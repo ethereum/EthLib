@@ -33,9 +33,8 @@ public section
 
 namespace EthLib.Consensus.Exports
 
-open EthLib.Exports (Result PyValue ToPy FromPy LawfulPy toPy fromPy pyExport)
+open EthLib.Exports (Result PyValue ToPy FromPy LawfulPy toPy fromPy pyExport toResult)
 open Base Serialization.Ssz
-open Serialization.Ssz.Exports (runSsz)
 
 /-- A result of the light client, with the code of its error. -/
 def runLightClient {α : Type} (act : Except LightClientError α) : Result α :=
@@ -100,7 +99,7 @@ def dataFork (name : String) (store : Fork) : Result {fork : Fork // fork ≤ st
 /-- The slot, the beacon root and the execution root of a header. -/
 def headerRecord {preset : Preset} {fork : Fork} (config : Config)
     (header : LightClientHeader preset fork) : Result SyncHeader := do
-  let beacon ← runSsz "root rejected" (SszType.hashTreeRoot header.beacon)
+  let beacon ← toResult "root rejected" (SszType.hashTreeRoot header.beacon)
   let execution ← runLightClient (getLcExecutionRoot config header)
   return ⟨header.beacon.slot, beacon, execution⟩
 
@@ -167,9 +166,9 @@ def blockToLightClientHeaderOf
   let (preset, fork) ← lightClientPresetAndFork name.toUTF8 fork.toUTF8
   let config ← configWithValue name replacements
   let block ← decodeAs (SignedBeaconBlock preset fork) block
-  let root ← runSsz "root rejected" (SszType.hashTreeRoot block.message)
+  let root ← toResult "root rejected" (SszType.hashTreeRoot block.message)
   let header ← runLightClient (blockToLightClientHeader config block)
-  return (root, ← runSsz "value rejected" (SszType.serialize header))
+  return (root, ← toResult "value rejected" (SszType.serialize header))
 
 /-- The root of a block, given as bytes, and the bytes of its light client header, as a pair. -/
 @[export eth_consensus_block_to_light_client_header]
@@ -240,10 +239,10 @@ No proposer signs the genesis block, so its signature is 96 zero bytes. -/
 def genesisBlockExport (name fork state : ByteArray) : Result ByteArray := do
   let (preset, fork) ← lightClientPresetAndFork name fork
   let state ← decodeAs (BeaconState preset fork) state
-  let root ← runSsz "root rejected" (SszType.hashTreeRoot state)
-  let block ← runSsz "default rejected" (BeaconBlock.genesis preset fork root)
+  let root ← toResult "root rejected" (SszType.hashTreeRoot state)
+  let block ← toResult "default rejected" (BeaconBlock.genesis preset fork root)
   let signed : SignedBeaconBlock preset fork := ⟨block, Vector.replicate _ 0⟩
-  runSsz "value rejected" (SszType.serialize signed)
+  toResult "value rejected" (SszType.serialize signed)
 
 /-- The bootstrap that a full node serves for a block, from the block and its post state. -/
 def createLightClientBootstrapOf
@@ -254,7 +253,7 @@ def createLightClientBootstrapOf
   let config ← configWithValue name replacements
   let bootstrap ← runLightClient (createLightClientBootstrap config
     (← decodeAs (BeaconState preset fork) state) (← decodeAs (SignedBeaconBlock preset fork) block))
-  runSsz "value rejected" (SszType.serialize bootstrap)
+  toResult "value rejected" (SszType.serialize bootstrap)
 
 /-- The bootstrap that a full node serves for a block, from the block and its post state. -/
 @[export eth_consensus_create_light_client_bootstrap]
@@ -265,11 +264,11 @@ def createLightClientBootstrapExport (args : PyValue) : Result PyValue :=
 def serializeUpdate {preset : Preset} {fork : Fork} (type : String)
     (update : LightClientUpdate preset fork) : Result ByteArray := do
   match type with
-  | "LightClientUpdate" => runSsz "value rejected" (SszType.serialize update)
+  | "LightClientUpdate" => toResult "value rejected" (SszType.serialize update)
   | "LightClientFinalityUpdate" =>
-    runSsz "value rejected" (SszType.serialize (createLightClientFinalityUpdate update))
+    toResult "value rejected" (SszType.serialize (createLightClientFinalityUpdate update))
   | "LightClientOptimisticUpdate" =>
-    runSsz "value rejected" (SszType.serialize (createLightClientOptimisticUpdate update))
+    toResult "value rejected" (SszType.serialize (createLightClientOptimisticUpdate update))
   | other => throw (0, s!"no update of type {other}")
 
 /-- The update that a full node serves for a block, from the blocks and their post states. -/
@@ -310,7 +309,7 @@ def createLightClientUpdateExport (args : PyValue) : Result PyValue :=
 def computeForkDigestOf (args : String × Option PyValue × Root × UInt64) : Result ByteArray := do
   let (name, replacements, genesisValidatorsRoot, epoch) := args
   let config ← configWithValue name replacements
-  let digest ← runSsz "root rejected" (computeForkDigest config genesisValidatorsRoot epoch)
+  let digest ← toResult "root rejected" (computeForkDigest config genesisValidatorsRoot epoch)
   return Base.packBytes digest
 
 /-- The fork digest at an epoch, on the chain with the given root of the genesis validators.

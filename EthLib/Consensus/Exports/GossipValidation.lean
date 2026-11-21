@@ -59,8 +59,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz Networking.Gossip
-open EthLib.Exports (Result PyValue FromPy fromPy pyExport)
-open Serialization.Ssz.Exports (runSsz)
+open EthLib.Exports (Result PyValue FromPy fromPy pyExport toResult)
 open Cryptography.Kzg.Exports (embeddedSetup)
 
 /-- A gossip message of a case: its time of arrival in ms, its subnet, its topic and its bytes. -/
@@ -141,7 +140,7 @@ def importGossipBlock {preset : Preset} {fork : Fork} (config : Config)
     (checks : SignatureChecks) (store : Store preset fork) (statuses : PayloadStatuses)
     (input : GossipBlockInput) : Result (Store preset fork × PayloadStatuses) := do
   let signed ← decodeInput (SignedBeaconBlock preset fork) input.data
-  let root ← runSsz "block rejected" (SszType.hashTreeRoot signed.message)
+  let root ← toResult "block rejected" (SszType.hashTreeRoot signed.message)
   let statuses := match input.status with
     | none => statuses
     | some status => statuses.insert root status

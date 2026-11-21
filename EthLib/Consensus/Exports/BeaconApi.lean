@@ -24,8 +24,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
-open Serialization.Ssz.Exports (runSsz)
+open EthLib.Exports (Result PyValue pyExport toResult)
 
 /-- The JSON of the API for the value that the bytes encode. -/
 def apiJsonOf (args : String × String × String × ByteArray) : Result PyValue := do
@@ -36,8 +35,8 @@ def apiJsonOf (args : String × String × String × ByteArray) : Result PyValue 
     | throw (0, s!"no container {type} at {fork.name}")
   if !specifiedAt fork type then
     throw (0, s!"{type} not yet specified at {fork.name}")
-  let value ← runSsz "input rejected" (SszType.deserialize container.type data)
-  return PyValue.ofJson (← runSsz "value rejected" (BeaconApi.toApiJson value))
+  let value ← toResult "input rejected" (SszType.deserialize container.type data)
+  return PyValue.ofJson (← toResult "value rejected" (BeaconApi.toApiJson value))
 
 /-- The JSON of the API for the value that SSZ bytes encode.
 
@@ -54,8 +53,8 @@ def apiSszOf (args : String × String × String × PyValue) : Result ByteArray :
     | throw (0, s!"no container {type} at {fork.name}")
   if !specifiedAt fork type then
     throw (0, s!"{type} not yet specified at {fork.name}")
-  let value ← runSsz "document rejected" (BeaconApi.ofApiJson container.type document.toJson)
-  runSsz "value rejected" (SszType.serialize value)
+  let value ← toResult "document rejected" (BeaconApi.ofApiJson container.type document.toJson)
+  toResult "value rejected" (SszType.serialize value)
 
 /-- The SSZ bytes of the value that a JSON document of the API holds.
 

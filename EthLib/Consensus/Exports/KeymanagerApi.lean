@@ -88,7 +88,7 @@ def chainViewOf (chain : String × String × String × ByteArray) : Result Chain
   let preset ← presetOf name
   let config ← configOf configName
   let fork ← forkOf fork.toUTF8
-  let state ← Serialization.Ssz.Exports.runSsz "state rejected"
+  let state ← EthLib.Exports.toResult "state rejected"
     (Serialization.Ssz.SszType.deserialize (BeaconState preset fork) data)
   return { preset, fork, config, state }
 

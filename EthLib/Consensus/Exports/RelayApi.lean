@@ -30,8 +30,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
-open Serialization.Ssz.Exports (runSsz)
+open EthLib.Exports (Result PyValue pyExport toResult)
 
 /-- The SSZ bytes of the bid that a relay serves from a submission, under a key. -/
 def relaySubmissionBidOf (args : String × String × ByteArray × Cryptography.Bls.BLSPubkey) :
@@ -40,10 +39,10 @@ def relaySubmissionBidOf (args : String × String × ByteArray × Cryptography.B
   let preset ← presetOf name
   let fork ← forkOf fork.toUTF8
   if range : HasBuilderApi fork then
-    let request ← runSsz "input rejected"
+    let request ← toResult "input rejected"
       (SszType.deserialize (SubmitBlockRequest preset fork) data)
-    let bid ← runSsz "header rejected" (request.bid range pubkey)
-    runSsz "value rejected" (SszType.serialize bid)
+    let bid ← toResult "header rejected" (request.bid range pubkey)
+    toResult "value rejected" (SszType.serialize bid)
   else throw (0, s!"no Relay API submissions at {fork.name}")
 
 /-- The SSZ bytes of the bid that a relay serves from a submission, under a key.
@@ -59,12 +58,12 @@ def relayValidatorsOf (args : String × String × ByteArray × List ByteArray) :
   let preset ← presetOf name
   let fork ← forkOf fork.toUTF8
   if fulu : .fusaka ≤ fork ∧ fork < .glamsterdam then
-    let state ← runSsz "state rejected" (SszType.deserialize (BeaconState preset fork) state)
+    let state ← toResult "state rejected" (SszType.deserialize (BeaconState preset fork) state)
     let entries ← kept.mapM fun bytes =>
-      runSsz "registry rejected" (SszType.deserialize SignedValidatorRegistrationV1 bytes)
+      toResult "registry rejected" (SszType.deserialize SignedValidatorRegistrationV1 bytes)
     let response := RelayApi.validatorsResponse state fulu.1 ⟨entries⟩
     let documents ← response.mapM fun entry =>
-      runSsz "value rejected" (BeaconApi.toApiJson entry)
+      toResult "value rejected" (BeaconApi.toApiJson entry)
     return PyValue.ofJson (Lean.Json.arr documents.toArray)
   else throw (0, s!"no Relay API list of validators at {fork.name}")
 
@@ -84,9 +83,9 @@ def relayValidatorsExport (args : PyValue) : Result PyValue := pyExport relayVal
 
 /-- A delivered payload, read from its JSON and written back. -/
 def relayDeliveredPayloadOf (document : PyValue) : Result PyValue := do
-  let entry ← runSsz "document rejected"
+  let entry ← toResult "document rejected"
     (BeaconApi.ofApiJson RelayApi.BidTraceV2 document.toJson)
-  return PyValue.ofJson (← runSsz "value rejected" (BeaconApi.toApiJson entry))
+  return PyValue.ofJson (← toResult "value rejected" (BeaconApi.toApiJson entry))
 
 /-- A delivered payload, read from its JSON and written back as a `dict`.
 
@@ -97,8 +96,8 @@ def relayDeliveredPayloadExport (args : PyValue) : Result PyValue :=
 
 /-- A received bid, read from its JSON and written back. -/
 def relayReceivedBidOf (document : PyValue) : Result PyValue := do
-  let entry ← runSsz "document rejected" (RelayApi.BidTraceV2WithTimestamp.ofJson document.toJson)
-  return PyValue.ofJson (← runSsz "value rejected" entry.toJson)
+  let entry ← toResult "document rejected" (RelayApi.BidTraceV2WithTimestamp.ofJson document.toJson)
+  return PyValue.ofJson (← toResult "value rejected" entry.toJson)
 
 /-- A received bid, read from its JSON and written back as a `dict`.
 
@@ -110,7 +109,7 @@ def relayReceivedBidExport (args : PyValue) : Result PyValue := pyExport relayRe
 def relayDeliveredKeepsOf (args : PyValue × Option Slot × Option Hash32 × Option UInt64 ×
     Option Cryptography.Bls.BLSPubkey × Option Cryptography.Bls.BLSPubkey) : Result Bool := do
   let (document, slot, blockHash, blockNumber, proposerPubkey, builderPubkey) := args
-  let entry ← runSsz "document rejected"
+  let entry ← toResult "document rejected"
     (BeaconApi.ofApiJson RelayApi.BidTraceV2 document.toJson)
   return RelayApi.DeliveredFilter.keeps
     { slot, blockHash, blockNumber, proposerPubkey, builderPubkey } entry
@@ -128,7 +127,7 @@ def relayDeliveredKeepsExport (args : PyValue) : Result PyValue :=
 def relayReceivedKeepsOf (args : PyValue × Option Slot × Option Hash32 × Option UInt64 ×
     Option Cryptography.Bls.BLSPubkey) : Result Bool := do
   let (document, slot, blockHash, blockNumber, builderPubkey) := args
-  let entry ← runSsz "document rejected"
+  let entry ← toResult "document rejected"
     (RelayApi.BidTraceV2WithTimestamp.ofJson document.toJson)
   return RelayApi.ReceivedFilter.keeps { slot, blockHash, blockNumber, builderPubkey } entry
 
@@ -145,9 +144,9 @@ def relaySortDeliveredOf (args : String × List PyValue) : Result PyValue := do
   let (name, documents) := args
   let some order := RelayApi.OrderBy.ofName? name | throw (0, s!"unknown order {name}")
   let entries ← documents.mapM fun document =>
-    runSsz "document rejected" (BeaconApi.ofApiJson RelayApi.BidTraceV2 document.toJson)
+    toResult "document rejected" (BeaconApi.ofApiJson RelayApi.BidTraceV2 document.toJson)
   let written ← (RelayApi.sortBy order entries).mapM fun entry =>
-    runSsz "value rejected" (BeaconApi.toApiJson entry)
+    toResult "value rejected" (BeaconApi.toApiJson entry)
   return PyValue.ofJson (Lean.Json.arr written.toArray)
 
 /-- Delivered payloads sorted by value in the given order, as a `list` of `dict`.
@@ -165,11 +164,11 @@ def relayValidatorRegistrationOf (args : List ByteArray × Option String) :
     Result (Option (Nat × PyValue)) := do
   let (kept, pubkey) := args
   let signed ← kept.mapM fun bytes =>
-    runSsz "registration rejected" (SszType.deserialize SignedValidatorRegistrationV1 bytes)
+    toResult "registration rejected" (SszType.deserialize SignedValidatorRegistrationV1 bytes)
   let registry := signed.foldl BuilderApi.Registry.insert {}
   match RelayApi.getValidatorRegistration registry pubkey with
   | .found entry =>
-    return some (200, PyValue.ofJson (← runSsz "value rejected" (BeaconApi.toApiJson entry)))
+    return some (200, PyValue.ofJson (← toResult "value rejected" (BeaconApi.toApiJson entry)))
   | .badRequest error => return some (400, PyValue.ofJson error.toJson)
   | .notHeld => return none
 

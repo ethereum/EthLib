@@ -34,7 +34,7 @@ public section
 
 namespace EthLib.Execution.Blocks.Exports
 
-open EthLib.Exports (Result PyValue forkUpTo pyExport)
+open EthLib.Exports (Result PyValue forkUpTo pyExport toResult)
 open EthLib.Base
 open EthLib.Serialization.Rlp
 open EthLib.Execution.Transactions.Exports (abortMessage inclusionMessage message
@@ -47,8 +47,8 @@ def recentOf (config : ChainConfig) (block : String × ByteArray × List ByteArr
     Result RecentBlock := do
   let (name, header, ommers) := block
   let fork ← forkUpTo .glamsterdam name.toUTF8
-  return ⟨fork, ← runRlp "recent header rejected" (Codec.decode header),
-    ← runRlp "recent ommers rejected" (ommers.mapM fun ommer => do
+  return ⟨fork, ← toResult "recent header rejected" (Codec.decode header),
+    ← toResult "recent ommers rejected" (ommers.mapM fun ommer => do
       Header.ofItemAtNumber (forkAtBlock config) (← decode ommer))⟩
 
 /-- The chain that a configuration, a state and recent blocks give, as the exports take them.

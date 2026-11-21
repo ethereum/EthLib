@@ -26,7 +26,8 @@ public section
 
 namespace EthLib.Serialization.Ssz.Exports
 
-open EthLib.Exports (Result PyValue pyExport toPy)
+open EthLib.Exports (UnreadArgument ExportError Result PyValue pyExport rejectArgument toPy
+  toResult)
 
 /-- The deepest nesting of types or values that the exports read.
 
@@ -167,18 +168,19 @@ end
 /-- Decode a Python value. -/
 def readValue {α : Type} (what : String) (value : PyValue) (decode : PyValue → Except String α) :
     Result α :=
-  (decode value).mapError fun e => (0, s!"{what}: {e}")
+  toResult what ((decode value).mapError UnreadArgument.mk)
 
-/-- Run a fallible step of the codec, with the code of its error and a message. -/
-def runSsz {α : Type} (what : String) (act : Except Err α) : Result α :=
-  act.mapError fun e => (e.code, s!"{what}: {reprStr e}")
+/-- An error of SSZ reaches Python with its code, and its message names the error. -/
+instance : ExportError Err where
+  code := Err.code
+  message := reprStr
 
 /-- The type that a Python value in its tagged form names, if SSZ allows it.
 
 A type from outside is checked once here, since the codec does not check it at every step. -/
 def readType (type : PyValue) : Result Desc := do
   let shape ← readValue "type" type (descOf MAX_NESTING)
-  runSsz "type rejected" shape.wellFormed
+  toResult "type rejected" shape.wellFormed
   return shape
 
 /-- The SSZ bytes of a value of a type. -/
@@ -186,7 +188,7 @@ def serializeOf (args : PyValue × PyValue) : Result ByteArray := do
   let (type, value) := args
   let shape ← readType type
   let value ← readValue "value" value (valueOf MAX_NESTING)
-  return ⟨← runSsz "value rejected" (serialize shape value)⟩
+  return ⟨← toResult "value rejected" (serialize shape value)⟩
 
 /-- The SSZ bytes of a value of a type, both given in their tagged form. -/
 @[export eth_ssz_serialize]
@@ -196,7 +198,7 @@ def serializeExport (args : PyValue) : Result PyValue := pyExport serializeOf ar
 def deserializeOf (args : PyValue × ByteArray) : Result PyValue := do
   let (type, data) := args
   let shape ← readType type
-  let value ← runSsz "input rejected" (deserialize shape data.data)
+  let value ← toResult "input rejected" (deserialize shape data.data)
   return pyOfValue value
 
 /-- The value that SSZ bytes hold for a type given in its tagged form, as a tagged `dict`. -/
@@ -208,7 +210,7 @@ def hashTreeRootOf (args : PyValue × PyValue) : Result ByteArray := do
   let (type, value) := args
   let shape ← readType type
   let value ← readValue "value" value (valueOf MAX_NESTING)
-  return ⟨← runSsz "value rejected" (hashTreeRoot shape value)⟩
+  return ⟨← toResult "value rejected" (hashTreeRoot shape value)⟩
 
 /-- The 32-byte hash tree root of a value of a type, both given in their tagged form. -/
 @[export eth_ssz_hash_tree_root]
@@ -228,16 +230,16 @@ A container takes the names of its fields only; a position given for a field is 
 def pathStep (shape : Option Desc) (part : PyValue) : Result PathStep :=
   match part, shape with
   | .int position, some (.container _ _) | .int position, some (.progressiveContainer _ _ _) =>
-    throw (0, s!"path: no field {position}")
+    rejectArgument "path" s!"no field {position}"
   | .int position, _ => return .position position
   | .str "__len__", _ => return .length
   | .str "__active_fields__", _ => return .activeFields
   | .str "__selector__", _ => return .selector
   | .str name, some (.container names _) | .str name, some (.progressiveContainer _ names _) =>
     if names.contains name then return .position (names.idxOf name)
-    else throw (0, s!"path: no field {name}")
-  | .str name, _ => throw (0, s!"path: no field {name}")
-  | _, _ => throw (0, "path: a part must be an int or a str")
+    else rejectArgument "path" s!"no field {name}"
+  | .str name, _ => rejectArgument "path" s!"no field {name}"
+  | _, _ => rejectArgument "path" "a part must be an int or a str"
 
 /-- The steps that the parts of a path name, after the steps already read.
 
@@ -250,7 +252,7 @@ def pathSteps (root : Desc) (read : List PathStep) (shape : Option Desc) :
   | part :: rest => do
     if let (.str name, none) := (part, shape) then
       if !["__len__", "__active_fields__", "__selector__"].contains name then
-        let _ ← runSsz "path rejected" (getGeneralizedIndex root (read ++ [.position 0]))
+        let _ ← toResult "path rejected" (getGeneralizedIndex root (read ++ [.position 0]))
     let step ← pathStep shape part
     let next := shape.bind fun shape => (shape.resolveStep step).toOption.bind (·.2)
     pathSteps root (read ++ [step]) next rest
@@ -259,7 +261,7 @@ def pathSteps (root : Desc) (read : List PathStep) (shape : Option Desc) :
 def generalizedIndexOf (args : PyValue × List PyValue) : Result Nat := do
   let (type, path) := args
   let shape ← readType type
-  runSsz "path rejected" (getGeneralizedIndex shape (← pathSteps shape [] (some shape) path))
+  toResult "path rejected" (getGeneralizedIndex shape (← pathSteps shape [] (some shape) path))
 
 /-- The generalized index of the node that a path selects in the tree of a type.
 
@@ -278,8 +280,8 @@ def merkleProofOf (args : PyValue × PyValue × Nat) : Result (List ByteArray) :
   let (type, value, gindex) := args
   let shape ← readType type
   let value ← readValue "value" value (valueOf MAX_NESTING)
-  let _ ← runSsz "value rejected" (serialize shape value)
-  let branch ← runSsz "proof rejected" (buildProof shape value gindex)
+  let _ ← toResult "value rejected" (serialize shape value)
+  let branch ← toResult "proof rejected" (buildProof shape value gindex)
   return branch.map fun sibling => ⟨sibling⟩
 
 /-- The branch that proves the node at a generalized index of a value against its root.
@@ -298,8 +300,8 @@ The width is the limit if one is given, and the number of chunks otherwise. -/
 def merkleizeChunksOf (args : List ByteArray × Option Nat) : Result ByteArray := do
   let (chunks, limit) := args
   let chunks := chunks.map (·.data)
-  runSsz "chunks rejected" (checkChunks chunks)
-  return ⟨← runSsz "chunks rejected" (merkleizeBoundedUnchecked chunks.toArray limit)⟩
+  toResult "chunks rejected" (checkChunks chunks)
+  return ⟨← toResult "chunks rejected" (merkleizeBoundedUnchecked chunks.toArray limit)⟩
 
 /-- The root of 32-byte chunks, in a tree padded to a power of two.
 

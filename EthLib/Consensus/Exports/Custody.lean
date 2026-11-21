@@ -73,7 +73,7 @@ def getCustodyColumnBitsOf (args : String × NodeID × UInt64) : Result ByteArra
   let preset ← presetOf name
   let bits ← (getCustodyColumnBits (← configOf name) preset id count custodyFuel).mapError
     fun e => (e.code, custodyErrorText e)
-  Serialization.Ssz.Exports.runSsz "bits rejected" (Serialization.Ssz.SszType.serialize bits)
+  EthLib.Exports.toResult "bits rejected" (Serialization.Ssz.SszType.serialize bits)
 
 /-- The columns that a node custodies, one bit per column, as the bytes of an SSZ bitvector.
 
