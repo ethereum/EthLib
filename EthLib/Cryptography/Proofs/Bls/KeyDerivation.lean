@@ -27,10 +27,6 @@ namespace EthLib.Cryptography.Bls.KeyDerivation
 open EthLib.Cryptography.Bls.Signatures
 open EthLib.Cryptography.Hash
 
-/-- BLS error codes lie below 101, the first code of a path error. -/
-theorem _root_.EthLib.Cryptography.Bls.BlsError.code_lt (e : BlsError) : e.code < 101 := by
-  cases e <;> simp [BlsError.code]
-
 /-- Master derivation reuses BLS key generation, ERC-2333, `hkdf_mod_r()` rationale. -/
 theorem deriveMasterSk_eq_keyGen (seed : ByteArray) :
     deriveMasterSk seed = keyGen seed := rfl

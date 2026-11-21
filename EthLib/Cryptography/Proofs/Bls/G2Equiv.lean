@@ -3,15 +3,13 @@ module
 public import EthLib.Cryptography.Proofs.Bls.G2Validity
 
 /-!
-# Proofs: projective equality and the group laws of `G2`
+# Proofs: projective equality on `G2`
 
 Different Jacobian triples can represent the same point of `E'`.
 
 The projective equality of `G2` tests that equivalence over `Fp2`.
 
 On valid triples, it agrees with equality of the points in Mathlib's affine group.
-
-So addition is associative and commutative, and has inverses, up to projective equality.
 -/
 
 @[expose] public section
@@ -19,6 +17,11 @@ So addition is associative and commutative, and has inverses, up to projective e
 namespace EthLib.Cryptography.Bls.G2
 
 open WeierstrassCurve.Jacobian
+
+/-- Projective equality on `G2` is reflexive. -/
+@[simp] theorem projectiveEq_refl (p : G2) : projectiveEq p p = true := by
+  unfold projectiveEq
+  by_cases hz : p.z.isZero = true <;> simp [hz, Fp2.beq_iff_eq]
 
 /-- On a valid triple, `Z = 0` exactly when the point is `O`.
 
@@ -87,34 +90,5 @@ theorem projectiveEq_eq_true_iff_rep_equiv {p q : G2} (hp : Valid p) (hq : Valid
 theorem projectiveEq_eq_true_iff_toPoint_eq {p q : G2} (hp : Valid p) (hq : Valid q) :
     projectiveEq p q = true ↔ toPoint p = toPoint q :=
   (projectiveEq_eq_true_iff_rep_equiv hp hq).trans (toPoint_eq_iff_rep_equiv hp hq).symm
-
-theorem toPoint_add_assoc {p q r : G2} (hp : Valid p) (hq : Valid q) (hr : Valid r) :
-    toPoint (add (add p q) r) = toPoint (add p (add q r)) := by
-  simp only [toPoint_add hp hq, toPoint_add hq hr,
-    toPoint_add (valid_add hp hq) hr, toPoint_add hp (valid_add hq hr)]
-  exact add_assoc _ _ _
-
-theorem toPoint_add_comm {p q : G2} (hp : Valid p) (hq : Valid q) :
-    toPoint (add p q) = toPoint (add q p) := by
-  rw [toPoint_add hp hq, toPoint_add hq hp, add_comm]
-
-theorem toPoint_add_neg {p : G2} (hp : Valid p) :
-    toPoint (add p (neg p)) = toPoint zero := by
-  rw [toPoint_add hp (valid_neg hp), toPoint_neg hp, toPoint_zero, add_neg_cancel]
-
-theorem add_assoc_projectiveEq {p q r : G2} (hp : Valid p) (hq : Valid q) (hr : Valid r) :
-    projectiveEq (add (add p q) r) (add p (add q r)) = true :=
-  (projectiveEq_eq_true_iff_toPoint_eq (valid_add (valid_add hp hq) hr)
-    (valid_add hp (valid_add hq hr))).mpr (toPoint_add_assoc hp hq hr)
-
-theorem add_comm_projectiveEq {p q : G2} (hp : Valid p) (hq : Valid q) :
-    projectiveEq (add p q) (add q p) = true :=
-  (projectiveEq_eq_true_iff_toPoint_eq (valid_add hp hq) (valid_add hq hp)).mpr
-    (toPoint_add_comm hp hq)
-
-theorem add_neg_projectiveEq_zero {p : G2} (hp : Valid p) :
-    projectiveEq (add p (neg p)) zero = true :=
-  (projectiveEq_eq_true_iff_toPoint_eq (valid_add hp (valid_neg hp)) valid_zero).mpr
-    (toPoint_add_neg hp)
 
 end EthLib.Cryptography.Bls.G2

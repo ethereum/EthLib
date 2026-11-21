@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Bls.G1
 public import EthLib.Cryptography.Bls.HashToCurve
 
 /-!
@@ -28,7 +29,6 @@ An input that sends a denominator of the isogeny to zero maps to the identity po
 namespace EthLib.Cryptography.Bls.MapToCurve
 
 open EthLib.Cryptography.Bls
-open EthLib.Cryptography.Bls.HashToCurve (sgn0Fp)
 
 variable {F : Type} [BaseField F]
 
@@ -62,7 +62,7 @@ def simpleSwuG1 (u : F) : Except BlsError (F × F) := do
   let x := if (sqrtOrError gx1).isOk then x1 else x2
   let y ← sqrtOrError (x * x * x + Aprime * x + Bprime)
   -- The sign of `y` follows the sign of `u`.
-  return (x, if sgn0Fp u = sgn0Fp y then y else -y)
+  return (x, if BaseField.sgn0 u = BaseField.sgn0 y then y else -y)
 
 -- The coefficients `k_(1,j)` of `x_num`.
 def k1_0 : F := BaseField.ofNat

@@ -22,21 +22,19 @@ open EthLib.Cryptography.Bls
 /-! ## Simplified SWU onto `E' : y^2 = x^3 + A'*x + B'` -/
 
 /-- Right-hand side `g(x) = x^3 + A'*x + B'` of the 3-isogenous curve `E'`. -/
-def swuG (x : Fp2) : Fp2 :=
+def swuG {F : Type} [BaseField F] (x : Fp2 F) : Fp2 F :=
   x * x * x + Aprime * x + Bprime
 
 /-- First candidate abscissa `x1(u)` in SSWU (`RFC 9380 §6.6.2`). -/
-def swuX1 (u : Fp2) : Fp2 :=
+def swuX1 {F : Type} [BaseField F] (u : Fp2 F) : Fp2 F :=
   let u2 := u * u
   let zu2 := Z * u2
   let denom := zu2 * zu2 + zu2
-  if denom.isZero then
-    @HDiv.hDiv Fp2 Fp2 Fp2 (@instHDiv Fp2 Fp2.instDiv) Bprime (Z * Aprime)
-  else
-    @HDiv.hDiv Fp2 Fp2 Fp2 (@instHDiv Fp2 Fp2.instDiv) (-Bprime) Aprime * (Fp2.one + denom.inverse)
+  if denom.isZero then Bprime / (Z * Aprime)
+  else (-Bprime / Aprime) * (Fp2.one + denom.inverse)
 
 /-- Second candidate abscissa `x2(u) = Z * u^2 * x1(u)` in SSWU (`RFC 9380 §6.6.2`). -/
-def swuX2 (u : Fp2) : Fp2 :=
+def swuX2 {F : Type} [BaseField F] (u : Fp2 F) : Fp2 F :=
   Z * (u * u) * swuX1 u
 
 private theorem aprime_ne_zero : Aprime ≠ (0 : Fp2) := by
@@ -101,8 +99,8 @@ theorem sq_or_neg_sq (a : Fp) :
 
 /-- Any `a : Fp2` whose `Fp` norm is a square in `Fp` has a square root returned by `Fp2.sqrt`. -/
 theorem sqrt_of_norm_sq {a : Fp2} {sn : Fp} (hsn : sn * sn = Fp2.norm a) :
-    ∃ c, Fp2.sqrt a = .ok c :=
-  Fp2.sqrt_isOk_of_norm ⟨_, (Fp.sqrtOrError_eq _).trans (Fp.sqrt_complete hsn)⟩
+    ∃ c, Fp2.sqrt a = some c :=
+  Fp2.sqrt_isSome_of_norm ⟨_, Fp.baseField_sqrt_complete hsn⟩
 
 private def sqrtNegNormZ : Fp :=
   Fp.ofNat 0x186417302d5a65347a88b0f999ab2b504614aa5e2eebdeb1a014c40bceb7d2306c12a6d436befcf94d39c9db7b263cd4
@@ -142,8 +140,8 @@ private theorem norm_gx2_sq_zmod {nz nu ng sz sg : ZMod Fp.modulus}
 
 /-- For every `u`, at least one of `g(x1(u))` and `g(x2(u))` has a square root in `Fp2`. -/
 theorem simpleSwu_sqrt_complete (u : Fp2) :
-    (∃ y, Fp2.sqrt (swuG (swuX1 u)) = .ok y) ∨
-    (∃ y, Fp2.sqrt (swuG (swuX2 u)) = .ok y) := by
+    (∃ y, Fp2.sqrt (swuG (swuX1 u)) = some y) ∨
+    (∃ y, Fp2.sqrt (swuG (swuX2 u)) = some y) := by
   by_cases hdenom : ((Z * (u * u)) * (Z * (u * u)) + Z * (u * u)).isZero = true
   -- Exceptional denominator `Z^2 * u^4 + Z * u^2 = 0`: `x1 = B' / (Z * A')` has square norm directly.
   · left
@@ -182,60 +180,62 @@ theorem simpleSwu_sqrt_complete (u : Fp2) :
         exact norm_gx2_sq_zmod hsz hsg
       exact sqrt_of_norm_sq hw_sq
 
--- The matcher of the map is named on purpose: its equations select a branch without evaluation.
-set_option linter.auxLemma false in
-/-- The SSWU map succeeds on every `u` (RFC 9380 §6.6.2). -/
-theorem simpleSwu_ok (u : Fp2) : ∃ p, simpleSwu u = .ok p := by
-  have hor := simpleSwu_sqrt_complete u
+-- The next two proofs hold for any base field, where no step can evaluate the square roots.
+--
+-- Over `Fp` in Montgomery form, the kernel would instead reduce them on the constants.
+
+/-- The SSWU map succeeds on `u` when `g(x1(u))` or `g(x2(u))` has a root, over any base field. -/
+private theorem simpleSwu_ok_of_sqrt {F : Type} [BaseField F] (u : Fp2 F)
+    (hor : (∃ y, Fp2.sqrt (swuG (swuX1 u)) = some y) ∨
+      (∃ y, Fp2.sqrt (swuG (swuX2 u)) = some y)) :
+    ∃ p, simpleSwu u = .ok p := by
   revert hor
-  -- `unfold` and `delta` make the kernel time out here when `Fp` is in Montgomery form.
   rw [simpleSwu]
   unfold swuG swuX2 swuX1
-  generalize (Fp2.sqrt : Fp2 → Except BlsError Fp2) = sqrtFn
+  generalize (Fp2.sqrt : Fp2 F → Option (Fp2 F)) = sqrtFn
   rintro (⟨y1, hy1⟩ | ⟨y2, hy2⟩)
-  · dsimp only at hy1
+  · -- `g(x1)` has a root, so the map returns at its first square root.
+    dsimp only at hy1
     rw [hy1]
     exact ⟨_, rfl⟩
-  · dsimp only at hy2
+  · -- Otherwise `g(x2)` has a root, and the map returns at its second square root.
+    dsimp only at hy2
     cases sqrtFn _ with
-    | ok y1 => exact ⟨_, rfl⟩
-    | error _ =>
-      simp (config := { zeta := false, iota := false, beta := false }) only
-        [simpleSwu.match_1.eq_2]
-      extract_lets x2
-      rw [show sqrtFn (x2 * x2 * x2 + Aprime * x2 + Bprime) = .ok y2 from hy2]
+    | some y1 => exact ⟨_, rfl⟩
+    | none =>
+      dsimp only
+      rw [hy2]
       exact ⟨_, rfl⟩
 
--- The matcher of the map is named on purpose: its equations select a branch without evaluation.
-set_option linter.auxLemma false in
+/-- An output of the SSWU map is a returned root of `g(x)` or its negation, over any base field. -/
+private theorem exists_sqrt_of_simpleSwu_eq_ok {F : Type} [BaseField F] {u : Fp2 F}
+    {p : Fp2 F × Fp2 F} (h : simpleSwu u = .ok p) :
+    ∃ y, Fp2.sqrt (swuG p.1) = some y ∧ p.2 = if Fp2.sgn0 u = Fp2.sgn0 y then y else -y := by
+  revert h
+  rw [simpleSwu]
+  unfold swuG
+  cases h1 : Fp2.sqrt (F := F) _ with
+  | some y1 =>
+    rintro ⟨⟩
+    exact ⟨y1, h1, rfl⟩
+  | none =>
+    dsimp only
+    cases h2 : Fp2.sqrt (F := F) _ with
+    | none => rintro ⟨⟩
+    | some y2 =>
+      rintro ⟨⟩
+      exact ⟨y2, h2, rfl⟩
+
+/-- The SSWU map succeeds on every `u` (RFC 9380 §6.6.2). -/
+theorem simpleSwu_ok (u : Fp2) : ∃ p, simpleSwu u = .ok p :=
+  simpleSwu_ok_of_sqrt u (simpleSwu_sqrt_complete u)
+
 /-- Every output of the SSWU map lies on `E' : y^2 = x^3 + A' * x + B'`. -/
 theorem simpleSwu_curve_eq {u : Fp2} {p : Fp2 × Fp2} (h : simpleSwu u = .ok p) :
     p.2 * p.2 = swuG p.1 := by
-  have hsqrt : ∀ {a c : Fp2}, Fp2.sqrt a = .ok c → c * c = a := fun hs => Fp2.sqrt_ok hs
-  revert h
-  -- `unfold` and `delta` make the kernel time out here when `Fp` is in Montgomery form.
-  rw [simpleSwu]
-  unfold swuG
-  generalize (Fp2.sqrt : Fp2 → Except BlsError Fp2) = sqrtFn at hsqrt ⊢
-  cases h1 : sqrtFn _ with
-  | ok y1 =>
-    simp (config := { zeta := false, iota := false, beta := false }) only
-      [simpleSwu.match_1.eq_1]
-    rintro ⟨⟩
-    dsimp only
-    rw [sq_ite_neg (sgn0Fp2 u = sgn0Fp2 y1) y1]
-    exact hsqrt h1
-  | error _ =>
-    simp (config := { zeta := false, iota := false, beta := false }) only
-      [simpleSwu.match_1.eq_2]
-    extract_lets x2
-    cases h2 : sqrtFn (x2 * x2 * x2 + Aprime * x2 + Bprime) with
-    | error _ => rintro ⟨⟩
-    | ok y2 =>
-      rintro ⟨⟩
-      dsimp only
-      rw [sq_ite_neg (sgn0Fp2 u = sgn0Fp2 y2) y2]
-      exact hsqrt h2
+  obtain ⟨y, hy, hp⟩ := exists_sqrt_of_simpleSwu_eq_ok h
+  rw [hp, sq_ite_neg]
+  exact Fp2.sqrt_mul_self hy
 
 end SwuComplete
 

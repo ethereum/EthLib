@@ -152,9 +152,6 @@ The source is RFC 9380, Appendix G.3.
 <https://www.rfc-editor.org/rfc/rfc9380#appendix-G.3>
 -/
 
-/-- Frobenius for `GF(p^2)` with basis `(1, I)`: `c0 + c1·I ↦ c0 − c1·I`. -/
-def frobeniusFp2 (x : Fp2 F) : Fp2 F := ⟨x.c0, -x.c1⟩
-
 /-- `c1_psi = 1 / (1 + I)^((p − 1) / 3)`. -/
 def c1Psi : Fp2 F :=
   let oneI : Fp2 F := ⟨BaseField.one, BaseField.one⟩
@@ -170,8 +167,8 @@ def psi (P : G2 F) : G2 F :=
   if P.z.isZero then P else
     -- Normalise to affine form, then map the coordinates, with `Z = 1`.
     let (x, y) := P.toAffine
-    let qx := c1Psi * frobeniusFp2 x
-    let qy := c2Psi * frobeniusFp2 y
+    let qx := c1Psi * x.conjugate
+    let qy := c2Psi * y.conjugate
     ⟨qx, qy, Fp2.one⟩
 
 end G2

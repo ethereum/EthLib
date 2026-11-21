@@ -114,11 +114,6 @@ Proofs use its lemmas, never its unfolding, which runs a Montgomery reduction. -
 @[inline] def zero : Fp := Montgomery.zero
 @[inline] def one  : Fp := Montgomery.one
 
-@[inline] def add (a b : Fp) : Fp := a + b
-@[inline] def sub (a b : Fp) : Fp := a - b
-@[inline] def neg (a : Fp)   : Fp := -a
-@[inline] def mul (a b : Fp) : Fp := a * b
-
 @[inline] def beq (a b : Fp) : Bool := a == b
 @[inline] def isZero (a : Fp) : Bool := a == zero
 

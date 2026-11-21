@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Bytes
+public import EthLib.Cryptography.Bls.Compress
 public import EthLib.Cryptography.Bls.HashToCurve
 public import EthLib.Cryptography.Bls.Pairing
 public import EthLib.Cryptography.Bls.Errors

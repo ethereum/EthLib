@@ -27,27 +27,6 @@ theorem map_sqrtOrError (f : Hom F G) (a : F) :
   rw [f.map_sqrt]
   cases BaseField.sqrt a <;> rfl
 
-namespace Fp2
-
-theorem map_sqrt (f : Hom F G) (a : Fp2 F) :
-    Fp2.sqrt (a.map f) = (Fp2.sqrt a).map (Fp2.map f) := by
-  obtain ⟨a0, a1⟩ := a
-  unfold Fp2.sqrt
-  simp only [Fp2.map, f.map_isZero, ← f.map_mul, ← f.map_add, ← f.map_ofNat,
-    ← f.map_inverse, map_sqrtOrError]
-  cases BaseField.isZero a1
-  · simp only [Bool.false_eq_true, ↓reduceIte]
-    cases sqrtOrError (a0 * a0 + a1 * a1) with
-    | error e => rfl
-    | ok s =>
-      simp only [Except.map, ← f.map_add, ← f.map_mul, ← f.map_inverse, f.map_sqrtCandidate,
-        f.map_beq]
-      split <;> simp only [Fp2.map, f.map_mul, f.map_inverse, f.map_ofNat]
-  · simp only [↓reduceIte, f.map_sqrtCandidate, ← f.map_mul, f.map_beq]
-    split <;> simp only [Except.map, Fp2.map, f.map_zero]
-
-end Fp2
-
 namespace HashToCurve
 
 theorem map_fpFromBytesL (f : Hom F G) (b : ByteArray) :
@@ -68,12 +47,6 @@ theorem map_hashToFieldFp2 (f : Hom F G) (msg dst : ByteArray) (count : Nat) :
     intro i hi
     simp only [Vector.getElem_map, Vector.getElem_ofFn, Fp2.map, map_fpFromBytesL]
 
-theorem map_sgn0Fp (f : Hom F G) (x : F) : sgn0Fp (f x) = sgn0Fp x :=
-  f.map_sgn0 x
-
-theorem map_sgn0Fp2 (f : Hom F G) (x : Fp2 F) : sgn0Fp2 (x.map f) = sgn0Fp2 x := by
-  simp only [sgn0Fp2, Fp2.map, map_sgn0Fp, f.map_isZero]
-
 theorem map_Z (f : Hom F G) : (Z : Fp2 F).map f = Z := by
   simp only [Z, Fp2.map, f.map_neg, f.map_ofNat, f.map_one]
 
@@ -93,15 +66,15 @@ theorem map_simpleSwu (f : Hom F G) (u : Fp2 F) :
   generalize (if (zu2 * zu2 + zu2).isZero = true then (Bprime / (Z * Aprime) : Fp2 F)
     else -Bprime / Aprime * (Fp2.one + (zu2 * zu2 + zu2).inverse)) = x1
   cases Fp2.sqrt (x1 * x1 * x1 + Aprime * x1 + Bprime) with
-  | ok y =>
-    simp only [Except.map, pure, Except.pure, Prod.map, map_sgn0Fp2, apply_ite (Fp2.map f),
-      Fp2.map_neg]
-  | error e =>
+  | some y =>
+    simp only [Option.map, Except.map, pure, Except.pure, Prod.map, Fp2.map_sgn0,
+      apply_ite (Fp2.map f), Fp2.map_neg]
+  | none =>
     cases Fp2.sqrt (zu2 * x1 * (zu2 * x1) * (zu2 * x1) + Aprime * (zu2 * x1) + Bprime) with
-    | ok y =>
-      simp only [Except.map, pure, Except.pure, bind, Except.bind, Prod.map, map_sgn0Fp2,
+    | some y =>
+      simp only [Option.map, Except.map, pure, Except.pure, Prod.map, Fp2.map_sgn0,
         apply_ite (Fp2.map f), Fp2.map_neg]
-    | error e => rfl
+    | none => rfl
 
 theorem map_ofNats (f : Hom F G) (c0 c1 : Nat) :
     (Fp2.ofNats c0 c1 : Fp2 F).map f = Fp2.ofNats c0 c1 := by
@@ -130,10 +103,6 @@ theorem map_isoMapG2 (f : Hom F G) (xp yp : Fp2 F) :
     ← Fp2.map_div, apply_ite (G2.map f), G2.map_zero]
   simp only [G2.map, Fp2.map_one]
 
-theorem map_frobeniusFp2 (f : Hom F G) (x : Fp2 F) :
-    (frobeniusFp2 x).map f = frobeniusFp2 (x.map f) := by
-  simp only [frobeniusFp2, Fp2.map, f.map_neg]
-
 theorem map_c1Psi (f : Hom F G) : (c1Psi : Fp2 F).map f = c1Psi := by
   unfold c1Psi
   rw [Fp2.map_inverse, Fp2.map_powNat]
@@ -154,7 +123,7 @@ theorem map_psi (f : Hom F G) (P : G2 F) : (psi P).map f = psi (P.map f) := by
   cases P.z.isZero
   · obtain ⟨x, y⟩ := P.toAffine
     simp only [Bool.false_eq_true, ↓reduceIte, Prod.map, G2.map, ← map_c1Psi f, ← map_c2Psi f,
-      ← map_frobeniusFp2, ← Fp2.map_mul, Fp2.map_one]
+      ← Fp2.map_conjugate, ← Fp2.map_mul, Fp2.map_one]
   · rfl
 
 theorem map_psi2 (f : Hom F G) (P : G2 F) : (psi2 P).map f = psi2 (P.map f) := by
@@ -224,7 +193,7 @@ theorem map_simpleSwuG1 (f : Hom F G) (u : F) :
     cases sqrtOrError (x1 * x1 * x1 + Aprime * x1 + Bprime) with
     | ok y =>
       simp only [pure, Except.pure, Prod.map, apply_ite f.toFun, f.map_neg,
-        HashToCurve.map_sgn0Fp]
+        f.map_sgn0]
     | error e => rfl
   | error _ =>
     simp only [Except.map, Except.isOk, Except.toBool, Bool.false_eq_true, ↓reduceIte, bind,
@@ -232,7 +201,7 @@ theorem map_simpleSwuG1 (f : Hom F G) (u : F) :
     cases sqrtOrError (zu2 * x1 * (zu2 * x1) * (zu2 * x1) + Aprime * (zu2 * x1) + Bprime) with
     | ok y =>
       simp only [pure, Except.pure, Prod.map, apply_ite f.toFun, f.map_neg,
-        HashToCurve.map_sgn0Fp]
+        f.map_sgn0]
     | error e => rfl
 
 theorem map_k1_0 (f : Hom F G) : f (k1_0 : F) = k1_0 := f.map_ofNat _
