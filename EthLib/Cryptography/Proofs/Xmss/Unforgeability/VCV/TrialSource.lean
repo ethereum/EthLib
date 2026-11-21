@@ -93,6 +93,8 @@ theorem expected_game_product (A : Adversary) (q : ℕ) (hq : q ≤ 2 ^ 127) :
         (1 - TrialMoment.rate) * (z.2.2.2 / TrialMoment.rate) ^ 2)) ≤
       ENNReal.ofReal ((2 - TrialMoment.rate) * q + 2 ^ 76) *
         ∑' z, Pr{let u ← m}[u = z] * (z.2.2.1 : ℝ≥0∞) := by
+  let (t : unifSpec.Domain) : Finite (unifSpec.Range t) :=
+    OracleSpec.UniformAnswerMeasure.finite_range t
   dsimp only [game]
   rw [tsum_prEvent_bind_mul, tsum_prEvent_bind_mul]
   let w := ENNReal.ofReal ((2 - TrialMoment.rate) * q + 2 ^ 76)
