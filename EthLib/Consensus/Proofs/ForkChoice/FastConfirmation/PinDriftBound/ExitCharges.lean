@@ -92,12 +92,7 @@ private theorem cV_split (h : Setting config checks g split fin pulled anc count
   have sub : V ⊆ costKeys pulled counted := fun v hv =>
     Finset.mem_union_right _ (h.voting v hv).1
   unfold voterFallCost inactiveVoterCost countedInactiveVoters
-  congr 1
-  · rw [← Finset.sum_filter]
-    refine Finset.sum_congr ?_ fun _ _ => rfl
-    ext v
-    simp only [Finset.mem_filter]
-    exact ⟨fun ⟨_, a, b⟩ => ⟨a, b⟩, fun ⟨a, b⟩ => ⟨sub a, a, b⟩⟩
+  congr 1 <;>
   · rw [← Finset.sum_filter]
     refine Finset.sum_congr ?_ fun _ _ => rfl
     ext v
