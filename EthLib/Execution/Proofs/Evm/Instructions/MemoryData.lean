@@ -109,7 +109,7 @@ theorem memoryReadBytes_memoryWrite_memoryReadBytes {memory : ByteArray}
 theorem loadWord_append_zeros (data : ByteArray) (start size k : Nat) :
     loadWord (data ++ ByteArray.mk (Array.replicate k 0)) start size =
       loadWord data start size := by
-  simp only [loadWord, bufferRead, byteAt_append_zeros]
+  simp only [loadWord, bufferRead_eq, byteAt_append_zeros]
 
 /-- RETURNDATACOPY that pays fails exactly when its range ends past the return data. -/
 theorem returndatacopyStep_eq_error_iff {evm : Evm fork Meter} {start offset size : U256}
@@ -308,7 +308,7 @@ theorem byteAt_copyToMemory {base : Nat} {data : ByteArray} {evm after : Evm for
     rw [byteAt_chargeGasAndMemory h4, m3, m2, m1]
   have hlen : ({ data := (bufferRead data offset.toNat size.toNat).toArray } : ByteArray).size =
       size.toNat := by simp [ByteArray.size, bufferRead_length]
-  simp only [advance]
+  simp only [advance, bufferBytes_eq]
   by_cases hz : size = 0
   · subst hz
     have hw : memoryWrite e4.memory start.toNat
@@ -521,7 +521,8 @@ theorem copyToMemory_cons {base : Nat} {data : ByteArray} {evm : Evm fork Meter}
           pc := evm.pc + 1 } := by
   have hstack : evm.stack =
       ⟨start :: offset :: size :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
-  simp only [copyToMemory, popWord, chargeGasAndMemory, chargeGas, advance, hstack, Stack.pop]
+  simp only [copyToMemory, popWord, chargeGasAndMemory, chargeGas, advance, hstack, Stack.pop,
+    bufferBytes_eq]
   rcases hc : GasMeter.charge evm.gas
       (base + OPCODE_COPY_PER_WORD * wordCount size.toNat +
         (extendMemory evm.memory.size [(start, size)]).cost) with _ | _ <;>
@@ -612,7 +613,7 @@ theorem size_memoryDataStep_mod {op : Op}
       rw [(popWord_eq_ok h3).2.1, (popWord_eq_ok h2).2.1, (popWord_eq_ok h1).2.1]; exact hmod
     simp only [advance]
     refine size_memoryWrite_chargeGasAndMemory_mod m3 h4 ?_
-    simp [ByteArray.size, bufferRead_length]
+    simp [size_bufferBytes]
   case mcopy =>
     obtain ⟨⟨dst, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨⟨src, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h

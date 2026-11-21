@@ -144,7 +144,7 @@ theorem push0GA (hfork : .shapella ≤ fork) (hlt : pc < code.size) (hbyte : cod
   simp only [Fin.val_zero, ↓reduceIte, OPCODE_PUSH0, BASE]
   rw [charge_nat (by rw [hg]; exact hgas)]
   exact ⟨_, rfl, hcode, hj, hm, by simp [hpc],
-    by simp [hst, pushData, bufferRead, EthLib.Base.bytesToNat], hmem, by simp [hg], hrun, herr,
+    by simp [hst, pushData, bufferRead_eq, EthLib.Base.bytesToNat], hmem, by simp [hg], hrun, herr,
     hout, hs, hss, hrd⟩
 
 /-- From Shapella, PUSH0 pushes the word 0, for 2 gas, by EIP-3855.

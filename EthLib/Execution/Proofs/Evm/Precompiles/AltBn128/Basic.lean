@@ -62,7 +62,7 @@ theorem ecmul_size {fork : Fork} {data : ByteArray} {gas : Nat} {out : ByteArray
   split at h
   · cases h
   obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
-  cases h
+  rw [← Except.ok.inj h]
   simp [ByteArray.size, length_g1ToBytes]
 
 /-- A first coordinate at or above `p` is rejected, and the error holds it. -/

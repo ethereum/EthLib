@@ -28,13 +28,14 @@ theorem readNat_lt (data : ByteArray) (start size : Nat) :
 
 /-- A read of no bytes is `0`. -/
 theorem readNat_zero_size (data : ByteArray) (start : Nat) : readNat data start 0 = 0 := by
-  simp [readNat, bufferRead, bytesToNat]
+  simp [readNat, bufferRead_eq, bytesToNat]
 
 /-- A read depends only on the bytes it covers. -/
 theorem readNat_congr {d₁ d₂ : ByteArray} {start size : Nat}
     (h : ∀ i, start ≤ i → i < start + size → byteAt d₁ i = byteAt d₂ i) :
     readNat d₁ start size = readNat d₂ start size := by
-  unfold readNat bufferRead
+  unfold readNat
+  rw [bufferRead_eq, bufferRead_eq]
   congr 1
   apply List.map_congr_left
   intro j hj

@@ -101,7 +101,7 @@ def extcodecopyStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) :=
   let evm ← chargeGasAndMemory evm cost [(start, size)]
   let evm := recordAccountRead evm address
   let code ← accountCode evm address
-  let value : ByteArray := ⟨(bufferRead code offset.toNat size.toNat).toArray⟩
+  let value := bufferBytes code offset.toNat size.toNat
   return advance { evm with memory := memoryWrite evm.memory start.toNat value }
 
 /-- The code hash of an account as a word, or 0 for the empty account. -/
