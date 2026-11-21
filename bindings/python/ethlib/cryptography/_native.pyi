@@ -1572,6 +1572,14 @@ def dnsdisc_verify_root(key: bytes, text: str) -> bool:
     """Whether a root text is signed by a compressed public key of 33 bytes."""
     ...
 
+def dnsdisc_resolve(key: bytes, seen_seq: int, domain: str, budget: int, table: list[tuple[str, str]]) -> tuple[int, list[bytes], list[str]]:
+    """The node list at a domain, under a compressed public key, with a table as the DNS."""
+    ...
+
+def dnsdisc_sign_root(secret_key: bytes, enr_root: bytes, link_root: bytes, seq: int) -> str:
+    """The text of a root of two hashes of 16 bytes and a sequence number, signed with a private key."""
+    ...
+
 def dnsdisc_parse_url(text: str) -> tuple[bytes, str]:
     """The compressed public key and the domain of a URL `enrtree://<key>@<domain>`."""
     ...

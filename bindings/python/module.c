@@ -1211,6 +1211,8 @@ static PyMethodDef methods[] = {
   {"dnsdisc_subdomain", py_dnsdisc_subdomain, METH_VARARGS, DOC_dnsdisc_subdomain},
   {"dnsdisc_verify_root", py_dnsdisc_verify_root, METH_VARARGS, DOC_dnsdisc_verify_root},
   {"dnsdisc_parse_url", py_dnsdisc_parse_url, METH_VARARGS, DOC_dnsdisc_parse_url},
+  {"dnsdisc_resolve", py_dnsdisc_resolve, METH_VARARGS, DOC_dnsdisc_resolve},
+  {"dnsdisc_sign_root", py_dnsdisc_sign_root, METH_VARARGS, DOC_dnsdisc_sign_root},
   {"fork_id", py_fork_id, METH_VARARGS, DOC_fork_id},
   {"fork_id_schedule", py_fork_id_schedule, METH_VARARGS, DOC_fork_id_schedule},
   {"fork_id_encode", py_fork_id_encode, METH_VARARGS, DOC_fork_id_encode},

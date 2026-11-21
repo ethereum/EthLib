@@ -18,6 +18,12 @@ So a resolver that changes the text of an entry changes the entry, and its hash 
 The name of an entry has 26 characters.
 
 A root signed with a private key verifies under the compressed public key of that key.
+
+Two resolvers that serve one root, and whose lists both resolve, give the same list.
+
+Otherwise the code finds two texts with one truncated hash, which is a collision of Keccak-256.
+
+A list resolves only from a root that the key signed, with a sequence number not below the last.
 -/
 
 @[expose] public section
@@ -485,5 +491,205 @@ theorem DnsError.code_injective (e₁ e₂ : DnsError) (h : e₁.code = e₂.cod
   -- Two distinct constructors have two distinct literal codes, which `decide` separates.
   cases e₁ <;> cases e₂ <;>
     first | rfl | (simp only [DnsError.code] at h; exact absurd h (by decide))
+
+/-! ## Resolving a list -/
+
+/-- Two walks from one state find the same, or the search finds a collision on their way. -/
+theorem walk_binds {lookup1 lookup2 : String → Option String} {domain : String} :
+    (budget : Nat) → (pending : List (Subtree × Hash)) → (visited : List Hash) →
+      (found : Found) → {found1 found2 : Found} →
+      walk lookup1 domain budget pending visited found = .ok found1 →
+      walk lookup2 domain budget pending visited found = .ok found2 →
+      found1 = found2 ∨ ∃ pair, walkCollision lookup1 lookup2 domain budget pending visited =
+        some pair ∧ IsCollision pair := by
+  intro budget
+  induction budget with
+  | zero =>
+    intro pending visited found found1 found2 h1 h2
+    cases pending with
+    | nil => simp only [walk] at h1 h2; cases h1; cases h2; exact .inl rfl
+    | cons _ _ => simp [walk] at h1
+  | succ budget ih =>
+    intro pending visited found found1 found2 h1 h2
+    rcases pending with _ | ⟨⟨tree, hash⟩, pending⟩
+    · simp only [walk] at h1 h2; cases h1; cases h2; exact .inl rfl
+    by_cases hv : hash ∈ visited
+    · simp only [walk, hv, ↓reduceIte] at h1 h2
+      simp only [walkCollision, hv, ↓reduceIte]
+      exact ih pending visited found h1 h2
+    simp only [walk, hv, ↓reduceIte] at h1 h2
+    simp only [walkCollision, hv, ↓reduceIte]
+    rcases hl1 : lookup1 (nameOf hash domain) with _ | text1
+    · simp [hl1] at h1
+    rcases hl2 : lookup2 (nameOf hash domain) with _ | text2
+    · simp [hl2] at h2
+    simp only [hl1, hl2] at h1 h2 ⊢
+    by_cases hh1 : hashOf text1 = hash
+    swap
+    · simp [hh1, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h1
+    by_cases hh2 : hashOf text2 = hash
+    swap
+    · simp [hh2, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h2
+    simp only [hh1, hh2, ↓reduceIte] at h1 h2
+    by_cases he : text1 = text2
+    swap
+    · exact .inr ⟨(text1, text2), by simp [he, hh1, hh2], he, hh1.trans hh2.symm⟩
+    subst he
+    simp only [↓reduceIte]
+    rcases hp : Entry.parse text1 with err | entry
+    · simp [hp, bind, Except.bind] at h1
+    simp only [hp, bind, Except.bind] at h1 h2 ⊢
+    cases entry <;> cases tree <;>
+      try first
+        | exact ih _ _ _ h1 h2
+        | (simp [throw, throwThe, MonadExceptOf.throw] at h1; done)
+    -- A record under the root of records: the walk goes on only when it verifies.
+    rename_i record
+    by_cases hr : Enr.verifyV4 record = true
+    · simp only [hr, ↓reduceIte] at h1 h2
+      exact ih _ _ _ h1 h2
+    · simp [hr, throw, throwThe, MonadExceptOf.throw] at h1
+
+/-- A resolved list comes from a signed root at its domain and from the walk of its subtrees. -/
+theorem resolve_ok {lookup : String → Option String} {key : Vector UInt8 33} {seenSeq : Nat}
+    {domain : String} {budget : Nat} {list : Nat × Found}
+    (h : resolve lookup key seenSeq domain budget = .ok list) :
+    ∃ text root found, lookup domain = some text ∧ Entry.parse text = .ok (.root root) ∧
+      root.verify key = true ∧ seenSeq ≤ root.seq ∧
+      walk lookup domain budget [(.records, root.enrRoot), (.links, root.linkRoot)] [] ⟨[], []⟩ =
+        .ok found ∧ list = (root.seq, found) := by
+  unfold resolve at h
+  rcases hl : lookup domain with _ | text
+  · simp [hl, throw, throwThe, MonadExceptOf.throw] at h
+  rcases hp : Entry.parse text with err | entry
+  · simp [hl, hp, bind, Except.bind] at h
+  cases entry with
+  | root root =>
+    by_cases hv : root.verify key = true
+    swap
+    · simp [hl, hp, hv, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+    by_cases hs : seenSeq ≤ root.seq
+    swap
+    · simp [hl, hp, hv, hs, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+    rcases hw : walk lookup domain budget [(.records, root.enrRoot), (.links, root.linkRoot)] []
+      ⟨[], []⟩ with err | found
+    · simp [hl, hp, hv, hs, hw, bind, Except.bind] at h
+    simp [hl, hp, hv, hs, hw, bind, Except.bind, pure, Except.pure] at h
+    exact ⟨text, root, found, rfl, hp, hv, hs, hw, h.symm⟩
+  | _ => simp [hl, hp, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+
+/-- The search for a collision between a lookup and itself finds nothing, from any state. -/
+theorem walkCollision_self (lookup : String → Option String) (domain : String) :
+    (budget : Nat) → (pending : List (Subtree × Hash)) → (visited : List Hash) →
+      walkCollision lookup lookup domain budget pending visited = none := by
+  intro budget
+  induction budget with
+  | zero => intro pending visited; cases pending <;> rfl
+  | succ budget ih =>
+    intro pending visited
+    rcases pending with _ | ⟨⟨tree, hash⟩, pending⟩
+    · rfl
+    simp only [walkCollision]
+    split
+    · exact ih _ _
+    split
+    · rename_i text1 text2 h1 h2
+      obtain rfl : text1 = text2 := Option.some.inj (h1.symm.trans h2)
+      simp only [↓reduceIte]
+      split <;> exact ih _ _
+    · rfl
+
+/-- Two resolvers that serve one root give one list, or the search finds a collision.
+
+One root means the same subtree hashes and sequence number, whatever the text of its signature.
+
+So a resolver that changes any entry below a signed root makes the walk fail or breaks Keccak-256.
+-/
+theorem resolve_binds {lookup1 lookup2 : String → Option String} {key : Vector UInt8 33}
+    {seenSeq : Nat} {domain : String} {budget : Nat} {list1 list2 : Nat × Found}
+    (same : rootFields lookup1 domain = rootFields lookup2 domain)
+    (h1 : resolve lookup1 key seenSeq domain budget = .ok list1)
+    (h2 : resolve lookup2 key seenSeq domain budget = .ok list2) :
+    list1 = list2 ∨ ∃ pair, findCollision lookup1 lookup2 domain budget = some pair ∧
+      IsCollision pair := by
+  obtain ⟨text1, root1, found1, hl1, hp1, -, -, hw1, rfl⟩ := resolve_ok h1
+  obtain ⟨text2, root2, found2, hl2, hp2, -, -, hw2, rfl⟩ := resolve_ok h2
+  -- Both lookups give one root fields, so the two walks start from one state.
+  have r1 : rootFields lookup1 domain = some (root1.enrRoot, root1.linkRoot, root1.seq) := by
+    simp [rootFields, hl1, hp1]
+  have r2 : rootFields lookup2 domain = some (root2.enrRoot, root2.linkRoot, root2.seq) := by
+    simp [rootFields, hl2, hp2]
+  rw [r1, r2] at same
+  simp only [Option.some.injEq, Prod.mk.injEq] at same
+  obtain ⟨e1, e2, e3⟩ := same
+  rw [← e1, ← e2] at hw2
+  rcases walk_binds budget _ _ _ hw1 hw2 with he | ⟨pair, hc, hpair⟩
+  · exact .inl (by rw [he, e3])
+  · refine .inr ⟨pair, ?_, hpair⟩
+    simp only [findCollision, r1]
+    exact hc
+
+/-- A pair that the search finds from any state is a collision. -/
+theorem isCollision_of_walkCollision {lookup1 lookup2 : String → Option String}
+    {domain : String} {pair : String × String} :
+    (budget : Nat) → (pending : List (Subtree × Hash)) → (visited : List Hash) →
+      walkCollision lookup1 lookup2 domain budget pending visited = some pair →
+      IsCollision pair := by
+  intro budget
+  induction budget with
+  | zero => intro pending visited h; cases pending <;> cases h
+  | succ budget ih =>
+    intro pending visited h
+    rcases pending with _ | ⟨⟨tree, hash⟩, pending⟩
+    · cases h
+    simp only [walkCollision] at h
+    split at h
+    · exact ih _ _ h
+    split at h
+    · rename_i text1 text2 _ _
+      by_cases he : text1 = text2
+      · simp only [he, ↓reduceIte] at h
+        split at h <;> exact ih _ _ h
+      · by_cases hh : hashOf text1 = hashOf text2
+        · simp only [he, hh, ↓reduceIte, Option.some.injEq] at h
+          subst h
+          exact ⟨he, hh⟩
+        · simp [he, hh] at h
+    · cases h
+
+/-- A pair that the search finds is a collision, with no other condition. -/
+theorem isCollision_of_findCollision {lookup1 lookup2 : String → Option String} {domain : String}
+    {budget : Nat} {pair : String × String}
+    (h : findCollision lookup1 lookup2 domain budget = some pair) : IsCollision pair := by
+  unfold findCollision at h
+  split at h
+  · exact isCollision_of_walkCollision _ _ _ h
+  · cases h
+
+/-- The search finds nothing when both lookups are one, so a found collision is not a given. -/
+theorem findCollision_self (lookup : String → Option String) (domain : String) (budget : Nat) :
+    findCollision lookup lookup domain budget = none := by
+  unfold findCollision
+  split
+  · exact walkCollision_self _ _ _ _ _
+  · rfl
+
+/-- A list resolves only with a sequence number at least the one seen last. -/
+theorem le_seq_of_resolve {lookup : String → Option String} {key : Vector UInt8 33}
+    {seenSeq : Nat} {domain : String} {budget : Nat} {list : Nat × Found}
+    (h : resolve lookup key seenSeq domain budget = .ok list) : seenSeq ≤ list.1 := by
+  obtain ⟨-, root, -, -, -, -, hs, -, rfl⟩ := resolve_ok h
+  exact hs
+
+/-- A list resolves only from a root at its domain whose signature verifies under the key.
+
+The list has the sequence number of that root. -/
+theorem verify_of_resolve {lookup : String → Option String} {key : Vector UInt8 33}
+    {seenSeq : Nat} {domain : String} {budget : Nat} {list : Nat × Found}
+    (h : resolve lookup key seenSeq domain budget = .ok list) :
+    ∃ text root, lookup domain = some text ∧ Entry.parse text = .ok (.root root) ∧
+      root.verify key = true ∧ root.seq = list.1 := by
+  obtain ⟨text, root, -, hl, hp, hv, -, -, rfl⟩ := resolve_ok h
+  exact ⟨text, root, hl, hp, hv, rfl⟩
 
 end EthLib.Networking.DnsDisc

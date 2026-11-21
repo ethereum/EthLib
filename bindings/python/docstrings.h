@@ -1172,6 +1172,12 @@
 #define DOC_dnsdisc_verify_root \
   "Whether a root text is signed by a compressed public key of 33 bytes."
 
+#define DOC_dnsdisc_resolve \
+  "The node list at a domain, under a compressed public key, with a table as the DNS."
+
+#define DOC_dnsdisc_sign_root \
+  "The text of a root of two hashes of 16 bytes and a sequence number, signed with a private key."
+
 #define DOC_dnsdisc_parse_url \
   "The compressed public key and the domain of a URL `enrtree://<key>@<domain>`."
 

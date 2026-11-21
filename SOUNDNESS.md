@@ -2601,6 +2601,25 @@ The recovery id of the signature is 0 or 1, and a high `s` is accepted, since th
 So a root text has a second valid signature, with `n - s` and the other recovery id, under the same key.
 An empty branch `enrtree-branch:` holds no hash, and the domain of a URL is not checked as a DNS name, so it may be empty.
 
+`resolve` (`Networking/DnsDisc.lean`) reads a whole list from a lookup, which stands for the DNS and may be any function, including one that an attacker chose.
+It verifies the root under the key, refuses a sequence number below the last one seen, then walks both subtrees.
+Each entry must have the hash of its name.
+A link may sit only under the root of links, and a record only under the root of records.
+A record must verify under its own "v4" key, since the client must "decode, verify the node record".
+A hash met again is skipped, as the client "must track hashes and domains which are already resolved", and a budget bounds the number of hashes taken.
+`resolve_binds` (`Networking/Proofs/DnsDisc.lean`) states that two lookups that serve one root and both resolve give one list, or `findCollision` returns two texts with one truncated hash.
+One root means the same subtree hashes and sequence number, so the statement covers a root whose signature text was swapped.
+`isCollision_of_findCollision` states that a pair that the search returns is a collision, with no other condition.
+`findCollision_self` states that the search finds nothing for a single lookup, so the statement is not trivial.
+`le_seq_of_resolve` and `verify_of_resolve` state that a list resolves only from a root whose signature verifies under the key.
+Its sequence number is at least the one seen last.
+
+The security of a list thus rests on the 128 bits of the truncated Keccak-256.
+Whoever builds the tree chooses its texts, so a birthday collision, at about 2^64 hashes, helps only the key holder, who could sign two lists anyway.
+A resolver that wants to change an entry must find a second preimage of one of the names, at about 2^128 hashes for one name.
+Against a list of `N` entries, any of which will do, the cost falls to about 2^128 / N.
+The root itself is bound by its signature only under the unforgeability of ECDSA on secp256k1, which EthLib assumes and does not prove.
+
 ### The discv4 endpoint proof
 
 `receive` (`Networking/Discv4/Exchange.lean`) follows what a node of discv4 does with a packet from an address: the state it keeps, and the packets it sends back.
@@ -7406,12 +7425,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 548 operations and 51 size constants.
-The Python extension calls 548 of the operations and 51 of the constants.
+Lean exports 550 operations and 51 size constants.
+The Python extension calls 550 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12354 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (342), `dnsdisc.c` (60), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1631), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (852), `x25519.c` (21), `xmss.c` (344).
+12384 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (342), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1633), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (854), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

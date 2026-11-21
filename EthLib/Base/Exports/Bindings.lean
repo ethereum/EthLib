@@ -1509,6 +1509,13 @@ def bindings : List Binding := [
   ⟨"dnsdisc_verify_root", `EthLib.Networking.DnsDisc.Exports.verifyRootExport,
     "(key: bytes, text: str) -> bool",
     [`EthLib.Networking.DnsDisc.DnsError], some "DnsDiscError"⟩,
+  ⟨"dnsdisc_resolve", `EthLib.Networking.DnsDisc.Exports.resolveExport,
+    "(key: bytes, seen_seq: int, domain: str, budget: int, table: list[tuple[str, str]]) -> " ++
+      "tuple[int, list[bytes], list[str]]",
+    [`EthLib.Networking.DnsDisc.DnsError], some "DnsDiscError"⟩,
+  ⟨"dnsdisc_sign_root", `EthLib.Networking.DnsDisc.Exports.signRootExport,
+    "(secret_key: bytes, enr_root: bytes, link_root: bytes, seq: int) -> str",
+    [`EthLib.Networking.DnsDisc.DnsError], some "DnsDiscError"⟩,
   ⟨"dnsdisc_parse_url", `EthLib.Networking.DnsDisc.Exports.parseUrlExport,
     "(text: str) -> tuple[bytes, str]",
     [`EthLib.Networking.DnsDisc.DnsError], some "DnsDiscError"⟩,
