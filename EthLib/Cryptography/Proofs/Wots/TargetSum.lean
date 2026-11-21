@@ -105,6 +105,12 @@ theorem incomparable_of_sum_eq {n k : Nat} {x y : Vector (Fin k) n}
 /-- Strings of `n` digits below `k` that sum to `s`. -/
 abbrev DigitStrings (n k s : ℕ) := {x : Fin n → Fin k // ∑ i, (x i : ℕ) = s}
 
+/-- Filtering the words of `n` digits below `k` by digit sum `s` counts the digit strings above. -/
+theorem card_filter_sum_eq (n k s : ℕ) :
+    (Finset.univ.filter fun x : Fin n → Fin k => ∑ i, (x i : ℕ) = s).card =
+      Fintype.card (DigitStrings n k s) :=
+  (Fintype.card_subtype _).symm
+
 /-- Only the empty string has no digits, and it sums to 0. -/
 theorem card_digitStrings_zero (k s : ℕ) :
     Fintype.card (DigitStrings 0 k s) = if s = 0 then 1 else 0 := by

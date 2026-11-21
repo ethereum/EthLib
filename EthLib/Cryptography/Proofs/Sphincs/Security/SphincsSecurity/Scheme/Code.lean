@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Sphincs.CodeSize
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme.Lemmas
 
 /-!
@@ -9,13 +10,11 @@ The counter search accepts a digest whose 64 two-bit digits sum to `T = 128`.
 
 The number of such digests is the coefficient of `z^128` in `(1 + z + z^2 + z^3)^64`.
 
+The model's digit words are the digit strings that the specification counts.
+
+So their number is the code size that the specification computes.
+
 This file shows that this number is at least `2^114`.
-
-The proof packs the polynomial into one natural number in base `2^129`, above every coefficient.
-
-The product of the 64 factors becomes a power, and each coefficient becomes one of its digits.
-
-So the kernel evaluates the count as arithmetic on one large numeral.
 -/
 
 @[expose] public section
@@ -29,9 +28,6 @@ namespace SphincsSecurity.Completeness
 variable [Params]
 
 open TargetSum
-
-/-- A base above every coefficient, so the coefficients are the digits. -/
-def base : Nat := 2 ^ 129
 
 omit [Params] in
 theorem digit_of_sum (B : Nat) (hB : 0 < B) (c : Nat → Nat) (hc : ∀ s, c s < B) :
@@ -60,62 +56,19 @@ theorem digit_of_sum (B : Nat) (hB : 0 < B) (c : Nat → Nat) (hc : ∀ s, c s <
           rw [Nat.add_mul_div_left _ _ hB, Nat.div_eq_of_lt (hc 0), Nat.zero_add]
           exact ih (fun s => c (s + 1)) (fun s => hc (s + 1)) k (Nat.lt_of_succ_lt_succ hk)
 
-omit [Params] in
-theorem weight_pow (B : Nat) :
-    (∑ d : Digit, B ^ d.val) ^ numChains = ∑ x : Encoding, B ^ (TargetSum.sum x) := by
-  have hcard : (Finset.univ : Finset ChainIndex).card = numChains := by
-    simp [Finset.card_univ]
-  have h1 : (∑ d : Digit, B ^ d.val) ^ numChains
-      = ∏ _i : ChainIndex, ∑ d : Digit, B ^ d.val := by
-    rw [Finset.prod_const, hcard]
-  rw [h1, Finset.prod_univ_sum, Fintype.piFinset_univ]
-  apply Finset.sum_congr rfl
-  intro x _
-  rw [Finset.prod_pow_eq_pow_sum]
-  rfl
-
 /-- The number of words with digit sum `s`. -/
 def codeCount (s : Nat) : Nat := (Finset.univ.filter (fun x : Encoding => TargetSum.sum x = s)).card
 
 omit [Params] in
-theorem sum_lt_193 (x : Encoding) : TargetSum.sum x < 193 := by
-  have : TargetSum.sum x ≤ ∑ _i : ChainIndex, 3 :=
-    Finset.sum_le_sum (fun i _ => Nat.le_of_lt_succ (x i).isLt)
-  simp only [Finset.sum_const, Finset.card_univ, smul_eq_mul] at this
-  have hcard : Fintype.card ChainIndex = 64 := by simp [numChains]
-  rw [hcard] at this
-  omega
-
-omit [Params] in
-theorem sum_encoding_pow (B : Nat) :
-    ∑ x : Encoding, B ^ (TargetSum.sum x) = ∑ s ∈ range 193, codeCount s * B ^ s := by
-  rw [← Finset.sum_fiberwise_of_maps_to (g := TargetSum.sum) (t := range 193)
-    (fun x _ => Finset.mem_range.mpr (sum_lt_193 x)) (fun x => B ^ (TargetSum.sum x))]
-  apply Finset.sum_congr rfl
-  intro s _
-  rw [Finset.sum_congr rfl (fun x hx => by rw [(Finset.mem_filter.mp hx).2]),
-    Finset.sum_const, codeCount, smul_eq_mul]
-
-omit [Params] in
-theorem codeCount_lt_base (s : Nat) : codeCount s < base := by
-  have h : codeCount s ≤ Fintype.card Encoding := Finset.card_filter_le _ _
-  have hcard : Fintype.card Encoding = 4 ^ 64 := by
-    simp [numChains, chainLength, winternitzBits]
-  rw [hcard] at h
-  exact Nat.lt_of_le_of_lt h (by decide)
-
-omit [Params] in
-theorem weight_eq : (∑ d : Digit, base ^ d.val) = (base ^ 4 - 1) / (base - 1) := by decide
-
-omit [Params] in
-theorem codeCount_target :
-    codeCount targetSum = (∑ d : Digit, base ^ d.val) ^ numChains / base ^ targetSum % base := by
-  rw [weight_pow, sum_encoding_pow]
-  exact (digit_of_sum base (by decide) codeCount codeCount_lt_base 193 targetSum (by decide)).symm
+/-- `[z^128](1 + z + z^2 + z^3)^64`. -/
+theorem codeCount_target : codeCount targetSum = 23195210617839120199658819909693679 :=
+  -- A digit word of sum `T` is a digit string of sum `T`, which the specification counts.
+  (EthLib.Cryptography.Wots.card_filter_sum_eq _ _ _).trans
+    EthLib.Cryptography.Sphincs.card_digitStrings_code
 
 omit [Params] in
 theorem two_pow_le_codeCount : 2 ^ 114 ≤ codeCount targetSum := by
-  rw [codeCount_target, weight_eq]
+  rw [codeCount_target]
   decide
 
 omit [Params] in
