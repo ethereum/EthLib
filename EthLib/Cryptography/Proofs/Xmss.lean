@@ -23,9 +23,12 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.CyclicDigest
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.EarlierProbe
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.FinderRepeat
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.FinderReplay
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.PairedGame
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.PairedHashWord
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.PriorCompensation
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.SigningCache
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.TrialBudget
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.WatchedCost
 public import EthLib.Cryptography.Proofs.Xmss.Errors
 
