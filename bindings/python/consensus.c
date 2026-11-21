@@ -858,6 +858,10 @@ extern lean_object* eth_consensus_light_client_update_as(lean_object* args);
 extern lean_object* eth_consensus_light_client_gossip_full_node(lean_object* args);
 extern lean_object* eth_consensus_light_client_gossip_light_client(lean_object* args);
 extern lean_object* eth_consensus_compute_fork_digest(lean_object* args);
+extern lean_object* eth_consensus_enr_fork_id(lean_object* args);
+extern lean_object* eth_consensus_next_fork_digest(lean_object* args);
+extern lean_object* eth_consensus_bootnode_fork_id(lean_object* args);
+extern lean_object* eth_consensus_enr_record(lean_object* args);
 extern lean_object* eth_consensus_digest_epochs(lean_object* args);
 extern lean_object* eth_consensus_fork_of_digest(lean_object* args);
 extern lean_object* eth_consensus_digests_identify(lean_object* args);
@@ -1874,6 +1878,38 @@ py_consensus_compute_fork_digest(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_compute_fork_digest, args, 4, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_enr_fork_id(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_enr_fork_id, args, 4, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_next_fork_digest(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_next_fork_digest, args, 4, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_bootnode_fork_id(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_bootnode_fork_id, args, 2, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_enr_record(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_enr_record, args, 9, SSZ_ERROR);
 }
 
 PyObject*

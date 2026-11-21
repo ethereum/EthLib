@@ -72,6 +72,21 @@ eth_discv5_decode_message(
 );
 
 extern lean_object*
+eth_discv5_answers_request(
+  lean_object* args
+);
+
+extern lean_object*
+eth_discv5_talk_response(
+  lean_object* args
+);
+
+extern lean_object*
+eth_discv5_nodes_match(
+  lean_object* args
+);
+
+extern lean_object*
 eth_discv5_reencode_message(
   lean_object* plaintext
 );
@@ -236,6 +251,30 @@ py_discv5_decode_message(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_discv5_decode_message, args, 1, DISCV5_ERROR);
+}
+
+PyObject*
+py_discv5_answers_request(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_discv5_answers_request, args, 2, DISCV5_ERROR);
+}
+
+PyObject*
+py_discv5_talk_response(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_discv5_talk_response, args, 1, DISCV5_ERROR);
+}
+
+PyObject*
+py_discv5_nodes_match(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_discv5_nodes_match, args, 3, DISCV5_ERROR);
 }
 
 PyObject*

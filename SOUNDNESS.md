@@ -1013,6 +1013,9 @@ The reader does not check the two arcs that the first subidentifier combines, si
 `validate_oid_ok_iff`, `validate_null_ok_iff`, `validate_utf8String_ok_iff` and `validate_printableString_ok_iff` state what validation accepts for these tags.
 A NULL is empty, and a UTF8String is the UTF-8 encoding of some characters.
 A PrintableString holds the letters, digits, space and `'()+,-./:=?` of X.680 §41.4.
+`validate_integer_ok_iff`, `validate_octetString` and `validate_ia5String_ok_iff` state what validation accepts for the other primitive tags.
+An INTEGER has one content octet or more, and with two or more its first nine bits are neither all zero nor all one (X.690 §§8.3.1, 8.3.2).
+An OCTET STRING passes whatever its content, and an IA5String passes exactly when each octet is below 128.
 `validate_eq_error_tag` states that a value of every tag outside the subset fails with a tag error.
 `validate_sequence_ok_iff` and `validate_set_ok_iff` state that a SEQUENCE or a SET OF passes exactly when its content reads as values that each pass.
 A SET OF also needs the encodings of those values in ascending order, compared octet by octet (X.690 §11.6).
@@ -1020,7 +1023,6 @@ Both hold for a value whose encoding is longer than its content.
 Every value that the reader returns is one (`size_lt_of_read_ok`, `children_go_sizes`).
 The comparison puts a proper prefix first, where X.690 pads the shorter encoding with zero octets.
 No theorem states that one sibling encoding is never a proper prefix of another.
-No theorem states the validation of INTEGER, OCTET STRING or IA5String.
 Nothing in Lean shows that authentication can succeed; the Python tests check vectors 1 to 4 of libp2p TLS.
 
 ### QUIC wire encodings
@@ -1628,6 +1630,10 @@ No theorem relates the definitions to the Yellow Paper.
 The stack, the frame with its program counter and gas meter, and memory are modelled.
 So are the instructions that read only the stack, memory, call data, code and return data.
 They are in `Execution/Evm/Instructions/StackOnly.lean` and `Execution/Evm/Instructions/MemoryData.lean`.
+
+`selfdestructCost_selfdestructCreatesAccount` (`Execution/Proofs/Evm/Instructions/SelfDestruct.lean`) prices the new beneficiary of SELFDESTRUCT before Glamsterdam.
+From Tangerine Whistle, that beneficiary adds what a CALL of the balance to it pays for the account.
+Before Tangerine Whistle, it adds nothing, since EIP-150 introduced that price together with the base price of SELFDESTRUCT.
 
 A program logic over bytecode is in `Execution/Proofs/Evm/Logic/`.
 Its first relation covers frames that send no message.
@@ -2566,6 +2572,26 @@ No decoded item fails to encode, since a length must reach `2^64` for that.
 If one did, its transaction would have no hash and would reject its whole message, while [Transaction Encoding and Validity](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#transaction-encoding-and-validity) asks only to discard invalid transactions.
 The session accepts an empty Transactions message from the peer, which the source only discourages.
 
+### discv5 answers and their requests
+
+`answersRequest` (`Networking/Discv5/Exchange.lean`) states which message answers a request of discv5: PONG for PING, NODES for FINDNODE and TALKRESP for TALKREQ, with the same request ID.
+`nodesMatch` checks the records of a NODES answer: each is a "v4" record that verifies.
+Each must also lie at one of the requested logarithmic distances from the node that received the FINDNODE.
+`acceptNodes` keeps the answers to the request, at most the smaller of `total` and a limit of the caller.
+`talkResponse` answers a TALKREQ.
+The answers to the topic requests REGTOPIC and TOPICQUERY are not covered.
+They follow [Protocol Messages](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/discv5/discv5-wire.md#L156-L239) in `discv5-wire.md`.
+
+`nodesMatch_zero` (`Networking/Proofs/Discv5/Exchange.lean`) states that with distance 0 alone, every record of a matching answer has the recipient's node ID.
+`nodesMatch_append` states that an answer in several NODES messages matches exactly when each message matches.
+`answersRequest_of_mem_acceptNodes`, `length_acceptNodes_le` and `length_acceptNodes_le_total` state that a node keeps only answers to its request, at most its limit and at most `total`.
+`talkResponse_unknown` states that a TALKREQ for an unknown protocol gets a TALKRESP with its request ID and an empty response, which the source requires.
+`answersRequest_talkResponse` states that this TALKRESP answers the TALKREQ.
+
+The source leaves two points open, and EthLib reads them as follows.
+The message table calls a FINDNODE distance "a positive integer", while the next sentence gives distance 0 a meaning; EthLib accepts 0, and [devp2p#297](https://github.com/ethereum/devp2p/pull/297) proposes that reading.
+The source recommends at most 16 nodes in an answer but fixes no limit on `total`, so the limit is an input.
+
 ### multistream-select negotiation and the TCP upgrade
 
 `listen` and `dial` (`Networking/Libp2p/Multistream.lean`) are the two peers of a multistream-select negotiation, and `run` lets them read each other's messages until both stop.
@@ -3000,6 +3026,33 @@ When a gossip topic carries the same object, that type is the message type of th
 `responseDesc_eq_messageDesc` states it for blocks, finality and optimistic light client updates, sidecars, payload envelopes and inclusion lists, with the size limit of the topic.
 `responseBounds_snd_eq_topicBound` draws the consequence: at a fork that lists the topic, the largest length of such a chunk is the bound of the topic.
 `responseDesc_eq_messageDesc_phase0` states that version 1 of blocks by range and by root sends a Phase 0 block at every fork, since that version has no context bytes.
+
+### The consensus entries that a node writes
+
+A consensus node puts its fork in its node record, so that a peer can tell whether the two follow one chain.
+`enrForkId` (`Consensus/Enr.lean`) gives the `eth2` value at an epoch of the wall clock.
+It holds the digest now, then the version and the epoch of the next fork.
+From Fulu, the next fork is the next epoch at which the digest can change, as the [Fulu networking text](https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/fulu/p2p-interface.md#L865-L954) asks.
+So it counts the epochs of the blob schedule.
+`nextForkDigest` gives the `nfd` value, the digest at that epoch, or four zero bytes when no fork is planned.
+`consensusPairs` writes all the entries as pairs for a new record.
+`mayDisconnect` says when a node may leave a peer for its fork entries.
+
+`computeForkDigest_of_lt_nextForkEpoch` (`Consensus/Proofs/Enr.lean`) states that the digest is the same at every epoch from the current one up to the next fork epoch.
+A next digest epoch that is the first epoch of no consensus fork is a BPO epoch.
+`nextForkVersion_of_nextDigestEpoch` states that before such an epoch, the next version is the current one.
+`readEntries_consensusPairs` states that a node reading a record built from these pairs, at the writer's fork, gets back the values written.
+`lookup_cgc_of_consensusPairs` and `lookup_nfd_of_consensusPairs` state that once Fulu has an epoch, such a record holds `cgc` and `nfd` at every epoch, as the Fulu text requires.
+`mayDisconnect_of_lt` states that with the same digest, a node never disconnects before the earlier of the two next fork epochs.
+`mayDisconnect_of_le` states that it may from then on, when the entries differ.
+
+The sources leave three points open, and EthLib reads them as follows.
+A fork whose epoch is the far future epoch is not planned, so it gives no next fork.
+The text requires `cgc` and `nfd` once Fulu has an epoch, and EthLib also writes them at a fork from Fulu on.
+That second case matters only at the far future epoch, or when a fork after Fulu is planned but not Fulu itself.
+It lets the reader accept the record.
+The Fulu text has a node weigh `nfd` with the next fork of `eth2`, and forbids a disconnect "before the fork boundary" on a mismatch.
+EthLib reads the boundary as the earlier of the two next fork epochs, and applies it to every difference in the next fork while the digest now is the same.
 
 ### Weak subjectivity
 
@@ -7255,12 +7308,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 534 operations and 51 size constants.
-The Python extension calls 534 of the operations and 51 of the constants.
+Lean exports 541 operations and 51 size constants.
+The Python extension calls 541 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12185 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2674), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (225), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1612), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (456), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (837), `x25519.c` (21), `xmss.c` (344).
+12276 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (342), `engine.c` (225), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1621), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (456), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (844), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

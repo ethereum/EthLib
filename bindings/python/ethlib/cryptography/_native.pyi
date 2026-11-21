@@ -528,6 +528,18 @@ def discv5_reencode_message(plaintext: bytes) -> bytes:
     """The plaintext of the decoded message, written again by the encoder."""
     ...
 
+def discv5_answers_request(request: bytes, answer: bytes) -> bool:
+    """Whether a message plaintext answers a request plaintext."""
+    ...
+
+def discv5_talk_response(request: bytes) -> bytes:
+    """The plaintext of the TALKRESP of a node that knows no protocol, for a TALKREQ plaintext."""
+    ...
+
+def discv5_nodes_match(recipient: bytes, distances: list[int], records: list[bytes]) -> bool:
+    """Whether records match the distances of a FINDNODE, from the node ID of its recipient."""
+    ...
+
 def discv5_make_whoareyou(dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: int) -> tuple[bytes, bytes]:
     """Node B's WHOAREYOU packet for node A, and its challenge data."""
     ...
@@ -1222,6 +1234,22 @@ def consensus_light_client_gossip_light_client(name: str, fork: str, config: dic
 
 def consensus_compute_fork_digest(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, epoch: int) -> bytes:
     """The fork digest at an epoch, on the chain with the given root of the genesis validators."""
+    ...
+
+def consensus_enr_fork_id(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, epoch: int) -> tuple[bytes, bytes, int]:
+    """The `eth2` value that a node writes at an epoch, as its digest, next version and next epoch."""
+    ...
+
+def consensus_next_fork_digest(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, epoch: int) -> bytes:
+    """The `nfd` value that a node writes at an epoch: the digest of the next fork."""
+    ...
+
+def consensus_bootnode_fork_id(name: str, config: dict[str, Any] | None) -> tuple[bytes, bytes, int]:
+    """The `eth2` value of a bootnode record made before genesis, as its three fields."""
+    ...
+
+def consensus_enr_record(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, epoch: int, secret_key: bytes, seq: int, attnets: bytes, syncnets: bytes, cgc: int) -> bytes:
+    """A signed "v4" record of a consensus node at an epoch, with its consensus entries."""
     ...
 
 def consensus_digest_epochs(name: str, config: dict[str, Any] | None) -> list[int]:
