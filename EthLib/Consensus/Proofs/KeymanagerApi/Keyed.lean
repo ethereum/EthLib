@@ -7,7 +7,7 @@ public import EthLib.Consensus.Proofs.KeymanagerApi.VoluntaryExit
 /-!
 # Proofs: every key of a client has the public key of its secret key
 
-A client is keyed when each local key has the public key of its own secret key.
+A keyed client is one whose local keys each have the public key of their own secret key.
 
 An import derives the public key from the secret, and a delete only removes keys.
 
@@ -23,10 +23,6 @@ An exit that a keyed client signs verifies under the key of its validator.
 namespace EthLib.Consensus.KeymanagerApi
 
 open Lean Base Cryptography Cryptography.Bls
-
-/-- Each local key of the client has the public key of its secret key. -/
-def KeyState.Keyed (state : KeyState) : Prop :=
-  ∀ key ∈ state.localKeys, key.pubkey = Signatures.skToPk key.secretKey
 
 /-- A client with no local key is keyed. -/
 theorem KeyState.keyed_of_localKeys_eq_nil {state : KeyState} (h : state.localKeys = []) :

@@ -51,6 +51,10 @@ theorem voluntaryExitDomain_of_dencun_le {config : Config} {state : BeaconState 
       config.CAPELLA_FORK_VERSION state.genesisValidatorsRoot) := by
   simp [voluntaryExitDomain, deneb]
 
+/-- Each local key of the client has the public key of its secret key. -/
+def KeyState.Keyed (state : KeyState) : Prop :=
+  ∀ key ∈ state.localKeys, key.pubkey = Signatures.skToPk key.secretKey
+
 variable {config : Config} {state : BeaconState preset fork} {keys : KeyState}
   {pubkey : BLSPubkey} {epoch : Option Epoch} {signed : SignedVoluntaryExit}
 
@@ -66,7 +70,7 @@ The root is under the domain of a voluntary exit in the state, at the epoch of t
 
 So the signature check of the processing of a voluntary exit passes, in that state. -/
 theorem verify_of_signVoluntaryExit
-    (keyed : ∀ key ∈ keys.localKeys, key.pubkey = Signatures.skToPk key.secretKey)
+    (keyed : keys.Keyed)
     (call : signVoluntaryExit config state keys pubkey epoch = .ok signed) :
     ∃ validator domain root, getValidator state signed.message.validatorIndex = .ok validator ∧
       voluntaryExitDomain config state signed.message.epoch = .ok domain ∧
@@ -103,7 +107,7 @@ That state may be at any fork from Deneb on.
 
 Its validator at the index of the exit must keep the key, an assumption about the chain. -/
 theorem verify_of_signVoluntaryExit_of_dencun_le
-    (keyed : ∀ key ∈ keys.localKeys, key.pubkey = Signatures.skToPk key.secretKey)
+    (keyed : keys.Keyed)
     (call : signVoluntaryExit config state keys pubkey epoch = .ok signed)
     (deneb : .dencun ≤ fork) {preset' : Preset} {fork' : Fork} (later : BeaconState preset' fork')
     (deneb' : .dencun ≤ fork')
