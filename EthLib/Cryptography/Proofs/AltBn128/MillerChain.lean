@@ -91,9 +91,9 @@ private theorem i_pow_modulus : Fp2.i ^ Fp.modulus = -Fp2.i := by
 /-- The conjugate in `Fp2` is the `p`-th power. -/
 theorem ofFp2Hom_conj (x : Fp2) : ofFp2Hom x.conj = primeFrobenius (ofFp2Hom x) := by
   have hx : x = Fp2.ofFp x.c0 + Fp2.ofFp x.c1 * Fp2.i := by
-    apply Fp2.ext <;> simp [Fp2.i]
+    apply Fp2.ext <;> simp [Fp2.i, Cryptography.Fp2.i]
   have hc : x.conj = Fp2.ofFp x.c0 - Fp2.ofFp x.c1 * Fp2.i := by
-    apply Fp2.ext <;> simp [Fp2.i, Fp2.conj]
+    apply Fp2.ext <;> simp [Fp2.i, Cryptography.Fp2.i, Fp2.conj, Cryptography.Fp2.conjugate]
   rw [hc]
   conv_rhs => rw [hx]
   simp only [map_add, map_sub, map_mul, ofFp2Hom_ofFp, primeFrobenius_apply, ← map_pow,
@@ -105,14 +105,14 @@ theorem ofFp2Hom_conj (x : Fp2) : ofFp2Hom x.conj = primeFrobenius (ofFp2Hom x) 
 
 /-- `(w^2)^p = w^2 (9 + i)^((p - 1) / 3)`, since `w^6 = 9 + i`. -/
 theorem primeFrobenius_w_sq : primeFrobenius (wPow 1 ^ 2) = ofFp2Hom frobeniusX * wPow 1 ^ 2 := by
-  rw [primeFrobenius_apply, frobeniusX, Fp2.powBits_eq_pow 256 _ _ (by decide), map_pow,
+  rw [primeFrobenius_apply, frobeniusX, Fp2.powNat_eq_pow _ _, map_pow,
     ← w_pow_six, ← pow_mul, ← pow_mul, ← pow_add,
     show 2 * Fp.modulus = 6 * ((Fp.modulus - 1) / 3) + 2 by decide]
 
 /-- `(w^3)^p = w^3 (9 + i)^((p - 1) / 2)`, since `w^6 = 9 + i`. -/
 theorem primeFrobenius_w_cube :
     primeFrobenius (wPow 1 ^ 3) = ofFp2Hom frobeniusY * wPow 1 ^ 3 := by
-  rw [primeFrobenius_apply, frobeniusY, Fp2.powBits_eq_pow 256 _ _ (by decide), map_pow,
+  rw [primeFrobenius_apply, frobeniusY, Fp2.powNat_eq_pow _ _, map_pow,
     ← w_pow_six, ← pow_mul, ← pow_mul, ← pow_add,
     show 3 * Fp.modulus = 6 * ((Fp.modulus - 1) / 2) + 3 by decide]
 
@@ -226,9 +226,12 @@ theorem finalExponentiation_vertical {x : Fp2} (hx : x ≠ 0) (xt : Fp) :
     finalExponentiation (ofFpHom xt - ofFp2Hom x * wPow 1 ^ 2) = 1 := by
   set v := ofFpHom xt - ofFp2Hom x * wPow 1 ^ 2
   have hv := vertical_ne_zero hx xt
+  -- Stated on a variable, so the kernel never evaluates the power.
   have hxi : (⟨9, 1⟩ : Fp2) ^ (Fp.modulus ^ 2 - 1) = 1 := by
-    rw [← card_fp2]
-    exact FiniteField.pow_card_sub_one_eq_one _ xi_ne_zero
+    have h (y : Fp2) (hy : y ≠ 0) : y ^ (Fp.modulus ^ 2 - 1) = 1 := by
+      rw [← card_fp2]
+      exact FiniteField.pow_card_sub_one_eq_one _ hy
+    exact h _ xi_ne_zero
   have hw : (wPow 1 ^ 2) ^ Fp.modulus ^ 6 = wPow 1 ^ 2 := by
     rw [← pow_mul, show 2 * Fp.modulus ^ 6 = 6 * ((Fp.modulus ^ 2 - 1) *
       ((Fp.modulus ^ 6 - 1) / 3 / (Fp.modulus ^ 2 - 1))) + 2 by decide +kernel, pow_add,

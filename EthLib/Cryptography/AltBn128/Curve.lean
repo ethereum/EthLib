@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Secp256k1.Field
 public import EthLib.Cryptography.ShortWeierstrass
+public import EthLib.Cryptography.BaseField
 
 /-!
 # `AltBn128.Curve`
@@ -39,6 +40,14 @@ abbrev Fp := Fin Fp.modulus
 
 /-- The inverse in `Fp`, by the extended Euclidean algorithm, and 0 for 0. -/
 def Fp.inv (a : Fp) : Fp := Fin.inverse a
+
+/-- The field operations of `Fp` that its quadratic extension reads. -/
+instance instFieldOps : FieldOps Fp where
+  zero := 0
+  one := 1
+  beq a b := a == b
+  isZero a := a == 0
+  inverse := Fp.inv
 
 /-- `b = 3`, from EIP-196. -/
 def b : Fp := 3

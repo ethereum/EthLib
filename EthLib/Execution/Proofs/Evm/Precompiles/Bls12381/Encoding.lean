@@ -334,10 +334,10 @@ theorem bytesToG2_eq_ok_iff {raw : List UInt8} {subgroupCheck : Bool} {p : G2} :
         · -- `(0, 0)` is not on the twist, so the second case cannot hold.
           obtain ⟨h0, h1, h2, h3⟩ := hz
           have hx0 : x = ⟨0, 0⟩ := by
-            cases x; simp only [Fp2.mk.injEq]
+            cases x; simp only [Cryptography.Fp2.mk.injEq]
             exact ⟨Fp.ext (h0.trans Fp.val_zero.symm), Fp.ext (h1.trans Fp.val_zero.symm)⟩
           have hy0 : y = ⟨0, 0⟩ := by
-            cases y; simp only [Fp2.mk.injEq]
+            cases y; simp only [Cryptography.Fp2.mk.injEq]
             exact ⟨Fp.ext (h2.trans Fp.val_zero.symm), Fp.ext (h3.trans Fp.val_zero.symm)⟩
           rw [onCurveG2, Fp2.beq_iff_eq, hx0, hy0] at hon
           exact absurd hon (by decide_eq_at_model [G2.bTwist])
