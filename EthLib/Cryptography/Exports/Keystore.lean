@@ -21,7 +21,7 @@ public section
 
 namespace EthLib.Cryptography.Keystore.Exports
 
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport ExportError toResult)
 
 /-- Unicode 16.0.0 Normalization Form KD, UAX #15 rev. 56, §1.3. -/
 @[export eth_keystore_nfkd]
@@ -112,13 +112,15 @@ def screen (text : String) : Except String Unit :=
   | some reason => .error reason
   | none => .ok ()
 
+/-- An error reaches Python with its code, and its message names the error. -/
+instance : ExportError KeystoreError where
+  code := KeystoreError.code
+  message := fun e => s!"{repr e}"
+
 /-- JSON text read at the boundary, with the parser's bounds checked first. -/
 def jsonOf (text : String) : Result Lean.Json := do
-  let invalid (reason : String) :=
-    let error := KeystoreError.invalidJson reason
-    (error.code, s!"{repr error}")
-  (screen text).mapError invalid
-  (Lean.Json.parse text).mapError invalid
+  toResult none ((screen text).mapError KeystoreError.invalidJson)
+  toResult none ((Lean.Json.parse text).mapError KeystoreError.invalidJson)
 
 /-- Read JSON text at the boundary, then run the specified keystore decryption.
 
@@ -127,8 +129,7 @@ The arguments are the text, the password, and the memory and work limits of key 
 def decryptOf (args : String × String × Nat × Nat) : Result ByteArray := do
   let (text, password, memory, work) := args
   let value ← jsonOf text
-  (Keystore.decrypt ⟨memory, work⟩ value password).mapError fun error =>
-    (error.code, s!"{repr error}")
+  toResult none (Keystore.decrypt ⟨memory, work⟩ value password)
 
 /-- Decrypt an ERC-2335 JSON keystore and return its secret octets. -/
 @[export eth_keystore_decrypt]
@@ -142,12 +143,11 @@ The arguments are those two as JSON text, then the IV, the password and the secr
 -/
 def encryptOf (args : String × String × ByteArray × String × ByteArray) : Result String := do
   let (kdf, metadata, iv, password, secret) := args
-  let fail (error : KeystoreError) := (error.code, s!"{repr error}")
-  let kdf ← (readKdf (← jsonOf kdf)).mapError fail
-  let metadata ← (readMetadata (← jsonOf metadata)).mapError fail
-  let iv ← (Base.exactBytes 16 iv fun _ => KeystoreError.invalidField "cipher.iv"
-    "expected 16 bytes").mapError fail
-  return (← (Keystore.encrypt kdf iv metadata password secret).mapError fail).compress
+  let kdf ← toResult none (readKdf (← jsonOf kdf))
+  let metadata ← toResult none (readMetadata (← jsonOf metadata))
+  let iv ← toResult none (Base.exactBytes 16 iv fun _ => KeystoreError.invalidField "cipher.iv"
+    "expected 16 bytes")
+  return (← toResult none (Keystore.encrypt kdf iv metadata password secret)).compress
 
 /-- Write an ERC-2335 JSON keystore of a secret, from its key derivation and metadata.
 

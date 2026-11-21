@@ -34,15 +34,16 @@ public section
 
 namespace EthLib.Cryptography.Kzg.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result ExportError toResult)
 
 open EthLib.Cryptography.Kzg
 open EthLib.Base (Bytes32 packBytes)
 open EthLib.Cryptography.Kzg.Constants
 
-/-- Run a KZG computation, with its error as a code and a message. -/
-def runKzg {α : Type} (act : Except KzgError α) : Result α :=
-  act.mapError fun e => (e.code, e.message)
+/-- An error reaches Python with its code and its own message. -/
+instance : ExportError KzgError where
+  code := KzgError.code
+  message := KzgError.message
 
 /-- The embedded trusted setup, decoded on its first read.
 
@@ -68,7 +69,7 @@ def embeddedSetup (_ : Unit) : Except KzgError TrustedSetup := embeddedSetupThun
 
 /-- Run a KZG computation that reads the embedded trusted setup. -/
 def runKzgWithSetup {α : Type} (act : TrustedSetup → Except KzgError α) : Result α :=
-  runKzg (embeddedSetup () >>= act)
+  toResult none (embeddedSetup () >>= act)
 
 /-! ## Parsing
 
@@ -146,7 +147,7 @@ def blobToKzgCommitmentExport (blob : ByteArray) : Result ByteArray :=
 @[export eth_kzg_compute_challenge]
 def computeChallengeExport
     (blob : ByteArray) (commitment : ByteArray) : Result ByteArray :=
-  runKzg do
+  toResult none do
     let blob ← parseBlob blob
     let commitment ← parseCommitment commitment
     let _ ← blobToPolynomial blob
@@ -196,7 +197,7 @@ def verifyBlobKzgProofBatchExport
 
 @[export eth_kzg_compute_cells]
 def computeCellsExport (blob : ByteArray) : Result ByteArray := do
-  let cells ← runKzg do computeCells (← parseBlob blob)
+  let cells ← toResult none do computeCells (← parseBlob blob)
   return cells.foldl (· ++ packBytes ·) ByteArray.empty
 
 @[export eth_kzg_compute_verify_cell_kzg_proof_batch_challenge]
@@ -206,7 +207,7 @@ def computeVerifyCellKzgProofBatchChallengeExport
     (cellIndicesBE : ByteArray)
     (cosetsEvals : Array ByteArray)
     (proofs : Array ByteArray) : Result ByteArray :=
-  runKzg do
+  toResult none do
     let commitmentIndices ← unpackIndicesBE commitmentIndicesBE
     let cellIndices       ← unpackIndicesBE cellIndicesBE
     if cellIndices.size ≠ commitmentIndices.size then

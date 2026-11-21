@@ -22,22 +22,24 @@ public section
 namespace EthLib.Cryptography.Aes.Exports
 
 open EthLib.Cryptography.Aes
-open EthLib.Exports (Result)
+open EthLib.Exports (Result ExportError UnreadArgument rejectArgument toResult)
 
 /-- A 16-byte block, or an error for any other length. -/
 def readBlock (what : String) (bytes : ByteArray) : Result Block :=
-  Base.exactBytes 16 bytes fun size => (0, s!"bad {what} size: {size}, expected 16")
+  toResult none (Base.exactBytes 16 bytes fun size =>
+    UnreadArgument.mk s!"bad {what} size: {size}, expected 16")
 
 /-- A cipher under a 16-byte or 32-byte key, or an error for any other length. -/
 def readCipher (cipher : (k : KeySize) → Key k → Block → Block) (key : ByteArray) :
     Result (Block → Block) :=
   if let some k := Base.exactBytes? 16 key then pure (cipher .aes128 k)
   else if let some k := Base.exactBytes? 32 key then pure (cipher .aes256 k)
-  else throw (0, s!"bad key size: {key.size}, expected 16 or 32")
+  else rejectArgument none s!"bad key size: {key.size}, expected 16 or 32"
 
-/-- A GCM result, with the code and the message of its error. -/
-def runGcm {α : Type} (act : Except Gcm.Error α) : Result α :=
-  act.mapError fun e => (e.code, s!"{repr e}")
+/-- An error reaches Python with its code, and its message names the error. -/
+instance : ExportError Gcm.Error where
+  code := Gcm.Error.code
+  message := fun e => s!"{repr e}"
 
 /-- The forward cipher `CIPH_K` of FIPS 197 §5 on one block. -/
 @[export eth_aes_encrypt_block]
@@ -61,7 +63,7 @@ def ctrExport (key initialCounter data : ByteArray) : Result ByteArray := do
 @[export eth_aes_gcm_encrypt]
 def gcmEncrypt (key iv plaintext aad : ByteArray) (tagLength : UInt64) : Result ByteArray := do
   let f ← readCipher ciph key
-  let (c, t) ← runGcm (Gcm.encrypt f tagLength.toNat iv plaintext aad)
+  let (c, t) ← toResult none (Gcm.encrypt f tagLength.toNat iv plaintext aad)
   return c ++ t
 
 /-- GCM-AD of SP 800-38D §7.2: the plaintext, or an error when the tag does not match.
@@ -71,6 +73,6 @@ The tag length belongs to the key, so the caller gives it, and a tag of another 
 def gcmDecrypt (key iv ciphertext aad tag : ByteArray) (tagLength : UInt64) :
     Result ByteArray := do
   let f ← readCipher ciph key
-  runGcm (Gcm.decrypt f tagLength.toNat iv ciphertext aad tag)
+  toResult none (Gcm.decrypt f tagLength.toNat iv ciphertext aad tag)
 
 end EthLib.Cryptography.Aes.Exports

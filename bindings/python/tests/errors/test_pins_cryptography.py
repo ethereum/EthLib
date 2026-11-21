@@ -19,6 +19,7 @@ from ethlib.cryptography.chacha20_poly1305 import (
     chacha20_crypt,
     chacha20_poly1305_decrypt,
     chacha20_poly1305_encrypt,
+    chacha20_quarter_round_state,
 )
 from ethlib.cryptography.x25519 import x25519
 from ethlib.errors import (
@@ -262,6 +263,49 @@ from raising import raises
             "expected bytes",
             lambda: crc32.digest("abc"),  # ty: ignore[invalid-argument-type]
             id="crc32",
+        ),
+        # The text is not JSON.
+        pytest.param(
+            KeystoreError,
+            1,
+            ('EthLib.Cryptography.Keystore.KeystoreError.invalidJson "offset 0: expected: null"'),
+            lambda: keystore.decrypt("not json", "password"),
+            id="keystore-json",
+        ),
+        # An empty object names no key derivation function.
+        pytest.param(
+            KeystoreError,
+            2,
+            (
+                'EthLib.Cryptography.Keystore.KeystoreError.invalidField "kdf.function" '
+                '"property not found: function"'
+            ),
+            lambda: keystore.encrypt("{}", "{}", bytes(16), "password", b""),
+            id="keystore-encrypt",
+        ),
+        # A state has 16 words, so index 16 is past its end.
+        pytest.param(
+            ChaCha20Poly1305Error,
+            0,
+            "quarter-round index must be below 16",
+            lambda: chacha20_quarter_round_state(bytes(64), 16, 0, 0, 0),
+            id="chacha20-quarter-round",
+        ),
+        # A header hash is 32 bytes.
+        pytest.param(
+            EthashError,
+            0,
+            "Ethash: a header hash is 32 bytes, got 31",
+            lambda: ethash.hashimoto_light(1024, bytes(64), bytes(31), bytes(8)),
+            id="ethash-header",
+        ),
+        # The block size r is at least 1.
+        pytest.param(
+            ScryptError,
+            2,
+            "EthLib.Cryptography.Hash.Scrypt.ScryptError.invalidBlockSize 0",
+            lambda: kdf.scrypt_block_mix(bytes(64), 0),
+            id="scrypt-mix",
         ),
     ],
 )

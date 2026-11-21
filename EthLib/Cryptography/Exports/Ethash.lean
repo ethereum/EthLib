@@ -23,7 +23,7 @@ public section
 
 namespace EthLib.Cryptography.Ethash.Exports
 
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport rejectArgument)
 
 /-- The bytes of a cache: its items in order, 64 bytes each. -/
 def bytesOfCache (c : Array Item) : ByteArray :=
@@ -32,7 +32,7 @@ def bytesOfCache (c : Array Item) : ByteArray :=
 /-- The cache that bytes spell, 64 bytes per item. -/
 def cacheOfBytes (bytes : ByteArray) : Result (Array Item) := do
   if bytes.size = 0 ∨ bytes.size % HASH_BYTES ≠ 0 then
-    throw (0, s!"Ethash: a cache is a positive multiple of 64 bytes, got {bytes.size}")
+    rejectArgument none s!"Ethash: a cache is a positive multiple of 64 bytes, got {bytes.size}"
   let data := bytes.data
   pure <| Array.ofFn fun i : Fin (bytes.size / HASH_BYTES) =>
     itemOfBytes (Vector.ofFn fun k : Fin 64 => data.getD (HASH_BYTES * i.val + k.val) 0)
@@ -80,9 +80,9 @@ def hashimotoLightOf (args : Nat × ByteArray × ByteArray × ByteArray) :
   let (datasetSize, cacheBytes, headerHash, nonce) := args
   let c ← cacheOfBytes cacheBytes
   if headerHash.size ≠ 32 then
-    throw (0, s!"Ethash: a header hash is 32 bytes, got {headerHash.size}")
+    rejectArgument none s!"Ethash: a header hash is 32 bytes, got {headerHash.size}"
   if nonce.size ≠ 8 then
-    throw (0, s!"Ethash: a nonce is 8 bytes, got {nonce.size}")
+    rejectArgument none s!"Ethash: a nonce is 8 bytes, got {nonce.size}"
   let out := hashimotoLight datasetSize c headerHash nonce
   pure (out.mixDigest, out.result)
 

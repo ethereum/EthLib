@@ -20,7 +20,17 @@ public section
 
 namespace EthLib.Cryptography.Hash.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result ExportError toResult)
+
+/-- An error reaches Python with its code, and its message names the error. -/
+instance : ExportError Hkdf.HkdfError where
+  code := Hkdf.HkdfError.code
+  message := fun e => s!"{repr e}"
+
+/-- An error reaches Python with its code, and its message names the error. -/
+instance : ExportError ConcatKdf.ConcatKdfError where
+  code := ConcatKdf.ConcatKdfError.code
+  message := fun e => s!"{repr e}"
 
 /-- The 32-byte HMAC-SHA-256 tag of a message under a key, RFC 2104 §2. -/
 @[export eth_hmac_sha256]
@@ -30,13 +40,11 @@ def hmacSha256 (key message : ByteArray) : ByteArray :=
 /-- HKDF-SHA-256 of RFC 5869 §2, with the output length in bytes. -/
 @[export eth_hkdf_sha256]
 def hkdfSha256 (salt ikm info : ByteArray) (length : UInt64) : Result ByteArray :=
-  (EthLib.Cryptography.Hash.Hkdf.hkdf salt ikm info length.toNat).mapError
-    fun e => (e.code, s!"{repr e}")
+  toResult none (EthLib.Cryptography.Hash.Hkdf.hkdf salt ikm info length.toNat)
 
 /-- The Concatenation KDF of SP 800-56C Rev. 2 §4.1 with SHA-256, the length in bytes. -/
 @[export eth_concat_kdf_sha256]
 def concatKdfSha256 (z fixedInfo : ByteArray) (length : UInt64) : Result ByteArray :=
-  (EthLib.Cryptography.Hash.ConcatKdf.concatKdf z fixedInfo length.toNat).mapError
-    fun e => (e.code, s!"{repr e}")
+  toResult none (EthLib.Cryptography.Hash.ConcatKdf.concatKdf z fixedInfo length.toNat)
 
 end EthLib.Cryptography.Hash.Exports

@@ -27,14 +27,15 @@ public section
 
 namespace EthLib.Cryptography.Xmss.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result ExportError toResult)
 
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
 
-/-- Run a fallible leanXMSS computation, with its error as a code and a message. -/
-def runXmss {α : Type} (act : Except XmssError α) : Result α :=
-  act.mapError fun e => (e.code, e.message)
+/-- An error reaches Python with its code and its own message. -/
+instance : ExportError XmssError where
+  code := XmssError.code
+  message := XmssError.message
 
 /-! ## Sizes
 
@@ -105,7 +106,7 @@ def constTargetSum (_ : Unit) : UInt64 :=
 It builds the whole top tree, `2^16` one-time keys. -/
 @[export eth_xmss_key_gen]
 def keyGenExport (seed : ByteArray) : Result (ByteArray × SecretKey) :=
-  runXmss do
+  toResult (ε := XmssError) none do
     -- The length is the only check, and the 32 bytes are read as four lanes.
     let _ ← Base.exactBytes SEED_LEN seed .badSeedSize
     -- The C side keeps the secret key per seed, so a first signature reuses its top tree.
@@ -122,18 +123,18 @@ A message of the wrong length leaves the key as it is. -/
 @[export eth_xmss_sign]
 def signExport (sk : SecretKey) (leafIndex : LeafIndex) (msg : ByteArray) :
     SecretKey × Result ByteArray :=
-  match Base.exactBytes MESSAGE_LEN msg .badMessageSize with
-  | .error err => (sk, runXmss (.error err))
+  match Base.exactBytes (ε := XmssError) MESSAGE_LEN msg .badMessageSize with
+  | .error err => (sk, toResult none (.error err))
   | .ok _ =>
     let (sig, sk) := sign sk leafIndex (Hash.Keccak.Lanes4.read msg 0)
-    (sk, runXmss (encodeSignature <$> sig))
+    (sk, toResult none (encodeSignature <$> sig))
 
 /-- Whether a signature signs a message under a public key, as 1 or 0.
 
 The leaf index travels inside the signature. -/
 @[export eth_xmss_verify]
 def verifyExport (pk : ByteArray) (msg : ByteArray) (sig : ByteArray) : Result UInt8 :=
-  runXmss do
+  toResult none do
     -- Only the lengths are checked: every correctly sized string decodes.
     let pk ← decodePublicKey pk
     let _ ← Base.exactBytes MESSAGE_LEN msg .badMessageSize
@@ -147,6 +148,6 @@ It is returned as a `UInt64`, so the C side reads it as any other exported integ
 A `UInt32` always fits, so the conversion drops nothing. -/
 @[export eth_xmss_signature_index]
 def signatureIndexExport (sig : ByteArray) : Result UInt64 :=
-  runXmss ((signatureIndex sig).map UInt32.toUInt64)
+  toResult none ((signatureIndex sig).map UInt32.toUInt64)
 
 end EthLib.Cryptography.Xmss.Exports
