@@ -137,16 +137,11 @@ These bridges restate the Mathlib rewrite lemmas on `Fr`.
 
 The DFT proof rewrites with them. -/
 
-private theorem fr_pow_zero (a : Fr) : a ^ 0 = 1 := pow_zero a
-private theorem fr_pow_add (a : Fr) (m n : Nat) :
-    a ^ (m + n) = a ^ m * a ^ n := pow_add a m n
 private theorem fr_one_pow (n : Nat) : (1 : Fr) ^ n = 1 := one_pow n
 private theorem fr_mul_one (a : Fr) : a * 1 = a := mul_one a
 private theorem fr_mul_neg (a b : Fr) : a * -b = -(a * b) := mul_neg a b
 private theorem fr_mul_pow (a b : Fr) (n : Nat) : (a * b) ^ n = a ^ n * b ^ n :=
   mul_pow a b n
-private theorem fr_pow_mul (a : Fr) (m n : Nat) : a ^ (m * n) = (a ^ m) ^ n :=
-  pow_mul a m n
 private theorem fr_mul_right_comm (a b c : Fr) : a * b * c = a * c * b :=
   mul_right_comm a b c
 
@@ -175,7 +170,7 @@ theorem getElem!_fftFieldAux_dft {k : Nat} {ω : Fr}
     rw [fftFieldAux, ite_eq_left (by omega : vals.size ≤ 1)]
     have hj0 : j = 0 := by omega
     subst hj0
-    rw [Finset.sum_range_one, Nat.zero_mul, fr_pow_zero, fr_mul_one]
+    rw [Finset.sum_range_one, Nat.zero_mul, pow_zero, fr_mul_one]
   | succ k ih =>
     have hpk : 0 < 2 ^ k := Nat.two_pow_pos k
     have h2 : 2 ^ (k + 1) = 2 * 2 ^ k := by rw [pow_succ]; ring
@@ -223,7 +218,7 @@ theorem getElem!_fftFieldAux_dft {k : Nat} {ω : Fr}
       congr 1
       rw [Finset.sum_mul]
       refine Finset.sum_congr rfl (fun i hi => ?_)
-      rw [Bls.Fr.mul_assoc, ← fr_pow_add,
+      rw [Bls.Fr.mul_assoc, ← pow_add,
           show (2 * i + 1) * j = 2 * i * j + j by ring]
     · -- bottom half: output = l[q] - r[q] * ω ^ q with q = j - 2 ^ k
       rw [ite_eq_right hjk]
@@ -235,7 +230,7 @@ theorem getElem!_fftFieldAux_dft {k : Nat} {ω : Fr}
             = ∑ i ∈ Finset.range (2 ^ k), vals[2 * i]! * ω ^ (2 * i * q) :=
         Finset.sum_congr rfl (fun i hi => by
           rw [show 2 * i * j = 2 * i * q + 2 ^ (k + 1) * i by rw [hjq, h2]; ring,
-              fr_pow_add, pow_mul ω (2 ^ (k + 1)) i, hpow1, fr_one_pow, fr_mul_one])
+              pow_add, pow_mul ω (2 ^ (k + 1)) i, hpow1, fr_one_pow, fr_mul_one])
       have hOdd :
           (∑ i ∈ Finset.range (2 ^ k), vals[2 * i + 1]! * ω ^ ((2 * i + 1) * j))
             = (∑ i ∈ Finset.range (2 ^ k), vals[2 * i + 1]! * ω ^ (2 * i * q))
@@ -244,8 +239,8 @@ theorem getElem!_fftFieldAux_dft {k : Nat} {ω : Fr}
         refine Finset.sum_congr rfl (fun i hi => ?_)
         rw [show (2 * i + 1) * j = 2 * i * q + q + 2 ^ (k + 1) * i + 2 ^ k by
               rw [hjq, h2]; ring,
-            fr_pow_add, hneg, fr_pow_add, pow_mul ω (2 ^ (k + 1)) i, hpow1,
-            fr_one_pow, fr_mul_one, fr_pow_add, fr_mul_neg, fr_mul_one,
+            pow_add, hneg, pow_add, pow_mul ω (2 ^ (k + 1)) i, hpow1,
+            fr_one_pow, fr_mul_one, pow_add, fr_mul_neg, fr_mul_one,
             ← fr_mul_neg, ← Bls.Fr.mul_assoc]
       rw [hl q hq2, hr q hq2, hroots q (by rw [h2]; omega), hEven, hOdd, fr_mul_neg]
       abel
@@ -298,7 +293,7 @@ private theorem sum_pow_orthogonal_fr {k : Nat} {ω : Fr}
   rw [show (∑ j ∈ Finset.range (2 ^ k), ω ^ (a * j) * (ω⁻¹) ^ (b * j))
         = ∑ j ∈ Finset.range (2 ^ k), (ω ^ a * (ω⁻¹) ^ b) ^ j from
       Finset.sum_congr rfl (fun j _ => by
-        rw [fr_mul_pow, ← fr_pow_mul, ← fr_pow_mul])]
+        rw [fr_mul_pow, ← pow_mul, ← pow_mul])]
   exact sum_pow_orthogonal hω ha hb
 
 /-- **FFT round-trip.**

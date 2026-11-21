@@ -110,21 +110,6 @@ theorem runFrameWith_map (h : σ → τ)
     rfl
 
 omit [GasMeter Meter] [LawfulGasMeter Meter] in
-/-- The match on a precompile run takes its first branch on a frame. -/
-private theorem precompile_match_some {β : Sort _} {x : Option (Evm fork Meter)}
-    {after : Evm fork Meter} (h : x = some after)
-    (h_1 : (after : Evm fork Meter) → x = some after → β) (h_2 : x = none → β) :
-    processMessageWith.match_1 fork (fun _ => β) x h_1 h_2 = h_1 after h :=
-  eq_of_heq (processMessageWith.match_1.congr_eq_1 _ _ _ _ _ after h)
-
-omit [GasMeter Meter] [LawfulGasMeter Meter] in
-/-- The match on a precompile run takes its second branch on nothing. -/
-private theorem precompile_match_none {β : Sort _} {x : Option (Evm fork Meter)}
-    (h : x = none) (h_1 : (after : Evm fork Meter) → x = some after → β) (h_2 : x = none → β) :
-    processMessageWith.match_1 fork (fun _ => β) x h_1 h_2 = h_2 h :=
-  eq_of_heq (processMessageWith.match_1.congr_eq_2 _ _ _ _ _ h)
-
-omit [GasMeter Meter] [LawfulGasMeter Meter] in
 /-- The match on a deposit of code takes its error branch on an error. -/
 private theorem deposit_match_error {β : Sort _} {x : Except EvmError (Evm fork Meter)}
     {e : EvmError} (h : x = .error e) (h_1 : (e : EvmError) → x = .error e → β)

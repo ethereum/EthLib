@@ -28,7 +28,6 @@ open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
 
-private theorem fr_pow_zero (a : Fr) : a ^ 0 = 1 := pow_zero a
 private theorem fr_mul_one (a : Fr) : a * 1 = a := mul_one a
 
 /-- Element `i` of `bitReversalPermutation seq` is element `reverseBits i seq.size` of `seq`. -/
@@ -69,7 +68,7 @@ private theorem horner_foldl_eq_sum (p : PolynomialCoeff) (z : Fr) (k : Nat) (hk
       exact Bls.Fr.mul_assoc _ _ _
     rw [hshift]
     have h0 : p.size - (k + 1) + 0 = p.size - 1 - k := by omega
-    rw [h0, fr_pow_zero, fr_mul_one]
+    rw [h0, pow_zero, fr_mul_one]
 
 /-- `evaluatePolynomialcoeff` computes the monomial sum `evalPolyAt`. -/
 theorem evaluatePolynomialcoeff_eq_evalPolyAt (p : PolynomialCoeff) (z : Fr) :

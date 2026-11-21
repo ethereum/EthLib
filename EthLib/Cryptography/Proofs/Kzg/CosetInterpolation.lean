@@ -32,8 +32,6 @@ open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
 
-private theorem fr_pow_add (a : Fr) (m n : Nat) : a ^ (m + n) = a ^ m * a ^ n := pow_add a m n
-private theorem fr_pow_mul (a : Fr) (m n : Nat) : a ^ (m * n) = (a ^ m) ^ n := pow_mul a m n
 private theorem fr_one_mul (a : Fr) : 1 * a = a := one_mul a
 private theorem fr_inv_mul_cancel {a : Fr} (ha : a ≠ 0) : a⁻¹ * a = 1 := inv_mul_cancel₀ ha
 
@@ -102,7 +100,7 @@ theorem domainRoot_extended_pow_cells :
   have h2 : (Fr.ofNat ((BLS_MODULUS - 1) / FIELD_ELEMENTS_PER_CELL)).val =
       (BLS_MODULUS - 1) / FIELD_ELEMENTS_PER_CELL :=
     Bls.Fr.val_ofNat_of_lt (by decide)
-  rw [h1, h2, ← fr_pow_mul]
+  rw [h1, h2, ← pow_mul]
   congr 1
 
 /-- Each point of `cosetForCell cellIndex` is the coset shift times a bit-reversed 64th root. -/
@@ -139,7 +137,7 @@ theorem getElem!_cosetForCell_eq_shift_mul_root
   have hj_rev := reverseBits_cell_index_offset cellIndex j hj
   have hrev0 : reverseBits 0 FIELD_ELEMENTS_PER_CELL = 0 := by decide
   rw [Nat.add_zero, hrev0, Nat.mul_zero, Nat.add_zero] at h0_rev
-  rw [hj_rev, h0_rev, fr_pow_add, fr_pow_mul, domainRoot_extended_pow_cells]
+  rw [hj_rev, h0_rev, pow_add, pow_mul, domainRoot_extended_pow_cells]
 
 /-- The coset shift of any valid cell is nonzero because it is a root of unity. -/
 theorem cosetShift_ne_zero (cellIndex : CellIndex) (hci : cellIndex < CELLS_PER_EXT_BLOB) :

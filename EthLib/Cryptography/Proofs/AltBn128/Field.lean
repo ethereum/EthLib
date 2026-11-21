@@ -21,11 +21,6 @@ The Euclidean inverse in `Fp` is the field inverse.
 
 namespace EthLib.Cryptography.AltBn128
 
-namespace Fp
-
--- The certificates compute powers of 256-bit numbers, deeper than the default.
-set_option maxRecDepth 8000
-
 /-- `405928799` is prime, with witness `22`. -/
 private theorem prime_405928799 : Nat.Prime 405928799 :=
   Pratt.prime_of_lucas 405928799 22 [(2, 1), (11, 1), (3691, 1), (4999, 1)] (by decide)
@@ -38,6 +33,11 @@ private theorem prime_405928799 : Nat.Prime 405928799 :=
     · norm_num
     · norm_num)
     (by decide) (by decide)
+
+namespace Fp
+
+-- The certificates compute powers of 256-bit numbers, deeper than the default.
+set_option maxRecDepth 8000
 
 /-- `11465965001` is prime, with witness `3`. -/
 private theorem prime_11465965001 : Nat.Prime 11465965001 :=
@@ -213,19 +213,6 @@ end Fp
 namespace Fr
 
 set_option maxRecDepth 8000
-
-/-- `405928799` is prime, with witness `22`. -/
-private theorem prime_405928799 : Nat.Prime 405928799 :=
-  Pratt.prime_of_lucas 405928799 22 [(2, 1), (11, 1), (3691, 1), (4999, 1)] (by decide)
-    (by
-    intro f hf
-    simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
-    rcases hf with rfl | rfl | rfl | rfl
-    · norm_num
-    · norm_num
-    · norm_num
-    · norm_num)
-    (by decide) (by decide)
 
 /-- `12048837557` is prime, with witness `2`. -/
 private theorem prime_12048837557 : Nat.Prime 12048837557 :=

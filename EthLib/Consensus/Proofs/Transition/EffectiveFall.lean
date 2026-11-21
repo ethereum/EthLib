@@ -997,21 +997,6 @@ private theorem getPendingPartialWithdrawals_ledger {fork : Fork}
   rw [sums v, Finset.sum_filter]
   simp [withdrawnFrom]
 
-private theorem withdrawals_pendingPartials {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
-    {capella : .shapella ≤ fork} {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
-    (ok : processWithdrawals s capella payload = .ok t) :
-    ∃ (partials : Array Withdrawal) (next : WithdrawalIndex) (count : ℕ),
-      getPendingPartialWithdrawals s electra (s.nextWithdrawalIndex capella) #[] =
-        .ok (partials, next, count) ∧
-      (t.pendingPartialWithdrawals electra).data.toList =
-        (s.pendingPartialWithdrawals electra).data.toList.drop count := by
-  obtain ⟨expected, expectedOk, frame⟩ := withdrawals_departureQueues electra early ok
-  obtain ⟨partials, next, partialsOk⟩ := getExpectedWithdrawals_partials electra early expectedOk
-  refine ⟨partials, next, _, partialsOk, ?_⟩
-  rw [← updatePendingPartialWithdrawals_toList s electra]
-  exact congrArg (·.2.2.2.2.toList) frame
-
 private def QueueAppend {fork : Fork} (s t : BeaconState preset fork) : Prop :=
   ∀ electra : .pectra ≤ fork, ∃ added : List PendingPartialWithdrawal,
     (t.pendingPartialWithdrawals electra).data.toList =
