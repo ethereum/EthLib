@@ -34,9 +34,9 @@ namespace EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
 open EthLib.Cryptography.Xmss.Internal (signRootWith cacheTreeWith fetchTreeWith)
 
-variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {s : Seed} {prf : SeedPrf Id}
+variable {f : Array UInt64 → Lanes4} {pp : PublicParam} {s : Seed} {prf : SeedPrf Id}
   {layer : Layer} {e : Nat}
-  {msg : ByteArray} {sig : LayerSignature}
+  {msg : Array UInt64} {sig : LayerSignature}
 
 /-! ## One build gives the path and the root -/
 
@@ -45,20 +45,20 @@ variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {s : Seed} {prf 
 The right side signs the bottom layer with its path, then computes the root of the whole tree.
 
 Both sides give the same signature, byte for byte, for every hash in the identity monad. -/
-theorem signDerived_eq_path_node (H : ByteArray → Id (Vector UInt8 32)) (prf : SeedPrf Id)
+theorem signDerived_eq_path_node (H : Array UInt64 → Id Lanes4) (prf : SeedPrf Id)
     (pp : PublicParam) (idx : LeafIndex) (msg : Message) :
     signDerived H prf pp idx msg = (do
-      let bottom ← match ← signLayer H pp prf .bottom idx.toNat (packBytes msg) with
+      let bottom ← match ← signLayer H pp prf .bottom idx.toNat (msg.toArray) with
         | .ok sig => pure sig
         | .error err => return .error err
       let bottomRoot ← node H pp prf .bottom LAYER_HEIGHT (bottomTree idx)
-      let top ← match ← signLayer H pp prf .top (bottomTree idx) (packBytes bottomRoot) with
+      let top ← match ← signLayer H pp prf .top (bottomTree idx) bottomRoot.toArray with
         | .ok sig => pure sig
         | .error err => return .error err
       return .ok { leafIndex := idx, bottom, top }) := by
   unfold signDerived signLayer
   -- Name the bottom one-time signature, so no tree is evaluated.
-  generalize otsSign H pp prf .bottom (UInt32.ofNat idx.toNat) (packBytes msg) = found
+  generalize otsSign H pp prf .bottom (UInt32.ofNat idx.toNat) (msg.toArray) = found
   rcases found with _ | ⟨randomizer, chainValues⟩
   · rfl
   · -- The path and the root, computed apart, are the two read from the one build.
@@ -97,9 +97,10 @@ theorem statelessSignWith_run {seed : Seed} {idx : LeafIndex} {m : Message}
     (hpp : (publicParamOf (seedPrf (pureHash f) s)).run = pp) :
     (statelessSignWith (pureHash f) seed idx m).run
       = (signLayer (pureHash f) pp (seedPrf (pureHash f) s) .bottom idx.toNat
-          (packBytes m)).run.bind fun bottom =>
+          m.toArray).run.bind fun bottom =>
           (signLayer (pureHash f) pp (seedPrf (pureHash f) s) .top (bottomTree idx)
-            (packBytes (node (pureHash f) pp (seedPrf (pureHash f) s) .bottom LAYER_HEIGHT
+            (EthLib.Cryptography.Hash.Keccak.Lanes2.toArray
+              (node (pureHash f) pp (seedPrf (pureHash f) s) .bottom LAYER_HEIGHT
               (bottomTree idx)).run)).run.bind fun top =>
             .ok { leafIndex := idx, bottom, top } := by
   subst hs hpp
@@ -107,7 +108,7 @@ theorem statelessSignWith_run {seed : Seed} {idx : LeafIndex} {m : Message}
   cases (signLayer (pureHash f)
       (publicParamOf (seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run)).run
       (seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run) .bottom idx.toNat
-      (packBytes m)).run with
+      m.toArray).run with
   | error err => rfl
   | ok bottom =>
     -- No signer is unfolded here, so `simp` may reduce the matches on `.ok`.
@@ -115,7 +116,7 @@ theorem statelessSignWith_run {seed : Seed} {idx : LeafIndex} {m : Message}
     cases (signLayer (pureHash f)
         (publicParamOf (seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run)).run
         (seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run) .top (bottomTree idx)
-        (packBytes (node (pureHash f)
+        (EthLib.Cryptography.Hash.Keccak.Lanes2.toArray (node (pureHash f)
           (publicParamOf (seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run)).run
           (seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run) .bottom LAYER_HEIGHT
           (bottomTree idx)).run)).run with
@@ -170,21 +171,23 @@ theorem statelessSign_eq_ok {seed : Seed} {idx : LeafIndex} {m : Message} {σ : 
     (h : (statelessSignWith (pureHash f) seed idx m).run = .ok σ) :
     σ.leafIndex = idx ∧
       (signLayer (pureHash f) pp (seedPrf (pureHash f) s) .bottom idx.toNat
-        (packBytes m)).run = .ok σ.bottom ∧
+        m.toArray).run = .ok σ.bottom ∧
       (signLayer (pureHash f) pp (seedPrf (pureHash f) s) .top (bottomTree idx)
-        (packBytes (node (pureHash f) pp (seedPrf (pureHash f) s) .bottom LAYER_HEIGHT
+        (EthLib.Cryptography.Hash.Keccak.Lanes2.toArray
+          (node (pureHash f) pp (seedPrf (pureHash f) s) .bottom LAYER_HEIGHT
           (bottomTree idx)).run)).run = .ok σ.top := by
   rw [statelessSignWith_run hs hpp] at h
   -- Each layer is either an error, which propagates, or a value the next step uses.
   cases hbottom : (signLayer (pureHash f) pp (seedPrf (pureHash f) s) .bottom idx.toNat
-      (packBytes m)).run with
+      m.toArray).run with
   | error err =>
     rw [hbottom] at h
     cases h
   | ok bottom =>
     rw [hbottom, Except.bind] at h
     cases htop : (signLayer (pureHash f) pp (seedPrf (pureHash f) s) .top (bottomTree idx)
-        (packBytes (node (pureHash f) pp (seedPrf (pureHash f) s) .bottom LAYER_HEIGHT
+        (EthLib.Cryptography.Hash.Keccak.Lanes2.toArray
+          (node (pureHash f) pp (seedPrf (pureHash f) s) .bottom LAYER_HEIGHT
           (bottomTree idx)).run)).run with
     | error err =>
       rw [htop] at h
@@ -204,7 +207,7 @@ theorem statelessSign_error {seed : Seed} {idx : LeafIndex} {m : Message} {err :
   rw [statelessSignWith_run hs hpp] at h
   -- The error comes from one of the two layers.
   cases hbottom : (signLayer (pureHash f) pp (seedPrf (pureHash f) s) .bottom idx.toNat
-      (packBytes m)).run with
+      m.toArray).run with
   | error e' =>
     rw [hbottom] at h
     cases h
@@ -212,7 +215,8 @@ theorem statelessSign_error {seed : Seed} {idx : LeafIndex} {m : Message} {err :
   | ok bottom =>
     rw [hbottom, Except.bind] at h
     cases htop : (signLayer (pureHash f) pp (seedPrf (pureHash f) s) .top (bottomTree idx)
-        (packBytes (node (pureHash f) pp (seedPrf (pureHash f) s) .bottom LAYER_HEIGHT
+        (EthLib.Cryptography.Hash.Keccak.Lanes2.toArray
+          (node (pureHash f) pp (seedPrf (pureHash f) s) .bottom LAYER_HEIGHT
           (bottomTree idx)).run)).run with
     | error e' =>
       rw [htop] at h
@@ -241,13 +245,13 @@ theorem bottomTree_lt (idx : LeafIndex) : bottomTree idx < 2 ^ LAYER_HEIGHT := b
 The tree is its bottom tree, built from the seed.
 
 The top signature is the top layer's signature of the tree's root, path computed from the seed. -/
-def CachedTree.IsStateless (H : ByteArray → Id (Vector UInt8 32)) (s : Seed) (pp : PublicParam)
+def CachedTree.IsStateless (H : Array UInt64 → Id Lanes4) (s : Seed) (pp : PublicParam)
     (t : CachedTree) : Prop :=
   t.tree = (build H pp (seedPrf H s) .bottom LAYER_HEIGHT t.index).run ∧
-    t.top = (signLayer H pp (seedPrf H s) .top t.index (packBytes t.tree.value)).run
+    t.top = (signLayer H pp (seedPrf H s) .top t.index t.tree.value.toArray).run
 
 /-- A secret key that holds what the stateless signer computes from a seed. -/
-structure SecretKey.IsStatelessOf (H : ByteArray → Id (Vector UInt8 32)) (seed : Seed)
+structure SecretKey.IsStatelessOf (H : Array UInt64 → Id Lanes4) (seed : Seed)
     (sk : SecretKey) : Prop where
   /-- The scheme seed `S` of the seed. -/
   schemeSeed_eq : sk.schemeSeed = (Xmss.schemeSeed H seed).run
@@ -260,10 +264,10 @@ structure SecretKey.IsStatelessOf (H : ByteArray → Id (Vector UInt8 32)) (seed
 
 section Stateless
 
-variable {H : ByteArray → Id (Vector UInt8 32)} {seed : Seed} {sk : SecretKey}
+variable {H : Array UInt64 → Id Lanes4} {seed : Seed} {sk : SecretKey}
 
 /-- Key generation gives a key with the stateless trees of its seed, and no bottom tree. -/
-theorem isStatelessOf_keyGenWith (H : ByteArray → Id (Vector UInt8 32)) (seed : Seed) :
+theorem isStatelessOf_keyGenWith (H : Array UInt64 → Id Lanes4) (seed : Seed) :
     (keyGenWith H seed).run.2.IsStatelessOf H seed :=
   ⟨rfl, rfl, rfl, fun _ h => absurd h List.not_mem_nil⟩
 
@@ -271,7 +275,7 @@ theorem isStatelessOf_keyGenWith (H : ByteArray → Id (Vector UInt8 32)) (seed 
 theorem signRootWith_run (h : sk.IsStatelessOf H seed) {b : Nat} (hb : b < 2 ^ LAYER_HEIGHT)
     (root : Digest) :
     (signRootWith H sk b root).run =
-      (signLayer H sk.publicParam (seedPrf H sk.schemeSeed) .top b (packBytes root)).run := by
+      (signLayer H sk.publicParam (seedPrf H sk.schemeSeed) .top b root.toArray).run := by
   -- The top key's path, read from the top tree, is the path computed from the seed.
   have hpath : sk.top.path LAYER_HEIGHT b =
       (path H sk.publicParam (seedPrf H sk.schemeSeed) .top b).run := by
@@ -283,7 +287,7 @@ theorem signRootWith_run (h : sk.IsStatelessOf H seed) {b : Nat} (hb : b < 2 ^ L
   rw [Id.run_bind, Id.run_bind]
   -- Name the top search, so no tree is evaluated.
   cases (otsSign H sk.publicParam (seedPrf H sk.schemeSeed) .top (UInt32.ofNat b)
-      (packBytes root)).run with
+      root.toArray).run with
   | none => rfl
   | some found =>
     obtain ⟨randomizer, chainValues⟩ := found
@@ -328,7 +332,7 @@ theorem isStatelessOf_signWith (h : sk.IsStatelessOf H seed) (idx : LeafIndex) (
   simp only [Internal.otsSignTrials_hashTrials]
   rw [Id.run_bind]
   cases (otsSign H sk.publicParam (seedPrf H sk.schemeSeed) .bottom (UInt32.ofNat idx.toNat)
-      (packBytes msg)).run with
+      (msg.toArray)).run with
   | none => exact h
   | some found =>
     obtain ⟨randomizer, chainValues⟩ := found
@@ -355,7 +359,7 @@ theorem signWith_fst_of_isStatelessOf (h : sk.IsStatelessOf H seed) (idx : LeafI
   rw [Id.run_bind, Id.run_bind]
   -- Name the bottom search, so no tree is evaluated.
   cases (otsSign H sk.publicParam (seedPrf H sk.schemeSeed) .bottom (UInt32.ofNat idx.toNat)
-      (packBytes msg)).run with
+      (msg.toArray)).run with
   | none => rfl
   | some found =>
     obtain ⟨randomizer, chainValues⟩ := found
@@ -371,7 +375,7 @@ theorem signWith_fst_of_isStatelessOf (h : sk.IsStatelessOf H seed) (idx : LeafI
 end Stateless
 
 /-- The keys that key generation from a seed, then any sequence of signatures, give. -/
-inductive SecretKey.Reachable (H : ByteArray → Id (Vector UInt8 32)) (seed : Seed) :
+inductive SecretKey.Reachable (H : Array UInt64 → Id Lanes4) (seed : Seed) :
     SecretKey → Prop
   /-- The key of key generation. -/
   | keyGen : SecretKey.Reachable H seed (keyGenWith H seed).run.2
@@ -380,7 +384,7 @@ inductive SecretKey.Reachable (H : ByteArray → Id (Vector UInt8 32)) (seed : S
       SecretKey.Reachable H seed sk → SecretKey.Reachable H seed (signWith H sk idx msg).run.2
 
 /-- A reachable key holds the stateless trees of its seed. -/
-theorem SecretKey.Reachable.isStatelessOf {H : ByteArray → Id (Vector UInt8 32)} {seed : Seed}
+theorem SecretKey.Reachable.isStatelessOf {H : Array UInt64 → Id Lanes4} {seed : Seed}
     {sk : SecretKey} (h : sk.Reachable H seed) : sk.IsStatelessOf H seed := by
   induction h with
   | keyGen => exact isStatelessOf_keyGenWith H seed
@@ -393,7 +397,7 @@ The key is any one that key generation, then any sequence of signatures, gives.
 So the trees a key keeps, and the order it used them in, never change a signature.
 
 It holds for every hash in the identity monad. -/
-theorem SecretKey.Reachable.signWith_fst {H : ByteArray → Id (Vector UInt8 32)} {seed : Seed}
+theorem SecretKey.Reachable.signWith_fst {H : Array UInt64 → Id Lanes4} {seed : Seed}
     {sk : SecretKey} (h : sk.Reachable H seed) (idx : LeafIndex) (msg : Message) :
     (signWith H sk idx msg).run.1 = (statelessSignWith H seed idx msg).run :=
   signWith_fst_of_isStatelessOf h.isStatelessOf idx msg
@@ -414,7 +418,7 @@ theorem SecretKey.Reachable.sign_fst {seed : Seed} {sk : SecretKey} (h : sk.Reac
 /-- **Key generation gives the public key of the stateless scheme.**
 
 It is the root of the top tree, computed as a node, and the parameter `P`. -/
-theorem keyGenWith_fst (H : ByteArray → Id (Vector UInt8 32)) (seed : Seed) :
+theorem keyGenWith_fst (H : Array UInt64 → Id Lanes4) (seed : Seed) :
     (keyGenWith H seed).run.1 = (statelessKeyGenWith H seed).run.2 := by
   simp only [keyGenWith, statelessKeyGenWith, publicKeyOf, Id.run_bind, Id.run_pure,
     value_build_run]
@@ -422,14 +426,14 @@ theorem keyGenWith_fst (H : ByteArray → Id (Vector UInt8 32)) (seed : Seed) :
 /-! ## Signatures of the specification's signer -/
 
 /-- A signature holds the leaf index it was signed at, whatever the key. -/
-theorem leafIndex_signWith {H : ByteArray → Id (Vector UInt8 32)} {sk : SecretKey}
+theorem leafIndex_signWith {H : Array UInt64 → Id Lanes4} {sk : SecretKey}
     {idx : LeafIndex} {m : Message} {σ : Signature} (h : (signWith H sk idx m).run.1 = .ok σ) :
     σ.leafIndex = idx := by
   unfold signWith Internal.signWithTrials at h
   simp only [Internal.otsSignTrials_hashTrials] at h
   rw [Id.run_bind] at h
   generalize (otsSign H sk.publicParam (seedPrf H sk.schemeSeed) .bottom (UInt32.ofNat idx.toNat)
-      (packBytes m)).run = found at h
+      m.toArray).run = found at h
   rcases found with _ | ⟨randomizer, chainValues⟩
   · cases h
   · rw [Id.run_bind] at h

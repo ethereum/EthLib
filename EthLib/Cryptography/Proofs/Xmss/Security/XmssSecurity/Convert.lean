@@ -23,7 +23,12 @@ namespace EthLib.Cryptography.Xmss.Unforgeability
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
 
-export EthLib.Cryptography.HashSig (queryH)
+/-- `H` as a query to the oracle: the bytes of the input's lanes go in.
+
+The answer comes out as four lanes. -/
+abbrev queryH {m : Type → Type} [Monad m] [HasQuery XmssSecurity.HashSpec m]
+    (input : Array UInt64) : m Lanes4 :=
+  HashSig.queryLanes input
 
 /-- A chain as the model numbers it. -/
 def chainOf (i : Fin V) : XmssSecurity.ChainIndex := ⟨i.val, i.isLt⟩
@@ -80,14 +85,18 @@ def ofTopIndex (key : XmssSecurity.TopIndex) : UInt32 :=
   bottom := ofLayerSig ⟨σ.randomness, σ.chainValue, σ.authPath⟩
   top := ofLayerSig σ.top
 
-/-- A digest as the model writes it, from its bytes. -/
+/-- A digest as the model writes it, from the integer of its lanes. -/
 def toDigest (d : Digest) : XmssSecurity.Digest :=
-  BitVec.ofNat _ (bytesToUint d)
+  BitVec.ofNat _ (lanesToNat d)
 
-@[simp] theorem ofDigest_toDigest (d : Digest) : ofDigest (toDigest d) = d :=
-  ofBV_ofNat_bytesToUint d (by simp [DIGEST_LEN, XmssSecurity.digestBits])
+@[simp] theorem ofDigest_toDigest (d : Digest) : ofDigest (toDigest d) = d := by
+  apply bytes_injective
+  rw [HashSig.bytes_ofDigestLanes, toDigest, bytes_eq,
+    ← ofBV_ofNat_bytesToUint (uintToBytes 16 (lanesToNat d)) (w := XmssSecurity.digestBits)
+      (by simp [XmssSecurity.digestBits]),
+    Base.bytesToUint_uintToBytes, Nat.mod_eq_of_lt (by simpa using lanesToNat_lt d)]
 
 @[simp] theorem toDigest_ofDigest (d : XmssSecurity.Digest) : toDigest (ofDigest d) = d :=
-  ofBV_inj (n := DIGEST_LEN) (by simp [DIGEST_LEN, XmssSecurity.digestBits]) (ofDigest_toDigest _)
+  HashSig.ofDigestLanes_injective (ofDigest_toDigest _)
 
 end EthLib.Cryptography.Xmss.Unforgeability

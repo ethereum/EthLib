@@ -30,7 +30,7 @@ open EthLib.Cryptography.Xmss.Constants
 
 /-! ## The encoding -/
 
-/-- `enc(tau, mu, hi, lo)`: the 16 bytes of one address.
+/-- `enc(tau, mu, hi, lo)`: the 16 bytes of one address, as two lanes.
 
 ```text
     [ lo: 4 | hi: 3 | tau + 32 mu: 1 | zero: 8 ]
@@ -40,12 +40,16 @@ open EthLib.Cryptography.Xmss.Constants
 - `mu < 8` is a chain position, zero outside chain steps.
 - `hi < 2^24` and `lo < 2^32` locate the call inside its type.
 - Every field is little-endian.
+
+The first lane holds bytes 0 to 7, least significant first, and the second lane is zero.
+
+So `lo` is bits 0 to 31 of the first lane, `hi` bits 32 to 55, and the type byte bits 56 to 63.
 -/
 def encodeAddress (tau : Fin 32) (mu : Fin 8) (hi : Fin (2 ^ 24)) (lo : UInt32) :
     Address :=
   -- Type and position share one byte: `tau` in bits 0 to 4, `mu` in bits 5 to 7.
-  uintToBytes 4 lo.toNat ++ uintToBytes 3 hi.val
-    ++ uintToBytes 1 (tau.val + 32 * mu.val) ++ uintToBytes 8 0
+  ⟨lo.toUInt64 ||| (UInt64.ofNat hi.val <<< 32) ||| (UInt64.ofNat (tau.val + 32 * mu.val) <<< 56),
+    0⟩
 
 /-! ## Address types -/
 

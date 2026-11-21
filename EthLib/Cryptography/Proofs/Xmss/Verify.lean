@@ -19,14 +19,14 @@ namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
-variable {f : ByteArray → Vector UInt8 32}
+variable {f : Array UInt64 → Lanes4}
 
 /-! ## The verifier as a value -/
 
 /-- What the one-time leaf recovery computes.
 
 Nothing unless the digest is a codeword, else the leaf of the walked chains. -/
-theorem otsLeaf_run {pp : PublicParam} {layer : Layer} {e : UInt32} {msg : ByteArray}
+theorem otsLeaf_run {pp : PublicParam} {layer : Layer} {e : UInt32} {msg : Array UInt64}
     {rho : Randomizer} {y : Vector Digest V} :
     (otsLeaf (pureHash f) pp layer e msg rho y).run
       = (codeword? (messageDigest (pureHash f) pp layer e msg rho).run).map
@@ -43,7 +43,7 @@ theorem otsLeaf_run {pp : PublicParam} {layer : Layer} {e : UInt32} {msg : ByteA
     rfl
 
 /-- What a layer's root computes: the recovered leaf, folded up the path. -/
-theorem layerRoot_run {pp : PublicParam} {layer : Layer} {e : Nat} {msg : ByteArray}
+theorem layerRoot_run {pp : PublicParam} {layer : Layer} {e : Nat} {msg : Array UInt64}
     {sig : LayerSignature} :
     (layerRoot (pureHash f) pp layer e msg sig).run
       = (otsLeaf (pureHash f) pp layer (UInt32.ofNat e) msg sig.randomizer sig.chainValues).run.map
@@ -58,18 +58,18 @@ theorem layerRoot_run {pp : PublicParam} {layer : Layer} {e : Nat} {msg : ByteAr
 Whether both layers succeed and the top one reaches the key's root. -/
 theorem verifyWith_run {pk : PublicKey} {m : Message} {sig : Signature} :
     (verifyWith (pureHash f) pk m sig).run
-      = decide (((layerRoot (pureHash f) pk.publicParam .bottom sig.leafIndex.toNat (packBytes m)
+      = decide (((layerRoot (pureHash f) pk.publicParam .bottom sig.leafIndex.toNat m.toArray
           sig.bottom).run.bind fun bottomRoot =>
             (layerRoot (pureHash f) pk.publicParam .top (bottomTree sig.leafIndex)
-              (packBytes bottomRoot) sig.top).run) = some pk.root) := by
+              bottomRoot.toArray sig.top).run) = some pk.root) := by
   rw [verifyWith, Id.run_bind]
-  cases (layerRoot (pureHash f) pk.publicParam .bottom sig.leafIndex.toNat (packBytes m)
+  cases (layerRoot (pureHash f) pk.publicParam .bottom sig.leafIndex.toNat m.toArray
       sig.bottom).run with
   | none => rfl
   | some bottomRoot =>
     rw [Id.run_bind, Option.bind_some]
     cases (layerRoot (pureHash f) pk.publicParam .top (bottomTree sig.leafIndex)
-        (packBytes bottomRoot) sig.top).run with
+        bottomRoot.toArray sig.top).run with
     | none => rfl
     -- The two sides decide the same equality, one inside `some`.
     | some root => simp
@@ -84,16 +84,16 @@ The path of the top layer reaches the key's root. -/
 theorem verify_iff {pk : PublicKey} {m : Message} {sig : Signature} :
     (verifyWith (pureHash f) pk m sig).run = true ↔
       ∃ bottomRoot,
-        (layerRoot (pureHash f) pk.publicParam .bottom sig.leafIndex.toNat (packBytes m)
+        (layerRoot (pureHash f) pk.publicParam .bottom sig.leafIndex.toNat m.toArray
           sig.bottom).run = some bottomRoot ∧
         (layerRoot (pureHash f) pk.publicParam .top (bottomTree sig.leafIndex)
-          (packBytes bottomRoot) sig.top).run = some pk.root := by
+          bottomRoot.toArray sig.top).run = some pk.root := by
   rw [verifyWith_run]
   simp only [decide_eq_true_eq, Option.bind_eq_some_iff]
 
 /-- A signature whose bottom digest is not a codeword rejects, whatever the rest. -/
 theorem verify_of_layerRoot_none {pk : PublicKey} {m : Message} {sig : Signature}
-    (h : (layerRoot (pureHash f) pk.publicParam .bottom sig.leafIndex.toNat (packBytes m)
+    (h : (layerRoot (pureHash f) pk.publicParam .bottom sig.leafIndex.toNat m.toArray
       sig.bottom).run = none) :
     (verifyWith (pureHash f) pk m sig).run = false := by
   rw [verifyWith_run, h]
@@ -106,13 +106,13 @@ A known answer evaluates the verifier hash by hash.
 These lemmas let each piece be checked on its own, with its value stated. -/
 
 /-- Chain `i` walked from the position its digit names to position 3. -/
-def chainEnd (f : ByteArray → Vector UInt8 32) (pp : PublicParam) (layer : Layer) (e : UInt32)
+def chainEnd (f : Array UInt64 → Lanes4) (pp : PublicParam) (layer : Layer) (e : UInt32)
     (x : Vector (Fin CHAIN_LENGTH) V) (y : Vector Digest V) (i : Fin V) : Digest :=
   (chain (pureHash f) pp layer e i x[i] (CHAIN_LENGTH - 1 - x[i]) (by have := x[i].isLt; omega)
     y[i]).run
 
 /-- A layer's root, from its codeword, its chain ends, its leaf and its path. -/
-theorem layerRoot_eq {pp : PublicParam} {layer : Layer} {e : Nat} {msg : ByteArray}
+theorem layerRoot_eq {pp : PublicParam} {layer : Layer} {e : Nat} {msg : Array UInt64}
     {sig : LayerSignature} {x : Vector (Fin CHAIN_LENGTH) V} {ends : Vector Digest V}
     {leaf root : Digest}
     (hx : codeword? (messageDigest (pureHash f) pp layer (UInt32.ofNat e) msg sig.randomizer).run
@@ -129,20 +129,20 @@ theorem layerRoot_eq {pp : PublicParam} {layer : Layer} {e : Nat} {msg : ByteArr
 
 /-- Acceptance, from the two layers' roots. -/
 theorem verify_of_layerRoot {pk : PublicKey} {m : Message} {sig : Signature} {bottomRoot : Digest}
-    (hb : (layerRoot (pureHash f) pk.publicParam .bottom sig.leafIndex.toNat (packBytes m)
+    (hb : (layerRoot (pureHash f) pk.publicParam .bottom sig.leafIndex.toNat m.toArray
       sig.bottom).run = some bottomRoot)
     (ht : (layerRoot (pureHash f) pk.publicParam .top (bottomTree sig.leafIndex)
-      (packBytes bottomRoot) sig.top).run = some pk.root) :
+      bottomRoot.toArray sig.top).run = some pk.root) :
     (verifyWith (pureHash f) pk m sig).run = true :=
   verify_iff.mpr ⟨bottomRoot, hb, ht⟩
 
 /-- Rejection, when the top layer leads to some other root. -/
 theorem verify_of_layerRoot_ne {pk : PublicKey} {m : Message} {sig : Signature}
     {bottomRoot root : Digest}
-    (hb : (layerRoot (pureHash f) pk.publicParam .bottom sig.leafIndex.toNat (packBytes m)
+    (hb : (layerRoot (pureHash f) pk.publicParam .bottom sig.leafIndex.toNat m.toArray
       sig.bottom).run = some bottomRoot)
     (ht : (layerRoot (pureHash f) pk.publicParam .top (bottomTree sig.leafIndex)
-      (packBytes bottomRoot) sig.top).run = some root)
+      bottomRoot.toArray sig.top).run = some root)
     (hne : root ≠ pk.root) :
     (verifyWith (pureHash f) pk m sig).run = false := by
   rw [verifyWith_run, hb, Option.bind_some, ht]

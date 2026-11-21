@@ -143,6 +143,9 @@ theorem trial_queryH (pkSeed : PkSeed) (key : OtsKey) (msg : Digest) (j : Nat)
     HashSig.queriesWith_pure, searchPoint, List.append_nil, true_and]
   exact HashSig.queriesWith_query_bind f _ pure
 
+-- The proofs below use the loop's lemmas, so the loop stays folded.
+attribute [local irreducible] HashSig.ofFnInOrder
+
 section Layers
 
 variable (H : ByteArray → OracleComp HashSpec (Vector UInt8 32))

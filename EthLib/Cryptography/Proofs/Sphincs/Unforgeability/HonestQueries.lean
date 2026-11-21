@@ -480,6 +480,9 @@ theorem size_digestInput (rho : Randomizer) (pkSeed : PkSeed) (pkRoot : Digest) 
   simp only [digestInput, ByteArray.size_append, Base.size_packBytes]
   rfl
 
+-- The proofs below use the loop's lemmas, so the loop stays folded.
+attribute [local irreducible] HashSig.ofFnInOrder
+
 /-! ## Inputs the honest algorithms never hash
 
 A predicate `p` on queries that no allowed call satisfies is never queried.

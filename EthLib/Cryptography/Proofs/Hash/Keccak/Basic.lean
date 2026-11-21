@@ -336,9 +336,9 @@ theorem laneAt_congr {a b : ByteArray} {s t : Nat}
 
 open Internal in
 /-- At a rate that is a whole number of lanes, a block lane is in the rate when `8i < rate`. -/
-theorem Internal.blockLane_of_dvd {rate : Nat} (lanes : 8 ∣ rate) (bytes : ByteArray)
+theorem Internal.blockLane_of_dvd {rate : Nat} (lanes : 8 ∣ rate) (read : Nat → UInt64)
     (start i : Nat) :
-    blockLane rate bytes start i = if 8 * i < rate then laneAt bytes (start + 8 * i) else 0 := by
+    blockLane rate read start i = if 8 * i < rate then read (start + 8 * i) else 0 := by
   obtain ⟨m, rfl⟩ := lanes
   -- Lane i lies wholly in the rate exactly when it starts in it.
   simp only [blockLane, show (8 * i + 8 ≤ 8 * m) = (8 * i < 8 * m) from propext (by omega)]
@@ -381,7 +381,7 @@ open Internal in
 /-- A block that lies in the message reads the same lanes from the message and from `P`. -/
 theorem blockLane_pad_of_le {rate : Nat} {msg : ByteArray} {start : Nat}
     (h : start + rate ≤ msg.size) (i : Nat) :
-    blockLane rate (pad rate msg) start i = blockLane rate msg start i := by
+    blockLane rate (laneAt (pad rate msg)) start i = blockLane rate (laneAt msg) start i := by
   unfold blockLane
   split
   · exact laneAt_congr fun k hk => byteAt_pad_of_lt rate (by omega)
@@ -391,11 +391,12 @@ open Internal in
 /-- The whole blocks of the message absorb alike from the message and from `P`. -/
 theorem absorbBlocks_pad (f : State → State) (rate : Nat) (msg : ByteArray) (n start : Nat)
     (S : State) (h : start + rate * n ≤ msg.size) :
-    absorbBlocks f rate (pad rate msg) n start S = absorbBlocks f rate msg n start S := by
+    absorbBlocks f rate (laneAt (pad rate msg)) n start S =
+      absorbBlocks f rate (laneAt msg) n start S := by
   induction n generalizing start S with
   | zero => rfl
   | succ n ih =>
-    have hlane : blockLane rate (pad rate msg) start = blockLane rate msg start :=
+    have hlane : blockLane rate (laneAt (pad rate msg)) start = blockLane rate (laneAt msg) start :=
       funext (blockLane_pad_of_le (by rw [Nat.mul_succ] at h; omega))
     rw [absorbBlocks, absorbBlocks, absorbBlock, absorbBlock, hlane]
     exact ih _ _ (by rw [Nat.mul_succ] at h; omega)
@@ -413,8 +414,8 @@ The rest of the message starts the block, and its bytes past the end read as zer
 
 The padding puts bit 0 in byte `len mod rate` and bit 7 in byte `rate - 1` of the block. -/
 theorem blockLane_pad_last (rate : Nat) (msg : ByteArray) (i : Nat) :
-    blockLane rate (pad rate msg) (rate * (msg.size / rate)) i =
-      blockLane rate msg (rate * (msg.size / rate)) i ^^^
+    blockLane rate (laneAt (pad rate msg)) (rate * (msg.size / rate)) i =
+      blockLane rate (laneAt msg) (rate * (msg.size / rate)) i ^^^
         (if 8 * i + 8 ≤ rate ∧ msg.size % rate / 8 = i then
           (0x01 : UInt8).toUInt64 <<< (8 * (msg.size % rate % 8)).toUInt64 else 0) ^^^
         (if 8 * i + 8 ≤ rate ∧ (rate - 1) / 8 = i then
@@ -511,17 +512,17 @@ open Internal in
 
 The blocks before the last one are absorbed from `P`, and the last block of `P` is XORed in. -/
 theorem stateBeforeLastPermutation_eq_pad (f : State → State) (rate : Nat) (msg : ByteArray) :
-    stateBeforeLastPermutation f rate msg =
-      absorbBlock rate (absorbBlocks f rate (pad rate msg) (blockCount rate msg.size - 1) 0
-        State.zero) (pad rate msg) (rate * (blockCount rate msg.size - 1)) := by
+    stateBeforeLastPermutation f rate msg.size (laneAt msg) =
+      absorbBlock rate (absorbBlocks f rate (laneAt (pad rate msg)) (blockCount rate msg.size - 1)
+        0 State.zero) (laneAt (pad rate msg)) (rate * (blockCount rate msg.size - 1)) := by
   rw [blockCount, Nat.add_sub_cancel,
     absorbBlocks_pad f rate msg _ 0 _ (by rw [Nat.zero_add]; exact Nat.mul_div_le _ _),
     stateBeforeLastPermutation]
-  generalize absorbBlocks f rate msg (msg.size / rate) 0 State.zero = S
+  generalize absorbBlocks f rate (laneAt msg) (msg.size / rate) 0 State.zero = S
   -- The last block of `P`: the lanes of the rest of the message, then the two padding bits.
   simp only [absorbBlock, blockLane_pad_last]
   unfold xorBlockByte
-  generalize blockLane rate msg (rate * (msg.size / rate)) = l
+  generalize blockLane rate (laneAt msg) (rate * (msg.size / rate)) = l
   generalize (0x01 : UInt8).toUInt64 <<< (8 * (msg.size % rate % 8)).toUInt64 = v₁
   generalize (0x80 : UInt8).toUInt64 <<< (8 * ((rate - 1) % 8)).toUInt64 = v₂
   generalize msg.size % rate = p₁
@@ -547,10 +548,10 @@ theorem stateBeforeLastPermutation_eq_pad (f : State → State) (rate : Nat) (ms
 
 open Internal in
 /-- Absorbing `m + n` blocks absorbs the first `m`, then the `n` after them. -/
-theorem absorbBlocks_add (f : State → State) (rate : Nat) (bytes : ByteArray) (m n start : Nat)
-    (S : State) :
-    absorbBlocks f rate bytes (m + n) start S
-      = absorbBlocks f rate bytes n (start + rate * m) (absorbBlocks f rate bytes m start S) := by
+theorem absorbBlocks_add (f : State → State) (rate : Nat) (read : Nat → UInt64)
+    (m n start : Nat) (S : State) :
+    absorbBlocks f rate read (m + n) start S
+      = absorbBlocks f rate read n (start + rate * m) (absorbBlocks f rate read m start S) := by
   induction m generalizing start S with
   | zero => simp [absorbBlocks]
   | succ m ih =>
@@ -561,10 +562,63 @@ theorem absorbBlocks_add (f : State → State) (rate : Nat) (bytes : ByteArray) 
 
 Every one of the `n` blocks of the padded message goes through `S = f(S ^ (P_i || 0^c))`. -/
 theorem spongeAbsorb_eq (f : State → State) (rate : Nat) (msg : ByteArray) :
-    spongeAbsorb f rate msg =
-      Internal.absorbBlocks f rate (pad rate msg) (blockCount rate msg.size) 0 State.zero := by
+    spongeAbsorb f rate msg.size (Internal.laneAt msg) =
+      Internal.absorbBlocks f rate (Internal.laneAt (pad rate msg)) (blockCount rate msg.size) 0
+        State.zero := by
   -- The last of the n = len(N) / r + 1 blocks is the one the last permutation follows.
   rw [spongeAbsorb, stateBeforeLastPermutation_eq_pad, blockCount, Nat.add_sub_cancel,
     absorbBlocks_add, Nat.zero_add, Internal.absorbBlocks, Internal.absorbBlocks]
+
+/-! ## Reading the message by lanes -/
+
+/-- The rate of Keccak-256 is a whole number of lanes. -/
+theorem lanes_rate : 8 ∣ RATE_256 := ⟨17, rfl⟩
+
+open Internal in
+/-- A block reads its message only at the offsets of its lanes in the rate. -/
+theorem absorbBlock_congr_read (rate : Nat) (S : State) {read read' : Nat → UInt64} {s t : Nat}
+    (h : ∀ i, 8 * i + 8 ≤ rate → read (s + 8 * i) = read' (t + 8 * i)) :
+    absorbBlock rate S read s = absorbBlock rate S read' t := by
+  have hlane : blockLane rate read s = blockLane rate read' t := by
+    funext i
+    unfold blockLane
+    split
+    · exact h i ‹_›
+    · rfl
+  simp only [absorbBlock, hlane]
+
+open Internal in
+/-- Absorbing `n` blocks reads the message only below `rate * n`, at multiples of 8. -/
+theorem absorbBlocks_congr_read (f : State → State) {rate : Nat} (lanes : 8 ∣ rate) (n : Nat)
+    (S : State) {read read' : Nat → UInt64} {s t : Nat}
+    (h : ∀ q < rate * n, 8 ∣ q → read (s + q) = read' (t + q)) :
+    absorbBlocks f rate read n s S = absorbBlocks f rate read' n t S := by
+  induction n generalizing s t S with
+  | zero => rfl
+  | succ n ih =>
+    rw [absorbBlocks, absorbBlocks, absorbBlock_congr_read rate S
+      (fun i hi => h (8 * i) (by rw [Nat.mul_succ]; omega) ⟨i, rfl⟩)]
+    apply ih
+    intro q hq h8
+    rw [Nat.add_assoc, Nat.add_assoc]
+    exact h _ (by rw [Nat.mul_succ]; omega) (Nat.dvd_add lanes h8)
+
+/-- The state before the last permutation reads the message only at multiples of 8.
+
+So two lane readers that agree there give the same state. -/
+theorem stateBeforeLastPermutation_congr (f : State → State) {rate : Nat} (lanes : 8 ∣ rate)
+    (len : Nat) {read read' : Nat → UInt64} (h : ∀ q, 8 ∣ q → read q = read' q) :
+    stateBeforeLastPermutation f rate len read = stateBeforeLastPermutation f rate len read' := by
+  simp only [stateBeforeLastPermutation]
+  rw [absorbBlocks_congr_read f lanes _ _ (read' := read') (t := 0)
+      (fun q _ h8 => by simp only [Nat.zero_add]; exact h q h8),
+    absorbBlock_congr_read rate _ (read' := read')
+      (fun i _ => h _ (Nat.dvd_add (Dvd.dvd.mul_right lanes _) ⟨i, rfl⟩))]
+
+/-- Keccak-256 of a byte string is the bytes of the squeezed state after absorbing it. -/
+theorem keccak256_eq_squeeze256 (msg : ByteArray) :
+    keccak256 msg = Internal.squeeze256 (spongeAbsorb keccakF RATE_256 msg.size
+      (Internal.laneAt msg)) :=
+  rfl
 
 end EthLib.Cryptography.Hash.Keccak

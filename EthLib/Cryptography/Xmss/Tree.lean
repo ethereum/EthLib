@@ -42,7 +42,7 @@ namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
-variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+variable {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
 
 /-! ## Nodes -/
 
@@ -55,7 +55,7 @@ def nodeHash (pp : PublicParam) (layer : Layer) (p : Merkle.Position) (left righ
     m Digest :=
   -- The payload is the left child, then the right child.
   th H pp (addrNode layer (Fin.ofNat _ p.level) (UInt32.ofNat p.index))
-    (packBytes left ++ packBytes right)
+    #[left.lo, left.hi, right.lo, right.hi]
 
 /-- `X_{0,j}`: the leaf of one-time key `j`. -/
 def leaves (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (j : Nat) : m Digest :=

@@ -51,6 +51,14 @@ For a proof in that model to be about the code that runs, the code must not fix 
 So every definition that hashes takes the hash `H` as an argument, a function that runs in a monad.
 `keyGen`, `sign` and `verify` run them in the identity monad with Keccak-256 (`hashId`), and a security proof passes a query to the oracle as `H` instead.
 
+Every object the scheme hashes is 16 or 32 bytes, and the scheme's name is 8 bytes.
+So the code holds every value as Keccak lanes, the 64-bit words of FIPS 202 §3.1.2, with the byte order of its Appendix B.1.
+`H` takes a string of lanes and returns the four lanes of its digest, which Keccak-256 absorbs and squeezes without moving a byte.
+Bytes appear only in the encodings of keys and signatures.
+In the random oracle model, `H` queries the oracle at the bytes of its lanes.
+A string of lanes and its bytes determine each other.
+So this oracle on lanes is the byte oracle restricted to lengths that are multiples of 8, and every theorem about it is a theorem about the byte oracle.
+
 The oracle sees every hash call, in the order the code makes them.
 So the code makes its calls as the note defines them, one by one and in a fixed order:
 

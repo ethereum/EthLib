@@ -54,7 +54,7 @@ open OracleComp OracleSpec ENNReal EthLib.Cryptography.LazyPermutation
 
 /-- Keccak-256 with the permutation `f` in place of Keccak-f[1600]. -/
 def keccak256With (f : State → State) (msg : ByteArray) : Vector UInt8 DIGEST_LEN_256 :=
-  Internal.squeeze256 (spongeAbsorb f RATE_256 msg)
+  Internal.squeeze256 (spongeAbsorb f RATE_256 msg.size (Internal.laneAt msg))
 
 /-- With Keccak-f[1600], it is Keccak-256. -/
 theorem keccak256With_keccakF : keccak256With keccakF = keccak256 := rfl

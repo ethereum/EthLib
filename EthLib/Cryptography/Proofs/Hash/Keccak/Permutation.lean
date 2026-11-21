@@ -274,10 +274,33 @@ theorem round_injective (ir : Fin ROUNDS) : Function.Injective (round ir) :=
   (iota_injective ir).comp (chi_injective.comp (pi_injective.comp
     (rho_injective.comp theta_injective)))
 
+/-- Rounds `i` to 23 are round `i`, then rounds `i + 1` to 23.
+
+The loop runs eight rounds per step, and this is the same composition one round at a time. -/
+theorem keccakF.roundsFrom_eq (i : Nat) (A : State) :
+    keccakF.roundsFrom i A =
+      if h : i < ROUNDS then keccakF.roundsFrom (i + 1) (round ⟨i, h⟩ A) else A := by
+  rw [keccakF.roundsFrom]
+  split
+  · next h8 =>
+    rw [dite_eq_left (by omega)]
+    -- Rounds `i + 1` to `i + 7`, one at a time, each by this equation at a later index.
+    have step : ∀ (j : Nat) (hj : j < ROUNDS) (B : State), i < j →
+        keccakF.roundsFrom j B = keccakF.roundsFrom (j + 1) (round ⟨j, hj⟩ B) :=
+      fun j hj B hij => by rw [keccakF.roundsFrom_eq j B, dite_eq_left hj]
+    rw [step (i + 1) (by omega) _ (by omega), step (i + 1 + 1) (by omega) _ (by omega),
+      step (i + 1 + 1 + 1) (by omega) _ (by omega),
+      step (i + 1 + 1 + 1 + 1) (by omega) _ (by omega),
+      step (i + 1 + 1 + 1 + 1 + 1) (by omega) _ (by omega),
+      step (i + 1 + 1 + 1 + 1 + 1 + 1) (by omega) _ (by omega),
+      step (i + 1 + 1 + 1 + 1 + 1 + 1 + 1) (by omega) _ (by omega)]
+  · rfl
+termination_by ROUNDS - i
+
 /-- The rounds from any index on are injective. -/
 theorem roundsFrom_injective (i : Nat) : Function.Injective (keccakF.roundsFrom i) := by
   intro A B h
-  rw [keccakF.roundsFrom, keccakF.roundsFrom] at h
+  rw [keccakF.roundsFrom_eq, keccakF.roundsFrom_eq] at h
   split at h
   · exact round_injective _ (roundsFrom_injective (i + 1) h)
   · exact h

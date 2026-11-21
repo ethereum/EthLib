@@ -1044,14 +1044,14 @@
    "docstring":
    "SHA-256 of a byte string shorter than 2^61 bytes, the bound of FIPS 180-4 §1.\n\nA longer input wraps its bit length modulo 2^64, and the result is not SHA-256."},
   {"summary":
-   "Keccak-256 of a byte string, `KECCAK[512](N, 256)` of FIPS 202 §5.2:",
+   "Keccak-256 of a byte string, `KECCAK[512](N, 256)` of FIPS 202 §5.2.",
    "signature": "(data: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Hash.Keccak.keccak256",
    "method": "keccak256",
    "errors": [],
    "error_class": null,
    "docstring":
-   "Keccak-256 of a byte string, `KECCAK[512](N, 256)` of FIPS 202 §5.2:\n\n`KECCAK[c](N, d) = SPONGE[KECCAK-p[1600, 24], pad10*1, 1600 - c](N, d)`\n\nSo `c = 512`, `d = 256`, and `r = 1600 - c = 1088` bits, that is 136 bytes.\n\nUnlike SHA3-256 of §6.1, the message `N` gets no `01` suffix before the padding."},
+   "Keccak-256 of a byte string, `KECCAK[512](N, 256)` of FIPS 202 §5.2.\n\nThe bytes are read a lane at a time, and the digest's lanes are written back as bytes."},
   {"summary":
    "Keccak-512 of a byte string, `KECCAK[1024](N, 512)` of FIPS 202 §5.2:",
    "signature": "(data: bytes) -> bytes",

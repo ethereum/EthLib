@@ -22,6 +22,32 @@ open EthLib.Cryptography.Xmss.Constants
 
 /-! ## The encoding is injective -/
 
+/-- The first lane of an address is the integer `lo + 2^32 hi + 2^56 (tau + 32 mu)`.
+
+The three fields fill disjoint bits, so the OR of the lane is their sum. -/
+theorem toNat_encodeAddress_lo (tau : Fin 32) (mu : Fin 8) (hi : Fin (2 ^ 24)) (lo : UInt32) :
+    (encodeAddress tau mu hi lo).lo.toNat =
+      lo.toNat + 2 ^ 32 * hi.val + 2 ^ 56 * (tau.val + 32 * mu.val) := by
+  have hlo : lo.toNat < 2 ^ 32 := lo.toNat_lt_size
+  have hhi := hi.isLt
+  have ht : tau.val + 32 * mu.val < 2 ^ 8 := by have := tau.isLt; have := mu.isLt; omega
+  simp only [encodeAddress, UInt64.toNat_or, UInt64.toNat_shiftLeft, UInt64.toNat_ofNat',
+    UInt32.toNat_toUInt64]
+  generalize lo.toNat = a at *
+  generalize hi.val = b at *
+  generalize tau.val + 32 * mu.val = c at *
+  -- Each field is below `2^64`, and so is each shifted field.
+  rw [Nat.mod_eq_of_lt (by omega : b < 2 ^ 64), Nat.mod_eq_of_lt (by omega : c < 2 ^ 64)]
+  simp only [show UInt64.toNat 32 = 32 from rfl, show UInt64.toNat 56 = 56 from rfl,
+    Nat.reduceMod]
+  rw [Nat.mod_eq_of_lt (by rw [Nat.shiftLeft_eq]; omega),
+    Nat.mod_eq_of_lt (by rw [Nat.shiftLeft_eq]; omega)]
+  -- Each OR adds a field above the bits filled so far.
+  rw [Nat.or_comm a, ← Nat.shiftLeft_add_eq_or_of_lt (by omega), Nat.or_comm,
+    ← Nat.shiftLeft_add_eq_or_of_lt (by rw [Nat.shiftLeft_eq]; omega)]
+  simp only [Nat.shiftLeft_eq]
+  omega
+
 /-- The 16 bytes of an address determine its type, position and both fields.
 
 - Bytes 0 to 3 hold `lo`, and bytes 4 to 6 hold `hi`.
@@ -33,18 +59,21 @@ theorem encodeAddress_inj {tau tau' : Fin 32} {mu mu' : Fin 8} {hi hi' : Fin (2 
       tau = tau' ∧ mu = mu' ∧ hi = hi' ∧ lo = lo' := by
   constructor
   · intro h
-    -- Peel the zero tail, then the type byte, then the two fields.
-    obtain ⟨h, -⟩ := Vector.append_inj h
-    obtain ⟨h, htype⟩ := Vector.append_inj h
-    obtain ⟨hlo, hhi⟩ := Vector.append_inj h
-    -- Each field is below the range its bytes cover.
-    have lo_eq := Base.uintToBytes_inj lo.toNat_lt_size lo'.toNat_lt_size hlo
-    have hi_eq := Base.uintToBytes_inj (k := 3) hi.isLt hi'.isLt hhi
-    have type_eq := Base.uintToBytes_inj (k := 1)
-      (by have := tau.isLt; have := mu.isLt; omega)
-      (by have := tau'.isLt; have := mu'.isLt; omega) htype
+    -- The first lane is the integer of bytes 0 to 7, and each field is below its range.
+    have h := congrArg (fun a => a.lo.toNat) h
+    simp only [toNat_encodeAddress_lo] at h
+    have := lo.toNat_lt_size
+    have := lo'.toNat_lt_size
+    have := hi.isLt
+    have := hi'.isLt
+    have := tau.isLt
+    have := tau'.isLt
+    have := mu.isLt
+    have := mu'.isLt
+    simp only [UInt32.size] at *
     -- `tau < 32` is the remainder by 32 and `mu` the quotient.
-    refine ⟨Fin.ext (by omega), Fin.ext (by omega), Fin.ext hi_eq, UInt32.toNat_inj.mp lo_eq⟩
+    refine ⟨Fin.ext (by omega), Fin.ext (by omega), Fin.ext (by omega),
+      UInt32.toNat_inj.mp (by omega)⟩
   · rintro ⟨rfl, rfl, rfl, rfl⟩
     rfl
 

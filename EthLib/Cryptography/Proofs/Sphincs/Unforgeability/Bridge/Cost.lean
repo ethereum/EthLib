@@ -62,7 +62,7 @@ theorem hashCalls_ofFnInOrder {α : Type} :
       hashCalls f (HashSig.ofFnInOrder n g) = ∑ i, hashCalls f (g i)
   | 0, _ => rfl
   | n + 1, g => by
-    simp only [HashSig.ofFnInOrder, hashCalls_bind, hashCalls_pure, Nat.add_zero,
+    simp only [HashSig.ofFnInOrder_succ, hashCalls_bind, hashCalls_pure, Nat.add_zero,
       hashCalls_ofFnInOrder n, Fin.sum_univ_succ]
 
 /-- A vector computed in order makes `n * c` calls if each of its `n` entries makes `c`. -/
@@ -730,6 +730,9 @@ theorem layersCost_le (signs : Layer → Bool) {cost cost' : Layer → Nat}
   unfold layersCost
   cases signs .bottom <;> cases signs .middle <;> simp only [Bool.false_eq_true, ↓reduceIte] <;>
     omega
+
+-- The proofs below use the loop's lemmas, so the loop stays folded.
+attribute [local irreducible] HashSig.ofFnInOrder
 
 /-! ### The whole request -/
 

@@ -35,7 +35,7 @@ namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
-variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+variable {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
 
 namespace Internal
 
@@ -51,7 +51,7 @@ def signRootWith (sk : SecretKey) (b : Nat) (root : Digest)
     (trials : TrialSource m := hashTrials H) : m (Except XmssError LayerSignature) := do
   -- No codeword is an error, which every leaf index of the tree then returns.
   let some (randomizer, chainValues) ← otsSignTrials H sk.publicParam (seedPrf H sk.schemeSeed)
-      .top (UInt32.ofNat b) (packBytes root) trials
+      .top (UInt32.ofNat b) root.toArray trials
     | return .error (.noAdmissibleEncoding .top b)
   return .ok { randomizer, chainValues, path := sk.top.path LAYER_HEIGHT b }
 
@@ -84,7 +84,7 @@ def signWithTrials (sk : SecretKey) (idx : LeafIndex) (msg : Message)
     (trials : TrialSource m) : m (Except XmssError Signature × SecretKey) := do
   -- A failed search ends signing, before any tree is built.
   let some (randomizer, chainValues) ← otsSignTrials H sk.publicParam (seedPrf H sk.schemeSeed)
-      .bottom (UInt32.ofNat idx.toNat) (packBytes msg) trials
+      .bottom (UInt32.ofNat idx.toNat) msg.toArray trials
     | return (.error (.noAdmissibleEncoding .bottom idx.toNat), sk)
   let (t, sk) ← fetchTreeWith H sk (bottomTree idx) trials
   -- The key's path and the root the top key signed both come from the one bottom tree.
