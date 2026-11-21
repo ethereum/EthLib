@@ -159,9 +159,11 @@ Justification must run in the first step, after the first two epochs.
 
 Then the second step finalizes the checkpoint of the first epoch.
 
-The current justified checkpoint after the second step is that of the second epoch. -/
-theorem processJustificationAndFinalization_finalizesTwoEpochs
-    {first firstAfter second secondAfter : BeaconState preset fork}
+The current justified checkpoint after the second step is that of the second epoch.
+
+The two states may be at different forks, as when an upgrade comes between the two steps. -/
+theorem processJustificationAndFinalization_finalizesTwoEpochs {fork' : Base.Fork}
+    {first firstAfter : BeaconState preset fork} {second secondAfter : BeaconState preset fork'}
     {firstHonest secondHonest : Finset ValidatorIndex}
     (firstComputed : processJustificationAndFinalization first = .ok firstAfter)
     (late : GENESIS_EPOCH + 1 < getCurrentEpoch first)

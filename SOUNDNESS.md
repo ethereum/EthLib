@@ -4590,6 +4590,12 @@ A block includes an attestation one slot after the slot of the attestation at th
 So the attesters of the last slot of an epoch count only in the test of the previous epoch, one epoch later.
 The honest set of each step must then hold two thirds without them, so it needs a margin above two thirds.
 The theorem holds at every fork; before Altair the counted validators are the attesters of matching pending attestations.
+The two steps may be at different forks, so the second epoch may start a new fork.
+`advanceSlotAcross_finalizesTwoEpochs` (`Consensus/Proofs/Transition/FfgSlotSteps.lean`) states the same result for the slot steps of a run that end the two epochs, from Altair.
+Each step caches the roots of its slot before the epoch transition, which keeps the registry, the flags and the slot, and it applies the upgrades now due after it.
+When the two steps are slot steps of a run, every state in the statement is a state of that run: the vote hypotheses read the states at the last slot of each epoch, and the conclusion reads the states after the two steps.
+The epoch transition after justification, and the upgrades, keep the checkpoints and the bits.
+That form starts at Altair because plausible liveness covers Altair to Fulu; before Altair it would also need the target root to stay in the buffer of block roots.
 No theorem yet derives the hypotheses of the two steps from a run.
 
 `quorum_of_stakeMargin` (`Consensus/Proofs/StakeMovement.lean`) moves the two-thirds hypothesis of those steps to a starting state `x`.
