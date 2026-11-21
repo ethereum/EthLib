@@ -192,9 +192,6 @@ def nextRecord (config : ChainConfig) (checkSeal : Bool) (records : List BlockRe
   let hash ← block.header.hash.mapError fun e => (0, s!"block hash: {reprStr e}")
   (BlockRecord.ofRun chain block hash state).mapError failed
 
-/-- The hash of thirty-two zero bytes, which a forkchoice state gives for no block. -/
-def zeroHash : Hash32 := Vector.replicate 32 (0 : UInt8)
-
 /-- The inputs of a chain view: the configuration, the state of the lowest block, and the blocks.
 
 Then come the head, safe and finalized hashes, the network ID and whether to check the seal. -/
@@ -255,27 +252,24 @@ def viewOf (inputs : ViewInputs) : Result ChainView := do
   unless lowest.transactions.isEmpty do
     .error (0, "the lowest block has transactions, whose receipts are not given")
   let lowest ← recordOf lowest state [] []
-  let genesis ← if lowest.block.header.number = 0 then do
-      let actual := (lowest.hash, lowest.block.header.timestamp.toNat)
-      match genesis with
-      | some given =>
+  let genesis ← match lowest.genesis with
+    | some actual => do
+      if let some given := genesis then
         unless given = actual do throw (0, "config: genesis context disagrees with block zero")
-        pure (some actual)
-      | none => pure (some actual)
-    else pure genesis
+      pure (some actual)
+    | none => pure genesis
   let records ← rest.foldlM (init := [lowest]) fun records block => do
     let prev := records.getLast?.getD lowest
     return records ++ [← nextRecord config checkSeal records prev block]
   if h : records = [] then .error (0, "no block")
   else
     unless (records.getLast h).hash = head do .error (0, "the head is not the last block")
-    let named := fun (hash : Hash32) => if hash = zeroHash then none else some hash
     let view : ChainView := {
       config := config
       canonical := records
       nonempty := h
-      safe := named safeHash
-      finalized := named finalizedHash
+      safe := namedBlock safeHash
+      finalized := namedBlock finalizedHash
       networkId := networkId
       genesis := genesis
       mergeForkBlock := mergeForkBlock

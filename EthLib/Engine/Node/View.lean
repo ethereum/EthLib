@@ -31,7 +31,7 @@ namespace EthLib.Engine
 
 open EthLib.Base
 open EthLib.Cryptography.Kzg (TrustedSetup)
-open EthLib.Execution.Rpc (BlockRecord ChainView)
+open EthLib.Execution.Rpc (BlockRecord ChainView namedBlock)
 
 namespace Node
 
@@ -73,21 +73,17 @@ def view (node : Node) (networkId : Nat) (setup : TrustedSetup) : Option ChainVi
   let chain := node.canonicalHashes
   let canonical ← chain.mapM node.validRecord
   let side ← (node.validHashes.filter (· ∉ chain)).mapM node.validRecord
-  let named := fun (hash : Hash32) => if hash = ZERO_HASH then none else some hash
   if h : canonical = [] then none
   else
-    let lowest := canonical.head h
     some {
       config := node.config
       canonical
       nonempty := h
       side
-      safe := named node.forkchoice.safeBlockHash
-      finalized := named node.forkchoice.finalizedBlockHash
+      safe := namedBlock node.forkchoice.safeBlockHash
+      finalized := namedBlock node.forkchoice.finalizedBlockHash
       networkId
-      genesis := if lowest.block.header.number = 0 then
-          some (lowest.hash, lowest.block.header.timestamp.toNat)
-        else none
+      genesis := (canonical.head h).genesis
       setup }
 
 end Node
