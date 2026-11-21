@@ -20,14 +20,6 @@ open Internal
 
 /-! ## Blocks -/
 
-/-- A lane reads only its own 8 bytes. -/
-theorem laneAt_congr {a b : ByteArray} {s t : Nat}
-    (h : ∀ k < 8, byteAt a (s + k) = byteAt b (t + k)) : laneAt a s = laneAt b t := by
-  have h0 : byteAt a s = byteAt b t := by simpa using h 0 (by omega)
-  unfold laneAt
-  rw [h0, h 1 (by omega), h 2 (by omega), h 3 (by omega), h 4 (by omega), h 5 (by omega),
-    h 6 (by omega), h 7 (by omega)]
-
 /-- A block reads only its own `rate` bytes, when the rate is a whole number of lanes. -/
 theorem absorbBlock_congr {rate : Nat} (lanes : 8 ∣ rate) (S : State) {a b : ByteArray}
     {s t : Nat} (h : ∀ j < rate, byteAt a (s + j) = byteAt b (t + j)) :
@@ -157,8 +149,7 @@ theorem digest_absorb_empty (msg : ByteArray) :
   -- The whole blocks lie inside the message.
   have hfirst : absorbBlocks keccakF RATE_256 msg q 0 State.zero
       = absorbBlocks keccakF RATE_256 (pad RATE_256 msg) q 0 State.zero :=
-    absorbBlocks_congr _ lanes_rate _ _ fun j hj => by
-      rw [Nat.zero_add, pad, byteAt_append, ite_eq_left (by omega)]
+    (absorbBlocks_pad keccakF RATE_256 msg q 0 State.zero (by rw [Nat.zero_add]; exact hle)).symm
   rw [hpend, padding_mod, absorbBlocks_add, Nat.zero_add, hfirst]
   -- The last block is the bytes after them, then the padding.
   refine congrArg squeeze256 (absorbBlocks_congr _ lanes_rate _ _ fun j _ => ?_)
