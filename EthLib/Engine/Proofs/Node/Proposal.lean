@@ -15,6 +15,10 @@ A request for that ID returns the payload of the build.
 
 The same payload sent back for validation is then valid, with its own hash.
 
+It goes back with the fields of the response and the parent beacon block root.
+
+The checks before execution then give the block of the build.
+
 The payload sits on the head of the update and carries the values of its attributes.
 
 The node must be consistent: each known block is under its own hash, with sound totals.
@@ -33,8 +37,7 @@ namespace EthLib.Engine
 
 open EthLib.Base
 open EthLib.Cryptography.Kzg (TrustedSetup)
-open EthLib.Execution.Blocks (Block)
-open EthLib.Execution.Transactions (Transaction)
+open EthLib.Execution.Transactions (versionedHash)
 
 namespace Node
 
@@ -325,9 +328,13 @@ The update answers a payload ID, with no build under it before, on a consistent 
 
 The request for that ID returns the payload, and the node does not know its block as invalid.
 
-The parameters of the validation pass the checks before execution, and give that block.
+The validation takes the payload as a consensus client sends it back, at a version of its fork.
 
-Those checks give the block a hash, which the theorem names.
+From version 5, the access list and the slot of the build come with it.
+
+From version 3, the versioned hashes of the commitments of the bundle and the beacon root follow.
+
+From version 4, the requests of the build follow.
 
 The block's parent is the head of the update.
 
@@ -338,17 +345,13 @@ The attributes are those of the request, as its version decodes them, at the for
 The fee recipient is not among them, since the builder may choose another one. -/
 theorem newPayloadStep_of_getPayloadStep {builder : Builder} {status : PayloadStatus}
     {pid : PayloadId} {next : Node} {setup : TrustedSetup} {version' version'' : Nat}
-    {r : GetPayloadResponse} {params' : Lean.Json} {checked : CheckedBlock version''}
-    {hash : Hash32} (hc : node.Consistent)
+    {r : GetPayloadResponse} (hc : node.Consistent)
     (hStep : node.forkchoiceUpdatedBuildStep builder version params =
       (.ok (status, some pid), next))
     (hNone : node.builds.lookup pid = none)
     (hGet : (next.getPayloadStep setup version' pid).1 = .ok r)
-    (hCheck : checkNewPayload next.config version'' params' = .ok (.ok checked))
-    (hBlock : (⟨checked.fork, checked.block⟩ : Σ f, Block f Transaction) =
-      ⟨r.stored.fork, r.stored.built.block⟩)
-    (hHash : checked.block.header.hash = .ok hash)
-    (hKnown : ∀ b, next.blocks.lookup hash = some b → b.validity ≠ .invalid) :
+    (accepts : acceptsFork version'' r.stored.fork = true)
+    (hKnown : ∀ b, next.blocks.lookup r.payload.blockHash = some b → b.validity ≠ .invalid) :
     ∃ state j decoded attributes, forkchoiceUpdatedParams version params = .ok (state, some j) ∧
       payloadAttributesOfVersion version j = .ok decoded ∧
       PayloadAttributes.atFork decoded r.stored.fork = some attributes ∧
@@ -358,10 +361,19 @@ theorem newPayloadStep_of_getPayloadStep {builder : Builder} {status : PayloadSt
       r.stored.built.block.withdrawals = attributes.withdrawals ∧
       r.stored.built.block.header.parentBeaconBlockRoot = attributes.parentBeaconBlockRoot ∧
       r.stored.built.block.header.slotNumber = attributes.slotNumber ∧
-      (next.newPayloadStep version'' params').1 = .ok (⟨.valid, some hash⟩, none) := by
+      (next.newPayloadStep version'' (newPayloadParamsJson version'' r.payload
+        (if hf : .glamsterdam ≤ r.stored.fork then
+          some (r.stored.built.blockAccessList hf, r.stored.built.block.header.slotNumber hf)
+        else none)
+        (r.stored.bundle.commitments.map versionedHash)
+        ((sinceValue r.stored.built.block.header.parentBeaconBlockRoot).getD 0)
+        r.stored.built.requests)).1 = .ok (⟨.valid, some r.payload.blockHash⟩, none) := by
+  have hGet' : getPayload next.config setup next.store version' pid = .ok r := by
+    rw [getPayloadStep_eq] at hGet
+    exact hGet
+  obtain ⟨hStored, -, hServes, -, -, hPay, -, -⟩ := of_getPayload_eq_ok hGet'
   obtain ⟨state, j, decoded, post, b, hp, hd, hFc, hb, hv, hbuild⟩ :=
-    build_of_forkchoiceUpdatedBuildStep hStep hNone
-      (of_getPayload_eq_ok (by rw [getPayloadStep_eq] at hGet; exact hGet)).1
+    build_of_forkchoiceUpdatedBuildStep hStep hNone hStored
   -- The update applied the head, on the validated node.
   have hAns : (node.forkchoiceUpdatedStep version params).1 = .ok (status, some pid) := by
     rw [← forkchoiceUpdatedBuildStep_answer _ builder, hStep]
@@ -411,6 +423,15 @@ theorem newPayloadStep_of_getPayloadStep {builder : Builder} {status : PayloadSt
   have hPar : r.stored.built.block.header.parentHash = state.headBlockHash :=
     Except.ok.inj (hParentHash.symm.trans hHeadHash)
   refine ⟨state, j, decoded, attributes, hp, hd, hAt, hPar, h1, h2, h3, h4, h5, ?_⟩
+  -- The stored block comes back from its payload, so the parameters pass the checks.
+  have hParis : .paris ≤ r.stored.fork :=
+    ((acceptsGetPayloadFork_eq_true_iff version' r.stored.fork).mp hServes).2.2.1
+  have hOf : ExecutionPayload.ofBlock hParis r.stored.built.block = some r.payload := by
+    simp only [payloadOfBlock, hParis, dite_true] at hPay
+    exact (Option.filter_eq_some_iff.mp hPay).1
+  have hRound := toBlock_of_buildPayload hBuilt hParis hOf
+  have hCheck := checkNewPayload_of_getPayload hGet' hRound accepts
+  have hHash := (ExecutionPayload.toBlock_shape hRound).1
   -- The head passes the terminal block check, with its total difficulty.
   have hTerm : ∀ p, (next.chainAt state.headBlockHash post).recent.getLast? = some p →
       passesTerminalCheck next.transition (next.totalDifficulty state.headBlockHash) p = true := by
@@ -426,12 +447,8 @@ theorem newPayloadStep_of_getPayloadStep {builder : Builder} {status : PayloadSt
         rfl
       rw [chainPassesTerminalCheck_of_lookup hTree hPow] at hT
       simp [passesTerminalCheck, htd, hD, hT]
-  -- The checked block is the built block, at the fork of the build.
-  obtain ⟨cfork, cacc, cblock⟩ := checked
-  obtain ⟨hf1, hf2⟩ := Sigma.mk.inj hBlock
-  subst hf1
-  cases eq_of_heq hf2
-  by_cases hNew : ∀ c, next.blocks.lookup hash = some c → c.validity.isAccepted = true
+  by_cases hNew : ∀ c, next.blocks.lookup r.payload.blockHash = some c →
+      c.validity.isAccepted = true
   · -- A payload not known as valid or invalid runs on the head, its valid parent.
     rw [newPayloadStep_of_head (post := post) hCheck hHash hNew
       (by rw [hPar]; exact validState_eq_some_iff.mpr ⟨b, hb, hv⟩) (by rw [hPar, hFc]),

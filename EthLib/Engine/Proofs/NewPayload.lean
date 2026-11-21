@@ -46,6 +46,8 @@ If it is the parent, a payload whose block passes the state transition is valid.
 A block that fails it without an abort makes the payload invalid, with the block error.
 
 A block and a state come back exactly for a valid payload.
+
+Decoded parameters whose payload gives a block at the active fork pass the checks.
 -/
 
 public section
@@ -816,5 +818,52 @@ theorem extraData_le_of_newPayloadParams_json {fork : Fork} {version : Nat}
     -- From version 5 it decodes as a payload of version 4.
     obtain ⟨_, _, hj, -⟩ := (payloadParam_eq_ok_iff_of_le (five.mp rfl)).mp ha
     exact Json.extraData_le_of_payloadV4_executionPayloadV4Json (dencun rfl) hj
+
+/-! ## The checks on decoded parameters -/
+
+/-- A payload at a fork keeps the number, the timestamp and the extra data of its structure. -/
+theorem Json.AnyPayload.atFork_common {any : Json.AnyPayload} {f : Fork}
+    {q : ExecutionPayload f} (h : any.atFork f = .ok q) :
+    q.blockNumber = any.common.blockNumber ∧ q.timestamp = any.common.timestamp ∧
+      q.extraData = any.common.extraData := by
+  simp only [Json.AnyPayload.atFork, bind_ok_iff] at h
+  obtain ⟨_, _, _, _, _, _, result⟩ := h
+  cases result
+  exact ⟨rfl, rfl, rfl⟩
+
+/-- Decoded parameters whose payload has a block at the active fork pass the checks.
+
+The request lists must pass their check, and the version must take the fork.
+
+The block comes from the payload at that fork, with the decoded root, requests, list and slot.
+
+Its blob transactions must carry the decoded versioned hashes, when they are given. -/
+theorem checkNewPayload_eq_ok {config : ChainConfig} {version : Nat}
+    {params : Lean.Json} {any : Json.AnyPayload} {amsterdam : Option (ByteArray × UInt64)}
+    {hashes : Option (List Hash32)} {beaconRoot : Option Hash32}
+    {requests : Option (List ByteArray)}
+    (hDecode : newPayloadParams version params =
+      .ok (any, amsterdam, hashes, beaconRoot, requests))
+    (hValid : ∀ rs, requests = some rs → validRequests rs = true) {f : Fork}
+    (hActive : config.activeFork any.common.blockNumber.toNat any.common.timestamp.toNat = some f)
+    (hAccepted : acceptsFork version f = true) {payload : ExecutionPayload f}
+    {beacon : Since .dencun f Hash32} {lists : Since .pectra f (List ByteArray)}
+    {accessList : Since .glamsterdam f ByteArray} {slot : Since .glamsterdam f UInt64}
+    (hPayload : any.atFork f = .ok payload)
+    (hBeacon : Json.since "parentBeaconBlockRoot" beaconRoot = .ok beacon)
+    (hLists : Json.since "executionRequests" requests = .ok lists)
+    (hAccess : Json.since "blockAccessList" (amsterdam.map (·.1)) = .ok accessList)
+    (hSlot : Json.since "slotNumber" (amsterdam.map (·.2)) = .ok slot)
+    {b : Execution.Blocks.Block f Execution.Transactions.Transaction}
+    (hBlock : payload.toBlock beacon lists accessList slot = .ok b)
+    (hHashes : ∀ hs, hashes = some hs →
+      ExecutionPayload.blobVersionedHashes b.transactions = hs) :
+    checkNewPayload config version params = .ok (.ok ⟨f, hAccepted, b⟩) := by
+  unfold checkNewPayload
+  rw [hDecode]
+  dsimp only
+  cases requests <;> cases hashes <;>
+    simp [hValid, hActive, hAccepted, hPayload, hBeacon, hLists, hAccess, hSlot, hBlock,
+      hHashes, bind, Except.bind, pure, Except.pure]
 
 end EthLib.Engine

@@ -103,16 +103,6 @@ private theorem shape_facts (hFork : .bellatrix ≤ fork ∧ fork < .hegota) :
 
 /-! ## The block of a payload of the beacon chain -/
 
-/-- A payload at a fork keeps the number, the timestamp and the extra data of its structure. -/
-private theorem atFork_common {any : Json.AnyPayload} {f : Fork} {q : ExecutionPayload f}
-    (h : any.atFork f = .ok q) :
-    q.blockNumber = any.common.blockNumber ∧ q.timestamp = any.common.timestamp ∧
-      q.extraData = any.common.extraData := by
-  simp only [Json.AnyPayload.atFork, bind_ok_iff] at h
-  obtain ⟨_, _, _, _, _, _, result⟩ := h
-  cases result
-  exact ⟨rfl, rfl, rfl⟩
-
 /-- The structure of a payload of the beacon chain has its number, timestamp and extra data. -/
 private theorem common_of_anyPayloadOf {p : Consensus.ExecutionPayload preset fork}
     {any : Json.AnyPayload} (h : anyPayloadOf p = some any) :
@@ -237,41 +227,6 @@ private theorem of_checkNewPayload_ok {config : ChainConfig} {version : Nat}
     subst e
     simp_all
 
-/-- Decoded parameters whose payload has a block at the active fork pass the checks.
-
-The request lists must pass their check, and the version must take the fork.
-
-The block comes from the payload at that fork, with the decoded root, requests, list and slot.
-
-Its blob transactions must carry the decoded versioned hashes, when they are given. -/
-private theorem checkNewPayload_eq_ok {config : ChainConfig} {version : Nat}
-    {params : Lean.Json} {any : Json.AnyPayload} {amsterdam : Option (ByteArray × UInt64)}
-    {hashes : Option (List Hash32)} {beaconRoot : Option Hash32}
-    {requests : Option (List ByteArray)}
-    (hDecode : newPayloadParams version params =
-      .ok (any, amsterdam, hashes, beaconRoot, requests))
-    (hValid : ∀ rs, requests = some rs → validRequests rs = true) {f : Fork}
-    (hActive : config.activeFork any.common.blockNumber.toNat any.common.timestamp.toNat = some f)
-    (hAccepted : acceptsFork version f = true) {payload : ExecutionPayload f}
-    {beacon : Since .dencun f Hash32} {lists : Since .pectra f (List ByteArray)}
-    {accessList : Since .glamsterdam f ByteArray} {slot : Since .glamsterdam f UInt64}
-    (hPayload : any.atFork f = .ok payload)
-    (hBeacon : Json.since "parentBeaconBlockRoot" beaconRoot = .ok beacon)
-    (hLists : Json.since "executionRequests" requests = .ok lists)
-    (hAccess : Json.since "blockAccessList" (amsterdam.map (·.1)) = .ok accessList)
-    (hSlot : Json.since "slotNumber" (amsterdam.map (·.2)) = .ok slot)
-    {b : Execution.Blocks.Block f Execution.Transactions.Transaction}
-    (hBlock : payload.toBlock beacon lists accessList slot = .ok b)
-    (hHashes : ∀ hs, hashes = some hs →
-      ExecutionPayload.blobVersionedHashes b.transactions = hs) :
-    checkNewPayload config version params = .ok (.ok ⟨f, hAccepted, b⟩) := by
-  unfold checkNewPayload
-  rw [hDecode]
-  dsimp only
-  cases requests <;> cases hashes <;>
-    simp [hValid, hActive, hAccepted, hPayload, hBeacon, hLists, hAccess, hSlot, hBlock,
-      hHashes, bind, Except.bind, pure, Except.pure]
-
 /-- A field from a later fork has no value. -/
 private theorem sinceValue_eq_none {α : Type} {f : Fork} {x : Since f fork α} (h : fork < f) :
     sinceValue x = none := by
@@ -339,7 +294,7 @@ private theorem valid_iff_accepts_of_json {transition : TransitionConfiguration}
     simp [sinceValue, deneb, three] at e
     exact e.symm
   have hCommon := common_of_anyPayloadOf hAny
-  have hPayCommon := atFork_common hPay
+  have hPayCommon := Json.AnyPayload.atFork_common hPay
   -- With extra data of at most 32 bytes, the parameters read back as the structure written.
   have decode : payload.extraData.size ≤ Execution.Blocks.MAX_EXTRA_DATA_BYTES →
       ∃ any', newPayloadParams (newPayloadVersion fork) (newPayloadParamsJson
@@ -358,7 +313,7 @@ private theorem valid_iff_accepts_of_json {transition : TransitionConfiguration}
     intro extra
     obtain ⟨any', hDec, hat⟩ := newPayloadParams_json_of_structure payload amsterdam _ _ _ hv
       layout dencunShape extra fiveA
-    have hatCommon := atFork_common hat
+    have hatCommon := Json.AnyPayload.atFork_common hat
     exact ⟨any', hDec, atFork_eq_of_atFork hat hPay,
       hatCommon.1.symm.trans (hPayCommon.1.trans hCommon.1),
       hatCommon.2.1.symm.trans (hPayCommon.2.1.trans hCommon.2.1)⟩
@@ -402,7 +357,8 @@ private theorem valid_iff_accepts_of_json {transition : TransitionConfiguration}
     obtain ⟨_, -, _, hHeader⟩ := Execution.Blocks.checkBlock_checkHeader hCheck
     have extraB := (Execution.Blocks.checkHeader_eq_ok_iff.mp hHeader).2.2.2.2.2.2.2.2.1
     have extra : payload.extraData.size ≤ Execution.Blocks.MAX_EXTRA_DATA_BYTES := by
-      rw [hPayCommon.2.2, ← (atFork_common hPl).2.2, ← toBlock_extraData hBlock]
+      rw [hPayCommon.2.2, ← (Json.AnyPayload.atFork_common hPl).2.2,
+        ← toBlock_extraData hBlock]
       exact extraB
     obtain ⟨any', hDec, hAt, hNum, hTime⟩ := decode extra
     have hValidRequests : ∀ rs, (if 4 ≤ newPayloadVersion fork then
@@ -536,7 +492,7 @@ theorem newPayloadV6Params_newPayloadRequestJson (heze : .hegota ≤ fork)
   -- The payload is written at Deneb, with the extra data of the request.
   have dencun : Fork.dencun ≤ fork := Nat.le_trans (by decide) heze
   have extra' : payload.extraData.size ≤ Execution.Blocks.MAX_EXTRA_DATA_BYTES := by
-    rw [(atFork_common hPay).2.2, (common_of_anyPayloadOf hAny).2.2]
+    rw [(Json.AnyPayload.atFork_common hPay).2.2, (common_of_anyPayloadOf hAny).2.2]
     exact extra
   -- The hashes and the root are those of the request.
   have hHashes : ((sinceValue r.versionedHashes).map (·.data.toList)).getD [] =

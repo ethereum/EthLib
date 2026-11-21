@@ -323,6 +323,17 @@ theorem toBlock_slotNumber {p : ExecutionPayload fork} {beacon : Since .dencun f
   obtain ⟨_, ⟨txs, -, root, -, accessHash, -, _, ⟨wr, -, rfl⟩, rfl⟩, -, -, rfl⟩ := h
   rfl
 
+/-- The block of a payload has the number and the timestamp of the payload. -/
+theorem toBlock_number_timestamp {p : ExecutionPayload fork} {beacon : Since .dencun fork Hash32}
+    {requests : Since .pectra fork (List ByteArray)}
+    {accessList : Since .glamsterdam fork ByteArray} {slot : Since .glamsterdam fork UInt64}
+    {b : Block fork Transaction} (h : p.toBlock beacon requests accessList slot = .ok b) :
+    b.header.number = p.blockNumber.toNat ∧ b.header.timestamp.toNat = p.timestamp.toNat := by
+  simp only [toBlock, toBlockUnchecked, toHeader, checkBlockHash, bind_ok_iff, pure_eq_ok,
+    mapError_ok_iff] at h
+  obtain ⟨_, ⟨txs, -, root, -, accessHash, -, _, ⟨wr, -, rfl⟩, rfl⟩, -, -, rfl⟩ := h
+  exact ⟨rfl, toNat_ofNat_timestamp _⟩
+
 /-- From Glamsterdam, a payload whose access list is not the RLP form of one gives no block. -/
 theorem toBlock_ne_ok_of_not_decode {p : ExecutionPayload fork}
     {beacon : Since .dencun fork Hash32} {requests : Since .pectra fork (List ByteArray)}
