@@ -1078,6 +1078,23 @@ private theorem Steady.total {a b : BeaconState preset fork} (steady : Steady a 
     getTotalActiveBalance b = getTotalActiveBalance a :=
   total_congr steady.1 steady.2.1 (Nat.le_of_eq steady.2.2.symm)
 
+/-- The deposits of a block keep the total active balance, with its errors.
+
+A new validator is not active, and a deposit changes no earlier effective balance. -/
+theorem foldlM_processDeposit_getTotalActiveBalance {before : fork < .hegota}
+    {deposits : List Deposit} {a b : BeaconState preset fork}
+    (computed : deposits.foldlM (processDeposit config checks before) a = .ok b) :
+    getTotalActiveBalance b = getTotalActiveBalance a := by
+  obtain ⟨step, kept, grows⟩ := foldlM_ok_invariant
+    (fun now : BeaconState preset fork => ActiveStep a now ∧ EffectiveKept a now ∧
+      a.validators.data.size ≤ now.validators.data.size)
+    (fun _ _ _ ⟨step, kept, grows⟩ ok =>
+      ⟨step.trans (activeStep_processDeposit ok),
+        effectiveKept_trans kept (effectiveKept_processDeposit ok) grows,
+        Nat.le_trans grows (stepKeeps_processDeposit ok).1⟩)
+    ⟨ActiveStep.refl a, effectiveKept_refl a, Nat.le_refl _⟩ computed
+  exact total_congr step kept grows
+
 end Totals
 
 /-! ## The flags of participation as a potential -/

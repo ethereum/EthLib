@@ -378,4 +378,69 @@ theorem foldlM_processAttestation_honestAttestation {budget scoreBound : Nat}
     state 0 ⟨state.balances, state.previousEpochParticipation, state.currentEpochParticipation, rfl⟩
     (by rwa [Nat.zero_mul, Nat.add_zero]) participation (by rwa [Nat.zero_add])
 
+/-- From Altair until Gloas, the attestation steps keep a budget that grows with each step.
+
+Each step may raise it by one reward share, the bound of the reward of the proposer.
+
+The registry must not be empty, and the budget must leave room for every share and the ceiling.
+
+The flags keep one entry for each validator. -/
+theorem foldlM_processAttestation_withinBudget {budget scoreBound : Nat}
+    {checks : SignatureChecks} {parentSlot : Slot} (altair : .altair ≤ fork)
+    (beforeGloas : fork < .glamsterdam) (increment : preset.EFFECTIVE_BALANCE_INCREMENT ≠ 0)
+    (scaled : preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64)
+    (positive : 0 < state.validators.data.size) :
+    ∀ {attestations : List (Attestation preset fork)} {after : BeaconState preset fork}
+      {spent : Nat} {first : BeaconState preset fork},
+      first.validators = state.validators →
+      WithinBudget (budget + spent * (state.validators.data.size *
+        (64 * preset.baseRewardCeiling) / 448)) scoreBound first →
+      ParticipationMatches first →
+      budget + (spent + attestations.length) * (state.validators.data.size *
+        (64 * preset.baseRewardCeiling) / 448) +
+          state.validators.data.size * (64 * preset.baseRewardCeiling) < 2 ^ 64 →
+      attestations.foldlM (processAttestation config checks · parentSlot ·) first = .ok after →
+      after.validators = state.validators ∧
+        WithinBudget (budget + (spent + attestations.length) * (state.validators.data.size *
+          (64 * preset.baseRewardCeiling) / 448)) scoreBound after ∧ ParticipationMatches after
+  | [], after, spent, first, validators, holds, participation, _, computed => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    simpa using ⟨validators, holds, participation⟩
+  | attestation :: rest, after, spent, first, validators, holds, participation, room,
+      computed => by
+    rw [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨middle, processed, computed⟩ := computed
+    rw [List.length_cons] at room
+    have ceilingLe : 64 * preset.baseRewardCeiling ≤
+        state.validators.data.size * (64 * preset.baseRewardCeiling) :=
+      Nat.le_mul_of_pos_left _ positive
+    have spentLe : spent * (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) ≤
+        (spent + (rest.length + 1)) *
+          (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) :=
+      Nat.mul_le_mul_right _ (by omega)
+    -- The step writes flags and pays the proposer one share at most.
+    obtain ⟨written, updated, payee, reward, raised, sized, rewardLe⟩ :=
+      processAttestation_raise altair beforeGloas increment scaled holds participation
+        (by omega) (by rw [validators]; omega) processed
+    have shareStep : (spent + 1) *
+        (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) =
+        spent * (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) +
+          state.validators.data.size * (64 * preset.baseRewardCeiling) / 448 :=
+      Nat.succ_mul _ _
+    have middleValidators : middle.validators = state.validators := by
+      obtain ⟨_, -, rfl⟩ := increaseBalance_eq_ok_iff.mp raised
+      cases written <;> exact validators
+    rw [validators] at rewardLe
+    have kept := foldlM_processAttestation_withinBudget altair beforeGloas increment scaled
+      positive (spent := spent + 1) middleValidators
+      (withinBudget_raise (raised := budget + (spent + 1) *
+        (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448)) holds raised
+        (by omega))
+      (participationMatches_raise participation sized raised)
+      (by rw [show spent + 1 + rest.length = spent + (rest.length + 1) by omega]; exact room)
+      computed
+    rw [show spent + 1 + rest.length = spent + (rest.length + 1) by omega] at kept
+    exact kept
+
 end EthLib.Consensus

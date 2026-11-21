@@ -4635,8 +4635,8 @@ No theorem yet shows that the stake of those members reaches two thirds at the e
 `stateBeforeOperations_honestBlock` (`Consensus/Proofs/HonestBlockInput.lean`) runs the steps of an honest block before its operations, before Gloas.
 The honest block is at the slot of the state, names the proposer of that slot, and builds on the latest block header.
 Its RANDAO reveal is the proposer's signature of the epoch, and it repeats the vote on the deposit contract that the state holds.
-It carries no operation other than its attestations, and an empty sync aggregate.
-These are choices an honest proposer may make when no deposit is due; it is not the block that the honest validator guide prescribes in every case.
+It carries as many deposits as the state expects, its attestations, an empty sync aggregate, and no other operation.
+These are choices an honest proposer may make; it is not the block that the honest validator guide prescribes in every case.
 The proposer must hold the key and must not be slashed, and the state must hold no block at its slot yet.
 The execution part of the block must pass on the state after the header.
 That is an assumption: it covers the checks of the withdrawals and the payload against the state, and the answer of the execution layer, which builds the payload.
@@ -4651,8 +4651,13 @@ Every budget of the state before the block bounds it too.
 `processBlock_honestBlock` (`Consensus/Proofs/HonestBlock.lean`) runs a whole honest block from Altair until Gloas, with honest attestations built on the state at its slot.
 Those attestations are the same on the state before the operations.
 So the attestation steps accept them, under the hypotheses of `foldlM_processAttestation_honestAttestation` above.
-No deposit of the deposit contract may be due, since the honest block carries none.
-Before Electra that leaves out the slots where deposits are due; from Electra it holds once deposit requests take over.
+The honest block carries the deposits that are due, each with a Merkle proof to the deposit root of the state at its index.
+Those proofs are an input, as the payload is.
+The proposer takes them from a deposit tree whose root is the deposit root of the state, and `DepositTree.isValidMerkleBranch_getProof` shows that the proofs of such a tree pass the check.
+That the tree holds the deposits of the deposit contract is outside EthLib.
+The registry, and from Electra the pending deposits, must have room for the deposits; before Electra the budget must also leave room for their amounts.
+From Altair the inactivity scores must hold one entry for each validator.
+The deposit steps then accept them and keep every flag that the attestations set.
 Each key of the current sync committee must be the key of a validator, and the empty sync aggregate then passes.
 The sync committee must not be empty, and one increment must be at most the largest effective balance, so that the sync reward fits in 64 bits.
 Each honest member of each committee then holds the timely target flag after the block, when the state holds the target root for the first slot of the target epoch.
