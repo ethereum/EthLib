@@ -10,6 +10,7 @@ public import EthLib.Base.Bytes
 public import EthLib.Base.Denominations
 public import EthLib.Base.ChainConfig
 public import EthLib.Base.Except
+public import EthLib.Base.ExecutionConfig
 public import EthLib.Base.Fork
 public import EthLib.Base.GasLimit
 public import EthLib.Base.Hash32

@@ -5093,6 +5093,38 @@ Step 4 concerns the answers of `engine_newPayload`: an update answers `INVALID` 
 A C export runs a script of requests on a node that starts from one block.
 The Python tests run scripts of payloads, updates and reorganizations of empty blocks through it.
 
+### Client configuration files
+
+A client configuration file gives each fork a time, in a key made of its name and `Time`, and a blob schedule under its name ([EIP-7840](https://eips.ethereum.org/EIPS/eip-7840#specification), [EIP-7892](https://eips.ethereum.org/EIPS/eip-7892#execution-layer-configuration)).
+`readExecutionConfig` (`Base/ExecutionConfig.lean`) merges these keys into a chain configuration, and `writeExecutionConfig` writes them back.
+Reading what the writer wrote onto the forks by block number gives the configuration back, when a file can hold it whole (`readExecutionConfig_write`, `Base/Proofs/ExecutionConfig.lean`).
+Such a configuration keeps each blob schedule with its fork, since two forks can activate at one time, as in the example of EIP-7892.
+Mainnet and Hoodi are such configurations, since they set no blob schedule of their own (`writable_mainnet`, `writable_hoodi`).
+A configuration that the reader gives has its forks in the order of the timeline (`readExecutionConfig_ordered`).
+After a file is read, the blob schedule at a block is the latest entry that the block has reached (`blobScheduleAt_read`).
+
+The reader takes a reading where its sources leave a choice:
+
+- EIP-7840 leaves a missing or incomplete entry to the client.
+  A fork without an entry keeps the schedule of the latest fork before it that has one.
+  The [Hoodi genesis file](https://github.com/eth-clients/hoodi/blob/2a7efb3c530cce7c71702cc98d0f965df2411c11/metadata/genesis.json) needs this reading, since it times Osaka and gives it no entry.
+  EIP-7892 asks a fork that changes the schedule for an entry.
+  A file that breaks that rule runs the fork under the schedule before it, such as Prague under that of Cancun.
+  The reader refuses an entry that is not three natural numbers within the bounds of a schedule.
+- EIP-7892 requires times only after Prague.
+  The reader takes a time that the file leaves out from the configuration it merges into, and refuses an entry whose fork has a time in neither.
+- The reader reads only the time keys and the blob schedules.
+  No EIP names the keys of the forks by block number, such as `londonBlock`, so those come from the configuration it merges into.
+- The reader bounds times below `2^64`, the bound of a block's time, but not the numbers of a schedule, which EIP-7892 types as 64-bit.
+- The reader refuses forks whose times break the order of the timeline.
+- The writer leaves out what a file cannot hold: a schedule without a fork or of a fork with no name, a second schedule of one fork, and the time of a fork with no name.
+  It writes a schedule of Shanghai, which the reader ignores, since blob schedules start at Cancun.
+  The export refuses all these configurations, since it reads the file back and compares.
+  A schedule takes the activation of its fork in the file, so the round trip holds only for a configuration that a file holds whole.
+- An entry under a name that no fork of EthLib has is ignored, and so is an entry of Shanghai, since blob schedules start at Cancun.
+  No EIP names the execution side of Glamsterdam, so the reader takes `amsterdam` from the Hoodi genesis file, which gave that key before it unscheduled the fork.
+  Hegotá has no name in the table of forks, since no source gives the key of its time yet.
+
 ### Execution JSON-RPC API
 
 The execution JSON-RPC API is the interface through which wallets, indexers and test suites read an execution node.
@@ -7525,12 +7557,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 553 operations and 51 size constants.
-The Python extension calls 553 of the operations and 51 of the constants.
+Lean exports 555 operations and 51 size constants.
+The Python extension calls 555 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12425 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (368), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (39), `kzg.c` (511), `libp2p.c` (187), `module.c` (1636), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (857), `x25519.c` (21), `xmss.c` (344).
+12457 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (71), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (368), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (39), `kzg.c` (511), `libp2p.c` (187), `module.c` (1640), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (859), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

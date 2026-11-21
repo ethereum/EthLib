@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.ChainConfig
+public import EthLib.Base.ExecutionConfig
 public import EthLib.Base.Hex
 public import EthLib.Base.Exports.PyValue
 public import Lean.Data.Json
@@ -25,6 +26,10 @@ The deposit contract is its address: `0x` and forty hex digits, which Python `by
 An activation is a fork name, `block` or `time`, and a number.
 
 A blob schedule is `block` or `time`, a number, the target, the maximum and the update fraction.
+
+A blob schedule can start with the name of its fork.
+
+A client configuration file crosses as the `dict` of its JSON, as EIP-7840 and EIP-7892 shape it.
 -/
 
 public section
@@ -72,15 +77,20 @@ def activationOfJson (j : Json) : Result (Fork × Activation) := do
 
 /-- One blob schedule of a configuration: its activation, target, maximum and update fraction.
 
+A fork name in front gives the fork that the schedule belongs to.
+
 The target must be at most the maximum, and the maximum and the fraction must be positive. -/
-def blobScheduleOfJson (j : Json) : Result (Activation × BlobSchedule) := do
-  let .arr #[.str kind, n, target, max, fraction] := j
-    | throw (0, "a blob schedule is not [kind, n, target, max, fraction]")
+def blobScheduleOfJson (j : Json) : Result (Option Fork × Activation × BlobSchedule) := do
+  let (fork, kind, n, target, max, fraction) ← match j with
+    | .arr #[.str kind, n, target, max, fraction] => pure (none, kind, n, target, max, fraction)
+    | .arr #[.str name, .str kind, n, target, max, fraction] =>
+      pure (some (← forkOfName name.toUTF8), kind, n, target, max, fraction)
+    | _ => throw (0, "a blob schedule is not [fork?, kind, n, target, max, fraction]")
   let some target := target.getNat?.toOption | throw (0, "a blob schedule has no target")
   let some max := max.getNat?.toOption | throw (0, "a blob schedule has no maximum")
   let some fraction := fraction.getNat?.toOption | throw (0, "a blob schedule has no fraction")
   if h : target ≤ max ∧ 0 < max ∧ 0 < fraction then
-    return (← activationOf kind n, ⟨target, max, fraction, h.1, h.2.1, h.2.2⟩)
+    return (fork, ← activationOf kind n, ⟨target, max, fraction, h.1, h.2.1, h.2.2⟩)
   else throw (0, "a blob schedule needs target ≤ max, 0 < max and 0 < update fraction")
 
 /-- The deposit contract address of a configuration: `0x` and forty hex digits. -/
@@ -132,5 +142,51 @@ def activeForkOf (args : PyValue × UInt64 × UInt64) : Result (Option String) :
 The arguments are the configuration as a `dict`, the block number and the timestamp. -/
 @[export eth_active_fork]
 def activeForkExport (args : PyValue) : Result PyValue := pyExport activeForkOf args
+
+/-- A base configuration given as JSON, merged with the keys of a configuration file.
+
+A file that the reader refuses gives the code of its error. -/
+def executionConfigOf (base file : PyValue) : Result ChainConfig := do
+  let base ← configOfJson base.toJson
+  (ExecutionConfig.readExecutionConfig base file.toJson).mapError
+    fun e => (e.code, s!"execution config: {reprStr e}")
+
+/-- The blob schedule of a chain at a block, from a base configuration and a configuration file.
+
+It is the target, the maximum and the update fraction, if the chain sets a schedule there. -/
+def executionBlobScheduleOf (args : PyValue × PyValue × UInt64 × UInt64) :
+    Result (Option (Nat × Nat × Nat)) := do
+  let (base, file, number, timestamp) := args
+  let config ← executionConfigOf base file
+  return (config.blobScheduleAt number.toNat timestamp.toNat).map
+    fun s => (s.target, s.max, s.baseFeeUpdateFraction)
+
+/-- The blob schedule of a chain at a block, from a base configuration and a configuration file.
+
+The arguments are the base and the file as `dict`, the block number and the timestamp. -/
+@[export eth_execution_blob_schedule]
+def executionBlobScheduleExport (args : PyValue) : Result PyValue :=
+  pyExport executionBlobScheduleOf args
+
+/-- The fork times and blob schedules of a configuration, as a configuration file holds them.
+
+A configuration that a file cannot hold whole is refused, so the export loses nothing.
+
+The check reads the file back onto the forks by block number, and compares. -/
+def writeExecutionConfigOf (config : PyValue) : Result PyValue := do
+  let config ← configOfJson config.toJson
+  let file := ExecutionConfig.writeExecutionConfig config
+  let blocks := { config with
+    activations := config.activations.filter (·.2 matches .block _), blobSchedules := [] }
+  unless (ExecutionConfig.readExecutionConfig blocks file).toOption == some config do
+    throw (0, "config: a configuration file cannot hold it whole")
+  return .ofJson file
+
+/-- The fork times and blob schedules of a configuration, as the `dict` of a configuration file.
+
+The argument is the configuration as a `dict`. -/
+@[export eth_write_execution_config]
+def writeExecutionConfigExport (args : PyValue) : Result PyValue :=
+  pyExport writeExecutionConfigOf args
 
 end EthLib.Base.ChainConfig.Exports

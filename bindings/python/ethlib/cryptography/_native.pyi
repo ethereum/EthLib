@@ -2080,6 +2080,14 @@ def active_fork(config: dict[str, Any], number: int, timestamp: int) -> str | No
     """The name of the active fork of a configured chain at a block, or `None` when none is active."""
     ...
 
+def execution_blob_schedule(base: dict[str, Any], config: dict[str, Any], number: int, timestamp: int) -> tuple[int, int, int] | None:
+    """The blob schedule of a chain at a block, from a base configuration and a configuration file."""
+    ...
+
+def write_execution_config(config: dict[str, Any]) -> dict[str, Any]:
+    """The fork times and blob schedules of a configuration, as the `dict` of a configuration file."""
+    ...
+
 def engine_new_payload(config: dict, request: dict) -> dict:
     """The payload status of an `engine_newPayload` request, without the parent's state."""
     ...

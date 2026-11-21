@@ -1553,6 +1553,12 @@
 #define DOC_active_fork \
   "The name of the active fork of a configured chain at a block, or `None` when none is active."
 
+#define DOC_execution_blob_schedule \
+  "The blob schedule of a chain at a block, from a base configuration and a configuration file."
+
+#define DOC_write_execution_config \
+  "The fork times and blob schedules of a configuration, as the `dict` of a configuration file."
+
 #define DOC_engine_new_payload \
   "The payload status of an `engine_newPayload` request, without the parent's state."
 
