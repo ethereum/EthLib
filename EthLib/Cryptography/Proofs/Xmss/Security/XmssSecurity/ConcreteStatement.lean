@@ -48,7 +48,7 @@ open OracleComp OracleSpec ENNReal
 open EthLib.Cryptography.Xmss
 
 /-- `H` in the game: a query to the random oracle. -/
-abbrev H : ByteArray → OracleComp XmssSecurity.HashSpec (Vector UInt8 32) := queryH
+abbrev H : Array UInt64 → OracleComp XmssSecurity.HashSpec Lanes4 := queryH
 
 /-- A signing request: a leaf index and a message. -/
 structure SignRequest where
@@ -96,7 +96,7 @@ def signingOracle : QueryImpl SigningSpec
     ((fun result => ((result.1.toOption, result.2), [⟨request, result.1.toOption⟩])) <$>
       liftM (signWith H sk request.leafIndex request.message))
 
-/-- A uniform seed `S_0`: the bytes of a uniform 256-bit vector, which `ofSeed` maps one to one. -/
+/-- A uniform seed `S_0`: the lanes of a uniform 256-bit vector, which `ofSeed` maps one to one. -/
 noncomputable def sampleSeed : ProbComp Seed :=
   ofSeed <$> XmssSecurity.sampleMasterSeed
 

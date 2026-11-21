@@ -77,12 +77,12 @@ theorem isQueryBoundP_liftM_hash {α : Type} {n : Nat} :
       omega
 
 /-- `H` is one hash query. -/
-theorem isQueryBoundP_H (x : ByteArray) : IsQueryBoundP (H x) (fun _ => True) 1 :=
+theorem isQueryBoundP_H (x : Array UInt64) : IsQueryBoundP (H x) (fun _ => True) 1 :=
   (isQueryBoundP_map_iff _ _ _).2
     ((isQueryBoundP_query_iff (spec := HashSpec) _ _ 1).2 fun _ => Nat.one_pos)
 
 /-- A derivation is one hash query. -/
-theorem isQueryBoundP_seedPrf (s : Seed) (pp : PublicParam) (a : Address) (suffix : ByteArray) :
+theorem isQueryBoundP_seedPrf (s : Seed) (pp : PublicParam) (a : Address) (suffix : Array UInt64) :
     IsQueryBoundP (seedPrf H s pp a suffix) (fun _ => True) 1 :=
   isQueryBoundP_H _
 

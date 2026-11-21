@@ -229,6 +229,9 @@ theorem prEvent_signLayer_bind_le {β : Type} (pkSeed : PkSeed)
         (cacheAvoids_isTrialQuery_mono (fun _ h => h ▸ le_refl _) hcache))
       (mul_le_of_le_one_right' (prEvent_le_one _))
 
+-- The proofs below use the loop's lemmas, so the loop stays folded.
+attribute [local irreducible] HashSig.ofFnInOrder
+
 /-! ## A whole signature fails rarely -/
 
 /-- **Signing from a source of secrets fails with probability at most `3 exp(-2^18)`.**

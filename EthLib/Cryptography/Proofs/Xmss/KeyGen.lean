@@ -16,10 +16,10 @@ namespace EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
 
 /-- With the derivations from `S`, the public parameter is `Th(0^128, A_param, S)`. -/
-theorem publicParamOf_seedPrf {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+theorem publicParamOf_seedPrf {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
     (s : Seed) :
     publicParamOf (seedPrf H s) =
-      th H (Vector.replicate PUBLIC_PARAM_LEN 0) addrParam (packBytes s) := by
+      th H ⟨0, 0⟩ addrParam s.toArray := by
   rw [publicParamOf, seedPrf_empty]
   rfl
 

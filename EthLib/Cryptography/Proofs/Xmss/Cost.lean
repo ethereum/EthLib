@@ -58,7 +58,7 @@ section Bounds
 attribute [local irreducible] LAYER_HEIGHT
 
 variable {ι : Type} {spec : OracleSpec ι} {p : ι → Prop} [DecidablePred p]
-  {H : ByteArray → OracleComp spec (Vector UInt8 32)}
+  {H : Array UInt64 → OracleComp spec Lanes4}
 
 /-- The scheme seed is one call of `H`. -/
 theorem isQueryBoundP_schemeSeed (hH : ∀ x, IsQueryBoundP (H x) p 1) (seed : Seed) :
@@ -67,7 +67,7 @@ theorem isQueryBoundP_schemeSeed (hH : ∀ x, IsQueryBoundP (H x) p 1) (seed : S
 
 /-- A derivation from the scheme seed is one call of `H`. -/
 theorem isQueryBoundP_seedPrf (hH : ∀ x, IsQueryBoundP (H x) p 1) (s : Seed) (pp : PublicParam)
-    (address : Address) (suffix : ByteArray) :
+    (address : Address) (suffix : Array UInt64) :
     IsQueryBoundP (seedPrf H s pp address suffix) p 1 :=
   hH _
 
@@ -188,13 +188,13 @@ end Bounds
 section Exact
 
 variable {ι : Type} {spec : OracleSpec ι} (f : QueryImpl spec Id)
-  (H : ByteArray → OracleComp spec (Vector UInt8 32))
+  (H : Array UInt64 → OracleComp spec Lanes4)
   (hH : ∀ x, (queriesWith f (H x)).length = 1)
 
 include hH
 
 /-- A tweakable hash call is one call of `H`. -/
-theorem length_queriesWith_th (pp : PublicParam) (address : Address) (payload : ByteArray) :
+theorem length_queriesWith_th (pp : PublicParam) (address : Address) (payload : Array UInt64) :
     (queriesWith f (th H pp address payload)).length = 1 := by
   rw [th, queriesWith_bind, List.length_append, hH, queriesWith_pure, List.length_nil]
 
@@ -232,8 +232,8 @@ theorem length_queriesWith_keyGenWith (seed : Seed) :
   have hseed : (queriesWith f (schemeSeed H seed)).length = 1 := hH _
   have hpp : ∀ s, (queriesWith f (publicParamOf (seedPrf H s))).length = 1 := fun s => by
     -- The parameter has the type of a digest, but under another name.
-    have h := queriesWith_bind f (seedPrf H s (Vector.replicate PUBLIC_PARAM_LEN 0) addrParam
-      .empty) fun h => (pure (halfOf 0 h) : OracleComp spec PublicParam)
+    have h := queriesWith_bind f (seedPrf H s ⟨0, 0⟩ addrParam
+      #[]) fun h => (pure (halfOf 0 h) : OracleComp spec PublicParam)
     exact (congrArg List.length h).trans (by rw [List.length_append]; exact congrArg (· + 0) (hH _))
   rw [keyGenWith, queriesWith_bind, List.length_append, hseed, queriesWith_bind,
     List.length_append, hpp, queriesWith_bind, List.length_append, build, queriesWith_build,

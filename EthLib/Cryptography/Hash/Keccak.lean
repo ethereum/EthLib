@@ -19,6 +19,12 @@ The state is a record of 25 lanes, and each step mapping is written out lane by 
 
 So the compiled code keeps the lanes in machine words, and allocates at most one state per round.
 
+The sponge reads its message a lane at a time, and gives its digest as lanes.
+
+So a message held as lanes is hashed with no byte moved.
+
+Keccak-256 of a byte string reads the same lanes from its bytes, and writes its digest as bytes.
+
 It is not intended to be constant-time.
 -/
 
@@ -391,7 +397,7 @@ The round constant is XORed into lane `(0, 0)`, the only lane it touches. -/
 /-! ## The permutation -/
 
 /-- One round, FIPS 202 §3.3: `Rnd(A, i_r) = iota(chi(pi(rho(theta(A)))), i_r)`. -/
-def round (ir : Fin ROUNDS) (A : State) : State :=
+@[inline] def round (ir : Fin ROUNDS) (A : State) : State :=
   iota ir (chi (pi (rho (theta A))))
 
 /-- Keccak-f[1600], FIPS 202 §3.4: Keccak-p[1600, 24], rounds 0 to 23 in order.
@@ -400,9 +406,19 @@ With `n_r = 24 = 12 + 2l` the rounds run from `12 + 2l - n_r = 0` to `23` (§3.3
 def keccakF (A : State) : State :=
   roundsFrom 0 A
 where
-  /-- Rounds `i` to 23, in order. -/
+  /-- Rounds `i` to 23, in order.
+
+  A step runs eight rounds while eight remain, and one round otherwise.
+
+  The compiled code then keeps the lanes in machine words across eight rounds. -/
   roundsFrom (i : Nat) (A : State) : State :=
-    if h : i < ROUNDS then roundsFrom (i + 1) (round ⟨i, h⟩ A) else A
+    if h : i + 8 ≤ ROUNDS then
+      -- Rounds i to i + 7, the first one innermost.
+      roundsFrom (i + 8) (round ⟨i + 7, by omega⟩ (round ⟨i + 6, by omega⟩
+        (round ⟨i + 5, by omega⟩ (round ⟨i + 4, by omega⟩ (round ⟨i + 3, by omega⟩
+          (round ⟨i + 2, by omega⟩ (round ⟨i + 1, by omega⟩ (round ⟨i, by omega⟩ A))))))))
+    else if h : i < ROUNDS then roundsFrom (i + 1) (round ⟨i, h⟩ A)
+    else A
   termination_by ROUNDS - i
 
 /-! ## The sponge
@@ -495,6 +511,76 @@ def blockCount (rate len : Nat) : Nat :=
   -- The padding brings the length up to the next multiple of the rate, strictly above `len`.
   len / rate + 1
 
+/-! ## Values as lanes
+
+FIPS 202 §3.1.2 holds the state as lanes, and Appendix B.1 orders the bytes within a lane.
+
+Byte `k` of a value is byte `k mod 8` of its lane `k / 8`, least significant first.
+
+So a value of `8k` bytes is `k` lanes, read and written without moving a byte. -/
+
+/-- A 16-byte value as two lanes: half of a Keccak-256 digest. -/
+@[ext] structure Lanes2 where
+  /-- Bytes 0 to 7. -/
+  lo : UInt64
+  /-- Bytes 8 to 15. -/
+  hi : UInt64
+  deriving DecidableEq, Inhabited
+
+/-- A 32-byte value as four lanes: a Keccak-256 digest. -/
+@[ext] structure Lanes4 where
+  /-- Bytes 0 to 7. -/
+  w0 : UInt64
+  /-- Bytes 8 to 15. -/
+  w1 : UInt64
+  /-- Bytes 16 to 23. -/
+  w2 : UInt64
+  /-- Bytes 24 to 31. -/
+  w3 : UInt64
+  deriving DecidableEq, Inhabited
+
+/-- The 16 bytes of two lanes, least significant first.
+
+Byte `j` is bits `8j` to `8j + 7` of the low lane, or of the high lane from byte 8 on. -/
+def Lanes2.bytes (w : Lanes2) : Vector UInt8 16 :=
+  -- Byte j of a lane is its bits 8j to 8j + 7, so the lane shifted down by 8j.
+  let b (v : UInt64) (j : UInt64) : UInt8 := (v >>> (8 * j)).toUInt8
+  #v[b w.lo 0, b w.lo 1, b w.lo 2, b w.lo 3, b w.lo 4, b w.lo 5, b w.lo 6, b w.lo 7,
+    b w.hi 0, b w.hi 1, b w.hi 2, b w.hi 3, b w.hi 4, b w.hi 5, b w.hi 6, b w.hi 7]
+
+/-- The 32 bytes of four lanes, least significant first. -/
+def Lanes4.bytes (w : Lanes4) : Vector UInt8 32 :=
+  -- Byte j of a lane is its bits 8j to 8j + 7, so the lane shifted down by 8j.
+  let b (v : UInt64) (j : UInt64) : UInt8 := (v >>> (8 * j)).toUInt8
+  #v[-- Bytes 0 to 7: the first lane
+    b w.w0 0, b w.w0 1, b w.w0 2, b w.w0 3, b w.w0 4, b w.w0 5, b w.w0 6, b w.w0 7,
+    -- Bytes 8 to 15: the second lane
+    b w.w1 0, b w.w1 1, b w.w1 2, b w.w1 3, b w.w1 4, b w.w1 5, b w.w1 6, b w.w1 7,
+    -- Bytes 16 to 23: the third lane
+    b w.w2 0, b w.w2 1, b w.w2 2, b w.w2 3, b w.w2 4, b w.w2 5, b w.w2 6, b w.w2 7,
+    -- Bytes 24 to 31: the fourth lane
+    b w.w3 0, b w.w3 1, b w.w3 2, b w.w3 3, b w.w3 4, b w.w3 5, b w.w3 6, b w.w3 7]
+
+/-- The first or the last 16 bytes of a 32-byte value: its first or its last two lanes. -/
+@[inline] def Lanes4.half (h : Fin 2) (w : Lanes4) : Lanes2 :=
+  if h.val = 0 then ⟨w.w0, w.w1⟩ else ⟨w.w2, w.w3⟩
+
+/-- The two lanes of a 16-byte value, the low one first. -/
+@[inline] def Lanes2.toArray (w : Lanes2) : Array UInt64 :=
+  #[w.lo, w.hi]
+
+/-- The four lanes of a 32-byte value, in order. -/
+@[inline] def Lanes4.toArray (w : Lanes4) : Array UInt64 :=
+  #[w.w0, w.w1, w.w2, w.w3]
+
+/-- The lane of bytes `p` to `p + 7` of the value that an array of lanes holds.
+
+The offset `p` is a multiple of 8, so the lane is entry `p / 8` of the array.
+
+Past the end the lane is zero, as the bytes past a message read. -/
+@[inline] def laneOfArray (lanes : Array UInt64) (p : Nat) : UInt64 :=
+  lanes.getD (p / 8) 0
+
 namespace Internal
 
 open EthLib.Base (byteAt)
@@ -539,14 +625,16 @@ def bytesOfLane (v : UInt64) : List UInt8 :=
 - If `8i + 8 <= rate`, the lane is bytes `8i` to `8i + 7` of `P_i`.
 - Otherwise the lane is zero.
 
+The message is read a lane at a time: `read p` is the lane of its bytes `p` to `p + 7`.
+
 A lane is read only when all 8 of its bytes lie in the block, so it never reads past the block.
 
 When the rate is a multiple of 8 bytes, no lane straddles `P_i` and `0^c`.
 
 So every lane past the rate lies wholly in `0^c`. -/
-@[inline] def blockLane (rate : Nat) (bytes : ByteArray) (start i : Nat) : UInt64 :=
+@[inline] def blockLane (rate : Nat) (read : Nat → UInt64) (start i : Nat) : UInt64 :=
   -- Bytes 8i to 8i + 7 of P_i are at index start + 8i of the string.
-  if 8 * i + 8 ≤ rate then laneAt bytes (start + 8 * i)
+  if 8 * i + 8 ≤ rate then read (start + 8 * i)
   -- Past the rate, the lane is in the capacity 0^c.
   else 0
 
@@ -562,9 +650,10 @@ Lane `i` of `S`, for `i < 25`, is XORed with lane `i` of `P_i || 0^c`.
 - A rate of 72 bytes fills lanes 0 to 8, and lanes 9 to 24 are zero.
 
 All 25 lanes are XORed, so every positive rate below 200 bytes that is a multiple of 8 works. -/
-def absorbBlock (rate : Nat) (S : State) (bytes : ByteArray) (start : Nat) : State :=
+@[specialize] def absorbBlock (rate : Nat) (S : State) (read : Nat → UInt64) (start : Nat) :
+    State :=
   -- lane i is lane i of P_i || 0^c: bytes 8i to 8i + 7 of P_i, or 0 past the rate.
-  let lane := blockLane rate bytes start
+  let lane := blockLane rate read start
   -- y = 0
   ⟨S.a0 ^^^ lane 0,     -- S[0, 0] ^ bytes 0 to 7 of P_i
    S.a1 ^^^ lane 1,     -- S[1, 0] ^ bytes 8 to 15 of P_i
@@ -615,18 +704,18 @@ def xorBlockByte (rate : Nat) (S : State) (p : Nat) (b : UInt8) : State :=
 
 Here `d = 256 <= r = 1088`, so step 9 returns at once, and step 10 never runs.
 
-So the digest is `Trunc_256(S)`, the 32 bytes of lanes 0 to 3, least significant byte first. -/
+So the digest is `Trunc_256(S)`, lanes 0 to 3 of the state.
+
+FIPS 202 §3.1.2 names those lanes first, and they hold bits 0 to 255 of the state string. -/
+@[inline] def squeezeLanes256 (S : State) : Lanes4 :=
+  -- Lanes S[0, 0], S[1, 0], S[2, 0] and S[3, 0]: bits 0 to 255 of S.
+  ⟨S.a0, S.a1, S.a2, S.a3⟩
+
+/-- The output of FIPS 202 §4, Algorithm 8, steps 7 to 9, for `d = 256` bits, as bytes.
+
+It is the 32 bytes of lanes 0 to 3, least significant byte first. -/
 def squeeze256 (S : State) : Vector UInt8 DIGEST_LEN_256 :=
-  -- Byte j of a lane is its bits 8j to 8j + 7, so the lane shifted down by 8j.
-  let b (v : UInt64) (j : UInt64) : UInt8 := (v >>> (8 * j)).toUInt8
-  #v[-- Bytes 0 to 7 of Z: lane S[0, 0], bits 0 to 63 of S
-    b S.a0 0, b S.a0 1, b S.a0 2, b S.a0 3, b S.a0 4, b S.a0 5, b S.a0 6, b S.a0 7,
-    -- Bytes 8 to 15 of Z: lane S[1, 0], bits 64 to 127 of S
-    b S.a1 0, b S.a1 1, b S.a1 2, b S.a1 3, b S.a1 4, b S.a1 5, b S.a1 6, b S.a1 7,
-    -- Bytes 16 to 23 of Z: lane S[2, 0], bits 128 to 191 of S
-    b S.a2 0, b S.a2 1, b S.a2 2, b S.a2 3, b S.a2 4, b S.a2 5, b S.a2 6, b S.a2 7,
-    -- Bytes 24 to 31 of Z: lane S[3, 0], bits 192 to 255 of S
-    b S.a3 0, b S.a3 1, b S.a3 2, b S.a3 3, b S.a3 4, b S.a3 5, b S.a3 6, b S.a3 7]
+  (squeezeLanes256 S).bytes
 
 /-- The output of FIPS 202 §4, Algorithm 8, steps 7 to 9, for `d = 512` bits:
 
@@ -662,13 +751,22 @@ def squeeze512 (S : State) : Vector UInt8 DIGEST_LEN_512 :=
 This is FIPS 202 §4, Algorithm 8, step 6.
 
 The blocks are read in place, so a long message is never copied block by block. -/
-def absorbBlocks (f : State → State) (rate : Nat) (bytes : ByteArray) :
+@[specialize] def absorbBlocks (f : State → State) (rate : Nat) (read : Nat → UInt64) :
     Nat → Nat → State → State
   | 0, _, S => S
   | n + 1, start, S =>
-    absorbBlocks f rate bytes n (start + rate) (f (absorbBlock rate S bytes start))
+    absorbBlocks f rate read n (start + rate) (f (absorbBlock rate S read start))
 
 end Internal
+
+/-- The 16 bytes at an offset of a buffer, as two lanes; bytes past its end read as zero. -/
+def Lanes2.read (bytes : ByteArray) (offset : Nat) : Lanes2 :=
+  ⟨Internal.laneAt bytes offset, Internal.laneAt bytes (offset + 8)⟩
+
+/-- The 32 bytes at an offset of a buffer, as four lanes; bytes past its end read as zero. -/
+def Lanes4.read (bytes : ByteArray) (offset : Nat) : Lanes4 :=
+  ⟨Internal.laneAt bytes offset, Internal.laneAt bytes (offset + 8),
+    Internal.laneAt bytes (offset + 16), Internal.laneAt bytes (offset + 24)⟩
 
 /-- The absorbing phase of FIPS 202 §4, Algorithm 8, up to its last permutation.
 
@@ -683,16 +781,21 @@ The state after the absorbing phase is `f` of this state.
 
 A caller that hashes many messages differing only in their last block can share all the rest.
 
-The rate must be positive, below 200 bytes and a multiple of 8 bytes, as for the absorbing phase. -/
-def stateBeforeLastPermutation (f : State → State) (rate : Nat) (msg : ByteArray) : State :=
+The rate must be positive, below 200 bytes and a multiple of 8 bytes, as for the absorbing phase.
+
+The message `N` has `len` bytes, and `read p` is its lane of bytes `p` to `p + 7`, for `8 ∣ p`.
+
+Its bytes from `len` on must read as zero, as `P` holds the padding there. -/
+@[specialize] def stateBeforeLastPermutation (f : State → State) (rate len : Nat)
+    (read : Nat → UInt64) : State :=
   -- Steps 1 and 2: the k = n - 1 blocks of P = N || pad(r, len(N)) before the last are in N.
-  let k := msg.size / rate
+  let k := len / rate
   -- Steps 3 to 6 for i < n - 1: from S = 0^b, S = f(S ^ (P_i || 0^c)), with P_i read from N.
-  let S := Internal.absorbBlocks f rate msg k 0 State.zero
+  let S := Internal.absorbBlocks f rate read k 0 State.zero
   -- The last block P_{n-1} starts with the rest of N, read in place; bytes past N read as zero.
-  let S := Internal.absorbBlock rate S msg (rate * k)
+  let S := Internal.absorbBlock rate S read (rate * k)
   -- The first 1 bit of the padding is bit 0 of byte len(N) mod r of the last block.
-  let S := Internal.xorBlockByte rate S (msg.size % rate) 0x01
+  let S := Internal.xorBlockByte rate S (len % rate) 0x01
   -- The final 1 bit is bit 7 of byte r - 1; with one padding byte, both bits share it.
   Internal.xorBlockByte rate S (rate - 1) 0x80
 
@@ -717,22 +820,43 @@ FIPS 202 §4 defines the sponge for any permutation `f`, so the permutation is a
 
 The absorbing phase ends with the last permutation of step 6.
 
-So it is that permutation applied to the state just before it. -/
-def spongeAbsorb (f : State → State) (rate : Nat) (msg : ByteArray) : State :=
-  -- Steps 1 to 6, up to the last block XORed in, then the last application of f.
-  f (stateBeforeLastPermutation f rate msg)
+So it is that permutation applied to the state just before it.
 
-/-- Keccak-256 of a byte string, `KECCAK[512](N, 256)` of FIPS 202 §5.2:
+The message `N` has `len` bytes, read a lane at a time, with zero bytes from `len` on. -/
+@[specialize] def spongeAbsorb (f : State → State) (rate len : Nat) (read : Nat → UInt64) :
+    State :=
+  -- Steps 1 to 6, up to the last block XORed in, then the last application of f.
+  f (stateBeforeLastPermutation f rate len read)
+
+/-- Keccak-256 of a message read a lane at a time, `KECCAK[512](N, 256)` of FIPS 202 §5.2:
 
 `KECCAK[c](N, d) = SPONGE[KECCAK-p[1600, 24], pad10*1, 1600 - c](N, d)`
 
 So `c = 512`, `d = 256`, and `r = 1600 - c = 1088` bits, that is 136 bytes.
 
-Unlike SHA3-256 of §6.1, the message `N` gets no `01` suffix before the padding. -/
-def keccak256 (msg : ByteArray) : Vector UInt8 DIGEST_LEN_256 :=
+Unlike SHA3-256 of §6.1, the message `N` gets no `01` suffix before the padding.
+
+The message has `len` bytes, and `read p` is its lane of bytes `p` to `p + 7`, for `8 ∣ p`.
+
+Its bytes from `len` on must read as zero.
+
+The digest is the four lanes of `Trunc_256(S)`, the lanes FIPS 202 §3.1.2 names first.
+
+A reader that breaks those conditions gives no Keccak-256 digest, so this is internal. -/
+@[inline] def Internal.keccak256Read (len : Nat) (read : Nat → UInt64) : Lanes4 :=
   -- Algorithm 8, steps 1 to 6: absorb N at r = 136 bytes, with f = KECCAK-p[1600, 24].
   -- Steps 7 to 9: return Trunc_256(S), as d = 256 <= r = 1088.
-  Internal.squeeze256 (spongeAbsorb keccakF RATE_256 msg)
+  Internal.squeezeLanes256 (spongeAbsorb keccakF RATE_256 len read)
+
+/-- Keccak-256 of a string of lanes: the message of 8 bytes a lane, and its digest as lanes. -/
+@[inline] def keccak256Lanes (lanes : Array UInt64) : Lanes4 :=
+  Internal.keccak256Read (8 * lanes.size) (laneOfArray lanes)
+
+/-- Keccak-256 of a byte string, `KECCAK[512](N, 256)` of FIPS 202 §5.2.
+
+The bytes are read a lane at a time, and the digest's lanes are written back as bytes. -/
+def keccak256 (msg : ByteArray) : Vector UInt8 DIGEST_LEN_256 :=
+  (Internal.keccak256Read msg.size (Internal.laneAt msg)).bytes
 
 /-- Keccak-512 of a byte string, `KECCAK[1024](N, 512)` of FIPS 202 §5.2:
 
@@ -744,7 +868,7 @@ Unlike SHA3-512 of §6.1, the message `N` gets no `01` suffix before the padding
 def keccak512 (msg : ByteArray) : Vector UInt8 DIGEST_LEN_512 :=
   -- Algorithm 8, steps 1 to 6: absorb N at r = 72 bytes, with f = KECCAK-p[1600, 24].
   -- Steps 7 to 9: return Trunc_512(S), as d = 512 <= r = 576.
-  Internal.squeeze512 (spongeAbsorb keccakF RATE_512 msg)
+  Internal.squeeze512 (spongeAbsorb keccakF RATE_512 msg.size (Internal.laneAt msg))
 
 /-! ## Incremental hashing
 
@@ -777,7 +901,7 @@ def absorb (h : Hasher256) (data : ByteArray) : Hasher256 :=
   -- The number of whole blocks of r = 136 bytes among them.
   let count := bytes.size / RATE_256
   -- Step 6 on each whole block: S = f(S ^ (P_i || 0^c)).
-  ⟨Internal.absorbBlocks keccakF RATE_256 bytes count 0 h.state,
+  ⟨Internal.absorbBlocks keccakF RATE_256 (Internal.laneAt bytes) count 0 h.state,
     -- The rest, fewer than r bytes, waits.
     bytes.extract (RATE_256 * count) bytes.size⟩
 
@@ -793,7 +917,7 @@ def digest (h : Hasher256) : Vector UInt8 DIGEST_LEN_256 :=
   -- The pending bytes are fewer than r, so the padding fills exactly one block.
   let last := h.pending ++ padding RATE_256 h.pending.size
   -- Step 6 on that last block, then steps 7 to 9.
-  Internal.squeeze256 (Internal.absorbBlocks keccakF RATE_256 last 1 0 h.state)
+  Internal.squeeze256 (Internal.absorbBlocks keccakF RATE_256 (Internal.laneAt last) 1 0 h.state)
 
 end Hasher256
 

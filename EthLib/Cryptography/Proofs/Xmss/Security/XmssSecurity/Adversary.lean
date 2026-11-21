@@ -37,13 +37,14 @@ open EthLib.Cryptography.Xmss.Constants
 def toLeafIndex (idx : LeafIndex) : XmssSecurity.LeafIndex :=
   ⟨idx.toNat, by simpa [XmssSecurity.lifetime, XmssSecurity.treeHeight] using idx.toNat_lt⟩
 
-/-- A message as the model writes it. -/
+/-- A message as the model writes it: the integer of its four lanes, the first least significant. -/
 def toMessage (msg : Message) : XmssSecurity.Message :=
-  BitVec.ofNat _ (bytesToUint msg)
+  BitVec.ofNat _ (msg.w0.toNat + 2 ^ 64 * msg.w1.toNat + 2 ^ 128 * msg.w2.toNat
+    + 2 ^ 192 * msg.w3.toNat)
 
-/-- A randomizer as the model writes it. -/
+/-- A randomizer as the model writes it: the integer of its two lanes. -/
 def toRandomness (r : Randomizer) : XmssSecurity.Randomness :=
-  BitVec.ofNat _ (bytesToUint r)
+  BitVec.ofNat _ (lanesToNat r)
 
 /-- One layer's signature as the model writes it. -/
 def toLayerSig (s : LayerSignature) : XmssSecurity.LayerSignature where
@@ -68,22 +69,47 @@ def toSignature (σ : Signature) : XmssSecurity.Signature where
   apply Fin.ext
   simp [toLeafIndex]
 
-@[simp] theorem ofMessage_toMessage (msg : Message) : ofMessage (toMessage msg) = msg :=
-  ofBV_ofNat_bytesToUint msg (by simp [MESSAGE_LEN, XmssSecurity.messageBits])
+@[simp] theorem ofMessage_toMessage (msg : Message) : ofMessage (toMessage msg) = msg := by
+  obtain ⟨w0, w1, w2, w3⟩ := msg
+  have := w0.toNat_lt
+  have := w1.toNat_lt
+  have := w2.toNat_lt
+  have := w3.toNat_lt
+  simp only [ofMessage, HashSig.ofOutputLanes, toMessage, XmssSecurity.messageBits,
+    EthLib.Cryptography.Hash.Keccak.Lanes4.mk.injEq]
+  -- Lane `k` is bits `64k` to `64k + 63` of the integer, which is that lane's own value.
+  refine ⟨?_, ?_, ?_, ?_⟩ <;> apply UInt64.toNat_inj.mp <;>
+    simp only [UInt64.toNat_ofBitVec, BitVec.extractLsb'_toNat, BitVec.toNat_ofNat,
+      Nat.shiftRight_eq_div_pow] <;> omega
+
+/-- The four 64-bit pieces of a 256-bit vector are the base-`2^64` digits of its integer. -/
+private theorem toNat_pieces (x : BitVec 256) :
+    (x.extractLsb' 0 64).toNat + 2 ^ 64 * (x.extractLsb' 64 64).toNat
+      + 2 ^ 128 * (x.extractLsb' 128 64).toNat + 2 ^ 192 * (x.extractLsb' 192 64).toNat
+      = x.toNat := by
+  have := x.isLt
+  simp only [BitVec.extractLsb'_toNat, Nat.shiftRight_eq_div_pow]
+  omega
 
 @[simp] theorem toMessage_ofMessage (msg : XmssSecurity.Message) :
-    toMessage (ofMessage msg) = msg :=
-  ofBV_inj (n := MESSAGE_LEN) (by simp [MESSAGE_LEN, XmssSecurity.messageBits])
-    (ofMessage_toMessage _)
+    toMessage (ofMessage msg) = msg := by
+  apply BitVec.eq_of_toNat_eq
+  simp only [toMessage, ofMessage, HashSig.ofOutputLanes, UInt64.toNat_ofBitVec,
+    BitVec.toNat_ofNat]
+  exact (congrArg (· % 2 ^ XmssSecurity.messageBits) (toNat_pieces msg)).trans
+    (Nat.mod_eq_of_lt msg.isLt)
 
 @[simp] theorem ofRandomizer_toRandomness (r : Randomizer) :
-    ofRandomizer (toRandomness r) = r :=
-  ofBV_ofNat_bytesToUint r (by simp [RANDOMIZER_LEN, XmssSecurity.randomnessBits])
+    ofRandomizer (toRandomness r) = r := by
+  apply bytes_injective
+  rw [HashSig.bytes_ofDigestLanes, toRandomness, bytes_eq,
+    ← ofBV_ofNat_bytesToUint (uintToBytes 16 (lanesToNat r)) (w := XmssSecurity.randomnessBits)
+      (by simp [XmssSecurity.randomnessBits]),
+    Base.bytesToUint_uintToBytes, Nat.mod_eq_of_lt (by simpa using lanesToNat_lt r)]
 
 @[simp] theorem toRandomness_ofRandomizer (r : XmssSecurity.Randomness) :
     toRandomness (ofRandomizer r) = r :=
-  ofBV_inj (n := RANDOMIZER_LEN) (by simp [RANDOMIZER_LEN, XmssSecurity.randomnessBits])
-    (ofRandomizer_toRandomness _)
+  HashSig.ofDigestLanes_injective (ofRandomizer_toRandomness _)
 
 @[simp] theorem ofLayerSig_toLayerSig (s : LayerSignature) : ofLayerSig (toLayerSig s) = s := by
   obtain ⟨rho, y, pi⟩ := s

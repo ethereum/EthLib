@@ -197,11 +197,14 @@ theorem ofFnInOrder_isTotalQueryBound {α : Type} :
         IsTotalQueryBound (HashSig.ofFnInOrder k f) (∑ i, b i)
   | 0, _, _, _ => isQueryBound_pure _ _ _ _
   | k + 1, f, b, h => by
-    rw [HashSig.ofFnInOrder, Fin.sum_univ_succ]
+    rw [HashSig.ofFnInOrder_succ, Fin.sum_univ_succ]
     refine isTotalQueryBound_bind (h 0) fun _ => ?_
     rw [← Nat.add_zero (∑ i : Fin k, b i.succ)]
     exact isTotalQueryBound_bind (ofFnInOrder_isTotalQueryBound k _ _ fun i => h i.succ)
       fun _ => isQueryBound_pure _ _ _ _
+
+-- The proofs below use the loop's lemmas, so the loop stays folded.
+attribute [local irreducible] HashSig.ofFnInOrder
 
 /-- A hash chain makes one call per step, when each step makes at most one. -/
 theorem chain_isTotalQueryBound {α : Type} {k : Nat} (step : Fin k → α → OracleComp spec α)

@@ -131,10 +131,12 @@ theorem packBytes_readBytes (b : ByteArray) (offset n : Nat) (h) :
     simp only [ofFnInOrder, Id.run_bind, Id.run_pure, ofFnInOrder_run n]
     apply Vector.ext
     intro i hi
-    -- Entry 0 is the head, entry `i + 1` is entry `i` of the tail.
-    cases i with
-    | zero => simp
-    | succ i => simp [Fin.succ]
+    -- Entries below `n` are the first `n`, and entry `n` is the last one pushed.
+    rw [Vector.getElem_push]
+    split
+    · simp
+    · obtain rfl : i = n := by omega
+      simp [Fin.last]
 
 /-- A map of monads that keeps `pure` and `bind` commutes with computing a vector in order. -/
 theorem ofFnInOrder_map_monad {m n : Type → Type} [Monad m] [Monad n]
@@ -172,6 +174,42 @@ section InOrder
 
 variable {m : Type → Type} [Monad m] [LawfulMonad m]
 
+/-- Computing `n + 1` results in order computes the first `n`, then the last one. -/
+theorem sequenceFin_snoc {α : Type} :
+    ∀ (n : Nat) (c : Fin (n + 1) → m α),
+      sequenceFin c = (do
+        let init ← sequenceFin fun i : Fin n => c i.castSucc
+        let last ← c (Fin.last n)
+        return fun i => Fin.lastCases last init i)
+  | 0, c => by
+    simp only [sequenceFin, pure_bind, bind_pure_comp, map_pure]
+    show _ <$> c 0 = _ <$> c 0
+    congr 1
+    funext x
+    funext i
+    -- The one index is both the first and the last.
+    refine Fin.lastCases ?_ (fun j => j.elim0) i
+    rfl
+  | n + 1, c => by
+    -- Unfold the first result on both sides, then split the rest at its last result.
+    rw [sequenceFin.eq_2 (computation_2 := c),
+      sequenceFin.eq_2 (computation_2 := fun i : Fin (n + 1) => c i.castSucc)]
+    simp only [bind_assoc, pure_bind]
+    refine bind_congr fun head => ?_
+    rw [sequenceFin_snoc n (fun i => c i.succ)]
+    simp only [bind_assoc, pure_bind]
+    refine bind_congr fun init => ?_
+    refine bind_congr fun last => ?_
+    congr 1
+    funext i
+    -- The first result is the head, the last is the last, and the others are in between.
+    refine Fin.cases ?_ (fun j => ?_) i
+    · rw [Fin.cases_zero, ← Fin.castSucc_zero, Fin.lastCases_castSucc, Fin.cases_zero]
+    · rw [Fin.cases_succ]
+      refine Fin.lastCases ?_ (fun k => ?_) j
+      · rw [Fin.lastCases_last, Fin.succ_last, Fin.lastCases_last]
+      · rw [Fin.lastCases_castSucc, Fin.succ_castSucc, Fin.lastCases_castSucc, Fin.cases_succ]
+
 /-- A vector computed in order is the function computed in order, each result mapped. -/
 theorem ofFnInOrder_eq_sequenceFin {α β : Type} :
     ∀ (n : Nat) (c : Fin n → m α) (g : α → β),
@@ -181,18 +219,25 @@ theorem ofFnInOrder_eq_sequenceFin {α β : Type} :
     simp only [ofFnInOrder, sequenceFin, map_pure]
     congr 1
   | n + 1, c, g => by
-    simp only [ofFnInOrder, sequenceFin, map_bind, bind_map_left, map_pure]
-    refine bind_congr fun head => ?_
-    rw [ofFnInOrder_eq_sequenceFin n (fun i => c i.succ) g]
+    rw [sequenceFin_snoc]
+    simp only [ofFnInOrder, map_bind, bind_map_left, map_pure]
+    rw [ofFnInOrder_eq_sequenceFin n (fun i => c i.castSucc) g]
     simp only [bind_map_left]
-    refine bind_congr fun tail => ?_
+    refine bind_congr fun init => ?_
+    refine bind_congr fun last => ?_
     congr 1
     apply Vector.ext
     intro i hi
-    -- Entry 0 is the head, entry `i + 1` is entry `i` of the tail.
-    cases i with
-    | zero => simp
-    | succ i => simp
+    -- Entries below `n` are the first `n` results, and entry `n` is the last.
+    rw [Vector.getElem_push]
+    split
+    · next h =>
+      simp only [Vector.getElem_ofFn]
+      rw [show (⟨i, hi⟩ : Fin (n + 1)) = Fin.castSucc ⟨i, h⟩ from rfl, Fin.lastCases_castSucc]
+    · next h =>
+      obtain rfl : i = n := by omega
+      simp only [Vector.getElem_ofFn]
+      rw [show (⟨i, hi⟩ : Fin (i + 1)) = Fin.last i from rfl, Fin.lastCases_last]
 
 /-- A vector computed in order is the function computed in order, over equal lengths. -/
 theorem ofFnInOrder_eq_sequenceFin_cast {α β : Type} {n n' : Nat} (h : n = n')
@@ -208,6 +253,25 @@ theorem ofFnInOrder_eq_map_sequenceFin {α : Type} (n : Nat) (c : Fin n → m α
   have h := ofFnInOrder_eq_sequenceFin n c id
   simp only [id_map] at h
   exact h
+
+/-- Computing `n + 1` entries in order computes entry 0, then the `n` after it.
+
+It is the head-first form of the definition, which pushes each entry at the end. -/
+theorem ofFnInOrder_succ {α : Type} (n : Nat) (f : Fin (n + 1) → m α) :
+    ofFnInOrder (n + 1) f = (do
+      let head ← f 0
+      let tail ← ofFnInOrder n fun i => f i.succ
+      return (#v[head] ++ tail).cast (Nat.add_comm 1 n)) := by
+  rw [ofFnInOrder_eq_map_sequenceFin, ofFnInOrder_eq_map_sequenceFin, sequenceFin]
+  simp only [map_bind, bind_map_left, map_pure]
+  refine bind_congr fun head => bind_congr fun tail => ?_
+  congr 1
+  apply Vector.ext
+  intro i hi
+  -- Entry 0 is the head, entry `i + 1` is entry `i` of the tail.
+  cases i with
+  | zero => simp
+  | succ i => simp
 
 end InOrder
 

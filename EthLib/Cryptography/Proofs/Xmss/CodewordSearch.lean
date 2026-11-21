@@ -45,12 +45,18 @@ open OracleSpec OracleComp ENNReal
 
 /-- There are `2^128` digests of 16 bytes. -/
 theorem card_digest : Fintype.card Digest = 2 ^ 128 :=
-  Wots.card_bytes16
+  Hash.Keccak.card_lanes2
 
 /-- Every string of 64 digits is the digits of exactly one digest. -/
 theorem digits_bijective : Function.Bijective (Internal.digits) := by
-  rw [digits_eq_digits4]
-  exact Wots.digits4_bijective
+  -- The digits are those of the digest's bytes, and the bytes determine the digest.
+  have hinj : Function.Injective Internal.digits := by
+    rw [digits_eq_digits4]
+    exact fun a b h => bytes_injective (Wots.digits4_bijective.1 h)
+  refine (Fintype.bijective_iff_injective_and_card _).mpr ⟨hinj, ?_⟩
+  rw [card_digest, Fintype.card_congr (arrayVectorEquivFin _ _), Fintype.card_fun, Fintype.card_fin,
+    Fintype.card_fin]
+  norm_num [DIGITS, CHAIN_LENGTH]
 
 /-- Exactly `|C|` digests are codewords.
 
@@ -94,7 +100,7 @@ theorem prEvent_halfOf_ofOutput (P : Digest → Prop) :
     Pr{let u ← $ᵗ XmssSecurity.HashOutput}[P (halfOf 0 (Unforgeability.ofOutput u))]
       = (Nat.card {d : Digest // P d} : ℝ≥0∞) / 2 ^ 128 := by
   simp only [Unforgeability.halfOf_zero_ofOutput]
-  exact HashSig.prEvent_ofBV_truncateHash P
+  exact HashSig.prEvent_ofDigestLanes_truncateHash P
 
 /-- One fresh trial misses the code with probability `1 - |C| / 2^128`. -/
 theorem prEvent_not_codeword :
@@ -105,10 +111,9 @@ theorem prEvent_not_codeword :
 /-- Distinct trials below `2^32` have distinct randomizers. -/
 theorem trialRandomizer_inj (base : Randomizer) {j j' : ℕ} (hj : j < 2 ^ 32) (hj' : j' < 2 ^ 32)
     (h : trialRandomizer base j = trialRandomizer base j') : j = j' := by
-  have := congrArg bytesToUint h
-  simp only [trialRandomizer_eq, Base.bytesToUint_uintToBytes, RANDOMIZER_LEN] at this
-  have hb := Base.bytesToUint_lt base
-  simp only [RANDOMIZER_LEN] at hb
+  have := congrArg lanesToNat h
+  simp only [lanesToNat_trialRandomizer] at this
+  have hb := lanesToNat_lt base
   omega
 
 /-- **All `2^32` trials miss the code with probability `(1 - |C| / 2^128)^(2^32)`.**
@@ -119,23 +124,28 @@ The cache must hold none of the `2^32` inputs that the trials hash.
 
 The randomizer base, the message, the key and its layer are arbitrary. -/
 theorem prEvent_findCodeword_none (pp : PublicParam) (layer : Layer) (e : UInt32)
-    (msg : ByteArray) (base : Randomizer) (cache : XmssSecurity.HashSpec.QueryCache)
+    (msg : Array UInt64) (base : Randomizer) (cache : XmssSecurity.HashSpec.QueryCache)
     (hfresh : ∀ j < MAX_RANDOMIZER_TRIALS,
-      cache (thInput pp (addrMsg layer e) (msg ++ packBytes (trialRandomizer base j))).data.toList
+      cache (Hash.Keccak.lanesBytes
+        (thInput pp (addrMsg layer e) (msg ++ (trialRandomizer base j).toArray)))
         = none) :
     Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl (Internal.findCodeword
         Unforgeability.queryH pp layer e msg base 0 MAX_RANDOMIZER_TRIALS)).run' cache}[z = none]
       = (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ MAX_RANDOMIZER_TRIALS := by
   rw [← prEvent_not_codeword, Internal.findCodeword_eq]
   refine Wots.prEvent_findFirst_romImpl_none (trialRandomizer base)
-    (fun rho => (thInput pp (addrMsg layer e) (msg ++ packBytes rho)).data.toList)
+    (fun rho => Hash.Keccak.lanesBytes (thInput pp (addrMsg layer e) (msg ++ rho.toArray)))
     (fun u => codeword? (halfOf 0 (Unforgeability.ofOutput u))) _ (fun rho => ?_) _ 0 cache
     (fun j j' _ hj _ hj' h => ?_) (fun j _ hj => hfresh j (by omega))
-  · simp only [messageDigest, th, Unforgeability.queryH, XmssSecurity.Concrete.oracleHash,
+  · simp only [messageDigest, th, Unforgeability.queryH,
       map_eq_bind_pure_comp, bind_assoc, pure_bind, Function.comp_apply]
     rfl
-  · have hin := (thInput_inj (ByteArray.ext (Array.toList_inj.mp h))).2.2
-    have hrho := packBytes_injective (HashSig.byteArray_append_inj hin rfl).2
+  · have hin := (thInput_inj (Hash.Keccak.lanesBytes_injective h)).2.2
+    have hrho : trialRandomizer base j = trialRandomizer base j' := by
+      have := Array.append_inj hin rfl
+      simp only [Hash.Keccak.Lanes2.toArray, List.toArray, Array.mk.injEq, List.cons.injEq,
+        and_true] at this
+      exact Hash.Keccak.Lanes2.ext this.2.1 this.2.2
     exact trialRandomizer_inj base (by simpa [MAX_RANDOMIZER_TRIALS] using hj)
       (by simpa [MAX_RANDOMIZER_TRIALS] using hj') hrho
 
@@ -165,9 +175,10 @@ theorem all_trials_fail_probability :
 
 The hypotheses are those of the exact probability above. -/
 theorem prEvent_findCodeword_none_le (pp : PublicParam) (layer : Layer) (e : UInt32)
-    (msg : ByteArray) (base : Randomizer) (cache : XmssSecurity.HashSpec.QueryCache)
+    (msg : Array UInt64) (base : Randomizer) (cache : XmssSecurity.HashSpec.QueryCache)
     (hfresh : ∀ j < MAX_RANDOMIZER_TRIALS,
-      cache (thInput pp (addrMsg layer e) (msg ++ packBytes (trialRandomizer base j))).data.toList
+      cache (Hash.Keccak.lanesBytes
+        (thInput pp (addrMsg layer e) (msg ++ (trialRandomizer base j).toArray)))
         = none) :
     Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl (Internal.findCodeword
         Unforgeability.queryH pp layer e msg base 0 MAX_RANDOMIZER_TRIALS)).run' cache}[z = none]
@@ -179,7 +190,7 @@ theorem prEvent_findCodeword_none_le (pp : PublicParam) (layer : Layer) (e : UIn
 
 /-- From an empty cache, all `2^32` trials miss the code with probability below `exp(-4000)`. -/
 theorem prEvent_findCodeword_none_le_empty (pp : PublicParam) (layer : Layer) (e : UInt32)
-    (msg : ByteArray) (base : Randomizer) :
+    (msg : Array UInt64) (base : Randomizer) :
     Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl (Internal.findCodeword
         Unforgeability.queryH pp layer e msg base 0 MAX_RANDOMIZER_TRIALS)).run' ∅}[z = none]
       ≤ ENNReal.ofReal (Real.exp (-4000)) :=

@@ -33,10 +33,9 @@ theorem ofFnInOrder_isQueryBoundP_zero {α : Type} :
       IsQueryBoundP (HashSig.ofFnInOrder k f) p 0
   | 0, _, _ => isQueryBoundP_pure _ _ _
   | k + 1, f, h => by
-    rw [HashSig.ofFnInOrder]
-    exact isQueryBoundP_bind_zero _ _ (h 0) fun _ =>
-      isQueryBoundP_bind_zero _ _ (ofFnInOrder_isQueryBoundP_zero k _ fun i => h i.succ)
-        fun _ => isQueryBoundP_pure _ _ _
+    rw [HashSig.ofFnInOrder.eq_2]
+    exact isQueryBoundP_bind_zero _ _ (ofFnInOrder_isQueryBoundP_zero k _ fun i => h i.castSucc)
+      fun _ => isQueryBoundP_bind_zero _ _ (h (Fin.last k)) fun _ => isQueryBoundP_pure _ _ _
 
 /-- A hash chain queries `p` nowhere when no step does. -/
 theorem chain_isQueryBoundP_zero {α : Type} {k : Nat} (step : Fin k → α → OracleComp spec α)

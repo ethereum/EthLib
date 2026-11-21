@@ -3,8 +3,6 @@ module
 public import EthLib.Cryptography.Xmss.Ots
 public import EthLib.Cryptography.Proofs.Xmss.TweakableHash
 public import EthLib.Cryptography.Proofs.Hash.Keccak.LastBlock
-public import EthLib.Cryptography.Proofs.Xmss.Words
-import Mathlib.Tactic.IntervalCases
 
 /-!
 # Proofs: randomizer trials on Keccak lanes
@@ -21,76 +19,65 @@ So signing with them gives the bytes of signing with the hash.
 namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
+open EthLib.Cryptography.Hash.Keccak (laneOfArray stateBeforeLastPermutation keccakF RATE_256)
 
-/-- The first half of a squeezed digest is the two words of lanes 0 and 1. -/
-theorem halfOf_squeeze256 (T : Hash.Keccak.State) :
-    halfOf 0 (Hash.Keccak.Internal.squeeze256 T) = (⟨T.a0, T.a1⟩ : WordPair).bytes := by
-  apply Vector.ext
-  intro j hj
-  simp only [halfOf, Vector.getElem_cast]
-  simp only [DIGEST_LEN] at hj
-  interval_cases j <;> simp [Hash.Keccak.Internal.squeeze256] <;> rfl
+/-- The lanes of a string with two lanes appended: its own, then the two, then zeros.
+
+At each multiple of 8, it is the reader of the string alone, with the two lanes XORed in. -/
+theorem laneOfArray_append_two (before : Array UInt64) (lo hi : UInt64) (q : Nat) (hq : 8 ∣ q) :
+    laneOfArray (before ++ #[lo, hi]) q =
+      if q = 8 * (before.size + 1) then
+        (if q = 8 * before.size then laneOfArray before q ^^^ lo else laneOfArray before q) ^^^ hi
+      else if q = 8 * before.size then laneOfArray before q ^^^ lo else laneOfArray before q := by
+  obtain ⟨j, rfl⟩ := hq
+  simp only [laneOfArray, Nat.mul_div_cancel_left _ (by decide : 0 < 8),
+    Array.getD_eq_getD_getElem?, Array.getElem?_append]
+  by_cases h1 : j < before.size
+  · rw [ite_eq_left h1, ite_eq_right (by omega), ite_eq_right (by omega)]
+  · obtain ⟨k, rfl⟩ : ∃ k, j = before.size + k := ⟨j - before.size, by omega⟩
+    have hn : before[before.size + k]? = none := Array.getElem?_eq_none (by omega)
+    rw [ite_eq_right h1, hn, Option.getD_none, Nat.add_sub_cancel_left]
+    rcases k with _ | _ | k
+    · simp only [Nat.add_zero] at hn ⊢
+      rw [ite_eq_right (by omega)]
+      simp
+    · rw [ite_eq_left (by omega), ite_eq_right (by omega)]
+      simp
+    · rw [ite_eq_right (by omega), ite_eq_right (by omega)]
+      simp
 
 /-- The Keccak-256 trials give the codeword of hashing each trial's input. -/
 theorem keccakTrials_eq : keccakTrials = hashTrials hashId := by
   funext before
   unfold keccakTrials
-  split_ifs with h
-  · obtain ⟨h8, hlast⟩ := h
+  split
+  · next hlast =>
     simp only [hashTrials, Trials.mk.injEq]
     funext rho
-    change Vector UInt8 16 at rho
-    -- The input is the fixed bytes, then the two lanes of the randomizer.
-    set lo := (packBytes rho).extract 0 8
-    set hi := (packBytes rho).extract 8 16
-    have hsplit : packBytes rho = lo ++ (hi ++ .empty) := by
-      have hs : (packBytes rho).size = 16 := by simp []
-      apply Base.eq_of_byteAt
-      · simp [lo, hi, hs]
-      · intro i
-        simp only [lo, hi, Base.byteAt_append, Base.byteAt_extract, ByteArray.size_extract, hs,
-          Nat.sub_zero, Nat.zero_add, Nat.reduceSub, show min 8 16 = 8 from rfl, Nat.min_self]
-        split_ifs <;> first
-          | with_reducible rfl
-          | omega
-          | (congr 1; omega)
-          | rw [Base.byteAt_of_size_le (by omega), Base.byteAt_of_size_le (by simp)]
-    have hlo : Hash.Keccak.Internal.laneAt lo 0 = (WordPair.ofBytes rho).lo := by
-      erw [WordPair.lo_ofBytes]
-      exact Hash.Keccak.laneAt_congr fun k hk => by
-        rw [Base.byteAt_extract, ite_eq_left (by simp []; omega)]
-        simp only [Nat.zero_add]
-    have hhi : Hash.Keccak.Internal.laneAt hi 0 = (WordPair.ofBytes rho).hi := by
-      erw [WordPair.hi_ofBytes]
-      exact Hash.Keccak.laneAt_congr fun k hk => by
-        rw [Base.byteAt_extract, ite_eq_left (by simp []; omega)]
-        simp only [Nat.zero_add]
-    have hz : Hash.Keccak.zeroLane.size = 8 := rfl
-    have hzeros : ByteArray.mk (Array.replicate 16 0) =
-        Hash.Keccak.zeroLane ++ Hash.Keccak.zeroLane ++ .empty := rfl
-    have key : Hash.Keccak.stateBeforeLastPermutation Hash.Keccak.keccakF Hash.Keccak.RATE_256
-        (before ++ packBytes rho) =
-        ((Hash.Keccak.stateBeforeLastPermutation Hash.Keccak.keccakF Hash.Keccak.RATE_256
-          (before ++ ByteArray.mk (Array.replicate 16 0))).xorLane
-            (before.size % Hash.Keccak.RATE_256 / 8 + 1) (WordPair.ofBytes rho).hi).xorLane
-          (before.size % Hash.Keccak.RATE_256 / 8) (WordPair.ofBytes rho).lo := by
-      rw [hsplit, ← ByteArray.append_assoc,
-        Hash.Keccak.stateBeforeLastPermutation_append_lane _ (by decide) Hash.Keccak.lanes_rate
-          before lo (hi ++ .empty) (by simp [lo]) (Nat.dvd_of_mod_eq_zero h8)
-          (by simp [hi, Hash.Keccak.RATE_256] at hlast ⊢; omega),
-        hlo, ← ByteArray.append_assoc,
-        Hash.Keccak.stateBeforeLastPermutation_append_lane _ (by decide) Hash.Keccak.lanes_rate
-          (before ++ Hash.Keccak.zeroLane) hi .empty (by simp [hi]) (by simp [hz]; omega)
-          (by simp [hz, Hash.Keccak.RATE_256] at hlast ⊢; omega),
-        hhi, hzeros]
-      simp only [ByteArray.append_assoc]
+    -- The state of the whole input is the state of the fixed lanes, with the two lanes XORed in.
+    have key : stateBeforeLastPermutation keccakF RATE_256 (8 * (before ++ rho.toArray).size)
+        (laneOfArray (before ++ rho.toArray)) =
+        ((stateBeforeLastPermutation keccakF RATE_256 (8 * (before.size + 2))
+          (laneOfArray before)).xorLane ((8 * before.size) % RATE_256 / 8 + 1) rho.hi).xorLane
+          ((8 * before.size) % RATE_256 / 8) rho.lo := by
+      have hsize : (before ++ rho.toArray).size = before.size + 2 := by
+        simp [Hash.Keccak.Lanes2.toArray]
+      rw [hsize]
+      simp only [Hash.Keccak.Lanes2.toArray]
+      rw [Hash.Keccak.stateBeforeLastPermutation_congr _ Hash.Keccak.lanes_rate _
+        (laneOfArray_append_two before rho.lo rho.hi),
+        Hash.Keccak.stateBeforeLastPermutation_xorLane _ (by decide) Hash.Keccak.lanes_rate _ _ _
+          _ ⟨before.size + 1, rfl⟩ (by simp only [RATE_256] at hlast ⊢; omega),
+        Hash.Keccak.stateBeforeLastPermutation_xorLane _ (by decide) Hash.Keccak.lanes_rate _ _ _
+          _ ⟨before.size, rfl⟩ (by simp only [RATE_256] at hlast ⊢; omega),
+        Hash.Keccak.State.xorLane_comm]
       congr 2
-      simp [hz, Hash.Keccak.RATE_256] at hlast ⊢
+      simp only [RATE_256] at hlast ⊢
       omega
-    show _ = (pure (codeword? (halfOf 0 (Hash.Keccak.Internal.squeeze256 (Hash.Keccak.keccakF
-      (Hash.Keccak.stateBeforeLastPermutation Hash.Keccak.keccakF Hash.Keccak.RATE_256
-        (before ++ packBytes rho)))))) : Id _)
-    rw [key, halfOf_squeeze256]
+    show _ = (pure (codeword? (halfOf 0 (hash (before ++ rho.toArray)))) : Id _)
+    simp only [hash, Hash.Keccak.keccak256Lanes, Hash.Keccak.Internal.keccak256Read,
+      Hash.Keccak.spongeAbsorb, key]
+    rfl
   · rfl
 
 end EthLib.Cryptography.Xmss

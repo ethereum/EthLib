@@ -146,12 +146,12 @@ theorem roundsFrom_ofLanes (n i : Nat) (h : i + n = 24) (a : Keccak.State) :
   induction n generalizing i a with
   | zero =>
     -- At round 24 no round is left.
-    rw [Keccak.keccakF.roundsFrom, dite_eq_right (by simp only [Keccak.ROUNDS]; omega)]
+    rw [Keccak.keccakF.roundsFrom_eq, dite_eq_right (by simp only [Keccak.ROUNDS]; omega)]
     rfl
   | succ n ih =>
     -- Run round `i`, then the rounds after it.
     have hi : i < Keccak.ROUNDS := by simp only [Keccak.ROUNDS]; omega
-    rw [Keccak.keccakF.roundsFrom, dite_eq_left hi, ih (i + 1) (by omega), round_ofLanes,
+    rw [Keccak.keccakF.roundsFrom_eq, dite_eq_left hi, ih (i + 1) (by omega), round_ofLanes,
       List.range'_succ, List.foldl_cons]
 
 /-- Keccak-f[1600] on lanes agrees with the 24 rounds of the model on every state. -/

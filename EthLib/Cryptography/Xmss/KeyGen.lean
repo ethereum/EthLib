@@ -29,15 +29,17 @@ namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
-variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+variable {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
 
 /-! ## Derivations from the seed -/
 
 /-- `S = H("leanXMSS" | S_0)`: the seed every secret derives from.
 
-The scheme's name comes first, so no other scheme derives from the same bytes. -/
+The scheme's name comes first, so no other scheme derives from the same bytes.
+
+The name is 8 bytes, one lane, so the input is the name's lane and the seed's four. -/
 def schemeSeed (seed : Seed) : m Seed :=
-  H (ByteArray.mk SEED_TAG.toArray ++ packBytes seed)
+  H (#[SEED_TAG_LANE] ++ seed.toArray)
 
 /-- `P`: the public parameter, the first half of the derivation at `0^128` and `A_param`.
 
@@ -45,7 +47,7 @@ The all-zero parameter stands in for the one being derived, and the suffix is em
 
 With the derivations from the scheme seed `S`, it is `Th(0^128, A_param, S)`. -/
 def publicParamOf (prf : SeedPrf m) : m PublicParam := do
-  return halfOf 0 (← prf (Vector.replicate PUBLIC_PARAM_LEN 0) addrParam .empty)
+  return halfOf 0 (← prf ⟨0, 0⟩ addrParam #[])
 
 /-! ## Keys -/
 

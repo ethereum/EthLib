@@ -26,7 +26,7 @@ namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
-variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+variable {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
 
 /-- The public key of the derivations from a seed: the top tree's root and the parameter `P`.
 
@@ -51,7 +51,7 @@ The path is computed from the seed.
 
 - No randomizer trial gives a codeword. -/
 def signLayer (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : Nat)
-    (msg : ByteArray) : m (Except XmssError LayerSignature) := do
+    (msg : Array UInt64) : m (Except XmssError LayerSignature) := do
   -- No codeword is an error.
   let some (randomizer, chainValues) ← otsSign H pp prf layer (UInt32.ofNat e) msg
     | return .error (.noAdmissibleEncoding layer e)
@@ -71,13 +71,13 @@ def signDerived (prf : SeedPrf m) (pp : PublicParam) (idx : LeafIndex) (msg : Me
     m (Except XmssError Signature) := do
   -- A layer's error ends signing, before any later hash call.
   let some (randomizer, chainValues) ←
-      otsSign H pp prf .bottom (UInt32.ofNat idx.toNat) (packBytes msg)
+      otsSign H pp prf .bottom (UInt32.ofNat idx.toNat) (msg.toArray)
     | return .error (.noAdmissibleEncoding .bottom idx.toNat)
   -- The bottom tree is built once: the key's path and the root both come from it.
   let tree ← build H pp prf .bottom LAYER_HEIGHT (bottomTree idx)
   let bottom : LayerSignature :=
     { randomizer, chainValues, path := tree.path LAYER_HEIGHT idx.toNat }
-  let top ← match ← signLayer H pp prf .top (bottomTree idx) (packBytes tree.value) with
+  let top ← match ← signLayer H pp prf .top (bottomTree idx) tree.value.toArray with
     | .ok sig => pure sig
     | .error err => return .error err
   return .ok { leafIndex := idx, bottom, top }

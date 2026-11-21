@@ -26,8 +26,10 @@ open EthLib.Base (readBytes)
 
 /-! ## The hash as a computation -/
 
-/-- A hash function, as a computation in the identity monad. -/
-def pureHash (f : ByteArray → Vector UInt8 32) (input : ByteArray) : Id (Vector UInt8 32) :=
+/-- A hash function, as a computation in the identity monad.
+
+leanSPHINCS hashes byte strings, and leanXMSS hashes strings of lanes. -/
+def pureHash {α β : Type} (f : α → β) (input : α) : Id β :=
   pure (f input)
 
 /-! ## Reading fixed-size objects -/
@@ -54,14 +56,18 @@ def unpackBytes? (n : Nat) (b : ByteArray) (offset : Nat := 0) :
 
 The order matters when each computation calls the hash.
 
-It fixes the sequence of hash calls, which a proof in the random oracle model counts. -/
+It fixes the sequence of hash calls, which a proof in the random oracle model counts.
+
+Its recursive call comes first, so unification can unfold it entry by entry.
+
+A proof about a computation that runs it marks it locally irreducible, and uses its equations. -/
 def ofFnInOrder {m : Type → Type} [Monad m] {α : Type} :
     (n : Nat) → (Fin n → m α) → m (Vector α n)
   | 0, _ => pure #v[]
-  -- Structural recursion, so the kernel can evaluate it.
+  -- Structural recursion, so the kernel can evaluate it, with each entry pushed at the end.
   | n + 1, f => do
-    let head ← f 0
-    let tail ← ofFnInOrder n fun i => f i.succ
-    return (#v[head] ++ tail).cast (Nat.add_comm 1 n)
+    let init ← ofFnInOrder n fun i => f i.castSucc
+    let last ← f (Fin.last n)
+    return init.push last
 
 end EthLib.Cryptography.HashSig

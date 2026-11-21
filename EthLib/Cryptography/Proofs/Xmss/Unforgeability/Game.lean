@@ -42,7 +42,7 @@ open XmssSecurity.Bridge (paramInput derivedSigningOracle realRest realGame real
   realKeygen)
 open XmssSecurity.Seeded (Erases worldKnown run'_lift_sample_bind run'_query_bind
   hashQueryBound_query_bind_of)
-open EthLib.Cryptography.HashSig (toList_data_append toList_data_packBytes)
+open EthLib.Cryptography.Hash.Keccak (lanesBytes)
 
 /-! ## The two calls the signer repeats -/
 
@@ -54,11 +54,12 @@ theorem H_eq_queryH : H = queryH (m := OracleComp HashSpec) :=
 theorem schemeSeed_queryH (S0 : MasterSeed) :
     (schemeSeed queryH (ofSeed S0) : OracleComp HashSpec Seed)
       = liftM (HashSpec.query (seedHashInput S0)) >>= fun y => pure (ofSeed y) := by
-  have hinput : (ByteArray.mk SEED_TAG.toArray ++ packBytes (ofSeed S0)).data.toList
-      = seedHashInput S0 := by
-    simp only [toList_data_append, toList_data_packBytes, toList_ofSeed]
+  -- The name's lane is its 8 bytes, and the seed's lanes are its 32 bytes.
+  have hinput : lanesBytes (#[SEED_TAG_LANE] ++ (ofSeed S0).toArray) = seedHashInput S0 := by
+    rw [Hash.Keccak.lanesBytes_append, Hash.Keccak.lanesBytes_singleton, bytesOfLane_seedTagLane,
+      toList_ofSeed]
     rfl
-  unfold schemeSeed queryH
+  unfold schemeSeed queryH HashSig.queryLanes
   rw [hinput, map_eq_bind_pure_comp]
   rfl
 
@@ -66,26 +67,22 @@ theorem schemeSeed_queryH (S0 : MasterSeed) :
 theorem publicParamOf_queryH (S : MasterSeed) :
     (publicParamOf (seedPrf queryH (ofSeed S)) : OracleComp HashSpec PublicParam)
       = liftM (HashSpec.query (paramInput S)) >>= fun y => pure (ofParam (truncateHash y)) := by
-  -- The all-zero parameter is the bytes of the zero bit vector.
-  have hzero : Vector.replicate PUBLIC_PARAM_LEN (0 : UInt8)
-      = ofParam (0 : XmssSecurity.PublicParameter) := by
-    rw [ofParam, ofBV_eq_uintToBytes]
-    apply Vector.ext
-    intro i hi
-    simp [EthLib.Base.uintToBytes_eq_div]
-  have hinput : (thInput (ofParam (0 : XmssSecurity.PublicParameter)) addrParam
-      (packBytes (ofSeed S))).data.toList = paramInput S := by
+  -- The all-zero parameter is the lanes of the zero bit vector.
+  have hzero : (⟨0, 0⟩ : PublicParam) = ofParam (0 : XmssSecurity.PublicParameter) := by
+    simp only [ofParam, HashSig.ofDigestLanes]
+    rfl
+  have hinput : lanesBytes (thInput (ofParam (0 : XmssSecurity.PublicParameter)) addrParam
+      (ofSeed S).toArray) = paramInput S := by
     rw [XmssSecurity.Bridge.paramInput_eq]
-    simp only [thInput, toList_data_append, toList_data_packBytes, toList_ofParam, toList_ofSeed,
+    simp only [thInput_eq_append, Hash.Keccak.lanesBytes_append, toList_ofParam, toList_ofSeed,
       toList_addrParam]
     rfl
   rw [publicParamOf_seedPrf]
-  unfold th queryH
+  unfold th queryH HashSig.queryLanes
   rw [hzero, hinput]
   simp only [map_eq_bind_pure_comp, bind_assoc, Function.comp_apply, pure_bind]
   refine bind_congr fun y => ?_
   rw [halfOf_zero_ofOutput]
-  rfl
 
 /-- The oracle's answers to the two calls of key generation that the signer repeats. -/
 def knownKeys (S0 : MasterSeed) (S Pf : HashOutput) : QueryCache HashSpec :=

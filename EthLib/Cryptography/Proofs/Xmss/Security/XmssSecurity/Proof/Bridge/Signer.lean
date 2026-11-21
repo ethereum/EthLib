@@ -33,11 +33,11 @@ namespace XmssSecurity.Bridge
 
 open Seeded DeterministicSigning
 
-/-- A query to the oracle, as the query and the bytes of its answer. -/
-theorem queryH_eq (x : ByteArray) :
-    (queryH x : OracleComp HashSpec (Vector UInt8 32))
-      = liftM (HashSpec.query x.data.toList) >>= fun y => pure (ofOutput y) := by
-  unfold queryH
+/-- A query to the oracle, as the query and the four lanes of its answer. -/
+theorem queryH_eq (x : Array UInt64) :
+    (queryH x : OracleComp HashSpec Hash.Keccak.Lanes4)
+      = liftM (HashSpec.query (Hash.Keccak.lanesBytes x)) >>= fun y => pure (ofOutput y) := by
+  unfold queryH HashSig.queryLanes
   rw [map_eq_bind_pure_comp]
   rfl
 
@@ -52,11 +52,11 @@ theorem halfOf_zero_ofOutput_randomizer (y : HashOutput) :
 
 Stated at the randomizer's type, so later binds associate with it. -/
 theorem randomizerBase_queryH (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.Layer)
-    (e : UInt32) (msg : ByteArray) :
+    (e : UInt32) (msg : Array UInt64) :
     (Xmss.randomizerBase pp (Xmss.seedPrf queryH s) layer e msg :
       OracleComp HashSpec Xmss.Randomizer)
       = liftM (HashSpec.query
-          (Xmss.thInput pp (Xmss.addrRnd layer e) (Xmss.packBytes s ++ msg)).data.toList) >>=
+          (Hash.Keccak.lanesBytes (Xmss.thInput pp (Xmss.addrRnd layer e) (s.toArray ++ msg)))) >>=
         fun y => pure (ofRandomizer (y.extractLsb' 0 randomnessBits)) := by
   rw [Xmss.randomizerBase_seedPrf]
   unfold Xmss.th
@@ -67,12 +67,12 @@ theorem randomizerBase_queryH (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer : X
 /-- The bottom randomizer base `R0(idx, m)` is the bottom derivation's input. -/
 theorem rndInput_toList (P : PublicParameter) (seed : MasterSeed) (index : LeafIndex)
     (message : Message) :
-    (Xmss.thInput (ofParam P) (Xmss.addrRnd .bottom (ofLeafIndex index))
-      (Xmss.packBytes (ofSeed seed) ++ Xmss.packBytes (ofMessage message))).data.toList
+    Hash.Keccak.lanesBytes (Xmss.thInput (ofParam P) (Xmss.addrRnd .bottom (ofLeafIndex index))
+      ((ofSeed seed).toArray ++ (ofMessage message).toArray))
       = rndInput P seed ⟨index, message⟩ := by
   rw [rndInput_eq]
-  simp only [Xmss.thInput, EthLib.Cryptography.HashSig.toList_data_append,
-    EthLib.Cryptography.HashSig.toList_data_packBytes, Xmss.Unforgeability.toList_ofParam,
+  simp only [Xmss.Unforgeability.thInput_eq_append,
+    EthLib.Cryptography.Hash.Keccak.lanesBytes_append, Xmss.Unforgeability.toList_ofParam,
     Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_ofMessage,
     Xmss.Unforgeability.toList_addrRnd, Xmss.Unforgeability.toNat_ofLeafIndex]
   -- The bottom layer adds no flag to `hi`.
@@ -82,12 +82,12 @@ theorem rndInput_toList (P : PublicParameter) (seed : MasterSeed) (index : LeafI
 /-- The top randomizer base `R0_top(b, r)` is the top derivation's input. -/
 theorem topRndInput_toList (P : PublicParameter) (seed : MasterSeed) (key : TopIndex)
     (root : Digest) :
-    (Xmss.thInput (ofParam P) (Xmss.addrRnd .top (ofTopIndex key))
-      (Xmss.packBytes (ofSeed seed) ++ Xmss.packBytes (ofDigest root))).data.toList
+    Hash.Keccak.lanesBytes (Xmss.thInput (ofParam P) (Xmss.addrRnd .top (ofTopIndex key))
+      ((ofSeed seed).toArray ++ (ofDigest root).toArray))
       = topRndInput P seed (key, root) := by
   rw [topRndInput_eq]
-  simp only [Xmss.thInput, EthLib.Cryptography.HashSig.toList_data_append,
-    EthLib.Cryptography.HashSig.toList_data_packBytes, Xmss.Unforgeability.toList_ofParam,
+  simp only [Xmss.Unforgeability.thInput_eq_append,
+    EthLib.Cryptography.Hash.Keccak.lanesBytes_append, Xmss.Unforgeability.toList_ofParam,
     Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_ofDigest,
     Xmss.Unforgeability.toList_addrRnd, Xmss.Unforgeability.toNat_ofTopIndex]
   -- The top layer adds its flag to `hi`.
@@ -103,7 +103,7 @@ theorem erases_findCodeword_bottom {β : Type} (cache : QueryCache HashSpec)
       (K' (some (Concrete.precomputedSignWithEncoding sk index rho enc)))) :
     ∀ fuel trial, Erases cache
       (Xmss.Internal.findCodeword queryH (ofParam sk.parameter) .bottom (ofLeafIndex index)
-        (Xmss.packBytes (ofMessage message)) (ofRandomizer base) trial fuel >>= K)
+        ((ofMessage message).toArray) (ofRandomizer base) trial fuel >>= K)
       (tableSignFrom base sk index message fuel trial >>= K')
   | 0, _ => by simpa [Xmss.Internal.findCodeword_eq, Wots.findFirst, tableSignFrom] using hnone
   | fuel + 1, trial => by
@@ -158,7 +158,7 @@ theorem realTopFind (h : Prepared seed d result cache) (key : TopIndex) (base : 
     ∀ fuel trial,
       Resolves cache (Concrete.topSignFrom d.parameter key (h.root key) base fuel trial) res →
       Resolves cache (Xmss.Internal.findCodeword queryH (ofParam d.parameter) .top (ofTopIndex key)
-          (Xmss.packBytes (ofDigest (h.root key))) (ofRandomizer base) trial fuel :
+          ((ofDigest (h.root key)).toArray) (ofRandomizer base) trial fuel :
           OracleComp HashSpec _)
         (res.map fun p => (ofRandomizer p.1, ofEncoding p.2))
   | 0, _, hmodel => by
@@ -244,7 +244,7 @@ theorem realBottomPath (h : Prepared seed d result cache) (index : LeafIndex) :
 /-- The top layer's signature of bottom tree `b`, or its error, as the key stores it. -/
 theorem realTopLayer (h : Prepared seed d result cache) (key : TopIndex) :
     Resolves cache (Xmss.signLayer queryH (ofParam d.parameter) (realPrf seed) .top key.val
-        (Xmss.packBytes (ofDigest (h.root key))) : OracleComp HashSpec _)
+        ((ofDigest (h.root key)).toArray) : OracleComp HashSpec _)
       (match (modelSecretKey d result).topSigned key with
         | some _ => .ok (ofLayerSig (Concrete.topPart (modelSecretKey d result) key))
         | none => .error (.noAdmissibleEncoding .top key.val)) := by

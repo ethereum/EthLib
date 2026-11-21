@@ -53,9 +53,9 @@ section Source
 variable {ι : Type} {spec : OracleSpec ι}
 
 /-- The hash of a game whose hash and coin queries a handler answers. -/
-def hashOf (pass : QueryImpl OracleWorld (OracleComp spec)) (x : ByteArray) :
-    OracleComp spec (Vector UInt8 32) :=
-  ofOutput <$> pass (.inr x.data.toList)
+def hashOf (pass : QueryImpl OracleWorld (OracleComp spec)) (x : Array UInt64) :
+    OracleComp spec Lanes4 :=
+  ofOutput <$> pass (.inr (Hash.Keccak.lanesBytes x))
 
 /-- The game's oracles: hash and coin queries go to `pass`, and a request signs.
 
@@ -89,7 +89,7 @@ section Map
 variable {ι' : Type} {spec' : OracleSpec ι'} (so : QueryImpl spec (OracleComp spec'))
 
 /-- Simulating a hash call gives the hash of the simulated handler. -/
-theorem simulateQ_hashOf (pass : QueryImpl OracleWorld (OracleComp spec)) (x : ByteArray) :
+theorem simulateQ_hashOf (pass : QueryImpl OracleWorld (OracleComp spec)) (x : Array UInt64) :
     simulateQ so (hashOf pass x) = hashOf (so ∘ₛ pass) x := by
   simp [hashOf, QueryImpl.apply_compose]
 
@@ -150,16 +150,16 @@ end Source
 /-! ## The real game -/
 
 /-- The game's `H`, lifted to hash and coin queries, is the hash of the identity handler. -/
-theorem liftM_H (x : ByteArray) :
-    (liftM (H x) : OracleComp OracleWorld (Vector UInt8 32)) =
+theorem liftM_H (x : Array UInt64) :
+    (liftM (H x) : OracleComp OracleWorld Lanes4) =
       hashOf (QueryImpl.id' OracleWorld) x := by
-  simp [H, queryH, hashOf, HashSig.oracleHash]
+  simp [H, queryH, HashSig.queryLanes, hashOf, HashSig.oracleHash]
   rfl
 
 /-- The derivations of the game, lifted, are those over the hash of the identity handler. -/
 theorem liftM_seedPrf (s : Seed) :
     (fun pp a suffix =>
-        (liftM (seedPrf H s pp a suffix) : OracleComp OracleWorld (Vector UInt8 32))) =
+        (liftM (seedPrf H s pp a suffix) : OracleComp OracleWorld Lanes4)) =
       seedPrf (hashOf (QueryImpl.id' OracleWorld)) s := by
   funext pp a suffix
   exact liftM_H _
@@ -275,9 +275,11 @@ theorem simulateQ_deriveImpl_seedGame (s0 : MasterSeed) (adversary : ReasonAdver
       failGameOf (QueryImpl.id' OracleWorld)
         (schemeSeed (hashOf (QueryImpl.id' OracleWorld)) (ofSeed s0))
         (seedPrf (hashOf (QueryImpl.id' OracleWorld))) adversary := by
-  have hinput : (ByteArray.mk Constants.SEED_TAG.toArray ++ packBytes (ofSeed s0)).data.toList
+  -- The name's lane is its 8 bytes, and the seed's lanes are its 32 bytes.
+  have hinput : Hash.Keccak.lanesBytes (#[Constants.SEED_TAG_LANE] ++ (ofSeed s0).toArray)
       = seedHashInput s0 := by
-    simp only [HashSig.toList_data_append, HashSig.toList_data_packBytes, toList_ofSeed]
+    rw [Hash.Keccak.lanesBytes_append, Hash.Keccak.lanesBytes_singleton, bytesOfLane_seedTagLane,
+      toList_ofSeed]
     rfl
   have hsrc : simulateQ (seedEncoding.deriveImpl s0)
       (ofOutput <$> SeedSpec.query (.inr ())) =
@@ -293,7 +295,6 @@ theorem simulateQ_deriveImpl_seedGame (s0 : MasterSeed) (adversary : ReasonAdver
     simp only [seedPrf, simulateQ_hashOf, SecretEncoding.deriveImpl_comp_withDerivationsLift]
   unfold seedGame
   erw [simulateQ_failGameOf, SecretEncoding.deriveImpl_comp_withDerivationsLift, hsrc, hprf]
-  rfl
 
 /-- **The first hop.**
 
@@ -318,7 +319,7 @@ theorem signingFailure_le_seedGame (adversary : ReasonAdversary) {q : ℕ}
 /-! ## The second hop: the derivations from the scheme seed -/
 
 /-- What a derivation from the scheme seed reads: a parameter, an address and a suffix. -/
-abbrev PrfInput := PublicParam × Address × ByteArray
+abbrev PrfInput := PublicParam × Address × Array UInt64
 
 /-- The oracles of a game whose derivations from the scheme seed are derivation queries. -/
 abbrev PrfSpec := HashSpec.withDerivations PrfInput HashOutput
@@ -336,13 +337,13 @@ def prfGame (adversary : ReasonAdversary) : OracleComp PrfSpec FailOutput :=
 
 The secret is the first hop's table of one entry, the answer that `S` is. -/
 def prfEncoding : SecretEncoding HashSpec (Unit → HashOutput) PrfInput HashOutput where
-  enc f x := (thInput x.1 x.2.1 (packBytes (ofOutput (f ())) ++ x.2.2)).data.toList
+  enc f x := Hash.Keccak.lanesBytes (thInput x.1 x.2.1 ((ofOutput (f ())).toArray ++ x.2.2))
   range_eq _ _ := rfl
   injective f x y h := by
     obtain ⟨pp, a, m⟩ := x
     obtain ⟨pp', a', m'⟩ := y
-    obtain ⟨hpp, ha, hm⟩ := thInput_inj (ByteArray.ext (Array.toList_inj.mp h))
-    obtain ⟨-, hm⟩ := HashSig.byteArray_append_inj hm rfl
+    obtain ⟨hpp, ha, hm⟩ := thInput_inj (Hash.Keccak.lanesBytes_injective h)
+    obtain ⟨-, hm⟩ := Array.append_inj hm (by simp [Hash.Keccak.Lanes4.toArray])
     exact Prod.ext hpp (Prod.ext ha hm)
 
 /-- A source that always gives one value is a game whose derivations fix that value. -/
@@ -360,11 +361,14 @@ theorem failGameOf_pure {σ : Type} (pass : QueryImpl OracleWorld (OracleComp sp
 /-- An input fixes the table of the first hop, which it encodes in its seed. -/
 theorem prfEncoding_fix (f f' : Unit → HashOutput) (x x' : PrfInput)
     (h : prfEncoding.enc f x = prfEncoding.enc f' x') : f = f' := by
-  obtain ⟨-, -, hm⟩ := thInput_inj (ByteArray.ext (Array.toList_inj.mp h))
-  obtain ⟨hs, -⟩ := HashSig.byteArray_append_inj hm (by simp)
+  obtain ⟨-, -, hm⟩ := thInput_inj (Hash.Keccak.lanesBytes_injective h)
+  obtain ⟨hs, -⟩ := Array.append_inj hm (by simp [Hash.Keccak.Lanes4.toArray])
   funext u
-  exact HashSig.ofBV_inj (n := 32) (by simp [HashSig.hashOutputBits])
-    (packBytes_injective hs)
+  -- Equal lanes have equal bytes, and the bytes of a 256-bit answer determine it.
+  have hb := congrArg Hash.Keccak.lanesBytes hs
+  rw [Hash.Keccak.lanesBytes_lanes4, Hash.Keccak.lanesBytes_lanes4, HashSig.bytes_ofOutputLanes,
+    HashSig.bytes_ofOutputLanes] at hb
+  exact HashSig.ofBV_inj (n := 32) (by simp [HashSig.hashOutputBits]) (Vector.toList_inj.mp hb)
 
 /-- There are `2^256` tables of the first hop. -/
 theorem natCard_table : Nat.card (Unit → HashOutput) = 2 ^ 256 := by
@@ -478,7 +482,7 @@ variable {ι : Type} {spec : OracleSpec ι} {p : ι → Prop} [DecidablePred p] 
   {prfOf : σ → SeedPrf (OracleComp spec)}
 
 /-- A hash call of the game is one call of its handler. -/
-theorem isQueryBoundP_hashOf (hhash : ∀ x, IsQueryBoundP (pass (.inr x)) p 1) (x : ByteArray) :
+theorem isQueryBoundP_hashOf (hhash : ∀ x, IsQueryBoundP (pass (.inr x)) p 1) (x : Array UInt64) :
     IsQueryBoundP (hashOf pass x) p 1 :=
   (isQueryBoundP_map_iff _ _ _).2 (hhash _)
 

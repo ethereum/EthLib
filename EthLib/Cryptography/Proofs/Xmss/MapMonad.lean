@@ -29,14 +29,14 @@ open EthLib.Cryptography.Xmss.Constants
 variable {m m' : Type → Type} [Monad m] [Monad m'] (φ : ∀ {β : Type}, m β → m' β)
   (map_pure : ∀ {β : Type} (b : β), φ (pure b) = pure b)
   (map_bind : ∀ {β γ : Type} (x : m β) (f : β → m γ), φ (x >>= f) = φ x >>= fun b => φ (f b))
-  (H : ByteArray → m (Vector UInt8 32)) (prf : SeedPrf m)
+  (H : Array UInt64 → m Lanes4) (prf : SeedPrf m)
 
 include map_pure map_bind
 
 /-! ## Hashing and chains -/
 
 /-- A tweakable hash call, over the image of `H`. -/
-theorem th_map_monad (pp : PublicParam) (address : Address) (payload : ByteArray) :
+theorem th_map_monad (pp : PublicParam) (address : Address) (payload : Array UInt64) :
     φ (th H pp address payload) = th (fun x => φ (H x)) pp address payload := by
   simp only [th, map_bind, map_pure]
 
@@ -100,7 +100,7 @@ theorem fold_map_monad (pp : PublicParam) (layer : Layer) (e : Nat) (leaf : Dige
 /-! ## Verification -/
 
 /-- The leaf a one-time signature leads to, over the image of `H`. -/
-theorem otsLeaf_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : ByteArray)
+theorem otsLeaf_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
     (rho : Randomizer) (y : Vector Digest V) :
     φ (otsLeaf H pp layer e msg rho y) = otsLeaf (fun x => φ (H x)) pp layer e msg rho y := by
   simp only [otsLeaf, map_bind, messageDigest, th_map_monad φ map_pure map_bind]
@@ -112,7 +112,7 @@ theorem otsLeaf_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) (msg :
       chain_map_monad φ map_pure map_bind, otsLeafHash, th_map_monad φ map_pure map_bind]
 
 /-- The root one layer's signature leads to, over the image of `H`. -/
-theorem layerRoot_map_monad (pp : PublicParam) (layer : Layer) (e : Nat) (msg : ByteArray)
+theorem layerRoot_map_monad (pp : PublicParam) (layer : Layer) (e : Nat) (msg : Array UInt64)
     (sig : LayerSignature) :
     φ (layerRoot H pp layer e msg sig) = layerRoot (fun x => φ (H x)) pp layer e msg sig := by
   simp only [layerRoot, map_bind, otsLeaf_map_monad φ map_pure map_bind]
@@ -131,7 +131,7 @@ section Sign
 
 /-- The base of the randomizer trials, over the image of the seed function. -/
 theorem randomizerBase_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32)
-    (msg : ByteArray) :
+    (msg : Array UInt64) :
     φ (randomizerBase pp prf layer e msg) =
       randomizerBase pp (fun pp a suffix => φ (prf pp a suffix)) layer e msg :=
   (map_bind _ _).trans (bind_congr fun _ => map_pure _)
@@ -140,14 +140,14 @@ variable [LawfulMonad m] [LawfulMonad m']
 
 /-- The codeword search, over the image of `H`. -/
 theorem findCodeword_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32)
-    (msg : ByteArray) (base : Randomizer) (c fuel : Nat) :
+    (msg : Array UInt64) (base : Randomizer) (c fuel : Nat) :
     φ (Internal.findCodeword H pp layer e msg base c fuel) =
       Internal.findCodeword (fun x => φ (H x)) pp layer e msg base c fuel := by
   simp only [Internal.findCodeword_eq, Wots.findFirst_map_monad φ map_pure map_bind,
     HashSig.map_monad_map φ map_pure map_bind, messageDigest, th_map_monad φ map_pure map_bind]
 
 /-- A one-time signature, over the images of `H` and of the seed function. -/
-theorem otsSign_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : ByteArray) :
+theorem otsSign_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64) :
     φ (otsSign H pp prf layer e msg) =
       otsSign (fun x => φ (H x)) pp (fun pp a suffix => φ (prf pp a suffix)) layer e msg := by
   simp only [otsSign, Internal.otsSignTrials, map_bind,
@@ -160,7 +160,7 @@ theorem otsSign_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) (msg :
       HashSig.ofFnInOrder_map_monad φ map_pure map_bind, chain_map_monad φ map_pure map_bind]
 
 /-- One layer's signature, over the images of `H` and of the seed function. -/
-theorem signLayer_map_monad (pp : PublicParam) (layer : Layer) (e : Nat) (msg : ByteArray) :
+theorem signLayer_map_monad (pp : PublicParam) (layer : Layer) (e : Nat) (msg : Array UInt64) :
     φ (signLayer H pp prf layer e msg) =
       signLayer (fun x => φ (H x)) pp (fun pp a suffix => φ (prf pp a suffix)) layer e msg := by
   simp only [signLayer, map_bind, otsSign_map_monad φ map_pure map_bind H prf]
