@@ -431,6 +431,17 @@ A new site is fixed, never added to the list.
 
 When you change the check, also run `scripts/test_check_accessors.sh`.
 
+Then check the values of the rules that forks change:
+
+```bash
+lake exe rule-history --check
+```
+
+It fails when, at some fork, a rule of the execution layer computes a value other than the one that `tests/execution/history/rules.tsv` records.
+The [README](tests/execution/history/README.md) next to that file says how to update it.
+
+When you change the tool, also run `scripts/test_rule_history.sh`.
+
 Then check which theorems the specification keeps:
 
 ```bash
