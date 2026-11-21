@@ -10,6 +10,7 @@ from ethlib.cryptography.keccak import keccak256
 from ethlib.serialization import rlp
 
 from .cases import BLOCK_FORKS, DEPOSIT_CONTRACT_ADDRESS
+from .test_terminal_block import CONFIG as POW_CONFIG, GENESIS as POW_GENESIS
 
 # A Python value from Lean holds only integers that are not negative.
 # So the negative code of an error object reaches Python as its decimal text.
@@ -236,6 +237,48 @@ def test_accepted_payload_sent_again_on_the_head() -> None:
     assert responses[2]["response"] == {"result": _status("ACCEPTED", None)}
     assert responses[3]["forkchoice"] == _forkchoice(G)
     assert responses[4]["response"] == {"result": _status("VALID", side.hash)}
+
+
+def test_descendant_of_an_invalid_payload() -> None:
+    """A child of an invalid payload is invalid, with the latest valid block of its chain."""
+    # G <- B1 <- B2, where B2 fails execution, then B3 on B2 and B4 on B3.
+    b2 = Block(B1.hash, 2, state_root=keccak256(b"not the state"))
+    b3 = Block(b2.hash, 3)
+    b4 = Block(b3.hash, 4)
+    responses = _run(
+        _new_payload(B1),
+        _update(B1.hash),
+        _new_payload(b2),
+        _new_payload(b3),
+        _new_payload(b4),
+        _update(b4.hash),
+    )
+    assert responses[2]["response"]["result"]["status"] == "INVALID"
+    assert responses[2]["response"]["result"]["latestValidHash"] == _hex(B1.hash)
+    assert responses[3]["response"] == {"result": _status("INVALID", B1.hash)}
+    assert responses[4]["response"] == {"result": _status("INVALID", B1.hash)}
+    assert responses[5] == {
+        "response": {"result": _update_result("INVALID", B1.hash)},
+        "forkchoice": _forkchoice(B1.hash),
+    }
+
+
+def test_child_of_a_payload_on_a_block_that_is_not_terminal() -> None:
+    """A payload on a non-terminal block of proof of work, and its child, get the zero hash."""
+    # The London genesis has a total difficulty of 99, below the terminal total of 100.
+    b1 = Block(keccak256(POW_GENESIS), 1)
+    b2 = Block(b1.hash, 2)
+    payload, child = engine.run_node(
+        POW_CONFIG,
+        rlp.encode([]),
+        ("london", POW_GENESIS, []),
+        [_new_payload(b1), _new_payload(b2)],
+        terminal_total_difficulty=100,
+        total_difficulty=99,
+    )
+    assert payload["response"]["result"]["status"] == "INVALID"
+    assert payload["response"]["result"]["latestValidHash"] == _hex(ZERO)
+    assert child["response"] == {"result": _status("INVALID", ZERO)}
 
 
 def test_update_to_a_child_of_a_failed_payload() -> None:

@@ -17,7 +17,9 @@ A payload on another known parent that is not invalid is accepted, with no lates
 
 That holds for a payload sent again too, and no other answer is accepted.
 
-A payload whose parent is unknown or invalid is syncing.
+A payload whose parent is invalid is invalid, with the latest valid hash of the parent's chain.
+
+A payload whose parent is unknown is syncing.
 
 A payload that fails the checks before execution gets their answer, and the node does not change.
 
@@ -182,25 +184,40 @@ theorem newPayloadStep_of_fresh {checked : CheckedBlock version} {hash : Hash32}
     | accepted v' p' => simp [newPayloadStep, hCheck, hHash, hk]
     | _ => simp [Validity.isAccepted] at hv
 
-/-- A payload whose parent is unknown or invalid is syncing, and the node does not change.
+/-- A payload whose parent is unknown is syncing, and the node does not change.
 
 The payload is not one that the node knows as valid or invalid. -/
-theorem newPayloadStep_syncing_of_parent {checked : CheckedBlock version} {hash : Hash32}
+theorem newPayloadStep_syncing_of_unknown_parent {checked : CheckedBlock version} {hash : Hash32}
     (hCheck : checkNewPayload node.config version params = .ok (.ok checked))
     (hHash : checked.block.header.hash = .ok hash)
     (hNew : ∀ b, node.blocks.lookup hash = some b → b.validity.isAccepted = true)
-    (hParent : ∀ b, node.blocks.lookup checked.block.header.parentHash = some b →
-      b.validity = .invalid) :
+    (hParent : node.blocks.lookup checked.block.header.parentHash = none) :
     node.newPayloadStep version params = (.ok (⟨.syncing, none⟩, none), node) := by
   rw [newPayloadStep_of_fresh hCheck hHash hNew]
-  cases hb : node.blocks.lookup checked.block.header.parentHash with
-  | none => simp [onParent, hb]
-  | some b =>
-    obtain ⟨blk, pow, v⟩ := b
-    have hv := hParent _ hb
-    simp only at hv
-    subst hv
-    simp [onParent, hb]
+  simp [onParent, hParent]
+
+/-- A payload whose parent is invalid is invalid, and the node keeps it as invalid.
+
+Its latest valid hash is the latest valid block of the parent's chain.
+
+That hash is zero when that latest valid block is of proof of work.
+
+The payload is not one that the node knows as valid or invalid. -/
+theorem newPayloadStep_of_invalid_parent {checked : CheckedBlock version} {hash : Hash32}
+    {parent : KnownBlock}
+    (hCheck : checkNewPayload node.config version params = .ok (.ok checked))
+    (hHash : checked.block.header.hash = .ok hash)
+    (hNew : ∀ b, node.blocks.lookup hash = some b → b.validity.isAccepted = true)
+    (hParent : node.blocks.lookup checked.block.header.parentHash = some parent)
+    (hInvalid : parent.validity = .invalid) :
+    node.newPayloadStep version params =
+      (.ok (⟨.invalid, latestValidHash node.tree checked.block.header.parentHash⟩, none),
+        node.record hash ⟨⟨checked.fork, checked.block.header, []⟩, none, .invalid⟩) := by
+  rw [newPayloadStep_of_fresh hCheck hHash hNew]
+  obtain ⟨blk, pow, v⟩ := parent
+  simp only at hInvalid
+  subst hInvalid
+  simp [onParent, hParent]
 
 /-- A payload on the valid head gets the answer of the method on the chain of the head.
 
@@ -275,7 +292,7 @@ theorem newPayloadStep_accepted_iff {checked : CheckedBlock version} {hash : Has
   · intro h
     cases hb : node.blocks.lookup checked.block.header.parentHash with
     | none =>
-      rw [newPayloadStep_syncing_of_parent hCheck hHash hNew (by simp [hb])] at h
+      rw [newPayloadStep_syncing_of_unknown_parent hCheck hHash hNew hb] at h
       simp at h
     | some b =>
       refine ⟨b, rfl, ?_⟩
@@ -297,7 +314,7 @@ theorem newPayloadStep_accepted_iff {checked : CheckedBlock version} {hash : Has
             exact absurd (by rw [h.1]) (status_ne_accepted_of_newPayloadOnChain hOn)
         · exact .inl ⟨post, rfl, hHead⟩
       | invalid =>
-        rw [newPayloadStep_syncing_of_parent hCheck hHash hNew (by simp [hb])] at h
+        rw [newPayloadStep_of_invalid_parent hCheck hHash hNew hb rfl] at h
         simp at h
       | accepted v' p' => exact .inr rfl
   · rintro ⟨b, hb, hOff⟩
@@ -347,6 +364,9 @@ theorem newPayloadStep_accepted {status : PayloadStatus} {reason : Option Payloa
           · simp only [Prod.mk.injEq, Except.ok.injEq] at h
             obtain ⟨⟨rfl, rfl⟩, -⟩ := h
             exact ⟨rfl, rfl⟩
+          · simp only [Prod.mk.injEq, Except.ok.injEq] at h
+            obtain ⟨⟨rfl, -⟩, -⟩ := h
+            cases hs
           · simp only [Prod.mk.injEq, Except.ok.injEq] at h
             obtain ⟨⟨rfl, -⟩, -⟩ := h
             cases hs
@@ -431,6 +451,41 @@ theorem executeOn_forkchoice (node : Node) (hash : Hash32) (block : RecentBlock)
     · exact ⟨rfl, rfl⟩
     · split <;> exact ⟨rfl, rfl⟩
 
+/-- A run keeps the configuration of the transition. -/
+theorem executeOn_transition (node : Node) (hash : Hash32) (block : RecentBlock)
+    (post : Execution.State.State) (version : Nat) (params : Lean.Json) :
+    (node.executeOn hash block post version params).2.transition = node.transition := by
+  simp only [executeOn]
+  split
+  · rfl
+  · simp only [recordExecution]
+    split
+    · rfl
+    · split <;> rfl
+
+/-- Validation keeps the configuration of the transition. -/
+theorem validateChain_transition (node : Node) (fuel : Nat) (hash : Hash32) :
+    (node.validateChain fuel hash).transition = node.transition := by
+  induction fuel generalizing node hash with
+  | zero => rfl
+  | succ fuel ih =>
+    simp only [validateChain]
+    split
+    · rename_i block pow version params hb
+      split
+      · rw [executeOn_transition, ih]
+      · exact ih _ _
+      · exact ih _ _
+    · rfl
+
+/-- The validation of an update keeps the configuration of the transition. -/
+theorem validateHead_transition (node : Node) (version : Nat) (params : Lean.Json) :
+    (node.validateHead version params).transition = node.transition := by
+  simp only [validateHead]
+  split
+  · exact validateChain_transition _ _ _
+  · rfl
+
 /-- Recording a block keeps every other known block as it was. -/
 theorem record_lookup_of_ne {hash other : Hash32} (node : Node) (b : KnownBlock)
     (hne : other ≠ hash) : (node.record hash b).blocks.lookup other = node.blocks.lookup other := by
@@ -472,31 +527,36 @@ theorem validateChain_forkchoice (node : Node) (fuel : Nat) (hash : Hash32) :
       · exact ⟨h1, h2⟩
     · exact ⟨rfl, rfl⟩
 
-/-- Validation keeps each valid block of the node valid, with the same state after it. -/
-theorem validateChain_validState {node : Node} {fuel : Nat} {hash other : Hash32}
-    {post : Execution.State.State} (h : node.validState other = some post) :
-    (node.validateChain fuel hash).validState other = some post := by
+/-- Validation keeps each known block that is not accepted as it was. -/
+theorem validateChain_lookup {node : Node} {fuel : Nat} {hash other : Hash32} {b : KnownBlock}
+    (h : node.blocks.lookup other = some b) (hb : b.validity.isAccepted = false) :
+    (node.validateChain fuel hash).blocks.lookup other = some b := by
   induction fuel generalizing node hash with
   | zero => exact h
   | succ fuel ih =>
     simp only [validateChain]
     split
-    · rename_i block pow version params hb
+    · rename_i block pow version params hk
       have hInner := ih (hash := block.header.parentHash) h
-      -- Validation records only the accepted block, which is not the valid one.
+      -- Validation records only the accepted block, which is not this one.
       have hne : other ≠ hash := by
         rintro rfl
-        obtain ⟨b, hb', hv⟩ := validState_eq_some_iff.mp h
-        rw [hb] at hb'
-        cases hb'
-        cases hv
-      obtain ⟨b, hb', hv⟩ := validState_eq_some_iff.mp hInner
+        rw [hk] at h
+        cases h
+        simp [Validity.isAccepted] at hb
       split
-      · exact validState_eq_some_iff.mpr
-          ⟨b, by rw [executeOn_lookup_of_ne _ _ _ _ _ hne, hb'], hv⟩
-      · exact validState_eq_some_iff.mpr ⟨b, by rw [record_lookup_of_ne _ _ hne, hb'], hv⟩
+      · rw [executeOn_lookup_of_ne _ _ _ _ _ hne, hInner]
+      · rw [record_lookup_of_ne _ _ hne, hInner]
       · exact hInner
     · exact h
+
+/-- Validation keeps each valid block of the node valid, with the same state after it. -/
+theorem validateChain_validState {node : Node} {fuel : Nat} {hash other : Hash32}
+    {post : Execution.State.State} (h : node.validState other = some post) :
+    (node.validateChain fuel hash).validState other = some post := by
+  obtain ⟨b, hb, hv⟩ := validState_eq_some_iff.mp h
+  exact validState_eq_some_iff.mpr
+    ⟨b, validateChain_lookup hb (by simp [hv, Validity.isAccepted]), hv⟩
 
 /-- The validation of an update keeps the forkchoice state and the known finalized block. -/
 theorem validateHead_forkchoice (node : Node) (version : Nat) (params : Lean.Json) :
@@ -506,6 +566,15 @@ theorem validateHead_forkchoice (node : Node) (version : Nat) (params : Lean.Jso
   split
   · exact validateChain_forkchoice _ _ _
   · exact ⟨rfl, rfl⟩
+
+/-- The validation of an update keeps each known block that is not accepted as it was. -/
+theorem validateHead_lookup {hash : Hash32} {b : KnownBlock}
+    (h : node.blocks.lookup hash = some b) (hb : b.validity.isAccepted = false) :
+    (node.validateHead version params).blocks.lookup hash = some b := by
+  simp only [validateHead]
+  split
+  · exact validateChain_lookup h hb
+  · exact h
 
 /-- The validation of an update keeps each valid block of the node valid. -/
 theorem validateHead_validState {hash : Hash32} {post : Execution.State.State}
@@ -590,6 +659,37 @@ theorem forkchoiceUpdatedStep_of_applied {state : ForkchoiceState}
       (node.validateHead version params).applyForkchoice state := by
   simp only [forkchoiceUpdatedStep, hNot, Bool.false_eq_true, ↓reduceIte]
   exact updateStep_of_applied hParams hHead
+
+/-- An update to a head that the node knows as invalid is invalid, and applies nothing.
+
+Its latest valid hash is the latest valid block of the chain of the head.
+
+That hash is zero when that latest valid block is of proof of work.
+
+The chain of the head must pass the terminal block check. -/
+theorem forkchoiceUpdatedStep_of_invalid_head {state : ForkchoiceState}
+    {attributes : Option Lean.Json} {b : KnownBlock}
+    (hParams : forkchoiceUpdatedParams version params = .ok (state, attributes))
+    (hb : node.blocks.lookup state.headBlockHash = some b) (hInvalid : b.validity = .invalid)
+    (hTerminal : chainPassesTerminalCheck node.transition (node.validateHead version params).tree
+      state.headBlockHash = true) :
+    node.forkchoiceUpdatedStep version params =
+      (.ok (⟨.invalid, latestValidHash (node.validateHead version params).tree
+        state.headBlockHash⟩, none), node.validateHead version params) := by
+  have hb' := validateHead_lookup (version := version) (params := params) hb
+    (by simp [hInvalid, Validity.isAccepted])
+  have hNot : (node.validateHead version params).headAccepted version params = false := by
+    simp [headAccepted, hParams, hb', hInvalid, Validity.isAccepted]
+  have hTree : (node.validateHead version params).tree.lookup state.headBlockHash =
+      some b.toKnownPayload := by
+    rw [tree_lookup, hb']
+    rfl
+  have hf := forkchoiceUpdated_of_invalid
+    (finalized := (node.validateHead version params).finalized) hTree
+    (by simp [KnownBlock.toKnownPayload, hInvalid, Validity.isValid]) hTerminal
+  rw [← validateHead_transition node version params] at hf
+  simp [forkchoiceUpdatedStep, hNot, updateStep, appliedState, forkchoiceUpdatedCall, hParams, hf,
+    bind, Except.bind, pure, Except.pure, forkchoiceUpdatedResponse, Functor.map, Except.map]
 
 /-- An update either keeps the forkchoice state of the node, or makes a valid block its head.
 

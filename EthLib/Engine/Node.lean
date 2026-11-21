@@ -216,7 +216,17 @@ A payload on another known parent that is not invalid is accepted, with no lates
 
 The node keeps it as accepted, with its request, as step 5 of the method allows.
 
-A payload whose parent is unknown or invalid is syncing. -/
+A payload whose parent is invalid is invalid too, since each ancestor must pass validation.
+
+Step 1 of payload validation asks this, as the block validity of EIP-3675 does.
+
+Its latest valid hash is the latest valid block of the chain of its parent.
+
+That hash is zero when that block is of proof of work, by step 3 of payload validation.
+
+The node keeps it as invalid.
+
+A payload whose parent is unknown is syncing. -/
 def onParent (node : Node) (hash : Hash32) (block : RecentBlock) (version : Nat) (params : Json) :
     Except EngineError (PayloadStatus × Option PayloadError) × Node :=
   let accept : Except EngineError (PayloadStatus × Option PayloadError) × Node :=
@@ -227,7 +237,10 @@ def onParent (node : Node) (hash : Hash32) (block : RecentBlock) (version : Nat)
     if parent = node.forkchoice.headBlockHash then node.executeOn hash block post version params
     else accept
   | some ⟨_, _, .accepted _ _⟩ => accept
-  | _ => (.ok (⟨.syncing, none⟩, none), node)
+  | some ⟨_, _, .invalid⟩ =>
+    (.ok (⟨.invalid, latestValidHash node.tree parent⟩, none),
+      node.record hash ⟨block, none, .invalid⟩)
+  | none => (.ok (⟨.syncing, none⟩, none), node)
 
 /-- The step of `engine_newPayload`: the status of a payload, with its reason, and the next node.
 

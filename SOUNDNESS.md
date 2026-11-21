@@ -4733,7 +4733,8 @@ It shows that the payload is then `INVALID`, with the zero hash as the latest va
 `isTerminalPowBlock_eq_isValidTerminalPowBlock` (`Proofs/TransitionConfiguration.lean`) shows that these conditions are those of the consensus layer, when both layers hold the same terminal total difficulty.
 Only the last block of the chain is checked.
 Step 2 also says that every descendant of an invalid terminal block must be `INVALID`.
-The method on a chain keeps no invalid block, so a child of a payload rejected by the check is `SYNCING` instead.
+The method on a chain holds no invalid block, so a child of a payload rejected by the check is `SYNCING` there.
+The execution node below keeps its invalid blocks, and answers `INVALID` for such a child.
 A chain whose last block is from Paris on is taken as valid, its terminal block included.
 
 Payload attributes of `engine_forkchoiceUpdated` answer by the version of the method and the fork of their timestamp.
@@ -4978,7 +4979,7 @@ Such a parent is valid elsewhere, or accepted itself.
 `newPayloadStep_accepted` shows that every `ACCEPTED` answer has a `null` latest valid hash.
 `newPayloadStep_of_not_head` shows that the node keeps such a payload as accepted, with its request.
 A payload sent again while accepted gets the answer of its parent again, so it runs once its parent is the head (`newPayloadStep_of_fresh`).
-A payload whose parent is unknown or invalid is `SYNCING` (`newPayloadStep_syncing_of_parent`), and a payload that fails the checks before execution gets their answer and changes nothing (`newPayloadStep_of_checkNewPayload_invalid`).
+A payload whose parent is unknown is `SYNCING` (`newPayloadStep_syncing_of_unknown_parent`), and a payload that fails the checks before execution gets their answer and changes nothing (`newPayloadStep_of_checkNewPayload_invalid`).
 Those checks also read the other parameters of the request, so the node does not record such a payload.
 `validState_of_newPayloadStep` shows that a `VALID` payload is then known as valid under its own hash.
 `forkchoiceUpdatedStep_ne_syncing_of_newPayloadStep` shows that the next update, with that payload as the head, is not `SYNCING`.
@@ -4992,7 +4993,15 @@ After that validation, an update applies its forkchoice state when it applies it
 Otherwise the validated node does not change (`updateStep_of_not_applied`).
 `forkchoiceUpdatedStep_head_valid` shows that an update keeps the forkchoice state, or makes a block that the node knows as valid its head.
 No update starts a build yet, so the builds stay empty, and a request for a payload answers `-38001`, even for the payload ID that an update answered (#3533).
-A child of a known invalid block is `SYNCING`, short of step 2 of payload validation, which asks `INVALID` for each descendant of an invalid terminal block (#3531).
+A block is valid only on a valid parent, so a payload whose parent the node knows as invalid is `INVALID`, and the node keeps it as invalid (`newPayloadStep_of_invalid_parent`).
+That covers step 2 of payload validation, which asks `INVALID` for each descendant of an invalid terminal block.
+Its latest valid hash is the latest valid block of the parent's chain, or zero when that block is of proof of work, as step 3 asks; `latestValidHash_eq_some_iff` (`Proofs/ForkchoiceUpdated.lean`) states that function.
+It is `null` when the chain of the parent holds no valid block, which the source allows when the node cannot determine that block.
+`forkchoiceUpdatedStep_of_invalid_head` shows that an update to a block that the node knows as invalid answers `INVALID` with the same function on the chain of the head, and applies nothing.
+It takes a chain that passes the terminal block check; otherwise the update answers `INVALID` with the zero hash (`forkchoiceUpdated_of_not_terminal`).
+No theorem yet equates the hash of that update with the hash of the earlier answer to the payload; the Python tests check it on a chain.
+Validation keeps every known block that is not accepted as it was (`validateHead_lookup`).
+The source requires no single answer for such a child outside the terminal case, and the reorg tests of execution-spec-tests accept `INVALID` or `SYNCING`; the node gives `INVALID`, which carries the most information.
 A node starts from one block; a total difficulty below the difficulty of a block of proof of work gives no node.
 The node keeps the state after every valid block, so it never refuses a reorganization with `-38006`.
 A C export runs a script of requests on a node that starts from one block.
