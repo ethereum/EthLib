@@ -106,17 +106,25 @@ theorem baseFee_of_validateHeader_first (h : .london ≤ fork) (hParent : ¬ .lo
   rw [baseFeeAcross_of_validateHeader h hv]
   simp [expectedBaseFeeAcross, hParent]
 
+/-- From Dencun, a header that passes the checks has the excess blob gas its parent gives.
+
+Its parent must be from London on. -/
+theorem excessBlobGas_of_checkHeader (hLondon : .london ≤ parentFork) (h : .dencun ≤ fork)
+    (hc : checkHeader hFork parent header schedule = .ok ()) :
+    (header.excessBlobGas h).toNat = expectedExcessBlobGas hLondon h parent schedule := by
+  have := (firstFailure_eq_ok_iff _).mp hc
+    (decide ((header.excessBlobGas h).toNat =
+        expectedExcessBlobGas hLondon h parent schedule),
+      .wrongExcessBlobGas (expectedExcessBlobGas hLondon h parent schedule)
+        (header.excessBlobGas h).toNat)
+    (by simp [headerChecks, h, hLondon])
+  simpa using this
+
 /-- From Dencun, with a parent from London on, a header has the excess blob gas its parent gives. -/
 theorem excessBlobGas_of_validateHeader (hLondon : .london ≤ parentFork) (h : .dencun ≤ fork)
     (hv : validateHeader hFork parent header schedule = .ok ()) :
-    (header.excessBlobGas h).toNat = expectedExcessBlobGas hLondon h parent schedule := by
-  have := check_of_validateHeader hv
-    (c := (decide ((header.excessBlobGas h).toNat =
-        expectedExcessBlobGas hLondon h parent schedule),
-      .wrongExcessBlobGas (expectedExcessBlobGas hLondon h parent schedule)
-        (header.excessBlobGas h).toNat))
-    (by simp [headerChecks, h, hLondon])
-  simpa using this
+    (header.excessBlobGas h).toNat = expectedExcessBlobGas hLondon h parent schedule :=
+  excessBlobGas_of_checkHeader hLondon h (checkHeader_of_validateHeader hv)
 
 /-- From Paris on, a valid header has a parent from London on. -/
 theorem london_le_of_validateHeader (h : .paris ≤ fork)
