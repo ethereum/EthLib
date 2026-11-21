@@ -103,6 +103,10 @@ variable {preset : Preset} {fork : Base.Fork}
 def getCurrentEpoch (state : BeaconState preset fork) : Epoch :=
   computeEpochAtSlot preset state.slot
 
+/-- The first slot of the current epoch of a state, as a natural number. -/
+def currentEpochStart (state : BeaconState preset fork) : Nat :=
+  (getCurrentEpoch state).toNat * preset.SLOTS_PER_EPOCH.toNat
+
 /-- The indices of the validators active in an epoch, in increasing order.
 
 An active position of `2^64` or more wraps modulo `2^64`, where the specification fails.

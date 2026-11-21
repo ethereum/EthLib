@@ -164,10 +164,6 @@ def validatorPubkey? (state : BeaconState preset fork) (index : ValidatorIndex) 
     Option BLSPubkey :=
   state.validators.data[index.toNat]?.map (·.pubkey)
 
-/-- The first slot of the current epoch of a state, as a natural number. -/
-def currentEpochStart (state : BeaconState preset fork) : Nat :=
-  (getCurrentEpoch state).toNat * preset.SLOTS_PER_EPOCH.toNat
-
 /-- From Fulu: the proposer of a slot of the current or next epoch, by the lookahead of a state.
 
 Other slots, and slots past the end of the lookahead, have none. -/

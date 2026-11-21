@@ -85,16 +85,13 @@ theorem processEpoch_proposerLookahead (fulu : .fusaka ≤ fork)
 
 The epoch of the second state starts no earlier than that of the first. -/
 def ProposerLookaheadShifted (x y : ForkedBeaconState preset) : Prop :=
-  (getCurrentEpoch x.state).toNat * preset.SLOTS_PER_EPOCH.toNat ≤
-      (getCurrentEpoch y.state).toNat * preset.SLOTS_PER_EPOCH.toNat ∧
+  currentEpochStart x.state ≤ currentEpochStart y.state ∧
     ∀ (early : .fusaka ≤ x.fork) (late : .fusaka ≤ y.fork) (slot : Nat),
-      (getCurrentEpoch y.state).toNat * preset.SLOTS_PER_EPOCH.toNat ≤ slot →
-      slot < (getCurrentEpoch x.state).toNat * preset.SLOTS_PER_EPOCH.toNat +
+      currentEpochStart y.state ≤ slot →
+      slot < currentEpochStart x.state +
         (preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat →
-      (y.state.proposerLookahead late)[slot -
-          (getCurrentEpoch y.state).toNat * preset.SLOTS_PER_EPOCH.toNat]? =
-        (x.state.proposerLookahead early)[slot -
-          (getCurrentEpoch x.state).toNat * preset.SLOTS_PER_EPOCH.toNat]?
+      (y.state.proposerLookahead late)[slot - currentEpochStart y.state]? =
+        (x.state.proposerLookahead early)[slot - currentEpochStart x.state]?
 
 /-- Every state agrees with itself. -/
 theorem ProposerLookaheadShifted.refl (x : ForkedBeaconState preset) :
@@ -116,13 +113,12 @@ private theorem proposerLookaheadShifted_advanceSlot
     ProposerLookaheadShifted ⟨fork, state⟩ ⟨fork, after⟩ := by
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
-  have startAfter : (getCurrentEpoch { epoched with slot := next }).toNat *
-      preset.SLOTS_PER_EPOCH.toNat =
+  have startAfter : currentEpochStart { epoched with slot := next } =
       (state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat * preset.SLOTS_PER_EPOCH.toNat := by
-    rw [getCurrentEpoch_toNat, sum]
+    rw [currentEpochStart, getCurrentEpoch_toNat, sum]
   unfold ProposerLookaheadShifted
   dsimp only
-  rw [startAfter, getCurrentEpoch_toNat]
+  rw [startAfter, currentEpochStart, getCurrentEpoch_toNat]
   obtain ⟨boundary, epochedOk⟩ | ⟨inside, rfl⟩ := epochIfLast_cases epochedOk
   · have mod : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 := by
       have := congrArg UInt64.toNat boundary
@@ -161,12 +157,12 @@ theorem proposerLookaheadShifted_advanceSlots :
 /-- From Fulu, the proposer of a state is the entry of its lookahead at its slot. -/
 theorem getBeaconProposerIndex_of_proposerLookahead (fulu : .fusaka ≤ fork)
     (nonzero : preset.SLOTS_PER_EPOCH ≠ 0) {index : ValidatorIndex}
-    (found : (state.proposerLookahead fulu)[state.slot.toNat -
-      (getCurrentEpoch state).toNat * preset.SLOTS_PER_EPOCH.toNat]? = some index) :
+    (found : (state.proposerLookahead fulu)[state.slot.toNat - currentEpochStart state]? =
+      some index) :
     getBeaconProposerIndex state = .ok index := by
   have position : (state.slot % preset.SLOTS_PER_EPOCH).toNat =
-      state.slot.toNat - (getCurrentEpoch state).toNat * preset.SLOTS_PER_EPOCH.toNat := by
-    rw [UInt64.toNat_mod, getCurrentEpoch_toNat]
+      state.slot.toNat - currentEpochStart state := by
+    rw [UInt64.toNat_mod, currentEpochStart, getCurrentEpoch_toNat]
     have := Nat.mod_add_div' state.slot.toNat preset.SLOTS_PER_EPOCH.toNat
     omega
   unfold getBeaconProposerIndex
@@ -210,6 +206,7 @@ private theorem proposerLookaheadShifted_upgradeNext {pre : ForkedBeaconState pr
     ProposerLookaheadShifted pre post.val := by
   have epoch : getCurrentEpoch post.val.state = getCurrentEpoch pre.state := by
     simp only [getCurrentEpoch, (upgradeFrame_upgradeNext computed).slot]
+  unfold ProposerLookaheadShifted currentEpochStart
   refine ⟨Nat.le_of_eq (by rw [epoch]), fun early late _ _ _ => ?_⟩
   rw [epoch, upgradeNext_proposerLookahead computed early late]
 
@@ -231,6 +228,7 @@ private theorem ChainStep.proposerLookaheadShifted {x y : ForkedBeaconState pres
     have look := processBlock_proposerLookahead (applySignedBlock_ok ok).2.1
     have epoch : getCurrentEpoch after = getCurrentEpoch state := by
       simp only [getCurrentEpoch, frame.slot]
+    unfold ProposerLookaheadShifted currentEpochStart
     refine ⟨Nat.le_of_eq (by dsimp only; rw [epoch]), fun early _ _ _ _ => ?_⟩
     dsimp only
     rw [epoch, look]
@@ -250,20 +248,17 @@ The slot is in the epochs that the lookahead covers, and the run ends at or befo
 The last state then names the same proposer at the position of that slot. -/
 theorem Run.proposerLookahead_getElem? {x y : ForkedBeaconState preset}
     (run : Run config checks x y) (fulu : .fusaka ≤ x.fork) {slot : Nat}
-    (started : (getCurrentEpoch x.state).toNat * preset.SLOTS_PER_EPOCH.toNat ≤ slot)
+    (started : currentEpochStart x.state ≤ slot)
     {proposer : ValidatorIndex}
-    (found : (x.state.proposerLookahead fulu)[slot -
-        (getCurrentEpoch x.state).toNat * preset.SLOTS_PER_EPOCH.toNat]? = some proposer)
+    (found : (x.state.proposerLookahead fulu)[slot - currentEpochStart x.state]? = some proposer)
     (early : y.state.slot.toNat ≤ slot) :
-    (y.state.proposerLookahead
-        (Nat.le_trans fulu (fork_le_of_chainSteps run.chainSteps)))[slot -
-          (getCurrentEpoch y.state).toNat * preset.SLOTS_PER_EPOCH.toNat]? = some proposer := by
+    (y.state.proposerLookahead (Nat.le_trans fulu (fork_le_of_chainSteps run.chainSteps)))[slot -
+        currentEpochStart y.state]? = some proposer := by
   -- The found entry lies inside the lookahead of the first state.
   have inside := (Vector.getElem?_eq_some_iff.mp found).1
   -- The last epoch starts at or before the slot of the last state.
-  have reached : (getCurrentEpoch y.state).toNat * preset.SLOTS_PER_EPOCH.toNat ≤
-      y.state.slot.toNat := by
-    rw [getCurrentEpoch_toNat]
+  have reached : currentEpochStart y.state ≤ y.state.slot.toNat := by
+    rw [currentEpochStart, getCurrentEpoch_toNat]
     exact Nat.div_mul_le_self _ _
   rw [run.proposerLookaheadShifted.2 fulu _ slot (by omega) (by omega)]
   exact found
@@ -273,10 +268,9 @@ theorem Run.proposerLookahead_getElem? {x y : ForkedBeaconState preset}
 The name is the entry of that slot in the lookahead of the first state of the run. -/
 theorem Run.getBeaconProposerIndex_of_proposerLookahead {x y : ForkedBeaconState preset}
     (run : Run config checks x y) (fulu : .fusaka ≤ x.fork) {slot : Nat}
-    (started : (getCurrentEpoch x.state).toNat * preset.SLOTS_PER_EPOCH.toNat ≤ slot)
+    (started : currentEpochStart x.state ≤ slot)
     {proposer : ValidatorIndex}
-    (found : (x.state.proposerLookahead fulu)[slot -
-        (getCurrentEpoch x.state).toNat * preset.SLOTS_PER_EPOCH.toNat]? = some proposer)
+    (found : (x.state.proposerLookahead fulu)[slot - currentEpochStart x.state]? = some proposer)
     (reached : y.state.slot.toNat = slot) :
     getBeaconProposerIndex y.state = .ok proposer := by
   -- With no slot in an epoch, the lookahead is empty and holds no entry.
