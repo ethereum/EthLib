@@ -80,8 +80,11 @@ No theorem covers the code that runs, the C boundary, or timing.
 ### XMSS
 
 The secret key keeps the top tree and the bottom trees it signed in last, and signing returns the updated key.
-`SecretKey.Reachable.sign_fst` (`Proofs/Xmss/Sign.lean`) proves that every key that `keyGen`, then any sequence of `sign` calls, gives signs as the note's stateless signer, byte for byte.
-That signer rebuilds every tree from the seed; it is written only in the proofs (`Proofs/Xmss/Reference.lean`) and is never exported.
+`SecretKey.Reachable.signWith_fst` (`Proofs/Xmss/Sign.lean`) takes any hash `H`.
+It proves that every key reached by `keyGenWith H`, then any sequence of `signWith H` calls, gives the note's signature, byte for byte.
+`sign_eq` makes `sign` the case of Keccak-256.
+Its statement writes that signature out, each part computed from the seed.
+The bottom key signs the message, the top key signs the bottom tree's root, and each comes with its key's path.
 
 The correctness theorem is `verify_keyGen_sign` (`Proofs/Xmss/Correctness.lean`).
 Take a key that `keyGen seed`, then any sequence of `sign` calls, gives.
@@ -102,21 +105,19 @@ The bound covers one signature from such a cache.
 An earlier signature under the same key caches the trial inputs of its keys, and in the unforgeability game the adversary's queries can too.
 So this theorem does not bound the failure of a later signature, or of signing inside the game.
 
-Unforgeability is `Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability/KeyedSigner.lean`).
+Unforgeability is `Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability/Game.lean`).
 In the random oracle model, an adversary with a budget of `q >= 1` hash calls forges a signature with probability at most `q / 2^127`.
 Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash `H` a query to the random oracle, and the signer keeps its key across requests.
 `keyGen`, `sign` and `verify` are the same definitions with Keccak-256 as `H`.
 
-The budget `q` bounds the calls of the same game with the stateless signer, key generation and the final verification included.
-Both games give the adversary the same answers, so it forges in each with the same probability (`forgeAdvantage_eq_statelessForgeAdvantage`).
-No theorem bounds the forgery by the calls of the game with the kept key.
+The budget `q` bounds the calls of that game on every run, key generation, signing and the final verification included.
+The game is the real game of the security proof (`gameCore_eq_realGame`).
 `Unforgeability.forgeAdvantage_le_adversaryBudget` (`Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) counts only the adversary's own calls instead.
 Take an adversary that makes at most `qH` calls of `H` and `r` signing requests on every public key and every run.
-It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH + r (2^33 + 410 * 2^16 + 204) + 384`.
-The constants are proved upper bounds on the calls of key generation, of one stateless signing request, and of the verification.
-With `r <= 2^32`, `Unforgeability.forgeAdvantage_le_lifetime` gives `(qH + 2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385) / 2^127`.
+It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH + r (2^33 + 205 * 2^16 + 407) + 384`.
+The constants are proved upper bounds on the calls of key generation, of one signing request, and of the verification.
+With `r <= 2^32`, `Unforgeability.forgeAdvantage_le_lifetime` gives `(qH + 2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385) / 2^127`.
 A request's bound includes two searches of `2^32` trials each, so this constant keeps the bound above `2^-62`.
-The library proves no smaller bound on the calls of a stateless signing request.
 
 The proof is adapted from leanerVM's, and `Proofs/Xmss/Security/README.md` lists what changed here.
 It reasons over EthLib's algorithms.
@@ -131,9 +132,10 @@ It bounds every run, including the unlucky ones, so the bound is weaker than `2^
 
 - Key generation alone makes `K = 13,434,881` calls, about `2^23.7`, so the bound is never below about `2^-103.3`.
 - A signing request can try up to `2^32` randomizers on each layer before one gives a codeword.
-  So each signing request adds more than `2^33` to `q`, and an adversary with `n >= 1` requests gets a bound above `n * 2^-94`.
-- An adversary that requests a signature at each of the `2^32` leaf indices has `q > 2^65`.
-  So over the key's lifetime, the bound is above `2^-62`, about 62 bits, not 127.
+  So each signing request adds more than `2^32` to `q`, and more than `2^33` when it builds a bottom tree.
+  An adversary with `n >= 1` requests gets a bound above `n * 2^-95`.
+- An adversary that requests a signature at each of the `2^32` leaf indices has `q > 2^64`.
+  So over the key's lifetime, the bound is above `2^-63`, about 63 bits, not 127.
 
 The bound is classical: the adversary queries the oracle as a classical algorithm.
 The statement is written with VCVio's oracle computations and probabilities, so their definitions are part of what it says.

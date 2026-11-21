@@ -15,7 +15,7 @@ It runs over a cache whose one entry names `S_0`.
 
 Dropping that entry costs at most one `2^-256` guess of `S_0` per hash call after the seed hash.
 
-The real game here is EthLib's, its signer keeping `S` and `P`.
+The real game here is EthLib's, its signer keeping its key across requests.
 -/
 
 @[expose] public section

@@ -117,10 +117,11 @@ The proofs are in `EthLib/Cryptography/Proofs/Xmss/`.
 
 **The kept trees change no signature.**
 The note's signer is stateless: it rebuilds every tree from the seed.
-The proofs write it out as a reference (`statelessSignWith`, `Proofs/Xmss/Reference.lean`), which nothing exports or runs.
 A key that `keyGen`, then any sequence of `sign` calls, gives is called reachable.
-A reachable key signs exactly as the stateless signer, byte for byte, at every leaf index (`SecretKey.Reachable.sign_fst`, `Sign.lean`).
-Key generation gives the public key of the stateless scheme (`keyGenWith_fst`).
+For every hash `H`, a key reached by `keyGenWith H`, then any sequence of `signWith H` calls, gives the note's signature, byte for byte, at every leaf index (`SecretKey.Reachable.signWith_fst`, `Sign.lean`).
+`sign` is that signer over Keccak-256 (`sign_eq`).
+That theorem writes the signature out: each layer's one-time signature, with the key's path computed from the seed.
+Key generation gives the root of the top tree and the parameter `P` (`keyGenWith_fst`).
 
 **Correctness.**
 The first thing a signature scheme must do is accept honest signatures.
@@ -187,9 +188,8 @@ A signature from `sign` reads back the index it was signed at (`signatureIndex_s
 **Unforgeability.**
 In the random oracle model, an adversary forges with probability at most `q / 2^127` (`unforgeable`, `Unforgeability.lean`).
 The game is the note's section "Security", run on `keyGenWith`, `signWith` and `verifyWith` with `H` a query to the oracle, and its signer keeps its key across requests.
-`q` bounds the hash calls of the same game with the stateless signer, key generation and signing included, so it is never below about `2^23.7`, plus more than `2^33` per signing request (`SOUNDNESS.md`).
-With all `2^32` leaf indices signed, `q` exceeds `2^65`, so over the key's lifetime the bound is above `2^-62`.
-The two games give the adversary the same answers, so it wins each with the same probability (`forgeAdvantage_eq_statelessForgeAdvantage`).
+`q` bounds the hash calls of that game on every run, key generation and signing included, so it is never below about `2^23.7`, plus more than `2^32` per signing request (`SOUNDNESS.md`).
+With all `2^32` leaf indices signed, `q` exceeds `2^64`, so over the key's lifetime the bound is above `2^-63`.
 The proof, adapted from leanerVM's, reasons over these same definitions (`Proofs/Xmss/Security/`).
 
 ## What is not proved

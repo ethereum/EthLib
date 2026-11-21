@@ -11,14 +11,14 @@ The theorem bounds the adversary's success by the number of those queries:
 ```
 
 Here `q` counts every hash call of the game in the worst run, not only the adversary's.
-Key generation alone makes about `2^23.7` calls, and a signing request can make more than `2^33`, one per randomizer trial.
-So the bound is never below about `2^-103.3`, and it grows by more than `2^-94` per signing request.
-An adversary that requests all `2^32` signatures of the key has `q > 2^65`, so over the key's lifetime the bound is above `2^-62`.
+Key generation alone makes about `2^23.7` calls, and a signing request can make more than `2^32`, one per randomizer trial.
+A request that builds a bottom tree searches twice, so it can make more than `2^33`.
+So the bound is never below about `2^-103.3`, and it grows by at least `2^-95` per signing request.
+An adversary that requests all `2^32` signatures of the key has `q > 2^64`, so over the key's lifetime the bound is above `2^-63`.
 
-The real game runs EthLib's own algorithms, with the hash a query to the random oracle, and its signer keeps the scheme seed `S` and the parameter `P`.
+The real game runs EthLib's own algorithms, with the hash a query to the random oracle, and its signer keeps its key across requests.
 The theorem about it is `XmssSecurity.Bridge.realGame_security` (`XmssSecurity/Proof/Bridge/Security.lean`).
-`Proofs/Xmss/Unforgeability.lean` then carries it to the game of the note's stateless signer, which derives `S` and `P` again on each request.
-It carries it on to EthLib's game, whose signer keeps its key across requests, as `Unforgeability.unforgeable`.
+`Proofs/Xmss/Unforgeability.lean` proves that EthLib's game is that real game, and states the bound as `Unforgeability.unforgeable`.
 The statement uses only EthLib's definitions of the scheme.
 
 ## The route
@@ -46,7 +46,7 @@ The `Bridge/` files then apply it to EthLib's algorithms directly, one step per 
 - `SchemeSeed` replaces the seed hash `S = H("leanXMSS" | S_0)` by a uniform `S`, at the cost of one guess of `S_0` per call.
 - `Derivation` and `Program` answer every input that contains `S` from a table drawn up front.
 - `Real` shows that EthLib's key generation from `S` makes `K = 13,434,881` calls and erases to the model's key.
-- `Signer` shows that EthLib's signer from `S` and `P` erases to the model's table signer.
+- `Signer` shows that EthLib's signer, with a key the prepared cache knows, erases to the model's table signer.
 - `Game`, `Reduction`, `Seed` and `Model` carry the rest of the game, then reach the model's game.
 - `Security` states the bound.
 
@@ -75,7 +75,9 @@ The changes that follow from this are:
   Both read the model's values through the byte conversions (`XmssSecurity/Convert.lean`).
   leanerVM's bodies of these definitions are theorems here (`Concrete.encodingHash_eq`, `Concrete.verify_eq` and the others, in `XmssSecurity/Translate.lean`), and the proof rewrites with them where leanerVM unfolds the definitions, often through the `tweakable_hashes` tactic.
   The model's types and hash inputs move to `XmssSecurity/Types.lean`, so the conversions can come before the model.
-- `Bridge/Real.lean`, `Bridge/Signer.lean` and `Bridge/Game.lean` are rewritten to reason about EthLib's `publicKeyOf`, `signDerived` and `verifyWith`.
+- `Bridge/Real.lean`, `Bridge/Signer.lean` and `Bridge/Game.lean` are rewritten to reason about EthLib's `keyGenWith`, `signWith` and `verifyWith`.
+  EthLib's signer keeps its key, so the game after key generation is a simulation with a state.
+  A key the prepared cache knows keeps that property after each request (`KeyResolves`), and `Deterministic/KeyedErasure.lean` carries each request's erasure to the whole run.
 - `Bridge/Derivation.lean` names its inputs by the model's byte layout.
 - `Bridge/SchemeSeed.lean`, `Reduction.lean`, `Seed.lean`, `Model.lean` and `Security.lean` take EthLib's adversary and state the real game (`realGame`) directly.
 - The codeword count of `LeanXmss/Code.lean`, which `Proof/Scan/Card.lean` needs, is not copied.

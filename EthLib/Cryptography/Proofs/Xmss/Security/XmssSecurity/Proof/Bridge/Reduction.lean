@@ -15,7 +15,7 @@ Presampling every derivation and the model's key generation before it changes no
 
 Afterwards the real key generation is cached.
 
-The rest of the real game erases to the model's game with the table signer.
+The rest of the real game wins as the model's game with the table signer, with fewer hash calls.
 
 A budget of `q - 1` from `S` leaves `q - K` hash calls after key generation.
 -/
@@ -23,7 +23,8 @@ A budget of `q - 1` from `S` leaves `q - K` hash calls after key generation.
 @[expose] public section
 
 open OracleComp OracleSpec
-open EthLib.Cryptography.Xmss.Unforgeability (toModelAdversary)
+open EthLib.Cryptography.Xmss.Unforgeability (toModelAdversary ofPublicKey ofSeed ofParam
+  gameAfterKeys)
 
 open EthLib.Cryptography.Xmss.Unforgeability renaming Adversary → EthAdversary
 namespace XmssSecurity.Bridge
@@ -73,27 +74,37 @@ noncomputable def tableGame (adversary : EthAdversary) (seed : MasterSeed) : Pro
   (simulateQ romImpl (Seeded.gameRest (tableScheme d.rnd) (toModelAdversary adversary)
     (modelPublicKey d r.1) (modelSecretKey d r.1))).run' r.2
 
-/-- EthLib's game from the scheme's seed `S`, its signer keeping `S` and `P`. -/
+/-- EthLib's game from the scheme's seed `S`: key generation from `S`, then the rest of the game.
+
+Its signer keeps the key that key generation returned, and each key that signing returns. -/
 noncomputable def realAfterSeed (adversary : EthAdversary)
     (seed : MasterSeed) : OracleComp OracleWorld Bool :=
-  (liftM (realKeygen seed) : OracleComp OracleWorld _) >>= fun pk => realRest adversary pk seed
+  (liftM (realKeygen seed) : OracleComp OracleWorld _) >>= fun keys =>
+    gameAfterKeys adversary keys.1 keys.2
 
 /-- The real game with `S` sampled uniformly rather than hashed from the key's seed. -/
 noncomputable def innerGame (adversary : EthAdversary) : OracleComp OracleWorld Bool :=
   (liftM sampleMasterSeed : OracleComp OracleWorld _) >>= realAfterSeed adversary
 
-theorem erases_afterKeygen (adversary : EthAdversary) {seed : MasterSeed} {d : Derivations}
+/-- After the preparation, EthLib's game from `S` wins as the model's game with the table signer.
+
+Key generation is cached, and gives a key that the cache knows. -/
+theorem evalDist_afterKeygen (adversary : EthAdversary) {seed : MasterSeed} {d : Derivations}
     {result : (Digest × (TopIndex → Option (Randomness × Encoding))) × QueryLog HashSpec}
     {cache : QueryCache HashSpec} (h : Prepared seed d result cache) :
-    Erases (worldKnown cache) (realAfterSeed adversary seed)
-      (Seeded.gameRest (tableScheme d.rnd) (toModelAdversary adversary) (modelPublicKey d result)
-        (modelSecretKey d result)) :=
-  (erases_pure_of_resolves (computation := realKeygen seed) h.realKeygen).lift_hash.bind_known _ _
-    (h.erases_rest adversary)
-
-theorem lift_hash_romImpl {α : Type} (c : OracleComp HashSpec α) :
-    simulateQ romImpl (liftM c : OracleComp OracleWorld α) = simulateQ randomOracle c :=
-  QueryImpl.simulateQ_add_liftM_right _ _ c
+    (simulateQ romImpl (realAfterSeed adversary seed)).run' cache =ᵈ
+      (simulateQ romImpl (Seeded.gameRest (tableScheme d.rnd) (toModelAdversary adversary)
+        (modelPublicKey d result) (modelSecretKey d result))).run' cache := by
+  obtain ⟨top, htop, hkeys⟩ := h.realKeygen
+  have herase :=
+    (erases_pure_of_resolves (computation := realKeygen seed) hkeys).lift_hash.bind_known
+    (fun keys => gameAfterKeys adversary keys.1 keys.2) _
+    (Erases.refl _ (gameAfterKeys adversary (ofPublicKey ⟨result.1.1, d.parameter⟩)
+      { schemeSeed := ofSeed seed, publicParam := ofParam d.parameter, top, cache := [] }))
+  have hrun := (herase.evalDist_run cache le_rfl).map Prod.fst
+  simp only [← StateT.run'_eq] at hrun
+  exact hrun.trans (h.evalDist_rest ⟨rfl, rfl, htop, fun _ ht => absurd ht List.not_mem_nil⟩
+    adversary)
 
 /-- The inner game's winning distribution is the table game's. -/
 theorem evalDist_innerGame (adversary : EthAdversary) :
@@ -112,8 +123,7 @@ theorem evalDist_innerGame (adversary : EthAdversary) :
   -- Name both components: the kernel would run the preparation to match a pair with its parts.
   intro ⟨r, cache⟩ hr
   have h := prepared_of_mem seed d r cache hr
-  rw [StateT.run'_eq, StateT.run'_eq]
-  exact ((erases_afterKeygen adversary h).evalDist_run cache le_rfl).map _
+  exact evalDist_afterKeygen adversary h
 
 theorem probOutput_countHashQueries (computation : OracleComp OracleWorld Bool) :
     Pr{let result ← (simulateQ romImpl (countHashQueries computation)).run' ∅}[result.1 = true] =
@@ -150,16 +160,20 @@ theorem afterKeygen_budget (adversary : EthAdversary) (q : Nat)
       rw [lift_hash_romImpl]
       exact mem_support_preparation seed d r cache hr)
   have h := prepared_of_mem seed d r cache hr
+  obtain ⟨top, htop, hkeys⟩ := h.realKeygen
   have hrun := run_countHashQueries_lift_of_resolves (c := realKeygen seed) (queryCount_realKeygen seed)
-    h.realKeygen
-  have hfirst := hashQueryBound_bind (realKeygen seed) (fun pk => realRest adversary pk seed) cache
-    (q - 1) hprep ((EthLib.Cryptography.Xmss.Unforgeability.ofPublicKey (modelPublicKey d r),
+    hkeys
+  have hfirst := hashQueryBound_bind (realKeygen seed)
+    (fun keys => gameAfterKeys adversary keys.1 keys.2) cache (q - 1) hprep
+    (((ofPublicKey (modelPublicKey d r),
+      { schemeSeed := ofSeed seed, publicParam := ofParam d.parameter, top, cache := [] }),
       keygenQueries - 1), cache)
     (by rw [hrun]; simp [modelPublicKey])
   have hK : keygenQueries - 1 ≤ q - 1 := hfirst.1
   have hK' := keygenQueries_eq
   refine ⟨by omega, ?_⟩
   rw [show q - keygenQueries = q - 1 - (keygenQueries - 1) by omega]
-  exact (h.erases_rest adversary).hashQueryBound cache le_rfl _ hfirst.2
+  exact h.hashQueryBound_rest ⟨rfl, rfl, htop, fun _ ht => absurd ht List.not_mem_nil⟩ adversary _
+    hfirst.2
 
 end XmssSecurity.Bridge

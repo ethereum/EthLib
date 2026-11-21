@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Xmss.Reference
+public import EthLib.Cryptography.Xmss.Sign
 public import EthLib.Cryptography.Xmss.Verify
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.Merkle.Completeness
@@ -14,8 +14,8 @@ Each call of `H` and of the seed function counts at most 1.
 
 Then each algorithm makes at most a fixed number of counted calls.
 
-- The public key takes at most `205 * 2^16` calls.
-- A signature from the derivations takes at most `2^33 + 410 * 2^16 + 202` calls.
+- A tree at level 16 takes at most `205 * 2^16 - 1` calls.
+- A one-time signature takes at most `2^32 + 204` calls.
 - Verification takes at most `384` calls.
 
 A key's leaf takes `29` derivations, `174` chain steps and one hash, `204` calls in all.
@@ -213,15 +213,6 @@ theorem isQueryBoundP_publicParamOf
     IsQueryBoundP (publicParamOf prf) p 1 :=
   isQueryBoundP_bind (m := 0) (hprf _ _ _) fun _ _ => isQueryBoundP_pure _ _ 0
 
-/-- The public key is the parameter and the top tree's root. -/
-theorem isQueryBoundP_publicKeyOf (hH : ∀ x, IsQueryBoundP (H x) p 1)
-    (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1) :
-    IsQueryBoundP (publicKeyOf H prf) p (205 * 2 ^ 16) := by
-  refine (isQueryBoundP_bind (isQueryBoundP_publicParamOf hprf) fun pp _ =>
-    isQueryBoundP_bind (m := 0) (isQueryBoundP_node hH hprf pp .top LAYER_HEIGHT 0) fun _ _ =>
-      isQueryBoundP_pure _ _ 0).mono ?_
-  simp [LAYER_HEIGHT]
-
 /-- The base of the randomizer trials is one derivation. -/
 theorem isQueryBoundP_randomizerBase
     (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1) (pp : PublicParam)
@@ -256,38 +247,6 @@ theorem isQueryBoundP_otsSign (hH : ∀ x, IsQueryBoundP (H x) p 1)
     have := x[i].isLt
     simp only [CHAIN_LENGTH] at this
     omega
-
-/-- One layer's signature is a one-time signature and a path. -/
-theorem isQueryBoundP_signLayer (hH : ∀ x, IsQueryBoundP (H x) p 1)
-    (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1) (pp : PublicParam)
-    (layer : Layer) (e : Nat) (msg : Array UInt64) :
-    IsQueryBoundP (signLayer H pp prf layer e msg) p (2 ^ 32 + 204 + (2 ^ 16 * 205 - 205)) := by
-  unfold signLayer
-  refine isQueryBoundP_bind (isQueryBoundP_otsSign hH hprf pp layer _ msg) fun r _ => ?_
-  rcases r with _ | ⟨rho, y⟩
-  · exact isQueryBoundP_pure _ _ _
-  · exact (isQueryBoundP_bind (m := 0) (isQueryBoundP_path hH hprf pp layer e) fun _ _ =>
-      isQueryBoundP_pure _ _ 0).mono le_rfl
-
-/-- A signature is the bottom one-time signature, one build of its tree, and the top layer. -/
-theorem isQueryBoundP_signDerived (hH : ∀ x, IsQueryBoundP (H x) p 1)
-    (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1) (pp : PublicParam)
-    (idx : LeafIndex) (msg : Message) :
-    IsQueryBoundP (signDerived H prf pp idx msg) p (2 ^ 33 + 410 * 2 ^ 16 + 202) := by
-  unfold signDerived
-  refine (isQueryBoundP_bind (isQueryBoundP_otsSign hH hprf pp .bottom _ _) fun r _ => ?_).mono
-    (n := 2 ^ 32 + 204 +
-      ((2 ^ LAYER_HEIGHT * 205 - 1) + (2 ^ 32 + 204 + (2 ^ 16 * 205 - 205))))
-    (by simp [LAYER_HEIGHT])
-  rcases r with _ | ⟨rho, y⟩
-  · exact isQueryBoundP_pure _ _ _
-  · refine isQueryBoundP_bind (isQueryBoundP_build hH hprf pp _ LAYER_HEIGHT _) fun _ _ =>
-      (isQueryBoundP_bind (m := 0) (isQueryBoundP_signLayer hH hprf pp .top _ _)
-        fun r _ => ?_).mono (le_of_eq (Nat.add_zero _))
-    rcases r with err | top
-    · exact isQueryBoundP_pure _ _ _
-    · exact isQueryBoundP_bind_zero _ _ (isQueryBoundP_pure _ _ _) fun _ =>
-        isQueryBoundP_pure _ _ _
 
 /-- The leaf of a one-time signature is a digest, at most `174` steps and one hash. -/
 theorem isQueryBoundP_otsLeaf (hH : ∀ x, IsQueryBoundP (H x) p 1) (pp : PublicParam)

@@ -268,8 +268,7 @@ theorem encodePublicKey_keyGen (seed : Seed) :
       packBytes (node hashId (publicParamOf (seedPrf hashId (schemeSeed hashId seed).run)).run
           (seedPrf hashId (schemeSeed hashId seed).run) .top LAYER_HEIGHT 0).run.bytes
         ++ packBytes (publicParamOf (seedPrf hashId (schemeSeed hashId seed).run)).run.bytes := by
-  rw [keyGen, keyGenWith_fst]
-  simp only [statelessKeyGenWith, publicKeyOf, Id.run_bind, Id.run_pure, encodePublicKey]
+  rw [keyGen, keyGenWith_fst, encodePublicKey]
 
 /-- A signature's 2404 bytes: the leaf index, then each layer's randomizer, chain values and path.
 

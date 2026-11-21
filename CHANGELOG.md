@@ -821,6 +821,21 @@ Not yet released.
 
 ### Changes that break callers
 
+- The leanXMSS security proof plays the game whose signer keeps its key, and the proofs no longer write out the note's stateless signer.
+  `Proofs/Xmss/Reference.lean` is removed, with `statelessSignWith`, `statelessSign`, `statelessKeyGenWith`, `signDerived`, `signLayer` and `publicKeyOf`.
+  The stateless games `statelessGameCore`, `statelessExperiment`, `statelessForgeAdvantage`, `statelessReasonRun` and `statelessSigningFailure` are removed, and so is `forgeAdvantage_eq_statelessForgeAdvantage`.
+  `Unforgeability.HasHashQueryBound` counts the calls of `experiment`, the game with the kept key, and `gameCore_eq_realGame` proves that this game is the real game of the proof.
+  `unforgeable`, `forgeAdvantage_le_adversaryBudget`, `forgeAdvantage_le_lifetime`, `reasonForgeAdvantage_le`, `reasonForgeAdvantage_le_add`, `signingFailure_le` and `reasonForgeAdvantage_le_bounded` keep their text.
+  `Unforgeability.requestQueries` is `2^33 + 205 * 2^16 + 407`, so `lifetimeQueries_eq` is `2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385`.
+  `Xmss.SecretKey.Reachable.signWith_fst` takes `hs` and `hpp`, which name the scheme seed and the parameter, and writes the note's signature out.
+  `Xmss.SecretKey.Reachable.sign_fst` is removed: `sign_eq` and `signWith_fst` state what `sign` computes.
+  `Xmss.Internal.keyGenFrom` is key generation from the scheme seed, which `keyGenWith` calls after the seed hash.
+  `Xmss.SecretKey.Reachable.signWith_eq_ok` replaces `statelessSign_eq_ok`, and `keyGenWith_fst` states the public key as the top tree's root and `P`.
+  `Xmss.Internal.signRootWith`, `cacheTreeWith`, `fetchTreeWith` and `signWithTrials` take the derivations `prf`; `signWith` and `sign` pass those of the key's seed and compute the same bytes.
+  The helpers of the stateless signer in `Correctness`, `Cost`, `QueryBound`, `MapMonad`, `SignatureFailure` and `Unforgeability` are removed, such as `verifyWith_statelessSignWith`, `prEvent_statelessSignWith_error_le` and `isQueryBoundP_signDerived`.
+  `layerRoot_signLayer` becomes `layerRoot_of_otsSign`, and `Cost.isQueryBoundP_signRootWith`, `isQueryBoundP_cacheTreeWith` and `isQueryBoundP_fetchTreeWith` take a bound on the derivations.
+  Migration: state a budget on the calls of `experiment`; read a signature's layers from `signWith_eq_ok`.
+
 - In Lean, `Secp256r1.Montgomery` and `Secp256k1.Montgomery` are now abbreviations of `Word64.Montgomery Fp.modulus`, a four-word Montgomery element written once for any modulus ([#3827](https://github.com/ethereum/EthLib/issues/3827)).
   In each curve, the fields `raw` and `lt` and the `DecidableEq` instance are those of `Word64.Montgomery`, so `a.raw` and `a.lt` still read the same.
   Each curve's zero, one, `readRaw`, `montgomerySquare` and `rawOne` move to `Word64.Montgomery`; the one and `montgomerySquare` read the words that the curve's instance of `Word64.Montgomery.Constants` gives.

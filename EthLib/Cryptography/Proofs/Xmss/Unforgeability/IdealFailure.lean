@@ -9,6 +9,8 @@ In the ideal game of the derivations, a request may fail or leave a search witho
 
 Its chance is at most `Q / 2^95 + 2 exp(-4000)`, as long as every earlier search found one.
 
+Then every tree the key keeps holds a top signature, since no earlier request failed.
+
 Here `Q` bounds the game's hash calls on every run, and so the size of its cache.
 
 A union bound over the `r` requests, by induction on the adversary, bounds the chance of a failure.
@@ -32,6 +34,8 @@ So would a count of how many trials are cached, rather than of whether one is.
 With the two hidden-seed hops, this bounds the failure in the real game.
 
 The bound then completes the one of the signer that tells why signing failed.
+
+That signer keeps its key across requests, as the theorem's game does.
 -/
 
 @[expose] public section
@@ -82,51 +86,59 @@ theorem verifyWith_hashD (pk : PublicKey) (msg : Message) (sig : Signature) :
 
 The adversary makes at most `n` signing requests.
 
+The key's kept trees must hold top signatures, as the key of key generation does.
+
 Some request fails, or a search is left without a codeword, with chance `<= n` times a request's.
 
 Count only the runs whose cache ends with at most `Q` entries. -/
 theorem failsAtMost_run_failSignerOf (Q : ℕ) {α : Type}
     (oa : OracleComp (XmssSecurity.OracleWorld + ReasonSigningSpec) α) {n : ℕ}
-    (h : IsQueryBoundP oa IsAdversaryRequest n) :
-    FailsAtMost (fun z : α × QueryLog SigningSpec => ∃ entry ∈ z.2, entry.2 = none) Q
-      (n * ((Q : ℝ≥0∞) / 2 ^ 95 + 2 * ENNReal.ofReal (Real.exp (-4000))))
-      (simulateQ (failSignerOf (HashSpec.withDerivationsLift PrfInput HashOutput) (pure ())
-        (fun _ => prfD)) oa).run := by
-  induction oa using OracleComp.inductionOn generalizing n with
+    (h : IsQueryBoundP oa IsAdversaryRequest n) (sk : SecretKey) (hsk : KeptOk sk) :
+    FailsAtMost (fun z : (α × SecretKey) × QueryLog SigningSpec => ∃ entry ∈ z.2, entry.2 = none)
+      Q (n * ((Q : ℝ≥0∞) / 2 ^ 95 + 2 * ENNReal.ofReal (Real.exp (-4000))))
+      ((simulateQ (failSignerOf (HashSpec.withDerivationsLift PrfInput HashOutput) prfD) oa).run
+        sk).run := by
+  induction oa using OracleComp.inductionOn generalizing n sk with
   | pure a =>
-    simp only [simulateQ_pure, WriterT.run_pure]
+    simp only [simulateQ_pure, StateT.run_pure, WriterT.run_pure']
     exact (FailsAtMost.pure (by simp)).mono_bound zero_le
   | query_bind t k ih =>
     rw [isQueryBoundP_query_bind_iff] at h
-    simp only [simulateQ_bind, simulateQ_spec_query, WriterT.run_bind']
+    simp only [simulateQ_bind, simulateQ_spec_query, StateT.run_bind, WriterT.run_bind']
     rcases t with t | request
-    · have hrun : (failSignerOf (HashSpec.withDerivationsLift PrfInput HashOutput) (pure ())
-          (fun _ => prfD) (.inl t)).run =
-            (fun u => (u, [])) <$> HashSpec.withDerivationsLift PrfInput HashOutput t := by
+    · have hrun : ((failSignerOf (HashSpec.withDerivationsLift PrfInput HashOutput) prfD
+          (.inl t)).run sk).run =
+            (fun u => ((u, sk), ([] : QueryLog SigningSpec))) <$>
+              HashSpec.withDerivationsLift PrfInput HashOutput t := by
         simp [failSignerOf]
       have hnr : ¬IsAdversaryRequest (.inl t) := id
       simp only [hnr, ite_false] at h
       rw [hrun, bind_map_left]
       refine (FailsAtMost.bind (failA := fun _ => False) (ε₁ := 0)
         (FailsAtMost.of_allQueriesSatisfy (allQueriesSatisfy_of_isQueryBoundP ?_))
-        fun u _ => FailsAtMost.map _ ((ih u (h.2 u)).mono_fail ?_)).mono_bound (by simp)
+        fun u _ => FailsAtMost.map _ ((ih u (h.2 u) sk hsk).mono_fail ?_)).mono_bound (by simp)
       · rcases t with n | x <;> simp [IsRndQuery, OracleSpec.withDerivationsLift]
       · simp
-    · have hrun : (failSignerOf (HashSpec.withDerivationsLift PrfInput HashOutput) (pure ())
-          (fun _ => prfD) (.inr request)).run =
-            (fun result => (result, [⟨request, result.toOption⟩])) <$> requestD request := by
-        simp [failSignerOf, requestD]
+    · have hrun : ((failSignerOf (HashSpec.withDerivationsLift PrfInput HashOutput) prfD
+          (.inr request)).run sk).run =
+            (fun r => ((r.1, r.2), [⟨request, r.1.toOption⟩])) <$>
+              Internal.signWithTrials hashD prfD sk request.leafIndex request.message
+                (hashTrials hashD) := by
+        simp [failSignerOf, hashD]
       have hr : IsAdversaryRequest (.inr request) := trivial
       simp only [hr, ite_true, not_true, false_or] at h
       obtain ⟨m, rfl⟩ := Nat.exists_eq_add_one_of_ne_zero h.1.ne'
       rw [hrun, bind_map_left]
-      refine (FailsAtMost.bind (failA := fun result => result.toOption = none)
-        (failsAtMost_requestD Q request) fun u hu => FailsAtMost.map _
-          ((ih u (h.2 u)).mono_fail ?_)).mono_bound ?_
+      refine (FailsAtMost.bind (failA := fun r => r.1.toOption = none ∨ ¬KeptOk r.2)
+        (ε₁ := (Q : ℝ≥0∞) / 2 ^ 95 + 2 * ENNReal.ofReal (Real.exp (-4000)))
+        ((failsAtMost_signWithTrials Q sk hsk _ _).mono_bound (le_of_eq ?_)) fun u hu =>
+          FailsAtMost.map _
+            ((ih u.1 (h.2 u.1) u.2 (not_not.1 (not_or.1 hu).2)).mono_fail ?_)).mono_bound ?_
+      · rw [mul_add, ← two_pow_mul_div_two_pow 1 95, pow_one]
       · rintro ⟨a, w⟩ ⟨entry, hmem, hnone⟩
         simp only [Prod.map, List.mem_append, List.mem_singleton] at hmem
         rcases hmem with rfl | hmem
-        · exact absurd hnone hu
+        · exact absurd hnone (not_or.1 hu).1
         · exact ⟨entry, hmem, hnone⟩
       · rw [Nat.add_sub_cancel, Nat.cast_add, Nat.cast_one, add_mul, one_mul, add_comm]
 
@@ -188,12 +200,6 @@ section Game
 -- Unfolding the tree height would build the whole tree when a bound is checked.
 attribute [local irreducible] Constants.LAYER_HEIGHT
 
-/-- The public key draws no base. -/
-theorem isQueryBoundP_publicKeyOf : IsQueryBoundP (publicKeyOf hashD prfD) IsRndQuery 0 :=
-  isQueryBoundP_bind_zero _ _ isQueryBoundP_publicParamOf fun pp =>
-    isQueryBoundP_bind_zero _ _ (isQueryBoundP_node pp .top _ _) fun _ =>
-      isQueryBoundP_pure _ _ _
-
 /-- **The game fails as the adversary's requests do.**
 
 The adversary makes at most `r` signing requests.
@@ -204,18 +210,26 @@ theorem failsAtMost_prfGame (Q : ℕ) (adversary : ReasonAdversary) {r : ℕ}
     FailsAtMost SomeFailure Q
       (r * ((Q : ℝ≥0∞) / 2 ^ 95 + 2 * ENNReal.ofReal (Real.exp (-4000))))
       (prfGame adversary) := by
-  unfold prfGame failGameOf
+  unfold prfGame failGameOf Internal.keyGenFrom
+  rw [pure_bind]
+  simp only [bind_assoc]
+  refine FailsAtMost.bind_of_noBase isQueryBoundP_publicParamOf fun pp => ?_
+  refine FailsAtMost.bind_of_noBase (isQueryBoundP_build pp .top _ _) fun top => ?_
   simp only [pure_bind]
-  refine FailsAtMost.bind_of_noBase isQueryBoundP_publicKeyOf fun pk => ?_
-  refine (FailsAtMost.bind (failsAtMost_run_failSignerOf Q _ (hr pk)) fun z hz => ?_).mono_bound
-    (add_zero _).le
-  rw [show verifyWith (hashOf (HashSpec.withDerivationsLift PrfInput HashOutput)) pk
-      z.1.message z.1.signature = _ from verifyWith_hashD pk _ _]
+  -- The key of key generation keeps no tree.
+  refine (FailsAtMost.bind (failsAtMost_run_failSignerOf Q _ (hr _) _
+    fun _ h => absurd h List.not_mem_nil) fun z hz => ?_).mono_bound (add_zero _).le
+  rcases z with ⟨⟨forgery, sk'⟩, log⟩
+  dsimp only
+  rw [show verifyWith (hashOf (HashSpec.withDerivationsLift PrfInput HashOutput))
+      { root := top.value, publicParam := pp } forgery.message forgery.signature = _ from
+    verifyWith_hashD _ _ _]
   refine (FailsAtMost.bind (failA := fun _ => False) (ε₁ := 0) (ε₂ := 0)
     (FailsAtMost.of_withDerivationsLift
-      (verifyWith queryH pk z.1.message z.1.signature : OracleComp XmssSecurity.OracleWorld Bool))
+      (verifyWith queryH { root := top.value, publicParam := pp } forgery.message
+        forgery.signature : OracleComp XmssSecurity.OracleWorld Bool))
     fun v _ => ?_).mono_bound (add_zero _).le
-  exact FailsAtMost.pure (fail := SomeFailure) (a := (z.1, z.2, v)) hz
+  exact FailsAtMost.pure (fail := SomeFailure) (a := (forgery, log, v)) hz
 
 end Game
 
@@ -236,42 +250,42 @@ theorem prEvent_prfGame_ideal_le (adversary : ReasonAdversary) {qH r : ℕ}
     ⟨Or.inl hE, enncard_le_of_mem_support_prfGame adversary hh hr hz⟩).trans
     (failsAtMost_prfGame (gameQueries qH r) adversary hr (∅, ∅) fun _ _ _ _ _ h => by simp at h)
 
-/-- **The failure of some signing request of the stateless signer.**
+/-- **The failure of some signing request.**
 
 The adversary makes at most `qH` hash queries and `r` signing requests.
 
-Let `q` be the bound on the hash calls of the stateless game, for `qH` and `r`.
+Let `Q` be the bound on the hash calls of the game, for `qH` and `r`.
 
-Some request fails with probability at most `2 q / 2^256 + r (q / 2^95 + 2 exp(-4000))`. -/
-theorem statelessSigningFailure_le (adversary : ReasonAdversary) {qH r : ℕ}
+Some request fails with probability at most `2 Q / 2^256 + r (Q / 2^95 + 2 exp(-4000))`. -/
+theorem signingFailure_le (adversary : ReasonAdversary) {qH r : ℕ}
     (hh : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryHash qH)
     (hr : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r) :
-    statelessSigningFailure adversary ≤
+    signingFailure adversary ≤
       2 * (gameQueries qH r : ℝ≥0∞) * (2 ^ 256 : ℝ≥0∞)⁻¹ +
         r * ((gameQueries qH r : ℝ≥0∞) / 2 ^ 95 + 2 * ENNReal.ofReal (Real.exp (-4000))) :=
   (signingFailure_le_prfGame adversary hh hr).trans <| by
     rw [add_comm]
     exact add_le_add_right (prEvent_prfGame_ideal_le adversary hh hr) _
 
-/-- **The stateless signer that reveals its reasons, with its failure term bounded.**
+/-- **leanXMSS with a signer that reveals its reasons, with its failure term bounded.**
 
-Take an adversary whose reduction to the stateless game makes at most `q >= 1` hash calls.
+Take an adversary whose reduction to the theorem's game has a budget of `q >= 1` hash calls.
 
 The adversary itself makes at most `qH` hash queries and `r` signing requests.
 
-Let `Q` be the bound on the hash calls of the stateless game, for the same adversary.
+Let `Q` be the bound on the game's hash calls, for the same adversary.
 
 The bound says nothing from about `2^31` requests, since its last term is quadratic in `r`.
 
 It forges with probability at most `q / 2^127 + 2 Q / 2^256 + r (Q / 2^95 + 2 exp(-4000))`. -/
-theorem statelessReasonForgeAdvantage_le_bounded (q : ℕ) (hq : 1 ≤ q) (adversary : ReasonAdversary)
+theorem reasonForgeAdvantage_le_bounded (q : ℕ) (hq : 1 ≤ q) (adversary : ReasonAdversary)
     (hbound : HasHashQueryBound (hideReasons adversary) q) {qH r : ℕ}
     (hh : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryHash qH)
     (hr : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r) :
-    statelessReasonForgeAdvantage adversary ≤
+    reasonForgeAdvantage adversary ≤
       q / ((2 ^ 127 : ℕ) : ℝ≥0∞) + (2 * (gameQueries qH r : ℝ≥0∞) * (2 ^ 256 : ℝ≥0∞)⁻¹ +
         r * ((gameQueries qH r : ℝ≥0∞) / 2 ^ 95 + 2 * ENNReal.ofReal (Real.exp (-4000)))) :=
-  (statelessReasonForgeAdvantage_le_add q hq adversary hbound).trans
-    (add_le_add_right (statelessSigningFailure_le adversary hh hr) _)
+  (reasonForgeAdvantage_le_add q hq adversary hbound).trans
+    (add_le_add_right (signingFailure_le adversary hh hr) _)
 
 end EthLib.Cryptography.Xmss.Unforgeability
