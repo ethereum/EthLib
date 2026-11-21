@@ -207,6 +207,58 @@ private theorem processAttestation_raise {budget scoreBound : Nat} {checks : Sig
     rw [UInt64.toNat_div, denominator]
     exact Nat.div_le_div_right (by simp only [UInt64.toNat_zero] at numeratorLe; omega)
 
+/-- One attestation step of a list, from Altair until Gloas, spends one reward share of the budget.
+
+The state it reaches keeps the registry, the flag sizes and the budget with one more share.
+
+If the state before differs from the first only in balances and flags, so does the state after.
+
+The budget must leave room for the shares of the rest of the list. -/
+private theorem processAttestation_budgetStep {budget scoreBound spent rest : Nat}
+    {checks : SignatureChecks} {parentSlot : Slot} {attestation : Attestation preset fork}
+    {first middle : BeaconState preset fork} (altair : .altair ≤ fork)
+    (beforeGloas : fork < .glamsterdam) (increment : preset.EFFECTIVE_BALANCE_INCREMENT ≠ 0)
+    (scaled : preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64)
+    (positive : 0 < state.validators.data.size) (validators : first.validators = state.validators)
+    (holds : WithinBudget (budget + spent * (state.validators.data.size *
+      (64 * preset.baseRewardCeiling) / 448)) scoreBound first)
+    (participation : ParticipationMatches first)
+    (room : budget + (spent + (rest + 1)) * (state.validators.data.size *
+      (64 * preset.baseRewardCeiling) / 448) +
+        state.validators.data.size * (64 * preset.baseRewardCeiling) < 2 ^ 64)
+    (processed : processAttestation config checks first parentSlot attestation = .ok middle) :
+    middle.validators = state.validators ∧
+      WithinBudget (budget + (spent + 1) * (state.validators.data.size *
+        (64 * preset.baseRewardCeiling) / 448)) scoreBound middle ∧
+      ParticipationMatches middle ∧
+      ((∃ balances previous current, first = { state with
+        balances := balances, previousEpochParticipation := previous,
+        currentEpochParticipation := current }) →
+        ∃ balances previous current, middle = { state with
+          balances := balances, previousEpochParticipation := previous,
+          currentEpochParticipation := current }) := by
+  have ceilingLe : 64 * preset.baseRewardCeiling ≤
+      state.validators.data.size * (64 * preset.baseRewardCeiling) :=
+    Nat.le_mul_of_pos_left _ positive
+  have spentLe : spent * (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) ≤
+      (spent + (rest + 1)) * (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) :=
+    Nat.mul_le_mul_right _ (by omega)
+  -- The step writes flags and pays the proposer one share at most.
+  obtain ⟨written, updated, payee, reward, raised, sized, rewardLe⟩ :=
+    processAttestation_raise altair beforeGloas increment scaled holds participation
+      (by omega) (by rw [validators]; omega) processed
+  rw [validators] at rewardLe
+  have shareStep : (spent + 1) *
+      (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) =
+      spent * (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) +
+        state.validators.data.size * (64 * preset.baseRewardCeiling) / 448 :=
+    Nat.succ_mul _ _
+  have middleValidators : middle.validators = state.validators := by
+    obtain ⟨_, -, rfl⟩ := increaseBalance_eq_ok_iff.mp raised
+    cases written <;> exact validators
+  exact ⟨middleValidators, withinBudget_raise holds raised (by omega),
+    participationMatches_raise participation sized raised, fun shaped => shaped_raise shaped raised⟩
+
 /-- The attestation steps from a state that differs from the first only in balances and flags.
 
 Each attestation of the list passes on every such state within a budget with room for one reward.
@@ -248,9 +300,6 @@ private theorem foldlM_processAttestation_of_accepted_from {budget scoreBound : 
   induction accepted generalizing first spent with
   | nil => exact ⟨first, rfl, fun item member => absurd member List.not_mem_nil⟩
   | @cons item attestation items attestations head tail ih =>
-    have ceilingLe : 64 * preset.baseRewardCeiling ≤
-        state.validators.data.size * (64 * preset.baseRewardCeiling) :=
-      Nat.le_mul_of_pos_left _ positive
     rw [List.length_cons] at room
     have spentLe : spent * (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) ≤
         (spent + (items.length + 1)) *
@@ -261,21 +310,12 @@ private theorem foldlM_processAttestation_of_accepted_from {budget scoreBound : 
     have firstValidators : first.validators = state.validators := by
       obtain ⟨_, _, _, rfl⟩ := shaped
       rfl
-    -- The step writes flags and pays the proposer one share at most.
-    obtain ⟨written, updated, payee, reward, raised, sized, rewardLe⟩ :=
-      processAttestation_raise altair beforeGloas increment scaled holds participation
-        (by omega) (by rw [firstValidators]; omega) processed
-    rw [firstValidators] at rewardLe
-    have shareStep : (spent + 1) *
-        (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) =
-        spent * (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) +
-          state.validators.data.size * (64 * preset.baseRewardCeiling) / 448 :=
-      Nat.succ_mul _ _
-    obtain ⟨balances, previous, current, rfl⟩ := shaped
-    obtain ⟨after, folded, rest⟩ := ih middle (spent + 1)
-      (shaped_raise ⟨balances, previous, current, rfl⟩ raised)
-      (withinBudget_raise holds raised (by omega))
-      (participationMatches_raise participation sized raised)
+    -- The step spends one share of the budget, and the rest of the list runs on its state.
+    obtain ⟨-, raisedHolds, raisedParticipation, raisedShape⟩ :=
+      processAttestation_budgetStep altair beforeGloas increment scaled positive firstValidators
+        holds participation room processed
+    obtain ⟨after, folded, rest⟩ := ih middle (spent + 1) (raisedShape shaped) raisedHolds
+      raisedParticipation
       (by rw [show spent + 1 + items.length = spent + (items.length + 1) by omega]; exact room)
     refine ⟨after, by rw [List.foldlM_cons, processed]; exact folded, ?_⟩
     intro other member index chosen
@@ -537,32 +577,12 @@ theorem foldlM_processAttestation_withinBudget {budget scoreBound : Nat}
     rw [List.foldlM_cons, bind_ok_iff] at computed
     obtain ⟨middle, processed, computed⟩ := computed
     rw [List.length_cons] at room
-    have ceilingLe : 64 * preset.baseRewardCeiling ≤
-        state.validators.data.size * (64 * preset.baseRewardCeiling) :=
-      Nat.le_mul_of_pos_left _ positive
-    have spentLe : spent * (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) ≤
-        (spent + (rest.length + 1)) *
-          (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) :=
-      Nat.mul_le_mul_right _ (by omega)
-    -- The step writes flags and pays the proposer one share at most.
-    obtain ⟨written, updated, payee, reward, raised, sized, rewardLe⟩ :=
-      processAttestation_raise altair beforeGloas increment scaled holds participation
-        (by omega) (by rw [validators]; omega) processed
-    have shareStep : (spent + 1) *
-        (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) =
-        spent * (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) +
-          state.validators.data.size * (64 * preset.baseRewardCeiling) / 448 :=
-      Nat.succ_mul _ _
-    have middleValidators : middle.validators = state.validators := by
-      obtain ⟨_, -, rfl⟩ := increaseBalance_eq_ok_iff.mp raised
-      cases written <;> exact validators
-    rw [validators] at rewardLe
+    -- The step spends one share of the budget, and the rest of the list runs on its state.
+    obtain ⟨middleValidators, raisedHolds, raisedParticipation, -⟩ :=
+      processAttestation_budgetStep altair beforeGloas increment scaled positive validators holds
+        participation room processed
     have kept := foldlM_processAttestation_withinBudget altair beforeGloas increment scaled
-      positive (spent := spent + 1) middleValidators
-      (withinBudget_raise (raised := budget + (spent + 1) *
-        (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448)) holds raised
-        (by omega))
-      (participationMatches_raise participation sized raised)
+      positive (spent := spent + 1) middleValidators raisedHolds raisedParticipation
       (by rw [show spent + 1 + rest.length = spent + (rest.length + 1) by omega]; exact room)
       computed
     rw [show spent + 1 + rest.length = spent + (rest.length + 1) by omega] at kept
