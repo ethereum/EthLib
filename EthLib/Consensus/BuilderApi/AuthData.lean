@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Bytes
+public import EthLib.Base.Hex
 
 /-!
 # `Consensus.BuilderApi.AuthData`
@@ -51,17 +52,10 @@ def AuthDataError.code : AuthDataError → UInt32
 
 /-! ## IPv6 text -/
 
-/-- The value of a hexadecimal digit, in either case. -/
-def hexDigitValue? (c : Char) : Option Nat :=
-  if '0' ≤ c ∧ c ≤ '9' then some (c.toNat - '0'.toNat)
-  else if 'a' ≤ c ∧ c ≤ 'f' then some (c.toNat - 'a'.toNat + 10)
-  else if 'A' ≤ c ∧ c ≤ 'F' then some (c.toNat - 'A'.toNat + 10)
-  else none
-
 /-- A group of one to four hexadecimal digits, by RFC 4291 section 2.2. -/
 def parseHexGroup (cs : List Char) : Option UInt16 :=
   if cs = [] ∨ 4 < cs.length then none
-  else (cs.foldlM (fun acc c => (acc * 16 + ·) <$> hexDigitValue? c) 0).map Nat.toUInt16
+  else (cs.foldlM (fun acc c => (acc * 16 + ·.toNat) <$> Base.hexValue? c) 0).map Nat.toUInt16
 
 /-- A decimal number from 0 to 255 without a leading zero, by RFC 3986 section 3.2.2. -/
 def parseDecOctet (cs : List Char) : Option Nat :=
