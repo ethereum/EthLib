@@ -249,6 +249,19 @@ theorem mapM_exists_ok {xs : List α} (h : ∀ x ∈ xs, ∃ y, f x = .ok y) :
     obtain ⟨rest, tail⟩ := ih fun x' member => h x' (List.mem_cons_of_mem x member)
     exact ⟨y :: rest, mapM_cons_ok.mpr ⟨y, rest, head, tail, rfl⟩⟩
 
+/-- A map over a list passes when it passes at each item, and keeps a property of each value. -/
+theorem mapM_exists_ok_forall {holds : β → Prop}
+    (items : List α) (each : ∀ item ∈ items, ∃ value, f item = .ok value ∧ holds value) :
+    ∃ values, items.mapM f = .ok values ∧ ∀ value ∈ values, holds value := by
+  obtain ⟨values, made⟩ := mapM_exists_ok fun item member =>
+    (each item member).imp fun _ found => found.1
+  refine ⟨values, made, fun value member => ?_⟩
+  -- Each value is the image of an item, whose value has the property.
+  obtain ⟨item, inside, ok⟩ := mapM_ok_mem made value member
+  obtain ⟨other, otherOk, held⟩ := each item inside
+  rw [ok, Except.ok.injEq] at otherOk
+  exact otherOk ▸ held
+
 /-- A function that returns `g x` on every input `x` maps the list to its image under `g`. -/
 theorem mapM_eq_ok_map {g : α → β} {xs : List α} (h : ∀ x ∈ xs, f x = .ok (g x)) :
     xs.mapM f = .ok (xs.map g) := by
