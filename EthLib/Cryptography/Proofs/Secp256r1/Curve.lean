@@ -33,7 +33,7 @@ instance : curve.IsElliptic :=
 /-- On this smooth curve, every solution of the equation is a nonsingular point. -/
 theorem nonsingular_of {x y : ZMod Fp.modulus} (h : y * y = x * x * x + Fp.toZMod a * x + Fp.toZMod b) :
     curve.Nonsingular x y :=
-  equation_iff_nonsingular.mp ((ShortWeierstrass.equation_iff x y).mpr h)
+  ShortWeierstrass.nonsingular_of_eq h
 
 @[simp] private theorem toZMod_two : Fp.toZMod 2 = 2 := by decide
 

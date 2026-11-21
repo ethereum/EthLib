@@ -40,7 +40,7 @@ theorem equation_iff (x y : ZMod Fp.modulus) : curve.Equation x y ↔ y * y = x 
 
 /-- On this smooth curve, every solution of the equation is a nonsingular point. -/
 theorem nonsingular_of {x y : ZMod Fp.modulus} (h : y * y = x * x * x + 3) : curve.Nonsingular x y :=
-  equation_iff_nonsingular.mp ((equation_iff x y).mpr h)
+  ShortWeierstrass.nonsingular_of_eq (by rwa [zero_mul, add_zero])
 
 /-- The negation of `y` in Mathlib is plain negation here, since `a_1 = a_3 = 0`. -/
 @[simp] theorem negY_eq (x y : ZMod Fp.modulus) : curve.negY x y = -y :=
