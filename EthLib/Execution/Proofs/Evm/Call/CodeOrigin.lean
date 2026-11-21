@@ -127,7 +127,7 @@ theorem codeWrites_setCode {tx tx' : TransactionState} {address : Address} {code
 /-- A change of one account keeps the origin of the code hashes when the new hash has one.
 
 The new hash is the empty one, a written one, or the old one. -/
-private theorem KeepsCodeOrigin.modifyState {tx tx' : TransactionState} {address : Address}
+theorem KeepsCodeOrigin.modifyState {tx tx' : TransactionState} {address : Address}
     {f : Account → Except StateError Account}
     (hf : ∀ updated, f (tx.getAccount address) = .ok updated →
       updated.codeHash = EMPTY_CODE_HASH ∨ updated.codeHash ∈ tx.codeWrites ∨
@@ -160,7 +160,7 @@ private theorem codeHash_debit {address : Address} {amount : U256} {account upda
   rfl
 
 /-- A credit keeps the code hash of an account. -/
-private theorem codeHash_credit {address : Address} {amount : U256} {account updated : Account}
+theorem codeHash_credit {address : Address} {amount : U256} {account updated : Account}
     (h : Account.credit address amount account = .ok updated) :
     updated.codeHash = account.codeHash := by
   unfold Account.credit at h
@@ -168,7 +168,7 @@ private theorem codeHash_credit {address : Address} {amount : U256} {account upd
   rfl
 
 /-- A move of ether keeps the origin of the code hashes. -/
-private theorem KeepsCodeOrigin.moveEther {tx tx' : TransactionState}
+theorem KeepsCodeOrigin.moveEther {tx tx' : TransactionState}
     {sender recipient : Address} {amount : U256}
     (h : tx.moveEther fork sender recipient amount = .ok tx') : KeepsCodeOrigin tx tx' := by
   unfold TransactionState.moveEther at h

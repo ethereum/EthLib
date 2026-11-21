@@ -1774,6 +1774,11 @@ After a creation with no error the return data is empty, and otherwise it is the
 It needs the output to hold at most 24576 bytes (EIP-170), and from London not to start with `0xEF` (EIP-3541).
 `Logic.depositCode_of_prefix` proves that from London an output that starts with `0xEF` fails with all the gas taken, the state put back and no output.
 `Logic.depositCode_of_outOfGas` proves that an output too long or too dear fails the same way, out of gas.
+These rules hold beyond one deposit, at each fork where they apply.
+A call or a creation writes only code that meets the code-size cap of its fork and, from London, the `0xEF` rule (`keepsCodeRules_processMessage`, `Proofs/Evm/Call/CodeRules.lean`).
+A transaction whose type exists at its fork writes only such code, or from Pectra a delegation indicator of EIP-7702 (`codeRules_processTransaction`, `Proofs/Transactions/CodeRules.lean`).
+So each account whose code a valid block changes gets code that meets these rules, or from Pectra a delegation indicator (`stateTransition_codeRules`, `Proofs/Blocks/CodeRules.lean`).
+An account changes its code when it is new or when its code hash changes; a code that the state held before the block, such as one of the genesis, is out of scope.
 `Logic.processCreateMessage_eq_ok` proves that a creation with no value and no precompile ends as its init code ends, then deposits.
 `Logic.meets_of_spec_create` proves that the runner of the interpreter meets `CreatesAs` for a specification of the init code.
 `Logic.running_eq_false_of_sstore_of_isStatic` proves that in a static frame, a step at SSTORE stops the frame.

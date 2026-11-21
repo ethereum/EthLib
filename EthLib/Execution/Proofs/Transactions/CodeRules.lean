@@ -154,7 +154,7 @@ private theorem keepsCodeRules_prepareFirstFrame {chainId : Nat} {message : Mess
           exact v2.trans (.of_codeWrites rfl)
 
 /-- The message of a transaction keeps the rules. -/
-private theorem keepsCodeRules_processMessageCall [LawfulGasMeter Meter] {chainId : Nat}
+theorem keepsCodeRules_processMessageCall [LawfulGasMeter Meter] {chainId : Nat}
     {message : Message fork} {state : TransactionState} {substate : Substate}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address} {output : CallOutput}
     (hauth : auths = [] ∨ .pectra ≤ fork)
