@@ -7301,6 +7301,9 @@ For each mainnet blob schedule, the least such excess is about 177.4457 times th
 - BPO1, fraction 8346193: from 1480995878.
 - BPO2 and the forks after it, fraction 11684671: from 2073394371.
 
+`getBaseFeePerBlobGas_blobSchedule_lt_iff` (`Proofs/Fees/BlobBaseFee.lean`) proves that each value is exact: the fee is below `2^256` exactly below it.
+Below it, when the block sets no blob price and has the schedule of its fork, the instruction pushes the fee itself, as the source does (`toNat_blobBaseFee_of_lt`).
+
 A block raises the excess by at most `GAS_PER_BLOB * (max - target)`.
 So from an excess of 0, a chain needs at least 1507 full blocks under the Dencun schedule, and 2260 under each later one, to reach these values.
 On the way the fee passes the supply of ether, so no blob transaction could pay it.
