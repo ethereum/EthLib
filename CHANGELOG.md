@@ -821,6 +821,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the light client checks with the shared assertion of Base, and its own copy is removed ([#3837](https://github.com/ethereum/EthLib/issues/3837)).
+  `LightClientError.require` and its lemma `LightClientError.require_ok` are removed.
+  Migration: write `Base.ensure` and `Base.ensure_ok_iff`, the same definition and lemma for any error type.
+
 - In Lean, the module `EthLib.Base.Length` is removed, and its declarations move to `EthLib.Networking.Snappy` with the same definitions ([#3836](https://github.com/ethereum/EthLib/issues/3836)).
   They are `hasAtLeast`, `hasAtLeast_iff`, `decideLeLength` and `decideLengthLt`.
   Migration: import `EthLib.Networking.Snappy.Block` and use the new namespace.

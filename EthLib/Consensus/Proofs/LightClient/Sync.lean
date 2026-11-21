@@ -59,12 +59,6 @@ theorem LightClientError.code_injective (e₁ e₂ : LightClientError) (h : e₁
   cases e₁ <;> cases e₂ <;>
     first | rfl | (simp only [LightClientError.code] at h; exact absurd h (by decide))
 
-/-- A check passes exactly when its condition holds. -/
-theorem LightClientError.require_ok {condition : Prop} [Decidable condition]
-    {error : LightClientError} {done : Unit} : require condition error = .ok done ↔ condition := by
-  unfold require
-  split <;> simp_all
-
 /-- A root lifted into the errors of the light client is the root it was. -/
 theorem LightClientError.liftRoot_ok {α : Type} {result : Except Err α} {value : α} :
     liftRoot result = .ok value ↔ result = .ok value := by
@@ -143,7 +137,7 @@ theorem applyLightClientUpdate_eq_ok_iff {store after : LightClientStore preset 
             update.finalizedHeader
           else store.optimisticHeader } := by
   unfold applyLightClientUpdate
-  simp only [bind, Except.bind, pure, Except.pure, LightClientError.require,
+  simp only [bind, Except.bind, pure, Except.pure, Base.ensure,
     LightClientError.requireFork]
   by_cases altair : Fork.altair ≤ fork
   · -- Split on each condition of the definition, then read the store that each branch builds.
@@ -185,7 +179,7 @@ theorem processLightClientStoreForceUpdate_eq_ok_iff
             after = { applied with bestValidUpdate := none }) ∧
         (store.bestValidUpdate = none ∨ currentSlot.toNat ≤ timeout → after = store) := by
   unfold processLightClientStoreForceUpdate
-  simp only [bind, Except.bind, pure, Except.pure, LightClientError.require,
+  simp only [bind, Except.bind, pure, Except.pure, Base.ensure,
     LightClientError.requireFork]
   by_cases altair : Fork.altair ≤ fork <;>
   by_cases fits : store.finalizedHeader.beacon.slot.toNat + preset.UPDATE_TIMEOUT.toNat < 2 ^ 64 <;>
@@ -973,11 +967,11 @@ theorem validateLightClientUpdate_eq_ok_iff {config : Config} {checks : Signatur
   have unit {P : Unit → Prop} : (∃ u, P u) ↔ P () := ⟨fun ⟨(), h⟩ => h, fun h => ⟨(), h⟩⟩
   unfold validateLightClientUpdate
   cases store.isNextSyncCommitteeKnown <;> cases update.isSyncCommitteeUpdate <;>
-    simp [LightClientError.requireFork, Base.bind_ok_iff, LightClientError.require_ok, unit,
+    simp [LightClientError.requireFork, Base.bind_ok_iff, Base.ensure_ok_iff, unit,
       and_assoc]
   -- A store that knows the next committee also checks the committee in its own period.
   intros
-  split <;> rename_i same <;> simp [same, Base.bind_ok_iff, LightClientError.require_ok, unit]
+  split <;> rename_i same <;> simp [same, Base.bind_ok_iff, Base.ensure_ok_iff, unit]
 
 end Checks
 

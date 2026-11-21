@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Except
 public import EthLib.Base.Hex
 public import EthLib.Consensus.ForkSchedule
 public import EthLib.Consensus.LightClient.Containers
@@ -212,11 +213,6 @@ instance : ToString LightClientError where
 
 end LightClientError
 
-/-- A check that holds, or the error that its failure raises. -/
-def LightClientError.require (condition : Prop) [Decidable condition] (error : LightClientError) :
-    Except LightClientError Unit :=
-  if condition then .ok () else .error error
-
 /-- A root, or the error of the light client when it cannot be computed. -/
 def LightClientError.liftRoot {α : Type} (result : Except Err α) : Except LightClientError α :=
   result.mapError .ssz
@@ -230,7 +226,8 @@ def LightClientError.specifiedFork (fork : Fork) :
     Except LightClientError (PLift (.altair ≤ fork)) :=
   if h : .altair ≤ fork then .ok ⟨h⟩ else .error (.forkNotSpecified fork)
 
-open LightClientError (require liftRoot requireFork)
+open Base (ensure)
+open LightClientError (liftRoot requireFork)
 
 /-- Whether two values have the same SSZ value, field by field. -/
 def sameSszValue {α : Type} [SszType α] (a b : α) : Bool :=
@@ -447,14 +444,14 @@ def initializeLightClientStore (config : Config) (trustedBlockRoot : Root)
     (bootstrap : LightClientBootstrap preset fork) :
     Except LightClientError (LightClientStore preset fork) := do
   requireFork fork
-  require (← isValidLightClientHeader config bootstrap.header)
+  ensure (← isValidLightClientHeader config bootstrap.header)
     (.invalidHeader bootstrap.header.beacon.slot)
   let headerRoot ← liftRoot (SszType.hashTreeRoot bootstrap.header.beacon)
-  require (headerRoot = trustedBlockRoot) (.untrustedHeader trustedBlockRoot headerRoot)
+  ensure (headerRoot = trustedBlockRoot) (.untrustedHeader trustedBlockRoot headerRoot)
   let leaf ← liftRoot (SszType.hashTreeRoot bootstrap.currentSyncCommittee)
   let gindex ← currentSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config
     bootstrap.header.beacon.slot
-  require (← liftRoot (isValidNormalizedMerkleBranch leaf
+  ensure (← liftRoot (isValidNormalizedMerkleBranch leaf
       bootstrap.currentSyncCommitteeBranch.toList gindex bootstrap.header.beacon.stateRoot))
     (.invalidCurrentSyncCommitteeBranch gindex bootstrap.header.beacon.stateRoot)
   return {
@@ -484,20 +481,20 @@ In each case, the finality branch must prove the root against the attested state
 def validateFinality (config : Config) (update : LightClientUpdate preset fork) :
     Except LightClientError Unit := do
   if !update.isFinalityUpdate then
-    require (sameSszValue update.finalizedHeader (LightClientHeader.empty preset fork))
+    ensure (sameSszValue update.finalizedHeader (LightClientHeader.empty preset fork))
       (.unexpectedFinalizedHeader update.finalizedHeader.beacon.slot)
   else
     let finalizedRoot ← if update.finalizedHeader.beacon.slot = GENESIS_SLOT then do
-        require (sameSszValue update.finalizedHeader (LightClientHeader.empty preset fork))
+        ensure (sameSszValue update.finalizedHeader (LightClientHeader.empty preset fork))
           (.unexpectedFinalizedHeader update.finalizedHeader.beacon.slot)
         pure zeroBytes32
       else do
-        require (← isValidLightClientHeader config update.finalizedHeader)
+        ensure (← isValidLightClientHeader config update.finalizedHeader)
           (.invalidHeader update.finalizedHeader.beacon.slot)
         liftRoot (SszType.hashTreeRoot update.finalizedHeader.beacon)
     let gindex ← finalizedRootGindexAtSlot (preset := preset) (fork := fork) config
       update.attestedHeader.beacon.slot
-    require (← liftRoot (isValidNormalizedMerkleBranch finalizedRoot update.finalityBranch.toList
+    ensure (← liftRoot (isValidNormalizedMerkleBranch finalizedRoot update.finalityBranch.toList
         gindex update.attestedHeader.beacon.stateRoot))
       (.invalidFinalityBranch gindex update.attestedHeader.beacon.stateRoot)
 
@@ -507,7 +504,7 @@ def validateNextSyncCommitteeBranch (config : Config) (update : LightClientUpdat
   let leaf ← liftRoot (SszType.hashTreeRoot update.nextSyncCommittee)
   let gindex ← nextSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config
     update.attestedHeader.beacon.slot
-  require (← liftRoot (isValidNormalizedMerkleBranch leaf update.nextSyncCommitteeBranch.toList
+  ensure (← liftRoot (isValidNormalizedMerkleBranch leaf update.nextSyncCommitteeBranch.toList
       gindex update.attestedHeader.beacon.stateRoot))
     (.invalidNextSyncCommitteeBranch gindex update.attestedHeader.beacon.stateRoot)
 
@@ -552,42 +549,42 @@ def validateLightClientUpdate (config : Config) (checks : SignatureChecks)
     (currentSlot : Slot) (genesisValidatorsRoot : Root) : Except LightClientError Unit := do
   requireFork fork
   let aggregate := update.syncAggregate
-  require (aggregate.participants ≥ preset.MIN_SYNC_COMMITTEE_PARTICIPANTS.toNat)
+  ensure (aggregate.participants ≥ preset.MIN_SYNC_COMMITTEE_PARTICIPANTS.toNat)
     (.tooFewParticipants aggregate.participants preset.MIN_SYNC_COMMITTEE_PARTICIPANTS.toNat)
-  require (← isValidLightClientHeader config update.attestedHeader)
+  ensure (← isValidLightClientHeader config update.attestedHeader)
     (.invalidHeader update.attestedHeader.beacon.slot)
   let attestedSlot := update.attestedHeader.beacon.slot
   let finalizedSlot := update.finalizedHeader.beacon.slot
-  require (currentSlot ≥ update.signatureSlot ∧ update.signatureSlot > attestedSlot ∧
+  ensure (currentSlot ≥ update.signatureSlot ∧ update.signatureSlot > attestedSlot ∧
     attestedSlot ≥ finalizedSlot)
     (.slotsOutOfOrder currentSlot update.signatureSlot attestedSlot finalizedSlot)
   let period := computeSyncCommitteePeriodAtSlot preset
   let storePeriod := period store.finalizedHeader.beacon.slot
   let signaturePeriod := period update.signatureSlot
   if store.isNextSyncCommitteeKnown then
-    require (signaturePeriod = storePeriod ∨ signaturePeriod = storePeriod + 1)
+    ensure (signaturePeriod = storePeriod ∨ signaturePeriod = storePeriod + 1)
       (.unknownSignaturePeriod signaturePeriod storePeriod true)
   else
-    require (signaturePeriod = storePeriod)
+    ensure (signaturePeriod = storePeriod)
       (.unknownSignaturePeriod signaturePeriod storePeriod false)
   let attestedPeriod := period attestedSlot
   let hasNextSyncCommittee := !store.isNextSyncCommitteeKnown &&
     (update.isSyncCommitteeUpdate && attestedPeriod == storePeriod)
-  require (attestedSlot > store.finalizedHeader.beacon.slot ∨ hasNextSyncCommittee)
+  ensure (attestedSlot > store.finalizedHeader.beacon.slot ∨ hasNextSyncCommittee)
     (.irrelevantUpdate attestedSlot store.finalizedHeader.beacon.slot)
   validateFinality config update
   if !update.isSyncCommitteeUpdate then
-    require (update.nextSyncCommittee = SyncCommittee.empty preset)
+    ensure (update.nextSyncCommittee = SyncCommittee.empty preset)
       (.unexpectedNextSyncCommittee update.nextSyncCommittee.aggregatePubkey)
   else
     if attestedPeriod = storePeriod ∧ store.isNextSyncCommitteeKnown then
-      require (update.nextSyncCommittee = store.nextSyncCommittee)
+      ensure (update.nextSyncCommittee = store.nextSyncCommittee)
         (.conflictingNextSyncCommittee store.nextSyncCommittee.aggregatePubkey
           update.nextSyncCommittee.aggregatePubkey)
     validateNextSyncCommitteeBranch config update
   let keys := (store.signatureCommittee update).participantKeys aggregate
   let signingRoot ← syncCommitteeSigningRoot config update genesisValidatorsRoot
-  require (checks.fastAggregateVerify keys (packBytes signingRoot)
+  ensure (checks.fastAggregateVerify keys (packBytes signingRoot)
     aggregate.syncCommitteeSignature = true) (.invalidSignature signingRoot)
 
 /-- The store after it applies an update that it has checked.
@@ -605,7 +602,7 @@ def applyLightClientUpdate (store : LightClientStore preset fork)
   let storePeriod := period store.finalizedHeader.beacon.slot
   let finalizedPeriod := period update.finalizedHeader.beacon.slot
   let store ← if !store.isNextSyncCommitteeKnown then do
-      require (finalizedPeriod = storePeriod)
+      ensure (finalizedPeriod = storePeriod)
         (.finalizedPeriodMismatch finalizedPeriod storePeriod)
       pure { store with nextSyncCommittee := update.nextSyncCommittee }
     else if finalizedPeriod = storePeriod + 1 then
@@ -633,7 +630,7 @@ def processLightClientStoreForceUpdate (store : LightClientStore preset fork)
     (currentSlot : Slot) : Except LightClientError (LightClientStore preset fork) := do
   requireFork fork
   let timeout := store.finalizedHeader.beacon.slot.toNat + preset.UPDATE_TIMEOUT.toNat
-  require (timeout < 2 ^ 64)
+  ensure (timeout < 2 ^ 64)
     (.slotOverflow store.finalizedHeader.beacon.slot preset.UPDATE_TIMEOUT)
   match store.bestValidUpdate with
   | some best =>
