@@ -7112,7 +7112,10 @@ For a client whose keys have the public keys of their secret keys, a signed exit
 It verifies against the signing root of the exit, under the domain of a voluntary exit in that state, which is the check that the processing of an exit makes.
 From Deneb, by [EIP-7044](https://eips.ethereum.org/EIPS/eip-7044#specification), the domain is fixed on the Capella fork version, so the exit verifies in every state of the same chain and configuration at a fork from Deneb on (`verify_of_signVoluntaryExit_of_dencun_le`).
 That theorem assumes that the validator at the index of the exit keeps its key in that state, which a chain does but the statement does not derive.
-That each key has the public key of its secret key is also an assumption: the import sets it for each key that it adds, and no call changes a key, but no theorem states it of a run of calls.
+That each key has the public key of its secret key holds after any run of calls from a client whose keys have it, in particular one that holds no key (`keyed_handle`, `keyed_of_run`, `Consensus/Proofs/KeymanagerApi/Keyed.lean`).
+The import derives the public key from the decrypted secret, a delete only removes keys, and no other call changes them.
+So an exit that such a client signs after any run of calls verifies (`verify_of_signVoluntaryExit_of_run`).
+The two calls of a move, a delete and an import, keep it as well (`keyed_deleteKeys`, `keyed_importKeystores`).
 The Python suite signs the exit of the case `basic` of the voluntary exits of consensus-specs, at Capella and at Deneb, and gets its signature byte for byte.
 
 The source leaves three points about the exit open, and EthLib takes these readings:
