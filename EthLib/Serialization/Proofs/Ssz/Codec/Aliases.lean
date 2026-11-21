@@ -113,7 +113,7 @@ private theorem deserializeEach_byteSlices (data : Bytes) :
 theorem deserialize_byteVector_alias (data : Bytes) (length : Nat) :
     deserialize (.vector (.uint 1) length) data =
       (deserialize (.byteVector length) data).map fun _ => .seq (byteValues data) := by
-  simp only [deserialize, vectorSlices_eq, Desc.fixedSize]
+  simp only [deserialize, vectorSlices, Desc.fixedSize]
   -- The size bound is checked first on both paths, then the same byte count.
   by_cases large : data.size ≥ 2 ^ (8 * bytesPerOffset)
   · simp [large, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, Except.map]
@@ -128,7 +128,7 @@ theorem deserialize_byteVector_alias (data : Bytes) (length : Nat) :
 theorem deserialize_byteList_alias (data : Bytes) (limit : Nat) :
     deserialize (.list (.uint 1) limit) data =
       (deserialize (.byteList limit) data).map fun _ => .seq (byteValues data) := by
-  simp only [deserialize, listSlices_eq, Desc.fixedSize]
+  simp only [deserialize, listSlices, Desc.fixedSize]
   -- The size bound is checked first on both paths, then the same limit.
   by_cases large : data.size ≥ 2 ^ (8 * bytesPerOffset)
   · simp [large, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, Except.map]
