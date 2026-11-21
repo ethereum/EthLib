@@ -273,15 +273,14 @@ theorem s'_bounds (j : Fin 80) : 0 < s'[j].toNat ∧ s'[j].toNat < 32 := by
 /--
 The inverse of one step for a rotation of 1 to 31 bits.
 
-From `#v[E, T, B, rol_10(C), D]`, left rotation by 22 recovers `C`.
+From `(E, T, B, rol_10(C), D)`, left rotation by 22 recovers `C`.
 
 Left rotation of `T - E` by `32 - amount`, then subtraction, recovers `A`.
 -/
-private def unstep (g : Fin 5) (state : Vector UInt32 5) (word constant amount : UInt32) :
-    Vector UInt32 5 :=
-  let c := rol state[3] 22
-  let a := rol (state[1] - state[0]) (32 - amount) - constant - word - f g state[2] c state[4]
-  #v[a, state[2], c, state[4], state[0]]
+private def unstep (g : Fin 5) (v : Vars) (word constant amount : UInt32) : Vars :=
+  let c := rol v.D 22
+  let a := rol (v.B - v.A) (32 - amount) - constant - word - f g v.C c v.E
+  ⟨a, v.C, c, v.E, v.A⟩
 
 /-- One step with a rotation of 1 to 31 bits permutes the five-word state. -/
 theorem step_bijective (g : Fin 5) (word constant amount : UInt32)
@@ -294,23 +293,12 @@ theorem step_bijective (g : Fin 5) (word constant amount : UInt32)
     rol_rol x 22 (by decide) (by decide)
   refine ⟨Function.LeftInverse.injective (g := (unstep g · word constant amount)) fun v => ?_,
     Function.RightInverse.surjective (g := (unstep g · word constant amount)) fun v => ?_⟩
-  · ext k hk
-    match k, hk with
-    | 0, _ => simp [step, unstep, UInt32.add_sub_cancel, rol_rol _ _ h0 h32, hc1]
-    | 1, _ => simp [step, unstep]
-    | 2, _ => simp [step, unstep, hc1]
-    | 3, _ => simp [step, unstep]
-    | 4, _ => simp [step, unstep]
-  · ext k hk
-    match k, hk with
-    | 0, _ => simp [step, unstep]
-    | 1, _ =>
-      have hrot : ∀ u : UInt32, rol (rol u (32 - amount)) amount = u := fun u => by
-        simpa only [hcancel] using rol_rol u (32 - amount) (by omega) (by omega)
-      simp [step, unstep, UInt32.sub_add_cancel, hrot]
-    | 2, _ => simp [step, unstep]
-    | 3, _ => simp [step, unstep, hc2]
-    | 4, _ => simp [step, unstep]
+  · obtain ⟨A, B, C, D, E⟩ := v
+    simp [step, unstep, UInt32.add_sub_cancel, rol_rol _ _ h0 h32, hc1]
+  · obtain ⟨A, B, C, D, E⟩ := v
+    have hrot : ∀ u : UInt32, rol (rol u (32 - amount)) amount = u := fun u => by
+      simpa only [hcancel] using rol_rol u (32 - amount) (by omega) (by omega)
+    simp [step, unstep, UInt32.sub_add_cancel, hrot, hc2]
 
 /-- Folding a list of bijective updates permutes the state. -/
 private theorem foldl_bijective {α β : Type} (stepFn : β → α → β) :
@@ -343,9 +331,9 @@ theorem line_right_bijective (X : Vector UInt32 16) :
 
 /-! ## Agreement with the model -/
 
-/-- A five-word state read as the variables of the model. -/
-def toVars (v : Vector UInt32 5) : Spec.Vars :=
-  ⟨v[0].toBitVec, v[1].toBitVec, v[2].toBitVec, v[3].toBitVec, v[4].toBitVec⟩
+/-- The variables of a line read as the variables of the model. -/
+def toVars (v : Vars) : Spec.Vars :=
+  ⟨v.A.toBitVec, v.B.toBitVec, v.C.toBitVec, v.D.toBitVec, v.E.toBitVec⟩
 
 /-- The function of group `g` is `f(j)` of the model for every step `j` in that group. -/
 private theorem f_toBitVec_of_div (g : Fin 5) (j : Nat) (hg : j / 16 = g.val) (x y z : UInt32) :
@@ -396,7 +384,7 @@ private theorem foldl_hom {α β γ : Type} (φ : α → β) (F : α → γ → 
   | j :: js, a => by rw [List.foldl_cons, List.foldl_cons, foldl_hom φ F G hφ js, hφ]
 
 /-- Step `j` of the left line is step `j` of the left line of the model. -/
-theorem step_left_toVars (X : Vector UInt32 16) (v : Vector UInt32 5) (j : Fin 80) :
+theorem step_left_toVars (X : Vector UInt32 16) (v : Vars) (j : Fin 80) :
     toVars (step ⟨j.val / 16, by omega⟩ v X[r[j]] K[(⟨j.val / 16, by omega⟩ : Fin 5)] s[j]) =
       Spec.stepLeft (X.map UInt32.toBitVec) (toVars v) j := by
   have hf (x y z : UInt32) := (f_toBitVec j x y z).1
@@ -407,7 +395,7 @@ theorem step_left_toVars (X : Vector UInt32 16) (v : Vector UInt32 5) (j : Fin 8
   simp [step, toVars, Spec.stepLeft, hf, hs, h10]
 
 /-- Step `j` of the right line is step `j` of the right line of the model. -/
-theorem step_right_toVars (X : Vector UInt32 16) (v : Vector UInt32 5) (j : Fin 80) :
+theorem step_right_toVars (X : Vector UInt32 16) (v : Vars) (j : Fin 80) :
     toVars (step ⟨4 - j.val / 16, by omega⟩ v X[r'[j]] K'[(⟨j.val / 16, by omega⟩ : Fin 5)] s'[j]) =
       Spec.stepRight (X.map UInt32.toBitVec) (toVars v) j := by
   have hf (x y z : UInt32) := (f_toBitVec j x y z).2
@@ -420,9 +408,9 @@ theorem step_right_toVars (X : Vector UInt32 16) (v : Vector UInt32 5) (j : Fin 
 /-- The loop of the model runs the left line and the right line of the code side by side. -/
 theorem lines_toVars (X : Vector UInt32 16) (h : Vector UInt32 5) :
     Spec.lines (X.map UInt32.toBitVec) (h.map UInt32.toBitVec) =
-      (toVars (line X h K r s false), toVars (line X h K' r' s' true)) := by
-  have hstart : Spec.Vars.ofChain (h.map UInt32.toBitVec) = toVars h := by
-    simp [Spec.Vars.ofChain, toVars]
+      (toVars (line X (.ofChain h) K r s false), toVars (line X (.ofChain h) K' r' s' true)) := by
+  have hstart : Spec.Vars.ofChain (h.map UInt32.toBitVec) = toVars (.ofChain h) := by
+    simp [Spec.Vars.ofChain, toVars, Vars.ofChain]
   unfold Spec.lines line
   rw [foldl_pair, hstart]
   simp only [Bool.false_eq_true, ↓reduceIte]
@@ -453,9 +441,9 @@ theorem little32_toBitVec (block : ByteArray) (start : Nat) (within : start + 4 
       BitVec.getLsbD_of_ge _ (i - 16) (by omega : 8 ≤ i - 16)]
 
 /-- The final mix of the chaining variable with both lines, read as 32-bit vectors. -/
-private theorem combine_toBitVec (h left right : Vector UInt32 5) :
-    (#v[h[1] + left[2] + right[3], h[2] + left[3] + right[4], h[3] + left[4] + right[0],
-        h[4] + left[0] + right[1], h[0] + left[1] + right[2]] : Vector UInt32 5).map
+private theorem combine_toBitVec (h : Vector UInt32 5) (left right : Vars) :
+    (#v[h[1] + left.C + right.D, h[2] + left.D + right.E, h[3] + left.E + right.A,
+        h[4] + left.A + right.B, h[0] + left.B + right.C] : Vector UInt32 5).map
       UInt32.toBitVec =
       #v[(h.map UInt32.toBitVec)[1] + (toVars left).C + (toVars right).D,
         (h.map UInt32.toBitVec)[2] + (toVars left).D + (toVars right).E,
@@ -466,13 +454,13 @@ private theorem combine_toBitVec (h left right : Vector UInt32 5) :
 
 /-- The left line of the code, read as the variables of the model, is the left line of the model. -/
 private theorem toVars_line_left (X : Vector UInt32 16) (h : Vector UInt32 5) :
-    toVars (line X h K r s false) =
+    toVars (line X (.ofChain h) K r s false) =
       (Spec.lines (X.map UInt32.toBitVec) (h.map UInt32.toBitVec)).1 := by
   rw [lines_toVars]
 
 /-- The right line of the code, read as variables of the model, is the right line of the model. -/
 private theorem toVars_line_right (X : Vector UInt32 16) (h : Vector UInt32 5) :
-    toVars (line X h K' r' s' true) =
+    toVars (line X (.ofChain h) K' r' s' true) =
       (Spec.lines (X.map UInt32.toBitVec) (h.map UInt32.toBitVec)).2 := by
   rw [lines_toVars]
 

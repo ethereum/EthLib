@@ -231,6 +231,16 @@ theorem big32_toBitVec (b : ByteArray) (off : Nat) :
 private def scheduleWord (input : Vector Spec.Word 16) (t : Nat) : UInt32 :=
   UInt32.ofBitVec (Spec.messageWord input t)
 
+/-- The schedule one word later: the window drops `W_t` and gains `W_(t+16)`. -/
+private def shift (w : Window) : Window :=
+  ⟨w.w1, w.w2, w.w3, w.w4, w.w5, w.w6, w.w7, w.w8, w.w9, w.w10, w.w11, w.w12, w.w13, w.w14, w.w15,
+    w.w0 + smallSigma0 w.w1 + w.w9 + smallSigma1 w.w14⟩
+
+/-- The rounds one at a time: each takes the next constant and the first word of the window. -/
+private def roundsList : List UInt32 → Window → State → State
+  | [], _, s => s
+  | K_t :: rest, w, s => roundsList rest (shift w) (round s K_t w.w0)
+
 /-- The window of sixteen values of a sequence of words. -/
 private def windowOf (f : Nat → UInt32) : Window :=
   ⟨f 0, f 1, f 2, f 3, f 4, f 5, f 6, f 7, f 8, f 9, f 10, f 11, f 12, f 13, f 14, f 15⟩
@@ -259,7 +269,7 @@ private theorem ofBlock_block (block : ByteArray) (start : Nat) (whole : start +
 
 /-- Each move of the window is one more word of the schedule, by the recurrence. -/
 private theorem next_windowOf (input : Vector Spec.Word 16) (t : Nat) :
-    (windowOf fun i => scheduleWord input (t + i)).next
+    shift (windowOf fun i => scheduleWord input (t + i))
       = windowOf fun i => scheduleWord input (t + 1 + i) := by
   have last : scheduleWord input (t + 16) = scheduleWord input t +
       smallSigma0 (scheduleWord input (t + 1)) + scheduleWord input (t + 9) +
@@ -272,7 +282,7 @@ private theorem next_windowOf (input : Vector Spec.Word 16) (t : Nat) :
       show t + 16 - 15 = t + 1 by omega, show t + 16 - 7 = t + 9 by omega,
       show t + 16 - 2 = t + 14 by omega]
   -- The other words only move one place.
-  simp only [Window.next, windowOf, last, Nat.add_zero, Nat.add_assoc]
+  simp only [shift, windowOf, last, Nat.add_zero, Nat.add_assoc]
 
 /-! ## One block -/
 
@@ -291,7 +301,7 @@ theorem round_toState (s : State) (constant word : UInt32) :
 /-- The rounds from any round on finish the model's rounds. -/
 private theorem rounds_toState (input : Vector Spec.Word 16) (initial : Spec.State) :
     ∀ m n, m + n = 64 → ∀ s, interpret s = Spec.rounds input initial n →
-      interpret (rounds (K.toList.drop n) (windowOf fun i => scheduleWord input (n + i)) s)
+      interpret (roundsList (K.toList.drop n) (windowOf fun i => scheduleWord input (n + i)) s)
         = Spec.rounds input initial 64 := by
   intro m
   induction m with
@@ -303,10 +313,40 @@ private theorem rounds_toState (input : Vector Spec.Word 16) (initial : Spec.Sta
   | succ m ih =>
     intro n sum s hs
     -- Round `n` takes constant `K_n` and the first word of the window, `W_n`.
-    rw [List.drop_eq_getElem_cons (by simp; omega), rounds, next_windowOf]
+    rw [List.drop_eq_getElem_cons (by simp; omega), roundsList, next_windowOf]
     apply ih (n + 1) (by omega)
     rw [windowOf_w0, round_toState, hs, Spec.rounds, Nat.add_zero, scheduleWord,
       UInt32.toBitVec_ofBitVec, Vector.getElem_toList, getElem!_pos K n (by omega)]
+
+/-- The constants as a list are the constants in order. -/
+private theorem K_toList : K.toList =
+    [K[0], K[1], K[2], K[3], K[4], K[5], K[6], K[7], K[8], K[9], K[10], K[11], K[12], K[13],
+      K[14], K[15], K[16], K[17], K[18], K[19], K[20], K[21], K[22], K[23], K[24], K[25], K[26],
+      K[27], K[28], K[29], K[30], K[31], K[32], K[33], K[34], K[35], K[36], K[37], K[38], K[39],
+      K[40], K[41], K[42], K[43], K[44], K[45], K[46], K[47], K[48], K[49], K[50], K[51], K[52],
+      K[53], K[54], K[55], K[56], K[57], K[58], K[59], K[60], K[61], K[62], K[63]] := rfl
+
+/-- Sixteen rounds one word at a time end on the window sixteen words later. -/
+private theorem roundsList_sixteen (c0 c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15 : UInt32)
+    (rest : List UInt32) (w : Window) (s : State) :
+    roundsList (c0 :: c1 :: c2 :: c3 :: c4 :: c5 :: c6 :: c7 :: c8 :: c9 :: c10 :: c11 :: c12 ::
+        c13 :: c14 :: c15 :: rest) w s =
+      roundsList rest w.next
+        (round (round (round (round (round (round (round (round (round (round (round (round
+          (round (round (round (round s c0 w.w0) c1 w.w1) c2 w.w2) c3 w.w3) c4 w.w4) c5 w.w5)
+          c6 w.w6) c7 w.w7) c8 w.w8) c9 w.w9) c10 w.w10) c11 w.w11) c12 w.w12) c13 w.w13)
+          c14 w.w14) c15 w.w15) := rfl
+
+/-- Sixteen rounds on a window that moves sixteen words are the rounds one word at a time. -/
+private theorem compress_eq (s : State) (block : ByteArray) (start : Nat)
+    (whole : start + 64 ≤ block.size) :
+    compress s block start whole =
+      let r := roundsList K.toList (Window.ofBlock block start whole) s
+      { a := r.a + s.a, b := r.b + s.b, c := r.c + s.c, d := r.d + s.d,
+        e := r.e + s.e, f := r.f + s.f, g := r.g + s.g, h := r.h + s.h } := by
+  rw [K_toList, roundsList_sixteen, roundsList_sixteen, roundsList_sixteen, roundsList_sixteen,
+    roundsList]
+  rfl
 
 /-- The compression of a whole block is the one of FIPS 180-4 §6.2.2, steps 2 to 4. -/
 theorem compress_toState (s : State) (block : ByteArray) (start : Nat)
@@ -314,7 +354,8 @@ theorem compress_toState (s : State) (block : ByteArray) (start : Nat)
     interpret (compress s block start whole) =
       Spec.compression (Spec.inputWords block start) (interpret s) := by
   have all := rounds_toState (Spec.inputWords block start) (interpret s) 64 0 rfl s rfl
-  simp only [compress]
+  rw [compress_eq]
+  simp only
   rw [ofBlock_block block start whole]
   simp only [List.drop_zero] at all
   simp only [Spec.compression, ← all]
