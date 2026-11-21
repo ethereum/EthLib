@@ -3505,10 +3505,10 @@ private theorem fall_floor (h : Setting config checks g split fin pulled anc cou
     (v : ValidatorIndex) (X : ℕ)
     (bound : fin.validators.data[v.toNat]? = none ∨
       (pinTerms config pulled anc fin).floorC v.toNat ≤ X) :
-    (Internal.eR pulled v : ℤ) ≤ ((pinTerms config pulled anc fin).fall v.toNat : ℤ) + X := by
+    (pulledBalance pulled v : ℤ) ≤ ((pinTerms config pulled anc fin).fall v.toNat : ℤ) + X := by
   have fallEq := Internal.fall_eq config pulled anc fin v.toNat
   simp only [h.shallow, ↓reduceIte] at fallEq
-  have eRdef : Internal.eR pulled v = balanceAt pulled v.toNat := rfl
+  have eRdef : pulledBalance pulled v = balanceAt pulled v.toNat := rfl
   rcases bound with none | le
   · obtain ⟨low, base, shape⟩ : ∃ low base : ℕ, (pinTerms config pulled anc fin).floorC v.toNat =
         if max (balanceAt fin v.toNat) base ≤ low + preset.downwardBand then balanceAt fin v.toNat
@@ -3608,7 +3608,8 @@ private theorem V_active (h : Setting config checks g split fin pulled anc count
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     (replayedF : fromFin.balanceEvents high = .ok eventsF)
     (replayedC : tailC.balanceEvents highC = .ok eventsC) :
-    ∀ v ∈ V, v ∈ Internal.AC counted → (Internal.eR pulled v : ℤ) - Internal.eC counted v ≤
+    ∀ v ∈ V, v ∈ countedActiveVoters counted → (pulledBalance pulled v : ℤ) - countedBalance counted
+        v ≤
       ((pinTerms config pulled anc fin).fall v.toNat : ℤ) +
         ((eventsF.map (Internal.syncDebit v.toNat)).sum + Internal.syncF eventsC v.toNat) +
           Internal.bandR (eventsF ++ eventsC) v.toNat := by
@@ -3640,7 +3641,7 @@ private theorem V_active (h : Setting config checks g split fin pulled anc count
         have : effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) v.toNat =
           balanceAt counted v.toNat := rfl
         omega))
-  have eCdef : Internal.eC counted v = balanceAt counted v.toNat := rfl
+  have eCdef : countedBalance counted v = balanceAt counted v.toNat := rfl
   omega
 
 /-- A V key that left C's active set is charged by its exit, its late activation or its floor.
@@ -3666,13 +3667,13 @@ private theorem V_left (h : Setting config checks g split fin pulled anc counted
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     (replayedF : fromFin.balanceEvents high = .ok eventsF)
     (replayedC : tailC.balanceEvents highC = .ok eventsC) :
-    ∀ v ∈ Internal.VN counted V, (Internal.eR pulled v : ℤ) ≤
+    ∀ v ∈ countedInactiveVoters counted V, (pulledBalance pulled v : ℤ) ≤
       ((pinTerms config pulled anc fin).fall v.toNat +
         ((eventsF.map (Internal.syncDebit v.toNat)).sum + Internal.syncF eventsC v.toNat) +
         Internal.bandR (eventsF ++ eventsC) v.toNat + Internal.exitQ tailC v.toNat +
-        (if (pinTerms config pulled anc fin).exitingB v.toNat = true then Internal.eR pulled v else
-          0) +
-        (if (pinTerms config pulled anc fin).lateB v.toNat = true then Internal.eR pulled v
+        (if (pinTerms config pulled anc fin).exitingB v.toNat = true then pulledBalance pulled v
+          else 0) +
+        (if (pinTerms config pulled anc fin).lateB v.toNat = true then pulledBalance pulled v
           else 0) : ℕ) := by
   intro v hv
   obtain ⟨member, notAC⟩ := Finset.mem_filter.mp hv
@@ -3701,7 +3702,7 @@ private theorem V_left (h : Setting config checks g split fin pulled anc counted
     have exited : u.exitEpoch.toNat ≤ (getCurrentEpoch counted).toNat := by
       by_contra later
       apply notAC
-      simpa [Internal.AC, activeVoters] using mem_getActiveValidatorIndices_of_isActiveAt
+      simpa [countedActiveVoters, activeVoters] using mem_getActiveValidatorIndices_of_isActiveAt
         (isActiveAt_eq_true_iff.mpr ⟨u, foundU, by
           simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
             UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt]
@@ -3777,19 +3778,20 @@ theorem cV_le (h : Setting config checks g split fin pulled anc counted V) (high
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
-    Internal.cV1 pulled counted V + Internal.cV2 pulled counted V ≤
+    voterFallCost pulled counted V + inactiveVoterCost pulled counted V ≤
       ((∑ v ∈ V, (pinTerms config pulled anc fin).fall v.toNat) +
         (∑ v ∈ V, Internal.bandR (eventsF ++ eventsC) v.toNat) +
         (∑ v ∈ V, (Internal.syncD eventsF v.toNat + (Internal.syncF events v.toNat + Internal.syncF
           eventsC v.toNat))) +
         (∑ v ∈ V, Internal.credDepR events v.toNat) +
         (∑ v ∈ V, Internal.consAmt events v.toNat) + preset.upwardBand * Internal.dueAt fin high V +
-        (∑ v ∈ (Internal.VN counted V), Internal.exitQ tailC v.toNat) +
-        (∑ v ∈ (Internal.VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat =
-          true,
-          Internal.eR pulled v) +
-        (∑ v ∈ (Internal.VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true,
-          Internal.eR pulled v) : ℕ) := by
+        (∑ v ∈ (countedInactiveVoters counted V), Internal.exitQ tailC v.toNat) +
+        (∑ v ∈ (countedInactiveVoters counted V) with
+            (pinTerms config pulled anc fin).exitingB v.toNat = true,
+          pulledBalance pulled v) +
+        (∑ v ∈ (countedInactiveVoters counted V) with
+            (pinTerms config pulled anc fin).lateB v.toNat = true,
+          pulledBalance pulled v) : ℕ) := by
   have base := Internal.cV_le_of h tailC
     (V_active h fromFin tailC high highC endEpoch endEpochC replayedF replayedC)
     (V_left h fromFin tailC high highC endEpoch endEpochC replayedF replayedC)
