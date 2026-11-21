@@ -373,7 +373,7 @@ theorem created_ceiling (h : Setting config checks g split fin pulled anc counte
     obtain ⟨rest, head⟩ := Run.balancePath_head post
     rw [head] at member
     rw [splitEq, Run.balancePath_append, last, head]
-    rcases List.mem_cons.mp member with rfl | later <;> simp [*]
+    rcases List.mem_cons.mp member with rfl | - <;> simp [*]
   have backZ : (⟨fork, counted⟩ : ForkedBeaconState preset).fork ≤ z.fork := by
     have := fork_le_of_chainSteps pre.chainSteps
     exact this
@@ -575,7 +575,7 @@ private theorem created_active (h : Setting config checks g split fin pulled anc
   have activated := Internal.activated_of_activeVoters h.early member_active
   have absent : split.validators.data.size ≤ v.toNat := Nat.le_of_not_lt created
   have key := Internal.key_of_lowGain h lowGain
-  obtain ⟨z, pre, post, cut, positive, ahead, bound⟩ := Internal.created_ceiling h tailC highC
+  obtain ⟨z, pre, post, cut, -, ahead, bound⟩ := Internal.created_ceiling h tailC highC
       endEpochC
     replayedC activated absent (pinTerms config pulled anc fin).perIncrement rfl key
   -- the state `a` is a state of the run, so it is before `z` or after it
@@ -857,7 +857,7 @@ private theorem sum_createdSlashed_positions
     simp [Array.getElem?_eq_none hge]
   · intro mem
     obtain ⟨hmem, hout⟩ := Finset.mem_filter.mp mem
-    obtain ⟨hrange, hsl, hcs⟩ := Finset.mem_filter.mp hmem
+    obtain ⟨hrange, -, hcs⟩ := Finset.mem_filter.mp hmem
     have below := (Finset.mem_range.mp hrange).trans
       (BeaconState.validators_size_lt_of_lt_glamsterdam h.early counted)
     refine Finset.mem_image.mpr ⟨UInt64.ofNat i, ?_, UInt64.toNat_ofNat_of_lt' below⟩
@@ -2893,7 +2893,7 @@ private theorem free_slashable (h : Setting config checks g split fin pulled anc
   have oldFound := Array.getElem?_eq_getElem inside
   have oldUnslashed : split.validators.data[i].slashed = false := by
     simpa [oldFound] using unslashedS
-  obtain ⟨w, foundR, lifeSplit⟩ := rp.registryLifecycle.validators i _ oldFound
+  obtain ⟨w, foundR, -⟩ := rp.registryLifecycle.validators i _ oldFound
   have unslashedR : w.slashed = false := by
     by_contra slashed
     exact notSlashedR (Internal.slashedRB_of_newly_slashed h oldFound foundR oldUnslashed
@@ -3186,7 +3186,7 @@ private theorem whistle_free (h : Setting config checks g split fin pulled anc c
     rw [flaggedEq, ← Finset.sum_filter]
     refine Finset.sum_le_sum_of_subset fun i member => ?_
     obtain ⟨inFW, flag⟩ := Finset.mem_filter.mp member
-    obtain ⟨inside, below, unslashed, slashedC, notSlashed, notExited, active, notLate⟩ :=
+    obtain ⟨inside, below, unslashed, slashedC, notSlashed, -, active, notLate⟩ :=
       facts i inFW
     obtain ⟨w, found, unslashedR, activated, settled⟩ := free_slashable h inside below unslashed
       slashedC notSlashed active notLate
@@ -4255,7 +4255,7 @@ theorem deposit_scan_card_le (h : Setting config checks g split fin pulled anc c
         ((getCurrentEpoch counted).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
           (getCurrentEpoch split).toNat /
             max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat) := by omega
-  obtain ⟨B, S, D, cardB, cardS, cardD, hBS, hD, hSD⟩ := Internal.credited_pieces h.genesis
+  obtain ⟨B, S, D, -, -, cardD, -, hD, -⟩ := Internal.credited_pieces h.genesis
     h.parameters.lookahead (y := ⟨fork, counted⟩) h.early (Internal.Setting.delay h) highC
     ((getCurrentEpoch counted).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
       (getCurrentEpoch split).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)

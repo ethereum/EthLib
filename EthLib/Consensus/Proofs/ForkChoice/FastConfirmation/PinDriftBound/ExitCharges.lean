@@ -92,12 +92,7 @@ private theorem cV_split (h : Setting config checks g split fin pulled anc count
   have sub : V ⊆ costKeys pulled counted := fun v hv =>
     Finset.mem_union_right _ (h.voting v hv).1
   unfold voterFallCost inactiveVoterCost countedInactiveVoters
-  congr 1
-  · rw [← Finset.sum_filter]
-    refine Finset.sum_congr ?_ fun _ _ => rfl
-    ext v
-    simp only [Finset.mem_filter]
-    exact ⟨fun ⟨_, a, b⟩ => ⟨a, b⟩, fun ⟨a, b⟩ => ⟨sub a, a, b⟩⟩
+  congr 1 <;>
   · rw [← Finset.sum_filter]
     refine Finset.sum_congr ?_ fun _ _ => rfl
     ext v
@@ -404,7 +399,7 @@ theorem slashed_floor (h : Setting config checks g split fin pulled anc counted 
   have start : effectiveAt ⟨fork, zs⟩ i.toNat ≤ top := by
     obtain ⟨rest, atHead⟩ := Run.balancePath_head tail
     exact envelope _ (by rw [atHead]; exact List.mem_cons_self)
-  obtain ⟨last, trace, balance, debt, -, w, final, -, -, -, ceiling, startNone⟩ :=
+  obtain ⟨last, trace, balance, debt, -, w, -, -, -, -, ceiling, startNone⟩ :=
     DirectSafety.Apriori.Internal.FloorTrace.run_of_le_cap_general (toFin.append toZ) tail
       h.genesis h.caps (Internal.Setting.delay h) h.early high endEpoch i val initial (Or.inr
         h.fulu)
@@ -628,7 +623,7 @@ private theorem segment_potential_slash (h : Setting config checks g split fin p
   obtain ⟨toFin⟩ := h.toFin
   have early : (⟨fork, pS⟩ : ForkedBeaconState preset).fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps rest.chainSteps) h.early
-  obtain ⟨endEpoch, quotient, positive, same, guards⟩ :=
+  obtain ⟨endEpoch, quotient, -, same, guards⟩ :=
     segment_guards h near i pre seg rest retained
   have two : 2 ≤ quotient := by
     rw [same, Internal.parameters_of_fusaka h.fulu h.early]
@@ -1294,23 +1289,6 @@ private theorem prevStake_band_of_guard {g x z : ForkedBeaconState preset} {high
   simp only [stakeCeilingAt, stakeFloorAt, zero] at low previous mono anti ratio ⊢
   omega
 
-private theorem total_band_of_setting (h : Setting config checks g split fin pulled anc counted V)
-    {m : ForkedBeaconState preset} (toM : Run config checks ⟨fork, fin⟩ m)
-    (early : m.fork < .glamsterdam)
-    (inside : (getCurrentEpoch m.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
-    {total T : Gwei} (totalOk : getTotalActiveBalance m.state = .ok total)
-    (pulledOk : getTotalActiveBalance pulled = .ok T) :
-    2 * T.toNat ≤ 3 * total.toNat ∧ 2 * total.toNat ≤ 3 * T.toNat := by
-  obtain ⟨shared⟩ := h.toFin
-  obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨toPulled⟩ := h.toPulled
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  have toP := fromFin.append toPulled
-  exact ⟨Internal.total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots
-      electra h.guard toM early inside toP h.early (Nat.le_succ _) totalOk pulledOk,
-    Internal.total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots
-      electra h.guard toP h.early (Nat.le_succ _) toM early inside pulledOk totalOk⟩
-
 private theorem quarter_toNat (T : Gwei) :
     ((if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T.toNat then T / 4
       else preset.EFFECTIVE_BALANCE_INCREMENT / 5 : Gwei)).toNat =
@@ -1434,7 +1412,7 @@ theorem rise_arith {inc band capFor high finEB start eR eC Bc capHigh S U : Nat}
     (slack : S = 0 ∨ inc ≤ U + 1 ∨ (S < inc ∧ inc ≤ S + U)) :
     eC ≤ eR + (min capFor (min (high + band - (high + band) % inc)
       (max finEB (high - high % inc))) - eR) + S + U := by
-  rcases stay with same | ⟨atStart, viaCap, viaTop⟩ | ⟨boundary, update⟩
+  rcases stay with same | ⟨atStart, -, viaTop⟩ | ⟨boundary, update⟩
   · omega
   · have b := Internal.round_add_le (x := high) incPos slack
     omega
@@ -2183,7 +2161,7 @@ theorem joinedKeys_class {g : ForkedBeaconState preset}
   obtain ⟨rc⟩ := h.toCounted
   have chain := (rf.append rs).append rp
   -- Epochs, as natural numbers.
-  obtain ⟨finSplit, called, later, near, below, farNat, succNat, finCur⟩ := Internal.setting_epochs
+  obtain ⟨finSplit, -, later, near, below, farNat, succNat, -⟩ := Internal.setting_epochs
     h
   -- The records of the key at R and at C, and the activity they give.
   obtain ⟨u, foundU, activeU⟩ := Internal.active_of_activeVoters h.early memberAC
