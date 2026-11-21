@@ -1585,6 +1585,22 @@ Its §3.2 explains how it follows from the two lemmas.
 The steps are §3.2 of ePrint 2024/1362, for many blobs, and the framework of Hall-Andersen, Simkin and Wagner, ePrint 2023/1079.
 2025/1683 does not prove these steps again, and EthLib does not formalize them.
 
+`Consensus/Proofs/DataAvailability/SamplingRandomOracle.lean` bounds the custody sampling of one node instead.
+It replaces the SHA-256 call that gives a node ID its custody group by a random oracle with an empty cache.
+`evalWithAnswerFn_queryCustodyGroups` shows that answering those calls with SHA-256 gives the specified groups.
+The network serves a set of columns that is fixed before the oracle answers, and a group is served when all its columns are.
+`prEvent_queryCustodyGroups_served_le` bounds the probability that every group returned for a node is served by `C(a, k) / C(G, k)`.
+Here `G` counts the groups, `a` the served groups and `k` the groups that the node asks for, and `G` must divide `2^64`.
+An error of the search, such as running out of fuel, counts as a rejection.
+`prEvent_queryCustodyGroups_served_le_mainnet` takes the mainnet configuration and at most 63 served columns of 128, too few to rebuild the data.
+The bound is then `C(63, k) / C(128, k)`, and `choose_sixtyThree_div_lt` shows that it is below `2^-k` for `k ≥ 1`.
+For the 8 groups that a node samples by default, it is about 0.0027, one node in 369.
+The served columns cannot depend on the answers of the oracle.
+SHA-256 is public, so an adversary that knows a node ID can compute the groups of that node.
+It can then serve exactly their columns, and the bound says nothing about such an adversary.
+Nodes with overlapping ranges of IDs share oracle answers, so no theorem says that their acceptances are independent.
+The bound says nothing about SHA-256 itself (A4), nor about the KZG proofs of the columns, which other theorems cover.
+
 `getDataColumnSidecars_spec` (`Consensus/Proofs/DataAvailability/Column.lean`) shows that a build of the sidecars of a block that succeeds gives one sidecar per column, for any rows.
 Sidecar `i` has index `i`, and holds the cell and the proof at position `i` of every row, in row order.
 Every sidecar carries the given header, commitments, branch, slot and root.
@@ -7517,6 +7533,10 @@ The codeword searches of each scheme share the bullet of that scheme:
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of Keccak.
+- PeerDAS sampling bound: SHA-256 on the 32-byte encodings of node IDs is a random oracle, and the initial cache is empty.
+  Each new ID receives 32 independent uniform bytes, and a repeated ID receives the same answer.
+  The served columns are fixed before the oracle answers, so the bound says nothing about an adversary that computes the groups of a known node ID.
+  The bound says nothing about an attack that uses the structure of SHA-256.
 - VRF unpredictability: Keccak-256 is a random oracle on byte strings, as for leanXMSS.
   The bound says nothing about an attack that uses the structure of Keccak.
   It counts classical queries only, so it says nothing about a quantum adversary.
