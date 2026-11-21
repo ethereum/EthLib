@@ -1968,7 +1968,8 @@ The route is the code of the address itself, or a delegate with the code that th
 `Logic.Routes.recordAccountRead` proves that a recorded read leaves the route unchanged.
 `Logic.CallSends` gives the frame and the message of a call that sends no value of its own, along a route.
 The message runs the code of the route; when delegated, its code address is the delegate and it runs no precompile.
-`Logic.callStep_child_of_routes` proves that the step of such a call sends that message, for each kind of call.
+`Logic.callStep_child_of_routes` proves that the step of such a call builds its calling frame and its message as every call does, for each kind of call.
+`Logic.callKindRoute` reads `Logic.CallSends` from it.
 It holds at every fork from Berlin, with the one-counter meter.
 The call pays the access to the address, the access to the delegate, the growth of memory, and the gas it passes on.
 `Logic.callKindRoute` proves the rule for such a call as a `HoareOn` triple.

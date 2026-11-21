@@ -803,7 +803,6 @@ theorem genericCall_keeps (rules : MeterRules Q)
     (h : genericCall evm message newAccount outputStart outputSize = .ok result) :
     result.Keeps (fun a b => Q a.gas b.gas) C evm := by
   unfold genericCall at h
-  dsimp only at h
   split at h
   · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
     exact (rules.trans (rules.refill evm.gas newAccount) (rules.skipCall_keeps hs :) :)

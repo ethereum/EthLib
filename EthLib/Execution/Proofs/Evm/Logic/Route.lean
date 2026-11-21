@@ -341,13 +341,13 @@ def CallSends (kind : CallKind) (message : Message fork) (memory : ByteArray) (g
 
 CALL and CALLCODE pop a value, here 0, and DELEGATECALL and STATICCALL pop none.
 
-The caller has paid the access to the address and the route.
+The frame pops the operands, accesses the address, records its read, and follows the route.
 
-It has paid the growth of memory, and the gas it passes on.
+It pays the access, the route, the growth of memory, and the gas it passes on.
 
-Its memory has grown for both ranges, and it keeps its output.
+The calling frame and the message are those that every call builds from the frame after the payment.
 
-The caller and the message are those of a call along the route. -/
+The message gets the gas it asks for, at most all but one 64th of the gas left, and no reservoir. -/
 theorem callStep_child_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
     {evm : Evm fork Nat} {g a i isz o osz : U256} {rest : List U256} {calleeCode : ByteArray}
     {route : Route}
@@ -359,22 +359,27 @@ theorem callStep_child_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
     (hgas : callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) +
       routeCost fork (evm.substate.accessedAddresses.insert (toAddressMasked a)) route +
       (extendMemory evm.memory.size [(i, isz), (o, osz)]).cost ≤ evm.gas) :
-    ∃ caller msg, callStep kind evm = .ok (.child caller msg (resumeCall fork caller 0 o osz)) ∧
-      caller.code = evm.code ∧ caller.validJumpDestinations = evm.validJumpDestinations ∧
-      caller.message = evm.message ∧ caller.pc = evm.pc ∧ caller.stack.val = rest ∧
-      caller.memory = memoryExtend evm.memory
-        (extendMemory evm.memory.size [(i, isz), (o, osz)]).expandBy ∧
-      caller.gas = evm.gas - ((messageCallGas fork 0 g.toNat evm.gas
-        (extendMemory evm.memory.size [(i, isz), (o, osz)]).cost
-        (callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) +
-          routeCost fork (evm.substate.accessedAddresses.insert (toAddressMasked a)) route)).cost +
-        (extendMemory evm.memory.size [(i, isz), (o, osz)]).cost) ∧
-      caller.running = evm.running ∧ caller.error = evm.error ∧ caller.output = evm.output ∧
-      CallSends kind evm.message evm.memory evm.gas evm.state evm.substate g a i isz o osz
-        calleeCode route caller msg := by
+    ∃ stack : Stack, stack.val = rest ∧
+      let growth := extendMemory evm.memory.size [(i, isz), (o, osz)]
+      let accessed := evm.substate.accessedAddresses.insert (toAddressMasked a)
+      let dc := routeCost fork accessed route
+      let callGas := messageCallGas fork 0 g.toNat evm.gas growth.cost
+        (callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) + dc)
+      let caller := callerFrame
+        { evm with
+          stack
+          gas := evm.gas - (callGas.cost + growth.cost)
+          state := routeState (evm.state.recordAccountRead (toAddressMasked a)) route
+          substate := routeSub { evm.substate with accessedAddresses := accessed } route }
+        growth.expandBy
+      callStep kind evm = .ok (.child caller
+        (callMessage kind ⟨g, toAddressMasked a, 0, i, isz, o, osz⟩
+          ⟨routeAddr (toAddressMasked a) route, routeCode calleeCode route, route.isSome, dc⟩
+          callGas.subCall 0 caller)
+        (resumeCall fork caller 0 o osz)) := by
   obtain ⟨stack, hstack, h⟩ := callStep_of_routes hfork hst hcode hroute rfl rfl rfl
-  simp only at h
-  unfold CallSends
+  refine ⟨stack, hstack, ?_⟩
+  simp only at h ⊢
   generalize callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) =
     cb at h hgas ⊢
   generalize routeCost fork (evm.substate.accessedAddresses.insert (toAddressMasked a)) route =
@@ -390,10 +395,9 @@ theorem callStep_child_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
   have c2 : ¬ (fork ≥ .glamsterdam ∧ evm.gas < cb + growth.cost + dc) := by omega
   have c3 : ¬ evm.gas <
       (messageCallGas fork 0 g.toNat evm.gas growth.cost (cb + dc)).cost + growth.cost := by omega
-  simp only [h, c1, c2, c3, ↓reduceIte, finishCall, genericCall, keepReads, recordAccountRead,
+  simp only [h, c1, c2, c3, ↓reduceIte, finishCall, genericCall, keepReads, message_callerFrame,
     ne_eq, not_true_eq_false, and_false, Nat.not_lt.mpr hdepth]
-  refine ⟨_, _, rfl, ?_⟩
-  and_intros <;> first | rfl | exact hstack
+  rfl
 
 /-! ## The rule of a call along a route -/
 
@@ -493,23 +497,21 @@ theorem callKindRoute (hfork : .berlin ≤ fork) {kind : CallKind} {byte : UInt8
   apply HoareOn.of_child
   rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun', herr, hout, hs, hss, -⟩
   subst hm hg hs hss hmem
-  obtain ⟨caller, msg, hstep, c1, c2, c3, c4, c5, c6, c7, c8, c9, co, sends⟩ :=
-    callStep_child_of_routes hfork hst hcode hroute hdepth hgas
-  refine ⟨hrun', caller, msg, resumeCall fork caller 0 outputStart outputSize, ?_, sends, ?_⟩
-  · rw [step_of_messageInstruction (by rw [hc, hpc]; exact hlt)
-      (by simp only [hc, hpc, hbyte]; exact decoded) hnone hrun]
-    exact hstep
+  obtain ⟨stack, hstack, hstep⟩ := callStep_child_of_routes hfork hst hcode hroute hdepth hgas
+  rw [step_of_messageInstruction (by rw [hc, hpc]; exact hlt)
+    (by simp only [hc, hpc, hbyte]; exact decoded) hnone hrun, hstep]
+  refine ⟨hrun', _, _, _, rfl, by unfold CallSends; and_intros <;> rfl, ?_⟩
   · intro child hchild hcallee
-    have hlen : caller.stack.val.length < STACK_LIMIT := by
-      have := evm.stack.property
-      rw [hst] at this
-      rw [c5]
-      cases kind <;> simp [CallKind.sendsValue] at this <;> omega
-    obtain ⟨after, hres, a1, a2, a3, a4, a5, a6, a7, a8, a9, ao, a10, a11, a12⟩ :=
-      resumeCall_eq (child := child) (o := outputStart) (osz := outputSize) hlen
-    refine .inl ⟨after, hres, caller, msg, child, sends, hcallee, hchild, ?_⟩
-    refine ⟨by rw [a1, c1, hc], by rw [a2, c2, hj], by rw [a3, c3], by rw [a4, c4, hpc],
-      by rw [a5, c5], by rw [a6, c6], by rw [a7, c7], by rw [a8, c8, hrun'], by rw [a9, c9, herr],
-      by rw [ao, co, hout], a10, a11, a12⟩
+    refine .inl ((resumeCall_eq (child := child) (o := outputStart) (osz := outputSize) ?_).elim
+      fun after ⟨hres, a1, a2, a3, a4, a5, a6, a7, a8, a9, ao, a10, a11, a12⟩ =>
+        ⟨after, hres, _, _, child, by unfold CallSends; and_intros <;> rfl, hcallee, hchild,
+          a1.trans hc, a2.trans hj, a3, a4.trans (by rw [pc_callerFrame, hpc]),
+          a5.trans (by rw [stack_callerFrame, hstack]), a6, a7.trans (by rfl), a8.trans hrun',
+          a9.trans herr, ao.trans hout, a10, a11, a12⟩)
+    show stack.val.length < STACK_LIMIT
+    have := evm.stack.property
+    rw [hst] at this
+    rw [hstack]
+    cases kind <;> simp [CallKind.sendsValue] at this <;> omega
 
 end EthLib.Execution.Evm.Logic

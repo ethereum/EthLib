@@ -52,7 +52,6 @@ private theorem callStep_child_depth {kind : CallKind} {evm caller : Evm fork Me
       split at h
       · obtain ⟨_, -, hc⟩ := Base.map_ok_iff.mp h; cases hc
       · unfold Evm.genericCall at h
-        dsimp only at h
         split at h
         · obtain ⟨_, -, hc⟩ := Base.map_ok_iff.mp h; cases hc
         · cases h; rfl

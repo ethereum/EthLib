@@ -251,14 +251,12 @@ theorem genericCall (rules : OrdinaryStepRules fork R) {evm : Evm fork Meter}
     (h : genericCall evm message newAccount outputStart outputSize = .ok result) :
     result.Keeps R (fun caller _ child => R caller child) evm := by
   unfold Evm.genericCall at h
-  dsimp only at h
   split at h
   · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
-    exact (rules.static (((StaticStep.of_sameContext (sameContext_returnData evm .empty)).trans
-      (.of_sameContext (sameContext_refillStateGas _ newAccount))).trans
+    exact (rules.static ((StaticStep.of_sameContext (sameContext_refillStateGas _ newAccount)).trans
       (staticStep_skipCall hs)) :)
   · cases h
-    have pre : R evm { evm with returnData := .empty } := rules.sameContext ⟨rfl, rfl, rfl, rfl⟩
+    have pre : R evm evm := rules.sameContext ⟨rfl, rfl, rfl, rfl⟩
     exact ⟨pre, fun _ _ hres p => rules.trans pre (rules.resumeCall hres p)⟩
 
 /-- The successful end of a call instruction keeps the relation. -/
@@ -271,9 +269,8 @@ theorem finishCall (rules : OrdinaryStepRules fork R) {kind : CallKind} {call : 
   split at h
   · cases h
   dsimp only at h
-  have pre : StaticStep evm (recordAccountRead { evm with
-      memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-      evm.message.currentTarget) := ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  have pre : StaticStep evm (callerFrame evm expandBy) :=
+    ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl⟩
   split at h
   · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
     exact (rules.static ((pre.trans (.of_sameContext (sameContext_refillStateGas _ _))).trans
@@ -597,15 +594,13 @@ private theorem sends_finishCall {kind : CallKind} {call : CallOperands}
   split at h
   · cases h
   dsimp only at h
-  have pre : StaticStep evm (recordAccountRead { evm with
-      memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-      evm.message.currentTarget) := ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  have pre : StaticStep evm (callerFrame evm expandBy) :=
+    ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl⟩
   split at h
   · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
     trivial
   · refine Sends.lift pre ?_
     unfold Evm.genericCall at h
-    dsimp only at h
     split at h
     · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
       trivial
@@ -615,17 +610,17 @@ private theorem sends_finishCall {kind : CallKind} {call : CallOperands}
         simp at c
       rotate_left
       · by_cases hk : kind = .call ∨ kind = .staticcall
-        · simp only [hk, ↓reduceIte]
+        · simp only [currentTarget_callMessage, hk, ↓reduceIte]
           exact pre.tracker.accountReads _ hread
-        · simp only [hk, ↓reduceIte]
+        · simp only [currentTarget_callMessage, hk, ↓reduceIte]
           exact Std.ExtTreeSet.mem_insert_self
       intro _
       by_cases hk : kind = .call ∨ kind = .staticcall
       · refine .inr fun nonempty => ?_
-        simp only [hk, ↓reduceIte] at nonempty ⊢
+        simp only [code_callMessage, currentTarget_callMessage, hk, ↓reduceIte] at nonempty ⊢
         rw [getAccount_of_staticStep pre]
         exact hcallee nonempty
-      · exact .inl (by simp [hk, pre.message])
+      · exact .inl (by simp [hk])
 
 /-- A successful step of a call instruction says what it sends. -/
 private theorem sends_callStep {kind : CallKind} {evm : Evm fork Meter}
@@ -798,7 +793,6 @@ theorem callStep_target_ne {kind : CallKind} {evm caller : Evm fork Meter}
       split at h
       · obtain ⟨_, -, hc⟩ := Base.map_ok_iff.mp h; cases hc
       · unfold Evm.genericCall at h
-        dsimp only at h
         split at h
         · obtain ⟨_, -, hc⟩ := Base.map_ok_iff.mp h; cases hc
         · cases h; simp

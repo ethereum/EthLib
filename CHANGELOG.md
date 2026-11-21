@@ -787,6 +787,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the step of a call builds its calling frame with the new `Evm.callerFrame` and its message with the new `Evm.callMessage`.
+  `genericCall` no longer empties the return data, since `callerFrame` does; the step computes what it computed before.
+  `callStep_child_of_routes`, `callStep_child`, `callStep_call`, `callStep_staticcall` and `callStep_value` state one equation on these two values instead of 23 conjuncts.
+  A caller reads one field with a lemma such as `gas_callMessage` or `memory_callerFrame`; each closes by `rfl`.
+
 - In Lean, `vectorSlices_eq` and `listSlices_eq` are removed ([#3747](https://github.com/ethereum/EthLib/pull/3747)), because they restated the whole body of the SSZ slicers.
   A caller unfolds `vectorSlices` or `listSlices`; on the offset-table path it also rewrites with the new `zipWith_extract_eq`, which turns the final `zipWith` into a map over the zipped offsets and spans.
 

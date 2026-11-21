@@ -292,7 +292,7 @@ private theorem finishCall_rel {g1 g2 : Evm fork Meter}
   by_cases static : kind = .call ∧ g1.message.isStatic = true ∧ call.value ≠ 0
   · simp only [ite_eq_left_of_eq_true _ _ (eq_true static)]
     rfl
-  simp only [ite_eq_right_of_eq_false _ _ (eq_false static), recordAccountRead,
+  simp only [ite_eq_right_of_eq_false _ _ (eq_false static), callerFrame, recordAccountRead,
     State.TransactionState.getAccount_recordAccountRead,
     hrel.state.getAccount_eq (.inr hcurrent)]
   by_cases hb : (g1.state.getAccount g1.message.currentTarget).balance < call.value
