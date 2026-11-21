@@ -37,7 +37,8 @@ namespace EthLib.Engine
 
 open EthLib.Base
 open EthLib.Cryptography.Kzg (TrustedSetup)
-open EthLib.Execution.Transactions (versionedHash)
+open EthLib.Execution.Blocks (Block)
+open EthLib.Execution.Transactions (Transaction versionedHash)
 
 namespace Node
 
@@ -67,12 +68,15 @@ theorem consistent_of_start {config : ChainConfig} {transition : TransitionConfi
   cases hh : anchor.header.hash with
   | error e => simp [hh, Except.toOption] at h
   | ok hash =>
-    simp only [hh, Except.toOption] at h
+    cases hc : commitsToEmptyBody anchor
+    · simp [hh, hc, Except.toOption] at h
+    simp only [hh, hc, Except.toOption] at h
     -- The node knows the anchor alone, under its hash.
     have hOne : ∀ pow, (.paris ≤ anchor.fork ∨
         ∃ total, pow = some (total, total - anchor.header.difficulty) ∧
           anchor.header.difficulty ≤ total) →
-        (⟨config, transition, [(hash, ⟨anchor, pow, .valid post⟩)],
+        (⟨config, transition, [(hash, ⟨⟨_, ⟨anchor.header, [], anchor.ommers, fun _ => []⟩⟩, pow,
+          .valid post⟩)],
           ⟨hash, ZERO_HASH, ZERO_HASH⟩, none, []⟩ : Node).Consistent := by
       intro pow hp other b hb
       by_cases hne : other = hash
@@ -116,9 +120,10 @@ private theorem Consistent.record {hash : Hash32} {b : KnownBlock} (hc : node.Co
 
 /-- Recording an execution of a block from Paris on, under its own hash, keeps consistency. -/
 private theorem Consistent.recordExecution {hash : Hash32}
-    {block : Execution.Blocks.RecentBlock} {status : PayloadStatus}
+    {block : (fork : Fork) × Block fork Transaction}
+    {status : PayloadStatus}
     {next : Option (Execution.Blocks.RecentBlock × Execution.State.State)}
-    (hc : node.Consistent) (hHash : block.header.hash = .ok hash) (hFork : .paris ≤ block.fork) :
+    (hc : node.Consistent) (hHash : block.2.header.hash = .ok hash) (hFork : .paris ≤ block.1) :
     (node.recordExecution hash block status next).Consistent := by
   unfold Node.recordExecution
   split
@@ -128,9 +133,10 @@ private theorem Consistent.recordExecution {hash : Hash32}
     · exact hc
 
 /-- A run of a block from Paris on, under its own hash, keeps a node consistent. -/
-private theorem Consistent.executeOn {hash : Hash32} {block : Execution.Blocks.RecentBlock}
-    {post : Execution.State.State} (hc : node.Consistent) (hHash : block.header.hash = .ok hash)
-    (hFork : .paris ≤ block.fork) :
+private theorem Consistent.executeOn {hash : Hash32}
+    {block : (fork : Fork) × Block fork Transaction}
+    {post : Execution.State.State} (hc : node.Consistent) (hHash : block.2.header.hash = .ok hash)
+    (hFork : .paris ≤ block.1) :
     (node.executeOn hash block post version params).2.Consistent := by
   simp only [Node.executeOn]
   split
@@ -138,9 +144,10 @@ private theorem Consistent.executeOn {hash : Hash32} {block : Execution.Blocks.R
   · exact Consistent.recordExecution hc hHash hFork
 
 /-- The answer by the parent of a block from Paris on, under its own hash, keeps consistency. -/
-private theorem Consistent.onParent {hash : Hash32} {block : Execution.Blocks.RecentBlock}
+private theorem Consistent.onParent {hash : Hash32}
+    {block : (fork : Fork) × Block fork Transaction}
     (hc : node.Consistent)
-    (hHash : block.header.hash = .ok hash) (hFork : .paris ≤ block.fork) :
+    (hHash : block.2.header.hash = .ok hash) (hFork : .paris ≤ block.1) :
     (node.onParent hash block version params).2.Consistent := by
   simp only [Node.onParent]
   split
@@ -162,11 +169,11 @@ private theorem Consistent.validateChain (hc : node.Consistent) (fuel : Nat) (ha
     · rename_i block pow v p hb
       obtain ⟨hHash, hFork⟩ := hc hash _ hb
       -- An accepted block of a consistent node is from Paris on.
-      have hFork : .paris ≤ block.fork := by
+      have hFork : .paris ≤ block.1 := by
         rcases hFork with h | ⟨h, -⟩
         · exact h
         · simp [Validity.isAccepted] at h
-      have hc' := ih hc block.header.parentHash
+      have hc' := ih hc block.2.header.parentHash
       split
       · exact Consistent.executeOn hc' hHash hFork
       · exact Consistent.record hc' hHash hFork

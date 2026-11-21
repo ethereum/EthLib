@@ -58,7 +58,8 @@ namespace EthLib.Engine
 
 open EthLib.Base
 open EthLib.Cryptography.Kzg (TrustedSetup)
-open EthLib.Execution.Blocks (RecentBlock)
+open EthLib.Execution.Blocks (Block RecentBlock)
+open EthLib.Execution.Transactions (Transaction)
 
 namespace Node
 
@@ -166,15 +167,16 @@ theorem status_ne_accepted_of_newPayloadOnChain {transition : TransitionConfigur
       all_goals simp
 
 /-- A run on a known valid parent answers what the method answers on the chain of that parent. -/
-theorem executeOn_fst (node : Node) (hash : Hash32) (block : RecentBlock)
+theorem executeOn_fst (node : Node) (hash : Hash32)
+    (block : (fork : Fork) × Block fork Transaction)
     (post : Execution.State.State) (version : Nat) (params : Lean.Json) :
     (node.executeOn hash block post version params).1 =
       (fun r => (r.1, r.2.1)) <$> newPayloadOnChain node.transition
-        (node.totalDifficulty block.header.parentHash)
-        (node.chainAt block.header.parentHash post) version params := by
+        (node.totalDifficulty block.2.header.parentHash)
+        (node.chainAt block.2.header.parentHash post) version params := by
   simp only [executeOn]
-  cases newPayloadOnChain node.transition (node.totalDifficulty block.header.parentHash)
-    (node.chainAt block.header.parentHash post) version params <;> rfl
+  cases newPayloadOnChain node.transition (node.totalDifficulty block.2.header.parentHash)
+    (node.chainAt block.2.header.parentHash post) version params <;> rfl
 
 /-- A payload that the node does not know as valid or invalid gets the answer that its parent gives.
 
@@ -184,7 +186,7 @@ theorem newPayloadStep_of_fresh {checked : CheckedBlock version} {hash : Hash32}
     (hHash : checked.block.header.hash = .ok hash)
     (hNew : ∀ b, node.blocks.lookup hash = some b → b.validity.isAccepted = true) :
     node.newPayloadStep version params =
-      node.onParent hash ⟨checked.fork, checked.block.header, []⟩ version params := by
+      node.onParent hash ⟨checked.fork, checked.block⟩ version params := by
   cases hk : node.blocks.lookup hash with
   | none => simp [newPayloadStep, hCheck, hHash, hk]
   | some b =>
@@ -222,7 +224,7 @@ theorem newPayloadStep_of_invalid_parent {checked : CheckedBlock version} {hash 
     (hInvalid : parent.validity = .invalid) :
     node.newPayloadStep version params =
       (.ok (⟨.invalid, latestValidHash node.tree checked.block.header.parentHash⟩, none),
-        node.record hash ⟨⟨checked.fork, checked.block.header, []⟩, none, .invalid⟩) := by
+        node.record hash ⟨⟨checked.fork, checked.block⟩, none, .invalid⟩) := by
   rw [newPayloadStep_of_fresh hCheck hHash hNew]
   obtain ⟨blk, pow, v⟩ := parent
   simp only at hInvalid
@@ -273,7 +275,7 @@ theorem newPayloadStep_of_not_head {checked : CheckedBlock version} {hash : Hash
       b.validity.isAccepted = true) :
     node.newPayloadStep version params = (.ok (⟨.accepted, none⟩, none),
       node.record hash
-        ⟨⟨checked.fork, checked.block.header, []⟩, none, .accepted version params⟩) := by
+        ⟨⟨checked.fork, checked.block⟩, none, .accepted version params⟩) := by
   rw [newPayloadStep_of_fresh hCheck hHash hNew]
   obtain ⟨blk, pow, v⟩ := b
   rcases hOff with ⟨post, hv, hne⟩ | hv
@@ -428,7 +430,7 @@ theorem validState_of_newPayloadStep {checked : CheckedBlock version} {hash : Ha
             rename_i post' _
             refine ⟨by simp [hHash, Except.toOption], post', ?_⟩
             exact validState_eq_some_iff.mpr
-              ⟨⟨⟨checked.fork, checked.block.header, []⟩, none, .valid post'⟩,
+              ⟨⟨⟨checked.fork, checked.block⟩, none, .valid post'⟩,
                 by simp [recordExecution, record], rfl⟩
         · simp only [onParent, hb, hHead, ↓reduceIte, Prod.mk.injEq, Except.ok.injEq] at h
           obtain ⟨⟨rfl, -⟩, -⟩ := h
@@ -449,7 +451,8 @@ theorem validState_of_newPayloadStep {checked : CheckedBlock version} {hash : Ha
 /-! ## Validation of the chain of a head -/
 
 /-- A run keeps the forkchoice state and the known finalized block of the node. -/
-theorem executeOn_forkchoice (node : Node) (hash : Hash32) (block : RecentBlock)
+theorem executeOn_forkchoice (node : Node) (hash : Hash32)
+    (block : (fork : Fork) × Block fork Transaction)
     (post : Execution.State.State) (version : Nat) (params : Lean.Json) :
     (node.executeOn hash block post version params).2.forkchoice = node.forkchoice ∧
       (node.executeOn hash block post version params).2.finalized = node.finalized := by
@@ -462,7 +465,8 @@ theorem executeOn_forkchoice (node : Node) (hash : Hash32) (block : RecentBlock)
     · split <;> exact ⟨rfl, rfl⟩
 
 /-- A run keeps the configuration of the transition. -/
-theorem executeOn_transition (node : Node) (hash : Hash32) (block : RecentBlock)
+theorem executeOn_transition (node : Node) (hash : Hash32)
+    (block : (fork : Fork) × Block fork Transaction)
     (post : Execution.State.State) (version : Nat) (params : Lean.Json) :
     (node.executeOn hash block post version params).2.transition = node.transition := by
   simp only [executeOn]
@@ -503,7 +507,8 @@ theorem record_lookup_of_ne {hash other : Hash32} (node : Node) (b : KnownBlock)
   simp [record, List.lookup, hb]
 
 /-- A run keeps every other known block as it was. -/
-theorem executeOn_lookup_of_ne {hash other : Hash32} (node : Node) (block : RecentBlock)
+theorem executeOn_lookup_of_ne {hash other : Hash32} (node : Node)
+    (block : (fork : Fork) × Block fork Transaction)
     (post : Execution.State.State) (version : Nat) (params : Lean.Json) (hne : other ≠ hash) :
     (node.executeOn hash block post version params).2.blocks.lookup other =
       node.blocks.lookup other := by
@@ -527,10 +532,10 @@ theorem validateChain_forkchoice (node : Node) (fuel : Nat) (hash : Hash32) :
     simp only [validateChain]
     split
     · rename_i block pow version params hb
-      obtain ⟨h1, h2⟩ := ih node block.header.parentHash
+      obtain ⟨h1, h2⟩ := ih node block.2.header.parentHash
       split
       · rename_i post hp
-        obtain ⟨e1, e2⟩ := executeOn_forkchoice (node.validateChain fuel block.header.parentHash)
+        obtain ⟨e1, e2⟩ := executeOn_forkchoice (node.validateChain fuel block.2.header.parentHash)
           hash block post version params
         exact ⟨e1.trans h1, e2.trans h2⟩
       · exact ⟨h1, h2⟩
@@ -547,7 +552,7 @@ theorem validateChain_lookup {node : Node} {fuel : Nat} {hash other : Hash32} {b
     simp only [validateChain]
     split
     · rename_i block pow version params hk
-      have hInner := ih (hash := block.header.parentHash) h
+      have hInner := ih (hash := block.2.header.parentHash) h
       -- Validation records only the accepted block, which is not this one.
       have hne : other ≠ hash := by
         rintro rfl
@@ -824,7 +829,8 @@ theorem newPayloadStep_of_known_invalid {checked : CheckedBlock version} {hash :
   simp [newPayloadStep, hCheck, hHash, hb]
 
 /-- The answer by the parent records only the payload, so it keeps every other known block. -/
-theorem onParent_lookup {hash other : Hash32} {block : RecentBlock} {b : KnownBlock}
+theorem onParent_lookup {hash other : Hash32} {block : (fork : Fork) × Block fork Transaction}
+    {b : KnownBlock}
     (hne : other ≠ hash) (h : node.blocks.lookup other = some b) :
     (node.onParent hash block version params).2.blocks.lookup other = some b := by
   simp only [onParent]
@@ -916,7 +922,8 @@ theorem forkchoiceUpdatedBuildStep_keeps (node : Node) (builder : Builder) (vers
   · exact ⟨rfl, rfl, rfl⟩
 
 /-- A run keeps the builds. -/
-theorem executeOn_builds (node : Node) (hash : Hash32) (block : RecentBlock)
+theorem executeOn_builds (node : Node) (hash : Hash32)
+    (block : (fork : Fork) × Block fork Transaction)
     (post : Execution.State.State) (version : Nat) (params : Lean.Json) :
     (node.executeOn hash block post version params).2.builds = node.builds := by
   simp only [executeOn]
@@ -1081,7 +1088,8 @@ theorem Reachable.invalid {start node : Node} {hash : Hash32} {b : KnownBlock}
   hr.lookup h (by simp [hInvalid, Validity.isAccepted])
 
 /-- A run keeps the configuration of the chain. -/
-theorem executeOn_config (node : Node) (hash : Hash32) (block : RecentBlock)
+theorem executeOn_config (node : Node) (hash : Hash32)
+    (block : (fork : Fork) × Block fork Transaction)
     (post : Execution.State.State) (version : Nat) (params : Lean.Json) :
     (node.executeOn hash block post version params).2.config = node.config := by
   simp only [executeOn]
@@ -1179,7 +1187,7 @@ theorem newPayloadStep_invalid_known {checked : CheckedBlock version} {hash : Ha
             rw [hs] at this
             cases this
           | none =>
-            exact ⟨⟨⟨checked.fork, checked.block.header, []⟩, none, .invalid⟩,
+            exact ⟨⟨⟨checked.fork, checked.block⟩, none, .invalid⟩,
               by simp [recordExecution, hs, record], rfl⟩
       · simp only [Prod.mk.injEq, Except.ok.injEq] at h
         obtain ⟨⟨rfl, -⟩, -⟩ := h
@@ -1189,7 +1197,7 @@ theorem newPayloadStep_invalid_known {checked : CheckedBlock version} {hash : Ha
       cases hs
     · simp only [Prod.mk.injEq, Except.ok.injEq] at h
       obtain ⟨⟨rfl, -⟩, rfl⟩ := h
-      exact ⟨⟨⟨checked.fork, checked.block.header, []⟩, none, .invalid⟩, by simp [record], rfl⟩
+      exact ⟨⟨⟨checked.fork, checked.block⟩, none, .invalid⟩, by simp [record], rfl⟩
     · simp only [Prod.mk.injEq, Except.ok.injEq] at h
       obtain ⟨⟨rfl, -⟩, -⟩ := h
       cases hs
