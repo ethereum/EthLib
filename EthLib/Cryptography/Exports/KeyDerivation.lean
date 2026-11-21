@@ -19,7 +19,7 @@ public section
 
 namespace EthLib.Cryptography.Bls.Exports
 
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport ExportError toResult)
 
 /-- The error of a derivation from a path: the path text, or a step of the derivation. -/
 inductive KeyDerivationError where
@@ -36,12 +36,13 @@ def KeyDerivationError.message : KeyDerivationError → String
   | .bls error => error.message
   | .path error => error.message
 
-/-- Pass the code and the message of a derivation error to Python. -/
-def runKeyDerivation {α : Type} (act : Except KeyDerivationError α) : Result α :=
-  act.mapError fun error => (error.code, error.message)
+/-- An error reaches Python with its code and its own message. -/
+instance : ExportError KeyDerivationError where
+  code := KeyDerivationError.code
+  message := KeyDerivationError.message
 
 /-- Derive and encode the master key. -/
-def deriveMasterSkBytes (seed : ByteArray) : Result ByteArray := runBls do
+def deriveMasterSkBytes (seed : ByteArray) : Result ByteArray := toResult none do
   let key ← KeyDerivation.deriveMasterSk seed
   return Fr.toBytesBE key.val
 
@@ -51,7 +52,7 @@ def deriveMasterSkExport (args : PyValue) : Result PyValue :=
   pyExport deriveMasterSkBytes args
 
 /-- Read the parent key, derive its child and encode the result. -/
-def deriveChildSkBytes (args : ByteArray × UInt32) : Result ByteArray := runBls do
+def deriveChildSkBytes (args : ByteArray × UInt32) : Result ByteArray := toResult none do
   let (parent, index) := args
   let parent ← Signatures.SecretKey.fromBytes parent
   let key ← KeyDerivation.deriveChildSk parent index
@@ -63,7 +64,7 @@ def deriveChildSkExport (args : PyValue) : Result PyValue :=
   pyExport deriveChildSkBytes args
 
 /-- Parse an ERC-2334 path, derive the key it names and encode the result. -/
-def derivePathBytes (args : ByteArray × String) : Result ByteArray := runKeyDerivation do
+def derivePathBytes (args : ByteArray × String) : Result ByteArray := toResult none do
   let (seed, path) := args
   let path ← (KeyPath.parsePath path).mapError KeyDerivationError.path
   let key ← (KeyDerivation.derivePath seed path.indices).mapError KeyDerivationError.bls

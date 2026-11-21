@@ -22,16 +22,17 @@ public section
 
 namespace EthLib.Cryptography.Bls.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result ExportError toResult)
 open EthLib.Base (packBytes exactBytes?)
 
 open EthLib.Cryptography.Bls.Constants
 open EthLib.Cryptography.Bls
 open EthLib.Cryptography.Bls.Signatures
 
-/-- Run a fallible BLS computation, with its error as a code and a message. -/
-def runBls {α : Type} (act : Except BlsError α) : Result α :=
-  act.mapError fun e => (e.code, e.message)
+/-- An error reaches Python with its code and its own message. -/
+instance : ExportError BlsError where
+  code := BlsError.code
+  message := BlsError.message
 
 /-! ## Sizes
 
@@ -89,8 +90,8 @@ So a key of the wrong size is reported before an earlier key that fails validati
 @[export eth_bls_aggregate_pubkeys]
 def ethAggregatePubkeysExport
     (pubkeys : Array ByteArray) : Result ByteArray := do
-  let pubkeys ← runBls (pubkeys.mapM readPubkey)
-  let pk ← runBls (ethAggregatePubkeys pubkeys)
+  let pubkeys ← toResult none (pubkeys.mapM readPubkey)
+  let pk ← toResult none (ethAggregatePubkeys pubkeys)
   return packBytes pk
 
 @[export eth_bls_fast_aggregate_verify]
@@ -108,13 +109,13 @@ EthLib makes no constant-time claim, so these exports can leak a secret key thro
 /-- A secret key from input keying material and key information, as 32 big-endian bytes. -/
 @[export eth_bls_key_gen]
 def keyGenExport (ikm keyInfo : ByteArray) : Result ByteArray := do
-  let sk ← runBls (keyGen ikm keyInfo)
+  let sk ← toResult none (keyGen ikm keyInfo)
   return Fr.toBytesBE sk.val
 
 @[export eth_bls_sign]
 def signExport (sk msg : ByteArray) : Result ByteArray := do
-  let sk ← runBls (SecretKey.fromBytes sk)
-  let sig ← runBls (sign sk msg)
+  let sk ← toResult none (SecretKey.fromBytes sk)
+  let sig ← toResult none (sign sk msg)
   return ⟨sig.toArray⟩
 
 @[export eth_bls_verify]
@@ -125,8 +126,8 @@ def verifyExport (pk msg sig : ByteArray) : Result UInt8 :=
 
 @[export eth_bls_aggregate]
 def aggregateExport (sigs : Array ByteArray) : Result ByteArray := do
-  let sigs ← runBls (sigs.mapM readSignature)
-  let sig ← runBls (aggregate sigs)
+  let sigs ← toResult none (sigs.mapM readSignature)
+  let sig ← toResult none (aggregate sigs)
   return ⟨sig.toArray⟩
 
 @[export eth_bls_aggregate_verify]
@@ -140,8 +141,8 @@ def fastAggregateVerifyExport (pks : Array ByteArray) (msg sig : ByteArray) : Re
 
 @[export eth_bls_pop_prove]
 def popProveExport (sk : ByteArray) : Result ByteArray := do
-  let sk ← runBls (SecretKey.fromBytes sk)
-  let proof ← runBls (popProve sk)
+  let sk ← toResult none (SecretKey.fromBytes sk)
+  let proof ← toResult none (popProve sk)
   return ⟨proof.toArray⟩
 
 @[export eth_bls_pop_verify]
@@ -161,19 +162,19 @@ The point at infinity is accepted in its one canonical encoding. -/
 /-- A compressed `G1` point, decoded, checked in the subgroup, and compressed again. -/
 @[export eth_bls_decode_g1]
 def decodeG1Export (bytes : ByteArray) : Result ByteArray := do
-  let p ← runBls (match exactBytes? 48 bytes with
+  let p ← toResult none (match exactBytes? 48 bytes with
     | some bytes => G1.uncompress bytes
     | none => .error .invalidG1Point)
-  if !G1.inSubgroup p then runBls (.error .notInSubgroup)
+  if !G1.inSubgroup p then toResult (ε := BlsError) none (.error .notInSubgroup)
   return packBytes (G1.compress p)
 
 /-- A compressed `G2` point, decoded, checked in the subgroup, and compressed again. -/
 @[export eth_bls_decode_g2]
 def decodeG2Export (bytes : ByteArray) : Result ByteArray := do
-  let p ← runBls (match exactBytes? 96 bytes with
+  let p ← toResult none (match exactBytes? 96 bytes with
     | some bytes => G2.uncompress bytes
     | none => .error .invalidG2Point)
-  if !G2.inSubgroup p then runBls (.error .notInSubgroup)
+  if !G2.inSubgroup p then toResult (ε := BlsError) none (.error .notInSubgroup)
   return packBytes (G2.compress p)
 
 /-! ## Hash to curve
@@ -183,15 +184,15 @@ These exports let a client check the hash to `G2` against RFC 9380. -/
 /-- The uniform bytes of RFC 9380 §5.3.1. -/
 @[export eth_bls_expand_message_xmd]
 def expandMessageXmdExport (msg dst : ByteArray) (len : UInt64) : Result ByteArray :=
-  runBls (HashToCurve.expandMessageXmd msg dst len.toNat)
+  toResult none (HashToCurve.expandMessageXmd msg dst len.toNat)
 
 /-- The hash of a message to `G2`, as the affine `x.c0 ‖ x.c1 ‖ y.c0 ‖ y.c1`, 48 bytes each.
 
 The point at infinity has no affine form, so it is an error. -/
 @[export eth_bls_hash_to_g2]
 def hashToG2Export (msg dst : ByteArray) : Result ByteArray := do
-  let p ← runBls (HashToCurve.hashToG2 (F := Fp) msg dst)
-  if p.isInfinity then runBls (.error .pointAtInfinity)
+  let p ← toResult none (HashToCurve.hashToG2 (F := Fp) msg dst)
+  if p.isInfinity then toResult (ε := BlsError) none (.error .pointAtInfinity)
   let (x, y) := p.toAffine
   return x.c0.toBytesBE ++ x.c1.toBytesBE ++ y.c0.toBytesBE ++ y.c1.toBytesBE
 
@@ -213,13 +214,13 @@ Both points must lie in their subgroups of order `r`.
 A point at infinity gives the identity, as in the pairing check. -/
 @[export eth_bls_pairing]
 def pairingExport (p q : ByteArray) : Result ByteArray := do
-  let P ← runBls (match exactBytes? 48 p with
+  let P ← toResult none (match exactBytes? 48 p with
     | some p => G1.uncompress p
     | none => .error .invalidG1Point)
-  let Q ← runBls (match exactBytes? 96 q with
+  let Q ← toResult none (match exactBytes? 96 q with
     | some q => G2.uncompress q
     | none => .error .invalidG2Point)
-  if !G1.inSubgroup P || !G2.inSubgroup Q then runBls (.error .notInSubgroup)
+  if !G1.inSubgroup P || !G2.inSubgroup Q then toResult (ε := BlsError) none (.error .notInSubgroup)
   return fp12Bytes (pairing P Q)
 
 end EthLib.Cryptography.Bls.Exports

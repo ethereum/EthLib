@@ -24,7 +24,7 @@ public section
 
 namespace EthLib.Cryptography.Vrf.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result UnreadArgument toResult)
 
 open EthLib.Cryptography.Vrf
 open EthLib.Cryptography.Vrf.Constants
@@ -42,8 +42,8 @@ def verify (root : ByteArray) (index : UInt64) (opening : ByteArray) : ByteArray
 
 /-- A 32-byte seed, or an error for any other length. -/
 def readSeed (bytes : ByteArray) : Result Seed :=
-  Base.exactBytes VRF_SEED_SIZE bytes fun size =>
-    (0, s!"bad seed size: {size}, expected {VRF_SEED_SIZE}")
+  toResult none (Base.exactBytes VRF_SEED_SIZE bytes fun size =>
+    UnreadArgument.mk s!"bad seed size: {size}, expected {VRF_SEED_SIZE}")
 
 /-- The secret of an index, from a seed.
 
@@ -61,8 +61,8 @@ def evaluate (seed : ByteArray) (index : UInt32) : Result ByteArray := do
 
 /-- 32 bytes, or an error that names the argument for any other length. -/
 def readDigest (name : String) (bytes : ByteArray) : Result Digest :=
-  Base.exactBytes VRF_HASH_SIZE bytes fun size =>
-    (0, s!"bad {name} size: {size}, expected {VRF_HASH_SIZE}")
+  toResult none (Base.exactBytes VRF_HASH_SIZE bytes fun size =>
+    UnreadArgument.mk s!"bad {name} size: {size}, expected {VRF_HASH_SIZE}")
 
 /-- An output mixed with randomness, or an error if either is not 32 bytes.
 

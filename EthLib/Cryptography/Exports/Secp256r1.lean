@@ -24,7 +24,7 @@ public section
 
 namespace EthLib.Cryptography.Secp256r1.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result ExportError toResult)
 open EthLib.Cryptography.Ecdsa (SIGNATURE_LEN)
 
 
@@ -34,9 +34,10 @@ def PUBLIC_KEY_LEN : Nat := 64
 /-- The length of a hash. -/
 def HASH_LEN : Nat := 32
 
-/-- Run a fallible computation, with its error as a code and a message. -/
-def runSecp256r1 {α : Type} (act : Except Secp256r1Error α) : Result α :=
-  act.mapError fun e => (e.code, e.message)
+/-- An error reaches Python with its code and its own message. -/
+instance : ExportError Secp256r1Error where
+  code := Secp256r1Error.code
+  message := Secp256r1Error.message
 
 /-- A coordinate below `p`, or an error. -/
 def readCoordinate (bytes : List UInt8) : Except Secp256r1Error Fp :=
@@ -73,7 +74,7 @@ def constSignatureLen (_ : Unit) : UInt64 := UInt64.ofNat SIGNATURE_LEN
 
 /-- ECDSA verification of a signature on a hash, under a public key. -/
 @[export eth_secp256r1_verify]
-def verifyExport (publicKey hash signature : ByteArray) : Result UInt8 := runSecp256r1 do
+def verifyExport (publicKey hash signature : ByteArray) : Result UInt8 := toResult none do
   let q ← readPublicKey publicKey
   let e ← readHash hash
   let (r, s) ← Cryptography.Ecdsa.read signature .badSignatureSize

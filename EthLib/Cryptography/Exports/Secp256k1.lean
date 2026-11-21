@@ -26,15 +26,16 @@ public section
 
 namespace EthLib.Cryptography.Secp256k1.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result ExportError toResult)
 open EthLib.Cryptography.Ecdsa (SIGNATURE_LEN)
 
 /-- The length of a hash. -/
 def HASH_LEN : Nat := 32
 
-/-- Run a fallible computation, with its error as a code and a message. -/
-def runSecp256k1 {α : Type} (act : Except Secp256k1Error α) : Result α :=
-  act.mapError fun e => (e.code, e.message)
+/-- An error reaches Python with its code and its own message. -/
+instance : ExportError Secp256k1Error where
+  code := Secp256k1Error.code
+  message := Secp256k1Error.message
 
 /-- A 32-byte hash, or an error for any other length. -/
 def readHash (bytes : ByteArray) : Except Secp256k1Error (Vector UInt8 32) :=
@@ -67,7 +68,7 @@ def constSignatureLen (_ : Unit) : UInt64 := UInt64.ofNat SIGNATURE_LEN
 
 /-- ECDSA verification of a signature on a hash, under an encoded public key. -/
 @[export eth_secp256k1_verify]
-def verifyExport (publicKey hash signature : ByteArray) : Result UInt8 := runSecp256k1 do
+def verifyExport (publicKey hash signature : ByteArray) : Result UInt8 := toResult none do
   let q ← Point.decode publicKey
   let h ← readHash hash
   let (r, s) ← Cryptography.Ecdsa.read signature .badSignatureSize
@@ -75,7 +76,7 @@ def verifyExport (publicKey hash signature : ByteArray) : Result UInt8 := runSec
 
 /-- The low-s rule of EIP-2, on the `s` of a signature. -/
 @[export eth_secp256k1_is_low_s]
-def isLowSExport (signature : ByteArray) : Result UInt8 := runSecp256k1 do
+def isLowSExport (signature : ByteArray) : Result UInt8 := toResult (ε := Secp256k1Error) none do
   let (_, s) ← Cryptography.Ecdsa.read signature .badSignatureSize
   return if Ecdsa.isLowS s then 1 else 0
 
@@ -84,7 +85,7 @@ def isLowSExport (signature : ByteArray) : Result UInt8 := runSecp256k1 do
 It comes back in the 65-byte uncompressed encoding. -/
 @[export eth_secp256k1_recover]
 def recoverExport (hash signature : ByteArray) (recoveryId : UInt8) : Result ByteArray :=
-  runSecp256k1 do
+  toResult none do
     let h ← readHash hash
     let (r, s) ← Cryptography.Ecdsa.read signature .badSignatureSize
     if hid : recoveryId.toNat < 2 then
@@ -98,7 +99,7 @@ It comes back as `r || s || v`: 65 bytes, with the recovery id `v` as `0` or `1`
 
 The private key is secret, and EthLib makes no constant-time claim (SOUNDNESS.md A3). -/
 @[export eth_secp256k1_sign]
-def signExport (privateKey hash : ByteArray) : Result ByteArray := runSecp256k1 do
+def signExport (privateKey hash : ByteArray) : Result ByteArray := toResult none do
   let d ← readPrivateKey privateKey .badPrivateKeySize .privateKeyTooLarge
   let h ← readHash hash
   let (r, s, odd) ← Ecdsa.sign d h
@@ -108,7 +109,7 @@ def signExport (privateKey hash : ByteArray) : Result ByteArray := runSecp256k1 
 
 The private key is secret, and EthLib makes no constant-time claim (SOUNDNESS.md A3). -/
 @[export eth_secp256k1_ecdh]
-def ecdhExport (privateKey publicKey : ByteArray) : Result ByteArray := runSecp256k1 do
+def ecdhExport (privateKey publicKey : ByteArray) : Result ByteArray := toResult none do
   let d ← readPrivateKey privateKey .badPrivateKeySize .privateKeyTooLarge
   let q ← Point.decode publicKey
   let secret ← ecdh d q
@@ -120,11 +121,12 @@ It is the last 20 bytes of the Keccak-256 hash of the 64 bytes of `d G`.
 
 The private key is secret, and EthLib makes no constant-time claim (SOUNDNESS.md A3). -/
 @[export eth_secp256k1_address]
-def addressExport (privateKey : ByteArray) : Result ByteArray := runSecp256k1 do
-  let d ← readPrivateKey privateKey .badPrivateKeySize .privateKeyTooLarge
-  match addressOfPrivateKey d with
-  | some a => return ⟨a.toArray⟩
-  -- Only the key 0 gives the point at infinity.
-  | none => throw .zeroPrivateKey
+def addressExport (privateKey : ByteArray) : Result ByteArray :=
+  toResult (ε := Secp256k1Error) none do
+    let d ← readPrivateKey privateKey .badPrivateKeySize .privateKeyTooLarge
+    match addressOfPrivateKey d with
+    | some a => return ⟨a.toArray⟩
+    -- Only the key 0 gives the point at infinity.
+    | none => throw .zeroPrivateKey
 
 end EthLib.Cryptography.Secp256k1.Exports

@@ -13,7 +13,7 @@ public section
 
 namespace EthLib.Cryptography.ChaCha20Poly1305.Exports
 
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport ExportError rejectArgument toResult)
 
 /-- The ChaCha20-Poly1305 key length in bytes, RFC 8439 §2.8. -/
 @[export eth_chachapoly_const_key_size]
@@ -31,9 +31,10 @@ def tagSize (_ : Unit) : UInt64 := 16
 @[export eth_chacha20_const_block_size]
 def blockSize (_ : Unit) : UInt64 := 64
 
-/-- Map primitive failures to their stable code and constructor name. -/
-def cipherResult {α : Type} (r : Except ChaCha20Poly1305Error α) : Result α :=
-  r.mapError fun e => (e.code, reprStr e)
+/-- An error reaches Python with its code, and its message names the error. -/
+instance : ExportError ChaCha20Poly1305Error where
+  code := ChaCha20Poly1305Error.code
+  message := reprStr
 
 /-- The four-word quarter round, RFC 8439 §2.1. -/
 @[export eth_chacha20_quarter_round]
@@ -50,10 +51,10 @@ def quarterRoundStateOf (args : Vector UInt8 64 × Nat × Nat × Nat × Nat) :
         if hd : d < 16 then
           return serializeState (quarterRoundState (stateOfBytes bytes) ⟨a, ha⟩ ⟨b, hb⟩
             ⟨c, hc⟩ ⟨d, hd⟩)
-        else throw (0, "quarter-round index must be below 16")
-      else throw (0, "quarter-round index must be below 16")
-    else throw (0, "quarter-round index must be below 16")
-  else throw (0, "quarter-round index must be below 16")
+        else rejectArgument none "quarter-round index must be below 16"
+      else rejectArgument none "quarter-round index must be below 16"
+    else rejectArgument none "quarter-round index must be below 16"
+  else rejectArgument none "quarter-round index must be below 16"
 
 /-- A quarter round on a 64-byte state at four indices, RFC 8439 §2.2. -/
 @[export eth_chacha20_quarter_round_state]
@@ -68,7 +69,7 @@ def blockExport (args : PyValue) : Result PyValue :=
 /-- ChaCha20 encryption or decryption without counter wrap, RFC 8439 §2.4. -/
 @[export eth_chacha20_crypt]
 def cryptExport (args : PyValue) : Result PyValue :=
-  pyExport (fun (key, counter, nonce, input) => cipherResult (crypt key counter nonce input)) args
+  pyExport (fun (key, counter, nonce, input) => toResult none (crypt key counter nonce input)) args
 
 /-- Poly1305 with a 32-byte one-time key, RFC 8439 §2.5. -/
 @[export eth_poly1305]
@@ -83,12 +84,13 @@ def poly1305KeyExport (args : PyValue) : Result PyValue :=
 /-- Encrypt and authenticate, returning ciphertext and a separate tag, RFC 8439 §2.8. -/
 @[export eth_chacha20_poly1305_encrypt]
 def encryptExport (args : PyValue) : Result PyValue :=
-  pyExport (fun (key, nonce, aad, plaintext) => cipherResult (encrypt key nonce aad plaintext)) args
+  pyExport (fun (key, nonce, aad, plaintext) =>
+    toResult none (encrypt key nonce aad plaintext)) args
 
 /-- Authenticate before returning plaintext, RFC 8439 §2.8. -/
 @[export eth_chacha20_poly1305_decrypt]
 def decryptExport (args : PyValue) : Result PyValue :=
   pyExport (fun (key, nonce, aad, ciphertext, tag) =>
-    cipherResult (decrypt key nonce aad ciphertext tag)) args
+    toResult none (decrypt key nonce aad ciphertext tag)) args
 
 end EthLib.Cryptography.ChaCha20Poly1305.Exports

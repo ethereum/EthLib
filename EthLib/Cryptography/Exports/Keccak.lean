@@ -19,7 +19,7 @@ public section
 
 namespace EthLib.Cryptography.Hash.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result rejectArgument)
 
 open EthLib.Cryptography.Hash.Keccak
 
@@ -41,7 +41,7 @@ Any other length is an error. -/
 @[export eth_keccak_f1600]
 def keccakF1600 (state : ByteArray) : Result ByteArray := do
   if state.size ≠ 8 * LANES then
-    throw (0, s!"Keccak-f[1600]: the state must be 200 bytes, got {state.size}")
+    rejectArgument none s!"Keccak-f[1600]: the state must be 200 bytes, got {state.size}"
   -- Lane `i` reads its own 8 bytes.
   let lane (i : Nat) : UInt64 := Internal.laneAt state (8 * i)
   let A : State := ⟨lane 0, lane 1, lane 2, lane 3, lane 4, lane 5, lane 6, lane 7, lane 8,
