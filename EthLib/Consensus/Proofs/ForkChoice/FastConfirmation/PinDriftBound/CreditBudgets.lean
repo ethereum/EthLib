@@ -282,10 +282,6 @@ theorem step_band_of_guard (h : Setting config checks g split fin pulled anc cou
     ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
       r.Contains step → ∀ T : Gwei, getTotalActiveBalance w.state = .ok T →
         2 * T.toNat ≤ 3 * pulledTotal.toNat := by
-  obtain ⟨shared⟩ := h.toFin
-  obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨toPulled⟩ := h.toPulled
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   intro u w step member T read
   obtain ⟨pre, post, _, _, _⟩ :=
     DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
@@ -293,10 +289,7 @@ theorem step_band_of_guard (h : Setting config checks g split fin pulled anc cou
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early
   have wEpoch : (getCurrentEpoch w.state).toNat ≤ (getCurrentEpoch e).toNat :=
     UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post.chainSteps)
-  exact Internal.total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots
-    electra
-    h.guard (fromFin.append toPulled) h.early (Nat.le_succ _) (pre.snoc step) wEarly
-    (by omega) pulledOk read
+  exact (total_band_of_setting h (pre.snoc step) wEarly (by omega) read pulledOk).2
 
 /-- The sync debits of any keys over a run from the finalized block fit the window's envelope.
 
@@ -634,17 +627,11 @@ private theorem start_rates (h : Setting config checks g split fin pulled anc co
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
       pq.toNat * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ∧
     2 * total.toNat ≤ 3 * T.toNat := by
-  obtain ⟨toFin⟩ := h.toFin
-  obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨toPulled⟩ := h.toPulled
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   rcases link with toMne | ⟨back, same⟩
   · obtain ⟨toM⟩ := toMne
     exact ⟨Internal.rate_of_guard h toM within (Or.inl rfl) pqOk total perIncrement totalOk per,
       Internal.rate_of_guard h toM within (Or.inr rfl) pqOk total perIncrement totalOk per,
-      Internal.total_band_of_guard toFin h.genesis h.parameters h.caps h.aligned h.twoSlots electra
-        h.guard (fromFin.append toPulled) h.early (Nat.le_succ _) toM h.early within pulledOk
-        totalOk⟩
+      (total_band_of_setting h toM h.early within totalOk pulledOk).2⟩
   · have current := activeStake_eq_of_same_epoch back h.early same (getCurrentEpoch m)
       (UInt64.le_refl _)
     have previous := activeStake_eq_of_same_epoch back h.early same (getPreviousEpoch m)
@@ -670,9 +657,8 @@ private theorem start_rates (h : Setting config checks g split fin pulled anc co
     have second := Internal.rate_of_guard h (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩)
       inside
       (Or.inr rfl) pqOk atFin perIncrement atFinOk per
-    refine ⟨?_, ?_, Internal.total_band_of_guard toFin h.genesis h.parameters h.caps h.aligned
-      h.twoSlots electra h.guard (fromFin.append toPulled) h.early (Nat.le_succ _)
-      (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩) h.early inside pulledOk atFinOk⟩
+    refine ⟨?_, ?_, (total_band_of_setting h (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩)
+      h.early inside atFinOk pulledOk).2⟩
     · rw [previousSame, previous] at first
       exact first
     · rw [same, current] at second

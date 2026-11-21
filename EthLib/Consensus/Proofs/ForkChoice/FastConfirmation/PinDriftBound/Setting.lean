@@ -177,6 +177,36 @@ theorem Setting.delay {g : ForkedBeaconState preset}
   have := h.shallow
   omega
 
+section
+variable {g : ForkedBeaconState preset} {split fin pulled anc counted : BeaconState preset fork}
+  {V : Finset ValidatorIndex}
+
+/-- In the pin's setting, the total at a state of a run from the finalized state is near R's.
+
+The state is before Gloas and at most one epoch past R's, and both totals read successfully.
+
+Then twice R's total is at most three times the state's.
+
+Twice the state's total is also at most three times R's. -/
+theorem total_band_of_setting (h : Setting config checks g split fin pulled anc counted V)
+    {m : ForkedBeaconState preset} (toM : Run config checks ⟨fork, fin⟩ m)
+    (early : m.fork < .glamsterdam)
+    (inside : (getCurrentEpoch m.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
+    {total T : Gwei} (totalOk : getTotalActiveBalance m.state = .ok total)
+    (pulledOk : getTotalActiveBalance pulled = .ok T) :
+    2 * T.toNat ≤ 3 * total.toNat ∧ 2 * total.toNat ≤ 3 * T.toNat := by
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  obtain ⟨toPulled⟩ := h.toPulled
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have toP := fromFin.append toPulled
+  exact ⟨Internal.total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots
+      electra h.guard toM early inside toP h.early (Nat.le_succ _) totalOk pulledOk,
+    Internal.total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots
+      electra h.guard toP h.early (Nat.le_succ _) toM early inside pulledOk totalOk⟩
+
+end
+
 /-! ## Flows of the two branches -/
 
 /-- The deposits applied to the key on R's branch.

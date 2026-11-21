@@ -1657,9 +1657,6 @@ private theorem syncF_run_le (h : Setting config checks g split fin pulled anc c
       ((getCurrentEpoch e).toNat + 1 - (getCurrentEpoch split).toNat) *
         preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
           Internal.syncSeatEnvelope preset pulledTotal.toNat := by
-  obtain ⟨shared⟩ := h.toFin
-  obtain ⟨toPulled⟩ := h.toPulled
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   have called := UInt64.le_iff_toNat_le.mp (Internal.Setting.called h)
   have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
     UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
@@ -1712,11 +1709,8 @@ private theorem syncF_run_le (h : Setting config checks g split fin pulled anc c
             exact getTotalBalance_ok_iff_stake.mpr
               ⟨fun i m => lt_size_of_mem_getActiveValidatorIndices m, sameStake ▸ ltW,
                 by rw [valW, sameStake]⟩
-          exact Internal.total_band_of_guard shared h.genesis h.parameters h.caps h.aligned
-            h.twoSlots
-            electra h.guard (fromFin.append toPulled) h.early (Nat.le_succ _)
-            (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩) h.early
-            (by dsimp only; omega) pulledOk okFin
+          exact (total_band_of_setting h (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩)
+            h.early (by dsimp only; omega) okFin pulledOk).2
         · exact guarded step ((Run.contains_append _ _ _).mpr (.inl inFin)) T read
     · exact guarded step ((Run.contains_append _ _ _).mpr (.inr inTail)) T read
   have moves := (Internal.Run.syncDebits_le (pre.append t) h.fulu h.early highE replayed

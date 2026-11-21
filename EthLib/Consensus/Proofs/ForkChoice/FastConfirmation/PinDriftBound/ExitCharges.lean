@@ -1294,23 +1294,6 @@ private theorem prevStake_band_of_guard {g x z : ForkedBeaconState preset} {high
   simp only [stakeCeilingAt, stakeFloorAt, zero] at low previous mono anti ratio ⊢
   omega
 
-private theorem total_band_of_setting (h : Setting config checks g split fin pulled anc counted V)
-    {m : ForkedBeaconState preset} (toM : Run config checks ⟨fork, fin⟩ m)
-    (early : m.fork < .glamsterdam)
-    (inside : (getCurrentEpoch m.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
-    {total T : Gwei} (totalOk : getTotalActiveBalance m.state = .ok total)
-    (pulledOk : getTotalActiveBalance pulled = .ok T) :
-    2 * T.toNat ≤ 3 * total.toNat ∧ 2 * total.toNat ≤ 3 * T.toNat := by
-  obtain ⟨shared⟩ := h.toFin
-  obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨toPulled⟩ := h.toPulled
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  have toP := fromFin.append toPulled
-  exact ⟨Internal.total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots
-      electra h.guard toM early inside toP h.early (Nat.le_succ _) totalOk pulledOk,
-    Internal.total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots
-      electra h.guard toP h.early (Nat.le_succ _) toM early inside pulledOk totalOk⟩
-
 private theorem quarter_toNat (T : Gwei) :
     ((if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T.toNat then T / 4
       else preset.EFFECTIVE_BALANCE_INCREMENT / 5 : Gwei)).toNat =
