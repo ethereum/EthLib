@@ -125,6 +125,15 @@ def environmentStep (fork : Fork) : Op → Option (Evm fork Meter → Except Evm
         BitVec.ofNat 256 (evm.message.blockEnv.baseFeePerGas h))
     else none
   | .blobhash => if h : .dencun ≤ fork then some (blobhashStep h) else none
+  /- The blob base fee has no upper bound.
+
+  EIP-7516 does not say what to push when the fee is `2^256` or more.
+
+  This instruction pushes the fee modulo `2^256`, and the frame goes on.
+
+  The fee reaches `2^256` at an excess blob gas of about 177.4457 times the update fraction.
+
+  With the mainnet schedule of Dencun, that is an excess of 592398316. -/
   | .blobbasefee =>
     if h : .dencun ≤ fork then
       some (readFrame OPCODE_BLOBBASEFEE fun evm =>

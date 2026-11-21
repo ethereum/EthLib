@@ -7285,6 +7285,27 @@ BLS key generation fails after 16 attempts, a bound that EthLib chose.
 The ERC-2333 master and child derivations reuse key generation, so they share the bound.
 An attempt fails only when its 48-byte output is a multiple of `r`.
 
+One instruction has an outcome that no source defines.
+BLOBBASEFEE pushes the base fee per blob gas, which has no upper bound.
+[EIP-7516](https://eips.ethereum.org/EIPS/eip-7516#specification) does not say what the instruction pushes when the fee is `2^256` or more.
+At such a fee [execution-specs](https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/cancun/vm/instructions/environment.py#L582-L605) fails, with an error that is not an exception of the EVM, so the outcome of the block is not specified.
+EthLib pushes the fee modulo `2^256`, and the frame goes on.
+The question is open upstream as [execution-specs#4044](https://github.com/ethereum/execution-specs/issues/4044).
+
+At an excess blob gas `x`, the fee is `fake_exponential(1, x, fraction)` of [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#helpers), which is monotone in `x` (`fakeExponential_mono`).
+The excess is a 64-bit field of the header, so a header can hold an excess at which the fee reaches `2^256`.
+For each mainnet blob schedule, the least such excess is about 177.4457 times the update fraction:
+
+- Dencun, fraction 3338477: from an excess of 592398316.
+- Pectra and Fusaka, fraction 5007716: from 888597562.
+- BPO1, fraction 8346193: from 1480995878.
+- BPO2 and the forks after it, fraction 11684671: from 2073394371.
+
+A block raises the excess by at most `GAS_PER_BLOB * (max - target)`.
+So from an excess of 0, a chain needs at least 1507 full blocks under the Dencun schedule, and 2260 under each later one, to reach these values.
+On the way the fee passes the supply of ether, so no blob transaction could pay it.
+A chain configuration or a test can still start from any excess.
+
 A run of slots of the consensus state transition divides by constants of the preset and of the configuration, such as the slots of an epoch, the increment of an effective balance and the quotient of the churn limit.
 Python's integer division and remainder raise an error on a zero divisor, so the specification fails there.
 In Lean a division of 64-bit integers by zero returns zero and a remainder returns the dividend, so with such constants a step can succeed in EthLib where the specification fails.
