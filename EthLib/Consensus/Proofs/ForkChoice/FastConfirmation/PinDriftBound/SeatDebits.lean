@@ -248,8 +248,8 @@ private theorem processSyncAggregate_moved_le {fork : Fork} {s t : BeaconState p
     ∃ reward, syncParticipantReward s = .ok reward ∧
       moved s t debited moving ≤ preset.SYNC_COMMITTEE_SIZE.toNat * reward.toNat := by
   simp only [processSyncAggregate, bind_ok_iff] at ok
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, reward, rewardOk, proposer, proposerOk,
-    members, membersOk, folded⟩ := ok
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, reward, rewardOk, proposer, -,
+    members, -, folded⟩ := ok
   refine ⟨reward, rewardOk, ?_⟩
   have fold (xs : List (ValidatorIndex × Bool)) (a b : BeaconState preset fork)
       (ok : xs.foldlM (applySyncReward reward proposer (getBeaconProposerIndex s)) a = .ok b) :
@@ -416,7 +416,7 @@ theorem slot_noSync {x y : ForkedBeaconState preset} (electra : .pectra ≤ x.fo
     {events : List (BalanceEvent preset)}
     (replayed : (Step.slot ok : Step config checks x y).balanceEvents = .ok events) :
     ∀ e ∈ events, e.source ≠ .sync := by
-  obtain ⟨advanced, cached, crossings, advanceOk, upgrades, cachedOk, crossingOk, branch⟩ :=
+  obtain ⟨advanced, cached, crossings, -, -, -, crossingOk, branch⟩ :=
     Step.balanceEvents_slot ok early replayed
   have noCrossings : crossings = [] :=
     DirectSafety.Apriori.Internal.upgradeBalanceReplay_electra_nil
