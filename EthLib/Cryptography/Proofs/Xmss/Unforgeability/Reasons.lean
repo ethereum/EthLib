@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Game
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.SigningSource
 public import EthLib.Cryptography.Proofs.LoggedUntilBad
 
 /-!
@@ -52,21 +53,6 @@ open EthLib.Cryptography.Xmss
 open XmssSecurity (OracleWorld HashSpec romImpl)
 
 /-! ## The game -/
-
-/-- The signing oracle answers a request with the signer's result, its error included. -/
-abbrev ReasonSigningSpec := SignRequest →ₒ Except XmssError Signature
-
-/-- An adversary that sees why a signing request failed. -/
-structure ReasonAdversary where
-  main : PublicKey → OracleComp (OracleWorld + ReasonSigningSpec) Forgery
-
-/-- `Sig(S_0, idx, m)` of the stateless signer on each request.
-
-The log records whether it succeeded, as the winning rule needs. -/
-def statelessReasonSigningOracle (sk : Seed) :
-    QueryImpl ReasonSigningSpec (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) :=
-  fun request => WriterT.mk ((fun result => (result, [⟨request, result.toOption⟩])) <$>
-    liftM (statelessSignWith H sk request.leafIndex request.message))
 
 /-- The stateless game up to its result: keys, the adversary with its log, then the verification. -/
 noncomputable def statelessReasonRun (adversary : ReasonAdversary) :
