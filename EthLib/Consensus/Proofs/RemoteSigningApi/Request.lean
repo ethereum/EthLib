@@ -29,6 +29,7 @@ A document whose `type` names no kind is refused with that name.
 namespace EthLib.Consensus.RemoteSigningApi
 
 open Lean Base Serialization.Ssz BeaconApi
+open EthLib.Base.Json (getObjVal?_mkObj getObjVal?_mkObj_of_not_mem)
 
 instance : LawfulSszType ForkInfo := .container (by decide) (fun _ => rfl) (fun _ => rfl)
 

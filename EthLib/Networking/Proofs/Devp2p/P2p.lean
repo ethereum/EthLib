@@ -232,7 +232,7 @@ theorem size_le_of_messageData {rest data : ByteArray} (h : messageData true res
   subst h
   -- The preamble that the reader checked is the length that the block decompresses to.
   obtain ⟨_, hdecl⟩ := Proofs.Snappy.Block.decompress_size_eq_declared hd
-  rw [Proofs.Snappy.Block.toList_eq_data_toList, hpre] at hdecl
+  rw [Base.toList_eq_data_toList, hpre] at hdecl
   have hp := congrArg Prod.fst (Except.ok.inj hdecl)
   simp only at hp
   exact ⟨rfl, by omega⟩

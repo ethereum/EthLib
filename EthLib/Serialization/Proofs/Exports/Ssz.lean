@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.ByteList
 public import EthLib.Base.Proofs.Hex
 public import Lean.Data.Json
 public import EthLib.Serialization.Ssz.Codec.Json
@@ -429,32 +430,6 @@ private theorem ofHex_hexString (bytes : List UInt8) :
         Bind.bind, Except.bind, pure, Except.pure, UInt8.ofNat_toNat]
   simp [ofHex, Base.toList_hexString, general]
 
-/-- The list loop of a byte buffer gives the bytes so far, reversed, then the bytes left. -/
-private theorem toList_loop (bytes : ByteArray) : ∀ (n i : Nat) (out : List UInt8),
-    bytes.size - i = n →
-      ByteArray.toList.loop bytes i out = out.reverse ++ bytes.data.toList.drop i
-  | 0, i, out, left => by
-    rw [ByteArray.toList.loop]
-    have done : ¬ i < bytes.size := by omega
-    simp only [done, ↓reduceIte]
-    rw [List.drop_eq_nil_of_le (by rw [Array.length_toList]; exact Nat.le_of_not_lt done),
-      List.append_nil]
-  | n + 1, i, out, left => by
-    rw [ByteArray.toList.loop]
-    have more : i < bytes.size := by omega
-    simp only [more, ↓reduceIte]
-    rw [toList_loop bytes n (i + 1) _ (by omega)]
-    have inList : i < bytes.data.toList.length := by rw [Array.length_toList]; exact more
-    rw [List.drop_eq_getElem_cons inList, List.reverse_cons, List.append_assoc,
-      List.singleton_append]
-    obtain ⟨data⟩ := bytes
-    simp only [ByteArray.get!, Array.getElem_toList, getElem!_pos data i more]
-
-/-- The bytes of a byte buffer, as a list, are those of its array. -/
-private theorem byteArray_toList (bytes : ByteArray) : bytes.toList = bytes.data.toList := by
-  rw [ByteArray.toList]
-  simpa using toList_loop bytes _ 0 [] rfl
-
 /-- Only the word `bool` itself has the JSON of that word. -/
 private theorem toJson_ne_bool (type : PyValue) (word : type ≠ .str "bool") :
     type.toJson ≠ .str "bool" := by
@@ -554,7 +529,7 @@ theorem valueOf_eq_json (fuel : Nat) (value : PyValue) :
       split
       all_goals simp only [getBool?_toJson, getNat?_toJson, getStr?_toJson, getArr?_toJson,
         jsonPair_toJson]
-      case h_3 => simp only [strOf, pure, Except.pure, byteArray_toList, ofHex_hexString]
+      case h_3 => simp only [strOf, pure, Except.pure, Base.toList_eq_data_toList, ofHex_hexString]
       case h_4 => rfl
       case h_5 =>
         cases itemsOf body with

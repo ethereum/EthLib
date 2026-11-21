@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Networking.Snappy.Block
+public import EthLib.Base.Proofs.ByteList
 public import EthLib.Base.Proofs.LittleEndian
 public import EthLib.Networking.Encoding.Varint
 
@@ -331,26 +332,6 @@ theorem decompress_size_eq_declared {bs out : ByteArray}
 
 /-! ## Literals (§2.1) -/
 
-/-- The bytes of a byte array, read one by one, are the bytes of its array. -/
-theorem toList_eq_data_toList (bs : ByteArray) : bs.toList = bs.data.toList := by
-  have hs : bs.data.toList.length = bs.size := Array.length_toList
-  -- From index i on, the loop puts the bytes it has read back in order, then the rest.
-  have loop : ∀ i r, i ≤ bs.size →
-      ByteArray.toList.loop bs i r = r.reverse ++ bs.data.toList.drop i := by
-    intro i r hi
-    fun_induction ByteArray.toList.loop bs i r with
-    | case1 i r hlt ih =>
-        rw [ih (by omega)]
-        have hget : bs.get! i = bs.data.toList[i]'(by omega) := by
-          obtain ⟨a⟩ := bs
-          exact (getElem!_pos a i hlt).trans (Array.getElem_toList _).symm
-        rw [hget, List.reverse_cons, List.append_assoc, List.singleton_append,
-          ← List.drop_eq_getElem_cons]
-    | case2 i r hge =>
-        rw [List.drop_eq_nil_of_le (by omega), List.append_nil]
-  unfold ByteArray.toList
-  simpa using loop 0 [] (Nat.zero_le _)
-
 /-- A literal, then any bytes: the literal appends its data to the output (§2.1).
 
 The data holds 1 to 2^32 bytes.
@@ -408,7 +389,7 @@ theorem declaredLength_of_decompress {bs out : ByteArray} (h : decompress bs = .
   obtain ⟨rest, hpre⟩ := decompress_size_eq_declared h
   obtain ⟨rest', h'⟩ := readPreamble_take hpre
   have hl : (bs.extract 0 preambleMaxLength).toList = bs.toList.take preambleMaxLength := by
-    rw [toList_eq_data_toList, toList_eq_data_toList, ByteArray.data_extract,
+    rw [Base.toList_eq_data_toList, Base.toList_eq_data_toList, ByteArray.data_extract,
       Array.toList_extract]
     simp [List.extract]
   simp [declaredLength, hl, h', Except.map]

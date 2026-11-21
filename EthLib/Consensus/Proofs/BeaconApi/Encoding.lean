@@ -37,6 +37,7 @@ The error bodies read back as written.
 namespace EthLib.Consensus.BeaconApi
 
 open Lean Serialization.Ssz
+open EthLib.Base.Json (getObjVal?_mkObj getObjVal?_mkObj_of_not_mem)
 
 /-- The reader gives back every value that the writer writes. -/
 theorem ofApiJson_toApiJson {α : Type} [SszType α] [LawfulSszType α] [ApiSpelling α] {x : α}

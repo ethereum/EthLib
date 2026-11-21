@@ -140,8 +140,8 @@ theorem getObjVal_blockJson {r : BlockRecord} {full : Bool} {j : Lean.Json}
   obtain ⟨⟨k', v⟩, hm, rfl⟩ := hk
   have hm' : (k', v) ∈ headerFields r.hash r.block.header ++
       blockFields size uncles t r.block.withdrawals := List.mem_append_left _ hm
-  rw [EthLib.Serialization.Ssz.getObjVal?_mkObj hd hm']
-  exact (EthLib.Serialization.Ssz.getObjVal?_mkObj hdh hm).symm
+  rw [EthLib.Base.Json.getObjVal?_mkObj hd hm']
+  exact (EthLib.Base.Json.getObjVal?_mkObj hdh hm).symm
 
 /-- When transactions are not hydrated, the block object lists their hashes. -/
 theorem transactions_blockJson_false {r : BlockRecord} {j : Lean.Json}
@@ -150,7 +150,7 @@ theorem transactions_blockJson_false {r : BlockRecord} {j : Lean.Json}
       j.getObjVal? "transactions" = .ok (listJson hash32Json hashes) := by
   obtain ⟨size, uncles, t, rfl, hf, -, -⟩ := blockJson_ok h
   obtain ⟨hashes, hh, rfl⟩ := hf rfl
-  refine ⟨hashes, hh, EthLib.Serialization.Ssz.getObjVal?_mkObj
+  refine ⟨hashes, hh, EthLib.Base.Json.getObjVal?_mkObj
     (names_distinct_block r.hash r.block.header _ _ _ _) ?_⟩
   simp [blockFields]
 
@@ -161,7 +161,7 @@ theorem transactions_blockJson_true {r : BlockRecord} {j : Lean.Json}
       j.getObjVal? "transactions" = .ok (listJson transactionInfoJson infos) := by
   obtain ⟨size, uncles, t, rfl, -, hf, -⟩ := blockJson_ok h
   obtain ⟨infos, hi, rfl⟩ := hf rfl
-  refine ⟨infos, hi, EthLib.Serialization.Ssz.getObjVal?_mkObj
+  refine ⟨infos, hi, EthLib.Base.Json.getObjVal?_mkObj
     (names_distinct_block r.hash r.block.header _ _ _ _) ?_⟩
   simp [blockFields]
 
@@ -186,7 +186,7 @@ theorem size_blockJson {r : BlockRecord} {full : Bool} {j : Lean.Json}
     ∃ raw, r.rawBlock = .ok raw ∧ j.getObjVal? "size" = .ok (quantityJson raw.size) := by
   obtain ⟨size, uncles, t, rfl, -, -, hsize, -⟩ := blockJson_ok h
   obtain ⟨raw, hraw, rfl⟩ := EthLib.Base.map_ok_iff.mp hsize
-  refine ⟨raw, hraw, EthLib.Serialization.Ssz.getObjVal?_mkObj
+  refine ⟨raw, hraw, EthLib.Base.Json.getObjVal?_mkObj
     (names_distinct_block r.hash r.block.header _ _ _ _) ?_⟩
   simp [blockFields]
 
@@ -198,7 +198,7 @@ theorem uncles_blockJson {r : BlockRecord} {full : Bool} {j : Lean.Json}
   obtain ⟨size, uncles, t, rfl, -, -, -, huncles⟩ := blockJson_ok h
   obtain ⟨hlen, hget⟩ := EthLib.Base.mapM_eq_ok_iff.mp huncles
   refine ⟨uncles, EthLib.Base.mapM_eq_ok_iff.mpr ⟨hlen, fun k hk =>
-    EthLib.Base.mapError_ok_iff.mp (hget k hk)⟩, EthLib.Serialization.Ssz.getObjVal?_mkObj
+    EthLib.Base.mapError_ok_iff.mp (hget k hk)⟩, EthLib.Base.Json.getObjVal?_mkObj
     (names_distinct_block r.hash r.block.header _ _ _ _) ?_⟩
   simp [blockFields]
 
