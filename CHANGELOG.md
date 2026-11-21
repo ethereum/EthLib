@@ -793,7 +793,7 @@ Not yet released.
   `Evm.Precompiles.PointEvaluation.FIELD_ELEMENTS_PER_BLOB` is removed, and `Kzg.Constants.FIELD_ELEMENTS_PER_BLOB` has the same value, 4096.
   `Evm.Precompiles.PointEvaluation.uncompress_KZG_SETUP_G2_MONOMIAL_1` is removed.
   The new `Kzg.TrustedSetup.g2MonomialOfHex_eq` states, for every position, that a point decoded alone is that point of the decoded setup, when the setup decodes.
-  A proof about the `[tau]_2` of the precompile uses `TrustedSetup.g2MonomialOfHex_eq h 1 (by decide)` in its place.
+  Migration: a proof that used the removed theorem uses `Kzg.TrustedSetup.g2MonomialOfHex_eq h 1 (by decide)`.
 
 - In Lean, `DirectSafety.Apriori.Internal.ScoresBelow.step` no longer takes the hypothesis `inside : n ≤ m.state.validators.data.size`.
   Its proof does not read it.

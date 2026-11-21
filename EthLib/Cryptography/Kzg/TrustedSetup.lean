@@ -102,7 +102,7 @@ def hexListToBytes (hex : Array String) : Except KzgError (Array ByteArray) :=
 
 /-- Decode the `G2` point at position `i` of the embedded setup, and no other point.
 
-A caller that needs one point reads it without decoding the 4096 points of `G1`.
+A caller that needs one point reads it without decoding the 8192 points of `G1`.
 
 A position past the 65 points gives the same error as a string that does not decode. -/
 def g2MonomialOfHex (i : Nat) : Except KzgError Bls.G2 :=

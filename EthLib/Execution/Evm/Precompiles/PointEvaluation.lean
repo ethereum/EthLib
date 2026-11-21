@@ -45,9 +45,7 @@ inductive PointEvaluationError where
   | invalidFieldElement (value : Nat)
   /-- The proof `proof` is not a valid compressed G1 point in the subgroup. -/
   | invalidProof (proof : Bytes48)
-  /-- `[tau]_2`, the `G2` point 1 of the embedded trusted setup, does not decode.
-
-  The source decodes the same point of the same setup, and fails the same way if it is invalid. -/
+  /-- `[tau]_2`, `G2` point 1 of the embedded trusted setup, does not decode. -/
   | invalidTrustedSetup
   /-- The pairing check fails: the proof does not show `p(z) = y`. -/
   | proofRejected
@@ -95,7 +93,7 @@ def PointEvaluationError.code : PointEvaluationError → UInt32
 
 It decodes the inputs and `[tau]_2`, then runs the KZG check with `[tau]_2` alone.
 
-`[tau]_2` is the `G2` point 1 of the embedded trusted setup, decoded alone on each call.
+`[tau]_2` is `G2` point 1 of the embedded trusted setup, decoded alone on each call.
 
 The check holds when the quotient `(p(X) - y) / (X - z)` is a polynomial. -/
 def verifyKzgProof (commitment : Bytes48) (z y : Bytes32) (proof : Bytes48) :
