@@ -35,7 +35,7 @@ require "leanprover-community" / "mathlib" @ git "v4.36.0"
 --
 -- VCVio bounds digest matches during a cached scan and after registration.
 require VCVio from git "https://github.com/Verified-zkEVM/VCVio.git" @
-  "1c9c6028fe2d9905359205009c8e2b01aa37b036"
+  "61f2f4c0e36a7a887b29f55fe96c89b79a2d33e3"
 
 @[default_target]
 lean_lib «EthLib» where
