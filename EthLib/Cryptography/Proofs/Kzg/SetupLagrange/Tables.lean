@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Rounds
-public meta import Lean.Elab.Term
+public meta import Lean.Elab.Command
 meta import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Roots
 meta import EthLib.Cryptography.Kzg.Fft
 meta import EthLib.Cryptography.Kzg.TrustedSetup
@@ -29,6 +29,8 @@ A bare `lake env lean` does not load it, so this file then runs out of heartbeat
 An elaborator reads the table of the previous round from the definition that holds it.
 
 The proofs do not trust the tables: a wrong entry only makes a kernel check fail.
+
+The file also declares the commands that state the checks against the tables.
 -/
 
 @[expose] public section
@@ -196,5 +198,39 @@ noncomputable def tableB : Table := fun n =>
 
 /-- The decoded Lagrange points, in file order. -/
 noncomputable def tableL : Table := entryAt tableLData
+
+/-! ## Declaring the checks -/
+
+open Lean Elab Command in
+/-- Declares the checks of the chunks `a` to `b - 1` of the strings `xs`.
+
+Chunk `k` holds the 16 strings from index `16 * k`.
+
+Its check is the theorem `name_k`: these strings encode the entries of table `t` from that index.
+
+A kernel check closes it. -/
+elab "decode_checks " name:ident t:ident xs:ident a:num b:num : command => do
+  for k in [a.getNat:b.getNat] do
+    let id := mkIdent (name.getId.appendAfter s!"_{k}")
+    let start := Syntax.mkNumLit (toString (16 * k))
+    elabCommand (← `(command|
+      theorem $id:ident :
+          decodeCheck $t $start
+            (((($xs).toList.map SetupTorsion.codes).drop $start).take 16) = true := by
+        rw [codes_chunk% $xs $start 16]
+        decide +kernel))
+
+open Lean Elab Command in
+/-- Declares the 16 checks of a round of transforms at the index `i`, from table `t` to `u`.
+
+The check at the second index `k` is the theorem `name_i_k`, where `name` is the check itself.
+
+A kernel check closes it. -/
+elab "round_checks " name:ident t:ident u:ident i:num : command => do
+  for k in [0:16] do
+    let id := mkIdent (name.getId.appendAfter s!"_{i.getNat}_{k}")
+    elabCommand (← `(command|
+      theorem $id:ident : $name $t $u $i $(Syntax.mkNumLit (toString k)) = true := by
+        decide +kernel))
 
 end EthLib.Cryptography.Kzg.SetupLagrange
