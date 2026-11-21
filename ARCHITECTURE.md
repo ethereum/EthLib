@@ -470,7 +470,8 @@ The beacon chain starts at Phase 0, so a theorem about the consensus layer assum
 
 A rule written once has a cost.
 An edit made for one fork can change the rule at earlier forks, and no build error says so.
-So CI compares the value of each rule of the execution layer at each fork with a snapshot, [`tests/execution/history/rules.tsv`](tests/execution/history/README.md).
+So CI compares the value at each fork of each numeric rule of the execution layer with a snapshot.
+The snapshot is `tests/execution/history/rules.tsv`, and its [README](tests/execution/history/README.md) says what it covers.
 
 ### Constants that change at forks
 

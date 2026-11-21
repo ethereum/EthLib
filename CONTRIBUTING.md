@@ -437,7 +437,7 @@ Then check the values of the rules that forks change:
 lake exe rule-history --check
 ```
 
-It fails when a rule of the execution layer computes another value at some fork than `tests/execution/history/rules.tsv` records.
+It fails when, at some fork, a rule of the execution layer computes a value other than the one that `tests/execution/history/rules.tsv` records.
 The [README](tests/execution/history/README.md) next to that file says how to update it.
 
 When you change the tool, also run `scripts/test_rule_history.sh`.

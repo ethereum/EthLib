@@ -11,40 +11,38 @@ A rule here is a definition of the execution layer or of `Base`.
 
 Its value depends only on the fork.
 
-The tool finds the rules by their type, so a new rule is listed without editing this file:
+The tool finds the rules by their type, so a new rule is listed without editing this file.
 
-```text
-    c : Nat                                   a constant, one value for every fork
-    r : Fork → Nat                            one value per fork
-    r : Fork → Bool → Nat                     two values per fork, one per Bool
-    r : Fork → Option Nat                     one value per fork, or none
-    r : Fork → S                              one value per field of type Nat of S
-    r : (fork : Fork) → Since f fork S        as above from f on, and none before f
-```
+- A constant of type `Nat` gives one value for every fork.
+- A rule from the fork to `Nat` gives one value per fork.
+- A rule from the fork and a `Bool` to `Nat` gives two values per fork, one per `Bool`.
+- A rule from the fork to `Option Nat` gives one value per fork, or none.
+- A rule from the fork to a structure gives one value per field of type `Nat`.
+- A rule whose structure is given from a fork on gives those values from that fork, and none before.
 
-It skips a rule that takes another argument, such as a preset or a chain configuration.
+It skips every other type, such as a list of addresses or an opcode table.
+
+It also skips a rule that takes another argument, such as a preset or a chain configuration.
+
+It reads the declarations that the two modules of the execution layer and of `Base` import.
 
 It reads the forks from the constructors of `Fork`, in order, so it never names the last fork.
 
-It reads the values from compiled code.
+It reads the values from compiled code, so it runs after `lake build EthLib`.
 
-Usage, after `lake build EthLib`:
+- `lake exe rule-history` writes `tests/execution/history/rules.tsv`.
+- `lake exe rule-history --check` fails if that file differs, and prints the changed lines.
 
-```text
-    lake exe rule-history                 write tests/execution/history/rules.tsv
-    lake exe rule-history --check         fail if that file differs, and print the changed lines
-```
+It exits with 1 when the file differs, 2 on an unknown argument, and 3 when it finds no rule.
 
-It exits with 1 when the file differs, and with 3 when it finds no fork type or no rule.
+It also exits with 3 when it finds no fork type.
 
-Four options replace the defaults, for the fixtures of `scripts/test_rule_history.sh`:
+Four options replace the defaults, for the fixtures of `scripts/test_rule_history.sh`.
 
-```text
-    --module M      read the rules of module M, in place of EthLib.Execution and EthLib.Base
-    --scope N       read only the declarations under the namespace N
-    --base B        read the fork type B.Fork and B.Since, in place of EthLib.Base
-    --file F        write or check the file F
-```
+- `--module M` reads the rules of module `M`, in place of the two default modules.
+- `--scope N` reads only the declarations under the namespace `N`.
+- `--base B` reads the fork type and its from-a-fork wrapper under `B`, in place of `Base`.
+- `--file F` writes or checks the file `F`.
 -/
 
 open Lean Meta
