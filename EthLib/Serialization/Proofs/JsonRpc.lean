@@ -1250,7 +1250,7 @@ theorem fixed_dataJson {n : Nat} (what : String) (v : Vector UInt8 n) (upper : B
   fixed_hexString what n v upper
 
 /-- The decoder of addresses reads back an address written as data. -/
-theorem address_dataJson (what : String) (v : Vector UInt8 20) :
+theorem address_dataJson (what : String) (v : Address) :
     address what (dataJson v.toList) = .ok v :=
   fixed_dataJson what v true
 
