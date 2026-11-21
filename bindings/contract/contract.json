@@ -14645,6 +14645,24 @@
    "docstring":
    "The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration.\n\nThe arguments are the terminal total difficulty, block hash and block number, and the request."},
   {"summary":
+   "The answer to an `engine_getInclusionListV1` request, from the candidates of the node.",
+   "signature": "(candidates: list[bytes], request: dict) -> list[str]",
+   "operation": "EthLib.Engine.Exports.getInclusionListExport",
+   "method": "engine_get_inclusion_list",
+   "errors":
+   [{"type": "EthLib.Engine.EngineError",
+     "codes":
+     [{"constructor": "invalidParams", "code": 32602},
+      {"constructor": "unsupportedFork", "code": 38005},
+      {"constructor": "invalidForkchoiceState", "code": 38002},
+      {"constructor": "tooLargeRequest", "code": 38004},
+      {"constructor": "invalidPayloadAttributes", "code": 38003},
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]}],
+   "error_class": "EngineError",
+   "docstring":
+   "The answer to an `engine_getInclusionListV1` request, from the candidates of the node.\n\nThe arguments are the candidates, in the order that the node prefers, and the request."},
+  {"summary":
    "The answer to an `engine_exchangeCapabilities` request: the methods that EthLib defines.",
    "signature": "(request: dict) -> list[str]",
    "operation": "EthLib.Engine.Exports.exchangeCapabilitiesExport",

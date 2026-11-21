@@ -1952,6 +1952,9 @@ def bindings : List Binding := [
     "(terminal_total_difficulty: int, terminal_block_hash: bytes, terminal_block_number: int, " ++
       "request: dict) -> dict[str, Any]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
+  ⟨"engine_get_inclusion_list", `EthLib.Engine.Exports.getInclusionListExport,
+    "(candidates: list[bytes], request: dict) -> list[str]",
+    [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_exchange_capabilities", `EthLib.Engine.Exports.exchangeCapabilitiesExport,
     "(request: dict) -> list[str]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,

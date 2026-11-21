@@ -4842,6 +4842,18 @@ There the checks reduce to the next block being of Glamsterdam and the timestamp
 `forkchoiceUpdatedCall_payloadAttributesJson_of_heze` states it from Heze at version 5, for a next block of Hegotá.
 The inclusion lists come back too, as byte strings, whatever their bytes.
 
+From Heze a member of the inclusion list committee asks its execution layer for a list through `engine_getInclusionListV1`.
+The source leaves the choice of the transactions to each node, so the candidates, in the order that the node prefers, are an input.
+The method keeps each candidate in turn when the list still keeps its two rules, and drops the others (`Proofs/GetInclusionList.lean`).
+Every transaction of an answer has at least one byte (`size_pos_of_getInclusionList`).
+The transactions of an answer hold at most 8192 bytes together (`sum_le_of_getInclusionList`).
+Candidates that keep both rules are the answer in full (`selectInclusionList_of_valid`), and the answer keeps their order (`selectInclusionList_sublist`).
+An inclusion list that carries an answer passes the two reject checks of its gossip, on the total size and on empty transactions (`gossip_size_checks_of_getInclusionList`).
+An empty answer, which comes when no candidate fits, is still ignored by gossip.
+The configuration must allow at least 8192 bytes, as mainnet does (`mainnet_maxTransactionsBytesPerInclusionList`).
+The answer is written as an array of byte strings, which reads back (`inclusionListOfJson_json`, `Proofs/Json.lean`).
+The method does not decode the candidates: it takes each as a transaction of EIP-2718 without checking it, and it does not enforce the SHOULD NOT on blob transactions.
+
 The tree of known payloads and the known finalized block are inputs of each call, not state that the model keeps between calls.
 
 ### Execution JSON-RPC API
@@ -7243,12 +7255,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 533 operations and 51 size constants.
-The Python extension calls 533 of the operations and 51 of the constants.
+Lean exports 534 operations and 51 size constants.
+The Python extension calls 534 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12138 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2674), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1610), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (836), `x25519.c` (21), `xmss.c` (344).
+12150 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2674), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (225), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1612), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (837), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

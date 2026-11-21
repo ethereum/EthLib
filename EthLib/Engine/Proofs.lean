@@ -8,6 +8,7 @@ public import EthLib.Engine.Proofs.ConsensusRoute
 public import EthLib.Engine.Proofs.ExecutionEngine
 public import EthLib.Engine.Proofs.ForkchoiceUpdated
 public import EthLib.Engine.Proofs.GetBlobs
+public import EthLib.Engine.Proofs.GetInclusionList
 public import EthLib.Engine.Proofs.GetPayload
 public import EthLib.Engine.Proofs.Json
 public import EthLib.Engine.Proofs.Jwt

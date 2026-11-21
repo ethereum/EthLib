@@ -1547,6 +1547,9 @@
 #define DOC_engine_exchange_transition_configuration \
   "The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration."
 
+#define DOC_engine_get_inclusion_list \
+  "The answer to an `engine_getInclusionListV1` request, from the candidates of the node."
+
 #define DOC_engine_exchange_capabilities \
   "The answer to an `engine_exchangeCapabilities` request: the methods that EthLib defines."
 

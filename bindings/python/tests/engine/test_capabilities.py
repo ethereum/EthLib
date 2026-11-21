@@ -41,6 +41,7 @@ _DEFINED = {
     "getBlobs": 4,
     "exchangeTransitionConfiguration": 1,
     "getClientVersion": 1,
+    "getInclusionList": 1,
 }
 
 # The example version and commit of ClientVersionV1 in identification.md.
