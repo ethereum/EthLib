@@ -168,7 +168,7 @@ def prunedHistoryUnavailableExport : PyValue → Result PyValue
 /-! ## The chain view -/
 
 open EthLib.Base (ChainConfig Fork Hash32)
-open EthLib.Execution.Blocks (Block BlockChain BlockError Log Receipt runBody stateTransition)
+open EthLib.Execution.Blocks (Block BlockChain BlockError Log Receipt stateTransition)
 open EthLib.Execution.Blocks.Exports (blockErrorMessage blockOf)
 open EthLib.Execution.State (stateRoot)
 open EthLib.Cryptography.Hash.Keccak (keccak256)
@@ -189,9 +189,8 @@ def nextRecord (config : ChainConfig) (checkSeal : Bool) (records : List BlockRe
   let failed := fun (e : BlockError) =>
     (e.code, s!"block {block.header.number}: {blockErrorMessage e}")
   let state ← (stateTransition chain block checkSeal).mapError failed
-  let result ← (runBody chain block).mapError failed
-  let accessList := result.output.accessListHash.map fun _ => result.output.body.builder.build
-  recordOf block state result.output.receipts result.output.logs accessList
+  let hash ← block.header.hash.mapError fun e => (0, s!"block hash: {reprStr e}")
+  (BlockRecord.ofRun chain block hash state).mapError failed
 
 /-- The hash of thirty-two zero bytes, which a forkchoice state gives for no block. -/
 def zeroHash : Hash32 := Vector.replicate 32 (0 : UInt8)

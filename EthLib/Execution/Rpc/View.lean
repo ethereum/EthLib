@@ -69,6 +69,15 @@ structure BlockRecord where
 def BlockRecord.recent (r : BlockRecord) : RecentBlock :=
   ⟨r.fork, r.block.header, r.block.ommers⟩
 
+/-- The record of a block that ran on a chain, with its hash and the state after it.
+
+Its body runs again on that chain, for its receipts, its logs and its block access list. -/
+def BlockRecord.ofRun (chain : BlockChain) {fork : Fork} (block : Block fork Transaction)
+    (hash : Hash32) (state : State) : Except BlockError BlockRecord := do
+  let result ← runBody chain block
+  let accessList := result.output.accessListHash.map fun _ => result.output.body.builder.build
+  return ⟨fork, block, hash, state, result.output.receipts, result.output.logs, accessList⟩
+
 /-- What a node holds when it answers a query. -/
 structure ChainView where
   /-- The configuration of the chain. -/
