@@ -222,7 +222,7 @@ theorem vectorSlices_assemble {element : Desc} {count : Nat} {data : Bytes}
   -- Fixed-size elements use adjacent intervals, while variable-size elements use an offset table.
   cases fixed : element.fixedSize with
   | some width =>
-    simp [vectorSlices_eq, fixed, throw_error, Bind.bind, Except.bind, pure, Except.pure] at read
+    simp [vectorSlices, fixed, throw_error, Bind.bind, Except.bind, pure, Except.pure] at read
     repeat' split at read
     all_goals simp_all
     subst slices
@@ -230,7 +230,8 @@ theorem vectorSlices_assemble {element : Desc} {count : Nat} {data : Bytes}
     -- The decoder has established the exact total length and the composite size bound.
     apply assemble_fixed_slices <;> first | omega | simp_all [Nat.mul_comm]
   | none =>
-    simp [vectorSlices_eq, fixed, throw_error, Bind.bind, Except.bind, pure, Except.pure,
+    simp [vectorSlices, zipWith_extract_eq,
+      fixed, throw_error, Bind.bind, Except.bind, pure, Except.pure,
       Nat.ne_of_gt positive] at read
     repeat' split at read
     all_goals simp_all
@@ -254,7 +255,8 @@ theorem listSlices_assemble {element : Desc} {limit : Option Nat} {data : Bytes}
     assemble (slices.map fun _ => element.isFixed) slices = .ok data := by
   -- Capacity affects admissibility but not reconstruction of accepted element boundaries.
   cases fixed : element.fixedSize <;> cases limit <;>
-    simp [listSlices_eq, fixed, throw_error, Bind.bind, Except.bind, pure, Except.pure] at read
+    simp [listSlices, zipWith_extract_eq,
+      fixed, throw_error, Bind.bind, Except.bind, pure, Except.pure] at read
   all_goals repeat' split at read
   all_goals simp_all
   -- An empty input reconstructs directly as an empty list encoding.

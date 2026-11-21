@@ -293,54 +293,13 @@ theorem assemble_eq (inline : List Bool) (parts : List Bytes) :
       return headOf leading slots ++ bodiesOf slots) := by
   rw [assemble, List.zip_eq_zipWith]
 
-/-- The slices of a fixed-count sequence, with offsets paired to spans by `zip`. -/
-theorem vectorSlices_eq (element : Desc) (length : Nat) (data : Bytes) :
-    vectorSlices element length data = (do
-      if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
-      match element.fixedSize with
-      | some width =>
-        let expected := width * length
-        if data.size != expected then throw (.scope expected data.size)
-        return (List.range length).map fun i => data.extract (i * width) ((i + 1) * width)
-      | none =>
-        let expectedFirst := length * bytesPerOffset
-        if data.size < expectedFirst then throw (.scopeTooSmall expectedFirst data.size)
-        if length == 0 then return []
-        let offsets := readOffsets data length
-        if offsets.headD 0 != expectedFirst then
-          throw (.firstOffset expectedFirst (offsets.headD 0))
-        let spans ← offsetSpans offsets data.size
-        return (offsets.zip spans).map fun (start, span) => data.extract start (start + span)) := by
-  simp only [vectorSlices, List.map_zip_eq_zipWith]
-  rfl
+/-- Cutting each offset's span out of the data is a map over the offsets zipped with their spans.
 
-/-- The slices of a counted sequence, with offsets paired to spans by `zip`. -/
-theorem listSlices_eq (element : Desc) (limit : Option Nat) (data : Bytes) :
-    listSlices element limit data = (do
-      if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
-      let scope := data.size
-      if scope == 0 then return []
-      match element.fixedSize with
-      | some width =>
-        if width == 0 then throw .scopeWidthless
-        if scope % width != 0 then throw (.scopeUndivided scope width)
-        let count := scope / width
-        if let some cap := limit then
-          if count > cap then throw (.overLimit cap count)
-        return (List.range count).map fun i => data.extract (i * width) ((i + 1) * width)
-      | none =>
-        if scope < bytesPerOffset then throw (.scopeTooSmall bytesPerOffset scope)
-        let first := readUint data 0 bytesPerOffset
-        if first < bytesPerOffset then throw (.offsetBelowTable first)
-        if first % bytesPerOffset != 0 then throw (.offsetUnaligned first)
-        if first > scope then throw (.offsetPastScope first scope)
-        let count := first / bytesPerOffset
-        if let some cap := limit then
-          if count > cap then throw (.overLimit cap count)
-        let offsets := readOffsets data count
-        let spans ← offsetSpans offsets scope
-        return (offsets.zip spans).map fun (start, span) => data.extract start (start + span)) := by
-  simp only [listSlices, List.map_zip_eq_zipWith]
+Proofs about the slicers rewrite their last step into this form. -/
+theorem zipWith_extract_eq (data : Bytes) (offsets spans : List Nat) :
+    List.zipWith (fun start span => data.extract start (start + span)) offsets spans =
+      (offsets.zip spans).map fun (start, span) => data.extract start (start + span) := by
+  rw [List.map_zip_eq_zipWith]
   rfl
 
 /-! ## Offsets -/

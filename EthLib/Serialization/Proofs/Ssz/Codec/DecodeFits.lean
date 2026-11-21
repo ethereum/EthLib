@@ -59,8 +59,8 @@ theorem vectorSlices_length {element : Desc} {count : Nat} {data : Bytes}
   -- The composite size restriction applies before either slicing strategy can succeed.
   by_cases huge : data.size ≥ 2 ^ (8 * bytesPerOffset)
   · cases fixed : element.fixedSize <;>
-      simp [vectorSlices_eq, huge, throw_error, Bind.bind, Except.bind] at read
-  · simp only [vectorSlices_eq, ite_eq_right huge] at read
+      simp [vectorSlices, huge, throw_error, Bind.bind, Except.bind] at read
+  · simp only [vectorSlices, zipWith_extract_eq, ite_eq_right huge] at read
     cases fixed : element.fixedSize with
     -- Fixed-size slicing creates one equal-width interval for each declared element.
     | some width =>
@@ -102,7 +102,8 @@ theorem listSlices_bound {element : Desc} {limit : Nat} {data : Bytes}
     {slices : List Bytes} (read : listSlices element (some limit) data = .ok slices) :
     slices.length ≤ limit := by
   -- For fixed elements the count comes from byte length, and for variable elements it comes from the first offset.
-  simp [listSlices_eq, throw_error, Bind.bind, Except.bind, pure, Except.pure] at read
+  simp [listSlices, zipWith_extract_eq,
+    throw_error, Bind.bind, Except.bind, pure, Except.pure] at read
   repeat' split at read
   all_goals simp_all
   -- Every surviving decoder path has checked that its recovered count fits the capacity.
@@ -323,14 +324,14 @@ theorem vectorSlices_overflow (element : Desc) (count : Nat) (data : Bytes)
     vectorSlices element count data = .error (.offsetOverflow data.size) := by
   -- Both fixed and variable element layouts enforce the same four-byte offset ceiling.
   cases element.fixedSize <;>
-    simp [vectorSlices_eq, large, throw_error, Bind.bind, Except.bind]
+    simp [vectorSlices, large, throw_error, Bind.bind, Except.bind]
 
 /-- A list budget outside the offset range is rejected independently of its capacity. -/
 theorem listSlices_overflow (element : Desc) (limit : Option Nat) (data : Bytes)
     (large : data.size ≥ 2 ^ (8 * bytesPerOffset)) :
     listSlices element limit data = .error (.offsetOverflow data.size) := by
   -- No declared element capacity enlarges the composite byte-offset range.
-  simp [listSlices_eq, large, throw_error, Bind.bind, Except.bind]
+  simp [listSlices, large, throw_error, Bind.bind, Except.bind]
 
 /-- Decoding a delimited bit list finds a nonzero last byte, and the bits below its highest set bit. -/
 theorem unpackDelimited_ok {limit : Option Nat} {data : Bytes} {bits : Array Bool}
@@ -370,7 +371,8 @@ theorem vectorSlices_offsets {element : Desc} {length : Nat} {data : Bytes} {sli
     (varies : element.fixedSize = none) (read : vectorSlices element length data = .ok slices) :
     length * bytesPerOffset ≤ data.size := by
   -- Cutting refuses an encoding too short to hold the offset table.
-  simp only [vectorSlices_eq, varies, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind,
+  simp only [vectorSlices, zipWith_extract_eq,
+    varies, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind,
     pure,
     Except.pure] at read
   split at read
@@ -393,7 +395,8 @@ theorem listSlices_facts {element : Desc} {limit : Option Nat} {data : Bytes} {s
       (width = 0 → slices.length = 0)) ∧
     (element.fixedSize = none → (data.size = 0 ∧ slices.length = 0) ∨
       (4 ≤ data.size ∧ slices.length = readUint data 0 bytesPerOffset / 4 ∧ 4 * slices.length ≤ data.size)) := by
-  simp only [listSlices_eq, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, pure,
+  simp only [listSlices, zipWith_extract_eq,
+    throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, pure,
     Except.pure] at read
   split at read
   · cases read
