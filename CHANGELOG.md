@@ -821,6 +821,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, three unused pieces of Base are removed ([#3835](https://github.com/ethereum/EthLib/issues/3835)).
+  The `LawfulBEq ByteArray` instance of `Base/Bytes.lean` goes, since Lean core gives one.
+  The lemma `Base.byteArray_set_eq_set!` goes.
+  The module `EthLib.Base.Proofs.Toolchain.OrdString` goes, with its lemma `Base.Toolchain.String.compare_eq`.
+  Migration: unfold `ByteArray.set!` where the lemma was used, and use `Std.compare_eq_of_lt_iff` for the order on strings.
+
 - The leanXMSS security proof plays the game whose signer keeps its key, and the proofs no longer write out the note's stateless signer.
   `Proofs/Xmss/Reference.lean` is removed, with `statelessSignWith`, `statelessSign`, `statelessKeyGenWith`, `signDerived`, `signLayer` and `publicKeyOf`.
   The stateless games `statelessGameCore`, `statelessExperiment`, `statelessForgeAdvantage`, `statelessReasonRun` and `statelessSigningFailure` are removed, and so is `forgeAdvantage_eq_statelessForgeAdvantage`.

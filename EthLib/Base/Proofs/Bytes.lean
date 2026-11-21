@@ -23,7 +23,7 @@ Two strings of one size are equal when they agree on every byte.
 
 A loop over the bytes of a string runs as a loop over the list of those bytes, in order.
 
-Inside the array, a bounded read or write of a byte agrees with the defaulting one.
+Inside the array, a bounded read of a byte agrees with the defaulting one.
 
 A defaulting write changes the byte it writes and no other.
 -/
@@ -37,16 +37,6 @@ theorem byteArray_getElem_eq_get! (bytes : ByteArray) (index : Nat) (inside : in
     bytes[index]'inside = bytes.get! index := by
   change bytes.data[index] = bytes.data[index]!
   exact (getElem!_pos bytes.data index inside).symm
-
-/-- A bounded byte write agrees with the defaulting write at the same index. -/
-theorem byteArray_set_eq_set! (bytes : ByteArray) (index : Nat) (value : UInt8)
-    (inside : index < bytes.size) : bytes.set index value inside = bytes.set! index value := by
-  cases bytes with
-  | mk data =>
-    change index < data.size at inside
-    change ByteArray.mk (data.set index value inside) =
-      ByteArray.mk (data.setIfInBounds index value)
-    rw [Array.setIfInBounds_def, dite_eq_left inside]
 
 /-- A defaulting write inside the array is read back by the defaulting read. -/
 theorem byteArray_get!_set!_self (b : ByteArray) {j : Nat} (v : UInt8)
