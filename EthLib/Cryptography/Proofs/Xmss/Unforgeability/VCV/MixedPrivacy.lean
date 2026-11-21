@@ -6,7 +6,6 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.DisclosureTrace
 import all EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.ChainDisclosure
 import all EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.ClientRelease
 import all EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.MixedVerifier
-import all VCVio.OracleComp.QueryTracking.RandomOracle.Undisclosed
 
 /-!
 # Chain positions hidden throughout the actual normalized game
