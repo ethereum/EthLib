@@ -499,24 +499,3 @@ source = "execution-apis 3284ee8, src/engine/paris.md, engine_newPayloadV1, spec
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_execution.py::test_case[tests/reorg/test_forkchoice_behaviour.py::test_out_of_order_payload_delivery[fork_Shanghai-blockchain_test_engine_reorg]]"'
 upstream = "As of 2026-11-21, there is no report upstream"
-
-# A build from Amsterdam, which the node of EthLib does not store yet.
-# Its builder gives no block access list, so a request for the payload ID answers -38001.
-
-[[disagreement]]
-suite = "execution-spec-tests"
-case = "tests/reorg/test_invalid_payloads_reorg.py::test_invalid_payload_field[fork_Amsterdam-blockchain_test_engine_reorg-canonical-field_state_root]"
-reason = "The node of EthLib stores no build from Glamsterdam yet, since its builder gives no block access list (ethereum/EthLib#3684)"
-source = "execution-apis 3284ee8, src/engine/paris.md, engine_forkchoiceUpdatedV1, specification item 9 (https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_forkchoiceupdatedv1), and EIP-7928"
-class = "ethlib-defect"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_execution.py::test_case[tests/reorg/test_invalid_payloads_reorg.py::test_invalid_payload_field[fork_Amsterdam-blockchain_test_engine_reorg-canonical-field_state_root]]"'
-upstream = "As of 2026-11-21, ethereum/EthLib#3684 is open"
-
-[[disagreement]]
-suite = "execution-spec-tests"
-case = "tests/reorg/test_payload_building_reorg.py::test_build_on_previously_validated_side_payload[fork_Amsterdam-blockchain_test_engine_reorg]"
-reason = "The node of EthLib stores no build from Glamsterdam yet, since its builder gives no block access list (ethereum/EthLib#3684)"
-source = "execution-apis 3284ee8, src/engine/paris.md, engine_forkchoiceUpdatedV1, specification item 9 (https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_forkchoiceupdatedv1), and EIP-7928"
-class = "ethlib-defect"
-reproduce = 'pytest -m archive "bindings/python/tests/parity/test_execution.py::test_case[tests/reorg/test_payload_building_reorg.py::test_build_on_previously_validated_side_payload[fork_Amsterdam-blockchain_test_engine_reorg]]"'
-upstream = "As of 2026-11-21, ethereum/EthLib#3684 is open"

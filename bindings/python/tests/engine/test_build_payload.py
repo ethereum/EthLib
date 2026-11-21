@@ -274,3 +274,37 @@ def test_attributes_not_above_the_parent() -> None:
     ) as error:
         _build("Paris", PARIS | {"timestamp": "0x0"})
     assert error.value.code == 38003
+
+
+def _request(method: str, params: list) -> dict:
+    """A JSON-RPC request of the Engine API."""
+    return {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+
+
+def test_node_build_is_valid_from_amsterdam() -> None:
+    """At Amsterdam, the node stores its build, returns it with its access list, and imports it."""
+    vector = _first_block("Amsterdam")
+    header = rlp.decode(bytes.fromhex(vector["rlp"].removeprefix("0x")))[0]
+    chain_config, state, recent = _chain("Amsterdam")
+    attributes = _attributes(header, [])
+    zero = _data(bytes(32))
+    head = _data(keccak256(recent[0][1]))
+    state_of_head = {"headBlockHash": head, "safeBlockHash": zero, "finalizedBlockHash": zero}
+    update = _request(METHODS["Amsterdam"], [state_of_head, attributes])
+    (started,) = engine.run_node(chain_config, state, recent[0], [update])
+    get = _request("engine_getPayloadV6", [started["response"]["result"]["payloadId"]])
+    _, got = engine.run_node(chain_config, state, recent[0], [update, get])
+    result = got["response"]["result"]
+    payload = result["executionPayload"]
+    assert payload["parentHash"] == head
+    # The payload carries the access list whose hash its header holds, so its block hash checks.
+    params = [payload, [], attributes["parentBeaconBlockRoot"], result["executionRequests"]]
+    new = _request("engine_newPayloadV5", params)
+    *_, imported = engine.run_node(chain_config, state, recent[0], [update, get, new])
+    assert imported["response"] == {
+        "result": {
+            "status": "VALID",
+            "latestValidHash": payload["blockHash"],
+            "validationError": None,
+        }
+    }

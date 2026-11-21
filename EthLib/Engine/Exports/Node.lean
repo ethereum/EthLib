@@ -25,7 +25,7 @@ The response has the result of the method, or its error object with the negative
 
 The forkchoice state is that of the node after the request.
 
-Before Glamsterdam, an update that starts a build stores it, and a request for its ID returns it.
+An update that starts a build stores it, and a request for its ID returns it.
 
 The builder of the node takes the suggested fee recipient, no extra data and no transaction.
 

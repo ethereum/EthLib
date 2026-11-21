@@ -140,12 +140,16 @@ structure BuiltPayload (fork : Fork) where
 
   It sums the gas used of each receipt times its price above the base fee. -/
   blockValue : Nat
+  /-- The block access list from Glamsterdam, in RLP form, whose hash the header holds. -/
+  blockAccessList : Since .glamsterdam fork ByteArray
 
 /-- Build a payload at `fork` from attributes and transactions, on the last block of a chain.
 
 The fork must be the active fork at the number after the parent and at the timestamp.
 
 The result is the block, the state after it, its requests and its value.
+
+From Glamsterdam it also holds the block access list that the run of the body records.
 
 It fails when the block cannot be built, or when it would fail the state transition.
 
@@ -176,8 +180,12 @@ def buildPayload (chain : BlockChain) (attributes : PayloadAttributes fork)
   checkBlock chain.config false chain.recent block
   firstFailure (outputChecks block.header result.output result.roots)
   let baseFee := if h : .london ≤ fork then header.baseFeePerGas h else 0
+  -- The list that the body recorded, whose hash the header already holds.
+  let blockAccessList ← sinceM fun _ =>
+    (Serialization.Rlp.Codec.encode result.output.body.builder.build).mapError .encoding
   return { block, state := result.post, requests := result.output.requests
-           blockValue := priorityFees baseFee transactions result.output.receipts }
+           blockValue := priorityFees baseFee transactions result.output.receipts
+           blockAccessList }
 
 /-- Why a build on a chain fails: its attributes, a transaction that does not decode, or its block.
 -/

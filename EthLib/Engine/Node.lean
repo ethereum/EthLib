@@ -372,8 +372,6 @@ The head is the head of the request, which the update applied, with the state af
 
 The node stores nothing when the build fails, so a request for that ID then fails too.
 
-It stores nothing from Glamsterdam, since a build gives no block access list here yet.
-
 The stored build has no blobs and does not ask to override an external builder. -/
 def storeBuild (node : Node) (builder : Builder) (version : Nat) (params : Json)
     (id : PayloadId) : Node :=
@@ -386,9 +384,7 @@ def storeBuild (node : Node) (builder : Builder) (version : Nat) (params : Json)
         match buildPayloadOnChain (node.chainAt state.headBlockHash post) version decoded choices
             transactions with
         | .ok ⟨fork, built⟩ =>
-          if h : .glamsterdam ≤ fork then node
-          else { node with builds := (id, ⟨fork, built, ⟨[], [], []⟩, false,
-            fun h' => absurd h' h⟩) :: node.builds }
+          { node with builds := (id, ⟨fork, built, ⟨[], [], []⟩, false⟩) :: node.builds }
         | .error _ => node
       | _, _ => node
     | _ => node

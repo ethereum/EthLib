@@ -1023,12 +1023,10 @@ theorem store_of_forkchoiceUpdatedBuildStep {builder : Builder} {status : Payloa
       · rename_i decoded post hd hpost
         split at hStored
         · rename_i fork built hb
-          split at hStored
-          · simp [store, hMidNone] at hStored
-          · simp only [store, List.lookup, beq_self_eq_true, Option.some.injEq] at hStored
-            subst hStored
-            obtain ⟨b, hbk, hv⟩ := validState_eq_some_iff.mp hpost
-            exact ⟨state, j, decoded, post, b, hp, hd, hbk, hv, recentTo_getLast? hbk, hb⟩
+          simp only [store, List.lookup, beq_self_eq_true, Option.some.injEq] at hStored
+          subst hStored
+          obtain ⟨b, hbk, hv⟩ := validState_eq_some_iff.mp hpost
+          exact ⟨state, j, decoded, post, b, hp, hd, hbk, hv, recentTo_getLast? hbk, hb⟩
         · simp [store, hMidNone] at hStored
       · simp [store, hMidNone] at hStored
     · simp [store, hMidNone] at hStored

@@ -5060,7 +5060,9 @@ An update that answers a payload ID, with no build under it, builds with the att
 `store_of_forkchoiceUpdatedBuildStep` shows that the stored build is that build, so the theorems on a build on a chain, such as `buildPayload_fields` and `newPayloadOnChain_of_buildPayload`, hold for the payload of that ID.
 A stored build stays, so a second update with the same payload ID keeps it, as step 6 of payload building asks (`forkchoiceUpdatedBuildStep_store_of_some`).
 A build that fails stores nothing, so a request for its ID answers `-38001`, although the update answered the ID; the model decides so, and step 2 of payload building recommends an empty build first, which the builder can choose.
-A build from Glamsterdam stores nothing, since the build gives no block access list here yet; until it does, an update with attributes from Glamsterdam answers an ID that names no build, against step 9 of the update.
+From Glamsterdam, a build also gives its block access list: the RLP form of the list that the run of its body records.
+`blockAccessList_of_buildPayload` (`Proofs/BuildPayload.lean`) shows that the header of the built block commits to that list.
+The update stores a build at every fork.
 The stored build has no blobs, so a request from version 3 fails for a build with blob transactions.
 `newPayloadStep_of_getPayloadStep` (`Proofs/Node/Proposal.lean`) composes the update, the request for its payload ID and `engine_newPayload` into one `VALID` answer, with the payload's own hash.
 The payload sits on the head of the update, and carries the timestamp, the RANDAO mix, the withdrawals, the parent beacon block root and the slot of its attributes.

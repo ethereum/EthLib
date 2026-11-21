@@ -66,8 +66,8 @@ def storedPayloadOf (entry : PayloadEntry) : Result (PayloadId × StoredPayload)
     (decodeNetwork fork bytes).mapError fun e => (0, s!"store: network error {e.code}")
   let built : BuiltPayload fork :=
     { block := ⟨items.header, transactions, items.ommers, items.withdrawals⟩
-      state, requests, blockValue }
-  return (id, { fork, built, bundle := .ofNetwork network, shouldOverrideBuilder, blockAccessList })
+      state, requests, blockValue, blockAccessList }
+  return (id, { fork, built, bundle := .ofNetwork network, shouldOverrideBuilder })
 
 /-- The version of an `engine_getPayloadV1` through `engine_getPayloadV6` method name. -/
 def getPayloadVersion (method : String) : Option Nat := methodVersion "getPayload" method
