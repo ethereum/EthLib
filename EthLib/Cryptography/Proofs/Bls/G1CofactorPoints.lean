@@ -82,7 +82,7 @@ theorem q11_not_nsmul (i : Fin 11) : toPoint q11 ≠ i.val • toPoint p11 :=
     (by simp only [Fp.toZMod_ofNat]; exact eq_of_decide (by decide)) p11_torsion
     (sum_zero_cert p11_valid q11_valid r11_valid (by decide_at_model [p11, q11, r11]))
     (fun i _ hd => absurd hd (not_dvd_of_nonresidue (by norm_num) (by decide) (by decide)
-      (fuel := 4) (by decide) (by decide +kernel) i)) i
+      (by decide +kernel) i)) i
 
 /-! ### Order 10177 -/
 
@@ -246,6 +246,6 @@ theorem q52437899_not_nsmul (i : Fin 52437899) : toPoint q52437899 ≠ i.val •
     (sum_zero_cert p52437899_valid q52437899_valid r52437899_valid
       (by decide_at_model [p52437899, q52437899, r52437899]))
     (fun i _ hd => absurd hd (not_dvd_of_nonresidue (by norm_num) (by decide) (by decide)
-      (fuel := 26) (by decide) (by decide +kernel) i)) i
+      (by decide +kernel) i)) i
 
 end EthLib.Cryptography.Bls.G1Rotation

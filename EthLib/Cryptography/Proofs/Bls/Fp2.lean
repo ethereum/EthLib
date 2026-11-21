@@ -228,8 +228,6 @@ end RingLaws
 
 /-! ## Non-squareness of `-1` in `Fp` and `Fp2.inverse` correctness -/
 
-set_option maxRecDepth 8000 in
-set_option exponentiation.threshold 512 in
 private theorem sq_ne_neg_one_zmod (y : ZMod Fp.modulus) : y * y ≠ -1 := by
   -- Euler's criterion: if `y^2 = -1`, then `(-1)^((p-1)/2) = y^(p-1) = 1`.
   -- The kernel computes `(-1)^((p-1)/2) mod p` and finds `p - 1`, not `1`.
@@ -246,8 +244,8 @@ private theorem sq_ne_neg_one_zmod (y : ZMod Fp.modulus) : y * y ≠ -1 := by
     ZMod.pow_card_sub_one_eq_one hy
   rw [show Fp.modulus - 1 = 2 * ((Fp.modulus - 1) / 2) by decide,
     pow_mul, h2] at hfermat
-  exact PowMod.natCast_pow_div_ne_one Fp.modulus 384 (Fp.modulus - 1) 2
-    (by decide) (by decide) hfermat
+  exact PowMod.natCast_pow_div_ne_one Fp.modulus (Fp.modulus - 1) 2
+    (by decide +kernel) hfermat
 
 /-- `-1` is not a square in `Fp`, because `p = 3 mod 4`. -/
 theorem sq_ne_neg_one (y : Fp) : y * y ≠ -1 := fun h =>

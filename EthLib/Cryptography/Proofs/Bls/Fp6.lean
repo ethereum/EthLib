@@ -212,8 +212,6 @@ theorem norm_xi : Fp2.norm Fp2.xi = Fp.ofNat 2 := by
   decide_eq_at_model [Fp2.norm, Fp2.xi]
 
 open scoped EthLib.Cryptography.Bls.Fp in
-set_option maxRecDepth 8000 in
-set_option exponentiation.threshold 512 in
 private theorem cube_ne_two_zmod (z : ZMod Fp.modulus) : z * z * z ≠ 2 := by
   -- If `z^3 = 2`, then `2^((p-1)/3) = z^(p-1) = 1`, which the kernel refutes.
   intro h
@@ -229,8 +227,8 @@ private theorem cube_ne_two_zmod (z : ZMod Fp.modulus) : z * z * z ≠ 2 := by
     ZMod.pow_card_sub_one_eq_one hz
   rw [show Fp.modulus - 1 = 3 * ((Fp.modulus - 1) / 3) by decide,
     pow_mul, h3] at hfermat
-  exact PowMod.natCast_pow_div_ne_one Fp.modulus 384 2 3
-    (by decide) (by decide) hfermat
+  exact PowMod.natCast_pow_div_ne_one Fp.modulus 2 3
+    (by decide +kernel) hfermat
 
 open scoped EthLib.Cryptography.Bls.Fp in
 private theorem cube_eq_two_mul_cube_zmod {u w nxi : ZMod Fp.modulus}

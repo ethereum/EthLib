@@ -3,74 +3,36 @@ module
 public import Mathlib.Data.ZMod.Basic
 
 /-!
-# Proofs: kernel-friendly modular exponentiation
+# Proofs: powers in `ZMod m` from one modular power
 
-`powModAux fuel m b e` is `b ^ e % m` (for `e < 2 ^ fuel`).
+Lean core's modular power computes `b ^ e % m` by square-and-multiply.
 
-It computes by a fuel-based square-and-multiply.
+Every step is a GMP-accelerated `Nat` operation, so the kernel evaluates it by `decide`.
 
-Every step is a GMP-accelerated `Nat` operation.
+It does so even for exponents hundreds of bits wide.
 
-So the kernel can evaluate it via `decide`, even for exponents hundreds of bits wide.
+The two lemmas below turn such a computation into `(b : ZMod m) ^ e = 1` or its negation.
 
-`natCast_pow_eq_one_iff` and `natCast_pow_div_ne_one` convert such computations into facts.
-
-The facts are `(b : ZMod m) ^ e = 1` / `≠ 1`, which Lucas primality certificates consume.
-
-The certificates are those of `lucas_primality`.
+Lucas primality certificates consume these facts.
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.PowMod
 
-/-- Fuel-based modular square-and-multiply.
-
-`powModAux fuel m b e` is `b ^ e % m` provided `e < 2 ^ fuel`.
-
-Structural recursion on `fuel` keeps kernel reduction shallow. -/
-def powModAux : Nat → Nat → Nat → Nat → Nat
-  | 0, m, _, _ => 1 % m
-  | fuel+1, m, b, e =>
-    if e = 0 then 1 % m
-    else if e % 2 = 1 then powModAux fuel m (b * b % m) (e / 2) * b % m
-    else powModAux fuel m (b * b % m) (e / 2)
-
-theorem powModAux_eq (fuel m b e : Nat) (he : e < 2 ^ fuel) :
-    powModAux fuel m b e = b ^ e % m := by
-  induction fuel generalizing b e with
-  | zero =>
-    have h1 : e < 1 := by simpa using he
-    have h0 : e = 0 := by omega
-    subst h0
-    simp [powModAux]
-  | succ fuel ih =>
-    by_cases h0 : e = 0
-    · subst h0; simp [powModAux]
-    · have h2 : e / 2 < 2 ^ fuel := by
-        rw [Nat.pow_succ] at he; omega
-      have hrec := ih (b * b % m) (e / 2) h2
-      by_cases h1 : e % 2 = 1
-      · rw [powModAux, ite_eq_right h0, ite_eq_left h1, hrec, ← Nat.pow_mod, ← Nat.pow_two,
-            ← Nat.pow_mul, Nat.mod_mul_mod, ← Nat.pow_succ,
-            show (2 * (e / 2)).succ = e by omega]
-      · rw [powModAux, ite_eq_right h0, ite_eq_right h1, hrec, ← Nat.pow_mod, ← Nat.pow_two,
-            ← Nat.pow_mul, show 2 * (e / 2) = e by omega]
-
-/-- `(b : ZMod m) ^ e = 1` is decided by one `powModAux` computation. -/
-theorem natCast_pow_eq_one_iff (m fuel b e : Nat) (he : e < 2 ^ fuel) :
-    ((b : ZMod m) ^ e = 1) ↔ powModAux fuel m b e = 1 % m := by
-  rw [powModAux_eq fuel m b e he, ← Nat.cast_pow, ← Nat.cast_one (R := ZMod m),
+/-- `(b : ZMod m) ^ e = 1` is decided by one modular power. -/
+theorem natCast_pow_eq_one_iff (m b e : Nat) :
+    ((b : ZMod m) ^ e = 1) ↔ Nat.powMod b e m = 1 % m := by
+  rw [Nat.powMod_def, ← Nat.cast_pow, ← Nat.cast_one (R := ZMod m),
       ZMod.natCast_eq_natCast_iff]
   exact Iff.rfl
 
 /-- The `≠ 1` half of a Lucas certificate.
 
-It refutes `(b : ZMod m) ^ ((m - 1) / q) = 1` by one `powModAux` computation. -/
-theorem natCast_pow_div_ne_one (m fuel b q : Nat) (hm : m - 1 < 2 ^ fuel)
-    (hne : powModAux fuel m b ((m - 1) / q) ≠ 1 % m) :
+It refutes `(b : ZMod m) ^ ((m - 1) / q) = 1` by one modular power. -/
+theorem natCast_pow_div_ne_one (m b q : Nat)
+    (hne : Nat.powMod b ((m - 1) / q) m ≠ 1 % m) :
     ((b : ZMod m) ^ ((m - 1) / q)) ≠ 1 := fun h =>
-  hne ((natCast_pow_eq_one_iff m fuel b _
-    (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) hm)).mp h)
+  hne ((natCast_pow_eq_one_iff m b _).mp h)
 
 end EthLib.Cryptography.PowMod

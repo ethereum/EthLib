@@ -59,7 +59,7 @@ set_option maxRecDepth 8000
 
 /-- `13331831` is prime, with witness `13`. -/
 private theorem prime_13331831 : Nat.Prime 13331831 :=
-  Pratt.prime_of_lucas 13331831 13 256 [(2, 1), (5, 1), (971, 1), (1373, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 13331831 13 [(2, 1), (5, 1), (971, 1), (1373, 1)] (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -72,7 +72,8 @@ private theorem prime_13331831 : Nat.Prime 13331831 :=
 
 /-- `173378833005251801` is prime, with witness `6`. -/
 private theorem prime_173378833005251801 : Nat.Prime 173378833005251801 :=
-  Pratt.prime_of_lucas 173378833005251801 6 256 [(2, 3), (5, 2), (2621, 1), (24809, 1), (13331831, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 173378833005251801 6 [(2, 3), (5, 2), (2621, 1), (24809, 1), (13331831, 1)]
+    (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -86,7 +87,8 @@ private theorem prime_173378833005251801 : Nat.Prime 173378833005251801 :=
 
 /-- `22149492674086928081353` is prime, with witness `5`. -/
 private theorem prime_22149492674086928081353 : Nat.Prime 22149492674086928081353 :=
-  Pratt.prime_of_lucas 22149492674086928081353 5 256 [(2, 3), (3, 1), (5323, 1), (173378833005251801, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 22149492674086928081353 5
+    [(2, 3), (3, 1), (5323, 1), (173378833005251801, 1)] (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -99,7 +101,8 @@ private theorem prime_22149492674086928081353 : Nat.Prime 2214949267408692808135
 
 /-- `132896956044521568488119` is prime, with witness `6`. -/
 private theorem prime_132896956044521568488119 : Nat.Prime 132896956044521568488119 :=
-  Pratt.prime_of_lucas 132896956044521568488119 6 256 [(2, 1), (3, 1), (22149492674086928081353, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 132896956044521568488119 6 [(2, 1), (3, 1), (22149492674086928081353, 1)]
+    (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -111,7 +114,7 @@ private theorem prime_132896956044521568488119 : Nat.Prime 132896956044521568488
 
 /-- `1206781` is prime, with witness `10`. -/
 private theorem prime_1206781 : Nat.Prime 1206781 :=
-  Pratt.prime_of_lucas 1206781 10 256 [(2, 2), (3, 1), (5, 1), (20113, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 1206781 10 [(2, 2), (3, 1), (5, 1), (20113, 1)] (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -124,7 +127,7 @@ private theorem prime_1206781 : Nat.Prime 1206781 :=
 
 /-- `7240687` is prime, with witness `3`. -/
 private theorem prime_7240687 : Nat.Prime 7240687 :=
-  Pratt.prime_of_lucas 7240687 3 256 [(2, 1), (3, 1), (1206781, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 7240687 3 [(2, 1), (3, 1), (1206781, 1)] (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -136,7 +139,7 @@ private theorem prime_7240687 : Nat.Prime 7240687 :=
 
 /-- `107590001` is prime, with witness `3`. -/
 private theorem prime_107590001 : Nat.Prime 107590001 :=
-  Pratt.prime_of_lucas 107590001 3 256 [(2, 4), (5, 4), (7, 1), (29, 1), (53, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 107590001 3 [(2, 4), (5, 4), (7, 1), (29, 1), (53, 1)] (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -150,7 +153,9 @@ private theorem prime_107590001 : Nat.Prime 107590001 :=
 
 /-- `255515944373312847190720520512484175977` is prime, with witness `3`. -/
 private theorem prime_255515944373312847190720520512484175977 : Nat.Prime 255515944373312847190720520512484175977 :=
-  Pratt.prime_of_lucas 255515944373312847190720520512484175977 3 256 [(2, 3), (7, 2), (11, 1), (1627, 1), (2657, 1), (4423, 1), (41201, 1), (96557, 1), (7240687, 1), (107590001, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 255515944373312847190720520512484175977 3
+    [(2, 3), (7, 2), (11, 1), (1627, 1), (2657, 1), (4423, 1), (41201, 1), (96557, 1), (7240687, 1),
+     (107590001, 1)] (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -171,7 +176,9 @@ private theorem prime_255515944373312847190720520512484175977 : Nat.Prime 255515
 
 `205115282021455665897114700593932402728804164701536103180137503955397371`. -/
 private theorem prime_205115282021455665897114700593932402728804164701536103180137503955397371 : Nat.Prime 205115282021455665897114700593932402728804164701536103180137503955397371 :=
-  Pratt.prime_of_lucas 205115282021455665897114700593932402728804164701536103180137503955397371 10 256 [(2, 1), (3, 1), (5, 1), (29, 2), (31, 1), (7723, 1), (132896956044521568488119, 1), (255515944373312847190720520512484175977, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 205115282021455665897114700593932402728804164701536103180137503955397371 10
+    [(2, 1), (3, 1), (5, 1), (29, 2), (31, 1), (7723, 1), (132896956044521568488119, 1),
+     (255515944373312847190720520512484175977, 1)] (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -187,7 +194,9 @@ private theorem prime_2051152820214556658971147005939324027288041647015361031801
     (by decide) (by decide)
 
 theorem modulus_prime : Nat.Prime modulus :=
-  Pratt.prime_of_lucas modulus 3 256 [(2, 1), (3, 1), (7, 1), (13441, 1), (205115282021455665897114700593932402728804164701536103180137503955397371, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas modulus 3
+    [(2, 1), (3, 1), (7, 1), (13441, 1),
+     (205115282021455665897114700593932402728804164701536103180137503955397371, 1)] (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -243,7 +252,7 @@ set_option maxRecDepth 8000
 
 /-- `4681609` is prime, with witness `23`. -/
 private theorem prime_4681609 : Nat.Prime 4681609 :=
-  Pratt.prime_of_lucas 4681609 23 256 [(2, 3), (3, 1), (97, 1), (2011, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 4681609 23 [(2, 3), (3, 1), (97, 1), (2011, 1)] (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -256,7 +265,8 @@ private theorem prime_4681609 : Nat.Prime 4681609 :=
 
 /-- `107361793816595537` is prime, with witness `3`. -/
 private theorem prime_107361793816595537 : Nat.Prime 107361793816595537 :=
-  Pratt.prime_of_lucas 107361793816595537 3 256 [(2, 4), (16699, 1), (85831, 1), (4681609, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 107361793816595537 3 [(2, 4), (16699, 1), (85831, 1), (4681609, 1)]
+    (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -269,7 +279,7 @@ private theorem prime_107361793816595537 : Nat.Prime 107361793816595537 :=
 
 /-- `44706919` is prime, with witness `6`. -/
 private theorem prime_44706919 : Nat.Prime 44706919 :=
-  Pratt.prime_of_lucas 44706919 6 256 [(2, 1), (3, 1), (797, 1), (9349, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 44706919 6 [(2, 1), (3, 1), (797, 1), (9349, 1)] (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -282,7 +292,8 @@ private theorem prime_44706919 : Nat.Prime 44706919 :=
 
 /-- `174723607534414371449` is prime, with witness `3`. -/
 private theorem prime_174723607534414371449 : Nat.Prime 174723607534414371449 :=
-  Pratt.prime_of_lucas 174723607534414371449 3 256 [(2, 3), (17, 1), (59, 1), (4051, 1), (120233, 1), (44706919, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 174723607534414371449 3
+    [(2, 3), (17, 1), (59, 1), (4051, 1), (120233, 1), (44706919, 1)] (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -297,7 +308,7 @@ private theorem prime_174723607534414371449 : Nat.Prime 174723607534414371449 :=
 
 /-- `545358713` is prime, with witness `5`. -/
 private theorem prime_545358713 : Nat.Prime 545358713 :=
-  Pratt.prime_of_lucas 545358713 5 256 [(2, 3), (41, 1), (59, 1), (28181, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 545358713 5 [(2, 3), (41, 1), (59, 1), (28181, 1)] (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -310,7 +321,7 @@ private theorem prime_545358713 : Nat.Prime 545358713 :=
 
 /-- `1627771` is prime, with witness `3`. -/
 private theorem prime_1627771 : Nat.Prime 1627771 :=
-  Pratt.prime_of_lucas 1627771 3 256 [(2, 1), (3, 1), (5, 1), (29, 1), (1871, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 1627771 3 [(2, 1), (3, 1), (5, 1), (29, 1), (1871, 1)] (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -324,7 +335,7 @@ private theorem prime_1627771 : Nat.Prime 1627771 :=
 
 /-- `297159362677` is prime, with witness `2`. -/
 private theorem prime_297159362677 : Nat.Prime 297159362677 :=
-  Pratt.prime_of_lucas 297159362677 2 256 [(2, 2), (3, 2), (11, 1), (461, 1), (1627771, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 297159362677 2 [(2, 2), (3, 2), (11, 1), (461, 1), (1627771, 1)] (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -338,7 +349,8 @@ private theorem prime_297159362677 : Nat.Prime 297159362677 :=
 
 /-- `29047611873442575647497758179` is prime, with witness `2`. -/
 private theorem prime_29047611873442575647497758179 : Nat.Prime 29047611873442575647497758179 :=
-  Pratt.prime_of_lucas 29047611873442575647497758179 2 256 [(2, 1), (293, 1), (305873, 1), (545358713, 1), (297159362677, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 29047611873442575647497758179 2
+    [(2, 1), (293, 1), (305873, 1), (545358713, 1), (297159362677, 1)] (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -352,7 +364,8 @@ private theorem prime_29047611873442575647497758179 : Nat.Prime 2904761187344257
 
 /-- `341948486974166000522343609283189` is prime, with witness `2`. -/
 private theorem prime_341948486974166000522343609283189 : Nat.Prime 341948486974166000522343609283189 :=
-  Pratt.prime_of_lucas 341948486974166000522343609283189 2 256 [(2, 2), (3, 3), (109, 1), (29047611873442575647497758179, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas 341948486974166000522343609283189 2
+    [(2, 2), (3, 3), (109, 1), (29047611873442575647497758179, 1)] (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
@@ -364,7 +377,9 @@ private theorem prime_341948486974166000522343609283189 : Nat.Prime 341948486974
     (by decide) (by decide)
 
 theorem modulus_prime : Nat.Prime modulus :=
-  Pratt.prime_of_lucas modulus 7 256 [(2, 6), (3, 1), (149, 1), (631, 1), (107361793816595537, 1), (174723607534414371449, 1), (341948486974166000522343609283189, 1)] (by decide) (by decide)
+  Pratt.prime_of_lucas modulus 7
+    [(2, 6), (3, 1), (149, 1), (631, 1), (107361793816595537, 1), (174723607534414371449, 1),
+     (341948486974166000522343609283189, 1)] (by decide)
     (by
     intro f hf
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hf

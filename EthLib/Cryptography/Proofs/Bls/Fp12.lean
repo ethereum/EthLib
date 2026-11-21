@@ -194,8 +194,6 @@ theorem norm_mul (a b : Fp12) : norm (a * b) = norm a * norm b := by
 /-! ## `v` is not a square, so the norm is zero only at zero -/
 
 open scoped EthLib.Cryptography.Bls.Fp in
-set_option maxRecDepth 8000 in
-set_option exponentiation.threshold 512 in
 private theorem sq_ne_two_zmod (z : ZMod Fp.modulus) : z * z ≠ 2 := by
   -- If `z^2 = 2`, then `2^((p-1)/2) = z^(p-1) = 1`, which the kernel refutes.
   intro h
@@ -211,8 +209,8 @@ private theorem sq_ne_two_zmod (z : ZMod Fp.modulus) : z * z ≠ 2 := by
     ZMod.pow_card_sub_one_eq_one hz
   rw [show Fp.modulus - 1 = 2 * ((Fp.modulus - 1) / 2) by decide,
     pow_mul, h2] at hfermat
-  exact PowMod.natCast_pow_div_ne_one Fp.modulus 384 2 2
-    (by decide) (by decide) hfermat
+  exact PowMod.natCast_pow_div_ne_one Fp.modulus 2 2
+    (by decide +kernel) hfermat
 
 open scoped EthLib.Cryptography.Bls.Fp in
 /-- If `u^2 = 2 w^2` in `Fp`, then `w = 0`, because 2 is not a square. -/

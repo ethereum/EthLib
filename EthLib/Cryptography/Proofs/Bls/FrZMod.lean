@@ -60,20 +60,15 @@ It is scoped, as Mathlib scopes the ring instance of `Fin`, to avoid coercion lo
 
 namespace EthLib.Cryptography.Bls.Fr
 
--- Kernel evaluation of `powModAux` (256 recursion steps) exceeds the default `maxRecDepth`.
---
--- The `decide` calls below need the higher depth.
-set_option maxRecDepth 4000
-
 private theorem seven_pow_div_ne_one (q : Nat)
-    (hne : PowMod.powModAux 256 modulus 7 ((modulus - 1) / q) ≠ 1 % modulus) :
+    (hne : Nat.powMod 7 ((modulus - 1) / q) modulus ≠ 1 % modulus) :
     ((7 : ℕ) : ZMod modulus) ^ ((modulus - 1) / q) ≠ 1 :=
-  PowMod.natCast_pow_div_ne_one modulus 256 7 q (by decide) hne
+  PowMod.natCast_pow_div_ne_one modulus 7 q hne
 
 /-- First half of the Lucas certificate: `7 ^ (r - 1) = 1` in `ZMod r`. -/
 theorem seven_pow_card_sub_one : ((7 : ℕ) : ZMod modulus) ^ (modulus - 1) = 1 := by
-  rw [PowMod.natCast_pow_eq_one_iff modulus 256 7 (modulus - 1) (by decide)]
-  decide
+  rw [PowMod.natCast_pow_eq_one_iff modulus 7 (modulus - 1)]
+  decide +kernel
 
 /-- Second half of the Lucas certificate.
 
@@ -91,39 +86,39 @@ theorem seven_pow_div_prime_ne_one : ∀ q : Nat, q.Prime → q ∣ modulus - 1 
   rw [hfact] at hdvd
   rcases (hq.dvd_mul).mp hdvd with h | hdvd
   · obtain rfl := heq 2 Nat.prime_two (hq.dvd_of_dvd_pow h)
-    exact seven_pow_div_ne_one 2 (by decide)
+    exact seven_pow_div_ne_one 2 (by decide +kernel)
   rcases (hq.dvd_mul).mp hdvd with h | hdvd
   · obtain rfl := heq 3 (by norm_num) h
-    exact seven_pow_div_ne_one 3 (by decide)
+    exact seven_pow_div_ne_one 3 (by decide +kernel)
   rcases (hq.dvd_mul).mp hdvd with h | hdvd
   · obtain rfl := heq 11 (by norm_num) h
-    exact seven_pow_div_ne_one 11 (by decide)
+    exact seven_pow_div_ne_one 11 (by decide +kernel)
   rcases (hq.dvd_mul).mp hdvd with h | hdvd
   · obtain rfl := heq 19 (by norm_num) h
-    exact seven_pow_div_ne_one 19 (by decide)
+    exact seven_pow_div_ne_one 19 (by decide +kernel)
   rcases (hq.dvd_mul).mp hdvd with h | hdvd
   · obtain rfl := heq 10177 (by norm_num) h
-    exact seven_pow_div_ne_one 10177 (by decide)
+    exact seven_pow_div_ne_one 10177 (by decide +kernel)
   rcases (hq.dvd_mul).mp hdvd with h | hdvd
   · obtain rfl := heq 125527 (by norm_num) h
-    exact seven_pow_div_ne_one 125527 (by decide)
+    exact seven_pow_div_ne_one 125527 (by decide +kernel)
   rcases (hq.dvd_mul).mp hdvd with h | hdvd
   · obtain rfl := heq 859267 (by norm_num) h
-    exact seven_pow_div_ne_one 859267 (by decide)
+    exact seven_pow_div_ne_one 859267 (by decide +kernel)
   rcases (hq.dvd_mul).mp hdvd with h | hdvd
   · obtain rfl := heq 906349 (by norm_num) (hq.dvd_of_dvd_pow h)
-    exact seven_pow_div_ne_one 906349 (by decide)
+    exact seven_pow_div_ne_one 906349 (by decide +kernel)
   rcases (hq.dvd_mul).mp hdvd with h | hdvd
   · obtain rfl := heq 2508409 (by norm_num) h
-    exact seven_pow_div_ne_one 2508409 (by decide)
+    exact seven_pow_div_ne_one 2508409 (by decide +kernel)
   rcases (hq.dvd_mul).mp hdvd with h | hdvd
   · obtain rfl := heq 2529403 (by norm_num) h
-    exact seven_pow_div_ne_one 2529403 (by decide)
+    exact seven_pow_div_ne_one 2529403 (by decide +kernel)
   rcases (hq.dvd_mul).mp hdvd with h | hdvd
   · obtain rfl := heq 52437899 (by norm_num) h
-    exact seven_pow_div_ne_one 52437899 (by decide)
+    exact seven_pow_div_ne_one 52437899 (by decide +kernel)
   · obtain rfl := heq 254760293 (by norm_num) (hq.dvd_of_dvd_pow hdvd)
-    exact seven_pow_div_ne_one 254760293 (by decide)
+    exact seven_pow_div_ne_one 254760293 (by decide +kernel)
 
 /-- The scalar field modulus `r` is prime, by a Lucas certificate with witness `7`.
 

@@ -117,7 +117,7 @@ theorem mul_self_ne_neg_one (y : ZMod Fp.modulus) : y * y ≠ -1 := by
       show 2 * ((Fp.modulus - 1) / 2) = Fp.modulus - 1 by decide]
     exact ZMod.pow_card_sub_one_eq_one hy
   -- The kernel computes that power, and it is `-1`, not `1`.
-  rw [PowMod.natCast_pow_eq_one_iff _ 256 _ _ (by decide)] at hpow
+  rw [PowMod.natCast_pow_eq_one_iff] at hpow
   exact absurd hpow (by decide)
 
 /-- The norm `c0^2 + c1^2` is zero only at zero. -/
