@@ -179,7 +179,7 @@ def traceBlockByParam (v : ChainView) (config : TraceConfig) (p : BlockParam) :
       else .error blockNotFound
     | _ => .error blockNotFound
 
-/-- The trace of the transaction with a hash, in the first block that holds it, canonical first. -/
+/-- The trace of the transaction with a hash, in the first canonical block that holds it. -/
 def traceTransactionByHash (v : ChainView) (config : TraceConfig) (hash : Hash32) :
     Except RpcError TransactionTrace := do
   match v.findTransaction hash with

@@ -7,11 +7,11 @@ public import EthLib.Execution.Proofs.Transactions.Inclusion
 /-!
 # Proofs: the transactions that the chain view returns
 
-A lookup by hash returns only a transaction of that hash, in a block that the node holds.
+A lookup by hash returns only a transaction of that hash, in a canonical block.
 
-It reads a canonical block first, whenever one has a transaction of that hash.
+The search under it finds nothing exactly when no canonical block has a transaction of that hash.
 
-It finds nothing only when no block of the node has a transaction of that hash.
+The blocks off the canonical chain never change that search.
 
 A lookup by block and index returns the transaction at that index of the block that it names.
 
@@ -88,18 +88,31 @@ private theorem findSome_mem {l : List BlockRecord} {hash : Hash32} {r : BlockRe
   cases hq
   exact ⟨by simp [hl], hp⟩
 
-/-- A search of the blocks of the node finds a transaction with that hash, at its index. -/
+/-- A search by hash finds a transaction with that hash, at its index in a canonical block. -/
 theorem findTransaction_some {v : ChainView} {hash : Hash32} {r : BlockRecord} {tx : Transaction}
     {index : Nat} (h : v.findTransaction hash = some (r, tx, index)) :
-    r ∈ v.canonical ++ v.side ∧ r.block.transactions[index]? = some tx ∧
+    r ∈ v.canonical ∧ r.block.transactions[index]? = some tx ∧
       transactionHash tx = .ok hash :=
   have ⟨hr, hf⟩ := findSome_mem h
   ⟨hr, findTransaction_block_some hf⟩
 
-/-- A lookup by hash returns a transaction of that hash, at its index in a block of the node. -/
+/-- A search by hash finds nothing exactly when no canonical block has a transaction of it. -/
+theorem findTransaction_eq_none {v : ChainView} {hash : Hash32} :
+    v.findTransaction hash = none ↔
+      ∀ r ∈ v.canonical, ∀ tx ∈ r.block.transactions, transactionHash tx ≠ .ok hash := by
+  unfold findTransaction
+  rw [List.findSome?_eq_none_iff]
+  exact forall₂_congr fun r _ => by simpa using findTransaction_block_none (r := r)
+
+/-- The blocks off the canonical chain never change the search by hash. -/
+theorem findTransaction_side (v : ChainView) (side : List BlockRecord) (hash : Hash32) :
+    ({ v with side } : ChainView).findTransaction hash = v.findTransaction hash :=
+  rfl
+
+/-- A lookup by hash returns a transaction of that hash, at its index in a canonical block. -/
 theorem transactionByHash_some {v : ChainView} {hash : Hash32} {info : TransactionInfo}
     (h : v.transactionByHash hash = .ok (some info)) :
-    ∃ r ∈ v.canonical ++ v.side, r.block.transactions[info.index]? = some info.tx ∧
+    ∃ r ∈ v.canonical, r.block.transactions[info.index]? = some info.tx ∧
       r.transactionInfo info.index info.tx = .ok info ∧ transactionHash info.tx = .ok hash ∧
       info.hash = hash := by
   unfold transactionByHash at h
@@ -116,10 +129,10 @@ theorem transactionByHash_some {v : ChainView} {hash : Hash32} {info : Transacti
       obtain ⟨sender, hash', -, hh, rfl⟩ := BlockRecord.transactionInfo_eq_ok.mp hi
       exact ⟨r, hr, hget, hi, hhash, (Except.ok.inj (hh.symm.trans hhash))⟩
 
-/-- A lookup by hash finds nothing only when no block of the node has a transaction of it. -/
+/-- A lookup by hash finds nothing only when no canonical block has a transaction of it. -/
 theorem transactionByHash_none {v : ChainView} {hash : Hash32}
     (h : v.transactionByHash hash = .ok none) :
-    ∀ r ∈ v.canonical ++ v.side, ∀ tx ∈ r.block.transactions, transactionHash tx ≠ .ok hash := by
+    ∀ r ∈ v.canonical, ∀ tx ∈ r.block.transactions, transactionHash tx ≠ .ok hash := by
   unfold transactionByHash at h
   cases hf : v.findTransaction hash with
   | some p =>
@@ -129,34 +142,6 @@ theorem transactionByHash_none {v : ChainView} {hash : Hash32}
     intro r hr
     have := List.findSome?_eq_none_iff.mp hf r hr
     exact findTransaction_block_none.mp (by simpa using this)
-
-/-- A lookup by hash reads a canonical block whenever one has a transaction of that hash. -/
-theorem transactionByHash_canonical {v : ChainView} {hash : Hash32} {info : TransactionInfo}
-    (h : v.transactionByHash hash = .ok (some info))
-    (hc : ∃ r ∈ v.canonical, ∃ tx ∈ r.block.transactions, transactionHash tx = .ok hash) :
-    ∃ r ∈ v.canonical, r.block.transactions[info.index]? = some info.tx ∧
-      r.transactionInfo info.index info.tx = .ok info := by
-  obtain ⟨r0, hr0, tx0, ht0, hh0⟩ := hc
-  have hsome : (v.canonical.findSome?
-      fun r => (r.findTransaction hash).map fun p => (r, p)) ≠ none := by
-    intro hn
-    have := List.findSome?_eq_none_iff.mp hn r0 hr0
-    exact findTransaction_block_none.mp (by simpa using this) tx0 ht0 hh0
-  obtain ⟨q, hq⟩ := Option.ne_none_iff_exists'.mp hsome
-  have hf : v.findTransaction hash = some q := by
-    simp [ChainView.findTransaction, List.findSome?_append, hq]
-  obtain ⟨r, tx, index⟩ := q
-  obtain ⟨hr, hrf⟩ := findSome_mem hq
-  obtain ⟨hget, -⟩ := findTransaction_block_some hrf
-  unfold transactionByHash at h
-  simp only [hf] at h
-  cases hi : r.transactionInfo index tx with
-  | error e => simp [hi, Functor.map, Except.map] at h
-  | ok info' =>
-    simp only [hi] at h
-    cases h
-    obtain ⟨sender, hash', -, hh, rfl⟩ := BlockRecord.transactionInfo_eq_ok.mp hi
-    exact ⟨r, hr, hget, hi⟩
 
 /-- A lookup by block and index returns the transaction at that index of the block it names. -/
 theorem transactionByBlockAndIndex_some {v : ChainView} {p : BlockParam} {index : Nat}

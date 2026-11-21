@@ -22,15 +22,20 @@ Its gas price is the effective gas price: what the sender pays per gas at the ba
 
 A block before London has no base fee, and its transactions pay their own gas price.
 
-A lookup by hash reads the canonical blocks first, then the other blocks that the node holds.
+A lookup by hash reads only the canonical blocks.
 
-The schema of the methods does not say which block to read when a transaction is in several.
+So a transaction that only a block off the canonical chain holds, as after a reorg, is not found.
+
+The method text does not say which blocks to read.
+
+The upstream report [execution-apis#1008][canonical] proposes to state this rule there.
 
 It does not read the transactions that wait in the pool: the result schema requires a block hash.
 
 A lookup by block and index finds no transaction when the block is unknown or too short.
 
 [tx]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/transaction.yaml
+[canonical]: https://github.com/ethereum/execution-apis/pull/1008
 -/
 
 @[expose] public section
@@ -98,13 +103,13 @@ def BlockRecord.findTransaction (r : BlockRecord) (hash : Hash32) : Option (Tran
 
 namespace ChainView
 
-/-- The first transaction of a given hash in the blocks of the node, canonical blocks first.
+/-- The first transaction of a given hash in the canonical blocks, with its block and its index.
 
-It comes with its block and its index. -/
+A block off the canonical chain is not read. -/
 def findTransaction (v : ChainView) (hash : Hash32) : Option (BlockRecord × Transaction × Nat) :=
-  (v.canonical ++ v.side).findSome? fun r => (r.findTransaction hash).map fun p => (r, p)
+  v.canonical.findSome? fun r => (r.findTransaction hash).map fun p => (r, p)
 
-/-- The object of the transaction with a hash, or none when no block of the node holds one. -/
+/-- The object of the transaction with a hash, or none when no canonical block holds one. -/
 def transactionByHash (v : ChainView) (hash : Hash32) :
     Except RpcError (Option TransactionInfo) :=
   match v.findTransaction hash with
