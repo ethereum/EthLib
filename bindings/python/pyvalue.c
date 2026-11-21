@@ -56,10 +56,11 @@ extern lean_object* eth_pyvalue_echo(lean_object* args);
  * The same `bytes` passed twice counts twice, since Lean holds two copies. */
 #define PV_MAX_BYTES ((size_t) 1 << 29)
 
-/* The state of one conversion from Python: the parts and the bytes it may still convert. */
+/* The limits and the last short key from a one-entry dictionary in this conversion. */
 typedef struct {
   size_t parts_left;
   size_t bytes_left;
+  lean_object* last_dict_key;
 } pv_budget;
 
 /* Take a number of bytes from the budget, or set `ValueError` and return 0. */
@@ -75,6 +76,26 @@ take_bytes(
   }
   budget->bytes_left -= n;
   return 1;
+}
+
+/* The cache and each caller own a reference to the resulting Lean string. */
+static lean_object*
+dict_key_of_utf8(
+  pv_budget* budget,
+  const char* bytes,
+  size_t len
+) {
+  lean_object* key = budget->last_dict_key;
+  if (key && lean_string_size(key) == len + 1 &&
+      memcmp(lean_string_cstr(key), bytes, len) == 0) {
+    lean_inc(key);
+    return key;
+  }
+  if (key) lean_dec(key);
+  key = lean_mk_string_from_bytes(bytes, len);
+  budget->last_dict_key = key;
+  lean_inc(key);
+  return key;
 }
 
 static lean_object* of_py(PyObject* obj, int depth, pv_budget* budget);
@@ -179,7 +200,11 @@ entries_of_py(
     lean_object* item = of_py(PyTuple_GET_ITEM(pair, 1), depth + 1, budget);
     if (!item) goto fail;
     lean_object* entry = lean_alloc_ctor(0, 2, 0);
-    lean_ctor_set(entry, 0, lean_mk_string_from_bytes(utf8, (size_t) len));
+    /* Compare at most one machine word. */
+    lean_object* name = n == 1 && (size_t) len <= sizeof(uintptr_t)
+      ? dict_key_of_utf8(budget, utf8, (size_t) len)
+      : lean_mk_string_from_bytes(utf8, (size_t) len);
+    lean_ctor_set(entry, 0, name);
     lean_ctor_set(entry, 1, item);
     out = lean_array_push(out, entry);
   }
@@ -247,12 +272,23 @@ of_py(
   return NULL;
 }
 
+/* Convert one argument or the tuple of all arguments with a fresh budget and cache. */
+static lean_object*
+convert_pyvalue(
+  PyObject* obj,
+  int depth
+) {
+  pv_budget budget = {PV_MAX_PARTS, PV_MAX_BYTES, NULL};
+  lean_object* value = of_py(obj, depth, &budget);
+  if (budget.last_dict_key) lean_dec(budget.last_dict_key);
+  return value;
+}
+
 lean_object*
 pyvalue_of_py(
   PyObject* obj
 ) {
-  pv_budget budget = {PV_MAX_PARTS, PV_MAX_BYTES};
-  return of_py(obj, 0, &budget);
+  return convert_pyvalue(obj, 0);
 }
 
 static PyObject* to_py(b_lean_obj_arg value, PyObject* error_class);
@@ -406,8 +442,7 @@ call_pyvalue_export(
     return NULL;
   }
   /* The tuple of the arguments is not a level of nesting, so each argument starts at depth 0. */
-  pv_budget budget = {PV_MAX_PARTS, PV_MAX_BYTES};
-  lean_object* value = of_py(args, -1, &budget);
+  lean_object* value = convert_pyvalue(args, -1);
   if (!value) return NULL;
   return except_into_pyvalue(export(value), error_class);
 }
