@@ -28,17 +28,23 @@ theorem decodeQuint_encodeQuint : ∀ v : Fin 32, decodeQuint (encodeQuint v) = 
 /-- A character that reads as a value is the character of that value. -/
 theorem encodeQuint_of_decodeQuint {c : Char} {v : Nat} (h : decodeQuint c = some v) :
     v < 32 ∧ encodeQuint v = c := by
+  -- The code points of `A`, `Z`, `2` and `7`, as numerals for `omega`.
+  have hA : 'A'.toNat = 65 := rfl
+  have hZ : 'Z'.toNat = 90 := rfl
+  have h2 : '2'.toNat = 50 := rfl
+  have h7 : '7'.toNat = 55 := rfl
   unfold decodeQuint at h
+  rw [hA, hZ, h2, h7] at h
   have hc : Char.ofNat c.toNat = c := Char.ofNat_toNat c
   split at h
   · cases h
     refine ⟨by omega, ?_⟩
-    simp only [encodeQuint, show c.toNat - 65 < 26 by omega, ↓reduceIte]
+    simp only [encodeQuint, hA, show c.toNat - 65 < 26 by omega, ↓reduceIte]
     rw [show 65 + (c.toNat - 65) = c.toNat by omega, hc]
   split at h
   · cases h
     refine ⟨by omega, ?_⟩
-    simp only [encodeQuint, show ¬ c.toNat - 50 + 26 < 26 by omega, ↓reduceIte]
+    simp only [encodeQuint, h2, show ¬ c.toNat - 50 + 26 < 26 by omega, ↓reduceIte]
     rw [show 50 + (c.toNat - 50 + 26 - 26) = c.toNat by omega, hc]
   · cases h
 
@@ -112,7 +118,8 @@ theorem decodeGroup_encodeGroup (start : Nat) {group : List UInt8} (h : group.le
   have below : bytesToNat group * 2 ^ pad < 32 ^ charCount group.length := by
     rw [← fits]
     exact Nat.mul_lt_mul_of_pos_right bound positive
-  simp only [decodeGroup, encodeGroup, length_digits, byteCount_charCount h, hpad,
+  simp only [decodeGroup, encodeGroup, Nat.shiftLeft_eq, Nat.shiftRight_eq_div_pow,
+    length_digits, byteCount_charCount h, hpad,
     value_digits, Nat.zero_mul, Nat.zero_add, Nat.mod_eq_of_lt below, Nat.mul_mod_left,
     Nat.mul_div_cancel _ positive, natToBytes_bytesToNat, bind, Except.bind, pure, Except.pure]
   rfl
@@ -149,8 +156,8 @@ theorem encodeGroup_of_decodeGroup {start : Nat} {cs : List Char} {group : List 
     rw [Nat.div_lt_iff_lt_mul positive, fits]
     exact below
   have whole : n / 2 ^ pad * 2 ^ pad = n := Nat.div_mul_cancel (Nat.dvd_of_mod_eq_zero zero)
-  simp only [encodeGroup, natToBytes_length, count, hpad, bytesToNat_natToBytes_of_lt quotient,
-    whole, chars]
+  simp only [encodeGroup, Nat.shiftLeft_eq, Nat.shiftRight_eq_div_pow, natToBytes_length, count,
+    hpad, bytesToNat_natToBytes_of_lt quotient, whole, chars]
 
 /-- A group that the decoder accepts has the size that its number of characters gives. -/
 theorem byteCount_of_decodeGroup {start : Nat} {cs : List Char} {group : List UInt8}
