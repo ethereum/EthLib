@@ -281,6 +281,24 @@ theorem fastAggregateVerify_eq_verify (sks : List SecretKey) (hne : sks ≠ [])
   simp only [fastAggregateVerify, hP]
   rw [pointToPubkey_eq_of_represents hPrep]
 
+/-- Honest signatures on one message aggregate to a point of the key sum times the hash.
+
+The hash of the message represents `b • g2`, and there must be at least one key. -/
+private theorem aggregate_map_mul {Q : G2} {b : Fr} (hb : G2.Represents Q b)
+    (keys : List SecretKey) (nonempty : keys ≠ []) :
+    ∃ S, aggregate (keys.map fun sk => pointToSignature (G2.mul Q sk.val)).toArray =
+        .ok (pointToSignature S) ∧ G2.Represents S ((keys.map (·.val)).sum * b) := by
+  obtain ⟨S, hS, hSrep⟩ := foldlM_aggregate _ _ (fun sk : SecretKey => hb.mul sk.val) keys
+    G2.represents_zero
+  refine ⟨S, ?_, (sum_map_mul keys (·.val) b) ▸ hSrep⟩
+  unfold aggregate
+  rw [ite_eq_right (by cases keys with
+    | nil => exact absurd rfl nonempty
+    | cons _ _ => exact Bool.false_ne_true)]
+  simp only [List.foldlM_toArray]
+  rw [hS]
+  rfl
+
 /-- Honest signatures on one message aggregate to a signature that verifies under the key sum.
 
 The secret keys must not sum to zero.
@@ -293,20 +311,10 @@ theorem fastAggregateVerify_aggregate (sks : List SecretKey) (hne : sks ≠ [])
         fastAggregateVerify (sks.map skToPk).toArray msg sig = true := by
   obtain ⟨Q, hQ, hv, hs⟩ := HashToCurve.hashToG2_total_inSubgroup msg DST
   obtain ⟨b, hb⟩ := (G2.inSubgroup_iff_exists_represents hv).mp hs
-  have hpt : ∀ sk : SecretKey, G2.Represents (G2.mul Q sk.val) (sk.val * b) :=
-    fun sk => hb.mul sk.val
-  obtain ⟨S, hS, hSrep⟩ := foldlM_aggregate _ _ hpt sks G2.represents_zero
-  refine ⟨_, mapM_sign hQ sks, pointToSignature S, ?_, ?_⟩
-  · unfold aggregate
-    rw [ite_eq_right (by cases sks with
-      | nil => exact absurd rfl hne
-      | cons _ _ => exact Bool.false_ne_true)]
-    simp only [List.foldlM_toArray]
-    rw [hS]
-    rfl
-  · -- The sum of the signatures is the sum of the keys times the discrete logarithm of the hash.
-    exact fastAggregateVerify_of_represents hne hsum hQ hb
-      ((sum_map_mul sks (·.val) b) ▸ hSrep)
+  obtain ⟨S, hS, hSrep⟩ := aggregate_map_mul hb sks hne
+  -- The sum of the signatures is the sum of the keys times the discrete logarithm of the hash.
+  exact ⟨_, mapM_sign hQ sks, pointToSignature S, hS,
+    fastAggregateVerify_of_represents hne hsum hQ hb hSrep⟩
 
 /-- An aggregate of signatures on one message verifies under their signing keys.
 
@@ -325,6 +333,132 @@ theorem fastAggregateVerify_aggregate_of_forall₂ {keys : List SecretKey}
   have sameAggregate : signature' = signature :=
     Except.ok.inj (built.symm.trans aggregated)
   simpa only [sameAggregate] using verifies
+
+/-- An aggregate of honest signatures on one message represents the key sum times the hash.
+
+The hash of the message represents `b • g2`. -/
+private theorem aggregate_group {message : ByteArray} {Q : G2} {b : Fr}
+    (hQ : HashToCurve.hashToG2 message DST = .ok Q) (hb : G2.Represents Q b)
+    {keys : List SecretKey} {signatures : List BLSSignature} {joint : BLSSignature}
+    (signed : List.Forall₂ (fun key sig => sign key message = .ok sig) keys signatures)
+    (aggregated : aggregate signatures.toArray = .ok joint) :
+    ∃ R, joint = pointToSignature R ∧ G2.Represents R ((keys.map (·.val)).sum * b) := by
+  have signs := (Base.mapM_ok_of_forall₂ signed).symm.trans (mapM_sign hQ keys)
+  rw [Except.ok.injEq] at signs
+  subst signs
+  -- With no key, the aggregation fails.
+  have nonempty : keys ≠ [] := by
+    rintro rfl
+    exact absurd aggregated (by simp [aggregate])
+  obtain ⟨S, hS, hSrep⟩ := aggregate_map_mul hb keys nonempty
+  exact ⟨S, Except.ok.inj (aggregated.symm.trans hS), hSrep⟩
+
+/-- Folding aggregates of honest groups into an accumulator represents the running key sum.
+
+The hash of the message represents `b • g2`. -/
+private theorem foldlM_groups {message : ByteArray} {Q : G2} {b : Fr}
+    (hQ : HashToCurve.hashToG2 message DST = .ok Q) (hb : G2.Represents Q b)
+    {groups : List (List SecretKey)} {aggregates : List BLSSignature}
+    (joined : List.Forall₂ (fun keys joint => ∃ signatures,
+      List.Forall₂ (fun key sig => sign key message = .ok sig) keys signatures ∧
+        aggregate signatures.toArray = .ok joint) groups aggregates)
+    {acc : G2} {a : Fr} (hacc : G2.Represents acc a) :
+    ∃ R, aggregates.foldlM
+        (fun agg sig => do
+          let p ← G2.uncompress sig
+          pure (agg.add p)) acc = .ok R ∧
+      G2.Represents R (a + (groups.flatten.map (·.val)).sum * b) := by
+  induction joined generalizing acc a with
+  | nil => exact ⟨acc, rfl, by simpa using hacc⟩
+  | cons head _ ih =>
+    obtain ⟨signatures, signed, aggregated⟩ := head
+    obtain ⟨S, rfl, hSrep⟩ := aggregate_group hQ hb signed aggregated
+    obtain ⟨r, hr, -, hrep⟩ := G2.uncompress_compress_of_represents hSrep
+    obtain ⟨R, hR, hRrep⟩ := ih (hacc.add hrep)
+    refine ⟨R, ?_, ?_⟩
+    · -- Rewrite the decoding first, so the kernel never evaluates it.
+      rw [List.foldlM_cons, pointToSignature_eq, hr]
+      exact hR
+    · rw [List.flatten_cons, List.map_append, List.sum_append]
+      convert hRrep using 1
+      ring
+
+/-- Honest signatures on one message aggregate, whatever their keys sum to.
+
+There must be at least one key. -/
+theorem aggregate_sign_exists_ok {keys : List SecretKey} {signatures : List BLSSignature}
+    {message : ByteArray}
+    (signed : List.Forall₂ (fun key sig => sign key message = .ok sig) keys signatures)
+    (nonempty : keys ≠ []) : ∃ signature, aggregate signatures.toArray = .ok signature := by
+  obtain ⟨Q, hQ, hv, hs⟩ := HashToCurve.hashToG2_total_inSubgroup message DST
+  obtain ⟨b, hb⟩ := (G2.inSubgroup_iff_exists_represents hv).mp hs
+  -- Rewrite the signatures as multiples of the hash, so the kernel never evaluates a point.
+  have signs := (Base.mapM_ok_of_forall₂ signed).symm.trans (mapM_sign hQ keys)
+  rw [Except.ok.injEq] at signs
+  subst signs
+  obtain ⟨S, hS, -⟩ := aggregate_map_mul hb keys nonempty
+  exact ⟨_, hS⟩
+
+/-- Aggregates of honest signatures on one message aggregate to a point of the key sum.
+
+The hash of the message represents `b • g2`, and there must be at least one group. -/
+private theorem aggregate_groups {message : ByteArray} {Q : G2} {b : Fr}
+    (hQ : HashToCurve.hashToG2 message DST = .ok Q) (hb : G2.Represents Q b)
+    {groups : List (List SecretKey)} {aggregates : List BLSSignature}
+    (joined : List.Forall₂ (fun keys joint => ∃ signatures,
+      List.Forall₂ (fun key sig => sign key message = .ok sig) keys signatures ∧
+        aggregate signatures.toArray = .ok joint) groups aggregates)
+    (nonempty : groups ≠ []) :
+    ∃ R, aggregate aggregates.toArray = .ok (pointToSignature R) ∧
+      G2.Represents R ((groups.flatten.map (·.val)).sum * b) := by
+  obtain ⟨R, hR, hRrep⟩ := foldlM_groups hQ hb joined G2.represents_zero
+  refine ⟨R, ?_, (zero_add ((groups.flatten.map (·.val)).sum * b)) ▸ hRrep⟩
+  unfold aggregate
+  rw [ite_eq_right (by cases joined with
+    | nil => exact absurd rfl nonempty
+    | cons _ _ => exact Bool.false_ne_true)]
+  simp only [List.foldlM_toArray]
+  rw [hR]
+  rfl
+
+/-- Aggregates of honest signatures on one message aggregate again.
+
+There must be at least one group. -/
+theorem aggregate_of_groups_exists_ok {groups : List (List SecretKey)}
+    {aggregates : List BLSSignature} {message : ByteArray}
+    (joined : List.Forall₂ (fun keys joint => ∃ signatures,
+      List.Forall₂ (fun key sig => sign key message = .ok sig) keys signatures ∧
+        aggregate signatures.toArray = .ok joint) groups aggregates)
+    (nonempty : groups ≠ []) :
+    ∃ signature, aggregate aggregates.toArray = .ok signature := by
+  obtain ⟨Q, hQ, hv, hs⟩ := HashToCurve.hashToG2_total_inSubgroup message DST
+  obtain ⟨b, hb⟩ := (G2.inSubgroup_iff_exists_represents hv).mp hs
+  obtain ⟨R, hR, -⟩ := aggregate_groups hQ hb joined nonempty
+  exact ⟨_, hR⟩
+
+/-- An aggregate of aggregates of signatures on one message verifies under all their keys.
+
+Each group of keys signs the message, and the signatures of each group aggregate into one.
+
+There must be at least one key, and the keys of all groups must not sum to zero. -/
+theorem fastAggregateVerify_aggregate_of_groups {groups : List (List SecretKey)}
+    {aggregates : List BLSSignature} {message : ByteArray} {signature : BLSSignature}
+    (joined : List.Forall₂ (fun keys joint => ∃ signatures,
+      List.Forall₂ (fun key sig => sign key message = .ok sig) keys signatures ∧
+        aggregate signatures.toArray = .ok joint) groups aggregates)
+    (nonempty : groups.flatten ≠ []) (sum : (groups.flatten.map (·.val)).sum ≠ 0)
+    (aggregated : aggregate aggregates.toArray = .ok signature) :
+    fastAggregateVerify (groups.flatten.map skToPk).toArray message signature = true := by
+  obtain ⟨Q, hQ, hv, hs⟩ := HashToCurve.hashToG2_total_inSubgroup message DST
+  obtain ⟨b, hb⟩ := (G2.inSubgroup_iff_exists_represents hv).mp hs
+  -- With no group, there is no key.
+  have someGroup : groups ≠ [] := by
+    rintro rfl
+    exact nonempty rfl
+  obtain ⟨R, hR, hRrep⟩ := aggregate_groups hQ hb joined someGroup
+  -- The given signature is the computed aggregate.
+  obtain rfl := Except.ok.inj (aggregated.symm.trans hR)
+  exact fastAggregateVerify_of_represents nonempty sum hQ hb hRrep
 
 /-- An honest signature passes the fast aggregate verification under its one public key. -/
 theorem fastAggregateVerify_sign (sk : SecretKey) (msg : ByteArray)
