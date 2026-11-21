@@ -131,7 +131,10 @@ private theorem header_deposit {fork : Fork} {before after : BeaconState preset 
   obtain ⟨_, _, _, _, applied⟩ := processDeposit_ok ok
   exact (frame_applyDeposit applied).latestBlockHeader
 
-private theorem genesis_header {g : ForkedBeaconState preset}
+/-- A genesis state built from deposits has its latest block header at slot zero.
+
+The state root of that header is zero. -/
+theorem genesis_header {g : ForkedBeaconState preset}
     (genesis : Genesis config checks g) :
     g.state.latestBlockHeader.slot = 0 ∧
       g.state.latestBlockHeader.stateRoot = Vector.replicate 32 0 := by
