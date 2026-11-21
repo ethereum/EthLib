@@ -1,61 +1,13 @@
 module
 
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumReserve
-public import EthLib.Consensus.Proofs.Transition.BalanceDrift
-public import EthLib.Consensus.Proofs.Transition.FfgJustification
-import EthLib.Consensus.Proofs.Transition.ActiveKept
-import EthLib.Consensus.Proofs.Transition.SlashedExit
-public import EthLib.Consensus.Proofs.Transition.SlashedPersistence
 public import EthLib.Consensus.Proofs.Transition.EpochReads
-import EthLib.Consensus.Proofs.Transition.PendingConsolidations
-import EthLib.Consensus.Proofs.Transition.Committees
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Penalties
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Contracts.Ledger
-import EthLib.Consensus.Proofs.Transition.EpochPending
-import EthLib.Consensus.Proofs.Transition.Operations
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Reserved.Operations
-import EthLib.Consensus.Proofs.Transition.Block
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Whistleblower
-import EthLib.Consensus.Proofs.DirectSafety.BalanceSources
-import EthLib.Consensus.Proofs.Mutators
-import EthLib.Consensus.Proofs.Transition.Trace
-import Mathlib.Data.Nat.Notation
-import EthLib.Consensus.Proofs.Transition.EpochUpdates
-import EthLib.Consensus.Proofs.Transition.ForkBoundary
-import EthLib.Consensus.Proofs.Transition.StateTransition
-import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
-import EthLib.Consensus.Proofs.Transition.BranchLedger
-import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Assembly
-import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 import EthLib.Consensus.Proofs.Transition.InactivityLeakBound
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumDriftBound
-import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
-import EthLib.Consensus.Proofs.Transition.ValidatorCaps
-public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Bound
-import EthLib.Consensus.Proofs.Transition.Totality.Supply
-import EthLib.Consensus.Proofs.Transition.EffectiveFall
-import EthLib.Consensus.Proofs.DirectSafety.Evidence
-import EthLib.Consensus.Proofs.DirectSafety.Fields
-import EthLib.Consensus.Proofs.Transition.ValidatorKeys
-import EthLib.Consensus.Proofs.Transition.ChainRoots
-import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
-import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
 import EthLib.Consensus.Proofs.Transition.SlashedFlags
 import EthLib.Consensus.Proofs.Transition.LookaheadActive
-import Mathlib.Data.Nat.ModEq
-import EthLib.Consensus.Proofs.DirectSafety.IntervalBounds
-import EthLib.Consensus.Proofs.Transition.BlockCredits
 import EthLib.Consensus.Proofs.DirectSafety.Apriori.BlockFold
-public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Ceiling
-public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Issuance
 public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Ownership
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Branch
-import EthLib.Consensus.Proofs.Transition.EpochRewards
-import EthLib.Consensus.Proofs.Transition.RewardDeltas
-import EthLib.Consensus.Proofs.Transition.FfgStake
-import EthLib.Consensus.Proofs.Time
-import EthLib.Consensus.Proofs.Participation
 import Mathlib.Algebra.Order.Floor.Div
 
 @[expose] public section
@@ -68,7 +20,7 @@ section
 
 /-! Which validator fields persist through transitions and their recorded events. -/
 
-namespace PinEventsKept
+namespace PinDrift.Internal
 
 open Base Uint64 Models DirectSafety
 
@@ -79,8 +31,7 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 Assigned exits stay, and a slash stays.
 
 The withdrawable epoch of a key with an exit set only rises, and only for a slashed key. -/
-structure _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Kept {f g : Fork} (s :
-  BeaconState preset f) (t : BeaconState preset g) :
+structure Kept {f g : Fork} (s : BeaconState preset f) (t : BeaconState preset g) :
     Prop where
   life : RegistryLifecycle s t
   slashed : SlashedPersistence s t
@@ -89,8 +40,7 @@ structure _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Kept {f g : F
 /-- Two steps keep what one keeps.
 
 The exit of the first comes from its lifecycle, and the slash of the second from its persistence. -/
-private theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Kept.trans {f g h : Fork}
-  {s : BeaconState preset f} {t : BeaconState preset g}
+private theorem Kept.trans {f g h : Fork} {s : BeaconState preset f} {t : BeaconState preset g}
     {u : BeaconState preset h} (one : PinDrift.Internal.Kept s t) (two : PinDrift.Internal.Kept t u)
       : PinDrift.Internal.Kept s u where
   life := one.life.trans two.life
@@ -111,8 +61,7 @@ private theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Kept.tr
       · exact .inr (same.trans same1)
 
 /-- A state with the same validators keeps everything. -/
-private theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Kept.of_data {f g : Fork}
-  {s : BeaconState preset f} {t : BeaconState preset g}
+private theorem Kept.of_data {f g : Fork} {s : BeaconState preset f} {t : BeaconState preset g}
     (same : t.validators.data = s.validators.data) : PinDrift.Internal.Kept s t where
   life := .of_data same
   slashed := .of_data same
@@ -122,8 +71,7 @@ private theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Kept.of
     exact ⟨UInt64.le_refl _, .inr rfl⟩
 
 /-- A step that keeps the lifecycle, the slashes and each withdrawable epoch keeps everything. -/
-private theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Kept.of_withdrawable {f g :
-  Fork} {s : BeaconState preset f}
+private theorem Kept.of_withdrawable {f g : Fork} {s : BeaconState preset f}
     {t : BeaconState preset g} (life : RegistryLifecycle s t) (slashed : SlashedPersistence s t)
     (same : ∀ (i : ℕ) (v : Validator), s.validators.data[i]? = some v →
       ∃ w, t.validators.data[i]? = some w ∧ w.withdrawableEpoch = v.withdrawableEpoch) :
@@ -251,8 +199,7 @@ private theorem kept_block {fork : Fork} {a t : BeaconState preset fork}
     fulu (by simp only [getCurrentEpoch, frame.slot]) matched
 
 /-- From Fulu and before Gloas, a run keeps the registry. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.kept_run {g x y : ForkedBeaconState
-  preset}
+theorem kept_run {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (fulu : .fusaka ≤ x.fork) (tail : Run config checks x y) (early : y.fork < .glamsterdam) :
     PinDrift.Internal.Kept x.state y.state := by
@@ -295,8 +242,7 @@ private theorem Grew.trans {f : Fork} {p q r : BalanceReplay preset f} (one : Gr
     · exact .inr other
 
 /-- A replay event either came from the input log or has the source of the appended events. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.mem_or_source_of_append {source :
-  BalanceSource}
+theorem mem_or_source_of_append {source : BalanceSource}
     {pre post : List (BalanceEvent preset)} {added e : BalanceEvent preset}
     (events : post = pre ++ [added]) (same : added.source = source)
     (member : e ∈ post) : e ∈ pre ∨ e.source = source := by
@@ -306,7 +252,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.mem_or_source_o
   · exact .inr ((congrArg BalanceEvent.source (List.mem_singleton.mp added)).trans same)
 
 /-- A carried pass changes the state by its action and records nothing. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.carryBalance_cases {f : Fork}
+theorem carryBalance_cases {f : Fork}
     {action : BeaconState preset f → Except TransitionError (BeaconState preset f)}
     {p q : BalanceReplay preset f} (ok : carryBalance action p = .ok q) :
     action p.1 = .ok q.1 ∧ q.2 = p.2 := by
@@ -427,15 +373,13 @@ private theorem replay_stage {f : Fork} (electra : .pectra ≤ f) {k : EpochStag
       exact Grew.refl _
 
 /-- A later state has the exit and withdrawable epochs of an earlier one at its indices. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.ExitsStay {f g : Fork} (s : BeaconState
-  preset f) (t : BeaconState preset g) : Prop :=
+def ExitsStay {f g : Fork} (s : BeaconState preset f) (t : BeaconState preset g) : Prop :=
   ∀ (i : ℕ) (v : Validator), s.validators.data[i]? = some v →
     ∃ w, t.validators.data[i]? = some w ∧ w.exitEpoch = v.exitEpoch ∧
       w.withdrawableEpoch = v.withdrawableEpoch
 
 /-- Two states in a row that keep the exits and withdrawable epochs keep them together. -/
-private theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.ExitsStay.trans {f g h :
-  Fork} {s : BeaconState preset f} {t : BeaconState preset g}
+private theorem ExitsStay.trans {f g h : Fork} {s : BeaconState preset f} {t : BeaconState preset g}
     {u : BeaconState preset h} (one : PinDrift.Internal.ExitsStay s t) (two :
       PinDrift.Internal.ExitsStay t u) : PinDrift.Internal.ExitsStay s u :=
   fun i v found => by
@@ -444,8 +388,7 @@ private theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.ExitsSt
     exact ⟨w, wFound, exit'.trans exit, wd'.trans wd⟩
 
 /-- A state with the same validators has the same exits. -/
-private theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.ExitsStay.of_data {f g :
-  Fork} {s : BeaconState preset f} {t : BeaconState preset g}
+private theorem ExitsStay.of_data {f g : Fork} {s : BeaconState preset f} {t : BeaconState preset g}
     (same : t.validators.data = s.validators.data) : PinDrift.Internal.ExitsStay s t :=
   fun i v found => ⟨v, by rw [same]; exact found, rfl, rfl⟩
 
@@ -456,8 +399,7 @@ It keeps the registry of the step's start, at its epoch and with at most its siz
 The step's end state has the exit and withdrawable epochs of that input.
 
 A step with a deposit event ends in a later epoch. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Step.deposit_input {u w :
-  ForkedBeaconState preset}
+theorem Step.deposit_input {u w : ForkedBeaconState preset}
     (ok : advanceSlotAcross config checks u = .ok w) (fulu : .fusaka ≤ u.fork)
     (early : w.fork < .glamsterdam) {events : List (BalanceEvent preset)}
     (replayed : (Step.slot ok : Step config checks u w).balanceEvents = .ok events) :
@@ -554,8 +496,7 @@ From Electra they credit no existing key.
 The registry at the event's start has at most the size of the one at the slot step's start.
 
 A slashed key at the slot step's start is slashed at the event's start, and their epochs agree. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.events_kept {g x y :
-  ForkedBeaconState preset}
+theorem Run.events_kept {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (tail : Run config checks x y) (fulu : .fusaka ≤ x.fork) (early : y.fork < .glamsterdam)
     {u w : ForkedBeaconState preset} (ok : advanceSlotAcross config checks u = .ok w)
@@ -587,7 +528,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.events_kept
   have total := run.trans kept
   exact ⟨total.life, total.withdrawable, same ▸ epochLe, size, kept.slashed, same⟩
 
-end PinEventsKept
+end PinDrift.Internal
 
 end
 
