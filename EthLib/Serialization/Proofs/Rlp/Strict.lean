@@ -2,6 +2,7 @@ module
 
 import EthLib.Base.Proofs.Bytes
 public import EthLib.Serialization.Proofs.Rlp.Bytes
+import EthLib.Serialization.Proofs.Rlp.Loops
 
 /-!
 # `Serialization.Proofs.Rlp.Strict`
@@ -44,7 +45,7 @@ theorem decodeItem_singleByteWithPrefix (x : UInt8) (hx : x < 0x80) {input : Byt
     decodeItem input pos stop = .error (.singleByteWithPrefix x) := by
   obtain ⟨hPos, hFirst, hTail⟩ := extract_toList_eq_cons hStop h
   obtain ⟨hPos', hSecond, -⟩ := extract_toList_eq_cons hStop hTail
-  rw [decodeItem.eq_def]
+  rw [decodeItem_eq]
   simp [byteArray_getElem_eq_get!, hPos, hFirst, readPrefix, hx, bind, Except.bind, hSecond,
     show pos + 1 + 1 ≤ stop by omega, show pos + 1 < input.size by omega]
 
@@ -63,7 +64,7 @@ theorem decodeItem_leadingZero_bytes (k : Nat) (hk1 : 1 ≤ k) (hk8 : k ≤ 8) (
   simp only [List.length_cons, List.length_append] at hCount
   obtain ⟨hPos, hFirst, hTail⟩ := extract_toList_eq_cons hStop h
   obtain ⟨-, hZero, -⟩ := extract_toList_eq_cons hStop (by rw [hTail]; rfl)
-  rw [decodeItem.eq_def]
+  rw [decodeItem_eq]
   simp [byteArray_getElem_eq_get!, hPos, hFirst, hZero, readPrefix, readPrefix.readLongLength,
     UInt8.lt_iff_toNat_lt,
     UInt8.toNat_ofNat', hMod,
@@ -88,7 +89,7 @@ theorem decodeItem_leadingZero_list (k : Nat) (hk1 : 1 ≤ k) (hk8 : k ≤ 8) (l
   simp only [List.length_cons, List.length_append] at hCount
   obtain ⟨hPos, hFirst, hTail⟩ := extract_toList_eq_cons hStop h
   obtain ⟨-, hZero, -⟩ := extract_toList_eq_cons hStop (by rw [hTail]; rfl)
-  rw [decodeItem.eq_def]
+  rw [decodeItem_eq]
   simp [byteArray_getElem_eq_get!, hPos, hFirst, hZero, readPrefix, readPrefix.readLongLength,
     UInt8.lt_iff_toNat_lt,
     UInt8.toNat_ofNat', hMod,
@@ -106,7 +107,7 @@ theorem decodeItem_longFormForShortLength_bytes (l : UInt8) (h0 : 0 < l) (h56 : 
     decodeItem input pos stop = .error (.longFormForShortLength l.toNat) := by
   obtain ⟨hPos, hFirst, hTail⟩ := extract_toList_eq_cons hStop h
   obtain ⟨hPos', hSecond, -⟩ := extract_toList_eq_cons hStop hTail
-  rw [decodeItem.eq_def]
+  rw [decodeItem_eq]
   simp only [UInt8.lt_iff_toNat_lt] at h0 h56
   simp [byteArray_getElem_eq_get!, hPos, hFirst, hSecond, readPrefix, readPrefix.readLongLength,
     readBigEndian,
@@ -120,7 +121,7 @@ theorem decodeItem_longFormForShortLength_list (l : UInt8) (h0 : 0 < l) (h56 : l
     decodeItem input pos stop = .error (.longFormForShortLength l.toNat) := by
   obtain ⟨hPos, hFirst, hTail⟩ := extract_toList_eq_cons hStop h
   obtain ⟨hPos', hSecond, -⟩ := extract_toList_eq_cons hStop hTail
-  rw [decodeItem.eq_def]
+  rw [decodeItem_eq]
   simp only [UInt8.lt_iff_toNat_lt] at h0 h56
   simp [byteArray_getElem_eq_get!, hPos, hFirst, hSecond, readPrefix, readPrefix.readLongLength,
     readBigEndian,

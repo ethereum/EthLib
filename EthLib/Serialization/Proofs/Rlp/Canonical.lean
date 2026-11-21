@@ -201,7 +201,7 @@ theorem readItem_canonical {input : ByteArray} {pos stop : Nat} (hStop : stop �
     {x : Item} {next : Nat} (h : readItem input pos stop = .ok (x, next)) :
     ∃ e, encode x = .ok e ∧ (input.extract pos next).data.toList = e.data.toList := by
   unfold readItem at h
-  rw [decodeItem.eq_def] at h
+  rw [decodeItem_eq] at h
   by_cases hPos : pos < stop
   case neg =>
     -- No byte is left, so there is no item.
