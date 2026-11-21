@@ -4586,6 +4586,16 @@ The honest set of each step must then hold two thirds without them, so it needs 
 The theorem holds at every fork; before Altair the counted validators are the attesters of matching pending attestations.
 No theorem yet derives the hypotheses of the two steps from a run.
 
+`processAttestation_exists_ok` (`Consensus/Proofs/Transition/AttestationAccepted.lean`) is the step of plausible liveness that makes a vote count, from Altair until Gloas.
+An attestation whose target is the epoch of its slot, and the current or previous epoch, is accepted under these conditions.
+It comes within its inclusion window, and its bits fit its committees.
+Its source is the justified checkpoint of its target epoch, and its indexed form passes the signature check.
+The state must be within a budget with room for the proposer's reward, and its proposer must be a validator.
+Each list of participation flags has one entry for each validator.
+The buffer of block roots must reach the previous epoch, and the slot plus its length must fit in 64 bits.
+Each attester then holds the timely target flag, when the state holds the target root for the first slot of the target epoch.
+The committee check and the signature check stay hypotheses here; Gloas, with its builder payments, is left out.
+
 `processJustificationAndFinalization_slackJustifiedCheckpoints` (`Consensus/Proofs/Transition/FfgSlack.lean`) turns one step into a slack link of the model.
 If the two justified checkpoints of the state before the step are slack-justified, so are those of the state after it.
 A new current justified checkpoint must match the state of that step.

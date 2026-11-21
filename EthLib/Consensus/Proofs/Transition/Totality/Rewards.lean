@@ -189,7 +189,7 @@ variable {preset : Preset} {fork : Base.Fork} {state : BeaconState preset fork}
 /-- The reward of one increment succeeds when the total is at least one positive increment.
 
 It is then at most its value at a total of one increment. -/
-private theorem getBaseRewardPerIncrement_le (positive : preset.EFFECTIVE_BALANCE_INCREMENT ≠ 0)
+theorem getBaseRewardPerIncrement_le (positive : preset.EFFECTIVE_BALANCE_INCREMENT ≠ 0)
     (fits : preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64)
     {total : Gwei} (low : preset.EFFECTIVE_BALANCE_INCREMENT ≤ total) :
     ∃ per, getBaseRewardPerIncrement preset total = .ok per ∧
@@ -216,7 +216,7 @@ private theorem getBaseRewardPerIncrement_le (positive : preset.EFFECTIVE_BALANC
 The reward of one increment must be at most its value at a total of one increment.
 
 The bound on the base reward must fit in 64 bits, and the reward is then at most that bound. -/
-private theorem getBaseReward_le (altair : .altair ≤ fork) {total per : Gwei}
+theorem getBaseReward_le (altair : .altair ≤ fork) {total per : Gwei}
     (perOk : getBaseRewardPerIncrement preset total = .ok per)
     (perLe : per.toNat ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
       preset.BASE_REWARD_FACTOR.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat.sqrt)
