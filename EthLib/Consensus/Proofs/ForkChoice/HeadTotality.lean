@@ -106,16 +106,6 @@ namespace Store
 
 variable {config : Config} {store : Store preset fork}
 
-/-- A vote for a held block supports a node. -/
-private theorem getSupportedNode_exists {message : LatestMessage fork}
-    {block : BeaconBlock preset fork} (found : store.blocks[message.root]? = some block) :
-    ∃ node, store.getSupportedNode message = .ok node := by
-  by_cases gloas : .glamsterdam ≤ fork
-  · by_cases lt : block.slot < message.slot gloas
-    · exact ⟨_, getSupportedNode_of_lt_slot gloas found lt⟩
-    · exact ⟨_, getSupportedNode_of_same_slot gloas found (UInt64.not_lt.mp lt)⟩
-  · exact ⟨_, getSupportedNode_of_lt (Nat.lt_of_not_le gloas)⟩
-
 /-- The votes for a held node can be read from any state of small enough stake.
 
 The registry of that state must be within its limit.

@@ -21,6 +21,8 @@ Not yet released.
   `Word64.add4_spec` and `Word64.sub4_spec` give the integer of a four-word sum with its carry, and of a difference with its borrow.
   The word lemmas that were private in the secp256k1 field and that both fields use are public in `Word64`: `mulHigh_spec`, `add_with_carry`, `mac_spec`, `sub_split`, `yes_le_one`, `lowValue_lt`, `value_low_of_top_zero`, `rawOfNat_val`, and in the proofs `value_wide`, `val_narrow` and `wide_narrow`.
 
+- `Store.getSupportedNode_exists` (`ForkChoice/Head.lean`) shows that a vote for a held block supports a node of the store, at every fork.
+
 - `PinDrift.Internal.total_band_of_setting` is public, in `PinDriftBound/Setting.lean`.
   In the pin's setting, take a pre-Gloas state on a run from the finalized state, by R's next epoch.
   When both total active balance reads succeed, each total is at most three halves of the other.
@@ -820,6 +822,17 @@ Not yet released.
 - In Lean, the secp256r1 `Fp`, `Fn`, `Fp.modulus`, `Fn.modulus`, `Fp.inv`, `Fn.inv` and their `NeZero` instances move from `Secp256r1/Curve.lean` to `Secp256r1/Field.lean`, with unchanged full names.
   `Secp256r1.Curve` no longer publicly imports `Secp256k1.Field`.
   Migration: import `Secp256k1.Field` directly where it is needed.
+
+- In Lean, `VoteAt.recorded_at_next_slot` holds at every fork.
+  It no longer takes `preGloas : fork < .glamsterdam`; it takes `anchorSlot : .glamsterdam ≤ fork → anchorBlock.slot ≤ anchorState.slot` after `sync`, and concludes `(LatestMessage.ofAttestation attestation).rank ≤ message.rank`.
+  Migration: before Gloas, pass `fun gloas => absurd gloas (Nat.not_le_of_lt preGloas)` for `anchorSlot`, and read the rank as the target epoch through `LatestMessage.ofAttestation_rank_of_lt`.
+
+- In Lean, `Execution.latest_rank_of_voteAt` holds at every fork, no longer takes `preGloas : fork < .glamsterdam`, and concludes `(LatestMessage.ofAttestation attestation).rank ≤ message.rank`.
+  Migration: a caller drops that argument, and before Gloas reads the rank as the target epoch through `LatestMessage.ofAttestation_rank_of_lt`.
+
+- In Lean, `Execution.mem_supportersOf_of_latest_signed`, `Execution.mem_supportersOf_of_duty_interval_core`, `Execution.mem_supportersOf_of_duty_epoch` and `Execution.mem_supportersOf_of_duty_epoch_or_accountable` hold at every fork and no longer take `preGloas : fork < .glamsterdam`.
+  Migration: a caller drops that argument.
+  The new statements imply the old ones.
 
 - In Lean, `Store.isAncestor_trans_of_lt` is renamed `Store.isAncestor_trans` and holds at every fork.
   It no longer takes `before : fork < .glamsterdam`.

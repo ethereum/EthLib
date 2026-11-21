@@ -183,6 +183,16 @@ theorem getSupportedNode_of_lt_slot {message : LatestMessage fork}
       .ok ⟨message.root, if message.payloadPresent gloas then .full else .empty⟩ := by
   simp [getSupportedNode, gloas, Store.block, found, later, bind, Except.bind, pure, Except.pure]
 
+/-- A vote for a held block supports a node. -/
+theorem getSupportedNode_exists {message : LatestMessage fork}
+    {block : BeaconBlock preset fork} (found : store.blocks[message.root]? = some block) :
+    ∃ node, store.getSupportedNode message = .ok node := by
+  by_cases gloas : .glamsterdam ≤ fork
+  · by_cases lt : block.slot < message.slot gloas
+    · exact ⟨_, getSupportedNode_of_lt_slot gloas found lt⟩
+    · exact ⟨_, getSupportedNode_of_same_slot gloas found (UInt64.not_lt.mp lt)⟩
+  · exact ⟨_, getSupportedNode_of_lt (Nat.lt_of_not_le gloas)⟩
+
 /-- From Gloas a vote for a block the store does not hold supports no node. -/
 theorem getSupportedNode_of_unknown {message : LatestMessage fork} (gloas : .glamsterdam ≤ fork)
     (missing : store.blocks[message.root]? = none) :

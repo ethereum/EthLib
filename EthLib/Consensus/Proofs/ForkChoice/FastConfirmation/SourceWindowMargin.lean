@@ -1204,13 +1204,14 @@ private theorem latest_rank_of_signed {Δ : ℕ} (sync : e.Synchronous Δ)
   rw [← sameData]
   rw [← sameData] at nextOk
   have slotEq := dataSlot
-  rcases e.latest_rank_of_voteAt sync slots preGloas admitted fits prompt anchored anchorSlot
+  rcases e.latest_rank_of_voteAt sync slots admitted fits prompt anchored anchorSlot
       anchorBoundary start chain nonzero honest receiver vote committees
       (dataSlot ▸ nextOk) (dataSlot ▸ (sameData ▸ slotTimeOk)) nextTimeOk deadlineOk started
       boundaryLe atTime upToDate known supports
       (fun k' le _ current => (rootFinal k' le current).imp_left (Or.imp_right headFits)) with
-    (latest | ⟨covered, k', le, -, current, unfit⟩) | collision
-  · exact .inl (.inl latest)
+    (⟨message, latest, rank⟩ | ⟨covered, k', le, -, current, unfit⟩) | collision
+  · rw [LatestMessage.ofAttestation_rank_of_lt preGloas] at rank
+    exact .inl (.inl ⟨message, latest, rank⟩)
   · exact .inl (.inr ⟨covered, k', le, current,
       fun fits => by rw [sameData] at fits; exact unfit (fits.imp_right headFits)⟩)
   · exact .inr collision
@@ -1639,7 +1640,7 @@ private theorem caller_supporter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
       (w := w) (k := k) with allFresh | collision
   swap
   · exact .inr collision
-  rcases Execution.mem_supportersOf_of_latest_signed anchored start preGloas honest receiver
+  rcases Execution.mem_supportersOf_of_latest_signed anchored start honest receiver
       receivedOk notCounted upToDate (le_of_eq atTime) dueOk dueLt allFresh
       (fun earlier low high => rootCovers earlier low (atTime ▸ high)) known rootAbove active
     with member | ⟨a, ha, b, hb, i, j, hi, hj, r, evidence, searched⟩
@@ -1950,7 +1951,7 @@ private theorem caller_parent_voter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
       (w := w) (k := k) with allFresh | collision
   swap
   · exact .inr collision
-  rcases Execution.mem_supportersOf_of_latest_signed anchored start preGloas honest receiver
+  rcases Execution.mem_supportersOf_of_latest_signed anchored start honest receiver
       receivedOk notCounted upToDate receiverTime dueOk dueLt allFresh
       (fun earlier low high => rootCovers earlier low (atTime ▸ high)) known rootAbove
       (List.mem_toFinset.mpr
@@ -1998,7 +1999,7 @@ The window ends before the receiver's current slot, so its duties are due by the
 
 They are after the caller's time, when honest heads descend from the root. -/
 private theorem receiver_window_member_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
-    (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
+    (slots : 0 < config.SLOT_DURATION_MS)
     {time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
     (votes : ValidatedDutyVotes (e := e) time)
     (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e time)
@@ -2067,7 +2068,7 @@ private theorem receiver_window_member_reaches {Δ : ℕ} (sync : e.Synchronous 
     simpa [Execution.world_zero, World.initial] using this
   have windowVotes := votes.votesInSlots fits (begin := slot) endTimeOk
     (by rw [upToDate.1, atTime] at endLe; exact endLe)
-  exact e.mem_supportersOf_of_duty_interval_core sync slots preGloas admitted fits prompt
+  exact e.mem_supportersOf_of_duty_interval_core sync slots admitted fits prompt
     anchored anchorSlot anchorBoundary start started chain nonzero windowVotes beginOk endTimeOk
     (le_of_eq timeEq) (by rw [← atTime, ← upToDate.1]; exact endLe) rootCovers receiver atTime
     upToDate known (fun k' le _ current => finality k' le current) honest active
@@ -2784,7 +2785,7 @@ public theorem Execution.source_surplus_or_historical_evidence_with [DecidablePr
       have := epoch_le_of_slot_le (preset := preset) parent.slot slot
         (UInt64.le_iff_toNat_le.mp parentSlotLe)
       omega
-    exact Finset.mem_filter.mpr ⟨main (receiver_window_member_reaches sync slots preGloas
+    exact Finset.mem_filter.mpr ⟨main (receiver_window_member_reaches sync slots
       admitted votes fits prompt windows anchored anchorSlot anchorBoundary start family roots
       receiver honest beginOk timeEq rootCovers atTime upToDate genesisEq known finality
       receiverHeadOk currentOk (UInt64.lt_of_le_of_lt finishLe finishLt) receiverRing xReceiver
