@@ -13,7 +13,11 @@ A valid block also has the state after it, so a payload on it can run.
 
 The node also keeps the forkchoice state of the last update that applied a head.
 
-It also has a store of completed builds, by payload ID, which no step fills yet.
+It also has a store of completed builds, by payload ID.
+
+An update whose payload attributes start a build stores it under the payload ID that it answers.
+
+The source leaves the transactions and the choices of a build to the node, so a builder gives them.
 
 Each method is a step: the node and the request give an answer and the next node.
 
@@ -57,10 +61,13 @@ They are the [payload validation][validation] of Paris, and three of its methods
 - [`engine_forkchoiceUpdatedV1`][fcu]
 - [`engine_getPayloadV1`][get]
 
+The builds follow the [payload building][building] of Paris.
+
 [validation]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-validation
 [new]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_newpayloadv1
 [fcu]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_forkchoiceupdatedv1
 [get]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_getpayloadv1
+[building]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-building
 -/
 
 @[expose] public section
@@ -337,7 +344,7 @@ def updateStep (node : Node) (version : Nat) (params : Json) :
     | none => node
   (forkchoiceUpdatedResponse <$> answer, next)
 
-/-- The step of `engine_forkchoiceUpdated`: the response, and the next node.
+/-- The update of `engine_forkchoiceUpdated`, before any build: the response, and the next node.
 
 The node first validates the accepted blocks of the chain of the head, by step 4 of the method.
 
@@ -349,6 +356,55 @@ def forkchoiceUpdatedStep (node : Node) (version : Nat) (params : Json) :
   let node := node.validateHead version params
   if node.headAccepted version params then (.ok (⟨.syncing, none⟩, none), node)
   else node.updateStep version params
+
+/-- What the builder of a node chooses for the attributes of a build: its choices and transactions.
+
+The transactions are in the form of an execution payload. -/
+abbrev Builder := (Σ fork, PayloadAttributes fork) → BuildChoices × List ByteArray
+
+/-- The node after an update that answers a payload ID stores the build of that ID.
+
+A node that already holds a build under that ID keeps it, by step 6 of payload building.
+
+Otherwise the attributes of the request, as the version decodes them, build on the head.
+
+The head is the head of the request, which the update applied, with the state after it.
+
+The node stores nothing when the build fails, so a request for that ID then fails too.
+
+It stores nothing from Glamsterdam, since a build gives no block access list here yet.
+
+The stored build has no blobs and does not ask to override an external builder. -/
+def storeBuild (node : Node) (builder : Builder) (version : Nat) (params : Json)
+    (id : PayloadId) : Node :=
+  if (node.builds.lookup id).isSome then node
+  else match forkchoiceUpdatedParams version params with
+    | .ok (state, some j) =>
+      match payloadAttributesOfVersion version j, node.validState state.headBlockHash with
+      | .ok decoded, some post =>
+        let (choices, transactions) := builder decoded
+        match buildPayloadOnChain (node.chainAt state.headBlockHash post) version decoded choices
+            transactions with
+        | .ok ⟨fork, built⟩ =>
+          if h : .glamsterdam ≤ fork then node
+          else { node with builds := (id, ⟨fork, built, ⟨[], [], []⟩, false,
+            fun h' => absurd h' h⟩) :: node.builds }
+        | .error _ => node
+      | _, _ => node
+    | _ => node
+
+/-- The step of `engine_forkchoiceUpdated` on a node that builds: the response, and the next node.
+
+The response and the node are those of the update.
+
+An update that answers a payload ID then stores the build of that ID, with the builder of the node.
+-/
+def forkchoiceUpdatedBuildStep (node : Node) (builder : Builder) (version : Nat) (params : Json) :
+    Except EngineError (PayloadStatus × Option PayloadId) × Node :=
+  match node.forkchoiceUpdatedStep version params with
+  | (.ok (status, some id), next) =>
+    (.ok (status, some id), next.storeBuild builder version params id)
+  | other => other
 
 /-- The step of `engine_getPayload`: the build of a payload ID, and the node as it was.
 

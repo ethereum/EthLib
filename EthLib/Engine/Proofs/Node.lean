@@ -41,6 +41,8 @@ That head is then a block that the node knows as valid.
 
 A request for a payload gives the answer of the method on the builds.
 
+An update that answers a payload ID stores the build of its request, on the chain of its head.
+
 Every step keeps each block that the node knows as valid or invalid, and the configuration.
 
 So a request whose checks pass, once answered valid or invalid, gets that answer again later.
@@ -877,6 +879,162 @@ theorem forkchoiceUpdatedStep_lookup {other : Hash32} {b : KnownBlock}
   · simp only [updateStep]
     split <;> exact hv
 
+/-! ## Builds -/
+
+/-- Storing a build keeps the known blocks, the configuration and the forkchoice state. -/
+theorem storeBuild_keeps (node : Node) (builder : Builder) (version : Nat) (params : Lean.Json)
+    (id : PayloadId) :
+    (node.storeBuild builder version params id).blocks = node.blocks ∧
+      (node.storeBuild builder version params id).config = node.config ∧
+      (node.storeBuild builder version params id).forkchoice = node.forkchoice := by
+  simp only [storeBuild]
+  repeat' split
+  all_goals exact ⟨rfl, rfl, rfl⟩
+
+/-- An update that builds gives the response of the update. -/
+theorem forkchoiceUpdatedBuildStep_answer (node : Node) (builder : Builder) (version : Nat)
+    (params : Lean.Json) :
+    (node.forkchoiceUpdatedBuildStep builder version params).1 =
+      (node.forkchoiceUpdatedStep version params).1 := by
+  simp only [forkchoiceUpdatedBuildStep]
+  split <;> simp_all
+
+/-- An update that builds keeps what the update gives, apart from the builds. -/
+theorem forkchoiceUpdatedBuildStep_keeps (node : Node) (builder : Builder) (version : Nat)
+    (params : Lean.Json) :
+    (node.forkchoiceUpdatedBuildStep builder version params).2.blocks =
+        (node.forkchoiceUpdatedStep version params).2.blocks ∧
+      (node.forkchoiceUpdatedBuildStep builder version params).2.config =
+        (node.forkchoiceUpdatedStep version params).2.config ∧
+      (node.forkchoiceUpdatedBuildStep builder version params).2.forkchoice =
+        (node.forkchoiceUpdatedStep version params).2.forkchoice := by
+  simp only [forkchoiceUpdatedBuildStep]
+  split
+  · rename_i status id next h
+    rw [h]
+    exact storeBuild_keeps _ _ _ _ _
+  · exact ⟨rfl, rfl, rfl⟩
+
+/-- A run keeps the builds. -/
+theorem executeOn_builds (node : Node) (hash : Hash32) (block : RecentBlock)
+    (post : Execution.State.State) (version : Nat) (params : Lean.Json) :
+    (node.executeOn hash block post version params).2.builds = node.builds := by
+  simp only [executeOn]
+  split
+  · rfl
+  · simp only [recordExecution]
+    split
+    · rfl
+    · split <;> rfl
+
+/-- Validation keeps the builds. -/
+theorem validateChain_builds (node : Node) (fuel : Nat) (hash : Hash32) :
+    (node.validateChain fuel hash).builds = node.builds := by
+  induction fuel generalizing node hash with
+  | zero => rfl
+  | succ fuel ih =>
+    simp only [validateChain]
+    split
+    · split
+      · rw [executeOn_builds, ih]
+      · exact ih _ _
+      · exact ih _ _
+    · rfl
+
+/-- An update keeps the builds. -/
+theorem forkchoiceUpdatedStep_builds (node : Node) (version : Nat) (params : Lean.Json) :
+    (node.forkchoiceUpdatedStep version params).2.builds = node.builds := by
+  have hv : (node.validateHead version params).builds = node.builds := by
+    simp only [validateHead]
+    split
+    · exact validateChain_builds _ _ _
+    · rfl
+  simp only [forkchoiceUpdatedStep]
+  split
+  · exact hv
+  · simp only [updateStep]
+    split <;> exact hv
+
+/-- A stored build stays, so a second update with the same payload ID keeps it.
+
+Step 6 of payload building asks that a build of the same attributes not restart. -/
+theorem forkchoiceUpdatedBuildStep_store_of_some {builder : Builder} {id : PayloadId}
+    {stored : StoredPayload} (h : node.store id = some stored) :
+    (node.forkchoiceUpdatedBuildStep builder version params).2.store id = some stored := by
+  have hs : (node.forkchoiceUpdatedStep version params).2.store id = some stored := by
+    simp only [store, forkchoiceUpdatedStep_builds]
+    exact h
+  simp only [forkchoiceUpdatedBuildStep]
+  split
+  · rename_i status id' next hStep
+    rw [hStep] at hs
+    simp only [storeBuild]
+    split
+    · exact hs
+    · by_cases hid : id = id'
+      · subst hid
+        rename_i hNone
+        simp [store] at hs
+        simp [hs] at hNone
+      · have hb : (id == id') = false := by simp [hid]
+        repeat' split
+        all_goals first
+          | exact hs
+          | simp [store, List.lookup, hb] at hs ⊢; exact hs
+  · rename_i hNot
+    exact hs
+
+/-- An update that answers a payload ID, with no build under it, stores the build of its request.
+
+The build runs on the chain of the head of the request, a valid block of the node after the update.
+
+It uses the attributes as the version decodes them, and the builder of the node.
+
+So the theorems on a build on a chain apply to the stored build. -/
+theorem store_of_forkchoiceUpdatedBuildStep {builder : Builder} {status : PayloadStatus}
+    {pid : PayloadId} {next : Node} {stored : StoredPayload}
+    (hStep : node.forkchoiceUpdatedBuildStep builder version params =
+      (.ok (status, some pid), next))
+    (hNone : node.builds.lookup pid = none) (hStored : next.store pid = some stored) :
+    ∃ state j decoded post b, forkchoiceUpdatedParams version params = .ok (state, some j) ∧
+      payloadAttributesOfVersion version j = .ok decoded ∧
+      (node.forkchoiceUpdatedStep version params).2.blocks.lookup state.headBlockHash = some b ∧
+      b.validity = .valid post ∧
+      ((node.forkchoiceUpdatedStep version params).2.chainAt state.headBlockHash
+        post).recent.getLast? = some b.block ∧
+      buildPayloadOnChain ((node.forkchoiceUpdatedStep version params).2.chainAt
+        state.headBlockHash post) version decoded (builder decoded).1 (builder decoded).2 =
+          .ok ⟨stored.fork, stored.built⟩ := by
+  simp only [forkchoiceUpdatedBuildStep] at hStep
+  split at hStep
+  · rename_i status' pid' mid hMid
+    simp only [Prod.mk.injEq, Except.ok.injEq, Option.some.injEq] at hStep
+    obtain ⟨⟨-, rfl⟩, rfl⟩ := hStep
+    rw [hMid]
+    have hMidNone : mid.builds.lookup pid' = none := by
+      rw [show mid = (node.forkchoiceUpdatedStep version params).2 by rw [hMid],
+        forkchoiceUpdatedStep_builds]
+      exact hNone
+    simp only [storeBuild, hMidNone, Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
+      at hStored
+    split at hStored
+    · rename_i state j hp
+      split at hStored
+      · rename_i decoded post hd hpost
+        split at hStored
+        · rename_i fork built hb
+          split at hStored
+          · simp [store, hMidNone] at hStored
+          · simp only [store, List.lookup, beq_self_eq_true, Option.some.injEq] at hStored
+            subst hStored
+            obtain ⟨b, hbk, hv⟩ := validState_eq_some_iff.mp hpost
+            exact ⟨state, j, decoded, post, b, hp, hd, hbk, hv, recentTo_getLast? hbk, hb⟩
+        · simp [store, hMidNone] at hStored
+      · simp [store, hMidNone] at hStored
+    · simp [store, hMidNone] at hStored
+  · rename_i hNot
+    exact absurd hStep (hNot _ _ _)
+
 /-- The nodes that the steps reach from a node, by any sequence of calls. -/
 inductive Reachable (start : Node) : Node → Prop where
   /-- The node itself. -/
@@ -887,6 +1045,10 @@ inductive Reachable (start : Node) : Node → Prop where
   /-- The node after a step of `engine_forkchoiceUpdated`. -/
   | forkchoiceUpdated {node : Node} (version : Nat) (params : Lean.Json) :
     Reachable start node → Reachable start (node.forkchoiceUpdatedStep version params).2
+  /-- The node after a step of `engine_forkchoiceUpdated` that builds. -/
+  | forkchoiceUpdatedBuild {node : Node} (builder : Builder) (version : Nat) (params : Lean.Json) :
+    Reachable start node →
+      Reachable start (node.forkchoiceUpdatedBuildStep builder version params).2
   /-- The node after a step of `engine_getPayload`. -/
   | getPayload {node : Node} (setup : TrustedSetup) (version : Nat) (id : PayloadId) :
     Reachable start node → Reachable start (node.getPayloadStep setup version id).2
@@ -899,6 +1061,9 @@ theorem Reachable.lookup {start node : Node} {other : Hash32} {b : KnownBlock}
   | refl => exact h
   | newPayload version params _ ih => exact newPayloadStep_lookup ih hb
   | forkchoiceUpdated version params _ ih => exact forkchoiceUpdatedStep_lookup ih hb
+  | forkchoiceUpdatedBuild builder version params _ ih =>
+    rw [(forkchoiceUpdatedBuildStep_keeps _ _ _ _).1]
+    exact forkchoiceUpdatedStep_lookup ih hb
   | getPayload setup version id _ ih => exact ih
 
 /-- A payload known as valid in a node is valid in every node that the steps reach from it.
@@ -985,6 +1150,8 @@ theorem Reachable.config {start node : Node} (hr : Reachable start node) :
   | refl => rfl
   | newPayload version params _ ih => rw [newPayloadStep_config, ih]
   | forkchoiceUpdated version params _ ih => rw [forkchoiceUpdatedStep_config, ih]
+  | forkchoiceUpdatedBuild builder version params _ ih =>
+    rw [(forkchoiceUpdatedBuildStep_keeps _ _ _ _).2.1, forkchoiceUpdatedStep_config, ih]
   | getPayload setup version id _ ih => exact ih
 
 /-- A payload that passes the checks and is answered invalid is then known as invalid. -/

@@ -25,6 +25,12 @@ The response has the result of the method, or its error object with the negative
 
 The forkchoice state is that of the node after the request.
 
+Before Glamsterdam, an update that starts a build stores it, and a request for its ID returns it.
+
+The builder of the node takes the suggested fee recipient, no extra data and no transaction.
+
+Before Glamsterdam its target gas limit is 30000000, a choice of this export.
+
 An unknown method, an argument that Lean cannot read, or an answer that has no JSON here, raises.
 
 Its code is then 0.
@@ -50,6 +56,12 @@ def responseJson (answer : Except EngineError Json) : Json :=
   | .ok result => Json.mkObj [("result", result)]
   | .error e => Json.mkObj [("error", rpcErrorJson e.toRpcError)]
 
+/-- The builder of this export: the suggested fee recipient, no extra data and no transaction.
+
+Its target gas limit, which counts only before Glamsterdam, is 30000000. -/
+def exportBuilder : Node.Builder := fun attributes =>
+  (⟨attributes.2.suggestedFeeRecipient, ByteArray.empty, 30000000⟩, [])
+
 /-- The response to a request on a node, and the node after it.
 
 The result of the method is written as its export writes it. -/
@@ -64,7 +76,7 @@ def nodeCall (setup : TrustedSetup) (node : Node) (request : Json) : Result (Jso
       | .error e => pure (.error e)
     return (responseJson answer, next)
   if let some version := forkchoiceUpdatedVersion method then
-    let (answer, next) := node.forkchoiceUpdatedStep version params
+    let (answer, next) := node.forkchoiceUpdatedBuildStep exportBuilder version params
     let answer ← match answer with
       | .ok (status, id) =>
         if version < 5 then pure (.ok (forkchoiceUpdatedResponseJson status none id))
