@@ -4621,6 +4621,22 @@ The steps of a block before its attestations, and the capacity of a block, are n
 Satisfiability on a run from genesis is left to the assembled theorem.
 No theorem yet shows that the stake of those members reaches two thirds at the end of the epoch.
 
+`stateBeforeOperations_honestBlock` (`Consensus/Proofs/HonestBlockInput.lean`) runs the steps of an honest block before its operations, before Gloas.
+The honest block is at the slot of the state, names the proposer of that slot, and builds on the latest block header.
+Its RANDAO reveal is the proposer's signature of the epoch, and it repeats the vote on the deposit contract that the state holds.
+It carries no operation other than its attestations, and an empty sync aggregate.
+These are choices an honest proposer may make when no deposit is due; it is not the block that the honest validator guide prescribes in every case.
+The proposer must hold the key and must not be slashed, and the state must hold no block at its slot yet.
+The execution part of the block must pass on the state after the header.
+That is an assumption: it covers the checks of the withdrawals and the payload against the state, and the answer of the execution layer, which builds the payload.
+The encoding of a block body must be lawful, as it is for every preset with nonzero sizes, so that the body has a root.
+The mixes must span more than the seed lookahead plus two epochs, and the voting period must fit in 64 bits.
+The votes on the deposit contract must leave room for one more in the period.
+The steps then reach a state that names the proposer.
+From Altair, that is everything the attestations read; before Altair they also read the lists of pending attestations, which these steps keep but the theorem does not state.
+It has the same registry, checkpoints, block roots, flags, and committees of the previous and current epoch.
+Every budget of the state before the block bounds it too.
+
 `processJustificationAndFinalization_slackJustifiedCheckpoints` (`Consensus/Proofs/Transition/FfgSlack.lean`) turns one step into a slack link of the model.
 If the two justified checkpoints of the state before the step are slack-justified, so are those of the state after it.
 A new current justified checkpoint must match the state of that step.
