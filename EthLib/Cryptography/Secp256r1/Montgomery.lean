@@ -268,21 +268,18 @@ end Montgomery
 /-- An element of the base field in Montgomery form, with `R = 2^256`.
 
 The words hold `a R mod p`, below `p`, so each element has one encoding. -/
-structure Montgomery where
-  /-- The canonical Montgomery residue. -/
-  raw : Word64.Raw
-  /-- The residue is below `p`. -/
-  lt : raw.val < Fp.modulus
-deriving DecidableEq
+abbrev Montgomery := Word64.Montgomery Fp.modulus
 
 namespace Montgomery
 
-/-- Zero, whose Montgomery form is zero. -/
-instance : OfNat Montgomery 0 := ⟨⟨⟨0, 0, 0, 0⟩, by decide⟩⟩
-
-/-- One, whose Montgomery form is `R mod p = 2^224 - 2^192 - 2^96 + 1`. -/
-instance : OfNat Montgomery 1 :=
-  ⟨⟨⟨1, 0xffffffff00000000, 0xffffffffffffffff, 0xfffffffe⟩, by decide⟩⟩
+/-- The Montgomery constants of `p`: `R mod p` and `R^2 mod p`. -/
+instance : Word64.Montgomery.Constants Fp.modulus where
+  -- `R mod p = 2^224 - 2^192 - 2^96 + 1`.
+  one := ⟨1, 0xffffffff00000000, 0xffffffffffffffff, 0xfffffffe⟩
+  square := ⟨3, 0xfffffffbffffffff, 0xfffffffffffffffe, 0x4fffffffd⟩
+  bounds := by decide
+  one_val := by decide
+  square_val := by decide
 
 /-- The sum of two elements. -/
 @[inline] def add (a b : @& Montgomery) : Montgomery :=
@@ -306,26 +303,11 @@ instance : Add Montgomery := ⟨add⟩
 instance : Sub Montgomery := ⟨sub⟩
 instance : Mul Montgomery := ⟨mul⟩
 
-/-- The integer of an element of `Fp` in four words, before the Montgomery scale. -/
-@[inline] def readRaw (a : Fp) : Montgomery :=
-  ⟨rawOfNat a.val, by
-    rw [rawOfNat_val _ (Nat.lt_trans a.isLt (by decide))]
-    exact a.isLt⟩
-
-/-- `R^2 mod p`, where `R = 2^256`. -/
-def montgomerySquare : Montgomery :=
-  ⟨⟨3, 0xfffffffbffffffff, 0xfffffffffffffffe, 0x4fffffffd⟩, by decide⟩
-
-/-- The integer one, without the Montgomery scale. -/
-def rawOne : Montgomery := ⟨⟨1, 0, 0, 0⟩, by decide⟩
-
 /-- Enter the Montgomery form with a product by `R^2 mod p`. -/
-@[inline] def ofFin (a : Fp) : Montgomery := montgomerySquare * readRaw a
+abbrev ofFin (a : Fp) : Montgomery := Word64.Montgomery.ofFin a
 
 /-- Leave the Montgomery form with a product by the integer one. -/
-@[inline] def toFin (a : Montgomery) : Fp :=
-  let x := a * rawOne
-  ⟨rawToNat x.raw, by rw [rawToNat_eq]; exact x.lt⟩
+abbrev toFin (a : Montgomery) : Fp := Word64.Montgomery.toFin a
 
 /-- The inverse, through the extended Euclidean algorithm on `Fp`, and 0 for 0. -/
 def inv (a : Montgomery) : Montgomery := ofFin (Fin.inverse (toFin a))

@@ -10,6 +10,10 @@ Lean has no 128-bit product, so the high word of a product comes from four 32-bi
 Each operation states its result as an equation of natural numbers.
 
 The Montgomery forms of the base fields of secp256k1 and secp256r1 run on these words.
+
+The element of such a form and its conversions are written once, for any modulus.
+
+Each field gives its own constants and its own arithmetic.
 -/
 
 @[expose] public section
@@ -433,5 +437,79 @@ theorem sub4_spec (a b : Words64) :
   refine ⟨?_, e3.2⟩
   simp only [lowValue, wordRadix, UInt64.toNat_zero] at *
   omega
+
+/-! ## Montgomery residues on four words -/
+
+/-- An element of the integers mod `p` in Montgomery form on four words, with `R = 2^256`.
+
+The words hold `a R mod p`, below `p`, so each element has one encoding. -/
+structure Montgomery (p : Nat) where
+  /-- The canonical Montgomery residue. -/
+  raw : Raw
+  /-- The residue is below `p`. -/
+  lt : raw.val < p
+deriving DecidableEq
+
+namespace Montgomery
+
+/-- The constants of a Montgomery field on four words, mod `p`.
+
+Each field gives them as literal words, and checks them by `decide`. -/
+class Constants (p : Nat) where
+  /-- `R mod p`, the Montgomery form of one. -/
+  one : Raw
+  /-- `R^2 mod p`, whose product with an integer gives its Montgomery form. -/
+  square : Raw
+  /-- The modulus is more than one, and it fits four words. -/
+  bounds : 1 < p ∧ p < 2^256
+  /-- The form of one is `R mod p`. -/
+  one_val : one.val = 2^256 % p
+  /-- The square is `R^2 mod p`. -/
+  square_val : square.val = 2^256 * 2^256 % p
+
+variable {p : Nat} [Constants p]
+
+/-- The modulus is not zero, so `Fin p` has its literals. -/
+instance : NeZero p := ⟨Nat.ne_of_gt (Nat.lt_trans (by decide) (Constants.bounds (p := p)).1)⟩
+
+/-- Zero, whose Montgomery form is zero. -/
+instance : OfNat (Montgomery p) 0 :=
+  ⟨⟨⟨0, 0, 0, 0⟩, Nat.lt_of_le_of_lt (Nat.le_of_eq (show Raw.val ⟨0, 0, 0, 0⟩ = 0 by decide))
+    (Nat.lt_trans (by decide) (Constants.bounds (p := p)).1)⟩⟩
+
+/-- One, whose Montgomery form is `R mod p`. -/
+instance : OfNat (Montgomery p) 1 :=
+  ⟨⟨Constants.one (p := p), by
+    rw [Constants.one_val]
+    exact Nat.mod_lt _ (Nat.lt_trans (by decide) (Constants.bounds (p := p)).1)⟩⟩
+
+/-- The integer of an element of `Fin p` in four words, before the Montgomery scale. -/
+@[inline] def readRaw (a : Fin p) : Montgomery p :=
+  ⟨rawOfNat a.val, by
+    rw [rawOfNat_val _ (Nat.lt_trans a.isLt (Constants.bounds (p := p)).2)]
+    exact a.isLt⟩
+
+/-- `R^2 mod p`, where `R = 2^256`. -/
+@[inline] def montgomerySquare : Montgomery p :=
+  ⟨Constants.square (p := p), by
+    rw [Constants.square_val]
+    exact Nat.mod_lt _ (Nat.lt_trans (by decide) (Constants.bounds (p := p)).1)⟩
+
+/-- The integer one, without the Montgomery scale. -/
+@[inline] def rawOne : Montgomery p :=
+  ⟨⟨1, 0, 0, 0⟩, Nat.lt_of_le_of_lt (Nat.le_of_eq (show Raw.val ⟨1, 0, 0, 0⟩ = 1 by decide))
+    (Constants.bounds (p := p)).1⟩
+
+variable [Mul (Montgomery p)]
+
+/-- Enter the Montgomery form with a product by `R^2 mod p`. -/
+@[inline] def ofFin (a : Fin p) : Montgomery p := montgomerySquare * readRaw a
+
+/-- Leave the Montgomery form with a product by the integer one. -/
+@[inline] def toFin (a : Montgomery p) : Fin p :=
+  let x := a * rawOne
+  ⟨rawToNat x.raw, by rw [rawToNat_eq]; exact x.lt⟩
+
+end Montgomery
 
 end EthLib.Cryptography.Word64

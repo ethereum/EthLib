@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, the laws of a four-word Montgomery field are proved once in `Word64.Montgomery`, from the laws of its sum, difference and product that an instance of `Word64.Montgomery.Laws` gives ([#3827](https://github.com/ethereum/EthLib/issues/3827)).
+  They are the bridge `toMont` to the shared field on eight limbs with its laws, `toFin_val_eq`, the read-back laws `toFin_zero` to `toFin_ofFin`, and the new `ofFin_toFin`.
+  The helpers `element_ext`, `mont_ext`, `modulus_odd` and `eq_of_radix_mul_mod` are public there.
+
 - The secp256r1 double scalar multiplication of verification runs in Montgomery form on four words ([#3796](https://github.com/ethereum/EthLib/issues/3796)).
   `Secp256r1.Point.mulAdd_eq_jacobian` states that it equals the shared Jacobian chain on `Fp`, for every input.
   `Secp256r1.Montgomery.toFin_embedding` states that reading the four-word form back into `Fp` keeps the operations and is one to one.
@@ -797,6 +801,13 @@ Not yet released.
   `ValidatorStep`, `PinDriftBound.CreditBudgets` and `PinDriftBound.PreviousEpochRise` use it.
 
 ### Changes that break callers
+
+- In Lean, `Secp256r1.Montgomery` is now an abbreviation of `Word64.Montgomery Fp.modulus`, a four-word Montgomery element written once for any modulus ([#3827](https://github.com/ethereum/EthLib/issues/3827)).
+  Its fields `raw` and `lt` and its `DecidableEq` instance are those of `Word64.Montgomery`, so `a.raw` and `a.lt` still read the same.
+  Its zero, its one, `readRaw`, `montgomerySquare` and `rawOne` move to `Word64.Montgomery`; the one and `montgomerySquare` read the words that an instance of `Word64.Montgomery.Constants` gives.
+  `Secp256r1.Montgomery.ofFin`, `toFin` and `toMont` stay, now as abbreviations of the shared conversions, so `simp` and `unfold` reach the shared definitions through them.
+  Every public theorem of the field keeps its statement.
+  Migration: write `Word64.Montgomery.readRaw`, `Word64.Montgomery.montgomerySquare` and `Word64.Montgomery.rawOne`, and `Word64.Montgomery.mk` for the constructor.
 
 - In Lean, the 64-bit word primitives and the integers of four and five words move from `Secp256k1.Montgomery` to the neutral `Word64` module, which the secp256r1 field shares.
   Each moves from `EthLib.Cryptography.Secp256k1.Montgomery.X` to `EthLib.Cryptography.Word64.X`, with its statement unchanged, for `X` in `wordRadix`, `mulHigh`, `yes`, `Pair`, `mac`, `plus`, `minus`, `plus_spec`, `minus_spec`, `Words64`, `Words64.val`, `lowValue`, `value`, `Raw`, `Raw.fromWords`, `Raw.words`, `Raw.val`, `Raw.val_eq`, `Raw.fromWords_val`, `rawOfNat`, `rawToNat` and `rawToNat_eq`.
