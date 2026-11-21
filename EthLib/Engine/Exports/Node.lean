@@ -2,7 +2,8 @@ module
 
 public import EthLib.Engine.Exports.ForkchoiceUpdated
 public import EthLib.Engine.Exports.GetPayload
-public import EthLib.Engine.Node
+public import EthLib.Engine.Node.View
+public import EthLib.Execution.Rpc.Methods
 
 /-!
 # `Exports.Node`
@@ -23,6 +24,12 @@ Each request is a JSON-RPC request object, run in order on the node that the req
 
 The methods are `engine_newPayload`, `engine_forkchoiceUpdated` and `engine_getPayload`.
 
+A request whose method starts with `eth_` goes to the JSON-RPC API, on the chain view of the node.
+
+Its network ID is the chain ID, and its response is the whole response object of that API.
+
+A node that gives no chain view raises.
+
 The result has one object per request, with the response and the forkchoice state of the node.
 
 The response has the result of the method, or its error object with the negative code.
@@ -35,9 +42,11 @@ The builder of the node takes the suggested fee recipient, no extra data and no 
 
 Before Glamsterdam its target gas limit is 30000000, a choice of this export.
 
-An unknown method, an argument that Lean cannot read, or an answer that has no JSON here, raises.
+An unknown Engine API method, an argument that Lean cannot read, or an answer with no JSON, raises.
 
-Its code is then 0.
+Its code is then 0, as for a JSON-RPC request with no ID.
+
+An unknown method of the JSON-RPC API gets the error object of that API.
 
 That answer is a valid status of version 6, or a valid head at version 5.
 
@@ -98,6 +107,11 @@ def nodeCall (setup : TrustedSetup) (node : Node) (request : Json) : Result (Jso
         | .error (.engine e) => pure (.error e)
         | .error e => throw (getPayloadErrorOf e)
     return (responseJson answer, node)
+  if method.startsWith "eth_" then
+    let some view := node.view node.config.chainId.toNat setup
+      | throw (0, "the node gives no chain view")
+    let some response := view.serve (.ok request) | throw (0, "request: a notification")
+    return (response, node)
   throw (0, s!"no method {method}")
 
 /-- The responses to a script of requests, from a node that knows one block.
