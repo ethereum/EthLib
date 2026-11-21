@@ -70,6 +70,8 @@ public import EthLib.Consensus.Proofs.KeymanagerApi.VoluntaryExit
 public import EthLib.Consensus.Proofs.Mutators
 public import EthLib.Consensus.Proofs.Participation
 public import EthLib.Consensus.Proofs.PayloadTimeliness
+public import EthLib.Consensus.Proofs.PlausibleLiveness
+public import EthLib.Consensus.Proofs.PlausibleLivenessSteps
 public import EthLib.Consensus.Proofs.Proposers
 public import EthLib.Consensus.Proofs.RelayApi
 public import EthLib.Consensus.Proofs.RemoteSigningApi.Endpoints

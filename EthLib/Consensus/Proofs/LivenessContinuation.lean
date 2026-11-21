@@ -198,7 +198,7 @@ private theorem Run.BlocksAt.nil {proposals : Set Slot} {first : ForkedBeaconSta
   cases member
 
 /-- A run with blocks only at the proposals, then a step with that property, keeps it. -/
-private theorem Run.BlocksAt.snoc {proposals : Set Slot}
+theorem Run.BlocksAt.snoc {proposals : Set Slot}
     {first middle last : ForkedBeaconState preset}
     {run : Run config checks first middle} {step : Step config checks middle last}
     (blocks : run.BlocksAt proposals) (blockAt : step.BlockAt proposals) :
@@ -207,6 +207,16 @@ private theorem Run.BlocksAt.snoc {proposals : Set Slot}
   cases member with
   | last => exact blockAt
   | earlier member => exact blocks other member
+
+/-- Two runs with blocks only at the proposals, joined, have blocks only there too. -/
+theorem Run.BlocksAt.append {proposals : Set Slot} {first middle last : ForkedBeaconState preset}
+    {pre : Run config checks first middle} {tail : Run config checks middle last}
+    (one : pre.BlocksAt proposals) (two : tail.BlocksAt proposals) :
+    (pre.append tail).BlocksAt proposals := by
+  intro _ _ step member
+  rcases (Run.contains_append pre tail step).mp member with member | member
+  · exact one step member
+  · exact two step member
 
 /-- The slot after a slot starts the next epoch when it is a multiple of the epoch length.
 

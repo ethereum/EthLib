@@ -67,6 +67,7 @@ The unforgeability of leanXMSS holds for EthLib's own definitions.
 The unforgeability of leanSPHINCS holds for EthLib's own definitions too.
 The unforgeability of BLS signatures holds for a scheme that EthLib's signing and verification compute.
 The accountable safety and the plausible liveness of Casper FFG hold for an abstract model of votes.
+Plausible liveness also holds on the beacon chain from Altair to Fulu, outside the epochs just before the Electra upgrade, under conditions on the states of the continuation.
 The evaluation binding of single KZG proofs reduces to the strong Diffie–Hellman problem.
 The binding of the batch check of KZG openings reduces to the same problem, or to a challenge that is a root of a nonzero polynomial.
 The binding of the batch check of KZG cells reduces to the bilinear variant of that problem, or to such a root.
@@ -4517,7 +4518,8 @@ The block is finalized at an epoch above every justified epoch so far.
 The new votes come from justified sources, and no honest validator becomes slashable.
 
 A vote names the validator that signed it, so both theorems assume that no one forges a vote.
-Below, the votes of the model come from the attestations that the blocks of a chain apply, but neither theorem is yet applied to them, so neither is yet about what a client runs.
+Below, the votes of the model come from the attestations that the blocks of a chain apply.
+Accountable safety is not yet applied to them; plausible liveness is, on the beacon chain itself, by `plausible_liveness_beacon` at the end of this section.
 
 These pieces of that link exist.
 `FfgVotes.lean` relates the slashing conditions of the beacon chain to those of the model.
@@ -4526,7 +4528,7 @@ Take a validator whose old votes hold no pair that a slashing punishes.
 It casts new votes, at most one for each target epoch, and a later target never has an earlier source.
 Each new vote has a source at least, and a target after, those of each old vote.
 Then the old and new votes together hold no such pair.
-No theorem yet applies this to the votes of a run, or to the slashing conditions of the model.
+`plausible_liveness_beacon` applies it to the votes of an honest run; no theorem yet applies it to the slashing conditions of the model.
 `justificationTest_iff_stake` (`Consensus/Proofs/Transition/FfgStake.lean`) reads the test of justification as a comparison of stakes.
 There the stake of a validator is its effective balance, and the indices count as a set.
 It needs an active stake of more than one and a half increments.
@@ -4596,7 +4598,7 @@ Each step caches the roots of its slot before the epoch transition, which keeps 
 When the two steps are slot steps of a run, every state in the statement is a state of that run: the vote hypotheses read the states at the last slot of each epoch, and the conclusion reads the states after the two steps.
 The epoch transition after justification, and the upgrades, keep the checkpoints and the bits.
 That form starts at Altair because plausible liveness covers Altair to Fulu; before Altair it would also need the target root to stay in the buffer of block roots.
-No theorem yet derives the hypotheses of the two steps from a run.
+`plausible_liveness_beacon` derives the hypotheses of the two steps from an honest run.
 
 `quorum_of_stakeMargin` (`Consensus/Proofs/StakeMovement.lean`) moves the two-thirds hypothesis of those steps to a starting state `x`.
 It takes a branch from `x` to a later state `w`, before Gloas, inside the window of the a priori drift and under its guard.
@@ -4717,7 +4719,7 @@ They ask that each slot step succeeds, and that an honest block passes at each s
 The ring of RANDAO mixes must span more than the seed lookahead plus two epochs, so that the committees of the epoch stay fixed.
 `exists_slotsContinuation` walks empty slots to the first slot of the next epoch, when the latest block header is at the slot of the state or before.
 The epoch continuation asks the slot of its first state to be after its latest block header, so it cannot start at the genesis state itself; its first state is one that a slot step reaches, with the upgrades due already applied.
-No theorem yet assembles the continuation of plausible liveness.
+`plausible_liveness_beacon` assembles the continuation, below.
 
 `exists_honestBlock_gathersVotes` (`Consensus/Proofs/LivenessBlock.lean`) reduces that block condition to conditions on each state of a proposal, from Altair until Gloas.
 At a slot of a proposal with an honest proposer, the block carries the honest votes of the slots of the epoch before it, within the gap.
@@ -4749,6 +4751,33 @@ It needs the ring of RANDAO mixes to span more than the seed lookahead plus two 
 `Run.Honest.source_le` and `Run.Honest.vote_fresh` show that the source of an honest vote never goes back along the run, from a state that keeps the invariant, and that its target is at least the epoch where the run starts.
 `Run.Honest.slashed_of_slashed` shows that an honest run slashes no one: its blocks, as modelled, carry no slashing, its slot steps and upgrades keep every slashed flag, and its deposits add unslashed validators.
 These are the facts that `not_slashableIn_union_of_fresh` and the stake margin of `quorum_without_slot_of_stakeMargin` need along the continuation.
+
+`plausible_liveness_beacon` (`Consensus/Proofs/PlausibleLiveness.lean`) is Theorem 2 of Casper FFG on the beacon chain, from Altair to Fulu.
+A run from a genesis state built from deposits reaches a state `x` of epoch `e`, past the first epoch, from Altair.
+Then a run from `x`, whose steps are honest, finalizes epoch `e + 1`, so above the current justified epoch of `x`.
+Its votes are votes of honest validators, and no honest validator is slashable among the old votes and the new ones.
+The run takes empty slots to the end of epoch `e`, then the epoch continuation of `e + 1` and of `e + 2`, each followed by the slot step that ends it.
+Its hypotheses are these.
+- The preset meets the parameters of accountable safety (`DirectSafety.Parameters`, `CapOrder`, aligned caps), the buffer of roots reaches the previous epoch, the eth1 voting period fits in 64 bits, the increment is nonzero and at most the largest cap, the increment times the base reward factor fits in 64 bits, the least inclusion delay is at most one slot, the largest number of committees in a slot is positive, and the seed lookahead reaches two epochs; the encodings of beacon states and block bodies are lawful, and the sync committee is not empty.
+- The guard of the a priori drift holds at `x` through `e + 2`.
+  The guard fails for a window that crosses Electra, so the theorem does not cover the epochs just before it.
+- The honest validators are active at `x` in `e`, `e + 1` and `e + 2`, and not slashed at `x`.
+- For `e + 1` and `e + 2`, three times the honest stake outside any set of at most one slot's share of the active validators covers twice the active stake plus the stake margin at `x`.
+- No honest validator is slashable among the old votes, and each old vote of an honest validator has a source at most the current justified epoch of `x` and a target at most `e`.
+- Every slot of `e + 1` and `e + 2` but the last of its epoch has a slot of a proposal after it in its epoch, within a gap.
+- Every honest run from `x` that applies blocks only at the slots of proposals meets the conditions of the continuation on its states up to `e + 2`: the state is before Gloas, its slot step succeeds, the active validators times the committees fit in 64 bits, the committees of each slot of its epoch have values, and at a slot of a proposal after its latest block header the proposer is honest and the state meets the conditions of its proposal.
+Those proposal conditions hold three assumptions: the execution layer accepts the honest payload, the deposits due have Merkle proofs to the deposit root, and the secret keys of the honest members of each committee (from Electra, of each slot) do not sum to zero.
+The stake hypothesis is on `x` alone, as the decision on #3571 asks; the margin pays for the movement of the stake in the window and for the committees of the last slot of each tested epoch.
+The conditions on the continuation quantify over the runs that it may take, since it is not known at `x`; before Fulu the proposers of `e + 2` depend on effective balances that the run moves, so the slots of proposals must suit every such run.
+They are not derived from bounds at `x`: no theorem yet gives the slot steps from the totality lemmas of `Transition/Totality/` along an honest run, and the proposal conditions are expected to hold on bounded states.
+With two slots or more in an epoch, the last slot of each tested epoch must have an honest proposer.
+Satisfiability was checked by argument, not by a Lean witness, since a concrete beacon state would be a kernel known-answer computation.
+At a genesis state itself the theorem does not apply, since its epoch is not past the first: the specification skips the justification test at the end of epoch 1.
+It applies from a state of epoch 1 on.
+Take a state of a run from such a genesis state, where the active set is the same in `e`, `e + 1` and `e + 2`, and every such validator is honest and unslashed.
+Then every proposer is honest, and every slot can be a proposal with a gap of one, since a slot has at most 64 committees and a block holds 128 attestations before Electra, or 8 aggregates from Electra.
+The stake outside one slot is then about 31/32 of the active stake on mainnet before Electra, so the margin hypothesis holds when the stake margin is at most about 0.9 of the active stake; no theorem here bounds it numerically.
+The other conditions are the bounds of the honest block and of totality on bounded states, which mainnet-sized states are expected to meet.
 
 `processJustificationAndFinalization_slackJustifiedCheckpoints` (`Consensus/Proofs/Transition/FfgSlack.lean`) turns one step into a slack link of the model.
 If the two justified checkpoints of the state before the step are slack-justified, so are those of the state after it.
