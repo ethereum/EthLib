@@ -305,23 +305,21 @@ def appendHistoricalRoot (roots : SszList Root preset.HISTORICAL_ROOTS_LIMIT.toN
     .ok ⟨roots.data.push root, by simp only [Array.size_push]; omega⟩
   else .error (.historicalRootsFull preset.HISTORICAL_ROOTS_LIMIT.toNat)
 
-/-- The state after the historical roots update.
+/-- Before Capella: the state after the historical roots update.
 
 When the next epoch starts a span of slots, the span joins the history.
 
 The root of its block roots and state roots joins the historical roots.
 
 From Capella the summaries of the spans take its place. -/
-def processHistoricalRootsUpdate (state : BeaconState preset fork) :
-    Except TransitionError (BeaconState preset fork) :=
-  if .shapella ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
-  else do
-    let nextEpoch ← liftAccessor (liftArith (addChecked (getCurrentEpoch state) 1))
-    if nextEpoch % (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH) = 0 then
-      let batch : HistoricalBatch preset := ⟨state.blockRoots, state.stateRoots⟩
-      let root ← liftSsz (hashTreeRoot batch)
-      return { state with historicalRoots := ← appendHistoricalRoot state.historicalRoots root }
-    else return state
+def processHistoricalRootsUpdate (state : BeaconState preset fork) (_before : fork < .shapella) :
+    Except TransitionError (BeaconState preset fork) := do
+  let nextEpoch ← liftAccessor (liftArith (addChecked (getCurrentEpoch state) 1))
+  if nextEpoch % (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH) = 0 then
+    let batch : HistoricalBatch preset := ⟨state.blockRoots, state.stateRoots⟩
+    let root ← liftSsz (hashTreeRoot batch)
+    return { state with historicalRoots := ← appendHistoricalRoot state.historicalRoots root }
+  else return state
 
 /-- From Capella: the state after the historical summaries update.
 
@@ -342,15 +340,14 @@ def processHistoricalSummariesUpdate (state : BeaconState preset fork)
     else throw (.historicalSummariesFull preset.HISTORICAL_ROOTS_LIMIT.toNat)
   else return state
 
-/-- The state after the rotation of the pending attestations.
+/-- Before Altair: the state after the rotation of the pending attestations.
 
 Those of the current epoch become those of the previous epoch, and the current ones start empty.
 
 From Altair the participation flags rotate instead, in their own step. -/
-def processParticipationRecordUpdates (state : BeaconState preset fork) :
+def processParticipationRecordUpdates (state : BeaconState preset fork) (_before : fork < .altair) :
     Except TransitionError (BeaconState preset fork) :=
-  if .altair ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
-  else pure { state with
+  pure { state with
     previousEpochAttestations := state.currentEpochAttestations
     currentEpochAttestations := fun _ => ⟨#[], by simp⟩ }
 

@@ -125,7 +125,7 @@ def processEpochAltair (config : Config) (checks : SignatureChecks)
   let state ← processSlashingsReset state
   let state ← processRandaoMixesReset state
   let state ← if capella : .shapella ≤ fork then processHistoricalSummariesUpdate state capella
-    else processHistoricalRootsUpdate state
+    else processHistoricalRootsUpdate state (Nat.lt_of_not_le capella)
   let state := processParticipationFlagUpdates state altair
   let state ← processSyncCommitteeUpdates state altair
   let state ← (if fulu : .fusaka ≤ fork then liftAccessor (processProposerLookahead state fulu)
@@ -150,7 +150,8 @@ def processEpoch (config : Config) (checks : SignatureChecks) (state : BeaconSta
     Except TransitionError (BeaconState preset fork) :=
   if altair : .altair ≤ fork then processEpochAltair config checks state altair
   else do
-    have before : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le altair) (by decide)
+    have phase0 : fork < .altair := Nat.lt_of_not_le altair
+    have before : fork < .hegota := Nat.lt_trans phase0 (by decide)
     let state ← processJustificationAndFinalization state
     let state ← processRewardsAndPenalties config state
     let state ← processRegistryUpdates config state
@@ -159,8 +160,8 @@ def processEpoch (config : Config) (checks : SignatureChecks) (state : BeaconSta
     let state ← processEffectiveBalanceUpdates state
     let state ← processSlashingsReset state
     let state ← processRandaoMixesReset state
-    let state ← processHistoricalRootsUpdate state
-    processParticipationRecordUpdates state
+    let state ← processHistoricalRootsUpdate state (Nat.lt_trans phase0 (by decide))
+    processParticipationRecordUpdates state phase0
 
 /-- The state after the epoch transition, if a slot is the last of its epoch. -/
 def epochIfLast (config : Config) (checks : SignatureChecks) (next : Slot)

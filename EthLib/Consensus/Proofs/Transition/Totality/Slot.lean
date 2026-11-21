@@ -124,7 +124,7 @@ A next slot must exist. -/
 theorem processHistoricalRootsUpdate_total (before : fork < .shapella)
     (fits : state.slot.toNat + 1 < 2 ^ 64)
     (room : state.historicalRoots.data.size < preset.HISTORICAL_ROOTS_LIMIT.toNat) :
-    ∃ after, processHistoricalRootsUpdate state = .ok after := by
+    ∃ after, processHistoricalRootsUpdate state before = .ok after := by
   obtain ⟨next, ok⟩ := addChecked_getCurrentEpoch_one_total state fits
   have nextPos : next ≠ 0 := by
     intro zero
@@ -132,18 +132,17 @@ theorem processHistoricalRootsUpdate_total (before : fork < .shapella)
     rw [zero] at grown
     have : (getCurrentEpoch state).toNat + 1 = 0 := by simpa using grown.symm
     omega
-  have notCapella : ¬ Fork.shapella ≤ fork := Nat.not_le.mpr before
   by_cases empty : preset.SLOTS_PER_HISTORICAL_ROOT = 0
   · have noSpan : ¬ next % (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH) = 0 := by
       rw [empty]
       simpa using nextPos
-    simp only [processHistoricalRootsUpdate, notCapella, ite_false, liftAccessor, liftArith, ok,
-      Except.mapError, bind, Except.bind, noSpan]
+    simp only [processHistoricalRootsUpdate, liftAccessor, liftArith, ok, Except.mapError, bind,
+      Except.bind, noSpan]
     exact ⟨_, rfl⟩
   · haveI : NeZero preset.SLOTS_PER_HISTORICAL_ROOT.toNat :=
       ⟨fun zero => empty (UInt64.toNat_inj.mp (by simpa using zero))⟩
-    simp only [processHistoricalRootsUpdate, notCapella, ite_false, liftAccessor, liftArith, ok,
-      Except.mapError, bind, Except.bind]
+    simp only [processHistoricalRootsUpdate, liftAccessor, liftArith, ok, Except.mapError, bind,
+      Except.bind]
     split
     · obtain ⟨root, hr⟩ :=
         hashTreeRoot_total (HistoricalBatch.mk state.blockRoots state.stateRoots)

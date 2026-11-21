@@ -683,12 +683,10 @@ private theorem processRandaoMixesReset (ok : Consensus.processRandaoMixesReset 
   obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq ok
   exact ⟨rfl, rfl, rfl⟩
 
-private theorem processHistoricalRootsUpdate
-    (ok : Consensus.processHistoricalRootsUpdate state = .ok after) :
+private theorem processHistoricalRootsUpdate {before : fork < .shapella}
+    (ok : Consensus.processHistoricalRootsUpdate state before = .ok after) :
     SameSyncCommittees state after := by
   unfold Consensus.processHistoricalRootsUpdate at ok
-  split at ok
-  · cases ok
   simp only [bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, _, ok⟩ := ok
   split at ok

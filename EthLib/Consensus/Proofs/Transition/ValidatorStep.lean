@@ -4137,8 +4137,6 @@ private theorem CapStep.epochEdge {f : Fork} {a b : BeaconState preset f} {k : E
          repeat' (split at edge <;> try cases edge)
          all_goals rfl
        · unfold processHistoricalRootsUpdate at edge
-         split at edge
-         · cases edge
          simp only [bind_ok_iff, liftAccessor_ok] at edge
          obtain ⟨_, _, edge⟩ := edge
          split at edge

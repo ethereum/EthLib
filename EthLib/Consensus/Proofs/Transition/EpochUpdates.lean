@@ -1323,18 +1323,13 @@ theorem processRandaoMixesReset_eq (computed : processRandaoMixesReset state = .
 
 The current ones then start empty. -/
 theorem processParticipationRecordUpdates_eq (before : fork < .altair) :
-    ∃ after, processParticipationRecordUpdates state = .ok after ∧
+    ∃ after, processParticipationRecordUpdates state before = .ok after ∧
       after.previousEpochAttestations before = state.currentEpochAttestations before ∧
       (after.currentEpochAttestations before).data = #[] ∧
       { after with
         previousEpochAttestations := state.previousEpochAttestations,
         currentEpochAttestations := state.currentEpochAttestations } = state := by
-  have notAltair : ¬Fork.altair ≤ fork := fun le => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le before le)
-  refine ⟨{ state with
-    previousEpochAttestations := state.currentEpochAttestations
-    currentEpochAttestations := fun _ => ⟨#[], by simp⟩ }, ?_, rfl, rfl, rfl⟩
-  simp only [processParticipationRecordUpdates, notAltair, ↓reduceIte]
-  try rfl
+  exact ⟨_, rfl, rfl, rfl, rfl⟩
 
 /-! ## Fields kept by four steps -/
 
@@ -1526,7 +1521,7 @@ When it starts a span of slots, the root of the block roots and state roots join
 
 Otherwise the state is unchanged. -/
 theorem processHistoricalRootsUpdate_eq (before : fork < .shapella)
-    (computed : processHistoricalRootsUpdate state = .ok after) :
+    (computed : processHistoricalRootsUpdate state before = .ok after) :
     (getCurrentEpoch state).toNat + 1 < 2 ^ 64 ∧
       if ((getCurrentEpoch state).toNat + 1) %
           (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH).toNat = 0 then
@@ -1535,17 +1530,16 @@ theorem processHistoricalRootsUpdate_eq (before : fork < .shapella)
           after.historicalRoots.data = state.historicalRoots.data.push root ∧
           { after with historicalRoots := state.historicalRoots } = state
       else after = state := by
-  have notCapella : ¬ Fork.shapella ≤ fork := Nat.not_le.mpr before
   cases next : addChecked (getCurrentEpoch state) 1 with
   | error fault =>
-    simp [processHistoricalRootsUpdate, notCapella, next, liftAccessor, liftArith,
+    simp [processHistoricalRootsUpdate, next, liftAccessor, liftArith,
       Except.mapError, bind, Except.bind] at computed
   | ok nextEpoch =>
     obtain ⟨fits, sum⟩ := addChecked_ok_iff.mp next
     have boundary := nextEpoch_span_iff (preset := preset) (by simpa using sum)
     refine ⟨by simpa using fits, ?_⟩
-    simp only [processHistoricalRootsUpdate, notCapella, ite_false, next, liftAccessor, liftArith,
-      Except.mapError, bind, Except.bind] at computed
+    simp only [processHistoricalRootsUpdate, next, liftAccessor, liftArith, Except.mapError, bind,
+      Except.bind] at computed
     split at computed
     · rename_i span
       simp only [boundary.mp span, ↓reduceIte]
@@ -1571,16 +1565,15 @@ It fails exactly when the next epoch starts a span of slots and the list is full
 It then fails with the error of a full list. -/
 theorem processHistoricalRootsUpdate_eq_error_iff (before : fork < .shapella)
     (fits : (getCurrentEpoch state).toNat + 1 < 2 ^ 64) {error : TransitionError} :
-    processHistoricalRootsUpdate state = .error error ↔
+    processHistoricalRootsUpdate state before = .error error ↔
       ((getCurrentEpoch state).toNat + 1) %
           (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH).toNat = 0 ∧
         preset.HISTORICAL_ROOTS_LIMIT.toNat ≤ state.historicalRoots.data.size ∧
         error = .historicalRootsFull preset.HISTORICAL_ROOTS_LIMIT.toNat := by
-  have notCapella : ¬ Fork.shapella ≤ fork := Nat.not_le.mpr before
   obtain ⟨nextEpoch, next, sum⟩ := addChecked_getCurrentEpoch_one_ok fits
   have boundary := nextEpoch_span_iff (preset := preset) sum
-  simp only [processHistoricalRootsUpdate, notCapella, ite_false, next, liftAccessor, liftArith,
-    Except.mapError, bind, Except.bind]
+  simp only [processHistoricalRootsUpdate, next, liftAccessor, liftArith, Except.mapError, bind,
+    Except.bind]
   by_cases span : nextEpoch % (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH) = 0
   · haveI := spanLength_pos sum span
     obtain ⟨root, rooted⟩ :=

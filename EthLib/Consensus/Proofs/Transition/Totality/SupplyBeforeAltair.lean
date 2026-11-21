@@ -561,9 +561,8 @@ private theorem balanceSum_le_of_tail {config : Config} {checks : SignatureCheck
       repeat' (split at edge <;> try cases edge)
       all_goals rfl
   case participation =>
-    simp only [notAltair, ↓reduceDIte, processParticipationRecordUpdates, ↓reduceIte, pure,
-      Except.pure, Except.ok.injEq] at edge
-    subst edge
+    simp only [notAltair, ↓reduceDIte] at edge
+    cases edge
     rfl
   case syncCommittees =>
     simp only [notAltair, ↓reduceDIte] at edge

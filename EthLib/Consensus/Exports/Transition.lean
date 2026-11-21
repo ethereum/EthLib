@@ -192,8 +192,12 @@ def runEpochStep {preset : Preset} {fork : Fork} (config : Config) (handler : St
   | "effective_balance_updates" => runTransition (processEffectiveBalanceUpdates state)
   | "slashings_reset" => runTransition (processSlashingsReset state)
   | "randao_mixes_reset" => runTransition (processRandaoMixesReset state)
-  | "historical_roots_update" => runTransition (processHistoricalRootsUpdate state)
-  | "participation_record_updates" => runTransition (processParticipationRecordUpdates state)
+  | "historical_roots_update" =>
+    if before : fork < .shapella then runTransition (processHistoricalRootsUpdate state before)
+    else throw (0, s!"no epoch step historical_roots_update at {fork.name}")
+  | "participation_record_updates" =>
+    if before : fork < .altair then runTransition (processParticipationRecordUpdates state before)
+    else throw (0, s!"no epoch step participation_record_updates at {fork.name}")
   | "historical_summaries_update" =>
     if capella : .shapella ≤ fork then
       runTransition (processHistoricalSummariesUpdate state capella)
