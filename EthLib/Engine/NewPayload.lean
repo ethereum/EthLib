@@ -309,7 +309,9 @@ Its latest valid hash is then zero, as that step requires.
 
 A parent from Paris on is not checked: the chain is taken as valid, its terminal block included.
 
-The method keeps no invalid block, so a child of an invalid payload is syncing, not invalid.
+The method holds no invalid block, so a child of an invalid payload is syncing here.
+
+A node that keeps its invalid blocks answers that such a child is invalid.
 
 Otherwise a payload that passes the checks before execution runs as the next block of the chain.
 
