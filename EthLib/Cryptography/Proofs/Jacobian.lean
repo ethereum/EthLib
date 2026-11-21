@@ -81,9 +81,32 @@ theorem toZ_injective : Function.Injective (toZ (m := m)) := by
     toZ (Fin.inverse x) = (toZ x)⁻¹ :=
   Fin.inverse_val x
 
-/-! ## A change of field representation -/
+/-! ## The steps of scalar multiplication -/
 
 namespace Coords
+
+section Steps
+
+variable {F : Type} [OfNat F 0] [OfNat F 1] [Add F] [Sub F] [Mul F] [DecidableEq F]
+
+/-- The scalar `0` gives the point at infinity, whatever the fuel. -/
+theorem mulBits_scalar_zero (a : F) (fuel : Nat) (p : Coords F) :
+    mulBits a fuel 0 p = infinity := by
+  cases fuel <;> simp [mulBits]
+
+/-- `k P = (k mod 2) P + (k / 2) (2 P)`, also when `k` is `0` and the chain stops early. -/
+theorem mulBits_succ (a : F) (fuel k : Nat) (p : Coords F) :
+    mulBits a (fuel + 1) k p =
+      let rest := mulBits a fuel (k / 2) (double a p)
+      if k % 2 = 1 then add a p rest else rest := by
+  by_cases hk : k = 0
+  · subst hk
+    simp [mulBits, mulBits_scalar_zero]
+  · simp [mulBits, hk]
+
+end Steps
+
+/-! ## A change of field representation -/
 
 /-- A map between two representations of one field.
 
@@ -158,7 +181,7 @@ theorem map_mulBits (a : F) (fuel k : Nat) (p : Coords F) :
   induction fuel generalizing k p with
   | zero => exact map_infinity hf
   | succ fuel ih =>
-    simp only [mulBits]
+    simp only [mulBits_succ]
     split <;> simp only [map_add hf, map_double hf, ih]
 
 /-- The simultaneous chain commutes with the change of representation, for every bit. -/
@@ -273,7 +296,7 @@ theorem mulBits_succ [NeZero m] (a : Fin m) (fuel k : Nat) (p : Jacobian m) :
     mulBits a (fuel + 1) k p =
       let rest := mulBits a fuel (k / 2) (double a p)
       if k % 2 = 1 then add a p rest else rest := by
-  simp only [mulBits, Coords.mulBits]
+  simp only [mulBits, Coords.mulBits_succ]
   split <;> rfl
 
 /-- No bits leave the point at infinity. -/

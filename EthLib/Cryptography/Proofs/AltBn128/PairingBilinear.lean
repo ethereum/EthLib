@@ -61,7 +61,11 @@ theorem pairingCheck_eq_true_iff (l : List (Point × Point2)) :
     | nil => simp
     | cons pq l ih => rw [List.foldl_cons, ih, finalExponentiation_checkStep, List.map_cons,
         List.prod_cons, mul_assoc]
-  have hcheck : pairingCheck l = (finalExponentiation (l.foldl checkStep 1) == 1) := rfl
+  have hcheck : pairingCheck l = (finalExponentiation (l.foldl checkStep 1) == 1) := by
+    change (l.foldl checkStep 1 == 1 || finalExponentiation (l.foldl checkStep 1) == 1) = _
+    by_cases h : l.foldl checkStep 1 = 1
+    · rw [h, finalExponentiation_one, Bool.or_self]
+    · rw [beq_eq_false_iff_ne.mpr h, Bool.false_or]
   rw [hcheck, beq_iff_eq, hfold, finalExponentiation_one, one_mul]
 
 /-- The check of `[(P1, P2)]` fails. -/
