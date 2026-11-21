@@ -24,6 +24,8 @@ Any other candidate gives way to the Euclidean inverse.
 
 namespace EthLib.Cryptography.Secp256k1
 
+open EthLib.Cryptography.Word64
+
 namespace Inverse
 
 /-- The checked candidate is the Euclidean inverse, whatever the candidate. -/

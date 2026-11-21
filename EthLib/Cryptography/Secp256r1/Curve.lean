@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Secp256k1.Field
+public import EthLib.Cryptography.Secp256r1.Montgomery
 public import EthLib.Cryptography.ShortWeierstrass
 
 /-!
@@ -10,39 +10,16 @@ The curve `E: y^2 = x^3 + a x + b` over `Fp`, with `a = -3`, from SEC 2 v2 §2.4
 
 NIST calls it P-256, and SP 800-186 §3.2.1.3 standardizes the same parameters.
 
-- `Fp` is the base field, integers mod the prime `p`.
-- `Fn` is the scalar field, integers mod the prime order `n` of the generator.
-
 The cofactor is 1, so every point of the curve but `O` generates the whole group.
 
 Its points and the addition rule of SEC 1 v2 §2.2.1 are those of every short Weierstrass curve.
+
+The two products of verification share one chain in Montgomery form, with one inverse at the end.
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.Secp256r1
-
-/-- `p`, the modulus of the base field, from SEC 2 v2 §2.4.2. -/
-def Fp.modulus : Nat := 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF
-
-/-- `n`, the order of the generator, from SEC 2 v2 §2.4.2. -/
-def Fn.modulus : Nat := 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
-
--- Named explicitly, since both anonymous instances would get the same name.
-instance Fp.instNeZeroModulus : NeZero Fp.modulus := ⟨by decide⟩
-instance Fn.instNeZeroModulus : NeZero Fn.modulus := ⟨by decide⟩
-
-/-- An element of the base field. -/
-abbrev Fp := Fin Fp.modulus
-
-/-- An element of the scalar field. -/
-abbrev Fn := Fin Fn.modulus
-
-/-- The inverse in `Fp`, by the extended Euclidean algorithm, and 0 for 0. -/
-def Fp.inv (a : Fp) : Fp := Fin.inverse a
-
-/-- The inverse in `Fn`, by the extended Euclidean algorithm, and 0 for 0. -/
-def Fn.inv (a : Fn) : Fn := Fin.inverse a
 
 /-- `a = -3`, from SEC 2 v2 §2.4.2. -/
 def a : Fp := 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFC
@@ -86,11 +63,39 @@ def mulBits (fuel k : Nat) (p : Point) : Point :=
 `n` has 256 bits, so 256 steps cover every scalar. -/
 def mul (k : Fn) (p : Point) : Point := mulBits 256 k.val p
 
+/-- `a` in Montgomery form. -/
+def aMontgomery : Montgomery := Montgomery.ofFin a
+
 /-- `k P + l Q`, for scalars mod `n`, with one chain of doublings for both.
+
+The chain runs in Jacobian coordinates in Montgomery form, and only the conversion back inverts.
 
 On points of the curve it is the sum of the two products. -/
 def mulAdd (k : Fn) (p : Point) (l : Fn) (q : Point) : Point :=
-  ofJacobian (Jacobian.mulAdd a 256 k.val (toJacobian p) l.val (toJacobian q))
+  let p' := (toJacobian p).toCoords.map Montgomery.ofFin
+  let q' := (toJacobian q).toCoords.map Montgomery.ofFin
+  ShortWeierstrass.Point.ofCoords Montgomery.inv Montgomery.toFin
+    (chain p' q' (Jacobian.Coords.add aMontgomery p' q') (Word64.rawOfNat k.val)
+      (Word64.rawOfNat l.val) 256 0)
+where
+  /-- `(k / 2^s) P + (l / 2^s) Q`, for `k, l < 2^(s + fuel)`, high bits first.
+
+  `pq` is `P + Q`, and the scalars are four words each.
+
+  It is the shared chain of the simultaneous multiplication, with the same doublings and sums.
+
+  It reads bit `s` of the words instead of halving the scalars.
+
+  Halving a 256-bit integer at each step allocates a big integer, which would dominate the chain. -/
+  chain (p q pq : Jacobian.Coords Montgomery) (k l : Word64.Raw) :
+      Nat → Nat → Jacobian.Coords Montgomery
+    | 0, _ => Jacobian.Coords.infinity
+    | fuel + 1, s =>
+      let acc := Jacobian.Coords.double aMontgomery (chain p q pq k l fuel (s + 1))
+      if k.bit s then
+        if l.bit s then Jacobian.Coords.add aMontgomery acc pq
+        else Jacobian.Coords.add aMontgomery acc p
+      else if l.bit s then Jacobian.Coords.add aMontgomery acc q else acc
 
 end Point
 

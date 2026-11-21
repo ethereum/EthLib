@@ -16,6 +16,8 @@ The power runs in Montgomery form, by a fixed chain of squarings and products.
 
 namespace EthLib.Cryptography.Secp256k1
 
+open Word64
+
 namespace Montgomery
 
 /-- Apply a step `n` times, with the four words of each value as separate arguments.

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Secp256k1.Field
+public import EthLib.Cryptography.Word64
 
 /-!
 # `Secp256k1.Montgomery`
@@ -40,219 +41,20 @@ That is the CIOS method of [Koç, Acar and Kaliski][cios].
 
 namespace EthLib.Cryptography.Secp256k1
 
+open Word64
+
 namespace Montgomery
 
-/-- The radix of one word, `2^64`. -/
-abbrev wordRadix : Nat := 2^64
+-- The word primitives are shared with the other curves.
+export Word64 (wordRadix mulHigh yes Pair mac plus minus plus_spec minus_spec Words64 lowValue
+  value Raw rawOfNat rawToNat rawToNat_eq)
+
 /-- The complement of the modulus, `2^256 - p = 2^32 + 977`. -/
 def complement : UInt64 := 4294968273
 /-- The inverse of the complement mod `2^64`.
 
 It is also `-p^(-1) mod 2^64`, since `-p = 2^32 + 977 mod 2^64`. -/
 def inverseComplement : UInt64 := 0xd838091dd2253531
-
-/-- Four words and a carry word above them, least significant first. -/
-structure Words64 where
-  /-- Bits 0 through 63. -/
-  w0 : UInt64
-  /-- Bits 64 through 127. -/
-  w1 : UInt64
-  /-- Bits 128 through 191. -/
-  w2 : UInt64
-  /-- Bits 192 through 255. -/
-  w3 : UInt64
-  /-- The carry above bit 255. -/
-  top : UInt64
-
-/-- The high word of the product of two words, from four 32-bit products. -/
-@[inline] def mulHigh (a b : UInt64) : UInt64 :=
-  let alo := a &&& 0xffffffff
-  let ahi := a >>> 32
-  let blo := b &&& 0xffffffff
-  let bhi := b >>> 32
-  let w0 := alo * blo
-  let t := ahi * blo + (w0 >>> 32)
-  let w1 := alo * bhi + (t &&& 0xffffffff)
-  ahi * bhi + (t >>> 32) + (w1 >>> 32)
-
-private abbrev halfRadix : Nat := 2^32
-
-private theorem low_eq (x : UInt64) : (x &&& 0xffffffff).toNat = x.toNat % halfRadix := by
-  rw [UInt64.toNat_and]
-  change x.toNat &&& (2^32 - 1) = x.toNat % 2^32
-  exact Nat.and_two_pow_sub_one_eq_mod _ _
-
-private theorem high_eq (x : UInt64) : (x >>> 32).toNat = x.toNat / halfRadix := by
-  rw [UInt64.toNat_shiftRight, Nat.shiftRight_eq_div_pow]
-  rfl
-
-private theorem prod_le {a b : Nat} (ha : a < halfRadix) (hb : b < halfRadix) :
-    a * b ≤ (halfRadix - 1) * (halfRadix - 1) := Nat.mul_le_mul (by omega) (by omega)
-
-private theorem half_le {a : Nat} (ha : a < halfRadix) : a ≤ halfRadix - 1 := by omega
-
-private theorem mul_exact {a b : UInt64} (h : a.toNat*b.toNat ≤ (halfRadix - 1)*(halfRadix - 1)) :
-    (a*b).toNat = a.toNat*b.toNat := by
-  rw [UInt64.toNat_mul, Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt h (by decide))]
-
-private theorem add_exact {a b : UInt64} (h : a.toNat + b.toNat < 2^64) :
-    (a+b).toNat = a.toNat+b.toNat := by
-  rw [UInt64.toNat_add, Nat.mod_eq_of_lt h]
-
-private theorem model_mulHigh (a b c d : Nat) :
-    let w0 := a * c
-    let t := b * c + w0 / halfRadix
-    let w1 := a * d + t % halfRadix
-    ((a + halfRadix*b) * (c + halfRadix*d)) / (halfRadix*halfRadix) =
-      b*d + t/halfRadix + w1/halfRadix := by
-  dsimp only
-  let w0 := a * c
-  let t := b * c + w0 / halfRadix
-  let w1 := a * d + t % halfRadix
-  let lo := w0 % halfRadix + halfRadix * (w1 % halfRadix)
-  let hi := b*d + t/halfRadix + w1/halfRadix
-  have hlo : lo < halfRadix*halfRadix := by
-    have h0 := half_le (Nat.mod_lt w0 (show 0 < halfRadix by decide))
-    have h1 := half_le (Nat.mod_lt w1 (show 0 < halfRadix by decide))
-    exact Nat.lt_of_le_of_lt (Nat.add_le_add h0 (Nat.mul_le_mul_left halfRadix h1)) (by decide)
-  have h : (a + halfRadix*b) * (c + halfRadix*d) = lo + halfRadix*halfRadix*hi := by
-    calc
-      _ = w0 + halfRadix*(a*d + b*c) + halfRadix*halfRadix*(b*d) := by dsimp only [w0]; grind
-      _ = w0 % halfRadix + halfRadix*(a*d + t) + halfRadix*halfRadix*(b*d) := by
-        conv => lhs; rw [← Nat.mod_add_div w0 halfRadix]
-        dsimp only [t]
-        grind
-      _ = w0 % halfRadix + halfRadix*(w1 + halfRadix*(t/halfRadix)) +
-          halfRadix*halfRadix*(b*d) := by
-        conv => lhs; rw [← Nat.mod_add_div t halfRadix]
-        dsimp only [w1]
-        grind
-      _ = lo + halfRadix*halfRadix*hi := by
-        conv => lhs; rw [← Nat.mod_add_div w1 halfRadix]
-        dsimp only [lo, hi]
-        grind
-  change ((a + halfRadix*b) * (c + halfRadix*d)) / (halfRadix*halfRadix) = hi
-  rw [h, Nat.add_mul_div_left _ _ (by decide), Nat.div_eq_of_lt hlo, Nat.zero_add]
-
-private theorem mulHigh_spec (a b : UInt64) : (mulHigh a b).toNat = a.toNat*b.toNat / 2^64 := by
-  let a0 := a &&& 0xffffffff
-  let a1 := a >>> 32
-  let b0 := b &&& 0xffffffff
-  let b1 := b >>> 32
-  let w0 := a0*b0
-  let t := a1*b0 + (w0 >>> 32)
-  let w1 := a0*b1 + (t &&& 0xffffffff)
-  have ha0 : a0.toNat < halfRadix := by rw [low_eq]; exact Nat.mod_lt _ (by decide)
-  have hb0 : b0.toNat < halfRadix := by rw [low_eq]; exact Nat.mod_lt _ (by decide)
-  have ha1 : a1.toNat < halfRadix := by
-    rw [high_eq]
-    exact Nat.div_lt_of_lt_mul a.toNat_lt
-  have hb1 : b1.toNat < halfRadix := by
-    rw [high_eq]
-    exact Nat.div_lt_of_lt_mul b.toNat_lt
-  have h00 := prod_le ha0 hb0
-  have h01 := prod_le ha0 hb1
-  have h10 := prod_le ha1 hb0
-  have h11 := prod_le ha1 hb1
-  have h0 : w0.toNat = a0.toNat*b0.toNat := mul_exact h00
-  have ht : t.toNat = a1.toNat*b0.toNat + (w0.toNat/halfRadix) := by
-    have hw0 : w0.toNat/halfRadix < halfRadix := Nat.div_lt_of_lt_mul w0.toNat_lt
-    change (a1*b0 + (w0 >>> 32)).toNat = _
-    rw [add_exact (by
-      rw [mul_exact h10, high_eq w0]
-      exact Nat.lt_of_le_of_lt (Nat.add_le_add h10 (half_le hw0)) (by decide)),
-      mul_exact h10, high_eq w0]
-  have hw : w1.toNat = a0.toNat*b1.toNat + t.toNat % halfRadix := by
-    have htm := Nat.mod_lt t.toNat (show 0 < halfRadix by decide)
-    change (a0*b1 + (t &&& 0xffffffff)).toNat = _
-    rw [add_exact (by
-      rw [mul_exact h01, low_eq t]
-      exact Nat.lt_of_le_of_lt (Nat.add_le_add h01 (half_le htm)) (by decide)),
-      mul_exact h01, low_eq t]
-  have htd : t.toNat/halfRadix < halfRadix := Nat.div_lt_of_lt_mul t.toNat_lt
-  have hwd : w1.toNat/halfRadix < halfRadix := Nat.div_lt_of_lt_mul w1.toNat_lt
-  have he : (mulHigh a b).toNat = a1.toNat*b1.toNat + t.toNat/halfRadix + w1.toNat/halfRadix := by
-    change (a1*b1 + (t >>> 32) + (w1 >>> 32)).toNat = _
-    have h1 := Nat.add_le_add h11 (half_le htd)
-    have e := add_exact (a := a1*b1) (b := t >>> 32) (by
-      rw [mul_exact h11, high_eq t]
-      exact Nat.lt_of_le_of_lt h1 (by decide))
-    rw [add_exact (by
-      rw [e, mul_exact h11, high_eq t, high_eq w1]
-      exact Nat.lt_of_le_of_lt (Nat.add_le_add h1 (half_le hwd)) (by decide)),
-      e, mul_exact h11, high_eq t, high_eq w1]
-  rw [he, hw, ht, h0]
-  have ea : a.toNat = a0.toNat + halfRadix*a1.toNat := by
-    dsimp only [a0, a1]
-    rw [low_eq a, high_eq a, Nat.mod_add_div]
-  have eb : b.toNat = b0.toNat + halfRadix*b1.toNat := by
-    dsimp only [b0, b1]
-    rw [low_eq b, high_eq b, Nat.mod_add_div]
-  conv => rhs; rw [ea, eb]
-  exact (model_mulHigh a0.toNat a1.toNat b0.toNat b1.toNat).symm
-
-/-- One for `true` and zero for `false`. -/
-@[inline] def yes (b : Bool) : UInt64 := b.toUInt64
-
-/-- The addition and its overflow bit represent the full 65-bit sum. -/
-private theorem add_with_carry (a b : UInt64) :
-    (a + b).toNat + 2^64 * (yes (a + b < a)).toNat = a.toNat + b.toNat := by
-  have ha := a.toNat_lt
-  have hb := b.toNat_lt
-  by_cases h : a + b < a
-  · have hl : (a.toNat + b.toNat) % 2^64 < a.toNat := by
-      simpa only [UInt64.toNat_add] using (show (a + b).toNat < a.toNat from h)
-    simp only [yes, Bool.toUInt64, h, decide_true, ite_true, UInt64.toNat_add,
-      UInt64.toNat_one, Nat.mul_one]
-    omega
-  · have hl : ¬ (a.toNat + b.toNat) % 2^64 < a.toNat := by
-      simpa only [UInt64.toNat_add] using (show ¬ (a + b).toNat < a.toNat from h)
-    simp only [yes, Bool.toUInt64, h, decide_false, Bool.false_eq_true, ite_false, UInt64.toNat_add,
-      UInt64.toNat_zero, Nat.mul_zero, Nat.add_zero]
-    omega
-
-/-- Two words, least significant first. -/
-structure Pair where
-  /-- The low word. -/
-  lo : UInt64
-  /-- The high word, or the carry. -/
-  hi : UInt64
-
-/-- `a b + w + cin`, the step of a column, as two words. -/
-@[inline] def mac (a b w cin : UInt64) : Pair :=
-  let lo := a*b
-  let hi := mulHigh a b
-  let s := lo+w
-  let t := s+cin
-  ⟨t, hi + yes (s < lo) + yes (t < s)⟩
-
-/-- The wide MAC represents the integer product and both added words. -/
-private theorem mac_spec (a b w cin : UInt64) :
-    (mac a b w cin).lo.toNat + 2^64 * (mac a b w cin).hi.toNat =
-      a.toNat*b.toNat + w.toNat + cin.toNat := by
-  let lo := a*b
-  let hi := mulHigh a b
-  let s := lo + w
-  let t := s + cin
-  let c1 := yes (s < lo)
-  let c2 := yes (t < s)
-  have hmul : lo.toNat + 2^64 * hi.toNat = a.toNat*b.toNat := by
-    dsimp only [lo, hi]
-    rw [UInt64.toNat_mul, mulHigh_spec, Nat.mod_add_div]
-  have hadd1 : s.toNat + 2^64 * c1.toNat = lo.toNat + w.toNat := add_with_carry lo w
-  have hadd2 : t.toNat + 2^64 * c2.toNat = s.toNat + cin.toNat := add_with_carry s cin
-  have hproduct : a.toNat*b.toNat ≤ (2^64 - 1)*(2^64 - 1) := Nat.mul_le_mul
-    (by have := a.toNat_lt; omega) (by have := b.toNat_lt; omega)
-  have hw := w.toNat_lt
-  have hc := cin.toNat_lt
-  have eh : t.toNat + 2^64 * (hi.toNat + c1.toNat + c2.toNat) =
-      a.toNat*b.toNat + w.toNat + cin.toNat := by omega
-  have hh : hi.toNat + c1.toNat + c2.toNat < 2^64 := by omega
-  change t.toNat + 2^64 * (hi + c1 + c2).toNat = _
-  rw [add_exact (a := hi + c1) (b := c2) (by rw [add_exact (by omega)]; exact hh),
-    add_exact (a := hi) (b := c1) (by omega)]
-  exact eh
-
 
 private def addComplement (r : Words64) : Words64 :=
   let v0 := r.w0 + complement
@@ -268,21 +70,6 @@ private def shouldReduce (r : Words64) : Bool :=
 /-- The reduction that the faster ones are proved against. -/
 private def reduce (r : Words64) : Words64 :=
   if shouldReduce r then addComplement r else r
-
-/-- The integer of the four low words. -/
-def lowValue (w : Words64) : Nat :=
-  w.w0.toNat + wordRadix*w.w1.toNat + wordRadix^2*w.w2.toNat + wordRadix^3*w.w3.toNat
-
-/-- The integer of all five words. -/
-def value (w : Words64) : Nat := lowValue w + wordRadix^4*w.top.toNat
-
-private theorem lowValue_lt (w : Words64) : lowValue w < wordRadix^4 := by
-  have h0 := w.w0.toNat_lt
-  have h1 := w.w1.toNat_lt
-  have h2 := w.w2.toNat_lt
-  have h3 := w.w3.toNat_lt
-  simp only [lowValue, wordRadix]
-  omega
 
 private theorem low_ge_iff (w : Words64) :
     (w.w3 == 0xffffffffffffffff && w.w2 == 0xffffffffffffffff &&
@@ -307,21 +94,6 @@ private theorem reduce_condition_iff (w : Words64) :
   simp only [Bool.or_eq_true, htop, low_ge_iff, value, wordRadix]
   have hp : Fp.modulus < 2^256 := by decide
   omega
-
-private theorem sub_split (a b : UInt64) :
-    (a-b).toNat + b.toNat = a.toNat + wordRadix * (yes (a < b)).toNat := by
-  have ha : a.toNat < wordRadix := a.toNat_lt
-  have hb : b.toNat < wordRadix := b.toNat_lt
-  simp only [wordRadix] at *
-  by_cases h : a < b
-  · have hn : a.toNat < b.toNat := h
-    simp [yes, Bool.toUInt64, h, UInt64.toNat_sub]
-    rw [Nat.mod_eq_of_lt (by omega)]
-    omega
-  · have hn : ¬ a.toNat < b.toNat := h
-    have hab : b ≤ a := by change b.toNat ≤ a.toNat; omega
-    simp [yes, Bool.toUInt64, h, UInt64.toNat_sub_of_le _ _ hab]
-    omega
 
 private theorem radix_q (s : UInt64) : s * inverseComplement * complement = s := by
   rw [UInt64.mul_assoc, show inverseComplement * complement = 1 by decide, UInt64.mul_one]
@@ -483,10 +255,6 @@ private theorem addComplement_value (r : Words64) :
   exact add_chain (add_with_carry r.w0 complement) (add_with_carry r.w1 (yes (v0 < r.w0)))
     (add_with_carry r.w2 (yes (v1 < r.w1))) (add_with_carry r.w3 (yes (v2 < r.w2)))
 
-private theorem value_low_of_top_zero (w : Words64) (h : w.top = 0) :
-    value w = lowValue w := by
-  simp only [value, h, UInt64.toNat_zero, Nat.mul_zero, Nat.add_zero]
-
 private theorem value_as_nat (w : Words64) : value w = lowValue w + 2^256*w.top.toNat := rfl
 
 private theorem remainder_of_complement (r v : Words64) (carry : Nat)
@@ -528,36 +296,6 @@ private theorem reduce_spec (r : Words64) (hbound : value r < 2*Fp.modulus) :
     (shouldReduce r) (addComplement r) r
     (fun h => reduce_yes r ((reduce_condition_iff r).1 h) hbound)
     (fun h => reduce_no r (Nat.lt_of_not_ge (fun hc => h ((reduce_condition_iff r).2 hc))))
-
-/-- A 256-bit integer in four words, with the least significant word first. -/
-structure Raw where
-  /-- Bits 0 through 63. -/
-  w0 : UInt64
-  /-- Bits 64 through 127. -/
-  w1 : UInt64
-  /-- Bits 128 through 191. -/
-  w2 : UInt64
-  /-- Bits 192 through 255. -/
-  w3 : UInt64
-deriving DecidableEq
-
-/-- The four low words, without the carry word. -/
-@[inline] def Raw.fromWords (r : Words64) : Raw := ⟨r.w0, r.w1, r.w2, r.w3⟩
-
-/-- Extend the four words with a zero carry word. -/
-@[inline] def Raw.words (t : Raw) : Words64 := ⟨t.w0, t.w1, t.w2, t.w3, 0⟩
-
-/-- The natural number represented by the four words. -/
-def Raw.val (t : Raw) : Nat := lowValue t.words
-
-theorem Raw.val_eq (t : Raw) : t.val = value t.words := by
-  rw [value_low_of_top_zero _ rfl]
-  rfl
-
-theorem Raw.fromWords_val (w : Words64) (h : w.top = 0) :
-    (Raw.fromWords w).val = value w := by
-  rw [value_low_of_top_zero w h]
-  rfl
 
 end Montgomery
 
@@ -1499,27 +1237,6 @@ instance : Mul Montgomery := ⟨mul⟩
   finish (reduceWideInverse w.1 w.2) h.1
 
 
-/-- Read the low 256 bits in four words. -/
-@[inline] def rawOfNat (n : Nat) : Raw :=
-  ⟨n.toUInt64, (n >>> 64).toUInt64, (n >>> 128).toUInt64, (n >>> 192).toUInt64⟩
-
-private theorem rawOfNat_val (n : Nat) (hn : n < 2^256) : (rawOfNat n).val = n := by
-  simp only [rawOfNat, Raw.val, Raw.words, lowValue, wordRadix,
-    Nat.shiftRight_eq_div_pow]
-  change n % 2^64 + 2^64 * ((n / 2^64) % 2^64) + 2^128 * ((n / 2^128) % 2^64) +
-    2^192 * ((n / 2^192) % 2^64) = n
-  omega
-
-/-- Join the four words with shifts by 64 bits. -/
-@[inline] def rawToNat (a : Raw) : Nat :=
-  let high := (a.w3.toNat <<< 64) + a.w2.toNat
-  let middle := (high <<< 64) + a.w1.toNat
-  (middle <<< 64) + a.w0.toNat
-
-theorem rawToNat_eq (a : Raw) : rawToNat a = a.val := by
-  simp only [rawToNat, Nat.shiftLeft_eq, Raw.val, Raw.words, lowValue, wordRadix]
-  omega
-
 /-- Read the canonical integer before applying the Montgomery scale. -/
 @[inline] def readRaw (a : Fp) : Montgomery :=
   ⟨rawOfNat a.val, by
@@ -1540,52 +1257,9 @@ def rawOne : Montgomery := ⟨⟨1, 0, 0, 0⟩, by decide⟩
   let x := a * rawOne
   ⟨rawToNat x.raw, by rw [rawToNat_eq]; exact x.lt⟩
 
-/-- `a + b + carry`, and the carry out. -/
-@[inline] def plus (a b carry : UInt64) : Pair :=
-  let s := a+b
-  let t := s+carry
-  ⟨t, yes (s < a) + yes (t < s)⟩
-
-/-- `a - b - borrow`, and the borrow out. -/
-@[inline] def minus (a b borrow : UInt64) : Pair :=
-  let s := a-b
-  ⟨s-borrow, yes (a < b) + yes (s < borrow)⟩
-
-private theorem yes_le_one (b : Bool) : (yes b).toNat ≤ 1 := by
-  cases b <;> decide
-
-private theorem yes_sum (a b : Bool) : (yes a + yes b).toNat = (yes a).toNat + (yes b).toNat := by
-  cases a <;> cases b <;> decide
-
-/-- An addition word and its carry give the integer sum. -/
-theorem plus_spec (a b carry : UInt64) (hc : carry.toNat ≤ 1) :
-    (plus a b carry).lo.toNat + wordRadix * (plus a b carry).hi.toNat =
-      a.toNat + b.toNat + carry.toNat ∧ (plus a b carry).hi.toNat ≤ 1 := by
-  have h0 := add_with_carry a b
-  have h1 := add_with_carry (a + b) carry
-  have ha := a.toNat_lt
-  have hb := b.toNat_lt
-  simp only [plus, yes_sum, wordRadix] at h0 h1 ⊢
-  omega
-
-/-- A subtraction word plus the subtrahends equals the minuend and the borrow. -/
-theorem minus_spec (a b borrow : UInt64) (hc : borrow.toNat ≤ 1) :
-    (minus a b borrow).lo.toNat + b.toNat + borrow.toNat =
-      a.toNat + wordRadix * (minus a b borrow).hi.toNat ∧ (minus a b borrow).hi.toNat ≤ 1 := by
-  have h0 := sub_split a b
-  have h1 := sub_split (a - b) borrow
-  have hb := b.toNat_lt
-  have hl := (a - b - borrow).toNat_lt
-  simp only [minus, yes_sum, wordRadix] at h0 h1 ⊢
-  omega
-
 /-- The sum of two values of four words, then the given reduction of the five-word result. -/
 @[inline] def add64 (reduce : Words64 → Words64) (a b : Words64) : Words64 :=
-  let s0 := plus a.w0 b.w0 0
-  let s1 := plus a.w1 b.w1 s0.hi
-  let s2 := plus a.w2 b.w2 s1.hi
-  let s3 := plus a.w3 b.w3 s2.hi
-  reduce ⟨s0.lo,s1.lo,s2.lo,s3.lo,s3.hi⟩
+  reduce (add4 a b)
 
 /-- Addition of reduced words gives the sum mod p. -/
 theorem add64_spec (reduce : Words64 → Words64)
@@ -1594,34 +1268,11 @@ theorem add64_spec (reduce : Words64 → Words64)
     (a b : Words64) (ha : a.top = 0) (hb : b.top = 0)
     (hpa : value a < Fp.modulus) (hpb : value b < Fp.modulus) :
     (add64 reduce a b).top = 0 ∧ value (add64 reduce a b) = (value a + value b) % Fp.modulus := by
+  have he : value (add4 a b) = value a + value b := by
+    rw [(add4_spec _ _).1, value_low_of_top_zero a ha, value_low_of_top_zero b hb]
   unfold add64
-  let s0 := plus a.w0 b.w0 0
-  let s1 := plus a.w1 b.w1 s0.hi
-  let s2 := plus a.w2 b.w2 s1.hi
-  let s3 := plus a.w3 b.w3 s2.hi
-  have h0 := plus_spec a.w0 b.w0 0 (by decide)
-  have h1 := plus_spec a.w1 b.w1 s0.hi h0.2
-  have h2 := plus_spec a.w2 b.w2 s1.hi h1.2
-  have h3 := plus_spec a.w3 b.w3 s2.hi h2.2
-  let s := (⟨s0.lo,s1.lo,s2.lo,s3.lo,s3.hi⟩ : Words64)
-  change (reduce s).top = 0 ∧ value (reduce s) = _
-  have he : value s = value a + value b := by
-    change s0.lo.toNat + wordRadix*s1.lo.toNat + wordRadix^2*s2.lo.toNat +
-      wordRadix^3*s3.lo.toNat + wordRadix^4*s3.hi.toNat =
-      value a + value b
-    have h0e := h0.1
-    have h1e := h1.1
-    have h2e := h2.1
-    have h3e := h3.1
-    change s0.lo.toNat + wordRadix*s0.hi.toNat = _ at h0e
-    change s1.lo.toNat + wordRadix*s1.hi.toNat = _ at h1e
-    change s2.lo.toNat + wordRadix*s2.hi.toNat = _ at h2e
-    change s3.lo.toNat + wordRadix*s3.hi.toNat = _ at h3e
-    simp only [value, lowValue, ha, hb, UInt64.toNat_zero, Nat.mul_zero,
-      Nat.add_zero, wordRadix] at *
-    omega
   rw [← he]
-  exact reduce_spec s (by rw [he]; omega)
+  exact reduce_spec _ (by rw [he]; omega)
 
 private theorem yes_lt_one (w : UInt64) : yes (w < 1) = yes (w = 0) := by
   have hx : w < 1 ↔ w = 0 := by
@@ -1684,12 +1335,9 @@ private theorem correctBorrow_value (w0 w1 w2 w3 : UInt64)
 
 /-- The subtraction that the masked one is proved against. -/
 private def sub64 (a b : Words64) : Words64 :=
-  let d0 := minus a.w0 b.w0 0
-  let d1 := minus a.w1 b.w1 d0.hi
-  let d2 := minus a.w2 b.w2 d1.hi
-  let d3 := minus a.w3 b.w3 d2.hi
-  if d3.hi = 0 then ⟨d0.lo,d1.lo,d2.lo,d3.lo,0⟩
-  else correctBorrow d0.lo d1.lo d2.lo d3.lo
+  let d := sub4 a b
+  if d.top = 0 then ⟨d.w0,d.w1,d.w2,d.w3,0⟩
+  else correctBorrow d.w0 d.w1 d.w2 d.w3
 
 /-- Subtraction of reduced words gives the difference mod p. -/
 private theorem sub64_spec (a b : Words64) (ha : a.top = 0) (hb : b.top = 0)
@@ -1908,9 +1556,6 @@ theorem subMasked_spec (a b : Words64) (ha : a.top = 0) (hb : b.top = 0)
 
 instance : Add Montgomery := ⟨add⟩
 instance : Sub Montgomery := ⟨sub⟩
-
-/-- The integer of all five words. -/
-abbrev Words64.val (x : Words64) : Nat := value x
 
 /-- One word of a value shifted right by one bit.
 

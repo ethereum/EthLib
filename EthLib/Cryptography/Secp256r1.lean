@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Cryptography.Secp256r1.Field
+public import EthLib.Cryptography.Secp256r1.Montgomery
 public import EthLib.Cryptography.Secp256r1.Curve
 public import EthLib.Cryptography.Secp256r1.Errors
 public import EthLib.Cryptography.Secp256r1.Encoding

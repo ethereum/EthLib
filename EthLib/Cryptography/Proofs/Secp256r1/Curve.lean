@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Secp256r1.Curve
 public import EthLib.Cryptography.Proofs.Secp256r1.Field
+public import EthLib.Cryptography.Proofs.Secp256r1.Montgomery
 public import EthLib.Cryptography.Proofs.ShortWeierstrass
 public import EthLib.Cryptography.Proofs.Jacobian
 
@@ -141,9 +142,43 @@ theorem toPoint_surjective (P : curve.Point) : ∃ p : Point, p.isOnCurve = true
 
 /-! ## Two products with shared doublings -/
 
+private theorem toFin_aMontgomery : Montgomery.toFin aMontgomery = a :=
+  Montgomery.toFin_ofFin a
+
+/-- The chain on scalar words is the shared chain, with the scalars shifted by `s`. -/
+theorem mulAddAux_eq (p q pq : Jacobian.Coords Montgomery) (k l : Word64.Raw)
+    (fuel s : Nat) :
+    mulAdd.chain p q pq k l fuel s =
+      Jacobian.Coords.mulAddAux aMontgomery p q pq fuel (k.val >>> s) (l.val >>> s) := by
+  induction fuel generalizing s with
+  | zero => simp only [mulAdd.chain, Jacobian.Coords.mulAddAux]
+  | succ fuel ih =>
+    simp only [mulAdd.chain, Jacobian.Coords.mulAddAux, ih, Word64.Raw.bit_iff,
+      Nat.shiftRight_succ]
+
+/-- The chain in Montgomery form is the shared chain on `Fp`, for every input. -/
+theorem mulAdd_eq_jacobian (k : Fn) (p : Point) (l : Fn) (q : Point) :
+    mulAdd k p l q =
+      ofJacobian (Jacobian.mulAdd a 256 k.val (toJacobian p) l.val (toJacobian q)) := by
+  have hf := Montgomery.toFin_embedding
+  have hk : (Word64.rawOfNat k.val).val = k.val :=
+    Word64.rawOfNat_val _ (Nat.lt_trans k.isLt (by decide))
+  have hl : (Word64.rawOfNat l.val).val = l.val :=
+    Word64.rawOfNat_val _ (Nat.lt_trans l.isLt (by decide))
+  -- Reading back the encoded form of a point gives the form itself.
+  have he : ∀ p : Point, ((toJacobian p).toCoords.map Montgomery.ofFin).map Montgomery.toFin =
+      (toJacobian p).toCoords := fun p => by
+    simp only [Jacobian.Coords.map, Montgomery.toFin_ofFin]
+  simp only [mulAdd]
+  rw [mulAddAux_eq, hk, hl, Nat.shiftRight_zero, Nat.shiftRight_zero,
+    ← Jacobian.Coords.mulAdd.eq_1, ShortWeierstrass.Point.ofCoords_map hf Montgomery.toFin_inv,
+    Jacobian.Coords.map_mulAdd hf, toFin_aMontgomery, he, he]
+  rfl
+
 theorem isOnCurve_mulAdd (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
-    (hq : q.isOnCurve = true) : (mulAdd k p l q).isOnCurve = true :=
-  (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val l.val
+    (hq : q.isOnCurve = true) : (mulAdd k p l q).isOnCurve = true := by
+  rw [mulAdd_eq_jacobian]
+  exact (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val l.val
     (toJacobian_spec hp).1 (toJacobian_spec hq).1)).1
 
 /-- The shared chain computes `k P + l Q`, with the values of `k` and `l` below `n`. -/
@@ -152,8 +187,8 @@ theorem toPoint_mulAdd (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
     toPoint (mulAdd k p l q) = k.val • toPoint p + l.val • toPoint q := by
   have hJp := toJacobian_spec hp
   have hJq := toJacobian_spec hq
-  rw [mulAdd, (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val l.val
-      hJp.1 hJq.1)).2,
+  rw [mulAdd_eq_jacobian, (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val
+      l.val hJp.1 hJq.1)).2,
     Jacobian.toPoint_mulAdd toZ_a two_ne_zero' 256 k.val l.val hJp.1 hJq.1
       (Nat.lt_trans k.isLt (by decide)) (Nat.lt_trans l.isLt (by decide))]
   exact congrArg₂ (k.val • · + l.val • ·) hJp.2 hJq.2

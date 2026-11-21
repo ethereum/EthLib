@@ -37,6 +37,8 @@ So the result never depends on the loop being right.
 
 namespace EthLib.Cryptography.Secp256k1
 
+open Word64
+
 namespace Inverse
 
 open Montgomery (plus minus mac)
