@@ -1,22 +1,16 @@
 module
 
 public import EthLib.Cryptography.Secp256k1.Inverse
-public import EthLib.Cryptography.Jacobian
+public import EthLib.Cryptography.ShortWeierstrass
 
 /-!
 # `Secp256k1.Curve`
 
 The curve `E: y^2 = x^3 + 7` over `Fp`, from SEC 2 v2 §2.4.1, where `a = 0` and `b = 7`.
 
-A point is the point at infinity `O`, or a pair `(x, y)` that satisfies the equation.
+Its points and the addition rule of SEC 1 v2 §2.2.1 are those of every short Weierstrass curve.
 
-The points form a group under the addition rule of SEC 1 v2 §2.2.1.
-
-`O` is its zero, and `-(x, y) = (x, -y)`.
-
-The rule is written in affine coordinates, as SEC 1 prints it.
-
-Scalar multiplication runs in Jacobian coordinates instead, with one inverse at the end.
+Scalar multiplication runs in Jacobian coordinates in Montgomery form, with one inverse at the end.
 -/
 
 @[expose] public section
@@ -26,83 +20,35 @@ namespace EthLib.Cryptography.Secp256k1
 /-- `b`, the constant term of the curve equation, from SEC 2 v2 §2.4.1. -/
 def b : Fp := 7
 
+/-- secp256k1 as a short Weierstrass curve, with `a = 0`, its `b`, and the inverse of `Fp`. -/
+instance instParams : ShortWeierstrass.Params Fp := ⟨0, b, Fp.inv⟩
+
 /-- A point of the curve: the point at infinity, or a pair of coordinates.
 
 A pair is a point of the curve only when it satisfies the equation. -/
-inductive Point where
-  /-- The point at infinity `O`, the zero of the group. -/
-  | infinity
-  /-- The point `(x, y)`. -/
-  | affine (x y : Fp)
-deriving DecidableEq, Repr, Inhabited
+abbrev Point := ShortWeierstrass.Point Fp
 
 namespace Point
 
-/-- Whether a point satisfies the defining equation `y^2 = x^3 + 7`.
+export ShortWeierstrass.Point (toJacobian ofCoords ofJacobian)
 
-The point at infinity always does. -/
-def isOnCurve : Point → Bool
-  | infinity => true
-  | affine x y => y * y == x * x * x + b
+-- The constructors and the negation are restated at this curve's point type.
+--
+-- Numerals in coordinates are then read in `Fp`, and dot notation finds this curve's operations.
+
+/-- The point at infinity `O`, the zero of the group. -/
+@[match_pattern] abbrev infinity : Point := ShortWeierstrass.Point.infinity
+
+/-- The point `(x, y)`. -/
+@[match_pattern] abbrev affine (x y : Fp) : Point := ShortWeierstrass.Point.affine x y
+
+/-- The negative of a point: `-(x, y) = (x, -y)`. -/
+abbrev neg (p : Point) : Point := ShortWeierstrass.Point.neg p
 
 /-- The base point `G`, from SEC 2 v2 §2.4.1. -/
 def generator : Point :=
   affine 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798
     0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8
-
-/-- The negative of a point, from rule 3 of SEC 1 v2 §2.2.1: `-(x, y) = (x, -y)`. -/
-def neg : Point → Point
-  | infinity => infinity
-  | affine x y => affine x (-y)
-
-/-- The sum of two points, by the addition rule of SEC 1 v2 §2.2.1.
-
-- Rules 1 and 2: `O + P = P + O = P`.
-- Rule 3: `(x, y) + (x, -y) = O`.
-- Rule 4, for `x1 != x2`: the chord's slope `l = (y2 - y1) / (x2 - x1)`.
-- Rule 5, for `P + P` with `y1 != 0`: the tangent's slope `l = 3 x1^2 / (2 y1)`, since `a = 0`.
-
-Rules 4 and 5 then give `x3 = l^2 - x1 - x2` and `y3 = l (x1 - x3) - y1`.
-
-Rule 5 writes `x3 = l^2 - 2 x1`, which is `l^2 - x1 - x2` when `x1 = x2`. -/
-def add : Point → Point → Point
-  | infinity, q => q
-  | p, infinity => p
-  | affine x1 y1, affine x2 y2 =>
-    if x1 = x2 then
-      -- The same x: two points of the curve are then equal, or opposite.
-      if y2 = -y1 then infinity
-      else
-        -- Doubling, with the tangent's slope.
-        let l := 3 * x1 * x1 * (2 * y1).inv
-        let x3 := l * l - x1 - x2
-        affine x3 (l * (x1 - x3) - y1)
-    else
-      -- Two different x: the chord's slope.
-      let l := (y2 - y1) * (x2 - x1).inv
-      let x3 := l * l - x1 - x2
-      affine x3 (l * (x1 - x3) - y1)
-
-instance : Add Point := ⟨add⟩
-
-instance : Neg Point := ⟨neg⟩
-
-/-- The Jacobian form of a point. -/
-def toJacobian : Point → Jacobian Fp.modulus
-  | infinity => .infinity
-  | affine x y => .ofAffine x y
-
-/-- The point of Jacobian coordinates in a representation of `Fp`.
-
-It takes the inverse of that representation, and the map that reads an element back. -/
-def ofCoords {F : Type} [OfNat F 0] [OfNat F 1] [Add F] [Sub F] [Mul F] [DecidableEq F]
-    (inverse : F → F) (read : F → Fp) (p : Jacobian.Coords F) : Point :=
-  match p.toAffine inverse with
-  | none => infinity
-  | some (x, y) => affine (read x) (read y)
-
-/-- The point of a Jacobian form. -/
-def ofJacobian (p : Jacobian Fp.modulus) : Point := ofCoords Fin.inverse id p.toCoords
 
 /-- The Jacobian form of a point, in Montgomery form. -/
 def toMontgomeryCoords (p : Point) : Jacobian.Coords Fp.Montgomery :=
@@ -118,7 +64,7 @@ The steps run in Jacobian coordinates in Montgomery form.
 
 Only the conversion back takes an inverse. -/
 def mulBits (fuel k : Nat) (p : Point) : Point :=
-  ofMontgomeryCoords (Jacobian.Coords.mulBits 0 fuel k (toMontgomeryCoords p))
+  ShortWeierstrass.Point.mulBits Montgomery.ofFin Montgomery.inv Montgomery.toFin 0 fuel k p
 
 /-- `k P`, the scalar multiplication of SEC 1 v2 §2.2.1, for a scalar mod `n`.
 
