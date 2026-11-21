@@ -2,11 +2,10 @@ module
 
 public import EthLib.Cryptography.Bls.Fr
 public import EthLib.Cryptography.Proofs.Bls.Fr
-public import EthLib.Cryptography.Proofs.PowMod
+public import EthLib.Cryptography.Proofs.Pratt
 public import EthLib.Cryptography.Proofs.Montgomery
 public import Mathlib.Data.ZMod.Basic
 public import Mathlib.Algebra.Field.ZMod
-public import Mathlib.NumberTheory.LucasPrimality
 public import Mathlib.Tactic.NormNum.Prime
 public import Mathlib.FieldTheory.Finite.Basic
 public import Mathlib.RingTheory.RootsOfUnity.PrimitiveRoots
@@ -60,11 +59,6 @@ It is scoped, as Mathlib scopes the ring instance of `Fin`, to avoid coercion lo
 
 namespace EthLib.Cryptography.Bls.Fr
 
-private theorem seven_pow_div_ne_one (q : Nat)
-    (hne : Nat.powMod 7 ((modulus - 1) / q) modulus ≠ 1 % modulus) :
-    ((7 : ℕ) : ZMod modulus) ^ ((modulus - 1) / q) ≠ 1 :=
-  PowMod.natCast_pow_div_ne_one modulus 7 q hne
-
 /-- First half of the Lucas certificate: `7 ^ (r - 1) = 1` in `ZMod r`. -/
 theorem seven_pow_card_sub_one : ((7 : ℕ) : ZMod modulus) ^ (modulus - 1) = 1 := by
   rw [PowMod.natCast_pow_eq_one_iff modulus 7 (modulus - 1)]
@@ -76,49 +70,17 @@ For every prime factor `q` of `r - 1`, `7 ^ ((r - 1) / q) ≠ 1` in `ZMod r`.
 
 Together with `seven_pow_card_sub_one` this pins the order of `7` to exactly `r - 1`. -/
 theorem seven_pow_div_prime_ne_one : ∀ q : Nat, q.Prime → q ∣ modulus - 1 →
-    ((7 : ℕ) : ZMod modulus) ^ ((modulus - 1) / q) ≠ 1 := by
-  intro q hq hdvd
-  have heq : ∀ p : Nat, p.Prime → q ∣ p → q = p := fun p hp h =>
-    (Nat.prime_dvd_prime_iff_eq hq hp).mp h
-  have hfact : modulus - 1 =
-      2 ^ 32 * (3 * (11 * (19 * (10177 * (125527 * (859267 * (906349 ^ 2 *
-        (2508409 * (2529403 * (52437899 * 254760293 ^ 2)))))))))) := by decide
-  rw [hfact] at hdvd
-  rcases (hq.dvd_mul).mp hdvd with h | hdvd
-  · obtain rfl := heq 2 Nat.prime_two (hq.dvd_of_dvd_pow h)
-    exact seven_pow_div_ne_one 2 (by decide +kernel)
-  rcases (hq.dvd_mul).mp hdvd with h | hdvd
-  · obtain rfl := heq 3 (by norm_num) h
-    exact seven_pow_div_ne_one 3 (by decide +kernel)
-  rcases (hq.dvd_mul).mp hdvd with h | hdvd
-  · obtain rfl := heq 11 (by norm_num) h
-    exact seven_pow_div_ne_one 11 (by decide +kernel)
-  rcases (hq.dvd_mul).mp hdvd with h | hdvd
-  · obtain rfl := heq 19 (by norm_num) h
-    exact seven_pow_div_ne_one 19 (by decide +kernel)
-  rcases (hq.dvd_mul).mp hdvd with h | hdvd
-  · obtain rfl := heq 10177 (by norm_num) h
-    exact seven_pow_div_ne_one 10177 (by decide +kernel)
-  rcases (hq.dvd_mul).mp hdvd with h | hdvd
-  · obtain rfl := heq 125527 (by norm_num) h
-    exact seven_pow_div_ne_one 125527 (by decide +kernel)
-  rcases (hq.dvd_mul).mp hdvd with h | hdvd
-  · obtain rfl := heq 859267 (by norm_num) h
-    exact seven_pow_div_ne_one 859267 (by decide +kernel)
-  rcases (hq.dvd_mul).mp hdvd with h | hdvd
-  · obtain rfl := heq 906349 (by norm_num) (hq.dvd_of_dvd_pow h)
-    exact seven_pow_div_ne_one 906349 (by decide +kernel)
-  rcases (hq.dvd_mul).mp hdvd with h | hdvd
-  · obtain rfl := heq 2508409 (by norm_num) h
-    exact seven_pow_div_ne_one 2508409 (by decide +kernel)
-  rcases (hq.dvd_mul).mp hdvd with h | hdvd
-  · obtain rfl := heq 2529403 (by norm_num) h
-    exact seven_pow_div_ne_one 2529403 (by decide +kernel)
-  rcases (hq.dvd_mul).mp hdvd with h | hdvd
-  · obtain rfl := heq 52437899 (by norm_num) h
-    exact seven_pow_div_ne_one 52437899 (by decide +kernel)
-  · obtain rfl := heq 254760293 (by norm_num) (hq.dvd_of_dvd_pow hdvd)
-    exact seven_pow_div_ne_one 254760293 (by decide +kernel)
+    ((7 : ℕ) : ZMod modulus) ^ ((modulus - 1) / q) ≠ 1 :=
+  Pratt.pow_div_ne_one_of_lucas modulus 7
+    [(2, 32), (3, 1), (11, 1), (19, 1), (10177, 1), (125527, 1), (859267, 1), (906349, 2),
+     (2508409, 1), (2529403, 1), (52437899, 1), (254760293, 2)]
+    (by decide)
+    (by
+      intro f hf
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
+      rcases hf with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
+        norm_num)
+    (by decide +kernel)
 
 /-- The scalar field modulus `r` is prime, by a Lucas certificate with witness `7`.
 
