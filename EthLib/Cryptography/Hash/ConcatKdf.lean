@@ -20,7 +20,7 @@ The shared secret `Z` is secret, and EthLib makes no constant-time claim (SOUNDN
 namespace EthLib.Cryptography.Hash.ConcatKdf
 
 /-- The output length `H_outputBits` of SHA-256, in bytes. -/
-def HASH_LEN : Nat := 32
+def HASH_LEN : Nat := Sha256.DIGEST_SIZE_BYTES
 
 /-- Every way the derivation can reject its input, SP 800-56C Rev. 2 §4.1. -/
 inductive ConcatKdfError where

@@ -248,20 +248,21 @@ theorem expandMessageXmd_eq_spec (msg dst : ByteArray) (lenInBytes : Nat)
   · simp only [gt_iff_lt, hlen, ↓reduceIte, or_true]
     rfl
   by_cases hell : 255 < (lenInBytes + 32 - 1) / 32
-  · simp only [gt_iff_lt, hlen, hell, ↓reduceIte, true_or, sha256OutputSize]
+  · simp only [gt_iff_lt, hlen, hell, ↓reduceIte, true_or, Hash.Sha256.DIGEST_SIZE_BYTES]
     rfl
-  simp only [gt_iff_lt, hlen, hell, ↓reduceIte, or_self, sha256OutputSize]
+  simp only [gt_iff_lt, hlen, hell, ↓reduceIte, or_self, Hash.Sha256.DIGEST_SIZE_BYTES]
   obtain ⟨hD, hDsize⟩ := shortDst_toList dst hdst
   generalize (if 255 < dst.size then Hash.Sha256.hash (oversizeDstPrefix ++ dst) else dst) = D
     at hD hDsize ⊢
   have hlenD : D.data.toList.length = D.size := Array.length_toList
   rw [← hD, hlenD]
-  have hpad : Spec.i2osp 0 64 = (⟨Array.replicate sha256BlockSize 0⟩ : ByteArray).data.toList := by
+  have hpad : Spec.i2osp 0 64 =
+      (⟨Array.replicate Hash.Sha256.BLOCK_SIZE_BYTES 0⟩ : ByteArray).data.toList := by
     rw [Spec.i2osp, Base.natToBytes_zero_right, Array.toList_replicate]
     rfl
   set dp := D ++ i2osp D.size 1 with hdp_def
-  set mp := (⟨Array.replicate sha256BlockSize 0⟩ : ByteArray) ++ msg ++ i2osp lenInBytes 2
-    ++ i2osp 0 1 ++ dp with hmp_def
+  set mp := (⟨Array.replicate Hash.Sha256.BLOCK_SIZE_BYTES 0⟩ : ByteArray) ++ msg
+    ++ i2osp lenInBytes 2 ++ i2osp 0 1 ++ dp with hmp_def
   have hdp : dp.data.toList = D.data.toList ++ Spec.i2osp D.size 1 := by
     rw [hdp_def, ByteArray.data_append, Array.toList_append, i2osp_one]
   have hdps : dp.size ≤ 256 := by
@@ -272,7 +273,8 @@ theorem expandMessageXmd_eq_spec (msg dst : ByteArray) (lenInBytes : Nat)
     rw [hpad, ← i2osp_two, ← i2osp_one 0, hmp_def]
     simp only [ByteArray.data_append, Array.toList_append]
   have hmps : mp.size < 2 ^ 61 := by
-    have hz : (⟨Array.replicate sha256BlockSize 0⟩ : ByteArray).size = 64 := Array.size_replicate
+    have hz : (⟨Array.replicate Hash.Sha256.BLOCK_SIZE_BYTES 0⟩ : ByteArray).size = 64 :=
+      Array.size_replicate
     rw [hmp_def, ByteArray.size_append, ByteArray.size_append, ByteArray.size_append,
       ByteArray.size_append, hz, i2osp_size, i2osp_size]
     omega

@@ -19,7 +19,7 @@ Passwords are secret, and EthLib makes no constant-time claim (SOUNDNESS.md A3).
 namespace EthLib.Cryptography.Hash.Pbkdf2
 
 /-- The output size `hLen` of HMAC-SHA-256, in bytes. -/
-def HASH_LEN : Nat := 32
+def HASH_LEN : Nat := Sha256.DIGEST_SIZE_BYTES
 
 /-- The largest output admitted by RFC 8018 §5.2. -/
 def MAX_LENGTH : Nat := (2 ^ 32 - 1) * HASH_LEN

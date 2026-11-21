@@ -220,7 +220,7 @@ theorem map_mk (f : Hom F G) (x y z : Fp2 F) :
 
 theorem map_generator (f : Hom F G) : map f generator = generator := by
   simp only [map, generator, Fp2.map_one]
-  simp only [Fp2.map, f.map_ofNat]
+  simp only [Fp2.ofNats, Fp2.map, f.map_ofNat]
 
 theorem map_zero (f : Hom F G) : map f zero = zero := by
   simp only [map, zero, Fp2.map_zero, Fp2.map_one]
@@ -229,7 +229,7 @@ theorem map_isInfinity (f : Hom F G) (p : G2 F) : (map f p).isInfinity = p.isInf
   simp only [map, isInfinity, Fp2.map_isZero]
 
 theorem map_bTwist (f : Hom F G) : (bTwist : Fp2 F).map f = bTwist := by
-  simp only [bTwist, Fp2.map, f.map_ofNat]
+  simp only [bTwist, Fp2.ofNats, Fp2.map, f.map_ofNat]
 
 theorem map_double (f : Hom F G) (p : G2 F) : map f p.double = (map f p).double := by
   unfold double

@@ -52,9 +52,7 @@ def generatorY1 : Nat :=
 
 /-- Affine generator of G2, embedded with `z = 1`. -/
 def generator : G2 F :=
-  let x : Fp2 F := ⟨BaseField.ofNat generatorX0, BaseField.ofNat generatorX1⟩
-  let y : Fp2 F := ⟨BaseField.ofNat generatorY0, BaseField.ofNat generatorY1⟩
-  ⟨x, y, Fp2.one⟩
+  ⟨Fp2.ofNats generatorX0 generatorX1, Fp2.ofNats generatorY0 generatorY1, Fp2.one⟩
 
 /-- The point at infinity. -/
 def zero : G2 F := ⟨Fp2.one, Fp2.one, Fp2.zero⟩
@@ -62,7 +60,7 @@ def zero : G2 F := ⟨Fp2.one, Fp2.one, Fp2.zero⟩
 @[inline] def isInfinity (p : G2 F) : Bool := p.z.isZero
 
 /-- The constant `b' = 4·(1 + i)` defining the G2 curve. -/
-def bTwist : Fp2 F := ⟨BaseField.ofNat 4, BaseField.ofNat 4⟩
+def bTwist : Fp2 F := Fp2.ofNats 4 4
 
 /-- Jacobian point doubling for `a = 0` curves. -/
 def double (p : G2 F) : G2 F :=

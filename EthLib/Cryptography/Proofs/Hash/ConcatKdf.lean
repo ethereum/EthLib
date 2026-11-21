@@ -25,7 +25,8 @@ theorem blocks_size (z fixedInfo : ByteArray) (i count : Nat) :
   induction count generalizing i with
   | zero => rfl
   | succ count ih =>
-    simp only [blocks, ByteArray.size_append, Sha256.hash_size, ih, HASH_LEN]
+    simp only [blocks, ByteArray.size_append, Sha256.hash_size, ih, HASH_LEN,
+      Sha256.DIGEST_SIZE_BYTES]
     omega
 
 /-- More blocks extend fewer: the counter of each block depends only on its position. -/
@@ -98,7 +99,7 @@ theorem concatKdf_size {z fixedInfo key : ByteArray} {length : Nat}
     (h : concatKdf z fixedInfo length = .ok key) : key.size = length := by
   -- The blocks cover the output, so the extraction keeps the requested length.
   rw [concatKdf_eq_extract h]
-  simp only [ByteArray.size_extract, blocks_size, HASH_LEN]
+  simp only [ByteArray.size_extract, blocks_size, HASH_LEN, Sha256.DIGEST_SIZE_BYTES]
   omega
 
 /-- A shorter output is a prefix of a longer one, for one shared secret and one context.
@@ -116,7 +117,7 @@ theorem concatKdf_prefix {z fixedInfo key key' : ByteArray} {length length' : Na
     Nat.min_eq_left le, ByteArray.extract_append]
   -- The shorter derivation's blocks already cover its length, so nothing comes from the rest.
   have covers : length ≤ (blocks z fixedInfo 1 ((length + HASH_LEN - 1) / HASH_LEN)).size := by
-    simp only [blocks_size, HASH_LEN]
+    simp only [blocks_size, HASH_LEN, Sha256.DIGEST_SIZE_BYTES]
     omega
   rw [Nat.sub_eq_zero_of_le covers, Nat.zero_sub, ByteArray.extract_same, ByteArray.append_empty]
 

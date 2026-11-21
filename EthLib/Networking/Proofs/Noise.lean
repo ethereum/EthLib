@@ -48,7 +48,7 @@ theorem hkdf_eq_hkdf2 (chainingKey : ChainingKey) (input : ByteArray) :
     Hkdf.hkdf (packBytes chainingKey.bytes) input .empty 64 =
       .ok (packBytes (hkdf2 chainingKey input).1 ++ packBytes (hkdf2 chainingKey input).2) := by
   have hprk : Hkdf.HASH_LEN ≤ (Hkdf.extract (packBytes chainingKey.bytes) input).size := by
-    simp [Hkdf.extract, Hkdf.HASH_LEN]
+    simp [Hkdf.extract, Hkdf.HASH_LEN, Hash.Sha256.DIGEST_SIZE_BYTES]
   rw [Hkdf.hkdf, Hkdf.expand_eq hprk (by decide)]
   simp only [show (64 + Hkdf.HASH_LEN - 1) / Hkdf.HASH_LEN = 2 from rfl]
   rw [show 64 = (Hkdf.blocks (Hkdf.extract (packBytes chainingKey.bytes) input) .empty 2).size by

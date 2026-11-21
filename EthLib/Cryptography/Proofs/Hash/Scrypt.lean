@@ -164,7 +164,7 @@ theorem scrypt_ok_iff {password salt : ByteArray} {n r p length : Nat} :
       omega)
     obtain ⟨key, h3⟩ := Pbkdf2.pbkdf2_ok_iff.mpr ⟨Nat.one_pos, hl, hL, hpw, by
       rw [hsize, ByteArray.size_empty, ← order]
-      simp only [Pbkdf2.MAX_LENGTH, Pbkdf2.HASH_LEN] at hpm
+      simp only [Pbkdf2.MAX_LENGTH, Pbkdf2.HASH_LEN, Sha256.DIGEST_SIZE_BYTES] at hpm
       omega⟩
     refine ⟨key, ?_⟩
     unfold scrypt

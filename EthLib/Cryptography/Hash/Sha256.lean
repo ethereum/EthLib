@@ -81,10 +81,10 @@ def IV : Vector UInt32 8 := #v[
 /-! ## Padding -/
 
 /-- The size `m` of a message block, 512 bits, in bytes, FIPS 180-4 §1 and §2.2.1. -/
-def BLOCK_SIZE : Nat := 64
+def BLOCK_SIZE_BYTES : Nat := 64
 
 /-- The size of the block that holds the message length, 64 bits, in bytes, FIPS 180-4 §5.1.1. -/
-def LENGTH_SIZE : Nat := 8
+def LENGTH_SIZE_BYTES : Nat := 8
 
 /--
 The zero bytes between the `0b10000000` byte and the length, so that the blocks are whole.
@@ -92,7 +92,7 @@ The zero bytes between the `0b10000000` byte and the length, so that the blocks 
 They are the fewest that bring the message, that byte, them and the length to whole blocks.
 -/
 def paddingZeros (size : Nat) : Nat :=
-  (BLOCK_SIZE - (size + 1 + LENGTH_SIZE) % BLOCK_SIZE) % BLOCK_SIZE
+  (BLOCK_SIZE_BYTES - (size + 1 + LENGTH_SIZE_BYTES) % BLOCK_SIZE_BYTES) % BLOCK_SIZE_BYTES
 
 /--
 The length of a message in bits, as eight big-endian bytes.
@@ -154,15 +154,16 @@ The block is the `m / 8` bytes of `bytes` from `start`.
 
 Word `j` of the block is its four bytes from `4j` on, read big-endian.
 -/
-def Window.ofBlock (bytes : ByteArray) (start : Nat) (whole : start + BLOCK_SIZE ≤ bytes.size) :
+def Window.ofBlock (bytes : ByteArray) (start : Nat)
+    (whole : start + BLOCK_SIZE_BYTES ≤ bytes.size) :
     Window :=
   -- Word `j` is the bytes at `4j` to `4j + 3` of the block, the first one most significant.
   let word (j : Fin 16) : UInt32 :=
     -- Since `j` is at most 15, every index is below `start + 64`, so inside the array.
-    big32 (bytes[start + 4 * j]'(by unfold BLOCK_SIZE at whole; omega))
-      (bytes[start + 4 * j + 1]'(by unfold BLOCK_SIZE at whole; omega))
-      (bytes[start + 4 * j + 2]'(by unfold BLOCK_SIZE at whole; omega))
-      (bytes[start + 4 * j + 3]'(by unfold BLOCK_SIZE at whole; omega))
+    big32 (bytes[start + 4 * j]'(by unfold BLOCK_SIZE_BYTES at whole; omega))
+      (bytes[start + 4 * j + 1]'(by unfold BLOCK_SIZE_BYTES at whole; omega))
+      (bytes[start + 4 * j + 2]'(by unfold BLOCK_SIZE_BYTES at whole; omega))
+      (bytes[start + 4 * j + 3]'(by unfold BLOCK_SIZE_BYTES at whole; omega))
   -- The words `W_0` to `W_15`, in order.
   ⟨word 0, word 1, word 2, word 3, word 4, word 5, word 6, word 7,
     word 8, word 9, word 10, word 11, word 12, word 13, word 14, word 15⟩
@@ -248,7 +249,7 @@ The block is the `m / 8` bytes of `bytes` from `start`, and `H` is `H^(i-1)`.
 - Step 4: `H_0^(i) = a + H_0^(i-1)`, and so on to `H_7^(i) = h + H_7^(i-1)`, modulo 2^32.
 -/
 def compress (H : State) (bytes : ByteArray) (start : Nat)
-    (whole : start + BLOCK_SIZE ≤ bytes.size) :
+    (whole : start + BLOCK_SIZE_BYTES ≤ bytes.size) :
     State :=
   -- Step 1: the schedule, sixteen words at a time, from the words of the block.
   let w0 := Window.ofBlock bytes start whole
@@ -273,14 +274,14 @@ It is an argument because, with the compression inside, the kernel overflows on 
 -/
 def chain
     (step : State → (bytes : ByteArray) → (start : Nat) →
-      start + BLOCK_SIZE ≤ bytes.size → State)
+      start + BLOCK_SIZE_BYTES ≤ bytes.size → State)
     (bytes : ByteArray) :
-    (count start : Nat) → start + BLOCK_SIZE * count ≤ bytes.size → State → State
+    (count start : Nat) → start + BLOCK_SIZE_BYTES * count ≤ bytes.size → State → State
   -- No block is left, so the hash value is the last one computed.
   | 0, _, _, H => H
   | count + 1, start, whole, H =>
     -- The rest of the blocks start one block later, from `H^(i)`.
-    chain step bytes count (start + BLOCK_SIZE) (by rw [Nat.mul_succ] at whole; omega)
+    chain step bytes count (start + BLOCK_SIZE_BYTES) (by rw [Nat.mul_succ] at whole; omega)
       -- The block `M^(i)` starts at `start`, and the compression gives `H^(i)` from `H^(i-1)`.
       (step H bytes start (by rw [Nat.mul_succ] at whole; omega))
 
@@ -288,6 +289,9 @@ def chain
 
 /-- The byte of a word that a right shift brings to the low eight bits. -/
 @[inline] def byteAt (w : UInt32) (shift : UInt32) : UInt8 := (w >>> shift).toUInt8
+
+/-- The size of a message digest, 256 bits, in bytes, FIPS 180-4 §1. -/
+def DIGEST_SIZE_BYTES : Nat := 32
 
 /--
 The message digest `H_0^(N) ‖ H_1^(N) ‖ ... ‖ H_7^(N)`, FIPS 180-4 §6.2.2, as 32 bytes.
@@ -317,8 +321,8 @@ def hash (message : ByteArray) : ByteArray :=
   -- The padded message is whole blocks.
   let padded := pad message
   -- All `N` blocks from `H^(0)`, then the digest of `H^(N)`.
-  digest (chain compress padded (padded.size / BLOCK_SIZE) 0
-    (by have := Nat.mul_div_le padded.size BLOCK_SIZE; omega) initial)
+  digest (chain compress padded (padded.size / BLOCK_SIZE_BYTES) 0
+    (by have := Nat.mul_div_le padded.size BLOCK_SIZE_BYTES; omega) initial)
 
 /-- SHA-256 of a message, as its 32 bytes. -/
 def hash32 (message : ByteArray) : Vector UInt8 32 :=
