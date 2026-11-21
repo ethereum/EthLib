@@ -163,8 +163,9 @@ theorem decompress_compress {src : ByteArray} (h : src.size ≤ maxUncompressedL
   have hmax : src.size ≤ 2 ^ 32 := by simp only [maxUncompressedLength] at h; omega
   have hreads := compressLoop_reads src hmax (Array.replicate (2 ^ tableBits) 0) 0 0
     ByteArray.empty (Nat.le_refl _) (Nat.zero_le _) (by simpa using Reads.nil src.size [])
-  rw [decompress, toList_eq_data_toList, compress_eq, ByteArray.data_append, Array.toList_append,
-    List.toList_toArray, decompressToArray, readPreamble_encode _ (by simpa using h)]
+  rw [decompress, Base.toList_eq_data_toList, compress_eq, ByteArray.data_append,
+    Array.toList_append, List.toList_toArray, decompressToArray,
+    readPreamble_encode _ (by simpa using h)]
   generalize compressLoop src (Array.replicate (2 ^ tableBits) 0) 0 0 ByteArray.empty = body
     at hreads ⊢
   have hbody := hreads []
@@ -178,7 +179,7 @@ theorem decompress_compress {src : ByteArray} (h : src.size ≤ maxUncompressedL
 theorem decompressList_compress {src : ByteArray} (h : src.size ≤ maxUncompressedLength) :
     decompressList (compress src).data.toList = .ok src.data.toList := by
   have hd := decompress_compress h
-  rw [decompress, toList_eq_data_toList] at hd
+  rw [decompress, Base.toList_eq_data_toList] at hd
   simp [decompressList, hd, Except.map]
 
 /-- The block of an input of at most 2^32 - 1 bytes declares the size of the input.

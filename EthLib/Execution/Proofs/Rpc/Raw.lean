@@ -63,7 +63,7 @@ theorem keccak256_rawTransaction {v : ChainView} {hash : Hash32} {raw : ByteArra
 /-- The header object of a block reports the hash that the node keeps for it. -/
 theorem getObjVal_hash_headerObject (r : BlockRecord) :
     (headerObject r).getObjVal? "hash" = .ok (hash32Json r.hash) :=
-  Serialization.Ssz.getObjVal?_mkObj (names_distinct_headerFields r.hash r.block.header)
+  Base.Json.getObjVal?_mkObj (names_distinct_headerFields r.hash r.block.header)
     (by simp [headerFields])
 
 end ChainView

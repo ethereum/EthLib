@@ -169,13 +169,13 @@ theorem readSigningRoot_signingRootFields (path : String) (base : List (String �
     readSigningRoot path (Json.mkObj (base ++ signingRootFields root)) = .ok root := by
   cases root with
   | none =>
-    have absent := Serialization.Ssz.getObjVal?_mkObj_of_not_mem
+    have absent := Base.Json.getObjVal?_mkObj_of_not_mem
       (pairs := base ++ signingRootFields none) (name := "signing_root") (by
         simp only [signingRootFields, List.append_nil, List.mem_map, not_exists, not_and]
         exact fun pair mem eq => named pair mem eq)
     simp [readSigningRoot, absent]
   | some root =>
-    have found := Serialization.Ssz.getObjVal?_mkObj
+    have found := Base.Json.getObjVal?_mkObj
       (pairs := base ++ signingRootFields (some root)) (name := "signing_root")
       (value := bytesJson root) (by
         simp only [signingRootFields, List.pairwise_append, distinct, List.mem_singleton,
@@ -186,7 +186,7 @@ theorem readSigningRoot_signingRootFields (path : String) (base : List (String �
 /-- A block that the file writes reads back as itself. -/
 theorem readBlock_blockJson (path : String) (block : SignedBlockRecord) :
     readBlock path (blockJson block) = .ok block := by
-  have slot := Serialization.Ssz.getObjVal?_mkObj
+  have slot := Base.Json.getObjVal?_mkObj
     (pairs := [("slot", uint64Json block.slot)] ++ signingRootFields block.signingRoot)
     (name := "slot") (value := uint64Json block.slot)
     (by cases block.signingRoot <;> simp [signingRootFields]) (by simp)
@@ -203,13 +203,13 @@ theorem readAttestation_attestationJson (path : String) (attestation : SignedAtt
         fun a b => a.1 ≠ b.1 := by
     intro root
     cases root <;> simp [signingRootFields]
-  have source := Serialization.Ssz.getObjVal?_mkObj
+  have source := Base.Json.getObjVal?_mkObj
     (pairs := [("source_epoch", uint64Json attestation.sourceEpoch),
       ("target_epoch", uint64Json attestation.targetEpoch)] ++
         signingRootFields attestation.signingRoot)
     (name := "source_epoch") (value := uint64Json attestation.sourceEpoch)
     (distinct _) (by simp)
-  have target := Serialization.Ssz.getObjVal?_mkObj
+  have target := Base.Json.getObjVal?_mkObj
     (pairs := [("source_epoch", uint64Json attestation.sourceEpoch),
       ("target_epoch", uint64Json attestation.targetEpoch)] ++
         signingRootFields attestation.signingRoot)
@@ -245,11 +245,11 @@ theorem readEntry_entryJson (path : String) (entry : InterchangeEntry) :
       ("signed_blocks", Json.arr (entry.signedBlocks.map blockJson).toArray),
       ("signed_attestations", Json.arr (entry.signedAttestations.map attestationJson).toArray)] :
         List (String × Json)).Pairwise fun a b => a.1 ≠ b.1 := by simp
-  have pubkey := Serialization.Ssz.getObjVal?_mkObj distinct
+  have pubkey := Base.Json.getObjVal?_mkObj distinct
     (name := "pubkey") (value := bytesJson entry.pubkey) (by simp)
-  have blocks := Serialization.Ssz.getObjVal?_mkObj distinct (name := "signed_blocks")
+  have blocks := Base.Json.getObjVal?_mkObj distinct (name := "signed_blocks")
     (value := Json.arr (entry.signedBlocks.map blockJson).toArray) (by simp)
-  have attestations := Serialization.Ssz.getObjVal?_mkObj distinct (name := "signed_attestations")
+  have attestations := Base.Json.getObjVal?_mkObj distinct (name := "signed_attestations")
     (value := Json.arr (entry.signedAttestations.map attestationJson).toArray) (by simp)
   simp only [readEntry, entryJson, field, pubkey, blocks, attestations, readBytes_bytesJson,
     readArray_arr _ readBlock blockJson readBlock_blockJson,
@@ -262,10 +262,10 @@ theorem ofJson_toJson (interchange : Interchange) :
   have metadataDistinct : ([("interchange_format_version", Json.str INTERCHANGE_FORMAT_VERSION),
       ("genesis_validators_root", bytesJson interchange.genesisValidatorsRoot)] :
         List (String × Json)).Pairwise fun a b => a.1 ≠ b.1 := by simp
-  have version := Serialization.Ssz.getObjVal?_mkObj metadataDistinct
+  have version := Base.Json.getObjVal?_mkObj metadataDistinct
     (name := "interchange_format_version") (value := Json.str INTERCHANGE_FORMAT_VERSION)
     (by simp)
-  have root := Serialization.Ssz.getObjVal?_mkObj metadataDistinct
+  have root := Base.Json.getObjVal?_mkObj metadataDistinct
     (name := "genesis_validators_root") (value := bytesJson interchange.genesisValidatorsRoot)
     (by simp)
   have distinct : ([("metadata", Json.mkObj [
@@ -273,11 +273,11 @@ theorem ofJson_toJson (interchange : Interchange) :
       ("genesis_validators_root", bytesJson interchange.genesisValidatorsRoot)]),
       ("data", Json.arr (interchange.data.map entryJson).toArray)] :
         List (String × Json)).Pairwise fun a b => a.1 ≠ b.1 := by simp
-  have metadata := Serialization.Ssz.getObjVal?_mkObj distinct (name := "metadata")
+  have metadata := Base.Json.getObjVal?_mkObj distinct (name := "metadata")
     (value := Json.mkObj [
       ("interchange_format_version", Json.str INTERCHANGE_FORMAT_VERSION),
       ("genesis_validators_root", bytesJson interchange.genesisValidatorsRoot)]) (by simp)
-  have data := Serialization.Ssz.getObjVal?_mkObj distinct (name := "data")
+  have data := Base.Json.getObjVal?_mkObj distinct (name := "data")
     (value := Json.arr (interchange.data.map entryJson).toArray) (by simp)
   simp only [ofJson, toJson, field, metadata, data, version, root, readString,
     readBytes_bytesJson, readArray_arr _ readEntry entryJson readEntry_entryJson,

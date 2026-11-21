@@ -11,6 +11,7 @@ import EthLib.Base.Proofs.Toolchain.JsonBasic
 namespace EthLib.Serialization.Ssz
 
 open Lean
+open EthLib.Base.Json (getObjVal?_mkObj getObjVal?_mkObj_of_not_mem)
 
 /-- Whether the mapping reads back every value of a shape that it writes. -/
 def Rewrites (shape : Desc) : Prop :=

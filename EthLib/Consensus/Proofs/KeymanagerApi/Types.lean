@@ -23,6 +23,7 @@ A key and an address read the same with any characters after `0x` in uppercase.
 namespace EthLib.Consensus.KeymanagerApi
 
 open Lean Base Cryptography.Bls Serialization.Ssz
+open EthLib.Base.Json (getObjVal?_mkObj getObjVal?_mkObj_of_not_mem)
 
 /-! ## Scalars -/
 
