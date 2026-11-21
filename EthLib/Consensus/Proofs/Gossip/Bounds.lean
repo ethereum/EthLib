@@ -17,7 +17,8 @@ From Gloas, a size limit of its topic bounds it too.
 - Only aggregates, attester slashings, data column sidecars, bids and inclusion lists have one.
 - From Gloas, the size limit of a data column sidecar topic is the largest size of a sidecar.
 - With a size limit, the bound of a topic is the lower of the limit and the bound of its type.
-- From Electra, aggregates, attestations and attester slashings have the bounds of Electra.
+- From Electra, aggregates, attestations and attester slashings keep their bounds at Electra.
+- That holds for the mainnet and minimal presets.
 - A payload that the gossip decoder accepts at its topic's bound is within the type's largest size.
 - That payload is also within the size limit of the topic.
 - A message that a node serializes, within the payload cap, passes the decoder once compressed.
@@ -78,11 +79,11 @@ theorem topicBound_eq_min {shape : Desc} {limit : UInt64}
     topicBound preset config fork topic = some (min (payloadBounds shape).2 limit) := by
   simp [topicBound, h, limited]
 
-/-- From Electra, aggregates, attestations and attester slashings have the bounds of Electra.
+/-- From Electra, aggregates, attestations and attester slashings keep their bounds at Electra.
 
 Those are the bounds of their types at Electra.
 
-The size limits of Gloas on aggregates and attester slashings are their largest sizes at Electra.
+From Gloas, the size limits of aggregates and attester slashings are their largest Electra sizes.
 
 This holds for the mainnet and minimal presets. -/
 theorem topicBound_eq_pectra (named : preset = .mainnet ∨ preset = .minimal)
