@@ -664,16 +664,17 @@ theorem Valid.buyGas_receiptInfos {v : ChainView} {checkSeal : Bool}
   obtain ⟨hle, hbal, -⟩ := buyGas_sender hfee hbought
   omega
 
-/-- In a valid view, take a transaction that a lookup finds in a canonical block.
+/-- In a valid view, take a transaction that a lookup finds.
 
-Its receipt is the object at its index among the receipts of the number of that block. -/
+Its receipt is the object at its index among the receipts of the number of its block. -/
 theorem Valid.transactionReceipt_blockReceipts {v : ChainView} {checkSeal : Bool}
-    (hv : v.Valid checkSeal) {i : Nat} (hi : i < v.canonical.length) {hash : Hash32}
-    {tx : Transaction} {index : Nat} {info : ReceiptInfo}
-    (hf : v.findTransaction hash = some (v.canonical[i], tx, index))
+    (hv : v.Valid checkSeal) {hash : Hash32} {r : BlockRecord} {tx : Transaction} {index : Nat}
+    {info : ReceiptInfo} (hf : v.findTransaction hash = some (r, tx, index))
     (h : v.transactionReceipt hash = .ok (some info)) :
-    ∃ infos, v.blockReceipts (.number v.canonical[i].block.header.number) = .ok (some infos) ∧
+    ∃ infos, v.blockReceipts (.number r.block.header.number) = .ok (some infos) ∧
       infos[index]? = some info := by
+  -- The lookup reads only canonical blocks, so the block is the canonical one at some height.
+  obtain ⟨i, hi, rfl⟩ := List.mem_iff_getElem.mp (findTransaction_some hf).1
   obtain ⟨r, tx', index', infos, hf', hinfos, hget⟩ := transactionReceipt_eq_ok h
   rw [hf] at hf'
   obtain ⟨rfl, rfl, rfl⟩ := Option.some.inj hf'

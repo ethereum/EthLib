@@ -787,6 +787,9 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Valid.transactionReceipt_blockReceipts` takes the block that the lookup returns, and no longer asks that it be canonical.
+  The lookup reads only canonical blocks, so the hypotheses `i < v.canonical.length` and the block `v.canonical[i]` are gone; a caller passes the lookup's result as is.
+
 - In Lean, the Snappy preamble reader takes the value of the shared varint reader, and keeps no loop of its own.
   `Snappy.readPreambleAux` and `Snappy.continuation` are removed, with the lemmas `readPreambleAux_encodeAux` and `readPreambleAux_take`.
   A caller reads the preamble with `Snappy.readPreamble`, and the constant `128` with `Encoding.Varint.continuation`.

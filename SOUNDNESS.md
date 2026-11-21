@@ -5355,7 +5355,7 @@ The receipt methods return the object `ReceiptInfo` of [`receipt.yaml`](https://
 The receipt objects of a block are one for each receipt, in order, each built from its transaction and its receipt (`receiptInfos_eq_ok`, `receiptInfo_eq_ok`, `Proofs/Rpc/Receipt.lean`).
 Their logs are numbered `0, 1, 2, …` across the block (`logIndex_receiptInfos`), and the lookup of one receipt returns the object at its index among those of its block (`transactionReceipt_eq_ok`).
 In a valid view, it is the object at that index among the receipts of the number of the block, so both methods give each log the same `logIndex` (`Valid.transactionReceipt_blockReceipts`).
-That theorem takes a canonical block, and the lookup finds only canonical blocks (`findTransaction_some`).
+That theorem takes the block that the lookup returns, which is canonical (`findTransaction_some`).
 A creation has the address that the sender makes at its nonce, and a call has none (`receiptInfo_contractAddress`).
 A receipt object has `blobGasUsed` and `blobGasPrice` exactly for a blob transaction (`receiptInfo_blob`).
 It reports `2^17` blob gas for each versioned hash.
