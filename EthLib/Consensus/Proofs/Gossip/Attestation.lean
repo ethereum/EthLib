@@ -309,8 +309,8 @@ theorem validateSingleAttestation_eq (head : store.headState config = .ok state)
         (rejectUnless valid "invalid attestation signature").andThen fun _ =>
         ancestry) := by
   unfold validateSingleAttestation
-  simp only [dataIndexOutcome, head, subnetOf, clock, committeeOf, found, signature, ancestryOf,
-    bind, Except.bind, pure, Except.pure, Except.mapError, ignoreUnless_andThenM,
+  simp only [dataIndexOutcome, head, subnetOf, clock, committeeOf, getValidator, found, signature,
+    ancestryOf, bind, Except.bind, pure, Except.pure, Except.mapError, ignoreUnless_andThenM,
     ignoreUnless_andThen, rejectUnless_andThenM, rejectUnless_andThen,
     apply_ite (Except.ok (ε := ForkChoiceError))]
   cases votedBlockOutcome store attestation.data.beaconBlockRoot <;> cases time <;>
@@ -678,8 +678,7 @@ theorem validateAggregateInCommittee_eq_accessors :
           "validator is not selected as aggregator").andThenM fun _ =>
         (rejectUnless (committee.contains proof.aggregatorIndex)
           "aggregator is not a member of the committee").andThenM fun _ => do
-        let some aggregator := state.validators.data[proof.aggregatorIndex.toNat]?
-          | throw (.accessor (.indexOutOfRange proof.aggregatorIndex))
+        let aggregator ← (getValidator state proof.aggregatorIndex).mapError .accessor
         let selected ← isValidSignatureAtEpoch config checks state DOMAIN_SELECTION_PROOF
           data.target.epoch data.slot aggregator.pubkey proof.selectionProof
         (rejectUnless selected "invalid selection proof signature").andThenM fun _ => do
@@ -800,9 +799,10 @@ theorem validateAggregateInCommittee_eq
         (rejectUnless valid "invalid aggregate signature").andThen fun _ =>
         ancestry) := by
   rw [validateAggregateInCommittee_eq_accessors]
-  simp only [rootOf, head, clock, committeeOf, participantsOf, found, selectedOf, signedOf,
-    indexedOf, signature, ancestryOf, bind, Except.bind, pure, Except.pure, Except.mapError,
-    ignoreUnless_andThenM, ignoreUnless_andThen, rejectUnless_andThenM, rejectUnless_andThen,
+  simp only [rootOf, head, clock, committeeOf, participantsOf, getValidator, found, selectedOf,
+    signedOf, indexedOf, signature, ancestryOf, bind, Except.bind, pure, Except.pure,
+    Except.mapError, ignoreUnless_andThenM, ignoreUnless_andThen, rejectUnless_andThenM,
+    rejectUnless_andThen,
     apply_ite (Except.ok (ε := ForkChoiceError))]
   cases votedBlockOutcome store signed.message.aggregate.data.beaconBlockRoot <;> cases time <;>
     simp only [ValidationResult.andThenM, ValidationResult.andThen, pure, Except.pure,
