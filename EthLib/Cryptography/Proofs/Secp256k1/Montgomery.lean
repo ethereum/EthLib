@@ -51,95 +51,10 @@ open EthLib.Cryptography.Word64
 
 open EthLib.Cryptography.Montgomery (Limbs)
 
-/-- The shared Montgomery field on eight 32-bit limbs, at the constants of `p`. -/
-abbrev Shared := Cryptography.Montgomery Fp.params
-
-/-- The same Montgomery residue on the eight limbs of the shared field. -/
-def toMont (a : Montgomery) : Shared :=
-  ⟨narrow a.raw.words, by rw [val_narrow _ rfl, ← a.raw.val_eq]; exact a.lt⟩
-
-/-- The same Montgomery residue on four words. -/
-def ofMont (a : Shared) : Montgomery :=
-  ⟨Raw.fromWords (wide a.limbs), by
-    rw [Raw.fromWords_val _ rfl, value_wide]
-    exact a.lt⟩
-
-
-private theorem product_sum (a : Words64) (b : UInt64) (r : Words64) (ha : a.top = 0) :
-    let m0 := mac a.w0 b r.w0 0
-    let m1 := mac a.w1 b r.w1 m0.hi
-    let m2 := mac a.w2 b r.w2 m1.hi
-    let m3 := mac a.w3 b r.w3 m2.hi
-    let s4 := m3.hi + r.top
-    let s5 := yes (s4 < m3.hi)
-    m0.lo.toNat + wordRadix * value ⟨m1.lo, m2.lo, m3.lo, s4, s5⟩ =
-      value r + value a * b.toNat := by
-  dsimp only
-  have h0 := mac_spec a.w0 b r.w0 0
-  have h1 := mac_spec a.w1 b r.w1 (mac a.w0 b r.w0 0).hi
-  have h2 := mac_spec a.w2 b r.w2
-    (mac a.w1 b r.w1 (mac a.w0 b r.w0 0).hi).hi
-  have h3 := mac_spec a.w3 b r.w3
-    (mac a.w2 b r.w2
-      (mac a.w1 b r.w1 (mac a.w0 b r.w0 0).hi).hi).hi
-  have ht := add_with_carry
-    (mac a.w3 b r.w3 (mac a.w2 b r.w2
-      (mac a.w1 b r.w1 (mac a.w0 b r.w0 0).hi).hi).hi).hi r.top
-  simp only [value, lowValue, ha, UInt64.toNat_zero, Nat.mul_zero, Nat.add_zero,
-    Nat.add_mul, Nat.mul_assoc]
-  simp only [wordRadix] at *
-  simp only [UInt64.toNat_zero, Nat.add_zero] at h0
-  omega
-
-private theorem Raw.words_fromWords (w : Words64) (h : w.top = 0) :
-    (Raw.fromWords w).words = w := by
-  cases w
-  cases h
-  rfl
-
 /-- Four words represent a value smaller than `2^256`. -/
 theorem rawToNat_lt (w : Raw) : rawToNat w < 2^256 := by
   rw [rawToNat_eq]
   exact lowValue_lt w.words
-
-private theorem toMont_val (a : Montgomery) : Limbs.val (n := 8) (toMont a).limbs = a.raw.val := by
-  exact (val_narrow _ rfl).trans a.raw.val_eq.symm
-
-private theorem ofMont_val (a : Shared) : (ofMont a).raw.val = Limbs.val (n := 8) a.limbs :=
-  (Raw.fromWords_val _ rfl).trans (value_wide _)
-
-private theorem mont_ext {a b : Shared} (h : Limbs.val (n := 8) a.limbs =
-    Limbs.val (n := 8) b.limbs) : a = b := by
-  have h := Limbs.val_injective (n := 8) h
-  cases a
-  cases b
-  cases h
-  rfl
-
-/-- A change of limb packing preserves the original Montgomery residue. -/
-theorem toMont_ofMont (a : Shared) : toMont (ofMont a) = a :=
-  mont_ext ((toMont_val (ofMont a)).trans (ofMont_val a))
-
-/-- Canonical residues have an injective representation in the general field. -/
-theorem toMont_injective : Function.Injective toMont := by
-  intro a b h
-  have h := congrArg (fun z : Shared => wide z.limbs) h
-  change wide (narrow a.raw.words) = wide (narrow b.raw.words) at h
-  rw [wide_narrow _ rfl, wide_narrow _ rfl] at h
-  have he := congrArg Raw.fromWords h
-  cases a with
-  | mk x hx =>
-    cases b with
-    | mk y hy =>
-      change x = y at he
-      cases he
-      rfl
-
-/-- Zero has the same residue in either representation. -/
-theorem toMont_zero : toMont (0 : Montgomery) = 0 := mont_ext (by decide)
-
-/-- One has the same residue in either representation. -/
-theorem toMont_one : toMont (1 : Montgomery) = 1 := mont_ext (by decide)
 
 private theorem finish_val (t : Words64) (ht : value t < 2*Fp.modulus) :
     (finish t ht).raw.val = value t % Fp.modulus := by
@@ -151,7 +66,8 @@ private theorem scaled_residue (x y v : Nat)
     (2^256 * (v % Fp.modulus)) % Fp.modulus = x*y % Fp.modulus :=
   (Nat.mul_mod_mod _ _ _).trans h
 
-private theorem mul_val (a b : Montgomery) :
+/-- The product on four words holds the product divided by `R = 2^256`, mod `p`. -/
+theorem mul_val_words (a b : Montgomery) :
     (2^256 * (mul a b).raw.val) % Fp.modulus = a.raw.val * b.raw.val % Fp.modulus := by
   let w := multiplyColumns a.raw.words b.raw.words
   let h := reduceWideInverse_spec w.1 w.2 (multiplyColumns_bound a.raw.words b.raw.words a.lt b.lt)
@@ -165,15 +81,49 @@ private theorem mul_val (a b : Montgomery) :
   rw [multiplyColumns_spec] at hh
   exact hh
 
-private theorem eq_of_radix_mul_mod {x y : Nat} (hx : x < Fp.modulus) (hy : y < Fp.modulus)
-    (he : 2^256 * x % Fp.modulus = 2^256 * y % Fp.modulus) : x = y := by
-  let inverse := 0xc9bd1905155383999c46c2c295f2b761bcb223fedc24a059d838091d0868192a
-  have hi : (inverse * 2^256) % Fp.modulus = 1 := by decide
-  have inv (v : Nat) : (inverse * (2^256 * v % Fp.modulus)) % Fp.modulus = v % Fp.modulus := by
-    rw [Nat.mul_mod_mod, ← Nat.mul_assoc, ← Nat.mod_mul_mod, hi, Nat.one_mul]
-  have h := congrArg (fun v => (inverse * v) % Fp.modulus) he
-  rw [inv, inv, Nat.mod_eq_of_lt hx, Nat.mod_eq_of_lt hy] at h
-  exact h
+/-- The laws of the sum, the difference and the product, and the constants of `p` on eight limbs. -/
+instance : Word64.Montgomery.Laws Fp.modulus where
+  params := Fp.params
+  params_p := rfl
+  add_val a b := by
+    let u := add64 reduceFast a.raw.words b.raw.words
+    have hu := add64_spec reduceFast reduceFast_spec a.raw.words b.raw.words rfl rfl
+      (a.raw.val_eq ▸ a.lt) (b.raw.val_eq ▸ b.lt)
+    rw [show (a + b).raw = Raw.fromWords u by simp only [HAdd.hAdd, Add.add, add]; rfl]
+    rw [Raw.fromWords_val u hu.1, hu.2, ← a.raw.val_eq, ← b.raw.val_eq]
+  sub_val a b := by
+    let u := subMasked a.raw.words b.raw.words
+    have hu := subMasked_spec a.raw.words b.raw.words rfl rfl
+      (a.raw.val_eq ▸ a.lt) (b.raw.val_eq ▸ b.lt)
+    rw [show (a - b).raw = Raw.fromWords u by simp only [HSub.hSub, Sub.sub, sub]; rfl]
+    rw [Raw.fromWords_val u hu.1, hu.2, ← a.raw.val_eq, ← b.raw.val_eq]
+  mul_val := mul_val_words
+
+/-- The shared Montgomery field on eight 32-bit limbs, at the constants of `p`. -/
+abbrev Shared := Cryptography.Montgomery Fp.params
+
+/-- The same Montgomery residue on the eight limbs of the shared field. -/
+abbrev toMont (a : Montgomery) : Shared := Word64.Montgomery.toMont a
+
+/-- The same Montgomery residue on four words. -/
+def ofMont (a : Shared) : Montgomery :=
+  ⟨Raw.fromWords (wide a.limbs), by
+    rw [Raw.fromWords_val _ rfl, value_wide]
+    exact a.lt⟩
+
+/-- A change of limb packing preserves the original Montgomery residue. -/
+theorem toMont_ofMont (a : Shared) : toMont (ofMont a) = a :=
+  Word64.Montgomery.mont_ext ((Word64.Montgomery.toMont_val (ofMont a)).trans
+    ((Raw.fromWords_val _ rfl).trans (value_wide _)))
+
+/-- Canonical residues have an injective representation in the general field. -/
+theorem toMont_injective : Function.Injective toMont := Word64.Montgomery.toMont_injective
+
+/-- Zero has the same residue in either representation. -/
+theorem toMont_zero : toMont (0 : Montgomery) = 0 := Word64.Montgomery.toMont_zero
+
+/-- One has the same residue in either representation. -/
+theorem toMont_one : toMont (1 : Montgomery) = 1 := Word64.Montgomery.toMont_one
 
 /-- Squaring gives the same residue as multiplying a value by itself. -/
 theorem square_eq_mul (a : Montgomery) : square a = a * a := by
@@ -189,114 +139,34 @@ theorem square_eq_mul (a : Montgomery) : square a = a * a := by
         wordRadix^4*lowValue (squareColumns a.raw.words).2) % Fp.modulus at hh
     rw [squareColumns_spec] at hh
     exact hh
-  have he : (square a).raw.val = (a*a).raw.val := eq_of_radix_mul_mod
-    (square a).lt (a*a).lt (hs.trans (mul_val a a).symm)
-  apply toMont_injective
-  apply mont_ext
-  rw [toMont_val, toMont_val, he]
+  have he : (square a).raw.val = (a*a).raw.val := Word64.Montgomery.eq_of_radix_mul_mod
+    (square a).lt (a*a).lt (hs.trans (mul_val_words a a).symm)
+  exact Word64.Montgomery.element_ext he
 
 /-- Multiplication gives the same Montgomery residue in either representation. -/
-theorem toMont_mul (a b : Montgomery) : toMont (a*b) = toMont a * toMont b := by
-  let x := toMont a
-  let y := toMont b
-  have hspec := (Cryptography.Montgomery.mulLimbs_spec Fp.params x.limbs x.lt y.limbs).2
-  have hEq : Limbs.val (n := 8) (x*y).limbs =
-      Limbs.val (n := 8) (Cryptography.Montgomery.mulWords (Limbs.get Fp.params.pLimbs)
-        Fp.params.pinv (Limbs.get x.limbs) (Limbs.get y.limbs) Limbs.pack) := by
-    change Limbs.val (n := 8) (Fp.params.mul x.limbs y.limbs) = _
-    rw [Fp.params.mul_spec x.limbs y.limbs x.lt]
-  change _ = x*y
-  apply mont_ext
-  have aeq := toMont_val a
-  have beq := toMont_val b
-  have hm := mul_val a b
-  have hc := toMont_val (a*b)
-  change (2^256 * _) % Fp.modulus =
-    (Limbs.val (n := 8) x.limbs * Limbs.val (n := 8) y.limbs) % Fp.modulus at hspec
-  rw [← hEq, aeq, beq] at hspec
-  exact eq_of_radix_mul_mod (toMont (a*b)).lt (x*y).lt
-    ((congrArg (fun v => (2^256 * v) % Fp.modulus) hc).trans (hm.trans hspec.symm))
-
-private theorem toMont_readRaw (a : Fp) :
-    (toMont (readRaw a)).limbs = Limbs.ofNat a.val := by
-  apply Limbs.val_injective
-  rw [toMont_val, Limbs.val_ofNat]
-  change (rawOfNat a.val).val = a.val % 2^256
-  have h : a.val < 2^256 := Nat.lt_trans a.isLt (by decide)
-  rw [rawOfNat_val _ h, Nat.mod_eq_of_lt h]
+theorem toMont_mul (a b : Montgomery) : toMont (a*b) = toMont a * toMont b :=
+  Word64.Montgomery.toMont_mul a b
 
 /-- Both field implementations encode a canonical integer the same way. -/
-theorem toMont_ofFin (a : Fp) : toMont (ofFin a) = Cryptography.Montgomery.ofFin a := by
-  have h : toMont montgomerySquare = ⟨Fp.params.r2, Fp.params.r2_lt⟩ := by
-    apply mont_ext
-    decide
-  simp only [ofFin, toMont_mul, h]
-  change Cryptography.Montgomery.mulLimbs Fp.params Fp.params.r2 Fp.params.r2_lt
-    (toMont (readRaw a)).limbs =
-      Cryptography.Montgomery.mulLimbs Fp.params Fp.params.r2 Fp.params.r2_lt
-        (Limbs.ofNat (a.val % Fp.modulus))
-  rw [Nat.mod_eq_of_lt a.isLt, toMont_readRaw]
+theorem toMont_ofFin (a : Fp) : toMont (ofFin a) = Cryptography.Montgomery.ofFin a :=
+  Word64.Montgomery.toMont_ofFin a
 
 /-- Leaving either Montgomery representation gives the same field element. -/
-theorem toFin_eq (a : Montgomery) : toFin a = Cryptography.Montgomery.toFin (toMont a) := by
-  apply Fin.ext
-  change rawToNat (a * rawOne).raw = (toMont a).toNat
-  rw [rawToNat_eq, ← toMont_val, toMont_mul, Cryptography.Montgomery.toNat_eq_val]
-  have h : (toMont rawOne).limbs = Limbs.ofNat (n := 8) 1 := by decide
-  exact congrArg (fun limbs =>
-    Limbs.val
-      (Cryptography.Montgomery.mulLimbs Fp.params (toMont a).limbs (toMont a).lt limbs).limbs) h
-
-private theorem add_val (a b : Montgomery) :
-    (a+b).raw.val = (a.raw.val + b.raw.val) % Fp.modulus := by
-  let u := add64 reduceFast a.raw.words b.raw.words
-  have hu := add64_spec reduceFast reduceFast_spec a.raw.words b.raw.words rfl rfl
-    (a.raw.val_eq ▸ a.lt) (b.raw.val_eq ▸ b.lt)
-  change (Raw.fromWords u).val = _
-  rw [Raw.fromWords_val u hu.1, hu.2, ← a.raw.val_eq, ← b.raw.val_eq]
-
-private theorem sub_val (a b : Montgomery) : (a-b).raw.val =
-    (a.raw.val + Fp.modulus - b.raw.val) % Fp.modulus := by
-  let u := subMasked a.raw.words b.raw.words
-  have hu := subMasked_spec a.raw.words b.raw.words rfl rfl
-    (a.raw.val_eq ▸ a.lt) (b.raw.val_eq ▸ b.lt)
-  change (Raw.fromWords u).val = _
-  rw [Raw.fromWords_val u hu.1, hu.2, ← a.raw.val_eq, ← b.raw.val_eq]
+theorem toFin_eq (a : Montgomery) : toFin a = Cryptography.Montgomery.toFin (toMont a) :=
+  Fin.ext (Word64.Montgomery.toFin_val_eq a)
 
 /-- Addition gives the same Montgomery residue in either representation. -/
-theorem toMont_add (a b : Montgomery) : toMont (a+b) = toMont a + toMont b := by
-  apply mont_ext
-  let x := toMont a
-  let y := toMont b
-  have h := Cryptography.Montgomery.addLimbs_spec Fp.params x.limbs y.limbs x.lt y.lt
-  change Limbs.val (n := 8) (toMont (a+b)).limbs =
-    Limbs.val (n := 8) (Cryptography.Montgomery.addCore (n := 8) x.limbs y.limbs Fp.params.pLimbs)
-  rw [toMont_val, add_val]
-  unfold Cryptography.Montgomery.addCore
-  rw [h, toMont_val, toMont_val]
-  rfl
+theorem toMont_add (a b : Montgomery) : toMont (a+b) = toMont a + toMont b :=
+  Word64.Montgomery.toMont_add a b
 
 /-- Subtraction gives the same Montgomery residue in either representation. -/
-theorem toMont_sub (a b : Montgomery) : toMont (a-b) = toMont a - toMont b := by
-  apply mont_ext
-  let x := toMont a
-  let y := toMont b
-  change Limbs.val (n := 8) (toMont (a-b)).limbs =
-    Limbs.val (n := 8) (Cryptography.Montgomery.subLimbs Fp.params x.limbs y.limbs)
-  rw [Cryptography.Montgomery.subLimbs_spec Fp.params x.lt y.lt, toMont_val, sub_val]
-  rw [toMont_val, toMont_val]
-  rfl
-
-private theorem element_ext {a b : Montgomery} (h : a.raw.val = b.raw.val) : a = b :=
-  toMont_injective (mont_ext ((toMont_val a).trans (h.trans (toMont_val b).symm)))
-
-private theorem add_self_val (x : Montgomery) : (x+x).raw.val = x.raw.val * 2 % Fp.modulus := by
-  rw [add_val, Nat.mul_two]
+theorem toMont_sub (a b : Montgomery) : toMont (a-b) = toMont a - toMont b :=
+  Word64.Montgomery.toMont_sub a b
 
 /-- Adding the halved residue to itself recovers the original residue. -/
 theorem halve_add_self (a : Montgomery) : halve a + halve a = a := by
-  apply element_ext
-  rw [add_val]
+  apply Word64.Montgomery.element_ext
+  rw [Word64.Montgomery.Laws.add_val]
   change ((halveRaw a.raw).val + (halveRaw a.raw).val) % Fp.modulus = a.raw.val
   have he : (halveRaw a.raw).val + (halveRaw a.raw).val =
       a.raw.val + (a.raw.val % 2) * Fp.modulus := by
@@ -310,7 +180,9 @@ private theorem fusedFinish_eq_fallback (t : Words64)
     fusedFinish t hlo hhi = fusedFinishFallback t hlo hhi := by
   unfold fusedFinish
   split
-  · next h => exact element_ext (congrArg Raw.val (fusedFinish_raw_eq_signedFast t hlo hhi h).symm)
+  · next h =>
+    exact Word64.Montgomery.element_ext
+      (congrArg Raw.val (fusedFinish_raw_eq_signedFast t hlo hhi h).symm)
   · rfl
 
 private theorem fusedFinish_val (t : Words64)
@@ -373,14 +245,14 @@ theorem productDiff_eq (a b c d : Montgomery) : productDiff a b c d = a*b - c*d 
   let s := u-v
   have hs : (s.raw.val+v.raw.val)%p = u.raw.val%p := by
     change (((a*b-c*d).raw.val) + v.raw.val)%p = _
-    rw [sub_val, Nat.mod_add_mod]
+    rw [Word64.Montgomery.Laws.sub_val, Nat.mod_add_mod]
     change ((u.raw.val + p - v.raw.val) + v.raw.val)%p = _
     rw [Nat.sub_add_cancel (Nat.le_trans (Nat.le_of_lt v.lt) (Nat.le_add_left _ _)),
       Nat.add_mod_right]
-  have hv : (R*v.raw.val)%p = (c.raw.val*d.raw.val)%p := mul_val c d
-  have hu : (R*u.raw.val)%p = (a.raw.val*b.raw.val)%p := mul_val a b
-  apply element_ext
-  apply eq_of_radix_mul_mod (productDiff a b c d).lt s.lt
+  have hv : (R*v.raw.val)%p = (c.raw.val*d.raw.val)%p := mul_val_words c d
+  have hu : (R*u.raw.val)%p = (a.raw.val*b.raw.val)%p := mul_val_words a b
+  apply Word64.Montgomery.element_ext
+  apply Word64.Montgomery.eq_of_radix_mul_mod (productDiff a b c d).lt s.lt
   apply mod_add_cancel_right (z := c.raw.val*d.raw.val)
   exact (productDiff_val a b c d).trans (sub_scaled_residue hs hu hv).symm
 
@@ -396,41 +268,28 @@ Reading an element back into `Fp` keeps zero, one, sums, differences and product
 Distinct elements read back to distinct elements.
 -/
 
-theorem toFin_zero : toFin (0 : Montgomery) = 0 := by
-  rw [toFin_eq, toMont_zero, Cryptography.Montgomery.toFin_zero]
-  rfl
+theorem toFin_zero : toFin (0 : Montgomery) = 0 := Word64.Montgomery.toFin_zero
 
-theorem toFin_one : toFin (1 : Montgomery) = 1 := by
-  rw [toFin_eq, toMont_one, Cryptography.Montgomery.toFin_one]
-  rfl
+theorem toFin_one : toFin (1 : Montgomery) = 1 := Word64.Montgomery.toFin_one
 
-theorem toFin_add (a b : Montgomery) : toFin (a + b) = toFin a + toFin b := by
-  rw [toFin_eq, toFin_eq, toFin_eq, toMont_add, Cryptography.Montgomery.toFin_add]
-  rfl
+theorem toFin_add (a b : Montgomery) : toFin (a + b) = toFin a + toFin b :=
+  Word64.Montgomery.toFin_add a b
 
-theorem toFin_sub (a b : Montgomery) : toFin (a - b) = toFin a - toFin b := by
-  rw [toFin_eq, toFin_eq, toFin_eq, toMont_sub, Cryptography.Montgomery.toFin_sub]
-  rfl
+theorem toFin_sub (a b : Montgomery) : toFin (a - b) = toFin a - toFin b :=
+  Word64.Montgomery.toFin_sub a b
 
-theorem toFin_mul (a b : Montgomery) : toFin (a * b) = toFin a * toFin b := by
-  rw [toFin_eq, toFin_eq, toFin_eq, toMont_mul, Cryptography.Montgomery.toFin_mul]
-  rfl
+theorem toFin_mul (a b : Montgomery) : toFin (a * b) = toFin a * toFin b :=
+  Word64.Montgomery.toFin_mul a b
 
 theorem toFin_square (a : Montgomery) : toFin (square a) = toFin a * toFin a := by
   rw [square_eq_mul, toFin_mul]
 
-theorem toFin_injective : Function.Injective toFin := by
-  intro a b h
-  rw [toFin_eq, toFin_eq] at h
-  exact toMont_injective (Cryptography.Montgomery.toFin_injective h)
+theorem toFin_injective : Function.Injective toFin := Word64.Montgomery.toFin_injective
 
 /-- Entering the Montgomery form and reading back gives the element itself. -/
-@[simp] theorem toFin_ofFin (a : Fp) : toFin (ofFin a) = a :=
-  (toFin_eq _).trans ((congrArg Cryptography.Montgomery.toFin (toMont_ofFin a)).trans
-    (Cryptography.Montgomery.toFin_ofFin (M := Fp.params) a))
+@[simp] theorem toFin_ofFin (a : Fp) : toFin (ofFin a) = a := Word64.Montgomery.toFin_ofFin a
 
 /-- Reading back and entering the Montgomery form again gives the same element. -/
-theorem ofFin_toFin (a : Montgomery) : ofFin (toFin a) = a :=
-  toFin_injective (toFin_ofFin _)
+theorem ofFin_toFin (a : Montgomery) : ofFin (toFin a) = a := Word64.Montgomery.ofFin_toFin a
 
 end EthLib.Cryptography.Secp256k1.Montgomery

@@ -57,7 +57,7 @@ theorem zeroElement_eq_true (x : Montgomery) : zeroElement x = true ↔ x = 0 :=
   obtain ⟨⟨a,b,c,d⟩, h⟩ := x
   rw [show (0 : Montgomery) = ⟨⟨0,0,0,0⟩, by decide⟩ from rfl]
   simp only [zeroElement, Bool.and_eq_true, beq_iff_eq, and_assoc,
-    Montgomery.mk.injEq, Word64.Raw.mk.injEq]
+    Word64.Montgomery.mk.injEq, Word64.Raw.mk.injEq]
 
 
 /-! ## The endomorphism and its action on the group -/
