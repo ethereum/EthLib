@@ -52,7 +52,6 @@ private theorem funded_finishCall {kind : CallKind} {call : CallOperands} {calle
     cases hc
   · rename_i hfunds
     unfold Evm.genericCall at h
-    dsimp only at h
     split at h
     · obtain ⟨_, -, hc⟩ := Base.map_ok_iff.mp h
       cases hc
@@ -60,7 +59,7 @@ private theorem funded_finishCall {kind : CallKind} {call : CallOperands} {calle
       intro transfers
       by_cases hk : kind = .delegatecall
       · simp [hk] at transfers
-      · simp only [hk, ↓reduceIte]
+      · simp only [value_callMessage, caller_callMessage, hk, ↓reduceIte]
         exact BitVec.not_lt.mp hfunds
 
 /-- A step of a call instruction sends only a message funded in the state of its caller. -/

@@ -132,9 +132,8 @@ theorem finishCall_of_balance_lt [GasMeter Meter] {kind : CallKind} {call : Call
   · cases h
   · dsimp only at h
     rw [ite_eq_left_of_eq_true _ _ (eq_true (by exact low))] at h
-    cases hs : skipCall (refillStateGas (recordAccountRead
-        { evm with memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-        evm.message.currentTarget) newAccount) subCall (GasMeter.reservoir evm.gas) with
+    cases hs : skipCall (refillStateGas (callerFrame evm expandBy) newAccount) subCall
+        (GasMeter.reservoir evm.gas) with
     | error => simp [hs, Functor.map, Except.map] at h
     | ok after =>
       simp only [hs, Functor.map, Except.map, Except.ok.injEq] at h
@@ -242,6 +241,102 @@ theorem byteAt_resumeCall [GasMeter Meter] {caller child after : Evm fork Meter}
       simp
       rw [ite_eq_left_of_eq_true _ _ (eq_true (by omega))]
     · rfl
+
+/-! ## The message and the calling frame of a call, field by field -/
+
+section Fields
+
+variable {evm : Evm fork Meter}
+
+variable {kind : CallKind} {call : CallOperands} {callee : Callee} {subCall reservoir : Nat}
+
+@[simp] theorem blockEnv_callMessage :
+    (callMessage kind call callee subCall reservoir evm).blockEnv = evm.message.blockEnv := rfl
+
+@[simp] theorem txEnv_callMessage :
+    (callMessage kind call callee subCall reservoir evm).txEnv = evm.message.txEnv := rfl
+
+@[simp] theorem caller_callMessage :
+    (callMessage kind call callee subCall reservoir evm).caller =
+      if kind = .delegatecall then evm.message.caller else evm.message.currentTarget := rfl
+
+@[simp] theorem target_callMessage :
+    (callMessage kind call callee subCall reservoir evm).target =
+      some (if kind = .call ∨ kind = .staticcall then call.address
+        else evm.message.currentTarget) := rfl
+
+@[simp] theorem currentTarget_callMessage :
+    (callMessage kind call callee subCall reservoir evm).currentTarget =
+      if kind = .call ∨ kind = .staticcall then call.address else evm.message.currentTarget := rfl
+
+@[simp] theorem gas_callMessage :
+    (callMessage kind call callee subCall reservoir evm).gas = subCall := rfl
+
+@[simp] theorem reservoir_callMessage :
+    (callMessage kind call callee subCall reservoir evm).reservoir = reservoir := rfl
+
+@[simp] theorem value_callMessage :
+    (callMessage kind call callee subCall reservoir evm).value =
+      if kind = .delegatecall then evm.message.value else call.value := rfl
+
+@[simp] theorem data_callMessage :
+    (callMessage kind call callee subCall reservoir evm).data =
+      memoryReadBytes evm.memory call.inputStart.toNat call.inputSize.toNat := rfl
+
+@[simp] theorem codeAddress_callMessage :
+    (callMessage kind call callee subCall reservoir evm).codeAddress =
+      some callee.codeAddress := rfl
+
+@[simp] theorem code_callMessage :
+    (callMessage kind call callee subCall reservoir evm).code = callee.code := rfl
+
+@[simp] theorem depth_callMessage :
+    (callMessage kind call callee subCall reservoir evm).depth = evm.message.depth + 1 := rfl
+
+@[simp] theorem shouldTransferValue_callMessage :
+    (callMessage kind call callee subCall reservoir evm).shouldTransferValue =
+      (kind != .delegatecall) := rfl
+
+@[simp] theorem isStatic_callMessage :
+    (callMessage kind call callee subCall reservoir evm).isStatic =
+      (kind == .staticcall || evm.message.isStatic) := rfl
+
+@[simp] theorem disablePrecompiles_callMessage :
+    (callMessage kind call callee subCall reservoir evm).disablePrecompiles =
+      callee.delegated := rfl
+
+variable [GasMeter Meter] {expandBy : Nat}
+
+@[simp] theorem pc_callerFrame : (callerFrame evm expandBy).pc = evm.pc := rfl
+
+@[simp] theorem stack_callerFrame : (callerFrame evm expandBy).stack = evm.stack := rfl
+
+@[simp] theorem memory_callerFrame :
+    (callerFrame evm expandBy).memory = memoryExtend evm.memory expandBy := rfl
+
+@[simp] theorem code_callerFrame : (callerFrame evm expandBy).code = evm.code := rfl
+
+@[simp] theorem validJumpDestinations_callerFrame :
+    (callerFrame evm expandBy).validJumpDestinations = evm.validJumpDestinations := rfl
+
+@[simp] theorem gas_callerFrame : (callerFrame evm expandBy).gas = GasMeter.drain evm.gas := rfl
+
+@[simp] theorem running_callerFrame : (callerFrame evm expandBy).running = evm.running := rfl
+
+@[simp] theorem message_callerFrame : (callerFrame evm expandBy).message = evm.message := rfl
+
+@[simp] theorem output_callerFrame : (callerFrame evm expandBy).output = evm.output := rfl
+
+@[simp] theorem returnData_callerFrame : (callerFrame evm expandBy).returnData = .empty := rfl
+
+@[simp] theorem state_callerFrame :
+    (callerFrame evm expandBy).state = evm.state.recordAccountRead evm.message.currentTarget := rfl
+
+@[simp] theorem substate_callerFrame : (callerFrame evm expandBy).substate = evm.substate := rfl
+
+@[simp] theorem error_callerFrame : (callerFrame evm expandBy).error = evm.error := rfl
+
+end Fields
 
 section Failures
 
@@ -535,7 +630,6 @@ theorem finishCall_of_skip {kind : CallKind} {call : CallOperands}
   · rename_i low
     have deep : evm.message.depth + 1 > STACK_DEPTH_LIMIT := skip.resolve_left low
     unfold genericCall at h
-    dsimp only at h
     split at h
     · obtain ⟨after, hs, rfl⟩ := next h
       obtain ⟨stack, hst, rfl⟩ := skipCall_eq_ok hs
@@ -717,7 +811,6 @@ theorem memoryAligned_callStep {kind : CallKind} {evm : Evm fork Meter}
   split at hr
   · exact skip (by exact grown) hr
   unfold genericCall at hr
-  dsimp only at hr
   split at hr
   · exact skip (by exact grown) hr
   cases hr
@@ -728,7 +821,7 @@ theorem memoryAligned_callStep {kind : CallKind} {evm : Evm fork Meter}
     [(call.inputStart, call.inputSize), (call.outputStart, call.outputSize)]
     (call.outputStart, call.outputSize) (by simp) hnz
   rw [ceil32_of_mod hmod1] at cover
-  simp only [recordAccountRead, size_memoryExtend, m4]
+  simp only [memory_callerFrame, size_memoryExtend, m4]
   exact cover
 
 /-- Each call keeps the size of memory a multiple of 32, and so does its caller after it. -/

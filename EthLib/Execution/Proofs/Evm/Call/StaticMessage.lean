@@ -430,21 +430,20 @@ theorem staticTouchResult_genericCall {evm : Evm fork Meter} {message : Message 
     (h : genericCall evm message newAccount outputStart outputSize = .ok result) :
     StaticTouchResult evm result := by
   unfold genericCall at h
-  dsimp only at h
   split at h
-  · cases hs : skipCall (refillStateGas { evm with returnData := .empty } newAccount)
+  · cases hs : skipCall (refillStateGas evm newAccount)
         message.gas message.reservoir with
     | error e => simp [hs, Functor.map, Except.map] at h
     | ok after =>
       simp only [hs, Functor.map, Except.map, Except.ok.injEq] at h
       subst h
       exact (⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩ : StaticStep evm
-        (refillStateGas { evm with returnData := .empty } newAccount)).trans
+        (refillStateGas evm newAccount)).trans
         (staticStep_skipCall hs)
   · cases h
     refine ⟨⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩, hmsg, ?_⟩
     intro touched child after hres kept parent hrec
-    have pre : StaticStep evm { evm with returnData := .empty } :=
+    have pre : StaticStep evm evm :=
       ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
     exact pre.trans_touchStep (staticTouchStep_resumeCall hres kept parent hrec)
 
@@ -466,30 +465,25 @@ theorem staticTouchResult_finishCall {kind : CallKind} {call : CallOperands} {ca
   · cases h
   rename_i hnot
   dsimp only at h
-  have pre : StaticStep evm (recordAccountRead { evm with
-      memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-      evm.message.currentTarget) := ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  have pre : StaticStep evm (callerFrame evm expandBy) :=
+    ⟨.recordAccountRead _ _, rfl, rfl, rfl, rfl, rfl, rfl⟩
   split at h
-  · cases hs : skipCall (refillStateGas (recordAccountRead { evm with
-        memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-        evm.message.currentTarget) newAccount) subCall (GasMeter.reservoir evm.gas) with
+  · cases hs : skipCall (refillStateGas (callerFrame evm expandBy) newAccount) subCall
+        (GasMeter.reservoir evm.gas) with
     | error e => simp [hs, Functor.map, Except.map] at h
     | ok after =>
       simp only [hs, Functor.map, Except.map, Except.ok.injEq] at h
       subst h
-      have refill : StaticStep (recordAccountRead { evm with
-          memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-          evm.message.currentTarget)
-          (refillStateGas (recordAccountRead { evm with
-          memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-          evm.message.currentTarget) newAccount) := ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
+      have refill : StaticStep (callerFrame evm expandBy)
+          (refillStateGas (callerFrame evm expandBy) newAccount) :=
+        ⟨.refl _, rfl, rfl, rfl, rfl, rfl, rfl⟩
       exact (pre.trans refill).trans (staticStep_skipCall hs)
   · refine StaticTouchResult.lift pre (staticTouchResult_genericCall ?_ h)
     have hcall : kind = .call → call.value = 0 := by
       intro hk
       exact Decidable.byContradiction fun hne => hnot ⟨hk, static, hne⟩
     refine ⟨?_, rfl, ?_, ?_⟩
-    · simp only [Bool.or_eq_true, beq_iff_eq]
+    · simp only [isStatic_callMessage, Bool.or_eq_true, beq_iff_eq]
       exact Or.inr static
     · intro nonempty
       cases kind

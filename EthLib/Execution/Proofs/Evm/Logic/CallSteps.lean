@@ -145,7 +145,7 @@ theorem callStep_deep_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
       have := evm.stack.property
       rw [hst] at this
       cases kind <;> simp [CallKind.sendsValue] at this <;> omega
-    simp [finishCall, genericCall, skipCall, recordAccountRead, refillStateGas, GasMeter.refill,
+    simp [finishCall, genericCall, skipCall, refillStateGas, GasMeter.refill,
       hdeep, pushWord, Stack.push, hlen, bind, Except.bind, pure, Except.pure, Functor.map,
       Except.map] at hf
   | ok r =>

@@ -155,7 +155,6 @@ theorem state_genericCall {evm : Evm fork Meter} {message : Message fork}
     match (generalizing := false) result with
     | .next after | .child after _ _ => after.state = evm.state := by
   unfold genericCall at h
-  dsimp only at h
   split at h
   · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
     have same := state_skipCall hs

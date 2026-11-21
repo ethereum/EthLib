@@ -1219,9 +1219,7 @@ private theorem rebuildStep_finishCall {block : BlockState} {kind : CallKind} {c
   split at h
   · cases h
   dsimp only at h
-  have pre : RebuildStep block evm (recordAccountRead { evm with
-      memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-      evm.message.currentTarget) :=
+  have pre : RebuildStep block evm (callerFrame evm expandBy) :=
     RebuildStep.of_sameWrites (SameWrites.recordAccountRead evm.state evm.message.currentTarget)
       rfl rfl rfl rfl
   split at h
@@ -1229,15 +1227,12 @@ private theorem rebuildStep_finishCall {block : BlockState} {kind : CallKind} {c
     exact (pre.trans (.of_sameContext (sameContext_refillStateGas _ _))).trans
       (rebuildStep_skipCall hs)
   · unfold Evm.genericCall at h
-    dsimp only at h
     split at h
     · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
-      exact (((pre.trans (.of_sameContext (sameContext_returnData _ .empty))).trans
-        (.of_sameContext (sameContext_refillStateGas _ newAccount))).trans
-        (rebuildStep_skipCall hs))
+      exact (pre.trans (.of_sameContext (sameContext_refillStateGas _ newAccount))).trans
+        (rebuildStep_skipCall hs)
     · cases h
-      have callerStep : RebuildStep block evm _ :=
-        pre.trans (.of_sameContext (sameContext_returnData _ .empty))
+      have callerStep := pre
       refine ⟨callerStep, fun child after hres hc => ?_⟩
       obtain ⟨e, h1, hpure⟩ := Base.bind_ok_iff.mp hres
       cases hpure
@@ -1249,7 +1244,6 @@ private theorem rebuildStep_finishCall {block : BlockState} {kind : CallKind} {c
           subst heq
           simp at htr
         simp [hk]
-        rfl
       · constructor <;> split <;> rfl
 
 private theorem rebuildStep_callStep {block : BlockState} {kind : CallKind} {evm : Evm fork Meter}

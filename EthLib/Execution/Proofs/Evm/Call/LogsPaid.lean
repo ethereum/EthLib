@@ -102,25 +102,24 @@ private theorem keeps_finishCall [LawfulGasMeter Meter] {kind : CallKind} {call 
     show logsPotential after ≤ logsPotential evm
     rw [logsPotential_skipCall hs]
     refine Nat.le_trans (Nat.add_le_add_right (logsPotential_refillStateGas _ _) _) ?_
-    simp only [logsPotential, recordAccountRead, LawfulGasMeter.gasHeld_drain]
+    simp only [logsPotential, substate_callerFrame, gas_callerFrame, LawfulGasMeter.gasHeld_drain]
     rw [logs]
     split at gas <;> omega
   · unfold genericCall at h
-    dsimp only at h
     split at h
     · obtain ⟨after, hs, rfl⟩ := Base.map_ok_iff.mp h
       show logsPotential after ≤ logsPotential evm
       rw [logsPotential_skipCall hs]
       refine Nat.le_trans (Nat.add_le_add_right (logsPotential_refillStateGas _ _) _) ?_
-      simp only [logsPotential, recordAccountRead, LawfulGasMeter.gasHeld_drain]
+      simp only [logsPotential, substate_callerFrame, gas_callerFrame, gas_callMessage,
+        LawfulGasMeter.gasHeld_drain]
       rw [logs]
       split at gas <;> omega
     · cases h
       refine keeps_child logs ?_ (fun _ _ hres => logsPotential_resumeCall hres)
-      simp only [recordAccountRead, LawfulGasMeter.gasHeld_drain]
+      simp only [gas_callerFrame, gas_callMessage, LawfulGasMeter.gasHeld_drain]
       refine Nat.le_trans (Nat.add_le_add_left ?_ _) gas
       unfold messageAllowance
-      dsimp only
       by_cases hk : kind = CallKind.delegatecall
       · subst hk
         simp

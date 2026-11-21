@@ -150,7 +150,6 @@ private theorem shortCaller_finishCall {kind : CallKind} {call : CallOperands}
   · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
     trivial
   · unfold Evm.genericCall at h
-    dsimp only at h
     split at h
     · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
       trivial
