@@ -48,12 +48,16 @@ inductive AttributeScalar where
   | data (bytes : List UInt8)
   deriving DecidableEq, Repr
 
-/-- The value of a field of the payload attributes: one value, or a list of objects. -/
+/-- The value of a field of the payload attributes.
+
+It is one value, a list of objects, or a list of byte strings. -/
 inductive AttributeValue where
   /-- One value. -/
   | scalar (value : AttributeScalar)
   /-- A list of objects, each with its named fields. -/
   | objects (items : List (List (String × AttributeScalar)))
+  /-- A list of byte strings. -/
+  | byteStrings (items : List (List UInt8))
   deriving DecidableEq, Repr
 
 /-- The fields of a withdrawal, with the names of the Engine API. -/
@@ -75,7 +79,10 @@ def attributeFields (a : PayloadAttributes fork) : List (String × AttributeValu
       else []) ++
     (if h : .glamsterdam ≤ fork then
       [("slotNumber", .scalar (.quantity (a.slotNumber h).toNat)),
-        ("targetGasLimit", .scalar (.quantity (a.targetGasLimit h).toNat))] else [])
+        ("targetGasLimit", .scalar (.quantity (a.targetGasLimit h).toNat))] else []) ++
+    (if h : .hegota ≤ fork then
+      [("inclusionListTransactions",
+        .byteStrings ((a.inclusionListTransactions h).map (·.data.toList)))] else [])
 
 /-! ## The two spellings -/
 
@@ -109,11 +116,13 @@ def apiObject (fields : List (String × AttributeScalar)) : Json :=
 def AttributeValue.engineJson : AttributeValue → Json
   | .scalar value => value.engineJson
   | .objects items => .arr (items.toArray.map engineObject)
+  | .byteStrings items => .arr (items.toArray.map dataJson)
 
 /-- A field value as the Beacon API writes it. -/
 def AttributeValue.apiJson : AttributeValue → Json
   | .scalar value => value.apiJson
   | .objects items => .arr (items.toArray.map apiObject)
+  | .byteStrings items => .arr (items.toArray.map dataJson)
 
 /-- Payload attributes as the Beacon API writes them: snake case keys and decimal integers. -/
 def apiPayloadAttributesJson (a : PayloadAttributes fork) : Json :=

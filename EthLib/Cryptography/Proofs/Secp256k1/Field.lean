@@ -3,7 +3,6 @@ module
 public import EthLib.Cryptography.Secp256k1.Field
 public import EthLib.Cryptography.Proofs.Pratt
 public import EthLib.Cryptography.Proofs.Inverse
-public import EthLib.Cryptography.Proofs.Montgomery.Fin
 public import Mathlib.FieldTheory.Finite.Basic
 public import Mathlib.Tactic.NormNum.Prime
 
@@ -19,9 +18,7 @@ So a proof states its algebra over `ZMod p`, where `ring` and `field_simp` work.
 An element of `Fp` crosses over unchanged.
 
 - Both moduli are prime, by Pratt certificates that the kernel checks.
-- Square and multiply computes the power, and the power on Montgomery limbs agrees with it.
-- The Euclidean inverse is the field inverse.
-- The square root succeeds exactly on the squares, and then returns a root.
+- Square and multiply computes the power.
 -/
 
 @[expose] public section
@@ -220,60 +217,16 @@ def toZMod : Fp ≃+* ZMod modulus := RingEquiv.refl _
 
 @[simp] theorem toZMod_sub (a b : Fp) : toZMod (a - b) = toZMod a - toZMod b := rfl
 
-/-- The power on Montgomery limbs is square and multiply on `Fp`, for every exponent. -/
-theorem pow_eq_powBits (a : Fp) (e : Nat) : a.pow e = Fin.powBits 256 a e := by
-  rw [Fin.powBits_mod, Fin.powBits_eq_pow 256 a _ (Nat.mod_lt _ (by decide))]
-  apply toZMod.injective
-  rw [← ZMod.natCast_zmod_val (toZMod (a.pow e)), map_pow, ← ZMod.natCast_zmod_val (toZMod a)]
-  -- The limbs of `e` write `e mod 2^256`, and the power by limbs is the power by that integer.
-  change ((Montgomery.toFin (Montgomery.powLimbs (Montgomery.ofFin (M := params) a)
-    (Montgomery.Limbs.ofNat e))).val : ZMod modulus) = (a.val : ZMod modulus) ^ (e % 2 ^ 256)
-  have h := Montgomery.toFin_powLimbs (Montgomery.ofFin (M := params) a) (Montgomery.Limbs.ofNat e)
-  rw [Montgomery.toFin_ofFin (M := params) a, Montgomery.Limbs.val_ofNat] at h
-  exact h
+/-- The power is square and multiply on `Fp`, for every exponent. -/
+theorem pow_eq_powBits (a : Fp) (e : Nat) : a.pow e = Fin.powBits 256 a e := rfl
 
 /-- `pow` computes `a^e`, for an exponent below `2^256`. -/
 theorem toZMod_pow (a : Fp) (e : Nat) (he : e < 2 ^ 256) : toZMod (a.pow e) = toZMod a ^ e := by
   rw [pow_eq_powBits]
   exact Fin.powBits_eq_pow 256 a e he
 
-/-- The Euclidean inverse is the field inverse, and both send `0` to `0`. -/
-@[simp] theorem toZMod_inv (a : Fp) : toZMod a.inv = (toZMod a)⁻¹ :=
-  Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
-
 /-- `p = 3 mod 4`, which gives the square root its closed form. -/
 theorem modulus_mod_four : modulus % 4 = 3 := by decide
-
-/-- A root that `sqrt` returns squares to its input. -/
-theorem sqrt_mul_self {a c : Fp} (h : a.sqrt = some c) : toZMod c * toZMod c = toZMod a := by
-  simp only [sqrt] at h
-  split_ifs at h with hc
-  obtain rfl := Option.some.inj h
-  rw [← map_mul, hc]
-
-/-- `sqrt` returns a root of every square. -/
-theorem sqrt_isSome {a : Fp} {b : ZMod modulus} (h : b * b = toZMod a) : ∃ c, a.sqrt = some c := by
-  refine ⟨_, ite_eq_left (toZMod.injective ?_)⟩
-  -- With `a = b^2`, the candidate `a^((p + 1) / 4)` squares to `b^(p + 1)`, which is `b^2`.
-  have h4 := modulus_mod_four
-  rw [map_mul, toZMod_pow _ _ (by decide), ← h, ← pow_two, ← pow_mul, ← pow_two, ← pow_mul]
-  by_cases hb : b = 0
-  · subst hb
-    rw [zero_pow (by omega), zero_pow (by omega)]
-  · rw [show 2 * ((modulus + 1) / 4 * 2) = (modulus - 1) + 2 by omega, pow_add, ZMod.pow_card_sub_one_eq_one hb,
-      one_mul]
-
-/-- `sqrt` fails exactly on the non-squares. -/
-theorem sqrt_eq_none_iff {a : Fp} : a.sqrt = none ↔ ∀ b : ZMod modulus, b * b ≠ toZMod a := by
-  constructor
-  · intro h b hb
-    obtain ⟨c, hc⟩ := sqrt_isSome hb
-    rw [h] at hc
-    cases hc
-  · intro h
-    cases hs : a.sqrt with
-    | none => rfl
-    | some c => exact absurd (sqrt_mul_self hs) (h (toZMod c))
 
 /-- In a field, a square has at most two roots, `c` and `-c`. -/
 theorem eq_or_eq_neg_of_mul_self {c d : ZMod modulus} (h : d * d = c * c) : d = c ∨ d = -c := by
@@ -443,10 +396,6 @@ def toZMod : Fn ≃+* ZMod modulus := RingEquiv.refl _
 /-- `pow` computes `a^e`, for an exponent below `2^256`. -/
 theorem toZMod_pow (a : Fn) (e : Nat) (he : e < 2 ^ 256) : toZMod (a.pow e) = toZMod a ^ e :=
   Fin.powBits_eq_pow 256 a e he
-
-/-- The Euclidean inverse is the field inverse, and both send `0` to `0`. -/
-@[simp] theorem toZMod_inv (a : Fn) : toZMod a.inv = (toZMod a)⁻¹ :=
-  Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
 
 end Fn
 

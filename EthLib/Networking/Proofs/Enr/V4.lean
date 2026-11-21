@@ -316,6 +316,19 @@ theorem mem_insertPair {p x : ByteArray × Item} :
       · rintro (h | h | h) <;> simp [h]
       · rintro (h | h | h) <;> simp [h]
 
+/-- An insertion leaves the first pair of every other key in place. -/
+theorem find?_insertPair {p : ByteArray × Item} {key : ByteArray} (hp : p.1 ≠ key) :
+    (pairs : List (ByteArray × Item)) →
+      (insertPair p pairs).find? (·.1 = key) = pairs.find? (·.1 = key)
+  | [] => by simp [insertPair, hp]
+  | q :: rest => by
+    unfold insertPair
+    split
+    · simp [hp]
+    · by_cases hq : q.1 = key
+      · simp [hq]
+      · simp [hq, find?_insertPair hp rest]
+
 /-- In pairs whose keys strictly increase, the value of a key is that of its one pair. -/
 theorem get_of_mem {r : Enr} {key : ByteArray} {value : Item}
     (hk : r.pairs.Pairwise (fun p q => keyLt p.1 q.1)) (hmem : (key, value) ∈ r.pairs) :
@@ -387,5 +400,33 @@ theorem makeRecordV4_eq_ok {sk : Fn} {seq : UInt64} {pairs : List (ByteArray × 
         · unfold Enr.get at gkey ⊢
           rw [hpairs]
           exact gkey
+
+/-- A record that the builder makes holds the given value of every key other than its own two. -/
+theorem get_of_makeRecordV4 {sk : Fn} {seq : UInt64} {pairs : List (ByteArray × Item)} {r : Enr}
+    {key : ByteArray} (h : makeRecordV4 sk seq pairs = .ok r) (hid : KEY_ID ≠ key)
+    (hsk : KEY_SECP256K1 ≠ key) : r.get key = (pairs.find? (·.1 = key)).map (·.2) := by
+  unfold makeRecordV4 at h
+  dsimp only at h
+  generalize hall : insertPair (KEY_ID, .bytes SCHEME_V4)
+    (insertPair (KEY_SECP256K1, .bytes (Point.mul sk Point.generator).encodeCompressed) pairs)
+    = all at h
+  cases hc : checkKeys all with
+  | error e => simp [hc, bind, Except.bind] at h
+  | ok u =>
+    cases hs : signV4 sk ⟨.empty, seq, all⟩ with
+    | error e => simp [hc, hs, bind, Except.bind] at h
+    | ok signed =>
+      cases he : signed.encode with
+      | error e => simp [hc, hs, he, Except.mapError, bind, Except.bind] at h
+      | ok bytes =>
+        by_cases hsize : MAX_RECORD_SIZE < bytes.size
+        · simp [hc, hs, he, hsize, Except.mapError, bind, Except.bind, throw, throwThe,
+            MonadExceptOf.throw] at h
+        simp only [hc, hs, he, hsize, Except.mapError, bind, Except.bind, ↓reduceIte, pure,
+          Except.pure, Except.ok.injEq] at h
+        subst h
+        -- Signing keeps the pairs, and neither inserted pair has the key.
+        unfold Enr.get
+        rw [(seq_pairs_signV4 hs).2, ← hall, find?_insertPair hid, find?_insertPair hsk]
 
 end EthLib.Networking.Enr

@@ -31,11 +31,14 @@ open EthLib.Engine.Json (AnyPayload)
 
 /-- A fork that a version of `engine_newPayload` takes, with payloads of a version of the structure.
 
-Version 5 takes Glamsterdam, and version 4 Pectra, whose payloads have version 3 of the structure.
+Version 6 takes Hegotá, version 5 Glamsterdam, and version 4 Pectra.
+
+Version 4 takes payloads with version 3 of the structure.
 
 Below, version 1 of the structure is that of Paris, 2 of Shapella, and 3 of Dencun. -/
 def payloadFork (version layout : Nat) : Fork :=
-  if 5 ≤ version then .glamsterdam
+  if 6 ≤ version then .hegota
+  else if 5 ≤ version then .glamsterdam
   else if version = 4 then .pectra
   else match layout with
     | 0 | 1 => .paris
@@ -44,8 +47,17 @@ def payloadFork (version layout : Nat) : Fork :=
 
 /-- The parameters of a version of `engine_newPayload`, read and written back.
 
-The payload is written with the structure it was read with, at a fork that the version takes. -/
+The payload is written with the structure it was read with, at a fork that the version takes.
+
+From version 6 the inclusion list is written back last. -/
 def rewriteNewPayloadParams (version : Nat) (params : Json) : Except EngineError Json := do
+  if 6 ≤ version then
+    let ((any, amsterdam, hashes, beaconRoot, requests), inclusionList) ←
+      newPayloadV6Params params
+    let payload ← any.atFork .hegota
+    let some fields := amsterdam | throw (.invalidParams "payload: not the fields of version 4")
+    return newPayloadV6ParamsJson payload fields (hashes.getD []) (beaconRoot.getD ZERO_HASH)
+      (requests.getD []) inclusionList
   let (any, amsterdam, hashes, beaconRoot, requests) ← newPayloadParams version params
   let payload ← any.atFork (payloadFork version any.version)
   -- The writer leaves out the hashes and the root before version 3, and the requests before 4.

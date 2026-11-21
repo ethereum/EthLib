@@ -76,7 +76,7 @@ source = "https://github.com/ethereum/consensus-specs/tree/aa16bb4c156184e9548a9
 [generators."pyspec 63aa303c KZG"]
 computes = "the KZG test generator of the consensus-specs Python specification, with the group arithmetic in py_arkworks_bls12381"
 version = "consensus-specs 63aa303c (1.4.0-beta.2), py_arkworks_bls12381 0.3.4, py_ecc 6.0.0, milagro_bls_binding 1.9.0"
-source = "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/cancun/eip4844_blobs/point_evaluation_vectors/README.md"
+source = "https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/tests/cancun/eip4844_blobs/point_evaluation_vectors/README.md"
 
 [generators."ssz-specs v0.1.0"]
 computes = "the filler suite of ssz-specs, with its own eth-ssz-specs package"
@@ -114,7 +114,7 @@ source = "https://github.com/ethereum/bls12-381-tests/blob/89ff3a86f1a9b89a55549
 [generators."bls12-381-tests eip-2537 branch"]
 computes = "main.py of the eip-2537 branch of bls12-381-tests, with py_ecc and py_arkworks_bls12381"
 version = "the commit run not recorded, the branch head 72f47fb6 pins py_ecc 7.0.0 and py_arkworks_bls12381 0.3.4"
-source = "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip2537_bls_12_381_precompiles/vectors/test-vectors.md"
+source = "https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/tests/prague/eip2537_bls_12_381_precompiles/vectors/test-vectors.md"
 
 [generators."Wycheproof"]
 computes = "the generator of Project Wycheproof, which C2SP/wycheproof does not publish, named google-wycheproof in each test group"
@@ -134,7 +134,7 @@ source = "https://github.com/C2SP/wycheproof/pull/224"
 [generators."Wycheproof P-256, converted by execution-specs"]
 computes = "the ECDSA P-256 vectors of Wycheproof, turned into precompile calls by the authors of execution-specs"
 version = "the Wycheproof commit not recorded"
-source = "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/osaka/eip7951_p256verify_precompiles/test_p256verify.py#L38-L40"
+source = "https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/tests/osaka/eip7951_p256verify_precompiles/test_p256verify.py#L38-L40"
 
 [generators."BLAKE2 genkat-json"]
 computes = "genkat-json.c of the BLAKE2 reference package, linked with its own BLAKE2 code"
@@ -195,8 +195,8 @@ source = "slashing-protection-interchange-tests 8e30b9dd and ad54abce"
 
 [generators."EELS 2.19.0"]
 computes = "EELS, the Python execution specification, run as the transition tool by the execution-specs filler"
-version = "ethereum-execution 2.19.0 and ethereum-execution-testing 1.0.0 at execution-specs e27f097e, in each fixture's _info"
-source = "_info.filling-transition-tool of each fixture, and https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/packages/testing/src/execution_testing/fixtures/base.py#L184"
+version = "ethereum-execution 2.19.0 and ethereum-execution-testing 1.0.0 at execution-specs 391d8a05, in each fixture's _info"
+source = "_info.filling-transition-tool of each fixture, and https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/packages/testing/src/execution_testing/fixtures/base.py#L184"
 
 [generators."EELS 2.19.0, heze devnet"]
 computes = "EELS, the Python execution specification, run as the transition tool by the execution-specs filler"
@@ -210,8 +210,8 @@ source = "_info of each fixture"
 
 [generators."execution-specs filler, no transition tool"]
 computes = "the execution-specs filler alone, which drops the transition tool for a transaction test and computes the hash, the sender and the intrinsic gas itself"
-version = "ethereum-execution-testing 1.0.0 at execution-specs e27f097e"
-source = "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/packages/testing/src/execution_testing/specs/transaction.py#L57-L103"
+version = "ethereum-execution-testing 1.0.0 at execution-specs 391d8a05"
+source = "https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/packages/testing/src/execution_testing/specs/transaction.py#L57-L103"
 
 [generators."go-ethereum default genesis"]
 computes = "core.DefaultGenesisBlock of go-ethereum, written out by scripts/gen_genesis_config.go of execution-specs"
@@ -570,7 +570,7 @@ generator = "Wycheproof P-256, converted by execution-specs"
 cases = ["osaka/eip7951_p256verify_precompiles/**"]
 subset = "cases 25 and 26 of secp256r1_public_key.json and case 18 of secp256r1_special_points.json, whose Name has no wycheproof/ prefix"
 generator = "not established"
-checked = "the Name of each case, and execution-specs at e27f097e, which holds no record of them"
+checked = "the Name of each case, and execution-specs at 391d8a05, which holds no record of them"
 
 [[directories."tests/execution/precompiles"]]
 cases = ["osaka/eip7883_modexp_gas_increase/**"]
@@ -694,11 +694,15 @@ generator = "hash-to-curve draft vectors"
 cases = ["deserialization_G1/**", "deserialization_G2/**"]
 generator = "bls12-381-tests hand-written"
 
-[[archives."execution-specs/tests@v21.0.2/fixtures"]]
-cases = ["fixtures/blockchain_tests/**", "fixtures/blockchain_tests_engine/**", "fixtures/blockchain_tests_engine_x/**", "fixtures/state_tests/**"]
+[[archives."execution-specs/tests@v21.0.3/fixtures"]]
+cases = [
+  "fixtures/blockchain_tests/**", "fixtures/blockchain_tests_engine/**",
+  "fixtures/blockchain_tests_engine_reorg/**", "fixtures/blockchain_tests_engine_x/**",
+  "fixtures/state_tests/**",
+]
 generator = "EELS 2.19.0"
 
-[[archives."execution-specs/tests@v21.0.2/fixtures"]]
+[[archives."execution-specs/tests@v21.0.3/fixtures"]]
 cases = ["fixtures/transaction_tests/**"]
 generator = "execution-specs filler, no transition tool"
 

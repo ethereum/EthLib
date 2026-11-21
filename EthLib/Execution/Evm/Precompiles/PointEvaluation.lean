@@ -20,29 +20,16 @@ The call data names the blob by the versioned hash of its commitment.
 namespace EthLib.Execution.Evm.Precompiles.PointEvaluation
 
 open EthLib.Base (Bytes32 natToBytes packBytes readBytes)
-open EthLib.Cryptography.Bls (G2 Fr)
-open EthLib.Cryptography.Kzg (Bytes48 kzgCommitmentToVersionedHash validateKzgG1Point
+open EthLib.Cryptography.Bls (Fr)
+open EthLib.Cryptography.Kzg (Bytes48 TrustedSetup kzgCommitmentToVersionedHash validateKzgG1Point
   verifyKzgProofWith)
+open EthLib.Cryptography.Kzg.Constants (FIELD_ELEMENTS_PER_BLOB)
 
 /-- The size of the call data: a versioned hash, two field elements and two compressed G1 points. -/
 def INPUT_BYTES : Nat := 192
 
 /-- The price of every call, from EIP-4844, Parameters. -/
 def GAS_POINT_EVALUATION : Nat := 50000
-
-/-- `FIELD_ELEMENTS_PER_BLOB`: the number of field elements in a blob, which the output reports. -/
-def FIELD_ELEMENTS_PER_BLOB : Nat := 4096
-
-/-- `[tau]_2`, the compressed G2 point of the trusted setup for the secret `tau`.
-
-It is entry 1 of `g2_monomial` in the KZG trusted setup, which `Kzg.TrustedSetupData` holds too. -/
-def KZG_SETUP_G2_MONOMIAL_1 : Vector UInt8 96 := #v[
-    0xb5, 0xbf, 0xd7, 0xdd, 0x8c, 0xde, 0xb1, 0x28, 0x84, 0x3b, 0xc2, 0x87, 0x23, 0x0a, 0xf3, 0x89,
-    0x26, 0x18, 0x70, 0x75, 0xcb, 0xfb, 0xef, 0xa8, 0x10, 0x09, 0xa2, 0xce, 0x61, 0x5a, 0xc5, 0x3d,
-    0x29, 0x14, 0xe5, 0x87, 0x0c, 0xb4, 0x52, 0xd2, 0xaf, 0xaa, 0xab, 0x24, 0xf3, 0x49, 0x9f, 0x72,
-    0x18, 0x5c, 0xbf, 0xee, 0x53, 0x49, 0x27, 0x14, 0x73, 0x44, 0x29, 0xb7, 0xb3, 0x86, 0x08, 0xe2,
-    0x39, 0x26, 0xc9, 0x11, 0xcc, 0xec, 0xea, 0xc9, 0xa3, 0x68, 0x51, 0x47, 0x7b, 0xa4, 0xc6, 0x0b,
-    0x08, 0x70, 0x41, 0xde, 0x62, 0x10, 0x00, 0xed, 0xc9, 0x8e, 0xda, 0xda, 0x20, 0xc1, 0xde, 0xf2]
 
 /-- Why a point evaluation call fails. -/
 inductive PointEvaluationError where
@@ -58,9 +45,7 @@ inductive PointEvaluationError where
   | invalidFieldElement (value : Nat)
   /-- The proof `proof` is not a valid compressed G1 point in the subgroup. -/
   | invalidProof (proof : Bytes48)
-  /-- `[tau]_2` does not decompress.
-
-  The source decompresses the same constant, and fails the same way if it is invalid. -/
+  /-- `[tau]_2`, `G2` point 1 of the embedded trusted setup, does not decode. -/
   | invalidTrustedSetup
   /-- The pairing check fails: the proof does not show `p(z) = y`. -/
   | proofRejected
@@ -108,6 +93,8 @@ def PointEvaluationError.code : PointEvaluationError → UInt32
 
 It decodes the inputs and `[tau]_2`, then runs the KZG check with `[tau]_2` alone.
 
+`[tau]_2` is `G2` point 1 of the embedded trusted setup, decoded alone on each call.
+
 The check holds when the quotient `(p(X) - y) / (X - z)` is a polynomial. -/
 def verifyKzgProof (commitment : Bytes48) (z y : Bytes32) (proof : Bytes48) :
     Except PointEvaluationError Bool := do
@@ -119,7 +106,7 @@ def verifyKzgProof (commitment : Bytes48) (z y : Bytes32) (proof : Bytes48) :
   let yField ← (Fr.fromBytesBE y).mapError fun _ =>
     .invalidFieldElement (EthLib.Base.bytesToNat y.toList)
   let proofPoint ← (validateKzgG1Point proof).mapError fun _ => .invalidProof proof
-  let tau ← (G2.uncompress KZG_SETUP_G2_MONOMIAL_1).mapError fun _ => .invalidTrustedSetup
+  let tau ← (TrustedSetup.g2MonomialOfHex 1).mapError fun _ => .invalidTrustedSetup
   return verifyKzgProofWith tau commitmentPoint zField yField proofPoint
 
 /-- The output of every successful call: two 32-byte big-endian words.

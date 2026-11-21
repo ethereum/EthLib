@@ -163,8 +163,8 @@ def test_custody_columns() -> None:
 
 def test_inclusion_lists_from_heze() -> None:
     # The node received no inclusion list.
-    assert prepare("heze", FULL)["inclusionListTransactions"] == []
-    assert "inclusionListTransactions" not in prepare("gloas", FULL)
+    assert prepare("heze", FULL)["payloadAttributes"]["inclusionListTransactions"] == []
+    assert "inclusionListTransactions" not in prepare("gloas", FULL)["payloadAttributes"]
 
 
 def test_pending_head() -> None:

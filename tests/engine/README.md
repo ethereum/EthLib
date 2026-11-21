@@ -1,8 +1,8 @@
 # Engine API test vectors
 
 `new_payload.json` holds calls of `engine_newPayload` from the engine blockchain tests of `ethereum/execution-specs`.
-They come from the release `tests@v21.0.2`, whose target is commit `e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e`, under CC0-1.0.
-Its archive `fixtures.tar.gz` has sha256 `e2fa7ea2ea516459f9ab92284b2927892f318f4e1f78ca802cb05a6c3b479ed9`.
+They come from the release `tests@v21.0.3`, whose target is commit `391d8a05d5cb182542ac7e7330c858b6ee03f990`, under CC0-1.0.
+Its archive `fixtures.tar.gz` has sha256 `46bd48fb71a23da084218fe856fe442ab0c8d00c85c1c1aead0d2a965804fd24`.
 
 The cases come from the directory `blockchain_tests_engine`, for the networks from Paris to Amsterdam.
 Amsterdam has two networks here: `Amsterdam` and `BPO2ToAmsterdamAtTime15k`.

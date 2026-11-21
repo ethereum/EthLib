@@ -1,62 +1,10 @@
 module
 
-import EthLib.Base.Proofs.Nat
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumReserve
-public import EthLib.Consensus.Proofs.Transition.BalanceDrift
-public import EthLib.Consensus.Proofs.Transition.FfgJustification
-import EthLib.Consensus.Proofs.Transition.ActiveKept
-import EthLib.Consensus.Proofs.Transition.SlashedExit
-public import EthLib.Consensus.Proofs.Transition.SlashedPersistence
-public import EthLib.Consensus.Proofs.Transition.EpochReads
-import EthLib.Consensus.Proofs.Transition.PendingConsolidations
-import EthLib.Consensus.Proofs.Transition.Committees
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Penalties
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Contracts.Ledger
-import EthLib.Consensus.Proofs.Transition.EpochPending
-import EthLib.Consensus.Proofs.Transition.Operations
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Reserved.Operations
-import EthLib.Consensus.Proofs.Transition.Block
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Whistleblower
-import EthLib.Consensus.Proofs.DirectSafety.BalanceSources
-import EthLib.Consensus.Proofs.Mutators
-import EthLib.Consensus.Proofs.Transition.Trace
-import Mathlib.Data.Nat.Notation
-import EthLib.Consensus.Proofs.Transition.EpochUpdates
-import EthLib.Consensus.Proofs.Transition.ForkBoundary
-import EthLib.Consensus.Proofs.Transition.StateTransition
-import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
-import EthLib.Consensus.Proofs.Transition.BranchLedger
-import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Assembly
-import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 import EthLib.Consensus.Proofs.Transition.InactivityLeakBound
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumDriftBound
-import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
-import EthLib.Consensus.Proofs.Transition.ValidatorCaps
-public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Bound
-import EthLib.Consensus.Proofs.Transition.Totality.Supply
-import EthLib.Consensus.Proofs.Transition.EffectiveFall
-import EthLib.Consensus.Proofs.DirectSafety.Evidence
-import EthLib.Consensus.Proofs.DirectSafety.Fields
-import EthLib.Consensus.Proofs.Transition.ValidatorKeys
-import EthLib.Consensus.Proofs.Transition.ChainRoots
-import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
-import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
 import EthLib.Consensus.Proofs.Transition.SlashedFlags
 import EthLib.Consensus.Proofs.Transition.LookaheadActive
-import Mathlib.Data.Nat.ModEq
-import EthLib.Consensus.Proofs.DirectSafety.IntervalBounds
-import EthLib.Consensus.Proofs.Transition.BlockCredits
 import EthLib.Consensus.Proofs.DirectSafety.Apriori.BlockFold
-public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Ceiling
-public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Issuance
-public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Ownership
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Branch
-import EthLib.Consensus.Proofs.Transition.EpochRewards
-import EthLib.Consensus.Proofs.Transition.RewardDeltas
-import EthLib.Consensus.Proofs.Transition.FfgStake
-import EthLib.Consensus.Proofs.Time
-import EthLib.Consensus.Proofs.Participation
 import Mathlib.Algebra.Order.Floor.Div
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.PinDriftBound.EventsKept
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.PinDriftBound.SlashFloor
@@ -71,20 +19,18 @@ section
 
 /-! ## The credits of one key along a run -/
 
-namespace PinKeys
+namespace PinDrift.Internal
 
 open Base Uint64 Models DirectSafety
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
 
 /-- The credit of key `i` in one replayed event. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.keyCredit (i : ℕ) (e : BalanceEvent
-  preset) : ℕ :=
+def keyCredit (i : ℕ) (e : BalanceEvent preset) : ℕ :=
   actualBalanceAt e.after i - actualBalanceAt e.before i
 
 /-- The credits to the key in one step, from the sources that count at that kind of step. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.stepCredit (blockP slotP :
-  BalanceSource → Bool) (v : ℕ)
+def stepCredit (blockP slotP : BalanceSource → Bool) (v : ℕ)
     {x y : ForkedBeaconState preset} (step : Step config checks x y) : ℕ :=
   let events := step.balanceEvents.toOption.getD []
   match step with
@@ -94,8 +40,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.stepCredit (blockP 
 /-- The credits to the key over a run.
 
 The scan includes only steps that start by epoch `high + 1`. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditScan (blockP slotP :
-  BalanceSource → Bool) (v high : ℕ)
+def creditScan (blockP slotP : BalanceSource → Bool) (v high : ℕ)
     {x : ForkedBeaconState preset} :
     {y : ForkedBeaconState preset} → Run config checks x y → ℕ
   | _, .nil => 0
@@ -106,8 +51,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditScan (blockP 
     else before
 
 /-- The credits that a scan reads from a run, after one more step. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditScan_snoc (blockP slotP :
-  BalanceSource → Bool) (v high : ℕ)
+theorem creditScan_snoc (blockP slotP : BalanceSource → Bool) (v high : ℕ)
     {x m y : ForkedBeaconState preset} (pre : Run config checks x m)
     (step : Step config checks m y) :
     PinDrift.Internal.creditScan blockP slotP v high (pre.snoc step) =
@@ -117,8 +61,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditScan_snoc
       else PinDrift.Internal.creditScan blockP slotP v high pre := rfl
 
 /-- The credits to a key in two consecutive runs add. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditScan_append (blockP slotP :
-  BalanceSource → Bool) (v high : ℕ)
+theorem creditScan_append (blockP slotP : BalanceSource → Bool) (v high : ℕ)
     {x m y : ForkedBeaconState preset} (pre : Run config checks x m)
     (post : Run config checks m y) :
     (PinDrift.Internal.creditScan blockP slotP v high (pre.append post)) =
@@ -134,8 +77,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditScan_appe
     · exact ih
 
 /-- The credits that a scan reads are 0 if each step of the run credits 0. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditScan_eq_zero_of_steps (blockP
-  slotP : BalanceSource → Bool) (v high : ℕ)
+theorem creditScan_eq_zero_of_steps (blockP slotP : BalanceSource → Bool) (v high : ℕ)
     {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (zero : ∀ {m n : ForkedBeaconState preset} (step : Step config checks m n),
       tail.Contains step → PinDrift.Internal.stepCredit blockP slotP v step = 0) :
@@ -180,8 +122,7 @@ The credits of a key from a source set `src` over the events are at most its sca
 Each kind of step either counts all of `src`, or records no credit from `src`.
 
 That holds for a run from Electra to before Glamsterdam. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditScan_bounds {ι : Type} (S :
-  Finset ι) (key : ι → ℕ)
+theorem creditScan_bounds {ι : Type} (S : Finset ι) (key : ι → ℕ)
     (blockP slotP : BalanceSource → Bool) (high : ℕ) (T : BalanceEvent preset → ℕ)
     {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) {events : List (BalanceEvent preset)}
@@ -300,8 +241,7 @@ A block step counts the events of `blockP`.
 A slot step counts the events of `slotP`.
 
 So an event of the run is counted at most once. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditScan_sum_le {ι : Type} (S :
-  Finset ι) (key : ι → ℕ)
+theorem creditScan_sum_le {ι : Type} (S : Finset ι) (key : ι → ℕ)
     (blockP slotP : BalanceSource → Bool) (high : ℕ) (T : BalanceEvent preset → ℕ)
     {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) {events : List (BalanceEvent preset)}
@@ -316,8 +256,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditScan_sum_
 /-- The net rise of a key in one step.
 
 A block step counts the rise of the key's balance across it, and a slot step counts nothing. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.stepNet (v : ℕ) {x y :
-  ForkedBeaconState preset} (step : Step config checks x y) : ℕ :=
+def stepNet (v : ℕ) {x y : ForkedBeaconState preset} (step : Step config checks x y) : ℕ :=
   match step with
   | .block .. => actualBalanceAt y v - actualBalanceAt x v
   | .slot _ => 0
@@ -329,8 +268,7 @@ A block step counts the rise of the key's balance across the whole step.
 A credit that the same step takes back counts for nothing.
 
 The scan includes only steps that start by epoch `high + 1`. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.netScan (v high : ℕ) {x :
-  ForkedBeaconState preset} :
+def netScan (v high : ℕ) {x : ForkedBeaconState preset} :
     {y : ForkedBeaconState preset} → Run config checks x y → ℕ
   | _, .nil => 0
   | _, .snoc (middle := m) pre step =>
@@ -339,8 +277,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.netScan (v high : �
     else PinDrift.Internal.netScan v high pre
 
 /-- The net credits to a key in the block steps of a run, after one more step. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.netScan_snoc (v high : ℕ) {x m y :
-  ForkedBeaconState preset}
+theorem netScan_snoc (v high : ℕ) {x m y : ForkedBeaconState preset}
     (pre : Run config checks x m) (step : Step config checks m y) :
     PinDrift.Internal.netScan v high (pre.snoc step) =
       if (getCurrentEpoch m.state).toNat ≤ high + 1 then
@@ -348,19 +285,16 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.netScan_snoc (v
       else PinDrift.Internal.netScan v high pre := rfl
 
 /-- A run with no step has no net credits. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.netScan_nil (v high : ℕ) {x :
-  ForkedBeaconState preset} :
+theorem netScan_nil (v high : ℕ) {x : ForkedBeaconState preset} :
     PinDrift.Internal.netScan v high (Run.nil : Run config checks x x) = 0 := rfl
 
 /-- A run with no step has no credits to scan. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditScan_nil (blockP slotP :
-  BalanceSource → Bool) (v high : ℕ)
+theorem creditScan_nil (blockP slotP : BalanceSource → Bool) (v high : ℕ)
     {x : ForkedBeaconState preset} :
     (PinDrift.Internal.creditScan blockP slotP v high (Run.nil : Run config checks x x)) = 0 := rfl
 
 /-- Events within their credit limits credit the slashing events at most their limits. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashing_credits_le_limits (events
-  : List (BalanceEvent preset))
+theorem slashing_credits_le_limits (events : List (BalanceEvent preset))
     (bounded : ∀ e ∈ events, e.credits ≤ e.creditLimit) :
     ((events.filter (·.source = .slashings)).map BalanceEvent.credits).sum ≤
       (events.map fun e => if e.source = .slashings then e.creditLimit else 0).sum := by
@@ -376,11 +310,11 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashing_credit
         List.map_cons, List.sum_cons]
       omega
 
-end PinKeys
+end PinDrift.Internal
 
 /-! ## A floor and a ceiling on one key's effective balance -/
 
-namespace PinKeyFloor
+namespace PinDrift.Internal
 
 open Base Uint64 Models
 
@@ -581,7 +515,7 @@ private theorem effective_ceiling_slot {f : Fork} {s t : BeaconState preset f}
 
 section Rewards
 
-open DirectSafety PinKeys
+open DirectSafety
 
 /-! ### One key's reward in an epoch pass -/
 
@@ -592,8 +526,7 @@ A slot step's events are those of its epoch pass and its upgrades.
 So its `.rewards` events are the epoch's rewards.
 
 A block step has none counted: its proposer credits are charged elsewhere. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.epochRewards (v : ℕ) {x y :
-  ForkedBeaconState preset}
+def epochRewards (v : ℕ) {x y : ForkedBeaconState preset}
     (step : Step config checks x y) : ℕ :=
   match step with
   | .slot ok =>
@@ -901,8 +834,7 @@ The key's stake at the start is at most `E`.
 `P` bounds the rate read at the active stake, scaled by the previous epoch's share of it.
 
 A key past the registry of a state with matched balances gets no reward. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.epochRewards_le {m n :
-  ForkedBeaconState preset}
+theorem epochRewards_le {m n : ForkedBeaconState preset}
     (step : Step config checks m n) (altair : .altair ≤ m.fork) (early : n.fork < .glamsterdam)
     (v : ℕ) (known : v < m.state.validators.data.size ∨ BalancesMatch m.state) (E P : ℕ)
     (envelope : v.toUInt64 ∉ getActiveValidatorIndices m.state (getPreviousEpoch m.state) ∨
@@ -1024,8 +956,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.epochRewards_le
           exact envelope))
 
 /-- A step raises the balance of a key by at most the credits of its events. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.step_balance_le_events {m n :
-  ForkedBeaconState preset}
+theorem step_balance_le_events {m n : ForkedBeaconState preset}
     (step : Step config checks m n) (early : n.fork < .glamsterdam) (i : ℕ)
     {events : List (BalanceEvent preset)} (ok : step.balanceEvents = .ok events) :
     actualBalanceAt n i ≤ actualBalanceAt m i + (events.map (PinDrift.Internal.keyCredit i)).sum :=
@@ -1043,8 +974,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.step_balance_le
 A block step counts the rise of the key's balance across the whole step.
 
 A slot step counts the credits of its events from the sources other than the epoch rewards. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.step_balance_le {m n :
-  ForkedBeaconState preset} (step : Step config checks m n)
+theorem step_balance_le {m n : ForkedBeaconState preset} (step : Step config checks m n)
     (early : n.fork < .glamsterdam) (i : ℕ) :
     actualBalanceAt n i ≤ actualBalanceAt m i + PinDrift.Internal.epochRewards i step +
       PinDrift.Internal.stepNet i step + PinDrift.Internal.stepCredit (fun _ => false) (fun s =>
@@ -1075,8 +1005,7 @@ The epoch rewards are those of the epochs that the run ends, at the rate given b
 The other credits are the net rises of its block steps and the credits of its slot steps.
 
 The slot-step credits leave out the epoch rewards. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditBound {x y : ForkedBeaconState
-  preset} (tail : Run config checks x y)
+def creditBound {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (i high E P capHigh : ℕ) : ℕ :=
   min (actualBalanceAt x i) capHigh +
     ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) *
@@ -1146,8 +1075,7 @@ Suppose also that `E` is at least the greatest effective balance that the bound 
 Then the balance at every state is at most its start, plus the epoch rewards at the rate of `E`.
 
 It also adds the other credits that the events of the run give the key. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.effective_floor_pair {x y :
-  ForkedBeaconState preset}
+theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ x.fork)
     (i : ℕ) (inside : i < x.state.validators.data.size)
     (floor capLow capHigh high E P : ℕ) :
@@ -1386,8 +1314,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.effective_f
 Its effective balance at the end is at least the least of three values.
 
 They are its effective balance at the start, `capLow`, and `floor` rounded down to an increment. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.effective_floor_rounded {x y :
-  ForkedBeaconState preset}
+theorem Run.effective_floor_rounded {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ x.fork)
     (i : ℕ) (inside : i < x.state.validators.data.size) (floor capLow : ℕ)
     (balanceFloor : ∀ z ∈ tail.balancePath, floor ≤ actualBalanceAt z i)
@@ -1442,9 +1369,7 @@ If no epoch boundary is crossed, it is the effective balance at the start.
 After a boundary, it is at most `ceil` plus the downward band.
 
 The epoch never moves back. -/
-theorem
-  _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.effective_ceiling_of_balance_ceiling
-  {x y : ForkedBeaconState preset}
+theorem Run.effective_ceiling_of_balance_ceiling {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ x.fork)
     (i : ℕ) (inside : i < x.state.validators.data.size) (ceil capHigh : ℕ)
     (alignedHigh : capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
@@ -1461,7 +1386,7 @@ theorem
   (PinDrift.Internal.Run.effective_floor_pair tail early fulu i inside 0 0 capHigh 0 0 0).2.2.1 ceil
     alignedHigh startCap balanceCeil capCeil
 
-end PinKeyFloor
+end PinDrift.Internal
 
 end
 
@@ -1469,7 +1394,7 @@ section
 
 /-! ## The penalty rate of one key in a rewards pass -/
 
-namespace PinKeyFloor
+namespace PinDrift.Internal
 
 open Base Uint64 Models
 
@@ -1498,8 +1423,7 @@ The flag term is `40 / 64` of a base reward per increment for each increment.
 It fits in `2 * (increments * perIncrement)`.
 
 The floor of a quotient that is at least one is at least half of it. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.passPenaltyRate_le_leak (z :
-  ForkedBeaconState preset) (v : ℕ) (pulledTotal : ℕ)
+theorem passPenaltyRate_le_leak (z : ForkedBeaconState preset) (v : ℕ) (pulledTotal : ℕ)
     (scoreBound : ℕ) (facts : PinPresetFacts preset)
     (pulledFits : pulledTotal < 2 ^ 64)
     (aligned : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∣ effectiveAt z v)
@@ -1600,7 +1524,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.passPenaltyRate
     Nat.div_le_div_right (Nat.mul_le_mul_left _ scored)
   exact Nat.add_le_add rewardRate scoreRate
 
-end PinKeyFloor
+end PinDrift.Internal
 
 end
 
@@ -1608,7 +1532,7 @@ section
 
 /-! ## Credits to exiting keys along a run -/
 
-namespace PinKeys
+namespace PinDrift.Internal
 
 open Base Uint64 Models DirectSafety
 
@@ -1617,8 +1541,7 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
 /-! ## Deposits leave the balance of an exiting key alone -/
 
 /-- Every exiting key of the first state keeps its balance in the second state. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.KeepsExiting {f g : Fork} (s :
-  BeaconState preset f) (t : BeaconState preset g) :
+def KeepsExiting {f g : Fork} (s : BeaconState preset f) (t : BeaconState preset g) :
     Prop :=
   ∀ (i : ℕ) (v : Validator), s.validators.data[i]? = some v → v.exitEpoch.toNat < 2 ^ 64 - 1 →
     (getCurrentEpoch s).toNat < v.withdrawableEpoch.toNat →
@@ -1629,8 +1552,7 @@ private def Quiet (events : List (BalanceEvent preset)) : Prop :=
   ∀ e ∈ events, e.source = .deposits → PinDrift.Internal.KeepsExiting e.before.state e.after.state
 
 /-- The event raises no balance of the registry. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Unconditional (e : BalanceEvent preset)
-  : Prop :=
+def Unconditional (e : BalanceEvent preset) : Prop :=
   ∀ i, actualBalanceAt e.after i ≤ actualBalanceAt e.before i
 
 /-- The empty list of events is quiet. -/
@@ -1765,8 +1687,7 @@ private theorem blockReplay_invariant {f : Fork} (electra : .pectra ≤ f) (earl
   exact record (by decide : BalanceSource.sync ≠ .deposits) (by decide) requestedQuiet rest
 
 /-- From Electra, the deposit events of a block replay raise no balance. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.blockReplay_unconditional {f :
-  Fork} (electra : .pectra ≤ f)
+theorem blockReplay_unconditional {f : Fork} (electra : .pectra ≤ f)
     (early : f < .glamsterdam)
     (engine : ExecutionEngine preset f) (s : BeaconState preset f)
     (block : BeaconBlock preset f) {post : BalanceReplay preset f}
@@ -1788,8 +1709,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.blockReplay_unc
     engine s block ok
 
 /-- No operation of a block records a consolidation event. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.blockReplay_noConsolidations {f :
-  Fork} (electra : .pectra ≤ f)
+theorem blockReplay_noConsolidations {f : Fork} (electra : .pectra ≤ f)
     (early : f < .glamsterdam) (engine : ExecutionEngine preset f) (s : BeaconState preset f)
     (block : BeaconBlock preset f) {post : BalanceReplay preset f}
     (ok : blockBalanceReplay (config := config) (checks := checks)
@@ -1874,8 +1794,7 @@ private theorem slot_quiet {x y : ForkedBeaconState preset}
 /-- A deposit event of a run raises no balance, or it is an epoch's deposit event of a slot step.
 
 Then it leaves the balance of an exiting key alone. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Located {x y : ForkedBeaconState
-  preset} (tail : Run config checks x y)
+def Located {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (e : BalanceEvent preset) : Prop :=
   PinDrift.Internal.Unconditional e ∨ ∃ (u w : ForkedBeaconState preset)
     (ok : advanceSlotAcross config checks u = .ok w) (es : List (BalanceEvent preset)),
@@ -1887,8 +1806,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Located {x y : Fork
 A deposit event raises no balance, or it is in the events of a slot step of the run.
 
 A consolidation event is in the events of a slot step of the run, since no block records one. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.run_located {x y :
-  ForkedBeaconState preset} (tail : Run config checks x y)
+theorem run_located {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (electra : .pectra ≤ x.fork) (early : y.fork < .glamsterdam) (high : ℕ)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
     (∀ e ∈ events, e.source = .deposits → PinDrift.Internal.Located tail e) ∧
@@ -2662,9 +2580,7 @@ private theorem capBound_sum (x : ForkedBeaconState preset) (high : ℕ)
 `exitedAt` is that fact at the state before each deposit event of a slot step.
 
 A block deposit needs none: from Electra it raises no balance. -/
-theorem
-  _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.exiting_deposit_credit_zero_of_exited
-  {x y : ForkedBeaconState preset}
+theorem Run.exiting_deposit_credit_zero_of_exited {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (electra : .pectra ≤ x.fork) (early : y.fork < .glamsterdam)
     (high : ℕ) {events : List (BalanceEvent preset)}
     (replayed : tail.balanceEvents high = .ok events) (i : ℕ)
@@ -2737,8 +2653,7 @@ private theorem Run.exiting_deposit_credit_zero_of_kept {x y : ForkedBeaconState
 The key stays not withdrawable through the run's end.
 
 The withdrawable epoch cannot drop before any deposit event of a slot step. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.exiting_deposit_credit_zero {g
-  x y : ForkedBeaconState preset}
+theorem Run.exiting_deposit_credit_zero {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (tail : Run config checks x y) (fulu : .fusaka ≤ x.fork) (early : y.fork < .glamsterdam)
     (high : ℕ) {events : List (BalanceEvent preset)}
@@ -2792,8 +2707,7 @@ private theorem Step.charge_deposit_credit_zero {a b : ForkedBeaconState preset}
 The key is exited and not withdrawable at the run's end.
 
 The step is counted by the replay. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.charge_deposit_credit_zero {g a
-  b y : ForkedBeaconState preset}
+theorem Run.charge_deposit_credit_zero {g a b y : ForkedBeaconState preset}
     (shared : Run config checks g a) (genesis : Genesis (config := config) (checks := checks) g)
     (step : Step config checks a b) (post : Run config checks b y) (fulu : .fusaka ≤ a.fork)
     (early : y.fork < .glamsterdam) (high : ℕ)
@@ -2828,9 +2742,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.charge_depo
 They are at most the caps at X of the due entries of X's queue whose target is in `T`.
 
 Each entry credits only its target, so the sum over the entries splits by target. -/
-theorem
-  _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.consolidation_credits_le_X_targets {g
-  x y : ForkedBeaconState preset}
+theorem Run.consolidation_credits_le_X_targets {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (caps : CapOrder preset)
     (tail : Run config checks x y) (electra : .pectra ≤ x.fork) (early : y.fork < .glamsterdam)
@@ -2855,7 +2767,7 @@ theorem
   conv_rhs => rw [← split, List.filter_append, List.map_append, List.sum_append]
   exact Nat.le_add_right _ _
 
-end PinKeys
+end PinDrift.Internal
 
 end
 
@@ -2863,7 +2775,7 @@ section
 
 /-! ## A validator created in a step has no exit assigned -/
 
-namespace PinKeys
+namespace PinDrift.Internal
 
 open Base Uint64 Models DirectSafety
 
@@ -3040,8 +2952,7 @@ private theorem ExitFarFrom.of_chainStep {a b : ForkedBeaconState preset}
 /-- Along a run from Electra, a validator can gain an exit epoch only through a departure charge.
 
 The charge is at that exit epoch. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.charge_of_exit {x y :
-  ForkedBeaconState preset}
+theorem Run.charge_of_exit {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (electra : .pectra ≤ x.fork) (early : y.fork < .glamsterdam)
     (i : ℕ) (unset : ∀ v, x.state.validators.data[i]? = some v → v.exitEpoch = FAR_FUTURE_EPOCH)
     (v : Validator) (found : y.state.validators.data[i]? = some v)
@@ -3065,7 +2976,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.charge_of_e
     exact ⟨c, by rw [Run.departureCharges_append]; exact List.mem_append_right _ member, index,
       epoch⟩
 
-end PinKeys
+end PinDrift.Internal
 
 end
 
@@ -3073,9 +2984,9 @@ section
 
 /-! ## The floor path of a new key's effective balance -/
 
-namespace PinKeys
+namespace PinDrift.Internal
 
-open Base Uint64 Models DirectSafety PinKeyFloor PinSlashFloor
+open Base Uint64 Models DirectSafety
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
 
@@ -3298,8 +3209,7 @@ It is not active by the epoch after the start of the run.
 At the state `z` that the run reaches in that epoch, the key holds its activation epoch `A`.
 
 Activity up to `A` is fixed at `z`, since the seed lookahead is at least three epochs. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.start_state {x y :
-  ForkedBeaconState preset} (tail : Run config checks x y)
+theorem Run.start_state {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (window : preset.SeedLookaheadAtLeastThree) (i : ℕ)
     (pending : ∀ v, x.state.validators.data[i]? = some v →
       (getCurrentEpoch x.state).toNat + 1 < v.activationEpoch.toNat)
@@ -4521,8 +4431,7 @@ private theorem final_floor (A inc S effZ effN K : ℕ) (hA : A ≤ K) (hZ : K �
 It is funded: its balance is at least its effective balance, which is at least the maximum.
 
 Its effective balance is at most its balance and the downward band, and it is unslashed. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.funded_at_start {g x z :
-  ForkedBeaconState preset}
+theorem Run.funded_at_start {g x z : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (caps : CapOrder preset) (aligned : MaxEffectiveBalancesAligned preset)
     (electra : .pectra ≤ x.fork) (pre : Run config checks x z) (zEarly : z.fork < .glamsterdam)
@@ -4576,8 +4485,7 @@ The key's sync debits and its partial payments are added back.
 The key is scheduled at the split.
 
 It is not active by the epoch after the split, and it is active at the end. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.new_key_effective_floor {g x y
-  : ForkedBeaconState preset}
+theorem Run.new_key_effective_floor {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (parameters : DirectSafety.Parameters preset) (caps : CapOrder preset)
     (aligned : MaxEffectiveBalancesAligned preset) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
@@ -4710,7 +4618,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.new_key_eff
     ((Nat.sub_le _ _).trans ((Nat.sub_le _ _).trans (by omega))) effZ hBal
   omega
 
-end PinKeys
+end PinDrift.Internal
 
 end
 

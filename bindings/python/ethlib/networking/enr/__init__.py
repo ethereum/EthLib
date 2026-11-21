@@ -92,6 +92,30 @@ def eth_fork_id(record: bytes) -> tuple[bytes, int] | None:
     return _native.enr_eth_fork_id(record)
 
 
+class Endpoint(NamedTuple):
+    """An address and the ports that a node listens on there, each port None when absent."""
+
+    ip: bytes
+    tcp: int | None
+    udp: int | None
+    quic: int | None
+
+
+def endpoints(record: bytes) -> tuple[Endpoint | None, Endpoint | None]:
+    """
+    The IPv4 and IPv6 endpoints of a record, each None when its address is absent.
+
+    The IPv6 endpoint takes the tcp and udp ports when tcp6 and udp6 are absent.
+
+    It does not check the signature.
+    """
+    ipv4, ipv6 = _native.enr_endpoints(record)
+    return (
+        None if ipv4 is None else Endpoint(*ipv4),
+        None if ipv6 is None else Endpoint(*ipv6),
+    )
+
+
 __all__ = [
     "MAX_RECORD_SIZE",
     "from_text",
@@ -104,5 +128,7 @@ __all__ = [
     "ConsensusEntries",
     "consensus_entries",
     "eth_fork_id",
+    "Endpoint",
+    "endpoints",
     "EnrError",
 ]

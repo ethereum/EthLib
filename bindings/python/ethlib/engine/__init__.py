@@ -255,6 +255,12 @@ def get_client_version(
     return _native.engine_get_client_version(code, name, version, commit, request)
 
 
+def get_inclusion_list(candidates: Sequence[bytes], method: str, params: list[Any]) -> list[str]:
+    """The answer to an `engine_getInclusionListV1` call, from candidates in the node's order."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    return _native.engine_get_inclusion_list(list(candidates), request)
+
+
 def error_object(code: int) -> str:
     """The JSON text of the error object of the Engine API error with a code, such as 38006."""
     return _native.engine_error_object(code)
@@ -435,6 +441,7 @@ __all__ = [
     "exchange_transition_configuration",
     "exchange_capabilities",
     "get_client_version",
+    "get_inclusion_list",
     "error_object",
     "WithdrawalEntry",
     "prepare_execution_payload",

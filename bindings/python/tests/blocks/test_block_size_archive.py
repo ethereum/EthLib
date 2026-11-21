@@ -7,7 +7,7 @@ import pytest
 from ethlib.execution import blocks
 from raising import raises
 
-ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
+ARCHIVE = "execution-specs/tests@v21.0.3/fixtures"
 
 _DIRECTORY = "fixtures/blockchain_tests/for_osaka/osaka/eip7934_block_rlp_limit/max_block_rlp_size"
 SOURCES = [

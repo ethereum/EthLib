@@ -8,7 +8,7 @@ from pathlib import Path
 
 import archives
 
-EXECUTION = "execution-specs/tests@v21.0.2/fixtures"
+EXECUTION = "execution-specs/tests@v21.0.3/fixtures"
 # The devnet pre-releases of execution-spec-tests, by the suite name of their report.
 DEVNETS = {
     "tests-heze-devnet": "execution-specs/tests-heze-devnet@v3.0.0/fixtures",

@@ -3,9 +3,9 @@
 `eip198_calls.json` holds the MODEXP calls of the state test `test_modexp` of the execution specification, with the outcome of each at each fork.
 
 - Repository: [`ethereum/execution-specs`](https://github.com/ethereum/execution-specs)
-- Release: `tests@v21.0.2`
-- Commit: `e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e`
-- Archive: `fixtures.tar.gz`, sha256 `e2fa7ea2ea516459f9ab92284b2927892f318f4e1f78ca802cb05a6c3b479ed9`
+- Release: `tests@v21.0.3`
+- Commit: `391d8a05d5cb182542ac7e7330c858b6ee03f990`
+- Archive: `fixtures.tar.gz`, sha256 `46bd48fb71a23da084218fe856fe442ab0c8d00c85c1c1aead0d2a965804fd24`
 - Fixtures: `state_tests/for_*/byzantium/eip198_modexp_precompile/modexp/modexp.json`
 - Licence: CC0-1.0
 

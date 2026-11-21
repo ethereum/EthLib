@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
+ARCHIVE = "execution-specs/tests@v21.0.3/fixtures"
 
 _CASES = Path(__file__).resolve().parents[4] / "tests" / "execution" / "blocks"
 BLOCKS = json.loads((_CASES / "blockchain_tests.json").read_text())

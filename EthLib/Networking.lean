@@ -2,6 +2,7 @@ module
 
 public import EthLib.Networking.Libp2p.Tls
 public import EthLib.Networking.Discv5.Distance
+public import EthLib.Networking.Discv5.Exchange
 public import EthLib.Networking.Devp2p.ForkId
 public import EthLib.Networking.Devp2p.P2p
 public import EthLib.Networking.Devp2p.Session
@@ -15,6 +16,7 @@ public import EthLib.Networking.Encoding.Protobuf
 public import EthLib.Networking.Encoding.Uvarint
 public import EthLib.Networking.Encoding.Varint
 public import EthLib.Networking.Noise.Identity
+public import EthLib.Networking.Enr.Address
 public import EthLib.Networking.Enr.Consensus
 public import EthLib.Networking.Enr.Eth
 public import EthLib.Networking.Enr.Record

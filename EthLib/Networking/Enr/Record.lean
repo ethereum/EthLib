@@ -93,6 +93,14 @@ inductive EnrError where
 
   This happens for the private key zero, and with negligible probability when no nonce is usable. -/
   | signing
+  /-- The value of an address key is not a byte string of the size of its address.
+
+  An IPv4 address has 4 bytes, and an IPv6 address 16. -/
+  | invalidAddress (key : ByteArray) (value : Item)
+  /-- The value of a port key is not a port.
+
+  A port is a big-endian integer below `2^16`, with no leading zero byte. -/
+  | invalidPort (key : ByteArray) (value : Item)
   deriving DecidableEq
 
 /-- The key `id`, in ASCII. -/
@@ -120,12 +128,18 @@ def EnrError.code : EnrError → UInt32
   | .unknownScheme _ => 14
   | .invalidPublicKey => 15
   | .signing => 16
+  | .invalidAddress .. => 17
+  | .invalidPort .. => 18
 
 /-- Whether the key `a` comes before the key `b`, in lexicographic byte order. -/
 def keyLt (a b : ByteArray) : Prop := a.data.toList < b.data.toList
 
 instance (a b : ByteArray) : Decidable (keyLt a b) :=
   inferInstanceAs (Decidable (a.data.toList < b.data.toList))
+
+/-- The value of the pair with the key `key`, if the record has one. -/
+def Enr.get (r : Enr) (key : ByteArray) : Option Item :=
+  (r.pairs.find? (·.1 = key)).map (·.2)
 
 /-- The pairs as RLP items: each key, then its value. -/
 def flatten : List (ByteArray × Item) → List Item
@@ -179,6 +193,12 @@ def decode (bytes : ByteArray) : Except EnrError Enr := do
   | .list (.list _ :: _ :: _) => throw .signatureNotBytes
   | .list items => throw (.tooFewItems items.length)
   | .bytes _ => throw .notAList
+
+/-- The record that an RLP item holds, as the decoder reads the bytes of the item.
+
+A message of node discovery carries a record as such an item. -/
+def ofItem (item : Item) : Except EnrError Enr := do
+  decode (← (Serialization.Rlp.encode item).mapError .rlp)
 
 /-- The prefix of the text form, `enr:`. -/
 def TEXT_PREFIX : List Char := ['e', 'n', 'r', ':']

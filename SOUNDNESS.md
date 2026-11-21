@@ -770,6 +770,21 @@ The secret is then the `x` of their product, as 32 big-endian bytes.
 `ecdsaForgery_of_forgery` (`Networking/Proofs/Enr/Security.lean`) proves that a forged EIP-778 "v4" record gives a forgery of ECDSA with Keccak-256 on a fresh message.
 The security of records then rests on the chosen-message security of that ECDSA, which EthLib assumes and does not prove; the bound on the chosen-message game above is proved only in the bijective random oracle model.
 
+### ENR addresses and ports
+
+`Enr.endpoints` (`Networking/Enr/Address.lean`) reads the IPv4 and IPv6 endpoints of a record from the eight keys `ip`, `ip6`, `tcp`, `tcp6`, `udp`, `udp6`, `quic` and `quic6`.
+The first six come from the key table of [EIP-778](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-778.md#L50-L67), and the consensus networking text states the QUIC ports in its [ENR structure](https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/phase0/p2p-interface.md#L1712-L1731).
+`endpoints_endpointPairs` (`Networking/Proofs/Enr/Address.lean`) states that a record built from the pairs of two endpoints reads them back.
+Where the IPv6 endpoint has no TCP or UDP port, it reads back with the port of the IPv4 endpoint.
+The format cannot express an IPv6 endpoint without a port that the IPv4 endpoint has, so the round trip can give no more.
+`readPort_tcp_of_endpoints` and `readPort_udp_of_endpoints` state the rule "If no `tcp6` / `udp6` port is provided, the `tcp` / `udp` port applies to both IP addresses".
+
+The sources leave two points open, and EthLib reads them as follows.
+The key table calls a port a "big endian integer" with no size.
+EthLib reads a port as an RLP scalar below `2^16`, with no leading zero byte, as every integer of a record is.
+The fallback rule names only `tcp` and `udp`, and no source states one for `quic`.
+So an IPv6 endpoint without `quic6` has no QUIC port, as `quic_of_endpoints` states.
+
 ### alt_bn128
 
 The alt_bn128 theorems check the constants and the group law of `G_1`, which the ECADD, ECMUL and ECPAIRING precompiles use.
@@ -998,6 +1013,9 @@ The reader does not check the two arcs that the first subidentifier combines, si
 `validate_oid_ok_iff`, `validate_null_ok_iff`, `validate_utf8String_ok_iff` and `validate_printableString_ok_iff` state what validation accepts for these tags.
 A NULL is empty, and a UTF8String is the UTF-8 encoding of some characters.
 A PrintableString holds the letters, digits, space and `'()+,-./:=?` of X.680 §41.4.
+`validate_integer_ok_iff`, `validate_octetString` and `validate_ia5String_ok_iff` state what validation accepts for the other primitive tags.
+An INTEGER has one content octet or more, and with two or more its first nine bits are neither all zero nor all one (X.690 §§8.3.1, 8.3.2).
+An OCTET STRING passes whatever its content, and an IA5String passes exactly when each octet is below 128.
 `validate_eq_error_tag` states that a value of every tag outside the subset fails with a tag error.
 `validate_sequence_ok_iff` and `validate_set_ok_iff` state that a SEQUENCE or a SET OF passes exactly when its content reads as values that each pass.
 A SET OF also needs the encodings of those values in ascending order, compared octet by octet (X.690 §11.6).
@@ -1005,7 +1023,6 @@ Both hold for a value whose encoding is longer than its content.
 Every value that the reader returns is one (`size_lt_of_read_ok`, `children_go_sizes`).
 The comparison puts a proper prefix first, where X.690 pads the shorter encoding with zero octets.
 No theorem states that one sibling encoding is never a proper prefix of another.
-No theorem states the validation of INTEGER, OCTET STRING or IA5String.
 Nothing in Lean shows that authentication can succeed; the Python tests check vectors 1 to 4 of libp2p TLS.
 
 ### QUIC wire encodings
@@ -1394,7 +1411,8 @@ They take two hypotheses on the setup.
 `computeCellsAndKzgProofs_blob_spec_ofHex` and `recoverCellsAndKzgProofs_spec_ofHex` state the two theorems for the embedded setup, with neither hypothesis.
 Of the setup, they assume only that it decodes.
 
-`uncompress_KZG_SETUP_G2_MONOMIAL_1` (`Execution/Proofs/Evm/Precompiles/PointEvaluation.lean`) states that the point evaluation precompile uses `G2` point 1 of the embedded setup as `[tau]_2`.
+The point evaluation precompile decodes `G2` point 1 of the embedded setup alone, with `TrustedSetup.g2MonomialOfHex`, and uses it as `[tau]_2`.
+`TrustedSetup.g2MonomialOfHex_eq` (`Proofs/Kzg/TrustedSetup.lean`) states that a point decoded alone is that point of the decoded setup.
 It also assumes only that the setup decodes.
 
 For a well-formed setup, `blobToKzgCommitment_represents` (`Proofs/Kzg/Commitment.lean`) proves that a blob's commitment holds its polynomial at the secret.
@@ -1613,6 +1631,10 @@ No theorem relates the definitions to the Yellow Paper.
 The stack, the frame with its program counter and gas meter, and memory are modelled.
 So are the instructions that read only the stack, memory, call data, code and return data.
 They are in `Execution/Evm/Instructions/StackOnly.lean` and `Execution/Evm/Instructions/MemoryData.lean`.
+
+`selfdestructCost_selfdestructCreatesAccount` (`Execution/Proofs/Evm/Instructions/SelfDestruct.lean`) prices the new beneficiary of SELFDESTRUCT before Glamsterdam.
+From Tangerine Whistle, that beneficiary adds what a CALL of the balance to it pays for the account.
+Before Tangerine Whistle, it adds nothing, since EIP-150 introduced that price together with the base price of SELFDESTRUCT.
 
 A program logic over bytecode is in `Execution/Proofs/Evm/Logic/`.
 Its first relation covers frames that send no message.
@@ -2551,6 +2573,26 @@ No decoded item fails to encode, since a length must reach `2^64` for that.
 If one did, its transaction would have no hash and would reject its whole message, while [Transaction Encoding and Validity](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#transaction-encoding-and-validity) asks only to discard invalid transactions.
 The session accepts an empty Transactions message from the peer, which the source only discourages.
 
+### discv5 answers and their requests
+
+`answersRequest` (`Networking/Discv5/Exchange.lean`) states which message answers a request of discv5: PONG for PING, NODES for FINDNODE and TALKRESP for TALKREQ, with the same request ID.
+`nodesMatch` checks the records of a NODES answer: each is a "v4" record that verifies.
+Each must also lie at one of the requested logarithmic distances from the node that received the FINDNODE.
+`acceptNodes` keeps the answers to the request, at most the smaller of `total` and a limit of the caller.
+`talkResponse` answers a TALKREQ.
+The answers to the topic requests REGTOPIC and TOPICQUERY are not covered.
+They follow [Protocol Messages](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/discv5/discv5-wire.md#L156-L239) in `discv5-wire.md`.
+
+`nodesMatch_zero` (`Networking/Proofs/Discv5/Exchange.lean`) states that with distance 0 alone, every record of a matching answer has the recipient's node ID.
+`nodesMatch_append` states that an answer in several NODES messages matches exactly when each message matches.
+`answersRequest_of_mem_acceptNodes`, `length_acceptNodes_le` and `length_acceptNodes_le_total` state that a node keeps only answers to its request, at most its limit and at most `total`.
+`talkResponse_unknown` states that a TALKREQ for an unknown protocol gets a TALKRESP with its request ID and an empty response, which the source requires.
+`answersRequest_talkResponse` states that this TALKRESP answers the TALKREQ.
+
+The source leaves two points open, and EthLib reads them as follows.
+The message table calls a FINDNODE distance "a positive integer", while the next sentence gives distance 0 a meaning; EthLib accepts 0, and [devp2p#297](https://github.com/ethereum/devp2p/pull/297) proposes that reading.
+The source recommends at most 16 nodes in an answer but fixes no limit on `total`, so the limit is an input.
+
 ### multistream-select negotiation and the TCP upgrade
 
 `listen` and `dial` (`Networking/Libp2p/Multistream.lean`) are the two peers of a multistream-select negotiation, and `run` lets them read each other's messages until both stop.
@@ -2985,6 +3027,33 @@ When a gossip topic carries the same object, that type is the message type of th
 `responseDesc_eq_messageDesc` states it for blocks, finality and optimistic light client updates, sidecars, payload envelopes and inclusion lists, with the size limit of the topic.
 `responseBounds_snd_eq_topicBound` draws the consequence: at a fork that lists the topic, the largest length of such a chunk is the bound of the topic.
 `responseDesc_eq_messageDesc_phase0` states that version 1 of blocks by range and by root sends a Phase 0 block at every fork, since that version has no context bytes.
+
+### The consensus entries that a node writes
+
+A consensus node puts its fork in its node record, so that a peer can tell whether the two follow one chain.
+`enrForkId` (`Consensus/Enr.lean`) gives the `eth2` value at an epoch of the wall clock.
+It holds the digest now, then the version and the epoch of the next fork.
+From Fulu, the next fork is the next epoch at which the digest can change, as the [Fulu networking text](https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/fulu/p2p-interface.md#L865-L954) asks.
+So it counts the epochs of the blob schedule.
+`nextForkDigest` gives the `nfd` value, the digest at that epoch, or four zero bytes when no fork is planned.
+`consensusPairs` writes all the entries as pairs for a new record.
+`mayDisconnect` says when a node may leave a peer for its fork entries.
+
+`computeForkDigest_of_lt_nextForkEpoch` (`Consensus/Proofs/Enr.lean`) states that the digest is the same at every epoch from the current one up to the next fork epoch.
+A next digest epoch that is the first epoch of no consensus fork is a BPO epoch.
+`nextForkVersion_of_nextDigestEpoch` states that before such an epoch, the next version is the current one.
+`readEntries_consensusPairs` states that a node reading a record built from these pairs, at the writer's fork, gets back the values written.
+`lookup_cgc_of_consensusPairs` and `lookup_nfd_of_consensusPairs` state that once Fulu has an epoch, such a record holds `cgc` and `nfd` at every epoch, as the Fulu text requires.
+`mayDisconnect_of_lt` states that with the same digest, a node never disconnects before the earlier of the two next fork epochs.
+`mayDisconnect_of_le` states that it may from then on, when the entries differ.
+
+The sources leave three points open, and EthLib reads them as follows.
+A fork whose epoch is the far future epoch is not planned, so it gives no next fork.
+The text requires `cgc` and `nfd` once Fulu has an epoch, and EthLib also writes them at a fork from Fulu on.
+That second case matters only at the far future epoch, or when a fork after Fulu is planned but not Fulu itself.
+It lets the reader accept the record.
+The Fulu text has a node weigh `nfd` with the next fork of `eth2`, and forbids a disconnect "before the fork boundary" on a mismatch.
+EthLib reads the boundary as the earlier of the two next fork epochs, and applies it to every difference in the next fork while the digest now is the same.
 
 ### Weak subjectivity
 
@@ -3812,7 +3881,7 @@ From Gloas, `prepareExecutionPayloadGloas` reads the fork choice store and a hea
 The proposer builds on the full node of the head when the fork choice says so at the current slot.
 It then applies the payload that the store holds for the head to a copy of the state, and reads the withdrawals of that copy.
 Otherwise it keeps the state and the withdrawals that the state records.
-From Heze it also reads the transactions of the inclusion lists of the slot before, which the payload attributes of the Engine API here do not carry.
+From Heze it also reads the transactions of the inclusion lists of the slot before, and the payload attributes carry them, each as its bytes.
 `prepareExecutionPayloadGloas_eq_ok` states each field of the update.
 `payloadParentGloas_eq_ok` states the two cases of the parent.
 
@@ -3829,7 +3898,7 @@ It rests on `applyParentExecutionPayload_latestExecutionPayloadBid`, which shows
 It shows that the bid passes the checks of its parent hash, its parent root and its mix in the bid step.
 It makes the assumptions of `latestBlockHash_of_prepareExecutionPayloadGloas`.
 It also assumes that the state of the proposer records the root of its latest block header as the root of the slot before.
-No theorem here covers the inclusion lists, which come from the store.
+`prepareExecutionPayloadGloas_eq_ok` states that the inclusion lists of the attributes are those that the store gives on the head.
 
 The Python suite builds the store of a fork choice case and checks the update on the full and the empty parent at Gloas and Heze.
 
@@ -4570,7 +4639,7 @@ Each of these is a function of plain numbers, and its `At` form reads those numb
 ### Engine API
 
 The Engine API is the interface through which the consensus layer drives the execution layer.
-`EthLib/Engine/` holds the checks of `engine_newPayload`, versions 1 to 5, and the choice of the head in `engine_forkchoiceUpdated`, versions 1 to 3.
+`EthLib/Engine/` holds the checks of `engine_newPayload`, versions 1 to 6, and the choice of the head in `engine_forkchoiceUpdated`, versions 1 to 5.
 It also holds the execution engine that the beacon chain calls.
 The theorems are in `Engine/Proofs/`.
 
@@ -4580,10 +4649,12 @@ A payload and its block determine each other.
 `toBlock_shape` gives that shape: no ommers, a difficulty and a nonce of zero, and the RANDAO mix in place of the mix digest.
 
 The checks of `engine_newPayload` answer by the version of the method and the fork of the payload.
-`exists_acceptsFork_iff` (`Proofs/NewPayload.lean`) shows that some version takes a fork exactly when the fork is from Paris to Glamsterdam.
+`exists_acceptsFork_iff` (`Proofs/NewPayload.lean`) shows that some version takes a fork exactly when the fork is from Paris on.
 `acceptsFork_eq_true_iff` gives the forks of each version.
 From version 3, a version takes the forks from the one that adds its last parameter, and none from the one that adds the next.
-Those parameters are the blob hashes and the beacon root of Dencun, the requests of Pectra, and the payload of Glamsterdam with its access list and slot.
+Those parameters are the blob hashes and the beacon root of Dencun, and the requests of Pectra.
+Then come the payload of Glamsterdam with its access list and slot, and the inclusion list of Hegotá.
+So version 6 takes Hegotá alone (`acceptsFork_six_iff`), and version 5 takes Glamsterdam alone (`acceptsFork_five_iff`), as the Bogota update of version 5 asks.
 Version 2 takes Paris and Shapella, and version 1 Paris alone.
 `acceptsGetPayloadFork_eq_true_iff` (`Proofs/GetPayload.lean`) states the same rule for the payloads that `engine_getPayload` returns.
 Its fields are the bundle of Dencun, the requests of Pectra, the cell proofs of Fusaka, and the access list and the slot of Glamsterdam.
@@ -4608,10 +4679,16 @@ The model keeps no invalid block, so a child of a payload rejected by the check 
 A chain whose last block is from Paris on is taken as valid, its terminal block included.
 
 Payload attributes of `engine_forkchoiceUpdated` answer by the version of the method and the fork of their timestamp.
-`exists_attributesTakeFork_iff` (`Proofs/ForkchoiceUpdated.lean`) shows that some version takes a fork exactly when the fork is from Paris to Glamsterdam.
+`exists_attributesTakeFork_iff` (`Proofs/ForkchoiceUpdated.lean`) shows that some version takes a fork exactly when the fork is from Paris on.
 `attributesTakeFork_eq_true_iff` shows that a version takes such a fork exactly when it decodes the structure of the attributes at that fork.
-So version 1 takes Paris, version 2 Paris and Shapella, version 3 the forks from Dencun before Glamsterdam, and version 4 Glamsterdam.
-Version 0 reads as version 1, and a version above 4 as version 4.
+So version 1 takes Paris, version 2 Paris and Shapella, version 3 the forks from Dencun before Glamsterdam, version 4 Glamsterdam and version 5 Hegotá.
+Version 0 reads as version 1, and a version above 5 as version 5.
+Version 5 follows [`bogota.md`](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_forkchoiceupdatedv5), cited at a commit after the pin until #3567 moves it.
+Its attributes add the transactions of the inclusion lists, each any byte string.
+Its payload status has version 2, and its verdict on the inclusion list of a valid head is an input of the C export.
+That verdict needs the execution rules of Bogota, which #1369 tracks.
+A response carries a verdict exactly when its status is valid (`inclusionListVerdict_eq_some_iff`, `inclusionListVerdict_eq_none_iff`).
+The source does not say what version 5 answers for a valid head before Hegotá; the export asks that head for its verdict too.
 
 The Engine API reads its base types with the readers that it shares with the execution JSON-RPC API.
 The readers live below the Execution layer, in `Serialization/JsonRpc.lean`, and their proofs in `Serialization/Proofs/JsonRpc.lean`.
@@ -4643,6 +4720,9 @@ The bitarray of `engine_getBlobs` is given exactly from version 4.
 The decoder of payloads of versions 1 to 3 reads back the JSON of every payload at its fork (`anyPayload_executionPayloadJson`, `Proofs/Json.lean`).
 The extra data must then hold at most 32 bytes.
 The decoder of version 4 does the same from Dencun on, with the block access list and the slot number (`payloadV4_executionPayloadV4Json`).
+Version 6 of `engine_newPayload`, from Bogota, takes the four parameters of version 5 and then the transactions of an inclusion list.
+Its decoder reads back what its writer writes from Dencun on, and the list reads back entry for entry (`newPayloadV6Params_json`, `Proofs/NewPayload.lean`; `inclusionListOfJson_json`, `Proofs/Json.lean`).
+Each entry is any byte string, as [`bogota.md`](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_newpayloadv6) asks after [execution-apis PR #956](https://github.com/ethereum/execution-apis/pull/956), so an entry that does not decode as a transaction still reads.
 The decoder of the forkchoice state reads back the JSON of every state (`forkchoiceStateOfJson_json`, `Proofs/ForkchoiceUpdated.lean`).
 A version of `engine_forkchoiceUpdated` reads back payload attributes whose structure it takes, and they are the attributes at their fork (`payloadAttributesOfVersion_json`).
 The decoder of its parameters reads back the state, and the JSON of the attributes or their absence (`forkchoiceUpdatedParams_json`).
@@ -4658,6 +4738,9 @@ The other two examples are of methods that EthLib does not specify, and the test
 
 The answers have a JSON form too, written and read back.
 The decoder of a payload status reads back what its writer writes, for every status and validation error (`payloadStatusOfJson_json`, `Proofs/Json.lean`).
+So does the decoder of a payload status of version 2, from Bogota (`payloadStatusV2OfJson_json`).
+That holds for every status but `INVALID_BLOCK_HASH`, which version 2 does not have.
+Its extra member says whether the payload satisfies its inclusion list, as a boolean or `null`.
 The decoder of the response of `engine_forkchoiceUpdated` does the same for each status that the method answers (`forkchoiceUpdatedResponseOfJson_json`, `Proofs/ForkchoiceUpdated.lean`).
 A JSON value reads as a payload status exactly when it is an object of this form (`payloadStatusOfJson_eq_ok_iff`, `Proofs/Json.lean`).
 Its members that are not `null` are `status` and, if present, `latestValidHash` and `validationError`.
@@ -4673,6 +4756,8 @@ Its response names a build exactly when the update applies a head and the attrib
 The ID is then that of the head and the attributes.
 Step 5 of [payload building](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-building) asks that each new build has its own ID.
 The bytes that the ID hashes determine the head and the attributes, at one fork (`payloadIdInput_inj`).
+From Hegotá they hold the inclusion list right after the fee recipient, ended by a byte 2.
+Each transaction has a byte 1 before each of its bytes and a byte 0 after it, so the list comes back whatever the lengths.
 The fork is the active fork at the number after the head and at the timestamp.
 The head and the timestamp come first in those bytes, and the tree gives the number of the head.
 Take two calls on one configuration and one tree that start builds.
@@ -4785,6 +4870,14 @@ Besides the fork range, its one hypothesis is that the last block of the chain p
 The chain needs no hypothesis on the parent: without the parent as its last block, the method answers `SYNCING` or refuses earlier, and the state transition of the execution engine fails, so neither route accepts.
 An execution that aborts gives `SYNCING` on one route and a refusal on the other, so it is not accepted either.
 The JSON is part of the statement, so the execution engine accepts no request that has none.
+From Heze the beacon chain calls version 6, with the transactions of the inclusion lists of the slot before, which its caller gives.
+`newPayloadV6Params_newPayloadRequestJson` shows that the JSON of such a request reads back at version 6 with every value of the request.
+The payload comes back at the structure it is written with, together with its access list and its slot.
+The blob hashes, the beacon root, the request lists and the inclusion list come back too.
+No theorem relates the answer to the execution engine there, since the block of a Bogota payload does not run yet (#1369).
+The answer of version 6 has a payload status of version 2.
+Its inclusion list verdict is `null`: the state transition stops at Hegotá, so no payload of Bogota is valid here yet (`newPayloadOnChain_six_ne_valid`).
+The C export of the two routes gives a Heze request an empty inclusion list, which changes neither route.
 The Python tests take the 175 vectors of `tests/engine/new_payload.json` that expect no JSON-RPC error.
 They stop before execution, since the vectors hold no parent state.
 Of these, 155 are requests that the beacon chain can form, and the JSON that EthLib writes for each is the vector itself.
@@ -4798,7 +4891,22 @@ The method then answers with that head and with attributes at the fork of the ne
 The hypotheses are the checks of the attributes against the head: the active fork at the next number and the timestamp is a fork that the version takes.
 That fork must have the structure of the fork of the attributes, and the timestamp must be above the head's.
 The fork of the attributes and that of the next block can differ, as Bellatrix and Paris do, so the theorem compares their structures.
-`forkchoiceUpdatedCall_payloadAttributesJson_of_gloas` states the same from Gloas at version 4, where the checks reduce to the next block being of Glamsterdam and the timestamp being above the head's.
+`forkchoiceUpdatedCall_payloadAttributesJson_of_gloas` states the same at Gloas at version 4.
+There the checks reduce to the next block being of Glamsterdam and the timestamp being above the head's.
+`forkchoiceUpdatedCall_payloadAttributesJson_of_heze` states it from Heze at version 5, for a next block of Hegotá.
+The inclusion lists come back too, as byte strings, whatever their bytes.
+
+From Heze a member of the inclusion list committee asks its execution layer for a list through `engine_getInclusionListV1`.
+The source leaves the choice of the transactions to each node, so the candidates, in the order that the node prefers, are an input.
+The method keeps each candidate in turn when the list still keeps its two rules, and drops the others (`Proofs/GetInclusionList.lean`).
+Every transaction of an answer has at least one byte (`size_pos_of_getInclusionList`).
+The transactions of an answer hold at most 8192 bytes together (`sum_le_of_getInclusionList`).
+Candidates that keep both rules are the answer in full (`selectInclusionList_of_valid`), and the answer keeps their order (`selectInclusionList_sublist`).
+An inclusion list that carries an answer passes the two reject checks of its gossip, on the total size and on empty transactions (`gossip_size_checks_of_getInclusionList`).
+An empty answer, which comes when no candidate fits, is still ignored by gossip.
+The configuration must allow at least 8192 bytes, as mainnet does (`mainnet_maxTransactionsBytesPerInclusionList`).
+The answer is written as an array of byte strings, which reads back (`inclusionListOfJson_json`, `Proofs/Json.lean`).
+The method does not decode the candidates: it takes each as a transaction of EIP-2718 without checking it, and it does not enforce the SHOULD NOT on blob transactions.
 
 The tree of known payloads and the known finalized block are inputs of each call, not state that the model keeps between calls.
 
@@ -5976,7 +6084,7 @@ Until Gloas, the number of the parent execution block is that of the latest payl
 Before the merge the parent is a block of proof of work, which the state does not describe, so the caller gives its number.
 The event covers Bellatrix to Gloas (the forks before Heze), and these gaps remain:
 
-- From Heze, the fifth version of the attributes adds the transactions of the inclusion lists, which the attributes of EthLib lack, and the pinned API names no consensus version for Heze, so the event is not defined there.
+- From Heze, the pinned Beacon API names no consensus version, so the event is not defined there.
 - The parent root is the root of the latest block header of the state, which is right only for a state at the slot of the proposal, after its empty slots; the event takes that state as given.
 - How often the event is sent may depend on the node, so only its content is specified.
 
@@ -7201,12 +7309,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 532 operations and 51 size constants.
-The Python extension calls 532 of the operations and 51 of the constants.
+Lean exports 541 operations and 51 size constants.
+The Python extension calls 541 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12123 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2674), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1609), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (835), `x25519.c` (21), `xmss.c` (344).
+12241 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (342), `engine.c` (225), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1621), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (844), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

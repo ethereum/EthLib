@@ -4,6 +4,7 @@ public import EthLib.Engine.NewPayload
 public import EthLib.Engine.Proofs.Block
 public import EthLib.Engine.Proofs.Json
 import EthLib.Base.Proofs.Toolchain.JsonBasic
+import EthLib.Execution.Proofs.Blocks.Transition
 
 /-!
 # Proofs: the checks of `engine_newPayload`
@@ -27,6 +28,8 @@ The types strictly increase along the list.
 Without a JSON-RPC error, the parameters are an array of the values of the version, none null.
 
 The decoder reads back the parameters that the writer writes, at a version that takes the fork.
+
+The decoder of version 6 reads back its parameters too, with their inclusion list.
 
 A payload that fails the checks is invalid, or has an invalid block hash at version 1.
 
@@ -65,43 +68,48 @@ theorem PayloadError.code_injective (e₁ e₂ : PayloadError) (h : e₁.code = 
   cases e₁ <;> cases e₂ <;>
     first | rfl | (simp only [PayloadError.code] at h; exact absurd h (by decide))
 
-/-- Some version of the method takes a fork exactly when the fork is from Paris to Glamsterdam. -/
+/-- Some version of the method takes a fork exactly when the fork is from Paris on. -/
 theorem exists_acceptsFork_iff (fork : Fork) :
-    (∃ version, acceptsFork version fork = true) ↔ .paris ≤ fork ∧ fork < .hegota := by
+    (∃ version, acceptsFork version fork = true) ↔ .paris ≤ fork := by
   constructor
   · rintro ⟨version, h⟩
     revert h
     unfold acceptsFork
     split <;> cases fork <;> decide
-  · intro ⟨hLow, hHigh⟩
+  · intro hLow
     cases fork <;> first
       | exact absurd hLow (by decide)
-      | exact absurd hHigh (by decide)
       | exact ⟨1, rfl⟩
       | exact ⟨2, rfl⟩
       | exact ⟨3, rfl⟩
       | exact ⟨4, rfl⟩
       | exact ⟨5, rfl⟩
+      | exact ⟨6, rfl⟩
 
 /-- Version 5 of the method takes exactly Glamsterdam. -/
 theorem acceptsFork_five_iff (fork : Fork) : acceptsFork 5 fork = true ↔ fork = .glamsterdam := by
   simp [acceptsFork]
 
+/-- Version 6 of the method takes exactly Hegotá. -/
+theorem acceptsFork_six_iff (fork : Fork) : acceptsFork 6 fork = true ↔ fork = .hegota := by
+  simp [acceptsFork]
+
 /-- A version takes a fork exactly when its parameters are those of the fork.
 
-Versions 3 to 5 start at the forks that add their parameters: Dencun, Pectra and Glamsterdam.
+Versions 3 to 6 start at the forks that add their parameters: Dencun to Hegotá.
 
-Each ends where the next one starts, and version 5 ends after Glamsterdam.
+Each ends where the next one starts, and version 6 takes Hegotá, the last fork.
 
 Version 2 takes Paris and Shapella, and version 1 Paris alone. -/
 theorem acceptsFork_eq_true_iff (version : Nat) (fork : Fork) :
     acceptsFork version fork = true ↔
-      1 ≤ version ∧ version ≤ 5 ∧ .paris ≤ fork ∧ fork < .hegota ∧
+      1 ≤ version ∧ version ≤ 6 ∧ .paris ≤ fork ∧
         (version = 1 → fork < .shapella) ∧ (3 ≤ version ↔ .dencun ≤ fork) ∧
-        (4 ≤ version ↔ .pectra ≤ fork) ∧ (5 ≤ version ↔ .glamsterdam ≤ fork) := by
+        (4 ≤ version ↔ .pectra ≤ fork) ∧ (5 ≤ version ↔ .glamsterdam ≤ fork) ∧
+        (6 ≤ version ↔ .hegota ≤ fork) := by
   match version with
-  | 0 | 1 | 2 | 3 | 4 | 5 => cases fork <;> decide
-  | n + 6 => simp [acceptsFork]
+  | 0 | 1 | 2 | 3 | 4 | 5 | 6 => cases fork <;> decide
+  | n + 7 => simp [acceptsFork]
 
 /-- The payload decoder of version 5 rejects a payload without its block access list.
 
@@ -550,7 +558,43 @@ theorem newPayloadOnChain_of_stateTransition_error {transition : TransitionConfi
     simp [newPayloadOnChain, hCheck, hParent, hHash, hTerminal, hRun, bind, Except.bind, pure,
       Except.pure, Except.toOption]
 
+/-- No payload is valid at version 6 yet: the block of a Bogota payload does not run here.
+
+Its state transition stops at Hegotá, so its answer is never valid, on any chain. -/
+theorem newPayloadOnChain_six_ne_valid {transition : TransitionConfiguration}
+    {totalDifficulty : Nat} {chain : BlockChain} {params : Lean.Json}
+    {answer : PayloadStatus × Option PayloadError × Option (RecentBlock × Execution.State.State)}
+    (h : newPayloadOnChain transition totalDifficulty chain 6 params = .ok answer) :
+    answer.1.status ≠ .valid := by
+  intro valid
+  obtain ⟨status, reason, next⟩ := answer
+  -- A valid answer comes from a block that passed the transition.
+  obtain ⟨block, post, rfl⟩ := (valid_iff_of_newPayloadOnChain h).mp valid
+  obtain ⟨-, checked, -, hRun, -⟩ := of_newPayloadOnChain_some h
+  -- Version 6 takes Hegotá alone, where the transition stops.
+  have hegota : checked.fork = .hegota := (acceptsFork_six_iff _).mp checked.accepted
+  rw [Execution.Blocks.stateTransition_of_hegota_le (by rw [hegota]; decide)] at hRun
+  cases hRun
+
 /-! ## The writer of the parameters -/
+
+open EthLib.Serialization.JsonRpc (listJson dataJson array fixed bytes array_listJson
+  fixed_dataJson bytes_hexString) in
+/-- The hashes, the root and the requests read back from their JSON. -/
+private theorem params_read_back (hashes : List Hash32) (beaconRoot : Hash32)
+    (requests : List ByteArray) :
+    array "expectedBlobVersionedHashes" (fun j => fixed "versioned hash" 32 j)
+        (listJson (dataJson ·.toList) hashes) = .ok hashes ∧
+      fixed "parentBeaconBlockRoot" 32 (dataJson beaconRoot.toList) = .ok beaconRoot ∧
+      array "executionRequests" (bytes "request")
+        (listJson (dataJson ·.data.toList) requests) = .ok requests := by
+  refine ⟨?_, fixed_dataJson _ beaconRoot false, ?_⟩
+  · rw [array_listJson]
+    simpa using mapM_eq_ok_map (g := id) fun x _ => fixed_dataJson "versioned hash" x false
+  · rw [array_listJson]
+    refine (mapM_eq_ok_map (g := id) fun r _ => ?_).trans (by simp)
+    rw [dataJson, bytes_hexString]
+    exact congrArg Except.ok (ByteArray.ext (Array.toList_inj.mp (by simp)))
 
 open EthLib.Serialization.JsonRpc (listJson dataJson array fixed bytes array_listJson
   fixed_dataJson bytes_hexString) in
@@ -567,18 +611,7 @@ private theorem newPayloadParams_arr {version : Nat} {pj : Lean.Json} {any : Jso
         if 3 ≤ version then some beaconRoot else none,
         if 4 ≤ version then some requests else none) := by
   -- Each value after the payload reads back, and none of them is null.
-  have hh : array "expectedBlobVersionedHashes" (fun j => fixed "versioned hash" 32 j)
-      (listJson (dataJson ·.toList) hashes) = .ok hashes := by
-    rw [array_listJson]
-    simpa using mapM_eq_ok_map (g := id) fun x _ => fixed_dataJson "versioned hash" x false
-  have hr : array "executionRequests" (bytes "request")
-      (listJson (dataJson ·.data.toList) requests) = .ok requests := by
-    rw [array_listJson]
-    refine (mapM_eq_ok_map (g := id) fun r _ => ?_).trans (by simp)
-    rw [dataJson, bytes_hexString]
-    exact congrArg Except.ok (ByteArray.ext (Array.toList_inj.mp (by simp)))
-  have hb : fixed "parentBeaconBlockRoot" 32 (dataJson beaconRoot.toList) = .ok beaconRoot :=
-    fixed_dataJson _ beaconRoot false
+  obtain ⟨hh, hb, hr⟩ := params_read_back hashes beaconRoot requests
   have nh : (listJson (dataJson ·.toList) hashes).isNull = false := Base.Toolchain.Json.isNull_arr _
   have nr : (listJson (dataJson ·.data.toList) requests).isNull = false :=
     Base.Toolchain.Json.isNull_arr _
@@ -669,6 +702,8 @@ theorem newPayloadParams_json_of_structure {fork : Fork} {version : Nat}
 
 The version must take the fork of the payload, whose extra data holds at most 32 bytes.
 
+It must come before version 6, whose parameters have their own writer.
+
 The access list and the slot are given exactly from version 5.
 
 The hashes and the root read back from version 3, and the requests from version 4.
@@ -677,7 +712,7 @@ The payload reads back as one whose form at its fork is the given payload. -/
 theorem newPayloadParams_json {fork : Fork} {version : Nat} (payload : ExecutionPayload fork)
     (amsterdam : Option (ByteArray × UInt64)) (hashes : List Hash32) (beaconRoot : Hash32)
     (requests : List ByteArray) (accepts : acceptsFork version fork = true)
-    (extra : payload.extraData.size ≤ MAX_EXTRA_DATA_BYTES)
+    (below : version < 6) (extra : payload.extraData.size ≤ MAX_EXTRA_DATA_BYTES)
     (five : amsterdam.isSome ↔ 5 ≤ version) :
     ∃ any, newPayloadParams version
         (newPayloadParamsJson version payload amsterdam hashes beaconRoot requests) =
@@ -697,6 +732,46 @@ theorem newPayloadParams_json {fork : Fork} {version : Nat} (payload : Execution
     obtain rfl | rfl | rfl | rfl | rfl :
         version = 1 ∨ version = 2 ∨ version = 3 ∨ version = 4 ∨ version = 5 := by omega
     all_goals (cases fork <;> revert accepts <;> decide)
+
+open EthLib.Serialization.JsonRpc (listJson dataJson) in
+/-- The decoder of version 6 reads back the JSON of its parameters, from Dencun on.
+
+The writer gives the payload the structure of version 4, with its access list and its slot.
+
+Its extra data must hold at most 32 bytes.
+
+The first four values read back as those of version 5, and the fifth as the inclusion list.
+
+The payload reads back as one whose form at its fork is the given payload. -/
+theorem newPayloadV6Params_json {fork : Fork} (payload : ExecutionPayload fork)
+    (amsterdam : ByteArray × UInt64) (hashes : List Hash32) (beaconRoot : Hash32)
+    (requests : List ByteArray) (inclusionList : List ByteArray) (dencun : .dencun ≤ fork)
+    (extra : payload.extraData.size ≤ MAX_EXTRA_DATA_BYTES) :
+    ∃ any, newPayloadV6Params
+        (newPayloadV6ParamsJson payload amsterdam hashes beaconRoot requests inclusionList) =
+        .ok ((any, some amsterdam, some hashes, some beaconRoot, some requests), inclusionList) ∧
+      any.atFork fork = .ok payload := by
+  -- The payload has the structure of version 4, with its access list and its slot.
+  obtain ⟨accessList, slot⟩ := amsterdam
+  obtain ⟨any, hj, hat⟩ :=
+    Json.payloadV4_executionPayloadV4Json payload accessList slot dencun extra
+  have hp : payloadParam 6 (Json.executionPayloadV4Json payload accessList slot) =
+      .ok (any, some (accessList, slot)) :=
+    (payloadParam_eq_ok_iff_of_le (by decide)).mpr ⟨accessList, slot, hj, rfl⟩
+  refine ⟨any, ?_, hat⟩
+  -- Each later value reads back, and none of the five is null.
+  obtain ⟨hh, hb, hr⟩ := params_read_back hashes beaconRoot requests
+  have np : (Json.executionPayloadV4Json payload accessList slot).isNull = false :=
+    Base.Toolchain.Json.isNull_mkObj _
+  have nh : (listJson (dataJson ·.toList) hashes).isNull = false := Base.Toolchain.Json.isNull_arr _
+  have nr : (listJson (dataJson ·.data.toList) requests).isNull = false :=
+    Base.Toolchain.Json.isNull_arr _
+  have nb : (dataJson beaconRoot.toList).isNull = false := Base.Toolchain.Json.isNull_str _
+  have nl : (Json.inclusionListJson inclusionList).isNull = false :=
+    Base.Toolchain.Json.isNull_arr _
+  simp [newPayloadV6Params, newPayloadV6ParamsJson, newPayloadParamsJson, newPayloadParams,
+    paramCount, hp, hh, hr, hb, np, nh, nr, nb, nl, Json.inclusionListOfJson_json]
+  rfl
 
 /-- Decoded parameters whose first value is a payload decode that payload. -/
 private theorem payloadParam_of_newPayloadParams {version : Nat} {pj : Lean.Json}

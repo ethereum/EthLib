@@ -1,60 +1,10 @@
 module
 
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumReserve
-public import EthLib.Consensus.Proofs.Transition.BalanceDrift
-public import EthLib.Consensus.Proofs.Transition.FfgJustification
-import EthLib.Consensus.Proofs.Transition.ActiveKept
-import EthLib.Consensus.Proofs.Transition.SlashedExit
-import EthLib.Consensus.Proofs.Transition.SlashedPersistence
-import EthLib.Consensus.Proofs.Transition.EpochReads
-import EthLib.Consensus.Proofs.Transition.PendingConsolidations
-import EthLib.Consensus.Proofs.Transition.Committees
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Penalties
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Contracts.Ledger
-import EthLib.Consensus.Proofs.Transition.EpochPending
-import EthLib.Consensus.Proofs.Transition.Operations
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Reserved.Operations
-import EthLib.Consensus.Proofs.Transition.Block
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Whistleblower
-import EthLib.Consensus.Proofs.DirectSafety.BalanceSources
-import EthLib.Consensus.Proofs.Mutators
-import EthLib.Consensus.Proofs.Transition.Trace
-import Mathlib.Data.Nat.Notation
-import EthLib.Consensus.Proofs.Transition.EpochUpdates
-import EthLib.Consensus.Proofs.Transition.ForkBoundary
-import EthLib.Consensus.Proofs.Transition.StateTransition
-import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
-import EthLib.Consensus.Proofs.Transition.BranchLedger
-import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Assembly
-import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
-import EthLib.Consensus.Proofs.Transition.InactivityLeakBound
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumDriftBound
-import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
-import EthLib.Consensus.Proofs.Transition.ValidatorCaps
-public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Bound
-import EthLib.Consensus.Proofs.Transition.Totality.Supply
-import EthLib.Consensus.Proofs.Transition.EffectiveFall
-import EthLib.Consensus.Proofs.DirectSafety.Evidence
-import EthLib.Consensus.Proofs.DirectSafety.Fields
-import EthLib.Consensus.Proofs.Transition.ValidatorKeys
-import EthLib.Consensus.Proofs.Transition.ChainRoots
-import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
-import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
 import EthLib.Consensus.Proofs.Transition.SlashedFlags
 import EthLib.Consensus.Proofs.Transition.LookaheadActive
 import Mathlib.Data.Nat.ModEq
-import EthLib.Consensus.Proofs.DirectSafety.IntervalBounds
-import EthLib.Consensus.Proofs.Transition.BlockCredits
 import EthLib.Consensus.Proofs.DirectSafety.Apriori.BlockFold
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Ceiling
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Issuance
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Branch
-import EthLib.Consensus.Proofs.Transition.EpochRewards
-import EthLib.Consensus.Proofs.Transition.RewardDeltas
-import EthLib.Consensus.Proofs.Transition.FfgStake
-import EthLib.Consensus.Proofs.Time
-import EthLib.Consensus.Proofs.Participation
 import Mathlib.Algebra.Order.Floor.Div
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.PinDriftBound.BalanceBounds
 
@@ -63,7 +13,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.PinDriftBound.
 namespace EthLib.Consensus.Models.Network
 namespace PinDrift
 
-open Base Uint64 Models DirectSafety PinKeys
+open Base Uint64 Models DirectSafety
 open DirectSafety.Apriori.Internal (recordBalance_single)
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
@@ -71,6 +21,8 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
 section Terms
 variable {g : ForkedBeaconState preset} {split fin pulled anc counted : BeaconState preset fork}
   {V : Finset ValidatorIndex}
+
+namespace Internal
 
 /-- The low bound of an existing key is covered by its exit charge and its sync debits.
 
@@ -323,8 +275,7 @@ It is at most three halves of the pulled total.
 The run ends at most one epoch after the pulled epoch.
 
 The guard bounds the active balance at each step. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.step_band_of_guard (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem step_band_of_guard (h : Setting config checks g split fin pulled anc counted V)
     {e : BeaconState preset fork} (r : Run config checks ⟨fork, fin⟩ ⟨fork, e⟩)
     (within : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
     {pulledTotal : Gwei} (pulledOk : getTotalActiveBalance pulled = .ok pulledTotal) :
@@ -352,8 +303,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.step_band_of_gu
 The run ends within one epoch of R's, and its events are read at R's epoch.
 
 The seats of the window debit at most its slots' envelopes, one for each epoch to the run's end. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.syncDebits_window_le (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem syncDebits_window_le (h : Setting config checks g split fin pulled anc counted V)
     {e : BeaconState preset fork} (run : Run config checks ⟨fork, fin⟩ ⟨fork, e⟩)
     (within : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
     {events : List (BalanceEvent preset)}
@@ -431,8 +381,7 @@ Small charges can be counted without reading R's exit flag.
 The queue count bounds the number of charged keys.
 
 Those are the keys with a large charge, the low keys and the keys that lose seats. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.charged_count_of (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem charged_count_of (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (S : Finset ValidatorIndex)
     (keys : ∀ v ∈ S, (∀ c, counted.validators.data[v.toNat]? = some c →
         c.activationEpoch.toNat ≤ (getCurrentEpoch pulled).toNat) ∧
@@ -510,8 +459,7 @@ private theorem charged_count (h : Setting config checks g split fin pulled anc 
 /-- Each credited K5 key counts at weight three and needs two extra rounding bands.
 
 The bound separates scheduled exits seen by R from exits that start on C's branch. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_exitingBands (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem bud_exitingBands (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ) :
     2 * (∑ v ∈ (Internal.K5 counted V), Internal.bandC tailC highC v.toNat) ≤
       (pinTerms config pulled anc fin).exitingBands :=
@@ -521,8 +469,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_exitingBand
 /-- The queue budget covers the rise after departure charges on C's branch.
 
 It covers keys counted in C's quorum but inactive at C and outside the voter set. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_queueRise (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem bud_queueRise (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ) :
     3 * (∑ v ∈ (Internal.K5 counted V) with ∃ c ∈ tailC.departureCharges, c.index = v.toNat,
         Internal.riseQ tailC highC v.toNat) ≤
@@ -585,8 +532,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_queueRise (
 /-- The scheduled-exit budget covers the rise of K5 keys whose exit R can see.
 
 The keys of `K5` are those without a departure charge on C's run. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_exitingRise (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem bud_exitingRise (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) :
     (∑ v ∈ (Internal.K5 counted V) with ¬ ∃ c ∈ tailC.departureCharges, c.index = v.toNat,
         (pinTerms config pulled anc fin).rise v.toNat) +
@@ -623,8 +569,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_exitingRise
   exact Internal.mem_positions_filter config pulled anc fin found exiting
 
 /-- The credits of a set of keys in one event are at most the event's credit limit. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.sum_keyCredit_le_creditLimit (S :
-  Finset ValidatorIndex) (e : BalanceEvent preset)
+theorem sum_keyCredit_le_creditLimit (S : Finset ValidatorIndex) (e : BalanceEvent preset)
     (bounded : e.credits ≤ e.creditLimit) : ∑ v ∈ S, Internal.keyCredit v.toNat e ≤ e.creditLimit :=
       by
   refine Nat.le_trans ?_ bounded
@@ -883,8 +828,7 @@ The bound is the proposer credit of each epoch of the window.
 The credits of each epoch are cut over the blocks, and the split's epoch is cut once from `b`.
 
 So the flag rewards of its epoch pass are not read. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.proposer_rewards_le (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem proposer_rewards_le (h : Setting config checks g split fin pulled anc counted V)
     {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
     (link : Nonempty (Run config checks ⟨fork, fin⟩ ⟨fork, b⟩) ∨
       ∃ _ : Run config checks ⟨fork, b⟩ ⟨fork, fin⟩, getCurrentEpoch fin = getCurrentEpoch b)
@@ -1026,8 +970,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.proposer_reward
     _ ≤ _ := by rw [← Nat.mul_add]; exact Nat.mul_le_mul_left _ credit
 
 /-- The sources of the due entries of X's queue that name a target in `T`. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.dueList (X : BeaconState preset fork)
-  (electra : .pectra ≤ fork) (high : ℕ)
+def dueList (X : BeaconState preset fork) (electra : .pectra ≤ fork) (high : ℕ)
     (T : Finset ValidatorIndex) : List Validator :=
   (((X.pendingConsolidations electra).data.toList.filter fun c =>
       decide (c.targetIndex ∈ T)).filterMap fun c =>
@@ -1035,8 +978,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.dueList (X : Beacon
       !v.slashed && decide (v.withdrawableEpoch.toNat ≤ high + 1)
 
 /-- Counting the due entries gives the consolidation queue's contribution. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.dueAt_eq (X : BeaconState preset
-  fork) (electra : .pectra ≤ fork) (high : ℕ)
+theorem dueAt_eq (X : BeaconState preset fork) (electra : .pectra ≤ fork) (high : ℕ)
     (T : Finset ValidatorIndex) : Internal.dueAt X high T = (Internal.dueList X electra high
       T).length := by
   unfold Internal.dueAt Internal.dueList
@@ -1081,8 +1023,7 @@ private theorem dueList_length_union (X : BeaconState preset fork) (electra : .p
   simpa using this
 
 /-- A later horizon keeps at least the stake of an earlier one. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.dueList_sum_mono (X : BeaconState
-  preset fork) (electra : .pectra ≤ fork)
+theorem dueList_sum_mono (X : BeaconState preset fork) (electra : .pectra ≤ fork)
     {high high' : ℕ} (later : high ≤ high') (T : Finset ValidatorIndex) (f : Validator → ℕ) :
     ((Internal.dueList X electra high T).map f).sum ≤ ((Internal.dueList X electra high' T).map
       f).sum := by
@@ -1117,8 +1058,7 @@ private theorem dueList_length_subset (X : BeaconState preset fork) (electra : .
   exact sub hc
 
 /-- The due entries of any targets have at most the stake of all entries read at that horizon. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.dueList_sum_le_all (X : BeaconState
-  preset fork) (electra : .pectra ≤ fork)
+theorem dueList_sum_le_all (X : BeaconState preset fork) (electra : .pectra ≤ fork)
     (high : ℕ) (T : Finset ValidatorIndex) (f : Validator → ℕ) :
     ((Internal.dueList X electra high T).map f).sum ≤
       ((((((X.pendingConsolidations electra).data.toList.filterMap fun c =>
@@ -1131,8 +1071,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.dueList_sum_le_
 /-- A whistleblower's share of an amount is at most the amount.
 
 The quotient is at least thirty, so a share of `33/300` of the amount, rounded up, fits. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.wShare_le (facts : PinPresetFacts
-  preset) (x : ℕ) : Internal.wShare preset fork x ≤ x := by
+theorem wShare_le (facts : PinPresetFacts preset) (x : ℕ) : Internal.wShare preset fork x ≤ x := by
   have quotient := facts.whistleblower fork
   unfold Internal.wShare
   generalize (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat = W at *
@@ -1162,8 +1101,7 @@ private theorem dueAt_sum (X : BeaconState preset fork) (electra : .pectra ≤ f
 /-- The band of a key is its upward band for each due entry that names it, and these add over keys.
 
 The due entries of a set of targets are the due entries of its keys. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bandX_sum (X : BeaconState preset
-  fork) (electra : .pectra ≤ fork) (high : ℕ)
+theorem bandX_sum (X : BeaconState preset fork) (electra : .pectra ≤ fork) (high : ℕ)
     (T : Finset ValidatorIndex) :
     ∑ v ∈ T, Internal.bandX X high v.toNat = preset.upwardBand * Internal.dueAt X high T := by
   classical
@@ -1174,8 +1112,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bandX_sum (X : 
   rw [← Finset.mul_sum, dueAt_sum X electra high T]
 
 /-- The classes `K4`, `K5` and `K6` share no key with each other or with `V`. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.classes_disjoint (h : Setting
-  config checks g split fin pulled anc counted V) :
+theorem classes_disjoint (h : Setting config checks g split fin pulled anc counted V) :
     Disjoint (Internal.K4 pulled counted V) (Internal.K5 counted V) ∧
     Disjoint (Internal.K4 pulled counted V) (Internal.K6 pulled counted) ∧
     Disjoint (Internal.K5 counted V) (Internal.K6 pulled counted) ∧
@@ -1196,7 +1133,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.classes_disjoin
     exact b.2.2 (h.voting v a).1
 
 /-- A key of `K4`, `K5` or `K6` is in C's quorum. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.classes_mem_Q {v : ValidatorIndex}
+theorem classes_mem_Q {v : ValidatorIndex}
     (member : v ∈ Internal.K4 pulled counted V ∪ Internal.K5 counted V ∪ Internal.K6 pulled counted)
       : v ∈ Internal.Q counted := by
   simp only [Finset.mem_union] at member
@@ -1209,8 +1146,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.classes_mem_Q {
     exact h6.2.1
 
 /-- A key of `K4`, `K5` or `K6` is in C's quorum, so it is unslashed at C. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.classes_unslashed {v :
-  ValidatorIndex}
+theorem classes_unslashed {v : ValidatorIndex}
     (member : v ∈ Internal.K4 pulled counted V ∪ Internal.K5 counted V ∪ Internal.K6 pulled counted)
       :
     slashedFlagAt counted v.toNat ≠ some true := by
@@ -1223,8 +1159,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.classes_unslash
   simp at unslashed
 
 /-- The keys slashed at C and not at the split are in no class of C's quorum, and not in `V`. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.sc_disjoint (h : Setting config
-  checks g split fin pulled anc counted V) :
+theorem sc_disjoint (h : Setting config checks g split fin pulled anc counted V) :
     Disjoint (Internal.K4 pulled counted V ∪ Internal.K5 counted V ∪ Internal.K6 pulled counted)
       (Internal.SC pulled counted split) ∧
     Disjoint V (Internal.SC pulled counted split) := by
@@ -1245,8 +1180,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.sc_disjoint (h 
 They are slashed at C, so they are not in C's quorum or in `V`.
 
 They are absent at the split, so they are not in `SC`. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cs_disjoint (h : Setting config
-  checks g split fin pulled anc counted V) :
+theorem cs_disjoint (h : Setting config checks g split fin pulled anc counted V) :
     Disjoint (Internal.K4 pulled counted V ∪ Internal.K5 counted V ∪ Internal.K6 pulled counted ∪
       Internal.SC pulled counted split)
       (Internal.CS counted split) ∧ Disjoint V (Internal.CS counted split) := by
@@ -1272,8 +1206,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cs_disjoint (h 
 /-- A key that a run credits.
 
 A block step credits it, or a pending-deposit pass does. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditedKey {x y : ForkedBeaconState
-  preset} (tail : Run config checks x y)
+def creditedKey {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (high : ℕ) (v : ValidatorIndex) : Bool :=
   decide (0 < Internal.grossScan v.toNat high tail +
     (Internal.creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat high tail))
@@ -1285,8 +1218,7 @@ The same holds for each queue key.
 The slots are at least the proposers, the seats and the deposit recipients of the window.
 
 They also hold the seat units of R's branch and the shared segment. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditUnits_eq (config : Config)
-  (pulled anc fin : BeaconState preset fork) :
+theorem creditUnits_eq (config : Config) (pulled anc fin : BeaconState preset fork) :
     ∃ N : ℕ, (pinTerms config pulled anc fin).creditUnits =
         (N + 2 * (((pinTerms config pulled anc fin).positions.filter fun i =>
           (pinTerms config pulled anc fin).exitingB i = true).card +
@@ -1310,8 +1242,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditUnits_eq 
 /-- The keys that a sync aggregate debits on the shared segment or R's branch fit the seat units.
 
 The seat units are the seats of the committees of the periods that the two runs touch. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.debit_keys_le (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem debit_keys_le (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (high : ℕ)
@@ -1366,8 +1297,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.debit_keys_le (
 The slots are the proposers, the seats and the deposit recipients of the window.
 
 The count uses the slots of the epochs on C's run. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.credited_slots_le (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem credited_slots_le (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (T : Finset ValidatorIndex) (inside : ∀ v ∈ T, v.toNat < counted.validators.data.size) :
     (T.filter fun v => Internal.creditedKey tailC highC v = true).card ≤
@@ -1435,8 +1365,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.credited_slots_
 The slots are the proposers, the seats and the deposit recipients of the window.
 
 A credited key of `CS` is a credited key of C's run, in C's registry, as the others are. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.credited_classes_le (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem credited_classes_le (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ) :
     ((Internal.K4 pulled counted V).filter fun v => Internal.creditedKey tailC highC v = true).card
       +
@@ -1533,8 +1462,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.credited_classe
   omega
 
 /-- The rounding slacks of a set of keys are the upward band for each credited key. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.band_sum {x y : ForkedBeaconState
-  preset} (tail : Run config checks x y)
+theorem band_sum {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (high : ℕ) (S : Finset ValidatorIndex) :
     ∑ v ∈ S, Internal.bandC tail high v.toNat =
       preset.upwardBand * (S.filter fun v => Internal.creditedKey tail high v = true).card := by
@@ -1548,8 +1476,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.band_sum {x y :
 /-- The credits that a scan reads for a key are at most the credits of its source's events.
 
 The sources of the scan, block and slot, are those that `p` selects. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.scan_le_events (blockP slotP :
-  BalanceSource → Bool) (p : BalanceSource → Prop)
+theorem scan_le_events (blockP slotP : BalanceSource → Bool) (p : BalanceSource → Prop)
     [DecidablePred p] (selects : ∀ s, (blockP s = true ∨ slotP s = true) ↔ p s)
     {x y : ForkedBeaconState preset} (tail : Run config checks x y) (high : ℕ)
     (v : ValidatorIndex) {events : List (BalanceEvent preset)}
@@ -1569,8 +1496,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.scan_le_events 
 /-- The credits of a key on C's branch are its proposer credits and deposits, up to consolidations.
 
 The consolidations are those of the replayed events. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.credit_parts_le {x y :
-  ForkedBeaconState preset} (tail : Run config checks x y)
+theorem credit_parts_le {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (high : ℕ) (v : ValidatorIndex) {events : List (BalanceEvent preset)}
     (replayed : tail.balanceEvents high = .ok events) :
     Internal.credC tail high v.toNat ≤ Internal.credN tail high v.toNat + Internal.consAmt events
@@ -1599,8 +1525,7 @@ The reserve also accounts separately for two more bands per credited key in this
 The run `pre` starts at the split's epoch, so its credits are proposer credits only.
 
 Consolidations and deposits credit at epoch processing, so none falls inside `pre`. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_exitingCredits (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem bud_exitingCredits (h : Setting config checks g split fin pulled anc counted V)
     {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
     (link : Nonempty (Run config checks ⟨fork, fin⟩ ⟨fork, b⟩) ∨
       ∃ _ : Run config checks ⟨fork, b⟩ ⟨fork, fin⟩, getCurrentEpoch fin = getCurrentEpoch b)
@@ -1822,8 +1747,7 @@ The compounding of the credits, an exact tenth of the keys' total, is in the bou
 Each credited key of `K4` or `K5` uses one rounding slot.
 
 `K5` also reads the proposer credits of `pre`, the run to the split from the start of its epoch. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_credits (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem bud_credits (h : Setting config checks g split fin pulled anc counted V)
     {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
     (link : Nonempty (Run config checks ⟨fork, fin⟩ ⟨fork, b⟩) ∨
       ∃ _ : Run config checks ⟨fork, b⟩ ⟨fork, fin⟩, getCurrentEpoch fin = getCurrentEpoch b)
@@ -1877,8 +1801,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_credits (h 
 /-- The keys of `K5` are at most the keys that R reads as exiting and the queue keys.
 
 A key of `K5` is read as exiting at R, or has a departure charge on C's run. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.card_K5_le (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem card_K5_le (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) :
     (Internal.K5 counted V).card ≤ ((pinTerms config pulled anc fin).positions.filter fun i =>
         (pinTerms config pulled anc fin).exitingB i = true).card +
@@ -2091,8 +2014,7 @@ private theorem key_idle_walk (h : Setting config checks g split fin pulled anc 
       exact ⟨by omega, by omega⟩
 
 /-- A voter that is active at a state has its activation assigned and reached. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.activated_of_activeVoters (early :
-  fork < .glamsterdam)
+theorem activated_of_activeVoters (early : fork < .glamsterdam)
     {s : BeaconState preset fork} {v : ValidatorIndex} (member : v ∈ activeVoters s) :
     ∃ w, s.validators.data[v.toNat]? = some w ∧ w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧
       w.activationEpoch ≤ getCurrentEpoch s := by
@@ -2102,8 +2024,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.activated_of_ac
 /-- A voter of the quorum has its activation assigned and reached.
 
 The quorum holds the keys that are active at the current or the previous epoch. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.activated_of_quorum (early : fork <
-  .glamsterdam)
+theorem activated_of_quorum (early : fork < .glamsterdam)
     {s : BeaconState preset fork} {v : ValidatorIndex} (member : v ∈ Internal.Q s) :
     ∃ w, s.validators.data[v.toNat]? = some w ∧ w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧
       w.activationEpoch ≤ getCurrentEpoch s := by
@@ -2151,8 +2072,7 @@ At that state its balance is at least `MAX_EFFECTIVE_BALANCE`.
 Its effective balance is within the downward band of its balance, and at least that.
 
 The key is idle before that state, so its balance is at most the credits that the scans count. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.created_start (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem created_start (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {v : ValidatorIndex} (activated : ∃ w, counted.validators.data[v.toNat]? = some w ∧
@@ -2233,7 +2153,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.created_start (
   exact ahead p r2
 
 /-- The activation reserve is positive. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.maxEffectiveBalance_pos
+theorem maxEffectiveBalance_pos
     (h : Setting config checks g split fin pulled anc counted V) :
     0 < preset.MAX_EFFECTIVE_BALANCE.toNat := by
   have newKey := h.facts.newKey .fusaka
@@ -2251,8 +2171,7 @@ The keys of a set are credited at most the caps of the due entries of X's queue 
 The run from X to the end is the shared segment and then the run from the split.
 
 The horizon is within the withdrawal delay of X, as `shallow` says. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cons_due_bound (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem cons_due_bound (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     {z : BeaconState preset fork} (tail : Run config checks ⟨fork, split⟩ ⟨fork, z⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch z).toNat ≤ high + 1)
@@ -2284,8 +2203,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cons_due_bound 
 /-- The keys that a consolidation of X's queue credits on C's run are at most its due entries.
 
 Each such key is the target of a due entry, and each entry names one target. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cons_keys_le (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem cons_keys_le (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
@@ -2326,8 +2244,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cons_keys_le (h
 /-- The consolidation budget sums the source caps of due entries in X's queue.
 
 It is zero beyond the withdrawal delay, so the setting's `shallow` selects the entries. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.consolidationsX_eq (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem consolidationsX_eq (h : Setting config checks g split fin pulled anc counted V)
     (electra : .pectra ≤ fork) :
     (pinTerms config pulled anc fin).consolidationsX =
       (((((fin.pendingConsolidations electra).data.toList.filterMap fun c =>
@@ -2341,7 +2258,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.consolidationsX
   simp only [shallow, electra, ↓reduceIte, ↓reduceDIte]
 
 /-- The source caps are whole increments, so their sum is too. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.consolidationsX_aligned
+theorem consolidationsX_aligned
     (h : Setting config checks g split fin pulled anc counted V) :
     (pinTerms config pulled anc fin).consolidationsX % preset.EFFECTIVE_BALANCE_INCREMENT.toNat =
       0 := by
@@ -2356,8 +2273,7 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key with no due consolidation entry takes no consolidation credit on C's run or before it.
 
 The horizon of the due entries is cut to R's epoch, which C's replay does not read. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.consAmt_zero (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem consAmt_zero (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) {eventsF : List (BalanceEvent preset)}
     (replayedF : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF)
     {ending : BeaconState preset fork}
@@ -2390,8 +2306,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.consAmt_zero (h
   omega
 
 /-- The caps of a list of validators are at least the maximum effective balance each. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cap_floor_sum (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem cap_floor_sum (h : Setting config checks g split fin pulled anc counted V)
     (l : List Validator) :
     preset.MAX_EFFECTIVE_BALANCE.toNat * l.length ≤
       (l.map fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat).sum := by
@@ -2405,8 +2320,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cap_floor_sum (
   simpa [smul_eq_mul, Nat.mul_comm] using this
 
 /-- A sum over a subset can be extended by zero to use the ambient set's pointwise bounds. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.sum_eq_U {M : Type*} [AddCommMonoid
-  M] {S W : Finset ValidatorIndex}
+theorem sum_eq_U {M : Type*} [AddCommMonoid M] {S W : Finset ValidatorIndex}
     (sub : S ⊆ W) (f : ValidatorIndex → M) :
     ∑ v ∈ S, f v = ∑ v ∈ W, if v ∈ S then f v else 0 := by
   rw [Finset.sum_ite_mem, Finset.inter_eq_right.mpr sub]
@@ -2456,7 +2370,7 @@ So three bands are at most three tenths of it.
 The reserve rounds the consolidation charge `3.3 · X` up to `(33 · X + 9) / 10`.
 
 The consolidation charge is zero beyond the withdrawal delay, so this bound needs a shallow call. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_consolidations_base
+theorem bud_consolidations_base
     (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
@@ -2678,8 +2592,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_consolidati
 /-- The consolidation credits of the third window, with the shares of `CS` and the shared segment.
 
 The shared segment's shares are those of the keys of `SC` that exited before the finalized epoch. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_consolidations (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem bud_consolidations (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -2716,7 +2629,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_consolidati
     endEpochC replayedC highLe).1
 
 /-- The keys of `K6` whose exit started on R's branch after the split. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_exitedR :
+theorem bud_exitedR :
     (∑ v ∈ (Internal.K6 pulled counted) with (pinTerms config pulled anc fin).exitedRB v.toNat =
       true,
       (Internal.eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) ≤
@@ -2729,15 +2642,14 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_exitedR :
   exact Internal.mem_positions_filter config pulled anc fin found flag
 
 /-- Three sets with disjoint keys: the weights one, three and one are at most three. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.weighted_le {A B C : Finset
-  ValidatorIndex} (f : ValidatorIndex → ℕ)
+theorem weighted_le {A B C : Finset ValidatorIndex} (f : ValidatorIndex → ℕ)
     (ab : Disjoint A B) (ac : Disjoint A C) (bc : Disjoint B C) :
     ∑ v ∈ A, f v + 3 * ∑ v ∈ B, f v + ∑ v ∈ C, f v ≤ 3 * ∑ v ∈ A ∪ B ∪ C, f v := by
   rw [Finset.sum_union (Finset.disjoint_union_left.mpr ⟨ac, bc⟩), Finset.sum_union ab]
   omega
 
 /-- The branch slashing test uses the key's slashed flag and withdrawable epoch. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashedRB_eq (config : Config)
+theorem slashedRB_eq (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) (i : ℕ) :
     (pinTerms config state ancestor finalizedState).slashedRB i =
       decide ((((state.validators.data[i]?).map (·.slashed)).getD false = true) ∧
@@ -2758,8 +2670,7 @@ private theorem slashedRB_lt (config : Config)
 /-- A slashed key counts toward the branch charge if its withdrawable epoch is late enough.
 
 That epoch must be a slashing vector past the finalized epoch. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashedRB_of_withdrawable (config :
-  Config)
+theorem slashedRB_of_withdrawable (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) {i : ℕ} {w : Validator}
     (found : state.validators.data[i]? = some w) (slashed : w.slashed = true)
     (late : ancestor.finalizedCheckpoint.epoch.toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
@@ -2771,7 +2682,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashedRB_of_wi
 /-- The branch charge counts a key unslashed at the split and slashed at R.
 
 R slashes it after the split, so its withdrawable epoch is a slashing vector past the split's. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashedRB_of_newly_slashed
+theorem slashedRB_of_newly_slashed
     (h : Setting config checks g split fin pulled anc counted V) {i : ℕ} {s w : Validator}
     (foundS : split.validators.data[i]? = some s)
     (foundP : pulled.validators.data[i]? = some w) (cleanS : s.slashed = false)
@@ -2790,8 +2701,7 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 The voter is not active at `counted` since an exit before the finalized epoch is excluded.
 
 Its exit at R is then at least the finalized epoch, so it is late for the whole run. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.voter_late (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem voter_late (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (v : ValidatorIndex) (voter : v ∈ Internal.Q counted) :
     ∀ w, pulled.validators.data[v.toNat]? = some w →
@@ -2847,8 +2757,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.voter_late (h :
 The call's cutoff is within the withdrawal delay of the finalized epoch.
 
 The same restriction applies to a counted voter. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.late_of_exitAfterFin (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem late_of_exitAfterFin (h : Setting config checks g split fin pulled anc counted V)
     (i : ℕ) (exitAfterFin : ∀ w, pulled.validators.data[i]? = some w →
       (getCurrentEpoch fin).toNat ≤ w.exitEpoch.toNat) :
     ∀ w, pulled.validators.data[i]? = some w →
@@ -2862,8 +2771,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.late_of_exitAft
 /-- A counted voter is unslashed at the split.
 
 It is unslashed at `counted`, and a slashing stays. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.voter_unslashed (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem voter_unslashed (h : Setting config checks g split fin pulled anc counted V)
     (v : ValidatorIndex) (voter : v ∈ Internal.Q counted) :
     (split.validators.data[v.toNat]?.map (·.slashed)).getD false = false := by
   classical
@@ -2893,7 +2801,7 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 It is withdrawable a slashings vector after that state.
 
 The state is at or after the finalized epoch, so the pin counts the slashing. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashed_withdrawable_of_clean
+theorem slashed_withdrawable_of_clean
     (h : Setting config checks g split fin pulled anc counted V) {d : BeaconState preset fork}
     (run : Run config checks ⟨fork, d⟩ ⟨fork, pulled⟩) (v : ValidatorIndex)
     (clean : ∀ u, d.validators.data[v.toNat]? = some u → u.slashed = false)
@@ -2915,8 +2823,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashed_withdra
 /-- Under the guard, the window from the finalized epoch through R's horizon is under half a vector.
 
 It is the short window of the guard, read at R's horizon. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.depthFin_lt_half (h : Setting
-  config checks g split fin pulled anc counted V) :
+theorem depthFin_lt_half (h : Setting config checks g split fin pulled anc counted V) :
     (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat <
       preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat / 2 := by
   obtain ⟨_, _, _, _, _, _, _, _, _, _, short, _⟩ := id h.guard
@@ -3000,8 +2907,7 @@ private theorem slashed_beyond_horizon
 /-- If an unslashed key is not withdrawable by R's next epoch, its exit plus the delay is later.
 
 Its withdrawable epoch is its exit plus the delay, or both are unset. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.late_of_withdrawable (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem late_of_withdrawable (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (i : ℕ) (w : Validator)
     (found : pulled.validators.data[i]? = some w) (clean : w.slashed = false)
@@ -3031,8 +2937,7 @@ After it the key is slashed, so its withdrawable epoch is beyond R's horizon.
 The floor allows for the run's debits and the maximum initial slashing penalty against R's balance.
 
 If the key is already slashed, the floor starts at that state. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slash_floor_across (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem slash_floor_across (h : Setting config checks g split fin pulled anc counted V)
     (v : ValidatorIndex) {c : BeaconState preset fork}
     (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩) (inside : v.toNat < c.validators.data.size)
     (clean : ∀ u, c.validators.data[v.toNat]? = some u → u.slashed = false)
@@ -3235,8 +3140,7 @@ The pin allows for the initial penalty at the largest effective-balance cap.
 The exit of the key at R is late for the whole run.
 
 The same exit-epoch restriction holds for a finalized key. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.voter_floorAt (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem voter_floorAt (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     (v : ValidatorIndex)
@@ -3327,8 +3231,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.voter_floorAt (
     omega
 
 /-- The effective-balance ceiling covers the key's finalized effective balance. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.effective_fin_le_ebUp (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem effective_fin_le_ebUp (h : Setting config checks g split fin pulled anc counted V)
     (i : ℕ) :
     effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i ≤
       (pinTerms config pulled anc fin).ebUp i := by
@@ -3344,7 +3247,7 @@ The key keeps its withdrawable epoch along every run, once it is slashed.
 Its withdrawable epoch at R is the slashings vector past the finalized epoch, and past R's horizon.
 
 The floor at each state needs no further allowance for slashing. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slash_floor_from_slashed
+theorem slash_floor_from_slashed
     (h : Setting config checks g split fin pulled anc counted V) (v : ValidatorIndex)
     (inFin : v.toNat < fin.validators.data.size)
     (slashedFin : ∀ u, fin.validators.data[v.toNat]? = some u → u.slashed = true)
@@ -3407,8 +3310,7 @@ Its withdrawable epoch at R is the slashings vector past the finalized epoch, an
 The floor at each state needs no further allowance for slashing.
 
 That actual-balance floor gives a lower bound on effective balance. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.kc_envelope (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem kc_envelope (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     {eventsF events : List (BalanceEvent preset)}
@@ -3475,8 +3377,7 @@ The increments are the whole ones of its sync debits and its slashing slack.
 The actual-balance floor holds at each state of that run.
 
 It gives a lower bound on effective balance. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.envelope_of_voter (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem envelope_of_voter (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     {eventsF events : List (BalanceEvent preset)}
@@ -3514,7 +3415,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.envelope_of_vot
     (Internal.voter_floorAt h fromFin tail v toC rest cutC clean slashedLate inside late)
 
 /-- The branch slashing count bounds the number of charged slashings in any set of keys. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashedRB_card_le (config : Config)
+theorem slashedRB_card_le (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) (W : Finset ValidatorIndex) :
     (W.filter fun v => (pinTerms config state ancestor finalizedState).slashedRB v.toNat =
       true).card ≤ (pinTerms config state ancestor finalizedState).slashedR := by
@@ -3527,7 +3428,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashedRB_card_
     finalizedState flag), flag⟩
 
 /-- The keys slashed on this branch after the finalized epoch cost one increment each, once. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashR_le (config : Config)
+theorem slashR_le (config : Config)
     (state ancestor finalizedState : BeaconState preset fork)
     (W : Finset ValidatorIndex) :
     ∑ v ∈ W, Internal.slashR (pinTerms config state ancestor finalizedState) v.toNat ≤
@@ -3545,8 +3446,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashR_le (conf
 /-- A key that exited by the epoch of a run's start is inactive at the end of the run.
 
 The run keeps an assigned exit epoch, and the epoch of its end is not before that of its start. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.inactive_of_exited (twoSlots : 2 ≤
-  preset.SLOTS_PER_EPOCH.toNat)
+theorem inactive_of_exited (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
     {x y : ForkedBeaconState preset} (tail : Run config checks x y) {i : ℕ} {v : Validator}
     (found : x.state.validators.data[i]? = some v)
     (exited : v.exitEpoch.toNat ≤ (getCurrentEpoch x.state).toNat) :
@@ -3567,8 +3467,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.inactive_of_exi
 The key's exit is already assigned at the finalized state, so it is inactive on the whole run.
 
 A proposer is active, which the lookahead of the run gives. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.exited_not_proposer (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem exited_not_proposer (h : Setting config checks g split fin pulled anc counted V)
     {i : ℕ} {w : Validator} (foundPulled : pulled.validators.data[i]? = some w)
     (exited : w.exitEpoch.toNat ≤ (getCurrentEpoch fin).toNat)
     (u : ForkedBeaconState preset) (run : Run config checks ⟨fork, fin⟩ u) (p : ValidatorIndex) :
@@ -3584,8 +3483,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.exited_not_prop
   exact Bool.false_ne_true active
 
 /-- A scan over sources that the gross credits hold is at most the gross credits. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.scan_le_gross {x y :
-  ForkedBeaconState preset} (tail : Run config checks x y)
+theorem scan_le_gross {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (high v : ℕ) (p : BalanceSource → Bool)
     (inside : ∀ s, p s = true → s = .rewards ∨ s = .slashings ∨ s = .sync) :
     (Internal.creditScan p (fun _ => false) v high tail) ≤ Internal.grossScan v high tail := by
@@ -3602,8 +3500,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.scan_le_gross {
   omega
 
 /-- A key with a sync credit over a run's replayed events has a gross credit on the run. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.syncCr_gross {x y :
-  ForkedBeaconState preset} (electra : .pectra ≤ x.fork)
+theorem syncCr_gross {x y : ForkedBeaconState preset} (electra : .pectra ≤ x.fork)
     (early : y.fork < .glamsterdam) (tailC : Run config checks x y) (highC : ℕ)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     (v : ℕ) (positive : 0 < Internal.syncCr eventsC v) : 0 < Internal.grossScan v highC tailC := by
@@ -3626,8 +3523,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.syncCr_gross {x
 /-- A key with a sync credit over the events of the shared segment has a gross credit on a run.
 
 The run is the shared segment followed by a tail from the split. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.syncCr_gross_shared (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem syncCr_gross_shared (h : Setting config checks g split fin pulled anc counted V)
     {z : BeaconState preset fork} (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, z⟩) (high : ℕ)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
@@ -3658,8 +3554,7 @@ A key charged in the split's epoch reads the balance before the credits of `pre`
 A key charged later holds those credits in its charge, so reading them is an overpayment.
 
 The excess charge also covers counted but inactive keys outside the voter set. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.scCharged (pulled counted split :
-  BeaconState preset fork)
+def scCharged (pulled counted split : BeaconState preset fork)
     {x y : ForkedBeaconState preset} (tailC : Run config checks x y) : Finset ValidatorIndex :=
   (Internal.SC pulled counted split).filter fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat
 
@@ -3678,8 +3573,7 @@ Its correlation penalty can fall in the window.
 None is in `SC`, which holds keys that are unslashed at the split.
 
 None is in C's quorum, since a flag set at the split persists to C. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cutKeys (config : Config) (pulled anc
-  fin split : BeaconState preset fork) :
+def cutKeys (config : Config) (pulled anc fin split : BeaconState preset fork) :
     Finset ValidatorIndex :=
   ((Finset.range pulled.validators.data.size).image UInt64.ofNat).filter fun v =>
     ((split.validators.data[v.toNat]?).map (·.slashed)).getD false = true ∧
@@ -3820,8 +3714,7 @@ A cut key is slashed at the split, and the flag persists to C.
 So it is not in `V` or a quorum class, and it is not in `SC`, which is unslashed at the split.
 
 It is in the split's registry, so it is not in `CS`. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cut_disjoint (h : Setting config
-  checks g split fin pulled anc counted V) :
+theorem cut_disjoint (h : Setting config checks g split fin pulled anc counted V) :
     Disjoint (Internal.cutKeys config pulled anc fin split) (V ∪ Internal.K4 pulled counted V ∪
       Internal.K5 counted V ∪
       Internal.K6 pulled counted ∪ Internal.SC pulled counted split ∪ Internal.CS counted split) :=
@@ -3868,8 +3761,7 @@ A cut key with a sync debit holds a seat and pays the rounding of an increment's
 C's run is read at `highC`, and the shared segment and R's run at `high`.
 
 The end epochs of R and C are at most `high + 1` and `highC + 1`, respectively. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bands_seats (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem bands_seats (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (high highC : ℕ)
@@ -4202,7 +4094,7 @@ The remainder `W` holds those and the unit gain.
 `Wh` pays the whistleblower reward of any set of keys that R's call reads as slashed on its branch.
 
 Each reward is at the key's effective balance and rise, or at its balance at the finalized state. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.branchR_split (config : Config)
+theorem branchR_split (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
     ∃ Wh W : ℕ, (pinTerms config state ancestor finalizedState).branchR =
       3 * (Wh + W + preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
@@ -4292,8 +4184,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.branchR_split (
   omega
 
 /-- The sync part of the proposer credit is at most the proposer credit. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.syncProposer_le_credit (config :
-  Config)
+theorem syncProposer_le_credit (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
     (pinTerms config state ancestor finalizedState).syncProposer ≤
       (pinTerms config state ancestor finalizedState).proposerCredit :=
@@ -4302,8 +4193,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.syncProposer_le
 /-- Keys of R's registry newly slashed on C's branch whose rise funds whistleblower rewards.
 
 They are active at C and do not qualify for R's slashing or slashable-exit charges. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.sc3a (config : Config) (pulled anc fin
-  counted split : BeaconState preset fork) :
+def sc3a (config : Config) (pulled anc fin counted split : BeaconState preset fork) :
     Finset ValidatorIndex :=
   (Internal.SC pulled counted split).filter fun v =>
     (¬ (pinTerms config pulled anc fin).slashedRB v.toNat = true ∧
@@ -4313,12 +4203,13 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.sc3a (config : Conf
 /-- The share of the cap budget for keys of `K6` outside R's registry.
 
 At a high gain rate each takes the largest cap. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.capUse (config : Config) (pulled anc
-  fin counted : BeaconState preset fork) : ℕ :=
+def capUse (config : Config) (pulled anc fin counted : BeaconState preset fork) : ℕ :=
   if (pinTerms config pulled anc fin).gainHigh = true then
     ((Internal.K6 pulled counted).filter fun v => pulled.validators.data.size ≤ v.toNat).card *
       preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
   else 0
+
+end Internal
 
 end Terms
 end PinDrift

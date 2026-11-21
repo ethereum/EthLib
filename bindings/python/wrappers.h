@@ -373,6 +373,7 @@ PyObject* py_enr_node_id                                  (PyObject* self, PyObj
 PyObject* py_enr_sign_v4                                  (PyObject* self, PyObject* args);
 PyObject* py_enr_make_record_v4                           (PyObject* self, PyObject* args);
 PyObject* py_enr_eth_fork_id                              (PyObject* self, PyObject* args);
+PyObject* py_enr_endpoints                                (PyObject* self, PyObject* args);
 PyObject* py_enr_consensus_entries                        (PyObject* self, PyObject* args);
 
 PyObject* py_discv5_log_distance                          (PyObject* self, PyObject* args);
@@ -386,6 +387,9 @@ PyObject* py_discv5_encrypt_message                       (PyObject* self, PyObj
 PyObject* py_discv5_decrypt_message                       (PyObject* self, PyObject* args);
 PyObject* py_discv5_decode_message                        (PyObject* self, PyObject* args);
 PyObject* py_discv5_reencode_message                      (PyObject* self, PyObject* args);
+PyObject* py_discv5_answers_request                       (PyObject* self, PyObject* args);
+PyObject* py_discv5_talk_response                         (PyObject* self, PyObject* args);
+PyObject* py_discv5_nodes_match                           (PyObject* self, PyObject* args);
 PyObject* py_discv5_make_whoareyou                        (PyObject* self, PyObject* args);
 PyObject* py_discv5_read_whoareyou                        (PyObject* self, PyObject* args);
 PyObject* py_discv5_seal_message                          (PyObject* self, PyObject* args);
@@ -567,6 +571,10 @@ PyObject* py_consensus_light_client_gossip_light_client (PyObject* self, PyObjec
 PyObject* py_consensus_block_to_light_client_header      (PyObject* self, PyObject* args);
 PyObject* py_consensus_light_client_update_proofs        (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_fork_digest               (PyObject* self, PyObject* args);
+PyObject* py_consensus_enr_fork_id                       (PyObject* self, PyObject* args);
+PyObject* py_consensus_next_fork_digest                  (PyObject* self, PyObject* args);
+PyObject* py_consensus_bootnode_fork_id                  (PyObject* self, PyObject* args);
+PyObject* py_consensus_enr_record                        (PyObject* self, PyObject* args);
 PyObject* py_consensus_digest_epochs (PyObject* self, PyObject* args);
 PyObject* py_consensus_fork_of_digest (PyObject* self, PyObject* args);
 PyObject* py_consensus_digests_identify (PyObject* self, PyObject* args);
@@ -756,6 +764,7 @@ PyObject* py_engine_read_get_blobs_result                (PyObject* self, PyObje
 PyObject* py_engine_exchange_transition_configuration     (PyObject* self, PyObject* args);
 PyObject* py_engine_exchange_capabilities                (PyObject* self, PyObject* args);
 PyObject* py_engine_get_client_version                   (PyObject* self, PyObject* args);
+PyObject* py_engine_get_inclusion_list                   (PyObject* self, PyObject* args);
 PyObject* py_engine_error_object                         (PyObject* self, PyObject* args);
 PyObject* py_engine_rewrite_params                       (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);

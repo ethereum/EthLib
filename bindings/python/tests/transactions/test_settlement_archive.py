@@ -11,7 +11,7 @@ from raising import raises
 
 from .test_transactions import FORK_OF_NETWORK
 
-ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
+ARCHIVE = "execution-specs/tests@v21.0.3/fixtures"
 
 # A block qualifies when no transaction runs code.
 # So the gas left is the gas limit minus the intrinsic gas, and the refund counter is 0.

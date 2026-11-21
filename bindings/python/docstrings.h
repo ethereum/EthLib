@@ -353,6 +353,9 @@
 #define DOC_enr_eth_fork_id \
   "The fork identifier of the \"eth\" entry of a record, as its hash and its next fork."
 
+#define DOC_enr_endpoints \
+  "The IPv4 and IPv6 endpoints of a record, each `None` when its address is absent."
+
 #define DOC_discv5_log_distance \
   "The logarithmic distance: the number of bits of the distance, and 0 for equal IDs."
 
@@ -385,6 +388,15 @@
 
 #define DOC_discv5_reencode_message \
   "The plaintext of the decoded message, written again by the encoder."
+
+#define DOC_discv5_answers_request \
+  "Whether a message plaintext answers a request plaintext."
+
+#define DOC_discv5_talk_response \
+  "The plaintext of the TALKRESP of a node that knows no protocol, for a TALKREQ plaintext."
+
+#define DOC_discv5_nodes_match \
+  "Whether records match the distances of a FINDNODE, from the node ID of its recipient."
 
 #define DOC_discv5_make_whoareyou \
   "Node B's WHOAREYOU packet for node A, and its challenge data."
@@ -907,6 +919,18 @@
 
 #define DOC_consensus_compute_fork_digest \
   "The fork digest at an epoch, on the chain with the given root of the genesis validators."
+
+#define DOC_consensus_enr_fork_id \
+  "The `eth2` value that a node writes at an epoch, as its digest, next version and next epoch."
+
+#define DOC_consensus_next_fork_digest \
+  "The `nfd` value that a node writes at an epoch: the digest of the next fork."
+
+#define DOC_consensus_bootnode_fork_id \
+  "The `eth2` value of a bootnode record made before genesis, as its three fields."
+
+#define DOC_consensus_enr_record \
+  "A signed \"v4\" record of a consensus node at an epoch, with its consensus entries."
 
 #define DOC_consensus_digest_epochs \
   "The epochs at which the fork digest can change, in increasing order and without repeats."
@@ -1543,6 +1567,9 @@
 
 #define DOC_engine_exchange_transition_configuration \
   "The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration."
+
+#define DOC_engine_get_inclusion_list \
+  "The answer to an `engine_getInclusionListV1` request, from the candidates of the node."
 
 #define DOC_engine_exchange_capabilities \
   "The answer to an `engine_exchangeCapabilities` request: the methods that EthLib defines."

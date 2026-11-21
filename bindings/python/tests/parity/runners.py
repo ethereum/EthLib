@@ -48,6 +48,7 @@ NOT_YET = {
     "random": "a fork or handler that the runner of random does not cover yet",
     "sanity": "a fork or handler that the runner of sanity does not cover yet",
     "transition": "a fork or handler that the runner of transition does not cover yet",
+    "blockchain_test_engine_reorg": "the runner of reorgs through the Engine API (#3534)",
 }
 
 # The plan at Gloas and Heze, by the steps of the track for Glamsterdam and Hegotá.

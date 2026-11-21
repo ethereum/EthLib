@@ -200,7 +200,9 @@ def prepareExecutionPayload (config : Config) (state : BeaconState preset fork)
     return some (⟨headBlockHash, safeBlockHash, finalizedBlockHash⟩, {
       timestamp, prevRandao, suggestedFeeRecipient, withdrawals, parentBeaconBlockRoot
       slotNumber := fun gloas => absurd gloas (Nat.not_le_of_lt bellatrix.2)
-      targetGasLimit := fun gloas => absurd gloas (Nat.not_le_of_lt bellatrix.2) })
+      targetGasLimit := fun gloas => absurd gloas (Nat.not_le_of_lt bellatrix.2)
+      inclusionListTransactions := fun heze =>
+        absurd heze (Nat.not_le_of_lt (Nat.lt_trans bellatrix.2 (by decide))) })
 
 /-! ## The forkchoice update of a proposer, from Gloas -/
 
@@ -264,9 +266,9 @@ The fee recipient and the target of the gas limit are those that the proposer gi
 
 The state here is the one after the payload of the parent, when the proposer builds on it.
 
-From Heze the result also holds the transactions of the inclusion lists of the slot before.
+From Heze the attributes also hold the transactions of the inclusion lists of the slot before.
 
-The payload attributes of the Engine API here have no field for them.
+Each transaction goes to the Engine API as its bytes.
 
 The custody columns of the update are not part of these types.
 
@@ -275,8 +277,7 @@ def prepareExecutionPayloadGloas (config : Config) (checks : SignatureChecks)
     (store : Store preset fork) (head : ForkChoiceNode) (state : BeaconState preset fork)
     (gloas : .glamsterdam ≤ fork) (safeBlockHash finalizedBlockHash : Hash32)
     (suggestedFeeRecipient : ExecutionAddress) (targetGasLimit : UInt64) :
-    Except ProposerError (ForkchoiceState × PayloadAttributes fork ×
-      Since .hegota fork (List InclusionListTransaction)) := do
+    Except ProposerError (ForkchoiceState × PayloadAttributes fork) := do
   let (state, withdrawals, headBlockHash) ← payloadParentGloas config checks store head state gloas
   let timestamp ← (computeTimeAtSlot config state.genesisTime state.slot).mapError .arith
   let prevRandao ← (getRandaoMix state (getCurrentEpoch state)).mapError .accessor
@@ -287,6 +288,8 @@ def prepareExecutionPayloadGloas (config : Config) (checks : SignatureChecks)
     withdrawals := fun _ => withdrawals.toList.map executionWithdrawal
     parentBeaconBlockRoot := fun _ => parentBeaconBlockRoot
     slotNumber := fun _ => state.slot
-    targetGasLimit := fun _ => targetGasLimit }, inclusionListTransactions)
+    targetGasLimit := fun _ => targetGasLimit
+    inclusionListTransactions := fun heze =>
+      (inclusionListTransactions heze).map fun tx => ⟨tx.data⟩ })
 
 end EthLib.Engine

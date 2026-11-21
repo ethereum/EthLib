@@ -12,7 +12,7 @@ from ethlib.serialization import rlp
 from .test_settlement_archive import _address, _int, _price, _raw_transactions, runs_no_code
 from .test_transactions import CHAIN_ID, FORK_OF_NETWORK, names
 
-ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
+ARCHIVE = "execution-specs/tests@v21.0.3/fixtures"
 
 _ROOT = "fixtures/blockchain_tests"
 _FORKS = [

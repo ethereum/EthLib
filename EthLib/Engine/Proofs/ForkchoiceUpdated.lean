@@ -834,7 +834,8 @@ theorem PayloadAttributes.atFork_fields {a : Σ f, PayloadAttributes f} {fork : 
       sinceValue b.withdrawals = sinceValue a.2.withdrawals ∧
       sinceValue b.parentBeaconBlockRoot = sinceValue a.2.parentBeaconBlockRoot ∧
       sinceValue b.slotNumber = sinceValue a.2.slotNumber ∧
-      sinceValue b.targetGasLimit = sinceValue a.2.targetGasLimit := by
+      sinceValue b.targetGasLimit = sinceValue a.2.targetGasLimit ∧
+      sinceValue b.inclusionListTransactions = sinceValue a.2.inclusionListTransactions := by
   obtain ⟨f, a⟩ := a
   unfold PayloadAttributes.atFork at h
   split at h
@@ -897,34 +898,30 @@ theorem checkAttributes_eq_error_of_unsupportedFork {version : Nat} {head : Know
   | some fork =>
     simp [checkAttributes, hF, h fork hF, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
-/-- A version takes exactly the forks from Paris to Glamsterdam whose attributes it decodes.
+/-- A version takes exactly the forks from Paris on whose attributes it decodes.
 
-The structure is that of the payload attributes at the fork.
-
-The source adds a field at Hegotá that these attributes lack, so the bound leaves Hegotá out. -/
+The structure is that of the payload attributes at the fork. -/
 theorem attributesTakeFork_eq_true_iff (version : Nat) (fork : Fork) :
     attributesTakeFork version fork = true ↔
-      .paris ≤ fork ∧ fork < .hegota ∧
-        attributesForkAt fork ∈ (attributesVersions version).map attributesFork := by
+      .paris ≤ fork ∧ attributesForkAt fork ∈ (attributesVersions version).map attributesFork := by
   match version with
-  | 0 | 1 | 2 | 3 => cases fork <;> decide
-  | n + 4 => cases fork <;> simp [attributesTakeFork, attributesVersions, attributesFork] <;> decide
+  | 0 | 1 | 2 | 3 | 4 => cases fork <;> decide
+  | n + 5 => cases fork <;> simp [attributesTakeFork, attributesVersions, attributesFork] <;> decide
 
-/-- Some version of the method takes a fork exactly when the fork is from Paris to Glamsterdam. -/
+/-- Some version of the method takes a fork exactly when the fork is from Paris on. -/
 theorem exists_attributesTakeFork_iff (fork : Fork) :
-    (∃ version, attributesTakeFork version fork = true) ↔ .paris ≤ fork ∧ fork < .hegota := by
+    (∃ version, attributesTakeFork version fork = true) ↔ .paris ≤ fork := by
   constructor
   · rintro ⟨version, h⟩
-    obtain ⟨hLow, hHigh, -⟩ := (attributesTakeFork_eq_true_iff version fork).mp h
-    exact ⟨hLow, hHigh⟩
-  · intro ⟨hLow, hHigh⟩
+    exact ((attributesTakeFork_eq_true_iff version fork).mp h).1
+  · intro hLow
     cases fork <;> first
       | exact absurd hLow (by decide)
-      | exact absurd hHigh (by decide)
       | exact ⟨1, rfl⟩
       | exact ⟨2, rfl⟩
       | exact ⟨3, rfl⟩
       | exact ⟨4, rfl⟩
+      | exact ⟨5, rfl⟩
 
 /-- A version other than 2 takes only forks whose structure is the one structure that it takes.
 
@@ -932,7 +929,7 @@ So only version 2 can give `-38003` for the structure at the fork. -/
 theorem attributesForkAt_of_attributesTakeFork {version : Nat} (hv : version ≠ 2) {fork : Fork}
     (h : attributesTakeFork version fork = true) :
     attributesForkAt fork = attributesFork version := by
-  have hmem := ((attributesTakeFork_eq_true_iff version fork).mp h).2.2
+  have hmem := ((attributesTakeFork_eq_true_iff version fork).mp h).2
   match version, hv with
   | 0, _ | 1, _ | 3, _ | _ + 4, _ => simpa [attributesVersions] using hmem
 
@@ -990,7 +987,10 @@ private def attributePairs {fork : Fork} (a : PayloadAttributes fork) :
       [("parentBeaconBlockRoot", dataJson (a.parentBeaconBlockRoot h).toList)] else []) ++
     (if h : .glamsterdam ≤ fork then
       [("slotNumber", quantityJson (a.slotNumber h).toNat),
-        ("targetGasLimit", quantityJson (a.targetGasLimit h).toNat)] else [])
+        ("targetGasLimit", quantityJson (a.targetGasLimit h).toNat)] else []) ++
+    (if h : .hegota ≤ fork then
+      [("inclusionListTransactions", Json.inclusionListJson (a.inclusionListTransactions h))]
+      else [])
 
 /-- The JSON of payload attributes is the object of their pairs. -/
 private theorem payloadAttributesJson_eq {fork : Fork} (a : PayloadAttributes fork) :
@@ -1001,15 +1001,16 @@ private theorem attributePairs_distinct {fork : Fork} (a : PayloadAttributes for
     (attributePairs a).Pairwise fun x y => x.1 ≠ y.1 := by
   unfold attributePairs
   by_cases h1 : Fork.shapella ≤ fork <;> by_cases h2 : Fork.dencun ≤ fork <;>
-    by_cases h3 : Fork.glamsterdam ≤ fork <;> simp [h1, h2, h3]
+    by_cases h3 : Fork.glamsterdam ≤ fork <;> by_cases h4 : Fork.hegota ≤ fork <;>
+    simp [h1, h2, h3, h4]
 
 /-- No pair of the JSON of payload attributes is `null`. -/
 private theorem attributePairs_present {fork : Fork} (a : PayloadAttributes fork) :
     ∀ x ∈ attributePairs a, x.2.isNull = false := by
   unfold attributePairs
   by_cases h1 : Fork.shapella ≤ fork <;> by_cases h2 : Fork.dencun ≤ fork <;>
-    by_cases h3 : Fork.glamsterdam ≤ fork <;>
-    simp [h1, h2, h3, dataJson, quantityJson, listJson]
+    by_cases h3 : Fork.glamsterdam ≤ fork <;> by_cases h4 : Fork.hegota ≤ fork <;>
+    simp [h1, h2, h3, h4, dataJson, quantityJson, listJson, Json.inclusionListJson]
 
 /-- When a version has the fork of the attributes, its fields are the names of the pairs. -/
 private theorem attributesFields_eq {fork : Fork} (a : PayloadAttributes fork) {v : Nat}
@@ -1018,12 +1019,13 @@ private theorem attributesFields_eq {fork : Fork} (a : PayloadAttributes fork) {
   have h1 := shapella_le_attributesForkAt_iff fork
   have h2 := dencun_le_attributesForkAt_iff fork
   have h3 := glamsterdam_le_attributesForkAt_iff fork
-  rw [← hv] at h1 h2 h3
+  have h4 := hegota_le_attributesForkAt_iff fork
+  rw [← hv] at h1 h2 h3 h4
   unfold attributePairs
-  rcases v with _ | _ | _ | _ | n <;>
-    simp (config := {decide := true}) [attributesFork] at h1 h2 h3 <;>
+  rcases v with _ | _ | _ | _ | _ | n <;>
+    simp (config := {decide := true}) [attributesFork] at h1 h2 h3 h4 <;>
     simp [attributesFields, attributesFieldsV1, attributesFieldsV2, attributesFieldsV3,
-      attributesFieldsV4, h1, h2, h3]
+      attributesFieldsV4, attributesFieldsV5, h1, h2, h3, h4]
 
 /-- The withdrawals read from the pairs of attributes are the option the attributes give. -/
 private theorem attributePairs_lookup_withdrawals {fork : Fork} (a : PayloadAttributes fork) :
@@ -1034,7 +1036,8 @@ private theorem attributePairs_lookup_withdrawals {fork : Fork} (a : PayloadAttr
   · simp [h, sinceValue, List.lookup]
   · simp only [sinceValue, h, dite_false, Option.map_none]
     simp
-    rintro k b (⟨rfl, _⟩ | ⟨_, ⟨rfl, _⟩ | ⟨rfl, _⟩⟩) <;> decide
+    rintro k b hk rfl
+    simp at hk
 
 /-- The parent beacon block root read from the pairs of attributes is the option they give. -/
 private theorem attributePairs_lookup_beacon {fork : Fork} (a : PayloadAttributes fork) :
@@ -1047,7 +1050,8 @@ private theorem attributePairs_lookup_beacon {fork : Fork} (a : PayloadAttribute
   · unfold attributePairs
     simp only [sinceValue, h, dite_false, Option.map_none]
     simp
-    rintro k b (⟨rfl, _⟩ | ⟨_, ⟨rfl, _⟩ | ⟨rfl, _⟩⟩) <;> decide
+    rintro k b hk rfl
+    simp at hk
 
 /-- The slot number read from the pairs of attributes is the option they give. -/
 private theorem attributePairs_lookup_slot {fork : Fork} (a : PayloadAttributes fork) :
@@ -1060,7 +1064,8 @@ private theorem attributePairs_lookup_slot {fork : Fork} (a : PayloadAttributes 
   · unfold attributePairs
     simp only [sinceValue, h, dite_false, Option.map_none]
     simp
-    rintro k b (⟨rfl, _⟩ | ⟨rfl, _⟩) <;> decide
+    rintro k b hk rfl
+    simp at hk
 
 /-- The target gas limit read from the pairs of attributes is the option they give. -/
 private theorem attributePairs_lookup_target {fork : Fork} (a : PayloadAttributes fork) :
@@ -1073,7 +1078,22 @@ private theorem attributePairs_lookup_target {fork : Fork} (a : PayloadAttribute
   · unfold attributePairs
     simp only [sinceValue, h, dite_false, Option.map_none]
     simp
-    rintro k b (⟨rfl, _⟩ | ⟨rfl, _⟩) <;> decide
+    rintro k b hk rfl
+    simp at hk
+
+/-- The inclusion list read from the pairs of attributes is the option they give. -/
+private theorem attributePairs_lookup_inclusion {fork : Fork} (a : PayloadAttributes fork) :
+    (attributePairs a).lookup "inclusionListTransactions" =
+      (sinceValue a.inclusionListTransactions).map Json.inclusionListJson := by
+  by_cases h : Fork.hegota ≤ fork
+  · rw [lookup_of_mem (attributePairs_distinct a) (k := "inclusionListTransactions")
+      (v := Json.inclusionListJson (a.inclusionListTransactions h)) (by simp [attributePairs, h])]
+    simp [sinceValue, h]
+  · unfold attributePairs
+    simp only [sinceValue, h, dite_false, Option.map_none]
+    simp
+    rintro k b hk rfl
+    simp at hk
 
 /-- A field from a fork is present in the option that it gives exactly when the fork has it. -/
 private theorem isSome_sinceValue {f fork : Fork} {α : Type} (x : Since f fork α) :
@@ -1090,7 +1110,8 @@ private theorem payloadAttributesOfJson_json {fork : Fork} (a : PayloadAttribute
       sinceValue c.withdrawals = sinceValue a.withdrawals ∧
       sinceValue c.parentBeaconBlockRoot = sinceValue a.parentBeaconBlockRoot ∧
       sinceValue c.slotNumber = sinceValue a.slotNumber ∧
-      sinceValue c.targetGasLimit = sinceValue a.targetGasLimit := by
+      sinceValue c.targetGasLimit = sinceValue a.targetGasLimit ∧
+      sinceValue c.inclusionListTransactions = sinceValue a.inclusionListTransactions := by
   have hd := attributePairs_distinct a
   obtain ⟨fs, hfs, hp⟩ := fields_mkObj "payloadAttributes" hd (attributePairs_present a)
   have lk := lookup_of_perm hp hd
@@ -1144,10 +1165,21 @@ private theorem payloadAttributesOfJson_json {fork : Fork} (a : PayloadAttribute
       simp only [Option.map_some]
       rw [uint64_toDigits]
       rfl
+  have o5 : optionalField fs "inclusionListTransactions" Json.inclusionListOfJson =
+      Except.ok (sinceValue a.inclusionListTransactions) := by
+    unfold optionalField
+    rw [lk, attributePairs_lookup_inclusion]
+    cases hw : sinceValue a.inclusionListTransactions with
+    | none => rfl
+    | some ws =>
+      simp only [Option.map_some]
+      rw [Json.inclusionListOfJson_json]
+      rfl
   have s1 := shapella_le_attributesForkAt_iff fork
   have s2 := dencun_le_attributesForkAt_iff fork
   have s3 := glamsterdam_le_attributesForkAt_iff fork
-  rw [← hv] at s1 s2 s3
+  have s4 := hegota_le_attributesForkAt_iff fork
+  rw [← hv] at s1 s2 s3 s4
   obtain ⟨x1, hx1⟩ := exists_since_iff (what := "withdrawals") |>.mpr
     ((isSome_sinceValue a.withdrawals).trans s1.symm)
   obtain ⟨x2, hx2⟩ := exists_since_iff (what := "parentBeaconBlockRoot") |>.mpr
@@ -1156,14 +1188,16 @@ private theorem payloadAttributesOfJson_json {fork : Fork} (a : PayloadAttribute
     ((isSome_sinceValue a.slotNumber).trans s3.symm)
   obtain ⟨x4, hx4⟩ := exists_since_iff (what := "targetGasLimit") |>.mpr
     ((isSome_sinceValue a.targetGasLimit).trans s3.symm)
+  obtain ⟨x5, hx5⟩ := exists_since_iff (what := "inclusionListTransactions") |>.mpr
+    ((isSome_sinceValue a.inclusionListTransactions).trans s4.symm)
   unfold payloadAttributesOfJson
   rw [payloadAttributesJson_eq]
   simp only [hfs, liftM_ok, Base.ok_bind]
   rw [ite_eq_left hex]
-  simp only [r1, r2, r3, o1, o2, o3, o4, hx1, hx2, hx3, hx4, liftM_ok, Base.ok_bind,
+  simp only [r1, r2, r3, o1, o2, o3, o4, o5, hx1, hx2, hx3, hx4, hx5, liftM_ok, Base.ok_bind,
     uint64_toDigits, fixed_dataJson, address_dataJson]
   exact ⟨_, rfl, rfl, rfl, rfl, sinceValue_of_since hx1, sinceValue_of_since hx2,
-    sinceValue_of_since hx3, sinceValue_of_since hx4⟩
+    sinceValue_of_since hx3, sinceValue_of_since hx4, sinceValue_of_since hx5⟩
 
 /-- Two fields from a fork that give the same option are equal. -/
 private theorem since_ext {f fork : Fork} {α : Type} {x y : Since f fork α}
@@ -1181,18 +1215,19 @@ private theorem atFork_eq_some {fork : Fork} (a : PayloadAttributes fork)
     (e4 : sinceValue b.2.withdrawals = sinceValue a.withdrawals)
     (e5 : sinceValue b.2.parentBeaconBlockRoot = sinceValue a.parentBeaconBlockRoot)
     (e6 : sinceValue b.2.slotNumber = sinceValue a.slotNumber)
-    (e7 : sinceValue b.2.targetGasLimit = sinceValue a.targetGasLimit) :
+    (e7 : sinceValue b.2.targetGasLimit = sinceValue a.targetGasLimit)
+    (e8 : sinceValue b.2.inclusionListTransactions = sinceValue a.inclusionListTransactions) :
     PayloadAttributes.atFork b fork = some a := by
   obtain ⟨b', hb'⟩ := Option.isSome_iff_exists.mp
     (PayloadAttributes.atFork_isSome_iff.mpr hb.symm)
   rw [hb']
-  obtain ⟨f1, f2, f3, f4, f5, f6, f7⟩ := PayloadAttributes.atFork_fields hb'
+  obtain ⟨f1, f2, f3, f4, f5, f6, f7, f8⟩ := PayloadAttributes.atFork_fields hb'
   congr 1
   cases a
   cases b'
   simp only [PayloadAttributes.mk.injEq]
   exact ⟨f1.trans e1, f2.trans e2, f3.trans e3, since_ext (f4.trans e4), since_ext (f5.trans e5),
-    since_ext (f6.trans e6), since_ext (f7.trans e7)⟩
+    since_ext (f6.trans e6), since_ext (f7.trans e7), since_ext (f8.trans e8)⟩
 
 /-- A version of the method reads back the JSON of attributes whose structure it takes.
 
@@ -1205,8 +1240,9 @@ theorem payloadAttributesOfVersion_json {fork : Fork} (a : PayloadAttributes for
     ∃ b, payloadAttributesOfVersion version (payloadAttributesJson a) = .ok b ∧
       PayloadAttributes.atFork b fork = some a := by
   obtain ⟨v, hmem, hv⟩ := takes
-  obtain ⟨c, hc, e1, e2, e3, e4, e5, e6, e7⟩ := payloadAttributesOfJson_json a hv
-  refine ⟨⟨attributesFork v, c⟩, ?_, atFork_eq_some a ⟨attributesFork v, c⟩ hv e1 e2 e3 e4 e5 e6 e7⟩
+  obtain ⟨c, hc, e1, e2, e3, e4, e5, e6, e7, e8⟩ := payloadAttributesOfJson_json a hv
+  refine ⟨⟨attributesFork v, c⟩, ?_,
+    atFork_eq_some a ⟨attributesFork v, c⟩ hv e1 e2 e3 e4 e5 e6 e7 e8⟩
   unfold payloadAttributesOfVersion
   by_cases h2 : version = 2
   · subst h2
@@ -1491,7 +1527,7 @@ theorem forkchoiceUpdatedResponseOfJson_call {version : Nat} {params : Lean.Json
 theorem exists_attributesVersions_of_attributesTakeFork {version : Nat} {fork : Fork}
     (h : attributesTakeFork version fork = true) :
     ∃ v ∈ attributesVersions version, attributesFork v = attributesForkAt fork :=
-  List.mem_map.mp ((attributesTakeFork_eq_true_iff version fork).mp h).2.2
+  List.mem_map.mp ((attributesTakeFork_eq_true_iff version fork).mp h).2
 
 /-- Attributes sent with a head that the update applies come back at the fork of the next block.
 
@@ -1524,27 +1560,30 @@ theorem forkchoiceUpdatedCall_payloadAttributesJson {version : Nat} {fork e : Fo
       sinceValue a'.withdrawals = sinceValue a.withdrawals ∧
       sinceValue a'.parentBeaconBlockRoot = sinceValue a.parentBeaconBlockRoot ∧
       sinceValue a'.slotNumber = sinceValue a.slotNumber ∧
-      sinceValue a'.targetGasLimit = sinceValue a.targetGasLimit := by
+      sinceValue a'.targetGasLimit = sinceValue a.targetGasLimit ∧
+      sinceValue a'.inclusionListTransactions = sinceValue a.inclusionListTransactions := by
   -- The attributes read back at a structure that the version takes, which is that of their fork.
   have takes := exists_attributesVersions_of_attributesTakeFork hTakes
   rw [hShape] at takes
   obtain ⟨b, hb, hat⟩ := payloadAttributesOfVersion_json a takes
   have hstruct : attributesForkAt fork = b.1 :=
     PayloadAttributes.atFork_isSome_iff.mp (by simp [hat])
-  obtain ⟨t1, t2, t3, t4, t5, t6, t7⟩ := PayloadAttributes.atFork_fields hat
+  obtain ⟨t1, t2, t3, t4, t5, t6, t7, t8⟩ := PayloadAttributes.atFork_fields hat
   -- At the fork of the payload they have the same structure, so they move there.
   obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp
     (PayloadAttributes.atFork_isSome_iff.mpr (hShape.trans hstruct))
-  obtain ⟨u1, u2, u3, u4, u5, u6, u7⟩ := PayloadAttributes.atFork_fields ha'
+  obtain ⟨u1, u2, u3, u4, u5, u6, u7, u8⟩ := PayloadAttributes.atFork_fields ha'
   have hcheck : checkAttributes config version known b = .ok ⟨e, a'⟩ :=
     checkAttributes_eq_ok_iff.mpr ⟨t1 ▸ hFork, hTakes, ha', t1 ▸ hTime⟩
   refine ⟨a', ?_, u1.trans t1.symm, u2.trans t2.symm, u3.trans t3.symm, u4.trans t4.symm,
-    u5.trans t5.symm, u6.trans t6.symm, u7.trans t7.symm⟩
+    u5.trans t5.symm, u6.trans t6.symm, u7.trans t7.symm, u8.trans t8.symm⟩
   unfold forkchoiceUpdatedCall
   rw [forkchoiceUpdatedParams_json]
   simp [hUpdate, hKnown, hb, hcheck, bind, Except.bind, pure, Except.pure]
 
-/-- From Glamsterdam, attributes sent with an applied head come back at Glamsterdam, at version 4.
+/-- At Glamsterdam, attributes sent with an applied head come back at Glamsterdam, at version 4.
+
+The attributes must be of Glamsterdam, the last fork before Hegotá.
 
 The tree must hold the head.
 
@@ -1552,7 +1591,8 @@ The block after the head must be of Glamsterdam, and the timestamp above that of
 
 The attributes at that fork carry every value of the attributes sent. -/
 theorem forkchoiceUpdatedCall_payloadAttributesJson_of_gloas {fork : Fork}
-    (gloas : .glamsterdam ≤ fork) {s : ForkchoiceState} {status : PayloadStatus}
+    (gloas : .glamsterdam ≤ fork) (before : fork < .hegota) {s : ForkchoiceState}
+    {status : PayloadStatus}
     {known : KnownPayload} (a : PayloadAttributes fork) (custody : Option (Vector UInt8 16))
     (hUpdate : forkchoiceUpdated transition tree finalized s = .ok (status, some s.headBlockHash))
     (hKnown : tree.lookup s.headBlockHash = some known)
@@ -1567,9 +1607,39 @@ theorem forkchoiceUpdatedCall_payloadAttributesJson_of_gloas {fork : Fork}
       sinceValue a'.withdrawals = sinceValue a.withdrawals ∧
       sinceValue a'.parentBeaconBlockRoot = sinceValue a.parentBeaconBlockRoot ∧
       sinceValue a'.slotNumber = sinceValue a.slotNumber ∧
-      sinceValue a'.targetGasLimit = sinceValue a.targetGasLimit := by
+      sinceValue a'.targetGasLimit = sinceValue a.targetGasLimit ∧
+      sinceValue a'.inclusionListTransactions = sinceValue a.inclusionListTransactions := by
   have hShape : attributesForkAt .glamsterdam = attributesForkAt fork := by
-    cases fork <;> first | rfl | exact absurd gloas (by decide)
+    cases fork <;> first | rfl | exact absurd gloas (by decide) | exact absurd before (by decide)
+  exact forkchoiceUpdatedCall_payloadAttributesJson a custody hUpdate hKnown hTime hFork rfl hShape
+
+/-- From Hegotá, attributes sent with an applied head come back at Hegotá, at version 5.
+
+The tree must hold the head.
+
+The block after the head must be of Hegotá, and the timestamp above that of the head.
+
+The attributes at that fork carry every value sent, the inclusion list too. -/
+theorem forkchoiceUpdatedCall_payloadAttributesJson_of_heze {fork : Fork}
+    (heze : .hegota ≤ fork) {s : ForkchoiceState} {status : PayloadStatus}
+    {known : KnownPayload} (a : PayloadAttributes fork) (custody : Option (Vector UInt8 16))
+    (hUpdate : forkchoiceUpdated transition tree finalized s = .ok (status, some s.headBlockHash))
+    (hKnown : tree.lookup s.headBlockHash = some known)
+    (hTime : known.timestamp < a.timestamp)
+    (hFork : config.activeFork (known.number.toNat + 1) a.timestamp.toNat = some .hegota) :
+    ∃ a' : PayloadAttributes .hegota,
+      forkchoiceUpdatedCall config transition 5 tree finalized
+          (forkchoiceUpdatedParamsJson 5 s (some a) custody) =
+        .ok (status, some s.headBlockHash, some ⟨.hegota, a'⟩) ∧
+      a'.timestamp = a.timestamp ∧ a'.prevRandao = a.prevRandao ∧
+      a'.suggestedFeeRecipient = a.suggestedFeeRecipient ∧
+      sinceValue a'.withdrawals = sinceValue a.withdrawals ∧
+      sinceValue a'.parentBeaconBlockRoot = sinceValue a.parentBeaconBlockRoot ∧
+      sinceValue a'.slotNumber = sinceValue a.slotNumber ∧
+      sinceValue a'.targetGasLimit = sinceValue a.targetGasLimit ∧
+      sinceValue a'.inclusionListTransactions = sinceValue a.inclusionListTransactions := by
+  have hShape : attributesForkAt .hegota = attributesForkAt fork := by
+    cases fork <;> first | rfl | exact absurd heze (by decide)
   exact forkchoiceUpdatedCall_payloadAttributesJson a custody hUpdate hKnown hTime hFork rfl hShape
 
 /-! ## The ID of a build -/
@@ -1595,6 +1665,68 @@ private theorem withdrawalBytes_inj (w w' : Execution.Blocks.Withdrawal)
   exact ⟨natToBytes_eight_inj h1, natToBytes_eight_inj h2, Vector.toList_inj.mp h3,
     natToBytes_eight_inj h4⟩
 
+/-- Bytes each after a byte 1, then a byte 0, split one way only from what follows. -/
+private theorem markedBytes_inj {x x' r r' : List UInt8}
+    (h : x.flatMap (fun b => [1, b]) ++ 0 :: r = x'.flatMap (fun b => [1, b]) ++ 0 :: r') :
+    x = x' ∧ r = r' := by
+  induction x generalizing x' with
+  | nil => cases x' <;> simp_all
+  | cons b x ih =>
+    cases x' with
+    | nil => simp at h
+    | cons b' x' =>
+      simp only [List.flatMap_cons, List.cons_append, List.nil_append, List.cons.injEq,
+        true_and] at h
+      obtain ⟨rfl, h⟩ := h
+      obtain ⟨rfl, rfl⟩ := ih h
+      exact ⟨rfl, rfl⟩
+
+/-- The bytes of one inclusion list entry never start with the byte 2. -/
+private theorem inclusionListEntryBytes_ne {t : ByteArray} {r r' : List UInt8} :
+    inclusionListEntryBytes t ++ r ≠ 2 :: r' := by
+  unfold inclusionListEntryBytes
+  cases t.data.toList <;> simp
+
+/-- The bytes of an inclusion list and the byte 2 split one way only from what follows. -/
+private theorem inclusionListBytes_inj {l l' : List ByteArray} {r r' : List UInt8}
+    (h : l.flatMap inclusionListEntryBytes ++ 2 :: r =
+      l'.flatMap inclusionListEntryBytes ++ 2 :: r') : l = l' ∧ r = r' := by
+  induction l generalizing l' with
+  | nil =>
+    cases l' with
+    | nil => simpa using h
+    | cons t' l' =>
+      simp only [List.flatMap_cons, List.append_assoc, List.flatMap_nil, List.nil_append] at h
+      exact absurd h.symm inclusionListEntryBytes_ne
+  | cons t l ih =>
+    cases l' with
+    | nil =>
+      simp only [List.flatMap_cons, List.append_assoc, List.flatMap_nil, List.nil_append] at h
+      exact absurd h inclusionListEntryBytes_ne
+    | cons t' l' =>
+      simp only [List.flatMap_cons, inclusionListEntryBytes, List.append_assoc, List.cons_append,
+        List.nil_append] at h
+      obtain ⟨ht, hl⟩ := markedBytes_inj h
+      obtain ⟨rfl, rfl⟩ := ih hl
+      obtain ⟨⟨d⟩⟩ := t
+      obtain ⟨⟨d'⟩⟩ := t'
+      simp only at ht
+      subst ht
+      exact ⟨rfl, rfl⟩
+
+/-- The part of a fork from Hegotá splits one way only from what follows, whether or not present. -/
+private theorem hegotaBytes_inj {p : Prop} [Decidable p] {l l' : p → List ByteArray}
+    {r r' : List UInt8}
+    (h : (if hp : p then (l hp).flatMap inclusionListEntryBytes ++ [2] else []) ++ r =
+      (if hp : p then (l' hp).flatMap inclusionListEntryBytes ++ [2] else []) ++ r') :
+    (∀ hp, l hp = l' hp) ∧ r = r' := by
+  by_cases hp : p
+  · simp only [hp, dite_true, List.append_assoc, List.singleton_append] at h
+    obtain ⟨hl, rfl⟩ := inclusionListBytes_inj h
+    exact ⟨fun _ => hl, rfl⟩
+  · simp only [hp, dite_false, List.nil_append] at h
+    exact ⟨fun h' => absurd h' hp, h⟩
+
 /-- The bytes that the ID of a build hashes determine the head and the attributes, at one fork. -/
 theorem payloadIdInput_inj {fork : Fork} {head head' : Hash32} {a a' : PayloadAttributes fork}
     (h : payloadIdInput head a = payloadIdInput head' a') : head = head' ∧ a = a' := by
@@ -1604,14 +1736,16 @@ theorem payloadIdInput_inj {fork : Fork} {head head' : Hash32} {a a' : PayloadAt
   obtain ⟨hTime, e⟩ := List.append_inj e (by simp [natToBytes_length])
   obtain ⟨hRandao, e⟩ := List.append_inj e (by simp)
   obtain ⟨hFee, e⟩ := List.append_inj e (by simp)
+  -- The inclusion list ends with the byte 2, which no entry starts with.
+  obtain ⟨hL, e⟩ := hegotaBytes_inj e
   -- The withdrawals vary in length, so this split counts the fixed bytes after them.
   obtain ⟨hW, e⟩ := List.append_inj' e (by
     by_cases hd : .dencun ≤ fork <;> by_cases hg : .glamsterdam ≤ fork <;>
       simp [hd, hg, natToBytes_length])
   obtain ⟨hB, hG⟩ := List.append_inj e (by by_cases hd : .dencun ≤ fork <;> simp [hd])
   refine ⟨Vector.toList_inj.mp hHead, ?_⟩
-  obtain ⟨t, r, s, w, b, n, g⟩ := a
-  obtain ⟨t', r', s', w', b', n', g'⟩ := a'
+  obtain ⟨t, r, s, w, b, n, g, l⟩ := a
+  obtain ⟨t', r', s', w', b', n', g', l'⟩ := a'
   simp only [PayloadAttributes.mk.injEq]
   refine ⟨natToBytes_eight_inj hTime, Vector.toList_inj.mp hRandao, Vector.toList_inj.mp hFee,
     ?_, ?_, ?_⟩
@@ -1628,8 +1762,9 @@ theorem payloadIdInput_inj {fork : Fork} {head head' : Hash32} {a a' : PayloadAt
   · by_cases hg : .glamsterdam ≤ fork
     · simp only [hg, dite_true] at hG
       obtain ⟨hn, hg'⟩ := List.append_inj hG (by simp [natToBytes_length])
-      exact ⟨funext fun _ => natToBytes_eight_inj hn, funext fun _ => natToBytes_eight_inj hg'⟩
-    · exact ⟨Since.eq_of_not_le hg _ _, Since.eq_of_not_le hg _ _⟩
+      exact ⟨funext fun _ => natToBytes_eight_inj hn, funext fun _ => natToBytes_eight_inj hg',
+        funext hL⟩
+    · exact ⟨Since.eq_of_not_le hg _ _, Since.eq_of_not_le hg _ _, funext hL⟩
 
 /-- Bytes to hash that agree give the same head and the same timestamp, at any two forks. -/
 private theorem payloadIdInput_head_timestamp {fork fork' : Fork} {head head' : Hash32}
@@ -1682,5 +1817,21 @@ theorem forkchoiceUpdatedCall_payloadIdInput_inj {version version' : Nat}
   cases hF
   obtain ⟨-, rfl⟩ := payloadIdInput_inj same
   exact ⟨rfl, rfl⟩
+
+/-! ## The inclusion list verdict -/
+
+/-- A response of version 5 carries a verdict exactly when its status is valid.
+
+The verdict is then whether the head satisfies its inclusion list. -/
+theorem inclusionListVerdict_eq_some_iff {status : PayloadStatus} {satisfied b : Bool} :
+    inclusionListVerdict status satisfied = some b ↔ status.status = .valid ∧ b = satisfied := by
+  unfold inclusionListVerdict
+  by_cases h : status.status = .valid <;> simp [h, eq_comm]
+
+/-- A response of version 5 carries no verdict exactly when its status is not valid. -/
+theorem inclusionListVerdict_eq_none_iff {status : PayloadStatus} {satisfied : Bool} :
+    inclusionListVerdict status satisfied = none ↔ status.status ≠ .valid := by
+  unfold inclusionListVerdict
+  by_cases h : status.status = .valid <;> simp [h]
 
 end EthLib.Engine

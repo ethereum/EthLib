@@ -3,10 +3,10 @@
 `header_pairs.json` holds the fee fields of consecutive block headers from the blockchain tests of the execution specification.
 
 - Repository: [`ethereum/execution-specs`](https://github.com/ethereum/execution-specs)
-- Release: `tests@v21.0.2`
-- Commit: `e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e`
+- Release: `tests@v21.0.3`
+- Commit: `391d8a05d5cb182542ac7e7330c858b6ee03f990`
 - Archive: `fixtures.tar.gz`
-- Archive sha256: `e2fa7ea2ea516459f9ab92284b2927892f318f4e1f78ca802cb05a6c3b479ed9`
+- Archive sha256: `46bd48fb71a23da084218fe856fe442ab0c8d00c85c1c1aead0d2a965804fd24`
 - Licence: CC0-1.0
 
 The pairs come from every fixture under these paths of `blockchain_tests/`, at each network but the Amsterdam ones:

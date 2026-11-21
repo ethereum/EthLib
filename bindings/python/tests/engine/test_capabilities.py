@@ -33,14 +33,15 @@ _VERSIONED = re.compile(r"engine_[A-Za-z]+V[1-9][0-9]*")
 # The last version of each method that EthLib defines; each has every version from 1.
 # The order is that of EthLib's table; the source fixes no order.
 _DEFINED = {
-    "newPayload": 5,
-    "forkchoiceUpdated": 4,
+    "newPayload": 6,
+    "forkchoiceUpdated": 5,
     "getPayload": 6,
     "getPayloadBodiesByHash": 2,
     "getPayloadBodiesByRange": 2,
     "getBlobs": 4,
     "exchangeTransitionConfiguration": 1,
     "getClientVersion": 1,
+    "getInclusionList": 1,
 }
 
 # The example version and commit of ClientVersionV1 in identification.md.

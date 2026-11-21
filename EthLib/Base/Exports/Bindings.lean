@@ -491,6 +491,11 @@ def bindings : List Binding := [
   ⟨"enr_eth_fork_id", `EthLib.Networking.Enr.Exports.ethForkIdExport,
     "(record: bytes) -> tuple[bytes, int] | None",
     [`EthLib.Networking.Enr.EnrError], some "EnrError"⟩,
+  ⟨"enr_endpoints", `EthLib.Networking.Enr.Exports.endpointsExport,
+    "(record: bytes) -> tuple[" ++
+      "tuple[bytes, int | None, int | None, int | None] | None, " ++
+      "tuple[bytes, int | None, int | None, int | None] | None]",
+    [`EthLib.Networking.Enr.EnrError], some "EnrError"⟩,
   ⟨"discv5_log_distance", `EthLib.Networking.Discv5.logDistance,
     "(a: bytes, b: bytes) -> int",
     [], some "Discv5Error"⟩,
@@ -527,6 +532,15 @@ def bindings : List Binding := [
   ⟨"discv5_reencode_message", `EthLib.Networking.Discv5.Exports.reencodeMessageExport,
     "(plaintext: bytes) -> bytes",
     [`EthLib.Networking.Discv5.MessageError], some "Discv5Error"⟩,
+  ⟨"discv5_answers_request", `EthLib.Networking.Discv5.Exports.answersRequestExport,
+    "(request: bytes, answer: bytes) -> bool",
+    [`EthLib.Networking.Discv5.MessageError], some "Discv5Error"⟩,
+  ⟨"discv5_talk_response", `EthLib.Networking.Discv5.Exports.talkResponseExport,
+    "(request: bytes) -> bytes",
+    [`EthLib.Networking.Discv5.MessageError], some "Discv5Error"⟩,
+  ⟨"discv5_nodes_match", `EthLib.Networking.Discv5.Exports.nodesMatchExport,
+    "(recipient: bytes, distances: list[int], records: list[bytes]) -> bool",
+    [], some "Discv5Error"⟩,
   ⟨"discv5_make_whoareyou", `EthLib.Networking.Discv5.Exports.makeWhoareyouExport,
     "(dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: int) -> " ++
       "tuple[bytes, bytes]",
@@ -1215,6 +1229,21 @@ def bindings : List Binding := [
   ⟨"consensus_compute_fork_digest", `EthLib.Consensus.Exports.computeForkDigestExport,
     "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, " ++
       "epoch: int) -> bytes",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_enr_fork_id", `EthLib.Consensus.Exports.enrForkIdExport,
+    "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, " ++
+      "epoch: int) -> tuple[bytes, bytes, int]",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_next_fork_digest", `EthLib.Consensus.Exports.nextForkDigestExport,
+    "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, " ++
+      "epoch: int) -> bytes",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_bootnode_fork_id", `EthLib.Consensus.Exports.bootnodeForkIdExport,
+    "(name: str, config: dict[str, Any] | None) -> tuple[bytes, bytes, int]",
+    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"consensus_enr_record", `EthLib.Consensus.Exports.consensusRecordExport,
+    "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, epoch: int, " ++
+      "secret_key: bytes, seq: int, attnets: bytes, syncnets: bytes, cgc: int) -> bytes",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_digest_epochs", `EthLib.Consensus.Exports.digestEpochsExport,
     "(name: str, config: dict[str, Any] | None) -> list[int]", [], some "ConsensusError"⟩,
@@ -1946,6 +1975,9 @@ def bindings : List Binding := [
     `EthLib.Engine.Exports.exchangeTransitionConfigurationExport,
     "(terminal_total_difficulty: int, terminal_block_hash: bytes, terminal_block_number: int, " ++
       "request: dict) -> dict[str, Any]",
+    [`EthLib.Engine.EngineError], some "EngineError"⟩,
+  ⟨"engine_get_inclusion_list", `EthLib.Engine.Exports.getInclusionListExport,
+    "(candidates: list[bytes], request: dict) -> list[str]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_exchange_capabilities", `EthLib.Engine.Exports.exchangeCapabilitiesExport,
     "(request: dict) -> list[str]",

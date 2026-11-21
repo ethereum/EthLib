@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Secp256k1.Curve
 public import EthLib.Cryptography.Secp256k1.Errors
+public import EthLib.Cryptography.Secp256k1.Sqrt
 public import EthLib.Base.BigEndian
 
 /-!

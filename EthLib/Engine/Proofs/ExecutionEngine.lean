@@ -239,28 +239,17 @@ theorem executionEngine_accepts_newPayloadRequest_iff {chain : BlockChain}
     exists_congr fun b => and_congr Iff.rfl <| and_congr ?_ Iff.rfl
   exact forall_congr' fun deneb => by simp [Consensus.BeaconBlockBody.newPayloadRequest]
 
-/-- From Bellatrix to Gloas, the version of the method at a fork takes some fork. -/
-theorem exists_acceptsFork_newPayloadVersion (h : .bellatrix ≤ fork ∧ fork < .hegota) :
+/-- From Bellatrix on, the version of the method at a fork takes some fork. -/
+theorem exists_acceptsFork_newPayloadVersion (h : .bellatrix ≤ fork) :
     ∃ f, acceptsFork (newPayloadVersion fork) f = true := by
-  obtain ⟨low, high⟩ := h
   cases fork <;> first
-    | exact absurd low (by decide)
-    | exact absurd high (by decide)
+    | exact absurd h (by decide)
     | exact ⟨.paris, by decide⟩
     | exact ⟨.shapella, by decide⟩
     | exact ⟨.dencun, by decide⟩
     | exact ⟨.pectra, by decide⟩
     | exact ⟨.glamsterdam, by decide⟩
-
-/-- From Heze, no payload of the beacon chain has a block here. -/
-theorem payloadBlock_of_hegota_le (h : .hegota ≤ fork) {config : ChainConfig}
-    {p : Consensus.ExecutionPayload preset fork} {root : Since .dencun fork Consensus.Root}
-    {requests : Since .pectra fork (List ByteArray)} :
-    payloadBlock config p root requests = none := by
-  have zero : newPayloadVersion fork = 0 := by simp [newPayloadVersion, h]
-  unfold payloadBlock
-  cases anyPayloadOf p <;> cases config.activeFork p.blockNumber.toNat p.timestamp.toNat <;>
-    simp [zero, acceptsFork]
+    | exact ⟨.hegota, by decide⟩
 
 /-- A payload with a block has it at a fork that the version of the method takes. -/
 theorem acceptsFork_of_payloadBlock {config : ChainConfig}
@@ -270,16 +259,26 @@ theorem acceptsFork_of_payloadBlock {config : ChainConfig}
     acceptsFork (newPayloadVersion fork) f = true :=
   (payloadBlock_spec h).1
 
-/-- From Gloas, a payload with a block has a block of Amsterdam. -/
-theorem fork_of_payloadBlock_of_gloas (gloas : .glamsterdam ≤ fork) {config : ChainConfig}
+/-- From Heze, a payload with a block has a block of Bogota. -/
+theorem fork_of_payloadBlock_of_heze (heze : .hegota ≤ fork) {config : ChainConfig}
+    {p : Consensus.ExecutionPayload preset fork}
+    {root : Since .dencun fork Consensus.Root} {requests : Since .pectra fork (List ByteArray)}
+    {f : Fork} {b : Block f Transaction} (h : payloadBlock config p root requests = some ⟨f, b⟩) :
+    f = .hegota := by
+  have version : newPayloadVersion fork = 6 := by simp [newPayloadVersion, heze]
+  have accepted := acceptsFork_of_payloadBlock h
+  rw [version] at accepted
+  simpa [acceptsFork] using accepted
+
+/-- At Gloas, a payload with a block has a block of Amsterdam. -/
+theorem fork_of_payloadBlock_of_gloas (gloas : .glamsterdam ≤ fork) (before : fork < .hegota)
+    {config : ChainConfig}
     {p : Consensus.ExecutionPayload preset fork}
     {root : Since .dencun fork Consensus.Root} {requests : Since .pectra fork (List ByteArray)}
     {f : Fork} {b : Block f Transaction} (h : payloadBlock config p root requests = some ⟨f, b⟩) :
     f = .glamsterdam := by
-  -- From Heze no payload has a block, so the fork is Gloas.
-  by_cases heze : .hegota ≤ fork
-  · rw [payloadBlock_of_hegota_le heze] at h
-    cases h
+  -- Before Heze the fork is Gloas, which calls version 5.
+  have heze : ¬.hegota ≤ fork := Nat.not_le.mpr before
   have version : newPayloadVersion fork = 5 := by simp [newPayloadVersion, heze, gloas]
   have accepted := acceptsFork_of_payloadBlock h
   rw [version] at accepted
@@ -309,14 +308,15 @@ theorem header_of_payloadBlock_of_gloas (gloas : .glamsterdam ≤ fork) {config 
   exact ⟨(ExecutionPayload.toBlock_slotNumber hBlock (Nat.le_refl _)).trans sl',
     (ExecutionPayload.toBlock_accessList hBlock (Nat.le_refl _)).2.trans (congrArg _ acc')⟩
 
-/-- From Gloas, the execution layer accepts exactly the requests whose Amsterdam block passes.
+/-- At Gloas, the execution layer accepts exactly the requests whose Amsterdam block passes.
 
 The request lists must be well formed, and the block of the payload must exist.
 
 The blob transactions of that block must carry the versioned hashes of the request, in order.
 
 The block must pass the state transition of the chain. -/
-theorem executionEngine_accepts_iff_of_gloas (gloas : .glamsterdam ≤ fork) {chain : BlockChain}
+theorem executionEngine_accepts_iff_of_gloas (gloas : .glamsterdam ≤ fork)
+    (before : fork < .hegota) {chain : BlockChain}
     {request : Consensus.NewPayloadRequest preset fork} :
     (executionEngine chain).verifyAndNotifyNewPayload request = .ok true ↔
       ∃ requests, request.requestsList = .ok requests ∧ ∃ b : Block .glamsterdam Transaction,
@@ -328,7 +328,7 @@ theorem executionEngine_accepts_iff_of_gloas (gloas : .glamsterdam ≤ fork) {ch
   rw [executionEngine_accepts_iff]
   constructor
   · rintro ⟨requests, found, f, b, hBlock, hashes, post, transition⟩
-    obtain rfl := fork_of_payloadBlock_of_gloas gloas hBlock
+    obtain rfl := fork_of_payloadBlock_of_gloas gloas before hBlock
     exact ⟨requests, found, b, hBlock, hashes _, post, transition⟩
   · rintro ⟨requests, found, b, hBlock, hashes, post, transition⟩
     exact ⟨requests, found, _, b, hBlock, fun _ => hashes, post, transition⟩

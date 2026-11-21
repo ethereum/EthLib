@@ -100,6 +100,19 @@ def hexListToBytes (hex : Array String) : Except KzgError (Array ByteArray) :=
     | some b => .ok b
     | none   => .error .invalidTrustedSetup
 
+/-- Decode the `G2` point at position `i` of the embedded setup, and no other point.
+
+A caller that needs one point reads it without decoding the 8192 points of `G1`.
+
+A position past the 65 points gives the same error as a string that does not decode. -/
+def g2MonomialOfHex (i : Nat) : Except KzgError Bls.G2 :=
+  match TrustedSetupData.g2MonomialHex[i]? with
+  | some hex =>
+    match hexToBytes? hex with
+    | some b => decodeG2 b
+    | none => .error .invalidTrustedSetup
+  | none => .error .invalidTrustedSetup
+
 /-- Decode the embedded setup of the mainnet ceremony.
 
 Compiled Lean evaluates each constant when its module is initialized.

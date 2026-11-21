@@ -47,9 +47,9 @@ theorem payloadAttributesEvent_fields (a : PayloadAttributes fork) :
   unfold payloadAttributesJson attributeFields
   congr 1
   simp only [List.map_append]
-  split <;> split <;> split <;>
+  split <;> split <;> split <;> split <;>
     simp [AttributeValue.engineJson, AttributeScalar.engineJson, Execution.Rpc.withdrawalJson,
-      engineObject, withdrawalFields, Serialization.JsonRpc.listJson]
+      engineObject, withdrawalFields, Serialization.JsonRpc.listJson, Json.inclusionListJson]
 
 /-- The proposer of the event is the one that the state gives for its slot.
 
@@ -144,12 +144,11 @@ theorem payloadAttributesEvent_prepareExecutionPayloadGloas {config : Config}
     {state base : BeaconState preset fork} {gloas : .glamsterdam ≤ fork}
     {safe finalized : Hash32} {feeRecipient : ExecutionAddress} {targetGasLimit : UInt64}
     {update : ForkchoiceState} {attributes : PayloadAttributes fork}
-    {transactions : Since .hegota fork (List InclusionListTransaction)}
     {withdrawals : Array Consensus.Withdrawal} {parentHash : Hash32}
     {forks : .bellatrix ≤ fork ∧ fork < .hegota} {terminalNumber : UInt64}
     {event : PayloadAttributesEvent fork}
     (prepared : prepareExecutionPayloadGloas config checks store head state gloas safe finalized
-      feeRecipient targetGasLimit = .ok (update, attributes, transactions))
+      feeRecipient targetGasLimit = .ok (update, attributes))
     (parented : payloadParentGloas config checks store head state gloas =
       .ok (base, withdrawals, parentHash))
     (made : payloadAttributesEvent base forks update attributes terminalNumber = .ok event) :
