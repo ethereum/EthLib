@@ -4,14 +4,6 @@ module
 # `Base.BigEndian`
 
 Big-endian integers: a list of bytes read as a number, and a number written back as bytes.
-
-Appendix H of the Yellow Paper reads a word this way.
-
-The first byte is the most significant one:
-
-```text
-    [0x01, 0x00]  reads as  1 * 256 + 0 = 256
-```
 -/
 
 @[expose] public section
@@ -20,8 +12,11 @@ namespace EthLib.Base
 
 /-- The integer that the bytes write, the first byte the most significant.
 
-An empty list reads as 0. -/
+Appendix H of the Yellow Paper reads a word this way.
+
+For example, `[0x01, 0x00]` reads as `1 * 256 + 0 = 256`, and an empty list reads as 0. -/
 def bytesToNat (bytes : List UInt8) : Nat :=
+  -- Shift the value so far by one byte, then add the next byte.
   bytes.foldl (fun acc b => acc * 256 + b.toNat) 0
 
 /-- Folding from any start value shifts it by one factor of 256 per byte. -/

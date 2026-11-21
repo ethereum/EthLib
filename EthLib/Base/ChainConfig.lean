@@ -8,25 +8,15 @@ public import EthLib.Base.Fork
 # `Base.ChainConfig`
 
 A chain configuration says when each fork activates on an execution chain.
-
-A fork activates at a block number, or from Shapella on at a timestamp.
-
-At a block, the active fork is the latest fork whose activation the block has reached.
-
-[EIP-6953](https://eips.ethereum.org/EIPS/eip-6953#specification) describes both triggers.
-
-The forks of the consensus layer alone activate by epoch, so an execution chain never lists them.
-
-A chain can also set its own blob parameters from an activation, as [EIP-7892][eip-7892] allows.
-
-[eip-7892]: https://eips.ethereum.org/EIPS/eip-7892#execution-layer-configuration
 -/
 
 @[expose] public section
 
 namespace EthLib.Base
 
-/-- The point of an execution chain from which a fork is active. -/
+/-- The point of an execution chain from which a fork is active.
+
+[EIP-6953](https://eips.ethereum.org/EIPS/eip-6953#specification) describes both triggers. -/
 inductive Activation where
   /-- The fork is active from the block with this number on. -/
   | block (number : Nat)
@@ -40,7 +30,9 @@ namespace Activation
 
 /-- Whether a block, with its number and its timestamp, has reached an activation. -/
 def reached : Activation → (number timestamp : Nat) → Bool
+  -- A block number is reached by that block and every later one.
   | block n, number, _ => n ≤ number
+  -- A timestamp is reached by every block at or after it.
   | time t, _, timestamp => t ≤ timestamp
 
 /-- One activation comes no later than another along a chain.
@@ -72,9 +64,13 @@ structure ChainConfig where
 
   From Pectra, its deposit logs give the deposit requests of a block, as EIP-6110 configures. -/
   depositContractAddress : Address
-  /-- Each fork of the chain with its activation, in the order of the timeline. -/
+  /-- Each fork of the chain with its activation, in the order of the timeline.
+
+  The forks of the consensus layer alone activate by epoch, so the list never holds them. -/
   activations : List (Fork × Activation)
   /-- The blob schedules that the chain sets itself, each with its fork and activation, in order.
+
+  [EIP-7892][eip-7892] lets a chain set its own blob parameters from an activation.
 
   A schedule holds from its activation until the activation of the next one.
 
@@ -86,7 +82,8 @@ structure ChainConfig where
 
   A schedule that a chain sets at an activation of no fork of the timeline has no fork.
 
-  [eip-7840]: https://eips.ethereum.org/EIPS/eip-7840#specification -/
+  [eip-7840]: https://eips.ethereum.org/EIPS/eip-7840#specification
+  [eip-7892]: https://eips.ethereum.org/EIPS/eip-7892#execution-layer-configuration -/
   blobSchedules : List (Option Fork × Activation × BlobSchedule) := []
   deriving DecidableEq, Repr
 
@@ -115,6 +112,7 @@ instance (config : ChainConfig) : Decidable config.Ordered :=
 
 [EIP-6122](https://eips.ethereum.org/EIPS/eip-6122#additional-rules) requires this order. -/
 def activationsOrdered (activations : List (Fork × Activation)) : Bool :=
+  -- For each fork by block number, every fork before it in the order is by block number too.
   activations.all fun (g, b) => !(b matches .block _) ||
     activations.all fun (f, a) => a matches .block _ || !decide (f < g)
 
@@ -126,9 +124,11 @@ Two forks can activate at one block, and then the later fork is active.
 
 No fork is active at a block that has reached no activation. -/
 def activeFork (config : ChainConfig) (number timestamp : Nat) : Option Fork :=
+  -- Fold from the last fork, keeping the latest reached fork in the order of the forks.
   config.activations.foldr (init := none) fun (fork, activation) later =>
     if activation.reached number timestamp then
       match later with
+      -- A later fork already reached wins, as Petersburg wins over Constantinople.
       | some other => if fork ≤ other then some other else some fork
       | none => some fork
     else later
@@ -141,6 +141,7 @@ Two schedules can activate at one block, and then the later one in the list hold
 
 None holds at a block that has reached no activation of a blob schedule. -/
 def blobScheduleAt (config : ChainConfig) (number timestamp : Nat) : Option BlobSchedule :=
+  -- Search from the end, so the last reached schedule in the list wins.
   (config.blobSchedules.reverse.find? fun entry => entry.2.1.reached number timestamp).map
     (·.2.2)
 
