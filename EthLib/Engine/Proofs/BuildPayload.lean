@@ -3,6 +3,7 @@ module
 public import EthLib.Engine.BuildPayload
 public import EthLib.Engine.Proofs.NewPayload
 public import EthLib.Execution.Proofs.Blocks.Transition
+import EthLib.Execution.Proofs.Blocks.BodyGas
 
 /-!
 # Proofs: the payload that the execution layer builds
@@ -165,6 +166,41 @@ theorem blockAccessList_of_buildPayload
     Except.ok.inj hHash
   rw [hBlock]
   simp [fillHeader, hValue, hValueEq]
+
+/-- A built block comes back from its payload form, with the requests and access list of the build.
+
+The parent beacon block root and the slot are those of its header. -/
+theorem toBlock_of_buildPayload (h : buildPayload chain attributes choices transactions = .ok built)
+    (hParis : .paris ≤ fork) {p : ExecutionPayload fork}
+    (hp : ExecutionPayload.ofBlock hParis built.block = some p) :
+    p.toBlock built.block.header.parentBeaconBlockRoot (fun _ => built.requests)
+      built.blockAccessList built.block.header.slotNumber = .ok built.block := by
+  obtain ⟨-, parent, parentHash, result, -, -, -, hR, -, -, hBlock, -, -, -, hList⟩ :=
+    buildPayload_spec h
+  obtain ⟨-, -, -, hRoots⟩ := runBody_eq_ok.mp hR
+  refine ExecutionPayload.toBlock_ofBlock hParis _ _ _ hp ?_ ?_ ?_ ?_
+    (stateTransition_fork_le (stateTransition_of_buildPayload h)) ?_ ?_
+    (requestsHash_of_buildPayload h) ?_ (fun _ => rfl)
+  -- The ommers and the fields that EIP-3675 fixes come from the header before the body ran.
+  · rw [hBlock]
+  · rw [hBlock]
+    rfl
+  · rw [hBlock]
+    rfl
+  · rw [hBlock]
+    rfl
+  -- The roots of the header are the roots that the body gave.
+  · rw [hBlock]
+    exact outputRoots_transactions hRoots
+  · intro hf
+    obtain ⟨r, hr, hw⟩ := outputRoots_withdrawals hf hRoots
+    rw [hBlock]
+    simp [fillHeader, hr, hw]
+  -- The access list is the encoding of a list, and the header holds its hash.
+  · intro hf
+    rw [blockAccessList_of_buildPayload h hf]
+    exact (ExecutionPayload.blockAccessListHashOf_eq_ok_iff _ _).mpr
+      ⟨⟨_, Serialization.Rlp.Codec.decode_encode (hList hf)⟩, rfl⟩
 
 /-! ## The value of a built block -/
 

@@ -5087,8 +5087,11 @@ The stored build has no blobs, so a request from version 3 fails for a build wit
 The payload sits on the head of the update, and carries the timestamp, the RANDAO mix, the withdrawals, the parent beacon block root and the slot of its attributes.
 The theorem asks that the node be consistent, with each known block under its own hash and sound totals of proof of work.
 `Reachable.consistent` shows that every node the steps reach from a consistent node is consistent, and `consistent_of_start` that a starting node is.
-It also assumes that the parameters of `engine_newPayload` pass the checks before execution and give the block of the build, and that the node not know that block as invalid.
-No theorem yet shows that the payload of the response, written as those parameters, passes those checks.
+It also assumes that the node not know the block of the build as invalid.
+The parameters of `engine_newPayload` are the payload of the response, with the versioned hashes of its bundle, the parent beacon block root and the requests.
+From Glamsterdam, the access list and the slot of the build come with the payload.
+`checkNewPayload_of_getPayload` (`Proofs/GetPayload.lean`) shows that these parameters pass the checks before execution and give the stored block, at any version of `engine_newPayload` that takes its fork.
+It needs the stored block to come back from its payload form, which `toBlock_of_buildPayload` (`Proofs/BuildPayload.lean`) shows for every built block.
 A block is valid only on a valid parent, so a payload whose parent the node knows as invalid is `INVALID`, and the node keeps it as invalid (`newPayloadStep_of_invalid_parent`).
 That covers step 2 of payload validation, which asks `INVALID` for each descendant of an invalid terminal block.
 Its latest valid hash is the latest valid block of the parent's chain, or zero when that block is of proof of work, as step 3 asks; `latestValidHash_eq_some_iff` (`Proofs/ForkchoiceUpdated.lean`) states that function.

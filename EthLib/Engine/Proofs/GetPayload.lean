@@ -4,6 +4,7 @@ public import EthLib.Engine.GetPayload
 public import EthLib.Engine.Proofs.Json
 public import EthLib.Execution.Proofs.Transactions.Network
 import EthLib.Base.Proofs.Toolchain.JsonBasic
+import EthLib.Engine.Proofs.NewPayload
 
 /-!
 # Proofs: `engine_getPayload`
@@ -31,6 +32,8 @@ It reads no JSON value other than what the writer writes.
 The result of a response reads back at its version and its fork.
 
 A bundle reads back exactly when it passes the length rules of its version.
+
+The payload of a response, sent back to `engine_newPayload`, passes its checks and gives its block.
 -/
 
 public section
@@ -497,5 +500,86 @@ theorem getPayloadResultOfJson_json {r : GetPayloadResponse}
   · have h4 : ¬4 ≤ version := by omega
     simp only [h3, h4, ite_false]
     simp only [GetPayloadResponse.result, h2, h3, h4, ite_true, ite_false]
+
+/-! ## The payload sent back -/
+
+/-- The payload of a response, sent back to `engine_newPayload`, passes the checks of the method.
+
+The stored block must come back from its payload form, with the requests and access list stored.
+
+The version of `engine_newPayload` must take the fork of the build.
+
+From version 5, the parameters hold the access list and the slot of the build with the payload.
+
+From version 3, they hold the versioned hashes of the commitments of the bundle.
+
+From version 3, they also hold the parent beacon block root of the block.
+
+From version 4, they hold the requests of the build.
+
+The checks then give the stored block, at the fork of the build. -/
+theorem checkNewPayload_of_getPayload {r : GetPayloadResponse} {version' : Nat}
+    (h : getPayload config setup store version id = .ok r)
+    (hBlock : r.stored.blockOfPayload r.payload = .ok r.stored.built.block)
+    (accepts : acceptsFork version' r.stored.fork = true) :
+    checkNewPayload config version' (newPayloadParamsJson version' r.payload
+        (if hf : .glamsterdam ≤ r.stored.fork then
+          some (r.stored.built.blockAccessList hf, r.stored.built.block.header.slotNumber hf)
+        else none)
+        (r.stored.bundle.commitments.map versionedHash)
+        ((sinceValue r.stored.built.block.header.parentBeaconBlockRoot).getD 0)
+        r.stored.built.requests) =
+      .ok (.ok ⟨r.stored.fork, accepts, r.stored.built.block⟩) := by
+  obtain ⟨-, hActive, hServes, hReq, -, hPay, -, -⟩ := of_getPayload_eq_ok h
+  obtain ⟨-, -, -, -, three, four, five, six⟩ :=
+    (acceptsFork_eq_true_iff version' r.stored.fork).mp accepts
+  obtain ⟨-, -, -, hHegota, -, threeGet, -⟩ :=
+    (acceptsGetPayloadFork_eq_true_iff version r.stored.fork).mp hServes
+  -- A fork that a version of the request serves comes before Hegotá, so version 6 is not taken.
+  have below : version' < 6 :=
+    Nat.lt_of_not_le fun hv => absurd (six.mp hv) (Std.not_le.mpr hHegota)
+  -- The parameters read back, with the payload at the fork of the build.
+  obtain ⟨any, hDecode, hAt⟩ := newPayloadParams_json r.payload
+    (if hf : .glamsterdam ≤ r.stored.fork then
+      some (r.stored.built.blockAccessList hf, r.stored.built.block.header.slotNumber hf)
+    else none)
+    (r.stored.bundle.commitments.map versionedHash)
+    ((sinceValue r.stored.built.block.header.parentBeaconBlockRoot).getD 0)
+    r.stored.built.requests accepts below (payloadOfBlock_extraData hPay)
+    (by
+      by_cases hf : Fork.glamsterdam ≤ r.stored.fork
+      · simpa [hf] using five.mpr hf
+      · simpa [hf] using Nat.lt_of_not_le (mt five.mp hf))
+  -- The payload has the number and the time of the block, so the fork of the build is active.
+  have hCommon := Json.AnyPayload.atFork_common hAt
+  obtain ⟨hNumber, hTime⟩ := ExecutionPayload.toBlock_number_timestamp hBlock
+  have hActive' : config.activeFork any.common.blockNumber.toNat any.common.timestamp.toNat =
+      some r.stored.fork := by
+    rw [← hCommon.1, ← hCommon.2.1, ← hNumber, ← hTime]
+    exact hActive
+  refine checkNewPayload_eq_ok hDecode ?_ hActive' accepts hAt ?_ ?_ ?_ ?_ hBlock ?_
+  -- From version 4 the requests are those of the build, which pass their check from Pectra.
+  · intro rs e
+    by_cases h4 : 4 ≤ version'
+    · simp only [h4, ite_true, Option.some.injEq] at e
+      subst e
+      simpa [requestsOfFork, four.mp h4] using hReq
+    · simp [h4] at e
+  -- Each field from a later fork is present exactly from its fork, with the value of the block.
+  · refine Json.since_eq_ok_iff.mpr ?_
+    by_cases hf : Fork.dencun ≤ r.stored.fork <;> simp [sinceValue, hf, three]
+  · refine Json.since_eq_ok_iff.mpr ?_
+    by_cases hf : Fork.pectra ≤ r.stored.fork <;> simp [sinceValue, hf, four]
+  · refine Json.since_eq_ok_iff.mpr ?_
+    by_cases hf : Fork.glamsterdam ≤ r.stored.fork <;> simp [sinceValue, hf]
+  · refine Json.since_eq_ok_iff.mpr ?_
+    by_cases hf : Fork.glamsterdam ≤ r.stored.fork <;> simp [sinceValue, hf]
+  -- From version 3 the commitments of the bundle hash to the blob hashes of the block.
+  · intro hs e
+    by_cases h3 : 3 ≤ version'
+    · simp only [h3, ite_true, Option.some.injEq] at e
+      subst e
+      exact ((getPayload_bundle h (threeGet.mpr (three.mp h3))).1).symm
+    · simp [h3] at e
 
 end EthLib.Engine
