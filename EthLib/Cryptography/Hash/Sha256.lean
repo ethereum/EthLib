@@ -168,13 +168,35 @@ def Window.ofBlock (bytes : ByteArray) (start : Nat) (whole : start + BLOCK_SIZE
     word 8, word 9, word 10, word 11, word 12, word 13, word 14, word 15⟩
 
 /--
-The schedule one word later, FIPS 180-4 §6.2.2, step 1.
+The schedule sixteen words later, FIPS 180-4 §6.2.2, step 1.
 
-The new last word is `W_(t+16) = W_t + σ_0^{256}(W_(t+1)) + W_(t+9) + σ_1^{256}(W_(t+14))`.
+From the words `W_t` to `W_(t+15)`, it gives the words `W_(t+16)` to `W_(t+31)`.
+
+Each new word is `W_u = W_(u-16) + σ_0^{256}(W_(u-15)) + W_(u-7) + σ_1^{256}(W_(u-2))`.
+
+The later new words read the earlier new words, so they are computed in order.
+
+The rounds use one window for sixteen rounds.
 -/
 def Window.next (w : Window) : Window :=
-  ⟨w.w1, w.w2, w.w3, w.w4, w.w5, w.w6, w.w7, w.w8, w.w9, w.w10, w.w11, w.w12, w.w13, w.w14, w.w15,
-    w.w0 + smallSigma0 w.w1 + w.w9 + smallSigma1 w.w14⟩
+  -- `n_i` is `W_(t+16+i)`; an operand past `W_(t+15)` is an earlier `n`.
+  let n0 := w.w0 + smallSigma0 w.w1 + w.w9 + smallSigma1 w.w14
+  let n1 := w.w1 + smallSigma0 w.w2 + w.w10 + smallSigma1 w.w15
+  let n2 := w.w2 + smallSigma0 w.w3 + w.w11 + smallSigma1 n0
+  let n3 := w.w3 + smallSigma0 w.w4 + w.w12 + smallSigma1 n1
+  let n4 := w.w4 + smallSigma0 w.w5 + w.w13 + smallSigma1 n2
+  let n5 := w.w5 + smallSigma0 w.w6 + w.w14 + smallSigma1 n3
+  let n6 := w.w6 + smallSigma0 w.w7 + w.w15 + smallSigma1 n4
+  let n7 := w.w7 + smallSigma0 w.w8 + n0 + smallSigma1 n5
+  let n8 := w.w8 + smallSigma0 w.w9 + n1 + smallSigma1 n6
+  let n9 := w.w9 + smallSigma0 w.w10 + n2 + smallSigma1 n7
+  let n10 := w.w10 + smallSigma0 w.w11 + n3 + smallSigma1 n8
+  let n11 := w.w11 + smallSigma0 w.w12 + n4 + smallSigma1 n9
+  let n12 := w.w12 + smallSigma0 w.w13 + n5 + smallSigma1 n10
+  let n13 := w.w13 + smallSigma0 w.w14 + n6 + smallSigma1 n11
+  let n14 := w.w14 + smallSigma0 w.w15 + n7 + smallSigma1 n12
+  let n15 := w.w15 + smallSigma0 n0 + n8 + smallSigma1 n13
+  ⟨n0, n1, n2, n3, n4, n5, n6, n7, n8, n9, n10, n11, n12, n13, n14, n15⟩
 
 /--
 Round `t` on the working variables a to h, FIPS 180-4 §6.2.2, step 3.
@@ -192,18 +214,28 @@ It takes the constant `K_t^{256}` and the schedule word `W_t`, and adds modulo 2
   { h := s.g, g := s.f, f := s.e, e := s.d + T1, d := s.c, c := s.b, b := s.a, a := T1 + T2 }
 
 /--
-The rounds of FIPS 180-4 §6.2.2, step 3.
+Rounds `t` to `t + 15` of FIPS 180-4 §6.2.2, step 3.
 
-For `t` from 0 to 63, round `t` takes `K_t^{256}` and `W_t`.
-
-The constants come as a list, and the window holds `W_t` to `W_(t+15)`.
+The window holds `W_t` to `W_(t+15)`, and round `t + j` takes `K_(t+j)^{256}` and `W_(t+j)`.
 -/
-def rounds : List UInt32 → Window → State → State
-  -- No constant is left, so every round is done.
-  | [], _, s => s
-  -- Round `t` takes `K_t^{256}` and the first word of the window, `W_t`.
-  -- The window then moves on one word, to start at `W_(t+1)`.
-  | K_t :: rest, w, s => rounds rest w.next (round s K_t w.w0)
+@[inline] def rounds (s : State) (w : Window) (t : Nat) (inside : t + 16 ≤ 64) : State :=
+  let s := round s (K[t + 0]'(by omega)) w.w0
+  let s := round s (K[t + 1]'(by omega)) w.w1
+  let s := round s (K[t + 2]'(by omega)) w.w2
+  let s := round s (K[t + 3]'(by omega)) w.w3
+  let s := round s (K[t + 4]'(by omega)) w.w4
+  let s := round s (K[t + 5]'(by omega)) w.w5
+  let s := round s (K[t + 6]'(by omega)) w.w6
+  let s := round s (K[t + 7]'(by omega)) w.w7
+  let s := round s (K[t + 8]'(by omega)) w.w8
+  let s := round s (K[t + 9]'(by omega)) w.w9
+  let s := round s (K[t + 10]'(by omega)) w.w10
+  let s := round s (K[t + 11]'(by omega)) w.w11
+  let s := round s (K[t + 12]'(by omega)) w.w12
+  let s := round s (K[t + 13]'(by omega)) w.w13
+  let s := round s (K[t + 14]'(by omega)) w.w14
+  let s := round s (K[t + 15]'(by omega)) w.w15
+  s
 
 /--
 The hash value `H^(i)` after the block `M^(i)`, FIPS 180-4 §6.2.2, steps 1 to 4.
@@ -218,8 +250,14 @@ The block is the `m / 8` bytes of `bytes` from `start`, and `H` is `H^(i-1)`.
 def compress (H : State) (bytes : ByteArray) (start : Nat)
     (whole : start + BLOCK_SIZE ≤ bytes.size) :
     State :=
-  -- Steps 1 to 3: the working variables after the rounds, from `H^(i-1)` and the block.
-  let r := rounds K.toList (Window.ofBlock bytes start whole) H
+  -- Step 1: the schedule, sixteen words at a time, from the words of the block.
+  let w0 := Window.ofBlock bytes start whole
+  let w1 := w0.next
+  let w2 := w1.next
+  let w3 := w2.next
+  -- Steps 2 and 3: the 64 rounds, from `H^(i-1)`, sixteen on each window.
+  let r := rounds (rounds (rounds (rounds H w0 0 (by omega)) w1 16 (by omega)) w2 32 (by omega))
+    w3 48 (by omega)
   -- Step 4: each word of `H^(i)` is a working variable plus the same word of `H^(i-1)`.
   { a := r.a + H.a, b := r.b + H.b, c := r.c + H.c, d := r.d + H.d,
     e := r.e + H.e, f := r.f + H.f, g := r.g + H.g, h := r.h + H.h }

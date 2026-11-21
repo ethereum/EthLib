@@ -140,6 +140,17 @@ def pad (message : ByteArray) : ByteArray :=
     block[start + 2].toUInt32 <<< 16 ||| block[start + 3].toUInt32 <<< 24
 
 /--
+The five variables (A, B, C, D, E) of a line.
+
+A record lets each step build five fields, where a vector built a new array.
+-/
+structure Vars where
+  (A B C D E : UInt32)
+
+/-- The variables of a line at its start: the five words of the chaining variable, in order. -/
+@[inline] def Vars.ofChain (h : Vector UInt32 5) : Vars := ⟨h[0], h[1], h[2], h[3], h[4]⟩
+
+/--
 One step of a line on the variables (A, B, C, D, E).
 
 ```text
@@ -147,10 +158,9 @@ One step of a line on the variables (A, B, C, D, E).
     (A, B, C, D, E) := (E, T, B, rol_10(C), D)
 ```
 -/
-@[inline] def step (group : Fin 5) (state : Vector UInt32 5) (word constant amount : UInt32) :
-    Vector UInt32 5 :=
-  let T := rol (state[0] + f group state[1] state[2] state[3] + word + constant) amount + state[4]
-  #v[state[4], T, state[1], rol state[2] 10, state[3]]
+@[inline] def step (group : Fin 5) (v : Vars) (word constant amount : UInt32) : Vars :=
+  let T := rol (v.A + f group v.B v.C v.D + word + constant) amount + v.E
+  ⟨v.E, T, v.B, rol v.C 10, v.D⟩
 
 /--
 One line of eighty steps.
@@ -159,8 +169,8 @@ One line of eighty steps.
 - The constants are the line's `K`.
 - The flag says whether the groups of `f` run backwards.
 -/
-def line (X : Vector UInt32 16) (start : Vector UInt32 5) (constants : Vector UInt32 5)
-    (index : Vector (Fin 16) 80) (rotation : Vector UInt32 80) (reversed : Bool) : Vector UInt32 5 :=
+def line (X : Vector UInt32 16) (start : Vars) (constants : Vector UInt32 5)
+    (index : Vector (Fin 16) 80) (rotation : Vector UInt32 80) (reversed : Bool) : Vars :=
   (List.finRange 80).foldl
     (fun state j =>
       -- The left line uses f(j), the right line f(79 - j), and the constant changes every 16 steps.
@@ -184,10 +194,10 @@ def compress (h : Vector UInt32 5) (block : ByteArray) (start : Nat)
     (whole : start + 64 ≤ block.size) : Vector UInt32 5 :=
   let X : Vector UInt32 16 :=
     Vector.ofFn fun j => little32 block (start + 4 * j.val) (by omega)
-  let left := line X h K r s false
-  let right := line X h K' r' s' true
-  #v[h[1] + left[2] + right[3], h[2] + left[3] + right[4], h[3] + left[4] + right[0],
-    h[4] + left[0] + right[1], h[0] + left[1] + right[2]]
+  let left := line X (.ofChain h) K r s false
+  let right := line X (.ofChain h) K' r' s' true
+  #v[h[1] + left.C + right.D, h[2] + left.D + right.E, h[3] + left.E + right.A,
+    h[4] + left.A + right.B, h[0] + left.B + right.C]
 
 /-! ## The hash -/
 
