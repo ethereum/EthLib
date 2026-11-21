@@ -198,8 +198,10 @@ inductive SnapMessage where
 
   So EthLib embeds each list as its item, as [EIP-8189][eip-8189] describes the message.
 
+  Each list keeps the bytes it was read from, so its hash never encodes it again.
+
   [eip-8189]: https://eips.ethereum.org/EIPS/eip-8189#specification -/
-  | blockAccessLists (requestId : UInt64) (lists : List Item)
+  | blockAccessLists (requestId : UInt64) (lists : List Encoded)
   deriving DecidableEq
 
 /-- Every way a snap message can be rejected. -/
@@ -257,14 +259,19 @@ def toItem : SnapMessage → Item
   | getTrieNodes i r ps b => .list [Codec.toItem i, Codec.toItem r, Codec.toItem ps, Codec.toItem b]
   | trieNodes i ns => .list [Codec.toItem i, Codec.toItem ns]
   | getBlockAccessLists i hs b => .list [Codec.toItem i, Codec.toItem hs, Codec.toItem b]
-  | blockAccessLists i ls => .list [Codec.toItem i, .list ls]
+  | blockAccessLists i ls => .list [Codec.toItem i, .list (ls.map (·.item))]
 
 /-- Whether a version uses a message ID: 0x06 and 0x07 on snap/1, 0x08 and 0x09 on snap/2. -/
 def usesId (version : SnapVersion) (id : Nat) : Bool :=
   id < 0x06 || (version = .snap1 && id < 0x08) || (version = .snap2 && 0x08 ≤ id && id < 0x0a)
 
-/-- The message with the ID `id` and the data `item`, on the version `version`. -/
-def ofItem (version : SnapVersion) (id : Nat) (item : Item) : Except SnapError SnapMessage := do
+/-- The message with the ID `id` and the data `item`, on the version `version`.
+
+The caller passes the encoding of `item` as `data`.
+
+Each access list keeps its own encoding, cut from `data`. -/
+def ofItem (version : SnapVersion) (id : Nat) (item : Item) (data : ByteArray) :
+    Except SnapError SnapMessage := do
   if !usesId version id then throw (.unknownId id)
   Except.mapError .rlp do
     match id, ← item.toItems with
@@ -281,7 +288,10 @@ def ofItem (version : SnapVersion) (id : Nat) (item : Item) : Except SnapError S
       return getTrieNodes (← i.field 0) (← r.field 1) (← ps.field 2) (← b.field 3)
     | 0x07, [i, ns] => return trieNodes (← i.field 0) (← ns.field 1)
     | 0x08, [i, hs, b] => return getBlockAccessLists (← i.field 0) (← hs.field 1) (← b.field 2)
-    | 0x09, [i, ls] => return blockAccessLists (← i.field 0) (← ls.toItems.mapError (.inField 1))
+    | 0x09, [i, ls] =>
+      let requestId ← i.field 0
+      let lists ← ls.toItems.mapError (.inField 1)
+      return blockAccessLists requestId (← Encoded.zip lists (← payloadEncodings data))
     | _, items => throw (.wrongFieldCount (expectedFields id) items.length)
 where
   /-- The number of fields of the message with an ID. -/
@@ -295,11 +305,18 @@ where
 /-- The message with the ID `id` whose data is the RLP encoding `data`. -/
 def decode (version : SnapVersion) (id : Nat) (data : ByteArray) :
     Except SnapError SnapMessage := do
-  ofItem version id (← (Serialization.Rlp.decode data).mapError .rlp)
+  ofItem version id (← (Serialization.Rlp.decode data).mapError .rlp) data
 
 /-- The RLP encoding of the data of a message. -/
 def encode (m : SnapMessage) : Except SnapError ByteArray :=
   (Serialization.Rlp.encode m.toItem).mapError .rlp
+
+/-- The access lists of a message, each with the bytes it was read from.
+
+Every other message has none. -/
+def kept : SnapMessage → List Encoded
+  | blockAccessLists _ ls => ls
+  | _ => []
 
 /-- The request ID that every snap message carries first. -/
 def requestId : SnapMessage → UInt64
@@ -345,14 +362,13 @@ The peer may cut the list short from the tail, as "BlockAccessLists (0x09)" says
 It puts the empty string for a list it does not have, as that section also says.
 
 Every other entry must hash to the access list hash of its block.
+
+The hash reads the bytes that the entry was read from, which the decoder keeps as its encoding.
 -/
-def accessListsAnswer (expected : List Hash32) (lists : List Item) : Bool :=
+def accessListsAnswer (expected : List Hash32) (lists : List Encoded) : Bool :=
   lists.length ≤ expected.length &&
     (lists.zip expected).all fun (list, hash) =>
-      list == .bytes .empty ||
-        match Serialization.Rlp.encode list with
-        | .ok bytes => Cryptography.Hash.Keccak.keccak256 bytes == hash
-        | .error _ => false
+      list.item == .bytes .empty || Cryptography.Hash.Keccak.keccak256 list.bytes == hash
 
 /-! ## Trie node paths -/
 

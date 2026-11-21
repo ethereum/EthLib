@@ -168,12 +168,8 @@ def checkPartialReceiptsExport (gasLimits : ByteArray) (blockGasLimit : UInt64)
     (receipts : ByteArray) : Result Bool := do
   let .ok (limits : List Nat) := Serialization.Rlp.Codec.decode gasLimits
     | throw (0, "gas limits are not an RLP list of scalars")
-  let .ok (.list items) := Serialization.Rlp.decode receipts
+  let .ok sizes := receiptSizes receipts
     | throw (0, "receipts are not one RLP list")
-  let sizes ← items.mapM fun item =>
-    match Serialization.Rlp.encode item with
-    | .ok bytes => pure bytes.size
-    | .error _ => throw (0, "a receipt does not encode")
   (checkPartialReceipts limits blockGasLimit.toNat sizes).map (fun _ => true)
     |>.mapError fun e => (e.code, partialMessage e)
 
@@ -214,6 +210,6 @@ def checkBodyExport (fork header body : ByteArray) : Result Bool := do
     fun e => (0, s!"header does not decode at this fork: {reprStr e}")
   let .ok item := Serialization.Rlp.decode body
     | throw (0, "body is not RLP")
-  (checkBody h item).map (fun _ => true) |>.mapError fun e => (e.code, bodyMessage e)
+  (checkBody h ⟨item, body⟩).map (fun _ => true) |>.mapError fun e => (e.code, bodyMessage e)
 
 end EthLib.Execution.Network.Exports

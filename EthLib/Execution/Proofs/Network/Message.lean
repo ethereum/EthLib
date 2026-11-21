@@ -158,11 +158,11 @@ def FitsVersion (version : EthVersion) : Message → Prop
   | .getCells .. | .cells .. => EthVersion.eth72 ≤ version
   | _ => True
 
-/-- Each transaction or header of a message keeps the bytes of its own encoding. -/
+/-- Each transaction, header or access list of a message keeps the bytes of its own encoding. -/
 def Kept (m : Message) : Prop :=
   ∀ e ∈ m.kept, Serialization.Rlp.encode e.item = .ok e.bytes
 
-/-- A message without transactions or headers keeps no encoding, so it keeps them all. -/
+/-- A message without transactions, headers or access lists keeps every encoding it holds. -/
 private theorem kept_nil {m : Message} (h : m.kept = [] := by rfl) : m.Kept := by
   simp [Kept, h]
 
@@ -170,20 +170,14 @@ private theorem kept_nil {m : Message} (h : m.kept = [] := by rfl) : m.Kept := b
 private theorem payloadEncodings_envelope {i : UInt64} {items : List Item} {data : ByteArray}
     (h : Serialization.Rlp.encode (envelope i (.list items)) = .ok data) :
     ∃ payload, Serialization.Rlp.encode (.list items) = .ok payload ∧
-      payloadEncodings data = listEncodings payload := by
-  unfold envelope at h
-  -- The envelope has two encodings, and the second is that of the payload.
-  obtain ⟨encodings, hList, hAll⟩ := listEncodings_of_encode h
-  cases hAll with
-  | cons _ hRest =>
-    cases hRest with
-    | cons hPayload hNil =>
-      cases hNil
-      exact ⟨_, hPayload, by simp [payloadEncodings, hList, bind, Except.bind]⟩
+      payloadEncodings data = listEncodings payload :=
+  payloadEncodings_of_encode h
 
 /-- A message of the form of a version reads back from its ID and its item on that version.
 
-Its transactions and headers must keep their own encodings, and `data` must encode its item. -/
+Its transactions, headers and access lists must keep their own encodings.
+
+And `data` must encode its item. -/
 theorem ofItem_toItem {version : EthVersion} {m : Message} {data : ByteArray}
     (hm : m.FitsVersion version) (hk : m.Kept)
     (hd : Serialization.Rlp.encode m.toItem = .ok data) :
@@ -265,8 +259,13 @@ theorem ofItem_toItem {version : EthVersion} {m : Message} {data : ByteArray}
       Except.mapError]
   | blockAccessLists i ls =>
     have hm : EthVersion.eth71 ≤ version := hm
-    simp [ofItem, Message.id, toItem, hm, list_eq_toItem ls, readEnvelope_envelope, Functor.map,
-      Except.map, Except.mapError]
+    -- The encodings cut from the payload are those that the access lists keep.
+    have hd : Serialization.Rlp.encode (envelope i (.list (ls.map (·.item)))) = .ok data := hd
+    obtain ⟨payload, hp, hpe⟩ := payloadEncodings_envelope hd
+    obtain ⟨encodings, hl, hz⟩ :=
+      bind_ok_iff.mp ((zip_listEncodings_eq_ok_iff hp).mpr ⟨rfl, hk⟩)
+    simp [ofItem, Message.id, toItem, hm, list_eq_toItem (ls.map (·.item)),
+      readEnvelope_envelope, hpe, hl, hz, bind, Except.bind, pure, Except.pure, Except.mapError]
   | getCells i hs m =>
     have hm : EthVersion.eth72 ≤ version := hm
     have h71 : EthVersion.eth71 ≤ version := Nat.le_trans (by decide) hm
@@ -284,7 +283,8 @@ So the decoder takes no item with fields missing or added, and no message of ano
 
 It takes no announcement whose lists differ in length.
 
-When `data` encodes the item, each transaction and header keeps its own encoding. -/
+When `data` encodes the item, each transaction, header and access list keeps its own encoding.
+-/
 theorem ofItem_eq_ok_iff {version : EthVersion} {id : Nat} {item : Item} {data : ByteArray}
     {m : Message} (hd : Serialization.Rlp.encode item = .ok data) :
     ofItem version id item data = .ok m ↔
@@ -410,11 +410,19 @@ theorem ofItem_eq_ok_iff {version : EthVersion} {id : Nat} {item : Item} {data :
     rw [ite_eq_right hc] at h
     by_cases hc : id = BLOCK_ACCESS_LISTS_ID ∧ EthVersion.eth71 ≤ version
     · rw [ite_eq_left hc] at h
-      obtain ⟨⟨i, ls⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
-      refine ⟨hc.1, hc.2, ?_, kept_nil⟩
-      show item = envelope i (.list ls)
-      rw [list_eq_toItem ls]
-      exact readEnvelope_eq_ok_iff.mp hr
+      obtain ⟨⟨i, ls⟩, hr, h⟩ := bind_ok_iff.mp (mapError_ok_iff.mp h)
+      obtain ⟨encodings, hl, h⟩ := bind_ok_iff.mp h
+      obtain ⟨kept, hz, h⟩ := bind_ok_iff.mp h
+      cases h
+      obtain rfl : item = envelope i (.list ls) := by
+        rw [list_eq_toItem ls]
+        exact readEnvelope_eq_ok_iff.mp hr
+      -- Each one is paired with its own encoding, cut from the payload.
+      obtain ⟨payload, hp, hpe⟩ := payloadEncodings_envelope hd
+      obtain ⟨rfl, hk⟩ :=
+        (zip_listEncodings_eq_ok_iff (kept := kept) hp).mp
+          (by simp [← hpe, hl, bind, Except.bind, hz])
+      exact ⟨hc.1, hc.2, rfl, hk⟩
     rw [ite_eq_right hc] at h
     by_cases hc : id = GET_CELLS_ID ∧ EthVersion.eth72 ≤ version
     · rw [ite_eq_left hc] at h
@@ -459,7 +467,7 @@ theorem encode_of_decode {version : EthVersion} {id : Nat} {data : ByteArray} {m
     obtain ⟨-, -, rfl, -⟩ := (ofItem_eq_ok_iff (encode_decode data _ hd)).mp h
     simp [encode, encode_decode data _ hd, Except.mapError]
 
-/-- Each transaction or header that the decoder reads from `data` keeps the bytes of its encoding.
+/-- Each transaction, header or access list that the decoder reads keeps the bytes of its encoding.
 
 So its hash reads those bytes, and no caller has to encode it again. -/
 theorem kept_of_decode {version : EthVersion} {id : Nat} {data : ByteArray} {m : Message}
@@ -598,15 +606,16 @@ The request is GetBlockAccessLists, and the response is BlockAccessLists with it
 
 The response has one entry for each expected hash.
 
-Each entry is the empty string, or its RLP encoding hashes to the expected hash at its position. -/
+Each entry is the empty string, or the bytes it was read from hash to the expected hash there.
+
+A decoded response keeps the encoding of each entry as those bytes. -/
 theorem accessListsResponse_eq_true_iff {expected : List Hash32} {request response : Message} :
     accessListsResponse expected request response = true ↔
       ∃ i hashes lists, request = getBlockAccessLists i hashes ∧
         response = blockAccessLists i lists ∧ lists.length = expected.length ∧
           ∀ (k : Nat) (hk : k < lists.length) (he : k < expected.length),
-            lists[k] = .bytes .empty ∨
-              ∃ bytes, Serialization.Rlp.encode lists[k] = .ok bytes ∧
-                Cryptography.Hash.Keccak.keccak256 bytes = expected[k] := by
+            lists[k].item = .bytes .empty ∨
+              Cryptography.Hash.Keccak.keccak256 lists[k].bytes = expected[k] := by
   unfold accessListsResponse
   split
   · rename_i i hashes j lists

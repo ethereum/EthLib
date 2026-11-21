@@ -11,6 +11,8 @@ The encoding of a list splits into the encodings of its items, in order.
 So an item paired with its slice of the bytes is paired with its own encoding.
 
 Pairing items with encodings succeeds exactly when the two lists have one length.
+
+An item that keeps its own encoding splits into its items, each with its own encoding.
 -/
 
 @[expose] public section
@@ -200,5 +202,66 @@ theorem zip_listEncodings_eq_ok_iff {items : List Item} {data : ByteArray}
   · rintro ⟨rfl, hEach⟩
     -- The encoding of each item is a function of the item, so the encodings are the bytes.
     exact ⟨rfl, (eq_bytes_of_forall₂ hEach hAll).symm⟩
+
+/-- The parts of an item that keeps its own encoding are its items, each with its own encoding.
+
+And every list of items with their own encodings comes out as its parts. -/
+theorem Encoded.parts_eq_ok_iff {e : Encoded} {kept : List Encoded}
+    (h : encode e.item = .ok e.bytes) :
+    e.parts = .ok kept ↔
+      e.item = .list (kept.map (·.item)) ∧ ∀ k ∈ kept, encode k.item = .ok k.bytes := by
+  obtain ⟨item, bytes⟩ := e
+  cases item with
+  | bytes b => simp [Encoded.parts]
+  | list items =>
+    simp only [Encoded.parts, Item.list.injEq] at h ⊢
+    rw [zip_listEncodings_eq_ok_iff h, eq_comm (a := items)]
+
+/-- The parts of an item are its items, whatever bytes it keeps. -/
+theorem Encoded.item_of_parts {e : Encoded} {kept : List Encoded} (h : e.parts = .ok kept) :
+    e.item = .list (kept.map (·.item)) := by
+  obtain ⟨item, bytes⟩ := e
+  cases item with
+  | bytes b => simp [Encoded.parts] at h
+  | list items =>
+    simp only [Encoded.parts, bind, Except.bind] at h
+    split at h
+    · cases h
+    · rw [(Encoded.zip_eq_ok_iff.mp h).1]
+
+/-- Lists related item by item have one length. -/
+private theorem length_of_forall₂ {items : List Item} {encodings : List ByteArray} :
+    List.Forall₂ (fun item e => encode item = .ok e) items encodings →
+    items.length = encodings.length
+  | .nil => rfl
+  | .cons _ hRest => by simp [length_of_forall₂ hRest]
+
+/-- A list that keeps its own encoding has parts: its items, each with its own encoding. -/
+theorem Encoded.parts_of_encode {e : Encoded} {items : List Item}
+    (h : encode e.item = .ok e.bytes) (hl : e.item = .list items) :
+    ∃ kept, e.parts = .ok kept ∧ kept.map (·.item) = items ∧
+      ∀ k ∈ kept, encode k.item = .ok k.bytes := by
+  obtain ⟨encodings, -, hAll⟩ := listEncodings_of_encode (hl ▸ h)
+  -- Each item is paired with its own encoding.
+  have hLen := length_of_forall₂ hAll
+  have hItems := map_item_zipWith hLen
+  have hBytes := map_bytes_zipWith hLen
+  have hEach : ∀ k ∈ List.zipWith Encoded.mk items encodings, encode k.item = .ok k.bytes :=
+    forall_of_forall₂ (by rw [hItems, hBytes]; exact hAll)
+  exact ⟨_, (Encoded.parts_eq_ok_iff h).mpr ⟨by rw [hl, hItems], hEach⟩, hItems, hEach⟩
+
+/-- The payload of a two-item list that encodes as `data` is cut from `data` with its encoding. -/
+theorem payloadEncodings_of_encode {first : Item} {items : List Item} {data : ByteArray}
+    (h : encode (.list [first, .list items]) = .ok data) :
+    ∃ payload, encode (.list items) = .ok payload ∧
+      payloadEncodings data = listEncodings payload := by
+  -- The list has two encodings, and the second is that of the payload.
+  obtain ⟨encodings, hList, hAll⟩ := listEncodings_of_encode h
+  cases hAll with
+  | cons _ hRest =>
+    cases hRest with
+    | cons hPayload hNil =>
+      cases hNil
+      exact ⟨_, hPayload, by simp [payloadEncodings, hList, bind, Except.bind]⟩
 
 end EthLib.Serialization.Rlp

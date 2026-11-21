@@ -255,4 +255,20 @@ def Encoded.zip (items : List Item) (encodings : List ByteArray) :
   if items.length = encodings.length then .ok (List.zipWith Encoded.mk items encodings)
   else .error (.wrongFieldCount items.length encodings.length)
 
+/-- The items of a list, each with its slice of the bytes of the list.
+
+A byte string has no items. -/
+def Encoded.parts (e : Encoded) : Except RlpError (List Encoded) :=
+  match e.item with
+  | .list items => listEncodings e.bytes >>= Encoded.zip items
+  | .bytes _ => .error .bytesAsList
+
+/-- The encodings of the items of the payload of the envelope that `data` encodes.
+
+The envelope is `[request-id, payload]`, and the payload is a list. -/
+def payloadEncodings (data : ByteArray) : Except RlpError (List ByteArray) := do
+  match ← listEncodings data with
+  | [_, payload] => listEncodings payload
+  | encodings => throw (.wrongFieldCount 2 encodings.length)
+
 end EthLib.Serialization.Rlp
