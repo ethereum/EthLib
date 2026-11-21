@@ -5,7 +5,7 @@ public import EthLib.Networking.Quic.Tls.Crypto
 public import EthLib.Base.Proofs.Bytes
 public import EthLib.Cryptography.Proofs.X25519.Agreement
 public import EthLib.Cryptography.Proofs.Secp256r1.Sign
-public import EthLib.Networking.Proofs.Libp2p.PeerId
+public import EthLib.Serialization.Proofs.Der
 
 /-!
 # Proofs: handshake cryptographic checks
@@ -21,6 +21,7 @@ namespace EthLib.Networking.Quic.Tls.Crypto
 
 open EthLib.Base
 open EthLib.Cryptography
+open EthLib.Serialization
 
 /-- A parsed private scalar is nonzero and retains its exact input integer. -/
 theorem readScalar_eq_ok_iff (bytes : Vector UInt8 32) (error : Error) (scalar : Secp256r1.Fn) :
@@ -90,7 +91,7 @@ theorem verifyCertificateVerify_signCertificateVerify (privateKey : Vector UInt8
     simp [signCertificateVerify, ensure, key, hs, bind, Except.bind] at signed
   | some rs =>
     obtain ⟨r, s⟩ := rs
-    have sig : Libp2p.encodeSignature r.val s.val = signature := by
+    have sig : Der.encodeEcdsaSignature r.val s.val = signature := by
       simpa [signCertificateVerify, ensure, key, hs, bind, Except.bind, pure, Except.pure] using
         signed
     subst signature
@@ -100,7 +101,7 @@ theorem verifyCertificateVerify_signCertificateVerify (privateKey : Vector UInt8
     simp only [Secp256r1.Ecdsa.sign, hd, ↓reduceIte] at hs
     obtain ⟨k, x, y, -, -, rfl, hr0, -, hs0⟩ := Secp256r1.Ecdsa.signWith_spec hs
     have decoded :=
-      EthLib.Networking.Proofs.Libp2p.PeerId.decodeScalars_eq_some_iff.mpr
+      EthLib.Serialization.Proofs.Der.decodeEcdsaScalars_eq_some_iff.mpr
         ⟨Nat.pos_of_ne_zero (fun hz => hr0 (Fin.ext hz)), Nat.lt_trans (Fin.isLt _) (by decide),
           Nat.pos_of_ne_zero (fun hz => hs0 (Fin.ext hz)), Nat.lt_trans (Fin.isLt _) (by decide),
           rfl⟩

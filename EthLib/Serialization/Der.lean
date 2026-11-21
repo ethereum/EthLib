@@ -11,6 +11,8 @@ DER lengths are definite and in their shortest form (X.690 §10.1).
 
 The reader keeps each value's complete encoding, so a certificate signature can be checked.
 
+The module also writes and reads the ECDSA signature value, the SEQUENCE of r and s.
+
 [x690]: https://www.itu.int/rec/T-REC-X.690-202102-I/en
 -/
 
@@ -195,5 +197,49 @@ where
           else throw .value
         values.forM (go fuel)
       | _ => throw (.tag none value.tag)
+
+/-! ## ECDSA signatures
+
+An ECDSA signature value is the SEQUENCE of the INTEGERs r and s ([RFC 3279 §2.2.3][rfc3279]).
+
+[rfc3279]: https://www.rfc-editor.org/rfc/rfc3279#section-2.2.3
+-/
+
+/-- The DER INTEGER of a number below `2 ^ 256`, on the fewest content bytes (X.690 §8.3.2).
+
+A content byte `0x00` comes first when the high bit of the next byte is set. -/
+def ecdsaInteger (n : Nat) : List UInt8 :=
+  let bytes := (EthLib.Base.natToBytes 32 n).dropWhile (· == 0)
+  let bytes := match bytes with
+    | [] => [0]
+    | b :: _ => if b.toNat ≥ 128 then 0 :: bytes else bytes
+  [0x02, UInt8.ofNat bytes.length] ++ bytes
+
+/-- The DER SEQUENCE of the two ECDSA scalars r and s. -/
+def encodeEcdsaSignature (r s : Nat) : ByteArray :=
+  let integers := ecdsaInteger r ++ ecdsaInteger s
+  ⟨([0x30, UInt8.ofNat integers.length] ++ integers).toArray⟩
+
+/-- The two positive scalars below `2 ^ 256` of a strict DER ECDSA signature.
+
+It serves every curve whose group order is at most `2 ^ 256`.
+
+Each curve checks its own scalar ranges after this read. -/
+def decodeEcdsaScalars (signature : ByteArray) : Option (Nat × Nat) :=
+  match signature.data.toList with
+  | 0x30 :: total :: 0x02 :: rLength :: rest =>
+    if total.toNat + 2 != signature.size then none
+    else
+      match rest.drop rLength.toNat with
+      | 0x02 :: sLength :: sBytes =>
+        if sLength.toNat != sBytes.length then none
+        else
+          let r := EthLib.Base.bytesToNat (rest.take rLength.toNat)
+          let s := EthLib.Base.bytesToNat sBytes
+          if 0 < r ∧ r < 2 ^ 256 ∧ 0 < s ∧ s < 2 ^ 256 ∧ encodeEcdsaSignature r s = signature then
+            some (r, s)
+          else none
+      | _ => none
+  | _ => none
 
 end EthLib.Serialization.Der

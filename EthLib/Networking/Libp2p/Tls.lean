@@ -321,7 +321,7 @@ def readP256 (spki : ByteArray) : Except TlsCertError EthLib.Cryptography.Secp25
 
 The signature is the DER sequence of RFC 3279 §2.2.3. -/
 def verifyP256 (spki message signature : ByteArray) : Bool :=
-  match readP256 spki, Libp2p.decodeScalars signature with
+  match readP256 spki, Der.decodeEcdsaScalars signature with
   | .ok point, some (r, s) =>
     EthLib.Cryptography.Secp256r1.verify point
       (EthLib.Base.bytesToNat (EthLib.Cryptography.Hash.Sha256.hash32 message).toList) r s

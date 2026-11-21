@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.BigEndian
+public import EthLib.Serialization.Der
 public import EthLib.Cryptography.Hash.Sha256
 public import EthLib.Cryptography.Secp256k1.Sign
 
@@ -26,6 +27,7 @@ The DER and low-s rules are rules 1 and 5 of [BIP 62, "New rules"][bip62], which
 namespace EthLib.Networking.Libp2p
 
 open EthLib.Cryptography.Secp256k1
+open EthLib.Serialization
 
 /-- A malformed key, peer ID, secret or DER signature, or a failure to sign. -/
 inductive IdentityError where
@@ -87,44 +89,9 @@ def publicKey (secret : Fn) : Except IdentityError ByteArray :=
   if secret = 0 then .error .privateKey
   else .ok (encodePublicKey (Point.mul secret .generator))
 
-/-- A positive DER INTEGER with the required leading zero when its high bit is set, BIP 62. -/
-def derInteger (n : Nat) : List UInt8 :=
-  let bytes := (EthLib.Base.natToBytes 32 n).dropWhile (· == 0)
-  let bytes := match bytes with
-    | [] => [0]
-    | b :: _ => if b.toNat ≥ 128 then 0 :: bytes else bytes
-  [0x02, UInt8.ofNat bytes.length] ++ bytes
-
-/-- The DER sequence of the two ECDSA scalars, without a transaction sighash flag, BIP 62. -/
-def encodeSignature (r s : Nat) : ByteArray :=
-  let integers := derInteger r ++ derInteger s
-  ⟨([0x30, UInt8.ofNat integers.length] ++ integers).toArray⟩
-
-/-- The two positive scalars below `2 ^ 256` of a strict DER ECDSA signature (RFC 3279 §2.2.3).
-
-It serves every curve whose group order is at most `2 ^ 256`.
-
-Each curve checks its own scalar ranges after this read. -/
-def decodeScalars (signature : ByteArray) : Option (Nat × Nat) :=
-  match signature.data.toList with
-  | 0x30 :: total :: 0x02 :: rLength :: rest =>
-    if total.toNat + 2 != signature.size then none
-    else
-      match rest.drop rLength.toNat with
-      | 0x02 :: sLength :: sBytes =>
-        if sLength.toNat != sBytes.length then none
-        else
-          let r := EthLib.Base.bytesToNat (rest.take rLength.toNat)
-          let s := EthLib.Base.bytesToNat sBytes
-          if 0 < r ∧ r < 2 ^ 256 ∧ 0 < s ∧ s < 2 ^ 256 ∧ encodeSignature r s = signature then
-            some (r, s)
-          else none
-      | _ => none
-  | _ => none
-
 /-- Decode a strict DER sequence and require the secp256k1 low-s scalar ranges, BIP 62. -/
 def decodeSignature (signature : ByteArray) : Except IdentityError (Nat × Nat) :=
-  match decodeScalars signature with
+  match Der.decodeEcdsaScalars signature with
   | some (r, s) =>
     if r < Fn.modulus ∧ s ≤ Fn.modulus / 2 then .ok (r, s) else .error .signature
   | none => .error .signature
@@ -136,7 +103,7 @@ def sign (secret : Fn) (message : ByteArray) : Except IdentityError ByteArray :=
   if secret = 0 then throw .privateKey
   let (r, s, _) ← (Ecdsa.sign secret
     (EthLib.Cryptography.Hash.Sha256.hash32 message)).mapError IdentityError.signing
-  return encodeSignature r.val s.val
+  return Der.encodeEcdsaSignature r.val s.val
 
 /-- Check the canonical key and DER signature on SHA-256 of the message, peer-IDs "Secp256k1". -/
 def verify (publicKey message signature : ByteArray) : Bool :=

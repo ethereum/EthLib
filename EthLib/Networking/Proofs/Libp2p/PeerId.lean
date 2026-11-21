@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Serialization.Proofs.Der
 public import EthLib.Networking.Libp2p.PeerId
 public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
 public import EthLib.Cryptography.Proofs.Secp256k1.Sign
@@ -12,8 +13,6 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Sign
 - A peer ID decodes back to its key, and the decoder accepts only peer IDs of keys.
 - Two different points of the curve have two different peer IDs.
 - A decoded key's peer ID is the two bytes `00 25`, then the key protobuf.
-- A number below `2 ^ 256` is a DER INTEGER on the fewest bytes, the first with its top bit clear.
-- The scalar reader accepts exactly the encodings of r and s in [1, 2^256), and returns them.
 - The signature decoder accepts exactly the encodings of r and low s in range, and returns them.
 - A signature that the identity secret makes verifies under the key protobuf of that secret.
 -/
@@ -25,6 +24,8 @@ namespace EthLib.Networking.Proofs.Libp2p.PeerId
 open EthLib.Base
 open EthLib.Cryptography.Secp256k1
 open EthLib.Networking.Libp2p
+open EthLib.Serialization.Der
+open EthLib.Serialization.Proofs.Der
 
 /-- A point of the curve, other than infinity, encodes to a key protobuf that decodes back to it. -/
 theorem decodePublicKey_encodePublicKey {point : Point} (hcurve : point.isOnCurve = true)
@@ -97,192 +98,6 @@ theorem peerId_of_decodePublicKey {key : ByteArray} {point : Point}
     (h : decodePublicKey key = .ok point) : peerId point = ⟨#[0x00, 0x25]⟩ ++ key := by
   rw [peerId, encodePublicKey_of_decodePublicKey h]
 
-/-! ## DER signatures
-
-Rule 1 of BIP 62 asks for strict DER, which its section [DER encoding][bip62der] spells out.
-
-An INTEGER content starts with `0x00` only when the next byte is `0x80` or more.
-
-So a positive number gets a leading zero byte exactly when its first nonzero byte is `0x80` or more.
-
-The decoder accepts a signature only when the encoder writes the same bytes back.
-
-[bip62der]: https://github.com/bitcoin/bips/blob/24e96e870fffaa257b465ce1f0370c14aac588e8/bip-0062.mediawiki#der-encoding
--/
-
-/-- On `i + 1` bytes, the first byte is `n / 256 ^ i` modulo 256, then `n` follows on `i` bytes. -/
-private theorem natToBytes_succ_eq_cons (i n : Nat) :
-    natToBytes (i + 1) n = UInt8.ofNat (n / 256 ^ i) :: natToBytes i n := by
-  rw [Nat.add_comm, natToBytes_add]
-  rfl
-
-/-- On 32 bytes, a number with `i + 1` significant bytes keeps them once its leading zeros go. -/
-private theorem dropWhile_natToBytes {n i : Nat} (hi : i < 32) (low : 256 ^ i ≤ n)
-    (high : n < 256 ^ (i + 1)) :
-    (natToBytes 32 n).dropWhile (· == 0) = natToBytes (i + 1) n := by
-  have hsplit := natToBytes_add (31 - i) (i + 1) n
-  rw [show 31 - i + (i + 1) = 32 by omega, Nat.div_eq_of_lt high, natToBytes_zero_right]
-    at hsplit
-  have hpos : 0 < 256 ^ i := Nat.pow_pos (by decide)
-  have hlow : 1 ≤ n / 256 ^ i := (Nat.le_div_iff_mul_le hpos).mpr (by omega)
-  have hhigh : n / 256 ^ i < 256 :=
-    (Nat.div_lt_iff_lt_mul hpos).mpr (by rw [Nat.pow_succ] at high; omega)
-  have nonzero : UInt8.ofNat (n / 256 ^ i) ≠ 0 := by
-    intro h
-    have := congrArg UInt8.toNat h
-    rw [UInt8.toNat_ofNat_of_lt' hhigh] at this
-    simp at this
-    omega
-  rw [hsplit, natToBytes_succ_eq_cons, List.dropWhile_append_of_pos (by simp)]
-  simp [nonzero]
-
-/-- The DER INTEGER of a number below `2 ^ 256`, as BIP 62 spells out strict DER.
-
-Its content is the number on `k` big-endian bytes, for the `k` that meets two bounds.
-
-The number is below `2 ^ (8 * k - 1)`, and, for `k` above 1, at least `2 ^ (8 * (k - 1) - 1)`.
-
-These bounds pick the fewest bytes such that the first has its top bit clear.
-
-With them, the first content byte is below `0x80`, and it is `0x00` only before `0x80` or more.
-
-Zero is one content byte, `0x00`. -/
-theorem derInteger_eq {n k : Nat} (hn : n < 2 ^ 256) (high : n < 2 ^ (8 * k - 1))
-    (low : k = 1 ∨ 2 ^ (8 * (k - 1) - 1) ≤ n) :
-    derInteger n = [0x02, UInt8.ofNat k] ++ natToBytes k n := by
-  obtain _ | j := k
-  · simp at high low; omega
-  have hhigh : n < 128 * 256 ^ j := by
-    rw [show 8 * (j + 1) - 1 = 7 + 8 * j by omega, Nat.pow_add, Nat.pow_mul] at high
-    simpa using high
-  have h256 : n < 256 ^ 32 := by simpa using hn
-  by_cases hj : 256 ^ j ≤ n
-  · have hj32 : j < 32 := (Nat.pow_lt_pow_iff_right (a := 256) (by decide)).mp (by omega)
-    have hdiv : n / 256 ^ j < 128 :=
-      (Nat.div_lt_iff_lt_mul (Nat.pow_pos (by decide))).mpr (by omega)
-    have hdrop := dropWhile_natToBytes hj32 hj (by rw [Nat.pow_succ]; omega)
-    rw [natToBytes_succ_eq_cons j n] at hdrop ⊢
-    have : ¬ (UInt8.ofNat (n / 256 ^ j)).toNat ≥ 128 := by
-      rw [UInt8.toNat_ofNat_of_lt' (by rw [UInt8.size]; omega)]; omega
-    simp only [derInteger, hdrop]
-    rw [ite_eq_right this]
-    simp [natToBytes_length]
-  · obtain _ | i := j
-    · have hzero : n = 0 := by simp at hj; omega
-      subst hzero
-      decide
-    · have hlow : 128 * 256 ^ i ≤ n := by
-        rcases low with h | h
-        · omega
-        · rw [show 8 * (i + 1 + 1 - 1) - 1 = 7 + 8 * i by omega, Nat.pow_add, Nat.pow_mul] at h
-          simpa using h
-      have hi32 : i < 32 := (Nat.pow_lt_pow_iff_right (a := 256) (by decide)).mp (by omega)
-      have hdrop := dropWhile_natToBytes (n := n) hi32 (by omega) (by omega)
-      have hdiv : 128 ≤ n / 256 ^ i :=
-        (Nat.le_div_iff_mul_le (Nat.pow_pos (by decide))).mpr (by omega)
-      have hdiv256 : n / 256 ^ i < 256 :=
-        (Nat.div_lt_iff_lt_mul (Nat.pow_pos (by decide))).mpr
-          (by rw [Nat.pow_succ] at hj; omega)
-      rw [natToBytes_succ_eq_cons i n] at hdrop
-      rw [natToBytes_succ_eq_cons (i + 1) n, Nat.div_eq_of_lt (by omega),
-        natToBytes_succ_eq_cons i n]
-      have : (UInt8.ofNat (n / 256 ^ i)).toNat ≥ 128 := by
-        rw [UInt8.toNat_ofNat_of_lt' hdiv256]; omega
-      simp only [derInteger, hdrop]
-      rw [ite_eq_left this]
-      simp [natToBytes_length]
-
--- The bound for 33 bytes is `2 ^ 263`, above the default threshold for evaluating a power.
-set_option exponentiation.threshold 263 in
-/-- Every number below `2 ^ 256` has a byte count from 1 to 33 that meets the bounds above. -/
-theorem exists_derByteCount {n : Nat} (hn : n < 2 ^ 256) :
-    ∃ k, 1 ≤ k ∧ k ≤ 33 ∧ n < 2 ^ (8 * k - 1) ∧
-      (k = 1 ∨ 2 ^ (8 * (k - 1) - 1) ≤ n) := by
-  suffices h : ∀ k, 1 ≤ k → k ≤ 33 → n < 2 ^ (8 * k - 1) →
-      ∃ k, 1 ≤ k ∧ k ≤ 33 ∧ n < 2 ^ (8 * k - 1) ∧
-        (k = 1 ∨ 2 ^ (8 * (k - 1) - 1) ≤ n) from
-    h 33 (by decide) (by decide) (Nat.lt_trans hn (by decide))
-  intro k
-  induction k with
-  | zero => intro h; omega
-  | succ k ih =>
-    intro h1 h33 high
-    by_cases hk : k = 0
-    · exact ⟨k + 1, h1, h33, high, .inl (by omega)⟩
-    by_cases hlow : 2 ^ (8 * (k + 1 - 1) - 1) ≤ n
-    · exact ⟨k + 1, h1, h33, high, .inr hlow⟩
-    · exact ih (by omega) (by omega)
-        (by rw [show 8 * k - 1 = 8 * (k + 1 - 1) - 1 by omega]; omega)
-
-/-- Every number below `2 ^ 256` has its DER INTEGER on at most 33 content bytes. -/
-private theorem exists_derInteger_eq {n : Nat} (hn : n < 2 ^ 256) :
-    ∃ k, 1 ≤ k ∧ k ≤ 33 ∧ n < 256 ^ k ∧
-      derInteger n = [0x02, UInt8.ofNat k] ++ natToBytes k n := by
-  obtain ⟨k, h1, h33, high, low⟩ := exists_derByteCount hn
-  refine ⟨k, h1, h33, ?_, derInteger_eq hn high low⟩
-  have : 2 ^ (8 * k - 1) ≤ 256 ^ k := by
-    rw [show (256 : Nat) = 2 ^ 8 by rfl, ← Nat.pow_mul]
-    exact Nat.pow_le_pow_right (by decide) (by omega)
-  omega
-
-/-- The scalar reader accepts exactly the encodings of r and s in [1, 2^256), BIP 62.
-
-It returns those r and s.
-
-Its last check is that the encoder writes the same bytes back, so acceptance gives the encoding.
-
-The converse is the content: the reader parses back every encoding of scalars in that range.
-
-So each accepted pair r, s has exactly one byte encoding. -/
-theorem decodeScalars_eq_some_iff {signature : ByteArray} {r s : Nat} :
-    decodeScalars signature = some (r, s) ↔
-      0 < r ∧ r < 2 ^ 256 ∧ 0 < s ∧ s < 2 ^ 256 ∧ encodeSignature r s = signature := by
-  constructor
-  · intro h
-    unfold decodeScalars at h
-    split at h
-    · split at h
-      · simp at h
-      · split at h
-        · split at h
-          · simp at h
-          · dsimp only at h
-            split at h
-            · rename_i hc
-              simp only [Option.some.injEq, Prod.mk.injEq] at h
-              obtain ⟨rfl, rfl⟩ := h
-              exact hc
-            · simp at h
-        · simp at h
-    · simp at h
-  · rintro ⟨hr, hr256, hs, hs256, rfl⟩
-    obtain ⟨kr, hkr1, hkr, hrk, hder_r⟩ := exists_derInteger_eq hr256
-    obtain ⟨ks, hks1, hks, hsk, hder_s⟩ := exists_derInteger_eq hs256
-    have hdata : (encodeSignature r s).data.toList =
-        0x30 :: UInt8.ofNat (kr + ks + 4) :: 0x02 :: UInt8.ofNat kr ::
-          (natToBytes kr r ++ 0x02 :: UInt8.ofNat ks :: natToBytes ks s) := by
-      simp [encodeSignature, hder_r, hder_s, natToBytes_length]
-      apply UInt8.toNat_inj.mp
-      simp
-      omega
-    have hsize : (encodeSignature r s).size = kr + ks + 6 := by
-      rw [ByteArray.size, ← Array.length_toList, hdata]
-      simp [natToBytes_length]
-      omega
-    have hkr8 : (UInt8.ofNat kr).toNat = kr := UInt8.toNat_ofNat_of_lt' (by rw [UInt8.size]; omega)
-    have hks8 : (UInt8.ofNat ks).toNat = ks := UInt8.toNat_ofNat_of_lt' (by rw [UInt8.size]; omega)
-    have htotal : (UInt8.ofNat (kr + ks + 4)).toNat = kr + ks + 4 :=
-      UInt8.toNat_ofNat_of_lt' (by rw [UInt8.size]; omega)
-    have hcond : 0 < r ∧ r < 2 ^ 256 ∧ 0 < s ∧ s < 2 ^ 256 ∧
-        encodeSignature r s = encodeSignature r s := ⟨hr, hr256, hs, hs256, rfl⟩
-    unfold decodeScalars
-    rw [hdata]
-    simp only [hsize, htotal, hkr8, hks8, List.take_left' (natToBytes_length kr r),
-      List.drop_left' (natToBytes_length kr r), natToBytes_length,
-      bytesToNat_natToBytes_of_lt hrk, bytesToNat_natToBytes_of_lt hsk]
-    simp only [hcond, and_self, ite_true]
-    simp
-
 /-- The decoder accepts exactly the encodings of r in [1, N) and s in [1, N/2], BIP 62.
 
 Here N is the order of the secp256k1 group, and N/2 rounds down.
@@ -291,14 +106,14 @@ The decoder returns those r and s, so each accepted pair has exactly one byte en
 theorem decodeSignature_eq_ok_iff {signature : ByteArray} {r s : Nat} :
     decodeSignature signature = .ok (r, s) ↔
       0 < r ∧ r < Fn.modulus ∧ 0 < s ∧ s ≤ Fn.modulus / 2 ∧
-        encodeSignature r s = signature := by
+        encodeEcdsaSignature r s = signature := by
   have hN : Fn.modulus < 2 ^ 256 := by decide
   unfold decodeSignature
   constructor
   · intro h
     split at h
     · rename_i r' s' hd
-      obtain ⟨hr, -, hs, -, he⟩ := decodeScalars_eq_some_iff.mp hd
+      obtain ⟨hr, -, hs, -, he⟩ := decodeEcdsaScalars_eq_some_iff.mp hd
       split at h
       · rename_i hc
         simp only [Except.ok.injEq, Prod.mk.injEq] at h
@@ -307,7 +122,7 @@ theorem decodeSignature_eq_ok_iff {signature : ByteArray} {r s : Nat} :
       · simp at h
     · simp at h
   · rintro ⟨hr, hrn, hs, hsn, he⟩
-    have hd := decodeScalars_eq_some_iff.mpr ⟨hr, by omega, hs, by omega, he⟩
+    have hd := decodeEcdsaScalars_eq_some_iff.mpr ⟨hr, by omega, hs, by omega, he⟩
     simp [hd, hrn, hsn]
 
 /-- A signature that a secret makes verifies under the key protobuf of that secret.
@@ -330,7 +145,7 @@ theorem verify_sign {k : Fn} {message signature : ByteArray} (h : sign k message
     obtain ⟨-, hr, hs0⟩ := Ecdsa.sign_ne_zero hs
     have hlow := Ecdsa.isLowS_sign hs
     have hcurve := Point.isOnCurve_mul k Point.isOnCurve_generator
-    have hdec := decodeSignature_eq_ok_iff (signature := encodeSignature r.val s.val)
+    have hdec := decodeSignature_eq_ok_iff (signature := encodeEcdsaSignature r.val s.val)
       (r := r.val) (s := s.val)
     have hr0 : 0 < r.val := Nat.pos_of_ne_zero fun h0 => hr (Fin.ext h0)
     have hs00 : 0 < s.val := Nat.pos_of_ne_zero fun h0 => hs0 (Fin.ext h0)
