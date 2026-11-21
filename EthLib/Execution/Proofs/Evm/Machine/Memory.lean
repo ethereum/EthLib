@@ -105,11 +105,37 @@ theorem bufferRead_zero_size (data : ByteArray) :
     simp [bufferRead_eq, EthLib.Base.byteAt_eq_getD, Array.getD_eq_getD_getElem?,
       Array.getElem?_eq_getElem hi]
 
+/-- A write is the bytes before the range, then the value, then the bytes after the range. -/
+theorem memoryWrite_eq (memory : ByteArray) (start : Nat) (value : ByteArray) :
+    memoryWrite memory start value = if value.size = 0 then memory
+      else memory.extract 0 start ++ value ++ memory.extract (start + value.size) memory.size := by
+  unfold memoryWrite
+  split
+  · rfl
+  · apply ByteArray.ext
+    have hs : value.data.size = value.size := rfl
+    -- The copy keeps the bytes of memory before and after the range, and all of the value.
+    simp only [ByteArray.copySlice, ByteArray.data_extract, ByteArray.data_append, Nat.zero_add,
+      Nat.sub_zero, hs, Nat.min_self,
+      show value.data.extract 0 value.size = value.data from Array.extract_size,
+      Array.append_assoc]
+    rfl
+
+/-- Growth appends that many zero bytes, also when it is none. -/
+theorem memoryExtend_eq (memory : ByteArray) (n : Nat) :
+    memoryExtend memory n = memory ++ ByteArray.mk (Array.replicate n 0) := by
+  unfold memoryExtend
+  split
+  · subst n
+    apply ByteArray.ext
+    simp [ByteArray.data_append]
+  · rfl
+
 /-- A write within memory keeps its size. -/
 theorem size_memoryWrite {memory value : ByteArray} {start : Nat}
     (h : start + value.size ≤ memory.size) :
     (memoryWrite memory start value).size = memory.size := by
-  unfold memoryWrite
+  rw [memoryWrite_eq]
   split
   · rfl
   · simp only [ByteArray.size_append, ByteArray.size_extract]
@@ -145,7 +171,8 @@ theorem size_memoryReadBytes_le (memory : ByteArray) (start size : Nat) :
 theorem memoryReadBytes_memoryWrite {memory value : ByteArray} {start : Nat}
     (h : start + value.size ≤ memory.size) :
     memoryReadBytes (memoryWrite memory start value) start value.size = value := by
-  unfold memoryReadBytes memoryWrite
+  unfold memoryReadBytes
+  rw [memoryWrite_eq]
   split
   · rename_i empty
     exact (ByteArray.size_eq_zero_iff.mp empty).symm
@@ -161,7 +188,7 @@ theorem memoryReadBytes_memoryWrite {memory value : ByteArray} {start : Nat}
 /-- Growth by `n` bytes adds `n` to the size. -/
 theorem size_memoryExtend (memory : ByteArray) (n : Nat) :
     (memoryExtend memory n).size = memory.size + n := by
-  rw [memoryExtend, ByteArray.size_append]
+  rw [memoryExtend_eq, ByteArray.size_append]
   simp only [← ByteArray.size_data, Array.size_replicate]
 
 /-- The growth for a list of ranges ends on a multiple of 32. -/
@@ -202,7 +229,7 @@ theorem byteAt_memoryWrite {memory value : ByteArray} {start : Nat}
     byteAt (memoryWrite memory start value) i =
       if start ≤ i ∧ i < start + value.size then byteAt value (i - start)
       else byteAt memory i := by
-  unfold memoryWrite
+  rw [memoryWrite_eq]
   split
   · rw [ite_eq_right_iff.mpr (fun hc => absurd hc (by omega))]
   · have hp : (memory.extract 0 start).size = start := by simp; omega
@@ -223,8 +250,9 @@ theorem byteAt_memoryWrite {memory value : ByteArray} {start : Nat}
 
 /-- Growth keeps every byte of memory. -/
 theorem byteAt_memoryExtend (memory : ByteArray) (n i : Nat) :
-    byteAt (memoryExtend memory n) i = byteAt memory i :=
-  byteAt_append_zeros memory n i
+    byteAt (memoryExtend memory n) i = byteAt memory i := by
+  rw [memoryExtend_eq]
+  exact byteAt_append_zeros memory n i
 
 /-- A read within memory gives the bytes of memory from its start, and zero past its size. -/
 theorem byteAt_memoryReadBytes {memory : ByteArray} {start size : Nat}

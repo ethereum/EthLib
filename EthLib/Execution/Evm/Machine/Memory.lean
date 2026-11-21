@@ -47,10 +47,12 @@ The memory must hold the whole range, so the size does not change.
 
 An empty value changes nothing, whatever its start.
 
-That start can reach 2^256, which no compiled index of a byte array holds, so it is never read. -/
+That start can reach 2^256, which no compiled index of a byte array holds, so it is never read.
+
+The bytes of the value replace those of the range, in place when nothing else holds the memory. -/
 def memoryWrite (memory : ByteArray) (start : Nat) (value : ByteArray) : ByteArray :=
   if value.size = 0 then memory
-  else memory.extract 0 start ++ value ++ memory.extract (start + value.size) memory.size
+  else value.copySlice 0 memory start value.size
 
 /-- The `size` bytes of memory from `start`.
 
@@ -60,8 +62,10 @@ An empty range reads nothing, and its start is never read, as for a write. -/
 def memoryReadBytes (memory : ByteArray) (start size : Nat) : ByteArray :=
   if size = 0 then .empty else memory.extract start (start + size)
 
-/-- The memory grown by `n` zero bytes. -/
+/-- The memory grown by `n` zero bytes.
+
+No growth leaves the memory as it is, with no copy. -/
 def memoryExtend (memory : ByteArray) (n : Nat) : ByteArray :=
-  memory ++ ByteArray.mk (Array.replicate n 0)
+  if n = 0 then memory else memory ++ ByteArray.mk (Array.replicate n 0)
 
 end EthLib.Execution.Evm
