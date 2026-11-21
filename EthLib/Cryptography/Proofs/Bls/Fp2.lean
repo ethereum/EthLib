@@ -92,21 +92,6 @@ theorem isZero_iff {a : Fp2} : a.isZero = true ↔ a = 0 := by
     Fp.isZero_iff]
   exact ⟨fun ⟨h0, h1⟩ => ext h0 h1, fun h => ⟨congrArg c0 h, congrArg c1 h⟩⟩
 
-instance : LawfulBEq Fp2 where
-  eq_of_beq {a b} h := by
-    cases a; cases b
-    change (_ && _) = true at h
-    rw [Bool.and_eq_true, _root_.beq_iff_eq, _root_.beq_iff_eq] at h
-    exact ext h.1 h.2
-  rfl {a} := by
-    cases a
-    change (_ && _) = true
-    simp
-
-instance : DecidableEq Fp2 := fun a b =>
-  if h : a.beq b then isTrue (beq_iff_eq.mp h)
-  else isFalse (fun heq => h (beq_iff_eq.mpr heq))
-
 /-! ## Ring axioms and `CommRing Fp2` -/
 
 section RingLaws
