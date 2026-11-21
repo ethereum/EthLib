@@ -10,6 +10,8 @@ public import EthLib.Networking.Proofs.Encoding.ByteReader
 - Reading a varint, a key or a record back from its encoding returns it, whatever bytes follow.
 - Reading the records of an encoded sequence returns the sequence.
 - The key needs a field number in range; a record also needs a value shorter than `2^64` bytes.
+- A key is read exactly when its field number is from 1 to `2^29 - 1` and its wire type below 8.
+- A group that holds well-formed records, empty groups among them, is read whole.
 - Reading a serialized message returns its records, for fields in range and a short message.
 - Short means fewer than `2^64` bytes.
 - The values of one field follow the order of the records, and so do its length-delimited values.
@@ -53,6 +55,41 @@ theorem readKey_encodeKey {field wire : Nat} (h0 : 0 < field) (hmax : field ≤ 
   simp only [readKey, encodeKey, readVarint_encode, bind, Except.bind, hk, hf, hm]
   simp only [hc, ↓reduceIte]
   rfl
+
+/-- A key is read exactly when it is a varint of 8 times its field number plus its wire type.
+
+The field number is from 1 to `2^29 - 1`, and the wire type is below 8. -/
+theorem readKey_eq_ok_iff {bytes rest : List UInt8} {field wire : Nat} :
+    readKey bytes = .ok (field, wire, rest) ↔ 0 < field ∧ field < 2 ^ 29 ∧ wire < 8 ∧
+      readVarint bytes = .ok (UInt64.ofNat (field * 8 + wire), rest) := by
+  cases hv : readVarint bytes with
+  | error e => simp [readKey, hv, bind, Except.bind]
+  | ok p =>
+    obtain ⟨key, r⟩ := p
+    have hk : key = UInt64.ofNat (key.toNat / 8 * 8 + key.toNat % 8) := by
+      rw [show key.toNat / 8 * 8 + key.toNat % 8 = key.toNat by omega, UInt64.ofNat_toNat]
+    by_cases hc : key.toNat / 8 = 0 ∨ maxField < key.toNat / 8
+    · simp only [readKey, hv, bind, Except.bind, hc, ↓reduceIte, throw, throwThe,
+        MonadExceptOf.throw, reduceCtorEq, false_iff, Except.ok.injEq, Prod.mk.injEq, not_and]
+      rintro h0 h29 hw rfl -
+      have hn : (UInt64.ofNat (field * 8 + wire)).toNat = field * 8 + wire := by
+        rw [UInt64.toNat_ofNat_of_lt']
+        simp only [UInt64.size]
+        omega
+      simp only [hn, maxField] at hc
+      omega
+    · simp only [readKey, hv, bind, Except.bind, hc, ↓reduceIte, pure, Except.pure,
+        Except.ok.injEq, Prod.mk.injEq]
+      simp only [maxField, not_or] at hc
+      constructor
+      · rintro ⟨rfl, rfl, rfl⟩
+        exact ⟨by omega, by omega, by omega, hk, rfl⟩
+      · rintro ⟨h0, h29, hw, rfl, rfl⟩
+        have hn : (UInt64.ofNat (field * 8 + wire)).toNat = field * 8 + wire := by
+          rw [UInt64.toNat_ofNat_of_lt']
+          simp only [UInt64.size]
+          omega
+        refine ⟨?_, ?_, rfl⟩ <;> rw [hn] <;> omega
 
 /-- Reading `n` bytes from `n` bytes and more returns them, and the bytes after them. -/
 theorem readFixed_append {n : Nat} (bytes : Vector UInt8 n) (rest : List UInt8) :
@@ -125,6 +162,122 @@ theorem two_le_length_encodeRecord (r : Record) : 2 ≤ (encodeRecord r).length 
     have := List.length_pos_iff.mpr (encodeKey_ne_nil field 4)
     simp only [encodeValue]; omega
   | i32 bytes => simp only [encodeValue, Vector.length_toList]; omega
+
+/-- A run of keys that closes the open groups within some steps also closes them with one more. -/
+private theorem skipGroup_succ_of_ok {fuel : Nat} {groups : List Nat} {bytes rest : List UInt8}
+    (h : skipGroup fuel groups bytes = .ok rest) :
+    skipGroup (fuel + 1) groups bytes = .ok rest := by
+  induction fuel generalizing groups bytes with
+  | zero =>
+    cases groups with
+    | nil => simpa [skipGroup] using h
+    | cons _ _ => simp [skipGroup] at h
+  | succ fuel ih =>
+    cases groups with
+    | nil => simpa [skipGroup] using h
+    | cons expected outer =>
+      rw [skipGroup] at h ⊢
+      cases hk : readKey bytes with
+      | error e => simp [hk, bind, Except.bind] at h
+      | ok k =>
+        obtain ⟨field, wire, r⟩ := k
+        simp only [hk, bind, Except.bind] at h ⊢
+        split
+        · exact ih h
+        · simp only at h
+          by_cases he : field = expected
+          · simp only [he, ↓reduceIte] at h ⊢
+            exact ih h
+          · simp [he, throw, throwThe, MonadExceptOf.throw] at h
+        · cases hs : readScalar wire r with
+          | error e => simp [hs] at h
+          | ok v => simp only [hs] at h ⊢; exact ih h
+
+/-- A run of keys that closes the open groups within some steps also closes them with more. -/
+private theorem skipGroup_add_of_ok {fuel : Nat} (k : Nat) {groups : List Nat}
+    {bytes rest : List UInt8} (h : skipGroup fuel groups bytes = .ok rest) :
+    skipGroup (fuel + k) groups bytes = .ok rest := by
+  induction k with
+  | zero => exact h
+  | succ k ih => exact skipGroup_succ_of_ok ih
+
+/-- Inside a group, a well-formed record is skipped in at most two steps. -/
+private theorem skipGroup_encodeRecord {r : Record} (hr : r.WellFormed) {fuel expected : Nat}
+    {outer : List Nat} {more rest : List UInt8}
+    (h : skipGroup fuel (expected :: outer) more = .ok rest) :
+    skipGroup (fuel + 2) (expected :: outer) (encodeRecord r ++ more) = .ok rest := by
+  obtain ⟨field, value⟩ := r
+  obtain ⟨h0, hmax, hv⟩ := hr
+  have h1 := skipGroup_succ_of_ok h
+  cases value with
+  | varint v =>
+    simp only [encodeRecord, encodeValue, Value.wireType, List.append_assoc]
+    rw [skipGroup, readKey_encodeKey h0 hmax (by decide)]
+    simpa [readScalar, readVarint_encode, bind, Except.bind, Except.map] using h1
+  | i64 bytes =>
+    simp only [encodeRecord, encodeValue, Value.wireType, List.append_assoc]
+    rw [skipGroup, readKey_encodeKey h0 hmax (by decide)]
+    simpa [readScalar, readFixed_append, bind, Except.bind, Except.map] using h1
+  | len bytes =>
+    simp only [encodeRecord, Value.wireType, List.append_assoc]
+    rw [skipGroup, readKey_encodeKey h0 hmax (by decide)]
+    simpa [readScalar, readLen_encodeValue hv, bind, Except.bind, Except.map] using h1
+  | group =>
+    simp only [encodeRecord, encodeValue, Value.wireType, List.append_assoc]
+    rw [skipGroup, readKey_encodeKey h0 hmax (by decide)]
+    simp only [bind, Except.bind]
+    rw [skipGroup, readKey_encodeKey h0 hmax (by decide)]
+    simpa [bind, Except.bind] using h
+  | i32 bytes =>
+    simp only [encodeRecord, encodeValue, Value.wireType, List.append_assoc]
+    rw [skipGroup, readKey_encodeKey h0 hmax (by decide)]
+    simpa [readScalar, readFixed_append, bind, Except.bind, Except.map] using h1
+
+/-- Inside a group, well-formed records are skipped in at most two steps each. -/
+private theorem skipGroup_encodeRecords {rs : List Record} (hrs : ∀ r ∈ rs, r.WellFormed)
+    {fuel expected : Nat} {outer : List Nat} {more rest : List UInt8}
+    (h : skipGroup fuel (expected :: outer) more = .ok rest) :
+    skipGroup (fuel + 2 * rs.length) (expected :: outer) (encodeRecords rs ++ more) = .ok rest := by
+  induction rs with
+  | nil => simpa [encodeRecords] using h
+  | cons r rs ih =>
+    have hr := hrs r (by simp)
+    have ih := ih fun r' hr' => hrs r' (by simp [hr'])
+    have he : encodeRecords (r :: rs) ++ more = encodeRecord r ++ (encodeRecords rs ++ more) := by
+      simp [encodeRecords]
+    rw [he, List.length_cons, show fuel + 2 * (rs.length + 1) = fuel + 2 * rs.length + 2 by omega]
+    exact skipGroup_encodeRecord hr ih
+
+/-- The records of a sequence take at least two bytes each. -/
+private theorem two_mul_length_le_encodeRecords (rs : List Record) :
+    2 * rs.length ≤ (encodeRecords rs).length := by
+  induction rs with
+  | nil => simp
+  | cons r rs ih =>
+    have := two_le_length_encodeRecord r
+    simp only [encodeRecords, List.flatMap_cons, List.length_append, List.length_cons] at ih ⊢
+    omega
+
+/-- A group that holds well-formed records, empty groups among them, is read whole.
+
+The record read is the field number with a group value, and the bytes after its end key follow. -/
+theorem readRecord_group {field : Nat} (h0 : 0 < field) (h29 : field < 2 ^ 29)
+    {rs : List Record} (hrs : ∀ r ∈ rs, r.WellFormed) (rest : List UInt8) :
+    readRecord (encodeKey field 3 ++ encodeRecords rs ++ encodeKey field 4 ++ rest) =
+      .ok (⟨field, .group⟩, rest) := by
+  have hmax : field ≤ maxField := by simp only [maxField]; omega
+  have hend : skipGroup 1 [field] (encodeKey field 4 ++ rest) = .ok rest := by
+    rw [skipGroup, readKey_encodeKey h0 hmax (by decide)]
+    simp [skipGroup, bind, Except.bind]
+  have hs := skipGroup_encodeRecords hrs hend
+  have hl := two_mul_length_le_encodeRecords rs
+  have hk := List.length_pos_iff.mpr (encodeKey_ne_nil field 4)
+  obtain ⟨k, hlen⟩ : ∃ k, (encodeRecords rs ++ (encodeKey field 4 ++ rest)).length =
+      1 + 2 * rs.length + k :=
+    ⟨_, (Nat.add_sub_of_le (by simp only [List.length_append]; omega)).symm⟩
+  simp only [readRecord, List.append_assoc]
+  rw [readKey_encodeKey h0 hmax (by decide)]
+  simp [bind, Except.bind, hlen, skipGroup_add_of_ok k hs, pure, Except.pure]
 
 /-- The loop reads back well-formed records from their encoding, given one step per input byte. -/
 theorem records_go_encodeRecords {rs : List Record} (h : ∀ r ∈ rs, r.WellFormed)
