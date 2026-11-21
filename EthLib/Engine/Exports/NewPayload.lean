@@ -28,6 +28,8 @@ The result is the value of the JSON of the payload status.
 
 Its validation error starts with the code of the reason, then a colon.
 
+From version 6 the status has version 2, with a `null` inclusion list verdict.
+
 A JSON-RPC error has the code of its Engine API error: 32602 or 38005.
 
 An unknown method, or an argument that Lean cannot read, has code 0.
@@ -60,9 +62,19 @@ def reasonMessage : PayloadError → String
   | .invalidTerminalBlock parent =>
     s!"the parent {hexString parent.toList} is a block of proof of work that is not terminal"
 
-/-- The JSON of a payload status, with the code of its reason first in the error. -/
-def statusJson (status : PayloadStatus) (reason : Option PayloadError) : Json :=
-  Json.payloadStatusJson status (reason.map fun e => s!"{e.code}: {reasonMessage e}")
+/-- The JSON of a payload status at a version, with the code of its reason first in the error.
+
+From version 6 the status has version 2, and its inclusion list verdict is `null`.
+
+The verdict of a valid payload needs the execution rules of Bogota, so that case raises code 0.
+
+No payload of Hegotá is valid here yet, since its block does not run. -/
+def statusJson (version : Nat) (status : PayloadStatus) (reason : Option PayloadError) :
+    Result Json := do
+  let error := reason.map fun e => s!"{e.code}: {reasonMessage e}"
+  if version < 6 then return Json.payloadStatusJson status error
+  if status.status = .valid then throw (0, "no inclusion list verdict: Bogota does not run here")
+  return Json.payloadStatusV2Json status error none
 
 /-- A payload status read from its JSON: the name of the status, the latest valid hash, the error.
 
@@ -81,7 +93,7 @@ A status that does not decode is an invalid parameter, with code 32602. -/
 @[export eth_engine_read_payload_status]
 def readPayloadStatusExport (args : PyValue) : Result PyValue := pyExport readPayloadStatusOf args
 
-/-- The version of a method name `engine_newPayloadV1` to `engine_newPayloadV5`. -/
+/-- The version of a method name `engine_newPayloadV1` to `engine_newPayloadV6`. -/
 def newPayloadVersion (method : String) : Option Nat := methodVersion "newPayload" method
 
 /-- The payload status of an `engine_newPayload` request, without the parent's state.
@@ -96,7 +108,7 @@ def newPayloadOf (args : PyValue × PyValue) : Result PyValue := do
   let some version := newPayloadVersion method | throw (0, s!"no method {method}")
   let params := request.getObjValD "params"
   match newPayloadWithoutState config version params with
-  | .ok (status, reason) => return .ofJson (statusJson status reason)
+  | .ok (status, reason) => return .ofJson (← statusJson version status reason)
   | .error e => throw (e.code, s!"engine error: {reprStr e}")
 
 /-- The payload status of an `engine_newPayload` request, without the parent's state.
@@ -143,7 +155,7 @@ def newPayloadOnChainOf
   match newPayloadOnChain transition totalDifficulty chain version params with
   | .error e => throw (e.code, s!"engine error: {reprStr e}")
   | .ok (status, reason, next) =>
-    let status := PyValue.ofJson (statusJson status reason)
+    let status := PyValue.ofJson (← statusJson version status reason)
     match next with
     | none => return (status, none, none)
     | some (block, post) =>

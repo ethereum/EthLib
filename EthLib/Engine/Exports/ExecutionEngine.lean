@@ -32,6 +32,8 @@ The result is the JSON parameters, then the status of the method or the code of 
 
 Last comes whether the layer accepts, with the state transition taken as passed.
 
+From Heze the request carries an empty inclusion list.
+
 Each part that does not apply is `None`. -/
 def newPayloadRoutesOf (args : PyValue × String × String × ByteArray) :
     Result (PyValue × PyValue × PyValue × Bool) := do
@@ -39,7 +41,6 @@ def newPayloadRoutesOf (args : PyValue × String × String × ByteArray) :
   let config ← configOfJson config.toJson
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let ⟨_⟩ ← holds (.bellatrix ≤ fork) s!"no payload request at {fork.name}"
-  let ⟨_⟩ ← holds (fork < .hegota) s!"no version of engine_newPayload at {fork.name}"
   let request ← decodeInput (Consensus.NewPayloadRequest preset fork) request
   let chain : Execution.Blocks.BlockChain :=
     { config, state := { accounts := ∅, storage := ∅, code := ∅ }, recent := [] }
@@ -51,7 +52,9 @@ def newPayloadRoutesOf (args : PyValue × String × String × ByteArray) :
   let accepted := match checks.verifyAndNotifyNewPayload request with
     | .ok true => true
     | _ => false
-  match newPayloadRequestJson request with
+  -- The inclusion list leaves both routes unchanged, so it is empty here.
+  let inclusionList : Since .hegota fork (List ByteArray) := fun _ => []
+  match newPayloadRequestJson request inclusionList with
   | none => return (.none, .none, .none, accepted)
   | some params =>
     match newPayloadWithoutState config (newPayloadVersion fork) params with

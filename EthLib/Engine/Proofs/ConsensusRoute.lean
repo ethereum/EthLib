@@ -17,6 +17,10 @@ From Bellatrix to Gloas, the method on a chain answers valid exactly when the mo
 The last block of the chain must pass the terminal block check, which only the method makes.
 
 A chain without the parent of the payload gives no valid answer on either route.
+
+From Heze the request reads back at version 6, with its inclusion list.
+
+Its block does not run yet, since the execution rules of Bogota are not in this library.
 -/
 
 public section
@@ -268,13 +272,20 @@ private theorem checkNewPayload_eq_ok {config : ChainConfig} {version : Nat}
     simp [hValid, hActive, hAccepted, hPayload, hBeacon, hLists, hAccess, hSlot, hBlock,
       hHashes, bind, Except.bind, pure, Except.pure]
 
+/-- A field from a later fork has no value. -/
+private theorem sinceValue_eq_none {α : Type} {f : Fork} {x : Since f fork α} (h : fork < f) :
+    sinceValue x = none := by
+  simp only [sinceValue, dite_eq_right_iff, reduceCtorEq, imp_false]
+  exact Nat.not_le.mpr h
+
 /-- From Bellatrix to Gloas, the written JSON of a request is valid exactly when the model accepts.
 
 The last block of the chain must pass the terminal block check. -/
 private theorem valid_iff_accepts_of_json {transition : TransitionConfiguration}
     {totalDifficulty : Nat} {chain : BlockChain} {r : Consensus.NewPayloadRequest preset fork}
-    {params : Lean.Json} (hFork : .bellatrix ≤ fork ∧ fork < .hegota)
-    (hJson : newPayloadRequestJson r = some params)
+    {params : Lean.Json} {inclusionList : Since .hegota fork (List ByteArray)}
+    (hFork : .bellatrix ≤ fork ∧ fork < .hegota)
+    (hJson : newPayloadRequestJson r inclusionList = some params)
     (hTerminal : ∀ parent, chain.recent.getLast? = some parent →
       passesTerminalCheck transition totalDifficulty parent = true) :
     (∃ answer, newPayloadOnChain transition totalDifficulty chain (newPayloadVersion fork) params =
@@ -291,7 +302,9 @@ private theorem valid_iff_accepts_of_json {transition : TransitionConfiguration}
   obtain ⟨payload, hPay, requests, hReq, hParams⟩ := hJson
   replace hPay := toOption_eq_some hPay
   replace hReq := toOption_eq_some hReq
-  simp only [pure, Option.some.injEq] at hParams
+  -- Before Heze there is no inclusion list, so the JSON is that of the earlier versions.
+  have noList : sinceValue inclusionList = none := sinceValue_eq_none hFork.2
+  simp only [noList, pure, Option.some.injEq] at hParams
   subst hParams
   generalize hAm : ((sinceValue r.executionPayload.blockAccessList).bind fun accessList =>
     (sinceValue r.executionPayload.slotNumber).bind fun slot =>
@@ -432,10 +445,11 @@ Without the parent of the payload as that last block, both routes refuse the req
 The method then answers syncing or refuses at its checks, and the state transition fails. -/
 theorem newPayloadOnChain_valid_iff_accepts {transition : TransitionConfiguration}
     {totalDifficulty : Nat} {chain : BlockChain} {r : Consensus.NewPayloadRequest preset fork}
+    (inclusionList : Since .hegota fork (List ByteArray))
     (hFork : .bellatrix ≤ fork ∧ fork < .hegota)
     (hTerminal : ∀ parent, chain.recent.getLast? = some parent →
       passesTerminalCheck transition totalDifficulty parent = true) :
-    (∃ params answer, newPayloadRequestJson r = some params ∧
+    (∃ params answer, newPayloadRequestJson r inclusionList = some params ∧
         newPayloadOnChain transition totalDifficulty chain (newPayloadVersion fork) params =
           .ok answer ∧ answer.1.status = .valid) ↔
       (executionEngine chain).verifyAndNotifyNewPayload r = .ok true := by
@@ -454,7 +468,9 @@ theorem newPayloadOnChain_valid_iff_accepts {transition : TransitionConfiguratio
     obtain ⟨shapella, dencun⟩ := shape_facts hFork
     obtain ⟨payload, hPay⟩ := exists_atFork_iff.mpr
       ⟨hw.trans shapella, hb.trans dencun, he.trans dencun⟩
-    have hJson : newPayloadRequestJson r = some (newPayloadParamsJson (newPayloadVersion fork)
+    have noList : sinceValue inclusionList = none := sinceValue_eq_none hFork.2
+    have hJson : newPayloadRequestJson r inclusionList =
+        some (newPayloadParamsJson (newPayloadVersion fork)
         payload ((sinceValue r.executionPayload.blockAccessList).bind fun accessList =>
           (sinceValue r.executionPayload.slotNumber).bind fun slot =>
             pure (({ data := accessList.data } : ByteArray), slot))
@@ -462,10 +478,81 @@ theorem newPayloadOnChain_valid_iff_accepts {transition : TransitionConfiguratio
         ((sinceValue r.parentBeaconBlockRoot).getD 0) ((sinceValue requests).getD [])) := by
       unfold newPayloadRequestJson
       simp only [hne, ne_eq, not_false_eq_true, guard, ite_true, pure_bind, hAny, hPay, hReq,
-        Except.toOption, Option.bind_eq_bind, Option.bind_some]
+        Except.toOption, Option.bind_eq_bind, Option.bind_some, noList]
       rfl
     obtain ⟨answer, hRun, hValid⟩ :=
       (valid_iff_accepts_of_json hFork hJson hTerminal).mpr hAccept
     exact ⟨_, answer, hJson, hRun, hValid⟩
+
+/-! ## From Heze -/
+
+/-- From Heze, the JSON of a request reads back at version 6, with the values of the request.
+
+The extra data of the payload must hold at most 32 bytes.
+
+The payload reads back with the access list and the slot of the request.
+
+At the fork of Deneb, where the request writes it, it is the payload of the request.
+
+The blob hashes, the beacon root, the request lists and the inclusion list read back too. -/
+theorem newPayloadV6Params_newPayloadRequestJson (heze : .hegota ≤ fork)
+    {r : Consensus.NewPayloadRequest preset fork} {list : List ByteArray} {params : Lean.Json}
+    (extra : r.executionPayload.extraData.data.size ≤ Execution.Blocks.MAX_EXTRA_DATA_BYTES)
+    (hJson : newPayloadRequestJson r (fun _ => list) = some params) :
+    ∃ any requests, r.requestsList = .ok requests ∧
+      newPayloadV6Params params = .ok ((any,
+        some (⟨(r.executionPayload.blockAccessList (Nat.le_trans (by decide) heze)).data⟩,
+          r.executionPayload.slotNumber (Nat.le_trans (by decide) heze)),
+        some (r.versionedHashes (Nat.le_trans (by decide) heze)).data.toList,
+        some (r.parentBeaconBlockRoot (Nat.le_trans (by decide) heze)),
+        some ((sinceValue requests).getD [])), list) ∧
+      ∃ original, anyPayloadOf r.executionPayload = some original ∧
+        ∃ q : ExecutionPayload .dencun, original.atFork .dencun = .ok q ∧
+          any.atFork .dencun = .ok q := by
+  have six : newPayloadVersion fork = 6 := by simp [newPayloadVersion, heze]
+  have gloas : Fork.glamsterdam ≤ fork := Nat.le_trans (by decide) heze
+  unfold newPayloadRequestJson at hJson
+  have hne : newPayloadVersion fork ≠ 0 := by omega
+  simp only [hne, ne_eq, not_false_eq_true, guard, ite_true, pure_bind] at hJson
+  cases hAny : anyPayloadOf r.executionPayload with
+  | none => simp [hAny] at hJson
+  | some any =>
+  simp only [hAny, Option.bind_eq_bind, Option.bind_some, Option.bind_eq_some_iff] at hJson
+  obtain ⟨payload, hPay, requests, hReq, hParams⟩ := hJson
+  replace hPay := toOption_eq_some hPay
+  replace hReq := toOption_eq_some hReq
+  -- From Heze the inclusion list, the access list and the slot are all present.
+  have hList : sinceValue (fun _ => list : Since .hegota fork (List ByteArray)) = some list := by
+    simp [sinceValue, heze]
+  have hAm : ((sinceValue r.executionPayload.blockAccessList).bind fun accessList =>
+      (sinceValue r.executionPayload.slotNumber).bind fun slot =>
+        pure (({ data := accessList.data } : ByteArray), slot)) =
+      some (⟨(r.executionPayload.blockAccessList gloas).data⟩,
+        r.executionPayload.slotNumber gloas) := by
+    simp [sinceValue, gloas, pure]
+  rw [hList, hAm] at hParams
+  simp only [pure, Option.some.injEq] at hParams
+  subst hParams
+  -- The payload is written at Deneb, with the extra data of the request.
+  have dencun : Fork.dencun ≤ fork := Nat.le_trans (by decide) heze
+  have extra' : payload.extraData.size ≤ Execution.Blocks.MAX_EXTRA_DATA_BYTES := by
+    rw [(atFork_common hPay).2.2, (common_of_anyPayloadOf hAny).2.2]
+    exact extra
+  -- The hashes and the root are those of the request.
+  have hHashes : ((sinceValue r.versionedHashes).map (·.data.toList)).getD [] =
+      (r.versionedHashes dencun).data.toList := by
+    simp [sinceValue, dencun]
+  have hRoot : (sinceValue r.parentBeaconBlockRoot).getD 0 = r.parentBeaconBlockRoot dencun := by
+    simp [sinceValue, dencun]
+  rw [hHashes, hRoot]
+  -- The structure of the payload is that of Deneb.
+  have hShape : (if Fork.dencun ≤ fork then Fork.dencun
+      else if Fork.shapella ≤ fork then Fork.shapella else Fork.paris) = Fork.dencun := by
+    simp [dencun]
+  revert payload
+  rw [hShape]
+  intro payload hPay extra'
+  obtain ⟨any', h, hat⟩ := newPayloadV6Params_json payload _ _ _ _ list (Nat.le_refl _) extra'
+  exact ⟨any', requests, hReq, h, any, rfl, payload, hPay, hat⟩
 
 end EthLib.Engine

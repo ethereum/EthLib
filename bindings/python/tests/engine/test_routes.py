@@ -22,7 +22,17 @@ _FILE = Path(__file__).resolve().parents[4] / "tests" / "engine" / "new_payload.
 CASES = json.loads(_FILE.read_text())
 
 # The forks of the beacon chain from Bellatrix, in order, as the export names them.
-FORKS = ["bellatrix", "shapella", "dencun", "pectra", "fusaka", "bpo1", "bpo2", "glamsterdam"]
+FORKS = [
+    "bellatrix",
+    "shapella",
+    "dencun",
+    "pectra",
+    "fusaka",
+    "bpo1",
+    "bpo2",
+    "glamsterdam",
+    "hegota",
+]
 
 # The request types of the beacon chain, in their order, and the fork that adds each.
 REQUEST_TYPES = {0: "pectra", 1: "pectra", 2: "pectra", 3: "glamsterdam", 4: "glamsterdam"}
@@ -208,12 +218,11 @@ def test_counts() -> None:
     ("preset", "fork", "message"),
     [
         ("mainnet", "phase0", "no payload request at phase0"),
-        ("mainnet", "hegota", "no version of engine_newPayload at hegota"),
         ("bogus", "pectra", "no preset is named bogus"),
     ],
 )
 def test_rejected_inputs(preset: str, fork: str, message: str) -> None:
-    """A fork before Bellatrix or from Hegota, or an unknown preset, has code 0."""
+    """A fork before Bellatrix, or an unknown preset, has code 0."""
     with raises(engine.EngineError, message) as error:
         engine.new_payload_routes(config("Prague"), preset, fork, b"")
     assert error.value.code == 0
@@ -226,3 +235,16 @@ def test_unsupported_fork() -> None:
     assert request is not None
     result = engine.new_payload_routes(config("Shanghai"), "mainnet", "bellatrix", request)
     assert result == (case["params"], None, 38005, False)
+
+
+def test_heze_request() -> None:
+    """A Heze request goes to version 6, with an empty inclusion list, and both routes agree."""
+    case = next(c for c in FORMED if c["network"] == "Amsterdam" and c["validationError"] is None)
+    request = _request_ssz("hegota", case["params"])
+    assert request is not None
+    bogota = config("Amsterdam") | {
+        "activations": [*config("Amsterdam")["activations"], ["hegota", "time", 0]]
+    }
+    result = engine.new_payload_routes(bogota, "mainnet", "hegota", request)
+    # Without the parent's state the payload is syncing, and the layer accepts its block.
+    assert result == ([*case["params"], []], "SYNCING", None, True)

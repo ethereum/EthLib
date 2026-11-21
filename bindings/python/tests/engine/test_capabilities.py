@@ -33,7 +33,7 @@ _VERSIONED = re.compile(r"engine_[A-Za-z]+V[1-9][0-9]*")
 # The last version of each method that EthLib defines; each has every version from 1.
 # The order is that of EthLib's table; the source fixes no order.
 _DEFINED = {
-    "newPayload": 5,
+    "newPayload": 6,
     "forkchoiceUpdated": 5,
     "getPayload": 6,
     "getPayloadBodiesByHash": 2,

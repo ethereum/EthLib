@@ -9,7 +9,7 @@ public import EthLib.Execution.Blocks.Transition
 /-!
 # `Engine.NewPayload`
 
-The checks of `engine_newPayload`, versions 1 to 5, that come before the transactions run.
+The checks of `engine_newPayload`, versions 1 to 6, that come before the transactions run.
 
 Each version takes payloads of some forks only.
 
@@ -18,6 +18,10 @@ The fork of a payload is the active fork at its number and its timestamp.
 Version 1 takes Paris, version 2 Paris and Shapella, version 3 Dencun, version 4 Pectra to BPO5.
 
 Version 5 takes Glamsterdam, which the Engine API calls Amsterdam on the execution side.
+
+Version 6 takes Hegotá, whose execution side the Engine API calls Bogota.
+
+The update by Bogota ends version 5 at Hegotá.
 
 A payload of any other fork is an unsupported fork, with JSON-RPC code `-38005`.
 
@@ -41,6 +45,12 @@ Version 5 takes version 4 of the payload structure, with the block access list a
 
 A list that is not the RLP form of a block access list makes the payload invalid.
 
+Version 6 also takes the transactions of an inclusion list, each any byte string.
+
+They must read as such a list, and the checks here use them no further.
+
+Whether a payload satisfies its list needs the execution rules of Bogota, not in this library yet.
+
 Then the block of the payload must decode, and its hash must be the block hash of the payload.
 
 A payload that fails these checks is invalid.
@@ -62,8 +72,11 @@ These sources state the rules, at commit `3284ee8` of execution-apis and `46976b
 - [`engine_newPayloadV3`][v3], and its update by Pectra in [`prague.md`][v3-prague]
 - [`engine_newPayloadV4`][v4], and its update by Amsterdam in [`amsterdam.md`][v4-amsterdam]
 - [`engine_newPayloadV5`][v5]
+- [`engine_newPayloadV6`][v6], and its update of version 5, in [`bogota.md`][v5-bogota]
 - the [payload validation][validation] of Paris, with its terminal block check
 - the [transition block validity][eip3675] of EIP-3675
+
+The Bogota links are at commit `68d76a5`, the first where a list entry may be any byte string.
 
 [v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_newpayloadv1
 [validation]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-validation
@@ -74,6 +87,8 @@ These sources state the rules, at commit `3284ee8` of execution-apis and `46976b
 [v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/prague.md#engine_newpayloadv4
 [v4-amsterdam]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#update-the-methods-of-previous-forks
 [v5]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_newpayloadv5
+[v6]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_newpayloadv6
+[v5-bogota]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#update-the-methods-of-previous-forks
 -/
 
 @[expose] public section
@@ -96,11 +111,12 @@ def acceptsFork (version : Nat) (fork : Fork) : Bool :=
   | 3 => fork == .dencun
   | 4 => decide (.pectra ≤ fork) && decide (fork < .glamsterdam)
   | 5 => fork == .glamsterdam
+  | 6 => fork == .hegota
   | _ => false
 
 /-- The number of parameters of a version of the method. -/
 def paramCount (version : Nat) : Nat :=
-  if version ≥ 4 then 4 else if version = 3 then 3 else 1
+  if version ≥ 6 then 5 else if version ≥ 4 then 4 else if version = 3 then 3 else 1
 
 /-- Whether a version of the method takes a version of the payload structure.
 
@@ -131,7 +147,10 @@ The payload comes first, with its access list and its slot from version 5.
 
 From version 3 the expected blob versioned hashes and the parent beacon block root follow.
 
-From version 4 the execution requests follow. -/
+From version 4 the execution requests follow.
+
+From version 6 the inclusion list follows, which must read as one and which the checks do not use.
+-/
 def newPayloadParams (version : Nat) (params : Json) :
     Decode (AnyPayload × Option (ByteArray × UInt64) × Option (List Hash32) × Option Hash32 ×
       Option (List ByteArray)) := do
@@ -153,6 +172,8 @@ def newPayloadParams (version : Nat) (params : Json) :
     some <$> fixed "parentBeaconBlockRoot" 32 (← param 2) else pure none
   let requests ← if version ≥ 4 then
     some <$> array "executionRequests" (bytes "request") (← param 3) else pure none
+  if version ≥ 6 then
+    let _ ← inclusionListOfJson (← param 4)
   return (any, amsterdam, hashes, beaconRoot, requests)
 
 /-- The parameters of a version of the method as JSON, in the order that the version takes.
@@ -179,18 +200,15 @@ def newPayloadParamsJson {fork : Fork} (version : Nat) (payload : ExecutionPaylo
 
 They are an array of five values, none of them `null`.
 
-The first four read as the parameters of version 5, and the fifth as the inclusion list. -/
+They read as the parameters of version 6, and the fifth also gives the inclusion list. -/
 def newPayloadV6Params (params : Json) :
     Decode ((AnyPayload × Option (ByteArray × UInt64) × Option (List Hash32) × Option Hash32 ×
       Option (List ByteArray)) × List ByteArray) := do
-  let items ← match params with
-    | .arr items => pure items.toList
+  let six ← newPayloadParams 6 params
+  let inclusionList ← match params with
+    | .arr items => inclusionListOfJson (items[4]?.getD .null)
     | _ => invalid "params: not an array"
-  unless items.all (!·.isNull) do invalid "params: not 5 values"
-  let [payload, hashes, beaconRoot, requests, inclusionList] := items
-    | invalid "params: not 5 values"
-  let five ← newPayloadParams 5 (.arr #[payload, hashes, beaconRoot, requests])
-  return (five, ← inclusionListOfJson inclusionList)
+  return (six, inclusionList)
 
 /-- The parameters of version 6 as JSON: those of version 5, then the inclusion list. -/
 def newPayloadV6ParamsJson {fork : Fork} (payload : ExecutionPayload fork)
