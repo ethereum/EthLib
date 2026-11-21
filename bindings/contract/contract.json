@@ -12910,7 +12910,7 @@
       {"constructor": "unequalLengths", "code": 3}]}],
    "error_class": "EthWireError",
    "docstring":
-   "The canonical data of the message with the ID `id` and the data `data`, on a version.\n\nIt reads the message, then writes it back."},
+   "The canonical data of the message with the ID `id` and the data `data`, on a version.\n\nIt reads the message, and returns the data once the message reads.\n\nThe decoder takes only the canonical encoding of a message, so the data is that encoding."},
   {"summary":
    "Whether a node accepts the Status of a peer, on the negotiated version `version`.",
    "signature":
@@ -13086,7 +13086,7 @@
       {"constructor": "emptyPathGroup", "code": 7}]}],
    "error_class": "SnapError",
    "docstring":
-   "The canonical data of the message with the ID `id` and the data `data`, on a version.\n\nIt reads the message, then writes it back."},
+   "The canonical data of the message with the ID `id` and the data `data`, on a version.\n\nIt reads the message, and returns the data once the message reads.\n\nThe decoder takes only the canonical encoding of a message, so the data is that encoding."},
   {"summary":
    "Whether the ByteCodes data `response` answers the GetByteCodes data `request`.",
    "signature": "(version: int, request: bytes, response: bytes) -> bool",

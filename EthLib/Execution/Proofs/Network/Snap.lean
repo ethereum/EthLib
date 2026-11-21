@@ -196,6 +196,19 @@ theorem ofItem_eq_ok_iff {version : SnapVersion} {id : Nat} {item : Item} {m : S
   · rintro ⟨rfl, hm, rfl⟩
     exact ofItem_toItem hm
 
+/-- A message that the decoder reads from `data` encodes back to exactly `data`.
+
+The RLP decoder takes only canonical input, and the message keeps its whole item. -/
+theorem encode_of_decode {version : SnapVersion} {id : Nat} {data : ByteArray} {m : SnapMessage}
+    (h : decode version id data = .ok m) : m.encode = .ok data := by
+  unfold decode at h
+  cases hd : Serialization.Rlp.decode data with
+  | error e => simp [hd, Except.mapError, bind, Except.bind] at h
+  | ok item =>
+    simp only [hd, Except.mapError, bind, Except.bind] at h
+    obtain ⟨-, -, rfl⟩ := ofItem_eq_ok_iff.mp h
+    simp [encode, encode_decode data _ hd, Except.mapError]
+
 /-- snap/2 rejects GetTrieNodes and TrieNodes, which it removes. -/
 theorem ofItem_snap2_trieNodes (item : Item) :
     ofItem .snap2 0x06 item = .error (.unknownId 0x06) ∧

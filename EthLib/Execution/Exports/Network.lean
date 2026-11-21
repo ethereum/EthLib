@@ -66,13 +66,14 @@ def readVersion (number : UInt64) : Result EthVersion :=
 
 /-- The canonical data of the message with the ID `id` and the data `data`, on a version.
 
-It reads the message, then writes it back. -/
+It reads the message, and returns the data once the message reads.
+
+The decoder takes only the canonical encoding of a message, so the data is that encoding. -/
 @[export eth_message_decode]
 def decodeExport (version id : UInt64) (data : ByteArray) : Result ByteArray := do
   let v ← readVersion version
-  let run {α : Type} (act : Except EthError α) : Result α :=
-    act.mapError fun e => (e.code, ethMessage e)
-  run (← run (Message.decode v id.toNat data)).encode
+  let _ ← (Message.decode v id.toNat data).mapError fun e => (e.code, ethMessage e)
+  return data
 
 /-- Whether a node accepts the Status `data` of a peer, on a version, at a head.
 
