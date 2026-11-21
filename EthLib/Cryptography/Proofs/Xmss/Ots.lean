@@ -27,7 +27,7 @@ namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
-variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {layer : Layer} {e : UInt32}
+variable {f : Array UInt64 → Lanes4} {pp : PublicParam} {layer : Layer} {e : UInt32}
   {i : Fin V}
   {start s₁ s₂ : Nat} {value : Digest}
 
@@ -35,30 +35,30 @@ variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {layer : Layer} 
 
 /-- The randomizer of trial `c` is the little-endian bytes of `R_0 + c` modulo `2^128`. -/
 theorem trialRandomizer_eq (base : Randomizer) (c : Nat) :
-    trialRandomizer base c = uintToBytes RANDOMIZER_LEN ((bytesToUint base + c) % 2 ^ 128) := by
-  rw [trialRandomizer, WordPair.bytes_eq, toNat_trialWords,
-    show (WordPair.ofBytes base).toNat = bytesToUint base from WordPair.toNat_ofBytes base]
+    (trialRandomizer base c).bytes =
+      uintToBytes RANDOMIZER_LEN ((bytesToUint base.bytes + c) % 2 ^ 128) := by
+  rw [Hash.Keccak.Lanes2.bytes_eq_uintToBytes, toNat_trialRandomizer,
+    Hash.Keccak.Lanes2.bytesToUint_bytes]
   rfl
 
 /-- The search tests trial `c` on the digest of its randomizer `rho_c`, in any monad.
 
-It builds `P | A_msg(l, e) | M` once, and each trial hashes those bytes followed by `rho_c`.
+It builds `P | A_msg(l, e) | M` once, and each trial hashes those lanes followed by `rho_c`.
 
 That is the input of the digest of `rho_c`, so the trials make the same hash calls. -/
-theorem Internal.findCodeword_eq {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
-    (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : ByteArray) (base : Randomizer)
+theorem Internal.findCodeword_eq {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
+    (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64) (base : Randomizer)
     (c fuel : Nat) :
     Internal.findCodeword H pp layer e msg base c fuel =
       Wots.findFirst (trialRandomizer base)
         (fun rho => codeword? <$> messageDigest H pp layer e msg rho) c fuel := by
   simp only [Internal.findCodeword, hashTrials, messageDigest, th, thInput,
-    ByteArray.append_assoc]
-  rfl
+    Array.append_assoc]
 
 /-- The one-time signer with the trials of `H` is the one-time signer over `H`. -/
 theorem Internal.otsSignTrials_hashTrials {m : Type → Type} [Monad m]
-    (H : ByteArray → m (Vector UInt8 32)) (pp : PublicParam) (prf : SeedPrf m) (layer : Layer)
-    (e : UInt32) (msg : ByteArray) :
+    (H : Array UInt64 → m Lanes4) (pp : PublicParam) (prf : SeedPrf m) (layer : Layer)
+    (e : UInt32) (msg : Array UInt64) :
     Internal.otsSignTrials H pp prf layer e msg (hashTrials H) = otsSign H pp prf layer e msg :=
   rfl
 
@@ -66,12 +66,12 @@ theorem Internal.otsSignTrials_hashTrials {m : Type → Type} [Monad m]
 
 section SeedPrf
 
-variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32)) (s : Seed)
+variable {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4) (s : Seed)
 
 /-- With the seed's derivations, the chain starts hash `P | A_prf(l, e, j) | S`. -/
 theorem chainStarts_seedPrf (pp : PublicParam) (layer : Layer) (e : UInt32) :
     chainStarts pp (seedPrf H s) layer e = (do
-      let pairs ← ofFnInOrder (V / 2) fun j => H (thInput pp (addrPrf layer e j) (packBytes s))
+      let pairs ← ofFnInOrder (V / 2) fun j => H (thInput pp (addrPrf layer e j) s.toArray)
       return Vector.ofFn fun i =>
         halfOf ⟨i.val % 2, Nat.mod_lt _ (by decide)⟩
           (pairs[i.val / 2]'(by have := i.isLt; simp only [V] at *; omega))) := by
@@ -79,8 +79,8 @@ theorem chainStarts_seedPrf (pp : PublicParam) (layer : Layer) (e : UInt32) :
 
 /-- With the seed's derivations, the randomizer base is `Th(P, A_rnd(l, e), S | M)`. -/
 theorem randomizerBase_seedPrf (pp : PublicParam) (layer : Layer) (e : UInt32)
-    (msg : ByteArray) :
-    randomizerBase pp (seedPrf H s) layer e msg = th H pp (addrRnd layer e) (packBytes s ++ msg) :=
+    (msg : Array UInt64) :
+    randomizerBase pp (seedPrf H s) layer e msg = th H pp (addrRnd layer e) (s.toArray ++ msg) :=
   rfl
 
 end SeedPrf
@@ -100,7 +100,7 @@ end SeedPrf
 `simp` rewrites with `rfl` lemmas, and checking those makes Lean unfold the grinding loop.
 
 That loop runs up to `2^32` trials. -/
-theorem otsSign_run {prf : SeedPrf Id} {msg : ByteArray} :
+theorem otsSign_run {prf : SeedPrf Id} {msg : Array UInt64} :
     (otsSign (pureHash f) pp prf layer e msg).run =
       ((Internal.findCodeword (pureHash f) pp layer e msg
           (randomizerBase pp prf layer e msg).run 0 MAX_RANDOMIZER_TRIALS).run).map
@@ -122,7 +122,7 @@ theorem otsSign_run {prf : SeedPrf Id} {msg : ByteArray} :
 The verifier walks each revealed value from position `x_i` to 3.
 
 The signer walked it from 0 to `x_i`, so together they walk the whole chain. -/
-theorem otsLeaf_otsSign {prf : SeedPrf Id} {msg : ByteArray} {rho : Randomizer}
+theorem otsLeaf_otsSign {prf : SeedPrf Id} {msg : Array UInt64} {rho : Randomizer}
     {y : Vector Digest V}
     (h : (otsSign (pureHash f) pp prf layer e msg).run = some (rho, y)) :
     (otsLeaf (pureHash f) pp layer e msg rho y).run

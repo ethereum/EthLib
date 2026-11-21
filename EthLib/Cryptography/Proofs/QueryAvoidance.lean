@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Merkle.Build
 public import EthLib.Cryptography.Proofs.Wots
-public import EthLib.Cryptography.HashSig
+public import EthLib.Cryptography.Proofs.HashSig
 public import VCVio.OracleComp.QueryTracking.QueryBound.Simulation
 
 /-!
@@ -33,7 +33,7 @@ theorem ofFnInOrder_isQueryBoundP_zero {α : Type} :
       IsQueryBoundP (HashSig.ofFnInOrder k f) p 0
   | 0, _, _ => isQueryBoundP_pure _ _ _
   | k + 1, f, h => by
-    rw [HashSig.ofFnInOrder]
+    rw [HashSig.ofFnInOrder_succ]
     exact isQueryBoundP_bind_zero _ _ (h 0) fun _ =>
       isQueryBoundP_bind_zero _ _ (ofFnInOrder_isQueryBoundP_zero k _ fun i => h i.succ)
         fun _ => isQueryBoundP_pure _ _ _

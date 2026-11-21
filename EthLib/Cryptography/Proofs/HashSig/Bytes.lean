@@ -172,6 +172,13 @@ theorem extractLsb'_byte_low {w : Nat} (x : BitVec w) (lo m i : Nat) (h : 8 * i 
   -- Dividing by `2^(8i)` inside `mod 2^m` keeps the low byte.
   rw [mod_div_mod _ (8 * i) m 8 h, Nat.div_div_eq_div_mul, ← pow_add]
 
+/-- A field of a field of a bit vector is a field of the vector, at the sum of the offsets. -/
+theorem extractLsb'_extractLsb'_add {w : Nat} (x : BitVec w) (a m b n : Nat) (h : b + n ≤ m) :
+    (x.extractLsb' a m).extractLsb' b n = x.extractLsb' (a + b) n := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro i hi
+  simp [hi, show b + i < m by omega, Nat.add_assoc]
+
 /-- Byte `i < 16` of an answer is byte `i` of its low 128 bits. -/
 theorem getElem_ofOutput_of_lt (x : HashOutput) (i : Nat) (hi : i < 16) :
     (ofOutput x)[i] = (ofBV 16 (truncateHash x))[i] := by

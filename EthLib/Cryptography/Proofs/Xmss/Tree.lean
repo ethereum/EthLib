@@ -37,7 +37,7 @@ open EthLib.Cryptography.Xmss.Constants
 
 section Monad
 
-variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+variable {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
   (pp : PublicParam) (prf : SeedPrf m) (layer : Layer)
 
 /-- A node on level 0 is the leaf of one-time key `j`. -/
@@ -69,7 +69,7 @@ theorem path_eq_ofFnInOrder [LawfulMonad m] (e : Nat) :
     | zero => intro level j; rfl
     | succ n ih =>
       intro level j
-      simp only [Merkle.siblings, ofFnInOrder, Merkle.Position.parent_mk, ih]
+      simp only [Merkle.siblings, HashSig.ofFnInOrder_succ, Merkle.Position.parent_mk, ih]
       -- Entry `i + 1` is entry `i` one level up, with the index halved once more.
       have shift :
           (fun i : Fin n => node H pp prf layer (level + 1 + i.val) ((j / 2 / 2 ^ i.val) ^^^ 1))
@@ -94,7 +94,7 @@ theorem nodeHash_of_le {p : Merkle.Position} (hlevel : p.level ≤ LAYER_HEIGHT)
     (left right : Digest) :
     nodeHash H pp layer p left right
       = th H pp (addrNode layer ⟨p.level, by omega⟩ (UInt32.ofNat p.index))
-          (packBytes left ++ packBytes right) := by
+          #[left.lo, left.hi, right.lo, right.hi] := by
   simp only [nodeHash, Fin.ofNat, Nat.mod_eq_of_lt (Nat.lt_succ_of_le hlevel)]
 
 /-- A node up to level 16 is the same with any node hash that agrees on levels 1 to 16. -/
@@ -127,7 +127,7 @@ end Monad
 
 section Build
 
-variable {H : ByteArray → Id (Vector UInt8 32)} {pp : PublicParam} {prf : SeedPrf Id}
+variable {H : Array UInt64 → Id Lanes4} {pp : PublicParam} {prf : SeedPrf Id}
   {layer : Layer}
 
 /-- The top value of a build is the node it is built at. -/
@@ -145,7 +145,7 @@ end Build
 
 /-! ## The path reaches the root -/
 
-variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {prf : SeedPrf Id} {layer : Layer}
+variable {f : Array UInt64 → Lanes4} {pp : PublicParam} {prf : SeedPrf Id} {layer : Layer}
 
 /-- An honest path leads from key `e`'s leaf to node `floor(e / 2^16)` on the top level. -/
 theorem fold_path (e : Nat) :

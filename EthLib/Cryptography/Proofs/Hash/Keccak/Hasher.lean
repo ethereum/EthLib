@@ -23,8 +23,8 @@ open Internal
 /-- A block reads only its own `rate` bytes, when the rate is a whole number of lanes. -/
 theorem absorbBlock_congr {rate : Nat} (lanes : 8 ∣ rate) (S : State) {a b : ByteArray}
     {s t : Nat} (h : ∀ j < rate, byteAt a (s + j) = byteAt b (t + j)) :
-    absorbBlock rate S a s = absorbBlock rate S b t := by
-  have hlane : blockLane rate a s = blockLane rate b t := by
+    absorbBlock rate S (laneAt a) s = absorbBlock rate S (laneAt b) t := by
+  have hlane : blockLane rate (laneAt a) s = blockLane rate (laneAt b) t := by
     funext i
     unfold blockLane
     split
@@ -40,7 +40,7 @@ theorem absorbBlock_congr {rate : Nat} (lanes : 8 ∣ rate) (S : State) {a b : B
 theorem absorbBlocks_congr (f : State → State) {rate : Nat} (lanes : 8 ∣ rate) (n : Nat)
     (S : State) {a b : ByteArray} {s t : Nat}
     (h : ∀ j < rate * n, byteAt a (s + j) = byteAt b (t + j)) :
-    absorbBlocks f rate a n s S = absorbBlocks f rate b n t S := by
+    absorbBlocks f rate (laneAt a) n s S = absorbBlocks f rate (laneAt b) n t S := by
   induction n generalizing s t S with
   | zero => rfl
   | succ n ih =>
@@ -57,9 +57,6 @@ theorem padding_mod (rate len : Nat) : padding rate (len % rate) = padding rate 
   rw [Nat.mod_mod]
 
 /-! ## The hasher -/
-
-/-- The rate of Keccak-256 is a whole number of lanes. -/
-theorem lanes_rate : 8 ∣ RATE_256 := ⟨17, rfl⟩
 
 /-- After an absorb, the pending bytes number the bytes not yet absorbed, mod the rate. -/
 theorem size_pending_absorb (h : Hasher256) (data : ByteArray) :
@@ -117,8 +114,8 @@ theorem absorb_absorb (h : Hasher256) (a b : ByteArray) :
   rw [hcount]
   congr 1
   · -- The first `q` blocks lie inside the first piece, and the next `n` follow them.
-    have hfirst : absorbBlocks keccakF RATE_256 bytes q 0 h.state
-        = absorbBlocks keccakF RATE_256 (bytes ++ b) q 0 h.state :=
+    have hfirst : absorbBlocks keccakF RATE_256 (laneAt bytes) q 0 h.state
+        = absorbBlocks keccakF RATE_256 (laneAt (bytes ++ b)) q 0 h.state :=
       absorbBlocks_congr _ lanes_rate _ _ fun j hj => by
         rw [Nat.zero_add, byteAt_append, ite_eq_left (by omega)]
     rw [absorbBlocks_add, Nat.zero_add, hfirst]
@@ -137,8 +134,8 @@ theorem absorb_absorb (h : Hasher256) (a b : ByteArray) :
 /-- The digest of a hasher that absorbed one message is its Keccak-256. -/
 theorem digest_absorb_empty (msg : ByteArray) :
     (Hasher256.empty.absorb msg).digest = keccak256 msg := by
-  simp only [Hasher256.absorb, Hasher256.digest, Hasher256.empty, ByteArray.empty_append, keccak256,
-    spongeAbsorb_eq, blockCount]
+  simp only [Hasher256.absorb, Hasher256.digest, Hasher256.empty, ByteArray.empty_append,
+    keccak256_eq_squeeze256, spongeAbsorb_eq, blockCount]
   generalize hq : msg.size / RATE_256 = q
   have hle : RATE_256 * q ≤ msg.size := hq ▸ Nat.mul_div_le _ _
   -- The bytes after the whole blocks are `len mod 136` long, so the padding is the same.
@@ -147,8 +144,8 @@ theorem digest_absorb_empty (msg : ByteArray) :
     have := Nat.div_add_mod msg.size RATE_256
     omega
   -- The whole blocks lie inside the message.
-  have hfirst : absorbBlocks keccakF RATE_256 msg q 0 State.zero
-      = absorbBlocks keccakF RATE_256 (pad RATE_256 msg) q 0 State.zero :=
+  have hfirst : absorbBlocks keccakF RATE_256 (laneAt msg) q 0 State.zero
+      = absorbBlocks keccakF RATE_256 (laneAt (pad RATE_256 msg)) q 0 State.zero :=
     (absorbBlocks_pad keccakF RATE_256 msg q 0 State.zero (by rw [Nat.zero_add]; exact hle)).symm
   rw [hpend, padding_mod, absorbBlocks_add, Nat.zero_add, hfirst]
   -- The last block is the bytes after them, then the padding.

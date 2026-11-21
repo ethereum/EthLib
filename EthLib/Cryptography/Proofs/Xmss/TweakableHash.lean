@@ -2,13 +2,14 @@ module
 
 public import EthLib.Cryptography.Xmss.TweakableHash
 public import EthLib.Cryptography.Proofs.Xmss.Types
+public import EthLib.Cryptography.Proofs.Hash.Keccak.Lanes
 
 /-!
 # Proofs: the leanXMSS tweakable hash
 
 A hash input determines its public parameter, its address and its payload.
 
-So two calls hash the same bytes only when they are the same call.
+So two calls hash the same lanes only when they are the same call.
 
 A derivation from the seed with an empty suffix hashes `P | A | S`.
 -/
@@ -19,35 +20,39 @@ namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
-/-- Byte `i` of a half of a hash value is byte `16 h + i` of the value, for half `h`. -/
-theorem getElem_halfOf (half : Fin 2) (full : Vector UInt8 32) (i : Nat) (hi : i < DIGEST_LEN) :
-    (halfOf half full)[i] =
-      full[16 * half.val + i]'(by have := half.isLt; simp only [DIGEST_LEN] at hi; omega) := by
-  simp only [halfOf, Vector.getElem_cast, Vector.getElem_extract]
+/-- The first half of a hash value is its first two lanes. -/
+@[simp] theorem halfOf_zero (full : Lanes4) : halfOf 0 full = ⟨full.w0, full.w1⟩ :=
+  rfl
 
-/-- A half of a hash value is the vector of its 16 bytes, read one by one. -/
-theorem halfOf_eq_ofFn (half : Fin 2) (full : Vector UInt8 32) :
-    halfOf half full = Vector.ofFn fun i => full[16 * half.val + i.val]'(by
-      have := half.isLt
-      have := i.isLt
-      simp only [DIGEST_LEN] at *
-      omega) :=
-  Vector.ext fun i hi => by rw [getElem_halfOf _ _ _ hi, Vector.getElem_ofFn]
+/-- The last half of a hash value is its last two lanes. -/
+@[simp] theorem halfOf_one (full : Lanes4) : halfOf 1 full = ⟨full.w2, full.w3⟩ :=
+  rfl
+
+/-- The scheme's hash of a string of lanes is Keccak-256 of the bytes of the lanes. -/
+theorem hash_bytes (input : Array UInt64) :
+    (hash input).bytes = Hash.Keccak.keccak256 ⟨(Hash.Keccak.lanesBytes input).toArray⟩ :=
+  Hash.Keccak.keccak256Lanes_lanesBytes input
+
+/-- A hash input is the lanes of the parameter, then of the address, then the payload. -/
+theorem thInput_eq_append (pp : PublicParam) (address : Address) (payload : Array UInt64) :
+    thInput pp address payload = pp.toArray ++ address.toArray ++ payload :=
+  rfl
 
 /-- `P | A | M` determines `P`, `A` and `M`. -/
-theorem thInput_inj {pp pp' : PublicParam} {a a' : Address} {m m' : ByteArray}
+theorem thInput_inj {pp pp' : PublicParam} {a a' : Address} {m m' : Array UInt64}
     (h : thInput pp a m = thInput pp' a' m') : pp = pp' ∧ a = a' ∧ m = m' := by
-  -- The first 32 bytes are the two fixed-size prefixes, the rest is the payload.
-  obtain ⟨hpre, hm⟩ := HashSig.byteArray_append_inj h (by simp)
-  obtain ⟨hpp, ha⟩ := HashSig.byteArray_append_inj hpre (by simp)
-  exact ⟨packBytes_injective hpp, packBytes_injective ha, hm⟩
+  -- The first four lanes are the two fixed-size prefixes, the rest is the payload.
+  obtain ⟨hpre, hm⟩ := Array.append_inj h rfl
+  simp only [List.toArray, Array.mk.injEq, List.cons.injEq, and_true] at hpre
+  obtain ⟨h1, h2, h3, h4⟩ := hpre
+  exact ⟨by cases pp; cases pp'; simp_all, by cases a; cases a'; simp_all, hm⟩
 
 /-- A derivation with an empty suffix hashes `P | A | S`.
 
 The public parameter and the chain starts are halves of such derivations. -/
-theorem seedPrf_empty {m : Type → Type} (H : ByteArray → m (Vector UInt8 32)) (s : Seed)
+theorem seedPrf_empty {m : Type → Type} (H : Array UInt64 → m Lanes4) (s : Seed)
     (pp : PublicParam) (address : Address) :
-    seedPrf H s pp address .empty = H (thInput pp address (packBytes s)) := by
-  simp only [seedPrf, ByteArray.append_empty]
+    seedPrf H s pp address #[] = H (thInput pp address s.toArray) := by
+  simp only [seedPrf, Array.append_empty]
 
 end EthLib.Cryptography.Xmss

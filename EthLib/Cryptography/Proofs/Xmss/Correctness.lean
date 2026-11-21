@@ -35,11 +35,11 @@ namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
-variable {f : ByteArray → Vector UInt8 32}
+variable {f : Array UInt64 → Lanes4}
 
 /-- An honest layer signature leads to the root its key's leaf and path give. -/
 theorem layerRoot_signLayer {pp : PublicParam} {prf : SeedPrf Id} {layer : Layer} {e : Nat}
-    {msg : ByteArray} {sig : LayerSignature}
+    {msg : Array UInt64} {sig : LayerSignature}
     (h : (signLayer (pureHash f) pp prf layer e msg).run = .ok sig) :
     (layerRoot (pureHash f) pp layer e msg sig).run
       = some (fold (pureHash f) pp layer e

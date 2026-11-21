@@ -107,7 +107,7 @@ end Merkle
 attribute [local irreducible] LAYER_HEIGHT
 
 /-- `H` in the game, on the hash oracle alone. -/
-local notation "Hh" => (queryH : ByteArray → OracleComp HashSpec (Vector UInt8 32))
+local notation "Hh" => (queryH : Array UInt64 → OracleComp HashSpec Lanes4)
 
 /-- A resolved top tree resolves the path of each top key, to the path the tree holds. -/
 theorem resolves_path_top {cache : QueryCache HashSpec} {pp : PublicParam} {s : Seed}
@@ -154,7 +154,7 @@ structure KeyInv (seed : Seed) (sk : SecretKey) (cache : QueryCache HashSpec) : 
     Resolves cache (build Hh sk.publicParam (seedPrf Hh sk.schemeSeed) .bottom LAYER_HEIGHT
       t.index) t.tree ∧
     Resolves cache (signLayer Hh sk.publicParam (seedPrf Hh sk.schemeSeed) .top t.index
-      (packBytes t.tree.value)) t.top
+      (t.tree.value.toArray)) t.top
 
 section KeyInv
 
@@ -181,7 +181,7 @@ theorem keyInv_keyGenWith {pk : PublicKey}
 The stateless one computes the path from the seed, and the cache answers those calls. -/
 theorem erases_signLayer_signRootWith (h : KeyInv seed sk cache) {b : Nat}
     (hb : b < 2 ^ LAYER_HEIGHT) (root : Digest) :
-    Erases cache (signLayer Hh sk.publicParam (seedPrf Hh sk.schemeSeed) .top b (packBytes root))
+    Erases cache (signLayer Hh sk.publicParam (seedPrf Hh sk.schemeSeed) .top b (root.toArray))
       (signRootWith Hh sk b root) := by
   unfold signLayer signRootWith
   simp only [Internal.otsSignTrials_hashTrials]
@@ -196,7 +196,7 @@ theorem resolves_signLayer_of_signRootWith (h : KeyInv seed sk cache) {b : Nat}
     (hb : b < 2 ^ LAYER_HEIGHT) {root : Digest} {r : Except XmssError LayerSignature}
     (hr : Resolves cache (signRootWith Hh sk b root) r) :
     Resolves cache (signLayer Hh sk.publicParam (seedPrf Hh sk.schemeSeed) .top b
-      (packBytes root)) r := by
+      (root.toArray)) r := by
   unfold signRootWith at hr
   simp only [Internal.otsSignTrials_hashTrials] at hr
   unfold signLayer
@@ -466,7 +466,7 @@ end Oracles
 
 /-- The stateless key generation is key generation, with the seed as the secret key. -/
 theorem statelessKeyGenWith_eq {m : Type → Type} [Monad m] [LawfulMonad m]
-    (H : ByteArray → m (Vector UInt8 32)) (seed : Seed) :
+    (H : Array UInt64 → m Lanes4) (seed : Seed) :
     statelessKeyGenWith H seed = (fun p => (seed, p.1)) <$> keyGenWith H seed := by
   unfold statelessKeyGenWith keyGenWith publicKeyOf node build
   simp only [← Merkle.value_build, map_bind, map_pure, bind_assoc, bind_map_left, pure_bind]
