@@ -47,26 +47,21 @@ public section
 
 namespace EthLib.Execution.Blocks.Exports
 
-open EthLib.Exports (Result PyValue forkUpTo pyExport)
+open EthLib.Exports (Result PyValue forkUpTo pyExport toResult)
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
-open EthLib.Serialization.Rlp.Exports (runRlp)
 
 /-- A value printed on one line, however long its numbers and hashes are. -/
 def oneLine {α : Type} [Repr α] (a : α) : String :=
   (repr a).pretty 1000000
 
-/-- Run a fallible decoding or encoding, with its error as a code and a message. -/
-def runRlp {α : Type} (what : String) (act : Except RlpError α) : Result α :=
-  act.mapError fun e => (e.code, s!"{what}: {reprStr e}")
-
 /-- The hash of a header in RLP form, after the decoder at the fork accepts it. -/
 @[export eth_block_header_hash]
 def headerHashExport (fork header : ByteArray) : Result ByteArray := do
   let fork ← forkUpTo .glamsterdam fork
-  let h : Header fork ← runRlp "header rejected" (Codec.decode header)
-  return ⟨(← runRlp "header has no hash" h.hash).toArray⟩
+  let h : Header fork ← toResult "header rejected" (Codec.decode header)
+  return ⟨(← toResult "header has no hash" h.hash).toArray⟩
 
 /-- The RLP form of a block, decoded at the fork and encoded again.
 
@@ -74,8 +69,8 @@ Each transaction stays the item that it is, so any transaction form passes. -/
 @[export eth_block_reencode]
 def reencodeExport (fork block : ByteArray) : Result ByteArray := do
   let fork ← forkUpTo .glamsterdam fork
-  let b : Block fork Item ← runRlp "block rejected" (Block.decode (fun _ => fork) block)
-  runRlp "block has no encoding" b.encode
+  let b : Block fork Item ← toResult "block rejected" (Block.decode (fun _ => fork) block)
+  toResult "block has no encoding" b.encode
 
 /-- The forks of a chain by block number, from their RLP form: a list of `[name, first block]`.
 
@@ -83,11 +78,11 @@ The first fork starts at block 0, so each block has a fork.
 
 The chain ID, the deposit contract and the blob schedules play no part. -/
 def chainOfForks (forks : ByteArray) : Result ChainConfig := do
-  let entries : List (List Item) ← runRlp "forks rejected" (Codec.decode forks)
+  let entries : List (List Item) ← toResult "forks rejected" (Codec.decode forks)
   let activations ← entries.mapM fun
     | [.bytes name, first] => do
       let fork ← forkUpTo .glamsterdam name
-      let first : Nat ← runRlp "fork block rejected" (Codec.ofItem first)
+      let first : Nat ← toResult "fork block rejected" (Codec.ofItem first)
       pure (fork, Activation.block first)
     | _ => throw (0, "a fork is not a list of a name and a block number")
   -- The chain ID and the deposit contract play no part in the order of the forks.
@@ -105,10 +100,10 @@ def forkAtBlock (config : ChainConfig) (number : Nat) : Fork :=
 /-- A block in its RLP item, with each header at the fork of its own number on the chain. -/
 def blockOnChain (config : ChainConfig) (item : Item) :
     Result ((fork : Fork) × Block fork Item) := do
-  let number ← runRlp "block rejected" do
+  let number ← toResult "block rejected" do
     let header :: _ ← item.toItems | .error (.wrongFieldCount 3 0)
     Header.numberOfItem header
-  pure ⟨_, ← runRlp "block rejected"
+  pure ⟨_, ← toResult "block rejected"
     (Block.ofItem (fork := forkAtBlock config number) (forkAtBlock config) item)⟩
 
 /-- The transaction type and the receipt that some bytes hold at the fork. -/
@@ -120,7 +115,7 @@ def decodeReceiptAt (fork : Fork) (receipt : ByteArray) : Result (UInt8 × Recei
 def receiptReencodeExport (fork receipt : ByteArray) : Result ByteArray := do
   let fork ← forkUpTo .glamsterdam fork
   let (type, r) ← decodeReceiptAt fork receipt
-  runRlp "receipt has no encoding" (encodeReceipt type r)
+  toResult "receipt has no encoding" (encodeReceipt type r)
 
 /-- The logs Bloom filter of the logs of a receipt, decoded at the fork. -/
 @[export eth_receipt_logs_bloom]
@@ -133,7 +128,7 @@ def receiptLogsBloomExport (fork receipt : ByteArray) : Result ByteArray := do
 @[export eth_block_validate_size]
 def validateSizeExport (fork block : ByteArray) : Result UInt8 := do
   let fork ← forkUpTo .glamsterdam fork
-  let b : Block fork Item ← runRlp "block rejected" (Block.decode (fun _ => fork) block)
+  let b : Block fork Item ← toResult "block rejected" (Block.decode (fun _ => fork) block)
   (validateBlockSize b).map (fun () => 1) |>.mapError
     fun e => (e.code, s!"block invalid: {oneLine e}")
 
@@ -166,8 +161,8 @@ def headerCheckInputs (args : HeaderCheckArgs) :
   let (parentFork, fork, parent, header, schedules) := args
   let parentFork ← forkUpTo .glamsterdam parentFork.toUTF8
   let fork ← forkUpTo .glamsterdam fork.toUTF8
-  let parent : Header parentFork ← runRlp "parent rejected" (Codec.decode parent)
-  let header : Header fork ← runRlp "header rejected" (Codec.decode header)
+  let parent : Header parentFork ← toResult "parent rejected" (Codec.decode parent)
+  let header : Header fork ← toResult "header rejected" (Codec.decode header)
   -- The chain's forks, chain ID and deposit contract play no part in the blob schedule.
   let schedules ← blobSchedulesOf schedules
   let config : ChainConfig :=
@@ -226,7 +221,7 @@ A header outside those ten blocks passes, and from Paris every header passes. -/
 @[export eth_block_dao_extra_data_valid]
 def daoExtraDataValidExport (daoBlock : UInt64) (fork header : ByteArray) : Result UInt8 := do
   let fork ← forkUpTo .glamsterdam fork
-  let header : Header fork ← runRlp "header rejected" (Codec.decode header)
+  let header : Header fork ← toResult "header rejected" (Codec.decode header)
   let config : ChainConfig :=
     { chainId := 1, depositContractAddress := Vector.replicate 20 0,
       activations := [(.daoFork, .block daoBlock.toNat)] }
@@ -248,14 +243,14 @@ def runTrie (act : Except Trie.TrieError Hash32) : Result ByteArray :=
 @[export eth_block_transactions_root]
 def transactionsRootExport (fork block : ByteArray) : Result ByteArray := do
   let fork ← forkUpTo .glamsterdam fork
-  let b : Block fork Item ← runRlp "block rejected" (Block.decode (fun _ => fork) block)
+  let b : Block fork Item ← toResult "block rejected" (Block.decode (fun _ => fork) block)
   runTrie (transactionsRoot (← b.transactions.mapM (transactionOfItem fork)))
 
 /-- The withdrawals root of the withdrawals of a block, decoded at a fork from Shapella. -/
 @[export eth_block_withdrawals_root]
 def withdrawalsRootExport (fork block : ByteArray) : Result ByteArray := do
   let fork ← forkUpTo .glamsterdam fork
-  let b : Block fork Item ← runRlp "block rejected" (Block.decode (fun _ => fork) block)
+  let b : Block fork Item ← toResult "block rejected" (Block.decode (fun _ => fork) block)
   if h : .shapella ≤ fork then runTrie (withdrawalsRoot (b.withdrawals h))
   else throw (0, "the fork is before Shapella")
 
@@ -266,7 +261,7 @@ The first argument is the 20-byte address of the deposit contract of the chain. 
 def depositRequestsExport (depositContract logs : ByteArray) : Result ByteArray := do
   let address : Address ← Base.exactBytes 20 depositContract fun _ =>
     (0, "the deposit contract address is not 20 bytes")
-  let logs : List Log ← runRlp "logs rejected" (Codec.decode logs)
+  let logs : List Log ← toResult "logs rejected" (Codec.decode logs)
   (depositRequests address logs).mapError fun e => (e.code, s!"deposit log rejected: {reprStr e}")
 
 /-- The requests hash of request lists, given as an RLP list of byte strings.
@@ -274,19 +269,19 @@ def depositRequestsExport (depositContract logs : ByteArray) : Result ByteArray 
 Each list is its type byte, then its data. -/
 @[export eth_block_requests_hash]
 def requestsHashExport (requests : ByteArray) : Result ByteArray := do
-  let requests : List ByteArray ← runRlp "requests rejected" (Codec.decode requests)
+  let requests : List ByteArray ← toResult "requests rejected" (Codec.decode requests)
   return ⟨(requestsHash requests).toArray⟩
 
 /-- The hash of a block access list in RLP form, after the decoder accepts it. -/
 @[export eth_block_access_list_hash]
 def blockAccessListHashExport (bal : ByteArray) : Result ByteArray := do
-  let bal : BlockAccessList ← runRlp "block access list rejected" (Codec.decode bal)
-  return ⟨(← runRlp "block access list has no encoding" (BlockAccessList.hash bal)).toArray⟩
+  let bal : BlockAccessList ← toResult "block access list rejected" (Codec.decode bal)
+  return ⟨(← toResult "block access list has no encoding" (BlockAccessList.hash bal)).toArray⟩
 
 /-- Check a block access list in RLP form alone, in a block with a gas limit. -/
 @[export eth_block_access_list_check]
 def blockAccessListCheckExport (bal : ByteArray) (gasLimit : UInt64) : Result UInt8 := do
-  let bal : BlockAccessList ← runRlp "block access list rejected" (Codec.decode bal)
+  let bal : BlockAccessList ← toResult "block access list rejected" (Codec.decode bal)
   (BlockAccessList.check bal gasLimit.toNat).map (fun () => 1) |>.mapError
     fun e => (e.code, s!"block access list invalid: {reprStr e}")
 
@@ -294,13 +289,13 @@ def blockAccessListCheckExport (bal : ByteArray) (gasLimit : UInt64) : Result UI
 
 The input is the RLP list of the four, where the outcome has the form it has in a receipt. -/
 def resultOfItem (fork : Fork) (item : Item) : Result (UInt8 × Outcome fork × Nat × List Log) := do
-  match ← runRlp "result rejected" (item.fields 4) with
+  match ← toResult "result rejected" (item.fields 4) with
   | [type, outcome, gas, logs] =>
-    let type : Nat ← runRlp "type rejected" (Codec.ofItem type)
+    let type : Nat ← toResult "type rejected" (Codec.ofItem type)
     -- No error type covers this bound of the binding, so its code is 0.
     if 256 ≤ type then throw (0, "type is 256 or more")
-    return (type.toUInt8, ← runRlp "outcome rejected" (Codec.ofItem outcome),
-      ← runRlp "gas rejected" (Codec.ofItem gas), ← runRlp "logs rejected" (Codec.ofItem logs))
+    return (type.toUInt8, ← toResult "outcome rejected" (Codec.ofItem outcome),
+      ← toResult "gas rejected" (Codec.ofItem gas), ← toResult "logs rejected" (Codec.ofItem logs))
   | _ => throw (0, "a result is not a list of four items")
 
 /-- The receipts of the transactions of a block, and their receipts root.
@@ -311,12 +306,12 @@ It returns the RLP list of the root and of the list of the bytes of each receipt
 @[export eth_block_make_receipts]
 def makeReceiptsExport (fork results : ByteArray) : Result ByteArray := do
   let fork ← forkUpTo .bpo5 fork
-  let items ← runRlp "results rejected" ((← runRlp "results rejected" (decode results)).toItems)
+  let items ← toResult "results rejected" ((← toResult "results rejected" (decode results)).toItems)
   let results ← items.mapM (resultOfItem fork)
   let receipts := makeReceipts (results.map fun (_, rest) => rest)
   let typed := (results.map (·.1)).zip receipts
   let root ← runTrie (receiptsRoot typed)
-  let bytes ← typed.mapM fun (type, r) => runRlp "receipt has no encoding" (encodeReceipt type r)
-  runRlp "output has no encoding" (encode (.list [.bytes root, .list (bytes.map .bytes)]))
+  let bytes ← typed.mapM fun (type, r) => toResult "receipt has no encoding" (encodeReceipt type r)
+  toResult "output has no encoding" (encode (.list [.bytes root, .list (bytes.map .bytes)]))
 
 end EthLib.Execution.Blocks.Exports

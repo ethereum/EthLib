@@ -39,8 +39,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
-open Serialization.Ssz.Exports (runSsz)
+open EthLib.Exports (Result PyValue pyExport toResult)
 
 /-- Whether the signature of a signed message of the Builder API verifies. -/
 def isValidBuilderSignatureOf (args : String × String × Option PyValue × String × ByteArray) :
@@ -53,12 +52,12 @@ def isValidBuilderSignatureOf (args : String × String × Option PyValue × Stri
   let config ← configWithValue name replacements
   match type with
   | "SignedValidatorRegistrationV1" =>
-    let signed ← runSsz "input rejected" (SszType.deserialize SignedValidatorRegistrationV1 data)
-    runSsz "root rejected" (verifyRegistrationSignature config .bls signed)
+    let signed ← toResult "input rejected" (SszType.deserialize SignedValidatorRegistrationV1 data)
+    toResult "root rejected" (verifyRegistrationSignature config .bls signed)
   | "SignedBuilderBid" =>
-    let signed ← runSsz "input rejected"
+    let signed ← toResult "input rejected"
       (SszType.deserialize (SignedBuilderBid preset fork) data)
-    runSsz "root rejected" (verifyBuilderBidSignature config .bls signed)
+    toResult "root rejected" (verifyBuilderBidSignature config .bls signed)
   | _ => throw (0, s!"no signed message {type} in the Builder API")
 
 /-- Whether the signature of a signed message of the Builder API verifies.
@@ -83,16 +82,16 @@ def unblindOf (args : String × String × ByteArray × ByteArray) :
   let preset ← presetOf name
   let fork ← forkOf fork.toUTF8
   if range : HasBuilderApi fork then
-    let signed ← runSsz "input rejected"
+    let signed ← toResult "input rejected"
       (SszType.deserialize (SignedBlindedBeaconBlock preset fork) blinded)
-    let payload ← (·.executionPayload) <$> runSsz "payload rejected"
+    let payload ← (·.executionPayload) <$> toResult "payload rejected"
       (SszType.deserialize (RevealedPayload preset fork) revealed)
     match signed.unblind range payload with
     | .error (.headerMismatch ..) => return none
-    | .error (.header fault) => runSsz "header rejected" (.error fault)
+    | .error (.header fault) => toResult "header rejected" (.error fault)
     | .ok full =>
-      let root ← runSsz "root rejected" (SszType.hashTreeRoot full)
-      let bytes ← runSsz "value rejected" (SszType.serialize full)
+      let root ← toResult "root rejected" (SszType.hashTreeRoot full)
+      let bytes ← toResult "value rejected" (SszType.serialize full)
       return some (root, bytes)
   else throw (0, s!"no Builder API messages at {fork.name}")
 
@@ -124,10 +123,10 @@ def submitBlindedBlockStatusOf
     | "v2" => pure .v2
     | _ => throw (0, s!"no endpoint version {version}")
   if range : HasBuilderApi fork then
-    let state ← runSsz "state rejected" (SszType.deserialize (BeaconState preset fork) pre)
-    let signed ← runSsz "input rejected"
+    let state ← toResult "state rejected" (SszType.deserialize (BeaconState preset fork) pre)
+    let signed ← toResult "input rejected"
       (SszType.deserialize (SignedBlindedBeaconBlock preset fork) blinded)
-    let payload ← runSsz "payload rejected"
+    let payload ← toResult "payload rejected"
       (SszType.deserialize (ExecutionPayload preset fork) payload)
     return BuilderApi.submitBlindedBlockStatus config .bls (.constant true) state range payload
       signed version
@@ -162,13 +161,13 @@ def processRegistrationOf
   unless HasBuilderApi fork do
     throw (0, s!"no Builder API messages at {fork.name}")
   let config ← configWithValue name replacements
-  let state ← runSsz "state rejected" (SszType.deserialize (BeaconState preset fork) state)
+  let state ← toResult "state rejected" (SszType.deserialize (BeaconState preset fork) state)
   let entries ← kept.mapM fun bytes =>
-    runSsz "registry rejected" (SszType.deserialize SignedValidatorRegistrationV1 bytes)
-  let signed ← runSsz "input rejected" (SszType.deserialize SignedValidatorRegistrationV1 data)
+    toResult "registry rejected" (SszType.deserialize SignedValidatorRegistrationV1 bytes)
+  let signed ← toResult "input rejected" (SszType.deserialize SignedValidatorRegistrationV1 data)
   match BuilderApi.processRegistration config .bls state ⟨entries⟩ signed now with
   | .ok () => return none
-  | .error (.root fault) => runSsz "root rejected" (.error fault)
+  | .error (.root fault) => toResult "root rejected" (.error fault)
   | .error e => return some (RegistrationError.reason e)
 
 /-- None when a builder keeps a signed registration, or the name of the rule that refuses it.
@@ -229,12 +228,12 @@ def processBidOf
   let fork ← forkOf fork.toUTF8
   if range : HasBuilderApi fork then
     let config ← configWithValue name replacements
-    let state ← runSsz "state rejected" (SszType.deserialize (BeaconState preset fork) state)
-    let signed ← runSsz "input rejected"
+    let state ← toResult "state rejected" (SszType.deserialize (BeaconState preset fork) state)
+    let signed ← toResult "input rejected"
       (SszType.deserialize (SignedBuilderBid preset fork) data)
     match BuilderApi.processBid config .bls state range signed feeRecipient with
     | .ok () => return none
-    | .error (.root fault) => runSsz "root rejected" (.error fault)
+    | .error (.root fault) => toResult "root rejected" (.error fault)
     | .error e => return some (BidError.reason e)
   else throw (0, s!"no Builder API messages at {fork.name}")
 
@@ -331,8 +330,8 @@ def verifyBuilderRequestAuthSignatureOf
   unless .glamsterdam ≤ fork do
     throw (0, s!"no builder request authentication at {fork.name}")
   let config ← configWithValue name replacements
-  let signed ← runSsz "input rejected" (SszType.deserialize SignedBuilderRequestAuth data)
-  runSsz "root rejected" (verifyBuilderRequestAuthSignature config .bls signed pubkey)
+  let signed ← toResult "input rejected" (SszType.deserialize SignedBuilderRequestAuth data)
+  toResult "root rejected" (verifyBuilderRequestAuthSignature config .bls signed pubkey)
 
 /-- Whether a proposer key signed a Gloas request authentication given in SSZ. -/
 @[export eth_consensus_verify_builder_request_auth_signature]
@@ -357,8 +356,8 @@ def builderRequestAuthFailuresOf
   unless .glamsterdam ≤ fork do
     throw (0, s!"no builder request authentication at {fork.name}")
   let config ← configWithValue name replacements
-  let signed ← runSsz "input rejected" (SszType.deserialize SignedBuilderRequestAuth data)
-  let failures ← runSsz "root rejected"
+  let signed ← toResult "input rejected" (SszType.deserialize SignedBuilderRequestAuth data)
+  let failures ← toResult "root rejected"
     (BuilderApi.authFailures config .bls agreed pathSlot pubkey header signed)
   return failures.map AuthFailure.reason
 
@@ -382,8 +381,8 @@ def builderPreferencesFailuresOf
   unless .glamsterdam ≤ fork do
     throw (0, s!"no builder request authentication at {fork.name}")
   let config ← configWithValue name replacements
-  let request ← runSsz "input rejected" (SszType.deserialize BuilderPreferencesRequest data)
-  let failures ← runSsz "root rejected"
+  let request ← toResult "input rejected" (SszType.deserialize BuilderPreferencesRequest data)
+  let failures ← toResult "root rejected"
     (BuilderApi.preferencesFailures config .bls agreed currentSlot pubkey header request)
   return failures.map AuthFailure.reason
 
@@ -447,8 +446,8 @@ def builderApiJsonOf (args : String × String × String × ByteArray) : Result P
   let version ← versionedBodyOf fork type
   let some container := containerOf preset fork type
     | throw (0, s!"no container {type} at {fork.name}")
-  let value ← runSsz "input rejected" (SszType.deserialize container.type data)
-  let data ← runSsz "value rejected" (BeaconApi.toApiJson value)
+  let value ← toResult "input rejected" (SszType.deserialize container.type data)
+  let data ← toResult "value rejected" (BeaconApi.toApiJson value)
   return PyValue.ofJson (BeaconApi.ApiEnvelope.toJson { version := some version, data })
 
 /-- The JSON body of a response of the Builder API: the version of the fork and the data.
@@ -481,7 +480,7 @@ def builderApiSszOf (args : String × String × String × PyValue) : Result Byte
   let some container := containerOf preset fork type
     | throw (0, s!"no container {type} at {fork.name}")
   match BeaconApi.readVersioned container.type version document.toJson with
-  | .ok value => runSsz "value rejected" (SszType.serialize value)
+  | .ok value => toResult "value rejected" (SszType.serialize value)
   | .error fault => throw (envelopeFault fault)
 
 /-- The SSZ bytes of the value that a JSON body of the Builder API holds.

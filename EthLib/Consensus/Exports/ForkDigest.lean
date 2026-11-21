@@ -25,9 +25,8 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport toResult)
 open Serialization.Ssz (SszType)
-open Serialization.Ssz.Exports (runSsz)
 open Networking.Enr
 
 /-- The epochs at which the fork digest can change, in increasing order and without repeats. -/
@@ -75,7 +74,7 @@ def enrForkIdOf (args : String × Option PyValue × Root × UInt64) :
     Result (ForkDigest × Version × UInt64) := do
   let (name, replacements, genesisValidatorsRoot, epoch) := args
   let config ← configWithValue name replacements
-  let e ← runSsz "root rejected" (enrForkId config genesisValidatorsRoot epoch)
+  let e ← toResult "root rejected" (enrForkId config genesisValidatorsRoot epoch)
   return (e.forkDigest, e.nextForkVersion, e.nextForkEpoch)
 
 /-- The `eth2` value that a node writes at an epoch, as its digest, next version and next epoch.
@@ -92,7 +91,7 @@ def enrForkIdExport (args : PyValue) : Result PyValue := pyExport enrForkIdOf ar
 def nextForkDigestOf (args : String × Option PyValue × Root × UInt64) : Result ForkDigest := do
   let (name, replacements, genesisValidatorsRoot, epoch) := args
   let config ← configWithValue name replacements
-  runSsz "root rejected" (nextForkDigest config genesisValidatorsRoot epoch)
+  toResult "root rejected" (nextForkDigest config genesisValidatorsRoot epoch)
 
 /-- The `nfd` value that a node writes at an epoch: the digest of the next fork.
 
@@ -105,7 +104,7 @@ def nextForkDigestExport (args : PyValue) : Result PyValue := pyExport nextForkD
 /-- The `eth2` value of a bootnode record made before genesis, as its three fields. -/
 def bootnodeForkIdOf (args : String × Option PyValue) : Result (ForkDigest × Version × UInt64) := do
   let (name, replacements) := args
-  let e ← runSsz "configuration rejected" (bootnodeForkId (← configWithValue name replacements))
+  let e ← toResult "configuration rejected" (bootnodeForkId (← configWithValue name replacements))
   return (e.forkDigest, e.nextForkVersion, e.nextForkEpoch)
 
 /-- The `eth2` value of a bootnode record made before genesis, as its three fields.
@@ -127,10 +126,10 @@ def consensusRecordOf (args : String × Option PyValue × Root × UInt64 × Byte
     cgc) := args
   let config ← configWithValue name replacements
   let sk ← Networking.Enr.Exports.privateKeyOf secretKey
-  let attnets ← runSsz "attnets rejected"
+  let attnets ← toResult "attnets rejected"
     (SszType.deserialize (Attnets config.ATTESTATION_SUBNET_COUNT) attnets)
-  let syncnets ← runSsz "syncnets rejected" (SszType.deserialize Syncnets syncnets)
-  let pairs ← runSsz "root rejected"
+  let syncnets ← toResult "syncnets rejected" (SszType.deserialize Syncnets syncnets)
+  let pairs ← toResult "root rejected"
     (consensusPairs config genesisValidatorsRoot epoch attnets syncnets cgc)
   -- A record error has no code among those of SSZ, so it comes back with code 0.
   let r ← (makeRecordV4 sk seq pairs).mapError fun e =>

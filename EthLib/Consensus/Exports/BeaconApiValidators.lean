@@ -23,13 +23,12 @@ A fork before Gloas, or an index with no builder, has code 0.
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
-open Serialization.Ssz.Exports (runSsz)
+open EthLib.Exports (Result PyValue pyExport toResult)
 
 /-- The status of a validator with a balance at an epoch, with the name of its group. -/
 def apiValidatorStatusOf (args : PyValue × UInt64 × UInt64) : Result (String × String) := do
   let (validator, balance, epoch) := args
-  let validator ← runSsz "document rejected" (BeaconApi.ofApiJson Validator validator.toJson)
+  let validator ← toResult "document rejected" (BeaconApi.ofApiJson Validator validator.toJson)
   let status := BeaconApi.validatorStatus validator balance epoch
   return (status.name, status.coarse.name)
 

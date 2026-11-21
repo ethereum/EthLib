@@ -8,6 +8,8 @@ import EthLib.Serialization.Proofs.Ssz.Codec.JsonHex
 public import EthLib.Serialization.Exports.Ssz
 import EthLib.Base.Proofs.Toolchain.JsonBasic
 import all EthLib.Serialization.Exports.Ssz
+-- The two reader proofs unfold the conversion of an error into the result of an export.
+import all EthLib.Base.Exports.Result
 import all EthLib.Base.Exports.PyValueCore
 import all EthLib.Base.Exports.PyValueJson
 import Std.Data.TreeMap.Raw.Lemmas
@@ -510,11 +512,15 @@ noncomputable def jsonReadValue {α : Type} (what : String) (value : PyValue)
 /-- An export reads a type as it read the JSON of the type. -/
 theorem readValue_descOf (what : String) (fuel : Nat) (type : PyValue) :
     readValue what type (descOf fuel) = jsonReadValue what type (jsonDescOf fuel) := by
-  simp [readValue, jsonReadValue, descOf_eq_json]
+  simp only [readValue, jsonReadValue, descOf_eq_json]
+  -- Both sides turn an error into code 0 and the same message, so each case is definitional.
+  cases jsonDescOf fuel type.toJson <;> rfl
 
 /-- An export reads a value as it read the JSON of the value. -/
 theorem readValue_valueOf (what : String) (fuel : Nat) (value : PyValue) :
     readValue what value (valueOf fuel) = jsonReadValue what value (jsonValueOf fuel) := by
-  simp [readValue, jsonReadValue, valueOf_eq_json]
+  simp only [readValue, jsonReadValue, valueOf_eq_json]
+  -- Both sides turn an error into code 0 and the same message, so each case is definitional.
+  cases jsonValueOf fuel value.toJson <;> rfl
 
 end EthLib.Serialization.Ssz.Exports.Proofs

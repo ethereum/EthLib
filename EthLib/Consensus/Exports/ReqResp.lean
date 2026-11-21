@@ -30,8 +30,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport forkUpTo)
-open Serialization.Ssz.Exports (runSsz)
+open EthLib.Exports (Result PyValue pyExport forkUpTo toResult)
 
 /-- The protocol IDs of a fork. -/
 def reqRespProtocolIdsOf (fork : String) : Result (List String) := do
@@ -98,9 +97,9 @@ def reqRespMessageOfBytes (args : String × String × String × ByteArray) :
   let fork ← forkUpTo .hegota fork.toUTF8
   let some message := reqRespMessageOf preset config fork type
     | throw (0, s!"no message {type} at {fork.name}")
-  let value ← runSsz "input rejected" (SszType.deserialize message.type data)
-  let root ← runSsz "root rejected" (SszType.hashTreeRoot value)
-  let bytes ← runSsz "value rejected" (SszType.serialize value)
+  let value ← toResult "input rejected" (SszType.deserialize message.type data)
+  let root ← toResult "root rejected" (SszType.hashTreeRoot value)
+  let bytes ← toResult "value rejected" (SszType.serialize value)
   return (root, bytes)
 
 /-- The root of the message that the bytes encode, and the bytes of that message, as a pair.
@@ -174,7 +173,7 @@ def reqRespResponseBoundsExport (args : PyValue) : Result PyValue :=
 
 /-- Decode the SSZ bytes of a request, or fail with the code of its SSZ error. -/
 def decodeRequest (α : Type) [SszType α] (data : ByteArray) : Result α :=
-  runSsz "request rejected" (SszType.deserialize α data)
+  toResult "request rejected" (SszType.deserialize α data)
 
 /-- Decode each item of a response from its tuple, or fail with code 0. -/
 def decodeItems {β : Type} (α : Type) [EthLib.Exports.FromPy α] (make : α → β)

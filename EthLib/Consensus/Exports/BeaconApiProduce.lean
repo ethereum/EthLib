@@ -27,8 +27,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz BeaconApi
-open EthLib.Exports (Result PyValue pyExport)
-open Serialization.Ssz.Exports (runSsz)
+open EthLib.Exports (Result PyValue pyExport toResult)
 
 /-- The consensus value of a signed block, in Wei, from the state at its slot. -/
 def apiConsensusBlockValueOf (args : String × String × ByteArray × ByteArray × Option PyValue) :
@@ -84,7 +83,7 @@ def apiSelectPayloadExport (args : PyValue) : Result PyValue :=
 /-- The terms that a builder configuration gives: those of gossip, then those of its entries. -/
 def apiBuilderConfigTermsOf (args : ByteArray × Slot) : Result (BidTerms × List BidTerms) := do
   let (data, slot) := args
-  let config ← runSsz "input rejected" (SszType.deserialize BuilderConfig data)
+  let config ← toResult "input rejected" (SszType.deserialize BuilderConfig data)
   return (config.gossipTerms, config.entryTerms slot)
 
 /-- From Gloas, the terms that the SSZ bytes of a builder configuration give.

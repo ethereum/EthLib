@@ -25,8 +25,7 @@ An unknown name, or an input that does not decode, has code 0.
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
-open Serialization.Ssz.Exports (runSsz)
+open EthLib.Exports (Result PyValue pyExport toResult)
 
 /-- The spec map of a preset and a configuration, as a `dict`. -/
 def apiSpecOf (args : String × Option PyValue) : Result PyValue := do
@@ -48,7 +47,7 @@ def apiForkScheduleOf (args : String × Option PyValue) : Result PyValue := do
   let (name, replacements) := args
   let config ← configWithValue name replacements
   let entries ← (BeaconApi.forkSchedule config).mapM fun entry =>
-    runSsz "value rejected" (BeaconApi.toApiJson entry)
+    toResult "value rejected" (BeaconApi.toApiJson entry)
   return PyValue.ofJson (Json.arr entries.toArray)
 
 /-- The fork schedule of a configuration, as a `list` of `dict`.
@@ -61,7 +60,7 @@ def apiForkScheduleExport (args : PyValue) : Result PyValue := pyExport apiForkS
 def apiDepositContractOf (args : String × Option PyValue) : Result PyValue := do
   let (name, replacements) := args
   let config ← configWithValue name replacements
-  let document ← runSsz "value rejected" (BeaconApi.toApiJson (BeaconApi.depositContract config))
+  let document ← toResult "value rejected" (BeaconApi.toApiJson (BeaconApi.depositContract config))
   return PyValue.ofJson document
 
 /-- The deposit contract of a configuration, as a `dict`.
@@ -77,7 +76,7 @@ def apiGenesisOf (args : String × String × ByteArray × Option PyValue) : Resu
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let config ← configWithValue name replacements
   let state ← decodeInput (BeaconState preset fork) state
-  let document ← runSsz "value rejected"
+  let document ← toResult "value rejected"
     (BeaconApi.toApiJson (BeaconApi.genesisInfo config state))
   return PyValue.ofJson document
 

@@ -22,27 +22,28 @@ public section
 
 namespace EthLib.Serialization.Rlp.Exports
 
-open EthLib.Exports (Result PyValue ToPy toPy pyExport)
+open EthLib.Exports (ExportError Result PyValue ToPy toPy pyExport rejectArgument toResult)
 
 open EthLib.Base
 
-/-- Run a fallible decoding or encoding, with the code of its error and a message. -/
-def runRlp {α : Type} (what : String) (act : Except RlpError α) : Result α :=
-  act.mapError fun e => (e.code, s!"{what}: {reprStr e}")
+/-- An error of RLP reaches Python with its code, and its message names the error. -/
+instance : ExportError RlpError where
+  code := RlpError.code
+  message := reprStr
 
 /-- The RLP encoding of an item. -/
 @[export eth_rlp_encode]
 def encodeExport (item : Item) : Result ByteArray :=
-  runRlp "item has no encoding" (encode item)
+  toResult "item has no encoding" (encode item)
 
 /-- The item that the bytes encode, if they encode exactly one. -/
 @[export eth_rlp_decode]
 def decodeExport (data : ByteArray) : Result Item :=
-  runRlp "input rejected" (decode data)
+  toResult "input rejected" (decode data)
 
 /-- Decode a value of one type, and return it as a Python value. -/
 def decodeAs (α : Type) [Codec α] [ToPy α] (data : ByteArray) : Result PyValue := do
-  let x : α ← runRlp "input rejected" (Codec.decode data)
+  let x : α ← toResult "input rejected" (Codec.decode data)
   return toPy x
 
 /-- The value of the named type that the bytes encode, as a Python value.
@@ -53,14 +54,14 @@ A recipient is an address, or `None` for a contract creation. -/
 def decodeAsOf (args : String × ByteArray) : Result PyValue := do
   let (kind, data) := args
   match kind with
-  | "nat" => return toPy (← runRlp "input rejected" (decodeScalar data))
+  | "nat" => return toPy (← toResult "input rejected" (decodeScalar data))
   | "u256" => decodeAs U256 data
   | "uint64" => decodeAs UInt64 data
   | "bool" => decodeAs Bool data
   | "address" => decodeAs Address data
   | "recipient" => decodeAs (Option Address) data
   | "list_nat" => decodeAs (List Nat) data
-  | _ => throw (0, "unknown RLP type")
+  | _ => rejectArgument none "unknown RLP type"
 
 /-- The value of the named type that the bytes encode, as a Python value.
 

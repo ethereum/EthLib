@@ -31,8 +31,7 @@ A chunk that cannot be built or read also has code 0.
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
-open Serialization.Ssz.Exports (runSsz)
+open EthLib.Exports (Result PyValue pyExport toResult)
 
 /-- The bootstrap answer for a block of the store after the steps of a fork choice case. -/
 def apiLightClientBootstrapOf (args : StoreCaseArgs (Option PyValue × Root)) :
@@ -139,7 +138,7 @@ def apiLightClientDecodeUpdatesOf (args : String × Option PyValue × Root × By
   let config ← configWithValue name replacements
   let updates ← runChunks (BeaconApi.decodeUpdateChunks preset config genesisValidatorsRoot data)
   updates.mapM fun ⟨fork, update⟩ => do
-    return (fork.name, ← runSsz "value rejected" (SszType.serialize update))
+    return (fork.name, ← toResult "value rejected" (SszType.serialize update))
 
 /-- The fork name and the SSZ bytes of each update of the SSZ body of an updates answer.
 
