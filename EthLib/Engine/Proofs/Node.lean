@@ -40,6 +40,14 @@ On the validated node, it applies its forkchoice state exactly when it applies i
 That head is then a block that the node knows as valid.
 
 A request for a payload gives the answer of the method on the builds.
+
+Every step keeps each block that the node knows as valid or invalid, and the configuration.
+
+So a request whose checks pass, once answered valid or invalid, gets that answer again later.
+
+The checks before execution read the whole request, so they can still answer invalid for it.
+
+An invalid block hash depends on the request and the configuration alone.
 -/
 
 public section
@@ -763,6 +771,375 @@ theorem getPayloadStep_eq (node : Node) (setup : TrustedSetup) (version : Nat) (
     node.getPayloadStep setup version id =
       (getPayload node.config setup node.store version id, node) :=
   rfl
+
+/-! ## Validation is idempotent -/
+
+/-- The method on a chain whose checks pass never answers an invalid block hash. -/
+theorem status_ne_invalidBlockHash_of_newPayloadOnChain {transition : TransitionConfiguration}
+    {totalDifficulty : Nat} {chain : Execution.Blocks.BlockChain} {checked : CheckedBlock version}
+    {status : PayloadStatus} {reason : Option PayloadError}
+    {next : Option (RecentBlock × Execution.State.State)}
+    (hCheck : checkNewPayload chain.config version params = .ok (.ok checked))
+    (h : newPayloadOnChain transition totalDifficulty chain version params =
+      .ok (status, reason, next)) :
+    status.status ≠ .invalidBlockHash := by
+  unfold newPayloadOnChain at h
+  simp only [hCheck, bind, Except.bind] at h
+  repeat' split at h
+  all_goals simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
+  all_goals obtain ⟨rfl, -, -⟩ := h
+  all_goals simp
+
+/-- A payload that the node knows as valid is valid again, with its own hash.
+
+The node does not change. -/
+theorem newPayloadStep_of_known_valid {checked : CheckedBlock version} {hash : Hash32}
+    {b : KnownBlock} {post : Execution.State.State}
+    (hCheck : checkNewPayload node.config version params = .ok (.ok checked))
+    (hHash : checked.block.header.hash = .ok hash) (hb : node.blocks.lookup hash = some b)
+    (hValid : b.validity = .valid post) :
+    node.newPayloadStep version params = (.ok (⟨.valid, some hash⟩, none), node) := by
+  obtain ⟨blk, pow, v⟩ := b
+  simp only at hValid
+  subst hValid
+  simp [newPayloadStep, hCheck, hHash, hb]
+
+/-- A payload that the node knows as invalid is invalid again.
+
+Its latest valid hash is the latest valid block of its chain.
+
+The node does not change. -/
+theorem newPayloadStep_of_known_invalid {checked : CheckedBlock version} {hash : Hash32}
+    {b : KnownBlock}
+    (hCheck : checkNewPayload node.config version params = .ok (.ok checked))
+    (hHash : checked.block.header.hash = .ok hash) (hb : node.blocks.lookup hash = some b)
+    (hInvalid : b.validity = .invalid) :
+    node.newPayloadStep version params =
+      (.ok (⟨.invalid, latestValidHash node.tree hash⟩, none), node) := by
+  obtain ⟨blk, pow, v⟩ := b
+  simp only at hInvalid
+  subst hInvalid
+  simp [newPayloadStep, hCheck, hHash, hb]
+
+/-- The answer by the parent records only the payload, so it keeps every other known block. -/
+theorem onParent_lookup {hash other : Hash32} {block : RecentBlock} {b : KnownBlock}
+    (hne : other ≠ hash) (h : node.blocks.lookup other = some b) :
+    (node.onParent hash block version params).2.blocks.lookup other = some b := by
+  simp only [onParent]
+  split
+  · split
+    · rw [executeOn_lookup_of_ne _ _ _ _ _ hne, h]
+    · rw [record_lookup_of_ne _ _ hne, h]
+  · rw [record_lookup_of_ne _ _ hne, h]
+  · rw [record_lookup_of_ne _ _ hne, h]
+  · exact h
+
+/-- A step of `engine_newPayload` keeps every known block that is not accepted as it was.
+
+So a block known as valid stays valid, with the same state, and one known as invalid stays invalid.
+-/
+theorem newPayloadStep_lookup {other : Hash32} {b : KnownBlock}
+    (h : node.blocks.lookup other = some b) (hb : b.validity.isAccepted = false) :
+    (node.newPayloadStep version params).2.blocks.lookup other = some b := by
+  cases hCheck : checkNewPayload node.config version params with
+  | error e => simp [newPayloadStep, hCheck, h]
+  | ok r =>
+    cases r with
+    | error q => simp [newPayloadStep, hCheck, h]
+    | ok checked =>
+      cases hHash : checked.block.header.hash with
+      | error e => simp [newPayloadStep, hCheck, hHash, h]
+      | ok hash =>
+        by_cases hFresh : ∀ c, node.blocks.lookup hash = some c → c.validity.isAccepted = true
+        · rw [newPayloadStep_of_fresh hCheck hHash hFresh]
+          -- The payload is new or accepted, and the block here is neither, so they differ.
+          have hne : other ≠ hash := by
+            rintro rfl
+            rw [hFresh b h] at hb
+            cases hb
+          exact onParent_lookup hne h
+        · simp only [Classical.not_forall] at hFresh
+          obtain ⟨⟨blk, pow, v⟩, hk, hv⟩ := hFresh
+          cases v with
+          | valid post => rw [newPayloadStep_of_known_valid hCheck hHash hk rfl]; exact h
+          | invalid => rw [newPayloadStep_of_known_invalid hCheck hHash hk rfl]; exact h
+          | accepted v' p' => simp [Validity.isAccepted] at hv
+
+/-- A step of `engine_forkchoiceUpdated` keeps every known block that is not accepted as it was.
+-/
+theorem forkchoiceUpdatedStep_lookup {other : Hash32} {b : KnownBlock}
+    (h : node.blocks.lookup other = some b) (hb : b.validity.isAccepted = false) :
+    (node.forkchoiceUpdatedStep version params).2.blocks.lookup other = some b := by
+  have hv := validateHead_lookup (version := version) (params := params) h hb
+  simp only [forkchoiceUpdatedStep]
+  split
+  · exact hv
+  · simp only [updateStep]
+    split <;> exact hv
+
+/-- The nodes that the steps reach from a node, by any sequence of calls. -/
+inductive Reachable (start : Node) : Node → Prop where
+  /-- The node itself. -/
+  | refl : Reachable start start
+  /-- The node after a step of `engine_newPayload`. -/
+  | newPayload {node : Node} (version : Nat) (params : Lean.Json) :
+    Reachable start node → Reachable start (node.newPayloadStep version params).2
+  /-- The node after a step of `engine_forkchoiceUpdated`. -/
+  | forkchoiceUpdated {node : Node} (version : Nat) (params : Lean.Json) :
+    Reachable start node → Reachable start (node.forkchoiceUpdatedStep version params).2
+  /-- The node after a step of `engine_getPayload`. -/
+  | getPayload {node : Node} (setup : TrustedSetup) (version : Nat) (id : PayloadId) :
+    Reachable start node → Reachable start (node.getPayloadStep setup version id).2
+
+/-- Every node that the steps reach keeps each known block that is not accepted as it was. -/
+theorem Reachable.lookup {start node : Node} {other : Hash32} {b : KnownBlock}
+    (hr : Reachable start node) (h : start.blocks.lookup other = some b)
+    (hb : b.validity.isAccepted = false) : node.blocks.lookup other = some b := by
+  induction hr with
+  | refl => exact h
+  | newPayload version params _ ih => exact newPayloadStep_lookup ih hb
+  | forkchoiceUpdated version params _ ih => exact forkchoiceUpdatedStep_lookup ih hb
+  | getPayload setup version id _ ih => exact ih
+
+/-- A payload known as valid in a node is valid in every node that the steps reach from it.
+
+It keeps the same state after it. -/
+theorem Reachable.validState {start node : Node} {hash : Hash32} {post : Execution.State.State}
+    (hr : Reachable start node) (h : start.validState hash = some post) :
+    node.validState hash = some post := by
+  obtain ⟨b, hb, hv⟩ := validState_eq_some_iff.mp h
+  exact validState_eq_some_iff.mpr
+    ⟨b, hr.lookup hb (by simp [hv, Validity.isAccepted]), hv⟩
+
+/-- A payload known as invalid in a node is invalid in every node that the steps reach from it. -/
+theorem Reachable.invalid {start node : Node} {hash : Hash32} {b : KnownBlock}
+    (hr : Reachable start node) (h : start.blocks.lookup hash = some b)
+    (hInvalid : b.validity = .invalid) : node.blocks.lookup hash = some b :=
+  hr.lookup h (by simp [hInvalid, Validity.isAccepted])
+
+/-- A run keeps the configuration of the chain. -/
+theorem executeOn_config (node : Node) (hash : Hash32) (block : RecentBlock)
+    (post : Execution.State.State) (version : Nat) (params : Lean.Json) :
+    (node.executeOn hash block post version params).2.config = node.config := by
+  simp only [executeOn]
+  split
+  · rfl
+  · simp only [recordExecution]
+    split
+    · rfl
+    · split <;> rfl
+
+/-- A step of `engine_newPayload` keeps the configuration of the chain. -/
+theorem newPayloadStep_config (node : Node) (version : Nat) (params : Lean.Json) :
+    (node.newPayloadStep version params).2.config = node.config := by
+  simp only [newPayloadStep]
+  split
+  · rfl
+  · rfl
+  · split
+    · rfl
+    · split
+      · rfl
+      · rfl
+      · simp only [onParent]
+        split
+        · split
+          · exact executeOn_config _ _ _ _ _ _
+          · rfl
+        · rfl
+        · rfl
+        · rfl
+
+/-- Validation keeps the configuration of the chain. -/
+theorem validateChain_config (node : Node) (fuel : Nat) (hash : Hash32) :
+    (node.validateChain fuel hash).config = node.config := by
+  induction fuel generalizing node hash with
+  | zero => rfl
+  | succ fuel ih =>
+    simp only [validateChain]
+    split
+    · split
+      · rw [executeOn_config, ih]
+      · exact ih _ _
+      · exact ih _ _
+    · rfl
+
+/-- A step of `engine_forkchoiceUpdated` keeps the configuration of the chain. -/
+theorem forkchoiceUpdatedStep_config (node : Node) (version : Nat) (params : Lean.Json) :
+    (node.forkchoiceUpdatedStep version params).2.config = node.config := by
+  have hv : (node.validateHead version params).config = node.config := by
+    simp only [validateHead]
+    split
+    · exact validateChain_config _ _ _
+    · rfl
+  simp only [forkchoiceUpdatedStep]
+  split
+  · exact hv
+  · simp only [updateStep]
+    split <;> exact hv
+
+/-- Every node that the steps reach keeps the configuration of the chain. -/
+theorem Reachable.config {start node : Node} (hr : Reachable start node) :
+    node.config = start.config := by
+  induction hr with
+  | refl => rfl
+  | newPayload version params _ ih => rw [newPayloadStep_config, ih]
+  | forkchoiceUpdated version params _ ih => rw [forkchoiceUpdatedStep_config, ih]
+  | getPayload setup version id _ ih => exact ih
+
+/-- A payload that passes the checks and is answered invalid is then known as invalid. -/
+theorem newPayloadStep_invalid_known {checked : CheckedBlock version} {hash : Hash32}
+    {status : PayloadStatus} {reason : Option PayloadError} {next : Node}
+    (hCheck : checkNewPayload node.config version params = .ok (.ok checked))
+    (hHash : checked.block.header.hash = .ok hash)
+    (h : node.newPayloadStep version params = (.ok (status, reason), next))
+    (hs : status.status = .invalid) :
+    ∃ b, next.blocks.lookup hash = some b ∧ b.validity = .invalid := by
+  by_cases hFresh : ∀ c, node.blocks.lookup hash = some c → c.validity.isAccepted = true
+  · rw [newPayloadStep_of_fresh hCheck hHash hFresh] at h
+    simp only [onParent] at h
+    split at h
+    · split at h
+      · simp only [executeOn] at h
+        split at h
+        · simp at h
+        · rename_i st re nx hOn
+          simp only [Prod.mk.injEq, Except.ok.injEq] at h
+          obtain ⟨⟨rfl, -⟩, rfl⟩ := h
+          -- An invalid answer brings back no block, so the payload is recorded as invalid.
+          cases nx with
+          | some bp =>
+            obtain ⟨blk, post⟩ := bp
+            have := (valid_iff_of_newPayloadOnChain hOn).mpr ⟨_, _, rfl⟩
+            rw [hs] at this
+            cases this
+          | none =>
+            exact ⟨⟨⟨checked.fork, checked.block.header, []⟩, none, .invalid⟩,
+              by simp [recordExecution, hs, record], rfl⟩
+      · simp only [Prod.mk.injEq, Except.ok.injEq] at h
+        obtain ⟨⟨rfl, -⟩, -⟩ := h
+        cases hs
+    · simp only [Prod.mk.injEq, Except.ok.injEq] at h
+      obtain ⟨⟨rfl, -⟩, -⟩ := h
+      cases hs
+    · simp only [Prod.mk.injEq, Except.ok.injEq] at h
+      obtain ⟨⟨rfl, -⟩, rfl⟩ := h
+      exact ⟨⟨⟨checked.fork, checked.block.header, []⟩, none, .invalid⟩, by simp [record], rfl⟩
+    · simp only [Prod.mk.injEq, Except.ok.injEq] at h
+      obtain ⟨⟨rfl, -⟩, -⟩ := h
+      cases hs
+  · simp only [Classical.not_forall] at hFresh
+    obtain ⟨⟨blk, pow, v⟩, hk, hv⟩ := hFresh
+    cases v with
+    | valid post =>
+      rw [newPayloadStep_of_known_valid hCheck hHash hk rfl] at h
+      simp only [Prod.mk.injEq, Except.ok.injEq] at h
+      obtain ⟨⟨rfl, -⟩, -⟩ := h
+      cases hs
+    | invalid =>
+      rw [newPayloadStep_of_known_invalid hCheck hHash hk rfl] at h
+      simp only [Prod.mk.injEq, Except.ok.injEq] at h
+      obtain ⟨⟨rfl, -⟩, rfl⟩ := h
+      exact ⟨_, hk, rfl⟩
+    | accepted v' p' => simp [Validity.isAccepted] at hv
+
+/-- A payload answered valid is valid again, with its own hash, in every node reached after.
+
+The request is the same, and its checks pass. -/
+theorem newPayloadStep_valid_again {checked : CheckedBlock version} {hash : Hash32}
+    {status : PayloadStatus} {reason : Option PayloadError} {next later : Node}
+    (hCheck : checkNewPayload node.config version params = .ok (.ok checked))
+    (hHash : checked.block.header.hash = .ok hash)
+    (h : node.newPayloadStep version params = (.ok (status, reason), next))
+    (hs : status.status = .valid) (hr : Reachable next later) :
+    later.newPayloadStep version params = (.ok (⟨.valid, some hash⟩, none), later) := by
+  obtain ⟨-, post, hp⟩ := validState_of_newPayloadStep hCheck hHash h hs
+  obtain ⟨b, hb, hv⟩ := validState_eq_some_iff.mp (hr.validState hp)
+  have hConfig : later.config = node.config := by
+    rw [hr.config, show next = (node.newPayloadStep version params).2 by rw [h],
+      newPayloadStep_config]
+  exact newPayloadStep_of_known_valid (hConfig ▸ hCheck) hHash hb hv
+
+/-- A payload answered invalid after its checks pass is invalid again in every node reached after.
+
+The request is the same, and its latest valid hash is that of its chain in the later node. -/
+theorem newPayloadStep_invalid_again {checked : CheckedBlock version} {hash : Hash32}
+    {status : PayloadStatus} {reason : Option PayloadError} {next later : Node}
+    (hCheck : checkNewPayload node.config version params = .ok (.ok checked))
+    (hHash : checked.block.header.hash = .ok hash)
+    (h : node.newPayloadStep version params = (.ok (status, reason), next))
+    (hs : status.status = .invalid) (hr : Reachable next later) :
+    later.newPayloadStep version params =
+      (.ok (⟨.invalid, latestValidHash later.tree hash⟩, none), later) := by
+  obtain ⟨b, hb, hv⟩ := newPayloadStep_invalid_known hCheck hHash h hs
+  have hConfig : later.config = node.config := by
+    rw [hr.config, show next = (node.newPayloadStep version params).2 by rw [h],
+      newPayloadStep_config]
+  exact newPayloadStep_of_known_invalid (hConfig ▸ hCheck) hHash (hr.invalid hb hv) hv
+
+/-- An invalid block hash comes from the checks before execution, and so from the request alone.
+
+Any node with the same configuration gives the same answer. -/
+theorem newPayloadStep_invalidBlockHash {status : PayloadStatus} {reason : Option PayloadError}
+    {next : Node} (h : node.newPayloadStep version params = (.ok (status, reason), next))
+    (hs : status.status = .invalidBlockHash) (other : Node) (hConfig : other.config = node.config) :
+    (other.newPayloadStep version params).1 = .ok (status, reason) := by
+  cases hCheck : checkNewPayload node.config version params with
+  | error e => simp [newPayloadStep, hCheck] at h
+  | ok r =>
+    cases r with
+    | error q =>
+      obtain ⟨st, re⟩ := q
+      rw [newPayloadStep_of_checkNewPayload_invalid hCheck] at h
+      simp only [Prod.mk.injEq, Except.ok.injEq] at h
+      obtain ⟨⟨rfl, rfl⟩, -⟩ := h
+      rw [newPayloadStep_of_checkNewPayload_invalid (hConfig ▸ hCheck)]
+    | ok checked =>
+      exfalso
+      cases hHash : checked.block.header.hash with
+      | error e =>
+        simp only [newPayloadStep, hCheck, hHash, Prod.mk.injEq, Except.ok.injEq] at h
+        obtain ⟨⟨rfl, -⟩, -⟩ := h
+        cases hs
+      | ok hash =>
+        by_cases hFresh : ∀ c, node.blocks.lookup hash = some c → c.validity.isAccepted = true
+        · rw [newPayloadStep_of_fresh hCheck hHash hFresh] at h
+          simp only [onParent] at h
+          split at h
+          · split at h
+            · simp only [executeOn] at h
+              split at h
+              · simp at h
+              · rename_i st re nx hOn
+                simp only [Prod.mk.injEq, Except.ok.injEq] at h
+                obtain ⟨⟨rfl, -⟩, -⟩ := h
+                exact status_ne_invalidBlockHash_of_newPayloadOnChain hCheck hOn hs
+            · simp only [Prod.mk.injEq, Except.ok.injEq] at h
+              obtain ⟨⟨rfl, -⟩, -⟩ := h
+              cases hs
+          · simp only [Prod.mk.injEq, Except.ok.injEq] at h
+            obtain ⟨⟨rfl, -⟩, -⟩ := h
+            cases hs
+          · simp only [Prod.mk.injEq, Except.ok.injEq] at h
+            obtain ⟨⟨rfl, -⟩, -⟩ := h
+            cases hs
+          · simp only [Prod.mk.injEq, Except.ok.injEq] at h
+            obtain ⟨⟨rfl, -⟩, -⟩ := h
+            cases hs
+        · simp only [Classical.not_forall] at hFresh
+          obtain ⟨⟨blk, pow, v⟩, hk, hv⟩ := hFresh
+          cases v with
+          | valid post =>
+            rw [newPayloadStep_of_known_valid hCheck hHash hk rfl] at h
+            simp only [Prod.mk.injEq, Except.ok.injEq] at h
+            obtain ⟨⟨rfl, -⟩, -⟩ := h
+            cases hs
+          | invalid =>
+            rw [newPayloadStep_of_known_invalid hCheck hHash hk rfl] at h
+            simp only [Prod.mk.injEq, Except.ok.injEq] at h
+            obtain ⟨⟨rfl, -⟩, -⟩ := h
+            cases hs
+          | accepted v' p' => simp [Validity.isAccepted] at hv
 
 end Node
 

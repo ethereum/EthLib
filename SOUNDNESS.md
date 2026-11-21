@@ -5023,6 +5023,14 @@ Validation keeps every known block that is not accepted as it was (`validateHead
 The source requires no single answer for such a child outside the terminal case, and the reorg tests of execution-spec-tests accept `INVALID` or `SYNCING`; the node gives `INVALID`, which carries the most information.
 A node starts from one block; a total difficulty below the difficulty of a block of proof of work gives no node.
 The node keeps the state after every valid block, so it never refuses a reorganization with `-38006`.
+Step 4 of payload validation asks that validation be idempotent: a payload answered `VALID` never becomes `INVALID`, nor the reverse.
+Each step keeps every block that the node knows as valid or invalid, and the configuration (`newPayloadStep_lookup`, `forkchoiceUpdatedStep_lookup`, `newPayloadStep_config`).
+So every node that the steps reach from a node keeps them too (`Reachable.lookup`, `Reachable.validState`, `Reachable.invalid`, `Reachable.config`).
+A request whose checks before execution pass, once answered `VALID`, is `VALID` again with its own hash in every node reached after (`newPayloadStep_valid_again`).
+Once answered `INVALID`, it is `INVALID` again, with the latest valid hash of its chain (`newPayloadStep_invalid_again`, `newPayloadStep_invalid_known`).
+The checks before execution read the whole request, such as the expected blob hashes, so the same block sent with other parameters can still fail them, and that answer is not recorded.
+An `INVALID_BLOCK_HASH` answer comes from those checks, so any node with the same configuration gives it for the same request (`newPayloadStep_invalidBlockHash`).
+Step 4 concerns the answers of `engine_newPayload`: an update answers `INVALID` on a chain that fails the terminal block check without changing what the node knows.
 A C export runs a script of requests on a node that starts from one block.
 The Python tests run scripts of payloads, updates and reorganizations of empty blocks through it.
 
