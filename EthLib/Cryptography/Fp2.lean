@@ -69,6 +69,22 @@ def inverse (a : Fp2 F) : Fp2 F :=
 
 instance : Div (Fp2 F) := ⟨fun a b => a * b.inverse⟩
 
+/-- The field operations of the extension.
+
+Code that reads only the field operations of its base field can then run on the extension.
+
+The inverse of zero is zero, as for the inverse of the extension. -/
+instance : FieldOps (Fp2 F) where
+  toAdd := inferInstance
+  toSub := inferInstance
+  toMul := inferInstance
+  toNeg := inferInstance
+  zero := zero
+  one := one
+  beq := beq
+  isZero := isZero
+  inverse := inverse
+
 /-- Square-and-multiply by a `Nat`. -/
 def powNat (base : Fp2 F) (e : Nat) : Fp2 F :=
   if e = 0 then one
