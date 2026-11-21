@@ -54,10 +54,10 @@
   "A compressed `G2` point, decoded, checked in the subgroup, and compressed again."
 
 #define DOC_bls_expand_message_xmd \
-  "Expand `msg` into `lenInBytes` pseudo-random bytes via XMD with SHA-256."
+  "`expand_message_xmd(msg, DST, len_in_bytes)` of [RFC 9380 §5.3.1][xmd], with SHA-256 as `H`."
 
 #define DOC_bls_hash_to_g2 \
-  "Hash a message + DST to a G2 point on BLS12-381."
+  "`hash_to_curve(msg)` of [RFC 9380 §3][h2c], for the suite `BLS12381G2_XMD:SHA-256_SSWU_RO_`."
 
 #define DOC_bls_pairing \
   "The pairing `e(P, Q)` of a compressed `G1` point and a compressed `G2` point."
