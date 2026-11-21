@@ -58,6 +58,22 @@ A provenance note says where a rule is stated, not which text makes the rule nor
 Do not cite another implementation as the authority for a behaviour.
 A byte-for-byte match with a client is a useful test, not a justification.
 
+### Step comments
+
+A definition that implements a step-by-step procedure marks each step of its source in a `--` comment, right above the line that computes that step.
+The comment names the step and writes it in the notation of the source, in ASCII, so that an auditor can match the two line by line.
+For example, the line that computes RFC 6979 §3.2 step d has the comment `` -- Step d: `K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1))`. `` above it.
+
+Where only `ethereum/consensus-specs` or `ethereum/execution-specs` writes out the steps of a rule, a step comment may name the function in that text and quote the line of each step.
+A provenance note then links the file at a pinned release or commit, with its section, in the doc comment of the definition or in a section comment above several definitions.
+A step comment that quotes those texts traces a step but is not a citation of authority, so the code still does not cite them as the authority for a rule.
+A defect found while quoting them is reported upstream, as [Defects found upstream](#defects-found-upstream) says, not copied into the code.
+
+Where EthLib departs from the steps of its source, the comment says how and why.
+Examples are a fork branch folded into one function, an overflow check, a loop bound, or a value computed once and reused.
+In the RFC 6979 code, one comment above the shared value says that steps d and f reuse it.
+When the step comments describe a step-by-step procedure, the doc comment of the definition states what the procedure computes and does not repeat its steps.
+
 ## Defects found upstream
 
 Formal work often finds defects in the documents that EthLib specifies.
