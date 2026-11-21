@@ -22,6 +22,7 @@ public import EthLib.Consensus.Proofs.BeaconApi.LightClientBootstrapReachable
 public import EthLib.Consensus.Proofs.BeaconApi.ObjectEvents
 public import EthLib.Consensus.Proofs.BeaconApi.Produce
 public import EthLib.Consensus.Proofs.BeaconApi.Publish
+public import EthLib.Consensus.Proofs.BeaconApi.RandaoKept
 public import EthLib.Consensus.Proofs.BeaconApi.Registries
 public import EthLib.Consensus.Proofs.BeaconApi.Responses
 public import EthLib.Consensus.Proofs.BeaconApi.Rewards

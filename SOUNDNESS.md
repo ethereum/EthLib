@@ -6487,7 +6487,10 @@ Points that remain open:
   A state alone does not hold the old mix, so EthLib refuses with code 400 every epoch after the current one, and every epoch at least the length of the buffer before it.
   `stateRandao_eq_ok` shows that an answer reads the buffer at an epoch that the state holds, and `stateRandao_of_holdsRandaoMix_eq_false` that any other epoch gets the error.
   `eq_of_holdsRandaoMix` shows that two epochs that the state holds have different entries, so no other held epoch reads the entry of an answer.
-  No theorem yet shows that the state transition writes entry `e mod N` only during epoch `e` and the reset into it, so that the entry holds the mix of epoch `e`.
+  The state transition writes entry `e mod N` only during epoch `e` and at the reset into it (`mixesKeptBut_processBlock`, `mixesKeptBut_processEpoch`, `Consensus/Proofs/Transition/MixesKept.lean`).
+  So a run of slots keeps the answer for each epoch up to the current one while the state holds it (`stateRandao_processSlots`, `Consensus/Proofs/BeaconApi/RandaoKept.lean`).
+  The transition of a block does the same for each epoch before that of the block (`stateRandao_stateTransition`), the step out of the epoch included.
+  An answer for a past epoch is then the mix that the chain wrote during that epoch.
 - The source says that a state before finalization reports epoch 0 and the zero root.
   `finalityCheckpoints_of_genesis_chainSteps` covers each state that a chain from the Phase 0 genesis state of deposits reaches.
   No theorem yet ties the states that a store keeps, from any anchor, to such a chain, so the answers of the API are not covered.
