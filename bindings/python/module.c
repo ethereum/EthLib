@@ -706,6 +706,7 @@ static PyMethodDef methods[] = {
   {"keystore_nfkd", py_keystore_nfkd, METH_VARARGS, DOC_keystore_nfkd},
   {"keystore_password", py_keystore_password, METH_VARARGS, DOC_keystore_password},
   {"keystore_decrypt", py_keystore_decrypt, METH_VARARGS, DOC_keystore_decrypt},
+  {"keystore_encrypt", py_keystore_encrypt, METH_VARARGS, DOC_keystore_encrypt},
   {"secp256k1_verify", py_secp256k1_verify, METH_VARARGS, DOC_secp256k1_verify},
   {"secp256k1_is_low_s", py_secp256k1_is_low_s, METH_VARARGS, DOC_secp256k1_is_low_s},
   {"secp256k1_recover", py_secp256k1_recover, METH_VARARGS, DOC_secp256k1_recover},

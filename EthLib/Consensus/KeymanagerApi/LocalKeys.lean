@@ -92,7 +92,9 @@ inductive ImportKeystoresError where
 
 /-- The key that a keystore holds, decrypted with its password.
 
-The public key is derived from the secret key; the `pubkey` field of the keystore is not read. -/
+The public key is derived from the secret key.
+
+Decryption checks only the form of the `pubkey` field of the keystore. -/
 def decodeKeystore (text : JsonText) (limits : Keystore.KdfLimits) (keystore password : String) :
     Except String LocalKey := do
   let .ok document := readKeystore text "" (.str keystore) | throw "the keystore is not JSON"
@@ -100,7 +102,7 @@ def decodeKeystore (text : JsonText) (limits : Keystore.KdfLimits) (keystore pas
     s!"the keystore did not decrypt, with code {e.code}"
   let secretKey ← (Signatures.SecretKey.fromBytes secret).mapError fun _ =>
     "the secret is not a BLS secret key"
-  -- Decryption has checked that the path is a string.
+  -- Decryption has checked that the path is a string: an ERC-2334 path, or empty.
   let derivationPath := ((document.getObjVal? "path").bind Json.getStr?).toOption.getD ""
   return { pubkey := Signatures.skToPk secretKey, secretKey, derivationPath, readonly := false }
 

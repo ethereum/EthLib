@@ -3,20 +3,32 @@ module
 public import EthLib.Base.Hex
 public import EthLib.Base.Unicode
 public import EthLib.Cryptography.Aes.Ctr
+public import EthLib.Cryptography.Bls.KeyPath
+public import EthLib.Cryptography.Bls.Signatures
 public import EthLib.Cryptography.Hash.Pbkdf2
 public import EthLib.Cryptography.Hash.Scrypt
 public import Lean.Data.Json
 
 /-!
-# ERC-2335 keystore decryption
+# ERC-2335 keystores
 
-The three steps are key derivation, password verification and secret decryption.
+Decryption has three steps: key derivation, password verification and secret decryption.
+
+Encryption runs the same steps forward, with the salt, the IV and the UUID as inputs.
 
 [ERC-2335][erc] specifies the supported functions and the password preparation.
 
 Unicode normalization uses the pinned Unicode 16.0.0 tables.
 
 Metadata does not authenticate a secret or prove that it is a BLS private key.
+
+The reader still checks its form: an ERC-2334 path, an RFC 4122 UUID and a 48-byte public key.
+
+ERC-2335 allows a path of any depth, but ERC-2334 requires at least four indices, and wins here.
+
+The public key is 48 bytes of hex with no marker, as in the vectors of ERC-2335.
+
+A separate check compares the public key with that of the decrypted secret.
 
 Decryption takes bounds on the memory and work of key derivation, set by the caller.
 
@@ -135,12 +147,25 @@ structure KdfLimits where
 def KdfLimits.admits (limits : KdfLimits) (password : Nat) (kdf : Kdf) : Bool :=
   kdf.memory ≤ limits.memory && kdf.work password ≤ limits.work
 
-/-- The cryptographic fields read by decryption; the IV and checksum have fixed sizes. -/
+/-- The metadata of a keystore, which ERC-2335 neither encrypts nor authenticates. -/
+structure Metadata where
+  /-- The ERC-2334 path of the key, none for the empty string. -/
+  path : Option Bls.KeyPath.Path
+  /-- The 16 bytes of the UUID. -/
+  uuid : Vector UInt8 16
+  /-- The public key of the secret, which the file may leave out. -/
+  pubkey : Option Bls.BLSPubkey
+  /-- A description, which the file may leave out. -/
+  description : Option String
+  deriving DecidableEq, Repr
+
+/-- The fields read by decryption, then the metadata; the IV and checksum have fixed sizes. -/
 structure Store where
   kdf : Kdf
   checksum : Vector UInt8 32
   iv : Aes.Block
   message : ByteArray
+  metadata : Metadata
 
 /-- C0, C1 and Delete, the codes removed by ERC-2335, "Password requirements". -/
 def isControl (c : Char) : Bool :=
@@ -178,6 +203,48 @@ def fixed (what : String) (size : Nat) (value : Json) :
     Except KeystoreError (Vector UInt8 size) := do
   Base.exactBytes size (← bytes what value) fun _ => .invalidField what s!"expected {size} bytes"
 
+/-- A field that the keystore may leave out, read when it is present. -/
+def optionalField {α : Type} (value : Json) (name : String)
+    (read : Json → Except KeystoreError α) : Except KeystoreError (Option α) :=
+  match value.getObjVal? name with
+  | .ok present => some <$> read present
+  | .error _ => .ok none
+
+/-- The path of the key: none for the empty string, or an ERC-2334 path ("Path"). -/
+def readPath (value : Json) : Except KeystoreError (Option Bls.KeyPath.Path) := do
+  let text ← string "path" value
+  if text = "" then return none
+  match Bls.KeyPath.parsePath text with
+  | .ok path => return some path
+  | .error error => throw (.invalidField "path" error.message)
+
+/-- The positions of the four hyphens in the text form of a UUID, RFC 4122 §3. -/
+def uuidHyphens : List Nat := [8, 13, 18, 23]
+
+/-- A UUID in the text form of RFC 4122 §3: hex digit groups of 8, 4, 4, 4 and 12, with hyphens.
+
+The digits may be in either letter case, as the RFC allows on input.
+
+The version bits are not checked, since ERC-2335 asks only for a random UUID.
+-/
+def readUuid (value : Json) : Except KeystoreError (Vector UInt8 16) := do
+  let chars := (← string "uuid" value).toList
+  unless chars.length = 36 && uuidHyphens.all (chars[·]? == some '-') do
+    throw (.invalidField "uuid" "not the 8-4-4-4-12 form of RFC 4122")
+  -- The 32 digits around the hyphens; a hyphen elsewhere is not a hex digit.
+  let digits := chars.take 8 ++ (chars.drop 9).take 4 ++ (chars.drop 14).take 4 ++
+    (chars.drop 19).take 4 ++ chars.drop 24
+  let some data := Base.hexBytes? digits | throw (.invalidField "uuid" "not a hex digit")
+  Base.exactBytes 16 data fun _ => .invalidField "uuid" "expected 16 bytes"
+
+/-- The metadata of a keystore ("JSON schema"): its path, UUID, public key and description. -/
+def readMetadata (value : Json) : Except KeystoreError Metadata := do
+  let path ← readPath (← field "keystore" value "path")
+  let uuid ← readUuid (← field "keystore" value "uuid")
+  let description ← optionalField value "description" (string "description")
+  let pubkey ← optionalField value "pubkey" (fixed "pubkey" 48)
+  return ⟨path, uuid, pubkey, description⟩
+
 /-- The function, parameters and message that every ERC-2335 module requires ("Modules"). -/
 def moduleFields (what : String) (value : Json) :
     Except KeystoreError (String × Json × Json) := do
@@ -210,15 +277,11 @@ def readKdf (value : Json) : Except KeystoreError Kdf := do
     return .scrypt (← param "kdf.n" "n") (← param "kdf.r" "r") (← param "kdf.p" "p") length salt
   else throw (.unsupportedFunction "kdf" name)
 
-/-- Read the version, required metadata and supported cryptographic modules ("JSON schema"). -/
+/-- Read the version, metadata and supported cryptographic modules ("JSON schema"). -/
 def readStore (value : Json) : Except KeystoreError Store := do
   let version ← number "version" (← field "keystore" value "version")
   if version ≠ 4 then throw (.unsupportedVersion version)
-  let _ ← string "path" (← field "keystore" value "path")
-  let _ ← string "uuid" (← field "keystore" value "uuid")
-  for name in ["description", "pubkey"] do
-    if let .ok metadata := value.getObjVal? name then
-      let _ ← string name metadata
+  let metadata ← readMetadata value
   let crypto ← field "keystore" value "crypto"
   let kdf ← readKdf (← field "crypto" crypto "kdf")
   let (checksumFunction, _, checksum) ← moduleFields "checksum" (← field "crypto" crypto "checksum")
@@ -227,7 +290,7 @@ def readStore (value : Json) : Except KeystoreError Store := do
   let (cipherFunction, params, message) ← moduleFields "cipher" (← field "crypto" crypto "cipher")
   if cipherFunction ≠ "aes-128-ctr" then throw (.unsupportedFunction "cipher" cipherFunction)
   return ⟨kdf, checksum, ← fixed "cipher.iv" 16 (← field "cipher.params" params "iv"),
-    ← bytes "cipher.message" message⟩
+    ← bytes "cipher.message" message, metadata⟩
 
 /-- Derive the intermediate key from the prepared password ("Decryption key").
 
@@ -246,6 +309,14 @@ def deriveKey (password : ByteArray) (kdf : Kdf) : Except KeystoreError ByteArra
 def passwordChecksum (key message : ByteArray) : Vector UInt8 32 :=
   Hash.Sha256.hash32 (key.extract 16 32 ++ message)
 
+/-- The AES-128 key: the first 16 bytes of a derived key of 32 bytes or more. -/
+def aesKey (key : ByteArray) (h : 32 ≤ key.size) : Aes.Key .aes128 :=
+  Vector.ofFn fun i => key[i.val]'(by
+    change i.val < key.data.size
+    change 32 ≤ key.data.size at h
+    have hi : i.val < 16 := by simpa [Aes.KeySize.Nk] using i.isLt
+    omega)
+
 /-- Verify the checksum before AES-128-CTR decryption ("Secret decryption").
 
 A longer key is truncated to its first 16 bytes for AES.
@@ -254,12 +325,7 @@ def decryptWithKey (store : Store) (key : ByteArray) : Except KeystoreError Byte
   if h : 32 ≤ key.size then
     if passwordChecksum key store.message != store.checksum then
       throw .checksumMismatch
-    let aesKey : Aes.Key .aes128 := Vector.ofFn fun i => key[i.val]'(by
-      change i.val < key.data.size
-      change 32 ≤ key.data.size at h
-      have hi : i.val < 16 := by simpa [Aes.KeySize.Nk] using i.isLt
-      omega)
-    return Aes.ctr (Aes.ciph .aes128 aesKey) 128 store.iv store.message
+    return Aes.ctr (Aes.ciph .aes128 (aesKey key h)) 128 store.iv store.message
   else throw (.shortKey key.size)
 
 /-- Prepare the password, check the caller's limits, then decrypt a parsed keystore. -/
@@ -277,5 +343,83 @@ The decrypted octets are returned without assuming a key length or authenticatin
 def decrypt (limits : KdfLimits) (value : Json) (password : String) :
     Except KeystoreError ByteArray := do
   decryptStore limits (← readStore value) password
+
+/-! ## Writing a keystore -/
+
+/-- Bytes as lowercase hex digits with no prefix, as ERC-2335 writes them. -/
+def hexText (data : List UInt8) : String :=
+  String.ofList (data.flatMap Base.byteHexDigits)
+
+/-- A UUID in the text form of RFC 4122 §3, with lowercase digits. -/
+def uuidText (uuid : Vector UInt8 16) : String :=
+  let group (start count : Nat) := hexText ((uuid.toList.drop start).take count)
+  group 0 4 ++ "-" ++ group 4 2 ++ "-" ++ group 6 2 ++ "-" ++ group 8 2 ++ "-" ++ group 10 6
+
+/-- A module of ERC-2335: its function, its parameters and its message ("Modules"). -/
+def moduleJson (function : String) (params : List (String × Json)) (message : String) : Json :=
+  Json.mkObj [("function", .str function), ("params", Json.mkObj params),
+    ("message", .str message)]
+
+/-- The key derivation module, with an empty message ("Modules"). -/
+def Kdf.toJson : Kdf → Json
+  | .pbkdf2 iterations length salt =>
+    moduleJson "pbkdf2" [("dklen", Lean.toJson length), ("c", Lean.toJson iterations),
+      ("prf", .str "hmac-sha256"), ("salt", .str (hexText salt.toList))] ""
+  | .scrypt n r p length salt =>
+    moduleJson "scrypt" [("dklen", Lean.toJson length), ("n", Lean.toJson n),
+      ("p", Lean.toJson p), ("r", Lean.toJson r), ("salt", .str (hexText salt.toList))] ""
+
+/-- The metadata fields of a keystore, with the version ("JSON schema").
+
+A path that is not known is the empty string.
+
+A missing public key or description is left out.
+-/
+def Metadata.fields (metadata : Metadata) : List (String × Json) :=
+  metadata.description.toList.map (fun text => ("description", .str text)) ++
+    metadata.pubkey.toList.map (fun pubkey => ("pubkey", .str (hexText pubkey.toList))) ++
+    [("path", .str (metadata.path.elim "" Bls.KeyPath.Path.toString)),
+      ("uuid", .str (uuidText metadata.uuid)), ("version", Lean.toJson (4 : Nat))]
+
+/-- Write an ERC-2335 keystore that holds a secret under a password.
+
+The salt is part of the key derivation, and the IV and the UUID are inputs.
+
+So writing is a function, and every random value comes from the caller.
+
+The key is derived from the prepared password, then the secret is encrypted with AES-128-CTR.
+
+The checksum is SHA-256 of key bytes 16 through 31 and the ciphertext, as decryption checks it.
+
+It runs the key derivation at any cost, so the caller chooses its parameters.
+
+ERC-2335 requires the public key when the secret is a private key, and the caller supplies it.
+-/
+def encrypt (kdf : Kdf) (iv : Aes.Block) (metadata : Metadata) (password : String)
+    (secret : ByteArray) : Except KeystoreError Json := do
+  let key ← deriveKey (passwordBytes password) kdf
+  if h : 32 ≤ key.size then
+    let message := Aes.ctr (Aes.ciph .aes128 (aesKey key h)) 128 iv secret
+    return Json.mkObj ([("crypto", Json.mkObj [
+      ("kdf", kdf.toJson),
+      ("checksum", moduleJson "sha256" [] (hexText (passwordChecksum key message).toList)),
+      ("cipher", moduleJson "aes-128-ctr" [("iv", .str (hexText iv.toList))]
+        (hexText message.toList))])] ++ metadata.fields)
+  else throw (.shortKey key.size)
+
+/-- Whether the stored public key is that of the secret, read as a BLS secret key.
+
+ERC-2335 requires the field when the secret is a private key, so a keystore without it fails.
+
+A secret that is not a BLS secret key fails too.
+
+[ERC-2335, PubKey][pubkey] defines the field.
+
+[pubkey]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2335.md#pubkey
+-/
+def checkPubkey (secret : ByteArray) (metadata : Metadata) : Bool :=
+  match metadata.pubkey, Bls.Signatures.SecretKey.fromBytes secret with
+  | some pubkey, .ok key => pubkey == Bls.Signatures.skToPk key
+  | _, _ => false
 
 end EthLib.Cryptography.Keystore

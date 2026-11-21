@@ -112,22 +112,48 @@ def screen (text : String) : Except String Unit :=
   | some reason => .error reason
   | none => .ok ()
 
+/-- JSON text read at the boundary, with the parser's bounds checked first. -/
+def jsonOf (text : String) : Result Lean.Json := do
+  let invalid (reason : String) :=
+    let error := KeystoreError.invalidJson reason
+    (error.code, s!"{repr error}")
+  (screen text).mapError invalid
+  (Lean.Json.parse text).mapError invalid
+
 /-- Read JSON text at the boundary, then run the specified keystore decryption.
 
 The arguments are the text, the password, and the memory and work limits of key derivation.
 -/
 def decryptOf (args : String × String × Nat × Nat) : Result ByteArray := do
   let (text, password, memory, work) := args
-  let invalid (reason : String) :=
-    let error := KeystoreError.invalidJson reason
-    (error.code, s!"{repr error}")
-  (screen text).mapError invalid
-  let value ← (Lean.Json.parse text).mapError invalid
+  let value ← jsonOf text
   (Keystore.decrypt ⟨memory, work⟩ value password).mapError fun error =>
     (error.code, s!"{repr error}")
 
 /-- Decrypt an ERC-2335 JSON keystore and return its secret octets. -/
 @[export eth_keystore_decrypt]
 def decrypt (args : PyValue) : Result PyValue := pyExport decryptOf args
+
+/-- Read the key derivation, the metadata and the IV, then write the keystore as JSON text.
+
+The key derivation is a module of the keystore, and the metadata an object with its fields.
+
+The arguments are those two as JSON text, then the IV, the password and the secret.
+-/
+def encryptOf (args : String × String × ByteArray × String × ByteArray) : Result String := do
+  let (kdf, metadata, iv, password, secret) := args
+  let fail (error : KeystoreError) := (error.code, s!"{repr error}")
+  let kdf ← (readKdf (← jsonOf kdf)).mapError fail
+  let metadata ← (readMetadata (← jsonOf metadata)).mapError fail
+  let iv ← (Base.exactBytes 16 iv fun _ => KeystoreError.invalidField "cipher.iv"
+    "expected 16 bytes").mapError fail
+  return (← (Keystore.encrypt kdf iv metadata password secret).mapError fail).compress
+
+/-- Write an ERC-2335 JSON keystore of a secret, from its key derivation and metadata.
+
+Its arguments are the KDF module and metadata as JSON text, the IV, the password and the secret.
+-/
+@[export eth_keystore_encrypt]
+def encrypt (args : PyValue) : Result PyValue := pyExport encryptOf args
 
 end EthLib.Cryptography.Keystore.Exports

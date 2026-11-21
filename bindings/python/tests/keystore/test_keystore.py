@@ -88,6 +88,78 @@ def test_erc2335(name: str) -> None:
     assert keystore.decrypt((ROOT / f"{name}.json").read_text(), PASSWORD) == SECRET
 
 
+METADATA_FIELDS = ("description", "pubkey", "path", "uuid")
+
+
+@pytest.mark.parametrize("name", ["pbkdf2", "scrypt"])
+def test_erc2335_write(name: str) -> None:
+    # The writer, given the vector's salt, IV and metadata, writes the vector field by field.
+    vector = json.loads((ROOT / f"{name}.json").read_text())
+    metadata = {field: vector[field] for field in METADATA_FIELDS}
+    iv = bytes.fromhex(vector["crypto"]["cipher"]["params"]["iv"])
+    kdf = json.dumps(vector["crypto"]["kdf"])
+    written = keystore.encrypt(kdf, json.dumps(metadata), iv, PASSWORD, SECRET)
+    assert json.loads(written) == vector
+    assert keystore.decrypt(written, PASSWORD) == SECRET
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("uuid", "1d85ae20", 'invalidField "uuid" "not the 8-4-4-4-12 form of RFC 4122"'),
+        ("uuid", "1d85ae20-35c5-4611-98e8-aa14a633906g", 'invalidField "uuid" "not a hex digit"'),
+        (
+            "uuid",
+            "1d85ae2035c5-4611-98e8-aa14a633906f-",
+            'invalidField "uuid" "not the 8-4-4-4-12 form of RFC 4122"',
+        ),
+        (
+            "path",
+            "m/12381/60/0",
+            'invalidField "path" "ERC-2334 path needs at least four indices, got 3"',
+        ),
+        ("pubkey", "9612d7a7", 'invalidField "pubkey" "expected 48 bytes"'),
+    ],
+)
+def test_metadata_refused(field: str, value: str, message: str) -> None:
+    store = json.loads((ROOT / "pbkdf2.json").read_text())
+    store[field] = value
+    with raises(KeystoreError, "EthLib.Cryptography.Keystore.KeystoreError." + message) as exc:
+        keystore.decrypt(json.dumps(store), PASSWORD)
+    assert exc.value.code == 2
+
+
+@pytest.mark.parametrize(
+    ("iv", "dklen", "message", "code"),
+    [
+        (bytes(15), 32, 'invalidField "cipher.iv" "expected 16 bytes"', 2),
+        (bytes(16), 16, "shortKey 16", 5),
+    ],
+)
+def test_write_refused(iv: bytes, dklen: int, message: str, code: int) -> None:
+    kdf = empty_store()["crypto"]["kdf"]
+    kdf["params"]["dklen"] = dklen
+    metadata = json.dumps({"path": "", "uuid": "64625def-3331-4eea-ab6f-782f3ed16a83"})
+    with raises(KeystoreError, "EthLib.Cryptography.Keystore.KeystoreError." + message) as exc:
+        keystore.encrypt(json.dumps(kdf), metadata, iv, "password", b"")
+    assert exc.value.code == code
+
+
+def test_write_without_optional_metadata() -> None:
+    kdf = json.dumps(empty_store()["crypto"]["kdf"])
+    metadata = {"path": "", "uuid": "64625def-3331-4eea-ab6f-782f3ed16a83"}
+    written = json.loads(keystore.encrypt(kdf, json.dumps(metadata), bytes(16), "password", b""))
+    assert written == empty_store()
+    assert keystore.decrypt(json.dumps(written), "password") == b""
+
+
+def test_uppercase_uuid_and_empty_path() -> None:
+    # RFC 4122 reads hex digits in either case, and ERC-2335 allows an unknown path as "".
+    store = empty_store()
+    store["uuid"] = store["uuid"].upper()
+    assert keystore.decrypt(json.dumps(store), "password") == b""
+
+
 def empty_store() -> dict:
     """A small authenticated empty secret, with an independent hashlib checksum."""
     key = hashlib.pbkdf2_hmac("sha256", b"password", b"salt", 1, 32)

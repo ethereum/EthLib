@@ -57,6 +57,12 @@ theorem isNull_eq (j : Json) : j.isNull = match j with | .null => true | _ => fa
     (Json.mkObj pairs).isNull = false := by
   rw [mkObj_eq, isNull_obj]
 
+/-- Reading the members of an object succeeds exactly for an object. -/
+theorem getObj?_eq (j : Json) : j.getObj? = match j with
+    | .obj kvs => .ok kvs
+    | _ => .error "object expected" := by
+  cases j <;> rfl
+
 /-- Reading array items succeeds exactly for an array. -/
 theorem getArr?_eq (j : Json) : j.getArr? = match j with
     | .arr items => .ok items
