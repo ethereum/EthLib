@@ -4,6 +4,7 @@ public import EthLib.Base.Proofs.ByteList
 public import EthLib.Base.Proofs.Hex
 public import Lean.Data.Json
 public import EthLib.Serialization.Ssz.Codec.Json
+import EthLib.Serialization.Proofs.Ssz.Codec.JsonHex
 public import EthLib.Serialization.Exports.Ssz
 import EthLib.Base.Proofs.Toolchain.JsonBasic
 import all EthLib.Serialization.Exports.Ssz
@@ -374,62 +375,6 @@ private theorem jsonTagged_toJson (value : PyValue) :
         · simp
   | _ => rfl
 
-/-- Each of the sixteen digits reads back as its own value. -/
-private theorem hexDigit_hexDigitChar (digit : Fin 16) :
-    hexDigit (Base.hexDigitChar digit) = .ok digit.val := by
-  -- Sixteen characters, each checked against the three ranges the reader tests.
-  obtain ⟨value, small⟩ := digit
-  rcases value with _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | value
-  all_goals first | rfl | omega
-
-/-- The byte loop of the hex reader from some bytes is the loop from none, after them. -/
-private theorem hexBytesFrom_eq : ∀ (digits : List Char) (out : Bytes),
-    hexBytesFrom digits out = (hexBytesFrom digits #[]).map (out ++ ·)
-  | [], out => by simp [hexBytesFrom, Except.map]
-  | [_], _ => rfl
-  | high :: low :: rest, out => by
-    simp only [hexBytesFrom]
-    cases hexDigit high with
-    | error e => rfl
-    | ok h =>
-      cases hexDigit low with
-      | error e => rfl
-      | ok l =>
-        show hexBytesFrom rest (out.push _) = (hexBytesFrom rest (#[].push _)).map _
-        rw [hexBytesFrom_eq rest (out.push _), hexBytesFrom_eq rest (#[].push _)]
-        cases hexBytesFrom rest #[] <;>
-          simp only [Except.map, Array.push_eq_append, Array.empty_append, Array.append_assoc]
-
-/-- The first two digits hold the first byte, and the rest hold the bytes after it. -/
-private theorem hexBytes_cons (high low : Char) (rest : List Char) :
-    hexBytes (high :: low :: rest) = do
-      let byte := 16 * (← hexDigit high) + (← hexDigit low)
-      return #[UInt8.ofNat byte] ++ (← hexBytes rest) := by
-  simp only [hexBytes, hexBytesFrom]
-  cases hexDigit high with
-  | error e => rfl
-  | ok h =>
-    cases hexDigit low with
-    | error e => rfl
-    | ok l =>
-      show hexBytesFrom rest (#[].push _) = _
-      rw [hexBytesFrom_eq]
-      cases hexBytesFrom rest #[] <;> rfl
-
-/-- A hex string that the writer gives reads back as the bytes it was written from. -/
-private theorem ofHex_hexString (bytes : List UInt8) :
-    ofHex (Base.hexString bytes) = .ok bytes.toArray := by
-  -- Two digits at a time rebuild one byte, and the rest of the string follows.
-  have general : ∀ (bytes : List UInt8),
-      hexBytes (bytes.flatMap Base.byteHexDigits) = .ok bytes.toArray := by
-    intro bytes
-    induction bytes with
-    | nil => rfl
-    | cons byte rest ih =>
-      simp [Base.byteHexDigits, hexBytes_cons, hexDigit_hexDigitChar, Nat.div_add_mod, ih,
-        Bind.bind, Except.bind, pure, Except.pure, UInt8.ofNat_toNat]
-  simp [ofHex, Base.toList_hexString, general]
-
 /-- Only the word `bool` itself has the JSON of that word. -/
 private theorem toJson_ne_bool (type : PyValue) (word : type ≠ .str "bool") :
     type.toJson ≠ .str "bool" := by
@@ -529,7 +474,10 @@ theorem valueOf_eq_json (fuel : Nat) (value : PyValue) :
       split
       all_goals simp only [getBool?_toJson, getNat?_toJson, getStr?_toJson, getArr?_toJson,
         jsonPair_toJson]
-      case h_3 => simp only [strOf, pure, Except.pure, Base.toList_eq_data_toList, ofHex_hexString]
+      case h_3 =>
+        -- The writer of bytes is the hex writer of the codec, whose reader reads them back.
+        have back (data : Bytes) : ofHex (Base.hexString data.toList) = .ok data := ofHex_toHex data
+        simp only [strOf, pure, Except.pure, Base.toList_eq_data_toList, back]
       case h_4 => rfl
       case h_5 =>
         cases itemsOf body with
