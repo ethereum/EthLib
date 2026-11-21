@@ -1629,6 +1629,10 @@ The stack, the frame with its program counter and gas meter, and memory are mode
 So are the instructions that read only the stack, memory, call data, code and return data.
 They are in `Execution/Evm/Instructions/StackOnly.lean` and `Execution/Evm/Instructions/MemoryData.lean`.
 
+`selfdestructCost_selfdestructCreatesAccount` (`Execution/Proofs/Evm/Instructions/SelfDestruct.lean`) prices the new beneficiary of SELFDESTRUCT before Glamsterdam.
+From Tangerine Whistle, that beneficiary adds what a CALL of the balance to it pays for the account.
+Before Tangerine Whistle, it adds nothing, since EIP-150 introduced that price together with the base price of SELFDESTRUCT.
+
 A program logic over bytecode is in `Execution/Proofs/Evm/Logic/`.
 Its first relation covers frames that send no message.
 `Reaches S` is the chain of steps of a relation `S`.
