@@ -326,6 +326,38 @@ theorem honestAttestation_spec (electra : .pectra ≤ fork) {honest : Finset Val
   · rw [List.forall₂_map_right_iff]
     exact made.imp fun _ _ singleMade => (constructSingleAttestation_spec singleMade).2.2.2
 
+/-- Before Electra, the honest attestation of a committee holds its data.
+
+Each of its signers is an honest member of the committee that the data names. -/
+theorem honestAttestation_signers (before : ¬.pectra ≤ fork)
+    {honest : Finset ValidatorIndex}
+    {key : ValidatorIndex → Signatures.SecretKey} {data : AttestationData}
+    {committeeIndex : CommitteeIndex} {attestation : Attestation preset fork}
+    (built : honestAttestation config state honest key data committeeIndex = .ok attestation) :
+    attestation.data = data ∧ ∀ indices, getAttestingIndices state attestation = .ok indices →
+      ∀ index ∈ indices, index ∈ honest ∧ ∃ committee,
+        getBeaconCommittee state data.slot data.index = .ok committee ∧ index ∈ committee := by
+  unfold honestAttestation at built
+  rw [dite_eq_right before] at built
+  obtain ⟨committee, committeeOk, built⟩ := bind_ok_iff.mp built
+  rw [mapError_ok_iff] at committeeOk
+  obtain ⟨singles, singlesOk, built⟩ := bind_ok_iff.mp built
+  have made := forall₂_of_mapM_ok singlesOk
+  obtain ⟨-, -, -, -, -, sameData, -⟩ := constructAggregate_spec built
+  obtain ⟨found, foundOk, members⟩ := mem_getAttestingIndices_constructAggregate built
+  refine ⟨sameData, fun indices indicesOk index member => ?_⟩
+  rw [foundOk, Except.ok.injEq] at indicesOk
+  subst indicesOk
+  obtain ⟨single, singleMember, -, attesters, attestersOk, attesting⟩ :=
+    (members index).mp member
+  obtain ⟨signer, signerMember, singleMade⟩ := exists_mem_of_forall₂ made.flip singleMember
+  rw [getAttestingIndices_constructAttestation singleMade, Except.ok.injEq] at attestersOk
+  subst attestersOk
+  rw [List.mem_singleton] at attesting
+  subst attesting
+  obtain ⟨seated, honestMember⟩ := mem_honestSigners.mp signerMember
+  exact ⟨honestMember, committee, committeeOk, seated⟩
+
 /-- From Altair to Fulu, the honest attestation of a committee is accepted.
 
 Each honest member of the committee then holds the timely target flag.
