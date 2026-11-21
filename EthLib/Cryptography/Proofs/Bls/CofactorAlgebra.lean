@@ -104,10 +104,6 @@ theorem toAffine_eq_of_projectiveEq {p q : G2} (h : G2.projectiveEq p q = true) 
     · field_simp
       linear_combination h.2
 
-private theorem projectiveEq_refl (p : G2) : G2.projectiveEq p p = true := by
-  unfold G2.projectiveEq
-  by_cases hz : p.z.isZero = true <;> simp [hz, Fp2.beq_iff_eq]
-
 /-- `psi` respects `G2.projectiveEq`, including at infinity. -/
 theorem psi_projectiveEq_of_projectiveEq {p q : G2} (h : G2.projectiveEq p q = true) :
     G2.projectiveEq (psi p) (psi q) = true := by
@@ -120,7 +116,7 @@ theorem psi_projectiveEq_of_projectiveEq {p q : G2} (h : G2.projectiveEq p q = t
       simp only [psi, hp, hq, Bool.false_eq_true, ↓reduceIte]
       rw [toAffine_eq_of_projectiveEq h]
     rw [he]
-    exact projectiveEq_refl _
+    exact G2.projectiveEq_refl _
 
 /-- On valid representatives `psi` depends only on the elliptic-curve group element. -/
 theorem psi_toPoint_eq_of_toPoint_eq {p q : G2} (hp : G2.Valid p) (hq : G2.Valid q)
@@ -144,7 +140,6 @@ theorem psi_neg (p : G2) : psi (G2.neg p) = G2.neg (psi p) := by
     rw [affine_neg hf]
     change (⟨_, _ * Fp2.conjugate (-p.toAffine.2), _⟩ : G2) = ⟨_, -(_ * _), _⟩
     rw [Fp2.conjugate_neg, mul_neg]
-    rfl
 
 /-- On valid points `psi` commutes with group negation. -/
 theorem psi_toPoint_neg {p : G2} (hp : G2.Valid p) :

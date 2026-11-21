@@ -72,6 +72,19 @@ theorem sqrt_complete {a b : Fp} (h : b * b = a) :
     ite_eq_left (show (Fp.powNat a ((Fp.modulus + 1) / 4) *
       Fp.powNat a ((Fp.modulus + 1) / 4)).beq a = true from Fp.beq_iff.mpr hcand)]
 
+/-- A root returned by the square root that the extensions read from `Fp` squares to its input. -/
+theorem baseField_sqrt_mul_self {a c : Fp} (h : BaseField.sqrt a = some c) : c * c = a := by
+  rw [baseField_sqrt] at h
+  cases hs : Fp.sqrt a with
+  | error e => rw [hs] at h; cases h
+  | ok c' => rw [hs] at h; cases h; exact sqrt_ok hs
+
+/-- The square root that the extensions read from `Fp` succeeds on every square. -/
+theorem baseField_sqrt_complete {a b : Fp} (h : b * b = a) :
+    BaseField.sqrt a = some (Fp.powNat a ((Fp.modulus + 1) / 4)) := by
+  rw [baseField_sqrt, sqrt_complete h]
+  rfl
+
 /-- The candidate for a square root squares to the input or its negation. -/
 theorem sqrtCandidate_sq_or_neg (a : Fp) :
     Fp.sqrtCandidate a * Fp.sqrtCandidate a = a ∨

@@ -222,6 +222,69 @@ theorem powNat_eq_npow (M : Monoid (Fp2 F)) (hone : M.one = one) (hmul : ∀ a b
       · rw [ite_eq_right h2, hsq]
         exact congrArg (a ^ ·) (by omega)
 
+section Sqrt
+
+variable {F : Type} [BaseField F]
+
+/-- The cases in which the square root in `Fp2` succeeds, over any base field.
+
+When `c1` is zero, the output is built from the candidate of `c0`.
+
+Otherwise, `s` is a root of the norm, and the output is built from the candidate of `(a0 + s) / 2`.
+
+The statement is generic, so the kernel checks the case analysis on variables only.
+-/
+theorem sqrt_eq_some_cases {a c : Fp2 F} (h : Fp2.sqrt a = some c) :
+    (BaseField.isZero a.c1 = true ∧
+      ((BaseField.beq (BaseField.sqrtCandidate a.c0 * BaseField.sqrtCandidate a.c0) a.c0 = true ∧
+          c = ⟨BaseField.sqrtCandidate a.c0, BaseField.zero⟩) ∨
+        (BaseField.beq (BaseField.sqrtCandidate a.c0 * BaseField.sqrtCandidate a.c0) a.c0 = false ∧
+          c = ⟨BaseField.zero, BaseField.sqrtCandidate a.c0⟩))) ∨
+    (BaseField.isZero a.c1 = false ∧ ∃ s,
+      BaseField.sqrt (a.c0 * a.c0 + a.c1 * a.c1) = some s ∧
+      let u := (a.c0 + s) * BaseField.inverse (BaseField.ofNat 2 : F)
+      let r := BaseField.sqrtCandidate u
+      let d := a.c1 * BaseField.inverse (BaseField.ofNat 2 * r)
+      (BaseField.beq (r * r) u = true ∧ c = ⟨r, d⟩) ∨
+        (BaseField.beq (r * r) u = false ∧ c = ⟨d, r⟩)) := by
+  unfold Fp2.sqrt at h
+  split at h
+  · rename_i hz
+    refine Or.inl ⟨hz, ?_⟩
+    dsimp only at h
+    split at h
+    · rename_i hc
+      exact Or.inl ⟨hc, Option.some.inj h.symm⟩
+    · rename_i hc
+      exact Or.inr ⟨Bool.eq_false_iff.mpr hc, Option.some.inj h.symm⟩
+  · rename_i hz
+    refine Or.inr ⟨Bool.eq_false_iff.mpr hz, ?_⟩
+    split at h
+    · cases h
+    · rename_i s hs
+      refine ⟨s, hs, ?_⟩
+      dsimp only at h ⊢
+      split at h
+      · rename_i hc
+        exact Or.inl ⟨hc, Option.some.inj h.symm⟩
+      · rename_i hc
+        exact Or.inr ⟨Bool.eq_false_iff.mpr hc, Option.some.inj h.symm⟩
+
+/-- The square root in `Fp2` succeeds when the norm has a root, over any base field. -/
+theorem sqrt_isSome_of_norm {a : Fp2 F}
+    (hn : ∃ s, BaseField.sqrt (a.c0 * a.c0 + a.c1 * a.c1) = some s) :
+    ∃ c, Fp2.sqrt a = some c := by
+  obtain ⟨s, hs⟩ := hn
+  unfold Fp2.sqrt
+  split
+  · dsimp only
+    split <;> exact ⟨_, rfl⟩
+  · rw [hs]
+    dsimp only
+    split <;> exact ⟨_, rfl⟩
+
+end Sqrt
+
 end Fp2
 
 end EthLib.Cryptography

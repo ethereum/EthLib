@@ -45,47 +45,6 @@ def Fp2.signBit (y : Fp2) : Bool :=
   else
     Fp.signBit y.c0
 
-/-! ## Square root in Fp2 -/
-
-section Sqrt
-
-variable {F : Type} [BaseField F]
-
-/-- A square root in `Fp2`, by the [complex method][source] of Adj and Rodríguez-Henríquez, §V.A.
-
-It relies on the base-field candidate, whose square is its input or the negation of its input.
-
-Over `Fp`, it fails with the error for a non-square exactly when the input has no root.
-
-Which of the two roots it returns is not fixed, since every caller chooses the sign afterwards.
-
-Write the input as `a0 + a1*i` with `i^2 = -1`, and let `s` be a root of the norm `a0^2 + a1^2`.
-
-The base-field candidate `c` of `(a0 + s)/2` squares to it or to its negation.
-
-In the first case `c + (a1/(2*c))*i` is a root, and in the second `a1/(2*c) + c*i` is one.
-
-So over `Fp`, a real input needs one exponentiation, and any other input at most two.
-
-[source]: https://eprint.iacr.org/2012/685
--/
-def Fp2.sqrt (a : Fp2 F) : Except BlsError (Fp2 F) :=
-  -- Real input: the candidate of `a0` squares to `a0` or to `-a0`.
-  if BaseField.isZero a.c1 then
-    let c := BaseField.sqrtCandidate a.c0
-    if BaseField.beq (c * c) a.c0 then .ok ⟨c, BaseField.zero⟩
-    else .ok ⟨BaseField.zero, c⟩
-  else
-    match sqrtOrError (a.c0 * a.c0 + a.c1 * a.c1) with
-    | .error _ => .error .notASquare
-    | .ok s =>
-      let u := (a.c0 + s) * BaseField.inverse (BaseField.ofNat 2 : F)
-      let c := BaseField.sqrtCandidate u
-      let d := a.c1 * BaseField.inverse (BaseField.ofNat 2 * c)
-      if BaseField.beq (c * c) u then .ok ⟨c, d⟩ else .ok ⟨d, c⟩
-
-end Sqrt
-
 /-- True iff `bytes[start..]` are all zero. -/
 -- The exposed decoders need this body for downstream reduction.
 --
@@ -236,8 +195,8 @@ def uncompress (bytes : Vector UInt8 96) : Except BlsError G2 :=
       let x : Fp2 := ⟨c0, c1⟩
       let rhs := x * x * x + bTwist
       match Fp2.sqrt rhs with
-      | .error _ => .error .invalidG2Point
-      | .ok yPos =>
+      | none => .error .invalidG2Point
+      | some yPos =>
         let yNeg := -yPos
         let y := if Fp2.signBit yPos = ySign then yPos else yNeg
         .ok ⟨x, y, Fp2.one⟩

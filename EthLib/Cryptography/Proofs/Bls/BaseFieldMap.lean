@@ -72,6 +72,28 @@ theorem map_mulByOnePlusI (f : Hom F G) (a : Fp2 F) :
 theorem map_conjugate (f : Hom F G) (a : Fp2 F) : map f a.conjugate = (map f a).conjugate := by
   simp only [map, conjugate, f.map_neg]
 
+/-- The square root commutes with a map of base fields. -/
+theorem map_sqrt (f : Hom F G) (a : Fp2 F) :
+    Cryptography.Fp2.sqrt (map f a) = (Cryptography.Fp2.sqrt a).map (map f) := by
+  obtain ⟨a0, a1⟩ := a
+  unfold Cryptography.Fp2.sqrt
+  simp only [map, f.map_isZero, ← f.map_mul, ← f.map_add, ← f.map_ofNat,
+    ← f.map_inverse, f.map_sqrt]
+  cases BaseField.isZero a1
+  · simp only [Bool.false_eq_true, ↓reduceIte]
+    cases BaseField.sqrt (a0 * a0 + a1 * a1) with
+    | none => rfl
+    | some s =>
+      simp only [Option.map, ← f.map_add, ← f.map_mul, ← f.map_inverse, f.map_sqrtCandidate,
+        f.map_beq]
+      split <;> simp only [map, f.map_mul, f.map_inverse, f.map_ofNat]
+  · simp only [↓reduceIte, f.map_sqrtCandidate, ← f.map_mul, f.map_beq]
+    split <;> simp only [Option.map, map, f.map_zero]
+
+/-- The sign `sgn0` is kept by a map of base fields. -/
+theorem map_sgn0 (f : Hom F G) (x : Fp2 F) : (map f x).sgn0 = x.sgn0 := by
+  simp only [Cryptography.Fp2.sgn0, map, f.map_sgn0, f.map_isZero]
+
 theorem map_inverse (f : Hom F G) (a : Fp2 F) : map f a.inverse = (map f a).inverse := by
   simp only [map, inverse, f.map_mul, f.map_neg, f.map_inverse, f.map_add]
 

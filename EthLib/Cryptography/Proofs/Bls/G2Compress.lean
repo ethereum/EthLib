@@ -49,36 +49,11 @@ instance : DecidableEq EthLib.Cryptography.Bls.G2 := fun a b =>
 
 namespace EthLib.Cryptography.Bls
 
-namespace Fp2
-
-/-- Boolean equality on `Fp2` is symmetric. -/
-theorem beq_symm (a b : Fp2) : a.beq b = b.beq a := by
-  rw [Bool.eq_iff_iff, Fp2.beq_iff_eq, Fp2.beq_iff_eq, eq_comm]
-
-end Fp2
-
 namespace G2
 
 open scoped EthLib.Cryptography.Bls.Fp
 
 /-! ## Projective equality -/
-
-/-- Projective equality on `G2` is reflexive. -/
-@[simp] theorem projectiveEq_refl (p : G2) : projectiveEq p p = true := by
-  unfold projectiveEq
-  by_cases hz : p.z.isZero = true <;> simp [hz, Fp2.beq_iff_eq]
-
-/-- Projective equality on `G2` is symmetric. -/
-theorem projectiveEq_symm (p q : G2) : projectiveEq p q = projectiveEq q p := by
-  unfold projectiveEq
-  by_cases hp : p.z.isZero = true <;> by_cases hq : q.z.isZero = true
-  · simp [hp, hq]
-  · simp [hp, hq]
-  · simp [hp, hq]
-  · rw [ite_eq_right hp, ite_eq_right hq, ite_eq_right hq, ite_eq_right hp]
-    -- Both finite: swap the two cross-multiplication tests.
-    rw [Fp2.beq_symm (p.x * (q.z * q.z)) (q.x * (p.z * p.z)),
-        Fp2.beq_symm (p.y * ((q.z * q.z) * q.z)) (q.y * ((p.z * p.z) * p.z))]
 
 /-- When `p` is at infinity, `projectiveEq p q` holds if and only if `q` is also at infinity. -/
 theorem projectiveEq_inf_iff {p q : G2} (hp : p.isInfinity = true) :
@@ -293,7 +268,7 @@ private theorem uncompress_ok_cases {b : Vector UInt8 96} {q : G2} (h : uncompre
         ((b[0] &&& 0x40) = 0 ∧ ∃ (c1 c0 : Fp) (yPos : Fp2),
           Fp.fromBytesBE ((packBytes (b.set 0 (b[0] &&& 0x1f))).extract 0 48) = .ok c1 ∧
           Fp.fromBytesBE ((packBytes (b.set 0 (b[0] &&& 0x1f))).extract 48 96) = .ok c0 ∧
-          Fp2.sqrt ((⟨c0, c1⟩ : Fp2) * ⟨c0, c1⟩ * ⟨c0, c1⟩ + bTwist) = .ok yPos ∧
+          Fp2.sqrt ((⟨c0, c1⟩ : Fp2) * ⟨c0, c1⟩ * ⟨c0, c1⟩ + bTwist) = some yPos ∧
           q = ⟨⟨c0, c1⟩,
             if (Fp2.signBit yPos = true) = ((b[0] &&& 0x20) ≠ 0) then yPos else -yPos,
             Fp2.one⟩)) := by
@@ -360,7 +335,7 @@ theorem uncompress_valid {bytes : Vector UInt8 96} {p : G2}
   -- Either sign squares to yPos^2, and the square root guarantees yPos^2 = x^3 + bTwist.
   · refine Or.inr ⟨rfl, isOnTwist_of_z_one ?_⟩
     rw [sq_select_fp2]
-    exact Fp2.sqrt_ok hsqrt
+    exact Fp2.sqrt_mul_self hsqrt
 
 /-- Every point returned by `G2.uncompress` satisfies `G2.isOnTwist`. -/
 theorem isOnTwist_of_uncompress {bytes : Vector UInt8 96} {p : G2}
@@ -560,7 +535,7 @@ private theorem uncompress_of_facts {xa ya yPos : Fp2} {cb : Vector UInt8 96}
     (hi : ((packBytes cb).get! 0 &&& 0x40) = 0)
     (hsg : ((packBytes cb).get! 0 &&& 0x20 ≠ 0) ↔ (Fp2.signBit ya = true))
     (hmaskeq : (packBytes cb).set! 0 ((packBytes cb).get! 0 &&& 0x1f) = fp2ToBytes xa)
-    (hsqrt : Fp2.sqrt (xa * xa * xa + bTwist) = .ok yPos)
+    (hsqrt : Fp2.sqrt (xa * xa * xa + bTwist) = some yPos)
     (hysq : yPos * yPos = ya * ya) :
     G2.uncompress cb = .ok ⟨xa, ya, Fp2.one⟩ := by
   rw [uncompress]
@@ -580,7 +555,7 @@ private theorem uncompress_of_facts {xa ya yPos : Fp2} {cb : Vector UInt8 96}
   -- Select the branches by the equations of the two matchers, so nothing is evaluated.
   simp (config := { zeta := false, iota := false, beta := false }) only [uncompress.match_3.eq_1]
   extract_lets x rhs
-  rw [show Fp2.sqrt rhs = .ok yPos from hsqrt]
+  rw [show Fp2.sqrt rhs = some yPos from hsqrt]
   simp (config := { zeta := false, iota := false, beta := false }) only [uncompress.match_1.eq_2]
   extract_lets yNeg y
   rw [show y = ya from by
@@ -597,7 +572,7 @@ theorem uncompress_compress_noninf {p : G2} (h : G2.isOnTwist p = true)
   have hsqw : ya * ya = xa * xa * xa + bTwist := by
     have := affine_sqrt_witness h hinf; rw [hpa] at this; exact this
   obtain ⟨yPos, hsqrt⟩ := Fp2.sqrt_complete hsqw
-  have hysq : yPos * yPos = ya * ya := by rw [Fp2.sqrt_ok hsqrt, ← hsqw]
+  have hysq : yPos * yPos = ya * ya := by rw [Fp2.sqrt_mul_self hsqrt, ← hsqw]
   have hsz96 : (fp2ToBytes xa).size = 96 := size_fp2ToBytes xa
   have hcp := compress_noninf hinf hpa
   have hother : ∀ i, i ≠ 0 → (packBytes (G2.compress p)).get! i = (fp2ToBytes xa).get! i := by
@@ -763,7 +738,7 @@ theorem compress_uncompress {b : Vector UInt8 96} {q : G2}
   -- Because x^3 + bTwist != 0, the square root yPos cannot be zero.
   have hypos : yPos ≠ 0 := by
     intro hy0
-    have hsq := Fp2.sqrt_ok hsqrt
+    have hsq := Fp2.sqrt_mul_self hsqrt
     rw [hy0, Fp2.mul_zero] at hsq
     exact cube_add_bTwist_ne_zero x hsq.symm
   have hsign : Fp2.signBit y = decide ((B.get! 0 &&& 0x20) ≠ 0) :=

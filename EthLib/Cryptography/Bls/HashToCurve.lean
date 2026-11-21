@@ -1,6 +1,7 @@
 module
 
-public import EthLib.Cryptography.Bls.Compress
+public import EthLib.Cryptography.Bls.G2
+public import EthLib.Cryptography.Bls.Errors
 public import EthLib.Cryptography.Hash.Sha256
 public import EthLib.Base.BigEndian
 
@@ -199,37 +200,6 @@ def hashToFieldFp2
     -- Step 9 returns `(u_0, ..., u_(count - 1))`, the vector that this builds.
     ⟨c0, c1⟩
 
-/-! ## `sgn0` for Fp / Fp2 (RFC 9380 §4.1)
-
-The sign of a field element, [RFC 9380 §4.1][sgn0].
-
-The maps to the curve use it to choose between the two square roots `y` and `-y`.
-
-[sgn0]: https://www.rfc-editor.org/rfc/rfc9380#section-4.1
--/
-
-/-- `sgn0(x) = x mod 2` for an element of `Fp`, [RFC 9380 §4.1][sgn0].
-
-[sgn0]: https://www.rfc-editor.org/rfc/rfc9380#section-4.1
--/
-def sgn0Fp (x : F) : Bool := BaseField.sgn0 x
-
-/-- `sgn0(x)` for `x = x_0 + x_1 * I` in `Fp2`, the case `m = 2` of [RFC 9380 §4.1][sgn0].
-
-The sign is the parity of `x_0`, or the parity of `x_1` when `x_0 = 0`.
-
-[sgn0]: https://www.rfc-editor.org/rfc/rfc9380#section-4.1
--/
-def sgn0Fp2 (x : Fp2 F) : Bool :=
-  -- Step 1: `sign_0 = x_0 mod 2`.
-  let s0 := sgn0Fp x.c0
-  -- Step 2: `zero_0 = x_0 == 0`.
-  let z0 := BaseField.isZero x.c0
-  -- Step 3: `sign_1 = x_1 mod 2`.
-  let s1 := sgn0Fp x.c1
-  -- Steps 4 and 5: `return sign_0 OR (zero_0 AND sign_1)`.
-  s0 || (z0 && s1)
-
 /-! ## SSWU map onto the 3-isogenous curve `E'` (RFC 9380 §6.6.3)
 
 The twist `E : y^2 = x^3 + 4 * (1 + I)` has `A = 0`, so the simplified SWU map does not apply to it.
@@ -287,19 +257,21 @@ def simpleSwu (u : Fp2 F) : Except BlsError (Fp2 F × Fp2 F) := do
       -- Step 2: `x1 = (-B' / A') * (1 + tv1)`.
       (-Bprime / Aprime) * (Fp2.one + denom.inverse)
   -- Step 4: `gx1 = x1^3 + A' * x1 + B'`.
-  let gx1 := x1 * x1 * x1 + Aprime * x1 + Bprime
+  let gx1 : Fp2 F := x1 * x1 * x1 + Aprime * x1 + Bprime
   match Fp2.sqrt gx1 with
-  | .ok y =>
+  | some y =>
     -- Step 7: `gx1` is a square, so `x = x1` and `y = sqrt(gx1)`.
     -- Step 9: if `sgn0(u) != sgn0(y)`, set `y = -y`.
-    return (x1, if sgn0Fp2 u = sgn0Fp2 y then y else -y)
-  | .error _ =>
+    return (x1, if Fp2.sgn0 u = Fp2.sgn0 y then y else -y)
+  | none =>
     -- Step 5: `x2 = Z * u^2 * x1`, needed only when `gx1` is not a square.
     let x2 := zu2 * x1
     -- Steps 6 and 8: `x = x2` and `y = sqrt(gx2)`, with `gx2 = x2^3 + A' * x2 + B'`.
-    let y ← Fp2.sqrt (x2 * x2 * x2 + Aprime * x2 + Bprime)
-    -- Step 9: if `sgn0(u) != sgn0(y)`, set `y = -y`.
-    return (x2, if sgn0Fp2 u = sgn0Fp2 y then y else -y)
+    match Fp2.sqrt (x2 * x2 * x2 + Aprime * x2 + Bprime : Fp2 F) with
+    | none => .error .notASquare
+    | some y =>
+      -- Step 9: if `sgn0(u) != sgn0(y)`, set `y = -y`.
+      return (x2, if Fp2.sgn0 u = Fp2.sgn0 y then y else -y)
 
 /-! ## 3-isogeny map `E' → E` (RFC 9380 Appendix E.3)
 
@@ -420,7 +392,7 @@ It gives the same result as the multiplication by `h_eff` of [§7][clear].
 -/
 
 -- The endomorphism `psi` is a map of the twist, so it is defined with the curve.
-export EthLib.Cryptography.Bls.G2 (frobeniusFp2 c1Psi c2Psi psi)
+export EthLib.Cryptography.Bls.G2 (c1Psi c2Psi psi)
 
 /-- The constant `c1 = 1 / 2^((p - 1) / 3)` of `psi2`, [RFC 9380 Appendix G.3][g3].
 
