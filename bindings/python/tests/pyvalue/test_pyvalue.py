@@ -259,3 +259,27 @@ def test_any_value_comes_back_or_fails_with_a_typed_error(value: object) -> None
     except (TypeError, ValueError):
         return
     assert same(out, value)
+
+
+@pytest.mark.parametrize("prefix", ["k", "longer key"])
+def test_equal_dictionary_keys_at_different_positions(prefix: str) -> None:
+    key = prefix + "\x00é"
+    equal_key = key.encode("utf-8").decode("utf-8")
+    other_key = prefix + "\x00ø"
+    assert equal_key == key and equal_key is not key
+    value = [
+        {key: 1},
+        {equal_key: 2},
+        {other_key: 3},
+        {key: [{other_key: 4}], other_key: {key: 5}},
+    ]
+    assert same(_native.pyvalue_echo(value), value)
+
+
+def test_conversion_after_failure_inside_a_dictionary() -> None:
+    value = [{"same": 1}, {"same": {"nested": [2, -1]}}, {1: object()}]
+    with raises(ValueError, "cannot pass a negative int to Lean"):
+        _native.pyvalue_echo(value)
+
+    valid = [{"same": 1}, {"same": {"nested": [2, 3]}}]
+    assert same(_native.pyvalue_echo(valid), valid)
