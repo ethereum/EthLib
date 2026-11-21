@@ -3,10 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Bls.G2Subgroup
 public import EthLib.Cryptography.Proofs.Bls.CofactorSpan
 public import EthLib.Cryptography.Proofs.Bls.CofactorIndependence
-public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ2713
-public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ11953
-public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ262069
-public import EthLib.Cryptography.Proofs.Bls.CofactorPointLarge
+public import EthLib.Cryptography.Proofs.Bls.CofactorPoints
 
 /-!
 # Proofs: the cofactor clearing and the hash to `G2` land in the subgroup of order `r`

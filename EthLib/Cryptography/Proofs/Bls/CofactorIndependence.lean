@@ -1,9 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ13
-public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ23
-public import EthLib.Cryptography.Proofs.Bls.CofactorPointIndependent13
-public import EthLib.Cryptography.Proofs.Bls.CofactorPointIndependent23
+public import EthLib.Cryptography.Proofs.Bls.CofactorPoints
 
 /-!
 # Proofs: Independence of the `13`-torsion and `23`-torsion witness pairs on `G2`
