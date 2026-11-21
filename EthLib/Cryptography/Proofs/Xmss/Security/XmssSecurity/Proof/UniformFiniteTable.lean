@@ -4,6 +4,7 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.DeferredSampling
 public import VCVio.OracleComp.Constructions.SampleableType
 public import VCVio.OracleComp.Constructions.SampleableType.Measure
 public import EthLib.Cryptography.Proofs.EvalDistEq
+public import EthLib.Cryptography.Proofs.HashSig.ProgrammedTable
 
 @[expose] public section
 
@@ -11,28 +12,7 @@ open OracleComp OracleSpec
 
 namespace XmssSecurity
 
-def finHeadTailEquiv (α : Type) (count : Nat) :
-    (α × (Fin count → α)) ≃ (Fin (count + 1) → α) where
-  toFun pair := Fin.cases pair.1 pair.2
-  invFun values := (values 0, fun index => values index.succ)
-  left_inv pair := by
-    apply Prod.ext
-    · simp
-    · funext index
-      simp
-  right_inv values := by
-    funext index
-    cases index using Fin.cases <;> simp
-
-theorem evalDist_independent_uniform_pair
-    {α β : Type} [Fintype α] [Fintype β]
-    [SampleableType α] [SampleableType β] :
-    (do
-      let left ← $ᵗ α
-      let right ← $ᵗ β
-      pure (left, right)) =ᵈ
-    ($ᵗ (α × β)) := by
-  rw [SampleableType.uniformSample_prod_eq_bind]
+export EthLib.Cryptography.HashSig (finHeadTailEquiv evalDist_independent_uniform_pair)
 
 noncomputable def uniformSnocList
     (α : Type) [SampleableType α] : Nat → ProbComp (List α)

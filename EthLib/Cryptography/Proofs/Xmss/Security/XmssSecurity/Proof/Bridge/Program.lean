@@ -19,6 +19,8 @@ open OracleComp OracleSpec
 namespace XmssSecurity.Bridge
 
 open Seeded DeterministicSigning
+open EthLib.Cryptography.HashSig
+  (cacheTable cacheTable_apply cacheTable_apply_of_not_mem queryTable evalDist_queryTable_fresh)
 
 set_option backward.isDefEq.respectTransparency false
 

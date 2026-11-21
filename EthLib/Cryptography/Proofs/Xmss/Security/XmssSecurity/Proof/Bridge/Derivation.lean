@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Basic
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.TableSigner
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.FiniteTable
+public import EthLib.Cryptography.Proofs.HashSig.ProgrammedTable
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.SeedGuessing
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.CacheCoupling
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashInputLemmas
