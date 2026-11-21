@@ -176,6 +176,15 @@ def unblind_signed_blinded_block(
     return _native.consensus_unblind_signed_blinded_block(name, fork, blinded, revealed)
 
 
+def submit_blinded_block_status(
+    name: str, fork: str, state: bytes, blinded: bytes, payload: bytes, version: str
+) -> int:
+    """The status of a Builder API request that submits a signed blinded block: 200, 202 or 400."""
+    return _native.consensus_submit_blinded_block_status(
+        name, fork, state, blinded, payload, version
+    )
+
+
 def verify_builder_request_auth_signature(
     name: str,
     fork: str,
@@ -2396,6 +2405,7 @@ __all__ = [
     "is_eligible_for_bid_gloas",
     "validate_bid",
     "unblind_signed_blinded_block",
+    "submit_blinded_block_status",
     "verify_builder_request_auth_signature",
     "builder_request_auth_failures",
     "builder_preferences_failures",

@@ -6671,6 +6671,14 @@ A proposer accepts a bid, builds the blinded body from the header of the bid, an
 That payload then names the fee recipient that the proposer checked, which the check takes to be the one it registered last.
 The theorem shows that the payload names the fee recipient, not that the fee recipient receives the value of the bid, which is a fact of the execution layer.
 
+A builder answers a signed blinded block with a success, 200 at the first endpoint and 202 at the second, exactly when the block is valid for it, and with 400 otherwise (`submitBlindedBlockStatus_eq_success_iff`, `submitBlindedBlockStatus_eq_400_iff`, `Consensus/Proofs/BuilderApi/Submit.lean`).
+A block is valid when it unblinds with the builder's payload and the full block passes the state transition from the builder's state, under signature checks that the export sets to BLS, as the [Bellatrix builder document](https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/bellatrix/builder.md#blinded-block-processing) asks.
+A block that names the proposer of its slot, and whose signature fails on the state of that slot, gets 400 (`submitBlindedBlockStatus_of_signature`), so the separate signature check of the source adds nothing to the transition.
+That theorem assumes a logs bloom of positive size, as every preset of the source has.
+The source does not say what a builder answers for a block whose header is not that of its payload; EthLib reads it as invalid, with 400.
+The source gives 500 for an internal error but never says when; EthLib gives no 500, and every error of the state transition gives 400.
+The issue proposed 500 where EthLib's own computation cannot run, but unblinding never fails on the header of a payload, and a fault inside the transition is not told apart from an invalid block.
+
 From Bellatrix to Fulu, a proposer that uses external builders also builds a block locally, and chooses between the two by four rules of the source (`Consensus/BuilderApi/Proposal.lean`).
 A signed blinded block keeps the builder's payload.
 Otherwise the circuit breaker, a missing bid or a bid later than `BUILDER_PROPOSAL_DELAY_TOLERANCE` gives the local payload.
@@ -7593,12 +7601,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 557 operations and 51 size constants.
-The Python extension calls 557 of the operations and 51 of the constants.
+Lean exports 558 operations and 51 size constants.
+The Python extension calls 558 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12487 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (71), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (368), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (39), `kzg.c` (511), `libp2p.c` (187), `module.c` (1642), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (207), `trie.c` (115), `vrf.c` (141), `wrappers.h` (861), `x25519.c` (21), `xmss.c` (344).
+12503 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (71), `consensus.c` (2723), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (368), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (39), `kzg.c` (511), `libp2p.c` (187), `module.c` (1644), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (207), `trie.c` (115), `vrf.c` (141), `wrappers.h` (862), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

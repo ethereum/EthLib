@@ -103,6 +103,11 @@ eth_consensus_unblind_signed_blinded_block(
 );
 
 extern lean_object*
+eth_consensus_submit_blinded_block_status(
+  lean_object* args
+);
+
+extern lean_object*
 eth_consensus_verify_builder_request_auth_signature(
   lean_object* args
 );
@@ -1251,6 +1256,14 @@ py_consensus_unblind_signed_blinded_block(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_unblind_signed_blinded_block, args, 4, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_submit_blinded_block_status(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_submit_blinded_block_status, args, 6, SSZ_ERROR);
 }
 
 PyObject*
