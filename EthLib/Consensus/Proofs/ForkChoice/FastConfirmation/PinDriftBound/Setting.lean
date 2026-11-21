@@ -708,7 +708,7 @@ private theorem epochReplayAction_slashing_credit {fork : Fork} (k : EpochStage)
   case slashings =>
     simp only [epochReplayAction, recordBalance, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at ok
-    obtain ⟨⟨credit, debit⟩, limited, after, computed, rfl⟩ := ok
+    obtain ⟨⟨credit, debit⟩, limited, after, -, rfl⟩ := ok
     simp only [Prod.mk.injEq] at limited
     obtain ⟨_, _, zero, _⟩ := limited
     intro e member source
@@ -1559,7 +1559,7 @@ theorem block_step_gross_keys {g : ForkedBeaconState preset}
     by_contra none
     refine absurd (List.sum_eq_zero fun x member => ?_) (Nat.pos_iff_ne_zero.mp pos)
     obtain ⟨e, inFilter, rfl⟩ := List.mem_map.mp member
-    obtain ⟨inEvents, source⟩ := List.mem_filter.mp inFilter
+    obtain ⟨inEvents, -⟩ := List.mem_filter.mp inFilter
     refine Nat.eq_zero_of_not_pos fun positive => none ?_
     rcases keys e inEvents i positive with inK | ⟨-, altair, seat⟩
     · exact .inl inK
@@ -2318,14 +2318,14 @@ theorem seat_union_card (h : Setting config checks g split fin pulled anc counte
         preset.SYNC_COMMITTEE_SIZE.toNat := fun _ _ => Vector.length_toList
   -- R's first two committees are the current and next ones at the split
   have firstR : LsR 0 = Lcur := by
-    obtain ⟨z, r1, r2, alt, cut, per, hL⟩ := familyR 0 (Nat.zero_le _)
+    obtain ⟨z, r1, r2, alt, -, per, hL⟩ := familyR 0 (Nat.zero_le _)
     have earlyZ : z.fork < .glamsterdam :=
       Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
     rw [hL, ← hLcur]
     exact r1.currentSyncCommittee_eq_of_same_period earlyZ (by rw [hP]; simpa using per) alt
       altairF
   have secondR : 1 ≤ nR → LsR 1 = Lnext := fun one => by
-    obtain ⟨z, r1, r2, alt, cut, per, hL⟩ := familyR 1 one
+    obtain ⟨z, r1, r2, alt, -, per, hL⟩ := familyR 1 one
     have earlyZ : z.fork < .glamsterdam :=
       Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
     rw [hL, ← hLnext]
@@ -2368,7 +2368,7 @@ theorem seat_union_card (h : Setting config checks g split fin pulled anc counte
   have eachC : ∀ L ∈ (List.range (nC + 1)).map LsC, L.length ≤ preset.SYNC_COMMITTEE_SIZE.toNat :=
     fun L member => by
       obtain ⟨j, hj, rfl⟩ := List.mem_map.mp member
-      obtain ⟨z, r1, r2, alt, cut, per, hL⟩ := familyC j (by
+      obtain ⟨z, r1, r2, alt, -, -, hL⟩ := familyC j (by
         have := List.mem_range.mp hj
         omega)
       rw [hL]
@@ -2376,7 +2376,7 @@ theorem seat_union_card (h : Setting config checks g split fin pulled anc counte
   have eachR : ∀ L ∈ (List.range' 2 (nR - 1)).map LsR,
       L.length ≤ preset.SYNC_COMMITTEE_SIZE.toNat := fun L member => by
     obtain ⟨j, hj, rfl⟩ := List.mem_map.mp member
-    obtain ⟨z, r1, r2, alt, cut, per, hL⟩ := familyR j (by
+    obtain ⟨z, r1, r2, alt, -, -, hL⟩ := familyR j (by
       have := List.mem_range'_1.mp hj
       omega)
     rw [hL]

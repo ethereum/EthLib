@@ -1162,7 +1162,7 @@ private theorem voter_not_withdrawn (h : Setting config checks g split fin pulle
     · have cleanP : wP.slashed = false := by simpa using slashedP
       have late := late wP foundP cleanP
       rcases Run.withdrawable_eq_exit_delay (shared.append (fromFin.append tail)) h.genesis
-        v.toNat wP foundP cleanP with ⟨exitFar, withdrawFar⟩ | eq
+        v.toNat wP foundP cleanP with ⟨-, withdrawFar⟩ | eq
       · have := congrArg UInt64.toNat withdrawFar
         omega
       · omega
@@ -1882,7 +1882,7 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
     rcases Internal.key_stay_to h toC fromC tailC v.toNat inside Bc onC with ⟨flat, same⟩ | ⟨-,
       near, top⟩
     · by_cases reached : (getCurrentEpoch pulled).toNat ≤ (getCurrentEpoch ending).toNat
-      · rcases Internal.key_stay_to h toC fromC tail v.toNat inside _ onR with ⟨flatR, sameR⟩ | ⟨lt,
+      · rcases Internal.key_stay_to h toC fromC tail v.toNat inside _ onR with ⟨-, sameR⟩ | ⟨lt,
         -⟩
         · exact .inl (same.trans sameR.symm)
         · omega

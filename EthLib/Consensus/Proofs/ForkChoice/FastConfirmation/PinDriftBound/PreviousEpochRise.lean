@@ -129,8 +129,8 @@ private theorem slot_events_nil {u w : ForkedBeaconState preset}
   have noCrossings : crossings = [] :=
     DirectSafety.Apriori.Internal.upgradeBalanceReplay_electra_nil
       (u := ⟨u.fork, advanced⟩) electra crossingOk
-  rcases branch with ⟨_, eventsEq⟩ | ⟨middle, updated, recorded, recordOk, updatedOk,
-      validatorsEq, _, eventsEq, next, nextNat, nextSlot, nextMod, -⟩
+  rcases branch with ⟨_, eventsEq⟩ | ⟨middle, updated, recorded, -, -,
+      -, _, -, next, nextNat, nextSlot, nextMod, -⟩
   · rw [eventsEq, noCrossings]
   · exfalso
     have mod0 := congrArg UInt64.toNat nextMod
@@ -726,7 +726,7 @@ private theorem charge_credits_to (h : Setting config checks g split fin pulled 
   obtain rfl := Except.ok.inj replayedY
   rw [eqTail]
   -- the key has no deposit credit from the epoch's start to C
-  obtain ⟨_, w, foundA, foundB, unset, set⟩ := Internal.charge_exits step charged
+  obtain ⟨_, w, foundA, foundB, -, set⟩ := Internal.charge_exits step charged
   have inside : v.toNat < a.state.validators.data.size := (Array.getElem?_eq_some_iff.mp foundA).1
   have exited := Internal.exitEpoch_toNat_lt_of_ne_far set
   have depR : (Internal.creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
@@ -824,7 +824,7 @@ private theorem charge_effective_bound_of
       (Internal.propC tailY highC v.toNat + Internal.whistC tailY highC v.toNat + Internal.syncCr
         eventsY v.toNat) +
       (Internal.riseScan v.toNat highC tailY).2 := by
-  obtain ⟨_, -, foundA0, -, unset, -⟩ := Internal.charge_exits step hcharge
+  obtain ⟨_, -, foundA0, -, -, -⟩ := Internal.charge_exits step hcharge
   have hin : v.toNat < a.state.validators.data.size := (Array.getElem?_eq_some_iff.mp foundA0).1
   subst site
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
@@ -835,7 +835,7 @@ private theorem charge_effective_bound_of
   have aEpoch : (getCurrentEpoch a.state).toNat ≤ highC + 1 :=
     Nat.le_trans (UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps
       ((Run.nil.snoc step).append post).chainSteps)) endEpochY
-  obtain ⟨c, before, r, cut, hc, same, effEq, hyst, hystLt, scanR⟩ := start
+  obtain ⟨c, before, r, cut, hc, same, effEq, -, hystLt, scanR⟩ := start
   subst cut
   have cFork : c.fork = fork := Internal.fork_eq_of_run before
     (r.append ((Run.nil.snoc step).append post)) yBack
@@ -976,7 +976,7 @@ private theorem previousOnlyKeys_charged_held
       (getCurrentEpoch counted).toNat < w.withdrawableEpoch.toNat := by
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨_, w0, foundA, foundB0, unset, set⟩ := Internal.charge_exits step charged
+  obtain ⟨_, w0, -, foundB0, -, set⟩ := Internal.charge_exits step charged
   have bFork : b.fork = fork := Internal.fork_eq_of_run (pre.snoc step) post (Nat.le_refl _)
   intro w foundB
   obtain rfl : w = w0 := Option.some.inj (foundB.symm.trans foundB0)
@@ -1736,7 +1736,7 @@ theorem previousOnlyCost_le (h : Setting config checks g split fin pulled anc co
       countedBalance counted v ≤
         Internal.exitQ tailC v.toNat + Internal.riseQ tailC highC v.toNat + T v := by
     intro v member ch
-    obtain ⟨a, c, front, step, post, site, hcharge, unset, hin, hexit⟩ :=
+    obtain ⟨a, c, front, step, post, site, hcharge, -, -, hexit⟩ :=
       previousOnlyKeys_charge_site h tailC member ch
     subst site
     by_cases started : (getCurrentEpoch split).toNat < (getCurrentEpoch a.state).toNat
@@ -2862,7 +2862,7 @@ theorem joinedCost_le (h : Setting config checks g split fin pulled anc counted 
     unfold joiningStake
     refine voters_sum_le (fun i => balanceAt pulled i) fun v hv => ?_
     obtain ⟨hi, hj⟩ := Finset.mem_filter.mp hv
-    obtain ⟨hK, hin⟩ := Finset.mem_filter.mp hi
+    obtain ⟨-, hin⟩ := Finset.mem_filter.mp hi
     exact Internal.mem_positions_filter config pulled anc fin (Array.getElem?_eq_getElem hin) hj
   have joinRise : ∑ v ∈ inside with (isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
         isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true),

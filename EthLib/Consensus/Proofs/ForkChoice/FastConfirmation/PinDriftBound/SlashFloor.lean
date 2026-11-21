@@ -156,7 +156,7 @@ theorem epochFloor {g m n : ForkedBeaconState preset} (shared : Run config check
   have mn : (getCurrentEpoch m.state).toNat ≤ (getCurrentEpoch n.state).toNat :=
     UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r.chainSteps)
   have endEpoch : (getCurrentEpoch n.state).toNat ≤ (getCurrentEpoch m.state).toNat + 1 := by
-    rcases shape with same | ⟨z, pre, ok, req, hz, h1⟩
+    rcases shape with same | ⟨z, pre, ok, -, -, h1⟩
     · rw [same]; omega
     · omega
   -- Every step of the run starts in the epoch of `m`, at a fork from Fulu.
@@ -171,7 +171,7 @@ theorem epochFloor {g m n : ForkedBeaconState preset} (shared : Run config check
     have member : r.Contains step := by
       rw [← split, Run.contains_append]
       exact .inl (.last _ _)
-    rcases shape with same | ⟨z, pre, ok, req, hz, h1⟩
+    rcases shape with same | ⟨z, pre, ok, req, hz, -⟩
     · exact step_start_epoch_eq r same step member
     · exact snoc_step_start_epoch_eq pre (Step.slot ok) hz step (req ▸ member)
   obtain ⟨z, pre, post, hsplit, hz, hpen⟩ : ∃ (z : ForkedBeaconState preset)

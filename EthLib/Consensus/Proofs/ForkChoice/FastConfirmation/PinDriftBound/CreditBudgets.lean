@@ -2124,7 +2124,7 @@ theorem created_start (h : Setting config checks g split fin pulled anc counted 
         u.activationEpoch.toNat := fun u found => by
     simp only [splitAbsent] at found
     cases found
-  obtain ⟨z, pre, post, v0, vy, splitEq, found0, foundY, sameAct, actEq, actLe⟩ :=
+  obtain ⟨z, pre, post, v0, vy, splitEq, found0, foundY, sameAct, actEq, -⟩ :=
     Internal.Run.start_state tailC h.window v.toNat pending ⟨w, foundC, neFar, lowC⟩ ordered
   obtain rfl := Option.some.inj (foundY.symm.trans foundC)
   have actNeFar : v0.activationEpoch ≠ FAR_FUTURE_EPOCH := fun same =>
@@ -2942,7 +2942,7 @@ theorem late_of_withdrawable (h : Setting config checks g split fin pulled anc c
   obtain ⟨shared⟩ := h.toFin
   have far := getCurrentEpoch_succ_lt_farFuture h.twoSlots pulled
   rcases Run.withdrawable_eq_exit_delay (shared.append (fromFin.append tail)) h.genesis i w found
-    clean with ⟨exitFar, withdrawFar⟩ | eq
+    clean with ⟨exitFar, -⟩ | eq
   · have := congrArg UInt64.toNat exitFar
     have farEq : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
     omega
@@ -3643,7 +3643,7 @@ private theorem chargedNewlySlashed_not_exited
     omega
   obtain ⟨at_split, foundSplit, life⟩ := fromFin.registryLifecycle.validators v.toNat u foundFin
   have keptSplit := life.exitEpoch assigned
-  obtain ⟨a, b, front, step, post, site, vv, w2, found, foundB, unset, set, amount, epoch⟩ :=
+  obtain ⟨a, b, front, step, post, -, vv, w2, found, foundB, unset, set, amount, epoch⟩ :=
     tailC.departure_charge_site c cMember
   rw [cIndex] at found foundB
   obtain ⟨at_a, foundA, lifeA⟩ := front.registryLifecycle.validators v.toNat at_split foundSplit

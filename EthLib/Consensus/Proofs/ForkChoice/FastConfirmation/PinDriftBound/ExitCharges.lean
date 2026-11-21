@@ -399,7 +399,7 @@ theorem slashed_floor (h : Setting config checks g split fin pulled anc counted 
   have start : effectiveAt ⟨fork, zs⟩ i.toNat ≤ top := by
     obtain ⟨rest, atHead⟩ := Run.balancePath_head tail
     exact envelope _ (by rw [atHead]; exact List.mem_cons_self)
-  obtain ⟨last, trace, balance, debt, -, w, final, -, -, -, ceiling, startNone⟩ :=
+  obtain ⟨last, trace, balance, debt, -, w, -, -, -, -, ceiling, startNone⟩ :=
     DirectSafety.Apriori.Internal.FloorTrace.run_of_le_cap_general (toFin.append toZ) tail
       h.genesis h.caps (Internal.Setting.delay h) h.early high endEpoch i val initial (Or.inr
         h.fulu)
@@ -623,7 +623,7 @@ private theorem segment_potential_slash (h : Setting config checks g split fin p
   obtain ⟨toFin⟩ := h.toFin
   have early : (⟨fork, pS⟩ : ForkedBeaconState preset).fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps rest.chainSteps) h.early
-  obtain ⟨endEpoch, quotient, positive, same, guards⟩ :=
+  obtain ⟨endEpoch, quotient, -, same, guards⟩ :=
     segment_guards h near i pre seg rest retained
   have two : 2 ≤ quotient := by
     rw [same, Internal.parameters_of_fusaka h.fulu h.early]
@@ -1412,7 +1412,7 @@ theorem rise_arith {inc band capFor high finEB start eR eC Bc capHigh S U : Nat}
     (slack : S = 0 ∨ inc ≤ U + 1 ∨ (S < inc ∧ inc ≤ S + U)) :
     eC ≤ eR + (min capFor (min (high + band - (high + band) % inc)
       (max finEB (high - high % inc))) - eR) + S + U := by
-  rcases stay with same | ⟨atStart, viaCap, viaTop⟩ | ⟨boundary, update⟩
+  rcases stay with same | ⟨atStart, -, viaTop⟩ | ⟨boundary, update⟩
   · omega
   · have b := Internal.round_add_le (x := high) incPos slack
     omega
@@ -2161,7 +2161,7 @@ theorem joinedKeys_class {g : ForkedBeaconState preset}
   obtain ⟨rc⟩ := h.toCounted
   have chain := (rf.append rs).append rp
   -- Epochs, as natural numbers.
-  obtain ⟨finSplit, called, later, near, below, farNat, succNat, finCur⟩ := Internal.setting_epochs
+  obtain ⟨finSplit, -, later, near, below, farNat, succNat, -⟩ := Internal.setting_epochs
     h
   -- The records of the key at R and at C, and the activity they give.
   obtain ⟨u, foundU, activeU⟩ := Internal.active_of_activeVoters h.early memberAC

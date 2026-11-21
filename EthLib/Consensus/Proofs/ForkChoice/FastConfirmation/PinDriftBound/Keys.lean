@@ -881,7 +881,7 @@ theorem epochRewards_le {m n : ForkedBeaconState preset}
         exact Nat.add_sub_cancel_left _ _
       rw [epochs, Nat.one_mul]
       -- The pass reads the registry and the epoch of the start.
-      obtain ⟨-, effectiveEq, -, validatorsEq, slotEq⟩ :=
+      obtain ⟨-, -, -, validatorsEq, slotEq⟩ :=
         pass_kept_of_effective (config := config) (checks := checks)
           (inner := (Run.nil : Run config checks m m)) (effectiveKept_refl m.state) rfl
           cachedOk justified scored
@@ -1731,7 +1731,7 @@ private theorem epochReplay_quiet {f : Fork} {s : BeaconState preset f}
   case pendingConsolidations =>
     split at step
     · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at step
-      obtain ⟨consolidated, consolidatedOk, rfl⟩ := step
+      obtain ⟨consolidated, -, rfl⟩ := step
       intro e member sourceEq
       rcases List.mem_append.mp member with old | new
       · exact held e old sourceEq
@@ -1923,7 +1923,7 @@ private theorem pass_credits_le_targets {f : Fork} (next : Epoch) (T : Finset �
         simp [creditedAt, actualBalanceAt]
       · simp only [slashed, early, Bool.false_eq_true, ↓reduceIte, bind_ok_iff,
           mapError_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
-        obtain ⟨balance, balanceOk, lowered, loweredOk, raised, raisedOk,
+        obtain ⟨balance, -, lowered, loweredOk, raised, raisedOk,
           ⟨state', read'⟩, passed, rfl, rfl⟩ := computed
         obtain ⟨validators, sizes, credits⟩ := pass_credits_le_targets next T rest passed
         have sameValidators := (increaseBalance_validators raisedOk).trans
@@ -2143,7 +2143,7 @@ private theorem pass_step_targets {x : ForkedBeaconState preset} {high : ℕ} {f
     rw [fundingSources_eq facts.electraP, fundingSources_eq facts.electraP]
     exact queueEq
   refine ⟨result.2, shape.pass queue life, life, fun T => ?_⟩
-  obtain ⟨validators, sizes, credits⟩ :=
+  obtain ⟨-, -, credits⟩ :=
     pass_credits_le_targets (getCurrentEpoch p + 1) T _ passed
   have creditsEq : creditedAt T p t = creditedAt T p result.1 := by
     simp [creditedAt, actualBalanceAt, balancesEq]
@@ -2310,10 +2310,10 @@ private theorem slot_step_targets {g x m last : ForkedBeaconState preset}
     rw [cachedEq]; exact shape
   by_cases boundary : next % preset.SLOTS_PER_EPOCH = 0
   · simp only [epochIfLast, boundary, ↓reduceIte] at epochOk
-    obtain ⟨middle, updated, recorded, recordOk, updatedOk, validators, balances, cutOk⟩ :=
+    obtain ⟨middle, updated, recorded, recordOk, updatedOk, -, balances, cutOk⟩ :=
       epochBalanceReplay_result_before cached epoched beforeFork epochOk
     obtain ⟨justified, scored, rewarded, registered, slashed, reset, deposited, rewardEvents,
-      limit, trace6, justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk,
+      limit, trace6, -, -, -, -, -, -,
       depositedOk, consolidatedOk, rewardReplay, recordedEq⟩ := funding_epoch_site cutOk recordOk
     have trace7 : EpochTrace (EpochStage.action config checks)
         [.justification, .inactivity, .rewards, .registry, .slashings, .eth1Reset,
@@ -3567,7 +3567,7 @@ private theorem Ctx.cross {g x m n z : ForkedBeaconState preset} {high : ℕ}
   have shared' := c.shared.append hm
   have xm := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps hm.chainSteps)
   obtain ⟨positiveQ, capLe, capEB, hB⟩ := c.step_facts hm mEarly found
-  obtain ⟨z', pre', post', hr, hz', ineq⟩ := PinDrift.Internal.epochFloor shared' c.genesis c.caps
+  obtain ⟨z', pre', post', -, hz', ineq⟩ := PinDrift.Internal.epochFloor shared' c.genesis c.caps
     c.delay
     c.vector positiveQ (pre.snoc (Step.slot ok)) fuluM early
     (Or.inr ⟨z, pre, ok, rfl, same, step⟩) i val found activated exit slashedCond
@@ -3714,7 +3714,7 @@ private theorem Ctx.inside {g x m n : ForkedBeaconState preset} {high : ℕ}
   have fuluM : .fusaka ≤ m.fork := Nat.le_trans c.fulu hxm
   have shared' := c.shared.append hm
   obtain ⟨positiveQ, capLe, capEB, hB⟩ := c.step_facts hm mEarly found
-  obtain ⟨z', pre', post', hr, hz', ineq⟩ := PinDrift.Internal.epochFloor shared' c.genesis c.caps
+  obtain ⟨z', pre', post', -, -, ineq⟩ := PinDrift.Internal.epochFloor shared' c.genesis c.caps
     c.delay
     c.vector positiveQ seg fuluM early (Or.inl same) i val found activated exit slashedCond
     (withdrawalMaxEffectiveBalance preset m.fork val).toNat le_rfl replayed
@@ -4310,7 +4310,7 @@ private theorem Ctx.floors {g x z y zz n : ForkedBeaconState preset} {high : ℕ
   simp only [Run.balancePath, List.mem_append] at member
   rcases member with member | member
   · rcases Run.mem_balancePath_split pre0 member with ⟨rp, rest, eq⟩ |
-      ⟨q, n', rq, ok', rest, adv, eq, advOk, hp, upgrades⟩
+      ⟨q, n', rq, ok', rest, adv, eq, -, hp, upgrades⟩
     · exact runState p rp rest eq
     · have step := runState n' (rq.snoc (Step.slot ok')) rest eq
       have qFork : x.fork ≤ q.fork :=

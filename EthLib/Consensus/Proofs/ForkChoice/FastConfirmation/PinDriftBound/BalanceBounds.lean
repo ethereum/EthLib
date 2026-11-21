@@ -1239,7 +1239,7 @@ theorem effective_ceiling_flip (h : Setting config checks g split fin pulled anc
       ∀ z ∈ r.balancePath,
         PinTerms.capAt z i = preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat :=
     fun r within atStart z member => by
-      obtain ⟨zs, rfl, ⟨r1⟩, ⟨r2⟩⟩ := Internal.balancePath_state r member
+      obtain ⟨zs, rfl, ⟨r1⟩, ⟨-⟩⟩ := Internal.balancePath_state r member
       have lo := Internal.cap_le_cap_of_run h.caps r1 h.early i
       rcases kind zs (Nat.lt_of_lt_of_le within (registryGrows_of_chainSteps r1.chainSteps)) with
         low | high
@@ -1530,7 +1530,7 @@ theorem c_ceiling (h : Setting config checks g split fin pulled anc counted V)
   have capCeil := Internal.capCeil_path tailC h.caps h.early (Nat.le_refl _) i
   have effS := Internal.effective_le_cap_at (shared.append fromFin) h.genesis h.caps h.early i
   have minMax := UInt64.le_iff_toNat_le.mp h.caps.compounding
-  obtain ⟨kindS, aMin, aMax⟩ := Internal.capAt_kind h i inside
+  obtain ⟨kindS, aMin, -⟩ := Internal.capAt_kind h i inside
   obtain ⟨kindC, -, -⟩ := Internal.capAt_kind h i sizeC
   obtain ⟨wC, foundC⟩ : ∃ w, e.validators.data[i]? = some w :=
     ⟨_, Array.getElem?_eq_getElem sizeC⟩
@@ -1893,11 +1893,11 @@ theorem prefix_envelope (h : Setting config checks g split fin pulled anc counte
     (Run.invariant h.genesis.invariant (shared.append toC)) v.toNat inside B
     (PinTerms.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
     (fun z' member' => by
-      obtain ⟨zs', s1, s2, rfl, cut⟩ := atPath z' member'
+      obtain ⟨zs', s1, s2, rfl, -⟩ := atPath z' member'
       exact Internal.effective_le_cap_at (shared.append (toC.append s1)) h.genesis h.caps h.early
         v.toNat)
     (fun z' member' => by
-      obtain ⟨zs', s1, s2, rfl, cut⟩ := atPath z' member'
+      obtain ⟨zs', s1, s2, rfl, -⟩ := atPath z' member'
       exact Internal.cap_le_cap_of_run h.caps s2 h.early v.toNat)
     (fun z' member' => by
       obtain ⟨zs', s1, s2, rfl, cut⟩ := atPath z' member'
@@ -2458,8 +2458,8 @@ private theorem exit_stop (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, 
   obtain ⟨stop, chosen⟩ := Internal.stop_of_charge fromFin tailC member0 index0
   have selected := stop.selected
   rw [chosen] at selected
-  obtain ⟨-, -, amount, next, assignedStep, rest, split', charged', vv, w, atStop, atNext,
-    unset, assigned, epoch⟩ := selected
+  obtain ⟨-, -, amount, next, assignedStep, rest, -, -, vv, w, atStop, -,
+    unset, -, -⟩ := selected
   refine ⟨stop.state, stop.pre, stop.post, stop.split, fun w' found => ?_, by rw [amount0, amount]⟩
   have same := Option.some.inj (found.symm.trans atStop)
   subst same
@@ -2523,7 +2523,7 @@ private theorem exitQ_potential (h : Setting config checks g split fin pulled an
       (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
         ∀ u, m.state.validators.data[v.toNat]? = some u →
           (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat := by
-    intro m n b step a cut' w found
+    intro m n b step a _ w found
     obtain ⟨last, located, kept⟩ := a.registryLifecycle.validators v.toNat w found
     by_cases e : w.exitEpoch = FAR_FUTURE_EPOCH
     · rw [e]
@@ -3365,7 +3365,7 @@ theorem retained_of_exit (h : Setting config checks g split fin pulled anc count
         ∀ u, m.state.validators.data[i.toNat]? = some u →
           high + 1 < u.withdrawableEpoch.toNat) := by
   obtain ⟨toFin⟩ := h.toFin
-  intro m n before step after cut w found
+  intro m n before step after _ w _
   refine .inr fun u foundU => ?_
   have holds := Run.invariant (Genesis.invariant h.genesis) (toFin.append before)
   obtain ⟨last, located, kept⟩ := ((Run.nil.snoc step).append after).registryLifecycle.validators
@@ -3691,7 +3691,7 @@ private theorem V_left (h : Setting config checks g split fin pulled anc counted
       have shallow := h.shallow
       have finOrder := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
       simp only at finOrder
-      obtain ⟨sd, pre, post, cut, far, amount⟩ := exit_stop fromFin tailC v.toNat ⟨c, mem, idx⟩
+      obtain ⟨sd, pre, post, cut, -, amount⟩ := exit_stop fromFin tailC v.toNat ⟨c, mem, idx⟩
         (fun c' mem' idx' => by have := exitOf c' mem' idx'; omega)
       have sync := V_sync_le eventsF eventsC v.toNat
       have clean : ∀ w, counted.validators.data[v.toNat]? = some w → w.slashed = false := by

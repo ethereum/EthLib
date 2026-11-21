@@ -440,7 +440,7 @@ private theorem activeNewlySlashed_class
   obtain ⟨w, found⟩ : ∃ w, pulled.validators.data[v.toNat]? = some w :=
     ⟨_, Array.getElem?_eq_getElem (Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp foundS).1
       (registryGrows_of_chainSteps rp.chainSteps))⟩
-  obtain ⟨finSplit, called, later, near, below, farNat, succNat, finCur⟩ := Internal.setting_epochs
+  obtain ⟨finSplit, called, later, near, -, -, succNat, -⟩ := Internal.setting_epochs
     h
   have rActive : ∀ e : Epoch, isActiveAt pulled e v.toNat = true ↔
       (w.activationEpoch.toNat ≤ e.toNat ∧ e.toNat < w.exitEpoch.toNat) := by
@@ -660,7 +660,7 @@ theorem created_first_state (h : Setting config checks g split fin pulled anc co
     intro p member
     obtain ⟨r1, r2, cutP⟩ := Internal.balancePath_endpoint (pre0.snoc step)
       (Run.nil : Run config checks ⟨fork, ns⟩ ⟨fork, ns⟩) (Nat.le_refl _) member
-    rcases Run.prefix_snoc r1 r2 pre0 step cutP with ⟨same, joined⟩ | ⟨r', cutR⟩
+    rcases Run.prefix_snoc r1 r2 pre0 step cutP with ⟨same, -⟩ | ⟨r', -⟩
     · exact Or.inl same
     · refine Or.inr ?_
       have grows := registryGrows_of_chainSteps r'.chainSteps
