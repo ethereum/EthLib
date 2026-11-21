@@ -12,12 +12,6 @@ The fork times and blob schedules of a chain, as the configuration file of a cli
 
 [EIP-7892][eip-7892] gives the time of each fork in a key made of its name and `Time`.
 
-The reader merges these keys into a configuration that holds the rest of the chain.
-
-It reads the keys of the forks from Shanghai to Glamsterdam, whose names a source gives.
-
-The writer writes them back, and reading what it wrote gives the configuration back.
-
 [eip-7840]: https://eips.ethereum.org/EIPS/eip-7840#specification
 [eip-7892]: https://eips.ethereum.org/EIPS/eip-7892#execution-layer-configuration
 -/
@@ -92,9 +86,11 @@ A JSON number reads as a natural number when it has no fraction part.
 
 So `1e3` reads as 1000, and `1000.0` is refused. -/
 def readTime (j : Json) (fork : Fork) (name : String) : Except ConfigError (Option Nat) :=
+  -- The key of a fork's time is its name followed by `Time`, such as `cancunTime`.
   match j.getObjVal? (name ++ "Time") with
   | .error _ => pure none
   | .ok v => match v.getNat? with
+    -- A block's time is below `2^64`, so a larger time is refused.
     | .ok t => if t < 2 ^ 64 then pure (some t) else throw (.timeNotNumber fork)
     | .error _ => throw (.timeNotNumber fork)
 
@@ -103,6 +99,7 @@ def readSchedule (fork : Fork) (v : Json) : Except ConfigError BlobSchedule :=
   match v.getObjValAs? Nat "target", v.getObjValAs? Nat "max",
       v.getObjValAs? Nat "baseFeeUpdateFraction" with
   | .ok target, .ok max, .ok fraction =>
+    -- The target is at most the maximum, and the maximum and the fraction are positive.
     if h : target ≤ max ∧ 0 < max ∧ 0 < fraction then
       pure ⟨target, max, fraction, h.1, h.2.1, h.2.2⟩
     else throw (.scheduleOutOfBounds fork)
@@ -130,12 +127,15 @@ Blob schedules start at Dencun, as in the object of EIP-7840, so an earlier entr
 An entry needs a time for its fork, so that it has an activation. -/
 def readFork (base : ChainConfig) (j schedules : Json) (fork : Fork) (name : String) :
     Except ConfigError (Option Nat × Option BlobSchedule) := do
+  -- The time of the file, else the time of the base.
   let time := (← readTime j fork name) <|> timeOf base fork
+  -- The entry of the fork, from Dencun on.
   let schedule ← if .dencun ≤ fork then
       match schedules.getObjVal? name with
       | .error _ => pure none
       | .ok v => some <$> readSchedule fork v
     else pure none
+  -- An entry without a time would have no activation.
   if time.isNone ∧ schedule.isSome then throw (.scheduleWithoutTime fork)
   return (time, schedule)
 
@@ -164,14 +164,19 @@ The forks of the result must activate in the order of the timeline.
 [eip-7892]: https://eips.ethereum.org/EIPS/eip-7892#blob-schedule-configuration -/
 def readExecutionConfig (base : ChainConfig) (j : Json) : Except ConfigError ChainConfig := do
   unless j matches .obj _ do throw .notObject
+  -- An absent schedule object reads as null, which holds no entry.
   let schedules := j.getObjValD "blobSchedule"
   unless (schedules matches .obj _) || (schedules matches .null) do throw .schedulesNotObject
+  -- The time and the entry of each named fork, in the order of the timeline.
   let read ← forkNames.mapM fun (fork, name) => do
     return (fork, ← readFork base j schedules fork name)
   let config : ChainConfig := { base with
+    -- The forks by block number of the base, then the named forks by time.
+    -- Last come the forks by time of the base that have no name in a file.
     activations := base.activations.filter (fun (_, a) => a matches .block _) ++
       read.filterMap (fun (fork, time, _) => time.map fun t => (fork, .time t)) ++
       base.activations.filter fun (f, a) => a matches .time _ ∧ f ∉ forkNames.map Prod.fst
+    -- Each entry of the file, activated at the time of its fork.
     blobSchedules := read.filterMap fun (fork, time, schedule) =>
       match time, schedule with
       | some t, some s => some (some fork, .time t, s)
@@ -194,13 +199,19 @@ It leaves out a schedule without a fork, or of a fork with no name, and a later 
 
 It also leaves out the time of a fork with no name in a file.
 
+Reading what it writes gives back a writable configuration.
+
+The base of that read keeps only the forks by block number.
+
 A schedule takes the activation of its fork, which the file gives by time only.
 
 The reader ignores an entry before Dencun, so a schedule of Shanghai does not read back. -/
 def writeExecutionConfig (config : ChainConfig) : Json :=
   Json.mkObj <|
+    -- One entry for each named fork that keeps a schedule.
     ("blobSchedule", Json.mkObj (forkNames.filterMap fun (fork, name) =>
       (scheduleOf config fork).map fun s => (name, scheduleJson s))) ::
+    -- One time key for each named fork that activates by time.
     forkNames.filterMap fun (fork, name) =>
       (timeOf config fork).map fun t => (name ++ "Time", toJson t)
 

@@ -6,31 +6,29 @@ public import EthLib.Base.Bytes
 /-!
 # `Base.U256`
 
-The 256-bit unsigned integer, the word of the EVM.
+The 256-bit unsigned integer, the word of the EVM, by section 9.1 of the [Yellow Paper][paper].
 
-Section 9.1 of the Yellow Paper, Shanghai version, fixes the word size at 256 bits:
-[`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex).
+The Yellow Paper is the Shanghai version.
 
-The type is `BitVec 256`, so `+`, `-` and `*` wrap modulo 2^256.
-
-The signed instructions of Appendix H read a word in two's complement:
-
-```text
-    signed(w) = w if w < 2^255, else w - 2^256
-```
+[paper]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
 
 @[expose] public section
 
 namespace EthLib.Base
 
-/-- An unsigned integer below 2^256. -/
+/-- An unsigned integer below 2^256.
+
+It is a bit vector, so `+`, `-` and `*` wrap modulo 2^256. -/
 abbrev U256 := BitVec 256
 
 namespace U256
 
-/-- The integer that a word encodes in two's complement, in `[-2^255, 2^255)`. -/
+/-- The integer that a word encodes in two's complement, in `[-2^255, 2^255)`.
+
+The signed instructions of Appendix H of the Yellow Paper read a word this way. -/
 def toSigned (w : U256) : Int :=
+  -- A word with its top bit set stands for that word minus 2^256.
   if w.toNat < 2 ^ 255 then w.toNat else w.toNat - 2 ^ 256
 
 /-- The word that encodes an integer in two's complement.

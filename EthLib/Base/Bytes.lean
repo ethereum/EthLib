@@ -3,15 +3,7 @@ module
 /-!
 # `Base.Bytes`
 
-Byte strings of a fixed length, with the length in the type.
-
-Source: section 3 of the Yellow Paper, Shanghai version, in [`Paper.tex` at `efc5f9a`][paper].
-
-It writes `B_n` for the byte strings of length `n`.
-
-A read of one byte of an untyped string gives zero past its end.
-
-The exact-length read of a byte string is the exact-length read of its array of bytes.
+Byte strings of a fixed length, `B_n` in section 3 of the [Yellow Paper][paper], Shanghai version.
 
 [paper]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/

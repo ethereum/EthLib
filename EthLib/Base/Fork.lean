@@ -3,7 +3,16 @@ module
 /-!
 # `Base.Fork`
 
-The network upgrades of both layers of Ethereum, in the order in which they activate on mainnet.
+The network upgrades of both layers of Ethereum, and the fields that a fork adds or removes.
+-/
+
+@[expose] public section
+
+namespace EthLib.Base
+
+/-- A network upgrade of the execution layer, the consensus layer or both.
+
+The cases run in the order in which the forks activate on mainnet.
 
 Before the Merge the two layers forked apart, so their forks interleave by date.
 
@@ -11,18 +20,7 @@ Before the Merge the two layers forked apart, so their forks interleave by date.
 
 From Shapella on, one upgrade changes both layers, and it is one fork.
 
-When a fork activates is chain configuration, so the type holds only the order.
-
-A field that a fork adds to a type holds a value only from that fork on.
-
-A field that a fork removes holds a value only before that fork.
--/
-
-@[expose] public section
-
-namespace EthLib.Base
-
-/-- A network upgrade of the execution layer, the consensus layer or both. -/
+When a fork activates is chain configuration, so the type holds only the order. -/
 inductive Fork where
   /-- Frontier: the execution layer at its launch. -/
   | frontier
@@ -222,6 +220,7 @@ def name : Fork → String
 
 /-- The fork with a name, if one has it. -/
 def ofName? (s : String) : Option Fork :=
+  -- Every fork from Frontier to Hegotá, in order, then the first whose name matches.
   ((List.range (hegota.ctorIdx + 1)).map Fork.ofNat).find? (·.name == s)
 
 end Fork
@@ -264,9 +263,11 @@ Two such values are equal when they agree under the condition.
 Without the condition each holds nothing, so any two are equal. -/
 def decEqUnder {p : Prop} [Decidable p] {α : Type} [DecidableEq α] : DecidableEq (p → α) :=
   fun a b =>
+    -- Under the condition, compare the two values.
     if present : p then
       if same : a present = b present then .isTrue (funext fun _ => same)
       else .isFalse fun eq => same (eq ▸ rfl)
+    -- Without it, there is nothing to compare.
     else .isTrue (funext fun holds => absurd holds present)
 
 instance {f fork : Fork} {α : Type} [DecidableEq α] : DecidableEq (Since f fork α) := decEqUnder

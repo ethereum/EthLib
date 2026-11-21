@@ -6,8 +6,6 @@ public import Init.Data.Array.BinSearch
 /-!
 # Unicode 16.0.0 NFKD normalization
 
-NFKD fully decomposes compatibility mappings, then orders non-starters by combining class.
-
 The algorithm follows [Unicode 16.0.0, §§3.11 and 3.12][unicode].
 
 [UAX #15, rev. 56, §1.3][uax15] describes the same process.
@@ -33,12 +31,17 @@ def combiningClass (c : Char) : Nat :=
 /-- Full compatibility decomposition, including algorithmic Hangul decomposition (§3.12.2). -/
 def decompose (c : Char) : List Char :=
   let code := c.toNat
+  -- The 11172 precomposed Hangul syllables start at `SBase = 0xAC00`.
   let parts := if 0xAC00 ≤ code ∧ code < 0xAC00 + 11172 then
       let index := code - 0xAC00
+      -- Each leading consonant covers `NCount = 21 * 28 = 588` syllables, from `LBase = 0x1100`.
       let leading := 0x1100 + index / 588
+      -- Each vowel covers `TCount = 28` syllables, from `VBase = 0x1161`.
       let vowel := 0x1161 + index % 588 / 28
+      -- Trailing index 0 means no trailing consonant, and the others start after `TBase = 0x11A7`.
       let trailing := index % 28
       if trailing = 0 then [leading, vowel] else [leading, vowel, 0x11A7 + trailing]
+    -- Any other code point decomposes by the table, or stays as it is.
     else (lookup Data.decompositions code).getD [code]
   parts.map Char.ofNat
 
@@ -46,18 +49,25 @@ def decompose (c : Char) : List Char :=
 def insertMark (c : Char) (rank : Nat) : List (Char × Nat) → List (Char × Nat)
   | [] => [(c, rank)]
   | (d, other) :: rest =>
+    -- Stop before the first mark of a higher class, so equal classes keep their order.
     if rank < other then (c, rank) :: (d, other) :: rest
     else (d, other) :: insertMark c rank rest
 
 /-- Order each run of non-starters without moving a character across a starter (§3.11.5). -/
 def canonicalOrder (chars : List Char) : List Char :=
+  -- The output so far, and the sorted run of non-starters since the last starter.
   let (out, marks) := chars.foldl (fun (out, marks) c =>
     let rank := combiningClass c
+    -- A starter flushes the run, then joins the output.
     if rank = 0 then (out ++ marks.map Prod.fst |>.push c, [])
+    -- A non-starter joins the run at its place by class.
     else (out, insertMark c rank marks)) ((#[] : Array Char), [])
+  -- Flush the run after the last starter.
   (out ++ marks.map Prod.fst).toList
 
-/-- Normalization Form KD (NFKD), Unicode 16.0.0 §3.11.7, definition D119. -/
+/-- Normalization Form KD (NFKD), Unicode 16.0.0 §3.11.7, definition D119.
+
+It fully decomposes compatibility mappings, then orders non-starters by combining class. -/
 def nfkd (text : String) : String :=
   String.ofList (canonicalOrder (text.toList.flatMap decompose))
 

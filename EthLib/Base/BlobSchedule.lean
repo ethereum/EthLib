@@ -4,15 +4,6 @@ module
 # `Base.BlobSchedule`
 
 The blob parameters of a block: the target, the maximum and the update fraction.
-
-[EIP-7892][eip-7892] makes them chain configuration.
-
-So a chain can change them at an activation of its own.
-
-[EIP-7840][eip-7840] names them in the configuration file of a client.
-
-[eip-7840]: https://eips.ethereum.org/EIPS/eip-7840#specification
-[eip-7892]: https://eips.ethereum.org/EIPS/eip-7892#blob-schedule-configuration
 -/
 
 @[expose] public section
@@ -23,9 +14,18 @@ namespace EthLib.Base
 
 Source: [EIP-7892](https://eips.ethereum.org/EIPS/eip-7892#blob-base-fee-computations).
 
+[EIP-7892][eip-7892] makes them chain configuration.
+
+So a chain can change them at an activation of its own.
+
+[EIP-7840][eip-7840] names them in the configuration file of a client.
+
 The bounds exclude the schedules that would divide by 0 or subtract below 0.
 
-For a schedule written in numbers, `decide` proves them. -/
+For a schedule written in numbers, `decide` proves them.
+
+[eip-7840]: https://eips.ethereum.org/EIPS/eip-7840#specification
+[eip-7892]: https://eips.ethereum.org/EIPS/eip-7892#blob-schedule-configuration -/
 structure BlobSchedule where
   /-- The blobs per block that the fee aims for. -/
   target : Nat

@@ -4,22 +4,24 @@ module
 # `Base.Length`
 
 A bound on the length of a list, checked in as many steps as the bound.
-
-A decoder checks each length it reads against the rest of its input.
-
-Reading the whole rest each time would make a long input cost time quadratic in its length.
-
-A decoder that opens these instances locally pays only the bound at each check.
 -/
 
 @[expose] public section
 
 namespace EthLib.Base.Length
 
-/-- Whether a list has at least `n` elements, read in at most `n` steps. -/
+/-- Whether a list has at least `n` elements, read in at most `n` steps.
+
+A decoder checks each length it reads against the rest of its input.
+
+Reading the whole rest each time would make a long input cost time quadratic in its length.
+
+A decoder that opens the instances below locally pays only the bound at each check. -/
 def hasAtLeast {α : Type} : Nat → List α → Bool
+  -- Any list has at least zero elements, so the rest is never read.
   | 0, _ => true
   | _ + 1, [] => false
+  -- One element meets one unit of the bound.
   | n + 1, _ :: rest => hasAtLeast n rest
 
 /-- The check reads the length of the list against the bound. -/
