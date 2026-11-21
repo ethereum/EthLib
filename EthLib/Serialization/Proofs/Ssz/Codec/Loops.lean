@@ -5,9 +5,11 @@ public import EthLib.Serialization.Ssz.Codec.Json
 /-!
 # Proofs: the loops of the SSZ codec
 
-The serializer and the hex reader run their lists in loops that carry what they have built so far.
+The serializer and the byte-run reader loop over their lists, carrying what they have built so far.
 
 The theorems below give back the plain recursion on the first element, which the other proofs use.
+
+The two smallest cases of the hex reader are here too.
 -/
 
 @[expose] public section
@@ -209,45 +211,11 @@ theorem serializeFields_cons (field : Desc) (fields : List Desc) (value : Value)
 
 /-! ## Hex and byte runs -/
 
-/-- The hex loop from some bytes is the loop from none, after them. -/
-theorem hexBytesFrom_eq : ∀ (digits : List Char) (out : Bytes),
-    hexBytesFrom digits out = (hexBytesFrom digits #[]).map (out ++ ·)
-  | [], out => by simp [hexBytesFrom, Except.map]
-  | [_], _ => rfl
-  | high :: low :: rest, out => by
-    simp only [hexBytesFrom]
-    cases hexDigit high with
-    | error e => rfl
-    | ok h =>
-      cases hexDigit low with
-      | error e => rfl
-      | ok l =>
-        show hexBytesFrom rest (out.push _) = (hexBytesFrom rest (#[].push _)).map _
-        rw [hexBytesFrom_eq rest (out.push _), hexBytesFrom_eq rest (#[].push _)]
-        cases hexBytesFrom rest #[] <;>
-          simp only [Except.map, Array.push_eq_append, Array.empty_append, Array.append_assoc]
-
 /-- No digits hold no bytes. -/
 theorem hexBytes_nil : hexBytes [] = .ok #[] := rfl
 
 /-- One digit alone holds no byte. -/
 theorem hexBytes_single (c : Char) : hexBytes [c] = .error .hexDigits := rfl
-
-/-- The first two digits hold the first byte, and the rest hold the bytes after it. -/
-theorem hexBytes_cons (high low : Char) (rest : List Char) :
-    hexBytes (high :: low :: rest) = do
-      let byte := 16 * (← hexDigit high) + (← hexDigit low)
-      return #[UInt8.ofNat byte] ++ (← hexBytes rest) := by
-  simp only [hexBytes, hexBytesFrom]
-  cases hexDigit high with
-  | error e => rfl
-  | ok h =>
-    cases hexDigit low with
-    | error e => rfl
-    | ok l =>
-      show hexBytesFrom rest (#[].push _) = _
-      rw [hexBytesFrom_eq]
-      cases hexBytesFrom rest #[] <;> rfl
 
 /-- The byte-run loop from some bytes is the loop from none, after them. -/
 theorem byteRunFrom_eq : ∀ (values : List Value) (out : Bytes),

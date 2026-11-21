@@ -94,26 +94,15 @@ def Desc.isOneByte : Desc → Bool
 def toHex (data : Bytes) : String :=
   Base.hexString data.toList
 
-/-- The value of one hex digit, in either letter case. -/
-def hexDigit (character : Char) : Except Err Nat :=
-  if '0' ≤ character && character ≤ '9' then .ok (character.toNat - '0'.toNat)
-  else if 'a' ≤ character && character ≤ 'f' then .ok (character.toNat - 'a'.toNat + 10)
-  else if 'A' ≤ character && character ≤ 'F' then .ok (character.toNat - 'A'.toNat + 10)
-  else .error .hexDigits
+/-- The bytes that a run of hex digits holds, two digits a byte, high digit first.
 
-/-- Two digits at a time, each pair's byte pushed after the bytes so far.
+A digit may be in either letter case.
 
-The loop runs in constant stack for any length. -/
-def hexBytesFrom : List Char → Bytes → Except Err Bytes
-  | [], out => .ok out
-  | [_], _ => .error .hexDigits
-  | high :: low :: rest, out => do
-    let byte := 16 * (← hexDigit high) + (← hexDigit low)
-    hexBytesFrom rest (out.push (UInt8.ofNat byte))
-
-/-- Two digits at a time, folded into the byte each pair holds. -/
+An odd count of digits, or a character that is not a digit, is refused. -/
 def hexBytes (digits : List Char) : Except Err Bytes :=
-  hexBytesFrom digits #[]
+  match Base.hexBytes? digits with
+  | some bytes => .ok bytes.data
+  | none => .error .hexDigits
 
 /--
 The bytes a hex string holds.
