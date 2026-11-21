@@ -6737,6 +6737,12 @@ The source asserts the eight rules and returns the signature check, so EthLib na
 `validateBid_zero_value` shows that a bid of value zero is never refused for the funds of its builder.
 `validateBid_not_selfBuild` shows that a bid naming the index of a self-built payload is never accepted, while the registry of builders is shorter than that index.
 The cap that a proposer sets on the execution payment limits how much of it counts when a bid is valued; it is not a rule of validity.
+`pendingPayment_of_validateBid` (`Consensus/Proofs/BuilderApi/GloasFlow.lean`) joins the proposer's check to the consensus layer.
+A bid that the proposer validates against its expected fee recipient, and that a block then carries, records a pending payment.
+The payment pays the value of the bid to that fee recipient, at the position of its slot, and names the proposer of that slot.
+It needs no hypothesis that relates the state of the validation to the state of the block, since the fee recipient comes from the bid.
+`builderPendingPayments_processExecutionPayloadBid_of_value_eq_zero` shows that a bid of value zero leaves the pending payments as they were.
+The theorems say that a payment is recorded, not that it is later paid out, which the processing of an epoch decides.
 
 From Gloas, a proposer authenticates a request for a bid, and a request that submits preferences, with a signed message.
 `authFailures` and `preferencesFailures` (`Consensus/BuilderApi/RequestAuth.lean`) list every check of the authentication that fails, in the order header, data, slot, signature.
