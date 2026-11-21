@@ -91,29 +91,6 @@ theorem PtcDrawable.of_eq {fork' : Fork}
   ⟨drawable.ends.of_eq validators mixes electra, validators ▸ drawable.few,
     validators ▸ drawable.committeeRoom⟩
 
-/-- A committee that is cut has a nonzero count and the size of its range of positions. -/
-theorem size_of_shuffledCommittee {indices : Array ValidatorIndex}
-    {shuffled : Array UInt64} {index count : UInt64} {committee : Array ValidatorIndex}
-    (cut : shuffledCommittee indices shuffled index count = .ok committee) :
-    count ≠ 0 ∧ committee.size = indices.size * (index.toNat + 1) / count.toNat -
-      indices.size * index.toNat / count.toNat := by
-  unfold shuffledCommittee at cut
-  by_cases zero : count = 0
-  · simp [zero, bind, Except.bind, throw, throwThe, MonadExcept.throw,
-      MonadExceptOf.throw] at cut
-  by_cases fits : index.toNat + 1 < 18446744073709551616 ∧
-      indices.size * (index.toNat + 1) < 18446744073709551616
-  · by_cases past : indices.size * index.toNat / count.toNat <
-        indices.size * (index.toNat + 1) / count.toNat ∧
-        indices.size < indices.size * (index.toNat + 1) / count.toNat
-    · simp [zero, fits, past, bind, Except.bind, throw, throwThe, MonadExcept.throw,
-        MonadExceptOf.throw] at cut
-    · simp [zero, fits, past, pure, Except.pure] at cut
-      subst cut
-      simp [zero]
-  · simp [zero, fits, bind, Except.bind, throw, throwThe, MonadExcept.throw,
-      MonadExceptOf.throw] at cut
-
 /-- A beacon committee that is cut has the size of its range of positions in the epoch. -/
 private theorem size_beaconCommitteeOf {slot : Slot} {index : CommitteeIndex} {perSlot : UInt64}
     {active : Array ValidatorIndex} {shuffled : Array UInt64} {committee : Array ValidatorIndex}

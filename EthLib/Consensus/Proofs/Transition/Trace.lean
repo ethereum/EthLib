@@ -2,7 +2,10 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.Chain
 public import EthLib.Consensus.Transition.Genesis
+import EthLib.Base.Proofs.MapM
 import EthLib.Consensus.Proofs.Transition.ActiveKept
+import EthLib.Consensus.Proofs.Transition.Genesis
+import EthLib.Consensus.Proofs.Transition.Operations
 import EthLib.Consensus.Proofs.Transition.PayloadInputs
 
 /-!
@@ -21,6 +24,8 @@ Each step of a run is a step of a chain, so the invariants of chains hold along 
 Slots and blocks before the next fork form runs.
 
 A run has at most one block for each slot it covers.
+
+A genesis state has its latest block header at slot zero, with a zero state root.
 -/
 
 @[expose] public section
@@ -37,6 +42,43 @@ It need not be valid for launch. -/
 def Genesis (config : Config) (checks : SignatureChecks) (g : ForkedBeaconState preset) : Prop :=
   ∃ hash time deposits,
     initializeBeaconStateFromEth1 config checks hash time deposits = .ok g.state
+
+private theorem header_deposit {fork : Fork} {before after : BeaconState preset fork}
+    {early : fork < .hegota} {deposit : Deposit}
+    (ok : processDeposit config checks early before deposit = .ok after) :
+    after.latestBlockHeader = before.latestBlockHeader := by
+  obtain ⟨_, _, _, _, applied⟩ := processDeposit_ok ok
+  exact (frame_applyDeposit applied).latestBlockHeader
+
+/-- A genesis state built from deposits has its latest block header at slot zero.
+
+The state root of that header is zero. -/
+theorem genesis_header {g : ForkedBeaconState preset}
+    (genesis : Genesis config checks g) :
+    g.state.latestBlockHeader.slot = 0 ∧
+      g.state.latestBlockHeader.stateRoot = Vector.replicate 32 0 := by
+  obtain ⟨hash, time, deposits, initialized⟩ := genesis
+  obtain ⟨before, time, root, deposited, activated, finalRoot, dep, act, stateEq⟩ :=
+    initializeBeaconStateFromEth1_ok initialized
+  have depositedHeader : deposited.latestBlockHeader =
+      (emptyGenesisState config before time hash deposits.size.toUInt64 root).latestBlockHeader :=
+    foldlM_ok_invariant (fun s => s.latestBlockHeader =
+      (emptyGenesisState config before time hash deposits.size.toUInt64 root).latestBlockHeader)
+      (fun _ _ _ same ok => by
+        simp only [genesisDeposit, bind_ok_iff] at ok
+        obtain ⟨_, _, ok⟩ := ok
+        exact (header_deposit ok).trans same) rfl dep
+  have activatedHeader : activated.latestBlockHeader = deposited.latestBlockHeader :=
+    foldlM_ok_invariant (fun s => s.latestBlockHeader = deposited.latestBlockHeader)
+      (fun _ _ _ same ok => by
+        simp only [activateAtGenesis, bind_ok_iff, liftAccessor_ok] at ok
+        obtain ⟨_, _, _, _, set⟩ := ok
+        exact (payloadInputs_setValidatorAt set).latestBlockHeader.trans same) rfl act
+  rw [stateEq]
+  change activated.latestBlockHeader.slot = 0 ∧
+    activated.latestBlockHeader.stateRoot = Vector.replicate 32 0
+  rw [activatedHeader, depositedHeader]
+  exact ⟨rfl, rfl⟩
 
 /-- One step of a run: a slot, or a signed block applied with its state root checked. -/
 inductive Step (config : Config) (checks : SignatureChecks) :
