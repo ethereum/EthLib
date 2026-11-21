@@ -25,11 +25,63 @@ The order check of EIP-6122 passes exactly when no fork by block follows a fork 
 A chain whose forks are in the order of the timeline passes it.
 
 Mainnet and Hoodi set none.
+
+Three numbers build a blob schedule exactly when they meet its bounds, and it holds them.
+
+The numbers of a schedule build it back.
 -/
 
 @[expose] public section
 
 namespace EthLib.Base
+
+namespace BlobSchedule
+
+/-- Three numbers build a schedule exactly when they meet its four bounds. -/
+theorem ofNat?_isSome_iff (target max fraction : Nat) :
+    (ofNat? target max fraction).isSome ↔
+      target ≤ max ∧ 0 < max ∧ GAS_PER_BLOB * max < 2 ^ 64 ∧ 0 < fraction := by
+  unfold ofNat?
+  split <;> simp_all
+
+/-- The numbers of a built schedule, each below `2^64` by the bound on the maximum's blob gas. -/
+private theorem ofNat?_numbers {target max fraction : Nat} {s : BlobSchedule}
+    (h : ofNat? target max fraction = some s) :
+    s.target.toNat = target ∧ s.max.toNat = max ∧ s.baseFeeUpdateFraction = fraction := by
+  unfold ofNat? at h
+  split at h
+  · next bounds =>
+    -- The bound on the blob gas of the maximum keeps both numbers below `2^64`.
+    have hmax : max < 2 ^ 64 :=
+      Nat.lt_of_le_of_lt (Nat.le_mul_of_pos_left max (by decide)) bounds.2.2.1
+    cases h
+    exact ⟨UInt64.toNat_ofNat_of_lt' (Nat.lt_of_le_of_lt bounds.1 hmax),
+      UInt64.toNat_ofNat_of_lt' hmax, rfl⟩
+  · cases h
+
+/-- A schedule built from three numbers has the first as its target. -/
+theorem target_toNat_of_ofNat? {target max fraction : Nat} {s : BlobSchedule}
+    (h : ofNat? target max fraction = some s) : s.target.toNat = target :=
+  (ofNat?_numbers h).1
+
+/-- A schedule built from three numbers has the second as its maximum. -/
+theorem max_toNat_of_ofNat? {target max fraction : Nat} {s : BlobSchedule}
+    (h : ofNat? target max fraction = some s) : s.max.toNat = max :=
+  (ofNat?_numbers h).2.1
+
+/-- A schedule built from three numbers has the third as its update fraction. -/
+theorem baseFeeUpdateFraction_of_ofNat? {target max fraction : Nat} {s : BlobSchedule}
+    (h : ofNat? target max fraction = some s) : s.baseFeeUpdateFraction = fraction :=
+  (ofNat?_numbers h).2.2
+
+/-- The numbers of a schedule build that schedule back. -/
+theorem ofNat?_toNat (s : BlobSchedule) :
+    ofNat? s.target.toNat s.max.toNat s.baseFeeUpdateFraction = some s := by
+  have target := UInt64.le_iff_toNat_le.mp s.target_le_max
+  have max : 0 < s.max.toNat := UInt64.lt_iff_toNat_lt.mp s.max_pos
+  simp [ofNat?, target, max, s.maxBlobGas_lt, s.baseFeeUpdateFraction_pos]
+
+end BlobSchedule
 
 namespace Activation
 

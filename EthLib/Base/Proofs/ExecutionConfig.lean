@@ -261,17 +261,17 @@ private theorem getNat?_toJson (n : Nat) : (Lean.toJson n).getNat? = .ok n := by
 /-- The entry written for a blob schedule is read back as that schedule. -/
 private theorem readSchedule_scheduleJson (fork : Fork) (s : BlobSchedule) :
     readSchedule fork (scheduleJson s) = .ok s := by
-  have d : [("target", Lean.toJson s.target), ("max", Lean.toJson s.max),
+  have d : [("target", Lean.toJson s.target.toNat), ("max", Lean.toJson s.max.toNat),
       ("baseFeeUpdateFraction", Lean.toJson s.baseFeeUpdateFraction)].Pairwise
         fun a b => a.1 ≠ b.1 := by
     simp
   unfold readSchedule scheduleJson
   simp only [Toolchain.Json.getObjValAs?_eq, fromJson?_nat]
-  rw [getObjValD_mkObj (value := Lean.toJson s.target) d (by simp),
-    getObjValD_mkObj (value := Lean.toJson s.max) d (by simp),
+  rw [getObjValD_mkObj (value := Lean.toJson s.target.toNat) d (by simp),
+    getObjValD_mkObj (value := Lean.toJson s.max.toNat) d (by simp),
     getObjValD_mkObj (value := Lean.toJson s.baseFeeUpdateFraction) d (by simp),
     getNat?_toJson, getNat?_toJson, getNat?_toJson]
-  simp only [s.target_le_max, s.max_pos, s.baseFeeUpdateFraction_pos, and_self, dite_true]
+  simp only [BlobSchedule.ofNat?_toNat]
   rfl
 
 /-- Two forks with one name are one fork. -/
