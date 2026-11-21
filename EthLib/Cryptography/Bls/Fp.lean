@@ -180,10 +180,4 @@ def fromBytesBE (b : ByteArray) : Except BlsError Fp :=
 
 end Fp
 
-/-- A square root in a base field, or the error of `Fp.sqrt` when the element is not a square. -/
-def sqrtOrError {F : Type} [BaseField F] (a : F) : Except BlsError F :=
-  match BaseField.sqrt a with
-  | some s => .ok s
-  | none => .error .notASquare
-
 end EthLib.Cryptography.Bls

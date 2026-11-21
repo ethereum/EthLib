@@ -21,12 +21,6 @@ open EthLib.Cryptography.BaseField (Hom)
 
 variable {F G : Type} [BaseField F] [BaseField G]
 
-theorem map_sqrtOrError (f : Hom F G) (a : F) :
-    sqrtOrError (f a) = (sqrtOrError a).map f := by
-  unfold sqrtOrError
-  rw [f.map_sqrt]
-  cases BaseField.sqrt a <;> rfl
-
 namespace HashToCurve
 
 theorem map_fpFromBytesL (f : Hom F G) (b : ByteArray) :
@@ -181,28 +175,27 @@ theorem map_simpleSwuG1 (f : Hom F G) (u : F) :
     simpleSwuG1 (f u) = (simpleSwuG1 u).map (Prod.map f f) := by
   unfold simpleSwuG1
   simp only [← map_Z f, ← map_Aprime f, ← map_Bprime f, ← f.map_mul, ← f.map_add,
-    f.map_isZero, ← f.map_inverse, ← f.map_neg, ← f.map_one, ← apply_ite f, map_sqrtOrError]
+    f.map_isZero, ← f.map_inverse, ← f.map_neg, ← f.map_one, ← apply_ite f, f.map_sqrt]
   generalize Z * (u * u) = zu2
   generalize (if BaseField.isZero (zu2 * zu2 + zu2) = true then
       Bprime * BaseField.inverse (Z * Aprime)
     else -Bprime * BaseField.inverse Aprime * (BaseField.one + BaseField.inverse (zu2 * zu2 + zu2)))
     = x1
-  cases sqrtOrError (x1 * x1 * x1 + Aprime * x1 + Bprime) with
-  | ok _ =>
-    simp only [Except.map, Except.isOk, Except.toBool, ↓reduceIte, bind, Except.bind]
-    cases sqrtOrError (x1 * x1 * x1 + Aprime * x1 + Bprime) with
-    | ok y =>
-      simp only [pure, Except.pure, Prod.map, apply_ite f.toFun, f.map_neg,
-        f.map_sgn0]
-    | error e => rfl
-  | error _ =>
-    simp only [Except.map, Except.isOk, Except.toBool, Bool.false_eq_true, ↓reduceIte, bind,
-      Except.bind]
-    cases sqrtOrError (zu2 * x1 * (zu2 * x1) * (zu2 * x1) + Aprime * (zu2 * x1) + Bprime) with
-    | ok y =>
-      simp only [pure, Except.pure, Prod.map, apply_ite f.toFun, f.map_neg,
-        f.map_sgn0]
-    | error e => rfl
+  cases BaseField.sqrt (x1 * x1 * x1 + Aprime * x1 + Bprime) with
+  | some _ =>
+    simp only [Option.map_some, Option.isSome_some, ↓reduceIte]
+    cases BaseField.sqrt (x1 * x1 * x1 + Aprime * x1 + Bprime) with
+    | some y =>
+      simp only [Option.map_some, pure, Except.pure, Except.map, Prod.map, apply_ite f.toFun,
+        f.map_neg, f.map_sgn0]
+    | none => rfl
+  | none =>
+    simp only [Option.map_none, Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
+    cases BaseField.sqrt (zu2 * x1 * (zu2 * x1) * (zu2 * x1) + Aprime * (zu2 * x1) + Bprime) with
+    | some y =>
+      simp only [Option.map_some, pure, Except.pure, Except.map, Prod.map, apply_ite f.toFun,
+        f.map_neg, f.map_sgn0]
+    | none => rfl
 
 theorem map_k1_0 (f : Hom F G) : f (k1_0 : F) = k1_0 := f.map_ofNat _
 theorem map_k1_1 (f : Hom F G) : f (k1_1 : F) = k1_1 := f.map_ofNat _

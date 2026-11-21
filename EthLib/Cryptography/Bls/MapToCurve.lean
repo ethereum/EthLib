@@ -59,8 +59,8 @@ def simpleSwuG1 (u : F) : Except BlsError (F × F) := do
   let gx1 := x1 * x1 * x1 + Aprime * x1 + Bprime
   let x2 := zu2 * x1
   -- `x1` when `g(x1)` is a square, and `x2` otherwise.
-  let x := if (sqrtOrError gx1).isOk then x1 else x2
-  let y ← sqrtOrError (x * x * x + Aprime * x + Bprime)
+  let x := if (BaseField.sqrt gx1).isSome then x1 else x2
+  let some y := BaseField.sqrt (x * x * x + Aprime * x + Bprime) | throw .notASquare
   -- The sign of `y` follows the sign of `u`.
   return (x, if BaseField.sgn0 u = BaseField.sgn0 y then y else -y)
 
