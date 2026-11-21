@@ -91,7 +91,7 @@ instance : DecidablePred IsVersionedMethod := fun name =>
 
 Each method has every version from 1 to that last one. -/
 def methodVersions : List (String × Nat) := [
-  ("newPayload", 5), ("forkchoiceUpdated", 5), ("getPayload", 6),
+  ("newPayload", 6), ("forkchoiceUpdated", 5), ("getPayload", 6),
   ("getPayloadBodiesByHash", 2), ("getPayloadBodiesByRange", 2), ("getBlobs", 4),
   ("exchangeTransitionConfiguration", 1), ("getClientVersion", 1)]
 

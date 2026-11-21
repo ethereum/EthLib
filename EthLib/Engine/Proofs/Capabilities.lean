@@ -224,10 +224,10 @@ theorem methodVersion_eq_some_iff {method name : String} {version : Nat} :
       simp only [p, beq_iff_eq, versionedMethod_inj, true_and] at hp
       exact ⟨j, hj, hp⟩
 
-/-- The versions of `engine_newPayload` are 1 to 5. -/
+/-- The versions of `engine_newPayload` are 1 to 6. -/
 theorem specifiedMethods_newPayload {version : Nat} :
-    versionedMethod "newPayload" version ∈ specifiedMethods ↔ 1 ≤ version ∧ version ≤ 5 := by
-  rw [mem_specifiedMethods, show methodVersions.lookup "newPayload" = some 5 by decide]
+    versionedMethod "newPayload" version ∈ specifiedMethods ↔ 1 ≤ version ∧ version ≤ 6 := by
+  rw [mem_specifiedMethods, show methodVersions.lookup "newPayload" = some 6 by decide]
   simp only [Option.some.injEq, exists_eq_left']
 
 /-- The versions of `engine_forkchoiceUpdated` are 1 to 5. -/

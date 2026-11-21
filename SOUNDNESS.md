@@ -4585,7 +4585,7 @@ Each of these is a function of plain numbers, and its `At` form reads those numb
 ### Engine API
 
 The Engine API is the interface through which the consensus layer drives the execution layer.
-`EthLib/Engine/` holds the checks of `engine_newPayload`, versions 1 to 5, and the choice of the head in `engine_forkchoiceUpdated`, versions 1 to 3.
+`EthLib/Engine/` holds the checks of `engine_newPayload`, versions 1 to 6, and the choice of the head in `engine_forkchoiceUpdated`, versions 1 to 5.
 It also holds the execution engine that the beacon chain calls.
 The theorems are in `Engine/Proofs/`.
 
@@ -4595,10 +4595,12 @@ A payload and its block determine each other.
 `toBlock_shape` gives that shape: no ommers, a difficulty and a nonce of zero, and the RANDAO mix in place of the mix digest.
 
 The checks of `engine_newPayload` answer by the version of the method and the fork of the payload.
-`exists_acceptsFork_iff` (`Proofs/NewPayload.lean`) shows that some version takes a fork exactly when the fork is from Paris to Glamsterdam.
+`exists_acceptsFork_iff` (`Proofs/NewPayload.lean`) shows that some version takes a fork exactly when the fork is from Paris on.
 `acceptsFork_eq_true_iff` gives the forks of each version.
 From version 3, a version takes the forks from the one that adds its last parameter, and none from the one that adds the next.
-Those parameters are the blob hashes and the beacon root of Dencun, the requests of Pectra, and the payload of Glamsterdam with its access list and slot.
+Those parameters are the blob hashes and the beacon root of Dencun, and the requests of Pectra.
+Then come the payload of Glamsterdam with its access list and slot, and the inclusion list of Hegotá.
+So version 6 takes Hegotá alone (`acceptsFork_six_iff`), and version 5 takes Glamsterdam alone (`acceptsFork_five_iff`), as the Bogota update of version 5 asks.
 Version 2 takes Paris and Shapella, and version 1 Paris alone.
 `acceptsGetPayloadFork_eq_true_iff` (`Proofs/GetPayload.lean`) states the same rule for the payloads that `engine_getPayload` returns.
 Its fields are the bundle of Dencun, the requests of Pectra, the cell proofs of Fusaka, and the access list and the slot of Glamsterdam.
@@ -4667,7 +4669,6 @@ The decoder of version 4 does the same from Dencun on, with the block access lis
 Version 6 of `engine_newPayload`, from Bogota, takes the four parameters of version 5 and then the transactions of an inclusion list.
 Its decoder reads back what its writer writes from Dencun on, and the list reads back entry for entry (`newPayloadV6Params_json`, `Proofs/NewPayload.lean`; `inclusionListOfJson_json`, `Proofs/Json.lean`).
 Each entry is any byte string, as [`bogota.md`](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_newpayloadv6) asks after [execution-apis PR #956](https://github.com/ethereum/execution-apis/pull/956), so an entry that does not decode as a transaction still reads.
-No route sends a request to version 6 yet.
 The decoder of the forkchoice state reads back the JSON of every state (`forkchoiceStateOfJson_json`, `Proofs/ForkchoiceUpdated.lean`).
 A version of `engine_forkchoiceUpdated` reads back payload attributes whose structure it takes, and they are the attributes at their fork (`payloadAttributesOfVersion_json`).
 The decoder of its parameters reads back the state, and the JSON of the attributes or their absence (`forkchoiceUpdatedParams_json`).
@@ -4815,6 +4816,14 @@ Besides the fork range, its one hypothesis is that the last block of the chain p
 The chain needs no hypothesis on the parent: without the parent as its last block, the method answers `SYNCING` or refuses earlier, and the state transition of the execution engine fails, so neither route accepts.
 An execution that aborts gives `SYNCING` on one route and a refusal on the other, so it is not accepted either.
 The JSON is part of the statement, so the execution engine accepts no request that has none.
+From Heze the beacon chain calls version 6, with the transactions of the inclusion lists of the slot before, which its caller gives.
+`newPayloadV6Params_newPayloadRequestJson` shows that the JSON of such a request reads back at version 6 with every value of the request.
+The payload comes back at the structure it is written with, together with its access list and its slot.
+The blob hashes, the beacon root, the request lists and the inclusion list come back too.
+No theorem relates the answer to the execution engine there, since the block of a Bogota payload does not run yet (#1369).
+The answer of version 6 has a payload status of version 2.
+Its inclusion list verdict is `null`: the state transition stops at Hegotá, so no payload of Bogota is valid here yet (`newPayloadOnChain_six_ne_valid`).
+The C export of the two routes gives a Heze request an empty inclusion list, which changes neither route.
 The Python tests take the 175 vectors of `tests/engine/new_payload.json` that expect no JSON-RPC error.
 They stop before execution, since the vectors hold no parent state.
 Of these, 155 are requests that the beacon chain can form, and the JSON that EthLib writes for each is the vector itself.

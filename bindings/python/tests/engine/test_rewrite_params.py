@@ -171,6 +171,6 @@ def test_leading_zero() -> None:
 
 def test_unknown_method() -> None:
     """A method that EthLib does not read has code 0."""
-    with raises(engine.EngineError, "no method engine_newPayloadV6") as error:
-        engine.rewrite_params("engine_newPayloadV6", [])
+    with raises(engine.EngineError, "no method engine_newPayloadV7") as error:
+        engine.rewrite_params("engine_newPayloadV7", [])
     assert error.value.code == 0

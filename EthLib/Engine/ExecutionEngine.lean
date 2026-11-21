@@ -14,6 +14,8 @@ Bellatrix calls version 1, Capella version 2, Deneb version 3, Electra and Fulu 
 
 Gloas calls version 5, which takes the payloads of Amsterdam.
 
+Heze calls version 6, which takes the payloads of Bogota and the transactions of an inclusion list.
+
 The execution layer reads the payload at its own active fork, which that version must take.
 
 The payload must decode into a block whose hash is the block hash of the payload.
@@ -33,6 +35,7 @@ The method specifications state these rules, at commit `3284ee8` of execution-ap
 - [`engine_newPayloadV3`][v3]
 - [`engine_newPayloadV4`][v4], and its update by Amsterdam in [`amsterdam.md`][v4-amsterdam]
 - [`engine_newPayloadV5`][v5]
+- [`engine_newPayloadV6`][v6], at commit `68d76a5`, where a list entry may be any byte string
 
 [v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_newpayloadv1
 [v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#engine_newpayloadv2
@@ -40,6 +43,7 @@ The method specifications state these rules, at commit `3284ee8` of execution-ap
 [v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/prague.md#engine_newpayloadv4
 [v4-amsterdam]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#update-the-methods-of-previous-forks
 [v5]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_newpayloadv5
+[v6]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_newpayloadv6
 -/
 
 @[expose] public section
@@ -53,11 +57,9 @@ open EthLib.Engine.Json (AnyPayload)
 
 variable {preset : Consensus.Preset} {fork : Fork}
 
-/-- The version of the method that the beacon chain calls at a fork, or 0 for none.
-
-No version here takes a payload of Heze or later. -/
+/-- The version of the method that the beacon chain calls at a fork, or 0 for none. -/
 def newPayloadVersion (fork : Fork) : Nat :=
-  if .hegota ≤ fork then 0
+  if .hegota ≤ fork then 6
   else if .glamsterdam ≤ fork then 5
   else if .pectra ≤ fork then 4
   else if .dencun ≤ fork then 3
@@ -109,8 +111,13 @@ It has none when the logs Bloom filter of the preset does not have 256 bytes.
 
 It also has none when the request lists cannot be made.
 
-It has none before Bellatrix and from Heze, where the beacon chain calls no version. -/
-def newPayloadRequestJson (r : Consensus.NewPayloadRequest preset fork) : Option Lean.Json := do
+From Heze the transactions of the inclusion list come last.
+
+The caller gives them, from the inclusion lists of the slot before.
+
+It has none before Bellatrix, where the beacon chain calls no version. -/
+def newPayloadRequestJson (r : Consensus.NewPayloadRequest preset fork)
+    (inclusionList : Since .hegota fork (List ByteArray)) : Option Lean.Json := do
   guard (newPayloadVersion fork ≠ 0)
   let p := r.executionPayload
   let any ← anyPayloadOf p
@@ -122,9 +129,14 @@ def newPayloadRequestJson (r : Consensus.NewPayloadRequest preset fork) : Option
     let accessList ← sinceValue p.blockAccessList
     let slot ← sinceValue p.slotNumber
     pure (ByteArray.mk accessList.data, slot)
-  return newPayloadParamsJson (newPayloadVersion fork) payload amsterdam
-    (((sinceValue r.versionedHashes).map (·.data.toList)).getD [])
-    ((sinceValue r.parentBeaconBlockRoot).getD 0) ((sinceValue requests).getD [])
+  let hashes := ((sinceValue r.versionedHashes).map (·.data.toList)).getD []
+  let root := (sinceValue r.parentBeaconBlockRoot).getD 0
+  match sinceValue inclusionList, amsterdam with
+  | some list, some fields =>
+    return newPayloadV6ParamsJson payload fields hashes root ((sinceValue requests).getD []) list
+  | _, _ =>
+    return newPayloadParamsJson (newPayloadVersion fork) payload amsterdam hashes root
+      ((sinceValue requests).getD [])
 
 /-- The block of a payload of the beacon chain, at the active fork of a chain configuration.
 
