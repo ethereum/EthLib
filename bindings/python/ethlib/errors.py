@@ -369,7 +369,7 @@ class JwtError(EthLibError, ValueError):
 
 
 class ChainError(EthLibError, ValueError):
-    """A chain configuration was malformed, with code 0."""
+    """A chain configuration was malformed, with code 0, or a configuration file was refused."""
 
 
 class BindingError(EthLibError, ValueError):

@@ -74,12 +74,20 @@ structure ChainConfig where
   depositContractAddress : Address
   /-- Each fork of the chain with its activation, in the order of the timeline. -/
   activations : List (Fork × Activation)
-  /-- The blob schedules that the chain sets itself, each with its activation, in order.
+  /-- The blob schedules that the chain sets itself, each with its fork and activation, in order.
 
   A schedule holds from its activation until the activation of the next one.
 
-  Before the first one, each fork keeps the schedule that its EIPs give. -/
-  blobSchedules : List (Activation × BlobSchedule) := []
+  Before the first one, each fork keeps the schedule that its EIPs give.
+
+  A configuration file keys each schedule by the name of its fork, as [EIP-7840][eip-7840] does.
+
+  So two forks that activate at one time keep their schedules apart.
+
+  A schedule that a chain sets at an activation of no fork of the timeline has no fork.
+
+  [eip-7840]: https://eips.ethereum.org/EIPS/eip-7840#specification -/
+  blobSchedules : List (Option Fork × Activation × BlobSchedule) := []
   deriving DecidableEq, Repr
 
 namespace ChainConfig
@@ -98,7 +106,7 @@ Each blob schedule also activates no earlier than the schedules before it.
 -/
 def Ordered (config : ChainConfig) : Prop :=
   config.activations.Pairwise (fun x y => x.1 < y.1 ∧ x.2 ≤ y.2) ∧
-    config.blobSchedules.Pairwise fun x y => x.1 ≤ y.1
+    config.blobSchedules.Pairwise fun x y => x.2.1 ≤ y.2.1
 
 instance (config : ChainConfig) : Decidable config.Ordered :=
   inferInstanceAs (Decidable (List.Pairwise _ _ ∧ List.Pairwise _ _))
@@ -133,7 +141,8 @@ Two schedules can activate at one block, and then the later one in the list hold
 
 None holds at a block that has reached no activation of a blob schedule. -/
 def blobScheduleAt (config : ChainConfig) (number timestamp : Nat) : Option BlobSchedule :=
-  (config.blobSchedules.reverse.find? fun entry => entry.1.reached number timestamp).map Prod.snd
+  (config.blobSchedules.reverse.find? fun entry => entry.2.1.reached number timestamp).map
+    (·.2.2)
 
 /-- The configuration of Ethereum mainnet, from Frontier to BPO2.
 

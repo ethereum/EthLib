@@ -1,4 +1,4 @@
-"""The activation of each fork on the execution chains of mainnet, Hoodi and a configured chain."""
+"""The forks and blob schedules of the execution chains of mainnet, Hoodi and a configured chain."""
 
 from typing import Any
 
@@ -23,4 +23,23 @@ def active_fork(config: dict[str, Any], number: int, timestamp: int) -> str | No
     return _native.active_fork(config, number, timestamp)
 
 
-__all__ = ["ChainError", "active_fork", "hoodi_active_fork", "mainnet_active_fork"]
+def execution_blob_schedule(
+    base: dict[str, Any], config: dict[str, Any], number: int, timestamp: int
+) -> tuple[int, int, int] | None:
+    """The blob schedule at a block, from a configuration and a client configuration file."""
+    return _native.execution_blob_schedule(base, config, number, timestamp)
+
+
+def write_execution_config(config: dict[str, Any]) -> dict[str, Any]:
+    """The fork times and blob schedules of a configuration, as a client configuration file."""
+    return _native.write_execution_config(config)
+
+
+__all__ = [
+    "ChainError",
+    "active_fork",
+    "execution_blob_schedule",
+    "hoodi_active_fork",
+    "mainnet_active_fork",
+    "write_execution_config",
+]

@@ -14941,6 +14941,34 @@
    "docstring":
    "The name of the active fork of a configured chain at a block, or `None` when none is active.\n\nThe arguments are the configuration as a `dict`, the block number and the timestamp."},
   {"summary":
+   "The blob schedule of a chain at a block, from a base configuration and a configuration file.",
+   "signature":
+   "(base: dict[str, Any], config: dict[str, Any], number: int, timestamp: int) -> tuple[int, int, int] | None",
+   "operation": "EthLib.Base.ChainConfig.Exports.executionBlobScheduleExport",
+   "method": "execution_blob_schedule",
+   "errors":
+   [{"type": "EthLib.Base.ExecutionConfig.ConfigError",
+     "codes":
+     [{"constructor": "notObject", "code": 1},
+      {"constructor": "schedulesNotObject", "code": 2},
+      {"constructor": "timeNotNumber", "code": 3},
+      {"constructor": "scheduleMalformed", "code": 4},
+      {"constructor": "scheduleOutOfBounds", "code": 5},
+      {"constructor": "scheduleWithoutTime", "code": 6},
+      {"constructor": "notOrdered", "code": 7}]}],
+   "error_class": "ChainError",
+   "docstring":
+   "The blob schedule of a chain at a block, from a base configuration and a configuration file.\n\nThe arguments are the base and the file as `dict`, the block number and the timestamp."},
+  {"summary":
+   "The fork times and blob schedules of a configuration, as the `dict` of a configuration file.",
+   "signature": "(config: dict[str, Any]) -> dict[str, Any]",
+   "operation": "EthLib.Base.ChainConfig.Exports.writeExecutionConfigExport",
+   "method": "write_execution_config",
+   "errors": [],
+   "error_class": "ChainError",
+   "docstring":
+   "The fork times and blob schedules of a configuration, as the `dict` of a configuration file.\n\nThe argument is the configuration as a `dict`."},
+  {"summary":
    "The payload status of an `engine_newPayload` request, without the parent's state.",
    "signature": "(config: dict, request: dict) -> dict",
    "operation": "EthLib.Engine.Exports.newPayloadExport",

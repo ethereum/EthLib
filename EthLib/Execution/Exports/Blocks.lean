@@ -139,12 +139,14 @@ def validateSizeExport (fork block : ByteArray) : Result UInt8 := do
 
 /-- The blob schedules that a chain sets itself.
 
-Each is four integers: activation time, target, maximum and update fraction. -/
+Each is four integers: activation time, target, maximum and update fraction.
+
+The header check needs no fork for a schedule, so none carries one. -/
 def blobSchedulesOf (entries : List (Nat × Nat × Nat × Nat)) :
-    Result (List (Activation × BlobSchedule)) :=
+    Result (List (Option Fork × Activation × BlobSchedule)) :=
   entries.mapM fun (time, target, max, fraction) =>
     if h : target ≤ max ∧ 0 < max ∧ 0 < fraction then
-      pure (.time time, ⟨target, max, fraction, h.1, h.2.1, h.2.2⟩)
+      pure (none, .time time, ⟨target, max, fraction, h.1, h.2.1, h.2.2⟩)
     -- No error type covers a blob schedule of the binding, so its code is 0.
     else throw (0, "a blob schedule needs target ≤ max, 0 < max and 0 < update fraction")
 

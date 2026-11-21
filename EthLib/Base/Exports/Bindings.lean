@@ -1963,6 +1963,13 @@ def bindings : List Binding := [
   ⟨"active_fork", `EthLib.Base.ChainConfig.Exports.activeForkExport,
     "(config: dict[str, Any], number: int, timestamp: int) -> str | None",
     [], some "ChainError"⟩,
+  ⟨"execution_blob_schedule", `EthLib.Base.ChainConfig.Exports.executionBlobScheduleExport,
+    "(base: dict[str, Any], config: dict[str, Any], number: int, timestamp: int) -> " ++
+      "tuple[int, int, int] | None",
+    [`EthLib.Base.ExecutionConfig.ConfigError], some "ChainError"⟩,
+  ⟨"write_execution_config", `EthLib.Base.ChainConfig.Exports.writeExecutionConfigExport,
+    "(config: dict[str, Any]) -> dict[str, Any]",
+    [], some "ChainError"⟩,
   ⟨"engine_new_payload", `EthLib.Engine.Exports.newPayloadExport,
     "(config: dict, request: dict) -> dict",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,

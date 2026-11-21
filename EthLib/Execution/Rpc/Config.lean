@@ -113,7 +113,7 @@ A schedule by block must start at block zero.
 [eip-7892]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7892.md#execution-layer-configuration
 -/
 def configBlobsAtForks (s : Schedule) : Bool :=
-  s.config.blobSchedules.all fun (activation, _) =>
+  s.config.blobSchedules.all fun (_, activation, _) =>
     match activation with
     | .block n => n == 0
     | .time t => t ≤ s.genesisTime || s.times.contains t
