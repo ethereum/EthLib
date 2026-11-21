@@ -1240,11 +1240,12 @@ It returns the encoding exactly when it has at most 65535 bytes.
 The decoder is not strict, so many byte strings decode to one payload, and no theorem says that an accepted string is an encoding.
 No theorem reads the fields of the extension message.
 
-The DER signature of an identity has its own theorems (`Networking/Proofs/Libp2p/PeerId.lean`).
-`derInteger_eq` proves that the content of the DER INTEGER of a number below `2 ^ 256` is that number in big-endian bytes, on the fewest bytes such that the first has its top bit clear.
+The DER codec of ECDSA signatures has its own theorems (`Serialization/Proofs/Der.lean`).
+`ecdsaInteger_eq` proves that the content of the DER INTEGER of a number below `2 ^ 256` is that number in big-endian bytes, on the fewest bytes such that the first has its top bit clear.
 `exists_derByteCount` shows that such a byte count, from 1 to 33, exists for every number below `2 ^ 256`.
 So a positive number gets a leading zero byte exactly when its first nonzero byte is `0x80` or more, and zero is the single byte `0x00`.
-`decodeSignature_eq_ok_iff` proves that the decoder accepts exactly the encodings of r in [1, N) and s in [1, N/2], where N is the order of the secp256k1 group, and returns r and s.
+`decodeEcdsaScalars_eq_some_iff` proves that the reader accepts exactly the encodings of r and s in [1, 2 ^ 256), and returns them.
+`decodeSignature_eq_ok_iff` (`Networking/Proofs/Libp2p/PeerId.lean`) proves that the identity decoder accepts exactly the encodings of r in [1, N) and s in [1, N/2], where N is the order of the secp256k1 group, and returns r and s.
 So each accepted pair r, s has exactly one byte encoding.
 No theorem relates the encoder to an independent model of X.690.
 `verify_sign` (`Networking/Proofs/Libp2p/PeerId.lean`) proves that a signature that a secret makes verifies under the key protobuf of that secret, since signing returns a low s that the strict decoder accepts.

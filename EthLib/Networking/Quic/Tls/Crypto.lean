@@ -31,6 +31,7 @@ namespace EthLib.Networking.Quic.Tls.Crypto
 
 open EthLib.Base
 open EthLib.Cryptography
+open EthLib.Serialization
 
 /-- An unsupported algorithm, malformed key, degenerate exchange or exhausted nonce generator. -/
 inductive Error where
@@ -124,7 +125,7 @@ def signCertificateVerify (algorithm : Wire.CodePoint) (privateKey : Vector UInt
   let secret ← readScalar privateKey .privateKey
   match Secp256r1.Ecdsa.sign secret (Hash.Sha256.hash32 content) with
   | none => throw .nonce
-  | some (r, s) => return Libp2p.encodeSignature r.val s.val
+  | some (r, s) => return Der.encodeEcdsaSignature r.val s.val
 
 /-- Verify CertificateVerify's signed content under the certificate SPKI, RFC 8446 §4.4.3. -/
 def verifyCertificateVerify (algorithm : Wire.CodePoint) (spki content signature : ByteArray) :
