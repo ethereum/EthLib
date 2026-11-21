@@ -5,7 +5,9 @@ module
 
 The gas limit that a block takes when it moves from its parent's toward a target.
 
-Both layers use it, so it sits below them.
+Consensus checks a builder's bid with it, and Engine builds a payload with it.
+
+So it sits below both.
 -/
 
 @[expose] public section

@@ -821,6 +821,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the module `EthLib.Base.Length` is removed, and its declarations move to `EthLib.Networking.Snappy` with the same definitions ([#3836](https://github.com/ethereum/EthLib/issues/3836)).
+  They are `hasAtLeast`, `hasAtLeast_iff`, `decideLeLength` and `decideLengthLt`.
+  Migration: import `EthLib.Networking.Snappy.Block` and use the new namespace.
+
 - In Lean, three unused pieces of Base are removed ([#3835](https://github.com/ethereum/EthLib/issues/3835)).
   The `LawfulBEq ByteArray` instance of `Base/Bytes.lean` goes, since Lean core gives one.
   The lemma `Base.byteArray_set_eq_set!` goes.
