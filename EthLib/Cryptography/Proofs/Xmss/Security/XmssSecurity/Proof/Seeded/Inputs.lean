@@ -1,7 +1,8 @@
 module
 
 public import EthLib.Cryptography.Proofs.EvalDistEq
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.KeyDerivation
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashInputLemmas
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
 
 @[expose] public section
 

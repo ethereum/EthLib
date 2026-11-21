@@ -22,7 +22,6 @@ open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 
 private theorem fr_mul_pow (a b : Fr) (n : Nat) : (a * b) ^ n = a ^ n * b ^ n := mul_pow a b n
-private theorem fr_pow_mul (a : Fr) (m n : Nat) : a ^ (m * n) = (a ^ m) ^ n := pow_mul a m n
 
 /-- Coefficient evaluation is the finite sum defining the discrete Fourier transform. -/
 theorem evalCoeffPolyAux_eq_sum (p : PolynomialCoeff) (x : Fr) (n : Nat) :
@@ -45,7 +44,7 @@ theorem getElem!_fftField_eval {k : Nat} {ω : Fr}
   rw [evalPolyAt, evalCoeffPoly, evalCoeffPolyAux_eq_sum, hn]
   apply Finset.sum_congr rfl
   intro i _
-  rw [← fr_pow_mul, Nat.mul_comm j i]
+  rw [← pow_mul, Nat.mul_comm j i]
 
 /-- Coefficient shifting corresponds to scaling the evaluation point. -/
 theorem evalPolyAt_shiftVals (vals : Array Fr) (factor x : Fr) :

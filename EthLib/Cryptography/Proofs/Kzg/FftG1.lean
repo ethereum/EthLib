@@ -28,9 +28,6 @@ namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr G1)
 open scoped EthLib.Cryptography.Bls.Fr
 
-private theorem fr_pow_zero (a : Fr) : a ^ 0 = 1 := pow_zero a
-private theorem fr_pow_add (a : Fr) (m n : Nat) : a ^ (m + n) = a ^ m * a ^ n := pow_add a m n
-private theorem fr_pow_mul (a : Fr) (m n : Nat) : a ^ (m * n) = (a ^ m) ^ n := pow_mul a m n
 private theorem fr_one_pow (n : Nat) : (1 : Fr) ^ n = 1 := one_pow n
 private theorem fr_mul_one (a : Fr) : a * 1 = a := mul_one a
 private theorem fr_mul_neg (a b : Fr) : a * -b = -(a * b) := mul_neg a b
@@ -247,7 +244,7 @@ theorem toPoint_getElem!_fftG1 {k : Nat} {ω : Fr}
     change G1.toPoint vals[j]! = _
     have hj0 : j = 0 := by omega
     subst hj0
-    rw [Finset.sum_range_one, Nat.zero_mul, fr_pow_zero, Bls.Fr.val_one, one_nsmul]
+    rw [Finset.sum_range_one, Nat.zero_mul, pow_zero, Bls.Fr.val_one, one_nsmul]
   | succ k ih =>
     have hpk : 0 < 2 ^ k := Nat.two_pow_pos k
     have h2 : 2 ^ (k + 1) = 2 * 2 ^ k := by rw [pow_succ]; ring
@@ -312,7 +309,7 @@ theorem toPoint_getElem!_fftG1 {k : Nat} {ω : Fr}
       rw [Finset.mem_range] at hi
       have hti := htor (2 * i + 1) (by rw [h2]; omega)
       rw [← nsmul_val_mul_of_torsion hti (ω ^ j) (ω ^ (2 * i * j)),
-        ← fr_pow_add, show j + 2 * i * j = (2 * i + 1) * j by ring]
+        ← pow_add, show j + 2 * i * j = (2 * i + 1) * j by ring]
     · -- Bottom half: l[q] - [omega^q] r[q] with q = j - 2^k and omega^(2^k) = -1.
       rw [ite_eq_right hjk]
       set q := j - 2 ^ k
@@ -328,7 +325,7 @@ theorem toPoint_getElem!_fftG1 {k : Nat} {ω : Fr}
             ∑ i ∈ Finset.range (2 ^ k), (ω ^ (2 * i * j)).val • G1.toPoint vals[2 * i]! := by
         refine Finset.sum_congr rfl fun i _ => ?_
         rw [show 2 * i * j = 2 * i * q + 2 ^ (k + 1) * i by rw [hjq, h2]; ring,
-          fr_pow_add, fr_pow_mul ω (2 ^ (k + 1)) i, hpow1, fr_one_pow, fr_mul_one]
+          pow_add, pow_mul ω (2 ^ (k + 1)) i, hpow1, fr_one_pow, fr_mul_one]
       have hOdd :
           (∑ i ∈ Finset.range (2 ^ k),
               -((ω ^ q).val • ((ω ^ (2 * i * q)).val • G1.toPoint vals[2 * i + 1]!))) =
@@ -341,8 +338,8 @@ theorem toPoint_getElem!_fftG1 {k : Nat} {ω : Fr}
           ← nsmul_val_neg_of_torsion hti (ω ^ q * ω ^ (2 * i * q))]
         have hexp : -(ω ^ q * ω ^ (2 * i * q)) = ω ^ ((2 * i + 1) * j) := by
           rw [show (2 * i + 1) * j = (q + 2 * i * q) + 2 ^ (k + 1) * i + 2 ^ k by rw [hjq, h2]; ring,
-            fr_pow_add, hneg, fr_pow_add, fr_pow_mul ω (2 ^ (k + 1)) i, hpow1,
-            fr_one_pow, fr_mul_one, fr_pow_add, fr_mul_neg, fr_mul_one]
+            pow_add, hneg, pow_add, pow_mul ω (2 ^ (k + 1)) i, hpow1,
+            fr_one_pow, fr_mul_one, pow_add, fr_mul_neg, fr_mul_one]
         rw [hexp]
       rw [hEven, hOdd]
 

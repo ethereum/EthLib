@@ -442,12 +442,6 @@ private theorem transactionAt_zero {block : Block fork Transaction}
     obtain ⟨hlt, heq⟩ := List.getElem?_eq_some_iff.mp hj
     exact ⟨rfl, hlt, heq⟩
 
-/-- The transactions of a later block of a run are those of the rest of the run. -/
-private theorem transactionAt_succ {b : (fork : Fork) × Block fork Transaction}
-    {rest : List ((fork : Fork) × Block fork Transaction)} {i j : Nat} :
-    transactionAt (b :: rest) (i + 1) j = transactionAt rest i j :=
-  rfl
-
 /-- An account above `n` at the fork of the last block sends later only nonces above `n`. -/
 private theorem ChainRun.nonce_gt {chain : BlockChain}
     {blocks : List ((fork : Fork) × Block fork Transaction)} (run : ChainRun chain blocks)

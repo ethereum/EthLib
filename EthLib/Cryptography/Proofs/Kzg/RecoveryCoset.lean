@@ -23,7 +23,6 @@ open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 
 private theorem fr_mul_pow (a b : Fr) (n : Nat) : (a * b) ^ n = a ^ n * b ^ n := mul_pow a b n
-private theorem fr_pow_mul (a : Fr) (m n : Nat) : a ^ (m * n) = (a ^ m) ^ n := pow_mul a m n
 private theorem fr_one_pow (n : Nat) : (1 : Fr) ^ n = 1 := one_pow n
 private theorem fr_mul_one (a : Fr) : a * 1 = a := mul_one a
 
@@ -47,7 +46,7 @@ theorem recoveryCoset_pow_ne_one (i : Nat) :
   have hg := isPrimitiveRoot_recoveryShift.pow_ne_one_of_pos_of_lt
     (by decide : FIELD_ELEMENTS_PER_EXT_BLOB ≠ 0)
     (by decide : FIELD_ELEMENTS_PER_EXT_BLOB < BLS_MODULUS - 1)
-  rw [fr_mul_pow, ← fr_pow_mul, Nat.mul_comm i FIELD_ELEMENTS_PER_EXT_BLOB, fr_pow_mul, hω,
+  rw [fr_mul_pow, ← pow_mul, Nat.mul_comm i FIELD_ELEMENTS_PER_EXT_BLOB, pow_mul, hω,
     fr_one_pow, fr_mul_one]
   exact hg
 
@@ -59,7 +58,8 @@ theorem recoveryCoset_cellPower_ne_root (i j : Nat) :
   have hp := congrArg (fun x : Fr => x ^ CELLS_PER_EXT_BLOB) h
   have hω : domainRoot CELLS_PER_EXT_BLOB ^ CELLS_PER_EXT_BLOB = (1 : Fr) := (isPrimitiveRoot_domainRoot
     (Nat.dvd_of_mod_eq_zero (by decide) : CELLS_PER_EXT_BLOB ∣ BLS_MODULUS - 1)).pow_eq_one
-  rw [← fr_pow_mul, ← fr_pow_mul, Nat.mul_comm j CELLS_PER_EXT_BLOB, fr_pow_mul (domainRoot CELLS_PER_EXT_BLOB), hω, fr_one_pow] at hp
+  rw [← pow_mul, ← pow_mul, Nat.mul_comm j CELLS_PER_EXT_BLOB,
+    pow_mul (domainRoot CELLS_PER_EXT_BLOB), hω, fr_one_pow] at hp
   exact recoveryCoset_pow_ne_one i hp
 
 /-- The vanishing polynomial used for recovery is nonzero throughout its shifted coset. -/
