@@ -58,7 +58,7 @@ public section
 namespace EthLib.Engine.Exports
 
 open Lean (Json)
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue UnreadArgument pyExport rejectArgument toResult)
 open EthLib.Base
 open EthLib.Cryptography.Kzg (TrustedSetup)
 open EthLib.Serialization.JsonRpc (rpcErrorJson)
@@ -80,7 +80,7 @@ def exportBuilder : Node.Builder := fun attributes =>
 The result of the method is written as its export writes it. -/
 def nodeCall (setup : TrustedSetup) (node : Node) (request : Json) : Result (Json × Node) := do
   let some method := (request.getObjValAs? String "method").toOption
-    | throw (0, "request: no method")
+    | rejectArgument none "request: no method"
   let params := request.getObjValD "params"
   if let some version := newPayloadVersion method then
     let (answer, next) := node.newPayloadStep version params
@@ -94,7 +94,7 @@ def nodeCall (setup : TrustedSetup) (node : Node) (request : Json) : Result (Jso
       | .ok (status, id) =>
         if version < 5 then pure (.ok (forkchoiceUpdatedResponseJson status none id))
         else if status.status = .valid then
-          throw (0, "no inclusion list verdict: Bogota does not run here")
+          rejectArgument none "no inclusion list verdict: Bogota does not run here"
         else pure (.ok (forkchoiceUpdatedResponseV2Json status none none id))
       | .error e => pure (.error e)
     return (responseJson answer, next)
@@ -105,14 +105,15 @@ def nodeCall (setup : TrustedSetup) (node : Node) (request : Json) : Result (Jso
         match (node.getPayloadStep setup version id).1 with
         | .ok r => pure (.ok (getPayloadResultJson (r.result version)))
         | .error (.engine e) => pure (.error e)
-        | .error e => throw (getPayloadErrorOf e)
+        | .error e => toResult none (.error e)
     return (responseJson answer, node)
   if method.startsWith "eth_" then
     let some view := node.view node.config.chainId.toNat setup
-      | throw (0, "the node gives no chain view")
-    let some response := view.serve (.ok request) | throw (0, "request: a notification")
+      | rejectArgument none "the node gives no chain view"
+    let some response := view.serve (.ok request)
+      | rejectArgument none "request: a notification"
     return (response, node)
-  throw (0, s!"no method {method}")
+  rejectArgument none s!"no method {method}"
 
 /-- The responses to a script of requests, from a node that knows one block.
 
@@ -127,18 +128,20 @@ def runNodeOf (args : PyValue × ByteArray × (String × ByteArray × List ByteA
     PyValue) : Result PyValue := do
   let (config, state, anchor, terminalTotalDifficulty, totalDifficulty, requests) := args
   unless terminalTotalDifficulty < 2 ^ 256 do
-    throw (0, s!"config: a terminal total difficulty of {terminalTotalDifficulty}, not below 2^256")
+    rejectArgument none
+      s!"config: a terminal total difficulty of {terminalTotalDifficulty}, not below 2^256"
   let transition : TransitionConfiguration := {
     terminalTotalDifficulty := BitVec.ofNat 256 terminalTotalDifficulty
     terminalBlockHash := 0
     terminalBlockNumber := 0 }
   let chain ← Execution.Blocks.Exports.chainOf config state [anchor]
-  let some block := chain.recent.head? | throw (0, "anchor: no block")
+  let some block := chain.recent.head? | rejectArgument none "anchor: no block"
   let some node := Node.start chain.config transition block chain.state totalDifficulty
-    | throw (0, "anchor: no hash, a body that is not empty, or a total below the difficulty")
-  let .arr requests := requests.toJson | throw (0, "requests: not an array")
-  let setup ← (Cryptography.Kzg.Exports.embeddedSetup ()).mapError
-    fun e => (0, s!"setup: {e.message}")
+    | rejectArgument none
+        "anchor: no hash, a body that is not empty, or a total below the difficulty"
+  let .arr requests := requests.toJson | rejectArgument none "requests: not an array"
+  let setup ← toResult none ((Cryptography.Kzg.Exports.embeddedSetup ()).mapError
+    fun e => UnreadArgument.mk s!"setup: {e.message}")
   let (_, out) ← requests.toList.foldlM (init := (node, #[])) fun (node, out) request => do
     let (response, next) ← nodeCall setup node request
     return (next, out.push (Json.mkObj [("response", response),

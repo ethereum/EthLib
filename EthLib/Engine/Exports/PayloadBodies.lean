@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Exports.PyValue
 public import EthLib.Engine.Capabilities
+public import EthLib.Engine.Exports.Errors
 public import EthLib.Engine.PayloadBodies
 
 /-!
@@ -49,7 +50,7 @@ public section
 namespace EthLib.Engine.Exports
 
 open Lean (Json)
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue UnreadArgument pyExport rejectArgument toResult)
 open EthLib.Base
 open EthLib.Execution.Blocks (Withdrawal)
 
@@ -63,9 +64,9 @@ abbrev BodyEntry := Bytes32 × Option Nat × String × List ByteArray ×
 /-- A field of a stored body, which must be given exactly when the block's fork has it. -/
 def storeField {α : Type} {f fork : Fork} (what : String) (x : Option α) :
     Result (Since f fork α) :=
-  (Json.since what x).mapError fun
-    | .invalidParams reason => (0, s!"store: {reason}")
-    | e => (0, s!"store: {reprStr e}")
+  toResult none ((Json.since what x).mapError fun
+    | .invalidParams reason => UnreadArgument.mk s!"store: {reason}"
+    | e => UnreadArgument.mk s!"store: {reprStr e}")
 
 /-- The hash, the canonical number and the stored body of an entry. -/
 def storedOf (entry : BodyEntry) : Result (Bytes32 × Option Nat × StoredBody) := do
@@ -93,15 +94,16 @@ def payloadBodiesOf (args : List BodyEntry × Nat × Nat × PyValue) : Result Py
   let (entries, latest, maxRequest, request) := args
   let entries ← entries.mapM storedOf
   -- A store holds each block once, and one canonical block at each number.
-  unless (entries.map (·.1)).Nodup do throw (0, "store: two entries with one block hash")
-  unless (entries.filterMap (·.2.1)).Nodup do throw (0, "store: two canonical entries at a number")
+  unless (entries.map (·.1)).Nodup do rejectArgument none "store: two entries with one block hash"
+  unless (entries.filterMap (·.2.1)).Nodup do
+    rejectArgument none "store: two canonical entries at a number"
   let canonical (n : Nat) : Option StoredBody :=
     (entries.find? (·.2.1 == some n)).map (·.2.2)
   if missing : (canonical latest).isSome = false then
-    throw (0, s!"store: no canonical entry at the latest known block {latest}")
+    rejectArgument none s!"store: no canonical entry at the latest known block {latest}"
   else
   if below : maxRequest < MIN_BODIES_REQUEST_LIMIT then
-    throw (0, s!"store: a limit of {maxRequest}, below {MIN_BODIES_REQUEST_LIMIT}")
+    rejectArgument none s!"store: a limit of {maxRequest}, below {MIN_BODIES_REQUEST_LIMIT}"
   else
   let store : BodyStore := {
     byHash := fun hash => (entries.find? (·.1 == hash)).map (·.2.2)
@@ -109,25 +111,25 @@ def payloadBodiesOf (args : List BodyEntry × Nat × Nat × PyValue) : Result Py
     maxRequest, le_maxRequest := Nat.not_lt.1 below }
   let request := request.toJson
   let some method := (request.getObjValAs? String "method").toOption
-    | throw (0, "request: no method")
-  let some (version, byRange) := bodiesMethod method | throw (0, s!"no method {method}")
-  let engine {α : Type} (act : Except EngineError α) : Result α :=
-    act.mapError fun e => (e.code, s!"engine error: {reprStr e}")
+    | rejectArgument none "request: no method"
+  let some (version, byRange) := bodiesMethod method | rejectArgument none s!"no method {method}"
   let params := request.getObjValD "params"
   let answer : Json ← match version, byRange with
     | 1, false =>
-      let hashes ← engine (bodiesByHashParams params)
-      pure (payloadBodiesV1Json (← engine (getPayloadBodiesByHashV1 store hashes)))
+      let hashes ← toResult "engine error" (bodiesByHashParams params)
+      let bodies ← toResult "engine error" (getPayloadBodiesByHashV1 store hashes)
+      pure (payloadBodiesV1Json bodies)
     | 1, true =>
-      let (start, count) ← engine (bodiesByRangeParams params)
-      let bodies ← engine (getPayloadBodiesByRangeV1 store start count)
+      let (start, count) ← toResult "engine error" (bodiesByRangeParams params)
+      let bodies ← toResult "engine error" (getPayloadBodiesByRangeV1 store start count)
       pure (payloadBodiesV1Json bodies)
     | _, false =>
-      let hashes ← engine (bodiesByHashParams params)
-      pure (payloadBodiesV2Json (← engine (getPayloadBodiesByHashV2 store hashes)))
+      let hashes ← toResult "engine error" (bodiesByHashParams params)
+      let bodies ← toResult "engine error" (getPayloadBodiesByHashV2 store hashes)
+      pure (payloadBodiesV2Json bodies)
     | _, true =>
-      let (start, count) ← engine (bodiesByRangeParams params)
-      let bodies ← engine (getPayloadBodiesByRangeV2 store start count)
+      let (start, count) ← toResult "engine error" (bodiesByRangeParams params)
+      let bodies ← toResult "engine error" (getPayloadBodiesByRangeV2 store start count)
       pure (payloadBodiesV2Json bodies)
   return .ofJson answer
 
@@ -145,13 +147,11 @@ def payloadBodiesExport (args : PyValue) : Result PyValue :=
 /-- A result of a payload bodies method, read at the version of its name and written back. -/
 def readPayloadBodiesResultOf (args : String × PyValue) : Result PyValue := do
   let (method, result) := args
-  let some (version, _) := bodiesMethod method | throw (0, s!"no method {method}")
-  let engine {α : Type} (act : Except EngineError α) : Result α :=
-    act.mapError fun e => (e.code, s!"engine error: {reprStr e}")
+  let some (version, _) := bodiesMethod method | rejectArgument none s!"no method {method}"
   let result := result.toJson
   let answer : Json ← if version = 1 then
-      payloadBodiesV1Json <$> engine (payloadBodiesV1OfJson result)
-    else payloadBodiesV2Json <$> engine (payloadBodiesV2OfJson result)
+      payloadBodiesV1Json <$> toResult "engine error" (payloadBodiesV1OfJson result)
+    else payloadBodiesV2Json <$> toResult "engine error" (payloadBodiesV2OfJson result)
   return .ofJson answer
 
 /-- The result of an `engine_getPayloadBodiesByHash` or `ByRange` method, read and written back.

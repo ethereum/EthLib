@@ -55,7 +55,7 @@ public section
 namespace EthLib.Engine.Exports
 
 open Lean (Json)
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport rejectArgument)
 open EthLib.Base
 open EthLib.Consensus
 open EthLib.Consensus.Exports
@@ -111,7 +111,7 @@ def payloadStatusOfCode : UInt64 → Result Consensus.PayloadStatus
   | 0 => return .empty
   | 1 => return .full
   | 2 => return .pending
-  | _ => throw (0, "a payload status is 0, 1 or 2")
+  | _ => rejectArgument none "a payload status is 0, 1 or 2"
 
 /-- From Gloas: the forkchoice update of a proposer, as the value of its JSON.
 

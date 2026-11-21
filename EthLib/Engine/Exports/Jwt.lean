@@ -13,11 +13,16 @@ public section
 
 namespace EthLib.Engine.Exports
 
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue pyExport toResult)
+
+/-- A token that cannot be built reaches Python with its code, and its message names the error. -/
+instance : ExportError Jwt.JwtError where
+  code := Jwt.JwtError.code
+  message := reprStr
 
 /-- Build an HS256 Engine token from a 32-byte secret and an issued-at time in seconds. -/
 def jwtBuild (args : ByteArray × Nat) : Result String :=
-  (Jwt.build args.1 args.2).mapError fun e => (e.code, reprStr e)
+  toResult none (Jwt.build args.1 args.2)
 
 /-- Check the secret, compact token, HS256 signature and issued-at time against the clock. -/
 def jwtCheck (args : ByteArray × String × Nat) : Result Bool :=

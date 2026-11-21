@@ -17,6 +17,7 @@ from ethlib.errors import (
     FeesError,
     JwtError,
     PrecompileError,
+    ProposerError,
     RpcError,
     SnapError,
     StateError,
@@ -69,6 +70,67 @@ CONFIG = {"chainId": 1, "depositContractAddress": "0x" + "00" * 20, "activations
 LOW_GAS_TX = rlp.encode([b"", b"", b"\x01", b"", b"", b"", b"\x1b", b"\x01", b"\x01"])
 # The topic of the DepositEvent of the deposit contract, by EIP-6110.
 DEPOSIT_TOPIC = bytes.fromhex("649bbc62d0e31342afea4e5cd82d4049e7e1ee912fc0889aa790803be39038c5")
+# A chain configuration that activates every fork up to Paris at block 0.
+PARIS_CONFIG = {
+    "chainId": 1,
+    "depositContractAddress": "0x" + "00" * 20,
+    "activations": [
+        [fork, "block", 0]
+        for fork in [
+            "frontier",
+            "homestead",
+            "tangerineWhistle",
+            "spuriousDragon",
+            "byzantium",
+            "constantinople",
+            "petersburg",
+            "istanbul",
+            "berlin",
+            "london",
+            "paris",
+        ]
+    ],
+}
+# The root of an empty trie, and the hash of an empty list of ommers.
+EMPTY_ROOT = bytes.fromhex("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+EMPTY_OMMERS = bytes.fromhex("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347")
+# A Paris genesis header with an empty body, a gas limit of 30000000 and a base fee of 1 gwei.
+PARIS_GENESIS = rlp.encode(
+    [
+        bytes(32),
+        EMPTY_OMMERS,
+        bytes(20),
+        EMPTY_ROOT,
+        EMPTY_ROOT,
+        EMPTY_ROOT,
+        bytes(256),
+        b"",
+        b"",
+        (30_000_000).to_bytes(4, "big"),
+        b"",
+        b"",
+        b"",
+        bytes(32),
+        bytes(8),
+        (10**9).to_bytes(4, "big"),
+    ]
+)
+# The payload attributes of version 1, at time 0.
+ATTRIBUTES = {
+    "timestamp": "0x0",
+    "prevRandao": "0x" + "00" * 32,
+    "suggestedFeeRecipient": "0x" + "00" * 20,
+}
+# An answer of eth_getProof for an empty account, with no proof node and no slot.
+ACCOUNT_ANSWER = {
+    "address": "0x" + "00" * 20,
+    "accountProof": [],
+    "balance": "0x0",
+    "codeHash": "0x" + "00" * 32,
+    "nonce": "0x0",
+    "storageHash": "0x" + "00" * 32,
+    "storageProof": [],
+}
 
 
 @pytest.mark.parametrize(
@@ -777,6 +839,981 @@ DEPOSIT_TOPIC = bytes.fromhex("649bbc62d0e31342afea4e5cd82d4049e7e1ee912fc0889aa
             "EthLib.Engine.Jwt.JwtError.secretLength 31",
             lambda: engine.jwt_build(bytes(31), 0),
             id="jwt",
+        ),
+        # No Engine API error has the code 1.
+        pytest.param(
+            EngineError,
+            0,
+            "no Engine API error has the code 1",
+            lambda: engine.error_object(1),
+            id="engine-error-object",
+        ),
+        # A payload status has a status field.
+        pytest.param(
+            EngineError,
+            32602,
+            (
+                "engine error: EthLib.Engine.EngineError.invalidParams "
+                '"payloadStatus: no field status"'
+            ),
+            lambda: engine.read_payload_status({}),
+            id="engine-read-status",
+        ),
+        # No Engine API method has the name engine_nope.
+        pytest.param(
+            EngineError,
+            0,
+            "no method engine_nope",
+            lambda: engine.new_payload(CONFIG, "engine_nope", []),
+            id="engine-new-payload-method",
+        ),
+        # A terminal total difficulty is below 2^256.
+        pytest.param(
+            EngineError,
+            0,
+            (
+                "config: a terminal total difficulty of "
+                "115792089237316195423570985008687907853269984665640564039457584007913129639936, "
+                "not below 2^256"
+            ),
+            lambda: engine.new_payload_on_chain(
+                CONFIG,
+                rlp.encode([]),
+                [],
+                "engine_newPayloadV1",
+                [],
+                terminal_total_difficulty=2**256,
+                total_difficulty=0,
+            ),
+            id="engine-on-chain-ttd",
+        ),
+        # No Engine API method has the name engine_nope.
+        pytest.param(
+            EngineError,
+            0,
+            "no method engine_nope",
+            lambda: engine.new_payload_on_chain(
+                CONFIG,
+                rlp.encode([]),
+                [],
+                "engine_nope",
+                [],
+                terminal_total_difficulty=0,
+                total_difficulty=0,
+            ),
+            id="engine-on-chain-method",
+        ),
+        # engine_newPayloadV1 takes one parameter, not none.
+        pytest.param(
+            EngineError,
+            32602,
+            'engine error: EthLib.Engine.EngineError.invalidParams "params: not 1 values"',
+            lambda: engine.new_payload_on_chain(
+                CONFIG,
+                rlp.encode([]),
+                [],
+                "engine_newPayloadV1",
+                [],
+                terminal_total_difficulty=0,
+                total_difficulty=0,
+            ),
+            id="engine-on-chain-params",
+        ),
+        # No forkchoice update has the name engine_nope.
+        pytest.param(
+            EngineError,
+            0,
+            "no method engine_nope",
+            lambda: engine.build_payload(
+                CONFIG,
+                rlp.encode([]),
+                [],
+                "engine_nope",
+                {},
+                fee_recipient=bytes(20),
+                extra_data=b"",
+                target_gas_limit=0,
+                transactions=[],
+            ),
+            id="engine-build-method",
+        ),
+        # Payload attributes have a timestamp.
+        pytest.param(
+            EngineError,
+            38003,
+            "engine error: EthLib.Engine.EngineError.invalidPayloadAttributes",
+            lambda: engine.build_payload(
+                CONFIG,
+                rlp.encode([]),
+                [],
+                "engine_forkchoiceUpdatedV1",
+                {},
+                fee_recipient=bytes(20),
+                extra_data=b"",
+                target_gas_limit=0,
+                transactions=[],
+            ),
+            id="engine-build-attributes",
+        ),
+        # A chain without a recent block has no parent to build on.
+        pytest.param(
+            EngineError,
+            226,
+            "block invalid: noParent",
+            lambda: engine.build_payload(
+                CONFIG,
+                rlp.encode([]),
+                [],
+                "engine_forkchoiceUpdatedV1",
+                ATTRIBUTES,
+                fee_recipient=bytes(20),
+                extra_data=b"",
+                target_gas_limit=0,
+                transactions=[],
+            ),
+            id="engine-build-no-parent",
+        ),
+        # The chain activates no fork, so the attributes are at no fork.
+        pytest.param(
+            EngineError,
+            38005,
+            "engine error: EthLib.Engine.EngineError.unsupportedFork none",
+            lambda: engine.build_payload(
+                CONFIG,
+                rlp.encode([]),
+                [("frontier", rlp.encode(HEADER), [])],
+                "engine_forkchoiceUpdatedV1",
+                ATTRIBUTES,
+                fee_recipient=bytes(20),
+                extra_data=b"",
+                target_gas_limit=0,
+                transactions=[b""],
+            ),
+            id="engine-build-fork",
+        ),
+        # A transaction is not empty.
+        pytest.param(
+            EngineError,
+            401,
+            (
+                "401: transaction 0 does not decode: "
+                "EthLib.Execution.Transactions.TransactionError.emptyTransaction"
+            ),
+            lambda: engine.build_payload(
+                PARIS_CONFIG,
+                rlp.encode([]),
+                [("paris", PARIS_GENESIS, [])],
+                "engine_forkchoiceUpdatedV1",
+                ATTRIBUTES | {"timestamp": "0x1"},
+                fee_recipient=bytes(20),
+                extra_data=b"",
+                target_gas_limit=30_000_000,
+                transactions=[b""],
+            ),
+            id="engine-build-transaction",
+        ),
+        # A terminal total difficulty is below 2^256.
+        pytest.param(
+            EngineError,
+            0,
+            (
+                "config: a terminal total difficulty of "
+                "115792089237316195423570985008687907853269984665640564039457584007913129639936, "
+                "not below 2^256"
+            ),
+            lambda: engine.forkchoice_updated(
+                CONFIG, [], "engine_forkchoiceUpdatedV1", [], terminal_total_difficulty=2**256
+            ),
+            id="engine-fcu-ttd",
+        ),
+        # A block of the tree says whether it is valid.
+        pytest.param(
+            EngineError,
+            0,
+            "tree: no validity",
+            lambda: engine.forkchoice_updated(
+                CONFIG, [{}], "engine_forkchoiceUpdatedV1", [], terminal_total_difficulty=0
+            ),
+            id="engine-fcu-tree-validity",
+        ),
+        # A block of the tree has a block hash.
+        pytest.param(
+            EngineError,
+            0,
+            'tree: EthLib.Engine.EngineError.invalidParams "blockHash: not a string"',
+            lambda: engine.forkchoice_updated(
+                CONFIG,
+                [{"valid": True}],
+                "engine_forkchoiceUpdatedV1",
+                [],
+                terminal_total_difficulty=0,
+            ),
+            id="engine-fcu-tree-hash",
+        ),
+        # A block of the tree has a number.
+        pytest.param(
+            EngineError,
+            0,
+            'tree: EthLib.Engine.EngineError.invalidParams "number: not a string"',
+            lambda: engine.forkchoice_updated(
+                CONFIG,
+                [{"valid": True, "blockHash": "0x" + "00" * 32, "parentHash": "0x" + "00" * 32}],
+                "engine_forkchoiceUpdatedV1",
+                [],
+                terminal_total_difficulty=0,
+            ),
+            id="engine-fcu-tree-number",
+        ),
+        # A total difficulty is a hex quantity.
+        pytest.param(
+            EngineError,
+            0,
+            'tree: EthLib.Engine.EngineError.invalidParams "totalDifficulty: no 0x marker"',
+            lambda: engine.forkchoice_updated(
+                CONFIG,
+                [
+                    {
+                        "valid": True,
+                        "blockHash": "0x" + "00" * 32,
+                        "parentHash": "0x" + "00" * 32,
+                        "number": "0x0",
+                        "timestamp": "0x0",
+                        "totalDifficulty": "x",
+                        "parentTotalDifficulty": "0x0",
+                    }
+                ],
+                "engine_forkchoiceUpdatedV1",
+                [],
+                terminal_total_difficulty=0,
+            ),
+            id="engine-fcu-tree-total",
+        ),
+        # A block of the tree has both totals or neither.
+        pytest.param(
+            EngineError,
+            0,
+            "tree: one total difficulty without the other",
+            lambda: engine.forkchoice_updated(
+                CONFIG,
+                [{"valid": True, "totalDifficulty": "0x0"}],
+                "engine_forkchoiceUpdatedV1",
+                [],
+                terminal_total_difficulty=0,
+            ),
+            id="engine-fcu-tree-one-total",
+        ),
+        # A tree holds each block hash once.
+        pytest.param(
+            EngineError,
+            0,
+            "tree: two payloads with one block hash",
+            lambda: engine.forkchoice_updated(
+                CONFIG,
+                [
+                    {
+                        "valid": True,
+                        "blockHash": "0x" + "00" * 32,
+                        "parentHash": "0x" + "00" * 32,
+                        "number": "0x0",
+                        "timestamp": "0x0",
+                    }
+                ]
+                * 2,
+                "engine_forkchoiceUpdatedV1",
+                [],
+                terminal_total_difficulty=0,
+            ),
+            id="engine-fcu-tree-twice",
+        ),
+        # A finalized block hash is 32 bytes.
+        pytest.param(
+            EngineError,
+            0,
+            'finalized: EthLib.Engine.EngineError.invalidParams "finalized: 1 bytes, not 32"',
+            lambda: engine.forkchoice_updated(
+                CONFIG, [], "engine_forkchoiceUpdatedV1", [], "0x00", terminal_total_difficulty=0
+            ),
+            id="engine-fcu-finalized",
+        ),
+        # No Engine API method has the name engine_nope.
+        pytest.param(
+            EngineError,
+            0,
+            "no method engine_nope",
+            lambda: engine.forkchoice_updated(
+                CONFIG, [], "engine_nope", [], terminal_total_difficulty=0
+            ),
+            id="engine-fcu-method",
+        ),
+        # engine_forkchoiceUpdatedV1 takes two parameters, not none.
+        pytest.param(
+            EngineError,
+            32602,
+            'engine error: EthLib.Engine.EngineError.invalidParams "params: got 0, expected 2"',
+            lambda: engine.forkchoice_updated(
+                CONFIG, [], "engine_forkchoiceUpdatedV1", [], terminal_total_difficulty=0
+            ),
+            id="engine-fcu-params",
+        ),
+        # A forkchoice response has a payload status.
+        pytest.param(
+            EngineError,
+            32602,
+            (
+                "engine error: EthLib.Engine.EngineError.invalidParams "
+                '"forkchoiceUpdatedResponse: no field payloadStatus"'
+            ),
+            lambda: engine.read_forkchoice_response({}),
+            id="engine-read-fcu",
+        ),
+        # A pool entry holds 128 cells, not one.
+        pytest.param(
+            EngineError,
+            0,
+            "pool: 1 cells, not 128",
+            lambda: engine.get_blobs(
+                [(bytes(32), None, None, [None])], "dencun", "engine_getBlobsV1", []
+            ),
+            id="engine-blobs-cells",
+        ),
+        # A pool holds each versioned hash once.
+        pytest.param(
+            EngineError,
+            0,
+            "pool: two entries with one versioned hash",
+            lambda: engine.get_blobs(
+                [(bytes(32), None, None, None)] * 2, "dencun", "engine_getBlobsV1", []
+            ),
+            id="engine-blobs-twice",
+        ),
+        # A pool takes requests of at least 128 hashes.
+        pytest.param(
+            EngineError,
+            0,
+            "pool: a limit of 1, below 128",
+            lambda: engine.get_blobs([], "dencun", "engine_getBlobsV1", [], max_request=1),
+            id="engine-blobs-limit",
+        ),
+        # No Engine API method has the name engine_nope.
+        pytest.param(
+            EngineError,
+            0,
+            "no method engine_nope",
+            lambda: engine.get_blobs([], "dencun", "engine_nope", []),
+            id="engine-blobs-method",
+        ),
+        # engine_getBlobsV1 takes one parameter, not none.
+        pytest.param(
+            EngineError,
+            32602,
+            'engine error: EthLib.Engine.EngineError.invalidParams "params: got 0, expected 1"',
+            lambda: engine.get_blobs([], "dencun", "engine_getBlobsV1", []),
+            id="engine-blobs-params",
+        ),
+        # A result of engine_getBlobsV1 is an array.
+        pytest.param(
+            EngineError,
+            32602,
+            'engine error: EthLib.Engine.EngineError.invalidParams "result: not an array"',
+            lambda: engine.read_get_blobs_result("engine_getBlobsV1", 0),
+            id="engine-read-blobs",
+        ),
+        # No Engine API method has the name engine_nope.
+        pytest.param(
+            EngineError,
+            0,
+            "no method engine_nope",
+            lambda: engine.read_get_blobs_result("engine_nope", 0),
+            id="engine-read-blobs-method",
+        ),
+        # A Frontier body has no withdrawals.
+        pytest.param(
+            EngineError,
+            0,
+            "store: withdrawals: present before its fork",
+            lambda: engine.get_payload_bodies(
+                [(bytes(32), 0, "frontier", [], [], None)], 0, "engine_getPayloadBodiesByHashV1", []
+            ),
+            id="engine-bodies-field",
+        ),
+        # A store holds each block hash once.
+        pytest.param(
+            EngineError,
+            0,
+            "store: two entries with one block hash",
+            lambda: engine.get_payload_bodies(
+                [(bytes(32), None, "frontier", [], None, None)] * 2,
+                0,
+                "engine_getPayloadBodiesByHashV1",
+                [],
+            ),
+            id="engine-bodies-twice",
+        ),
+        # A store holds one canonical block at each number.
+        pytest.param(
+            EngineError,
+            0,
+            "store: two canonical entries at a number",
+            lambda: engine.get_payload_bodies(
+                [
+                    (bytes(32), 0, "frontier", [], None, None),
+                    (b"\x01" * 32, 0, "frontier", [], None, None),
+                ],
+                0,
+                "engine_getPayloadBodiesByHashV1",
+                [],
+            ),
+            id="engine-bodies-number",
+        ),
+        # A store holds the latest known block.
+        pytest.param(
+            EngineError,
+            0,
+            "store: no canonical entry at the latest known block 0",
+            lambda: engine.get_payload_bodies([], 0, "engine_getPayloadBodiesByHashV1", []),
+            id="engine-bodies-latest",
+        ),
+        # A store takes requests of at least 32 bodies.
+        pytest.param(
+            EngineError,
+            0,
+            "store: a limit of 1, below 32",
+            lambda: engine.get_payload_bodies(
+                [(bytes(32), 0, "frontier", [], None, None)],
+                0,
+                "engine_getPayloadBodiesByHashV1",
+                [],
+                max_request=1,
+            ),
+            id="engine-bodies-limit",
+        ),
+        # No Engine API method has the name engine_nope.
+        pytest.param(
+            EngineError,
+            0,
+            "no method engine_nope",
+            lambda: engine.get_payload_bodies(
+                [(bytes(32), 0, "frontier", [], None, None)], 0, "engine_nope", []
+            ),
+            id="engine-bodies-method",
+        ),
+        # engine_getPayloadBodiesByHashV1 takes one parameter, not none.
+        pytest.param(
+            EngineError,
+            32602,
+            'engine error: EthLib.Engine.EngineError.invalidParams "params: got 0, expected 1"',
+            lambda: engine.get_payload_bodies(
+                [(bytes(32), 0, "frontier", [], None, None)],
+                0,
+                "engine_getPayloadBodiesByHashV1",
+                [],
+            ),
+            id="engine-bodies-params",
+        ),
+        # engine_getPayloadBodiesByRangeV2 takes two parameters, not none.
+        pytest.param(
+            EngineError,
+            32602,
+            'engine error: EthLib.Engine.EngineError.invalidParams "params: got 0, expected 2"',
+            lambda: engine.get_payload_bodies(
+                [(bytes(32), 0, "frontier", [], None, None)],
+                0,
+                "engine_getPayloadBodiesByRangeV2",
+                [],
+            ),
+            id="engine-bodies-range-params",
+        ),
+        # A result of engine_getPayloadBodiesByHashV1 is an array.
+        pytest.param(
+            EngineError,
+            32602,
+            'engine error: EthLib.Engine.EngineError.invalidParams "result: not an array"',
+            lambda: engine.read_payload_bodies_result("engine_getPayloadBodiesByHashV1", 0),
+            id="engine-read-bodies",
+        ),
+        # No Engine API method has the name engine_nope.
+        pytest.param(
+            EngineError,
+            0,
+            "no method engine_nope",
+            lambda: engine.read_payload_bodies_result("engine_nope", 0),
+            id="engine-read-bodies-method",
+        ),
+        # A stored block is an RLP list, not an empty string.
+        pytest.param(
+            EngineError,
+            0,
+            "store: block rejected: EthLib.Serialization.Rlp.RlpError.bytesAsList",
+            lambda: engine.get_payload(
+                CONFIG,
+                [(bytes(8), "frontier", b"\x80", b"", [], 0, [], False, None)],
+                "engine_getPayloadV1",
+                [],
+            ),
+            id="engine-get-payload-block",
+        ),
+        # A transaction of a stored block is not empty.
+        pytest.param(
+            EngineError,
+            0,
+            (
+                "store: transaction rejected: "
+                "EthLib.Execution.Transactions.TransactionError.emptyTransaction"
+            ),
+            lambda: engine.get_payload(
+                CONFIG,
+                [
+                    (
+                        bytes(8),
+                        "frontier",
+                        rlp.encode([HEADER, [b""], []]),
+                        b"",
+                        [],
+                        0,
+                        [],
+                        False,
+                        None,
+                    )
+                ],
+                "engine_getPayloadV1",
+                [],
+            ),
+            id="engine-get-payload-transaction",
+        ),
+        # The accounts after a stored block are an RLP list.
+        pytest.param(
+            EngineError,
+            0,
+            "store: state is not an RLP list",
+            lambda: engine.get_payload(
+                CONFIG,
+                [
+                    (
+                        bytes(8),
+                        "frontier",
+                        rlp.encode([HEADER, [], []]),
+                        b"\x80",
+                        [],
+                        0,
+                        [],
+                        False,
+                        None,
+                    )
+                ],
+                "engine_getPayloadV1",
+                [],
+            ),
+            id="engine-get-payload-state",
+        ),
+        # A Frontier block has no block access list.
+        pytest.param(
+            EngineError,
+            0,
+            "store: block access list: present before its fork",
+            lambda: engine.get_payload(
+                CONFIG,
+                [
+                    (
+                        bytes(8),
+                        "frontier",
+                        rlp.encode([HEADER, [], []]),
+                        rlp.encode([]),
+                        [],
+                        0,
+                        [],
+                        False,
+                        b"",
+                    )
+                ],
+                "engine_getPayloadV1",
+                [],
+            ),
+            id="engine-get-payload-access-list",
+        ),
+        # A store holds each payload ID once.
+        pytest.param(
+            EngineError,
+            0,
+            "store: two entries with one payload ID",
+            lambda: engine.get_payload(
+                CONFIG,
+                [
+                    (
+                        bytes(8),
+                        "frontier",
+                        rlp.encode([HEADER, [], []]),
+                        rlp.encode([]),
+                        [],
+                        0,
+                        [],
+                        False,
+                        None,
+                    )
+                ]
+                * 2,
+                "engine_getPayloadV1",
+                [],
+            ),
+            id="engine-get-payload-twice",
+        ),
+        # No Engine API method has the name engine_nope.
+        pytest.param(
+            EngineError,
+            0,
+            "no method engine_nope",
+            lambda: engine.get_payload(CONFIG, [], "engine_nope", []),
+            id="engine-get-payload-method",
+        ),
+        # engine_getPayloadV1 takes one parameter, not none.
+        pytest.param(
+            EngineError,
+            32602,
+            'engine error: EthLib.Engine.EngineError.invalidParams "params: got 0, expected 1"',
+            lambda: engine.get_payload(CONFIG, [], "engine_getPayloadV1", []),
+            id="engine-get-payload-params",
+        ),
+        # The store holds no payload with the ID.
+        pytest.param(
+            EngineError,
+            38001,
+            "engine error: EthLib.Engine.EngineError.unknownPayload 0x0000000000000000",
+            lambda: engine.get_payload(CONFIG, [], "engine_getPayloadV1", ["0x" + "00" * 8]),
+            id="engine-get-payload-unknown",
+        ),
+        # The chain runs Paris at block 0, not Frontier.
+        pytest.param(
+            EngineError,
+            0,
+            "store: the fork frontier is not the configured fork at the block, paris",
+            lambda: engine.get_payload(
+                PARIS_CONFIG,
+                [
+                    (
+                        bytes(8),
+                        "frontier",
+                        rlp.encode([HEADER, [], []]),
+                        rlp.encode([]),
+                        [],
+                        0,
+                        [],
+                        False,
+                        None,
+                    )
+                ],
+                "engine_getPayloadV1",
+                ["0x" + "00" * 8],
+            ),
+            id="engine-get-payload-wrong-fork",
+        ),
+        # A block value is below 2^256.
+        pytest.param(
+            EngineError,
+            0,
+            (
+                "store: block value "
+                "115792089237316195423570985008687907853269984665640564039457584007913129639936 "
+                "is 2^256 or more"
+            ),
+            lambda: engine.get_payload(
+                PARIS_CONFIG,
+                [
+                    (
+                        bytes(8),
+                        "paris",
+                        rlp.encode([rlp.decode(PARIS_GENESIS), [], []]),
+                        rlp.encode([]),
+                        [],
+                        2**256,
+                        [],
+                        False,
+                        None,
+                    )
+                ],
+                "engine_getPayloadV1",
+                ["0x" + "00" * 8],
+            ),
+            id="engine-get-payload-value",
+        ),
+        # A Paris block has no execution requests.
+        pytest.param(
+            EngineError,
+            0,
+            "store: execution requests out of order, too short or before Pectra",
+            lambda: engine.get_payload(
+                PARIS_CONFIG,
+                [
+                    (
+                        bytes(8),
+                        "paris",
+                        rlp.encode([rlp.decode(PARIS_GENESIS), [], []]),
+                        rlp.encode([]),
+                        [b""],
+                        0,
+                        [],
+                        False,
+                        None,
+                    )
+                ],
+                "engine_getPayloadV1",
+                ["0x" + "00" * 8],
+            ),
+            id="engine-get-payload-requests",
+        ),
+        # A payload has the fields of a version.
+        pytest.param(
+            EngineError,
+            32602,
+            (
+                "engine error: EthLib.Engine.EngineError.invalidParams "
+                '"payload: the fields of no version"'
+            ),
+            lambda: engine.read_get_payload_result("engine_getPayloadV1", "paris", {}),
+            id="engine-read-get-payload",
+        ),
+        # No Engine API method has the name engine_nope.
+        pytest.param(
+            EngineError,
+            0,
+            "no method engine_nope",
+            lambda: engine.read_get_payload_result("engine_nope", "paris", {}),
+            id="engine-read-get-payload-method",
+        ),
+        # Only engine_exchangeCapabilities is accepted.
+        pytest.param(
+            EngineError,
+            0,
+            "no method engine_nope",
+            lambda: engine.exchange_capabilities("engine_nope", []),
+            id="engine-capabilities-method",
+        ),
+        # engine_exchangeCapabilities takes one parameter, not none.
+        pytest.param(
+            EngineError,
+            32602,
+            'engine error: EthLib.Engine.EngineError.invalidParams "params: got 0, expected 1"',
+            lambda: engine.exchange_capabilities("engine_exchangeCapabilities", []),
+            id="engine-capabilities-params",
+        ),
+        # A client code is two letters.
+        pytest.param(
+            EngineError,
+            0,
+            "own: a code abc, not two letters",
+            lambda: engine.get_client_version(
+                "abc", "n", "v", bytes(4), "engine_getClientVersionV1", []
+            ),
+            id="engine-client-code",
+        ),
+        # engine_getClientVersionV1 takes one parameter, not none.
+        pytest.param(
+            EngineError,
+            32602,
+            'engine error: EthLib.Engine.EngineError.invalidParams "params: got 0, expected 1"',
+            lambda: engine.get_client_version(
+                "EL", "n", "v", bytes(4), "engine_getClientVersionV1", []
+            ),
+            id="engine-client-params",
+        ),
+        # Only engine_getInclusionListV1 is accepted.
+        pytest.param(
+            EngineError,
+            0,
+            "no method engine_nope",
+            lambda: engine.get_inclusion_list([], "engine_nope", []),
+            id="engine-inclusion-method",
+        ),
+        # engine_getInclusionListV1 takes no parameter, not two.
+        pytest.param(
+            EngineError,
+            32602,
+            'engine error: EthLib.Engine.EngineError.invalidParams "params: got 2, expected 0"',
+            lambda: engine.get_inclusion_list([], "engine_getInclusionListV1", [1, 2]),
+            id="engine-inclusion-params",
+        ),
+        # A terminal total difficulty is below 2^256.
+        pytest.param(
+            EngineError,
+            0,
+            (
+                "config: a total difficulty of "
+                "115792089237316195423570985008687907853269984665640564039457584007913129639936, "
+                "not below 2^256"
+            ),
+            lambda: engine.exchange_transition_configuration(
+                2**256, bytes(32), 0, "engine_exchangeTransitionConfigurationV1", []
+            ),
+            id="engine-transition-difficulty",
+        ),
+        # A terminal block number is below 2^64.
+        pytest.param(
+            EngineError,
+            0,
+            "config: a block number of 18446744073709551616, not below 2^64",
+            lambda: engine.exchange_transition_configuration(
+                0, bytes(32), 2**64, "engine_exchangeTransitionConfigurationV1", []
+            ),
+            id="engine-transition-number",
+        ),
+        # Only engine_exchangeTransitionConfigurationV1 is accepted.
+        pytest.param(
+            EngineError,
+            0,
+            "no method engine_nope",
+            lambda: engine.exchange_transition_configuration(0, bytes(32), 0, "engine_nope", []),
+            id="engine-transition-method",
+        ),
+        # engine_exchangeTransitionConfigurationV1 takes one parameter, not none.
+        pytest.param(
+            EngineError,
+            32602,
+            'engine error: EthLib.Engine.EngineError.invalidParams "params: got 0, expected 1"',
+            lambda: engine.exchange_transition_configuration(
+                0, bytes(32), 0, "engine_exchangeTransitionConfigurationV1", []
+            ),
+            id="engine-transition-params",
+        ),
+        # No Engine API method has the name engine_nope.
+        pytest.param(
+            EngineError,
+            0,
+            "no method engine_nope",
+            lambda: engine.rewrite_params("engine_nope", []),
+            id="engine-rewrite-method",
+        ),
+        # engine_newPayloadV1 takes one parameter, not none.
+        pytest.param(
+            EngineError,
+            32602,
+            'engine error: EthLib.Engine.EngineError.invalidParams "params: not 1 values"',
+            lambda: engine.rewrite_params("engine_newPayloadV1", []),
+            id="engine-rewrite-params",
+        ),
+        # engine_getPayloadBodiesByRangeV1 takes two parameters, not none.
+        pytest.param(
+            EngineError,
+            32602,
+            'engine error: EthLib.Engine.EngineError.invalidParams "params: got 0, expected 2"',
+            lambda: engine.rewrite_params("engine_getPayloadBodiesByRangeV1", []),
+            id="engine-rewrite-bodies",
+        ),
+        # A terminal total difficulty is below 2^256.
+        pytest.param(
+            EngineError,
+            0,
+            (
+                "config: a terminal total difficulty of "
+                "115792089237316195423570985008687907853269984665640564039457584007913129639936, "
+                "not below 2^256"
+            ),
+            lambda: engine.run_node(
+                CONFIG,
+                rlp.encode([]),
+                ("frontier", rlp.encode(HEADER), []),
+                [],
+                terminal_total_difficulty=2**256,
+            ),
+            id="engine-node-ttd",
+        ),
+        # A header of zeros does not commit to an empty body.
+        pytest.param(
+            EngineError,
+            0,
+            "anchor: no hash, a body that is not empty, or a total below the difficulty",
+            lambda: engine.run_node(
+                CONFIG, rlp.encode([]), ("frontier", rlp.encode(HEADER), []), []
+            ),
+            id="engine-node-anchor",
+        ),
+        # A request names its method.
+        pytest.param(
+            EngineError,
+            0,
+            "request: no method",
+            lambda: engine.run_node(
+                PARIS_CONFIG, rlp.encode([]), ("paris", PARIS_GENESIS, []), [{}]
+            ),
+            id="engine-node-request",
+        ),
+        # No Engine API method has the name engine_nope.
+        pytest.param(
+            EngineError,
+            0,
+            "no method engine_nope",
+            lambda: engine.run_node(
+                PARIS_CONFIG,
+                rlp.encode([]),
+                ("paris", PARIS_GENESIS, []),
+                [{"method": "engine_nope"}],
+            ),
+            id="engine-node-method",
+        ),
+        # A state root is 32 bytes.
+        pytest.param(
+            TrieError,
+            0,
+            "bad root size: 31, expected 32",
+            lambda: trie.verify_account_proof(bytes(31), ACCOUNT_ANSWER),
+            id="engine-proof-root",
+        ),
+        # An answer of eth_getProof has an address.
+        pytest.param(
+            TrieError,
+            0,
+            "answer: no field address",
+            lambda: trie.verify_account_proof(bytes(32), {}),
+            id="engine-proof-field",
+        ),
+        # An empty account proof shows no node of a root that is not empty.
+        pytest.param(
+            TrieError,
+            501,
+            (
+                "answer does not hold: EthLib.Execution.State.AccountProofError.account "
+                "(EthLib.Execution.Trie.ProofError.missingNode "
+                "(hash := some 0x0101010101010101010101010101010101010101010101010101010101010101))"
+            ),
+            lambda: trie.verify_account_proof(b"\x01" * 32, ACCOUNT_ANSWER),
+            id="engine-proof-fails",
+        ),
+        # No preset has the name nope.
+        pytest.param(
+            ProposerError,
+            0,
+            "no preset is named nope",
+            lambda: engine.payload_attributes_event(
+                "nope", "bellatrix", b"", bytes(32), bytes(32), bytes(20)
+            ),
+            id="engine-event-name",
+        ),
+        # A payload is prepared from Bellatrix on.
+        pytest.param(
+            ProposerError,
+            0,
+            "no payload preparation at phase0",
+            lambda: engine.payload_attributes_event(
+                "minimal", "phase0", b"", bytes(32), bytes(32), bytes(20)
+            ),
+            id="engine-event-fork",
+        ),
+        # A state is not empty.
+        pytest.param(
+            ProposerError,
+            0,
+            "input rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 10233 0",
+            lambda: engine.payload_attributes_event(
+                "minimal", "bellatrix", b"", bytes(32), bytes(32), bytes(20)
+            ),
+            id="engine-event-state",
+        ),
+        # A payload attributes event on a store starts at Gloas.
+        pytest.param(
+            ProposerError,
+            0,
+            "no payload attributes event on a store at phase0",
+            lambda: engine.payload_attributes_event_gloas(
+                "minimal", "phase0", b"", b"", [], bytes(32), 0, b"", bytes(32), bytes(20), 0
+            ),
+            id="engine-event-gloas-fork",
         ),
     ],
 )
