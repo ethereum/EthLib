@@ -241,6 +241,7 @@ public import EthLib.Consensus.Proofs.Transition.FfgSlack
 public import EthLib.Consensus.Proofs.Transition.FfgSlackActive
 public import EthLib.Consensus.Proofs.Transition.FfgSlackChain
 public import EthLib.Consensus.Proofs.Transition.FfgStake
+public import EthLib.Consensus.Proofs.Transition.FfgTwoEpochs
 public import EthLib.Consensus.Proofs.Transition.FfgVotes
 public import EthLib.Consensus.Proofs.Transition.ForkBoundary
 public import EthLib.Consensus.Proofs.Transition.ForkVersions
