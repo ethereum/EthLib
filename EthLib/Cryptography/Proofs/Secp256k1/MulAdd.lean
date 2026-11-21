@@ -30,6 +30,8 @@ open EthLib.Cryptography EthLib.Cryptography.Secp256k1 WeierstrassCurve
 
 namespace EthLib.Cryptography.Secp256k1
 
+open EthLib.Cryptography.Word64
+
 namespace MulAdd
 
 /-- The scalar by which the endomorphism acts on the generator.
@@ -55,7 +57,7 @@ theorem zeroElement_eq_true (x : Montgomery) : zeroElement x = true ↔ x = 0 :=
   obtain ⟨⟨a,b,c,d⟩, h⟩ := x
   rw [show (0 : Montgomery) = ⟨⟨0,0,0,0⟩, by decide⟩ from rfl]
   simp only [zeroElement, Bool.and_eq_true, beq_iff_eq, and_assoc,
-    Montgomery.mk.injEq, Montgomery.Raw.mk.injEq]
+    Montgomery.mk.injEq, Word64.Raw.mk.injEq]
 
 
 /-! ## The endomorphism and its action on the group -/
@@ -2649,7 +2651,7 @@ private theorem raw_fixed_words (l : Montgomery.Raw) :
   change l.w1.toNat < 2^64 at h1
   change l.w2.toNat < 2^64 at h2
   change l.w3.toNat < 2^64 at h3
-  simp only [WordPair.toNat, Montgomery.Raw.val, Montgomery.Raw.words,
+  simp only [WordPair.toNat, Word64.Raw.val, Word64.Raw.words,
     Montgomery.lowValue, Montgomery.wordRadix]
   omega
 
@@ -4544,7 +4546,7 @@ private theorem fallback_represents (k l : Fn) {p : Coordinates} {P : curve.Poin
   exact congrArg₂ (k.val • · + l.val • ·) hp.2 hg.2
 
 private theorem rawOfNat_val_of_lt (k : Fn) : (Montgomery.rawOfNat k.val).val = k.val :=
-  Montgomery.rawOfNat_val _ (Nat.lt_trans k.isLt (by decide))
+  Word64.rawOfNat_val _ (Nat.lt_trans k.isLt (by decide))
 
 section
 attribute [local irreducible] splitScalarWords commonTable

@@ -18,6 +18,8 @@ The square root then succeeds exactly on the squares, and returns a root.
 
 namespace EthLib.Cryptography.Secp256k1
 
+open EthLib.Cryptography.Word64
+
 namespace Montgomery
 
 /-- An element is the element built from its own words. -/

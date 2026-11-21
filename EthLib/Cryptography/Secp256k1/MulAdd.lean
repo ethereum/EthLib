@@ -52,6 +52,8 @@ That book is by Hankerson, Menezes and Vanstone (Springer, 2004).
 
 namespace EthLib.Cryptography.Secp256k1
 
+open Word64
+
 open Jacobian
 
 namespace MulAdd

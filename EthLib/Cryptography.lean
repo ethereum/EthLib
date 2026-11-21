@@ -18,6 +18,7 @@ public import EthLib.Cryptography.Aes
 public import EthLib.Cryptography.Ethash
 public import EthLib.Cryptography.Montgomery
 public import EthLib.Cryptography.Montgomery.Fin
+public import EthLib.Cryptography.Word64
 public import EthLib.Cryptography.BaseField
 public import EthLib.Cryptography.Fp2
 public import EthLib.Cryptography.X25519

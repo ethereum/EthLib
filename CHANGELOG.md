@@ -9,6 +9,13 @@ Not yet released.
 
 ### Proof additions
 
+- The secp256r1 double scalar multiplication of verification runs in Montgomery form on four words ([#3796](https://github.com/ethereum/EthLib/issues/3796)).
+  `Secp256r1.Point.mulAdd_eq_jacobian` states that it equals the shared Jacobian chain on `Fp`, for every input.
+  `Secp256r1.Montgomery.toFin_embedding` states that reading the four-word form back into `Fp` keeps the operations and is one to one.
+  `Word64.Raw.val_injective` and `Word64.Raw.bit_iff` state that four words are determined by their integer, and that a bit read from them is a bit of it.
+  `Word64.add4_spec` and `Word64.sub4_spec` give the integer of a four-word sum with its carry, and of a difference with its borrow.
+  The word lemmas that were private in the secp256k1 field and that both fields use are public in `Word64`: `mulHigh_spec`, `add_with_carry`, `mac_spec`, `sub_split`, `yes_le_one`, `lowValue_lt`, `value_low_of_top_zero`, `rawOfNat_val`, and in the proofs `value_wide`, `val_narrow` and `wide_narrow`.
+
 - `PinDrift.Internal.total_band_of_setting` is public, in `PinDriftBound/Setting.lean`.
   In the pin's setting, take a pre-Gloas state on a run from the finalized state, by R's next epoch.
   When both total active balance reads succeed, each total is at most three halves of the other.
@@ -790,6 +797,16 @@ Not yet released.
   `ValidatorStep`, `PinDriftBound.CreditBudgets` and `PinDriftBound.PreviousEpochRise` use it.
 
 ### Changes that break callers
+
+- In Lean, the 64-bit word primitives and the integers of four and five words move from `Secp256k1.Montgomery` to the neutral `Word64` module, which the secp256r1 field shares.
+  Each moves from `EthLib.Cryptography.Secp256k1.Montgomery.X` to `EthLib.Cryptography.Word64.X`, with its statement unchanged, for `X` in `wordRadix`, `mulHigh`, `yes`, `Pair`, `mac`, `plus`, `minus`, `plus_spec`, `minus_spec`, `Words64`, `Words64.val`, `lowValue`, `value`, `Raw`, `Raw.fromWords`, `Raw.words`, `Raw.val`, `Raw.val_eq`, `Raw.fromWords_val`, `rawOfNat`, `rawToNat` and `rawToNat_eq`.
+  The proof helpers `join`, `wide` and `narrow` move the same way, from `Proofs/Secp256k1/Montgomery.lean` to `Proofs/Word64.lean`.
+  Inside `Secp256k1.Montgomery`, an `export` keeps the short names `wordRadix`, `mulHigh`, `yes`, `Pair`, `mac`, `plus`, `minus`, `plus_spec`, `minus_spec`, `Words64`, `lowValue`, `value`, `Raw`, `rawOfNat`, `rawToNat` and `rawToNat_eq`.
+  Migration: write the new full names, or `open EthLib.Cryptography.Word64` for the members of `Raw` and `Words64`.
+
+- In Lean, the secp256r1 `Fp`, `Fn`, `Fp.modulus`, `Fn.modulus`, `Fp.inv`, `Fn.inv` and their `NeZero` instances move from `Secp256r1/Curve.lean` to `Secp256r1/Field.lean`, with unchanged full names.
+  `Secp256r1.Curve` no longer publicly imports `Secp256k1.Field`.
+  Migration: import `Secp256k1.Field` directly where it is needed.
 
 - In Lean, the eth messages Transactions, BlockHeaders and PooledTransactions keep each transaction and header as `Rlp.Encoded`: its item, and the bytes it was read from ([#3766](https://github.com/ethereum/EthLib/issues/3766)).
   The wire hash, the hash of a header, the PooledTransactions check, the BlockHeaders check and the session read those bytes, so they never run the recursive RLP encoder on what a peer sent.

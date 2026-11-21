@@ -7,6 +7,7 @@ import all EthLib.Cryptography.Montgomery.Fin
 import all EthLib.Cryptography.Montgomery
 public import EthLib.Cryptography.Proofs.Montgomery.Core
 public import EthLib.Cryptography.Proofs.Montgomery.Fin
+public import EthLib.Cryptography.Proofs.Word64
 
 /-!
 # Proofs: the Montgomery form of the secp256k1 base field
@@ -21,6 +22,8 @@ Its specialized square, shifts and fused operations give the corresponding field
 @[expose] public section
 
 namespace EthLib.Cryptography.Secp256k1
+
+open EthLib.Cryptography.Word64
 
 /-- The Montgomery constants of `p` on eight 32-bit limbs, with radix `R = 2^256`.
 
@@ -44,67 +47,9 @@ end EthLib.Cryptography.Secp256k1
 
 namespace EthLib.Cryptography.Secp256k1.Montgomery
 
+open EthLib.Cryptography.Word64
+
 open EthLib.Cryptography.Montgomery (Limbs)
-
-/-- One word from two 32-bit limbs, the low one first. -/
-def join (lo hi : UInt32) : UInt64 :=
-  lo.toUInt64 ||| (hi.toUInt64 <<< 32)
-
-/-- Four words from eight 32-bit limbs, with a zero carry word. -/
-def wide (a : Cryptography.Montgomery.Limbs8) : Words64 :=
-  ⟨join a.l0 a.l1, join a.l2 a.l3, join a.l4 a.l5, join a.l6 a.l7, 0⟩
-
-/-- Eight 32-bit limbs from the four low words. -/
-def narrow (p : Words64) : Cryptography.Montgomery.Limbs8 :=
-  ⟨p.w0.toUInt32, (p.w0 >>> 32).toUInt32,
-    p.w1.toUInt32, (p.w1 >>> 32).toUInt32,
-    p.w2.toUInt32, (p.w2 >>> 32).toUInt32,
-    p.w3.toUInt32, (p.w3 >>> 32).toUInt32⟩
-
-
-private theorem join_value (lo hi : UInt32) : (join lo hi).toNat = lo.toNat + 2^32*hi.toNat := by
-  have hhi : hi.toNat * 2^32 < 2^64 := Nat.mul_lt_mul_of_pos_right hi.toNat_lt (by decide)
-  unfold join
-  rw [UInt64.toNat_or, UInt64.toNat_shiftLeft, UInt32.toNat_toUInt64, UInt32.toNat_toUInt64]
-  change lo.toNat ||| (hi.toNat <<< 32) % 2^64 = _
-  rw [Nat.shiftLeft_eq, Nat.mod_eq_of_lt hhi, Nat.mul_comm hi.toNat, Nat.or_comm,
-    ← Nat.two_pow_add_eq_or_of_lt lo.toNat_lt, Nat.add_comm]
-
-private theorem split_value (w : UInt64) :
-    w.toUInt32.toNat + 2^32*(w >>> 32).toUInt32.toNat = w.toNat := by
-  rw [UInt64.toNat_toUInt32, UInt64.toNat_toUInt32, UInt64.toNat_shiftRight,
-    Nat.shiftRight_eq_div_pow]
-  change w.toNat % 2^32 + 2^32*(w.toNat / 2^32 % 2^32) = w.toNat
-  have h : w.toNat / 2^32 < 2^32 := Nat.div_lt_of_lt_mul w.toNat_lt
-  rw [Nat.mod_eq_of_lt h, Nat.mod_add_div]
-
-private theorem limbs8_value (a : Cryptography.Montgomery.Limbs8) :
-    Limbs.val (n := 8) a = a.l0.toNat + 2^32*a.l1.toNat + 2^64*a.l2.toNat +
-      2^96*a.l3.toNat + 2^128*a.l4.toNat + 2^160*a.l5.toNat +
-      2^192*a.l6.toNat + 2^224*a.l7.toNat := by
-  change a.l0.toNat + 2^32*(a.l1.toNat + 2^32*(a.l2.toNat + 2^32*(a.l3.toNat +
-    2^32*(a.l4.toNat + 2^32*(a.l5.toNat + 2^32*(a.l6.toNat + 2^32*(a.l7.toNat + 2^32*0))))))) = _
-  omega
-
-private theorem value_wide (a : Cryptography.Montgomery.Limbs8) :
-    value (wide a) = Limbs.val (n := 8) a := by
-  simp only [value, lowValue, wide, join_value, limbs8_value, UInt64.toNat_zero,
-    Nat.mul_zero, Nat.add_zero, wordRadix]
-  omega
-
-private theorem val_narrow (w : Words64) (h : w.top = 0) :
-    Limbs.val (n := 8) (narrow w) = value w := by
-  have h0 := split_value w.w0
-  have h1 := split_value w.w1
-  have h2 := split_value w.w2
-  have h3 := split_value w.w3
-  simp only [limbs8_value, narrow, value, lowValue, h, UInt64.toNat_zero,
-    Nat.mul_zero, Nat.add_zero, wordRadix]
-  omega
-
-
-
-
 
 /-- The shared Montgomery field on eight 32-bit limbs, at the constants of `p`. -/
 abbrev Shared := Cryptography.Montgomery Fp.params
@@ -174,16 +119,6 @@ private theorem mont_ext {a b : Shared} (h : Limbs.val (n := 8) a.limbs =
 /-- A change of limb packing preserves the original Montgomery residue. -/
 theorem toMont_ofMont (a : Shared) : toMont (ofMont a) = a :=
   mont_ext ((toMont_val (ofMont a)).trans (ofMont_val a))
-
-private theorem join_split (w : UInt64) :
-    join w.toUInt32 (w >>> 32).toUInt32 = w :=
-  UInt64.toNat_inj.mp ((join_value _ _).trans (split_value w))
-
-private theorem wide_narrow (w : Words64) (h : w.top = 0) : wide (narrow w) = w := by
-  cases w
-  cases h
-  simp only [wide, narrow, join_split]
-  rfl
 
 /-- Canonical residues have an injective representation in the general field. -/
 theorem toMont_injective : Function.Injective toMont := by
