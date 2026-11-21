@@ -258,7 +258,7 @@ theorem push1GA {byte : UInt8} (hlt : pc + 1 < code.size) (hop : code[pc]'(by om
       (At code message (pc + 2) (BitVec.ofNat 256 byte.toNat :: stack) memory (gas - 3) state
         substate returnData) :=
   pushGA (n := 1) (by decide) (by omega) (by rw [hop]; decide) rfl
-    (by simp [pushData, bufferRead, Base.byteAt, hlt, hbyte, Base.bytesToNat]) hgas hstack
+    (by simp [pushData, bufferRead_eq, Base.byteAt, hlt, hbyte, Base.bytesToNat]) hgas hstack
 
 /-- PUSH1 pushes the byte after it and costs 3, with room on the stack.
 

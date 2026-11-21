@@ -7,7 +7,7 @@ public import EthLib.Execution.Proofs.Evm.Gas.Memory
 /-!
 # Proofs: `Evm.Machine.Memory`
 
-- A read gives exactly the bytes asked for.
+- A read gives exactly the bytes asked for, as a byte array or as a list.
 - A read of memory after a write of the same range gives the written bytes, and the size stays.
 - Memory grows in whole words, so its size stays a multiple of 32.
 - A write within memory sets each byte of its range and keeps every other byte.
@@ -27,19 +27,82 @@ namespace EthLib.Execution.Evm
 open EthLib.Base (U256 byteAt byteAt_append byteAt_append_zeros byteAt_extract byteAt_of_size_le
   eq_of_byteAt)
 
+/-- A read into a byte array is its block, then the zeros it lacks, which may be none. -/
+private theorem bufferBytes_eq_append (data : ByteArray) (start size : Nat) :
+    bufferBytes data start size =
+      let inside := if start < data.size then data.extract start (min (start + size) data.size)
+        else .empty
+      inside ++ ByteArray.mk (Array.replicate (size - inside.size) 0) := by
+  unfold bufferBytes
+  dsimp only
+  generalize (if start < data.size then data.extract start (min (start + size) data.size)
+    else ByteArray.empty) = inside
+  by_cases h : inside.size = size
+  · simp only [h, ite_true, Nat.sub_self]
+    exact ByteArray.append_empty.symm
+  · simp only [h, ite_false]
+
+/-- A read into a byte array has exactly the `size` bytes asked for. -/
+theorem size_bufferBytes (data : ByteArray) (start size : Nat) :
+    (bufferBytes data start size).size = size := by
+  rw [bufferBytes_eq_append]
+  dsimp only
+  split <;>
+    simp only [ByteArray.size_append, ByteArray.size_extract, ByteArray.size_empty] <;>
+    simp only [← ByteArray.size_data, Array.size_replicate] <;>
+    omega
+
+/-- A read into a byte array holds the bytes of the buffer, zero past its end and past `size`. -/
+theorem byteAt_bufferBytes (data : ByteArray) (start size j : Nat) :
+    byteAt (bufferBytes data start size) j =
+      if j < size then byteAt data (start + j) else 0 := by
+  rw [bufferBytes_eq_append]
+  dsimp only
+  -- A byte past the end of the buffer reads as zero on both sides.
+  have past : data.size ≤ start + j → byteAt data (start + j) = 0 := byteAt_of_size_le
+  split
+  · rw [byteAt_append_zeros, byteAt_extract]
+    by_cases hj : j < size
+    · by_cases hd : start + j < data.size
+      · simp [hj, hd, Nat.lt_min]
+      · simp [hj, hd, Nat.lt_min, past (by omega)]
+    · simp [hj, Nat.lt_min]
+  · rw [byteAt_append_zeros, byteAt_of_size_le (by simp)]
+    by_cases hj : j < size <;> simp [hj, past (by omega)]
+
+/-- A read is the byte of the buffer at each position, zero past its end. -/
+theorem bufferRead_eq (data : ByteArray) (start size : Nat) :
+    bufferRead data start size = (List.range size).map fun i => byteAt data (start + i) := by
+  apply List.ext_getElem
+  · simp only [bufferRead, Array.length_toList, List.length_map, List.length_range]
+    exact size_bufferBytes data start size
+  · intro i h1 h2
+    have hi : i < size := by simpa using h2
+    have hb : i < (bufferBytes data start size).size := by rw [size_bufferBytes]; exact hi
+    have h := byteAt_bufferBytes data start size i
+    simp only [hi, ite_true] at h
+    simp only [bufferRead, Array.getElem_toList, List.getElem_map, List.getElem_range]
+    rw [← h]
+    simp [byteAt, hb, ByteArray.getElem_eq_getElem_data]
+
+/-- A read into a byte array is the bytes of the read as a list. -/
+theorem bufferBytes_eq (data : ByteArray) (start size : Nat) :
+    bufferBytes data start size = ⟨(bufferRead data start size).toArray⟩ := by
+  simp [bufferRead]
+
 /-- A read has exactly the `size` bytes asked for. -/
 theorem bufferRead_length (data : ByteArray) (start size : Nat) :
     (bufferRead data start size).length = size := by
-  simp [bufferRead]
+  simp [bufferRead_eq]
 
 /-- A read of a whole buffer from its start gives its bytes. -/
 theorem bufferRead_zero_size (data : ByteArray) :
     bufferRead data 0 data.size = data.data.toList := by
   apply List.ext_getElem
-  · simp [bufferRead]
+  · simp [bufferRead_eq]
   · intro i _ h
     have hi : i < data.data.size := by simpa using h
-    simp [bufferRead, EthLib.Base.byteAt_eq_getD, Array.getD_eq_getD_getElem?,
+    simp [bufferRead_eq, EthLib.Base.byteAt_eq_getD, Array.getD_eq_getD_getElem?,
       Array.getElem?_eq_getElem hi]
 
 /-- A write within memory keeps its size. -/
@@ -184,7 +247,7 @@ theorem byteAt_bufferRead (data : ByteArray) (offset size j : Nat) :
   · have hlen : j < (bufferRead data offset size).toArray.size := by simp [bufferRead_length, hj]
     rw [dite_eq_left_of_eq_true (eq_true (by simpa [ByteArray.size] using hlen)),
       ite_eq_left_of_eq_true _ _ (eq_true hj), ByteArray.getElem_eq_getElem_data]
-    simp [bufferRead, byteAt]
+    simp [bufferRead_eq, byteAt]
   · rw [dite_eq_right_of_eq_false
       (eq_false (by simpa [ByteArray.size, bufferRead_length] using hj)),
       ite_eq_right_of_eq_false _ _ (eq_false hj)]

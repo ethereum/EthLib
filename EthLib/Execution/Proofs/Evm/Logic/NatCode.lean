@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Evm.Machine.JumpDest
 public import EthLib.Execution.Evm.Instructions.StackOnly
+import EthLib.Execution.Proofs.Evm.Machine.Memory
 
 /-!
 # Proofs: a code stored as one natural number
@@ -77,7 +78,8 @@ The last of them sits `size - 1 - (pc + k)` bytes above the lowest byte of the n
 theorem pushData_ofNat (n size pc k : Nat) (h : pc + k < size) :
     pushData (ofNat n size) pc k =
       BitVec.ofNat 256 (n >>> (8 * (size - 1 - (pc + k))) % 256 ^ k) := by
-  unfold pushData bufferRead
+  unfold pushData
+  rw [bufferRead_eq]
   congr 1
   induction k with
   | zero => simp [bytesToNat, Nat.mod_one]

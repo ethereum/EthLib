@@ -87,7 +87,7 @@ def copyToMemory (base : Nat) (source : ByteArray) (evm : Evm fork Meter) :
   let (size, evm) ← popWord evm
   let cost := base + OPCODE_COPY_PER_WORD * wordCount size.toNat
   let evm ← chargeGasAndMemory evm cost [(start, size)]
-  let value : ByteArray := ⟨(bufferRead source offset.toNat size.toNat).toArray⟩
+  let value := bufferBytes source offset.toNat size.toNat
   return advance { evm with memory := memoryWrite evm.memory start.toNat value }
 
 /-- RETURNDATACOPY: copy return data to memory, by EIP-211.

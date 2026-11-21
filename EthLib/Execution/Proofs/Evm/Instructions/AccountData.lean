@@ -203,7 +203,7 @@ theorem extcodecopyStep_of_accountCode [GasMeter Meter] {evm : Evm fork Meter}
     { evm with stack := ⟨rest, by have := evm.stack.property; rw [h] at this; simp at this; omega⟩ }
     (toAddressMasked word)
   simp only [extcodecopyStep, popWord, chargeGasAndMemory, chargeGas, recordAccountRead, advance,
-    hstack, Stack.pop]
+    hstack, Stack.pop, bufferBytes_eq]
   simp only [bind, Except.bind, pure, Except.pure, hacc]
   -- Recording the read leaves the account and its code as they are.
   have recorded : Except.mapError EvmError.state
@@ -297,7 +297,7 @@ theorem byteAt_extcodecopyStep [GasMeter Meter] {evm after : Evm fork Meter}
     exact congrArg (byteAt · j) hm4
   have hlen : ({ data := (bufferRead code offset.toNat size.toNat).toArray } : ByteArray).size =
       size.toNat := by simp [ByteArray.size, bufferRead_length]
-  simp only [advance, recordAccountRead]
+  simp only [advance, recordAccountRead, bufferBytes_eq]
   by_cases hz : size = 0
   · subst hz
     have hw : memoryWrite e5.memory start.toNat
@@ -391,6 +391,6 @@ theorem size_accountStep_mod [GasMeter Meter] {op : Op}
     simp only [advance, recordAccountRead]
     refine size_memoryWrite_chargeGasAndMemory_mod (evm := { e4 with
       substate := { e4.substate with accessedAddresses := accessed } }) m4 h5 ?_
-    simp [ByteArray.size, bufferRead_length]
+    simp [size_bufferBytes]
 
 end EthLib.Execution.Evm

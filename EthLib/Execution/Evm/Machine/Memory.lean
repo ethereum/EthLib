@@ -20,13 +20,26 @@ So a read or a write of memory stays within its size.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (byteAt)
+/-- `size` bytes of the buffer from `start`, padded with zeros on the right, as a byte array.
 
-/-- `size` bytes of the buffer from `start`, padded with zeros on the right.
+Appendix H.2 of the Yellow Paper reads call data this way, as zero past its end.
 
-Appendix H.2 of the Yellow Paper reads call data this way, as zero past its end. -/
+The bytes inside the buffer are copied as one block, then the zeros follow.
+
+The start can be any word, far past any index that a compiled byte array holds.
+
+So the block is cut to the buffer first, and a start past its end copies nothing.
+
+A read that ends inside the buffer needs no zeros, so it appends none. -/
+def bufferBytes (data : ByteArray) (start size : Nat) : ByteArray :=
+  let inside := if start < data.size then data.extract start (min (start + size) data.size)
+    else .empty
+  if inside.size = size then inside
+  else inside ++ ByteArray.mk (Array.replicate (size - inside.size) 0)
+
+/-- `size` bytes of the buffer from `start`, padded with zeros on the right, as a list. -/
 def bufferRead (data : ByteArray) (start size : Nat) : List UInt8 :=
-  (List.range size).map fun i => byteAt data (start + i)
+  (bufferBytes data start size).data.toList
 
 /-- The memory with `value` written from `start`.
 

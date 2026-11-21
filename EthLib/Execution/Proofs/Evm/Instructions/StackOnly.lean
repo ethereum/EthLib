@@ -43,7 +43,7 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 /-- PUSH reads the code past its end as zeros, so zeros appended to the code change nothing. -/
 theorem pushData_append_zeros (code : ByteArray) (pc n k : Nat) :
     pushData (code ++ ByteArray.mk (Array.replicate k 0)) pc n = pushData code pc n := by
-  simp only [pushData, bufferRead, byteAt_append_zeros]
+  simp only [pushData, bufferRead_eq, byteAt_append_zeros]
 
 /-- DUP(n + 1) that pays fails with an underflow on a stack of at most `n` words. -/
 theorem dupN_of_length_le {n : Fin 16} {evm : Evm fork Meter} {gas : Meter}
