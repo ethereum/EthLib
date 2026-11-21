@@ -52,6 +52,7 @@ extern lean_object* eth_engine_exchange_transition_configuration(lean_object* ar
 extern lean_object* eth_engine_exchange_capabilities(lean_object* args);
 extern lean_object* eth_engine_get_client_version(lean_object* args);
 extern lean_object* eth_engine_get_inclusion_list(lean_object* args);
+extern lean_object* eth_engine_run_node(lean_object* args);
 extern lean_object* eth_engine_error_object(lean_object* args);
 
 /* ---- Wrappers --------------------------------------------------------- */
@@ -214,6 +215,14 @@ py_engine_get_inclusion_list(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_engine_get_inclusion_list, args, 2, ENGINE_ERROR);
+}
+
+PyObject*
+py_engine_run_node(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_run_node, args, 6, ENGINE_ERROR);
 }
 
 PyObject*

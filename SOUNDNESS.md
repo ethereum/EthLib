@@ -4705,7 +4705,7 @@ It shows that the payload is then `INVALID`, with the zero hash as the latest va
 `isTerminalPowBlock_eq_isValidTerminalPowBlock` (`Proofs/TransitionConfiguration.lean`) shows that these conditions are those of the consensus layer, when both layers hold the same terminal total difficulty.
 Only the last block of the chain is checked.
 Step 2 also says that every descendant of an invalid terminal block must be `INVALID`.
-The model keeps no invalid block, so a child of a payload rejected by the check is `SYNCING` instead.
+The method on a chain keeps no invalid block, so a child of a payload rejected by the check is `SYNCING` instead.
 A chain whose last block is from Paris on is taken as valid, its terminal block included.
 
 Payload attributes of `engine_forkchoiceUpdated` answer by the version of the method and the fork of their timestamp.
@@ -4938,7 +4938,26 @@ The configuration must allow at least 8192 bytes, as mainnet does (`mainnet_maxT
 The answer is written as an array of byte strings, which reads back (`inclusionListOfJson_json`, `Proofs/Json.lean`).
 The method does not decode the candidates: it takes each as a transaction of EIP-2718 without checking it, and it does not enforce the SHOULD NOT on blob transactions.
 
-The tree of known payloads and the known finalized block are inputs of each call, not state that the model keeps between calls.
+The functions of each method take the tree of known payloads, the known finalized block and the builds as inputs.
+An execution node keeps them as state across calls (`Engine/Node.lean`).
+It knows blocks with their validity and the state after each valid one, and it keeps the forkchoice state, the known finalized block and the builds.
+Each method is a step of the node, and each step answers with the function of its method on a view of the node (`Proofs/Node.lean`).
+`newPayloadStep_of_validState` shows that a new payload on a known valid parent gets the answer of the method on the chain of that parent.
+`chainAt_last` shows that this chain ends at the parent, with the state after it.
+A payload whose parent the node does not know as valid is `SYNCING` (`newPayloadStep_of_validState_eq_none`), and a payload that fails the checks before execution gets their answer and changes nothing (`newPayloadStep_of_checkNewPayload_invalid`).
+Those checks also read the other parameters of the request, so the node does not record such a payload.
+`validState_of_newPayloadStep` shows that a `VALID` payload is then known as valid under its own hash.
+`forkchoiceUpdatedStep_ne_syncing_of_newPayloadStep` shows that the next update, with that payload as the head, is not `SYNCING`.
+`forkchoiceUpdatedStep_answer` gives the response of an update on the tree of the node, and `getPayloadStep_eq` the answer of a request for a payload on its builds.
+An update applies its forkchoice state when it applies its head, even when its payload attributes then fail, as step 8 of the method asks (`forkchoiceUpdatedStep_of_applied`).
+Otherwise the node does not change (`forkchoiceUpdatedStep_of_not_applied`).
+No update starts a build yet, so the builds stay empty, and a request for a payload answers `-38001`, even for the payload ID that an update answered (#3533).
+The node runs every payload on a known valid parent, so it never answers `ACCEPTED` (#3530).
+A child of a known invalid block is `SYNCING`, short of step 2 of payload validation, which asks `INVALID` for each descendant of an invalid terminal block (#3531).
+A node starts from one block; a total difficulty below the difficulty of a block of proof of work gives no node.
+The node keeps the state after every valid block, so it never refuses a reorganization with `-38006`.
+A C export runs a script of requests on a node that starts from one block.
+The Python tests run scripts of payloads, updates and reorganizations of empty blocks through it.
 
 ### Execution JSON-RPC API
 
@@ -7339,12 +7358,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 543 operations and 51 size constants.
-The Python extension calls 543 of the operations and 51 of the constants.
+Lean exports 544 operations and 51 size constants.
+The Python extension calls 544 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12272 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (342), `engine.c` (225), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1624), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (846), `x25519.c` (21), `xmss.c` (344).
+12283 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (342), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1625), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (847), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

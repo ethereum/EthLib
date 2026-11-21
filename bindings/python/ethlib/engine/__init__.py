@@ -261,6 +261,29 @@ def get_inclusion_list(candidates: Sequence[bytes], method: str, params: list[An
     return _native.engine_get_inclusion_list(list(candidates), request)
 
 
+def run_node(
+    config: dict,
+    state: bytes,
+    anchor: RecentBlock,
+    requests: Sequence[dict[str, Any]],
+    *,
+    terminal_total_difficulty: int = 0,
+    total_difficulty: int = 0,
+) -> list[dict[str, Any]]:
+    """The response to each request of a script, and the forkchoice state after it, on one node."""
+    # The node starts from the anchor, valid, as its head, with `state` after it.
+    # `total_difficulty` is that of the anchor, which counts only before Paris.
+    name, header, ommers = anchor
+    return _native.engine_run_node(
+        config,
+        state,
+        (name, header, list(ommers)),
+        terminal_total_difficulty,
+        total_difficulty,
+        list(requests),
+    )
+
+
 def error_object(code: int) -> str:
     """The JSON text of the error object of the Engine API error with a code, such as 38006."""
     return _native.engine_error_object(code)
@@ -442,6 +465,7 @@ __all__ = [
     "exchange_capabilities",
     "get_client_version",
     "get_inclusion_list",
+    "run_node",
     "error_object",
     "WithdrawalEntry",
     "prepare_execution_payload",
