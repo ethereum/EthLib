@@ -245,13 +245,7 @@ theorem string_str (what text : String) : string what (.str text) = .ok text := 
 theorem bytes_hexText (what : String) (data : List UInt8) :
     bytes what (.str (hexText data)) = .ok ⟨data.toArray⟩ := by
   -- Two digits per byte, so the number of digits is even.
-  have even : (data.flatMap Base.byteHexDigits).length = 2 * data.length := by
-    induction data with
-    | nil => rfl
-    | cons byte rest ih =>
-      simp only [List.flatMap_cons, List.length_append, ih]
-      simp only [Base.byteHexDigits, List.length_cons, List.length_nil]
-      omega
+  have even := Base.length_flatMap_byteHexDigits data
   simp only [bytes, string_str, hexText, bind, Except.bind, String.toList_ofList, even,
     Nat.mul_mod_right, Base.hexBytes?_flatMap]
   rfl

@@ -241,12 +241,6 @@ private theorem byte_split (b : UInt8) :
     UInt8.toNat_ofNat']
   omega
 
-/-- The sum of a list of twos is twice its length. -/
-private theorem sum_two (l : List UInt8) : (l.map fun _ => 2).sum = 2 * l.length := by
-  induction l with
-  | nil => rfl
-  | cons b l ih => simp only [List.map_cons, List.sum_cons, ih, List.length_cons]; omega
-
 /-- The high digit of a byte. -/
 private def highDigit (b : UInt8) : Fin 16 := ⟨b.toNat / 16, by have := b.toNat_lt; omega⟩
 
@@ -259,13 +253,6 @@ private theorem flatMap_byteHexDigits_getElem? (data : List UInt8) (i : Nat) :
     (data.flatMap byteHexDigits)[2 * i + 1]? = data[i]?.map (fun b => hexDigitChar (lowDigit b)) :=
   flatMap_pair_getElem? (fun b => hexDigitChar (highDigit b)) (fun b => hexDigitChar (lowDigit b))
     data i
-
-/-- The hex encoding writes two digits for each byte. -/
-private theorem length_flatMap_byteHexDigits (data : List UInt8) :
-    (data.flatMap byteHexDigits).length = 2 * data.length := by
-  rw [List.length_flatMap]
-  simp only [byteHexDigits, List.length_cons, List.length_nil]
-  exact sum_two data
 
 /-- The decoder returns the bytes whose two digits it reads at positions `2 * i` and `2 * i + 1`.
 

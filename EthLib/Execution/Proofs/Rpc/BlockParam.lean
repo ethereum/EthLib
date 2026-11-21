@@ -187,15 +187,7 @@ theorem hash32_quantityJson_of_lt (what : String) {n : Nat} (hn : n < 2 ^ 252) :
     unfold quantityJson at h
     rw [String.toList_append, toList_hexString, String.toList_ofList] at h
     have h := congrArg List.length (List.append_cancel_left (as := ['0', 'x']) h)
-    have hl : ∀ l : List UInt8, (l.flatMap byteHexDigits).length = 2 * l.length := by
-      intro l
-      induction l with
-      | nil => rfl
-      | cons b l ih =>
-        simp only [List.flatMap_cons, List.length_append, ih]
-        simp [byteHexDigits]
-        omega
-    have hv := hl v.toList
+    have hv := length_flatMap_byteHexDigits v.toList
     have hs : v.toList.length = 32 := by simp
     simp only [← List.flatMap_def] at h
     have hd := (Nat.length_toDigits_le_iff (b := 16) (n := n) (k := 63) (by omega)
