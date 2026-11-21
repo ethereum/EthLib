@@ -23,7 +23,9 @@ The root of the registry then tells this chain apart from others.
 
 A candidate state launches the chain once it is late enough and has enough active validators.
 
-Altair and later forks start from a state of their own, which EthLib does not yet have here.
+Genesis is defined at Phase 0 only.
+
+A chain reaches each later fork through the upgrade of its state.
 -/
 
 @[expose] public section
