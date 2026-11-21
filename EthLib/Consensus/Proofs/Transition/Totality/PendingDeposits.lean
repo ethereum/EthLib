@@ -60,7 +60,7 @@ private theorem setOrAppendList_exists_ok {switch : Base.Fork} {α : Type} {limi
   simp [setOrAppendList, atEnd, appendWithinLimit, room]
 
 /-- A new validator succeeds in a registry with room, with one entry per validator in each list. -/
-private theorem addValidatorToRegistry_exists_ok {state : BeaconState preset fork}
+theorem addValidatorToRegistry_exists_ok {state : BeaconState preset fork}
     (matched : BalancesMatch state) (sized : ParticipationMatches state)
     (scored : InactivityScoresMatch state)
     (room : state.validators.data.size < preset.VALIDATOR_REGISTRY_LIMIT.toNat)
@@ -100,7 +100,7 @@ private theorem addValidatorToRegistry_exists_ok {state : BeaconState preset for
 The sum of the balances plus its amount must be below `2^64`.
 
 Each list of the registry must have one entry for each validator. -/
-private theorem applyPendingDeposit_exists_ok (config : Config) (checks : SignatureChecks)
+theorem applyPendingDeposit_exists_ok (config : Config) (checks : SignatureChecks)
     {state : BeaconState preset fork} (deposit : PendingDeposit)
     (matched : BalancesMatch state) (sized : ParticipationMatches state)
     (scored : InactivityScoresMatch state)
@@ -165,7 +165,7 @@ theorem addValidatorToRegistry_matches {state after : BeaconState preset fork}
     · cases computed
 
 /-- A pending deposit keeps one entry for each validator in the flags and the scores. -/
-private theorem applyPendingDeposit_matches {config : Config} {checks : SignatureChecks}
+theorem applyPendingDeposit_matches {config : Config} {checks : SignatureChecks}
     {state after : BeaconState preset fork} {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after)
     (sized : ParticipationMatches state) (scored : InactivityScoresMatch state) :
