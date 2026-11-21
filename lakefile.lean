@@ -35,7 +35,7 @@ require "leanprover-community" / "mathlib" @ git "v4.36.0"
 --
 -- VCVio supplies cache replay, graph collision bounds, and the price of adaptive searches.
 require VCVio from git "https://github.com/Verified-zkEVM/VCVio.git" @
-  "d927588ca0611096f0b77f7edc4ce038d1171202"
+  "b30616ba05b0f0aab8329cbb38812f486d2d0db8"
 
 @[default_target]
 lean_lib «EthLib» where

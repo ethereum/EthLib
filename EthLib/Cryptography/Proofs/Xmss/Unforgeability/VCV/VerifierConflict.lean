@@ -2,7 +2,6 @@ module
 
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.VerifierProbe
 public import VCVio.OracleComp.QueryTracking.RandomOracle.PublicReplay
-import all VCVio.OracleComp.QueryTracking.RandomOracle.PublicReplay
 public import VCVio.OracleComp.QueryTracking.RandomOracle.Undisclosed
 import all EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.VerifierProbe
 import EthLib.Cryptography.Proofs.Xmss.MapMonad
@@ -41,7 +40,8 @@ local notation "requests" => CanonicalGraph.publicRequests
 
 /-- Lift a raw public full-word call into the shared graph. -/
 theorem public_image (b : ByteArray) : simulateQ requests (halvesHash b) = Honest.hash b := by
-  simp only [halvesHash, simulateQ_bind, simulateQ_HasQuery_query, simulateQ_pure]
+  simp only [halvesHash, simulateQ_bind, simulateQ_HasQuery_query, simulateQ_pure,
+    CanonicalGraph.publicRequests_apply]
   rfl
 
 private theorem verifier_image (pp : PublicParam) (l : Layer) (e : Nat) (m : ByteArray)
@@ -92,7 +92,7 @@ theorem finder_replay (pp : PublicParam) (l : Layer) (e : UInt32) (msg : ByteArr
       = Xmss.Internal.findCodeword Honest.hash pp l e msg base counter fuel := by
     rw [show raw = _ from rfl, findCodeword_map_monad (simulateQ requests) (simulateQ_pure _)
       (simulateQ_bind _)]
-    simp only [public_image]
+    rw [show (fun b => simulateQ requests (halvesHash b)) = Honest.hash from funext public_image]
   rw [← image] at run
   have replay := (graph pp).deferred_public_replay raw run extended clean
   rw [show raw = _ from rfl, findCodeword_map_monad (simulateQ _) (simulateQ_pure _)
