@@ -34,40 +34,6 @@ open EthLib.Serialization.Rlp
 
 variable {fork : Fork} {Tx : Type} [Codec Tx] [LawfulCodec Tx]
 
-namespace Header
-
-/-- The number read from the item of a header is the number of the header. -/
-theorem numberOfItem_toItem {f : Fork} (h : Header f) :
-    numberOfItem (Codec.toItem h) = .ok h.number := by
-  simp [numberOfItem, toItem_eq, NUMBER_FIELD, Item.toItems, Item.field,
-    LawfulCodec.ofItem_toItem, Except.mapError, bind, Except.bind]
-
-/-- A header reads back with the fork of its number, when that is its own fork. -/
-theorem ofItemAtNumber_toItem (forkOf : Nat → Fork) (ommer : (f : Fork) × Header f)
-    (hFork : ommer.1 = forkOf ommer.2.number) :
-    ofItemAtNumber forkOf (Codec.toItem ommer.2) = .ok ommer := by
-  obtain ⟨f, h⟩ := ommer
-  simp only [ofItemAtNumber, numberOfItem_toItem, bind, Except.bind, pure, Except.pure]
-  generalize forkOf h.number = g at hFork ⊢
-  subst hFork
-  simp [LawfulCodec.ofItem_toItem]
-
-/-- A header read with the fork of its number has that fork, and its item is the item read. -/
-theorem ofItemAtNumber_eq_ok {forkOf : Nat → Fork} {item : Item}
-    {ommer : (f : Fork) × Header f} (hDecode : ofItemAtNumber forkOf item = .ok ommer) :
-    Codec.toItem ommer.2 = item ∧ ommer.1 = forkOf ommer.2.number := by
-  unfold ofItemAtNumber at hDecode
-  obtain ⟨number, hNumber, hDecode⟩ := bind_ok_iff.mp hDecode
-  obtain ⟨h, hHeader, hDecode⟩ := bind_ok_iff.mp hDecode
-  obtain rfl := (Except.ok.inj hDecode).symm
-  have hItem := LawfulCodec.toItem_of_ofItem hHeader
-  refine ⟨hItem, ?_⟩
-  -- The number read from the item is the number of the header that the item holds.
-  rw [← hItem, numberOfItem_toItem] at hNumber
-  exact congrArg forkOf (Except.ok.inj hNumber).symm
-
-end Header
-
 omit [LawfulCodec Tx] in
 /-- The items of a block: the header, the transactions and the ommers, then the withdrawals. -/
 theorem Block.toItem_eq (b : Block fork Tx) :

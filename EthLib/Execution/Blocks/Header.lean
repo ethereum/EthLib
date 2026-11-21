@@ -185,6 +185,31 @@ def hash {fork : Fork} (h : Header fork) : Except RlpError Hash32 := do
   let bytes ← Codec.encode h
   return keccak256 bytes
 
+/-- The index of the number among the fields of a header, at every fork. -/
+def NUMBER_FIELD : Nat := 8
+
+/-- The number that the item of a header holds, read before the header is decoded at a fork.
+
+The number is the ninth field at every fork, and every fork has at least 15 fields. -/
+def numberOfItem (item : Item) : Except RlpError Nat := do
+  -- The header is a list, and its number is at the same index at every fork.
+  let items ← item.toItems
+  match items[NUMBER_FIELD]? with
+  | some field => Item.field NUMBER_FIELD field
+  -- A list too short for the number is shorter than any header.
+  | none => .error (.wrongFieldCount (fieldCount .frontier) items.length)
+
+/-- The header that an item holds, with its fork: the fork of its own number on the chain.
+
+The chain gives the fork of each block number.
+
+An ommer decodes this way, so it can hold the header form of an earlier fork. -/
+def ofItemAtNumber (forkOf : Nat → Fork) (item : Item) :
+    Except RlpError ((f : Fork) × Header f) := do
+  -- Read the number first, since the fork of the header decides its field count.
+  let f := forkOf (← numberOfItem item)
+  return ⟨f, ← Codec.ofItem item⟩
+
 end Header
 
 end EthLib.Execution.Blocks
