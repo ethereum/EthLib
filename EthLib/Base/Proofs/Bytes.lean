@@ -24,6 +24,8 @@ Two strings of one size are equal when they agree on every byte.
 A loop over the bytes of a string runs as a loop over the list of those bytes, in order.
 
 Inside the array, a bounded read or write of a byte agrees with the defaulting one.
+
+A defaulting write changes the byte it writes and no other.
 -/
 
 @[expose] public section
@@ -45,6 +47,63 @@ theorem byteArray_set_eq_set! (bytes : ByteArray) (index : Nat) (value : UInt8)
     change ByteArray.mk (data.set index value inside) =
       ByteArray.mk (data.setIfInBounds index value)
     rw [Array.setIfInBounds_def, dite_eq_left inside]
+
+/-- A defaulting write inside the array is read back by the defaulting read. -/
+theorem byteArray_get!_set!_self (b : ByteArray) {j : Nat} (v : UInt8)
+    (hj : j < b.size) : (b.set! j v).get! j = v := by
+  show (b.data.setIfInBounds j v)[j]! = v
+  rw [getElem!_pos (b.data.setIfInBounds j v) j
+    (by rw [Array.size_setIfInBounds]; exact hj), Array.getElem_setIfInBounds_self]
+
+/-- A defaulting write leaves every other byte unchanged. -/
+theorem byteArray_get!_set!_ne (b : ByteArray) {i j : Nat} (v : UInt8)
+    (hne : i ≠ j) : (b.set! j v).get! i = b.get! i := by
+  show (b.data.setIfInBounds j v)[i]! = b.data[i]!
+  by_cases hi : i < b.data.size
+  · rw [getElem!_pos (b.data.setIfInBounds j v) i
+        (by rw [Array.size_setIfInBounds]; exact hi),
+      getElem!_pos b.data i hi, Array.getElem_setIfInBounds_ne hi (fun hh => hne hh.symm)]
+  · rw [getElem!_neg (b.data.setIfInBounds j v) i
+        (by rw [Array.size_setIfInBounds]; exact hi),
+      getElem!_neg b.data i hi]
+
+/-- Two arrays of one size are equal when their defaulting reads agree inside them. -/
+theorem byteArray_ext_get! {a b : ByteArray} (hsz : a.size = b.size)
+    (h : ∀ i, i < a.size → a.get! i = b.get! i) : a = b := by
+  apply ByteArray.ext
+  apply Array.ext hsz
+  intro i hi1 hi2
+  have := h i hi1
+  rwa [show a.get! i = a.data[i]! from rfl, show b.get! i = b.data[i]! from rfl,
+    getElem!_pos a.data i hi1, getElem!_pos b.data i hi2] at this
+
+/-- Writing the same position twice keeps only the second write. -/
+theorem byteArray_set!_set! (b : ByteArray) (j : Nat) (u v : UInt8) :
+    (b.set! j u).set! j v = b.set! j v := by
+  -- Compare the two arrays byte by byte.
+  refine byteArray_ext_get! (by rw [ByteArray.size_set!, ByteArray.size_set!,
+    ByteArray.size_set!]) (fun i hi => ?_)
+  rw [ByteArray.size_set!, ByteArray.size_set!] at hi
+  by_cases hij : i = j
+  -- At the written position both sides hold the second value.
+  · subst hij
+    rw [byteArray_get!_set!_self _ _ (by rw [ByteArray.size_set!]; exact hi),
+      byteArray_get!_set!_self _ _ hi]
+  -- Elsewhere both sides hold the original byte.
+  · rw [byteArray_get!_set!_ne _ _ hij, byteArray_get!_set!_ne _ _ hij,
+      byteArray_get!_set!_ne _ _ hij]
+
+/-- Writing a byte back to where it was read leaves the array unchanged. -/
+theorem byteArray_set!_get!_self (b : ByteArray) {j : Nat} (hj : j < b.size) :
+    b.set! j (b.get! j) = b := by
+  -- Compare the two arrays byte by byte.
+  refine byteArray_ext_get! (ByteArray.size_set! b j _) (fun i hi => ?_)
+  rw [ByteArray.size_set!] at hi
+  by_cases hij : i = j
+  -- At the written position the new byte is the old byte.
+  · subst hij; exact byteArray_get!_set!_self b _ hj
+  -- Elsewhere nothing changed.
+  · exact byteArray_get!_set!_ne b _ hij
 
 /-- A fixed-size object serializes to exactly its own length. -/
 @[simp] theorem size_packBytes {n : Nat} (v : Vector UInt8 n) :

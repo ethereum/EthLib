@@ -34,7 +34,9 @@ That holds because `x^3 + 4 (1 + i)` has no root in `Fp2`.
 @[expose] public section
 
 open EthLib.Base (packBytes size_packBytes
-  packBytes_injective getElem_eq_get!_packBytes packBytes_set packBytes_mk_data)
+  packBytes_injective getElem_eq_get!_packBytes packBytes_set packBytes_mk_data
+  byteArray_get!_set!_self byteArray_get!_set!_ne byteArray_ext_get! byteArray_set!_set!
+  byteArray_set!_get!_self)
 
 /-- Equality of `G2` points, coordinate by coordinate.
 
@@ -165,9 +167,6 @@ private theorem compress_noninf {p : G2} (hinf : ¬ p.isInfinity = true)
   simp only [Id.run, hinf, hpa, Bool.false_eq_true, ↓reduceIte]
   -- Each byte read and write of the vector is the same read and write of its bytes.
   split <;> simp only [pure, packBytes_set, getElem_eq_get!_packBytes, packBytes_mk_data]
-
-private theorem ba_size_set! (b : ByteArray) (j : Nat) (v : UInt8) :
-    (b.set! j v).size = b.size := Array.size_setIfInBounds
 
 /-- The infinity encoding starts with the byte `0xc0`. -/
 private theorem infinityBytes_head : infinityBytes[0] = 0xc0 := by decide
@@ -378,32 +377,6 @@ theorem isOnTwist_of_uncompress {bytes : Vector UInt8 96} {p : G2}
   rw [compress_zero]
   exact uncompress_infinityBytes
 
-private theorem ba_get!_set!_self (b : ByteArray) {j : Nat} (v : UInt8)
-    (hj : j < b.size) : (b.set! j v).get! j = v := by
-  show (b.data.setIfInBounds j v)[j]! = v
-  rw [getElem!_pos (b.data.setIfInBounds j v) j
-    (by rw [Array.size_setIfInBounds]; exact hj), Array.getElem_setIfInBounds_self]
-
-private theorem ba_get!_set!_ne (b : ByteArray) {i j : Nat} (v : UInt8)
-    (hne : i ≠ j) : (b.set! j v).get! i = b.get! i := by
-  show (b.data.setIfInBounds j v)[i]! = b.data[i]!
-  by_cases hi : i < b.data.size
-  · rw [getElem!_pos (b.data.setIfInBounds j v) i
-        (by rw [Array.size_setIfInBounds]; exact hi),
-      getElem!_pos b.data i hi, Array.getElem_setIfInBounds_ne hi (fun hh => hne hh.symm)]
-  · rw [getElem!_neg (b.data.setIfInBounds j v) i
-        (by rw [Array.size_setIfInBounds]; exact hi),
-      getElem!_neg b.data i hi]
-
-private theorem ba_ext {a b : ByteArray} (hsz : a.size = b.size)
-    (h : ∀ i, i < a.size → a.get! i = b.get! i) : a = b := by
-  apply ByteArray.ext
-  apply Array.ext hsz
-  intro i hi1 hi2
-  have := h i hi1
-  rwa [show a.get! i = a.data[i]! from rfl, show b.get! i = b.data[i]! from rfl,
-    getElem!_pos a.data i hi1, getElem!_pos b.data i hi2] at this
-
 /-! ## Flags in the compressed header byte
 
 Byte 0 of a compressed `G2` point carries three flags above the five high bits of `x.c1`.
@@ -485,10 +458,10 @@ theorem compress_eq_infinityBytes_iff (p : G2) :
     rw [hcp]
     dsimp only
     by_cases hs : Fp2.signBit ya = true
-    · rw [ite_eq_left hs, ba_get!_set!_self _ _ (by rw [ba_size_set!, hsz96]; decide),
-        ba_get!_set!_self _ _ (by rw [hsz96]; decide)]
+    · rw [ite_eq_left hs, byteArray_get!_set!_self _ _ (by rw [ByteArray.size_set!, hsz96]; decide),
+        byteArray_get!_set!_self _ _ (by rw [hsz96]; decide)]
       exact b0_pos_i B0 hb0
-    · rw [ite_eq_right hs, ba_get!_set!_self _ _ (by rw [hsz96]; decide)]
+    · rw [ite_eq_right hs, byteArray_get!_set!_self _ _ (by rw [hsz96]; decide)]
       exact b0_neg_i B0 hb0
   have hinf_bit : ((packBytes G2.infinityBytes).get! 0) &&& 0x40 ≠ 0 := by decide
   rw [h] at hbit
@@ -631,41 +604,41 @@ theorem uncompress_compress_noninf {p : G2} (h : G2.isOnTwist p = true)
     intro i hi0
     rw [hcp]; dsimp only
     by_cases hs : Fp2.signBit ya
-    · rw [ite_eq_left hs, ba_get!_set!_ne _ _ hi0, ba_get!_set!_ne _ _ hi0]
-    · rw [ite_eq_right hs, ba_get!_set!_ne _ _ hi0]
+    · rw [ite_eq_left hs, byteArray_get!_set!_ne _ _ hi0, byteArray_get!_set!_ne _ _ hi0]
+    · rw [ite_eq_right hs, byteArray_get!_set!_ne _ _ hi0]
   have hsize : (packBytes (G2.compress p)).size = 96 := size_packBytes _
   by_cases hs : Fp2.signBit ya
   -- Sign bit set: header byte carries 0x80 | 0x20 above the five top bits of xa.c1.
   · have hhead : (packBytes (G2.compress p)).get! 0 = B0 ||| 0x80 ||| 0x20 := by
       rw [hcp]; dsimp only
-      rw [ite_eq_left hs, ba_get!_set!_self _ _ (by rw [ba_size_set!, hsz96]; decide),
-        ba_get!_set!_self _ _ (by rw [hsz96]; decide)]
+      rw [ite_eq_left hs, byteArray_get!_set!_self _ _ (by rw [ByteArray.size_set!, hsz96]; decide),
+        byteArray_get!_set!_self _ _ (by rw [hsz96]; decide)]
     refine uncompress_of_facts (by rw [hhead]; exact b0_pos_c B0)
       (by rw [hhead]; exact b0_pos_i B0 hb0) ?_ ?_ hsqrt hysq
     · rw [hhead]
       exact ⟨fun _ => hs, fun _ => b0_pos_s B0⟩
-    · refine ba_ext (by rw [ba_size_set!, hsize, hsz96]) (fun i hi' => ?_)
-      rw [ba_size_set!, hsize] at hi'
+    · refine byteArray_ext_get! (by rw [ByteArray.size_set!, hsize, hsz96]) (fun i hi' => ?_)
+      rw [ByteArray.size_set!, hsize] at hi'
       by_cases hi0 : i = 0
       · subst hi0
-        rw [ba_get!_set!_self _ _ (by rw [hsize]; decide), hhead, ← hB0]
+        rw [byteArray_get!_set!_self _ _ (by rw [hsize]; decide), hhead, ← hB0]
         exact b0_pos_m B0 hb0
-      · rw [ba_get!_set!_ne _ _ hi0, hother i hi0]
+      · rw [byteArray_get!_set!_ne _ _ hi0, hother i hi0]
   -- Sign bit clear: header byte carries only 0x80 above the five top bits of xa.c1.
   · have hhead : (packBytes (G2.compress p)).get! 0 = B0 ||| 0x80 := by
       rw [hcp]; dsimp only
-      rw [ite_eq_right hs, ba_get!_set!_self _ _ (by rw [hsz96]; decide)]
+      rw [ite_eq_right hs, byteArray_get!_set!_self _ _ (by rw [hsz96]; decide)]
     refine uncompress_of_facts (by rw [hhead]; exact b0_neg_c B0)
       (by rw [hhead]; exact b0_neg_i B0 hb0) ?_ ?_ hsqrt hysq
     · rw [hhead]
       exact ⟨fun hne => absurd (b0_neg_s B0 hb0) hne, fun hh => absurd hh hs⟩
-    · refine ba_ext (by rw [ba_size_set!, hsize, hsz96]) (fun i hi' => ?_)
-      rw [ba_size_set!, hsize] at hi'
+    · refine byteArray_ext_get! (by rw [ByteArray.size_set!, hsize, hsz96]) (fun i hi' => ?_)
+      rw [ByteArray.size_set!, hsize] at hi'
       by_cases hi0 : i = 0
       · subst hi0
-        rw [ba_get!_set!_self _ _ (by rw [hsize]; decide), hhead, ← hB0]
+        rw [byteArray_get!_set!_self _ _ (by rw [hsize]; decide), hhead, ← hB0]
         exact b0_neg_m B0 hb0
-      · rw [ba_get!_set!_ne _ _ hi0, hother i hi0]
+      · rw [byteArray_get!_set!_ne _ _ hi0, hother i hi0]
 
 /-- Encoding then decoding a twist point gives back the same projective point (C.1, C.2).
 
@@ -721,24 +694,6 @@ private theorem infinityBytes_getElem_pos (i : Fin 96) (hi : 1 ≤ i.val) :
     infinityBytes[i.val] = 0 := by
   -- Check all 95 trailing indices in the kernel.
   revert hi i; decide
-
-private theorem ba_set!_set!_same (b : ByteArray) (j : Nat) (u v : UInt8) :
-    (b.set! j u).set! j v = b.set! j v := by
-  refine ba_ext (by rw [ba_size_set!, ba_size_set!, ba_size_set!]) (fun i hi => ?_)
-  rw [ba_size_set!, ba_size_set!] at hi
-  by_cases hij : i = j
-  · subst hij
-    rw [ba_get!_set!_self _ _ (by rw [ba_size_set!]; exact hi),
-      ba_get!_set!_self _ _ hi]
-  · rw [ba_get!_set!_ne _ _ hij, ba_get!_set!_ne _ _ hij, ba_get!_set!_ne _ _ hij]
-
-private theorem ba_set!_get!_self (b : ByteArray) {j : Nat} (hj : j < b.size) :
-    b.set! j (b.get! j) = b := by
-  refine ba_ext (ba_size_set! b j _) (fun i hi => ?_)
-  rw [ba_size_set!] at hi
-  by_cases hij : i = j
-  · subst hij; exact ba_get!_set!_self b _ hj
-  · exact ba_get!_set!_ne b _ hij
 
 set_option maxRecDepth 4000 in
 private theorem head_reconstruct (head : UInt8)
@@ -804,7 +759,7 @@ theorem compress_uncompress {b : Vector UInt8 96} {q : G2}
     unfold fp2ToBytes
     dsimp only [x]
     rw [Fp.toBytesBE_fromBytesBE hc1, Fp.toBytesBE_fromBytesBE hc0]
-    exact ba_extract_append_extract (by rw [ba_size_set!, hB, size_packBytes])
+    exact ba_extract_append_extract (by rw [ByteArray.size_set!, hB, size_packBytes])
   -- Because x^3 + bTwist != 0, the square root yPos cannot be zero.
   have hypos : yPos ≠ 0 := by
     intro hy0
@@ -817,19 +772,19 @@ theorem compress_uncompress {b : Vector UInt8 96} {q : G2}
   have hbase :
       (fp2ToBytes x).set! 0 ((fp2ToBytes x).get! 0 ||| 0x80) =
         B.set! 0 ((B.get! 0 &&& 0x1f) ||| 0x80) := by
-    rw [hxbytes, ba_get!_set!_self B _ h0lt, ba_set!_set!_same]
+    rw [hxbytes, byteArray_get!_set!_self B _ h0lt, byteArray_set!_set!]
   by_cases hs : (B.get! 0 &&& 0x20) ≠ 0
   -- Sign flag set: compression sets 0x20 and reconstructs byte 0.
   · have hsy : Fp2.signBit y = true := by rw [hsign, decide_eq_true hs]
     have hrec := head_reconstruct (B.get! 0) hc hi
     rw [ite_eq_left hs] at hrec
-    rw [ite_eq_left hsy, hbase, ba_get!_set!_self B _ h0lt,
-      ba_set!_set!_same, hrec, ba_set!_get!_self B h0lt]
+    rw [ite_eq_left hsy, hbase, byteArray_get!_set!_self B _ h0lt,
+      byteArray_set!_set!, hrec, byteArray_set!_get!_self B h0lt]
   -- Sign flag clear: compression leaves 0x20 clear and reconstructs byte 0.
   · have hsy : ¬ Fp2.signBit y = true := by rw [hsign, decide_eq_false hs]; decide
     have hrec := head_reconstruct (B.get! 0) hc hi
     rw [ite_eq_right hs] at hrec
-    rw [ite_eq_right hsy, hbase, hrec, ba_set!_get!_self B h0lt]
+    rw [ite_eq_right hsy, hbase, hrec, byteArray_set!_get!_self B h0lt]
 
 /-- Two byte strings that decode to the same point are equal.
 
