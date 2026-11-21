@@ -1574,6 +1574,9 @@
 #define DOC_engine_exchange_transition_configuration \
   "The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration."
 
+#define DOC_engine_run_node \
+  "The responses to a script of Engine API requests, from a node that knows one block."
+
 #define DOC_engine_get_inclusion_list \
   "The answer to an `engine_getInclusionListV1` request, from the candidates of the node."
 

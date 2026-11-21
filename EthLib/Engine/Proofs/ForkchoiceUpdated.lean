@@ -1321,7 +1321,7 @@ private theorem forkchoiceUpdated_status {result : PayloadStatus × Option Hash3
     | simp [throw, throwThe, MonadExceptOf.throw] at h
 
 /-- An answer of a call comes from its update, and names a build only with attributes that pass. -/
-private theorem forkchoiceUpdatedCall_ok_cases {version : Nat} {params : Lean.Json}
+theorem forkchoiceUpdatedCall_ok_cases {version : Nat} {params : Lean.Json}
     {r : PayloadStatus × Option Hash32 × Option (Σ fork, PayloadAttributes fork)}
     (h : forkchoiceUpdatedCall config transition version tree finalized params = .ok r) :
     ∃ state attributes status head,

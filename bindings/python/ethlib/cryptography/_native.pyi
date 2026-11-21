@@ -2108,6 +2108,10 @@ def engine_exchange_transition_configuration(terminal_total_difficulty: int, ter
     """The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration."""
     ...
 
+def engine_run_node(config: dict, state: bytes, anchor: tuple[str, bytes, list[bytes]], terminal_total_difficulty: int, total_difficulty: int, requests: list[dict]) -> list[dict[str, Any]]:
+    """The responses to a script of Engine API requests, from a node that knows one block."""
+    ...
+
 def engine_get_inclusion_list(candidates: list[bytes], request: dict) -> list[str]:
     """The answer to an `engine_getInclusionListV1` request, from the candidates of the node."""
     ...

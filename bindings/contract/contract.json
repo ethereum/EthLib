@@ -15075,6 +15075,25 @@
    "docstring":
    "The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration.\n\nThe arguments are the terminal total difficulty, block hash and block number, and the request."},
   {"summary":
+   "The responses to a script of Engine API requests, from a node that knows one block.",
+   "signature":
+   "(config: dict, state: bytes, anchor: tuple[str, bytes, list[bytes]], terminal_total_difficulty: int, total_difficulty: int, requests: list[dict]) -> list[dict[str, Any]]",
+   "operation": "EthLib.Engine.Exports.runNodeExport",
+   "method": "engine_run_node",
+   "errors":
+   [{"type": "EthLib.Engine.EngineError",
+     "codes":
+     [{"constructor": "invalidParams", "code": 32602},
+      {"constructor": "unsupportedFork", "code": 38005},
+      {"constructor": "invalidForkchoiceState", "code": 38002},
+      {"constructor": "tooLargeRequest", "code": 38004},
+      {"constructor": "invalidPayloadAttributes", "code": 38003},
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]}],
+   "error_class": "EngineError",
+   "docstring":
+   "The responses to a script of Engine API requests, from a node that knows one block.\n\nThe arguments are the configuration, the state after the block and the block.\n\nThen come the two totals and the requests.\n\nThe result has the response and the forkchoice state of the node after each request."},
+  {"summary":
    "The answer to an `engine_getInclusionListV1` request, from the candidates of the node.",
    "signature": "(candidates: list[bytes], request: dict) -> list[str]",
    "operation": "EthLib.Engine.Exports.getInclusionListExport",

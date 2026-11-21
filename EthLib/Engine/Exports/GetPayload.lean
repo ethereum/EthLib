@@ -72,6 +72,22 @@ def storedPayloadOf (entry : PayloadEntry) : Result (PayloadId × StoredPayload)
 /-- The version of an `engine_getPayloadV1` through `engine_getPayloadV6` method name. -/
 def getPayloadVersion (method : String) : Option Nat := methodVersion "getPayload" method
 
+/-- The code and the message of an error of the method.
+
+An error of the request has its code, and malformed data in the store has code 0. -/
+def getPayloadErrorOf : GetPayloadError → UInt32 × String
+  | .engine e => (e.code, s!"engine error: {reprStr e}")
+  | .wrongFork stored active =>
+    let active := match active with
+      | some fork => fork.name
+      | none => "no fork"
+    (0, s!"store: the fork {stored.name} is not the configured fork at the block, {active}")
+  | .requests => (0, "store: execution requests out of order, too short or before Pectra")
+  | .blockValue value => (0, s!"store: block value {value} is 2^256 or more")
+  | .noPayload => (0, "store: the block has no payload form")
+  | .header e => (0, s!"store: the payload does not give the block: error {e.code}")
+  | .bundle e => (0, s!"store: bundle error {e.code}")
+
 /-- The answer to a get-payload request, from a snapshot of build processes. -/
 def getPayloadOf (args : PyValue × List PayloadEntry × PyValue) : Result PyValue := do
   let (config, entries, request) := args
@@ -86,18 +102,8 @@ def getPayloadOf (args : PyValue × List PayloadEntry × PyValue) : Result PyVal
     fun e => (e.code, s!"engine error: {reprStr e}")
   let setup ← (Cryptography.Kzg.Exports.embeddedSetup ()).mapError
     fun e => (0, s!"setup: {e.message}")
-  let r ← (getPayload config setup (fun id => entries.lookup id) version id).mapError fun
-    | .engine e => (e.code, s!"engine error: {reprStr e}")
-    | .wrongFork stored active =>
-      let active := match active with
-        | some fork => fork.name
-        | none => "no fork"
-      (0, s!"store: the fork {stored.name} is not the configured fork at the block, {active}")
-    | .requests => (0, "store: execution requests out of order, too short or before Pectra")
-    | .blockValue value => (0, s!"store: block value {value} is 2^256 or more")
-    | .noPayload => (0, "store: the block has no payload form")
-    | .header e => (0, s!"store: the payload does not give the block: error {e.code}")
-    | .bundle e => (0, s!"store: bundle error {e.code}")
+  let r ← (getPayload config setup (fun id => entries.lookup id) version id).mapError
+    getPayloadErrorOf
   return .ofJson (getPayloadResultJson (r.result version))
 
 /-- The answer to an `engine_getPayload` request, from the configuration and a store snapshot.

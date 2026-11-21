@@ -1984,6 +1984,11 @@ def bindings : List Binding := [
     "(terminal_total_difficulty: int, terminal_block_hash: bytes, terminal_block_number: int, " ++
       "request: dict) -> dict[str, Any]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
+  ⟨"engine_run_node", `EthLib.Engine.Exports.runNodeExport,
+    "(config: dict, state: bytes, anchor: tuple[str, bytes, list[bytes]], " ++
+      "terminal_total_difficulty: int, total_difficulty: int, requests: list[dict]) -> " ++
+      "list[dict[str, Any]]",
+    [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_get_inclusion_list", `EthLib.Engine.Exports.getInclusionListExport,
     "(candidates: list[bytes], request: dict) -> list[str]",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
