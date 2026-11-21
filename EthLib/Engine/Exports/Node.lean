@@ -11,6 +11,10 @@ The C export of an execution node that runs a script of Engine API requests.
 
 The node starts from one block, valid, as its head, with the state after it.
 
+That block crosses without its body, so its header must commit to an empty body.
+
+Its header must also commit to its ommers.
+
 The configuration, the state and the block take the forms of the export on a chain.
 
 A block of proof of work also takes its total difficulty, and the terminal one.
@@ -102,6 +106,8 @@ The arguments are the chain configuration, the state after the block, and the bl
 
 The block is the fork name, the header and its ommers, the header and each ommer in RLP form.
 
+Its header must commit to its ommers, to no transaction and, from Shapella, to no withdrawal.
+
 Then come the terminal total difficulty, the total difficulty of the block and the requests. -/
 def runNodeOf (args : PyValue × ByteArray × (String × ByteArray × List ByteArray) × Nat × Nat ×
     PyValue) : Result PyValue := do
@@ -115,7 +121,7 @@ def runNodeOf (args : PyValue × ByteArray × (String × ByteArray × List ByteA
   let chain ← Execution.Blocks.Exports.chainOf config state [anchor]
   let some block := chain.recent.head? | throw (0, "anchor: no block")
   let some node := Node.start chain.config transition block chain.state totalDifficulty
-    | throw (0, "anchor: no hash, or a total difficulty below the difficulty")
+    | throw (0, "anchor: no hash, a body that is not empty, or a total below the difficulty")
   let .arr requests := requests.toJson | throw (0, "requests: not an array")
   let setup ← (Cryptography.Kzg.Exports.embeddedSetup ()).mapError
     fun e => (0, s!"setup: {e.message}")

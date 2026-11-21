@@ -5,9 +5,12 @@
 
 from typing import Any
 
+import pytest
+
 from ethlib import engine
 from ethlib.cryptography.keccak import keccak256
 from ethlib.serialization import rlp
+from raising import raises
 
 from .cases import BLOCK_FORKS, DEPOSIT_CONTRACT_ADDRESS
 from .test_terminal_block import CONFIG as POW_CONFIG, GENESIS as POW_GENESIS
@@ -332,6 +335,19 @@ def test_invalid_forkchoice_state() -> None:
     error = {"code": "-38002", "message": "Invalid forkchoice state", "data": None}
     assert update["response"] == {"error": error}
     assert update["forkchoice"] == _forkchoice(G)
+
+
+# The node keeps its first block with an empty body, so the header must commit to that body.
+# The fields are the ommers hash and the transactions root.
+@pytest.mark.parametrize("field", [1, 4])
+def test_anchor_that_commits_to_a_body(field: int) -> None:
+    """A first block whose header commits to other ommers or to a transaction gives no node."""
+    header = rlp.decode(GENESIS)
+    header[field] = keccak256(b"not empty")
+    anchor = ("paris", rlp.encode(header), [])
+    message = "anchor: no hash, a body that is not empty, or a total below the difficulty"
+    with raises(engine.EngineError, message):
+        engine.run_node(CONFIG, rlp.encode([]), anchor, [])
 
 
 def _update_with_attributes(head: bytes, timestamp: int) -> dict[str, Any]:

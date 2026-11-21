@@ -7,7 +7,11 @@ public import EthLib.Engine.GetPayload
 
 An execution node that keeps what the Engine API tells it, from one call to the next.
 
-It knows blocks by hash, each with its header and its validity.
+It knows blocks by hash, each with its validity.
+
+It keeps the header, the ommers, the transactions and the withdrawals of each block.
+
+So the receipts of a block can be found again by running its transactions.
 
 A valid block also has the state after it, so a payload on it can run.
 
@@ -77,7 +81,8 @@ namespace EthLib.Engine
 open Lean (Json)
 open EthLib.Base
 open EthLib.Cryptography.Kzg (TrustedSetup)
-open EthLib.Execution.Blocks (BlockChain RecentBlock)
+open EthLib.Execution.Blocks (Block BlockChain RecentBlock)
+open EthLib.Execution.Transactions (Transaction)
 
 /-- What a node knows of the validity of a block. -/
 inductive Validity where
@@ -98,14 +103,18 @@ def Validity.isAccepted : Validity → Bool
   | .accepted _ _ => true
   | _ => false
 
-/-- A block that a node knows: its header at its fork, its validity and its proof of work totals. -/
+/-- A block that a node knows: the block at its fork, its validity and its proof of work totals. -/
 structure KnownBlock where
-  /-- The block, at its fork, with its header and its ommers. -/
-  block : RecentBlock
+  /-- The block at its fork: its header, its ommers, its transactions and its withdrawals. -/
+  full : (fork : Fork) × Block fork Transaction
   /-- For a block of proof of work, its total difficulty and its parent's; `none` otherwise. -/
   powTotalDifficulty : Option (Nat × Nat)
   /-- What the node knows of its validity. -/
   validity : Validity
+
+/-- A known block as a recent block of a chain: its fork, its header and its ommers. -/
+def KnownBlock.block (b : KnownBlock) : RecentBlock :=
+  ⟨b.full.1, b.full.2.header, b.full.2.ommers⟩
 
 /-- A known block as the forkchoice update reads it: its parent, validity, number and time. -/
 def KnownBlock.toKnownPayload (b : KnownBlock) : KnownPayload :=
@@ -127,6 +136,17 @@ structure Node where
   /-- The completed builds, by payload ID. -/
   builds : List (PayloadId × StoredPayload)
 
+/-- Whether the header of a recent block commits to its ommers and to an empty body.
+
+An empty body has no transaction and, from Shapella, no withdrawal. -/
+def commitsToEmptyBody (b : RecentBlock) : Bool :=
+  let withdrawals := if h : .shapella ≤ b.fork then some (b.header.withdrawalsRoot h) else none
+  let ommers := (Serialization.Rlp.encode (Execution.Blocks.ommersItem b.ommers)).toOption
+  (Execution.Blocks.transactionsRoot []).toOption == some b.header.transactionsRoot &&
+    (Execution.Blocks.withdrawalsRootOf (fork := b.fork) fun _ => []).toOption ==
+      some withdrawals &&
+    ommers.map Cryptography.Hash.Keccak.keccak256 == some b.header.ommersHash
+
 namespace Node
 
 /-- A node that knows one block, valid with a state, as its head.
@@ -139,18 +159,24 @@ From Paris on, the total is not read.
 
 The safe and finalized hashes are zero, and the node knows no finalized block.
 
-There is no node when the header has no hash, or when a total is below the difficulty.
+The node keeps the block with an empty body, so its header must commit to it and to its ommers.
+
+There is no node when the header has no hash, or commits to another body or other ommers.
+
+There is none either when a total is below the difficulty.
 
 The forkchoice update reads the number and the time of the block in 64 bits. -/
 def start (config : ChainConfig) (transition : TransitionConfiguration) (anchor : RecentBlock)
     (post : Execution.State.State) (totalDifficulty : Nat) : Option Node := do
   let hash ← anchor.header.hash.toOption
+  unless commitsToEmptyBody anchor do none
+  let block : Block anchor.fork Transaction := ⟨anchor.header, [], anchor.ommers, fun _ => []⟩
   let pow ← if anchor.fork < .paris then
       if anchor.header.difficulty ≤ totalDifficulty then
         some (some (totalDifficulty, totalDifficulty - anchor.header.difficulty))
       else none
     else some none
-  return { config, transition, blocks := [(hash, ⟨anchor, pow, .valid post⟩)],
+  return { config, transition, blocks := [(hash, ⟨⟨_, block⟩, pow, .valid post⟩)],
            forkchoice := ⟨hash, ZERO_HASH, ZERO_HASH⟩, finalized := none, builds := [] }
 
 /-- The tree of the known blocks, as the forkchoice update reads it. -/
@@ -194,8 +220,8 @@ A payload invalid in execution is known as invalid.
 So is a payload on a parent that fails the terminal block check.
 
 A payload whose execution aborts stays unknown. -/
-def recordExecution (node : Node) (hash : Hash32) (block : RecentBlock) (status : PayloadStatus)
-    (next : Option (RecentBlock × Execution.State.State)) : Node :=
+def recordExecution (node : Node) (hash : Hash32) (block : (fork : Fork) × Block fork Transaction)
+    (status : PayloadStatus) (next : Option (RecentBlock × Execution.State.State)) : Node :=
   match next with
   | some (_, post) => node.record hash ⟨block, none, .valid post⟩
   | none => if status.status = .invalid then node.record hash ⟨block, none, .invalid⟩ else node
@@ -205,10 +231,10 @@ def recordExecution (node : Node) (hash : Hash32) (block : RecentBlock) (status 
 The payload runs on the chain that ends at that parent, with the state after it.
 
 The node then records the payload, unless its execution aborts. -/
-def executeOn (node : Node) (hash : Hash32) (block : RecentBlock) (post : Execution.State.State)
-    (version : Nat) (params : Json) :
+def executeOn (node : Node) (hash : Hash32) (block : (fork : Fork) × Block fork Transaction)
+    (post : Execution.State.State) (version : Nat) (params : Json) :
     Except EngineError (PayloadStatus × Option PayloadError) × Node :=
-  let parent := block.header.parentHash
+  let parent := block.2.header.parentHash
   match newPayloadOnChain node.transition (node.totalDifficulty parent)
       (node.chainAt parent post) version params with
   | .error e => (.error e, node)
@@ -234,11 +260,12 @@ That hash is zero when that block is of proof of work, by step 3 of payload vali
 The node keeps it as invalid.
 
 A payload whose parent is unknown is syncing. -/
-def onParent (node : Node) (hash : Hash32) (block : RecentBlock) (version : Nat) (params : Json) :
+def onParent (node : Node) (hash : Hash32) (block : (fork : Fork) × Block fork Transaction)
+    (version : Nat) (params : Json) :
     Except EngineError (PayloadStatus × Option PayloadError) × Node :=
   let accept : Except EngineError (PayloadStatus × Option PayloadError) × Node :=
     (.ok (⟨.accepted, none⟩, none), node.record hash ⟨block, none, .accepted version params⟩)
-  let parent := block.header.parentHash
+  let parent := block.2.header.parentHash
   match node.blocks.lookup parent with
   | some ⟨_, _, .valid post⟩ =>
     if parent = node.forkchoice.headBlockHash then node.executeOn hash block post version params
@@ -273,7 +300,7 @@ def newPayloadStep (node : Node) (version : Nat) (params : Json) :
       match node.blocks.lookup hash with
       | some ⟨_, _, .valid _⟩ => (.ok (⟨.valid, some hash⟩, none), node)
       | some ⟨_, _, .invalid⟩ => (.ok (⟨.invalid, latestValidHash node.tree hash⟩, none), node)
-      | _ => node.onParent hash ⟨checked.fork, header, []⟩ version params
+      | _ => node.onParent hash ⟨checked.fork, checked.block⟩ version params
 
 /-- The node after it validates the accepted blocks of the chain that ends at a block.
 
@@ -289,8 +316,8 @@ def validateChain (node : Node) : Nat → Hash32 → Node
   | fuel + 1, hash =>
     match node.blocks.lookup hash with
     | some ⟨block, _, .accepted version params⟩ =>
-      let node := node.validateChain fuel block.header.parentHash
-      match node.blocks.lookup block.header.parentHash with
+      let node := node.validateChain fuel block.2.header.parentHash
+      match node.blocks.lookup block.2.header.parentHash with
       | some ⟨_, _, .valid post⟩ => (node.executeOn hash block post version params).2
       | some ⟨_, _, .invalid⟩ => node.record hash ⟨block, none, .invalid⟩
       | _ => node
