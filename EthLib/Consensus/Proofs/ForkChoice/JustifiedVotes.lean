@@ -122,11 +122,8 @@ theorem Store.ForwardReachableWith.held_participation {store : Store preset fork
           store.votesBelow config checks root := by
       refine Set.union_subset_union_right _ ?_
       rintro vote ⟨blockRoot, voter, parent, voterAdvanced, voterFound, descends, rest⟩
-      obtain ⟨_, ancestorKnown⟩ := Store.held_of_isAncestor descends
       exact ⟨blockRoot, voter, parent, voterAdvanced, voterFound,
-        Store.isAncestor_trans parentKnown ancestorKnown
-          (Store.isAncestor_pending_parent_of_slot_lt found parentKnown parentLower) descends,
-        rest⟩
+        Store.isAncestor_of_parent found parentKnown parentLower descends, rest⟩
     -- The block's own votes are below its root, as it descends from itself.
     have own : blockVotes advanced block ⊆
         {vote | vote.2.target.epoch ≤ getCurrentEpoch anchorState} ∪

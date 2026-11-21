@@ -237,9 +237,9 @@ theorem isAncestor_iff_of_gloas {start node : ForkChoiceNode} {block : BeaconBlo
           omega
       rw [ForkChoiceNode.toModel_injective same]
 
-/-- Parents have lower slots, and filtering from start succeeds.
+/-- Each node that filtering returns from a start node has a block root below the start's root.
 
-Then each returned node's block root descends from the start's block root. -/
+Parents must have lower slots, and the filtering must succeed. -/
 theorem filterNodeTree_root_ancestor (lower : store.ParentsBelow) {config : Config}
     {start : ForkChoiceNode} {nodes : List ForkChoiceNode}
     (walk : store.filterNodeTree config start = .ok nodes) :
@@ -1346,6 +1346,22 @@ theorem boostScoreOfGloas_of_not_boost {gloas : .glamsterdam ≤ fork}
     (noBoost : store.shouldApplyProposerBoost config gloas = .ok false) :
     store.boostScoreOfGloas config gloas = 0 := by
   simp [boostScoreOfGloas, noBoost]
+
+/-- From Gloas, the score of the boost is at most the boost score of the LMD-GHOST model. -/
+theorem boostScoreOfGloas_le_boostScore (gloas : .glamsterdam ≤ fork) :
+    store.boostScoreOfGloas config gloas ≤ store.boostScore config := by
+  unfold boostScoreOfGloas boostScore
+  cases applies : store.shouldApplyProposerBoost config gloas with
+  | error e => simp
+  | ok applies' =>
+  cases applies' with
+  | false => simp
+  | true =>
+  have nonzero : store.proposerBoostRoot ≠ Vector.replicate 32 0 := by
+    rcases (shouldApplyProposerBoost_eq_ok_iff gloas).mp applies with ⟨-, bad⟩ | ⟨nonzero, -⟩
+    · cases bad
+    · exact nonzero
+  cases store.getProposerScore config <;> simp [nonzero]
 
 variable (lower) in
 /-- When a viable node has more than half of the stake in votes, the head is in its subtree.

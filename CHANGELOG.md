@@ -33,6 +33,8 @@ Not yet released.
 - `Store.filterNodeTree_root_ancestor` (`ForkChoice/PayloadGhost.lean`) holds at every fork.
   If parents have lower slots and filtering from a start node succeeds, each returned node's block root descends from the start's block root.
 
+- `Store.boostScoreOfGloas_le_boostScore` (`ForkChoice/PayloadGhost.lean`) bounds the score of the boost from Gloas by the boost score of the LMD-GHOST model.
+
 - `Store.getNodeChildren_ok_of_known` (`ForkChoice/Head.lean`) shows that the children of a node can be computed when the store holds its block.
 
 - `Store.getSupportedNode_exists` (`ForkChoice/Head.lean`) shows that a vote for a held block supports a node of the store, at every fork.

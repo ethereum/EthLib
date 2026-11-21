@@ -33,6 +33,8 @@ Each store checkpoint besides the anchor one keeps its field from a block state 
 The justified ones are current justified checkpoints there, and the finalized ones are finalized.
 
 When the justified checkpoint comes from a pull-up, the block is of an epoch before the current one.
+
+From Gloas, room in the anchor's registry keeps every registry of a store within the limit.
 -/
 
 @[expose] public section

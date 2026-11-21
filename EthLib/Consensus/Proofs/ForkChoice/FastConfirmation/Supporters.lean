@@ -204,22 +204,6 @@ private theorem stake_le_weight_of_gloas (lower : store.ParentsBelow) (gloas : .
   rw [same]
   simpa [latestNode, latest, supportedOk, Except.toOption] using honest
 
-/-- From Gloas, the boost of the head walk weighs at most the boost before Gloas. -/
-private theorem boostScoreOfGloas_le (gloas : .glamsterdam ≤ fork) :
-    store.boostScoreOfGloas config gloas ≤ store.boostScore config := by
-  unfold boostScoreOfGloas boostScore
-  cases applies : store.shouldApplyProposerBoost config gloas with
-  | error e => simp
-  | ok applies' =>
-  cases applies' with
-  | false => simp
-  | true =>
-  have nonzero : store.proposerBoostRoot ≠ Vector.replicate 32 0 := by
-    rcases (shouldApplyProposerBoost_eq_ok_iff gloas).mp applies with ⟨-, bad⟩ | ⟨nonzero, -⟩
-    · cases bad
-    · exact nonzero
-  cases store.getProposerScore config <;> simp [nonzero]
-
 open Models.ForkChoice in
 /-- From Gloas, a viable node weighing over half the stake plus the boost stays on the head chain.
 
@@ -395,9 +379,7 @@ theorem isAncestor_getHead_of_duty_support
       have bound := current.toNat_lt
       have fits : nBlock.slot.toNat + 1 < 2 ^ 64 := by split at heights <;> omega
       obtain ⟨next, add⟩ : ∃ next, addChecked nBlock.slot 1 = .ok next :=
-        ⟨(nBlock.slot.toNat + 1).toUInt64, addChecked_ok_iff.mpr ⟨by simpa using fits, by
-          simp only [Nat.toUInt64_eq, UInt64.toNat_ofNat]
-          exact Nat.mod_eq_of_lt fits⟩⟩
+        ⟨_, addChecked_of_lt (by simpa using fits)⟩
       have nextEq := (addChecked_ok_iff.mp add).2
       by_cases pending : n.payloadStatus = .pending
       · simp [isPreviousSlotPayloadDecision, block_ok_iff.mpr nFound, add, pending, currentOk,
@@ -412,7 +394,7 @@ theorem isAncestor_getHead_of_duty_support
           bind, Except.bind, pure, Except.pure, Except.mapError]
     have counted := stake_le_weight_of_gloas lower gloas within known (nodes := nodes)
       (fun v => v ∈ J ∧ duty v) fun v active ⟨honest, dutied⟩ => supported v active honest dutied
-    have boosts := boostScoreOfGloas_le (store := store) (config := config) gloas
+    have boosts := boostScoreOfGloas_le_boostScore (store := store) (config := config) gloas
     have notEmpty : ¬ (.glamsterdam ≤ fork ∧ nodes.isEmpty = true) :=
       fun ⟨_, empty⟩ => List.ne_nil_of_mem viable (List.isEmpty_iff.mp empty)
     have headFrom := headOk

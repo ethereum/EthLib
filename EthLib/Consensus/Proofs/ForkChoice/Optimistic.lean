@@ -710,10 +710,8 @@ theorem Linked.onInvalidPayload {orphanParent : Root} {block : BeaconBlock prese
     obtain ⟨contains, descends⟩ := (member _).mp parentRemoved
     rw [Std.TreeMap.contains_eq_isSome_getElem?] at contains
     obtain ⟨parent, parentFound⟩ := Option.isSome_iff_exists.mp contains
-    obtain ⟨_, firstFound⟩ := held_of_isAncestor descends
-    refine (member r).mpr ⟨?_, isAncestor_trans parentFound firstFound
-      (isAncestor_pending_parent_of_slot_lt found parentFound
-        (linked.parentsBelow r b parent found parentFound)) descends⟩
+    refine (member r).mpr ⟨?_, isAncestor_of_parent found parentFound
+      (linked.parentsBelow r b parent found parentFound) descends⟩
     rw [Std.TreeMap.contains_eq_isSome_getElem?, found]
     rfl
 

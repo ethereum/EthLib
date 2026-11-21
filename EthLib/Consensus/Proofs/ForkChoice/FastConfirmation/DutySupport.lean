@@ -757,7 +757,7 @@ private theorem justified_epoch_in_horizon {anchor : Store preset fork} {time : 
 
 From Gloas, the anchor's registry must leave room for pending deposits.
 
-The room covers the deposits of each epoch from the anchor's to the horizon. -/
+The room covers the deposits of each epoch from the anchor's epoch to the horizon. -/
 private theorem justified_registry_within_limit {anchor : Store preset fork} {time : ℕ}
     {horizon : Epoch}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -1228,7 +1228,7 @@ Finalized-prefix compatibility, nonzero state roots and the absent anchor parent
 
 From Gloas, the anchor's registry must leave room for pending deposits.
 
-The room covers the deposits of each epoch from the anchor's to the horizon. -/
+The room covers the deposits of each epoch from the anchor's epoch to the horizon. -/
 theorem Execution.isAncestor_getHead_of_duty_epoch {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
@@ -1455,7 +1455,7 @@ With enough churn since the anchor, the evidence holds with no accountable key.
 
 From Gloas, the anchor's registry must leave room for pending deposits.
 
-The room covers the deposits of each epoch from the anchor's to the horizon. -/
+The room covers the deposits of each epoch from the anchor's epoch to the horizon. -/
 theorem Execution.isAncestor_getHead_of_duty_epoch_or_accountable {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
