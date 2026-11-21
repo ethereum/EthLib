@@ -297,9 +297,7 @@ def replayForkChoice {preset : Preset} {fork : Fork} (config : Config) (checks :
 
 /-- The handler outcomes of each step of a fork choice case, from an anchor state and block.
 
-A step that the store rejects gives the error as its outcome, and the run goes on.
-
-From Gloas the node on which a proposer builds is not yet specified here, so that read fails. -/
+A step that the store rejects gives the error as its outcome, and the run goes on. -/
 def forkChoice (args : String × String × ByteArray × ByteArray × List ForkChoiceStep × Bool ×
     Option PyValue) : Result (List (List StepOutcome)) := do
   let (name, fork, anchorState, anchorBlock, steps, verify, replacements) := args
@@ -325,9 +323,7 @@ An invalid verdict still applies its removal, even when the step is rejected.
 
 The arguments are the preset, the fork, the anchor state and the anchor block in SSZ, and the steps.
 
-Then come whether the signature checks run, and replacements of values of the configuration.
-
-From Gloas the node on which a proposer builds is not yet specified here, so that read fails. -/
+Then come whether the signature checks run, and replacements of values of the configuration. -/
 @[export eth_consensus_fork_choice]
 def forkChoiceExport (args : PyValue) : Result PyValue := pyExport forkChoice args
 
