@@ -121,7 +121,7 @@ private theorem precompile_match_none {β : Sort _} {x : Option (Evm fork Meter)
 
 omit [GasMeter Meter] [LawfulGasMeter Meter] in
 /-- The match on a deposit of code takes its error branch on an error. -/
-private theorem deposit_match_error {β : Sort _} {x : Except EvmError (Evm fork Meter)}
+theorem processCreateMessageWith_match_error {β : Sort _} {x : Except EvmError (Evm fork Meter)}
     {e : EvmError} (h : x = .error e) (h_1 : (e : EvmError) → x = .error e → β)
     (h_2 : (after : Evm fork Meter) → x = .ok after → β) :
     processCreateMessageWith.match_1 fork (fun _ => β) x h_1 h_2 = h_1 e h :=
@@ -129,7 +129,7 @@ private theorem deposit_match_error {β : Sort _} {x : Except EvmError (Evm fork
 
 omit [GasMeter Meter] [LawfulGasMeter Meter] in
 /-- The match on a deposit of code takes its success branch on a frame. -/
-private theorem deposit_match_ok {β : Sort _} {x : Except EvmError (Evm fork Meter)}
+theorem processCreateMessageWith_match_ok {β : Sort _} {x : Except EvmError (Evm fork Meter)}
     {after : Evm fork Meter} (h : x = .ok after) (h_1 : (e : EvmError) → x = .error e → β)
     (h_2 : (after : Evm fork Meter) → x = .ok after → β) :
     processCreateMessageWith.match_1 fork (fun _ => β) x h_1 h_2 = h_2 after h :=
@@ -239,9 +239,9 @@ private theorem process_modify
   obtain ⟨⟨evm, used⟩, s'⟩ := ended
   dsimp only
   split <;> rename_i hd
-  · rw [deposit_match_error hd]
+  · rw [processCreateMessageWith_match_error hd]
     rfl
-  · rw [deposit_match_ok hd]
+  · rw [processCreateMessageWith_match_ok hd]
     rfl
 
 /-- An observed run of a message, with its state dropped, is the run with no observer.

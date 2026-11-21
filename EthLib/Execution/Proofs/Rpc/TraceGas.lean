@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Evm.Call.StepRules
 public import EthLib.Execution.Proofs.Rpc.Trace
+import EthLib.Execution.Proofs.Evm.Call.Observe
 
 /-!
 # Proofs: the gas of consecutive entries of the opcode trace
@@ -290,20 +291,6 @@ section Run
 
 variable {fork : Fork} (config : TraceConfig)
 
-/-- The match on a resumed frame takes its error branch on an error. -/
-private theorem resume_match_error {β : Sort _} {x : Except EvmError (Evm fork Nat)}
-    {e : EvmError} (h : x = .error e) (h_1 : (e : EvmError) → x = .error e → β)
-    (h_2 : (after : Evm fork Nat) → x = .ok after → β) :
-    runFrameWith.match_1 (fun _ => β) x h_1 h_2 = h_1 e h :=
-  eq_of_heq (runFrameWith.match_1.congr_eq_1 _ _ _ _ e h)
-
-/-- The match on a resumed frame takes its success branch on a frame. -/
-private theorem resume_match_ok {β : Sort _} {x : Except EvmError (Evm fork Nat)}
-    {after : Evm fork Nat} (h : x = .ok after) (h_1 : (e : EvmError) → x = .error e → β)
-    (h_2 : (after : Evm fork Nat) → x = .ok after → β) :
-    runFrameWith.match_1 (fun _ => β) x h_1 h_2 = h_2 after h :=
-  eq_of_heq (runFrameWith.match_1.congr_eq_2 _ _ _ _ after h)
-
 /-- A logged run of a frame leaves the logger as after the end of that frame.
 
 The logger must be ready for the step of the frame.
@@ -364,7 +351,7 @@ private theorem runFrameWith_after
         rw [(step_child hs).1, keep] at post
         cases hres : resume child with
         | error e =>
-          rw [resume_match_error hres] at h
+          rw [runFrameWith_match_error hres] at h
           by_cases aborts : e.aborts <;>
             simp [aborts, pure, StateT.pure, throw, throwThe, MonadExceptOf.throw,
               StateT.lift, Except.pure] at h
@@ -372,7 +359,7 @@ private theorem runFrameWith_after
           · rw [← h.2]
             exact post.up
         | ok after =>
-          rw [resume_match_ok hres] at h
+          rw [runFrameWith_match_ok hres] at h
           have same := sameContext_of_step_eq_child hs hres
           have message : after.message = evm.message :=
             same.message.trans ((message_incorporateChild _ _).trans keep)
@@ -383,25 +370,6 @@ private theorem runFrameWith_after
     subst hrun
     cases h
     exact pre.after
-
-/-- A map that succeeds comes from a run that succeeds with the same state. -/
-private theorem map_ok {α β : Type} {f : α → β} {x : StateT Tracer (Except EvmError) α}
-    {s s' : Tracer} {b : β} (h : (f <$> x) s = .ok (b, s')) : ∃ a, x s = .ok (a, s') := by
-  simp only [Functor.map, StateT.map] at h
-  cases hx : x s with
-  | error e => simp [hx, bind, Except.bind] at h
-  | ok p =>
-    simp only [hx, bind, Except.bind, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
-    exact ⟨p.1, by rw [← h.2]⟩
-
-/-- A bind that succeeds runs its first part, then the rest from the state it leaves. -/
-private theorem bind_ok {α β : Type} {x : StateT Tracer (Except EvmError) α}
-    {f : α → StateT Tracer (Except EvmError) β} {s s' : Tracer} {b : β}
-    (h : (x >>= f) s = .ok (b, s')) : ∃ a mid, x s = .ok (a, mid) ∧ f a mid = .ok (b, s') := by
-  simp only [bind, StateT.bind] at h
-  cases hx : x s with
-  | error e => simp [hx, Except.bind] at h
-  | ok p => exact ⟨p.1, p.2, rfl, by simpa [hx, Except.bind] using h⟩
 
 /-- A lifted result leaves the state as it is. -/
 private theorem liftExcept_ok {α : Type} {x : Except EvmError α} {a : α} {s s' : Tracer}
@@ -478,12 +446,13 @@ private theorem process_after (n : Nat) :
       Fresh config tracer → After config tracer' message.depth := by
     intro state substate meter held tracer r tracer' h fresh
     rw [processMessageWith] at h
-    obtain ⟨_, h⟩ := map_ok h
-    dsimp only at h
+    obtain ⟨⟨_, after⟩, h, same⟩ := Base.stateT_map_eq_ok h
+    dsimp only at h same
+    subst same
     by_cases ht : message.shouldTransferValue = true ∧ message.value ≠ 0
     all_goals
       first | simp only [ite_eq_left ht] at h | simp only [ite_eq_right ht] at h
-      obtain ⟨_, mid, h1, hj⟩ := bind_ok h
+      obtain ⟨⟨_, mid⟩, h1, hj⟩ := Base.stateT_bind_eq_ok h
       first | obtain rfl := liftExcept_ok h1 | obtain rfl := pure_ok h1
       cases hp : precompileAddress fork message with
       | some address =>
@@ -505,9 +474,9 @@ private theorem process_after (n : Nat) :
         · exact (ih _ lt' child rfl).1 _ _ _ _ _ _ _ hr hf
   refine ⟨call, fun state substate meter held tracer r tracer' h fresh => ?_⟩
   rw [processCreateMessageWith] at h
-  obtain ⟨_, mid, h1, hrest⟩ := bind_ok h
+  obtain ⟨⟨_, mid⟩, h1, hrest⟩ := Base.stateT_bind_eq_ok h
   obtain rfl := liftExcept_ok h1
-  obtain ⟨⟨evm, used⟩, mid', h2, hdep⟩ := bind_ok hrest
+  obtain ⟨⟨⟨evm, used⟩, mid'⟩, h2, hdep⟩ := Base.stateT_bind_eq_ok hrest
   have post := call _ _ _ _ _ _ _ h2 fresh
   dsimp only at hdep
   obtain rfl := deposit_state (fun _ _ => rfl) (fun _ _ => ⟨_, rfl⟩) hdep
@@ -533,7 +502,7 @@ private theorem processMessageCallWith_chained (chainId : Nat) (message : Messag
   · revert h
     cases message.target <;> intro h <;> dsimp only at h
     all_goals
-      obtain ⟨⟨evm, used⟩, mid, h1, h2⟩ := bind_ok h
+      obtain ⟨⟨⟨evm, used⟩, mid⟩, h1, h2⟩ := Base.stateT_bind_eq_ok h
       obtain rfl := pure_ok h2
       first
         | exact ((process_after config _ _ rfl).1 _ _ _ _ _ _ _ h1 fresh).1
@@ -565,19 +534,19 @@ theorem traceRun_gas {fork : Fork} (config : TraceConfig) (early : fork < .glams
     Nat.not_le_of_lt early (Nat.le_trans (by decide : Fork.glamsterdam ≤ .hegota) hh)
   have pre : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt early
   rw [processTransactionWith, ite_eq_right specified, ite_eq_right pre, runTransactionWith] at h
-  obtain ⟨_, t1, h1, h⟩ := bind_ok h
+  obtain ⟨⟨_, t1⟩, h1, h⟩ := Base.stateT_bind_eq_ok h
   obtain rfl := liftExcept_ok h1
-  obtain ⟨_, t2, h2, h⟩ := bind_ok h
+  obtain ⟨⟨_, t2⟩, h2, h⟩ := Base.stateT_bind_eq_ok h
   obtain rfl := liftExcept_ok h2
-  obtain ⟨_, t3, h3, h⟩ := bind_ok h
+  obtain ⟨⟨_, t3⟩, h3, h⟩ := Base.stateT_bind_eq_ok h
   obtain rfl := liftExcept_ok h3
-  obtain ⟨_, t4, h4, h⟩ := bind_ok h
+  obtain ⟨⟨_, t4⟩, h4, h⟩ := Base.stateT_bind_eq_ok h
   have chained := processMessageCallWith_chained config _ _ _ _ _ _ h4 fresh
   dsimp only at h
-  obtain ⟨⟨_, _⟩, t5, h5, h6⟩ := bind_ok h
+  obtain ⟨⟨⟨_, _⟩, t5⟩, h5, h6⟩ := Base.stateT_bind_eq_ok h
   obtain rfl := liftExcept_ok h5
   dsimp only at h6
-  obtain ⟨_, t7, h7, h8⟩ := bind_ok h6
+  obtain ⟨⟨_, t7⟩, h7, h8⟩ := Base.stateT_bind_eq_ok h6
   obtain rfl := liftExcept_ok h7
   obtain rfl := pure_ok h8
   exact chained i hi depth ⟨plain, ok⟩
