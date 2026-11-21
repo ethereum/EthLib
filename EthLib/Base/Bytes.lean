@@ -14,18 +14,6 @@ Byte strings of a fixed length, `B_n` in section 3 of the [Yellow Paper][paper],
 instance : Repr ByteArray where
   reprPrec bytes prec := reprPrec bytes.data prec
 
-/-- Boolean equality agrees with equality of the packed byte arrays. -/
-instance : LawfulBEq ByteArray where
-  eq_of_beq {a b} same := by
-    have data : a.data = b.data := eq_of_beq same
-    cases a
-    cases b
-    cases data
-    rfl
-  rfl {a} := by
-    change (a.data == a.data) = true
-    exact BEq.rfl
-
 namespace EthLib.Base
 
 /-- `B_8`: exactly 8 bytes, such as the nonce of a block header. -/
