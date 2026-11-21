@@ -43,11 +43,14 @@ def run {α : Type} (act : Except SnapError α) : Result α :=
 
 /-- The canonical data of the message with the ID `id` and the data `data`, on a version.
 
-It reads the message, then writes it back. -/
+It reads the message, and returns the data once the message reads.
+
+The decoder takes only the canonical encoding of a message, so the data is that encoding. -/
 @[export eth_snap_message_decode]
 def decodeExport (version id : UInt64) (data : ByteArray) : Result ByteArray := do
   let v ← readVersion version
-  run (← run (SnapMessage.decode v id.toNat data)).encode
+  let _ ← run (SnapMessage.decode v id.toNat data)
+  return data
 
 /-- Whether the ByteCodes data `response` answers the GetByteCodes data `request`.
 
