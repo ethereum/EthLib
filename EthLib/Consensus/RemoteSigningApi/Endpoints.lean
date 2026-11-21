@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.RemoteSigningApi.SigningRoot
 public import EthLib.Consensus.SlashingProtection
+public import EthLib.Serialization.Ssz.Codec.HexBytes
 
 /-!
 # `Consensus.RemoteSigningApi.Endpoints`
@@ -47,9 +48,7 @@ def publicKeys (state : SignerState) : List BLSPubkey :=
 
 The source says only "BLS public key in hex format", so other spellings are refused. -/
 def readIdentifier (identifier : String) : Option BLSPubkey :=
-  match ofHex identifier with
-  | .ok data => exactBytes? 48 ⟨data⟩
-  | .error _ => none
+  parseHexBytes 48 identifier
 
 /-- A rule of slashing protection: it refuses a request of a key, or records it.
 
