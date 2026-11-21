@@ -8,6 +8,7 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.HexBytes
 public import EthLib.Consensus.Proofs.BeaconApi.Encoding
 public import EthLib.Consensus.Proofs.Proposers
 public import EthLib.Consensus.Proofs.Transition.PayloadInputs
+public import EthLib.Consensus.Proofs.Transition.ProposerLookahead
 public import Std.Data.String.ToInt
 import EthLib.Base.Proofs.Toolchain.JsonBasic
 
@@ -417,144 +418,7 @@ theorem validatorsResponse_sound (state : BeaconState preset fork) (fulu : .fusa
 
 section Lookahead
 
-variable {config : Config} {checks : SignatureChecks} {state after : BeaconState preset fork}
-
-/-- Two states with the same lookahead of proposers. -/
-private def Kept (state after : BeaconState preset fork) : Prop :=
-  after.proposerLookahead = state.proposerLookahead
-
-/-- Every state keeps its own lookahead. -/
-private theorem Kept.refl (state : BeaconState preset fork) : Kept state state :=
-  rfl
-
-/-- Two steps in a row that keep the lookahead keep it. -/
-private theorem Kept.trans {first second third : BeaconState preset fork}
-    (one : Kept first second) (two : Kept second third) : Kept first third :=
-  Eq.trans two one
-
-/-- A step that keeps the inputs of a payload keeps the lookahead. -/
-private theorem Kept.of_payloadInputs (inputs : PayloadInputs state after) : Kept state after :=
-  inputs.proposerLookahead
-
-/-- From Fulu, the epoch transition moves each kept proposer of the lookahead back by one epoch. -/
-theorem processEpoch_proposerLookahead (fulu : .fusaka ≤ fork)
-    (computed : processEpoch config checks state = .ok after) {position : Nat}
-    (inside : position + preset.SLOTS_PER_EPOCH.toNat <
-      (preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat) :
-    (after.proposerLookahead fulu)[position]? =
-      (state.proposerLookahead fulu)[position + preset.SLOTS_PER_EPOCH.toNat]? := by
-  have altair : Fork.altair ≤ fork := Nat.le_trans (by decide) fulu
-  have capella : Fork.shapella ≤ fork := Nat.le_trans (by decide) fulu
-  obtain ⟨cleared, mixed, rooted, rotated, synced, looked, initial, mixedOk, rootedOk, rotation,
-    syncedOk, lookedOk, windowed⟩ := processEpoch_randaoCut computed
-  have head : Kept state cleared := Kept.of_payloadInputs (payloadInputs_epochPrefix initial)
-  simp only [EpochStage.Edge, altair, capella, ↓reduceDIte] at rootedOk rotation syncedOk
-  simp only [EpochStage.Edge, fulu, ↓reduceDIte] at lookedOk windowed
-  have middle : Kept cleared synced := by
-    obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq mixedOk
-    subst rotation
-    exact (Kept.of_payloadInputs
-      (payloadInputsLaws.processHistoricalSummariesUpdate rootedOk)).trans
-      ((show Kept rooted (processParticipationFlagUpdates rooted altair) from rfl).trans
-        (Kept.of_payloadInputs (payloadInputsLaws.processSyncCommitteeUpdates syncedOk)))
-  have tail : Kept looked after := by
-    split at windowed
-    · exact Kept.of_payloadInputs (payloadInputsLaws.processPtcWindow windowed)
-    · exact windowed ▸ Kept.refl _
-  obtain ⟨_, _, _, _, shifted⟩ := processProposerLookahead_spec lookedOk
-  have before : synced.proposerLookahead = state.proposerLookahead := head.trans middle
-  rw [show after.proposerLookahead = looked.proposerLookahead from tail, ← before,
-    Vector.getElem?_eq_getElem (by omega), Vector.getElem?_eq_getElem inside,
-    shifted _ (by omega)]
-  simp only [Vector.size, inside, ↓reduceDIte]
-
-/-- Two states whose lookaheads agree on each slot that both cover, from Fulu.
-
-The epoch of the second state starts no earlier than that of the first. -/
-private def Shifted (state after : BeaconState preset fork) : Prop :=
-  currentEpochStart state ≤ currentEpochStart after ∧
-    ∀ (fulu : .fusaka ≤ fork) (slot : Nat), currentEpochStart after ≤ slot →
-      slot < currentEpochStart state +
-        (preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat →
-      (after.proposerLookahead fulu)[slot - currentEpochStart after]? =
-        (state.proposerLookahead fulu)[slot - currentEpochStart state]?
-
-/-- Every state agrees with itself. -/
-private theorem Shifted.refl (state : BeaconState preset fork) : Shifted state state :=
-  ⟨Nat.le_refl _, fun _ _ _ _ => rfl⟩
-
-/-- Two agreements in a row give one. -/
-private theorem Shifted.trans {first second third : BeaconState preset fork}
-    (one : Shifted first second) (two : Shifted second third) : Shifted first third :=
-  ⟨Nat.le_trans one.1 two.1, fun fulu slot low high => by
-    rw [two.2 fulu slot low (by have := one.1; omega),
-      one.2 fulu slot (by have := two.1; omega) high]⟩
-
-/-- The first slot of the epoch of a state, by the slot of the state. -/
-private theorem currentEpochStart_eq (state : BeaconState preset fork) :
-    currentEpochStart state =
-      state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat * preset.SLOTS_PER_EPOCH.toNat := by
-  simp [currentEpochStart, getCurrentEpoch, computeEpochAtSlot, UInt64.toNat_div]
-
-/-- One slot keeps the proposer of each slot that both lookaheads cover. -/
-private theorem shifted_advanceSlot (computed : advanceSlot config checks state = .ok after) :
-    Shifted state after := by
-  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
-  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
-  have startAfter : currentEpochStart { epoched with slot := next } =
-      (state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat * preset.SLOTS_PER_EPOCH.toNat := by
-    rw [currentEpochStart_eq, sum]
-  obtain ⟨boundary, epochedOk⟩ | ⟨inside, rfl⟩ := epochIfLast_cases epochedOk
-  · have mod : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 := by
-      have := congrArg UInt64.toNat boundary
-      simpa [UInt64.toNat_mod, sum] using this
-    have up := Nat.succ_div_of_mod_eq_zero mod
-    rw [up, Nat.add_mul, Nat.one_mul] at startAfter
-    refine ⟨by rw [startAfter, currentEpochStart_eq]; omega, fun fulu slot low high => ?_⟩
-    rw [startAfter] at low ⊢
-    rw [currentEpochStart_eq] at high ⊢
-    have moved := processEpoch_proposerLookahead fulu epochedOk
-      (position := slot - (state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat *
-        preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat)) (by omega)
-    rw [show slot - state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat * preset.SLOTS_PER_EPOCH.toNat =
-      slot - (state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat * preset.SLOTS_PER_EPOCH.toNat +
-        preset.SLOTS_PER_EPOCH.toNat) + preset.SLOTS_PER_EPOCH.toNat by omega]
-    exact moved
-  · have mod : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat ≠ 0 := fun zero =>
-      inside (UInt64.toNat_inj.mp (by simpa [UInt64.toNat_mod, sum] using zero))
-    rw [Nat.succ_div_of_mod_ne_zero mod, ← currentEpochStart_eq] at startAfter
-    exact ⟨Nat.le_of_eq startAfter.symm, fun _ _ _ _ => by rw [startAfter]⟩
-
-/-- Any count of slots keeps the proposer of each slot that both lookaheads cover. -/
-private theorem shifted_advanceSlots :
-    ∀ (count : Nat) {state after : BeaconState preset fork},
-      advanceSlots config checks count state = .ok after → Shifted state after
-  | 0, _, _, computed => by
-    simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact Shifted.refl _
-  | count + 1, _, _, computed => by
-    simp only [advanceSlots, bind_ok_iff] at computed
-    obtain ⟨_, first, rest⟩ := computed
-    exact (shifted_advanceSlot first).trans (shifted_advanceSlots count rest)
-
-/-- From Fulu, the proposer of a state is the entry of its lookahead at its slot. -/
-private theorem getBeaconProposerIndex_of_lookahead (fulu : .fusaka ≤ fork)
-    (nonzero : preset.SLOTS_PER_EPOCH ≠ 0) {index : ValidatorIndex}
-    (found : (state.proposerLookahead fulu)[state.slot.toNat - currentEpochStart state]? =
-      some index) :
-    getBeaconProposerIndex state = .ok index := by
-  have position : (state.slot % preset.SLOTS_PER_EPOCH).toNat =
-      state.slot.toNat - currentEpochStart state := by
-    rw [UInt64.toNat_mod, currentEpochStart_eq]
-    have := Nat.mod_add_div' state.slot.toNat preset.SLOTS_PER_EPOCH.toNat
-    omega
-  unfold getBeaconProposerIndex
-  simp only [fulu, nonzero, ↓reduceDIte, position]
-  rw [Vector.getElem?_eq_some_iff] at found
-  obtain ⟨_, found⟩ := found
-  rw [found]
-  rfl
+variable {state : BeaconState preset fork}
 
 /-- From Fulu, an entry of the list lies in the lookahead of the state, at its slot. -/
 private theorem lookahead_of_mem {fulu : .fusaka ≤ fork} {registry : Registry}
@@ -582,17 +446,21 @@ theorem validatorsResponse_proposer {config : Config} {checks : SignatureChecks}
     getBeaconProposerIndex after = .ok entry.validatorIndex := by
   obtain ⟨nonzero, low, found⟩ := lookahead_of_mem listed
   obtain ⟨-, reached⟩ := processSlots_slot advanced
-  have shifted : Shifted state after := by
+  have shifted : ProposerLookaheadShifted ⟨fork, state⟩ ⟨fork, after⟩ := by
     simp only [processSlots, bind_ok_iff, ensure_ok_iff] at advanced
     obtain ⟨_, _, run⟩ := advanced
-    exact shifted_advanceSlots _ run
+    exact proposerLookaheadShifted_advanceSlots _ run
   have inside : entry.slot.toNat - currentEpochStart state <
       (preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat := by
     obtain ⟨bound, -⟩ := Vector.getElem?_eq_some_iff.mp found
     exact bound
-  apply getBeaconProposerIndex_of_lookahead fulu nonzero
-  rw [reached, shifted.2 fulu entry.slot.toNat
-    (by rw [currentEpochStart_eq, reached]; exact Nat.div_mul_le_self _ _) (by omega)]
+  unfold currentEpochStart at low found inside
+  have kept := shifted.2 fulu fulu entry.slot.toNat
+    (by dsimp only; rw [getCurrentEpoch_toNat, reached]; exact Nat.div_mul_le_self _ _)
+    (by dsimp only; omega)
+  dsimp only at kept
+  apply getBeaconProposerIndex_of_proposerLookahead fulu nonzero
+  rw [reached, kept]
   exact found
 
 /-- From Fulu, an entry for the slot of the state names the proposer of the state. -/
@@ -602,7 +470,7 @@ theorem validatorsResponse_proposer_self {state : BeaconState preset fork}
     getBeaconProposerIndex state = .ok entry.validatorIndex := by
   obtain ⟨nonzero, -, found⟩ := lookahead_of_mem listed
   rw [current] at found
-  exact getBeaconProposerIndex_of_lookahead fulu nonzero found
+  exact getBeaconProposerIndex_of_proposerLookahead fulu nonzero found
 
 /-! ## The registration of a key -/
 
