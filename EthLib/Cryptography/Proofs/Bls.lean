@@ -13,6 +13,7 @@ public import EthLib.Cryptography.Proofs.Bls.Fr
 public import EthLib.Cryptography.Proofs.Bls.FrZMod
 public import EthLib.Cryptography.Proofs.Bls.FrBatchInverse
 public import EthLib.Cryptography.Proofs.Bls.G1Group
+public import EthLib.Cryptography.Proofs.Bls.JacobianLaw
 public import EthLib.Cryptography.Proofs.Bls.Compress
 public import EthLib.Cryptography.Proofs.Bls.G1Msm
 public import EthLib.Cryptography.Proofs.Bls.G1Order

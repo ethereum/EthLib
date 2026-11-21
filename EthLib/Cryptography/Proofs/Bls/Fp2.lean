@@ -32,24 +32,6 @@ There the kernel computes on natural numbers.
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Bls
-
-/-- `Fp` maps into `ZMod p`, injectively and respecting each field operation. -/
-def Fp.embedding : FieldOps.Embedding Fp (ZMod Fp.modulus) where
-  toFun := Fp.toZMod
-  injective := Fp.toZMod.injective
-  map_add := Fp.toZMod_add
-  map_sub := Fp.toZMod_sub
-  map_mul := Fp.toZMod_mul
-  map_neg := Fp.toZMod_neg
-  map_zero := Fp.toZMod_zero
-  map_one := Fp.toZMod_one
-  map_inverse := Fp.toZMod_inverse
-  beq_iff _ _ := Fp.beq_iff.trans Fp.toZMod_inj.symm
-  isZero_iff _ := Fp.isZero_iff.trans (by rw [← Fp.toZMod_zero, Fp.toZMod_inj])
-
-end EthLib.Cryptography.Bls
-
 namespace EthLib.Cryptography.Bls.Fp2
 
 open Cryptography.Fp2 (c0 c1 beq isZero conjugate inverse)
@@ -277,6 +259,20 @@ instance : Field Fp2 where
   div_eq_mul_inv := fun _ _ => rfl
   nnqsmul := _
   qsmul := _
+
+/-- `Fp2` maps into itself, as a field of Mathlib, by the identity. -/
+def embedding : FieldOps.Embedding Fp2 Fp2 where
+  toFun a := a
+  injective := fun _ _ h => h
+  map_add _ _ := rfl
+  map_sub _ _ := rfl
+  map_mul _ _ := rfl
+  map_neg _ := rfl
+  map_zero := rfl
+  map_one := rfl
+  map_inverse _ := rfl
+  beq_iff _ _ := beq_iff_eq
+  isZero_iff _ := isZero_iff
 
 /-! ## Exponentiation (`powNat`) -/
 

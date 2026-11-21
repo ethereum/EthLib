@@ -18,7 +18,7 @@ Every fork from Pectra accepts the same inputs at the same prices.
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
 open EthLib.Base (bytesToNat)
-open EthLib.Cryptography.Bls (G2)
+open EthLib.Cryptography.Bls (G2 G2.add G2.zero)
 
 /-- The price of G2ADD, from EIP-2537, Gas schedule. -/
 def GAS_G2ADD : Nat := 600
@@ -74,7 +74,7 @@ The scalar `m` is the full 32-byte integer, not reduced. -/
 def g2Msm (pairs : List (List UInt8 × List UInt8)) : Except Bls12381Error G2 :=
   pairs.foldlM (init := G2.zero) fun sum (raw, scalar) => do
     let point ← bytesToG2 raw true
-    return G2.add sum (G2.mulNat point (bytesToNat scalar))
+    return G2.add sum (point.mulNat (bytesToNat scalar))
 
 /-- The multi-scalar multiplication of the pairs in the call data. -/
 def bls12G2Msm (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray := do

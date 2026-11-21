@@ -30,56 +30,17 @@ local notation "F" => ZMod Fp.modulus
 /-! ## Projective equality -/
 
 theorem toPoint_eq_iff_rep_equiv {p q : G1} (hp : Valid p) (hq : Valid q) :
-    toPoint p = toPoint q ↔ rep p ≈ rep q := by
-  constructor
-  · intro h
-    have he : ({ point := ⟦rep p⟧, nonsingular := hp } : curve.Point) =
-        ({ point := ⟦rep q⟧, nonsingular := hq } : curve.Point) :=
-      (Point.toAffineAddEquiv curve).injective h
-    exact Quotient.eq.mp (congrArg Point.point he)
-  · exact Point.toAffine_of_equiv
+    toPoint p = toPoint q ↔ rep p ≈ rep q :=
+  Law.toPoint_eq_iff_rep_equiv Fp.embedding 4 hp hq
 
 theorem projectiveEq_eq_true_iff_rep_equiv {p q : G1} (hp : Valid p) (hq : Valid q) :
-    projectiveEq p q = true ↔ rep p ≈ rep q := by
-  have hz (a : G1) : BaseField.isZero a.z = true ↔ rep a 2 = 0 := isZero_iff
-  unfold projectiveEq
-  by_cases hpz : BaseField.isZero p.z = true
-  · rw [ite_eq_left hpz]
-    constructor
-    · intro hqz
-      exact equiv_of_Z_eq_zero hp hq ((hz p).mp hpz) ((hz q).mp hqz)
-    · intro he
-      exact (hz q).mpr ((Z_eq_zero_of_equiv he).mp ((hz p).mp hpz))
-  · rw [ite_eq_right hpz]
-    by_cases hqz : BaseField.isZero q.z = true
-    · rw [ite_eq_left hqz]
-      exact iff_of_false Bool.false_ne_true
-        (not_equiv_of_Z_eq_zero_right (fun h => hpz ((hz p).mpr h)) ((hz q).mp hqz))
-    · rw [ite_eq_right hqz, Bool.and_eq_true]
-      have hx : BaseField.beq (p.x * (q.z * q.z)) (q.x * (p.z * p.z)) = true ↔
-          rep p 0 * rep q 2 ^ 2 = rep q 0 * rep p 2 ^ 2 := by
-        rw [show BaseField.beq (p.x * (q.z * q.z)) (q.x * (p.z * p.z)) =
-          (p.x * (q.z * q.z)).beq (q.x * (p.z * p.z)) from rfl, beq_iff]
-        simp only [rep_x, rep_z, Fp.toZMod_mul]
-        constructor <;> intro h <;> linear_combination h
-      have hy : BaseField.beq (p.y * (q.z * q.z * q.z)) (q.y * (p.z * p.z * p.z)) = true ↔
-          rep p 1 * rep q 2 ^ 3 = rep q 1 * rep p 2 ^ 3 := by
-        rw [show BaseField.beq (p.y * (q.z * q.z * q.z)) (q.y * (p.z * p.z * p.z)) =
-          (p.y * (q.z * q.z * q.z)).beq (q.y * (p.z * p.z * p.z)) from rfl, beq_iff]
-        simp only [rep_y, rep_z, Fp.toZMod_mul]
-        constructor <;> intro h <;> linear_combination h
-      rw [hx, hy]
-      constructor
-      · rintro ⟨h1, h2⟩
-        exact equiv_of_X_eq_of_Y_eq (fun h => hpz ((hz p).mpr h))
-          (fun h => hqz ((hz q).mpr h)) h1 h2
-      · intro he
-        exact ⟨X_eq_of_equiv he, Y_eq_of_equiv he⟩
+    projectiveEq p q = true ↔ rep p ≈ rep q :=
+  Law.projectiveEq_eq_true_iff_rep_equiv Fp.embedding 4 hp hq
 
 /-- On valid triples, projective equality is equality of the points they denote. -/
 theorem projectiveEq_eq_true_iff_toPoint_eq {p q : G1} (hp : Valid p) (hq : Valid q) :
     projectiveEq p q = true ↔ toPoint p = toPoint q :=
-  (projectiveEq_eq_true_iff_rep_equiv hp hq).trans (toPoint_eq_iff_rep_equiv hp hq).symm
+  Law.projectiveEq_eq_true_iff_toPoint_eq Fp.embedding 4 hp hq
 
 /-! ## `β` in `ZMod p` -/
 
@@ -239,19 +200,14 @@ theorem map_beta {K L : Type} [BaseField K] [BaseField L] (f : BaseField.Hom K L
 
 /-- A map of base fields commutes with `σ`. -/
 theorem map_sigma {K L : Type} [BaseField K] [BaseField L] (f : BaseField.Hom K L) (p : G1 K) :
-    map f (sigma p) = sigma (map f p) := by
+    map f.toHom (sigma p) = sigma (map f.toHom p) := by
   simp only [sigma, map, f.map_mul, map_beta]
-
-/-- A map of base fields keeps the projective equality of two points. -/
-theorem map_projectiveEq {K L : Type} [BaseField K] [BaseField L] (f : BaseField.Hom K L)
-    (p q : G1 K) : projectiveEq (map f p) (map f q) = projectiveEq p q := by
-  simp only [projectiveEq, map, f.map_isZero, ← f.map_mul, f.map_beq]
 
 /-- `σ(g_1) = [-t^2] g_1`, checked by the kernel in the model of `Fp`. -/
 theorem projectiveEq_sigma_generator :
     projectiveEq (sigma (generator : G1)) (neg (mulNat (mulNat generator blsX) blsX)) = true := by
   rw [← mulNatAux_eq 64 generator blsX (by decide),
-    ← mulNatAux_eq 64 _ blsX (by decide), ← map_projectiveEq Fp.toModel, map_sigma,
+    ← mulNatAux_eq 64 _ blsX (by decide), ← map_projectiveEq Fp.toModel.toHom, map_sigma,
     map_neg_fn, map_mulNatAux, map_mulNatAux, map_generator]
   decide +kernel
 

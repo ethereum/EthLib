@@ -137,7 +137,7 @@ private theorem isoMapG2_eq {x y : Fp2} (hd : d x ≠ 0) :
   unfold isoMapG2
   dsimp only
   rw [xDen_eq, yDen_eq, xNum_eq, yNum_eq, h2, h3]
-  simp only [Bool.or_self, Bool.false_eq_true, ↓reduceIte, G2.mk.injEq]
+  simp only [Bool.or_self, Bool.false_eq_true, ↓reduceIte, G1.mk.injEq]
   exact ⟨by ring, by ring, trivial⟩
 
 /-- The isogeny sends every affine point of `E'` to an affine point of the twist.

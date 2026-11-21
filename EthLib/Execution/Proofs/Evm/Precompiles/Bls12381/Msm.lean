@@ -20,7 +20,7 @@ EIP-2537 does not require a scalar to be below the subgroup order.
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
 open EthLib.Base (bytesToNat mapM_cons_ok mapM_ok_mem)
-open EthLib.Cryptography.Bls (G1 G2)
+open EthLib.Cryptography.Bls (G1 G2 G2.add G2.zero)
 
 /-! ## G1 -/
 
@@ -130,9 +130,9 @@ Its result adds each product to the start, in order. -/
 private theorem foldlM_g2Msm_eq_ok_iff (pairs : List (List UInt8 × List UInt8)) (acc q : G2) :
     pairs.foldlM (init := acc) (fun sum (raw, scalar) => do
         let point ← bytesToG2 raw true
-        return G2.add sum (G2.mulNat point (bytesToNat scalar))) = .ok q ↔
+        return G2.add sum (point.mulNat (bytesToNat scalar))) = .ok q ↔
       ∃ points, pairs.mapM (fun pair => bytesToG2 pair.1 true) = .ok points ∧
-        q = (List.zipWith (fun P pair => G2.mulNat P (bytesToNat pair.2)) points pairs).foldl
+        q = (List.zipWith (fun P pair => P.mulNat (bytesToNat pair.2)) points pairs).foldl
           G2.add acc := by
   induction pairs generalizing acc with
   | nil => simp [pure, Except.pure, eq_comm]
@@ -143,7 +143,7 @@ private theorem foldlM_g2Msm_eq_ok_iff (pairs : List (List UInt8 × List UInt8))
     cases hp : bytesToG2 raw true with
     | error e => simp [bind, Except.bind]
     | ok P =>
-      change List.foldlM _ (acc.add (P.mulNat (bytesToNat scalar))) pairs = _ ↔ _
+      change List.foldlM _ (G2.add acc (P.mulNat (bytesToNat scalar))) pairs = _ ↔ _
       rw [ih]
       constructor
       · rintro ⟨points, hm, rfl⟩
@@ -158,7 +158,7 @@ Its result adds `m_i • P_i` in order, from the point at infinity. -/
 theorem g2Msm_eq_ok_iff {pairs : List (List UInt8 × List UInt8)} {q : G2} :
     g2Msm pairs = .ok q ↔
       ∃ points, pairs.mapM (fun pair => bytesToG2 pair.1 true) = .ok points ∧
-        q = (List.zipWith (fun P pair => G2.mulNat P (bytesToNat pair.2)) points pairs).foldl
+        q = (List.zipWith (fun P pair => P.mulNat (bytesToNat pair.2)) points pairs).foldl
           G2.add G2.zero :=
   foldlM_g2Msm_eq_ok_iff pairs G2.zero q
 
@@ -166,7 +166,7 @@ theorem g2Msm_eq_ok_iff {pairs : List (List UInt8 × List UInt8)} {q : G2} :
 private theorem toPoint_foldl_g2 (n : List UInt8 × List UInt8 → Nat) :
     ∀ (points : List G2) (pairs : List (List UInt8 × List UInt8)) (acc : G2), G2.Valid acc →
       (∀ P ∈ points, G2.Valid P) →
-      G2.toPoint ((List.zipWith (fun P pair => G2.mulNat P (n pair)) points pairs).foldl
+      G2.toPoint ((List.zipWith (fun P pair => P.mulNat (n pair)) points pairs).foldl
           G2.add acc) =
         G2.toPoint acc + (List.zipWith (fun P pair => n pair • G2.toPoint P) points pairs).sum
   | [], _, _, _, _ => by simp

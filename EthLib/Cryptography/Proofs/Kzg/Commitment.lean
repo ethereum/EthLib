@@ -31,7 +31,7 @@ The scheme is PolyCommit_DL, §3.2 of Kate, Zaverucha and Goldberg, ASIACRYPT 20
 
 namespace EthLib.Cryptography.Kzg
 
-open EthLib.Cryptography.Bls (G1 G2 Fr)
+open EthLib.Cryptography.Bls (G1 G2 Fr G2.mul)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial

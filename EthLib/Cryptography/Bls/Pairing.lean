@@ -84,7 +84,7 @@ def millerAdd (T : G2 F) (xq yq : Fp2 F) (xp yp : F) (f : Fp12 F) : G2 F × Fp12
   let c0 := n * xq - d * yq
   let c2 := -(n * Fp2.ofFp xp)
   let c3 := d * Fp2.ofFp yp
-  (T.add ⟨xq, yq, Fp2.one⟩, f * lineValue c0 c2 c3)
+  (G2.add T ⟨xq, yq, Fp2.one⟩, f * lineValue c0 c2 c3)
 
 /-- Walk bits `n - 1` down to `0` of `s` from `(T, f)`.
 

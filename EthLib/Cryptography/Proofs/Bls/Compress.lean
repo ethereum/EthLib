@@ -827,17 +827,8 @@ private theorem head_reconstruct (head : UInt8)
 
 /-- A point with `z = 1` is already affine. -/
 private theorem toAffine_of_z_one (x y : Fp) :
-    (⟨x, y, Fp.one⟩ : G1).toAffine = (x, y) := by
-  unfold toAffine
-  simp only [Fp.baseField_isZero, Fp.baseField_inverse]
-  -- z = 1 is not zero, so the point is not at infinity.
-  rw [ite_eq_right (Bool.eq_false_iff.mp Fp.one_isZero)]
-  -- The inverse of 1 is 1.
-  have hinv : Fp.one.inverse = (1 : Fp) :=
-    Fp.toZMod.injective (by rw [Fp.toZMod_inverse, Fp.one_def, Fp.toZMod_one, inv_one])
-  -- Dividing by 1^2 and 1^3 leaves x and y unchanged.
-  rw [hinv]
-  refine Prod.ext ?_ ?_ <;> dsimp only <;> apply Fp.toZMod.injective <;> push_toZMod <;> ring
+    (⟨x, y, Fp.one⟩ : G1).toAffine = (x, y) :=
+  Law.toAffine_mk_one Fp.embedding x y
 
 /-! ### The infinity encoding -/
 

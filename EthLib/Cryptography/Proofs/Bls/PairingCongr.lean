@@ -22,99 +22,15 @@ namespace EthLib.Cryptography.Bls
 
 open WeierstrassCurve.Jacobian
 
-section Jacobian
-
-variable {F : Type} [Field F] {W : WeierstrassCurve.Jacobian F} {P Q : Fin 3 → F}
-
-/-- Two nonsingular representatives of one point are both at infinity or both finite. -/
-private theorem Z_eq_zero_iff_of_toAffine_eq (hP : W.Nonsingular P) (hQ : W.Nonsingular Q)
-    (h : Point.toAffine W P = Point.toAffine W Q) : P 2 = 0 ↔ Q 2 = 0 := by
-  by_cases hPz : P 2 = 0 <;> by_cases hQz : Q 2 = 0
-  · simp [hPz, hQz]
-  · rw [Point.toAffine_of_Z_eq_zero hPz, Point.toAffine_of_Z_ne_zero hQ hQz] at h
-    cases h
-  · rw [Point.toAffine_of_Z_ne_zero hP hPz, Point.toAffine_of_Z_eq_zero hQz] at h
-    cases h
-  · simp [hPz, hQz]
-
-/-- Two finite nonsingular representatives of one point have the same affine coordinates. -/
-private theorem affine_eq_of_toAffine_eq (hP : W.Nonsingular P) (hQ : W.Nonsingular Q)
-    (h : Point.toAffine W P = Point.toAffine W Q) (hPz : P 2 ≠ 0) (hQz : Q 2 ≠ 0) :
-    P 0 / P 2 ^ 2 = Q 0 / Q 2 ^ 2 ∧ P 1 / P 2 ^ 3 = Q 1 / Q 2 ^ 3 := by
-  rw [Point.toAffine_of_Z_ne_zero hP hPz, Point.toAffine_of_Z_ne_zero hQ hQz] at h
-  simp only [WeierstrassCurve.Affine.Point.some.injEq] at h
-  exact h
-
-end Jacobian
-
-namespace G1
-
-open scoped EthLib.Cryptography.Bls.Fp
-
-/-- The spec multiplies by the inverse of `z` where Mathlib divides by `z`. -/
-private theorem mul_inverse_sq (x z w : ZMod Fp.modulus) (hw : z * w = 1) :
-    x * (w * w) = x / z ^ 2 := by
-  rw [eq_inv_of_mul_eq_one_right hw]
-  ring
-
-private theorem mul_inverse_cube (y z w : ZMod Fp.modulus) (hw : z * w = 1) :
-    y * (w * w * w) = y / z ^ 3 := by
-  rw [eq_inv_of_mul_eq_one_right hw]
-  ring
-
-private theorem z_mul_inverse {P : G1} (hz : ¬P.z.isZero = true) :
-    Fp.toZMod P.z * Fp.toZMod P.z.inverse = 1 := by
-  rw [Fp.toZMod_inverse]
-  exact mul_inv_cancel₀ (fun h => hz (isZero_iff.mpr h))
+/-- Two valid points with the same group element have the same affine coordinates. -/
+theorem G1.toAffine_congr {P Q : G1} (hP : G1.Valid P) (hQ : G1.Valid Q)
+    (h : G1.toPoint P = G1.toPoint Q) : P.isInfinity = Q.isInfinity ∧ P.toAffine = Q.toAffine :=
+  G1.Law.toAffine_congr Fp.embedding 4 hP hQ h
 
 /-- Two valid points with the same group element have the same affine coordinates. -/
-theorem toAffine_congr {P Q : G1} (hP : Valid P) (hQ : Valid Q) (h : toPoint P = toPoint Q) :
-    P.isInfinity = Q.isInfinity ∧ P.toAffine = Q.toAffine := by
-  have hz : P.z.isZero = true ↔ Q.z.isZero = true :=
-    isZero_iff.trans ((Z_eq_zero_iff_of_toAffine_eq hP hQ h).trans isZero_iff.symm)
-  refine ⟨Bool.eq_iff_iff.mpr hz, ?_⟩
-  by_cases hPz : P.z.isZero = true
-  · simp [G1.toAffine, hPz, hz.mp hPz]
-  · have hQz : ¬Q.z.isZero = true := fun h => hPz (hz.mpr h)
-    obtain ⟨hx, hy⟩ := affine_eq_of_toAffine_eq hP hQ h
-      (fun h => hPz (isZero_iff.mpr h)) (fun h => hQz (isZero_iff.mpr h))
-    simp only [G1.toAffine, Fp.baseField_isZero, Fp.baseField_inverse, ite_eq_right hPz,
-      ite_eq_right hQz]
-    simp only [rep_x, rep_y, rep_z] at hx hy
-    refine Prod.ext (Fp.toZMod.injective ?_) (Fp.toZMod.injective ?_) <;> push_toZMod
-    · exact (mul_inverse_sq _ _ _ (z_mul_inverse hPz)).trans
-        (hx.trans (mul_inverse_sq _ _ _ (z_mul_inverse hQz)).symm)
-    · exact (mul_inverse_cube _ _ _ (z_mul_inverse hPz)).trans
-        (hy.trans (mul_inverse_cube _ _ _ (z_mul_inverse hQz)).symm)
-
-end G1
-
-namespace G2
-
-/-- Two valid points with the same group element have the same affine coordinates. -/
-theorem toAffine_congr {P Q : G2} (hP : Valid P) (hQ : Valid Q) (h : toPoint P = toPoint Q) :
-    P.isInfinity = Q.isInfinity ∧ P.toAffine = Q.toAffine := by
-  have hz : P.z.isZero = true ↔ Q.z.isZero = true :=
-    isZero_iff.trans ((Z_eq_zero_iff_of_toAffine_eq hP hQ h).trans isZero_iff.symm)
-  refine ⟨Bool.eq_iff_iff.mpr hz, ?_⟩
-  by_cases hPz : P.z.isZero = true
-  · simp [G2.toAffine, hPz, hz.mp hPz]
-  · have hQz : ¬Q.z.isZero = true := fun h => hPz (hz.mpr h)
-    obtain ⟨hx, hy⟩ := affine_eq_of_toAffine_eq hP hQ h
-      (fun h => hPz (isZero_iff.mpr h)) (fun h => hQz (isZero_iff.mpr h))
-    simp only [G2.toAffine, ite_eq_right hPz, ite_eq_right hQz]
-    change (P.x * (P.z⁻¹ * P.z⁻¹), P.y * (P.z⁻¹ * P.z⁻¹ * P.z⁻¹)) =
-      (Q.x * (Q.z⁻¹ * Q.z⁻¹), Q.y * (Q.z⁻¹ * Q.z⁻¹ * Q.z⁻¹))
-    simp only [rep_x, rep_y, rep_z] at hx hy
-    refine Prod.ext ?_ ?_
-    · calc P.x * (P.z⁻¹ * P.z⁻¹) = P.x / P.z ^ 2 := by ring
-        _ = Q.x / Q.z ^ 2 := hx
-        _ = Q.x * (Q.z⁻¹ * Q.z⁻¹) := by ring
-    · calc P.y * (P.z⁻¹ * P.z⁻¹ * P.z⁻¹) = P.y / P.z ^ 3 := by ring
-        _ = Q.y / Q.z ^ 3 := hy
-        _ = Q.y * (Q.z⁻¹ * Q.z⁻¹ * Q.z⁻¹) := by ring
-
-end G2
+theorem G2.toAffine_congr {P Q : G2} (hP : G2.Valid P) (hQ : G2.Valid Q)
+    (h : G2.toPoint P = G2.toPoint Q) : P.isInfinity = Q.isInfinity ∧ P.toAffine = Q.toAffine :=
+  G1.Law.toAffine_congr Fp2.embedding G2.bTwist hP hQ h
 
 /-- The pairing check is the final exponentiation of the product of the factors, in order. -/
 theorem pairingCheck_eq_finalExp_prod (pairs : Array (G1 × G2)) :

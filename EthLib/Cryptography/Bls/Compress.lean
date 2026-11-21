@@ -213,7 +213,7 @@ For a point on the twist, the proofs show that it holds exactly when `[r] P = O`
 `t` is negative, so `[t] P` is `-[|t|] P`, one product by the 64-bit `|t|`. -/
 def inSubgroup (p : G2) : Bool :=
   if p.isInfinity then true
-  else projectiveEq (psi p) (neg (mulNat p blsX))
+  else (psi p).projectiveEq (neg (p.mulNat blsX))
 
 end G2
 
