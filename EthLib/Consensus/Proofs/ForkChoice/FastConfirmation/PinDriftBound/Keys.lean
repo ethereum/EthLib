@@ -310,15 +310,7 @@ theorem slashing_credits_le_limits (events : List (BalanceEvent preset))
         List.map_cons, List.sum_cons]
       omega
 
-end PinDrift.Internal
-
 /-! ## A floor and a ceiling on one key's effective balance -/
-
-namespace PinDrift.Internal
-
-open Base Uint64 Models
-
-variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 /-- A successful update of the effective balances applies the scalar update at each index.
 
@@ -514,8 +506,6 @@ private theorem effective_ceiling_slot {f : Fork} {s t : BeaconState preset f}
       rw [nextSlot_epoch_of_inside sum inner]
 
 section Rewards
-
-open DirectSafety
 
 /-! ### One key's reward in an epoch pass -/
 
@@ -1386,19 +1376,7 @@ theorem Run.effective_ceiling_of_balance_ceiling {x y : ForkedBeaconState preset
   (PinDrift.Internal.Run.effective_floor_pair tail early fulu i inside 0 0 capHigh 0 0 0).2.2.1 ceil
     alignedHigh startCap balanceCeil capCeil
 
-end PinDrift.Internal
-
-end
-
-section
-
 /-! ## The penalty rate of one key in a rewards pass -/
-
-namespace PinDrift.Internal
-
-open Base Uint64 Models
-
-variable {preset : Preset} {config : Config}
 
 /-- One rewards pass debits a key at a state at a rate of at most the pin reserve's leak rate.
 
@@ -1524,19 +1502,7 @@ theorem passPenaltyRate_le_leak (z : ForkedBeaconState preset) (v : ℕ) (pulled
     Nat.div_le_div_right (Nat.mul_le_mul_left _ scored)
   exact Nat.add_le_add rewardRate scoreRate
 
-end PinDrift.Internal
-
-end
-
-section
-
 /-! ## Credits to exiting keys along a run -/
-
-namespace PinDrift.Internal
-
-open Base Uint64 Models DirectSafety
-
-variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
 
 /-! ## Deposits leave the balance of an exiting key alone -/
 
@@ -2767,19 +2733,7 @@ theorem Run.consolidation_credits_le_X_targets {g x y : ForkedBeaconState preset
   conv_rhs => rw [← split, List.filter_append, List.map_append, List.sum_append]
   exact Nat.le_add_right _ _
 
-end PinDrift.Internal
-
-end
-
-section
-
 /-! ## A validator created in a step has no exit assigned -/
-
-namespace PinDrift.Internal
-
-open Base Uint64 Models DirectSafety
-
-variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
 
 /-- Every validator from position `n` on has no exit epoch assigned. -/
 private def ExitFarFrom (n : ℕ) {f : Fork} (s : BeaconState preset f) : Prop :=
@@ -2976,19 +2930,7 @@ theorem Run.charge_of_exit {x y : ForkedBeaconState preset}
     exact ⟨c, by rw [Run.departureCharges_append]; exact List.mem_append_right _ member, index,
       epoch⟩
 
-end PinDrift.Internal
-
-end
-
-section
-
 /-! ## The floor path of a new key's effective balance -/
-
-namespace PinDrift.Internal
-
-open Base Uint64 Models DirectSafety
-
-variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
 
 /-! ## A potential that retains a decreasing floor -/
 
