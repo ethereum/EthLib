@@ -25,7 +25,7 @@ public section
 namespace EthLib.Engine.Exports
 
 open Lean (Json)
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport rejectArgument toResult)
 open EthLib.Base
 open EthLib.Engine.Json (AnyPayload)
 
@@ -86,9 +86,7 @@ def rewriteParamsOf (args : String × PyValue) : Result PyValue := do
   let (method, params) := args
   let params := params.toJson
   let engine (act : Except EngineError Json) : Result PyValue :=
-    match act with
-    | .ok j => pure (.ofJson j)
-    | .error e => throw (e.code, s!"engine error: {reprStr e}")
+    PyValue.ofJson <$> toResult "engine error" act
   if let some version := newPayloadVersion method then
     engine (rewriteNewPayloadParams version params)
   else if let some version := forkchoiceUpdatedVersion method then
@@ -103,7 +101,7 @@ def rewriteParamsOf (args : String × PyValue) : Result PyValue := do
     | some (_, true) =>
       engine ((fun (start, count) => bodiesByRangeParamsJson start count) <$>
         bodiesByRangeParams params)
-    | none => throw (0, s!"no method {method}")
+    | none => rejectArgument none s!"no method {method}"
 
 /-- The parameters of an Engine API request, read by the decoder and written by the writer.
 

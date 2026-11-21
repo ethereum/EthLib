@@ -4,6 +4,7 @@ public import EthLib.Base.Exports
 public import EthLib.Base.Exports.ChainConfig
 public import EthLib.Base.Hex
 public import EthLib.Engine.Capabilities
+public import EthLib.Engine.Exports.Errors
 public import EthLib.Engine.NewPayload
 public import EthLib.Execution.Exports.Transition
 
@@ -40,7 +41,7 @@ public section
 namespace EthLib.Engine.Exports
 
 open Lean (Json)
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue UnreadArgument pyExport rejectArgument toResult)
 open EthLib.Base
 open EthLib.Base.ChainConfig.Exports (configOfJson)
 
@@ -73,7 +74,8 @@ def statusJson (version : Nat) (status : PayloadStatus) (reason : Option Payload
     Result Json := do
   let error := reason.map fun e => s!"{e.code}: {reasonMessage e}"
   if version < 6 then return Json.payloadStatusJson status error
-  if status.status = .valid then throw (0, "no inclusion list verdict: Bogota does not run here")
+  if status.status = .valid then
+    rejectArgument none "no inclusion list verdict: Bogota does not run here"
   return Json.payloadStatusV2Json status error none
 
 /-- A payload status read from its JSON: the name of the status, the latest valid hash, the error.
@@ -81,8 +83,7 @@ def statusJson (version : Nat) (status : PayloadStatus) (reason : Option Payload
 The hash and the error are `None` in Python when the JSON has no value for them. -/
 def readPayloadStatusOf (status : PyValue) :
     Result (String × Option ByteArray × Option String) := do
-  let (s, e) ← (Json.payloadStatusOfJson status.toJson).mapError
-    fun e => (e.code, s!"engine error: {reprStr e}")
+  let (s, e) ← toResult "engine error" (Json.payloadStatusOfJson status.toJson)
   return (s.status.name, s.latestValidHash.map (⟨·.toArray⟩), e)
 
 /-- A payload status read from its JSON, as `json.loads` gives it.
@@ -104,12 +105,11 @@ def newPayloadOf (args : PyValue × PyValue) : Result PyValue := do
   let config ← configOfJson config.toJson
   let request := request.toJson
   let some method := (request.getObjValAs? String "method").toOption
-    | throw (0, "request: no method")
-  let some version := newPayloadVersion method | throw (0, s!"no method {method}")
+    | rejectArgument none "request: no method"
+  let some version := newPayloadVersion method | rejectArgument none s!"no method {method}"
   let params := request.getObjValD "params"
-  match newPayloadWithoutState config version params with
-  | .ok (status, reason) => return .ofJson (← statusJson version status reason)
-  | .error e => throw (e.code, s!"engine error: {reprStr e}")
+  let (status, reason) ← toResult "engine error" (newPayloadWithoutState config version params)
+  return .ofJson (← statusJson version status reason)
 
 /-- The payload status of an `engine_newPayload` request, without the parent's state.
 
@@ -141,7 +141,8 @@ def newPayloadOnChainOf
     Result (PyValue × Option ByteArray × Option ByteArray) := do
   let (config, state, recent, terminalTotalDifficulty, totalDifficulty, request) := args
   unless terminalTotalDifficulty < 2 ^ 256 do
-    throw (0, s!"config: a terminal total difficulty of {terminalTotalDifficulty}, not below 2^256")
+    rejectArgument none
+      s!"config: a terminal total difficulty of {terminalTotalDifficulty}, not below 2^256"
   let transition : TransitionConfiguration := {
     terminalTotalDifficulty := BitVec.ofNat 256 terminalTotalDifficulty
     terminalBlockHash := 0
@@ -149,22 +150,22 @@ def newPayloadOnChainOf
   let chain ← Execution.Blocks.Exports.chainOf config state recent
   let request := request.toJson
   let some method := (request.getObjValAs? String "method").toOption
-    | throw (0, "request: no method")
-  let some version := newPayloadVersion method | throw (0, s!"no method {method}")
+    | rejectArgument none "request: no method"
+  let some version := newPayloadVersion method | rejectArgument none s!"no method {method}"
   let params := request.getObjValD "params"
-  match newPayloadOnChain transition totalDifficulty chain version params with
-  | .error e => throw (e.code, s!"engine error: {reprStr e}")
-  | .ok (status, reason, next) =>
-    let status := PyValue.ofJson (← statusJson version status reason)
-    match next with
-    | none => return (status, none, none)
-    | some (block, post) =>
-      let encoded : Except _ (ByteArray × ByteArray) := do
-        let header ← Serialization.Rlp.encode (Serialization.Rlp.Codec.toItem block.header)
-        let accounts ← Serialization.Rlp.encode (Execution.Blocks.Exports.accountsItem post)
-        return (header, accounts)
-      let (header, accounts) ← encoded.mapError fun e => (0, s!"result: {reprStr e}")
-      return (status, some header, some accounts)
+  let (status, reason, next) ← toResult "engine error"
+    (newPayloadOnChain transition totalDifficulty chain version params)
+  let status := PyValue.ofJson (← statusJson version status reason)
+  match next with
+  | none => return (status, none, none)
+  | some (block, post) =>
+    let encoded : Except _ (ByteArray × ByteArray) := do
+      let header ← Serialization.Rlp.encode (Serialization.Rlp.Codec.toItem block.header)
+      let accounts ← Serialization.Rlp.encode (Execution.Blocks.Exports.accountsItem post)
+      return (header, accounts)
+    let (header, accounts) ← toResult none
+      (encoded.mapError fun e => UnreadArgument.mk s!"result: {reprStr e}")
+    return (status, some header, some accounts)
 
 /-- The payload status of an `engine_newPayload` request, on a chain that holds the parent.
 

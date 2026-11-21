@@ -8,6 +8,8 @@ public import EthLib.Engine.Json
 
 The C export of the error object of each Engine API error, by its code.
 
+It also gives the code and the message with which an Engine API error reaches Python.
+
 The code crosses without its sign, as the codes of the Engine API errors do.
 -/
 
@@ -15,8 +17,13 @@ public section
 
 namespace EthLib.Engine.Exports
 
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue pyExport rejectArgument)
 open EthLib.Serialization.JsonRpc (rpcErrorJson)
+
+/-- An Engine API error reaches Python with its code, and its message names the error. -/
+instance : ExportError EngineError where
+  code := EngineError.code
+  message := reprStr
 
 /-- One error of each constructor.
 
@@ -32,7 +39,8 @@ def engineErrorOfCode (code : UInt32) : Option EngineError :=
 
 /-- The error object of the Engine API error with a code, as JSON text. -/
 def errorObjectOf (code : UInt32) : Result String := do
-  let some e := engineErrorOfCode code | throw (0, s!"no Engine API error has the code {code}")
+  let some e := engineErrorOfCode code
+    | rejectArgument none s!"no Engine API error has the code {code}"
   return (rpcErrorJson e.toRpcError).compress
 
 /-- The error object of the Engine API error with a code: its negative code, message and data.

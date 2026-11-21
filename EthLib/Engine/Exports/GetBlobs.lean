@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Exports.PyValue
 public import EthLib.Engine.Capabilities
+public import EthLib.Engine.Exports.Errors
 public import EthLib.Engine.GetBlobs
 
 /-!
@@ -39,7 +40,7 @@ public section
 namespace EthLib.Engine.Exports
 
 open Lean (Json)
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue UnreadArgument pyExport rejectArgument toResult)
 open EthLib.Base
 open EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Kzg.Constants
@@ -53,8 +54,8 @@ def pooledOf (entry : PoolEntry) : Result (Bytes32 × PooledBlob) := do
   let (hash, blob, proof, cells) := entry
   let cells ← match cells with
     | none => pure (Vector.replicate CELLS_PER_EXT_BLOB none)
-    | some cells => exactArray CELLS_PER_EXT_BLOB cells.toArray fun count =>
-      (0, s!"pool: {count} cells, not {CELLS_PER_EXT_BLOB}")
+    | some cells => toResult none (exactArray CELLS_PER_EXT_BLOB cells.toArray fun count =>
+      UnreadArgument.mk s!"pool: {count} cells, not {CELLS_PER_EXT_BLOB}")
   return (hash, ⟨blob, proof, cells⟩)
 
 /-- The version of a method name `engine_getBlobsV1` to `engine_getBlobsV4`. -/
@@ -67,37 +68,37 @@ def getBlobsOf (args : List PoolEntry × Bool × Nat × String × PyValue) : Res
   let (entries, serving, maxRequest, forkName, request) := args
   let entries ← entries.mapM pooledOf
   -- A pool holds each blob once, so two entries with one hash are malformed input.
-  unless (entries.map (·.1)).Nodup do throw (0, "pool: two entries with one versioned hash")
+  unless (entries.map (·.1)).Nodup do
+    rejectArgument none "pool: two entries with one versioned hash"
   -- The method is specified up to Glamsterdam, the fork of its version 4.
   let fork ← EthLib.Exports.forkUpTo .glamsterdam forkName.toUTF8
   if below : maxRequest < MIN_BLOBS_REQUEST_LIMIT then
-    throw (0, s!"pool: a limit of {maxRequest}, below {MIN_BLOBS_REQUEST_LIMIT}")
+    rejectArgument none s!"pool: a limit of {maxRequest}, below {MIN_BLOBS_REQUEST_LIMIT}"
   else
   let pool : BlobPool := {
     lookup := fun hash => (entries.find? (·.1 == hash)).map (·.2)
     serving, maxRequest, le_maxRequest := Nat.not_lt.1 below }
   let request := request.toJson
   let some method := (request.getObjValAs? String "method").toOption
-    | throw (0, "request: no method")
-  let some version := getBlobsVersion method | throw (0, s!"no method {method}")
-  let engine {α : Type} (act : Except EngineError α) : Result α :=
-    act.mapError fun e => (e.code, s!"engine error: {reprStr e}")
-  let (hashes, bits) ← engine (getBlobsParams version (request.getObjValD "params"))
+    | rejectArgument none "request: no method"
+  let some version := getBlobsVersion method | rejectArgument none s!"no method {method}"
+  let (hashes, bits) ← toResult "engine error"
+    (getBlobsParams version (request.getObjValD "params"))
   let answer : Json ← match version, bits with
     | 1, _ =>
-      let blobs ← engine (getBlobsV1 pool fork hashes)
+      let blobs ← toResult "engine error" (getBlobsV1 pool fork hashes)
       pure (getBlobsV1Json blobs)
     | 2, _ =>
-      let blobs ← engine (getBlobsV2 pool hashes)
+      let blobs ← toResult "engine error" (getBlobsV2 pool hashes)
       pure (getBlobsV2Json blobs)
     | 3, _ =>
-      let blobs ← engine (getBlobsV3 pool hashes)
+      let blobs ← toResult "engine error" (getBlobsV3 pool hashes)
       pure (getBlobsV3Json blobs)
     | _, some bits =>
-      let cells ← engine (getBlobsV4 pool hashes bits)
+      let cells ← toResult "engine error" (getBlobsV4 pool hashes bits)
       pure (getBlobsV4Json cells)
     -- The parameters of version 4 always hold a bitarray, so this case never happens.
-    | _, none => throw (0, "params: no bitarray")
+    | _, none => rejectArgument none "params: no bitarray"
   return .ofJson answer
 
 /-- The answer to an `engine_getBlobs` request, from a blob pool.
@@ -114,15 +115,13 @@ def getBlobsExport (args : PyValue) : Result PyValue :=
 /-- A result of `engine_getBlobs`, read at the version of the method name and written back. -/
 def readGetBlobsResultOf (args : String × PyValue) : Result PyValue := do
   let (method, result) := args
-  let some version := getBlobsVersion method | throw (0, s!"no method {method}")
-  let engine {α : Type} (act : Except EngineError α) : Result α :=
-    act.mapError fun e => (e.code, s!"engine error: {reprStr e}")
+  let some version := getBlobsVersion method | rejectArgument none s!"no method {method}"
   let result := result.toJson
   let answer : Json ← match version with
-    | 1 => getBlobsV1Json <$> engine (getBlobsV1OfJson result)
-    | 2 => getBlobsV2Json <$> engine (getBlobsV2OfJson result)
-    | 3 => getBlobsV3Json <$> engine (getBlobsV3OfJson result)
-    | _ => getBlobsV4Json <$> engine (getBlobsV4OfJson result)
+    | 1 => getBlobsV1Json <$> toResult "engine error" (getBlobsV1OfJson result)
+    | 2 => getBlobsV2Json <$> toResult "engine error" (getBlobsV2OfJson result)
+    | 3 => getBlobsV3Json <$> toResult "engine error" (getBlobsV3OfJson result)
+    | _ => getBlobsV4Json <$> toResult "engine error" (getBlobsV4OfJson result)
   return .ofJson answer
 
 /-- The result of an `engine_getBlobs` method, read from its JSON and written back.

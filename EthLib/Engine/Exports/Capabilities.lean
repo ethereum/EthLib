@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Exports.PyValue
 public import EthLib.Engine.Capabilities
+public import EthLib.Engine.Exports.Errors
 
 /-!
 # `Exports.Capabilities`
@@ -28,7 +29,7 @@ public section
 namespace EthLib.Engine.Exports
 
 open Lean (Json)
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport rejectArgument toResult)
 open EthLib.Base
 open EthLib.Serialization.JsonRpc (listJson)
 
@@ -36,15 +37,14 @@ open EthLib.Serialization.JsonRpc (listJson)
 def paramsOfMethod (accepts : String → Bool) (request : PyValue) : Result Json := do
   let request := request.toJson
   let some method := (request.getObjValAs? String "method").toOption
-    | throw (0, "request: no method")
-  unless accepts method do throw (0, s!"no method {method}")
+    | rejectArgument none "request: no method"
+  unless accepts method do rejectArgument none s!"no method {method}"
   return request.getObjValD "params"
 
 /-- The answer to the request, at an execution node that supports the methods of EthLib. -/
 def exchangeCapabilitiesOf (request : PyValue) : Result PyValue := do
   let params ← paramsOfMethod (· == "engine_exchangeCapabilities") request
-  let answer ← (exchangeCapabilities specifiedMethods params).mapError
-    fun e => (e.code, s!"engine error: {reprStr e}")
+  let answer ← toResult "engine error" (exchangeCapabilities specifiedMethods params)
   return .ofJson (listJson .str answer)
 
 /-- The answer to an `engine_exchangeCapabilities` request: the methods that EthLib defines.
@@ -60,10 +60,10 @@ The arguments are the four fields of the object and the request. -/
 def getClientVersionOf (args : String × String × String × Vector UInt8 4 × PyValue) :
     Result PyValue := do
   let (code, name, version, commit, request) := args
-  unless decide (IsClientCode code) do throw (0, s!"own: a code {code}, not two letters")
+  unless decide (IsClientCode code) do
+    rejectArgument none s!"own: a code {code}, not two letters"
   let params ← paramsOfMethod (methodVersion "getClientVersion" · == some 1) request
-  let answer ← (getClientVersion { code, name, version, commit } params).mapError
-    fun e => (e.code, s!"engine error: {reprStr e}")
+  let answer ← toResult "engine error" (getClientVersion { code, name, version, commit } params)
   return .ofJson (clientVersionsJson answer)
 
 /-- The answer to an `engine_getClientVersionV1` request, from a version object.

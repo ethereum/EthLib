@@ -24,14 +24,13 @@ public section
 namespace EthLib.Engine.Exports
 
 open Lean (Json)
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport toResult)
 
 /-- The answer to the request, from the candidates of the node. -/
 def getInclusionListOf (args : List ByteArray × PyValue) : Result PyValue := do
   let (candidates, request) := args
   let params ← paramsOfMethod (· == "engine_getInclusionListV1") request
-  let answer ← (getInclusionList candidates params).mapError
-    fun e => (e.code, s!"engine error: {reprStr e}")
+  let answer ← toResult "engine error" (getInclusionList candidates params)
   return .ofJson (Json.inclusionListJson answer)
 
 /-- The answer to an `engine_getInclusionListV1` request, from the candidates of the node.

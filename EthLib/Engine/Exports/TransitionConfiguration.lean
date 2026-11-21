@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Exports.PyValue
 public import EthLib.Engine.Capabilities
+public import EthLib.Engine.Exports.Errors
 public import EthLib.Engine.TransitionConfiguration
 
 /-!
@@ -31,7 +32,7 @@ public section
 namespace EthLib.Engine.Exports
 
 open Lean (Json)
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport rejectArgument toResult)
 open EthLib.Base
 
 /-- The answer to the request, at an execution node with a configuration.
@@ -41,19 +42,20 @@ def exchangeTransitionConfigurationOf (args : Nat × Bytes32 × Nat × PyValue) 
     Result PyValue := do
   let (difficulty, hash, number, request) := args
   unless difficulty < 2 ^ 256 do
-    throw (0, s!"config: a total difficulty of {difficulty}, not below 2^256")
-  unless number < 2 ^ 64 do throw (0, s!"config: a block number of {number}, not below 2^64")
+    rejectArgument none s!"config: a total difficulty of {difficulty}, not below 2^256"
+  unless number < 2 ^ 64 do
+    rejectArgument none s!"config: a block number of {number}, not below 2^64"
   let own : TransitionConfiguration := {
     terminalTotalDifficulty := BitVec.ofNat 256 difficulty
     terminalBlockHash := hash
     terminalBlockNumber := number.toUInt64 }
   let request := request.toJson
   let some method := (request.getObjValAs? String "method").toOption
-    | throw (0, "request: no method")
+    | rejectArgument none "request: no method"
   unless methodVersion "exchangeTransitionConfiguration" method = some 1 do
-    throw (0, s!"no method {method}")
-  let answer ← (exchangeTransitionConfiguration own (request.getObjValD "params")).mapError
-    fun e => (e.code, s!"engine error: {reprStr e}")
+    rejectArgument none s!"no method {method}"
+  let answer ← toResult "engine error"
+    (exchangeTransitionConfiguration own (request.getObjValD "params"))
   return .ofJson (transitionConfigurationJson answer)
 
 /-- The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration.
