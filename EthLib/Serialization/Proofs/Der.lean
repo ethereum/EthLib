@@ -21,8 +21,8 @@ The reader is stated against X.690 itself, in terms of octets and numbers.
 - The BIT STRING reader accepts only an octet-aligned value: the octet 0, then its octets.
 - BIT STRING contents count at most 7 unused bits, all zero, and none when no octet follows.
 - BMPString and UniversalString pass when they write Unicode scalar values, two or four octets each.
-- An INTEGER passes validation when it is nonempty and its first nine bits are not all equal.
-- An OCTET STRING always passes, and an IA5String passes when each octet is below 80.
+- An INTEGER passes validation exactly when its content is two's complement on the fewest octets.
+- An OCTET STRING always passes, and an IA5String passes when each octet is below 128.
 - An OBJECT IDENTIFIER is one or more subidentifiers, each on the fewest base-128 octets.
 - A SEQUENCE passes validation exactly when each value it holds passes.
 - A SET OF also needs the encodings of those values in ascending order.
@@ -1138,7 +1138,7 @@ private theorem validate_go_octetString {value : Value} (fuel : Nat) (tag : valu
   rw [validate.go, tag]
   rfl
 
-/-- With positive fuel, a value of tag 22 passes validation exactly when each octet is below 80.
+/-- With positive fuel, a value of tag 22 passes validation exactly when each octet is below 128.
 
 Those are the 128 characters of IA5, one octet each. -/
 private theorem validate_go_ia5String_ok_iff {value : Value} (fuel : Nat) (tag : value.tag = 22) :
@@ -1202,13 +1202,13 @@ theorem validate_integer_ok_iff {value : Value} (tag : value.tag = 2) :
         ¬(first = 0x00 ∧ next.toNat < 0x80) ∧ ¬(first = 0xFF ∧ 0x80 ≤ next.toNat) :=
   validate_go_integer_ok_iff _ tag
 
-/-- An OCTET STRING passes validation whatever its content (X.690 §8.7). -/
+/-- An OCTET STRING passes validation whatever its content (X.690 §8.7.2). -/
 theorem validate_octetString {value : Value} (tag : value.tag = 4) : validate value = .ok () :=
   validate_go_octetString _ tag
 
-/-- An IA5String passes validation exactly when each octet is below 80.
+/-- An IA5String passes validation exactly when each octet is below 128.
 
-Those are the 128 characters of IA5, one octet each (X.680 §41). -/
+Those are the 128 characters of IA5, one octet each (X.680 §41.1, Table 8). -/
 theorem validate_ia5String_ok_iff {value : Value} (tag : value.tag = 22) :
     validate value = .ok () ↔ ∀ b ∈ value.content.data.toList, b.toNat < 0x80 :=
   validate_go_ia5String_ok_iff _ tag
