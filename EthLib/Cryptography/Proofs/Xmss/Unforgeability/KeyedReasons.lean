@@ -187,7 +187,7 @@ theorem evalDistEq_reasonRun (adversary : ReasonAdversary) :
     XmssSecurity.Seeded.run'_lift_sample_bind]
   refine EvalDistEq.bind_right _ fun seed => ?_
   unfold keyedReasonRun statelessReasonRunOf
-  rw [run'_romImpl_bind, run'_romImpl_bind]
+  rw [show XmssSecurity.romImpl = HashSpec.romImpl from rfl, run'_romImpl_bind, run'_romImpl_bind]
   refine OracleComp.EvalDistEq.bind_congr_of_support _ fun b hb => ?_
   exact evalDistEq_run_bind seed keyedReasonOracles (statelessReasonOracles seed)
     (fun q _ _ hs => keyedReasonOracles_step hs q) (fun q _ _ hs => keyedReasonOracles_inv hs q)

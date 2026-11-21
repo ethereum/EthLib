@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Reasons
 public import EthLib.Cryptography.Proofs.Xmss.MapMonad
 public import EthLib.Cryptography.Proofs.Xmss.QueryBound
-public import EthLib.Cryptography.Proofs.DerivationTable
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.SeedInputs
 
 /-!
 # Proofs: the signer's secrets as derivations, in two hidden-seed hops
@@ -38,158 +38,6 @@ namespace EthLib.Cryptography.Xmss.Unforgeability
 open OracleComp OracleSpec ENNReal
 open EthLib.Cryptography.Xmss
 open XmssSecurity (OracleWorld HashSpec HashOutput MasterSeed romImpl seedHashInput)
-
-/-- What the game returns: the forgery, the log of the signing requests, and the verification. -/
-abbrev FailOutput := Forgery × QueryLog SigningSpec × Bool
-
-/-- Some signing request of the game failed. -/
-def SomeFailure (z : FailOutput) : Prop :=
-  ∃ entry ∈ z.2.1, entry.2 = none
-
-/-! ## The game over a source of derivations -/
-
-section Source
-
-variable {ι : Type} {spec : OracleSpec ι}
-
-/-- The hash of a game whose hash and coin queries a handler answers. -/
-def hashOf (pass : QueryImpl OracleWorld (OracleComp spec)) (x : ByteArray) :
-    OracleComp spec (Vector UInt8 32) :=
-  ofOutput <$> pass (.inr x.data.toList)
-
-/-- The game's oracles: hash and coin queries go to `pass`, and a request signs.
-
-A request first obtains the value its secrets derive from, as the signer does. -/
-def failSignerOf {σ : Type} (pass : QueryImpl OracleWorld (OracleComp spec))
-    (seedSrc : OracleComp spec σ) (prfOf : σ → SeedPrf (OracleComp spec)) :
-    QueryImpl (OracleWorld + ReasonSigningSpec)
-      (WriterT (QueryLog SigningSpec) (OracleComp spec))
-  | .inl t => (liftM (pass t) : WriterT (QueryLog SigningSpec) (OracleComp spec) _)
-  | .inr request => WriterT.mk (do
-      let s ← seedSrc
-      let pp ← publicParamOf (prfOf s)
-      let result ← signDerived (hashOf pass) (prfOf s) pp request.leafIndex request.message
-      return (result, [⟨request, result.toOption⟩]))
-
-/-- The game of a signing failure after the seed: keys, the adversary, then the verification.
-
-The secrets derive from `prfOf s`, where `s` comes from `seedSrc`. -/
-def failGameOf {σ : Type} (pass : QueryImpl OracleWorld (OracleComp spec))
-    (seedSrc : OracleComp spec σ) (prfOf : σ → SeedPrf (OracleComp spec))
-    (adversary : ReasonAdversary) : OracleComp spec FailOutput := do
-  let s ← seedSrc
-  let pk ← publicKeyOf (hashOf pass) (prfOf s)
-  let ((forgery, log) : Forgery × QueryLog SigningSpec) ←
-    (simulateQ (failSignerOf pass seedSrc prfOf) (adversary.main pk)).run
-  let verified ← verifyWith (hashOf pass) pk forgery.message forgery.signature
-  return (forgery, log, verified)
-
-section Map
-
-variable {ι' : Type} {spec' : OracleSpec ι'} (so : QueryImpl spec (OracleComp spec'))
-
-/-- Simulating a hash call gives the hash of the simulated handler. -/
-theorem simulateQ_hashOf (pass : QueryImpl OracleWorld (OracleComp spec)) (x : ByteArray) :
-    simulateQ so (hashOf pass x) = hashOf (so ∘ₛ pass) x := by
-  simp [hashOf, QueryImpl.apply_compose]
-
-/-- Simulating a request gives the request over the simulated handler and source. -/
-theorem simulateQ_run_failSignerOf_apply {σ : Type}
-    (pass : QueryImpl OracleWorld (OracleComp spec)) (seedSrc : OracleComp spec σ)
-    (prfOf : σ → SeedPrf (OracleComp spec)) (t : (OracleWorld + ReasonSigningSpec).Domain) :
-    simulateQ so (failSignerOf pass seedSrc prfOf t).run =
-      (failSignerOf (so ∘ₛ pass) (simulateQ so seedSrc)
-        (fun s pp a suffix => simulateQ so (prfOf s pp a suffix)) t).run := by
-  rcases t with t | request
-  · simp [failSignerOf, QueryImpl.apply_compose]
-  · simp only [failSignerOf, WriterT.run_mk, simulateQ_bind, simulateQ_pure]
-    refine bind_congr fun s => ?_
-    rw [publicParamOf_map_monad (simulateQ so) (fun b => simulateQ_pure so b)
-      (fun x f => simulateQ_bind so x f)]
-    refine bind_congr fun pp => ?_
-    rw [signDerived_map_monad (simulateQ so) (fun b => simulateQ_pure so b)
-      (fun x f => simulateQ_bind so x f)]
-    simp only [simulateQ_hashOf]
-
-/-- Simulating the run of the game's oracles gives their run over the simulated sources. -/
-theorem simulateQ_run_failSignerOf {σ : Type}
-    (pass : QueryImpl OracleWorld (OracleComp spec)) (seedSrc : OracleComp spec σ)
-    (prfOf : σ → SeedPrf (OracleComp spec)) {α : Type}
-    (oa : OracleComp (OracleWorld + ReasonSigningSpec) α) :
-    simulateQ so (simulateQ (failSignerOf pass seedSrc prfOf) oa).run =
-      (simulateQ (failSignerOf (so ∘ₛ pass) (simulateQ so seedSrc)
-        (fun s pp a suffix => simulateQ so (prfOf s pp a suffix))) oa).run := by
-  induction oa using OracleComp.inductionOn with
-  | pure x => simp
-  | query_bind t k ih =>
-    simp only [simulateQ_bind, simulateQ_spec_query, WriterT.run_bind', simulateQ_map,
-      simulateQ_run_failSignerOf_apply, ih]
-
-end Map
-
-/-- Simulating the queries of the game gives the game over the simulated handler and source. -/
-theorem simulateQ_failGameOf {ι' : Type} {spec' : OracleSpec ι'} {σ : Type}
-    (so : QueryImpl spec (OracleComp spec')) (pass : QueryImpl OracleWorld (OracleComp spec))
-    (seedSrc : OracleComp spec σ) (prfOf : σ → SeedPrf (OracleComp spec))
-    (adversary : ReasonAdversary) :
-    simulateQ so (failGameOf pass seedSrc prfOf adversary) =
-      failGameOf (so ∘ₛ pass) (simulateQ so seedSrc)
-        (fun s pp a suffix => simulateQ so (prfOf s pp a suffix)) adversary := by
-  simp only [failGameOf, simulateQ_bind, simulateQ_pure, simulateQ_run_failSignerOf]
-  refine bind_congr fun s => ?_
-  rw [publicKeyOf_map_monad (simulateQ so) (fun b => simulateQ_pure so b)
-    (fun x f => simulateQ_bind so x f)]
-  simp only [simulateQ_hashOf]
-  refine bind_congr fun pk => bind_congr fun z => ?_
-  rw [verifyWith_map_monad (simulateQ so) (fun b => simulateQ_pure so b)
-    (fun x f => simulateQ_bind so x f)]
-  simp only [simulateQ_hashOf]
-
-end Source
-
-/-! ## The real game -/
-
-/-- The game's `H`, lifted to hash and coin queries, is the hash of the identity handler. -/
-theorem liftM_H (x : ByteArray) :
-    (liftM (H x) : OracleComp OracleWorld (Vector UInt8 32)) =
-      hashOf (QueryImpl.id' OracleWorld) x := by
-  simp [H, queryH, hashOf, HashSig.oracleHash]
-  rfl
-
-/-- The derivations of the game, lifted, are those over the hash of the identity handler. -/
-theorem liftM_seedPrf (s : Seed) :
-    (fun pp a suffix =>
-        (liftM (seedPrf H s pp a suffix) : OracleComp OracleWorld (Vector UInt8 32))) =
-      seedPrf (hashOf (QueryImpl.id' OracleWorld)) s := by
-  funext pp a suffix
-  exact liftM_H _
-
-/-- The real game's oracles, for the secret key of a seed, are the game's over that seed. -/
-theorem reasonOracles_eq_failSignerOf (seed : Seed) :
-    QueryImpl.ofLift OracleWorld (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) +
-        statelessReasonSigningOracle seed =
-      failSignerOf (QueryImpl.id' OracleWorld)
-        (schemeSeed (hashOf (QueryImpl.id' OracleWorld)) seed)
-        (seedPrf (hashOf (QueryImpl.id' OracleWorld))) := by
-  funext t
-  rcases t with t | request
-  · rfl
-  · rw [QueryImpl.add_apply_inr]
-    simp only [statelessReasonSigningOracle, failSignerOf]
-    refine congrArg WriterT.mk ?_
-    have hseed : (liftM (schemeSeed H seed) : OracleComp OracleWorld Seed) =
-        schemeSeed (hashOf (QueryImpl.id' OracleWorld)) seed :=
-      liftM_H _
-    simp only [statelessSignWith, liftM_bind, map_bind, hseed]
-    refine bind_congr fun s => ?_
-    rw [publicParamOf_map_monad (fun {β} (c : OracleComp HashSpec β) =>
-      (liftM c : OracleComp OracleWorld β)) (fun b => liftM_pure b) (fun x f => liftM_bind x f),
-      liftM_seedPrf]
-    refine bind_congr fun pp => ?_
-    rw [signDerived_map_monad (fun {β} (c : OracleComp HashSpec β) =>
-      (liftM c : OracleComp OracleWorld β)) (fun b => liftM_pure b) (fun x f => liftM_bind x f),
-      liftM_seedPrf, funext liftM_H]
-    simp
 
 /-- The game of a signing failure, before the random oracle, as the game over the seed `S_0`. -/
 theorem reasonRun_eq_failGameOf (adversary : ReasonAdversary) :
@@ -227,20 +75,11 @@ theorem signingFailure_eq (adversary : ReasonAdversary) :
 
 /-! ## The first hop: the scheme seed -/
 
-/-- The oracles of a game whose scheme seed is a derivation query. -/
-abbrev SeedSpec := HashSpec.withDerivations Unit HashOutput
-
 /-- The game with the scheme seed `S` as a derivation query, which each request reads again. -/
 def seedGame (adversary : ReasonAdversary) : OracleComp SeedSpec FailOutput :=
   failGameOf (HashSpec.withDerivationsLift Unit HashOutput)
     (ofOutput <$> SeedSpec.query (.inr ()))
     (seedPrf (hashOf (HashSpec.withDerivationsLift Unit HashOutput))) adversary
-
-/-- `S` is the hash at `"leanXMSS" | S_0`. -/
-def seedEncoding : SecretEncoding HashSpec MasterSeed Unit HashOutput where
-  enc s0 _ := seedHashInput s0
-  range_eq _ _ := rfl
-  injective _ _ _ _ := rfl
 
 /-- A hash query of a game with derivation queries. -/
 def IsHashD {X : Type} : (HashSpec.withDerivations X HashOutput).Domain → Prop
@@ -249,25 +88,6 @@ def IsHashD {X : Type} : (HashSpec.withDerivations X HashOutput).Domain → Prop
 
 instance {X : Type} : DecidablePred (IsHashD (X := X)) := fun t => by
   rcases t with (_ | _) | _ <;> simp only [IsHashD] <;> infer_instance
-
-/-- The input of `S` fixes `S_0`. -/
-theorem seedHashInput_inj {s0 s0' : MasterSeed} (h : seedHashInput s0 = seedHashInput s0') :
-    s0 = s0' :=
-  XmssSecurity.bytesLE_injective 32 (List.append_cancel_left h)
-
-/-- There are `2^256` seeds `S_0`. -/
-theorem natCard_masterSeed : Nat.card MasterSeed = 2 ^ 256 := by
-  rw [Nat.card_eq_fintype_card, Fintype.card_bitVec]
-
-/-- A given input is the input of `S` for a uniform `S_0` with probability at most `2^-256`. -/
-theorem prEvent_mem_range_seedEncoding_le (t : HashSig.HashInput) :
-    Pr{let s0 ← XmssSecurity.sampleMasterSeed}[t ∈ Set.range (seedEncoding.enc s0)] ≤
-      (2 ^ 256 : ℝ≥0∞)⁻¹ := by
-  let := SampleableType.ofFintype MasterSeed
-  have h := prEvent_mem_range_enc_le seedEncoding
-    (fun _ _ _ _ h => seedHashInput_inj h) t
-  rw [natCard_masterSeed, Nat.cast_pow, Nat.cast_ofNat] at h
-  exact h
 
 /-- Answering the scheme seed at its input gives the real game. -/
 theorem simulateQ_deriveImpl_seedGame (s0 : MasterSeed) (adversary : ReasonAdversary) :
@@ -317,9 +137,6 @@ theorem signingFailure_le_seedGame (adversary : ReasonAdversary) {q : ℕ}
 
 /-! ## The second hop: the derivations from the scheme seed -/
 
-/-- What a derivation from the scheme seed reads: a parameter, an address and a suffix. -/
-abbrev PrfInput := PublicParam × Address × ByteArray
-
 /-- The oracles of a game whose derivations from the scheme seed are derivation queries. -/
 abbrev PrfSpec := HashSpec.withDerivations PrfInput HashOutput
 
@@ -332,19 +149,6 @@ def prfGame (adversary : ReasonAdversary) : OracleComp PrfSpec FailOutput :=
   failGameOf (HashSpec.withDerivationsLift PrfInput HashOutput) (pure ()) (fun _ => prfD)
     adversary
 
-/-- A derivation from `S` is the hash at `P | A | S | suffix`.
-
-The secret is the first hop's table of one entry, the answer that `S` is. -/
-def prfEncoding : SecretEncoding HashSpec (Unit → HashOutput) PrfInput HashOutput where
-  enc f x := (thInput x.1 x.2.1 (packBytes (ofOutput (f ())) ++ x.2.2)).data.toList
-  range_eq _ _ := rfl
-  injective f x y h := by
-    obtain ⟨pp, a, m⟩ := x
-    obtain ⟨pp', a', m'⟩ := y
-    obtain ⟨hpp, ha, hm⟩ := thInput_inj (ByteArray.ext (Array.toList_inj.mp h))
-    obtain ⟨-, hm⟩ := HashSig.byteArray_append_inj hm rfl
-    exact Prod.ext hpp (Prod.ext ha hm)
-
 /-- A source that always gives one value is a game whose derivations fix that value. -/
 theorem failGameOf_pure {σ : Type} (pass : QueryImpl OracleWorld (OracleComp spec)) (s : σ)
     (prfOf : σ → SeedPrf (OracleComp spec)) (adversary : ReasonAdversary) :
@@ -356,29 +160,6 @@ theorem failGameOf_pure {σ : Type} (pass : QueryImpl OracleWorld (OracleComp sp
     · rfl
     · simp only [failSignerOf, pure_bind]
   simp only [failGameOf, pure_bind, h]
-
-/-- An input fixes the table of the first hop, which it encodes in its seed. -/
-theorem prfEncoding_fix (f f' : Unit → HashOutput) (x x' : PrfInput)
-    (h : prfEncoding.enc f x = prfEncoding.enc f' x') : f = f' := by
-  obtain ⟨-, -, hm⟩ := thInput_inj (ByteArray.ext (Array.toList_inj.mp h))
-  obtain ⟨hs, -⟩ := HashSig.byteArray_append_inj hm (by simp)
-  funext u
-  exact HashSig.ofBV_inj (n := 32) (by simp [HashSig.hashOutputBits])
-    (packBytes_injective hs)
-
-/-- There are `2^256` tables of the first hop. -/
-theorem natCard_table : Nat.card (Unit → HashOutput) = 2 ^ 256 := by
-  rw [Nat.card_fun, Nat.card_unique (α := Unit), pow_one, Nat.card_eq_fintype_card,
-    Fintype.card_bitVec]
-  rfl
-
-/-- A given input encodes a derivation under a uniform table with probability `<= 2^-256`. -/
-theorem prEvent_mem_range_prfEncoding_le (t : HashSig.HashInput) :
-    Pr{let f ← $ᵗ (Unit → HashOutput)}[t ∈ Set.range (prfEncoding.enc f)] ≤
-      (2 ^ 256 : ℝ≥0∞)⁻¹ := by
-  have h := prEvent_mem_range_enc_le prfEncoding prfEncoding_fix t
-  rw [natCard_table, Nat.cast_pow, Nat.cast_ofNat] at h
-  exact h
 
 /-- Fixing the scheme seed to a table entry gives the game whose derivations use that entry. -/
 theorem simulateQ_fixDerivations_seedGame (f : Unit → HashOutput)

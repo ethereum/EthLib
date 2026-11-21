@@ -176,6 +176,10 @@ With all `2^32` leaf indices signed, `q` exceeds `2^65`, so over the key's lifet
 The two games give the adversary the same answers, so it wins each with the same probability (`forgeAdvantage_eq_statelessForgeAdvantage`).
 The proof, adapted from leanerVM's, reasons over these same definitions (`Proofs/Xmss/Security/`).
 
+A second proof establishes the same bound with VCVio (`keyed_security_127`).
+It replays cached hash answers and accounts for the two signature layers on one run of the game.
+Import the theorem from [`Unforgeability/VCV/FinderFinal.lean`](../Proofs/Xmss/Unforgeability/VCV/FinderFinal.lean).
+
 ## What is not proved
 
 - No security property is proved beyond the random oracle model, so the theorem says nothing about an attack that uses the structure of Keccak-256.

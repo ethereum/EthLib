@@ -33,8 +33,9 @@ require "leanprover-community" / "mathlib" @ git "v4.36.0"
 --
 -- The library code never imports it.
 --
--- VCVio's release tag for this Lean version, built against the same Mathlib.
-require VCVio from git "https://github.com/Verified-zkEVM/VCVio.git" @ "v4.36.0"
+-- VCVio supplies cache replay, graph collision bounds, and the price of adaptive searches.
+require VCVio from git "https://github.com/Verified-zkEVM/VCVio.git" @
+  "d927588ca0611096f0b77f7edc4ce038d1171202"
 
 @[default_target]
 lean_lib «EthLib» where

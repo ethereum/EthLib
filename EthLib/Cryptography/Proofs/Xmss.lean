@@ -23,6 +23,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Correctness
 public import EthLib.Cryptography.Proofs.Xmss.Security
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability
 public import EthLib.Cryptography.Proofs.Xmss.Errors
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.FinderFinal
 
 /-!
 # `EthLib.Cryptography.Proofs.Xmss`
