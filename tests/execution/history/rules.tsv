@@ -343,7 +343,6 @@ Execution.Evm.Precompiles.Modexp.SMALL_LENGTH_BYTES	-	32
 Execution.Evm.Precompiles.Modexp.WORD_BYTES	-	8
 Execution.Evm.Precompiles.P256Verify.GAS_P256VERIFY	-	6900
 Execution.Evm.Precompiles.P256Verify.INPUT_BYTES	-	160
-Execution.Evm.Precompiles.PointEvaluation.FIELD_ELEMENTS_PER_BLOB	-	4096
 Execution.Evm.Precompiles.PointEvaluation.GAS_POINT_EVALUATION	-	50000
 Execution.Evm.Precompiles.PointEvaluation.INPUT_BYTES	-	192
 Execution.Evm.Precompiles.Ripemd160.DIGEST_BYTES	-	20
