@@ -83,9 +83,11 @@ def BodyError.code : BodyError → UInt32
   | .invalidTransaction .. => 611
   | .gasLimitAboveBlock .. => 612
 
-/-- The bytes that a transaction item stands for in the trie of the transactions root.
+/-- The bytes that a transaction stands for in the trie of the transactions root.
 
-A list is a legacy transaction, and it stands for its RLP encoding.
+A list is a legacy transaction, and it stands for the bytes it was read from.
+
+The decoder keeps those bytes as its RLP encoding.
 
 A byte string is a typed transaction, and it stands for itself.
 
@@ -94,16 +96,17 @@ Its first byte is the type, which [EIP-2718][eip-2718] keeps at most `0x7f`.
 An RLP list starts with a byte of at least `0xc0`, so the two forms never stand for the same bytes.
 
 [eip-2718]: https://eips.ethereum.org/EIPS/eip-2718#transactiontype-only-goes-up-to-0x7f -/
-def transactionBytes : Item → Except BodyError ByteArray
+def transactionBytes (tx : Encoded) : Except BodyError ByteArray :=
+  match tx.item with
   | .bytes b =>
     if h : 0 < b.size then
       if b[0] < 0x80 then .ok b else .error (.untypedTransaction (some b[0]))
     else .error (.untypedTransaction none)
-  | item@(.list _) => (encode item).mapError .decoding
+  | .list _ => .ok tx.bytes
 
 /-- The bytes of each transaction of a body, in order. -/
-def transactionValues (transactions : Item) : Except BodyError (List ByteArray) := do
-  (← transactions.toItems.mapError .decoding).mapM transactionBytes
+def transactionValues (transactions : Encoded) : Except BodyError (List ByteArray) := do
+  (← transactions.parts.mapError .decoding).mapM transactionBytes
 
 /-- Each transaction of a body is one of the fork, with a gas limit at most that of the header.
 
@@ -119,12 +122,12 @@ def checkGasLimits {fork : Fork} (header : Header fork) (transactions : Item) :
 /-- The transactions of a body match the transactions root of the header.
 
 Each of them is then one of the fork, with a gas limit at most that of the header. -/
-def checkTransactions {fork : Fork} (header : Header fork) (transactions : Item) :
+def checkTransactions {fork : Fork} (header : Header fork) (transactions : Encoded) :
     Except BodyError Unit := do
   let values ← transactionValues transactions
   let root ← (indexedRoot values).mapError .trie
   ensure (root == header.transactionsRoot) (.wrongTransactionsRoot header.transactionsRoot root)
-  checkGasLimits header transactions
+  checkGasLimits header transactions.item
 
 /-- The withdrawals of a body, from Shapella, match the withdrawals root of the header. -/
 def checkWithdrawals {fork : Fork} (header : Header fork) (h : .shapella ≤ fork)
@@ -135,13 +138,15 @@ def checkWithdrawals {fork : Fork} (header : Header fork) (h : .shapella ≤ for
 
 /-- The ommers of a body match the ommers hash of the header, and stay within its limits.
 
-The hash is that of the ommers item as received. -/
-def checkOmmers {fork : Fork} (header : Header fork) (ommers : Item) : Except BodyError Unit := do
-  let items ← ommers.toItems.mapError .decoding
+The hash reads the bytes that the ommers list was read from.
+
+The decoder keeps those bytes as its RLP encoding. -/
+def checkOmmers {fork : Fork} (header : Header fork) (ommers : Encoded) :
+    Except BodyError Unit := do
+  let items ← ommers.item.toItems.mapError .decoding
   ensure (items.length ≤ MAX_OMMERS) (.tooManyOmmers items.length)
-  let encoded ← (encode ommers).mapError .decoding
-  ensure (keccak256 encoded == header.ommersHash)
-    (.wrongOmmersHash header.ommersHash (keccak256 encoded))
+  ensure (keccak256 ommers.bytes == header.ommersHash)
+    (.wrongOmmersHash header.ommersHash (keccak256 ommers.bytes))
   (List.range items.length).zip items |>.forM fun (i, ommer) => do
     let n ← (headerNumber ommer).mapError .decoding
     ensure (n ≤ header.number) (.ommerAfterBlock i n)
@@ -187,14 +192,20 @@ Take a block of gas limit 30,000,000 and two transactions of gas limit 20,000,00
 If the first uses 21,000 gas, the second sees 29,979,000 gas left, so the block can be valid.
 
 The caller pairs each body with the header of the hash that it requested.
+
+The body keeps the bytes it was read from.
+
+Each legacy transaction and the ommers list are hashed from their slices of those bytes.
+
+So the check never encodes an item that a peer chose.
 -/
-def checkBody {fork : Fork} (header : Header fork) (body : Item) : Except BodyError Unit := do
-  let items ← body.toItems.mapError .decoding
+def checkBody {fork : Fork} (header : Header fork) (body : Encoded) : Except BodyError Unit := do
+  let items ← body.parts.mapError .decoding
   if h : .shapella ≤ fork then
     match items with
     | [transactions, ommers, withdrawals] =>
       checkTransactions header transactions
-      checkWithdrawals header h withdrawals
+      checkWithdrawals header h withdrawals.item
       checkOmmers header ommers
     | [_, _] => throw .missingWithdrawals
     | _ => throw (.decoding (.wrongFieldCount 3 items.length))

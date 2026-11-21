@@ -24,7 +24,7 @@ A message whose ID the version does not use is rejected.
 
 So is a message that EthLib does not read yet.
 
-Each transaction and header of a message keeps the bytes it was read from, next to its item.
+Each transaction, header and access list of a message keeps the bytes it was read from.
 
 So its hash reads those bytes, and never encodes an item that a peer chose.
 -/
@@ -80,8 +80,10 @@ inductive Message where
   | getBlockAccessLists (requestId : UInt64) (hashes : List Hash32)
   /-- BlockAccessLists (0x13) of eth/71: `[request-id, [bal, ...]]`.
 
-  Each access list is its RLP item, or the empty string when the peer does not have it. -/
-  | blockAccessLists (requestId : UInt64) (lists : List Item)
+  Each access list is its RLP item, or the empty string when the peer does not have it.
+
+  Each list keeps the bytes it was read from, so its hash never encodes it again. -/
+  | blockAccessLists (requestId : UInt64) (lists : List Encoded)
   /-- GetCells (0x14) of eth/72: `[request-id, [txhash, ...], cells]`. -/
   | getCells (requestId : UInt64) (hashes : List Hash32) (mask : CellMask)
   /-- Cells (0x15) of eth/72: `[request-id, [txhash, ...], [[cell, ...], ...], cells]`. -/
@@ -160,7 +162,7 @@ def toItem : Message → Item
   | receipts i b ls => withPart i b (.list (ls.map .list))
   | blockRangeUpdate r => Codec.toItem r
   | getBlockAccessLists i hs => envelope i (Codec.toItem hs)
-  | blockAccessLists i ls => envelope i (.list ls)
+  | blockAccessLists i ls => envelope i (.list (ls.map (·.item)))
   | getCells i hs m => .list [Codec.toItem i, Codec.toItem hs, Codec.toItem m]
   | cells i hs gs m => .list [Codec.toItem i, Codec.toItem hs, Codec.toItem gs, Codec.toItem m]
 
@@ -184,19 +186,12 @@ def readWithPart {α β : Type} [Codec α] [Codec β] (version : EthVersion) (it
     | [i, k, p] => return (← i.field 0, some (← k.field 1), ← p.field 2)
     | items => throw (.wrongFieldCount 3 items.length)
 
-/-- The encodings of the items of the payload of the envelope that `data` encodes.
-
-The envelope is `[request-id, payload]`, and the payload is a list. -/
-def payloadEncodings (data : ByteArray) : Except RlpError (List ByteArray) := do
-  match ← listEncodings data with
-  | [_, payload] => listEncodings payload
-  | encodings => throw (.wrongFieldCount 2 encodings.length)
-
-/-- The transactions or headers of a message, each with the bytes it was read from.
+/-- The transactions, headers or access lists of a message, each with the bytes it was read from.
 
 Every other message has none. -/
 def kept : Message → List Encoded
   | transactions txs | blockHeaders _ txs | pooledTransactions _ txs => txs
+  | blockAccessLists _ ls => ls
   | _ => []
 
 /-- The request ID of a request or a response, and none for the other messages. -/
@@ -223,7 +218,7 @@ def answers (request response : Message) : Bool :=
 
 The caller passes the encoding of `item` as `data`.
 
-Each transaction or header keeps its own encoding, cut from `data`.
+Each transaction, header or access list keeps its own encoding, cut from `data`.
 
 On other bytes, they would keep unrelated slices.
 
@@ -264,8 +259,9 @@ def ofItem (version : EthVersion) (id : Nat) (item : Item) (data : ByteArray) :
     ((fun (i, b, ls) => receipts i b ls) <$> readWithPart version item).mapError .rlp
   else if id = GET_BLOCK_ACCESS_LISTS_ID ∧ EthVersion.eth71 ≤ version then
     ((fun (i, hs) => getBlockAccessLists i hs) <$> readEnvelope item).mapError .rlp
-  else if id = BLOCK_ACCESS_LISTS_ID ∧ EthVersion.eth71 ≤ version then
-    ((fun (i, ls) => blockAccessLists i ls) <$> readEnvelope item).mapError .rlp
+  else if id = BLOCK_ACCESS_LISTS_ID ∧ EthVersion.eth71 ≤ version then Except.mapError .rlp do
+    let (i, ls) ← readEnvelope item
+    return blockAccessLists i (← Encoded.zip ls (← payloadEncodings data))
   else if id = GET_CELLS_ID ∧ EthVersion.eth72 ≤ version then Except.mapError .rlp do
     match ← item.fields 3 with
     | [i, hs, m] => return getCells (← i.field 0) (← hs.field 1) (← m.field 2)

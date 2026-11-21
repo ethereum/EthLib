@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Network.Receipts
 public import EthLib.Execution.Proofs.Blocks.Receipt
+public import EthLib.Serialization.Proofs.Rlp.Encodings
 
 /-!
 # Proofs: the receipts of the eth protocol
@@ -23,6 +24,8 @@ Each reads in consensus form, and those forms, in order, have that root.
 From eth/70, a partial list of receipts passes the EIP-7975 checks exactly when three bounds hold.
 
 Before eth/70, a peer sends every receipt of a block, and these checks do not apply.
+
+The size of each receipt is that of its encoding, read from its slice of the list.
 -/
 
 @[expose] public section
@@ -253,6 +256,41 @@ theorem checkPartialReceipts_eq_ok_iff {gasLimits : List Nat} {blockGasLimit : N
     simp only [List.getElem_zip, List.getElem_range, decide_eq_true_eq, Nat.not_lt]
     exact hall i hi.1 hi.2.2
   simp [Nat.not_lt.mpr hl, hf, Nat.not_lt.mpr ht, pure, Except.pure]
+
+/-- Sizes read from encodings related to the items are the sizes of the encodings of the items. -/
+private theorem map_size_iff {items : List Item} {encodings : List ByteArray} :
+    List.Forall₂ (fun item e => encode item = .ok e) items encodings →
+    ∀ {sizes : List Nat}, encodings.map (·.size) = sizes ↔
+      List.Forall₂ (fun item n => ∃ e, encode item = .ok e ∧ e.size = n) items sizes
+  | .nil, sizes => by cases sizes <;> simp <;> nofun
+  | .cons (a := item) (b := e) hHead hRest, sizes => by
+    cases sizes with
+    | nil => simp only [List.map_cons, reduceCtorEq, false_iff]; nofun
+    | cons n ns =>
+      rw [List.map_cons, List.cons.injEq, List.forall₂_cons, map_size_iff hRest]
+      -- The encoding of the head is the one that the head has.
+      refine and_congr_left fun _ => ⟨fun h => ⟨e, hHead, h⟩, fun ⟨e', he', h⟩ => ?_⟩
+      rwa [Except.ok.inj (hHead.symm.trans he')]
+
+/-- The sizes of a list of receipts are the sizes of the encodings of its items, in order.
+
+`data` must encode a list. -/
+theorem receiptSizes_eq_ok_iff {data : ByteArray} {sizes : List Nat} :
+    receiptSizes data = .ok sizes ↔
+      ∃ items, decode data = .ok (.list items) ∧
+        List.Forall₂ (fun item n => ∃ e, encode item = .ok e ∧ e.size = n) items sizes := by
+  unfold receiptSizes
+  cases hd : decode data with
+  | error e => simp [bind, Except.bind]
+  | ok item =>
+    cases item with
+    | bytes b => simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+    | list items =>
+      -- The data is the encoding of the list, so it splits into the encodings of the items.
+      obtain ⟨encodings, hl, hAll⟩ := listEncodings_of_encode (encode_decode data _ hd)
+      simp only [bind, Except.bind, hl, pure, Except.pure, Except.ok.injEq, Item.list.injEq,
+        exists_eq_left']
+      exact map_size_iff hAll
 
 /-- Two errors with one code come from one constructor. -/
 theorem PartialReceiptsError.code_injective (e₁ e₂ : PartialReceiptsError)

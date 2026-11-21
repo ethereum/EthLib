@@ -3088,7 +3088,9 @@ The sum of the gas limits may exceed it, since a transaction only has to fit in 
 
 `checkBody_complete` (`Execution/Proofs/Network/Bodies.lean`) proves that the body of every block that passes `stateTransition` passes this check.
 So a correct node never rejects it.
-`checkBody_binding` proves that two bodies that pass for one header are equal in each part, or that a Keccak-256 collision is named.
+The check reads each body with the bytes it was decoded from, and hashes the legacy transactions and the ommers from their slices of those bytes.
+`checkBody_complete` holds for every encoding of the body.
+`checkBody_binding` proves that two bodies that pass for one header, each read from its own encoding, are equal in each part, or that a Keccak-256 collision is named.
 For the transactions and the withdrawals, the search of the trie binding returns the collision; for the ommers, the two encodings are the collision.
 It reuses `indexedRoot_binding` and `withdrawalsRoot_binding` for the roots, and `encode_injective` for the ommers.
 `checkBody_gasLimit_le` proves that each transaction of a body that passes decodes at the fork, with a gas limit at most that of the header.
@@ -3130,7 +3132,8 @@ The caller gives the receipts root, the fork of the block and the eth version, a
 `accessListsResponse` (`Execution/Network/Message.lean`) checks a BlockAccessLists answer of eth/71 against the access list hashes of the requested blocks.
 It follows "BlockAccessLists (0x13)" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#blockaccesslists-0x13).
 `accessListsResponse_eq_true_iff` (`Execution/Proofs/Network/Message.lean`) states when an answer passes: it repeats the request ID and has one entry for each hash that the caller gives.
-Each entry is the RLP empty string, or its RLP encoding has that hash under Keccak-256.
+Each entry is the RLP empty string, or the bytes it was decoded from have that hash under Keccak-256.
+`Message.kept_of_decode` and `SnapMessage.kept_of_decode` state that those bytes are the RLP encoding of the entry.
 `accessListsAnswer_eq_true_iff` (`Execution/Proofs/Network/Snap.lean`) states the check of the entries alone, which snap/2 shares.
 There the peer may cut the list short, so that check asks only for no more entries than hashes.
 The caller gives the access list hash of each requested block, in the order of the request.
@@ -7931,8 +7934,9 @@ These depths were measured on this decoder, on top of commit `22008211b`, on CPy
 - The eth wire hash, the checks of PooledTransactions and BlockHeaders, and the eth session read the bytes each transaction or header was decoded from.
   On a transaction of 300000 nested lists, measured on top of commit `cf8500beb`, the wire hash returns.
   The checks of PooledTransactions and BlockHeaders raise their own errors, and the eth session accepts it.
-- The checks of a block body, of block access lists and of partial receipts still run the encoder on items that a peer sent.
-  Their depth was not measured.
+- The checks of a block body, of block access lists in eth and snap, and of partial receipts read the bytes each item was decoded from.
+  On an item of 300000 nested lists, measured on top of commit `d19316175`, the two access list checks return false.
+  The body check and the partial receipts check raise their own errors.
 - The encoder raises `RecursionError` from 9998 nested lists, in the conversion from Python, before the Lean encoder runs.
 - The transaction and block decoders raise their own errors at every depth tested, up to 4194305 nested lists, on inputs that do not have the shape of a transaction or a block.
 - The other paths that decode RLP, such as trie proofs, Era1 files, discovery packets and ENR records, run the same decoder, but were not measured.

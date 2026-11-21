@@ -818,6 +818,22 @@ Not yet released.
   `ofItem_blockRangeUpdate_eth68`, `ofItem_unequalLengths` and `messageCount_le_iff_unknownId` take the bytes too, and `answers_of_requestId`, `sublist_of_checkPooled` and `numbers_of_checkHeaders` take the new types.
   New: `Rlp.listEncodings`, `Rlp.splitItems`, `Rlp.Encoded.zip`, `Message.payloadEncodings`, `Message.kept`, `Message.Kept`, and the theorems `listEncodings_of_encode`, `Encoded.zip_eq_ok_iff`, `zip_listEncodings_eq_ok_iff` and `wireHash_networkForm`.
 
+- In Lean, the check of a block body, the checks of block access lists in eth and snap, and the sizes of partial receipts read the bytes each item was read from ([#3826](https://github.com/ethereum/EthLib/issues/3826)).
+  So none of them runs the recursive RLP encoder on what a peer sent.
+  `checkBody`, `checkTransactions`, `checkOmmers`, `transactionValues` and `transactionBytes` take `Rlp.Encoded` items; `checkGasLimits` and `checkWithdrawals` still take items.
+  `Message.blockAccessLists` and `SnapMessage.blockAccessLists` hold `Rlp.Encoded` access lists, and `accessListsAnswer` takes them.
+  `SnapMessage.ofItem` takes the bytes of the item as a last argument, as `Message.ofItem` does.
+  `Message.payloadEncodings` moves to `Rlp.payloadEncodings`, with the same definition.
+  Migration: build an `Rlp.Encoded` from an item and its encoding.
+  The body theorems that compare or complete bodies ask that each body keep its own encoding: `checkBody_binding`, `checkTransactions_binding`, `checkOmmers_binding`, `transactionValues_injective` and `transactionBytes_injective`.
+  `checkBody_complete` states the check for every encoding of the body, `checkOmmers_hash` states the hash of the kept bytes, and `TransactionsBound` and `OmmersBound` take `Rlp.Encoded`.
+  `accessListsAnswer_eq_true_iff`, `of_accessListsAnswer` and `accessListsResponse_eq_true_iff` state the hash of the kept bytes; `Message.kept_of_decode` and the new `SnapMessage.kept_of_decode` state that those bytes are the encoding.
+  The other body theorems take `Rlp.Encoded` items: `checkOmmers_tooMany`, `checkOmmers_nil`, `checkOmmers_of_valid` (which drops its encoding hypothesis), `checkBody_eq_ok`, `checkBody_gasLimit_le`, `checkTransactions_eq_ok_iff`, `transactionBytes_bytes`, `transactionBytes_bodyItem` and `mapM_transactionBytes`.
+  `checkBody_unexpectedWithdrawals`, `checkBody_missingWithdrawals`, `checkBody_tooManyOmmers` and `checkBody_tooManyOmmers_shapella` ask that the body bytes encode the body.
+  `Message.kept` and `Message.Kept` now cover access lists, so `Message.ofItem_toItem` and `Message.ofItem_eq_ok_iff` speak of them too.
+  The snap theorems `ofItem_toItem`, `ofItem_eq_ok_iff`, `ofItem_snap2_trieNodes`, `ofItem_snap1_accessLists` and `messageCount_le_iff_unknownId` take the bytes, as the eth ones do.
+  New: `Rlp.Encoded.parts`, `SnapMessage.kept`, `SnapMessage.Kept`, `receiptSizes`, and the theorems `Encoded.parts_eq_ok_iff`, `Encoded.item_of_parts`, `Encoded.parts_of_encode`, `payloadEncodings_of_encode`, `transactionBytes_list` and `receiptSizes_eq_ok_iff`.
+
 - In Lean, the SHA-256 sizes name their unit: `Sha256.BLOCK_SIZE` is now `Sha256.BLOCK_SIZE_BYTES`, and `Sha256.LENGTH_SIZE` is now `Sha256.LENGTH_SIZE_BYTES`.
   The new `Sha256.DIGEST_SIZE_BYTES` is the 32-byte digest size of FIPS 180-4 §1.
   `HASH_LEN` of HKDF, PBKDF2 and Concat KDF, and `OUTPUT_BYTES` of the SHA-256 precompile, are defined as that size.

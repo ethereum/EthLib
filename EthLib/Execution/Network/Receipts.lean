@@ -186,4 +186,14 @@ def checkPartialReceipts (gasLimits : List Nat) (blockGasLimit : Nat) (sizes : L
     throw (.receiptTooLarge i size (gas / 8))
   if blockGasLimit / 8 < sizes.sum then throw (.totalTooLarge sizes.sum (blockGasLimit / 8))
 
+/-- The size in bytes of the encoding of each receipt of the list that `data` encodes, in order.
+
+Each size is that of the slice of `data` that the receipt was read from.
+
+So no receipt is encoded again. -/
+def receiptSizes (data : ByteArray) : Except RlpError (List Nat) := do
+  match ← decode data with
+  | .list _ => return (← listEncodings data).map (·.size)
+  | .bytes _ => throw .bytesAsList
+
 end EthLib.Execution.Network
