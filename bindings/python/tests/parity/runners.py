@@ -33,7 +33,7 @@ from transactions.expected_errors import expected_template
 from transactions.test_inclusion_archive import names_in_block
 from transactions.test_transactions import CHAIN_ID, FORK_OF_NETWORK
 
-from . import legacy
+from . import legacy, reorg
 from .catalogue import BOGOTA_NETWORKS, Case
 
 # The groups that no runner covers yet, with the pull requests of the plan that bring them.
@@ -48,7 +48,6 @@ NOT_YET = {
     "random": "a fork or handler that the runner of random does not cover yet",
     "sanity": "a fork or handler that the runner of sanity does not cover yet",
     "transition": "a fork or handler that the runner of transition does not cover yet",
-    "blockchain_test_engine_reorg": "the runner of reorgs through the Engine API (#3534)",
 }
 
 # The plan at Gloas and Heze, by the steps of the track for Glamsterdam and Hegotá.
@@ -545,6 +544,24 @@ def _shared_start(path: Path, fork: str) -> tuple[bytes, bytes]:
     return _start(shared["pre"], shared["genesis"], fork)
 
 
+def _engine_genesis(
+    fixture: dict,
+    pre: dict,
+    genesis: dict,
+    start: Callable[[str], tuple[bytes, bytes]] | None = None,
+) -> tuple[str, bytes, bytes]:
+    """The fork, the state and the header of the genesis block of an engine fixture, checked."""
+    from ethlib.cryptography.keccak import keccak256
+    from ethlib.serialization import rlp
+
+    header = _header_of_json(genesis)
+    assert "0x" + keccak256(header).hex() == genesis["hash"]
+    fork = active_fork(chain_of(fixture)[1], rlp.decode(header))
+    state, computed = start(fork) if start else _start(pre, genesis, fork)
+    assert computed == header
+    return fork, state, header
+
+
 def run_engine_chain(
     fixture: dict,
     pre: dict,
@@ -556,14 +573,9 @@ def run_engine_chain(
     The function `start` gives the state and the genesis header at a fork, when they are known.
     """
     from ethlib.cryptography.keccak import keccak256
-    from ethlib.serialization import rlp
 
-    header = _header_of_json(genesis)
-    assert "0x" + keccak256(header).hex() == genesis["hash"]
-    fork = active_fork(chain_of(fixture)[1], rlp.decode(header))
-    state, computed = start(fork) if start else _start(pre, genesis, fork)
+    fork, state, header = _engine_genesis(fixture, pre, genesis, start)
     recent = [(fork, header, [])]
-    assert computed == header
     kinds = Counter()
     for payload in fixture["engineNewPayloads"]:
         kind, state, recent = _engine_payload(fixture, payload, state, recent)
@@ -597,6 +609,12 @@ def _blockchain_test_engine_x(root: Path, case: Case) -> None:
     run_engine_chain(
         fixture, shared["pre"], shared["genesis"], lambda fork: _shared_start(path, fork)
     )
+
+
+def _blockchain_test_engine_reorg(root: Path, case: Case) -> None:
+    fixture = _fixtures(root / case.path)[case.id]
+    fork, state, header = _engine_genesis(fixture, fixture["pre"], fixture["genesisBlockHeader"])
+    reorg.run(fixture, chain_of(fixture)[0], state, (fork, header, []))
 
 
 def _shuffle(root: Path, case: Case) -> None:
@@ -756,6 +774,7 @@ FORMAT_RUNNERS = {
     "blockchain_test": _blockchain_test,
     "blockchain_test_engine": _blockchain_test_engine,
     "blockchain_test_engine_x": _blockchain_test_engine_x,
+    "blockchain_test_engine_reorg": _blockchain_test_engine_reorg,
 }
 
 # The runner of each group, by format or by runner and handler.
