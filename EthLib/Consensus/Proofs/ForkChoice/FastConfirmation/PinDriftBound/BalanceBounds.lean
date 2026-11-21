@@ -2432,105 +2432,6 @@ private theorem run_partials_le_due (h : Setting config checks g split fin pulle
     ((getCurrentEpoch pulled).toNat + 1) near (Internal.window_short h) v replayed).trans
     (partials_le_due electra v)
 
-/-- The effective balance of a key at a state of the run from the finalized state, before its exit.
-
-It is at least the least of its effective balance and cap at the finalized state.
-
-It is also at least the floor of its potential, rounded down to an increment.
-
-The floor loses the shortfall of the balance below the stored effective balance.
-
-It also loses the debits, which are the sync debits of the run and the partials due. -/
-private theorem exitQ_at (h : Setting config checks g split fin pulled anc counted V)
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
-    {events : List (BalanceEvent preset)}
-    (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
-    {sd : ForkedBeaconState preset} (pre : Run config checks ⟨fork, fin⟩ sd)
-    (post : Run config checks sd ⟨fork, counted⟩)
-    (cut : pre.append post = fromFin.append tailC)
-    (v : ValidatorIndex) (val : Validator)
-    (initial : fin.validators.data[v.toNat]? = some val)
-    (far : ∀ w, sd.state.validators.data[v.toNat]? = some w → w.exitEpoch = FAR_FUTURE_EPOCH)
-    (ρn ρd : ℕ)
-    (leaky : ∀ eb : ℕ, preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∣ eb →
-      (pinTerms config pulled anc fin).leakAt eb v.toNat ≤ ρn * eb / ρd) :
-    min (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
-        (min (withdrawalMaxEffectiveBalance preset fork val).toNat
-          (potentialFloor ρn ρd ((getCurrentEpoch counted).toNat - (getCurrentEpoch fin).toNat)
-              (min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
-                (withdrawalMaxEffectiveBalance preset fork val).toNat)
-              preset.downwardBand (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat -
-                actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
-              ((events.map (Internal.syncDebit v.toNat)).sum +
-                (pinTerms config pulled anc fin).partialsDue v.toNat) -
-            potentialFloor ρn ρd ((getCurrentEpoch counted).toNat - (getCurrentEpoch fin).toNat)
-              (min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
-                (withdrawalMaxEffectiveBalance preset fork val).toNat)
-              preset.downwardBand (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat -
-                actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
-              ((events.map (Internal.syncDebit v.toNat)).sum +
-                (pinTerms config pulled anc fin).partialsDue v.toNat) %
-              preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
-      effectiveAt sd v.toNat := by
-  have nearC := h.near
-  have same := Internal.fork_eq_of_run pre post (Nat.le_refl _)
-  obtain ⟨sf, se⟩ := sd
-  obtain rfl : fork = sf := same.symm
-  have toCounted := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post.chainSteps)
-  simp only at toCounted
-  have near : (getCurrentEpoch se).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by omega
-  obtain ⟨before, beforeOk, isPrefix⟩ := Run.balanceEvents_prefix pre post
-    (getCurrentEpoch pulled).toNat events (by rw [cut]; exact replayed)
-  have clean : ∀ w, se.validators.data[v.toNat]? = some w → w.slashed = false := by
-    obtain ⟨shared⟩ := h.toFin
-    intro w found
-    by_contra slashed
-    exact run_slashed_exit_assigned (shared.append pre) h.genesis h.caps.activation
-      h.caps.compounding h.early (Internal.Setting.delay h) v.toNat w found (by simpa using slashed)
-        (far w found)
-  have retained : ∀ {m n : ForkedBeaconState preset} (b : Run config checks ⟨fork, fin⟩ m)
-      (step : Step config checks m n) (a : Run config checks n ⟨fork, se⟩),
-      (b.snoc step).append a = pre → ∀ w, n.state.validators.data[v.toNat]? = some w →
-      (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
-        ∀ u, m.state.validators.data[v.toNat]? = some u →
-          (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat := by
-    intro m n b step a cut' w found
-    obtain ⟨last, located, kept⟩ := a.registryLifecycle.validators v.toNat w found
-    by_cases e : w.exitEpoch = FAR_FUTURE_EPOCH
-    · rw [e]
-      exact .inl (getCurrentEpoch_succ_lt_farFuture h.twoSlots pulled)
-    · exact absurd ((kept.exitEpoch e).symm.trans (far last located)) e
-  have syncLe : (before.map (Internal.syncDebit v.toNat)).sum ≤ (events.map (Internal.syncDebit
-    v.toNat)).sum :=
-    (isPrefix.sublist.map (Internal.syncDebit v.toNat)).sum_le_sum fun _ _ => Nat.zero_le _
-  have partialLe : (before.map (floorPartialDebit v)).sum ≤
-      (pinTerms config pulled anc fin).partialsDue v.toNat :=
-    run_partials_le_due h pre near v beforeOk
-  have final := Internal.cfloor_endpoint h se pre near beforeOk v val initial clean retained
-    (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat -
-      actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat) ρn ρd
-    (potentialFloor ρn ρd ((getCurrentEpoch counted).toNat - (getCurrentEpoch fin).toNat)
-      (min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
-        (withdrawalMaxEffectiveBalance preset fork val).toNat)
-      preset.downwardBand (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat -
-        actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
-      ((before.map (Internal.syncDebit v.toNat)).sum + (before.map (floorPartialDebit v)).sum))
-    (by omega)
-    (pass_of_leak h pre near v ⟨val, initial⟩ ρn ρd leaky)
-    (fun a D k hk hD closed => by
-      have mono : ρd - ρn * ((getCurrentEpoch counted).toNat - (getCurrentEpoch fin).toNat) ≤
-          ρd - ρn * k :=
-        Nat.sub_le_sub_left (Nat.mul_le_mul_left _ (hk.trans (Nat.sub_le_sub_right toCounted _))) _
-      have step2 := (Nat.mul_le_mul_right _ mono).trans closed
-      have step3 := Nat.div_le_of_le_mul (Nat.sub_le_of_le_add step2)
-      unfold potentialFloor
-      omega)
-    pre Run.nil rfl
-  refine le_trans (min_le_min le_rfl (min_le_min le_rfl (rounded_mono _ ?_))) final
-  unfold potentialFloor
-  omega
-
 /-- The charge of a key on C's run is its effective balance at a state where its exit is unset.
 
 The state is the stop of the charge.
@@ -2600,7 +2501,63 @@ private theorem exitQ_potential (h : Setting config checks g split fin pulled an
       Internal.exitQ tailC v.toNat := by
   obtain ⟨sd, pre, post, cut, far, amount⟩ := exit_stop fromFin tailC v.toNat charged epochLe
   rw [amount]
-  exact exitQ_at h fromFin tailC replayed pre post cut v val initial far ρn ρd leaky
+  have nearC := h.near
+  have same := Internal.fork_eq_of_run pre post (Nat.le_refl _)
+  obtain ⟨sf, se⟩ := sd
+  obtain rfl : fork = sf := same.symm
+  have toCounted := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post.chainSteps)
+  simp only at toCounted
+  have near : (getCurrentEpoch se).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by omega
+  obtain ⟨before, beforeOk, isPrefix⟩ := Run.balanceEvents_prefix pre post
+    (getCurrentEpoch pulled).toNat events (by rw [cut]; exact replayed)
+  have clean : ∀ w, se.validators.data[v.toNat]? = some w → w.slashed = false := by
+    obtain ⟨shared⟩ := h.toFin
+    intro w found
+    by_contra slashed
+    exact run_slashed_exit_assigned (shared.append pre) h.genesis h.caps.activation
+      h.caps.compounding h.early (Internal.Setting.delay h) v.toNat w found (by simpa using slashed)
+        (far w found)
+  have retained : ∀ {m n : ForkedBeaconState preset} (b : Run config checks ⟨fork, fin⟩ m)
+      (step : Step config checks m n) (a : Run config checks n ⟨fork, se⟩),
+      (b.snoc step).append a = pre → ∀ w, n.state.validators.data[v.toNat]? = some w →
+      (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[v.toNat]? = some u →
+          (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat := by
+    intro m n b step a cut' w found
+    obtain ⟨last, located, kept⟩ := a.registryLifecycle.validators v.toNat w found
+    by_cases e : w.exitEpoch = FAR_FUTURE_EPOCH
+    · rw [e]
+      exact .inl (getCurrentEpoch_succ_lt_farFuture h.twoSlots pulled)
+    · exact absurd ((kept.exitEpoch e).symm.trans (far last located)) e
+  have syncLe : (before.map (Internal.syncDebit v.toNat)).sum ≤ (events.map (Internal.syncDebit
+    v.toNat)).sum :=
+    (isPrefix.sublist.map (Internal.syncDebit v.toNat)).sum_le_sum fun _ _ => Nat.zero_le _
+  have partialLe : (before.map (floorPartialDebit v)).sum ≤
+      (pinTerms config pulled anc fin).partialsDue v.toNat :=
+    run_partials_le_due h pre near v beforeOk
+  have final := Internal.cfloor_endpoint h se pre near beforeOk v val initial clean retained
+    (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat -
+      actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat) ρn ρd
+    (potentialFloor ρn ρd ((getCurrentEpoch counted).toNat - (getCurrentEpoch fin).toNat)
+      (min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
+        (withdrawalMaxEffectiveBalance preset fork val).toNat)
+      preset.downwardBand (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat -
+        actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
+      ((before.map (Internal.syncDebit v.toNat)).sum + (before.map (floorPartialDebit v)).sum))
+    (by omega)
+    (pass_of_leak h pre near v ⟨val, initial⟩ ρn ρd leaky)
+    (fun a D k hk hD closed => by
+      have mono : ρd - ρn * ((getCurrentEpoch counted).toNat - (getCurrentEpoch fin).toNat) ≤
+          ρd - ρn * k :=
+        Nat.sub_le_sub_left (Nat.mul_le_mul_left _ (hk.trans (Nat.sub_le_sub_right toCounted _))) _
+      have step2 := (Nat.mul_le_mul_right _ mono).trans closed
+      have step3 := Nat.div_le_of_le_mul (Nat.sub_le_of_le_add step2)
+      unfold potentialFloor
+      omega)
+    pre Run.nil rfl
+  refine le_trans (min_le_min le_rfl (min_le_min le_rfl (rounded_mono _ ?_))) final
+  unfold potentialFloor
+  omega
 
 /-- The leak of an aligned effective balance is at most a rate times it.
 
