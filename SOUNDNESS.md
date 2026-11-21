@@ -4402,6 +4402,25 @@ Past the timeout it applies the best update, whose attested header stands for a 
 `processLightClientUpdate_eq_ok_iff` states when processing an update succeeds, and the store that it returns, with its committees and its best update.
 Without a newer finalized header, the first next committee is applied only from a finality update whose finalized header is in the period of its attested header.
 `SyncAggregate.participants_le` bounds the signers by the size of the committee, so their count fits in 64 bits.
+
+`Consensus/Proofs/LightClient/Accountable.lean` compares two updates that each move the finalized header of their store.
+`processLightClientUpdate_finalizedHeader_ne_iff` shows that an update moves the finalized header exactly when two thirds of the committee signed it and its finalized header is newer.
+`processLightClientUpdate_overlap` shows that two such updates have bits set in both for at least a third of the seats of the committee.
+It counts bits only, so it needs no signature assumption.
+A key can hold several seats, so the shared seats can belong to fewer validators.
+`validateLightClientUpdate_overlap_signed` takes two accepted updates whose stores read one committee for them, and the signature assumption on each aggregate call.
+The key of each seat set in both then signed the signing roots of both attested headers.
+`processLightClientUpdate_finalized_agree` takes two updates that move the finalized header from one attested beacon header.
+They prove one root of the finalized beacon header, or `findBranchCollision` returns a SHA-256 collision.
+Together the three theorems say this of two stores that move to finalized blocks with different roots, under one committee.
+Unless a search names a SHA-256 collision, they received two different attested beacon headers.
+Under the signature assumption, the keys of a common third of the seats signed both.
+That is not a fault by itself: an honest member signs a new head at every slot, and two stores may be at different slots.
+These theorems name the shared keys; they do not show that the keys misbehaved.
+That needs the two updates to share one signature slot, or the two finalized checkpoints to conflict, and no theorem here states either case.
+A forced update (`processLightClientStoreForceUpdate`) moves the finalized header without two thirds, so these theorems leave it out.
+Two stores that read two different committees for their updates are also outside them.
+
 No theorem links an honest signer to the canonical chain; that is a property of the validators, not of the protocol text.
 
 ### Casper FFG
