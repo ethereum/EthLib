@@ -22,6 +22,7 @@ public import EthLib.Cryptography.BaseField
 public import EthLib.Cryptography.X25519
 public import EthLib.Cryptography.ChaCha20Poly1305
 public import EthLib.Cryptography.Keystore
+public import EthLib.Cryptography.Aggregation
 
 /-!
 # `EthLib.Cryptography`
