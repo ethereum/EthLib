@@ -20,7 +20,8 @@ public section
 
 namespace EthLib.Networking.DnsDisc.Exports
 
-open EthLib.Exports (Result PyValue toPy pyExport)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument toPy pyExport rejectArgument
+  toResult)
 
 /-- A message for a rejection, phrased for someone reading a Python traceback. -/
 def message : DnsError → String
@@ -42,9 +43,10 @@ def message : DnsError → String
   | .tooManyEntries => "the walk took more hashes than its budget"
   | .badRecord name => s!"the node record at {name} does not verify"
 
-/-- Run a fallible computation, with its error as a code and a message. -/
-def runDns {α : Type} (act : Except DnsError α) : Result α :=
-  act.mapError fun e => (e.code, message e)
+/-- A rejection reaches Python with its code, and its message names the fault. -/
+instance : ExportError DnsError where
+  code := DnsError.code
+  message := message
 
 /-- The fields of an entry, as Python values. -/
 def entryFields : Entry → Result (List (String × PyValue))
@@ -56,11 +58,11 @@ def entryFields : Entry → Result (List (String × PyValue))
   | .enr record =>
     match record.encode with
     | .ok bytes => return [("type", toPy "enr"), ("record", toPy bytes)]
-    | .error _ => throw (0, "record has no RLP encoding")
+    | .error _ => rejectArgument none "record has no RLP encoding"
 
 /-- The type and the fields of an entry text. -/
 def parseEntryOf (text : String) : Result PyValue := do
-  return .dict (← entryFields (← runDns (Entry.parse text))).toArray
+  return .dict (← entryFields (← toResult none (Entry.parse text))).toArray
 
 /-- The type and the fields of an entry text, as a `dict`.
 
@@ -81,7 +83,7 @@ def subdomainExport (args : PyValue) : Result PyValue :=
 /-- Whether a root text is signed by a compressed public key of 33 bytes. -/
 def verifyRootOf (args : Vector UInt8 33 × String) : Result Bool := do
   let (key, text) := args
-  match ← runDns (Entry.parse text) with
+  match ← toResult none (Entry.parse text) with
   | .root r => return r.verify key
   | _ => throw ((DnsError.rootFields).code, "text is not a root")
 
@@ -94,7 +96,7 @@ def verifyRootExport (args : PyValue) : Result PyValue :=
 
 /-- The compressed public key and the domain of a URL. -/
 def parseUrlOf (text : String) : Result (Vector UInt8 33 × String) := do
-  let url ← runDns (Url.parse text)
+  let url ← toResult none (Url.parse text)
   return (url.key, url.domain)
 
 /-- The compressed public key and the domain of a URL `enrtree://<key>@<domain>`. -/
@@ -108,9 +110,9 @@ def resolveOf (args : Vector UInt8 33 × Nat × String × Nat × List (String ×
   let (key, seenSeq, domain, budget, table) := args
   -- The first record of the table at a name is its text.
   let lookup := fun name => (table.find? (·.1 = name)).map (·.2)
-  let (seq, found) ← runDns (resolve lookup key seenSeq domain budget)
+  let (seq, found) ← toResult none (resolve lookup key seenSeq domain budget)
   let records ← found.records.mapM fun record =>
-    record.encode.mapError fun _ => (0, "record has no RLP encoding")
+    toResult none (record.encode.mapError fun _ => UnreadArgument.mk "record has no RLP encoding")
   return (seq, records, found.links.map fun url => String.ofList url.toText)
 
 /-- The node list at a domain, under a compressed public key, with a table as the DNS.
@@ -127,12 +129,13 @@ def resolveExport (args : PyValue) : Result PyValue :=
 /-- The text of a root of two hashes and a sequence number, signed with a private key. -/
 def signRootOf (args : ByteArray × Hash × Hash × Nat) : Result String := do
   let (secretKey, enrRoot, linkRoot, seq) := args
-  let sk ← Cryptography.Secp256k1.Exports.readPrivateKey secretKey (fun _ => bad) bad
-  let root ← runDns (Root.sign sk enrRoot linkRoot seq)
+  let sk ← toResult none
+    (Cryptography.Secp256k1.Exports.readPrivateKey secretKey (fun _ => bad) bad)
+  let root ← toResult none (Root.sign sk enrRoot linkRoot seq)
   return String.ofList root.toText
 where
   /-- The error of a private key that is not 32 bytes below the group order. -/
-  bad : UInt32 × String := (0, "private key is not 32 bytes below the group order")
+  bad : UnreadArgument := ⟨"private key is not 32 bytes below the group order"⟩
 
 /-- The text of a root of two hashes of 16 bytes and a sequence number, signed with a private key.
 

@@ -19,7 +19,7 @@ public section
 
 namespace EthLib.Networking.Devp2p.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (ExportError Result toResult)
 
 /-- A message for a rejection, phrased for someone reading a Python traceback. -/
 def message : P2pError → String
@@ -28,20 +28,21 @@ def message : P2pError → String
   | .tooLarge size => s!"message decompresses to {size} bytes, more than {MAX_MESSAGE_SIZE}"
   | .unknownId id => s!"message ID {id} is not a p2p message"
 
-/-- Run a fallible computation, with its error as a code and a message. -/
-def runP2p {α : Type} (act : Except P2pError α) : Result α :=
-  act.mapError fun e => (e.code, message e)
+/-- A rejection reaches Python with its code, and its message names the fault. -/
+instance : ExportError P2pError where
+  code := P2pError.code
+  message := message
 
 /-- The uncompressed frame data of the message in the frame data `frameData`. -/
 @[export eth_devp2p_decode_message]
 def decodeMessageExport (snappy : UInt8) (frameData : ByteArray) : Result ByteArray := do
-  let m ← runP2p (decodeMessage (snappy != 0) frameData)
-  runP2p (encodeMessage false m)
+  let m ← toResult none (decodeMessage (snappy != 0) frameData)
+  toResult none (encodeMessage false m)
 
 /-- The frame data of the message in the uncompressed frame data `plain`. -/
 @[export eth_devp2p_encode_message]
 def encodeMessageExport (snappy : UInt8) (plain : ByteArray) : Result ByteArray := do
-  let m ← runP2p (decodeMessage false plain)
-  runP2p (encodeMessage (snappy != 0) m)
+  let m ← toResult none (decodeMessage false plain)
+  toResult none (encodeMessage (snappy != 0) m)
 
 end EthLib.Networking.Devp2p.Exports

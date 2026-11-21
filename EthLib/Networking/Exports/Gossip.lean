@@ -30,7 +30,7 @@ public section
 
 namespace EthLib.Networking.Gossip.Exports
 
-open EthLib.Exports (Result PyValue forkOfName pyExport)
+open EthLib.Exports (ExportError Result PyValue forkOfName pyExport rejectArgument toResult)
 
 derive_py SubOpts
 derive_py_laws SubOpts
@@ -57,6 +57,16 @@ derive_py_laws Control
 derive_py Rpc
 derive_py_laws Rpc
 
+/-- A rejected payload reaches Python with its code, and its message is the printed error. -/
+instance : ExportError PayloadError where
+  code := PayloadError.code
+  message := reprStr
+
+/-- A rejected RPC reaches Python with its code, and its message is the printed error. -/
+instance : ExportError RpcError where
+  code := RpcError.code
+  message := reprStr
+
 /-- The message ID of a message on a topic of a named fork, from the topic and the data. -/
 def messageIdOf (args : String × ByteArray × ByteArray) : Result MessageId := do
   let (fork, topic, data) := args
@@ -72,14 +82,13 @@ def messageIdExport (args : PyValue) : Result PyValue :=
 /-- The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type. -/
 @[export eth_gossip_decode_payload]
 def decodePayloadExport (typeBound : UInt64) (data : ByteArray) : Result ByteArray :=
-  (decodePayload typeBound data).mapError fun e =>
-    (e.code, s!"gossip payload rejected: {reprStr e}")
+  toResult "gossip payload rejected" (decodePayload typeBound data)
 
 /-- The RPC that the bytes encode, under the `StrictNoSign` policy. -/
 @[export eth_gossip_rpc_decode]
 def rpcDecodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (data : ByteArray) =>
-    (decodeRpc data).mapError fun e => (e.code, s!"gossip RPC rejected: {reprStr e}")) args
+    toResult "gossip RPC rejected" (decodeRpc data)) args
 
 /-- The bytes of an RPC. -/
 @[export eth_gossip_rpc_encode]
@@ -157,7 +166,8 @@ def rankOf (ranking : List PeerId) : Rank := fun a b => ranking.idxOf a ≤ rank
 /-- The client choices, when they keep the bounds of gossipsub v1.1 for the parameters. -/
 def checkChoices (p : GossipsubParameters) (c : ClientChoices) : Result ClientChoices :=
   have : Decidable (c.Valid p) := by unfold ClientChoices.Valid; infer_instance
-  if c.Valid p then pure c else throw (0, "client choices outside the bounds of gossipsub v1.1")
+  if c.Valid p then pure c
+  else rejectArgument none "client choices outside the bounds of gossipsub v1.1"
 
 /-- The router after this node joins a topic, and the GRAFTs it sends.
 

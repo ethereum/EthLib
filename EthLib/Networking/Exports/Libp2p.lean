@@ -56,7 +56,7 @@ public section
 
 namespace EthLib.Networking.Libp2p.Exports
 
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue pyExport rejectArgument toResult)
 open EthLib.Networking.Encoding
 open EthLib.Cryptography.Secp256k1 (Fn)
 
@@ -69,6 +69,21 @@ derive_py_laws Yamux.Kind
 derive_py Yamux.Frame
 derive_py_laws Yamux.Frame
 
+/-- A rejected multistream-select message reaches Python with its code, and the printed error. -/
+instance : ExportError Multistream.MultistreamError where
+  code := Multistream.MultistreamError.code
+  message := reprStr
+
+/-- A rejected mplex frame reaches Python with its code, and its message is the printed error. -/
+instance : ExportError Mplex.MplexError where
+  code := Mplex.MplexError.code
+  message := reprStr
+
+/-- A rejected yamux frame reaches Python with its code, and its message is the printed error. -/
+instance : ExportError Yamux.YamuxError where
+  code := Yamux.YamuxError.code
+  message := reprStr
+
 /-- The bytes of one multistream-select message: its length, its bytes, then a newline.
 
 The length counts the newline.
@@ -78,15 +93,15 @@ The message must be shorter than `2^63 - 1` bytes, so that its length fits an un
 def multistreamEncodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (message : ByteArray) => do
     if Uvarint.bound ≤ message.size + 1 then
-      throw (0, "message must be shorter than 2^63 - 1 bytes")
+      rejectArgument none "message must be shorter than 2^63 - 1 bytes"
     return (⟨(Multistream.encode message).toArray⟩ : ByteArray)) args
 
 /-- The multistream-select message at the start of the bytes, and the bytes after it. -/
 @[export eth_multistream_decode]
 def multistreamDecodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (data : ByteArray) => do
-    let (message, rest) ← (Multistream.decode data.data.toList).mapError
-      fun e => (e.code, s!"multistream message rejected: {reprStr e}")
+    let (message, rest) ←
+      toResult "multistream message rejected" (Multistream.decode data.data.toList)
     return (message, (⟨rest.toArray⟩ : ByteArray))) args
 
 /-- The bytes of a list of messages, each encoded in turn. -/
@@ -123,8 +138,7 @@ def runPeer {σ : Type} (step : σ → ByteArray → σ × List ByteArray) (wait
   let mut rest := data.data.toList
   for index in List.range data.size do
     if !waiting state || rest.isEmpty then break
-    let (message, after) ← (Multistream.decode rest).mapError
-      fun e => (e.code, s!"message {index} rejected: {reprStr e}")
+    let (message, after) ← toResult s!"message {index} rejected" (Multistream.decode rest)
     let (next, out) := step state message
     state := next
     sent := sent ++ out
@@ -169,7 +183,7 @@ Two such nodes always agree, so the upgrade never fails. -/
 def upgradeExport (args : PyValue) : Result PyValue :=
   pyExport (fun ((dialer, listener) : Bool × Bool) => do
     let some agreed := Upgrade.upgrade ⟨dialer⟩ ⟨listener⟩
-      | throw (0, "the upgrade found no common protocol")
+      | rejectArgument none "the upgrade found no common protocol"
     return agreed) args
 
 /-- The bytes of a valid mplex frame. -/
@@ -177,7 +191,7 @@ def upgradeExport (args : PyValue) : Result PyValue :=
 def mplexEncodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (frame : Mplex.Frame) => do
     unless decide frame.Valid do
-      throw (0, "frame must have a stream ID below 2^60, at most 1 MiB of data, " ++
+      rejectArgument none ("frame must have a stream ID below 2^60, at most 1 MiB of data, " ++
         "and no data on a close or a reset")
     return (⟨(Mplex.encode frame).toArray⟩ : ByteArray)) args
 
@@ -185,8 +199,7 @@ def mplexEncodeExport (args : PyValue) : Result PyValue :=
 @[export eth_mplex_decode]
 def mplexDecodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (data : ByteArray) => do
-    let (frame, rest) ← (Mplex.decode data.data.toList).mapError
-      fun e => (e.code, s!"mplex frame rejected: {reprStr e}")
+    let (frame, rest) ← toResult "mplex frame rejected" (Mplex.decode data.data.toList)
     return (frame, (⟨rest.toArray⟩ : ByteArray))) args
 
 /-- The name of a stream state in snake case, such as `remote_closed+local_reset`.
@@ -206,6 +219,11 @@ def mplexSessionMessage : Mplex.MplexSessionError → String
   | .reusedId i l => s!"stream {i} (opened locally: {l}) was opened before"
   | .unknownStream i l => s!"stream {i} (opened locally: {l}) is unknown"
   | .writeAfterClose i l => s!"write on stream {i} (opened locally: {l}) after its close or reset"
+
+/-- A refused mplex frame reaches Python with its code, and its message names the fault. -/
+instance : ExportError Mplex.MplexSessionError where
+  code := Mplex.MplexSessionError.code
+  message := mplexSessionMessage
 
 /-- The mplex frames at the start of the bytes, until the bytes end. -/
 def mplexFrames (data : List UInt8) : Except Mplex.MplexError (List Mplex.Frame) := do
@@ -232,11 +250,9 @@ def mplexSessionExport (args : PyValue) : Result PyValue :=
   pyExport (fun (events : List (Bool × ByteArray)) => do
     let mut streams : Mplex.Streams := []
     for ((received, data), index) in events.zipIdx do
-      let frames ← (mplexFrames data.data.toList).mapError
-        fun e => (e.code, s!"event {index}: mplex frame rejected: {reprStr e}")
+      let frames ← toResult s!"event {index}: mplex frame rejected" (mplexFrames data.data.toList)
       for frame in frames do
-        streams ← (Mplex.step received streams frame).mapError
-          fun e => (e.code, s!"event {index}: {mplexSessionMessage e}")
+        streams ← toResult s!"event {index}" (Mplex.step received streams frame)
     return streams.map fun ((id, opened), state) => (id, opened, mplexStateName state)) args
 
 /-- The bytes of a valid yamux frame. -/
@@ -244,15 +260,14 @@ def mplexSessionExport (args : PyValue) : Result PyValue :=
 def yamuxEncodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (frame : Yamux.Frame) => do
     unless decide frame.Valid do
-      throw (0, "frame must carry as many bytes as its length for data, else none")
+      rejectArgument none "frame must carry as many bytes as its length for data, else none"
     return (⟨(Yamux.encode frame).toArray⟩ : ByteArray)) args
 
 /-- The yamux frame at the start of the bytes, and the bytes after it. -/
 @[export eth_yamux_decode]
 def yamuxDecodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (data : ByteArray) => do
-    let (frame, rest) ← (Yamux.decode data.data.toList).mapError
-      fun e => (e.code, s!"yamux frame rejected: {reprStr e}")
+    let (frame, rest) ← toResult "yamux frame rejected" (Yamux.decode data.data.toList)
     return (frame, (⟨rest.toArray⟩ : ByteArray))) args
 
 /-- The name of a yamux stream state in snake case, such as `syn_sent`. -/
@@ -276,6 +291,11 @@ def yamuxSessionMessage : Yamux.YamuxSessionError → String
   | .afterFin i => s!"data or FIN on stream {i} after its writer's FIN"
   | .windowExceeded i l w => s!"data of {l} bytes on stream {i} exceeds its window of {w}"
   | .missingAck i => s!"frame on stream {i} without ACK or RST before its ACK"
+
+/-- A refused yamux frame reaches Python with its code, and its message names the fault. -/
+instance : ExportError Yamux.YamuxSessionError where
+  code := Yamux.YamuxSessionError.code
+  message := yamuxSessionMessage
 
 /-- The yamux frames at the start of the bytes, until the bytes end. -/
 def yamuxFrames (data : List UInt8) : Except Yamux.YamuxError (List Yamux.Frame) := do
@@ -307,11 +327,9 @@ def yamuxSessionExport (args : PyValue) : Result PyValue :=
     let mut session : Yamux.Session := { isClient }
     let mut replies : Array ByteArray := #[]
     for ((received, data), index) in events.zipIdx do
-      let frames ← (yamuxFrames data.data.toList).mapError
-        fun (e : Yamux.YamuxError) => (e.code, s!"event {index}: yamux frame rejected: {reprStr e}")
+      let frames ← toResult s!"event {index}: yamux frame rejected" (yamuxFrames data.data.toList)
       for frame in frames do
-        session ← (Yamux.step received session frame).mapError
-          fun (e : Yamux.YamuxSessionError) => (e.code, s!"event {index}: {yamuxSessionMessage e}")
+        session ← toResult s!"event {index}" (Yamux.step received session frame)
         if received then
           replies := replies ++ (Yamux.reply frame).toArray.map
             fun r => (⟨(Yamux.encode r).toArray⟩ : ByteArray)
@@ -319,9 +337,10 @@ def yamuxSessionExport (args : PyValue) : Result PyValue :=
       (id.toNat, yamuxStateName s.state, s.sendWindow, s.recvWindow)
     return (streams, session.goneAway, replies.toList)) args
 
-/-- The result of a function on peer identities, with the code of its error. -/
-def identityResult {α : Type} (r : Except IdentityError α) : Result α :=
-  r.mapError fun e => (e.code, s!"libp2p identity rejected: {reprStr e}")
+/-- A rejected peer identity reaches Python with its code, and its message is the printed error. -/
+instance : ExportError IdentityError where
+  code := IdentityError.code
+  message := reprStr
 
 /-- Read 32 big-endian bytes as a secp256k1 scalar, whose value must be below the group order.
 
@@ -340,19 +359,19 @@ Here n is the order of the group.
 The secret key must stay private, and this function makes no constant-time claim. -/
 @[export eth_libp2p_public_key]
 def publicKeyExport (args : PyValue) : Result PyValue :=
-  pyExport (fun (secret : Vector UInt8 32) => identityResult do
+  pyExport (fun (secret : Vector UInt8 32) => toResult "libp2p identity rejected" do
     publicKey (← secretOfBytes secret)) args
 
 /-- The peer ID of a canonical secp256k1 key protobuf. -/
 @[export eth_libp2p_peer_id]
 def peerIdExport (args : PyValue) : Result PyValue :=
-  pyExport (fun (key : ByteArray) => identityResult do
+  pyExport (fun (key : ByteArray) => toResult "libp2p identity rejected" do
     return peerId (← decodePublicKey key)) args
 
 /-- The key protobuf that a binary secp256k1 peer ID names. -/
 @[export eth_libp2p_decode_peer_id]
 def decodePeerIdExport (args : PyValue) : Result PyValue :=
-  pyExport (fun (id : ByteArray) => identityResult do
+  pyExport (fun (id : ByteArray) => toResult "libp2p identity rejected" do
     return encodePublicKey (← decodePeerId id)) args
 
 end EthLib.Networking.Libp2p.Exports

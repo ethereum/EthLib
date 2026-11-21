@@ -19,17 +19,22 @@ public section
 
 namespace EthLib.Networking.Snappy.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (ExportError Result toResult)
 
-/-- Run a fallible step, with the code of its error and a message that names the fault. -/
-def runSnappy {ε α : Type} [Repr ε] (code : ε → UInt32) (what : String) (act : Except ε α) :
-    Result α :=
-  act.mapError fun e => (code e, s!"{what}: {reprStr e}")
+/-- A rejected block reaches Python with its code, and its message is the printed error. -/
+instance : ExportError SnappyError where
+  code := SnappyError.code
+  message := reprStr
+
+/-- A rejected stream reaches Python with its code, and its message is the printed error. -/
+instance : ExportError FrameError where
+  code := FrameError.code
+  message := reprStr
 
 /-- The data of a Snappy block. -/
 @[export eth_snappy_decompress]
 def decompressExport (block : ByteArray) : Result ByteArray :=
-  runSnappy SnappyError.code "block rejected" (decompress block)
+  toResult "block rejected" (decompress block)
 
 /-- The block that the compressor writes for the data, of at most 2^32 - 1 bytes. -/
 @[export eth_snappy_compress]
@@ -39,7 +44,7 @@ def compressExport (data : ByteArray) : Result ByteArray :=
 /-- The data of a framed stream. -/
 @[export eth_snappy_decode_frames]
 def decodeFramesExport (stream : ByteArray) : Result ByteArray :=
-  runSnappy FrameError.code "stream rejected" (decodeFrames stream)
+  toResult "stream rejected" (decodeFrames stream)
 
 /-- The framed stream that holds the data in uncompressed chunks. -/
 @[export eth_snappy_encode_frames_literal]
