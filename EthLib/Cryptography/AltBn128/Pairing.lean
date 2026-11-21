@@ -386,12 +386,14 @@ A pair with a point at infinity contributes 1.
 
 The Miller loops are multiplied, then raised to the final exponent once.
 
-That is valid since `(a * b)^e = a^e * b^e`. -/
+That is valid since `(a * b)^e = a^e * b^e`.
+
+A product of 1 passes at once, since `1^e = 1`, as when no pair has a Miller loop. -/
 def pairingCheck (pairs : List (Point × Point2)) : Bool :=
   let product := pairs.foldl (fun f pair =>
     match pair with
     | (.affine xp yp, q@(.affine _ _)) => f * millerLoop q xp yp
     | _ => f) Fp12.one
-  finalExponentiation product == Fp12.one
+  product == Fp12.one || finalExponentiation product == Fp12.one
 
 end EthLib.Cryptography.AltBn128

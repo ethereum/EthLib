@@ -131,10 +131,14 @@ When `Q` has `Z = 1`, the products by its `Z` are skipped. -/
 
 /-- `k P`, for `k < 2^fuel`, by double and add on the bits of `k`, low bit first.
 
-It recurses on `fuel`, so the kernel can run it. -/
+It recurses on `fuel`, so the kernel can run it.
+
+It stops once no bit of `k` is left, so a small scalar costs only its own bits. -/
 @[specialize] def mulBits (a : F) : Nat → Nat → Coords F → Coords F
   | 0, _, _ => infinity
   | fuel + 1, k, p =>
+    -- `0 P = O`, and the doublings that would follow add no point.
+    if k = 0 then infinity else
     -- `k P = (k mod 2) P + (k / 2) (2 P)`.
     let rest := mulBits a fuel (k / 2) (double a p)
     if k % 2 = 1 then add a p rest else rest
