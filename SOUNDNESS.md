@@ -7306,7 +7306,7 @@ Below it, when the block sets no blob price and has the schedule of its fork, th
 A schedule that a chain sets itself has no such evaluation.
 Under any schedule, an excess of at most 161 update fractions gives a fee of at most `3^161`, below `2^256` (`getBaseFeePerBlobGas_lt_of_le`, `Proofs/Fees/BlobBaseFeeBound.lean`).
 
-A block raises the excess by at most `GAS_PER_BLOB * (max - target)`.
+A block raises the excess by at most `GAS_PER_BLOB * (max - target)`, and along valid headers whose parents stay within the maximum the rises add up (`excessBlobGas_le_of_checkHeader`, `Proofs/Blocks/ExcessBlobGas.lean`).
 So from an excess of 0, a chain needs at least 1507 full blocks under the Dencun schedule, and 2260 under each later one, to reach these values.
 On the way the fee passes the supply of ether, so no blob transaction could pay it.
 A chain configuration or a test can still start from any excess.
