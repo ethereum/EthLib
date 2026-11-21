@@ -61,7 +61,7 @@ private theorem find_image (pp : PublicParam) (l : Layer) (e : UInt32) (msg : By
         Xmss.Internal.findCodeword Honest.hash pp l e msg base 0 MAX_RANDOMIZER_TRIALS := by
     rw [findCodeword_map_monad (simulateQ (expand PairedHashWord.halves)) (simulateQ_pure _)
       (simulateQ_bind _)]
-    simp only [expand_hash]
+    rw [expand_hash_fun]
   simp only [mixedFind, bind_image, lift_image, rnd_image, image, randomizerBase, bind_assoc,
     pure_bind]
 

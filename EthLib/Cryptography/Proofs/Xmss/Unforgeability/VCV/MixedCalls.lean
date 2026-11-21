@@ -27,6 +27,11 @@ private theorem expand_hash (b : ByteArray) :
   simp [mixedHash, expand, Honest.hash, RandomOraclePairedValue.readHalves, simulateQ_bind,
     liftPublic, Functor.map_map]
 
+/-- The default trial source takes the entire hash function as an argument. -/
+private theorem expand_hash_fun :
+    (fun b => simulateQ (expand PairedHashWord.halves) (mixedHash b)) = Honest.hash :=
+  funext expand_hash
+
 /-- Raw bytes are charged before either half, independent of the address or a previous cache hit. -/
 theorem mixed_hash (pp : PublicParam) (b : ByteArray) :
     SameMixed pp (simulateQ (selectedImpl pp) (markedFindHash b)) (liftM (mixedHash b)) := by

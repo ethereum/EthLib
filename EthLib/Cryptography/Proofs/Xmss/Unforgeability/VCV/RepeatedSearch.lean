@@ -35,7 +35,7 @@ private theorem deferred_finder (pp : PublicParam) (l : Layer) (e : UInt32) (msg
   rw [deferredMixed, QueryImpl.simulateQ_compose] at ran
   rw [findCodeword_map_monad (simulateQ (expand PairedHashWord.halves)) (simulateQ_pure _)
     (simulateQ_bind _)] at ran
-  simp only [expand_hash] at ran
+  rw [expand_hash_fun] at ran
   exact VerifierProbe.finder_replay pp l e msg base 0 MAX_RANDOMIZER_TRIALS ran extended clean
 
 /-- A second completed attempt at the same private input returns exactly the first answer.

@@ -35,7 +35,7 @@ private theorem trial_of_find {pp q l e m r s rho x out t}
   have image := findCodeword_map_monad
     (simulateQ (CanonicalGraph.PairedQueries.expand PairedHashWord.halves))
     (simulateQ_pure _) (simulateQ_bind _) mixedHash pp l e m base 0 MAX_RANDOMIZER_TRIALS
-  simp only [expand_hash] at image
+  rw [expand_hash_fun] at image
   rw [← image]
   exact finder
 
