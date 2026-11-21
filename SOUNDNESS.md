@@ -4719,6 +4719,17 @@ The ring of RANDAO mixes must span more than the seed lookahead plus two epochs,
 The epoch continuation asks the slot of its first state to be after its latest block header, so it cannot start at the genesis state itself; its first state is one that a slot step reaches, with the upgrades due already applied.
 No theorem yet derives the block hypothesis from the honest block theorems above, or assembles the continuation of plausible liveness.
 
+`targetIndices_of_votesGathered` (`Consensus/Proofs/LivenessVotes.lean`) reads those flags in the justification test, from Altair.
+The committees of an epoch hold each of its active validators, so an active honest validator sits in a committee of some slot of the epoch.
+At the last slot, with the votes of the other slots gathered, every active and unslashed honest validator outside the committees of that slot is a target index of the epoch.
+That needs the active validators times the committees of the epoch to fit in 64 bits.
+`Run.Honest.vote_eq` shows that two votes of one validator for one target epoch in an honest run are the same data.
+The checkpoint, the block roots and the committees of an epoch stay fixed inside it, and the committees of an epoch do not overlap.
+It needs the ring of RANDAO mixes to span more than the seed lookahead plus two epochs, and the 64-bit bound on the committees before each step.
+`Run.Honest.source_le` and `Run.Honest.vote_fresh` show that the source of an honest vote never goes back along the run, from a state that keeps the invariant, and that its target is at least the epoch where the run starts.
+`Run.Honest.slashed_of_slashed` shows that an honest run slashes no one: its blocks, as modelled, carry no slashing, its slot steps and upgrades keep every slashed flag, and its deposits add unslashed validators.
+These are the facts that `not_slashableIn_union_of_fresh` and the stake margin of `quorum_without_slot_of_stakeMargin` need along the continuation.
+
 `processJustificationAndFinalization_slackJustifiedCheckpoints` (`Consensus/Proofs/Transition/FfgSlack.lean`) turns one step into a slack link of the model.
 If the two justified checkpoints of the state before the step are slack-justified, so are those of the state after it.
 A new current justified checkpoint must match the state of that step.
