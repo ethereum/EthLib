@@ -7,6 +7,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.PriorCompensati
 # Counting physical rows across the message finders
 
 The leanXMSS draft in "Hashing and parameters" places the fixed-width randomizer after the message.
+
 The full hash input therefore identifies both the arbitrary-length message and its randomizer.
 -/
 
@@ -14,7 +15,8 @@ The full hash input therefore identifies both the arbitrary-length message and i
 
 namespace EthLib.Cryptography.Xmss.Unforgeability.VCV.EarlierDigest
 
-open Constants HashSig OracleComp OracleSpec AcceptedScan CachedCodeword PostSigning randomOracle.Partners
+open Constants HashSig OracleComp OracleSpec AcceptedScan CachedCodeword PostSigning
+open randomOracle.Partners
 open scoped ENNReal
 
 /-- At a fixed signing key the physical hash bytes identify both the message and randomizer. -/
@@ -32,7 +34,8 @@ private theorem count_rows (pp : PublicParam) (l : Layer) (e : UInt32) (msgs : F
     (covered : ∀ m ∈ msgs, ∀ r ∈ positions m, trialInput pp l e m r ∈ physical) :
     (∑ m ∈ msgs, (positions m).card) ≤ physical.card := by
   rw [← Finset.card_sigma]
-  apply Finset.card_le_card_of_injOn (fun v : Σ _ : ByteArray, Randomizer => trialInput pp l e v.1 v.2)
+  apply Finset.card_le_card_of_injOn
+    (fun v : Σ _ : ByteArray, Randomizer => trialInput pp l e v.1 v.2)
   · rintro ⟨m, r⟩ h
     obtain ⟨hm, hr⟩ := Finset.mem_sigma.mp h
     exact covered m hm r hr
@@ -41,11 +44,13 @@ private theorem count_rows (pp : PublicParam) (l : Layer) (e : UInt32) (msgs : F
     rfl
 
 /-- Occupied full inputs at one physical layer and OTS key, including rejected words. -/
-noncomputable def inputsAtKey (pp : PublicParam) (l : Layer) (e : UInt32) (seen : Finset HashInput) :=
+noncomputable def inputsAtKey (pp : PublicParam) (l : Layer) (e : UInt32)
+    (seen : Finset HashInput) :=
   seen.filter fun b => messageKey pp b = some (l, e)
 
 set_option maxRecDepth 4096 in
 /-- The randomizer rotation counts each stored row once across all chosen messages.
+
 This holds for every finite set of messages, without a message length restriction. -/
 theorem occupied_finders_le (pp : PublicParam) (l : Layer) (e : UInt32) (msgs : Finset ByteArray)
     (c fuel : Nat) (within : c + fuel ≤ 2 ^ 32) (cache : HashSpec.QueryCache)
@@ -73,7 +78,8 @@ theorem occupied_finders_le (pp : PublicParam) (l : Layer) (e : UInt32) (msgs : 
     simp only [good, validRows, Finset.mem_filter, Finset.mem_univ, true_and] at hr
     obtain ⟨w, ok, hw⟩ := hr
     exact Finset.mem_filter.mpr ⟨covers _ _ hw, messageKey_trial .., w, ok, hw⟩)
-  have perMessage (m : ByteArray) := CyclicDigest.selection_mass_le pp l e m c fuel within cache (good m) (full m)
+  have perMessage (m : ByteArray) :=
+    CyclicDigest.selection_mass_le pp l e m c fuel within cache (good m) (full m)
   unfold occupiedSelections
   rw [Finset.sum_product, Finset.mul_sum]
   calc

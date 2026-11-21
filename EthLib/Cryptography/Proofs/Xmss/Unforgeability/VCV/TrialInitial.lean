@@ -7,7 +7,7 @@ import all EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.RegisteredDigest
 /-!
 # The message cache at key generation
 
-The leanXMSS draft in "Hashing and parameters" assigns distinct roles to the message and tree hashes.
+The leanXMSS draft separates message hashes from tree hashes in "Hashing and parameters".
 
 Its key generator derives the scheme seed, the public parameter and the top root.
 

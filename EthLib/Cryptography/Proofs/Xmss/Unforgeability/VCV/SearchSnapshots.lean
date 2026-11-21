@@ -6,7 +6,9 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.StoppedFinder
 # Reserving the pre-signing mass at its actual search boundary
 
 A search reads its randomizer after the adversary has chosen the request.
+
 The first attempt at a key fixes the entry cache and footprint used to price that search.
+
 Later probes and unsuccessful signing replies do not change that snapshot.
 -/
 
@@ -21,7 +23,7 @@ abbrev Key := Layer × UInt32
 abbrev Entry := HashSpec.QueryCache × Finset HashInput
 abbrev Snapshots := Key → Option Entry
 
-/-- Use the current physical state until the first search at a key; afterwards use its stored entry. -/
+/-- Read the live state until the first attempt saves this key's entry. -/
 def entry (saved : Snapshots) (k : Key) (now : Entry) : Entry := (saved k).getD now
 
 /-- Record the state at the first attempt only, including attempts that later exhaust the finder. -/
@@ -64,6 +66,7 @@ private theorem mean_sum (keys : Finset Key) (f : Key → HashOutput → ℝ≥0
   exact Summable.tsum_finsetSum (fun _ _ => CompleteLattice.summable)
 
 /-- Any fresh physical query pays the increase in total live and booked mass.
+
 Only its own still-live signing key can contribute a nonconstant term. -/
 theorem snapshot_probe (pp : PublicParam) (c fuel : Nat) (within : c + fuel ≤ 2 ^ 32)
     (keys : Finset Key) (saved : Snapshots) (cache : HashSpec.QueryCache) (seen : Finset HashInput)
@@ -88,20 +91,25 @@ theorem snapshot_probe (pp : PublicParam) (c fuel : Nat) (within : c + fuel ≤ 
       by_cases belongs : messageKey pp a = some (l, e)
       · simpa only [searchMass, searchReserve, now, next, mean_scale] using
           compensate_active pp l e c fuel within cache seen covers a belongs cold
-      · have invariant (v : HashOutput) := foreign_probe pp l e c fuel within cache seen a belongs cold v
-        have hF (v : HashOutput) : searchMass pp c fuel (l, e) (next v) = searchMass pp c fuel (l, e) now :=
+      · have invariant (v : HashOutput) :=
+          foreign_probe pp l e c fuel within cache seen a belongs cold v
+        have hF (v : HashOutput) : searchMass pp c fuel (l, e) (next v) =
+            searchMass pp c fuel (l, e) now :=
           congrArg (_ * ·) (invariant v).2.2
-        have hR (v : HashOutput) : searchReserve pp c fuel (l, e) (next v) = searchReserve pp c fuel (l, e) now := by
+        have hR (v : HashOutput) : searchReserve pp c fuel (l, e) (next v) =
+            searchReserve pp c fuel (l, e) now := by
           simp only [searchReserve, next, now, (invariant v).1, (invariant v).2.1]
         simp only [hF, hR, mean_const, le_refl]
   simp only [F, R, mean_sum, ← Finset.sum_add_distrib]
   exact Finset.sum_le_sum fun k _ => one k
 
 /-- A later successful release can redeem the pre-search reserve even after intervening hash calls.
+
 This is the claim available at the first independent private randomizer draw. -/
 theorem fresh_search_booking (pp : PublicParam) (l : Layer) (e : UInt32) (m : ByteArray)
     (c fuel : Nat) (within : c + fuel ≤ 2 ^ 32) (saved : Snapshots) (coldKey : saved (l, e) = none)
-    (cache : HashSpec.QueryCache) (seen : Finset HashInput) (covers : ∀ b w, cache b = some w → b ∈ seen)
+    (cache : HashSpec.QueryCache) (seen : Finset HashInput)
+    (covers : ∀ b w, cache b = some w → b ∈ seen)
     (later : Entry) :
     let now : Entry := (cache, seen)
     let booked := entry (begin saved (l, e) now) (l, e) later

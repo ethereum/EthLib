@@ -5,7 +5,8 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.SearchSnapshots
 /-!
 # Bounding the total pre-search reserve by physical trial counts
 
-Each signing key uses its entry at the first attempted search, or the live state if no search has begun.
+A key uses its saved entry at the first search or the current state until that search.
+
 The reserve sums over keys, while its final bound uses only the two totals for all keys.
 -/
 

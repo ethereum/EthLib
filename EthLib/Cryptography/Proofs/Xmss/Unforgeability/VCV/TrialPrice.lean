@@ -37,7 +37,8 @@ private theorem post_run {α : Type} (pp : PublicParam) (q : Nat) (body : Oracle
   -- Drop only the trial counters and physical meter, retaining the registered digest watch.
   have view : (fun z : α × (WatchState × Nat) × Nat × Nat => (z.1, z.2.1.1)) <$> m =
       (simulateQ read body).run st := by
-    have trials := extendState_run_proj_eq (randomOracle.Targets.counted (record pp) (messageKey pp) low)
+    have trials :=
+      extendState_run_proj_eq (randomOracle.Targets.counted (record pp) (messageKey pp) low)
       (BernoulliMoment.update q (eligible pp) validReply) body (st, paid) ((0, 0) : Nat × Nat)
     have physical := extendState_run_proj_eq (randomOracle.Targets.impl (record pp) (messageKey pp)
       low) (fun t _ _ _ n => n + randomOracle.Targets.publicCost t) body st paid

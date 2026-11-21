@@ -5,7 +5,8 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.PriorIncidence
 /-!
 # The finite family of active messages at one signing key
 
-A finder can select an initially occupied row only if its exact input occurs in the physical footprint.
+Only a physical input in the initial footprint can supply an occupied selection.
+
 Other messages contribute zero, including when a later fresh trial introduces them into the family.
 -/
 
@@ -22,8 +23,9 @@ noncomputable def messageOfInput (pp : PublicParam) (l : Layer) (e : UInt32) (a 
     Option ByteArray :=
   if h : ∃ m, ∃ r, trialInput pp l e m r = a then some h.choose else none
 
-/-- The finite footprint determines the finite set of messages whose initial selections can count. -/
-noncomputable def activeMessages (pp : PublicParam) (l : Layer) (e : UInt32) (seen : Finset HashInput) :=
+/-- The footprint identifies the messages that can supply an occupied selection. -/
+noncomputable def activeMessages (pp : PublicParam) (l : Layer) (e : UInt32)
+    (seen : Finset HashInput) :=
   seen.biUnion fun a => (messageOfInput pp l e a).toFinset
 
 private theorem trial_mem (pp : PublicParam) (l : Layer) (e : UInt32) (seen : Finset HashInput)
@@ -52,18 +54,21 @@ private theorem noStored (pp : PublicParam) (l : Layer) (e : UInt32) (cache : Ha
   | some w => exact (absent (trial_mem pp l e seen m r (covers _ w h))).elim
 
 set_option maxRecDepth 4096 in
-/-- Adding messages outside the initial footprint preserves both initial selection masses exactly. -/
+/-- Enlarging the message family leaves the initial selection masses unchanged. -/
 theorem selections_active (pp : PublicParam) (l : Layer) (e : UInt32) (c fuel : Nat)
     (cache : HashSpec.QueryCache) (seen more : Finset HashInput) (le : seen ⊆ more)
     (covers : ∀ b w, cache b = some w → b ∈ seen) :
     let active := fun s => activeMessages pp l e s ×ˢ (Finset.univ : Finset Randomizer)
-    occupiedSelections pp l e (active seen) c fuel cache = occupiedSelections pp l e (active more) c fuel cache ∧
-    partneredSelections pp l e (active seen) c fuel cache = partneredSelections pp l e (active more) c fuel cache := by
+    occupiedSelections pp l e (active seen) c fuel cache =
+      occupiedSelections pp l e (active more) c fuel cache ∧
+    partneredSelections pp l e (active seen) c fuel cache =
+      partneredSelections pp l e (active more) c fuel cache := by
   classical
   intro active
   have sub : active seen ⊆ active more := by
     apply Finset.product_subset_product (monotone_messages pp l e le) (Finset.Subset.refl _)
-  have outside (i : ByteArray × Randomizer) (ne : i ∉ active seen) : i.1 ∉ activeMessages pp l e seen :=
+  have outside (i : ByteArray × Randomizer) (ne : i ∉ active seen) :
+      i.1 ∉ activeMessages pp l e seen :=
     fun mem => ne (Finset.mem_product.mpr ⟨mem, Finset.mem_univ i.2⟩)
   constructor
   · apply Finset.sum_subset sub
@@ -79,7 +84,7 @@ theorem selections_active (pp : PublicParam) (l : Layer) (e : UInt32) (c fuel : 
     rw [noStored pp l e cache seen covers (outside i ne) r] at hw
     contradiction
 
-/-- The one-query compensator applies to the evolving set of all messages with physical cache rows. -/
+/-- Apply the one-query bound to the messages present in the physical cache. -/
 theorem compensate_active (pp : PublicParam) (l : Layer) (e : UInt32) (c fuel : Nat)
     (within : c + fuel ≤ 2 ^ 32) (cache : HashSpec.QueryCache) (seen : Finset HashInput)
     (covers : ∀ b w, cache b = some w → b ∈ seen) (a : HashInput)
@@ -94,7 +99,8 @@ theorem compensate_active (pp : PublicParam) (l : Layer) (e : UInt32) (c fuel : 
     p * freshMean (fun v => Φ after (update v)) + ε * (V cache seen * H seen cache) ≤
       p * Φ seen cache + ε * freshMean (fun v => V (update v) after * H after (update v)) := by
   dsimp only
-  have agrees := selections_active pp l e c fuel cache seen (insert a seen) (Finset.subset_insert ..) covers
+  have agrees := selections_active pp l e c fuel
+     cache seen (insert a seen) (Finset.subset_insert ..) covers
   rw [agrees.1, agrees.2]
   exact compensate_finders pp l e _ c fuel within cache seen covers a addr cold
 

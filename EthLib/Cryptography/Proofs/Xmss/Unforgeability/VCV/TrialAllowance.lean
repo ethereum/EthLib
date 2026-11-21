@@ -7,8 +7,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.TrialPrice
 
 The leanXMSS draft in "Security" gives the adversary a single public-hash budget.
 
-The pre-signing second moment and the registered-target event are priced against different
-queries of the same run.
+Trial counts before and after registration refer to distinct queries in the same run.
 -/
 
 public section
@@ -18,8 +17,10 @@ namespace EthLib.Cryptography.Xmss.Unforgeability.VCV.RealClient.Watch.Trials
 open OracleComp OracleSpec
 open scoped ENNReal
 
-/-- Each pre-registration trial can pay the scaled second moment while each post-registration
-trial pays for a later digest match.
+/-- Each trial before registration pays for the scaled second moment.
+
+Each trial after registration pays for a later digest match.
+
 The right-hand side retains the actual message cost for composition with the graph charges.
 -/
 theorem joint_price (A : Adversary) (q : Nat) (hq : q ≤ 2 ^ 127) :
