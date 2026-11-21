@@ -627,9 +627,9 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let lateB (i : ℕ) := (validator i).any (fun v =>
     decide (v.activationEligibilityEpoch.toNat ≤ epoch.toNat) &&
       decide (finalized + preset.MAX_SEED_LOOKAHEAD.toNat < v.activationEpoch.toNat))
-  -- A key's finalized effective balance above its balance and rise here, as a reward rounded up.
+  -- A key's finalized effective balance above its effective balance and rise here.
   --
-  -- It weighs three.
+  -- It is charged as a whistleblower reward rounded up, and it weighs three.
   let finExcess (i : ℕ) := 3 * ((finEB i - effective i - rise i +
     (p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) / p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat)
   let late := if tight then 0 else
