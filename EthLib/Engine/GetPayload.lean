@@ -86,8 +86,6 @@ structure StoredPayload where
   bundle : BlobsBundle
   /-- Whether the builder recommends its payload over an external builder's. -/
   shouldOverrideBuilder : Bool
-  /-- The block access list from Glamsterdam, whose hash the header holds. -/
-  blockAccessList : Since .glamsterdam fork ByteArray
 
 /-- A snapshot of build processes, each identified by its payload ID. -/
 abbrev PayloadStore := PayloadId → Option StoredPayload
@@ -154,7 +152,7 @@ def StoredPayload.blockOfPayload (stored : StoredPayload)
     Except PayloadError (Block stored.fork Transaction) :=
   let header := stored.built.block.header
   payload.toBlock header.parentBeaconBlockRoot (fun _ => stored.built.requests)
-    stored.blockAccessList header.slotNumber
+    stored.built.blockAccessList header.slotNumber
 
 /-- Read the latest build of an ID, checking its fork and, from version 3, its bundle.
 
@@ -264,7 +262,7 @@ structure GetPayloadResult (fork : Fork) where
 def GetPayloadResponse.result (version : Nat) (r : GetPayloadResponse) :
     GetPayloadResult r.stored.fork where
   payload := r.payload
-  blockAccessList := r.stored.blockAccessList
+  blockAccessList := r.stored.built.blockAccessList
   slotNumber := r.stored.built.block.header.slotNumber
   blockValue := if 2 ≤ version then some r.stored.built.blockValue else none
   blobsBundle := if 3 ≤ version then some r.stored.bundle else none

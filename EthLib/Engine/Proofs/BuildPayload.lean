@@ -45,7 +45,9 @@ theorem buildPayload_eq_error_of_hegota_le (h : .hegota ≤ fork) :
 
 The parent is the last recent block, and the fork is the active fork after it at the timestamp.
 
-The body ran on the header before it was filled, and the block holds the filled header. -/
+The body ran on the header before it was filled, and the block holds the filled header.
+
+From Glamsterdam the access list of the build is the encoding of the list that the body recorded. -/
 private theorem buildPayload_spec
     (h : buildPayload chain attributes choices transactions = .ok built) :
     ¬ .hegota ≤ fork ∧ ∃ parent parentHash result,
@@ -62,7 +64,10 @@ private theorem buildPayload_spec
       built.blockValue = priorityFees
         (if h : .london ≤ fork then
           (buildHeader chain.config parent parentHash attributes choices).baseFeePerGas h
-        else 0) transactions result.output.receipts := by
+        else 0) transactions result.output.receipts ∧
+      ∀ hFork : .glamsterdam ≤ fork,
+        Serialization.Rlp.Codec.encode result.output.body.builder.build =
+          .ok (built.blockAccessList hFork) := by
   have hH : ¬ .hegota ≤ fork := fun hc => by simp [buildPayload_eq_error_of_hegota_le hc] at h
   simp only [buildPayload, hH, reduceIte] at h
   split at h
@@ -70,12 +75,23 @@ private theorem buildPayload_spec
     split at h
     next hA =>
       simp only [bind_ok_iff] at h
-      obtain ⟨parentHash, hHash, result, hR, u, hC, v, hF, hEq⟩ := h
+      obtain ⟨parentHash, hHash, result, hR, u, hC, v, hF, list, hList, hEq⟩ := h
       simp only [pure, Except.pure, Except.ok.injEq] at hEq
       subst hEq
       have hHash' : parent.header.hash = .ok parentHash := by
         cases hp : parent.header.hash <;> simp_all [Except.mapError]
-      exact ⟨hH, parent, parentHash, result, hP, hA, hHash', hR, hC, hF, rfl, rfl, rfl, rfl⟩
+      refine ⟨hH, parent, parentHash, result, hP, hA, hHash', hR, hC, hF, rfl, rfl, rfl, rfl, ?_⟩
+      intro hFork
+      -- The encoding runs only from Glamsterdam, where `sinceM` gives its result.
+      simp only [sinceM, hFork, dite_true] at hList
+      cases hE : (Serialization.Rlp.Codec.encode result.output.body.builder.build).mapError
+          BlockError.encoding with
+      | error e => simp [hE, Functor.map, Except.map] at hList
+      | ok a =>
+        simp only [hE, Functor.map, Except.map] at hList
+        obtain rfl := Except.ok.inj hList
+        cases hc : Serialization.Rlp.Codec.encode result.output.body.builder.build <;>
+          simp_all [Except.mapError]
     · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
   · simp [throw, throwThe, MonadExceptOf.throw] at h
 
@@ -132,6 +148,23 @@ theorem requestsHash_of_buildPayload
   obtain ⟨-, _, _, _, -, -, -, -, -, -, hBlock, -, hRequests, -⟩ := buildPayload_spec h
   rw [hBlock, hRequests]
   rfl
+
+/-- From Glamsterdam, the header of a built block commits to the access list that the build gives.
+-/
+theorem blockAccessList_of_buildPayload
+    (h : buildPayload chain attributes choices transactions = .ok built)
+    (hFork : .glamsterdam ≤ fork) :
+    built.block.header.blockAccessListHash hFork =
+      Cryptography.Hash.Keccak.keccak256 (built.blockAccessList hFork) := by
+  obtain ⟨-, _, _, result, -, -, -, hR, -, -, hBlock, -, -, -, hList⟩ := buildPayload_spec h
+  obtain ⟨hashes, -, hApply, -⟩ := runBody_eq_ok.mp hR
+  obtain ⟨value, hValue, hHash⟩ := applyBody_accessListHash hApply hFork
+  -- The hash of the recorded list is the keccak of its encoding, which the build kept.
+  simp only [BlockAccessList.hash, hList hFork, bind, Except.bind] at hHash
+  have hValueEq : Cryptography.Hash.Keccak.keccak256 (built.blockAccessList hFork) = value :=
+    Except.ok.inj hHash
+  rw [hBlock]
+  simp [fillHeader, hValue, hValueEq]
 
 /-! ## The value of a built block -/
 
@@ -248,7 +281,7 @@ theorem blockValue_of_buildPayload
           (.ofBlock before.block) transactions[i] = .ok included ∧
         processTransaction (blockEnvironment chain.config hashes built.block.header)
           before.block included transactions[i] = .ok out := by
-  obtain ⟨-, parent, parentHash, result, -, -, -, hR, -, -, hBlock, -, -, hValue⟩ :=
+  obtain ⟨-, parent, parentHash, result, -, -, -, hR, -, -, hBlock, -, -, hValue, -⟩ :=
     buildPayload_spec h
   obtain ⟨hashes, hHashes, hApply, -⟩ := runBody_eq_ok.mp hR
   obtain ⟨state, body, txs, hDao, hStart, hTxs, hReceipts⟩ := applyBody_receipts hApply
