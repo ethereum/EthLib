@@ -191,7 +191,7 @@ theorem readItem_list {input : ByteArray} {pos stop : Nat} {payload rest : List 
   have hSize : pre.size = lengthBytes.length + 1 := by
     simp [← ByteArray.size_data, ← Array.length_toList, hPre]
   unfold readItem
-  rw [decodeItem.eq_def]
+  rw [decodeItem_eq]
   simp only [byteArray_getElem_eq_get!, hPos, hGet, hHigh, hRP, dite_true, ite_false,
     bind, Except.bind, hFit,
     hItems _ (by omega) hPayload, Except.map, Except.ok.injEq, Prod.mk.injEq, true_and]
@@ -230,7 +230,7 @@ theorem readItem_bytes {input : ByteArray} {pos stop : Nat} (data : ByteArray) {
     subst hl
     exact hLow
   unfold readItem
-  rw [decodeItem.eq_def]
+  rw [decodeItem_eq]
   simp only [byteArray_getElem_eq_get!, exists_prop, hPos, hGet, hHigh, hRP, dite_true,
     ite_false, bind, Except.bind, hFit, hOne, dite_false, hData, Except.map, Except.ok.injEq,
     Prod.mk.injEq, true_and]
@@ -251,7 +251,7 @@ theorem readItem_single {input : ByteArray} {pos stop : Nat} (data : ByteArray) 
       have hLow' : byte < 0x80 := of_decide_eq_true hLow
       obtain ⟨hPos, hGet, -⟩ := extract_toList_eq_cons hStop hInput
       unfold readItem
-      rw [decodeItem.eq_def]
+      rw [decodeItem_eq]
       simp only [byteArray_getElem_eq_get!, hPos, dite_true, hGet, hLow', ite_true, Except.map]
       rfl
   · cases h

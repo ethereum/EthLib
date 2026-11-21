@@ -87,11 +87,96 @@ where
       else
         .ok (kind, k, length)
 
-mutual
+/-- The head of an item at `pos`, read inside the bytes up to `stop`.
+
+A byte string is read whole, and a list gives the bounds of its payload. -/
+inductive ItemHead (pos stop : Nat) where
+  /-- A byte string, and the position after it. -/
+  | bytes (value : ByteArray) (next : Nat) (after : pos < next) (within : next ≤ stop)
+  /-- A list whose payload runs from `start` to `next`, the position after the list. -/
+  | list (start next : Nat) (after : pos < start) (ordered : start ≤ next) (within : next ≤ stop)
+
+/-- The head of the item of `input` at `pos`, read inside the bytes up to `stop`.
+
+It checks every rule of an item except those on the items of a list, which come later. -/
+def readHead (input : ByteArray) (pos stop : Nat) (bounded : stop ≤ input.size := by omega) :
+    Except RlpError (ItemHead pos stop) :=
+  -- There is no first byte.
+  if hPos : pos < stop then
+    let first := input[pos]'(by omega)
+    -- A byte below `0x80` is its own encoding.
+    if first < 0x80 then
+      .ok (.bytes ⟨#[first]⟩ (pos + 1) (by omega) (by omega))
+    else do
+      let (kind, k, length) ← readPrefix input first (pos + 1) stop
+      -- The payload starts after the `k` bytes of its length.
+      let start := pos + 1 + k
+      -- The payload must fit in what is left of the input.
+      if hFit : start + length ≤ stop then
+        match kind with
+        | .bytes =>
+          -- One byte below `0x80` is its own encoding, never `0x81` then the byte.
+          if low : length = 1 ∧ ∃ inside : start < input.size, input[start] < 0x80 then
+            .error (.singleByteWithPrefix (input[start]'low.2.1))
+          else
+            .ok (.bytes (input.extract start (start + length)) (start + length) (by omega) hFit)
+        | .list => .ok (.list start (start + length) (by omega) (by omega) hFit)
+      else
+        .error (.inputTooShort length (stop - start))
+  else
+    .error (.inputTooShort 1 0)
+
+/-- A list that the decoder has opened: the end of its payload, and its items so far, last first. -/
+structure OpenList (size : Nat) where
+  /-- The position where the payload of the list ends. -/
+  stop : Nat
+  /-- The payload ends inside the input. -/
+  bounded : stop ≤ size
+  /-- The items read so far, in reverse order. -/
+  done : List Item
+
+/-- The items from `pos` to the end of the list `current`, inside the lists of `outer`.
+
+Each list of `outer` holds the one before it, and the last holds the items asked for.
+
+A nested list opens on top of `current`, and returns to it when its payload ends.
+
+So the loop runs in constant native stack, whatever the depth of the nesting. -/
+def decodeItemsLoop (input : ByteArray) (pos : Nat) (current : OpenList input.size)
+    (outer : List (OpenList input.size)) : Except RlpError (List Item) :=
+  if hPos : pos < current.stop then
+    match readHead input pos current.stop current.bounded with
+    | .error e => .error e
+    | .ok (.bytes value next after within) =>
+      decodeItemsLoop input next { current with done := .bytes value :: current.done } outer
+    | .ok (.list start next after ordered within) =>
+      decodeItemsLoop input start ⟨next, by have := current.bounded; omega, []⟩ (current :: outer)
+  else
+    -- The payload of `current` ends at `pos`, so the list is whole.
+    match outer with
+    | [] => .ok current.done.reverse
+    | parent :: rest =>
+      decodeItemsLoop input pos
+        { parent with done := .list current.done.reverse :: parent.done } rest
+termination_by (input.size - pos, outer.length)
+decreasing_by
+  all_goals first
+    | (apply Prod.Lex.left; have := current.bounded; omega)
+    | (apply Prod.Lex.right; simp)
+
+/-- The items read so far, in reverse order, then the items from `pos` to `stop`. -/
+def decodeItemsFrom (input : ByteArray) (pos stop : Nat) (done : List Item)
+    (bounded : stop ≤ input.size := by omega) : Except RlpError (List Item) :=
+  decodeItemsLoop input pos ⟨stop, bounded, done⟩ []
+
+/-- The items whose encodings, one after another, are exactly the bytes from `pos` to `stop`. -/
+def decodeItems (input : ByteArray) (pos stop : Nat)
+    (bounded : stop ≤ input.size := by omega) : Except RlpError (List Item) :=
+  decodeItemsFrom input pos stop []
 
 /-- One item read from the bytes of `input` from `pos` to `stop`, and the position after it.
 
-That position is past `pos`, which bounds the recursion of a list.
+That position is past `pos`.
 
 The decoder reads the bytes in place, and copies only the bytes of each byte string.
 
@@ -99,58 +184,14 @@ The bound on the end position keeps every byte read inside `input`. -/
 def decodeItem (input : ByteArray) (pos stop : Nat)
     (bounded : stop ≤ input.size := by omega) :
     Except RlpError (Item × { next : Nat // pos < next ∧ next ≤ stop }) :=
-  -- There is no first byte.
-  if hPos : pos < stop then
-    let first := input[pos]'(by omega)
-    -- A byte below `0x80` is its own encoding.
-    if first < 0x80 then
-      .ok (.bytes ⟨#[first]⟩, ⟨pos + 1, by omega, by omega⟩)
-    else do
-      let (kind, k, length) ← readPrefix input first (pos + 1) stop
-      -- The payload starts after the `k` bytes of its length.
-      let start := pos + 1 + k
-      -- The payload must fit in what is left of the input.
-      if hFit : start + length ≤ stop then
-        let next : { next : Nat // pos < next ∧ next ≤ stop } := ⟨start + length, by omega, hFit⟩
-        match kind with
-        | .bytes =>
-          -- One byte below `0x80` is its own encoding, never `0x81` then the byte.
-          if low : length = 1 ∧ ∃ inside : start < input.size, input[start] < 0x80 then
-            .error (.singleByteWithPrefix (input[start]'low.2.1))
-          else
-            .ok (.bytes (input.extract start (start + length)), next)
-        | .list =>
-          -- The payload of a list is its items, one after another, with nothing left over.
-          let items ← decodeItems input start (start + length)
-          .ok (.list items, next)
-      else
-        .error (.inputTooShort length (stop - start))
-  else
-    .error (.inputTooShort 1 0)
-termination_by 3 * (stop - pos)
-decreasing_by omega
-
-/-- The items whose encodings, one after another, are exactly the bytes from `pos` to `stop`. -/
-def decodeItems (input : ByteArray) (pos stop : Nat)
-    (bounded : stop ≤ input.size := by omega) : Except RlpError (List Item) :=
-  decodeItemsFrom input pos stop []
-termination_by 3 * (stop - pos) + 2
-
-/-- The items read so far, in reverse order, then the items from `pos` to `stop`.
-
-The loop runs in constant stack for any number of items. -/
-def decodeItemsFrom (input : ByteArray) (pos stop : Nat) (done : List Item)
-    (bounded : stop ≤ input.size := by omega) :
-    Except RlpError (List Item) :=
-  if pos < stop then do
-    -- The first item, then the items of what is left.
-    let (item, ⟨next, _⟩) ← decodeItem input pos stop
-    decodeItemsFrom input next stop (item :: done)
-  else
-    .ok done.reverse
-termination_by 3 * (stop - pos) + 1
-
-end
+  match readHead input pos stop bounded with
+  | .error e => .error e
+  | .ok (.bytes value next after within) => .ok (.bytes value, ⟨next, after, within⟩)
+  | .ok (.list start next after ordered within) =>
+    -- The payload of a list is its items, one after another, with nothing left over.
+    match decodeItems input start next with
+    | .error e => .error e
+    | .ok items => .ok (.list items, ⟨next, by omega, within⟩)
 
 /-- The item that `input` encodes.
 

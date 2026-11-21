@@ -7787,23 +7787,23 @@ Every Monday, the `vectors-slow` workflow regenerates all cases, these included.
 It fails when a test file then differs from the committed one, or when a pinned digest does not match.
 So between two weekly runs, a change can alter the compiled key generation or signing of those two schemes unnoticed.
 
-The compiled RLP decoder recurses once per nested list, on a native stack of fixed size.
-The definitions terminate and the proofs hold at every depth, but a deep enough input overflows that stack, and the Lean runtime then aborts the process.
+The RLP decoder keeps the lists it has opened on a list of its own, so its compiled code runs in constant native stack at any depth of nesting.
+The conversion of an item to Python keeps its open lists on the heap too, and no rule bounds the depth: no source sets one.
 The reference decoder rejects at depth 333 only through the recursion limit of CPython ([execution-specs#3469](https://github.com/ethereum/execution-specs/issues/3469)).
 So EthLib accepts inputs that the reference rejects, and no source decides between them.
-These depths were measured at commit `0b4e5d0c0`, on CPython 3.12.16 and Linux 7.0 on x86-64, in the main thread with a stack limit of 8 MiB:
-- The generic decoder of the bindings returns the item up to 9997 nested lists.
-  From 9998, the conversion of the item to Python raises `RecursionError` at the C recursion limit of CPython, which `sys.setrecursionlimit` does not raise.
-  From about 47600 nested lists, an input of about 168 KB, the decoder aborts the process.
-  In five runs each, 47001 never aborted and 48001 always did; between them the outcome varies.
-- The typed decoder of the bindings, and the decoders of eth/68, snap and devp2p messages, also abort from about 47600 nested lists.
+The RLP encoder still recurses once per nested list.
+These depths were measured on this decoder, on top of commit `22008211b`, on CPython 3.12.16 and Linux 7.0 on x86-64, in the main thread with a stack limit of 8 MiB:
+- The generic decoder of the bindings returns the item of 4194305 nested lists, an input of 16755096 bytes.
+- The typed decoder of the bindings and the decoders of snap and devp2p messages raise their own errors at every depth tested, up to 4194305 nested lists.
+- The decoder of eth messages writes the message back with the encoder, so it aborts the process from about 104700 nested lists of a Transactions message, an input of about 400 KB.
+  Near that depth the outcome varies from run to run.
   A peer sends the bytes of those messages; #3766 tracks a fix.
 - The encoder raises `RecursionError` from 9998 nested lists, in the conversion from Python, before the Lean encoder runs.
 - The transaction and block decoders raise their own errors at every depth tested, up to 4194305 nested lists, on inputs that do not have the shape of a transaction or a block.
-- The other paths that decode RLP, such as trie proofs, Era1 files, discovery packets and ENR records, were not measured.
+- The other paths that decode RLP, such as trie proofs, Era1 files, discovery packets and ENR records, run the same decoder, but were not measured.
 
-A thread with a smaller stack would abort at a smaller depth; this was not measured.
-The Python suite decodes 5000 nested lists (`bindings/python/tests/rlp/test_nesting.py`).
+A thread with a smaller stack would abort the eth message decoder at a smaller depth; this was not measured.
+The Python suite decodes 200000 nested lists (`bindings/python/tests/rlp/test_nesting.py`).
 
 ### B2. Lean core's own implementations
 
@@ -7831,7 +7831,7 @@ The Python extension calls 559 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12517 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (71), `consensus.c` (2734), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (368), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (39), `kzg.c` (511), `libp2p.c` (187), `module.c` (1646), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (207), `trie.c` (115), `vrf.c` (141), `wrappers.h` (863), `x25519.c` (21), `xmss.c` (344).
+12570 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (71), `consensus.c` (2734), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (368), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (39), `kzg.c` (511), `libp2p.c` (187), `module.c` (1646), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (209), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (207), `trie.c` (115), `vrf.c` (141), `wrappers.h` (863), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

@@ -1,8 +1,8 @@
-"""RLP of 5000 nested lists, well inside the depth that the bindings return."""
+"""RLP of 200000 nested lists, past the depth that a recursive decoder or conversion reaches."""
 
 from ethlib.serialization import rlp
 
-DEPTH = 5000
+DEPTH = 200000
 
 
 def nested(depth: int) -> bytes:
@@ -23,8 +23,8 @@ def nested(depth: int) -> bytes:
 def test_nested_lists_decode() -> None:
     encoded = nested(DEPTH)
     assert nested(3) == bytes.fromhex("c2c1c0")
-    # 56 one-byte prefixes, 100 two-byte prefixes up to a payload of 255, then three bytes each.
-    assert len(encoded) == 56 + 2 * 100 + 3 * (DEPTH - 156)
+    # One byte each for payloads up to 55 bytes, two up to 255, three up to 65535, then four.
+    assert len(encoded) == 56 + 2 * 100 + 3 * 21760 + 4 * (DEPTH - 156 - 21760)
     item = rlp.decode(encoded)
     # Walk down without recursion: each level holds exactly the next one.
     for _ in range(DEPTH - 1):

@@ -72,26 +72,79 @@ item_of_py(
   return item;
 }
 
-/* The Python form of a borrowed Lean item, or NULL with an exception set. */
+/* The Python bytes of a borrowed Lean byte string, or NULL with an exception set. */
+static PyObject*
+py_of_bytes(
+  lean_object* data
+) {
+  return PyBytes_FromStringAndSize(
+    (const char*) lean_sarray_cptr(data), (Py_ssize_t) lean_sarray_size(data));
+}
+
+/* A list that the conversion has opened: its Python list, and the next cell of its Lean list. */
+typedef struct {
+  PyObject* out;
+  lean_object* cell;
+} open_list;
+
+/* The Python form of a borrowed Lean item, or NULL with an exception set.
+ *
+ * The open lists sit on a stack on the heap, so a deep item needs no deep native stack. */
 static PyObject*
 py_of_item(
   lean_object* item
 ) {
-  if (lean_obj_tag(item) == 0) {
-    lean_object* data = lean_ctor_get(item, 0);
-    return PyBytes_FromStringAndSize(
-      (const char*) lean_sarray_cptr(data), (Py_ssize_t) lean_sarray_size(data));
+  if (lean_obj_tag(item) == 0) return py_of_bytes(lean_ctor_get(item, 0));
+  size_t capacity = 16;
+  size_t depth = 0;
+  open_list* stack = PyMem_New(open_list, capacity);
+  if (!stack) return PyErr_NoMemory();
+  PyObject* top = PyList_New(0);
+  if (!top) goto fail;
+  stack[depth++] = (open_list) { top, lean_ctor_get(item, 0) };
+  for (;;) {
+    open_list* current = &stack[depth - 1];
+    if (lean_is_scalar(current->cell)) {
+      /* The list is whole: it becomes the last item of the list below it, or the result. */
+      PyObject* whole = current->out;
+      depth--;
+      if (depth == 0) {
+        PyMem_Free(stack);
+        return whole;
+      }
+      int appended = PyList_Append(stack[depth - 1].out, whole);
+      Py_DECREF(whole);
+      if (appended < 0) goto fail;
+      continue;
+    }
+    lean_object* child = lean_ctor_get(current->cell, 0);
+    current->cell = lean_ctor_get(current->cell, 1);
+    if (lean_obj_tag(child) == 0) {
+      PyObject* bytes = py_of_bytes(lean_ctor_get(child, 0));
+      if (!bytes) goto fail;
+      int appended = PyList_Append(current->out, bytes);
+      Py_DECREF(bytes);
+      if (appended < 0) goto fail;
+      continue;
+    }
+    /* A nested list opens on top of the stack, which doubles when it is full. */
+    if (depth == capacity) {
+      open_list* grown = PyMem_Realloc(stack, 2 * capacity * sizeof(open_list));
+      if (!grown) {
+        PyErr_NoMemory();
+        goto fail;
+      }
+      stack = grown;
+      capacity *= 2;
+    }
+    PyObject* nested = PyList_New(0);
+    if (!nested) goto fail;
+    stack[depth++] = (open_list) { nested, lean_ctor_get(child, 0) };
   }
-  if (Py_EnterRecursiveCall(" while converting an RLP item")) return NULL;
-  PyObject* out = PyList_New(0);
-  for (lean_object* cell = lean_ctor_get(item, 0); out && !lean_is_scalar(cell);
-       cell = lean_ctor_get(cell, 1)) {
-    PyObject* child = py_of_item(lean_ctor_get(cell, 0));
-    if (!child || PyList_Append(out, child) < 0) Py_CLEAR(out);
-    Py_XDECREF(child);
-  }
-  Py_LeaveRecursiveCall();
-  return out;
+fail:
+  for (size_t i = 0; i < depth; i++) Py_DECREF(stack[i].out);
+  PyMem_Free(stack);
+  return NULL;
 }
 
 /* The item of a successful result as its Python form, or NULL with an RlpError set. */
