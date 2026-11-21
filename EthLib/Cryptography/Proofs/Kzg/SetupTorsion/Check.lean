@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Kzg.TrustedSetup
 public import EthLib.Cryptography.Proofs.Bls.G1TorsionCheck
 public import EthLib.Cryptography.Proofs.Kzg.TrustedSetup
-public meta import Lean.Elab.Term
+public meta import Lean.Elab.Command
 
 /-!
 # Proofs: the check that reads one point of the embedded setup
@@ -23,6 +23,8 @@ The kernel decodes a string slowly, since it reads its UTF-8 bytes one at a time
 So a proof first replaces each string by the list of its codes.
 
 The kernel checks that step by unfolding the literal, which is cheap.
+
+The file also declares the checks of many strings, one theorem each, and a term that gathers them.
 -/
 
 @[expose] public section
@@ -243,5 +245,55 @@ theorem all_of_chunks {α : Type} (p : α → Bool) (c : Nat) :
       omega
     · rw [List.drop_drop, show c + c * k = c * (k + 1) by rw [Nat.mul_succ, Nat.add_comm]]
       exact h (k + 1) (by omega)
+
+/-! ## Declaring the checks -/
+
+open Lean Elab Command in
+/-- Declares the checks of the chunks `a` to `b - 1` of the strings `xs`.
+
+Chunk `k` holds the 16 strings from index `16 * k`.
+
+Its check is the theorem `name_k`, closed by a kernel check. -/
+elab "torsion_checks " name:ident xs:ident a:num b:num : command => do
+  for k in [a.getNat:b.getNat] do
+    let id := mkIdent (name.getId.appendAfter s!"_{k}")
+    let start := Syntax.mkNumLit (toString (16 * k))
+    elabCommand (← `(command|
+      theorem $id:ident :
+          (((($xs).toList.map codes).drop $start).take 16).all checkCodes = true := by
+        rw [codes_chunk% $xs $start 16]
+        decide +kernel))
+
+/-- A predicate holds below `a + b` if it holds below `a`, and at `a + k` for each `k` below `b`. -/
+theorem forall_lt_add {p : Nat → Prop} {a b : Nat} (ha : ∀ k < a, p k)
+    (hb : ∀ k < b, p (a + k)) : ∀ k < a + b, p k := fun k hk =>
+  if h : k < a then ha k h else Nat.add_sub_cancel' (Nat.le_of_not_lt h) ▸ hb (k - a) (by omega)
+
+/-- A predicate holds below 1 if it holds at 0. -/
+theorem forall_lt_one {p : Nat → Prop} (h : p 0) : ∀ k < 1, p k := fun _ hk =>
+  Nat.lt_one_iff.mp hk ▸ h
+
+open Lean in
+/-- A proof of `∀ k < n, p (lo + k)` from the theorems for `lo` to `lo + n - 1`.
+
+It splits the range in halves, so the proof has depth logarithmic in `n`. -/
+meta def checksBelow (leaf : Nat → MacroM Term) (lo n : Nat) : MacroM Term :=
+  if n = 0 then `(fun _ h => absurd h (Nat.not_lt_zero _))
+  else if n = 1 then do `(forall_lt_one $(← leaf lo))
+  else do
+    `(forall_lt_add (a := $(quote (n / 2))) (b := $(quote (n - n / 2)))
+      $(← checksBelow leaf lo (n / 2)) $(← checksBelow leaf (lo + n / 2) (n - n / 2)))
+termination_by n
+decreasing_by all_goals omega
+
+open Lean in
+/-- A proof of `∀ k < n, p k` from the theorems `name_0` to `name_(n - 1)`.
+
+With two bounds `n m`, it proves `∀ k < n, ∀ l < m, p k l` from the theorems `name_k_l`. -/
+macro "checks_of% " name:ident bounds:num+ : term => do
+  let rec go (pre : Name) : List Nat → MacroM Term
+    | [] => return mkIdent pre
+    | n :: rest => checksBelow (fun k => go (pre.appendAfter s!"_{k}") rest) 0 n
+  go name.getId (bounds.map (·.getNat)).toList
 
 end EthLib.Cryptography.Kzg.SetupTorsion

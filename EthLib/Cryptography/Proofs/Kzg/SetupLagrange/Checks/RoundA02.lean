@@ -14,52 +14,6 @@ Separate theorems keep the memory of each kernel check small.
 
 namespace EthLib.Cryptography.Kzg.SetupLagrange
 
-theorem checkA_2_0 : checkA tableM tableA 2 0 = true := by
-  decide +kernel
-
-theorem checkA_2_1 : checkA tableM tableA 2 1 = true := by
-  decide +kernel
-
-theorem checkA_2_2 : checkA tableM tableA 2 2 = true := by
-  decide +kernel
-
-theorem checkA_2_3 : checkA tableM tableA 2 3 = true := by
-  decide +kernel
-
-theorem checkA_2_4 : checkA tableM tableA 2 4 = true := by
-  decide +kernel
-
-theorem checkA_2_5 : checkA tableM tableA 2 5 = true := by
-  decide +kernel
-
-theorem checkA_2_6 : checkA tableM tableA 2 6 = true := by
-  decide +kernel
-
-theorem checkA_2_7 : checkA tableM tableA 2 7 = true := by
-  decide +kernel
-
-theorem checkA_2_8 : checkA tableM tableA 2 8 = true := by
-  decide +kernel
-
-theorem checkA_2_9 : checkA tableM tableA 2 9 = true := by
-  decide +kernel
-
-theorem checkA_2_10 : checkA tableM tableA 2 10 = true := by
-  decide +kernel
-
-theorem checkA_2_11 : checkA tableM tableA 2 11 = true := by
-  decide +kernel
-
-theorem checkA_2_12 : checkA tableM tableA 2 12 = true := by
-  decide +kernel
-
-theorem checkA_2_13 : checkA tableM tableA 2 13 = true := by
-  decide +kernel
-
-theorem checkA_2_14 : checkA tableM tableA 2 14 = true := by
-  decide +kernel
-
-theorem checkA_2_15 : checkA tableM tableA 2 15 = true := by
-  decide +kernel
+round_checks checkA tableM tableA 2
 
 end EthLib.Cryptography.Kzg.SetupLagrange
