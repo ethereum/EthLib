@@ -147,26 +147,18 @@ def blobScheduleAt (config : ChainConfig) (number timestamp : Nat) : Option Blob
 
 /-- The configuration of Ethereum mainnet, from Frontier to BPO2.
 
-Its chain ID is 1, as [EIP-155](https://eips.ethereum.org/EIPS/eip-155#list-of-chain-ids) lists.
-
-Frontier holds from the genesis block on.
-
-[EIP-6953][eip-6953-pow] gives the blocks from Homestead to Gray Glacier.
-
-[EIP-3675][eip-3675] starts Paris at the first block whose parent reaches a set total difficulty.
-
-That value is the terminal total difficulty.
-
-On mainnet that block is 15,537,394, the first block after the history of [EIP-7643][eip-7643].
-
-[EIP-6953][eip-6953-pos] gives the time of Shapella.
-
-The meta EIP of each later fork gives its time: EIP-7569, EIP-7600, EIP-7607, EIP-8134, EIP-8135.
-
 Mainnet sets no blob schedule of its own: each fork keeps the schedule of its EIPs.
 
-[EIP-6110][eip-6110] gives the address of its deposit contract.
+Sources:
 
+- [EIP-155][eip-155]: the chain ID.
+- [EIP-6110][eip-6110]: the deposit contract.
+- [EIP-6953][eip-6953-pow]: the blocks from Homestead to Gray Glacier.
+- [EIP-3675][eip-3675] and [EIP-7643][eip-7643]: the block of Paris.
+- [EIP-6953][eip-6953-pos]: the time of Shapella.
+- The meta EIP of each later fork: EIP-7569, EIP-7600, EIP-7607, EIP-8134 and EIP-8135.
+
+[eip-155]: https://eips.ethereum.org/EIPS/eip-155#list-of-chain-ids
 [eip-6110]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-6110.md#configuration
 [eip-6953-pow]: https://eips.ethereum.org/EIPS/eip-6953#proof-of-work-network-upgrades
 [eip-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#transition-block-validity
@@ -174,16 +166,21 @@ Mainnet sets no blob schedule of its own: each fork keeps the schedule of its EI
 [eip-6953-pos]: https://eips.ethereum.org/EIPS/eip-6953#post-merge-upgrades
 -/
 def mainnet : ChainConfig where
+  -- EIP-155 lists chain ID 1 for mainnet.
   chainId := 1
+  -- The deposit contract that EIP-6110 configures.
   depositContractAddress := #v[0x00, 0x00, 0x00, 0x00, 0x21, 0x9a, 0xb5, 0x40, 0x35, 0x6c, 0xbb,
     0x83, 0x9c, 0xbe, 0x05, 0x30, 0x3d, 0x77, 0x05, 0xfa]
   activations := [
+    -- Frontier holds from the genesis block on.
     (.frontier, .block 0),
+    -- Homestead to Gray Glacier activate at the blocks of EIP-6953.
     (.homestead, .block 1150000),
     (.daoFork, .block 1920000),
     (.tangerineWhistle, .block 2463000),
     (.spuriousDragon, .block 2675000),
     (.byzantium, .block 4370000),
+    -- Petersburg activates at the block of Constantinople, and takes precedence.
     (.constantinople, .block 7280000),
     (.petersburg, .block 7280000),
     (.istanbul, .block 9069000),
@@ -192,8 +189,11 @@ def mainnet : ChainConfig where
     (.london, .block 12965000),
     (.arrowGlacier, .block 13773000),
     (.grayGlacier, .block 15050000),
+    -- The first block whose parent reaches the terminal total difficulty of EIP-3675.
     (.paris, .block 15537394),
+    -- Shapella activates at the time of EIP-6953.
     (.shapella, .time 1681338455),
+    -- Each later fork activates at the time of its meta EIP.
     (.dencun, .time 1710338135),
     (.pectra, .time 1746612311),
     (.fusaka, .time 1764798551),
@@ -202,40 +202,27 @@ def mainnet : ChainConfig where
 
 /-- The configuration of the Hoodi test network, from Frontier to BPO2.
 
-Its chain ID is 560048, as its [genesis file][hoodi] gives.
+The [genesis file][hoodi] gives every value.
 
-The genesis file gives the address of its deposit contract, the same as on mainnet.
+The meta EIPs EIP-7600 and EIP-7607 give the same times to the later forks, BPO1 and BPO2 included.
 
-The genesis file activates every fork up to London at block 0.
+No fork follows BPO2: neither the genesis file nor the Hoodi row of [EIP-7773][eip-7773] gives one.
 
-Its terminal total difficulty is 0, so Paris activates at block 0 too.
+Hoodi sets no blob schedule of its own.
 
-Shapella and Dencun activate at time 0, so Hoodi starts with the rules of Dencun.
-
-The genesis file lists no DAO fork and no fork that only delays the difficulty bomb.
-
-The meta EIP of each later fork gives its time: EIP-7600 and EIP-7607 (BPO1, BPO2).
-
-The genesis file schedules no fork after BPO2.
-
-The Hoodi row of [EIP-7773][eip-7773], the meta EIP of Glamsterdam, gives no time either.
-
-A later fork comes from a later genesis file, once the meta EIP of that fork gives the same time.
-
-The genesis file gives Dencun, Pectra, BPO1 and BPO2 the blob schedules of their EIPs.
-
-Fusaka keeps the schedule of Pectra.
-
-So Hoodi sets no blob schedule of its own.
+Fusaka keeps the schedule of Pectra, and each other fork that of its EIPs.
 
 [hoodi]: https://github.com/eth-clients/hoodi/blob/2a7efb3c530cce7c71702cc98d0f965df2411c11/metadata/genesis.json
 [eip-7773]: https://github.com/ethereum/EIPs/blob/b055feec322fbc37e9d77a393a50b3ff56b31c92/EIPS/eip-7773.md#activation
 -/
 def hoodi : ChainConfig where
   chainId := 560048
+  -- The same deposit contract as on mainnet.
   depositContractAddress := #v[0x00, 0x00, 0x00, 0x00, 0x21, 0x9a, 0xb5, 0x40, 0x35, 0x6c, 0xbb,
     0x83, 0x9c, 0xbe, 0x05, 0x30, 0x3d, 0x77, 0x05, 0xfa]
   activations := [
+    -- Every fork up to London activates at block 0.
+    -- The DAO fork and the forks that only delay the difficulty bomb are absent.
     (.frontier, .block 0),
     (.homestead, .block 0),
     (.tangerineWhistle, .block 0),
@@ -246,7 +233,9 @@ def hoodi : ChainConfig where
     (.istanbul, .block 0),
     (.berlin, .block 0),
     (.london, .block 0),
+    -- The terminal total difficulty is 0, so Paris activates at block 0 too.
     (.paris, .block 0),
+    -- Shapella and Dencun activate at time 0, so Hoodi starts with the rules of Dencun.
     (.shapella, .time 0),
     (.dencun, .time 0),
     (.pectra, .time 1742999832),
