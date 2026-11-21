@@ -5011,7 +5011,15 @@ Otherwise `forkchoiceUpdatedStep_answer` gives the response of the update on the
 After that validation, an update applies its forkchoice state when it applies its head, even when its payload attributes then fail, as step 8 of the method asks (`forkchoiceUpdatedStep_of_applied`, `updateStep_of_applied`).
 Otherwise the validated node does not change (`updateStep_of_not_applied`).
 `forkchoiceUpdatedStep_head_valid` shows that an update keeps the forkchoice state, or makes a block that the node knows as valid its head.
-No update starts a build yet, so the builds stay empty, and a request for a payload answers `-38001`, even for the payload ID that an update answered (#3533).
+The function of `engine_getPayload` takes a snapshot of builds; the node fills its builds with the update that builds (`forkchoiceUpdatedBuildStep`).
+The source leaves the transactions and the choices of a build to the node, so a builder of the node gives them.
+An update that answers a payload ID, with no build under it, builds with the attributes of its request on the chain of the head that it applied, and stores the result under that ID.
+`store_of_forkchoiceUpdatedBuildStep` shows that the stored build is that build, so the theorems on a build on a chain, such as `buildPayload_fields` and `newPayloadOnChain_of_buildPayload`, hold for the payload of that ID.
+A stored build stays, so a second update with the same payload ID keeps it, as step 6 of payload building asks (`forkchoiceUpdatedBuildStep_store_of_some`).
+A build that fails stores nothing, so a request for its ID answers `-38001`, although the update answered the ID; the model decides so, and step 2 of payload building recommends an empty build first, which the builder can choose.
+A build from Glamsterdam stores nothing, since the build gives no block access list here yet; until it does, an update with attributes from Glamsterdam answers an ID that names no build, against step 9 of the update.
+The stored build has no blobs, so a request from version 3 fails for a build with blob transactions.
+No theorem yet composes the update, the request and `engine_newPayload` on the node into one `VALID` answer (#3533); the Python tests run those three calls.
 A block is valid only on a valid parent, so a payload whose parent the node knows as invalid is `INVALID`, and the node keeps it as invalid (`newPayloadStep_of_invalid_parent`).
 That covers step 2 of payload validation, which asks `INVALID` for each descendant of an invalid terminal block.
 Its latest valid hash is the latest valid block of the parent's chain, or zero when that block is of proof of work, as step 3 asks; `latestValidHash_eq_some_iff` (`Proofs/ForkchoiceUpdated.lean`) states that function.

@@ -334,6 +334,38 @@ def test_invalid_forkchoice_state() -> None:
     assert update["forkchoice"] == _forkchoice(G)
 
 
+def _update_with_attributes(head: bytes, timestamp: int) -> dict[str, Any]:
+    """The request of version 1 for a head, with payload attributes of zero bytes."""
+    request = _update(head)
+    request["params"][1] = {
+        "timestamp": hex(timestamp),
+        "prevRandao": _hex(ZERO),
+        "suggestedFeeRecipient": _hex(bytes(20)),
+    }
+    return request
+
+
+def _get_payload(payload_id: str) -> dict[str, Any]:
+    """The request of version 1 for the payload of a build."""
+    return {"jsonrpc": "2.0", "id": 1, "method": "engine_getPayloadV1", "params": [payload_id]}
+
+
+def test_build_then_get_then_import() -> None:
+    """An update starts a build on its head, the request for its ID returns it, and it is valid."""
+    (update,) = _run(_update_with_attributes(G, 1))
+    payload_id = update["response"]["result"]["payloadId"]
+    assert update["response"]["result"]["payloadStatus"] == _status("VALID", G)
+    update, again, built = _run(
+        _update_with_attributes(G, 1), _update_with_attributes(G, 1), _get_payload(payload_id)
+    )
+    # The same head and attributes give the same ID, and the request for it still answers.
+    assert again["response"] == update["response"]
+    # With no transaction and the fee recipient of zero bytes, the build is the empty block 1.
+    assert built["response"] == {"result": B1.payload}
+    (*_, imported) = _run(_update_with_attributes(G, 1), _get_payload(payload_id), _new_payload(B1))
+    assert imported["response"] == {"result": _status("VALID", B1.hash)}
+
+
 def test_unknown_payload_id() -> None:
     """A node that started no build answers a request for a payload with an unknown payload ID."""
     request = {
