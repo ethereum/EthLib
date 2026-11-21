@@ -28,11 +28,13 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport ToPy FromPy FromPyItems toPy fromPy)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport rejectArgument
+  toResult ToPy FromPy FromPyItems toPy fromPy)
 
-/-- The result of a deposit tree operation, with the code and the message of its error. -/
-def runDepositTree {α : Type} (result : Except DepositTreeError α) : Result α :=
-  result.mapError fun e => (e.code, toString e)
+/-- A failed operation on a deposit tree reaches Python with its code and its printed error. -/
+instance : ExportError DepositTreeError where
+  code := DepositTreeError.code
+  message := toString
 
 /-- The subtrees of a sparse tree in preorder, each one a tagged tuple. -/
 def depositMerkleTreeItems : DepositMerkleTree → List PyValue
@@ -103,16 +105,17 @@ The count is that of its deposits, below `2^32`, and finalized deposits come wit
 -/
 def depositTreeOfValue (value : DepositTreeValue) : Result DepositTree := do
   let (items, mixInLength, finalizedExecutionBlock) := value
-  let tree ← (depositMerkleTreeOfItems items).mapError fun message => (0, message)
+  let tree ← toResult none ((depositMerkleTreeOfItems items).mapError UnreadArgument.mk)
   if canonicalDepositMerkleTree tree ≠ some tree then
-    throw (0, "the subtrees do not have the shape of a deposit tree")
+    rejectArgument none "the subtrees do not have the shape of a deposit tree"
   let finalized := tree.getFinalized.2
   let count := finalized + (pendingLeaves tree).length
-  if count ≠ mixInLength then throw (0, s!"the tree holds {count} deposits, not {mixInLength}")
+  if count ≠ mixInLength then
+    rejectArgument none s!"the tree holds {count} deposits, not {mixInLength}"
   if 2 ^ DEPOSIT_CONTRACT_TREE_DEPTH.toNat ≤ count then
-    throw (0, s!"a tree holds fewer than 2^{DEPOSIT_CONTRACT_TREE_DEPTH} deposits")
+    rejectArgument none s!"a tree holds fewer than 2^{DEPOSIT_CONTRACT_TREE_DEPTH} deposits"
   if finalized ≠ 0 ∧ finalizedExecutionBlock.isNone then
-    throw (0, "a tree with finalized deposits has a finalized block")
+    rejectArgument none "a tree with finalized deposits has a finalized block"
   return { tree, mixInLength, finalizedExecutionBlock }
 
 /-- A snapshot as the tuple of its fields, in order. -/
@@ -131,28 +134,28 @@ def depositTreeSnapshotOfValue (value : DepositTreeSnapshotValue) :
     return ⟨⟨finalized.toArray, bound⟩, depositRoot, depositCount, executionBlockHash,
       executionBlockHeight⟩
   else
-    throw (0, s!"a snapshot holds at most {DEPOSIT_CONTRACT_TREE_DEPTH} finalized roots")
+    rejectArgument none s!"a snapshot holds at most {DEPOSIT_CONTRACT_TREE_DEPTH} finalized roots"
 
 /-- The tree with no deposit. -/
 @[export eth_consensus_deposit_tree_new]
 def depositTreeNewExport (args : PyValue) : Result PyValue :=
   match args with
   | .tuple #[] => .ok (toPy (depositTreeToValue DepositTree.new))
-  | _ => .error (0, "expected no argument")
+  | _ => rejectArgument none "expected no argument"
 
 /-- The tree with one more deposit, by the root of its data. -/
 @[export eth_consensus_deposit_tree_push_leaf]
 def depositTreePushLeafExport (args : PyValue) : Result PyValue :=
   pyExport (fun ((value, leaf) : DepositTreeValue × Root) => do
     let tree ← depositTreeOfValue value
-    return depositTreeToValue (← runDepositTree (tree.pushLeaf leaf))) args
+    return depositTreeToValue (← toResult none (tree.pushLeaf leaf))) args
 
 /-- The tree after pushing deposits in order, by the roots of their data. -/
 @[export eth_consensus_deposit_tree_push_leaves]
 def depositTreePushLeavesExport (args : PyValue) : Result PyValue :=
   pyExport (fun ((value, leaves) : DepositTreeValue × List Root) => do
     let tree ← depositTreeOfValue value
-    return depositTreeToValue (← runDepositTree (tree.pushLeaves leaves))) args
+    return depositTreeToValue (← toResult none (tree.pushLeaves leaves))) args
 
 /-- The deposit root of a tree. -/
 @[export eth_consensus_deposit_tree_get_root]
@@ -167,14 +170,14 @@ def depositTreeFinalizeExport (args : PyValue) : Result PyValue :=
       DepositTreeValue × (Root × UInt64 × Hash32) × UInt64) => do
     let tree ← depositTreeOfValue value
     let eth1Data : Eth1Data := { depositRoot, depositCount, blockHash }
-    return depositTreeToValue (← runDepositTree (tree.finalize eth1Data height))) args
+    return depositTreeToValue (← toResult none (tree.finalize eth1Data height))) args
 
 /-- The leaf at an index of a tree, and its proof against the deposit root. -/
 @[export eth_consensus_deposit_tree_get_proof]
 def depositTreeGetProofExport (args : PyValue) : Result PyValue :=
   pyExport (fun ((value, index) : DepositTreeValue × Nat) => do
     let tree ← depositTreeOfValue value
-    let (leaf, proof) ← runDepositTree (tree.getProof index)
+    let (leaf, proof) ← toResult none (tree.getProof index)
     return (leaf, proof.toList)) args
 
 /-- The snapshot of a finalized tree. -/
@@ -183,7 +186,7 @@ def depositTreeGetSnapshotExport (args : PyValue) : Result PyValue :=
   letI : FromPyItems DepositTreeValue := EthLib.Exports.instFromPyItemsOfFromPy
   pyExport (fun value => do
     let tree ← depositTreeOfValue value
-    return depositTreeSnapshotToValue (← runDepositTree tree.getSnapshot)) args
+    return depositTreeSnapshotToValue (← toResult none tree.getSnapshot)) args
 
 /-- The tree rebuilt from a snapshot. -/
 @[export eth_consensus_deposit_tree_from_snapshot]
@@ -191,7 +194,7 @@ def depositTreeFromSnapshotExport (args : PyValue) : Result PyValue :=
   letI : FromPyItems DepositTreeSnapshotValue := EthLib.Exports.instFromPyItemsOfFromPy
   pyExport (fun value => do
     let snapshot ← depositTreeSnapshotOfValue value
-    return depositTreeToValue (← runDepositTree (DepositTree.fromSnapshot snapshot))) args
+    return depositTreeToValue (← toResult none (DepositTree.fromSnapshot snapshot))) args
 
 /-- The deposit root that the finalized roots and the count of a snapshot compute. -/
 @[export eth_consensus_deposit_tree_snapshot_calculate_root]
@@ -199,6 +202,6 @@ def depositTreeSnapshotCalculateRootExport (args : PyValue) : Result PyValue :=
   letI : FromPyItems DepositTreeSnapshotValue := EthLib.Exports.instFromPyItemsOfFromPy
   pyExport (fun value => do
     let snapshot ← depositTreeSnapshotOfValue value
-    runDepositTree snapshot.calculateRoot) args
+    toResult none snapshot.calculateRoot) args
 
 end EthLib.Consensus.Exports

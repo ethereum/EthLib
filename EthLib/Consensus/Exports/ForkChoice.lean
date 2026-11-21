@@ -29,11 +29,13 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport rejectArgument
+  toResult)
 
-/-- A result of the fork choice, with the code of its error. -/
-def runForkChoice {α : Type} (result : Except ForkChoiceError α) : Result α :=
-  result.mapError fun e => (e.code, s!"fork choice: {e}")
+/-- An error of the fork choice reaches Python with its code and its printed form. -/
+instance : ExportError ForkChoiceError where
+  code := ForkChoiceError.code
+  message := toString
 
 /-- The little-endian bytes of a number, in a given width. -/
 def littleEndian (width value : Nat) : ByteArray :=
@@ -104,9 +106,6 @@ def fastConfirmationRead {preset : Preset} {fork : Fork} (store : Store preset f
 The message carries no prefix, unlike an error of the whole call. -/
 abbrev StepOutcome := Except (UInt32 × String) (Option StepRead)
 
-/-- The outcome of a step that the store rejects. -/
-def rejected (e : ForkChoiceError) : StepOutcome := .error (e.code, toString e)
-
 /-- The store after a step and what the step reads, or the error that rejects it.
 
 Three kinds of step run before this: a PoW block, a payload verdict and the fast confirmation. -/
@@ -128,14 +127,14 @@ def runForkChoiceStep {preset : Preset} {fork : Fork} (config : Config) (checks 
     let signed ← decodeInput (SignedExecutionPayloadEnvelope preset fork) data
     if gloas : .glamsterdam ≤ fork then
       return (·, none) <$> store.onExecutionPayloadEnvelope config checks sources gloas signed
-    else throw (0, "an envelope needs Gloas or later")
+    else rejectArgument none "an envelope needs Gloas or later"
   | .payloadAttestationMessage data => do
     let message ← decodeInput PayloadAttestationMessage data
     if gloas : .glamsterdam ≤ fork then
       return (·, none) <$> store.onPayloadAttestationMessage config checks gloas message false
-    else throw (0, "a vote of the payload committee needs Gloas or later")
+    else rejectArgument none "a vote of the payload committee needs Gloas or later"
   | .powBlock _ | .payload _ | .fastConfirmation _ =>
-    throw (0, "this step does not run on the store alone")
+    rejectArgument none "this step does not run on the store alone"
 
 /-- The blobs and the proofs that the node holds for a block. -/
 def heldBlobs (blobs proofs : List ByteArray) :
@@ -182,13 +181,14 @@ def replayForkChoiceConfirming {preset : Preset} {fork : Fork} (config : Config)
     (adjust : BlockSources preset fork → BlockSources preset fork := id) :
     Result (Store preset fork × Option (Store preset fork × FastConfirmationStore) ×
       List (List StepOutcome)) := do
-  let mut store ← runForkChoice (getForkchoiceStore config anchorState anchorBlock)
+  let mut store ← toResult "fork choice" (getForkchoiceStore config anchorState anchorBlock)
   let mut fcr := getFastConfirmationStore store
   let mut lastRun : Option (Store preset fork × FastConfirmationStore) := none
   let mut outcomes : Array (List StepOutcome) := #[]
   let mut powBlocks : List PowBlock := []
   let mut verdict : Option (Option Hash32) := none
-  let setup ← (Cryptography.Kzg.Exports.embeddedSetup ()).mapError fun e => (0, e.message)
+  let setup ← toResult none ((Cryptography.Kzg.Exports.embeddedSetup ()).mapError fun e =>
+    UnreadArgument.mk e.message)
   for step in steps do
     match step with
     | .powBlock data =>
@@ -207,7 +207,7 @@ def replayForkChoiceConfirming {preset : Preset} {fork : Fork} (config : Config)
         fcr := next
         lastRun := some (store, next)
         outcomes := outcomes.push [.ok (some (.fastConfirmation read))]
-      | .error e => outcomes := outcomes.push [rejected e]
+      | .error e => outcomes := outcomes.push [toResult none (.error e)]
       continue
     | _ => pure ()
     -- The blobs, the columns and the verdict of a block serve only that block.
@@ -247,13 +247,13 @@ def replayForkChoiceConfirming {preset : Preset} {fork : Fork} (config : Config)
         | .ok voted =>
           next := voted
           carried := carried.push (.ok none)
-        | .error e => carried := carried.push (rejected e)
+        | .error e => carried := carried.push (toResult none (.error e))
       for slashing in signed.message.body.attesterSlashings.data do
         match next.onAttesterSlashing config checks slashing with
         | .ok slashed =>
           next := slashed
           carried := carried.push (.ok none)
-        | .error e => carried := carried.push (rejected e)
+        | .error e => carried := carried.push (toResult none (.error e))
       outcome := .ok (next, read)
     -- An invalid verdict removes blocks, whether the step itself fails or not.
     if let some latestValidHash := invalid then
@@ -282,7 +282,7 @@ def replayForkChoiceConfirming {preset : Preset} {fork : Fork} (config : Config)
     | .ok (next, read) =>
       store := next
       outcomes := outcomes.push (.ok read :: carried.toList)
-    | .error e => outcomes := outcomes.push [rejected e]
+    | .error e => outcomes := outcomes.push [toResult none (.error e)]
   return (store, lastRun, outcomes.toList)
 
 /-- The store after the steps of a fork choice case, and the handler outcomes of each step. -/

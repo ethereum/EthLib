@@ -18,7 +18,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base
-open EthLib.Exports (Result PyValue pyExport forkOfName)
+open EthLib.Exports (Result PyValue pyExport forkOfName rejectArgument)
 
 /-- The name of the consensus version of a fork, if it has one. -/
 def consensusVersionOf (fork : String) : Result (Option String) := do
@@ -31,7 +31,8 @@ def consensusVersionExport (args : PyValue) : Result PyValue :=
 
 /-- The first fork of a consensus version, read from its exact name. -/
 def consensusVersionForkOf (name : String) : Result String := do
-  let some version := ConsensusVersion.ofName? name | throw (0, s!"no consensus version {name}")
+  let some version := ConsensusVersion.ofName? name
+    | rejectArgument none s!"no consensus version {name}"
   return version.fork.name
 
 /-- The name of the first fork of a consensus version, read from its exact name. -/

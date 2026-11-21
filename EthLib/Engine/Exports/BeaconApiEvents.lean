@@ -26,7 +26,7 @@ public section
 
 namespace EthLib.Engine.Exports
 
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport toResult)
 open EthLib.Base
 open EthLib.Consensus
 open EthLib.Consensus.Exports
@@ -47,11 +47,11 @@ def payloadAttributesEventOf (args : String × String × ByteArray × Option PyV
   let finalized ← decodeInput Root finalized
   let feeRecipient ← decodeInput ExecutionAddress feeRecipient
   let powChain ← powChain.mapM (decodeInput PowBlock)
-  let prepared ← runProposer
+  let prepared ← toResult none
     (prepareExecutionPayload config state bellatrix safe finalized feeRecipient powChain)
   let some (update, attributes) := prepared | return none
   let forks := ⟨bellatrix.1, Nat.lt_trans bellatrix.2 (by decide)⟩
-  let event ← runProposer (payloadAttributesEvent state forks update attributes terminalNumber)
+  let event ← toResult none (payloadAttributesEvent state forks update attributes terminalNumber)
   return some (eventRecord event.toApiEvent)
 
 /-- From Bellatrix to Fulu: the event of the payload attributes of a proposer.
@@ -87,13 +87,13 @@ def payloadAttributesEventGloasOf
   let state ← decodeInput (BeaconState preset fork) state
   let safe ← decodeInput Root safe
   let feeRecipient ← decodeInput ExecutionAddress feeRecipient
-  let finalized ← runProposer
+  let finalized ← toResult none
     ((store.getFinalizedExecutionBlockHash (Nat.le_trans (by decide) forks.1)).mapError
-      .forkChoice)
-  let (update, attributes) ← runProposer (prepareExecutionPayloadGloas config checks
+      ProposerError.forkChoice)
+  let (update, attributes) ← toResult none (prepareExecutionPayloadGloas config checks
     store head state forks.1 safe finalized feeRecipient targetGasLimit)
-  let (base, _, _) ← runProposer (payloadParentGloas config checks store head state forks.1)
-  let event ← runProposer (payloadAttributesEvent base
+  let (base, _, _) ← toResult none (payloadParentGloas config checks store head state forks.1)
+  let event ← toResult none (payloadAttributesEvent base
     ⟨Nat.le_trans (by decide) forks.1, forks.2⟩ update attributes 0)
   return eventRecord event.toApiEvent
 

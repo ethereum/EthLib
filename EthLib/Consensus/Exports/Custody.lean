@@ -22,7 +22,7 @@ public section
 
 namespace EthLib.Consensus.Exports
 
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue pyExport toResult)
 
 open Lean Base DataAvailability
 
@@ -40,14 +40,15 @@ def custodyErrorText : CustodyError → String
   | .outOfFuel found count =>
     s!"the search for custody groups ran out of steps with {found} of {count} groups"
 
-/-- The result of a custody function, or the code and the message of its error. -/
-def custodyResult (result : Except CustodyError (List UInt64)) : Result (List UInt64) :=
-  result.mapError fun e => (e.code, custodyErrorText e)
+/-- A custody error reaches Python with its code, and its message names the fault. -/
+instance : ExportError CustodyError where
+  code := CustodyError.code
+  message := custodyErrorText
 
 /-- The custody groups of a node ID, in increasing order. -/
 def getCustodyGroupsOf (args : String × NodeID × UInt64) : Result (List UInt64) := do
   let (name, id, count) := args
-  custodyResult (getCustodyGroups (← configOf name) id count custodyFuel)
+  toResult none (getCustodyGroups (← configOf name) id count custodyFuel)
 
 /-- The custody groups of a node ID, in increasing order, as a list.
 
@@ -58,7 +59,7 @@ def getCustodyGroupsExport (args : PyValue) : Result PyValue := pyExport getCust
 /-- The columns of a custody group. -/
 def computeColumnsForCustodyGroupOf (args : String × UInt64) : Result (List UInt64) := do
   let (name, group) := args
-  custodyResult (computeColumnsForCustodyGroup (← configOf name) (← presetOf name) group)
+  toResult none (computeColumnsForCustodyGroup (← configOf name) (← presetOf name) group)
 
 /-- The columns of a custody group, as a list.
 
@@ -71,9 +72,8 @@ def computeColumnsForCustodyGroupExport (args : PyValue) : Result PyValue :=
 def getCustodyColumnBitsOf (args : String × NodeID × UInt64) : Result ByteArray := do
   let (name, id, count) := args
   let preset ← presetOf name
-  let bits ← (getCustodyColumnBits (← configOf name) preset id count custodyFuel).mapError
-    fun e => (e.code, custodyErrorText e)
-  EthLib.Exports.toResult "bits rejected" (Serialization.Ssz.SszType.serialize bits)
+  let bits ← toResult none (getCustodyColumnBits (← configOf name) preset id count custodyFuel)
+  toResult "bits rejected" (Serialization.Ssz.SszType.serialize bits)
 
 /-- The columns that a node custodies, one bit per column, as the bytes of an SSZ bitvector.
 

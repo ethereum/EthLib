@@ -24,7 +24,7 @@ An unknown name or fork, an input that does not decode or a bad configuration ha
 namespace EthLib.Consensus.Exports
 
 open Lean Base
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport toResult)
 
 /-- The code and the message of an error of the events. -/
 def chainEventError : BeaconApi.ChainEventError → UInt32 × String
@@ -85,8 +85,8 @@ def apiFastConfirmationEventOf (args : StoreCaseArgs (Option PyValue)) :
   let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
   let (_, lastRun, _) ← replayForkChoiceConfirming config checks anchorState anchorBlock steps
   let some (store, fcr) := lastRun | throw (0, "no run of the fast confirmation rule passed")
-  let currentSlot ← runForkChoice (store.getCurrentSlot config)
-  let event ← runForkChoice (BeaconApi.fastConfirmationEvent store fcr currentSlot)
+  let currentSlot ← toResult "fork choice" (store.getCurrentSlot config)
+  let event ← toResult "fork choice" (BeaconApi.fastConfirmationEvent store fcr currentSlot)
   return eventRecord ((BeaconApi.ChainEvent.fastConfirmation event).toApiEvent fork)
 
 /-- The event of the last run of the fast confirmation rule in a case that passed.

@@ -21,13 +21,19 @@ public section
 
 namespace EthLib.Consensus.History.Exports
 
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport toResult)
 open EthLib.Consensus.Exports (configWithValue presetOf)
 open Serialization.Ssz
 
+/-- A rejected era file reaches Python with its code and its printed error. -/
+instance : ExportError EraError where
+  code := EraError.code
+  message e := s!"{repr e}"
+
 /-- The SSZ bytes of a value of an accepted file, which encode again as they decoded. -/
 def sszBytes {α : Type} [SszType α] (value : α) : Result ByteArray :=
-  (SszType.serialize value).mapError fun e => (0, s!"value rejected: {reprStr e}")
+  toResult none ((SszType.serialize value).mapError fun e =>
+    UnreadArgument.mk s!"value rejected: {reprStr e}")
 
 /-- One block of a group, as plain values: its slot, its fork, its SSZ bytes and its root. -/
 def blockOf {preset : Preset} (block : EraBlock preset) :
@@ -55,8 +61,7 @@ def decodeEraOf (args : String × Option PyValue × ByteArray) :
   let (name, replacements, bytes) := args
   let preset ← presetOf name
   let config ← configWithValue name replacements
-  let groups ← (decodeEra preset config bytes).mapError fun e =>
-    (e.code, s!"era file rejected: {repr e}")
+  let groups ← toResult "era file rejected" (decodeEra preset config bytes)
   let fileName := match groups with
     | first :: rest => (eraFileName config first rest).toOption
     | [] => none
