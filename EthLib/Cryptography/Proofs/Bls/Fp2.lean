@@ -45,6 +45,8 @@ def Fp.embedding : FieldOps.Embedding Fp (ZMod Fp.modulus) where
   map_zero := Fp.toZMod_zero
   map_one := Fp.toZMod_one
   map_inverse := Fp.toZMod_inverse
+  beq_iff _ _ := Fp.beq_iff.trans Fp.toZMod_inj.symm
+  isZero_iff _ := Fp.isZero_iff.trans (by rw [← Fp.toZMod_zero, Fp.toZMod_inj])
 
 end EthLib.Cryptography.Bls
 
@@ -83,14 +85,11 @@ theorem ext {a b : Fp2} (h0 : a.c0 = b.c0) (h1 : a.c1 = b.c1) : a = b := by
 
 /-! ## Boolean equality and zero check -/
 
-theorem beq_iff_eq {a b : Fp2} : a.beq b = true ↔ a = b := by
-  rw [beq, Bool.and_eq_true, Fp.baseField_beq, Fp.baseField_beq, Fp.beq_iff, Fp.beq_iff]
-  exact ⟨fun ⟨h0, h1⟩ => ext h0 h1, fun h => ⟨congrArg c0 h, congrArg c1 h⟩⟩
+theorem beq_iff_eq {a b : Fp2} : a.beq b = true ↔ a = b :=
+  Cryptography.Fp2.beq_iff Fp.embedding
 
-theorem isZero_iff {a : Fp2} : a.isZero = true ↔ a = 0 := by
-  rw [isZero, Bool.and_eq_true, Fp.baseField_isZero, Fp.baseField_isZero, Fp.isZero_iff,
-    Fp.isZero_iff]
-  exact ⟨fun ⟨h0, h1⟩ => ext h0 h1, fun h => ⟨congrArg c0 h, congrArg c1 h⟩⟩
+theorem isZero_iff {a : Fp2} : a.isZero = true ↔ a = 0 :=
+  Cryptography.Fp2.isZero_iff Fp.embedding
 
 /-! ## Ring axioms and `CommRing Fp2` -/
 

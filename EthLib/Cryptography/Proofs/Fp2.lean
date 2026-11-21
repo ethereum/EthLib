@@ -34,6 +34,10 @@ structure FieldOps.Embedding (F K : Type) [FieldOps F] [Field K] where
   map_zero : toFun FieldOps.zero = 0
   map_one : toFun FieldOps.one = 1
   map_inverse : ∀ a, toFun (FieldOps.inverse a) = (toFun a)⁻¹
+  /-- The boolean equality holds exactly when the images are equal. -/
+  beq_iff : ∀ a b, FieldOps.beq a b = true ↔ toFun a = toFun b
+  /-- The zero test holds exactly when the image is zero. -/
+  isZero_iff : ∀ a, FieldOps.isZero a = true ↔ toFun a = 0
 
 namespace Fp2
 
@@ -194,6 +198,17 @@ theorem mul_inverse_cancel (hsq : ∀ y : K, y * y ≠ -1) {a : Fp2 F} (h : a �
 theorem inverse_zero : (0 : Fp2 F).inverse = 0 := by
   apply Fp2.ext <;> apply e.injective <;> simp only [inverse_c0, inverse_c1] <;> push_map <;>
     ring
+
+/-- The boolean equality of the extension compares both coordinates, so it is equality. -/
+theorem beq_iff {a b : Fp2 F} : a.beq b = true ↔ a = b := by
+  rw [beq, Bool.and_eq_true, e.beq_iff, e.beq_iff, e.injective.eq_iff, e.injective.eq_iff]
+  exact ⟨fun ⟨h0, h1⟩ => Fp2.ext h0 h1, fun h => ⟨congrArg c0 h, congrArg c1 h⟩⟩
+
+/-- The zero test of the extension holds exactly at zero. -/
+theorem isZero_iff {a : Fp2 F} : a.isZero = true ↔ a = 0 := by
+  rw [isZero, Bool.and_eq_true, e.isZero_iff, e.isZero_iff, ← e.map_zero, e.injective.eq_iff,
+    e.injective.eq_iff]
+  exact ⟨fun ⟨h0, h1⟩ => Fp2.ext h0 h1, fun h => ⟨congrArg c0 h, congrArg c1 h⟩⟩
 
 end Laws
 
