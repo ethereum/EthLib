@@ -22,6 +22,16 @@ eth_discv4_record_signed_by(
   lean_object* record
 );
 
+extern lean_object*
+eth_discv4_receive(
+  lean_object* args
+);
+
+extern lean_object*
+eth_discv4_accept_enr_response(
+  lean_object* args
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* Copy the Python `bytes` object `obj` into a Lean `ByteArray`, or set a TypeError naming it. */
@@ -75,4 +85,20 @@ py_discv4_record_signed_by(
   if (parse_bytes(sender_obj, "sender", &sender)) return NULL;
   if (parse_bytes(record_obj, "record", &record)) { lean_dec(sender); return NULL; }
   return except_into_pybool(eth_discv4_record_signed_by(sender, record), DISCV4_ERROR);
+}
+
+PyObject*
+py_discv4_receive(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_discv4_receive, args, 10, DISCV4_ERROR);
+}
+
+PyObject*
+py_discv4_accept_enr_response(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_discv4_accept_enr_response, args, 2, DISCV4_ERROR);
 }

@@ -1492,6 +1492,14 @@ def bindings : List Binding := [
   ⟨"discv4_record_signed_by", `EthLib.Networking.Discv4.Exports.recordSignedByExport,
     "(sender: bytes, record: bytes) -> bool",
     [], some "Discv4Error"⟩,
+  ⟨"discv4_receive", `EthLib.Networking.Discv4.Exports.receiveExport,
+    "(now: int, ip: bytes, port: int, last_ping: bytes | None, last_pong: int | None, " ++
+      "packet: bytes, expiration: int, enr_seq: int | None, record: bytes, nodes: bytes) -> " ++
+      "tuple[tuple[bytes | None, int | None], list[bytes]]",
+    [`EthLib.Networking.Discv4.Discv4Error], some "Discv4Error"⟩,
+  ⟨"discv4_accept_enr_response", `EthLib.Networking.Discv4.Exports.acceptEnrResponseExport,
+    "(request: bytes, response: bytes) -> bool",
+    [`EthLib.Networking.Discv4.Discv4Error], some "Discv4Error"⟩,
   ⟨"fork_id", `EthLib.Networking.Devp2p.Exports.forkIdExport,
     "(schedule: bytes, number: int, timestamp: int) -> tuple[bytes, int]",
     [], some "ForkIdError"⟩,

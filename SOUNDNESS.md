@@ -2573,6 +2573,36 @@ No decoded item fails to encode, since a length must reach `2^64` for that.
 If one did, its transaction would have no hash and would reject its whole message, while [Transaction Encoding and Validity](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#transaction-encoding-and-validity) asks only to discard invalid transactions.
 The session accepts an empty Transactions message from the peer, which the source only discourages.
 
+### The discv4 endpoint proof
+
+`receive` (`Networking/Discv4/Exchange.lean`) follows what a node of discv4 does with a packet from an address: the state it keeps, and the packets it sends back.
+It follows [Endpoint Proof and the packet sections](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/discv4.md#L48-L170) of `discv4.md`.
+An address is proven when it sent a Pong with the hash of the node's most recent Ping to it, at most 12 hours earlier.
+A FindNode gets Neighbors, at most twelve nodes per packet, and an ENRRequest gets an ENRResponse, only from a proven address.
+`run` follows a node through a list of events: the Pings that it sends and the packets that it receives.
+
+`pongAt_of_step` (`Networking/Proofs/Discv4/Exchange.lean`) states the amplification bound along any run that starts from the empty state.
+When the node sends Neighbors or an ENRResponse to an address, that address sent it a Pong at most 12 hours earlier.
+That Pong had not expired when it arrived.
+That Pong carried the hash of the node's last Ping to the address at that moment.
+`proven_of_receive` and `lastPong_receive` are its two steps for one packet.
+`receive_expired`, `receive_pong_unsolicited` and `receive_ping` state the other steps.
+`proven_ping_pong` states that the Pong for a Ping proves the endpoint to the node that sent the Ping.
+`receive_other` states that a packet changes only what the node keeps of its sender.
+`acceptEnrResponse_eq_true_iff` states the check of an ENRResponse against its ENRRequest.
+
+Only the endpoint proof is a "must" in the source, and EthLib makes these "should" and "may" rules into rules of `receive`.
+An expired packet, whose expiration "lies in the past", is not processed, though the source says that it "may not be processed".
+A Pong without the hash of the most recent Ping is ignored, and the source says "should".
+The record of an ENRResponse must be signed by the key of the response, and the source says "should".
+
+The source leaves four more points open.
+"Within the last 12 hours" counts 12 hours exactly as proven, and a Pong recorded after the current time proves nothing.
+The proof is kept for the sender's IP address and UDP port, since the amplification it guards against targets an address.
+The closest 16 nodes take two Neighbors packets, since twelve IPv6 nodes already make a packet of 1201 bytes.
+An empty table still gets one Neighbors packet with no node, a case that the source leaves open.
+The node's own Ping after 12 hours without contact, which the source says "should be sent", is left to the caller.
+
 ### discv5 answers and their requests
 
 `answersRequest` (`Networking/Discv5/Exchange.lean`) states which message answers a request of discv5: PONG for PING, NODES for FINDNODE and TALKRESP for TALKREQ, with the same request ID.
@@ -7309,12 +7339,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 541 operations and 51 size constants.
-The Python extension calls 541 of the operations and 51 of the constants.
+Lean exports 543 operations and 51 size constants.
+The Python extension calls 543 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12241 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (342), `engine.c` (225), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1621), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (844), `x25519.c` (21), `xmss.c` (344).
+12272 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (342), `engine.c` (225), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1624), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (846), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
