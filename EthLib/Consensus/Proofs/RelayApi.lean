@@ -454,9 +454,11 @@ theorem validatorsResponse_proposer {config : Config} {checks : SignatureChecks}
       (preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat := by
     obtain ⟨bound, -⟩ := Vector.getElem?_eq_some_iff.mp found
     exact bound
-  unfold currentEpochStart at low found inside
   have kept := shifted.2 fulu fulu entry.slot.toNat
-    (by dsimp only; rw [getCurrentEpoch_toNat, reached]; exact Nat.div_mul_le_self _ _)
+    (by
+      dsimp only
+      rw [currentEpochStart, getCurrentEpoch_toNat, reached]
+      exact Nat.div_mul_le_self _ _)
     (by dsimp only; omega)
   dsimp only at kept
   apply getBeaconProposerIndex_of_proposerLookahead fulu nonzero

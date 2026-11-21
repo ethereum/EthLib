@@ -118,7 +118,7 @@ theorem quorumDrift_le_quorumReserve
     (caps : CapOrder preset) (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (hysteresis : Hysteresis boundary) (single : edge.blockCount ≤ 1)
     (counted : edge.blockCount + tailP.blockCount ≤
-      pulled.slot.toNat - (getCurrentEpoch pulled).toNat * preset.SLOTS_PER_EPOCH.toNat + 1)
+      pulled.slot.toNat - currentEpochStart pulled + 1)
     (queue : ∀ electra : .pectra ≤ fork,
       middle.pendingPartialWithdrawals electra = anc.pendingPartialWithdrawals electra)
     (middleEpoch : getCurrentEpoch middle = getCurrentEpoch boundary)
@@ -198,7 +198,7 @@ theorem quorumDrift_le_quorumReserve
     -, -, -, -, -, -⟩ := tailP.balanceCorrections_of_same_epoch early fulu
       (callEpoch.trans middleEpoch.symm) invM.balancesMatch invM.exitsOrdered
   have blocksLe : (edge.append tailP).blockCount ≤
-      pulled.slot.toNat - (getCurrentEpoch pulled).toNat * preset.SLOTS_PER_EPOCH.toNat + 1 := by
+      pulled.slot.toNat - currentEpochStart pulled + 1 := by
     rw [Run.blockCount_append]; exact counted
   -- The reserve, term by term.
   unfold quorumReserve
