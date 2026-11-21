@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Xmss.Reference
+public import EthLib.Cryptography.Xmss.Sign
 public import EthLib.Cryptography.Proofs.HashSig
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.Merkle.Build
@@ -159,15 +159,52 @@ theorem otsSign_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) (msg :
     simp only [map_bind, map_pure, chainStarts_map_monad φ map_pure map_bind,
       HashSig.ofFnInOrder_map_monad φ map_pure map_bind, chain_map_monad φ map_pure map_bind]
 
-/-- One layer's signature, over the images of `H` and of the seed function. -/
-theorem signLayer_map_monad (pp : PublicParam) (layer : Layer) (e : Nat) (msg : Array UInt64) :
-    φ (signLayer H pp prf layer e msg) =
-      signLayer (fun x => φ (H x)) pp (fun pp a suffix => φ (prf pp a suffix)) layer e msg := by
-  simp only [signLayer, map_bind, otsSign_map_monad φ map_pure map_bind H prf]
+/-- The top key's signature of a root, over the images of `H` and of the derivations. -/
+theorem signRootWith_map_monad (sk : SecretKey) (b : Nat) (root : Digest) :
+    φ (Internal.signRootWith H prf sk b root) =
+      Internal.signRootWith (fun x => φ (H x)) (fun pp a suffix => φ (prf pp a suffix)) sk b
+        root := by
+  simp only [Internal.signRootWith, Internal.otsSignTrials_hashTrials, map_bind,
+    otsSign_map_monad φ map_pure map_bind H prf]
   refine bind_congr fun r => ?_
   cases r with
   | none => exact map_pure _
-  | some r => simp only [map_bind, map_pure, path_map_monad φ map_pure map_bind]
+  | some r => exact map_pure _
+
+/-- A bottom tree with its top signature, over the images of `H` and of the derivations. -/
+theorem cacheTreeWith_map_monad (sk : SecretKey) (b : Nat) :
+    φ (Internal.cacheTreeWith H prf sk b) =
+      Internal.cacheTreeWith (fun x => φ (H x)) (fun pp a suffix => φ (prf pp a suffix)) sk b := by
+  simp only [Internal.cacheTreeWith, map_bind, map_pure, build_map_monad φ map_pure map_bind,
+    signRootWith_map_monad φ map_pure map_bind H prf]
+
+/-- A fetched bottom tree and the updated key, over the images of `H` and of the derivations. -/
+theorem fetchTreeWith_map_monad (sk : SecretKey) (b : Nat) :
+    φ (Internal.fetchTreeWith H prf sk b) =
+      Internal.fetchTreeWith (fun x => φ (H x)) (fun pp a suffix => φ (prf pp a suffix)) sk b := by
+  unfold Internal.fetchTreeWith
+  split
+  · exact map_pure _
+  · simp only [map_bind, map_pure, cacheTreeWith_map_monad φ map_pure map_bind H prf]
+
+/-- A signature and the updated key, over the images of `H` and of the derivations. -/
+theorem signWithTrials_map_monad (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
+    φ (Internal.signWithTrials H prf sk idx msg (hashTrials H)) =
+      Internal.signWithTrials (fun x => φ (H x)) (fun pp a suffix => φ (prf pp a suffix)) sk idx
+        msg (hashTrials fun x => φ (H x)) := by
+  simp only [Internal.signWithTrials, Internal.otsSignTrials_hashTrials, map_bind,
+    otsSign_map_monad φ map_pure map_bind H prf]
+  refine bind_congr fun r => ?_
+  cases r with
+  | none => exact map_pure _
+  | some r =>
+    simp only [map_bind, fetchTreeWith_map_monad φ map_pure map_bind H prf]
+    refine bind_congr fun r => ?_
+    obtain ⟨t, sk'⟩ := r
+    dsimp only
+    cases t.top with
+    | error err => exact map_pure _
+    | ok top => exact map_pure _
 
 end Sign
 
@@ -177,30 +214,6 @@ end Sign
 theorem publicParamOf_map_monad :
     φ (publicParamOf prf) = publicParamOf fun pp a suffix => φ (prf pp a suffix) := by
   exact (map_bind _ _).trans (bind_congr fun _ => map_pure _)
-
-/-- The public key, over the images of `H` and of the seed function. -/
-theorem publicKeyOf_map_monad :
-    φ (publicKeyOf H prf) =
-      publicKeyOf (fun x => φ (H x)) fun pp a suffix => φ (prf pp a suffix) := by
-  simp only [publicKeyOf, map_bind, map_pure, publicParamOf_map_monad φ map_pure map_bind,
-    node_map_monad φ map_pure map_bind]
-
-/-- A signature from the derivations, over the images of `H` and of the seed function. -/
-theorem signDerived_map_monad [LawfulMonad m] [LawfulMonad m']
-    (pp : PublicParam) (idx : LeafIndex) (msg : Message) :
-    φ (signDerived H prf pp idx msg) =
-      signDerived (fun x => φ (H x)) (fun pp a suffix => φ (prf pp a suffix)) pp idx msg := by
-  simp only [signDerived, map_bind, otsSign_map_monad φ map_pure map_bind H prf]
-  refine bind_congr fun r => ?_
-  cases r with
-  | none => exact map_pure _
-  | some r =>
-    simp only [map_bind, build_map_monad φ map_pure map_bind,
-      signLayer_map_monad φ map_pure map_bind H prf]
-    refine bind_congr fun _ => bind_congr fun r => ?_
-    cases r with
-    | error err => exact map_pure _
-    | ok top => simp only [map_bind, map_pure]
 
 /-- Verification, over the image of `H`. -/
 theorem verifyWith_map_monad (pk : PublicKey) (msg : Message) (sig : Signature) :

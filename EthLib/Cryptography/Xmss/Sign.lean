@@ -41,52 +41,56 @@ namespace Internal
 
 /-- The top key `b`'s signature of a root: the one-time signature and the key's path.
 
+Its secrets come from the given derivations, which signing takes from the key's seed `S`.
+
 The path is read from the top tree, so only the search and the chains hash.
 
 # Errors
 
 - No randomizer trial gives a codeword.
   In the random oracle model, from an empty cache, that has probability below `exp(-4000)`. -/
-def signRootWith (sk : SecretKey) (b : Nat) (root : Digest)
+def signRootWith (prf : SeedPrf m) (sk : SecretKey) (b : Nat) (root : Digest)
     (trials : TrialSource m := hashTrials H) : m (Except XmssError LayerSignature) := do
   -- No codeword is an error, which every leaf index of the tree then returns.
-  let some (randomizer, chainValues) ← otsSignTrials H sk.publicParam (seedPrf H sk.schemeSeed)
-      .top (UInt32.ofNat b) root.toArray trials
+  let some (randomizer, chainValues) ← otsSignTrials H sk.publicParam prf .top (UInt32.ofNat b)
+      root.toArray trials
     | return .error (.noAdmissibleEncoding .top b)
   return .ok { randomizer, chainValues, path := sk.top.path LAYER_HEIGHT b }
 
-/-- Build bottom tree `b` of a secret key, and sign its root with the top key `b`.
+/-- Build bottom tree `b` from the given derivations, and sign its root with the top key `b`.
 
 The top layer's error, if any, is kept with the tree. -/
-def cacheTreeWith (sk : SecretKey) (b : Nat) (trials : TrialSource m := hashTrials H) :
-    m CachedTree := do
-  let tree ← build H sk.publicParam (seedPrf H sk.schemeSeed) .bottom LAYER_HEIGHT b
-  let top ← signRootWith H sk b tree.value trials
+def cacheTreeWith (prf : SeedPrf m) (sk : SecretKey) (b : Nat)
+    (trials : TrialSource m := hashTrials H) : m CachedTree := do
+  let tree ← build H sk.publicParam prf .bottom LAYER_HEIGHT b
+  let top ← signRootWith H prf sk b tree.value trials
   return { index := b, tree, top }
 
 /-- Bottom tree `b` of a secret key, and the key that keeps it as the one it signed in last.
 
 A kept tree is read without a hash call.
 
-Otherwise the tree is built and put first.
+Otherwise the tree is built from the given derivations and put first.
 
 Past the limit, the tree used longest ago is dropped. -/
-def fetchTreeWith (sk : SecretKey) (b : Nat) (trials : TrialSource m := hashTrials H) :
-    m (CachedTree × SecretKey) :=
+def fetchTreeWith (prf : SeedPrf m) (sk : SecretKey) (b : Nat)
+    (trials : TrialSource m := hashTrials H) : m (CachedTree × SecretKey) :=
   match sk.cache.find? (·.index == b) with
   | some t => pure (t, { sk with cache := t :: sk.cache.filter (·.index != b) })
   | none => do
-    let t ← cacheTreeWith H sk b trials
+    let t ← cacheTreeWith H prf sk b trials
     return (t, { sk with cache := (t :: sk.cache).take MAX_CACHED_BOTTOM_TREES })
 
-/-- `Sig(sk, idx, m)`, with the trials of its searches taken from a source. -/
-def signWithTrials (sk : SecretKey) (idx : LeafIndex) (msg : Message)
+/-- `Sig(sk, idx, m)`, with its secrets from the given derivations, and trials from a source.
+
+Signing passes the derivations of the key's seed `S`. -/
+def signWithTrials (prf : SeedPrf m) (sk : SecretKey) (idx : LeafIndex) (msg : Message)
     (trials : TrialSource m) : m (Except XmssError Signature × SecretKey) := do
   -- A failed search ends signing, before any tree is built.
-  let some (randomizer, chainValues) ← otsSignTrials H sk.publicParam (seedPrf H sk.schemeSeed)
-      .bottom (UInt32.ofNat idx.toNat) msg.toArray trials
+  let some (randomizer, chainValues) ← otsSignTrials H sk.publicParam prf .bottom
+      (UInt32.ofNat idx.toNat) msg.toArray trials
     | return (.error (.noAdmissibleEncoding .bottom idx.toNat), sk)
-  let (t, sk) ← fetchTreeWith H sk (bottomTree idx) trials
+  let (t, sk) ← fetchTreeWith H prf sk (bottomTree idx) trials
   -- The key's path and the root the top key signed both come from the one bottom tree.
   let bottom : LayerSignature :=
     { randomizer, chainValues, path := t.tree.path LAYER_HEIGHT idx.toNat }
@@ -108,7 +112,7 @@ When the bottom search succeeds, the updated key keeps tree `b`.
 
 A failed bottom search returns the key unchanged.
 
-A key that key generation and signing give signs as the note's stateless signer, by a theorem.
+A key that key generation and signing give signs as the note's signer does, by a theorem.
 
 # Warning
 
@@ -125,7 +129,7 @@ Each trial of a randomizer search hashes its input with `H`.
 - Either layer's one-time signature finds no codeword. -/
 def signWith (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
     m (Except XmssError Signature × SecretKey) :=
-  Internal.signWithTrials H sk idx msg (hashTrials H)
+  Internal.signWithTrials H (seedPrf H sk.schemeSeed) sk idx msg (hashTrials H)
 
 /-- `Sig(sk, idx, m)`, with Keccak-256, and the updated key.
 
@@ -134,6 +138,6 @@ Its searches take their trials from Keccak-256's permutation, built once per sea
 Those trials give the codewords of hashing each trial, by a theorem. -/
 def sign (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
     Except XmssError Signature × SecretKey :=
-  (Internal.signWithTrials hashId sk idx msg keccakTrials).run
+  (Internal.signWithTrials hashId (seedPrf hashId sk.schemeSeed) sk idx msg keccakTrials).run
 
 end EthLib.Cryptography.Xmss

@@ -11,7 +11,11 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.IdealBase
 
 In the second hop's ideal game, each derivation is drawn from a lazy table on its first use.
 
-A request runs two codeword searches, one per layer.
+A request runs a codeword search on the bottom layer.
+
+When the key does not keep the bottom tree, it builds it and runs the top layer's search too.
+
+Until a request fails, every kept tree holds the top signature of a search that succeeded.
 
 A search reads its randomizer base from the table, at the parameter, its address and the message.
 
@@ -24,7 +28,9 @@ A search reads its randomizer base from the table, at the parameter, its address
   When that search succeeded, the cache holds a trial with a codeword digest.
   So the repeat succeeds too.
 
-When every earlier search succeeded, a request fails with chance `<= Q / 2^95 + 2 exp(-4000)`.
+When every earlier search succeeded, and so every kept tree holds a top signature,
+
+a request fails with chance `<= Q / 2^95 + 2 exp(-4000)`.
 -/
 
 @[expose] public section
@@ -43,10 +49,9 @@ abbrev IdealState := SecretEncoding.SplitCache HashSpec PrfInput HashOutput
 abbrev hashD : Array UInt64 → OracleComp PrfSpec Lanes4 :=
   hashOf (HashSpec.withDerivationsLift PrfInput HashOutput)
 
-/-- One signing request of the second hop's game: the parameter, then the signature. -/
-def requestD (request : SignRequest) : OracleComp PrfSpec (Except XmssError Signature) := do
-  let pp ← publicParamOf prfD
-  signDerived hashD prfD pp request.leafIndex request.message
+/-- Every tree the key keeps holds a top signature, not an error. -/
+def KeptOk (sk : SecretKey) : Prop :=
+  ∀ t ∈ sk.cache, t.top.isOk = true
 
 /-- The hash input of trial `j` of a search of key `e` on `layer`, from the base `base`. -/
 def trialInput (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
@@ -471,12 +476,6 @@ theorem isQueryBoundP_build (pp : PublicParam) (layer : Layer) (level j : ℕ) :
   merkleBuild_isQueryBoundP_zero _ _ (fun _ => isQueryBoundP_otsPublicLeaf _ _ _)
     (fun _ _ _ => isQueryBoundP_th _ _ _) ⟨level, j⟩
 
-/-- The path of a key draws no base. -/
-theorem isQueryBoundP_path (pp : PublicParam) (layer : Layer) (e : ℕ) :
-    IsQueryBoundP (path hashD pp prfD layer e) IsRndQuery 0 :=
-  merkleSiblings_isQueryBoundP_zero _ _ (fun _ => isQueryBoundP_otsPublicLeaf _ _ _)
-    (fun _ _ _ => isQueryBoundP_th _ _ _) _ _
-
 /-- The public parameter draws no base. -/
 theorem isQueryBoundP_publicParamOf : IsQueryBoundP (publicParamOf prfD) IsRndQuery 0 :=
   isQueryBoundP_bind_zero _ _ (isQueryBoundP_prfD (addrParam_ne_addrRnd)) fun _ =>
@@ -515,63 +514,90 @@ theorem failsAtMost_otsSign (Q : ℕ) (pp : PublicParam) (layer : Layer) (e : UI
       FailsAtMost.bind_of_noBase (ofFnInOrder_isQueryBoundP_zero _ _ fun _ =>
         isQueryBoundP_chain _ _ _ _ _ _ _ _) fun _ => FailsAtMost.pure (by simp)
 
-/-- One layer's signature fails as its one-time signature does. -/
-theorem failsAtMost_signLayer (Q : ℕ) (pp : PublicParam) (layer : Layer) (e : ℕ)
-    (msg : Array UInt64) :
+/-- The top key's signature of a root fails as its search does. -/
+theorem failsAtMost_signRootWith (Q : ℕ) (sk : SecretKey) (b : ℕ) (root : Digest) :
     FailsAtMost (fun r => r.toOption = none) Q
       ((Q : ℝ≥0∞) / 2 ^ 96 + ENNReal.ofReal (Real.exp (-4000)))
-      (signLayer hashD pp prfD layer e msg) := by
-  unfold signLayer
-  refine (FailsAtMost.bind (ε₂ := 0) (failsAtMost_otsSign Q pp layer _ msg)
+      (Internal.signRootWith hashD prfD sk b root) := by
+  unfold Internal.signRootWith
+  rw [Internal.otsSignTrials_hashTrials]
+  refine (FailsAtMost.bind (ε₂ := 0) (failsAtMost_otsSign Q sk.publicParam .top _ _)
     fun r hr => ?_).mono_bound (add_zero _).le
   rcases r with _ | ⟨rho, y⟩
   · exact absurd rfl hr
-  · exact FailsAtMost.bind_of_noBase (isQueryBoundP_path pp layer e) fun _ =>
-      FailsAtMost.pure (by simp [Except.toOption])
+  · exact FailsAtMost.pure (by simp [Except.toOption])
 
-/-- A signature fails at most as often as its two layers do. -/
-theorem failsAtMost_signDerived (Q : ℕ) (pp : PublicParam) (idx : LeafIndex) (msg : Message) :
-    FailsAtMost (fun r => r.toOption = none) Q
+/-- **A signature fails at most as often as its two searches do.**
+
+The key's kept trees must hold top signatures.
+
+The key that signing returns keeps them too, unless the request failed. -/
+theorem failsAtMost_signWithTrials (Q : ℕ) (sk : SecretKey) (hsk : KeptOk sk) (idx : LeafIndex)
+    (msg : Message) :
+    FailsAtMost (fun r => r.1.toOption = none ∨ ¬KeptOk r.2) Q
       (2 * ((Q : ℝ≥0∞) / 2 ^ 96 + ENNReal.ofReal (Real.exp (-4000))))
-      (signDerived hashD prfD pp idx msg) := by
-  unfold signDerived
-  rw [two_mul]
-  refine FailsAtMost.bind (failsAtMost_otsSign Q pp .bottom _ _) fun r hr => ?_
+      (Internal.signWithTrials hashD prfD sk idx msg (hashTrials hashD)) := by
+  unfold Internal.signWithTrials
+  rw [Internal.otsSignTrials_hashTrials, two_mul]
+  refine FailsAtMost.bind (failsAtMost_otsSign Q sk.publicParam .bottom _ _) fun r hr => ?_
   rcases r with _ | ⟨rho, y⟩
   · exact absurd rfl hr
-  refine FailsAtMost.bind_of_noBase (isQueryBoundP_build pp .bottom _ _) fun tree => ?_
-  refine (FailsAtMost.bind (ε₂ := 0) (failsAtMost_signLayer Q pp .top _ _)
-    fun r hr => ?_).mono_bound (add_zero _).le
-  rcases r with err | top
-  · exact absurd rfl hr
-  exact FailsAtMost.bind_of_noBase (isQueryBoundP_pure _ _ _) fun _ =>
-    FailsAtMost.pure (by simp [Except.toOption])
-
-/-- A request fails at most as often as the two layers of its signature do. -/
-theorem failsAtMost_requestD (Q : ℕ) (request : SignRequest) :
-    FailsAtMost (fun r => r.toOption = none) Q
-      ((Q : ℝ≥0∞) / 2 ^ 95 + 2 * ENNReal.ofReal (Real.exp (-4000))) (requestD request) := by
-  refine (FailsAtMost.bind_of_noBase isQueryBoundP_publicParamOf fun pp =>
-    failsAtMost_signDerived Q pp _ _).mono_bound (le_of_eq ?_)
-  rw [mul_add, ← two_pow_mul_div_two_pow 1 95, pow_one]
+  dsimp only
+  unfold Internal.fetchTreeWith
+  split
+  · -- A kept tree holds a top signature, and no hash is called.
+    next t ht =>
+    have htok : t.top.isOk = true := hsk t (List.mem_of_find?_eq_some ht)
+    rw [pure_bind]
+    dsimp only
+    cases htt : t.top with
+    | error err => rw [htt] at htok; cases htok
+    | ok top =>
+      refine (FailsAtMost.pure ?_).mono_bound zero_le
+      rintro (h | h)
+      · cases h
+      · refine h fun u hu => ?_
+        rcases List.mem_cons.1 hu with rfl | hu
+        · rw [htt]
+          rfl
+        · exact hsk u (List.mem_filter.1 hu).1
+  · -- A new tree: its build draws no base, then the top key's search.
+    unfold Internal.cacheTreeWith
+    simp only [bind_assoc, pure_bind]
+    refine FailsAtMost.bind_of_noBase (isQueryBoundP_build sk.publicParam .bottom _ _)
+      fun tree => ?_
+    refine (FailsAtMost.bind (ε₂ := 0) (failsAtMost_signRootWith Q sk _ _)
+      fun top htop => ?_).mono_bound (add_zero _).le
+    rcases top with err | top
+    · exact absurd rfl htop
+    dsimp only
+    refine FailsAtMost.pure ?_
+    rintro (h | h)
+    · cases h
+    · refine h fun u hu => ?_
+      rcases List.mem_cons.1 (List.mem_of_mem_take hu) with rfl | hu
+      · rfl
+      · exact hsk u hu
 
 end Request
 
 /-- **One request in the ideal game.**
 
-Every search with a base in the table found a codeword.
+Every search with a base in the table found a codeword, and every kept tree holds a top signature.
 
 Count only the runs whose cache ends with at most `Q` entries.
 
 Then the request fails, or leaves a search without a codeword, with chance `<= Q / 2^95 + 2 e`.
 
 Here `e = exp(-4000)`. -/
-theorem prEvent_requestD_le (request : SignRequest) (st : IdealState) (hst : SearchesFound st)
-    (Q : ℕ) :
+theorem prEvent_signWithTrials_le (sk : SecretKey) (hsk : KeptOk sk) (request : SignRequest)
+    (st : IdealState) (hst : SearchesFound st) (Q : ℕ) :
     Pr{let z ← (simulateQ (SecretEncoding.idealImpl HashSpec PrfInput HashOutput)
-        (requestD request)).run st}[
-      (z.1.toOption = none ∨ ¬SearchesFound z.2) ∧ z.2.1.enncard ≤ Q] ≤
+        (Internal.signWithTrials hashD prfD sk request.leafIndex request.message
+          (hashTrials hashD))).run st}[
+      ((z.1.1.toOption = none ∨ ¬KeptOk z.1.2) ∨ ¬SearchesFound z.2) ∧ z.2.1.enncard ≤ Q] ≤
       (Q : ℝ≥0∞) / 2 ^ 95 + 2 * ENNReal.ofReal (Real.exp (-4000)) := by
-  exact failsAtMost_requestD Q request st hst
+  refine (failsAtMost_signWithTrials Q sk hsk _ _ st hst).trans (le_of_eq ?_)
+  rw [mul_add, ← two_pow_mul_div_two_pow 1 95, pow_one]
 
 end EthLib.Cryptography.Xmss.Unforgeability

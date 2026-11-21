@@ -86,6 +86,24 @@ structure SecretKey where
 
 /-! ## Key generation -/
 
+namespace Internal
+
+/-- The key pair grown from a scheme seed `S`, with its secrets from the given derivations.
+
+Key generation passes the derivations of `S`.
+
+1. The public parameter `P`, derived from `S`.
+2. The top tree, from the `2^16` one-time keys of the top layer.
+
+The secret key keeps `S`, `P` and the top tree. -/
+def keyGenFrom (prf : SeedPrf m) (s : Seed) : m (PublicKey × SecretKey) := do
+  let pp ← publicParamOf prf
+  let top ← build H pp prf .top LAYER_HEIGHT 0
+  return ({ root := top.value, publicParam := pp },
+    { schemeSeed := s, publicParam := pp, top, cache := [] })
+
+end Internal
+
 /-- `Gen` over a hash `H`: the key pair grown from a seed.
 
 1. The scheme seed `S`, from the seed.
@@ -97,10 +115,7 @@ The public key is the top tree's root and `P`.
 The seed must be 32 uniform bytes, kept secret. -/
 def keyGenWith (seed : Seed) : m (PublicKey × SecretKey) := do
   let s ← schemeSeed H seed
-  let pp ← publicParamOf (seedPrf H s)
-  let top ← build H pp (seedPrf H s) .top LAYER_HEIGHT 0
-  return ({ root := top.value, publicParam := pp },
-    { schemeSeed := s, publicParam := pp, top, cache := [] })
+  Internal.keyGenFrom H (seedPrf H s) s
 
 /-- `Gen`, with Keccak-256. -/
 def keyGen (seed : Seed) : PublicKey × SecretKey :=

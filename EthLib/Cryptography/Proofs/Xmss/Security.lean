@@ -14,13 +14,13 @@ The proof that the real game of leanXMSS is won with probability at most `q / 2^
 
 Here `q` counts every hash call of the game in the worst run, the signer's included.
 
-With all `2^32` leaf indices signed, `q` exceeds `2^65`, and the bound exceeds `2^-62`.
+With all `2^32` leaf indices signed, `q` exceeds `2^64`, and the bound exceeds `2^-63`.
 
 The real game runs EthLib's own algorithms.
 
-Its signer keeps the scheme seed `S` and the parameter `P`.
+Its signer keeps its key across requests.
 
-The unforgeability module carries the bound to EthLib's game, whose signer re-derives `S` and `P`.
+The unforgeability module proves that EthLib's game is the real game.
 
 The README of the security proof says where the proof comes from and what changed here.
 -/

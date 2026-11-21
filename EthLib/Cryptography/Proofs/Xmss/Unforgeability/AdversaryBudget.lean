@@ -1,28 +1,25 @@
 module
 
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.SeedHops
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.KeyedSigner
 
 /-!
 # Proofs: the bound for a budget of the adversary's own calls
 
-The theorem's budget `q` counts every hash call of the game with the stateless signer.
-
-That signer rebuilds every tree on each request.
+The theorem's budget `q` counts every hash call of the game.
 
 Here the budget is the adversary's own: at most `qH` calls of `H` and `r` signing requests.
 
 Key generation, each request and the final verification make at most a fixed number of calls.
 
-The bounds are `205 * 2^16 + 1`, `2^33 + 410 * 2^16 + 204` and `384`.
+The bounds are `205 * 2^16 + 1`, `2^33 + 205 * 2^16 + 407` and `384`.
 
-So that game makes at most `Q = 205 * 2^16 + 1 + qH + r (2^33 + 410 * 2^16 + 204) + 384` calls.
+So the game makes at most `Q = 205 * 2^16 + 1 + qH + r (2^33 + 205 * 2^16 + 407) + 384` calls.
 
 The theorem then bounds a forgery by `Q / 2^127`.
 
 A key has `2^32` leaf indices.
 
-With at most `2^32` requests, `Q <= qH + 2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385`.
+With at most `2^32` requests, `Q <= qH + 2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385`.
 
 A request's bound includes two searches of `2^32` trials each, and the theorem charges all of it.
 
@@ -81,78 +78,51 @@ theorem isQueryBoundP_H (x : Array UInt64) : IsQueryBoundP (H x) (fun _ => True)
   (isQueryBoundP_map_iff _ _ _).2
     ((isQueryBoundP_query_iff (spec := HashSpec) _ _ 1).2 fun _ => Nat.one_pos)
 
-/-- A derivation is one hash query. -/
-theorem isQueryBoundP_seedPrf (s : Seed) (pp : PublicParam) (a : Address) (suffix : Array UInt64) :
-    IsQueryBoundP (seedPrf H s pp a suffix) (fun _ => True) 1 :=
-  isQueryBoundP_H _
+/-- Key generation: the scheme seed, the parameter and the top tree. -/
+theorem isQueryBoundP_keyGenWith_keyGenQueries (seed : Seed) :
+    IsQueryBoundP (keyGenWith H seed) (fun _ => True) keyGenQueries := by
+  refine (Cost.isQueryBoundP_keyGenWith isQueryBoundP_H seed).mono ?_
+  simp [keyGenQueries, LAYER_HEIGHT]
 
-/-- Stateless key generation: the scheme seed, then the public key. -/
-theorem isQueryBoundP_statelessKeyGenWith (seed : Seed) :
-    IsQueryBoundP (statelessKeyGenWith H seed) (fun _ => True) keyGenQueries := by
-  unfold statelessKeyGenWith
-  refine (isQueryBoundP_bind (isQueryBoundP_H _) fun s _ =>
-    isQueryBoundP_bind (m := 0) (isQueryBoundP_publicKeyOf isQueryBoundP_H
-      (isQueryBoundP_seedPrf s)) fun _ _ => isQueryBoundP_pure _ _ 0).mono ?_
-  simp only [keyGenQueries]
-  omega
+/-- A signature: the bottom search, then at most one bottom tree and the top search. -/
+theorem isQueryBoundP_signWith_requestQueries (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
+    IsQueryBoundP (signWith H sk idx msg) (fun _ => True) requestQueries := by
+  refine (Cost.isQueryBoundP_signWith isQueryBoundP_H sk idx msg).mono ?_
+  simp [requestQueries, Constants.MAX_RANDOMIZER_TRIALS, LAYER_HEIGHT]
 
-/-- A stateless signature: the scheme seed, the parameter, then the signature. -/
-theorem isQueryBoundP_statelessSignWith (sk : Seed) (idx : LeafIndex) (msg : Message) :
-    IsQueryBoundP (statelessSignWith H sk idx msg) (fun _ => True) requestQueries := by
-  unfold statelessSignWith
-  refine (isQueryBoundP_bind (isQueryBoundP_H _) fun s _ =>
-    isQueryBoundP_bind (isQueryBoundP_publicParamOf (isQueryBoundP_seedPrf s)) fun pp _ =>
-      isQueryBoundP_signDerived isQueryBoundP_H (isQueryBoundP_seedPrf s) pp idx msg).mono ?_
-  simp only [requestQueries]
-  omega
+/-- The adversary's run costs a call per hash query and a request's bound per request.
 
-/-- The adversary's run costs a call per hash query and a request's bound per request. -/
-theorem isQueryBoundP_run_signingOracle (sk : Seed) {α : Type}
+Each request signs with the key the request before it returned. -/
+theorem isQueryBoundP_run_signingOracle {α : Type}
     (oa : OracleComp (OracleWorld + SigningSpec) α) {qH r : Nat}
-    (hh : IsQueryBoundP oa IsAdversaryHash qH) (hr : IsQueryBoundP oa IsAdversaryRequest r) :
-    IsQueryBoundP (simulateQ (QueryImpl.ofLift OracleWorld
-      (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) + statelessSigningOracle sk) oa).run
-      IsHashCall (qH + r * requestQueries) := by
-  induction oa using OracleComp.inductionOn generalizing qH r with
-  | pure a => simp
-  | query_bind t k ih =>
-    rw [isQueryBoundP_query_bind_iff] at hh hr
-    simp only [simulateQ_bind, simulateQ_spec_query, WriterT.run_bind']
-    rcases t with (n | x) | request
-    · simp only [IsAdversaryHash, IsAdversaryRequest, ite_false] at hh hr
-      refine (isQueryBoundP_bind (n := 0) ?_ fun u _ =>
-        (isQueryBoundP_map_iff _ _ _).2 (ih u.1 (hh.2 u.1) (hr.2 u.1))).mono (by omega)
-      exact (isQueryBoundP_query_iff (spec := OracleWorld) _ (.inl n) 0).2 fun h => by
-        simp [IsHashCall] at h
-    · simp only [IsAdversaryHash, IsAdversaryRequest, ite_true, ite_false] at hh hr
-      have : 0 < qH := by simpa using hh.1
-      refine (isQueryBoundP_bind (n := 1) ?_ fun u _ =>
-        (isQueryBoundP_map_iff _ _ _).2 (ih u.1 (hh.2 u.1) (hr.2 u.1))).mono (by omega)
-      exact (isQueryBoundP_query_iff (spec := OracleWorld) _ (.inr x) 1).2 fun _ => Nat.one_pos
-    · simp only [IsAdversaryHash, IsAdversaryRequest, ite_true, ite_false] at hh hr
-      have : 0 < r := by simpa using hr.1
-      refine (isQueryBoundP_bind (n := requestQueries) ?_ fun u _ =>
-        (isQueryBoundP_map_iff _ _ _).2 (ih u.1 (hh.2 u.1) (hr.2 u.1))).mono ?_
-      · simp only [QueryImpl.add_apply_inr, statelessSigningOracle, QueryImpl.run_withLogging_apply]
-        exact isQueryBoundP_bind (m := 0) (n := requestQueries)
-          (isQueryBoundP_liftM_hash (Except.toOption <$> statelessSignWith H sk request.leafIndex
-            request.message)
-            ((isQueryBoundP_map_iff _ _ _).2 (isQueryBoundP_statelessSignWith sk _ _)))
-          fun _ _ => isQueryBoundP_pure _ _ 0
-      · have : (r - 1) * requestQueries + requestQueries = r * requestQueries := by
-          rw [← Nat.succ_mul, Nat.succ_eq_add_one, Nat.sub_add_cancel this]
-        omega
+    (hh : IsQueryBoundP oa IsAdversaryHash qH) (hr : IsQueryBoundP oa IsAdversaryRequest r)
+    (sk : SecretKey) :
+    IsQueryBoundP ((simulateQ (QueryImpl.ofLift OracleWorld
+      (StateT SecretKey (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld))) +
+        signingOracle) oa).run sk).run IsHashCall (qH + r * requestQueries) := by
+  refine isQueryBoundP_run_keyed _ (fun n sk => ?_) (fun x sk => ?_) (fun request sk => ?_) oa
+    hh hr sk
+  · rw [XmssSecurity.Bridge.run_keyedOracles_inl]
+    exact (isQueryBoundP_map_iff _ _ _).2
+      ((isQueryBoundP_query_iff (spec := OracleWorld) _ (.inl n) 0).2 fun h => by
+        simp [IsHashCall] at h)
+  · rw [XmssSecurity.Bridge.run_keyedOracles_inl]
+    exact (isQueryBoundP_map_iff _ _ _).2
+      ((isQueryBoundP_query_iff (spec := OracleWorld) _ (.inr x) 1).2 fun _ => Nat.one_pos)
+  · exact (isQueryBoundP_map_iff _ _ _).2
+      (isQueryBoundP_liftM_hash _ (isQueryBoundP_signWith_requestQueries sk _ _))
 
-/-- The stateless signer's game makes at most `Q` hash calls, for `qH` calls and `r` requests. -/
-theorem isQueryBoundP_statelessGameCore (adversary : Adversary) {qH r : Nat}
+/-- The game makes at most `Q` hash calls, for `qH` calls of `H` and `r` requests. -/
+theorem isQueryBoundP_gameCore (adversary : Adversary) {qH r : Nat}
     (hbudget : HasAdversaryBudget adversary qH r) :
-    IsQueryBoundP (statelessGameCore adversary) IsHashCall (gameQueries qH r) := by
-  unfold statelessGameCore
+    IsQueryBoundP (gameCore adversary) IsHashCall (gameQueries qH r) := by
+  unfold gameCore gameAfterKeys checkForgery
   refine (isQueryBoundP_bind (isQueryBoundP_liftM_prob sampleSeed) fun seed _ =>
-    isQueryBoundP_bind (isQueryBoundP_liftM_hash _ (isQueryBoundP_statelessKeyGenWith seed))
+    isQueryBoundP_bind
+      (isQueryBoundP_liftM_hash _ (isQueryBoundP_keyGenWith_keyGenQueries seed))
       fun keys _ =>
-      isQueryBoundP_bind (isQueryBoundP_run_signingOracle keys.1 (adversary.main keys.2)
-        (hbudget keys.2).1 (hbudget keys.2).2) fun z _ =>
+      isQueryBoundP_bind (isQueryBoundP_run_signingOracle (adversary.main keys.1)
+        (hbudget keys.1).1 (hbudget keys.1).2 keys.2) fun z _ =>
         isQueryBoundP_bind (m := 0) (isQueryBoundP_liftM_hash _
           (isQueryBoundP_verifyWith isQueryBoundP_H _ _ _)) fun _ _ =>
           isQueryBoundP_pure _ _ 0).mono ?_
@@ -190,15 +160,15 @@ theorem hashQueryBound_of_isQueryBoundP {α : Type} {n : Nat} :
       have := h.1.resolve_left (not_not_intro trivial)
       omega
 
-/-- The stateless signer's counted experiment makes at most `Q` calls, for `qH` and `r`. -/
+/-- The counted experiment makes at most `Q` calls, for `qH` calls of `H` and `r` requests. -/
 theorem hasHashQueryBound_of_budget (adversary : Adversary) {qH r : Nat}
     (hbudget : HasAdversaryBudget adversary qH r) :
     HasHashQueryBound adversary (gameQueries qH r) := by
   have bound :=
-    hashQueryBound_of_isQueryBoundP _ (isQueryBoundP_statelessGameCore adversary hbudget) ∅
+    hashQueryBound_of_isQueryBoundP _ (isQueryBoundP_gameCore adversary hbudget) ∅
   -- Rewrite the experiment to its run first: the kernel would run the game to compare them.
-  have run : statelessExperiment adversary =
-      ((simulateQ countedOracle (statelessGameCore adversary)).run.run' ∅ :
+  have run : experiment adversary =
+      ((simulateQ countedOracle (gameCore adversary)).run.run' ∅ :
         ProbComp (Bool × Nat)) := rfl
   unfold HasHashQueryBound
   rw [run]
@@ -208,7 +178,7 @@ theorem hasHashQueryBound_of_budget (adversary : Adversary) {qH r : Nat}
 
 /-- With at most `qH` calls of `H` and `r` requests, a forgery has chance `<= Q / 2^127`.
 
-`Q = 205 * 2^16 + 1 + qH + r (2^33 + 410 * 2^16 + 204) + 384` bounds the stateless signer's game. -/
+`Q = 205 * 2^16 + 1 + qH + r (2^33 + 205 * 2^16 + 407) + 384` bounds the calls of the game. -/
 theorem forgeAdvantage_le_adversaryBudget (adversary : Adversary) {qH r : Nat}
     (hbudget : HasAdversaryBudget adversary qH r) :
     forgeAdvantage adversary ≤ (gameQueries qH r : ℝ≥0∞) / ((2 ^ 127 : Nat) : ℝ≥0∞) :=
@@ -220,7 +190,7 @@ def lifetimeQueries : Nat := gameQueries 0 (2 ^ LOG_LIFETIME)
 
 /-- With at most `qH` calls of `H` and `2^32` requests, a forgery has chance `<= (qH + C) / 2^127`.
 
-`C = 2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385`.
+`C = 2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385`.
 
 It covers key generation, the signer and the verifier. -/
 theorem forgeAdvantage_le_lifetime (adversary : Adversary) {qH r : Nat}
@@ -233,9 +203,9 @@ theorem forgeAdvantage_le_lifetime (adversary : Adversary) {qH r : Nat}
   have := Nat.mul_le_mul_right requestQueries hr
   omega
 
-/-- The constant of the lifetime bound is `2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385`. -/
+/-- The constant of the lifetime bound is `2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385`. -/
 theorem lifetimeQueries_eq :
-    lifetimeQueries = 2 ^ 65 + 410 * 2 ^ 48 + 204 * 2 ^ 32 + 205 * 2 ^ 16 + 385 := by
+    lifetimeQueries = 2 ^ 65 + 205 * 2 ^ 48 + 407 * 2 ^ 32 + 205 * 2 ^ 16 + 385 := by
   simp only [lifetimeQueries, gameQueries, keyGenQueries, requestQueries, verifyQueries,
     LOG_LIFETIME, LAYER_HEIGHT]
   norm_num

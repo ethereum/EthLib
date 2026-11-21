@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Xmss.Reference
+public import EthLib.Cryptography.Xmss.Sign
 public import EthLib.Cryptography.Proofs.Xmss.KeyGen
 public import EthLib.Cryptography.Proofs.Xmss.Ots
 public import EthLib.Cryptography.Proofs.Xmss.Trials
@@ -10,21 +10,21 @@ public import EthLib.Cryptography.Proofs.Xmss.Tree
 /-!
 # Proofs: leanXMSS signing
 
-What a successful signature holds, and how signing can fail.
+What signing computes, and how it can fail.
 
 Each theorem holds for every hash function `f`, run in the identity monad.
 
-`sign` is the case `f = hash`.
-
-The stateless signer of the note builds the bottom tree once, for the key's path and the root.
-
-It signs exactly as the form that computes the path, then builds the whole tree for the root.
+`sign` is the case `f = hash`, by a theorem that signing with Keccak-256 is the signer over it.
 
 The specification's signer reads its trees from the key, or builds and keeps them.
 
-Every key that key generation and signing reach holds the trees the stateless signer builds.
+Every key that key generation and signing reach holds the trees its seed gives.
 
-So that signer returns the stateless signature, byte for byte, whatever trees the key keeps.
+So that signer returns the note's signature, byte for byte, whatever trees the key keeps.
+
+The note's signature is two one-time signatures, each with its key's path.
+
+The bottom key `idx` signs the message, and the top key `b` signs the root of bottom tree `b`.
 -/
 
 @[expose] public section
@@ -34,205 +34,13 @@ namespace EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
 open EthLib.Cryptography.Xmss.Internal (signRootWith cacheTreeWith fetchTreeWith)
 
-variable {f : Array UInt64 → Lanes4} {pp : PublicParam} {s : Seed} {prf : SeedPrf Id}
-  {layer : Layer} {e : Nat}
-  {msg : Array UInt64} {sig : LayerSignature}
-
-/-! ## One build gives the path and the root -/
-
-/-- Reading the key's path and the root from one build signs as computing them apart.
-
-The right side signs the bottom layer with its path, then computes the root of the whole tree.
-
-Both sides give the same signature, byte for byte, for every hash in the identity monad. -/
-theorem signDerived_eq_path_node (H : Array UInt64 → Id Lanes4) (prf : SeedPrf Id)
-    (pp : PublicParam) (idx : LeafIndex) (msg : Message) :
-    signDerived H prf pp idx msg = (do
-      let bottom ← match ← signLayer H pp prf .bottom idx.toNat (msg.toArray) with
-        | .ok sig => pure sig
-        | .error err => return .error err
-      let bottomRoot ← node H pp prf .bottom LAYER_HEIGHT (bottomTree idx)
-      let top ← match ← signLayer H pp prf .top (bottomTree idx) bottomRoot.toArray with
-        | .ok sig => pure sig
-        | .error err => return .error err
-      return .ok { leafIndex := idx, bottom, top }) := by
-  unfold signDerived signLayer
-  -- Name the bottom one-time signature, so no tree is evaluated.
-  generalize otsSign H pp prf .bottom (UInt32.ofNat idx.toNat) (msg.toArray) = found
-  rcases found with _ | ⟨randomizer, chainValues⟩
-  · rfl
-  · -- The path and the root, computed apart, are the two read from the one build.
-    have hpath : path H pp prf .bottom idx.toNat =
-        (build H pp prf .bottom LAYER_HEIGHT (bottomTree idx)).run.path LAYER_HEIGHT idx.toNat :=
-      (path_build_run idx.toNat).symm
-    have hroot : node H pp prf .bottom LAYER_HEIGHT (bottomTree idx) =
-        (build H pp prf .bottom LAYER_HEIGHT (bottomTree idx)).run.value :=
-      (value_build_run _ _).symm
-    rw [hpath, hroot]
-    rfl
-
-/-! ## The signer as a value
-
-`rw` unfolds the signer, not `simp`, as for the one-time signer. -/
-
-/-- What a layer's signature computes: the one-time signature with the key's path, or the error. -/
-theorem signLayer_run :
-    (signLayer (pureHash f) pp prf layer e msg).run
-      = match (otsSign (pureHash f) pp prf layer (UInt32.ofNat e) msg).run with
-        | none => .error (.noAdmissibleEncoding layer e)
-        | some (randomizer, chainValues) =>
-          .ok { randomizer, chainValues, path := (path (pureHash f) pp prf layer e).run } := by
-  rw [signLayer, Id.run_bind]
-  cases (otsSign (pureHash f) pp prf layer (UInt32.ofNat e) msg).run with
-  | none => rfl
-  | some found => rfl
-
-/-- What the stateless signer computes, one layer after the other, as a computation in `Except`.
-
-- `s` and `pp` are the scheme seed and the public parameter, from the seed `S_0`.
-- Both layers derive their secrets from `s`.
-- The top layer signs the root of bottom tree `b`, which signing builds. -/
-theorem statelessSignWith_run {seed : Seed} {idx : LeafIndex} {m : Message}
-    (hs : (schemeSeed (pureHash f) seed).run = s)
-    (hpp : (publicParamOf (seedPrf (pureHash f) s)).run = pp) :
-    (statelessSignWith (pureHash f) seed idx m).run
-      = (signLayer (pureHash f) pp (seedPrf (pureHash f) s) .bottom idx.toNat
-          m.toArray).run.bind fun bottom =>
-          (signLayer (pureHash f) pp (seedPrf (pureHash f) s) .top (bottomTree idx)
-            (EthLib.Cryptography.Hash.Keccak.Lanes2.toArray
-              (node (pureHash f) pp (seedPrf (pureHash f) s) .bottom LAYER_HEIGHT
-              (bottomTree idx)).run)).run.bind fun top =>
-            .ok { leafIndex := idx, bottom, top } := by
-  subst hs hpp
-  rw [statelessSignWith, Id.run_bind, Id.run_bind, signDerived_eq_path_node, Id.run_bind]
-  cases (signLayer (pureHash f)
-      (publicParamOf (seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run)).run
-      (seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run) .bottom idx.toNat
-      m.toArray).run with
-  | error err => rfl
-  | ok bottom =>
-    -- No signer is unfolded here, so `simp` may reduce the matches on `.ok`.
-    simp only [Id.run_bind, Id.run_pure, Except.bind]
-    cases (signLayer (pureHash f)
-        (publicParamOf (seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run)).run
-        (seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run) .top (bottomTree idx)
-        (EthLib.Cryptography.Hash.Keccak.Lanes2.toArray (node (pureHash f)
-          (publicParamOf (seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run)).run
-          (seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run) .bottom LAYER_HEIGHT
-          (bottomTree idx)).run)).run with
-    | error err => rfl
-    | ok top => rfl
-
-/-! ## Layers -/
-
-/-- A layer's signature is a one-time signature, with the key's honest path. -/
-theorem signLayer_eq_ok (h : (signLayer (pureHash f) pp prf layer e msg).run = .ok sig) :
-    (otsSign (pureHash f) pp prf layer (UInt32.ofNat e) msg).run
-        = some (sig.randomizer, sig.chainValues) ∧
-      sig.path = (path (pureHash f) pp prf layer e).run := by
-  rw [signLayer_run] at h
-  -- Name the one-time signature, so the match reduces without evaluating it.
-  cases hots : (otsSign (pureHash f) pp prf layer (UInt32.ofNat e) msg).run with
-  | none =>
-    rw [hots] at h
-    cases h
-  | some found =>
-    obtain ⟨randomizer, chainValues⟩ := found
-    rw [hots] at h
-    -- The accepting branch packs the one-time signature with the path.
-    cases h
-    exact ⟨rfl, rfl⟩
-
-/-- A layer fails only when no randomizer trial gives a codeword. -/
-theorem signLayer_error {err : XmssError}
-    (h : (signLayer (pureHash f) pp prf layer e msg).run = .error err) :
-    (otsSign (pureHash f) pp prf layer (UInt32.ofNat e) msg).run = none ∧
-      err = .noAdmissibleEncoding layer e := by
-  rw [signLayer_run] at h
-  cases hots : (otsSign (pureHash f) pp prf layer (UInt32.ofNat e) msg).run with
-  | none =>
-    rw [hots] at h
-    cases h
-    exact ⟨rfl, rfl⟩
-  | some found =>
-    obtain ⟨randomizer, chainValues⟩ := found
-    rw [hots] at h
-    cases h
-
-/-! ## Signatures of the stateless signer -/
-
-/-- A stateless signature holds one honest signature per layer.
-
-- The bottom key `idx` signs the message.
-- The top key `b` signs the root of bottom tree `b`. -/
-theorem statelessSign_eq_ok {seed : Seed} {idx : LeafIndex} {m : Message} {σ : Signature}
-    (hs : (schemeSeed (pureHash f) seed).run = s)
-    (hpp : (publicParamOf (seedPrf (pureHash f) s)).run = pp)
-    (h : (statelessSignWith (pureHash f) seed idx m).run = .ok σ) :
-    σ.leafIndex = idx ∧
-      (signLayer (pureHash f) pp (seedPrf (pureHash f) s) .bottom idx.toNat
-        m.toArray).run = .ok σ.bottom ∧
-      (signLayer (pureHash f) pp (seedPrf (pureHash f) s) .top (bottomTree idx)
-        (EthLib.Cryptography.Hash.Keccak.Lanes2.toArray
-          (node (pureHash f) pp (seedPrf (pureHash f) s) .bottom LAYER_HEIGHT
-          (bottomTree idx)).run)).run = .ok σ.top := by
-  rw [statelessSignWith_run hs hpp] at h
-  -- Each layer is either an error, which propagates, or a value the next step uses.
-  cases hbottom : (signLayer (pureHash f) pp (seedPrf (pureHash f) s) .bottom idx.toNat
-      m.toArray).run with
-  | error err =>
-    rw [hbottom] at h
-    cases h
-  | ok bottom =>
-    rw [hbottom, Except.bind] at h
-    cases htop : (signLayer (pureHash f) pp (seedPrf (pureHash f) s) .top (bottomTree idx)
-        (EthLib.Cryptography.Hash.Keccak.Lanes2.toArray
-          (node (pureHash f) pp (seedPrf (pureHash f) s) .bottom LAYER_HEIGHT
-          (bottomTree idx)).run)).run with
-    | error err =>
-      rw [htop] at h
-      cases h
-    | ok top =>
-      rw [htop] at h
-      cases h
-      exact ⟨rfl, rfl, rfl⟩
-
-/-- The stateless signer fails only when one layer's one-time key finds no codeword. -/
-theorem statelessSign_error {seed : Seed} {idx : LeafIndex} {m : Message} {err : XmssError}
-    (h : (statelessSignWith (pureHash f) seed idx m).run = .error err) :
-    ∃ layer key, err = .noAdmissibleEncoding layer key := by
-  -- Name the scheme seed and the parameter, so the layers stay short.
-  obtain ⟨s, hs⟩ : ∃ s, (schemeSeed (pureHash f) seed).run = s := ⟨_, rfl⟩
-  obtain ⟨pp, hpp⟩ : ∃ pp, (publicParamOf (seedPrf (pureHash f) s)).run = pp := ⟨_, rfl⟩
-  rw [statelessSignWith_run hs hpp] at h
-  -- The error comes from one of the two layers.
-  cases hbottom : (signLayer (pureHash f) pp (seedPrf (pureHash f) s) .bottom idx.toNat
-      m.toArray).run with
-  | error e' =>
-    rw [hbottom] at h
-    cases h
-    exact ⟨_, _, (signLayer_error hbottom).2⟩
-  | ok bottom =>
-    rw [hbottom, Except.bind] at h
-    cases htop : (signLayer (pureHash f) pp (seedPrf (pureHash f) s) .top (bottomTree idx)
-        (EthLib.Cryptography.Hash.Keccak.Lanes2.toArray
-          (node (pureHash f) pp (seedPrf (pureHash f) s) .bottom LAYER_HEIGHT
-          (bottomTree idx)).run)).run with
-    | error e' =>
-      rw [htop] at h
-      cases h
-      exact ⟨_, _, (signLayer_error htop).2⟩
-    | ok top =>
-      rw [htop] at h
-      cases h
+variable {f : Array UInt64 → Lanes4}
 
 /-! ## Keys that key generation and signing reach
 
-A key holds the stateless trees of a seed when it holds what the stateless signer computes.
+A key holds the trees of a seed when its parts are what the seed gives.
 
-Key generation gives such a key, and signing keeps it one.
-
-Such a key signs as the stateless signer, byte for byte. -/
+Key generation gives such a key, and signing keeps it one. -/
 
 /-- The bottom tree of a leaf index is a key of the top tree: it is below `2^16`. -/
 theorem bottomTree_lt (idx : LeafIndex) : bottomTree idx < 2 ^ LAYER_HEIGHT := by
@@ -240,18 +48,12 @@ theorem bottomTree_lt (idx : LeafIndex) : bottomTree idx < 2 ^ LAYER_HEIGHT := b
   simp only [bottomTree, LAYER_HEIGHT, UInt32.size] at *
   omega
 
-/-- A kept tree as the stateless signer computes it from the scheme seed `s` and the parameter.
+/-- A secret key that holds what its seed gives.
 
-The tree is its bottom tree, built from the seed.
+Its scheme seed, parameter and top tree are those of the seed.
 
-The top signature is the top layer's signature of the tree's root, path computed from the seed. -/
-def CachedTree.IsStateless (H : Array UInt64 → Id Lanes4) (s : Seed) (pp : PublicParam)
-    (t : CachedTree) : Prop :=
-  t.tree = (build H pp (seedPrf H s) .bottom LAYER_HEIGHT t.index).run ∧
-    t.top = (signLayer H pp (seedPrf H s) .top t.index t.tree.value.toArray).run
-
-/-- A secret key that holds what the stateless signer computes from a seed. -/
-structure SecretKey.IsStatelessOf (H : Array UInt64 → Id Lanes4) (seed : Seed)
+Each kept tree is the tree its index names, built and signed from the key's seed. -/
+structure SecretKey.IsOfSeed (H : Array UInt64 → Id Lanes4) (seed : Seed)
     (sk : SecretKey) : Prop where
   /-- The scheme seed `S` of the seed. -/
   schemeSeed_eq : sk.schemeSeed = (Xmss.schemeSeed H seed).run
@@ -259,75 +61,76 @@ structure SecretKey.IsStatelessOf (H : Array UInt64 → Id Lanes4) (seed : Seed)
   publicParam_eq : sk.publicParam = (publicParamOf (seedPrf H sk.schemeSeed)).run
   /-- The top tree, built from `S`. -/
   top_eq : sk.top = (build H sk.publicParam (seedPrf H sk.schemeSeed) .top LAYER_HEIGHT 0).run
-  /-- Each kept tree, with its top signature, as the stateless signer computes it. -/
-  cache_isStateless : ∀ t ∈ sk.cache, t.IsStateless H sk.schemeSeed sk.publicParam
+  /-- Each kept tree, with its top signature, as signing builds it from `S`. -/
+  cache_eq : ∀ t ∈ sk.cache, t = (cacheTreeWith H (seedPrf H sk.schemeSeed) sk t.index).run
 
-section Stateless
+section OfSeed
 
 variable {H : Array UInt64 → Id Lanes4} {seed : Seed} {sk : SecretKey}
 
-/-- Key generation gives a key with the stateless trees of its seed, and no bottom tree. -/
-theorem isStatelessOf_keyGenWith (H : Array UInt64 → Id Lanes4) (seed : Seed) :
-    (keyGenWith H seed).run.2.IsStatelessOf H seed :=
+/-- Key generation gives a key with the trees of its seed, and no bottom tree. -/
+theorem isOfSeed_keyGenWith (H : Array UInt64 → Id Lanes4) (seed : Seed) :
+    (keyGenWith H seed).run.2.IsOfSeed H seed :=
   ⟨rfl, rfl, rfl, fun _ h => absurd h List.not_mem_nil⟩
 
-/-- The top signature of a root, path read from the top tree, is the one the seed gives. -/
-theorem signRootWith_run (h : sk.IsStatelessOf H seed) {b : Nat} (hb : b < 2 ^ LAYER_HEIGHT)
+/-- The top signature of a root: the top key's one-time signature, with the key's path.
+
+The path is read from the top tree, and it is the path the seed gives. -/
+theorem signRootWith_run (h : sk.IsOfSeed H seed) {b : Nat} (hb : b < 2 ^ LAYER_HEIGHT)
     (root : Digest) :
-    (signRootWith H sk b root).run =
-      (signLayer H sk.publicParam (seedPrf H sk.schemeSeed) .top b root.toArray).run := by
+    (signRootWith H (seedPrf H sk.schemeSeed) sk b root).run =
+      match (otsSign H sk.publicParam (seedPrf H sk.schemeSeed) .top (UInt32.ofNat b)
+          root.toArray).run with
+      | none => .error (.noAdmissibleEncoding .top b)
+      | some (randomizer, chainValues) =>
+        .ok { randomizer := randomizer, chainValues := chainValues,
+              path := (path H sk.publicParam (seedPrf H sk.schemeSeed) .top b).run } := by
   -- The top key's path, read from the top tree, is the path computed from the seed.
   have hpath : sk.top.path LAYER_HEIGHT b =
       (path H sk.publicParam (seedPrf H sk.schemeSeed) .top b).run := by
     have := path_build_run (H := H) (pp := sk.publicParam) (prf := seedPrf H sk.schemeSeed)
       (layer := .top) b
     rwa [Nat.div_eq_of_lt hb, ← h.top_eq] at this
-  unfold signRootWith signLayer
+  unfold signRootWith
   simp only [Internal.otsSignTrials_hashTrials]
-  rw [Id.run_bind, Id.run_bind]
+  rw [Id.run_bind]
   -- Name the top search, so no tree is evaluated.
   cases (otsSign H sk.publicParam (seedPrf H sk.schemeSeed) .top (UInt32.ofNat b)
       root.toArray).run with
   | none => rfl
   | some found =>
     obtain ⟨randomizer, chainValues⟩ := found
-    simp only [Id.run_bind, hpath]
+    simp only [Id.run_pure, hpath]
 
-/-- A tree built for a key of the top tree is the one the stateless signer computes. -/
-theorem isStateless_cacheTreeWith (h : sk.IsStatelessOf H seed) {b : Nat}
-    (hb : b < 2 ^ LAYER_HEIGHT) :
-    (cacheTreeWith H sk b).run.IsStateless H sk.schemeSeed sk.publicParam :=
-  ⟨rfl, signRootWith_run h hb _⟩
+/-- A fetched tree is the tree its index names, as signing builds it from the seed.
 
-/-- A fetched tree is the stateless one of its index.
-
-The updated key still holds the stateless trees. -/
-theorem fetchTreeWith_run (h : sk.IsStatelessOf H seed) {b : Nat} (hb : b < 2 ^ LAYER_HEIGHT) :
-    (fetchTreeWith H sk b).run.1.index = b ∧
-      (fetchTreeWith H sk b).run.1.IsStateless H sk.schemeSeed sk.publicParam ∧
-      (fetchTreeWith H sk b).run.2.IsStatelessOf H seed := by
+The updated key still holds the trees of its seed. -/
+theorem fetchTreeWith_run (h : sk.IsOfSeed H seed) (b : Nat) :
+    (fetchTreeWith H (seedPrf H sk.schemeSeed) sk b).run.1 =
+        (cacheTreeWith H (seedPrf H sk.schemeSeed) sk b).run ∧
+      (fetchTreeWith H (seedPrf H sk.schemeSeed) sk b).run.2.IsOfSeed H seed := by
   unfold fetchTreeWith
   split
   next t ht =>
     -- A kept tree moves to the front; the others stay.
     have hmem := List.mem_of_find?_eq_some ht
-    refine ⟨by simpa using List.find?_some ht, h.cache_isStateless t hmem,
+    have hidx : t.index = b := by simpa using List.find?_some ht
+    refine ⟨hidx ▸ h.cache_eq t hmem,
       ⟨h.schemeSeed_eq, h.publicParam_eq, h.top_eq, fun u hu => ?_⟩⟩
     rcases List.mem_cons.1 hu with rfl | hu
-    · exact h.cache_isStateless _ hmem
-    · exact h.cache_isStateless u (List.mem_filter.1 hu).1
+    · exact h.cache_eq _ hmem
+    · exact h.cache_eq u (List.mem_filter.1 hu).1
   next =>
     -- A new tree goes in front, and the trees past the limit are dropped.
-    refine ⟨rfl, isStateless_cacheTreeWith h hb,
-      ⟨h.schemeSeed_eq, h.publicParam_eq, h.top_eq, fun u hu => ?_⟩⟩
+    refine ⟨rfl, ⟨h.schemeSeed_eq, h.publicParam_eq, h.top_eq, fun u hu => ?_⟩⟩
     rcases List.mem_cons.1 (List.mem_of_mem_take hu) with rfl | hu
-    · exact isStateless_cacheTreeWith h hb
-    · exact h.cache_isStateless u hu
+    · rfl
+    · exact h.cache_eq u hu
 
-/-- Signing keeps a key with the stateless trees of its seed. -/
-theorem isStatelessOf_signWith (h : sk.IsStatelessOf H seed) (idx : LeafIndex) (msg : Message) :
-    (signWith H sk idx msg).run.2.IsStatelessOf H seed := by
-  have hfetch := (fetchTreeWith_run h (bottomTree_lt idx)).2.2
+/-- Signing keeps a key with the trees of its seed. -/
+theorem isOfSeed_signWith (h : sk.IsOfSeed H seed) (idx : LeafIndex) (msg : Message) :
+    (signWith H sk idx msg).run.2.IsOfSeed H seed := by
+  have hfetch := (fetchTreeWith_run h (bottomTree idx)).2
   unfold signWith Internal.signWithTrials
   simp only [Internal.otsSignTrials_hashTrials]
   rw [Id.run_bind]
@@ -338,41 +141,13 @@ theorem isStatelessOf_signWith (h : sk.IsStatelessOf H seed) (idx : LeafIndex) (
     obtain ⟨randomizer, chainValues⟩ := found
     rw [Id.run_bind]
     -- Name the fetched tree and key: only the key matters.
-    generalize (fetchTreeWith H sk (bottomTree idx)).run = r at hfetch ⊢
+    generalize (fetchTreeWith H (seedPrf H sk.schemeSeed) sk (bottomTree idx)).run = r
+      at hfetch ⊢
     obtain ⟨t, sk'⟩ := r
     dsimp only at hfetch ⊢
     cases t.top <;> exact hfetch
 
-/-- A key with the stateless trees of its seed signs as the stateless signer, byte for byte. -/
-theorem signWith_fst_of_isStatelessOf (h : sk.IsStatelessOf H seed) (idx : LeafIndex)
-    (msg : Message) :
-    (signWith H sk idx msg).run.1 = (statelessSignWith H seed idx msg).run := by
-  obtain ⟨hindex, ⟨htree, htop⟩, -⟩ := fetchTreeWith_run h (bottomTree_lt idx)
-  -- The stateless signer derives the key's scheme seed and parameter.
-  have hs : (statelessSignWith H seed idx msg).run =
-      (signDerived H (seedPrf H sk.schemeSeed) sk.publicParam idx msg).run := by
-    rw [h.publicParam_eq, h.schemeSeed_eq]
-    rfl
-  rw [hs]
-  unfold signWith Internal.signWithTrials signDerived
-  simp only [Internal.otsSignTrials_hashTrials]
-  rw [Id.run_bind, Id.run_bind]
-  -- Name the bottom search, so no tree is evaluated.
-  cases (otsSign H sk.publicParam (seedPrf H sk.schemeSeed) .bottom (UInt32.ofNat idx.toNat)
-      (msg.toArray)).run with
-  | none => rfl
-  | some found =>
-    obtain ⟨randomizer, chainValues⟩ := found
-    rw [Id.run_bind, Id.run_bind]
-    -- Name the fetched tree, whose tree and top signature are the stateless ones.
-    generalize (fetchTreeWith H sk (bottomTree idx)).run = r at hindex htree htop ⊢
-    obtain ⟨t, sk'⟩ := r
-    dsimp only at hindex htree htop ⊢
-    rw [hindex] at htree htop
-    rw [← htree, Id.run_bind, ← htop]
-    cases t.top <;> rfl
-
-end Stateless
+end OfSeed
 
 /-- The keys that key generation from a seed, then any sequence of signatures, give. -/
 inductive SecretKey.Reachable (H : Array UInt64 → Id Lanes4) (seed : Seed) :
@@ -383,24 +158,121 @@ inductive SecretKey.Reachable (H : Array UInt64 → Id Lanes4) (seed : Seed) :
   | sign {sk : SecretKey} (idx : LeafIndex) (msg : Message) :
       SecretKey.Reachable H seed sk → SecretKey.Reachable H seed (signWith H sk idx msg).run.2
 
-/-- A reachable key holds the stateless trees of its seed. -/
-theorem SecretKey.Reachable.isStatelessOf {H : Array UInt64 → Id Lanes4} {seed : Seed}
-    {sk : SecretKey} (h : sk.Reachable H seed) : sk.IsStatelessOf H seed := by
+/-- A reachable key holds the trees of its seed. -/
+theorem SecretKey.Reachable.isOfSeed {H : Array UInt64 → Id Lanes4} {seed : Seed}
+    {sk : SecretKey} (h : sk.Reachable H seed) : sk.IsOfSeed H seed := by
   induction h with
-  | keyGen => exact isStatelessOf_keyGenWith H seed
-  | sign idx msg _ ih => exact isStatelessOf_signWith ih idx msg
+  | keyGen => exact isOfSeed_keyGenWith H seed
+  | sign idx msg _ ih => exact isOfSeed_signWith ih idx msg
 
-/-- **A reachable key signs as the stateless signer, byte for byte, at every leaf index.**
+/-- **A reachable key gives the note's signature, byte for byte, at every leaf index.**
 
-The key is any one that key generation, then any sequence of signatures, gives.
+`s` and `pp` are the scheme seed and the parameter of the seed.
+
+- The bottom key `idx` signs the message, with its path in bottom tree `b`.
+- The top key `b` signs the root of bottom tree `b`, with its path in the top tree.
+
+Either search finding no codeword is the error of its layer.
 
 So the trees a key keeps, and the order it used them in, never change a signature.
 
 It holds for every hash in the identity monad. -/
 theorem SecretKey.Reachable.signWith_fst {H : Array UInt64 → Id Lanes4} {seed : Seed}
-    {sk : SecretKey} (h : sk.Reachable H seed) (idx : LeafIndex) (msg : Message) :
-    (signWith H sk idx msg).run.1 = (statelessSignWith H seed idx msg).run :=
-  signWith_fst_of_isStatelessOf h.isStatelessOf idx msg
+    {sk : SecretKey} {s : Seed} {pp : PublicParam} (h : sk.Reachable H seed)
+    (hs : (Xmss.schemeSeed H seed).run = s) (hpp : (publicParamOf (seedPrf H s)).run = pp)
+    (idx : LeafIndex) (msg : Message) :
+    (signWith H sk idx msg).run.1 =
+      match (otsSign H pp (seedPrf H s) .bottom (UInt32.ofNat idx.toNat) msg.toArray).run with
+      | none => .error (.noAdmissibleEncoding .bottom idx.toNat)
+      | some (randomizer, chainValues) =>
+        match (otsSign H pp (seedPrf H s) .top (UInt32.ofNat (bottomTree idx))
+            (node H pp (seedPrf H s) .bottom LAYER_HEIGHT (bottomTree idx)).run.toArray).run with
+        | none => .error (.noAdmissibleEncoding .top (bottomTree idx))
+        | some (topRandomizer, topChainValues) =>
+          .ok
+            { leafIndex := idx
+              bottom :=
+                { randomizer := randomizer, chainValues := chainValues
+                  path := (path H pp (seedPrf H s) .bottom idx.toNat).run }
+              top :=
+                { randomizer := topRandomizer, chainValues := topChainValues
+                  path := (path H pp (seedPrf H s) .top (bottomTree idx)).run } } := by
+  have hk := h.isOfSeed
+  have hsk : sk.schemeSeed = s := hk.schemeSeed_eq.trans hs
+  have hppk : sk.publicParam = pp := by rw [hk.publicParam_eq, hsk, hpp]
+  subst hsk hppk
+  have hfetch := (fetchTreeWith_run hk (bottomTree idx)).1
+  -- The key's path and the root both come from the one build of bottom tree `b`.
+  have hpath : (build H sk.publicParam (seedPrf H sk.schemeSeed) .bottom LAYER_HEIGHT
+      (bottomTree idx)).run.path LAYER_HEIGHT idx.toNat =
+        (path H sk.publicParam (seedPrf H sk.schemeSeed) .bottom idx.toNat).run :=
+    path_build_run _
+  have hroot := value_build_run (H := H) (pp := sk.publicParam) (prf := seedPrf H sk.schemeSeed)
+    (layer := .bottom) LAYER_HEIGHT (bottomTree idx)
+  unfold signWith Internal.signWithTrials
+  simp only [Internal.otsSignTrials_hashTrials]
+  rw [Id.run_bind]
+  -- Name the bottom search, so no tree is evaluated.
+  cases (otsSign H sk.publicParam (seedPrf H sk.schemeSeed) .bottom (UInt32.ofNat idx.toNat)
+      (msg.toArray)).run with
+  | none => rfl
+  | some found =>
+    obtain ⟨randomizer, chainValues⟩ := found
+    rw [Id.run_bind]
+    -- Name the fetched tree: it is the tree that signing builds, with its top signature.
+    generalize (fetchTreeWith H (seedPrf H sk.schemeSeed) sk (bottomTree idx)).run = r
+      at hfetch ⊢
+    obtain ⟨t, sk'⟩ := r
+    dsimp only at hfetch ⊢
+    have htree : t.tree = (build H sk.publicParam (seedPrf H sk.schemeSeed) .bottom LAYER_HEIGHT
+        (bottomTree idx)).run := by
+      rw [hfetch]
+      rfl
+    have htop : t.top = (signRootWith H (seedPrf H sk.schemeSeed) sk (bottomTree idx)
+        (build H sk.publicParam (seedPrf H sk.schemeSeed) .bottom LAYER_HEIGHT
+          (bottomTree idx)).run.value).run := by
+      rw [hfetch]
+      rfl
+    rw [htop, hroot, signRootWith_run hk (bottomTree_lt idx), htree, hpath]
+    cases (otsSign H sk.publicParam (seedPrf H sk.schemeSeed) .top (UInt32.ofNat (bottomTree idx))
+        (node H sk.publicParam (seedPrf H sk.schemeSeed) .bottom LAYER_HEIGHT
+          (bottomTree idx)).run.toArray).run <;> rfl
+
+/-- **A reachable key's signature holds one honest signature per layer.**
+
+- The bottom key `idx` signs the message, and the path is the key's path in bottom tree `b`.
+- The top key `b` signs the root of bottom tree `b`, and the path is its path in the top tree. -/
+theorem SecretKey.Reachable.signWith_eq_ok {H : Array UInt64 → Id Lanes4} {seed : Seed}
+    {sk : SecretKey} {s : Seed} {pp : PublicParam} (h : sk.Reachable H seed)
+    (hs : (Xmss.schemeSeed H seed).run = s) (hpp : (publicParamOf (seedPrf H s)).run = pp)
+    {idx : LeafIndex} {msg : Message} {σ : Signature} (hσ : (signWith H sk idx msg).run.1 = .ok σ) :
+    σ.leafIndex = idx ∧
+      (otsSign H pp (seedPrf H s) .bottom (UInt32.ofNat idx.toNat) msg.toArray).run
+        = some (σ.bottom.randomizer, σ.bottom.chainValues) ∧
+      σ.bottom.path = (path H pp (seedPrf H s) .bottom idx.toNat).run ∧
+      (otsSign H pp (seedPrf H s) .top (UInt32.ofNat (bottomTree idx))
+          (node H pp (seedPrf H s) .bottom LAYER_HEIGHT (bottomTree idx)).run.toArray).run
+        = some (σ.top.randomizer, σ.top.chainValues) ∧
+      σ.top.path = (path H pp (seedPrf H s) .top (bottomTree idx)).run := by
+  rw [h.signWith_fst hs hpp] at hσ
+  -- Each search either fails, which is an error, or gives the layer's signature.
+  cases hbottom : (otsSign H pp (seedPrf H s) .bottom (UInt32.ofNat idx.toNat) msg.toArray).run with
+  | none =>
+    rw [hbottom] at hσ
+    cases hσ
+  | some found =>
+    obtain ⟨randomizer, chainValues⟩ := found
+    rw [hbottom] at hσ
+    cases htop : (otsSign H pp (seedPrf H s) .top (UInt32.ofNat (bottomTree idx))
+        (node H pp (seedPrf H s) .bottom LAYER_HEIGHT (bottomTree idx)).run.toArray).run with
+    | none =>
+      rw [htop] at hσ
+      cases hσ
+    | some found =>
+      obtain ⟨topRandomizer, topChainValues⟩ := found
+      rw [htop] at hσ
+      cases hσ
+      exact ⟨rfl, rfl, rfl, rfl, rfl⟩
 
 /-- **Signing with Keccak-256 is the signer over the hash, byte for byte, key included.**
 
@@ -409,19 +281,15 @@ theorem sign_eq (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
     Xmss.sign sk idx msg = (signWith hashId sk idx msg).run := by
   rw [Xmss.sign, keccakTrials_eq, signWith]
 
-/-- **With Keccak-256, a reachable key signs as the stateless signer, byte for byte.** -/
-theorem SecretKey.Reachable.sign_fst {seed : Seed} {sk : SecretKey} (h : sk.Reachable hashId seed)
-    (idx : LeafIndex) (msg : Message) : (Xmss.sign sk idx msg).1 = statelessSign seed idx msg := by
-  rw [sign_eq]
-  exact h.signWith_fst idx msg
+/-- **Key generation gives the root of the top tree and the parameter `P` of the seed.**
 
-/-- **Key generation gives the public key of the stateless scheme.**
-
-It is the root of the top tree, computed as a node, and the parameter `P`. -/
+The root is node 0 on level 16 of the top layer. -/
 theorem keyGenWith_fst (H : Array UInt64 → Id Lanes4) (seed : Seed) :
-    (keyGenWith H seed).run.1 = (statelessKeyGenWith H seed).run.2 := by
-  simp only [keyGenWith, statelessKeyGenWith, publicKeyOf, Id.run_bind, Id.run_pure,
-    value_build_run]
+    (keyGenWith H seed).run.1 =
+      { root := (node H (publicParamOf (seedPrf H (schemeSeed H seed).run)).run
+          (seedPrf H (schemeSeed H seed).run) .top LAYER_HEIGHT 0).run
+        publicParam := (publicParamOf (seedPrf H (schemeSeed H seed).run)).run } := by
+  simp only [keyGenWith, Internal.keyGenFrom, Id.run_bind, Id.run_pure, value_build_run]
 
 /-! ## Signatures of the specification's signer -/
 
@@ -437,7 +305,7 @@ theorem leafIndex_signWith {H : Array UInt64 → Id Lanes4} {sk : SecretKey}
   rcases found with _ | ⟨randomizer, chainValues⟩
   · cases h
   · rw [Id.run_bind] at h
-    generalize (fetchTreeWith H sk (bottomTree idx)).run = r at h
+    generalize (fetchTreeWith H (seedPrf H sk.schemeSeed) sk (bottomTree idx)).run = r at h
     obtain ⟨t, sk'⟩ := r
     dsimp only at h
     cases ht : t.top with
@@ -462,7 +330,15 @@ theorem signatureIndex_sign {sk : SecretKey} {idx : LeafIndex} {m : Message} {σ
 theorem sign_error {seed : Seed} {sk : SecretKey} (hsk : sk.Reachable (pureHash f) seed)
     {idx : LeafIndex} {m : Message} {err : XmssError}
     (h : (signWith (pureHash f) sk idx m).run.1 = .error err) :
-    ∃ layer key, err = .noAdmissibleEncoding layer key :=
-  statelessSign_error ((hsk.signWith_fst idx m).symm.trans h)
+    ∃ layer key, err = .noAdmissibleEncoding layer key := by
+  rw [hsk.signWith_fst rfl rfl] at h
+  -- The error comes from one of the two searches.
+  split at h
+  · cases h
+    exact ⟨_, _, rfl⟩
+  · split at h
+    · cases h
+      exact ⟨_, _, rfl⟩
+    · cases h
 
 end EthLib.Cryptography.Xmss

@@ -1,7 +1,8 @@
 module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
-public import EthLib.Cryptography.Proofs.Xmss.Reference
+public import EthLib.Cryptography.Xmss.Sign
+public import EthLib.Cryptography.Xmss.Verify
 public import VCVio.OracleComp.QueryTracking.WriterCost
 
 /-!
@@ -28,13 +29,9 @@ The signer keeps its key across requests, as a real signer does.
 
 Each request signs with the key the request before it returned.
 
-The budget `q` counts the hash calls of the same game with the note's stateless signer.
+The budget `q` counts the hash calls of this game, on every run.
 
-That signer re-derives `S` and `P` from `S_0`, and rebuilds every tree, on each request.
-
-It returns the same signatures, and a theorem proves that the two games win equally often.
-
-The budget counts key generation, signing, the adversary's queries and the final verification.
+It counts key generation, signing, the adversary's queries and the final verification.
 
 It counts repeated inputs too, and a hash call is one call of `H`, whatever its input's length.
 
@@ -100,16 +97,26 @@ def signingOracle : QueryImpl SigningSpec
 noncomputable def sampleSeed : ProbComp Seed :=
   ofSeed <$> XmssSecurity.sampleMasterSeed
 
+/-- The check of a forgery, once the adversary returned it with the log of its requests.
+
+It wins when the forgery verifies and no request for its message returned its signature. -/
+noncomputable def checkForgery (pk : PublicKey) (y : Forgery × QueryLog SigningSpec) :
+    OracleComp XmssSecurity.OracleWorld Bool := do
+  let verified ← liftM (verifyWith H pk y.1.message y.1.signature)
+  return decide (Valid y.2 ∧ ¬Contains y.2 y.1) && verified
+
+/-- The game once the keys exist: the adversary with its oracles, then the check of its forgery. -/
+noncomputable def gameAfterKeys (adversary : Adversary) (pk : PublicKey) (sk : SecretKey) :
+    OracleComp XmssSecurity.OracleWorld Bool :=
+  ((simulateQ (QueryImpl.ofLift XmssSecurity.OracleWorld
+    (StateT SecretKey (WriterT (QueryLog SigningSpec) (OracleComp XmssSecurity.OracleWorld))) +
+      signingOracle) (adversary.main pk)).run sk).run >>= fun x => checkForgery pk (x.1.1, x.2)
+
 /-- The game: key generation, the adversary with its oracles, then the check of its forgery. -/
 noncomputable def gameCore (adversary : Adversary) : OracleComp XmssSecurity.OracleWorld Bool := do
   let seed ← liftM sampleSeed
   let (pk, sk) ← liftM (keyGenWith H seed)
-  let (((forgery, _), log) : (Forgery × SecretKey) × QueryLog SigningSpec) ←
-    ((simulateQ (QueryImpl.ofLift XmssSecurity.OracleWorld
-      (StateT SecretKey (WriterT (QueryLog SigningSpec) (OracleComp XmssSecurity.OracleWorld))) +
-        signingOracle) (adversary.main pk)).run sk).run
-  let verified ← liftM (verifyWith H pk forgery.message forgery.signature)
-  return decide (Valid log ∧ ¬Contains log forgery) && verified
+  gameAfterKeys adversary pk sk
 
 /-- The oracles of the game.
 
@@ -131,47 +138,15 @@ noncomputable def experiment (adversary : Adversary) : ProbComp (Bool × Nat) :=
 noncomputable def forgeAdvantage (adversary : Adversary) : ℝ≥0∞ :=
   Pr{let result ← experiment adversary}[result.1 = true]
 
-/-! ## The game with the stateless signer
-
-The budget of the theorem counts the calls of this game. -/
-
-/-- `Sig(S_0, idx, m)` of the stateless signer on each request, recorded with its answer. -/
-def statelessSigningOracle (seed : Seed) :
-    QueryImpl SigningSpec (WriterT (QueryLog SigningSpec) (OracleComp XmssSecurity.OracleWorld)) :=
-  QueryImpl.withLogging fun request =>
-    liftM (Except.toOption <$> statelessSignWith H seed request.leafIndex request.message)
-
-/-- The game with the stateless signer: the secret key is the seed itself. -/
-noncomputable def statelessGameCore (adversary : Adversary) :
-    OracleComp XmssSecurity.OracleWorld Bool := do
-  let seed ← liftM sampleSeed
-  let (sk, pk) ← liftM (statelessKeyGenWith H seed)
-  let ((forgery, log) : Forgery × QueryLog SigningSpec) ←
-    (simulateQ (QueryImpl.ofLift XmssSecurity.OracleWorld
-      (WriterT (QueryLog SigningSpec) (OracleComp XmssSecurity.OracleWorld)) +
-        statelessSigningOracle sk) (adversary.main pk)).run
-  let verified ← liftM (verifyWith H pk forgery.message forgery.signature)
-  return decide (Valid log ∧ ¬Contains log forgery) && verified
-
-/-- The game with the stateless signer against one random oracle, from an empty cache.
-
-It counts every hash call. -/
-noncomputable def statelessExperiment (adversary : Adversary) : ProbComp (Bool × Nat) :=
-  (simulateQ countedOracle (statelessGameCore adversary)).run.run' ∅
-
-/-- The probability that the adversary forges against the stateless signer. -/
-noncomputable def statelessForgeAdvantage (adversary : Adversary) : ℝ≥0∞ :=
-  Pr{let result ← statelessExperiment adversary}[result.1 = true]
-
 /-! ## The statement -/
 
-/-- Every run of the game with the stateless signer makes at most `q` hash calls. -/
+/-- Every run of the game makes at most `q` hash calls. -/
 def HasHashQueryBound (adversary : Adversary) (q : Nat) : Prop :=
-  ∀ result ∈ support (statelessExperiment adversary), result.2 ≤ q
+  ∀ result ∈ support (experiment adversary), result.2 ≤ q
 
 /-- An adversary with a budget of `q >= 1` hash calls forges with probability `<= q / 2^bits`.
 
-The budget counts every hash call of the game with the stateless signer, the signer's included. -/
+The budget counts every hash call of the game, the signer's included. -/
 def HasClassicalSecurityBits (bits : Nat) : Prop :=
   ∀ q, 1 ≤ q → ∀ adversary, HasHashQueryBound adversary q →
     forgeAdvantage adversary ≤ q / ((2 ^ bits : Nat) : ℝ≥0∞)

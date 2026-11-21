@@ -5,8 +5,6 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Reasons
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.SeedHops
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.IdealFailure
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.AdversaryBudget
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.KeyedSigner
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.KeyedReasons
 
 /-!
 # Proofs: leanXMSS as EthLib computes it is unforgeable
@@ -17,27 +15,27 @@ The theorem holds in the random oracle model.
 
 The game's signer keeps its key across requests, as a real signer does.
 
-Take an adversary whose game with the note's stateless signer makes at most `q >= 1` hash calls.
+Take an adversary whose game makes at most `q >= 1` hash calls on every run.
 
 It forges a signature with probability at most `q / 2^127`.
 
-`q` counts every hash call of that game, the signer's and key generation's included.
-
-Both signers return the same signatures, so the adversary forges in both games equally often.
+`q` counts every hash call of the game, the signer's and key generation's included.
 
 Key generation alone makes about `2^23.7` calls.
 
-A signing request can make more than `2^33`, when its randomizer trials keep missing.
+A signing request can make more than `2^32` calls, when its randomizer trials keep missing.
 
-So the bound is never below about `2^-103.3`, and each signing request adds more than `2^-94`.
+It can make more than `2^33` when it builds a bottom tree, which runs a second search.
 
-With all `2^32` leaf indices signed, `q` exceeds `2^65`, and the bound exceeds `2^-62`.
+So the bound is never below about `2^-103.3`, and each signing request adds at least `2^-95`.
+
+With all `2^32` leaf indices signed, `q` exceeds `2^64`, and the bound exceeds `2^-63`.
 
 A second form counts only the adversary's own calls: `qH` calls of `H` and `r` requests.
 
-Its bound is `Q / 2^127`, with `Q = 205 * 2^16 + 1 + qH + r (2^33 + 410 * 2^16 + 204) + 384`.
+Its bound is `Q / 2^127`, with `Q = 205 * 2^16 + 1 + qH + r (2^33 + 205 * 2^16 + 407) + 384`.
 
-For `r <= 2^32` it is at most `(qH + 2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385) / 2^127`.
+For `r <= 2^32` it is at most `(qH + 2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385) / 2^127`.
 
 The game runs EthLib's key generation, signing and verification.
 
@@ -50,13 +48,7 @@ It compares them with a model of the scheme with precomputed keys, its own game-
 - EthLib's bytes, addresses and codewords are the model's.
 - Each hashing routine of EthLib is the model's, call for call.
 - EthLib's adversary is one of the model's.
-- EthLib's game wins as often as the real game of the proof.
-
-The stateless signer gets the seed `S_0` and derives `S` and `P` again with two hash calls.
-
-Key generation made those calls first, so they return cached answers and change nothing.
-
-They still count toward the budget `q`, so the bound holds as stated.
+- EthLib's game wins as often as the model's, and makes at least its hash calls.
 
 The game's signer reads its trees from its key instead of rebuilding them.
 
@@ -72,7 +64,7 @@ Take an adversary that makes at most `qH` hash queries and `r` signing requests 
 
 The hops cost at most `2 Q / 2^256`, where `Q` bounds the hash calls of the game on every run.
 
-Here `Q = 205 * 2^16 + 1 + qH + r (2^33 + 410 * 2^16 + 204) + 384`.
+Here `Q = 205 * 2^16 + 1 + qH + r (2^33 + 205 * 2^16 + 407) + 384`.
 
 So it charges each request's worst case.
 
@@ -81,6 +73,8 @@ After the hops, some request fails with probability at most `r (Q / 2^95 + 2 exp
 A new search meets a cached trial with chance `<= Q / 2^96`, and fresh trials all fail rarely.
 
 A repeated search succeeds once its first run did, since a trial with a codeword stays cached.
+
+Until a request fails, every kept tree holds the top signature of a search that succeeded.
 
 So the variant game's bound is `q / 2^127 + 2 Q / 2^256 + r (Q / 2^95 + 2 exp(-4000))`.
 

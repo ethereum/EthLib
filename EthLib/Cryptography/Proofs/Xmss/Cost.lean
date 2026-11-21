@@ -18,8 +18,6 @@ The signing bounds charge each randomizer search all `2^32` trials.
 
 The top key's path is read from the key, so signing never hashes the top tree.
 
-The stateless signer of the note takes at most `2 + 2^33 + 410 * 2^16 + 202` calls.
-
 Key generation does not search.
 
 So under fixed answers, when each call of `H` makes exactly one query, it makes `13434881` calls.
@@ -76,7 +74,7 @@ theorem isQueryBoundP_seedPrf (hH : ∀ x, IsQueryBoundP (H x) p 1) (s : Seed) (
 It makes at most `1 + 205 * 2^16` calls. -/
 theorem isQueryBoundP_keyGenWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (seed : Seed) :
     IsQueryBoundP (keyGenWith H seed) p (1 + 205 * 2 ^ LAYER_HEIGHT) := by
-  unfold keyGenWith
+  unfold keyGenWith Internal.keyGenFrom
   refine isQueryBoundP_bind (isQueryBoundP_schemeSeed hH seed) fun s _ =>
     (isQueryBoundP_bind (isQueryBoundP_publicParamOf (isQueryBoundP_seedPrf hH s)) fun pp _ =>
       isQueryBoundP_bind (m := 0)
@@ -85,45 +83,70 @@ theorem isQueryBoundP_keyGenWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (seed : S
   simp [LAYER_HEIGHT]
 
 /-- The top key's signature of a root is one search: at most `2^32 + 204` calls. -/
-theorem isQueryBoundP_signRootWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (sk : SecretKey)
-    (b : Nat) (root : Digest) :
-    IsQueryBoundP (signRootWith H sk b root) p (2 ^ 32 + 204) := by
+theorem isQueryBoundP_signRootWith (hH : ∀ x, IsQueryBoundP (H x) p 1)
+    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1)
+    (sk : SecretKey) (b : Nat) (root : Digest) :
+    IsQueryBoundP (signRootWith H prf sk b root) p (2 ^ 32 + 204) := by
   unfold signRootWith
   simp only [Internal.otsSignTrials_hashTrials]
   refine (isQueryBoundP_bind (m := 0)
-    (isQueryBoundP_otsSign hH (isQueryBoundP_seedPrf hH _) _ _ _ _) fun r _ => ?_).mono
+    (isQueryBoundP_otsSign hH hprf _ _ _ _) fun r _ => ?_).mono
     (le_of_eq (Nat.add_zero _))
   rcases r with _ | ⟨rho, y⟩ <;> exact isQueryBoundP_pure _ _ _
 
 /-- A bottom tree with its top signature: at most `205 * 2^16 - 1 + 2^32 + 204` calls. -/
-theorem isQueryBoundP_cacheTreeWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (sk : SecretKey)
-    (b : Nat) :
-    IsQueryBoundP (cacheTreeWith H sk b) p (2 ^ LAYER_HEIGHT * 205 - 1 + (2 ^ 32 + 204)) := by
+theorem isQueryBoundP_cacheTreeWith (hH : ∀ x, IsQueryBoundP (H x) p 1)
+    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1)
+    (sk : SecretKey) (b : Nat) :
+    IsQueryBoundP (cacheTreeWith H prf sk b) p (2 ^ LAYER_HEIGHT * 205 - 1 + (2 ^ 32 + 204)) := by
   unfold cacheTreeWith
   exact isQueryBoundP_bind
-    (isQueryBoundP_build hH (isQueryBoundP_seedPrf hH _) _ .bottom LAYER_HEIGHT b) fun _ _ =>
-      (isQueryBoundP_bind (m := 0) (isQueryBoundP_signRootWith hH sk b _) fun _ _ =>
+    (isQueryBoundP_build hH hprf _ .bottom LAYER_HEIGHT b) fun _ _ =>
+      (isQueryBoundP_bind (m := 0) (isQueryBoundP_signRootWith hH hprf sk b _) fun _ _ =>
         isQueryBoundP_pure _ _ 0).mono (le_of_eq (Nat.add_zero _))
 
 /-- Fetching a bottom tree costs at most building it. -/
-theorem isQueryBoundP_fetchTreeWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (sk : SecretKey)
-    (b : Nat) :
-    IsQueryBoundP (fetchTreeWith H sk b) p (2 ^ LAYER_HEIGHT * 205 - 1 + (2 ^ 32 + 204)) := by
+theorem isQueryBoundP_fetchTreeWith (hH : ∀ x, IsQueryBoundP (H x) p 1)
+    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1)
+    (sk : SecretKey) (b : Nat) :
+    IsQueryBoundP (fetchTreeWith H prf sk b) p (2 ^ LAYER_HEIGHT * 205 - 1 + (2 ^ 32 + 204)) := by
   unfold fetchTreeWith
   split
   · exact (isQueryBoundP_pure _ _ 0).mono (Nat.zero_le _)
-  · exact (isQueryBoundP_bind (m := 0) (isQueryBoundP_cacheTreeWith hH sk b) fun _ _ =>
+  · exact (isQueryBoundP_bind (m := 0) (isQueryBoundP_cacheTreeWith hH hprf sk b) fun _ _ =>
       isQueryBoundP_pure _ _ 0).mono (le_of_eq (Nat.add_zero _))
 
 /-- Fetching a bottom tree that the key keeps makes no call. -/
-theorem isQueryBoundP_fetchTreeWith_of_mem (sk : SecretKey) {b : Nat}
-    (hb : ∃ t ∈ sk.cache, t.index = b) : IsQueryBoundP (fetchTreeWith H sk b) p 0 := by
+theorem isQueryBoundP_fetchTreeWith_of_mem {prf : SeedPrf (OracleComp spec)} (sk : SecretKey)
+    {b : Nat} (hb : ∃ t ∈ sk.cache, t.index = b) :
+    IsQueryBoundP (fetchTreeWith H prf sk b) p 0 := by
   unfold fetchTreeWith
   split
   · exact isQueryBoundP_pure _ _ 0
   · next hnone =>
     obtain ⟨t, ht, rfl⟩ := hb
     exact absurd (List.find?_eq_none.1 hnone t ht) (by simp)
+
+/-- Signing from any derivations: the bottom search, then at most one tree and the top search.
+
+At most `2^33 + 205 * 2^16 + 407` calls, for any key, when each derivation is one call. -/
+theorem isQueryBoundP_signWithTrials (hH : ∀ x, IsQueryBoundP (H x) p 1)
+    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1)
+    (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
+    IsQueryBoundP (Internal.signWithTrials H prf sk idx msg (hashTrials H)) p
+      (2 * MAX_RANDOMIZER_TRIALS + 205 * 2 ^ LAYER_HEIGHT + 407) := by
+  unfold Internal.signWithTrials
+  simp only [Internal.otsSignTrials_hashTrials]
+  refine (isQueryBoundP_bind (isQueryBoundP_otsSign hH hprf _ .bottom _ _)
+    fun r _ => ?_).mono (n := 2 ^ 32 + 204 + (2 ^ LAYER_HEIGHT * 205 - 1 + (2 ^ 32 + 204)))
+    (by simp [MAX_RANDOMIZER_TRIALS, LAYER_HEIGHT])
+  rcases r with _ | ⟨rho, y⟩
+  · exact (isQueryBoundP_pure _ _ 0).mono (Nat.zero_le _)
+  · refine (isQueryBoundP_bind (m := 0) (isQueryBoundP_fetchTreeWith hH hprf sk _)
+      fun r _ => ?_).mono (le_of_eq (Nat.add_zero _))
+    obtain ⟨t, sk'⟩ := r
+    dsimp only
+    cases t.top <;> exact isQueryBoundP_pure _ _ _
 
 /-- Signing: the bottom search, then at most one bottom tree and the top search.
 
@@ -133,19 +156,8 @@ It bounds the calls of one signing request, whatever trees the key keeps. -/
 theorem isQueryBoundP_signWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (sk : SecretKey)
     (idx : LeafIndex) (msg : Message) :
     IsQueryBoundP (signWith H sk idx msg) p
-      (2 * MAX_RANDOMIZER_TRIALS + 205 * 2 ^ LAYER_HEIGHT + 407) := by
-  unfold signWith Internal.signWithTrials
-  simp only [Internal.otsSignTrials_hashTrials]
-  refine (isQueryBoundP_bind (isQueryBoundP_otsSign hH (isQueryBoundP_seedPrf hH _) _ .bottom _ _)
-    fun r _ => ?_).mono (n := 2 ^ 32 + 204 + (2 ^ LAYER_HEIGHT * 205 - 1 + (2 ^ 32 + 204)))
-    (by simp [MAX_RANDOMIZER_TRIALS, LAYER_HEIGHT])
-  rcases r with _ | ⟨rho, y⟩
-  · exact (isQueryBoundP_pure _ _ 0).mono (Nat.zero_le _)
-  · refine (isQueryBoundP_bind (m := 0) (isQueryBoundP_fetchTreeWith hH sk _) fun r _ => ?_).mono
-      (le_of_eq (Nat.add_zero _))
-    obtain ⟨t, sk'⟩ := r
-    dsimp only
-    cases t.top <;> exact isQueryBoundP_pure _ _ _
+      (2 * MAX_RANDOMIZER_TRIALS + 205 * 2 ^ LAYER_HEIGHT + 407) :=
+  isQueryBoundP_signWithTrials hH (isQueryBoundP_seedPrf hH _) sk idx msg
 
 /-- Signing in a bottom tree the key keeps is the bottom search alone: at most `2^32 + 204` calls.
 
@@ -160,26 +172,12 @@ theorem isQueryBoundP_signWith_of_mem (hH : ∀ x, IsQueryBoundP (H x) p 1) (sk 
     (by simp [MAX_RANDOMIZER_TRIALS])
   rcases r with _ | ⟨rho, y⟩
   · exact isQueryBoundP_pure _ _ 0
-  · refine (isQueryBoundP_bind (m := 0) (isQueryBoundP_fetchTreeWith_of_mem sk hkept)
+  · refine (isQueryBoundP_bind (m := 0)
+      (isQueryBoundP_fetchTreeWith_of_mem (prf := seedPrf H _) sk hkept)
       fun r _ => ?_).mono le_rfl
     obtain ⟨t, sk'⟩ := r
     dsimp only
     cases t.top <;> exact isQueryBoundP_pure _ _ _
-
-/-- The stateless signer: the scheme seed, the parameter and a signature.
-
-At most `2 + 2^33 + 410 * 2^16 + 202 = 8616804556` calls.
-
-It bounds the calls of one signing request in the security game of the stateless signer. -/
-theorem isQueryBoundP_statelessSignWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (seed : Seed)
-    (idx : LeafIndex) (msg : Message) :
-    IsQueryBoundP (statelessSignWith H seed idx msg) p
-      (2 + (2 * MAX_RANDOMIZER_TRIALS + 410 * 2 ^ LAYER_HEIGHT + 202)) := by
-  unfold statelessSignWith
-  refine (isQueryBoundP_bind (isQueryBoundP_schemeSeed hH seed) fun s _ =>
-    isQueryBoundP_bind (isQueryBoundP_publicParamOf (isQueryBoundP_seedPrf hH s)) fun pp _ =>
-      isQueryBoundP_signDerived hH (isQueryBoundP_seedPrf hH s) pp idx msg).mono ?_
-  simp [MAX_RANDOMIZER_TRIALS, LAYER_HEIGHT]
 
 end Bounds
 
@@ -235,7 +233,8 @@ theorem length_queriesWith_keyGenWith (seed : Seed) :
     have h := queriesWith_bind f (seedPrf H s ⟨0, 0⟩ addrParam
       #[]) fun h => (pure (halfOf 0 h) : OracleComp spec PublicParam)
     exact (congrArg List.length h).trans (by rw [List.length_append]; exact congrArg (· + 0) (hH _))
-  rw [keyGenWith, queriesWith_bind, List.length_append, hseed, queriesWith_bind,
+  rw [keyGenWith, queriesWith_bind, List.length_append, hseed, Internal.keyGenFrom,
+    queriesWith_bind,
     List.length_append, hpp, queriesWith_bind, List.length_append, build, queriesWith_build,
     ← node, length_queriesWith_xmssNode f H hH, queriesWith_pure, List.length_nil]
   have hpos : 1 ≤ 205 * 2 ^ LAYER_HEIGHT := Nat.one_le_iff_ne_zero.2 (by positivity)
