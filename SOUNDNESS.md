@@ -4637,6 +4637,19 @@ From Altair, that is everything the attestations read; before Altair they also r
 It has the same registry, checkpoints, block roots, flags, and committees of the previous and current epoch.
 Every budget of the state before the block bounds it too.
 
+`processBlock_honestBlock` (`Consensus/Proofs/HonestBlock.lean`) runs a whole honest block from Altair until Gloas, with honest attestations built on the state at its slot.
+Those attestations are the same on the state before the operations.
+So the attestation steps accept them, under the hypotheses of `foldlM_processAttestation_honestAttestation` above.
+No deposit of the deposit contract may be due, since the honest block carries none.
+Before Electra that leaves out the slots where deposits are due; from Electra it holds once deposit requests take over.
+Each key of the current sync committee must be the key of a validator, and the empty sync aggregate then passes.
+The sync committee must not be empty, and one increment must be at most the largest effective balance, so that the sync reward fits in 64 bits.
+Each honest member of each committee then holds the timely target flag after the block, when the state holds the target root for the first slot of the target epoch.
+`applySignedBlock_of_processBlock` completes such a block with the root of the state after it and the proposer's signature, so it passes the block step of a run, which checks both.
+That needs the encoding of a beacon state to be lawful, so that the state has a root.
+A block holds at most 128 attestations before Electra and 8 from Electra on mainnet; which honest blocks carry which attestations is left to the assembled theorem.
+Satisfiability of the state hypotheses on a run from genesis is also left to the assembled theorem.
+
 `processJustificationAndFinalization_slackJustifiedCheckpoints` (`Consensus/Proofs/Transition/FfgSlack.lean`) turns one step into a slack link of the model.
 If the two justified checkpoints of the state before the step are slack-justified, so are those of the state after it.
 A new current justified checkpoint must match the state of that step.
