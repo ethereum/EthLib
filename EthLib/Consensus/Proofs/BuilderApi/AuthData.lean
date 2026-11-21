@@ -26,8 +26,8 @@ namespace EthLib.Consensus.BuilderApi
 /-! ## Hexadecimal groups -/
 
 /-- A hexadecimal digit reads back as its value, and is ASCII. -/
-private theorem hexDigitValue?_digitChar {d : Nat} (hd : d < 16) :
-    hexDigitValue? (Nat.digitChar d) = some d ∧ (Nat.digitChar d).toNat < 128 := by
+private theorem hexValue?_digitChar {d : Nat} (hd : d < 16) :
+    Base.hexValue? (Nat.digitChar d) = some (UInt8.ofNat d) ∧ (Nat.digitChar d).toNat < 128 := by
   match d, hd with
   | 0, _ => rw [show Nat.digitChar 0 = '0' by simp]; decide
   | 1, _ => rw [show Nat.digitChar 1 = '1' by simp]; decide
@@ -62,14 +62,16 @@ private theorem exists_digitChar_of_mem_toDigits {n : Nat} {c : Char} (hc : c �
 
 /-- The digits of a number in base 16 read back as that number. -/
 private theorem foldlM_toDigits (n : Nat) :
-    (Nat.toDigits 16 n).foldlM (fun acc c => (acc * 16 + ·) <$> hexDigitValue? c) 0 = some n := by
+    (Nat.toDigits 16 n).foldlM (fun acc c => (acc * 16 + ·.toNat) <$> Base.hexValue? c) 0 =
+      some n := by
   induction n using Nat.strongRecOn with
   | ind n ih =>
     rw [Nat.toDigits_eq_ite (by decide)]
     split
-    · simp [(hexDigitValue?_digitChar ‹_›).1]
+    · simp [(hexValue?_digitChar ‹_›).1]
+      omega
     · rw [List.foldlM_append, ih (n / 16) (by omega)]
-      simp [(hexDigitValue?_digitChar (Nat.mod_lt n (by decide : 16 > 0))).1]
+      simp [(hexValue?_digitChar (Nat.mod_lt n (by decide : 16 > 0))).1]
       omega
 
 /-- A group in hexadecimal is not empty. -/
@@ -77,22 +79,22 @@ theorem hexGroup_ne_nil (g : UInt16) : hexGroup g ≠ [] := Nat.toDigits_ne_nil
 
 /-- Each character of a group in hexadecimal is a hexadecimal digit and ASCII. -/
 theorem mem_hexGroup {g : UInt16} {c : Char} (hc : c ∈ hexGroup g) :
-    (∃ d, hexDigitValue? c = some d) ∧ c.toNat < 128 := by
+    (∃ d, Base.hexValue? c = some d) ∧ c.toNat < 128 := by
   obtain ⟨d, hd, rfl⟩ := exists_digitChar_of_mem_toDigits hc
-  exact ⟨⟨d, (hexDigitValue?_digitChar hd).1⟩, (hexDigitValue?_digitChar hd).2⟩
+  exact ⟨⟨UInt8.ofNat d, (hexValue?_digitChar hd).1⟩, (hexValue?_digitChar hd).2⟩
 
 /-- A group in hexadecimal holds no colon. -/
 theorem colon_not_mem_hexGroup (g : UInt16) : ':' ∉ hexGroup g := by
   intro h
   obtain ⟨⟨d, hd⟩, -⟩ := mem_hexGroup h
-  rw [show hexDigitValue? _ = none by decide] at hd
+  rw [show Base.hexValue? _ = none by decide] at hd
   cases hd
 
 /-- A group in hexadecimal holds no dot. -/
 theorem dot_not_mem_hexGroup (g : UInt16) : '.' ∉ hexGroup g := by
   intro h
   obtain ⟨⟨d, hd⟩, -⟩ := mem_hexGroup h
-  rw [show hexDigitValue? _ = none by decide] at hd
+  rw [show Base.hexValue? _ = none by decide] at hd
   cases hd
 
 /-- A group in hexadecimal reads back as that group. -/

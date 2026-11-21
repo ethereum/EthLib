@@ -821,6 +821,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the IPv6 reader of the builder API reads hex digits with the reader of Base, and its own copy is removed ([#3837](https://github.com/ethereum/EthLib/issues/3837)).
+  `BuilderApi.hexDigitValue?` is removed, and `BuilderApi.mem_hexGroup` now states that each character of a group has a value under `Base.hexValue?`, a byte.
+  Migration: write `Base.hexValue?`, and read its value with `UInt8.toNat`.
+
 - In Lean, the light client checks with the shared assertion of Base, and its own copy is removed ([#3837](https://github.com/ethereum/EthLib/issues/3837)).
   `LightClientError.require` and its lemma `LightClientError.require_ok` are removed.
   Migration: write `Base.ensure` and `Base.ensure_ok_iff`, the same definition and lemma for any error type.
