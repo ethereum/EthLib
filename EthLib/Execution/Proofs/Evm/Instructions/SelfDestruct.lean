@@ -22,9 +22,9 @@ It moves the balance to another beneficiary and keeps the sum of the two balance
 
 An account that names itself keeps its balance.
 
-Before Glamsterdam, a new beneficiary costs what a CALL of the balance pays for a new account.
+From Tangerine Whistle, a new beneficiary adds what a CALL of the balance pays for a new account.
 
-It costs nothing at a fork where SELFDESTRUCT has no base price.
+That holds up to Glamsterdam, and before Tangerine Whistle a new beneficiary adds nothing.
 
 From Glamsterdam, a new beneficiary costs 9000 execution gas and 183600 state gas.
 
@@ -156,15 +156,15 @@ theorem selfdestructStateGas_eq_zero (h : fork < .glamsterdam ∨ createsAccount
     simp [this]
   · simp [h]
 
-/-- Before Glamsterdam, a beneficiary that gets an account costs what a CALL pays for it.
+/-- From Tangerine Whistle to Glamsterdam, a beneficiary that gets an account adds what a CALL pays.
 
 That CALL sends the balance of the current account to the beneficiary.
 
-EIP-150 adds the price of the account with the base price, similar to CALLs.
+EIP-150, Specification, charges 25000 for that account, "similar to CALLs".
 
-EIP-161 then gives CALL and SELFDESTRUCT one rule: ether must move to a dead account.
+EIP-161, Specification (b), then charges both only when ether moves to a dead account.
 
-A fork with no base price charges nothing for the account. -/
+Before Tangerine Whistle, SELFDESTRUCT has no base price and charges nothing for the account. -/
 theorem selfdestructCost_selfdestructCreatesAccount (hlt : fork < .glamsterdam) (cold : Bool)
     (state : TransactionState) (originator beneficiary : Address) :
     selfdestructCost fork cold (selfdestructCreatesAccount fork state originator beneficiary) =

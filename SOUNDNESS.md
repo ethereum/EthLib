@@ -1614,6 +1614,10 @@ The stack, the frame with its program counter and gas meter, and memory are mode
 So are the instructions that read only the stack, memory, call data, code and return data.
 They are in `Execution/Evm/Instructions/StackOnly.lean` and `Execution/Evm/Instructions/MemoryData.lean`.
 
+`selfdestructCost_selfdestructCreatesAccount` (`Execution/Proofs/Evm/Instructions/SelfDestruct.lean`) prices the new beneficiary of SELFDESTRUCT before Glamsterdam.
+From Tangerine Whistle, that beneficiary adds what a CALL of the balance to it pays for the account.
+Before Tangerine Whistle, it adds nothing, since EIP-150 introduced that price together with the base price of SELFDESTRUCT.
+
 A program logic over bytecode is in `Execution/Proofs/Evm/Logic/`.
 Its first relation covers frames that send no message.
 `Reaches S` is the chain of steps of a relation `S`.
@@ -1659,9 +1663,6 @@ That state keeps every other slot, the original words and the accounts.
 `Logic.mem_insert_getD_self` proves that a slot whose access is recorded is warm.
 `Logic.mem_insert_getD_of_ne` proves that the record leaves every other slot as cold or warm as it was.
 `Logic.le_sloadCost` proves that from Berlin, SLOAD costs at least 100.
-`selfdestructCost_selfdestructCreatesAccount` (`Proofs/Evm/Instructions/SelfDestruct.lean`) covers SELFDESTRUCT before Glamsterdam.
-A beneficiary that gets an account costs what a CALL of the balance to it pays for the account.
-At a fork where SELFDESTRUCT has no base price, it pays nothing for the account, since EIP-150 adds both prices together.
 `Logic.gas_rule` is the rule for GAS, which pushes the gas left after its own price of 2.
 `Logic.extcodesize` is the rule for EXTCODESIZE from Berlin to before Glamsterdam.
 It charges the prices of EIP-2929, and needs the state to hold the code of the account.
