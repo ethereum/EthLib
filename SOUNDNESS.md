@@ -6923,6 +6923,13 @@ Before Fulu, the state does not hold the proposers of the next epoch.
 They can change with the balances until that epoch starts, so the agreement with the consensus schedule is proved from Fulu only.
 The export gives the list at Fulu only, because the relay source has no part after Fulu.
 
+`Consensus/Proofs/Transition/ProposerLookahead.lean` proves the promise of EIP-7917 along a run of slots, blocks and upgrades, from Fulu.
+`Run.proposerLookahead_getElem?` takes a run from a state at Fulu or later.
+It also takes a slot that the lookahead of that state covers, at or after the slot of the last state.
+The last state then names the same proposer at the position of that slot.
+`Run.getBeaconProposerIndex_of_proposerLookahead` adds that the state that the run reaches at that slot computes that proposer.
+The epoch step moves each kept entry back by one epoch, blocks keep the lookahead, and the upgrades to Gloas and to Heze copy it.
+
 The data API lists the payloads that a relay delivered to proposers and the bids from builders that it received and verified ([`proposer_payload_delivered.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/data/proposer_payload_delivered.yaml), [`builder_blocks_received.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/data/builder_blocks_received.yaml)).
 A delivered payload is a bid trace with `block_number` and `num_tx`, and a received bid adds `timestamp` and `timestamp_ms` ([`bids.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/bids.yaml)).
 `BidTraceV2.ofApiJson_toApiJson` (`Consensus/Proofs/RelayApi.lean`) shows that the JSON of a delivered payload reads back as that payload.

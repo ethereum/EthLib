@@ -271,6 +271,7 @@ public import EthLib.Consensus.Proofs.Transition.PaymentReleaseWithdrawals
 public import EthLib.Consensus.Proofs.Transition.PendingConsolidations
 public import EthLib.Consensus.Proofs.Transition.PendingTail
 public import EthLib.Consensus.Proofs.Transition.ProposerBalance
+public import EthLib.Consensus.Proofs.Transition.ProposerLookahead
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Requests
 public import EthLib.Consensus.Proofs.Transition.RetiredValidator
