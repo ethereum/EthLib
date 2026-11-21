@@ -5051,7 +5051,12 @@ A stored build stays, so a second update with the same payload ID keeps it, as s
 A build that fails stores nothing, so a request for its ID answers `-38001`, although the update answered the ID; the model decides so, and step 2 of payload building recommends an empty build first, which the builder can choose.
 A build from Glamsterdam stores nothing, since the build gives no block access list here yet; until it does, an update with attributes from Glamsterdam answers an ID that names no build, against step 9 of the update.
 The stored build has no blobs, so a request from version 3 fails for a build with blob transactions.
-No theorem yet composes the update, the request and `engine_newPayload` on the node into one `VALID` answer (#3533); the Python tests run those three calls.
+`newPayloadStep_of_getPayloadStep` (`Proofs/Node/Proposal.lean`) composes the update, the request for its payload ID and `engine_newPayload` into one `VALID` answer, with the payload's own hash.
+The payload sits on the head of the update, and carries the timestamp, the RANDAO mix, the withdrawals, the parent beacon block root and the slot of its attributes.
+The theorem asks that the node be consistent, with each known block under its own hash and sound totals of proof of work.
+`Reachable.consistent` shows that every node the steps reach from a consistent node is consistent, and `consistent_of_start` that a starting node is.
+It also assumes that the parameters of `engine_newPayload` pass the checks before execution and give the block of the build, and that the node not know that block as invalid.
+No theorem yet shows that the payload of the response, written as those parameters, passes those checks.
 A block is valid only on a valid parent, so a payload whose parent the node knows as invalid is `INVALID`, and the node keeps it as invalid (`newPayloadStep_of_invalid_parent`).
 That covers step 2 of payload validation, which asks `INVALID` for each descendant of an invalid terminal block.
 Its latest valid hash is the latest valid block of the parent's chain, or zero when that block is of proof of work, as step 3 asks; `latestValidHash_eq_some_iff` (`Proofs/ForkchoiceUpdated.lean`) states that function.
