@@ -254,8 +254,7 @@ def validateSingleAttestation (config : Config) (checks : SignatureChecks) (seen
   let committee ← (getBeaconCommittee state data.slot index).mapError .accessor
   (rejectUnless (committee.contains attestation.attesterIndex)
     "attester is not a member of the committee").andThenM fun _ => do
-  let some attester := state.validators.data[attestation.attesterIndex.toNat]?
-    | throw (.accessor (.indexOutOfRange attestation.attesterIndex))
+  let attester ← (getValidator state attestation.attesterIndex).mapError .accessor
   let valid ← isValidSignatureAtEpoch config checks state DOMAIN_BEACON_ATTESTER data.target.epoch
     data attester.pubkey attestation.signature
   (rejectUnless valid "invalid attestation signature").andThenM fun _ =>
@@ -333,8 +332,7 @@ def validateAggregateInCommittee (config : Config) (checks : SignatureChecks) (s
     "validator is not selected as aggregator").andThenM fun _ =>
   (rejectUnless (committee.contains proof.aggregatorIndex)
     "aggregator is not a member of the committee").andThenM fun _ => do
-  let some aggregator := state.validators.data[proof.aggregatorIndex.toNat]?
-    | throw (.accessor (.indexOutOfRange proof.aggregatorIndex))
+  let aggregator ← (getValidator state proof.aggregatorIndex).mapError .accessor
   let selected ← isValidSignatureAtEpoch config checks state DOMAIN_SELECTION_PROOF
     data.target.epoch data.slot aggregator.pubkey proof.selectionProof
   (rejectUnless selected "invalid selection proof signature").andThenM fun _ => do
