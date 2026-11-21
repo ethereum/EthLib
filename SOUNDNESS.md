@@ -1432,6 +1432,9 @@ Blobs, cells, commitments, proofs and field elements are byte vectors with their
 `Proofs/Kzg/Core.lean` proves that parsing rejects bytes of any other length.
 It and `Proofs/Kzg/Cells.lean` prove that the operations reject other malformed inputs.
 An example is two lists of different lengths.
+The cell indices reach the cell operations through the C exports as one buffer, 8 big-endian bytes per index.
+`unpackIndicesBE_eq_ok_iff` (`Proofs/Kzg/Cells.lean`) states that a buffer decodes to a list of indices exactly when it is their encodings in order.
+So an index of 2^32 or more is read in full, and is rejected as out of bounds rather than read as a smaller index.
 
 Each operation takes the trusted setup as an argument and returns `Except KzgError`, so the kernel can unfold it.
 `computeCellsAndKzgProofs_blob_spec` and `recoverCellsAndKzgProofs_spec` (`Proofs/Kzg/Fk20Proofs.lean`) state the cells and proofs that two operations return.
