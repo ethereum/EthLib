@@ -26,7 +26,7 @@ public section
 
 namespace EthLib.Networking.Rlpx.Exports
 
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport rejectArgument toResult)
 
 open EthLib.Cryptography.Secp256k1
 
@@ -38,25 +38,27 @@ def eciesMessage : Ecies.EciesError → String
   | .keyDerivation _ => "key derivation failed"
   | .tagMismatch => "tag does not match"
 
-/-- Run a fallible computation, with its error as a code and a message. -/
-def runEcies {α : Type} (act : Except Ecies.EciesError α) : Result α :=
-  act.mapError fun e => (e.code, eciesMessage e)
+/-- A rejected ciphertext reaches Python with its code, and its message names the fault. -/
+instance : ExportError Ecies.EciesError where
+  code := Ecies.EciesError.code
+  message := eciesMessage
 
 /-- A private key of 32 big-endian bytes, or an error unless it is below `n`. -/
 def readPrivateKey (bytes : ByteArray) : Result Fn :=
-  Cryptography.Secp256k1.Exports.readPrivateKey bytes
-    (fun size => (0, s!"bad private key size: {size}, expected 32"))
-    (0, "private key is not below n")
+  toResult none (Cryptography.Secp256k1.Exports.readPrivateKey bytes
+    (fun size => UnreadArgument.mk s!"bad private key size: {size}, expected 32")
+    (UnreadArgument.mk "private key is not below n"))
 
 /-- An encoded public key, or an error. -/
 def readPublicKey (bytes : ByteArray) : Result Point :=
   match Point.decode bytes with
   | .ok p => pure p
-  | .error e => throw (0, e.message)
+  | .error e => rejectArgument none e.message
 
 /-- A 16-byte initialization vector, or an error for any other length. -/
 def readIv (bytes : ByteArray) : Result (Vector UInt8 16) :=
-  Base.exactBytes 16 bytes fun size => (0, s!"bad iv size: {size}, expected 16")
+  toResult none (Base.exactBytes 16 bytes fun size =>
+    UnreadArgument.mk s!"bad iv size: {size}, expected 16")
 
 /-! ## ECIES -/
 
@@ -67,13 +69,13 @@ def eciesEncryptExport (recipient ephemeral iv sharedMac message : ByteArray) :
   let q ← readPublicKey recipient
   let r ← readPrivateKey ephemeral
   let iv ← readIv iv
-  runEcies (Ecies.encrypt q r iv sharedMac message)
+  toResult none (Ecies.encrypt q r iv sharedMac message)
 
 /-- The message of an ECIES ciphertext, under a private key. -/
 @[export eth_rlpx_ecies_decrypt]
 def eciesDecryptExport (key sharedMac ciphertext : ByteArray) : Result ByteArray := do
   let k ← readPrivateKey key
-  runEcies (Ecies.decrypt k sharedMac ciphertext)
+  toResult none (Ecies.decrypt k sharedMac ciphertext)
 
 /-! ## The handshake -/
 
@@ -86,13 +88,15 @@ def handshakeMessage : HandshakeError → String
   | .secp256k1 e => e.message
   | .badRecoveryId id => s!"bad recovery id: {id}, expected 0 or 1"
 
-/-- Run a fallible handshake step, with its error as a code and a message. -/
-def runHandshake {α : Type} (act : Except HandshakeError α) : Result α :=
-  act.mapError fun e => (e.code, handshakeMessage e)
+/-- A rejected handshake reaches Python with its code, and its message names the fault. -/
+instance : ExportError HandshakeError where
+  code := HandshakeError.code
+  message := handshakeMessage
 
 /-- A 32-byte nonce, or an error for any other length. -/
 def readNonce (bytes : ByteArray) : Result (Vector UInt8 32) :=
-  Base.exactBytes 32 bytes fun size => (0, s!"bad nonce size: {size}, expected 32")
+  toResult none (Base.exactBytes 32 bytes fun size =>
+    UnreadArgument.mk s!"bad nonce size: {size}, expected 32")
 
 /-- The keys of one side: a static key, an ephemeral key and a nonce. -/
 def readKeys (staticKey ephemeralKey nonce : ByteArray) : Result Keys := do
@@ -121,14 +125,14 @@ def makeAuthExport (staticKey ephemeralKey nonce recipient r iv padding : ByteAr
     Result ByteArray := do
   let keys ← readKeys staticKey ephemeralKey nonce
   let q ← readPublicKey recipient
-  runHandshake (makeAuth keys q (← readSealing r iv padding))
+  toResult none (makeAuth keys q (← readSealing r iv padding))
 
 /-- The recipient's answer to `auth`: the packet `ack`, and the 128 bytes of its secrets. -/
 def respondOf (args : ByteArray × ByteArray × ByteArray × ByteArray × ByteArray × ByteArray ×
     ByteArray × ByteArray) : Result (ByteArray × ByteArray) := do
   let (staticKey, ephemeralKey, nonce, r, iv, padding, auth, probe) := args
   let keys ← readKeys staticKey ephemeralKey nonce
-  let (ack, secrets) ← runHandshake (respond keys (← readSealing r iv padding) auth)
+  let (ack, secrets) ← toResult none (respond keys (← readSealing r iv padding) auth)
   return (ack, secretsBytes secrets probe)
 
 /-- The recipient's answer to `auth`: the packet `ack`, and the 128 bytes of its secrets.
@@ -145,8 +149,9 @@ def respondExport (args : PyValue) : Result PyValue :=
 def recipientSecretsExport (staticKey ephemeralKey nonce auth ack probe : ByteArray) :
     Result ByteArray := do
   let keys ← readKeys staticKey ephemeralKey nonce
-  let (msg, _, remoteEphemeral) ← runHandshake (readAuth keys.staticKey auth)
-  let shared ← runHandshake ((ecdh keys.ephemeralKey remoteEphemeral).mapError .secp256k1)
+  let (msg, _, remoteEphemeral) ← toResult none (readAuth keys.staticKey auth)
+  let shared ←
+    toResult none ((ecdh keys.ephemeralKey remoteEphemeral).mapError HandshakeError.secp256k1)
   return secretsBytes (deriveSecrets false shared msg.initiatorNonce keys.nonce auth ack) probe
 
 /-- The initiator's secrets for its `auth` and the `ack` it received. -/
@@ -154,7 +159,7 @@ def recipientSecretsExport (staticKey ephemeralKey nonce auth ack probe : ByteAr
 def finishExport (staticKey ephemeralKey nonce auth ack probe : ByteArray) :
     Result ByteArray := do
   let keys ← readKeys staticKey ephemeralKey nonce
-  return secretsBytes (← runHandshake (finish keys auth ack)) probe
+  return secretsBytes (← toResult none (finish keys auth ack)) probe
 
 /-! ## Frames -/
 
@@ -165,13 +170,15 @@ def frameMessage : FrameError → String
   | .headerMacMismatch => "header MAC does not match"
   | .frameMacMismatch => "frame MAC does not match"
 
-/-- Run a fallible frame step, with its error as a code and a message. -/
-def runFrame {α : Type} (act : Except FrameError α) : Result α :=
-  act.mapError fun e => (e.code, frameMessage e)
+/-- A rejected frame reaches Python with its code, and its message names the fault. -/
+instance : ExportError FrameError where
+  code := FrameError.code
+  message := frameMessage
 
 /-- A 32-byte secret as an AES-256 key, or an error for any other length. -/
 def readSecret (bytes : ByteArray) : Result (Cryptography.Aes.Key .aes256) :=
-  Base.exactBytes 32 bytes fun size => (0, s!"bad secret size: {size}, expected 32")
+  toResult none (Base.exactBytes 32 bytes fun size =>
+    UnreadArgument.mk s!"bad secret size: {size}, expected 32")
 
 /-- The state of one direction at its start: the zero counter, and the MAC after `macInit`. -/
 def readFrameState (aesSecret macSecret macInit : ByteArray) : Result FrameState := do
@@ -203,8 +210,8 @@ def writeFramesExport (aesSecret macSecret macInit frames : ByteArray) : Result 
   let st ← readFrameState aesSecret macSecret macInit
   let datas ← match Serialization.Rlp.Codec.decode (α := List ByteArray) frames with
     | .ok datas => pure datas
-    | .error _ => throw (0, "frames is not an RLP list of byte strings")
-  runFrame (writeFrames st datas)
+    | .error _ => rejectArgument none "frames is not an RLP list of byte strings"
+  toResult none (writeFrames st datas)
 
 /-- The frame data of the frames in `input`, as an RLP list, from the start of a direction.
 
@@ -212,9 +219,9 @@ The input must hold whole frames only. -/
 @[export eth_rlpx_read_frames]
 def readFramesExport (aesSecret macSecret macInit input : ByteArray) : Result ByteArray := do
   let st ← readFrameState aesSecret macSecret macInit
-  let datas ← runFrame (readFrames input.size st input)
+  let datas ← toResult none (readFrames input.size st input)
   match Serialization.Rlp.Codec.encode datas with
   | .ok bytes => pure bytes
-  | .error _ => throw (0, "frame data does not fit in RLP")
+  | .error _ => rejectArgument none "frame data does not fit in RLP"
 
 end EthLib.Networking.Rlpx.Exports

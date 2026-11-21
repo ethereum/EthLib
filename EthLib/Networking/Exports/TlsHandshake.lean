@@ -21,7 +21,8 @@ public section
 
 namespace EthLib.Networking.Quic.Tls.Handshake.Exports
 
-open EthLib.Exports (Result PyValue pyExport ToPy FromPy PlainPy LawfulPy fromPy)
+open EthLib.Exports (ExportError Result PyValue pyExport toResult ToPy FromPy PlainPy LawfulPy
+  fromPy)
 open scoped EthLib.Exports.FinAsInt
 
 derive_py KeySchedule
@@ -51,31 +52,32 @@ derive_py_laws Completion
 derive_py Step
 derive_py_laws Step
 
-/-- Report a failed TLS transition with its QUIC connection error code. -/
-def stepResult {α : Type} (value : Except Error α) : Result α :=
-  value.mapError fun e => (e.code, s!"TLS handshake rejected: {reprStr e}")
+/-- A failed TLS transition reaches Python with its QUIC error code, and the printed error. -/
+instance : ExportError Error where
+  code := Error.code
+  message := reprStr
 
 /-- Start a client certificate handshake under an explicit policy, RFC 8446 §4.1.2. -/
 @[export eth_quic_tls_client_start]
 def clientStartExport (args : PyValue) : Result PyValue :=
-  pyExport (fun (config : Config) => stepResult (clientStart config)) args
+  pyExport (fun (config : Config) => toResult "TLS handshake rejected" (clientStart config)) args
 
 /-- Start a server certificate handshake under an explicit policy. -/
 @[export eth_quic_tls_server_start]
 def serverStartExport (args : PyValue) : Result PyValue :=
-  pyExport (fun (config : Config) => stepResult (serverStart config)) args
+  pyExport (fun (config : Config) => toResult "TLS handshake rejected" (serverStart config)) args
 
 /-- Process one complete server message and check the intended peer ID at authentication. -/
 @[export eth_quic_tls_client_step]
 def clientStepExport (args : PyValue) : Result PyValue :=
   pyExport (fun ((config, expected, state, message) :
       Config × ByteArray × State × FlightMessage) =>
-    stepResult (clientStep config expected state message)) args
+    toResult "TLS handshake rejected" (clientStep config expected state message)) args
 
 /-- Process one complete client message and require libp2p client authentication. -/
 @[export eth_quic_tls_server_step]
 def serverStepExport (args : PyValue) : Result PyValue :=
   pyExport (fun ((config, state, message) : Config × State × FlightMessage) =>
-    stepResult (serverStep config state message)) args
+    toResult "TLS handshake rejected" (serverStep config state message)) args
 
 end EthLib.Networking.Quic.Tls.Handshake.Exports

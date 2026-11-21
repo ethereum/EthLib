@@ -50,7 +50,14 @@ from ethlib.networking import (
 from ethlib.networking.gossip import rpc
 from ethlib.networking.libp2p import identity, mplex, multistream, tls, yamux
 from ethlib.networking.quic import handshake, tls as quic_tls
+from ethlib.serialization import rlp
 from raising import raises
+
+# A private key of secp256k1: the scalar 1.
+SECRET = bytes(31) + b"\x01"
+
+# The compressed generator of secp256k1, a valid public key.
+GENERATOR = bytes.fromhex("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
 
 # An export turns the typed error of an operation into a code and a message.
 # Each case pins one way of doing so, with the code and the message that Python sees.
@@ -419,6 +426,538 @@ from raising import raises
             ),
             lambda: rpc.decode(b"\xff"),
             id="gossip-rpc",
+        ),
+        # A record of a signature and a sequence number has no id.
+        pytest.param(
+            EnrError,
+            13,
+            "record has no id",
+            lambda: enr.node_id(rlp.encode([bytes(64), b"\x01"])),
+            id="enr-node-id",
+        ),
+        # A private key is 32 bytes.
+        pytest.param(
+            EnrError,
+            0,
+            "private key is not 32 bytes below the group order",
+            lambda: enr.sign_v4(b"", enr.make_record_v4(SECRET, 1, rlp.encode([]))),
+            id="enr-sign-key",
+        ),
+        # Two bytes that are not one RLP item.
+        pytest.param(
+            EnrError,
+            2,
+            "record is not one RLP item",
+            lambda: enr.sign_v4(SECRET, b"\x01\x02"),
+            id="enr-sign-record",
+        ),
+        # Two bytes that are not one RLP item.
+        pytest.param(
+            EnrError,
+            2,
+            "record is not one RLP item",
+            lambda: enr.make_record_v4(SECRET, 1, b"\x01\x02"),
+            id="enr-make-rlp",
+        ),
+        # The pairs are an RLP list, not an empty string.
+        pytest.param(
+            EnrError,
+            3,
+            "record is not an RLP list",
+            lambda: enr.make_record_v4(SECRET, 1, rlp.encode(b"")),
+            id="enr-make-list",
+        ),
+        # The key id comes without its value.
+        pytest.param(
+            EnrError,
+            8,
+            "the last key has no value",
+            lambda: enr.make_record_v4(SECRET, 1, rlp.encode([b"id"])),
+            id="enr-make-pairs",
+        ),
+        # A record with no other pair has no eth2 entry.
+        pytest.param(
+            EnrError,
+            101,
+            "record has no eth2 entry",
+            lambda: enr.consensus_entries("fusaka", enr.make_record_v4(SECRET, 1, rlp.encode([]))),
+            id="enr-entries",
+        ),
+        # The eth entry is a byte string, not a list.
+        pytest.param(
+            EnrError,
+            0,
+            "eth entry is not a list that starts with [forkHash, forkNext]",
+            lambda: enr.eth_fork_id(enr.make_record_v4(SECRET, 1, rlp.encode([b"eth", b"\x01"]))),
+            id="enr-eth",
+        ),
+        # An IPv4 address is 4 bytes, not 1.
+        pytest.param(
+            EnrError,
+            17,
+            "the 0x6970 entry is not an address of its size",
+            lambda: enr.endpoints(enr.make_record_v4(SECRET, 1, rlp.encode([b"ip", b"\x01"]))),
+            id="enr-endpoints",
+        ),
+        # Two bytes that are not one RLP item.
+        pytest.param(
+            EnrError,
+            2,
+            "record is not one RLP item",
+            lambda: enr.verify_v4(b"\x01\x02"),
+            id="enr-verify",
+        ),
+        # A branch is not a root.
+        pytest.param(
+            DnsDiscError,
+            2,
+            "text is not a root",
+            lambda: dnsdisc.verify_root(bytes(33), "enrtree-branch:"),
+            id="dnsdisc-verify-root",
+        ),
+        # The text nope has no known prefix.
+        pytest.param(
+            DnsDiscError,
+            1,
+            "text is not a root, a branch, a link or a node record",
+            lambda: dnsdisc.verify_root(bytes(33), "nope"),
+            id="dnsdisc-verify-parse",
+        ),
+        # The empty table has no TXT record at the domain.
+        pytest.param(
+            DnsDiscError,
+            10,
+            "no TXT record at x",
+            lambda: dnsdisc.resolve(bytes(33), 0, "x", 10, {}),
+            id="dnsdisc-resolve",
+        ),
+        # A private key is 32 bytes.
+        pytest.param(
+            DnsDiscError,
+            0,
+            "private key is not 32 bytes below the group order",
+            lambda: dnsdisc.sign_root(b"", bytes(16), bytes(16), 0),
+            id="dnsdisc-sign-key",
+        ),
+        # The content has at least its type byte.
+        pytest.param(
+            Discv4Error,
+            0,
+            "content is empty",
+            lambda: discv4.encode(SECRET, b""),
+            id="discv4-encode-empty",
+        ),
+        # 0x81 starts a string that the input ends inside.
+        pytest.param(
+            Discv4Error,
+            0,
+            "packet data is not one RLP item",
+            lambda: discv4.encode(SECRET, b"\x01\x81"),
+            id="discv4-encode-rlp",
+        ),
+        # The packet data is a list, not an empty string.
+        pytest.param(
+            Discv4Error,
+            0,
+            "packet data is not an RLP list",
+            lambda: discv4.encode(SECRET, b"\x01\x80"),
+            id="discv4-encode-bytes",
+        ),
+        # A Ping has more fields than the empty list.
+        pytest.param(
+            Discv4Error,
+            7,
+            "packet data is not RLP of the expected shape",
+            lambda: discv4.encode(SECRET, b"\x01\xc0"),
+            id="discv4-encode-packet",
+        ),
+        # A private key is 32 bytes.
+        pytest.param(
+            Discv4Error,
+            0,
+            "bad private key size: 0, expected 32",
+            lambda: discv4.encode(b"", b"\x01\xc0"),
+            id="discv4-encode-key",
+        ),
+        # A public key is 33 or 65 bytes.
+        pytest.param(
+            Discv4Error,
+            0,
+            "bad point encoding size: 0, expected 33 or 65",
+            lambda: discv4.record_signed_by(b"", b""),
+            id="discv4-signed-key",
+        ),
+        # Two bytes that are not one RLP item.
+        pytest.param(
+            Discv4Error,
+            0,
+            "record is not one RLP item",
+            lambda: discv4.record_signed_by(GENERATOR, b"\x01\x02"),
+            id="discv4-signed-record",
+        ),
+        # The empty input is too short for a header and a packet type.
+        pytest.param(
+            Discv4Error,
+            2,
+            "packet has 0 bytes, too few for a header and a packet type",
+            lambda: discv4.accept_enr_response(b"", b""),
+            id="discv4-accept",
+        ),
+        # Message ID 4 is past the p2p messages.
+        pytest.param(
+            Devp2pError,
+            4,
+            "message ID 4 is not a p2p message",
+            lambda: devp2p.encode_message(False, b"\x04\xc0"),
+            id="devp2p-encode",
+        ),
+        # The empty input is not one RLP item.
+        pytest.param(
+            ForkIdError,
+            0,
+            "schedule is not one RLP item",
+            lambda: forkid.fork_id(b"", 0, 0),
+            id="forkid-schedule-rlp",
+        ),
+        # A schedule has four items, not none.
+        pytest.param(
+            ForkIdError,
+            0,
+            "schedule is not [genesis-hash, genesis-time, merge-fork, forks]",
+            lambda: forkid.fork_id(rlp.encode([]), 0, 0),
+            id="forkid-schedule-shape",
+        ),
+        # The remote announces a fork hash that the chain never had.
+        pytest.param(
+            ForkIdError,
+            2,
+            "chains are incompatible, or the local node is stale",
+            lambda: forkid.validate(
+                forkid.schedule(bytes(32), 0, []), 0, 0, forkid.encode(b"\xff" * 4, 0)
+            ),
+            id="forkid-refused",
+        ),
+        # The empty chunk has no response code.
+        pytest.param(
+            ReqRespError,
+            7,
+            "response chunk has no response code",
+            lambda: reqresp.decode_response_chunk(0, 0, 10, b""),
+            id="reqresp-chunk",
+        ),
+        # A public key is 33 or 65 bytes.
+        pytest.param(
+            RlpxError,
+            0,
+            "bad point encoding size: 0, expected 33 or 65",
+            lambda: rlpx.ecies_encrypt(b"", SECRET, bytes(16), b"", b""),
+            id="rlpx-public-key",
+        ),
+        # An IV is 16 bytes.
+        pytest.param(
+            RlpxError,
+            0,
+            "bad iv size: 15, expected 16",
+            lambda: rlpx.make_auth(SECRET, SECRET, bytes(32), GENERATOR, SECRET, bytes(15), b""),
+            id="rlpx-iv",
+        ),
+        # A nonce is 32 bytes.
+        pytest.param(
+            RlpxError,
+            0,
+            "bad nonce size: 31, expected 32",
+            lambda: rlpx.finish(SECRET, SECRET, bytes(31), b"", b"", b""),
+            id="rlpx-nonce",
+        ),
+        # The empty ack has no size prefix.
+        pytest.param(
+            RlpxError,
+            102,
+            "packet of 0 bytes does not match its size prefix",
+            lambda: rlpx.finish(SECRET, SECRET, bytes(32), b"", b"", b""),
+            id="rlpx-handshake",
+        ),
+        # The empty auth has no size prefix.
+        pytest.param(
+            RlpxError,
+            102,
+            "packet of 0 bytes does not match its size prefix",
+            lambda: rlpx.recipient_secrets(SECRET, SECRET, bytes(32), b"", b"", b""),
+            id="rlpx-recipient",
+        ),
+        # Two bytes that are not one RLP item.
+        pytest.param(
+            RlpxError,
+            0,
+            "frames is not an RLP list of byte strings",
+            lambda: rlpx.write_frames(bytes(32), bytes(32), bytes(32), b"\x01\x02"),
+            id="rlpx-frames-rlp",
+        ),
+        # Ten bytes are too few for a packet.
+        pytest.param(
+            Discv5Error,
+            1,
+            "invalid packet: EthLib.Networking.Discv5.PacketError.size 10",
+            lambda: discv5.read_whoareyou(bytes(32), bytes(10)),
+            id="discv5-session-packet",
+        ),
+        # A WHOAREYOU packet is not an ordinary message packet.
+        pytest.param(
+            Discv5Error,
+            204,
+            "packet has flag 1, not 0",
+            lambda: discv5.open_message(
+                bytes(16),
+                bytes(32),
+                bytes(32),
+                discv5.make_whoareyou(bytes(32), bytes(16), bytes(12), bytes(16), 0)[0],
+            ),
+            id="discv5-session-flag",
+        ),
+        # Ten bytes are too few for a packet.
+        pytest.param(
+            Discv5Error,
+            1,
+            "invalid packet: EthLib.Networking.Discv5.PacketError.size 10",
+            lambda: discv5.open_handshake(SECRET, b"", bytes(32), GENERATOR, bytes(10)),
+            id="discv5-handshake-packet",
+        ),
+        # A WHOAREYOU packet is not a handshake packet.
+        pytest.param(
+            Discv5Error,
+            310,
+            "packet has flag 1, not 2",
+            lambda: discv5.open_handshake(
+                SECRET,
+                b"",
+                bytes(32),
+                GENERATOR,
+                discv5.make_whoareyou(bytes(32), bytes(16), bytes(12), bytes(16), 0)[0],
+            ),
+            id="discv5-handshake-flag",
+        ),
+        # The empty input is no point of secp256k1.
+        pytest.param(
+            Discv5Error,
+            0,
+            "public key is not a point of secp256k1",
+            lambda: discv5.ecdh(SECRET, b""),
+            id="discv5-public-key",
+        ),
+        # A session key is 16 bytes.
+        pytest.param(
+            Discv5Error,
+            0,
+            "key is not 16 bytes",
+            lambda: discv5.encrypt_message(bytes(15), bytes(12), b"", b""),
+            id="discv5-key",
+        ),
+        # A nonce is 12 bytes.
+        pytest.param(
+            Discv5Error,
+            0,
+            "nonce is not 12 bytes",
+            lambda: discv5.encrypt_message(bytes(16), bytes(11), b"", b""),
+            id="discv5-nonce",
+        ),
+        # A tag of zeros does not authenticate.
+        pytest.param(
+            Discv5Error,
+            0,
+            "message does not authenticate",
+            lambda: discv5.decrypt_message(bytes(16), bytes(12), bytes(16), b""),
+            id="discv5-decrypt",
+        ),
+        # A masking IV is 16 bytes.
+        pytest.param(
+            Discv5Error,
+            0,
+            "masking IV has 15 bytes, not 16",
+            lambda: discv5.make_whoareyou(bytes(32), bytes(15), bytes(12), bytes(16), 0),
+            id="discv5-masking-iv",
+        ),
+        # A PING is not a TALKREQ.
+        pytest.param(
+            Discv5Error,
+            0,
+            "message is not a TALKREQ",
+            lambda: discv5.talk_response(b"\x01\xc2\x01\x01"),
+            id="discv5-talk",
+        ),
+        # A message has at least its type byte.
+        pytest.param(
+            Discv5Error,
+            101,
+            "invalid message: empty",
+            lambda: discv5.talk_response(b""),
+            id="discv5-talk-message",
+        ),
+        # A message has at least its type byte.
+        pytest.param(
+            Discv5Error,
+            101,
+            "invalid message: empty",
+            lambda: discv5.answers_request(b"", b""),
+            id="discv5-answers",
+        ),
+        # A message has at least its type byte.
+        pytest.param(
+            Discv5Error,
+            101,
+            "invalid message: empty",
+            lambda: discv5.reencode_message(b""),
+            id="discv5-reencode",
+        ),
+        # Ten bytes are too few for a packet.
+        pytest.param(
+            Discv5Error,
+            1,
+            "invalid packet: EthLib.Networking.Discv5.PacketError.size 10",
+            lambda: discv5.reencode_packet(bytes(32), bytes(10)),
+            id="discv5-reencode-packet",
+        ),
+        # Two bytes that are not one RLP item.
+        pytest.param(
+            Discv5Error,
+            0,
+            "record is not one RLP item",
+            lambda: discv5.nodes_match(bytes(32), [], [b"\x01\x02"]),
+            id="discv5-nodes-match",
+        ),
+        # The empty input is no point of secp256k1.
+        pytest.param(
+            Discv5Error,
+            0,
+            "public key is not a point of secp256k1",
+            lambda: discv5.derive_keys(SECRET, b"", bytes(32), bytes(32), b""),
+            id="discv5-derive-keys",
+        ),
+        # A private key is 32 bytes.
+        pytest.param(
+            Discv5Error,
+            0,
+            "private key is not 32 bytes below the group order",
+            lambda: discv5.id_sign(b"", b"", b"", bytes(32)),
+            id="discv5-id-sign",
+        ),
+        # A message of length zero.
+        pytest.param(
+            MultistreamError,
+            2,
+            "message 0 rejected: EthLib.Networking.Libp2p.Multistream.MultistreamError.empty",
+            lambda: multistream.listen([b"/x"], b"\x00"),
+            id="multistream-listen",
+        ),
+        # A message of length zero.
+        pytest.param(
+            MultistreamError,
+            2,
+            "message 0 rejected: EthLib.Networking.Libp2p.Multistream.MultistreamError.empty",
+            lambda: multistream.dial([b"/x"], b"\x00"),
+            id="multistream-dial",
+        ),
+        # Flag 7 is not an mplex flag.
+        pytest.param(
+            MplexError,
+            2,
+            "event 0: mplex frame rejected: EthLib.Networking.Libp2p.Mplex.MplexError.unknownFlag",
+            lambda: mplex.session([(True, b"\x07\x00")]),
+            id="mplex-session-frame",
+        ),
+        # A message on stream 1, which no frame opened.
+        pytest.param(
+            MplexError,
+            102,
+            "event 0: stream 1 (opened locally: false) is unknown",
+            lambda: mplex.session([(True, b"\x0a\x00")]),
+            id="mplex-session-step",
+        ),
+        # A stream ID is below 2^60.
+        pytest.param(
+            MplexError,
+            0,
+            (
+                "frame must have a stream ID below 2^60, at most 1 MiB of data, "
+                "and no data on a close or a reset"
+            ),
+            lambda: mplex.encode(mplex.Frame(stream_id=2**60, flag=mplex.Flag.NEW_STREAM)),
+            id="mplex-encode",
+        ),
+        # Version 1, where yamux defines only version 0.
+        pytest.param(
+            YamuxError,
+            2,
+            "event 0: yamux frame rejected: EthLib.Networking.Libp2p.Yamux.YamuxError.version 1",
+            lambda: yamux.session(False, [(True, b"\x01" + bytes(11))]),
+            id="yamux-session-frame",
+        ),
+        # A data frame on stream 1, which no frame opened.
+        pytest.param(
+            YamuxError,
+            104,
+            "event 0: stream 1 is unknown",
+            lambda: yamux.session(False, [(True, bytes(7) + b"\x01" + bytes(4))]),
+            id="yamux-session-step",
+        ),
+        # A data frame of length 1 carries one byte, not none.
+        pytest.param(
+            YamuxError,
+            0,
+            "frame must carry as many bytes as its length for data, else none",
+            lambda: yamux.encode(yamux.Frame(kind=yamux.Kind.DATA, flags=0, stream_id=1, length=1)),
+            id="yamux-encode",
+        ),
+        # A chain holds exactly one certificate, not none.
+        pytest.param(
+            TlsCertificateError,
+            4,
+            "TLS certificate rejected: EthLib.Networking.Libp2p.Tls.TlsCertError.chain 0",
+            lambda: tls.authenticate(
+                {"host_algorithms": [], "certificate_algorithms": [], "reject_unique_ids": False},
+                0,
+                [],
+            ),
+            id="tls-authenticate",
+        ),
+        # A chain holds exactly one certificate, not none.
+        pytest.param(
+            TlsCertificateError,
+            4,
+            "TLS certificate rejected: EthLib.Networking.Libp2p.Tls.TlsCertError.chain 0",
+            lambda: tls.authenticate_peer(
+                {"host_algorithms": [], "certificate_algorithms": [], "reject_unique_ids": False},
+                0,
+                b"",
+                [],
+            ),
+            id="tls-authenticate-peer",
+        ),
+        # The empty input has no first byte.
+        pytest.param(
+            QuicError,
+            1,
+            "QUIC header rejected: EthLib.Networking.Quic.Wire.Error.truncated 1 0",
+            lambda: quic.decode_header(0, b""),
+            id="quic-header-decode",
+        ),
+        # A truncated packet number of one byte is below 2^8.
+        pytest.param(
+            QuicError,
+            7,
+            (
+                "QUIC packet number rejected: "
+                "EthLib.Networking.Quic.Wire.Error.packetNumber 4611686018427387904 1 0"
+            ),
+            lambda: quic.decode_packet_number(0, 2**62, 0),
+            id="quic-number-decode",
+        ),
+        # The empty input has no 2-byte length.
+        pytest.param(
+            NoiseError,
+            3,
+            "EthLib.Networking.Noise.NoiseError.truncated 2 0",
+            lambda: noise.unframe(b""),
+            id="noise-unframe",
         ),
     ],
 )

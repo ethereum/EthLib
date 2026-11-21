@@ -14,7 +14,7 @@ public section
 
 namespace EthLib.Networking.Libp2p.Tls.Exports
 
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue pyExport toResult)
 
 derive_py Extension
 derive_py_laws Extension
@@ -25,6 +25,11 @@ derive_py_laws CertificateAlgorithm
 derive_py Policy
 derive_py_laws Policy
 
+/-- A rejected certificate reaches Python with its code, and its message is the printed error. -/
+instance : ExportError TlsCertError where
+  code := TlsCertError.code
+  message := reprStr
+
 /-- The certificate's signed bytes, SPKI, validity and extensions.
 
 Then its signature algorithm, signature and the two unique-ID flags.
@@ -33,8 +38,7 @@ A validity endpoint is a sign flag and its absolute seconds from the Unix epoch.
 @[export eth_tls_certificate_read]
 def readExport (args : PyValue) : Result PyValue :=
   pyExport (fun (bytes : ByteArray) => do
-    let certificate ← (readCertificate bytes).mapError
-      fun (e : TlsCertError) => (e.code, s!"TLS certificate rejected: {reprStr e}")
+    let certificate ← toResult "TLS certificate rejected" (readCertificate bytes)
     return (certificate.tbs, certificate.spki,
       (decide (certificate.notBefore < 0), certificate.notBefore.natAbs),
       (decide (certificate.notAfter < 0), certificate.notAfter.natAbs), certificate.extensions,
@@ -49,16 +53,14 @@ The implemented backends are secp256k1 and P-256 host keys, with P-256/SHA-256 s
 @[export eth_tls_certificate_authenticate]
 def authenticateExport (args : PyValue) : Result PyValue :=
   pyExport (fun ((policy, now, chain) : Policy × Nat × List ByteArray) => do
-    let peer ← (Tls.authenticate policy now chain).mapError
-      fun (e : TlsCertError) => (e.code, s!"TLS certificate rejected: {reprStr e}")
+    let peer ← toResult "TLS certificate rejected" (Tls.authenticate policy now chain)
     return peer.peerId) args
 
 /-- The peer ID of one authenticated certificate, checked against the intended peer ID. -/
 @[export eth_tls_certificate_authenticate_peer]
 def authenticatePeerExport (args : PyValue) : Result PyValue :=
   pyExport (fun ((policy, now, expected, chain) : Policy × Nat × ByteArray × List ByteArray) => do
-    let peer ← (Tls.authenticatePeer policy now expected chain).mapError
-      fun (e : TlsCertError) => (e.code, s!"TLS certificate rejected: {reprStr e}")
+    let peer ← toResult "TLS certificate rejected" (Tls.authenticatePeer policy now expected chain)
     return peer.peerId) args
 
 /-- Verify DER ECDSA/SHA-256 under an uncompressed P-256 SubjectPublicKeyInfo. -/

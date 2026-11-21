@@ -30,7 +30,7 @@ public section
 
 namespace EthLib.Networking.Noise.Exports
 
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue pyExport toResult)
 
 /-- A cipher key, possibly absent during the handshake, and the next nonce. -/
 abbrev CipherValue := Option Cryptography.ChaCha20Poly1305.Key × UInt64
@@ -79,8 +79,10 @@ def libp2pOfValue (v : Libp2pValue) : Except NoiseError Libp2pState := do
     | some r => some <$> remoteOfValue r
   return ⟨stateOfValue v.1, remote⟩
 
-def result {α : Type} (r : Except NoiseError α) : Result α :=
-  r.mapError fun error => (error.code, reprStr error)
+/-- A Noise error reaches Python with its code, and its message is the printed error. -/
+instance : ExportError NoiseError where
+  code := NoiseError.code
+  message := reprStr
 
 /-- Initialize the raw XX state with explicit private keys and prologue, Noise §5.3. -/
 @[export eth_noise_initialize]
@@ -91,14 +93,14 @@ def initializeExport (args : PyValue) : Result PyValue :=
 /-- Write the next raw XX message and return the updated state, Noise §5.3. -/
 @[export eth_noise_write_message]
 def writeExport (args : PyValue) : Result PyValue :=
-  pyExport (fun (value, payload) => result (do
+  pyExport (fun (value, payload) => toResult none (do
     let (state, message) ← writeMessage (stateOfValue value) payload
     return (stateToValue state, message))) args
 
 /-- Read the next raw XX message and return its payload and updated state, Noise §5.3. -/
 @[export eth_noise_read_message]
 def readExport (args : PyValue) : Result PyValue :=
-  pyExport (fun (value, message) => result (do
+  pyExport (fun (value, message) => toResult none (do
     let (state, payload) ← readMessage (stateOfValue value) message
     return (stateToValue state, payload))) args
 
@@ -108,7 +110,7 @@ The split is Noise §5.2, and its first cipher carries initiator-to-responder me
 @[export eth_noise_transport]
 def transportExport (args : PyValue) : Result PyValue :=
   letI : EthLib.Exports.FromPyItems StateValue := EthLib.Exports.instFromPyItemsOfFromPy
-  pyExport (fun value => result (do
+  pyExport (fun value => toResult none (do
     let state := stateOfValue value
     let (send, receive) ← transport state
     return (cipherToValue send, cipherToValue receive, state.symmetric.hash.bytes))) args
@@ -116,26 +118,26 @@ def transportExport (args : PyValue) : Result PyValue :=
 /-- Encrypt with a cipher state and associated data, returning its next state, Noise §5.1. -/
 @[export eth_noise_cipher_encrypt]
 def cipherEncryptExport (args : PyValue) : Result PyValue :=
-  pyExport (fun (value, aad, plaintext) => result (do
+  pyExport (fun (value, aad, plaintext) => toResult none (do
     let (state, ciphertext) ← encryptWithAd (cipherOfValue value) aad plaintext
     return (cipherToValue state, ciphertext))) args
 
 /-- Authenticate and decrypt, advancing the nonce only on success, Noise §5.1. -/
 @[export eth_noise_cipher_decrypt]
 def cipherDecryptExport (args : PyValue) : Result PyValue :=
-  pyExport (fun (value, aad, ciphertext) => result (do
+  pyExport (fun (value, aad, ciphertext) => toResult none (do
     let (state, plaintext) ← decryptWithAd (cipherOfValue value) aad ciphertext
     return (cipherToValue state, plaintext))) args
 
 /-- Prefix the 16-bit big-endian message length, noise-libp2p "Wire Format". -/
 @[export eth_noise_frame]
 def frameExport (args : PyValue) : Result PyValue :=
-  pyExport (fun bytes => result (frame bytes)) args
+  pyExport (fun bytes => toResult none (frame bytes)) args
 
 /-- Read exactly one complete 16-bit frame, noise-libp2p "Wire Format". -/
 @[export eth_noise_unframe]
 def unframeExport (args : PyValue) : Result PyValue :=
-  pyExport (fun bytes => result (unframe bytes)) args
+  pyExport (fun bytes => toResult none (unframe bytes)) args
 
 /-- Initialize libp2p XX with explicit X25519 private keys and an empty prologue.
 
@@ -152,7 +154,7 @@ The identity secret is 32 big-endian bytes whose value is in [1, n), with n the 
 It is checked before every other check, on every message. -/
 @[export eth_noise_libp2p_write]
 def writeLibp2pExport (args : PyValue) : Result PyValue :=
-  pyExport (fun (value, identitySecret, extensions) => result (do
+  pyExport (fun (value, identitySecret, extensions) => toResult none (do
     let secret ← (Libp2p.Exports.secretOfBytes identitySecret).mapError identitySecretError
     let (state, message) ← writeLibp2p (← libp2pOfValue value) secret extensions
     return (libp2pToValue state, message))) args
@@ -160,7 +162,7 @@ def writeLibp2pExport (args : PyValue) : Result PyValue :=
 /-- Read the next libp2p message, and authenticate the static key of message 2 or 3. -/
 @[export eth_noise_libp2p_read]
 def readLibp2pExport (args : PyValue) : Result PyValue :=
-  pyExport (fun (value, message) => result (do
+  pyExport (fun (value, message) => toResult none (do
     let state ← readLibp2p (← libp2pOfValue value) message
     return libp2pToValue state)) args
 
@@ -168,7 +170,7 @@ def readLibp2pExport (args : PyValue) : Result PyValue :=
 @[export eth_noise_libp2p_complete]
 def completeExport (args : PyValue) : Result PyValue :=
   letI : EthLib.Exports.FromPyItems Libp2pValue := EthLib.Exports.instFromPyItemsOfFromPy
-  pyExport (fun value => result (do
+  pyExport (fun value => toResult none (do
     let state ← libp2pOfValue value
     let (remote, send, receive) ← complete state
     return (remote.staticKey,

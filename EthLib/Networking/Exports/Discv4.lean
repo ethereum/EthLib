@@ -26,7 +26,7 @@ public section
 
 namespace EthLib.Networking.Discv4.Exports
 
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport rejectArgument toResult)
 open EthLib.Serialization.Rlp
 open EthLib.Base (hexString)
 
@@ -41,29 +41,31 @@ def message : Discv4Error → String
   | .unknownType type => s!"packet type {type} is unknown"
   | .rlp _ => "packet data is not RLP of the expected shape"
 
-/-- Run a fallible computation, with its error as a code and a message. -/
-def runDiscv4 {α : Type} (act : Except Discv4Error α) : Result α :=
-  act.mapError fun e => (e.code, message e)
+/-- A rejection reaches Python with its code, and its message names the fault. -/
+instance : ExportError Discv4Error where
+  code := Discv4Error.code
+  message := message
 
 /-- The content `packet-type || packet-data` of a packet, with only the fields it keeps. -/
 def content (p : Packet) : Result ByteArray := do
-  let data ← (Serialization.Rlp.encode (.list p.fields)).mapError fun _ => (0, "too large")
+  let data ← toResult none
+    ((Serialization.Rlp.encode (.list p.fields)).mapError fun _ => UnreadArgument.mk "too large")
   return ⟨#[p.type]⟩ ++ data
 
 /-- The packet with the content `packet-type || packet-data`. -/
 def readContent (plain : ByteArray) : Result Packet :=
   match plain.data.toList with
-  | [] => throw (0, "content is empty")
+  | [] => rejectArgument none "content is empty"
   | type :: data =>
     match Serialization.Rlp.decode ⟨data.toArray⟩ with
-    | .error _ => throw (0, "packet data is not one RLP item")
-    | .ok (.bytes _) => throw (0, "packet data is not an RLP list")
-    | .ok (.list items) => runDiscv4 (Packet.ofItems type items)
+    | .error _ => rejectArgument none "packet data is not one RLP item"
+    | .ok (.bytes _) => rejectArgument none "packet data is not an RLP list"
+    | .ok (.list items) => toResult none (Packet.ofItems type items)
 
 /-- The hash, the sender's key and the content of the packet in the bytes `packet`. -/
 @[export eth_discv4_decode]
 def decodeExport (packet : ByteArray) : Result ByteArray := do
-  let r ← runDiscv4 (decode packet)
+  let r ← toResult none (decode packet)
   let sender := Rlpx.encodePublicKey r.sender
   return ⟨r.hash.toArray⟩ ++ ⟨sender.toArray⟩ ++ (← content r.packet)
 
@@ -71,14 +73,14 @@ def decodeExport (packet : ByteArray) : Result ByteArray := do
 @[export eth_discv4_encode]
 def encodeExport (key plain : ByteArray) : Result ByteArray := do
   let k ← Rlpx.Exports.readPrivateKey key
-  runDiscv4 (encode k (← readContent plain))
+  toResult none (encode k (← readContent plain))
 
 /-- Whether the RLP record `record` of an ENRResponse is signed by the public key `sender`. -/
 @[export eth_discv4_record_signed_by]
 def recordSignedByExport (sender record : ByteArray) : Result Bool := do
   let q ← Rlpx.Exports.readPublicKey sender
   match Serialization.Rlp.decode record with
-  | .error _ => throw (0, "record is not one RLP item")
+  | .error _ => rejectArgument none "record is not one RLP item"
   | .ok item => return recordSignedBy q item
 
 /-- The arguments of a received packet.
@@ -93,13 +95,13 @@ abbrev ReceiveArgs := Nat × ByteArray × UInt16 × Option (Vector UInt8 32) × 
 def receiveOf (args : ReceiveArgs) :
     Result ((Option (Vector UInt8 32) × Option Nat) × List ByteArray) := do
   let (now, ip, port, lastPing, lastPong, packet, expiration, enrSeq, record, nodes) := args
-  let received ← runDiscv4 (decode packet)
+  let received ← toResult none (decode packet)
   let some record := (Serialization.Rlp.decode record).toOption
-    | throw (0, "record is not one RLP item")
+    | rejectArgument none "record is not one RLP item"
   let some item := (Serialization.Rlp.decode nodes).toOption
-    | throw (0, "nodes are not one RLP item")
+    | rejectArgument none "nodes are not one RLP item"
   let some nodes := (Codec.ofItem item : Except RlpError (List Node)).toOption
-    | throw (0, "nodes are not a list of [ip, udp-port, tcp-port, node-id]")
+    | rejectArgument none "nodes are not a list of [ip, udp-port, tcp-port, node-id]"
   let node : Local := ⟨expiration, enrSeq, fun _ => nodes, record⟩
   let address : Address := ⟨ip, port⟩
   let (state, replies) := receive node now (fun _ => ⟨lastPing, lastPong⟩) address received
@@ -125,7 +127,7 @@ def receiveExport (args : PyValue) : Result PyValue :=
 /-- Whether an ENRResponse packet answers an ENRRequest packet that the node sent. -/
 def acceptEnrResponseOf (args : ByteArray × ByteArray) : Result Bool := do
   let (request, response) := args
-  return acceptEnrResponse (← runDiscv4 (decode request)) (← runDiscv4 (decode response))
+  return acceptEnrResponse (← toResult none (decode request)) (← toResult none (decode response))
 
 /-- Whether an ENRResponse packet answers an ENRRequest packet that the node sent.
 

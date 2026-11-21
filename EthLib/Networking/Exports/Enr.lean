@@ -34,7 +34,8 @@ public section
 
 namespace EthLib.Networking.Enr.Exports
 
-open EthLib.Exports (Result PyValue forkUpTo pyExport)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument forkUpTo pyExport rejectArgument
+  toResult)
 
 open EthLib.Serialization.Ssz (SszType)
 
@@ -66,9 +67,10 @@ def message : EnrError → String
     s!"the {hexString key.data.toList} entry is not a big-endian integer below 2^16 " ++
       "without leading zeros"
 
-/-- Run a fallible computation, with its error as a code and a message. -/
-def runEnr {α : Type} (act : Except EnrError α) : Result α :=
-  act.mapError fun e => (e.code, message e)
+/-- A rejected record reaches Python with its code, and its message names the fault. -/
+instance : ExportError EnrError where
+  code := EnrError.code
+  message := message
 
 /-! ## Sizes -/
 
@@ -80,32 +82,32 @@ def constMaxRecordSize (_ : Unit) : UInt64 := UInt64.ofNat MAX_RECORD_SIZE
 /-- The RLP bytes of a record in text form, after the decoder accepts the record. -/
 @[export eth_enr_from_text]
 def fromTextExport (text : String) : Result ByteArray := do
-  let r ← runEnr (fromText text)
+  let r ← toResult none (fromText text)
   -- An encoder failure keeps the code of an RLP error, with a message of its own.
   r.encode.mapError fun e => ((EnrError.rlp e).code, "record has no RLP encoding")
 
 /-- The sequence number of a record. -/
 @[export eth_enr_seq]
 def seqExport (record : ByteArray) : Result UInt64 := do
-  return (← runEnr (decode record)).seq
+  return (← toResult none (decode record)).seq
 
 /-- Whether a record is a valid "v4" record. -/
 @[export eth_enr_verify_v4]
 def verifyV4Export (record : ByteArray) : Result UInt8 := do
-  let r ← runEnr (decode record)
+  let r ← toResult none (decode record)
   return if verifyV4 r then 1 else 0
 
 /-- The 32-byte node ID of a "v4" record. -/
 @[export eth_enr_node_id]
 def nodeIdExport (record : ByteArray) : Result ByteArray := do
-  let r ← runEnr (decode record)
-  let id ← runEnr (nodeId r)
+  let r ← toResult none (decode record)
+  let id ← toResult none (nodeId r)
   return ⟨id.toArray⟩
 
 /-- A private key of 32 big-endian bytes, below the group order. -/
 def privateKeyOf (bytes : ByteArray) : Result Cryptography.Secp256k1.Fn :=
-  let bad := (0, "private key is not 32 bytes below the group order")
-  Cryptography.Secp256k1.Exports.readPrivateKey bytes (fun _ => bad) bad
+  let bad := UnreadArgument.mk "private key is not 32 bytes below the group order"
+  toResult none (Cryptography.Secp256k1.Exports.readPrivateKey bytes (fun _ => bad) bad)
 
 /-- The bytes of a record, signed again with a private key by the "v4" scheme.
 
@@ -113,8 +115,8 @@ The decoder reads the record first, and its signature is replaced. -/
 @[export eth_enr_sign_v4]
 def signV4Export (secretKey record : ByteArray) : Result ByteArray := do
   let sk ← privateKeyOf secretKey
-  let r ← runEnr (decode record)
-  let signed ← runEnr (signV4 sk r)
+  let r ← toResult none (decode record)
+  let signed ← toResult none (signV4 sk r)
   signed.encode.mapError fun e => ((EnrError.rlp e).code, "record has no RLP encoding")
 
 /-- The bytes of a new "v4" record of a private key, a sequence number and other pairs.
@@ -124,9 +126,9 @@ The other pairs come as the RLP list `[k1, v1, k2, v2, ...]`, in key order. -/
 def makeRecordV4Export (secretKey : ByteArray) (seq : UInt64) (pairs : ByteArray) :
     Result ByteArray := do
   let sk ← privateKeyOf secretKey
-  let items ← runEnr ((Serialization.Rlp.decode pairs).mapError .rlp)
-  let .list items := items | throw ((EnrError.notAList).code, message .notAList)
-  let r ← runEnr (makeRecordV4 sk seq (← runEnr (readPairs items)))
+  let items ← toResult none ((Serialization.Rlp.decode pairs).mapError EnrError.rlp)
+  let .list items := items | toResult none (.error EnrError.notAList)
+  let r ← toResult none (makeRecordV4 sk seq (← toResult none (readPairs items)))
   r.encode.mapError fun e => ((EnrError.rlp e).code, "record has no RLP encoding")
 
 /-- A message for a refused consensus entry. -/
@@ -136,12 +138,17 @@ def entryMessage : EntryError → String
   | .ssz key _ => s!"the {key.name} entry is not valid SSZ"
   | .cgc _ => "the cgc entry is not a big-endian integer below 2^64 without leading zeros"
 
+/-- A refused consensus entry reaches Python with its code, and its message names the entry. -/
+instance : ExportError EntryError where
+  code := EntryError.code
+  message := entryMessage
+
 /-- The SSZ bytes of a value, or an error that names it. -/
 def sszBytes {α : Type} [SszType α] (a : α) : Result ByteArray :=
   match SszType.serialize a with
   | .ok bytes => pure bytes
   -- No error type of the specification covers this case, so its code is 0.
-  | .error _ => throw (0, "entry has no SSZ encoding")
+  | .error _ => rejectArgument none "entry has no SSZ encoding"
 
 /-- The SSZ bytes of an optional entry, or `None` when it is absent. -/
 def optionBytes {α : Type} [SszType α] : Option α → Result (Option ByteArray)
@@ -162,8 +169,8 @@ abbrev EntriesValue := (Vector UInt8 4 × Vector UInt8 4 × UInt64) × Option By
 def consensusEntriesOf (args : String × UInt64 × ByteArray) : Result EntriesValue := do
   let (fork, count, record) := args
   let fork ← forkUpTo .bpo2 fork.toUTF8
-  let r ← runEnr (decode record)
-  let e ← (readEntries count fork r).mapError fun err => (err.code, entryMessage err)
+  let r ← toResult none (decode record)
+  let e ← toResult none (readEntries count fork r)
   return ((e.eth2.forkDigest, e.eth2.nextForkVersion, e.eth2.nextForkEpoch),
     ← optionBytes e.attnets, ← optionBytes e.syncnets, e.cgc, e.nfd)
 
@@ -182,9 +189,9 @@ def consensusEntriesExport (args : PyValue) : Result PyValue :=
 
 It is `None` without the entry, and an entry that does not start with one has code 0. -/
 def ethForkIdOf (record : ByteArray) : Result (Option (Vector UInt8 4 × UInt64)) := do
-  let r ← runEnr (decode record)
+  let r ← toResult none (decode record)
   match readEth r with
-  | .error _ => throw (0, "eth entry is not a list that starts with [forkHash, forkNext]")
+  | .error _ => rejectArgument none "eth entry is not a list that starts with [forkHash, forkNext]"
   | .ok none => pure none
   | .ok (some id) => pure (some (id.hash, id.next))
 
@@ -208,8 +215,8 @@ def endpointValue {size : Nat} (e : Endpoint size) : EndpointValue size :=
 /-- The IPv4 and IPv6 endpoints of a record, each `None` when its address is absent. -/
 def endpointsOf (record : ByteArray) :
     Result (Option (EndpointValue 4) × Option (EndpointValue 16)) := do
-  let r ← runEnr (decode record)
-  let (e4, e6) ← runEnr r.endpoints
+  let r ← toResult none (decode record)
+  let (e4, e6) ← toResult none r.endpoints
   return (e4.map endpointValue, e6.map endpointValue)
 
 /-- The IPv4 and IPv6 endpoints of a record, each `None` when its address is absent.
