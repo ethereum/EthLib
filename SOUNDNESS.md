@@ -5050,7 +5050,7 @@ The method does not decode the candidates: it takes each as a transaction of EIP
 
 The functions of each method take the tree of known payloads, the known finalized block and the builds as inputs.
 An execution node keeps them as state across calls (`Engine/Node.lean`).
-It knows blocks with their validity and the state after each valid one, and it keeps the forkchoice state, the known finalized block and the builds.
+It knows each block whole, with its validity and the state after each valid one, and it keeps the forkchoice state, the known finalized block and the builds.
 Each method is a step of the node, and each step answers with the function of its method on a view of the node (`Proofs/Node.lean`).
 `newPayloadStep_of_head` shows that a new payload on the valid head gets the answer of the method on the chain of the head.
 `chainAt_last` shows that this chain ends at the head, with the state after it.
@@ -5103,6 +5103,16 @@ Validation keeps every known block that is not accepted as it was (`validateHead
 The source requires no single answer for such a child outside the terminal case, and the reorg tests of execution-spec-tests accept `INVALID` or `SYNCING`; the node gives `INVALID`, which carries the most information.
 A node starts from one block; a total difficulty below the difficulty of a block of proof of work gives no node.
 The node keeps the state after every valid block, so it never refuses a reorganization with `-38006`.
+The node starts from a block whose header commits to an empty body, which it keeps as that block's body.
+`Node.view` (`Engine/Node/View.lean`) gives the chain view of the node that the execution JSON-RPC API reads.
+Its canonical chain is the chain of the head, and the other valid blocks are off that chain.
+Each block runs its body again on the chain of its parent, for its receipts and its logs.
+The RPC export runs a body with the same function (`BlockRecord.ofRun`).
+`mem_view_iff` (`Proofs/Node/View.lean`) shows that the view holds exactly the valid blocks of the node.
+`lookup_of_mem_view` shows that each is the kept block, with the kept state after it.
+`canonical_hashes_of_view` shows that its canonical chain is the chain of the head, so the theorems on the tags of the last forkchoice update apply to it.
+There is no view when a body fails to run again; `view_of_start` shows that a node that starts from a block has a view, for a block whose header hash is not its own parent hash.
+No theorem yet shows that a body that ran once runs again.
 Step 4 of payload validation asks that validation be idempotent: a payload answered `VALID` never becomes `INVALID`, nor the reverse.
 Each step keeps every block that the node knows as valid or invalid, and the configuration (`newPayloadStep_lookup`, `forkchoiceUpdatedStep_lookup`, `newPayloadStep_config`).
 So every node that the steps reach from a node keeps them too (`Reachable.lookup`, `Reachable.validState`, `Reachable.invalid`, `Reachable.config`).
