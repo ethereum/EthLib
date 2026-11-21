@@ -1,6 +1,7 @@
 """The runner of the reorg fixtures of execution-spec-tests, on the execution node of EthLib."""
 
 import hashlib
+import itertools
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -15,15 +16,13 @@ from ethlib.execution.blocks import RecentBlock
 POOL = "EthLib specifies no transaction pool, so the builder of the node export takes none"
 
 # The observations of the chain that the runner does not check, each with its reason.
-# The node export answers Engine API calls only, with no JSON-RPC view of its chain.
-# The node runs each block on the state after its parent, and keeps a block only if it is valid.
-# So the state at the head is the one that the state root of the head commits to.
-UNCHECKED = {
-    "assertState": "the node export gives no JSON-RPC view of the state",
-    "assertReceipt": "the node export gives no JSON-RPC view of the receipts",
-    "assertLogs": "the node export gives no JSON-RPC view of the logs",
-    "assertTxStatus": POOL,
-}
+UNCHECKED = {"assertTxStatus": POOL}
+
+# The observations that the runner checks with JSON-RPC queries on the chain view of the node.
+QUERIES = ("assertState", "assertReceipt", "assertLogs")
+
+# The block tags of the JSON-RPC API; any other block of a step is a label.
+TAGS = ("latest", "earliest", "safe", "finalized", "pending")
 
 ZERO = "0x" + "00" * 32
 
@@ -152,7 +151,7 @@ class ReorgScript:
                 requests.append(self._forkchoice_request(step))
             elif step["type"] == "newPayload" and step["block"] in self.payloads:
                 requests.append(self.payloads[step["block"]])
-            elif step["type"] in ("newPayload", "getPayload"):
+            elif step["type"] in ("newPayload", "getPayload", *QUERIES):
                 break
         return requests
 
@@ -172,6 +171,15 @@ class ReorgScript:
                 continue
             elif kind == "assertCanonical":
                 self._assert_canonical(step)
+                continue
+            elif kind == "assertState":
+                self._assert_state(step)
+                continue
+            elif kind == "assertReceipt":
+                self._assert_receipt(step)
+                continue
+            elif kind == "assertLogs":
+                self._assert_logs(step)
                 continue
             else:
                 assert kind in UNCHECKED, kind
@@ -273,6 +281,53 @@ class ReorgScript:
         for height, expected in step["blocks"].items():
             want = None if expected is None else self.hashes[expected]
             assert chain.get(int(height, 16)) == want, (step, chain)
+
+    def _query(self, method: str, params: list[Any]) -> Any:
+        """The result of a JSON-RPC query on the chain view of the node after the requests sent."""
+        answer = self._call(_request(method, params), [])
+        assert "result" in answer, (method, params, answer)
+        return answer["result"]
+
+    def _block(self, at: str) -> str:
+        return at if at in TAGS else self.hashes[at]
+
+    def _assert_state(self, step: dict[str, Any]) -> None:
+        at = self._block(step["at"])
+        for address, account in step["accounts"].items():
+            queries = [
+                ("balance", "eth_getBalance", [address, at]),
+                ("nonce", "eth_getTransactionCount", [address, at]),
+            ]
+            for name, method, params in queries:
+                if name in account:
+                    got = int(self._query(method, params), 16)
+                    assert got == int(account[name], 16), (step, address, name, got)
+            if "code" in account:
+                got = self._query("eth_getCode", [address, at])
+                assert got == account["code"], (step, address, got)
+            for slot, value in account.get("storage", {}).items():
+                got = int(self._query("eth_getStorageAt", [address, slot, at]), 16)
+                assert got == int(value, 16), (step, address, slot, got)
+
+    def _assert_receipt(self, step: dict[str, Any]) -> None:
+        # The receipt names the block of the step, or there is none on the canonical chain.
+        raw = bytes.fromhex(self._transaction(step["tx"]).removeprefix("0x"))
+        receipt = self._query("eth_getTransactionReceipt", ["0x" + keccak256(raw).hex()])
+        got = None if receipt is None else receipt["blockHash"]
+        want = self.hashes[step["block"]] if "block" in step else None
+        assert got == want, (step, receipt)
+
+    def _assert_logs(self, step: dict[str, Any]) -> None:
+        # The logs of the address come from the listed blocks, in order.
+        query = {
+            "address": step["address"],
+            "fromBlock": self._block(step["fromBlock"]),
+            "toBlock": self._block(step["toBlock"]),
+        }
+        logs = self._query("eth_getLogs", [query])
+        assert all(log["address"] == step["address"].lower() for log in logs), (step, logs)
+        got = [block for block, _ in itertools.groupby(log["blockHash"] for log in logs)]
+        assert got == [self.hashes[label] for label in step["blocks"]], (step, logs)
 
 
 def run(fixture: dict[str, Any], config: dict[str, Any], state: bytes, anchor: RecentBlock) -> None:
