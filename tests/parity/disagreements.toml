@@ -462,7 +462,7 @@ reason = "EthLib answers ACCEPTED for a payload off the canonical chain, which t
 source = "execution-apis 3284ee8, src/engine/paris.md, engine_newPayloadV1, specification item 5 and the ACCEPTED response (https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_newpayloadv1)"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_execution.py::test_case[tests/reorg/test_forkchoice_behaviour.py::test_out_of_order_payload_delivery[fork_Amsterdam-blockchain_test_engine_reorg]]"'
-upstream = "As of 2026-11-21, ethereum/execution-specs#4045 is open. It adds ACCEPTED to the outcomes that the case allows for the resent payload"
+upstream = "As of 2026-11-21, ethereum/execution-specs#4048 is open. It asks to add ACCEPTED to the outcomes that the case allows for the resent payload"
 
 [[disagreement]]
 suite = "execution-spec-tests"
@@ -471,7 +471,7 @@ reason = "EthLib answers ACCEPTED for a payload off the canonical chain, which t
 source = "execution-apis 3284ee8, src/engine/paris.md, engine_newPayloadV1, specification item 5 and the ACCEPTED response (https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_newpayloadv1)"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_execution.py::test_case[tests/reorg/test_forkchoice_behaviour.py::test_out_of_order_payload_delivery[fork_Cancun-blockchain_test_engine_reorg]]"'
-upstream = "As of 2026-11-21, ethereum/execution-specs#4045 is open. It adds ACCEPTED to the outcomes that the case allows for the resent payload"
+upstream = "As of 2026-11-21, ethereum/execution-specs#4048 is open. It asks to add ACCEPTED to the outcomes that the case allows for the resent payload"
 
 [[disagreement]]
 suite = "execution-spec-tests"
@@ -480,7 +480,7 @@ reason = "EthLib answers ACCEPTED for a payload off the canonical chain, which t
 source = "execution-apis 3284ee8, src/engine/paris.md, engine_newPayloadV1, specification item 5 and the ACCEPTED response (https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_newpayloadv1)"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_execution.py::test_case[tests/reorg/test_forkchoice_behaviour.py::test_out_of_order_payload_delivery[fork_Osaka-blockchain_test_engine_reorg]]"'
-upstream = "As of 2026-11-21, ethereum/execution-specs#4045 is open. It adds ACCEPTED to the outcomes that the case allows for the resent payload"
+upstream = "As of 2026-11-21, ethereum/execution-specs#4048 is open. It asks to add ACCEPTED to the outcomes that the case allows for the resent payload"
 
 [[disagreement]]
 suite = "execution-spec-tests"
@@ -489,7 +489,7 @@ reason = "EthLib answers ACCEPTED for a payload off the canonical chain, which t
 source = "execution-apis 3284ee8, src/engine/paris.md, engine_newPayloadV1, specification item 5 and the ACCEPTED response (https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_newpayloadv1)"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_execution.py::test_case[tests/reorg/test_forkchoice_behaviour.py::test_out_of_order_payload_delivery[fork_Prague-blockchain_test_engine_reorg]]"'
-upstream = "As of 2026-11-21, ethereum/execution-specs#4045 is open. It adds ACCEPTED to the outcomes that the case allows for the resent payload"
+upstream = "As of 2026-11-21, ethereum/execution-specs#4048 is open. It asks to add ACCEPTED to the outcomes that the case allows for the resent payload"
 
 [[disagreement]]
 suite = "execution-spec-tests"
@@ -498,4 +498,4 @@ reason = "EthLib answers ACCEPTED for a payload off the canonical chain, which t
 source = "execution-apis 3284ee8, src/engine/paris.md, engine_newPayloadV1, specification item 5 and the ACCEPTED response (https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_newpayloadv1)"
 class = "fixture-defect"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_execution.py::test_case[tests/reorg/test_forkchoice_behaviour.py::test_out_of_order_payload_delivery[fork_Shanghai-blockchain_test_engine_reorg]]"'
-upstream = "As of 2026-11-21, ethereum/execution-specs#4045 is open. It adds ACCEPTED to the outcomes that the case allows for the resent payload"
+upstream = "As of 2026-11-21, ethereum/execution-specs#4048 is open. It asks to add ACCEPTED to the outcomes that the case allows for the resent payload"
