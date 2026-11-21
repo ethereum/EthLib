@@ -6,7 +6,6 @@ public import EthLib.Execution.Proofs.Evm.Instructions.Bitwise
 public import EthLib.Execution.Proofs.Evm.Instructions.Keccak
 public import EthLib.Execution.Proofs.Evm.Precompiles
 public import EthLib.Execution.Proofs.Evm.Machine.Memory
-public import EthLib.Execution.Proofs.Evm.PowMod
 public import EthLib.Execution.Proofs.Evm.Reads
 public import EthLib.Execution.Proofs.Evm.Noninterference
 public import EthLib.Execution.Proofs.Evm.Words

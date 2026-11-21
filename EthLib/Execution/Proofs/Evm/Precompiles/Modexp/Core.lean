@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Execution.Proofs.Evm.Precompiles.Modexp.Encoding
-public import EthLib.Execution.Proofs.Evm.PowMod
 public import EthLib.Execution.Proofs.Evm.Precompiles.Modexp.Gas
 public import EthLib.Execution.Evm.Precompiles.Modexp.Core
 
@@ -26,6 +25,7 @@ namespace EthLib.Execution.Evm.Precompiles.Modexp
 
 open EthLib.Base
 open EthLib.Execution.Evm
+open Nat (powMod)
 
 /-- The big-endian integer held by the output bytes. -/
 def outputNat (bytes : ByteArray) : Nat :=
@@ -66,9 +66,9 @@ theorem compute_eq_pow_mod (data : ByteArray) (l : Lengths) :
     rw [bytesToNat_natToBytes, Nat.zero_mod]
   · next h =>
     -- No truncation: the remainder is below the modulus, which fits in `len_mod` bytes.
-    rw [bytesToNat_natToBytes_of_lt, powMod_eq]
+    rw [bytesToNat_natToBytes_of_lt, Nat.powMod_def]
     -- The side goal is that bound, stated on the loop.
-    rw [powMod_eq]
+    rw [Nat.powMod_def]
     exact Nat.lt_trans (Nat.mod_lt _ (Nat.pos_of_ne_zero h)) (readNat_lt _ _ _)
 
 /-- A zero modulus gives `len_mod` zero bytes. -/
