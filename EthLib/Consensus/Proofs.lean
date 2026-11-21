@@ -165,6 +165,7 @@ public import EthLib.Consensus.Proofs.HonestContributionSignatures
 public import EthLib.Consensus.Proofs.HonestValidator
 public import EthLib.Consensus.Proofs.HonestProposer
 public import EthLib.Consensus.Proofs.InclusionListCommittee
+public import EthLib.Consensus.Proofs.LightClient.Accountable
 public import EthLib.Consensus.Proofs.LightClient.Authenticate
 public import EthLib.Consensus.Proofs.LightClient.Containers
 public import EthLib.Consensus.Proofs.LightClient.Execution
