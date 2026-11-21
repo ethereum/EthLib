@@ -187,19 +187,89 @@ def test_unknown_parent() -> None:
 
 
 def test_chain_of_two() -> None:
-    """The second payload runs on the state that the first left."""
+    """A payload off the head is accepted, and the update to it runs it on its parent's state."""
     responses = _run(_new_payload(B1), _new_payload(B2), _update(B2.hash, B1.hash, G))
-    assert [r["response"]["result"]["status"] for r in responses[:2]] == ["VALID", "VALID"]
-    assert responses[2]["forkchoice"] == _forkchoice(B2.hash, B1.hash, G)
+    assert responses[0]["response"] == {"result": _status("VALID", B1.hash)}
+    # The parent of the second payload is valid but is not the head, so it does not run yet.
+    assert responses[1]["response"] == {"result": _status("ACCEPTED", None)}
+    assert responses[2] == {
+        "response": {"result": _update_result("VALID", B2.hash)},
+        "forkchoice": _forkchoice(B2.hash, B1.hash, G),
+    }
 
 
 def test_reorganization() -> None:
-    """A sibling of the head runs on their common parent, and an update makes it the head."""
+    """A sibling of the head is accepted, and an update runs it and makes it the head."""
     responses = _run(
-        _new_payload(B1), _update(B1.hash), _new_payload(B1_SIDE), _update(B1_SIDE.hash)
+        _new_payload(B1),
+        _update(B1.hash),
+        _new_payload(B1_SIDE),
+        _new_payload(B1_SIDE),
+        _update(B1_SIDE.hash),
     )
-    assert responses[2]["response"] == {"result": _status("VALID", B1_SIDE.hash)}
-    assert responses[3]["forkchoice"] == _forkchoice(B1_SIDE.hash)
+    assert responses[1]["forkchoice"] == _forkchoice(B1.hash)
+    # The parent of the sibling is known and valid but is not the head: G <- B1, head B1.
+    assert responses[2]["response"] == {"result": _status("ACCEPTED", None)}
+    assert responses[3]["response"] == responses[2]["response"]
+    assert responses[4] == {
+        "response": {"result": _update_result("VALID", B1_SIDE.hash)},
+        "forkchoice": _forkchoice(B1_SIDE.hash),
+    }
+
+
+def test_accepted_payload_that_fails() -> None:
+    """An accepted payload that fails when the update runs it is invalid, and the head stays."""
+    responses = _run(_new_payload(B1), _update(B1.hash), _new_payload(BAD), _update(BAD.hash))
+    assert responses[2]["response"] == {"result": _status("ACCEPTED", None)}
+    assert responses[3] == {
+        "response": {"result": _update_result("INVALID", G)},
+        "forkchoice": _forkchoice(B1.hash),
+    }
+
+
+def test_accepted_payload_sent_again_on_the_head() -> None:
+    """An accepted payload sent again once its parent is the head runs, and is valid."""
+    side = Block(G, 1, extra=b"\x03")
+    responses = _run(
+        _new_payload(B1), _update(B1.hash), _new_payload(side), _update(G), _new_payload(side)
+    )
+    assert responses[2]["response"] == {"result": _status("ACCEPTED", None)}
+    assert responses[3]["forkchoice"] == _forkchoice(G)
+    assert responses[4]["response"] == {"result": _status("VALID", side.hash)}
+
+
+def test_update_to_a_child_of_a_failed_payload() -> None:
+    """A child of an accepted payload that fails is invalid when an update names it."""
+    child = Block(BAD.hash, 2)
+    responses = _run(
+        _new_payload(B1),
+        _update(B1.hash),
+        _new_payload(BAD),
+        _new_payload(child),
+        _update(child.hash),
+    )
+    assert [r["response"]["result"]["status"] for r in responses[2:4]] == ["ACCEPTED"] * 2
+    assert responses[4] == {
+        "response": {"result": _update_result("INVALID", G)},
+        "forkchoice": _forkchoice(B1.hash),
+    }
+
+
+def test_update_to_an_accepted_child_of_an_accepted_payload() -> None:
+    """An update runs the accepted blocks of the chain of its head, oldest first."""
+    b2_side = Block(B1_SIDE.hash, 2)
+    responses = _run(
+        _new_payload(B1),
+        _update(B1.hash),
+        _new_payload(B1_SIDE),
+        _new_payload(b2_side),
+        _update(b2_side.hash),
+    )
+    assert [r["response"]["result"]["status"] for r in responses[2:4]] == ["ACCEPTED"] * 2
+    assert responses[4] == {
+        "response": {"result": _update_result("VALID", b2_side.hash)},
+        "forkchoice": _forkchoice(b2_side.hash),
+    }
 
 
 def test_invalid_payload_is_remembered() -> None:

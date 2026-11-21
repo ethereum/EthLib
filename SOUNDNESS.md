@@ -4970,17 +4970,28 @@ The functions of each method take the tree of known payloads, the known finalize
 An execution node keeps them as state across calls (`Engine/Node.lean`).
 It knows blocks with their validity and the state after each valid one, and it keeps the forkchoice state, the known finalized block and the builds.
 Each method is a step of the node, and each step answers with the function of its method on a view of the node (`Proofs/Node.lean`).
-`newPayloadStep_of_validState` shows that a new payload on a known valid parent gets the answer of the method on the chain of that parent.
-`chainAt_last` shows that this chain ends at the parent, with the state after it.
-A payload whose parent the node does not know as valid is `SYNCING` (`newPayloadStep_of_validState_eq_none`), and a payload that fails the checks before execution gets their answer and changes nothing (`newPayloadStep_of_checkNewPayload_invalid`).
+`newPayloadStep_of_head` shows that a new payload on the valid head gets the answer of the method on the chain of the head.
+`chainAt_last` shows that this chain ends at the head, with the state after it.
+Step 5 of `engine_newPayloadV1` lets a node skip the validation of a payload off the canonical chain, and the node does.
+`newPayloadStep_accepted_iff` shows that a payload that the node does not know as valid or invalid is `ACCEPTED` exactly when its parent is known and is not invalid, but is not the valid head.
+Such a parent is valid elsewhere, or accepted itself.
+`newPayloadStep_accepted` shows that every `ACCEPTED` answer has a `null` latest valid hash.
+`newPayloadStep_of_not_head` shows that the node keeps such a payload as accepted, with its request.
+A payload sent again while accepted gets the answer of its parent again, so it runs once its parent is the head (`newPayloadStep_of_fresh`).
+A payload whose parent is unknown or invalid is `SYNCING` (`newPayloadStep_syncing_of_parent`), and a payload that fails the checks before execution gets their answer and changes nothing (`newPayloadStep_of_checkNewPayload_invalid`).
 Those checks also read the other parameters of the request, so the node does not record such a payload.
 `validState_of_newPayloadStep` shows that a `VALID` payload is then known as valid under its own hash.
 `forkchoiceUpdatedStep_ne_syncing_of_newPayloadStep` shows that the next update, with that payload as the head, is not `SYNCING`.
-`forkchoiceUpdatedStep_answer` gives the response of an update on the tree of the node, and `getPayloadStep_eq` the answer of a request for a payload on its builds.
-An update applies its forkchoice state when it applies its head, even when its payload attributes then fail, as step 8 of the method asks (`forkchoiceUpdatedStep_of_applied`).
-Otherwise the node does not change (`forkchoiceUpdatedStep_of_not_applied`).
+An update first runs the accepted blocks of the chain of its head, oldest first, each with its own request on the chain of its parent, as step 4 of `engine_forkchoiceUpdatedV1` asks.
+A block whose parent is then invalid is recorded as invalid too, by step 1 of payload validation.
+That validation keeps every valid block valid and the forkchoice state as it was (`validateHead_validState`, `validateHead_forkchoice`).
+A head that stays accepted, because its run or that of an ancestor aborted, is `SYNCING` (`forkchoiceUpdatedStep_of_headAccepted`).
+An aborted run is `SYNCING` in `engine_newPayload` too.
+Otherwise `forkchoiceUpdatedStep_answer` gives the response of the update on the tree of the validated node, and `getPayloadStep_eq` the answer of a request for a payload on its builds.
+After that validation, an update applies its forkchoice state when it applies its head, even when its payload attributes then fail, as step 8 of the method asks (`forkchoiceUpdatedStep_of_applied`, `updateStep_of_applied`).
+Otherwise the validated node does not change (`updateStep_of_not_applied`).
+`forkchoiceUpdatedStep_head_valid` shows that an update keeps the forkchoice state, or makes a block that the node knows as valid its head.
 No update starts a build yet, so the builds stay empty, and a request for a payload answers `-38001`, even for the payload ID that an update answered (#3533).
-The node runs every payload on a known valid parent, so it never answers `ACCEPTED` (#3530).
 A child of a known invalid block is `SYNCING`, short of step 2 of payload validation, which asks `INVALID` for each descendant of an invalid terminal block (#3531).
 A node starts from one block; a total difficulty below the difficulty of a block of proof of work gives no node.
 The node keeps the state after every valid block, so it never refuses a reorganization with `-38006`.
