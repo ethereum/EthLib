@@ -33,8 +33,9 @@ require "leanprover-community" / "mathlib" @ git "v4.36.0"
 --
 -- The library code never imports it.
 --
--- VCVio's release tag for this Lean version, built against the same Mathlib.
-require VCVio from git "https://github.com/Verified-zkEVM/VCVio.git" @ "v4.36.0"
+-- The cached scan theorem for the first valid codeword, from VCVio #1202.
+require VCVio from git "https://github.com/Verified-zkEVM/VCVio.git" @
+  "23f44515eb1e997136c796da283d89b811145164"
 
 @[default_target]
 lean_lib «EthLib» where
