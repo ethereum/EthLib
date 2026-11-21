@@ -38,6 +38,7 @@ public import EthLib.Consensus.Proofs.BuilderApi.Flow
 public import EthLib.Consensus.Proofs.BuilderApi.RequestAuth
 public import EthLib.Consensus.Proofs.BuilderApi.GloasBid
 public import EthLib.Consensus.Proofs.BuilderApi.Registration
+public import EthLib.Consensus.Proofs.BuilderApi.Submit
 public import EthLib.Consensus.Proofs.Builders
 public import EthLib.Consensus.Proofs.Churn
 public import EthLib.Consensus.Proofs.ChurnReservations

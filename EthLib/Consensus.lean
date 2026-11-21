@@ -29,6 +29,7 @@ public import EthLib.Consensus.BuilderApi.Proposal
 public import EthLib.Consensus.BuilderApi.RequestAuth
 public import EthLib.Consensus.BuilderApi.GloasBid
 public import EthLib.Consensus.BuilderApi.Registration
+public import EthLib.Consensus.BuilderApi.Submit
 public import EthLib.Consensus.Builders
 public import EthLib.Consensus.Churn
 public import EthLib.Consensus.Mutators

@@ -7,6 +7,7 @@ public import EthLib.Consensus.BuilderApi.Encoding
 public import EthLib.Consensus.BuilderApi.GloasBid
 public import EthLib.Consensus.BuilderApi.Registration
 public import EthLib.Consensus.BuilderApi.RequestAuth
+public import EthLib.Consensus.BuilderApi.Submit
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Consensus.Exports.Ssz
 public import EthLib.Serialization.Exports.Ssz
@@ -104,6 +105,42 @@ The payload is the SSZ response of the builder, with its blobs bundle from Deneb
 None when the header of the payload is not the header of the blinded block. -/
 @[export eth_consensus_unblind_signed_blinded_block]
 def unblindExport (args : PyValue) : Result PyValue := pyExport unblindOf args
+
+/-- The status of a request that submits a signed blinded block to the endpoint of a version.
+
+The builder holds the state of the proposal and the payload of its bid.
+
+The signatures are checked with BLS, as the source asks.
+
+The execution layer accepts every payload. -/
+def submitBlindedBlockStatusOf
+    (args : String × String × ByteArray × ByteArray × ByteArray × String) : Result Nat := do
+  let (name, fork, pre, blinded, payload, version) := args
+  let preset ← presetOf name
+  let fork ← forkOf fork.toUTF8
+  let config ← configWithValue name none
+  let version ← match version with
+    | "v1" => pure BuilderApi.SubmitVersion.v1
+    | "v2" => pure .v2
+    | _ => throw (0, s!"no endpoint version {version}")
+  if range : HasBuilderApi fork then
+    let state ← runSsz "state rejected" (SszType.deserialize (BeaconState preset fork) pre)
+    let signed ← runSsz "input rejected"
+      (SszType.deserialize (SignedBlindedBeaconBlock preset fork) blinded)
+    let payload ← runSsz "payload rejected"
+      (SszType.deserialize (ExecutionPayload preset fork) payload)
+    return BuilderApi.submitBlindedBlockStatus config .bls (.constant true) state range payload
+      signed version
+  else throw (0, s!"no Builder API messages at {fork.name}")
+
+/-- The status of a request that submits a signed blinded block: 200 or 202 when valid, else 400.
+
+The arguments are the name of the preset, the fork and the state of the builder.
+
+Then come the signed blinded block, the payload of the bid and the version, `v1` or `v2`. -/
+@[export eth_consensus_submit_blinded_block_status]
+def submitBlindedBlockStatusExport (args : PyValue) : Result PyValue :=
+  pyExport submitBlindedBlockStatusOf args
 
 /-- The name of the rule that refuses a registration. -/
 def RegistrationError.reason : BuilderApi.RegistrationError → String
