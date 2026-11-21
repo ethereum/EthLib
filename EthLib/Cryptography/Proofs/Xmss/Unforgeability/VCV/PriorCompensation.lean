@@ -6,9 +6,10 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.AcceptedScan.Compensat
 /-!
 # The cost of partners formed before signing
 
-The leanXMSS draft in "WOTS+C", paragraph "Signing", scans candidate randomizers until one gives a valid digest.
+The leanXMSS draft in "WOTS+C", paragraph "Signing", selects the first valid digest.
 
 Partners share their layer and OTS key.
+
 Their physical hash inputs can contain different messages.
 -/
 
@@ -43,7 +44,8 @@ theorem validInputs_after (pp : PublicParam) (l : Layer) (e : UInt32) (cache : H
     (seen : Finset HashInput) (a : HashInput) (addr : messageKey pp a = some (l, e))
     (cold : cache a = none) (w : HashOutput) :
     (validInputs pp l e (cache.cacheQuery a w) (insert a seen)).card =
-      if w ∈ accepted then (validInputs pp l e cache seen).card + 1 else (validInputs pp l e cache seen).card := by
+      if w ∈ accepted then (validInputs pp l e cache seen).card + 1
+      else (validInputs pp l e cache seen).card := by
   classical
   let before := validInputs pp l e cache seen
   have outside : a ∉ before := by simp [before, validInputs, cold]
@@ -52,31 +54,36 @@ theorem validInputs_after (pp : PublicParam) (l : Layer) (e : UInt32) (cache : H
     ext b
     by_cases same : b = a
     · subst b
-      by_cases ok : w ∈ accepted <;> simp [validInputs, before, addr, QueryCache.cacheQuery_self, cold, ok]
+      by_cases ok : w ∈ accepted <;>
+        simp [validInputs, before, addr, QueryCache.cacheQuery_self, cold, ok]
     · by_cases ok : w ∈ accepted <;>
         simp [validInputs, before, same, ok]
   rw [shape]
   split <;> simp_all [Finset.card_insert_of_notMem, before]
 
 /-- Sum of the actual finder probabilities for a finite family of messages and starting randomizers.
+
 Each selected position must already contain an accepted full hash word in the entry cache. -/
 noncomputable def occupiedSelections (pp : PublicParam) (l : Layer) (e : UInt32)
-    (family : Finset (ByteArray × Randomizer)) (c fuel : Nat) (cache : HashSpec.QueryCache) : ℝ≥0∞ :=
+    (family : Finset (ByteArray × Randomizer)) (c fuel : Nat)
+    (cache : HashSpec.QueryCache) : ℝ≥0∞ :=
   ∑ i ∈ family, Pr{let z ← (simulateQ randomOracle (selected pp l e i.1 i.2 c fuel)).run cache}[
     ∃ r ∈ validRows accepted (trialInput pp l e i.1) cache, z.1 = some r]
 
-/-- Sum of the probabilities that the actual finder selects a row with another valid,
-same-key input bearing the same digest in the entry cache. -/
+/-- Sum of the probabilities of selecting a digest shared by two cached inputs at this key. -/
 noncomputable def partneredSelections (pp : PublicParam) (l : Layer) (e : UInt32)
-    (family : Finset (ByteArray × Randomizer)) (c fuel : Nat) (cache : HashSpec.QueryCache) : ℝ≥0∞ :=
+    (family : Finset (ByteArray × Randomizer)) (c fuel : Nat)
+    (cache : HashSpec.QueryCache) : ℝ≥0∞ :=
   ∑ i ∈ family, Pr{let z ← (simulateQ randomOracle (selected pp l e i.1 i.2 c fuel)).run cache}[
     ∃ r, z.1 = some r ∧ EarlierDigest.Partner pp cache (trialInput pp l e i.1 r)]
 
 /-- A fresh physical query at this signing key pays for every newly partnered selection.
+
 The valid input count includes all messages at this key, regardless of the measured family. -/
 theorem compensate_finders (pp : PublicParam) (l : Layer) (e : UInt32)
     (family : Finset (ByteArray × Randomizer)) (c fuel : Nat) (within : c + fuel ≤ 2 ^ 32)
-    (cache : HashSpec.QueryCache) (seen : Finset HashInput) (covers : ∀ b w, cache b = some w → b ∈ seen)
+    (cache : HashSpec.QueryCache) (seen : Finset HashInput)
+    (covers : ∀ b w, cache b = some w → b ∈ seen)
     (a : HashInput) (addr : messageKey pp a = some (l, e)) (cold : cache a = none) :
     let p : ℝ≥0∞ := CODE_SIZE / 2 ^ 128
     let ε : ℝ≥0∞ := 1 / 2 ^ 128
@@ -85,13 +92,15 @@ theorem compensate_finders (pp : PublicParam) (l : Layer) (e : UInt32)
     let V := (validInputs pp l e cache seen).card
     let upd := fun v => cache.cacheQuery a v
     p * freshMean (fun v => Φ (upd v)) + ε * (V * H cache) ≤
-      p * Φ cache + ε * freshMean (fun v => ((validInputs pp l e (upd v) (insert a seen)).card : ℝ≥0∞) * H (upd v)) := by
+      p * Φ cache + ε * freshMean (fun v =>
+        ((validInputs pp l e (upd v) (insert a seen)).card : ℝ≥0∞) * H (upd v)) := by
   classical
   have nonempty : accepted.Nonempty := by
     by_contra! empty
     have p := prEvent_accepted
     rw [empty] at p
-    have positive : (0 : ℝ≥0∞) < CODE_SIZE / 2 ^ 128 := ENNReal.div_pos (by norm_num [CODE_SIZE]) (by norm_num)
+    have positive : (0 : ℝ≥0∞) < CODE_SIZE / 2 ^ 128 :=
+      ENNReal.div_pos (by norm_num [CODE_SIZE]) (by norm_num)
     simp [← p] at positive
   obtain ⟨ref, ok⟩ := nonempty
   have rate := priorPairRate_le (messageKey pp) validDigest cache a (validInputs pp l e cache seen)
@@ -101,7 +110,8 @@ theorem compensate_finders (pp : PublicParam) (l : Layer) (e : UInt32)
     (fun i => trialInput pp l e i.1) (fun i _ => trial_injective pp l e i.1)
     (fun i => (List.range' c fuel).map (trialRandomizer i.2))
     (fun i _ => trials_nodup pp l e i.1 i.2 c fuel within) cache a cold ref ok
-    ((1 : ℝ≥0∞) / 2 ^ 128) (validInputs pp l e cache seen).card rate valid_of_digest prEvent_validDigest
+    ((1 : ℝ≥0∞) / 2 ^ 128) (validInputs pp l e cache seen).card rate valid_of_digest
+    prEvent_validDigest
   dsimp only
   simp only [occupiedSelections, partneredSelections, selected, findCodeword_position,
     validInputs_after pp l e cache seen a addr cold, apply_ite Nat.cast, Nat.cast_add, Nat.cast_one]
