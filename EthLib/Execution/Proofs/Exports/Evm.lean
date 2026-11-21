@@ -74,7 +74,7 @@ private theorem readAddress_of_size_eq {sender : ByteArray} (h : sender.size = 2
     readAddress sender = .ok (readBytes sender 0 20 (by omega)) := by
   -- Reading the buffer in place gives back the vector of its bytes.
   rw [readAddress, Base.exactBytes_of_size_eq _ h]
-  exact congrArg Except.ok (Base.readBytes_packBytes (⟨sender.data, h⟩ : Vector UInt8 20) _).symm
+  exact congrArg Except.ok (Base.readBytes_packBytes (⟨sender.data, h⟩ : Base.Address) _).symm
 
 /-- A sender of any length but 20 bytes gives the error of a sender, for CREATE. -/
 theorem createAddressOf_eq_error_of_size_ne {sender : ByteArray} {nonce : Nat}
