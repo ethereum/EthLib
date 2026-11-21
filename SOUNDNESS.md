@@ -4699,6 +4699,26 @@ It reads only the committees, their count and the attester domain, which the ste
 A block holds at most 128 attestations before Electra and 8 from Electra on mainnet; which honest blocks carry which attestations is left to the assembled theorem.
 Satisfiability of the state hypotheses on a run from genesis is also left to the assembled theorem.
 
+`exists_epochContinuation` (`Consensus/Proofs/LivenessContinuation.lean`) builds the continuation of one epoch, from Altair.
+Its run starts at the first slot of the epoch and walks it slot by slot to the last slot.
+At a slot of a proposal it applies an honest block, and it takes a slot step after each slot but the last.
+A step is honest when it is a slot, or a block of an honest proposer that carries only honest votes (`Step.Honest`).
+An honest vote heads the latest block at its slot or before, targets the current epoch with the root of the latest block at its first slot or before, has the current justified checkpoint as source, and comes from a committee of its slot (`HonestVote`).
+That is a restriction of the model: a real proposer may also carry other valid votes, such as those of the previous epoch.
+The head and the target are read on the chain that carries the vote, so the model assumes that honest attesters see that chain, with no reorganization within the epoch.
+From Gloas the index of the data also says whether the payload is present, so an honest vote is defined only before Gloas, and a block at Gloas or later is never an honest step here.
+Each block must give the timely target flag to the honest members of the slots of the epoch shortly before it, within a gap.
+Every slot of the epoch but the last must have a slot of a proposal after it in the epoch within that gap.
+With two slots or more in an epoch, the last slot of each tested epoch must then have an honest proposer, since the margin of the stake covers the attesters of one slot only.
+Then at the last slot every honest member of every other slot holds the flag, and the latest block header is at that slot or before.
+The run keeps the current justified checkpoint and the bits of justification.
+The slot steps and the blocks are hypotheses that quantify over every honest run from the first state of the epoch that applies blocks only at the slots of the proposals.
+They ask that each slot step succeeds, and that an honest block passes at each slot of a proposal: its payload, its deposits and its attestations must fit and pass.
+The ring of RANDAO mixes must span more than the seed lookahead plus two epochs, so that the committees of the epoch stay fixed.
+`exists_slotsContinuation` walks empty slots to the first slot of the next epoch, when the latest block header is at the slot of the state or before.
+The epoch continuation asks the slot of its first state to be after its latest block header, so it cannot start at the genesis state itself; its first state is one that a slot step reaches, with the upgrades due already applied.
+No theorem yet derives the block hypothesis from the honest block theorems above, or assembles the continuation of plausible liveness.
+
 `processJustificationAndFinalization_slackJustifiedCheckpoints` (`Consensus/Proofs/Transition/FfgSlack.lean`) turns one step into a slack link of the model.
 If the two justified checkpoints of the state before the step are slack-justified, so are those of the state after it.
 A new current justified checkpoint must match the state of that step.
