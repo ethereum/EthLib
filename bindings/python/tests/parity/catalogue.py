@@ -18,6 +18,8 @@ CONSENSUS = {
     "mainnet": "consensus-specs/v1.7.0-beta.4/mainnet",
     "minimal": "consensus-specs/v1.7.0-beta.4/minimal",
 }
+# The fork choice compliance tests of the same release, at the minimal preset only.
+COMPLIANCE = "consensus-specs/v1.7.0-beta.4/comptests"
 
 # The source of ethereum/legacytests at its pinned commit, and the directory that holds its files.
 LEGACY = "legacytests@1f581b8c/source"
@@ -251,25 +253,31 @@ def devnet_cases(suite: str) -> list[Case]:
 
 def consensus_cases() -> list[Case]:
     """Every case directory of both presets, at the forks from Phase 0 to Heze."""
-    cases = set()
-    for preset, name in CONSENSUS.items():
-        archive = archives.fetch_archives.load(archives.REPO)[name]
-        for member in archives.fetch_archives.members(archive, archives.CACHE):
-            # tests/<preset>/<fork>/<runner>/<handler>/<suite>/<case>/<file>
-            parts = member.split("/")
-            if len(parts) == 8 and parts[1] == preset and parts[2] in CONSENSUS_FORKS:
-                path = "/".join(parts[:7])
-                cases.add(
-                    Case(
-                        "consensus-spec-tests",
-                        preset,
-                        parts[2],
-                        f"{parts[3]}/{parts[4]}",
-                        path,
-                        path,
-                    )
-                )
+    cases = [
+        case
+        for preset, name in CONSENSUS.items()
+        for case in _consensus_layout("consensus-spec-tests", name, preset)
+    ]
     return sorted(cases, key=lambda case: case.path)
+
+
+def compliance_cases() -> list[Case]:
+    """Every fork choice compliance case, at the forks from Phase 0 to Heze."""
+    cases = _consensus_layout("fork-choice-compliance", COMPLIANCE, "minimal")
+    return sorted(cases, key=lambda case: case.path)
+
+
+def _consensus_layout(suite: str, name: str, preset: str) -> set[Case]:
+    """Every case directory of one preset in an archive of consensus-specs."""
+    cases = set()
+    archive = archives.fetch_archives.load(archives.REPO)[name]
+    for member in archives.fetch_archives.members(archive, archives.CACHE):
+        # tests/<preset>/<fork>/<runner>/<handler>/<suite>/<case>/<file>
+        parts = member.split("/")
+        if len(parts) == 8 and parts[1] == preset and parts[2] in CONSENSUS_FORKS:
+            path = "/".join(parts[:7])
+            cases.add(Case(suite, preset, parts[2], f"{parts[3]}/{parts[4]}", path, path))
+    return cases
 
 
 def legacy_networks(root: Path) -> set[str]:

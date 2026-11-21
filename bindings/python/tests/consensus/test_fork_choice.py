@@ -56,6 +56,16 @@ FAST_CONFIRMATION = (
     "variables",
 )
 
+# The suites of the fork choice compliance cases, which EthLib runs at every fork above.
+COMPLIANCE = (
+    "attester_slashing_test",
+    "block_cover_test",
+    "block_tree_test",
+    "block_weight_test",
+    "invalid_message_test",
+    "shuffling_test",
+)
+
 # The checks that read the store of the fast confirmation rule.
 # A checks step with them follows a run of that rule.
 # The case leaves that run implicit at the start of each slot.
@@ -92,6 +102,8 @@ def runs(fork: str, runner: str, handler: str) -> bool:
     """Whether EthLib runs the cases of a handler at a fork."""
     if runner == "fast_confirmation":
         return fork in SPECIFIED and handler in FAST_CONFIRMATION
+    if runner == "fork_choice_compliance":
+        return fork in SPECIFIED and handler in COMPLIANCE
     return fork in SPECIFIED and handler in HANDLERS + GLOAS_HANDLERS
 
 
@@ -150,7 +162,18 @@ def _input(case: Path, step: dict) -> tuple:
     raise ValueError(f"no runner for the step {step}")
 
 
-def _check(read: dict, checks: dict) -> None:
+def _viable_leaves(read: list[dict], want: list[dict], gloas: bool) -> tuple[list, list]:
+    """The viable leaves that the store gives and those that a check wants, in one order."""
+    # The order of the leaves depends on the walk, so the sorted lists are compared.
+    # A leaf gives its payload status from Gloas on, and only its root and weight before.
+    fields = ("weight", "payload_status") if gloas else ("weight",)
+    assert all(leaf.keys() == {"root", *fields} for leaf in want), want
+    found = [(leaf["root"], *(leaf[f] for f in fields)) for leaf in read]
+    wanted = [(_hex(leaf["root"]), *(leaf[f] for f in fields)) for leaf in want]
+    return sorted(found), sorted(wanted)
+
+
+def _check(read: dict, checks: dict, gloas: bool) -> None:
     """Compare a read of the store with each check of a step."""
     for key, want in checks.items():
         match key:
@@ -160,10 +183,8 @@ def _check(read: dict, checks: dict) -> None:
                 if "payload_status" in want:
                     assert read["head"]["payload_status"] == want["payload_status"]
             case "viable_for_head_roots_and_weights":
-                # The order of the leaves depends on the walk, so the sets are compared.
-                found = [(e["root"], e["weight"], e["payload_status"]) for e in read[key]]
-                wanted = [(_hex(e["root"]), e["weight"], e["payload_status"]) for e in want]
-                assert sorted(found) == sorted(wanted)
+                found, wanted = _viable_leaves(read[key], want, gloas)
+                assert found == wanted
             case "payload_timeliness_vote" | "payload_data_availability_vote":
                 # The read asks for the votes on the block of the timeliness check.
                 asked = checks["payload_timeliness_vote"]["block_root"]
@@ -198,14 +219,23 @@ def _check(read: dict, checks: dict) -> None:
                 raise ValueError(f"no runner for the check {key}")
 
 
-def run_case(preset: str, fork: str, case: Path) -> None:
-    """Run every step of a case on one store, and compare each outcome with the case."""
+def run_case(preset: str, fork: str, case: Path, compliance: bool = False) -> None:
+    """Run every step of a case on one store, and compare each outcome with the case.
+
+    A compliance case runs as its own runner does.
+    That runner starts Gloas at epoch 0 without a configuration file.
+    It checks signatures only under setting 1, and it lets a carried handler fail.
+    """
     steps = _load(case / "steps.yaml")
     config_file = case / "config.yaml"
     config = replacements(_load(config_file), preset) if config_file.exists() else None
+    gloas = SPECIFIED.index(fork) >= SPECIFIED.index("gloas")
+    if compliance and gloas:
+        config = {"GLOAS_FORK_EPOCH": 0}
     meta = _load(case / "meta.yaml") if (case / "meta.yaml").exists() else {}
+    setting = (meta or {}).get("bls_setting", 0)
     # Setting 2 marks placeholder signatures, which the case must not check.
-    verify = (meta or {}).get("bls_setting", 0) != 2
+    verify = setting == 1 if compliance else setting != 2
     inputs = [_inputs(case, step) for step in steps]
     outcomes = iter(
         consensus.fork_choice(
@@ -227,13 +257,13 @@ def run_case(preset: str, fork: str, case: Path) -> None:
             assert all(len(group) == 1 for group in groups), (index, groups)
             found = [read for read in reads if isinstance(read, dict)]
             assert len(found) == len(reads), (index, reads)
-            _check(found[0] if len(found) == 1 else found[0] | found[1], step["checks"])
+            _check(found[0] if len(found) == 1 else found[0] | found[1], step["checks"], gloas)
         else:
             assert len(reads) == 1, (index, reads)
             outcome = reads[0]
             assert (outcome is None) == step.get("valid", True), (index, step, outcome)
             # The helper's valid block cases require every carried handler to succeed too.
-            if outcome is None:
+            if outcome is None and not compliance:
                 assert all(result is None for group in groups for result in group[1:]), (
                     index,
                     groups,
@@ -308,12 +338,34 @@ def test_digests():
 @pytest.mark.parametrize("preset, fork, case", _cases())
 def test_case(preset, fork, case):
     assert runs(fork, case.parts[-4], case.parts[-3])
-    run_case(preset, fork, case)
+    run_case(preset, fork, case, case.parts[-4] == "fork_choice_compliance")
 
 
 @archives.parametrize("preset, fork, case", _archive_cases)
 def test_archive_case(preset, fork, case):
     run_case(preset, fork, case)
+
+
+# A leaf of the store, which gives its payload status at every fork.
+_LEAF = {"root": bytes([1]) * 32, "weight": 32_000_000_000, "payload_status": 0}
+
+
+def test_viable_leaves_before_gloas():
+    # Before Gloas a check gives no payload status, so the root and the weight decide.
+    want = [{"root": "0x" + "01" * 32, "weight": 32_000_000_000}]
+    found, wanted = _viable_leaves([_LEAF], want, gloas=False)
+    assert found == wanted == [(_LEAF["root"], 32_000_000_000)]
+    found, wanted = _viable_leaves([{**_LEAF, "weight": 0}], want, gloas=False)
+    assert found != wanted
+
+
+def test_viable_leaves_from_gloas():
+    # From Gloas the payload status of each leaf is compared too.
+    want = [{"root": "0x" + "01" * 32, "weight": 32_000_000_000, "payload_status": 1}]
+    found, wanted = _viable_leaves([_LEAF], want, gloas=True)
+    assert found != wanted
+    found, wanted = _viable_leaves([{**_LEAF, "payload_status": 1}], want, gloas=True)
+    assert found == wanted
 
 
 def test_anchor_state_mismatch():

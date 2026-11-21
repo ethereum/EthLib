@@ -31,6 +31,7 @@ TESTS = {
     "execution-spec-tests": "test_execution.py",
     **dict.fromkeys(DEVNETS, "test_devnets.py"),
     "consensus-spec-tests": "test_consensus.py",
+    "fork-choice-compliance": "test_compliance.py",
     "legacytests": "test_legacy.py",
 }
 # The directory of the parity tests, from the repository root, where a command runs.
