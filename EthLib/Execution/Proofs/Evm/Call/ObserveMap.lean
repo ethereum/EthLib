@@ -23,22 +23,6 @@ open EthLib.Execution.State (TransactionState)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter] {σ τ : Type}
 
-omit [GasMeter Meter] [LawfulGasMeter Meter] in
-/-- The match on a resumed frame takes its error branch on an error. -/
-private theorem resume_match_error {β : Sort _} {x : Except EvmError (Evm fork Meter)}
-    {e : EvmError} (h : x = .error e) (h_1 : (e : EvmError) → x = .error e → β)
-    (h_2 : (after : Evm fork Meter) → x = .ok after → β) :
-    runFrameWith.match_1 (fun _ => β) x h_1 h_2 = h_1 e h :=
-  eq_of_heq (runFrameWith.match_1.congr_eq_1 _ _ _ _ e h)
-
-omit [GasMeter Meter] [LawfulGasMeter Meter] in
-/-- The match on a resumed frame takes its success branch on a frame. -/
-private theorem resume_match_ok {β : Sort _} {x : Except EvmError (Evm fork Meter)}
-    {after : Evm fork Meter} (h : x = .ok after) (h_1 : (e : EvmError) → x = .error e → β)
-    (h_2 : (after : Evm fork Meter) → x = .ok after → β) :
-    runFrameWith.match_1 (fun _ => β) x h_1 h_2 = h_2 after h :=
-  eq_of_heq (runFrameWith.match_1.congr_eq_2 _ _ _ _ after h)
-
 /-- An observed run of a frame, with its state mapped, is the run of the observer it maps to.
 
 The map must send each record of the first observer to the record of the second.
@@ -99,31 +83,15 @@ theorem runFrameWith_map (h : σ → τ)
         obtain ⟨e, hres⟩ | ⟨after, hres⟩ :
             (∃ e, resume child = .error e) ∨ ∃ after, resume child = .ok after := by
           cases resume child <;> simp
-        · rw [resume_match_error hres, resume_match_error hres]
+        · rw [runFrameWith_match_error hres, runFrameWith_match_error hres]
           by_cases aborts : e.aborts <;>
             simp [aborts, pure, StateT.pure, throw, throwThe, MonadExceptOf.throw,
               StateT.lift, bind, Except.bind, Except.pure]
-        · rw [resume_match_ok hres, resume_match_ok hres]
+        · rw [runFrameWith_match_ok hres, runFrameWith_match_ok hres]
           exact ih _ ((decreases running hs).2 child _ used hres) _ _ _ rfl
   · simp only [running] at hl hr
     subst hl hr
     rfl
-
-omit [GasMeter Meter] [LawfulGasMeter Meter] in
-/-- The match on a deposit of code takes its error branch on an error. -/
-private theorem deposit_match_error {β : Sort _} {x : Except EvmError (Evm fork Meter)}
-    {e : EvmError} (h : x = .error e) (h_1 : (e : EvmError) → x = .error e → β)
-    (h_2 : (after : Evm fork Meter) → x = .ok after → β) :
-    processCreateMessageWith.match_1 fork (fun _ => β) x h_1 h_2 = h_1 e h :=
-  eq_of_heq (processCreateMessageWith.match_1.congr_eq_1 _ _ _ _ _ e h)
-
-omit [GasMeter Meter] [LawfulGasMeter Meter] in
-/-- The match on a deposit of code takes its success branch on a frame. -/
-private theorem deposit_match_ok {β : Sort _} {x : Except EvmError (Evm fork Meter)}
-    {after : Evm fork Meter} (h : x = .ok after) (h_1 : (e : EvmError) → x = .error e → β)
-    (h_2 : (after : Evm fork Meter) → x = .ok after → β) :
-    processCreateMessageWith.match_1 fork (fun _ => β) x h_1 h_2 = h_2 after h :=
-  eq_of_heq (processCreateMessageWith.match_1.congr_eq_2 _ _ _ _ _ after h)
 
 omit [GasMeter Meter] [LawfulGasMeter Meter] in
 /-- A map of the state passes through the match on a precompile run whose branches are pure. -/
@@ -224,9 +192,9 @@ private theorem process_map (h : σ → τ)
   obtain ⟨e, hd⟩ | ⟨after, hd⟩ : (∃ e, depositCode fork state evm = .error e) ∨
       ∃ after, depositCode fork state evm = .ok after := by
     cases depositCode fork state evm <;> simp
-  · rw [deposit_match_error hd, deposit_match_error hd]
+  · rw [processCreateMessageWith_match_error hd, processCreateMessageWith_match_error hd]
     rfl
-  · rw [deposit_match_ok hd, deposit_match_ok hd]
+  · rw [processCreateMessageWith_match_ok hd, processCreateMessageWith_match_ok hd]
     rfl
 
 /-- An observed run of a message, with its state mapped, is the run of the observer it maps to.
