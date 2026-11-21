@@ -792,7 +792,7 @@
   "An interchange file as the format writes it again, from its JSON text."
 
 #define DOC_consensus_import_slashing_interchange \
-  "The record after importing a file with the minimal strategy of EIP-3076, as JSON text."
+  "The record after importing a file of its chain with the minimal strategy, as JSON text."
 
 #define DOC_consensus_read_signing_request \
   "A request of the Remote-signing API, read and written again as the signer reads it."

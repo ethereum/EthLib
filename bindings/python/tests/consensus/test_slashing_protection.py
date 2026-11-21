@@ -142,15 +142,22 @@ def test_read_rejected(text: bytes, code: int, message: str):
 def test_import_keeps_independent_limits():
     held = interchange([entry(blocks=[block(1, ROOT_A)], attestations=[vote(9, 10, ROOT_A)])])
     file = interchange(
-        [entry(blocks=[block(100, ROOT_B)], attestations=[vote(7, 20, ROOT_B)]), entry(OTHER_KEY)],
-        root="0x" + "00" * 32,
+        [entry(blocks=[block(100, ROOT_B)], attestations=[vote(7, 20, ROOT_B)]), entry(OTHER_KEY)]
     )
     merged = json.loads(consensus.import_slashing_interchange(held, file))
     # Source 9 comes from the held vote and target 20 from the file; no limit keeps a signing root.
-    # The record keeps its own chain root, not the file's.
     assert merged == json.loads(
         interchange([entry(blocks=[block(100)], attestations=[vote(9, 20)]), entry(OTHER_KEY)])
     )
+
+
+def test_import_refuses_another_chain():
+    # The case `wrong_genesis_validators_root` of the interchange tests, with its two roots.
+    held = interchange([], root="0x" + "00" * 31 + "01")
+    file = interchange([], root="0x" + "00" * 32)
+    with raises(ERROR, "slashing protection failed with code 8") as info:
+        consensus.import_slashing_interchange(held, file)
+    assert info.value.code == 8
 
 
 def test_import_refuses_the_gap_and_boundary_repeat():
@@ -393,13 +400,13 @@ def _run(case: dict) -> None:
     """Run a case as a signer that imports with the minimal strategy, against `should_succeed`."""
     held = interchange([], root=case["genesis_validators_root"])
     for step in case["steps"]:
-        file = step["interchange"]
-        # The tests refuse a file of another chain, a check that the EIP does not make.
-        if file["metadata"]["genesis_validators_root"] != case["genesis_validators_root"]:
-            assert not step["should_succeed"]
+        file = json.dumps(step["interchange"]).encode()
+        # The only import that the tests refuse is that of a file of another chain.
+        if not step["should_succeed"]:
+            with raises(ERROR, "slashing protection failed with code 8"):
+                consensus.import_slashing_interchange(held, file)
             return
-        assert step["should_succeed"]
-        held = consensus.import_slashing_interchange(held, json.dumps(file).encode())
+        held = consensus.import_slashing_interchange(held, file)
         for signing in step["blocks"]:
             expected = signing["should_succeed"]
             key, root, slot = (

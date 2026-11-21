@@ -4090,6 +4090,14 @@ Both include the initial held file, allow repeated imports and duplicate-key ent
 These two theorems cover a record built by imports alone.
 The theorems on one import take any held record.
 
+A signer also refuses a file of another chain, whose genesis validators root differs from that of its record.
+The five conditions of EIP-3076 do not include this check.
+Its schema describes the root as the field that "serves to uniquely identify the chain" ([line 49](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md#L49)), and the case `wrong_genesis_validators_root` of the interchange tests expects the import to fail.
+EthLib follows the tests, and [EIPs#12677](https://github.com/ethereum/EIPs/pull/12677), still open, proposes to add the check to the EIP.
+`importChecked_wrongChain` shows that such a file gives the error `wrongChain` with the two roots, so the record is kept as it was.
+`importChecked_eq_ok_iff` shows that the import succeeds exactly when the two roots are equal, and then gives the minimal import of the file.
+The theorems above on `importFile` therefore hold for every import that succeeds.
+
 `importAndSignBlocks` models a signer of blocks that also imports files, from any starting file.
 `importAndSignBlocks_map_signBlock` shows that a run without imports is `signBlocks`.
 `signingRoot_eq_of_importAndSignBlocks` and `lt_slot_of_importAndSignBlocks` state `signingRoot_eq_of_signBlocks` and `lt_slot_of_signBlocks` for it, and the theorems on `signBlocks` follow from them.
@@ -4124,7 +4132,7 @@ No theorem says what `ofJson` does on a document that another client wrote.
 
 The Python suite checks each condition and each malformed field against cases worked out from the EIP.
 With release archives enabled, it runs the 38 interchange tests of `eth-clients/slashing-protection-interchange-tests` against their flags for the minimal strategy.
-Its signer imports each file with the minimal strategy and records each message it signs with its signing root.
+Its signer imports each file through the export, which refuses a file of another chain, and records each message it signs with its signing root.
 
 ### Optimistic sync
 
@@ -6834,7 +6842,8 @@ The source leaves six points about the import open, and EthLib takes these readi
 - Which public key identifies a keystore.
   ERC-2335 makes the `pubkey` field optional, so EthLib derives the key from the decrypted secret and does not read the field.
 - Whether a key imported through the API is read-only: EthLib imports it as one that can be deleted.
-- Whether the genesis validators root of the data must match the chain: EthLib does not compare it, as EIP-3076 import does not.
+- Whether the genesis validators root of the data must match the chain: this import does not compare it, since the conditions of EIP-3076 do not ask for it.
+  The import of a file alone, in § Slashing protection, refuses another chain, but this call does not use it.
 - For an empty request, the flow lets a client read the data and fail on it; EthLib answers HTTP 200 with no status.
 
 The calls `GET` and `DELETE /eth/v1/keystores` list the keys of a client and delete some of them (`Consensus/KeymanagerApi/DeleteKeys.lean`).

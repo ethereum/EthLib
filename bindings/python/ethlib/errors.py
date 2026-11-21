@@ -126,7 +126,7 @@ class ProposerError(EthLibError, ValueError):
 
 
 class SlashingProtectionError(EthLibError, ValueError):
-    """An interchange file does not read, or a signer must refuse a message."""
+    """An interchange file does not read, or a signer must refuse a file or a message."""
 
 
 class KeymanagerError(EthLibError, ValueError):

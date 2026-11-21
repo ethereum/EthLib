@@ -46,9 +46,14 @@ So is a recorded vote without a signing root and a new vote with its target.
 
 The file reads integers as decimal digits in strings, and keys and roots as `0x` hex.
 
-The conditions of the EIP leave out several checks, and so does this module:
+The checked import refuses a file of another chain, which the conditions of the EIP leave out.
 
-- It does not compare the genesis validators root of a file with that of the chain.
+The root "serves to uniquely identify the chain", in the [schema of the EIP][schema].
+
+The [interchange tests][tests] refuse such a file.
+
+The conditions of the EIP leave out two more checks, and so does this module:
+
 - It does not reject a file whose own records are slashable with each other.
 - It does not ask for the records of a key to be sorted, or for a key to appear once.
 
@@ -65,6 +70,8 @@ The limits have no signing roots, so imported messages cannot be signed again.
 These limits prevent signing in a gap between imported files.
 
 [EIP-3076]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md
+[schema]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md#L49
+[tests]: https://github.com/eth-clients/slashing-protection-interchange-tests/blob/bb7900688eecd287d8723154faac6addb5e63336/tests/generated/wrong_genesis_validators_root.json
 -/
 
 @[expose] public section
@@ -130,6 +137,8 @@ inductive SlashingProtectionError where
   | sourceEpochTooLow (sourceEpoch minimum : Epoch)
   /-- A vote has a target epoch at most the least recorded target epoch, and is not a repeat. -/
   | targetEpochTooLow (targetEpoch minimum : Epoch)
+  /-- A file has the genesis validators root of another chain than the signer's. -/
+  | wrongChain (expected actual : Root)
   deriving DecidableEq, Repr
 
 /-- The code of an error at the C boundary, one for each constructor. -/
@@ -141,6 +150,7 @@ def SlashingProtectionError.code : SlashingProtectionError → UInt32
   | .slashableAttestation .. => 5
   | .sourceEpochTooLow .. => 6
   | .targetEpochTooLow .. => 7
+  | .wrongChain .. => 8
 
 /-! ## Reading and writing the file -/
 
@@ -469,7 +479,7 @@ The greatest slot and the independent greatest source and target epochs of each 
 
 Signing roots are discarded, so repeats of imported messages are refused.
 
-It does not compare the genesis validators roots of the two.
+It does not compare the genesis validators roots of the two; the checked import below does.
 
 [EIP-3076, Advice for Minimal Databases][minimal] recommends these maxima.
 
@@ -477,6 +487,23 @@ It does not compare the genesis validators roots of the two.
 -/
 def importFile (held file : Interchange) : Interchange :=
   toMinimal { held with data := held.data ++ file.data }
+
+/-- The record after importing a file of the signer's chain, or an error for another chain.
+
+The chain of the signer is that of its record, by its genesis validators root.
+
+A file with another root is refused, and the record is kept as it was.
+
+Otherwise the import follows the minimal strategy, as above.
+
+The [schema of EIP-3076][schema] says that the root "serves to uniquely identify the chain".
+
+[schema]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3076.md#L49
+-/
+def importChecked (held file : Interchange) : Except SlashingProtectionError Interchange := do
+  ensure (file.genesisValidatorsRoot = held.genesisValidatorsRoot)
+    (.wrongChain held.genesisValidatorsRoot file.genesisValidatorsRoot)
+  return held.importFile file
 
 end Interchange
 

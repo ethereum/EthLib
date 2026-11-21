@@ -47,10 +47,14 @@ def fixedBytesOf (what : String) (size : Nat) (bytes : ByteArray) : Result (Vect
 def readSlashingInterchangeExport (text : ByteArray) : Result ByteArray := do
   return interchangeText (← interchangeOf text)
 
-/-- The record after importing a file with the minimal strategy of EIP-3076, as JSON text. -/
+/-- The record after importing a file of its chain with the minimal strategy, as JSON text.
+
+It returns the record, or the code of the error of a file of another chain. -/
 @[export eth_consensus_import_slashing_interchange]
 def importSlashingInterchangeExport (held file : ByteArray) : Result ByteArray := do
-  return interchangeText ((← interchangeOf held).importFile (← interchangeOf file))
+  let held ← interchangeOf held
+  let file ← interchangeOf file
+  return interchangeText (← runProtection (held.importChecked file))
 
 /-- Whether a key may sign a block of a slot with a signing root, given a record.
 

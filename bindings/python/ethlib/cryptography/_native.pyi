@@ -1065,7 +1065,7 @@ def consensus_read_slashing_interchange(text: bytes) -> bytes:
     ...
 
 def consensus_import_slashing_interchange(held: bytes, file: bytes) -> bytes:
-    """The record after importing a file with the minimal strategy of EIP-3076, as JSON text."""
+    """The record after importing a file of its chain with the minimal strategy, as JSON text."""
     ...
 
 def consensus_read_signing_request(name: str, document: Any) -> Any:

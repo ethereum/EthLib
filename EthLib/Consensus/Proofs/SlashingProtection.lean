@@ -936,6 +936,24 @@ theorem checkAttestation_of_importFile {held file : Interchange} {pubkey : BLSPu
   checkAttestationSigning_of_foldl_importFile (files := [file]) passed held
     (List.mem_cons_self ..)
 
+/-! ## Imports of one chain -/
+
+/-- A file of another chain is refused with the two roots, so the signer keeps its record. -/
+theorem importChecked_wrongChain {held file : Interchange}
+    (other : file.genesisValidatorsRoot ≠ held.genesisValidatorsRoot) :
+    held.importChecked file =
+      .error (.wrongChain held.genesisValidatorsRoot file.genesisValidatorsRoot) := by
+  simp [Interchange.importChecked, ensure, other, Functor.map, Except.map]
+
+/-- An import succeeds exactly when the two roots are equal, and then it is the minimal import. -/
+theorem importChecked_eq_ok_iff {held file result : Interchange} :
+    held.importChecked file = .ok result ↔
+      file.genesisValidatorsRoot = held.genesisValidatorsRoot ∧
+        result = held.importFile file := by
+  unfold Interchange.importChecked
+  by_cases same : file.genesisValidatorsRoot = held.genesisValidatorsRoot <;>
+    simp [ensure, same, eq_comm, Functor.map, Except.map]
+
 /-! ## Imports between signed blocks -/
 
 /-- One step of a signer of blocks: it imports a file, or signs a block header. -/
