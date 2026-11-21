@@ -92,7 +92,7 @@ theorem PtcDrawable.of_eq {fork' : Fork}
     validators ▸ drawable.committeeRoom⟩
 
 /-- A committee that is cut has a nonzero count and the size of its range of positions. -/
-private theorem size_of_shuffledCommittee {indices : Array ValidatorIndex}
+theorem size_of_shuffledCommittee {indices : Array ValidatorIndex}
     {shuffled : Array UInt64} {index count : UInt64} {committee : Array ValidatorIndex}
     (cut : shuffledCommittee indices shuffled index count = .ok committee) :
     count ≠ 0 ∧ committee.size = indices.size * (index.toNat + 1) / count.toNat -

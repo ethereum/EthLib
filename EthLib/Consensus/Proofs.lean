@@ -199,6 +199,7 @@ public import EthLib.Consensus.Proofs.ShufflePermutation
 public import EthLib.Consensus.Proofs.SignatureChecks
 public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.SigningRandomOracle
+public import EthLib.Consensus.Proofs.SlotCommitteeStake
 public import EthLib.Consensus.Proofs.StakeMovement
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.ActivationExitOrder

@@ -4609,6 +4609,12 @@ It also assumes that every validator active and slashed at `w` was slashed at `x
 The guard fails for a window that crosses Electra or starts before Altair, so the theorem says nothing there.
 The margin is as loose as the drift.
 It does not cover the attesters of the last slot of an epoch, which the steps above leave out.
+`quorum_without_slot_of_stakeMargin` (`Consensus/Proofs/SlotCommitteeStake.lean`) leaves them out and still keeps two thirds.
+The committees of one slot cut a contiguous share of the shuffled active validators of the epoch, so `sum_size_le_of_mapM_getBeaconCommittee` bounds their members by the active count over the slots of an epoch, plus one.
+Those members are active in the epoch of the slot, and a run fixes the activity of each epoch up to the largest seed lookahead (four epochs on mainnet) after its start.
+So the margin is asked at `x` without every set of validators active in that epoch of at most that size, and the theorem gives two thirds at `w` without the members of the committees of the slot.
+The shuffle of an epoch more than the least seed lookahead after the current epoch of `x` is not known at `x`, so the hypothesis ranges over every such set; it is a bound on the largest stake that one slot can hold.
+Before Electra each such set holds at most about one slot's share of the active validators at 32 ETH each; from Electra, compounding validators of up to 2048 ETH can make that share of the stake much larger.
 `stateDrift_le_drift` (`Consensus/Proofs/DirectSafety/Apriori.lean`) is the drift bound of one branch that it uses.
 
 `processAttestation_exists_ok` (`Consensus/Proofs/Transition/AttestationAccepted.lean`) is the step of plausible liveness that makes a vote count, from Altair until Gloas.
