@@ -58,8 +58,9 @@ theorem record_memSize {config : TraceConfig} {fork : Fork} {Meter : Type}
     · exact .inl old
     · exact .inr (by subst new; exact ⟨rfl, rfl, rfl⟩)
 
-/-- Under the configuration of the lines, each entry that a step adds has its stack and its return
-data. -/
+/-- Under the configuration of the lines, each entry that a step adds has its stack.
+
+It also has its return data. -/
 theorem record_eip3155Config {fork : Fork} {Meter : Type} [Evm.GasMeter Meter]
     {evm : Evm.Evm fork Meter} {result : Except Evm.EvmError (Evm.StepResult fork Meter)}
     {tracer : Tracer} {e : StructLog} (h : e ∈ (tracer.record eip3155Config evm result).logs) :
