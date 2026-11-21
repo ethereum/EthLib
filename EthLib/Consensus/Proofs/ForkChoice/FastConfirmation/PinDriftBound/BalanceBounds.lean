@@ -3672,8 +3672,7 @@ private theorem V_left (h : Setting config checks g split fin pulled anc counted
         ((eventsF.map (Internal.syncDebit v.toNat)).sum + Internal.syncF eventsC v.toNat) +
         Internal.bandR (eventsF ++ eventsC) v.toNat + Internal.exitQ tailC v.toNat +
         (if (pinTerms config pulled anc fin).exitingB v.toNat = true then pulledBalance pulled v
-            else
-          0) +
+          else 0) +
         (if (pinTerms config pulled anc fin).lateB v.toNat = true then pulledBalance pulled v
           else 0) : ℕ) := by
   intro v hv
@@ -3787,13 +3786,11 @@ theorem cV_le (h : Setting config checks g split fin pulled anc counted V) (high
         (∑ v ∈ V, Internal.credDepR events v.toNat) +
         (∑ v ∈ V, Internal.consAmt events v.toNat) + preset.upwardBand * Internal.dueAt fin high V +
         (∑ v ∈ (countedInactiveVoters counted V), Internal.exitQ tailC v.toNat) +
-        (∑ v ∈ (countedInactiveVoters counted V) with (pinTerms config pulled anc fin).exitingB
-            v.toNat =
-          true,
+        (∑ v ∈ (countedInactiveVoters counted V) with
+            (pinTerms config pulled anc fin).exitingB v.toNat = true,
           pulledBalance pulled v) +
-        (∑ v ∈ (countedInactiveVoters counted V) with (pinTerms config pulled anc fin).lateB v.toNat
-            =
-            true,
+        (∑ v ∈ (countedInactiveVoters counted V) with
+            (pinTerms config pulled anc fin).lateB v.toNat = true,
           pulledBalance pulled v) : ℕ) := by
   have base := Internal.cV_le_of h tailC
     (V_active h fromFin tailC high highC endEpoch endEpochC replayedF replayedC)

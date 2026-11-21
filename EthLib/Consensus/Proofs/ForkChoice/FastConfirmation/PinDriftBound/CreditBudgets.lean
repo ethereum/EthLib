@@ -1380,16 +1380,16 @@ A credited created slashed key is a credited key of C's run, in C's registry, li
 -/
 theorem credited_classes_le (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ) :
-    ((stayingKeys pulled counted V).filter fun v => Internal.creditedKey tailC highC v = true).card
-      +
-      ((previousOnlyKeys counted V).filter fun v => Internal.creditedKey tailC highC v = true).card
-          +
-      ((joinedKeys pulled counted).filter fun v => Internal.creditedKey tailC highC v = true).card
-        +
-      ((newlySlashed pulled counted split).filter fun v => Internal.creditedKey tailC highC v =
-        true).card +
-      ((createdSlashed counted split).filter fun v => Internal.creditedKey tailC highC v =
-          true).card ≤
+    ((stayingKeys pulled counted V).filter fun v =>
+        Internal.creditedKey tailC highC v = true).card +
+      ((previousOnlyKeys counted V).filter fun v =>
+        Internal.creditedKey tailC highC v = true).card +
+      ((joinedKeys pulled counted).filter fun v =>
+        Internal.creditedKey tailC highC v = true).card +
+      ((newlySlashed pulled counted split).filter fun v =>
+        Internal.creditedKey tailC highC v = true).card +
+      ((createdSlashed counted split).filter fun v =>
+        Internal.creditedKey tailC highC v = true).card ≤
     (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
       ((pinTerms config pulled anc fin).depth /
         max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2) *
@@ -1402,11 +1402,10 @@ theorem credited_classes_le (h : Setting config checks g split fin pulled anc co
   set C4 := (stayingKeys pulled counted V).filter fun v => Internal.creditedKey tailC highC v = true
   set C5 := (previousOnlyKeys counted V).filter fun v => Internal.creditedKey tailC highC v = true
   set C6 := (joinedKeys pulled counted).filter fun v => Internal.creditedKey tailC highC v = true
-  set Csc := (newlySlashed pulled counted split).filter fun v => Internal.creditedKey tailC highC v
-      =
-    true
-  set Ccs := (createdSlashed counted split).filter fun v => Internal.creditedKey tailC highC v =
-      true
+  set Csc := (newlySlashed pulled counted split).filter fun v =>
+    Internal.creditedKey tailC highC v = true
+  set Ccs := (createdSlashed counted split).filter fun v =>
+    Internal.creditedKey tailC highC v = true
   -- The five classes are apart, and each key of them is in C's registry.
   have apart : Disjoint (C4 ∪ C6) C5 :=
     Finset.disjoint_union_left.mpr ⟨Finset.disjoint_filter_filter d45,
@@ -1661,20 +1660,20 @@ private theorem budget_credits_of (h : Setting config checks g split fin pulled 
     (deposits : 3 * ((∑ v ∈ stayingKeys pulled counted V ∪ joinedKeys pulled counted,
         (Internal.creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
           tailC)) +
-      (∑ v ∈ newlySlashed pulled counted split ∪ createdSlashed counted split, Internal.depPre
-          eventsC
-        v.toNat)) ≤
+      (∑ v ∈ newlySlashed pulled counted split ∪ createdSlashed counted split,
+        Internal.depPre eventsC v.toNat)) ≤
       (pinTerms config pulled anc fin).queueDep)
-    (cards : ((stayingKeys pulled counted V).filter fun v => Internal.creditedKey tailC highC v =
-      true).card +
-      ((previousOnlyKeys counted V).filter fun v => Internal.creditedKey tailC highC v = true).card
-          +
-      ((joinedKeys pulled counted).filter fun v => Internal.creditedKey tailC highC v = true).card
-        +
-      ((newlySlashed pulled counted split).filter fun v => Internal.creditedKey tailC highC v =
-        true).card +
-      ((createdSlashed counted split).filter fun v => Internal.creditedKey tailC highC v =
-          true).card ≤
+    (cards :
+      ((stayingKeys pulled counted V).filter fun v =>
+        Internal.creditedKey tailC highC v = true).card +
+      ((previousOnlyKeys counted V).filter fun v =>
+        Internal.creditedKey tailC highC v = true).card +
+      ((joinedKeys pulled counted).filter fun v =>
+        Internal.creditedKey tailC highC v = true).card +
+      ((newlySlashed pulled counted split).filter fun v =>
+        Internal.creditedKey tailC highC v = true).card +
+      ((createdSlashed counted split).filter fun v =>
+        Internal.creditedKey tailC highC v = true).card ≤
       (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
         ((pinTerms config pulled anc fin).depth /
           max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2) *
@@ -3756,11 +3755,9 @@ It is not a newly slashed key either, which is unslashed at the split.
 
 It is in the split's registry, so it is not a created slashed key. -/
 theorem cut_disjoint (h : Setting config checks g split fin pulled anc counted V) :
-    Disjoint (Internal.cutKeys config pulled anc fin split) (V ∪ stayingKeys pulled counted V ∪
-      previousOnlyKeys counted V ∪
-      joinedKeys pulled counted ∪ newlySlashed pulled counted split ∪ createdSlashed counted split)
-          :=
-        by
+    Disjoint (Internal.cutKeys config pulled anc fin split)
+      (V ∪ stayingKeys pulled counted V ∪ previousOnlyKeys counted V ∪ joinedKeys pulled counted ∪
+        newlySlashed pulled counted split ∪ createdSlashed counted split) := by
   rw [Finset.disjoint_left]
   intro v cut member
   simp only [Internal.cutKeys, Finset.mem_filter] at cut

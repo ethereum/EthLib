@@ -104,36 +104,30 @@ private theorem split_epoch_start (toFin : Run config checks g ⟨fork, fin⟩)
 
 /-- The weighted drift, key by key: exact per-key algebra, no reserve term. -/
 private theorem drift_le_costs (h : Setting config checks g split fin pulled anc counted V) :
-    3 * (∑ v ∈ Internal.countedQuorum counted, (Internal.countedBalance counted v : ℤ)) + 3 * (∑ v ∈
-        V, (Internal.pulledBalance pulled
-      v : ℤ)) -
+    3 * (∑ v ∈ Internal.countedQuorum counted, (Internal.countedBalance counted v : ℤ)) +
+        3 * (∑ v ∈ V, (Internal.pulledBalance pulled v : ℤ)) -
         2 * (∑ v ∈ Internal.countedActiveVoters counted, (Internal.countedBalance counted v : ℤ)) -
-            (∑ v ∈ Internal.pulledActiveVoters pulled,
-          (Internal.pulledBalance pulled v : ℤ)) -
-        3 * (∑ v ∈ (Internal.countedQuorum counted).filter (· ∈ V), (Internal.countedBalance counted
-            v : ℤ)) ≤
-      2 * Internal.voterFallCost pulled counted V + 2 * Internal.inactiveVoterCost pulled counted V
-          +
-          Internal.stayingRiseCost pulled
-        counted V +
-        3 * Internal.previousOnlyCost pulled counted V + Internal.joinedCost pulled counted +
-            Internal.outsideQuorumCost pulled counted
-          +
+        (∑ v ∈ Internal.pulledActiveVoters pulled, (Internal.pulledBalance pulled v : ℤ)) -
+        3 * (∑ v ∈ (Internal.countedQuorum counted).filter (· ∈ V),
+          (Internal.countedBalance counted v : ℤ)) ≤
+      2 * Internal.voterFallCost pulled counted V +
+        2 * Internal.inactiveVoterCost pulled counted V +
+        Internal.stayingRiseCost pulled counted V + 3 * Internal.previousOnlyCost pulled counted V +
+        Internal.joinedCost pulled counted + Internal.outsideQuorumCost pulled counted +
         Internal.departedCost pulled counted V := by
   have hAR : ∀ v ∈ V, v ∈ Internal.pulledActiveVoters pulled := fun v m => (h.voting v m).1
   have hQ := Internal.glue_quorum h
-  have subQ : Internal.countedQuorum counted ⊆ Internal.costKeys pulled counted := fun v m => by
-      simp [Internal.costKeys, m]
-  have subAC : Internal.countedActiveVoters counted ⊆ Internal.costKeys pulled counted := fun v m =>
-      by simp [Internal.costKeys, m]
-  have subAR : Internal.pulledActiveVoters pulled ⊆ Internal.costKeys pulled counted := fun v m =>
-      by simp [Internal.costKeys, m]
+  have subQ : Internal.countedQuorum counted ⊆ Internal.costKeys pulled counted :=
+    fun v m => by simp [Internal.costKeys, m]
+  have subAC : Internal.countedActiveVoters counted ⊆ Internal.costKeys pulled counted :=
+    fun v m => by simp [Internal.costKeys, m]
+  have subAR : Internal.pulledActiveVoters pulled ⊆ Internal.costKeys pulled counted :=
+    fun v m => by simp [Internal.costKeys, m]
   have subV : V ⊆ Internal.costKeys pulled counted := fun v m => subAR (hAR v m)
   have subQV : (Internal.countedQuorum counted).filter (· ∈ V) ⊆ Internal.costKeys pulled counted :=
     fun v m => subQ (Finset.mem_filter.mp m).1
   rw [Internal.sum_eq_costKeys subQ, Internal.sum_eq_costKeys subV, Internal.sum_eq_costKeys subAC,
-      Internal.sum_eq_costKeys
-    subAR, Internal.sum_eq_costKeys subQV]
+    Internal.sum_eq_costKeys subAR, Internal.sum_eq_costKeys subQV]
   unfold Internal.voterFallCost Internal.inactiveVoterCost Internal.stayingRiseCost
       Internal.previousOnlyCost Internal.joinedCost Internal.outsideQuorumCost Internal.departedCost
   simp only [Finset.mul_sum, ← Finset.sum_add_distrib, ← Finset.sum_sub_distrib]
@@ -147,8 +141,8 @@ private theorem drift_le_costs (h : Setting config checks g split fin pulled anc
       simp [hv, ha, hr, hq]
       omega
     · by_cases hq : v ∈ Internal.countedQuorum counted <;> simp [hv, ha, hr, hq] <;> omega
-  · by_cases hq : v ∈ Internal.countedQuorum counted <;> by_cases ha : v ∈
-        Internal.countedActiveVoters counted <;>
+  · by_cases hq : v ∈ Internal.countedQuorum counted <;>
+      by_cases ha : v ∈ Internal.countedActiveVoters counted <;>
       by_cases hr : v ∈ Internal.pulledActiveVoters pulled <;> simp [hv, ha, hr, hq] <;> omega
 
 /-- A bound on `x` gives the bound at weight two against weight three. -/
@@ -204,16 +198,11 @@ theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted 
     replayedF
     tailC highC endEpochC replayedC)
   have sN := Internal.stayingRiseCost_le (config := config) h tail high endEpoch replayed fromFin
-      replayedF tailC
-    highC
-    endEpochC replayedC
+    replayedF tailC highC endEpochC replayedC
   have sP := Internal.previousOnlyCost_le (config := config) h tail high endEpoch replayed fromFin
-      toB pre
-    sameEpoch earlier replayedF tailC highC endEpochC replayedC replayedP
+    toB pre sameEpoch earlier replayedF tailC highC endEpochC replayedC replayedP
   have sJ := Internal.joinedCost_le (config := config) h tail high endEpoch replayed fromFin
-      replayedF tailC
-    highC
-    endEpochC replayedC
+    replayedF tailC highC endEpochC replayedC
   -- The terms that `keyExtra` adds are paid by the flow split, the units and the induced leak.
   have reg := Internal.registry_bounds (config := config) h tail high endEpoch replayed fromFin
     replayedF
@@ -234,11 +223,9 @@ theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted 
   have b2 := Internal.budget_late (config := config) h
   have b3 := Internal.budget_queues (config := config) h tailC
   have b4 := Internal.budget_credits (config := config) h toB link pre sameEpoch tailC highC
-      endEpochC
-    replayedC
+    endEpochC replayedC
   have b5 := Internal.budget_branchR (config := config) h tail high endEpoch replayed fromFin toB
-      pre
-    sameEpoch replayedF tailC highC endEpochC replayedC replayedP
+    pre sameEpoch replayedF tailC highC endEpochC replayedC replayedP
   have replayedPHigh : pre.balanceEvents high = .ok eventsP := by
     have called := UInt64.le_iff_toNat_le.mp (Internal.Setting.called h)
     have later := UInt64.le_iff_toNat_le.mp h.later
@@ -246,8 +233,7 @@ theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted 
       (by simp only; omega) (by simp only; omega)]
     exact replayedP
   have b6 := Internal.budget_sync (config := config) h tail high replayed fromFin pre sameEpoch
-      shape
-    replayedF
+    shape replayedF
     tailC highC replayedC replayedPHigh
   have b7 := Internal.budget_fall (config := config) h
   have b8 := Internal.budget_rise (config := config) h
@@ -259,12 +245,10 @@ theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted 
   have b17 := Internal.budget_exitingBands (config := config) h tailC highC
   have b18 := Internal.budget_pendingR (config := config) h
   have b15 := Internal.budget_consolidations (config := config) h fromFin tail high endEpoch
-      replayed
-    replayedF
+    replayed replayedF
     highLeR tailC highC endEpochC replayedC highLe
-  have b16 := Internal.budget_exitedR (config := config) (pulled := pulled) (anc := anc) (fin :=
-      fin)
-    (counted := counted)
+  have b16 := Internal.budget_exitedR (config := config) (pulled := pulled) (anc := anc)
+    (fin := fin) (counted := counted)
   -- `budget_consolidations` pays the band of each due entry: the counted keys' bands and V's share.
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   have bandV : ∑ v ∈ Internal.stayingKeys pulled counted V, Internal.bandX fin highC v.toNat +
@@ -287,12 +271,11 @@ theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted 
   have b19 := Internal.budget_joinRise (config := config) h
   have b20 := Internal.newlySlashed_active_split (config := config) h
   have b21 := Internal.budget_capSlots (config := config) h
-  have w4 : 0 ≤ ∑ v ∈ (Internal.stayingKeys pulled counted V), (Internal.whistC tailC highC v.toNat
-      :
-      ℤ) :=
+  have w4 : 0 ≤ ∑ v ∈ (Internal.stayingKeys pulled counted V),
+      (Internal.whistC tailC highC v.toNat : ℤ) :=
     nn _ _
-  have w6 : 0 ≤ ∑ v ∈ (Internal.joinedKeys pulled counted), (Internal.whistC tailC highC v.toNat :
-      ℤ) :=
+  have w6 : 0 ≤ ∑ v ∈ (Internal.joinedKeys pulled counted),
+      (Internal.whistC tailC highC v.toNat : ℤ) :=
     nn _ _
   have b9 := Internal.budget_joining (config := config) (pulled := pulled) (anc := anc) (fin := fin)
   -- The upward bands of the charged newly slashed keys are not read by the drift.
@@ -308,18 +291,17 @@ theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted 
   simp only [Internal.keyExtra, Finset.sum_add_distrib] at sV sN sP sJ b2 b5 b6 b14 b16 b18 b20 ⊢
   simp only [← Finset.mul_sum] at b6 b14
   zify at *
-  have syncPos : 0 ≤ ∑ x ∈ Internal.stayingKeys pulled counted V, (Internal.syncF events x.toNat :
-      ℤ)
-      :=
+  have syncPos : 0 ≤ ∑ x ∈ Internal.stayingKeys pulled counted V,
+      (Internal.syncF events x.toNat : ℤ) :=
     nn _ _
-  have syncPosC : 0 ≤ ∑ x ∈ Internal.stayingKeys pulled counted V, (Internal.syncF eventsC x.toNat :
-      ℤ) :=
+  have syncPosC : 0 ≤ ∑ x ∈ Internal.stayingKeys pulled counted V,
+      (Internal.syncF eventsC x.toNat : ℤ) :=
     nn _ _
   -- `budget_sync` weighs the shared segment's staying-key debits three times.
   --
   -- `stayingRiseCost_le` weighs them once.
-  have syncPosF : 0 ≤ ∑ x ∈ Internal.stayingKeys pulled counted V, (Internal.syncD eventsF x.toNat :
-      ℤ) :=
+  have syncPosF : 0 ≤ ∑ x ∈ Internal.stayingKeys pulled counted V,
+      (Internal.syncD eventsF x.toNat : ℤ) :=
     nn _ _
   -- `budget_units` also weighs newly and created slashed keys' units; the drift does not.
   have unitPosSC : 0 ≤ ∑ x ∈ Internal.newlySlashed pulled counted split,
@@ -332,19 +314,17 @@ theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted 
     nn _ _
   -- `budget_credits` compounds to pay a tenth of the shared credits `previousOnlyCost_le` reads.
   have scChargedPre : 0 ≤
-      ∑ v ∈ Internal.chargedNewlySlashed pulled counted split tailC, (Internal.whistC pre highC
-          v.toNat : ℤ)
-        :=
+      ∑ v ∈ Internal.chargedNewlySlashed pulled counted split tailC,
+        (Internal.whistC pre highC v.toNat : ℤ) :=
     nn _ _
-  have wShareSC : 0 ≤ ((Internal.wShare preset fork (∑ v ∈ Internal.newlySlashed pulled counted
-      split,
-      Internal.propN pre highC v.toNat) : ℕ) : ℤ) := Int.natCast_nonneg _
-  have syncPre : 0 ≤ ∑ v ∈ Internal.newlySlashed pulled counted split, (Internal.syncCr eventsP
-      v.toNat : ℤ)
-    :=
+  have wShareSC : 0 ≤ ((Internal.wShare preset fork
+      (∑ v ∈ Internal.newlySlashed pulled counted split, Internal.propN pre highC v.toNat) : ℕ) :
+        ℤ) := Int.natCast_nonneg _
+  have syncPre : 0 ≤ ∑ v ∈ Internal.newlySlashed pulled counted split,
+      (Internal.syncCr eventsP v.toNat : ℤ) :=
     nn _ _
-  have proposerPre : 0 ≤ ∑ x ∈ Internal.previousOnlyKeys counted V, (Internal.propN pre highC
-      x.toNat : ℤ) :=
+  have proposerPre : 0 ≤ ∑ x ∈ Internal.previousOnlyKeys counted V,
+      (Internal.propN pre highC x.toNat : ℤ) :=
     nn _ _
   have xPos : 0 ≤ (33 * ((pinTerms config pulled anc fin).consolidationsX : ℤ) + 9) / 10 := by
     positivity

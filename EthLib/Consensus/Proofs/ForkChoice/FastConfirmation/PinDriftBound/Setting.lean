@@ -2593,26 +2593,26 @@ def departedCost : ℤ := ∑ v ∈ costKeys pulled counted,
 /-- The keys of `V` not active at C. -/
 def countedInactiveVoters : Finset ValidatorIndex := V.filter (· ∉ countedActiveVoters counted)
 
-/-- The keys outside `V` active at C and R and counted in C's quorum. -/
+/-- The staying keys: outside `V`, active at C and R, and counted in C's quorum. -/
 def stayingKeys : Finset ValidatorIndex :=
   (countedActiveVoters counted).filter fun v =>
     v ∈ pulledActiveVoters pulled ∧ v ∈ countedQuorum counted ∧ v ∉ V
 
-/-- The keys outside `V` counted in C's quorum but not active at C. -/
+/-- The previous-only keys: outside `V`, counted in C's quorum but not active at C. -/
 def previousOnlyKeys : Finset ValidatorIndex :=
   (countedQuorum counted).filter fun v => v ∉ countedActiveVoters counted ∧ v ∉ V
 
-/-- The keys active and counted at C but not active at R. -/
+/-- The joined keys: active and counted at C but not active at R. -/
 def joinedKeys : Finset ValidatorIndex :=
   (countedActiveVoters counted).filter fun v =>
     v ∈ countedQuorum counted ∧ v ∉ pulledActiveVoters pulled
 
-/-- The keys of R's registry unslashed at the split and slashed at C. -/
+/-- The newly slashed keys: in R's registry, unslashed at the split and slashed at C. -/
 def newlySlashed (split : BeaconState preset fork) : Finset ValidatorIndex :=
   ((Finset.range pulled.validators.data.size).image UInt64.ofNat).filter fun v =>
     slashedFlagAt counted v.toNat = some true ∧ slashedFlagAt split v.toNat = some false
 
-/-- Keys created beyond the split's registry and slashed at C. -/
+/-- The created slashed keys: beyond the split's registry and slashed at C. -/
 def createdSlashed (split : BeaconState preset fork) : Finset ValidatorIndex :=
   ((Finset.range counted.validators.data.size).image UInt64.ofNat).filter fun v =>
     split.validators.data.size ≤ v.toNat ∧ slashedFlagAt counted v.toNat = some true

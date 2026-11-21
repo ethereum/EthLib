@@ -109,12 +109,10 @@ It also pays the reward of what its finalized balance exceeds them by, rounded u
 In the tight window the charge for late activations is zero, including over newly slashed keys.
 -/
 theorem budget_late (h : Setting config checks g split fin pulled anc counted V) :
-    3 * (∑ v ∈ (countedInactiveVoters counted V) with (pinTerms config pulled anc fin).lateB v.toNat
-        =
-        true,
+    3 * (∑ v ∈ (countedInactiveVoters counted V) with
+          (pinTerms config pulled anc fin).lateB v.toNat = true,
         pulledBalance pulled v) +
-      (∑ v ∈ (joinedKeys pulled counted) with (pinTerms config pulled anc fin).lateB v.toNat =
-        true,
+      (∑ v ∈ (joinedKeys pulled counted) with (pinTerms config pulled anc fin).lateB v.toNat = true,
         (3 * pulledBalance pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
       (∑ v ∈ (activeNewlySlashed config pulled anc fin counted split) with
         ((pinTerms config pulled anc fin).tight = false ∧

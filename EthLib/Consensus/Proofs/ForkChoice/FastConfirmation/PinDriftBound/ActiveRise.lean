@@ -547,9 +547,8 @@ theorem budget_units (h : Setting config checks g split fin pulled anc counted V
     · exact .inr (Finset.mem_union_left _ (Finset.mem_union_right _
         (Finset.mem_union_right _ (Finset.mem_filter.mpr ⟨inAll, debitR⟩))))
     · exact .inr (Finset.mem_union_right _ (Finset.mem_filter.mpr ⟨inAll, slashed⟩))
-  have inAll : ∀ v, v ∈ stayingKeys pulled counted V ∨ v ∈ previousOnlyKeys counted V ∨ v ∈
-      joinedKeys
-    pulled counted ∨
+  have inAll : ∀ v, v ∈ stayingKeys pulled counted V ∨ v ∈ previousOnlyKeys counted V ∨
+      v ∈ joinedKeys pulled counted ∨
       v ∈ newlySlashed pulled counted split ∨ v ∈ createdSlashed counted split → v ∈ All := fun v
           member
         => by
@@ -2666,8 +2665,8 @@ theorem stayingRiseCost_le (h : Setting config checks g split fin pulled anc cou
     zify at core
     omega
   have eq : stayingRiseCost pulled counted V =
-      ∑ v ∈ stayingKeys pulled counted V, ((countedBalance counted v : ℤ) - pulledBalance pulled v)
-          := by
+      ∑ v ∈ stayingKeys pulled counted V,
+        ((countedBalance counted v : ℤ) - pulledBalance pulled v) := by
     unfold stayingRiseCost
     rw [← Finset.sum_filter]
     congr 1

@@ -1731,11 +1731,10 @@ theorem previousOnlyCost_le (h : Setting config checks g split fin pulled anc co
           v.toNat +
         Internal.bandR (eventsF ++ events) v.toNat + Internal.bandX fin highC v.toNat with hT
   -- a charged key: its charge, the start of its epoch, and its exact rise after the charge
-  have charged : ∀ v ∈ previousOnlyKeys counted V, (∃ c ∈ tailC.departureCharges, c.index = v.toNat)
-      →
-      countedBalance counted v ≤ Internal.exitQ tailC v.toNat + Internal.riseQ tailC highC v.toNat +
-          T
-        v := by
+  have charged : ∀ v ∈ previousOnlyKeys counted V,
+      (∃ c ∈ tailC.departureCharges, c.index = v.toNat) →
+      countedBalance counted v ≤
+        Internal.exitQ tailC v.toNat + Internal.riseQ tailC highC v.toNat + T v := by
     intro v member ch
     obtain ⟨a, c, front, step, post, site, hcharge, unset, hin, hexit⟩ :=
       previousOnlyKeys_charge_site h tailC member ch
@@ -1760,9 +1759,8 @@ theorem previousOnlyCost_le (h : Setting config checks g split fin pulled anc co
       v.toNat :=
       rfl
     omega
-  have eq : previousOnlyCost pulled counted V = ∑ v ∈ previousOnlyKeys counted V, (countedBalance
-      counted v : ℤ)
-    := by
+  have eq : previousOnlyCost pulled counted V =
+      ∑ v ∈ previousOnlyKeys counted V, (countedBalance counted v : ℤ) := by
     unfold previousOnlyCost
     rw [← Finset.sum_filter]
     congr 1
@@ -1778,26 +1776,23 @@ theorem previousOnlyCost_le (h : Setting config checks g split fin pulled anc co
     (fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat) (countedBalance counted)
   have splitT := Finset.sum_filter_add_sum_filter_not (previousOnlyKeys counted V)
     (fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat) T
-  have onCharged : ∑ v ∈ (previousOnlyKeys counted V) with ∃ c ∈ tailC.departureCharges, c.index =
-    v.toNat,
-      countedBalance counted v ≤ ∑ v ∈ (previousOnlyKeys counted V) with ∃ c ∈
-          tailC.departureCharges,
-        c.index = v.toNat,
+  have onCharged :
+      ∑ v ∈ (previousOnlyKeys counted V) with ∃ c ∈ tailC.departureCharges, c.index = v.toNat,
+        countedBalance counted v ≤
+      ∑ v ∈ (previousOnlyKeys counted V) with ∃ c ∈ tailC.departureCharges, c.index = v.toNat,
         (Internal.exitQ tailC v.toNat + Internal.riseQ tailC highC v.toNat) +
-      ∑ v ∈ (previousOnlyKeys counted V) with ∃ c ∈ tailC.departureCharges, c.index = v.toNat, T v
-          := by
+      ∑ v ∈ (previousOnlyKeys counted V) with ∃ c ∈ tailC.departureCharges, c.index = v.toNat,
+        T v := by
     rw [← Finset.sum_add_distrib]
     exact Finset.sum_le_sum fun v hv => charged v (Finset.mem_filter.mp hv).1
       (Finset.mem_filter.mp hv).2
-  have onUncharged : ∑ v ∈ (previousOnlyKeys counted V) with ¬ ∃ c ∈ tailC.departureCharges,
-        c.index = v.toNat, countedBalance counted v ≤ ∑ v ∈ (previousOnlyKeys counted V) with ¬ ∃ c
-            ∈
-          tailC.departureCharges,
-        c.index = v.toNat, (pulledBalance pulled v + (pinTerms config pulled anc fin).rise v.toNat)
-            +
-      ∑ v ∈ (previousOnlyKeys counted V) with ¬ ∃ c ∈ tailC.departureCharges, c.index = v.toNat, T v
-          :=
-        by
+  have onUncharged :
+      ∑ v ∈ (previousOnlyKeys counted V) with ¬ ∃ c ∈ tailC.departureCharges, c.index = v.toNat,
+        countedBalance counted v ≤
+      ∑ v ∈ (previousOnlyKeys counted V) with ¬ ∃ c ∈ tailC.departureCharges, c.index = v.toNat,
+        (pulledBalance pulled v + (pinTerms config pulled anc fin).rise v.toNat) +
+      ∑ v ∈ (previousOnlyKeys counted V) with ¬ ∃ c ∈ tailC.departureCharges, c.index = v.toNat,
+        T v := by
     rw [← Finset.sum_add_distrib]
     refine Finset.sum_le_sum fun v hv => ?_
     obtain ⟨member, none⟩ := Finset.mem_filter.mp hv

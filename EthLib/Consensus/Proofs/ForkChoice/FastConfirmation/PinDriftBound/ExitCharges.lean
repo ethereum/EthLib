@@ -129,24 +129,20 @@ theorem cV_le_of (h : Setting config checks g split fin pulled anc counted V)
         ((eventsF.map (Internal.syncDebit v.toNat)).sum + Internal.syncF eventsC v.toNat) +
         Internal.bandR (eventsF ++ eventsC) v.toNat + Internal.exitQ tailC v.toNat +
         (if (pinTerms config pulled anc fin).exitingB v.toNat = true then pulledBalance pulled v
-            else
-          0) +
-        (if (pinTerms config pulled anc fin).lateB v.toNat = true then pulledBalance pulled v else
-            0)
-          : ℕ)) :
+          else 0) +
+        (if (pinTerms config pulled anc fin).lateB v.toNat = true then pulledBalance pulled v
+          else 0) : ℕ)) :
     voterFallCost pulled counted V + inactiveVoterCost pulled counted V ≤
       ((∑ v ∈ V, (pinTerms config pulled anc fin).fall v.toNat) +
-        (∑ v ∈ V, ((eventsF.map (Internal.syncDebit v.toNat)).sum + Internal.syncF eventsC v.toNat))
-          +
+        (∑ v ∈ V,
+          ((eventsF.map (Internal.syncDebit v.toNat)).sum + Internal.syncF eventsC v.toNat)) +
         (∑ v ∈ V, Internal.bandR (eventsF ++ eventsC) v.toNat) +
         (∑ v ∈ (countedInactiveVoters counted V), Internal.exitQ tailC v.toNat) +
-        (∑ v ∈ (countedInactiveVoters counted V) with (pinTerms config pulled anc fin).exitingB
-            v.toNat =
-          true,
+        (∑ v ∈ (countedInactiveVoters counted V) with
+            (pinTerms config pulled anc fin).exitingB v.toNat = true,
           pulledBalance pulled v) +
-        (∑ v ∈ (countedInactiveVoters counted V) with (pinTerms config pulled anc fin).lateB v.toNat
-            =
-            true,
+        (∑ v ∈ (countedInactiveVoters counted V) with
+            (pinTerms config pulled anc fin).lateB v.toNat = true,
           pulledBalance pulled v) : ℕ) := by
   classical
   rw [cV_split h]
@@ -157,13 +153,11 @@ theorem cV_le_of (h : Setting config checks g split fin pulled anc counted V)
         Internal.bandR (eventsF ++ eventsC) v.toNat
   let X : ValidatorIndex → ℕ := fun v =>
     Internal.exitQ tailC v.toNat +
-      (if (pinTerms config pulled anc fin).exitingB v.toNat = true then pulledBalance pulled v else
-          0)
-        +
+      (if (pinTerms config pulled anc fin).exitingB v.toNat = true then pulledBalance pulled v
+        else 0) +
       (if (pinTerms config pulled anc fin).lateB v.toNat = true then pulledBalance pulled v else 0)
-  have first : ∑ v ∈ V.filter (· ∈ countedActiveVoters counted), ((pulledBalance pulled v : ℤ) -
-      countedBalance
-    counted v) ≤
+  have first : ∑ v ∈ V.filter (· ∈ countedActiveVoters counted),
+      ((pulledBalance pulled v : ℤ) - countedBalance counted v) ≤
       ∑ v ∈ V.filter (· ∈ countedActiveVoters counted), (P v : ℤ) := by
     refine Finset.sum_le_sum fun v hv => ?_
     obtain ⟨member, act⟩ := Finset.mem_filter.mp hv
@@ -179,37 +173,33 @@ theorem cV_le_of (h : Setting config checks g split fin pulled anc counted V)
     push_cast at this ⊢
     omega
   have partition : ∑ v ∈ V, (P v : ℤ) =
-      ∑ v ∈ V.filter (· ∈ countedActiveVoters counted), (P v : ℤ) + ∑ v ∈ countedInactiveVoters
-          counted V,
-          (P v : ℤ)
-        := by
+      ∑ v ∈ V.filter (· ∈ countedActiveVoters counted), (P v : ℤ) +
+        ∑ v ∈ countedInactiveVoters counted V, (P v : ℤ) := by
     unfold countedInactiveVoters
     exact (Finset.sum_filter_add_sum_filter_not V (· ∈ countedActiveVoters counted) _).symm
   have total : ∑ v ∈ V, (P v : ℤ) =
       ((∑ v ∈ V, (pinTerms config pulled anc fin).fall v.toNat) +
-        (∑ v ∈ V, ((eventsF.map (Internal.syncDebit v.toNat)).sum + Internal.syncF eventsC v.toNat))
-          +
+        (∑ v ∈ V,
+          ((eventsF.map (Internal.syncDebit v.toNat)).sum + Internal.syncF eventsC v.toNat)) +
         (∑ v ∈ V, Internal.bandR (eventsF ++ eventsC) v.toNat) : ℕ) := by
     simp only [P]
     push_cast
     simp only [Finset.sum_add_distrib]
   have exits : ∑ v ∈ countedInactiveVoters counted V, (X v : ℤ) =
       ((∑ v ∈ (countedInactiveVoters counted V), Internal.exitQ tailC v.toNat) +
-        (∑ v ∈ (countedInactiveVoters counted V) with (pinTerms config pulled anc fin).exitingB
-            v.toNat =
-          true,
+        (∑ v ∈ (countedInactiveVoters counted V) with
+            (pinTerms config pulled anc fin).exitingB v.toNat = true,
           pulledBalance pulled v) +
-        (∑ v ∈ (countedInactiveVoters counted V) with (pinTerms config pulled anc fin).lateB v.toNat
-            =
-            true,
+        (∑ v ∈ (countedInactiveVoters counted V) with
+            (pinTerms config pulled anc fin).lateB v.toNat = true,
           pulledBalance pulled v) : ℕ) := by
     simp only [X, Finset.sum_filter]
     push_cast
     simp only [Finset.sum_add_distrib]
   have split : ∑ v ∈ countedInactiveVoters counted V, ((P v : ℤ) + X v) =
-      ∑ v ∈ countedInactiveVoters counted V, (P v : ℤ) + ∑ v ∈ countedInactiveVoters counted V, (X v
-          : ℤ) :=
-        Finset.sum_add_distrib
+      ∑ v ∈ countedInactiveVoters counted V, (P v : ℤ) +
+        ∑ v ∈ countedInactiveVoters counted V, (X v : ℤ) :=
+    Finset.sum_add_distrib
   push_cast at total exits ⊢
   omega
 
@@ -2559,13 +2549,13 @@ theorem previousOnlyKeys_exiting_of_not_charged
 The sum over previous-only keys takes only those without a departure charge on C's run. -/
 theorem budget_exiting (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) :
-    (∑ v ∈ (countedInactiveVoters counted V) with (pinTerms config pulled anc fin).exitingB v.toNat
-        = true,
+    (∑ v ∈ (countedInactiveVoters counted V) with
+        (pinTerms config pulled anc fin).exitingB v.toNat = true,
       pulledBalance pulled v) +
       (∑ v ∈ (previousOnlyKeys counted V) with ¬ ∃ c ∈ tailC.departureCharges, c.index = v.toNat,
         pulledBalance pulled v) +
-      (∑ v ∈ (joinedKeys pulled counted) with (pinTerms config pulled anc fin).exitingB v.toNat =
-        true,
+      (∑ v ∈ (joinedKeys pulled counted) with
+          (pinTerms config pulled anc fin).exitingB v.toNat = true,
         pulledBalance pulled v) ≤ (pinTerms config pulled anc fin).exiting := by
   have apartVK5 : Disjoint (countedInactiveVoters counted V) (previousOnlyKeys counted V) := by
     rw [Finset.disjoint_left]
@@ -2820,9 +2810,8 @@ theorem budget_queues (h : Setting config checks g split fin pulled anc counted 
   obtain ⟨finalized, -, -, near, -⟩ := Internal.setting_epochs h
   -- the two sets are disjoint
   have apart : Disjoint (countedInactiveVoters counted V)
-      ((previousOnlyKeys counted V).filter fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat)
-          :=
-        by
+      ((previousOnlyKeys counted V).filter fun v =>
+        ∃ c ∈ tailC.departureCharges, c.index = v.toNat) := by
     refine Finset.disjoint_left.mpr fun v first second => ?_
     exact (Finset.mem_filter.mp (Finset.mem_filter.mp second).1).2.2
       (Finset.mem_filter.mp first).1
