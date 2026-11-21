@@ -188,12 +188,12 @@ def lightClientUpdateProofsOf
       LightClientFinalityUpdate.toUpdate <$> decodeAs (LightClientFinalityUpdate preset fork) data
     | other => throw (0, s!"no update of type {other}")
   runLightClient do
-    LightClientError.require (← isValidLightClientHeader config update.attestedHeader)
+    Base.ensure (← isValidLightClientHeader config update.attestedHeader)
       (.invalidHeader update.attestedHeader.beacon.slot)
     validateFinality config update
     if update.isSyncCommitteeUpdate then validateNextSyncCommitteeBranch config update
     else
-      LightClientError.require (update.nextSyncCommittee = SyncCommittee.empty preset)
+      Base.ensure (update.nextSyncCommittee = SyncCommittee.empty preset)
         (.unexpectedNextSyncCommittee update.nextSyncCommittee.aggregatePubkey)
   return true
 

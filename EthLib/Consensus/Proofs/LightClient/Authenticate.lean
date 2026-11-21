@@ -99,7 +99,7 @@ theorem validateFinality_proves {config : Config} {update : LightClientUpdate pr
     cases zero
     obtain ⟨gindex, indexed, rest⟩ := Base.bind_ok_iff.mp rest
     obtain ⟨verdict, checked, rest⟩ := Base.bind_ok_iff.mp rest
-    obtain rfl := LightClientError.require_ok.mp rest
+    obtain rfl := Base.ensure_ok_iff.mp rest
     exact ⟨gindex, _, indexed, .inl ⟨genesis, rfl⟩, LightClientError.liftRoot_ok.mp checked⟩
   · rename_i later
     obtain ⟨_, -, rest⟩ := Base.bind_ok_iff.mp accepted
@@ -107,7 +107,7 @@ theorem validateFinality_proves {config : Config} {update : LightClientUpdate pr
     obtain ⟨leaf, rooted, rest⟩ := Base.bind_ok_iff.mp rest
     obtain ⟨gindex, indexed, rest⟩ := Base.bind_ok_iff.mp rest
     obtain ⟨verdict, checked, rest⟩ := Base.bind_ok_iff.mp rest
-    obtain rfl := LightClientError.require_ok.mp rest
+    obtain rfl := Base.ensure_ok_iff.mp rest
     exact ⟨gindex, leaf, indexed, .inr ⟨later, LightClientError.liftRoot_ok.mp rooted⟩,
       LightClientError.liftRoot_ok.mp checked⟩
 
@@ -124,9 +124,9 @@ theorem validateFinality_beacon_of_genesis {config : Config}
   refine LightClientHeader.beacon_eq_of_sameSszValue ?_
   unfold validateFinality at accepted
   split at accepted
-  · exact LightClientError.require_ok.mp accepted
+  · exact Base.ensure_ok_iff.mp accepted
   · obtain ⟨_, same, -⟩ := Base.bind_ok_iff.mp accepted
-    exact LightClientError.require_ok.mp same
+    exact Base.ensure_ok_iff.mp same
 
 /-- An accepted committee branch verifies the root of the next committee of an update.
 
@@ -143,7 +143,7 @@ theorem validateNextSyncCommitteeBranch_proves {config : Config}
   obtain ⟨leaf, rooted, rest⟩ := Base.bind_ok_iff.mp accepted
   obtain ⟨gindex, indexed, rest⟩ := Base.bind_ok_iff.mp rest
   obtain ⟨verdict, checked, rest⟩ := Base.bind_ok_iff.mp rest
-  obtain rfl := LightClientError.require_ok.mp rest
+  obtain rfl := Base.ensure_ok_iff.mp rest
   exact ⟨gindex, leaf, indexed, LightClientError.liftRoot_ok.mp rooted,
     LightClientError.liftRoot_ok.mp checked⟩
 
@@ -213,8 +213,8 @@ theorem initializeLightClientStore_proves {config : Config} {trustedBlockRoot : 
   obtain ⟨gindex, indexed, rest⟩ := Base.bind_ok_iff.mp rest
   obtain ⟨verdict, checked, rest⟩ := Base.bind_ok_iff.mp rest
   obtain ⟨_, accepted, built⟩ := Base.bind_ok_iff.mp rest
-  obtain rfl := LightClientError.require_ok.mp trusted
-  obtain rfl := LightClientError.require_ok.mp accepted
+  obtain rfl := Base.ensure_ok_iff.mp trusted
+  obtain rfl := Base.ensure_ok_iff.mp accepted
   cases built
   exact ⟨LightClientError.liftRoot_ok.mp headerRooted, rfl, gindex, leaf, indexed,
     LightClientError.liftRoot_ok.mp leafRooted, LightClientError.liftRoot_ok.mp checked⟩

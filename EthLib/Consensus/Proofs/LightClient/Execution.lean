@@ -1013,7 +1013,7 @@ theorem initializeLightClientStore_header_valid {config : Config} {trustedBlockR
   obtain ⟨_, -, rest⟩ := Base.bind_ok_iff.mp computed
   obtain ⟨verdict, valid, rest⟩ := Base.bind_ok_iff.mp rest
   obtain ⟨_, checked, -⟩ := Base.bind_ok_iff.mp rest
-  obtain rfl := LightClientError.require_ok.mp checked
+  obtain rfl := Base.ensure_ok_iff.mp checked
   exact valid
 
 omit [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
@@ -1049,7 +1049,7 @@ theorem validateLightClientUpdate_finalizedHeader_valid {config : Config}
   · contradiction
   obtain ⟨verdict, valid, rest⟩ := Base.bind_ok_iff.mp checked
   obtain ⟨_, required, -⟩ := Base.bind_ok_iff.mp rest
-  obtain rfl := LightClientError.require_ok.mp required
+  obtain rfl := Base.ensure_ok_iff.mp required
   exact valid
 
 end EthLib.Consensus

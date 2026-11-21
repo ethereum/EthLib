@@ -83,7 +83,7 @@ theorem processLightClientUpdate_isFinalityUpdate {config : Config}
     unfold validateFinality at checked
     simp only [finality, Bool.not_false, ↓reduceIte] at checked
     have empty := LightClientHeader.beacon_eq_of_sameSszValue
-      (LightClientError.require_ok.mp checked)
+      (Base.ensure_ok_iff.mp checked)
     rw [empty] at newer
     exact (UInt64.not_lt_zero newer).elim
   · rfl

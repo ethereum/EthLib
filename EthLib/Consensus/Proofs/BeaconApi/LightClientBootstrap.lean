@@ -289,7 +289,7 @@ theorem createLightClientBootstrap_exists [NeZero preset.BYTES_PER_LOGS_BLOOM.to
   have long := computeMerkleProof_length state named proved
   have headerRooted : SszType.hashTreeRoot header = .ok blockRoot := ofBlock.trans blockRooted
   unfold createLightClientBootstrap
-  simp [LightClientError.specifiedFork, altair, LightClientError.require, eq_true fromAltair,
+  simp [LightClientError.specifiedFork, altair, Base.ensure, eq_true fromAltair,
     eq_true atBlock, headed, headerRooted, blockRooted, layout, madeHeader, proved, branchVector,
     Base.exactArray, Base.exactArray?, long, LightClientError.liftRoot, Except.mapError, bind,
     Except.bind, pure, Except.pure]
@@ -388,7 +388,7 @@ theorem bootstrapFor_valid [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
   unfold initializeLightClientStore
   simp only [LightClientError.requireFork, altair, ↓reduceIte, valid, trusted, nodeRooted, layout,
     stateRoot, branchVector_toList fits, climbs, LightClientError.liftRoot, Except.mapError,
-    LightClientError.require, bind, Except.bind, pure, Except.pure]
+    Base.ensure, bind, Except.bind, pure, Except.pure]
   exact ⟨_, rfl⟩
 
 /-- Each refusal of the bootstrap is the error that names the root. -/
@@ -469,7 +469,7 @@ theorem bootstrapFor_of_lt_altair {config : Config} {store : Store preset fork}
     by_cases scheduled : config.forkAtEpoch (computeEpochAtSlot preset block.slot) = fork
     · by_cases altair : .altair ≤ fork
       · simp [bootstrapFor, held, heldState, scheduled, createLightClientBootstrap,
-          LightClientError.specifiedFork, altair, LightClientError.require, notStarted, bind,
+          LightClientError.specifiedFork, altair, Base.ensure, notStarted, bind,
           Except.bind, Except.mapError]
       · simp [bootstrapFor, held, heldState, scheduled, createLightClientBootstrap,
           LightClientError.specifiedFork, altair, bind, Except.bind, Except.mapError]
