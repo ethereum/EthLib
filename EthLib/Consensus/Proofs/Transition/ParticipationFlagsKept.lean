@@ -50,7 +50,7 @@ private theorem addFlagReward_keeps {total : Gwei} {earned : List UInt64}
     exact set
 
 /-- One attester keeps the size of the list of flags and each flag already set. -/
-private theorem addAttesterFlags_keeps {total : Gwei} {earned : List UInt64}
+theorem addAttesterFlags_keeps {total : Gwei} {earned : List UInt64}
     {index : ValidatorIndex} {participation updated : EpochParticipation preset fork}
     {numerator numerator' : Gwei}
     (computed :
@@ -142,7 +142,7 @@ theorem processAttestation_keepsFlag {attestation : Attestation preset fork}
 /-- The target flag is the flag at position one.
 
 A position past the end reads as the empty flags, which hold no target flag. -/
-private theorem targetFlagAt_iff {participation : EpochParticipation preset fork}
+theorem targetFlagAt_iff {participation : EpochParticipation preset fork}
     {position : Nat} :
     TargetFlagAt participation position ↔
       hasFlag ((participation.data[position]?).getD 0)

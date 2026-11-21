@@ -4610,6 +4610,17 @@ With the BLS checks, the signature then verifies, and the block accepts the atte
 Each honest member of the committee then holds the timely target flag, under the same condition on the target root.
 If the secret keys summed to zero, the aggregate key would be the point at infinity, which key validation rejects.
 
+`foldlM_processAttestation_honestAttestation` (`Consensus/Proofs/HonestAttestationList.lean`) runs a list of such attestations, as the attestation steps of a block do.
+Each attestation is built on the state before the list, and changes only flags and the proposer's balance.
+So each next attestation reads the same committees, checkpoints, roots and keys, and is accepted too.
+The budget must leave room for the proposer's reward of each attestation of the list.
+A flag once set stays set, so each honest member of each committee ends with the timely target flag.
+The registry must hold the key of every honest validator.
+Before Deneb, each attestation of the list must be at most one epoch older than the block.
+The steps of a block before its attestations, and the capacity of a block, are not covered here.
+Satisfiability on a run from genesis is left to the assembled theorem.
+No theorem yet shows that the stake of those members reaches two thirds at the end of the epoch.
+
 `processJustificationAndFinalization_slackJustifiedCheckpoints` (`Consensus/Proofs/Transition/FfgSlack.lean`) turns one step into a slack link of the model.
 If the two justified checkpoints of the state before the step are slack-justified, so are those of the state after it.
 A new current justified checkpoint must match the state of that step.

@@ -120,10 +120,12 @@ private theorem addAttesterFlags_exists_ok {total base : Gwei} {earned : List UI
 
 /-- The flags of attesters of the registry, set in turn, succeed when the numerator stays small.
 
-Each attester must have a base reward of at most a ceiling, and the list of flags the registry size.
+Each attester must be below a size, with a base reward of at most a ceiling.
+
+The list of flags must have that size.
 
 The numerator grows by at most 64 times the ceiling for each attester. -/
-private theorem foldlM_addAttesterFlags_exists_ok {total : Gwei} {earned : List UInt64}
+theorem foldlM_addAttesterFlags_exists_ok {total : Gwei} {earned : List UInt64}
     {size ceiling : Nat}
     (baseOk : ∀ index : ValidatorIndex, index.toNat < size →
       ∃ base, getBaseReward state total index = .ok base ∧ base.toNat ≤ ceiling) :
@@ -153,7 +155,7 @@ private theorem foldlM_addAttesterFlags_exists_ok {total : Gwei} {earned : List 
 /-- From Altair, under a budget each validator of the registry has a base reward up to a ceiling.
 
 The total must be at least one positive increment, and the ceiling must fit in 64 bits. -/
-private theorem getBaseReward_exists_le {budget scoreBound : Nat} (altair : .altair ≤ fork)
+theorem getBaseReward_exists_le {budget scoreBound : Nat} (altair : .altair ≤ fork)
     (holds : WithinBudget budget scoreBound state)
     (increment : preset.EFFECTIVE_BALANCE_INCREMENT ≠ 0)
     (scaled : preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64)
@@ -170,7 +172,7 @@ private theorem getBaseReward_exists_le {budget scoreBound : Nat} (altair : .alt
 /-- A valid indexed attestation names only validators of the registry.
 
 Its signature check reads the key of each of them. -/
-private theorem isValidIndexedAttestation_lt_size {indexed : IndexedAttestation preset fork}
+theorem isValidIndexedAttestation_lt_size {indexed : IndexedAttestation preset fork}
     (valid : isValidIndexedAttestation config checks state indexed = .ok true) :
     ∀ index ∈ indexed.attestingIndices.data.toList,
       index.toNat < state.validators.data.size := by
@@ -188,7 +190,7 @@ private theorem isValidIndexedAttestation_lt_size {indexed : IndexedAttestation 
   exact (Array.getElem?_eq_some_iff.mp (getValidator_eq_ok_iff.mp (liftAccessor_ok.mp found))).1
 
 /-- Distinct indices below a size are at most that many. -/
-private theorem length_le_of_nodup {indices : List ValidatorIndex} {size : Nat}
+theorem length_le_of_toNat_nodup {indices : List ValidatorIndex} {size : Nat}
     (distinct : (indices.map UInt64.toNat).Nodup)
     (inside : ∀ index ∈ indices, index.toNat < size) : indices.length ≤ size := by
   have sub := List.subperm_of_subset (l₂ := List.range size) distinct fun n member => by
@@ -342,7 +344,7 @@ theorem processAttestation_exists_ok {budget scoreBound : Nat}
       isValidIndexedAttestation_lt_size validOk attester (by rw [indices]; simpa using member)
   have distinct := getAttestingIndices_nodup attestersOk
   have counted := Nat.mul_le_mul_right (64 * preset.baseRewardCeiling)
-    (length_le_of_nodup distinct inside)
+    (length_le_of_toNat_nodup distinct inside)
   obtain ⟨proposerIndex, proposerOk, proposerInside⟩ := proposer
   -- The budget bounds the effective balances, so the total active balance is read.
   have budgetLt : budget < 2 ^ 64 := by omega
