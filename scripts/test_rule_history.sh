@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # The rule history must write exactly the lines that scripts/RuleHistoryTest
 # plants, pass its own file, and fail on a changed, missing or extra line, a
-# missing file, lines in another order or count, a scan that finds no rule, a
-# missing fork type, an unknown argument and a failure of the tool.
+# missing file, lines in another order or count, a missing final line end, a
+# scan that finds no rule, a missing fork type, an unknown argument and a
+# failure of the tool.
 # Run from anywhere.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -103,6 +104,10 @@ expect_fail "the line of the code where a swapped file differs" "+ line 4: $EARL
 
 awk 'NR == 4 { print } { print }' "$WORK/expected" >"$WORK/case"
 expect_fail "a file with a line written twice" "- line 5: $EARLY"
+
+# An editor can drop the final line end, which leaves every line with text in place.
+printf '%s' "$(cat "$WORK/expected")" >"$WORK/case"
+expect_fail "a file without its final line end" "- line 29: (past the last line)"
 
 history --check --file "$WORK/missing" >"$WORK/out"; got=$?
 if [ "$got" -eq 1 ] && grep -qxF -- "+ RuleHistoryTest.Rules.limit${TAB}-${TAB}24576" "$WORK/out"; then

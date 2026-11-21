@@ -33,17 +33,23 @@ It reads the values from compiled code, so it runs after `lake build EthLib`.
 - `lake exe rule-history` writes `tests/execution/history/rules.tsv`.
 - `lake exe rule-history --check` fails if that file differs, and prints the changed lines.
 
-A file can also hold the lines that the code computes, in another order or with a line repeated.
+A file can also hold the lines that the code computes in another order or count.
 
-Then no line is new or gone, so the check prints the first line where the file and the code differ.
+A line written twice, or a final line end that an editor removed, is such a case.
+
+Then no line with text is new or gone, so the check prints the first line that differs.
 
 It exits with 1 when the file differs, 2 on an unknown argument, and 3 when it finds no rule.
 
 It also exits with 3 when it finds no fork type.
 
-It exits with 4 when it cannot run, such as when a module is not built or the file is unreadable.
+It exits with 4 when it cannot run, such as when a module is not built.
+
+It also exits with 4 when the file exists but cannot be read.
 
 So a failure of the tool never reads as a changed value.
+
+A missing file is not a failure of the tool: the check exits with 1 and lists every line as new.
 
 Four options replace the defaults, for the fixtures of `scripts/test_rule_history.sh`.
 
@@ -300,10 +306,11 @@ unsafe def run (args : List String) : IO UInt32 := do
       return 0
     let oldLines := old.splitOn "\n"
     let newLines := text.splitOn "\n"
-    let gone := oldLines.filter (!newLines.contains ·)
-    let added := newLines.filter (!oldLines.contains ·)
+    -- A blank line holds no value, so only the lines with text count as new or gone.
+    let gone := oldLines.filter fun l => !l.isEmpty && !newLines.contains l
+    let added := newLines.filter fun l => !l.isEmpty && !oldLines.contains l
     if gone.isEmpty && added.isEmpty then
-      -- Both hold the same lines, so they differ in order or in the count of a line.
+      -- Both hold the same lines with text, so they differ in order or in the count of a line.
       let i := ((oldLines.zip newLines).takeWhile fun (a, b) => a == b).length
       IO.println s!"- line {i + 1}: {lineAt oldLines i}"
       IO.println s!"+ line {i + 1}: {lineAt newLines i}"
