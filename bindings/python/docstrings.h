@@ -353,6 +353,9 @@
 #define DOC_enr_eth_fork_id \
   "The fork identifier of the \"eth\" entry of a record, as its hash and its next fork."
 
+#define DOC_enr_endpoints \
+  "The IPv4 and IPv6 endpoints of a record, each `None` when its address is absent."
+
 #define DOC_discv5_log_distance \
   "The logarithmic distance: the number of bits of the distance, and 0 for equal IDs."
 

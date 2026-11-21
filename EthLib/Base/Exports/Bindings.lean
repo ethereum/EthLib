@@ -491,6 +491,11 @@ def bindings : List Binding := [
   ⟨"enr_eth_fork_id", `EthLib.Networking.Enr.Exports.ethForkIdExport,
     "(record: bytes) -> tuple[bytes, int] | None",
     [`EthLib.Networking.Enr.EnrError], some "EnrError"⟩,
+  ⟨"enr_endpoints", `EthLib.Networking.Enr.Exports.endpointsExport,
+    "(record: bytes) -> tuple[" ++
+      "tuple[bytes, int | None, int | None, int | None] | None, " ++
+      "tuple[bytes, int | None, int | None, int | None] | None]",
+    [`EthLib.Networking.Enr.EnrError], some "EnrError"⟩,
   ⟨"discv5_log_distance", `EthLib.Networking.Discv5.logDistance,
     "(a: bytes, b: bytes) -> int",
     [], some "Discv5Error"⟩,

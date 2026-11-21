@@ -48,6 +48,11 @@ eth_enr_eth_fork_id(
   lean_object* args
 );
 
+extern lean_object*
+eth_enr_endpoints(
+  lean_object* args
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* The bytes of a `bytes` argument, or NULL with a TypeError set. */
@@ -174,4 +179,12 @@ py_enr_eth_fork_id(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_enr_eth_fork_id, args, 1, ENR_ERROR);
+}
+
+PyObject*
+py_enr_endpoints(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_enr_endpoints, args, 1, ENR_ERROR);
 }

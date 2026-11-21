@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Exports.PyValue
 public import EthLib.Base.Hex
 public import EthLib.Cryptography.Exports.Secp256k1
+public import EthLib.Networking.Enr.Address
 public import EthLib.Networking.Enr.Consensus
 public import EthLib.Networking.Enr.Eth
 public import EthLib.Networking.Enr.V4
@@ -60,6 +61,10 @@ def message : EnrError → String
   | .unknownScheme (.list _) => "identity scheme is a list, not v4"
   | .invalidPublicKey => "secp256k1 value is not a valid compressed public key"
   | .signing => "the record could not be signed"
+  | .invalidAddress key _ => s!"the {hexString key.data.toList} entry is not an address of its size"
+  | .invalidPort key _ =>
+    s!"the {hexString key.data.toList} entry is not a big-endian integer below 2^16 " ++
+      "without leading zeros"
 
 /-- Run a fallible computation, with its error as a code and a message. -/
 def runEnr {α : Type} (act : Except EnrError α) : Result α :=
@@ -189,5 +194,33 @@ It is `None` without the entry, and an entry that does not start with one has co
 @[export eth_enr_eth_fork_id]
 def ethForkIdExport (args : PyValue) : Result PyValue :=
   pyExport ethForkIdOf args
+
+/-- An endpoint as Python values: its address, then its TCP, UDP and QUIC ports.
+
+Each port is `None` when absent. -/
+abbrev EndpointValue (size : Nat) :=
+  Vector UInt8 size × Option UInt16 × Option UInt16 × Option UInt16
+
+/-- The Python value of an endpoint. -/
+def endpointValue {size : Nat} (e : Endpoint size) : EndpointValue size :=
+  (e.ip, e.tcp, e.udp, e.quic)
+
+/-- The IPv4 and IPv6 endpoints of a record, each `None` when its address is absent. -/
+def endpointsOf (record : ByteArray) :
+    Result (Option (EndpointValue 4) × Option (EndpointValue 16)) := do
+  let r ← runEnr (decode record)
+  let (e4, e6) ← runEnr r.endpoints
+  return (e4.map endpointValue, e6.map endpointValue)
+
+/-- The IPv4 and IPv6 endpoints of a record, each `None` when its address is absent.
+
+An endpoint is its address, then its TCP, UDP and QUIC ports, each `None` when absent.
+
+The IPv6 endpoint takes the `tcp` and `udp` ports when `tcp6` and `udp6` are absent.
+
+It does not check the signature. -/
+@[export eth_enr_endpoints]
+def endpointsExport (args : PyValue) : Result PyValue :=
+  pyExport endpointsOf args
 
 end EthLib.Networking.Enr.Exports

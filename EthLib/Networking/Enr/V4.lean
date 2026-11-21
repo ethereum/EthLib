@@ -42,10 +42,6 @@ def SCHEME_V4 : ByteArray := ⟨#[0x76, 0x34]⟩
 /-- The key `secp256k1`, in ASCII. -/
 def KEY_SECP256K1 : ByteArray := ⟨#[0x73, 0x65, 0x63, 0x70, 0x32, 0x35, 0x36, 0x6b, 0x31]⟩
 
-/-- The value of the pair with the key `key`, if the record has one. -/
-def Enr.get (r : Enr) (key : ByteArray) : Option Item :=
-  (r.pairs.find? (·.1 = key)).map (·.2)
-
 /-- The public key of a "v4" record.
 
 It fails unless the scheme is "v4" and the `secp256k1` value is a compressed point.

@@ -770,6 +770,21 @@ The secret is then the `x` of their product, as 32 big-endian bytes.
 `ecdsaForgery_of_forgery` (`Networking/Proofs/Enr/Security.lean`) proves that a forged EIP-778 "v4" record gives a forgery of ECDSA with Keccak-256 on a fresh message.
 The security of records then rests on the chosen-message security of that ECDSA, which EthLib assumes and does not prove; the bound on the chosen-message game above is proved only in the bijective random oracle model.
 
+### ENR addresses and ports
+
+`Enr.endpoints` (`Networking/Enr/Address.lean`) reads the IPv4 and IPv6 endpoints of a record from the eight keys `ip`, `ip6`, `tcp`, `tcp6`, `udp`, `udp6`, `quic` and `quic6`.
+The first six come from the key table of [EIP-778](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-778.md#L50-L67), and the consensus networking text states the QUIC ports in its [ENR structure](https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/phase0/p2p-interface.md#L1712-L1731).
+`endpoints_endpointPairs` (`Networking/Proofs/Enr/Address.lean`) states that a record built from the pairs of two endpoints reads them back.
+Where the IPv6 endpoint has no TCP or UDP port, it reads back with the port of the IPv4 endpoint.
+The format cannot express an IPv6 endpoint without a port that the IPv4 endpoint has, so the round trip can give no more.
+`readPort_tcp_of_endpoints` and `readPort_udp_of_endpoints` state the rule "If no `tcp6` / `udp6` port is provided, the `tcp` / `udp` port applies to both IP addresses".
+
+The sources leave two points open, and EthLib reads them as follows.
+The key table calls a port a "big endian integer" with no size.
+EthLib reads a port as an RLP scalar below `2^16`, with no leading zero byte, as every integer of a record is.
+The fallback rule names only `tcp` and `udp`, and no source states one for `quic`.
+So an IPv6 endpoint without `quic6` has no QUIC port, as `quic_of_endpoints` states.
+
 ### alt_bn128
 
 The alt_bn128 theorems check the constants and the group law of `G_1`, which the ECADD, ECMUL and ECPAIRING precompiles use.
@@ -7219,12 +7234,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 532 operations and 51 size constants.
-The Python extension calls 532 of the operations and 51 of the constants.
+Lean exports 533 operations and 51 size constants.
+The Python extension calls 533 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12123 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2674), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1609), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (835), `x25519.c` (21), `xmss.c` (344).
+12138 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2674), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1610), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (836), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

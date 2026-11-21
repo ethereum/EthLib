@@ -18,6 +18,7 @@ public import EthLib.Networking.Proofs.Discv4.Packet
 public import EthLib.Networking.Proofs.Encoding.Protobuf
 public import EthLib.Networking.Proofs.Encoding.Uvarint
 public import EthLib.Networking.Proofs.Encoding.Varint
+public import EthLib.Networking.Proofs.Enr.Address
 public import EthLib.Networking.Proofs.Enr.Consensus
 public import EthLib.Networking.Proofs.Enr.Eth
 public import EthLib.Networking.Proofs.Enr.Record
