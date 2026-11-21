@@ -89,8 +89,8 @@ Returns nothing when the signed digest is not a codeword.
 
 - `e`: the signing key's index on its layer.
 - `msg`: the 32-byte message on the bottom layer, a 16-byte root on the top. -/
-def layerRoot {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
-    (pp : PublicParam) (layer : Layer) (e : Nat) (msg : ByteArray)
+def layerRoot {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
+    (pp : PublicParam) (layer : Layer) (e : Nat) (msg : Array UInt64)
     (sig : LayerSignature) : m (Option Digest) := do
   -- Recover the key's leaf from the one-time signature.
   let some leaf ← otsLeaf H pp layer (UInt32.ofNat e) msg sig.randomizer sig.chainValues
@@ -103,14 +103,14 @@ def layerRoot {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 3
 A yes or a no, never a reason.
 
 Which step rejected a well-formed signature carries no consensus meaning. -/
-def verifyWith {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+def verifyWith {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
     (pk : PublicKey) (msg : Message) (sig : Signature) : m Bool := do
   let pp := pk.publicParam
   -- Step 1: the bottom key signs the message, so its path reaches bottom tree `b`'s root.
-  let some bottomRoot ← layerRoot H pp .bottom sig.leafIndex.toNat (packBytes msg) sig.bottom
+  let some bottomRoot ← layerRoot H pp .bottom sig.leafIndex.toNat msg.toArray sig.bottom
     | return false
   -- Step 2: the top key `b` signs that root, so its path reaches the top root.
-  let some root ← layerRoot H pp .top (bottomTree sig.leafIndex) (packBytes bottomRoot) sig.top
+  let some root ← layerRoot H pp .top (bottomTree sig.leafIndex) bottomRoot.toArray sig.top
     | return false
   -- Step 3: neither layer failed, and the top root is the key's.
   return decide (root = pk.root)

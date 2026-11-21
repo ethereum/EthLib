@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Hash.Keccak.BitsPermutation
+public import EthLib.Cryptography.Proofs.Hash.Keccak.Lanes
 
 /-!
 # Proofs: the Keccak sponge on bytes and on bits
@@ -178,15 +179,15 @@ def blockBits (rate : Nat) (bytes : ByteArray) (start : Nat) : Block (8 * rate) 
 
 /-- After absorbing a block, lane `(x, y)` is XORed with block lane `x + 5 * y`. -/
 theorem _root_.EthLib.Cryptography.Hash.Keccak.Internal.absorbBlock_lane {rate : Nat}
-    (a : Keccak.State) (bytes : ByteArray) (start : Nat) (x y : Fin 5) :
-    (Keccak.Internal.absorbBlock rate a bytes start).lane x y =
-      a.lane x y ^^^ Keccak.Internal.blockLane rate bytes start (x.val + 5 * y.val) := by
+    (a : Keccak.State) (read : Nat → UInt64) (start : Nat) (x y : Fin 5) :
+    (Keccak.Internal.absorbBlock rate a read start).lane x y =
+      a.lane x y ^^^ Keccak.Internal.blockLane rate read start (x.val + 5 * y.val) := by
   fin_cases x <;> fin_cases y <;> rfl
 
 /-- Absorbing a `rate`-byte block, for `8 ∣ rate`, equals absorbing its bits. -/
 theorem absorbBlock_ofLanes {rate : Nat} (hlanes : 8 ∣ rate)
     (a : Keccak.State) (bytes : ByteArray) (start : Nat) :
-    ofLanes (Keccak.Internal.absorbBlock rate a bytes start) =
+    ofLanes (Keccak.Internal.absorbBlock rate a (Keccak.Internal.laneAt bytes) start) =
       absorb (ofLanes a) (blockBits rate bytes start) := by
   obtain ⟨m, rfl⟩ := hlanes
   funext x y z
@@ -217,7 +218,8 @@ theorem absorbBlock_ofLanes {rate : Nat} (hlanes : 8 ∣ rate)
 /-- Absorbing `n` blocks of `rate` bytes from byte `start` is absorbing their bits in order. -/
 theorem absorbBlocks_ofLanes {rate : Nat} (hlanes : 8 ∣ rate)
     (bytes : ByteArray) (n start : Nat) (a : Keccak.State) :
-    ofLanes (Keccak.Internal.absorbBlocks Keccak.keccakF rate bytes n start a) =
+    ofLanes (Keccak.Internal.absorbBlocks Keccak.keccakF rate (Keccak.Internal.laneAt bytes) n
+      start a) =
       (List.range n).foldl
         (fun s j => permutation (absorb s (blockBits rate bytes (start + rate * j))))
         (ofLanes a) := by
@@ -263,7 +265,8 @@ theorem paddedBlock_eq {rate : Nat} (hr : 0 < rate) (msg : ByteArray)
 
 /-- The lane sponge at `rate` bytes absorbs every message to the state of the bit model. -/
 theorem absorbAll_eq {rate : Nat} (hr : 0 < rate) (hlanes : 8 ∣ rate) (msg : ByteArray) :
-    ofLanes (Keccak.spongeAbsorb Keccak.keccakF rate msg) =
+    ofLanes (Keccak.Internal.spongeAbsorb Keccak.keccakF rate msg.size
+        (Keccak.Internal.laneAt msg)) =
       absorbAll (rateBits := 8 * rate) (Nat.mul_pos (by decide) hr) msg := by
   have zero : ofLanes Keccak.State.zero = (fun _ _ _ => false) := by
     funext x y z
@@ -285,10 +288,11 @@ theorem bytesOfLane_bit (v : UInt64) (m j : Nat) (hm : m < 8) (hj : j < 8) :
     ((Keccak.Internal.bytesOfLane v)[m]'(by
       simp [Keccak.Internal.bytesOfLane]; omega)).toBitVec.getLsbD j =
       v.toBitVec.getLsbD (8 * m + j) := by
-  interval_cases m <;>
-    simp [Keccak.Internal.bytesOfLane, UInt64.toBitVec_toUInt8,
-      UInt64.toBitVec_shiftRight, UInt64.toBitVec_ofNat, BitVec.ushiftRight_eq',
-      BitVec.getLsbD_ushiftRight, hj]
+  -- It is the bit statement of the lane facts, read through the bit vectors.
+  have h := Keccak.testBit_getD_bytesOfLane v m j hm hj
+  rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem
+    (by simp [Keccak.Internal.bytesOfLane]; omega), Option.getD_some] at h
+  exact h
 
 /-- Squeezed byte `i` is byte `i % 8` of lane `(i / 8, 0)`. -/
 private theorem squeeze_get (a : Keccak.State) (i : Fin 32) :
@@ -382,12 +386,14 @@ theorem sponge_eq_of_squeeze {rate outBytes : Nat} (hr : 0 < rate) (hlanes : 8 �
     (hout : outBytes ≤ rate) (sq : Keccak.State → Vector UInt8 outBytes)
     (hsq : ∀ (a : Keccak.State) (i : Fin outBytes), (sq a)[i] = outputByte (ofLanes a) i.val)
     (msg : ByteArray) :
-    sq (Keccak.spongeAbsorb Keccak.keccakF rate msg) =
+    sq (Keccak.Internal.spongeAbsorb Keccak.keccakF rate msg.size (Keccak.Internal.laneAt msg)) =
       sponge (rateBits := 8 * rate) (Nat.mul_pos (by decide) hr) (Nat.mul_le_mul_left 8 hout)
         msg := by
   apply Vector.ext
   intro i hi
-  have out := hsq (Keccak.spongeAbsorb Keccak.keccakF rate msg) ⟨i, hi⟩
+  have out := hsq
+    (Keccak.Internal.spongeAbsorb Keccak.keccakF rate msg.size (Keccak.Internal.laneAt msg))
+    ⟨i, hi⟩
   simp only [Fin.getElem_fin, absorbAll_eq hr hlanes] at out
   simpa only [sponge, squeezeBytes, Vector.getElem_ofFn] using out
 
@@ -403,7 +409,8 @@ theorem keccak512_getElem (msg : ByteArray) (i : Nat) (h : i < 64) :
 
 /-- The lane implementation of Keccak-256 equals the bit model, for every message. -/
 theorem keccak256_eq (msg : ByteArray) : Keccak.keccak256 msg = keccak256 msg := by
-  simpa only [Keccak.keccak256, Keccak.RATE_256, Keccak.DIGEST_LEN_256, keccak256] using
+  simpa only [Keccak.keccak256_eq_squeeze256, Keccak.RATE_256, Keccak.DIGEST_LEN_256, keccak256]
+    using
     sponge_eq_of_squeeze (rate := 136) (outBytes := Keccak.DIGEST_LEN_256) (by decide) ⟨17, rfl⟩
       (by decide) Keccak.Internal.squeeze256
       (fun a i => (outputByte_eq_squeeze a i).symm) msg

@@ -34,10 +34,20 @@ namespace Internal
 
 /-- Digit `i` of a digest: the base-4 digit of weight `4^i` of its little-endian integer.
 
-Byte `floor(i / 4)` holds digit `i`, in its bits `2 (i mod 4)` and `2 (i mod 4) + 1`. -/
+The integer is `lo + 2^64 hi` for the digest's two lanes.
+
+So digit `i` is bits `2i` and `2i + 1` of the low lane for `i < 32`.
+
+From `i = 32` on, it is bits `2 (i - 32)` and `2 (i - 32) + 1` of the high lane. -/
 def digit (d : Digest) (i : Fin DIGITS) : Fin CHAIN_LENGTH :=
-  let byte := d[i.val / 4]'(by have := i.isLt; simp only [DIGITS, DIGEST_LEN] at *; omega)
-  ⟨byte.toNat >>> (2 * (i.val % 4)) % CHAIN_LENGTH, Nat.mod_lt _ (by decide)⟩
+  let lane := if i.val < 32 then d.lo >>> (2 * i.val).toUInt64 else
+    d.hi >>> (2 * (i.val - 32)).toUInt64
+  ⟨(lane &&& 3).toNat, by
+    -- Two bits are below 4.
+    have : (lane &&& 3).toNat ≤ 3 := by
+      rw [UInt64.toNat_and]; exact Nat.and_le_right
+    simp only [CHAIN_LENGTH]
+    omega⟩
 
 /-- The 64 digits of a digest, codeword or not. -/
 def digits (d : Digest) : Vector (Fin CHAIN_LENGTH) DIGITS :=

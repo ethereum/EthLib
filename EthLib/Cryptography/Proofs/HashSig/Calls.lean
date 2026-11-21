@@ -109,7 +109,7 @@ theorem length_queriesWith_ofFnInOrder {α : Type} :
       (queriesWith F (HashSig.ofFnInOrder k f)).length = ∑ i, (queriesWith F (f i)).length
   | 0, _ => rfl
   | k + 1, f => by
-    rw [HashSig.ofFnInOrder, Fin.sum_univ_succ, queriesWith_bind, List.length_append,
+    rw [HashSig.ofFnInOrder_succ, Fin.sum_univ_succ, queriesWith_bind, List.length_append,
       queriesWith_bind, List.length_append, length_queriesWith_ofFnInOrder k]
     simp
 

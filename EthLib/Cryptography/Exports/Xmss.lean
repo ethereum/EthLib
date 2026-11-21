@@ -106,9 +106,10 @@ It builds the whole top tree, `2^16` one-time keys. -/
 @[export eth_xmss_key_gen]
 def keyGenExport (seed : ByteArray) : Result (ByteArray × SecretKey) :=
   runXmss do
-    let seed ← Base.exactBytes SEED_LEN seed .badSeedSize
+    -- The length is the only check, and the 32 bytes are read as four lanes.
+    let _ ← Base.exactBytes SEED_LEN seed .badSeedSize
     -- The C side keeps the secret key per seed, so a first signature reuses its top tree.
-    let (pk, sk) := keyGen seed
+    let (pk, sk) := keyGen (Hash.Keccak.Lanes4.read seed 0)
     return (encodePublicKey pk, sk)
 
 /-- The updated key and the signature of a message at a leaf index, signed with a secret key.
@@ -123,8 +124,8 @@ def signExport (sk : SecretKey) (leafIndex : LeafIndex) (msg : ByteArray) :
     SecretKey × Result ByteArray :=
   match Base.exactBytes MESSAGE_LEN msg .badMessageSize with
   | .error err => (sk, runXmss (.error err))
-  | .ok msg =>
-    let (sig, sk) := sign sk leafIndex msg
+  | .ok _ =>
+    let (sig, sk) := sign sk leafIndex (Hash.Keccak.Lanes4.read msg 0)
     (sk, runXmss (encodeSignature <$> sig))
 
 /-- Whether a signature signs a message under a public key, as 1 or 0.
@@ -135,9 +136,9 @@ def verifyExport (pk : ByteArray) (msg : ByteArray) (sig : ByteArray) : Result U
   runXmss do
     -- Only the lengths are checked: every correctly sized string decodes.
     let pk ← decodePublicKey pk
-    let msg ← Base.exactBytes MESSAGE_LEN msg .badMessageSize
+    let _ ← Base.exactBytes MESSAGE_LEN msg .badMessageSize
     let sig ← decodeSignature sig
-    return if verify pk msg sig then 1 else 0
+    return if verify pk (Hash.Keccak.Lanes4.read msg 0) sig then 1 else 0
 
 /-- The leaf index a signature carries.
 

@@ -85,7 +85,7 @@ open EthLib.Cryptography.Xmss.Unforgeability (queryH ofParam ofLeafIndex ofTopIn
 def encodingHash (parameter : PublicParameter) (leafIndex : LeafIndex)
     (message : Message) (randomness : Randomness) : m Digest :=
   toDigest <$> EthLib.Cryptography.Xmss.messageDigest queryH (ofParam parameter) .bottom
-    (ofLeafIndex leafIndex) (EthLib.Cryptography.Xmss.packBytes (ofMessage message))
+    (ofLeafIndex leafIndex) (ofMessage message).toArray
     (ofRandomizer randomness)
 
 /-- One chain step, under `tweak_chain(idx, i, step + 1)`: EthLib's bottom chain step. -/
@@ -129,7 +129,7 @@ def nodeHash (parameter : PublicParameter) (level : MerkleLevel) (node : MerkleN
 def topEncodingHash (parameter : PublicParameter) (key : TopIndex)
     (root : Digest) (randomness : Randomness) : m Digest :=
   toDigest <$> EthLib.Cryptography.Xmss.messageDigest queryH (ofParam parameter) .top
-    (ofTopIndex key) (EthLib.Cryptography.Xmss.packBytes (ofDigest root)) (ofRandomizer randomness)
+    (ofTopIndex key) (ofDigest root).toArray (ofRandomizer randomness)
 
 /-- One top chain step: EthLib's top chain step. -/
 def topChainHash (parameter : PublicParameter) (key : TopIndex) (chain : ChainIndex)
@@ -198,7 +198,7 @@ def verifyTop (publicKey : PublicKey) (key : TopIndex) (root : Digest) (part : L
   let some topRoot ← EthLib.Cryptography.Xmss.layerRoot
       EthLib.Cryptography.Xmss.Unforgeability.queryH
       (EthLib.Cryptography.Xmss.Unforgeability.ofParam publicKey.parameter) .top key.val
-      (EthLib.Cryptography.Xmss.packBytes (EthLib.Cryptography.Xmss.Unforgeability.ofDigest root))
+      (EthLib.Cryptography.Xmss.Unforgeability.ofDigest root).toArray
       (EthLib.Cryptography.Xmss.Unforgeability.ofLayerSig part)
     | return false
   return decide (topRoot = EthLib.Cryptography.Xmss.Unforgeability.ofDigest publicKey.root)

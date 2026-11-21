@@ -39,7 +39,8 @@ namespace EthLib.Cryptography.Xmss.Unforgeability
 
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
-open EthLib.Cryptography.HashSig (toList_data_append toList_data_packBytes toList_uintToBytes
+open EthLib.Cryptography.Hash.Keccak (lanesBytes)
+open EthLib.Cryptography.HashSig (toList_uintToBytes
   ofFnInOrder_eq_sequenceFin)
 
 variable {m : Type → Type} [Monad m] [LawfulMonad m] [HasQuery XmssSecurity.HashSpec m]
@@ -52,21 +53,19 @@ theorem flatMap_ofFn {α β : Type} {n : Nat} (g : α → List β) (f : Fin n �
     (List.ofFn f).flatMap g = (List.ofFn fun i => g (f i)).flatten := by
   simp [List.flatMap, List.map_ofFn, Function.comp_def]
 
-/-- The bytes of 58 digests, as the model's leaf payload. -/
-theorem toList_packDigests_ofChains (f : XmssSecurity.ChainIndex → XmssSecurity.Digest) :
-    (packDigests (ofChains f)).data.toList = XmssSecurity.Concrete.leafPayload f := by
-  -- The packed digests are their lists, flattened.
-  have hflat : (packDigests (ofChains f)).data.toList
-      = ((ofChains f).toList.map Vector.toList).flatten := by
-    simp [packDigests, packBytes, Vector.flatten, Array.toList_flatten, Vector.toList]
-    rfl
-  calc (packDigests (ofChains f)).data.toList
-      = (List.ofFn fun i : Fin V => (ofDigest (f (chainOf i))).toList).flatten := by
-        rw [hflat, ofChains, Vector.toList_ofFn, List.map_ofFn]
+/-- The lanes of 58 digests, as bytes, are the model's leaf payload. -/
+theorem lanesBytes_digestLanes_ofChains (f : XmssSecurity.ChainIndex → XmssSecurity.Digest) :
+    lanesBytes (digestLanes (ofChains f)) = XmssSecurity.Concrete.leafPayload f := by
+  calc lanesBytes (digestLanes (ofChains f))
+      = ((ofChains f).toList.map fun d => d.bytes.toList).flatten := lanesBytes_digestLanes _
+    _ = (List.ofFn fun i : Fin V => (ofDigest (f (chainOf i))).bytes.toList).flatten := by
+        rw [ofChains, Vector.toList_ofFn, List.map_ofFn]
         rfl
     -- Digest by digest, EthLib's bytes are the model's.
     _ = (List.ofFn fun i : XmssSecurity.ChainIndex => XmssSecurity.bytesLE 16 (f i)).flatten :=
-        congrArg (fun g => (List.ofFn g).flatten) (funext fun i => toList_ofDigest (f i))
+        congrArg (fun g => (List.ofFn g).flatten) (funext fun i => by
+          rw [← Hash.Keccak.lanesBytes_lanes2]
+          exact toList_ofDigest (f i))
     _ = XmssSecurity.Concrete.leafPayload f := (flatMap_ofFn (XmssSecurity.bytesLE 16) f).symm
 
 /-! ## Computing in order -/
@@ -89,14 +88,15 @@ theorem fieldBytes_congr {a b c d a' b' c' d' : Nat} (ha : a = a') (hb : b = b')
 /-! ## The tweakable hash -/
 
 /-- EthLib's `Th` with `queryH` is the model's, at the same address and payload bytes. -/
-theorem th_queryH (P : XmssSecurity.PublicParameter) (A : Address) (payload : ByteArray)
+theorem th_queryH (P : XmssSecurity.PublicParameter) (A : Address) (payload : Array UInt64)
     (domain : XmssSecurity.HashDomain) (msg : XmssSecurity.HashInput)
-    (hA : A.toList = XmssSecurity.tweakBytes domain)
-    (hpayload : payload.data.toList = msg ++ XmssSecurity.domainSuffix domain) :
+    (hA : lanesBytes A.toArray = XmssSecurity.tweakBytes domain)
+    (hpayload : lanesBytes payload = msg ++ XmssSecurity.domainSuffix domain) :
     th (queryH (m := m)) (ofParam P) A payload
       = ofDigest <$> XmssSecurity.Concrete.tweakableHash (m := m) P domain msg := by
-  simp only [th, queryH, XmssSecurity.Concrete.tweakableHash, thInput, toList_data_append,
-    toList_data_packBytes, toList_ofParam, hA, hpayload, XmssSecurity.tweakableHashInput,
+  simp only [th, queryH, HashSig.queryLanes, XmssSecurity.Concrete.tweakableHash,
+    thInput_eq_append, Hash.Keccak.lanesBytes_append, toList_ofParam, hA, hpayload,
+    XmssSecurity.tweakableHashInput,
     List.append_assoc, bind_map_left, map_bind, map_pure, halfOf_zero_ofOutput]
 
 omit [HasQuery XmssSecurity.HashSpec m] in
@@ -124,7 +124,10 @@ theorem chainStep_bottom_tweakable (P : XmssSecurity.PublicParameter)
   refine th_queryH P _ _ _ _ ?_ ?_
   · rw [toList_addrChain]
     exact fieldBytes_congr rfl rfl (by simp [Layer.toNat]) (toNat_ofLeafIndex idx)
-  · simp only [toList_data_append, toList_data_packBytes, toList_ofDigest, toList_uintToBytes]
+  · rw [show (#[(ofDigest v).lo, (ofDigest v).hi, i.val.toUInt64, 0] : Array UInt64)
+        = (ofDigest v).toArray ++ (⟨i.val.toUInt64, 0⟩ : Lanes2).toArray from rfl,
+      Hash.Keccak.lanesBytes_append, toList_ofDigest,
+      lanesBytes_index _ (by have := i.isLt; simp only [V] at this; omega), toList_uintToBytes]
     rfl
 
 /-- One step of a bottom chain. -/
@@ -149,7 +152,10 @@ theorem chainStep_top_tweakable (P : XmssSecurity.PublicParameter) (key : XmssSe
   · rw [toList_addrChain]
     exact fieldBytes_congr rfl rfl (by simp [Layer.toNat, XmssSecurity.topFlag])
       (toNat_ofTopIndex key)
-  · simp only [toList_data_append, toList_data_packBytes, toList_ofDigest, toList_uintToBytes]
+  · rw [show (#[(ofDigest v).lo, (ofDigest v).hi, i.val.toUInt64, 0] : Array UInt64)
+        = (ofDigest v).toArray ++ (⟨i.val.toUInt64, 0⟩ : Lanes2).toArray from rfl,
+      Hash.Keccak.lanesBytes_append, toList_ofDigest,
+      lanesBytes_index _ (by have := i.isLt; simp only [V] at this; omega), toList_uintToBytes]
     rfl
 
 /-- One step of a top chain. -/
@@ -218,7 +224,7 @@ theorem otsLeafHash_bottom_tweakable (P : XmssSecurity.PublicParameter)
   refine th_queryH P _ _ _ _ ?_ ?_
   · rw [toList_addrLeaf]
     exact fieldBytes_congr rfl rfl (by simp [Layer.toNat]) (toNat_ofLeafIndex idx)
-  · rw [toList_packDigests_ofChains]
+  · rw [lanesBytes_digestLanes_ofChains]
     exact (List.append_nil _).symm
 
 /-- A bottom key's leaf, from its chain ends. -/
@@ -241,7 +247,7 @@ theorem otsLeafHash_top_tweakable (P : XmssSecurity.PublicParameter) (key : Xmss
   · rw [toList_addrLeaf]
     exact fieldBytes_congr rfl rfl (by simp [Layer.toNat, XmssSecurity.topFlag])
       (toNat_ofTopIndex key)
-  · rw [toList_packDigests_ofChains]
+  · rw [lanesBytes_digestLanes_ofChains]
     exact (List.append_nil _).symm
 
 /-- A top key's leaf, from its chain ends. -/
@@ -260,21 +266,21 @@ theorem messageDigest_bottom_tweakable (P : XmssSecurity.PublicParameter)
     (idx : XmssSecurity.LeafIndex)
     (msg : XmssSecurity.Message) (rho : XmssSecurity.Randomness) :
     messageDigest (queryH (m := m)) (ofParam P) .bottom (ofLeafIndex idx)
-        (packBytes (ofMessage msg)) (ofRandomizer rho)
+        (ofMessage msg).toArray (ofRandomizer rho)
       = ofDigest <$> XmssSecurity.Concrete.tweakableHash (m := m) P (.encoding idx)
           (XmssSecurity.Concrete.encodingPayload msg rho) := by
   rw [messageDigest]
   refine th_queryH P _ _ _ _ ?_ ?_
   · rw [toList_addrMsg]
     exact fieldBytes_congr rfl rfl (by simp [Layer.toNat]) (toNat_ofLeafIndex idx)
-  · simp only [toList_data_append, toList_data_packBytes, toList_ofMessage, toList_ofRandomizer]
+  · simp only [Hash.Keccak.lanesBytes_append, toList_ofMessage, toList_ofRandomizer]
     rfl
 
 /-- The digest a bottom key signs: the message, then the randomizer. -/
 theorem messageDigest_bottom (P : XmssSecurity.PublicParameter) (idx : XmssSecurity.LeafIndex)
     (msg : XmssSecurity.Message) (rho : XmssSecurity.Randomness) :
     messageDigest (queryH (m := m)) (ofParam P) .bottom (ofLeafIndex idx)
-        (packBytes (ofMessage msg)) (ofRandomizer rho)
+        (ofMessage msg).toArray (ofRandomizer rho)
       = ofDigest <$> XmssSecurity.Concrete.encodingHash (m := m) P idx msg rho := by
   rw [XmssSecurity.Concrete.encodingHash, map_ofDigest_toDigest]
 
@@ -283,7 +289,7 @@ theorem messageDigest_bottom (P : XmssSecurity.PublicParameter) (idx : XmssSecur
 Its oracle input is the model's tweakable hash input. -/
 theorem messageDigest_top_tweakable (P : XmssSecurity.PublicParameter) (key : XmssSecurity.TopIndex)
     (root : XmssSecurity.Digest) (rho : XmssSecurity.Randomness) :
-    messageDigest (queryH (m := m)) (ofParam P) .top (ofTopIndex key) (packBytes (ofDigest root))
+    messageDigest (queryH (m := m)) (ofParam P) .top (ofTopIndex key) (ofDigest root).toArray
         (ofRandomizer rho)
       = ofDigest <$> XmssSecurity.Concrete.tweakableHash (m := m) P (.topEncoding key)
           (XmssSecurity.Concrete.topEncodingPayload root rho) := by
@@ -292,13 +298,13 @@ theorem messageDigest_top_tweakable (P : XmssSecurity.PublicParameter) (key : Xm
   · rw [toList_addrMsg]
     exact fieldBytes_congr rfl rfl (by simp [Layer.toNat, XmssSecurity.topFlag])
       (toNat_ofTopIndex key)
-  · simp only [toList_data_append, toList_data_packBytes, toList_ofDigest, toList_ofRandomizer]
+  · simp only [Hash.Keccak.lanesBytes_append, toList_ofDigest, toList_ofRandomizer]
     rfl
 
 /-- The digest a top key signs: the bottom root, then the randomizer. -/
 theorem messageDigest_top (P : XmssSecurity.PublicParameter) (key : XmssSecurity.TopIndex)
     (root : XmssSecurity.Digest) (rho : XmssSecurity.Randomness) :
-    messageDigest (queryH (m := m)) (ofParam P) .top (ofTopIndex key) (packBytes (ofDigest root))
+    messageDigest (queryH (m := m)) (ofParam P) .top (ofTopIndex key) (ofDigest root).toArray
         (ofRandomizer rho)
       = ofDigest <$> XmssSecurity.Concrete.topEncodingHash (m := m) P key root rho := by
   rw [XmssSecurity.Concrete.topEncodingHash, map_ofDigest_toDigest]
@@ -325,7 +331,10 @@ theorem nodeHash_bottom_tweakable (P : XmssSecurity.PublicParameter)
     refine fieldBytes_congr rfl rfl (by simp [Layer.toNat, Nat.mod_eq_of_lt hlevel]) ?_
     have h32 : node.val < 4294967296 := lt_of_lt_of_le node.isLt (by decide)
     simp [Nat.mod_eq_of_lt h32]
-  · simp only [toList_data_append, toList_data_packBytes, toList_ofDigest]
+  · rw [show (#[(ofDigest left).lo, (ofDigest left).hi, (ofDigest right).lo,
+        (ofDigest right).hi] : Array UInt64) = (ofDigest left).toArray ++ (ofDigest right).toArray
+        from rfl]
+    simp only [Hash.Keccak.lanesBytes_append, toList_ofDigest]
     exact (List.append_nil _).symm
 
 /-- A bottom node, from its two children. -/
@@ -357,7 +366,10 @@ theorem nodeHash_top_tweakable (P : XmssSecurity.PublicParameter) (level : XmssS
       (by simp [Layer.toNat, XmssSecurity.topFlag, Nat.mod_eq_of_lt hlevel]; omega) ?_
     have h32 : node.val < 4294967296 := lt_of_lt_of_le node.isLt (by decide)
     simp [Nat.mod_eq_of_lt h32]
-  · simp only [toList_data_append, toList_data_packBytes, toList_ofDigest]
+  · rw [show (#[(ofDigest left).lo, (ofDigest left).hi, (ofDigest right).lo,
+        (ofDigest right).hi] : Array UInt64) = (ofDigest left).toArray ++ (ofDigest right).toArray
+        from rfl]
+    simp only [Hash.Keccak.lanesBytes_append, toList_ofDigest]
     exact (List.append_nil _).symm
 
 /-- A top node, from its two children. -/
@@ -519,7 +531,7 @@ theorem ofNat_val_topIndex (key : XmssSecurity.TopIndex) :
 Up to the leaf in the model's routines, then EthLib's fold up the path. -/
 theorem layerRoot_bottom (P : XmssSecurity.PublicParameter) (idx : XmssSecurity.LeafIndex)
     (msg : XmssSecurity.Message) (σ : XmssSecurity.Signature) :
-    layerRoot (queryH (m := m)) (ofParam P) .bottom idx.val (packBytes (ofMessage msg))
+    layerRoot (queryH (m := m)) (ofParam P) .bottom idx.val (ofMessage msg).toArray
         (ofLayerSig ⟨σ.randomness, σ.chainValue, σ.authPath⟩)
       = (do
           let digest ← XmssSecurity.Concrete.encodingHash (m := m) P idx msg σ.randomness
@@ -562,7 +574,7 @@ theorem layerRoot_bottom (P : XmssSecurity.PublicParameter) (idx : XmssSecurity.
 /-- The root a top layer's signature leads to, from the bottom root it signs. -/
 theorem layerRoot_top (P : XmssSecurity.PublicParameter) (key : XmssSecurity.TopIndex)
     (root : XmssSecurity.Digest) (part : XmssSecurity.LayerSignature) :
-    layerRoot (queryH (m := m)) (ofParam P) .top key.val (packBytes (ofDigest root))
+    layerRoot (queryH (m := m)) (ofParam P) .top key.val (ofDigest root).toArray
         (ofLayerSig part)
       = Option.map ofDigest <$> (do
           let digest ← XmssSecurity.Concrete.topEncodingHash (m := m) P key root part.randomness
@@ -607,9 +619,9 @@ theorem layerRoot_top (P : XmssSecurity.PublicParameter) (key : XmssSecurity.Top
     rw [fold_eq P .top key.val key.isLt]
     simp
 
-/-- Two digests are equal exactly when their bytes are. -/
+/-- Two digests are equal exactly when their lanes are. -/
 theorem ofDigest_eq_iff (x y : XmssSecurity.Digest) : ofDigest x = ofDigest y ↔ x = y :=
-  ⟨ofBV_inj (by simp [XmssSecurity.digestBits, DIGEST_LEN]), fun h => h ▸ rfl⟩
+  ⟨fun h => HashSig.ofDigestLanes_injective h, fun h => h ▸ rfl⟩
 
 /-- The bottom tree of a leaf index is the model's top key. -/
 theorem bottomTree_ofLeafIndex (idx : XmssSecurity.LeafIndex) :

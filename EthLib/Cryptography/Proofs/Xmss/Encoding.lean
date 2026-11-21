@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Xmss.Encoding
-public import EthLib.Cryptography.Proofs.Xmss.Types
+public import EthLib.Cryptography.Proofs.Xmss.Words
 public import EthLib.Cryptography.Proofs.Wots.TargetSum
 public import Mathlib.Tactic
 
@@ -25,38 +25,59 @@ variable {d d' : Digest} {x y : Vector (Fin CHAIN_LENGTH) V}
 
 /-! ## Unfolding a codeword -/
 
-/-- Byte `j` of a digest is base-256 digit `j` of its integer. -/
-private theorem toNat_getElem_digest (d : Digest) (j : Nat) (hj : j < DIGEST_LEN) :
-    (d[j]'hj).toNat = bytesToUint d / 256 ^ j % 256 := by
-  conv_lhs => rw [← Base.uintToBytes_bytesToUint d]
-  simp [Base.uintToBytes_eq_div]
+/-- Two bits of a lane, at offset `k < 64`, are its integer's base-4 digit at that bit. -/
+private theorem toNat_shiftRight_and_three (x : UInt64) (k : Nat) (hk : k < 64) :
+    ((x >>> k.toUInt64) &&& 3).toNat = x.toNat / 2 ^ k % 4 := by
+  rw [UInt64.toNat_and, UInt64.toNat_shiftRight, show (3 : UInt64).toNat = 2 ^ 2 - 1 from rfl,
+    Nat.and_two_pow_sub_one_eq_mod, Nat.shiftRight_eq_div_pow]
+  congr 3
+  simp only [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.reducePow]
+  omega
 
-/-- The two bits at offset `2r` of a byte are base-4 digit `4j + r` of the integer. -/
-private theorem byte_digit (n j r : Nat) (hr : r < 4) :
-    (n / 256 ^ j % 256) >>> (2 * r) % 4 = n / 4 ^ (4 * j + r) % 4 := by
-  rw [Nat.shiftRight_eq_div_pow, pow_mul, show (2 : Nat) ^ 2 = 4 by norm_num, pow_add, pow_mul,
-    show (4 : Nat) ^ 4 = 256 by norm_num, ← Nat.div_div_eq_div_mul]
-  generalize n / 256 ^ j = m
-  interval_cases r <;> simp only [pow_zero, pow_one, Nat.reducePow] <;> omega
+/-- Digit `i` of `lo + 2^64 hi`: digit `i` of `lo` below 32, and digit `i - 32` of `hi` above. -/
+private theorem digit_lanes (lo hi i : Nat) (hlo : lo < 2 ^ 64) :
+    (lo + 2 ^ 64 * hi) / 4 ^ i % 4 =
+      if i < 32 then lo / 4 ^ i % 4 else hi / 4 ^ (i - 32) % 4 := by
+  split
+  · next hi32 =>
+    -- `4^i` divides `2^64`, and leaves a multiple of 4 for the high lane.
+    have h : 2 ^ 64 * hi = 4 ^ i * (4 * (4 ^ (31 - i) * hi)) := by
+      have : (2 : Nat) ^ 64 = 4 ^ i * (4 * 4 ^ (31 - i)) := by
+        rw [← pow_succ', ← pow_add, show i + (31 - i + 1) = 32 by omega]
+        norm_num
+      rw [this]
+      ring
+    rw [h, Nat.add_mul_div_left _ _ (by positivity), Nat.add_mul_mod_self_left]
+  · next hi32 =>
+    -- `4^i` is `2^64` times `4^(i - 32)`, and the low lane is below `2^64`.
+    rw [show 4 ^ i = 2 ^ 64 * 4 ^ (i - 32) by
+      rw [show i = 32 + (i - 32) by omega, Nat.pow_add, Nat.add_sub_cancel_left]; norm_num,
+      ← Nat.div_div_eq_div_mul, Nat.add_mul_div_left _ _ (by positivity),
+      Nat.div_eq_of_lt hlo, Nat.zero_add]
 
-/-- Digit `i` read from its byte is base-4 digit `i` of the digest's integer. -/
+/-- Digit `i` read from its lane is base-4 digit `i` of the digest's integer. -/
 theorem digit_val (d : Digest) (i : Fin DIGITS) :
-    (Internal.digit d i).val = bytesToUint d / 4 ^ i.val % 4 := by
-  simp only [Internal.digit, CHAIN_LENGTH]
-  rw [toNat_getElem_digest, byte_digit _ _ _ (Nat.mod_lt _ (by norm_num)), Nat.div_add_mod]
+    (Internal.digit d i).val = d.toNat / 4 ^ i.val % 4 := by
+  have hi := i.isLt
+  simp only [DIGITS] at hi
+  simp only [Internal.digit, Hash.Keccak.Lanes2.toNat, digit_lanes _ _ _ d.lo.toNat_lt]
+  split
+  · next h => rw [toNat_shiftRight_and_three _ _ (by omega), Nat.pow_mul]
+  · next h => rw [toNat_shiftRight_and_three _ _ (by omega), Nat.pow_mul]
 
 /-- Digit `i` of a digest's vector of digits, as a number. -/
 @[simp] theorem digits_getElem_val (d : Digest) (i : Nat) (hi : i < DIGITS) :
-    ((Internal.digits d)[i]'hi).val = bytesToUint d / 4 ^ i % 4 := by
+    ((Internal.digits d)[i]'hi).val = d.toNat / 4 ^ i % 4 := by
   simp only [Internal.digits, Vector.getElem_ofFn, digit_val]
 
-/-- The digits read from the bytes are the base-4 digits of the digest's integer. -/
-theorem digits_eq_digits4 : Internal.digits = Wots.digits4 := by
+/-- The digits read from the lanes are the base-4 digits of the digest's bytes. -/
+theorem digits_eq_digits4 : Internal.digits = fun d => Wots.digits4 d.bytes := by
   funext d
   refine Vector.ext fun i hi => Fin.ext ?_
   have h := Vector.getElem_ofFn (i := i) (by simpa only [DIGITS] using hi)
-    (f := fun k : Fin 64 => (⟨bytesToUint d / 4 ^ k.val % 4, Nat.mod_lt _ (by decide)⟩ : Fin 4))
-  rw [digits_getElem_val]
+    (f := fun k : Fin 64 =>
+      (⟨bytesToUint d.bytes / 4 ^ k.val % 4, Nat.mod_lt _ (by decide)⟩ : Fin 4))
+  rw [digits_getElem_val, ← Hash.Keccak.Lanes2.bytesToUint_bytes]
   exact (congrArg Fin.val h).symm
 
 /-- The codeword test is the form that builds all 64 digits, then tests the tail and the sum. -/
@@ -82,8 +103,8 @@ A codeword holds the digest's first 58 digits.
 Its other 6 digits are zero, and it sums to `T`.
 -/
 theorem codeword?_eq_some (h : codeword? d = some x) :
-    (∀ i : Fin V, (x[i] : Nat) = bytesToUint d / 4 ^ i.val % 4) ∧
-      (∀ i, V ≤ i → i < DIGITS → bytesToUint d / 4 ^ i % 4 = 0) ∧
+    (∀ i : Fin V, (x[i] : Nat) = d.toNat / 4 ^ i.val % 4) ∧
+      (∀ i, V ≤ i → i < DIGITS → d.toNat / 4 ^ i % 4 = 0) ∧
       Internal.digitSum x = TARGET_SUM := by
   simp only [codeword?_eq_digits] at h
   obtain ⟨hcond, hx⟩ := Option.ite_none_right_eq_some.mp h
@@ -134,31 +155,31 @@ theorem sum_of_codeword (h : codeword? d = some x) : ∑ i : Fin V, (x[i] : Nat)
     LE^-1(D) = sum_{i < 58} x_i 4^i
 ```
 -/
-theorem bytesToUint_of_codeword (h : codeword? d = some x) :
-    bytesToUint d = ∑ i : Fin V, (x[i] : Nat) * 4 ^ i.val := by
+theorem toNat_of_codeword (h : codeword? d = some x) :
+    d.toNat = ∑ i : Fin V, (x[i] : Nat) * 4 ^ i.val := by
   obtain ⟨hx, htail, -⟩ := codeword?_eq_some h
-  -- A 16-byte number is below `256^16 = 4^64`, so its 64 digits spell it.
-  have hlt : bytesToUint d < 4 ^ DIGITS := by
-    have := Base.bytesToUint_lt d
-    simpa [DIGEST_LEN, DIGITS] using this
-  have hall := Wots.sum_base_digits_eq_mod 4 (bytesToUint d) DIGITS
+  -- Two lanes make a number below `2^128 = 4^64`, so its 64 digits spell it.
+  have hlt : d.toNat < 4 ^ DIGITS := by
+    have := Hash.Keccak.Lanes2.toNat_lt d
+    simpa [DIGITS] using this
+  have hall := Wots.sum_base_digits_eq_mod 4 (d.toNat) DIGITS
   rw [Nat.mod_eq_of_lt hlt] at hall
   -- Digits 58 to 63 are zero, so only the first 58 contribute.
-  have hsplit : ∑ r ∈ Finset.range DIGITS, bytesToUint d / 4 ^ r % 4 * 4 ^ r
-      = ∑ r ∈ Finset.range V, bytesToUint d / 4 ^ r % 4 * 4 ^ r := by
+  have hsplit : ∑ r ∈ Finset.range DIGITS, d.toNat / 4 ^ r % 4 * 4 ^ r
+      = ∑ r ∈ Finset.range V, d.toNat / 4 ^ r % 4 * 4 ^ r := by
     rw [show DIGITS = V + (DIGITS - V) by decide, Finset.sum_range_add]
     simp only [add_eq_left]
     refine Finset.sum_eq_zero fun r hr => ?_
     rw [Finset.mem_range] at hr
     rw [htail (V + r) (by omega) (by simp only [DIGITS, V] at *; omega), zero_mul]
-  rw [← hall, hsplit, ← Fin.sum_univ_eq_sum_range (fun r => bytesToUint d / 4 ^ r % 4 * 4 ^ r)]
+  rw [← hall, hsplit, ← Fin.sum_univ_eq_sum_range (fun r => d.toNat / 4 ^ r % 4 * 4 ^ r)]
   exact Finset.sum_congr rfl fun i _ => by rw [hx i]
 
 /-- No two digests share a codeword. -/
 theorem eq_of_codeword (h : codeword? d = some x) (h' : codeword? d' = some x) : d = d' := by
-  -- Both digests spell the same number, and a digest is its little-endian bytes.
-  have := (bytesToUint_of_codeword h).trans (bytesToUint_of_codeword h').symm
-  rw [← Base.uintToBytes_bytesToUint d, ← Base.uintToBytes_bytesToUint d', this]
+  -- Both digests spell the same number, and two lanes are their number.
+  have := (toNat_of_codeword h).trans (toNat_of_codeword h').symm
+  exact Hash.Keccak.Lanes2.toNat_injective this
 
 /-! ## Incomparability
 

@@ -29,14 +29,16 @@ open XmssSecurity.TargetSum (decodeDigest digestEncoding digestTop digitOffset z
 open EthLib.Cryptography.HashSig (bytesToUint_ofBV)
 
 /-- A digest's integer is its bit vector's. -/
-@[simp] theorem bytesToUint_ofDigest (x : XmssSecurity.Digest) :
-    bytesToUint (ofDigest x) = x.toNat :=
-  bytesToUint_ofBV 16 x
+@[simp] theorem toNat_ofDigest (x : XmssSecurity.Digest) :
+    Hash.Keccak.Lanes2.toNat (ofDigest x) = x.toNat := by
+  rw [← Hash.Keccak.Lanes2.bytesToUint_bytes, HashSig.bytes_ofDigestLanes]
+  exact bytesToUint_ofBV 16 x
 
 /-- A randomizer's integer is its bit vector's. -/
-@[simp] theorem bytesToUint_ofRandomizer (x : XmssSecurity.Randomness) :
-    bytesToUint (ofRandomizer x) = x.toNat :=
-  bytesToUint_ofBV 16 x
+@[simp] theorem toNat_ofRandomizer (x : XmssSecurity.Randomness) :
+    Hash.Keccak.Lanes2.toNat (ofRandomizer x) = x.toNat := by
+  rw [← Hash.Keccak.Lanes2.bytesToUint_bytes, HashSig.bytes_ofDigestLanes]
+  exact bytesToUint_ofBV 16 x
 
 /-! ## The digits -/
 
@@ -95,7 +97,7 @@ theorem codeword?_ofDigest (x : XmssSecurity.Digest) :
       have := i.isLt; simp only [V, DIGITS] at *; omega))
       = ofEncoding (digestEncoding x) := by
     refine congrArg Vector.ofFn (funext fun i => Fin.ext ?_)
-    rw [digits_getElem_val, bytesToUint_ofDigest]
+    rw [digits_getElem_val, toNat_ofDigest]
     exact (val_digestEncoding x (chainOf i)).symm
   -- The six digits without a chain are zero exactly when the model's top bits are.
   have htail : ((Internal.digits (ofDigest x)).toList.drop V).all (·.val == 0) = true ↔
@@ -107,13 +109,13 @@ theorem codeword?_ofDigest (x : XmssSecurity.Digest) :
       have := h (((Internal.digits (ofDigest x)).toList.drop V)[i - V]'(by
         simp only [List.length_drop, Vector.length_toList]; omega)) (List.getElem_mem _)
       simp only [List.getElem_drop, Vector.getElem_toList, Nat.add_sub_cancel' hlo,
-        digits_getElem_val, bytesToUint_ofDigest, beq_iff_eq] at this
+        digits_getElem_val, toNat_ofDigest, beq_iff_eq] at this
       exact this
     · intro h d hd
       obtain ⟨k, hk, rfl⟩ := List.getElem_of_mem hd
       simp only [List.length_drop, Vector.length_toList] at hk
       simp only [List.getElem_drop, Vector.getElem_toList, digits_getElem_val,
-        bytesToUint_ofDigest, beq_iff_eq]
+        toNat_ofDigest, beq_iff_eq]
       exact h (V + k) (by omega) (by simp only [V, DIGITS] at *; omega)
   -- The digit sums agree.
   have hsum : Internal.digitSum (ofEncoding (digestEncoding x))
@@ -145,11 +147,10 @@ theorem codeword?_ofDigest (x : XmssSecurity.Digest) :
 theorem trialRandomizer_ofRandomizer (base : XmssSecurity.Randomness) (c : Nat) :
     trialRandomizer (ofRandomizer base) c
       = ofRandomizer (base + BitVec.ofNat XmssSecurity.randomnessBits c) := by
-  -- Both sides are the bytes of `(R0 + c) mod 2^128`.
-  show _ = ofBV RANDOMIZER_LEN _
-  rw [trialRandomizer_eq, bytesToUint_ofRandomizer, ofBV_eq_uintToBytes, BitVec.toNat_add,
-    BitVec.toNat_ofNat]
-  congr 1
+  -- Both sides are the lanes of `(R0 + c) mod 2^128`.
+  apply Hash.Keccak.Lanes2.toNat_injective
+  rw [toNat_trialRandomizer, toNat_ofRandomizer, toNat_ofRandomizer,
+    BitVec.toNat_add, BitVec.toNat_ofNat]
   simp only [XmssSecurity.randomnessBits]
   omega
 

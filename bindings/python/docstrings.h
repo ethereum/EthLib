@@ -123,7 +123,7 @@
   "SHA-256 of a byte string shorter than 2^61 bytes, the bound of FIPS 180-4 §1."
 
 #define DOC_keccak256 \
-  "Keccak-256 of a byte string, `KECCAK[512](N, 256)` of FIPS 202 §5.2:"
+  "Keccak-256 of a byte string, `KECCAK[512](N, 256)` of FIPS 202 §5.2."
 
 #define DOC_keccak512 \
   "Keccak-512 of a byte string, `KECCAK[1024](N, 512)` of FIPS 202 §5.2:"

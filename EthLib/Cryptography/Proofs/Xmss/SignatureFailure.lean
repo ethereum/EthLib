@@ -37,41 +37,40 @@ local notation "Hq" => Unforgeability.queryH (m := OracleComp XmssSecurity.Oracl
 
 /-! ## Trial inputs -/
 
-/-- A query of an input at address `A` whose payload has `k` bytes.
+/-- A query of an input at address `A` whose payload has `k` lanes, `8 k` bytes.
 
 A key's codeword search queries only such inputs, at its message address. -/
 def IsTrialQuery (A : Address) (k : Nat) : XmssSecurity.OracleWorld.Domain → Prop
   | .inl _ => False
-  | .inr x => ∃ pp payload, payload.size = k ∧ x = (thInput pp A payload).data.toList
+  | .inr x => ∃ pp payload, payload.size = k ∧ x = Hash.Keccak.lanesBytes (thInput pp A payload)
 
 noncomputable instance (A : Address) (k : Nat) : DecidablePred (IsTrialQuery A k) :=
   Classical.decPred _
 
-/-- An input `P | A | M` has `32` bytes before its payload. -/
-theorem size_thInput (pp : PublicParam) (A : Address) (payload : ByteArray) :
-    (thInput pp A payload).size = 32 + payload.size := by
-  rw [thInput, ByteArray.size_append, ByteArray.size_append, Base.size_packBytes,
-    Base.size_packBytes]
+/-- An input `P | A | M` has `4` lanes before its payload. -/
+theorem size_thInput (pp : PublicParam) (A : Address) (payload : Array UInt64) :
+    (thInput pp A payload).size = 4 + payload.size := by
+  rw [thInput, Array.size_append]
   rfl
 
 /-- A hash at another address is not a trial query. -/
 theorem isQueryBoundP_queryH_of_ne {A A' : Address} (k : Nat) (pp : PublicParam)
-    (payload : ByteArray) (hA : A' ≠ A) :
+    (payload : Array UInt64) (hA : A' ≠ A) :
     IsQueryBoundP (Hq (thInput pp A' payload)) (IsTrialQuery A k) 0 := by
   refine (isQueryBoundP_map_iff _ _ _).2 ((isQueryBoundP_query_iff _ _ _).2 fun h => ?_)
   obtain ⟨_, _, _, heq⟩ := h
-  exact absurd (thInput_inj (ByteArray.ext (Array.toList_inj.mp heq))).2.1 hA
+  exact absurd (thInput_inj (Hash.Keccak.lanesBytes_injective heq)).2.1 hA
 
 /-- A hash of an input of another length is not a trial query. -/
-theorem isQueryBoundP_queryH_of_size {A : Address} {k : Nat} {x : ByteArray}
-    (hx : x.size ≠ 32 + k) : IsQueryBoundP (Hq x) (IsTrialQuery A k) 0 := by
+theorem isQueryBoundP_queryH_of_size {A : Address} {k : Nat} {x : Array UInt64}
+    (hx : x.size ≠ 4 + k) : IsQueryBoundP (Hq x) (IsTrialQuery A k) 0 := by
   refine (isQueryBoundP_map_iff _ _ _).2 ((isQueryBoundP_query_iff _ _ _).2 fun h => ?_)
   obtain ⟨pp, payload, hsize, heq⟩ := h
-  change x.data.toList = _ at heq
+  change Hash.Keccak.lanesBytes x = _ at heq
   have hlen : x.size = (thInput pp A payload).size := by
     have := congrArg List.length heq
-    rw [Array.length_toList, Array.length_toList] at this
-    exact this
+    rw [Hash.Keccak.length_lanesBytes, Hash.Keccak.length_lanesBytes] at this
+    omega
   rw [size_thInput, hsize] at hlen
   exact absurd hlen hx
 
@@ -90,7 +89,7 @@ include hl
 
 /-- A hash at an address of the layer is not a trial query of the other layer. -/
 theorem th_isQueryBoundP_otherLayer (pp : PublicParam) (tau : Fin 32) (mu : Fin 8)
-    (a : Fin (2 ^ 23)) (e : UInt32) (payload : ByteArray) :
+    (a : Fin (2 ^ 23)) (e : UInt32) (payload : Array UInt64) :
     IsQueryBoundP (th Hq pp (encodeAddress tau mu (layerHi layer a) e) payload)
       (IsTrialQuery (addrMsg layer' e') k) 0 :=
   isQueryBoundP_bind_zero _ _
@@ -153,7 +152,7 @@ theorem path_isQueryBoundP_otherLayer (pp : PublicParam) (seed : Seed) (e : Nat)
     (fun _ _ _ => nodeHash_isQueryBoundP_otherLayer hl e' k _ _ _ _) _ _
 
 /-- The codeword search of a key on the layer queries no trial input of the other layer. -/
-theorem findCodeword_isQueryBoundP_otherLayer (pp : PublicParam) (e : UInt32) (msg : ByteArray)
+theorem findCodeword_isQueryBoundP_otherLayer (pp : PublicParam) (e : UInt32) (msg : Array UInt64)
     (base : Randomizer) (c fuel : Nat) :
     IsQueryBoundP (Internal.findCodeword Hq pp layer e msg base c fuel)
       (IsTrialQuery (addrMsg layer' e') k) 0 := by
@@ -163,7 +162,7 @@ theorem findCodeword_isQueryBoundP_otherLayer (pp : PublicParam) (e : UInt32) (m
 
 /-- A one-time signature on the layer queries no trial input of the other layer. -/
 theorem otsSign_isQueryBoundP_otherLayer (pp : PublicParam) (seed : Seed) (e : UInt32)
-    (msg : ByteArray) :
+    (msg : Array UInt64) :
     IsQueryBoundP (otsSign Hq pp (seedPrf Hq seed) layer e msg)
       (IsTrialQuery (addrMsg layer' e') k) 0 := by
   refine isQueryBoundP_bind_zero _ _ (th_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _)
@@ -177,7 +176,7 @@ theorem otsSign_isQueryBoundP_otherLayer (pp : PublicParam) (seed : Seed) (e : U
 
 /-- A layer's signature queries no trial input of the other layer. -/
 theorem signLayer_isQueryBoundP_otherLayer (pp : PublicParam) (seed : Seed) (e : Nat)
-    (msg : ByteArray) :
+    (msg : Array UInt64) :
     IsQueryBoundP (signLayer Hq pp (seedPrf Hq seed) layer e msg)
       (IsTrialQuery (addrMsg layer' e') k) 0 := by
   refine isQueryBoundP_bind_zero _ _ (otsSign_isQueryBoundP_otherLayer hl e' k _ _ _ _) fun r => ?_
@@ -192,7 +191,7 @@ end OtherLayer
 
 /-- The randomizer base is not a trial query of its own key. -/
 theorem randomizerBase_isQueryBoundP (pp : PublicParam) (seed : Seed) (layer : Layer)
-    (e : UInt32) (msg : ByteArray) (k : Nat) :
+    (e : UInt32) (msg : Array UInt64) (k : Nat) :
     IsQueryBoundP (randomizerBase pp (seedPrf Hq seed) layer e msg)
       (IsTrialQuery (addrMsg layer e) k) 0 :=
   isQueryBoundP_bind_zero _ _ (isQueryBoundP_queryH_of_ne k pp _
@@ -202,13 +201,13 @@ theorem randomizerBase_isQueryBoundP (pp : PublicParam) (seed : Seed) (layer : L
 
 The cache holds no trial input of the key: no input at its message address of the trial length. -/
 theorem prEvent_otsSign_none_le (pp : PublicParam) (seed : Seed) (layer : Layer) (e : UInt32)
-    (msg : ByteArray) (cache : XmssSecurity.HashSpec.QueryCache)
-    (hcache : CacheAvoids (IsTrialQuery (addrMsg layer e) (msg.size + 16)) cache) :
+    (msg : Array UInt64) (cache : XmssSecurity.HashSpec.QueryCache)
+    (hcache : CacheAvoids (IsTrialQuery (addrMsg layer e) (msg.size + 2)) cache) :
     Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
       (otsSign Hq pp (seedPrf Hq seed) layer e msg)).run' cache}[z = none]
       ≤ ENNReal.ofReal (Real.exp (-4000)) := by
   unfold otsSign Internal.otsSignTrials
-  refine prEvent_run'_romImpl_bind_le (CacheAvoids (IsTrialQuery (addrMsg layer e) (msg.size + 16)))
+  refine prEvent_run'_romImpl_bind_le (CacheAvoids (IsTrialQuery (addrMsg layer e) (msg.size + 2)))
     _ _ _ (fun z hz => cache_eq_none_of_mem_support_run_romImpl
       (randomizerBase_isQueryBoundP pp seed layer e msg _) hcache hz) fun base c hc => ?_
   rw [run'_simulateQ_romImpl_bind]
@@ -220,15 +219,15 @@ theorem prEvent_otsSign_none_le (pp : PublicParam) (seed : Seed) (layer : Layer)
       exact prEvent_run'_romImpl_bind_pure_some _ (fun y => (rho, y)) _
   · rw [prEvent_run_romImpl_fst _ _ fun r => r = none]
     refine prEvent_findCodeword_none_le pp layer e msg base c fun j _ => hc _ ⟨pp, _, ?_, rfl⟩
-    rw [ByteArray.size_append, Base.size_packBytes]
+    rw [Array.size_append]
     rfl
 
 /-- **A layer's signature fails with probability at most `exp(-4000)`.**
 
 The cache holds no trial input of the layer's key. -/
 theorem prEvent_signLayer_error_le (pp : PublicParam) (seed : Seed) (layer : Layer) (e : Nat)
-    (msg : ByteArray) (cache : XmssSecurity.HashSpec.QueryCache)
-    (hcache : CacheAvoids (IsTrialQuery (addrMsg layer (UInt32.ofNat e)) (msg.size + 16)) cache) :
+    (msg : Array UInt64) (cache : XmssSecurity.HashSpec.QueryCache)
+    (hcache : CacheAvoids (IsTrialQuery (addrMsg layer (UInt32.ofNat e)) (msg.size + 2)) cache) :
     Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
       (signLayer Hq pp (seedPrf Hq seed) layer e msg)).run' cache}[z.isOk = false]
       ≤ ENNReal.ofReal (Real.exp (-4000)) := by
@@ -249,11 +248,11 @@ theorem bottom_ne_top : Layer.bottom ≠ Layer.top := by decide
 
 /-- The trial queries of the bottom key of leaf index `idx`: 32-byte message, 16-byte trial. -/
 abbrev IsBottomTrialQuery (idx : LeafIndex) : XmssSecurity.OracleWorld.Domain → Prop :=
-  IsTrialQuery (addrMsg .bottom idx) 48
+  IsTrialQuery (addrMsg .bottom idx) 6
 
 /-- The trial queries of the top key above leaf index `idx`: 16-byte root, 16-byte trial. -/
 abbrev IsTopTrialQuery (idx : LeafIndex) : XmssSecurity.OracleWorld.Domain → Prop :=
-  IsTrialQuery (addrMsg .top (UInt32.ofNat (bottomTree idx))) 32
+  IsTrialQuery (addrMsg .top (UInt32.ofNat (bottomTree idx))) 4
 
 /- A concrete height would let Lean unfold a whole tree, so the height stays opaque. -/
 attribute [local irreducible] LAYER_HEIGHT
@@ -292,25 +291,22 @@ theorem prEvent_signDerived_error_le (s : Seed) (pp : PublicParam) (idx : LeafIn
       · simp [Except.isOk, Except.toBool]
     · rw [prEvent_run_romImpl_fst _ _ fun r : Except XmssError LayerSignature => r.isOk = false]
       refine prEvent_signLayer_error_le pp s .top _ _ c' ?_
-      rwa [Base.size_packBytes]
+      exact hc'
   · -- The bottom key fails rarely, and the top layer after it.
     rw [prEvent_run_romImpl_fst _ _ fun r => r = none, two_mul]
     refine add_le_add (prEvent_otsSign_none_le pp s .bottom _ _ cache ?_)
       (mul_le_of_le_one_right' (prEvent_le_one _))
-    have hsize : (packBytes msg).size + 16 = 48 := by
-      rw [Base.size_packBytes]
+    have hsize : msg.toArray.size + 2 = 6 := by
       rfl
     rw [hsize, UInt32.ofNat_toNat]
     exact hbottom
 
-/-- The input that grows the scheme seed has 40 bytes: 8 for the name, 32 for the seed. -/
-theorem size_schemeSeedInput (seed : Seed) :
-    (ByteArray.mk SEED_TAG.toArray ++ packBytes seed).size = 40 := by
-  rw [ByteArray.size_append, Base.size_packBytes, seed_tag_eq]
+/-- The input that grows the scheme seed has 5 lanes: 1 for the name, 4 for the seed. -/
+theorem size_schemeSeedInput (seed : Seed) : (#[SEED_TAG_LANE] ++ seed.toArray).size = 5 :=
   rfl
 
-/-- Growing the scheme seed is not a trial query of a key with a payload of more than 8 bytes. -/
-theorem schemeSeed_isQueryBoundP (seed : Seed) (A : Address) {k : Nat} (hk : 8 < k) :
+/-- Growing the scheme seed is not a trial query of a key with a payload of more than 1 lane. -/
+theorem schemeSeed_isQueryBoundP (seed : Seed) (A : Address) {k : Nat} (hk : 1 < k) :
     IsQueryBoundP (schemeSeed Hq seed) (IsTrialQuery A k) 0 :=
   isQueryBoundP_queryH_of_size (by rw [size_schemeSeedInput]; omega)
 
@@ -326,8 +322,8 @@ The hash is a lazily sampled random oracle, and signing starts from any cache.
 
 The cache must hold no trial input of the two keys that sign:
 
-- the bottom key `idx`: inputs at its message address with a 48-byte payload;
-- the top key above it: inputs at its message address with a 32-byte payload.
+- the bottom key `idx`: inputs at its message address with a payload of 6 lanes, 48 bytes;
+- the top key above it: inputs at its message address with a payload of 4 lanes, 32 bytes.
 
 Each layer's search then fails with probability at most `exp(-4000)`. -/
 theorem prEvent_statelessSignWith_error_le (seed : Seed) (idx : LeafIndex) (msg : Message)
@@ -366,7 +362,7 @@ theorem prEvent_statelessSignWith_error_le_empty (seed : Seed) (idx : LeafIndex)
 The cache holds no trial input of the top key. -/
 theorem prEvent_signRootWith_error_le (sk : SecretKey) (b : Nat) (root : Digest)
     (cache : XmssSecurity.HashSpec.QueryCache)
-    (hcache : CacheAvoids (IsTrialQuery (addrMsg .top (UInt32.ofNat b)) 32) cache) :
+    (hcache : CacheAvoids (IsTrialQuery (addrMsg .top (UInt32.ofNat b)) 4) cache) :
     Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
       (signRootWith Hq sk b root)).run' cache}[z.isOk = false]
       ≤ ENNReal.ofReal (Real.exp (-4000)) := by
@@ -379,7 +375,7 @@ theorem prEvent_signRootWith_error_le (sk : SecretKey) (b : Nat) (root : Digest)
     · simp [Except.isOk, Except.toBool]
   · rw [prEvent_run_romImpl_fst _ _ fun r => r = none]
     refine prEvent_otsSign_none_le _ _ .top _ _ cache ?_
-    rwa [Base.size_packBytes]
+    exact hcache
 
 /-- **A leanXMSS signature fails with probability at most `2 exp(-4000)`.**
 
@@ -387,8 +383,8 @@ The hash is a lazily sampled random oracle, and signing starts from any cache an
 
 The cache must hold no trial input of the two keys that sign:
 
-- the bottom key `idx`: inputs at its message address with a 48-byte payload;
-- the top key above it: inputs at its message address with a 32-byte payload.
+- the bottom key `idx`: inputs at its message address with a payload of 6 lanes, 48 bytes;
+- the top key above it: inputs at its message address with a payload of 4 lanes, 32 bytes.
 
 A bottom tree of `idx` that the key keeps must hold a top signature, not an error.
 
@@ -443,8 +439,7 @@ theorem prEvent_signWith_error_le (sk : SecretKey) (idx : LeafIndex) (msg : Mess
     rw [prEvent_run_romImpl_fst _ _ fun r => r = none, two_mul]
     refine add_le_add (prEvent_otsSign_none_le _ _ .bottom _ _ cache ?_)
       (mul_le_of_le_one_right' (prEvent_le_one _))
-    have hsize : (packBytes msg).size + 16 = 48 := by
-      rw [Base.size_packBytes]
+    have hsize : msg.toArray.size + 2 = 6 := by
       rfl
     rw [hsize, UInt32.ofNat_toNat]
     exact hbottom

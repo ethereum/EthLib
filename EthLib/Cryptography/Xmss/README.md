@@ -51,6 +51,14 @@ For a proof in that model to be about the code that runs, the code must not fix 
 So every definition that hashes takes the hash `H` as an argument, a function that runs in a monad.
 `keyGen`, `sign` and `verify` run them in the identity monad with Keccak-256 (`hashId`), and a security proof passes a query to the oracle as `H` instead.
 
+Every object the scheme hashes is 16 or 32 bytes, and the scheme's name is 8 bytes.
+So the code holds every value as Keccak lanes, the 64-bit words of FIPS 202 §3.1.2, with the byte order of its Appendix B.1.
+`H` takes a string of lanes and returns the four lanes of its digest, which Keccak-256 absorbs and squeezes without moving a byte.
+Bytes appear only in the encodings of keys and signatures.
+In the random oracle model, the scheme queries the byte oracle at the bytes of its lanes, and the adversary queries it at any byte string.
+A string of lanes and its bytes determine each other, so the scheme queries only byte strings whose length is a multiple of 8.
+The security theorems are therefore about the byte oracle that the note defines.
+
 The oracle sees every hash call, in the order the code makes them.
 So the code makes its calls as the note defines them, one by one and in a fixed order:
 
@@ -157,6 +165,14 @@ Every hash call carries an address that says where in the key it happens, so tha
 An address determines its type, its position and both fields (`encodeAddress_inj`), and the two layers never share an address (`layerHi_inj`).
 Each address of a key determines its own arguments (`addrPrf_inj` and the five like it).
 Finally, a hash input determines its public parameter, address and payload (`thInput_inj`).
+
+**The scheme in bytes.**
+The code holds its values as lanes, but the note writes every hash over bytes.
+So for each hash the scheme makes, a theorem states the bytes that Keccak-256 hashes, in the note's order, and the bytes the scheme keeps (`Bytes.lean`).
+They cover the tweakable hash (`th_bytes`), the scheme seed, the public parameter and the chain starts.
+They also cover the randomizer base, a chain step, a one-time key's leaf, a trial's digest and a Merkle node.
+The public key is the bytes of the top tree's root and of `P` (`encodePublicKey_keyGen`), and a signature's bytes are its fields in the note's order (`toList_encodeSignature`).
+Given byte strings, verification accepts exactly when the key, the message and the signature they encode lead to the key's root (`verify_decode_iff`).
 
 **The one-time signature and the trees.**
 An honest one-time signature leads back to its key's leaf (`otsLeaf_otsSign`, `Ots.lean`), and an honest path leads from a key's leaf to its tree's root (`fold_path`, `Tree.lean`).

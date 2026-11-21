@@ -123,12 +123,77 @@ theorem packBytes_readBytes (b : ByteArray) (offset n : Nat) (h) :
 
 /-! ## Computing a vector in order -/
 
+section Builder
+
+/-- No entries make the empty vector. -/
+theorem ofFnInOrder_zero {m : Type → Type} [Monad m] {α : Type} (f : Fin 0 → m α) :
+    ofFnInOrder 0 f = pure #v[] :=
+  rfl
+
+/-- The builder after the results in `acc` appends the vector of the remaining entries.
+
+The remaining entries are the indices from the size of `acc` on. -/
+private theorem ofFnInOrder_go_eq {m : Type → Type} [Monad m] [LawfulMonad m] {α : Type} :
+    ∀ (k n : Nat) (f : Fin n → m α) (acc : Array α) (h : acc.size + k = n),
+      ofFnInOrder.go n f k acc h =
+        (fun v : Vector α k => (⟨acc ++ v.toArray, by simp; omega⟩ : Vector α n)) <$>
+          ofFnInOrder k fun j => f ⟨acc.size + j.val, by omega⟩
+  | 0, n, f, acc, h => by
+    rw [ofFnInOrder.go, ofFnInOrder_zero, map_pure]
+    congr 1
+  | k + 1, n, f, acc, h => by
+    -- Both sides run the entry at the size of `acc` first, then the rest from one index on.
+    rw [ofFnInOrder.go, ofFnInOrder, ofFnInOrder.go, map_bind]
+    refine bind_congr fun x => ?_
+    rw [ofFnInOrder_go_eq k n f (acc.push x), ofFnInOrder_go_eq k (k + 1), Functor.map_map]
+    -- The rest starts at index `acc.size + 1` of `f` on both sides.
+    have hrest : (fun j : Fin k => f ⟨(acc.push x).size + j.val, by simp; omega⟩) =
+        fun j : Fin k => f ⟨acc.size + ((Array.emptyWithCapacity (k + 1)).push x).size + j.val,
+          by simp; omega⟩ := by
+      funext j
+      congr 1
+      ext
+      simp only [Array.size_push, Array.emptyWithCapacity_eq, List.size_toArray, List.length_nil]
+    simp only [Nat.add_assoc] at hrest ⊢
+    rw [hrest]
+    congr 1
+    funext v
+    apply Vector.ext
+    intro i hi
+    simp [Array.getElem_append, Array.getElem_push]
+
+/-- Computing `n + 1` entries in order computes entry 0, then the `n` after it. -/
+theorem ofFnInOrder_succ {m : Type → Type} [Monad m] [LawfulMonad m] {α : Type} (n : Nat)
+    (f : Fin (n + 1) → m α) :
+    ofFnInOrder (n + 1) f = (do
+      let head ← f 0
+      let tail ← ofFnInOrder n fun i => f i.succ
+      return (#v[head] ++ tail).cast (Nat.add_comm 1 n)) := by
+  rw [ofFnInOrder, ofFnInOrder.go]
+  refine bind_congr fun head => ?_
+  rw [ofFnInOrder_go_eq, ← bind_pure_comp]
+  -- Entry `i` of the rest is entry `i + 1`.
+  have hrest : (fun j : Fin n =>
+        f ⟨((Array.emptyWithCapacity (n + 1)).push head).size + j.val, by simp; omega⟩) =
+      fun i : Fin n => f i.succ := by
+    funext j
+    congr 1
+    ext
+    simp only [Array.size_push, Array.emptyWithCapacity_eq, List.size_toArray, List.length_nil,
+      Fin.val_succ]
+    omega
+  rw [hrest]
+  refine bind_congr fun tail => ?_
+  congr 1
+
+end Builder
+
 /-- In the identity monad, computing a vector in order is building it from its entries. -/
 @[simp] theorem ofFnInOrder_run {α : Type} :
     ∀ (n : Nat) (f : Fin n → Id α), (ofFnInOrder n f).run = Vector.ofFn fun i => (f i).run
   | 0, _ => Vector.ext fun _ hi => absurd hi (Nat.not_lt_zero _)
   | n + 1, f => by
-    simp only [ofFnInOrder, Id.run_bind, Id.run_pure, ofFnInOrder_run n]
+    simp only [ofFnInOrder_succ, Id.run_bind, Id.run_pure, ofFnInOrder_run n]
     apply Vector.ext
     intro i hi
     -- Entry 0 is the head, entry `i + 1` is entry `i` of the tail.
@@ -136,15 +201,25 @@ theorem packBytes_readBytes (b : ByteArray) (offset n : Nat) (h) :
     | zero => simp
     | succ i => simp [Fin.succ]
 
+/-- The builder after `acc` commutes with a map of monads that keeps `pure` and `bind`. -/
+private theorem ofFnInOrder_go_map_monad {m n : Type → Type} [Monad m] [Monad n]
+    (φ : ∀ {β : Type}, m β → n β) (map_pure : ∀ {β : Type} (b : β), φ (pure b) = pure b)
+    (map_bind : ∀ {β γ : Type} (x : m β) (f : β → m γ), φ (x >>= f) = φ x >>= fun b => φ (f b))
+    {α : Type} {k : Nat} (f : Fin k → m α) :
+    ∀ (r : Nat) (acc : Array α) (h : acc.size + r = k),
+      φ (ofFnInOrder.go k f r acc h) = ofFnInOrder.go k (fun i => φ (f i)) r acc h
+  | 0, _, _ => map_pure _
+  | r + 1, acc, h => by
+    rw [ofFnInOrder.go, ofFnInOrder.go, map_bind]
+    exact bind_congr fun x => ofFnInOrder_go_map_monad φ map_pure map_bind f r _ _
+
 /-- A map of monads that keeps `pure` and `bind` commutes with computing a vector in order. -/
 theorem ofFnInOrder_map_monad {m n : Type → Type} [Monad m] [Monad n]
     (φ : ∀ {β : Type}, m β → n β) (map_pure : ∀ {β : Type} (b : β), φ (pure b) = pure b)
     (map_bind : ∀ {β γ : Type} (x : m β) (f : β → m γ), φ (x >>= f) = φ x >>= fun b => φ (f b))
     {α : Type} :
-    ∀ (k : Nat) (f : Fin k → m α), φ (ofFnInOrder k f) = ofFnInOrder k fun i => φ (f i)
-  | 0, _ => map_pure _
-  | k + 1, f => by
-    simp only [ofFnInOrder, map_bind, map_pure, ofFnInOrder_map_monad φ map_pure map_bind k]
+    ∀ (k : Nat) (f : Fin k → m α), φ (ofFnInOrder k f) = ofFnInOrder k fun i => φ (f i) :=
+  fun k f => ofFnInOrder_go_map_monad φ map_pure map_bind f k _ _
 
 /-! ## Maps of monads -/
 
@@ -178,10 +253,10 @@ theorem ofFnInOrder_eq_sequenceFin {α β : Type} :
       ofFnInOrder n (fun i => g <$> c i)
         = (fun f => Vector.ofFn fun i => g (f i)) <$> sequenceFin c
   | 0, c, g => by
-    simp only [ofFnInOrder, sequenceFin, map_pure]
+    simp only [ofFnInOrder_zero, sequenceFin, map_pure]
     congr 1
   | n + 1, c, g => by
-    simp only [ofFnInOrder, sequenceFin, map_bind, bind_map_left, map_pure]
+    simp only [ofFnInOrder_succ, sequenceFin, map_bind, bind_map_left, map_pure]
     refine bind_congr fun head => ?_
     rw [ofFnInOrder_eq_sequenceFin n (fun i => c i.succ) g]
     simp only [bind_map_left]

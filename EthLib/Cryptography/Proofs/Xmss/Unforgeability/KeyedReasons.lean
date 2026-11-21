@@ -25,7 +25,7 @@ open XmssSecurity (OracleWorld HashSpec romImpl)
 open DeterministicSigning (Resolves resolves_of_run cache_le_of_run)
 
 /-- `H` in the game, on the hash oracle alone. -/
-local notation "Hh" => (queryH : ByteArray → OracleComp HashSpec (Vector UInt8 32))
+local notation "Hh" => (queryH : Array UInt64 → OracleComp HashSpec Lanes4)
 
 /-! ## The game -/
 

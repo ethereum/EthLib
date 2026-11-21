@@ -26,8 +26,10 @@ open EthLib.Base (readBytes)
 
 /-! ## The hash as a computation -/
 
-/-- A hash function, as a computation in the identity monad. -/
-def pureHash (f : ByteArray → Vector UInt8 32) (input : ByteArray) : Id (Vector UInt8 32) :=
+/-- A hash function, as a computation in the identity monad.
+
+The input and output types are parameters: leanSPHINCS hashes bytes, leanXMSS lanes. -/
+def pureHash {α β : Type} (f : α → β) (input : α) : Id β :=
   pure (f input)
 
 /-! ## Reading fixed-size objects -/
@@ -54,14 +56,25 @@ def unpackBytes? (n : Nat) (b : ByteArray) (offset : Nat := 0) :
 
 The order matters when each computation calls the hash.
 
-It fixes the sequence of hash calls, which a proof in the random oracle model counts. -/
-def ofFnInOrder {m : Type → Type} [Monad m] {α : Type} :
-    (n : Nat) → (Fin n → m α) → m (Vector α n)
-  | 0, _ => pure #v[]
-  -- Structural recursion, so the kernel can evaluate it.
-  | n + 1, f => do
-    let head ← f 0
-    let tail ← ofFnInOrder n fun i => f i.succ
-    return (#v[head] ++ tail).cast (Nat.add_comm 1 n)
+It fixes the sequence of hash calls, which a proof in the random oracle model counts.
+
+Core's monadic vector builder recurses on a well-founded measure, which the kernel does not reduce.
+
+So this one recurses structurally on the number of entries left. -/
+def ofFnInOrder {m : Type → Type} [Monad m] {α : Type} (n : Nat) (f : Fin n → m α) :
+    m (Vector α n) :=
+  go n (Array.emptyWithCapacity n) (by simp)
+where
+  /-- The results of the last `k` indices, after the results of the others in `acc`.
+
+  Structural recursion, so the kernel can evaluate it.
+
+  Each result is pushed at the end, so `n` results take linear time. -/
+  go : (k : Nat) → (acc : Array α) → acc.size + k = n → m (Vector α n)
+    | 0, acc, h => pure ⟨acc, by omega⟩
+    | k + 1, acc, h => do
+      -- The next index is the number of results so far.
+      let x ← f ⟨acc.size, by omega⟩
+      go k (acc.push x) (by simp only [Array.size_push]; omega)
 
 end EthLib.Cryptography.HashSig

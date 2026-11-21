@@ -53,6 +53,12 @@ No other scheme derives its secrets from the same bytes.
 It is the 8-byte ASCII string `leanXMSS`, one byte per character. -/
 def SEED_TAG : List UInt8 := "leanXMSS".toList.map fun c => UInt8.ofNat c.toNat
 
+/-- The scheme's name as one Keccak lane: its 8 bytes, the first one least significant.
+
+Byte `j` of the name is bits `8j` to `8j + 7` of the lane. -/
+def SEED_TAG_LANE : UInt64 :=
+  SEED_TAG.foldr (fun b lane => (lane <<< 8) ||| b.toUInt64) 0
+
 /-! ## WOTS+C -/
 
 /-- The positions of one hash chain, `0` to `3`.

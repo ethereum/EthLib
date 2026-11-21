@@ -52,8 +52,8 @@ theorem queryCount_oracleHash (x : HashInput) :
   rw [← bind_pure (liftM (HashSpec.query x) : OracleComp HashSpec HashOutput)]
   exact .query x _ 0 fun a => .pure a
 
-theorem queryCount_queryH (x : ByteArray) :
-    QueryCount (queryH x : OracleComp HashSpec (Vector UInt8 32)) 1 :=
+theorem queryCount_queryH (x : Array UInt64) :
+    QueryCount (queryH x : OracleComp HashSpec Hash.Keccak.Lanes4) 1 :=
   (queryCount_oracleHash _).map _
 
 /-- `n` computations in order make the sum of their calls. -/
@@ -62,7 +62,7 @@ theorem QueryCount.ofFnInOrder {α : Type} {k n : Nat} {c : Fin k → OracleComp
   rw [HashSig.ofFnInOrder_eq_map_sequenceFin]
   exact (QueryCount.sequenceFin h).map _
 
-theorem queryCount_th (pp : Xmss.PublicParam) (A : Xmss.Address) (payload : ByteArray) :
+theorem queryCount_th (pp : Xmss.PublicParam) (A : Xmss.Address) (payload : Array UInt64) :
     QueryCount (Xmss.th queryH pp A payload : OracleComp HashSpec Xmss.Digest) 1 := by
   unfold Xmss.th
   exact (queryCount_queryH _).bind fun _ => .pure _
@@ -126,10 +126,10 @@ theorem queryCount_realKeygen (seed : MasterSeed) :
 /-! ## Erasing the derivations -/
 
 /-- A query whose answer the cache holds resolves to it. -/
-theorem resolves_queryH {cache : QueryCache HashSpec} {x : ByteArray} {y : HashOutput}
-    (h : cache x.data.toList = some y) :
-    Resolves cache (queryH x : OracleComp HashSpec (Vector UInt8 32)) (ofOutput y) := by
-  change Resolves cache (ofOutput <$> (liftM (HashSpec.query x.data.toList) :
+theorem resolves_queryH {cache : QueryCache HashSpec} {x : Array UInt64} {y : HashOutput}
+    (h : cache (Hash.Keccak.lanesBytes x) = some y) :
+    Resolves cache (queryH x : OracleComp HashSpec Hash.Keccak.Lanes4) (ofOutput y) := by
+  change Resolves cache (ofOutput <$> (liftM (HashSpec.query (Hash.Keccak.lanesBytes x)) :
     OracleComp HashSpec HashOutput)) _
   rw [← bind_pure (liftM (HashSpec.query _) : OracleComp HashSpec HashOutput), map_bind]
   exact .query _ _ h _ _ (.pure _)
@@ -143,12 +143,12 @@ theorem Resolves.ofFnInOrder {α : Type} {cache : QueryCache HashSpec} {n : Nat}
 
 /-- The hash that starts chains `2j` and `2j + 1` of a bottom key is the bottom derivation's. -/
 theorem bottomPrfInput (seed : MasterSeed) (d : Derivations) (index : LeafIndex) (j : Fin (V / 2)) :
-    (Xmss.thInput (ofParam d.parameter) (Xmss.addrPrf .bottom (ofLeafIndex index) j)
-      (Xmss.packBytes (ofSeed seed))).data.toList
+    Hash.Keccak.lanesBytes (Xmss.thInput (ofParam d.parameter)
+      (Xmss.addrPrf .bottom (ofLeafIndex index) j) (ofSeed seed).toArray)
       = bottomInput d.parameter seed (index, ⟨j.val, j.isLt⟩) := by
   rw [bottomInput_eq]
-  simp only [Xmss.thInput, EthLib.Cryptography.HashSig.toList_data_append,
-    EthLib.Cryptography.HashSig.toList_data_packBytes, Xmss.Unforgeability.toList_ofParam,
+  simp only [Xmss.thInput_eq_append,
+    EthLib.Cryptography.Hash.Keccak.lanesBytes_append, Xmss.Unforgeability.toList_ofParam,
     Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_addrPrf]
   rw [Xmss.Unforgeability.toNat_ofLeafIndex]
   -- The bottom layer adds no flag to `hi`.
@@ -157,12 +157,13 @@ theorem bottomPrfInput (seed : MasterSeed) (d : Derivations) (index : LeafIndex)
 
 /-- The hash that starts chains `2j` and `2j + 1` of a top key is the top derivation's. -/
 theorem topPrfInput (seed : MasterSeed) (d : Derivations) (key : TopIndex) (j : Fin (V / 2)) :
-    (Xmss.thInput (ofParam d.parameter) (Xmss.addrPrf .top (ofTopIndex key) j)
-      (Xmss.packBytes (ofSeed seed))).data.toList
+    Hash.Keccak.lanesBytes
+      (Xmss.thInput (ofParam d.parameter) (Xmss.addrPrf .top (ofTopIndex key) j)
+        ((ofSeed seed).toArray))
       = topInput d.parameter seed (key, ⟨j.val, j.isLt⟩) := by
   rw [topInput_eq]
-  simp only [Xmss.thInput, EthLib.Cryptography.HashSig.toList_data_append,
-    EthLib.Cryptography.HashSig.toList_data_packBytes, Xmss.Unforgeability.toList_ofParam,
+  simp only [Xmss.thInput_eq_append,
+    EthLib.Cryptography.Hash.Keccak.lanesBytes_append, Xmss.Unforgeability.toList_ofParam,
     Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_addrPrf]
   rw [Xmss.Unforgeability.toNat_ofTopIndex]
   -- The top layer adds its flag to `hi`.
@@ -364,20 +365,17 @@ theorem realParam (h : Prepared seed d result cache) :
   rw [Xmss.publicParamOf_seedPrf]
   unfold Xmss.th
   have hparam : cache (paramInput seed) = some d.param := h.prog_le (progCache_param seed d)
-  -- The all-zero parameter is the bytes of the zero bit vector.
-  have hzero : Vector.replicate PUBLIC_PARAM_LEN (0 : UInt8)
-      = ofParam (0 : PublicParameter) := by
-    rw [Xmss.Unforgeability.ofParam, Xmss.Unforgeability.ofBV_eq_uintToBytes]
-    apply Vector.ext
-    intro i hi
-    simp [EthLib.Base.uintToBytes_eq_div]
+  -- The all-zero parameter is the lanes of the zero bit vector.
+  have hzero : (⟨0, 0⟩ : Xmss.PublicParam) = ofParam (0 : PublicParameter) := by
+    simp only [Xmss.Unforgeability.ofParam, HashSig.ofDigestLanes]
+    rfl
   -- The input is `0^128 | A_param | S`, the programmed parameter's.
-  have hinput : (Xmss.thInput (ofParam (0 : PublicParameter)) Xmss.addrParam
-      (Xmss.packBytes (ofSeed seed))).data.toList
+  have hinput : Hash.Keccak.lanesBytes (Xmss.thInput (ofParam (0 : PublicParameter)) Xmss.addrParam
+      ((ofSeed seed).toArray))
       = paramInput seed := by
     rw [paramInput_eq]
-    simp only [Xmss.thInput, EthLib.Cryptography.HashSig.toList_data_append,
-      EthLib.Cryptography.HashSig.toList_data_packBytes, Xmss.Unforgeability.toList_ofParam,
+    simp only [Xmss.thInput_eq_append,
+    EthLib.Cryptography.Hash.Keccak.lanesBytes_append, Xmss.Unforgeability.toList_ofParam,
       Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_addrParam]
     rfl
   refine (resolves_queryH (y := d.param) ?_).bind ?_

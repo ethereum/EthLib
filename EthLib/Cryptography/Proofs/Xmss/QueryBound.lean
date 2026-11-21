@@ -42,7 +42,7 @@ theorem isQueryBoundP_ofFnInOrder {α : Type} {n : Nat} :
       IsQueryBoundP (HashSig.ofFnInOrder k f) p (k * n)
   | 0, _, _ => isQueryBoundP_pure _ _ _
   | k + 1, f, h => by
-    rw [HashSig.ofFnInOrder]
+    rw [HashSig.ofFnInOrder_succ]
     refine (isQueryBoundP_bind (h 0) fun _ _ =>
       isQueryBoundP_bind (isQueryBoundP_ofFnInOrder k _ fun i => h i.succ)
         fun _ _ => isQueryBoundP_pure _ _ 0).mono ?_
@@ -149,11 +149,11 @@ attribute [local irreducible] LAYER_HEIGHT MAX_RANDOMIZER_TRIALS
 section Algorithms
 
 variable {ι : Type} {spec : OracleSpec ι} {p : ι → Prop} [DecidablePred p]
-  {H : ByteArray → OracleComp spec (Vector UInt8 32)} {prf : SeedPrf (OracleComp spec)}
+  {H : Array UInt64 → OracleComp spec Lanes4} {prf : SeedPrf (OracleComp spec)}
 
 /-- A tweakable hash call is one call of `H`. -/
 theorem isQueryBoundP_th (hH : ∀ x, IsQueryBoundP (H x) p 1) (pp : PublicParam)
-    (address : Address) (payload : ByteArray) :
+    (address : Address) (payload : Array UInt64) :
     IsQueryBoundP (th H pp address payload) p 1 :=
   isQueryBoundP_bind (m := 0) (hH _) fun _ _ => isQueryBoundP_pure _ _ 0
 
@@ -225,13 +225,13 @@ theorem isQueryBoundP_publicKeyOf (hH : ∀ x, IsQueryBoundP (H x) p 1)
 /-- The base of the randomizer trials is one derivation. -/
 theorem isQueryBoundP_randomizerBase
     (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1) (pp : PublicParam)
-    (layer : Layer) (e : UInt32) (msg : ByteArray) :
+    (layer : Layer) (e : UInt32) (msg : Array UInt64) :
     IsQueryBoundP (randomizerBase pp prf layer e msg) p 1 :=
   isQueryBoundP_bind (m := 0) (hprf _ _ _) fun _ _ => isQueryBoundP_pure _ _ 0
 
 /-- The codeword search is one digest per trial. -/
 theorem isQueryBoundP_findCodeword (hH : ∀ x, IsQueryBoundP (H x) p 1) (pp : PublicParam)
-    (layer : Layer) (e : UInt32) (msg : ByteArray) (base : Randomizer) (c fuel : Nat) :
+    (layer : Layer) (e : UInt32) (msg : Array UInt64) (base : Randomizer) (c fuel : Nat) :
     IsQueryBoundP (Internal.findCodeword H pp layer e msg base c fuel) p fuel := by
   rw [Internal.findCodeword_eq]
   exact isQueryBoundP_findFirst _ _ (fun _ => (isQueryBoundP_map_iff _ _ _).2
@@ -240,7 +240,7 @@ theorem isQueryBoundP_findCodeword (hH : ∀ x, IsQueryBoundP (H x) p 1) (pp : P
 /-- A one-time signature is the base, at most `2^32` trials, the starts and `174` steps. -/
 theorem isQueryBoundP_otsSign (hH : ∀ x, IsQueryBoundP (H x) p 1)
     (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1) (pp : PublicParam)
-    (layer : Layer) (e : UInt32) (msg : ByteArray) :
+    (layer : Layer) (e : UInt32) (msg : Array UInt64) :
     IsQueryBoundP (otsSign H pp prf layer e msg) p (2 ^ 32 + 204) := by
   unfold otsSign Internal.otsSignTrials
   refine (isQueryBoundP_bind (isQueryBoundP_randomizerBase hprf pp layer e msg) fun base _ =>
@@ -260,7 +260,7 @@ theorem isQueryBoundP_otsSign (hH : ∀ x, IsQueryBoundP (H x) p 1)
 /-- One layer's signature is a one-time signature and a path. -/
 theorem isQueryBoundP_signLayer (hH : ∀ x, IsQueryBoundP (H x) p 1)
     (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1) (pp : PublicParam)
-    (layer : Layer) (e : Nat) (msg : ByteArray) :
+    (layer : Layer) (e : Nat) (msg : Array UInt64) :
     IsQueryBoundP (signLayer H pp prf layer e msg) p (2 ^ 32 + 204 + (2 ^ 16 * 205 - 205)) := by
   unfold signLayer
   refine isQueryBoundP_bind (isQueryBoundP_otsSign hH hprf pp layer _ msg) fun r _ => ?_
@@ -291,7 +291,7 @@ theorem isQueryBoundP_signDerived (hH : ∀ x, IsQueryBoundP (H x) p 1)
 
 /-- The leaf of a one-time signature is a digest, at most `174` steps and one hash. -/
 theorem isQueryBoundP_otsLeaf (hH : ∀ x, IsQueryBoundP (H x) p 1) (pp : PublicParam)
-    (layer : Layer) (e : UInt32) (msg : ByteArray) (rho : Randomizer) (y : Vector Digest V) :
+    (layer : Layer) (e : UInt32) (msg : Array UInt64) (rho : Randomizer) (y : Vector Digest V) :
     IsQueryBoundP (otsLeaf H pp layer e msg rho y) p 176 := by
   unfold otsLeaf
   refine isQueryBoundP_bind (m := 175) (isQueryBoundP_th hH pp _ _) fun d _ => ?_
@@ -305,7 +305,7 @@ theorem isQueryBoundP_otsLeaf (hH : ∀ x, IsQueryBoundP (H x) p 1) (pp : Public
 
 /-- The root one layer's signature leads to is a leaf and a climb of `16` levels. -/
 theorem isQueryBoundP_layerRoot (hH : ∀ x, IsQueryBoundP (H x) p 1) (pp : PublicParam)
-    (layer : Layer) (e : Nat) (msg : ByteArray) (sig : LayerSignature) :
+    (layer : Layer) (e : Nat) (msg : Array UInt64) (sig : LayerSignature) :
     IsQueryBoundP (layerRoot H pp layer e msg sig) p 192 := by
   unfold layerRoot
   refine (isQueryBoundP_bind (isQueryBoundP_otsLeaf hH pp layer _ msg _ _) fun r _ => ?_).mono

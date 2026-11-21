@@ -173,7 +173,7 @@ def sha256(data: bytes) -> bytes:
     ...
 
 def keccak256(data: bytes) -> bytes:
-    """Keccak-256 of a byte string, `KECCAK[512](N, 256)` of FIPS 202 §5.2:"""
+    """Keccak-256 of a byte string, `KECCAK[512](N, 256)` of FIPS 202 §5.2."""
     ...
 
 def keccak512(data: bytes) -> bytes:
