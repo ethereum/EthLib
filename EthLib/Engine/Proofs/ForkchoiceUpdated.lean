@@ -754,10 +754,10 @@ theorem forkchoiceUpdatedCall_of_no_head {version : Nat}
   simp [forkchoiceUpdatedCall, forkchoiceUpdatedParams, paramsArray, custodyColumnsOfJson,
     hs, hf, bind, Except.bind, pure, Except.pure]
 
-/-- An applied head is a head that the tree holds. -/
-theorem exists_lookup_of_forkchoiceUpdated {status : PayloadStatus} {head : Hash32}
+/-- An applied head is the head that the update names, and a valid block that the tree holds. -/
+theorem valid_of_forkchoiceUpdated {status : PayloadStatus} {head : Hash32}
     (hf : forkchoiceUpdated transition tree finalized state = .ok (status, some head)) :
-    ∃ known, tree.lookup head = some known := by
+    head = state.headBlockHash ∧ ∃ known, tree.lookup head = some known ∧ known.valid = true := by
   unfold forkchoiceUpdated at hf
   split at hf
   · simp [pure, Except.pure] at hf
@@ -766,7 +766,16 @@ theorem exists_lookup_of_forkchoiceUpdated {status : PayloadStatus} {head : Hash
     all_goals first
       | simp [pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at hf; done
       | (simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq, Option.some.injEq] at hf
-         exact ⟨p, hf.2 ▸ hp⟩)
+         obtain ⟨-, rfl⟩ := hf
+         refine ⟨rfl, p, hp, ?_⟩
+         simp_all)
+
+/-- An applied head is a head that the tree holds. -/
+theorem exists_lookup_of_forkchoiceUpdated {status : PayloadStatus} {head : Hash32}
+    (hf : forkchoiceUpdated transition tree finalized state = .ok (status, some head)) :
+    ∃ known, tree.lookup head = some known :=
+  let ⟨_, known, hk, _⟩ := valid_of_forkchoiceUpdated hf
+  ⟨known, hk⟩
 
 /-- An update applies only the head that it names, with its safe and finalized blocks on its chain.
 

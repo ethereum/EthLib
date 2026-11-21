@@ -25,7 +25,17 @@ A forkchoice update reads the tree of the known blocks and the known finalized b
 
 A request for a payload reads the builds.
 
-A payload that the node already knows as valid or invalid gets that status again.
+A payload that the node already knows gets that status again.
+
+A payload whose parent is the head runs at once.
+
+A payload on another known parent that is not invalid is accepted, and kept without running.
+
+An update validates the accepted blocks of the chain of its head, oldest first, before its rules.
+
+A block on a parent found invalid is invalid too.
+
+A head that is still accepted then, since a run aborted, is syncing.
 
 A payload that fails the checks before execution leaves the node as it was.
 
@@ -68,11 +78,18 @@ inductive Validity where
   | valid (post : Execution.State.State)
   /-- The block or one of its ancestors is invalid. -/
   | invalid
+  /-- The block arrived off the head and has not run: the request is kept, to run it later. -/
+  | accepted (version : Nat) (params : Json)
 
 /-- Whether a validity is that of a valid block. -/
 def Validity.isValid : Validity → Bool
   | .valid _ => true
-  | .invalid => false
+  | _ => false
+
+/-- Whether a validity is that of an accepted block, which has not run. -/
+def Validity.isAccepted : Validity → Bool
+  | .accepted _ _ => true
+  | _ => false
 
 /-- A block that a node knows: its header at its fork, its validity and its proof of work totals. -/
 structure KnownBlock where
@@ -176,6 +193,42 @@ def recordExecution (node : Node) (hash : Hash32) (block : RecentBlock) (status 
   | some (_, post) => node.record hash ⟨block, none, .valid post⟩
   | none => if status.status = .invalid then node.record hash ⟨block, none, .invalid⟩ else node
 
+/-- The answer of the method to a payload run on its known valid parent, and the next node.
+
+The payload runs on the chain that ends at that parent, with the state after it.
+
+The node then records the payload, unless its execution aborts. -/
+def executeOn (node : Node) (hash : Hash32) (block : RecentBlock) (post : Execution.State.State)
+    (version : Nat) (params : Json) :
+    Except EngineError (PayloadStatus × Option PayloadError) × Node :=
+  let parent := block.header.parentHash
+  match newPayloadOnChain node.transition (node.totalDifficulty parent)
+      (node.chainAt parent post) version params with
+  | .error e => (.error e, node)
+  | .ok (status, reason, next) =>
+    (.ok (status, reason), node.recordExecution hash block status next)
+
+/-- The answer to a payload that the node does not know as valid or invalid, by its parent.
+
+A payload whose parent is the valid head runs on the chain of that parent.
+
+A payload on another known parent that is not invalid is accepted, with no latest valid hash.
+
+The node keeps it as accepted, with its request, as step 5 of the method allows.
+
+A payload whose parent is unknown or invalid is syncing. -/
+def onParent (node : Node) (hash : Hash32) (block : RecentBlock) (version : Nat) (params : Json) :
+    Except EngineError (PayloadStatus × Option PayloadError) × Node :=
+  let accept : Except EngineError (PayloadStatus × Option PayloadError) × Node :=
+    (.ok (⟨.accepted, none⟩, none), node.record hash ⟨block, none, .accepted version params⟩)
+  let parent := block.header.parentHash
+  match node.blocks.lookup parent with
+  | some ⟨_, _, .valid post⟩ =>
+    if parent = node.forkchoice.headBlockHash then node.executeOn hash block post version params
+    else accept
+  | some ⟨_, _, .accepted _ _⟩ => accept
+  | _ => (.ok (⟨.syncing, none⟩, none), node)
+
 /-- The step of `engine_newPayload`: the status of a payload, with its reason, and the next node.
 
 The checks before execution run first, and a payload that fails them leaves the node as it was.
@@ -184,11 +237,8 @@ A known valid payload is valid, with its own hash as the latest valid hash.
 
 A known invalid payload is invalid, with the latest valid block of its chain.
 
-A payload on a known valid parent runs on the chain that ends at that parent.
-
-The node then records the payload, unless its execution aborts.
-
-A payload whose parent the node does not know as valid is syncing. -/
+Any other payload gets the answer that its parent gives, even one that the node keeps as accepted.
+-/
 def newPayloadStep (node : Node) (version : Nat) (params : Json) :
     Except EngineError (PayloadStatus × Option PayloadError) × Node :=
   match checkNewPayload node.config version params with
@@ -203,17 +253,42 @@ def newPayloadStep (node : Node) (version : Nat) (params : Json) :
       match node.blocks.lookup hash with
       | some ⟨_, _, .valid _⟩ => (.ok (⟨.valid, some hash⟩, none), node)
       | some ⟨_, _, .invalid⟩ => (.ok (⟨.invalid, latestValidHash node.tree hash⟩, none), node)
-      | none =>
-        match node.validState header.parentHash with
-        | none => (.ok (⟨.syncing, none⟩, none), node)
-        | some post =>
-          let chain := node.chainAt header.parentHash post
-          match newPayloadOnChain node.transition (node.totalDifficulty header.parentHash) chain
-              version params with
-          | .error e => (.error e, node)
-          | .ok (status, reason, next) =>
-            (.ok (status, reason),
-              node.recordExecution hash ⟨checked.fork, header, []⟩ status next)
+      | _ => node.onParent hash ⟨checked.fork, header, []⟩ version params
+
+/-- The node after it validates the accepted blocks of the chain that ends at a block.
+
+The blocks run oldest first, each on its parent once that parent is valid.
+
+A block whose parent is then invalid is invalid too, by step 1 of payload validation.
+
+A block whose parent is not known as valid or invalid stays accepted, as does one whose run aborts.
+
+The fuel bounds the number of blocks, and the update gives the number of known blocks. -/
+def validateChain (node : Node) : Nat → Hash32 → Node
+  | 0, _ => node
+  | fuel + 1, hash =>
+    match node.blocks.lookup hash with
+    | some ⟨block, _, .accepted version params⟩ =>
+      let node := node.validateChain fuel block.header.parentHash
+      match node.blocks.lookup block.header.parentHash with
+      | some ⟨_, _, .valid post⟩ => (node.executeOn hash block post version params).2
+      | some ⟨_, _, .invalid⟩ => node.record hash ⟨block, none, .invalid⟩
+      | _ => node
+    | _ => node
+
+/-- The node after an update validates the chain of the head that it names.
+
+Parameters that do not decode validate nothing. -/
+def validateHead (node : Node) (version : Nat) (params : Json) : Node :=
+  match forkchoiceUpdatedParams version params with
+  | .ok (state, _) => node.validateChain node.blocks.length state.headBlockHash
+  | .error _ => node
+
+/-- Whether an update names a head that the node knows as accepted, which it could not validate. -/
+def headAccepted (node : Node) (version : Nat) (params : Json) : Bool :=
+  match forkchoiceUpdatedParams version params with
+  | .ok (state, _) => (node.blocks.lookup state.headBlockHash).any (·.validity.isAccepted)
+  | .error _ => false
 
 /-- The node after an update applies a forkchoice state.
 
@@ -235,12 +310,12 @@ def appliedState (node : Node) (version : Nat) (params : Json) : Option Forkchoi
     | _ => none
   | .error _ => none
 
-/-- The step of `engine_forkchoiceUpdated`: the response, and the next node.
+/-- An update on a node whose head is validated: the response, and the next node.
 
 The response is that of the method on the tree of the known blocks and the known finalized block.
 
 The node applies the forkchoice state when the update applies its head, whatever the attributes. -/
-def forkchoiceUpdatedStep (node : Node) (version : Nat) (params : Json) :
+def updateStep (node : Node) (version : Nat) (params : Json) :
     Except EngineError (PayloadStatus × Option PayloadId) × Node :=
   let answer := forkchoiceUpdatedCall node.config node.transition version node.tree node.finalized
     params
@@ -248,6 +323,19 @@ def forkchoiceUpdatedStep (node : Node) (version : Nat) (params : Json) :
     | some state => node.applyForkchoice state
     | none => node
   (forkchoiceUpdatedResponse <$> answer, next)
+
+/-- The step of `engine_forkchoiceUpdated`: the response, and the next node.
+
+The node first validates the accepted blocks of the chain of the head, by step 4 of the method.
+
+A head that is still accepted is syncing, and the update applies nothing.
+
+Otherwise the update runs on the validated node. -/
+def forkchoiceUpdatedStep (node : Node) (version : Nat) (params : Json) :
+    Except EngineError (PayloadStatus × Option PayloadId) × Node :=
+  let node := node.validateHead version params
+  if node.headAccepted version params then (.ok (⟨.syncing, none⟩, none), node)
+  else node.updateStep version params
 
 /-- The step of `engine_getPayload`: the build of a payload ID, and the node as it was.
 
