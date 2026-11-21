@@ -46,7 +46,7 @@ A log of a block that the node holds is not removed, and the object gives `false
 
 The fixtures do the same.
 
-A transaction found only in a block off the canonical chain gets the receipt of that block.
+A transaction that only a block off the canonical chain holds has no receipt.
 
 An unknown transaction or block gets `null`, and the view never answers `4444` for pruned history.
 
@@ -226,7 +226,7 @@ def blockReceipts (v : ChainView) (p : BlockParam) :
   | none => return none
   | some r => some <$> r.receiptInfos v.config
 
-/-- The receipt object of the transaction of a hash, or none when no block of the node has one.
+/-- The receipt object of the transaction of a hash, or none when no canonical block has one.
 
 It is the object at the index of the transaction among those of its block. -/
 def transactionReceipt (v : ChainView) (hash : Hash32) : Except RpcError (Option ReceiptInfo) :=

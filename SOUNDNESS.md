@@ -5241,8 +5241,11 @@ A typed transaction holds its parity as a 256-bit number, while the schema types
 That bound holds for every transaction whose signature names a sender (`parityIsByte_of_recoverSender`).
 The object that the methods return reads back as its transaction too (`transactionOfJson_transactionInfoJson`).
 The object of a transaction of a block holds the context of that block, the sender that its signature names, its hash, and its effective gas price at the base fee of the block (`BlockRecord.transactionInfo_eq_ok`, `Proofs/Rpc/TransactionInfo.lean`).
-A lookup by hash returns only that object for a transaction of that hash, at its index in a block that the node holds (`transactionByHash_some`).
-It reads a canonical block whenever one has such a transaction (`transactionByHash_canonical`), and finds nothing only when no block of the node has one (`transactionByHash_none`).
+A lookup by hash returns only that object for a transaction of that hash, at its index in a canonical block (`transactionByHash_some`).
+It finds nothing only when no canonical block has one (`transactionByHash_none`).
+The search under it reads the canonical blocks alone (`findTransaction_some`, `findTransaction_eq_none`, `findTransaction_side`).
+So a transaction that only a block off the canonical chain holds has no object and no receipt.
+The method text of execution-apis does not say which blocks the lookup reads; [ethereum/execution-apis#1008](https://github.com/ethereum/execution-apis/pull/1008) proposes this rule.
 A lookup by block and index returns the object of the transaction at that index of the block that the parameter names (`transactionByBlockAndIndex_some`), and finds nothing exactly when that block is unknown or too short (`transactionByBlockAndIndex_none`).
 In a valid view, take a canonical block after the lowest.
 Its run started from the state of the block before, reached each of its transactions after those before it, and the inclusion check passed there.
@@ -5316,8 +5319,8 @@ It does not check the order of the list, so only a list in canonical order gives
 The receipt methods return the object `ReceiptInfo` of [`receipt.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/receipt.yaml), with its logs as objects `Log` (`Execution/Rpc/Receipt.lean`).
 The receipt objects of a block are one for each receipt, in order, each built from its transaction and its receipt (`receiptInfos_eq_ok`, `receiptInfo_eq_ok`, `Proofs/Rpc/Receipt.lean`).
 Their logs are numbered `0, 1, 2, …` across the block (`logIndex_receiptInfos`), and the lookup of one receipt returns the object at its index among those of its block (`transactionReceipt_eq_ok`).
-In a valid view, when that block is canonical, it is the object at that index among the receipts of the number of the block, so both methods give each log the same `logIndex` (`Valid.transactionReceipt_blockReceipts`).
-A block off the canonical chain is checked for its hash only, so a receipt found there has no such guarantee.
+In a valid view, it is the object at that index among the receipts of the number of the block, so both methods give each log the same `logIndex` (`Valid.transactionReceipt_blockReceipts`).
+That theorem takes a canonical block, and the lookup finds only canonical blocks (`findTransaction_some`).
 A creation has the address that the sender makes at its nonce, and a call has none (`receiptInfo_contractAddress`).
 A receipt object has `blobGasUsed` and `blobGasPrice` exactly for a blob transaction (`receiptInfo_blob`).
 It reports `2^17` blob gas for each versioned hash.

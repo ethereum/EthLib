@@ -97,9 +97,7 @@ def rawBlock (v : ChainView) (p : BlockParam) : Except RpcError ByteArray :=
 def rawReceipts (v : ChainView) (p : BlockParam) : Except RpcError (List ByteArray) :=
   v.ofBlock p BlockRecord.rawReceipts
 
-/-- The bytes of the transaction of a hash, from the first block of the node that holds one.
-
-The canonical blocks come first, then the blocks off the canonical chain. -/
+/-- The bytes of the transaction of a hash, from the first canonical block that holds one. -/
 def rawTransaction (v : ChainView) (hash : Hash32) : Except RpcError ByteArray :=
   match v.findTransaction hash with
   | none => .error (unknown "transaction")
