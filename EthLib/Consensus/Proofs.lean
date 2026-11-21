@@ -197,6 +197,7 @@ public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
 public import EthLib.Consensus.Proofs.Transition.ActivationReserve
 public import EthLib.Consensus.Proofs.Transition.ActiveKept
+public import EthLib.Consensus.Proofs.Transition.AttestationAccepted
 public import EthLib.Consensus.Proofs.Transition.AttesterSlashingAccepted
 public import EthLib.Consensus.Proofs.Transition.BalanceCappedBlock
 public import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
