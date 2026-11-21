@@ -1555,6 +1555,27 @@ private theorem selectedReleaseProducer_of_run {g x y : ForkedBeaconState preset
     ScheduledAllocation.ofReads tail high, demand, cumulativeFunding_bound electra initial funding,
     partition, rounds, roundSum, baselineSum⟩
 
+/-- The release from the block replay and the deposit funding bound.
+
+Its selected capacity holds, since the run's selected charges fit the carry and flow. -/
+private theorem releaseProducer_of_block
+    (block : BlockReplay (preset := preset) (config := config) (checks := checks))
+    (deposits : ∀ g x y : ForkedBeaconState preset,
+      (∀ (shared : Run config checks g x) (tail : Run config checks x y) high,
+        Supported shared tail high → 2 ≤ preset.SLOTS_PER_EPOCH.toNat → .pectra ≤ x.fork →
+        ∀ events, tail.balanceEvents high = .ok events →
+          (events.map funding_deposit_credit).sum + fundingCarry y ≤
+            fundingCarry x +
+              ((List.range (driftHorizon x high + 1)).map
+                    (exitFlowAt (config := config) x high)).sum))
+    (g x y : ForkedBeaconState preset) :
+    SelectedReleaseProducer (config := config) (checks := checks) (g := g) (x := x) (y := y) :=
+  selectedReleaseProducer_of_run block (deposits _ _ _)
+    (fun shared tail high supported twoSlots _ replayed electra _ _ _ _ chosen _ _ _ fresh
+        unique =>
+      selected_capacity_of_run block shared tail high supported twoSlots replayed electra
+        chosen fresh unique)
+
 /-- The headline from the block replay and the deposit funding bound.
 
 The selected inputs come from the slot and block replays, and the release from its assembly.
@@ -1573,11 +1594,25 @@ theorem headline_of_block
     AccountableDriftBound (preset := preset) (config := config) (checks := checks) ∧
       AccountableWindowBound (preset := preset) (config := config) (checks := checks) :=
   headline_ledger (fun _ _ _ => selectedInputs_of_run reservedReplay_slotStep block)
-    (fun _ _ _ => selectedReleaseProducer_of_run block (deposits _ _ _)
-      (fun shared tail high supported twoSlots _ replayed electra _ _ _ _ chosen _ _ _ fresh
-          unique =>
-        selected_capacity_of_run block shared tail high supported twoSlots replayed electra
-          chosen fresh unique))
+    (releaseProducer_of_block block deposits)
+
+/-- The drift of a supported branch from the block replay and the deposit funding bound.
+
+The inputs are those of the headline. -/
+theorem stateProducer_of_block
+    (block : BlockReplay (preset := preset) (config := config) (checks := checks))
+    (deposits : ∀ g x y : ForkedBeaconState preset,
+      (∀ (shared : Run config checks g x) (tail : Run config checks x y) high,
+        Supported shared tail high → 2 ≤ preset.SLOTS_PER_EPOCH.toNat → .pectra ≤ x.fork →
+        ∀ events, tail.balanceEvents high = .ok events →
+          (events.map funding_deposit_credit).sum + fundingCarry y ≤
+            fundingCarry x +
+              ((List.range (driftHorizon x high + 1)).map
+                    (exitFlowAt (config := config) x high)).sum))
+    (g x y : ForkedBeaconState preset) :
+    StateProducer (config := config) (checks := checks) (g := g) (x := x) (y := y) :=
+  stateProducer_ledger (fun _ _ _ => selectedInputs_of_run reservedReplay_slotStep block)
+    (releaseProducer_of_block block deposits) g x y
 
 end
 

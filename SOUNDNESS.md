@@ -4592,6 +4592,19 @@ The honest set of each step must then hold two thirds without them, so it needs 
 The theorem holds at every fork; before Altair the counted validators are the attesters of matching pending attestations.
 No theorem yet derives the hypotheses of the two steps from a run.
 
+`quorum_of_stakeMargin` (`Consensus/Proofs/StakeMovement.lean`) moves the two-thirds hypothesis of those steps to a starting state `x`.
+It takes a branch from `x` to a later state `w`, before Gloas, inside the window of the a priori drift and under its guard.
+At `x`, three times the honest stake must cover twice the active stake plus `stakeMargin config x high`.
+That margin is twice `drift x high` plus twice `slashedHeadroom x`, since the drift leaves slashed validators out.
+`slashedHeadroom x` charges each slashed validator its cap at `x`, less its effective balance if it is active there.
+Then at `w`, three times the honest stake is at least twice the active stake.
+It assumes that the honest validators are active at `x`, and active and unslashed at `w`.
+It also assumes that every validator active and slashed at `w` was slashed at `x`, a condition on the branch.
+The guard fails for a window that crosses Electra or starts before Altair, so the theorem says nothing there.
+The margin is as loose as the drift.
+It does not cover the attesters of the last slot of an epoch, which the steps above leave out.
+`stateDrift_le_drift` (`Consensus/Proofs/DirectSafety/Apriori.lean`) is the drift bound of one branch that it uses.
+
 `processAttestation_exists_ok` (`Consensus/Proofs/Transition/AttestationAccepted.lean`) is the step of plausible liveness that makes a vote count, from Altair until Gloas.
 An attestation whose target is the epoch of its slot, and the current or previous epoch, is accepted under these conditions.
 It comes within its inclusion window, and its bits fit its committees.
