@@ -480,6 +480,10 @@ def enr_eth_fork_id(record: bytes) -> tuple[bytes, int] | None:
     """The fork identifier of the "eth" entry of a record, as its hash and its next fork."""
     ...
 
+def enr_endpoints(record: bytes) -> tuple[tuple[bytes, int | None, int | None, int | None] | None, tuple[bytes, int | None, int | None, int | None] | None]:
+    """The IPv4 and IPv6 endpoints of a record, each `None` when its address is absent."""
+    ...
+
 def discv5_log_distance(a: bytes, b: bytes) -> int:
     """The logarithmic distance: the number of bits of the distance, and 0 for equal IDs."""
     ...

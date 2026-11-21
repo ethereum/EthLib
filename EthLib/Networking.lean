@@ -15,6 +15,7 @@ public import EthLib.Networking.Encoding.Protobuf
 public import EthLib.Networking.Encoding.Uvarint
 public import EthLib.Networking.Encoding.Varint
 public import EthLib.Networking.Noise.Identity
+public import EthLib.Networking.Enr.Address
 public import EthLib.Networking.Enr.Consensus
 public import EthLib.Networking.Enr.Eth
 public import EthLib.Networking.Enr.Record
