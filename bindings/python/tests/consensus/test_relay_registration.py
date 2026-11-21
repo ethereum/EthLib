@@ -24,7 +24,9 @@ def _at(timestamp: int) -> bytes:
 
 def test_latest_registration() -> None:
     """A key registered at times 100 and 200 gets 200 with the registration of time 200."""
-    status, body = consensus.relay_validator_registration([_at(100), _at(200)], PUBKEY)
+    answer = consensus.relay_validator_registration([_at(100), _at(200)], PUBKEY)
+    assert answer is not None
+    status, body = answer
     assert status == 200
     assert body["message"]["timestamp"] == "200"
     assert body["message"]["pubkey"] == EXAMPLE_JSON["message"]["pubkey"]

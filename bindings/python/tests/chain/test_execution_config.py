@@ -1,6 +1,7 @@
 """The fork times and blob schedules of a client configuration file, per EIP-7840 and EIP-7892."""
 
 import copy
+from typing import Any, cast
 
 import pytest
 
@@ -8,14 +9,14 @@ from ethlib import chain
 from raising import raises
 
 # A chain of the rules of Paris from block 0, which takes its later forks from the file.
-BASE = {
+BASE: dict[str, Any] = {
     "chainId": 1,
     "depositContractAddress": bytes(20),
     "activations": [["paris", "block", 0]],
 }
 
 # The configuration of EIP-7892, "Execution layer configuration".
-EXAMPLE = {
+EXAMPLE: dict[str, Any] = {
     "blobSchedule": {
         "cancun": {"target": 3, "max": 6, "baseFeeUpdateFraction": 3338477},
         "prague": {"target": 6, "max": 9, "baseFeeUpdateFraction": 5007716},
@@ -31,7 +32,7 @@ EXAMPLE = {
 }
 
 # The same chain in the shape of the other exports, each schedule with its fork.
-CONFIG = {
+CONFIG: dict[str, Any] = {
     **BASE,
     "activations": [
         ["paris", "block", 0],
@@ -62,10 +63,10 @@ NOT_ORDERED = 7
 PREFIX = "execution config: EthLib.Base.ExecutionConfig.ConfigError."
 
 
-def without(path: list[str]) -> dict:
+def without(path: list[str]) -> dict[str, Any]:
     """The example with one key removed, given by its path."""
     config = copy.deepcopy(EXAMPLE)
-    parent = config
+    parent: dict[str, Any] = config
     for key in path[:-1]:
         parent = parent[key]
     del parent[path[-1]]
@@ -95,7 +96,7 @@ def test_missing_entry_inherits() -> None:
 
 def test_prague_without_entry_inherits() -> None:
     """A file that breaks the rule of EIP-7892 by giving Prague no entry runs it under Cancun's."""
-    config = {"blobSchedule": {"cancun": EXAMPLE["blobSchedule"]["cancun"]}}
+    config: dict[str, Any] = {"blobSchedule": {"cancun": EXAMPLE["blobSchedule"]["cancun"]}}
     config |= {"cancunTime": 0, "pragueTime": 100}
     assert chain.execution_blob_schedule(BASE, config, 0, 200) == (3, 6, 3338477)
 
@@ -176,7 +177,7 @@ def test_schedules_not_object_refused() -> None:
 def test_file_not_object_refused() -> None:
     """A file that is not an object is refused."""
     with raises(chain.ChainError, f"{PREFIX}notObject") as error:
-        chain.execution_blob_schedule(BASE, [], 0, 0)
+        chain.execution_blob_schedule(BASE, cast(dict[str, Any], []), 0, 0)
     assert error.value.code == NOT_OBJECT
 
 
