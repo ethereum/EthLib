@@ -648,6 +648,111 @@ theorem root_fromSnapshotParts {roots : List Root} {count height : Nat}
           obtain ⟨left, rebuilt, rfl⟩ := parts
           simp [root, ih half low rebuilt]
 
+/-- A subtree rebuilt from finalized roots and a count below its capacity gives them back.
+
+The roots are one per bit set in the count, which the climb from them checks. -/
+theorem getFinalized_fromSnapshotParts {roots : List Root} {count height : Nat}
+    {tree : DepositMerkleTree} {result : Root} (below : count < 2 ^ height)
+    (climbed : climbFinalized roots.reverse count (zeroNode 0) 0 height = .ok result)
+    (parts : fromSnapshotParts roots count height = some tree) :
+    tree.getFinalized = (roots, count) := by
+  induction height generalizing roots count tree result with
+  | zero =>
+    obtain rfl : count = 0 := by simpa using below
+    cases roots with
+    | nil =>
+      simp only [fromSnapshotParts, Option.some.injEq] at parts
+      subst parts
+      rfl
+    | cons first rest => simp [climbFinalized_zero] at climbed
+  | succ height ih =>
+    obtain ⟨lower, upper, middle, split, low, high⟩ :=
+      exists_of_climbFinalized_add (more := 1) climbed
+    rw [Nat.zero_add] at high
+    -- A count with no bit below the height rebuilds the empty subtree.
+    have empty : ∀ {count : Nat} (rest : List Root), count < 2 ^ height →
+        count % 2 ^ height = 0 → fromSnapshotParts rest count height = some (.zero height) := by
+      intro count rest fits zero
+      rw [Nat.mod_eq_of_lt fits] at zero
+      subst zero
+      cases rest <;> rw [fromSnapshotParts.eq_def] <;> simp
+    by_cases bit : count.testBit height
+    · match upper, high with
+      | [last], high =>
+        simp only [climbFinalized_succ, climbFinalized_zero, bit, List.isEmpty_nil, ite_true,
+          Except.ok.injEq] at high
+        subst high
+        obtain rfl : roots = last :: lower.reverse := by
+          simpa using congrArg List.reverse split
+        have atLeast := Nat.ge_two_pow_of_testBit bit
+        have rem : count % 2 ^ height = count - 2 ^ height := by
+          rw [Nat.mod_eq_sub_mod atLeast, Nat.mod_eq_of_lt (by rw [Nat.pow_succ] at below; omega)]
+        have low' : climbFinalized lower.reverse.reverse (count % 2 ^ height) (zeroNode 0) 0 height
+            = .ok middle := by
+          rw [List.reverse_reverse, climbFinalized_congr]
+          · exact low
+          · intro i _ high
+            simp [Nat.testBit_mod_two_pow, show i < height by omega]
+        have notAll : count ≠ 2 ^ (height + 1) := Nat.ne_of_lt below
+        have notPast : ¬2 ^ (height + 1) < count := Nat.not_lt_of_lt below
+        have notZero : count ≠ 0 := by have := Nat.two_pow_pos height; omega
+        simp only [fromSnapshotParts, notZero, notAll, notPast, ite_false] at parts
+        by_cases exact : count = 2 ^ height
+        · subst exact
+          have whole : fromSnapshotParts (last :: lower.reverse) (2 ^ height) height
+              = some (.finalized (2 ^ height) last) := by
+            rw [fromSnapshotParts.eq_def]
+            simp
+          simp only [Nat.le_refl, ite_true, whole, Option.map_eq_map, Option.map_some,
+            Option.some.injEq] at parts
+          subst parts
+          -- The empty right half leaves no root after the first.
+          have := ih (Nat.mod_lt _ (Nat.two_pow_pos height)) low'
+            (empty _ (Nat.mod_lt _ (Nat.two_pow_pos height)) (Nat.mod_mod _ _ ▸ by simp))
+          simp only [getFinalized, Prod.mk.injEq] at this
+          simp [getFinalized, ← this.1]
+        · simp only [show ¬count ≤ 2 ^ height by omega, ite_false, Option.map_eq_map,
+            Option.map_eq_some_iff] at parts
+          obtain ⟨right, rebuilt, rfl⟩ := parts
+          rw [rem] at low'
+          simp only [getFinalized, ih (by omega) low' rebuilt]
+          simp only [List.singleton_append, Prod.mk.injEq, true_and]
+          omega
+      | [], high => simp [climbFinalized_succ, bit] at high
+      | _ :: _ :: _, high => simp [climbFinalized_succ, climbFinalized_zero, bit] at high
+    · have half : count < 2 ^ height := Nat.lt_of_not_le fun over =>
+        bit (Nat.testBit_of_two_pow_le_and_two_pow_add_one_gt over below)
+      cases upper with
+      | cons _ _ => simp [climbFinalized_succ, climbFinalized_zero, bit] at high
+      | nil =>
+      simp only [climbFinalized_succ, climbFinalized_zero, bit, Bool.false_eq_true,
+        List.isEmpty_nil, ite_true, ite_false, Except.ok.injEq] at high
+      subst high
+      rw [List.append_nil] at split
+      rw [← split] at low
+      have notAll : count ≠ 2 ^ (height + 1) := Nat.ne_of_lt below
+      have notPast : ¬2 ^ (height + 1) < count := Nat.not_lt_of_lt below
+      cases roots with
+      | nil =>
+        simp only [fromSnapshotParts, Option.some.injEq] at parts
+        subst parts
+        -- No root left means a count with no bit set.
+        have := ih half low (by rw [fromSnapshotParts.eq_def])
+        simp only [getFinalized, Prod.mk.injEq] at this
+        simp [getFinalized, ← this.2]
+      | cons first rest =>
+        by_cases zero : count = 0
+        · simp only [fromSnapshotParts, zero, ite_true, Option.some.injEq] at parts
+          subst parts
+          subst zero
+          -- A root with no bit set to use it fails the climb.
+          have := ih half low (empty _ half (by simp))
+          simp [getFinalized] at this
+        · simp only [fromSnapshotParts, zero, notAll, notPast, Nat.le_of_lt half, ite_true,
+            ite_false, Option.map_eq_map, Option.map_eq_some_iff] at parts
+          obtain ⟨left, rebuilt, rfl⟩ := parts
+          simp [getFinalized, ih half low rebuilt]
+
 /--
 A walk down to a leaf gives a branch that climbs back to the root of the subtree.
 
@@ -1322,6 +1427,41 @@ theorem getProof_leaf {tree : DepositTree} {held : List Root} {index : Nat} {lea
     omega
   have := holds.getElem?_generateProof walked inside
   rwa [Nat.mod_eq_of_lt (Nat.lt_trans below fits)] at this
+
+/-- A tree rebuilt from a snapshot gives back that same snapshot.
+
+So a node that restarts from a snapshot serves a peer the snapshot it stored. -/
+theorem getSnapshot_fromSnapshot {snapshot : DepositTreeSnapshot} {rebuilt : DepositTree}
+    (built : DepositTree.fromSnapshot snapshot = .ok rebuilt) :
+    rebuilt.getSnapshot = .ok snapshot := by
+  simp only [fromSnapshot, bind, Except.bind, throw, throwThe, MonadExceptOf.throw, pure,
+    Except.pure] at built
+  split at built
+  · cases built
+  rename_i computed calculated
+  split at built
+  · cases built
+  rename_i same
+  split at built
+  · rename_i sparse parts
+    cases built
+    have climb := calculated
+    simp only [DepositTreeSnapshot.calculateRoot, DepositTreeSnapshot.calculateRootOf, bind,
+      Except.bind, throw, throwThe, MonadExceptOf.throw, pure, Except.pure] at climb
+    split at climb
+    · cases climb
+    rename_i fits
+    split at climb
+    · cases climb
+    rename_i result climbed
+    have got := getFinalized_fromSnapshotParts (Nat.lt_of_not_le fits) climbed parts
+    simp only [getSnapshot, got, DepositTreeSnapshot.fromTreeParts]
+    rw [show DepositTreeSnapshot.calculateRootOf _ _ = _ from calculated]
+    obtain ⟨⟨data, bound⟩, root, count, hash, height⟩ := snapshot
+    simp only [ne_eq, Decidable.not_not] at same
+    subst same
+    simp [bind, Except.bind, pure, Except.pure, bound]
+  · cases built
 
 end DepositTree
 

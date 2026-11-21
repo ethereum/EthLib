@@ -3211,6 +3211,13 @@ It lets the reader accept the record.
 The Fulu text has a node weigh `nfd` with the next fork of `eth2`, and forbids a disconnect "before the fork boundary" on a mismatch.
 EthLib reads the boundary as the earlier of the two next fork epochs, and applies it to every difference in the next fork while the digest now is the same.
 
+### Deposit tree snapshots
+
+[EIP-4881](https://eips.ethereum.org/EIPS/eip-4881) lets a node keep its finalized deposits as a snapshot: one root per bit set in the deposit count, the deposit root, and the hash and height of the execution block.
+A node that restarts rebuilds its deposit tree from the snapshot, and may later serve the snapshot to a peer.
+The rebuilt tree has the deposit root that the snapshot states (`getRoot_fromSnapshot_eq`, `Consensus/Proofs/DepositTree.lean`), and it agrees with the original tree on every later root (`getRoot_fromSnapshot`).
+It also gives back the same snapshot, so nothing of the snapshot is lost or changed by a rebuild (`getSnapshot_fromSnapshot`).
+
 ### Weak subjectivity
 
 A node that starts from a recent checkpoint trusts it only for a limited time, the weak subjectivity period.
