@@ -33,9 +33,9 @@ require "leanprover-community" / "mathlib" @ git "v4.36.0"
 --
 -- The library code never imports it.
 --
--- VCVio supplies the warm finder law and the adaptive digest watch.
+-- VCVio bounds digest matches during a cached scan and after registration.
 require VCVio from git "https://github.com/Verified-zkEVM/VCVio.git" @
-  "8a7583b2e49882fcc010e8a4ce255da1f52adb60"
+  "faef48905e38f92c7fd2bb3f32e070949698dd38"
 
 @[default_target]
 lean_lib «EthLib» where
