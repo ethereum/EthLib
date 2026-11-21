@@ -3001,6 +3001,33 @@ When a gossip topic carries the same object, that type is the message type of th
 `responseBounds_snd_eq_topicBound` draws the consequence: at a fork that lists the topic, the largest length of such a chunk is the bound of the topic.
 `responseDesc_eq_messageDesc_phase0` states that version 1 of blocks by range and by root sends a Phase 0 block at every fork, since that version has no context bytes.
 
+### The consensus entries that a node writes
+
+A consensus node puts its fork in its node record, so that a peer can tell whether the two follow one chain.
+`enrForkId` (`Consensus/Enr.lean`) gives the `eth2` value at an epoch of the wall clock.
+It holds the digest now, then the version and the epoch of the next fork.
+From Fulu, the next fork is the next epoch at which the digest can change, as the [Fulu networking text](https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/fulu/p2p-interface.md#L865-L954) asks.
+So it counts the epochs of the blob schedule.
+`nextForkDigest` gives the `nfd` value, the digest at that epoch, or four zero bytes when no fork is planned.
+`consensusPairs` writes all the entries as pairs for a new record.
+`mayDisconnect` says when a node may leave a peer for its fork entries.
+
+`computeForkDigest_of_lt_nextForkEpoch` (`Consensus/Proofs/Enr.lean`) states that the digest is the same at every epoch from the current one up to the next fork epoch.
+A next digest epoch that is the first epoch of no consensus fork is a BPO epoch.
+`nextForkVersion_of_nextDigestEpoch` states that before such an epoch, the next version is the current one.
+`readEntries_consensusPairs` states that a node reading a record built from these pairs, at the writer's fork, gets back the values written.
+`lookup_cgc_of_consensusPairs` and `lookup_nfd_of_consensusPairs` state that once Fulu has an epoch, such a record holds `cgc` and `nfd` at every epoch, as the Fulu text requires.
+`mayDisconnect_of_lt` states that with the same digest, a node never disconnects before the earlier of the two next fork epochs.
+`mayDisconnect_of_le` states that it may from then on, when the entries differ.
+
+The sources leave three points open, and EthLib reads them as follows.
+A fork whose epoch is the far future epoch is not planned, so it gives no next fork.
+The text requires `cgc` and `nfd` once Fulu has an epoch, and EthLib also writes them at a fork from Fulu on.
+That second case matters only at the far future epoch, or when a fork after Fulu is planned but not Fulu itself.
+It lets the reader accept the record.
+The Fulu text has a node weigh `nfd` with the next fork of `eth2`, and forbids a disconnect "before the fork boundary" on a mismatch.
+EthLib reads the boundary as the earlier of the two next fork epochs, and applies it to every difference in the next fork while the digest now is the same.
+
 ### Weak subjectivity
 
 A node that starts from a recent checkpoint trusts it only for a limited time, the weak subjectivity period.
@@ -7255,12 +7282,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 534 operations and 51 size constants.
-The Python extension calls 534 of the operations and 51 of the constants.
+Lean exports 538 operations and 51 size constants.
+The Python extension calls 538 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12150 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2674), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (225), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1612), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (837), `x25519.c` (21), `xmss.c` (344).
+12196 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (225), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1618), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (841), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

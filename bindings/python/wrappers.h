@@ -568,6 +568,10 @@ PyObject* py_consensus_light_client_gossip_light_client (PyObject* self, PyObjec
 PyObject* py_consensus_block_to_light_client_header      (PyObject* self, PyObject* args);
 PyObject* py_consensus_light_client_update_proofs        (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_fork_digest               (PyObject* self, PyObject* args);
+PyObject* py_consensus_enr_fork_id                       (PyObject* self, PyObject* args);
+PyObject* py_consensus_next_fork_digest                  (PyObject* self, PyObject* args);
+PyObject* py_consensus_bootnode_fork_id                  (PyObject* self, PyObject* args);
+PyObject* py_consensus_enr_record                        (PyObject* self, PyObject* args);
 PyObject* py_consensus_digest_epochs (PyObject* self, PyObject* args);
 PyObject* py_consensus_fork_of_digest (PyObject* self, PyObject* args);
 PyObject* py_consensus_digests_identify (PyObject* self, PyObject* args);

@@ -669,6 +669,42 @@ def compute_fork_digest(
     return _native.consensus_compute_fork_digest(name, config, genesis_validators_root, epoch)
 
 
+def enr_fork_id(
+    name: str, genesis_validators_root: bytes, epoch: int, config: dict[str, Any] | None = None
+) -> tuple[bytes, bytes, int]:
+    """The eth2 entry that a node writes at an epoch: its digest, next fork version and epoch."""
+    return _native.consensus_enr_fork_id(name, config, genesis_validators_root, epoch)
+
+
+def next_fork_digest(
+    name: str, genesis_validators_root: bytes, epoch: int, config: dict[str, Any] | None = None
+) -> bytes:
+    """The nfd entry that a node writes at an epoch: the digest of the next fork, or zeros."""
+    return _native.consensus_next_fork_digest(name, config, genesis_validators_root, epoch)
+
+
+def bootnode_fork_id(name: str, config: dict[str, Any] | None = None) -> tuple[bytes, bytes, int]:
+    """The eth2 entry of a bootnode record made before genesis, when the root is not known."""
+    return _native.consensus_bootnode_fork_id(name, config)
+
+
+def enr_record(
+    name: str,
+    genesis_validators_root: bytes,
+    epoch: int,
+    secret_key: bytes,
+    seq: int,
+    attnets: bytes,
+    syncnets: bytes,
+    cgc: int,
+    config: dict[str, Any] | None = None,
+) -> bytes:
+    """A signed node record of a consensus node at an epoch, with the entries that it writes."""
+    return _native.consensus_enr_record(
+        name, config, genesis_validators_root, epoch, secret_key, seq, attnets, syncnets, cgc
+    )
+
+
 def digest_epochs(name: str, config: dict[str, Any] | None = None) -> list[int]:
     """The epochs at which the fork digest can change, in increasing order and without repeats."""
     return _native.consensus_digest_epochs(name, config)
@@ -2451,6 +2487,10 @@ __all__ = [
     "light_client_gossip_full_node",
     "light_client_gossip_light_client",
     "compute_fork_digest",
+    "enr_fork_id",
+    "next_fork_digest",
+    "bootnode_fork_id",
+    "enr_record",
     "digest_epochs",
     "fork_of_digest",
     "digests_identify",
