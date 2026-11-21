@@ -317,4 +317,49 @@ theorem builderPendingWithdrawals_error_iff (state : BeaconState preset fork) :
       ¬.glamsterdam ≤ fork :=
   sinceFork_error_iff _
 
+/-! ## The RANDAO mix of an epoch -/
+
+/-- An answer to the RANDAO query reads the buffer at an epoch whose mix the state holds. -/
+theorem stateRandao_eq_ok {state : BeaconState preset fork} {epoch : Option Epoch}
+    {mix : Bytes32} (answered : stateRandao state epoch = .ok mix) :
+    holdsRandaoMix state (epoch.getD (getCurrentEpoch state)) = true ∧
+      getRandaoMix state (epoch.getD (getCurrentEpoch state)) = .ok mix := by
+  unfold stateRandao at answered
+  cases held : holdsRandaoMix state (epoch.getD (getCurrentEpoch state)) <;>
+    cases read : getRandaoMix state (epoch.getD (getCurrentEpoch state)) <;>
+    simp_all [bind, Except.bind, throw, throwThe, MonadExceptOf.throw,
+      Except.mapError]
+
+/-- An epoch whose mix the state does not hold gets the error with code 400. -/
+theorem stateRandao_of_holdsRandaoMix_eq_false {state : BeaconState preset fork}
+    {epoch : Epoch} (absent : holdsRandaoMix state epoch = false) :
+    stateRandao state (some epoch) = .error randaoOutOfRange := by
+  simp [stateRandao, absent, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+
+/-- Two epochs whose mixes a state holds have different entries in its buffer.
+
+So no other held epoch reads the entry that an answer reads. -/
+theorem eq_of_holdsRandaoMix {state : BeaconState preset fork} {first second : Epoch}
+    (heldFirst : holdsRandaoMix state first = true)
+    (heldSecond : holdsRandaoMix state second = true)
+    (same : first % preset.EPOCHS_PER_HISTORICAL_VECTOR =
+      second % preset.EPOCHS_PER_HISTORICAL_VECTOR) :
+    first = second := by
+  simp only [holdsRandaoMix, Bool.and_eq_true, decide_eq_true_eq] at heldFirst heldSecond
+  have entries := congrArg UInt64.toNat same
+  simp only [UInt64.toNat_mod] at entries
+  apply UInt64.toNat_inj.mp
+  -- Two numbers less than the length apart, with one remainder, have one quotient.
+  have a := Nat.div_add_mod first.toNat preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat
+  have b := Nat.div_add_mod second.toNat preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat
+  rcases Nat.lt_trichotomy (first.toNat / preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (second.toNat / preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) with lt | eq | gt
+  · have := Nat.mul_le_mul_left preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat lt
+    rw [Nat.mul_succ] at this
+    omega
+  · rw [← a, ← b, eq, entries]
+  · have := Nat.mul_le_mul_left preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat gt
+    rw [Nat.mul_succ] at this
+    omega
+
 end EthLib.Consensus.BeaconApi

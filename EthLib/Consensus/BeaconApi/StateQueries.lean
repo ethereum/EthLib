@@ -66,16 +66,15 @@ def finalityCheckpoints (state : BeaconState preset fork) : FinalityCheckpoints 
     currentJustified := state.currentJustifiedCheckpoint
     finalized := state.finalizedCheckpoint }
 
-/-- The RANDAO mix of a state for an epoch, or for its current epoch when none is given.
+/-- Whether the circular buffer of a state still holds the RANDAO mix of an epoch.
 
-The mix is read in the circular buffer of the state, and no epoch is refused.
+The buffer has one entry for each of the last epochs, as many as its length, up to the current one.
 
-The source has an error with code 400 for an epoch out of range, but names no range.
-
-The read fails only for a buffer of length 0. -/
-def stateRandao (state : BeaconState preset fork) (epoch : Option Epoch) :
-    Except AccessorError Bytes32 :=
-  getRandaoMix state (epoch.getD (getCurrentEpoch state))
+A later epoch has no mix yet, and an earlier one has had its entry written over.
+-/
+def holdsRandaoMix (state : BeaconState preset fork) (epoch : Epoch) : Bool :=
+  epoch.toNat ≤ (getCurrentEpoch state).toNat &&
+    (getCurrentEpoch state).toNat < epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat
 
 /-- The error of a query on a state before the fork that adds its field, with code 400.
 
@@ -165,6 +164,32 @@ def versioned {α : Type} [SszType α] [ApiSpelling α] (fork : Fork)
     (field : Except ErrorMessage α) : Except ErrorMessage ApiEnvelope := do
   return { version := fork.consensusVersion?, data := ← apiJsonOr500 (← field) }
 
+/-- The error of a RANDAO query for an epoch whose mix the state does not hold, with code 400.
+
+Its message is the example of the source. -/
+def randaoOutOfRange : ErrorMessage :=
+  { code := 400, message := "Epoch is out of range for the `randao_mixes` of the state" }
+
+/-- The RANDAO mix of a state for an epoch, or for its current epoch when none is given.
+
+The source has an error with code 400 for an epoch out of range, but names no range.
+
+So an epoch whose mix the buffer no longer holds, or does not hold yet, gets that error.
+
+Reading the buffer at such an epoch would give the mix of another epoch.
+
+A buffer of length 0 holds no mix, so every epoch gets the error with code 400.
+
+[beacon-APIs, `getStateRandao`][randao] gives the error.
+
+[randao]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/states/randao.yaml
+-/
+def stateRandao (state : BeaconState preset fork) (epoch : Option Epoch) :
+    Except ErrorMessage Bytes32 := do
+  let epoch := epoch.getD (getCurrentEpoch state)
+  unless holdsRandaoMix state epoch do throw randaoOutOfRange
+  (getRandaoMix state epoch).mapError fun _ => internalError "no RANDAO mix"
+
 /-- The response to a query on a state, without the two flags that come from the store.
 
 The root and the RANDAO mix are objects with one key, `root` and `randao`.
@@ -177,7 +202,7 @@ def stateQuery (state : BeaconState preset fork) : StateQuery → Except ErrorMe
   | .fork => do return { data := ← apiJsonOr500 (stateFork state) }
   | .finalityCheckpoints => do return { data := ← apiJsonOr500 (finalityCheckpoints state) }
   | .randao epoch => do
-    let mix ← (stateRandao state epoch).mapError fun _ => internalError "no RANDAO mix"
+    let mix ← stateRandao state epoch
     return { data := Json.mkObj [("randao", .str (toHex mix.toArray))] }
   | .pendingDeposits => versioned fork (pendingDeposits state)
   | .pendingPartialWithdrawals => versioned fork (pendingPartialWithdrawals state)

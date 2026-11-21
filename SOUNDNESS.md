@@ -6413,8 +6413,12 @@ Points that remain open:
   So the answers of the API are not covered.
 - The format rule of the spec map names hex, numbers and arrays only; EthLib writes the names of the preset and of the configuration as text, as the files do.
 - The source has the `randao` query answer "Invalid state ID or epoch" with code 400, and its example message is "Epoch is out of range for the `randao_mixes` of the state", but it names no range.
-  EthLib reads the circular buffer at the epoch modulo its length and refuses no epoch.
-  So an epoch outside the window that the buffer holds gives the mix of another epoch.
+  [beacon-APIs#682](https://github.com/ethereum/beacon-APIs/pull/682), which proposed one, was closed without a merge: a node may refuse an old epoch, or serve its true mix from historical blocks.
+  Reading the circular buffer at an epoch outside the window that it holds would give the mix of another epoch, which is neither.
+  A state alone does not hold the old mix, so EthLib refuses with code 400 every epoch after the current one, and every epoch at least the length of the buffer before it.
+  `stateRandao_eq_ok` shows that an answer reads the buffer at an epoch that the state holds, and `stateRandao_of_holdsRandaoMix_eq_false` that any other epoch gets the error.
+  `eq_of_holdsRandaoMix` shows that two epochs that the state holds have different entries, so no other held epoch reads the entry of an answer.
+  No theorem yet shows that the state transition writes entry `e mod N` only during epoch `e` and the reset into it, so that the entry holds the mix of epoch `e`.
 - The source says that a state before finalization reports epoch 0 and the zero root.
   `finalityCheckpoints_of_genesis_chainSteps` covers each state that a chain from the Phase 0 genesis state of deposits reaches.
   No theorem yet ties the states that a store keeps, from any anchor, to such a chain, so the answers of the API are not covered.
