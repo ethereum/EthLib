@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Length
 public import EthLib.Base.LittleEndian
+public import EthLib.Networking.Encoding.Varint
 
 /-!
 # `Networking.Snappy.Block`
@@ -55,14 +56,6 @@ def preambleMaxLength : Nat := 5
 /-- The largest uncompressed length a block may declare (§1). -/
 def maxUncompressedLength : Nat := 2 ^ 32 - 1
 
-/-- The continuation bit of a preamble byte, `0x80`.
-
-It is set on every preamble byte but the last.
-
-The seven bits below it carry the value, so it is also the radix.
--/
-def continuation : Nat := 128
-
 /-- Every way decompression can reject its input. -/
 inductive SnappyError where
   /-- The input ended inside the preamble. -/
@@ -106,9 +99,11 @@ def SnappyError.code : SnappyError → UInt32
   | .copyOffsetTooLarge .. => 7
   | .lengthMismatch .. => 8
 
-/-- Read the preamble, at most `fuel` more bytes deep.
+/-- The uncompressed length a block declares, and the bytes after the preamble (§1).
 
-Returns the length and the bytes after the preamble.
+The preamble is a varint: its last byte is the first one without the continuation bit.
+
+Its length is the value of its groups of seven bits.
 
 # Why no minimal encoding
 
@@ -116,30 +111,25 @@ The format sets no minimality rule.
 
 So `80 00` is a valid preamble for the length zero.
 
-The consensus-layer varint rejects it, so this reader is separate.
--/
-def readPreambleAux : List UInt8 → Nat → Nat → Nat → Except SnappyError (Nat × List UInt8)
-  | [], _, _, _ => .error .preambleTruncated
-  -- Five bytes all carried the continuation bit.
-  | _ :: _, _, _, 0 => .error .preambleTooLong
-  | b :: bs, acc, shift, fuel + 1 =>
-      -- Add this byte's seven value bits at their place.
-      let acc := acc + (b.toNat % continuation) * 2 ^ shift
-      if b.toNat < continuation then
-        .ok (acc, bs)
-      else
-        readPreambleAux bs acc (shift + 7) fuel
+The consensus-layer varint rejects it.
 
-/-- The uncompressed length a block declares, and the bytes after the preamble (§1). -/
+This reader takes the value of the groups with no minimality check.
+-/
 def readPreamble (bs : List UInt8) : Except SnappyError (Nat × List UInt8) :=
-  match readPreambleAux bs 0 0 preambleMaxLength with
-  | .error e => .error e
-  | .ok (len, rest) =>
-      -- Five bytes hold 35 bits, so the range is checked separately.
-      if maxUncompressedLength < len then
-        .error (.preambleTooLarge len)
-      else
-        .ok (len, rest)
+  let window := bs.take preambleMaxLength
+  let last := window.findIdx (·.toNat < Encoding.Varint.continuation)
+  if last < window.length then
+    let len := Encoding.Varint.valueOf (bs.take (last + 1))
+    -- Five bytes hold 35 bits, so the range is checked separately.
+    if maxUncompressedLength < len then
+      .error (.preambleTooLarge len)
+    else
+      .ok (len, bs.drop (last + 1))
+  -- No last byte among the first five: too long if a sixth byte follows, else truncated.
+  else if preambleMaxLength < bs.length then
+    .error .preambleTooLong
+  else
+    .error .preambleTruncated
 
 /-- The uncompressed length a block declares, read from its first bytes alone (§1).
 

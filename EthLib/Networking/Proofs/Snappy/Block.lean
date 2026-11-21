@@ -4,6 +4,7 @@ public import EthLib.Networking.Snappy.Block
 public import EthLib.Base.Proofs.ByteList
 public import EthLib.Base.Proofs.LittleEndian
 public import EthLib.Networking.Encoding.Varint
+public import EthLib.Networking.Proofs.Encoding.Varint
 
 /-!
 # `Networking.Proofs.Snappy.Block`
@@ -29,118 +30,61 @@ open EthLib.Networking.Snappy
 
 /-! ## The preamble (§1) -/
 
-/-- Reading a varint written by the shared encoder gives back its value, at its place.
-
-A budget of k bytes holds values below 128^k.
--/
-theorem readPreambleAux_encodeAux {n fuel : Nat} (acc shift : Nat) (rest : List UInt8)
-    (hfuel : 0 < fuel) (hn : n < 128 ^ fuel) :
-    readPreambleAux (EthLib.Networking.Encoding.Varint.encodeAux n fuel ++ rest) acc shift fuel =
-      .ok (acc + n * 2 ^ shift, rest) := by
-  induction fuel generalizing n acc shift with
-  | zero => omega
-  | succ fuel ih =>
-      rw [EthLib.Networking.Encoding.Varint.encodeAux]
-      split
-      -- A last byte: its value is the whole of n.
-      · rename_i hlt
-        have hlt' : n < 128 := hlt
-        have hb : (UInt8.ofNat n).toNat = n := by rw [UInt8.toNat_ofNat']; omega
-        simp only [List.cons_append, List.nil_append, readPreambleAux, hb, continuation]
-        simp only [hlt', ↓reduceIte, Nat.mod_eq_of_lt hlt']
-      -- A continued byte: n mod 128 here, and n / 128 one group higher.
-      · rename_i hge
-        have hge' : ¬ n < 128 := hge
-        -- n is at least 128, so the budget has a second byte.
-        have hfuel' : 0 < fuel := by
-          rcases Nat.eq_zero_or_pos fuel with h | h
-          · subst h; omega
-          · exact h
-        have hdiv : n / 128 < 128 ^ fuel := by
-          rw [Nat.pow_succ, Nat.mul_comm] at hn
-          exact Nat.div_lt_of_lt_mul hn
-        have hb : (UInt8.ofNat (n % EthLib.Networking.Encoding.Varint.groupSize +
-            EthLib.Networking.Encoding.Varint.continuation)).toNat = n % 128 + 128 := by
-          rw [UInt8.toNat_ofNat']
-          show (n % 128 + 128) % 2 ^ 8 = n % 128 + 128
-          omega
-        have hq : n / EthLib.Networking.Encoding.Varint.groupSize = n / 128 := rfl
-        simp only [List.cons_append, readPreambleAux, hb, continuation, hq,
-          show ¬ n % 128 + 128 < 128 by omega, ↓reduceIte]
-        rw [ih _ _ hfuel' hdiv]
-        -- Recombine the two groups.
-        --
-        --     n = (n mod 128) + 128 * (n / 128)
-        have hmod : (n % 128 + 128) % 128 = n % 128 := by omega
-        have hn : n * 2 ^ shift = (n % 128 + 128 * (n / 128)) * 2 ^ shift := by
-          rw [Nat.mod_add_div]
-        rw [hmod, hn, Nat.pow_add, Nat.add_mul, Nat.add_assoc]
-        congr 3
-        rw [show (2 : Nat) ^ 7 = 128 from rfl]
-        ac_rfl
-
 /-- The preamble reads back the varint of every length up to 2^32 - 1, whatever follows it. -/
 theorem readPreamble_encode {n : Nat} (rest : List UInt8) (hn : n ≤ maxUncompressedLength) :
     readPreamble (EthLib.Networking.Encoding.Varint.encodeAux n preambleMaxLength ++ rest) =
       .ok (n, rest) := by
-  have hn' : n < 128 ^ preambleMaxLength := by
+  have hn' : n < Encoding.Varint.groupSize ^ preambleMaxLength := by
     simp only [maxUncompressedLength] at hn
-    simp only [preambleMaxLength]
+    simp only [Encoding.Varint.groupSize, Encoding.Varint.payloadBits, preambleMaxLength]
     omega
-  rw [readPreamble, readPreambleAux_encodeAux 0 0 rest (by decide) hn']
-  simp only [Nat.zero_add, Nat.pow_zero, Nat.mul_one, show ¬ maxUncompressedLength < n by omega,
-    ↓reduceIte]
+  have hlen := Encoding.Varint.length_encodeAux_le n preambleMaxLength
+  have hidx := Encoding.Varint.findIdx_encodeAux rest (by decide) hn' hlen
+  have hpos : 0 < (Encoding.Varint.encodeAux n preambleMaxLength).length :=
+    List.length_pos_iff.mpr (Encoding.Varint.encodeAux_ne_nil (by decide))
+  -- The last byte of the encoding lies inside the five-byte window.
+  have hw : ((Encoding.Varint.encodeAux n preambleMaxLength ++ rest).take
+      preambleMaxLength).findIdx (·.toNat < Encoding.Varint.continuation) <
+      ((Encoding.Varint.encodeAux n preambleMaxLength ++ rest).take preambleMaxLength).length := by
+    rw [List.length_take, List.length_append]
+    omega
+  rw [readPreamble]
+  dsimp only
+  simp only [hw, ↓reduceIte]
+  rw [hidx, List.take_left' rfl, List.drop_left' rfl, Encoding.Varint.valueOf_encodeAux hn']
+  simp only [show ¬ maxUncompressedLength < n by omega, ↓reduceIte]
 
 /-- An accepted preamble declares at most 2^32 - 1 bytes. -/
 theorem readPreamble_le {bs rest : List UInt8} {len : Nat}
     (h : readPreamble bs = .ok (len, rest)) : len ≤ maxUncompressedLength := by
-  rw [readPreamble] at h
+  simp only [readPreamble] at h
   split at h
-  · cases h
   · split at h
     · cases h
     · cases h; omega
-
-/-- A preamble read within its fuel reads the same length from the first bytes alone. -/
-theorem readPreambleAux_take {l rest : List UInt8} {acc shift fuel len : Nat} (n : Nat)
-    (hn : fuel ≤ n) (h : readPreambleAux l acc shift fuel = .ok (len, rest)) :
-    ∃ rest', readPreambleAux (l.take n) acc shift fuel = .ok (len, rest') := by
-  induction fuel generalizing l acc shift n with
-  | zero => cases l <;> simp [readPreambleAux] at h
-  | succ fuel ih =>
-      obtain ⟨m, rfl⟩ : ∃ m, n = m + 1 := ⟨n - 1, by omega⟩
-      cases l with
-      | nil => simp [readPreambleAux] at h
-      | cons b bs =>
-          rw [List.take_succ_cons]
-          rw [readPreambleAux] at h ⊢
-          split at h
-          · rename_i hb
-            simp only [hb, ↓reduceIte]
-            cases h
-            exact ⟨_, rfl⟩
-          · rename_i hb
-            simp only [hb, ↓reduceIte]
-            exact ih m (by omega) h
+  · split at h <;> cases h
 
 /-- An accepted preamble declares the same length when read from the first five bytes alone. -/
 theorem readPreamble_take {bs rest : List UInt8} {len : Nat}
     (h : readPreamble bs = .ok (len, rest)) :
     ∃ rest', readPreamble (bs.take preambleMaxLength) = .ok (len, rest') := by
-  rw [readPreamble] at h ⊢
-  cases haux : readPreambleAux bs 0 0 preambleMaxLength with
-  | error e => rw [haux] at h; cases h
-  | ok p =>
-      obtain ⟨len', rest''⟩ := p
-      rw [haux] at h
-      obtain ⟨rest', h'⟩ := readPreambleAux_take preambleMaxLength (Nat.le_refl _) haux
-      rw [h']
-      dsimp only at h ⊢
-      by_cases hl : maxUncompressedLength < len'
-      · simp only [hl, ↓reduceIte] at h; cases h
-      · simp only [hl, ↓reduceIte] at h ⊢
-        cases h
-        exact ⟨_, rfl⟩
+  simp only [readPreamble, List.take_take, Nat.min_self] at h ⊢
+  split at h
+  · rename_i hlt
+    -- The varint ends inside the window, so the window holds all of it.
+    have hk : (bs.take preambleMaxLength).findIdx (·.toNat < Encoding.Varint.continuation) + 1 ≤
+        preambleMaxLength := by
+      have := List.length_take_le preambleMaxLength bs
+      omega
+    rw [Nat.min_eq_left hk]
+    simp only [hlt, ↓reduceIte]
+    split at h
+    · cases h
+    · rename_i hle
+      cases h
+      simp only [hle, ↓reduceIte]
+      exact ⟨_, rfl⟩
+  · split at h <;> cases h
 
 /-! ## Copies (§2.2) -/
 
