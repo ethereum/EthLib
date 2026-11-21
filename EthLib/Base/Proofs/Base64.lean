@@ -88,23 +88,31 @@ theorem decode_encode (bytes : ByteArray) : decode (encode bytes) = .ok bytes :=
 /-- A character that reads as a value is the character of that value. -/
 theorem encodeSextet_of_decodeSextet {c : Char} {v : Nat} (h : decodeSextet c = some v) :
     v < 64 ∧ encodeSextet v = c := by
+  -- The code points of the ends of the three ranges, as numerals for `omega`.
+  have hA : 'A'.toNat = 65 := rfl
+  have hZ : 'Z'.toNat = 90 := rfl
+  have ha : 'a'.toNat = 97 := rfl
+  have hz : 'z'.toNat = 122 := rfl
+  have h0 : '0'.toNat = 48 := rfl
+  have h9 : '9'.toNat = 57 := rfl
   unfold decodeSextet at h
+  rw [hA, hZ, ha, hz, h0, h9] at h
   have hc : Char.ofNat c.toNat = c := Char.ofNat_toNat c
   split at h
   · cases h
     refine ⟨by omega, ?_⟩
-    simp only [encodeSextet, show c.toNat - 65 < 26 by omega, ↓reduceIte]
+    simp only [encodeSextet, hA, show c.toNat - 65 < 26 by omega, ↓reduceIte]
     rw [show 65 + (c.toNat - 65) = c.toNat by omega, hc]
   split at h
   · cases h
     refine ⟨by omega, ?_⟩
-    simp only [encodeSextet, show ¬ c.toNat - 97 + 26 < 26 by omega,
+    simp only [encodeSextet, ha, show ¬ c.toNat - 97 + 26 < 26 by omega,
       show c.toNat - 97 + 26 < 52 by omega, ↓reduceIte]
     rw [show 97 + (c.toNat - 97 + 26 - 26) = c.toNat by omega, hc]
   split at h
   · cases h
     refine ⟨by omega, ?_⟩
-    simp only [encodeSextet, show ¬ c.toNat - 48 + 52 < 26 by omega,
+    simp only [encodeSextet, h0, show ¬ c.toNat - 48 + 52 < 26 by omega,
       show ¬ c.toNat - 48 + 52 < 52 by omega, show c.toNat - 48 + 52 < 62 by omega, ↓reduceIte]
     rw [show 48 + (c.toNat - 48 + 52 - 52) = c.toNat by omega, hc]
   split at h
