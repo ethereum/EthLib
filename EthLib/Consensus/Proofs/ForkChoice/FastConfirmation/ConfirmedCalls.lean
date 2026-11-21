@@ -295,7 +295,6 @@ It holds at one walk, from the recency facts of the walk's start. -/
 private theorem parent_source {store : Store preset fork}
     (forward : Store.ForwardReachable config anchorState anchorBlock store)
     (slots : 0 < config.SLOT_DURATION_MS) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (preGloas : fork < .glamsterdam)
     {E : ℕ} {c : Checkpoint} {slot : Slot} (slotOk : store.getCurrentSlot config = .ok slot)
     (hE : (computeEpochAtSlot preset slot).toNat = E) (below : c.epoch.toNat + 1 ≤ E)
     {fcr : FastConfirmationStore} {head start root : Root} {chain later : List Root}
@@ -314,7 +313,7 @@ private theorem parent_source {store : Store preset fork}
   have above := epoch_le_of_slot_le (preset := preset) _ _ (UInt64.le_iff_toNat_le.mp le)
   have current := forward.block_epoch_le_current slots anchorSlot slotOk parentFound
   refine ⟨by omega, by omega, ?_⟩
-  exact Store.getCheckpointBlock_of_ancestor_epoch preGloas startFound descends (by omega) T
+  exact Store.getCheckpointBlock_of_ancestor_epoch startFound descends (by omega) T
 
 /-- A checked walk's confirmed root keeps the recency facts of its start.
 
@@ -327,7 +326,6 @@ private theorem root_recent {store : Store preset fork}
     (forward : Store.ForwardReachable config anchorState anchorBlock store)
     (sound : Invariant anchorState) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (slots : 0 < config.SLOT_DURATION_MS) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (preGloas : fork < .glamsterdam)
     {E : ℕ} {c : Checkpoint} {slot : Slot} (slotOk : store.getCurrentSlot config = .ok slot)
     (hE : (computeEpochAtSlot preset slot).toNat = E) (below : c.epoch.toNat + 1 ≤ E)
     {fcr : FastConfirmationStore} {head start root : Root} {chain later : List Root}
@@ -346,7 +344,7 @@ private theorem root_recent {store : Store preset fork}
   obtain rfl := Store.getCurrentStoreEpoch_eq slotOk epochOk
   obtain rfl : be = rootEpoch := Except.ok.inj (beOk.symm.trans rootOk)
   have descends := Store.isAncestor_terminal_of_getAncestorRoots (member := root) walked (by simp)
-  refine ⟨?_, R, Store.getCheckpointBlock_of_ancestor_epoch preGloas startFound descends
+  refine ⟨?_, R, Store.getCheckpointBlock_of_ancestor_epoch startFound descends
     (by omega) T⟩
   by_cases same : be = computeEpochAtSlot preset slot
   · have inside := not_start_of_confirmed forward slots anchorSlot slotOk (same ▸ rootOk)
@@ -868,7 +866,7 @@ private theorem facts_step (ctx : CallsCtx (e := e) anchor u events firstSlot li
   · rw [same]
     exact startFacts
   · exact root_recent (ctx.forward n) ctx.sound ctx.positive ctx.slots
-      (UInt64.le_of_eq ctx.anchorSlot) ctx.preGloas slotOk hE cb startFacts checked walked
+      (UInt64.le_of_eq ctx.anchorSlot) slotOk hE cb startFacts checked walked
       (confirmed _ (by simp))
 
 /-- Every call by the limit has the facts, by induction over the calls. -/
@@ -939,7 +937,7 @@ theorem sourceOnParentChain_of_walk {anchor : Store preset fork}
       (firstSlot.toNat + i) / preset.SLOTS_PER_EPOCH.toNat := by
     simp [computeEpochAtSlot, UInt64.toNat_div, slotNNat]
   intro member mem block parent blockOk parentOk
-  exact parent_source (ctx.forward n) slots (UInt64.le_of_eq anchorSlot) preGloas slotNOk hE below
+  exact parent_source (ctx.forward n) slots (UInt64.le_of_eq anchorSlot) slotNOk hE below
     (startRec head slotN startRoot headOk slotNOk selects) checked walked mem blockOk parentOk
 
 /-! ## The call invariant -/
@@ -1202,7 +1200,7 @@ theorem walk_invariant [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store pre
       startInv.2.1 _ startEpoch currentOk startEpochOk recent
     obtain ⟨_, found, -⟩ := found_of_blockEpoch historicalOk
     exact ⟨historical, historicalEpoch, epochStart, epochStartTime,
-      Store.isAncestor_trans_of_lt ctx.preGloas startHeld found rootAbove above,
+      Store.isAncestor_trans startHeld found rootAbove above,
       historicalOk, historicalRecent, epochStartOk, epochStartTimeOk, cover⟩
   · intro epoch currentOk readRootOk
     obtain rfl := Store.getCurrentStoreEpoch_eq slotOk currentOk
@@ -1214,7 +1212,7 @@ theorem walk_invariant [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store pre
         startInv.2.2 _ currentOk (startSame ▸ startEpochOk)
       obtain ⟨_, found, -⟩ := found_of_blockEpoch originOk
       exact ⟨k, before, origin, readRootOk, originOk,
-        Store.isAncestor_trans_of_lt ctx.preGloas startHeld found rootAbove below,
+        Store.isAncestor_trans startHeld found rootAbove below,
         checkedOrigin, cover⟩
     · -- The root itself is the origin, checked by this call.
       have target : ((e.world n).state u).willCurrentTargetBeJustified config head.root =
@@ -1602,7 +1600,7 @@ theorem walkMembers_cover [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store 
       .ok true := by
     obtain ⟨older, newer, split⟩ := List.append_of_mem memWalk
     exact (Store.parentRoot_of_getAncestorRoots (split ▸ walked) blockOk).2.1
-  have historicalBelow := Store.isAncestor_trans_of_lt ctx.preGloas startHeld historicalKnown
+  have historicalBelow := Store.isAncestor_trans startHeld historicalKnown
     (parent_above startHeld walked hm blockOk) startBelow
   have rootAbove := root_descends_of_walk walked hm
   have membership := Execution.votersInHeadWindow_of_newlyActive ctx.anchored ctx.start
@@ -1618,7 +1616,7 @@ theorem walkMembers_cover [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store 
     have kHigh : (e.world k).time ≤ limit := by omega
     have below : ((e.world k).state w).isAncestor ⟨after.confirmedRoot, .pending⟩
         ⟨m, .pending⟩ = .ok true :=
-      Store.isAncestor_of_same_blocks (reach k w hw) ctx.preGloas
+      Store.isAncestor_of_same_blocks (reach k w hw)
         (fun r b c hb hc => good.blocks u ctx.caller w hw n k nBound kHigh r b c hb hc)
         (Store.block_ok_iff.mp blockOk)
         ((reach n u ctx.caller).anchorSlot_le (UInt64.le_of_eq ctx.anchorSlot)

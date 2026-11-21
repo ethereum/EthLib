@@ -821,6 +821,19 @@ Not yet released.
   `Secp256r1.Curve` no longer publicly imports `Secp256k1.Field`.
   Migration: import `Secp256k1.Field` directly where it is needed.
 
+- In Lean, `Store.isAncestor_trans_of_lt` is renamed `Store.isAncestor_trans` and holds at every fork.
+  It no longer takes `before : fork < .glamsterdam`.
+  Migration: a caller takes the new name and drops that argument.
+  The new statement implies the old one.
+
+- In Lean, `Store.getCheckpointBlock_of_isAncestor`, `Store.getCheckpointBlock_of_ancestor_epoch`, `Store.isAncestor_of_same_blocks` and `Store.isAncestor_of_parent` hold at every fork and no longer take `before : fork < .glamsterdam`.
+  Migration: a caller drops that argument.
+  The new statements imply the old ones.
+
+- In Lean, `Store.getAncestor_of_isAncestor` moves from `EthLib.Consensus.Proofs.ForkChoice.CommitteeAgreement` to `EthLib.Consensus.Proofs.ForkChoice.Store`.
+  Its name and statement are unchanged.
+  Existing imports remain sufficient; for a direct import of the lemma, use `EthLib.Consensus.Proofs.ForkChoice.Store`.
+
 - In Lean, the eth messages Transactions, BlockHeaders and PooledTransactions keep each transaction and header as `Rlp.Encoded`: its item, and the bytes it was read from ([#3766](https://github.com/ethereum/EthLib/issues/3766)).
   The wire hash, the hash of a header, the PooledTransactions check, the BlockHeaders check and the session read those bytes, so they never run the recursive RLP encoder on what a peer sent.
   `Message.ofItem` takes the bytes of the item as a last argument, and the new `Message.kept_of_decode` states that each kept slice is the encoding of its item.

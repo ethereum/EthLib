@@ -1380,7 +1380,7 @@ theorem Store.getCheckpointBlock_of_shared_origin {A B : Store preset fork}
       checkpointLe
   have receiverRead := Store.getCheckpointBlock_of_same_blocks reachedB same boundaryOk
     aboveAnchor ⟨originBlock, receivedHeld⟩ originRead
-  exact Store.getCheckpointBlock_of_isAncestor (node := ⟨x, .pending⟩) before receivedHeld above
+  exact Store.getCheckpointBlock_of_isAncestor (node := ⟨x, .pending⟩) receivedHeld above
     boundaryOk early receiverRead
 
 /-- A successful pulled-up state read has the store's current epoch. -/

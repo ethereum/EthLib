@@ -233,29 +233,9 @@ theorem isAncestor_parentRoot_of_isAncestor {node root : Root}
     (found : store.blocks[root]? = some block)
     (parentFound : store.blocks[block.parentRoot]? = some parent)
     (lower : parent.slot < block.slot) :
-    store.isAncestor ⟨node, .pending⟩ ⟨block.parentRoot, .pending⟩ = .ok true := by
-  have known : store.block root = .ok block := block_ok_iff.mpr found
-  simp only [isAncestor, known, bind, Except.bind] at descends
-  cases walk : store.getAncestor ⟨node, .pending⟩ block.slot with
-  | error e => simp [walk] at descends
-  | ok reached =>
-    rw [walk] at descends
-    -- The walk to the block's slot reaches the block, with some payload status.
-    have sameRoot : reached.root = root := by
-      by_cases gloas : .glamsterdam ≤ fork <;> simp_all [pure, Except.pure]
-    have reachedFound : store.blocks[reached.root]? = some block := sameRoot ▸ found
-    -- Going on to the parent's slot steps from the block to its parent.
-    have onward : store.getAncestor ⟨node, .pending⟩ parent.slot =
-        .ok ⟨block.parentRoot, parentPayloadStatus block parent⟩ := by
-      rw [getAncestor_trans (UInt64.le_of_lt lower) walk]
-      exact getAncestor_parent_of_slot_lt reachedFound parentFound lower
-    by_cases gloas : .glamsterdam ≤ fork
-    · simp [isAncestor_pending gloas, block_ok_iff.mpr parentFound, onward, bind, Except.bind,
-        pure, Except.pure]
-    · have pending := parentPayloadStatus_of_lt (block := block) (parent := parent)
-        (Nat.lt_of_not_le gloas)
-      simp [isAncestor, block_ok_iff.mpr parentFound, onward, pending, gloas, bind, Except.bind,
-        pure, Except.pure]
+    store.isAncestor ⟨node, .pending⟩ ⟨block.parentRoot, .pending⟩ = .ok true :=
+  isAncestor_trans found parentFound descends
+    (isAncestor_pending_parent_of_slot_lt found parentFound lower)
 
 /-- The walk from a root, as it goes on: each listed root has the root before it as parent.
 

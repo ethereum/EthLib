@@ -102,7 +102,7 @@ theorem isAncestor_of_blockTree_ancestor (before : fork < .glamsterdam) {root an
       rw [blockTree_height_of ancestorFound] at this
       simp [blockTree, treeHeight, parentFound] at this
     | some parent =>
-      exact isAncestor_of_parent before found parentFound (lower _ block parent found parentFound)
+      exact isAncestor_of_parent found parentFound (lower _ block parent found parentFound)
         (ih parentFound chain)
 
 end Store

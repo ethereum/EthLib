@@ -826,7 +826,7 @@ public theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     ⟨viable, descends, maximum, sourceMaximum, sourceScore, maximumOk, sourceMaximumOk,
       sourceScoreOk, sourceMargin⟩
   · obtain ⟨justified, justifiedKnown⟩ := Store.filterNodeTree_known tree
-    exact .inl (Store.isAncestor_trans_of_lt before justifiedKnown found
+    exact .inl (Store.isAncestor_trans justifiedKnown found
       (Store.isAncestor_getHead_of_lt_gloas before headRead) justifiedAbove)
   let store := (e.world n).state u
   have reached := e.forwardReachableWith

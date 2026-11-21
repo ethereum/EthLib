@@ -168,7 +168,7 @@ theorem Execution.mem_supportersOf_of_latest_signed {anchor : Store preset fork}
   have reached := e.reachable
     (fun u hu => (start u hu) ▸ Store.Reachable.anchor anchored) k w receiver
   obtain ⟨tip, tipKnown, _⟩ := origin.voted
-  have descends := Store.isAncestor_of_same_blocks reached preGloas
+  have descends := Store.isAncestor_of_same_blocks reached
     (oneBlock v honest w receiver n k ((e.monotone_time earlier.le).trans bounded) bounded)
     sourceKnown aboveAnchor ⟨tip, dataRoot ▸ tipKnown⟩ supported
   have pending := Store.getHead_pending preGloas headOk
@@ -285,7 +285,7 @@ private theorem blocks_or_justified_covers {Δ : ℕ} (sync : e.Synchronous Δ)
           dsimp at clock
           omega)) boundaryOk aboveAnchor
         ⟨rootBlock, sourceKnown⟩ checkpoint
-      exact Store.getCheckpointBlock_of_isAncestor preGloas sourceKnown
+      exact Store.getCheckpointBlock_of_isAncestor sourceKnown
         supports boundaryOk belowRoot sourceCheckpoint
     rcases e.blocks_of_partiallySynchronous sync preGloas admitted anchored start
       honest receiver (by simpa using late) arrivalBound upToDate ⟨finalized, finalizedKnown⟩
@@ -297,7 +297,7 @@ private theorem blocks_or_justified_covers {Δ : ℕ} (sync : e.Synchronous Δ)
     have checkpoint := chain w receiver arrival endpoint later bounded
     obtain ⟨_, finalized, _, held, _, descends⟩ :=
       Store.isAncestor_of_getCheckpointBlock checkpoint
-    exact Store.isAncestor_trans_of_lt preGloas held known descends covered
+    exact Store.isAncestor_trans held known descends covered
 
 /-- An honest duty vote is a sent message that signs its own data. -/
 theorem VoteAt.signed_sent {anchor : Store preset fork}
@@ -961,7 +961,7 @@ theorem rootFinal_or_justified_covers {anchor : Store preset fork}
   refine ⟨boundary, boundaryOk, ?_⟩
   by_cases early : boundary ≤ justifiedBlock.slot
   · exact ⟨UInt64.le_trans early justifiedLe,
-      Store.getCheckpointBlock_of_isAncestor preGloas justifiedFound descends boundaryOk early read⟩
+      Store.getCheckpointBlock_of_isAncestor justifiedFound descends boundaryOk early read⟩
   have late : justifiedBlock.slot ≤ boundary := UInt64.le_of_lt (UInt64.not_le.mp early)
   rw [Store.getAncestor_of_le justifiedFound late, Except.ok.injEq] at walk
   subst walk
@@ -1099,7 +1099,7 @@ private theorem Execution.isAncestor_getHead_of_duty_epoch_core {Δ : ℕ} (sync
   by_cases covered : ((e.world k).state w).isAncestor
       ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true
   · obtain ⟨justified, held, _⟩ := Store.slot_le_of_isAncestor known covered
-    exact Store.isAncestor_trans_of_lt preGloas held
+    exact Store.isAncestor_trans held
       known (Store.isAncestor_getHead_of_lt_gloas preGloas headOk) covered
   have reached := e.reachable
     (fun u hu => (start u hu) ▸ Store.Reachable.anchor anchored) k w receiver

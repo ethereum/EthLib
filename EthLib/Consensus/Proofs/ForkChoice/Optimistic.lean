@@ -300,19 +300,6 @@ theorem Reachable.removeDescendants_ok {config : Config} {anchorState : BeaconSt
     (fun _ _ _ _ found parentUnknown otherFound =>
       reachable.orphans_le anchorSlot found parentUnknown otherFound) first
 
-/-- From a known block above the slot, the walk does not depend on the payload status of the start.
-
-Both walks step to the same parent node. -/
-private theorem getAncestor_status_of_gt {root : Root} {slot : Slot}
-    {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
-    (above : ¬ block.slot ≤ slot) (status other : PayloadStatus) :
-    store.getAncestor ⟨root, status⟩ slot = store.getAncestor ⟨root, other⟩ slot := by
-  conv => lhs; rw [getAncestor]
-  conv => rhs; rw [getAncestor]
-  repeat' split
-  all_goals simp_all [UInt64.lt_iff_toNat_lt, UInt64.le_iff_toNat_le]
-  all_goals omega
-
 /-- From Gloas, a known block does not descend from its own node with the payload. -/
 private theorem isAncestor_full_self {root : Root} {block : BeaconBlock preset fork}
     (gloas : .glamsterdam ≤ fork) (found : store.blocks[root]? = some block) :
@@ -320,33 +307,6 @@ private theorem isAncestor_full_self {root : Root} {block : BeaconBlock preset f
   simp [isAncestor, block_ok_iff.mpr found,
     getAncestor_of_le (node := ⟨root, .pending⟩) found (UInt64.le_refl _), gloas, bind,
     Except.bind, pure, Except.pure]
-
-/-- A block whose parent descends from a node with its payload descends from that node too.
-
-That needs the parent at an earlier slot than the block. -/
-private theorem isAncestor_full_of_parent {root first : Root}
-    {block parent : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
-    (parentFound : store.blocks[block.parentRoot]? = some parent)
-    (lower : parent.slot < block.slot)
-    (descends : store.isAncestor ⟨block.parentRoot, .pending⟩ ⟨first, .full⟩ = .ok true) :
-    store.isAncestor ⟨root, .pending⟩ ⟨first, .full⟩ = .ok true := by
-  by_cases gloas : .glamsterdam ≤ fork
-  swap
-  · exact isAncestor_of_parent (Nat.lt_of_not_le gloas) found parentFound lower descends
-  simp only [isAncestor, gloas, ↓reduceIte, bind, Except.bind] at descends ⊢
-  cases known : store.block first with
-  | error e => simp [known] at descends
-  | ok firstBlock =>
-    simp only [known] at descends ⊢
-    -- The parent sits above the node with the payload, or its own walk would stop at it, pending.
-    by_cases le : parent.slot ≤ firstBlock.slot
-    · rw [getAncestor_of_le parentFound le] at descends
-      simp [pure, Except.pure] at descends
-    · have aboveBlock : ¬ block.slot ≤ firstBlock.slot := fun h =>
-        le (UInt64.le_of_lt (UInt64.lt_of_lt_of_le lower h))
-      rw [getAncestor_step found aboveBlock parentFound lower,
-        getAncestor_status_of_gt parentFound le _ .pending]
-      exact descends
 
 /-- The blocks that a removal from Gloas drops are those built on the payload of its root.
 
@@ -728,7 +688,7 @@ theorem Linked.onInvalidPayload {orphanParent : Root} {block : BeaconBlock prese
     (linked : store.Linked orphanParent)
     (invalidated : store.onInvalidPayload block latestValidHash = .ok after) :
     after.Linked orphanParent := by
-  rcases onInvalidPayload_eq invalidated with same | ⟨before, first, removed⟩ |
+  rcases onInvalidPayload_eq invalidated with same | ⟨-, first, removed⟩ |
     ⟨gloas, first, removed⟩
   · exact same ▸ linked
   · rcases removeDescendants_eq removed with ⟨-, same⟩ | ⟨roots, -, member, rest⟩
@@ -738,7 +698,7 @@ theorem Linked.onInvalidPayload {orphanParent : Root} {block : BeaconBlock prese
     obtain ⟨contains, descends⟩ := (member _).mp parentRemoved
     rw [Std.TreeMap.contains_eq_isSome_getElem?] at contains
     obtain ⟨parent, parentFound⟩ := Option.isSome_iff_exists.mp contains
-    refine (member r).mpr ⟨?_, isAncestor_of_parent before found parentFound
+    refine (member r).mpr ⟨?_, isAncestor_of_parent found parentFound
       (linked.parentsBelow r b parent found parentFound) descends⟩
     rw [Std.TreeMap.contains_eq_isSome_getElem?, found]
     rfl
@@ -750,8 +710,10 @@ theorem Linked.onInvalidPayload {orphanParent : Root} {block : BeaconBlock prese
     obtain ⟨contains, descends⟩ := (member _).mp parentRemoved
     rw [Std.TreeMap.contains_eq_isSome_getElem?] at contains
     obtain ⟨parent, parentFound⟩ := Option.isSome_iff_exists.mp contains
-    refine (member r).mpr ⟨?_, isAncestor_full_of_parent found parentFound
-      (linked.parentsBelow r b parent found parentFound) descends⟩
+    obtain ⟨_, firstFound⟩ := held_of_isAncestor descends
+    refine (member r).mpr ⟨?_, isAncestor_trans parentFound firstFound
+      (isAncestor_pending_parent_of_slot_lt found parentFound
+        (linked.parentsBelow r b parent found parentFound)) descends⟩
     rw [Std.TreeMap.contains_eq_isSome_getElem?, found]
     rfl
 

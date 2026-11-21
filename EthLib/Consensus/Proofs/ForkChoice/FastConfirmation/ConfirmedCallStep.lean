@@ -823,7 +823,7 @@ private theorem finalized_invariant {Δ : ℕ} {anchor : Store preset fork}
       Store.isAncestor_of_getCheckpointBlock read
     have headDescends := Store.isAncestor_getHead headOk
     obtain ⟨justifiedBlock, justifiedFound⟩ := Store.held_of_isAncestor headDescends
-    exact Store.isAncestor_trans_of_lt ctx.preGloas justifiedFound finalFound headDescends below
+    exact Store.isAncestor_trans justifiedFound finalFound headDescends below
   · intro epoch rootEpoch epochOk rootOk recent
     obtain ⟨other, otherOk, low, lagged⟩ := old epoch epochOk
     rw [rootOk, Except.ok.injEq] at otherOk
@@ -1018,7 +1018,7 @@ private theorem observed_facts [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : S
           ((UInt64.le_iff_toNat_le.mp blockLe).trans early) honest duty target (by omega)
           high').resolve_right collision
         obtain ⟨rootBlock, rootKnown⟩ := Store.held_of_isAncestor descends
-        exact Store.isAncestor_trans_of_lt ctx.preGloas justifiedKnown rootKnown headAbove
+        exact Store.isAncestor_trans justifiedKnown rootKnown headAbove
           descends
     have coverAll := cover (limit + 1) le_rfl
     refine ⟨⟨?_, ?_, ?_⟩, coverAll⟩

@@ -216,7 +216,7 @@ theorem Execution.receiverWindowExitsNear_of_sourceOnParentChain
       checkpointFound) checkpointLe
   have receiverRead := Store.getCheckpointBlock_of_same_blocks (reached w receiver k) same
     boundaryOk aboveAnchor ⟨parent, receiverParent⟩ callerRead
-  have headRead := Store.getCheckpointBlock_of_isAncestor preGloas receiverParent descends
+  have headRead := Store.getCheckpointBlock_of_isAncestor receiverParent descends
     boundaryOk boundaryLe receiverRead
   -- The block states of the checkpoint block and of the head.
   obtain ⟨-, receiverCheckpoint, -, receiverCheckpointFound, -, -⟩ :=

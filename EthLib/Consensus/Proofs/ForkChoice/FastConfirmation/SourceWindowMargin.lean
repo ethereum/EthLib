@@ -321,7 +321,6 @@ So every vote is near the parent, and the head state agrees with its target stat
 private theorem supportersOf_mem_range_of_near_parent {checks : SignatureChecks}
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
-    (before : fork < .glamsterdam)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -354,9 +353,9 @@ private theorem supportersOf_mem_range_of_near_parent {checks : SignatureChecks}
     Store.getSupportedNode_root supported
   have rootParent := Store.isAncestor_pending_parent_of_slot_lt (node := ⟨root, .pending⟩)
     found parentFound lower
-  have headParent := Store.isAncestor_trans_of_lt before found parentFound descends rootParent
+  have headParent := Store.isAncestor_trans found parentFound descends rootParent
   obtain ⟨votedBlock, votedFound, votedAbove⟩ := Store.slot_le_of_isAncestor found voteDescends
-  have voteParent := Store.isAncestor_trans_of_lt before found parentFound voteDescends rootParent
+  have voteParent := Store.isAncestor_trans found parentFound voteDescends rootParent
   -- The head has a state, at or before the current slot.
   obtain ⟨headBlock, headBlockFound, -⟩ := Store.slot_le_of_isAncestor found descends
   obtain ⟨headState, headFound, -, -⟩ := reached.reachable.blockStatesFromParents headBlockFound
@@ -532,7 +531,6 @@ private theorem caller_margin_sets {checks : SignatureChecks}
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     (absent : store.blocks[anchorBlock.parentRoot]? = none)
-    (before : fork < .glamsterdam)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -572,7 +570,7 @@ private theorem caller_margin_sets {checks : SignatureChecks}
     Store.computeAdversarialWeight_eq_ok rangeOk
   obtain ⟨participants, participantsOk, equivocators⟩ :=
     Store.exists_stake_equivocatorsOf_of_getEquivocationScore equivocationOk
-  have inRange := supportersOf_mem_range_of_near_parent anchorSlot reached before
+  have inRange := supportersOf_mem_range_of_near_parent anchorSlot reached
     minLookahead maxLookahead ring slotOk blockOk (Store.block_ok_iff.mp parentOk) lower startLe
     lastOk descends near participantsOk (balanceSource := source)
   have whole : ∀ v ∈ Store.activeMembers source participants,
@@ -1010,8 +1008,8 @@ private theorem caller_fits_below_head {anchor : Store preset fork}
     rcases rootFinal_or_justified_covers anchored start anchorSlot before chain caller bounded
         lower headFound tree covered with justifiedCovers | fits
     · -- The justified block descends from the head, so from the block below it.
-      have belowJustified := Store.isAncestor_trans_of_lt (middle := ⟨head.root, .pending⟩)
-        before headFound belowFound justifiedCovers (headRoot ▸ headDescends)
+      have belowJustified := Store.isAncestor_trans (middle := ⟨head.root, .pending⟩)
+        headFound belowFound justifiedCovers (headRoot ▸ headDescends)
       exact getCheckpointBlock_of_below before belowFound belowJustified boundaryOk boundaryLe
         justifiedRead
     · obtain ⟨boundary', boundaryOk', -, headRead⟩ := fits k' le
@@ -1186,7 +1184,7 @@ private theorem latest_rank_of_signed {Δ : ℕ} (sync : e.Synchronous Δ)
     rw [headOk, Except.ok.injEq] at hOk
     subst hOk
     rw [headEq]
-    exact Store.isAncestor_of_same_blocks (reached v honest n) preGloas
+    exact Store.isAncestor_of_same_blocks (reached v honest n)
       (agree (a, i) ⟨holder, heldTime⟩ (v, n) ⟨honest, dutyTime⟩) heldRoot
       ((reached a holder i).anchorSlot_le (UInt64.le_of_eq anchorSlot) heldRoot)
       ⟨headBlock, by rw [← sameData, dataRoot]; exact headKnown⟩ heldDescends
@@ -1592,7 +1590,7 @@ private theorem caller_supporter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
       have := congrArg LatestMessage.root otherEq
       simpa [LatestMessage.ofAttestation] using this.symm
     rw [tipRoot] at tipFound
-    have receiverDescends := Store.isAncestor_of_same_blocks (reached w receiver k) preGloas
+    have receiverDescends := Store.isAncestor_of_same_blocks (reached w receiver k)
       (agree (u, n) ⟨caller, callerTime⟩ (w, k) ⟨receiver, le_of_eq atTime⟩) found
       ((reached u caller n).anchorSlot_le (UInt64.le_of_eq anchorSlot) found) ⟨tip, tipFound⟩
       voteDescends
@@ -1629,8 +1627,8 @@ private theorem caller_supporter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
     have := UInt64.le_iff_toNat_le.mp votedLe
     omega
   have headHistorical : ((e.world n).state u).isAncestor head ⟨historical, .pending⟩ = .ok true :=
-    Store.isAncestor_trans_of_lt preGloas parentFound historicalFound
-      (Store.isAncestor_trans_of_lt preGloas found parentFound headDescends
+    Store.isAncestor_trans parentFound historicalFound
+      (Store.isAncestor_trans found parentFound headDescends
         (Store.isAncestor_pending_parent_of_slot_lt (node := ⟨root, .pending⟩) found parentFound
           parentBelow))
       historicalBelow
@@ -1855,7 +1853,7 @@ private theorem caller_parent_voter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
       parentKnown callerTime parentFound
       (by rw [votedRoot]; exact Store.isAncestor_self parentFound)
       (fun k' le current => (parentCases k' le current).imp_right fun covers =>
-        Store.isAncestor_trans_of_lt preGloas known parentKnown covers rootParent) with
+        Store.isAncestor_trans known parentKnown covers rootParent) with
     (⟨received, receivedOk, rank⟩ | ⟨-, k', le, current, unfit⟩) | collision
   rotate_left
   · -- The checkpoint descends from the root, and the justified block from the checkpoint.
@@ -1863,7 +1861,7 @@ private theorem caller_parent_voter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
     have checkpoint := chain w receiver k' k le receiverTime
     obtain ⟨_, finalized, _, held, _, descends⟩ :=
       Store.isAncestor_of_getCheckpointBlock checkpoint
-    exact .inl (.inr (.inr (Store.isAncestor_trans_of_lt preGloas held known descends covers)))
+    exact .inl (.inr (.inr (Store.isAncestor_trans held known descends covers)))
   · exact .inr collision
   have counted := e.equivocatingIndices_honest slots
     (fun a ha b hb => by
@@ -1940,8 +1938,8 @@ private theorem caller_parent_voter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
       have := UInt64.le_iff_toNat_le.mp votedLe
       omega)
   have headHistorical : callerStore.isAncestor head ⟨historical, .pending⟩ = .ok true :=
-    Store.isAncestor_trans_of_lt preGloas parentFound historicalFound
-      (Store.isAncestor_trans_of_lt preGloas found parentFound headDescends
+    Store.isAncestor_trans parentFound historicalFound
+      (Store.isAncestor_trans found parentFound headDescends
         (Store.isAncestor_pending_parent_of_slot_lt (node := ⟨root, .pending⟩) found parentFound
           parentBelow))
       historicalBelow
@@ -2617,7 +2615,7 @@ public theorem Execution.source_surplus_or_historical_evidence_with [DecidablePr
     rw [← callerHeadPending]
   have receiverHeadEq : (⟨receiverHead.root, .pending⟩ : ForkChoiceNode) = receiverHead := by
     rw [← Store.getHead_pending preGloas receiverHeadOk]
-  have callerDescends := Store.isAncestor_trans_of_lt preGloas found parentFound headDescends
+  have callerDescends := Store.isAncestor_trans found parentFound headDescends
     rootParent
   have agreeReads := fun {a b : Slot} (above : parent.slot ≤ a)
       (endNear : (computeEpochAtSlot preset b).toNat ≤
@@ -2645,7 +2643,7 @@ public theorem Execution.source_surplus_or_historical_evidence_with [DecidablePr
   -- The caller's reads, in sets.
   obtain ⟨startSlot, advParticipants, I, firstStart, startCases, advOk, supportEq, supIn,
     equivocatorsIn, equivocators, apart, cover⟩ :=
-    caller_margin_sets (UInt64.le_of_eq anchorSlot) (forward u caller n) callerAbsent preGloas
+    caller_margin_sets (UInt64.le_of_eq anchorSlot) (forward u caller n) callerAbsent
       minLookahead maxLookahead ring slotOk blockOk parentOk firstOk lastOk
       (callerHeadEq ▸ headDescends) callerNear registry aligned increment supportOk adversaryOk
   have anchorEmpty := Store.getForkchoiceStore_equivocatingIndices anchored
@@ -3030,7 +3028,7 @@ public theorem Execution.honest_vote_of_caller_margin [DecidablePred (· ∈ J)]
       (computeEpochAtSlot preset parent.slot).toNat + 1 := by omega
   obtain ⟨startSlot, advParticipants, I, firstLe, ordered, advOk, supportEq, supIn, equivIn,
     equivAre, apart, cover⟩ := caller_margin_sets (UInt64.le_of_eq anchorSlot) reached
-      (absent u caller n callerTime) preGloas minLookahead maxLookahead ring slotOk blockOk
+      (absent u caller n callerTime) minLookahead maxLookahead ring slotOk blockOk
       parentOk firstOk lastOk headDescends nearParent registry aligned increment supportOk
       adversaryOk
   -- The adversary's window ends by the reserve's end.
