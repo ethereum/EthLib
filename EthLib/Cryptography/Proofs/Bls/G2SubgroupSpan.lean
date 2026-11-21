@@ -2,10 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Bls.CofactorSpan
 public import EthLib.Cryptography.Proofs.Bls.CofactorIndependence
-public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ2713
-public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ11953
-public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ262069
-public import EthLib.Cryptography.Proofs.Bls.CofactorPointLarge
+public import EthLib.Cryptography.Proofs.Bls.CofactorPoints
 
 /-!
 # Proofs: Twist curve cardinality and `G2.generator` span completeness
