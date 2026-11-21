@@ -50,7 +50,7 @@ theorem activation_le_of_active {g : ForkedBeaconState preset}
     (h : Setting config checks g split fin pulled anc counted V)
     (bound : (getCurrentEpoch counted).toNat ≤
       anc.finalizedCheckpoint.epoch.toNat + preset.MAX_SEED_LOOKAHEAD.toNat)
-    {v : ValidatorIndex} (member : v ∈ Internal.AC counted) {w : Validator}
+    {v : ValidatorIndex} (member : v ∈ countedActiveVoters counted) {w : Validator}
     (found : pulled.validators.data[v.toNat]? = some w) :
     w.activationEpoch.toNat ≤ (getCurrentEpoch counted).toNat := by
   have finalized := UInt64.le_iff_toNat_le.mp h.finalized
@@ -68,29 +68,30 @@ theorem activation_le_of_active {g : ForkedBeaconState preset}
 
 /-- Glue: an unslashed V key active in C counts in C's quorum. -/
 theorem glue_quorum (h : Setting config checks g split fin pulled anc counted V) :
-    ∀ v ∈ V, v ∈ Internal.AC counted → v ∈ Internal.Q counted := by
+    ∀ v ∈ V, v ∈ countedActiveVoters counted → v ∈ countedQuorum counted := by
   intro v member active
   have unslashed := (h.voting v member).2
   have listed : v ∈ getActiveValidatorIndices counted (getCurrentEpoch counted) := by
-    simpa [Internal.AC, activeVoters] using active
+    simpa [countedActiveVoters, activeVoters] using active
   have inside := lt_size_of_mem_getActiveValidatorIndices listed
   have found : counted.validators.data[v.toNat]? = some counted.validators.data[v.toNat] :=
     Array.getElem?_eq_getElem inside
   have flag : ((counted.validators.data[v.toNat]?).map (·.slashed)).getD true = false := by
     simpa [slashedFlagAt, found] using unslashed
-  simp only [Internal.Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append]
+  simp only [countedQuorum, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append]
   exact ⟨.inl listed, flag⟩
 
 /-- The two costs of V keys are the fall of those active in C and the stake of the others. -/
 private theorem cV_split (h : Setting config checks g split fin pulled anc counted V) :
-    Internal.cV1 pulled counted V + Internal.cV2 pulled counted V =
-      ∑ v ∈ V.filter (· ∈ Internal.AC counted), ((Internal.eR pulled v : ℤ) - Internal.eC counted v)
+    voterFallCost pulled counted V + inactiveVoterCost pulled counted V =
+      ∑ v ∈ V.filter (· ∈ countedActiveVoters counted), ((pulledBalance pulled v : ℤ) -
+          countedBalance counted v)
         +
-        ∑ v ∈ Internal.VN counted V, (Internal.eR pulled v : ℤ) := by
+        ∑ v ∈ countedInactiveVoters counted V, (pulledBalance pulled v : ℤ) := by
   classical
-  have sub : V ⊆ Internal.U pulled counted := fun v hv =>
+  have sub : V ⊆ costKeys pulled counted := fun v hv =>
     Finset.mem_union_right _ (h.voting v hv).1
-  unfold Internal.cV1 Internal.cV2 Internal.VN
+  unfold voterFallCost inactiveVoterCost countedInactiveVoters
   congr 1
   · rw [← Finset.sum_filter]
     refine Finset.sum_congr ?_ fun _ _ => rfl
@@ -117,30 +118,36 @@ C's tail adds its sync movement. -/
 theorem cV_le_of (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
     {eventsF eventsC : List (BalanceEvent preset)}
-    (active : ∀ v ∈ V, v ∈ Internal.AC counted → (Internal.eR pulled v : ℤ) - Internal.eC counted v
+    (active : ∀ v ∈ V, v ∈ countedActiveVoters counted → (pulledBalance pulled v : ℤ) -
+        countedBalance counted v
       ≤
       ((pinTerms config pulled anc fin).fall v.toNat : ℤ) +
         ((eventsF.map (Internal.syncDebit v.toNat)).sum + Internal.syncF eventsC v.toNat) +
           Internal.bandR (eventsF ++ eventsC) v.toNat)
-    (left : ∀ v ∈ Internal.VN counted V, (Internal.eR pulled v : ℤ) ≤
+    (left : ∀ v ∈ countedInactiveVoters counted V, (pulledBalance pulled v : ℤ) ≤
       ((pinTerms config pulled anc fin).fall v.toNat +
         ((eventsF.map (Internal.syncDebit v.toNat)).sum + Internal.syncF eventsC v.toNat) +
         Internal.bandR (eventsF ++ eventsC) v.toNat + Internal.exitQ tailC v.toNat +
-        (if (pinTerms config pulled anc fin).exitingB v.toNat = true then Internal.eR pulled v else
+        (if (pinTerms config pulled anc fin).exitingB v.toNat = true then pulledBalance pulled v
+            else
           0) +
-        (if (pinTerms config pulled anc fin).lateB v.toNat = true then Internal.eR pulled v else 0)
+        (if (pinTerms config pulled anc fin).lateB v.toNat = true then pulledBalance pulled v else
+            0)
           : ℕ)) :
-    Internal.cV1 pulled counted V + Internal.cV2 pulled counted V ≤
+    voterFallCost pulled counted V + inactiveVoterCost pulled counted V ≤
       ((∑ v ∈ V, (pinTerms config pulled anc fin).fall v.toNat) +
         (∑ v ∈ V, ((eventsF.map (Internal.syncDebit v.toNat)).sum + Internal.syncF eventsC v.toNat))
           +
         (∑ v ∈ V, Internal.bandR (eventsF ++ eventsC) v.toNat) +
-        (∑ v ∈ (Internal.VN counted V), Internal.exitQ tailC v.toNat) +
-        (∑ v ∈ (Internal.VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat =
+        (∑ v ∈ (countedInactiveVoters counted V), Internal.exitQ tailC v.toNat) +
+        (∑ v ∈ (countedInactiveVoters counted V) with (pinTerms config pulled anc fin).exitingB
+            v.toNat =
           true,
-          Internal.eR pulled v) +
-        (∑ v ∈ (Internal.VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true,
-          Internal.eR pulled v) : ℕ) := by
+          pulledBalance pulled v) +
+        (∑ v ∈ (countedInactiveVoters counted V) with (pinTerms config pulled anc fin).lateB v.toNat
+            =
+            true,
+          pulledBalance pulled v) : ℕ) := by
   classical
   rw [cV_split h]
   -- the bound of each key that does not depend on how it left
@@ -150,30 +157,34 @@ theorem cV_le_of (h : Setting config checks g split fin pulled anc counted V)
         Internal.bandR (eventsF ++ eventsC) v.toNat
   let X : ValidatorIndex → ℕ := fun v =>
     Internal.exitQ tailC v.toNat +
-      (if (pinTerms config pulled anc fin).exitingB v.toNat = true then Internal.eR pulled v else 0)
+      (if (pinTerms config pulled anc fin).exitingB v.toNat = true then pulledBalance pulled v else
+          0)
         +
-      (if (pinTerms config pulled anc fin).lateB v.toNat = true then Internal.eR pulled v else 0)
-  have first : ∑ v ∈ V.filter (· ∈ Internal.AC counted), ((Internal.eR pulled v : ℤ) - Internal.eC
+      (if (pinTerms config pulled anc fin).lateB v.toNat = true then pulledBalance pulled v else 0)
+  have first : ∑ v ∈ V.filter (· ∈ countedActiveVoters counted), ((pulledBalance pulled v : ℤ) -
+      countedBalance
     counted v) ≤
-      ∑ v ∈ V.filter (· ∈ Internal.AC counted), (P v : ℤ) := by
+      ∑ v ∈ V.filter (· ∈ countedActiveVoters counted), (P v : ℤ) := by
     refine Finset.sum_le_sum fun v hv => ?_
     obtain ⟨member, act⟩ := Finset.mem_filter.mp hv
     have := active v member act
     simp only [P]
     push_cast at this ⊢
     omega
-  have second : ∑ v ∈ Internal.VN counted V, (Internal.eR pulled v : ℤ) ≤
-      ∑ v ∈ Internal.VN counted V, ((P v : ℤ) + X v) := by
+  have second : ∑ v ∈ countedInactiveVoters counted V, (pulledBalance pulled v : ℤ) ≤
+      ∑ v ∈ countedInactiveVoters counted V, ((P v : ℤ) + X v) := by
     refine Finset.sum_le_sum fun v hv => ?_
     have := left v hv
     simp only [P, X]
     push_cast at this ⊢
     omega
   have partition : ∑ v ∈ V, (P v : ℤ) =
-      ∑ v ∈ V.filter (· ∈ Internal.AC counted), (P v : ℤ) + ∑ v ∈ Internal.VN counted V, (P v : ℤ)
+      ∑ v ∈ V.filter (· ∈ countedActiveVoters counted), (P v : ℤ) + ∑ v ∈ countedInactiveVoters
+          counted V,
+          (P v : ℤ)
         := by
-    unfold Internal.VN
-    exact (Finset.sum_filter_add_sum_filter_not V (· ∈ Internal.AC counted) _).symm
+    unfold countedInactiveVoters
+    exact (Finset.sum_filter_add_sum_filter_not V (· ∈ countedActiveVoters counted) _).symm
   have total : ∑ v ∈ V, (P v : ℤ) =
       ((∑ v ∈ V, (pinTerms config pulled anc fin).fall v.toNat) +
         (∑ v ∈ V, ((eventsF.map (Internal.syncDebit v.toNat)).sum + Internal.syncF eventsC v.toNat))
@@ -182,18 +193,22 @@ theorem cV_le_of (h : Setting config checks g split fin pulled anc counted V)
     simp only [P]
     push_cast
     simp only [Finset.sum_add_distrib]
-  have exits : ∑ v ∈ Internal.VN counted V, (X v : ℤ) =
-      ((∑ v ∈ (Internal.VN counted V), Internal.exitQ tailC v.toNat) +
-        (∑ v ∈ (Internal.VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat =
+  have exits : ∑ v ∈ countedInactiveVoters counted V, (X v : ℤ) =
+      ((∑ v ∈ (countedInactiveVoters counted V), Internal.exitQ tailC v.toNat) +
+        (∑ v ∈ (countedInactiveVoters counted V) with (pinTerms config pulled anc fin).exitingB
+            v.toNat =
           true,
-          Internal.eR pulled v) +
-        (∑ v ∈ (Internal.VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true,
-          Internal.eR pulled v) : ℕ) := by
+          pulledBalance pulled v) +
+        (∑ v ∈ (countedInactiveVoters counted V) with (pinTerms config pulled anc fin).lateB v.toNat
+            =
+            true,
+          pulledBalance pulled v) : ℕ) := by
     simp only [X, Finset.sum_filter]
     push_cast
     simp only [Finset.sum_add_distrib]
-  have split : ∑ v ∈ Internal.VN counted V, ((P v : ℤ) + X v) =
-      ∑ v ∈ Internal.VN counted V, (P v : ℤ) + ∑ v ∈ Internal.VN counted V, (X v : ℤ) :=
+  have split : ∑ v ∈ countedInactiveVoters counted V, ((P v : ℤ) + X v) =
+      ∑ v ∈ countedInactiveVoters counted V, (P v : ℤ) + ∑ v ∈ countedInactiveVoters counted V, (X v
+          : ℤ) :=
         Finset.sum_add_distrib
   push_cast at total exits ⊢
   omega
@@ -2039,14 +2054,14 @@ theorem setting_epochs {g : ForkedBeaconState preset}
   rw [UInt64.toNat_add, one]
   exact Nat.mod_eq_of_lt (by omega)
 
-/-- A key of `K6` in R's registry has no exit, or an exit after the split's lookahead.
+/-- A joined key in R's registry has no exit, or an exit after the split's lookahead.
 
 An exit at or before the split's epoch plus the seed lookahead is on the shared prefix of the runs.
 
 Both runs then agree on the key's activity up to that exit, so C would not count the key.
 
 The records of the key at R and at C, and what they say of its activity, are the premises. -/
-private theorem K6_exit_late {g : ForkedBeaconState preset}
+private theorem joinedKeys_exit_late {g : ForkedBeaconState preset}
     {split fin pulled anc counted : BeaconState preset fork} {V : Finset ValidatorIndex}
     (h : Setting config checks g split fin pulled anc counted V) {v : ValidatorIndex}
     {w u : Validator} (found : pulled.validators.data[v.toNat]? = some w)
@@ -2159,10 +2174,10 @@ theorem late_or_pending (h : Setting config checks g split fin pulled anc counte
 It joins at R's next epoch.
 
 Or it activates late, has exited at R, is exiting at R, or is not yet eligible at R. -/
-theorem K6_class {g : ForkedBeaconState preset}
+theorem joinedKeys_class {g : ForkedBeaconState preset}
     {split fin pulled anc counted : BeaconState preset fork} {V : Finset ValidatorIndex}
     (h : Setting config checks g split fin pulled anc counted V) {v : ValidatorIndex}
-    (member : v ∈ Internal.K6 pulled counted) {w : Validator}
+    (member : v ∈ joinedKeys pulled counted) {w : Validator}
     (found : pulled.validators.data[v.toNat]? = some w) :
     (isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
         isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true) ∨
@@ -2200,7 +2215,7 @@ theorem K6_class {g : ForkedBeaconState preset}
       (getCurrentEpoch pulled).toNat < w.exitEpoch.toNat) := by
     intro both
     apply notAR
-    simpa [Internal.AR, activeVoters] using
+    simpa [pulledActiveVoters, activeVoters] using
       mem_getActiveValidatorIndices_of_isActiveAt ((rActive _).mpr both)
   -- The key joins at R's next epoch.
   have joins : w.activationEpoch.toNat = (getCurrentEpoch pulled).toNat + 1 →
@@ -2250,7 +2265,7 @@ theorem K6_class {g : ForkedBeaconState preset}
     have gap := Run.exit_activation_gap chain h.genesis v.toNat w found exitNear
     have afterFin : anc.finalizedCheckpoint.epoch.toNat + 1 +
         preset.MAX_SEED_LOOKAHEAD.toNat ≤ w.exitEpoch.toNat := by
-      rcases K6_exit_late h found rActive cActive uExit notActive with far | late
+      rcases joinedKeys_exit_late h found rActive cActive uExit notActive with far | late
       · exact absurd far exitNear
       · omega
     by_cases settled : w.exitEpoch.toNat + 1 ≤ (getCurrentEpoch pulled).toNat
@@ -2334,31 +2349,33 @@ theorem card_exitingB_le (config : Config)
   exact Internal.mem_positions_filter config state ancestor finalizedState found
     (p := fun i => (pinTerms config state ancestor finalizedState).exitingB i = true) (member v hv)
 
-/-- The exit rounding budget covers two more bands for each credited key of `K5`.
+/-- The exit rounding budget covers two more bands for each credited previous-only key.
 
 Each such key must be marked as exiting or have a departure charge. -/
 theorem two_bands_le_exitingBands (config : Config)
     (pulled anc fin counted : BeaconState preset fork) (V : Finset ValidatorIndex)
     {x : ForkedBeaconState preset} (tailC : Run config checks x ⟨fork, counted⟩) (highC : ℕ)
-    (charged : ∀ v ∈ Internal.K5 counted V, (pinTerms config pulled anc fin).exitingB v.toNat =
+    (charged : ∀ v ∈ previousOnlyKeys counted V, (pinTerms config pulled anc fin).exitingB v.toNat =
       false →
       0 < Internal.bandC tailC highC v.toNat → ∃ c ∈ tailC.departureCharges, c.index = v.toNat)
-    (count : ((Internal.K5 counted V).filter fun v => ∃ c ∈ tailC.departureCharges,
+    (count : ((previousOnlyKeys counted V).filter fun v => ∃ c ∈ tailC.departureCharges,
       c.index = v.toNat).card ≤ (pinTerms config pulled anc fin).queueKeys) :
-    2 * (∑ v ∈ Internal.K5 counted V, Internal.bandC tailC highC v.toNat) ≤
+    2 * (∑ v ∈ previousOnlyKeys counted V, Internal.bandC tailC highC v.toNat) ≤
       (pinTerms config pulled anc fin).exitingBands := by
   have bounded (v : ℕ) : Internal.bandC tailC highC v ≤ preset.upwardBand := by
     unfold Internal.bandC
     split <;> omega
   rw [exitingBands_eq]
-  set A := (Internal.K5 counted V).filter fun v => (pinTerms config pulled anc fin).exitingB v.toNat
+  set A := (previousOnlyKeys counted V).filter fun v => (pinTerms config pulled anc fin).exitingB
+      v.toNat
     = true
-  set B := (Internal.K5 counted V).filter fun v => (pinTerms config pulled anc fin).exitingB v.toNat
+  set B := (previousOnlyKeys counted V).filter fun v => (pinTerms config pulled anc fin).exitingB
+      v.toNat
     = false
-  have parts : ∑ v ∈ Internal.K5 counted V, Internal.bandC tailC highC v.toNat =
+  have parts : ∑ v ∈ previousOnlyKeys counted V, Internal.bandC tailC highC v.toNat =
       ∑ v ∈ A, Internal.bandC tailC highC v.toNat + ∑ v ∈ B, Internal.bandC tailC highC v.toNat :=
         by
-    rw [← Finset.sum_filter_add_sum_filter_not (Internal.K5 counted V)
+    rw [← Finset.sum_filter_add_sum_filter_not (previousOnlyKeys counted V)
       (fun v => (pinTerms config pulled anc fin).exitingB v.toNat = true)]
     simp [A, B]
   have first : ∑ v ∈ A, Internal.bandC tailC highC v.toNat ≤ A.card * preset.upwardBand := by
@@ -2454,31 +2471,31 @@ theorem exit_charged (h : Setting config checks g split fin pulled anc counted V
         exact inherited ⟨w, hw, far⟩) u foundU assignedC
     exact ⟨c, member, index⟩
 
-/-- A key of `K5` is unslashed in C's state. -/
-theorem K5_unslashed {v : ValidatorIndex} (member : v ∈ Internal.K5 counted V) :
+/-- A previous-only key is unslashed in C's state. -/
+theorem previousOnlyKeys_unslashed {v : ValidatorIndex} (member : v ∈ previousOnlyKeys counted V) :
     ∀ w, counted.validators.data[v.toNat]? = some w → w.slashed = false := by
   intro w found
   have inK5 := Finset.mem_filter.mp member
-  simp only [Internal.Q, quorumVoters, Finset.mem_filter, List.mem_toFinset,
+  simp only [countedQuorum, quorumVoters, Finset.mem_filter, List.mem_toFinset,
     List.mem_append] at inK5
   obtain ⟨⟨-, flag⟩, -, -⟩ := inK5
   simpa [slashedFlagAt, found] using flag
 
-/-- A key of `K5` is a validator of C's registry that was active before C's epoch and is not now.
+/-- A previous-only key is a validator of C's registry active before C's epoch and not now.
 
 It is unslashed. -/
-theorem K5_previous_only (h : Setting config checks g split fin pulled anc counted V)
-    {v : ValidatorIndex} (member : v ∈ Internal.K5 counted V) :
+theorem previousOnlyKeys_previous_only (h : Setting config checks g split fin pulled anc counted V)
+    {v : ValidatorIndex} (member : v ∈ previousOnlyKeys counted V) :
     ∃ u, counted.validators.data[v.toNat]? = some u ∧
       isActiveValidator u (getPreviousEpoch counted) = true ∧
       isActiveValidator u (getCurrentEpoch counted) = false := by
   have within := BeaconState.registryWithinLimit_of_lt h.early counted
   have inK5 := Finset.mem_filter.mp member
-  simp only [Internal.Q, quorumVoters, Finset.mem_filter, List.mem_toFinset,
+  simp only [countedQuorum, quorumVoters, Finset.mem_filter, List.mem_toFinset,
     List.mem_append] at inK5
   obtain ⟨⟨listed, -⟩, notActive, -⟩ := inK5
   have notCurrent : v ∉ getActiveValidatorIndices counted (getCurrentEpoch counted) := fun now =>
-    notActive (by simpa [Internal.AC, activeVoters] using now)
+    notActive (by simpa [countedActiveVoters, activeVoters] using now)
   rcases listed with now | before
   · exact absurd now notCurrent
   obtain ⟨u, foundU, activeBefore⟩ := (mem_getActiveValidatorIndices within).mp before
@@ -2487,17 +2504,19 @@ theorem K5_previous_only (h : Setting config checks g split fin pulled anc count
   · rfl
   · exact absurd ((mem_getActiveValidatorIndices within).mpr ⟨u, foundU, now⟩) notCurrent
 
-/-- A key of `K5` that R does not read as exiting has a departure charge on C's run. -/
-theorem K5_charged (h : Setting config checks g split fin pulled anc counted V)
+/-- A previous-only key that R does not read as exiting has a departure charge on C's run.
+-/
+theorem previousOnlyKeys_charged (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) {v : ValidatorIndex}
-    (member : v ∈ Internal.K5 counted V) (flag : (pinTerms config pulled anc fin).exitingB v.toNat =
+    (member : v ∈ previousOnlyKeys counted V) (flag : (pinTerms config pulled anc fin).exitingB
+        v.toNat =
       false) :
     ∃ c ∈ tailC.departureCharges, c.index = v.toNat := by
   obtain ⟨toPulled⟩ := h.toPulled
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨u, foundU, activeBefore, notNow⟩ := Internal.K5_previous_only h member
-  have unslashedC := Internal.K5_unslashed member u foundU
+  obtain ⟨u, foundU, activeBefore, notNow⟩ := previousOnlyKeys_previous_only h member
+  have unslashedC := previousOnlyKeys_unslashed member u foundU
   have exitC := (previous_only_iff_exit counted u).mp ⟨activeBefore, notNow⟩
   have notFar := getCurrentEpoch_ne_farFuture h.twoSlots counted
   have assignedC : u.exitEpoch ≠ FAR_FUTURE_EPOCH := fun far =>
@@ -2524,42 +2543,44 @@ theorem K5_charged (h : Setting config checks g split fin pulled anc counted V)
   · exact .inr (activeAt _ (by omega) (by omega))
   · exact .inl (activeAt _ (by omega) (by omega))
 
-/-- A key of `K5` without a departure charge on C's run is one whose exit R reads. -/
-theorem K5_exiting_of_not_charged
+/-- A previous-only key without a departure charge on C's run is one whose exit R reads. -/
+theorem previousOnlyKeys_exiting_of_not_charged
     (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) {v : ValidatorIndex}
-    (member : v ∈ Internal.K5 counted V) (none : ¬ ∃ c ∈ tailC.departureCharges, c.index = v.toNat)
+    (member : v ∈ previousOnlyKeys counted V) (none : ¬ ∃ c ∈ tailC.departureCharges, c.index =
+        v.toNat)
       :
     (pinTerms config pulled anc fin).exitingB v.toNat = true := by
   by_contra flag
-  exact none (Internal.K5_charged h tailC member (by simpa using flag))
+  exact none (previousOnlyKeys_charged h tailC member (by simpa using flag))
 
 /-- The scheduled-exit budget covers the stake of keys whose exits R can see.
 
-The keys of `K5` are those without a departure charge on C's run. -/
-theorem bud_exiting (h : Setting config checks g split fin pulled anc counted V)
+The sum over previous-only keys takes only those without a departure charge on C's run. -/
+theorem budget_exiting (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) :
-    (∑ v ∈ (Internal.VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true,
-      Internal.eR pulled v) +
-      (∑ v ∈ (Internal.K5 counted V) with ¬ ∃ c ∈ tailC.departureCharges, c.index = v.toNat,
-        Internal.eR pulled v) +
-      (∑ v ∈ (Internal.K6 pulled counted) with (pinTerms config pulled anc fin).exitingB v.toNat =
+    (∑ v ∈ (countedInactiveVoters counted V) with (pinTerms config pulled anc fin).exitingB v.toNat
+        = true,
+      pulledBalance pulled v) +
+      (∑ v ∈ (previousOnlyKeys counted V) with ¬ ∃ c ∈ tailC.departureCharges, c.index = v.toNat,
+        pulledBalance pulled v) +
+      (∑ v ∈ (joinedKeys pulled counted) with (pinTerms config pulled anc fin).exitingB v.toNat =
         true,
-        Internal.eR pulled v) ≤ (pinTerms config pulled anc fin).exiting := by
-  have apartVK5 : Disjoint (Internal.VN counted V) (Internal.K5 counted V) := by
+        pulledBalance pulled v) ≤ (pinTerms config pulled anc fin).exiting := by
+  have apartVK5 : Disjoint (countedInactiveVoters counted V) (previousOnlyKeys counted V) := by
     rw [Finset.disjoint_left]
     intro v inV inK5
-    simp only [Internal.VN, Internal.K5, Finset.mem_filter] at inV inK5
+    simp only [countedInactiveVoters, previousOnlyKeys, Finset.mem_filter] at inV inK5
     exact inK5.2.2 inV.1
-  have apartVK6 : Disjoint (Internal.VN counted V) (Internal.K6 pulled counted) := by
+  have apartVK6 : Disjoint (countedInactiveVoters counted V) (joinedKeys pulled counted) := by
     rw [Finset.disjoint_left]
     intro v inV inK6
-    simp only [Internal.VN, Internal.K6, Finset.mem_filter] at inV inK6
+    simp only [countedInactiveVoters, joinedKeys, Finset.mem_filter] at inV inK6
     exact inV.2 inK6.1
-  have apartK5K6 : Disjoint (Internal.K5 counted V) (Internal.K6 pulled counted) := by
+  have apartK5K6 : Disjoint (previousOnlyKeys counted V) (joinedKeys pulled counted) := by
     rw [Finset.disjoint_left]
     intro v inK5 inK6
-    simp only [Internal.K5, Internal.K6, Finset.mem_filter] at inK5 inK6
+    simp only [previousOnlyKeys, joinedKeys, Finset.mem_filter] at inK5 inK6
     exact inK5.2.1 inK6.1
   rw [← Finset.sum_union (Finset.disjoint_filter_filter apartVK5),
     ← Finset.sum_union (Finset.disjoint_union_left.mpr
@@ -2568,7 +2589,7 @@ theorem bud_exiting (h : Setting config checks g split fin pulled anc counted V)
     rcases Finset.mem_union.mp member with member | member
     · rcases Finset.mem_union.mp member with member | member
       · exact (Finset.mem_filter.mp member).2
-      · exact Internal.K5_exiting_of_not_charged h tailC (Finset.mem_filter.mp member).1
+      · exact previousOnlyKeys_exiting_of_not_charged h tailC (Finset.mem_filter.mp member).1
           (Finset.mem_filter.mp member).2
     · exact (Finset.mem_filter.mp member).2
 
@@ -2787,10 +2808,10 @@ theorem card_big_charges_le (h : Setting config checks g split fin pulled anc co
 /-- The departure budget bounds exits and consolidations initiated on C's branch.
 
 There are none in the tight window. -/
-theorem bud_queues (h : Setting config checks g split fin pulled anc counted V)
+theorem budget_queues (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) :
-    3 * ((∑ v ∈ (Internal.VN counted V), Internal.exitQ tailC v.toNat) +
-      (∑ v ∈ (Internal.K5 counted V) with ∃ c ∈ tailC.departureCharges, c.index = v.toNat,
+    3 * ((∑ v ∈ (countedInactiveVoters counted V), Internal.exitQ tailC v.toNat) +
+      (∑ v ∈ (previousOnlyKeys counted V) with ∃ c ∈ tailC.departureCharges, c.index = v.toNat,
         Internal.exitQ tailC v.toNat)) ≤
       (pinTerms config pulled anc fin).queueExit := by
   classical
@@ -2798,8 +2819,9 @@ theorem bud_queues (h : Setting config checks g split fin pulled anc counted V)
   have early := h.early
   obtain ⟨finalized, -, -, near, -⟩ := Internal.setting_epochs h
   -- the two sets are disjoint
-  have apart : Disjoint (Internal.VN counted V)
-      ((Internal.K5 counted V).filter fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat) :=
+  have apart : Disjoint (countedInactiveVoters counted V)
+      ((previousOnlyKeys counted V).filter fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat)
+          :=
         by
     refine Finset.disjoint_left.mpr fun v first second => ?_
     exact (Finset.mem_filter.mp (Finset.mem_filter.mp second).1).2.2
@@ -2832,8 +2854,9 @@ theorem bud_queues (h : Setting config checks g split fin pulled anc counted V)
   · simp only [tight, Bool.false_eq_true, ↓reduceIte]
     have window := charges_le_queueWindow h tailC
     have kept := sum_exitQ_le tailC ((getCurrentEpoch counted).toNat - 1 + 1)
-      (by simp only; omega) ((Internal.VN counted V) ∪
-        ((Internal.K5 counted V).filter fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat))
+      (by simp only; omega) ((countedInactiveVoters counted V) ∪
+        ((previousOnlyKeys counted V).filter fun v => ∃ c ∈ tailC.departureCharges, c.index =
+            v.toNat))
     omega
 
 /-- The deposit credits of a set of keys, as events, fit any per-event bound on them.
@@ -2920,7 +2943,7 @@ The credits that a deposit event gives to V keys are at most its deposit credit.
 That credit leaves out the keys that are withdrawn, which V keys never are.
 
 The deposit credits of the run from the finalized block fit its carry and a churn for each epoch. -/
-private theorem bud_deposits_of (h : Setting config checks g split fin pulled anc counted V)
+private theorem budget_deposits_of (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -3176,7 +3199,7 @@ theorem deposits_active_le (h : Setting config checks g split fin pulled anc cou
       (life.trans life') (slashedC v inP) found clean
 
 /-- The deposit budget covers the deposits applied to voters on R's branch at weight three. -/
-theorem bud_deposits (h : Setting config checks g split fin pulled anc counted V)
+theorem budget_deposits (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
@@ -3196,7 +3219,7 @@ theorem bud_deposits (h : Setting config checks g split fin pulled anc counted V
       simpa [activeVoters] using (h.voting v member).1
     obtain ⟨u, found, active⟩ := (mem_getActiveValidatorIndices within).mp listed
     exact ⟨u, found, .inl active⟩
-  refine bud_deposits_of h tail high endEpoch replayed fun e member deposit => ?_
+  refine budget_deposits_of h tail high endEpoch replayed fun e member deposit => ?_
   have forkLe := ((toFin.append fromFin).withdrawnConsolidationCredit_eq_zero tail h.genesis h.early
     (Internal.Setting.delay h) replayed e member).2.2
   have credited := Run.deposit_credit_le_funding (toFin.append fromFin) tail h.genesis h.early
@@ -3486,15 +3509,16 @@ theorem chargeAmt_eq_zero {x y : ForkedBeaconState preset} (tail : Run config ch
   rw [List.find?_eq_none.mpr fun c member same => none ⟨c, member, by simpa using same⟩]
   rfl
 
-/-- A key of `K5` that has a charge on the run exits by the run's last epoch. -/
-theorem charge_epoch_le_of_K5 (h : Setting config checks g split fin pulled anc counted V)
+/-- A previous-only key that has a charge on the run exits by the run's last epoch. -/
+theorem charge_epoch_le_of_previousOnlyKeys
+    (h : Setting config checks g split fin pulled anc counted V)
     {x : ForkedBeaconState preset} (tail : Run config checks x ⟨fork, counted⟩)
-    {v : ValidatorIndex} (member : v ∈ Internal.K5 counted V) :
+    {v : ValidatorIndex} (member : v ∈ previousOnlyKeys counted V) :
     ∀ c ∈ tail.departureCharges, c.index = v.toNat →
       c.epoch ≤ (getCurrentEpoch counted).toNat := by
   intro c charged same
   obtain ⟨w, found, assigned, epoch⟩ := Run.departure_charge_exit tail c charged
-  obtain ⟨u, foundU, activeBefore, notNow⟩ := Internal.K5_previous_only h member
+  obtain ⟨u, foundU, activeBefore, notNow⟩ := previousOnlyKeys_previous_only h member
   rw [same] at found
   have equal : u = w := Option.some.inj (foundU.symm.trans found)
   subst equal

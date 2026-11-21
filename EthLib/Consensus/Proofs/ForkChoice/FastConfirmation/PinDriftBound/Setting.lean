@@ -525,7 +525,7 @@ They also include the initial penalty of a slashing on R's branch.
 
 The credits `cred` count the key's deposits by default.
 
-For a key of `K5`, the caller excludes deposits. -/
+For a previous-only key, the caller excludes deposits. -/
 def flowCredit (t : PinTerms preset) {x y : ForkedBeaconState preset}
     (tailC : Run config checks x y) (high : ℕ)
     (eventsC events eventsF : List (BalanceEvent preset)) (i : ℕ)
@@ -2525,84 +2525,95 @@ variable (pulled counted : BeaconState preset fork) (V : Finset ValidatorIndex)
 namespace Internal
 
 /-- The keys active at C. -/
-def AC := activeVoters counted
+def countedActiveVoters := activeVoters counted
 
 /-- The keys active at R. -/
-def AR := activeVoters pulled
+def pulledActiveVoters := activeVoters pulled
 
 /-- The keys counted in C's quorum. -/
-def Q := quorumVoters counted
+def countedQuorum := quorumVoters counted
 
 /-- The keys that the costs sum over: counted at C, or active at C or R. -/
-def U := Internal.Q counted ∪ Internal.AC counted ∪ Internal.AR pulled
+def costKeys := countedQuorum counted ∪ countedActiveVoters counted ∪ pulledActiveVoters pulled
 
 /-- The balance of a key at C. -/
-def eC (v : ValidatorIndex) : ℕ :=
+def countedBalance (v : ValidatorIndex) : ℕ :=
   balanceAt counted v.toNat
 
 /-- The balance of a key at R. -/
-def eR (v : ValidatorIndex) : ℕ :=
+def pulledBalance (v : ValidatorIndex) : ℕ :=
   balanceAt pulled v.toNat
 
-/-- V keys active in C: twice their fall. -/
-def cV1 : ℤ := ∑ v ∈ Internal.U pulled counted,
-  if v ∈ V ∧ v ∈ Internal.AC counted then (Internal.eR pulled v : ℤ) - Internal.eC counted v else 0
+/-- The fall from R to C of the keys of `V` active at C. -/
+def voterFallCost : ℤ := ∑ v ∈ costKeys pulled counted,
+  if v ∈ V ∧ v ∈ countedActiveVoters counted then
+    (pulledBalance pulled v : ℤ) - countedBalance counted v
+  else 0
 
-/-- V keys not active in C: twice their stake at R. -/
-def cV2 : ℤ :=
-  ∑ v ∈ Internal.U pulled counted, if v ∈ V ∧ v ∉ Internal.AC counted then (Internal.eR pulled v :
-    ℤ) else 0
+/-- The stake at R of the keys of `V` not active at C. -/
+def inactiveVoterCost : ℤ := ∑ v ∈ costKeys pulled counted,
+  if v ∈ V ∧ v ∉ countedActiveVoters counted then (pulledBalance pulled v : ℤ) else 0
 
-/-- (K4 pulled counted V), other keys active in both and counted in C: once their rise. -/
-def cN : ℤ := ∑ v ∈ Internal.U pulled counted,
-  if v ∈ Internal.AC counted ∧ v ∈ Internal.AR pulled ∧ v ∈ Internal.Q counted ∧ v ∉ V then
-    (Internal.eC counted v : ℤ) - Internal.eR pulled v else 0
+/-- The rise from R to C of the keys outside `V` active at C and R and counted in C's quorum. -/
+def stayingRiseCost : ℤ := ∑ v ∈ costKeys pulled counted,
+  if v ∈ countedActiveVoters counted ∧ v ∈ pulledActiveVoters pulled ∧
+      v ∈ countedQuorum counted ∧ v ∉ V then
+    (countedBalance counted v : ℤ) - pulledBalance pulled v
+  else 0
 
-/-- (K5 counted V), other keys previous-epoch-only in C: three times their stake at C. -/
-def cP : ℤ := ∑ v ∈ Internal.U pulled counted,
-  if v ∈ Internal.Q counted ∧ v ∉ Internal.AC counted ∧ v ∉ V then (Internal.eC counted v : ℤ) else
-    0
+/-- The stake at C of the keys outside `V` counted in C's quorum but not active at C. -/
+def previousOnlyCost : ℤ := ∑ v ∈ costKeys pulled counted,
+  if v ∈ countedQuorum counted ∧ v ∉ countedActiveVoters counted ∧ v ∉ V then
+    (countedBalance counted v : ℤ)
+  else 0
 
-/-- (K6 pulled counted), keys counted in C and not active at R: once their stake at C. -/
-def cJ : ℤ := ∑ v ∈ Internal.U pulled counted,
-  if v ∈ Internal.AC counted ∧ v ∈ Internal.Q counted ∧ v ∉ Internal.AR pulled then (Internal.eC
-    counted v : ℤ) else 0
+/-- The stake at C of the keys active and counted at C but not active at R. -/
+def joinedCost : ℤ := ∑ v ∈ costKeys pulled counted,
+  if v ∈ countedActiveVoters counted ∧ v ∈ countedQuorum counted ∧
+      v ∉ pulledActiveVoters pulled then
+    (countedBalance counted v : ℤ)
+  else 0
 
 /-- The keys active at C and outside its quorum (slashed at C): minus twice their stake at C.
 
 It also subtracts their stake at R if they are active there. -/
-def cK7 : ℤ := ∑ v ∈ Internal.U pulled counted,
-  if v ∈ Internal.AC counted ∧ v ∉ Internal.Q counted then
-    -(2 * (Internal.eC counted v : ℤ)) - (if v ∈ Internal.AR pulled then (Internal.eR pulled v : ℤ)
-      else 0) else 0
+def outsideQuorumCost : ℤ := ∑ v ∈ costKeys pulled counted,
+  if v ∈ countedActiveVoters counted ∧ v ∉ countedQuorum counted then
+    -(2 * (countedBalance counted v : ℤ)) -
+      (if v ∈ pulledActiveVoters pulled then (pulledBalance pulled v : ℤ) else 0)
+  else 0
 
-/-- cS, other keys active at R, not at C and outside C's quorum: minus their stake at R. -/
-def cS : ℤ := ∑ v ∈ Internal.U pulled counted,
-  if v ∈ Internal.AR pulled ∧ v ∉ Internal.AC counted ∧ v ∉ Internal.Q counted ∧ v ∉ V then
-    -(Internal.eR pulled v : ℤ) else 0
+/-- Minus the stake at R of the keys outside `V` active at R, not at C and outside C's quorum. -/
+def departedCost : ℤ := ∑ v ∈ costKeys pulled counted,
+  if v ∈ pulledActiveVoters pulled ∧ v ∉ countedActiveVoters counted ∧
+      v ∉ countedQuorum counted ∧ v ∉ V then
+    -(pulledBalance pulled v : ℤ)
+  else 0
 
 /-- The keys of `V` not active at C. -/
-def VN : Finset ValidatorIndex := V.filter (· ∉ Internal.AC counted)
+def countedInactiveVoters : Finset ValidatorIndex := V.filter (· ∉ countedActiveVoters counted)
 
 /-- The keys outside `V` active at C and R and counted in C's quorum. -/
-def K4 : Finset ValidatorIndex :=
-  (Internal.AC counted).filter fun v => v ∈ Internal.AR pulled ∧ v ∈ Internal.Q counted ∧ v ∉ V
+def stayingKeys : Finset ValidatorIndex :=
+  (countedActiveVoters counted).filter fun v =>
+    v ∈ pulledActiveVoters pulled ∧ v ∈ countedQuorum counted ∧ v ∉ V
 
 /-- The keys outside `V` counted in C's quorum but not active at C. -/
-def K5 : Finset ValidatorIndex :=
-  (Internal.Q counted).filter fun v => v ∉ Internal.AC counted ∧ v ∉ V
+def previousOnlyKeys : Finset ValidatorIndex :=
+  (countedQuorum counted).filter fun v => v ∉ countedActiveVoters counted ∧ v ∉ V
 
 /-- The keys active and counted at C but not active at R. -/
-def K6 : Finset ValidatorIndex :=
-  (Internal.AC counted).filter fun v => v ∈ Internal.Q counted ∧ v ∉ Internal.AR pulled
+def joinedKeys : Finset ValidatorIndex :=
+  (countedActiveVoters counted).filter fun v =>
+    v ∈ countedQuorum counted ∧ v ∉ pulledActiveVoters pulled
 
-/-- SC, keys of R's registry unslashed at the split and slashed at C. -/
-def SC (split : BeaconState preset fork) : Finset ValidatorIndex :=
+/-- The keys of R's registry unslashed at the split and slashed at C. -/
+def newlySlashed (split : BeaconState preset fork) : Finset ValidatorIndex :=
   ((Finset.range pulled.validators.data.size).image UInt64.ofNat).filter fun v =>
     slashedFlagAt counted v.toNat = some true ∧ slashedFlagAt split v.toNat = some false
 
 /-- Keys created beyond the split's registry and slashed at C. -/
-def CS (split : BeaconState preset fork) : Finset ValidatorIndex :=
+def createdSlashed (split : BeaconState preset fork) : Finset ValidatorIndex :=
   ((Finset.range counted.validators.data.size).image UInt64.ofNat).filter fun v =>
     split.validators.data.size ≤ v.toNat ∧ slashedFlagAt counted v.toNat = some true
 
