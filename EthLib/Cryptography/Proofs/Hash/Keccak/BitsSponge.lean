@@ -119,22 +119,6 @@ theorem padding_get (rateBits length i : Nat) (h : i < (padding rateBits length)
       subst j
       simp
 
-/-- Bit `i` of the padding mask is bit 0 of the first flag, or bit 7 of the last flag. -/
-private theorem maskBits : ∀ (first last : Bool) (i : Fin 8),
-    (((if first then 1 else 0 : UInt8) ||| (if last then 128 else 0)).toNat.testBit i.val) =
-      ((first && (decide (i.val = 0))) || (last && (decide (i.val = 7)))) := by
-  decide +kernel
-
-/-- Byte `pos` of the padding sets bit 0 when it is the first byte, and bit 7 when it is the last.
-
-It sets no other bit. -/
-theorem _root_.EthLib.Cryptography.Hash.Keccak.paddingByte_testBit (rate len pos bit : Nat)
-    (h : bit < 8) :
-    (Keccak.paddingByte rate len pos).toNat.testBit bit =
-      (decide (pos = 0 ∧ bit = 0) || decide (pos + 1 = rate - len % rate ∧ bit = 7)) := by
-  have hb := maskBits (decide (pos = 0)) (decide (pos + 1 = rate - len % rate)) ⟨bit, h⟩
-  simpa [Keccak.paddingByte, Bool.and_eq_true] using hb
-
 /-- The byte padding at `rate` bytes spells the bits of pad10*1 at `8 * rate` bits. -/
 theorem paddingBits_eq {rate : Nat} (hr : 0 < rate) (len : Nat) :
     messageBits (Keccak.padding rate len) = padding (8 * rate) (8 * len) := by
@@ -218,7 +202,7 @@ theorem absorbBlock_ofLanes {rate : Nat} (hlanes : 8 ∣ rate)
   by_cases hrate : x.val + 5 * y.val < m
   -- A rate lane reads 8 bytes of the block.
   · have inside : index x y z < 8 * (8 * m) := by omega
-    simp only [show 8 * (x.val + 5 * y.val) < 8 * m by omega, ↓reduceIte, dite_eq_left inside,
+    simp only [show 8 * (x.val + 5 * y.val) + 8 ≤ 8 * m by omega, ↓reduceIte, dite_eq_left inside,
       Keccak.Internal.laneAt_testBit _ _ _ hz, blockBits, Vector.getElem_ofFn]
     have byte : start + 8 * (x.val + 5 * y.val) + z.val / 8 = start + index x y z / 8 := by
       omega
@@ -226,7 +210,7 @@ theorem absorbBlock_ofLanes {rate : Nat} (hlanes : 8 ∣ rate)
     rw [byte, bit]
   -- A capacity lane is XORed with zero.
   · have outside : ¬ index x y z < 8 * (8 * m) := by omega
-    simp only [show ¬ 8 * (x.val + 5 * y.val) < 8 * m by omega, ↓reduceIte,
+    simp only [show ¬ 8 * (x.val + 5 * y.val) + 8 ≤ 8 * m by omega, ↓reduceIte,
       dite_eq_right outside]
     simp
 

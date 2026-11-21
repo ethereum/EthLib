@@ -536,13 +536,17 @@ def bytesOfLane (v : UInt64) : List UInt8 :=
 
 /-- Lane `i` of `P_i || 0^c`, FIPS 202 §4, Algorithm 8, step 6, with block `P_i` at `start`:
 
-- If `8i < rate`, the lane is bytes `8i` to `8i + 7` of `P_i`.
-- Otherwise the lane lies in `0^c`, so it is zero.
+- If `8i + 8 <= rate`, the lane is bytes `8i` to `8i + 7` of `P_i`.
+- Otherwise the lane is zero.
 
-The rate is a multiple of 8 bytes, so no lane straddles `P_i` and `0^c`. -/
+A lane is read only when all 8 of its bytes lie in the block, so it never reads past the block.
+
+When the rate is a multiple of 8 bytes, no lane straddles `P_i` and `0^c`.
+
+So every lane past the rate lies wholly in `0^c`. -/
 @[inline] def blockLane (rate : Nat) (bytes : ByteArray) (start i : Nat) : UInt64 :=
   -- Bytes 8i to 8i + 7 of P_i are at index start + 8i of the string.
-  if 8 * i < rate then laneAt bytes (start + 8 * i)
+  if 8 * i + 8 ≤ rate then laneAt bytes (start + 8 * i)
   -- Past the rate, the lane is in the capacity 0^c.
   else 0
 
@@ -591,6 +595,17 @@ def absorbBlock (rate : Nat) (S : State) (bytes : ByteArray) (start : Nat) : Sta
    S.a22 ^^^ lane 22,   -- S[2, 4] ^ bytes 176 to 183 of P_i, or 0 at rates 72 and 136
    S.a23 ^^^ lane 23,   -- S[3, 4] ^ bytes 184 to 191 of P_i, or 0 at rates 72 and 136
    S.a24 ^^^ lane 24⟩   -- S[4, 4] ^ bytes 192 to 199 of P_i, or 0 at rates 72 and 136
+
+/-- XOR the byte `b` into the state, at byte `p` of the block, if its lane is in the rate.
+
+Byte `p` is byte `p mod 8` of lane `p / 8`, so `b` is shifted up by `8 * (p mod 8)` bits.
+
+A byte whose lane is not wholly in the rate is not absorbed, as in a block.
+
+At a rate that is a multiple of 8 bytes, every byte below the rate is absorbed. -/
+def xorBlockByte (rate : Nat) (S : State) (p : Nat) (b : UInt8) : State :=
+  if 8 * (p / 8) + 8 ≤ rate then S.xorLane (p / 8) (b.toUInt64 <<< (8 * (p % 8)).toUInt64)
+  else S
 
 /-- The output of FIPS 202 §4, Algorithm 8, steps 7 to 9, for `d = 256` bits:
 
@@ -670,14 +685,16 @@ A caller that hashes many messages differing only in their last block can share 
 
 The rate must be positive, below 200 bytes and a multiple of 8 bytes, as for the absorbing phase. -/
 def stateBeforeLastPermutation (f : State → State) (rate : Nat) (msg : ByteArray) : State :=
-  -- Step 1: P = N || pad(r, len(N)).
-  let P := pad rate msg
-  -- Step 2: n = len(P) / r, and k = n - 1 blocks come before the last one.
-  let k := blockCount rate msg.size - 1
-  -- Steps 3 to 6 for i < n - 1: from S = 0^b, S = f(S ^ (P_i || 0^c)), with P_i at index i * r.
-  let S := Internal.absorbBlocks f rate P k 0 State.zero
-  -- The last block P_{n-1}, at index k * r, is XORed in and not yet permuted.
-  Internal.absorbBlock rate S P (rate * k)
+  -- Steps 1 and 2: the k = n - 1 blocks of P = N || pad(r, len(N)) before the last are in N.
+  let k := msg.size / rate
+  -- Steps 3 to 6 for i < n - 1: from S = 0^b, S = f(S ^ (P_i || 0^c)), with P_i read from N.
+  let S := Internal.absorbBlocks f rate msg k 0 State.zero
+  -- The last block P_{n-1} starts with the rest of N, read in place; bytes past N read as zero.
+  let S := Internal.absorbBlock rate S msg (rate * k)
+  -- The first 1 bit of the padding is bit 0 of byte len(N) mod r of the last block.
+  let S := Internal.xorBlockByte rate S (msg.size % rate) 0x01
+  -- The final 1 bit is bit 7 of byte r - 1; with one padding byte, both bits share it.
+  Internal.xorBlockByte rate S (rate - 1) 0x80
 
 /-- The absorbing phase, FIPS 202 §4, Algorithm 8, steps 1 to 6, at a rate of `rate` bytes:
 

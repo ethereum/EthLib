@@ -36,38 +36,6 @@ theorem laneAt_zero {bytes : ByteArray} {s : Nat} (h : ∀ k < 8, byteAt bytes (
     h 6 (by omega), h 7 (by omega)]
   rfl
 
-/-- An index of 25 or more names no lane. -/
-theorem State.xorLane_of_le (A : State) {i : Nat} (h : 25 ≤ i) (v : UInt64) :
-    A.xorLane i v = A := by
-  obtain ⟨j, rfl⟩ : ∃ j, i = j + 25 := ⟨i - 25, by omega⟩
-  rfl
-
-/-- XORing one word into lane `i` of a block XORs it into lane `i` of the absorbed state. -/
-private theorem absorbBlock_lanes_xor (S : State) (g : Nat → UInt64) (i : Nat) (v : UInt64) :
-    (⟨S.a0 ^^^ (g 0 ^^^ if 0 = i then v else 0), S.a1 ^^^ (g 1 ^^^ if 1 = i then v else 0),
-      S.a2 ^^^ (g 2 ^^^ if 2 = i then v else 0), S.a3 ^^^ (g 3 ^^^ if 3 = i then v else 0),
-      S.a4 ^^^ (g 4 ^^^ if 4 = i then v else 0), S.a5 ^^^ (g 5 ^^^ if 5 = i then v else 0),
-      S.a6 ^^^ (g 6 ^^^ if 6 = i then v else 0), S.a7 ^^^ (g 7 ^^^ if 7 = i then v else 0),
-      S.a8 ^^^ (g 8 ^^^ if 8 = i then v else 0), S.a9 ^^^ (g 9 ^^^ if 9 = i then v else 0),
-      S.a10 ^^^ (g 10 ^^^ if 10 = i then v else 0), S.a11 ^^^ (g 11 ^^^ if 11 = i then v else 0),
-      S.a12 ^^^ (g 12 ^^^ if 12 = i then v else 0), S.a13 ^^^ (g 13 ^^^ if 13 = i then v else 0),
-      S.a14 ^^^ (g 14 ^^^ if 14 = i then v else 0), S.a15 ^^^ (g 15 ^^^ if 15 = i then v else 0),
-      S.a16 ^^^ (g 16 ^^^ if 16 = i then v else 0), S.a17 ^^^ (g 17 ^^^ if 17 = i then v else 0),
-      S.a18 ^^^ (g 18 ^^^ if 18 = i then v else 0), S.a19 ^^^ (g 19 ^^^ if 19 = i then v else 0),
-      S.a20 ^^^ (g 20 ^^^ if 20 = i then v else 0), S.a21 ^^^ (g 21 ^^^ if 21 = i then v else 0),
-      S.a22 ^^^ (g 22 ^^^ if 22 = i then v else 0), S.a23 ^^^ (g 23 ^^^ if 23 = i then v else 0),
-      S.a24 ^^^ (g 24 ^^^ if 24 = i then v else 0)⟩ : State) =
-    (⟨S.a0 ^^^ g 0, S.a1 ^^^ g 1, S.a2 ^^^ g 2, S.a3 ^^^ g 3, S.a4 ^^^ g 4, S.a5 ^^^ g 5,
-      S.a6 ^^^ g 6, S.a7 ^^^ g 7, S.a8 ^^^ g 8, S.a9 ^^^ g 9, S.a10 ^^^ g 10, S.a11 ^^^ g 11,
-      S.a12 ^^^ g 12, S.a13 ^^^ g 13, S.a14 ^^^ g 14, S.a15 ^^^ g 15, S.a16 ^^^ g 16,
-      S.a17 ^^^ g 17, S.a18 ^^^ g 18, S.a19 ^^^ g 19, S.a20 ^^^ g 20, S.a21 ^^^ g 21,
-      S.a22 ^^^ g 22, S.a23 ^^^ g 23, S.a24 ^^^ g 24⟩ : State).xorLane i v := by
-  rcases Nat.lt_or_ge i 25 with h | h
-  · interval_cases i <;> simp [State.xorLane, UInt64.xor_assoc]
-  · rw [State.xorLane_of_le _ h]
-    simp only [show ∀ j, j < 25 → (j = i) = False from fun j hj => eq_false (by omega),
-      ite_false, UInt64.xor_zero, Nat.reduceLT]
-
 /-- The state before the last permutation, for a message with a lane `w` in its last block.
 
 It is the state for the same message with that lane zero, with `w` XORed into its lane.
@@ -114,7 +82,8 @@ theorem stateBeforeLastPermutation_append_lane (f : State → State) {rate : Nat
   have before : absorbBlocks f rate P₁ (a.size / rate) 0 State.zero =
       absorbBlocks f rate P₀ (a.size / rate) 0 State.zero :=
     absorbBlocks_congr f lanes _ _ fun j hj => outside _ (by omega)
-  rw [stateBeforeLastPermutation, stateBeforeLastPermutation, ← hP₁, ← hP₀, hq, hq₀, before]
+  rw [stateBeforeLastPermutation_eq_pad, stateBeforeLastPermutation_eq_pad, ← hP₁, ← hP₀, hq, hq₀,
+    before]
   -- In the last block, lane `i` reads the bytes from `a.size + 8 (i - i₀)`.
   set i₀ := a.size % rate / 8 with hi₀
   have hstart : rate * (a.size / rate) + 8 * i₀ = a.size := by
@@ -129,7 +98,7 @@ theorem stateBeforeLastPermutation_append_lane (f : State → State) {rate : Nat
       blockLane rate P₀ (rate * (a.size / rate)) i ^^^ if i = i₀ then laneAt w 0 else 0 := by
     intro i
     unfold blockLane
-    by_cases hi : 8 * i < rate
+    by_cases hi : 8 * i + 8 ≤ rate
     · rw [ite_eq_left hi, ite_eq_left hi]
       by_cases hii : i = i₀
       · subst hii

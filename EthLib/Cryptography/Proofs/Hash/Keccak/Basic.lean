@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Hash.Keccak
+import EthLib.Base.Proofs.Bytes
 import Mathlib.Tactic.IntervalCases
 
 /-!
@@ -11,6 +12,8 @@ The constants of Keccak-f[1600] agree with the algorithms that define them.
 Each step mapping, written lane by lane, is the formula of the standard for every lane.
 
 The padding cuts every message into whole blocks, and no two messages pad alike.
+
+The sponge reads the message in place, and absorbs the same blocks as the padded message.
 -/
 
 @[expose] public section
@@ -246,30 +249,6 @@ theorem pad_injective {rate : Nat} (hr : 0 < rate) : Function.Injective (pad rat
     simpa only [pad, ByteArray.data_append, lengths] using this
   exact ByteArray.ext (Array.append_left_inj _ |>.mp prefixes)
 
-/-! ## The absorbing phase -/
-
-open Internal in
-/-- Absorbing `m + n` blocks absorbs the first `m`, then the `n` after them. -/
-theorem absorbBlocks_add (f : State → State) (rate : Nat) (bytes : ByteArray) (m n start : Nat)
-    (S : State) :
-    absorbBlocks f rate bytes (m + n) start S
-      = absorbBlocks f rate bytes n (start + rate * m) (absorbBlocks f rate bytes m start S) := by
-  induction m generalizing start S with
-  | zero => simp [absorbBlocks]
-  | succ m ih =>
-    rw [Nat.succ_add, absorbBlocks, ih, absorbBlocks, Nat.mul_succ, Nat.add_comm (rate * m),
-      Nat.add_assoc]
-
-/-- The absorbing phase is FIPS 202 §4, Algorithm 8, steps 1 to 6, block after block.
-
-Every one of the `n` blocks of the padded message goes through `S = f(S ^ (P_i || 0^c))`. -/
-theorem spongeAbsorb_eq (f : State → State) (rate : Nat) (msg : ByteArray) :
-    spongeAbsorb f rate msg =
-      Internal.absorbBlocks f rate (pad rate msg) (blockCount rate msg.size) 0 State.zero := by
-  -- The last of the n = len(N) / r + 1 blocks is the one the last permutation follows.
-  rw [spongeAbsorb, stateBeforeLastPermutation, blockCount, Nat.add_sub_cancel,
-    absorbBlocks_add, Nat.zero_add, Internal.absorbBlocks, Internal.absorbBlocks]
-
 /-! ## Lanes -/
 
 /-- A byte widened to a lane keeps its eight bits, and is zero above them. -/
@@ -335,5 +314,257 @@ theorem Internal.laneAt_testBit (bytes : ByteArray)
   interval_cases q <;> simp_all
   -- Byte 0 holds bit `i` itself, since `i < 8`.
   rw [Nat.mod_eq_of_lt low]
+
+/-! ## Blocks read in place
+
+The sponge reads the blocks of the message in place, and builds no padded copy.
+
+The whole blocks of the message are blocks of the padded message as they stand.
+
+The last block is the rest of the message, with the two 1 bits of the padding XORed in.
+
+So the sponge absorbs the same blocks as the padded message `P` of FIPS 202 §4, Algorithm 8. -/
+
+/-- A lane reads only its own 8 bytes. -/
+theorem laneAt_congr {a b : ByteArray} {s t : Nat}
+    (h : ∀ k < 8, EthLib.Base.byteAt a (s + k) = EthLib.Base.byteAt b (t + k)) :
+    Internal.laneAt a s = Internal.laneAt b t := by
+  have h0 : EthLib.Base.byteAt a s = EthLib.Base.byteAt b t := by simpa using h 0 (by omega)
+  unfold Internal.laneAt
+  rw [h0, h 1 (by omega), h 2 (by omega), h 3 (by omega), h 4 (by omega), h 5 (by omega),
+    h 6 (by omega), h 7 (by omega)]
+
+open Internal in
+/-- At a rate that is a whole number of lanes, a block lane is in the rate when `8i < rate`. -/
+theorem Internal.blockLane_of_dvd {rate : Nat} (lanes : 8 ∣ rate) (bytes : ByteArray)
+    (start i : Nat) :
+    blockLane rate bytes start i = if 8 * i < rate then laneAt bytes (start + 8 * i) else 0 := by
+  obtain ⟨m, rfl⟩ := lanes
+  -- Lane i lies wholly in the rate exactly when it starts in it.
+  simp only [blockLane, show (8 * i + 8 ≤ 8 * m) = (8 * i < 8 * m) from propext (by omega)]
+
+/-- Below the length of the message, the padded message holds the message's own bytes. -/
+theorem byteAt_pad_of_lt (rate : Nat) {msg : ByteArray} {j : Nat} (h : j < msg.size) :
+    EthLib.Base.byteAt (pad rate msg) j = EthLib.Base.byteAt msg j := by
+  rw [pad, EthLib.Base.byteAt_append, ite_eq_left h]
+
+/-- From the length of the message on, the padded message holds padding bytes, then zeros. -/
+theorem byteAt_pad_of_le (rate : Nat) {msg : ByteArray} {j : Nat} (h : msg.size ≤ j) :
+    EthLib.Base.byteAt (pad rate msg) j =
+      if j - msg.size < rate - msg.size % rate then paddingByte rate msg.size (j - msg.size)
+      else 0 := by
+  rw [pad, EthLib.Base.byteAt_append, ite_eq_right (by omega), EthLib.Base.byteAt_eq_getD]
+  split
+  · next inside =>
+    simp only [Array.getD_eq_getD_getElem?, padding_data, Array.getElem?_ofFn, inside,
+      ↓reduceDIte, Option.getD_some]
+  · next outside =>
+    simp only [Array.getD_eq_getD_getElem?, padding_data, Array.getElem?_ofFn, outside,
+      ↓reduceDIte, Option.getD_none]
+
+/-- Bit `i` of the padding mask is bit 0 of the first flag, or bit 7 of the last flag. -/
+private theorem maskBits : ∀ (first last : Bool) (i : Fin 8),
+    (((if first then 1 else 0 : UInt8) ||| (if last then 128 else 0)).toNat.testBit i.val) =
+      ((first && (decide (i.val = 0))) || (last && (decide (i.val = 7)))) := by
+  decide +kernel
+
+/-- Byte `pos` of the padding sets bit 0 when it is the first byte, and bit 7 when it is the last.
+
+It sets no other bit. -/
+theorem paddingByte_testBit (rate len pos bit : Nat) (h : bit < 8) :
+    (paddingByte rate len pos).toNat.testBit bit =
+      (decide (pos = 0 ∧ bit = 0) || decide (pos + 1 = rate - len % rate ∧ bit = 7)) := by
+  have hb := maskBits (decide (pos = 0)) (decide (pos + 1 = rate - len % rate)) ⟨bit, h⟩
+  simpa [paddingByte, Bool.and_eq_true] using hb
+
+open Internal in
+/-- A block that lies in the message reads the same lanes from the message and from `P`. -/
+theorem blockLane_pad_of_le {rate : Nat} {msg : ByteArray} {start : Nat}
+    (h : start + rate ≤ msg.size) (i : Nat) :
+    blockLane rate (pad rate msg) start i = blockLane rate msg start i := by
+  unfold blockLane
+  split
+  · exact laneAt_congr fun k hk => byteAt_pad_of_lt rate (by omega)
+  · rfl
+
+open Internal in
+/-- The whole blocks of the message absorb alike from the message and from `P`. -/
+theorem absorbBlocks_pad (f : State → State) (rate : Nat) (msg : ByteArray) (n start : Nat)
+    (S : State) (h : start + rate * n ≤ msg.size) :
+    absorbBlocks f rate (pad rate msg) n start S = absorbBlocks f rate msg n start S := by
+  induction n generalizing start S with
+  | zero => rfl
+  | succ n ih =>
+    have hlane : blockLane rate (pad rate msg) start = blockLane rate msg start :=
+      funext (blockLane_pad_of_le (by rw [Nat.mul_succ] at h; omega))
+    rw [absorbBlocks, absorbBlocks, absorbBlock, absorbBlock, hlane]
+    exact ih _ _ (by rw [Nat.mul_succ] at h; omega)
+
+/-- A byte shifted to byte `m` of a lane, with the shift written as a natural number. -/
+private theorem shiftedByte_toUInt64 (b : UInt8) (m i : Nat) (hm : m < 8) (hi : i < 64) :
+    (b.toUInt64 <<< (8 * m).toUInt64).toBitVec.getLsbD i =
+      (decide (i / 8 = m) && b.toNat.testBit (i % 8)) :=
+  shiftedByte b m i hm hi
+
+open Internal in
+/-- Lane `i` of the last block of `P`: the lane of the rest of the message, and the padding bits.
+
+The rest of the message starts the block, and its bytes past the end read as zero.
+
+The padding puts bit 0 in byte `len mod rate` and bit 7 in byte `rate - 1` of the block. -/
+theorem blockLane_pad_last (rate : Nat) (msg : ByteArray) (i : Nat) :
+    blockLane rate (pad rate msg) (rate * (msg.size / rate)) i =
+      blockLane rate msg (rate * (msg.size / rate)) i ^^^
+        (if 8 * i + 8 ≤ rate ∧ msg.size % rate / 8 = i then
+          (0x01 : UInt8).toUInt64 <<< (8 * (msg.size % rate % 8)).toUInt64 else 0) ^^^
+        (if 8 * i + 8 ≤ rate ∧ (rate - 1) / 8 = i then
+          (0x80 : UInt8).toUInt64 <<< (8 * ((rate - 1) % 8)).toUInt64 else 0) := by
+  unfold blockLane
+  by_cases hi : 8 * i + 8 ≤ rate
+  swap
+  · simp only [hi, false_and, ite_false, UInt64.xor_zero]
+  have hr : 0 < rate := by omega
+  have hdiv := Nat.div_add_mod msg.size rate
+  have hs := Nat.mod_lt msg.size hr
+  simp only [hi, true_and, ite_true]
+  apply UInt64.toBitVec_inj.mp
+  apply BitVec.eq_of_getLsbD_eq
+  intro z hz
+  have hb : z % 8 < 8 := Nat.mod_lt _ (by decide)
+  have hm1 : msg.size % rate % 8 < 8 := Nat.mod_lt _ (by decide)
+  have hm2 : (rate - 1) % 8 < 8 := Nat.mod_lt _ (by decide)
+  simp only [UInt64.toBitVec_xor, BitVec.getLsbD_xor, laneAt_testBit _ _ _ hz]
+  -- Each padding bit is set where the padding puts it, and is clear elsewhere.
+  have first : (if msg.size % rate / 8 = i then
+      (0x01 : UInt8).toUInt64 <<< (8 * (msg.size % rate % 8)).toUInt64 else 0).toBitVec.getLsbD z
+      = decide (8 * i + z / 8 = msg.size % rate ∧ z % 8 = 0) := by
+    split
+    · rw [shiftedByte_toUInt64 _ _ _ hm1 hz]
+      generalize hc : z % 8 = c at hb
+      interval_cases c <;> simp <;> first | omega | (intro; decide)
+    · simp only [UInt64.toBitVec_zero, BitVec.getLsbD_zero]
+      symm
+      simp only [decide_eq_false_iff_not, not_and]
+      omega
+  have last : (if (rate - 1) / 8 = i then
+      (0x80 : UInt8).toUInt64 <<< (8 * ((rate - 1) % 8)).toUInt64 else 0).toBitVec.getLsbD z
+      = decide (8 * i + z / 8 = rate - 1 ∧ z % 8 = 7) := by
+    split
+    · rw [shiftedByte_toUInt64 _ _ _ hm2 hz]
+      generalize hc : z % 8 = c at hb
+      interval_cases c <;> simp [show Nat.testBit 128 7 = true by decide] <;>
+        first | omega | (intro; decide)
+    · simp only [UInt64.toBitVec_zero, BitVec.getLsbD_zero]
+      symm
+      simp only [decide_eq_false_iff_not, not_and]
+      omega
+  rw [first, last]
+  -- Byte `8i + z / 8` of the block is a message byte, or a padding byte past the message.
+  by_cases inMsg : rate * (msg.size / rate) + 8 * i + z / 8 < msg.size
+  · rw [byteAt_pad_of_lt rate inMsg]
+    have : ¬ (8 * i + z / 8 = msg.size % rate ∧ z % 8 = 0) := by omega
+    have : ¬ (8 * i + z / 8 = rate - 1 ∧ z % 8 = 7) := by omega
+    simp [*]
+  · rw [byteAt_pad_of_le rate (by omega), EthLib.Base.byteAt_of_size_le (by omega),
+      ite_eq_left (by omega), paddingByte_testBit _ _ _ _ hb]
+    have hpos : rate * (msg.size / rate) + 8 * i + z / 8 - msg.size =
+        8 * i + z / 8 - msg.size % rate := by
+      omega
+    rw [hpos]
+    generalize hc : z % 8 = c at hb
+    interval_cases c <;> simp <;> omega
+
+/-- An index of 25 or more names no lane. -/
+theorem State.xorLane_of_le (A : State) {i : Nat} (h : 25 ≤ i) (v : UInt64) :
+    A.xorLane i v = A := by
+  obtain ⟨j, rfl⟩ : ∃ j, i = j + 25 := ⟨i - 25, by omega⟩
+  rfl
+
+/-- XORing one word into lane `i` of a block XORs it into lane `i` of the absorbed state. -/
+theorem absorbBlock_lanes_xor (S : State) (g : Nat → UInt64) (i : Nat) (v : UInt64) :
+    (⟨S.a0 ^^^ (g 0 ^^^ if 0 = i then v else 0), S.a1 ^^^ (g 1 ^^^ if 1 = i then v else 0),
+      S.a2 ^^^ (g 2 ^^^ if 2 = i then v else 0), S.a3 ^^^ (g 3 ^^^ if 3 = i then v else 0),
+      S.a4 ^^^ (g 4 ^^^ if 4 = i then v else 0), S.a5 ^^^ (g 5 ^^^ if 5 = i then v else 0),
+      S.a6 ^^^ (g 6 ^^^ if 6 = i then v else 0), S.a7 ^^^ (g 7 ^^^ if 7 = i then v else 0),
+      S.a8 ^^^ (g 8 ^^^ if 8 = i then v else 0), S.a9 ^^^ (g 9 ^^^ if 9 = i then v else 0),
+      S.a10 ^^^ (g 10 ^^^ if 10 = i then v else 0), S.a11 ^^^ (g 11 ^^^ if 11 = i then v else 0),
+      S.a12 ^^^ (g 12 ^^^ if 12 = i then v else 0), S.a13 ^^^ (g 13 ^^^ if 13 = i then v else 0),
+      S.a14 ^^^ (g 14 ^^^ if 14 = i then v else 0), S.a15 ^^^ (g 15 ^^^ if 15 = i then v else 0),
+      S.a16 ^^^ (g 16 ^^^ if 16 = i then v else 0), S.a17 ^^^ (g 17 ^^^ if 17 = i then v else 0),
+      S.a18 ^^^ (g 18 ^^^ if 18 = i then v else 0), S.a19 ^^^ (g 19 ^^^ if 19 = i then v else 0),
+      S.a20 ^^^ (g 20 ^^^ if 20 = i then v else 0), S.a21 ^^^ (g 21 ^^^ if 21 = i then v else 0),
+      S.a22 ^^^ (g 22 ^^^ if 22 = i then v else 0), S.a23 ^^^ (g 23 ^^^ if 23 = i then v else 0),
+      S.a24 ^^^ (g 24 ^^^ if 24 = i then v else 0)⟩ : State) =
+    (⟨S.a0 ^^^ g 0, S.a1 ^^^ g 1, S.a2 ^^^ g 2, S.a3 ^^^ g 3, S.a4 ^^^ g 4, S.a5 ^^^ g 5,
+      S.a6 ^^^ g 6, S.a7 ^^^ g 7, S.a8 ^^^ g 8, S.a9 ^^^ g 9, S.a10 ^^^ g 10, S.a11 ^^^ g 11,
+      S.a12 ^^^ g 12, S.a13 ^^^ g 13, S.a14 ^^^ g 14, S.a15 ^^^ g 15, S.a16 ^^^ g 16,
+      S.a17 ^^^ g 17, S.a18 ^^^ g 18, S.a19 ^^^ g 19, S.a20 ^^^ g 20, S.a21 ^^^ g 21,
+      S.a22 ^^^ g 22, S.a23 ^^^ g 23, S.a24 ^^^ g 24⟩ : State).xorLane i v := by
+  rcases Nat.lt_or_ge i 25 with h | h
+  · interval_cases i <;> simp [State.xorLane, UInt64.xor_assoc]
+  · rw [State.xorLane_of_le _ h]
+    simp only [show ∀ j, j < 25 → (j = i) = False from fun j hj => eq_false (by omega),
+      ite_false, UInt64.xor_zero, Nat.reduceLT]
+
+open Internal in
+/-- The state before the last permutation is FIPS 202 §4, Algorithm 8, run on `P`.
+
+The blocks before the last one are absorbed from `P`, and the last block of `P` is XORed in. -/
+theorem stateBeforeLastPermutation_eq_pad (f : State → State) (rate : Nat) (msg : ByteArray) :
+    stateBeforeLastPermutation f rate msg =
+      absorbBlock rate (absorbBlocks f rate (pad rate msg) (blockCount rate msg.size - 1) 0
+        State.zero) (pad rate msg) (rate * (blockCount rate msg.size - 1)) := by
+  rw [blockCount, Nat.add_sub_cancel,
+    absorbBlocks_pad f rate msg _ 0 _ (by rw [Nat.zero_add]; exact Nat.mul_div_le _ _),
+    stateBeforeLastPermutation]
+  generalize absorbBlocks f rate msg (msg.size / rate) 0 State.zero = S
+  -- The last block of `P`: the lanes of the rest of the message, then the two padding bits.
+  simp only [absorbBlock, blockLane_pad_last]
+  unfold xorBlockByte
+  generalize blockLane rate msg (rate * (msg.size / rate)) = l
+  generalize (0x01 : UInt8).toUInt64 <<< (8 * (msg.size % rate % 8)).toUInt64 = v₁
+  generalize (0x80 : UInt8).toUInt64 <<< (8 * ((rate - 1) % 8)).toUInt64 = v₂
+  generalize msg.size % rate = p₁
+  generalize rate - 1 = p₂
+  -- A padding bit whose lane is in the rate goes into that lane alone; otherwise it is dropped.
+  have bit : ∀ (p : Nat) (v : UInt64) j, (if 8 * j + 8 ≤ rate ∧ p / 8 = j then v else 0) =
+      if 8 * (p / 8) + 8 ≤ rate then (if j = p / 8 then v else 0) else 0 := by
+    intro p v j
+    by_cases e : j = p / 8
+    · subst e
+      simp
+    · simp only [e, ite_false, ite_self, ite_eq_right_iff, and_imp]
+      omega
+  simp only [bit]
+  by_cases g₁ : 8 * (p₁ / 8) + 8 ≤ rate <;> by_cases g₂ : 8 * (p₂ / 8) + 8 ≤ rate <;>
+    simp only [g₁, g₂, ite_true, ite_false, UInt64.xor_zero]
+  · exact ((absorbBlock_lanes_xor S (fun j => l j ^^^ if j = p₁ / 8 then v₁ else 0) _ _).trans
+      (congrArg (fun T => State.xorLane T _ v₂) (absorbBlock_lanes_xor S l _ _))).symm
+  · exact (absorbBlock_lanes_xor S l _ _).symm
+  · exact (absorbBlock_lanes_xor S l _ _).symm
+
+/-! ## The absorbing phase -/
+
+open Internal in
+/-- Absorbing `m + n` blocks absorbs the first `m`, then the `n` after them. -/
+theorem absorbBlocks_add (f : State → State) (rate : Nat) (bytes : ByteArray) (m n start : Nat)
+    (S : State) :
+    absorbBlocks f rate bytes (m + n) start S
+      = absorbBlocks f rate bytes n (start + rate * m) (absorbBlocks f rate bytes m start S) := by
+  induction m generalizing start S with
+  | zero => simp [absorbBlocks]
+  | succ m ih =>
+    rw [Nat.succ_add, absorbBlocks, ih, absorbBlocks, Nat.mul_succ, Nat.add_comm (rate * m),
+      Nat.add_assoc]
+
+/-- The absorbing phase is FIPS 202 §4, Algorithm 8, steps 1 to 6, block after block.
+
+Every one of the `n` blocks of the padded message goes through `S = f(S ^ (P_i || 0^c))`. -/
+theorem spongeAbsorb_eq (f : State → State) (rate : Nat) (msg : ByteArray) :
+    spongeAbsorb f rate msg =
+      Internal.absorbBlocks f rate (pad rate msg) (blockCount rate msg.size) 0 State.zero := by
+  -- The last of the n = len(N) / r + 1 blocks is the one the last permutation follows.
+  rw [spongeAbsorb, stateBeforeLastPermutation_eq_pad, blockCount, Nat.add_sub_cancel,
+    absorbBlocks_add, Nat.zero_add, Internal.absorbBlocks, Internal.absorbBlocks]
 
 end EthLib.Cryptography.Hash.Keccak

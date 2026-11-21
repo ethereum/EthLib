@@ -106,9 +106,9 @@ theorem lane_oneBlockState (msg : ByteArray) (x y : Fin 5) :
   rw [oneBlockState, Internal.absorbBlock_lane, hz, UInt64.zero_xor,
     Internal.blockLane]
   by_cases h : x.val + 5 * y.val < 17
-  · have hr : 8 * (x.val + 5 * y.val) < RATE_256 := by unfold RATE_256; omega
+  · have hr : 8 * (x.val + 5 * y.val) + 8 ≤ RATE_256 := by unfold RATE_256; omega
     simp only [hr, h, ↓reduceIte, Nat.zero_add]
-  · have hr : ¬8 * (x.val + 5 * y.val) < RATE_256 := by unfold RATE_256; omega
+  · have hr : ¬8 * (x.val + 5 * y.val) + 8 ≤ RATE_256 := by unfold RATE_256; omega
     simp only [hr, h, ↓reduceIte]
 
 /-- The states whose capacity lanes, 17 to 24, are zero. -/
