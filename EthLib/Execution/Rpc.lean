@@ -27,6 +27,7 @@ public import EthLib.Execution.Rpc.Simulate.Blocks
 public import EthLib.Execution.Rpc.Methods
 public import EthLib.Execution.Rpc.Trace
 public import EthLib.Execution.Rpc.TraceView
+public import EthLib.Execution.Rpc.Eip3155
 
 /-!
 # `EthLib.Execution.Rpc`

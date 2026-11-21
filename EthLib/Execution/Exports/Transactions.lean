@@ -5,6 +5,7 @@ public import EthLib.Execution.Exports.Blocks
 public import EthLib.Execution.Exports.State
 public import EthLib.Cryptography.Exports.Kzg
 public import EthLib.Execution.Network.Pool
+public import EthLib.Execution.Rpc.Eip3155
 public import EthLib.Execution.Transactions.Inclusion
 public import EthLib.Execution.Transactions.Network
 public import EthLib.Execution.Transactions.Process
@@ -347,6 +348,42 @@ The state after it has no beneficiary reward, since a block pays that. -/
 @[export eth_tx_run]
 def runExport (args : PyValue) : Result PyValue :=
   pyExport runOf args
+
+/-- A JSON object on one line, with its fields in the order given. -/
+def objectLine (fields : List (String × Lean.Json)) : String :=
+  "{" ++ ",".intercalate (fields.map fun (k, v) => (Lean.Json.str k).compress ++ ":" ++
+    v.compress) ++ "}"
+
+/-- The trace of one transaction in the lines of EIP-3155, run as the run export runs it.
+
+The logger records what the lines require, as their configuration says. -/
+def traceEip3155Of (args : String × UInt64 × ByteArray × ByteArray × ByteArray) :
+    Result (List String) := do
+  let (fork, chainId, tx, state, env) := args
+  let (fork, tx) ← decodeAt .glamsterdam fork.toUTF8 tx
+  let pre ← (State.Exports.ofInput state).mapError fun e => (e.code, e.message)
+  let env ← (decode env >>= ofEnvironmentItem fork chainId).mapError
+    fun e => (0, s!"block environment rejected: {rlpMessage e}")
+  let block : State.BlockState := ⟨pre, ∅, ∅, ∅, ∅⟩
+  let inc ← (checkInclusion chainId env ⟨0, 0, 0⟩ (.ofBlock block) tx).mapError
+    fun e => (e.code, inclusionMessage e)
+  let (out, tracer) ← (Rpc.traceRun Rpc.eip3155Config env block inc tx).mapError
+    fun e =>
+      match e with
+      | .state s => (s.code, abortMessage e)
+      | _ => (0, abortMessage e)
+  let root ← State.Exports.rootOf out.block.applyChanges
+  let some root := Base.exactBytes? 32 root | throw (0, "a state root is not 32 bytes")
+  return (Rpc.eip3155Lines fork (.ofRun out tracer) root).map objectLine
+
+/-- The trace of one transaction in the lines of EIP-3155: one per step, then the summary.
+
+The arguments are those of the run export.
+
+They are the name of the fork, the chain ID, the transaction, the state and the block. -/
+@[export eth_tx_trace_eip3155]
+def traceEip3155Export (args : PyValue) : Result PyValue :=
+  pyExport traceEip3155Of args
 
 /-! ## The network form of blob transactions -/
 

@@ -1493,6 +1493,9 @@
 #define DOC_tx_run \
   "Run one transaction on a state, in a block with no transaction before."
 
+#define DOC_tx_trace_eip3155 \
+  "The trace of one transaction in the lines of EIP-3155: one per step, then the summary."
+
 #define DOC_tx_network_check \
   "Check the network form of a blob transaction at the named fork."
 
