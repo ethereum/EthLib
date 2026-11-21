@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.MapM
-public import EthLib.Execution.Proofs.Transactions.Observe
+public import EthLib.Execution.Proofs.Transactions.Depth
 public import EthLib.Execution.Rpc.Trace
 
 /-!
@@ -14,6 +14,8 @@ The trace of a transaction of a block exists whenever the block runs it, at ever
 From Byzantium, the trace fails exactly when the receipt of the transaction says it failed.
 
 An entry holds storage only at an SLOAD or SSTORE that runs, and a failed step changes no slot.
+
+Each entry has a depth from 1 to 1025, since no frame is deeper than the limit.
 -/
 
 @[expose] public section
@@ -191,5 +193,35 @@ theorem record_slots_of_stepError {fork : Fork} {Meter : Type} [GasMeter Meter]
       · have hne : (a == evm.message.currentTarget) = false := by simpa using ha
         simp [List.lookup, hne, lookup_filter_ne ha]
     · rfl
+
+/-- A step of a frame within the depth limit adds only an entry of depth from 1 to 1025. -/
+private theorem depth_mem_record {fork : Fork} {Meter : Type} [GasMeter Meter]
+    (config : TraceConfig) (evm : Evm fork Meter) (result : Except EvmError (StepResult fork Meter))
+    (tracer : Tracer) (within : evm.message.depth ≤ STACK_DEPTH_LIMIT)
+    (kept : ∀ log ∈ tracer.logs, 1 ≤ log.depth ∧ log.depth ≤ STACK_DEPTH_LIMIT + 1) :
+    ∀ log ∈ (Tracer.record config evm result tracer).logs,
+      1 ≤ log.depth ∧ log.depth ≤ STACK_DEPTH_LIMIT + 1 := by
+  unfold Tracer.record
+  split
+  · exact kept
+  · intro log mem
+    rcases Array.mem_push.mp mem with mem | rfl
+    · exact kept log mem
+    · exact ⟨Nat.le_add_left _ _, Nat.add_le_add_right within 1⟩
+
+/-- Each entry of the opcode trace of a transaction has a depth from 1 to 1025.
+
+The depth of an entry is that of its frame plus one. -/
+theorem depth_mem_traceRun {fork : Fork} {config : TraceConfig} {env : BlockEnvironment fork}
+    {block : BlockState} {included : Included} {tx : Transaction}
+    {precompiles : Address → Option Address} {lifted : LiftedRules}
+    {output : TransactionOutput} {tracer : Tracer}
+    (run : traceRun config env block included tx precompiles lifted = .ok (output, tracer)) :
+    ∀ log ∈ tracer.logs, 1 ≤ log.depth ∧ log.depth ≤ STACK_DEPTH_LIMIT + 1 :=
+  processTransactionWith_inv_of_depth_le
+    (fun tracer : Tracer => ∀ log ∈ tracer.logs, 1 ≤ log.depth ∧ log.depth ≤ STACK_DEPTH_LIMIT + 1)
+    (fun evm result tracer => Tracer.record config evm result tracer)
+    (fun evm result tracer within kept => depth_mem_record config evm result tracer within kept)
+    env block included tx precompiles lifted (fun _ mem => by simp at mem) run
 
 end EthLib.Execution.Rpc

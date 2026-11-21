@@ -1984,6 +1984,14 @@ That price is the access to the address, the access to the delegate if any, and 
 Instead of failing, the step may halt the frame with an error.
 Each holds for every kind of call with the one-counter meter: the first two from Berlin, the third from Pectra.
 
+Every message that a step of a call or a creation sends is within the depth limit of 1024 (`depth_le_of_step_eq_child`, `Proofs/Evm/Call/Depth.lean`).
+A transaction and a system call build their message at depth 0 (`transactionMessage` in `Transactions/Process.lean`, `systemMessage` in `Blocks/SystemCall.lean`), and no other message is built outside a step.
+The message processing of execution-specs first checks that a message is within the depth limit.
+EthLib has no such check; the runner enters only those messages and the ones that a step sends, so the check never fails.
+So every frame of a run from a message within the limit is within it too: a run that succeeds keeps any record that its observer keeps at such frames (`processMessageWith_inv_of_depth_le`).
+The same holds of a transaction (`processTransactionWith_inv_of_depth_le`, `Proofs/Transactions/Depth.lean`).
+Each entry of an opcode trace therefore has a depth from 1 to 1025 (`depth_mem_traceRun`, `Proofs/Rpc/Trace.lean`).
+
 A triple says about the state after a message only what its assumption says, so a proof needs an assumption on what the callee does.
 `Logic.KeepsOn runChild S R` (`Logic/Keeps.lean`) says that each message of `S` that the runner ends with no error keeps the relation `R`.
 It is the assumption `Logic.MeetsOk` of a triple, for that condition on the frame that ends the message.
