@@ -22,6 +22,8 @@ open ENNReal
 
 namespace SphincsSecurity.LoopWalk
 
+open EthLib.Cryptography.HashSig.LoopWalk
+
 open SphincsSecurity.Base.Domination SphincsSecurity.Security.Domination
 
 variable {α V : Type} [Fintype α] [DecidableEq α] (σ : Equiv.Perm α) (p : ℝ≥0∞)

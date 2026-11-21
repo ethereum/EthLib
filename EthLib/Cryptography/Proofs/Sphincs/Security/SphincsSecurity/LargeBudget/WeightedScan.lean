@@ -392,6 +392,7 @@ variable [Params]
 open SphincsSecurity.Base
 open Concrete Completeness Prefix HiddenGraph HiddenCost HiddenDebt ForsSigner
     SphincsSecurity.LoopWalk
+open EthLib.Cryptography.HashSig.LoopWalk
 
 set_option maxRecDepth 10000
 set_option linter.unusedSectionVars false

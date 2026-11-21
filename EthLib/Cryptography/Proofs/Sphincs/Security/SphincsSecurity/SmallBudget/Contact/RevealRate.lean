@@ -30,6 +30,7 @@ open SphincsSecurity.Base
 open Concrete HiddenGraph HiddenCost HiddenDebt GraphView Domination ForsPrice ForsSigner
     HiddenBridge
 open SphincsSecurity.LoopWalk
+open EthLib.Cryptography.HashSig.LoopWalk
 open SphincsSecurity.Base.Domination
 
 set_option maxRecDepth 10000

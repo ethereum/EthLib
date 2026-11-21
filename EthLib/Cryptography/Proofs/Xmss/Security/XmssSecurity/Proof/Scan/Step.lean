@@ -27,7 +27,7 @@ open OracleComp OracleSpec ENNReal
 
 namespace XmssSecurity.Partner
 
-open LoopWalk
+open LoopWalk EthLib.Cryptography.HashSig.LoopWalk
 
 theorem nextRand_pow_apply (j : ℕ) (ρ : Randomness) : (nextRand ^ j) ρ = ρ + BitVec.ofNat _ j := by
   induction j with

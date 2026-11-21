@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.LoopWalk
+public import EthLib.Cryptography.Proofs.HashSig.LoopWalk
 
 /-!
 # Reaching positions under one more query
@@ -18,6 +18,8 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.L
 open ENNReal
 
 namespace XmssSecurity.LoopWalk
+
+open EthLib.Cryptography.HashSig.LoopWalk
 
 variable {α : Type} {σ : Equiv.Perm α} {p : ℝ≥0∞} [DecidableEq α]
 

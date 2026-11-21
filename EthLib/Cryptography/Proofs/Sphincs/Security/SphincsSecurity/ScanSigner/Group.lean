@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.ScanSigner.LoopWalk
+public import EthLib.Cryptography.Proofs.HashSig.LoopWalk
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Base.VirtualMono
 
 /-!
@@ -28,6 +28,8 @@ This needs `(2 - p) / card <= p * w * m`, with `m` the mass on the identity.
 open ENNReal
 
 namespace SphincsSecurity.LoopWalk
+
+open EthLib.Cryptography.HashSig.LoopWalk
 
 open SphincsSecurity.Base.Domination SphincsSecurity.Security.Domination
 

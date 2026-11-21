@@ -30,6 +30,7 @@ variable [Params]
 
 open SphincsSecurity.Base
 open Concrete HiddenCost HiddenDebt HiddenGraph ForsSigner SphincsSecurity.LoopWalk
+open EthLib.Cryptography.HashSig.LoopWalk
 
 set_option maxRecDepth 10000
 attribute [local instance] Classical.propDecidable
