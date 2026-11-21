@@ -41,8 +41,12 @@ theorem trial_period (r : Randomizer) : trialRandomizer r (2 ^ 128) = r := by
 def advance : Equiv.Perm Randomizer where
   toFun r := trialRandomizer r 1
   invFun r := trialRandomizer r (2 ^ 128 - 1)
-  left_inv r := (trial_add r 1 (2 ^ 128 - 1)).trans (trial_period r)
-  right_inv r := (trial_add r (2 ^ 128 - 1) 1).trans (trial_period r)
+  left_inv r := by
+    change trialRandomizer (trialRandomizer r 1) (2 ^ 128 - 1) = r
+    rw [trial_add, show 1 + (2 ^ 128 - 1) = 2 ^ 128 by decide, trial_period]
+  right_inv r := by
+    change trialRandomizer (trialRandomizer r (2 ^ 128 - 1)) 1 = r
+    rw [trial_add, show (2 ^ 128 - 1) + 1 = 2 ^ 128 by decide, trial_period]
 
 private theorem advance_pow (r : Randomizer) (c : Nat) : (advance ^ c) r = trialRandomizer r c := by
   induction c with
