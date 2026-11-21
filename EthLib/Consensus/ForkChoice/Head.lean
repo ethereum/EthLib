@@ -224,9 +224,8 @@ def isHeadWeak (headRoot : Root) : Except ForkChoiceError Bool := do
     let committee ← (getBeaconCommittee headState headBlock.slot index.toUInt64).mapError .accessor
     for validator in committee do
       if store.equivocatingIndices.contains validator then
-        match justifiedState.validators.data[validator.toNat]? with
-        | some known => headWeight := headWeight + known.effectiveBalance.toNat
-        | none => throw (.accessor (.indexOutOfRange validator))
+        let known ← (getValidator justifiedState validator).mapError .accessor
+        headWeight := headWeight + known.effectiveBalance.toNat
     if 2 ^ 64 ≤ headWeight then throw (.arith .overflow)
   return headWeight < reorgThreshold.toNat
 

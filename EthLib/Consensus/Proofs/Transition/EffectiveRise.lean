@@ -165,12 +165,11 @@ private theorem depositTargetStatus_of_found {f : Fork} {s : BeaconState preset 
       cases converted
       exact h
   obtain ⟨_, same⟩ := ofNatChecked_ok_iff.mp conv
-  rw [same] at ok
   split at ok
+  · cases ok
   · rename_i v read
     cases ok
-    exact ⟨v, read, rfl⟩
-  · cases ok
+    exact ⟨v, same ▸ getValidator_eq_ok_iff.mp read, rfl⟩
 
 /-- Applied deposits credit an old position only with deposits whose key first sits there. -/
 private theorem appliedDeposits_balances {f : Fork} {s : BeaconState preset f} :

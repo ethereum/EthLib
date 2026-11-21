@@ -217,13 +217,9 @@ private theorem equivocatorWeight_append {equivocators : List ValidatorIndex}
 /-- One step of the walk over a committee in the weak test. -/
 private abbrev equivocatorStep (store : Store preset fork) (state : BeaconState preset fork)
     (validator : ValidatorIndex) (weight : Nat) : Except ForkChoiceError (ForInStep Nat) :=
-  if store.equivocatingIndices.contains validator = true then
-    match state.validators.data[validator.toNat]? with
-    | some known => Except.ok (ForInStep.yield (weight + known.effectiveBalance.toNat))
-    -- The step after the throw is how the loop of the rule elaborates.
-    | none => do
-      throw (ForkChoiceError.accessor (AccessorError.indexOutOfRange validator))
-      Except.ok (ForInStep.yield weight)
+  if store.equivocatingIndices.contains validator = true then do
+    let known ← Except.mapError ForkChoiceError.accessor (getValidator state validator)
+    Except.ok (ForInStep.yield (weight + known.effectiveBalance.toNat))
   else Except.ok (ForInStep.yield weight)
 
 /-- A walk over validators adds the balances of the equivocators.
@@ -246,15 +242,17 @@ private theorem forIn_equivocators_ok_iff {state : BeaconState preset fork}
     by_cases contained : store.equivocatingIndices.contains validator = true
     · cases found : state.validators.data[validator.toNat]? with
       | none =>
-        simp only [equivocatorStep, contained, found, ↓reduceIte]
-        simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+        simp only [equivocatorStep, contained, getValidator, found, Except.mapError, bind,
+          Except.bind, ↓reduceIte]
+        simp
       | some known =>
         have weight : equivocatorWeight store.equivocatingIndices state (validator :: rest) =
             known.effectiveBalance.toNat +
               equivocatorWeight store.equivocatingIndices state rest := by
           simp only [equivocatorWeight, List.filter_cons, contained, ↓reduceIte,
             List.filterMap_cons, found, List.map_cons, List.sum_cons]
-        simp only [equivocatorStep, contained, found, ↓reduceIte, Except.ok.injEq,
+        simp only [equivocatorStep, contained, getValidator, found, Except.mapError, bind,
+          Except.bind, ↓reduceIte, Except.ok.injEq,
           exists_eq_left', ih, weight, Option.isSome_some, forall_const, true_and, Nat.add_assoc]
     · have weight : equivocatorWeight store.equivocatingIndices state (validator :: rest) =
           equivocatorWeight store.equivocatingIndices state rest := by

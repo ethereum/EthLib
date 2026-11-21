@@ -1587,18 +1587,15 @@ private theorem applyPendingDeposit_churn_eligible {fork : Fork} {s t : BeaconSt
   apply increaseBalance_credit_eligible raised
   -- The status read the same position and found the validator not withdrawable.
   simp only [depositTargetStatus, known, bind_ok_iff] at status
-  obtain ⟨read, readConverted, status⟩ := status
+  obtain ⟨read, readConverted, validator, found, status⟩ := status
   have readEq := (Uint64.ofNatChecked_ok_iff.mp (mapError_ok_iff.mp readConverted)).2
-  rw [indexEq, ← readEq]
-  cases found : s.validators.data[read.toNat]? with
-  | none => simp [found] at status
-  | some validator =>
-    simp only [found, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at status
-    have later : ¬ validator.withdrawableEpoch < nextEpoch := by
-      simpa using status.2
-    rw [UInt64.lt_iff_toNat_lt] at later
-    simp only [Option.map_some, Option.getD_some, decide_eq_false_iff_not]
-    omega
+  rw [indexEq, ← readEq, getValidator_eq_ok_iff.mp found]
+  simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at status
+  have later : ¬ validator.withdrawableEpoch < nextEpoch := by
+    simpa using status.2
+  rw [UInt64.lt_iff_toNat_lt] at later
+  simp only [Option.map_some, Option.getD_some, decide_eq_false_iff_not]
+  omega
 
 section
 
@@ -1891,16 +1888,13 @@ private theorem pending_source_not_bypass {fork : Fork} {s : BeaconState preset 
     (status : depositTargetStatus s nextEpoch deposit.pubkey = .ok (exited, true))
     (known : s.validators.data.findIdx? (·.pubkey == deposit.pubkey) = some i) : False := by
   simp only [depositTargetStatus, known, bind_ok_iff] at status
-  obtain ⟨index, converted, status⟩ := status
+  obtain ⟨index, converted, v, found, status⟩ := status
   have indexEq := (Uint64.ofNatChecked_ok_iff.mp (mapError_ok_iff.mp converted)).2
-  cases found : s.validators.data[index.toNat]? with
-  | none => simp [found] at status
-  | some v =>
-    simp only [found, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at status
-    have withdrawn : v.withdrawableEpoch < nextEpoch := by simpa using status.2
-    have queued : s.validators.data[c.sourceIndex.toNat]? = some v := by
-      simpa only [source, indexEq] using found
-    exact pending_source_not_withdrawn ordered electra c member v queued next withdrawn
+  simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at status
+  have withdrawn : v.withdrawableEpoch < nextEpoch := by simpa using status.2
+  have queued : s.validators.data[c.sourceIndex.toNat]? = some v := by
+    simpa only [source, indexEq] using getValidator_eq_ok_iff.mp found
+  exact pending_source_not_withdrawn ordered electra c member v queued next withdrawn
 
 theorem epochTrace_pendingConsolidationsOrdered {fork : Fork}
     {stages : List EpochStage} {s t : BeaconState preset fork}
@@ -1982,11 +1976,13 @@ private theorem bypass_reserve_hidden {fork : Fork} {s : BeaconState preset fork
     rintro ⟨c, member, source⟩
     exact pending_source_not_bypass ordered electra c (suffixIn c member) source next status known
   simp only [depositTargetStatus, known, bind_ok_iff] at status
-  obtain ⟨index, converted, status⟩ := status
+  obtain ⟨index, converted, v, read, status⟩ := status
   have indexEq := (Uint64.ofNatChecked_ok_iff.mp (mapError_ok_iff.mp converted)).2
   intro w found
   have lookup : s.validators.data[index.toNat]? = some w := by simpa only [indexEq] using found
-  simp only [lookup, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at status
+  have same : w = v := Option.some.inj (lookup.symm.trans (getValidator_eq_ok_iff.mp read))
+  subst same
+  simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at status
   have withdrawn : w.withdrawableEpoch < nextEpoch := by simpa using status.2
   have due : w.withdrawableEpoch ≤ getCurrentEpoch s := by
     rw [UInt64.lt_iff_toNat_lt] at withdrawn

@@ -447,7 +447,8 @@ theorem stake_le_computeCommitteeWeightBetweenSlots_of_reads {head : Root}
     obtain ⟨inParticipants, validator, atIndex, isActive⟩ := inside v member
     refine mem_filterM_ok_of_test activeOk
       (Std.TreeSet.mem_toList.mpr (inParticipants found foundOk)) ?_
-    simp [validatorAt, atIndex, isActive, bind, Except.bind, pure, Except.pure]
+    simp [validatorAt, getValidator, Except.mapError, atIndex, isActive, bind, Except.bind, pure,
+      Except.pure]
   · exact absurd coveredOk whole
 
 /-- The store's weight of the committees of a range covers the stake of their active members.
@@ -517,7 +518,8 @@ theorem exists_stake_of_getNodeSupportBetweenSlots {head : Root}
         validatorAt_ok_iff.mp found, unslashed, isActive⟩
     · rintro ⟨inside, validator, found, unslashed, isActive⟩
       refine mem_filterM_ok_of_test countedOk (Std.TreeSet.mem_toList.mpr inside) ?_
-      simp [validatorAt, found, unslashed, isActive, bind, Except.bind, pure, Except.pure]
+      simp [validatorAt, getValidator, Except.mapError, found, unslashed, isActive, bind,
+        Except.bind, pure, Except.pure]
   have distinct : counted.Nodup :=
     (sublist_of_filterM_ok countedOk).nodup
       (Std.TreeSet.distinct_toList.imp Std.ReflCmp.ne_of_cmp_ne_eq)

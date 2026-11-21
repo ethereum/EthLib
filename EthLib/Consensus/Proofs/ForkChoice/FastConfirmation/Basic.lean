@@ -128,8 +128,8 @@ theorem validatorAt_ok_iff {state : BeaconState preset fork} {index : ValidatorI
     {validator : Validator} :
     validatorAt state index = .ok validator ↔
       state.validators.data[index.toNat]? = some validator := by
-  unfold validatorAt
-  split <;> simp_all [throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
+  unfold validatorAt getValidator
+  split <;> simp_all [Except.mapError]
 
 /-- The members of a set with a list folded in: those of the set and of the list. -/
 private theorem mem_list_foldl_insert {v : ValidatorIndex} :

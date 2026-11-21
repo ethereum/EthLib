@@ -91,9 +91,7 @@ def sumGwei {α : Type} (items : List α) (weight : α → Except ForkChoiceErro
 /-- The validator at an index of a state, or an error when the index is out of range. -/
 def validatorAt (state : BeaconState preset fork) (index : ValidatorIndex) :
     Except ForkChoiceError Validator :=
-  match state.validators.data[index.toNat]? with
-  | some validator => return validator
-  | none => throw (.accessor (.indexOutOfRange index))
+  (getValidator state index).mapError .accessor
 
 namespace Store
 
