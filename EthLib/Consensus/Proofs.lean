@@ -184,6 +184,7 @@ public import EthLib.Consensus.Proofs.LightClient.SyncCommitteeRandomOracle
 public import EthLib.Consensus.Proofs.LightClient.Unforgeable
 public import EthLib.Consensus.Proofs.LightClient.Upgrade
 public import EthLib.Consensus.Proofs.LivenessContinuation
+public import EthLib.Consensus.Proofs.LivenessVotes
 public import EthLib.Consensus.Proofs.Models.Ffg.AccountableSafety
 public import EthLib.Consensus.Proofs.Models.Ffg.Monotonicity
 public import EthLib.Consensus.Proofs.Models.Ffg.PlausibleLiveness
