@@ -3125,21 +3125,19 @@ private theorem funding_withdrawn_deposit {fork : Fork} {s t : BeaconState prese
   split at status
   · rename_i position found
     simp only [bind_ok_iff] at status
-    obtain ⟨index, converted, status⟩ := status
+    obtain ⟨index, converted, validator, read, status⟩ := status
     have indexEq := (Uint64.ofNatChecked_ok_iff.mp (mapError_ok_iff.mp converted)).2
-    cases read : s.validators.data[index.toNat]? with
-    | none => simp [read] at status
-    | some validator =>
-      simp only [read, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at status
-      have withdrawn : validator.withdrawableEpoch < nextEpoch := by
-        exact of_decide_eq_true status.2
-      have other : i ≠ position := by
-        intro same
-        subst i
-        rw [indexEq] at read
-        exact selected validator read withdrawn
-      have kept := (applyPendingDeposit_known_balances found ok).2 i other
-      simp only [actualBalanceAt, kept]
+    replace read := getValidator_eq_ok_iff.mp read
+    simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at status
+    have withdrawn : validator.withdrawableEpoch < nextEpoch := by
+      exact of_decide_eq_true status.2
+    have other : i ≠ position := by
+      intro same
+      subst i
+      rw [indexEq] at read
+      exact selected validator read withdrawn
+    have kept := (applyPendingDeposit_known_balances found ok).2 i other
+    simp only [actualBalanceAt, kept]
   · cases status
 
 private theorem funding_selected_credit {fork : Fork} (s t : BeaconState preset fork)

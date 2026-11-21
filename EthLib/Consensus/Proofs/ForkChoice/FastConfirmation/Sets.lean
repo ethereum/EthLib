@@ -132,15 +132,17 @@ theorem stake_equivocatorsOf {balanceSource : BeaconState preset fork}
       simp only [List.mem_filter, decide_eq_true_eq] at kept
       refine ⟨⟨Std.TreeSet.mem_toList.mp kept.1, ?_⟩, kept.2⟩
       cases found : balanceSource.validators.data[v.toNat]? with
-      | none => simp [validatorAt, found, throw, throwThe, MonadExceptOf.throw, bind,
+      | none => simp [validatorAt, getValidator, Except.mapError, found, bind,
           Except.bind] at passes
       | some validator =>
         exact ⟨validator, rfl, by
-          simpa [validatorAt, found, bind, Except.bind, pure, Except.pure] using passes⟩
+          simpa [validatorAt, getValidator, Except.mapError, found, bind, Except.bind, pure,
+            Except.pure] using passes⟩
     · rintro ⟨⟨inside, validator, found, isActive⟩, equivocating⟩
       refine mem_filterM_ok_of_test activeOk
         (List.mem_filter.mpr ⟨Std.TreeSet.mem_toList.mpr inside, by simpa using equivocating⟩) ?_
-      simp [validatorAt, found, isActive, bind, Except.bind, pure, Except.pure]
+      simp [validatorAt, getValidator, Except.mapError, found, isActive, bind, Except.bind, pure,
+        Except.pure]
   have distinct : active.Nodup :=
     ((sublist_of_filterM_ok activeOk).trans List.filter_sublist).nodup
       (Std.TreeSet.distinct_toList.imp Std.ReflCmp.ne_of_cmp_ne_eq)

@@ -127,7 +127,7 @@ theorem depositTargetStatus_applyPendingDeposit {deposit : PendingDeposit}
         have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
         omega
       have small := addValidatorToRegistry_size_lt computed
-      simp only [depositTargetStatus, pushed, Array.findIdx?_push]
+      simp only [depositTargetStatus, getValidator, pushed, Array.findIdx?_push]
       cases found : state.validators.data.findIdx? (·.pubkey == pubkey) with
       | some position =>
         -- The validator found before keeps its position, below the new one.
@@ -149,7 +149,7 @@ theorem depositTargetStatus_applyPendingDeposit {deposit : PendingDeposit}
       rfl
   · simp only [liftAccessor_ok, bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
-    simp only [depositTargetStatus, increaseBalance_validators computed]
+    simp only [depositTargetStatus, getValidator, increaseBalance_validators computed]
 
 /-- The status of a deposit target never fails on an index.
 
@@ -157,7 +157,7 @@ The validator found with the key is the one that the read at its converted index
 theorem depositTargetStatus_ne_indexOutOfRange (state : BeaconState preset fork)
     (nextEpoch : Epoch) (pubkey : Cryptography.Bls.BLSPubkey) (index : ValidatorIndex) :
     depositTargetStatus state nextEpoch pubkey ≠ .error (.indexOutOfRange index) := by
-  unfold depositTargetStatus
+  unfold depositTargetStatus getValidator
   split
   · rename_i position found
     obtain ⟨inside, _⟩ := Array.findIdx?_eq_some_iff_getElem.mp found
@@ -184,7 +184,7 @@ theorem depositTargetStatus_eq {state : BeaconState preset fork} {nextEpoch : Ep
             decide (validator.withdrawableEpoch.toNat < nextEpoch.toNat))
         | none => (false, false)) := by
   rw [Array.find?_eq_bind_findIdx?_getElem?]
-  unfold depositTargetStatus
+  unfold depositTargetStatus getValidator
   cases found : state.validators.data.findIdx? (·.pubkey == pubkey) with
   | none => rfl
   | some position =>
@@ -210,7 +210,7 @@ theorem depositTargetStatus_of_ok {state : BeaconState preset fork} {nextEpoch :
             decide (validator.withdrawableEpoch.toNat < nextEpoch.toNat))
         | none => (false, false)) := by
   rw [Array.find?_eq_bind_findIdx?_getElem?]
-  unfold depositTargetStatus at ok
+  unfold depositTargetStatus getValidator at ok
   cases found : state.validators.data.findIdx? (·.pubkey == pubkey) with
   | none =>
     rw [found] at ok

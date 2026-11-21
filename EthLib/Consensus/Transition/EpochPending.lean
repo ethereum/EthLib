@@ -63,7 +63,7 @@ def depositTargetStatus (state : BeaconState preset fork) (nextEpoch : Epoch)
   match state.validators.data.findIdx? (·.pubkey == pubkey) with
   | some position => do
     let index ← liftArith (ofNatChecked position)
-    let some validator := state.validators.data[index.toNat]? | throw (.indexOutOfRange index)
+    let validator ← getValidator state index
     return (validator.exitEpoch < FAR_FUTURE_EPOCH, validator.withdrawableEpoch < nextEpoch)
   | none => return (false, false)
 
