@@ -2000,6 +2000,10 @@ def tx_run(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> tup
     """Run one transaction on a state, in a block with no transaction before."""
     ...
 
+def tx_trace_eip3155(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> list[str]:
+    """The trace of one transaction in the lines of EIP-3155: one per step, then the summary."""
+    ...
+
 def tx_network_check(fork: str, network: bytes) -> bytes:
     """Check the network form of a blob transaction at the named fork."""
     ...

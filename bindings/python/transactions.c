@@ -59,6 +59,11 @@ eth_tx_run(
 );
 
 extern lean_object*
+eth_tx_trace_eip3155(
+  lean_object* args
+);
+
+extern lean_object*
 eth_tx_settle(
   lean_object* args
 );
@@ -173,6 +178,14 @@ py_tx_run(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_tx_run, args, 5, TRANSACTION_ERROR);
+}
+
+PyObject*
+py_tx_trace_eip3155(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_tx_trace_eip3155, args, 5, TRANSACTION_ERROR);
 }
 
 PyObject*

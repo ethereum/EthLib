@@ -118,6 +118,11 @@ def run(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> Run:
     return Run(*_native.tx_run(fork, chain_id, tx, state, env))
 
 
+def trace_eip3155(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> list[str]:
+    """The trace of one transaction as the lines of EIP-3155, run as `run` runs it."""
+    return _native.tx_trace_eip3155(fork, chain_id, tx, state, env)
+
+
 def settle(fork: str, tx: bytes, base_fee: int, gas_left: int, refund_counter: int) -> Settlement:
     """Settle the gas of a transaction, from its gas left and its refund counter."""
     return Settlement(*_native.tx_settle(fork, tx, base_fee, gas_left, refund_counter))
@@ -137,6 +142,7 @@ __all__ = [
     "recover_sender",
     "run",
     "settle",
+    "trace_eip3155",
     "tx_hash",
     "tx_type",
     "TransactionError",

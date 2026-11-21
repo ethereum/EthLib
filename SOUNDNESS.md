@@ -5675,6 +5675,21 @@ The source leaves these points open, and EthLib picks:
 - A named tracer fails as an invalid parameter, since the source puts named tracers out of its scope; `timeout`, `debug` and `tracerConfig` change no answer.
 - The traced block replays the start of the body, then each transaction twice, once traced and once plain; no theorem yet ties that replay to the body.
 
+The same entries also give the lines of [EIP-3155](https://github.com/ethereum/EIPs/blob/b055feec322fbc37e9d77a393a50b3ff56b31c92/EIPS/eip-3155.md#specification) (`Execution/Rpc/Eip3155.lean`).
+The line of a step has the required fields in the order of the EIP, then the optional ones that the logger recorded (`eip3155Fields_keys`, `Proofs/Rpc/Eip3155.lean`).
+Each entry that a step adds holds the size of the memory before that step and its opcode byte (`record_memSize`).
+Under the configuration of the lines, which the export uses, each such entry also holds its stack and its return data (`record_eip3155Config`).
+A trace has one line per entry plus the summary (`eip3155Lines_length`).
+EthLib reads these points of the EIP, which is in Last Call:
+- `pass` is the Boolean of the table, where the example of the summary writes a string; [EIPs#12678](https://github.com/ethereum/EIPs/pull/12678) reports it.
+- `output` is hex behind `0x`, as the test case writes `0x40`, where the example of the summary writes an empty output as an empty string.
+- `memory` is an array of 32-byte words, as the table says, where the example writes one string.
+- `stack` and `returnData` are those that the logger recorded, so the export records both; `refund` leaves out the refund of EIP-7702 authorizations, as above.
+- `error` is the text of the error, as the explanation of the table reads it, where the table types it Hex-String.
+- `fork` is EthLib's name of the fork, such as `pectra`; the EIP names no scheme.
+- No STOP line follows a step that failed, since the logger records no step of a frame after its halt.
+- The EIP describes the summary of one transaction, and EthLib writes one summary per transaction.
+
 The Python suite replays the official test chain into a view and answers the official fixtures of the methods that EthLib serves.
 That chain mines its blocks before the merge with a zero mix hash and a zero nonce, so the suite runs the transition without the proof-of-work check.
 
@@ -7578,12 +7593,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 556 operations and 51 size constants.
-The Python extension calls 556 of the operations and 51 of the constants.
+Lean exports 557 operations and 51 size constants.
+The Python extension calls 557 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12472 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (71), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (368), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (39), `kzg.c` (511), `libp2p.c` (187), `module.c` (1641), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (194), `trie.c` (115), `vrf.c` (141), `wrappers.h` (860), `x25519.c` (21), `xmss.c` (344).
+12487 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (71), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (368), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (39), `kzg.c` (511), `libp2p.c` (187), `module.c` (1642), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (207), `trie.c` (115), `vrf.c` (141), `wrappers.h` (861), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

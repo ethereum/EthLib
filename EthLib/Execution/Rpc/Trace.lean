@@ -137,6 +137,10 @@ structure StructLog where
   pc : Nat
   /-- The mnemonic of the opcode. -/
   op : String
+  /-- The byte of the opcode, 0 for the STOP past the end of the code. -/
+  opcode : Nat
+  /-- The size in bytes of the memory before the step, recorded whatever the configuration. -/
+  memSize : Nat
   /-- The gas left before the step.
 
   From Glamsterdam, it is the execution gas, without the reservoir of state gas. -/
@@ -271,6 +275,8 @@ def Tracer.record (config : TraceConfig) {fork : Fork} {Meter : Type} [GasMeter 
     let entry : StructLog :=
       { pc := evm.pc
         op := mnemonicOf fork op
+        opcode := if h : evm.pc < evm.code.size then evm.code[evm.pc].toNat else 0
+        memSize := evm.memory.size
         gas := GasMeter.gasLeft evm.gas
         gasCost := stepCost evm result
         depth := evm.message.depth + 1

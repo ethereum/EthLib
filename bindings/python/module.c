@@ -1316,6 +1316,7 @@ static PyMethodDef methods[] = {
   {"tx_check_in_block", py_tx_check_in_block, METH_VARARGS, DOC_tx_check_in_block},
   {"tx_admit_to_pool", py_tx_admit_to_pool, METH_VARARGS, DOC_tx_admit_to_pool},
   {"tx_run", py_tx_run, METH_VARARGS, DOC_tx_run},
+  {"tx_trace_eip3155", py_tx_trace_eip3155, METH_VARARGS, DOC_tx_trace_eip3155},
   {"tx_settle", py_tx_settle, METH_VARARGS, DOC_tx_settle},
   {"tx_network_check", py_tx_network_check, METH_VARARGS, DOC_tx_network_check},
   {"rlpx_make_auth", py_rlpx_make_auth, METH_VARARGS, DOC_rlpx_make_auth},

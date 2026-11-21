@@ -14410,6 +14410,34 @@
    "error_class": "TransactionError",
    "docstring":
    "Run one transaction on a state, in a block with no transaction before.\n\nThe arguments are the name of the fork, the chain ID, the transaction, the state and the block.\n\nThe state takes the form of the state root export, and the block is a list of ten items.\n\nA transaction that may not enter the block fails with the code of its inclusion error.\n\nAn error that aborts the run has the code of its state error, or 0.\n\nIt returns the state root, the hash of the encoding of the logs, the gas used and the success.\n\nLast come the accounts of the state after it, each with its code and its storage.\n\nThe state after it has no beneficiary reward, since a block pays that."},
+  {"summary":
+   "The trace of one transaction in the lines of EIP-3155: one per step, then the summary.",
+   "signature":
+   "(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> list[str]",
+   "operation": "EthLib.Execution.Transactions.Exports.traceEip3155Export",
+   "method": "tx_trace_eip3155",
+   "errors":
+   [{"type": "EthLib.Execution.Transactions.InclusionError",
+     "codes":
+     [{"constructor": "transaction", "code": null},
+      {"constructor": "gasAllowanceExceeded", "code": 201},
+      {"constructor": "blobGasLimitExceeded", "code": 202},
+      {"constructor": "insufficientMaxFeePerGas", "code": 203},
+      {"constructor": "insufficientMaxFeePerBlobGas", "code": 204},
+      {"constructor": "nonceTooLow", "code": 205},
+      {"constructor": "nonceTooHigh", "code": 206},
+      {"constructor": "insufficientBalance", "code": 207},
+      {"constructor": "senderNotEoa", "code": 208},
+      {"constructor": "missingCode", "code": 209}]},
+    {"type": "EthLib.Execution.State.StateError",
+     "codes":
+     [{"constructor": "noAccount", "code": 101},
+      {"constructor": "missingCode", "code": 102},
+      {"constructor": "insufficientBalance", "code": 103},
+      {"constructor": "balanceOverflow", "code": 104}]}],
+   "error_class": "TransactionError",
+   "docstring":
+   "The trace of one transaction in the lines of EIP-3155: one per step, then the summary.\n\nThe arguments are those of the run export.\n\nThey are the name of the fork, the chain ID, the transaction, the state and the block."},
   {"summary": "Check the network form of a blob transaction at the named fork.",
    "signature": "(fork: str, network: bytes) -> bytes",
    "operation": "EthLib.Execution.Transactions.Exports.networkCheckExport",
