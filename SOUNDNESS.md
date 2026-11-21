@@ -4717,7 +4717,27 @@ They ask that each slot step succeeds, and that an honest block passes at each s
 The ring of RANDAO mixes must span more than the seed lookahead plus two epochs, so that the committees of the epoch stay fixed.
 `exists_slotsContinuation` walks empty slots to the first slot of the next epoch, when the latest block header is at the slot of the state or before.
 The epoch continuation asks the slot of its first state to be after its latest block header, so it cannot start at the genesis state itself; its first state is one that a slot step reaches, with the upgrades due already applied.
-No theorem yet derives the block hypothesis from the honest block theorems above, or assembles the continuation of plausible liveness.
+No theorem yet assembles the continuation of plausible liveness.
+
+`exists_honestBlock_gathersVotes` (`Consensus/Proofs/LivenessBlock.lean`) reduces that block condition to conditions on each state of a proposal, from Altair until Gloas.
+At a slot of a proposal with an honest proposer, the block carries the honest votes of the slots of the epoch before it, within the gap.
+Before Electra it carries one attestation for each committee of those slots with an honest member; from Electra one aggregate for each such slot.
+Each vote heads the latest block at its slot or before, targets the root of the latest block at the first slot of the epoch or before, and has the current justified checkpoint as source.
+The gap times the attestations of one slot must fit in a block.
+On mainnet that allows a gap of two slots before Electra, when a slot has 64 committees, and of eight slots from Electra.
+Each committee of the epoch must fit the largest committee size, an assumption.
+The honest validators must hold their keys in the registry, and the proposer must not be slashed.
+The honest keys of each attestation must not sum to zero, an assumption.
+The state must meet the budget and room conditions of the honest block above.
+Any list of attestations that fits must complete to an honest block of the proposer whose execution part passes and whose deposits have proofs.
+The registry and the pending deposits must have room for those deposits, and before Electra the budget must have room for their amounts.
+That is an assumption on the execution layer and on the deposit data, as for the honest block above.
+The ring of mixes must span more than the seed lookahead plus two epochs, and the voting period on the deposit contract must fit in 64 bits.
+An epoch must have two slots at least, and the buffer of roots must reach the previous epoch.
+The balance increment must be nonzero and at most the largest effective balance, the increment times the base reward factor must fit in 64 bits, and the sync committee must not be empty.
+The least inclusion delay must be at most one slot, and the largest number of committees per slot must be positive.
+Then the block, signed by the proposer, passes the block step of a run with the signature and state-root checks, it is an honest step, and it gives the flag to every honest member of those slots.
+`honestSlotAggregate_signers` (`HonestSlotAggregate.lean`) states that each signer of the honest aggregate of a slot is an honest member of a committee of that slot.
 
 `targetIndices_of_votesGathered` (`Consensus/Proofs/LivenessVotes.lean`) reads those flags in the justification test, from Altair.
 The committees of an epoch hold each of its active validators, so an active honest validator sits in a committee of some slot of the epoch.

@@ -393,37 +393,6 @@ theorem foldlM_processAttestation_honestAttestation {budget scoreBound : Nat}
   exact ⟨after, folded, fun vote member rooted committee committeeOk index inside honestIndex =>
     flagged vote member index ⟨rooted, committee, committeeOk, inside, honestIndex⟩⟩
 
-/-- From Electra, the committees of the slot of a built honest aggregate have values. -/
-private theorem committees_of_honestSlotAggregate (electra : .pectra ≤ fork)
-    {honest : Finset ValidatorIndex} {key : ValidatorIndex → Signatures.SecretKey}
-    {data : AttestationData} {attestation : Attestation preset fork}
-    (built : honestSlotAggregate electra config state honest key data = .ok attestation) :
-    ∃ committees, (List.range
-        (getCommitteeCountPerSlot state (computeEpochAtSlot preset data.slot)).toNat).mapM
-      (fun position => getBeaconCommittee state data.slot position.toUInt64) = .ok committees := by
-  unfold honestSlotAggregate at built
-  obtain ⟨keys, keysOk, -⟩ := bind_ok_iff.mp built
-  unfold honestCommittees at keysOk
-  obtain ⟨committees, committeesOk, -⟩ := bind_ok_iff.mp (mapError_ok_iff.mp keysOk)
-  exact ⟨committees, committeesOk⟩
-
-/-- A committee at an index below the count is one of the committees read in turn. -/
-private theorem mem_of_mapM_getBeaconCommittee {slot : Slot} {count : Nat}
-    {committees : List (Array ValidatorIndex)}
-    (committeesOk : (List.range count).mapM
-      (fun position => getBeaconCommittee state slot position.toUInt64) = .ok committees)
-    {committeeIndex : CommitteeIndex} {committee : Array ValidatorIndex}
-    (below : committeeIndex.toNat < count)
-    (committeeOk : getBeaconCommittee state slot committeeIndex = .ok committee) :
-    committee ∈ committees := by
-  obtain ⟨lengths, each⟩ := mapM_eq_ok_iff.mp committeesOk
-  rw [List.length_range] at lengths
-  have read := each committeeIndex.toNat (by rw [List.length_range]; exact below)
-  simp only [List.getElem_range, Nat.toUInt64_eq, UInt64.ofNat_toNat] at read
-  rw [committeeOk, Except.ok.injEq] at read
-  rw [read]
-  exact List.getElem_mem _
-
 /-- From Electra until Gloas, the attestation steps accept the honest aggregates of slots.
 
 Each aggregate covers the committees of the slot of its data that have an honest member.

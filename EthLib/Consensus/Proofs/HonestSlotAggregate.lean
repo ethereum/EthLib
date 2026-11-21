@@ -99,8 +99,8 @@ private theorem committeeAttesters_honest {honest : Finset ValidatorIndex}
     obtain ⟨seat, inside, rfl⟩ := Array.mem_iff_getElem.mp member
     exact ⟨seat, inside, rfl, by rw [read seat inside, decide_eq_true_iff]; exact honestMember⟩
 
-/-- A position below a count of committees is the same index as a 64-bit number. -/
-private theorem toUInt64_lt_of_lt {position : Nat} {count : UInt64}
+/-- A number below the value of a 64-bit count stays below it as a 64-bit number. -/
+theorem toUInt64_lt_of_lt {position : Nat} {count : UInt64}
     (below : position < count.toNat) :
     position.toUInt64 < count := by
   rw [UInt64.lt_iff_toNat_lt, Nat.toUInt64_eq,
@@ -571,6 +571,45 @@ private theorem selected_exists {honest : Finset ValidatorIndex} {slot : Slot}
   exact UInt64.le_of_lt (toUInt64_lt_toUInt64 lt
     (Nat.lt_trans (good _ second).1 (UInt64.toNat_lt _)))
 
+/-- The count of committees of a slot is at most the largest number, when that is positive. -/
+theorem toNat_getCommitteeCountPerSlot_le (state : BeaconState preset fork)
+    (epoch : Epoch) (positive : 0 < preset.MAX_COMMITTEES_PER_SLOT) :
+    (getCommitteeCountPerSlot state epoch).toNat ≤ preset.MAX_COMMITTEES_PER_SLOT.toNat := by
+  have bounded := getCommitteeCountPerSlot_le state epoch
+  simp only [max, UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt] at bounded positive ⊢
+  split at bounded <;> simp_all
+
+/-- A committee at an index below the count is one of the committees read in turn. -/
+theorem mem_of_mapM_getBeaconCommittee {slot : Slot} {count : Nat}
+    {committees : List (Array ValidatorIndex)}
+    (committeesOk : (List.range count).mapM
+      (fun position => getBeaconCommittee state slot position.toUInt64) = .ok committees)
+    {committeeIndex : CommitteeIndex} {committee : Array ValidatorIndex}
+    (below : committeeIndex.toNat < count)
+    (committeeOk : getBeaconCommittee state slot committeeIndex = .ok committee) :
+    committee ∈ committees := by
+  obtain ⟨lengths, each⟩ := mapM_eq_ok_iff.mp committeesOk
+  rw [List.length_range] at lengths
+  have read := each committeeIndex.toNat (by rw [List.length_range]; exact below)
+  simp only [List.getElem_range, Nat.toUInt64_eq, UInt64.ofNat_toNat] at read
+  rw [committeeOk, Except.ok.injEq] at read
+  rw [read]
+  exact List.getElem_mem _
+
+/-- From Electra, the committees of the slot of a built honest aggregate have values. -/
+theorem committees_of_honestSlotAggregate (electra : .pectra ≤ fork)
+    {honest : Finset ValidatorIndex} {key : ValidatorIndex → Signatures.SecretKey}
+    {data : AttestationData} {attestation : Attestation preset fork}
+    (built : honestSlotAggregate electra config state honest key data = .ok attestation) :
+    ∃ committees, (List.range
+        (getCommitteeCountPerSlot state (computeEpochAtSlot preset data.slot)).toNat).mapM
+      (fun position => getBeaconCommittee state data.slot position.toUInt64) = .ok committees := by
+  unfold honestSlotAggregate at built
+  obtain ⟨keys, keysOk, -⟩ := bind_ok_iff.mp built
+  unfold honestCommittees at keysOk
+  obtain ⟨committees, committeesOk, -⟩ := bind_ok_iff.mp (mapError_ok_iff.mp keysOk)
+  exact ⟨committees, committeesOk⟩
+
 /-- From Electra, the honest aggregate of a slot is built when its committees have values.
 
 The largest number of committees of a slot is positive.
@@ -590,11 +629,8 @@ theorem honestSlotAggregate_exists_ok (electra : .pectra ≤ fork)
     ∃ attestation,
       honestSlotAggregate electra config state honest key data = .ok attestation := by
   -- The count of committees of a slot is at most the largest number, which is positive.
-  have countBelow : (getCommitteeCountPerSlot state (computeEpochAtSlot preset data.slot)).toNat ≤
-      preset.MAX_COMMITTEES_PER_SLOT.toNat := by
-    have bounded := getCommitteeCountPerSlot_le state (computeEpochAtSlot preset data.slot)
-    simp only [max, UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt] at bounded positive ⊢
-    split at bounded <;> simp_all
+  have countBelow := toNat_getCommitteeCountPerSlot_le state
+    (computeEpochAtSlot preset data.slot) positive
   obtain ⟨selected, covered, good, -, ordered, flat, sub⟩ :=
     selected_exists (honest := honest) committeesOk
   -- A selected committee is one of the slot, so it fits the bits of an attestation.
@@ -650,6 +686,116 @@ theorem honestSlotAggregate_exists_ok (electra : .pectra ≤ fork)
   unfold honestSlotAggregate
   rw [covered, mapError_ok_bind, aggregatesOk, mapError_ok_bind]
   exact joinedOk
+
+/-- From Electra, a built honest aggregate is described by the committees of the slot it covers.
+
+It holds the given data, and covers the committees of the slot with an honest member.
+
+Each covered committee is read at its position, below the count, and has an honest member.
+
+Their honest members are those of all the committees of the slot.
+
+Its committee bits name the covered committees, in order of their positions.
+
+Its bits are one per member of the covered committees in turn, set when that member is honest.
+
+Its signers are the honest members of the committees of the slot.
+
+Its signature aggregates, per covered committee, the signatures of its honest members. -/
+theorem honestSlotAggregate_spec (electra : .pectra ≤ fork)
+    {honest : Finset ValidatorIndex} {key : ValidatorIndex → Signatures.SecretKey}
+    {data : AttestationData} {committees : List (Array ValidatorIndex)}
+    {attestation : Attestation preset fork}
+    (committeesOk : (List.range
+        (getCommitteeCountPerSlot state (computeEpochAtSlot preset data.slot)).toNat).mapM
+      (fun position => getBeaconCommittee state data.slot position.toUInt64) = .ok committees)
+    (built : honestSlotAggregate electra config state honest key data = .ok attestation) :
+    attestation.data = data ∧ ∃ selected : List (Nat × Array ValidatorIndex),
+      (∀ pair ∈ selected,
+        pair.1 < (getCommitteeCountPerSlot state (computeEpochAtSlot preset data.slot)).toNat ∧
+        getBeaconCommittee state data.slot pair.1.toUInt64 = .ok pair.2 ∧
+        honestSigners honest pair.2 ≠ []) ∧
+      selected.flatMap (fun pair => honestSigners honest pair.2) =
+        committees.flatMap (honestSigners honest) ∧
+      getCommitteeIndices (attestation.committeeBits electra) = selected.map (·.1.toUInt64) ∧
+      attestation.aggregationBits.bits.toList = selected.flatMap (fun pair =>
+        List.ofFn fun seat : Fin pair.2.size => decide (pair.2[seat] ∈ honest)) ∧
+      (∃ indices, getAttestingIndices state attestation = .ok indices ∧
+        ∀ index, index ∈ indices ↔ index ∈ committees.flatMap (honestSigners honest)) ∧
+      ∀ domain root,
+        getDomain config state DOMAIN_BEACON_ATTESTER (some data.target.epoch) = .ok domain →
+        computeSigningRoot data domain = .ok root →
+        ∃ joints, List.Forall₂ (fun keys joint => ∃ signatures,
+            List.Forall₂ (fun secret signature =>
+              Signatures.sign secret (Base.packBytes root) = .ok signature) keys signatures ∧
+            Signatures.aggregate signatures.toArray = .ok joint)
+          (selected.map fun pair => (honestSigners honest pair.2).map key) joints ∧
+          Signatures.aggregate joints.toArray = .ok attestation.signature := by
+  -- The committees of the slot with an honest member, each with its position.
+  obtain ⟨selected, covered, good, increasing, ordered, flat, -⟩ :=
+    selected_exists (honest := honest) committeesOk
+  -- The aggregate joins the honest attestations of those committees.
+  unfold honestSlotAggregate at built
+  obtain ⟨keys, keysOk, built⟩ := bind_ok_iff.mp built
+  rw [mapError_ok_iff, covered, Except.ok.injEq] at keysOk
+  subst keysOk
+  obtain ⟨aggregates, aggregatesOk, built⟩ := bind_ok_iff.mp built
+  have made := List.forall₂_map_left_iff.mp (forall₂_of_mapM_ok (mapError_ok_iff.mp aggregatesOk))
+  obtain ⟨domain, domained⟩ :=
+    getDomain_total config state DOMAIN_BEACON_ATTESTER (some data.target.epoch)
+  obtain ⟨root, rooted⟩ := computeSigningRoot_total data domain
+  obtain ⟨named, datas, bitsEq, joined⟩ := honestAttestations_spec electra domained rooted
+    (fun pair member => (good pair member).2.1) made
+  obtain ⟨bitsOf, signatureOf, ⟨first, firstMember, dataOf⟩, committeeBitsOf⟩ :=
+    computeOnChainAggregate_of_ordered named ordered built
+  have sameData : attestation.data = data := dataOf.trans (datas first firstMember)
+  -- The bits are those of the committees in turn, one per member, set when it is honest.
+  have split : attestation.aggregationBits.bits.toList = [] ++ selected.flatMap fun pair =>
+      List.ofFn fun seat : Fin pair.2.size => decide (pair.2[seat] ∈ honest) := by
+    rw [bitsOf, bitsEq, foldl_append_toList]
+    simp
+  -- The committee bits name the committees, each below the largest number of committees.
+  have inside : ∀ position ∈ selected.map (·.1),
+      position < preset.MAX_COMMITTEES_PER_SLOT.toNat := by
+    intro position member
+    obtain ⟨pair, kept, rfl⟩ := List.mem_map.mp member
+    obtain ⟨aggregate, -, one⟩ := exists_mem_of_forall₂ named
+      (List.mem_map_of_mem (f := fun pair : Nat × Array ValidatorIndex => pair.1.toUInt64) kept)
+    have below := lt_of_mem_getCommitteeIndices (one ▸ List.mem_singleton_self _)
+    rwa [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt'
+      (Nat.lt_trans (good pair kept).1 (UInt64.toNat_lt _))] at below
+  have indices : getCommitteeIndices (attestation.committeeBits electra) =
+      selected.map (·.1.toUInt64) := by
+    rw [committeeBitsOf]
+    have same : selected.map (·.1.toUInt64) = (selected.map (·.1)).map Nat.toUInt64 := by
+      rw [List.map_map]
+      rfl
+    rw [same]
+    exact getCommitteeIndices_ofFn_contains increasing inside
+  refine ⟨sameData, selected, good, flat, indices, by rw [split, List.nil_append], ?_,
+    fun other otherRoot otherDomained otherRooted => ?_⟩
+  · -- The signers are the honest members of the committees.
+    rcases selected with _ | ⟨pair, rest⟩
+    · -- Some aggregate is joined, so some committee is covered.
+      rw [List.forall₂_nil_left_iff.mp made] at firstMember
+      cases firstMember
+    obtain ⟨active, shuffled, shuffleOk⟩ :=
+      attesterShuffle_ok_of_getBeaconCommittee (good pair List.mem_cons_self).2.1
+    obtain ⟨attesters, attestersOk, members⟩ := committeesAttestersOf_honest shuffleOk
+      (pair :: rest) (fun pair member => (good pair member).2.1) split
+    refine ⟨sortedSet attesters, ?_, fun index => ?_⟩
+    · rw [getAttestingIndices_of_attesterShuffle (sameData ▸ shuffleOk)]
+      unfold attestingIndicesOf
+      rw [dite_eq_left electra, indices, sameData]
+      simp only [List.length_nil] at attestersOk
+      simp only [attestersOk, bind, Except.bind, pure, Except.pure]
+    · rw [mem_sortedSet, members, ← flat, List.mem_flatMap]
+  · -- The signature joins the aggregates of the committees, each of their honest members.
+    rw [domained, Except.ok.injEq] at otherDomained
+    subst otherDomained
+    rw [rooted, Except.ok.injEq] at otherRooted
+    subst otherRooted
+    exact ⟨_, joined, signatureOf⟩
 
 /-- From Electra until Gloas, the honest aggregate of a slot is accepted.
 
@@ -707,51 +853,13 @@ theorem processAttestation_honestSlotAggregate {budget scoreBound : Nat}
           TargetFlagAt (recentParticipation after (Nat.le_trans (by decide) electra)
             (data.target.epoch == getCurrentEpoch state)) index.toNat) := by
   have notGloas : ¬.glamsterdam ≤ fork := Nat.not_le_of_lt beforeGloas
-  -- The committees of the slot with an honest member, each with its position.
-  obtain ⟨selected, covered, good, increasing, ordered, flat, -⟩ :=
-    selected_exists (honest := honest) committeesOk
-  -- The aggregate joins the honest attestations of those committees.
-  unfold honestSlotAggregate at built
-  obtain ⟨keys, keysOk, built⟩ := bind_ok_iff.mp built
-  rw [mapError_ok_iff, covered, Except.ok.injEq] at keysOk
-  subst keysOk
-  obtain ⟨aggregates, aggregatesOk, built⟩ := bind_ok_iff.mp built
-  have made := List.forall₂_map_left_iff.mp (forall₂_of_mapM_ok (mapError_ok_iff.mp aggregatesOk))
-  obtain ⟨domain, domained⟩ :=
-    getDomain_total config state DOMAIN_BEACON_ATTESTER (some data.target.epoch)
-  obtain ⟨root, rooted⟩ := computeSigningRoot_total data domain
-  obtain ⟨named, datas, bitsEq, joined⟩ := honestAttestations_spec electra domained rooted
-    (fun pair member => (good pair member).2.1) made
-  obtain ⟨bitsOf, signatureOf, ⟨first, firstMember, dataOf⟩, committeeBitsOf⟩ :=
-    computeOnChainAggregate_of_ordered named ordered built
-  have sameData : attestation.data = data := dataOf.trans (datas first firstMember)
-  -- The bits are those of the committees in turn, one per member, set when it is honest.
-  have split : attestation.aggregationBits.bits.toList = [] ++ selected.flatMap fun pair =>
-      List.ofFn fun seat : Fin pair.2.size => decide (pair.2[seat] ∈ honest) := by
-    rw [bitsOf, bitsEq, foldl_append_toList]
-    simp
-  -- The committee bits name the committees, each below the largest number of committees.
-  have inside : ∀ position ∈ selected.map (·.1),
-      position < preset.MAX_COMMITTEES_PER_SLOT.toNat := by
-    intro position member
-    obtain ⟨pair, kept, rfl⟩ := List.mem_map.mp member
-    obtain ⟨aggregate, -, one⟩ := exists_mem_of_forall₂ named
-      (List.mem_map_of_mem (f := fun pair : Nat × Array ValidatorIndex => pair.1.toUInt64) kept)
-    have below := lt_of_mem_getCommitteeIndices (one ▸ List.mem_singleton_self _)
-    rwa [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt'
-      (Nat.lt_trans (good pair kept).1 (UInt64.toNat_lt _))] at below
-  have indices : getCommitteeIndices (attestation.committeeBits electra) =
-      selected.map (·.1.toUInt64) := by
-    rw [committeeBitsOf]
-    have same : selected.map (·.1.toUInt64) = (selected.map (·.1)).map Nat.toUInt64 := by
-      rw [List.map_map]
-      rfl
-    rw [same]
-    exact getCommitteeIndices_ofFn_contains increasing inside
+  obtain ⟨sameData, selected, good, flat, indices, split, ⟨found, computed, membersAll⟩,
+    signed⟩ := honestSlotAggregate_spec electra committeesOk built
   -- Each committee has an honest attester, and the bits run over the committees exactly.
   have committeesChecked : checkAttestationCommittees state attestation = .ok () := by
     have size := attestationCommitteesSize_honest holds.within (sameData ▸ slotEpoch) selected
-      (sameData ▸ good) split
+      (sameData ▸ good) (bits := attestation.aggregationBits.bits) (before := [])
+      (split.trans (List.nil_append _).symm)
     unfold checkAttestationCommittees
     rw [dite_eq_left electra, ite_eq_right notGloas, indices]
     simp only [ensure, sameData, indexed, ↓reduceIte, ok_bind]
@@ -761,32 +869,19 @@ theorem processAttestation_honestSlotAggregate {budget scoreBound : Nat}
   have signersNonempty : committees.flatMap (honestSigners honest) ≠ [] := by
     intro empty
     exact sum (by rw [empty]; rfl)
-  obtain ⟨signer, signerMember⟩ := List.exists_mem_of_ne_nil _ signersNonempty
-  obtain ⟨pair, kept, -⟩ := List.mem_flatMap.mp (flat ▸ signerMember)
-  obtain ⟨active, shuffled, shuffleOk⟩ :=
-    attesterShuffle_ok_of_getBeaconCommittee (good pair kept).2.1
-  -- The attesters are the honest members of the committees.
-  obtain ⟨attesters, attestersOk, members⟩ := committeesAttestersOf_honest shuffleOk selected
-    (fun pair member => (good pair member).2.1) split
-  have computed : getAttestingIndices state attestation = .ok (sortedSet attesters) := by
-    rw [getAttestingIndices_of_attesterShuffle (sameData ▸ shuffleOk)]
-    unfold attestingIndicesOf
-    rw [dite_eq_left electra, indices, sameData]
-    simp only [List.length_nil] at attestersOk
-    simp only [attestersOk, bind, Except.bind, pure, Except.pure]
-  have membersAll : ∀ index, index ∈ sortedSet attesters ↔
-      index ∈ committees.flatMap (honestSigners honest) := by
-    intro index
-    rw [mem_sortedSet, members, ← flat, List.mem_flatMap]
   -- The committees of the slot do not overlap, so the signers are distinct.
   have distinct : (committees.flatMap (honestSigners honest)).Nodup :=
     (getBeaconCommittees_nodup holds.within shuffleRoom committeesOk).sublist
       (flatMap_honestSigners_sublist honest committees)
-  have permuted : (sortedSet attesters).Perm (committees.flatMap (honestSigners honest)) :=
+  have permuted : found.Perm (committees.flatMap (honestSigners honest)) :=
     (List.perm_ext_iff_of_nodup ((getAttestingIndices_sorted computed).imp
       fun {first second} lt (same : first = second) => UInt64.lt_irrefl _ (same ▸ lt))
       distinct).mpr membersAll
   -- The aggregate signature verifies under the keys of all signers.
+  obtain ⟨domain, domained⟩ :=
+    getDomain_total config state DOMAIN_BEACON_ATTESTER (some data.target.epoch)
+  obtain ⟨root, rooted⟩ := computeSigningRoot_total data domain
+  obtain ⟨joints, joined, signatureOf⟩ := signed domain root domained rooted
   have flatKeys : (selected.map fun pair => (honestSigners honest pair.2).map key).flatten =
       (committees.flatMap (honestSigners honest)).map key := by
     rw [← flat, List.map_flatMap, List.flatMap]
@@ -811,5 +906,32 @@ theorem processAttestation_honestSlotAggregate {budget scoreBound : Nat}
   refine ⟨after, processed, fun rooted committee member index seated honestMember =>
     flags _ computed rooted index ((membersAll index).mpr ?_)⟩
   exact List.mem_flatMap.mpr ⟨committee, member, mem_honestSigners.mpr ⟨seated, honestMember⟩⟩
+
+/-- From Electra, the honest aggregate of a slot holds its data.
+
+Each of its signers is an honest member of a committee of the slot, below the count. -/
+theorem honestSlotAggregate_signers (electra : .pectra ≤ fork)
+    {honest : Finset ValidatorIndex}
+    {key : ValidatorIndex → Signatures.SecretKey} {data : AttestationData}
+    {attestation : Attestation preset fork}
+    (built : honestSlotAggregate electra config state honest key data = .ok attestation) :
+    attestation.data = data ∧ ∀ indices, getAttestingIndices state attestation = .ok indices →
+      ∀ index ∈ indices, index ∈ honest ∧ ∃ committeeIndex committee,
+        committeeIndex < getCommitteeCountPerSlot state (computeEpochAtSlot preset data.slot) ∧
+        getBeaconCommittee state data.slot committeeIndex = .ok committee ∧
+        index ∈ committee := by
+  -- The committees of the slot have values, since the aggregate reads them.
+  obtain ⟨committees, committeesOk⟩ := committees_of_honestSlotAggregate electra built
+  obtain ⟨sameData, selected, good, flat, -, -, ⟨found, computed, membersAll⟩, -⟩ :=
+    honestSlotAggregate_spec electra committeesOk built
+  refine ⟨sameData, fun indices indicesOk index member => ?_⟩
+  rw [computed, Except.ok.injEq] at indicesOk
+  subst indicesOk
+  have signer := (membersAll index).mp member
+  rw [← flat, List.mem_flatMap] at signer
+  obtain ⟨pair, kept, signer⟩ := signer
+  obtain ⟨below, committeeOk, -⟩ := good pair kept
+  obtain ⟨seated, honestMember⟩ := mem_honestSigners.mp signer
+  exact ⟨honestMember, pair.1.toUInt64, pair.2, toUInt64_lt_of_lt below, committeeOk, seated⟩
 
 end EthLib.Consensus
