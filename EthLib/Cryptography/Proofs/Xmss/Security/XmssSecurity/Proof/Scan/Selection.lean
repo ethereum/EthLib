@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedBoundedSignProbability
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingRejection
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOracle
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.LoopWalk
+public import EthLib.Cryptography.Proofs.HashSig.LoopWalk
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 
 /-!
@@ -30,7 +30,7 @@ open OracleComp OracleSpec ENNReal
 
 namespace XmssSecurity.Scan
 
-open LoopWalk
+open EthLib.Cryptography.HashSig.LoopWalk
 
 set_option maxRecDepth 100000
 

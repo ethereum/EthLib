@@ -47,6 +47,7 @@ open Concrete HiddenGraph HiddenCost HiddenDebt GraphView Domination ForsPrice F
     HiddenBridge
 open PotentialA
 open SphincsSecurity.LoopWalk
+open EthLib.Cryptography.HashSig.LoopWalk
 
 set_option maxRecDepth 10000
 set_option linter.unusedSectionVars false

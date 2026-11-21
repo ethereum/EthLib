@@ -29,6 +29,7 @@ variable [Params]
 open SphincsSecurity.Base
 open Concrete HiddenGraph HiddenCost HiddenDebt GraphView Domination ForsPrice ForsSigner
   SphincsSecurity.Base.Domination SphincsSecurity.LoopWalk
+open EthLib.Cryptography.HashSig.LoopWalk
 
 set_option maxRecDepth 10000
 set_option linter.unusedSectionVars false
