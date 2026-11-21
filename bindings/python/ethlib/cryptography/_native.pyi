@@ -528,6 +528,18 @@ def discv5_reencode_message(plaintext: bytes) -> bytes:
     """The plaintext of the decoded message, written again by the encoder."""
     ...
 
+def discv5_answers_request(request: bytes, answer: bytes) -> bool:
+    """Whether a message plaintext answers a request plaintext."""
+    ...
+
+def discv5_talk_response(request: bytes) -> bytes:
+    """The plaintext of the TALKRESP of a node that knows no protocol, for a TALKREQ plaintext."""
+    ...
+
+def discv5_nodes_match(recipient: bytes, distances: list[int], records: list[bytes]) -> bool:
+    """Whether records match the distances of a FINDNODE, from the node ID of its recipient."""
+    ...
+
 def discv5_make_whoareyou(dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: int) -> tuple[bytes, bytes]:
     """Node B's WHOAREYOU packet for node A, and its challenge data."""
     ...
@@ -1224,6 +1236,22 @@ def consensus_compute_fork_digest(name: str, config: dict[str, Any] | None, gene
     """The fork digest at an epoch, on the chain with the given root of the genesis validators."""
     ...
 
+def consensus_enr_fork_id(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, epoch: int) -> tuple[bytes, bytes, int]:
+    """The `eth2` value that a node writes at an epoch, as its digest, next version and next epoch."""
+    ...
+
+def consensus_next_fork_digest(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, epoch: int) -> bytes:
+    """The `nfd` value that a node writes at an epoch: the digest of the next fork."""
+    ...
+
+def consensus_bootnode_fork_id(name: str, config: dict[str, Any] | None) -> tuple[bytes, bytes, int]:
+    """The `eth2` value of a bootnode record made before genesis, as its three fields."""
+    ...
+
+def consensus_enr_record(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, epoch: int, secret_key: bytes, seq: int, attnets: bytes, syncnets: bytes, cgc: int) -> bytes:
+    """A signed "v4" record of a consensus node at an epoch, with its consensus entries."""
+    ...
+
 def consensus_digest_epochs(name: str, config: dict[str, Any] | None) -> list[int]:
     """The epochs at which the fork digest can change, in increasing order and without repeats."""
     ...
@@ -1522,6 +1550,14 @@ def discv4_encode(key: bytes, content: bytes) -> bytes:
 
 def discv4_record_signed_by(sender: bytes, record: bytes) -> bool:
     """Whether the RLP record `record` of an ENRResponse is signed by the public key `sender`."""
+    ...
+
+def discv4_receive(now: int, ip: bytes, port: int, last_ping: bytes | None, last_pong: int | None, packet: bytes, expiration: int, enr_seq: int | None, record: bytes, nodes: bytes) -> tuple[tuple[bytes | None, int | None], list[bytes]]:
+    """What a node knows of the sender of a packet after it receives it, and what it sends back."""
+    ...
+
+def discv4_accept_enr_response(request: bytes, response: bytes) -> bool:
+    """Whether an ENRResponse packet answers an ENRRequest packet that the node sent."""
     ...
 
 def fork_id(schedule: bytes, number: int, timestamp: int) -> tuple[bytes, int]:
@@ -2070,6 +2106,10 @@ def engine_read_get_blobs_result(method: str, result: Any) -> list[dict[str, Any
 
 def engine_exchange_transition_configuration(terminal_total_difficulty: int, terminal_block_hash: bytes, terminal_block_number: int, request: dict) -> dict[str, Any]:
     """The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration."""
+    ...
+
+def engine_get_inclusion_list(candidates: list[bytes], request: dict) -> list[str]:
+    """The answer to an `engine_getInclusionListV1` request, from the candidates of the node."""
     ...
 
 def engine_exchange_capabilities(request: dict) -> list[str]:

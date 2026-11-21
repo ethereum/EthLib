@@ -793,6 +793,14 @@ Not yet released.
   Migration for the budget lemmas: `bud_branchR` → `budget_branchR`, `bud_capSlots` → `budget_capSlots`, `bud_consolidations` → `budget_consolidations`, `bud_consolidations_base` → `budget_consolidations_base`, `bud_credits` → `budget_credits`, `bud_csUnits` → `budget_csUnits`, `bud_deposits` → `budget_deposits`, `bud_exitedR` → `budget_exitedR`, `bud_exiting` → `budget_exiting`, `bud_exitingBands` → `budget_exitingBands`, `bud_exitingCredits` → `budget_exitingCredits`, `bud_exitingRise` → `budget_exitingRise`, `bud_fall` → `budget_fall`, `bud_joinRise` → `budget_joinRise`, `bud_joining` → `budget_joining`, `bud_late` → `budget_late`, `bud_pendingR` → `budget_pendingR`, `bud_queueRise` → `budget_queueRise`, `bud_queues` → `budget_queues`, `bud_rise` → `budget_rise`, `bud_sync` → `budget_sync`, `bud_syncLeak` → `budget_syncLeak`, `bud_units` → `budget_units`, `bud_whistle_of` → `budget_whistle_of`.
   No statement changes.
 
+- In Lean, the point evaluation precompile reads `[tau]_2` and the blob size from the KZG module, and keeps no copy of either.
+  `Evm.Precompiles.PointEvaluation.KZG_SETUP_G2_MONOMIAL_1`, the 96 bytes of `[tau]_2`, is removed.
+  The precompile decodes `G2` point 1 of the embedded setup with the new `Kzg.TrustedSetup.g2MonomialOfHex`, and fails with `invalidTrustedSetup` as before.
+  `Evm.Precompiles.PointEvaluation.FIELD_ELEMENTS_PER_BLOB` is removed, and `Kzg.Constants.FIELD_ELEMENTS_PER_BLOB` has the same value, 4096.
+  `Evm.Precompiles.PointEvaluation.uncompress_KZG_SETUP_G2_MONOMIAL_1` is removed.
+  The new `Kzg.TrustedSetup.g2MonomialOfHex_eq` states, for every position, that a point decoded alone is that point of the decoded setup, when the setup decodes.
+  Migration: a proof that used the removed theorem uses `Kzg.TrustedSetup.g2MonomialOfHex_eq h 1 (by decide)`.
+
 - In Lean, `DirectSafety.Apriori.Internal.ScoresBelow.step` no longer takes the hypothesis `inside : n ≤ m.state.validators.data.size`.
   Its proof does not read it.
   Migration: a caller drops that argument.

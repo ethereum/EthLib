@@ -194,6 +194,12 @@ def decode (bytes : ByteArray) : Except EnrError Enr := do
   | .list items => throw (.tooFewItems items.length)
   | .bytes _ => throw .notAList
 
+/-- The record that an RLP item holds, as the decoder reads the bytes of the item.
+
+A message of node discovery carries a record as such an item. -/
+def ofItem (item : Item) : Except EnrError Enr := do
+  decode (← (Serialization.Rlp.encode item).mapError .rlp)
+
 /-- The prefix of the text form, `enr:`. -/
 def TEXT_PREFIX : List Char := ['e', 'n', 'r', ':']
 

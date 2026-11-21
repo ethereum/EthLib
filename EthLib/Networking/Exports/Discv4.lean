@@ -1,6 +1,8 @@
 module
 
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Base.Hex
+public import EthLib.Networking.Discv4.Exchange
 public import EthLib.Networking.Discv4.Packet
 public import EthLib.Networking.Exports.Rlpx
 
@@ -24,7 +26,7 @@ public section
 
 namespace EthLib.Networking.Discv4.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result PyValue pyExport)
 open EthLib.Serialization.Rlp
 open EthLib.Base (hexString)
 
@@ -78,5 +80,58 @@ def recordSignedByExport (sender record : ByteArray) : Result Bool := do
   match Serialization.Rlp.decode record with
   | .error _ => throw (0, "record is not one RLP item")
   | .ok item => return recordSignedBy q item
+
+/-- The arguments of a received packet.
+
+They are the time, the sender's address, what the node knows of it, and the packet.
+
+Then comes what the node puts into its answers. -/
+abbrev ReceiveArgs := Nat × ByteArray × UInt16 × Option (Vector UInt8 32) × Option Nat ×
+  ByteArray × Nat × Option UInt64 × ByteArray × ByteArray
+
+/-- What the node knows of the sender after a packet, and the contents of the packets it sends. -/
+def receiveOf (args : ReceiveArgs) :
+    Result ((Option (Vector UInt8 32) × Option Nat) × List ByteArray) := do
+  let (now, ip, port, lastPing, lastPong, packet, expiration, enrSeq, record, nodes) := args
+  let received ← runDiscv4 (decode packet)
+  let some record := (Serialization.Rlp.decode record).toOption
+    | throw (0, "record is not one RLP item")
+  let some item := (Serialization.Rlp.decode nodes).toOption
+    | throw (0, "nodes are not one RLP item")
+  let some nodes := (Codec.ofItem item : Except RlpError (List Node)).toOption
+    | throw (0, "nodes are not a list of [ip, udp-port, tcp-port, node-id]")
+  let node : Local := ⟨expiration, enrSeq, fun _ => nodes, record⟩
+  let address : Address := ⟨ip, port⟩
+  let (state, replies) := receive node now (fun _ => ⟨lastPing, lastPong⟩) address received
+  return (((state address).lastPing, (state address).lastPong), ← replies.mapM content)
+
+/-- What a node knows of the sender of a packet after it receives it, and what it sends back.
+
+The arguments are the time, the sender's IP and UDP port, and what the node knows of it.
+
+That is the hash of the node's last Ping there, and the time of the last Pong that carried it.
+
+Then come the packet and the expiration of the answers.
+
+Last come the node's record sequence number, its record and the nodes it gives for any target.
+
+The record and the list of nodes are RLP bytes.
+
+The result is the new hash and time, and the content of each packet that the node sends. -/
+@[export eth_discv4_receive]
+def receiveExport (args : PyValue) : Result PyValue :=
+  pyExport receiveOf args
+
+/-- Whether an ENRResponse packet answers an ENRRequest packet that the node sent. -/
+def acceptEnrResponseOf (args : ByteArray × ByteArray) : Result Bool := do
+  let (request, response) := args
+  return acceptEnrResponse (← runDiscv4 (decode request)) (← runDiscv4 (decode response))
+
+/-- Whether an ENRResponse packet answers an ENRRequest packet that the node sent.
+
+It must hold the hash of the request packet, and a record signed by the key of the response. -/
+@[export eth_discv4_accept_enr_response]
+def acceptEnrResponseExport (args : PyValue) : Result PyValue :=
+  pyExport acceptEnrResponseOf args
 
 end EthLib.Networking.Discv4.Exports
