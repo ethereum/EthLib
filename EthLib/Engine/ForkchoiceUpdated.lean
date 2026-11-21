@@ -10,7 +10,7 @@ public import EthLib.Execution.Blocks.Withdrawal
 /-!
 # `Engine.ForkchoiceUpdated`
 
-The choice of the head in `engine_forkchoiceUpdated`, versions 1 to 4, without a payload build.
+The choice of the head in `engine_forkchoiceUpdated`, versions 1 to 5, without a payload build.
 
 The consensus layer names a head, a safe block and a finalized block.
 
@@ -70,7 +70,7 @@ Any other value of them is an invalid parameter.
 
 EIP-8070 and the OpenRPC description of the method make them optional.
 
-So version 4 also takes two parameters.
+So versions 4 and 5 also take two parameters.
 
 That description also makes the payload attributes optional in every version.
 
@@ -90,7 +90,7 @@ Otherwise the error is `-38003`, invalid payload attributes.
 
 A field of the right name with a value of the wrong form also gives `-38003`.
 
-Versions 2, 3 and 4 name `-38003` for a structure that the method does not take.
+Versions 2 to 5 name `-38003` for a structure that the method does not take.
 
 Version 1 names no code for that case.
 
@@ -100,7 +100,7 @@ Step 8 of version 1 keeps the forkchoice state applied after that error.
 
 This model holds no state, so the error carries no head.
 
-Versions 1, 3 and 4 of the method each take the version of the structure with their own number.
+Versions 1, 3, 4 and 5 of the method each take the version of the structure with their own number.
 
 Version 2 takes versions 1 and 2 of the structure.
 
@@ -111,6 +111,10 @@ Each version takes some forks only, and gives `-38005` for attributes of another
 Version 1 takes Paris, and version 2 Paris and Shapella.
 
 Version 3 takes the forks from Dencun on, before Glamsterdam, and version 4 takes Glamsterdam.
+
+Version 5 takes Hegotá, whose execution side the Engine API calls Bogota.
+
+The update by Bogota ends version 4 at Hegotá.
 
 The update by Cancun ends version 2 at Dencun.
 
@@ -158,6 +162,7 @@ The method specifications state these rules, at commit `3284ee8` of execution-ap
 - the [definitions][eip3675] of EIP-3675, for a terminal block of proof of work
 - [`engine_forkchoiceUpdatedV2`][v2] and [`engine_forkchoiceUpdatedV3`][v3]
 - [`engine_forkchoiceUpdatedV4`][v4], and the custody columns of [EIP-8070][eip8070]
+- [`engine_forkchoiceUpdatedV5`][v5], and the update of version 4 by [Bogota][v4-bogota]
 - the updates of earlier versions by [Cancun][v2-cancun] and [Prague][v3-prague]
 - the update of earlier versions by [Osaka][osaka], which leaves version 3 unchanged
 - the update of version 3 by [Amsterdam][v3-amsterdam]
@@ -166,6 +171,10 @@ The method specifications state these rules, at commit `3284ee8` of execution-ap
 Each version has its payload attributes: [version 1][a1], [version 2][a2] and [version 3][a3].
 
 From Glamsterdam, [version 4][a4] adds the slot number of EIP-7843 and a target gas limit.
+
+From Hegotá, [version 5][a5] adds the transactions of the inclusion lists of EIP-7805.
+
+The Bogota links are at commit `68d76a5`, the first where an entry may be any byte string.
 
 [v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_forkchoiceupdatedv1
 [fcs]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#forkchoicestatev1
@@ -184,6 +193,9 @@ From Glamsterdam, [version 4][a4] adds the slot number of EIP-7843 and a target 
 [a2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#payloadattributesv2
 [a3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#payloadattributesv3
 [a4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#payloadattributesv4
+[a5]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#payloadattributesv5
+[v5]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_forkchoiceupdatedv5
+[v4-bogota]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#update-the-methods-of-previous-forks
 -/
 
 @[expose] public section
@@ -213,6 +225,10 @@ structure PayloadAttributes (fork : Fork) : Type where
   slotNumber : Since .glamsterdam fork UInt64
   /-- The target of the gas limit of the payload, from Glamsterdam. -/
   targetGasLimit : Since .glamsterdam fork UInt64
+  /-- The transactions of the inclusion lists that the payload must satisfy, from Hegotá.
+
+  Each is any byte string, and one that does not decode as a transaction is still taken. -/
+  inclusionListTransactions : Since .hegota fork (List ByteArray)
 
 /-- A block that the execution layer holds: its parent, its validity, its number and its time.
 
@@ -365,25 +381,30 @@ def attributesFieldsV3 : List String := attributesFieldsV2 ++ ["parentBeaconBloc
 /-- The fields of version 4: those of version 3, the slot number and the target gas limit. -/
 def attributesFieldsV4 : List String := attributesFieldsV3 ++ ["slotNumber", "targetGasLimit"]
 
-/-- The fields of a version of the payload attributes, from 1 to 4.
+/-- The fields of version 5: those of version 4, and the inclusion list transactions. -/
+def attributesFieldsV5 : List String := attributesFieldsV4 ++ ["inclusionListTransactions"]
 
-Version 0 reads as 1, and a version above 4 reads as 4. -/
+/-- The fields of a version of the payload attributes, from 1 to 5.
+
+Version 0 reads as 1, and a version above 5 reads as 5. -/
 def attributesFields : Nat → List String
   | 0 | 1 => attributesFieldsV1
   | 2 => attributesFieldsV2
   | 3 => attributesFieldsV3
-  | _ => attributesFieldsV4
+  | 4 => attributesFieldsV4
+  | _ => attributesFieldsV5
 
 /-- The fork whose payload attributes have the fields of a version of their structure.
 
-Version 1 is that of Paris, 2 of Shapella, 3 of Dencun and 4 of Glamsterdam.
+Version 1 is that of Paris, 2 of Shapella, 3 of Dencun, 4 of Glamsterdam and 5 of Hegotá.
 
-Version 0 reads as 1, and a version above 4 reads as 4. -/
+Version 0 reads as 1, and a version above 5 reads as 5. -/
 def attributesFork : Nat → Fork
   | 0 | 1 => .paris
   | 2 => .shapella
   | 3 => .dencun
-  | _ => .glamsterdam
+  | 4 => .glamsterdam
+  | _ => .hegota
 
 /-- The value of a field of an object, decoded by `f`, or none when the object lacks it. -/
 def optionalField {α : Type} (fs : List (String × Json)) (name : String)
@@ -414,11 +435,11 @@ def payloadAttributesOfJson (version : Nat) (j : Json) :
       (← optionalField fs "parentBeaconBlockRoot" (fixed "parentBeaconBlockRoot" 32))
     slotNumber := ← since "slotNumber" (← optionalField fs "slotNumber" (uint64 "slotNumber"))
     targetGasLimit := ← since "targetGasLimit"
-      (← optionalField fs "targetGasLimit" (uint64 "targetGasLimit")) }
+      (← optionalField fs "targetGasLimit" (uint64 "targetGasLimit"))
+    inclusionListTransactions := ← since "inclusionListTransactions"
+      (← optionalField fs "inclusionListTransactions" inclusionListOfJson) }
 
-/-- Payload attributes as JSON, with the fields of their fork's structure, versions 1 to 4.
-
-The fifth version of the source, from Hegotá, adds a field that these attributes lack. -/
+/-- Payload attributes as JSON, with the fields of their fork's structure, versions 1 to 5. -/
 def payloadAttributesJson {fork : Fork} (a : PayloadAttributes fork) : Json :=
   Json.mkObj ([("timestamp", quantityJson a.timestamp.toNat),
       ("prevRandao", dataJson a.prevRandao.toList),
@@ -429,7 +450,10 @@ def payloadAttributesJson {fork : Fork} (a : PayloadAttributes fork) : Json :=
       [("parentBeaconBlockRoot", dataJson (a.parentBeaconBlockRoot h).toList)] else []) ++
     (if h : .glamsterdam ≤ fork then
       [("slotNumber", quantityJson (a.slotNumber h).toNat),
-        ("targetGasLimit", quantityJson (a.targetGasLimit h).toNat)] else []))
+        ("targetGasLimit", quantityJson (a.targetGasLimit h).toNat)] else []) ++
+    (if h : .hegota ≤ fork then
+      [("inclusionListTransactions", inclusionListJson (a.inclusionListTransactions h))]
+      else []))
 
 /-- The versions of the structure of the payload attributes that a version of the method takes.
 
@@ -502,25 +526,27 @@ Version 1 takes Paris, and version 2 Paris and Shapella.
 
 Version 3 takes the forks from Dencun on, before Glamsterdam.
 
-Version 4 takes Glamsterdam.
+Version 4 takes Glamsterdam, and version 5 Hegotá.
 
-Version 0 reads as 1, and a version above 4 reads as 4. -/
+Version 0 reads as 1, and a version above 5 reads as 5. -/
 def attributesTakeFork : Nat → Fork → Bool
   | 0, fork | 1, fork => fork == .paris
   | 2, fork => fork == .paris || fork == .shapella
   | 3, fork => decide (.dencun ≤ fork) && decide (fork < .glamsterdam)
-  | _, fork => fork == .glamsterdam
+  | 4, fork => fork == .glamsterdam
+  | _, fork => fork == .hegota
 
 /-- The fork of the structure of the payload attributes whose timestamp is in a fork.
 
 Before Shapella it is Paris, then Shapella before Dencun, then Dencun before Glamsterdam.
 
-From Glamsterdam it is Glamsterdam. -/
+Then Glamsterdam before Hegotá, and from Hegotá it is Hegotá. -/
 def attributesForkAt (fork : Fork) : Fork :=
   if fork < .shapella then .paris
   else if fork < .dencun then .shapella
   else if fork < .glamsterdam then .dencun
-  else .glamsterdam
+  else if fork < .hegota then .glamsterdam
+  else .hegota
 
 /-- The fork of the structure has the withdrawals exactly when the fork has them. -/
 theorem shapella_le_attributesForkAt_iff (fork : Fork) :
@@ -537,6 +563,11 @@ theorem glamsterdam_le_attributesForkAt_iff (fork : Fork) :
     .glamsterdam ≤ attributesForkAt fork ↔ .glamsterdam ≤ fork := by
   cases fork <;> decide
 
+/-- The fork of the structure has the inclusion list exactly when the fork has it. -/
+theorem hegota_le_attributesForkAt_iff (fork : Fork) :
+    .hegota ≤ attributesForkAt fork ↔ .hegota ≤ fork := by
+  cases fork <;> decide
+
 /-- Payload attributes of the structure of a fork, as attributes of that fork, field by field. -/
 def PayloadAttributes.ofStructure {fork : Fork} (a : PayloadAttributes (attributesForkAt fork)) :
     PayloadAttributes fork where
@@ -547,6 +578,8 @@ def PayloadAttributes.ofStructure {fork : Fork} (a : PayloadAttributes (attribut
   parentBeaconBlockRoot := a.parentBeaconBlockRoot.congr (dencun_le_attributesForkAt_iff fork)
   slotNumber := a.slotNumber.congr (glamsterdam_le_attributesForkAt_iff fork)
   targetGasLimit := a.targetGasLimit.congr (glamsterdam_le_attributesForkAt_iff fork)
+  inclusionListTransactions :=
+    a.inclusionListTransactions.congr (hegota_le_attributesForkAt_iff fork)
 
 /-- Payload attributes at a fork, when their structure is that of the fork.
 
@@ -587,11 +620,11 @@ They must then fit a structure of the version, and then pass the checks against 
 
 The attributes of a build are those of the fork of their timestamp.
 
-The versions of the method are 1 to 4; the C export passes no other.
+The versions of the method are 1 to 5; the C export passes no other.
 
 The configuration of the transition gives the terminal total difficulty.
 
-Version 0 reads as 1, and a version above 4 reads as 4. -/
+Version 0 reads as 1, and a version above 5 reads as 5. -/
 def forkchoiceUpdatedCall (config : ChainConfig) (transition : TransitionConfiguration)
     (version : Nat) (tree : PayloadTree) (finalized : Option Hash32) (params : Json) :
     Except EngineError
@@ -606,9 +639,23 @@ def forkchoiceUpdatedCall (config : ChainConfig) (transition : TransitionConfigu
     return (status, head, some (← checkAttributes config version known decoded))
   | _, _ => return (status, head, none)
 
+/-- The bytes of one inclusion list transaction in the input of a payload ID.
+
+Each byte of the transaction comes after a byte 1, and a byte 0 ends the transaction.
+
+So the bytes of a list of transactions give back the list, whatever the lengths.
+
+A byte 2 after them marks the end of the list. -/
+def inclusionListEntryBytes (transaction : ByteArray) : List UInt8 :=
+  transaction.data.toList.flatMap (fun b => [1, b]) ++ [0]
+
 /-- The bytes that the ID of a build hashes: the head, then the attributes in order.
 
 The attributes are those of their fork: the timestamp, the RANDAO mix and the fee recipient first.
+
+From Hegotá the inclusion list follows, each transaction in a form that marks where it ends.
+
+A byte 2 then ends the list, so the list and the bytes after it split in one way only.
 
 The withdrawals follow from Shapella, the parent beacon block root from Dencun.
 
@@ -626,8 +673,12 @@ def payloadIdInput (head : Hash32) (attributes : PayloadAttributes fork) : ByteA
   let glamsterdam : List UInt8 := if h : .glamsterdam ≤ fork then
       word (attributes.slotNumber h) ++ word (attributes.targetGasLimit h)
     else []
+  let hegota : List UInt8 := if h : .hegota ≤ fork then
+      (attributes.inclusionListTransactions h).flatMap inclusionListEntryBytes ++ [2]
+    else []
   ⟨(head.toList ++ word attributes.timestamp ++ attributes.prevRandao.toList ++
-    attributes.suggestedFeeRecipient.toList ++ withdrawals ++ beacon ++ glamsterdam).toArray⟩
+    attributes.suggestedFeeRecipient.toList ++ hegota ++ withdrawals ++ beacon ++
+    glamsterdam).toArray⟩
 
 /-- The ID of the build that attributes start on a head: the first 8 bytes of a Keccak-256 hash.
 
@@ -696,5 +747,25 @@ def forkchoiceUpdatedResponseOfJson (j : Json) :
   unless status.status.restricted do invalid "payloadStatus: not a status of the method"
   let id ← Json.lift ((fs.lookup "payloadId").mapM (fixed "payloadId" 8))
   return (status, validationError, id)
+
+/-- The response of version 5 as JSON: a payload status of version 2, and the ID or `null`.
+
+Step 2 of [`engine_forkchoiceUpdatedV5`][fcu5] gives the inclusion list verdict.
+
+It is a boolean when the head is valid, and `null` otherwise.
+
+The writer takes the verdict as given, and the function after it pairs it with the status.
+
+[fcu5]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_forkchoiceupdatedv5 -/
+def forkchoiceUpdatedResponseV2Json (status : PayloadStatus) (validationError : Option String)
+    (inclusionListSatisfied : Option Bool) (id : Option PayloadId) : Json :=
+  Json.mkObj [("payloadStatus", payloadStatusV2Json status validationError inclusionListSatisfied),
+    ("payloadId", optionJson (dataJson ·.toList) id)]
+
+/-- The inclusion list verdict of a response of version 5, from whether the head satisfies its list.
+
+It is that boolean when the status is valid, and `null` otherwise, by step 2 of version 5. -/
+def inclusionListVerdict (status : PayloadStatus) (satisfied : Bool) : Option Bool :=
+  if status.status = .valid then some satisfied else none
 
 end EthLib.Engine

@@ -134,6 +134,23 @@ def test_custody_columns() -> None:
     ]
 
 
+def test_attributes_of_version_5() -> None:
+    """Attributes of version 5 are written back with their inclusion list, any byte strings."""
+    attributes = {
+        "timestamp": "0x5",
+        "prevRandao": "0x" + "00" * 32,
+        "suggestedFeeRecipient": "0x" + "00" * 20,
+        "withdrawals": [],
+        "parentBeaconBlockRoot": "0x" + "44" * 32,
+        "slotNumber": "0x1",
+        "targetGasLimit": "0x1c9c380",
+        # A typed transaction, an entry that decodes as no transaction, and an empty entry.
+        "inclusionListTransactions": ["0x02f8", "0x00", "0x"],
+    }
+    params = [_STATE, attributes, None]
+    assert engine.rewrite_params("engine_forkchoiceUpdatedV5", params) == params
+
+
 def test_canonical_form() -> None:
     """Address hex in mixed case is written in lowercase."""
     attributes = {"timestamp": "0x5", "prevRandao": "0x" + "00" * 32}

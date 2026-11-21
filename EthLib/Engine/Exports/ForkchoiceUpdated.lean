@@ -6,7 +6,7 @@ public import EthLib.Engine.ForkchoiceUpdated
 /-!
 # `Exports.ForkchoiceUpdated`
 
-The C export of `engine_forkchoiceUpdated`, versions 1 to 4.
+The C export of `engine_forkchoiceUpdated`, versions 1 to 5.
 
 The configuration, the payload tree, the finalized block and the request cross as Python values.
 
@@ -24,6 +24,14 @@ A block of proof of work also has its total difficulty and that of its parent, a
 
 They are the fields `totalDifficulty` and `parentTotalDifficulty`, both present or both absent.
 
+A block may also say whether it satisfies its inclusion list.
+
+That verdict is the boolean `inclusionListSatisfied`.
+
+Version 5 answers that verdict for a valid head, which must then carry it.
+
+The verdict is an input, since the execution rules of Bogota are not in this library yet.
+
 Give no totals for a genesis block of a chain that starts at Paris.
 
 The model then treats it as a payload, so its descendants pass the terminal block check.
@@ -37,6 +45,8 @@ The terminal total difficulty is a Python integer below `2^256`.
 The request is a JSON-RPC request object, with its method and its parameters.
 
 The result is the value of the JSON of the response: the payload status and the payload ID.
+
+From version 5 the payload status has version 2, with the verdict of the head or `null`.
 
 A JSON-RPC error has the code of its Engine API error: 32602, 38002, 38003 or 38005.
 
@@ -78,7 +88,7 @@ def knownOfJson (j : Json) : Result (Hash32 × KnownPayload) := do
   return (← hash "blockHash",
     ⟨← hash "parentHash", valid, ← number "number", ← number "timestamp", pow⟩)
 
-/-- The version of a method name `engine_forkchoiceUpdatedV1` to `engine_forkchoiceUpdatedV4`. -/
+/-- The version of a method name `engine_forkchoiceUpdatedV1` to `engine_forkchoiceUpdatedV5`. -/
 def forkchoiceUpdatedVersion (method : String) : Option Nat :=
   methodVersion "forkchoiceUpdated" method
 
@@ -97,8 +107,8 @@ def forkchoiceUpdatedOf (args : PyValue × PyValue × PyValue × Nat × PyValue)
     terminalBlockHash := 0
     terminalBlockNumber := 0 }
   let config ← configOfJson config.toJson
-  let .arr tree := tree.toJson | throw (0, "tree: not an array")
-  let tree ← tree.toList.mapM knownOfJson
+  let .arr entries := tree.toJson | throw (0, "tree: not an array")
+  let tree ← entries.toList.mapM knownOfJson
   -- A tree holds each block once, so two payloads with one block hash are malformed input.
   unless (tree.map (·.1)).Nodup do throw (0, "tree: two payloads with one block hash")
   let finalized := finalized.toJson
@@ -115,7 +125,18 @@ def forkchoiceUpdatedOf (args : PyValue × PyValue × PyValue × Nat × PyValue)
   let result ← answer.mapError fun e => (e.code, s!"engine error: {reprStr e}")
   -- Step 8: valid attributes on an applied valid head start a build, named by its ID.
   let (status, id) := forkchoiceUpdatedResponse result
-  return .ofJson (forkchoiceUpdatedResponseJson status none id)
+  if version < 5 then return .ofJson (forkchoiceUpdatedResponseJson status none id)
+  -- Step 2 of version 5: a valid head carries its inclusion list verdict, read from the tree.
+  let satisfied ← if status.status = .valid then do
+      let head := (forkchoiceUpdatedParams version params).toOption.map (·.1.headBlockHash)
+      let entry := (entries.toList.zip tree).find? fun (_, (hash, _)) => some hash = head
+      let some verdict :=
+          entry.bind fun (j, _) => (j.getObjValAs? Bool "inclusionListSatisfied").toOption
+        | throw (0, "tree: no inclusion list verdict for the valid head")
+      pure verdict
+    else pure false
+  return .ofJson (forkchoiceUpdatedResponseV2Json status none
+    (inclusionListVerdict status satisfied) id)
 
 /-- A forkchoice response read from its JSON: the status name, the hash, the error, the ID.
 

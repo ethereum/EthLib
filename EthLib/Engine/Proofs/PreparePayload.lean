@@ -670,13 +670,14 @@ The fee recipient and the target of the gas limit are those given.
 
 The parent root is the root of the latest block header of that state, and the slot is its slot.
 
-From Heze the transactions are those of the inclusion lists of the slot before, on the head. -/
+From Heze the attributes carry the transactions of the inclusion lists of the slot before.
+
+They are the lists on the head, each transaction as its bytes. -/
 theorem prepareExecutionPayloadGloas_eq_ok {safe finalized : Hash32}
     {feeRecipient : ExecutionAddress} {targetGasLimit : UInt64} {update : ForkchoiceState}
     {attributes : PayloadAttributes fork}
-    {transactions : Since .hegota fork (List InclusionListTransaction)}
     (prepared : prepareExecutionPayloadGloas config checks store head state gloas safe finalized
-      feeRecipient targetGasLimit = .ok (update, attributes, transactions)) :
+      feeRecipient targetGasLimit = .ok (update, attributes)) :
     ∃ base withdrawals,
       payloadParentGloas config checks store head state gloas =
         .ok (base, withdrawals, update.headBlockHash) ∧
@@ -689,9 +690,9 @@ theorem prepareExecutionPayloadGloas_eq_ok {safe finalized : Hash32}
       (∀ deneb : .dencun ≤ fork,
         hashTreeRoot base.latestBlockHeader = .ok (attributes.parentBeaconBlockRoot deneb)) ∧
       attributes.slotNumber gloas = base.slot ∧ attributes.targetGasLimit gloas = targetGasLimit ∧
-      (∀ heze : .hegota ≤ fork,
-        getPayloadInclusionListTransactions store heze base head.root =
-          .ok (transactions heze)) := by
+      (∀ heze : .hegota ≤ fork, ∃ transactions,
+        getPayloadInclusionListTransactions store heze base head.root = .ok transactions ∧
+          attributes.inclusionListTransactions heze = transactions.map fun tx => ⟨tx.data⟩) := by
   unfold prepareExecutionPayloadGloas at prepared
   obtain ⟨⟨base, withdrawals, headBlockHash⟩, parented, built⟩ := bind_ok_iff.mp prepared
   simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at built
@@ -702,7 +703,7 @@ theorem prepareExecutionPayloadGloas_eq_ok {safe finalized : Hash32}
   simp only [payloadInclusionListTransactions, heze, ↓reduceDIte] at listed
   obtain ⟨found, foundOk, built⟩ := bind_ok_iff.mp listed
   obtain rfl := Except.ok.inj built
-  exact mapError_ok_iff.mp foundOk
+  exact ⟨found, mapError_ok_iff.mp foundOk, rfl⟩
 
 /-- A block on the update of its proposer leaves the parent step with the state of the attributes.
 
@@ -801,12 +802,11 @@ The hashes of the latest bid differ, and the latest block hash is the parent has
 theorem latestBlockHash_of_prepareExecutionPayloadGloas {safe finalized : Hash32}
     {feeRecipient : ExecutionAddress} {targetGasLimit : UInt64} {update : ForkchoiceState}
     {attributes : PayloadAttributes fork}
-    {transactions : Since .hegota fork (List InclusionListTransaction)}
     {block : BeaconBlock preset fork} {parented header after : BeaconState preset fork}
     {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (Consensus.ExecutionPayload preset fork)}
     (prepared : prepareExecutionPayloadGloas config checks store head state gloas safe finalized
-      feeRecipient targetGasLimit = .ok (update, attributes, transactions))
+      feeRecipient targetGasLimit = .ok (update, attributes))
     (distinct : (state.latestExecutionPayloadBid gloas).blockHash ≠
       (state.latestExecutionPayloadBid gloas).parentBlockHash)
     (linked : state.latestBlockHash gloas = (state.latestExecutionPayloadBid gloas).parentBlockHash)
@@ -835,12 +835,11 @@ The hashes of the latest bid differ, and the latest block hash is the parent has
 theorem payloadExpectedWithdrawals_of_prepareExecutionPayloadGloas {safe finalized : Hash32}
     {feeRecipient : ExecutionAddress} {targetGasLimit : UInt64} {update : ForkchoiceState}
     {attributes : PayloadAttributes fork}
-    {transactions : Since .hegota fork (List InclusionListTransaction)}
     {block : BeaconBlock preset fork} {parented header after : BeaconState preset fork}
     {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (Consensus.ExecutionPayload preset fork)}
     (prepared : prepareExecutionPayloadGloas config checks store head state gloas safe finalized
-      feeRecipient targetGasLimit = .ok (update, attributes, transactions))
+      feeRecipient targetGasLimit = .ok (update, attributes))
     (distinct : (state.latestExecutionPayloadBid gloas).blockHash ≠
       (state.latestExecutionPayloadBid gloas).parentBlockHash)
     (linked : state.latestBlockHash gloas = (state.latestExecutionPayloadBid gloas).parentBlockHash)
@@ -870,12 +869,11 @@ The hashes of the latest bid differ. -/
 theorem slot_of_prepareExecutionPayloadGloas {safe finalized : Hash32}
     {feeRecipient : ExecutionAddress} {targetGasLimit : UInt64} {update : ForkchoiceState}
     {attributes : PayloadAttributes fork}
-    {transactions : Since .hegota fork (List InclusionListTransaction)}
     {block : BeaconBlock preset fork} {parented header after : BeaconState preset fork}
     {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (Consensus.ExecutionPayload preset fork)}
     (prepared : prepareExecutionPayloadGloas config checks store head state gloas safe finalized
-      feeRecipient targetGasLimit = .ok (update, attributes, transactions))
+      feeRecipient targetGasLimit = .ok (update, attributes))
     (distinct : (state.latestExecutionPayloadBid gloas).blockHash ≠
       (state.latestExecutionPayloadBid gloas).parentBlockHash)
     (parentHash :
@@ -910,10 +908,9 @@ The hashes of the latest bid differ. -/
 theorem parentRoot_of_prepareExecutionPayloadGloas {safe finalized : Hash32}
     {feeRecipient : ExecutionAddress} {targetGasLimit : UInt64} {update : ForkchoiceState}
     {attributes : PayloadAttributes fork}
-    {transactions : Since .hegota fork (List InclusionListTransaction)}
     {block : BeaconBlock preset fork} {parented header : BeaconState preset fork}
     (prepared : prepareExecutionPayloadGloas config checks store head state gloas safe finalized
-      feeRecipient targetGasLimit = .ok (update, attributes, transactions))
+      feeRecipient targetGasLimit = .ok (update, attributes))
     (distinct : (state.latestExecutionPayloadBid gloas).blockHash ≠
       (state.latestExecutionPayloadBid gloas).parentBlockHash)
     (parentHash :
@@ -953,7 +950,6 @@ It also carries the RANDAO mix of its current epoch. -/
 theorem checkExecutionPayloadBid_of_prepareExecutionPayloadGloas {safe finalized : Hash32}
     {feeRecipient : ExecutionAddress} {targetGasLimit : UInt64} {update : ForkchoiceState}
     {attributes : PayloadAttributes fork}
-    {transactions : Since .hegota fork (List InclusionListTransaction)}
     {payload : Consensus.ExecutionPayload preset fork} {requests : ExecutionRequests preset fork}
     {commitments : BlobKZGCommitments preset fork} {slot : Slot} {recipient : ExecutionAddress}
     {builderIndex : BuilderIndex} {value : Gwei}
@@ -962,7 +958,7 @@ theorem checkExecutionPayloadBid_of_prepareExecutionPayloadGloas {safe finalized
     {capella : .shapella ≤ fork}
     {withdrawalsPayload : Until .glamsterdam fork (Consensus.ExecutionPayload preset fork)}
     (prepared : prepareExecutionPayloadGloas config checks store head state gloas safe finalized
-      feeRecipient targetGasLimit = .ok (update, attributes, transactions))
+      feeRecipient targetGasLimit = .ok (update, attributes))
     (distinct : (state.latestExecutionPayloadBid gloas).blockHash ≠
       (state.latestExecutionPayloadBid gloas).parentBlockHash)
     (linked : state.latestBlockHash gloas = (state.latestExecutionPayloadBid gloas).parentBlockHash)

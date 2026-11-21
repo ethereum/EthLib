@@ -3812,7 +3812,7 @@ From Gloas, `prepareExecutionPayloadGloas` reads the fork choice store and a hea
 The proposer builds on the full node of the head when the fork choice says so at the current slot.
 It then applies the payload that the store holds for the head to a copy of the state, and reads the withdrawals of that copy.
 Otherwise it keeps the state and the withdrawals that the state records.
-From Heze it also reads the transactions of the inclusion lists of the slot before, which the payload attributes of the Engine API here do not carry.
+From Heze it also reads the transactions of the inclusion lists of the slot before, and the payload attributes carry them, each as its bytes.
 `prepareExecutionPayloadGloas_eq_ok` states each field of the update.
 `payloadParentGloas_eq_ok` states the two cases of the parent.
 
@@ -3829,7 +3829,7 @@ It rests on `applyParentExecutionPayload_latestExecutionPayloadBid`, which shows
 It shows that the bid passes the checks of its parent hash, its parent root and its mix in the bid step.
 It makes the assumptions of `latestBlockHash_of_prepareExecutionPayloadGloas`.
 It also assumes that the state of the proposer records the root of its latest block header as the root of the slot before.
-No theorem here covers the inclusion lists, which come from the store.
+`prepareExecutionPayloadGloas_eq_ok` states that the inclusion lists of the attributes are those that the store gives on the head.
 
 The Python suite builds the store of a fork choice case and checks the update on the full and the empty parent at Gloas and Heze.
 
@@ -4608,10 +4608,16 @@ The model keeps no invalid block, so a child of a payload rejected by the check 
 A chain whose last block is from Paris on is taken as valid, its terminal block included.
 
 Payload attributes of `engine_forkchoiceUpdated` answer by the version of the method and the fork of their timestamp.
-`exists_attributesTakeFork_iff` (`Proofs/ForkchoiceUpdated.lean`) shows that some version takes a fork exactly when the fork is from Paris to Glamsterdam.
+`exists_attributesTakeFork_iff` (`Proofs/ForkchoiceUpdated.lean`) shows that some version takes a fork exactly when the fork is from Paris on.
 `attributesTakeFork_eq_true_iff` shows that a version takes such a fork exactly when it decodes the structure of the attributes at that fork.
-So version 1 takes Paris, version 2 Paris and Shapella, version 3 the forks from Dencun before Glamsterdam, and version 4 Glamsterdam.
-Version 0 reads as version 1, and a version above 4 as version 4.
+So version 1 takes Paris, version 2 Paris and Shapella, version 3 the forks from Dencun before Glamsterdam, version 4 Glamsterdam and version 5 Hegotá.
+Version 0 reads as version 1, and a version above 5 as version 5.
+Version 5 follows [`bogota.md`](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_forkchoiceupdatedv5), cited at a commit after the pin until #3567 moves it.
+Its attributes add the transactions of the inclusion lists, each any byte string.
+Its payload status has version 2, and its verdict on the inclusion list of a valid head is an input of the C export.
+That verdict needs the execution rules of Bogota, which #1369 tracks.
+A response carries a verdict exactly when its status is valid (`inclusionListVerdict_eq_some_iff`, `inclusionListVerdict_eq_none_iff`).
+The source does not say what version 5 answers for a valid head before Hegotá; the export asks that head for its verdict too.
 
 The Engine API reads its base types with the readers that it shares with the execution JSON-RPC API.
 The readers live below the Execution layer, in `Serialization/JsonRpc.lean`, and their proofs in `Serialization/Proofs/JsonRpc.lean`.
@@ -4680,6 +4686,8 @@ Its response names a build exactly when the update applies a head and the attrib
 The ID is then that of the head and the attributes.
 Step 5 of [payload building](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-building) asks that each new build has its own ID.
 The bytes that the ID hashes determine the head and the attributes, at one fork (`payloadIdInput_inj`).
+From Hegotá they hold the inclusion list right after the fee recipient, ended by a byte 2.
+Each transaction has a byte 1 before each of its bytes and a byte 0 after it, so the list comes back whatever the lengths.
 The fork is the active fork at the number after the head and at the timestamp.
 The head and the timestamp come first in those bytes, and the tree gives the number of the head.
 Take two calls on one configuration and one tree that start builds.
@@ -4805,7 +4813,10 @@ The method then answers with that head and with attributes at the fork of the ne
 The hypotheses are the checks of the attributes against the head: the active fork at the next number and the timestamp is a fork that the version takes.
 That fork must have the structure of the fork of the attributes, and the timestamp must be above the head's.
 The fork of the attributes and that of the next block can differ, as Bellatrix and Paris do, so the theorem compares their structures.
-`forkchoiceUpdatedCall_payloadAttributesJson_of_gloas` states the same from Gloas at version 4, where the checks reduce to the next block being of Glamsterdam and the timestamp being above the head's.
+`forkchoiceUpdatedCall_payloadAttributesJson_of_gloas` states the same at Gloas at version 4.
+There the checks reduce to the next block being of Glamsterdam and the timestamp being above the head's.
+`forkchoiceUpdatedCall_payloadAttributesJson_of_heze` states it from Heze at version 5, for a next block of Hegotá.
+The inclusion lists come back too, as byte strings, whatever their bytes.
 
 The tree of known payloads and the known finalized block are inputs of each call, not state that the model keeps between calls.
 
@@ -5983,7 +5994,7 @@ Until Gloas, the number of the parent execution block is that of the latest payl
 Before the merge the parent is a block of proof of work, which the state does not describe, so the caller gives its number.
 The event covers Bellatrix to Gloas (the forks before Heze), and these gaps remain:
 
-- From Heze, the fifth version of the attributes adds the transactions of the inclusion lists, which the attributes of EthLib lack, and the pinned API names no consensus version for Heze, so the event is not defined there.
+- From Heze, the pinned Beacon API names no consensus version, so the event is not defined there.
 - The parent root is the root of the latest block header of the state, which is right only for a state at the slot of the proposal, after its empty slots; the event takes that state as given.
 - How often the event is sent may depend on the node, so only its content is specified.
 

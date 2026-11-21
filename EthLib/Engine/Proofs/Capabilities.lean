@@ -230,11 +230,11 @@ theorem specifiedMethods_newPayload {version : Nat} :
   rw [mem_specifiedMethods, show methodVersions.lookup "newPayload" = some 5 by decide]
   simp only [Option.some.injEq, exists_eq_left']
 
-/-- The versions of `engine_forkchoiceUpdated` are 1 to 4. -/
+/-- The versions of `engine_forkchoiceUpdated` are 1 to 5. -/
 theorem specifiedMethods_forkchoiceUpdated {version : Nat} :
     versionedMethod "forkchoiceUpdated" version ∈ specifiedMethods ↔
-      1 ≤ version ∧ version ≤ 4 := by
-  rw [mem_specifiedMethods, show methodVersions.lookup "forkchoiceUpdated" = some 4 by decide]
+      1 ≤ version ∧ version ≤ 5 := by
+  rw [mem_specifiedMethods, show methodVersions.lookup "forkchoiceUpdated" = some 5 by decide]
   simp only [Option.some.injEq, exists_eq_left']
 
 /-- The versions of `engine_getPayload` are 1 to 6. -/
