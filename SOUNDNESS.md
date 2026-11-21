@@ -4632,7 +4632,7 @@ The preset must allow a committee in a slot, and before Gloas the committees of 
 The committees of one slot do not overlap when the active validators of the epoch times its committees fit in 64 bits, so each honest member signs once.
 With the BLS checks, the joined signature verifies when the secret keys of all honest members of the slot do not sum to zero, and the block accepts the aggregate.
 Each honest member of each committee of the slot then holds the timely target flag, under the same condition on the target root.
-The list and block theorems below still take one committee for each attestation.
+The list and block theorems below have a form for such aggregates too, one for each slot.
 
 `foldlM_processAttestation_honestAttestation` (`Consensus/Proofs/HonestAttestationList.lean`) runs a list of such attestations, as the attestation steps of a block do.
 Each attestation is built on the state before the list, and changes only flags and the proposer's balance.
@@ -4644,6 +4644,10 @@ Before Deneb, each attestation of the list must be at most one epoch older than 
 The steps of a block before its attestations, and the capacity of a block, are not covered here.
 Satisfiability on a run from genesis is left to the assembled theorem.
 No theorem yet shows that the stake of those members reaches two thirds at the end of the epoch.
+`foldlM_processAttestation_honestSlotAggregate` runs a list of honest aggregates of slots in the same way, from Electra until Gloas.
+It shares the proof of the list form, so the bookkeeping of the budget and of the flags is written once.
+Each aggregate asks the hypotheses of `processAttestation_honestSlotAggregate` for its slot, and the budget leaves room for one reward for each aggregate.
+Each honest member of each committee of each slot of the list then holds the timely target flag.
 
 `stateBeforeOperations_honestBlock` (`Consensus/Proofs/HonestBlockInput.lean`) runs the steps of an honest block before its operations, before Gloas.
 The honest block is at the slot of the state, names the proposer of that slot, and builds on the latest block header.
@@ -4676,6 +4680,10 @@ The sync committee must not be empty, and one increment must be at most the larg
 Each honest member of each committee then holds the timely target flag after the block, when the state holds the target root for the first slot of the target epoch.
 `applySignedBlock_of_processBlock` completes such a block with the root of the state after it and the proposer's signature, so it passes the block step of a run, which checks both.
 That needs the encoding of a beacon state to be lawful, so that the state has a root.
+`processBlock_honestBlock_honestSlotAggregate` runs the same block from Electra until Gloas, when it carries honest aggregates of slots instead.
+The attestation steps then accept them under the hypotheses of `foldlM_processAttestation_honestSlotAggregate` above, instead of those of the list of single attestations, and no room for deposit amounts is needed.
+An aggregate built on the state at the slot is also the one built on the state before the operations.
+It reads only the committees, their count and the attester domain, which the steps before the operations keep.
 A block holds at most 128 attestations before Electra and 8 from Electra on mainnet; which honest blocks carry which attestations is left to the assembled theorem.
 Satisfiability of the state hypotheses on a run from genesis is also left to the assembled theorem.
 

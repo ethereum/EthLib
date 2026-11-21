@@ -35,6 +35,8 @@ From Altair until Gloas, the block passes, with its signature and its state root
 Each honest member of each committee then holds the timely target flag of its target epoch.
 
 On mainnet a block holds at most 128 attestations before Electra, and 8 from Electra.
+
+From Electra the block may instead carry honest aggregates, each covering the committees of a slot.
 -/
 
 @[expose] public section
@@ -68,6 +70,33 @@ theorem honestAttestation_eq_of_kept {state input : BeaconState preset fork}
   unfold honestAttestation constructSingleAttestation constructAttestation constructAggregate
     constructAggregateOfSingleAttestations
   simp only [committees, signature]
+
+/-- From Electra, the honest aggregate of a recent slot is the same on two states.
+
+The two states must agree on what the attestations read. -/
+theorem honestSlotAggregate_eq_of_kept (electra : .pectra ≤ fork)
+    {state input : BeaconState preset fork} (kept : AttestationReadsKept state input)
+    {honest : Finset ValidatorIndex} {key : ValidatorIndex → Signatures.SecretKey}
+    {data : AttestationData}
+    (low : getPreviousEpoch state ≤ computeEpochAtSlot preset data.slot)
+    (high : computeEpochAtSlot preset data.slot ≤ getCurrentEpoch state) :
+    honestSlotAggregate electra config input honest key data =
+      honestSlotAggregate electra config state honest key data := by
+  -- The count of committees reads only the registry.
+  have count : ∀ epoch, getCommitteeCountPerSlot input epoch =
+      getCommitteeCountPerSlot state epoch := by
+    intro epoch
+    unfold getCommitteeCountPerSlot getActiveValidatorIndices
+    rw [kept.validators]
+  have committees : ∀ index, getBeaconCommittee input data.slot index =
+      getBeaconCommittee state data.slot index :=
+    fun index => kept.committees _ low high data.slot index rfl
+  -- The honest attestation of each committee is the same on both states.
+  have attestations : honestAttestation config input honest key data =
+      honestAttestation config state honest key data :=
+    funext fun _ => honestAttestation_eq_of_kept kept low high
+  unfold honestSlotAggregate honestCommittees
+  simp only [count, committees, attestations]
 
 /-! ## The sync aggregate of an honest block -/
 
@@ -382,6 +411,216 @@ private theorem processOperations_honest
       Except.pure]
   · rfl
 
+/-- From Altair until Gloas, the steps of an honest block pass when its attestation steps pass.
+
+The attestation steps run on the state before the operations, which keeps what they read.
+
+There they must pass, and leave a state with some property, such as flags of honest members.
+
+The budget must leave room for the rewards of the proposer, one for each attestation.
+
+The flags that the attestation steps set survive the deposits and the sync aggregate. -/
+private theorem processBlock_honestBlock_of_attested [LawfulSszType (BeaconBlockBody preset fork)]
+    [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] {budget scoreBound : Nat}
+    (altair : .altair ≤ fork) (beforeGloas : fork < .glamsterdam)
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {state : BeaconState preset fork} {proposerKey : Signatures.SecretKey}
+    {block : BeaconBlock preset fork} {engine : ExecutionEngine preset fork}
+    (honestBlock : HonestBlock config state proposerKey block)
+    (owned : ∃ validator, getValidator state block.proposerIndex = .ok validator ∧
+      validator.pubkey = Signatures.skToPk proposerKey ∧ validator.slashed = false)
+    (fresh : state.latestBlockHeader.slot < state.slot)
+    (votesRoom : ∀ before : fork < .hegota, (state.eth1DataVotes before).data.size <
+      preset.EPOCHS_PER_ETH1_VOTING_PERIOD.toNat * preset.SLOTS_PER_EPOCH.toNat)
+    (periodFits :
+      preset.EPOCHS_PER_ETH1_VOTING_PERIOD.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (proven : ∀ (before : fork < .hegota) (position : Nat)
+      (inside : position < (block.body.deposits before).data.size), ∃ leaf,
+        hashTreeRoot (block.body.deposits before).data[position].data = .ok leaf ∧
+        isValidMerkleBranch leaf (block.body.deposits before).data[position].proof.toList
+          (DEPOSIT_CONTRACT_TREE_DEPTH.toNat + 1)
+          ((state.eth1DepositIndex before).toNat + position)
+          (state.eth1Data before).depositRoot = true)
+    (registryRoom : ∀ before : fork < .hegota, state.validators.data.size +
+      (block.body.deposits before).data.size ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat)
+    (pendingRoom : ∀ (electra : .pectra ≤ fork) (before : fork < .hegota),
+      (state.pendingDeposits electra).data.size + (block.body.deposits before).data.size ≤
+        preset.PENDING_DEPOSITS_LIMIT.toNat)
+    (scores : InactivityScoresMatch state)
+    (executes : ∀ headed, processBlockHeader state block = .ok headed →
+      ∀ bellatrix : .bellatrix ≤ fork, ∃ executed,
+        processBlockExecution config .bls engine headed block.body bellatrix = .ok executed)
+    (syncKeys : ∀ pubkey ∈ (state.currentSyncCommittee altair).value.pubkeys.toList,
+      ∃ validator ∈ state.validators.data.toList, validator.pubkey = pubkey)
+    (roots : preset.RootsReachPreviousEpoch)
+    (slotRoom : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64)
+    (increment : preset.EFFECTIVE_BALANCE_INCREMENT ≠ 0)
+    (scaled : preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64)
+    (incrementLe : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ preset.largestEffectiveBalance)
+    (holds : WithinBudget budget scoreBound state)
+    (participation : ParticipationMatches state)
+    (room : budget + block.body.attestations.data.toList.length * (state.validators.data.size *
+      (64 * preset.baseRewardCeiling) / 448) +
+        state.validators.data.size * (64 * preset.baseRewardCeiling) < 2 ^ 64)
+    (depositRoom : fork < .pectra → ∀ before : fork < .hegota,
+      budget + block.body.attestations.data.toList.length * (state.validators.data.size *
+        (64 * preset.baseRewardCeiling) / 448) +
+          ((block.body.deposits before).data.toList.map (·.data.amount.toNat)).sum < 2 ^ 64)
+    (marks : BeaconState preset fork → Prop)
+    (attests : ∀ input, AttestationReadsKept state input →
+      getBeaconProposerIndex input = .ok block.proposerIndex →
+      ∃ attested, block.body.attestations.data.toList.foldlM
+        (processAttestation config .bls · state.latestBlockHeader.slot ·) input = .ok attested ∧
+        marks attested) :
+    ∃ after attested, marks attested ∧ processBlock config .bls engine state block = .ok after ∧
+      ∀ current position, TargetFlagAt (recentParticipation attested altair current) position →
+        TargetFlagAt (recentParticipation after altair current) position := by
+  obtain ⟨proposer, found, pubkey, notSlashed⟩ := owned
+  -- The steps before the operations pass, and keep what the attestations and deposits read.
+  obtain ⟨input, computed, proposerI, kept, indexI, eth1I, pendingI, scoresI⟩ :=
+    stateBeforeOperations_honestBlock_deposits beforeGloas apart honestBlock
+      ⟨proposer, found, pubkey, notSlashed⟩ fresh votesRoom periodFits executes
+  have holdsI := kept.budget _ _ holds
+  have slotI := kept.slot
+  have validatorsI := kept.validators
+  -- The registry holds the proposer, so it is not empty.
+  have proposerInside : block.proposerIndex.toNat < state.validators.data.size := by
+    unfold getValidator at found
+    split at found
+    · rename_i located
+      exact (Array.getElem?_eq_some_iff.mp located).1
+    · cases found
+  have participationI : ParticipationMatches input := fun altair => by
+    rw [kept.previousParticipation, kept.currentParticipation, validatorsI]
+    exact participation altair
+  -- The attestation steps pass on the state before the operations.
+  obtain ⟨attested, attestedOk, marked⟩ := attests input kept proposerI
+  -- The attestation steps keep the budget, raised by one reward share for each attestation.
+  obtain ⟨-, holdsA, participationA⟩ := foldlM_processAttestation_withinBudget
+    (state := state) altair beforeGloas increment scaled (by omega) (spent := 0) validatorsI
+    (by simpa using holdsI) participationI (by simpa using room) attestedOk
+  rw [Nat.zero_add] at holdsA
+  have matchedA : BalancesMatch attested := holdsA.matched
+  obtain ⟨balances, previous, current, shaped⟩ :=
+    foldlM_processAttestation_shape altair beforeGloas attestedOk
+  -- The attestation steps keep the registry, the slot and the roots.
+  have slotA : attested.slot = state.slot := by rw [shaped]; exact slotI
+  have validatorsA : attested.validators = state.validators := by rw [shaped]; exact validatorsI
+  have rootsA : attested.blockRoots = state.blockRoots := by rw [shaped]; exact kept.blockRoots
+  -- They also keep what the deposits read.
+  have indexA : attested.eth1DepositIndex = state.eth1DepositIndex := by
+    rw [shaped]
+    exact indexI
+  have eth1A : ∀ before : fork < .hegota, attested.eth1Data before = state.eth1Data before := by
+    rw [shaped]
+    exact eth1I
+  have pendingA : attested.pendingDeposits = state.pendingDeposits := by
+    rw [shaped]
+    exact pendingI
+  have scoresA : InactivityScoresMatch attested := fun altair => by
+    rw [shaped]
+    show (input.inactivityScores altair).data.size = input.validators.data.size
+    rw [scoresI, validatorsI]
+    exact scores altair
+  -- The deposit steps accept the deposits that are due, each with its proof.
+  have before : fork < .hegota := Nat.lt_trans beforeGloas (by decide)
+  have counted : ∀ before : fork < .hegota,
+      expectedDepositCount input before = .ok (block.body.deposits before).data.size :=
+    fun before => (kept.deposits before).trans (honestBlock.deposits before)
+  have indexRoom := expectedDepositCount_index_lt (counted before)
+  rw [indexI] at indexRoom
+  obtain ⟨deposited, depositedOk, grownD⟩ := foldlM_processDeposit_exists_ok (config := config)
+    (checks := .bls) before (deposits := (block.body.deposits before).data.toList)
+    (state := attested)
+    (fun position inside => by
+      rw [indexA, eth1A before]
+      simpa using proven before position (by simpa using inside))
+    (by rw [indexA]; simpa using indexRoom)
+    (by rw [validatorsA]; simpa using registryRoom before)
+    (fun electra => by rw [pendingA]; simpa using pendingRoom electra before)
+    (fun preElectra => by
+      have := balanceSum_le_stakeSum matchedA
+      have := holdsA.funded
+      have := depositRoom preElectra before
+      omega)
+    matchedA participationA scoresA
+  -- The other operations are empty, so the operations are the attestation and deposit steps.
+  have operated := processOperations_honest (parentSlot := state.latestBlockHeader.slot)
+    honestBlock beforeGloas counted attestedOk (fun _ => depositedOk)
+  obtain ⟨frameD, belowD⟩ := foldlM_processDeposit_kept depositedOk
+  -- The deposits keep the slot, the roots and the sync committee.
+  have slotD : deposited.slot = state.slot := frameD.slot.trans slotA
+  have rootsD : deposited.blockRoots = state.blockRoots := frameD.blockRoots.trans rootsA
+  have syncD : deposited.currentSyncCommittee altair = state.currentSyncCommittee altair :=
+    (processOperations_currentSyncCommittee altair operated).trans
+      (congrFun kept.syncCommittee altair)
+  -- The state is past its latest block, so the root of the slot before has a value.
+  have rootedD : ∃ root,
+      getBlockRootAtSlot deposited (Uint64.saturatingSub deposited.slot 1) = .ok root := by
+    rw [getBlockRootAtSlot_congr slotD rootsD, slotD]
+    have later := UInt64.lt_iff_toNat_lt.mp fresh
+    have reach := roots.reach
+    have two := roots.twoSlots
+    have previousSlot := Uint64.toNat_saturatingSub state.slot 1
+    rw [show (1 : UInt64).toNat = 1 from rfl] at previousSlot
+    exact getBlockRootAtSlot_exists (by omega) (by omega) (by omega) (by omega)
+  -- The reward reads the total active balance, which the deposits and attestations keep.
+  have rewardedD : ∃ reward, syncParticipantReward deposited = .ok reward := by
+    rw [BlockLedger.syncParticipantReward_congr (a := attested)
+      (foldlM_processDeposit_getTotalActiveBalance depositedOk),
+      BlockLedger.syncParticipantReward_congr (a := state) (by
+        unfold getTotalActiveBalance getActiveValidatorIndicesChecked getTotalBalance
+          getCurrentEpoch
+        rw [validatorsA, slotA])]
+    have slots : preset.SLOTS_PER_EPOCH ≠ 0 := fun zero => by
+      have := roots.twoSlots
+      rw [zero] at this
+      simp at this
+    exact syncParticipantReward_exists holds increment scaled incrementLe slots
+      Uint64.ne_zero_of_neZero_toNat (by omega) (by omega)
+  -- Each key of the sync committee stays the key of a validator, since the registry only grows.
+  have keysD : ∀ pubkey ∈ (deposited.currentSyncCommittee altair).value.pubkeys.toList,
+      ∃ validator ∈ deposited.validators.data.toList, validator.pubkey = pubkey := by
+    intro pubkey member
+    rw [syncD] at member
+    obtain ⟨validator, inside, keyed⟩ := syncKeys pubkey member
+    have listed : pubkey ∈ validatorKeys attested := by
+      unfold validatorKeys
+      rw [validatorsA]
+      exact List.mem_map.mpr ⟨validator, inside, keyed⟩
+    exact List.mem_map.mp (frameD.pubkeysPrefix.subset listed)
+  obtain ⟨after, synced⟩ := processSyncAggregate_none (config := config) altair
+    (honestBlock.syncBits altair) (honestBlock.syncSignature altair) rootedD rewardedD keysD
+    (by
+      unfold BeaconState.RegistryWithinLimit
+      have := registryRoom before
+      rw [validatorsA] at grownD
+      simp only [Array.length_toList] at grownD
+      omega)
+    (frameD.balancesMatch matchedA)
+  refine ⟨after, attested, marked, ?_, ?_⟩
+  · simp only [processBlock, altair, ↓reduceDIte, processBlockAltair, computed, operated, synced,
+      bind, Except.bind]
+  -- The deposits keep the flags of the registry before them, and the sync aggregate every flag.
+  · intro current position flag
+    obtain ⟨flags, found, set⟩ := flag
+    have sized := participationA altair
+    have below : position < attested.validators.data.size := by
+      have := (Array.getElem?_eq_some_iff.mp found).1
+      unfold recentParticipation at this
+      split at this <;> omega
+    have same := belowD altair position below
+    obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
+    refine ⟨flags, ?_, set⟩
+    unfold recentParticipation at found ⊢
+    by_cases currentEpoch : current = true
+    · rw [ite_eq_left currentEpoch] at found ⊢
+      rw [same.2]
+      exact found
+    · rw [ite_eq_right currentEpoch] at found ⊢
+      rw [same.1]
+      exact found
+
 /-- From Altair until Gloas, the steps of an honest block with honest attestations pass.
 
 The block is that of the proposer of the slot, built with its key on the state at the slot.
@@ -501,206 +740,291 @@ theorem processBlock_honestBlock [LawfulSszType (BeaconBlockBody preset fork)]
           ∀ index ∈ committee, index ∈ honest → TargetFlagAt (recentParticipation after altair
             (vote.1.target.epoch == getCurrentEpoch state)) index.toNat := by
   obtain ⟨proposer, found, pubkey⟩ := registered block.proposerIndex (Finset.mem_insert_self _ _)
-  -- The steps before the operations pass, and keep what the attestations and deposits read.
-  obtain ⟨input, computed, proposerI, kept, indexI, eth1I, pendingI, scoresI⟩ :=
-    stateBeforeOperations_honestBlock_deposits beforeGloas apart honestBlock
-      ⟨proposer, found, pubkey, unslashed _ found⟩ fresh votesRoom periodFits executes
-  have holdsI := kept.budget _ _ holds
-  have slotI := kept.slot
-  have validatorsI := kept.validators
-  have currentI : getCurrentEpoch input = getCurrentEpoch state := by
-    unfold getCurrentEpoch
-    rw [slotI]
-  have previousI : getPreviousEpoch input = getPreviousEpoch state := by
-    unfold getPreviousEpoch
-    rw [currentI]
-  -- The registry holds the proposer, so it is not empty.
-  have proposerInside : block.proposerIndex.toNat < state.validators.data.size := by
-    unfold getValidator at found
-    split at found
-    · rename_i located
-      exact (Array.getElem?_eq_some_iff.mp located).1
-    · cases found
-  -- Each vote is for a slot of the previous or the current epoch.
-  have bounds : ∀ vote ∈ votes,
-      getPreviousEpoch state ≤ computeEpochAtSlot preset vote.1.slot ∧
-        computeEpochAtSlot preset vote.1.slot ≤ getCurrentEpoch state := by
-    intro vote member
-    rw [← slotEpoch vote member]
-    have := getPreviousEpoch_le state
-    rcases recent vote member with same | same <;> rw [same]
-    · exact ⟨UInt64.le_refl _, this⟩
-    · exact ⟨this, UInt64.le_refl _⟩
-  -- The committees of each vote are the same on both states.
-  have committeesI : ∀ vote ∈ votes, ∀ index,
-      getBeaconCommittee input vote.1.slot index = getBeaconCommittee state vote.1.slot index :=
-    fun vote member index =>
-      kept.committees _ (bounds vote member).1 (bounds vote member).2 _ index rfl
-  -- The honest attestations built on the state are those built on the input state.
-  have builtI : List.Forall₂ (fun vote attestation =>
-      honestAttestation config input honest key vote.1 vote.2 = .ok attestation)
-        votes block.body.attestations.data.toList :=
-    forall₂_imp_of_mem built fun vote _ member made => by
-      rw [honestAttestation_eq_of_kept kept (bounds vote member).1 (bounds vote member).2]
-      exact made
-  have participationI : ParticipationMatches input := fun altair => by
-    rw [kept.previousParticipation, kept.currentParticipation, validatorsI]
-    exact participation altair
-  -- The attestation steps accept them on the input state, which reads the same values.
-  obtain ⟨attested, attestedOk, flagged⟩ := foldlM_processAttestation_honestAttestation
-    (state := input) altair beforeGloas (honest := honest) (key := key)
-    state.latestBlockHeader.slot roots (by rw [slotI]; exact slotRoom) increment scaled holdsI
-    participationI (by rw [validatorsI]; exact room)
-    (fun vote member => by rw [previousI, currentI]; exact recent vote member) slotEpoch
-    (fun vote member => by rw [slotI]; exact past vote member)
-    (fun vote member => by rw [slotI]; exact early vote member)
-    (fun vote member => by rw [slotI]; exact deadline vote member) indexed
-    (fun vote member => by
-      unfold getCommitteeCountPerSlot getActiveValidatorIndices
-      rw [validatorsI]
-      exact below vote member)
-    (fun vote member => by
-      rw [currentI, kept.currentJustified, kept.previousJustified]
-      exact source vote member)
-    (fun index member => by
-      unfold getValidator
-      rw [validatorsI]
-      exact registered index (Finset.mem_insert_of_mem member))
-    (fun vote member committee => by
-      rw [committeesI vote member]
-      exact sum vote member committee)
-    ⟨block.proposerIndex, proposerI, by rw [validatorsI]; exact proposerInside⟩ builtI
-  -- The attestation steps keep the budget, raised by one reward share for each attestation.
   have lengths : block.body.attestations.data.toList.length = votes.length :=
     built.length_eq.symm
-  obtain ⟨-, holdsA, participationA⟩ := foldlM_processAttestation_withinBudget
-    (state := state) altair beforeGloas increment scaled (by omega) (spent := 0) validatorsI
-    (by simpa using holdsI) participationI (by rw [lengths]; simpa using room) attestedOk
-  rw [Nat.zero_add, lengths] at holdsA
-  have matchedA : BalancesMatch attested := holdsA.matched
-  obtain ⟨balances, previous, current, shaped⟩ :=
-    foldlM_processAttestation_shape altair beforeGloas attestedOk
-  -- The attestation steps keep the registry, the slot and the roots.
-  have slotA : attested.slot = state.slot := by rw [shaped]; exact slotI
-  have validatorsA : attested.validators = state.validators := by rw [shaped]; exact validatorsI
-  have rootsA : attested.blockRoots = state.blockRoots := by rw [shaped]; exact kept.blockRoots
-  -- They also keep what the deposits read.
-  have indexA : attested.eth1DepositIndex = state.eth1DepositIndex := by
-    rw [shaped]
-    exact indexI
-  have eth1A : ∀ before : fork < .hegota, attested.eth1Data before = state.eth1Data before := by
-    rw [shaped]
-    exact eth1I
-  have pendingA : attested.pendingDeposits = state.pendingDeposits := by
-    rw [shaped]
-    exact pendingI
-  have scoresA : InactivityScoresMatch attested := fun altair => by
-    rw [shaped]
-    show (input.inactivityScores altair).data.size = input.validators.data.size
-    rw [scoresI, validatorsI]
-    exact scores altair
-  -- The deposit steps accept the deposits that are due, each with its proof.
-  have before : fork < .hegota := Nat.lt_trans beforeGloas (by decide)
-  have counted : ∀ before : fork < .hegota,
-      expectedDepositCount input before = .ok (block.body.deposits before).data.size :=
-    fun before => (kept.deposits before).trans (honestBlock.deposits before)
-  have indexRoom := expectedDepositCount_index_lt (counted before)
-  rw [indexI] at indexRoom
-  obtain ⟨deposited, depositedOk, grownD⟩ := foldlM_processDeposit_exists_ok (config := config)
-    (checks := .bls) before (deposits := (block.body.deposits before).data.toList)
-    (state := attested)
-    (fun position inside => by
-      rw [indexA, eth1A before]
-      simpa using proven before position (by simpa using inside))
-    (by rw [indexA]; simpa using indexRoom)
-    (by rw [validatorsA]; simpa using registryRoom before)
-    (fun electra => by rw [pendingA]; simpa using pendingRoom electra before)
-    (fun preElectra => by
-      have := balanceSum_le_stakeSum matchedA
-      have := holdsA.funded
-      have := depositRoom preElectra before
-      omega)
-    matchedA participationA scoresA
-  -- The other operations are empty, so the operations are the attestation and deposit steps.
-  have operated := processOperations_honest (parentSlot := state.latestBlockHeader.slot)
-    honestBlock beforeGloas counted attestedOk (fun _ => depositedOk)
-  obtain ⟨frameD, belowD⟩ := foldlM_processDeposit_kept depositedOk
-  -- The deposits keep the slot, the roots and the sync committee.
-  have slotD : deposited.slot = state.slot := frameD.slot.trans slotA
-  have rootsD : deposited.blockRoots = state.blockRoots := frameD.blockRoots.trans rootsA
-  have syncD : deposited.currentSyncCommittee altair = state.currentSyncCommittee altair :=
-    (processOperations_currentSyncCommittee altair operated).trans
-      (congrFun kept.syncCommittee altair)
-  -- The state is past its latest block, so the root of the slot before has a value.
-  have rootedD : ∃ root,
-      getBlockRootAtSlot deposited (Uint64.saturatingSub deposited.slot 1) = .ok root := by
-    rw [getBlockRootAtSlot_congr slotD rootsD, slotD]
-    have later := UInt64.lt_iff_toNat_lt.mp fresh
-    have reach := roots.reach
-    have two := roots.twoSlots
-    have previousSlot := Uint64.toNat_saturatingSub state.slot 1
-    rw [show (1 : UInt64).toNat = 1 from rfl] at previousSlot
-    exact getBlockRootAtSlot_exists (by omega) (by omega) (by omega) (by omega)
-  -- The reward reads the total active balance, which the deposits and attestations keep.
-  have rewardedD : ∃ reward, syncParticipantReward deposited = .ok reward := by
-    rw [BlockLedger.syncParticipantReward_congr (a := attested)
-      (foldlM_processDeposit_getTotalActiveBalance depositedOk),
-      BlockLedger.syncParticipantReward_congr (a := state) (by
-        unfold getTotalActiveBalance getActiveValidatorIndicesChecked getTotalBalance
-          getCurrentEpoch
-        rw [validatorsA, slotA])]
-    have slots : preset.SLOTS_PER_EPOCH ≠ 0 := fun zero => by
-      have := roots.twoSlots
-      rw [zero] at this
-      simp at this
-    exact syncParticipantReward_exists holds increment scaled incrementLe slots
-      Uint64.ne_zero_of_neZero_toNat (by omega) (by omega)
-  -- Each key of the sync committee stays the key of a validator, since the registry only grows.
-  have keysD : ∀ pubkey ∈ (deposited.currentSyncCommittee altair).value.pubkeys.toList,
-      ∃ validator ∈ deposited.validators.data.toList, validator.pubkey = pubkey := by
-    intro pubkey member
-    rw [syncD] at member
-    obtain ⟨validator, inside, keyed⟩ := syncKeys pubkey member
-    have listed : pubkey ∈ validatorKeys attested := by
-      unfold validatorKeys
-      rw [validatorsA]
-      exact List.mem_map.mpr ⟨validator, inside, keyed⟩
-    exact List.mem_map.mp (frameD.pubkeysPrefix.subset listed)
-  obtain ⟨after, synced⟩ := processSyncAggregate_none (config := config) altair
-    (honestBlock.syncBits altair) (honestBlock.syncSignature altair) rootedD rewardedD keysD
-    (by
-      unfold BeaconState.RegistryWithinLimit
-      have := registryRoom before
-      rw [validatorsA] at grownD
-      simp only [Array.length_toList] at grownD
-      omega)
-    (frameD.balancesMatch matchedA)
-  refine ⟨after, ?_, ?_⟩
-  · simp only [processBlock, altair, ↓reduceDIte, processBlockAltair, computed, operated, synced,
-      bind, Except.bind]
-  -- The deposits keep the flags of the registry before them, and the sync aggregate every flag.
-  · intro vote member rooted committee committeeOk index inside honestIndex
-    have flag := flagged vote member
-      (by simp only [getBlockRoot, getBlockRootAtSlot_congr slotI kept.blockRoots]; exact rooted)
-      committee (by rw [committeesI vote member]; exact committeeOk) index inside honestIndex
-    rw [currentI] at flag
-    obtain ⟨flags, found, set⟩ := flag
-    have sized := participationA altair
-    have below : index.toNat < attested.validators.data.size := by
-      have := (Array.getElem?_eq_some_iff.mp found).1
-      unfold recentParticipation at this
-      split at this <;> omega
-    have same := belowD altair index.toNat below
-    obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
-    refine ⟨flags, ?_, set⟩
-    unfold recentParticipation at found ⊢
-    by_cases currentEpoch : (vote.1.target.epoch == getCurrentEpoch state) = true
-    · rw [ite_eq_left currentEpoch] at found ⊢
-      rw [same.2]
-      exact found
-    · rw [ite_eq_right currentEpoch] at found ⊢
-      rw [same.1]
-      exact found
+  obtain ⟨after, attested, marked, processed, carried⟩ := processBlock_honestBlock_of_attested
+    altair beforeGloas apart honestBlock ⟨proposer, found, pubkey, unslashed _ found⟩ fresh
+    votesRoom periodFits proven registryRoom pendingRoom scores executes syncKeys roots slotRoom
+    increment scaled incrementLe holds participation (by rw [lengths]; exact room)
+    (fun preElectra before => by rw [lengths]; exact depositRoom preElectra before)
+    (fun attested => ∀ vote ∈ votes,
+      getBlockRoot state vote.1.target.epoch = .ok vote.1.target.root →
+        ∀ committee, getBeaconCommittee state vote.1.slot vote.2 = .ok committee →
+          ∀ index ∈ committee, index ∈ honest → TargetFlagAt (recentParticipation attested altair
+            (vote.1.target.epoch == getCurrentEpoch state)) index.toNat)
+    fun input kept proposerI => by
+      have holdsI := kept.budget _ _ holds
+      have slotI := kept.slot
+      have validatorsI := kept.validators
+      have currentI : getCurrentEpoch input = getCurrentEpoch state := by
+        unfold getCurrentEpoch
+        rw [slotI]
+      have previousI : getPreviousEpoch input = getPreviousEpoch state := by
+        unfold getPreviousEpoch
+        rw [currentI]
+      -- The registry holds the proposer, so it is not empty.
+      have proposerInside : block.proposerIndex.toNat < state.validators.data.size := by
+        unfold getValidator at found
+        split at found
+        · rename_i located
+          exact (Array.getElem?_eq_some_iff.mp located).1
+        · cases found
+      -- Each vote is for a slot of the previous or the current epoch.
+      have bounds : ∀ vote ∈ votes,
+          getPreviousEpoch state ≤ computeEpochAtSlot preset vote.1.slot ∧
+            computeEpochAtSlot preset vote.1.slot ≤ getCurrentEpoch state := by
+        intro vote member
+        rw [← slotEpoch vote member]
+        have := getPreviousEpoch_le state
+        rcases recent vote member with same | same <;> rw [same]
+        · exact ⟨UInt64.le_refl _, this⟩
+        · exact ⟨this, UInt64.le_refl _⟩
+      -- The committees of each vote are the same on both states.
+      have committeesI : ∀ vote ∈ votes, ∀ index,
+          getBeaconCommittee input vote.1.slot index = getBeaconCommittee state vote.1.slot index :=
+        fun vote member index =>
+          kept.committees _ (bounds vote member).1 (bounds vote member).2 _ index rfl
+      -- The honest attestations built on the state are those built on the input state.
+      have builtI : List.Forall₂ (fun vote attestation =>
+          honestAttestation config input honest key vote.1 vote.2 = .ok attestation)
+            votes block.body.attestations.data.toList :=
+        forall₂_imp_of_mem built fun vote _ member made => by
+          rw [honestAttestation_eq_of_kept kept (bounds vote member).1 (bounds vote member).2]
+          exact made
+      have participationI : ParticipationMatches input := fun altair => by
+        rw [kept.previousParticipation, kept.currentParticipation, validatorsI]
+        exact participation altair
+      -- The attestation steps accept them on the input state, which reads the same values.
+      obtain ⟨attested, attestedOk, flagged⟩ := foldlM_processAttestation_honestAttestation
+        (state := input) altair beforeGloas (honest := honest) (key := key)
+        state.latestBlockHeader.slot roots (by rw [slotI]; exact slotRoom) increment scaled holdsI
+        participationI (by rw [validatorsI]; exact room)
+        (fun vote member => by rw [previousI, currentI]; exact recent vote member) slotEpoch
+        (fun vote member => by rw [slotI]; exact past vote member)
+        (fun vote member => by rw [slotI]; exact early vote member)
+        (fun vote member => by rw [slotI]; exact deadline vote member) indexed
+        (fun vote member => by
+          unfold getCommitteeCountPerSlot getActiveValidatorIndices
+          rw [validatorsI]
+          exact below vote member)
+        (fun vote member => by
+          rw [currentI, kept.currentJustified, kept.previousJustified]
+          exact source vote member)
+        (fun index member => by
+          unfold getValidator
+          rw [validatorsI]
+          exact registered index (Finset.mem_insert_of_mem member))
+        (fun vote member committee => by
+          rw [committeesI vote member]
+          exact sum vote member committee)
+        ⟨block.proposerIndex, proposerI, by rw [validatorsI]; exact proposerInside⟩ builtI
+      refine ⟨attested, attestedOk, fun vote member rooted committee committeeOk index inside
+        honestIndex => ?_⟩
+      have flag := flagged vote member
+        (by simp only [getBlockRoot, getBlockRootAtSlot_congr slotI kept.blockRoots]; exact rooted)
+        committee (by rw [committeesI vote member]; exact committeeOk) index inside honestIndex
+      rw [currentI] at flag
+      exact flag
+  exact ⟨after, processed, fun vote member rooted committee committeeOk index inside honestIndex =>
+    carried _ _ (marked vote member rooted committee committeeOk index inside honestIndex)⟩
+
+/-- From Electra until Gloas, the steps of an honest block with honest slot aggregates pass.
+
+Each aggregate covers the committees of a slot that have an honest member, built on the state.
+
+The block and the state meet the conditions of an honest block, except those on its attestations.
+
+The execution part of the block must pass on the state after its header, an assumption.
+
+Each deposit has a Merkle proof to the deposit root of the state, at its index; this is an input.
+
+The data of each aggregate meet the checks of the attestation step, with committee index zero.
+
+The secret keys of the honest members of the committees of each slot must not sum to zero.
+
+The active validators times the committees of each epoch must fit in 64 bits.
+
+Each honest member of each committee of each slot then holds the timely target flag.
+
+That needs the state to hold the target root for the first slot of the target epoch. -/
+theorem processBlock_honestBlock_honestSlotAggregate [LawfulSszType (BeaconBlockBody preset fork)]
+    [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] {budget scoreBound : Nat}
+    (electra : .pectra ≤ fork) (beforeGloas : fork < .glamsterdam)
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {state : BeaconState preset fork} {honest : Finset ValidatorIndex}
+    {key : ValidatorIndex → Signatures.SecretKey} {block : BeaconBlock preset fork}
+    {engine : ExecutionEngine preset fork}
+    (honestBlock : HonestBlock config state (key block.proposerIndex) block)
+    (registered : ∀ index ∈ insert block.proposerIndex honest, ∃ validator,
+      getValidator state index = .ok validator ∧ validator.pubkey = Signatures.skToPk (key index))
+    (unslashed : ∀ validator, getValidator state block.proposerIndex = .ok validator →
+      validator.slashed = false)
+    (fresh : state.latestBlockHeader.slot < state.slot)
+    (votesRoom : ∀ before : fork < .hegota, (state.eth1DataVotes before).data.size <
+      preset.EPOCHS_PER_ETH1_VOTING_PERIOD.toNat * preset.SLOTS_PER_EPOCH.toNat)
+    (periodFits :
+      preset.EPOCHS_PER_ETH1_VOTING_PERIOD.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (proven : ∀ (before : fork < .hegota) (position : Nat)
+      (inside : position < (block.body.deposits before).data.size), ∃ leaf,
+        hashTreeRoot (block.body.deposits before).data[position].data = .ok leaf ∧
+        isValidMerkleBranch leaf (block.body.deposits before).data[position].proof.toList
+          (DEPOSIT_CONTRACT_TREE_DEPTH.toNat + 1)
+          ((state.eth1DepositIndex before).toNat + position)
+          (state.eth1Data before).depositRoot = true)
+    (registryRoom : ∀ before : fork < .hegota, state.validators.data.size +
+      (block.body.deposits before).data.size ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat)
+    (pendingRoom : ∀ before : fork < .hegota,
+      (state.pendingDeposits electra).data.size + (block.body.deposits before).data.size ≤
+        preset.PENDING_DEPOSITS_LIMIT.toNat)
+    (scores : InactivityScoresMatch state)
+    (executes : ∀ headed, processBlockHeader state block = .ok headed →
+      ∀ bellatrix : .bellatrix ≤ fork, ∃ executed,
+        processBlockExecution config .bls engine headed block.body bellatrix = .ok executed)
+    (syncKeys : ∀ pubkey ∈
+        (state.currentSyncCommittee (Nat.le_trans (by decide) electra)).value.pubkeys.toList,
+      ∃ validator ∈ state.validators.data.toList, validator.pubkey = pubkey)
+    (roots : preset.RootsReachPreviousEpoch)
+    (slotRoom : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64)
+    (increment : preset.EFFECTIVE_BALANCE_INCREMENT ≠ 0)
+    (scaled : preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64)
+    (incrementLe : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ preset.largestEffectiveBalance)
+    (holds : WithinBudget budget scoreBound state)
+    (participation : ParticipationMatches state)
+    {datas : List AttestationData}
+    (room : budget + datas.length * (state.validators.data.size *
+      (64 * preset.baseRewardCeiling) / 448) +
+        state.validators.data.size * (64 * preset.baseRewardCeiling) < 2 ^ 64)
+    (recent : ∀ data ∈ datas, data.target.epoch = getPreviousEpoch state ∨
+      data.target.epoch = getCurrentEpoch state)
+    (slotEpoch : ∀ data ∈ datas, data.target.epoch = computeEpochAtSlot preset data.slot)
+    (past : ∀ data ∈ datas, data.slot.toNat < state.slot.toNat)
+    (early : ∀ data ∈ datas,
+      data.slot.toNat + preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat ≤ state.slot.toNat)
+    (indexed : ∀ data ∈ datas, data.index = 0)
+    (shuffleRoom : ∀ data ∈ datas, (getActiveValidatorIndices state data.target.epoch).length *
+      ((getCommitteeCountPerSlot state data.target.epoch).toNat *
+        preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64)
+    (source : ∀ data ∈ datas, data.source =
+      if data.target.epoch = getCurrentEpoch state then state.currentJustifiedCheckpoint
+      else state.previousJustifiedCheckpoint)
+    (sum : ∀ data ∈ datas, ∀ committees, (List.range
+        (getCommitteeCountPerSlot state data.target.epoch).toNat).mapM
+      (fun position => getBeaconCommittee state data.slot position.toUInt64) = .ok committees →
+        (((committees.flatMap (honestSigners honest)).map key).map (·.val)).sum ≠ 0)
+    (built : List.Forall₂ (fun data attestation =>
+      honestSlotAggregate electra config state honest key data = .ok attestation)
+        datas block.body.attestations.data.toList) :
+    ∃ after, processBlock config .bls engine state block = .ok after ∧
+      ∀ data ∈ datas, getBlockRoot state data.target.epoch = .ok data.target.root →
+        ∀ committeeIndex committee,
+          committeeIndex < getCommitteeCountPerSlot state data.target.epoch →
+          getBeaconCommittee state data.slot committeeIndex = .ok committee →
+            ∀ index ∈ committee, index ∈ honest → TargetFlagAt (recentParticipation after
+              (Nat.le_trans (by decide) electra) (data.target.epoch == getCurrentEpoch state))
+                index.toNat := by
+  have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
+  obtain ⟨proposer, found, pubkey⟩ := registered block.proposerIndex (Finset.mem_insert_self _ _)
+  have lengths : block.body.attestations.data.toList.length = datas.length :=
+    built.length_eq.symm
+  obtain ⟨after, attested, marked, processed, carried⟩ := processBlock_honestBlock_of_attested
+    altair beforeGloas apart honestBlock ⟨proposer, found, pubkey, unslashed _ found⟩ fresh
+    votesRoom periodFits proven registryRoom (fun _ before => pendingRoom before) scores
+    executes syncKeys roots slotRoom increment scaled incrementLe holds participation
+    (by rw [lengths]; exact room)
+    (fun preElectra => absurd electra (Nat.not_le_of_lt preElectra))
+    (fun attested => ∀ data ∈ datas,
+      getBlockRoot state data.target.epoch = .ok data.target.root →
+        ∀ committeeIndex committee,
+          committeeIndex < getCommitteeCountPerSlot state data.target.epoch →
+          getBeaconCommittee state data.slot committeeIndex = .ok committee →
+            ∀ index ∈ committee, index ∈ honest → TargetFlagAt (recentParticipation attested
+              altair (data.target.epoch == getCurrentEpoch state)) index.toNat)
+    fun input kept proposerI => by
+      have holdsI := kept.budget _ _ holds
+      have slotI := kept.slot
+      have validatorsI := kept.validators
+      have currentI : getCurrentEpoch input = getCurrentEpoch state := by
+        unfold getCurrentEpoch
+        rw [slotI]
+      have previousI : getPreviousEpoch input = getPreviousEpoch state := by
+        unfold getPreviousEpoch
+        rw [currentI]
+      -- The registry holds the proposer, so it is not empty.
+      have proposerInside : block.proposerIndex.toNat < state.validators.data.size := by
+        unfold getValidator at found
+        split at found
+        · rename_i located
+          exact (Array.getElem?_eq_some_iff.mp located).1
+        · cases found
+      -- Each aggregate is for a slot of the previous or the current epoch.
+      have bounds : ∀ data ∈ datas,
+          getPreviousEpoch state ≤ computeEpochAtSlot preset data.slot ∧
+            computeEpochAtSlot preset data.slot ≤ getCurrentEpoch state := by
+        intro data member
+        rw [← slotEpoch data member]
+        have := getPreviousEpoch_le state
+        rcases recent data member with same | same <;> rw [same]
+        · exact ⟨UInt64.le_refl _, this⟩
+        · exact ⟨this, UInt64.le_refl _⟩
+      -- The committees of each slot, and their count, are the same on both states.
+      have committeesI : ∀ data ∈ datas, ∀ index,
+          getBeaconCommittee input data.slot index = getBeaconCommittee state data.slot index :=
+        fun data member index =>
+          kept.committees _ (bounds data member).1 (bounds data member).2 _ index rfl
+      have activeI : ∀ epoch,
+          getActiveValidatorIndices input epoch = getActiveValidatorIndices state epoch := by
+        intro epoch
+        unfold getActiveValidatorIndices
+        rw [validatorsI]
+      have countI : ∀ epoch,
+          getCommitteeCountPerSlot input epoch = getCommitteeCountPerSlot state epoch := by
+        intro epoch
+        unfold getCommitteeCountPerSlot
+        rw [activeI]
+      -- The honest aggregates built on the state are those built on the input state.
+      have builtI : List.Forall₂ (fun data attestation =>
+          honestSlotAggregate electra config input honest key data = .ok attestation)
+            datas block.body.attestations.data.toList :=
+        forall₂_imp_of_mem built fun data _ member made => by
+          rw [honestSlotAggregate_eq_of_kept electra kept (bounds data member).1
+            (bounds data member).2]
+          exact made
+      have participationI : ParticipationMatches input := fun altair => by
+        rw [kept.previousParticipation, kept.currentParticipation, validatorsI]
+        exact participation altair
+      -- The attestation steps accept them on the input state, which reads the same values.
+      obtain ⟨attested, attestedOk, flagged⟩ := foldlM_processAttestation_honestSlotAggregate
+        (state := input) electra beforeGloas (honest := honest) (key := key)
+        state.latestBlockHeader.slot roots (by rw [slotI]; exact slotRoom) increment scaled
+        holdsI participationI (by rw [validatorsI]; exact room)
+        (fun data member => by rw [previousI, currentI]; exact recent data member) slotEpoch
+        (fun data member => by rw [slotI]; exact past data member)
+        (fun data member => by rw [slotI]; exact early data member) indexed
+        (fun data member => by rw [activeI, countI]; exact shuffleRoom data member)
+        (fun data member => by
+          rw [currentI, kept.currentJustified, kept.previousJustified]
+          exact source data member)
+        (fun index member => by
+          unfold getValidator
+          rw [validatorsI]
+          exact registered index (Finset.mem_insert_of_mem member))
+        (fun data member committees committeesOk => by
+          rw [countI] at committeesOk
+          simp only [committeesI data member] at committeesOk
+          exact sum data member committees committeesOk)
+        ⟨block.proposerIndex, proposerI, by rw [validatorsI]; exact proposerInside⟩ builtI
+      refine ⟨attested, attestedOk, fun data member rooted committeeIndex committee below
+        committeeOk index inside honestIndex => ?_⟩
+      have flag := flagged data member
+        (by simp only [getBlockRoot, getBlockRootAtSlot_congr slotI kept.blockRoots]; exact rooted)
+        committeeIndex committee (by rw [countI]; exact below)
+        (by rw [committeesI data member]; exact committeeOk) index inside honestIndex
+      rw [currentI] at flag
+      exact flag
+  exact ⟨after, processed, fun data member rooted committeeIndex committee below committeeOk index
+    inside honestIndex => carried _ _
+      (marked data member rooted committeeIndex committee below committeeOk index inside
+        honestIndex)⟩
 
 /-- A block at the slot of a state that passes its steps also passes them with both checks.
 
