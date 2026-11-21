@@ -33,6 +33,7 @@ public import EthLib.Consensus.Proofs.BuilderApi
 public import EthLib.Consensus.Proofs.BuilderApi.AuthData
 public import EthLib.Consensus.Proofs.BuilderApi.Bid
 public import EthLib.Consensus.Proofs.BuilderApi.Encoding
+public import EthLib.Consensus.Proofs.BuilderApi.Flow
 public import EthLib.Consensus.Proofs.BuilderApi.RequestAuth
 public import EthLib.Consensus.Proofs.BuilderApi.GloasBid
 public import EthLib.Consensus.Proofs.BuilderApi.Registration

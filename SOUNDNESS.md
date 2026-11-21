@@ -6591,6 +6591,10 @@ From Bellatrix to Fulu, the proposer signs a blinded block, and the builder then
 `BlindedBeaconBlockBody.unblind_blind` and `BeaconBlockBody.blind_unblind` (`Consensus/Proofs/BuilderApi.lean`) show that unblinding with the payload undoes blinding, and the converse.
 `BlindedBeaconBlockBody.unblind_eq_headerMismatch_iff` shows that unblinding fails exactly when the header of the payload differs from that of the blinded body, and `BlindedBeaconBlockBody.unblind_ne_header` that no other failure occurs.
 `verifyBlockSignature_unblind` shows that the one signature of the proposer verifies on the full block exactly as on the blinded block, when the block names the proposer of the state.
+`feeRecipient_unblind_of_processBid` (`Consensus/Proofs/BuilderApi/Flow.lean`) joins these steps, from Bellatrix to Fulu.
+A proposer accepts a bid, builds the blinded body from the header of the bid, and unblinds it with the revealed payload.
+That payload then names the fee recipient that the proposer checked, which the check takes to be the one it registered last.
+The theorem shows that the payload names the fee recipient, not that the fee recipient receives the value of the bid, which is a fact of the execution layer.
 
 From Bellatrix to Fulu, a builder keeps a registration only when five rules hold, in the order of the source.
 `processRegistration_ok_iff` (`Consensus/Proofs/BuilderApi/Registration.lean`) states them on the inputs.
@@ -7491,12 +7495,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 552 operations and 51 size constants.
-The Python extension calls 552 of the operations and 51 of the constants.
+Lean exports 553 operations and 51 size constants.
+The Python extension calls 553 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12414 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (368), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1635), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (856), `x25519.c` (21), `xmss.c` (344).
+12425 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (368), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (39), `kzg.c` (511), `libp2p.c` (187), `module.c` (1636), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (857), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
