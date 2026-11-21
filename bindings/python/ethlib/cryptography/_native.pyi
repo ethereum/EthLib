@@ -2072,6 +2072,10 @@ def engine_exchange_transition_configuration(terminal_total_difficulty: int, ter
     """The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration."""
     ...
 
+def engine_get_inclusion_list(candidates: list[bytes], request: dict) -> list[str]:
+    """The answer to an `engine_getInclusionListV1` request, from the candidates of the node."""
+    ...
+
 def engine_exchange_capabilities(request: dict) -> list[str]:
     """The answer to an `engine_exchangeCapabilities` request: the methods that EthLib defines."""
     ...

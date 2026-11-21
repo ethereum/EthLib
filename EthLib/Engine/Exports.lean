@@ -7,6 +7,7 @@ public import EthLib.Engine.Exports.Errors
 public import EthLib.Engine.Exports.ExecutionEngine
 public import EthLib.Engine.Exports.ForkchoiceUpdated
 public import EthLib.Engine.Exports.GetBlobs
+public import EthLib.Engine.Exports.GetInclusionList
 public import EthLib.Engine.Exports.GetPayload
 public import EthLib.Engine.Exports.GetProof
 public import EthLib.Engine.Exports.Jwt

@@ -1347,6 +1347,8 @@ static PyMethodDef methods[] = {
    DOC_engine_exchange_capabilities},
   {"engine_get_client_version", py_engine_get_client_version, METH_VARARGS,
    DOC_engine_get_client_version},
+  {"engine_get_inclusion_list", py_engine_get_inclusion_list, METH_VARARGS,
+   DOC_engine_get_inclusion_list},
   {"engine_error_object", py_engine_error_object, METH_VARARGS, DOC_engine_error_object},
   {"engine_rewrite_params", py_engine_rewrite_params, METH_VARARGS,
    DOC_engine_rewrite_params},
