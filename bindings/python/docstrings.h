@@ -911,6 +911,18 @@
 #define DOC_consensus_compute_fork_digest \
   "The fork digest at an epoch, on the chain with the given root of the genesis validators."
 
+#define DOC_consensus_enr_fork_id \
+  "The `eth2` value that a node writes at an epoch, as its digest, next version and next epoch."
+
+#define DOC_consensus_next_fork_digest \
+  "The `nfd` value that a node writes at an epoch: the digest of the next fork."
+
+#define DOC_consensus_bootnode_fork_id \
+  "The `eth2` value of a bootnode record made before genesis, as its three fields."
+
+#define DOC_consensus_enr_record \
+  "A signed \"v4\" record of a consensus node at an epoch, with its consensus entries."
+
 #define DOC_consensus_digest_epochs \
   "The epochs at which the fork digest can change, in increasing order and without repeats."
 

@@ -1224,6 +1224,22 @@ def consensus_compute_fork_digest(name: str, config: dict[str, Any] | None, gene
     """The fork digest at an epoch, on the chain with the given root of the genesis validators."""
     ...
 
+def consensus_enr_fork_id(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, epoch: int) -> tuple[bytes, bytes, int]:
+    """The `eth2` value that a node writes at an epoch, as its digest, next version and next epoch."""
+    ...
+
+def consensus_next_fork_digest(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, epoch: int) -> bytes:
+    """The `nfd` value that a node writes at an epoch: the digest of the next fork."""
+    ...
+
+def consensus_bootnode_fork_id(name: str, config: dict[str, Any] | None) -> tuple[bytes, bytes, int]:
+    """The `eth2` value of a bootnode record made before genesis, as its three fields."""
+    ...
+
+def consensus_enr_record(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, epoch: int, secret_key: bytes, seq: int, attnets: bytes, syncnets: bytes, cgc: int) -> bytes:
+    """A signed "v4" record of a consensus node at an epoch, with its consensus entries."""
+    ...
+
 def consensus_digest_epochs(name: str, config: dict[str, Any] | None) -> list[int]:
     """The epochs at which the fork digest can change, in increasing order and without repeats."""
     ...

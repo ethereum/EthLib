@@ -132,6 +132,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.UnrealizedCheckpoints
 public import EthLib.Consensus.Proofs.ForkChoice.VoteDelivery
 public import EthLib.Consensus.Proofs.ForkChoice.VoteOrigins
 public import EthLib.Consensus.Proofs.ForkChoice.VoteRecords
+public import EthLib.Consensus.Proofs.Enr
 public import EthLib.Consensus.Proofs.ForkDigest
 public import EthLib.Consensus.Proofs.ForkSchedule
 public import EthLib.Consensus.Proofs.Gossip.Attestation
