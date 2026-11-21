@@ -10,9 +10,8 @@ Not yet released.
 ### Proof additions
 
 - `PinDrift.Internal.total_band_of_setting` is public, in `PinDriftBound/Setting.lean`.
-  In the pin's setting, take a pre-Gloas state on a run from the finalized state, by R's next epoch, where both total active balance reads succeed.
-  Then each total is at most three halves of the other: twice R's total is at most three times the state's, and twice the state's is at most three times R's.
-  `CreditBudgets` and `HeaderSupplies` call it instead of the guard's band with every premise of the setting.
+  In the pin's setting, take a pre-Gloas state on a run from the finalized state, by R's next epoch.
+  When both total active balance reads succeed, each total is at most three halves of the other.
 
 - `DirectSafety.exitChurnLimit_total` is public: it gives the total active balance read by a successful exit churn limit before Gloas.
   `ExitCharges` reads it for the pin reserve, and `BlockFold` reads it for the deposit churn bound.

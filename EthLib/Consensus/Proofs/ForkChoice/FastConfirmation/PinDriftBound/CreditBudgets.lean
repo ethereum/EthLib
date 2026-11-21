@@ -2699,7 +2699,7 @@ theorem slashedRB_of_withdrawable (config : Config)
   rw [Internal.slashedRB_eq]
   simpa [found, slashed] using late
 
-/-- A key unslashed at `c` and slashed at a later state has a late withdrawable epoch.
+/-- A key unslashed at `c` and slashed later on a run before Gloas has a late withdrawable epoch.
 
 That epoch is at least `c`'s epoch plus the length of the slashings vector. -/
 private theorem withdrawable_of_clean_run (caps : CapOrder preset)
@@ -3709,7 +3709,7 @@ private theorem pre_credit_seat (h : Setting config checks g split fin pulled an
       rw [pre.currentSyncCommittee_eq_of_same_period h.early samePeriod altair altair]
       exact mem
 
-/-- The rounding of an increment's reward is at most a third of a band, from quotient thirty. -/
+/-- Three roundings of an increment's reward are below the increment, from quotient thirty. -/
 private theorem whistle_round_le (inc W : ℕ) (quotient : 30 ≤ W) (large : 3600 ≤ inc) :
     3 * ((inc + W - 1) / W) ≤ inc - 1 := by
   have le := Nat.div_mul_le_self (inc + W - 1) W
