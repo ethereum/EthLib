@@ -528,6 +528,18 @@ def discv5_reencode_message(plaintext: bytes) -> bytes:
     """The plaintext of the decoded message, written again by the encoder."""
     ...
 
+def discv5_answers_request(request: bytes, answer: bytes) -> bool:
+    """Whether a message plaintext answers a request plaintext."""
+    ...
+
+def discv5_talk_response(request: bytes) -> bytes:
+    """The plaintext of the TALKRESP of a node that knows no protocol, for a TALKREQ plaintext."""
+    ...
+
+def discv5_nodes_match(recipient: bytes, distances: list[int], records: list[bytes]) -> bool:
+    """Whether records match the distances of a FINDNODE, from the node ID of its recipient."""
+    ...
+
 def discv5_make_whoareyou(dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: int) -> tuple[bytes, bytes]:
     """Node B's WHOAREYOU packet for node A, and its challenge data."""
     ...

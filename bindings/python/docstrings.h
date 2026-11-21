@@ -389,6 +389,15 @@
 #define DOC_discv5_reencode_message \
   "The plaintext of the decoded message, written again by the encoder."
 
+#define DOC_discv5_answers_request \
+  "Whether a message plaintext answers a request plaintext."
+
+#define DOC_discv5_talk_response \
+  "The plaintext of the TALKRESP of a node that knows no protocol, for a TALKREQ plaintext."
+
+#define DOC_discv5_nodes_match \
+  "Whether records match the distances of a FINDNODE, from the node ID of its recipient."
+
 #define DOC_discv5_make_whoareyou \
   "Node B's WHOAREYOU packet for node A, and its challenge data."
 
