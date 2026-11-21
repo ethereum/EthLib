@@ -40,6 +40,7 @@ SLOTS_PER_EPOCH = 8
 
 # The slot of the crafted states: epoch 5 of the minimal preset.
 SLOT = 5 * SLOTS_PER_EPOCH + 3
+RANDAO_OUT_OF_RANGE = "Epoch is out of range for the `randao_mixes` of the state"
 
 # The pairs of a query and a fork at which the state holds its field, and before which it does not.
 AFTER = [(query, fork) for query, first in SINCE.items() for fork in ORDER[ORDER.index(first) :]]
@@ -141,8 +142,25 @@ def test_randao_reads_the_buffer(fork: str) -> None:
     # Entry i of the crafted buffer holds the mix i + 1, and the state is in epoch 5.
     assert _query(fork, "randao") == {"data": {"randao": _hex(6, 32)}}
     assert _query(fork, "randao", 2) == {"data": {"randao": _hex(3, 32)}}
-    # The buffer refuses no epoch: one a full turn later reads the same entry.
-    assert _query(fork, "randao", 2 + length) == {"data": {"randao": _hex(3, 32)}}
+    # A later epoch has no mix yet, even one a full turn later that reads the same entry.
+    for epoch in (6, 2 + length):
+        with raises(consensus.ConsensusError, RANDAO_OUT_OF_RANGE) as error:
+            _query(fork, "randao", epoch)
+        assert error.value.code == 400
+
+
+@pytest.mark.parametrize("fork", ORDER)
+def test_randao_refuses_an_overwritten_epoch(fork: str) -> None:
+    length = len(_json(fork)["randao_mixes"])
+    # In epoch 5 + length, the entry of epoch 5 holds the mix of the current epoch.
+    state = {**_json(fork), "slot": str((5 + length) * SLOTS_PER_EPOCH)}
+    encoded = consensus.api_ssz("minimal", FORKS[fork], "BeaconState", state)
+    with raises(consensus.ConsensusError, RANDAO_OUT_OF_RANGE) as error:
+        consensus.api_state_query("minimal", FORKS[fork], encoded, "randao", 5)
+    assert error.value.code == 400
+    # The entry of epoch 6 still holds its mix, the value 7 of the crafted buffer.
+    answer = consensus.api_state_query("minimal", FORKS[fork], encoded, "randao", 6)
+    assert answer == {"data": {"randao": _hex(7, 32)}}
 
 
 @pytest.mark.parametrize(("query", "fork"), AFTER)
