@@ -824,6 +824,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the KZG trusted setup decodes its hex strings with the reader of Base, and its own copy is removed ([#3837](https://github.com/ethereum/EthLib/issues/3837)).
+  `TrustedSetup.nibble?`, `TrustedSetup.hexToBytesAux` and `TrustedSetup.hexToBytes?` are removed, and the decoders of the setup give the same results.
+  `SetupLagrange.coords_of_encodes`, `SetupTorsion.modulus_smul_eq_zero`, `TrustedSetup.hexListToBytes_mem` and `TrustedSetup.hexListToBytes_getElem` state `Base.hexBytes? s.toList` where they stated `TrustedSetup.hexToBytes? s`.
+  In `SetupTorsion`, `nibble?_eq` becomes `hexValue?_eq` and `hexToBytesAux_eq` becomes `hexBytesFrom?_eq`, on the Base readers, and `byte_eq` states `16 * a + b` in place of `a <<< 4 ||| b`, for any two numbers, with no bound.
+  Migration: write `Base.hexBytes? s.toList` for `TrustedSetup.hexToBytes? s`.
+
 - In Lean, the SSZ JSON codec reads hex with the readers of Base, and its own copies are removed ([#3837](https://github.com/ethereum/EthLib/issues/3837)).
   `Ssz.hexDigit` and `Ssz.hexBytesFrom` are removed, and `Ssz.hexBytes` reads its digits with `Base.hexBytes?`, with the same results.
   The lemmas `Ssz.hexDigit_toUpper`, `Ssz.hexBytesFrom_map_toUpper`, `Ssz.hexBytesFrom_eq` and `Ssz.hexBytes_cons` are removed.

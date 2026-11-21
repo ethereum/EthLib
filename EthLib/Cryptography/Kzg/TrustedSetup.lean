@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Hex
 public import EthLib.Cryptography.Bls
 public import EthLib.Cryptography.Kzg.BitReversal
 public import EthLib.Cryptography.Kzg.Constants
@@ -33,27 +34,6 @@ structure TrustedSetup where
   g2Monomial : Vector Bls.G2 KZG_SETUP_G2_LENGTH
 
 namespace TrustedSetup
-
-/-- The value of one hexadecimal digit, in either case. -/
-def nibble? (c : Char) : Option UInt8 :=
-  let n := c.toNat
-  if 0x30 ≤ n ∧ n ≤ 0x39 then some (UInt8.ofNat (n - 0x30))
-  else if 0x61 ≤ n ∧ n ≤ 0x66 then some (UInt8.ofNat (n - 0x57))
-  else if 0x41 ≤ n ∧ n ≤ 0x46 then some (UInt8.ofNat (n - 0x37))
-  else none
-
-/-- Decode pairs of hexadecimal digits onto `acc`.
-
-An odd number of digits, or a character that is not a digit, gives `none`. -/
-def hexToBytesAux : List Char → ByteArray → Option ByteArray
-  | [], acc => some acc
-  | [_], _ => none
-  | hi :: lo :: rest, acc => do
-    hexToBytesAux rest (acc.push (((← nibble? hi) <<< 4) ||| (← nibble? lo)))
-
-/-- Decode a hexadecimal string without a `0x` prefix. -/
-def hexToBytes? (s : String) : Option ByteArray :=
-  hexToBytesAux s.toList ByteArray.empty
 
 /-- Decode one compressed point of `G1` of the setup.
 
@@ -96,7 +76,7 @@ def ofBytes (g1LagrangeBytes g1MonomialBytes g2MonomialBytes : Array ByteArray) 
 
 /-- Decode a list of hexadecimal strings, or reject the list if one string is malformed. -/
 def hexListToBytes (hex : Array String) : Except KzgError (Array ByteArray) :=
-  hex.mapM fun s => match hexToBytes? s with
+  hex.mapM fun s => match Base.hexBytes? s.toList with
     | some b => .ok b
     | none   => .error .invalidTrustedSetup
 
@@ -108,7 +88,7 @@ A position past the 65 points gives the same error as a string that does not dec
 def g2MonomialOfHex (i : Nat) : Except KzgError Bls.G2 :=
   match TrustedSetupData.g2MonomialHex[i]? with
   | some hex =>
-    match hexToBytes? hex with
+    match Base.hexBytes? hex.toList with
     | some b => decodeG2 b
     | none => .error .invalidTrustedSetup
   | none => .error .invalidTrustedSetup
