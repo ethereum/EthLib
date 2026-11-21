@@ -1082,11 +1082,9 @@ private theorem keeps_processSlashingsReset (computed : processSlashingsReset st
   obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq computed
   exact Keeps.of_eq rfl rfl rfl rfl rfl
 
-private theorem keeps_processHistoricalRootsUpdate
-    (computed : processHistoricalRootsUpdate state = .ok after) : Keeps state after := by
+private theorem keeps_processHistoricalRootsUpdate {before : fork < .shapella}
+    (computed : processHistoricalRootsUpdate state before = .ok after) : Keeps state after := by
   unfold processHistoricalRootsUpdate at computed
-  split at computed
-  · cases computed
   simp only [bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, _, computed⟩ := computed
   split at computed
@@ -1164,8 +1162,8 @@ theorem activeStep_processSlashingsReset (computed : processSlashingsReset state
   (keeps_processSlashingsReset computed).activeStep
 
 /-- The historical roots update keeps the slot and activity. -/
-theorem activeStep_processHistoricalRootsUpdate
-    (computed : processHistoricalRootsUpdate state = .ok after) : ActiveStep state after :=
+theorem activeStep_processHistoricalRootsUpdate {before : fork < .shapella}
+    (computed : processHistoricalRootsUpdate state before = .ok after) : ActiveStep state after :=
   (keeps_processHistoricalRootsUpdate computed).activeStep
 
 /-- Before Altair, what the epoch step keeps, writes and rotates. -/

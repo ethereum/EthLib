@@ -71,10 +71,10 @@ def action (config : Config) (checks : SignatureChecks) (stage : EpochStage)
   | .randaoReset => processRandaoMixesReset state
   | .history =>
     if capella : .shapella ≤ fork then processHistoricalSummariesUpdate state capella
-    else processHistoricalRootsUpdate state
+    else processHistoricalRootsUpdate state (Nat.lt_of_not_le capella)
   | .participation =>
     if altair : .altair ≤ fork then pure (processParticipationFlagUpdates state altair)
-    else processParticipationRecordUpdates state
+    else processParticipationRecordUpdates state (Nat.lt_of_not_le altair)
   | .syncCommittees =>
     if altair : .altair ≤ fork then processSyncCommitteeUpdates state altair else pure state
   | .proposerLookahead =>
@@ -107,10 +107,10 @@ def Edge (config : Config) (checks : SignatureChecks) (stage : EpochStage)
   | .randaoReset => processRandaoMixesReset s = .ok t
   | .history =>
     if h : .shapella ≤ fork then processHistoricalSummariesUpdate s h = .ok t
-    else processHistoricalRootsUpdate s = .ok t
+    else processHistoricalRootsUpdate s (Nat.lt_of_not_le h) = .ok t
   | .participation =>
     if h : .altair ≤ fork then processParticipationFlagUpdates s h = t
-    else processParticipationRecordUpdates s = .ok t
+    else processParticipationRecordUpdates s (Nat.lt_of_not_le h) = .ok t
   | .syncCommittees =>
     if h : .altair ≤ fork then processSyncCommitteeUpdates s h = .ok t else s = t
   | .proposerLookahead =>
@@ -353,7 +353,7 @@ theorem processEpochAltair_eq_epochBeforePayments_bind (config : Config) (checks
       let state ← processSlashingsReset state
       let state ← processRandaoMixesReset state
       let state ← if capella : .shapella ≤ fork then processHistoricalSummariesUpdate state capella
-        else processHistoricalRootsUpdate state
+        else processHistoricalRootsUpdate state (Nat.lt_of_not_le capella)
       let state := processParticipationFlagUpdates state altair
       let state ← processSyncCommitteeUpdates state altair
       let state ← (if fulu : .fusaka ≤ fork then liftAccessor (processProposerLookahead state fulu)

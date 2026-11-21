@@ -2184,11 +2184,10 @@ theorem processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
   · subst summaries
     exact laws.refl _
 
-theorem processHistoricalRootsUpdate
-    (computed : Consensus.processHistoricalRootsUpdate state = .ok after) : R state after := by
+theorem processHistoricalRootsUpdate {before : fork < .shapella}
+    (computed : Consensus.processHistoricalRootsUpdate state before = .ok after) :
+    R state after := by
   unfold Consensus.processHistoricalRootsUpdate at computed
-  split at computed
-  · cases computed
   simp only [bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, _, computed⟩ := computed
   split at computed
@@ -2198,14 +2197,10 @@ theorem processHistoricalRootsUpdate
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ laws.refl _
 
-theorem processParticipationRecordUpdates
-    (computed : Consensus.processParticipationRecordUpdates state = .ok after) :
+theorem processParticipationRecordUpdates {before : fork < .altair}
+    (computed : Consensus.processParticipationRecordUpdates state before = .ok after) :
     R state after := by
-  unfold Consensus.processParticipationRecordUpdates at computed
-  split at computed
-  · cases computed
-  simp only [pure, Except.pure, Except.ok.injEq] at computed
-  subst computed
+  cases computed
   exact (laws.participationRecords _)
 
 theorem processSyncCommitteeUpdates {altair : .altair ≤ fork}
@@ -2497,12 +2492,13 @@ theorem frame_processRandaoMixesReset (computed : processRandaoMixesReset state 
     MutatorFrame state after :=
   mutatorEpochFrameLaws.processRandaoMixesReset computed
 
-theorem frame_processHistoricalRootsUpdate
-    (computed : processHistoricalRootsUpdate state = .ok after) : MutatorFrame state after :=
+theorem frame_processHistoricalRootsUpdate {before : fork < .shapella}
+    (computed : processHistoricalRootsUpdate state before = .ok after) :
+    MutatorFrame state after :=
   mutatorEpochFrameLaws.processHistoricalRootsUpdate computed
 
-theorem frame_processParticipationRecordUpdates
-    (computed : processParticipationRecordUpdates state = .ok after) :
+theorem frame_processParticipationRecordUpdates {before : fork < .altair}
+    (computed : processParticipationRecordUpdates state before = .ok after) :
     MutatorFrame state after :=
   mutatorEpochFrameLaws.processParticipationRecordUpdates computed
 

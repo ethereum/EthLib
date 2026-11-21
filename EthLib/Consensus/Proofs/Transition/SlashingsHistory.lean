@@ -82,11 +82,7 @@ theorem EpochStage.Edge.slashingsHistory {stage : EpochStage} {s t : BeaconState
     split at edge
     · subst edge
       exact ⟨rfl, rfl, rfl⟩
-    · unfold processParticipationRecordUpdates at edge
-      split at edge
-      · cases edge
-      simp only [pure, Except.pure, Except.ok.injEq] at edge
-      subst edge
+    · cases edge
       exact ⟨rfl, rfl, rfl⟩
   case syncCommittees =>
     split at edge

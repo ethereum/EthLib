@@ -250,8 +250,6 @@ theorem EpochStage.Edge.records {stage : EpochStage} {s t : BeaconState preset f
       repeat' (split at edge <;> try cases edge)
       all_goals exact ⟨rfl, rfl, rfl, rfl, rfl⟩
     · unfold processHistoricalRootsUpdate at edge
-      split at edge
-      · cases edge
       simp only [bind_ok_iff, liftAccessor_ok] at edge
       obtain ⟨_, _, edge⟩ := edge
       split at edge
@@ -371,8 +369,6 @@ theorem EpochStage.Edge.exitQueue {stage : EpochStage} {s t : BeaconState preset
       repeat' (split at edge <;> try cases edge)
       all_goals exact ⟨rfl, rfl⟩
     · unfold processHistoricalRootsUpdate at edge
-      split at edge
-      · cases edge
       simp only [bind_ok_iff, liftAccessor_ok] at edge
       obtain ⟨_, _, edge⟩ := edge
       split at edge
