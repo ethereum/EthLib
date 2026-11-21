@@ -30,7 +30,7 @@ public section
 
 namespace EthLib.Execution.Blocks.Exports
 
-open EthLib.Exports (Result PyValue forkUpTo pyExport)
+open EthLib.Exports (ExportError Result PyValue forkUpTo pyExport rejectArgument toResult)
 
 /-- The difficulty of a block at a named fork, from its number, its timestamp and its parent.
 
@@ -53,9 +53,8 @@ def blockDifficultyExport (args : PyValue) : Result PyValue :=
 
 The ommer check and the rewards root read the forks of a chain in this form. -/
 def chainForksOf (forks : List (String × Nat)) : Result ByteArray :=
-  (Serialization.Rlp.encode (.list (forks.map fun (name, first) =>
-    .list [.bytes name.toUTF8, Serialization.Rlp.Codec.toItem first]))).mapError
-    fun e => (e.code, s!"forks have no encoding: {reprStr e}")
+  toResult "forks have no encoding" (Serialization.Rlp.encode (.list (forks.map fun (name, first) =>
+    .list [.bytes name.toUTF8, Serialization.Rlp.Codec.toItem first])))
 
 /-- The RLP form of the forks of a chain, each with its first block.
 
@@ -67,14 +66,13 @@ def chainForksExport (args : PyValue) : Result PyValue :=
 /-- The header at a named fork that RLP bytes hold. -/
 def headerOf (fork header : ByteArray) : Result (Σ fork : Base.Fork, Header fork) := do
   let fork ← forkUpTo .glamsterdam fork
-  let header : Header fork ← (Serialization.Rlp.Codec.decode header).mapError
-    fun e => (e.code, s!"header rejected: {reprStr e}")
+  let header : Header fork ← toResult "header rejected" (Serialization.Rlp.Codec.decode header)
   pure ⟨fork, header⟩
 
 /-- The seal hash of a header at a named fork: its Keccak-256 hash without mix digest and nonce. -/
 def sealHashOf (args : String × ByteArray) : Result ByteArray := do
   let ⟨_, header⟩ ← headerOf args.1.toUTF8 args.2
-  let hash ← header.sealHash.mapError fun e => (e.code, s!"header has no encoding: {reprStr e}")
+  let hash ← toResult "header has no encoding" header.sealHash
   pure ⟨hash.toArray⟩
 
 /-- The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce.
@@ -84,12 +82,16 @@ The arguments are the name of the fork and the header in RLP form. -/
 def sealHashExport (args : PyValue) : Result PyValue :=
   pyExport sealHashOf args
 
+/-- A proof-of-work error reaches Python with its code, and its message prints it on one line. -/
+instance : ExportError PowError where
+  code := PowError.code
+  message := oneLine
+
 /-- Check the proof of work of a header in RLP form, at a named fork before Paris. -/
 def checkOf (args : String × ByteArray) : Result Bool := do
   let ⟨fork, header⟩ ← headerOf args.1.toUTF8 args.2
-  if .paris ≤ fork then throw (0, "a header from Paris on has no proof of work")
-  (checkProofOfWork header).map (fun () => true) |>.mapError
-    fun e => (e.code, s!"proof of work invalid: {oneLine e}")
+  if .paris ≤ fork then rejectArgument none "a header from Paris on has no proof of work"
+  toResult "proof of work invalid" ((checkProofOfWork header).map fun () => true)
 
 /-- Check the proof of work of a header in RLP form, at a named fork before Paris.
 
@@ -97,6 +99,11 @@ The arguments are the name of the fork and the header in RLP form. -/
 @[export eth_pow_check]
 def checkExport (args : PyValue) : Result PyValue :=
   pyExport checkOf args
+
+/-- An ommer error reaches Python with its code, and its message prints it on one line. -/
+instance : ExportError OmmerError where
+  code := OmmerError.code
+  message := oneLine
 
 /-- Check the ommers of a block in RLP form, against recent blocks, each at the fork of its number.
 
@@ -111,16 +118,15 @@ A check seal of 0 leaves out the proof of work of the ommers, as for test chains
 def validateOmmersExport (forks recent block : ByteArray) (checkSeal : UInt8) :
     Result UInt8 := do
   let config ← chainOfForks forks
-  let rlpError (what : String) (e : Serialization.Rlp.RlpError) := (e.code, s!"{what}: {reprStr e}")
-  let items ← match (← (Serialization.Rlp.decode recent).mapError (rlpError "recent rejected")) with
+  let items ← match (← toResult "recent rejected" (Serialization.Rlp.decode recent)) with
     | .list items => pure items
-    | .bytes _ => throw (0, "recent blocks are not a list")
+    | .bytes _ => rejectArgument none "recent blocks are not a list"
   let recentBlocks ← items.mapM fun item => do
     let ⟨fork, b⟩ ← blockOnChain config item
     pure (RecentBlock.mk fork b.header b.ommers)
   let ⟨_, b⟩ ← blockOnChain config
-    (← (Serialization.Rlp.decode block).mapError (rlpError "block rejected"))
-  (validateOmmers config (checkSeal != 0) recentBlocks b.header b.ommers).map (fun () => 1)
-    |>.mapError fun e => (e.code, s!"ommers invalid: {oneLine e}")
+    (← toResult "block rejected" (Serialization.Rlp.decode block))
+  toResult "ommers invalid"
+    ((validateOmmers config (checkSeal != 0) recentBlocks b.header b.ommers).map fun () => 1)
 
 end EthLib.Execution.Blocks.Exports

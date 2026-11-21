@@ -8,6 +8,7 @@ from ethlib import chain, engine, precompiles, state
 from ethlib.errors import (
     BlockError,
     ChainError,
+    Devp2pError,
     EngineError,
     Era1Error,
     EthLibError,
@@ -34,10 +35,40 @@ from ethlib.execution import (
     trie,
 )
 from ethlib.execution.network import snap
+from ethlib.networking import devp2p, forkid
+from ethlib.networking.forkid import BLOCK
+from ethlib.serialization import rlp
 from raising import raises
 
 # An export turns the typed error of an operation into a code and a message.
 # Each case pins one way of doing so, with the code and the message that Python sees.
+
+# A Frontier header whose fields are zero, but for a difficulty and a gas limit of 1.
+HEADER = [
+    bytes(32),
+    bytes(32),
+    bytes(20),
+    bytes(32),
+    bytes(32),
+    bytes(32),
+    bytes(256),
+    b"\x01",
+    b"",
+    b"\x01",
+    b"",
+    b"",
+    b"",
+    bytes(32),
+    bytes(8),
+]
+# A chain that starts at Frontier, with a zero genesis hash.
+SCHEDULE = forkid.schedule(bytes(32), 0, [("frontier", BLOCK, 0)])
+# A chain configuration that activates no fork.
+CONFIG = {"chainId": 1, "depositContractAddress": "0x" + "00" * 20, "activations": []}
+# A legacy transaction with a gas limit of 1, below the intrinsic gas of 21000.
+LOW_GAS_TX = rlp.encode([b"", b"", b"\x01", b"", b"", b"", b"\x1b", b"\x01", b"\x01"])
+# The topic of the DepositEvent of the deposit contract, by EIP-6110.
+DEPOSIT_TOPIC = bytes.fromhex("649bbc62d0e31342afea4e5cd82d4049e7e1ee912fc0889aa790803be39038c5")
 
 
 @pytest.mark.parametrize(
@@ -308,6 +339,416 @@ from raising import raises
             "config: no chainId",
             lambda: chain.execution_blob_schedule({}, {}, 0, 0),
             id="chain-blob-schedule",
+        ),
+        # The Status announces eth/70 on an eth/69 session.
+        pytest.param(
+            EthWireError,
+            101,
+            "Status announces version 70, not the negotiated one",
+            lambda: network.check_status(
+                69,
+                SCHEDULE,
+                0,
+                0,
+                rlp.encode([b"\x46", b"\x01", bytes(32), [bytes(4), b""], b"", b"", bytes(32)]),
+            ),
+            id="eth-status",
+        ),
+        # A Status message is a list, not an empty string.
+        pytest.param(
+            EthWireError,
+            2,
+            "message data is not RLP of the expected shape",
+            lambda: network.check_status(69, SCHEDULE, 0, 0, b"\x80"),
+            id="eth-status-decode",
+        ),
+        # The answer repeats another request ID than the request.
+        pytest.param(
+            EthWireError,
+            206,
+            "response is not BlockHeaders with the request ID of the request",
+            lambda: network.check_headers(
+                69, rlp.encode([b"\x01", [b"\x01", b"\x01", b"", b""]]), rlp.encode([b"\x02", []])
+            ),
+            id="eth-headers",
+        ),
+        # The answer repeats another request ID than the request.
+        pytest.param(
+            EthWireError,
+            303,
+            "response is not PooledTransactions with the request ID of the request",
+            lambda: network.check_pooled(69, rlp.encode([b"\x01", []]), rlp.encode([b"\x02", []])),
+            id="eth-pool",
+        ),
+        # One receipt comes for a block with no transaction.
+        pytest.param(
+            EthWireError,
+            501,
+            "1 receipts delivered for 0 transactions",
+            lambda: network.check_partial_receipts(rlp.encode([]), 0, rlp.encode([b"\x01"])),
+            id="eth-partial-receipts",
+        ),
+        # A body is a list of its parts, not an empty string.
+        pytest.param(
+            EthWireError,
+            601,
+            "body is not the RLP list of its parts: EthLib.Serialization.Rlp.RlpError.bytesAsList",
+            lambda: network.check_body("frontier", rlp.encode(HEADER), b"\x80"),
+            id="eth-body-refused",
+        ),
+        # A Status message is a list, not an empty string.
+        pytest.param(
+            EthWireError,
+            2,
+            "event 0: message data is not RLP of the expected shape",
+            lambda: network.session(69, SCHEDULE, 0, 0, [(False, 0, b"\x80")]),
+            id="eth-session-event",
+        ),
+        # A GetBlockHeaders request comes before the peer's Status.
+        pytest.param(
+            EthWireError,
+            701,
+            "event 0: message ID 3 came before the peer's Status",
+            lambda: network.session(
+                69,
+                SCHEDULE,
+                0,
+                0,
+                [(False, 3, rlp.encode([b"\x01", [b"\x01", b"\x01", b"", b""]]))],
+            ),
+            id="eth-session-refused",
+        ),
+        # A request is a list, not an empty string.
+        pytest.param(
+            EthWireError,
+            2,
+            "message data is not RLP of the expected shape",
+            lambda: network.access_lists_answer(71, b"\x80", b"\x80", []),
+            id="eth-access-lists",
+        ),
+        # Our Hello is a list, not an empty string.
+        pytest.param(
+            Devp2pError,
+            0,
+            "our Hello: message is not RLP of the expected shape",
+            lambda: devp2p.session(b"\x80", []),
+            id="devp2p-hello",
+        ),
+        # A request is a list, not an empty string.
+        pytest.param(
+            SnapError,
+            2,
+            "message data is not RLP of the expected shape",
+            lambda: snap.codes_answer(1, b"\x80", b"\x80"),
+            id="snap-codes",
+        ),
+        # A start is empty or 32 bytes.
+        pytest.param(
+            SnapError,
+            0,
+            "bad start size: 1, expected 0 or 32",
+            lambda: snap.verify_storage_ranges([], b"\x01", [], []),
+            id="snap-storage-start",
+        ),
+        # The one node of the proof does not hash to the root.
+        pytest.param(
+            TrieError,
+            102,
+            (
+                "proof does not verify: EthLib.Execution.Trie.ProofError.hashMismatch (expected := "
+                "0x0000000000000000000000000000000000000000000000000000000000000000) (actual := "
+                "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421)"
+            ),
+            lambda: trie.verify_proof(bytes(32), b"", [b"\x80"]),
+            id="trie-proof",
+        ),
+        # A root is 32 bytes.
+        pytest.param(
+            TrieError,
+            0,
+            "bad root size: 31, expected 32",
+            lambda: trie.verify_proof(bytes(31), b"", []),
+            id="trie-root-size",
+        ),
+        # Withdrawals start at Shapella.
+        pytest.param(
+            StateError,
+            0,
+            "the fork is before Shapella",
+            lambda: state.withdrawals_root(
+                "frontier", rlp.encode([]), rlp.encode([HEADER, [], []])
+            ),
+            id="state-withdrawals-fork",
+        ),
+        # The block is an RLP list, not an empty string.
+        pytest.param(
+            StateError,
+            0,
+            "block rejected: EthLib.Serialization.Rlp.RlpError.bytesAsList",
+            lambda: state.rewards_root([("frontier", 0)], rlp.encode([]), b"\x80"),
+            id="state-rewards",
+        ),
+        # No fork has the name nofork.
+        pytest.param(
+            StateError,
+            0,
+            "no fork named nofork",
+            lambda: state.rewards_root([("nofork", 0)], rlp.encode([]), b"\x80"),
+            id="state-rewards-forks",
+        ),
+        # The chain activates no fork, so the block is at no active fork.
+        pytest.param(
+            BlockError,
+            225,
+            "block invalid: wrongFork (active := none) (fork := EthLib.Base.Fork.frontier)",
+            lambda: blocks.state_transition(
+                CONFIG, rlp.encode([]), [], "frontier", rlp.encode([HEADER, [], []])
+            ),
+            id="block-transition",
+        ),
+        # A block is an RLP list, not an empty string.
+        pytest.param(
+            BlockError,
+            213,
+            "block rejected: EthLib.Serialization.Rlp.RlpError.bytesAsList",
+            lambda: blocks.state_transition(CONFIG, rlp.encode([]), [], "frontier", b"\x80"),
+            id="block-transition-decode",
+        ),
+        # A state is an RLP list, not an empty string.
+        pytest.param(
+            BlockError,
+            0,
+            "state is not an RLP list",
+            lambda: blocks.state_transition(CONFIG, b"\x80", [], "frontier", b"\x80"),
+            id="block-transition-state",
+        ),
+        # 0x80 is the type of no transaction.
+        pytest.param(
+            BlockError,
+            0,
+            (
+                "transaction rejected: "
+                "EthLib.Execution.Transactions.TransactionError.unsupportedType (type := 128)"
+            ),
+            lambda: blocks.transactions_root("frontier", rlp.encode([HEADER, [b"\x80"], []])),
+            id="block-transactions-root",
+        ),
+        # The deposit log has no data.
+        pytest.param(
+            BlockError,
+            301,
+            "deposit log rejected: EthLib.Execution.Blocks.DepositError.wrongLength 0",
+            lambda: blocks.deposit_requests(
+                bytes(20), rlp.encode([[bytes(20), [DEPOSIT_TOPIC], b""]])
+            ),
+            id="block-deposit-layout",
+        ),
+        # The same account comes twice.
+        pytest.param(
+            BlockError,
+            401,
+            (
+                "block access list invalid: "
+                "EthLib.Execution.Blocks.BlockAccessList.Error.accountsNotAscending\n  #v[0, 0, 0, "
+                "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]"
+            ),
+            lambda: blocks.check_block_access_list(
+                rlp.encode([[bytes(20), [], [], [], [], []]] * 2), 0
+            ),
+            id="block-access-list-invalid",
+        ),
+        # A header of zeros has no valid proof of work.
+        pytest.param(
+            BlockError,
+            222,
+            (
+                "proof of work invalid: EthLib.Execution.Blocks.PowError.wrongMixDigest (expected "
+                ":= 0xc0ff6c7b688611cd37aa7ec907844330d1d891208e8467825dfd44c4f6d02e37) (actual := "
+                "0x0000000000000000000000000000000000000000000000000000000000000000)"
+            ),
+            lambda: proof_of_work.check_proof_of_work("frontier", rlp.encode(HEADER)),
+            id="pow-check",
+        ),
+        # The ommers do not hash to the ommers hash of the header.
+        pytest.param(
+            BlockError,
+            231,
+            (
+                "ommers invalid: EthLib.Execution.Blocks.OmmerError.wrongOmmersHash (expected := "
+                "0x0000000000000000000000000000000000000000000000000000000000000000) (actual := "
+                "0x96dcb37b83bd1f5e730a17abd3278a73e48b183f77a7c99b2a04d7d9046297d5)"
+            ),
+            lambda: proof_of_work.validate_ommers(
+                [("frontier", 0)], [], rlp.encode([HEADER, [], [HEADER]])
+            ),
+            id="pow-ommers",
+        ),
+        # The recent blocks are an RLP list, not an empty string.
+        pytest.param(
+            BlockError,
+            10,
+            "block rejected: EthLib.Serialization.Rlp.RlpError.bytesAsList",
+            lambda: proof_of_work.validate_ommers([("frontier", 0)], [b"\x80"], b"\x80"),
+            id="pow-ommers-recent",
+        ),
+        # A signature with r and s zero names no sender.
+        pytest.param(
+            TransactionError,
+            5,
+            "invalidSignature",
+            lambda: transactions.recover_sender(
+                "frontier", rlp.encode([b"", b"", b"\x01", b"", b"", b"", b"\x1b", b"", b""])
+            ),
+            id="tx-recover-sender",
+        ),
+        # A gas limit of 1 is below the intrinsic gas.
+        pytest.param(
+            TransactionError,
+            6,
+            "insufficientGas (needed := 21000) (gas := 1)",
+            lambda: transactions.check_in_block(
+                "frontier",
+                1,
+                LOW_GAS_TX,
+                rlp.encode([]),
+                gas_limit=0,
+                gas_used=0,
+                blob_gas_used=0,
+                base_fee=0,
+                excess_blob_gas=0,
+            ),
+            id="tx-check-in-block",
+        ),
+        # A state is an RLP list, not an empty string.
+        pytest.param(
+            TransactionError,
+            2,
+            "state is not an RLP list",
+            lambda: transactions.check_in_block(
+                "frontier",
+                1,
+                LOW_GAS_TX,
+                b"\x80",
+                gas_limit=0,
+                gas_used=0,
+                blob_gas_used=0,
+                base_fee=0,
+                excess_blob_gas=0,
+            ),
+            id="tx-check-in-block-state",
+        ),
+        # A gas limit of 1 is below the intrinsic gas.
+        pytest.param(
+            TransactionError,
+            6,
+            "insufficientGas (needed := 21000) (gas := 1)",
+            lambda: transactions.admit_to_pool("frontier", 1, LOW_GAS_TX, rlp.encode([])),
+            id="tx-admit",
+        ),
+        # The block is a list of ten items, not an empty string.
+        pytest.param(
+            TransactionError,
+            0,
+            "block environment rejected: bytesAsList",
+            lambda: transactions.run("frontier", 1, LOW_GAS_TX, rlp.encode([]), b"\x80"),
+            id="tx-run-env",
+        ),
+        # A gas limit of 1 is below the intrinsic gas.
+        pytest.param(
+            TransactionError,
+            6,
+            "insufficientGas (needed := 21000) (gas := 1)",
+            lambda: transactions.run(
+                "frontier",
+                1,
+                LOW_GAS_TX,
+                rlp.encode([]),
+                rlp.encode([bytes(20), b"", b"", b"", b"", b"", bytes(32), b"", [], b""]),
+            ),
+            id="tx-run-inclusion",
+        ),
+        # The block is a list of ten items, not an empty string.
+        pytest.param(
+            TransactionError,
+            0,
+            "block environment rejected: bytesAsList",
+            lambda: transactions.trace_eip3155("frontier", 1, LOW_GAS_TX, rlp.encode([]), b"\x80"),
+            id="tx-trace-env",
+        ),
+        # A gas limit of 1 is below the intrinsic gas.
+        pytest.param(
+            TransactionError,
+            6,
+            "insufficientGas (needed := 21000) (gas := 1)",
+            lambda: transactions.settle("frontier", LOW_GAS_TX, 1, 0, 0),
+            id="tx-settle",
+        ),
+        # A blob transaction in network form has five items, not four.
+        pytest.param(
+            TransactionError,
+            3,
+            "decoding: wrongFieldCount 5 4",
+            lambda: transactions.network_check("fusaka", b"\x03" + rlp.encode([[], [], [], []])),
+            id="tx-network-wrapper",
+        ),
+        # 0x80 is the type of no transaction.
+        pytest.param(
+            FeesError,
+            0,
+            (
+                "transaction rejected: "
+                "EthLib.Execution.Transactions.TransactionError.unsupportedType (type := 128)"
+            ),
+            lambda: fees.calculate_data_fee("dencun", 0, b"\x80"),
+            id="fees-blob-tx",
+        ),
+        # A salt is 32 bytes.
+        pytest.param(
+            EvmError,
+            104,
+            "the salt must be 32 bytes, not 31",
+            lambda: evm.create2_address(bytes(20), bytes(31), b""),
+            id="evm-salt",
+        ),
+        # ADD has no immediate depth.
+        pytest.param(
+            EvmError,
+            0,
+            "byte 0 encodes no depth of opcode 1",
+            lambda: evm.immediate_depths(0x01, 0),
+            id="evm-immediate",
+        ),
+        # No schema has the name nope.
+        pytest.param(
+            RpcError,
+            0,
+            "unknown schema: nope",
+            lambda: rpc.read_param("nope", 0),  # ty: ignore[no-matching-overload]
+            id="rpc-unknown-schema",
+        ),
+        # A block access list is a JSON array.
+        pytest.param(
+            RpcError,
+            32602,
+            "block access list: not an array",
+            lambda: rpc.encode_block_access_list(0),
+            id="rpc-bal",
+        ),
+        # The state overrides are a JSON object.
+        pytest.param(
+            RpcError,
+            32602,
+            "stateOverrides: not an object",
+            lambda: rpc.apply_overrides(rlp.encode([]), 0),
+            id="rpc-overrides-schema",
+        ),
+        # An era1 file ends with a trailer.
+        pytest.param(
+            Era1Error,
+            2,
+            "era1 file rejected: EthLib.Execution.History.Era1Error.noTrailer",
+            lambda: history.decode_era1(b"\x65\x32" + bytes(6)),
+            id="era1-short",
         ),
         # A chain ID is below 2^64.
         pytest.param(

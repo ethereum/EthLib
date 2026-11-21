@@ -34,7 +34,7 @@ public section
 
 namespace EthLib.Execution.Blocks.Exports
 
-open EthLib.Exports (Result PyValue forkUpTo pyExport toResult)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument forkUpTo pyExport toResult)
 open EthLib.Base
 open EthLib.Serialization.Rlp
 open EthLib.Execution.Transactions.Exports (abortMessage inclusionMessage message
@@ -59,8 +59,10 @@ A state or a recent block that does not decode has code 0, since the export read
 def chainOf (config : PyValue) (state : ByteArray)
     (recent : List (String × ByteArray × List ByteArray)) : Result BlockChain := do
   let config ← ChainConfig.Exports.configOfJson config.toJson
-  let pre ← (State.Exports.ofInput state).mapError fun e => (0, e.message)
-  let recent ← (recent.mapM (recentOf config)).mapError fun (_, m) => (0, m)
+  let pre ← toResult none
+    ((State.Exports.ofInput state).mapError fun e => UnreadArgument.mk e.message)
+  let recent ← toResult none
+    ((recent.mapM (recentOf config)).mapError fun (_, m) => UnreadArgument.mk m)
   return ⟨config, pre, recent⟩
 
 /-- The accounts of a state, as the list of entries of the state root export. -/
@@ -73,6 +75,11 @@ def blockErrorMessage : BlockError → String
   | .aborted e => abortMessage e
   | .systemCallFailed address e => s!"system call to {hexString address.toList} failed: {oneLine e}"
   | e => s!"block invalid: {(oneLine e).replace "EthLib.Execution.Blocks.BlockError." ""}"
+
+/-- A block error reaches Python with its code, and its message names the rule that failed. -/
+instance : ExportError BlockError where
+  code := BlockError.code
+  message := blockErrorMessage
 
 /-- A block from the name of its fork and its RLP form, with its transactions decoded.
 
@@ -101,11 +108,10 @@ def stateTransitionOf
   let (config, state, recent, fork, block, checkSeal) := args
   let chain ← chainOf config state recent
   let ⟨_, block⟩ ← blockOf chain.config fork block
-  let post ← (stateTransition chain block checkSeal).mapError
-    fun e => (e.code, blockErrorMessage e)
+  let post ← toResult none (stateTransition chain block checkSeal)
   let root ← State.Exports.rootOf post
-  (encode (Item.list [Codec.toItem root, accountsItem post])).mapError
-    fun e => (0, s!"result: {reprStr e}")
+  toResult none ((encode (Item.list [Codec.toItem root, accountsItem post])).mapError
+    fun e => UnreadArgument.mk s!"result: {reprStr e}")
 
 /-- Run the state transition of a block on a chain, and give the state after it.
 
@@ -137,11 +143,12 @@ def genesisOf (args : String × GenesisFields × ByteArray) : Result ByteArray :
     baseFeePerGas := baseFeePerGas, excessBlobGas := excessBlobGas, slotNumber := slotNumber }
   let fork ← forkUpTo .glamsterdam fork.toUTF8
   -- The state is read by the export itself, so its errors have code 0.
-  let alloc ← (State.Exports.ofInput state).mapError fun e => (0, e.message)
-  let block ← (genesis fork params alloc).mapError fun e => (e.code, blockErrorMessage e)
+  let alloc ← toResult none
+    ((State.Exports.ofInput state).mapError fun e => UnreadArgument.mk e.message)
+  let block ← toResult none (genesis fork params alloc)
   -- The body is empty, so its transactions take the form of RLP items.
-  ({ block with transactions := ([] : List Item) }.encode).mapError
-    fun e => (0, s!"result: {reprStr e}")
+  toResult none (({ block with transactions := ([] : List Item) }.encode).mapError
+    fun e => UnreadArgument.mk s!"result: {reprStr e}")
 
 /-- The genesis block at a fork, in RLP form.
 

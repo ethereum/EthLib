@@ -5,6 +5,7 @@ public import EthLib.Execution.Exports.Snap
 public import EthLib.Execution.Proofs.Network.Message
 import all EthLib.Execution.Exports.Network
 import all EthLib.Execution.Exports.Snap
+import all EthLib.Base.Exports.Result
 
 /-!
 # Proofs: the decoding exports of the eth and snap messages
@@ -23,7 +24,8 @@ theorem decodeExport_eq_ok {version id : UInt64} {data : ByteArray} {v : EthVers
     {m : Message} (hv : readVersion version = .ok v)
     (hm : Message.decode v id.toNat data = .ok m) :
     decodeExport version id data = .ok data := by
-  simp [decodeExport, hv, hm, bind, Except.bind, Except.mapError, pure, Except.pure]
+  simp [decodeExport, hv, hm, bind, Except.bind, Except.mapError, pure, Except.pure,
+    EthLib.Exports.toResult]
 
 /-- The data that the eth export returns is the encoding of the decoded message. -/
 theorem decodeExport_eq_encode {version id : UInt64} {data : ByteArray} {v : EthVersion}
@@ -41,13 +43,15 @@ theorem decodeExport_eq_ok {version id : UInt64} {data : ByteArray} {v : SnapVer
     {m : SnapMessage} (hv : readVersion version = .ok v)
     (hm : SnapMessage.decode v id.toNat data = .ok m) :
     decodeExport version id data = .ok data := by
-  simp [decodeExport, run, hv, hm, bind, Except.bind, Except.mapError, pure, Except.pure]
+  simp [decodeExport, run, hv, hm, bind, Except.bind, Except.mapError, pure, Except.pure,
+    EthLib.Exports.toResult]
 
 /-- The data that the snap export returns is the encoding of the decoded message. -/
 theorem decodeExport_eq_encode {version id : UInt64} {data : ByteArray} {v : SnapVersion}
     {m : SnapMessage} (hv : readVersion version = .ok v)
     (hm : SnapMessage.decode v id.toNat data = .ok m) :
     decodeExport version id data = run m.encode := by
-  simp [decodeExport_eq_ok hv hm, SnapMessage.encode_of_decode hm, run, Except.mapError]
+  simp [decodeExport_eq_ok hv hm, SnapMessage.encode_of_decode hm, run, Except.mapError,
+    EthLib.Exports.toResult]
 
 end EthLib.Execution.Network.Snap.Exports

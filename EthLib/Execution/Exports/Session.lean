@@ -32,7 +32,7 @@ public section
 namespace EthLib.Execution.Network.Exports
 
 open EthLib.Networking.Devp2p
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport rejectArgument toResult)
 
 /-- A message for a rejected frame, phrased for someone reading a Python traceback. -/
 def sessionMessage : SessionError → String
@@ -42,6 +42,11 @@ def sessionMessage : SessionError → String
   | .closed => "a frame came after a Disconnect"
   | .tooLarge size => s!"message data has {size} bytes, more than {MAX_MESSAGE_SIZE}"
   | .message e => Networking.Devp2p.Exports.message e
+
+/-- A rejected frame reaches Python with its code, and its message names the fault. -/
+instance : ExportError SessionError where
+  code := SessionError.code
+  message := sessionMessage
 
 /-- The capabilities of a list of names and versions. -/
 def capabilitiesOf (capabilities : List (ByteArray × Nat)) : List Capability :=
@@ -77,8 +82,8 @@ def outcomeOf (phase : Phase) (event : Option Event) (actions : List Action) :
   let pong := actions.contains .sendPong
   match event with
   | some (.p2p message) =>
-    let data ← (Serialization.Rlp.encode message.toItem).mapError fun _ =>
-      (0, "message does not encode")
+    let data ← toResult none ((Serialization.Rlp.encode message.toItem).mapError fun _ =>
+      UnreadArgument.mk "message does not encode")
     return (phaseName phase, "p2p", .empty, 0, message.id, data, pong)
   | some (.capability capability relativeId data) =>
     return (phaseName phase, "capability", capability.name, capability.version, relativeId,
@@ -89,17 +94,16 @@ def outcomeOf (phase : Phase) (event : Option Event) (actions : List Action) :
 def sessionOf (args : ByteArray × List ByteArray) :
     Result (List (String × String × ByteArray × Nat × Nat × ByteArray × Bool)) := do
   let (helloData, frames) := args
-  let .hello ours ← (decodeMessage false helloData).mapError fun e =>
-      (0, s!"our Hello: {Networking.Devp2p.Exports.message e}")
-    | throw (0, "our Hello is another message")
+  let .hello ours ← toResult none ((decodeMessage false helloData).mapError fun e =>
+      UnreadArgument.mk s!"our Hello: {Networking.Devp2p.Exports.message e}")
+    | rejectArgument none "our Hello is another message"
   let mut phase := Phase.awaitHello
   let mut outcomes := #[]
   for (frame, index) in frames.zipIdx do
-    match receive capabilityLength ours phase frame with
-    | .error e => throw (e.code, s!"frame {index}: {sessionMessage e}")
-    | .ok (next, event, actions) =>
-      phase := next
-      outcomes := outcomes.push (← outcomeOf next event actions)
+    let (next, event, actions) ←
+      toResult s!"frame {index}" (receive capabilityLength ours phase frame)
+    phase := next
+    outcomes := outcomes.push (← outcomeOf next event actions)
   return outcomes.toList
 
 /-- The outcomes of the frames a session receives in turn, from before the peer's Hello.
@@ -126,6 +130,11 @@ def ethSessionMessage : EthSessionError → String
   | .unsolicited i => s!"response with request ID {i} answers no pending request"
   | .badRange e l => s!"block range starts at {e}, after its end {l}"
 
+/-- A rejected eth message reaches Python with its code, and its message names the fault. -/
+instance : ExportError EthSessionError where
+  code := EthSessionError.code
+  message := ethSessionMessage
+
 /-- The outcomes of the eth messages that a session sends and receives in turn.
 
 Each event says whether this node sends it, then gives its message ID and its RLP data.
@@ -135,13 +144,12 @@ def ethSessionOf (args : Nat × ByteArray × Nat × Nat × List (Bool × Nat × 
     Result (List (String × Nat)) := do
   let (version, schedule, number, timestamp, events) := args
   let some v := EthVersion.ofNumber? version
-    | throw (0, s!"eth/{version} is not a version that EthLib specifies")
+    | rejectArgument none s!"eth/{version} is not a version that EthLib specifies"
   let s ← Networking.Devp2p.Exports.readSchedule schedule
   let mut session := EthSession.init v
   let mut outcomes := #[]
   for ((sent, id, data), index) in events.zipIdx do
-    let m ← (Message.decode v id data).mapError fun e =>
-      (e.code, s!"event {index}: {ethMessage e}")
+    let m ← toResult s!"event {index}" (Message.decode v id data)
     if sent then
       match sendEth session m with
       | some next =>
@@ -149,14 +157,12 @@ def ethSessionOf (args : Nat × ByteArray × Nat × Nat × List (Bool × Nat × 
         outcomes := outcomes.push ("sent", session.pending.length)
       | none => outcomes := outcomes.push ("refused", session.pending.length)
     else
-      match receiveEth s number timestamp session m with
-      | .error e => throw (e.code, s!"event {index}: {ethSessionMessage e}")
-      | .ok (next, verdict) =>
-        session := next
-        let name := match verdict with
-          | .accept => "accept"
-          | .discard => "discard"
-        outcomes := outcomes.push (name, session.pending.length)
+      let (next, verdict) ← toResult s!"event {index}" (receiveEth s number timestamp session m)
+      session := next
+      let name := match verdict with
+        | .accept => "accept"
+        | .discard => "discard"
+      outcomes := outcomes.push (name, session.pending.length)
   return outcomes.toList
 
 /-- The outcomes of the eth messages that a session sends and receives in turn.
