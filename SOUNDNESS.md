@@ -4572,6 +4572,20 @@ So one step gives the stake condition of a supermajority link of the model, up t
 The beacon chain leaves slashed attesters out, and the model counts them, so the converse does not hold.
 The ancestry of the blocks of the link is not shown yet.
 
+`processJustificationAndFinalization_finalizesTwoEpochs` (`Consensus/Proofs/Transition/FfgTwoEpochs.lean`) is the converse step that plausible liveness needs.
+It takes two steps of justification at the ends of two consecutive epochs.
+In each, a set of honest validators holds at least two thirds of the active stake of the current epoch, with effective balances.
+Each of them is among the target indices that the step counts for that epoch.
+The first epoch is past the first two.
+Between the two steps the current justified checkpoint and the bits of justification stay.
+Then the second step finalizes the checkpoint of the first epoch, and the second epoch is justified.
+The test of an epoch reads only the votes that blocks of that epoch include.
+A block includes an attestation one slot after the slot of the attestation at the earliest.
+So the attesters of the last slot of an epoch count only in the test of the previous epoch, one epoch later.
+The honest set of each step must then hold two thirds without them, so it needs a margin above two thirds.
+The theorem holds at every fork; before Altair the counted validators are the attesters of matching pending attestations.
+No theorem yet derives the hypotheses of the two steps from a run.
+
 `processJustificationAndFinalization_slackJustifiedCheckpoints` (`Consensus/Proofs/Transition/FfgSlack.lean`) turns one step into a slack link of the model.
 If the two justified checkpoints of the state before the step are slack-justified, so are those of the state after it.
 A new current justified checkpoint must match the state of that step.
