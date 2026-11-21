@@ -48,42 +48,6 @@ def Store.votesBelow (store : Store preset fork) (config : Config) (checks : Sig
     processSlots config checks parent block.slot = .ok advanced ∧
     vote ∈ blockVotes advanced block}
 
-/-- A block descends from each pending node that its parent descends from, in every fork.
-
-The store must hold the block and its parent, the parent at an earlier slot. -/
-private theorem Store.isAncestor_pending_of_parent {store : Store preset fork}
-    {root ancestor : Root}
-    {block parent : BeaconBlock preset fork}
-    (found : store.blocks[root]? = some block)
-    (parentFound : store.blocks[block.parentRoot]? = some parent)
-    (lower : parent.slot < block.slot)
-    (descends : store.isAncestor ⟨block.parentRoot, .pending⟩ ⟨ancestor, .pending⟩ = .ok true) :
-    store.isAncestor ⟨root, .pending⟩ ⟨ancestor, .pending⟩ = .ok true := by
-  by_cases gloas : .glamsterdam ≤ fork
-  swap
-  · exact Store.isAncestor_of_parent (Nat.lt_of_not_le gloas) found parentFound lower descends
-  -- The test reads the ancestor's block, so the store holds it.
-  cases known : store.block ancestor with
-  | error error => simp [Store.isAncestor, known, bind, Except.bind] at descends
-  | ok ancestorBlock =>
-  obtain ⟨parentBlock, parentKnown, le⟩ :=
-    Store.slot_le_of_isAncestor (Store.block_ok_iff.mp known) descends
-  rw [parentFound, Option.some.injEq] at parentKnown
-  subst parentKnown
-  -- The block is above the ancestor's slot, so the walk from it steps to its parent.
-  have above : ¬ block.slot ≤ ancestorBlock.slot := fun atMost =>
-    UInt64.not_le.mpr lower (UInt64.le_trans atMost le)
-  have step := Store.getAncestor_step (node := ⟨root, .pending⟩) found above parentFound lower
-  -- From Gloas only the root of the walk counts, and it does not depend on the status.
-  have same := Store.getAncestor_root (store := store) ⟨block.parentRoot, .pending⟩
-    (parentPayloadStatus block parent) ancestorBlock.slot
-  rw [Store.isAncestor_pending gloas] at descends ⊢
-  simp only [known, step, bind, Except.bind] at descends ⊢
-  cases walk : store.getAncestor ⟨block.parentRoot, .pending⟩ ancestorBlock.slot <;>
-    cases other : store.getAncestor ⟨block.parentRoot, parentPayloadStatus block parent⟩
-      ancestorBlock.slot <;>
-    simp_all [Functor.map, Except.map]
-
 /-- Slots keep the participation backed by a set of votes, and the early justified checkpoints.
 
 An epoch must have a slot, and the buffer of roots must cover two epochs.
@@ -159,7 +123,7 @@ theorem Store.ForwardReachableWith.held_participation {store : Store preset fork
       refine Set.union_subset_union_right _ ?_
       rintro vote ⟨blockRoot, voter, parent, voterAdvanced, voterFound, descends, rest⟩
       exact ⟨blockRoot, voter, parent, voterAdvanced, voterFound,
-        Store.isAncestor_pending_of_parent found parentKnown parentLower descends, rest⟩
+        Store.isAncestor_of_parent found parentKnown parentLower descends, rest⟩
     -- The block's own votes are below its root, as it descends from itself.
     have own : blockVotes advanced block ⊆
         {vote | vote.2.target.epoch ≤ getCurrentEpoch anchorState} ∪

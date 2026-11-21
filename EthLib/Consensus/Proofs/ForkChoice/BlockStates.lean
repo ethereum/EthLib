@@ -719,7 +719,6 @@ The ancestor lies above the anchor, and the receiver holds the tip.
 The receiver need not hold the ancestor in advance: the walk from the tip reaches it. -/
 theorem Store.isAncestor_of_same_blocks {store receiver : Store preset fork}
     (reachable : Store.Reachable config anchorState anchorBlock receiver)
-    (before : fork < .glamsterdam)
     (same : ∀ (r : Root) b c, store.blocks[r]? = some b →
       receiver.blocks[r]? = some c → b = c)
     {node ancestor : ForkChoiceNode} {block : BeaconBlock preset fork}
@@ -728,9 +727,20 @@ theorem Store.isAncestor_of_same_blocks {store receiver : Store preset fork}
     (known : ∃ tip, receiver.blocks[node.root]? = some tip)
     (descends : store.isAncestor node ancestor = .ok true) :
     receiver.isAncestor node ancestor = .ok true := by
-  have walk := Store.getAncestor_of_isAncestor_of_lt before sourceKnown descends
-  exact Store.isAncestor_of_getAncestor
-    (Store.getAncestor_of_same_blocks reachable same aboveAnchor known walk)
+  simp only [Store.isAncestor, Store.block_ok_iff.mpr sourceKnown, bind, Except.bind] at descends
+  cases walk : store.getAncestor node block.slot with
+  | error e => simp [walk] at descends
+  | ok reached =>
+  rw [walk] at descends
+  -- The receiver walks to the same node, and holds the same block at the ancestor's root.
+  have moved := Store.getAncestor_of_same_blocks reachable same aboveAnchor known walk
+  have rooted : reached.root = ancestor.root := by
+    by_cases gloas : .glamsterdam ≤ fork <;> simp_all [pure, Except.pure]
+  obtain ⟨held, heldFound, -⟩ := Store.getAncestor_le moved
+  rw [rooted] at heldFound
+  obtain rfl := same _ _ _ sourceKnown heldFound
+  simpa only [Store.isAncestor, Store.block_ok_iff.mpr heldFound, moved, bind, Except.bind]
+    using descends
 
 /-- Checkpoint reads agree across reachable stores holding the tip above the anchor boundary. -/
 theorem Store.getCheckpointBlock_of_same_blocks {store receiver : Store preset fork}

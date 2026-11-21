@@ -818,9 +818,14 @@ theorem VoteAt.accepted_at_next_slot (preGloas : fork < .glamsterdam) {anchor : 
     dataSlot nextOk currentOk arrivalBound nBound votedKnown notFuture
     (fun gloas => False.elim (Nat.not_le_of_lt preGloas gloas)) checkpoint
 
-/-- A delivered duty is recorded and retained, or bounded honest stores name a collision. -/
+/-- A delivered duty is recorded and retained, or bounded honest stores name a collision.
+
+The recorded vote ranks at least as high as the duty vote.
+
+From Gloas, the anchor block must be at or before the slot of the anchor state. -/
 theorem VoteAt.recorded_at_next_slot {Δ : ℕ} (sync : e.Synchronous Δ)
-    (preGloas : fork < .glamsterdam) {anchor : Store preset fork}
+    (anchorSlot : .glamsterdam ≤ fork → anchorBlock.slot ≤ anchorState.slot)
+    {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ u ∈ J, e.start u = anchor) {last : ℕ}
     {v w : ValidatorIndex} (honest : v ∈ J) (receiver : w ∈ J)
@@ -847,19 +852,30 @@ theorem VoteAt.recorded_at_next_slot {Δ : ℕ} (sync : e.Synchronous Δ)
     (checkpoint : ((e.world arrival).state w).getCheckpointBlock attestation.data.beaconBlockRoot
       attestation.data.target.epoch = .ok attestation.data.target.root) :
     (∃ message, ((e.world endpoint).state w).latestMessages[v]? = some message ∧
-      attestation.data.target.epoch ≤ message.rank) ∨
+      (LatestMessage.ofAttestation attestation).rank ≤ message.rank) ∨
     ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ last ∧ (e.world m).time ≤ last ∧
       ∃ root collision, EthLib.Consensus.Store.findBlockCollision ((e.world n).state u)
         ((e.world m).state v) [root] = some collision := by
-  rcases vote.accepted_at_next_slot preGloas anchored start honest receiver committees dataSlot
-      nextOk currentOk arrivalBound (by have := vote.atTime; omega) votedKnown notFuture
-      checkpoint with ⟨⟨after, accepted⟩, reads⟩ | collision
+  have nBound : (e.world n).time ≤ last := by have := vote.atTime; omega
+  -- From Gloas the payload check of the vote passes, as the receiver is a fixed point.
+  have accepted : ((∃ after, ((e.world arrival).state w).onAttestation config checks attestation
+        false = .ok after) ∧
+      ReadsAttestation config checks ((e.world arrival).state w) attestation indexed) ∨
+      HonestCollision (e := e) last := by
+    by_cases gloas : .glamsterdam ≤ fork
+    · rcases vote.validatePayloadVote_or_collision sync gloas (anchorSlot gloas) anchored honest
+          receiver (start v honest) (start w receiver) late arrivalBound
+          (fun _ _ mem accepted => upToDate.2 _ (.envelope mem accepted) ▸
+            Store.onExecutionPayloadEnvelope_verified accepted) votedKnown with checked | collision
+      · exact vote.accepted_at_next_slot_of_payloadVote anchored start honest receiver committees
+          dataSlot nextOk currentOk arrivalBound nBound votedKnown notFuture (fun _ => checked)
+          checkpoint
+      · exact .inr collision
+    · exact vote.accepted_at_next_slot (Nat.lt_of_not_le gloas) anchored start honest receiver
+        committees dataSlot nextOk currentOk arrivalBound nBound votedKnown notFuture checkpoint
+  rcases accepted with ⟨⟨after, accepted⟩, reads⟩ | collision
   swap
   · exact .inr collision
-  obtain ⟨message, latest, rank⟩ := vote.recorded_of_le sync honest receiver late upToDate
-    accepted reads counted later
-  refine .inl ⟨message, latest, ?_⟩
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt preGloas
-  simpa [LatestMessage.rank, LatestMessage.ofAttestation, notGloas] using rank
+  exact .inl (vote.recorded_of_le sync honest receiver late upToDate accepted reads counted later)
 
 end EthLib.Consensus.Models.Network

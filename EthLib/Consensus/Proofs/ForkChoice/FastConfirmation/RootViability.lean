@@ -407,7 +407,7 @@ private theorem signs_of_duty {anchor : Store preset fork} {Δ time : ℕ}
       .ok target.root := by
     simp [Store.getCheckpointBlock, firstOk, Except.mapError, bind, Except.bind, walkV,
       reachedRoot, pure, Except.pure]
-  have hvRead := Store.getCheckpointBlock_of_isAncestor preGloas originKnownV descendsV firstOk
+  have hvRead := Store.getCheckpointBlock_of_isAncestor originKnownV descendsV firstOk
     firstLe readV
   rw [← rootEq, ← slotEpoch, ← dataEpoch, dataTarget] at hvRead
   have rootSame := Except.ok.inj hvRead
@@ -807,7 +807,7 @@ private theorem late_justified_not_in_call_epoch {anchor : Store preset fork} {�
         .ok ((e.world k).state w).justifiedCheckpoint.root) : False := by
     have up := Store.isAncestor_of_getCheckpointBlock_above preGloas callerFound headAbove read
       (slot_le_of_epoch_lt positive above)
-    exact close (Store.isAncestor_of_same_blocks reachedW preGloas oneBlock callerFound
+    exact close (Store.isAncestor_of_same_blocks reachedW oneBlock callerFound
       (reachedU.anchorSlot_le (UInt64.le_of_eq anchorSlot) callerFound)
       ⟨_, justifiedFound⟩ up)
   -- An honest vote for it from the call's slot on is cast on a head above the root.
@@ -1207,7 +1207,7 @@ private theorem late_previous_receiver_source {anchor : Store preset fork} {Δ t
           callerBlock.slot.toNat / preset.SLOTS_PER_EPOCH.toNat by omega)
       have back := Nat.div_mul_le_self callerBlock.slot.toNat preset.SLOTS_PER_EPOCH.toNat
       omega
-    exact Store.getCheckpointBlock_of_isAncestor (node := ⟨head.root, .pending⟩) preGloas
+    exact Store.getCheckpointBlock_of_isAncestor (node := ⟨head.root, .pending⟩)
       callerFound headAbove boundaryOk below moved
   -- The receiver holds the head: the head was held more than one delay before.
   have late : max (e.world n).time 0 + Δ ≤ (e.world k).time := by
@@ -1216,7 +1216,7 @@ private theorem late_previous_receiver_source {anchor : Store preset fork} {Δ t
   obtain ⟨headHeld, -⟩ := (e.blocks_of_partiallySynchronous sync preGloas admitted anchorStore
     anchored caller receiver late receiverBound ready finalizedKnown headKnown
     finalRead).resolve_right (e.not_honestCollision_of_agree agree)
-  have headAboveW := Store.isAncestor_of_same_blocks reachedW preGloas oneBlock callerFound
+  have headAboveW := Store.isAncestor_of_same_blocks reachedW oneBlock callerFound
     (reachedU.anchorSlot_le (UInt64.le_of_eq anchorSlot) callerFound) ⟨_, headHeld⟩ headAbove
   obtain ⟨receiverHeadState, receiverHeadStored, -⟩ := reachedW.blockStatesFromParents headHeld
   have stateEq := e.blockStates_eq anchorStore (anchored u caller)
@@ -1436,7 +1436,7 @@ private theorem late_current_receiver_source {anchor : Store preset fork} {Δ ti
     rw [startWalk] at through
     have rootAboveStart := Store.isAncestor_of_getAncestor through.symm
     exact ⟨q, qLe, origin, headQ, readyQ, atSlotQ, epochQ, headQOk, checkQ, originBelow, countQ,
-      originEpoch, Store.isAncestor_trans_of_lt preGloas startFound originFoundN rootAboveStart
+      originEpoch, Store.isAncestor_trans startFound originFoundN rootAboveStart
         startAbove, originCover⟩
   obtain ⟨q, qLe, origin, headQ, readyQ, atSlotQ, epochQ, headQOk, checkQ, originBelow, countQ,
     originEpochN, rootAboveOrigin, originCover⟩ := record
@@ -1484,7 +1484,7 @@ private theorem late_current_receiver_source {anchor : Store preset fork} {Δ ti
   have originEpochQ : ((e.world q).state u).getBlockEpoch origin = .ok target.epoch := by
     simp [Store.getBlockEpoch, Store.block_ok_iff.mpr originHeldQ, originEpochNat, bind,
       Except.bind, pure, Except.pure]
-  have rootAboveOriginK := Store.isAncestor_of_same_blocks reachedK preGloas sameNK originHeldN
+  have rootAboveOriginK := Store.isAncestor_of_same_blocks reachedK sameNK originHeldN
     (reachedN.anchorSlot_le (UInt64.le_of_eq anchorSlot) originHeldN) ⟨_, rootFound⟩
     rootAboveOrigin
   obtain ⟨originBlockK, originHeldK⟩ := heldOf rootAboveOriginK
@@ -1501,14 +1501,14 @@ private theorem late_current_receiver_source {anchor : Store preset fork} {Δ ti
       rw [← Store.getHead_pending preGloas hdOk]
     rw [pendingHd] at aboveRoot ⊢
     obtain ⟨rootBlockI, rootHeldI⟩ := heldOf aboveRoot
-    have copied := Store.isAncestor_of_same_blocks (forwardOf a member i).reachable preGloas
+    have copied := Store.isAncestor_of_same_blocks (forwardOf a member i).reachable
       (agree u caller a member n i callerBound iBound) originHeldN
       (reachedN.anchorSlot_le (UInt64.le_of_eq anchorSlot) originHeldN) ⟨_, rootHeldI⟩
       rootAboveOrigin
     obtain ⟨originBlockI, originHeldI⟩ := heldOf copied
-    exact Store.isAncestor_trans_of_lt preGloas rootHeldI originHeldI aboveRoot copied
+    exact Store.isAncestor_trans rootHeldI originHeldI aboveRoot copied
   -- The caller reads the same target, so the rollover read applies to it.
-  have headAboveOrigin := Store.isAncestor_trans_of_lt preGloas rootFoundN originHeldN
+  have headAboveOrigin := Store.isAncestor_trans rootFoundN originHeldN
     inputs.2.1 rootAboveOrigin
   have targetN : ((e.world n).state u).getCurrentTarget config head.root = .ok target :=
     Store.getCurrentTarget_eq_ok_iff.mpr ⟨target.epoch, target.root, targetEpoch ▸ epochOk,
@@ -1552,8 +1552,8 @@ private theorem late_current_receiver_source {anchor : Store preset fork} {Δ ti
   have aboveOriginOf {P : Root}
       (above : ((e.world k).state w).isAncestor ⟨P, .pending⟩ ⟨seed, .pending⟩ = .ok true) :
       ((e.world k).state w).isAncestor ⟨P, .pending⟩ ⟨origin, .pending⟩ = .ok true :=
-    Store.isAncestor_trans_of_lt preGloas seedHeld originHeldK above
-      (Store.isAncestor_trans_of_lt preGloas rootFound originHeldK seedAbove rootAboveOriginK)
+    Store.isAncestor_trans seedHeld originHeldK above
+      (Store.isAncestor_trans rootFound originHeldK seedAbove rootAboveOriginK)
   -- The voters are active at the target epoch in each state above the seed.
   have active : ∀ (P : Root) (Ps : BeaconState preset fork),
       ((e.world k).state w).blockStates[P]? = some Ps →
@@ -1861,7 +1861,7 @@ private theorem finalized_read_above_root {anchor : Store preset fork} {Δ time 
     rw [boundaryNat]
     rw [Nat.add_mul, Nat.one_mul] at mono
     omega
-  exact Store.getCheckpointBlock_of_isAncestor preGloas rootFound above boundaryOk boundaryLe
+  exact Store.getCheckpointBlock_of_isAncestor rootFound above boundaryOk boundaryLe
     ((Store.getCheckpointBlock_trans rootRead finalLe).trans finalRead)
 
 /-- The root is in the receiver's filtered tree, given the finality reads of held states.

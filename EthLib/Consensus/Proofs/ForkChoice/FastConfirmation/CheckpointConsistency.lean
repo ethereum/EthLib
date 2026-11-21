@@ -224,7 +224,6 @@ private theorem copy_ancestor {sender receiver : Store preset fork}
     (anchorSlot : anchorBlock.slot = anchorState.slot)
     (senderReached : Store.Reachable config anchorState anchorBlock sender)
     (reached : Store.Reachable config anchorState anchorBlock receiver)
-    (before : fork < .glamsterdam)
     (same : ∀ (r : Root) (b c : BeaconBlock preset fork),
       sender.blocks[r]? = some b → receiver.blocks[r]? = some c → b = c)
     {a b : Root} {aBlock : BeaconBlock preset fork}
@@ -232,7 +231,7 @@ private theorem copy_ancestor {sender receiver : Store preset fork}
     (above : sender.isAncestor ⟨a, .pending⟩ ⟨b, .pending⟩ = .ok true) :
     receiver.isAncestor ⟨a, .pending⟩ ⟨b, .pending⟩ = .ok true := by
   obtain ⟨block, held⟩ := Store.held_of_isAncestor above
-  exact Store.isAncestor_of_same_blocks reached before same held
+  exact Store.isAncestor_of_same_blocks reached same held
     (senderReached.anchorSlot_le (UInt64.le_of_eq anchorSlot) held) ⟨aBlock, aKnown⟩ above
 
 /-- A target read on a head above the root makes the checkpoint comparable with the root.
@@ -256,8 +255,8 @@ private theorem comparable_of_target_read {sender receiver : Store preset fork}
   obtain ⟨_, block, _, held, _, targetAbove⟩ := Store.isAncestor_of_getCheckpointBlock read
   obtain ⟨rb, rk⟩ := Store.held_of_isAncestor supports
   rcases Store.comparable_of_ancestors before held rk targetAbove supports with h | h
-  · exact .inl (copy_ancestor anchorSlot senderReached reached before same checkpointKnown h)
-  · exact .inr (copy_ancestor anchorSlot senderReached reached before same known h)
+  · exact .inl (copy_ancestor anchorSlot senderReached reached same checkpointKnown h)
+  · exact .inr (copy_ancestor anchorSlot senderReached reached same known h)
 
 /-- The call's target block has a stored state (the anchor of the count's reserves). -/
 private theorem exists_blockState_of_currentTarget {u : ValidatorIndex} {n : ℕ} {head : Root}
@@ -554,16 +553,16 @@ private theorem justified_comparable_of_pin {anchor : Store preset fork} {Δ tim
   obtain ⟨rootBlock, known⟩ := holds w receiver k (by omega) kBound ready
   -- Compare the base with the root before comparing the receiver's justification with the base.
   rcases Store.comparable_of_ancestors preGloas sk rk callerBase rootAbove with below | above
-  · have copied := copy_ancestor anchorSlot sr rr preGloas common rsk below
-    have supported := Store.isAncestor_trans_of_lt preGloas rsk known receiverBase copied
+  · have copied := copy_ancestor anchorSlot sr rr common rsk below
+    have supported := Store.isAncestor_trans rsk known receiverBase copied
     exact Store.comparable_of_ancestors preGloas jk known receiverJ supported
-  have baseBelow := copy_ancestor anchorSlot sr rr preGloas common known above
+  have baseBelow := copy_ancestor anchorSlot sr rr common known above
   rcases Store.comparable_of_ancestors preGloas jk rsk receiverJ receiverBase with aboveJ | belowJ
   swap
-  · exact .inr (Store.isAncestor_trans_of_lt preGloas rsk jk baseBelow belowJ)
+  · exact .inr (Store.isAncestor_trans rsk jk baseBelow belowJ)
   by_cases reverse : ((e.world k).state w).isAncestor ⟨base, .pending⟩
       ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ = .ok true
-  · exact .inr (Store.isAncestor_trans_of_lt preGloas rsk jk baseBelow reverse)
+  · exact .inr (Store.isAncestor_trans rsk jk baseBelow reverse)
   -- The justified block strictly descends from the base.
   have baseStrict : sb.slot < jb.slot := by
     by_contra notLt

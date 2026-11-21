@@ -120,6 +120,43 @@ theorem VoteOrigin.exists_mem_committee {validator : ValidatorIndex}
   rw [origin.targetEpoch] at below
   exact ⟨targetState, index, committee, state, below, committeeOk, member⟩
 
+/-- A counted vote for a known node comes from an attestation at or after the slot of its block.
+
+The latest votes of the store must come from attestations, with the facts behind them. -/
+theorem VotesHaveOrigins.exists_attestation_of_voteCountsFor (holds : store.VotesHaveOrigins config)
+    {node : ForkChoiceNode} {block : BeaconBlock preset fork} {v : ValidatorIndex}
+    (found : store.blocks[node.root]? = some block)
+    (counts : store.voteCountsFor node v = true) :
+    ∃ attestation, store.latestMessages[v]? = some (LatestMessage.ofAttestation attestation) ∧
+      store.VoteOrigin config v attestation ∧ block.slot ≤ attestation.data.slot := by
+  obtain ⟨message, supported, latest, -, supportedOk, descends⟩ :=
+    store.exists_of_voteCountsFor counts
+  obtain ⟨attestation, rfl, origin⟩ := holds latest
+  obtain ⟨supportedBlock, supportedFound, slotLe⟩ := slot_le_of_isAncestor found descends
+  rw [getSupportedNode_root supportedOk] at supportedFound
+  obtain ⟨voted, votedFound, votedLe⟩ := origin.voted
+  have same : supportedBlock = voted := by
+    simp only [LatestMessage.ofAttestation] at supportedFound
+    rw [votedFound] at supportedFound
+    exact (Option.some.inj supportedFound).symm
+  subst same
+  exact ⟨attestation, latest, origin, UInt64.le_trans slotLe votedLe⟩
+
+/-- A known node that a counted vote supports has its block before the current slot.
+
+The latest votes of the store must come from attestations, with the facts behind them. -/
+theorem VotesHaveOrigins.slot_lt_of_voteCountsFor (holds : store.VotesHaveOrigins config)
+    {current : Slot} {node : ForkChoiceNode} {block : BeaconBlock preset fork}
+    (slotOk : store.getCurrentSlot config = .ok current)
+    (found : store.blocks[node.root]? = some block) {v : ValidatorIndex}
+    (counts : store.voteCountsFor node v = true) :
+    block.slot < current := by
+  obtain ⟨attestation, -, origin, le⟩ := holds.exists_attestation_of_voteCountsFor found counts
+  obtain ⟨current', currentOk, past⟩ := origin.past
+  rw [slotOk, Except.ok.injEq] at currentOk
+  subst current'
+  exact UInt64.lt_of_le_of_lt le past
+
 /-- The latest votes keep their facts in a store with the same votes, blocks, states and clock. -/
 private theorem VotesHaveOrigins.of_same (holds : store.VotesHaveOrigins config)
     (messages : after.latestMessages = store.latestMessages)

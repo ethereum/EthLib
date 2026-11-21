@@ -35,21 +35,6 @@ variable {preset : Preset} {fork : Fork} {config : Config}
   {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
   {store : Store preset fork}
 
-/-- A node that descends from a known pending node walks back to its root.
-
-The walk stops at the slot of the block of that root. -/
-theorem Store.getAncestor_of_isAncestor {node : ForkChoiceNode} {root : Root}
-    {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
-    (descends : store.isAncestor node ⟨root, .pending⟩ = .ok true) :
-    ∃ reached, store.getAncestor node block.slot = .ok reached ∧ reached.root = root := by
-  simp only [Store.isAncestor, Store.block_ok_iff.mpr found, bind, Except.bind] at descends
-  cases walk : store.getAncestor node block.slot with
-  | error e => simp [walk] at descends
-  | ok reached =>
-    refine ⟨reached, rfl, ?_⟩
-    rw [walk] at descends
-    by_cases gloas : .glamsterdam ≤ fork <;> simp_all [pure, Except.pure]
-
 /-- A walk from another payload status of the start reaches the same root. -/
 private theorem Store.getAncestor_ok_of_status {node reached : ForkChoiceNode} {slot : Slot}
     (status : PayloadStatus) (walk : store.getAncestor node slot = .ok reached) :

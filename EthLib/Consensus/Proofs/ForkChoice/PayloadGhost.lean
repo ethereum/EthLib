@@ -237,6 +237,20 @@ theorem isAncestor_iff_of_gloas {start node : ForkChoiceNode} {block : BeaconBlo
           omega
       rw [ForkChoiceNode.toModel_injective same]
 
+/-- Each node that filtering returns from a start node has a block root below the start's root.
+
+Parents must have lower slots, and the filtering must succeed. -/
+theorem filterNodeTree_root_ancestor (lower : store.ParentsBelow) {config : Config}
+    {start : ForkChoiceNode} {nodes : List ForkChoiceNode}
+    (walk : store.filterNodeTree config start = .ok nodes) :
+    ∀ n ∈ nodes, (blockTree lower).Ancestor (some start.root) (some n.root) := by
+  intro n mem
+  by_cases gloas : .glamsterdam ≤ fork
+  · exact payloadTree_ancestor_fst ((filterNodeTree_closed (T := nodeTree lower) (·.toModel) walk
+      (fun _ _ _ childrenOk _ nMem => isChild_of_mem_getNodeChildren gloas childrenOk nMem) n
+      mem).1)
+  · exact (filterNodeTree_ancestor (lower := lower) (Nat.lt_of_not_le gloas) walk n mem).1
+
 /-! ## Votes and weights -/
 
 variable (store) in
@@ -1308,9 +1322,7 @@ theorem isAncestor_getHead_of_majority_withBoost_of_gloas {nodes : List ForkChoi
   obtain ⟨-, ⟨nodeBlock, nodeFound⟩, -⟩ := filterNodeTree_mem tree node viable
   have belowJustified :
       (blockTree lower).Ancestor (some store.justifiedCheckpoint.root) (some node.root) :=
-    payloadTree_ancestor_fst ((filterNodeTree_closed (T := nodeTree lower) (·.toModel) tree
-      (fun _ _ _ childrenOk _ nMem => isChild_of_mem_getNodeChildren gloas childrenOk nMem) node
-      viable).1)
+    filterNodeTree_root_ancestor lower tree node viable
   have headIn : head ∈ nodes := by
     have notEmpty : ¬ (.glamsterdam ≤ fork ∧ nodes.isEmpty = true) :=
       fun ⟨_, empty⟩ => List.ne_nil_of_mem viable (List.isEmpty_iff.mp empty)
@@ -1334,6 +1346,22 @@ theorem boostScoreOfGloas_of_not_boost {gloas : .glamsterdam ≤ fork}
     (noBoost : store.shouldApplyProposerBoost config gloas = .ok false) :
     store.boostScoreOfGloas config gloas = 0 := by
   simp [boostScoreOfGloas, noBoost]
+
+/-- From Gloas, the score of the boost is at most the boost score of the LMD-GHOST model. -/
+theorem boostScoreOfGloas_le_boostScore (gloas : .glamsterdam ≤ fork) :
+    store.boostScoreOfGloas config gloas ≤ store.boostScore config := by
+  unfold boostScoreOfGloas boostScore
+  cases applies : store.shouldApplyProposerBoost config gloas with
+  | error e => simp
+  | ok applies' =>
+  cases applies' with
+  | false => simp
+  | true =>
+  have nonzero : store.proposerBoostRoot ≠ Vector.replicate 32 0 := by
+    rcases (shouldApplyProposerBoost_eq_ok_iff gloas).mp applies with ⟨-, bad⟩ | ⟨nonzero, -⟩
+    · cases bad
+    · exact nonzero
+  cases store.getProposerScore config <;> simp [nonzero]
 
 variable (lower) in
 /-- When a viable node has more than half of the stake in votes, the head is in its subtree.

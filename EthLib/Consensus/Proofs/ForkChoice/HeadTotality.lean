@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Basic
+public import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
 public import EthLib.Consensus.Proofs.ForkChoice.Reachable
 public import EthLib.Consensus.Proofs.ForkChoice.VoteOrigins
 public import EthLib.Consensus.Proofs.Transition.FfgStake
@@ -83,11 +84,6 @@ theorem Config.headWeightsFit_minimal :
     Config.minimal.HeadWeightsFit Preset.minimal (2 * 10 ^ 17) := by
   constructor <;> decide
 
-/-- Every held block state of a store has its registry within the limit of the preset. -/
-def HeldRegistriesWithinLimit (store : Store preset fork) : Prop :=
-  ∀ (root : Root) (state : BeaconState preset fork),
-    store.blockStates[root]? = some state → state.RegistryWithinLimit
-
 /-- Every equivocator of a store has a place in a state, when it is active in a held block's state.
 
 It is active there at the epoch of that block's slot.
@@ -105,16 +101,6 @@ def ActiveEquivocatorsRegistered (store : Store preset fork) (state : BeaconStat
 namespace Store
 
 variable {config : Config} {store : Store preset fork}
-
-/-- A vote for a held block supports a node. -/
-private theorem getSupportedNode_exists {message : LatestMessage fork}
-    {block : BeaconBlock preset fork} (found : store.blocks[message.root]? = some block) :
-    ∃ node, store.getSupportedNode message = .ok node := by
-  by_cases gloas : .glamsterdam ≤ fork
-  · by_cases lt : block.slot < message.slot gloas
-    · exact ⟨_, getSupportedNode_of_lt_slot gloas found lt⟩
-    · exact ⟨_, getSupportedNode_of_same_slot gloas found (UInt64.not_lt.mp lt)⟩
-  · exact ⟨_, getSupportedNode_of_lt (Nat.lt_of_not_le gloas)⟩
 
 /-- The votes for a held node can be read from any state of small enough stake.
 
@@ -197,18 +183,15 @@ theorem getNodeChildren_held (lower : store.ParentsBelow) {node : ForkChoiceNode
             · rw [List.mem_singleton.mp member]
               simp [nodeRank, found, pending]
             · cases member
-    · obtain ⟨children, childrenOk⟩ : ∃ children, store.getNodeChildren node = .ok children := by
-        simp only [getNodeChildren, gloas, pending, and_false, ↓reduceDIte, true_and]
-        split
-        · simp [Store.block, found, bind, Except.bind, pure, Except.pure]
-        · exact ⟨_, rfl⟩
+    · obtain ⟨children, childrenOk⟩ :=
+        getNodeChildren_ok_of_known (status := node.payloadStatus) found
       refine ⟨children, childrenOk, fun child member => ?_⟩
       obtain ⟨childPending, childBlock, -, childFound, parent, -⟩ :=
         (mem_getNodeChildren_of_gloas gloas pending childrenOk).mp member
       exact ⟨childBlock, childFound, climbs child childBlock childPending childFound parent⟩
   · have before : fork < .glamsterdam := Nat.lt_of_not_le gloas
-    obtain ⟨children, childrenOk⟩ : ∃ children, store.getNodeChildren node = .ok children := by
-      simp [getNodeChildren, gloas, pure, Except.pure]
+    obtain ⟨children, childrenOk⟩ :=
+      getNodeChildren_ok_of_known (status := node.payloadStatus) found
     refine ⟨children, childrenOk, fun child member => ?_⟩
     obtain ⟨childPending, childBlock, childFound, parent⟩ :=
       (mem_getNodeChildren before childrenOk).mp member

@@ -183,6 +183,16 @@ theorem getSupportedNode_of_lt_slot {message : LatestMessage fork}
       .ok ⟨message.root, if message.payloadPresent gloas then .full else .empty⟩ := by
   simp [getSupportedNode, gloas, Store.block, found, later, bind, Except.bind, pure, Except.pure]
 
+/-- A vote for a held block supports a node. -/
+theorem getSupportedNode_exists {message : LatestMessage fork}
+    {block : BeaconBlock preset fork} (found : store.blocks[message.root]? = some block) :
+    ∃ node, store.getSupportedNode message = .ok node := by
+  by_cases gloas : .glamsterdam ≤ fork
+  · by_cases lt : block.slot < message.slot gloas
+    · exact ⟨_, getSupportedNode_of_lt_slot gloas found lt⟩
+    · exact ⟨_, getSupportedNode_of_same_slot gloas found (UInt64.not_lt.mp lt)⟩
+  · exact ⟨_, getSupportedNode_of_lt (Nat.lt_of_not_le gloas)⟩
+
 /-- From Gloas a vote for a block the store does not hold supports no node. -/
 theorem getSupportedNode_of_unknown {message : LatestMessage fork} (gloas : .glamsterdam ≤ fork)
     (missing : store.blocks[message.root]? = none) :
@@ -266,6 +276,18 @@ theorem mem_getNodeChildren_of_gloas {node child : ForkChoiceNode}
         by simp [parentRoot]⟩
     rw [empty] at built
     cases built
+
+/-- The children of a node can be computed when the store holds its block. -/
+theorem getNodeChildren_ok_of_known {root : Root} {status : PayloadStatus}
+    {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block) :
+    ∃ children, store.getNodeChildren ⟨root, status⟩ = .ok children := by
+  unfold Store.getNodeChildren
+  split
+  · exact ⟨_, rfl⟩
+  · dsimp only
+    split
+    · simp [Store.block, found, bind, Except.bind, pure, Except.pure]
+    · exact ⟨_, rfl⟩
 
 /-- The tally of the justified state, when the store holds that state. -/
 theorem justifiedTally_of_state {state : BeaconState preset fork}

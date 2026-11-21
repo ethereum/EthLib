@@ -209,35 +209,19 @@ theorem getAncestor_of_gt {node : ForkChoiceNode} {slot : Slot}
     store.getAncestor node slot = store.getAncestor ⟨block.parentRoot, .pending⟩ slot := by
   rw [getAncestor_step found above parentFound parentLower, parentPayloadStatus_of_lt before]
 
-/-- Before Gloas, a block whose parent descends from a node descends from it too.
+/-- A block whose parent descends from a node descends from it too.
 
 That needs the parent at an earlier slot than the block. -/
 theorem isAncestor_of_parent {root : Root} {block parent : BeaconBlock preset fork}
-    {ancestor : ForkChoiceNode} (before : fork < .glamsterdam)
+    {ancestor : ForkChoiceNode}
     (found : store.blocks[root]? = some block)
     (parentFound : store.blocks[block.parentRoot]? = some parent)
     (lower : parent.slot < block.slot)
     (descends : store.isAncestor ⟨block.parentRoot, .pending⟩ ancestor = .ok true) :
     store.isAncestor ⟨root, .pending⟩ ancestor = .ok true := by
-  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-  simp only [isAncestor, later, ↓reduceIte, bind, Except.bind] at descends ⊢
-  cases known : store.block ancestor.root with
-  | error e => simp [known] at descends
-  | ok ancestorBlock =>
-    simp only [known] at descends ⊢
-    -- The ancestor sits at or below the parent, so the walk from the block passes the parent.
-    have below : ancestorBlock.slot < block.slot := by
-      by_cases le : parent.slot ≤ ancestorBlock.slot
-      · rw [getAncestor_of_le parentFound le] at descends
-        simp only [pure, Except.pure, Except.ok.injEq, beq_iff_eq] at descends
-        have same : ancestor.root = block.parentRoot := by rw [← descends]
-        simp only [Store.block, same, parentFound, pure, Except.pure, Except.ok.injEq] at known
-        exact known ▸ lower
-      · exact UInt64.lt_trans (UInt64.lt_iff_toNat_lt.mpr (by
-          have := UInt64.le_iff_toNat_le.not.mp le; omega)) lower
-    rw [getAncestor_of_gt before found (fun le => absurd (UInt64.lt_of_lt_of_le below le)
-      (UInt64.lt_irrefl _)) parentFound lower]
-    exact descends
+  obtain ⟨_, held⟩ := held_of_isAncestor descends
+  exact isAncestor_trans parentFound held
+    (isAncestor_pending_parent_of_slot_lt found parentFound lower) descends
 
 /-- The ancestor walk to a slot succeeds from every known block.
 
@@ -676,7 +660,7 @@ theorem viable_of_ancestor {config : Config} {root member : Root}
   rcases viable with below | inTree
   · -- The justified block descends from the root, so from the member too.
     obtain ⟨rootBlock, rootFound, -⟩ := slot_le_of_isAncestor memberFound descends
-    exact .inl (isAncestor_trans_of_lt before rootFound memberFound below descends)
+    exact .inl (isAncestor_trans rootFound memberFound below descends)
   -- Walk down the filtered tree from the root, by the slot of the node, until the member.
   have walkDown : ∀ s, ∀ n ∈ nodes, ∀ block : BeaconBlock preset fork,
       store.blocks[n.root]? = some block → block.slot.toNat = s →
@@ -1212,7 +1196,7 @@ theorem getHeadFrom_descends {nodes : List ForkChoiceNode} {ancestor : ForkChoic
     have parentFound : store.blocks[block.parentRoot]? = some startBlock := by
       rw [parent]
       exact startFound
-    have step := isAncestor_of_parent before childFound parentFound lower (startNode ▸ descends)
+    have step := isAncestor_of_parent childFound parentFound lower (startNode ▸ descends)
     exact ih source lowerRank childPending (childNode ▸ step) walk
 
 /-- The head is a viable leaf, or no leaf is viable and the head is a node of the justified block.

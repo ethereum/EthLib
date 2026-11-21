@@ -26,18 +26,6 @@ open Base
 variable {preset : Preset} {fork : Fork} {config : Config} {store : Store preset fork}
   {optimistic : OptimisticStore preset fork}
 
-/-- The children of a node can be computed when the store holds its block. -/
-private theorem getNodeChildren_ok_of_known {root : Root} {status : PayloadStatus}
-    {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block) :
-    ∃ children, store.getNodeChildren ⟨root, status⟩ = .ok children := by
-  unfold Store.getNodeChildren
-  split
-  · exact ⟨_, rfl⟩
-  · dsimp only
-    split
-    · simp [Store.block, found, bind, Except.bind, pure, Except.pure]
-    · exact ⟨_, rfl⟩
-
 /-- The listed nodes of the tree are exactly the nodes that belong to it. -/
 theorem mem_treeNodes {node : ForkChoiceNode} :
     node ∈ treeNodes store ↔ isTreeNode store node = true := by
@@ -94,7 +82,7 @@ theorem treeParent_eq_some_iff {node parent : ForkChoiceNode}
       · rintro ⟨linked, parentTree⟩
         simp only [Option.bind_eq_some_iff, pure, Option.some.injEq] at linked
         obtain ⟨parentBlock, parentFound, rfl⟩ := linked
-        obtain ⟨children, childrenOk⟩ := getNodeChildren_ok_of_known parentFound
+        obtain ⟨children, childrenOk⟩ := Store.getNodeChildren_ok_of_known parentFound
         refine ⟨parentTree, children, childrenOk, ?_⟩
         rw [Store.mem_getNodeChildren_of_gloas gloas (Store.parentPayloadStatus_ne_pending gloas)
           childrenOk]
@@ -159,7 +147,7 @@ theorem treeParent_eq_some_iff {node parent : ForkChoiceNode}
     · rintro ⟨linked, parentTree⟩
       simp only [Option.bind_eq_some_iff, pure, Option.some.injEq] at linked
       obtain ⟨parentBlock, parentFound, rfl⟩ := linked
-      obtain ⟨children, childrenOk⟩ := getNodeChildren_ok_of_known parentFound
+      obtain ⟨children, childrenOk⟩ := Store.getNodeChildren_ok_of_known parentFound
       exact ⟨parentTree, children, childrenOk,
         (Store.mem_getNodeChildren before childrenOk).mpr ⟨rfl, block, found, rfl⟩⟩
     · rintro ⟨parentTree, children, childrenOk, mem⟩

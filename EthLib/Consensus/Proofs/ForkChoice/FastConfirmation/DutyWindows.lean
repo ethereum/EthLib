@@ -171,7 +171,7 @@ public theorem justified_descends_of_duty {anchor : Store preset fork} {time T :
   have up := Store.isAncestor_of_getCheckpointBlock_above preGloas b'Found supports targetRead
       blockLe
   -- The store agrees with the signer on the walk.
-  exact Store.isAncestor_of_same_blocks reachedW preGloas
+  exact Store.isAncestor_of_same_blocks reachedW
     (agree v honest w receiver k' k k'Bound (by omega)) b'Found
     (reachedV.anchorSlot_le (UInt64.le_of_eq anchorSlot) b'Found) ⟨_, justifiedKnown⟩ up
 

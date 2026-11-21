@@ -88,7 +88,7 @@ theorem Execution.rootHeld_of_honest_vote {Δ : ℕ} {anchor : Store preset fork
     (e.monotone_time before.le).trans voteTime
   have same := agree u caller v honest n k within (kTime.trans within)
   -- So the signer held the root then.
-  have signerDescends := Store.isAncestor_of_same_blocks (reached v honest k) preGloas same known
+  have signerDescends := Store.isAncestor_of_same_blocks (reached v honest k) same known
     ((reached u caller n).anchorSlot_le anchorLe known) ⟨headBlock, dataRoot ▸ headHeld⟩ descends
   obtain ⟨signerBlock, signerKnown⟩ := Store.held_of_isAncestor signerDescends
   -- The deadline of the vote, plus the delay, is before the call.

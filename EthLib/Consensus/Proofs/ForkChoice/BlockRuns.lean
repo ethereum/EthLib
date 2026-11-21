@@ -438,4 +438,9 @@ def AnchorRegistryRoom (preset : Preset) (anchorState : BeaconState preset fork)
       (horizon.toNat - (getCurrentEpoch anchorState).toNat) ≤
     preset.VALIDATOR_REGISTRY_LIMIT.toNat
 
+/-- Every held block state of a store has its registry within the limit of the preset. -/
+def HeldRegistriesWithinLimit (store : Store preset fork) : Prop :=
+  ∀ (root : Root) (state : BeaconState preset fork),
+    store.blockStates[root]? = some state → state.RegistryWithinLimit
+
 end EthLib.Consensus
