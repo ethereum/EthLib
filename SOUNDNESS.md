@@ -1008,6 +1008,9 @@ It is 26 fixed octets, then the octets that the uncompressed P-256 point decoder
 The fixed octets are a SEQUENCE header, the DER of id-ecPublicKey with the parameter secp256r1, then the header of a BIT STRING without unused bits.
 So another key type such as id-ecDH (RFC 5480 §2.1.2), another curve, another parameter form, a long length form, an unused bit and a trailing octet are each rejected.
 `size_of_readP256_eq_ok` derives that such a SubjectPublicKeyInfo has 91 octets, the length that the host key check of authentication requires of an ECDSA key.
+`readExtension_eq_ok_iff` states exactly which extensions read: an OID, then a TRUE BOOLEAN when critical, then an OCTET STRING.
+The result is the OID content, whether the TRUE is present, and the octets of the OCTET STRING.
+An explicit FALSE is rejected, because DER omits a value equal to its default (X.690 §11.5).
 `boolean_ok_iff` states that a BOOLEAN is one octet, FF for TRUE and 00 for FALSE (X.690 §§8.2, 11.1).
 `bitString_ok_iff` states that the BIT STRING reader accepts exactly the octet 0, then the octets it returns.
 `validBits_ok_iff` states that BIT STRING contents count at most 7 unused bits, all zero (X.690 §§8.6.2, 11.2.1).

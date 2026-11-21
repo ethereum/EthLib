@@ -23,6 +23,7 @@ These theorems describe the concrete checks that a successful authentication pas
 - A validity reads as two such times in order.
 - The endpoints of a parsed certificate are what its own validity field reads as.
 - An SPKI reads as a P-256 key exactly when it is 26 fixed octets, then an uncompressed point.
+- An extension reads as an OID, then TRUE when critical, then an OCTET STRING; FALSE is rejected.
 -/
 
 @[expose] public section
@@ -545,6 +546,48 @@ theorem readValidity_eq_ok_iff {value : Der.Value} {notBefore notAfter : Int} :
   · rintro ⟨first, last, hc, ha, hb, hab⟩
     refine ⟨[first, last], hc, ?_⟩
     simp [ha, hb, hab, ensure, bind, Except.bind, pure, Except.pure]
+
+/-- An extension reads exactly when it holds an OID, an optional TRUE and an OCTET STRING.
+
+The fields are those of RFC 5280 §4.1, where the critical flag is a BOOLEAN DEFAULT FALSE.
+
+It reads as the OID content, a critical flag set when TRUE is present, and the string octets.
+
+TRUE is the BOOLEAN with the one octet FF.
+
+An explicit FALSE is rejected, because DER omits a value equal to its default (X.690 §11.5). -/
+theorem readExtension_eq_ok_iff {value : Der.Value} {ext : Extension} :
+    readExtension value = .ok ext ↔ ∃ oid data, Der.oid oid = .ok ext.oid ∧ data.tag = 4 ∧
+      data.content = ext.value ∧
+      ((fields 0x30 value = .ok [oid, data] ∧ ext.critical = false) ∨
+        ∃ critical, fields 0x30 value = .ok [oid, critical, data] ∧ critical.tag = 1 ∧
+          critical.content.data.toList = [0xFF] ∧ ext.critical = true) := by
+  unfold readExtension
+  rw [bind_ok_iff]
+  constructor
+  · rintro ⟨children, hc, h⟩
+    rcases children with _ | ⟨oid, _ | ⟨data, _ | ⟨last, _ | ⟨other, rest⟩⟩⟩⟩
+    · simp [throw, throwThe, MonadExceptOf.throw] at h
+    · simp [throw, throwThe, MonadExceptOf.throw] at h
+    · simp only [der, bind_ok_iff, ensure_ok_iff, mapError_ok_iff, pure, Except.pure,
+        Except.ok.injEq] at h
+      obtain ⟨_, tag, o, ho, rfl⟩ := h
+      exact ⟨oid, data, ho, tag, rfl, .inl ⟨hc, rfl⟩⟩
+    · simp only [der, bind_ok_iff, ensure_ok_iff, mapError_ok_iff, pure, Except.pure,
+        Except.ok.injEq] at h
+      obtain ⟨_, tag, flag, hflag, _, rfl, o, ho, rfl⟩ := h
+      obtain ⟨one, ff⟩ := Proofs.Der.boolean_ok_iff.mp hflag
+      exact ⟨oid, last, ho, tag, rfl, .inr ⟨data, hc, one, by simpa using ff, rfl⟩⟩
+    · simp [throw, throwThe, MonadExceptOf.throw] at h
+  · rintro ⟨oid, data, ho, tag, hv, (⟨hc, hf⟩ | ⟨critical, hc, one, ff, hf⟩)⟩
+    · refine ⟨[oid, data], hc, ?_⟩
+      cases ext
+      simp_all [der, ensure, bind, Except.bind, pure, Except.pure, Except.mapError]
+    · refine ⟨[oid, critical, data], hc, ?_⟩
+      have hb : Der.boolean critical = .ok true :=
+        Proofs.Der.boolean_ok_iff.mpr ⟨one, by simpa using ff⟩
+      cases ext
+      simp_all [der, ensure, bind, Except.bind, pure, Except.pure, Except.mapError]
 
 /-- The validity endpoints of a parsed certificate are what its own validity field reads as.
 
