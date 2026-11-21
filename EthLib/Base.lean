@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Address
+public import EthLib.Base.Base32
 public import EthLib.Base.Base64
 public import EthLib.Base.BigEndian
 public import EthLib.Base.ByteReader

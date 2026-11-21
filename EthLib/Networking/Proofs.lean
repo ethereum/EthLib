@@ -16,6 +16,7 @@ public import EthLib.Networking.Proofs.Devp2p.ForkId
 public import EthLib.Networking.Proofs.Devp2p.P2p
 public import EthLib.Networking.Proofs.Devp2p.Session
 public import EthLib.Networking.Proofs.Discv4.Exchange
+public import EthLib.Networking.Proofs.DnsDisc
 public import EthLib.Networking.Proofs.Discv4.Packet
 public import EthLib.Networking.Proofs.Encoding.Protobuf
 public import EthLib.Networking.Proofs.Encoding.Uvarint

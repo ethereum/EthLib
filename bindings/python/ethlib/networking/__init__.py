@@ -4,6 +4,7 @@ __all__ = [
     "devp2p",
     "discv4",
     "discv5",
+    "dnsdisc",
     "enr",
     "forkid",
     "gossip",

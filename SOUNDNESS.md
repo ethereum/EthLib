@@ -2573,6 +2573,34 @@ No decoded item fails to encode, since a length must reach `2^64` for that.
 If one did, its transaction would have no hash and would reject its whole message, while [Transaction Encoding and Validity](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#transaction-encoding-and-validity) asks only to discard invalid transactions.
 The session accepts an empty Transactions message from the peer, which the source only discourages.
 
+### DNS node lists
+
+`Entry.parse` and `Entry.toText` (`Networking/DnsDisc.lean`) read and write the entries of a node list of [EIP-1459](https://eips.ethereum.org/EIPS/eip-1459): the root, a branch, a link and a node record.
+They follow the [DNS Record Structure](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/dnsdisc.md#L20-L102) of `dnsdisc.md`, the maintained text of the EIP.
+The hashes and keys are in the base32 of RFC 4648, the signature in its URL-safe base64, both without padding.
+`subdomain` gives the name at which an entry sits, and `Root.verify` checks the signature of a root against the compressed public key of a URL.
+
+`Entry.parse_toText` and `Entry.toText_of_parse` (`Networking/Proofs/DnsDisc.lean`) state that an entry and its text determine each other.
+A link must name a point of the curve, and a record must read back from its own bytes.
+`Url.parse_toText` and `Url.toText_of_parse` state the same for a URL.
+`length_subdomain` states that a name has 26 characters.
+`Root.verify_sign` states that a root signed with a private key verifies under the compressed public key of that key.
+`Base32.decode_encode` and `Base32.encode_of_decode` (`Base/Proofs/Base32.lean`) state that base32 is a bijection between byte strings and the texts that the decoder accepts.
+
+The source leaves these points open, and EthLib reads them as follows.
+[devp2p#298](https://github.com/ethereum/devp2p/pull/298), [#299](https://github.com/ethereum/devp2p/pull/299), [#300](https://github.com/ethereum/devp2p/pull/300) and [#301](https://github.com/ethereum/devp2p/pull/301) report the first four upstream.
+The hash that names an entry is "abbreviated" to a length that the text does not give.
+EthLib keeps 16 bytes, 26 characters, as the examples do.
+The text calls the key of a URL "the compressed 32-byte binary public key", while a compressed key has 33 bytes, as the example has; EthLib reads 33 bytes.
+The example URL decodes to another key than the one that the text says signs the list.
+The signature of the example root recovers the second key, and the Python suite checks both.
+Step 1 of the client protocol writes `enrtree-root=v1`, while the record structure writes `enrtree-root:v1`; EthLib reads the second.
+The 512-byte limit on a record is a "should", so the reader does not enforce it.
+The sequence number is read without leading zeros, so that each root has one text, and with no upper bound.
+The recovery id of the signature is 0 or 1, and a high `s` is accepted, since the source fixes neither.
+So a root text has a second valid signature, with `n - s` and the other recovery id, under the same key.
+An empty branch `enrtree-branch:` holds no hash, and the domain of a URL is not checked as a DNS name, so it may be empty.
+
 ### The discv4 endpoint proof
 
 `receive` (`Networking/Discv4/Exchange.lean`) follows what a node of discv4 does with a packet from an address: the state it keeps, and the packets it sends back.
@@ -7358,12 +7386,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 544 operations and 51 size constants.
-The Python extension calls 544 of the operations and 51 of the constants.
+Lean exports 548 operations and 51 size constants.
+The Python extension calls 548 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12283 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (342), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1625), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (847), `x25519.c` (21), `xmss.c` (344).
+12354 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (342), `dnsdisc.c` (60), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1631), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (852), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

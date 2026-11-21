@@ -68,6 +68,16 @@ theorem decodeList_encodeList {start : Nat} :
     rw [ofNat_eq b0 _ (by omega)]
   | [] => rfl
 
+/-- A byte string has its bits in characters, six bits each, rounded up. -/
+theorem length_encodeList :
+    (bytes : List UInt8) → (encodeList bytes).length = (4 * bytes.length + 2) / 3
+  | _ :: _ :: _ :: rest => by
+    simp only [encodeList, List.length_cons, length_encodeList rest]
+    omega
+  | [_, _] => by simp [encodeList]
+  | [_] => by simp [encodeList]
+  | [] => by simp [encodeList]
+
 /-- The decoder undoes the encoder: every byte string reads back from its text. -/
 theorem decode_encode (bytes : ByteArray) : decode (encode bytes) = .ok bytes := by
   simp only [decode, encode, String.toList_ofList, decodeList_encodeList, bind, Except.bind,
