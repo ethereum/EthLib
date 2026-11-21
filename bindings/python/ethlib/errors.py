@@ -281,6 +281,10 @@ class Discv4Error(EthLibError, ValueError):
     """A discv4 packet was rejected, with the code of its error, or 0 for a bad argument."""
 
 
+class DnsDiscError(EthLibError, ValueError):
+    """An entry or a URL of an EIP-1459 node list was rejected."""
+
+
 class ForkIdError(EthLibError, ValueError):
     """A node refused the fork identifier of a peer, or an input was malformed, with code 0."""
 
@@ -430,6 +434,7 @@ __all__ = [
     "RlpxError",
     "Devp2pError",
     "Discv4Error",
+    "DnsDiscError",
     "ForkIdError",
     "EthWireError",
     "SnapError",

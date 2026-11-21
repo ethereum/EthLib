@@ -204,6 +204,7 @@ def _make_extension() -> Extension:
             "bindings/python/rlpx.c",
             "bindings/python/devp2p.c",
             "bindings/python/discv4.c",
+            "bindings/python/dnsdisc.c",
             "bindings/python/forkid.c",
             "bindings/python/eth.c",
             "bindings/python/snap.c",

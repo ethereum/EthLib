@@ -1560,6 +1560,22 @@ def discv4_accept_enr_response(request: bytes, response: bytes) -> bool:
     """Whether an ENRResponse packet answers an ENRRequest packet that the node sent."""
     ...
 
+def dnsdisc_parse_entry(text: str) -> dict[str, Any]:
+    """The type and the fields of an entry text, as a `dict`."""
+    ...
+
+def dnsdisc_subdomain(text: str) -> str:
+    """The subdomain of an entry text: the base32 of the first 16 bytes of its Keccak-256 hash."""
+    ...
+
+def dnsdisc_verify_root(key: bytes, text: str) -> bool:
+    """Whether a root text is signed by a compressed public key of 33 bytes."""
+    ...
+
+def dnsdisc_parse_url(text: str) -> tuple[bytes, str]:
+    """The compressed public key and the domain of a URL `enrtree://<key>@<domain>`."""
+    ...
+
 def fork_id(schedule: bytes, number: int, timestamp: int) -> tuple[bytes, int]:
     """The fork identifier of a node with a schedule at a head: its hash and its next fork."""
     ...

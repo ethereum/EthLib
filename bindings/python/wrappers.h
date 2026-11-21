@@ -178,6 +178,7 @@ extern PyObject* DISCV5_ERROR;
 extern PyObject* RLPX_ERROR;
 extern PyObject* DEVP2P_ERROR;
 extern PyObject* DISCV4_ERROR;
+extern PyObject* DNSDISC_ERROR;
 extern PyObject* FORK_ID_ERROR;
 extern PyObject* ETH_WIRE_ERROR;
 extern PyObject* SNAP_ERROR;
@@ -688,6 +689,10 @@ PyObject* py_discv4_encode                                (PyObject* self, PyObj
 PyObject* py_discv4_record_signed_by                      (PyObject* self, PyObject* args);
 PyObject* py_discv4_receive                               (PyObject* self, PyObject* args);
 PyObject* py_discv4_accept_enr_response                   (PyObject* self, PyObject* args);
+PyObject* py_dnsdisc_parse_entry                          (PyObject* self, PyObject* args);
+PyObject* py_dnsdisc_subdomain                            (PyObject* self, PyObject* args);
+PyObject* py_dnsdisc_verify_root                          (PyObject* self, PyObject* args);
+PyObject* py_dnsdisc_parse_url                            (PyObject* self, PyObject* args);
 PyObject* py_fork_id                                      (PyObject* self, PyObject* args);
 PyObject* py_fork_id_schedule                             (PyObject* self, PyObject* args);
 PyObject* py_fork_id_encode                               (PyObject* self, PyObject* args);

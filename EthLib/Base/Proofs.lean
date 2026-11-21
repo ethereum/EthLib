@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.Address
+public import EthLib.Base.Proofs.Base32
 public import EthLib.Base.Proofs.Base64
 public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Base.Proofs.BitVec

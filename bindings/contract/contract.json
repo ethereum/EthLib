@@ -12472,6 +12472,74 @@
    "error_class": "Discv4Error",
    "docstring":
    "Whether an ENRResponse packet answers an ENRRequest packet that the node sent.\n\nIt must hold the hash of the request packet, and a record signed by the key of the response."},
+  {"summary": "The type and the fields of an entry text, as a `dict`.",
+   "signature": "(text: str) -> dict[str, Any]",
+   "operation": "EthLib.Networking.DnsDisc.Exports.parseEntryExport",
+   "method": "dnsdisc_parse_entry",
+   "errors":
+   [{"type": "EthLib.Networking.DnsDisc.DnsError",
+     "codes":
+     [{"constructor": "unknownEntry", "code": 1},
+      {"constructor": "rootFields", "code": 2},
+      {"constructor": "seq", "code": 3},
+      {"constructor": "encoding", "code": 4},
+      {"constructor": "branchHashes", "code": 5},
+      {"constructor": "linkFields", "code": 6},
+      {"constructor": "publicKey", "code": 7},
+      {"constructor": "enr", "code": 8},
+      {"constructor": "signing", "code": 9}]}],
+   "error_class": "DnsDiscError",
+   "docstring":
+   "The type and the fields of an entry text, as a `dict`.\n\nThe type is `root`, `branch`, `link` or `enr`."},
+  {"summary":
+   "The subdomain of an entry text: the base32 of the first 16 bytes of its Keccak-256 hash.",
+   "signature": "(text: str) -> str",
+   "operation": "EthLib.Networking.DnsDisc.Exports.subdomainExport",
+   "method": "dnsdisc_subdomain",
+   "errors": [],
+   "error_class": "DnsDiscError",
+   "docstring":
+   "The subdomain of an entry text: the base32 of the first 16 bytes of its Keccak-256 hash."},
+  {"summary":
+   "Whether a root text is signed by a compressed public key of 33 bytes.",
+   "signature": "(key: bytes, text: str) -> bool",
+   "operation": "EthLib.Networking.DnsDisc.Exports.verifyRootExport",
+   "method": "dnsdisc_verify_root",
+   "errors":
+   [{"type": "EthLib.Networking.DnsDisc.DnsError",
+     "codes":
+     [{"constructor": "unknownEntry", "code": 1},
+      {"constructor": "rootFields", "code": 2},
+      {"constructor": "seq", "code": 3},
+      {"constructor": "encoding", "code": 4},
+      {"constructor": "branchHashes", "code": 5},
+      {"constructor": "linkFields", "code": 6},
+      {"constructor": "publicKey", "code": 7},
+      {"constructor": "enr", "code": 8},
+      {"constructor": "signing", "code": 9}]}],
+   "error_class": "DnsDiscError",
+   "docstring":
+   "Whether a root text is signed by a compressed public key of 33 bytes.\n\nA text that is no root comes back with the code of a root error."},
+  {"summary":
+   "The compressed public key and the domain of a URL `enrtree://<key>@<domain>`.",
+   "signature": "(text: str) -> tuple[bytes, str]",
+   "operation": "EthLib.Networking.DnsDisc.Exports.parseUrlExport",
+   "method": "dnsdisc_parse_url",
+   "errors":
+   [{"type": "EthLib.Networking.DnsDisc.DnsError",
+     "codes":
+     [{"constructor": "unknownEntry", "code": 1},
+      {"constructor": "rootFields", "code": 2},
+      {"constructor": "seq", "code": 3},
+      {"constructor": "encoding", "code": 4},
+      {"constructor": "branchHashes", "code": 5},
+      {"constructor": "linkFields", "code": 6},
+      {"constructor": "publicKey", "code": 7},
+      {"constructor": "enr", "code": 8},
+      {"constructor": "signing", "code": 9}]}],
+   "error_class": "DnsDiscError",
+   "docstring":
+   "The compressed public key and the domain of a URL `enrtree://<key>@<domain>`."},
   {"summary":
    "The fork identifier of a node with a schedule at a head: its hash and its next fork.",
    "signature":

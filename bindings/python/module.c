@@ -112,6 +112,7 @@ PyObject* DISCV5_ERROR;
 PyObject* RLPX_ERROR;
 PyObject* DEVP2P_ERROR;
 PyObject* DISCV4_ERROR;
+PyObject* DNSDISC_ERROR;
 PyObject* FORK_ID_ERROR;
 PyObject* ETH_WIRE_ERROR;
 PyObject* SNAP_ERROR;
@@ -1206,6 +1207,10 @@ static PyMethodDef methods[] = {
   {"discv4_receive", py_discv4_receive, METH_VARARGS, DOC_discv4_receive},
   {"discv4_accept_enr_response", py_discv4_accept_enr_response, METH_VARARGS,
    DOC_discv4_accept_enr_response},
+  {"dnsdisc_parse_entry", py_dnsdisc_parse_entry, METH_VARARGS, DOC_dnsdisc_parse_entry},
+  {"dnsdisc_subdomain", py_dnsdisc_subdomain, METH_VARARGS, DOC_dnsdisc_subdomain},
+  {"dnsdisc_verify_root", py_dnsdisc_verify_root, METH_VARARGS, DOC_dnsdisc_verify_root},
+  {"dnsdisc_parse_url", py_dnsdisc_parse_url, METH_VARARGS, DOC_dnsdisc_parse_url},
   {"fork_id", py_fork_id, METH_VARARGS, DOC_fork_id},
   {"fork_id_schedule", py_fork_id_schedule, METH_VARARGS, DOC_fork_id_schedule},
   {"fork_id_encode", py_fork_id_encode, METH_VARARGS, DOC_fork_id_encode},
@@ -1452,6 +1457,7 @@ PyInit__native(void) {
     RLPX_ERROR = PyObject_GetAttrString(errors, "RlpxError");
     DEVP2P_ERROR = PyObject_GetAttrString(errors, "Devp2pError");
     DISCV4_ERROR = PyObject_GetAttrString(errors, "Discv4Error");
+    DNSDISC_ERROR = PyObject_GetAttrString(errors, "DnsDiscError");
     FORK_ID_ERROR = PyObject_GetAttrString(errors, "ForkIdError");
     ETH_WIRE_ERROR = PyObject_GetAttrString(errors, "EthWireError");
     SNAP_ERROR = PyObject_GetAttrString(errors, "SnapError");

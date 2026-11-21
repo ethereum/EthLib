@@ -1163,6 +1163,18 @@
 #define DOC_discv4_accept_enr_response \
   "Whether an ENRResponse packet answers an ENRRequest packet that the node sent."
 
+#define DOC_dnsdisc_parse_entry \
+  "The type and the fields of an entry text, as a `dict`."
+
+#define DOC_dnsdisc_subdomain \
+  "The subdomain of an entry text: the base32 of the first 16 bytes of its Keccak-256 hash."
+
+#define DOC_dnsdisc_verify_root \
+  "Whether a root text is signed by a compressed public key of 33 bytes."
+
+#define DOC_dnsdisc_parse_url \
+  "The compressed public key and the domain of a URL `enrtree://<key>@<domain>`."
+
 #define DOC_fork_id \
   "The fork identifier of a node with a schedule at a head: its hash and its next fork."
 
