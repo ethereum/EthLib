@@ -1,62 +1,7 @@
 module
 
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumReserve
-public import EthLib.Consensus.Proofs.Transition.BalanceDrift
-public import EthLib.Consensus.Proofs.Transition.FfgJustification
-import EthLib.Consensus.Proofs.Transition.ActiveKept
-import EthLib.Consensus.Proofs.Transition.SlashedExit
-public import EthLib.Consensus.Proofs.Transition.SlashedPersistence
-public import EthLib.Consensus.Proofs.Transition.EpochReads
-import EthLib.Consensus.Proofs.Transition.PendingConsolidations
-import EthLib.Consensus.Proofs.Transition.Committees
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Penalties
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Contracts.Ledger
-import EthLib.Consensus.Proofs.Transition.EpochPending
-import EthLib.Consensus.Proofs.Transition.Operations
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Reserved.Operations
-import EthLib.Consensus.Proofs.Transition.Block
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Whistleblower
-import EthLib.Consensus.Proofs.DirectSafety.BalanceSources
-import EthLib.Consensus.Proofs.Mutators
-import EthLib.Consensus.Proofs.Transition.Trace
-import Mathlib.Data.Nat.Notation
-import EthLib.Consensus.Proofs.Transition.EpochUpdates
-import EthLib.Consensus.Proofs.Transition.ForkBoundary
-import EthLib.Consensus.Proofs.Transition.StateTransition
-import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
-import EthLib.Consensus.Proofs.Transition.BranchLedger
-import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Assembly
-import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
-import EthLib.Consensus.Proofs.Transition.InactivityLeakBound
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumDriftBound
-import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
-import EthLib.Consensus.Proofs.Transition.ValidatorCaps
-public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Bound
-import EthLib.Consensus.Proofs.Transition.Totality.Supply
-import EthLib.Consensus.Proofs.Transition.EffectiveFall
-import EthLib.Consensus.Proofs.DirectSafety.Evidence
-import EthLib.Consensus.Proofs.DirectSafety.Fields
-import EthLib.Consensus.Proofs.Transition.ValidatorKeys
-import EthLib.Consensus.Proofs.Transition.ChainRoots
-import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
-import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
-import EthLib.Consensus.Proofs.Transition.SlashedFlags
-import EthLib.Consensus.Proofs.Transition.LookaheadActive
-import Mathlib.Data.Nat.ModEq
-import EthLib.Consensus.Proofs.DirectSafety.IntervalBounds
-import EthLib.Consensus.Proofs.Transition.BlockCredits
 import EthLib.Consensus.Proofs.DirectSafety.Apriori.BlockFold
-public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Ceiling
-public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Issuance
-public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Ownership
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Branch
-import EthLib.Consensus.Proofs.Transition.EpochRewards
-import EthLib.Consensus.Proofs.Transition.RewardDeltas
-import EthLib.Consensus.Proofs.Transition.FfgStake
-import EthLib.Consensus.Proofs.Time
-import EthLib.Consensus.Proofs.Participation
-import Mathlib.Algebra.Order.Floor.Div
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.PinDriftBound.Band
 
 @[expose] public section
@@ -69,15 +14,14 @@ section
 
 /-! Balance floors for validators slashed before a run or during its first epoch. -/
 
-namespace PinSlashFloor
+namespace PinDrift.Internal
 
 open Base Uint64 Models DirectSafety DirectSafety.Apriori.Internal
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 /-- Every fork from Fulu on has the slashing quotient of Electra. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.mspq_fusaka {f : Fork} (h : .fusaka
-  ≤ f) :
+theorem mspq_fusaka {f : Fork} (h : .fusaka ≤ f) :
     (EthLib.Consensus.parameters preset f).MIN_SLASHING_PENALTY_QUOTIENT =
       (EthLib.Consensus.parameters preset .fusaka).MIN_SLASHING_PENALTY_QUOTIENT := by
   have pectra : .pectra ≤ f := Nat.le_trans (by decide) h
@@ -170,8 +114,7 @@ The last is its initial slashing penalty, if the run slashes it.
 That penalty is the effective balance at `m` over the slashing quotient.
 
 The effective balance changes only at the boundary, after any slashing before it. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.epochFloor {g m n :
-  ForkedBeaconState preset} (shared : Run config checks g m)
+theorem epochFloor {g m n : ForkedBeaconState preset} (shared : Run config checks g m)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (vector : 4 ≤ preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat)
@@ -334,7 +277,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.epochFloor {g m
     simp only [cond, and_self, ↓reduceIte]
     omega
 
-end PinSlashFloor
+end PinDrift.Internal
 
 end
 
