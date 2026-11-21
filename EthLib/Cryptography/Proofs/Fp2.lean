@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Fp2
+public import EthLib.Cryptography.Proofs.BaseField
 public import Mathlib.FieldTheory.Finite.Basic
 public import Mathlib.Tactic.LinearCombination
 
@@ -21,23 +22,6 @@ In the integers mod a prime `p = 3 mod 4`, `-1` is not a square, by Euler's crit
 @[expose] public section
 
 namespace EthLib.Cryptography
-
-/-- An injective map of the field operations of `F` into a field of Mathlib, respecting each one. -/
-structure FieldOps.Embedding (F K : Type) [FieldOps F] [Field K] where
-  /-- The map of elements. -/
-  toFun : F → K
-  injective : Function.Injective toFun
-  map_add : ∀ a b, toFun (a + b) = toFun a + toFun b
-  map_sub : ∀ a b, toFun (a - b) = toFun a - toFun b
-  map_mul : ∀ a b, toFun (a * b) = toFun a * toFun b
-  map_neg : ∀ a, toFun (-a) = -toFun a
-  map_zero : toFun FieldOps.zero = 0
-  map_one : toFun FieldOps.one = 1
-  map_inverse : ∀ a, toFun (FieldOps.inverse a) = (toFun a)⁻¹
-  /-- The boolean equality holds exactly when the images are equal. -/
-  beq_iff : ∀ a b, FieldOps.beq a b = true ↔ toFun a = toFun b
-  /-- The zero test holds exactly when the image is zero. -/
-  isZero_iff : ∀ a, FieldOps.isZero a = true ↔ toFun a = 0
 
 namespace Fp2
 
@@ -83,6 +67,14 @@ protected theorem ext {a b : Fp2 F} (h0 : a.c0 = b.c0) (h1 : a.c1 = b.c1) : a = 
 
 instance : Zero (Fp2 F) := ⟨zero⟩
 instance : One (Fp2 F) := ⟨one⟩
+
+/-! The field operations of the extension are its own operations. -/
+
+@[simp] theorem fieldOps_zero : (FieldOps.zero : Fp2 F) = 0 := rfl
+@[simp] theorem fieldOps_one : (FieldOps.one : Fp2 F) = 1 := rfl
+@[simp] theorem fieldOps_beq (a b : Fp2 F) : FieldOps.beq a b = a.beq b := rfl
+@[simp] theorem fieldOps_isZero (a : Fp2 F) : FieldOps.isZero a = a.isZero := rfl
+@[simp] theorem fieldOps_inverse (a : Fp2 F) : FieldOps.inverse a = a.inverse := rfl
 
 @[simp] theorem zero_c0 : (0 : Fp2 F).c0 = FieldOps.zero := rfl
 @[simp] theorem zero_c1 : (0 : Fp2 F).c1 = FieldOps.zero := rfl

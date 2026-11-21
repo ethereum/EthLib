@@ -25,7 +25,7 @@ set_option maxRecDepth 10000
 
 private theorem curve_equation (x y : ZMod Fp.modulus) :
     curve.toAffine.Equation x y ↔ y ^ 2 = x ^ 3 + 4 := by
-  simp [WeierstrassCurve.Affine.equation_iff, curve]
+  simp [WeierstrassCurve.Affine.equation_iff, curve, Law.curveOf]
 
 /-- Witness `y`-coordinate when some `y` on the curve has coordinate `x`, or `0` otherwise. -/
 noncomputable def chosenY (x : ZMod Fp.modulus) : ZMod Fp.modulus := by

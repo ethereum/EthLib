@@ -21,10 +21,6 @@ open EthLib.Cryptography.BaseField (Hom)
 
 variable {F G : Type} [BaseField F] [BaseField G]
 
-private theorem G2.map_add' (f : Hom F G) (p q : G2 F) :
-    G2.map f (p.add q) = (G2.map f p).add (G2.map f q) :=
-  G2.map_add f p q
-
 theorem map_lineValue (f : Hom F G) (c0 c2 c3 : Fp2 F) :
     (lineValue c0 c2 c3).map f = lineValue (c0.map f) (c2.map f) (c3.map f) := by
   simp only [lineValue, Fp12.map, Fp6.map, Fp2.map_zero]
@@ -39,9 +35,9 @@ theorem map_millerDouble (f : Hom F G) (T : G2 F) (xp yp : F) (g : Fp12 F) :
 theorem map_millerAdd (f : Hom F G) (T : G2 F) (xq yq : Fp2 F) (xp yp : F) (g : Fp12 F) :
     Prod.map (G2.map f) (Fp12.map f) (millerAdd T xq yq xp yp g)
       = millerAdd (T.map f) (xq.map f) (yq.map f) (f xp) (f yp) (g.map f) := by
-  simp only [millerAdd, Prod.map, G2.map_add', Fp12.map_mul, map_lineValue,
+  simp only [millerAdd, Prod.map, G2.map_add_fn, Fp12.map_mul, map_lineValue,
     Fp2.map_sub, Fp2.map_mul, Fp2.map_neg, Fp2.map_ofFp]
-  simp only [G2.map, Fp2.map_one]
+  simp only [G2.map, G1.map, Fp2.hom, Fp2.map_one]
 
 theorem map_millerSteps (f : Hom F G) (s : Nat) (xq yq : Fp2 F) (xp yp : F) (n : Nat)
     (T : G2 F) (g : Fp12 F) :
@@ -65,7 +61,8 @@ theorem map_millerSteps (f : Hom F G) (s : Nat) (xq yq : Fp2 F) (xp yp : F) (n :
 theorem map_millerLoop (f : Hom F G) (s : Nat) (q : Fp2 F × Fp2 F) (p : F × F) :
     (millerLoop s q p).map f
       = millerLoop s (Prod.map (Fp2.map f) (Fp2.map f) q) (Prod.map f f p) := by
-  simp only [millerLoop, map_millerSteps, Fp12.map_one, G2.map, Fp2.map_one, Prod.map]
+  simp only [millerLoop, map_millerSteps, Fp12.map_one, G2.map, G1.map, Fp2.hom, Fp2.map_one,
+    Prod.map]
 
 theorem map_finalExponentiation (f : Hom F G) (g : Fp12 F) :
     (finalExponentiation g).map f = finalExponentiation (g.map f) := by
@@ -74,7 +71,7 @@ theorem map_finalExponentiation (f : Hom F G) (g : Fp12 F) :
 
 /-- The factor of a pair commutes with the map. -/
 private theorem map_pairFactor (f : Hom F G) (pq : G1 F × G2 F) :
-    (pairFactor pq).map (Fp12.map f) = pairFactor (Prod.map (G1.map f) (G2.map f) pq) := by
+    (pairFactor pq).map (Fp12.map f) = pairFactor (Prod.map (G1.map f.toHom) (G2.map f) pq) := by
   obtain ⟨p, q⟩ := pq
   unfold pairFactor
   simp only [Prod.map, G1.map_isInfinity, G2.map_isInfinity]
@@ -84,9 +81,9 @@ private theorem map_pairFactor (f : Hom F G) (pq : G1 F × G2 F) :
       ← Fp12.map_conjugate]
 
 theorem map_pairing (f : Hom F G) (P : G1 F) (Q : G2 F) :
-    (pairing P Q).map f = pairing (P.map f) (Q.map f) := by
+    (pairing P Q).map f = pairing (P.map f.toHom) (Q.map f) := by
   unfold pairing
-  rw [show (P.map f, Q.map f) = Prod.map (G1.map f) (G2.map f) (P, Q) from rfl,
+  rw [show (P.map f.toHom, Q.map f) = Prod.map (G1.map f.toHom) (G2.map f) (P, Q) from rfl,
     ← map_pairFactor]
   cases pairFactor (P, Q) with
   | none => exact Fp12.map_one f
@@ -95,7 +92,7 @@ theorem map_pairing (f : Hom F G) (P : G1 F) (Q : G2 F) :
 /-- The product of the factors commutes with the map. -/
 private theorem map_foldl_pairFactor (f : Hom F G) (l : List (G1 F × G2 F)) (acc : Fp12 F) :
     ((l.filterMap pairFactor).foldl (· * ·) acc).map f =
-      ((l.map (Prod.map (G1.map f) (G2.map f))).filterMap pairFactor).foldl (· * ·)
+      ((l.map (Prod.map (G1.map f.toHom) (G2.map f))).filterMap pairFactor).foldl (· * ·)
         (acc.map f) := by
   induction l generalizing acc with
   | nil => rfl
@@ -106,7 +103,7 @@ private theorem map_foldl_pairFactor (f : Hom F G) (l : List (G1 F × G2 F)) (ac
     | some x => rw [Option.map_some, List.foldl_cons, List.foldl_cons, ih, Fp12.map_mul]
 
 theorem map_pairingCheck (f : Hom F G) (pairs : Array (G1 F × G2 F)) :
-    pairingCheck (pairs.map (Prod.map (G1.map f) (G2.map f))) = pairingCheck pairs := by
+    pairingCheck (pairs.map (Prod.map (G1.map f.toHom) (G2.map f))) = pairingCheck pairs := by
   unfold pairingCheck
   rw [← Array.foldl_toList, Array.toList_filterMap, ← Array.foldl_toList, Array.toList_filterMap,
     Array.toList_map, ← Fp12.map_one f, ← map_foldl_pairFactor, ← map_finalExponentiation,

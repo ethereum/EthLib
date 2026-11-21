@@ -27,7 +27,7 @@ The group and the curve are those of Mathlib, so this file imports Mathlib.
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
 open EthLib.Base (natToBytes)
-open EthLib.Cryptography.Bls (Fp Fp2 G1 G2)
+open EthLib.Cryptography.Bls (Fp Fp2 G1 G2 G2.zero)
 
 /-- Decoding the encoding of a G1 point on the curve gives the same group element.
 
@@ -97,7 +97,8 @@ theorem g2ToBytes_bytesToG2 {raw : List UInt8} (hlength : raw.length = 192) {sub
   have hyb := natToBytes_bytesToFq2 (by simp [hlength]) hy
   rcases hcase with ⟨h0, h1, h2, h3, rfl⟩ | ⟨-, -, rfl⟩
   · -- Every coordinate is zero: the point at infinity, and the bytes are all zero.
-    rw [g2ToBytes_of_isZero G2.isInfinity_zero, ← List.take_append_drop 96 raw, ← hxb, ← hyb]
+    rw [g2ToBytes_of_isZero (p := G2.zero) G2.isInfinity_zero, ← List.take_append_drop 96 raw,
+      ← hxb, ← hyb]
     rw [h0, h1, h2, h3]
     rfl
   · simp only [g2ToBytes, G2.toAffine_of_z_one]

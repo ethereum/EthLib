@@ -38,20 +38,12 @@ open EthLib.Base (packBytes size_packBytes
   byteArray_get!_set!_self byteArray_get!_set!_ne byteArray_ext_get! byteArray_set!_set!
   byteArray_set!_get!_self)
 
-/-- Equality of `G2` points, coordinate by coordinate.
-
-The derived instance would ask for equality on every base field, so this one is written for `Fp`. -/
-instance : DecidableEq EthLib.Cryptography.Bls.G2 := fun a b =>
-  match a, b with
-  | ⟨ax, ay, az⟩, ⟨bx, bY, bz⟩ =>
-    if h : ax = bx ∧ ay = bY ∧ az = bz then isTrue (by obtain ⟨rfl, rfl, rfl⟩ := h; rfl)
-    else isFalse (fun e => h (by cases e; exact ⟨rfl, rfl, rfl⟩))
-
 namespace EthLib.Cryptography.Bls
 
 namespace G2
 
 open scoped EthLib.Cryptography.Bls.Fp
+open G1 (projectiveEq isInfinity toAffine)
 
 /-! ## Projective equality -/
 
@@ -446,14 +438,8 @@ theorem compress_eq_infinityBytes_iff (p : G2) :
 
 /-- Projecting a point with `z = 1` to affine coordinates leaves `(x, y)` unchanged. -/
 @[simp] theorem toAffine_of_z_one (x y : Fp2) :
-    (⟨x, y, Fp2.one⟩ : G2).toAffine = (x, y) := by
-  unfold toAffine
-  rw [ite_eq_right (by rw [Fp2.one_isZero]; decide)]
-  have hinv : (Fp2.one : Fp2).inverse = 1 := by
-    have h := Fp2.mul_inverse_cancel (a := 1) one_ne_zero
-    rwa [one_mul] at h
-  dsimp only
-  rw [hinv, mul_one, mul_one, mul_one, mul_one]
+    (⟨x, y, Fp2.one⟩ : G2).toAffine = (x, y) :=
+  G1.Law.toAffine_mk_one Fp2.embedding x y
 
 private theorem curve_eq_fp2 (x y z w : Fp2) (hw : z * w = 1)
     (heq : y * y = x * x * x + bTwist * (z * z * z * (z * z * z))) :
@@ -473,7 +459,7 @@ theorem affine_sqrt_witness {p : G2} (h : G2.isOnTwist p = true) (hinf : ¬ p.is
   have hzne : p.z ≠ 0 := fun hz0 => hinf (Fp2.isZero_iff.mpr hz0)
   have hw : p.z * p.z.inverse = 1 := Fp2.mul_inverse_cancel hzne
   have hpz : ¬ p.z.isZero = true := hinf
-  simp only [G2.toAffine, ite_eq_right hpz]
+  simp only [G1.toAffine, Fp2.fieldOps_isZero, Fp2.fieldOps_inverse, ite_eq_right hpz]
   exact curve_eq_fp2 p.x p.y p.z p.z.inverse hw heq
 
 private theorem xeq_fp2 (x z w : Fp2) (hw : z * w = 1) :
@@ -491,11 +477,11 @@ theorem projectiveEq_toAffine {p : G2} (hinf : ¬ p.isInfinity = true) :
   have hzne : p.z ≠ 0 := fun hz0 => hinf (Fp2.isZero_iff.mpr hz0)
   have hw : p.z * p.z.inverse = 1 := Fp2.mul_inverse_cancel hzne
   unfold projectiveEq
+  simp only [Fp2.fieldOps_isZero, Fp2.fieldOps_beq]
   rw [ite_eq_right (by rw [Fp2.one_isZero]; decide : ¬ (Fp2.one : Fp2).isZero = true),
     ite_eq_right hpz]
-  dsimp only [G2.toAffine]
+  simp only [G1.toAffine, Fp2.fieldOps_isZero, Fp2.fieldOps_inverse]
   rw [ite_eq_right hpz]
-  dsimp only
   -- Reduce both cross-multiplications to z * z.inverse = 1.
   rw [Bool.and_eq_true, Fp2.beq_iff_eq, Fp2.beq_iff_eq]
   exact ⟨xeq_fp2 p.x p.z p.z.inverse hw, yeq_fp2 p.y p.z p.z.inverse hw⟩

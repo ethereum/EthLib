@@ -184,7 +184,7 @@ private theorem foldlM_aggregate {α : Type} (pt : α → G2) (sc : α → Fr)
     ∃ R, (l.map fun x => pointToSignature (pt x)).foldlM
         (fun agg sig => do
           let p ← G2.uncompress sig
-          pure (agg.add p)) acc = .ok R ∧
+          pure (G2.add agg p)) acc = .ok R ∧
       G2.Represents R (a + (l.map sc).sum) := by
   induction l generalizing acc a with
   | nil => exact ⟨acc, rfl, (congrArg (G2.Represents acc) (add_zero a)).mpr hacc⟩
@@ -366,7 +366,7 @@ private theorem foldlM_groups {message : ByteArray} {Q : G2} {b : Fr}
     ∃ R, aggregates.foldlM
         (fun agg sig => do
           let p ← G2.uncompress sig
-          pure (agg.add p)) acc = .ok R ∧
+          pure (G2.add agg p)) acc = .ok R ∧
       G2.Represents R (a + (groups.flatten.map (·.val)).sum * b) := by
   induction joined generalizing acc a with
   | nil => exact ⟨acc, rfl, by simpa using hacc⟩

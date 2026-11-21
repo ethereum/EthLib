@@ -19,7 +19,7 @@ A point takes its coordinates in order, and the point at infinity is all zeros.
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
 open EthLib.Base (bytesToNat natToBytes)
-open EthLib.Cryptography.Bls (Fp Fp2 G1 G2)
+open EthLib.Cryptography.Bls (Fp Fp2 G1 G2 G2.zero)
 
 /-- The size of a field element without its padding. -/
 def FP_BYTES : Nat := 48

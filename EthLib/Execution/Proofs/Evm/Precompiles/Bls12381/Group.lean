@@ -24,7 +24,7 @@ Neither precompile checks that its inputs lie in the subgroup.
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
 open EthLib.Base (natToBytes_length)
-open EthLib.Cryptography.Bls (Fp Fp2 G1 G2)
+open EthLib.Cryptography.Bls (Fp Fp2 G1 G2 G2.add)
 
 /-! ## Validity of decoded points -/
 

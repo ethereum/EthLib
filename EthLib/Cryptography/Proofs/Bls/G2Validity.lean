@@ -133,7 +133,8 @@ theorem valid_of_isOnTwist_of_z_one {p : G2}
   dsimp only at hz
   subst z
   have heq : y * y = x * x * x + bTwist := by
-    simpa [isOnTwist, isInfinity, show (1 : Fp2).isZero = false from Fp2.one_isZero] using h
+    simpa [isOnTwist, G1.isInfinity, Fp2.fieldOps_isZero,
+      show (1 : Fp2).isZero = false from Fp2.one_isZero] using h
   exact valid_of_affine_equation heq
 
 theorem valid_generator : Valid generator :=

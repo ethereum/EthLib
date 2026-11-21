@@ -1,9 +1,8 @@
 module
 
 public import EthLib.Cryptography.Bls.G2
+public import EthLib.Cryptography.Proofs.Bls.JacobianLaw
 public import EthLib.Cryptography.Proofs.Bls.Fp2
-public import Mathlib.AlgebraicGeometry.EllipticCurve.Jacobian.Point
-public import Mathlib.Tactic.Module
 
 /-!
 # Proofs: the group structure of `G2`
@@ -16,21 +15,9 @@ The curve and the subgroup follow draft-04, §1.3 and Appendix A.
 The twist also matches draft-07, §4.2.1.
 <https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-07>
 
-This file links the arithmetic of `G2` to Mathlib's group law of elliptic curves.
+A point of `G2` is a point of `G1` over `Fp2`, so it follows the group law of the formulas.
 
-The field structure of `Fp2` comes from the `Fp2` proofs.
-
-A triple is valid when it is nonsingular, and each valid triple maps to a point of the group.
-
-Zero, negation, doubling, addition and scalar multiplication keep validity.
-
-They are the group law.
-
-Doubling agrees with Mathlib's doubling with the weight `u = 1`.
-
-Addition agrees with Mathlib's addition up to the weight `u = -(2 z_1 z_2)`.
-
-That agreement holds modulo the two curve equations.
+Here `Fp2` is itself a field of Mathlib, and the map is the identity.
 -/
 
 @[expose] public section
@@ -39,23 +26,13 @@ namespace EthLib.Cryptography.Bls.G2
 
 open WeierstrassCurve (Jacobian)
 open WeierstrassCurve.Jacobian
-
-/-- One-step unfolding equation for `mulNat`.
-
-Recursive equation lemmas are private to their defining module, so downstream proofs rewrite through this theorem.
--/
-theorem mulNat_def (p : G2) (k : Nat) :
-    mulNat p k = if k = 0 then zero
-      else if k % 2 = 1 then add p (mulNat (double p) (k / 2))
-      else mulNat (double p) (k / 2) := by
-  rw [mulNat]
+open G1 (double mulNat)
 
 /-- The BLS12-381 twisted curve `y^2 = x^3 + 4*(1 + i)` in Jacobian coordinates over `Fp2`. -/
-def curve : Jacobian Fp2 :=
-  { a₁ := 0, a₂ := 0, a₃ := 0, a₄ := 0, a₆ := bTwist }
+def curve : Jacobian Fp2 := G1.Law.curveOf bTwist
 
 /-- Mathlib Jacobian coordinate vector `![P.x, P.y, P.z]` of a `G2` triple. -/
-def rep (P : G2) : Fin 3 → Fp2 := ![P.x, P.y, P.z]
+def rep (P : G2) : Fin 3 → Fp2 := G1.Law.repOf Fp2.embedding P
 
 @[simp] theorem rep_x (P : G2) : rep P 0 = P.x := rfl
 @[simp] theorem rep_y (P : G2) : rep P 1 = P.y := rfl
@@ -80,396 +57,54 @@ theorem isZero_iff {a : Fp2} : a.isZero = true ↔ a = 0 := Fp2.isZero_iff
 
 theorem beq_iff {a b : Fp2} : a.beq b = true ↔ a = b := Fp2.beq_iff_eq
 
-/-! ## Zero and negation -/
+private theorem two_ne_zero' : (2 : Fp2) ≠ 0 := by decide_eq_at_model []
 
-theorem rep_zero : rep zero = ![1, 1, 0] := by
-  funext i
-  fin_cases i <;> rfl
+/-! ## The group law, from the formulas over any field -/
 
-theorem valid_zero : Valid zero := by
-  rw [Valid, rep_zero]
-  exact nonsingular_zero
+theorem rep_zero : rep zero = ![1, 1, 0] := G1.Law.repOf_zero Fp2.embedding
 
-theorem toPoint_zero : toPoint zero = 0 := by
-  rw [toPoint, rep_zero]
-  exact Point.toAffine_zero
+theorem valid_zero : Valid zero := G1.Law.valid_zero Fp2.embedding bTwist
 
-/-- Because `a_1 = 0` and `a_3 = 0`, Mathlib's `negY` reduces to `-Q 1`. -/
-private theorem curve_negY (Q : Fin 3 → Fp2) :
-    curve.negY Q = -Q 1 := by
-  rw [negY, show curve.a₁ = 0 from rfl, show curve.a₃ = 0 from rfl]
-  ring
+theorem toPoint_zero : toPoint zero = 0 := G1.Law.toPoint_zero Fp2.embedding bTwist
 
-theorem rep_neg (P : G2) : rep (neg P) = curve.neg (rep P) := by
-  -- Each coordinate is rewritten, since a defeq check of whole vectors would unfold the arithmetic.
-  have hx : (neg P).x = P.x := rfl
-  have hy : (neg P).y = -P.y := rfl
-  have hz : (neg P).z = P.z := rfl
-  funext i
-  fin_cases i
-  · show (neg P).x = curve.neg (rep P) 0
-    rw [neg_X, rep_x, hx]
-  · show (neg P).y = curve.neg (rep P) 1
-    rw [neg_Y, curve_negY, rep_y, hy]
-  · show (neg P).z = curve.neg (rep P) 2
-    rw [neg_Z, rep_z, hz]
+theorem rep_neg (P : G2) : rep (neg P) = curve.neg (rep P) :=
+  G1.Law.repOf_neg Fp2.embedding bTwist P
 
-theorem valid_neg {P : G2} (h : Valid P) : Valid (neg P) := by
-  rw [Valid, rep_neg]
-  exact nonsingular_neg h
+theorem valid_neg {P : G2} (h : Valid P) : Valid (neg P) := G1.Law.valid_neg Fp2.embedding bTwist h
 
-theorem toPoint_neg {P : G2} (h : Valid P) : toPoint (neg P) = -toPoint P := by
-  rw [toPoint, rep_neg]
-  exact Point.toAffine_neg h
-
-/-- The constants of the formulas are the numerals of `Fp2`. -/
-private theorem ofFp_ofNat (n : Nat) [n.AtLeastTwo] :
-    Fp2.ofFp (BaseField.ofNat n : Fp) = (OfNat.ofNat n : Fp2) := by
-  rw [Fp2.numeral_eq]
-  rfl
-
-/-! ## Doubling
-
-The explicit `dbl-2009-l` formulas match Mathlib's `dblXYZ` as polynomial identities over `Fp2`.
--/
-
-private theorem dblX_eq (x y z : Fp2) :
-    3 * (x * x) * (3 * (x * x))
-        - 2 * (2 * ((x + y * y) * (x + y * y) - x * x - y * y * (y * y)))
-      = curve.dblX ![x, y, z] := by
-  rw [dblX, dblU_eq, curve_negY]
-  simp only [show curve.a₁ = 0 from rfl, show curve.a₂ = 0 from rfl,
-    show curve.a₄ = 0 from rfl, Matrix.cons_val_zero, Matrix.cons_val_one,
-    Matrix.cons_val_two, Matrix.head_cons, Matrix.tail_cons]
-  ring
-
-private theorem dblY_eq (x y z : Fp2) :
-    3 * (x * x)
-          * (2 * ((x + y * y) * (x + y * y) - x * x - y * y * (y * y))
-            - (3 * (x * x) * (3 * (x * x))
-              - 2 * (2 * ((x + y * y) * (x + y * y) - x * x
-                - y * y * (y * y)))))
-        - 8 * (y * y * (y * y))
-      = curve.dblY ![x, y, z] := by
-  rw [dblY, curve_negY]
-  show _ = -curve.negDblY ![x, y, z]
-  rw [negDblY, dblX, dblU_eq, curve_negY]
-  simp only [show curve.a₁ = 0 from rfl, show curve.a₂ = 0 from rfl,
-    show curve.a₄ = 0 from rfl, Matrix.cons_val_zero, Matrix.cons_val_one,
-    Matrix.cons_val_two, Matrix.head_cons, Matrix.tail_cons]
-  ring
-
-private theorem dblZ_eq (x y z : Fp2) :
-    2 * y * z = curve.dblZ ![x, y, z] := by
-  rw [dblZ, curve_negY]
-  simp only [Matrix.cons_val_zero, Matrix.cons_val_one, Matrix.cons_val_two,
-    Matrix.head_cons, Matrix.tail_cons]
-  ring
+theorem toPoint_neg {P : G2} (h : Valid P) : toPoint (neg P) = -toPoint P :=
+  G1.Law.toPoint_neg Fp2.embedding bTwist h
 
 /-- Finite `double` needs no projective rescaling because `dbl-2009-l` has unit weight `u = 1`. -/
 theorem rep_double {P : G2} (hz : ¬P.z.isZero = true) :
-    rep (double P) = curve.dblXYZ (rep P) := by
-  funext i
-  fin_cases i
-  · show (double P).x = curve.dblX (rep P)
-    rw [double, ite_eq_right hz]
-    simp only [ofFp_ofNat]
-    exact dblX_eq P.x P.y P.z
-  · show (double P).y = curve.dblY (rep P)
-    rw [double, ite_eq_right hz]
-    simp only [ofFp_ofNat]
-    exact dblY_eq P.x P.y P.z
-  · show (double P).z = curve.dblZ (rep P)
-    rw [double, ite_eq_right hz]
-    simp only [ofFp_ofNat]
-    exact dblZ_eq P.x P.y P.z
+    rep (double P) = curve.dblXYZ (rep P) :=
+  G1.Law.repOf_double Fp2.embedding bTwist hz
 
-theorem valid_double {P : G2} (h : Valid P) : Valid (double P) := by
-  by_cases hz : P.z.isZero = true
-  · rw [Valid, double, ite_eq_left hz]
-    exact h
-  -- Rewrite `dblXYZ` into Jacobian addition on `rep P` so `nonsingular_add` applies.
-  · rw [Valid, rep_double hz, ← add_of_equiv (Setoid.refl (rep P))]
-    exact nonsingular_add h h
+theorem valid_double {P : G2} (h : Valid P) : Valid (double P) :=
+  G1.Law.valid_double Fp2.embedding bTwist h
 
 theorem toPoint_double {P : G2} (h : Valid P) :
-    toPoint (double P) = toPoint P + toPoint P := by
-  by_cases hz : P.z.isZero = true
-  -- At infinity both `P` and `double P` denote `0`.
-  · have h0 : toPoint P = 0 :=
-      Point.toAffine_of_Z_eq_zero (isZero_iff.mp hz)
-    rw [double, show (if P.z.isZero = true then P else _) = P from ite_eq_left hz]
-    rw [h0, add_zero]
-  · rw [toPoint, rep_double hz, ← add_of_equiv (Setoid.refl (rep P))]
-    exact Point.toAffine_add h h
-
-/-! ## Addition
-
-The `add-2007-bl` chord formulas equal `addXYZ` scaled by `u = -(2 * z_1 * z_2)` modulo the two curve equations.
-
-Special cases (`z = 0`, equal points, opposite points) reduce directly to `0`, `double`, or `zero`.
--/
+    toPoint (double P) = toPoint P + toPoint P :=
+  G1.Law.toPoint_double Fp2.embedding bTwist h
 
 /-- Homogeneous curve equation `y^2 = x^3 + bTwist * z^6` of a valid point. -/
 theorem valid_equation {P : G2} (h : Valid P) :
-    rep P 1 ^ 2 = rep P 0 ^ 3 + bTwist * rep P 2 ^ 6 := by
-  have heq := ((nonsingular_iff (rep P)).mp h).1
-  rw [equation_iff] at heq
-  simp only [show curve.a₁ = 0 from rfl, show curve.a₂ = 0 from rfl,
-    show curve.a₃ = 0 from rfl, show curve.a₄ = 0 from rfl,
-    show curve.a₆ = (bTwist : Fp2) from rfl] at heq
-  linear_combination heq
+    rep P 1 ^ 2 = rep P 0 ^ 3 + bTwist * rep P 2 ^ 6 :=
+  G1.Law.valid_equation Fp2.embedding bTwist h
 
-/-- General-case addition coordinates equal `-(2 * z_1 * z_2)`-weighted `addXYZ` modulo both curve equations.
-
-Each `let`-bound term is passed as a binder so the caller unfolds definitions by `rfl` before `linear_combination`.
--/
-private theorem spec_add_components
-    (x1 y1 z1 x2 y2 z2 z11 z22 u1 u2 s1 s2 h i j r v xp : Fp2)
-    (hz11 : z11 = z1 * z1) (hz22 : z22 = z2 * z2)
-    (hu1 : u1 = x1 * z22) (hu2 : u2 = x2 * z11)
-    (hs1 : s1 = y1 * z2 * z22) (hs2 : s2 = y2 * z1 * z11)
-    (hh : h = u2 - u1) (hi : i = 2 * h * (2 * h)) (hj : j = h * i)
-    (hr : r = 2 * (s2 - s1)) (hv : v = u1 * i)
-    (hxp : xp = r * r - j - 2 * v)
-    (hP : y1 ^ 2 = x1 ^ 3 + bTwist * z1 ^ 6) (hQ : y2 ^ 2 = x2 ^ 3 + bTwist * z2 ^ 6) :
-    xp = (-(2 * (z1 * z2))) ^ 2 * curve.addX ![x1, y1, z1] ![x2, y2, z2]
-    ∧ r * (v - xp) - 2 * s1 * j
-        = (-(2 * (z1 * z2))) ^ 3 * curve.addY ![x1, y1, z1] ![x2, y2, z2]
-    ∧ ((z1 + z2) * (z1 + z2) - z11 - z22) * h
-        = -(2 * (z1 * z2))
-            * WeierstrassCurve.Jacobian.addZ ![x1, y1, z1] ![x2, y2, z2] := by
-  subst hz11 hz22 hu1 hu2 hs1 hs2 hh hi hj hr hv hxp
-  refine ⟨?_, ?_, ?_⟩
-  · rw [addX]
-    simp only [show curve.a₁ = 0 from rfl, show curve.a₂ = 0 from rfl,
-      show curve.a₃ = 0 from rfl, show curve.a₄ = 0 from rfl,
-      show curve.a₆ = (bTwist : Fp2) from rfl,
-      Matrix.cons_val_zero, Matrix.cons_val_one, Matrix.cons_val_two,
-      Matrix.head_cons, Matrix.tail_cons]
-    -- Substitute `y_1^2` and `y_2^2` via `hP` and `hQ` so the `y^2` terms cancel against `addX`.
-    linear_combination (4 * z2 ^ 6) * hP + (4 * z1 ^ 6) * hQ
-  · rw [addY, curve_negY]
-    show _ = (-(2 * (z1 * z2))) ^ 3
-      * -curve.negAddY ![x1, y1, z1] ![x2, y2, z2]
-    rw [negAddY]
-    simp only [show curve.a₁ = 0 from rfl, show curve.a₂ = 0 from rfl,
-      show curve.a₃ = 0 from rfl, show curve.a₄ = 0 from rfl,
-      show curve.a₆ = (bTwist : Fp2) from rfl,
-      Matrix.cons_val_zero, Matrix.cons_val_one, Matrix.cons_val_two,
-      Matrix.head_cons, Matrix.tail_cons]
-    -- Eliminate `y_1^2` and `y_2^2` along `y_1 * z_2^3 - y_2 * z_1^3` using both curve equations.
-    linear_combination (8 * z2 ^ 6 * (y1 * z2 ^ 3 - y2 * z1 ^ 3)) * hP
-      + (8 * z1 ^ 6 * (y1 * z2 ^ 3 - y2 * z1 ^ 3)) * hQ
-  · rw [addZ]
-    simp only [Matrix.cons_val_zero, Matrix.cons_val_two,
-      Matrix.head_cons, Matrix.tail_cons]
-    ring
-
-/-! ### Branch extraction for `G2.add` -/
-
-private theorem add_of_left_zero {P Q : G2} (hz1 : P.z.isZero = true) :
-    add P Q = Q := by
-  rw [add]
-  exact ite_eq_left hz1
-
-private theorem add_of_right_zero {P Q : G2} (hz1 : ¬P.z.isZero = true)
-    (hz2 : Q.z.isZero = true) : add P Q = P := by
-  rw [add, ite_eq_right hz1]
-  exact ite_eq_left hz2
-
-private theorem add_of_dbl {P Q : G2} (hz1 : ¬P.z.isZero = true)
-    (hz2 : ¬Q.z.isZero = true)
-    (hu : (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true)
-    (hs : (P.y * Q.z * (Q.z * Q.z)).beq (Q.y * P.z * (P.z * P.z)) = true) :
-    add P Q = double P := by
-  rw [add, ite_eq_right hz1, ite_eq_right hz2]
-  exact (ite_eq_left hu).trans (ite_eq_left hs)
-
-private theorem add_of_opp {P Q : G2} (hz1 : ¬P.z.isZero = true)
-    (hz2 : ¬Q.z.isZero = true)
-    (hu : (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true)
-    (hs : ¬(P.y * Q.z * (Q.z * Q.z)).beq (Q.y * P.z * (P.z * P.z)) = true) :
-    add P Q = zero := by
-  rw [add, ite_eq_right hz1, ite_eq_right hz2]
-  exact (ite_eq_left hu).trans (ite_eq_right hs)
-
-private theorem rep_add_general {P Q : G2} (hP : Valid P) (hQ : Valid Q)
-    (hz1 : ¬P.z.isZero = true) (hz2 : ¬Q.z.isZero = true)
-    (hu : ¬(P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true) :
-    rep (add P Q)
-      = (-(2 * (rep P 2 * rep Q 2)))
-          • curve.addXYZ (rep P) (rep Q) := by
-  let z1z1 := P.z * P.z
-  let z2z2 := Q.z * Q.z
-  let u1 := P.x * z2z2
-  let u2 := Q.x * z1z1
-  let s1 := P.y * Q.z * z2z2
-  let s2 := Q.y * P.z * z1z1
-  let h := u2 - u1
-  let i := 2 * h * (2 * h)
-  let j := h * i
-  let r := 2 * (s2 - s1)
-  let v := u1 * i
-  let x3 := r * r - j - 2 * v
-  obtain ⟨hX, hY, hZ⟩ := spec_add_components P.x P.y P.z Q.x Q.y Q.z
-    z1z1 z2z2 u1 u2 s1 s2 h i j r v x3
-    rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
-    (valid_equation hP) (valid_equation hQ)
-  have hbranch : add P Q = G2.mk x3
-      (r * (v - x3) - 2 * s1 * j)
-      (((P.z + Q.z) * (P.z + Q.z) - z1z1 - z2z2) * h) := by
-    rw [add, ite_eq_right hz1, ite_eq_right hz2, ite_eq_right hu]
-    simp only [ofFp_ofNat]
-    rfl
-  rw [hbranch]
-  funext k
-  fin_cases k
-  · exact hX.trans
-      ((smul_fin3_ext (curve.addXYZ (rep P) (rep Q))
-        (-(2 * (rep P 2 * rep Q 2)))).1).symm
-  · exact hY.trans
-      ((smul_fin3_ext (curve.addXYZ (rep P) (rep Q))
-        (-(2 * (rep P 2 * rep Q 2)))).2.1).symm
-  · exact hZ.trans
-      ((smul_fin3_ext (curve.addXYZ (rep P) (rep Q))
-        (-(2 * (rep P 2 * rep Q 2)))).2.2).symm
-
-/-! ### The addition homomorphism -/
-
-private theorem beq_x_iff {P Q : G2} :
-    (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true
-      ↔ rep P 0 * (rep Q 2 * rep Q 2) = rep Q 0 * (rep P 2 * rep P 2) :=
-  beq_iff
-
-private theorem beq_y_iff {P Q : G2} :
-    (P.y * Q.z * (Q.z * Q.z)).beq (Q.y * P.z * (P.z * P.z)) = true
-      ↔ rep P 1 * rep Q 2 * (rep Q 2 * rep Q 2)
-          = rep Q 1 * rep P 2 * (rep P 2 * rep P 2) :=
-  beq_iff
-
-private theorem two_ne_zero' : (2 : Fp2) ≠ 0 := by decide_eq_at_model []
-
-private theorem z_ne_zero {P : G2} (hz : ¬P.z.isZero = true) :
-    rep P 2 ≠ 0 := fun h => hz (isZero_iff.mpr h)
-
-/-- Because `2 != 0`, `z_1 != 0`, and `z_2 != 0` in the field `Fp2`, the weight `-(2 * z_1 * z_2)` is a unit. -/
-private theorem isUnit_scale {P Q : G2} (hz1 : ¬P.z.isZero = true)
-    (hz2 : ¬Q.z.isZero = true) :
-    IsUnit (-(2 * (rep P 2 * rep Q 2))) := by
-  exact (neg_ne_zero.mpr (mul_ne_zero two_ne_zero'
-    (mul_ne_zero (z_ne_zero hz1) (z_ne_zero hz2)))).isUnit
-
-theorem valid_add {P Q : G2} (hP : Valid P) (hQ : Valid Q) :
-    Valid (add P Q) := by
-  by_cases hz1 : P.z.isZero = true
-  · rw [Valid, add_of_left_zero hz1]
-    exact hQ
-  by_cases hz2 : Q.z.isZero = true
-  · rw [Valid, add_of_right_zero hz1 hz2]
-    exact hP
-  by_cases hu : (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true
-  · by_cases hs : (P.y * Q.z * (Q.z * Q.z)).beq (Q.y * P.z * (P.z * P.z)) = true
-    · rw [Valid, add_of_dbl hz1 hz2 hu hs]
-      exact valid_double hP
-    · rw [Valid, add_of_opp hz1 hz2 hu hs]
-      exact valid_zero
-  -- Distinct affine x-coordinates imply inequivalent Jacobian representatives.
-  · rw [Valid, rep_add_general hP hQ hz1 hz2 hu]
-    rw [nonsingular_smul _ (isUnit_scale hz1 hz2),
-        ← add_of_not_equiv
-          (fun heq => hu (beq_x_iff.mpr (by linear_combination X_eq_of_equiv heq)))]
-    exact nonsingular_add hP hQ
+theorem valid_add {P Q : G2} (hP : Valid P) (hQ : Valid Q) : Valid (add P Q) :=
+  G1.Law.valid_add Fp2.embedding bTwist two_ne_zero' hP hQ
 
 theorem toPoint_add {P Q : G2} (hP : Valid P) (hQ : Valid Q) :
-    toPoint (add P Q) = toPoint P + toPoint Q := by
-  by_cases hz1 : P.z.isZero = true
-  · rw [add_of_left_zero hz1,
-      show toPoint P = 0 from Point.toAffine_of_Z_eq_zero (isZero_iff.mp hz1),
-      zero_add]
-  by_cases hz2 : Q.z.isZero = true
-  · rw [add_of_right_zero hz1 hz2,
-      show toPoint Q = 0 from Point.toAffine_of_Z_eq_zero (isZero_iff.mp hz2),
-      add_zero]
-  by_cases hu : (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true
-  -- Cross-multiplied X-coordinates agree.
-  · have hx : rep P 0 * rep Q 2 ^ 2 = rep Q 0 * rep P 2 ^ 2 := by
-      linear_combination beq_x_iff.mp hu
-    by_cases hs : (P.y * Q.z * (Q.z * Q.z)).beq (Q.y * P.z * (P.z * P.z)) = true
-    -- Equal Y-coordinates: `P` and `Q` represent the same point, so `add` doubles `P`.
-    · have hy : rep P 1 * rep Q 2 ^ 3 = rep Q 1 * rep P 2 ^ 3 := by
-        linear_combination beq_y_iff.mp hs
-      have hequiv : rep P ≈ rep Q :=
-        equiv_of_X_eq_of_Y_eq (z_ne_zero hz1) (z_ne_zero hz2) hx hy
-      rw [add_of_dbl hz1 hz2 hu hs, toPoint_double hP,
-        show toPoint P = toPoint Q from Point.toAffine_of_equiv hequiv]
-    -- Unequal Y-coordinates with equal X-coordinates: `Q` represents `-P`, so `add` returns `zero`.
-    · have hy : rep P 1 * rep Q 2 ^ 3 ≠ rep Q 1 * rep P 2 ^ 3 := fun heq =>
-        hs (beq_y_iff.mpr (by linear_combination heq))
-      have hyneg := Y_eq_of_Y_ne ((nonsingular_iff (rep P)).mp hP).1
-        ((nonsingular_iff (rep Q)).mp hQ).1 hx hy
-      have hequiv : rep P ≈ curve.neg (rep Q) := by
-        refine equiv_of_X_eq_of_Y_eq (z_ne_zero hz1) ?_ ?_ ?_
-        · rw [neg_Z]
-          exact z_ne_zero hz2
-        · rw [neg_X, neg_Z]
-          exact hx
-        · rw [neg_Y, neg_Z]
-          exact hyneg
-      rw [add_of_opp hz1 hz2 hu hs, toPoint_zero,
-        show toPoint P = -toPoint Q from (Point.toAffine_of_equiv hequiv).trans
-          (Point.toAffine_neg hQ),
-        neg_add_cancel]
-  -- General chord branch: scaling by a unit preserves the Jacobian equivalence class.
-  · have hne : ¬rep P ≈ rep Q := fun heq =>
-      hu (beq_x_iff.mpr (by linear_combination X_eq_of_equiv heq))
-    rw [toPoint, rep_add_general hP hQ hz1 hz2 hu]
-    rw [Point.toAffine_of_equiv (smul_equiv _ (isUnit_scale hz1 hz2)),
-        ← add_of_not_equiv hne]
-    exact Point.toAffine_add hP hQ
+    toPoint (add P Q) = toPoint P + toPoint Q :=
+  G1.Law.toPoint_add Fp2.embedding bTwist two_ne_zero' hP hQ
 
-/-! ### Scalar multiplication -/
-
-theorem valid_mulNat {P : G2} (h : Valid P) (k : Nat) : Valid (mulNat P k) := by
-  induction k using Nat.strongRecOn generalizing P with
-  | _ k ih =>
-    rw [mulNat_def]
-    split
-    · exact valid_zero
-    · rename_i hk
-      show Valid (if k % 2 = 1 then add P (mulNat (double P) (k / 2))
-        else mulNat (double P) (k / 2))
-      by_cases h2 : k % 2 = 1
-      · rw [ite_eq_left h2]
-        exact valid_add h (ih (k / 2) (by omega) (valid_double h))
-      · rw [ite_eq_right h2]
-        exact ih (k / 2) (by omega) (valid_double h)
+theorem valid_mulNat {P : G2} (h : Valid P) (k : Nat) : Valid (mulNat P k) :=
+  G1.Law.valid_mulNat Fp2.embedding bTwist two_ne_zero' h k
 
 theorem toPoint_mulNat {P : G2} (h : Valid P) (k : Nat) :
-    toPoint (mulNat P k) = k • toPoint P := by
-  induction k using Nat.strongRecOn generalizing P with
-  | _ k ih =>
-    rw [mulNat_def]
-    split
-    · rename_i hk
-      subst hk
-      rw [toPoint_zero]
-      exact (zero_nsmul _).symm
-    · rename_i hk
-      show toPoint (if k % 2 = 1 then add P (mulNat (double P) (k / 2))
-        else mulNat (double P) (k / 2)) = k • toPoint P
-      by_cases h2 : k % 2 = 1
-      -- Odd `k = 2 * m + 1`: `P + [m] * (P + P) = [2 * m + 1] * P`.
-      · obtain ⟨m, rfl⟩ : ∃ m, k = 2 * m + 1 := ⟨k / 2, by omega⟩
-        have hm : (2 * m + 1) / 2 = m := by omega
-        rw [ite_eq_left h2, toPoint_add h (valid_mulNat (valid_double h) _), hm,
-            ih m (by omega) (valid_double h), toPoint_double h]
-        module
-      -- Even `k = 2 * m`: `[m] * (P + P) = [2 * m] * P`.
-      · obtain ⟨m, rfl⟩ : ∃ m, k = 2 * m := ⟨k / 2, by omega⟩
-        have hm : 2 * m / 2 = m := by omega
-        rw [ite_eq_right h2, hm, ih m (by omega) (valid_double h), toPoint_double h]
-        module
+    toPoint (mulNat P k) = k • toPoint P :=
+  G1.Law.toPoint_mulNat Fp2.embedding bTwist two_ne_zero' h k
 
 theorem toPoint_mul {P : G2} (h : Valid P) (s : Fr) :
     toPoint (mul P s) = s.val • toPoint P :=

@@ -22,6 +22,7 @@ It accepts the generator, and it is closed under scalar multiplication, addition
 namespace EthLib.Cryptography.Bls.G2
 
 open WeierstrassCurve.Jacobian
+open G1 (mulNat)
 
 /-- The subgroup check accepts a valid point exactly when `[r] P = 0`.
 

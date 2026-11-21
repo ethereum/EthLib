@@ -28,7 +28,7 @@ The theorems cover the exact checks, not their batched form.
 
 namespace EthLib.Cryptography.Kzg.CeremonyChecks
 
-open EthLib.Cryptography.Bls (Fr G1 G2)
+open EthLib.Cryptography.Bls (Fr G1 G2 G2.add G2.mul G2.zero)
 open scoped EthLib.Cryptography.Bls.Fr
 
 /-- Point-level ceremony validation for `G1`: non-infinity and in the prime-order subgroup. -/
@@ -62,80 +62,40 @@ theorem g2Validate_isInfinity_eq_false {p : G2} (h : g2Validate p = true) :
   cases hp : p.isInfinity <;> simp_all
 
 /-- Adding from `G1.zero` on the left returns the right operand. -/
-@[simp] theorem G1.zero_add (q : G1) : G1.add G1.zero q = q := by
-  unfold Bls.G1.add
-  have hz : BaseField.isZero (G1.zero : G1).z = true := G1.isInfinity_zero
-  simp [hz]
+@[simp] theorem G1.zero_add (q : G1) : G1.add G1.zero q = q :=
+  Bls.G1.Law.zero_add Bls.Fp.embedding q
 
 /-- Adding `G1.zero` on the right of a non-infinity point returns the point unchanged. -/
-@[simp] theorem G1.add_zero {p : G1} (hp : p.isInfinity = false) :
-    G1.add p G1.zero = p := by
-  unfold Bls.G1.add
-  have hpz : BaseField.isZero p.z = false := hp
-  have hz : BaseField.isZero (G1.zero : G1).z = true := G1.isInfinity_zero
-  simp [hpz, hz]
+@[simp] theorem G1.add_zero {p : G1} (hp : p.isInfinity = false) : G1.add p G1.zero = p :=
+  Bls.G1.Law.add_zero Bls.Fp.embedding hp
 
 /-- Scalar multiplication of any `G1` point by `0` gives `G1.zero`. -/
 @[simp] theorem G1.mul_zero (p : G1) : G1.mul p (0 : Fr) = G1.zero := by
-  rw [G1.mul, Fr.val_zero, G1.mulNat_def]
-  rfl
+  rw [G1.mul, Fr.val_zero]
+  exact Bls.G1.Law.mulNat_zero p
 
 /-- Scalar multiplication of a non-infinity `G1` point by `1` returns the point unchanged. -/
-@[simp] theorem G1.mul_one {p : G1} (hp : p.isInfinity = false) :
-    G1.mul p (1 : Fr) = p := by
-  rw [G1.mul, Fr.val_one, G1.mulNat_def]
-  norm_num
-  rw [G1.mulNat_def]
-  norm_num
-  exact G1.add_zero hp
+@[simp] theorem G1.mul_one {p : G1} (hp : p.isInfinity = false) : G1.mul p (1 : Fr) = p := by
+  rw [G1.mul, Fr.val_one]
+  exact Bls.G1.Law.mulNat_one Bls.Fp.embedding hp
 
 /-- Adding from `G2.zero` on the left returns the right operand. -/
-@[simp] theorem G2.zero_add (q : G2) : G2.add G2.zero q = q := by
-  unfold Bls.G2.add
-  have hz : (G2.zero : G2).z.isZero = true := G2.isInfinity_zero
-  simp [hz]
+@[simp] theorem G2.zero_add (q : G2) : G2.add G2.zero q = q :=
+  Bls.G1.Law.zero_add Bls.Fp2.embedding q
 
 /-- Adding `G2.zero` on the right of a non-infinity point returns the point unchanged. -/
-@[simp] theorem G2.add_zero {p : G2} (hp : p.isInfinity = false) :
-    G2.add p G2.zero = p := by
-  unfold Bls.G2.add
-  have hpz : p.z.isZero = false := hp
-  have hz : (G2.zero : G2).z.isZero = true := G2.isInfinity_zero
-  simp [hpz, hz]
-
-/-- Unfolding equation for the executable G2 double-and-add multiplication. -/
-private theorem g2MulNat_def (p : G2) (k : Nat) :
-    G2.mulNat p k = if k = 0 then G2.zero
-      else if k % 2 = 1 then G2.add p (G2.mulNat (G2.double p) (k / 2))
-      else G2.mulNat (G2.double p) (k / 2) := by
-  rw [G2.mulNat]
+@[simp] theorem G2.add_zero {p : G2} (hp : p.isInfinity = false) : G2.add p G2.zero = p :=
+  Bls.G1.Law.add_zero Bls.Fp2.embedding hp
 
 /-- Scalar multiplication of any `G2` point by `0` gives `G2.zero`. -/
 @[simp] theorem G2.mul_zero (p : G2) : G2.mul p (0 : Fr) = G2.zero := by
-  rw [G2.mul, Fr.val_zero, g2MulNat_def]
-  rfl
+  rw [G2.mul, Fr.val_zero]
+  exact Bls.G1.Law.mulNat_zero p
 
 /-- Scalar multiplication of a non-infinity `G2` point by `1` returns the point unchanged. -/
-@[simp] theorem G2.mul_one {p : G2} (hp : p.isInfinity = false) :
-    G2.mul p (1 : Fr) = p := by
-  rw [G2.mul, Fr.val_one, g2MulNat_def]
-  norm_num
-  rw [g2MulNat_def]
-  norm_num
-  exact G2.add_zero hp
-
-/-- For any valid `G1` point `p`, `p.isInfinity = true` iff `G1.toPoint p = 0`. -/
-theorem isInfinity_eq_true_iff_toPoint_eq_zero {p : G1} (hp : G1.Valid p) :
-    p.isInfinity = true ↔ G1.toPoint p = 0 := by
-  constructor
-  · intro h
-    exact WeierstrassCurve.Jacobian.Point.toAffine_of_Z_eq_zero (G1.isZero_iff.mp h)
-  · intro h
-    by_contra hne
-    have hz : Bls.Fp.toZMod p.z ≠ 0 :=
-      fun hz0 => hne (G1.isZero_iff.mpr hz0)
-    rw [G1.toPoint, WeierstrassCurve.Jacobian.Point.toAffine_of_Z_ne_zero hp hz] at h
-    cases h
+@[simp] theorem G2.mul_one {p : G2} (hp : p.isInfinity = false) : G2.mul p (1 : Fr) = p := by
+  rw [G2.mul, Fr.val_one]
+  exact Bls.G1.Law.mulNat_one Bls.Fp2.embedding hp
 
 /-- A `G1` generator multiple is non-infinity exactly when its scalar is nonzero.
 
@@ -144,7 +104,7 @@ It discharges the `G1` non-infinity law unconditionally.
 It uses the kernel-verified generator order (`G1.addOrderOf_toPoint_generator`). -/
 theorem g1Mul_nonzero_iff (s : Fr) :
     G1.isInfinity (G1.mul (G1.generator : G1) s) = false ↔ s ≠ 0 := by
-  rw [Bool.eq_false_iff, Ne, isInfinity_eq_true_iff_toPoint_eq_zero
+  rw [Bool.eq_false_iff, Ne, G1.isInfinity_eq_true_iff_toPoint_eq_zero
       (G1.valid_mul G1.valid_generator s), G1.toPoint_mul_generator, G1.ofFr]
   refine not_congr ?_
   rw [← addOrderOf_dvd_iff_nsmul_eq_zero, G1.addOrderOf_toPoint_generator]
@@ -164,7 +124,7 @@ theorem g1Mul_ne_zero_of_isInfinity_eq_false {p : G1} {s : Fr}
 
 /-- Non-infinity of a `G2` scalar multiple implies the scalar is nonzero. -/
 theorem g2Mul_ne_zero_of_isInfinity_eq_false {p : G2} {x : Fr}
-    (h : G2.isInfinity (G2.mul p x) = false) : x ≠ 0 := by
+    (h : (G2.mul p x).isInfinity = false) : x ≠ 0 := by
   rintro rfl
   rw [G2.mul_zero, G2.isInfinity_zero] at h
   cases h
@@ -260,12 +220,12 @@ theorem g1_ne_zero_of_isInfinity_eq_false {p : G1} {a : Fr} (h : G1.Represents p
     (hp : G1.isInfinity p = false) : a ≠ 0 := by
   rintro rfl
   have h0 : G1.toPoint p = 0 := by rw [h.2, G1.toPoint_mul_generator, G1.ofFr_zero]
-  rw [(isInfinity_eq_true_iff_toPoint_eq_zero h.1).mpr h0] at hp
+  rw [(G1.isInfinity_eq_true_iff_toPoint_eq_zero h.1).mpr h0] at hp
   cases hp
 
 /-- A representative of `0 • g2` is the point at infinity. -/
 theorem g2_ne_zero_of_isInfinity_eq_false {q : G2} {b : Fr} (h : G2.Represents q b)
-    (hq : G2.isInfinity q = false) : b ≠ 0 := by
+    (hq : q.isInfinity = false) : b ≠ 0 := by
   rintro rfl
   have h0 : G2.toPoint q = 0 := by rw [h.2, G2.toPoint_mul_generator, G2.ofFr_zero]
   rw [(G2.isInfinity_eq_true_iff_toPoint_eq_zero h.1).mpr h0] at hq
@@ -279,7 +239,7 @@ theorem exponentChecksSufficient
     (checks : Checks contribution transcript)
     (exponents : SubgroupExponents contribution transcript)
     (previousTauNonzero : G1.isInfinity transcript.previousTau = false)
-    (pubkeyNonzero : G2.isInfinity contribution.potPubkey = false) :
+    (pubkeyNonzero : contribution.potPubkey.isInfinity = false) :
     (∀ i, i < contribution.g1Powers.size →
       exponents.a i = Fr.powNat (exponents.s * exponents.x) i) ∧
     (∀ i, i < contribution.g2Powers.size →
@@ -420,7 +380,7 @@ theorem checksSufficient
     (checks : Checks contribution transcript)
     (exponents : SubgroupExponents contribution transcript)
     (previousTauNonzero : G1.isInfinity transcript.previousTau = false)
-    (pubkeyNonzero : G2.isInfinity contribution.potPubkey = false) :
+    (pubkeyNonzero : contribution.potPubkey.isInfinity = false) :
     (∀ i (hi : i < contribution.g1Powers.size),
       G1.Represents (contribution.g1Powers[i]'hi)
         (Fr.powNat (exponents.s * exponents.x) i)) ∧
@@ -441,7 +401,7 @@ theorem g1ZeroExponentEqOne
     (checks : Checks contribution transcript)
     (exponents : SubgroupExponents contribution transcript)
     (previousTauNonzero : G1.isInfinity transcript.previousTau = false)
-    (pubkeyNonzero : G2.isInfinity contribution.potPubkey = false) :
+    (pubkeyNonzero : contribution.potPubkey.isInfinity = false) :
     exponents.a 0 = 1 := by
   have zero_lt_g1 : 0 < contribution.g1Powers.size :=
     Nat.lt_trans (Nat.zero_lt_succ 0) checks.one_lt_g1
@@ -455,7 +415,7 @@ theorem g1ZeroPointRepresentsOne
     (checks : Checks contribution transcript)
     (exponents : SubgroupExponents contribution transcript)
     (previousTauNonzero : G1.isInfinity transcript.previousTau = false)
-    (pubkeyNonzero : G2.isInfinity contribution.potPubkey = false) :
+    (pubkeyNonzero : contribution.potPubkey.isInfinity = false) :
     G1.Represents
       (contribution.g1Powers[0]'(Nat.lt_trans (Nat.zero_lt_succ 0) checks.one_lt_g1)) 1 := by
   have h := (checksSufficient contribution transcript checks exponents
@@ -514,7 +474,7 @@ theorem checksSufficient_of_subgroupChecks
     (hg2 : ∀ i (hi : i < contribution.g2Powers.size),
       G2.Valid (contribution.g2Powers[i]'hi) ∧ (contribution.g2Powers[i]'hi).inSubgroup = true)
     (previousTauNonzero : G1.isInfinity transcript.previousTau = false)
-    (pubkeyNonzero : G2.isInfinity contribution.potPubkey = false) :
+    (pubkeyNonzero : contribution.potPubkey.isInfinity = false) :
     ∃ τ : Fr,
       (∀ i (hi : i < contribution.g1Powers.size),
         G1.Represents (contribution.g1Powers[i]'hi) (Fr.powNat τ i)) ∧

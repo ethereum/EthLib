@@ -8,6 +8,7 @@ public import Mathlib.Algebra.Field.ZMod
 public import Mathlib.Tactic.NormNum.Prime
 public import Mathlib.FieldTheory.Finite.Basic
 public import EthLib.Cryptography.Proofs.Montgomery
+public import EthLib.Cryptography.Proofs.BaseField
 
 /-!
 # Proofs: `Fp` as a Mathlib finite field
@@ -512,5 +513,19 @@ macro "push_toZMod" loc:(Lean.Parser.Tactic.location)? : tactic =>
 example (a b : Fp) : a * b = b * a := mul_comm a b
 example (a b : Fp) : a - b = a + -b := sub_eq_add_neg a b
 example (a : Fp) (h : a ≠ 0) : a * a⁻¹ = 1 := mul_inv_cancel₀ h
+
+/-- `Fp` maps into `ZMod p`, injectively and respecting each field operation. -/
+def embedding : FieldOps.Embedding Fp (ZMod modulus) where
+  toFun := toZMod
+  injective := toZMod.injective
+  map_add := toZMod_add
+  map_sub := toZMod_sub
+  map_mul := toZMod_mul
+  map_neg := toZMod_neg
+  map_zero := toZMod_zero
+  map_one := toZMod_one
+  map_inverse := toZMod_inverse
+  beq_iff _ _ := beq_iff.trans toZMod_inj.symm
+  isZero_iff _ := isZero_iff.trans (by rw [← toZMod_zero, toZMod_inj])
 
 end EthLib.Cryptography.Bls.Fp
