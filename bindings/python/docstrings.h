@@ -398,6 +398,12 @@
 #define DOC_discv5_nodes_match \
   "Whether records match the distances of a FINDNODE, from the node ID of its recipient."
 
+#define DOC_discv5_node_step \
+  "A node's state after a packet from an endpoint, and the packets it sends back."
+
+#define DOC_discv5_node_send \
+  "A node's state after it sends a request to a peer, and the packet it sends."
+
 #define DOC_discv5_make_whoareyou \
   "Node B's WHOAREYOU packet for node A, and its challenge data."
 

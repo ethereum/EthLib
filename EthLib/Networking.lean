@@ -12,6 +12,7 @@ public import EthLib.Networking.Discv4.Packet
 public import EthLib.Networking.Discv5.Handshake
 public import EthLib.Networking.Discv5.Identity
 public import EthLib.Networking.Discv5.Message
+public import EthLib.Networking.Discv5.Node
 public import EthLib.Networking.Discv5.Packet
 public import EthLib.Networking.Discv5.Session
 public import EthLib.Networking.Encoding.Protobuf

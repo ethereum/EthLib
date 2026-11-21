@@ -540,6 +540,14 @@ def discv5_nodes_match(recipient: bytes, distances: list[int], records: list[byt
     """Whether records match the distances of a FINDNODE, from the node ID of its recipient."""
     ...
 
+def discv5_node_step(node: tuple[bytes, bytes, bytes, int, list[tuple[bytes, bytes, int]], bytes | None], randoms: tuple[bytes, bytes, bytes, bytes], state: tuple[list[tuple[bytes, bytes, int, bytes, bytes, bool, int]], list[tuple[bytes, bytes, int, bytes, bytes]], list[tuple[bytes, int, bytes, bytes, bytes]]], ip: bytes, port: int, packet: bytes) -> tuple[tuple[list[tuple[bytes, bytes, int, bytes, bytes, bool, int]], list[tuple[bytes, bytes, int, bytes, bytes]], list[tuple[bytes, int, bytes, bytes, bytes]]], list[bytes]]:
+    """A node's state after a packet from an endpoint, and the packets it sends back."""
+    ...
+
+def discv5_node_send(node: tuple[bytes, bytes, bytes, int, list[tuple[bytes, bytes, int]], bytes | None], randoms: tuple[bytes, bytes, bytes, bytes], state: tuple[list[tuple[bytes, bytes, int, bytes, bytes, bool, int]], list[tuple[bytes, bytes, int, bytes, bytes]], list[tuple[bytes, int, bytes, bytes, bytes]]], node_id: bytes, ip: bytes, port: int, unknown_key: bytes, plaintext: bytes) -> tuple[tuple[list[tuple[bytes, bytes, int, bytes, bytes, bool, int]], list[tuple[bytes, bytes, int, bytes, bytes]], list[tuple[bytes, int, bytes, bytes, bytes]]], list[bytes]]:
+    """A node's state after it sends a request to a peer, and the packet it sends."""
+    ...
+
 def discv5_make_whoareyou(dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: int) -> tuple[bytes, bytes]:
     """Node B's WHOAREYOU packet for node A, and its challenge data."""
     ...

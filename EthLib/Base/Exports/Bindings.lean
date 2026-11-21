@@ -27,6 +27,12 @@ structure Binding where
   /-- The class of `ethlib.errors` that the method raises, if it can fail. -/
   errorClass : Option String
 
+/-- The Python type of the state of a discv5 node: its sessions, challenges and requests. -/
+def discv5StateType : String :=
+  "tuple[list[tuple[bytes, bytes, int, bytes, bytes, bool, int]], " ++
+    "list[tuple[bytes, bytes, int, bytes, bytes]], " ++
+    "list[tuple[bytes, int, bytes, bytes, bytes]]]"
+
 /-- The Python type of a deposit tree: its subtrees in preorder, its count, its finalized block. -/
 def depositTreeType : String :=
   "tuple[list[Literal['node'] | tuple[Literal['zero'], int] | tuple[Literal['leaf'], bytes] | " ++
@@ -540,6 +546,18 @@ def bindings : List Binding := [
     [`EthLib.Networking.Discv5.MessageError], some "Discv5Error"⟩,
   ⟨"discv5_nodes_match", `EthLib.Networking.Discv5.Exports.nodesMatchExport,
     "(recipient: bytes, distances: list[int], records: list[bytes]) -> bool",
+    [], some "Discv5Error"⟩,
+  ⟨"discv5_node_step", `EthLib.Networking.Discv5.Exports.nodeStepExport,
+    "(node: tuple[bytes, bytes, bytes, int, list[tuple[bytes, bytes, int]], bytes | None], " ++
+      "randoms: tuple[bytes, bytes, bytes, bytes], state: " ++ discv5StateType ++
+      ", ip: bytes, port: int, packet: bytes) -> " ++
+      "tuple[" ++ discv5StateType ++ ", list[bytes]]",
+    [], some "Discv5Error"⟩,
+  ⟨"discv5_node_send", `EthLib.Networking.Discv5.Exports.nodeSendExport,
+    "(node: tuple[bytes, bytes, bytes, int, list[tuple[bytes, bytes, int]], bytes | None], " ++
+      "randoms: tuple[bytes, bytes, bytes, bytes], state: " ++ discv5StateType ++
+      ", node_id: bytes, ip: bytes, port: int, " ++
+      "unknown_key: bytes, plaintext: bytes) -> tuple[" ++ discv5StateType ++ ", list[bytes]]",
     [], some "Discv5Error"⟩,
   ⟨"discv5_make_whoareyou", `EthLib.Networking.Discv5.Exports.makeWhoareyouExport,
     "(dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: int) -> " ++

@@ -5,6 +5,7 @@ public import EthLib.Networking.Exports.Enr
 public import EthLib.Networking.Discv5.Exchange
 public import EthLib.Networking.Discv5.Identity
 public import EthLib.Networking.Discv5.Message
+public import EthLib.Networking.Discv5.Node
 public import EthLib.Networking.Discv5.Packet
 public import EthLib.Networking.Discv5.Handshake
 public import EthLib.Networking.Discv5.Session
@@ -405,5 +406,96 @@ Then come the public key of node A and the packet. -/
 @[export eth_discv5_open_handshake]
 def openHandshakeExport (args : PyValue) : Result PyValue :=
   pyExport openHandshakeOf args
+
+/-! ## Node states -/
+
+/-- A session as Python values: the peer, its endpoint, the two keys, the side and the counter. -/
+abbrev SessionValue := NodeId × ByteArray × UInt16 × ByteArray × ByteArray × Bool × UInt32
+
+/-- A sent challenge as Python values: the peer, its endpoint, the packet and the challenge data. -/
+abbrev ChallengeValue := NodeId × ByteArray × UInt16 × ByteArray × ByteArray
+
+/-- A pending request as Python values: the endpoint, the peer, the nonce and the plaintext. -/
+abbrev RequestValue := ByteArray × UInt16 × NodeId × Vector UInt8 12 × ByteArray
+
+/-- A node state as Python values: its sessions, challenges and requests. -/
+abbrev StateValue := List SessionValue × List ChallengeValue × List RequestValue
+
+/-- What a node knows, as Python values.
+
+They are its private key, node ID, record and record sequence number.
+
+Then come its peers, each a node ID, a compressed public key and a record sequence number.
+
+Last comes the plaintext of its answer to any message, if it answers. -/
+abbrev LocalValue :=
+  ByteArray × NodeId × ByteArray × UInt64 × List (NodeId × ByteArray × UInt64) × Option ByteArray
+
+/-- The random values of a step: masking IV, nonce tail, ID nonce and ephemeral private key. -/
+abbrev RandomsValue := Vector UInt8 16 × Vector UInt8 8 × Vector UInt8 16 × ByteArray
+
+/-- The node of its Python values. -/
+def localOf (value : LocalValue) : Result Local := do
+  let (staticKey, nodeId, record, enrSeq, peers, reply) := value
+  let peers ← peers.mapM fun (id, key, seq) => do return (id, ← publicKeyOf key, seq)
+  return { staticKey := ← privateKeyOf staticKey, nodeId, record, enrSeq
+           publicKeyOf := fun id => (peers.find? (·.1 = id)).map (·.2.1)
+           knownSeq := fun id => ((peers.find? (·.1 = id)).map (·.2.2)).getD 0
+           answer := fun _ => reply }
+
+/-- The random values of their Python values. -/
+def randomsOf (value : RandomsValue) : Result Randoms := do
+  let (maskingIv, nonceTail, idNonce, ephemeralKey) := value
+  return ⟨maskingIv, nonceTail, idNonce, ← privateKeyOf ephemeralKey⟩
+
+/-- The state of its Python values. -/
+def stateOf (value : StateValue) : NodeState :=
+  let (sessions, challenges, requests) := value
+  ⟨sessions.map fun (id, ip, port, ik, rk, init, counter) =>
+      (⟨id, ⟨ip, port⟩⟩, ⟨⟨ik, rk⟩, init, counter⟩),
+    challenges.map fun (id, ip, port, packet, cd) => (⟨id, ⟨ip, port⟩⟩, ⟨packet, cd⟩),
+    requests.map fun (ip, port, id, nonce, plaintext) => (⟨ip, port⟩, ⟨id, nonce, plaintext⟩)⟩
+
+/-- The Python values of a state. -/
+def stateValue (state : NodeState) : StateValue :=
+  (state.sessions.map fun (k, s) =>
+      (k.id, k.endpoint.ip, k.endpoint.port, s.keys.initiatorKey, s.keys.recipientKey,
+        s.initiator, s.counter),
+    state.challenges.map fun (k, c) => (k.id, k.endpoint.ip, k.endpoint.port, c.packet,
+      c.challengeData),
+    state.requests.map fun (e, r) => (e.ip, e.port, r.id, r.nonce, r.plaintext))
+
+/-- A node's state after a packet from an endpoint, and the packets it sends back. -/
+def nodeStepOf (args : LocalValue × RandomsValue × StateValue × ByteArray × UInt16 × ByteArray) :
+    Result (StateValue × List ByteArray) := do
+  let (node, rand, state, ip, port, bytes) := args
+  let (state, replies) := step (← localOf node) (← randomsOf rand) (stateOf state) ⟨ip, port⟩ bytes
+  return (stateValue state, replies)
+
+/-- A node's state after a packet from an endpoint, and the packets it sends back.
+
+The node is its private key, node ID, record, record sequence number, peers and answer.
+
+The random values are the masking IV, the nonce tail, the ID nonce and the ephemeral key.
+
+The state is its sessions, its sent challenges and its pending requests. -/
+@[export eth_discv5_node_step]
+def nodeStepExport (args : PyValue) : Result PyValue :=
+  pyExport nodeStepOf args
+
+/-- A node's state after it sends a request to a peer, and the packet it sends. -/
+def nodeSendOf (args : LocalValue × RandomsValue × StateValue × NodeId × ByteArray × UInt16 ×
+    Vector UInt8 16 × ByteArray) : Result (StateValue × List ByteArray) := do
+  let (node, rand, state, id, ip, port, unknownKey, plaintext) := args
+  let (state, sent) := sendRequest (← localOf node) (← randomsOf rand) (stateOf state)
+    ⟨id, ⟨ip, port⟩⟩ unknownKey plaintext
+  return (stateValue state, sent)
+
+/-- A node's state after it sends a request to a peer, and the packet it sends.
+
+Without a session, the packet is sealed under the given key, which the peer does not have. -/
+@[export eth_discv5_node_send]
+def nodeSendExport (args : PyValue) : Result PyValue :=
+  pyExport nodeSendOf args
 
 end EthLib.Networking.Discv5.Exports

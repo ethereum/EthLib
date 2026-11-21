@@ -2650,6 +2650,30 @@ The closest 16 nodes take two Neighbors packets, since twelve IPv6 nodes already
 An empty table still gets one Neighbors packet with no node, a case that the source leaves open.
 The node's own Ping after 12 hours without contact, which the source says "should be sent", is left to the caller.
 
+### The session states of a discv5 node
+
+`step` (`Networking/Discv5/Node.lean`) follows a discv5 node through the packets that it receives, and `sendRequest` through the requests that it sends.
+It follows [Sessions to Session Cache](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-theory.md#sessions) of `discv5-theory.md`, with the handshake of `Discv5/Handshake.lean`.
+The node keeps its sessions and the WHOAREYOU challenges that it sent, both by node ID and endpoint, and its pending requests by endpoint.
+Every random value, such as an ID nonce, a masking IV or an ephemeral key, is an input of the step.
+
+`step_resend` (`Networking/Proofs/Discv5/Node.lean`) states that while a challenge is pending, a message that no session opens gets the same WHOAREYOU, byte for byte.
+`step_endpoint` states that a message from an endpoint with no session and no challenge gets a new WHOAREYOU, whatever the peer holds at other endpoints.
+`step_whoareyou_unsolicited` states that a WHOAREYOU that mirrors no pending request changes nothing, and `receiveHandshake_unchallenged` the same for a handshake packet with no stored challenge.
+`handshake_agree` states that after a handshake run by both nodes through their steps, each opens what the other seals.
+`seal_nonce_distinct` states that two packets sealed at two counters of a session carry two different nonces.
+`counter_add_ne` states that the counters of `2^32` messages in a row differ.
+
+The source leaves three points open, and EthLib reads them as follows.
+It gives no lifetime for a challenge ("a short duration") or for a session, so both last until they are replaced.
+The nonce layout, the counter in the first 32 bits, is "strongly recommended", not required, and the theorems on nonces hold for that layout only.
+The number of messages per key "is limited" with no number, so the counter wraps after `2^32` messages, and then only the random bytes keep nonces apart.
+
+EthLib also simplifies two points of the source.
+A node keeps one pending request per endpoint, the most recent, while the source allows several; a WHOAREYOU then refers to that one.
+Node B takes the public key of node A from the record it knows, or else from the record in the handshake packet, which must verify and name the source ID.
+When node B knows a record of A, it ignores the record in the packet, though the source says that B "must first validate it"; the ID signature is still checked under the known key.
+
 ### discv5 answers and their requests
 
 `answersRequest` (`Networking/Discv5/Exchange.lean`) states which message answers a request of discv5: PONG for PING, NODES for FINDNODE and TALKRESP for TALKREQ, with the same request ID.
@@ -7441,12 +7465,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 550 operations and 51 size constants.
-The Python extension calls 550 of the operations and 51 of the constants.
+Lean exports 552 operations and 51 size constants.
+The Python extension calls 552 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12384 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (342), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1633), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (854), `x25519.c` (21), `xmss.c` (344).
+12414 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (368), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1635), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (856), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
