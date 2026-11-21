@@ -880,6 +880,10 @@ def consensus_relay_validators(name: str, fork: str, state: bytes, registry: lis
     """At Fulu only: the list of validators that a relay serves, as a `list` of `dict`."""
     ...
 
+def consensus_relay_validator_registration(registrations: list[bytes], pubkey: str | None) -> tuple[int, dict[str, Any]] | None:
+    """The answer of a relay to a request for the registration of a key, with its status and body."""
+    ...
+
 def consensus_relay_delivered_payload(document: dict[str, Any]) -> dict[str, Any]:
     """A delivered payload, read from its JSON and written back as a `dict`."""
     ...

@@ -3,6 +3,8 @@ module
 public import EthLib.Consensus.RelayApi
 public import EthLib.Consensus.Proofs.BuilderApi
 public import EthLib.Consensus.Proofs.BuilderApi.Bid
+public import EthLib.Consensus.Proofs.BuilderApi.Registration
+public import EthLib.Serialization.Proofs.Ssz.Codec.HexBytes
 public import EthLib.Consensus.Proofs.BeaconApi.Encoding
 public import EthLib.Consensus.Proofs.Proposers
 public import EthLib.Consensus.Proofs.Transition.PayloadInputs
@@ -601,6 +603,57 @@ theorem validatorsResponse_proposer_self {state : BeaconState preset fork}
   obtain ⟨nonzero, -, found⟩ := lookahead_of_mem listed
   rw [current] at found
   exact getBeaconProposerIndex_of_lookahead fulu nonzero found
+
+/-! ## The registration of a key -/
+
+/-- A request without a key gets 400. -/
+theorem getValidatorRegistration_none (registry : Registry) :
+    (getValidatorRegistration registry none).status = some 400 := rfl
+
+/-- After the relay keeps a registration, a request for its key gets 200 with that registration.
+
+This is how a validator checks that its own registration succeeded, as the source says. -/
+theorem getValidatorRegistration_insert (registry : Registry)
+    (signed : SignedValidatorRegistrationV1) {text : String}
+    (spells : Serialization.Ssz.parseHexBytes 48 text = some signed.message.pubkey) :
+    getValidatorRegistration (registry.insert signed) (some text) = .found signed := by
+  simp [getValidatorRegistration, spells, Registry.find?_insert_self]
+
+/-- A request with the hex text of the key of a kept registration gets 200 with it. -/
+theorem getValidatorRegistration_insert_toHex (registry : Registry)
+    (signed : SignedValidatorRegistrationV1) :
+    getValidatorRegistration (registry.insert signed)
+        (some (Serialization.Ssz.toHex signed.message.pubkey.toArray)) = .found signed :=
+  getValidatorRegistration_insert registry signed (Serialization.Ssz.parseHexBytes_toHex _)
+
+/-- After a registration passes and is kept, a request for its key gets 200 with it.
+
+Its timestamp is at least that of the registration that the relay held before for the key. -/
+theorem getValidatorRegistration_insert_monotone {preset : Preset} {fork : Fork} {config : Config}
+    {checks : SignatureChecks} {state : BeaconState preset fork} {registry : Registry}
+    {signed previous : SignedValidatorRegistrationV1} {now : UInt64} {text : String}
+    (kept : processRegistration config checks state registry signed now = .ok ())
+    (before : registry.find? signed.message.pubkey = some previous)
+    (spells : Serialization.Ssz.parseHexBytes 48 text = some signed.message.pubkey) :
+    getValidatorRegistration (registry.insert signed) (some text) = .found signed ∧
+      previous.message.timestamp ≤ signed.message.timestamp :=
+  ⟨getValidatorRegistration_insert registry signed spells,
+    (processRegistration_monotone kept before).2⟩
+
+/-- A key that does not read as 48 bytes of hex gets 400. -/
+theorem getValidatorRegistration_malformed {registry : Registry} {text : String}
+    (unread : Serialization.Ssz.parseHexBytes 48 text = none) :
+    getValidatorRegistration registry (some text) =
+      .badRequest ⟨400, "invalid pubkey argument", none⟩ := by
+  simp [getValidatorRegistration, unread]
+
+/-- A key that the relay does not hold gets no status, since the source gives none. -/
+theorem getValidatorRegistration_notHeld {registry : Registry} {text : String}
+    {pubkey : BLSPubkey} (spells : Serialization.Ssz.parseHexBytes 48 text = some pubkey)
+    (absent : registry.find? pubkey = none) :
+    getValidatorRegistration registry (some text) = .notHeld ∧
+      (getValidatorRegistration registry (some text)).status = none := by
+  simp [getValidatorRegistration, spells, absent, RegistrationAnswer.status]
 
 end RelayApi
 

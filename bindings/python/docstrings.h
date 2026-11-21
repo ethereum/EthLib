@@ -653,6 +653,9 @@
 #define DOC_consensus_relay_validators \
   "At Fulu only: the list of validators that a relay serves, as a `list` of `dict`."
 
+#define DOC_consensus_relay_validator_registration \
+  "The answer of a relay to a request for the registration of a key, with its status and body."
+
 #define DOC_consensus_relay_delivered_payload \
   "A delivered payload, read from its JSON and written back as a `dict`."
 

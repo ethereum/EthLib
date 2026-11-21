@@ -278,6 +278,14 @@ def keymanager_run(
     )
 
 
+def relay_validator_registration(
+    registrations: list[bytes], pubkey: str | None
+) -> tuple[int, dict[str, Any]] | None:
+    """A relay's answer to a request for the registration of a key, or None when it holds none."""
+    # A later registration for a key replaces an earlier one, as the relay keeps them.
+    return _native.consensus_relay_validator_registration(registrations, pubkey)
+
+
 def relay_delivered_payload(document: dict[str, Any]) -> dict[str, Any]:
     """A delivered payload of the relay data API, checked and written back as canonical JSON."""
     return _native.consensus_relay_delivered_payload(document)
@@ -2412,6 +2420,7 @@ __all__ = [
     "default_auth_data",
     "relay_submission_bid",
     "relay_validators",
+    "relay_validator_registration",
     "relay_delivered_payload",
     "relay_received_bid",
     "relay_delivered_keeps",

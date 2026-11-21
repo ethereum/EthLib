@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.BeaconApi.Encoding
+public import EthLib.Serialization.Ssz.Codec.HexBytes
 public import EthLib.Consensus.ForkChoice.OptimisticSync
 
 /-!
@@ -75,14 +76,6 @@ inductive ValidatorId where
 def parseUInt64 (text : String) : Option UInt64 :=
   match readNat (.str text) with
   | .ok n => if n < UInt64.size then some (UInt64.ofNat n) else none
-  | .error _ => none
-
-/-- The bytes of a given count that a text writes as hex after a lowercase `0x`, or none.
-
-The digits may be in either case. -/
-def parseHexBytes (count : Nat) (text : String) : Option (Vector UInt8 count) :=
-  match ofHex text with
-  | .ok data => Base.exactBytes? count ⟨data⟩
   | .error _ => none
 
 /-- The error of a text that names nothing, with code 400. -/
