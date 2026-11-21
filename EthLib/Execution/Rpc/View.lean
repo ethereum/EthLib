@@ -78,6 +78,18 @@ def BlockRecord.ofRun (chain : BlockChain) {fork : Fork} (block : Block fork Tra
   let accessList := result.output.accessListHash.map fun _ => result.output.body.builder.build
   return ⟨fork, block, hash, state, result.output.receipts, result.output.logs, accessList⟩
 
+/-- The fork-ID context that a block gives: its hash and its timestamp if it is block zero.
+
+Any later block gives none. -/
+def BlockRecord.genesis (r : BlockRecord) : Option (Hash32 × Nat) :=
+  if r.block.header.number = 0 then some (r.hash, r.block.header.timestamp.toNat) else none
+
+/-- The block that a safe or finalized hash of the consensus layer names.
+
+A hash of thirty-two zero bytes names no block. -/
+def namedBlock (hash : Hash32) : Option Hash32 :=
+  if hash = Vector.replicate 32 0 then none else some hash
+
 /-- What a node holds when it answers a query. -/
 structure ChainView where
   /-- The configuration of the chain. -/
