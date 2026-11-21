@@ -234,6 +234,7 @@ public import EthLib.Consensus.Proofs.Transition.Execution
 public import EthLib.Consensus.Proofs.Transition.FfgFinality
 public import EthLib.Consensus.Proofs.Transition.FfgFinalityChain
 public import EthLib.Consensus.Proofs.Transition.FfgFinalityMonotonicity
+public import EthLib.Consensus.Proofs.Transition.FfgFreshVotes
 public import EthLib.Consensus.Proofs.Transition.FfgJustification
 public import EthLib.Consensus.Proofs.Transition.FfgRoots
 public import EthLib.Consensus.Proofs.Transition.FfgSlack

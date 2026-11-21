@@ -4508,6 +4508,12 @@ Below, the votes of the model come from the attestations that the blocks of a ch
 
 These pieces of that link exist.
 `FfgVotes.lean` relates the slashing conditions of the beacon chain to those of the model.
+`not_slashableIn_union_of_fresh` (`Consensus/Proofs/Transition/FfgFreshVotes.lean`) states the last step of plausible liveness on attestation data.
+Take a validator whose old votes hold no pair that a slashing punishes.
+It casts new votes, at most one for each target epoch, and a later target never has an earlier source.
+Each new vote has a source at least, and a target after, those of each old vote.
+Then the old and new votes together hold no such pair.
+No theorem yet applies this to the votes of a run, or to the slashing conditions of the model.
 `justificationTest_iff_stake` (`Consensus/Proofs/Transition/FfgStake.lean`) reads the test of justification as a comparison of stakes.
 There the stake of a validator is its effective balance, and the indices count as a set.
 It needs an active stake of more than one and a half increments.
