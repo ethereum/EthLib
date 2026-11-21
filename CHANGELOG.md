@@ -21,6 +21,15 @@ Not yet released.
   `Word64.add4_spec` and `Word64.sub4_spec` give the integer of a four-word sum with its carry, and of a difference with its borrow.
   The word lemmas that were private in the secp256k1 field and that both fields use are public in `Word64`: `mulHigh_spec`, `add_with_carry`, `mac_spec`, `sub_split`, `yes_le_one`, `lowValue_lt`, `value_low_of_top_zero`, `rawOfNat_val`, and in the proofs `value_wide`, `val_narrow` and `wide_narrow`.
 
+- `Store.ForwardReachable.registriesWithinLimit_of_room` (`ForkChoice/CheckpointBlocks.lean`) bounds registries from Gloas.
+  A forward store whose epoch is within a horizon keeps its held and justified registries within the limit.
+  The anchor's registry must leave room up to that horizon.
+  The anchor state must satisfy the state invariant, and the anchor block must be at or before its slot.
+
+- `Store.VotesHaveOrigins.exists_attestation_of_voteCountsFor` (`ForkChoice/VoteOrigins.lean`) works in a store whose latest votes have attestation origins.
+  There a counted vote for a known node comes from an attestation at or after its block's slot.
+  `Store.VotesHaveOrigins.slot_lt_of_voteCountsFor` adds that the block is before the current slot.
+
 - `Store.getSupportedNode_exists` (`ForkChoice/Head.lean`) shows that a vote for a held block supports a node of the store, at every fork.
 
 - `PinDrift.Internal.total_band_of_setting` is public, in `PinDriftBound/Setting.lean`.
@@ -467,7 +476,7 @@ Not yet released.
   - `Store.parentRoot_of_getAncestorRoots` and `Store.isAncestor_terminal_of_getAncestorRoots` in `ForkChoice/AncestorRoots.lean` read a walk of roots.
     Each root has the root before it as parent, or the terminal block; the head descends from it, and it descends from the terminal block.
     `Store.isAncestor_parentRoot_of_isAncestor` passes descent from a known block to its parent.
-  - `Store.voteCountsFor_eq_false_of_slot_eq_current` and `Store.not_isOneConfirmed_of_slot_eq_current` show that, in a forward store, no vote counts for a block at the current slot, so it is not one-confirmed.
+  - `Store.not_isOneConfirmed_of_slot_eq_current` shows that a held block at the current slot is not one-confirmed in a forward store.
   - `Store.unrealizedJustification_found` reads an unrealized justification as its stored entry.
   - `isStartSlotAtEpoch_eq`, `isStartSlotAtEpoch_next_eq_false` and `computeStartSlotAtEpoch_of_isStartSlotAtEpoch` read the start test of a slot as its remainder by the epoch length.
 
@@ -822,6 +831,13 @@ Not yet released.
 - In Lean, the secp256r1 `Fp`, `Fn`, `Fp.modulus`, `Fn.modulus`, `Fp.inv`, `Fn.inv` and their `NeZero` instances move from `Secp256r1/Curve.lean` to `Secp256r1/Field.lean`, with unchanged full names.
   `Secp256r1.Curve` no longer publicly imports `Secp256k1.Field`.
   Migration: import `Secp256k1.Field` directly where it is needed.
+
+- In Lean, `Store.voteCountsFor_eq_false_of_slot_eq_current` is removed.
+  Migration: use `Store.VotesHaveOrigins.slot_lt_of_voteCountsFor` with `forward.votesHaveOrigins`, which gives `block.slot < current` for a counted vote.
+
+- In Lean, `HeldRegistriesWithinLimit` moves from `EthLib.Consensus.Proofs.ForkChoice.HeadTotality` to `EthLib.Consensus.Proofs.ForkChoice.BlockRuns`.
+  Its name and statement are unchanged.
+  Existing imports remain sufficient; for a direct import of the definition, use `EthLib.Consensus.Proofs.ForkChoice.BlockRuns`.
 
 - In Lean, `VoteAt.recorded_at_next_slot` holds at every fork.
   It no longer takes `preGloas : fork < .glamsterdam`; it takes `anchorSlot : .glamsterdam ≤ fork → anchorBlock.slot ≤ anchorState.slot` after `sync`, and concludes `(LatestMessage.ofAttestation attestation).rank ≤ message.rank`.

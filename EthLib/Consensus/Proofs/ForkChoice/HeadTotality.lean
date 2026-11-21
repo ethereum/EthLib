@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Basic
+public import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
 public import EthLib.Consensus.Proofs.ForkChoice.Reachable
 public import EthLib.Consensus.Proofs.ForkChoice.VoteOrigins
 public import EthLib.Consensus.Proofs.Transition.FfgStake
@@ -82,11 +83,6 @@ theorem Config.headWeightsFit_mainnet :
 theorem Config.headWeightsFit_minimal :
     Config.minimal.HeadWeightsFit Preset.minimal (2 * 10 ^ 17) := by
   constructor <;> decide
-
-/-- Every held block state of a store has its registry within the limit of the preset. -/
-def HeldRegistriesWithinLimit (store : Store preset fork) : Prop :=
-  ∀ (root : Root) (state : BeaconState preset fork),
-    store.blockStates[root]? = some state → state.RegistryWithinLimit
 
 /-- Every equivocator of a store has a place in a state, when it is active in a held block's state.
 

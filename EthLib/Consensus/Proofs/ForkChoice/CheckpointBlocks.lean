@@ -3,7 +3,7 @@ module
 public import EthLib.Consensus.Proofs.ForkChoice.BlockStates
 public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
 public import EthLib.Consensus.Proofs.Transition.ChainRoots
-import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
+public import EthLib.Consensus.Proofs.ForkChoice.BlockRuns
 
 /-!
 # Proofs: the checkpoints of each block state name ancestors of that block
@@ -965,6 +965,62 @@ theorem Store.ForwardReachable.justified_epoch_le_current {config : Config}
         (processJustificationAndFinalization_invariant inv.ordered inv.settled run).2.2.1
         (stateBound root state held)
   exact ⟨each _ (.inl rfl), each _ (.inr rfl)⟩
+
+/-- From Gloas, a forward store with its epoch within a horizon keeps its registries in the limit.
+
+The anchor's registry must leave room for the pending deposits of each epoch up to the horizon.
+
+The anchor state must satisfy the invariant, and the anchor block must be at or before its slot.
+
+That covers every held block state and the state of the justified checkpoint. -/
+theorem Store.ForwardReachable.registriesWithinLimit_of_room {config : Config}
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store : Store preset fork} (gloas : .glamsterdam ≤ fork)
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    {horizon epoch : Epoch} (epochOk : store.getCurrentStoreEpoch config = .ok epoch)
+    (inHorizon : epoch ≤ horizon) (room : AnchorRegistryRoom preset anchorState horizon) :
+    HeldRegistriesWithinLimit store ∧
+    ∀ state : BeaconState preset fork,
+      store.checkpointState store.justifiedCheckpoint = .ok state → state.RegistryWithinLimit := by
+  -- The store's clock reads a slot, so slots have a positive duration.
+  have slots : 0 < config.SLOT_DURATION_MS := by
+    unfold Store.getCurrentStoreEpoch at epochOk
+    cases slotOk : store.getCurrentSlot config with
+    | error e => simp [slotOk, bind, Except.bind] at epochOk
+    | ok slot => exact Store.slotDuration_pos slotOk
+  obtain ⟨blockBound, checkpointBound⟩ := forward.reachable.validators_size_le_of_gloas gloas
+  -- A state within the horizon that grew only by its epochs fits in the room of the anchor.
+  have within : ∀ state : BeaconState preset fork, getCurrentEpoch state ≤ horizon →
+      state.validators.data.size ≤ anchorState.validators.data.size +
+        preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+          ((getCurrentEpoch state).toNat - (getCurrentEpoch anchorState).toNat) →
+      state.RegistryWithinLimit := by
+    intro state le bound
+    have epochs := UInt64.le_iff_toNat_le.mp le
+    have more : preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+        ((getCurrentEpoch state).toNat - (getCurrentEpoch anchorState).toNat) ≤
+        preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+          (horizon.toNat - (getCurrentEpoch anchorState).toNat) :=
+      Nat.mul_le_mul_left _ (by omega)
+    unfold AnchorRegistryRoom at room
+    show state.validators.data.size ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat
+    omega
+  have blockLe := forward.blockState_epoch_le_current slots anchorSlot epochOk
+  refine ⟨fun root state held => within state (UInt64.le_trans (blockLe root state held) inHorizon)
+    (blockBound root state held), fun state stateOk => ?_⟩
+  have found := Store.checkpointState_ok_iff.mp stateOk
+  refine within state ?_ (checkpointBound _ state found)
+  -- The justified state is a held block state, or that state processed to its epoch's start.
+  obtain ⟨base, startSlot, baseHeld, startOk, kept⟩ :=
+    forward.reachable.checkpointStatesFromBlocks found
+  rcases kept with ⟨-, rfl⟩ | ⟨-, _, -, processed⟩
+  · exact UInt64.le_trans (blockLe _ _ baseHeld) inHorizon
+  have justifiedLe := UInt64.le_iff_toNat_le.mp (UInt64.le_trans
+    (forward.justified_epoch_le_current sound slots anchorSlot epochOk).1 inHorizon)
+  rw [UInt64.le_iff_toNat_le, getCurrentEpoch_toNat, (processSlots_slot processed).2,
+    (computeStartSlotAtEpoch_ok_iff.mp startOk).2]
+  exact Nat.le_trans (Nat.div_le_of_le_mul (Nat.le_of_eq (Nat.mul_comm _ _))) justifiedLe
 
 /-- A forward-reachable store finalizes no later than the anchor's epoch or the previous epoch.
 
