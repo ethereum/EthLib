@@ -4601,6 +4601,15 @@ The buffer of block roots must reach the previous epoch, and the slot plus its l
 Each attester then holds the timely target flag, when the state holds the target root for the first slot of the target epoch.
 The committee check and the signature check stay hypotheses here; Gloas, with its builder payments, is left out.
 
+`processAttestation_honestAttestation` (`Consensus/Proofs/HonestAttestations.lean`) discharges those two checks for the honest attestation of one committee.
+That attestation is built by the functions of the honest validator: each honest member signs the data, and an aggregate joins the signatures.
+From Electra the aggregate names its one committee in its committee bits.
+The aggregate assumes that the votes of the honest members reach the aggregator in time.
+`honestAttestation_exists_ok` shows that it is built when the secret keys of the honest members do not sum to zero, and the committee fits the bits of an attestation.
+With the BLS checks, the signature then verifies, and the block accepts the attestation from Altair until Gloas.
+Each honest member of the committee then holds the timely target flag, under the same condition on the target root.
+If the secret keys summed to zero, the aggregate key would be the point at infinity, which key validation rejects.
+
 `processJustificationAndFinalization_slackJustifiedCheckpoints` (`Consensus/Proofs/Transition/FfgSlack.lean`) turns one step into a slack link of the model.
 If the two justified checkpoints of the state before the step are slack-justified, so are those of the state after it.
 A new current justified checkpoint must match the state of that step.
