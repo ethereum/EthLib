@@ -6602,6 +6602,25 @@ A proposer accepts a bid, builds the blinded body from the header of the bid, an
 That payload then names the fee recipient that the proposer checked, which the check takes to be the one it registered last.
 The theorem shows that the payload names the fee recipient, not that the fee recipient receives the value of the bid, which is a fact of the execution layer.
 
+From Bellatrix to Fulu, a proposer that uses external builders also builds a block locally, and chooses between the two by four rules of the source (`Consensus/BuilderApi/Proposal.lean`).
+A signed blinded block keeps the builder's payload.
+Otherwise the circuit breaker, a missing bid or a bid later than `BUILDER_PROPOSAL_DELAY_TOLERANCE` gives the local payload.
+`chooseSource_eq_builder_iff` states when the payload comes from the builder, and `chooseSource_circuitBreaker`, `chooseSource_late` and `chooseSource_signedBlinded` state the other cases (`Consensus/Proofs/BuilderApi/Proposal.lean`).
+The source leaves the conditions of the circuit breaker to the implementation, so it is an input.
+It does not say whether the tolerance counts from the request for the bid or from the start of the slot.
+EthLib takes the arrival time after the request as an input, in whole milliseconds, and a bid at the tolerance exactly is in time.
+The deadline rule is written with a lowercase "must", while the rule against a local fallback after a signed blinded block is a "**MUST**".
+The source triggers that rule on publishing the blinded block; EthLib triggers it on signing, which is safer.
+When the circuit breaker fires after a blinded block was signed, the two MUSTs conflict, and EthLib keeps the builder's payload, for slashing safety.
+The rule for the transition from proof-of-work to proof-of-stake is historical and out of scope.
+
+The rule against a local fallback is a slashing-safety property, and the slashing protection of EIP-3076 enforces it.
+`signingRoot_eq_of_importAndSignBlocks` (§ Slashing protection) shows that two headers that the signer signs for one slot have one signing root, whatever it imports in between.
+With `BeaconBlock.computeSigningRoot_blind`, which gives a block the signing root of its blinded form, a signer never signs a local block whose root differs from that of its signed blinded block.
+`checkBlock_recordBlock_self` shows the liveness side: right after the signed blinded block is recorded, the unblinded block passes the check as a repeat.
+An import between the two signatures can remove the signing root from the record, and the unblinded block is then refused.
+The source also says that a proposer "MUST accept at most one bid" for a slot ([`builder.md`](https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/bellatrix/builder.md#blinded-block-processing)), and it selects a bid by signing a blinded block, so the signing-root theorem covers that rule.
+
 From Bellatrix to Fulu, a builder keeps a registration only when five rules hold, in the order of the source.
 `processRegistration_ok_iff` (`Consensus/Proofs/BuilderApi/Registration.lean`) states them on the inputs.
 The key names a validator of the state; that validator is active or pending in the current epoch; the time is at most ten seconds ahead of the builder's clock; it is not earlier than the registration kept for the key; and the signature verifies.
