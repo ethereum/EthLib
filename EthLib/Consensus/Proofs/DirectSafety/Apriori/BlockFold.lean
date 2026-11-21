@@ -968,6 +968,11 @@ theorem headline_of_block_deposits
   headline_of_block block fun _ _ _ shared tail high supported twoSlots electra events replayed =>
     depositExits_proved shared tail high supported twoSlots electra events replayed
 
+/-- The drift of every supported branch is at most the a priori drift of its window. -/
+theorem stateProducer_proved (g x y : ForkedBeaconState preset) :
+    StateProducer (config := config) (checks := checks) (g := g) (x := x) (y := y) :=
+  stateProducer_of_block blockReplay_proved (fun _ _ _ => depositExits_proved) g x y
+
 end
 
 end EthLib.Consensus.DirectSafety.Apriori.Internal

@@ -1416,6 +1416,20 @@ theorem headline_ledger
   headline_staged hSelected hRelease (@commonLedger_of_allocation preset config checks)
     (@commonLedger_pre preset config checks)
 
+/-- The drift of a supported branch is at most the a priori drift of its window.
+
+It needs only the selected inputs and the release, as the headline does. -/
+theorem stateProducer_ledger
+    (hSelected : ∀ g x y : ForkedBeaconState preset,
+      SelectedInputs (config := config) (checks := checks) (g := g) (x := x) (y := y))
+    (hRelease : ∀ g x y : ForkedBeaconState preset,
+      SelectedReleaseProducer (config := config) (checks := checks) (g := g) (x := x) (y := y))
+    (g x y : ForkedBeaconState preset) :
+    StateProducer (config := config) (checks := checks) (g := g) (x := x) (y := y) :=
+  stateProducer_of_ledger (commonLedger_proved hSelected hRelease
+    (@commonLedger_of_allocation preset config checks) (@commonLedger_pre preset config checks)
+    g x y)
+
 end
 
 /-- A paid pair carries a fresh tag exactly when its source is new.

@@ -54,4 +54,33 @@ theorem accountable_safety_apriori :
       AccountableWindowBound (preset := preset) (config := config) (checks := checks) :=
   headline_of_block_deposits blockReplay_proved
 
+/-- The drift of one branch is at most the a priori drift of its window, before Gloas.
+
+A run from a genesis state `g` reaches `x`, and a branch continues it to `y`.
+
+The preset meets the parameters of the bound, orders its caps and has at least two slots per epoch.
+
+Its largest effective balances are whole numbers of increments.
+
+The epoch of `y` is at most `high + 1`, and the guard of the bound holds at `x` and `high`.
+
+Then the drift from `x` to `y` is at most the a priori drift, read at `x` with `high`.
+
+The drift of the branch charges twice the stake lost by the keys active and unslashed at `x`.
+
+It charges the stake gained by the keys unslashed at `y`, active in its epoch or the last.
+
+It charges twice the unslashed stake active at `y` in the last epoch but not in its own. -/
+theorem stateDrift_le_drift {g x y : ForkedBeaconState preset}
+    (shared : Run config checks g x) (tail : Run config checks x y)
+    (genesis : Genesis (config := config) (checks := checks) g)
+    (parameters : Parameters preset) (caps : CapOrder preset)
+    (aligned : MaxEffectiveBalancesAligned preset) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
+    (early : y.fork < .glamsterdam) {high : Nat}
+    (window : (getCurrentEpoch y.state).toNat ≤ high + 1)
+    (guard : aprioriGuardAt config x high) :
+    stateDrift x y ≤ drift (config := config) x high :=
+  stateProducer_proved g x y shared tail high
+    ⟨genesis, parameters, caps, aligned, early, window, guard⟩ twoSlots
+
 end EthLib.Consensus.DirectSafety
