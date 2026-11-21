@@ -13,7 +13,7 @@ Lucas' test proves `m` prime from a witness `g` whose order is `m - 1`.
 
 `prime_of_lucas` takes `m - 1` as a list of prime powers `q^e`.
 
-The kernel checks the product and the powers by `decide`, through `PowMod.powModAux`.
+The kernel checks the product and the powers by `decide`, through Lean core's modular power.
 
 Each factor `q` needs its own proof of primality, by `norm_num` when small, or by this lemma again.
 
@@ -40,21 +40,18 @@ private theorem mem_of_dvd_prod {q : Nat} (hq : q.Prime) :
     · obtain ⟨g, hg, rfl⟩ := mem_of_dvd_prod hq fs (fun g hg => hp g (List.mem_cons_of_mem _ hg)) h
       exact ⟨g, List.mem_cons_of_mem _ hg, rfl⟩
 
-/-- Lucas' test, with `m - 1` given as the product of `q^e` over `fs`.
-
-`fuel` bounds the exponents: `m - 1 < 2^fuel`. -/
-theorem prime_of_lucas (m g fuel : Nat) (fs : List (Nat × Nat))
-    (hfuel : m - 1 < 2 ^ fuel)
+/-- Lucas' test, with `m - 1` given as the product of `q^e` over `fs`. -/
+theorem prime_of_lucas (m g : Nat) (fs : List (Nat × Nat))
     (hprod : (fs.map fun f => f.1 ^ f.2).prod = m - 1)
     (hprime : ∀ f ∈ fs, f.1.Prime)
-    (hpow : powModAux fuel m g (m - 1) = 1 % m)
-    (hdiv : fs.all (fun f => powModAux fuel m g ((m - 1) / f.1) != 1 % m) = true) :
+    (hpow : Nat.powMod g (m - 1) m = 1 % m)
+    (hdiv : fs.all (fun f => Nat.powMod g ((m - 1) / f.1) m != 1 % m) = true) :
     m.Prime := by
-  refine lucas_primality m (g : ZMod m) ((natCast_pow_eq_one_iff m fuel g _ hfuel).mpr hpow) ?_
+  refine lucas_primality m (g : ZMod m) ((natCast_pow_eq_one_iff m g _).mpr hpow) ?_
   intro q hq hdvd
   -- `q` is one of the listed primes, whose power check the kernel ran.
   obtain ⟨f, hf, rfl⟩ := mem_of_dvd_prod hq fs hprime (hprod ▸ hdvd)
   have hne := List.all_eq_true.mp hdiv f hf
-  exact natCast_pow_div_ne_one m fuel g f.1 hfuel (by simpa using hne)
+  exact natCast_pow_div_ne_one m g f.1 (by simpa using hne)
 
 end EthLib.Cryptography.Pratt

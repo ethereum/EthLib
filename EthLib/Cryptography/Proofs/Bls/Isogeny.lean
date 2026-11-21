@@ -88,7 +88,6 @@ private theorem yNum_eq (x : Fp2) :
 
 open scoped EthLib.Cryptography.Bls.Fp
 
-set_option exponentiation.threshold 512 in
 /-- `2` is not a square modulo `Fp.modulus`, checked via Euler's criterion. -/
 private theorem sq_ne_two (z : ZMod Fp.modulus) : z * z ≠ 2 := by
   intro h
@@ -101,8 +100,8 @@ private theorem sq_ne_two (z : ZMod Fp.modulus) : z * z ≠ 2 := by
   have hfermat : z ^ (Fp.modulus - 1) = 1 := ZMod.pow_card_sub_one_eq_one hz
   rw [show Fp.modulus - 1 = 2 * ((Fp.modulus - 1) / 2) by decide,
     pow_mul, h2] at hfermat
-  exact PowMod.natCast_pow_div_ne_one Fp.modulus 384 2 2
-    (by decide) (by decide) hfermat
+  exact PowMod.natCast_pow_div_ne_one Fp.modulus 2 2
+    (by decide +kernel) hfermat
 
 /-- `4 + 4*i` has norm `32 = 16 * 2`, so it has no square root in `Fp2`. -/
 private theorem pole_not_on_curve (y : Fp2) : y * y ≠ 4 + 4 * I := by

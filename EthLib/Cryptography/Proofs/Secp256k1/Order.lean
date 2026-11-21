@@ -132,7 +132,7 @@ theorem cube_ne_neg_seven (x : ZMod Fp.modulus) : x * x * x ≠ -7 := by
       show 3 * ((Fp.modulus - 1) / 3) = Fp.modulus - 1 by decide]
     exact ZMod.pow_card_sub_one_eq_one hx
   -- The kernel computes that power, and it is not `1`.
-  rw [PowMod.natCast_pow_eq_one_iff _ 256 _ _ (by decide)] at hpow
+  rw [PowMod.natCast_pow_eq_one_iff] at hpow
   exact absurd hpow (by decide)
 
 /-- No point has order 2. -/

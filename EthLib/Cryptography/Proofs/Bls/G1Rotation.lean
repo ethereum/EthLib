@@ -87,9 +87,8 @@ theorem nsmul_eq_zero_of_rotation {A B : Type*} [AddCommGroup A] [AddCommGroup B
 /-- If `-3` is not a square modulo the prime `q`, then `q` never divides `1 + i + i^2`.
 
 The computation shows `(-3)^((q - 1) / 2) ≠ 1`, which is Euler's criterion for a non-square. -/
-theorem not_dvd_of_nonresidue {q fuel : Nat} (hq : q.Prime) (h3 : 3 < q) (hodd : q % 2 = 1)
-    (hfuel : q - 1 < 2 ^ fuel)
-    (hne : PowMod.powModAux fuel q (q - 3) ((q - 1) / 2) ≠ 1 % q) (i : Nat) :
+theorem not_dvd_of_nonresidue {q : Nat} (hq : q.Prime) (h3 : 3 < q) (hodd : q % 2 = 1)
+    (hne : Nat.powMod (q - 3) ((q - 1) / 2) q ≠ 1 % q) (i : Nat) :
     ¬ q ∣ 1 + i + i * i := by
   intro hd
   have : Fact q.Prime := ⟨hq⟩
@@ -109,7 +108,7 @@ theorem not_dvd_of_nonresidue {q fuel : Nat} (hq : q.Prime) (h3 : 3 < q) (hodd :
     have h3' : ((3 : Nat) : ZMod q) = 0 := by push_cast; linear_combination hz
     have := (ZMod.natCast_eq_zero_iff _ _).mp h3'
     exact absurd (Nat.le_of_dvd (by decide) this) (by omega)
-  apply PowMod.natCast_pow_div_ne_one q fuel (q - 3) 2 hfuel hne
+  apply PowMod.natCast_pow_div_ne_one q (q - 3) 2 hne
   rw [← hz, ← pow_mul, Nat.mul_div_cancel' (by omega)]
   exact ZMod.pow_card_sub_one_eq_one hz0
 

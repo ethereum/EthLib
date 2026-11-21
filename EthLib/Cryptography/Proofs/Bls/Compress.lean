@@ -557,8 +557,6 @@ The proof rests on three facts:
 
 /-! ### No curve point has `y = 0` -/
 
-set_option maxRecDepth 8000 in
-set_option exponentiation.threshold 512 in
 /-- The equation `x^3 + 4 = 0` has no solution modulo `p`.
 
 Equivalently, `-4` is not a cube modulo `p`.
@@ -589,8 +587,8 @@ private theorem cube_add_four_ne_zero_zmod (x : ZMod Fp.modulus) :
   rw [show Fp.modulus - 1 = 3 * ((Fp.modulus - 1) / 3) by decide,
     pow_mul, h3] at hfermat
   -- The kernel computes (-4)^((p - 1) / 3) mod p by square-and-multiply and finds it is not 1.
-  exact PowMod.natCast_pow_div_ne_one Fp.modulus 384 (Fp.modulus - 4) 3
-    (by decide) (by decide) hfermat
+  exact PowMod.natCast_pow_div_ne_one Fp.modulus (Fp.modulus - 4) 3
+    (by decide +kernel) hfermat
 
 /-- The curve right-hand side `x^3 + 4` never vanishes over the base field.
 

@@ -62,8 +62,6 @@ theorem isOnTwist_generator : isOnTwist generator = true :=
 
 /-! ## Nonsingularity of affine twist points -/
 
-set_option maxRecDepth 8000 in
-set_option exponentiation.threshold 512 in
 /-- `32` is not a cube modulo `Fp.modulus`, checked via Euler's cubic criterion. -/
 private theorem cube_ne_32_zmod (n : ZMod Fp.modulus) :
     n * n * n ≠ 32 := by
@@ -82,8 +80,8 @@ private theorem cube_ne_32_zmod (n : ZMod Fp.modulus) :
   rw [show Fp.modulus - 1 = 3 * ((Fp.modulus - 1) / 3) by decide,
     pow_mul, h3] at hfermat
   -- The kernel evaluates `32^((p - 1) / 3) mod p` and confirms it is not `1`.
-  exact PowMod.natCast_pow_div_ne_one Fp.modulus 384 32 3
-    (by decide) (by decide) hfermat
+  exact PowMod.natCast_pow_div_ne_one Fp.modulus 32 3
+    (by decide +kernel) hfermat
 
 /-- The twist right-hand side `x^3 + bTwist` never vanishes in `Fp2`.
 
