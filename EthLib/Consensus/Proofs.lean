@@ -168,6 +168,7 @@ public import EthLib.Consensus.Proofs.HonestAttestations
 public import EthLib.Consensus.Proofs.HonestBlock
 public import EthLib.Consensus.Proofs.HonestBlockInput
 public import EthLib.Consensus.Proofs.HonestContributionSignatures
+public import EthLib.Consensus.Proofs.HonestSlotAggregate
 public import EthLib.Consensus.Proofs.HonestValidator
 public import EthLib.Consensus.Proofs.HonestProposer
 public import EthLib.Consensus.Proofs.InclusionListCommittee

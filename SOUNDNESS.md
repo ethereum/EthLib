@@ -4008,7 +4008,8 @@ From Altair, `processSyncCommitteeContributions_spec` states the bits of the syn
 They are exactly the bits that its contributions set, each at the seat of its subcommittee.
 It also shows that the contributions name distinct subcommittees below the number of subnets.
 
-No theorem says that the on-chain aggregate verifies, which rests on BLS and on the disjoint committees of the network aggregates.
+No theorem says that the on-chain aggregate of any network aggregates verifies, which rests on BLS and on the disjoint committees of the network aggregates.
+`processAttestation_honestSlotAggregate`, in the section on Casper FFG, shows it for the honest aggregate of a slot.
 The Python suite checks the new state root against the state root of each valid sanity block case that the repository holds, at seven forks from Phase 0 to Heze.
 It checks the Eth1 vote, the pending deposit count, the custody requirement, the on-chain aggregate, the sync aggregate and the execution requests.
 The test works out the expected values from the guides, with py_ecc for the aggregate signatures.
@@ -4605,10 +4606,20 @@ The committee check and the signature check stay hypotheses here; Gloas, with it
 That attestation is built by the functions of the honest validator: each honest member signs the data, and an aggregate joins the signatures.
 From Electra the aggregate names its one committee in its committee bits.
 The aggregate assumes that the votes of the honest members reach the aggregator in time.
-`honestAttestation_exists_ok` shows that it is built when the secret keys of the honest members do not sum to zero, and the committee fits the bits of an attestation.
-With the BLS checks, the signature then verifies, and the block accepts the attestation from Altair until Gloas.
+`honestAttestation_exists_ok` shows that it is built when the committee has an honest member and fits the bits of an attestation.
+With the BLS checks, the signature verifies when the secret keys of the honest members do not sum to zero, and the block accepts the attestation from Altair until Gloas.
 Each honest member of the committee then holds the timely target flag, under the same condition on the target root.
 If the secret keys summed to zero, the aggregate key would be the point at infinity, which key validation rejects.
+
+`processAttestation_honestSlotAggregate` (`Consensus/Proofs/HonestSlotAggregate.lean`) covers a whole slot with one attestation, from Electra until Gloas.
+From Electra a block holds at most 8 attestations on mainnet, so it carries one attestation over several committees, as EIP-7549 allows.
+The honest aggregate of a slot joins the honest attestation of each committee of the slot that has an honest member, as an honest proposer joins network aggregates.
+`honestSlotAggregate_exists_ok` shows that it is built when the committees of the slot have values and one of them has an honest member.
+The preset must allow a committee in a slot, and before Gloas the committees of the slot must fit the bits of an attestation together.
+The committees of one slot do not overlap when the active validators of the epoch times its committees fit in 64 bits, so each honest member signs once.
+With the BLS checks, the joined signature verifies when the secret keys of all honest members of the slot do not sum to zero, and the block accepts the aggregate.
+Each honest member of each committee of the slot then holds the timely target flag, under the same condition on the target root.
+The list and block theorems below still take one committee for each attestation.
 
 `foldlM_processAttestation_honestAttestation` (`Consensus/Proofs/HonestAttestationList.lean`) runs a list of such attestations, as the attestation steps of a block do.
 Each attestation is built on the state before the list, and changes only flags and the proposer's balance.

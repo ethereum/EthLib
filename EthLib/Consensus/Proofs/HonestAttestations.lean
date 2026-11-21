@@ -23,7 +23,7 @@ From Electra each sends a single attestation that names its committee.
 
 The aggregate then marks that one committee in its committee bits, as [EIP-7549] specifies.
 
-Such an aggregate is built when the secret keys of the honest members do not sum to zero.
+Such an aggregate is built when the committee has an honest member.
 
 From Altair until Gloas, the attestation step of a block in the inclusion window accepts it.
 
@@ -112,18 +112,6 @@ private theorem honestSigners_ne_nil {honest : Finset ValidatorIndex}
     (sum : (((honestSigners honest committee).map key).map (·.val)).sum ≠ 0) :
     honestSigners honest committee ≠ [] := fun empty => sum (by simp [empty])
 
-/-- Signatures of one message by keys that do not sum to zero aggregate. -/
-private theorem aggregate_ok_of_forall₂ {keys : List Signatures.SecretKey}
-    {signatures : List BLSSignature} {message : ByteArray}
-    (signed : List.Forall₂ (fun key signature => Signatures.sign key message = .ok signature)
-      keys signatures)
-    (nonempty : keys ≠ []) (sum : (keys.map (·.val)).sum ≠ 0) :
-    ∃ signature, Signatures.aggregate signatures.toArray = .ok signature := by
-  obtain ⟨sigs, signs, signature, aggregated, -⟩ :=
-    Signatures.fastAggregateVerify_aggregate keys nonempty sum message
-  rw [mapM_ok_of_forall₂ signed, Except.ok.injEq] at signs
-  exact ⟨signature, signs ▸ aggregated⟩
-
 /-- A single attestation is built whenever the signature of the data is. -/
 private theorem constructSingleAttestation_exists_ok {config : Config} {data : AttestationData}
     {committeeIndex : CommitteeIndex} {index : ValidatorIndex} {key : Signatures.SecretKey}
@@ -175,15 +163,13 @@ private theorem filter_attestations_eq {config : Config} {before : fork < .pectr
   obtain ⟨-, -, -, -, sameData, -⟩ := constructAttestation_spec made
   simp [sameData]
 
-/-- The honest attestation of a committee is built when its honest signers can aggregate.
+/-- The honest attestation of a committee is built when the committee has an honest member.
 
 Before Electra the data names the committee.
 
 The committee has a value, and before Gloas it fits the bits of an attestation.
 
-From Electra its index is below the largest number of committees of a slot.
-
-The secret keys of its honest members must not sum to zero, so it has one at least. -/
+From Electra its index is below the largest number of committees of a slot. -/
 theorem honestAttestation_exists_ok {honest : Finset ValidatorIndex}
     {key : ValidatorIndex → Signatures.SecretKey} {data : AttestationData}
     {committeeIndex : CommitteeIndex} {committee : Array ValidatorIndex}
@@ -191,12 +177,12 @@ theorem honestAttestation_exists_ok {honest : Finset ValidatorIndex}
     (committeeOk : getBeaconCommittee state data.slot committeeIndex = .ok committee)
     (fits : fork < .glamsterdam → committee.size ≤ maxAttesters preset fork)
     (below : .pectra ≤ fork → committeeIndex < preset.MAX_COMMITTEES_PER_SLOT)
-    (sum : (((honestSigners honest committee).map key).map (·.val)).sum ≠ 0) :
+    (someSigner : honestSigners honest committee ≠ []) :
     ∃ attestation,
       honestAttestation config state honest key data committeeIndex = .ok attestation := by
   obtain ⟨message, signs⟩ := getAttestationSignature_eq config state data
   have nonempty : (honestSigners honest committee).map key ≠ [] := by
-    simpa using honestSigners_ne_nil sum
+    simpa using someSigner
   -- Each key signs the data, since the message has a signature by any key.
   have signed : ∀ index, ∃ signature,
       getAttestationSignature config state data (key index) = .ok signature := fun index => by
@@ -236,7 +222,7 @@ theorem honestAttestation_exists_ok {honest : Finset ValidatorIndex}
           rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff]
           exact made.imp fun index single made => mapError_ok_iff.mp
             ((signs _).symm.trans (constructSingleAttestation_spec made).2.2.2)
-        obtain ⟨signature, aggregated⟩ := aggregate_ok_of_forall₂ keysSigned nonempty sum
+        obtain ⟨signature, aggregated⟩ := Signatures.aggregate_sign_exists_ok keysSigned nonempty
         rw [aggregated] at failedAggregate
         cases failedAggregate
     obtain ⟨aggregate, aggregated⟩ := aggregated
@@ -274,18 +260,71 @@ theorem honestAttestation_exists_ok {honest : Finset ValidatorIndex}
         exact sized (by simp [bits])
       · -- The signatures are those of one message by the keys, so they aggregate.
         have keysSigned : List.Forall₂
-            (fun attestation secret => Signatures.sign secret message = .ok attestation.signature)
-            attestations ((honestSigners honest committee).map key) := by
-          rw [List.forall₂_map_right_iff]
-          exact made.flip.imp fun attestation index made => mapError_ok_iff.mp
+            (fun secret signature => Signatures.sign secret message = .ok signature)
+            ((honestSigners honest committee).map key) (attestations.map (·.signature)) := by
+          rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff]
+          exact made.imp fun index attestation made => mapError_ok_iff.mp
             ((signs _).symm.trans (constructAttestation_spec made).choose_spec.2.2.2.2)
-        obtain ⟨signature, aggregated, -⟩ :=
-          fastAggregateVerify_getAggregateSignature keysSigned nonempty sum
-        rw [aggregated] at failedAggregate
+        obtain ⟨signature, aggregated⟩ := Signatures.aggregate_sign_exists_ok keysSigned nonempty
+        rw [getAggregateSignature, aggregated] at failedAggregate
         cases failedAggregate
     obtain ⟨aggregate, aggregated⟩ := aggregated
     exact ⟨aggregate, bind_ok_iff.mpr ⟨committee, mapError_ok_iff.mpr committeeOk',
       bind_ok_iff.mpr ⟨attestations, mapM_ok_of_forall₂ made, aggregated⟩⟩⟩
+
+/-- From Electra, the honest attestation of a committee, from what it is built of.
+
+Its committee bits name the committee alone, and it holds the given data.
+
+It has one bit for each member of the committee, set when that member is honest.
+
+Its signature is the aggregate of the signatures of the honest signers on the data, in order. -/
+theorem honestAttestation_spec (electra : .pectra ≤ fork) {honest : Finset ValidatorIndex}
+    {key : ValidatorIndex → Signatures.SecretKey} {data : AttestationData}
+    {committeeIndex : CommitteeIndex} {attestation : Attestation preset fork}
+    (built : honestAttestation config state honest key data committeeIndex = .ok attestation) :
+    ∃ committee, getBeaconCommittee state data.slot committeeIndex = .ok committee ∧
+      getCommitteeIndices (attestation.committeeBits electra) = [committeeIndex] ∧
+      attestation.data = data ∧
+      attestation.aggregationBits.bits =
+        Array.ofFn (fun seat : Fin committee.size => decide (committee[seat] ∈ honest)) ∧
+      ∃ signatures, List.Forall₂ (fun index signature =>
+          getAttestationSignature config state data (key index) = .ok signature)
+        (honestSigners honest committee) signatures ∧
+        Signatures.aggregate signatures.toArray = .ok attestation.signature := by
+  unfold honestAttestation at built
+  rw [dite_eq_left electra] at built
+  obtain ⟨committee, committeeOk, built⟩ := bind_ok_iff.mp built
+  rw [mapError_ok_iff] at committeeOk
+  obtain ⟨singles, singlesOk, built⟩ := bind_ok_iff.mp built
+  have made := forall₂_of_mapM_ok singlesOk
+  have kept := filter_singles_eq made
+  obtain ⟨-, other, otherOk, -, bits, sameData, -, aggregated⟩ :=
+    constructAggregateOfSingleAttestations_spec built
+  rw [committeeOk, Except.ok.injEq] at otherOk
+  subst otherOk
+  refine ⟨committee, committeeOk,
+    getCommitteeIndices_constructAggregateOfSingleAttestations electra built, sameData, ?_,
+    singles.map (·.signature), ?_, by rw [kept] at aggregated; exact aggregated⟩
+  · -- The attesters of the single attestations are exactly the honest signers.
+    rw [bits, kept]
+    congr 1
+    funext seat
+    refine Bool.eq_iff_iff.mpr ?_
+    rw [List.any_eq_true, decide_eq_true_iff]
+    constructor
+    · rintro ⟨single, member, attester⟩
+      obtain ⟨index, signer, singleMade⟩ := exists_mem_of_forall₂ made.flip member
+      have same := (constructSingleAttestation_spec singleMade).1
+      rw [decide_eq_true_iff, same] at attester
+      exact attester ▸ (mem_honestSigners.mp signer).2
+    · intro honestMember
+      obtain ⟨single, member, singleMade⟩ := exists_mem_of_forall₂ made
+        (mem_honestSigners.mpr ⟨Array.getElem_mem seat.isLt, honestMember⟩)
+      exact ⟨single, member,
+        decide_eq_true_iff.mpr (constructSingleAttestation_spec singleMade).1⟩
+  · rw [List.forall₂_map_right_iff]
+    exact made.imp fun _ _ singleMade => (constructSingleAttestation_spec singleMade).2.2.2
 
 /-- From Altair to Fulu, the honest attestation of a committee is accepted.
 
@@ -335,16 +374,21 @@ theorem processAttestation_honestAttestation {budget scoreBound : Nat}
         ∀ index ∈ committee, index ∈ honest → TargetFlagAt (recentParticipation after altair
           (data.target.epoch == getCurrentEpoch state)) index.toNat) := by
   have signer := List.exists_mem_of_ne_nil _ (honestSigners_ne_nil sum)
+  have described := fun electra => honestAttestation_spec (config := config) electra built
   unfold honestAttestation at built
   by_cases electra : .pectra ≤ fork
-  · rw [dite_eq_left electra] at built
+  · -- The bits of the committee are set exactly at its honest members.
+    obtain ⟨other, otherOk, -, -, bits, -⟩ := described electra
+    rw [committeeOk, Except.ok.injEq] at otherOk
+    subst otherOk
+    rw [dite_eq_left electra] at built
     obtain ⟨other, otherOk, built⟩ := bind_ok_iff.mp built
     rw [mapError_ok_iff, committeeOk, Except.ok.injEq] at otherOk
     subst otherOk
     obtain ⟨singles, singlesOk, built⟩ := bind_ok_iff.mp built
     have made := forall₂_of_mapM_ok singlesOk
     have kept := filter_singles_eq made
-    obtain ⟨-, other, otherOk, -, bits, sameData, -, -⟩ :=
+    obtain ⟨-, other, otherOk, -, -, sameData, -, -⟩ :=
       constructAggregateOfSingleAttestations_spec built
     rw [committeeOk, Except.ok.injEq] at otherOk
     subst otherOk
@@ -359,14 +403,11 @@ theorem processAttestation_honestAttestation {budget scoreBound : Nat}
       (bits := attestation.aggregationBits.bits) (committee := committee) (by simp [bits])
     have someAttester : attesters ≠ [] := by
       obtain ⟨index, member⟩ := signer
-      obtain ⟨single, singleMember, singleMade⟩ := exists_mem_of_forall₂ made member
-      obtain ⟨attester, singleData, singleIndex, -⟩ := constructSingleAttestation_spec singleMade
-      obtain ⟨seat, inside, seated⟩ := Array.mem_iff_getElem.mp (mem_honestSigners.mp member).1
+      obtain ⟨inCommittee, honestMember⟩ := mem_honestSigners.mp member
+      obtain ⟨seat, inside, seated⟩ := Array.mem_iff_getElem.mp inCommittee
       refine List.ne_nil_of_mem
         ((mem_committeeAttesters_iff attestersOk).mpr ⟨seat, inside, seated, ?_⟩)
-      simp only [bits, Array.getD_eq_getD_getElem?, Array.getElem?_ofFn, Nat.zero_add, inside,
-        ↓reduceDIte, Option.getD_some, List.any_eq_true, List.mem_filter, decide_eq_true_eq]
-      exact ⟨single, ⟨singleMember, singleData, singleIndex⟩, attester.trans seated.symm⟩
+      simp [bits, inside, seated, honestMember]
     have committees : checkAttestationCommittees state attestation = .ok () := by
       unfold checkAttestationCommittees
       rw [dite_eq_left electra,
