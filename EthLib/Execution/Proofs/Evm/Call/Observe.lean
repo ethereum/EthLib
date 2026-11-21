@@ -25,7 +25,7 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter] {�
 
 omit [GasMeter Meter] [LawfulGasMeter Meter] in
 /-- The match on a resumed frame takes its error branch on an error. -/
-private theorem resume_match_error {β : Sort _} {x : Except EvmError (Evm fork Meter)}
+theorem runFrameWith_match_error {β : Sort _} {x : Except EvmError (Evm fork Meter)}
     {e : EvmError} (h : x = .error e) (h_1 : (e : EvmError) → x = .error e → β)
     (h_2 : (after : Evm fork Meter) → x = .ok after → β) :
     runFrameWith.match_1 (fun _ => β) x h_1 h_2 = h_1 e h :=
@@ -33,7 +33,7 @@ private theorem resume_match_error {β : Sort _} {x : Except EvmError (Evm fork 
 
 omit [GasMeter Meter] [LawfulGasMeter Meter] in
 /-- The match on a resumed frame takes its success branch on a frame. -/
-private theorem resume_match_ok {β : Sort _} {x : Except EvmError (Evm fork Meter)}
+theorem runFrameWith_match_ok {β : Sort _} {x : Except EvmError (Evm fork Meter)}
     {after : Evm fork Meter} (h : x = .ok after) (h_1 : (e : EvmError) → x = .error e → β)
     (h_2 : (after : Evm fork Meter) → x = .ok after → β) :
     runFrameWith.match_1 (fun _ => β) x h_1 h_2 = h_2 after h :=
@@ -93,12 +93,12 @@ theorem runFrameWith_modify
         rw [← run]
         dsimp only [Functor.map]
         split <;> rename_i hres
-        · rw [resume_match_error hres]
+        · rw [runFrameWith_match_error hres]
           rename_i e
           by_cases aborts : e.aborts <;>
             simp [aborts, pure, StateT.pure, throw, throwThe, MonadExceptOf.throw,
               StateT.lift, Except.map, bind, Except.bind, Except.pure]
-        · rw [resume_match_ok hres]
+        · rw [runFrameWith_match_ok hres]
           exact ih _ ((decreases running hs).2 child _ used hres) _ _ _ rfl
   · simp only [running] at hm ⊢
     subst hm
