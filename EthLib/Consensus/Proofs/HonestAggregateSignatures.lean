@@ -196,7 +196,7 @@ theorem isValidIndexedAttestation_constructAggregate {config : Config}
   simpa only [getAggregateSignature, List.map_map, Function.comp_def] using aggregateSignature
 
 /-- A single attestation holds its signer's index, committee, data and signature. -/
-private theorem single_attestation_spec {config : Config} {state : BeaconState preset fork}
+theorem constructSingleAttestation_spec {config : Config} {state : BeaconState preset fork}
     {data : AttestationData} {committeeIndex : CommitteeIndex} {index : ValidatorIndex}
     {key : Signatures.SecretKey} {single : SingleAttestation}
     (made : constructSingleAttestation config state data committeeIndex index key = .ok single) :
@@ -243,11 +243,11 @@ theorem isValidIndexedAttestation_constructAggregateOfSingleAttestations {config
     · rintro ⟨single, member, sameData, sameCommittee, attester⟩
       obtain ⟨signer, signerMember, made⟩ := exists_mem_of_forall₂ honest.flip
         (List.mem_filter.mpr ⟨member, by simp [sameData, sameCommittee]⟩)
-      have same : index = signer := attester.symm.trans (single_attestation_spec made).1
+      have same : index = signer := attester.symm.trans (constructSingleAttestation_spec made).1
       exact same.symm ▸ signerMember
     · intro member
       obtain ⟨single, singleMember, made⟩ := exists_mem_of_forall₂ honest member
-      obtain ⟨sameIndex, sameData, sameCommittee, _⟩ := single_attestation_spec made
+      obtain ⟨sameIndex, sameData, sameCommittee, _⟩ := constructSingleAttestation_spec made
       exact ⟨single, (List.mem_filter.mp singleMember).1, sameData, sameCommittee, sameIndex⟩
   have permuted : indices.Perm signers :=
     (List.perm_ext_iff_of_nodup (getAttestingIndices_sorted computed).nodup distinct).mpr
@@ -257,7 +257,7 @@ theorem isValidIndexedAttestation_constructAggregateOfSingleAttestations {config
     simp [empty] at sum
   obtain ⟨signer, signerMember⟩ := List.exists_mem_of_ne_nil signers nonempty
   obtain ⟨single, _, made⟩ := exists_mem_of_forall₂ honest signerMember
-  obtain ⟨_, _, _, signedOne⟩ := single_attestation_spec made
+  obtain ⟨_, _, _, signedOne⟩ := constructSingleAttestation_spec made
   obtain ⟨domain, root, domained, rooted⟩ := attestation_signing_root signedOne
   have signed : List.Forall₂ (fun secret signature =>
       Signatures.sign secret (Base.packBytes root) = .ok signature)
@@ -265,7 +265,7 @@ theorem isValidIndexedAttestation_constructAggregateOfSingleAttestations {config
         single.data = data ∧ single.committeeIndex = committeeIndex).map (·.signature)) := by
     rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff]
     exact honest.imp fun _ _ made =>
-      attestation_sign_eq domained rooted (single_attestation_spec made).2.2.2
+      attestation_sign_eq domained rooted (constructSingleAttestation_spec made).2.2.2
   apply indexed_attestation_of_aggregate computed sameData permuted nonempty bounded registered
     domained rooted signed sum
   simpa only [List.map_map, Function.comp_def] using aggregateSignature
