@@ -4456,7 +4456,11 @@ Unless a search names a SHA-256 collision, they received two different attested 
 Under the signature assumption, the keys of a common third of the seats signed both.
 That is not a fault by itself: an honest member signs a new head at every slot, and two stores may be at different slots.
 These theorems name the shared keys; they do not show that the keys misbehaved.
-That needs the two updates to share one signature slot, or the two finalized checkpoints to conflict, and no theorem here states either case.
+No pair of light client updates can show that they did.
+The members sign the root of the attested header under a domain, and the signature slot enters that root only through the fork version of the slot before it.
+So the signature slot is a label of the update.
+Two honest aggregates from two slots, over two heads at one fork version, can carry the same signature slot, and both updates pass validation.
+Two conflicting finalized headers do not change this, since each member signs only the head it sees, whatever that head finalizes.
 A forced update (`processLightClientStoreForceUpdate`) moves the finalized header without two thirds, so these theorems leave it out.
 Two stores that read two different committees for their updates are also outside them.
 
