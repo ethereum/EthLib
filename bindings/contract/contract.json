@@ -2471,6 +2471,47 @@
    "error_class": "Discv5Error",
    "docstring":
    "The plaintext of the decoded message, written again by the encoder."},
+  {"summary": "Whether a message plaintext answers a request plaintext.",
+   "signature": "(request: bytes, answer: bytes) -> bool",
+   "operation": "EthLib.Networking.Discv5.Exports.answersRequestExport",
+   "method": "discv5_answers_request",
+   "errors":
+   [{"type": "EthLib.Networking.Discv5.MessageError",
+     "codes":
+     [{"constructor": "empty", "code": 101},
+      {"constructor": "unknownType", "code": 102},
+      {"constructor": "rlp", "code": 103},
+      {"constructor": "fields", "code": 104},
+      {"constructor": "invalid", "code": 105}]}],
+   "error_class": "Discv5Error",
+   "docstring":
+   "Whether a message plaintext answers a request plaintext.\n\nIt must have the answer type of the request and the same request ID.\n\nPING is answered by PONG, FINDNODE by NODES, and TALKREQ by TALKRESP.\n\nA plaintext that is not a valid message comes back with the code of its message error."},
+  {"summary":
+   "The plaintext of the TALKRESP of a node that knows no protocol, for a TALKREQ plaintext.",
+   "signature": "(request: bytes) -> bytes",
+   "operation": "EthLib.Networking.Discv5.Exports.talkResponseExport",
+   "method": "discv5_talk_response",
+   "errors":
+   [{"type": "EthLib.Networking.Discv5.MessageError",
+     "codes":
+     [{"constructor": "empty", "code": 101},
+      {"constructor": "unknownType", "code": 102},
+      {"constructor": "rlp", "code": 103},
+      {"constructor": "fields", "code": 104},
+      {"constructor": "invalid", "code": 105}]}],
+   "error_class": "Discv5Error",
+   "docstring":
+   "The plaintext of the TALKRESP of a node that knows no protocol, for a TALKREQ plaintext.\n\nIt has the request ID of the TALKREQ and an empty response.\n\nAnother message comes back with code 0."},
+  {"summary":
+   "Whether records match the distances of a FINDNODE, from the node ID of its recipient.",
+   "signature":
+   "(recipient: bytes, distances: list[int], records: list[bytes]) -> bool",
+   "operation": "EthLib.Networking.Discv5.Exports.nodesMatchExport",
+   "method": "discv5_nodes_match",
+   "errors": [],
+   "error_class": "Discv5Error",
+   "docstring":
+   "Whether records match the distances of a FINDNODE, from the node ID of its recipient.\n\nEach record is its RLP bytes, and must be a \"v4\" record that verifies.\n\nIts node ID must be at one of the logarithmic distances from the recipient.\n\nBytes that are not one RLP item come back with code 0."},
   {"summary": "Node B's WHOAREYOU packet for node A, and its challenge data.",
    "signature":
    "(dest_id: bytes, masking_iv: bytes, nonce: bytes, id_nonce: bytes, enr_seq: int) -> tuple[bytes, bytes]",

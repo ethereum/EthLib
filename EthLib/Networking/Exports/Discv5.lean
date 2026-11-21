@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Exports.PyValue
 public import EthLib.Networking.Exports.Enr
+public import EthLib.Networking.Discv5.Exchange
 public import EthLib.Networking.Discv5.Identity
 public import EthLib.Networking.Discv5.Message
 public import EthLib.Networking.Discv5.Packet
@@ -229,6 +230,60 @@ def reencodeMessageExport (plaintext : ByteArray) : Result ByteArray := do
   match m.encode with
   | .ok bytes => pure bytes
   | .error _ => throw (0, "message has no RLP encoding")
+
+/-! ## Requests and answers -/
+
+/-- Whether a message plaintext answers a request plaintext.
+
+It must have the answer type of the request and the same request ID. -/
+def answersRequestOf (args : ByteArray × ByteArray) : Result Bool := do
+  let (request, answer) := args
+  let request ← runMessage (Message.decode request)
+  return answersRequest request (← runMessage (Message.decode answer))
+
+/-- Whether a message plaintext answers a request plaintext.
+
+It must have the answer type of the request and the same request ID.
+
+PING is answered by PONG, FINDNODE by NODES, and TALKREQ by TALKRESP.
+
+A plaintext that is not a valid message comes back with the code of its message error. -/
+@[export eth_discv5_answers_request]
+def answersRequestExport (args : PyValue) : Result PyValue :=
+  pyExport answersRequestOf args
+
+/-- The plaintext of the TALKRESP of a node that knows no protocol, for a TALKREQ plaintext. -/
+def talkResponseOf (request : ByteArray) : Result ByteArray := do
+  let some answer := talkResponse (fun _ => none) (← runMessage (Message.decode request))
+    | throw (0, "message is not a TALKREQ")
+  answer.encode.mapError fun _ => (0, "message has no RLP encoding")
+
+/-- The plaintext of the TALKRESP of a node that knows no protocol, for a TALKREQ plaintext.
+
+It has the request ID of the TALKREQ and an empty response.
+
+Another message comes back with code 0. -/
+@[export eth_discv5_talk_response]
+def talkResponseExport (args : PyValue) : Result PyValue :=
+  pyExport talkResponseOf args
+
+/-- Whether records match the distances of a FINDNODE, from the node ID of its recipient. -/
+def nodesMatchOf (args : ByteArray × List Nat × List ByteArray) : Result Bool := do
+  let (recipient, distances, records) := args
+  let items ← records.mapM fun bytes =>
+    (Serialization.Rlp.decode bytes).mapError fun _ => (0, "record is not one RLP item")
+  return nodesMatch (← nodeIdOf recipient) distances items
+
+/-- Whether records match the distances of a FINDNODE, from the node ID of its recipient.
+
+Each record is its RLP bytes, and must be a "v4" record that verifies.
+
+Its node ID must be at one of the logarithmic distances from the recipient.
+
+Bytes that are not one RLP item come back with code 0. -/
+@[export eth_discv5_nodes_match]
+def nodesMatchExport (args : PyValue) : Result PyValue :=
+  pyExport nodesMatchOf args
 
 /-! ## Session packets -/
 

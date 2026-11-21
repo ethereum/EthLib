@@ -387,6 +387,9 @@ PyObject* py_discv5_encrypt_message                       (PyObject* self, PyObj
 PyObject* py_discv5_decrypt_message                       (PyObject* self, PyObject* args);
 PyObject* py_discv5_decode_message                        (PyObject* self, PyObject* args);
 PyObject* py_discv5_reencode_message                      (PyObject* self, PyObject* args);
+PyObject* py_discv5_answers_request                       (PyObject* self, PyObject* args);
+PyObject* py_discv5_talk_response                         (PyObject* self, PyObject* args);
+PyObject* py_discv5_nodes_match                           (PyObject* self, PyObject* args);
 PyObject* py_discv5_make_whoareyou                        (PyObject* self, PyObject* args);
 PyObject* py_discv5_read_whoareyou                        (PyObject* self, PyObject* args);
 PyObject* py_discv5_seal_message                          (PyObject* self, PyObject* args);
