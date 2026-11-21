@@ -31,7 +31,7 @@ The caller chooses the masking IV, the nonce, the ID nonce and the session key.
 
 This module does not check that a nonce or an ID nonce is fresh, or that the `enr-seq` is current.
 
-It does not keep sessions: the caller finds the key of a source node ID.
+It keeps no state; the session states of a node, built on it, find the key of a source.
 -/
 
 @[expose] public section

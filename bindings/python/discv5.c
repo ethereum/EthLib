@@ -87,6 +87,16 @@ eth_discv5_nodes_match(
 );
 
 extern lean_object*
+eth_discv5_node_step(
+  lean_object* args
+);
+
+extern lean_object*
+eth_discv5_node_send(
+  lean_object* args
+);
+
+extern lean_object*
 eth_discv5_reencode_message(
   lean_object* plaintext
 );
@@ -275,6 +285,22 @@ py_discv5_nodes_match(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_discv5_nodes_match, args, 3, DISCV5_ERROR);
+}
+
+PyObject*
+py_discv5_node_step(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_discv5_node_step, args, 6, DISCV5_ERROR);
+}
+
+PyObject*
+py_discv5_node_send(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_discv5_node_send, args, 8, DISCV5_ERROR);
 }
 
 PyObject*

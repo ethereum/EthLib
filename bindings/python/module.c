@@ -746,6 +746,8 @@ static PyMethodDef methods[] = {
   {"discv5_decode_message", py_discv5_decode_message, METH_VARARGS, DOC_discv5_decode_message},
   {"discv5_reencode_message", py_discv5_reencode_message, METH_VARARGS, DOC_discv5_reencode_message},
   {"discv5_answers_request", py_discv5_answers_request, METH_VARARGS, DOC_discv5_answers_request},
+  {"discv5_node_step", py_discv5_node_step, METH_VARARGS, DOC_discv5_node_step},
+  {"discv5_node_send", py_discv5_node_send, METH_VARARGS, DOC_discv5_node_send},
   {"discv5_talk_response", py_discv5_talk_response, METH_VARARGS, DOC_discv5_talk_response},
   {"discv5_nodes_match", py_discv5_nodes_match, METH_VARARGS, DOC_discv5_nodes_match},
   {"discv5_make_whoareyou", py_discv5_make_whoareyou, METH_VARARGS, DOC_discv5_make_whoareyou},
