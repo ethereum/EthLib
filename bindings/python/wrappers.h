@@ -356,6 +356,7 @@ PyObject* py_chacha20_poly1305_decrypt                    (PyObject* self, PyObj
 PyObject* py_keystore_nfkd                               (PyObject* self, PyObject* args);
 PyObject* py_keystore_password                           (PyObject* self, PyObject* args);
 PyObject* py_keystore_decrypt                            (PyObject* self, PyObject* args);
+PyObject* py_keystore_encrypt                            (PyObject* self, PyObject* args);
 
 PyObject* py_secp256k1_verify                             (PyObject* self, PyObject* args);
 PyObject* py_secp256k1_is_low_s                           (PyObject* self, PyObject* args);

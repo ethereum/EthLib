@@ -1,4 +1,4 @@
-"""ERC-2335 keystore decryption and its Unicode password preparation."""
+"""ERC-2335 keystores: writing, decryption and the Unicode password preparation."""
 
 from ethlib.cryptography import _native
 from ethlib.errors import KeystoreError
@@ -29,4 +29,17 @@ def decrypt(
     return _native.keystore_decrypt(keystore, password, max_memory, max_work)
 
 
-__all__ = ["MAX_MEMORY", "MAX_WORK", "nfkd", "password_bytes", "decrypt", "KeystoreError"]
+def encrypt(kdf: str, metadata: str, iv: bytes, password: str, secret: bytes) -> str:
+    """Write ERC-2335 JSON text of a secret, from a KDF module and metadata as JSON text."""
+    return _native.keystore_encrypt(kdf, metadata, iv, password, secret)
+
+
+__all__ = [
+    "MAX_MEMORY",
+    "MAX_WORK",
+    "nfkd",
+    "password_bytes",
+    "decrypt",
+    "encrypt",
+    "KeystoreError",
+]

@@ -1288,6 +1288,17 @@ Decryption takes the caller's limits on memory and work, and refuses a key deriv
 The model counts bytes of buffers and calls of 64-byte block functions; no theorem shows that it bounds the code.
 The Python binding sets default limits.
 
+The writer of a keystore takes every random value as an input: the salt within the key derivation, the IV and the UUID.
+`decrypt_encrypt` shows that decrypting what it writes, with the same password and limits that admit its key derivation, gives the secret back.
+`readStore_encrypt` shows that the reader gives back its key derivation, its IV and its metadata.
+The reader checks the form of the metadata.
+The path is an ERC-2334 path or the empty string, the UUID has the text form of RFC 4122 §3, and the public key has 48 bytes.
+ERC-2335 calls the UUID "randomly generated" without naming a version of RFC 4122, so the reader does not check the version bits.
+It requires the public key "if the secret being stored within the keystore is a private key", which the reader cannot know before decryption.
+So the field stays optional when read, and a separate check compares it with the public key of the decrypted secret.
+`checkPubkey_encrypt` shows that a keystore written with the public key of its secret passes that check, and `checkPubkey_of_pubkey_eq_none` that a keystore without the field fails it.
+The Python suite writes both ERC-2335 vectors from their inputs and compares them field by field.
+
 ### scrypt
 
 The scrypt proofs state the length each step returns, the inputs each step accepts, and the table of ROMix and the integer that picks its index (`Proofs/Hash/Scrypt.lean`).
@@ -6845,7 +6856,8 @@ The source leaves six points about the import open, and EthLib takes these readi
 - What `duplicate` compares against: "already known to the keymanager", or "not currently active".
   EthLib compares against the local keys only, so a remote key of the same public key does not make a keystore a duplicate.
 - Which public key identifies a keystore.
-  ERC-2335 makes the `pubkey` field optional, so EthLib derives the key from the decrypted secret and does not read the field.
+  ERC-2335 makes the `pubkey` field optional, so EthLib derives the key from the decrypted secret, and checks only the form of the field.
+  The keystore example of the source writes that field with a `0x` marker, which the vectors of ERC-2335 do not, so the reader refuses it.
 - Whether a key imported through the API is read-only: EthLib imports it as one that can be deleted.
 - Whether the genesis validators root of the data must match the chain: this import does not compare it, since the conditions of EIP-3076 do not ask for it.
   The import of a file alone, in § Slashing protection, refuses another chain, but this call does not use it.

@@ -1634,6 +1634,27 @@
    "docstring":
    "Decrypt an ERC-2335 JSON keystore and return its secret octets."},
   {"summary":
+   "Write an ERC-2335 JSON keystore of a secret, from its key derivation and metadata.",
+   "signature":
+   "(kdf: str, metadata: str, iv: bytes, password: str, secret: bytes) -> str",
+   "operation": "EthLib.Cryptography.Keystore.Exports.encrypt",
+   "method": "keystore_encrypt",
+   "errors":
+   [{"type": "EthLib.Cryptography.Keystore.KeystoreError",
+     "codes":
+     [{"constructor": "invalidJson", "code": 1},
+      {"constructor": "invalidField", "code": 2},
+      {"constructor": "unsupportedVersion", "code": 3},
+      {"constructor": "unsupportedFunction", "code": 4},
+      {"constructor": "shortKey", "code": 5},
+      {"constructor": "pbkdf2", "code": 6},
+      {"constructor": "scrypt", "code": 7},
+      {"constructor": "checksumMismatch", "code": 8},
+      {"constructor": "limitExceeded", "code": 9}]}],
+   "error_class": "KeystoreError",
+   "docstring":
+   "Write an ERC-2335 JSON keystore of a secret, from its key derivation and metadata.\n\nIts arguments are the KDF module and metadata as JSON text, the IV, the password and the secret."},
+  {"summary":
    "Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4.",
    "signature":
    "(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool",

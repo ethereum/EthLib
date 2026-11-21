@@ -372,6 +372,10 @@ def keystore_decrypt(keystore: str, password: str, max_memory: int, max_work: in
     """Decrypt an ERC-2335 JSON keystore and return its secret octets."""
     ...
 
+def keystore_encrypt(kdf: str, metadata: str, iv: bytes, password: str, secret: bytes) -> str:
+    """Write an ERC-2335 JSON keystore of a secret, from its key derivation and metadata."""
+    ...
+
 def secp256k1_verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool:
     """Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4."""
     ...

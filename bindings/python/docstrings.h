@@ -272,6 +272,9 @@
 #define DOC_keystore_decrypt \
   "Decrypt an ERC-2335 JSON keystore and return its secret octets."
 
+#define DOC_keystore_encrypt \
+  "Write an ERC-2335 JSON keystore of a secret, from its key derivation and metadata."
+
 #define DOC_secp256k1_verify \
   "Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4."
 
