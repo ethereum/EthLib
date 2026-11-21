@@ -12,7 +12,7 @@ After a valid bid, the state keeps the bid.
 
 A self-built bid has no value, and a bid with no value records no payment.
 
-A bid with a value records one payment, at the position of its slot in the next epoch.
+A bid with a value records one payment, in the current epoch's half of the pending payments.
 
 That payment pays the bid's value from its builder to the proposer of the slot.
 

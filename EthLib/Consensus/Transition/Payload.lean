@@ -224,7 +224,9 @@ def bidPayment (bid : ExecutionPayloadBid preset fork) (proposer : ValidatorInde
 
 /-- The state with the payment of a bid recorded, when the bid has a value.
 
-The payment goes to the proposer of the slot, at the slot's position in the next epoch. -/
+The payment goes to the proposer of the slot.
+
+It sits at the slot's position in the second half of the pending payments, for the current epoch. -/
 def recordBidPayment (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (bid : ExecutionPayloadBid preset fork) : Except TransitionError (BeaconState preset fork) :=
   if 0 < bid.value then do
