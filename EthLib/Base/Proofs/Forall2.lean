@@ -13,6 +13,8 @@ Each input is related to its output, and is a member of the list.
 Conversely, inputs related pairwise to outputs make the map succeed with those outputs.
 
 Each member of the left list of a pairing has a partner in the right list.
+
+A pairing implies a second one when the first implies it on members of the left list.
 -/
 
 @[expose] public section
@@ -83,5 +85,14 @@ theorem exists_mem_of_forall₂ {α β : Type} {R : α → β → Prop} :
     · exact ⟨_, List.mem_cons_self, head⟩
     · obtain ⟨y, mem', related⟩ := exists_mem_of_forall₂ tail mem
       exact ⟨y, List.mem_cons_of_mem _ mem', related⟩
+
+/-- A pairing implies a second one when the first implies it on members of the left list. -/
+theorem forall₂_imp_of_mem {α β : Type} {first second : α → β → Prop} :
+    ∀ {left : List α} {right : List β}, List.Forall₂ first left right →
+      (∀ a b, a ∈ left → first a b → second a b) → List.Forall₂ second left right
+  | _, _, .nil, _ => .nil
+  | _, _, .cons head tail, implies =>
+    .cons (implies _ _ List.mem_cons_self head)
+      (forall₂_imp_of_mem tail fun a b member => implies a b (.tail _ member))
 
 end EthLib.Base

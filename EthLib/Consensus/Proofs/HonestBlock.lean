@@ -223,19 +223,6 @@ private theorem foldlM_applySyncReward_unsigned {reward proposerReward : Gwei}
       ⟨(unsigned other (.tail _ later)).1, by
         simpa [BeaconState.putBalance] using (unsigned other (.tail _ later)).2⟩
 
-/-- A map over a list passes when it passes at each item, and keeps a property of each value. -/
-private theorem mapM_exists_ok_forall {α β ε : Type} {f : α → Except ε β} {holds : β → Prop}
-    (items : List α) (each : ∀ item ∈ items, ∃ value, f item = .ok value ∧ holds value) :
-    ∃ values, items.mapM f = .ok values ∧ ∀ value ∈ values, holds value := by
-  obtain ⟨values, made⟩ := Base.mapM_exists_ok fun item member =>
-    (each item member).imp fun _ found => found.1
-  refine ⟨values, made, fun value member => ?_⟩
-  -- Each value is the image of an item, whose value has the property.
-  obtain ⟨item, inside, ok⟩ := Base.mapM_ok_mem made value member
-  obtain ⟨other, otherOk, held⟩ := each item inside
-  rw [ok, Except.ok.injEq] at otherOk
-  exact otherOk ▸ held
-
 /-- A key that a validator of the registry holds names an index of the registry. -/
 private theorem validatorIndexOfPubkey_exists {state : BeaconState preset fork}
     {pubkey : BLSPubkey} (within : state.RegistryWithinLimit)
@@ -311,15 +298,6 @@ private theorem processSyncAggregate_none [NeZero preset.SYNC_COMMITTEE_SIZE.toN
     arrayMembers, ensure, ↓reduceIte, bind, Except.bind]
   rw [← Array.foldlM_toList]
   exact folded
-
-/-- A relation between two lists implies a second one that may read the first list. -/
-private theorem forall₂_imp_of_mem {α β : Type} {first second : α → β → Prop} :
-    ∀ {left : List α} {right : List β}, List.Forall₂ first left right →
-      (∀ a b, a ∈ left → first a b → second a b) → List.Forall₂ second left right
-  | _, _, .nil, _ => .nil
-  | _, _, .cons head tail, implies =>
-    .cons (implies _ _ List.mem_cons_self head)
-      (forall₂_imp_of_mem tail fun a b member => implies a b (.tail _ member))
 
 /-! ## The operations of an honest block -/
 
