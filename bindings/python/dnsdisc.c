@@ -25,6 +25,16 @@ eth_dnsdisc_parse_url(
   lean_object* args
 );
 
+extern lean_object*
+eth_dnsdisc_resolve(
+  lean_object* args
+);
+
+extern lean_object*
+eth_dnsdisc_sign_root(
+  lean_object* args
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 PyObject*
@@ -57,4 +67,20 @@ py_dnsdisc_parse_url(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_dnsdisc_parse_url, args, 1, DNSDISC_ERROR);
+}
+
+PyObject*
+py_dnsdisc_resolve(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_dnsdisc_resolve, args, 5, DNSDISC_ERROR);
+}
+
+PyObject*
+py_dnsdisc_sign_root(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_dnsdisc_sign_root, args, 4, DNSDISC_ERROR);
 }

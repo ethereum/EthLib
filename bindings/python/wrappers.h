@@ -693,6 +693,8 @@ PyObject* py_dnsdisc_parse_entry                          (PyObject* self, PyObj
 PyObject* py_dnsdisc_subdomain                            (PyObject* self, PyObject* args);
 PyObject* py_dnsdisc_verify_root                          (PyObject* self, PyObject* args);
 PyObject* py_dnsdisc_parse_url                            (PyObject* self, PyObject* args);
+PyObject* py_dnsdisc_resolve                              (PyObject* self, PyObject* args);
+PyObject* py_dnsdisc_sign_root                            (PyObject* self, PyObject* args);
 PyObject* py_fork_id                                      (PyObject* self, PyObject* args);
 PyObject* py_fork_id_schedule                             (PyObject* self, PyObject* args);
 PyObject* py_fork_id_encode                               (PyObject* self, PyObject* args);
