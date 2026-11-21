@@ -216,7 +216,7 @@ end Meter
 /-! ## The transaction -/
 
 /-- Before Pectra, a transaction whose type exists at its fork holds no authorization. -/
-private theorem authorizations_eq_nil (hfork : tx.fork ≤ fork) (hp : fork < .pectra) :
+theorem authorizations_eq_nil (hfork : tx.fork ≤ fork) (hp : fork < .pectra) :
     tx.authorizations = [] := by
   cases tx with
   | setCode t =>
