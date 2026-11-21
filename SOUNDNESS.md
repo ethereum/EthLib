@@ -3016,6 +3016,24 @@ Neither side is stopped from opening streams after a Go Away, since the source f
 The ACK backlog of 256 streams is a SHOULD under [yamux, "ACK backlog & backpressure"](https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/yamux/README.md#ack-backlog--backpressure), and is left out.
 The export decodes every frame first, so the table does not check the size of the data again.
 
+### The transaction pool of the eth protocol
+
+The eth capability lists the checks on a transaction that a peer sends: a known type, a valid signature, a gas limit that covers the intrinsic gas, a sender that holds the cost, and a nonce at least the sender's ([`caps/eth.md`](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#transaction-encoding-and-validity)).
+`admitToPool` (`Execution/Network/Pool.lean`) runs them, and keeps a transaction exactly when they pass (`admitToPool_eq_ok_iff`, `Execution/Proofs/Network/Pool.lean`).
+A transaction that the next block could include is kept (`admitToPool_of_checkInclusion`).
+A kept transaction whose nonce is ahead of its sender's can enter no block at that state (`admitToPool_future_nonce`).
+A node disconnects a peer only for a transaction of a type that no fork defines (`peerAction_eq_disconnect_iff`).
+The transactions that it may send whole hold no blob transaction, as [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#networking) requires (`transactions_no_blob`).
+
+EthLib takes three readings:
+
+- The source writes the cost as `gas-limit * gas-price + value`, for a legacy transaction.
+  For later types EthLib reads the price as the most fee per gas, and adds the most fee of the blobs, as the check of a block does.
+- The checks that need no state are those of a transaction alone, which also bound the init code, the gas and the blobs.
+  The source allows a node to enforce other rules, and a transaction that fails them never enters a block.
+- The source lets a node consider valid a type that a later fork defines, and EthLib requires the type to be active at the fork.
+  The peer of such a transaction is kept, since only a type that no fork defines disconnects it.
+
 ### The block headers of the eth protocol
 
 `checkHeaders` (`Execution/Network/Blocks.lean`) checks an answer to a GetBlockHeaders request of the eth protocol.
@@ -7557,12 +7575,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 555 operations and 51 size constants.
-The Python extension calls 555 of the operations and 51 of the constants.
+Lean exports 556 operations and 51 size constants.
+The Python extension calls 556 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12457 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (71), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (368), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (39), `kzg.c` (511), `libp2p.c` (187), `module.c` (1640), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (859), `x25519.c` (21), `xmss.c` (344).
+12472 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (71), `consensus.c` (2710), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (368), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (39), `kzg.c` (511), `libp2p.c` (187), `module.c` (1641), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (194), `trie.c` (115), `vrf.c` (141), `wrappers.h` (860), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

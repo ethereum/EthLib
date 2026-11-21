@@ -1875,6 +1875,9 @@ def bindings : List Binding := [
     "(fork: str, chain_id: int, tx: bytes, state: bytes, gas_limit: int, gas_used: int, " ++
       "blob_gas_used: int, base_fee: int, excess_blob_gas: int) -> tuple[bytes, int, int]",
     [`EthLib.Execution.Transactions.InclusionError], some "TransactionError"⟩,
+  ⟨"tx_admit_to_pool", `EthLib.Execution.Network.admitToPool,
+    "(fork: str, chain_id: int, tx: bytes, state: bytes) -> tuple[bytes, bool]",
+    [`EthLib.Execution.Transactions.InclusionError], some "TransactionError"⟩,
   ⟨"tx_settle", `EthLib.Execution.Transactions.Exports.settleExport,
     "(fork: str, tx: bytes, base_fee: int, gas_left: int, refund_counter: int) -> " ++
       "tuple[int, int, int, int]",
