@@ -9,6 +9,9 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `Base.hexValue?_toUpper` and `Base.hexBytesFrom?_map_toUpper` state that a hex digit, and a run of hex digits, decode the same in uppercase ([#3837](https://github.com/ethereum/EthLib/issues/3837)).
+  The SSZ JSON codec uses them for its case rule.
+
 - In Lean, the laws of a four-word Montgomery field are proved once in `Word64.Montgomery`, from the laws of its sum, difference and product that an instance of `Word64.Montgomery.Laws` gives ([#3827](https://github.com/ethereum/EthLib/issues/3827)).
   They are the bridge `toMont` to the shared field on eight limbs with its laws, `toFin_val_eq`, the read-back laws `toFin_zero` to `toFin_ofFin`, and the new `ofFin_toFin`.
   The helpers `element_ext`, `mont_ext`, `modulus_odd` and `eq_of_radix_mul_mod` are public there.
@@ -820,6 +823,11 @@ Not yet released.
   `ValidatorStep`, `PinDriftBound.CreditBudgets` and `PinDriftBound.PreviousEpochRise` use it.
 
 ### Changes that break callers
+
+- In Lean, the SSZ JSON codec reads hex with the readers of Base, and its own copies are removed ([#3837](https://github.com/ethereum/EthLib/issues/3837)).
+  `Ssz.hexDigit` and `Ssz.hexBytesFrom` are removed, and `Ssz.hexBytes` reads its digits with `Base.hexBytes?`, with the same results.
+  The lemmas `Ssz.hexDigit_toUpper`, `Ssz.hexBytesFrom_map_toUpper`, `Ssz.hexBytesFrom_eq` and `Ssz.hexBytes_cons` are removed.
+  Migration: use `Base.hexValue?_toUpper` and `Base.hexBytesFrom?_map_toUpper`; the two loop lemmas have no replacement, so unfold `Ssz.hexBytes` and reason on `Base.hexBytesFrom?`.
 
 - In Lean, the IPv6 reader of the builder API reads hex digits with the reader of Base, and its own copy is removed ([#3837](https://github.com/ethereum/EthLib/issues/3837)).
   `BuilderApi.hexDigitValue?` is removed, and `BuilderApi.mem_hexGroup` now states that each character of a group has a value under `Base.hexValue?`, a byte.

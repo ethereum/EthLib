@@ -6,6 +6,8 @@ public import EthLib.Base.Hex
 # Proofs: hex decoding reads back hex encoding
 
 Decoding the two digits of each byte gives the bytes back.
+
+A digit in uppercase decodes to the same value, so the case of the digits never matters.
 -/
 
 @[expose] public section
@@ -48,6 +50,54 @@ theorem hexValue?_toUpper_hexDigitChar (n : Fin 16) :
     hexValue? (hexDigitChar n).toUpper = some n.val.toUInt8 := by
   revert n
   decide
+
+/-- A lowercase letter is 32 below the code of its uppercase letter. -/
+private theorem toUpper_val_of_lower {c : Char} (low : 'a'.val.toNat ≤ c.val.toNat)
+    (high : c.val.toNat ≤ 'z'.val.toNat) : c.toUpper.val.toNat + 32 = c.val.toNat := by
+  have h : 'a'.val ≤ c.val ∧ c.val ≤ 'z'.val := by
+    simp only [UInt32.le_iff_toNat_le]
+    exact ⟨low, high⟩
+  simp only [Char.toUpper, h, and_self, ↓reduceDIte, UInt32.toNat_add, UInt32.toNat_sub]
+  have ea : 'a'.val.toNat = 97 := rfl
+  have eA : 'A'.val.toNat = 65 := rfl
+  have ez : 'z'.val.toNat = 122 := rfl
+  omega
+
+/-- The code of any other character is kept in uppercase. -/
+private theorem toUpper_of_not_lower {c : Char} (h : ¬ ('a'.val.toNat ≤ c.val.toNat ∧
+    c.val.toNat ≤ 'z'.val.toNat)) : c.toUpper = c := by
+  have h' : ¬ ('a'.val ≤ c.val ∧ c.val ≤ 'z'.val) := by
+    simpa only [UInt32.le_iff_toNat_le] using h
+  unfold Char.toUpper
+  simp only [h', ↓reduceDIte]
+
+/-- A hex digit has the same value in uppercase, and a character that is not a digit stays one. -/
+theorem hexValue?_toUpper (c : Char) : hexValue? c.toUpper = hexValue? c := by
+  by_cases h : 'a'.val.toNat ≤ c.val.toNat ∧ c.val.toNat ≤ 'z'.val.toNat
+  · have key := toUpper_val_of_lower h.1 h.2
+    unfold hexValue?
+    simp only [Char.le_def, Char.toNat, UInt32.le_iff_toNat_le]
+    generalize c.toUpper = d at *
+    have e0 : '0'.val.toNat = 48 := rfl
+    have e9 : '9'.val.toNat = 57 := rfl
+    have ea : 'a'.val.toNat = 97 := rfl
+    have ef : 'f'.val.toNat = 102 := rfl
+    have ez : 'z'.val.toNat = 122 := rfl
+    have eA : 'A'.val.toNat = 65 := rfl
+    have eF : 'F'.val.toNat = 70 := rfl
+    simp only [e0, e9, ea, ef, ez, eA, eF] at *
+    repeat' split
+    all_goals first | rfl | (exfalso; omega) | (congr 2; omega)
+  · rw [toUpper_of_not_lower h]
+
+/-- Pairs of digits decode to the same bytes with every digit in uppercase. -/
+theorem hexBytesFrom?_map_toUpper :
+    ∀ (digits : List Char) (out : ByteArray),
+      hexBytesFrom? (digits.map Char.toUpper) out = hexBytesFrom? digits out
+  | [], _ => rfl
+  | [_], _ => rfl
+  | high :: low :: rest, out => by
+    simp only [List.map_cons, hexBytesFrom?, hexValue?_toUpper, hexBytesFrom?_map_toUpper rest]
 
 /-- A byte is sixteen times its high digit plus its low digit. -/
 theorem toUInt8_div_add_mod (byte : UInt8) :
