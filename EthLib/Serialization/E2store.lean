@@ -31,11 +31,7 @@ The documents do not lay out those 8 bytes, so EthLib states the layout as its o
 
 A type is written as its two bytes in order, so the Version type `0x6532` is `e2` in ASCII.
 
-The Version record must come first, as [its document][version] says.
-
-Every Version record has no data, as that document also says.
-
-A later Version record applies to the records after it, as when two files are concatenated.
+A file starts with a Version record, as [its document][version] says.
 
 An index record gives the position of each entry of a file, as an offset from the record.
 -/
@@ -92,10 +88,11 @@ def E2storeError.code : E2storeError → UInt32
 
 /-- The header of a record of the type `type` whose data has `length` bytes.
 
-The type is big-endian, so its bytes come in the order the type list writes them.
-
 A length of `2^32` or more keeps only its value modulo `2^32`, so the encoder rejects it first. -/
 def encodeHeader (type : UInt16) (length : Nat) : ByteArray :=
+  -- EthLib's header layout: the type in 2 bytes, in the order that the type list writes them.
+  --
+  -- Then the length of the data in 4 bytes, little-endian, then 2 reserved zero bytes.
   ⟨(natToBytes 2 type.toNat ++ (uintToBytes 4 length).toList ++ [0, 0]).toArray⟩
 
 /-- The bytes of the records, one after the other.
@@ -103,7 +100,9 @@ def encodeHeader (type : UInt16) (length : Nat) : ByteArray :=
 Each record goes straight onto the output, so its data is copied once. -/
 def encode (records : List Record) : Except E2storeError ByteArray :=
   records.foldlM (init := .empty) fun out record =>
+    -- The 4-byte length writes only a length below `2^32`.
     if record.data.size < 2 ^ 32 then
+      -- Each record is its 8-byte header, then its data, right after the record before.
       .ok (out ++ encodeHeader record.type record.data.size ++ record.data)
     else
       .error (.dataTooLong record.data.size)
@@ -120,13 +119,16 @@ structure Header where
 
 An index of an era1 or era file points at such a position. -/
 def readHeader (bytes : ByteArray) (offset : Nat) : Except E2storeError Header :=
+  -- A header is 8 bytes, as the Version and SlotIndex documents say; the layout is EthLib's.
   if bytes.size < offset + 8 then
     .error (.truncatedHeader offset bytes.size)
   else
     let byte (i : Nat) := byteAt bytes (offset + i)
+    -- Bytes 6 and 7 are reserved, and zero.
     if byte 6 ≠ 0 ∨ byte 7 ≠ 0 then
       .error (.reservedNotZero (byte 6) (byte 7))
     else
+      -- Bytes 0 and 1 are the type, in order, and bytes 2 to 5 the length, little-endian.
       .ok ⟨UInt16.ofNat (bytesToNat [byte 0, byte 1]),
         bytesToUint #v[byte 2, byte 3, byte 4, byte 5]⟩
 
@@ -134,14 +136,18 @@ def readHeader (bytes : ByteArray) (offset : Nat) : Except E2storeError Header :
 def decodeFrom (bytes : ByteArray) (offset : Nat) (acc : Array Record) :
     Except E2storeError (List Record) :=
   if offset < bytes.size then
+    -- A record starts with its header.
     match readHeader bytes offset with
     | .error e => .error e
     | .ok header =>
+      -- Its data follows, of the length that the header gives, within the bytes.
       if bytes.size < offset + 8 + header.length then
         .error (.truncatedData offset header.length bytes.size)
       else
         let data := bytes.extract (offset + 8) (offset + 8 + header.length)
+        -- The next record starts right after the data.
         decodeFrom bytes (offset + 8 + header.length) (acc.push ⟨header.type, data⟩)
+  -- The bytes end where a record ends.
   else
     .ok acc.toList
 termination_by bytes.size - offset
@@ -155,8 +161,12 @@ def decode (bytes : ByteArray) : Except E2storeError (List Record) :=
 Every Version record must have no data. -/
 def decodeFile (bytes : ByteArray) : Except E2storeError (List Record) := do
   let records ← decode bytes
+  -- Version: the version type must be the first record in the file.
   let first := records.head?.map (·.type)
   unless first = some VERSION do throw (.noVersion first)
+  -- Version: the length of its data field is always 0.
+  --
+  -- A later Version record applies to the records after it, as where two files are concatenated.
   unless records.all (fun record => record.type != VERSION || record.data.size == 0) do
     let index := records.findIdx fun record => record.type == VERSION && record.data.size != 0
     throw (.versionData index)
@@ -165,6 +175,7 @@ def decodeFile (bytes : ByteArray) : Except E2storeError (List Record) := do
 /-- The position of each record in the bytes that encode the records, from the position `pos`. -/
 def recordStarts (pos : Nat) : List Record → List Nat
   | [] => []
+  -- The next record starts after the 8-byte header and the data of this one.
   | record :: rest => pos :: recordStarts (pos + 8 + record.data.size) rest
 
 /-! ### Index records -/
@@ -183,28 +194,31 @@ structure Index where
 
 The integer is in two's complement, so a top bit of 1 makes it negative. -/
 def readInt64 (data : ByteArray) (pos : Nat) : Int :=
+  -- SlotIndex: each entry is a fixed-length 8-byte two's complement signed integer, little-endian.
   (BitVec.ofNat 64 (Ssz.readUint data.data pos 8)).toInt
 
 /-- The index that the data of an index record holds.
 
-The data is the first number, one offset per entry, then the count of entries.
-
-Each is 8 bytes, little-endian, and each offset is signed.
-
-The [SlotIndex][slotindex] document gives this layout.
-
-So the data has 16 bytes plus 8 bytes for each entry it counts.
+The [SlotIndex][slotindex] document gives its layout.
 
 [slotindex]: https://github.com/eth-clients/e2store-format-specs/blob/31cf6b577123bf1703eb3713f0b242f65fea806a/types/0x6932.md
 -/
 def readIndex (data : ByteArray) : Except E2storeError Index :=
+  -- SlotIndex: `data: starting-slot | index | index | index ... | count`, 8 bytes each.
   if data.size < 16 then
     .error (.indexSize data.size)
   else
+    -- The count is the last 8 bytes, which EthLib reads unsigned and little-endian.
     let count := Ssz.readUint data.data (data.size - 8) 8
+    -- SlotIndex: the record is `count * 8 + 24` bytes, so its data is `16 + 8 count` bytes.
     if data.size ≠ 16 + 8 * count then
       .error (.indexSize data.size)
     else
+      -- The first number is the first 8 bytes, which EthLib reads unsigned and little-endian.
+      --
+      -- SlotIndex: entry `N`, from the first number, is at `(N * 8) + 16` of the record.
+      --
+      -- So it is at `8 + 8 N` of the data.
       .ok ⟨Ssz.readUint data.data 0 8, (List.range count).map fun i => readInt64 data (8 + 8 * i)⟩
 
 end EthLib.Serialization.E2store
