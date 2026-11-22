@@ -396,11 +396,8 @@ private theorem callPays_rollbackOnError {message : Message fork}
   have hpar' : ended.state.parent = state.parent := hpar.trans (parent_entered hentry)
   have hkept : MeterKept meter (rollbackOnError state ended).gas :=
     meterRules_kept.trans hmeter (meterRules_kept.rollbackOnError state ended)
-  have hkeeps : KeepsNonceOrCode state (rollbackOnError state ended).state := by
-    unfold rollbackOnError
-    split
-    · exact (sameWrites_restoreTxState ended.state state).keepsNonceOrCode hpar'
-    · exact kentry.trans hk
+  have hkeeps : KeepsNonceOrCode state (rollbackOnError state ended).state :=
+    keepsNonceOrCode_rollbackOnError (kentry.trans hk) hpar'
   -- The rest depends on whether the frame failed.
   have hend : ((rollbackOnError state ended).error ≠ none →
         (rollbackOnError state ended).gas.stateGasUsed = meter.restore.stateGasUsed) ∧
@@ -535,6 +532,7 @@ private theorem createPays_depositCode (hfork : .glamsterdam ≤ fork) {message 
   have hnonce_evm : 1 ≤ (evm.state.getAccount evm.message.currentTarget).nonce := by
     rw [hmsg]
     exact Nat.le_trans hnonce (hk.1 message.currentTarget)
+  have kafter := keepsNonceOrCode_depositCode kevm pevm hnonce_evm hd
   rw [nonceOrCodeFreshSlots_prepareCreation hnc hp] at hfloor
   rcases depositCode_slots hd with ⟨hs, hg⟩ | ⟨hs, hg⟩ | ⟨hs, hg⟩
   · -- A failed creation puts back the state, and its meter is rolled back.
@@ -549,8 +547,7 @@ private theorem createPays_depositCode (hfork : .glamsterdam ≤ fork) {message 
         simp only [StateGasMeter.halt, StateGasMeter.restore, StateGasMeter.stateGasUsed, hgrant,
           hcomm, hbase]
     refine ⟨⟨⟨?_, ?_⟩, ?_⟩, hmeter.1.trans hgrant, hmeter.2.1.trans hcomm, ?_⟩
-    · rw [hs]
-      exact (sameWrites_restoreTxState evm.state state).keepsNonceOrCode pevm
+    · exact kafter
     · rw [hs]
       exact cevm.of_created rfl
     · rw [hs]
@@ -562,7 +559,7 @@ private theorem createPays_depositCode (hfork : .glamsterdam ≤ fork) {message 
     rw [hs, hg]
     exact ⟨⟨⟨kevm, cevm⟩, pevm⟩, hgrant, hcomm, hfloor⟩
   · -- The code goes to the address, which keeps its nonce, and the deposit charges state gas.
-    refine ⟨⟨⟨kevm.trans (keepsNonceOrCode_setCode hnonce_evm hs),
+    refine ⟨⟨⟨kafter,
       cevm.of_created (TransactionState.createdAccounts_setCode hs)⟩,
       (TransactionState.parent_setCode hs).trans pevm⟩,
       hmeter.1.trans hgrant, hmeter.2.1.trans hcomm, ?_⟩
