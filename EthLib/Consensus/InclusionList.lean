@@ -48,24 +48,25 @@ def empty : InclusionListStore := ⟨fun _ _ => [], fun _ _ => []⟩
 /-- A map with a new value at one slot and root, read from the old one. -/
 def modify {α : Type} (map : Slot → Root → α) (slot : Slot) (root : Root) (change : α → α) :
     Slot → Root → α :=
+  -- The changed value at the slot and root, and the old value at every other key.
   fun slot' root' => if slot' = slot ∧ root' = root then change (map slot root) else map slot' root'
 
-/-- The store after a signed inclusion list arrives.
-
-A first list of its member is kept with its timeliness.
-
-A later list of the same member is dropped, and it marks the member when it differs. -/
+/-- The store after a signed inclusion list arrives. -/
 def process (store : InclusionListStore) (signed : SignedInclusionList) (timely : Bool) :
     InclusionListStore :=
   let list := signed.message
   let member := list.validatorIndex
+  -- The list kept for the member at the slot and dependent root of the list, if any.
   match (store.inclusionLists list.slot list.dependentRoot).lookup member with
   | some stored =>
+    -- A later list equal to the kept one changes nothing.
     if stored.signedInclusionList.message = list then store
+    -- A later list that differs is dropped, and marks the member as an equivocator once.
     else
       { store with
         equivocators := modify store.equivocators list.slot list.dependentRoot
           fun members => if member ∈ members then members else members ++ [member] }
+  -- A first list of the member is kept with its timeliness, after the lists before it.
   | none =>
     { store with
       inclusionLists := modify store.inclusionLists list.slot list.dependentRoot
@@ -74,6 +75,7 @@ def process (store : InclusionListStore) (signed : SignedInclusionList) (timely 
 /-- The entries that count at a slot and root: no equivocator's, and only timely ones if asked. -/
 def counted (store : InclusionListStore) (slot : Slot) (root : Root) (onlyTimely : Bool) :
     List (ValidatorIndex × InclusionListEntry) :=
+  -- The kept entries whose member is no equivocator, and that are timely when asked.
   (store.inclusionLists slot root).filter fun (member, entry) =>
     member ∉ store.equivocators slot root && (!onlyTimely || entry.timely)
 
@@ -82,18 +84,21 @@ def counted (store : InclusionListStore) (slot : Slot) (root : Root) (onlyTimely
 The source leaves the order open, so here each transaction keeps its first place. -/
 def transactions (store : InclusionListStore) (slot : Slot) (root : Root) (onlyTimely : Bool) :
     List InclusionListTransaction :=
+  -- The transactions of those entries in order, each kept at its first place.
   ((store.counted slot root onlyTimely).flatMap fun (_, entry) =>
     entry.signedInclusionList.message.transactions.data.toList).eraseDups
 
 /-- One bit for each seat of a committee, set when the seat's member has an entry that counts. -/
 def bits {preset : Preset} (store : InclusionListStore) (committee : InclusionListCommittee preset)
     (slot : Slot) (root : Root) (onlyTimely : Bool) : InclusionListBits preset :=
+  -- Bit `i` is set when the member at seat `i` has an entry that counts.
   ⟨committee.map fun member => (store.counted slot root onlyTimely).any (·.1 == member)⟩
 
 /-- Whether some bits set every bit that the store sets for a committee. -/
 def isInclusive {preset : Preset} (store : InclusionListStore)
     (committee : InclusionListCommittee preset) (slot : Slot) (root : Root)
     (bits : InclusionListBits preset) (onlyTimely : Bool) : Bool :=
+  -- For each seat `i`, bit `i` of the store implies bit `i` of the bits given.
   let own := store.bits committee slot root onlyTimely
   (List.finRange preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat).all fun i =>
     !own.bits[i] || bits.bits[i]

@@ -41,10 +41,14 @@ The zero hash names a block with the empty payload.
 
 A block before Bellatrix has no payload, so the zero hash names it too. -/
 def marksLatestValid (latestValidHash : Hash32) (block : BeaconBlock preset fork) : Bool :=
+  -- From Bellatrix to Fulu the block carries its payload.
   if range : .bellatrix ≤ fork ∧ fork < .glamsterdam then
     let payload := block.body.executionPayload range
+    -- The zero hash names the empty payload.
     if latestValidHash = Vector.replicate 32 0 then payload == .empty preset fork
+    -- Any other hash names a payload that is not empty and has that block hash.
     else payload != .empty preset fork && payload.blockHash == latestValidHash
+  -- A block with no payload in its body is named by the zero hash only.
   else latestValidHash = Vector.replicate 32 0
 
 namespace Store
@@ -53,18 +57,17 @@ variable (store : Store preset fork)
 
 /-- The first invalid block of a chain, from a known block and its child on the chain.
 
-The walk climbs from the block until the hash names a payload as the latest valid one.
-
-The result is the child of that block on the chain.
-
 It is none when the walk leaves the store first. -/
 def firstInvalidBlock (latestValidHash : Hash32) (child root : Root) :
     Except ForkChoiceError (Option Root) :=
   match _found : store.blocks[root]? with
+  -- A block that the store does not hold ends the walk with none.
   | none => pure none
   | some block =>
+    -- When the hash names the payload of the block, the first invalid block is its child.
     if marksLatestValid latestValidHash block then pure (some child)
     else
+      -- Else the walk climbs to the parent, whose slot is lower.
       match _parentFound : store.blocks[block.parentRoot]? with
       | none => pure none
       | some parent =>
@@ -84,7 +87,11 @@ So is every record kept by block root, such as the payloads and the votes of the
 
 The inclusion lists, kept by slot, stay. -/
 def removeBlocks (roots : List Root) : Store preset fork :=
+  -- A root is kept when it is not among the roots given.
   let kept (root : Root) := !roots.contains root
+  -- Each record kept by block root drops the removed roots, and so do the votes.
+  --
+  -- A boost of a removed block becomes the zero root.
   { store with
     blocks := store.blocks.filter fun root _ => kept root
     blockStates := store.blockStates.filter fun root _ => kept root
@@ -106,7 +113,9 @@ def removeBlocks (roots : List Root) : Store preset fork :=
 
 An unknown root removes nothing. -/
 def removeDescendants (first : Root) : Except ForkChoiceError (Store preset fork) := do
+  -- An unknown root removes nothing.
   if !store.blocks.contains first then return store
+  -- The known blocks that have the block as an ancestor, itself included.
   let removed ← store.blocks.keys.filterMapM fun known => do
     return if ← store.isAncestor ⟨known, .pending⟩ ⟨first, .pending⟩ then some known else none
   return store.removeBlocks removed
@@ -119,31 +128,27 @@ The result is the first invalid block only when the hash names a payload on the 
 
 The execution layer promises that it does.
 
-Each block names, in its bid, the hash of the payload on which it builds.
-
-When that hash is the latest valid one, the candidate is the first invalid block.
-
-Otherwise the walk climbs to the parent of the block.
-
-When the block builds on the payload of its parent, that payload is invalid too.
-
-The parent then becomes the candidate.
-
-When the block builds on its parent without the payload, that payload is not on the chain.
-
 The result is none when the walk leaves the store first. -/
 def firstInvalidPayload (gloas : .glamsterdam ≤ fork) (latestValidHash : Hash32)
     (candidate : Root) (child : BeaconBlock preset fork) :
     Except ForkChoiceError (Option Root) :=
+  -- Each block names, in its bid, the hash of the payload on which it builds.
+  --
+  -- When that hash is the latest valid one, the candidate is the first invalid block.
   if (child.body.signedExecutionPayloadBid gloas).message.parentBlockHash = latestValidHash then
     pure (some candidate)
   else
+    -- Otherwise the walk climbs to the parent of the block, whose slot is lower.
     match _parentFound : store.blocks[child.parentRoot]? with
     | none => pure none
     | some parent =>
       if _lower : parent.slot < child.slot then
+        -- A block built on the payload of its parent makes that payload invalid too.
+        --
+        -- The parent then becomes the candidate.
         if parentPayloadStatus child parent = .full then
           firstInvalidPayload gloas latestValidHash child.parentRoot parent
+        -- A block built on its parent without the payload leaves that payload off the chain.
         else firstInvalidPayload gloas latestValidHash candidate parent
       else throw (.parentSlotNotLower child.parentRoot)
 termination_by child.slot.toNat
@@ -165,10 +170,13 @@ From Heze its record of the inclusion lists stays, but it is read only with its 
 An unknown root removes nothing. -/
 def removeFullDescendants (gloas : .glamsterdam ≤ fork) (first : Root) :
     Except ForkChoiceError (Store preset fork) := do
+  -- An unknown root removes nothing.
   if !store.blocks.contains first then return store
+  -- The known blocks that have the full node of the block as an ancestor.
   let removed ← store.blocks.keys.filterMapM fun known => do
     return if ← store.isAncestor ⟨known, .pending⟩ ⟨first, .full⟩ then some known else none
   let kept := store.removeBlocks removed
+  -- The votes for the block with its payload, and its payload, are dropped too.
   return { kept with
     latestMessages := kept.latestMessages.filter fun _ message =>
       !(message.root == first && message.payloadPresent gloas)
@@ -215,19 +223,27 @@ def onInvalidPayload (block : BeaconBlock preset fork) (latestValidHash : Option
     Except ForkChoiceError (Store preset fork) := do
   let root ← (SszType.hashTreeRoot block).mapError .ssz
   if gloas : .glamsterdam ≤ fork then
+    -- From Gloas: without a hash, the block itself is the first invalid block.
     let first ← match latestValidHash with
       | none => pure (some root)
       | some hash =>
+        -- A hash that names the payload of the block itself removes nothing.
         if (block.body.signedExecutionPayloadBid gloas).message.blockHash = hash then pure none
+        -- Else the walk from the block, or the block itself when the walk finds none.
         else pure (some ((← store.firstInvalidPayload gloas hash root block).getD root))
+    -- The payload of that block, the blocks built on it and their descendants leave the store.
     return ← match first with
       | none => pure store
       | some first => store.removeFullDescendants gloas first
+  -- Before Gloas: without a hash, the block itself is the first invalid block.
   let first ← match latestValidHash with
     | none => pure (some root)
     | some hash =>
+      -- A hash that names the payload of the block itself removes nothing.
       if marksLatestValid hash block then pure none
+      -- Else the child of the block with that payload, or the block itself when none is found.
       else pure (some ((← store.firstInvalidBlock hash root block.parentRoot).getD root))
+  -- That block and every known block that descends from it leave the store.
   match first with
   | none => return store
   | some first => store.removeDescendants first
