@@ -9,6 +9,11 @@ Not yet released.
 
 ### Proof additions
 
+- `nonceOrCodeFreshSlots` counts the fresh slots of the accounts with a nonce or code, the only accounts where code runs ([#4038](https://github.com/ethereum/EthLib/issues/4038), second part).
+  `sstoreStateGas_sub_sstoreStateRefill_of_hasNonceOrCode` proves that from Glamsterdam a storage write at such an account pays for them: its state gas net of its refill is the state gas of a new slot times their change.
+  The count stays through a read, a write of transient storage, a change that keeps the nonce and the code, a move of ether, a touch, a nonce rise or new code at an account that already has a nonce or code, and the start of a creation at an account with none.
+  A rollback on the same block that keeps the created accounts restores the count of its snapshot, when each account created since had no nonce or code there (`nonceOrCodeFreshSlots_restoreTxState`).
+
 - `TransactionState.freshSlots` is the finite set of slots whose word was zero before the transaction and is not zero now, by `mem_freshSlots` ([#4038](https://github.com/ethereum/EthLib/issues/4038), first part).
   A transaction with no write has none (`freshSlots_ofBlock`), and a storage write adds or removes only its own slot (`freshSlots_setStorage`, `card_freshSlots_setStorage`).
   `sstoreStateGas_sub_sstoreStateRefill` proves that from Glamsterdam the state gas of a storage write, net of its refill, is the state gas of a new slot times the change in the number of fresh slots.
