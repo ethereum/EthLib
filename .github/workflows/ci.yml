@@ -676,6 +676,13 @@ jobs:
 
       - run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_comment_code.py
 
+      # No library module runs a command such as #print or #eval at every build,
+      # except one listed with a reason in the allowlist.
+      # lake exe check-decls, in the build job, fails on any axiom beyond the three standard ones.
+      - run: uv run --no-project --python 3.12 python scripts/check_lean_commands.py
+
+      - run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_lean_commands.py
+
       # Every test cites only the pinned commits of tests/sources.toml, and every pinned
       # vector directory names its sources.
       # pyproject.toml and lakefile.lean declare one release version.

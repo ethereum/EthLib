@@ -241,6 +241,9 @@ What an entry point does with a wrong input is part of the protocol, so its sour
   Check this rule again at each update of the toolchain.
 - After a proof change, check its axioms with `lake exe check-decls`.
   The goal is `propext`, `Classical.choice` and `Quot.sound`, nothing else.
+- Do not leave a command such as `#print axioms`, `#eval` or `#check` in a module under `EthLib/`.
+  It runs at every build of the module, and `lake exe check-decls` already fails on any theorem that depends on an axiom beyond the three standard ones.
+  `scripts/check_lean_commands.py` fails on one, unless `scripts/check_lean_commands_allowlist.txt` lists it with the reason it must run at build time.
 - Name each theorem by the [naming conventions of Mathlib](https://leanprover-community.github.io/contribute/naming.html).
   The name is in `snake_case` and describes the statement: the conclusion first, then `_of_` and the hypotheses.
 - Prove what a reader cares about: round trips, injectivity, the rejection of bad input and the invariants of a state transition.
