@@ -153,32 +153,34 @@ abbrev DEPOSIT_CONTRACT_LIMIT : Nat := 2 ^ DEPOSIT_CONTRACT_TREE_DEPTH.toNat
 
 More deposits than the contract holds are an error. -/
 def depositRootOf (leaves : Array DepositData) (count : Nat) : Except TransitionError Root :=
+  -- The first `n` deposit data, for the count `n`.
   let first := leaves.extract 0 count
+  -- Their root as a list of at most `2^DEPOSIT_CONTRACT_TREE_DEPTH` entries.
   if bound : first.size ≤ DEPOSIT_CONTRACT_LIMIT then
     liftSsz (hashTreeRoot (⟨first, bound⟩ : SszList DepositData DEPOSIT_CONTRACT_LIMIT))
   else throw (.ssz (.merkleizeLimit first.size DEPOSIT_CONTRACT_LIMIT))
 
-/-- The state after one deposit at genesis.
-
-The vote on the deposit contract first takes the root of the deposits up to this one. -/
+/-- The state after one deposit at genesis. -/
 def genesisDeposit (config : Config) (checks : SignatureChecks) (before : fork < .hegota)
     (leaves : Array DepositData) (state : BeaconState preset fork) (entry : Deposit × Nat) :
     Except TransitionError (BeaconState preset fork) := do
   let (deposit, index) := entry
+  -- The deposit root of the vote becomes the root of deposits `0` to `i`, for the index `i`.
   let depositRoot ← depositRootOf leaves (index + 1)
   let eth1Data := { state.eth1Data before with depositRoot }
+  -- Then the deposit applies, against that root.
   processDeposit config checks before { state with eth1Data := fun _ => eth1Data } deposit
 
-/-- The state in which one validator has its effective balance from its balance at genesis.
-
-A validator with the largest effective balance is eligible and active from the genesis epoch. -/
+/-- The state in which one validator has its effective balance from its balance at genesis. -/
 def activateAtGenesis (state : BeaconState preset fork) (index : Nat) :
     Except TransitionError (BeaconState preset fork) := do
   let validator ← liftAccessor (getValidatorAt state index)
   let balance ← liftAccessor (getBalanceAt state index)
+  -- For the balance `b`, `min(b - b mod EFFECTIVE_BALANCE_INCREMENT, MAX_EFFECTIVE_BALANCE)`.
   let effectiveBalance := min (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT)
     preset.MAX_EFFECTIVE_BALANCE
   let validator := { validator with effectiveBalance }
+  -- A validator at `MAX_EFFECTIVE_BALANCE` is eligible and active from `GENESIS_EPOCH`.
   let validator :=
     if effectiveBalance = preset.MAX_EFFECTIVE_BALANCE then
       { validator with
@@ -194,28 +196,36 @@ The genesis time and the deposit count must fit in 64 bits, and every deposit mu
 def initializeBeaconStateFromEth1 (config : Config) (checks : SignatureChecks)
     (eth1BlockHash : Hash32) (eth1Timestamp : UInt64) (deposits : Array Deposit) :
     Except TransitionError (BeaconState preset fork) :=
+  -- Genesis is defined at Phase 0 only.
   if altair : .altair ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
   else do
     have before : fork < .altair := Nat.lt_of_not_le altair
     have beforeHeze : fork < .hegota := Nat.lt_trans before (by decide)
+    -- The genesis time is `t + GENESIS_DELAY`, for the time `t` of the block.
     let genesisTime ← liftAccessor (liftArith (addChecked eth1Timestamp config.GENESIS_DELAY))
+    -- The deposit count of the vote is the number of deposits, a 64-bit integer.
     ensure (deposits.size < 2 ^ 64) (.accessor (.arith .overflow))
+    -- The empty state at the genesis fork version, whose header holds the root of the empty body.
+    --
+    -- Its vote holds the block hash, and every RANDAO mix is the block hash.
     let bodyRoot ← liftSsz (hashTreeRoot (emptyBody (preset := preset) before))
     let state := emptyGenesisState config before genesisTime eth1BlockHash
       deposits.size.toUInt64 bodyRoot
+    -- The deposits apply in order.
     let leaves := deposits.map (·.data)
     let state ← deposits.toList.zipIdx.foldlM (genesisDeposit config checks beforeHeze leaves)
       state
+    -- Then each validator in order takes its effective balance, and may be active at genesis.
     let state ← (List.range state.validators.data.size).foldlM activateAtGenesis state
+    -- The root of the registry becomes the genesis validators root, which tells chains apart.
     let genesisValidatorsRoot ← liftSsz (hashTreeRoot state.validators)
     return { state with genesisValidatorsRoot }
 
-/-- Whether a candidate state launches the chain.
-
-Its genesis time must be at least the earliest one.
-
-Enough validators must be active at the genesis epoch. -/
+/-- Whether a candidate state launches the chain. -/
 def isValidGenesisState (config : Config) (state : BeaconState preset fork) : Bool :=
+  -- Its genesis time is at least `MIN_GENESIS_TIME`.
+  --
+  -- At least `MIN_GENESIS_ACTIVE_VALIDATOR_COUNT` validators are active at `GENESIS_EPOCH`.
   config.MIN_GENESIS_TIME ≤ state.genesisTime &&
     config.MIN_GENESIS_ACTIVE_VALIDATOR_COUNT.toNat ≤
       (getActiveValidatorIndices state GENESIS_EPOCH).length

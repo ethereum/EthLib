@@ -214,15 +214,16 @@ def carryFields (config : Config) (post : Fork) {fork : Fork} (pre : BeaconState
 
 /-- From Altair: the state with the flags that one pending attestation of Phase 0 earned.
 
-The attestation earns the flags of its source, target and head, at its inclusion delay.
-
-Each member of its committee whose bit is set gets those flags for the previous epoch. -/
+The attestation earns the flags of its source, target and head, at its inclusion delay. -/
 def translateAttestation {fork : Fork} (state : BeaconState preset fork)
     (altair : .altair ≤ fork) (attestation : PendingAttestation preset) :
     Except TransitionError (BeaconState preset fork) := do
+  -- The flags that its data earn at its inclusion delay.
+  --
   -- The slot of the parent block matters only from Gloas.
   let flags ← liftAccessor (getAttestationParticipationFlagIndices state attestation.data
     attestation.inclusionDelay state.latestBlockHeader.slot)
+  -- Each member of its committee whose bit is set gets those flags for the previous epoch.
   let attesters ← liftAccessor (getPendingAttestingIndices state attestation)
   let participation ← attesters.foldlM (init := state.previousEpochParticipation altair)
     fun participation index => do
@@ -233,16 +234,15 @@ def translateAttestation {fork : Fork} (state : BeaconState preset fork)
       else throw (.accessor (.indexOutOfRange index))
   return { state with previousEpochParticipation := fun _ => participation }
 
-/-- The Altair state of a Phase 0 state, at the first slot of the fork epoch.
-
-The fields carry over, and the pending attestations of the previous epoch become flags.
-
-Both sync committees are then the next sync committee of that state. -/
+/-- The Altair state of a Phase 0 state, at the first slot of the fork epoch. -/
 def upgradeToAltair (config : Config) (pre : BeaconState preset .phase0) :
     Except TransitionError (BeaconState preset .altair) := do
+  -- The fields carry over, with zero flags and scores for each validator.
   let post := carryFields config .altair pre (by decide) (by decide)
+  -- The pending attestations of the previous epoch become flags, in order.
   let post ← (pre.previousEpochAttestations (by decide)).data.foldlM
     (fun state attestation => translateAttestation state (by decide) attestation) post
+  -- Both sync committees are then the next sync committee of that state.
   let committee := Rooted.of (← liftAccessor (getNextSyncCommittee post))
   return { post with
     currentSyncCommittee := fun _ => committee
@@ -250,18 +250,20 @@ def upgradeToAltair (config : Config) (pre : BeaconState preset .phase0) :
 
 /-- From Electra: the state in which a validator that is not yet active waits as a deposit.
 
-Its balance and its effective balance become zero, and its eligibility is reset.
-
-Its whole balance waits as a pending deposit, with the signature of the point at infinity.
-
 The genesis slot tells that deposit apart from one that comes as a request. -/
 def queuePreActivation {fork : Fork} (state : BeaconState preset fork) (electra : .pectra ≤ fork)
     (index : ValidatorIndex) : Except TransitionError (BeaconState preset fork) := do
   let validator ← liftAccessor (getValidator state index)
   let balance ← liftAccessor (getBalance state index)
+  -- Its whole balance waits as a pending deposit, with the key and credentials of the validator.
+  --
+  -- The deposit has the signature of the point at infinity and the slot `GENESIS_SLOT`.
   let deposit : PendingDeposit := ⟨validator.pubkey, validator.withdrawalCredentials, balance,
     Cryptography.Bls.Signatures.G2_POINT_AT_INFINITY, GENESIS_SLOT⟩
   let pending ← liftAccessor (appendWithinLimit (state.pendingDeposits electra) deposit)
+  -- Its balance and effective balance become 0.
+  --
+  -- Its eligibility epoch becomes `FAR_FUTURE_EPOCH`.
   let validator := { validator with
     effectiveBalance := 0, activationEligibilityEpoch := FAR_FUTURE_EPOCH }
   let state ← liftAccessor (state.setBalance index 0)
@@ -272,8 +274,10 @@ def queuePreActivation {fork : Fork} (state : BeaconState preset fork) (electra 
 
 They come in order of their eligibility epoch, and of their index within one epoch. -/
 def preActivationIndices {fork : Fork} (state : BeaconState preset fork) : List ValidatorIndex :=
+  -- The validators whose activation epoch is `FAR_FUTURE_EPOCH`.
   let waiting := state.validators.data.toList.zipIdx.filter
     fun (validator, _) => validator.activationEpoch = FAR_FUTURE_EPOCH
+  -- Sorted by activation eligibility epoch, then by index.
   let sorted := waiting.mergeSort fun (first, i) (second, j) =>
     first.activationEligibilityEpoch < second.activationEligibilityEpoch ||
       (first.activationEligibilityEpoch == second.activationEligibilityEpoch && i ≤ j)
@@ -287,6 +291,7 @@ def queueCompoundingExcess {fork : Fork} (state : BeaconState preset fork)
     (electra : .pectra ≤ fork) (index : Nat) : Except TransitionError (BeaconState preset fork) :=
   match state.validators.data[index]? with
   | some validator =>
+    -- A validator with the prefix `0x02` queues its balance above `MIN_ACTIVATION_BALANCE`.
     if hasCompoundingWithdrawalCredential validator then
       liftAccessor (queueExcessActiveBalance state electra index.toUInt64)
     else pure state
@@ -294,56 +299,59 @@ def queueCompoundingExcess {fork : Fork} (state : BeaconState preset fork)
 
 /-- The Electra state of a Deneb state, at the first slot of the fork epoch.
 
-The earliest exit epoch is one after the latest of the activation exit epoch and every exit.
+[EIP-7251] introduces the new fields, the churns and the queues.
 
-The earliest consolidation epoch is the activation exit epoch.
+[EIP-6110] adds the index of the first deposit request.
 
-The churns of exits and of consolidations start full.
-
-Each validator that is not yet active then waits as a pending deposit, in order of eligibility.
-
-Last, each validator with compounding credentials queues its balance above the activation balance.
-
-[EIP-7251] specifies these steps, and [EIP-6110] the unset index of the first deposit request.
+That index starts unset.
 
 [EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
 [EIP-6110]: https://eips.ethereum.org/EIPS/eip-6110#consensus-layer -/
 def upgradeToElectra (config : Config) (pre : BeaconState preset .dencun) :
     Except TransitionError (BeaconState preset .pectra) := do
+  -- The activation exit epoch `a = e + 1 + MAX_SEED_LOOKAHEAD`, for the current epoch `e`.
   let activationExit ← liftAccessor (liftArith (computeActivationExitEpoch preset
     (getCurrentEpoch pre)))
+  -- The earliest exit epoch is `1 + max(a, x)`, for the latest set exit epoch `x`.
+  --
+  -- An exit epoch is set when it is not `FAR_FUTURE_EPOCH`.
   let latestExit := pre.validators.data.foldl (init := activationExit) fun latest validator =>
     if validator.exitEpoch = FAR_FUTURE_EPOCH then latest else max latest validator.exitEpoch
   let earliestExit ← liftAccessor (liftArith (addChecked latestExit 1))
+  -- The fields carry over, and the earliest consolidation epoch is `a`.
   let post := carryFields config .pectra pre (by decide) (by decide)
   let post := { post with
     earliestExitEpoch := fun _ => earliestExit
     earliestConsolidationEpoch := fun _ => activationExit }
+  -- The churns of exits and of consolidations start full, read on the new state.
   let exitChurn ← liftAccessor (getActivationExitChurnLimit config post)
   let post := { post with exitBalanceToConsume := fun _ => exitChurn }
   let consolidationChurn ← liftAccessor (getConsolidationChurnLimit config post)
   let post := { post with consolidationBalanceToConsume := fun _ => consolidationChurn }
+  -- Each validator not yet active then waits as a pending deposit, by eligibility, then index.
   let post ← (preActivationIndices post).foldlM
     (fun state index => queuePreActivation state (by decide) index) post
+  -- Last, each validator with compounding credentials queues its excess, in order of index.
   (List.range post.validators.data.size).foldlM
     (fun state index => queueCompoundingExcess state (by decide) index) post
 
 /-- The Fulu state of an Electra state, at the first slot of the fork epoch.
-
-The fields carry over, and the proposers of the current epoch and the lookahead are computed.
 
 [EIP-7917] specifies the lookahead.
 
 [EIP-7917]: https://eips.ethereum.org/EIPS/eip-7917#specification -/
 def upgradeToFulu (config : Config) (pre : BeaconState preset .pectra) :
     Except TransitionError (BeaconState preset .fusaka) := do
+  -- The fields carry over.
   let post := carryFields config .fusaka pre (by decide) (by decide)
+  -- The proposers of the current epoch and of the lookahead are computed on the new state.
   let lookahead ← liftAccessor (initializeProposerLookahead post)
   return { post with proposerLookahead := fun _ => lookahead }
 
 /-- Whether a queue of deposits holds one for a key with a valid signature. -/
 def isPendingValidator (config : Config) (checks : SignatureChecks)
     (pending : List PendingDeposit) (pubkey : BLSPubkey) : Except TransitionError Bool :=
+  -- Some deposit of the queue has the key and a valid deposit signature.
   pending.anyM fun deposit =>
     if deposit.pubkey = pubkey then
       isValidDepositSignature config checks deposit.pubkey deposit.withdrawalCredentials
@@ -360,18 +368,25 @@ def onboardDeposit (config : Config) (checks : SignatureChecks)
     Except TransitionError (BeaconState preset .glamsterdam × Array PendingDeposit) := do
   let (state, kept) := step
   let gloas : Fork.glamsterdam ≤ .glamsterdam := by decide
+  -- A deposit for the key of a validator stays in the queue, as EIP-7732 specifies.
   if deposit.pubkey ∈ validatorKeys then return (state, kept.push deposit)
   match findBuilderByPubkey state gloas deposit.pubkey with
+  -- A deposit for the key of a builder adds its amount to the balance of that builder.
   | some index =>
     let _ ← liftAccessor (liftArith (ofNatChecked index.val))
     let builder := (state.builders gloas).data[index]
     let balance ← liftAccessor (liftArith (addChecked builder.balance deposit.amount))
     return (state.putBuilder gloas index index.isLt { builder with balance }, kept)
   | none =>
+    -- A deposit without the builder prefix stays in the queue.
     if isBuilderWithdrawalCredential deposit.withdrawalCredentials = false then
       return (state, kept.push deposit)
+    -- So does one whose key has a valid deposit among those kept so far, a pending validator.
     if ← isPendingValidator config checks kept.toList deposit.pubkey then
       return (state, kept.push deposit)
+    -- A valid signature makes a payload builder, deposited at the slot of the deposit.
+    --
+    -- An invalid one drops the deposit.
     if ← isValidDepositSignature config checks deposit.pubkey deposit.withdrawalCredentials
         deposit.amount deposit.signature then
       let state ← addBuilderToRegistry state gloas deposit.pubkey PAYLOAD_BUILDER_VERSION
@@ -384,7 +399,9 @@ def onboardBuildersFromPendingDeposits (config : Config) (checks : SignatureChec
     (state : BeaconState preset .glamsterdam) :
     Except TransitionError (BeaconState preset .glamsterdam) := do
   let gloas : Fork.glamsterdam ≤ .glamsterdam := by decide
+  -- The keys of the validators, fixed for the whole onboarding.
   let validatorKeys := (state.validators.data.map (·.pubkey)).toList
+  -- Each pending deposit in order, and the queue keeps those that stay, in their order.
   let (state, kept) ← (state.pendingDeposits (by decide)).data.foldlM
     (onboardDeposit config checks validatorKeys) (state, #[])
   return { state with pendingDeposits := fun _ => ⟨kept, fun before => absurd before (by decide)⟩ }
@@ -475,16 +492,15 @@ def upgradeFields (config : Config) (pre : BeaconState preset .fusaka) (requests
     payloadExpectedWithdrawals := fun _ => ⟨#[], fun before => absurd before (by decide)⟩
     ptcWindow := fun _ => .ofVector (Vector.replicate _ (Vector.replicate _ 0)) }
 
-/-- The Gloas state of a Fulu state, at the first slot of the fork epoch.
-
-The fields carry over, and the window of payload committees is computed.
-
-Then the pending deposits of builders become builders. -/
+/-- The Gloas state of a Fulu state, at the first slot of the fork epoch. -/
 def upgradeToGloas (config : Config) (checks : SignatureChecks) (pre : BeaconState preset .fusaka) :
     Except TransitionError (BeaconState preset .glamsterdam) := do
+  -- The fields carry over, with a self-built latest bid on the root of empty requests.
   let requestsRoot ← liftSsz (SszType.hashTreeRoot (ExecutionRequests.empty preset .glamsterdam))
   let post := upgradeFields config pre requestsRoot
+  -- The window of payload committees is computed on the new state.
   let window ← liftAccessor (initializePtcWindow post)
+  -- Then the pending deposits of builders become builders, as EIP-7732 specifies.
   onboardBuildersFromPendingDeposits config checks { post with ptcWindow := fun _ => window }
 
 /-- A list of a Gloas state as the same list of a Heze state. -/
@@ -574,9 +590,13 @@ It fails when the count of processed deposits differs from the first deposit req
 -/
 def upgradeToHeze (config : Config) (pre : BeaconState preset .glamsterdam) :
     Except TransitionError (BeaconState preset .hegota) := do
+  -- Every deposit of the contract is processed, the activation condition of EIP-8015.
+  --
+  -- A state that breaks it is an error here, where the EIP only delays the fork.
   let processed := pre.eth1DepositIndex (by decide)
   let startIndex := pre.depositRequestsStartIndex (by decide)
   ensure (processed = startIndex) (.depositIndicesDiffer processed startIndex)
+  -- The fields of the deposit contract go, and the others carry over.
   return upgradeHezeFields config pre
 
 end EthLib.Consensus
