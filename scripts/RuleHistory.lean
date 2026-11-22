@@ -33,23 +33,25 @@ It reads the values from compiled code, so it runs after `lake build EthLib`.
 - `lake exe rule-history` writes `tests/execution/history/rules.tsv`.
 - `lake exe rule-history --check` fails if that file differs, and prints the changed lines.
 
-A file can also hold the lines that the code computes in another order or count.
-
-A line written twice, or a final line end that an editor removed, is such a case.
+A file can also differ only in the order or count of its lines, or by a blank line.
 
 Then no line with text is new or gone, so the check prints the first line that differs.
+
+It prints that line as the file holds it and as the code computes it.
+
+When the file lacks only its final line end, which an editor can remove, the check says so.
 
 It exits with 1 when the file differs, 2 on an unknown argument, and 3 when it finds no rule.
 
 It also exits with 3 when it finds no fork type.
 
-It exits with 4 when it cannot run, such as when a module is not built.
+It exits with 4 on any other error, such as a module that is not built.
 
-It also exits with 4 when the file exists but cannot be read.
+A file that exists but cannot be read is such an error.
 
-So a failure of the tool never reads as a changed value.
+So once the tool runs, an error never reads as a changed value.
 
-A missing file is not a failure of the tool: the check exits with 1 and lists every line as new.
+A missing file is not an error: the check exits with 1 and lists every line with text as new.
 
 Four options replace the defaults, for the fixtures of `scripts/test_rule_history.sh`.
 
@@ -274,9 +276,18 @@ def parse : Config → List String → Except String Config
 def usage : String :=
   "usage: lake exe rule-history [--check] [--module M]... [--scope N]... [--base B] [--file F]"
 
-/-- The text of line `i` of `lines`, or a mark for a line past the end. -/
-def lineAt (lines : List String) (i : Nat) : String :=
-  lines[i]?.getD "(past the last line)"
+/-- The lines of a text, where a line end closes each line instead of opening an empty one. -/
+def fileLines (s : String) : List String :=
+  if s.isEmpty then [] else
+    let ls := s.splitOn "\n"
+    if s.endsWith "\n" then ls.dropLast else ls
+
+/-- The line at a zero-based position, with a mark for a blank line or a line past the end. -/
+def shownLine (lines : List String) (i : Nat) : String :=
+  match lines[i]? with
+  | some "" => "(blank line)"
+  | some l => l
+  | none => "(past the last line)"
 
 unsafe def run (args : List String) : IO UInt32 := do
   if let .error e := parse {} args then
@@ -304,16 +315,22 @@ unsafe def run (args : List String) : IO UInt32 := do
     if old == text then
       IO.println s!"rule-history: {vals.size} rules at {fs.length} forks agree with {c.file}"
       return 0
-    let oldLines := old.splitOn "\n"
-    let newLines := text.splitOn "\n"
+    let oldLines := fileLines old
+    let newLines := fileLines text
     -- A blank line holds no value, so only the lines with text count as new or gone.
     let gone := oldLines.filter fun l => !l.isEmpty && !newLines.contains l
     let added := newLines.filter fun l => !l.isEmpty && !oldLines.contains l
+    if oldLines == newLines then
+      -- The code ends its text with a line end, so the file lacks only that one.
+      IO.println s!"- line {oldLines.length}: {shownLine oldLines (oldLines.length - 1)}"
+      IO.eprintln s!"rule-history: {c.file} has no line end after its last line"
+      IO.eprintln "Run `lake exe rule-history` to rewrite the file."
+      return 1
     if gone.isEmpty && added.isEmpty then
       -- Both hold the same lines with text, so they differ in order or in the count of a line.
       let i := ((oldLines.zip newLines).takeWhile fun (a, b) => a == b).length
-      IO.println s!"- line {i + 1}: {lineAt oldLines i}"
-      IO.println s!"+ line {i + 1}: {lineAt newLines i}"
+      IO.println s!"- line {i + 1}: {shownLine oldLines i}"
+      IO.println s!"+ line {i + 1}: {shownLine newLines i}"
       IO.eprintln s!"rule-history: {c.file} holds the lines of the code in another order or count"
       IO.eprintln "Run `lake exe rule-history` to rewrite the file."
       return 1
@@ -330,7 +347,7 @@ unsafe def run (args : List String) : IO UInt32 := do
 
 end RuleHistory
 
-/-- Run the tool, and exit with 4 if it fails, so that a failure never reads as a changed value. -/
+/-- Runs the tool, and exits with 4 on an error, so that an error never reads as a changed value. -/
 unsafe def main (args : List String) : IO UInt32 := do
   try
     RuleHistory.run args

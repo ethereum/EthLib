@@ -6,7 +6,7 @@
 # failure of the tool.
 # Run from anywhere.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 FAIL=0
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
@@ -104,10 +104,22 @@ expect_fail "the line of the code where a swapped file differs" "+ line 4: $EARL
 
 awk 'NR == 4 { print } { print }' "$WORK/expected" >"$WORK/case"
 expect_fail "a file with a line written twice" "- line 5: $EARLY"
+grep -qxF -- "rule-history: $WORK/case holds the lines of the code in another order or count" \
+  "$WORK/err" || { echo "FAIL: a line written twice is not named as such"; FAIL=1; }
+expect_fail "the line of the code where a doubled line differs" "+ line 5: $MIDDLE"
 
-# An editor can drop the final line end, which leaves every line with text in place.
+# An editor can drop the final line end, or add a blank line at the end.
+# Both leave every line with text in place.
+END_LINE=$(($(wc -l <"$WORK/expected") + 1))
+LAST=$(tail -n 1 "$WORK/expected")
 printf '%s' "$(cat "$WORK/expected")" >"$WORK/case"
-expect_fail "a file without its final line end" "- line 29: (past the last line)"
+expect_fail "a file without its final line end" "- line $((END_LINE - 1)): $LAST"
+grep -qxF -- "rule-history: $WORK/case has no line end after its last line" "$WORK/err" \
+  || { echo "FAIL: a file without its final line end is not named so"; FAIL=1; }
+
+{ cat "$WORK/expected"; echo; } >"$WORK/case"
+expect_fail "a file with a blank line at the end" "- line $END_LINE: (blank line)"
+expect_fail "the line of the code past the end of the file" "+ line $END_LINE: (past the last line)"
 
 history --check --file "$WORK/missing" >"$WORK/out"; got=$?
 if [ "$got" -eq 1 ] && grep -qxF -- "+ RuleHistoryTest.Rules.limit${TAB}-${TAB}24576" "$WORK/out"; then
@@ -153,11 +165,11 @@ expect_crash() {
 }
 
 expect_crash "a module that does not exist" \
-  --module RuleHistoryTest.Missing --scope RuleHistoryTest.Rules --base RuleHistoryTest.Base --check \
-  --file "$WORK/expected"
+  --module RuleHistoryTest.Missing --scope RuleHistoryTest.Rules --base RuleHistoryTest.Base \
+  --check --file "$WORK/expected"
 
 expect_crash "a file that cannot be read" \
-  --module RuleHistoryTest --scope RuleHistoryTest.Rules --base RuleHistoryTest.Base --check \
-  --file "$WORK"
+  --module RuleHistoryTest --scope RuleHistoryTest.Rules --base RuleHistoryTest.Base \
+  --check --file "$WORK"
 
 exit "$FAIL"
