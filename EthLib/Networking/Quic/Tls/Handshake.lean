@@ -1045,9 +1045,9 @@ def receiveTicket (input : FlightMessage) : Except Error Unit := do
     -- `opaque ticket_nonce<0..255>;` and `opaque ticket<1..2^16-1>;`.
     let _ ← blob 1 0 255
     let _ ← blob 2 1 65535
-    -- `Extension extensions<0..2^16-2>;`.
+    -- RFC 9846 §4.7.1: `Extension extensions<0..2^16-1>;`.
     --
-    -- Departure: the reader takes up to 2^16-1 bytes, one more than the bound of §4.6.1.
+    -- RFC 8446 §4.6.1 printed 2^16-2, a calculation error that RFC 9846 §1.2 corrects.
     readExtensions 0
   let extensions ← wire (Wire.exact reader body)
   -- §4.2: each recognized extension is one that NewSessionTicket may carry.
