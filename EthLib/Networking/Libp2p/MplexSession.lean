@@ -7,29 +7,11 @@ public import EthLib.Networking.Libp2p.Mplex
 
 Each side keeps a table of the streams on one connection, and checks each frame against it.
 
-Both sides may open a stream with the same ID, so a stream is known by its ID and by who opened it.
-
-The flag of a frame says whether its writer opened the stream.
-
-A side closes a stream for its own writing, and the stream is closed once both sides have.
-
-A reset closes both directions at once.
-
-Writing after a close or a reset is a protocol violation, as [mplex, "Protocol"][mplex] says.
+The rules are those of the section Protocol of [mplex][mplex].
 
 The source fixes no reaction to an ID used again, nor to a frame on an unknown stream.
 
 Each of these cases gets its own error.
-
-Each side has its own close and its own reset, so neither ends the other's.
-
-A side may reset a stream after it closed it, but writes nothing after its own reset.
-
-A side also writes nothing after it has received the other side's reset.
-
-Frames that the peer wrote before it learned of a reset by this side may still arrive.
-
-So this side accepts and drops them, until the peer closes or resets.
 
 A closed or reset stream stays in the table, so its ID and opener cannot open a stream again.
 
@@ -73,11 +55,15 @@ def MplexSessionError.code : MplexSessionError → UInt32
 
 /-- Whether a frame of this flag is written by the side that opened its stream. -/
 def Flag.initiator : Flag → Bool
+  -- The party that opens a stream is the stream initiator, which writes NewStream.
+  --
+  -- MessageInitiator, CloseInitiator and ResetInitiator are the flags of its later frames.
   | .newStream | .messageInitiator | .closeInitiator | .resetInitiator => true
   | _ => false
 
 /-- The stream of a frame, as seen by the side that wrote it, or by the side that received it. -/
 def streamKey (remote : Bool) (frame : Frame) : StreamKey :=
+  -- This side opened the stream when it writes an initiator flag or receives a receiver flag.
   (frame.streamId, frame.flag.initiator != remote)
 
 /-- The table of streams of one side, each with its state. -/
@@ -94,38 +80,51 @@ def Streams.set (streams : Streams) (key : StreamKey) (state : StreamState) : St
 
 /-- The table after one frame, written by the other side or by this side.
 
-A new stream needs a key that the table does not have.
-
-A data frame changes nothing, and a close or a reset marks its writer's half.
-
-The other side may not write after its close or its reset.
-
-This side may not write after its close or after a reset by either side.
-
-A reset may follow a close, but not a reset of the same side, nor one this side received.
-
 The caller passes a frame that the decoder accepts, so its size and data are not checked here. -/
 def step (remote : Bool) (streams : Streams) (frame : Frame) :
     Except MplexSessionError Streams :=
+  -- Opening a new stream: both parties can open a stream with the same ID.
+  --
+  -- So a stream is known by its ID and by whether this side opened it, which the flag says.
   let key := streamKey remote frame
+  -- Closing and Resetting a stream: writing after a close or a reset is a protocol violation.
   let refuse : Except MplexSessionError Streams := .error (.writeAfterClose key.1 key.2)
   match frame.flag, streams.find? key with
+  -- Opening a new stream: NewStream with a newly allocated ID; the stream name is not read.
   | .newStream, none => .ok (streams.set key {})
+  -- Not in the source, which says only that reusing an ID after a close may be undefined.
+  --
+  -- A NewStream on an ID and opener already in the table is refused.
   | .newStream, some _ => .error (.reusedId key.1 key.2)
+  -- Not in the source: a frame on a stream not in the table is refused.
   | _, none => .error (.unknownStream key.1 key.2)
+  -- Writing to a stream: MessageReceiver (1) or MessageInitiator (2); the table does not change.
   | .messageReceiver, some s | .messageInitiator, some s =>
+    -- The other side writes nothing after its own close or its own reset.
+    --
+    -- Not in the source: its frames may cross a reset by this side.
+    --
+    -- So they are accepted and dropped.
     if remote then
       if s.remoteClosed || s.remoteReset then refuse else .ok streams
+    -- This side writes nothing after its own close, its own reset, or a reset it received.
     else if s.localClosed || s.localReset || s.remoteReset then refuse else .ok streams
+  -- Closing a stream: CloseReceiver (3) or CloseInitiator (4) closes it for writing by its writer.
+  --
+  -- Writing in the other direction goes on, as with a half-closed stream.
   | .closeReceiver, some s | .closeInitiator, some s =>
+    -- A second close is a write after a close, and so is a close after a reset.
     if remote then
       if s.remoteClosed || s.remoteReset then refuse
       else .ok (streams.set key { s with remoteClosed := true })
     else if s.localClosed || s.localReset || s.remoteReset then refuse
     else .ok (streams.set key { s with localClosed := true })
+  -- Resetting a stream: ResetReceiver (5) or ResetInitiator (6) closes both ends at once.
   | .resetReceiver, some s | .resetInitiator, some s =>
+    -- Each side has its own reset, which may follow its own close but not its own reset.
     if remote then
       if s.remoteReset then refuse else .ok (streams.set key { s with remoteReset := true })
+    -- This side also writes no reset after a reset it received.
     else if s.localReset || s.remoteReset then refuse
     else .ok (streams.set key { s with localReset := true })
 

@@ -7,17 +7,11 @@ public import EthLib.Networking.Libp2p.Yamux
 
 Each side keeps a table of the streams on one session, and checks each frame against it.
 
-The client opens odd IDs and the server even ones, by [yamux, "StreamID Field"][ids].
+The rules are those of the section Message Flow of [yamux][flow].
 
-A Data or Window Update frame with SYN opens a stream, and data may follow before the ACK.
+The stream IDs follow the section StreamID Field of [yamux][ids].
 
-The other side accepts it with ACK or rejects it with RST, by [yamux, "Message Flow"][flow].
-
-FIN closes one direction, and RST closes the stream at once.
-
-Each stream starts with a window of 256 KiB in each direction, by [yamux, "Flow Control"][window].
-
-Data spends the window of its direction, and a Window Update adds to the other direction.
+The windows follow the section Flow Control of [yamux][window].
 
 The cases that the source leaves open, and the choices made for them, are listed in SOUNDNESS.md.
 
@@ -54,7 +48,7 @@ structure Stream where
   recvWindow : Nat := initialWindow
   deriving DecidableEq, Repr
 
-/-- The state of a stream, as the source names it. -/
+/-- The state of a stream, named by EthLib after the steps of the section Message Flow. -/
 inductive StreamState where
   /-- This side opened the stream, and no ACK has arrived. -/
   | synSent
@@ -74,10 +68,13 @@ inductive StreamState where
 
 /-- The state of a stream: a reset first, then the closes, then whether it is acknowledged. -/
 def Stream.state (s : Stream) : StreamState :=
+  -- RST closes the stream immediately, whatever FIN came before.
   if s.localReset || s.remoteReset then .reset
+  -- Once both sides have closed the connection with FIN, the stream is closed.
   else if s.localClosed && s.remoteClosed then .closed
   else if s.localClosed then .localClosed
   else if s.remoteClosed then .remoteClosed
+  -- The ACK of the side that did not open the stream accepts it.
   else if s.acked then .established
   else if s.localOpened then .synSent
   else .synReceived
@@ -106,6 +103,7 @@ def Session.set (session : Session) (id : UInt32) (s : Stream) : Session :=
 
 /-- Whether this side opens the streams of an ID: odd IDs for the client, even for the server. -/
 def Session.ownsId (session : Session) (id : UInt32) : Bool :=
+  -- StreamID Field: the client side uses odd IDs, and the server even.
   (id.toNat % 2 == 1) == session.isClient
 
 /-- Why a side refuses a frame. -/
@@ -146,63 +144,87 @@ def YamuxSessionError.code : YamuxSessionError → UInt32
 
 The frame was written by the other side when the first argument is true, else by this side.
 
-Until the side that did not open the stream has sent ACK, its frames must carry ACK or RST.
-
 ACK comes first, then the data or the window delta, then FIN, then RST. -/
 def Stream.apply (remote : Bool) (id : UInt32) (s : Stream) (frame : Frame) :
     Except YamuxSessionError Stream := do
+  -- Opening a stream: the receiver must reply with ACK to accept the stream or RST to reject it.
+  --
+  -- So until it has sent ACK, each frame of the side that did not open the stream carries one.
+  --
+  -- The opener may send data once SYN is sent, without waiting for the ACK.
   if !s.acked && s.localOpened == remote && !frame.hasFlag ack && !frame.hasFlag rst then
     throw (.missingAck id)
+  -- ACK acknowledges the start of a stream, from the side that did not open it.
+  --
+  -- Not in the source: a second ACK is refused.
   let s ← if frame.hasFlag ack then
       if s.acked || s.localOpened != remote then throw (.unexpectedAck id)
       pure { s with acked := true }
     else pure s
+  -- Closing a stream: FIN says that its sender will send no further data.
   let finSent := if remote then s.remoteClosed else s.localClosed
   let length := frame.length.toNat
+  -- Length Field: the length of the data, or the delta of a window update.
   let s ← if frame.kind = .data then
+      -- Nonempty data after the FIN of its writer is refused.
       if finSent && 0 < length then throw (.afterFin id)
+      -- Flow Control: the bytes sent in Data frames spend the window of their direction.
+      --
+      -- Not in the source, which names no reaction: data beyond the window is refused.
       let window := if remote then s.recvWindow else s.sendWindow
       if window < length then throw (.windowExceeded id length window)
       pure (if remote then { s with recvWindow := window - length }
         else { s with sendWindow := window - length })
+    -- Window Update: the delta adds to the receive window of the writer of the frame.
+    --
+    -- It is accepted after FIN, since the other direction may still be open.
     else
       pure (if remote then { s with sendWindow := s.sendWindow + length }
         else { s with recvWindow := s.recvWindow + length })
+  -- FIN performs a half-close: the direction of its writer closes, once.
   let s ← if frame.hasFlag fin then
       if finSent then throw (.afterFin id)
       pure (if remote then { s with remoteClosed := true } else { s with localClosed := true })
     else pure s
+  -- RST resets the stream immediately.
   return if frame.hasFlag rst then
       (if remote then { s with remoteReset := true } else { s with localReset := true })
     else s
 
 /-- The session after one frame, written by the other side when the first argument is true.
 
-A Go Away from the other side marks the session, and a Ping changes nothing.
-
-A Data or Window Update frame with SYN opens a stream, with a new nonzero ID of its writer's parity.
-
-Any other such frame needs a stream in the table.
-
-A frame without SYN from the peer on a stream that this side has reset is dropped, even a reset.
-
 The caller passes a frame that the decoder accepts, so its data is not checked here. -/
 def step (remote : Bool) (session : Session) (frame : Frame) :
     Except YamuxSessionError Session := do
+  -- StreamID Field: Ping and Go Away should use stream 0.
+  --
+  -- Not in the source: they are read the same on any stream.
   match frame.kind with
+  -- Ping measures the round trip and changes no stream; the reply is computed apart.
   | .ping => return session
+  -- Session termination: a Go Away from the other side marks the session.
   | .goAway => return if remote then { session with goneAway := true } else session
   | .data | .windowUpdate =>
     let id := frame.streamId
+    -- StreamID Field: the 0 ID is reserved to represent the session.
     if id = 0 then throw .sessionStream
+    -- Opening a stream: a data or window update frame with SYN and a new StreamID.
     let s ← if frame.hasFlag syn then
         if (session.find? id).isSome then throw (.reusedId id)
+        -- StreamID Field: the client side uses odd IDs and the server even, against collisions.
         if session.ownsId id == remote then throw (.wrongParity id)
         pure ({ localOpened := !remote } : Stream)
+      -- The source says only that SYN should be set; any other frame needs a stream in the table.
       else match session.find? id with
         | none => throw (.unknownStream id)
         | some s => pure s
+    -- Not in the source: frames of the peer may cross a RST of this side, so they are dropped.
+    --
+    -- That holds for every frame without SYN, a RST included.
     if remote && s.localReset then return session
+    -- RST resets the stream immediately.
+    --
+    -- Not in the source: after RST, nothing more is written, except by the crossing above.
     if s.remoteReset || (!remote && s.localReset) then throw (.afterReset id)
     let s ← s.apply remote id frame
     return session.set id s
@@ -211,6 +233,9 @@ def step (remote : Bool) (session : Session) (frame : Frame) :
 
 A Ping with both SYN and ACK is answered too. -/
 def reply (frame : Frame) : List Frame :=
+  -- Flag Field: SYN with a ping indicates outbound, and ACK a response.
+  --
+  -- Length Field: the opaque value of a Ping is echoed back, on stream 0.
   if frame.kind = .ping && frame.hasFlag syn then
     [{ kind := .ping, flags := ack, streamId := 0, length := frame.length, data := .empty }]
   else []

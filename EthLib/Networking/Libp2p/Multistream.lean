@@ -7,29 +7,13 @@ public import EthLib.Networking.Encoding.Uvarint
 
 Two peers agree on a protocol by name: one proposes it, and the other echoes it or answers `na`.
 
-Both peers first send the name of multistream-select itself.
-
-Each message is a varint length, the bytes of the message, then a newline.
-
-The length is read as a multiformats unsigned varint, the varint of libp2p.
-
-The length counts the newline.
-
-A protocol name is sent as its UTF-8 bytes, but the framing reads any bytes.
-
 The optional listing of protocols is not modelled, so `ls` is an ordinary proposal.
 
-The source is [multistream-select, "Protocol"][mss].
+The source is the section Protocol of [multistream-select][mss].
 
-The two peers of a negotiation follow [libp2p connections, "multistream-select"][conn].
+The two peers of a negotiation follow the section multistream-select of [libp2p connections][conn].
 
-The dialer sends its first proposal without waiting for the header of the listener.
-
-[multistream-select, "Implementation Recommendations"][rec] asks for that.
-
-A dialer that gets an answer that is neither its proposal nor `na` stops in a state that keeps it.
-
-The sources fix no reaction to such an answer.
+The dialer also follows the section Implementation Recommendations of [multistream-select][rec].
 
 [mss]: https://github.com/multiformats/multistream-select/blob/9a1fbe8edadebea223f47102f1913b8026c23a1c/README.md#protocol
 [conn]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/connections/README.md#multistream-select
@@ -74,23 +58,33 @@ def MultistreamError.code : MultistreamError → UInt32
 
 The message must be shorter than `2^63 - 1` bytes, so that its length fits an unsigned varint. -/
 def encode (message : ByteArray) : List UInt8 :=
+  -- Note 1: the message is prefixed by a varint that describes its size.
+  --
+  -- Note 2: a newline ends the message, and the size counts it.
   Uvarint.encode (message.size + 1) ++ message.data.toList ++ [newline]
 
 /-- The message at the start of the input, without its newline, and the bytes after it. -/
 def decode (bytes : List UInt8) : Except MultistreamError (ByteArray × List UInt8) := do
+  -- The length, by the rules of the multiformats unsigned varint spec.
   let (length, rest) ← (Uvarint.decode bytes).mapError .length
+  -- Not in the sources: a length of zero leaves no room for the newline, so it is refused.
   if length = 0 then throw .empty
+  -- The bytes that the length counts.
   let body := rest.take length
   if body.length < length then throw (.truncated length body.length)
+  -- Messages are always followed by a newline, the last byte that the length counts.
   if body[length - 1]? ≠ some newline then throw (.missingNewline (body[length - 1]?.getD 0))
+  -- Messages are sent as UTF-8, but the framing reads any bytes, and leaves the name to the caller.
   return (⟨(body.take (length - 1)).toArray⟩, rest.drop length)
 
 /-- The answer to a proposed protocol: the protocol itself if supported, else `na`. -/
 def respond (supported : List ByteArray) (proposal : ByteArray) : ByteArray :=
+  -- A Responder that supports the protocol echoes back its protocol id, else it answers na.
   if proposal.data ∈ supported.map (·.data) then proposal else notAvailable
 
 /-- Whether a protocol is in a list, compared byte for byte. -/
 def supports (supported : List ByteArray) (protocol : ByteArray) : Bool :=
+  -- Protocol Negotiation: by default, libp2p routes a protocol id by exact literal matching.
   protocol.data ∈ supported.map (·.data)
 
 /-- The state of the peer that accepts a channel and answers proposals. -/
@@ -107,17 +101,23 @@ inductive Listener where
 
 /-- The listener at the start, with the messages it sends then: its header. -/
 def Listener.start (supported : List ByteArray) : Listener × List ByteArray :=
+  -- Both peers send the multistream protocol id, without waiting for the other side.
   (.awaitHeader supported, [protocolId])
 
-/-- The next state of the listener on one received message, and the messages it sends.
-
-A listener that has agreed or aborted ignores the message. -/
+/-- The next state of the listener on one received message, and the messages it sends. -/
 def listen : Listener → ByteArray → Listener × List ByteArray
+  -- A first message other than the multistream protocol id aborts the negotiation.
   | .awaitHeader supported, message =>
     if message = protocolId then (.awaitProposal supported, []) else (.aborted, [])
+  -- The Responder echoes back a protocol id it supports, which signals agreement.
+  --
+  -- It answers na to any other, and waits for the next proposal.
   | .awaitProposal supported, message =>
     if supports supported message then (.agreed message, [message])
     else (.awaitProposal supported, [notAvailable])
+  -- After an agreement, the traffic follows the agreed protocol, so the listener reads no more.
+  --
+  -- An aborted listener reads no more either.
   | state, _ => (state, [])
 
 /-- The state of the peer that opens a channel and proposes protocols. -/
@@ -138,34 +138,33 @@ inductive Dialer where
   | aborted
   deriving DecidableEq
 
-/-- The dialer at the start, with the messages it sends then.
-
-It sends its header and its first proposal, or nothing when it has no proposal. -/
+/-- The dialer at the start, with the messages it sends then. -/
 def Dialer.start : List ByteArray → Dialer × List ByteArray
+  -- Not in the sources: a dialer with no proposal sends nothing and fails.
   | [] => (.failed, [])
+  -- Implementation Recommendations: the initiator sends the multistream protocol and its proposal.
+  --
+  -- It sends both in the same packet, without waiting for the header of the listener.
   | proposed :: rest => (.awaitHeader proposed rest, [protocolId, proposed])
 
-/-- The next state of the dialer on one received message, and the messages it sends.
-
-The header of the listener moves the dialer on, and any other first message aborts.
-
-An echo of the proposal agrees on it.
-
-On `na`, the dialer sends its next proposal, or fails when none is left.
-
-Any other answer stops the dialer in the state that keeps that answer.
-
-A dialer that has agreed, failed, stopped or aborted ignores the message. -/
+/-- The next state of the dialer on one received message, and the messages it sends. -/
 def dial : Dialer → ByteArray → Dialer × List ByteArray
+  -- A first message other than the multistream protocol id aborts the negotiation.
   | .awaitHeader proposed rest, message =>
     if message = protocolId then (.awaitAnswer proposed rest, []) else (.aborted, [])
   | .awaitAnswer proposed rest, message =>
+    -- An echo of the proposed protocol id signals agreement.
     if message = proposed then (.agreed proposed, [])
+    -- On na, the Initiator tries its next protocol id.
+    --
+    -- When none is left, it fails: the source says that it closes the channel.
     else if message = notAvailable then
       match rest with
       | [] => (.failed, [])
       | next :: rest => (.awaitAnswer next rest, [next])
+    -- Not in the sources: any other answer stops the dialer, in a state that keeps the answer.
     else (.unexpected message, [])
+  -- A dialer that has agreed, failed, stopped or aborted reads no more.
   | state, _ => (state, [])
 
 /-- Both peers after they read the messages in flight, one message per unit of fuel.

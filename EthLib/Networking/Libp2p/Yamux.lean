@@ -7,13 +7,7 @@ public import EthLib.Base.BigEndian
 
 yamux carries many streams over one connection, with flow control for each stream.
 
-A frame is a 12-byte header, then the data of a data frame.
-
-The header holds a version, a type, flags, a stream ID and a length, all big-endian.
-
-The version is 0.
-
-The source is [yamux, "Framing"][yamux].
+The source is the section Framing of [yamux][yamux].
 
 [yamux]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/yamux/README.md#framing
 -/
@@ -23,15 +17,21 @@ The source is [yamux, "Framing"][yamux].
 namespace EthLib.Networking.Libp2p.Yamux
 
 /-- The name of yamux in multistream-select. -/
-def protocolId : ByteArray := "/yamux/1.0.0".toUTF8
+def protocolId : ByteArray :=
+  -- Specification: the protocol string of yamux for multistream-select.
+  "/yamux/1.0.0".toUTF8
 
 /-- The size of a header in bytes. -/
-def headerSize : Nat := 12
+def headerSize : Nat :=
+  -- Framing: 8 + 8 + 16 + 32 + 32 bits, so each header has a 12 byte overhead.
+  12
 
-/-- The window of a new stream in bytes: 256 KiB, "Flow Control". -/
-def initialWindow : Nat := 262144
+/-- The window of a new stream in bytes: 256 KiB, from the section Flow Control. -/
+def initialWindow : Nat :=
+  -- The section writes 256KiB, then 256KB; EthLib reads both as 256 KiB, that is `2^18` bytes.
+  262144
 
-/-- The flag that starts a stream. -/
+/-- The flag that starts a stream, from the section Flag Field. -/
 def syn : UInt16 := 0x1
 
 /-- The flag that acknowledges the start of a stream. -/
@@ -43,7 +43,7 @@ def fin : UInt16 := 0x4
 /-- The flag that resets a stream. -/
 def rst : UInt16 := 0x8
 
-/-- The go-away code of a normal termination, "Session termination". -/
+/-- The go-away code of a normal termination, from the section Session termination. -/
 def goAwayNormal : UInt32 := 0
 
 /-- The go-away code of a protocol error. -/
@@ -66,6 +66,7 @@ inductive Kind where
 
 /-- The byte of a type. -/
 def Kind.toUInt8 : Kind → UInt8
+  -- Type Field: 0x0 Data, 0x1 Window Update, 0x2 Ping, 0x3 Go Away.
   | .data => 0
   | .windowUpdate => 1
   | .ping => 2
@@ -77,6 +78,7 @@ def Kind.ofUInt8? : UInt8 → Option Kind
   | 1 => some .windowUpdate
   | 2 => some .ping
   | 3 => some .goAway
+  -- The source supports no other type.
   | _ => none
 
 /-- One frame: the header fields after the version, and the data of a data frame. -/
@@ -94,6 +96,7 @@ structure Frame where
 
 /-- The bytes that follow the header: the length of a data frame, else none. -/
 def Frame.dataSize (frame : Frame) : Nat :=
+  -- Length Field: for Data, the length of bytes following the header; other types carry no data.
   if frame.kind = .data then frame.length.toNat else 0
 
 /-- A frame whose data has the size that its type and its length give.
@@ -124,26 +127,38 @@ def YamuxError.code : YamuxError → UInt32
   | .unknownKind _ => 3
   | .truncated _ _ => 4
 
-/-- The bytes of a frame: version 0, type, flags, stream ID, length, then data.
+/-- The bytes of a frame.
 
 The frame must be valid; the bytes of any other frame are not specified. -/
 def encode (frame : Frame) : List UInt8 :=
+  -- Framing: Version (8 bits), Type (8 bits), Flags (16 bits), StreamID and Length (32 bits each).
+  --
+  -- All fields are big endian, and the version is always 0, the initial version.
+  --
+  -- The data of a data frame follows the header.
   [0, frame.kind.toUInt8] ++ Base.natToBytes 2 frame.flags.toNat ++
     Base.natToBytes 4 frame.streamId.toNat ++ Base.natToBytes 4 frame.length.toNat ++
     frame.data.data.toList
 
 /-- The frame at the start of the input, and the bytes after it. -/
 def decode (bytes : List UInt8) : Except YamuxError (Frame × List UInt8) := do
+  -- Framing: the 12 bytes of the header.
   let header := bytes.take headerSize
   if header.length < headerSize then throw (.shortHeader header.length)
   let rest := bytes.drop headerSize
+  -- Version Field: always set to 0.
   let version := header.getD 0 0
   if version ≠ 0 then throw (.version version)
+  -- Type Field: one of 0x0 to 0x3.
   let kindByte := header.getD 1 0
   let some kind := Kind.ofUInt8? kindByte | throw (.unknownKind kindByte)
+  -- Flags (16 bits), big endian; bits other than SYN, ACK, FIN and RST are kept, not checked.
   let flags := (Base.bytesToNat ((header.drop 2).take 2)).toUInt16
+  -- StreamID (32 bits), big endian.
   let streamId := (Base.bytesToNat ((header.drop 4).take 4)).toUInt32
+  -- Length (32 bits), big endian.
   let length := (Base.bytesToNat (header.drop 8)).toUInt32
+  -- Length Field: a Data frame has that many bytes after the header, and other types none.
   let size := if kind = .data then length.toNat else 0
   let body := rest.take size
   if body.length < size then throw (.truncated size body.length)
