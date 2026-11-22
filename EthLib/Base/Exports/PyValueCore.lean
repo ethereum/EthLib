@@ -259,8 +259,8 @@ def pyExport {α β : Type} [FromPyItems α] [ToPy β] [FromPy β] [LawfulPy β]
     (f : α → Result β) (args : PyValue) : Result PyValue := do
   let items ← match args with
     | .tuple items => pure items.toList
-    | _ => throw (0, "the arguments are not a tuple")
-  let a ← (FromPyItems.ofItems items).mapError fun message => (0, message)
+    | _ => rejectArgument none "the arguments are not a tuple"
+  let a ← toResult none ((FromPyItems.ofItems items).mapError UnreadArgument.mk)
   return toPy (← f a)
 
 /-- The value of a digit in base 16, in lower case. -/
