@@ -9,6 +9,11 @@ Not yet released.
 
 ### Proof additions
 
+- `slotSurplus` is the net state gas of a frame of EIP-8037, less the state gas of a new slot for each fresh slot of an account with a nonce or code ([#4038](https://github.com/ethereum/EthLib/issues/4038), fourth part).
+  `PaysSlots` relates two frames when the second failed (it stops with an error, and its meter rolled back unless it reverted), or when, without an error, its surplus did not drop; it is a preorder (`PaysSlots.refl`, `PaysSlots.trans`).
+  `paysSlots_instruction` proves that from Glamsterdam each instruction that gives the next frame keeps it, from a running frame whose current account has a nonce or code.
+  `MessagePays` states what a message must pay for its slots, from the floor of its meter.
+
 - `keepsNonceOrCode_processMessage` and `keepsNonceOrCode_processCreateMessage` prove that from Spurious Dragon every call and creation lowers no nonce and keeps a nonce or code wherever an account has one, with no hypothesis on the state ([#4038](https://github.com/ethereum/EthLib/issues/4038), third part).
   `processMessage_rebuildState` and `processCreateMessage_rebuildState` also need the rebuild property of the state, a code condition at the target or a deployable target, and a value condition.
   `stepRules_keepsNonceOrCode` gives the same for each step, at every fork.
