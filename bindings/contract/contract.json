@@ -13331,8 +13331,7 @@
    "method": "snappy_masked_crc",
    "errors": [],
    "error_class": null,
-   "docstring":
-   "The masked CRC-32C that a data chunk stores (§3).\n\nThe CRC is rotated right by 15 bits, then `0xa282ead8` is added modulo 2^32."},
+   "docstring": "The masked CRC-32C that a data chunk stores (§3)."},
   {"summary": "A 64-bit value as an unsigned protobuf varint.",
    "signature": "(value: int) -> bytes",
    "operation": "EthLib.Networking.Encoding.Varint.encode",

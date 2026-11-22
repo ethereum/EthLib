@@ -14,15 +14,7 @@ Its opening text describes the format, and not how the compressor works.
 
 So one input has many valid blocks.
 
-This compressor scans the input once, from the front:
-
-- A table of 2^14 slots maps the hash of four bytes to the last scanned position with that hash.
-- At each position, the table proposes an earlier position.
-- A proposal counts if it lies less than 65536 bytes back and matches at least four bytes.
-- The bytes since the last copy are then written as one literal, followed by the copy.
-- The scan then goes on from the end of the copy.
-- Without a proposal that counts, the scan moves one byte on.
-- At the end of the input, the bytes since the last copy are written as one literal.
+This compressor scans the input once, from the front, with a table that proposes earlier positions.
 
 The table is a hint.
 
@@ -66,8 +58,10 @@ See `TableEntry` of [`snappy.cc`][snappy.cc].
 [snappy.cc]: https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/snappy.cc
 -/
 def hashSlot (src : ByteArray) (i : Nat) (h : i + 4 ≤ src.size) : Nat :=
+  -- The four bytes from `i`, read little-endian.
   let word := src[i].toNat + 256 * src[i + 1].toNat + 65536 * src[i + 2].toNat +
     16777216 * src[i + 3].toNat
+  -- The top 14 bits of the product of the four bytes and 0x1e35a7bd, modulo 2^32.
   word * 0x1e35a7bd % 2 ^ 32 / 2 ^ (32 - tableBits)
 
 /-- How many bytes from `j` agree with the bytes from `c`, for a position `c` before `j`.
@@ -92,18 +86,32 @@ The table holds a position for each slot, from which the scan proposes a copy.
 -/
 def compressLoop (src : ByteArray) (table : Array Nat) (i lit : Nat) (out : ByteArray) :
     ByteArray :=
+  -- A copy may start at `i` only while four bytes remain.
   if h : i + minCopyLength ≤ src.size then
+    -- The slot of the four bytes at `i` proposes the last scanned position with that hash.
     let s := hashSlot src i h
     let c := table.getD s 0
+    -- The slot now holds `i`.
     let table := table.setIfInBounds s i
+    -- The proposal counts if it lies before `i`, less than 65536 bytes back.
+    --
+    -- That bound keeps the offset within the two bytes of §2.2.2.
     if hc : c < i ∧ i - c < copyTwoOffsetBound then
       -- The match length, computed once for this step.
+      --
+      -- The compressor reads the input to find it, so a wrong proposal gives a short match.
       let len := matchLength src c i hc.1
+      -- At least four matching bytes: the bytes since the last copy as one literal, then the copy.
+      --
+      -- The scan then goes on from the end of the copy.
       if hl : minCopyLength ≤ len then
         compressLoop src table (i + len) (i + len)
           (emitCopies (i - c) (emitLiteral out src lit i) len)
+      -- A shorter match: the scan moves one byte on.
       else compressLoop src table (i + 1) lit out
+    -- No proposal that counts: the scan moves one byte on.
     else compressLoop src table (i + 1) lit out
+  -- At the end of the input, the bytes since the last copy as one literal.
   else emitLiteral out src lit src.size
 termination_by src.size - i
 decreasing_by all_goals (have : minCopyLength = 4 := rfl; (try simp only [s, c, len] at *); omega)
@@ -117,6 +125,9 @@ A longer input gives a preamble out of range, so decompression rejects the block
 The scan writes its elements straight after the preamble, so the body is not copied a second time.
 -/
 def compress (src : ByteArray) : ByteArray :=
+  -- §1: the preamble, the input length as a varint, then the elements of §2.
+  --
+  -- Every slot of the table starts at position 0.
   compressLoop src (Array.replicate (2 ^ tableBits) 0) 0 0
     ⟨(EthLib.Networking.Encoding.Varint.encodeAux src.size preambleMaxLength).toArray⟩
 

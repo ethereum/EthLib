@@ -44,26 +44,31 @@ def copyTwoOffsetBound : Nat := 65536
 
 /-- A copy element with a one-byte offset, for a length of 4 to 11 and an offset of 1 to 2047.
 
-The tag holds the kind `01` and the length minus 4 in bits 2 to 4.
-
-Its bits 5 to 7 hold offset bits 8 to 10.
-
-One byte after the tag holds the low eight bits of the offset.
+Its layout is that of §2.2.1.
 -/
 def copyOne (offset len : Nat) : List UInt8 :=
+  -- §2.2.1: the tag holds the type 01, then len - 4 in bits 2 to 4.
+  --
+  -- Its bits 5 to 7 hold the upper three of the 11 offset bits.
+  --
+  -- The lower eight bits of the offset are stored in a byte following the tag byte.
   [UInt8.ofNat (1 + (len - 4) * 4 + offset / 256 * 32), UInt8.ofNat (offset % 256)]
 
 /-- A copy element with a two-byte offset, for a length of 1 to 64 and an offset of 1 to 65535.
 
-The tag holds the kind `10` and the length minus 1 in its upper six bits.
-
-Two little-endian bytes after the tag hold the offset.
+Its layout is that of §2.2.2.
 -/
 def copyTwo (offset len : Nat) : List UInt8 :=
+  -- §2.2.2: the tag holds the type 10, and len - 1 in its upper six bits, bits 2 to 7.
+  --
+  -- The offset is a little-endian 16-bit integer in the two bytes following the tag byte.
   [UInt8.ofNat (2 + (len - 1) * 4), UInt8.ofNat (offset % 256), UInt8.ofNat (offset / 256)]
 
 /-- The shortest copy element for a length of 1 to 64 and an offset of 1 to 65535. -/
 def copyElement (offset len : Nat) : List UInt8 :=
+  -- §2.2.1 takes two bytes and §2.2.2 takes three, when the length and offset fit both.
+  --
+  -- The format lets a compressor choose either, and EthLib writes the shorter.
   if 4 ≤ len ∧ len ≤ 11 ∧ offset < copyOneOffsetBound then copyOne offset len
   else copyTwo offset len
 
@@ -80,6 +85,8 @@ The reference compressor splits a copy the same way, in `EmitCopy` of [`snappy.c
 def emitCopies (offset : Nat) (out : ByteArray) (len : Nat) : ByteArray :=
   if len = 0 then out
   else
+    -- §2.2.2: one element copies at most 64 bytes.
+    --
     -- Leave at least four bytes for the last element.
     let n :=
       if maxCopyLength + 4 ≤ len then maxCopyLength
@@ -95,8 +102,9 @@ A literal holds 1 to 2^32 bytes (§2.1).
 -/
 def emitLiteral (out src : ByteArray) (lo hi : Nat) : ByteArray :=
   if lo < hi then
+    -- §2.1: the tag and the length of the literal.
     let out := out ++ ⟨(literalHeader (hi - lo)).toArray⟩
-    -- The data goes from `src` straight to the end of the output.
+    -- §2.1: then the literal itself, from `src` straight to the end of the output.
     src.copySlice lo out out.size (hi - lo) false
   else out
 
