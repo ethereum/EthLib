@@ -114,6 +114,7 @@ instance : ApiSpelling DepositSigningData := .unmarked
 
 The discriminators of the versioned bodies in the schemas spell the versions so. -/
 def versionName : ConsensusVersion → String
+  -- The schemas: the values of the version discriminator, PHASE0 to GLOAS.
   | .phase0 => "PHASE0"
   | .altair => "ALTAIR"
   | .bellatrix => "BELLATRIX"
@@ -127,6 +128,7 @@ def versionName : ConsensusVersion → String
 
 The schemas fix each name exactly, so no other spelling names a version. -/
 def versionOfName? (name : String) : Option ConsensusVersion :=
+  -- The schemas: a version is one of these values, matched exactly.
   ConsensusVersion.all.find? (versionName · == name)
 
 /-! ## The requests -/
@@ -182,6 +184,7 @@ def all : List RequestType :=
 
 /-- The value of the field `type` for a kind of request. -/
 def name : RequestType → String
+  -- The sign endpoint: the values of the discriminator type, one for each schema.
   | aggregationSlot => "AGGREGATION_SLOT"
   | aggregateAndProof => "AGGREGATE_AND_PROOF"
   | aggregateAndProofV2 => "AGGREGATE_AND_PROOF_V2"
@@ -203,6 +206,7 @@ def name : RequestType → String
 
 /-- The kind of request with a name, if one has it. -/
 def ofName? (name : String) : Option RequestType :=
+  -- The sign endpoint: the type is one of the values of its discriminator, matched exactly.
   all.find? (·.name == name)
 
 end RequestType
@@ -319,6 +323,7 @@ def type : SigningRequest preset → RequestType
 
 /-- The version that a versioned body of a request names, if the request has one. -/
 def version? : SigningRequest preset → Option ConsensusVersion
+  -- The two kinds with versions from Phase 0, and the kinds that Gloas adds, at GLOAS only.
   | .aggregateAndProofV2 _ version _ => some version
   | .blockV2 _ body => some body.version
   | .executionPayloadBid .. | .executionPayloadEnvelope .. | .payloadAttestationMessage ..
@@ -331,19 +336,23 @@ end SigningRequest
 
 /-- The field of an optional signing root, written as hex when present. -/
 def signingRootFields : Option Root → List (String × Json)
+  -- The schemas: the signing root is optional, so an absent one is left out.
   | none => []
   | some root => [("signingRoot", .str (toHex root.toArray))]
 
 /-- The fields of the shared part of a request. -/
 def signingFields (signing : Signing) : Except Err (List (String × Json)) := do
+  -- The schema of the shared part: the fork info, then the optional signing root.
   return ("fork_info", ← toApiJson signing.forkInfo) :: signingRootFields signing.signingRoot
 
 /-- A versioned body: its version, and its data under a key. -/
 def versionedJson (version : ConsensusVersion) (key : String) (data : Json) : Json :=
+  -- The schemas: a versioned body has the version and the data, both required.
   .mkObj [("version", .str (versionName version)), (key, data)]
 
 /-- The JSON of the block of a request of the second block kind. -/
 def BlockV2Body.toJson {preset : Preset} : BlockV2Body preset → Except Err Json
+  -- The schemas: the block up to Altair, and the block header from Bellatrix.
   | .phase0 block => return versionedJson .phase0 "block" (← toApiJson block)
   | .altair block => return versionedJson .altair "block" (← toApiJson block)
   | .header version blockHeader =>
@@ -355,6 +364,7 @@ variable {preset : Preset}
 
 /-- The fields of a request other than its kind: the shared part and the body. -/
 def fields : SigningRequest preset → Except Err (List (String × Json))
+  -- Each body under the key that its schema names, beside the shared part when it has one.
   | .aggregationSlot signing body =>
     return ("aggregation_slot", ← toApiJson body) :: (← signingFields signing)
   | .aggregateAndProof signing body =>
@@ -366,6 +376,7 @@ def fields : SigningRequest preset → Except Err (List (String × Json))
     return ("attestation", ← toApiJson body) :: (← signingFields signing)
   | .block signing body => return ("block", ← toApiJson body) :: (← signingFields signing)
   | .blockV2 signing body => return ("beacon_block", ← body.toJson) :: (← signingFields signing)
+  -- The schema of a deposit has no fork info, only the optional signing root.
   | .deposit signingRoot body =>
     return ("deposit", ← toApiJson body) :: signingRootFields signingRoot
   | .randaoReveal signing body =>
@@ -378,8 +389,10 @@ def fields : SigningRequest preset → Except Err (List (String × Json))
     return ("sync_aggregator_selection_data", ← toApiJson body) :: (← signingFields signing)
   | .syncCommitteeContributionAndProof signing body =>
     return ("contribution_and_proof", ← toApiJson body) :: (← signingFields signing)
+  -- The schema of a registration has no fork info either.
   | .validatorRegistration signingRoot body =>
     return ("validator_registration", ← toApiJson body) :: signingRootFields signingRoot
+  -- The kinds that Gloas adds put their data under the version GLOAS.
   | .executionPayloadBid signing body =>
     return ("execution_payload_bid", ← (versionedJson .gloas "data" <$> toApiJson body)) ::
       (← signingFields signing)
@@ -392,12 +405,14 @@ def fields : SigningRequest preset → Except Err (List (String × Json))
   | .proposerPreferences signing body =>
     return ("proposer_preferences", ← (versionedJson .gloas "data" <$> toApiJson body)) ::
       (← signingFields signing)
+  -- The schemas: the authentication carries no fork info.
   | .builderRequestAuth signingRoot body _ =>
     return ("builder_request_auth", ← (versionedJson .gloas "data" <$> toApiJson body)) ::
       signingRootFields signingRoot
 
 /-- The JSON document of a request: its kind under `type`, then its other fields. -/
 def toJson (request : SigningRequest preset) : Except Err Json := do
+  -- The discriminator type first, then the fields of the kind.
   return .mkObj (("type", .str request.type.name) :: (← request.fields))
 
 end SigningRequest
@@ -437,6 +452,7 @@ def RequestError.code : RequestError → UInt32
 
 /-- The value under a key of an object, which must be present. -/
 def field (document : Json) (key : String) : Except RequestError Json :=
+  -- The schema: a required property is present.
   match document.getObjVal? key with
   | .ok value => .ok value
   | .error _ => .error (.missingField key)
@@ -444,28 +460,34 @@ def field (document : Json) (key : String) : Except RequestError Json :=
 /-- The value of a type under a key of an object, read in the JSON mapping of SSZ. -/
 def readValue (α : Type) [SszType α] [ApiSpelling α] (document : Json) (key : String) :
     Except RequestError α := do
+  -- The value in the JSON mapping of SSZ that the schemas write: integers in decimal, bytes as hex.
   match ofApiJson α (← field document key) with
   | .ok x => .ok x
   | .error fault => .error (.badField key fault)
 
 /-- The optional signing root of a request: 32 bytes as hex, with digits in either case. -/
 def readSigningRoot (document : Json) : Except RequestError (Option Root) :=
+  -- The schemas: an optional string, which EthLib reads as a root.
   (ApiEnvelope.readKey document "signingRoot" ApiEnvelope.readRoot).mapError fun _ =>
     .badField "signingRoot" .typeMismatch
 
 /-- The shared part of a request: the fork info, which must be present, and the signing root. -/
 def readSigning (document : Json) : Except RequestError Signing := do
+  -- The schemas: the shared part that most kinds of request carry.
   return ⟨← readValue ForkInfo document "fork_info", ← readSigningRoot document⟩
 
 /-- The object under a key, which must be an object. -/
 def readObject (document : Json) (key : String) : Except RequestError Json := do
   let body ← field document key
+  -- The schema: the value under the key is a JSON object.
   let .obj _ := body | throw (.notAnObject key)
   return body
 
 /-- The version that the versioned body under a key names. -/
 def readVersion (body : Json) (key : String) : Except RequestError ConsensusVersion := do
+  -- The schemas: the version is required, a string.
   let .str name ← field body "version" | throw (.badField "version" .typeMismatch)
+  -- The schemas: a value of the version discriminator.
   let some version := versionOfName? name | throw (.unknownVersion key name)
   return version
 
@@ -474,25 +496,27 @@ def readGloasData (α : Type) [SszType α] [ApiSpelling α] (document : Json) (k
     Except RequestError α := do
   let body ← readObject document key
   let version ← readVersion body key
+  -- The schemas: GLOAS is the one version of the kinds that Gloas adds.
   unless version = .gloas do throw (.unknownVersion key (versionName version))
+  -- The schemas: the data is required.
   readValue α body "data"
 
 /-- The kind of request that the field `type` names. -/
 def readType (document : Json) : Except RequestError RequestType := do
+  -- The schemas: the type is required, a string.
   let .str name ← field document "type" | throw (.badField "type" .typeMismatch)
+  -- The sign endpoint: a value of the discriminator type.
   let some type := RequestType.ofName? name | throw (.unknownType name)
   return type
 
-/-- The block of a request of the second block kind, from its versioned body.
-
-Up to Altair the body holds the block under `block`.
-
-From Bellatrix it holds the header under `block_header`. -/
+/-- The block of a request of the second block kind, from its versioned body. -/
 def BlockV2Body.ofJson (preset : Preset) (body : Json) :
     Except RequestError (BlockV2Body preset) := do
   let version ← readVersion body "beacon_block"
+  -- The schemas: from Bellatrix, the block header is required.
   if atLeast : .bellatrix ≤ version then
     return .header ⟨version, atLeast⟩ (← readValue BeaconBlockHeader body "block_header")
+  -- The schemas: up to Altair, the block of that version is required.
   else if version = .phase0 then
     return .phase0 (← readValue (BeaconBlock preset .phase0) body "block")
   else
@@ -500,16 +524,16 @@ def BlockV2Body.ofJson (preset : Preset) (body : Json) :
 
 /-- The request that a JSON document holds.
 
-The field `type` decides the kind, and the body must be under the key of that kind.
-
-A versioned body must name a version that the kind admits.
-
 The request ignores any other key, as the schemas do not forbid one.
 
 Each body is read in the JSON mapping of SSZ, which refuses a key that its container lacks. -/
 def SigningRequest.ofJson (preset : Preset) (document : Json) :
     Except RequestError (SigningRequest preset) := do
+  -- The request body is an object.
   let .obj _ := document | throw (.notAnObject "")
+  -- The sign endpoint: the type decides the schema of the request.
+  --
+  -- Each schema requires the type and the body under the key of its kind.
   match ← readType document with
   | .aggregationSlot =>
     return .aggregationSlot (← readSigning document)
@@ -517,6 +541,7 @@ def SigningRequest.ofJson (preset : Preset) (document : Json) :
   | .aggregateAndProof =>
     return .aggregateAndProof (← readSigning document)
       (← readValue (AggregateAndProof preset .phase0) document "aggregate_and_proof")
+  -- The versioned aggregate: any version from PHASE0 to GLOAS, with the data of that fork.
   | .aggregateAndProofV2 =>
     let signing ← readSigning document
     let body ← readObject document "aggregate_and_proof"
@@ -532,6 +557,7 @@ def SigningRequest.ofJson (preset : Preset) (document : Json) :
   | .blockV2 =>
     let signing ← readSigning document
     return .blockV2 signing (← BlockV2Body.ofJson preset (← readObject document "beacon_block"))
+  -- The schemas of a deposit and a registration have no fork info.
   | .deposit =>
     return .deposit (← readSigningRoot document) (← readValue DepositSigningData document "deposit")
   | .randaoReveal =>
@@ -565,9 +591,11 @@ def SigningRequest.ofJson (preset : Preset) (document : Json) :
   | .proposerPreferences =>
     return .proposerPreferences (← readSigning document)
       (← readGloasData ProposerPreferences document "proposer_preferences")
+  -- The schemas: the authentication has no fork info.
   | .builderRequestAuth =>
     let signingRoot ← readSigningRoot document
     let body ← readGloasData BuilderRequestAuth document "builder_request_auth"
+    -- The schemas: its data is not empty.
     if nonEmpty : body.data.data.size ≠ 0 then
       return .builderRequestAuth signingRoot body nonEmpty
     else throw .emptyAuthData

@@ -34,6 +34,7 @@ instance : ApiSpelling SigningResponse := .unmarked
 
 /-- The plain-text response to a request to sign: the signature as hex alone. -/
 def SigningResponse.text (response : SigningResponse) : String :=
+  -- The source: the text/plain form is the signature as hex; its example writes 0x first.
   toHex response.signature.toArray
 
 /-- A public key is written as hex. -/
@@ -41,11 +42,13 @@ instance : ApiSpelling BLSPubkey := .unmarked
 
 /-- The JSON response that lists the public keys of the signer. -/
 def publicKeysJson (keys : List BLSPubkey) : Except Err Json := do
+  -- The source: an array of strings, each a public key as hex.
   return .arr (← keys.mapM toApiJson).toArray
 
 /-- The public keys that a JSON response lists, each 48 bytes as hex. -/
 def readPublicKeys (document : Json) : Except Err (List BLSPubkey) :=
   match document with
+  -- The source: an array of strings; EthLib's reading: each is a key of 48 bytes.
   | .arr entries => entries.toList.mapM (ofApiJson BLSPubkey)
   | _ => .error .typeMismatch
 
