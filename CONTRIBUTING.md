@@ -61,13 +61,25 @@ A byte-for-byte match with a client is a useful test, not a justification.
 ### Step comments
 
 A definition that implements a step-by-step procedure marks each step of its source in a `--` comment, right above the line that computes that step.
-The comment names the step and writes it in the notation of the source, in ASCII, so that an auditor can match the two line by line.
+The comment names the step and states it formally, in ASCII, so that an auditor can match the two line by line.
 For example, the line that computes RFC 6979 §3.2 step d has the comment `` -- Step d: `K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1))`. `` above it.
+A step of the Keccak sponge of FIPS 202 Algorithm 8 reads `-- Steps 3 to 6 for i < n - 1: from S = 0^b, S = f(S ^ (P_i || 0^c)), with P_i read from N.`
+Its bound `i < n - 1` marks a departure from the source: the last block is absorbed apart.
 
-Where only `ethereum/consensus-specs` or `ethereum/execution-specs` writes out the steps of a rule, a step comment may name the function in that text and quote the line of each step.
+A step comment is formal, short and precise, like the text of an RFC or a FIPS standard.
+
+- Where the source states its steps as formulas, as an RFC, a FIPS standard, the Yellow Paper or a paper does, the comment uses the notation of the source.
+- Pseudo-code that the source itself writes, such as `v[a] := (v[a] + v[b] + x) mod 2**w` in RFC 7693 §3.1, is the notation of the source and stays as the source writes it.
+- Where the source states a step in words, or only in code, the comment states it in mathematical notation or in short, plain words.
+- A step comment never quotes code in a programming language.
+  That covers the Python of `ethereum/execution-specs`, of `ethereum/consensus-specs` and of the reference code in an EIP.
+  It also covers a loop, a condition or an assertion written in the syntax of a language, such as `for log in receipt.logs:` or `pubkey_size == 48 and amount_size == 8`.
+  The Lean line under the comment is already the code, and the same step in another programming language gives an auditor nothing new to check.
+
+Where only `ethereum/consensus-specs` or `ethereum/execution-specs` writes out the steps of a rule, a step comment may name the function of that text that holds the step, and it states the step as the list above says.
 A provenance note then links the file at a pinned release or commit, with its section, in the doc comment of the definition or in a section comment above several definitions.
-A step comment that quotes those texts traces a step but is not a citation of authority, so the code still does not cite them as the authority for a rule.
-A defect found while quoting them is reported upstream, as [Defects found upstream](#defects-found-upstream) says, not copied into the code.
+A step comment that traces those texts is not a citation of authority, so the code still does not cite them as the authority for a rule.
+A defect found while tracing them is reported upstream, as [Defects found upstream](#defects-found-upstream) says, not copied into the code.
 
 Where EthLib departs from the steps of its source, the comment says how and why.
 Examples are a fork branch folded into one function, an overflow check, a loop bound, or a value computed once and reused.
