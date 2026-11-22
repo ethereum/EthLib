@@ -89,22 +89,37 @@ def generator : Point2 :=
     ⟨8495653923123431417604973247489272438418190587263600148770280649306958101930,
       4082367875863433681332203403145435568316851327593401208105741076214120093531⟩
 
-/-- The sum of two points, by the same rule as on `G_1`, over `Fp2`. -/
+/-- The sum of two points, by the addition rule of [SEC 1 v2][sec1] §2.2.1.
+
+The rule is stated over `Fp`, and the same formulas hold over `Fp2`.
+
+[sec1]: https://www.secg.org/sec1-v2.pdf
+-/
 def add : Point2 → Point2 → Point2
+  -- Rules 1 and 2: `O + O = O` and `(x, y) + O = O + (x, y) = (x, y)`.
   | infinity, q => q
   | p, infinity => p
   | affine x1 y1, affine x2 y2 =>
     if x1 = x2 then
+      -- Rule 3: `(x, y) + (x, -y) = O`.
       if y2 = -y1 then infinity
       else
-        -- The point is doubled, with the tangent's slope.
+        -- Rule 5, with `a = 0`: `lambda = (3 x1^2 + a) / (2 y1)`.
+        --
+        -- On the curve, the same `x` gives `y2 = y1` or `y2 = -y1`, so the points are equal here.
+        --
+        -- Then `y1 != -y1`, so `y1 != 0`, as rule 5 asks.
         let l := Fp2.ofFp 3 * x1 * x1 * Fp2.inv (Fp2.ofFp 2 * y1)
+        -- Rule 5: `x3 = lambda^2 - 2 x1`, written `lambda^2 - x1 - x2` since `x1 = x2`.
         let x3 := l * l - x1 - x2
+        -- Rule 5: `y3 = lambda (x1 - x3) - y1`.
         affine x3 (l * (x1 - x3) - y1)
     else
-      -- Two different x: the chord's slope.
+      -- Rule 4: `lambda = (y2 - y1) / (x2 - x1)`.
       let l := (y2 - y1) * (x2 - x1).inv
+      -- Rule 4: `x3 = lambda^2 - x1 - x2`.
       let x3 := l * l - x1 - x2
+      -- Rule 4: `y3 = lambda (x1 - x3) - y1`.
       affine x3 (l * (x1 - x3) - y1)
 
 instance : Add Point2 := ⟨add⟩
@@ -288,17 +303,24 @@ A twisted point has `x` times `w^2` and `y` times `w^3`.
 
 So a slope `l` of the twist is the slope `l w` of the twisted points.
 
-- Two different `x`: the chord.
-- The same point: the tangent.
-- Opposite points: the vertical line. -/
+It follows the line function of [the pairing-friendly curves draft][pfc], Appendix A.
+
+The draft writes it on `E`, and here it runs on the twisted points.
+
+[pfc]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-11#appendix-A
+-/
 def linefunc (r q : Point2) (xt yt : Fp) : Fp12 :=
   match r, q with
   | .affine x1 y1, .affine x2 y2 =>
+    -- The draft tests `Q_1 = Q_2`, then `Q_1 = -Q_2`; on the curve, both have `x_1 = x_2`.
     if x1 ≠ x2 then
+      -- `l := (y_2 - y_1) / (x_2 - x_1)`, then `return (l * (x - x_1) + y_1 - y)`.
       slopeLine ((y2 - y1) * (x2 - x1).inv) x1 y1 xt yt
     else if y1 = y2 then
+      -- `if (Q_1 = Q_2) then l := (3 * x_1^2) / (2 * y_1)`, then the same return.
       slopeLine (Fp2.ofFp 3 * x1 * x1 * Fp2.inv (Fp2.ofFp 2 * y1)) x1 y1 xt yt
     else
+      -- `else if (Q_1 = -Q_2) then return x - x_1`.
       verticalLine x1 xt
   -- The loop never meets the point at infinity on points of order `q`.
   | _, _ => Fp12.one
@@ -316,20 +338,43 @@ def frobenius : Point2 → Point2
   | .infinity => .infinity
   | .affine x y => .affine (x.conj * frobeniusX) (y.conj * frobeniusY)
 
-/-- The Miller loop of the optimal ate pairing, before the final exponentiation. -/
+/-- The Miller loop of the optimal ate pairing, before the final exponentiation.
+
+It follows lines 1 to 13 of Algorithm 1 of [Beuchat et al.](https://eprint.iacr.org/2010/354), §2.
+
+Their `t` is the BN parameter `u`.
+
+It takes `Q` of `G_2` on the twist, and `P = (xp, yp)` of `G_1`. -/
 def millerLoop (q : Point2) (xp yp : Fp) : Fp12 :=
-  -- The bits below the top one, each doubling `r`, then adding `q` on a set bit.
+  -- Line 1: write `s = 6t + 2` as `s = sum_{i=0}^{L-1} s_i 2^i`, with `s_i` in `{-1, 0, 1}`.
+  --
+  -- The digits here are the bits of `s`, so no `s_i` is `-1`, and lines 5 and 6 never apply.
+  --
+  -- `s` has `L = 65` bits.
+  --
+  -- Line 2: `T <- Q, f <- 1`, the start of the fold.
   let (f, r) := (List.range (LOG_ATE_LOOP_COUNT + 1)).foldl (fun (f, r) step =>
+    -- Line 3: for `i = L - 2` to 0, so `i` runs from 63 down to 0.
     let i := LOG_ATE_LOOP_COUNT - step
+    -- Line 4: `f <- f^2 * l_{T,T}(P); T <- 2T`.
     let f := f * f * linefunc r r xp yp
     let r := r + r
+    -- Lines 7 and 8: if `s_i = 1`, then `f <- f * l_{T,Q}(P); T <- T + Q`.
     if ATE_LOOP_COUNT / 2 ^ i % 2 = 1 then (f * linefunc r q xp yp, r + q) else (f, r)) (Fp12.one, q)
-  -- Two more lines, through the `p`-th and the negated `p^2`-th powers of `q`.
+  -- Line 11: `Q1 <- pi_p(Q); Q2 <- pi_p^2(Q)`.
+  --
+  -- Line 13 reads only `-Q2`, so the negation is taken here.
   let q1 := frobenius q
   let nq2 := match frobenius q1 with
     | .affine x y => Point2.affine x (-y)
     | .infinity => .infinity
+  -- Line 12: `f <- f * l_{T,Q1}(P); T <- T + Q1`.
+  --
+  -- Its `T <- T + Q1` is computed once, inside line 13.
   let f := f * linefunc r q1 xp yp
+  -- Line 13: `f <- f * l_{T,-Q2}(P)`.
+  --
+  -- Its `T <- T - Q2` is not computed, since no later line reads `T`.
   f * linefunc (r + q1) nq2 xp yp
 
 /-- The final exponent `(p^12 - 1) / q`. -/
@@ -340,60 +385,71 @@ def BN_U : Nat := 4965661367192848881
 
 /-- `f^((p^12 - 1) / q)`, the final exponentiation.
 
-[Scott et al.](https://eprint.iacr.org/2008/490), §3, split the exponent.
+It follows §3 and §5 of [Scott et al.](https://eprint.iacr.org/2008/490), for the BN curves.
 
-It is `(p^6 - 1) (p^2 + 1) (p^4 - p^2 + 1) / q`.
-
-The first two factors cost a few Frobenius maps and one inverse.
-
-After them, `f^(p^6) = f^(-1)`, so a power by a negative number is a power of the conjugate.
-
-Their §5 writes `(p^4 - p^2 + 1) / q` in base `p`, with digits `l0` to `l3` in `u`.
-
-- `l3 = 1` and `l2 = 6 u^2 + 1`.
-- `l1 = -36 u^3 - 18 u^2 - 12 u + 1`.
-- `l0 = -36 u^3 - 30 u^2 - 18 u - 2`.
-
-So the last factor needs three powers by `u` and a few by small numbers. -/
+Their `x` is the BN parameter `u`, their `r` is the group order `q`, and their `m` is `f`. -/
 def finalExponentiation (f : Fp12) : Fp12 :=
-  -- `f^((p^6 - 1) (p^2 + 1))`.
+  -- §3: `(p^12 - 1) / r = (p^6 - 1) * (p^2 + 1) * [(p^4 - p^2 + 1) / r]`.
+  --
+  -- §3: the first part, `m^(p^6 - 1)`, by the Frobenius map and one division in `Fp12`.
   let f := Fp12.frobeniusPow 6 f * f.inverse
+  -- §3: the second part, `m^(p^2 + 1)`, by the Frobenius map and one product.
   let f := Fp12.frobeniusPow 2 f * f
-  -- `f^u`, `f^(u^2)` and `f^(u^3)`, each below `2^64`.
+  -- §5: `m^x`, `m^(x^2) = (m^x)^x` and `m^(x^3) = (m^(x^2))^x`.
+  --
+  -- `u` is below `2^64`, so 64 bits of square and multiply reach it.
   let fu := Fp12.powBits 64 f BN_U
   let fu2 := Fp12.powBits 64 fu BN_U
   let fu3 := Fp12.powBits 64 fu2 BN_U
-  -- The four digits, with the conjugate for each negative part.
+  -- §3: after the first part, the element is unitary, so an inversion is a conjugation.
+  --
+  -- The conjugation is the power `p^6`, since `m^(p^6) = m^(-1)` for a unitary `m`.
   let conj := Fp12.frobeniusPow 6
+  -- §5: the hard part is `(p^4 - p^2 + 1) / r = lambda3 p^3 + lambda2 p^2 + lambda1 p + lambda0`.
+  --
+  -- §3: its power is `(m^(p^3))^lambda3 * (m^(p^2))^lambda2 * (m^p)^lambda1 * m^lambda0`.
+  --
+  -- The coefficients in the digits are at most 36, below `2^6`.
   let small (a : Fp12) (e : Nat) := Fp12.powBits 6 a e
+  -- §5: `m^lambda0`, with `lambda0(x) = -36 x^3 - 30 x^2 - 18 x - 2`.
   let y0 := conj (small fu3 36 * small fu2 30 * small fu 18 * small f 2)
+  -- §5: `m^lambda1`, with `lambda1(x) = -36 x^3 - 18 x^2 - 12 x + 1`.
   let y1 := conj (small fu3 36 * small fu2 18 * small fu 12) * f
+  -- §5: `m^lambda2`, with `lambda2(x) = 6 x^2 + 1`.
   let y2 := small fu2 6 * f
+  -- §5 gives `lambda3 = 1`, and each power by `p^i` is taken after the power by `lambda_i`.
+  --
+  -- §5 then groups the terms and evaluates them by an addition chain.
+  --
+  -- Here each digit is raised on its own instead, which gives the same element.
   y0 * Fp12.frobenius y1 * Fp12.frobeniusPow 2 y2 * Fp12.frobeniusPow 3 f
 
 /-- The pairing `e(P, Q)` of a point of `G_1` and a point of `G_2`, an element of `Fp12`.
 
 It is the final exponentiation of the Miller loop.
 
+It is line 14 of Algorithm 1 of [Beuchat et al.](https://eprint.iacr.org/2010/354), §2.
+
+Their `r` is the group order `q`.
+
 A point at infinity gives 1. -/
 def pairing : Point → Point2 → Fp12
+  -- Line 14: `f <- f^((p^12 - 1) / r)`.
   | .affine xp yp, q@(.affine _ _) => finalExponentiation (millerLoop q xp yp)
   | _, _ => Fp12.one
 
 /-- Whether the product of the pairings of the pairs is 1.
 
-A pair with a point at infinity contributes 1.
-
-The Miller loops are multiplied, then raised to the final exponent once.
-
-That is valid since `(a * b)^e = a^e * b^e`.
-
-A product of 1 passes at once, since `1^e = 1`, as when no pair has a Miller loop. -/
+A pair with a point at infinity contributes 1. -/
 def pairingCheck (pairs : List (Point × Point2)) : Bool :=
+  -- The Miller loops are multiplied, and the product is raised to the final exponent once.
+  --
+  -- That is valid since `(a * b)^e = a^e * b^e`.
   let product := pairs.foldl (fun f pair =>
     match pair with
     | (.affine xp yp, q@(.affine _ _)) => f * millerLoop q xp yp
     | _ => f) Fp12.one
+  -- A product of 1 passes at once, since `1^e = 1`, as when no pair has a Miller loop.
   product == Fp12.one || finalExponentiation product == Fp12.one
 
 end EthLib.Cryptography.AltBn128
