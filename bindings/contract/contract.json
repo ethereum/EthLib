@@ -4181,7 +4181,7 @@
    "errors": [],
    "error_class": "ConsensusError",
    "docstring":
-   "From Bellatrix to Fulu: whether the node returns its local payload rather than the builder's.\n\nThe two values are in Wei, and the factor is in percent of the builder's value.\n\nThe builder's value is first rounded down to a multiple of 100 Wei."},
+   "From Bellatrix to Fulu: whether the node returns its local payload rather than the builder's.\n\nThe two values are in Wei, and the factor is in percent of the builder's value."},
   {"summary":
    "The value of a bid, in Gwei: its value plus its execution payment, counted up to its cap.",
    "signature": "(bid: dict[str, Any]) -> int",
@@ -4190,15 +4190,14 @@
    "errors": [],
    "error_class": "ConsensusError",
    "docstring":
-   "The value of a bid, in Gwei: its value plus its execution payment, counted up to its cap.\n\nThe sum saturates at the largest 64-bit integer."},
+   "The value of a bid, in Gwei: its value plus its execution payment, counted up to its cap."},
   {"summary": "Whether the terms of a bid accept it.",
    "signature": "(bid: dict[str, Any]) -> bool",
    "operation": "EthLib.Consensus.BeaconApi.bidAccepted",
    "method": "consensus_api_bid_accepted",
    "errors": [],
    "error_class": "ConsensusError",
-   "docstring":
-   "Whether the terms of a bid accept it.\n\nThe signer must be among the keys of the terms, when they name some.\n\nThe value of the bid must reach the smallest value of the terms."},
+   "docstring": "Whether the terms of a bid accept it."},
   {"summary":
    "From Gloas: the bid that the node commits to, or none for its local payload.",
    "signature":
@@ -4208,7 +4207,7 @@
    "errors": [],
    "error_class": "ConsensusError",
    "docstring":
-   "From Gloas: the bid that the node commits to, or none for its local payload.\n\nThe local value is in Wei, the value of the local payload that the execution layer gives.\n\nThe node drops the bids that their terms refuse, and keeps the first one of largest weight.\n\nThat bid wins only when its weight is above 100 times the local value.\n\nBoth sides are in hundredths of a Wei, and the bid must weigh strictly more.\n\nSo the local payload wins a tie."},
+   "From Gloas: the bid that the node commits to, or none for its local payload.\n\nThe local value is in Wei, the value of the local payload that the execution layer gives."},
   {"summary":
    "From Gloas, the terms that the SSZ bytes of a builder configuration give.",
    "signature":
