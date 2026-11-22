@@ -49,16 +49,24 @@ def Error.code : Error → UInt32
 /-- HKDF-Extract of RFC 5869 §2.2, as a 32-byte secret.
 
 The input keying material is secret, and this function makes no constant-time claim. -/
-def extract (salt ikm : ByteArray) : Secret := Hmac.hmac32 salt ikm
+def extract (salt ikm : ByteArray) : Secret :=
+  -- `PRK = HMAC-Hash(salt, IKM)`, with SHA-256.
+  Hmac.hmac32 salt ikm
 
 /-- Serialize `HkdfLabel` after checking the field bounds of RFC 8446 §7.1.
 
 The supplied label excludes the `tls13 ` prefix. -/
 def hkdfLabel (label context : ByteArray) (length : Nat) : Except Error ByteArray := do
+  -- `opaque label<7..255> = "tls13 " + Label`, so `Label` has 1 to 249 bytes.
   if label.size = 0 ∨ 249 < label.size then throw (.labelLength label.size)
+  -- `opaque context<0..255> = Context`.
   if 255 < context.size then throw (.contextLength context.size)
+  -- `uint16 length = Length`.
   if 65535 < length then throw (.lengthOverflow length)
   let fullLabel := "tls13 ".toUTF8 ++ label
+  -- The fields in order: `length` in two big-endian bytes, by RFC 8446 §3.3.
+  --
+  -- Then each vector after its one-byte length, by §3.4, since each holds at most 255 bytes.
   return ⟨(natToBytes 2 length).toArray⟩ ++ ⟨#[UInt8.ofNat fullLabel.size]⟩ ++
     fullLabel ++ ⟨#[UInt8.ofNat context.size]⟩ ++ context
 
@@ -69,6 +77,7 @@ RFC 5869 §2.3 limits the output to `255 * 32` bytes.
 The secret is secret, and this function makes no constant-time claim. -/
 def expandLabel (secret : Secret) (label context : ByteArray) (length : Nat) :
     Except Error (Vector UInt8 length) := do
+  -- `HKDF-Expand-Label(Secret, Label, Context, Length) = HKDF-Expand(Secret, HkdfLabel, Length)`.
   let info ← hkdfLabel label context length
   match h : Hkdf.expand (packBytes secret) info length with
   | .error e => throw (.hkdf e)
