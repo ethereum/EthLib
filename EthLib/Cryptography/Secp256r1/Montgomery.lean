@@ -59,6 +59,7 @@ private theorem modulusWords_low : lowValue modulusWords.words = Fp.modulus := b
 
 /-- `t mod p`, for `t < 2 p`: `t` itself, or `t - p`. -/
 @[inline] def reduceOnce (t : Words64) : Raw :=
+  -- The final subtraction of CIOS: `t - p`, kept when `t >= p`.
   let d := sub4 t modulusWords.words
   -- `t < p` exactly when no carry sits above bit 255 and the subtraction borrows.
   if t.top < d.top then Raw.fromWords t else Raw.fromWords d
@@ -136,27 +137,43 @@ theorem subRaw_val (a b : Raw) (ha : a.val < Fp.modulus) (hb : b.val < Fp.modulu
 
 The low word is then dropped, which divides by `2^64`. -/
 @[inline] def row (a : Raw) (x : UInt64) (t : Words64) : Words64 :=
+  -- CIOS, the multiplication loop `for j=0 to s-1`, `C := 0` first.
+  --
+  -- `(C,S) := t[j] + a[j]*b[i] + C`, `t[j] := S`; the paper's modulus `n` is `p` here.
   let u0 := mac a.w0 x t.w0 0
   let u1 := mac a.w1 x t.w1 u0.hi
   let u2 := mac a.w2 x t.w2 u1.hi
   let u3 := mac a.w3 x t.w3 u2.hi
+  -- `(C,S) := t[s] + C`, `t[s] := S`, `t[s+1] := C`.
   let u4 := plus t.top u3.hi 0
   -- The multiple is `m p`, with `m` the low word, since `-p^(-1) = 1 mod 2^64`.
   --
   -- The low word of `p` is `2^64 - 1`, so the low word plus `m (2^64 - 1)` is `m 2^64`.
   --
   -- It clears, and carries `m` into the next word.
+  --
+  -- `m := t[0]*n'[0] mod W`, with `W = 2^64` and `n'[0] = 1`.
   let m := u0.lo
-  -- That carry and `m (2^32 - 1)` make `m 2^32`, split into `lo` and `hi` at bit 64.
+  -- `(C,S) := t[0] + m*n[0]` gives `S = 0` and `C = m`, since `n[0] = 2^64 - 1`.
+  --
+  -- The reduction loop runs on the words of `p`; its carry `C` arrives as two terms.
+  --
+  -- j=1: `(C,S) := t[1] + m*n[1] + C`, `t[0] := S`, with `n[1] = 2^32 - 1`.
+  --
+  -- So `m*n[1] + C = m 2^32`, split into `lo` and `hi` at bit 64.
   let lo := m <<< 32
   let hi := m >>> 32
   let v1 := plus u1.lo lo 0
+  -- j=2: `(C,S) := t[2] + m*n[2] + C`, `t[1] := S`, with `n[2] = 0`.
   let v2 := plus u2.lo hi v1.hi
+  -- j=3: `(C,S) := t[3] + m*n[3] + C`, `t[2] := S`, with `n[3] = 2^64 - 2^32 + 1`.
+  --
   -- The top word of `p` is `2^64 - 2^32 + 1`, and `m` times it is `2^64 (m - hi) + m - lo`.
   --
   -- When `m < lo`, the low part borrows one from the high part.
   let d := minus m lo 0
   let v3 := plus u3.lo d.lo v2.hi
+  -- `(C,S) := t[s] + C`, `t[s-1] := S`, `t[s] := t[s+1] + C`.
   let v4 := plus u4.lo (m - hi - d.hi) v3.hi
   ⟨v1.lo, v2.lo, v3.lo, v4.lo, u4.hi + v4.hi⟩
 
@@ -236,6 +253,7 @@ theorem row_spec (a : Raw) (x : UInt64) (t : Words64) (ha : a.val < Fp.modulus)
 
 /-- The rows of `a b`, before the last correction: one row for each word of `b`. -/
 @[inline] def mulAcc (a b : Raw) : Words64 :=
+  -- CIOS: `for i=0 to s-1`, with `s = 4` and `t` set to `0` first.
   row a b.w3 (row a b.w2 (row a b.w1 (row a b.w0 ⟨0, 0, 0, 0, 0⟩)))
 
 /-- The rows give `a b` plus a multiple of `p`, divided by `2^256`, and stay below `2 p`. -/
