@@ -129,7 +129,7 @@ theorem fromBytesBE_eq {l : List Nat} {x : Fp}
   | nil => rfl
   | cons a t =>
     simp [ByteArray.set!, ByteArray.get!, xOf]
-    -- Both sides fold over the same bytes: a byte of value `u` adds `acc * 256 + u % 256`.
+    -- Both sides fold over the same bytes: a byte `u` maps `acc` to `256 acc + (u mod 256)`.
     rw [Base.bytesToNat, List.foldl_cons, List.foldl_map]
     refine congrArg₂ (fun f i => List.foldl f i t) ?_ ?_
     · funext acc u

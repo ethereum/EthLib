@@ -9,7 +9,7 @@ public import EthLib.Cryptography.Kzg.BitReversal
 
 Number-theoretic transforms over `Fr`, including a coset variant.
 
-The step comments quote the functions of the same names in consensus-specs at `8a3df1d7`:
+Consensus-specs writes these transforms out at `8a3df1d7`, as a reference point:
 <https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/fulu/polynomial-commitments-sampling.md>
 
 EIP-7594 links that file at `9d377fd5`; the later text has the interface used here.
@@ -109,9 +109,11 @@ The values and the roots of unity must have the same length, a power of two.
 
 Values of any other shape have no transform, and they come back unchanged. -/
 def fftFieldIter (vals roots : Array Fr) : Array Fr :=
-  -- _fft_field recurses on `vals[::2]` and `vals[1::2]`; this loop runs the same butterflies.
+  -- The butterflies of the recursive radix-2 FFT, run stage by stage in a loop.
   --
-  -- `o[i] = x + y * roots_of_unity[i]` and `o[i + len(L)] = x - y * roots_of_unity[i]`.
+  -- With `L` and `R` the transforms of the even and the odd entries, `o_i = L_i + w_i R_i`.
+  --
+  -- Likewise `o_(i + n/2) = L_i - w_i R_i`, where `w_i` is root `i` and `n` the length.
   if h : vals.size = 2 ^ vals.size.log2 ∧ roots.size = vals.size then
     (fftStages ⟨roots, h.2⟩ vals.size.log2
       ⟨bitReversalPermutation vals, by simp [bitReversalPermutation]⟩ 1
@@ -127,18 +129,18 @@ def fftField
     (vals : Array Fr) (rootsOfUnity : Array Fr)
     (inv : Bool := false) : Array Fr :=
   if inv then
-    -- fft_field: `invlen = BLSFieldElement(len(vals)).pow(BLSFieldElement(BLS_MODULUS - 2))`.
+    -- The inverse `1 / n = n^(r - 2)` of the length `n` in `Fr`.
     let invlen := (Fr.ofNat vals.size).inverse
-    -- `list(roots_of_unity[0:1]) + list(roots_of_unity[:0:-1])`.
+    -- The roots in reverse order after the first: `w_0, w_(n-1), ..., w_1`.
     --
     -- Root `i` of the inverse is root `n - i` of the forward transform, and root `0` stays.
     let n := rootsOfUnity.size
     let reversed := Array.ofFn (n := n) fun i =>
       rootsOfUnity[(n - i.val) % n]'(Nat.mod_lt _ (Nat.lt_of_le_of_lt (Nat.zero_le _) i.isLt))
-    -- `[x * invlen for x in _fft_field(vals, ...)]`.
+    -- Each output of the transform with these roots is multiplied by `1 / n`.
     (fftFieldIter vals reversed).map (· * invlen)
   else
-    -- `return _fft_field(vals, roots_of_unity)`.
+    -- The forward transform, with the roots as given.
     fftFieldIter vals rootsOfUnity
 
 /-- The FFT in `G1` of `2^k` points, by the Cooley-Tukey recursion.
@@ -187,14 +189,14 @@ def fftG1 (vals : Array Bls.G1) (rootsOfUnity : Array Fr) : Array Bls.G1 :=
 /-- Multiply successive values by successive powers of `factor`, starting at `shift`. -/
 def shiftValsAux (factor : Fr) : Fr → List Fr → List Fr
   | _, [] => []
-  -- shift_vals: `updated_vals.append(vals[i] * shift)` and `shift = shift * factor`.
+  -- Value `i` is multiplied by the current shift, then the shift is multiplied by `factor`.
   | shift, v :: rest => (v * shift) :: shiftValsAux factor (shift * factor) rest
 
 /-- Multiply `vals[i]` by `factor ^ i`, shifting the values onto a coset. -/
 def shiftVals
     (vals : Array Fr) (factor : Fr)
     : Array Fr :=
-  -- shift_vals: `shift = BLSFieldElement(1)`.
+  -- The shift starts at `1`, so value `i` is multiplied by `factor^i`.
   (shiftValsAux factor Fr.one vals.toList).toArray
 
 /-- The FFT or the inverse FFT over a coset of the roots of unity.
@@ -203,17 +205,17 @@ It serves to divide by a polynomial that vanishes on the unshifted domain. -/
 def cosetFftField
     (vals : Array Fr) (rootsOfUnity : Array Fr)
     (inv : Bool := false) : Array Fr :=
-  -- coset_fft_field: `shift_factor = BLSFieldElement(PRIMITIVE_ROOT_OF_UNITY)`.
+  -- The coset is shifted by `g = 7`, the primitive root of unity of `Fr`.
   let shiftFactor : Fr := Fr.ofNat PRIMITIVE_ROOT_OF_UNITY
   if inv then
-    -- `vals = fft_field(vals, roots_of_unity, inv)`.
+    -- The inverse transform comes first.
     let post := fftField vals rootsOfUnity inv
-    -- `return shift_vals(vals, shift_factor.inverse())`.
+    -- Then value `i` is multiplied by `g^(-i)`.
     shiftVals post shiftFactor.inverse
   else
-    -- `vals = shift_vals(vals, shift_factor)`.
+    -- Value `i` is first multiplied by `g^i`.
     let pre := shiftVals vals shiftFactor
-    -- `return fft_field(vals, roots_of_unity, inv)`.
+    -- Then the forward transform of the shifted values.
     fftField pre rootsOfUnity inv
 
 end EthLib.Cryptography.Kzg

@@ -19,7 +19,7 @@ The length is checked where a polynomial enters an operation.
 
 A polynomial in coefficient form is also an array of `Fr`, for the cells.
 
-The step comments of the evaluation form quote consensus-specs at `8a3df1d7`:
+Consensus-specs writes the evaluation form out at `8a3df1d7`, as a reference point:
 <https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/deneb/polynomial-commitments.md>
 -/
 
@@ -50,16 +50,16 @@ abbrev Bytes48 := Vector UInt8 48
 
 It rejects an integer of at least the modulus. -/
 def bytesToBlsField (b : Bytes32) : Except KzgError Fr :=
-  -- bytes_to_bls_field: `field_element = int.from_bytes(b, KZG_ENDIANNESS)`.
+  -- The 32 bytes are read as a big-endian integer `x`.
   --
-  -- `assert field_element < BLS_MODULUS`.
+  -- It fails unless `x < r`, for the modulus `r` of `Fr`.
   match Fr.fromBytesBE b with
   | .ok f    => .ok f
   | .error _ => .error (.invalidFieldElement none)
 
 /-- Encode `x` as 32 big-endian bytes. -/
 @[inline] def blsFieldToBytes (x : Fr) : Bytes32 :=
-  -- bls_field_to_bytes: `int.to_bytes(int(x), 32, KZG_ENDIANNESS)`.
+  -- The integer `0 <= x < r`, as 32 big-endian bytes.
   ⟨x.toBytesBE.data, Montgomery.toBytesBE_size x⟩
 
 /-- The 32 bytes of field element `i`, in bytes that hold `k` field elements in a row. -/
@@ -74,7 +74,7 @@ def fieldElementBytes {k : Nat} (bytes : Vector UInt8 (k * BYTES_PER_FIELD_ELEME
 
 /-- Decode the `k` field elements of `bytes`, in order.
 
-The first one that is not below `BLS_MODULUS` is rejected, with its index. -/
+The first one that is not below the modulus `r` of `Fr` is rejected, with its index. -/
 def bytesToBlsFields {k : Nat} (bytes : Vector UInt8 (k * BYTES_PER_FIELD_ELEMENT)) :
     Except KzgError (Array Fr) :=
   (Array.finRange k).mapM fun i =>
@@ -87,7 +87,7 @@ def computePowersAux (x current : Fr) : Nat → List Fr
 
 /-- Return `[x^0, x^1, ..., x^(n-1)]`. -/
 def computePowers (x : Fr) (n : Nat) : Array Fr :=
-  -- compute_powers: `current_power = BLSFieldElement(1)`, then `current_power * x`, `n` times.
+  -- The powers start at `x^0 = 1`, and each next one is the previous times `x`, `n` in all.
   (computePowersAux x Fr.one n).toArray
 
 /-- The `order`-th roots of unity in `Fr`: the powers of a primitive `order`-th root.
@@ -98,15 +98,15 @@ Every caller passes 64, 128, 4096 or 8192, which divide `r - 1`.
 
 For another order, the powers are those of an element that is not a primitive `order`-th root. -/
 def computeRootsOfUnity (order : Nat) : Array Fr :=
-  -- compute_roots_of_unity: `assert (BLS_MODULUS - 1) % int(order) == 0` is left out.
+  -- `order` must divide `r - 1`; that check is left out.
   --
-  -- Every caller passes an order that divides `BLS_MODULUS - 1`.
+  -- Every caller passes an order that divides `r - 1`.
   --
-  -- `root_of_unity = pow(PRIMITIVE_ROOT_OF_UNITY, (BLS_MODULUS - 1) // int(order), BLS_MODULUS)`.
+  -- The root is `w = 7^((r - 1) / order) mod r`, where 7 is the primitive root of unity.
   let exponent := (BLS_MODULUS - 1) / order
   let root :=
     (Fr.ofNat PRIMITIVE_ROOT_OF_UNITY) ^ (Fr.ofNat exponent)
-  -- `return compute_powers(root_of_unity, order)`.
+  -- The roots are `w^0, w^1, ..., w^(order - 1)`.
   computePowers root order
 
 @[simp] theorem length_computePowersAux (x current : Fr) (n : Nat) :
@@ -125,17 +125,15 @@ def computeRootsOfUnity (order : Nat) : Array Fr :=
 
 /-! ## Polynomials in coefficient form
 
-The step comments of this section quote consensus-specs at `8a3df1d7`.
-
-They quote its section "Polynomials in coefficient form", of the Fulu file:
+Consensus-specs writes these operations out at `8a3df1d7`, as a reference point:
 <https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/fulu/polynomial-commitments-sampling.md#polynomials-in-coefficient-form>
 -/
 
 /-- Sum the coefficient-form polynomials `a` and `b`. -/
 def addPolynomialcoeff (a b : PolynomialCoeff) : PolynomialCoeff :=
-  -- add_polynomialcoeff: `a, b = (a, b) if len(a) >= len(b) else (b, a)`.
+  -- The longer polynomial comes first, and `a` on a tie.
   let (a, b) := if a.size ≥ b.size then (a, b) else (b, a)
-  -- `[a[i] + (b[i] if i < length_b else BLSFieldElement(0)) for i in range(length_a)]`.
+  -- Coefficient `i` of the sum is `a_i + b_i`, with `b_i = 0` beyond the length of `b`.
   Array.ofFn (n := a.size) fun i =>
     let bi := if h : i.val < b.size then b[i.val] else Fr.zero
     a[i] + bi
@@ -147,16 +145,16 @@ It rejects factors whose sizes sum to more than 8192.
 So a product has at most 8191 coefficients. -/
 def multiplyPolynomialcoeff (a b : PolynomialCoeff) :
     Except KzgError PolynomialCoeff := do
-  -- multiply_polynomialcoeff: `assert len(a) + len(b) <= FIELD_ELEMENTS_PER_EXT_BLOB`.
+  -- The sizes of `a` and `b` must sum to at most 8192.
   if a.size + b.size > FIELD_ELEMENTS_PER_EXT_BLOB then
     throw (.polynomialProductTooLong a.size b.size)
-  -- `r = PolynomialCoeff([BLSFieldElement(0)])`, then the loop over `power, coef`.
+  -- The product `r` starts as the zero polynomial, then gains one summand per coefficient of `a`.
   return (Array.finRange a.size).foldl (init := #[Fr.zero]) fun r power =>
     let coef := a[power]
-    -- `summand = [BLSFieldElement(0)] * power + [coef * x for x in b]`.
+    -- The summand of coefficient `a_k` is `a_k x^k b(x)`: `k` zeros, then `a_k b_j` for each `j`.
     let summand : PolynomialCoeff :=
       Array.replicate power.val Fr.zero ++ b.map (· * coef)
-    -- `r = add_polynomialcoeff(r, summand)`.
+    -- The summand is added to `r`.
     addPolynomialcoeff r summand
 
 /-- Long division of two coefficient-form polynomials.
@@ -168,24 +166,24 @@ It rejects an empty divisor.
 It also rejects a divisor with a zero leading coefficient, when the loop would run. -/
 def dividePolynomialcoeff (a b : PolynomialCoeff) :
     Except KzgError PolynomialCoeff := do
-  -- Not in divide_polynomialcoeff, which reads `b[bpos]` and fails on an empty divisor.
+  -- An empty divisor has no leading coefficient, so it is rejected.
   if hb : b.size = 0 then
     throw .zeroDivisorPolynomial
-  -- `while diff >= 0` runs zero times when `a` is shorter than `b`, so `o` stays empty.
+  -- When `a` is shorter than `b`, no step runs, and the quotient is empty.
   else if hab : a.size < b.size then
     return #[]
   else
-    -- `bpos = len(b) - 1`.
+    -- The leading coefficient of `b` has index `|b| - 1`.
     let bpos := b.size - 1
     let lead := b[bpos]'(by omega)
-    -- Not in the source: a zero `b[bpos]` would make every `a[apos] / b[bpos]` divide by zero.
+    -- A zero leading coefficient of `b` would make every step divide by zero, so it is rejected.
     --
     -- Field division by zero returns 0 here, so it would fail silently.
     if lead.isZero then
       throw .zeroDivisorPolynomial
     -- The divisor's leading coefficient does not change, so its costly inverse is computed once.
     let bLeadInv := lead.inverse
-    -- One quotient coefficient per step, while `apos - t ≥ bpos`.
+    -- One quotient coefficient per step `t`, while `|a| - 1 - t >= |b| - 1`.
     --
     -- The remainder keeps the length of `a`, so each step reads and writes inside it.
     let steps := a.size + 1 - max b.size 1
@@ -193,19 +191,19 @@ def dividePolynomialcoeff (a b : PolynomialCoeff) :
       (init := (a.toVector, (Array.empty : PolynomialCoeff)))
       fun (r, o) t =>
         have ht : t.val < a.size + 1 - b.size := by have := t.isLt; omega
-        -- `apos = len(a) - 1`, then `apos -= 1` and `diff -= 1` at each step.
+        -- Step `t` reads coefficient `m = |a| - 1 - t` of the remainder, and `d = m - (|b| - 1)`.
         let apos := a.size - 1 - t.val
         let diff := apos - bpos
-        -- `quot = a[apos] / b[bpos]`.
+        -- The quotient coefficient `q = a_m / b_(|b| - 1)`, with `a` the current remainder.
         let quot := r[apos]'(by omega) * bLeadInv
-        -- `a[diff + i] = a[diff + i] - b[i] * quot`, for `i` from `bpos` down to 0.
+        -- `a_(d + i) := a_(d + i) - q b_i`, for `i` from `|b| - 1` down to 0.
         --
         -- The order of `i` does not matter: each step writes a distinct entry.
         let r := (Array.finRange b.size).foldl
           (fun r i =>
             have hi := i.isLt
             r.set (diff + i.val) (r[diff + i.val]'(by omega) - b[i] * quot) (by omega)) r
-        -- `o.insert(0, quot)`.
+        -- The quotient coefficient goes in front of the earlier ones.
         (r, #[quot] ++ o)
     return o
 
@@ -218,43 +216,43 @@ The points `xs` must be pairwise distinct.
 The weights invert `xs[i] - xs[j]`, and inversion in `Fr` sends 0 to 0. -/
 def interpolatePolynomialcoeff
     (xs ys : Array Fr) : Except KzgError PolynomialCoeff :=
-  -- interpolate_polynomialcoeff: `assert len(xs) == len(ys)`.
+  -- There must be as many values `ys` as points `xs`.
   if h : xs.size ≠ ys.size then
     throw (.inputLengthMismatch "ys" xs.size ys.size)
   else
-    -- `r = PolynomialCoeff([BLSFieldElement(0)])`, then the loop over `i`.
+    -- `r` starts as the zero polynomial, then gains one summand per point `i`.
     (Array.finRange xs.size).foldlM (init := #[Fr.zero]) fun r i => do
-      -- `summand = PolynomialCoeff([ys[i]])`, then the loop over `j != i`.
+      -- The summand of point `i` is `ys[i] * prod_(j != i) (x - xs[j]) / (xs[i] - xs[j])`.
       let summand ← (Array.finRange ys.size).foldlM (init := #[ys[i.val]'(by omega)])
         fun summand j =>
           if j.val ≠ i.val then
             let xj := xs[j.val]'(by omega)
-            -- `weight_adjustment = (xs[i] - xs[j]).inverse()`.
+            -- The weight `c = 1 / (xs[i] - xs[j])`.
             let weightAdj := (xs[i] - xj).inverse
-            -- `summand = multiply_polynomialcoeff(summand, [-weight_adjustment * xs[j], ...])`.
+            -- The summand is multiplied by `c x - c xs[j]`, the coefficients `-c xs[j]` and `c`.
             multiplyPolynomialcoeff summand #[(-weightAdj) * xj, weightAdj]
           else
             pure summand
-      -- `r = add_polynomialcoeff(r, summand)`.
+      -- The summand is added to `r`.
       return addPolynomialcoeff r summand
 
 /-- Compute the vanishing polynomial on `xs` (coefficient form). -/
 def vanishingPolynomialcoeff (xs : Array Fr) : Except KzgError PolynomialCoeff :=
-  -- vanishing_polynomialcoeff: `p = [1]`, then `p = multiply_polynomialcoeff(p, [-x, 1])`.
+  -- `p(x) = prod_k (x - xs[k])`, from `p = 1` times `x - xs[k]` for each point in order.
   xs.foldlM (init := #[Fr.one]) fun p x =>
     multiplyPolynomialcoeff p #[-x, Fr.one]
 
 /-- Evaluate a coefficient-form polynomial at `z` by Horner's rule, from the last coefficient. -/
 def evaluatePolynomialcoeff
     (polynomialCoeff : PolynomialCoeff) (z : Fr) : Fr :=
-  -- evaluate_polynomialcoeff: `y = 0`, then `y = y * z + coef` over `polynomial_coeff[::-1]`.
+  -- From `y = 0`, `y = y z + c_k` for `k` from the last coefficient down to `c_0`.
   polynomialCoeff.foldr (init := Fr.zero) fun c y => y * z + c
 
 /-- Convert evaluation form to coefficient form via inverse FFT. -/
 def polynomialEvalToCoeff (polynomial : Polynomial) : PolynomialCoeff :=
-  -- polynomial_eval_to_coeff: `roots_of_unity = compute_roots_of_unity(FIELD_ELEMENTS_PER_BLOB)`.
+  -- The 4096-th roots of unity, in their natural order.
   let roots := computeRootsOfUnity FIELD_ELEMENTS_PER_BLOB
-  -- `fft_field(bit_reversal_permutation(polynomial), roots_of_unity, inv=True)`.
+  -- The inverse FFT of the values, put back from bit-reversed order to natural order.
   fftField (bitReversalPermutation polynomial) roots (inv := true)
 
 
@@ -264,7 +262,7 @@ def polynomialEvalToCoeff (polynomial : Polynomial) : PolynomialCoeff :=
 
 It rejects a 32-byte chunk of at least the modulus. -/
 def blobToPolynomial (blob : Blob) : Except KzgError Polynomial :=
-  -- blob_to_polynomial: `bytes_to_bls_field` of each 32-byte slice `i`, in order.
+  -- Element `i` is the 32-byte slice `i` of the blob, read as an element of `Fr`, in order.
   bytesToBlsFields (k := FIELD_ELEMENTS_PER_BLOB) blob
 
 /-! ## Evaluating a polynomial in evaluation form -/
@@ -284,27 +282,27 @@ Value `i` of the polynomial is its value at point `i` of the domain.
 The two arrays must have the same length, and the evaluation reads them as pairs. -/
 def evaluatePolynomialInEvaluationFormAux
     (polynomial domain : Array Fr) (z : Fr) : Fr :=
-  -- The caller checks the width and passes `roots_of_unity_brp`.
+  -- The caller checks the width and passes the roots of unity in bit-reversed order.
   --
-  -- evaluate_polynomial_in_evaluation_form: `width = len(polynomial)`.
+  -- The width `W` is the number of values.
   let width := polynomial.size
-  -- `inverse_width = BLSFieldElement(width).inverse()`.
+  -- `1 / W` in `Fr`.
   let inverseWidth := (Fr.ofNat width).inverse
   let points := polynomial.zip domain
-  -- `if z in roots_of_unity_brp: return polynomial[eval_index]`.
+  -- If `z = D[i]` for a point of the domain, the value is entry `i`.
   match points.find? (·.2 == z) with
   | some (y, _) => y
   | none =>
-    -- The barycentric formula, where `z` is not in the domain, so no `z - domain[i]` is zero.
+    -- The barycentric formula, where `z` is not in the domain, so no `z - D[i]` is zero.
     --
-    -- `b = z - roots_of_unity_brp[i]`, all inverted with one batch inversion.
+    -- The denominators `z - D[i]`, all inverted with one batch inversion.
     let inverses := Fr.batchInverse (points.map fun (_, d) => z - d)
-    -- `a = polynomial[i] * roots_of_unity_brp[i]`, and `result += a / b`.
+    -- The sum `S = sum_i f(D[i]) D[i] / (z - D[i])`.
     let acc := (points.zip inverses).foldl (init := Fr.zero) fun acc ((y, d), inv) =>
       acc + y * d * inv
-    -- `r = z.pow(BLSFieldElement(width)) - BLSFieldElement(1)`.
+    -- `z^W - 1`.
     let r := z ^ (Fr.ofNat width) - Fr.one
-    -- `result = result * r * inverse_width`.
+    -- `f(z) = S (z^W - 1) / W`.
     acc * r * inverseWidth
 
 /-- Evaluate an evaluation-form polynomial at `z`.
@@ -318,10 +316,10 @@ Otherwise it is the barycentric formula, for the domain size `W`:
 It rejects a polynomial that does not have exactly 4096 elements. -/
 def evaluatePolynomialInEvaluationForm
     (polynomial : Polynomial) (z : Fr) : Except KzgError Fr :=
-  -- evaluate_polynomial_in_evaluation_form: `assert width == FIELD_ELEMENTS_PER_BLOB`.
+  -- The width must be 4096 values.
   if polynomial.size ≠ FIELD_ELEMENTS_PER_BLOB then
     .error (.badPolynomialSize polynomial.size)
-  -- `roots_of_unity_brp = bit_reversal_permutation(compute_roots_of_unity(...))`.
+  -- The domain is the 4096-th roots of unity in bit-reversed order.
   else
     .ok (evaluatePolynomialInEvaluationFormAux polynomial
       (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB) z)
