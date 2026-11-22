@@ -888,6 +888,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- The TLS 1.3 codec takes two floors of [RFC 9846](https://www.rfc-editor.org/rfc/rfc9846), which obsoletes RFC 8446 ([#4234](https://github.com/ethereum/EthLib/issues/4234)).
+  A ClientHello extension block may have 7 bytes, a lone supported_versions extension, as RFC 9846 §4.2.2 and the verified [erratum 8423](https://www.rfc-editor.org/errata/eid8423) of RFC 8446 say, where the codec asked for 8.
+  A CertificateRequest extension block may be empty, as RFC 9846 §4.4.2 says, where the codec asked for 2 bytes.
+  `encode_message` and `decode_message` now accept both, where they raised `TlsHandshakeError` with the local code 2.
+  The handshake steps still require signature_algorithms in a CertificateRequest, so an empty block now gives missing_extension in place of decode_error.
+
 - A QUIC 0-RTT packet that carries a RETIRE_CONNECTION_ID frame now fails with PROTOCOL_VIOLATION, as the verified [erratum 7365](https://www.rfc-editor.org/errata/eid7365) of RFC 9000 asks ([#4222](https://github.com/ethereum/EthLib/issues/4222)).
   The erratum corrects Table 3 of §12.4 to allow the frame in 1-RTT packets only, as the end of §12.5 already said.
   `decode_frame` on a 0-RTT packet now raises `QuicError` with the local code 9 for frame type `0x19`, where it returned the frame.

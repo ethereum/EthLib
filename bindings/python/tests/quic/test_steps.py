@@ -690,13 +690,18 @@ def test_client_rejects_a_client_hello_instead_of_server_hello() -> None:
         ("context", "illegalParameter", 0x12F),
         # The missing extension is signature_algorithms, type 13.
         ("no_signature_algorithms", "missingExtension 13", 0x16D),
+        ("no_extensions", "missingExtension 13", 0x16D),
         ("no_common_scheme", "handshakeFailure", 0x128),
         ("misplaced_extension", "illegalParameter", 0x12F),
     ],
 )
 def test_client_checks_the_certificate_request(
     change: Literal[
-        "context", "no_signature_algorithms", "no_common_scheme", "misplaced_extension"
+        "context",
+        "no_signature_algorithms",
+        "no_extensions",
+        "no_common_scheme",
+        "misplaced_extension",
     ],
     expected: str,
     code: int,
@@ -710,6 +715,9 @@ def test_client_checks_the_certificate_request(
     elif change == "no_signature_algorithms":
         # RFC 8446 §4.3.2: signature_algorithms MUST be present; unknown extensions are ignored.
         request[1]["extensions"] = [{"kind": 0xAAAA, "data": b""}]
+    elif change == "no_extensions":
+        # RFC 9846 §4.4.2: an empty extension block is well formed, yet lacks signature_algorithms.
+        request[1]["extensions"] = []
     elif change == "no_common_scheme":
         replace_extension(
             request[1]["extensions"], 13, tls.encode_payload(("signature_algorithms", [0x0804]))
