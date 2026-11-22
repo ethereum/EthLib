@@ -30,6 +30,7 @@ When `b7` is set, the shift drops `x^8`.
 
 Adding `{1b}` puts back its remainder `x^4 + x^3 + x + 1`. -/
 def xtimes (b : UInt8) : UInt8 :=
+  -- (4.5): `{b6 b5 b4 b3 b2 b1 b0 0}` if `b7 = 0`, else that XOR `{00011011}`.
   if b &&& 0x80 = 0 then b <<< 1 else (b <<< 1) ^^^ 0x1b
 
 /-- The sum of `b • x^i` over the bits `i` of `c` below `n`, from bit 0 up.
@@ -37,6 +38,9 @@ def xtimes (b : UInt8) : UInt8 :=
 The argument `b` holds `b • x^i` at step `i`, as the table of FIPS 197 §4.2 (4.6) builds it. -/
 def mulAux : Nat → UInt8 → UInt8 → UInt8
   | 0, _, _ => 0
+  -- (4.6) and (4.7): add `b * x^i` when bit `i` of `c` is set.
+  --
+  -- The next term `b * x^(i+1)` is `XTIMES(b * x^i)`.
   | n + 1, b, c => (if c &&& 1 = 0 then 0 else b) ^^^ mulAux n (xtimes b) (c >>> 1)
 
 /-- The product `b • c` in GF(2^8), as FIPS 197 §4.2 (4.7) computes it.
@@ -63,6 +67,7 @@ Square-and-multiply runs over the bits of 254, which is `11111110` in binary.
 
 Each step squares, then multiplies by `b` when the next bit is set. -/
 def inv (b : UInt8) : UInt8 :=
+  -- (4.11): `b^-1 = b^254`, high bit of 254 first.
   [true, true, true, true, true, true, true, false].foldl
     (fun acc bit => if bit then mul (mul acc acc) b else mul acc acc) 1
 
@@ -70,13 +75,9 @@ def inv (b : UInt8) : UInt8 :=
 def bit (b : UInt8) (i : Nat) : UInt8 :=
   (b >>> (i % 8).toUInt8) &&& 1
 
-/-- The affine transformation of FIPS 197 §5.1.1 (5.3), with `c = {63}`:
-
-```text
-    b'_i = b_i ^ b_(i+4) ^ b_(i+5) ^ b_(i+6) ^ b_(i+7) ^ c_i     indices mod 8
-```
--/
+/-- The affine transformation of FIPS 197 §5.1.1 (5.3), with `c = {63}`. -/
 def affine (b : UInt8) : UInt8 :=
+  -- (5.3): `b'_i = b_i XOR b_(i+4) XOR b_(i+5) XOR b_(i+6) XOR b_(i+7) XOR c_i`, indices mod 8.
   (List.range 8).foldl
     (fun acc i =>
       acc ||| ((bit b i ^^^ bit b (i + 4) ^^^ bit b (i + 5) ^^^ bit b (i + 6) ^^^ bit b (i + 7) ^^^
@@ -85,6 +86,7 @@ def affine (b : UInt8) : UInt8 :=
 
 /-- SBOX of FIPS 197 §5.1.1: the inverse of (5.2), `{00}` to `{00}`, then the affine map. -/
 def sbox (b : UInt8) : UInt8 :=
+  -- (5.2): `b~ = {00}` if `b = {00}`, else `b^-1`; then the affine map (5.3) of `b~`.
   affine (if b = 0 then 0 else inv b)
 
 end Internal
@@ -164,15 +166,19 @@ abbrev Word := Vector UInt8 4
 
 /-- SUBBYTES of FIPS 197 §5.1.1: the S-box on each byte of the state. -/
 def subBytes (s : Block) : Block :=
+  -- `s'[r, c] = SBOX(s[r, c])` for every byte of the state.
   s.map sbox
 
 /-- SHIFTROWS of FIPS 197 §5.1.2 (5.5): `s'[r, c] = s[r, (c + r) mod 4]`. -/
 def shiftRows (s : Block) : Block :=
+  -- (5.5): `s'[r, c] = s[r, (c + r) mod 4]`.
+  --
   -- Index `i` holds `s'[r, c]` with `r = i mod 4` and `c = i / 4`.
   Vector.ofFn fun i => s[i.val % 4 + 4 * ((i.val / 4 + i.val % 4) % 4)]'(by omega)
 
 /-- Multiplication of a word by the fixed matrix of `[a0, a1, a2, a3]`, FIPS 197 §4.3 (4.8). -/
 def mulWord (a b : Word) : Word := #v[
+  -- (4.8): `d_i = XOR_j (a_((i - j) mod 4) * b_j)`.
   mul a[0] b[0] ^^^ mul a[3] b[1] ^^^ mul a[2] b[2] ^^^ mul a[1] b[3],
   mul a[1] b[0] ^^^ mul a[0] b[1] ^^^ mul a[3] b[2] ^^^ mul a[2] b[3],
   mul a[2] b[0] ^^^ mul a[1] b[1] ^^^ mul a[0] b[2] ^^^ mul a[3] b[3],
@@ -191,12 +197,18 @@ def mixColumnsWith (a : Word) (s : Block) : Block :=
 
 /-- MIXCOLUMNS of FIPS 197 §5.1.3, with the word `[{02}, {01}, {01}, {03}]` of (5.6). -/
 def mixColumns (s : Block) : Block :=
+  -- (5.7): each column times the matrix of the word (5.6).
+  --
+  -- (5.8): `s'[0, c] = ({02} * s[0, c]) XOR ({03} * s[1, c]) XOR s[2, c] XOR s[3, c]`.
+  --
+  -- That is row 0; rows 1 to 3 rotate the same coefficients.
   mixColumnsWith #v[0x02, 0x01, 0x01, 0x03] s
 
 /-- ADDROUNDKEY of FIPS 197 §5.1.4 (5.9): the state XOR the round key.
 
 The round key is the words `w[4 round .. 4 round + 3]`, laid out as the state. -/
 def addRoundKey (s roundKey : Block) : Block :=
+  -- (5.9): each column `[s'[0, c], ..., s'[3, c]] = [s[0, c], ..., s[3, c]] XOR w[4 round + c]`.
   Vector.zipWith (· ^^^ ·) s roundKey
 
 /-! ## The transformations of the inverse cipher -/
@@ -205,14 +217,17 @@ def addRoundKey (s roundKey : Block) : Block :=
 
 Since `r < 4`, `(c - r) mod 4` is `(c + 4 - r) mod 4` in natural numbers. -/
 def invShiftRows (s : Block) : Block :=
+  -- (5.12): `s'[r, c] = s[r, (c - r) mod 4]`, at index `r + 4c`.
   Vector.ofFn fun i => s[i.val % 4 + 4 * ((i.val / 4 + 4 - i.val % 4) % 4)]'(by omega)
 
 /-- INVSUBBYTES of FIPS 197 §5.3.2: the inverse S-box on each byte of the state. -/
 def invSubBytes (s : Block) : Block :=
+  -- `s'[r, c] = INVSBOX(s[r, c])` for every byte of the state.
   s.map invSbox
 
 /-- INVMIXCOLUMNS of FIPS 197 §5.3.3, with the word `[{0e}, {09}, {0d}, {0b}]` of (5.13). -/
 def invMixColumns (s : Block) : Block :=
+  -- (5.14): each column times the matrix of the word (5.13).
   mixColumnsWith #v[0x0e, 0x09, 0x0d, 0x0b] s
 
 /-! ## The key expansion -/
@@ -223,10 +238,12 @@ def xorWord (a b : Word) : Word :=
 
 /-- ROTWORD of FIPS 197 §5.2 (5.10): `[a0, a1, a2, a3]` to `[a1, a2, a3, a0]`. -/
 def rotWord (a : Word) : Word :=
+  -- (5.10): `ROTWORD([a0, a1, a2, a3]) = [a1, a2, a3, a0]`.
   #v[a[1], a[2], a[3], a[0]]
 
 /-- SUBWORD of FIPS 197 §5.2 (5.11): the S-box on each byte of a word. -/
 def subWord (a : Word) : Word :=
+  -- (5.11): `SUBWORD([a0, ..., a3]) = [SBOX(a0), ..., SBOX(a3)]`.
   a.map sbox
 
 /-- The round constant `Rcon[j] = [x^(j-1), {00}, {00}, {00}]` of FIPS 197 §5.2.
@@ -241,10 +258,14 @@ def rcon (j : Nat) : Word :=
 
 It is lines 8 to 14 of FIPS 197 §5.2, Algorithm 2. -/
 def nextWord (Nk i : Nat) (prev back : Word) : Word :=
+  -- Line 8: `temp <- w[i - 1]`, which the caller passes.
   let temp :=
+    -- Lines 9 and 10: if `i mod Nk = 0`, `temp <- SUBWORD(ROTWORD(temp)) XOR Rcon[i/Nk]`.
     if i % Nk = 0 then xorWord (subWord (rotWord prev)) (rcon (i / Nk))
+    -- Lines 11 and 12: else if `Nk > 6` and `i mod Nk = 4`, `temp <- SUBWORD(temp)`.
     else if Nk > 6 ∧ i % Nk = 4 then subWord prev
     else prev
+  -- Line 14: `w[i] <- w[i - Nk] XOR temp`.
   xorWord back temp
 
 /-- KEYEXPANSION of FIPS 197 §5.2, Algorithm 2: the key schedule `w[0 .. 4 Nr + 3]`.
@@ -266,16 +287,19 @@ def keyExpansion (Nk Nr : Nat) (key : Vector UInt8 (4 * Nk)) : Vector Word (4 * 
 
 /-- The round key of round `round`: the words `w[4 round .. 4 round + 3]`, laid out as the state. -/
 def roundKey {Nr : Nat} (w : Vector Word (4 * (Nr + 1))) (round : Nat) (h : round ≤ Nr) : Block :=
+  -- Byte `r + 4c` is byte `r` of `w[4 round + c]`, the word that (5.9) adds to column `c`.
   Vector.ofFn fun i => (w[4 * round + i.val / 4]'(by omega))[i.val % 4]'(by omega)
 
 /-! ## The cipher and its inverse -/
 
 /-- One middle round of CIPHER, lines 5 to 8 of FIPS 197 §5.1, Algorithm 1. -/
 def round (s roundKey : Block) : Block :=
+  -- Lines 5 to 8: SUBBYTES, SHIFTROWS, MIXCOLUMNS, then ADDROUNDKEY.
   addRoundKey (mixColumns (shiftRows (subBytes s))) roundKey
 
 /-- One middle round of INVCIPHER, lines 5 to 8 of FIPS 197 §5.3, Algorithm 3. -/
 def invRound (s roundKey : Block) : Block :=
+  -- Lines 5 to 8: INVSHIFTROWS, INVSUBBYTES, ADDROUNDKEY, then INVMIXCOLUMNS.
   invMixColumns (addRoundKey (invSubBytes (invShiftRows s)) roundKey)
 
 /-- The middle rounds `1` to `Nr - 1`, each with a proof that its round key exists. -/
@@ -329,12 +353,14 @@ abbrev Key (k : KeySize) := Vector UInt8 (4 * k.Nk)
 
 It takes a secret key. -/
 def ciph (k : KeySize) (key : Key k) (input : Block) : Block :=
+  -- (5.1): `CIPHER(in, Nr, KEYEXPANSION(key))`.
   cipher k.Nr (keyExpansion k.Nk k.Nr key) input
 
 /-- The inverse cipher `CIPH_K^-1` of FIPS 197 §5 (5.1): `INVCIPHER(in, Nr, KEYEXPANSION(key))`.
 
 It takes a secret key. -/
 def ciphInv (k : KeySize) (key : Key k) (input : Block) : Block :=
+  -- (5.1): `INVCIPHER(in, Nr, KEYEXPANSION(key))`.
   invCipher k.Nr (keyExpansion k.Nk k.Nr key) input
 
 end EthLib.Cryptography.Aes
