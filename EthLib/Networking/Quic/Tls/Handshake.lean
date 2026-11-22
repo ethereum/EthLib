@@ -215,11 +215,15 @@ def supportedSuite (suite : CodePoint) : Bool :=
   -- TLS_CHACHA20_POLY1305_SHA256 is {0x13,0x03}.
   suite.val == 0x1301 || suite.val == 0x1303
 
-/-- Separate an unexpected message type from malformed data, RFC 8446 §§4 and 6.2. -/
+/-- Map a codec error to its alert: unexpected message, protocol version, or a malformed field.
+
+RFC 8446 §§4 and 6.2 name the alerts. -/
 def wire {α : Type} (value : Except Wire.Error α) : Except Error α :=
   value.mapError fun
     -- §6.2: an inappropriate message, such as the wrong handshake message, is unexpected_message.
     | .messageType _ | .retry => .unexpectedMessage
+    -- RFC 9846 §§4.2.2 to 4.2.4: a hello whose legacy version is not 0x0303 is protocol_version.
+    | .legacyVersion => .protocolVersion
     -- §6.2: a field that is incorrect, or inconsistent with other fields, is illegal_parameter.
     --
     -- §4.2 names no alert for a repeated extension type, so EthLib takes this one.

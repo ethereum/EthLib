@@ -24,7 +24,9 @@ namespace EthLib.Networking.Quic.Tls.Wire
 
 /-- A malformed wire field, an unsupported message, or a misplaced transcript retry.
 
-A fixed field with another value, or an extension of the wrong type, is a constant error. -/
+A fixed field with another value, or an extension of the wrong type, is a constant error.
+
+The legacy version of a hello has its own error, since its alert differs. -/
 inductive Error where
   /-- A field needs `needed` bytes, and only `available` are left. -/
   | truncated (needed available : Nat)
@@ -40,6 +42,8 @@ inductive Error where
   | messageType (type : UInt8)
   /-- The transcript cannot take a retry here: it has already retried, or has more messages. -/
   | retry
+  /-- A hello's legacy version is not `0x0303` (RFC 9846 §§4.2.2 to 4.2.4). -/
+  | legacyVersion
   deriving Repr, DecidableEq
 
 /-- Stable local codes, independent of the TLS alert numbers. -/
@@ -51,6 +55,7 @@ def Error.code : Error → UInt32
   | .duplicateExtension _ => 5
   | .messageType _ => 6
   | .retry => 7
+  | .legacyVersion => 8
 
 /-- A reader consumes a prefix of a byte list. -/
 abbrev Reader (α : Type) := Encoding.ByteReader.Reader Error α

@@ -309,7 +309,7 @@ theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : L
     have sameKind : kind = 1 := UInt8.toNat_inj.mp tag
     subst kind
     change (uint 2 input >>= fun (version, a) =>
-      require (version = 0x0303) .constant a >>= fun (_, b) =>
+      require (version = 0x0303) .legacyVersion a >>= fun (_, b) =>
       vector 32 b >>= fun (random, c) =>
       blob 1 0 32 c >>= fun (session, d) =>
       items 2 2 65534 codePoint d >>= fun (suites, e) =>
@@ -341,7 +341,7 @@ theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : L
     have sameKind : kind = 2 := UInt8.toNat_inj.mp tag
     subst kind
     change (uint 2 input >>= fun (version, a) =>
-      require (version = 0x0303) .constant a >>= fun (_, b) =>
+      require (version = 0x0303) .legacyVersion a >>= fun (_, b) =>
       vector 32 b >>= fun (random, c) =>
       blob 1 0 32 c >>= fun (session, d) =>
       codePoint d >>= fun (suite, e) =>

@@ -888,6 +888,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- A TLS 1.3 hello whose legacy_version is not `0x0303` now fails with protocol_version, as RFC 9846 §§4.2.2 to 4.2.4 ask, where it failed with illegal_parameter ([#4234](https://github.com/ethereum/EthLib/issues/4234)).
+  `decode_message` and `transcript` raise `TlsHandshakeError` with the new local code 8, `legacyVersion`, where they raised code 4, `constant`.
+  `client_step` and `server_step` raise `TlsStepError` with the QUIC code `0x146`, where they raised `0x12f`.
+  In Lean, `Wire.Error` has the new constructor `legacyVersion`, which the step layer maps to `protocolVersion`.
+
 - The TLS 1.3 codec takes two floors of [RFC 9846](https://www.rfc-editor.org/rfc/rfc9846), which obsoletes RFC 8446 ([#4234](https://github.com/ethereum/EthLib/issues/4234)).
   A ClientHello extension block may have 7 bytes, a lone supported_versions extension, as RFC 9846 §4.2.2 and the verified [erratum 8423](https://www.rfc-editor.org/errata/eid8423) of RFC 8446 say, where the codec asked for 8.
   A CertificateRequest extension block may be empty, as RFC 9846 §4.4.2 says, where the codec asked for 2 bytes.
