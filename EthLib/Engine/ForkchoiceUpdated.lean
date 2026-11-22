@@ -14,71 +14,9 @@ The choice of the head in `engine_forkchoiceUpdated`, versions 1 to 5, without a
 
 The consensus layer names a head, a safe block and a finalized block.
 
-The execution layer knows a tree of payloads, each with its parent and its validity.
+The execution layer knows a tree of blocks, and the finalized block of an earlier update.
 
-The tree may also hold blocks of proof of work, each with its total difficulty and its parent's.
-
-A head that the tree does not hold is syncing.
-
-The most recent block of proof of work on the chain of the head must be terminal.
-
-The head itself counts.
-
-Step 3 asks this of a head of proof of work, and step 2 of payload validation of a payload.
-
-Otherwise the head is invalid, with the zero hash as its latest valid hash, and it is not applied.
-
-A head that is invalid stays invalid, with the latest valid ancestor as the latest valid hash.
-
-That hash is zero when the ancestor is a block of proof of work, by step 3 of payload validation.
-
-The execution layer may also know a finalized block, the latest one that an earlier update named.
-
-A valid head below that block is valid, and the forkchoice state is neither checked nor applied.
-
-Its chain must still pass the terminal block check, which this model runs first.
-
-Step 2 applies only to a valid block, and a chain that fails that check is not valid.
-
-The source allows the update to be skipped there, and this model skips it.
-
-A head equal to that block follows the steps below, as for any other valid head.
-
-A valid head becomes the head of the canonical chain.
-
-The safe and the finalized block must then be the head or its ancestors, unless they are zero.
-
-Otherwise the state is invalid, with JSON-RPC code `-38002`.
-
-The source allows zero hashes only until the transition block is finalized.
-
-This model takes the transition block as finalized when the known finalized block is a held payload.
-
-The finalized hash of the request itself does not count.
-
-A zero safe or finalized hash then gives `-38002`.
-
-No step names an error for that case, and this model reads it as an invalid state of step 9.
-
-The parameters are the forkchoice state, with exactly its three fields, and the payload attributes.
-
-The payload attributes are an object or `null`; any other value is an invalid parameter.
-
-From version 4 the custody columns may follow, as 16 bytes or `null`.
-
-Any other value of them is an invalid parameter.
-
-EIP-8070 and the OpenRPC description of the method make them optional.
-
-So versions 4 and 5 also take two parameters.
-
-That description also makes the payload attributes optional in every version.
-
-This model still asks for them, as `null` when there are none.
-
-The source runs the update of the custody set apart from the forkchoice update.
-
-So custody columns that decode never change the answer.
+A step comment without a version names a step of [`engine_forkchoiceUpdatedV1`][v1].
 
 Payload attributes count only when the update applies a valid head.
 
@@ -150,13 +88,9 @@ When the update applies no valid head, no build begins, so the attributes change
 
 The consensus layer writes the forkchoice state, the payload attributes and the parameters as JSON.
 
-This model leaves out step 6, since the source lets each client set the deepest reorg it takes.
-
-Past that depth, step 6 returns `-38006`.
-
 The method specifications state these rules, at commit `3284ee8` of execution-apis:
 
-- [`engine_forkchoiceUpdatedV1`][v1], steps 2 to 5, 7, 8 and 9
+- [`engine_forkchoiceUpdatedV1`][v1], steps 1 to 9, without the reorg limit of step 6
 - the structure [`ForkchoiceStateV1`][fcs], with its note on zero hashes
 - the [payload validation][validation] of Paris, with its terminal block check
 - the [definitions][eip3675] of EIP-3675, for a terminal block of proof of work
@@ -166,7 +100,7 @@ The method specifications state these rules, at commit `3284ee8` of execution-ap
 - the updates of earlier versions by [Cancun][v2-cancun] and [Prague][v3-prague]
 - the update of earlier versions by [Osaka][osaka], which leaves version 3 unchanged
 - the update of version 3 by [Amsterdam][v3-amsterdam]
-- the [OpenRPC description][rpc] of the four versions, for the parameters that each requires
+- the [OpenRPC description][rpc] of the five versions, for the parameters that each requires
 
 Each version has its payload attributes: [version 1][a1], [version 2][a2] and [version 3][a3].
 
@@ -257,73 +191,89 @@ def ZERO_HASH : Hash32 := Vector.replicate 32 0
 
 /-- The hashes from a block back through its known ancestors, at most `fuel` of them. -/
 def ancestors (tree : PayloadTree) : Nat → Hash32 → List Hash32
+  -- The fuel bounds the walk, so a tree whose parents form a cycle still ends.
   | 0, _ => []
   | fuel + 1, hash =>
     match tree.lookup hash with
+    -- A held block, then the ancestors of its parent.
     | some p => hash :: ancestors tree fuel p.parentHash
+    -- The chain stops at the first block that the tree does not hold.
     | none => []
 
 /-- The chain of a block in a tree: the block and its known ancestors. -/
 def chainOf (tree : PayloadTree) (hash : Hash32) : List Hash32 :=
+  -- A chain without a cycle holds each block of the tree at most once, so this fuel suffices.
   ancestors tree tree.length hash
 
 /-- The most recent valid block on the chain of a block, if any. -/
 def latestValid (tree : PayloadTree) (hash : Hash32) : Option Hash32 :=
+  -- Payload validation, step 3: the ancestor that is `VALID`, below ancestors that are `INVALID`.
+  --
+  -- The chain runs from the block down, so its first valid block is that ancestor.
   (chainOf tree hash).find? fun h => (tree.lookup h).any (·.valid)
 
-/-- The latest valid hash of an invalid block: the latest valid block of its chain.
-
-It is zero when that block is of proof of work, by step 3 of payload validation. -/
+/-- The latest valid hash of an invalid block: the latest valid block of its chain. -/
 def latestValidHash (tree : PayloadTree) (hash : Hash32) : Option Hash32 :=
+  -- Payload validation, step 3: the latest valid hash is the block hash of that ancestor.
+  --
+  -- It is `0x00..00` when that ancestor is a PoW block.
+  --
+  -- It is `null` when no such ancestor is known.
   (latestValid tree hash).map fun v => if (tree.lookup v).any (·.isPow) then ZERO_HASH else v
 
-/-- The totals of the most recent block of proof of work on the chain of a block, if any.
-
-The block itself counts. -/
+/-- The totals of the most recent block of proof of work on the chain of a block, if any. -/
 def latestPow (tree : PayloadTree) (hash : Hash32) : Option (Nat × Nat) :=
+  -- Payload validation, step 2, reads the most recent PoW block among the ancestors of a payload.
+  --
+  -- Step 3 reads the head when it is a PoW block, so the block itself counts here.
   (chainOf tree hash).findSome? fun h => (tree.lookup h).bind (·.powTotalDifficulty)
 
-/-- Whether the chain of a block passes the terminal block check.
-
-Its most recent block of proof of work must be terminal.
-
-The model lets a chain with no block of proof of work in the tree pass, as one after the transition.
--/
+/-- Whether the chain of a block passes the terminal block check. -/
 def chainPassesTerminalCheck (transition : TransitionConfiguration) (tree : PayloadTree)
     (hash : Hash32) : Bool :=
   match latestPow tree hash with
+  -- EIP-3675: a terminal PoW block has a total difficulty of at least the terminal one.
+  --
+  -- Its parent has a total difficulty below the terminal one.
   | some (totalDifficulty, parentTotalDifficulty) =>
     isTerminalPowBlock transition totalDifficulty parentTotalDifficulty
+  -- No PoW block in the tree: EthLib takes the chain as one after the transition, so it passes.
   | none => true
 
 /-- Whether the transition block is finalized: the known finalized block is a payload in the tree.
 
-Without a known finalized block, or with one that the tree does not hold, it is not.
-
 The finalized hash of the request does not count. -/
 def transitionFinalized (tree : PayloadTree) (finalized : Option Hash32) : Bool :=
   match finalized.bind (tree.lookup ·) with
+  -- EIP-3675: `TRANSITION_BLOCK` is the earliest PoS block of the canonical chain.
+  --
+  -- A finalized PoS block is that block or a descendant of it, so that block is finalized too.
   | some p => !p.isPow
+  -- Without a known finalized block, or with one that the tree does not hold, EthLib says no.
   | none => false
 
-/-- Whether the forkchoice state has a zero safe or finalized hash after the transition.
-
-The structure of the state allows zero hashes only until the transition block is finalized. -/
+/-- Whether the forkchoice state has a zero safe or finalized hash after the transition. -/
 def zeroAfterTransition (tree : PayloadTree) (finalized : Option Hash32)
     (state : ForkchoiceState) : Bool :=
+  -- The note on zero hashes of `ForkchoiceStateV1`, once the transition block is finalized.
   transitionFinalized tree finalized &&
     (state.safeBlockHash == ZERO_HASH || state.finalizedBlockHash == ZERO_HASH)
 
 /-- Whether a block of the forkchoice state is zero or on the chain of the head. -/
 def onChain (tree : PayloadTree) (head hash : Hash32) : Bool :=
+  -- A zero hash passes here, and the check of zero hashes after the transition runs apart.
+  --
+  -- Otherwise the block is the head or one of the ancestors of the head that the tree holds.
   hash == ZERO_HASH || (chainOf tree head).contains hash
 
-/-- Whether a block is a strict ancestor of the finalized block that the execution layer knows.
-
-It is not when the execution layer knows no finalized block. -/
+/-- Whether a block is a strict ancestor of the finalized block that the execution layer knows. -/
 def belowFinalized (tree : PayloadTree) (finalized : Option Hash32) (hash : Hash32) : Bool :=
   match finalized with
+  -- Step 2: an ancestor of the latest known finalized block.
+  --
+  -- EthLib reads ancestor as strict, so a head equal to that block runs the steps after step 2.
   | some f => hash != f && (chainOf tree f).contains hash
+  -- Step 2 needs a known finalized block.
   | none => false
 
 /-- The status of a forkchoice update, and the new head when it changes.
@@ -335,29 +285,78 @@ def forkchoiceUpdated (transition : TransitionConfiguration) (tree : PayloadTree
     (finalized : Option Hash32) (state : ForkchoiceState) :
     Except EngineError (PayloadStatus × Option Hash32) :=
   match tree.lookup state.headBlockHash with
+  -- Steps 1 and 9: an unknown head is `SYNCING`, with a `null` latest valid hash.
+  --
+  -- Step 1 lets the client start a sync, which EthLib leaves out.
   | none => pure (⟨.syncing, none⟩, none)
   | some head =>
-    -- Step 3, and step 2 of payload validation: the latest block of proof of work must be terminal.
+    -- Step 3: a PoW head satisfies the terminal block conditions of EIP-3675.
+    --
+    -- Payload validation, step 2: so does the most recent PoW block among the ancestors.
+    --
+    -- On failure, step 9 answers `INVALID` with `0x00..00`, and the state is not updated.
+    --
+    -- Version 2, step 1 lets a client skip both checks.
+    --
+    -- EthLib runs them in every version, so that one rule serves all versions.
+    --
+    -- The check runs first, since a chain that fails it is not `VALID`, as step 2 below needs.
     if !chainPassesTerminalCheck transition tree state.headBlockHash then
       pure (⟨.invalid, some ZERO_HASH⟩, none)
+    -- Step 4: the head must be `VALID`, or the state is not updated.
+    --
+    -- Step 9: an `INVALID` head has the `validHash` of payload validation, step 3.
+    --
+    -- The tree holds the result of payload validation, which EthLib does not run.
     else if !head.valid then pure (⟨.invalid, latestValidHash tree state.headBlockHash⟩, none)
-    -- Step 2: a valid head below the known finalized block is valid, and the update is skipped.
+    -- Step 2: a `VALID` ancestor of the known finalized block is `VALID`, with its own hash.
+    --
+    -- The client may skip the update, and EthLib skips it, so the checks of the state do not run.
+    --
+    -- No payload build begins, since no head is applied.
     else if belowFinalized tree finalized state.headBlockHash then
       pure (⟨.valid, some state.headBlockHash⟩, none)
-    -- The note of the forkchoice state, read as an invalid state of step 9.
+    -- `ForkchoiceStateV1`, note: the safe and the finalized hash may be `0x00..00`.
+    --
+    -- They may be so unless the transition block is finalized.
+    --
+    -- No step names an error for that case, and EthLib gives the `-38002` of step 9.
+    --
+    -- Step 9 gives `-38002` to a state that is invalid or inconsistent.
     else if zeroAfterTransition tree finalized state then
       throw (.invalidForkchoiceState state.safeBlockHash state.finalizedBlockHash)
+    -- Step 5: the safe and the finalized block belong to the chain of the `VALID` head.
     else if onChain tree state.headBlockHash state.safeBlockHash &&
         onChain tree state.headBlockHash state.finalizedBlockHash then
+      -- Step 7: the head is `VALID`, and so is a nonzero finalized block, as its ancestor.
+      --
+      -- So the state is updated to the head.
+      --
+      -- A zero finalized hash names no payload, and EthLib updates the state then too.
+      --
+      -- The note of `ForkchoiceStateV1` allows that hash until the transition block is finalized.
+      --
+      -- Step 9: `VALID`, with the hash of the head as the latest valid hash.
+      --
+      -- Step 6 is left out, since the source lets each client set the deepest reorg it takes.
+      --
+      -- Past that depth, step 6 returns `-38006`.
       pure (⟨.valid, some state.headBlockHash⟩, some state.headBlockHash)
+    -- Step 5: otherwise `-38002`, invalid forkchoice state.
     else throw (.invalidForkchoiceState state.safeBlockHash state.finalizedBlockHash)
 
 /-- The forkchoice state, with exactly its three fields. -/
 def forkchoiceStateOfJson (j : Json) : Decode ForkchoiceState := do
+  -- Version 3, step 1: the state matches `ForkchoiceStateV1`, or `-32602`.
+  --
+  -- Versions 1 and 2 state no such step, and EthLib checks them the same way.
+  --
+  -- A field whose value is `null` counts as absent, so it fails the match.
   let fs ← fields "forkchoiceState" j
   unless hasExactly fs ["headBlockHash", "safeBlockHash", "finalizedBlockHash"] do
     invalid "forkchoiceState: wrong fields"
   let get := field "forkchoiceState" fs
+  -- `ForkchoiceStateV1`: each of the three hashes is `DATA` of 32 bytes.
   return {
     headBlockHash := ← fixed "headBlockHash" 32 (← get "headBlockHash")
     safeBlockHash := ← fixed "safeBlockHash" 32 (← get "safeBlockHash")
@@ -365,6 +364,7 @@ def forkchoiceStateOfJson (j : Json) : Decode ForkchoiceState := do
 
 /-- The forkchoice state as JSON, with its three hashes. -/
 def forkchoiceStateJson (state : ForkchoiceState) : Json :=
+  -- `ForkchoiceStateV1`: the three hashes, each as `DATA` of 32 bytes.
   Json.mkObj [("headBlockHash", dataJson state.headBlockHash.toList),
     ("safeBlockHash", dataJson state.safeBlockHash.toList),
     ("finalizedBlockHash", dataJson state.finalizedBlockHash.toList)]
@@ -476,48 +476,54 @@ def payloadAttributesOfVersion (version : Nat) (j : Json) :
   | some attributes => .ok attributes
   | none => .error .invalidPayloadAttributes
 
-/-- The custody columns of version 4: 16 bytes, one bit for each column.
-
-They are `null` when the consensus layer gives no custody set. -/
+/-- The custody columns of version 4: 16 bytes, one bit for each column. -/
 def custodyColumnsOfJson : Json → Decode (Option (Vector UInt8 16))
+  -- Version 4, parameter 3: `null` when the consensus layer gives no custody set.
   | .null => pure none
+  -- Version 4, step 3.1: a value other than `null` is `DATA` of 16 bytes, or `-32602`.
   | j => some <$> fixed "custodyColumns" 16 j
 
 /-- The parameters of a version of the method.
-
-They are the forkchoice state, then the payload attributes, an object or `null`.
-
-From version 4 the custody columns may follow, as 16 bytes or `null`.
-
-The source checks the fields of the attributes only when a valid head is applied.
 
 The result is the state, and the attributes when they are an object. -/
 def forkchoiceUpdatedParams (version : Nat) (params : Json) :
     Decode (ForkchoiceState × Option Json) := do
   let params ← paramsArray params
+  -- The forkchoice state and the payload attributes, then from version 4 the custody columns.
   let (state, attributes, custody) ← match params, decide (4 ≤ version) with
+    -- The OpenRPC description makes the attributes optional in every version.
+    --
+    -- EthLib still asks for them, as `null` when there are none.
     | [state, attributes], _ => pure (state, attributes, Json.null)
+    -- Version 4, parameter 3: the custody columns, which the OpenRPC description makes optional.
+    --
+    -- EIP-8070 makes them optional too, so versions 4 and 5 take two or three parameters.
     | [state, attributes, custody], true => pure (state, attributes, custody)
+    -- Any other count of parameters is `-32602`.
     | _, four => invalid s!"params: got {params.length}, expected {if four then "2 or 3" else "2"}"
+  -- Parameter 1: `ForkchoiceStateV1`.
   let state ← forkchoiceStateOfJson state
+  -- Parameter 2: `Object|null`, and EthLib gives `-32602` to any other value.
+  --
+  -- Step 8 checks the fields of the attributes only once a valid head is applied.
   let attributes ← match attributes with
     | .null => pure none
     | .obj kvs => pure (some (Json.obj kvs))
     | _ => invalid "payloadAttributes: not an object"
-  -- The custody set changes the blob pool only, never the answer, so its value is dropped.
+  -- Version 4, step 3.4: the custody set updates apart from the forkchoice update.
+  --
+  -- It changes the blob pool only, so columns that decode never change the answer.
   let _ ← custodyColumnsOfJson custody
   return (state, attributes)
 
 /-- The parameters of a version of the method as JSON.
 
-They are the forkchoice state, then the payload attributes or `null`.
-
-From version 4 the custody columns follow, as 16 bytes or `null`; before, they are left out.
-
 The attributes have the structure of their fork, which the version must take. -/
 def forkchoiceUpdatedParamsJson {fork : Fork} (version : Nat) (state : ForkchoiceState)
     (attributes : Option (PayloadAttributes fork)) (custody : Option (Vector UInt8 16)) : Json :=
+  -- Parameters 1 and 2: the forkchoice state, then the payload attributes or `null`.
   .arr ([forkchoiceStateJson state, optionJson payloadAttributesJson attributes] ++
+    -- Parameter 3, from version 4: the custody columns as 16 bytes or `null`; before, none.
     if 4 ≤ version then [optionJson (dataJson ·.toList) custody] else []).toArray
 
 /-- Whether a version of the method takes payload attributes whose timestamp is in a fork.
@@ -630,13 +636,16 @@ def forkchoiceUpdatedCall (config : ChainConfig) (transition : TransitionConfigu
     Except EngineError
       (PayloadStatus × Option Hash32 × Option (Σ fork, PayloadAttributes fork)) := do
   let (state, attributes) ← forkchoiceUpdatedParams version params
+  -- Steps 1 to 5 and 7: the status, and the head when the state is updated to it.
   let (status, head) ← forkchoiceUpdated transition tree finalized state
   match attributes, head with
+  -- Step 8: the attributes count once the state is applied with a `VALID` head.
   | some j, some h =>
     let decoded ← payloadAttributesOfVersion version j
     -- The update applies only a head that the tree holds, so this branch never runs.
     let some known := tree.lookup h | return (status, head, none)
     return (status, head, some (← checkAttributes config version known decoded))
+  -- Without attributes or an applied head, no build begins, so the attributes change nothing.
   | _, _ => return (status, head, none)
 
 /-- The bytes of one inclusion list transaction in the input of a payload ID.
@@ -704,14 +713,15 @@ def payloadId (head : Hash32) (attributes : PayloadAttributes fork) : PayloadId 
 
 /-- The response of a call, from its result: the status, and the ID of the build that it begins.
 
-The ID is that of the applied head and the attributes, when the call returns attributes.
-
 These are the answers of step 9 of [`engine_forkchoiceUpdatedV1`][fcu] that are not errors.
 
 [fcu]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_forkchoiceupdatedv1 -/
 def forkchoiceUpdatedResponse
     (result : PayloadStatus × Option Hash32 × Option (Σ fork, PayloadAttributes fork)) :
     PayloadStatus × Option PayloadId :=
+  -- Step 9: the payload ID names the build once it has begun, and is `null` otherwise.
+  --
+  -- The ID is that of the applied head and the attributes, when the call returns attributes.
   (result.1, result.2.1.bind fun head => result.2.2.map fun a => payloadId head a.2)
 
 /-- Whether a status is one that a forkchoice update answers: valid, invalid or syncing.
@@ -721,30 +731,33 @@ def forkchoiceUpdatedResponse
 [schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/openrpc/schemas/payload.yaml
 [fcu]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_forkchoiceupdatedv1 -/
 def Status.restricted : Status → Bool
+  -- Response: the status is restricted to `VALID`, `INVALID` and `SYNCING`.
   | .valid | .invalid | .syncing => true
+  -- The method never answers the two other statuses of `PayloadStatusV1`.
   | .accepted | .invalidBlockHash => false
 
 /-- The response as JSON: the payload status, and the payload ID or `null`. -/
 def forkchoiceUpdatedResponseJson (status : PayloadStatus) (validationError : Option String)
     (id : Option PayloadId) : Json :=
+  -- Response: `payloadStatus`, then `payloadId` as `DATA` of 8 bytes or `null`.
   Json.mkObj [("payloadStatus", payloadStatusJson status validationError),
     ("payloadId", optionJson (dataJson ·.toList) id)]
 
 /-- A forkchoice response read from its JSON: one of three statuses, and an ID.
 
-The ID is 8 bytes; a missing or `null` ID is absent.
-
-Any other field with a value other than `null` is invalid.
-
 The decoder does not check the pairing of status, hash and ID that step 9 asks of a client. -/
 def forkchoiceUpdatedResponseOfJson (j : Json) :
     Decode (PayloadStatus × Option String × Option PayloadId) := do
+  -- A field whose value is `null` counts as absent.
   let fs ← fields "forkchoiceUpdatedResponse" j
+  -- Response: the object has `payloadStatus` and `payloadId`, and EthLib rejects another field.
   unless fs.all (["payloadStatus", "payloadId"].contains ·.1) do
     invalid "forkchoiceUpdatedResponse: unknown field"
   let (status, validationError) ←
     payloadStatusOfJson (← field "forkchoiceUpdatedResponse" fs "payloadStatus")
+  -- Response: the status is one of the three that the method answers.
   unless status.status.restricted do invalid "payloadStatus: not a status of the method"
+  -- Response: `payloadId` is `DATA` of 8 bytes or `null`, and EthLib reads a missing one as `null`.
   let id ← Json.lift ((fs.lookup "payloadId").mapM (fixed "payloadId" 8))
   return (status, validationError, id)
 
@@ -752,20 +765,20 @@ def forkchoiceUpdatedResponseOfJson (j : Json) :
 
 Step 2 of [`engine_forkchoiceUpdatedV5`][fcu5] gives the inclusion list verdict.
 
-It is a boolean when the head is valid, and `null` otherwise.
-
 The writer takes the verdict as given, and the function after it pairs it with the status.
 
 [fcu5]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_forkchoiceupdatedv5 -/
 def forkchoiceUpdatedResponseV2Json (status : PayloadStatus) (validationError : Option String)
     (inclusionListSatisfied : Option Bool) (id : Option PayloadId) : Json :=
+  -- Version 5, response: `PayloadStatusV2` with `inclusionListSatisfied`, then `payloadId`.
   Json.mkObj [("payloadStatus", payloadStatusV2Json status validationError inclusionListSatisfied),
     ("payloadId", optionJson (dataJson ·.toList) id)]
 
-/-- The inclusion list verdict of a response of version 5, from whether the head satisfies its list.
-
-It is that boolean when the status is valid, and `null` otherwise, by step 2 of version 5. -/
+/-- The inclusion list verdict of a version 5 response, from whether the head satisfies its list. -/
 def inclusionListVerdict (status : PayloadStatus) (satisfied : Bool) : Option Bool :=
+  -- Version 5, step 2.1: for a `VALID` head, whether it satisfied the inclusion list constraints.
+  --
+  -- Version 5, step 2.3: otherwise `null`.
   if status.status = .valid then some satisfied else none
 
 end EthLib.Engine
