@@ -6,7 +6,6 @@ public import EthLib.Cryptography.Proofs.Bls.KeyValidate
 public import EthLib.Cryptography.Proofs.Bls.CofactorSubgroupLanding
 public import EthLib.Base.Proofs.MapM
 import EthLib.Cryptography.Proofs.Bls.PairingAte
-import EthLib.Base.Proofs.Forall2
 import EthLib.Base.Proofs.Bytes
 
 /-!
@@ -328,7 +327,7 @@ theorem fastAggregateVerify_aggregate_of_forall₂ {keys : List SecretKey}
   obtain ⟨signatures', signs, signature', built, verifies⟩ :=
     fastAggregateVerify_aggregate keys nonempty sum message
   have sameSignatures : signatures' = signatures :=
-    Except.ok.inj (signs.symm.trans (Base.mapM_ok_of_forall₂ signed))
+    Except.ok.inj (signs.symm.trans (List.mapM_eq_ok_iff_forall₂.mpr signed))
   subst signatures'
   have sameAggregate : signature' = signature :=
     Except.ok.inj (built.symm.trans aggregated)
@@ -343,7 +342,7 @@ private theorem aggregate_group {message : ByteArray} {Q : G2} {b : Fr}
     (signed : List.Forall₂ (fun key sig => sign key message = .ok sig) keys signatures)
     (aggregated : aggregate signatures.toArray = .ok joint) :
     ∃ R, joint = pointToSignature R ∧ G2.Represents R ((keys.map (·.val)).sum * b) := by
-  have signs := (Base.mapM_ok_of_forall₂ signed).symm.trans (mapM_sign hQ keys)
+  have signs := (List.mapM_eq_ok_iff_forall₂.mpr signed).symm.trans (mapM_sign hQ keys)
   rw [Except.ok.injEq] at signs
   subst signs
   -- With no key, the aggregation fails.
@@ -393,7 +392,7 @@ theorem aggregate_sign_exists_ok {keys : List SecretKey} {signatures : List BLSS
   obtain ⟨Q, hQ, hv, hs⟩ := HashToCurve.hashToG2_total_inSubgroup message DST
   obtain ⟨b, hb⟩ := (G2.inSubgroup_iff_exists_represents hv).mp hs
   -- Rewrite the signatures as multiples of the hash, so the kernel never evaluates a point.
-  have signs := (Base.mapM_ok_of_forall₂ signed).symm.trans (mapM_sign hQ keys)
+  have signs := (List.mapM_eq_ok_iff_forall₂.mpr signed).symm.trans (mapM_sign hQ keys)
   rw [Except.ok.injEq] at signs
   subst signs
   obtain ⟨S, hS, -⟩ := aggregate_map_mul hb keys nonempty

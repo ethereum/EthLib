@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Proofs.FoldlM
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
 public import EthLib.Consensus.Proofs.Transition.Totality.Inactivity
 public import Mathlib.Data.Nat.Sqrt

@@ -31,6 +31,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - Two folds whose steps agree on every item of the list read the same result.
 - A fold whose steps fail only with errors of a property fails only with them.
 - A fold succeeds when each step succeeds and keeps an invariant that holds at the start.
+- A fold over inputs with distinct keys succeeds when each step keeps the other keys ready.
 - A successful fold reads only inputs that its steps accept.
 - A fold over distinct keys changes the view of a key only in the step of that key.
 - A fold of steps that each succeed with a pure step is the pure fold.
@@ -563,6 +564,24 @@ theorem foldlM_exists_ok_of_invariant {σ : Type} {g : σ → α → Except ε �
     obtain ⟨out, rest⟩ :=
       ih (fun acc y member => step acc y (List.mem_cons_of_mem x member)) middle kept
     exact ⟨out, by simp only [List.foldlM_cons, bind, Except.bind, first, rest]⟩
+
+/-- A fold over inputs with distinct keys succeeds when each step from a ready state succeeds.
+
+Each step must keep ready the inputs with another key. -/
+theorem foldlM_exists_ok_of_distinct {α σ ε : Type} {step : σ → α → Except ε σ}
+    (key : α → Nat) (Ready : σ → α → Prop)
+    (advance : ∀ last x, Ready last x → ∃ next, step last x = .ok next ∧
+      ∀ y, key y ≠ key x → Ready last y → Ready next y) :
+    ∀ (xs : List α) (start : σ), (xs.map key).Nodup → (∀ x ∈ xs, Ready start x) →
+      ∃ out, xs.foldlM step start = .ok out
+  | [], start, _, _ => ⟨start, rfl⟩
+  | x :: rest, start, distinct, ready => by
+    rw [List.map_cons, List.nodup_cons] at distinct
+    obtain ⟨next, stepped, keeps⟩ := advance start x (ready x List.mem_cons_self)
+    obtain ⟨out, folded⟩ := foldlM_exists_ok_of_distinct key Ready advance rest next distinct.2
+      fun y member => keeps y (fun same => distinct.1 (same ▸ List.mem_map_of_mem member))
+        (ready y (List.mem_cons_of_mem _ member))
+    exact ⟨out, by rw [List.foldlM_cons, stepped]; exact folded⟩
 
 /-- A successful fold reaches each of its steps, and the result of each step relates to the end.
 

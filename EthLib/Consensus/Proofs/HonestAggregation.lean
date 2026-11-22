@@ -7,7 +7,6 @@ public import EthLib.Consensus.HonestAggregation
 public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
-import EthLib.Base.Proofs.Forall2
 
 /-!
 # Proofs: the votes of an honest attester and their aggregates
@@ -269,7 +268,7 @@ theorem mapM_sign_eq_of_forall₂ {attestations : List (Attestation preset fork)
       Signatures.sign key message = .ok attestation.signature) attestations keys) :
     keys.mapM (fun key => Signatures.sign key message) =
       .ok (attestations.map (·.signature)) :=
-  mapM_ok_of_forall₂ (List.forall₂_map_right_iff.mpr signed.flip)
+  List.mapM_eq_ok_iff_forall₂.mpr (List.forall₂_map_right_iff.mpr signed.flip)
 
 /-- Honest signatures of attestations on one message aggregate to a signature that verifies.
 

@@ -228,11 +228,11 @@ theorem wins_of_byteWins {pk : G1Sub} {signed : List ByteArray}
   obtain ⟨xs, hxs, hagg⟩ := isDh_of_byteFastAggregateVerify hfa
   rw [List.toList_toArray] at hxs
   obtain ⟨ys, hys, rfl⟩ := exists_mapM_decode keys xs hxs
-  have hrel := Base.forall₂_of_mapM_some hys
+  have hrel := List.mapM_eq_some_iff_forall₂.mp hys
   have hdec : decodeKeys keys = ys := by rw [decodeKeys, hys, Option.getD_some]
   simp only [wins, hdec, Bool.and_eq_true, decide_eq_true_eq]
   refine ⟨⟨⟨⟨?_, hm⟩, hlen.trans hrel.length_eq⟩, all_isDh_of_forall₂ hrel hs hv⟩, hagg⟩
-  obtain ⟨x, hx, hdx⟩ := Base.exists_mem_of_forall₂ (Base.forall₂_of_mapM_some hxs) hpk
+  obtain ⟨x, hx, hdx⟩ := Base.exists_mem_of_forall₂ (List.mapM_eq_some_iff_forall₂.mp hxs) hpk
   rw [decodeKey_encode, Option.some.injEq] at hdx
   exact hdx ▸ hx
 

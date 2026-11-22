@@ -648,7 +648,7 @@ theorem honestSlotAggregate_exists_ok (electra : .pectra ≤ fork)
         (fun gloas => (sized pair kept).trans (fits gloas))
         (fun _ => toUInt64_lt_of_lt (Nat.lt_of_lt_of_le below countBelow))
         someSigner
-  have made := List.forall₂_map_left_iff.mp (forall₂_of_mapM_ok aggregatesOk)
+  have made := List.forall₂_map_left_iff.mp (List.mapM_eq_ok_iff_forall₂.mp aggregatesOk)
   obtain ⟨domain, domained⟩ :=
     getDomain_total config state DOMAIN_BEACON_ATTESTER (some data.target.epoch)
   obtain ⟨root, rooted⟩ := computeSigningRoot_total data domain
@@ -740,7 +740,8 @@ theorem honestSlotAggregate_spec (electra : .pectra ≤ fork)
   rw [mapError_ok_iff, covered, Except.ok.injEq] at keysOk
   subst keysOk
   obtain ⟨aggregates, aggregatesOk, built⟩ := bind_ok_iff.mp built
-  have made := List.forall₂_map_left_iff.mp (forall₂_of_mapM_ok (mapError_ok_iff.mp aggregatesOk))
+  have made := List.forall₂_map_left_iff.mp
+    (List.mapM_eq_ok_iff_forall₂.mp (mapError_ok_iff.mp aggregatesOk))
   obtain ⟨domain, domained⟩ :=
     getDomain_total config state DOMAIN_BEACON_ATTESTER (some data.target.epoch)
   obtain ⟨root, rooted⟩ := computeSigningRoot_total data domain

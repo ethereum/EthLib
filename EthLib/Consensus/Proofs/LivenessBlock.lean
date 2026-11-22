@@ -457,7 +457,7 @@ theorem exists_honestBlock_gathersVotes [LawfulSszType (BeaconBlockBody preset f
       rw [List.length_map, mapM_ok_length listedOk, List.length_range, smul_eq_mul] at total
       simp only [maxAttesters, electra, ↓reduceIte]
       exact total.trans (Nat.mul_comm _ _ ▸ Nat.mul_le_mul_left _ countBelow)
-    have made := forall₂_of_mapM_ok attestationsOk
+    have made := List.mapM_eq_ok_iff_forall₂.mp attestationsOk
     have attestationsLength : attestations.length = datas.length := mapM_ok_length attestationsOk
     have lengthFits : datas.length ≤ (parameters preset fork).MAX_ATTESTATIONS.toNat := by
       have capacity := conditions.capacity
@@ -600,7 +600,7 @@ theorem exists_honestBlock_gathersVotes [LawfulSszType (BeaconBlockBody preset f
         (fun _ => ?_) (fun electra' => absurd electra' electra) someSigner
       simp only [maxAttesters, electra, ↓reduceIte]
       exact conditions.committeeSizes slot committeeIndex members sameEpoch below committeeOk
-    have made := forall₂_of_mapM_ok attestationsOk
+    have made := List.mapM_eq_ok_iff_forall₂.mp attestationsOk
     have attestationsLength : attestations.length = votes.length := mapM_ok_length attestationsOk
     obtain ⟨engine, block, honestBlock, carried, executes, proven, registryRoom, pendingRoom,
       depositRoom⟩ :=
