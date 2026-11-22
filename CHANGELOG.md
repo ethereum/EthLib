@@ -9,6 +9,9 @@ Not yet released.
 
 ### Proof additions
 
+- `paysSlots_messageInstruction` proves that from Glamsterdam each call and creation pays for the fresh slots it counts (`PaysSlots`), given that each message it sends pays (`MessagePays`) ([#4038](https://github.com/ethereum/EthLib/issues/4038), fifth part).
+  `paysSlots_step` gives the same for every step of a running frame whose code, when not empty, runs at an account with a nonce or code.
+
 - `slotSurplus` is the net state gas of a frame of EIP-8037, less the state gas of a new slot for each fresh slot of an account with a nonce or code ([#4038](https://github.com/ethereum/EthLib/issues/4038), fourth part).
   `PaysSlots` relates two frames when the second failed (it stops with an error, and its meter rolled back unless it reverted), or when, without an error, its surplus did not drop; it is a preorder (`PaysSlots.refl`, `PaysSlots.trans`).
   `paysSlots_instruction` proves that from Glamsterdam each instruction that gives the next frame keeps it, from a running frame whose current account has a nonce or code.
