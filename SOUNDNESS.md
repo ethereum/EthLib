@@ -7633,6 +7633,18 @@ The transaction tests of ethereum/tests reject 43 results whose gas limit is `2^
 No rule of the Yellow Paper rejects such a transaction alone, and EIP-7825 caps the gas limit only from Fusaka on.
 EthLib accepts them, and the suite asserts that it does, as `tests/execution/ethereum_tests/README.md` explains.
 
+The gas limit and the fee fields of a transaction have two readings.
+Section 4.2 of the [Yellow Paper](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex), Shanghai version, puts the gas limit and the gas price below `2^256`.
+[EIP-1559](https://eips.ethereum.org/EIPS/eip-1559#specification) asserts the same bound on its two fee caps.
+[execution-specs](https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/prague/transactions.py) at `391d8a0` types the four fields as unbounded integers.
+EthLib follows the Yellow Paper and EIP-1559: the fields are 256-bit words, so a value of `2^256` or more fails at decoding.
+In a block, both readings refuse a transaction whose fee reaches `2^256`, since no balance can pay it.
+That fee is the gas limit times the gas price, or times the maximum fee per gas.
+The readings differ in one case: a gas limit of `2^256` or more with a price of 0.
+The block must then have a gas limit at least as large, and the unbounded reading accepts the transaction, where EthLib refuses it.
+That case needs a chain whose gas limit reaches `2^256`, and it exists only before Fusaka.
+From Fusaka [EIP-7825](https://eips.ethereum.org/EIPS/eip-7825#specification) caps the gas limit of a transaction at `2^24`, and from Glamsterdam [EIP-8037](https://eips.ethereum.org/EIPS/eip-8037#transaction-validation) caps it at `2^32 - 1`.
+
 ### A2. Hypotheses inside theorems
 
 A conditional theorem is only as strong as its hypotheses.
