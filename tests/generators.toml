@@ -146,6 +146,11 @@ computes = "the ECDSA P-256 vectors of Wycheproof, turned into precompile calls 
 version = "the Wycheproof commit not recorded"
 source = "https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/tests/osaka/eip7951_p256verify_precompiles/test_p256verify.py#L38-L40"
 
+[generators."Wycheproof P-256, converted for EIP-7951"]
+computes = "the ECDSA P-256 vectors of Wycheproof, turned into precompile calls in ethereum/EIPs#9833, which names no program"
+version = "the Wycheproof commit not recorded"
+source = "https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/assets/eip-7951/test-vectors.json"
+
 [generators."BLAKE2 genkat-json"]
 computes = "genkat-json.c of the BLAKE2 reference package, linked with its own BLAKE2 code"
 version = "not recorded, the file written in BLAKE2 2994ec5 (2016)"
@@ -667,6 +672,21 @@ generator = "execution-apis error groups"
 cases = ["**"]
 generator = "not established"
 checked = "EIP-4881 ships a reference implementation and a test that runs the cases on it, but not the script that wrote them"
+
+[[directories."bindings/python/tests/precompile/eips"]]
+cases = ["eip2537_cases.json", "eip2537_msm_repeated.json"]
+generator = "bls12-381-tests eip-2537 branch"
+
+[[directories."bindings/python/tests/precompile/eips"]]
+cases = ["eip7951_cases.json"]
+subset = "every case whose Name starts with wycheproof/"
+generator = "Wycheproof P-256, converted for EIP-7951"
+
+[[directories."bindings/python/tests/precompile/eips"]]
+cases = ["eip7951_cases.json"]
+subset = "the three cases whose Name has no wycheproof/ prefix: two invalid public keys and the reference point"
+generator = "not established"
+checked = "the Name of each case, and ethereum/EIPs#9833, which adds the asset with no description"
 
 [[directories."bindings/python/tests/state/dao"]]
 cases = ["**"]

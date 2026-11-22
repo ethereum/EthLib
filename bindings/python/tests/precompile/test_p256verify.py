@@ -28,7 +28,7 @@ from .forks import ends
 # The fork that adds the precompile, fusaka, and the latest fork: no fork in between changes it.
 FORKS = ends("fusaka")
 
-CASES = json.loads((Path(__file__).parent / "eip7951_cases.json").read_text())
+CASES = json.loads((Path(__file__).parent / "eips" / "eip7951_cases.json").read_text())
 
 
 @pytest.mark.parametrize("case", CASES, ids=[case["Name"] for case in CASES])
