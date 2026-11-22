@@ -8,7 +8,7 @@ public import EthLib.Serialization.Rlp.Decode
 /-!
 # `Execution.Network.Blocks`
 
-The block exchange of the eth capability, from "Protocol Messages" of [`caps/eth.md`][eth].
+The block exchange of the eth capability, from Protocol Messages in [`caps/eth.md`][eth].
 
 [eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#protocol-messages
 
@@ -77,6 +77,7 @@ namespace BlockId
 
 /-- A start block as `{P, B_32}`: a scalar for a number, 32 bytes for a hash. -/
 def toItem : BlockId → Item
+  -- `startblock: {P, B_32}`.
   | .number n => Codec.toItem n
   | .hash h => Codec.toItem h
 
@@ -84,6 +85,7 @@ def toItem : BlockId → Item
 
 A scalar below 2^64 has at most 8 bytes, so a reader tells the two apart by the length. -/
 def ofItem : Item → Except RlpError BlockId
+  -- 32 bytes are a hash; a number below `2^64` takes at most 8 bytes, EthLib's own bound.
   | .bytes b =>
     if b.size = 32 then hash <$> Codec.ofItem (.bytes b) else number <$> Codec.ofItem (.bytes b)
   | .list _ => .error .listAsBytes
@@ -110,6 +112,7 @@ def HeaderRequest.toItem (r : HeaderRequest) : Item :=
 
 /-- The request in the RLP list `[startblock, limit, skip, reverse]`. -/
 def HeaderRequest.ofItem (item : Item) : Except RlpError HeaderRequest := do
+  -- `[startblock: {P, B_32}, limit: P, skip: P, reverse: {0, 1}]`.
   match ← item.fields 4 with
   | [s, l, k, r] => return ⟨← s.field 0, ← l.field 1, ← k.field 2, ← r.field 3⟩
   | items => throw (.wrongFieldCount 4 items.length)
@@ -130,6 +133,7 @@ def BlockAnnouncement.toItem (a : BlockAnnouncement) : Item :=
 
 /-- The announcement in the RLP list `[blockhash, number]`. -/
 def BlockAnnouncement.ofItem (item : Item) : Except RlpError BlockAnnouncement := do
+  -- `[blockhash: B_32, number: P]`.
   match ← item.fields 2 with
   | [h, n] => return ⟨← h.field 0, ← n.field 1⟩
   | items => throw (.wrongFieldCount 2 items.length)
@@ -143,10 +147,12 @@ def HEADER_NUMBER_INDEX : Nat := 8
 
 /-- The hash of a header: the Keccak-256 hash of the bytes of its RLP encoding. -/
 def headerHash (header : Encoded) : Hash32 :=
+  -- `keccak256(header)`, over the bytes the header was read from, so no item is encoded again.
   Cryptography.Hash.Keccak.keccak256 header.bytes
 
 /-- The number of a header, its ninth field. -/
 def headerNumber (header : Item) : Except RlpError Nat := do
+  -- `number: P`, the ninth field of the header in Block Encoding and Validity.
   let fields ← header.toItems
   match fields[HEADER_NUMBER_INDEX]? with
   | some n => Codec.ofItem n
@@ -157,6 +163,7 @@ def HEADER_DIFFICULTY_INDEX : Nat := 7
 
 /-- The difficulty of a header, its eighth field. -/
 def headerDifficulty (header : Item) : Except RlpError Nat := do
+  -- `difficulty: P`, the eighth field.
   let fields ← header.toItems
   match fields[HEADER_DIFFICULTY_INDEX]? with
   | some d => Codec.ofItem d
@@ -164,6 +171,7 @@ def headerDifficulty (header : Item) : Except RlpError Nat := do
 
 /-- The parent hash of a header, its first field. -/
 def headerParent (header : Item) : Except RlpError Hash32 := do
+  -- `parent-hash: B_32`, the first field.
   match ← header.toItems with
   | p :: _ => Codec.ofItem p
   | [] => throw (.wrongFieldCount 1 0)
@@ -201,23 +209,24 @@ def HeadersError.code : HeadersError → UInt32
 
 A falling answer stops at block 0, so a number below the step has no next number. -/
 def HeaderRequest.next (r : HeaderRequest) (n : Nat) : Option Nat :=
+  -- `skip` blocks apart, read as `skip` blocks between: a step of `skip + 1`.
+  --
+  -- Falling when `reverse` is 1, down to block 0.
   if r.reverse then (if r.skip + 1 ≤ n then some (n - (r.skip + 1)) else none)
+  -- Rising by `skip + 1` when `reverse` is 0.
   else some (n + r.skip + 1)
 
 /-- Whether the header `b` follows `a` in an answer to `r`.
 
-The number of `b` must be the next number after the number of `a`.
-
-When the headers are consecutive, they must also chain.
-
-The parent of the later one is then the hash of the earlier one.
-
-"Block Encoding and Validity" asks this of headers in sequence. -/
+The section Block Encoding and Validity asks the chain of headers in sequence. -/
 def followsIn (r : HeaderRequest) (a b : Encoded) : Except HeadersError Unit := do
   let na ← (headerNumber a.item).mapError .rlp
   let nb ← (headerNumber b.item).mapError .rlp
+  -- GetBlockHeaders: the next number is the one `skip + 1` blocks on, in the order of `reverse`.
   if r.next na ≠ some nb then throw (.wrongNumber ((r.next na).getD 0) nb)
+  -- Block Encoding and Validity: consecutive headers chain by their parent hash.
   if r.skip = 0 then
+    -- In a falling answer the earlier header is the child, in a rising one the later.
     let (child, parent) := if r.reverse then (a, b) else (b, a)
     if (← (headerParent child.item).mapError .rlp) ≠ headerHash parent then
       throw (.notChained nb)
@@ -234,18 +243,17 @@ def isStart (start : BlockId) (header : Encoded) : Except HeadersError Bool :=
   | .hash h => pure (decide (headerHash header = h))
 
 /--
-Whether the headers `headers` answer the request `r`, as "GetBlockHeaders (0x03)" says.
-
-- They are at most `limit` headers.
-- The first one is the start block, by number or by hash.
-- `skip` blocks lie between two headers, in rising order, or falling if `reverse` is set.
+Whether the headers `headers` answer the request `r`, as the section GetBlockHeaders (0x03) says.
 
 The list may be empty, when the peer has none of the blocks.
 -/
 def checkHeaders (r : HeaderRequest) (headers : List Encoded) : Except HeadersError Unit := do
+  -- At most `limit` items.
   if r.limit < headers.length then throw (.tooMany headers.length r.limit)
+  -- Beginning at block `startblock`, by number or by hash; an empty list passes.
   if let first :: _ := headers then
     if !(← isStart r.start first) then throw .wrongStart
+  -- Then `skip` blocks between consecutive headers, a step of `skip + 1`.
   followAll r headers
 
 end EthLib.Execution.Network

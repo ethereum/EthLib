@@ -8,7 +8,7 @@ public import EthLib.Execution.Network.Protocol
 
 The receipt exchange of the eth capability, from two sections of [`caps/eth.md`][eth].
 
-They are "Receipt Encoding and Validity" and "Protocol Messages".
+They are Receipt Encoding and Validity, and Protocol Messages.
 
 [eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#receipt-encoding-and-validity
 
@@ -78,6 +78,7 @@ def toItem (r : WireReceipt fork) : Item :=
 
 The type is a scalar below 256. -/
 def ofItem (item : Item) : Except RlpError (WireReceipt fork) := do
+  -- EIP-7642: `[tx-type, post-state-or-status, cumulative-gas, logs]`.
   match ← item.fields 4 with
   | [t, o, g, l] => return ⟨← t.field 0, ← o.field 1, ← g.field 2, ← l.field 3⟩
   | items => throw (.wrongFieldCount 4 items.length)
@@ -88,6 +89,7 @@ instance : Codec (WireReceipt fork) := ⟨toItem, ofItem⟩
 
 It is its type, and the receipt with the Bloom filter of its logs. -/
 def toConsensus (r : WireReceipt fork) : UInt8 × Receipt fork :=
+  -- The Bloom filter comes back from the logs, as eth/69 leaves it out.
   (r.txType, makeReceipt r.outcome r.cumulativeGasUsed r.logs)
 
 /-- The receipt that eth/69 sends for a receipt in consensus form: the filter left out. -/
@@ -105,6 +107,7 @@ From eth/69 on, the receipt gets the Bloom filter of its logs back.
 -/
 def consensusOfItem (version : EthVersion) (fork : Fork) (item : Item) :
     Except ReceiptError (UInt8 × Receipt fork) :=
+  -- On eth/68, `legacy-receipt` as a list, or `typed-receipt = tx-type || rlp(legacy-receipt)`.
   if version = .eth68 then
     match item with
     | .list _ => ((0, ·) <$> Codec.ofItem item).mapError .decoding
@@ -112,6 +115,7 @@ def consensusOfItem (version : EthVersion) (fork : Fork) (item : Item) :
       -- A legacy receipt crosses the wire as a list, so a byte string must hold a typed one.
       if b.data.toList.head?.all (· < 0xc0) then decodeReceipt fork b
       else .error (.decoding .bytesAsList)
+  -- From eth/69, the list of EIP-7642, with the Bloom filter recomputed from its logs.
   else ((WireReceipt.toConsensus (fork := fork)) <$> Codec.ofItem item).mapError .decoding
 
 /--
@@ -123,6 +127,7 @@ Receipts that do not read, or that have no root, do not match.
 -/
 def receiptsMatch (version : EthVersion) (fork : Fork) (receiptsRoot : Hash32)
     (receipts : List Item) : Bool :=
+  -- Receipt Encoding and Validity: the root is over the consensus forms.
   match receipts.mapM (consensusOfItem version fork) with
   | .ok rs =>
     match Blocks.receiptsRoot rs with
@@ -180,10 +185,17 @@ The source is the specification of [EIP-7975][eip-7975].
 -/
 def checkPartialReceipts (gasLimits : List Nat) (blockGasLimit : Nat) (sizes : List Nat) :
     Except PartialReceiptsError Unit := do
+  -- EIP-7975: the count of receipts matches the count of transactions.
+  --
+  -- A list still in parts has fewer, so EthLib checks only that it has no more.
   if gasLimits.length < sizes.length then throw (.tooMany sizes.length gasLimits.length)
   let indexed := (List.range sizes.length).zip (sizes.zip gasLimits)
+  -- EIP-7975: each receipt is at most `gaslimit / 8` bytes, with the gas limit of its transaction.
   if let some (i, size, gas) := indexed.find? (fun (_, size, gas) => gas / 8 < size) then
     throw (.receiptTooLarge i size (gas / 8))
+  -- The EIP bounds the total only by the block gas limit.
+  --
+  -- EthLib applies the bound `gaslimit / 8` to the block, as the Rationale derives it.
   if blockGasLimit / 8 < sizes.sum then throw (.totalTooLarge sizes.sum (blockGasLimit / 8))
 
 /-- The size in bytes of the encoding of each receipt of the list that `data` encodes, in order.
