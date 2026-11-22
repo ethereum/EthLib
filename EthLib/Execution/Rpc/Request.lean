@@ -19,7 +19,7 @@ A server tells a notification apart before it reads a request.
 
 The execution API passes the parameters by position, as an array.
 
-Its fixtures leave out `params` when the array is empty, and the writer does the same.
+Its fixtures leave out the parameters when the array is empty, and the writer does the same.
 
 The reader rejects parameters given by name, a form of JSON-RPC 2.0 that this API never uses.
 
@@ -83,7 +83,7 @@ structure Request where
   /-- The parameters, by position. -/
   params : List Json := []
 
-/-- A request as JSON, without `params` when there are none. -/
+/-- A request as JSON, without parameters when there are none. -/
 def requestJson (r : Request) : Json :=
   Json.mkObj ([("jsonrpc", .str "2.0"), ("id", requestIdJson r.id), ("method", .str r.method)] ++
     if r.params.isEmpty then [] else [("params", .arr r.params.toArray)])

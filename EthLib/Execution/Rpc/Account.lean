@@ -7,65 +7,13 @@ public import EthLib.Execution.Rpc.Raw
 
 The account queries of the execution JSON-RPC API, in [`state.yaml`][state].
 
-Each query reads the state after the block that its block parameter names.
+Each query reads the state after the block that its block parameter names, the latest by default.
 
-The parameter is optional, and `latest` by default.
+The parameter, when present, must not be null: null is an invalid parameter, -32602.
 
-- `eth_getBalance` gives the balance of an address.
-- `eth_getTransactionCount` gives its nonce.
-- `eth_getCode` gives its code.
-- `eth_getStorageAt` gives the word at one key of its storage.
-- `eth_getStorageValues` gives the words at some keys of the storage of some addresses.
-
-For an address with no account, the fixtures fix answers that no text states.
-
-The balance is `0x0`, as `get-balance-unknown-account.io` expects.
-
-The nonce is `0x0`, as `get-nonce-unknown-account.io` expects.
-
-The code is `0x`, as `get-code-unknown-account.io` expects.
-
-Each storage word is zero, as `get-storage-unknown-account.io` expects.
-
-So an address with no account reads as the empty account.
-
-Its storage words are those of the state, which the transition leaves empty for such an address.
+For an address with no account, the fixtures fix answers that no text states, and EthLib follows.
 
 The code of an account delegated by [EIP-7702][eip7702] is its delegation designator.
-
-That is the code that the state holds for it.
-
-The fixture `get-code-eip7702-delegation.io` expects that.
-
-A storage key is a `bytesMax32`, at most 32 bytes in hex, read as a number on 32 bytes.
-
-A word is 32 bytes.
-
-The fixtures give each word on 32 bytes, with leading zeros, though the schema types it `bytes`.
-
-The schema of `eth_getStorageValues` does not say how to treat an empty object.
-
-Here it is an invalid parameter, `-32602`, as `get-storage-values-empty-request.io` expects.
-
-Two members of the object can name one address, in two cases of hex.
-
-Here they are an invalid parameter too, since the answer has one member for each address.
-
-A member name written twice in the same case is one member, the last, as the JSON text is read.
-
-A member whose keys are `null` is an invalid parameter, since the schema asks for an array.
-
-The answer writes each address in lower case, as the fixtures do.
-
-The example of the source echoes the case of the request, which no text requires.
-
-The block parameter, when present, is a block: `null` is an invalid parameter.
-
-An unknown block gets `-32001`, "Resource not found", as for the raw getters.
-
-The tag `pending` gets the same error when the view has no pending block.
-
-A code hash with no code in the state gets `-32603`.
 
 [state]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/state.yaml
 [eip7702]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7702.md
@@ -84,17 +32,24 @@ namespace BlockRecord
 
 /-- The account of an address in the state after the block, or the empty account for none. -/
 def account (r : BlockRecord) (a : Address) : Account :=
+  -- No account reads as the empty account: balance 0, nonce 0, no code, as the fixtures expect.
   (r.state.getAccountOptional a).getD EMPTY_ACCOUNT
 
 /-- The code of an address in the state after the block, empty for no account.
 
 A code hash with no code in the state is an internal error. -/
 def code (r : BlockRecord) (a : Address) : Except RpcError ByteArray :=
+  -- The code of the code hash, which is the delegation designator for an account of EIP-7702.
+  --
+  -- A fixture expects that designator.
+  --
+  -- EthLib's choice: a code hash with no code in the state gets code -32603.
   (r.state.getCode (r.account a).codeHash).mapError fun _ =>
     internalError.toRpcError (some (.str "code: missing from the state"))
 
 /-- The word at a key of the storage of an address in the state after the block. -/
 def storage (r : BlockRecord) (a : Address) (key : Bytes32) : U256 :=
+  -- An address with no account has empty storage, so each word is 0, as the fixtures expect.
   r.state.getStorage a key
 
 end BlockRecord
@@ -104,25 +59,46 @@ end BlockRecord
 The object must have a member, and no two members may name one address. -/
 def storageRequests (j : Json) : Read (List (Address × List Bytes32)) := do
   let .obj members := j | reject "requests: not an object"
+  -- EthLib's choice: a name written twice in the same case is one member, the last.
+  --
+  -- RFC 8259 §4 leaves an object with a repeated name open.
   let fs := members.toList
+  -- An empty object is invalid, code -32602, as a fixture expects.
+  --
+  -- The schema does not say how to treat it.
   if fs.isEmpty then reject "requests: empty request"
+  -- EthLib reads each member name as an address, since the method asks for accounts.
+  --
+  -- The schema: the keys of a member are an array, so null keys are invalid.
+  --
+  -- A key has at most 32 bytes in hex, read as a number on 32 bytes.
   let requests ← fs.mapM fun (name, keys) => do
     return (← address "address" (.str name), ← array "keys" (bytesMax32 "key") keys)
+  -- EthLib's choice: one address in two cases of hex is invalid, code -32602.
+  --
+  -- The answer has one member for each address.
   unless (requests.map (·.1)).Nodup do reject "requests: an address twice"
   return requests
 
 /-- The JSON of a word on 32 bytes. -/
 def wordJson (w : U256) : Json :=
+  -- 32 bytes with leading zeros, as the fixtures write a word, though the schema types it bytes.
   dataJson w.toBeBytes.toList
 
 /-- The answer of `eth_getStorageValues`: an object from each address to its words. -/
 def storageValuesJson (values : List (Address × List U256)) : Json :=
+  -- Each address in lower case, as the fixtures write it.
+  --
+  -- The example of the source echoes the case of the request, which no text requires.
   Json.mkObj (values.map fun (a, words) => (hexString a.toList, listJson wordJson words))
 
 namespace ChainView
 
 /-- The balance of an address after a block, as `eth_getBalance` returns it. -/
 def balance (v : ChainView) (a : Address) (p : BlockParam) : Except RpcError U256 :=
+  -- Each query: an unknown block, or no pending block for that tag, gets code -32001.
+  --
+  -- EIP-1898 recommends that code for a block not found, and EthLib uses it for every form.
   v.ofBlock p fun r => .ok (r.account a).balance
 
 /-- The nonce of an address after a block, as `eth_getTransactionCount` returns it. -/

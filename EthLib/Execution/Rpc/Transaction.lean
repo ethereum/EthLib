@@ -14,7 +14,7 @@ A legacy transaction also has its recipient, its gas price and `v`.
 
 Its chain is written when `v` carries one, as [EIP-155][eip155] puts it in `v`.
 
-A typed transaction also has its recipient, its chain, its access list and the parity `yParity`.
+A typed transaction also has its recipient, its chain, its access list and the signature parity.
 
 It repeats the parity as `v`, a field that the schemas keep as optional and deprecated.
 
@@ -28,7 +28,7 @@ The reader reads the fields of the kind that the type names, and ignores any oth
 
 So it also reads the object of a transaction of a block, which has more fields.
 
-It takes the chain of a legacy transaction from `v`, and the parity of a typed one from `yParity`.
+It reads the chain of a legacy transaction from `v`, and the parity of a typed one from its field.
 
 A transaction of type 2, 3 or 4 stores no gas price, so the reader drops that field.
 
