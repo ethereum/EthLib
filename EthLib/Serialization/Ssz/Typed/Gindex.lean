@@ -15,6 +15,7 @@ The generalized index that a path names in the tree of every value of a type.
 Each step of the path is a field, an element, or a word that a root mixes in.
 -/
 def SszType.getGeneralizedIndex (α : Type) [SszType α] (path : List PathStep) : Except Err Nat :=
+  -- A generalized index depends on the SSZ type alone, so it is read from the declared type.
   Ssz.getGeneralizedIndex (desc α) path
 
 end EthLib.Serialization.Ssz

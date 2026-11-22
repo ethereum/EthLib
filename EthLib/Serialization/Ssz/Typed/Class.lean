@@ -52,6 +52,7 @@ The read takes `width` bytes from `start`.
 A byte past the end of the data reads as zero.
 -/
 def readUintBytes (data : ByteArray) (start width : Nat) : Nat :=
+  -- The sum of `b_i * 256^i` for `i < width`, with `b_i` the byte at `start + i`, or 0.
   Base.bytesToUint (Vector.ofFn fun i : Fin width => data[start + i.val]?.getD 0)
 
 namespace SszType
@@ -70,6 +71,7 @@ The 32-byte Merkle root of a value.
 The width check never fails on a well-formed type, since every root there is one node.
 -/
 def hashTreeRoot (a : α) : Except Err (Vector UInt8 32) := do
+  -- The root of the type, read as one 32-byte chunk; a node of another width is refused.
   toChunk (← root a)
 
 end SszType
