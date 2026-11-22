@@ -1317,7 +1317,7 @@
   "Process one complete client message and require libp2p client authentication."
 
 #define DOC_quic_tls_key_schedule \
-  "Return the early, handshake, master, two handshake traffic and two application traffic secrets."
+  "Return the early, handshake, main, two handshake traffic and two application traffic secrets."
 
 #define DOC_quic_tls_derive_secret \
   "Derive a SHA-256 secret from encoded handshake messages, RFC 9846 §7.1."

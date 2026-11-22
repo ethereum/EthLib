@@ -72,7 +72,7 @@ def handshakeSecret (sharedSecret : ByteArray) : Except Tls13.Error Secret := do
 /-- Derive the Main Secret from the Handshake Secret, RFC 9846 §7.1.
 
 RFC 8446 named it the Master Secret. -/
-def masterSecret (handshake : Secret) : Except Tls13.Error Secret := do
+def mainSecret (handshake : Secret) : Except Tls13.Error Secret := do
   -- `Derive-Secret(., "derived", "")`, from the Handshake Secret.
   let derived ← deriveSecret handshake "derived".toUTF8 .empty
   -- `0 -> HKDF-Extract = Main Secret`: the salt is the derived secret, the input the 0-value.
@@ -85,7 +85,7 @@ structure KeySchedule where
   /-- `handshake_secret`. -/
   handshake : Secret
   /-- The Main Secret, the Master Secret of RFC 8446. -/
-  master : Secret
+  main : Secret
   /-- `client_handshake_traffic_secret`. -/
   clientHandshake : Secret
   /-- `server_handshake_traffic_secret`. -/
@@ -110,21 +110,21 @@ def keySchedule (sharedSecret helloTranscript serverTranscript : ByteArray) :
   -- The left side of the §7.1 diagram: the Handshake Secret, from the asymmetric shared secret.
   let handshake ← handshakeSecret sharedSecret
   -- Then the Main Secret, from the Handshake Secret.
-  let master ← masterSecret handshake
+  let main ← mainSecret handshake
   -- `Derive-Secret(., "c hs traffic", ClientHello...ServerHello)`, from the Handshake Secret.
   let clientHandshake ← deriveSecret handshake "c hs traffic".toUTF8 helloTranscript
   -- `Derive-Secret(., "s hs traffic", ClientHello...ServerHello)`, from the Handshake Secret.
   let serverHandshake ← deriveSecret handshake "s hs traffic".toUTF8 helloTranscript
   -- `Derive-Secret(., "c ap traffic", ClientHello...server Finished)`, from the Main Secret.
-  let clientApplication ← deriveSecret master "c ap traffic".toUTF8 serverTranscript
+  let clientApplication ← deriveSecret main "c ap traffic".toUTF8 serverTranscript
   -- `Derive-Secret(., "s ap traffic", ClientHello...server Finished)`, from the Main Secret.
-  let serverApplication ← deriveSecret master "s ap traffic".toUTF8 serverTranscript
+  let serverApplication ← deriveSecret main "s ap traffic".toUTF8 serverTranscript
   -- Not derived: the binder key, the client early traffic secret and the early exporter secret.
   --
   -- They need a PSK.
   --
   -- Not derived either: the exporter and resumption secrets.
-  return ⟨earlySecret, handshake, master, clientHandshake, serverHandshake,
+  return ⟨earlySecret, handshake, main, clientHandshake, serverHandshake,
     clientApplication, serverApplication⟩
 
 /-- The Finished `verify_data` of RFC 9846 §4.5.3.

@@ -88,7 +88,7 @@ def packetExport (args : PyValue) : Result PyValue :=
     let keys ← toResult none (packetKeys suite secret)
     return (Base.packBytes keys.key, Base.packBytes keys.iv, Base.packBytes keys.hp)) args
 
-/-- Return the early, handshake, master, two handshake traffic and two application traffic secrets.
+/-- Return the early, handshake, main, two handshake traffic and two application traffic secrets.
 
 Each pair gives the client secret first.
 
@@ -97,7 +97,7 @@ The no-PSK schedule and transcript boundaries are those of RFC 9846 §7.1. -/
 def scheduleExport (args : PyValue) : Result PyValue :=
   pyExport (fun (sharedSecret, helloTranscript, serverTranscript) => do
     let s ← toResult none (Tls.keySchedule sharedSecret helloTranscript serverTranscript)
-    return (s.early, s.handshake, s.master, s.clientHandshake, s.serverHandshake,
+    return (s.early, s.handshake, s.main, s.clientHandshake, s.serverHandshake,
       s.clientApplication, s.serverApplication)) args
 
 /-- Derive a SHA-256 secret from encoded handshake messages, RFC 9846 §7.1.

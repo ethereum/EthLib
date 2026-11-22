@@ -27,7 +27,7 @@ class KeySchedule(NamedTuple):
 
     early: bytes
     handshake: bytes
-    master: bytes
+    main: bytes
     client_handshake: bytes
     server_handshake: bytes
     client_application: bytes

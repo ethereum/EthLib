@@ -901,6 +901,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- The TLS 1.3 key schedule names its Main Secret as [RFC 9846 §7.1](https://www.rfc-editor.org/rfc/rfc9846#section-7.1) does, where it kept the Master Secret of RFC 8446 ([#4242](https://github.com/ethereum/EthLib/issues/4242)).
+  In Python, the field `master` of `KeySchedule` is now `main`; the tuple keeps its order, so positional reads are unchanged.
+  The key `master` of `TrafficSecrets`, in the negotiated part of a handshake state, is now `main`, so a state saved with the old key no longer reads back.
+  In Lean, `masterSecret` is now `mainSecret`, the field `KeySchedule.master` is now `KeySchedule.main`, and the theorem `masterSecret_ok` is now `mainSecret_ok`.
+  The statement of `keySchedule_eq_ok_iff` follows the new names.
+
 - A completed TLS 1.3 client now silently ignores every 1-RTT NewSessionTicket, whatever its body, as [RFC 9846 §4.7.1](https://www.rfc-editor.org/rfc/rfc9846#section-4.7.1) requires of a client without resumption ([#4241](https://github.com/ethereum/EthLib/issues/4241)).
   It parses only the message type and length, so it no longer checks the ticket's fields, its extension placement or the early_data value of RFC 9001 §4.6.1.
   `client_step` now returns the unchanged state for such a ticket, where it raised `TlsStepError` with decode_error (`0x132`), illegal_parameter (`0x12f`) or PROTOCOL_VIOLATION (`0x0a`).

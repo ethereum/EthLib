@@ -43,50 +43,50 @@ theorem handshakeSecret_ok (sharedSecret : ByteArray) :
   simp only [handshakeSecret, hd, bind, Except.bind, pure, Except.pure]
 
 /-- Deriving the Main Secret always succeeds. -/
-theorem masterSecret_ok (handshake : Secret) :
-    ∃ output, masterSecret handshake = .ok output := by
+theorem mainSecret_ok (handshake : Secret) :
+    ∃ output, mainSecret handshake = .ok output := by
   obtain ⟨derived, hd⟩ := deriveSecret_ok handshake "derived".toUTF8 .empty
     (by simp; decide)
   refine ⟨Tls13.extract (packBytes derived) (packBytes zeros), ?_⟩
-  simp only [masterSecret, hd, bind, Except.bind, pure, Except.pure]
+  simp only [mainSecret, hd, bind, Except.bind, pure, Except.pure]
 
 /-- The no-PSK schedule computes every secret for every shared secret and transcript pair. -/
 theorem keySchedule_ok (sharedSecret helloTranscript serverTranscript : ByteArray) :
     ∃ output, keySchedule sharedSecret helloTranscript serverTranscript = .ok output := by
   obtain ⟨handshake, hh⟩ := handshakeSecret_ok sharedSecret
-  obtain ⟨master, hm⟩ := masterSecret_ok handshake
+  obtain ⟨main, hm⟩ := mainSecret_ok handshake
   obtain ⟨ch, hch⟩ := deriveSecret_ok handshake "c hs traffic".toUTF8 helloTranscript
     (by simp; decide)
   obtain ⟨sh, hsh⟩ := deriveSecret_ok handshake "s hs traffic".toUTF8 helloTranscript
     (by simp; decide)
-  obtain ⟨ca, hca⟩ := deriveSecret_ok master "c ap traffic".toUTF8 serverTranscript
+  obtain ⟨ca, hca⟩ := deriveSecret_ok main "c ap traffic".toUTF8 serverTranscript
     (by simp; decide)
-  obtain ⟨sa, hsa⟩ := deriveSecret_ok master "s ap traffic".toUTF8 serverTranscript
+  obtain ⟨sa, hsa⟩ := deriveSecret_ok main "s ap traffic".toUTF8 serverTranscript
     (by simp; decide)
-  refine ⟨⟨earlySecret, handshake, master, ch, sh, ca, sa⟩, ?_⟩
+  refine ⟨⟨earlySecret, handshake, main, ch, sh, ca, sa⟩, ?_⟩
   simp only [keySchedule, hh, hm, hch, hsh, hca, hsa, bind, Except.bind, pure, Except.pure]
 
-/-- A schedule returns exactly the early, handshake, master and four labelled traffic secrets. -/
+/-- A schedule returns exactly the early, handshake, main and four labelled traffic secrets. -/
 theorem keySchedule_eq_ok_iff (sharedSecret helloTranscript serverTranscript : ByteArray)
     (out : KeySchedule) :
     keySchedule sharedSecret helloTranscript serverTranscript = .ok out ↔
       out.early = earlySecret ∧
       handshakeSecret sharedSecret = .ok out.handshake ∧
-      masterSecret out.handshake = .ok out.master ∧
+      mainSecret out.handshake = .ok out.main ∧
       deriveSecret out.handshake "c hs traffic".toUTF8 helloTranscript =
         .ok out.clientHandshake ∧
       deriveSecret out.handshake "s hs traffic".toUTF8 helloTranscript =
         .ok out.serverHandshake ∧
-      deriveSecret out.master "c ap traffic".toUTF8 serverTranscript =
+      deriveSecret out.main "c ap traffic".toUTF8 serverTranscript =
         .ok out.clientApplication ∧
-      deriveSecret out.master "s ap traffic".toUTF8 serverTranscript =
+      deriveSecret out.main "s ap traffic".toUTF8 serverTranscript =
         .ok out.serverApplication := by
   simp only [keySchedule, bind_ok_iff, pure, Except.pure, Except.ok.injEq]
   constructor
   · rintro ⟨hs, hh, ms, hm, ch, hch, sh, hsh, ca, hca, sa, hsa, rfl⟩
     exact ⟨rfl, hh, hm, hch, hsh, hca, hsa⟩
   · rintro ⟨he, hh, hm, hch, hsh, hca, hsa⟩
-    refine ⟨out.handshake, hh, out.master, hm, out.clientHandshake, hch,
+    refine ⟨out.handshake, hh, out.main, hm, out.clientHandshake, hch,
       out.serverHandshake, hsh, out.clientApplication, hca, out.serverApplication, hsa, ?_⟩
     cases out
     simp_all
