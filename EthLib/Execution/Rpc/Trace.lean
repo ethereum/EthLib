@@ -19,7 +19,7 @@ The trace is an observer of the one interpreter, so it changes nothing in the ru
 
 Where it leaves a choice open, the docs of each field say what this specification picks.
 
-[schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/opcode-tracer.yaml
+[schema]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/schemas/opcode-tracer.yaml
 -/
 
 @[expose] public section
@@ -217,8 +217,15 @@ def setSlot (slots : List (Bytes32 × U256)) (key : Bytes32) (value : U256) :
 /-- The gas that a step removes from the frame `evm`, or all its gas when the step fails. -/
 def stepCost {fork : Fork} {Meter : Type} [GasMeter Meter] (evm : Evm fork Meter) :
     Except EvmError (StepResult fork Meter) → Nat
+  -- The gas that the step charges, memory growth and cold access included.
   | .ok (.next after) => GasMeter.gasLeft evm.gas - GasMeter.gasLeft after.gas
+  -- A call or a creation: the gas taken before its message runs, the gas it passes included.
+  --
+  -- The source does not say whether the passed gas counts; EthLib counts it.
   | .ok (.child caller _ _) => GasMeter.gasLeft evm.gas - GasMeter.gasLeft caller.gas
+  -- A failed step: all the gas that the frame holds, which its halt burns.
+  --
+  -- The source asks for the cost on success, which a failed step does not have.
   | .error _ => GasMeter.gasLeft evm.gas
 
 /-- The slot that an SLOAD or SSTORE step reads or writes, with its value after the step.
@@ -228,6 +235,9 @@ def touchedSlot {fork : Fork} {Meter : Type} [GasMeter Meter] (op : Option Op)
     (evm : Evm fork Meter) : Except EvmError (StepResult fork Meter) → Option (Bytes32 × U256)
   | .ok (.next after) =>
     if (op = some .sload ∨ op = some .sstore) ∧ after.error.isNone then
+      -- The key is `mu_s[0]` as 32 bytes, in the storage of the current account.
+      --
+      -- Its value is the one after the step, so the new value for SSTORE.
       evm.stack.val.head?.map fun word =>
         let key := word.toBeBytes
         (key, after.state.getStorage evm.message.currentTarget key)
@@ -242,11 +252,15 @@ A revert is no error of the step. -/
 def stepError {fork : Fork} {Meter : Type} :
     Except EvmError (StepResult fork Meter) → Option EvmError
   | .error e => some e
+  -- A frame that the step halted holds its error.
+  --
+  -- A revert gives no error of the step, EthLib's choice.
   | .ok (.next after) => after.error.filter (· != .revert)
   | .ok (.child _ _ _) => none
 
 /-- The opcode of the step of the frame `evm` at `fork`: STOP past the end of the code. -/
 def stepOp {fork : Fork} {Meter : Type} [GasMeter Meter] (evm : Evm fork Meter) : Option Op :=
+  -- Yellow Paper §9.4.1: `w = I_b[mu_{pc}]`, and STOP past the end of the code.
   if h : evm.pc < evm.code.size then Op.ofByte fork evm.code[evm.pc] else some .stop
 
 /-- The logger after it sees the step `result` of the frame `evm`, at `fork`.
@@ -259,6 +273,9 @@ A step past the bound adds no entry. -/
 def Tracer.record (config : TraceConfig) {fork : Fork} {Meter : Type} [GasMeter Meter]
     (evm : Evm fork Meter) (result : Except EvmError (StepResult fork Meter))
     (tracer : Tracer) : Tracer :=
+  -- A frame with no code adds no entry, as the source asks for a plain transfer.
+  --
+  -- Past the step limit no entry is added, and a limit of 0 sets no bound.
   if evm.code.size = 0 ∨ (config.limit ≠ 0 ∧ config.limit ≤ tracer.logs.size) then tracer
   else
     let op := stepOp evm
@@ -273,18 +290,30 @@ def Tracer.record (config : TraceConfig) {fork : Fork} {Meter : Type} [GasMeter 
       else tracer.slots
     let callers := tracer.refunds.take evm.message.depth
     let entry : StructLog :=
+      -- The program counter, the name and the byte of the opcode, and the memory size in bytes.
       { pc := evm.pc
         op := mnemonicOf fork op
         opcode := if h : evm.pc < evm.code.size then evm.code[evm.pc].toNat else 0
         memSize := evm.memory.size
+        -- The gas remaining before the opcode, and the gas that the step removes.
         gas := GasMeter.gasLeft evm.gas
         gasCost := stepCost evm result
+        -- The depth, 1 for the outermost call.
         depth := evm.message.depth + 1
+        -- The error of the step, absent when there is none.
         error := stepError result
+        -- The refund counter before the step, the counters of the calling frames included.
+        --
+        -- A negative total counts as 0, and the refund of EIP-7702 authorizations is not in it.
         refund := (callers.sum + evm.substate.refundCounter).toNat
+        -- The stack from bottom to top, unless the configuration disables it.
         stack := if config.disableStack then none else some evm.stack.val.reverse
+        -- The memory and the return data, only when the configuration enables them.
         memory := if config.enableMemory then some evm.memory else none
         returnData := if config.enableReturnData then some evm.returnData else none
+        -- The slots of the current account seen so far, at an SLOAD or SSTORE that succeeds.
+        --
+        -- None when the configuration disables the storage.
         storage := if config.disableStorage ∨ touched.isNone then none else some seen }
     let refunds := match result with
       | .ok (.child caller _ _) => callers ++ [caller.substate.refundCounter]
@@ -306,6 +335,9 @@ structure TransactionTrace where
 
 /-- The trace of a transaction from what its run gives and the logger at its end. -/
 def TransactionTrace.ofRun (output : TransactionOutput) (tracer : Tracer) : TransactionTrace where
+  -- The gas used after the refund, a failure for a revert or an exceptional halt.
+  --
+  -- Then the output of the message and the entries.
   gas := output.gasUsed
   failed := output.error.isSome
   returnValue := output.messageOutput
@@ -328,6 +360,7 @@ It runs the transaction as the body of the block does. -/
 def traceTransaction {fork : Fork} (config : TraceConfig) (env : BlockEnvironment fork)
     (index : Nat) (before : BodyOutput fork) (tx : Transaction) :
     Except BlockError TransactionTrace := do
+  -- The checks of inclusion that the body runs, then the run with the logger.
   let included ← (checkInclusion env.chainId env before.gas (.ofBlock before.block) tx).mapError
     (.invalidTransaction index)
   let (output, tracer) ← (traceRun config env before.block included tx).mapError .aborted
@@ -338,8 +371,10 @@ def traceTransaction {fork : Fork} (config : TraceConfig) (env : BlockEnvironmen
 The transactions of the block run from that body. -/
 def bodyStart (chain : BlockChain) {fork : Fork} (block : Block fork Transaction) :
     Except BlockError (BlockEnvironment fork × BodyState) := do
+  -- The environment of the block, with the hashes of the recent blocks.
   let hashes ← recentHashes chain.recent
   let env := blockEnvironment chain.config hashes block.header
+  -- The transfer of the DAO Fork at its block, then the system calls at the start of the block.
   let state ← daoTransfer chain.config fork block.header.number ⟨chain.state, ∅, ∅, ∅, ∅⟩
   let body ← (startSystemCalls env block.header.parentHash (.init state)).mapError .aborted
   return (env, body)
@@ -353,6 +388,7 @@ def traceBlock (config : TraceConfig) (chain : BlockChain) {fork : Fork}
   let (_, traces) ← block.transactions.zipIdx.foldlM
     (init := ((⟨body, .zero, 0, [], [], []⟩ : BodyOutput fork), ([] : List TransactionTrace)))
     fun (before, traces) (tx, index) => do
+      -- Each transaction is traced, then applied to the body, so the next one runs on its writes.
       let trace ← traceTransaction config env index before tx
       let after ← applyTransaction env index before tx
       return (after, traces ++ [trace])
@@ -366,6 +402,7 @@ def traceTransactionAt (config : TraceConfig) (chain : BlockChain) {fork : Fork}
   | none => return none
   | some tx =>
     let (env, body) ← bodyStart chain block
+    -- The transactions before it run first.
     let before ← applyTransactions env body (block.transactions.take index)
     some <$> traceTransaction config env index before tx
 

@@ -47,6 +47,7 @@ So a trace for these lines runs the logger with the configuration above.
 
 The name of the opcode follows, then the error, the memory and the storage when they are there. -/
 def eip3155Fields (e : StructLog) : List (String × Json) :=
+  -- EIP-3155: the required fields first, in the order of the EIP, then the optional ones.
   [("pc", Json.num e.pc), ("op", Json.num e.opcode), ("gas", quantityJson e.gas),
     ("gasCost", quantityJson e.gasCost), ("memSize", Json.num e.memSize),
     ("stack", listJson (quantityJson ·.toNat) (e.stack.getD [])), ("depth", Json.num e.depth),
@@ -66,6 +67,9 @@ The output is its bytes in hex behind `0x`, as the test case of the EIP writes `
 The gas is that of the whole transaction, its intrinsic gas included and its refund taken off. -/
 def eip3155SummaryFields (fork : Fork) (trace : TransactionTrace) (stateRoot : Hash32) :
     List (String × Json) :=
+  -- EIP-3155: the summary line, its four required fields in order, then the optional fork.
+  --
+  -- The optional time is left out, since a run in this specification takes no measured time.
   [("stateRoot", dataJson stateRoot.toList),
     ("output", dataJson trace.returnValue.toList),
     ("gasUsed", quantityJson trace.gas), ("pass", .bool !trace.failed), ("fork", .str fork.name)]
