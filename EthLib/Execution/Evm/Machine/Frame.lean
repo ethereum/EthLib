@@ -135,7 +135,9 @@ These forks have no state gas, so a charge of state gas is a charge of execution
 
 There is no reservoir, and nothing to refill, to roll back or to commit. -/
 instance : GasMeter Nat where
+  -- Yellow Paper §9.4.2: `Z` holds when `mu_g < C`; else §9.5 gives `mu'_g = mu_g - C`.
   charge gas amount := if gas < amount then .error .outOfGas else .ok (gas - amount)
+  -- No state gas before Glamsterdam, so the same rule.
   chargeState gas amount := if gas < amount then .error .outOfGas else .ok (gas - amount)
   refill gas _ := gas
   gasLeft gas := gas
@@ -349,18 +351,27 @@ structure Evm (fork : Fork) (Meter : Type) where
 /-- The frame after a charge of `amount` gas, or out of gas. -/
 def chargeGas {fork : Fork} {Meter : Type} [GasMeter Meter] (evm : Evm fork Meter)
     (amount : Nat) : Except EvmError (Evm fork Meter) := do
+  -- `mu'_g = mu_g - C`, or out of gas, by the rule of the meter of the fork.
   let gas ← GasMeter.charge evm.gas amount
   return { evm with gas }
 
 /-- The frame after a charge of `amount` state gas, or out of gas. -/
 def chargeStateGas {fork : Fork} {Meter : Type} [GasMeter Meter] (evm : Evm fork Meter)
     (amount : Nat) : Except EvmError (Evm fork Meter) := do
+  -- From Glamsterdam, EIP-8037: the reservoir pays first, then the gas left; else out of gas.
+  --
+  -- Before, it is a charge of gas.
   let gas ← GasMeter.chargeState evm.gas amount
   return { evm with gas }
 
 /-- The frame after a refill of `amount` state gas, for a state creation that is undone. -/
 def refillStateGas {fork : Fork} {Meter : Type} [GasMeter Meter] (evm : Evm fork Meter)
     (amount : Nat) : Evm fork Meter :=
+  -- From Glamsterdam, EIP-8037: the refill goes to the gas left first, up to what it paid.
+  --
+  -- The rest goes to the reservoir.
+  --
+  -- Before, there is no state gas, and nothing changes.
   { evm with gas := GasMeter.refill evm.gas amount }
 
 end EthLib.Execution.Evm

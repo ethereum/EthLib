@@ -28,16 +28,23 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- The top word of the stack, and the frame without it. -/
 def popWord (evm : Evm fork Meter) : Except EvmError (U256 × Evm fork Meter) := do
+  -- `mu_s[0]`, with `mu'_s[x] = mu_s[x + 1]`.
+  --
+  -- An empty stack is `||mu_s|| < delta_w`, so `Z` of §9.4.2 holds.
   let (x, stack) ← evm.stack.pop
   return (x, { evm with stack })
 
 /-- The frame with a word on top of its stack. -/
 def pushWord (evm : Evm fork Meter) (x : U256) : Except EvmError (Evm fork Meter) := do
+  -- `mu'_s[0] = x`, and `Z` of §9.4.2 holds if `||mu_s|| - delta_w + alpha_w > 1024`.
   let stack ← evm.stack.push x
   return { evm with stack }
 
 /-- The frame with its program counter moved by `n`. -/
 def advance (evm : Evm fork Meter) (n : Nat := 1) : Evm fork Meter :=
+  -- Yellow Paper §9.5: `mu'_{pc} = N(mu_{pc}, w)`, past the data of PUSH1 to PUSH32, else `+ 1`.
+  --
+  -- EIP-8024 adds DUPN, SWAPN and EXCHANGE, which skip their one immediate byte too.
   { evm with pc := evm.pc + n }
 
 /-- The frame after it pays `cost` and the growth of memory for `ranges`, with memory grown.
@@ -45,13 +52,19 @@ def advance (evm : Evm fork Meter) (n : Nat := 1) : Evm fork Meter :=
 Each range is a start and a size, as the instruction pops them. -/
 def chargeGasAndMemory (evm : Evm fork Meter) (cost : Nat) (ranges : List (U256 × U256)) :
     Except EvmError (Evm fork Meter) := do
+  -- `mu'_i = M(mu_i, s, f)` for each range, and its cost `C_mem(mu'_i) - C_mem(mu_i)`.
   let growth := extendMemory evm.memory.size ranges
+  -- `mu'_g = mu_g - C(sigma, mu, A, I)`, where `C` adds the growth of memory.
   let evm ← chargeGas evm (cost + growth.cost)
+  -- The memory grows by whole words of zeros, as §9.1 reads every location as 0.
   return { evm with memory := memoryExtend evm.memory growth.expandBy }
 
 /-- An instruction that pays `cost`, then pushes a word that it reads from the frame. -/
 def readFrame (cost : Nat) (value : Evm fork Meter → U256) (evm : Evm fork Meter) :
     Except EvmError (Evm fork Meter) := do
+  -- `mu'_g = mu_g - C`, then `mu'_s[0]` is a word read from the frame after the charge.
+  --
+  -- So GAS pushes `mu'_g`, as Appendix H says in words, where its formula reads `mu_g`.
   let evm ← chargeGas evm cost
   let evm ← pushWord evm (value evm)
   return advance evm
@@ -71,6 +84,7 @@ def readNumber (cost : Nat) (value : Evm fork Meter → Nat) (evm : Evm fork Met
 /-- An instruction that pops `x`, pays `cost` and pushes `f x`. -/
 def unaryOp (cost : Nat) (f : U256 → U256) (evm : Evm fork Meter) :
     Except EvmError (Evm fork Meter) := do
+  -- `delta_w = 1` and `alpha_w = 1`: `mu'_s[0] = f(mu_s[0])`, once `C` is paid.
   let (x, evm) ← popWord evm
   let evm ← chargeGas evm cost
   let evm ← pushWord evm (f x)
@@ -79,6 +93,7 @@ def unaryOp (cost : Nat) (f : U256 → U256) (evm : Evm fork Meter) :
 /-- An instruction that pops `x` then `y`, pays `cost` and pushes `f x y`. -/
 def binaryOp (cost : Nat) (f : U256 → U256 → U256) (evm : Evm fork Meter) :
     Except EvmError (Evm fork Meter) := do
+  -- `delta_w = 2` and `alpha_w = 1`: `mu'_s[0] = f(mu_s[0], mu_s[1])`, once `C` is paid.
   let (x, evm) ← popWord evm
   let (y, evm) ← popWord evm
   let evm ← chargeGas evm cost
@@ -88,6 +103,7 @@ def binaryOp (cost : Nat) (f : U256 → U256 → U256) (evm : Evm fork Meter) :
 /-- An instruction that pops `x`, `y` then `z`, pays `cost` and pushes `f x y z`. -/
 def ternaryOp (cost : Nat) (f : U256 → U256 → U256 → U256) (evm : Evm fork Meter) :
     Except EvmError (Evm fork Meter) := do
+  -- `delta_w = 3` and `alpha_w = 1`: `mu'_s[0] = f(mu_s[0], mu_s[1], mu_s[2])`, once `C` is paid.
   let (x, evm) ← popWord evm
   let (y, evm) ← popWord evm
   let (z, evm) ← popWord evm
@@ -97,6 +113,7 @@ def ternaryOp (cost : Nat) (f : U256 → U256 → U256 → U256) (evm : Evm fork
 
 /-- The frame after an exceptional halt: it stops with no gas, no output and the error. -/
 def exceptionalHalt (evm : Evm fork Meter) (error : EvmError) : Evm fork Meter :=
+  -- Yellow Paper §9.4: when `Z` holds, `X` gives no output, and §8 leaves no gas, `g' = 0`.
   { evm with
     gas := GasMeter.exhaust evm.gas
     running := false
@@ -113,11 +130,13 @@ The read stays even when the instruction then halts. -/
 
 /-- The frame once it records a read of the account at an address. -/
 def recordAccountRead (evm : Evm fork Meter) (address : Base.Address) : Evm fork Meter :=
+  -- EIP-7928: the address joins the block access list.
   { evm with state := evm.state.recordAccountRead address }
 
 /-- The frame once it records a read of a key of the storage of an address. -/
 def recordStorageRead (evm : Evm fork Meter) (address : Base.Address) (key : Base.Bytes32) :
     Evm fork Meter :=
+  -- EIP-7928: the key joins the storage reads of the address, at most once.
   { evm with state := evm.state.recordStorageRead address key }
 
 /-- From Glamsterdam, fail with out of gas when the frame has less than `amount` gas left.
@@ -126,6 +145,7 @@ It charges nothing, and it passes before Glamsterdam.
 
 From Glamsterdam, an instruction checks the price it knows before it reads the state. -/
 def checkGas (evm : Evm fork Meter) (amount : Nat) : Except EvmError Unit :=
+  -- EIP-7928, Gas Validation Before State Access: out of gas if the gas left is below `amount`.
   if fork ≥ .glamsterdam ∧ GasMeter.gasLeft evm.gas < amount then throw .outOfGas else pure ()
 
 /-- The result of the rest of an instruction, from the frame `evm` that has read the state.
@@ -136,6 +156,9 @@ An error that aborts the whole execution stays an error. -/
 def keepReads {α : Type} (evm : Evm fork Meter) (halted : Evm fork Meter → α)
     (rest : Except EvmError α) : Except EvmError α :=
   match rest with
+  -- EIP-7928: a halt keeps the reads that the frame made before it.
+  --
+  -- An error that aborts the run is no halt of the frame.
   | .error e => if e.aborts then .error e else .ok (halted (exceptionalHalt evm e))
   | .ok result => .ok result
 
