@@ -218,10 +218,17 @@ def name : Fork → String
   | glamsterdam => "glamsterdam"
   | hegota => "hegota"
 
+/-- The last fork of the list.
+
+Enumerations and termination measures that run to the end of the list read it.
+
+So they name no case, and a new fork at the end leaves them as they are. -/
+def last : Fork := hegota
+
 /-- The fork with a name, if one has it. -/
 def ofName? (s : String) : Option Fork :=
-  -- Every fork from Frontier to Hegotá, in order, then the first whose name matches.
-  ((List.range (hegota.ctorIdx + 1)).map Fork.ofNat).find? (·.name == s)
+  -- Every fork from Frontier to the last one, in order, then the first whose name matches.
+  ((List.range (last.ctorIdx + 1)).map Fork.ofNat).find? (·.name == s)
 
 end Fork
 

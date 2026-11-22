@@ -855,10 +855,10 @@ def upgradeBalanceReplay (s : ForkedBeaconState preset) :
       else return rest
     else return rest
   else return []
-termination_by Fork.hegota.ctorIdx + 1 - s.fork.ctorIdx
+termination_by Fork.last.ctorIdx + 1 - s.fork.ctorIdx
 decreasing_by
   have later : s.fork.ctorIdx < next.val.fork.ctorIdx := next.property
-  have last : next.val.fork.ctorIdx ≤ Fork.hegota.ctorIdx := by cases next.val.fork <;> decide
+  have last : next.val.fork.ctorIdx ≤ Fork.last.ctorIdx := by cases next.val.fork <;> decide
   omega
 
 def _root_.EthLib.Consensus.Step.balanceEvents {x y : ForkedBeaconState preset}

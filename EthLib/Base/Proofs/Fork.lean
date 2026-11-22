@@ -45,9 +45,13 @@ instance : LawfulOrderOrd Fork where
 /-- Frontier is the first fork. -/
 theorem frontier_le (f : Fork) : frontier ≤ f := Nat.zero_le f.ctorIdx
 
-/-- Hegotá is the last fork. -/
-theorem le_hegota (f : Fork) : f ≤ hegota := by
+/-- The last fork comes at or after every fork. -/
+theorem le_last (f : Fork) : f ≤ last := by
   cases f <;> decide
+
+/-- Hegotá is the last fork. -/
+@[deprecated "Use `le_last`, which states it for the last fork." (since := "2026-11-22")]
+theorem le_hegota (f : Fork) : f ≤ hegota := le_last f
 
 /-! ## The comparison
 
