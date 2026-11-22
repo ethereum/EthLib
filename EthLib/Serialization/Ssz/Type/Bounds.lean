@@ -15,12 +15,7 @@ A dynamic type takes its largest size from its limits.
 
 Each variable-size element or field adds an offset of 4 bytes.
 
-No primary source writes these bounds as functions, so the rules below state them.
-
-- A bit list holds a delimiter bit, so it has at least one byte.
-- A list, a byte list and a bit list have no elements at least, and at most their limit.
-- A progressive list without a limit has no largest size.
-- A union is its selector byte, then the smallest or the largest of its options.
+No primary source writes these bounds as functions, so EthLib states them, one rule per comment.
 -/
 
 @[expose] public section
@@ -35,19 +30,26 @@ mutual
 
 /-- The fewest bytes that an encoding of the type has. -/
 def Desc.minSize : Desc → Nat
+  -- A fixed-size type has one size: 1 for a boolean, `N / 8` for uintN, `N` for ByteVector[N].
   | .bool => 1
   | .uint width => width
   | .byteVector length => length
+  -- ByteList[N]: the empty list, of no byte.
   | .byteList _ => 0
+  -- Bitvector[N]: `ceil(N / 8)` bytes.
   | .bitVector length => (length + 7) / 8
-  -- The delimiter bit takes one byte when the list is empty.
+  -- Bitlist[N] and ProgressiveBitlist: the empty list, whose delimiter bit takes one byte.
   | .bitList _ => 1
   | .progressiveBitList _ => 1
+  -- Vector[type, N]: `N` elements, each of its fewest bytes, plus 4 if variable-size.
   | .vector element length => length * (element.minSize + offsetWidth element)
+  -- List[type, N] and ProgressiveList[type]: the empty list, of no byte.
   | .list _ _ => 0
   | .progressiveList _ _ => 0
+  -- A container: each field of its fewest bytes, plus 4 if variable-size.
   | .container _ fields => Desc.fieldsMinSize fields
   | .progressiveContainer _ _ fields => Desc.fieldsMinSize fields
+  -- A union: its selector byte, then the smallest of its options.
   | .compatibleUnion _ options => 1 + Desc.optionsMinSize options
 
 /-- The fewest bytes of the fields of a struct, with an offset for each variable field. -/
@@ -67,22 +69,33 @@ mutual
 
 /-- The most bytes that an encoding of the type has, if the type bounds them. -/
 def Desc.maxSize : Desc → Option Nat
+  -- A fixed-size type has one size: 1 for a boolean, `N / 8` for uintN, `N` for ByteVector[N].
   | .bool => some 1
   | .uint width => some width
   | .byteVector length => some length
+  -- ByteList[N]: `N` bytes.
   | .byteList limit => some limit
+  -- Bitvector[N]: `ceil(N / 8)` bytes.
   | .bitVector length => some ((length + 7) / 8)
-  -- The delimiter bit follows the last data bit.
+  -- Bitlist[N]: `floor(N / 8) + 1` bytes, since the delimiter bit follows the last data bit.
   | .bitList limit => some ((limit + 8) / 8)
+  -- A ProgressiveBitlist: as a Bitlist[N] where a bound `N` is declared, and unbounded otherwise.
   | .progressiveBitList limit => limit.map fun bound => (bound + 8) / 8
+  -- Vector[type, N]: `N` elements, each of its most bytes, plus 4 if variable-size.
   | .vector element length => element.maxSize.map fun size => length * (size + offsetWidth element)
+  -- List[type, N]: `N` elements, each of its most bytes, plus 4 if variable-size.
   | .list element limit => element.maxSize.map fun size => limit * (size + offsetWidth element)
+  -- A ProgressiveList[type]: as a List[type, N] where a bound `N` is declared.
+  --
+  -- A progressive list without a bound has no largest size.
   | .progressiveList element limit => do
     let bound ← limit
     let size ← element.maxSize
     return bound * (size + offsetWidth element)
+  -- A container: each field of its most bytes, plus 4 if variable-size.
   | .container _ fields => Desc.fieldsMaxSize fields
   | .progressiveContainer _ _ fields => Desc.fieldsMaxSize fields
+  -- A union: its selector byte, then the largest of its options.
   | .compatibleUnion _ options => (Desc.optionsMaxSize options).map (1 + ·)
 
 /-- The most bytes of the fields of a struct, if every field bounds them. -/
