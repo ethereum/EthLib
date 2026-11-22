@@ -6,6 +6,8 @@ public import EthLib.Serialization.Ssz.Codec.Layout
 The Merkle root of a value, taken from the tree its layout describes.
 
 The hash may answer in a monad, and the specification is SHA-256 in the identity monad.
+
+The rule of each type is stated where its layout is built, and the rooting hashes that layout.
 -/
 
 @[expose] public section
@@ -31,12 +33,17 @@ def hashTreeRootAtM : Nat → Desc → Value → ExceptT Err m Bytes
   -- A budget of the type's nesting never runs out, so this answers only a budget set too low.
   | 0, _, _ => throw .proofIncomplete
   | budget + 1, shape, value => do
+    -- The leaves, capacity and mixed-in word of the type.
     let layout ← merkleLayout shape value
+    -- The chunks: packed data, or the root of each nested value.
     let chunks ← layoutChunksAtM budget layout
+    -- A bounded tree for a declared capacity, else the progressive tree of EIP-7916.
     let root ← match layout.limit with
       | none => ExceptT.lift (merkleizeProgressiveUncheckedM hasher chunks.toList)
       | some capacity => merkleizeBoundedUncheckedM hasher chunks (some capacity)
     -- A shape mixing a word in puts its contents on the left and the word on the right.
+    --
+    -- So its root is `H(r || w)`.
     match layout.mixin with
     | none => return root
     | some word => ExceptT.lift (mixInM hasher root word)
@@ -60,6 +67,7 @@ def layoutChunksAtM (budget : Nat) (layout : MerkleLayout)
       match slot with
       -- A position carrying no value merkleizes as a zero leaf.
       | none => pure zeroChunk
+      -- A nested value takes its own root as its chunk.
       | some (shape, value) => hashTreeRootAtM budget shape value
     return chunks.toArray
 

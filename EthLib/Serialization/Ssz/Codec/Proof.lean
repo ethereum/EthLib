@@ -3,7 +3,17 @@ module
 public import EthLib.Serialization.Ssz.Codec.Root
 public import EthLib.Serialization.Ssz.Merkle.Verify
 
-/-! Reading an index against a value's data, and building the proofs that carry it. -/
+/-!
+Reading an index against a value's data, and building the proofs that carry it.
+
+A proof is the nodes at the branch indices of one index, or at the helper indices of several.
+
+The tree is the one the root of the value hashes, so a node is `H(left || right)` of its children.
+
+[EIP-7916][eip7916] gives the spine of a progressive shape its indices.
+
+[eip7916]: https://github.com/ethereum/EIPs/blob/875fcf6d084c096195fec170310514444f537133/EIPS/eip-7916.md#progressive-merkle-tree
+-/
 
 @[expose] public section
 
@@ -39,7 +49,9 @@ def spineWalk (leafCount index : Nat) :
   | depth + 1, leavesFrom, capacity => do
     -- A level whose first leaf is past the data is a level the spine never opened.
     if leavesFrom ≥ leafCount then throw .pathPastSpine
+    -- EIP-7916: the left child of a spine node is the subtree of its level, the right one the rest.
     if !gindexBit index depth then return ⟨depth, leavesFrom, capacity, true⟩
+    -- The next level starts past this one, and holds four times as many leaves.
     spineWalk leafCount index depth (leavesFrom + capacity) (capacity * 4)
 
 mutual
@@ -55,6 +67,7 @@ def nodeRootAt : Nat → Desc → Value → Nat → Except Err Bytes
   -- A budget of the type's nesting never runs out, so this answers only a budget set too low.
   | 0, _, _, _ => .error .proofIncomplete
   | budget + 1, shape, value, index => do
+    -- No node has the index 0.
     if index < 1 then throw (.notAGindex index)
     -- The root sits on no branch, but it is still a node, so this walk answers for it.
     if index == 1 then return (← hashTreeRoot shape value)
@@ -63,6 +76,7 @@ def nodeRootAt : Nat → Desc → Value → Nat → Except Err Bytes
     let full ← gindexLength index
     -- A mixed-in word is the right child, which puts the contents one level down on the left.
     let depth := if layout.mixin.isSome then full - 1 else full
+    -- Under a root `H(r || w)`, the word `w` is node 3 and the contents `r` node 2.
     match layout.mixin with
     | some word =>
       if gindexBit index depth then
@@ -89,7 +103,9 @@ def boundedNode (budget : Nat) (layout : MerkleLayout)
   let width := nextPow2 capacity
   let treeDepth := Nat.log2 width
   if depth ≤ treeDepth then
-    -- Each turn halves the run of leaves a node spans, so the turns left give its width.
+    -- After `t` turns down a tree of width `w`, a node spans `w / 2^t` leaves.
+    --
+    -- It is the root of those leaves, as a tree of that width.
     let span := width >>> depth
     let start := leavesFrom + gindexBelow index depth * span
     let chunks ← layoutChunksAt budget layout start (some (start + span))
@@ -104,6 +120,7 @@ def boundedNode (budget : Nat) (layout : MerkleLayout)
     | .nested values =>
       match values[leaf]? with
       | some (some (nestedShape, nestedValue)) =>
+        -- The rest of the index, rebased, is an index in the tree of that nested value.
         nodeRootAt budget nestedShape nestedValue (gindexRebase index below)
       -- A position past the leaves, or one holding no value, has no tree to descend into.
       | _ => throw .pathIntoGap
@@ -139,6 +156,7 @@ Branch that authenticates one generalized index of a value against its root.
 Every node on the path contributes its sibling, bottom-up, as a verifier reads it.
 -/
 def buildProof (shape : Desc) (value : Value) (index : Nat) : Except Err (List Bytes) := do
+  -- The node at each branch index, the sibling of each path node from the bottom up.
   (← getBranchIndices index).mapM (nodeRoot shape value)
 
 /--
@@ -150,6 +168,7 @@ Branches that meet share every node above the meeting point, and those are dropp
 -/
 def buildMultiproof (shape : Desc) (value : Value) (indices : List Nat) :
     Except Err (List Bytes) := do
+  -- The node at each helper index, in the order of those indices.
   (← getHelperIndices indices).mapM (nodeRoot shape value)
 
 end EthLib.Serialization.Ssz
