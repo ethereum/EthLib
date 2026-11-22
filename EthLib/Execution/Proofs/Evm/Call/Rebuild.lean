@@ -1388,7 +1388,14 @@ private theorem rebuildStep_step {block : BlockState} {evm : Evm fork Meter}
     exact ⟨RebuildStep.of_sameContext (controlFlowStep_sameContext (op := .stop) rfl rfl),
       fun _ _ _ hc => by cases hc⟩
 
-private theorem accountDeployable_of_create_step {evm caller : Evm fork Meter}
+/-- A creation that a step sends goes to an address where a contract may be deployed.
+
+That holds in the state of the frame that sends it, once the creator has raised its nonce.
+
+The current account of the step must have a nonce or code.
+
+The creator then has a nonce or code in that state too. -/
+theorem accountDeployable_of_create_step {evm caller : Evm fork Meter}
     {message : Message fork} {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (hnc : HasNonceOrCode evm.state evm.message.currentTarget)
     (h : step fork evm = .ok (.child caller message resume)) (ht : message.target = none) :

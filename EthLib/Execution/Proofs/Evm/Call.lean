@@ -42,6 +42,7 @@ public import EthLib.Execution.Proofs.Evm.Call.Settled
 public import EthLib.Execution.Proofs.Evm.Call.SlotSurplus
 public import EthLib.Execution.Proofs.Evm.Call.SlotSurplusCalls
 public import EthLib.Execution.Proofs.Evm.Call.SlotSurplusParts
+public import EthLib.Execution.Proofs.Evm.Call.SlotSurplusRun
 public import EthLib.Execution.Proofs.Evm.Call.SlotSurplusSteps
 public import EthLib.Execution.Proofs.Evm.Call.SimulatedLogs
 public import EthLib.Execution.Proofs.Evm.Call.StateAborts
