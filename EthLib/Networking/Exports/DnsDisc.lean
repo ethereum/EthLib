@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Exports.PyValue
 public import EthLib.Cryptography.Exports.Secp256k1
 public import EthLib.Networking.DnsDisc
+public import EthLib.Networking.Exports.Enr
 
 /-!
 # `Exports.DnsDisc`
@@ -20,8 +21,8 @@ public section
 
 namespace EthLib.Networking.DnsDisc.Exports
 
-open EthLib.Exports (ExportError Result PyValue UnreadArgument toPy pyExport rejectArgument
-  toResult)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument toPy pyExport toResult)
+open EthLib.Networking.Enr.Exports (encodeRecord)
 
 /-- A message for a rejection, phrased for someone reading a Python traceback. -/
 def message : DnsError → String
@@ -48,6 +49,10 @@ instance : ExportError DnsError where
   code := DnsError.code
   message := message
 
+/-- The code of a node record with no RLP encoding: that of a refused node record. -/
+def recordCode (e : Serialization.Rlp.RlpError) : UInt32 :=
+  (DnsError.enr (.rlp e)).code
+
 /-- The fields of an entry, as Python values. -/
 def entryFields : Entry → Result (List (String × PyValue))
   | .root r => return [("type", toPy "root"), ("enr_root", toPy r.enrRoot),
@@ -56,9 +61,7 @@ def entryFields : Entry → Result (List (String × PyValue))
   | .link url => return [("type", toPy "link"), ("key", toPy url.key),
       ("domain", toPy url.domain)]
   | .enr record =>
-    match record.encode with
-    | .ok bytes => return [("type", toPy "enr"), ("record", toPy bytes)]
-    | .error _ => rejectArgument none "record has no RLP encoding"
+    return [("type", toPy "enr"), ("record", toPy (← encodeRecord recordCode record))]
 
 /-- The type and the fields of an entry text. -/
 def parseEntryOf (text : String) : Result PyValue := do
@@ -111,8 +114,7 @@ def resolveOf (args : Vector UInt8 33 × Nat × String × Nat × List (String ×
   -- The first record of the table at a name is its text.
   let lookup := fun name => (table.find? (·.1 = name)).map (·.2)
   let (seq, found) ← toResult none (resolve lookup key seenSeq domain budget)
-  let records ← found.records.mapM fun record =>
-    toResult none (record.encode.mapError fun _ => UnreadArgument.mk "record has no RLP encoding")
+  let records ← found.records.mapM (encodeRecord recordCode)
   return (seq, records, found.links.map fun url => String.ofList url.toText)
 
 /-- The node list at a domain, under a compressed public key, with a table as the DNS.

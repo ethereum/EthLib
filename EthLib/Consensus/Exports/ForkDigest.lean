@@ -119,7 +119,9 @@ def bootnodeForkIdExport (args : PyValue) : Result PyValue := pyExport bootnodeF
 
 The subnets come as the SSZ bytes of their bitvectors.
 
-A private key or a record that is rejected comes back with code 0. -/
+A private key or a record that is rejected comes back with code 0.
+
+So does a record with no RLP encoding. -/
 def consensusRecordOf (args : String × Option PyValue × Root × UInt64 × ByteArray × UInt64 ×
     ByteArray × ByteArray × UInt64) : Result ByteArray := do
   let (name, replacements, genesisValidatorsRoot, epoch, secretKey, seq, attnets, syncnets,
@@ -134,7 +136,7 @@ def consensusRecordOf (args : String × Option PyValue × Root × UInt64 × Byte
   -- A record error has no code among those of SSZ, so it comes back with code 0.
   let r ← toResult none ((makeRecordV4 sk seq pairs).mapError fun e =>
     UnreadArgument.mk s!"record rejected: {Networking.Enr.Exports.message e}")
-  toResult none (r.encode.mapError fun _ => UnreadArgument.mk "record has no RLP encoding")
+  Networking.Enr.Exports.encodeRecord (fun _ => 0) r
 
 /-- A signed "v4" record of a consensus node at an epoch, with its consensus entries.
 
