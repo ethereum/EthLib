@@ -8,12 +8,7 @@ public import EthLib.Cryptography.Sphincs.Ots
 
 The Merkle trees of the hypertree, whose leaves are one-time keys.
 
-Tree `tau` of layer `l` has height `h_l`, and for `1 <= z <= h_l`:
-
-```text
-    X_{0,e} = the leaf of one-time key (l, tau, e)
-    X_{z,j} = H(PK.seed, ADRS_node(l, tau, z, j), X_{z-1,2j} | X_{z-1,2j+1})
-```
+Tree `tau` of layer `l` has height `h_l`, and its nodes are `X_{z,j}` for `z <= h_l`.
 
 Its root is `X_{h_l,0}`, and the top tree's root is `PK.root`.
 
@@ -57,11 +52,16 @@ variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 The position's level is the height `z`, and its index is the index `j`. -/
 def nodeHash (pkSeed : PkSeed) (layer : Layer) (tree : Nat) (p : Merkle.Position)
     (left right : Digest) : m Digest :=
+  -- Algorithm 9, lines 8 to 11, for `z >= 1`.
+  --
+  -- `X_{z,j} = H(PK.seed, ADRS_node(l, tau, z, j), X_{z-1,2j} | X_{z-1,2j+1})`.
+  --
   -- The payload is the left child, then the right child.
   th H pkSeed (adrsNode layer tree p.level p.index) (packBytes left ++ packBytes right)
 
 /-- `X_{0,e}`: the leaf of one-time key `e` of tree `tree` of a layer. -/
 def leaves (pkSeed : PkSeed) (prf : Prf m) (layer : Layer) (tree e : Nat) : m Digest :=
+  -- Algorithm 9, lines 1 to 4: `X_{0,e}` is the leaf of one-time key `(l, tau, e)`.
   otsPublicLeaf H pkSeed prf ⟨layer, tree, e⟩
 
 /-- `X_{z,j}`: node `j` at height `z` of tree `tree` of a layer, FIPS 205's `xmss_node`.
@@ -83,14 +83,10 @@ def buildTree (pkSeed : PkSeed) (prf : Prf m) (layer : Layer) (tree : Nat) :
 
 /-! ## The path -/
 
-/-- The path of key `e` of tree `tree`, from the leaf up, height 0 first.
-
-```text
-    P_z = X_{z, floor(e / 2^z) xor 1}
-```
--/
+/-- The path of key `e` of tree `tree`, from the leaf up, height 0 first. -/
 def path (pkSeed : PkSeed) (prf : Prf m) (layer : Layer) (tree e : Nat) :
     m (Vector Digest layer.height) :=
+  -- Algorithm 10, lines 2 and 3: `P_z = X_{z, floor(e / 2^z) xor 1}`.
   Merkle.path (nodeHash H pkSeed layer tree) (leaves H pkSeed prf layer tree) layer.height e
 
 /-- `Tree.fold`: the root a path leads to from the leaf of key `e` of tree `tree`.

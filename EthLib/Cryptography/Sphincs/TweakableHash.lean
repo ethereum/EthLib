@@ -7,12 +7,7 @@ public import EthLib.Cryptography.HashSig
 /-!
 # The leanSPHINCS tweakable hash
 
-The hash every other definition is built from.
-
-```text
-    Th(PK.seed, ADRS, M)       = Trunc_n(H(PK.seed | ADRS | M))
-    PRF(PK.seed, SK.seed, ADRS) = Th(PK.seed, ADRS, SK.seed)
-```
+The hash every other definition is built from: `Th` hashes `PK.seed | ADRS | M` and keeps `n` bytes.
 
 - `H` is Keccak-256: the 256-bit hash of FIPS 202, with Keccak's original padding byte `0x01`.
 - `Trunc_n` keeps the first `n = 16` bytes of its output.
@@ -72,6 +67,9 @@ def thInput (pkSeed : PkSeed) (adrs : Adrs) (payload : ByteArray) : ByteArray :=
 
 It is FIPS 205's `F`, `H` and `T_l`. -/
 def th (pkSeed : PkSeed) (adrs : Adrs) (payload : ByteArray) : m Digest := do
+  -- `Th(PK.seed, ADRS, M) = Trunc_n(H(PK.seed | ADRS | M))`.
+  --
+  -- It is FIPS 205 §11.1, with Keccak-256 in place of SHAKE256.
   return trunc N (← H (thInput pkSeed adrs payload))
 
 /-! ## Secret values -/
@@ -87,6 +85,7 @@ abbrev Prf (m : Type → Type) := Adrs → m Digest
 
 `SK.seed` has 32 bytes, so the input has 80 bytes. -/
 def prf (pkSeed : PkSeed) (skSeed : Seed) : Prf m := fun adrs =>
+  -- FIPS 205 §11.1, the `PRF` line, with `Th` in place of SHAKE256.
   th H pkSeed adrs (packBytes skSeed)
 
 end EthLib.Cryptography.Sphincs

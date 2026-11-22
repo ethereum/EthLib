@@ -12,19 +12,9 @@ Revealing a chain at position `k` lets anyone reach the positions above `k`.
 
 It reveals nothing about the positions below.
 
-The chains of key `K = (l, tau, e)`, for `i < 64` and `mu < 3`:
+Key `K = (l, tau, e)` has 64 chains `C_{i,mu}`, for `i < 64` and positions `mu <= 3`.
 
-```text
-    C_{i,0}    = PRF(PK.seed, SK.seed, ADRS_prf(K, i))
-    C_{i,mu+1} = F(PK.seed, ADRS_chain(K, i, mu), C_{i,mu})
-    leaf       = T_v(PK.seed, ADRS_pk(K), C_{0,3} | ... | C_{63,3})
-```
-
-The key signs a 16-byte message `M` with the least counter `c` that makes this a codeword:
-
-```text
-    D = Th(PK.seed, ADRS_enc(K), M | BE_32(c))
-```
+The key signs a 16-byte message `M` with the least counter `c` whose digest `D` is a codeword.
 
 Source: WOTS+C of [leanSPHINCS.tex][note] §1, and WOTS+ of [FIPS 205][fips205] §5.
 
@@ -53,6 +43,7 @@ variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
 Chain `i` starts at `PRF(PK.seed, SK.seed, ADRS_prf(K, i))`, as in FIPS 205's `wots_pkGen`. -/
 def chainStarts (prf : Prf m) (key : OtsKey) : m (Vector Digest V) :=
+  -- `C_{i,0} = PRF(PK.seed, SK.seed, ADRS_prf(K, i))`, Algorithm 6, lines 5 and 6.
   ofFnInOrder V fun i => prf (adrsPrf key i)
 
 /-- One step of chain `i`, from position `mu` to the next: `F` under `ADRS_chain(K, i, mu)`.
@@ -60,6 +51,7 @@ def chainStarts (prf : Prf m) (key : OtsKey) : m (Vector Digest V) :=
 The chain index and the position are in the address, so the payload is the value alone. -/
 def chainStep (pkSeed : PkSeed) (key : OtsKey) (i : Fin V) (mu : Fin (CHAIN_LENGTH - 1))
     (value : Digest) : m Digest :=
+  -- `C_{i,mu+1} = F(PK.seed, ADRS_chain(K, i, mu), C_{i,mu})`, Algorithm 5, lines 3 and 4.
   th H pkSeed (adrsChain key i mu) (packBytes value)
 
 /-- Walk chain `i` for `steps` steps, starting at position `start`: FIPS 205's `chain`.
@@ -73,6 +65,7 @@ def chain (pkSeed : PkSeed) (key : OtsKey) (i : Fin V) (start steps : Nat)
 
 /-- `T_v` over the ends of the 64 chains: the Merkle leaf of a one-time key. -/
 def otsLeafHash (pkSeed : PkSeed) (key : OtsKey) (ends : Vector Digest V) : m Digest :=
+  -- `leaf = T_v(PK.seed, ADRS_pk(K), C_{0,3} | ... | C_{63,3})`, Algorithm 6, line 13.
   th H pkSeed (adrsPk key) (packDigests ends)
 
 /-- The leaf of a key, computed from its secrets: FIPS 205's `wots_pkGen`. -/
@@ -91,6 +84,7 @@ It hashes `M | BE_32(c)` under `ADRS_enc(K)`, 68 bytes in all.
 The counter comes last, so all counter trials share every block before the last one. -/
 def encode (pkSeed : PkSeed) (key : OtsKey) (msg : Digest) (counter : UInt32) :
     m (Option Codeword) :=
+  -- `D = Th(PK.seed, ADRS_enc(K), M | BE_32(c))`, a codeword when its digits sum to 128.
   codeword? <$>
     th H pkSeed (adrsEnc key) (packBytes msg ++ packBytes (toByte COUNTER_LEN counter.toNat))
 
@@ -124,6 +118,8 @@ def otsSign (pkSeed : PkSeed) (prf : Prf m) (key : OtsKey) (msg : Digest) :
   let some (counter, x) ← Internal.findCounter H pkSeed key msg 0 MAX_COUNTER_TRIALS
     | return none
   -- Step 2: reveal each chain at the position its digit names, chain 0 first.
+  --
+  -- Algorithm 7, lines 11 to 15, with the codeword in place of the message and checksum.
   let starts ← chainStarts prf key
   let y ← ofFnInOrder V fun i => chain H pkSeed key i 0 x[i] (by simp) starts[i]
   return some (counter, y)
