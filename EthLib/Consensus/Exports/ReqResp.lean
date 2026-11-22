@@ -115,7 +115,10 @@ def minEpochsForBlockRequestsOf (args : String × String) : Result Nat := do
   let (name, fork) := args
   let config ← configOf name
   let fork ← forkUpTo .hegota fork.toUTF8
-  return (config.computeMinEpochsForBlockRequests fork).toNat
+  -- The named configurations never fail, but a failure would reach Python with code 0.
+  let epochs ← toResult none ((config.computeMinEpochsForBlockRequests fork).mapError fun e =>
+    UnreadArgument.mk s!"configuration rejected: {reprStr e}")
+  return epochs.toNat
 
 /-- The fewest epochs back from the current one over which a node must serve blocks, at a fork.
 
