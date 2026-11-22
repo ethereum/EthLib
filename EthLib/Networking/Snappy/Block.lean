@@ -8,22 +8,11 @@ public import EthLib.Networking.Encoding.Varint
 
 Decompression of the Snappy block format.
 
-Source: [`format_description.txt`][format] of `google/snappy`.
+Source: [`format_description.txt`][format] of `google/snappy`, §1 and §2.
 
 Gossip on the consensus layer compresses every message with it.
 
-A block is a preamble, then elements:
-
-- The preamble is the uncompressed length, as a varint (§1).
-- A literal is bytes copied straight to the output (§2.1).
-- A copy repeats bytes already written, some distance back (§2.2).
-
-The low two bits of an element's first byte, its tag, name its kind:
-
-- `00`: a literal.
-- `01`: a copy with a one-byte offset.
-- `10`: a copy with a two-byte offset.
-- `11`: a copy with a four-byte offset.
+A block is a preamble that declares the uncompressed length, then literals and copies.
 
 A peer controls every byte, so decompression is total and names each way a block can be malformed.
 
@@ -98,33 +87,31 @@ def SnappyError.code : SnappyError → UInt32
   | .copyOffsetTooLarge .. => 7
   | .lengthMismatch .. => 8
 
-/-- The uncompressed length a block declares, and the bytes after the preamble (§1).
-
-The preamble is a varint: its last byte is the first one without the continuation bit.
-
-Its length is the value of its groups of seven bits.
-
-# Why no minimal encoding
-
-The format sets no minimality rule.
-
-So `80 00` is a valid preamble for the length zero.
-
-The consensus-layer varint rejects it.
-
-This reader takes the value of the groups with no minimality check.
--/
+/-- The uncompressed length a block declares, and the bytes after the preamble (§1). -/
 def readPreamble (bs : List UInt8) : Except SnappyError (Nat × List UInt8) :=
+  -- §1: given the maximum 2^32 - 1, 5 bytes are sufficient for any value.
   let window := bs.take preambleMaxLength
+  -- §1: the upper bit of a byte is set iff there are more bytes, so the last byte has it clear.
   let last := window.findIdx (·.toNat < Encoding.Varint.continuation)
   if last < window.length then
+    -- §1: the lower 7 bits of each byte are data, little-endian.
+    --
+    -- The format sets no minimality rule, so 0x80 0x00 is a valid preamble for the length zero.
+    --
+    -- The consensus-layer varint rejects it, and this reader takes the value with no such check.
     let len := Encoding.Varint.valueOf (bs.take (last + 1))
+    -- §1: the length is at most 2^32 - 1.
+    --
     -- Five bytes hold 35 bits, so the range is checked separately.
     if maxUncompressedLength < len then
       .error (.preambleTooLarge len)
     else
       .ok (len, bs.drop (last + 1))
   -- No last byte among the first five: too long if a sixth byte follows, else truncated.
+  --
+  -- §1 names neither failure.
+  --
+  -- A sixth byte exceeds the 5 bytes of §1, and an early end leaves the varint unfinished.
   else if preambleMaxLength < bs.length then
     .error .preambleTooLong
   else
@@ -136,17 +123,21 @@ The preamble takes at most five bytes, so this reads no more, and decompresses n
 def declaredLength (bs : ByteArray) : Except SnappyError Nat :=
   (readPreamble (bs.extract 0 preambleMaxLength).toList).map (·.1)
 
-/-- Copy the given number of bytes from `offset` back onto the end of the output (§2.2).
-
-Each byte is read `offset` back from the current end.
-
-So a copy longer than its offset reads bytes it has written, and repeats itself, as §2.2 allows.
-
-An offset of 0 reads the most recent byte, as an offset of 1 does. -/
+/-- Copy the given number of bytes from `offset` back onto the end of the output (§2.2). -/
 def copyBytes (out : ByteArray) (offset : Nat) : Nat → Except SnappyError ByteArray
   | 0 => .ok out
   | len + 1 =>
+      -- §2.2: offset > current decompressed position is not allowed.
+      --
+      -- So the block cannot start with a copy, as §2 says.
+      --
+      -- Not in §2.2: an offset of 0, which is not legal, reads as 1, so the index stays in range.
+      --
+      -- The decoder of the elements rejects that offset before it calls this copy.
       if h : max offset 1 ≤ out.size then
+        -- §2.2: the next byte is the one `offset` bytes back from the current position.
+        --
+        -- A length larger than the offset reads bytes this copy wrote: the run-length form of §2.2.
         copyBytes (out.push out[out.size - max offset 1]) offset len
       else
         -- The copy reaches before the first byte written.
@@ -200,66 +191,94 @@ def decompressElements (declared : Nat) :
     List UInt8 → ByteArray → Nat → Except SnappyError ByteArray
   | [], out, _ => .ok out
   -- Out of fuel: unreachable when the fuel is at least the input length.
+  --
   -- The fields of this error are therefore arbitrary.
   | l@(_ :: _), _, 0 => .error (.literalPastEnd (l.length + 1) l.length)
   | tag :: rest, out, fuel + 1 =>
-      -- The element kind, and the six bits above it.
+      -- §2: the lower two bits of the tag byte give the type of the element.
       let t := tag.toNat % 4
+      -- §2: the upper six bits of the tag are element-dependent.
       let upper := tag.toNat / 4
+      -- §2: type 00 is a literal (§2.1).
       if t == 0 then
-        -- A literal of up to 60 bytes stores its length minus one in the tag (§2.1).
+        -- §2.1: for a literal of up to 60 bytes, the upper six bits of the tag hold len - 1.
         if upper < 60 then
           let len := upper + 1
+          -- §2.1: the literal follows immediately, so the input must hold its len bytes.
           if rest.length < len then
             .error (.literalPastEnd len rest.length)
+          -- Not in §2: an element that takes the output past the declared length is rejected.
+          --
+          -- The check comes before the write, so the output never exceeds the length of §1.
           else if declared < out.size + len then
             .error (.lengthMismatch declared (out.size + len))
           else
+            -- §2.1: the len bytes go to the output unchanged.
             decompressElements declared (rest.drop len) (out ++ (rest.take len).toByteArray) fuel
-        -- Tags 60 to 63 say that 1 to 4 little-endian bytes hold the length minus one (§2.1).
+        -- §2.1: upper six bits of 60, 61, 62 or 63 say that 1 to 4 bytes hold len - 1.
+        --
+        -- Not in §2.1: this form is read for any len, also for one of 60 bytes or fewer.
         else
           let extra := upper - 59
           if rest.length < extra then
             .error (.literalPastEnd extra rest.length)
           else
+            -- §2.1: len - 1 is stored after the tag byte, little-endian.
             let len := bytesToUint (rest.take extra).toArray.toVector + 1
             let rest := rest.drop extra
+            -- §2.1: the literal itself follows after the length.
             if rest.length < len then
               .error (.literalPastEnd len rest.length)
+            -- Not in §2: the same check against the declared length as for a short literal.
             else if declared < out.size + len then
               .error (.lengthMismatch declared (out.size + len))
             else
               decompressElements declared (rest.drop len) (out ++ (rest.take len).toByteArray) fuel
       else
-        -- A copy: the tag fixes the width of the offset (§2.2.1 to §2.2.3).
+        -- §2: types 01, 10 and 11 are copies with a 1-byte, 2-byte or 4-byte offset.
         let width := if t == 1 then 1 else if t == 2 then 2 else 4
-        -- The length minus 4 is in tag bits 2 to 4 for a one-byte offset, else the length minus 1.
+        -- §2.2.1: len - 4 is stored in bits 2 to 4 of the tag byte.
+        --
+        -- §2.2.2 and §2.2.3: len - 1 is stored in the upper six bits, bits 2 to 7, of the tag byte.
         let len := if t == 1 then 4 + upper % 8 else upper + 1
         if rest.length < width then
           .error (.copyPastEnd width rest.length)
         else
-          -- A one-byte-offset copy keeps the top three of its 11 offset bits in tag bits 5 to 7.
+          -- §2.2.1: the offset has 11 bits, the upper three in tag bits 5 to 7.
+          --
+          -- The lower eight are in the byte after the tag.
+          --
+          -- §2.2.2 and §2.2.3: the offset is a little-endian 16-bit or 32-bit integer.
           let offset :=
             if t == 1 then upper / 8 * 256 + bytesToUint (rest.take 1).toArray.toVector
             else bytesToUint (rest.take width).toArray.toVector
+          -- §2.2: offsets of zero can be encoded, but are not legal.
           if offset == 0 then
             .error (.copyOffsetZero out.size)
+          -- Not in §2.2: the same check against the declared length as for a literal.
           else if declared < out.size + len then
             .error (.lengthMismatch declared (out.size + len))
           else
+            -- §2.2: copy len bytes from offset bytes back, which must not pass the first byte.
             match copyBytes out offset len with
             | .error e => .error e
             | .ok out => decompressElements declared (rest.drop width) out fuel
 
 /-- The byte array that a Snappy block, read as a list, decompresses to, or why it is not valid. -/
 def decompressToArray (bs : List UInt8) : Except SnappyError ByteArray :=
+  -- §1: the block starts with the uncompressed length.
   match readPreamble bs with
   | .error e => .error e
   | .ok (declared, rest) =>
+      -- §2: then elements in any order, up to the end of the input.
+      --
+      -- Each element takes at least its tag byte, so the input length is enough fuel.
       match decompressElements declared rest ByteArray.empty rest.length with
       | .error e => .error e
       | .ok out =>
-          -- The output must have exactly the declared length: no truncation, no padding.
+          -- §1: the preamble is the uncompressed length.
+          --
+          -- So the output must have exactly the declared length: no truncation, no padding.
           if out.size == declared then
             .ok out
           else
@@ -275,25 +294,23 @@ def decompress (bs : ByteArray) : Except SnappyError ByteArray :=
 
 /-- The fewest bytes that hold `n` little-endian, for `n < 2^32` (§2.1). -/
 def literalLengthBytes (n : Nat) : Nat :=
+  -- §2.1 lets 1 to 4 bytes hold len - 1, and EthLib writes the fewest.
   if n < 2 ^ 8 then 1 else if n < 2 ^ 16 then 2 else if n < 2 ^ 24 then 3 else 4
 
-/-- The tag and the length bytes of a literal of `n` bytes, for `n` from 1 to 2^32 (§2.1).
-
-A length up to 60 sits in the tag as the length minus one.
-
-A longer length is written, minus one, in 1 to 4 bytes after the tag.
-
-The six upper bits of the tag then hold 59 plus that count, so 60 to 63.
--/
+/-- The tag and the length bytes of a literal of `n` bytes, for `n` from 1 to 2^32 (§2.1). -/
 def literalHeader (n : Nat) : List UInt8 :=
+  -- §2.1: for len up to 60, the upper six bits of the tag hold len - 1, above the type 00.
   if n - 1 < 60 then
     [UInt8.ofNat ((n - 1) * 4)]
+  -- §2.1: for a longer literal, len - 1 is stored after the tag byte, little-endian.
   else
     let k := literalLengthBytes (n - 1)
+    -- §2.1: the upper six bits of the tag are 60, 61, 62 or 63 for 1 to 4 bytes, so 59 + k.
     UInt8.ofNat ((59 + k) * 4) :: (uintToBytes k (n - 1)).toList
 
-/-- One literal element that holds `data`, of 1 to 2^32 bytes: its header, then the data (§2.1). -/
+/-- One literal element that holds `data`, of 1 to 2^32 bytes (§2.1). -/
 def literal (data : List UInt8) : List UInt8 :=
+  -- §2.1: the tag and the length, then the literal itself.
   literalHeader data.length ++ data
 
 end EthLib.Networking.Snappy
