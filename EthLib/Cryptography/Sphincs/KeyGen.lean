@@ -74,7 +74,7 @@ def publicKeyOf (pkSeed : PkSeed) (prf : Prf m) : m PublicKey := do
   let root ← treeRoot H pkSeed prf .top 0
   return { pkSeed, root }
 
-/-- `Gen` over a hash `H`: the key pair of `SK.seed`, FIPS 205's `slh_keygen_internal`.
+/-- `Gen` over a hash `H`: the key pair of `SK.seed`, by Algorithm 18 of FIPS 205.
 
 1. `PK.seed` and `SK.prf`, from `SK.seed`.
 2. `PK.root`, the root of the top tree, whose secrets are `PRF(PK.seed, SK.seed, ADRS)`.
@@ -85,9 +85,9 @@ The seed must be 32 uniform bytes, kept secret.
 def keyGenWith (seed : Seed) : m (SecretKey × PublicKey) := do
   -- FIPS 205 takes `SK.prf` and `PK.seed` as inputs; leanSPHINCS derives them from `SK.seed`.
   let key ← expandKey H seed
-  -- Algorithm 18, line 4: the secret key is `(SK.seed, SK.prf, PK.seed, PK.root)`.
+  -- Algorithm 18, line 4 returns the secret key `(SK.seed, SK.prf, PK.seed, PK.root)`.
   --
-  -- The public key is `(PK.seed, PK.root)`.
+  -- It returns the public key `(PK.seed, PK.root)`.
   --
   -- The secret key keeps `SK.seed` alone, since it regenerates the rest.
   return (⟨seed⟩, ← publicKeyOf H key.pkSeed (prf H key.pkSeed seed))

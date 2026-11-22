@@ -101,7 +101,9 @@ def keyGenFrom (prf : SeedPrf m) (s : Seed) : m (PublicKey × SecretKey) := do
   let pp ← publicParamOf prf
   -- The top tree, whose root `X^1_{h,0}` is in the public key.
   let top ← build H pp prf .top LAYER_HEIGHT 0
-  -- The keys are `pk = (X^1_{h,0}, P)` and `sk = S_0`; the key keeps `S`, `P` and the top tree.
+  -- The keys are `pk = (X^1_{h,0}, P)` and `sk = S_0`.
+  --
+  -- Here the secret key keeps `S`, `P` and the top tree.
   return ({ root := top.value, publicParam := pp },
     { schemeSeed := s, publicParam := pp, top, cache := [] })
 

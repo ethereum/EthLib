@@ -35,7 +35,7 @@ def chain {α : Type} {n : Nat} (step : Fin n → α → m α) (start : Nat) :
     (steps : Nat) → start + steps ≤ n → α → m α
   -- Construction 2, steps 1 and 2: `y := x`, and `y` is the result when `s = 0`.
   | 0, _, value => pure value
-  -- Step 3: for `j` in `[s]`, `y := Th(P, tweak(ep, i, k + j), y)`, with `k` the start.
+  -- Step 3: for each `j ∈ [s]`, `y := Th(P, tweak(ep, i, k + j), y)`, with `k` the start.
   --
   -- The step that reaches position `k + j` gets index `k + j - 1`.
   --
