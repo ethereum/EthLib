@@ -15,7 +15,17 @@ In section 4.4 of the Yellow Paper, Shanghai version, the hashes of a block head
 
 namespace EthLib.Base
 
-/-- Exactly 32 bytes, such as a Keccak-256 digest or the root of a trie. -/
+/-- Exactly 32 bytes, such as a Keccak-256 digest or the root of a trie.
+
+The two layers read the name in two ways.
+
+The execution layer gives another name to any 32 bytes, so a hash and other 32 bytes mix freely.
+
+The consensus layer makes it a type of its own, kept apart from other 32 bytes such as a root.
+
+EthLib takes the first reading: the name abbreviates 32 bytes, in both layers.
+
+Making it a type of its own takes a pull request that converts every use. -/
 abbrev Hash32 := Bytes32
 
 end EthLib.Base

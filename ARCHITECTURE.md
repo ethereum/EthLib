@@ -283,7 +283,6 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
   A name that the source only aliases, such as `Hash32 = Bytes32` in execution-specs, stays an `abbrev`.
   Two sources can disagree on whether a name is a type of its own, as they do for `Hash32`.
   Its definition then records both readings and the choice.
-  `EthLib/Base/Hash32.lean` does not record them yet.
 - An integer keeps the range its source gives it.
   An unbounded integer is a `Nat`, and a 64-bit one is a `UInt64`.
   Where the source makes overflow invalid, an operation that would overflow is an error, never a silent wrap.
