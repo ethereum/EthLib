@@ -186,29 +186,3 @@ theorem unforgeable_capped : HasCappedSecurityBits 127 := by
     exact_mod_cast hbig
 
 end EthLib.Cryptography.Sphincs.Unforgeability.Bridge
-
-/-! The build fails if the theorem ever depends on more than Lean's three standard axioms. -/
-
-/--
-info: 'EthLib.Cryptography.Sphincs.Unforgeability.Bridge.unforgeable' depends on axioms:
-
-[propext, Classical.choice, Quot.sound]
--/
-#guard_msgs (whitespace := lax) in
-#print axioms EthLib.Cryptography.Sphincs.Unforgeability.Bridge.unforgeable
-
-/--
-info: 'EthLib.Cryptography.Sphincs.Unforgeability.Bridge.unforgeable_adversary' depends on axioms:
-
-[propext, Classical.choice, Quot.sound]
--/
-#guard_msgs (whitespace := lax) in
-#print axioms EthLib.Cryptography.Sphincs.Unforgeability.Bridge.unforgeable_adversary
-
-/--
-info: 'EthLib.Cryptography.Sphincs.Unforgeability.Bridge.unforgeable_capped' depends on axioms:
-
-[propext, Classical.choice, Quot.sound]
--/
-#guard_msgs (whitespace := lax) in
-#print axioms EthLib.Cryptography.Sphincs.Unforgeability.Bridge.unforgeable_capped

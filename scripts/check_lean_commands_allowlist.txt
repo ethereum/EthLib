@@ -1,0 +1,9 @@
+# Lean commands such as `#print` or `#eval` that a library module runs at every build.
+#
+# Each one must say why it has to run at build time rather than in a check of CI.
+#
+# One command per line: its file, the reason, then the text of its line.
+# The fields are separated by ` | `, and the text is the one that the check prints.
+# An entry covers each line of its file with that text.
+# A `#guard_msgs ... in` line and the command it guards are two entries.
+# A line that no longer matches a command fails the check.
