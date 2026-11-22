@@ -20,15 +20,7 @@ Source: [`Paper.tex` at `efc5f9a`][yp].
 
 The step comments write the Yellow Paper's relations in ASCII.
 
-Only `ethereum/execution-specs` spells out the order of the checks, and the step comments quote it.
-
-They quote `process_transaction` and `check_transaction` in the `fork.py` of each fork.
-
-Those are [Osaka's][es-osaka] and [Amsterdam's][es-amsterdam].
-
-They quote `check_block_gas_capacity` and `check_max_fee_per_blob_gas` in [`vm/gas.py`][es-gas].
-
-They quote `calculate_effective_gas_price` and `check_nonce` in [`transactions.py`][es-tx].
+Only `ethereum/execution-specs` orders the checks: [Osaka][es-osaka], [Amsterdam][es-amsterdam].
 
 The EIPs that add a rule:
 
@@ -43,8 +35,6 @@ These rules hold up to Glamsterdam, which changes the rule on the gas of the blo
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [es-osaka]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/osaka/fork.py
 [es-amsterdam]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/amsterdam/fork.py
-[es-gas]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/amsterdam/vm/gas.py
-[es-tx]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/amsterdam/transactions.py
 [eip1559]: https://eips.ethereum.org/EIPS/eip-1559#specification
 [eip3607]: https://eips.ethereum.org/EIPS/eip-3607#specification
 [eip4844]: https://eips.ethereum.org/EIPS/eip-4844#execution-layer-validation
@@ -73,9 +63,9 @@ def maxFeePerBlobGas : Transaction → Nat
 
 /-- The most that the gas and the blobs of a transaction can cost, at its maximum fees. -/
 def maxGasFee (tx : Transaction) : Nat :=
-  -- Osaka: `max_gas_fee = tx.gas * tx.max_fee_per_gas`, or `tx.gas * tx.gas_price`.
+  -- The gas limit times the maximum fee per gas, or times the gas price for types 0 and 1.
   --
-  -- Then `max_gas_fee += Uint(calculate_total_blob_gas(tx)) * Uint(tx.max_fee_per_blob_gas)`.
+  -- Then the blob gas times the maximum fee per blob gas, by EIP-4844.
   --
   -- That second term is 0 for a transaction without blobs.
   tx.gas.toNat * tx.maxFeePerGas + calculateTotalBlobGas tx * tx.maxFeePerBlobGas
@@ -88,7 +78,7 @@ The most blobs come from the blob schedule of the block.
 
 A block before Dencun has no blobs. -/
 def maxBlobGasPerBlock {fork : Fork} (env : BlockEnvironment fork) : Nat :=
-  -- `MAX_BLOB_GAS_PER_BLOCK = GasCosts.BLOB_SCHEDULE_MAX * GasCosts.PER_BLOB`.
+  -- The most blobs of a block times the blob gas of one blob.
   --
   -- The `max` of EIP-7840's `blobSchedule` gives that most, from Dencun.
   if h : .dencun ≤ fork then GAS_PER_BLOB * (env.blobSchedule h).max.toNat else 0
@@ -99,7 +89,7 @@ It is the gas limit, capped from Glamsterdam at `2^24`, the most execution gas o
 
 A simulation can lift that cap. -/
 def executionCapacity (fork : Fork) (tx : Transaction) (lifted : LiftedRules := {}) : Nat :=
-  -- Amsterdam: `min(GasCosts.TX_MAX_GAS_LIMIT, tx_gas)`; before, `tx.gas` itself.
+  -- From Glamsterdam, the least of `2^24` and the gas limit; before, the gas limit itself.
   --
   -- A simulation may lift the cap; the source has no such mode.
   if fork ≥ .glamsterdam then
@@ -210,24 +200,24 @@ def failIf (condition : Bool) (error : InclusionError) : Except InclusionError U
 - The blob gas fits in the blob gas left. -/
 def checkBlockGas {fork : Fork} (env : BlockEnvironment fork) (used : BlockGas)
     (tx : Transaction) (lifted : LiftedRules := {}) : Except InclusionError Unit := do
-  -- `execution_gas_available = block_env.block_gas_limit - block_output.block_gas_used`.
+  -- The execution gas left: the gas limit of the block minus the execution gas it has used.
   let available := env.gasLimit - used.execution
   let gas := executionCapacity fork tx lifted
-  -- `if min(GasCosts.TX_MAX_GAS_LIMIT, tx_gas) > execution_gas_available`.
+  -- The transaction fails when its capped gas limit exceeds the execution gas left.
   --
-  -- Before Glamsterdam, `if tx.gas > gas_available`.
+  -- Before Glamsterdam, its gas limit is not capped.
   --
   -- That is the Yellow Paper's `T_g <= B_H_l - l(B_R)_u`.
   failIf (available < gas) (.gasAllowanceExceeded gas available)
-  -- `state_gas_available = block_env.block_gas_limit - block_output.block_state_gas_used`.
+  -- The state gas left: the gas limit of the block minus the state gas it has used.
   let stateAvailable := env.gasLimit - used.state
-  -- `if tx_gas > state_gas_available`, from Glamsterdam.
+  -- From Glamsterdam, the transaction fails when its gas limit exceeds the state gas left.
   failIf (fork ≥ .glamsterdam ∧ stateAvailable < tx.gas.toNat)
     (.gasAllowanceExceeded tx.gas.toNat stateAvailable)
   let blobGas := calculateTotalBlobGas tx
-  -- `blob_gas_available = MAX_BLOB_GAS_PER_BLOCK - block_output.blob_gas_used`.
+  -- The blob gas left: the most blob gas of a block minus the blob gas it has used.
   let blobAvailable := maxBlobGasPerBlock env - used.blob
-  -- `if tx_blob_gas > blob_gas_available`.
+  -- The transaction fails when its blob gas exceeds the blob gas left.
   failIf (blobAvailable < blobGas) (.blobGasLimitExceeded blobGas blobAvailable)
 
 /-- Check that `sender` may send a transaction at `fork`, in the state `state`.
@@ -244,33 +234,33 @@ The nonce of the sender must then still be below `2^64 - 1`, as EIP-2681 asks.
 -/
 def checkSender (fork : Fork) (state : TransactionState) (sender : Address) (tx : Transaction)
     (signed : Bool := true) (skipNonce : Bool := false) : Except InclusionError Unit := do
-  -- `sender_account = get_account(tx_state, sender)`.
+  -- The account of the sender, `sigma[S(T)]`.
   let account := state.getAccount sender
   if skipNonce then
     -- A simulation's own rule: the sender's nonce must still be below `2^64 - 1`.
     failIf (2 ^ 64 - 1 ≤ account.nonce) (.transaction (.nonceOverflow account.nonce))
   else
-    -- `T_n = sigma[S(T)]_n`, in the two branches of `check_nonce`.
+    -- `T_n = sigma[S(T)]_n`, with one error for each side of the inequality.
     --
-    -- `if sender_nonce > Uint(tx.nonce): raise NonceMismatchError("nonce too low")`.
+    -- The nonce is too low when `T_n < sigma[S(T)]_n`.
     failIf (tx.nonce.toNat < account.nonce) (.nonceTooLow account.nonce tx.nonce.toNat)
-    -- `elif sender_nonce < Uint(tx.nonce): raise NonceMismatchError("nonce too high")`.
+    -- The nonce is too high when `sigma[S(T)]_n < T_n`.
     failIf (account.nonce < tx.nonce.toNat) (.nonceTooHigh account.nonce tx.nonce.toNat)
   -- `v_0 <= sigma[S(T)]_b`, with `v_0 = T_g T_p + T_v`, or `T_g T_m + T_v` for type 2.
   --
   -- EIP-4844 adds the blob fee.
   --
-  -- `if Uint(sender_account.balance) < max_gas_fee + Uint(tx.value)`.
+  -- It fails when the balance is below its maximum fee, blob fee included, plus its value.
   let cost := tx.maxGasFee + tx.value.toNat
   failIf (account.balance.toNat < cost) (.insufficientBalance account.balance.toNat cost)
   if signed then
-    -- `sender_code = get_code(tx_state, sender_account.code_hash)`.
+    -- The code of the sender.
     --
     -- A state without that code gives an error of its own, where the source reads a full state.
     let code ← (state.getCode account.codeHash).mapError fun _ => .missingCode account.codeHash
     -- `sigma[S(T)]_c = KEC(())`, by EIP-3607, which EIP-7702 relaxes from Pectra.
     --
-    -- `if sender_account.code_hash != EMPTY_CODE_HASH and not is_valid_delegation(sender_code)`.
+    -- From Pectra, a code that is a delegation indicator passes too.
     failIf (account.codeHash ≠ EMPTY_CODE_HASH ∧ !(fork ≥ .pectra ∧ isValidDelegation code))
       (.senderNotEoa sender)
 
@@ -293,20 +283,20 @@ def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork
   --
   -- From London, `m >= H_f`.
   --
-  -- `if tx.max_fee_per_gas < block_env.base_fee_per_gas`, or the same with `tx.gas_price`.
+  -- The transaction fails when its maximum fee per gas, or its gas price, is below the base fee.
   --
   -- A simulation may pay a maximum fee of 0 at a base fee of 0; the source has no such mode.
   let baseFee := paidBaseFee env tx lifted
   let coversBaseFee := failIf (tx.maxFeePerGas < baseFee)
     (.insufficientMaxFeePerGas tx.maxFeePerGas baseFee)
-  -- `sender_address = recover_sender(tx)`, unless a simulation gives the sender.
+  -- The sender, recovered from the signature, unless a simulation gives the sender.
   --
   -- The source has no such mode.
   let recover : Except InclusionError Address :=
     match knownSender with
     | some sender => pure sender
     | none => (recoverSender fork tx).mapError .transaction
-  -- `if tx_chain_id is not None and tx_chain_id != block_env.chain_id`.
+  -- A transaction that names a chain fails when that chain is not the chain of the block.
   --
   -- A legacy transaction with a given sender has no signature, so it names no chain.
   --
@@ -316,23 +306,23 @@ def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork
     else (checkChainId fork chainId tx).mapError .transaction
   let (sender, intrinsic) ←
     if fork ≥ .glamsterdam then do
-      -- Amsterdam's `process_transaction` checks the chain, then `check_transaction` runs.
+      -- From Glamsterdam, the chain comes first.
       checkChain
-      -- `sender = recover_sender(tx)`.
+      -- Then the sender.
       let sender ← recover
-      -- `intrinsic = validate_transaction(tx, sender)`.
+      -- Then the rules that need no state, which read the sender, and give the intrinsic gas.
       let intrinsic ← (validateTransaction fork sender tx lifted).mapError .transaction
-      -- `check_block_gas_capacity(block_env, block_output, tx.gas, calculate_total_blob_gas(tx))`.
+      -- Then the gas and the blob gas that the block has left.
       checkBlockGas env used tx lifted
-      -- `effective_gas_price = calculate_effective_gas_price(tx, block_env.base_fee_per_gas)`.
+      -- Then the base fee, with the effective gas price.
       coversBaseFee
       pure (sender, intrinsic)
     else do
-      -- Osaka's `process_transaction` runs `intrinsic = validate_transaction(tx)` first.
+      -- Before Glamsterdam, the rules that need no state come first, and give the intrinsic gas.
       --
       -- No rule alone reads the sender before Glamsterdam, so any address stands in for it.
       let intrinsic ← (validateTransaction fork default tx lifted).mapError .transaction
-      -- Then `check_transaction`: the gas and the blob gas of the block.
+      -- Then the gas and the blob gas that the block has left.
       checkBlockGas env used tx lifted
       -- Then the chain, the sender and the base fee.
       checkChain
@@ -342,14 +332,14 @@ def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork
       (checkContents fork tx).mapError .transaction
       pure (sender, intrinsic)
   let blobGas := calculateTotalBlobGas tx
-  -- `blob_gas_price = calculate_blob_gas_price(block_env.excess_blob_gas)`.
+  -- The base fee per blob gas, from the excess blob gas of the block.
   let blobGasPrice := blobGasPriceOf env
-  -- From Dencun, `if Uint(tx.max_fee_per_blob_gas) < blob_gas_price`, for a transaction with blobs.
+  -- From Dencun, a transaction with blobs fails when its maximum fee per blob gas is below it.
   failIf (0 < blobGas ∧ tx.maxFeePerBlobGas < blobGasPrice)
     (.insufficientMaxFeePerBlobGas tx.maxFeePerBlobGas blobGasPrice)
   -- Then the nonce, the balance and the code of the sender.
   checkSender fork state sender tx knownSender.isNone lifted.nonce
-  -- `effective_gas_price = priority_fee_per_gas + block_env.base_fee_per_gas`, or `tx.gas_price`.
+  -- The effective gas price `p` of the Yellow Paper.
   return ⟨sender, intrinsic, effectiveGasPrice baseFee tx, blobGas⟩
 
 end EthLib.Execution.Transactions
