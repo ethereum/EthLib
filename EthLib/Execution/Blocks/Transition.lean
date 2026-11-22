@@ -43,15 +43,11 @@ Section 11 of the Berlin version defines it before Paris: [`Paper.tex`][yp-berli
 
 No EIP or version of the Yellow Paper orders all the steps of a block together.
 
-The step comments quote an EIP or the paper for each step that one writes out.
+The step comments cite an EIP or the paper for each step that one writes out.
 
-For the rest they quote `ethereum/execution-specs`.
+The body runs the system calls, the transactions, the withdrawals and the requests, in that order.
 
-The step comments quote `state_transition`, `execute_block` and `apply_body` of Amsterdam.
-
-They are in [Amsterdam's `fork.py`][es-amsterdam]; [Osaka's][es-osaka] has the same order.
-
-Before Paris they quote [London's `fork.py`][es-london], with the ommers and the rewards.
+Before Paris, the rewards of the beneficiary and the ommers come after the transactions.
 
 The EIPs that change it:
 
@@ -66,9 +62,6 @@ The EIPs that change it:
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [yp-berlin]: https://github.com/ethereum/yellowpaper/blob/beacfbd29ccc04dfd790f2282d4c4b1c0afc9b5a/Paper.tex
-[es-amsterdam]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/amsterdam/fork.py
-[es-osaka]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/osaka/fork.py
-[es-london]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/london/fork.py
 [eip-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#specification
 [eip-4895]: https://eips.ethereum.org/EIPS/eip-4895#specification
 [eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#header-extension
@@ -110,9 +103,9 @@ The hashes of the blocks before the next block read only those 255, so no older 
 -/
 def BlockChain.addBlock (chain : BlockChain) {fork : Fork} (block : Block fork Transaction)
     (post : State) : BlockChain :=
-  -- `chain.blocks.append(block)`.
+  -- The block joins the recent blocks, last.
   let recent := chain.recent ++ [⟨fork, block.header, block.ommers⟩]
-  -- `if len(chain.blocks) > 255: chain.blocks = chain.blocks[-255:]`.
+  -- Only the last 255 recent blocks stay.
   { chain with state := post, recent := recent.drop (recent.length - 255) }
 
 /-- The hashes of the blocks before a block, oldest first, from the recent blocks of its chain.
@@ -258,11 +251,9 @@ The extra data rule of the fork has the same gate.
 [eip-779]: https://eips.ethereum.org/EIPS/eip-779#specification -/
 def daoTransfer (config : ChainConfig) (fork : Fork) (number : Nat) (start : BlockState) :
     Except BlockError BlockState :=
-  -- EIP-779: "At the beginning of block 1920000, all ether throughout all accounts in `L`".
+  -- EIP-779: at the beginning of block 1920000, all ether of the accounts in `L` moves.
   --
-  -- It "will be transferred"; here at the chain's DAO Fork block, before Paris, as the body starts.
-  --
-  -- The source runs it in `apply_fork` of the DAO Fork, outside any block.
+  -- Here it moves at the chain's DAO Fork block, before Paris, as the body starts.
   if fork < .paris ∧ daoForkBlock config = some number then onBlock start (applyDaoFork fork)
   else pure start
 
@@ -274,13 +265,13 @@ The other requests come from their contracts. -/
 def blockRequests {fork : Fork} (depositContract : Address) (env : BlockEnvironment fork)
     (body : BodyState) (logs : List Log) : Except BlockError (BodyState × List ByteArray) := do
   if .pectra ≤ fork then
-    -- `deposit_requests = parse_deposit_requests(block_output)`.
+    -- The deposit requests, from the logs of the deposit contract.
     let deposits ← (depositRequests depositContract logs).mapError .deposit
-    -- `process_checked_system_transaction(...)` to the withdrawal, then the consolidation contract.
+    -- A checked system call to the withdrawal contract, then to the consolidation contract.
     --
     -- From Glamsterdam, then to the builder deposit and exit contracts.
     let (body, requests) ← readRequests env body
-    -- "Requests are to be in ascending order of request type": the deposits first.
+    -- EIP-7685: the requests are in ascending order of request type, so the deposits come first.
     return (body, requestList DEPOSIT_REQUEST_TYPE deposits ++ requests)
   else return (body, [])
 
@@ -297,13 +288,13 @@ The list must fit the gas limit `gasLimit` of the block, as EIP-7928 asks. -/
 def accessListHashOf (fork : Fork) (body : BodyState) (gasLimit : Nat) :
     Except BlockError (Option Hash32) := do
   if fork ≥ .glamsterdam then
-    -- `block_output.block_access_list = build_block_access_list(...)`.
+    -- The block access list, from the reads and writes of the body.
     let bal := body.builder.build
-    -- `validate_block_access_list_gas_limit(...)`.
+    -- The list must fit the gas limit of the block.
     (BlockAccessList.check bal gasLimit).mapError .blockAccessList
-    -- `computed_block_access_list_hash = hash_block_access_list(block_output.block_access_list)`.
+    -- The hash of the list.
     --
-    -- The source takes the hash in `execute_block`; here the body gives it.
+    -- The body gives the hash, which the header check reads.
     some <$> (BlockAccessList.hash bal).mapError .encoding
   else return none
 
@@ -324,30 +315,28 @@ def applyBody {fork : Fork} (config : ChainConfig) (env : BlockEnvironment fork)
   let state ← daoTransfer config fork block.header.number start
   -- EIP-4788, from Dencun, then EIP-2935, from Pectra: a system call each.
   --
-  -- Each runs "At the start of processing any" block, "before processing any transactions".
+  -- Each runs at the start of the block, before any transaction.
   let body ← (startSystemCalls env block.header.parentHash (.init state)).mapError .aborted
-  -- `for i, tx in enumerate(map(decode_transaction, transactions)):`
-  --
-  -- `process_transaction(block_env, block_output, tx, Uint(i))`.
+  -- Each transaction in order, with its index `i` in the block.
   let output ← applyTransactions env body block.transactions overrides
-  -- "EIP-7928: Post-execution operations use index N+1".
+  -- EIP-7928: the operations after the `N` transactions use index `N + 1`.
   --
   -- The index is kept at every fork, and only a body from Glamsterdam builds the list.
   let body := output.body.beginIndex (block.transactions.length + 1)
-  -- EIP-4895, from Shapella: the withdrawals are "processed **after** any user-level transactions".
+  -- EIP-4895, from Shapella: the withdrawals apply after all the transactions.
   --
-  -- The source fills the withdrawals trie here; this code computes its root with the other roots.
+  -- The root of the withdrawals is computed with the other roots.
   let body ← if h : .shapella ≤ fork then do
       let tx ← (withdrawalState fork body.block (block.withdrawals h)).mapError .state
       (body.join tx).mapError .state
     else pure body
-  -- `process_general_purpose_requests(...)`, from Pectra; the builder requests join at Glamsterdam.
+  -- The requests of EIP-7685, from Pectra; the builder requests join at Glamsterdam.
   let (body, requests) ← blockRequests config.depositContractAddress env body output.logs
-  -- Before Paris, the Berlin paper's stage "apply rewards", after the transactions.
+  -- Before Paris, the Berlin paper's stage that applies the rewards, after the transactions.
   let ommers := block.ommers.map fun ommer => (ommer.2.coinbase, ommer.2.number)
   let state ← onBlock body.block fun tx =>
     payRewards fork tx block.header.coinbase block.header.number ommers
-  -- From Glamsterdam: `build_block_access_list(...)`, its gas limit check, then its hash.
+  -- From Glamsterdam: the block access list, its gas limit check, then its hash.
   let accessListHash ← accessListHashOf fork body block.header.gasLimit
   return { output with body := { body with block := state }, requests, accessListHash }
 
@@ -364,13 +353,13 @@ def bodyItems {fork : Fork} (block : Block fork Transaction) :
 The parent is the last recent block. With `checkSeal` off, the proof of work is left out. -/
 def checkBlock {fork : Fork} (config : ChainConfig) (checkSeal : Bool)
     (recent : List RecentBlock) (block : Block fork Transaction) : Except BlockError Unit := do
-  -- `if len(rlp.encode(block)) > MAX_RLP_BLOCK_SIZE`, from Fusaka.
+  -- EIP-7934, from Fusaka: the RLP encoding of the block has at most `MAX_RLP_BLOCK_SIZE` bytes.
   validateBlockSize (← bodyItems block)
-  -- `parent_header = chain_context.parent_header`.
+  -- The parent is the last recent block.
   --
-  -- With no recent block, the source has no parent; here that fails with its own error.
+  -- With no recent block there is no parent, and the block fails with its own error.
   let some parent := recent.getLast? | throw .noParent
-  -- `validate_header(parent_header, block.header)`.
+  -- The checks of the header against its parent.
   --
   -- A parent at a later fork than the block fails as a wrong parent hash.
   if hFork : parent.fork ≤ fork then
@@ -380,17 +369,15 @@ def checkBlock {fork : Fork} (config : ChainConfig) (checkSeal : Bool)
     if checkSeal then validateHeader hFork parent.header block.header schedule
     else checkHeader hFork parent.header block.header schedule
   else throw (.wrongParentHash parent.header.hash.toOption block.header.parentHash)
-  -- EIP-779: blocks in "[1_920_000, 1_920_009] **MUST** have" `dao-hard-fork` in `extraData`.
+  -- EIP-779: the blocks 1920000 to 1920009 must have `dao-hard-fork` as their extra data.
   --
   -- Here at the chain's DAO Fork block and its next nine, before Paris, after the seal check.
   unless daoExtraDataValid config block.header do
     throw (.wrongDaoExtraData block.header.extraData)
-  -- Before Paris, the Berlin paper's stage "Validate ... ommers".
-  --
-  -- `validate_ommers(block.ommers, block.header, chain)`.
+  -- Before Paris, the Berlin paper's stage that validates the ommers.
   if fork < .paris then
     (validateOmmers config checkSeal recent block.header block.ommers).mapError .ommers
-  -- From Paris: `if block.ommers != (): raise InvalidBlock`.
+  -- From Paris, a block has no ommer, by EIP-3675.
   else unless block.ommers.isEmpty do throw (.ommersAfterParis block.ommers.length)
 
 /-- The roots of a block that its body gives, from the post-state `post`.
@@ -427,39 +414,39 @@ def outputRoots {fork : Fork} (transactions : List Transaction)
 /-- The checks of a block against what its body gave, in order, each with its error. -/
 def outputChecks {fork : Fork} (header : Header fork) (output : BlockOutput fork)
     (roots : OutputRoots) : List (Bool × BlockError) :=
-  -- `block_gas_used = max(block_output.block_gas_used, block_output.block_state_gas_used)`.
+  -- EIP-8037, from Glamsterdam: the gas used is the larger of the execution gas and the state gas.
   --
-  -- From Glamsterdam; before, the source compares `block_output.block_gas_used` itself.
+  -- Before, it is the gas that the transactions used.
   let gasUsed := output.gas.gasUsed
-  -- `if block_gas_used != block.header.gas_used: raise InvalidBlock(...)`.
+  -- The gas used equals that of the header.
   [(decide (gasUsed = header.gasUsed), .wrongGasUsed header.gasUsed gasUsed),
-    -- `if transactions_root != block.header.transactions_root: raise InvalidBlock`.
+    -- The transactions root equals that of the header.
     (decide (roots.transactions = header.transactionsRoot),
       .wrongTransactionsRoot header.transactionsRoot roots.transactions),
-    -- `if block_state_root != block.header.state_root: raise InvalidBlock`.
+    -- The state root equals that of the header.
     (decide (roots.state = header.stateRoot), .wrongStateRoot header.stateRoot roots.state),
-    -- `if receipt_root != block.header.receipt_root: raise InvalidBlock`.
+    -- The receipts root equals that of the header.
     (decide (roots.receipts = header.receiptRoot),
       .wrongReceiptRoot header.receiptRoot roots.receipts),
-    -- `if block_logs_bloom != block.header.bloom: raise InvalidBlock`.
+    -- The logs Bloom equals that of the header.
     (decide (logsBloom output.logs = header.bloom),
       .wrongBloom header.bloom (logsBloom output.logs))] ++
-  -- From Shapella: `if withdrawals_root != block.header.withdrawals_root: raise InvalidBlock`.
+  -- From Shapella, the withdrawals root equals that of the header.
   (if h : .shapella ≤ fork then
     [(decide (roots.withdrawals = some (header.withdrawalsRoot h)),
       .wrongWithdrawalsRoot (header.withdrawalsRoot h) roots.withdrawals)]
   else []) ++
-  -- From Dencun: `if block_output.blob_gas_used != block.header.blob_gas_used`.
+  -- From Dencun, the blob gas used equals that of the header.
   (if h : .dencun ≤ fork then
     [(decide (output.gas.blob = (header.blobGasUsed h).toNat),
       .wrongBlobGasUsed (header.blobGasUsed h).toNat output.gas.blob)]
   else []) ++
-  -- From Pectra: `if requests_hash != block.header.requests_hash: raise InvalidBlock`.
+  -- From Pectra, the requests hash equals that of the header.
   (if h : .pectra ≤ fork then
     [(decide (requestsHash output.requests = header.requestsHash h),
       .wrongRequestsHash (header.requestsHash h) (requestsHash output.requests))]
   else []) ++
-  -- From Glamsterdam: `if computed_block_access_list_hash != block.header.block_access_list_hash`.
+  -- From Glamsterdam, the hash of the block access list equals that of the header.
   (if h : .glamsterdam ≤ fork then
     [(decide (output.accessListHash = some (header.blockAccessListHash h)),
       .wrongBlockAccessListHash (header.blockAccessListHash h) output.accessListHash)]
@@ -524,17 +511,15 @@ def stateTransition (chain : BlockChain) {fork : Fork} (block : Block fork Trans
   -- No source specifies Hegotá yet.
   if .hegota ≤ fork then throw (.aborted (.forkNotYetSpecified fork))
   -- The fork of the block is the one that the chain activates at it.
-  --
-  -- The source picks the module of the fork from the block, so it has no such check.
   let active := chain.config.activeFork block.header.number block.header.timestamp.toNat
   unless active = some fork do throw (.wrongFork active fork)
-  -- `execute_block`: the size, the header and the ommers.
+  -- The checks of the block: the size, the header and the ommers.
   checkBlock chain.config checkSeal chain.recent block
-  -- `block_output = apply_body(...)`, then the roots.
+  -- The body, then the roots.
   let result ← runBody chain block
   -- The checks of the header against the output, in order.
   firstFailure (outputChecks block.header result.output result.roots)
-  -- `apply_changes_to_state(chain.state, block_diff)`.
+  -- The changes of the block apply to the state of the chain.
   return result.post
 
 end EthLib.Execution.Blocks
