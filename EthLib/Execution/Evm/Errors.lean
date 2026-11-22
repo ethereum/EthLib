@@ -19,6 +19,8 @@ So does an opcode whose instruction is not yet specified.
 
 So does a transaction at a fork whose rules are not yet specified.
 
+So does a value of the block or the transaction of `2^256` or more, which no word holds.
+
 Every other error is an exceptional halt, which consumes all the gas of the frame.
 
 The subsection Exceptional Halting of the Yellow Paper, Shanghai version, lists most of them.
@@ -68,6 +70,10 @@ inductive EvmError where
   | encoding (e : Serialization.Rlp.RlpError)
   /-- The rules of a transaction at the fork are not yet specified here. -/
   | forkNotYetSpecified (fork : Base.Fork)
+  /-- An instruction pushes `value`, a value of the block or the transaction of `2^256` or more.
+
+  No word holds it, and no source says what the instruction does then. -/
+  | wordOverflow (value : Nat)
   deriving DecidableEq
 
 /-- A constructor of the error, named in full, applied to its arguments. -/
@@ -98,6 +104,7 @@ def EvmError.reprPrec : EvmError → Nat → Std.Format
   | .encoding e, p => evmErrorFormat "encoding" [reprArg e] p
   | .forkNotYetSpecified fork, p =>
     evmErrorFormat "forkNotYetSpecified" [namedArg "fork" fork] p
+  | .wordOverflow value, p => evmErrorFormat "wordOverflow" [namedArg "value" value] p
 
 instance : Repr EvmError := ⟨EvmError.reprPrec⟩
 
@@ -107,9 +114,11 @@ A state that lacks data aborts, and so does an opcode whose instruction is not y
 
 So does a creation whose address has no preimage, which no nonce below 2^256 gives.
 
-So does a transaction at a fork whose rules are not yet specified. -/
+So does a transaction at a fork whose rules are not yet specified.
+
+So does a value of the environment that no word holds. -/
 def EvmError.aborts : EvmError → Bool
-  | .state _ | .unspecifiedOpcode _ | .encoding _ | .forkNotYetSpecified _ => true
+  | .state _ | .unspecifiedOpcode _ | .encoding _ | .forkNotYetSpecified _ | .wordOverflow _ => true
   | _ => false
 
 end EthLib.Execution.Evm

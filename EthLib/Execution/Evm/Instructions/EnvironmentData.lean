@@ -11,6 +11,14 @@ The instructions that push a value of the message, the transaction or the block.
 
 Each one pays a fixed price, pushes one word and moves to the next opcode.
 
+The number, gas limit, difficulty, base fee and blob base fee of a block have no upper bound.
+
+No source says what to push when one is `2^256` or more, and EIP-7516 is silent for the blob fee.
+
+So such an instruction aborts the execution, which then has no outcome.
+
+The step comments write `{I_H}_x` for the field `x` of the header of the block.
+
 An address becomes a word through its low 20 bytes, and a hash is read big-endian.
 
 BLOCKHASH and BLOBHASH push 0 for a block or a blob out of their range.
@@ -93,54 +101,58 @@ def blobhashStep (h : .dencun ≤ fork) (evm : Evm fork Meter) :
 
 Other opcodes give none, and so does an opcode before the fork that adds it. -/
 def environmentStep (fork : Fork) : Op → Option (Evm fork Meter → Except EvmError (Evm fork Meter))
+  -- ADDRESS: `mu'_s[0] = I_a`.
   | .address =>
     some (readFrame OPCODE_ADDRESS fun evm => evm.message.currentTarget.toU256)
+  -- ORIGIN: `mu'_s[0] = I_o`.
   | .origin => some (readFrame OPCODE_ORIGIN fun evm => evm.message.txEnv.origin.toU256)
+  -- CALLER: `mu'_s[0] = I_s`.
   | .caller => some (readFrame OPCODE_CALLER fun evm => evm.message.caller.toU256)
+  -- CALLVALUE: `mu'_s[0] = I_v`.
   | .callvalue => some (readFrame OPCODE_CALLVALUE fun evm => evm.message.value)
-  | .gasprice =>
-    some (readFrame OPCODE_GASPRICE fun evm => BitVec.ofNat 256 evm.message.txEnv.gasPrice)
+  -- GASPRICE: `mu'_s[0] = I_p`, the effective gas price, which the fee fields bound below `2^256`.
+  | .gasprice => some (readNumber OPCODE_GASPRICE fun evm => evm.message.txEnv.gasPrice)
   | .blockhash => some blockhashStep
+  -- COINBASE: `mu'_s[0] = {I_H}_c`.
   | .coinbase =>
     some (readFrame OPCODE_COINBASE fun evm => evm.message.blockEnv.coinbase.toU256)
+  -- TIMESTAMP: `mu'_s[0] = {I_H}_s`, which the header holds below `2^256`.
   | .timestamp => some (readFrame OPCODE_TIMESTAMP fun evm => evm.message.blockEnv.timestamp)
-  | .number =>
-    some (readFrame OPCODE_NUMBER fun evm => BitVec.ofNat 256 evm.message.blockEnv.number)
+  -- NUMBER: `mu'_s[0] = {I_H}_i`, which has no bound.
+  | .number => some (readNumber OPCODE_NUMBER fun evm => evm.message.blockEnv.number)
   | .prevrandao =>
     if h : .paris ≤ fork then
+      -- PREVRANDAO: `mu'_s[0] = {I_H}_a`, read big-endian.
       some (readFrame OPCODE_PREVRANDAO fun evm =>
         U256.fromBeBytes (evm.message.blockEnv.prevRandao h))
     else
-      some (readFrame OPCODE_PREVRANDAO fun evm =>
-        BitVec.ofNat 256 evm.message.blockEnv.difficulty)
-  | .gaslimit =>
-    some (readFrame OPCODE_GASLIMIT fun evm => BitVec.ofNat 256 evm.message.blockEnv.gasLimit)
+      -- DIFFICULTY: `mu'_s[0] = {I_H}_d` before Paris, which has no bound.
+      some (readNumber OPCODE_PREVRANDAO fun evm => evm.message.blockEnv.difficulty)
+  -- GASLIMIT: `mu'_s[0] = {I_H}_l`, which has no bound.
+  | .gaslimit => some (readNumber OPCODE_GASLIMIT fun evm => evm.message.blockEnv.gasLimit)
   | .chainid =>
     if .istanbul ≤ fork then
+      -- CHAINID: `mu'_s[0] = beta`, which EthLib holds in 64 bits.
       some (readFrame OPCODE_CHAINID fun evm => BitVec.ofNat 256 evm.message.blockEnv.chainId.toNat)
     else none
   | .basefee =>
     if h : .london ≤ fork then
-      some (readFrame OPCODE_BASEFEE fun evm =>
-        BitVec.ofNat 256 (evm.message.blockEnv.baseFeePerGas h))
+      -- BASEFEE: `mu'_s[0] = {I_H}_f`, which has no bound.
+      some (readNumber OPCODE_BASEFEE fun evm => evm.message.blockEnv.baseFeePerGas h)
     else none
   | .blobhash => if h : .dencun ≤ fork then some (blobhashStep h) else none
-  /- The blob base fee has no upper bound.
-
-  EIP-7516 does not say what to push when the fee is `2^256` or more.
-
-  This instruction pushes the fee modulo `2^256`, and the frame goes on.
-
-  The fee reaches `2^256` at an excess blob gas of about 177.4457 times the update fraction.
-
-  With the mainnet schedule of Dencun, that is an excess of 592398316. -/
   | .blobbasefee =>
     if h : .dencun ≤ fork then
-      some (readFrame OPCODE_BLOBBASEFEE fun evm =>
-        BitVec.ofNat 256 (evm.message.blockEnv.blobBaseFee h))
+      -- BLOBBASEFEE: `get_blob_gasprice(header)` of EIP-7516, which has no bound.
+      --
+      -- It reaches `2^256` at an excess blob gas of about 177.4457 times the update fraction.
+      --
+      -- With the mainnet schedule of Dencun, that is an excess of 592398316.
+      some (readNumber OPCODE_BLOBBASEFEE fun evm => evm.message.blockEnv.blobBaseFee h)
     else none
   | .slotnum =>
     if h : .glamsterdam ≤ fork then
+      -- SLOTNUM: the slot number of EIP-7843, a 64-bit number.
       some (readFrame OPCODE_SLOTNUM fun evm =>
         BitVec.ofNat 256 (evm.message.blockEnv.slotNumber h).toNat)
     else none

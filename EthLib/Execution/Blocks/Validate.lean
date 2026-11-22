@@ -114,7 +114,9 @@ inductive BlockError where
   | systemCallFailed (address : Address) (error : Evm.EvmError)
   /-- The execution aborts with `error`, so the block is neither valid nor invalid.
 
-  The state lacks data that it must hold, or the rules of the fork are not yet specified. -/
+  The state lacks data that it must hold, or the rules of the fork are not yet specified.
+
+  An instruction can also push a number of the environment that no word holds. -/
   | aborted (error : Evm.EvmError)
   /-- The transaction `index`, counted from 0, cannot enter the block, by `error`. -/
   | invalidTransaction (index : Nat) (error : Transactions.InclusionError)

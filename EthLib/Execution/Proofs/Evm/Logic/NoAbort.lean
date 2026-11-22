@@ -15,6 +15,8 @@ An error of the state aborts, and so does an opcode with no instruction.
 
 An encoding error aborts too, and so does a fork with no specification.
 
+So does a number of the environment that no word holds, which an instruction would push.
+
 An instruction that runs out of gas or of stack halts its frame instead.
 
 So do a jump to an invalid destination and a write in a static frame.

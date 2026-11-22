@@ -364,7 +364,7 @@ private theorem cls_environmentStep [LawfulGasMeter Meter] {op : Op}
     (try subst hstep)
   all_goals first
     | cases hstep
-    | (simp only [blockhashStep, blobhashStep, readFrame]; cls)
+    | (simp only [blockhashStep, blobhashStep, readNumber, readFrame]; cls)
 
 /-- Each instruction that reads another account is allowed. -/
 private theorem cls_accountStep [LawfulGasMeter Meter] {op : Op}

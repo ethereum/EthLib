@@ -119,10 +119,18 @@ theorem instruction_followsMeter {op : Op}
       (highValue := fun e => e.message.blockEnv.timestamp) below (fun _ _ => rfl) ok
     exact ⟨_, next, rfl, hn, hf⟩
   case number =>
+    -- The low run read the number, so it fits a word, and the high run reads it as a word too.
+    have fits : low.message.blockEnv.number < 2 ^ 256 := by
+      unfold readNumber at ok
+      split at ok
+      · assumption
+      · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp ok
+        cases h
     obtain ⟨next, hn, hf⟩ := readFrame_followsMeter
-      (highValue := fun e => BitVec.ofNat 256 e.message.blockEnv.number)
-      below (fun _ _ => rfl) ok
-    exact ⟨_, next, rfl, hn, hf⟩
+      (highValue := fun _ => BitVec.ofNat 256 low.message.blockEnv.number)
+      below (fun _ _ => rfl) (readFrame_of_readNumber ok)
+    refine ⟨_, next, rfl, ?_, hf⟩
+    exact (ite_eq_left fits).trans hn
   case log n =>
     have hz : n = 0 := by simpa using supported
     subst n

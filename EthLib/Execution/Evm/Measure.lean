@@ -390,6 +390,15 @@ theorem readFrame_pays {cost : Nat} {value : Evm fork Meter → U256} {evm after
   cases h
   exact (((chargeGas_pays h1).trans (pushWord_pays h2)).mono (m := cost) (by omega)).congr rfl rfl
 
+/-- An instruction that reads a number of the environment pays its price when it succeeds. -/
+theorem readNumber_pays {cost : Nat} {value : Evm fork Meter → Nat} {evm after : Evm fork Meter}
+    (h : readNumber cost value evm = .ok after) : Pays cost evm after := by
+  unfold readNumber at h
+  split at h
+  · exact readFrame_pays h
+  · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+
 /-- JUMP pays its price. -/
 theorem jumpStep_pays {evm after : Evm fork Meter} (h : jumpStep evm = .ok after) :
     Pays OPCODE_JUMP evm after := by
@@ -603,6 +612,7 @@ theorem environmentStep_measure_lt {op : Op}
   all_goals first
     | cases hf
     | exact ((readFrame_pays h).mono).measure_lt running
+    | exact ((readNumber_pays h).mono).measure_lt running
 
 /-! ## The instructions that read another account -/
 

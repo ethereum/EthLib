@@ -30,6 +30,10 @@ It steps over JUMPI on a condition that is a number, or that a hypothesis proves
 
 It steps over each opcode that pushes a word fixed by the frame, such as CALLVALUE, and over GAS.
 
+It steps over each opcode that pushes a number of the environment, such as NUMBER.
+
+A hypothesis or linear arithmetic must show that the number is below `2^256`.
+
 It proves a jump destination valid by the walk along the opcodes.
 
 So it steps over a jump only in a code stored as one number.
@@ -246,6 +250,15 @@ macro_rules
          case word => intro _ hc hm hp hmem; (try simp only [hc, hm, hp, hmem]); rfl
          case gas => evm_gas
          case room => evm_room)
+      | (refine' Triple.seq (push_of_readNumber ?lt ?op ?dec ?run ?word ?fit ?gas ?room) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case dec => refine ofByte_of_decode rfl ?_; evm_fork
+         case run => rfl
+         case word => intro _ hc hm hp hmem; (try simp only [hc, hm, hp, hmem]); rfl
+         case fit => first | assumption | omega
+         case gas => evm_gas
+         case room => evm_room)
       | (refine' Triple.seq (gas_rule ?lt ?op ?gas ?room) ?next
          case lt => evm_code [$ls,*]
          case op => evm_code [$ls,*]
@@ -347,6 +360,15 @@ macro_rules
          case dec => refine ofByte_of_decode rfl ?_; evm_fork
          case run => rfl
          case word => intro _ hc hm hp hmem; (try simp only [hc, hm, hp, hmem]); rfl
+         case gas => evm_gas
+         case room => evm_room)
+      | (refine' Triple.seq (push_of_readNumberG ?lt ?op ?dec ?run ?word ?fit ?gas ?room) ?next
+         case lt => evm_code [$ls,*]
+         case op => evm_code [$ls,*]
+         case dec => refine ofByte_of_decode rfl ?_; evm_fork
+         case run => rfl
+         case word => intro _ hc hm hp hmem; (try simp only [hc, hm, hp, hmem]); rfl
+         case fit => first | assumption | omega
          case gas => evm_gas
          case room => evm_room)
       | fail "no rule of a step applies to the opcode at the program counter") <;> evm_tidy))
