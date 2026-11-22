@@ -37,7 +37,7 @@ def apiConsensusBlockValueOf (args : String × String × ByteArray × ByteArray 
   let config ← configWithValue name replacements
   let state ← decodeInput (BeaconState preset fork) state
   let signed ← decodeInput (SignedBeaconBlock preset fork) block
-  runTransition (consensusBlockValue config SignatureChecks.acceptAll (.constant true) state
+  toResult none (consensusBlockValue config SignatureChecks.acceptAll (.constant true) state
     signed.message)
 
 /-- The consensus value of a signed block, in Wei.

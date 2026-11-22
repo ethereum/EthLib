@@ -30,11 +30,12 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue pyExport toResult)
 
-/-- The result of weak subjectivity, with the code and the text of its error. -/
-def runWeakSubjectivity {α : Type} (result : Except WeakSubjectivityError α) : Result α :=
-  result.mapError fun e => (e.code, toString e)
+/-- An error of weak subjectivity reaches Python with its code and its printed form. -/
+instance : ExportError WeakSubjectivityError where
+  code := WeakSubjectivityError.code
+  message := toString
 
 /-- The weak subjectivity period of a state, in epochs. -/
 def computeWeakSubjectivityPeriodOf
@@ -44,7 +45,7 @@ def computeWeakSubjectivityPeriodOf
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let config ← configWithValue name replacements
   let state ← decodeInput (BeaconState preset fork) state
-  runWeakSubjectivity (computeWeakSubjectivityPeriod config state)
+  toResult none (computeWeakSubjectivityPeriod config state)
 
 /-- The weak subjectivity period of a state, in epochs.
 
@@ -77,7 +78,7 @@ def isWithinWeakSubjectivityPeriodOf
   let config ← configWithValue name replacements
   let state ← decodeInput (BeaconState preset fork) state
   let checkpoint ← decodeInput Checkpoint checkpoint
-  runWeakSubjectivity (isWithinWeakSubjectivityPeriod config
+  toResult none (isWithinWeakSubjectivityPeriod config
     (storeAtTime preset fork genesisTimeMs timeMs) state checkpoint)
 
 /-- Whether a checkpoint is within the weak subjectivity period of its state, at a time.

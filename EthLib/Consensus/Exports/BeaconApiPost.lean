@@ -63,7 +63,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz Networking.Gossip BeaconApi
-open EthLib.Exports (Result PyValue FromPy fromPy pyExport)
+open EthLib.Exports (Result PyValue FromPy fromPy pyExport toResult)
 open Cryptography.Kzg.Exports (embeddedSetup)
 
 /-- A request to an endpoint: its time, the name of its endpoint, its items and its level. -/
@@ -175,7 +175,7 @@ def decodePublishInput {preset : Preset} {fork : Fork} (input : PostInput) :
 def eventRecords {preset : Preset} {fork : Fork} (events : List (ObjectEvent preset fork)) :
     Result (List (String × String)) :=
   events.mapM fun event => do
-    let event ← runForkChoice ((event.toApiEvent fork).mapError .ssz)
+    let event ← toResult "fork choice" ((event.toApiEvent fork).mapError ForkChoiceError.ssz)
     return (event.topic.name, event.data.compress)
 
 /-- The status code and the failed items of the answer to a pool request. -/
@@ -218,7 +218,7 @@ def apiPostOf (args : String × String × ByteArray × ByteArray × List GossipB
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let (store, statuses) ← gossipCaseStore (preset := preset) (fork := fork) config checks
     anchorState anchorBlock blocks finalized
-  let setup ← runForkChoice ((embeddedSetup ()).mapError .kzg)
+  let setup ← toResult "fork choice" ((embeddedSetup ()).mapError ForkChoiceError.kzg)
   let sources := emptySources setup
   -- The execution layer accepts every payload, so no block is optimistic.
   let optimistic : Root → Bool := fun _ => false
@@ -229,7 +229,7 @@ def apiPostOf (args : String × String × ByteArray × ByteArray × List GossipB
   for input in inputs do
     -- The clock of the node reaches the time of each request before the node answers it.
     if store.timeMs < input.currentTimeMs then
-      store ← runForkChoice (store.onTick config input.currentTimeMs)
+      store ← toResult "fork choice" (store.onTick config input.currentTimeMs)
     let context : SubmitContext preset fork :=
       { config, checks, setup, store, statuses, currentTimeMs := input.currentTimeMs }
     let publishes := input.endpoint ∈ ["blocks", "execution_payload_envelopes"]
@@ -241,7 +241,8 @@ def apiPostOf (args : String × String × ByteArray × ByteArray × List GossipB
       let (outcome, next, after) := match request with
         | .block signed => publishBlock context sources seen level signed
         | .envelope gloas signed => publishEnvelope context sources seen level gloas signed
-      let events ← runForkChoice <| Except.mapError .ssz <| match request with
+      let events ← toResult "fork choice" <| Except.mapError ForkChoiceError.ssz <|
+        match request with
         | .block signed => publishBlockEvents context seen optimistic signed outcome
         | .envelope gloas signed =>
           publishEnvelopeEvents context seen optimistic gloas signed outcome
@@ -252,7 +253,8 @@ def apiPostOf (args : String × String × ByteArray × ByteArray × List GossipB
         let root ← match request with
           | .block signed =>
             if decide (Fork.bellatrix ≤ fork ∧ fork < Fork.glamsterdam) then
-              some <$> runForkChoice ((SszType.hashTreeRoot signed.message).mapError .ssz)
+              some <$> toResult "fork choice"
+                ((SszType.hashTreeRoot signed.message).mapError ForkChoiceError.ssz)
             else pure none
           | .envelope _ signed => pure (some signed.message.beaconBlockRoot)
         if let some root := root then statuses := statuses.insert root PAYLOAD_STATUS_VALID
@@ -263,7 +265,8 @@ def apiPostOf (args : String × String × ByteArray × ByteArray × List GossipB
     | none =>
       let request ← decodePoolInput input
       let items := request.items context
-      let events ← runForkChoice ((submittedEvents context seen items).mapError .ssz)
+      let events ← toResult "fork choice"
+        ((submittedEvents context seen items).mapError ForkChoiceError.ssz)
       let (outcome, next) := submitList context seen items
       seen := next
       let (status, failures) := submitAnswer outcome
@@ -293,7 +296,8 @@ def apiGossipEventOf (args : String × String × String × ByteArray) :
   let preset ← presetOf name
   let fork ← forkOf fork.toUTF8
   let message ← decodeGossipInput (preset := preset) (fork := fork) topic ⟨0, 0, topic, data⟩
-  let events ← runForkChoice ((eventsOfGossip .accept message).mapError .ssz)
+  let events ← toResult "fork choice"
+    ((eventsOfGossip .accept message).mapError ForkChoiceError.ssz)
   return (← eventRecords events).head?
 
 /-- The event that an object gives if gossip accepts it, by the name of its gossip topic.

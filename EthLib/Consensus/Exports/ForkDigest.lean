@@ -25,7 +25,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base
-open EthLib.Exports (Result PyValue pyExport toResult)
+open EthLib.Exports (Result PyValue UnreadArgument pyExport toResult)
 open Serialization.Ssz (SszType)
 open Networking.Enr
 
@@ -132,9 +132,9 @@ def consensusRecordOf (args : String × Option PyValue × Root × UInt64 × Byte
   let pairs ← toResult "root rejected"
     (consensusPairs config genesisValidatorsRoot epoch attnets syncnets cgc)
   -- A record error has no code among those of SSZ, so it comes back with code 0.
-  let r ← (makeRecordV4 sk seq pairs).mapError fun e =>
-    (0, s!"record rejected: {Networking.Enr.Exports.message e}")
-  r.encode.mapError fun _ => (0, "record has no RLP encoding")
+  let r ← toResult none ((makeRecordV4 sk seq pairs).mapError fun e =>
+    UnreadArgument.mk s!"record rejected: {Networking.Enr.Exports.message e}")
+  toResult none (r.encode.mapError fun _ => UnreadArgument.mk "record has no RLP encoding")
 
 /-- A signed "v4" record of a consensus node at an epoch, with its consensus entries.
 

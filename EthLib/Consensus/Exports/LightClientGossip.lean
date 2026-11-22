@@ -39,11 +39,11 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz Networking.Gossip
-open EthLib.Exports (Result PyValue fromPy pyExport)
+open EthLib.Exports (Result PyValue UnreadArgument fromPy pyExport rejectArgument toResult)
 
-/-- A result of the clock, with code 0 for a time before genesis or out of the 64-bit range. -/
-def runClock {α : Type} (act : Except ArithError α) : Result α :=
-  act.mapError fun e => (0, s!"time rejected: {reprStr e}")
+/-- A time before genesis or out of the 64-bit range does not read, so it has code 0. -/
+def timeRejected (e : ArithError) : UnreadArgument :=
+  ⟨s!"time rejected: {reprStr e}"⟩
 
 /-- The outcomes of light client messages at a full node, in turn.
 
@@ -61,17 +61,17 @@ def lightClientGossipFullNodeOf (args : String × String × Option PyValue × UI
     match topic with
       | "light_client_finality_update" =>
         let update ← decodeAs (LightClientFinalityUpdate preset fork) data
-        let outcome ← runClock (forwarded.validateFinalityUpdateAtFullNode config genesisTimeMs
-          latest update currentTimeMs)
+        let outcome ← toResult none ((forwarded.validateFinalityUpdateAtFullNode config
+          genesisTimeMs latest update currentTimeMs).mapError timeRejected)
         if outcome.isAccept then forwarded := forwarded.recordFinalityUpdate update
         out := out.push (outcomeRecord outcome)
       | "light_client_optimistic_update" =>
         let update ← decodeAs (LightClientOptimisticUpdate preset fork) data
-        let outcome ← runClock (forwarded.validateOptimisticUpdateAtFullNode config genesisTimeMs
-          latest update currentTimeMs)
+        let outcome ← toResult none ((forwarded.validateOptimisticUpdateAtFullNode config
+          genesisTimeMs latest update currentTimeMs).mapError timeRejected)
         if outcome.isAccept then forwarded := forwarded.recordOptimisticUpdate update
         out := out.push (outcomeRecord outcome)
-      | other => throw (0, s!"no light client topic is named {other}")
+      | other => rejectArgument none s!"no light client topic is named {other}"
   return out.toList
 
 /-- The outcomes of light client messages at a full node, in turn.
@@ -99,16 +99,18 @@ def lightClientGossipLightClientOf (args : String × String × Option PyValue ×
   let config ← configWithValue name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let bootstrap ← decodeAs (LightClientBootstrap preset fork) bootstrap
-  let mut store ← runLightClient (initializeLightClientStore config trusted bootstrap)
+  let mut store ← toResult "light client" (initializeLightClientStore config trusted bootstrap)
   let mut forwarded : LightClientForwarded preset fork := {}
   let mut out := #[]
   for (topic, currentTimeMs, data) in messages do
     match topic with
       | "light_client_finality_update" =>
         let update ← decodeAs (LightClientFinalityUpdate preset fork) data
-        let outcome ← runClock (forwarded.validateFinalityUpdateAtLightClient config genesisTimeMs
-          checks store genesisValidatorsRoot update currentTimeMs)
-        let currentSlot ← runClock (computeSlotAtTimeMs config genesisTimeMs currentTimeMs)
+        let outcome ← toResult none ((forwarded.validateFinalityUpdateAtLightClient config
+          genesisTimeMs checks store genesisValidatorsRoot update currentTimeMs).mapError
+            timeRejected)
+        let currentSlot ← toResult none ((computeSlotAtTimeMs config genesisTimeMs
+          currentTimeMs).mapError timeRejected)
         let next := processLightClientFinalityUpdate config checks store update currentSlot
           genesisValidatorsRoot
         store := next.toOption.getD store
@@ -116,15 +118,17 @@ def lightClientGossipLightClientOf (args : String × String × Option PyValue ×
         out := out.push (outcomeRecord outcome)
       | "light_client_optimistic_update" =>
         let update ← decodeAs (LightClientOptimisticUpdate preset fork) data
-        let outcome ← runClock (forwarded.validateOptimisticUpdateAtLightClient config
-          genesisTimeMs checks store genesisValidatorsRoot update currentTimeMs)
-        let currentSlot ← runClock (computeSlotAtTimeMs config genesisTimeMs currentTimeMs)
+        let outcome ← toResult none ((forwarded.validateOptimisticUpdateAtLightClient config
+          genesisTimeMs checks store genesisValidatorsRoot update currentTimeMs).mapError
+            timeRejected)
+        let currentSlot ← toResult none ((computeSlotAtTimeMs config genesisTimeMs
+          currentTimeMs).mapError timeRejected)
         let next := processLightClientOptimisticUpdate config checks store update currentSlot
           genesisValidatorsRoot
         store := next.toOption.getD store
         if outcome.isAccept then forwarded := forwarded.recordOptimisticUpdate update
         out := out.push (outcomeRecord outcome)
-      | other => throw (0, s!"no light client topic is named {other}")
+      | other => rejectArgument none s!"no light client topic is named {other}"
   return out.toList
 
 /-- The outcomes of light client messages at a light client, in turn.

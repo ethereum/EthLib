@@ -58,15 +58,18 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport rejectArgument
+  toResult)
 
 /-- The value of a type that SSZ bytes encode. -/
 def decodeInput (α : Type) [SszType α] (data : ByteArray) : Result α :=
-  (SszType.deserialize α data).mapError fun e => (0, s!"input rejected: {reprStr e}")
+  toResult none ((SszType.deserialize α data).mapError fun e =>
+    UnreadArgument.mk s!"input rejected: {reprStr e}")
 
-/-- The result of a step of the transition, with the code and the message of its error. -/
-def runTransition {α : Type} (result : Except TransitionError α) : Result α :=
-  result.mapError fun e => (e.code, toString e)
+/-- A failed step of the transition reaches Python with its code and its printed error. -/
+instance : ExportError TransitionError where
+  code := TransitionError.code
+  message := toString
 
 /-- The state after a block operation of a handler of the vectors, the operation given as bytes.
 
@@ -76,89 +79,89 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
     (operation : ByteArray) : Result (BeaconState preset fork) :=
   match handler with
   | "block_header" => do
-    runTransition (processBlockHeader state (← decodeInput (BeaconBlock preset fork) operation))
+    toResult none (processBlockHeader state (← decodeInput (BeaconBlock preset fork) operation))
   | "proposer_slashing" => do
-    runTransition (processProposerSlashing config checks state
+    toResult none (processProposerSlashing config checks state
       (← decodeInput ProposerSlashing operation))
   | "attester_slashing" => do
-    runTransition (processAttesterSlashing config checks state
+    toResult none (processAttesterSlashing config checks state
       (← decodeInput (AttesterSlashing preset fork) operation))
   | "attestation" => do
     -- Before a block runs, its parent is the latest block header, as the vectors take it.
-    runTransition (processAttestation config checks state state.latestBlockHeader.slot
+    toResult none (processAttestation config checks state state.latestBlockHeader.slot
       (← decodeInput (Attestation preset fork) operation))
   | "deposit" =>
     if before : fork < .hegota then do
-      runTransition (processDeposit config checks before state (← decodeInput Deposit operation))
-    else throw (0, s!"no operation deposit at {fork.name}")
+      toResult none (processDeposit config checks before state (← decodeInput Deposit operation))
+    else rejectArgument none s!"no operation deposit at {fork.name}"
   | "sync_aggregate" =>
     if altair : .altair ≤ fork then do
-      runTransition (processSyncAggregate config checks state altair
+      toResult none (processSyncAggregate config checks state altair
         (← decodeInput (SyncAggregate preset) operation))
-    else throw (0, s!"no operation sync_aggregate at {fork.name}")
+    else rejectArgument none s!"no operation sync_aggregate at {fork.name}"
   | "voluntary_exit" | "voluntary_exit_churn" => do
-    runTransition (processVoluntaryExit config checks state
+    toResult none (processVoluntaryExit config checks state
       (← decodeInput SignedVoluntaryExit operation))
   | "execution_payload" =>
     if bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam then do
-      runTransition (processExecutionPayload config (.constant executionValid) state
+      toResult none (processExecutionPayload config (.constant executionValid) state
         (← decodeInput (BeaconBlockBody preset fork) operation) bellatrix)
-    else throw (0, s!"no operation execution_payload at {fork.name}")
+    else rejectArgument none s!"no operation execution_payload at {fork.name}"
   | "withdrawals" =>
     if capella : .shapella ≤ fork then
       -- From Gloas the step takes no payload, and the operation bytes are not read.
       if gloas : .glamsterdam ≤ fork then
-        runTransition (processWithdrawals state capella fun before => absurd gloas
+        toResult none (processWithdrawals state capella fun before => absurd gloas
           (Nat.not_le_of_lt before))
       else do
         let payload ← decodeInput (ExecutionPayload preset fork) operation
-        runTransition (processWithdrawals state capella fun _ => payload)
-    else throw (0, s!"no operation withdrawals at {fork.name}")
+        toResult none (processWithdrawals state capella fun _ => payload)
+    else rejectArgument none s!"no operation withdrawals at {fork.name}"
   | "bls_to_execution_change" =>
     if .shapella ≤ fork then do
-      runTransition (processBlsToExecutionChange config checks state
+      toResult none (processBlsToExecutionChange config checks state
         (← decodeInput SignedBLSToExecutionChange operation))
-    else throw (0, s!"no operation bls_to_execution_change at {fork.name}")
+    else rejectArgument none s!"no operation bls_to_execution_change at {fork.name}"
   | "deposit_request" =>
     if electra : .pectra ≤ fork then do
-      runTransition (processDepositRequest state electra (← decodeInput DepositRequest operation))
-    else throw (0, s!"no operation deposit_request at {fork.name}")
+      toResult none (processDepositRequest state electra (← decodeInput DepositRequest operation))
+    else rejectArgument none s!"no operation deposit_request at {fork.name}"
   | "withdrawal_request" =>
     if electra : .pectra ≤ fork then do
-      runTransition (processWithdrawalRequest config state electra
+      toResult none (processWithdrawalRequest config state electra
         (← decodeInput WithdrawalRequest operation))
-    else throw (0, s!"no operation withdrawal_request at {fork.name}")
+    else rejectArgument none s!"no operation withdrawal_request at {fork.name}"
   | "consolidation_request" =>
     if electra : .pectra ≤ fork then do
-      runTransition (processConsolidationRequest config state electra
+      toResult none (processConsolidationRequest config state electra
         (← decodeInput ConsolidationRequest operation))
-    else throw (0, s!"no operation consolidation_request at {fork.name}")
+    else rejectArgument none s!"no operation consolidation_request at {fork.name}"
   | "payload_attestation" =>
     if gloas : .glamsterdam ≤ fork then do
-      runTransition (processPayloadAttestation config checks state gloas
+      toResult none (processPayloadAttestation config checks state gloas
         (← decodeInput (PayloadAttestation preset) operation))
-    else throw (0, s!"no operation payload_attestation at {fork.name}")
+    else rejectArgument none s!"no operation payload_attestation at {fork.name}"
   | "execution_payload_bid" =>
     if gloas : .glamsterdam ≤ fork then do
-      runTransition (processExecutionPayloadBid config checks state gloas
+      toResult none (processExecutionPayloadBid config checks state gloas
         (← decodeInput (SignedExecutionPayloadBid preset fork) operation))
-    else throw (0, s!"no operation execution_payload_bid at {fork.name}")
+    else rejectArgument none s!"no operation execution_payload_bid at {fork.name}"
   | "builder_deposit_request" =>
     if gloas : .glamsterdam ≤ fork then do
-      runTransition (processBuilderDepositRequest config checks state gloas
+      toResult none (processBuilderDepositRequest config checks state gloas
         (← decodeInput BuilderDepositRequest operation))
-    else throw (0, s!"no operation builder_deposit_request at {fork.name}")
+    else rejectArgument none s!"no operation builder_deposit_request at {fork.name}"
   | "builder_exit_request" =>
     if gloas : .glamsterdam ≤ fork then do
-      runTransition (processBuilderExitRequest config state gloas
+      toResult none (processBuilderExitRequest config state gloas
         (← decodeInput BuilderExitRequest operation))
-    else throw (0, s!"no operation builder_exit_request at {fork.name}")
+    else rejectArgument none s!"no operation builder_exit_request at {fork.name}"
   | "parent_execution_payload" =>
     if gloas : .glamsterdam ≤ fork then do
       let block ← decodeInput (BeaconBlock preset fork) operation
-      runTransition (processParentExecutionPayload config checks state gloas block.body)
-    else throw (0, s!"no operation parent_execution_payload at {fork.name}")
-  | handler => throw (0, s!"no operation {handler}")
+      toResult none (processParentExecutionPayload config checks state gloas block.body)
+    else rejectArgument none s!"no operation parent_execution_payload at {fork.name}"
+  | handler => rejectArgument none s!"no operation {handler}"
 
 /-- The handlers of the operation vectors that run from Gloas.
 
@@ -179,55 +182,55 @@ def runEpochStep {preset : Preset} {fork : Fork} (config : Config) (handler : St
     (state : BeaconState preset fork) : Result (BeaconState preset fork) :=
   match handler with
   | "justification_and_finalization" =>
-    runTransition (processJustificationAndFinalization state)
+    toResult none (processJustificationAndFinalization state)
   | "inactivity_updates" =>
-    if altair : .altair ≤ fork then runTransition (processInactivityUpdates config state altair)
-    else throw (0, s!"no epoch step inactivity_updates at {fork.name}")
-  | "rewards_and_penalties" => runTransition (processRewardsAndPenalties config state)
-  | "registry_updates" => runTransition (processRegistryUpdates config state)
-  | "slashings" => runTransition (processSlashings state)
+    if altair : .altair ≤ fork then toResult none (processInactivityUpdates config state altair)
+    else rejectArgument none s!"no epoch step inactivity_updates at {fork.name}"
+  | "rewards_and_penalties" => toResult none (processRewardsAndPenalties config state)
+  | "registry_updates" => toResult none (processRegistryUpdates config state)
+  | "slashings" => toResult none (processSlashings state)
   | "eth1_data_reset" =>
-    if before : fork < .hegota then runTransition (processEth1DataReset before state)
-    else throw (0, s!"no epoch step eth1_data_reset at {fork.name}")
-  | "effective_balance_updates" => runTransition (processEffectiveBalanceUpdates state)
-  | "slashings_reset" => runTransition (processSlashingsReset state)
-  | "randao_mixes_reset" => runTransition (processRandaoMixesReset state)
+    if before : fork < .hegota then toResult none (processEth1DataReset before state)
+    else rejectArgument none s!"no epoch step eth1_data_reset at {fork.name}"
+  | "effective_balance_updates" => toResult none (processEffectiveBalanceUpdates state)
+  | "slashings_reset" => toResult none (processSlashingsReset state)
+  | "randao_mixes_reset" => toResult none (processRandaoMixesReset state)
   | "historical_roots_update" =>
-    if before : fork < .shapella then runTransition (processHistoricalRootsUpdate state before)
-    else throw (0, s!"no epoch step historical_roots_update at {fork.name}")
+    if before : fork < .shapella then toResult none (processHistoricalRootsUpdate state before)
+    else rejectArgument none s!"no epoch step historical_roots_update at {fork.name}"
   | "participation_record_updates" =>
-    if before : fork < .altair then runTransition (processParticipationRecordUpdates state before)
-    else throw (0, s!"no epoch step participation_record_updates at {fork.name}")
+    if before : fork < .altair then toResult none (processParticipationRecordUpdates state before)
+    else rejectArgument none s!"no epoch step participation_record_updates at {fork.name}"
   | "historical_summaries_update" =>
     if capella : .shapella ≤ fork then
-      runTransition (processHistoricalSummariesUpdate state capella)
-    else throw (0, s!"no epoch step historical_summaries_update at {fork.name}")
+      toResult none (processHistoricalSummariesUpdate state capella)
+    else rejectArgument none s!"no epoch step historical_summaries_update at {fork.name}"
   | "participation_flag_updates" =>
     if altair : .altair ≤ fork then pure (processParticipationFlagUpdates state altair)
-    else throw (0, s!"no epoch step participation_flag_updates at {fork.name}")
+    else rejectArgument none s!"no epoch step participation_flag_updates at {fork.name}"
   | "sync_committee_updates" =>
-    if altair : .altair ≤ fork then runTransition (processSyncCommitteeUpdates state altair)
-    else throw (0, s!"no epoch step sync_committee_updates at {fork.name}")
+    if altair : .altair ≤ fork then toResult none (processSyncCommitteeUpdates state altair)
+    else rejectArgument none s!"no epoch step sync_committee_updates at {fork.name}"
   | "ptc_window" =>
-    if gloas : .glamsterdam ≤ fork then runTransition (liftAccessor (processPtcWindow state gloas))
-    else throw (0, s!"no epoch step ptc_window at {fork.name}")
+    if gloas : .glamsterdam ≤ fork then toResult none (liftAccessor (processPtcWindow state gloas))
+    else rejectArgument none s!"no epoch step ptc_window at {fork.name}"
   | "builder_pending_payments" =>
     if gloas : .glamsterdam ≤ fork then
-      runTransition (liftAccessor (processBuilderPendingPayments state gloas))
-    else throw (0, s!"no epoch step builder_pending_payments at {fork.name}")
+      toResult none (liftAccessor (processBuilderPendingPayments state gloas))
+    else rejectArgument none s!"no epoch step builder_pending_payments at {fork.name}"
   | "pending_deposits" | "pending_deposits_churn" =>
     -- The deposits to new keys are checked with BLS, as the vectors expect.
     if electra : .pectra ≤ fork then
-      runTransition (processPendingDeposits config .bls state electra)
-    else throw (0, s!"no epoch step pending_deposits at {fork.name}")
+      toResult none (processPendingDeposits config .bls state electra)
+    else rejectArgument none s!"no epoch step pending_deposits at {fork.name}"
   | "pending_consolidations" =>
-    if electra : .pectra ≤ fork then runTransition (processPendingConsolidations state electra)
-    else throw (0, s!"no epoch step pending_consolidations at {fork.name}")
+    if electra : .pectra ≤ fork then toResult none (processPendingConsolidations state electra)
+    else rejectArgument none s!"no epoch step pending_consolidations at {fork.name}"
   | "proposer_lookahead" =>
     if fulu : .fusaka ≤ fork then
-      runTransition (liftAccessor (processProposerLookahead state fulu))
-    else throw (0, s!"no epoch step proposer_lookahead at {fork.name}")
-  | handler => throw (0, s!"no epoch step {handler}")
+      toResult none (liftAccessor (processProposerLookahead state fulu))
+    else rejectArgument none s!"no epoch step proposer_lookahead at {fork.name}"
+  | handler => rejectArgument none s!"no epoch step {handler}"
 
 /-- The state after a block operation of a handler of the vectors, as SSZ bytes. -/
 def processOperationOf
@@ -238,10 +241,11 @@ def processOperationOf
   let config ← configWithValue name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   if .glamsterdam ≤ fork ∧ handler ∉ gloasOperations then
-    throw (0, s!"no operation {handler} at {fork.name}")
+    rejectArgument none s!"no operation {handler} at {fork.name}"
   let state ← decodeInput (BeaconState preset fork) pre
   let after ← runOperation config checks executionValid handler state operation
-  (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
+  toResult none ((SszType.serialize after).mapError fun e =>
+    UnreadArgument.mk s!"state rejected: {reprStr e}")
 
 /-- The state after a block operation of a handler of the vectors, as SSZ bytes.
 
@@ -262,7 +266,8 @@ def processEpochOf
   let config ← configWithValue name replacements
   let state ← decodeInput (BeaconState preset fork) pre
   let after ← runEpochStep config handler state
-  (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
+  toResult none ((SszType.serialize after).mapError fun e =>
+    UnreadArgument.mk s!"state rejected: {reprStr e}")
 
 /-- The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes.
 
@@ -280,9 +285,10 @@ def processSlotsOf
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let config ← configWithValue name replacements
   let state ← decodeInput (BeaconState preset fork) pre
-  let target ← runTransition (liftAccessor (liftArith (Uint64.addChecked state.slot slots)))
-  let after ← runTransition (processSlots config .bls state target)
-  (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
+  let target ← toResult none (liftAccessor (liftArith (Uint64.addChecked state.slot slots)))
+  let after ← toResult none (processSlots config .bls state target)
+  toResult none ((SszType.serialize after).mapError fun e =>
+    UnreadArgument.mk s!"state rejected: {reprStr e}")
 
 /-- The state some slots later, as SSZ bytes.
 
@@ -304,8 +310,9 @@ def stateTransitionOf
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let state ← decodeInput (BeaconState preset fork) pre
   let signed ← decodeInput (SignedBeaconBlock preset fork) block
-  let after ← runTransition (stateTransition config checks (.constant true) state signed)
-  (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
+  let after ← toResult none (stateTransition config checks (.constant true) state signed)
+  toResult none ((SszType.serialize after).mapError fun e =>
+    UnreadArgument.mk s!"state rejected: {reprStr e}")
 
 /-- The state after a signed block, as SSZ bytes, with the signature and the state root checked.
 
@@ -327,7 +334,7 @@ def forkBefore : Fork → Result Fork
   | .fusaka => pure .pectra
   | .glamsterdam => pure .fusaka
   | .hegota => pure .glamsterdam
-  | fork => throw (0, s!"no upgrade to {fork.name}")
+  | fork => rejectArgument none s!"no upgrade to {fork.name}"
 
 /-- The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes. -/
 def upgradeStateOf
@@ -339,8 +346,9 @@ def upgradeStateOf
   let config ← configWithValue name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let state ← decodeInput (BeaconState preset previous) pre
-  let post ← runTransition (upgradeNext config checks ⟨previous, state⟩)
-  (SszType.serialize post.val.state).mapError fun e => (0, s!"state rejected: {reprStr e}")
+  let post ← toResult none (upgradeNext config checks ⟨previous, state⟩)
+  toResult none ((SszType.serialize post.val.state).mapError fun e =>
+    UnreadArgument.mk s!"state rejected: {reprStr e}")
 
 /-- The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.
 
@@ -364,9 +372,10 @@ def stateTransitionAcrossOf
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let state ← decodeInput (BeaconState preset fork) pre
   let signed ← decodeInput (SignedBeaconBlock preset blockFork) block
-  let after ← runTransition
+  let after ← toResult none
     (stateTransitionAcross config checks (.constant true) ⟨fork, state⟩ signed)
-  (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
+  toResult none ((SszType.serialize after).mapError fun e =>
+    UnreadArgument.mk s!"state rejected: {reprStr e}")
 
 /-- The state after a signed block of a fork, from a state of that fork or an earlier one.
 
@@ -396,8 +405,9 @@ def stateTransitionsOf
   let mut state ← decodeInput (BeaconState preset fork) pre
   for block in blocks do
     let signed ← decodeInput (SignedBeaconBlock preset fork) block
-    state ← runTransition (stateTransition config checks (.constant true) state signed)
-  (SszType.serialize state).mapError fun e => (0, s!"state rejected: {reprStr e}")
+    state ← toResult none (stateTransition config checks (.constant true) state signed)
+  toResult none ((SszType.serialize state).mapError fun e =>
+    UnreadArgument.mk s!"state rejected: {reprStr e}")
 
 /-- The state after signed blocks in order, as SSZ bytes, with each state root checked.
 
@@ -420,14 +430,15 @@ def stateTransitionsAcrossOf
   let config ← configWithValue name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   if blockForks.size != blocks.size then
-    throw (0, s!"{blockForks.size} block forks for {blocks.size} blocks")
+    rejectArgument none s!"{blockForks.size} block forks for {blocks.size} blocks"
   let mut forked : ForkedBeaconState preset := ⟨fork, ← decodeInput (BeaconState preset fork) pre⟩
   for (blockFork, block) in blockForks.zip blocks do
     let (_, blockFork) ← transitionPresetAndFork name.toUTF8 blockFork.toUTF8
     let signed ← decodeInput (SignedBeaconBlock preset blockFork) block
     forked := ⟨blockFork,
-      ← runTransition (stateTransitionAcross config checks (.constant true) forked signed)⟩
-  (SszType.serialize forked.state).mapError fun e => (0, s!"state rejected: {reprStr e}")
+      ← toResult none (stateTransitionAcross config checks (.constant true) forked signed)⟩
+  toResult none ((SszType.serialize forked.state).mapError fun e =>
+    UnreadArgument.mk s!"state rejected: {reprStr e}")
 
 /-- The state after signed blocks in order, as SSZ bytes, across the fork epochs on the way.
 

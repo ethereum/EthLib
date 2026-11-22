@@ -49,7 +49,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport toResult)
+open EthLib.Exports (Result PyValue pyExport rejectArgument toResult)
 
 /-- A container type of the beacon chain, with its SSZ codec. -/
 structure Container where
@@ -265,7 +265,7 @@ def specifiedAt (fork : Fork) (type : String) : Bool :=
 def presetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
   let preset ← presetOf (← nameOf name)
   let fork ← forkOf fork
-  if .glamsterdam ≤ fork then throw (0, s!"fork {fork.name} not yet specified")
+  if .glamsterdam ≤ fork then rejectArgument none s!"fork {fork.name} not yet specified"
   return (preset, fork)
 
 /-- The root of the value that the bytes encode, and the bytes of that value. -/
@@ -274,9 +274,9 @@ def sszStaticOf (args : String × String × String × ByteArray) : Result (Root 
   let preset ← presetOf name
   let fork ← forkOf fork.toUTF8
   let some container := containerOf preset fork type
-    | throw (0, s!"no container {type} at {fork.name}")
+    | rejectArgument none s!"no container {type} at {fork.name}"
   if !specifiedAt fork type then
-    throw (0, s!"{type} not yet specified at {fork.name}")
+    rejectArgument none s!"{type} not yet specified at {fork.name}"
   let value ← toResult "input rejected" (SszType.deserialize container.type data)
   let root ← toResult "root rejected" (SszType.hashTreeRoot value)
   let bytes ← toResult "value rejected" (SszType.serialize value)
@@ -297,9 +297,9 @@ def merkleProofOf (args : String × String × String × ByteArray × UInt64) :
   let preset ← presetOf name
   let fork ← forkOf fork.toUTF8
   let some container := containerOf preset fork type
-    | throw (0, s!"no container {type} at {fork.name}")
+    | rejectArgument none s!"no container {type} at {fork.name}"
   if !specifiedAt fork type then
-    throw (0, s!"{type} not yet specified at {fork.name}")
+    rejectArgument none s!"{type} not yet specified at {fork.name}"
   let value ← toResult "input rejected" (SszType.deserialize container.type data)
   let shape := SszType.desc container.type
   let node ← toResult "node rejected" (nodeRoot shape (SszType.toValue value) gindex.toNat)
@@ -332,7 +332,7 @@ def upgradeOperationOf (args : String × String × ByteArray) : Result (Root × 
     upgradeToGloasOf (IndexedAttestation.upgradeToGloas (preset := preset)) data
   | "AttesterSlashing" =>
     upgradeToGloasOf (AttesterSlashing.upgradeToGloas (preset := preset)) data
-  | _ => throw (0, s!"no upgrade of {type} to Gloas")
+  | _ => rejectArgument none s!"no upgrade of {type} to Gloas"
 
 /-- The root and the bytes of the Gloas form of a container of Fulu, as a pair.
 
@@ -350,7 +350,8 @@ def upgradeOperationExport (args : PyValue) : Result PyValue := pyExport upgrade
 @[export eth_consensus_verify_blob_sidecar_inclusion_proof]
 def verifyBlobSidecarInclusionProofExport (name fork data : ByteArray) : Result Bool := do
   let (preset, fork) ← presetAndFork name fork
-  if ¬(.dencun ≤ fork ∧ fork < .fusaka) then throw (0, s!"no container BlobSidecar at {fork.name}")
+  if ¬(.dencun ≤ fork ∧ fork < .fusaka) then
+    rejectArgument none s!"no container BlobSidecar at {fork.name}"
   let sidecar ← toResult "input rejected" (SszType.deserialize (BlobSidecar preset) data)
   return verifyBlobSidecarInclusionProof preset fork sidecar
 

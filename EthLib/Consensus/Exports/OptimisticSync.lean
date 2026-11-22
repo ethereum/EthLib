@@ -36,7 +36,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue UnreadArgument pyExport rejectArgument toResult)
 
 /-- The result of a step of optimistic sync, with the code of its error. -/
 def runOptimistic {α : Type} (result : Except ForkChoiceError α) : Result α :=
@@ -46,7 +46,7 @@ def runOptimistic {α : Type} (result : Except ForkChoiceError α) : Result α :
 def optimisticPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
   let (preset, fork) ← transitionPresetAndFork name fork
   unless .bellatrix ≤ fork do
-    throw (0, s!"no optimistic sync at {fork.name}")
+    rejectArgument none s!"no optimistic sync at {fork.name}"
   return (preset, fork)
 
 /-- An optimistic store from its optimistic roots and the SSZ bytes of its blocks.
@@ -56,7 +56,8 @@ def optimisticStoreOf (preset : Preset) (fork : Fork) (blocks : Array ByteArray)
     (optimisticRoots : List Root) : Result (OptimisticStore preset fork) := do
   let decoded ← blocks.toList.mapM fun bytes => do
     let block ← decodeInput (BeaconBlock preset fork) bytes
-    let root ← (SszType.hashTreeRoot block).mapError fun e => (0, s!"block rejected: {reprStr e}")
+    let root ← toResult none ((SszType.hashTreeRoot block).mapError fun e =>
+      UnreadArgument.mk s!"block rejected: {reprStr e}")
     return (root, block)
   return {
     optimisticRoots := optimisticRoots
@@ -165,12 +166,12 @@ def isOptimisticNodeOf (args : String × String × ByteArray × ByteArray × Lis
   let blocks ← (steps.zip outcomes).filterMapM fun
     | (.block input, .ok _ :: _) => do
       let signed ← decodeInput (SignedBeaconBlock preset fork) input.block
-      let root ← (SszType.hashTreeRoot signed.message).mapError fun e =>
-        (0, s!"block rejected: {reprStr e}")
+      let root ← toResult none ((SszType.hashTreeRoot signed.message).mapError fun e =>
+        UnreadArgument.mk s!"block rejected: {reprStr e}")
       return some (root, signed.message)
     | _ => pure none
-  let anchorRoot ← (SszType.hashTreeRoot anchorBlock).mapError fun e =>
-    (0, s!"block rejected: {reprStr e}")
+  let anchorRoot ← toResult none ((SszType.hashTreeRoot anchorBlock).mapError fun e =>
+    UnreadArgument.mk s!"block rejected: {reprStr e}")
   let optimistic : OptimisticStore preset fork :=
     { optimisticRoots := roots, head := ⟨head, status⟩,
       blocks := Std.TreeMap.ofList ((anchorRoot, anchorBlock) :: blocks) }
@@ -214,7 +215,7 @@ def inclusionListSatisfactionOf (args : String × String × ByteArray × ByteArr
   let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8
   if heze : .hegota ≤ fork then
     unless status ≤ PAYLOAD_STATUS_NOT_VALIDATED do
-      throw (0, s!"unknown payload validation status {status}")
+      rejectArgument none s!"unknown payload validation status {status}"
     let config ← configWithValue name replacements
     let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
     let anchorState ← decodeInput (BeaconState preset fork) anchorState
@@ -234,7 +235,7 @@ def inclusionListSatisfactionOf (args : String × String × ByteArray × ByteArr
         let (_, store) ← runOptimistic (optimistic.onValidatedPayload store heze root satisfied)
         pure store
     return roots.map ((store.payloadInclusionListSatisfaction heze)[·]?)
-  else throw (0, s!"no inclusion lists at {fork.name}")
+  else rejectArgument none s!"no inclusion lists at {fork.name}"
 
 /-- From Heze: the answers on the inclusion lists after a run of fork choice steps.
 
@@ -250,8 +251,8 @@ def inclusionListSatisfactionExport (args : PyValue) : Result PyValue :=
 /-- Whether an optimistic validator may not sign under a domain type of 4 bytes. -/
 @[export eth_consensus_is_optimistic_restricted_domain]
 def isOptimisticRestrictedDomainExport (domainType : ByteArray) : Result Bool := do
-  let domainType ← Base.exactBytes 4 domainType fun size =>
-    (0, s!"a domain type is 4 bytes, not {size}")
+  let domainType ← toResult none (Base.exactBytes 4 domainType fun size =>
+    UnreadArgument.mk s!"a domain type is 4 bytes, not {size}")
   return isOptimisticRestrictedDomain domainType
 
 end EthLib.Consensus.Exports

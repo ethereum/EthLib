@@ -26,7 +26,7 @@ An input that does not decode, or an unknown name, has code 0.
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue UnreadArgument pyExport toResult)
 
 /-- The candidate genesis state of a block of the proof-of-work chain, as SSZ bytes. -/
 def initializeGenesisOf
@@ -37,9 +37,10 @@ def initializeGenesisOf
   let config ← configWithValue name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let deposits ← deposits.mapM (decodeInput Deposit)
-  let state : BeaconState preset fork ← runTransition
+  let state : BeaconState preset fork ← toResult none
     (initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits)
-  (SszType.serialize state).mapError fun e => (0, s!"state rejected: {reprStr e}")
+  toResult none ((SszType.serialize state).mapError fun e =>
+    UnreadArgument.mk s!"state rejected: {reprStr e}")
 
 /-- The candidate genesis state of a block of the proof-of-work chain, as SSZ bytes.
 

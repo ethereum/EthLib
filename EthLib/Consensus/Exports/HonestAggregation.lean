@@ -33,12 +33,12 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz Cryptography.Bls
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue UnreadArgument pyExport rejectArgument toResult)
 
 /-- A secret key from its bytes, or code 0. -/
 def secretKeyOf (bytes : ByteArray) : Result Signatures.SecretKey :=
-  (Signatures.SecretKey.fromBytes bytes).mapError fun _ =>
-    (0, "the secret key is not a nonzero scalar below the group order")
+  toResult none ((Signatures.SecretKey.fromBytes bytes).mapError fun _ =>
+    UnreadArgument.mk "the secret key is not a nonzero scalar below the group order")
 
 /-- A status of a payload in the fork choice, from its code, or code 0.
 
@@ -48,7 +48,7 @@ def payloadStatusOf (code : UInt64) : Result PayloadStatus :=
   | 0 => return .empty
   | 1 => return .full
   | 2 => return .pending
-  | _ => throw (0, s!"unknown payload status {code}")
+  | _ => rejectArgument none s!"unknown payload status {code}"
 
 /-- The attestation data of an attester, from the head block and the state at its slot, as SSZ.
 
@@ -66,8 +66,9 @@ def getAttestationDataExport (name fork state headRoot : ByteArray)
   let state ← decodeInput (BeaconState preset fork) state
   let headRoot ← decodeInput Root headRoot
   let payloadStatus ← payloadStatusOf payloadStatus
-  let data ← runDuty (getAttestationData state headRoot headSlot committeeIndex payloadStatus)
-  (SszType.serialize data).mapError fun e => (0, s!"attestation data rejected: {reprStr e}")
+  let data ← toResult none (getAttestationData state headRoot headSlot committeeIndex payloadStatus)
+  toResult none ((SszType.serialize data).mapError fun e =>
+    UnreadArgument.mk s!"attestation data rejected: {reprStr e}")
 
 /-- The aggregate of the signatures of attestations, as 96 bytes.
 
@@ -77,7 +78,8 @@ def getAggregateSignatureExport (name fork : ByteArray) (attestations : Array By
     Result ByteArray := do
   let (preset, fork) ← transitionPresetAndFork name fork
   let attestations ← attestations.toList.mapM (decodeInput (Attestation preset fork))
-  return packBytes (← runDuty ((getAggregateSignature attestations).mapError .bls))
+  return packBytes
+    (← toResult none ((getAggregateSignature attestations).mapError ValidatorDutyError.bls))
 
 /-- Before Electra: the attestation of a validator on attestation data, as SSZ bytes. -/
 def constructAttestationOf
@@ -89,9 +91,10 @@ def constructAttestationOf
   let ⟨before⟩ ← holds (fork < .pectra) s!"no attestation of one validator at {fork.name}"
   let state ← decodeInput (BeaconState preset fork) state
   let data ← decodeInput AttestationData data
-  let attestation ← runDuty
+  let attestation ← toResult none
     (constructAttestation config state before data validatorIndex (← secretKeyOf secretKey))
-  (SszType.serialize attestation).mapError fun e => (0, s!"attestation rejected: {reprStr e}")
+  toResult none ((SszType.serialize attestation).mapError fun e =>
+    UnreadArgument.mk s!"attestation rejected: {reprStr e}")
 
 /-- Before Electra: the attestation of a validator on attestation data, as SSZ bytes.
 
@@ -111,9 +114,10 @@ def constructSingleAttestationOf
   let ⟨_⟩ ← holds (.pectra ≤ fork) s!"no single attestation at {fork.name}"
   let state ← decodeInput (BeaconState preset fork) state
   let data ← decodeInput AttestationData data
-  let single ← runDuty (constructSingleAttestation config state data committeeIndex
+  let single ← toResult none (constructSingleAttestation config state data committeeIndex
     validatorIndex (← secretKeyOf secretKey))
-  (SszType.serialize single).mapError fun e => (0, s!"attestation rejected: {reprStr e}")
+  toResult none ((SszType.serialize single).mapError fun e =>
+    UnreadArgument.mk s!"attestation rejected: {reprStr e}")
 
 /-- From Electra: the single attestation of a validator in a committee, as SSZ bytes.
 
@@ -133,8 +137,9 @@ def constructAggregateExport (name fork state data : ByteArray) (attestations : 
   let state ← decodeInput (BeaconState preset fork) state
   let data ← decodeInput AttestationData data
   let attestations ← attestations.toList.mapM (decodeInput (Attestation preset fork))
-  let aggregate ← runDuty (constructAggregate state before data attestations)
-  (SszType.serialize aggregate).mapError fun e => (0, s!"aggregate rejected: {reprStr e}")
+  let aggregate ← toResult none (constructAggregate state before data attestations)
+  toResult none ((SszType.serialize aggregate).mapError fun e =>
+    UnreadArgument.mk s!"aggregate rejected: {reprStr e}")
 
 /-- From Electra: the aggregate of the single attestations of a committee, as SSZ bytes.
 
@@ -147,8 +152,10 @@ def constructAggregateOfSingleAttestationsExport (name fork state data : ByteArr
   let state ← decodeInput (BeaconState preset fork) state
   let data ← decodeInput AttestationData data
   let singles ← singles.toList.mapM (decodeInput SingleAttestation)
-  let aggregate ← runDuty (constructAggregateOfSingleAttestations state data committeeIndex singles)
-  (SszType.serialize aggregate).mapError fun e => (0, s!"aggregate rejected: {reprStr e}")
+  let aggregate ← toResult none
+    (constructAggregateOfSingleAttestations state data committeeIndex singles)
+  toResult none ((SszType.serialize aggregate).mapError fun e =>
+    UnreadArgument.mk s!"aggregate rejected: {reprStr e}")
 
 /-- From Altair: the contribution of a subcommittee from sync committee messages, as SSZ bytes.
 
@@ -164,8 +171,9 @@ def constructSyncCommitteeContributionExport (name fork state committee blockRoo
   let committee ← decodeInput (SyncCommittee preset) committee
   let blockRoot ← decodeInput Root blockRoot
   let messages ← messages.toList.mapM (decodeInput SyncCommitteeMessage)
-  let contribution ← runDuty (constructSyncCommitteeContribution state committee blockRoot
+  let contribution ← toResult none (constructSyncCommitteeContribution state committee blockRoot
     subcommitteeIndex messages)
-  (SszType.serialize contribution).mapError fun e => (0, s!"contribution rejected: {reprStr e}")
+  toResult none ((SszType.serialize contribution).mapError fun e =>
+    UnreadArgument.mk s!"contribution rejected: {reprStr e}")
 
 end EthLib.Consensus.Exports

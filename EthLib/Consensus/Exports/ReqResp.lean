@@ -30,7 +30,8 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport forkUpTo toResult)
+open EthLib.Exports (Result PyValue UnreadArgument pyExport forkUpTo rejectArgument
+  toResult)
 
 /-- The protocol IDs of a fork. -/
 def reqRespProtocolIdsOf (fork : String) : Result (List String) := do
@@ -46,7 +47,7 @@ def reqRespProtocolIdsExport (args : PyValue) : Result PyValue :=
 
 /-- The protocol name and the version that an ID names. -/
 def reqRespParseProtocolIdOf (text : String) : Result (String × Nat) := do
-  let some id := ProtocolId.parse? text | throw (0, s!"{text} names no protocol")
+  let some id := ProtocolId.parse? text | rejectArgument none s!"{text} names no protocol"
   return (id.protocol.name, id.version)
 
 /-- The protocol name and the version that an ID names, as a pair.
@@ -96,7 +97,7 @@ def reqRespMessageOfBytes (args : String × String × String × ByteArray) :
   let config ← configOf name
   let fork ← forkUpTo .hegota fork.toUTF8
   let some message := reqRespMessageOf preset config fork type
-    | throw (0, s!"no message {type} at {fork.name}")
+    | rejectArgument none s!"no message {type} at {fork.name}"
   let value ← toResult "input rejected" (SszType.deserialize message.type data)
   let root ← toResult "root rejected" (SszType.hashTreeRoot value)
   let bytes ← toResult "value rejected" (SszType.serialize value)
@@ -125,7 +126,7 @@ def computeMinEpochsForBlockRequestsExport (args : PyValue) : Result PyValue :=
 
 /-- A protocol ID that the fork defines, or the code of the error that says it does not. -/
 def protocolAtFork (fork : Fork) (text : String) : Result ProtocolId := do
-  let some id := ProtocolId.parse? text | throw (0, s!"{text} names no protocol")
+  let some id := ProtocolId.parse? text | rejectArgument none s!"{text} names no protocol"
   unless (protocolIds fork).contains id do
     throw (BoundsError.notAtFork text fork).fault
   return id
@@ -179,12 +180,13 @@ def decodeRequest (α : Type) [SszType α] (data : ByteArray) : Result α :=
 def decodeItems {β : Type} (α : Type) [EthLib.Exports.FromPy α] (make : α → β)
     (items : List PyValue) : Result (List β) :=
   items.mapM fun item => do
-    return make (← (EthLib.Exports.FromPy.fromPy item).mapError fun error => (0, error))
+    return make (← toResult none
+      ((EthLib.Exports.FromPy.fromPy item).mapError UnreadArgument.mk))
 
 /-- The root of the genesis validators, which the light client checks need, or code 0. -/
 def lightClientRoot : Option Root → Result Root
   | some root => .ok root
-  | none => throw (0, "the light client checks need the root of the genesis validators")
+  | none => rejectArgument none "the light client checks need the root of the genesis validators"
 
 /-- Whether a response is valid for its request, under the protocol that an ID names.
 
@@ -249,13 +251,13 @@ def reqRespResponseValidOf
   | .inclusionListsByIndices =>
     let request ← decodeRequest (InclusionListsByIndicesRequest preset) request
     let seats := preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat
-    let committee ← exactArray seats committee.toArray fun count =>
-      (0, s!"the committee has {count} seats, not {seats}")
+    let committee ← toResult none (exactArray seats committee.toArray fun count =>
+      UnreadArgument.mk s!"the committee has {count} seats, not {seats}")
     let lists ← decodeItems (Slot × ValidatorIndex × Root)
       (fun (slot, validatorIndex, dependentRoot) =>
         InclusionList.mk slot validatorIndex dependentRoot ⟨#[]⟩) items
     return isValidInclusionListsByIndicesResponse config request committee lists
-  | _ => throw (0, s!"{id.toString} has no response check")
+  | _ => rejectArgument none s!"{id.toString} has no response check"
 
 /-- Whether a response is valid for its request, as a Boolean.
 

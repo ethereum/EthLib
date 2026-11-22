@@ -32,7 +32,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result toResult)
+open EthLib.Exports (Result rejectArgument toResult)
 
 /-- From Heze, the bits of the inclusion lists of a bid, from their SSZ bytes.
 
@@ -44,11 +44,11 @@ The bits are required from Heze, and must be absent before. -/
 def inclusionListBitsOf {preset : Preset} {fork : Fork} (bits : ByteArray) :
     Result (Since .hegota fork (InclusionListBits preset)) :=
   if heze : .hegota ≤ fork then do
-    if bits.isEmpty then throw (0, s!"inclusion list bits are required at {fork.name}")
+    if bits.isEmpty then rejectArgument none s!"inclusion list bits are required at {fork.name}"
     let bits ← decodeInput (InclusionListBits preset) bits
     return fun _ => bits
   else if bits.isEmpty then return fun later => absurd later heze
-  else throw (0, s!"no inclusion list bits at {fork.name}")
+  else rejectArgument none s!"no inclusion list bits at {fork.name}"
 
 /-- From Gloas: the bid of a builder for a payload that it built on a state, as SSZ bytes. -/
 @[export eth_consensus_get_execution_payload_bid]

@@ -28,7 +28,8 @@ public section
 
 namespace EthLib.Consensus.Exports
 
-open EthLib.Exports (Result PyValue forkUpTo pyExport)
+open EthLib.Exports (Result PyValue UnreadArgument forkUpTo pyExport rejectArgument
+  toResult)
 
 open Lean Base
 
@@ -108,20 +109,20 @@ def presetJson (preset : Preset) : Json := entriesJson (BeaconApi.presetEntries 
 
 /-- The text of a name, or an error that a Python traceback shows. -/
 def nameOf (bytes : ByteArray) : Result String := do
-  let some name := String.fromUTF8? bytes | throw (0, "name is not UTF-8")
+  let some name := String.fromUTF8? bytes | rejectArgument none "name is not UTF-8"
   return name
 
 /-- The preset of a name. -/
 def presetOf : String → Result Preset
   | "mainnet" => return .mainnet
   | "minimal" => return .minimal
-  | name => throw (0, s!"no preset is named {name}")
+  | name => rejectArgument none s!"no preset is named {name}"
 
 /-- The configuration of a name. -/
 def configOf : String → Result Config
   | "mainnet" => return .mainnet
   | "minimal" => return .minimal
-  | name => throw (0, s!"no configuration is named {name}")
+  | name => rejectArgument none s!"no configuration is named {name}"
 
 /-- The configuration of a name, with some of its values replaced.
 
@@ -131,9 +132,11 @@ An empty replacement keeps the configuration of the name. -/
 def configWith (name replacements : ByteArray) : Result Config := do
   let config ← configOf (← nameOf name)
   if replacements.isEmpty then return config
-  let some text := String.fromUTF8? replacements | throw (0, "configuration is not UTF-8")
-  let replaced ← (Json.parse text).mapError fun e => (0, s!"configuration: {e}")
-  (fromJson? ((toJson config).mergeObj replaced)).mapError fun e => (0, s!"configuration: {e}")
+  let some text := String.fromUTF8? replacements | rejectArgument none "configuration is not UTF-8"
+  let replaced ← toResult none ((Json.parse text).mapError fun e =>
+    UnreadArgument.mk s!"configuration: {e}")
+  toResult none ((fromJson? ((toJson config).mergeObj replaced)).mapError fun e =>
+    UnreadArgument.mk s!"configuration: {e}")
 
 /-- The configuration of a name, with some of its values replaced.
 
@@ -149,18 +152,19 @@ def configWithValue (name : String) (replacements : Option PyValue) : Result Con
   match replacements with
   | none | some (.dict #[]) => return config
   | some (.dict entries) =>
-    (fromJson? ((toJson config).mergeObj (PyValue.dict entries).toJson)).mapError fun e =>
-      (0, s!"configuration: {e}")
-  | some _ => throw (0, "configuration: expected a dict")
+    toResult none
+      ((fromJson? ((toJson config).mergeObj (PyValue.dict entries).toJson)).mapError fun e =>
+        UnreadArgument.mk s!"configuration: {e}")
+  | some _ => rejectArgument none "configuration: expected a dict"
 
 /-- The fork of a name, for the forks from Phase 0 to Hegotá, whose beacon chain is Heze.
 
 The configuration has no epoch for BPO3 to BPO5, so they fail. -/
 def forkOf (name : ByteArray) : Result Fork := do
   let fork ← forkUpTo .hegota name
-  if .bpo3 ≤ fork ∧ fork ≤ .bpo5 then throw (0, s!"fork {fork.name} not yet specified")
+  if .bpo3 ≤ fork ∧ fork ≤ .bpo5 then rejectArgument none s!"fork {fork.name} not yet specified"
   if .phase0 ≤ fork then return fork
-  else throw (0, s!"{fork.name} is not a fork of the beacon chain")
+  else rejectArgument none s!"{fork.name} is not a fork of the beacon chain"
 
 /-- The JSON text of a value, as UTF-8 bytes. -/
 def jsonBytes (value : Json) : ByteArray := value.compress.toUTF8
