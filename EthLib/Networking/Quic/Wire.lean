@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Networking.Quic.Varint
-public import EthLib.Base.ByteReader
+public import EthLib.Networking.Encoding.ByteReader
 public import EthLib.Base.Bytes
 
 /-!
@@ -59,19 +59,19 @@ def Error.code : Error → UInt32
   | .protocolViolation _ => 9
 
 /-- A field reader carries the bytes still to be read. -/
-abbrev Reader (α : Type) := Base.ByteReader.Reader Error α
+abbrev Reader (α : Type) := Encoding.ByteReader.Reader Error α
 
 /-- Read exactly the requested bytes, without padding a truncated field. -/
 abbrev bytes (n : Nat) : Reader (List UInt8) := fun input =>
-  Base.ByteReader.bytes (.truncated n input.length) n input
+  Encoding.ByteReader.bytes (.truncated n input.length) n input
 
 /-- Read a fixed-length byte vector without defaulting or padding. -/
 abbrev vector (n : Nat) : Reader (Vector UInt8 n) := fun input =>
-  Base.ByteReader.vector (.truncated n input.length) n input
+  Encoding.ByteReader.vector (.truncated n input.length) n input
 
 /-- Read a big-endian integer of the given byte width. -/
 abbrev uint (n : Nat) : Reader Nat := fun input =>
-  Base.ByteReader.uint (.truncated n input.length) n input
+  Encoding.ByteReader.uint (.truncated n input.length) n input
 
 /-- Read one byte. -/
 def byte : Reader UInt8 := fun input =>
@@ -86,7 +86,7 @@ def varint : Reader Varint := fun input =>
 
 /-- Reject a field that does not meet its format constraint. -/
 abbrev require (condition : Prop) [Decidable condition] (error : Error) : Reader Unit :=
-  Base.ByteReader.require condition error
+  Encoding.ByteReader.require condition error
 
 /-- Read every remaining byte of a packet. -/
 def remainder : Reader (List UInt8) := fun input => .ok (input, [])

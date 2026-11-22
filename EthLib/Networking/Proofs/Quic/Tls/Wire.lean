@@ -3,7 +3,7 @@ module
 public import EthLib.Networking.Quic.Tls.Wire
 public import EthLib.Base.Proofs.Bytes
 public import EthLib.Base.Proofs.BigEndian
-public import EthLib.Base.Proofs.ByteReader
+public import EthLib.Networking.Proofs.Encoding.ByteReader
 
 /-!
 # Proofs: TLS wire fields
@@ -20,12 +20,12 @@ Vector encoders reject lengths that do not fit, rather than reducing them modulo
 namespace EthLib.Networking.Quic.Tls.Wire
 
 open EthLib.Base (bind_ok_iff)
-open EthLib.Base.ByteReader (bytes_append uint_encode require_true)
+open EthLib.Networking.Encoding.ByteReader (bytes_append uint_encode require_true)
 
 /-- A one-byte integer is the value of that byte. -/
 @[simp] theorem uint_byte (value : UInt8) (rest : List UInt8) :
     uint 1 (value :: rest) = .ok (value.toNat, rest) := by
-  simp [uint, Base.ByteReader.uint, Base.ByteReader.bytes, Base.bytesToNat, StateT.bind,
+  simp [uint, Encoding.ByteReader.uint, Encoding.ByteReader.bytes, Base.bytesToNat, StateT.bind,
     StateT.pure, bind, Except.bind, pure, Except.pure]
 
 /-- Reading a bounded vector recovers all its bytes and leaves the following bytes. -/
@@ -61,7 +61,7 @@ theorem encodeBlob_length_overflow (width minimum maximum : Nat) (data : List UI
 /-- Reading a fixed-size vector recovers the same vector. -/
 @[simp] theorem vector_encode (n : Nat) (value : Vector UInt8 n) (rest : List UInt8) :
     vector n (value.toList ++ rest) = .ok (value, rest) :=
-  Base.ByteReader.vector_append _ value rest
+  Encoding.ByteReader.vector_append _ value rest
 
 /-- Reading any successful vector encoding recovers its data and the following bytes. -/
 theorem blob_encode_of_encode {width minimum maximum : Nat} {data encoded : List UInt8}
@@ -194,7 +194,7 @@ theorem eq_natToBytes_of_codePoint {input rest : List UInt8} {value : CodePoint}
         simpa [codePoint, numberRead, bound, bind, StateT.bind, Except.bind,
           pure, StateT.pure, Except.pure] using parsed
       obtain ⟨rfl, rfl⟩ := checked
-      exact (Base.ByteReader.uint_ok_iff ..).mp numberRead |>.2
+      exact (Encoding.ByteReader.uint_ok_iff ..).mp numberRead |>.2
     · simp [codePoint, numberRead, bound, bind, StateT.bind, Except.bind,
         throw, throwThe, MonadExceptOf.throw, StateT.lift] at parsed
 
@@ -202,7 +202,7 @@ theorem eq_natToBytes_of_codePoint {input rest : List UInt8} {value : CodePoint}
 theorem eq_toList_append_of_vector {n : Nat} {input rest : List UInt8}
     {value : Vector UInt8 n} (parsed : vector n input = .ok (value, rest)) :
     input = value.toList ++ rest :=
-  (Base.ByteReader.vector_ok_iff _ input rest value).mp parsed
+  (Encoding.ByteReader.vector_ok_iff _ input rest value).mp parsed
 
 /-- Every accepted length-prefixed byte vector is the encoding of the returned data. -/
 theorem encodeBlob_of_blob {width minimum maximum : Nat} {input data rest : List UInt8}
@@ -213,9 +213,9 @@ theorem encodeBlob_of_blob {width minimum maximum : Nat} {input data rest : List
       bytes size afterCheck) = .ok (data, rest) at parsed
   simp only [bind_ok_iff] at parsed
   obtain ⟨⟨size, afterLength⟩, sizeRead, ⟨u, afterCheck⟩, checked, dataRead⟩ := parsed
-  obtain ⟨bounds, same⟩ := (Base.ByteReader.require_ok_iff ..).mp checked
-  obtain ⟨length, suffix⟩ := (Base.ByteReader.bytes_ok_iff ..).mp dataRead
-  obtain ⟨capacity, before⟩ := (Base.ByteReader.uint_ok_iff ..).mp sizeRead
+  obtain ⟨bounds, same⟩ := (Encoding.ByteReader.require_ok_iff ..).mp checked
+  obtain ⟨length, suffix⟩ := (Encoding.ByteReader.bytes_ok_iff ..).mp dataRead
+  obtain ⟨capacity, before⟩ := (Encoding.ByteReader.uint_ok_iff ..).mp sizeRead
   refine ⟨Base.natToBytes width data.length ++ data, ?_, ?_⟩
   · apply (encodeBlob_eq_ok_iff ..).mpr
     exact ⟨by omega, by omega, by omega, rfl⟩

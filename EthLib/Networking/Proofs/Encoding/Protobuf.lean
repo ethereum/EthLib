@@ -2,7 +2,7 @@ module
 
 public import EthLib.Networking.Encoding.Protobuf
 public import EthLib.Networking.Proofs.Encoding.Varint
-public import EthLib.Base.Proofs.ByteReader
+public import EthLib.Networking.Proofs.Encoding.ByteReader
 
 /-!
 # Proofs: the protobuf wire format
@@ -57,7 +57,7 @@ theorem readKey_encodeKey {field wire : Nat} (h0 : 0 < field) (hmax : field ≤ 
 /-- Reading `n` bytes from `n` bytes and more returns them, and the bytes after them. -/
 theorem readFixed_append {n : Nat} (bytes : Vector UInt8 n) (rest : List UInt8) :
     readFixed n (bytes.toList ++ rest) = .ok (bytes, rest) :=
-  Base.ByteReader.vector_append _ bytes rest
+  Encoding.ByteReader.vector_append _ bytes rest
 
 /-- Reading a length-delimited value back from its encoding returns it. -/
 theorem readLen_encodeValue {field : Nat} {bytes : ByteArray} (h : bytes.size < 2 ^ 64)

@@ -15,7 +15,7 @@ The packet-number encoder keeps exactly the low bytes of the number.
 namespace EthLib.Networking.Quic.Packet
 
 open Wire
-open EthLib.Base.ByteReader (bytes_append uint_encode require_true)
+open EthLib.Networking.Encoding.ByteReader (bytes_append uint_encode require_true)
 
 /-- The truncated packet number is the original number modulo the selected window. -/
 theorem bytesToNat_encodePacketNumberList (width : PacketNumberLength) (number : Varint) :
@@ -111,7 +111,7 @@ theorem connectionId_encode (cid : ByteArray) (rest : List UInt8) (maximum : Nat
     exact UInt8.toNat_ofNat_of_lt' (by simpa only [UInt8.size] using (by omega : cid.size < 256))
   simp [connectionId, hbyte, hcid, bytes_byteArray_append,
     bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure,
-    require, Base.ByteReader.require]
+    require, Encoding.ByteReader.require]
 
 
 /-- Reading the length and packet number undoes their encoding. -/
@@ -122,7 +122,7 @@ theorem lengthAndNumber_encode (width : PacketNumberLength) (length : Varint)
       (Varint.encodeList length ++ (Base.natToBytes (numberLength width) number ++ rest)) =
       .ok ((length, number), rest) := by
   simp only [bind, pure, lengthAndNumber, StateT.bind, StateT.pure, Except.bind, Except.pure,
-    varint_encode, require, Base.ByteReader.require, hl, uint_encode, Nat.mod_eq_of_lt hn,
+    varint_encode, require, Encoding.ByteReader.require, hl, uint_encode, Nat.mod_eq_of_lt hn,
     ↓reduceIte]
 
 /-- Reading an Initial header recovers its fields and leaves the payload untouched. -/
@@ -147,8 +147,8 @@ theorem decodeList_initial (d s t : ByteArray) (rest : List UInt8) (w : PacketNu
     bind, pure, StateT.bind, StateT.pure,
     Except.bind, Except.pure, byte, hf, hm, hf128, ↓reduceIte,
     uint_encode, Nat.one_mod, connectionId_encode _ _ 20 hd (by decide),
-    connectionId_encode _ _ 20 hs (by decide), require, Base.ByteReader.require, hf64, hf16, hf4,
-    Fin.eta, blob_byteArray_encode, Base.toByteArray_data_toList,
+    connectionId_encode _ _ 20 hs (by decide), require, Encoding.ByteReader.require, hf64, hf16,
+    hf4, Fin.eta, blob_byteArray_encode, Base.toByteArray_data_toList,
     lengthAndNumber_encode _ _ _ _ hl hn]
 
 /-- Reading a 0-RTT header recovers its fields and leaves the payload untouched. -/
@@ -173,8 +173,8 @@ theorem decodeList_zeroRtt (d s : ByteArray) (rest : List UInt8) (w : PacketNumb
     bind, pure, StateT.bind, StateT.pure,
     Except.bind, Except.pure, byte, hf, hm, hf128, ↓reduceIte,
     uint_encode, Nat.one_mod, connectionId_encode _ _ 20 hd (by decide),
-    connectionId_encode _ _ 20 hs (by decide), require, Base.ByteReader.require, hf64, hf16, hf4,
-    Fin.eta, lengthAndNumber_encode _ _ _ _ hl hn, ↓reduceIte]
+    connectionId_encode _ _ 20 hs (by decide), require, Encoding.ByteReader.require, hf64, hf16,
+    hf4, Fin.eta, lengthAndNumber_encode _ _ _ _ hl hn, ↓reduceIte]
 
 /-- Reading a Handshake header recovers its fields and leaves the payload untouched. -/
 theorem decodeList_handshake (d s : ByteArray) (rest : List UInt8) (w : PacketNumberLength)
@@ -199,8 +199,8 @@ theorem decodeList_handshake (d s : ByteArray) (rest : List UInt8) (w : PacketNu
     bind, pure, StateT.bind, StateT.pure,
     Except.bind, Except.pure, byte, hf, hm, hf128, ↓reduceIte,
     uint_encode, Nat.one_mod, connectionId_encode _ _ 20 hd (by decide),
-    connectionId_encode _ _ 20 hs (by decide), require, Base.ByteReader.require, hf64, hf16, hf4,
-    Fin.eta, lengthAndNumber_encode _ _ _ _ hl hn, ↓reduceIte]
+    connectionId_encode _ _ 20 hs (by decide), require, Encoding.ByteReader.require, hf64, hf16,
+    hf4, Fin.eta, lengthAndNumber_encode _ _ _ _ hl hn, ↓reduceIte]
 
 /-- Reading a short header recovers the spin bit, key phase and packet-number bytes. -/
 theorem decodeList_oneRtt (d : ByteArray) (rest : List UInt8) (spin keyPhase : Bool)
@@ -247,7 +247,7 @@ theorem decodeList_oneRtt (d : ByteArray) (rest : List UInt8) (spin keyPhase : B
     Base.natToBytes (numberLength w) n ++ rest) = _
   simp only [decodeList, widthOfFirst, List.append_assoc, List.cons_append, List.nil_append,
     bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure, byte,
-    hfirst, hm, hf128, ↓reduceIte, Fin.eta, require, Base.ByteReader.require, hf64, hf8, hd,
+    hfirst, hm, hf128, ↓reduceIte, Fin.eta, require, Encoding.ByteReader.require, hf64, hf8, hd,
     bytes_byteArray_append, Base.toByteArray_data_toList,
     uint_encode, Nat.mod_eq_of_lt hn, hspin, hkey]
 
@@ -283,7 +283,7 @@ theorem decodeList_retry (d s t : ByteArray) (tag : Vector UInt8 16) (unused : F
     bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure, byte, hf,
     hf128, ↓reduceIte, uint_encode, Nat.one_mod, show (1 : Nat) ≠ 0 by decide,
     connectionId_encode _ _ 20 hd (by decide), connectionId_encode _ _ 20 hs (by decide),
-    require, Base.ByteReader.require, hf64, hf16, remainder, hlength, hsplit, htake, hdrop,
+    require, Encoding.ByteReader.require, hf64, hf16, remainder, hlength, hsplit, htake, hdrop,
     StateT.lift, Vector.toArray_toList, Base.exactArray_toArray, hm, Fin.eta,
     Base.toByteArray_data_toList]
 
