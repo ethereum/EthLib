@@ -12761,7 +12761,7 @@
       {"constructor": "badRecord", "code": 17}]}],
    "error_class": "DnsDiscError",
    "docstring":
-   "Whether a root text is signed by a compressed public key of 33 bytes.\n\nA text that is no root comes back with the code of a root error."},
+   "Whether a root text is signed by a compressed public key of 33 bytes.\n\nA text that is no root comes back as the error of a root whose fields are wrong."},
   {"summary":
    "The node list at a domain, under a compressed public key, with a table as the DNS.",
    "signature":

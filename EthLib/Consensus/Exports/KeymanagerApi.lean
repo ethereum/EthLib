@@ -27,10 +27,10 @@ namespace EthLib.Consensus.Exports
 open Lean KeymanagerApi
 open EthLib.Exports (ExportError Result PyValue pyExport rejectArgument toResult)
 
-/-- A value that the Keymanager API rejects reaches Python with its code, as the message says. -/
+/-- A rejected Keymanager API value reaches Python with its code and its error on one line. -/
 instance : ExportError KeymanagerError where
   code := KeymanagerError.code
-  message e := s!"keymanager value rejected with code {e.code}"
+  message e := (repr e).pretty 1000000
 
 /-- The JSON parser and printer of the Lean toolchain, which the exports supply to the API. -/
 def toolchainJsonText : JsonText := ⟨Json.parse, Json.compress⟩

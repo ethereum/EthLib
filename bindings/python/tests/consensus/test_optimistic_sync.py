@@ -82,12 +82,23 @@ def test_optimistic_candidate_with_another_number_of_slots():
 
 
 @pytest.mark.parametrize(
-    ("candidate", "code"),
-    [(block(3, bytes([7]) * 32), 2), (block(2**64 - 1, RG), 7)],
+    ("candidate", "code", "message"),
+    [
+        (
+            block(3, bytes([7]) * 32),
+            2,
+            f"optimistic sync: no known block has root 0x{'07' * 32}",
+        ),
+        (
+            block(2**64 - 1, RG),
+            7,
+            "optimistic sync: arithmetic: EthLib.Base.ArithError.overflow",
+        ),
+    ],
     ids=["unknown parent", "overflow"],
 )
-def test_optimistic_candidate_rejected(candidate: bytes, code: int):
-    with raises(ERROR, f"optimistic sync failed with code {code}") as info:
+def test_optimistic_candidate_rejected(candidate: bytes, code: int, message: str):
+    with raises(ERROR, message) as info:
         consensus.is_optimistic_candidate_block("mainnet", FORK, BLOCKS, 0, candidate)
     assert info.value.code == code
 
@@ -111,11 +122,12 @@ def test_latest_verified_ancestor(optimistic: list, start: bytes, expected: byte
 
 def test_latest_verified_ancestor_rejected():
     orphan = block(4, bytes([7]) * 32)
-    with raises(ERROR, "optimistic sync failed with code 2") as info:
+    with raises(ERROR, f"optimistic sync: no known block has root 0x{'09' * 32}") as info:
         consensus.latest_verified_ancestor("mainnet", FORK, BLOCKS, [], bytes([9]) * 32)
     assert info.value.code == 2
-    with raises(ERROR, "optimistic sync failed with code 2"):
+    with raises(ERROR, f"optimistic sync: no known block has root 0x{'07' * 32}") as info:
         consensus.latest_verified_ancestor("mainnet", FORK, [orphan], [root(orphan)], root(orphan))
+    assert info.value.code == 2
 
 
 @pytest.mark.parametrize(
@@ -140,10 +152,11 @@ def test_invalidated_payload(first: bytes, expected: list):
 
 def test_transitions_rejected():
     lower = block(1, RB)
-    with raises(ERROR, "optimistic sync failed with code 6") as info:
+    message = f"optimistic sync: the block 0x{root(lower).hex()} has a parent at no lower slot"
+    with raises(ERROR, message) as info:
         consensus.on_valid_payload("mainnet", FORK, [*BLOCKS, lower], [], root(lower))
     assert info.value.code == 6
-    with raises(ERROR, "optimistic sync failed with code 2") as info:
+    with raises(ERROR, f"optimistic sync: no known block has root 0x{'09' * 32}") as info:
         consensus.on_invalidated_payload("mainnet", FORK, BLOCKS, [bytes([9]) * 32], RA)
     assert info.value.code == 2
 
@@ -287,7 +300,8 @@ def test_gloas_latest_verified_ancestor(optimistic: list[bytes], status: int, ex
 )
 def test_gloas_no_verified_ancestor(optimistic: list[bytes], start: bytes, status: int):
     # Every payload that the node holds is optimistic, or it holds none.
-    with raises(ERROR, "optimistic sync failed with code 39") as info:
+    message = f"optimistic sync: the payload of the block 0x{GG.hex()} is not verified"
+    with raises(ERROR, message) as info:
         consensus.latest_verified_ancestor(
             "minimal", GLOAS_FORK, GLOAS_BLOCKS, optimistic, start, payload_status=status
         )
@@ -584,7 +598,10 @@ GLOAS_ANCHOR_ROOT = gloas_root(_pinned_file("anchor_block"))
 @pytest.mark.parametrize("status", [EMPTY, PENDING], ids=["empty", "pending"])
 def test_gloas_head_on_a_payload_the_store_lacks(status: int):
     # Without its own optimistic payload, the head cannot be judged.
-    with raises(ERROR, "optimistic sync failed with code 39") as info:
+    message = (
+        f"optimistic sync: the payload of the block 0x{GLOAS_ANCHOR_ROOT.hex()} is not verified"
+    )
+    with raises(ERROR, message) as info:
         _gloas_optimistic_node([], status, GLOAS_ANCHOR_ROOT)
     assert info.value.code == 39
 
@@ -707,7 +724,8 @@ def test_inclusion_list_satisfaction_once_valid(satisfied: bool):
 )
 def test_inclusion_list_satisfaction_once_valid_of_payload_not_optimistic(status: int, root: bytes):
     # Only a payload kept before it was validated can move from not validated to valid.
-    with raises(ERROR, "optimistic sync failed with code 52") as info:
+    message = f"optimistic sync: the payload of the block 0x{root.hex()} is not optimistic"
+    with raises(ERROR, message) as info:
         _satisfaction(status, True, root)
     assert info.value.code == 52
 

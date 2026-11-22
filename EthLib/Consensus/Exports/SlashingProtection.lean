@@ -24,10 +24,10 @@ namespace EthLib.Consensus.Exports
 open Lean Base Cryptography.Bls
 open EthLib.Exports (ExportError Result UnreadArgument rejectArgument toResult)
 
-/-- A failed step of slashing protection reaches Python with its code, which the message names. -/
+/-- A failed step of slashing protection reaches Python with its code and its error on one line. -/
 instance : ExportError SlashingProtectionError where
   code := SlashingProtectionError.code
-  message e := s!"slashing protection failed with code {e.code}"
+  message e := (repr e).pretty 1000000
 
 /-- An interchange file from its JSON text. -/
 def interchangeOf (text : ByteArray) : Result Interchange := do

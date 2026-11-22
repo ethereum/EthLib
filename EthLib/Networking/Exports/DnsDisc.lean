@@ -85,11 +85,11 @@ def verifyRootOf (args : Vector UInt8 33 × String) : Result Bool := do
   let (key, text) := args
   match ← toResult none (Entry.parse text) with
   | .root r => return r.verify key
-  | _ => throw ((DnsError.rootFields).code, "text is not a root")
+  | _ => toResult none (.error DnsError.rootFields)
 
 /-- Whether a root text is signed by a compressed public key of 33 bytes.
 
-A text that is no root comes back with the code of a root error. -/
+A text that is no root comes back as the error of a root whose fields are wrong. -/
 @[export eth_dnsdisc_verify_root]
 def verifyRootExport (args : PyValue) : Result PyValue :=
   pyExport verifyRootOf args

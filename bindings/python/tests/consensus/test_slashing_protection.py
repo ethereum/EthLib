@@ -10,6 +10,9 @@ from raising import raises
 
 ERROR = consensus.SlashingProtectionError
 
+# The Lean name of the error type, which each message starts with.
+FAULT = "EthLib.Consensus.SlashingProtectionError"
+
 GVR = "0x" + "04" * 32
 KEY = "0x" + "a1" * 48
 OTHER_KEY = "0x" + "b2" * 48
@@ -49,6 +52,11 @@ def _bytes(text: str) -> bytes:
     return bytes.fromhex(text.removeprefix("0x"))
 
 
+def _root(text: str) -> str:
+    """A root as the message of an error prints it: lowercase hex behind `0x`."""
+    return "0x" + _bytes(text).hex()
+
+
 # ---- Reading and writing the file ----------------------------------------------------------------
 
 
@@ -83,39 +91,47 @@ def test_read_writes_the_file_again():
     [
         (b"\xff", 0, "the interchange is not UTF-8"),
         (b"{", 0, "the interchange is not JSON"),
-        (interchange([], version="4"), 2, "slashing protection failed with code 2"),
-        (b'{"data": []}', 1, "slashing protection failed with code 1"),
-        (interchange([], root="0x" + "04" * 31), 1, "slashing protection failed with code 1"),
+        (interchange([], version="4"), 2, f'{FAULT}.version "4"'),
+        (b'{"data": []}', 1, f'{FAULT}.field ".metadata"'),
+        (
+            interchange([], root="0x" + "04" * 31),
+            1,
+            f'{FAULT}.field ".metadata.genesis_validators_root"',
+        ),
         (
             interchange([entry(pubkey="0x" + "a1" * 47)]),
             1,
-            "slashing protection failed with code 1",
+            f'{FAULT}.field ".data[0].pubkey"',
         ),
         (
             interchange([entry(blocks=[block(1, "0x" + "aa" * 33)])]),
             1,
-            "slashing protection failed with code 1",
+            f'{FAULT}.field ".data[0].signed_blocks[0].signing_root"',
         ),
         (
             interchange([entry(blocks=[{"slot": "01"}])]),
             1,
-            "slashing protection failed with code 1",
+            f'{FAULT}.field ".data[0].signed_blocks[0].slot"',
         ),
         (
             interchange([entry(blocks=[{"slot": str(2**64)}])]),
             1,
-            "slashing protection failed with code 1",
+            f'{FAULT}.field ".data[0].signed_blocks[0].slot"',
         ),
-        (interchange([entry(blocks=[{"slot": 1}])]), 1, "slashing protection failed with code 1"),
+        (
+            interchange([entry(blocks=[{"slot": 1}])]),
+            1,
+            f'{FAULT}.field ".data[0].signed_blocks[0].slot"',
+        ),
         (
             interchange([entry(attestations=[{"source_epoch": "1"}])]),
             1,
-            "slashing protection failed with code 1",
+            f'{FAULT}.field ".data[0].signed_attestations[0].target_epoch"',
         ),
         (
             interchange([{"pubkey": KEY, "signed_blocks": []}]),
             1,
-            "slashing protection failed with code 1",
+            f'{FAULT}.field ".data[0].signed_attestations"',
         ),
     ],
     ids=[
@@ -155,7 +171,9 @@ def test_import_refuses_another_chain():
     # The case `wrong_genesis_validators_root` of the interchange tests, with its two roots.
     held = interchange([], root="0x" + "00" * 31 + "01")
     file = interchange([], root="0x" + "00" * 32)
-    with raises(ERROR, "slashing protection failed with code 8") as info:
+    # The message names the expected root, the one held, then the root of the file.
+    message = f"{FAULT}.wrongChain 0x{'00' * 31}01 0x{'00' * 32}"
+    with raises(ERROR, message) as info:
         consensus.import_slashing_interchange(held, file)
     assert info.value.code == 8
 
@@ -164,11 +182,11 @@ def test_import_refuses_the_gap_and_boundary_repeat():
     held = interchange([entry(blocks=[block(10, ROOT_A)])])
     file = interchange([entry(blocks=[block(100, ROOT_B)])])
     record = consensus.import_slashing_interchange(held, file)
-    with raises(ERROR, "slashing protection failed with code 4") as info:
+    with raises(ERROR, f"{FAULT}.blockSlotTooLow 50 100") as info:
         consensus.check_block_signing(record, _bytes(KEY), 50, _bytes(ROOT_A))
     assert info.value.code == 4
     # The imported boundary has no root, so even its original block cannot be repeated.
-    with raises(ERROR, "slashing protection failed with code 3") as info:
+    with raises(ERROR, f"{FAULT}.slashableBlock 100") as info:
         consensus.check_block_signing(record, _bytes(KEY), 100, _bytes(ROOT_B))
     assert info.value.code == 3
     consensus.check_block_signing(record, _bytes(KEY), 101, _bytes(ROOT_A))
@@ -181,13 +199,17 @@ VOTE_LIMITS = (
 
 
 @pytest.mark.parametrize(
-    ("source", "target", "code"),
-    [(8, 19, 6), (9, 19, 7), (9, 20, 5)],
+    ("source", "target", "code", "message"),
+    [
+        (8, 19, 6, f"{FAULT}.sourceEpochTooLow 8 9"),
+        (9, 19, 7, f"{FAULT}.targetEpochTooLow 19 20"),
+        (9, 20, 5, f"{FAULT}.slashableAttestation 9 20"),
+    ],
     ids=["source", "target", "double"],
 )
-def test_import_refuses_below_vote_limits(source: int, target: int, code: int):
+def test_import_refuses_below_vote_limits(source: int, target: int, code: int, message: str):
     record = consensus.import_slashing_interchange(*VOTE_LIMITS)
-    with raises(ERROR, f"slashing protection failed with code {code}") as info:
+    with raises(ERROR, message) as info:
         consensus.check_attestation_signing(record, _bytes(KEY), source, target, _bytes(ROOT_B))
     assert info.value.code == code
 
@@ -238,10 +260,10 @@ def test_import_limits_survive_reload_and_checked_recording():
     consensus.check_block_signing(record, _bytes(KEY), 201, _bytes(ROOT_A))
     consensus.check_attestation_signing(record, _bytes(KEY), 10, 31, _bytes(ROOT_A))
     # The rootless limits are still held: each conflicts with a new message at its slot or target.
-    with raises(ERROR, "slashing protection failed with code 3") as info:
+    with raises(ERROR, f"{FAULT}.slashableBlock 200") as info:
         consensus.check_block_signing(record, _bytes(KEY), 200, _bytes(ROOT_B))
     assert info.value.code == 3
-    with raises(ERROR, "slashing protection failed with code 5") as info:
+    with raises(ERROR, f"{FAULT}.slashableAttestation 10 30") as info:
         consensus.check_attestation_signing(record, _bytes(KEY), 10, 30, _bytes(ROOT_B))
     assert info.value.code == 5
 
@@ -270,20 +292,32 @@ def test_block_signed(record: list, slot: int, root: str):
 
 
 @pytest.mark.parametrize(
-    ("record", "slot", "root", "code"),
+    ("record", "slot", "root", "code", "message"),
     [
         # Condition 1: another block of the slot, or a recorded one without a root.
-        ([entry(blocks=[block(5, ROOT_A)])], 5, ROOT_B, 3),
-        ([entry(blocks=[block(5)])], 5, ROOT_A, 3),
+        ([entry(blocks=[block(5, ROOT_A)])], 5, ROOT_B, 3, f"{FAULT}.slashableBlock 5"),
+        ([entry(blocks=[block(5)])], 5, ROOT_A, 3, f"{FAULT}.slashableBlock 5"),
         # Condition 2: a slot at most the least recorded slot.
-        ([entry(blocks=[block(5, ROOT_A), block(9, ROOT_B)])], 4, ROOT_B, 4),
+        (
+            [entry(blocks=[block(5, ROOT_A), block(9, ROOT_B)])],
+            4,
+            ROOT_B,
+            4,
+            f"{FAULT}.blockSlotTooLow 4 5",
+        ),
         # The least slot reads every entry of the key.
-        ([entry(blocks=[block(9, ROOT_A)]), entry(blocks=[block(3)])], 2, ROOT_B, 4),
+        (
+            [entry(blocks=[block(9, ROOT_A)]), entry(blocks=[block(3)])],
+            2,
+            ROOT_B,
+            4,
+            f"{FAULT}.blockSlotTooLow 2 3",
+        ),
     ],
     ids=["other root", "no root", "below", "two entries"],
 )
-def test_block_refused(record: list, slot: int, root: str, code: int):
-    with raises(ERROR, f"slashing protection failed with code {code}") as info:
+def test_block_refused(record: list, slot: int, root: str, code: int, message: str):
+    with raises(ERROR, message) as info:
         _check_block(record, slot, root)
     assert info.value.code == code
 
@@ -291,8 +325,9 @@ def test_block_refused(record: list, slot: int, root: str, code: int):
 def test_recorded_block_refuses_another_block_of_its_slot():
     record = consensus.record_block_signing(interchange([]), _bytes(KEY), 7, _bytes(ROOT_A))
     consensus.check_block_signing(record, _bytes(KEY), 7, _bytes(ROOT_A))
-    with raises(ERROR, "slashing protection failed with code 3"):
+    with raises(ERROR, f"{FAULT}.slashableBlock 7") as info:
         consensus.check_block_signing(record, _bytes(KEY), 7, _bytes(ROOT_B))
+    assert info.value.code == 3
 
 
 # ---- The conditions on votes ---------------------------------------------------------------------
@@ -318,24 +353,73 @@ def test_vote_signed(record: list, source: int, target: int, root: str):
 
 
 @pytest.mark.parametrize(
-    ("record", "source", "target", "root", "code"),
+    ("record", "source", "target", "root", "code", "message"),
     [
         # Condition 3: a double vote, by root or without a recorded root, and the two surrounds.
-        ([entry(attestations=[vote(2, 5, ROOT_A)])], 3, 5, ROOT_B, 5),
-        ([entry(attestations=[vote(2, 5)])], 2, 5, ROOT_A, 5),
-        ([entry(attestations=[vote(2, 5, ROOT_A)])], 1, 6, ROOT_B, 5),
-        ([entry(attestations=[vote(1, 9, ROOT_A)])], 2, 8, ROOT_B, 5),
+        (
+            [entry(attestations=[vote(2, 5, ROOT_A)])],
+            3,
+            5,
+            ROOT_B,
+            5,
+            f"{FAULT}.slashableAttestation 3 5",
+        ),
+        (
+            [entry(attestations=[vote(2, 5)])],
+            2,
+            5,
+            ROOT_A,
+            5,
+            f"{FAULT}.slashableAttestation 2 5",
+        ),
+        (
+            [entry(attestations=[vote(2, 5, ROOT_A)])],
+            1,
+            6,
+            ROOT_B,
+            5,
+            f"{FAULT}.slashableAttestation 1 6",
+        ),
+        (
+            [entry(attestations=[vote(1, 9, ROOT_A)])],
+            2,
+            8,
+            ROOT_B,
+            5,
+            f"{FAULT}.slashableAttestation 2 8",
+        ),
         # Condition 4: a source below the least recorded source.
-        ([entry(attestations=[vote(4, 9, ROOT_A)])], 3, 8, ROOT_B, 6),
+        (
+            [entry(attestations=[vote(4, 9, ROOT_A)])],
+            3,
+            8,
+            ROOT_B,
+            6,
+            f"{FAULT}.sourceEpochTooLow 3 4",
+        ),
         # Condition 5: a target at most the least recorded target.
-        ([entry(attestations=[vote(4, 9, ROOT_A), vote(4, 12, ROOT_A)])], 4, 8, ROOT_B, 7),
+        (
+            [entry(attestations=[vote(4, 9, ROOT_A), vote(4, 12, ROOT_A)])],
+            4,
+            8,
+            ROOT_B,
+            7,
+            f"{FAULT}.targetEpochTooLow 8 9",
+        ),
         # A record with the root but other epochs does not make a repeat.
-        ([entry(attestations=[vote(4, 9, ROOT_A)])], 4, 8, ROOT_A, 7),
+        (
+            [entry(attestations=[vote(4, 9, ROOT_A)])],
+            4,
+            8,
+            ROOT_A,
+            7,
+            f"{FAULT}.targetEpochTooLow 8 9",
+        ),
     ],
     ids=["double", "no root", "surrounds", "surrounded", "source", "target", "root only"],
 )
-def test_vote_refused(record: list, source: int, target: int, root: str, code: int):
-    with raises(ERROR, f"slashing protection failed with code {code}") as info:
+def test_vote_refused(record: list, source: int, target: int, root: str, code: int, message: str):
+    with raises(ERROR, message) as info:
         _check_vote(record, source, target, root)
     assert info.value.code == code
 
@@ -344,8 +428,9 @@ def test_recorded_vote_refuses_a_double_vote():
     record = consensus.record_attestation_signing(
         interchange([]), _bytes(KEY), 3, 4, _bytes(ROOT_A)
     )
-    with raises(ERROR, "slashing protection failed with code 5"):
+    with raises(ERROR, f"{FAULT}.slashableAttestation 3 4") as info:
         consensus.check_attestation_signing(record, _bytes(KEY), 3, 4, _bytes(ROOT_B))
+    assert info.value.code == 5
 
 
 # ---- Inputs at the boundary ----------------------------------------------------------------------
@@ -372,7 +457,7 @@ def test_signing_inputs_rejected(sign):
     with raises(ERROR, "the interchange is not JSON") as info:
         sign(b"[", bytes(48), bytes(32))
     assert info.value.code == 0
-    with raises(ERROR, "slashing protection failed with code 2") as info:
+    with raises(ERROR, f'{FAULT}.version "4"') as info:
         sign(interchange([], version="4"), bytes(48), bytes(32))
     assert info.value.code == 2
 
@@ -380,8 +465,9 @@ def test_signing_inputs_rejected(sign):
 def test_import_of_a_file_that_does_not_read():
     with raises(ERROR, "the interchange is not JSON"):
         consensus.import_slashing_interchange(interchange([]), b"")
-    with raises(ERROR, "slashing protection failed with code 2"):
+    with raises(ERROR, f'{FAULT}.version "4"') as info:
         consensus.import_slashing_interchange(interchange([], version="4"), interchange([]))
+    assert info.value.code == 2
 
 
 # ---- The interchange tests -----------------------------------------------------------------------
@@ -403,8 +489,11 @@ def _run(case: dict) -> None:
         file = json.dumps(step["interchange"]).encode()
         # The only import that the tests refuse is that of a file of another chain.
         if not step["should_succeed"]:
-            with raises(ERROR, "slashing protection failed with code 8"):
+            held_root = _root(case["genesis_validators_root"])
+            file_root = _root(step["interchange"]["metadata"]["genesis_validators_root"])
+            with raises(ERROR, f"{FAULT}.wrongChain {held_root} {file_root}") as info:
                 consensus.import_slashing_interchange(held, file)
+            assert info.value.code == 8
             return
         held = consensus.import_slashing_interchange(held, file)
         for signing in step["blocks"]:

@@ -824,6 +824,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- The optimistic sync, slashing protection, Keymanager API, Builder API, ENR, DNS discovery and execution JSON-RPC exports turn their errors into a code and a message through the shared conversion ([#3605](https://github.com/ethereum/EthLib/issues/3605)).
+  No error code changes, but some messages change in Python.
+  The optimistic sync exports give their fork choice error after `optimistic sync: `, in place of `optimistic sync failed with code N`.
+  Slashing protection and the Keymanager API give their error on one line, in place of `slashing protection failed with code N` and `keymanager value rejected with code N`.
+  That form is the full Lean name of the constructor and its arguments, such as `EthLib.Consensus.SlashingProtectionError.slashableBlock 100`, with roots as hex behind `0x`.
+  The Builder API gives a failed step of the transition on one line, as the other consensus exports do.
+  `enr.from_text`, `enr.sign_v4` and `enr.make_record_v4` give `record is not one RLP item`, the message of an RLP error of a record, in place of `record has no RLP encoding`.
+  `dnsdisc.verify_root` gives `root does not have the fields e=, l=, seq= and sig=, in that order` for a text that is no root, in place of `text is not a root`.
+
 - In Lean, the nonce of a set-code transaction is `UInt64`, and the other kinds keep a nonce of 256 bits ([#3846](https://github.com/ethereum/EthLib/issues/3846)).
   So a set-code transaction with a nonce of `2^64` or more fails at decoding, with `scalarTooLarge`, where the rule of EIP-2681 refused it with `nonceOverflow`.
   `Transaction.nonce` still returns a `U256`, and gives the 64-bit nonce unchanged.
