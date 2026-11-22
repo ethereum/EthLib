@@ -115,27 +115,28 @@ def BeaconState.setValidatorAt (state : BeaconState preset fork) (position : Nat
 /-- The state with a balance raised by an amount. -/
 def increaseBalance (state : BeaconState preset fork) (index : ValidatorIndex) (delta : Gwei) :
     Except AccessorError (BeaconState preset fork) := do
+  -- The balance `b` becomes `b + d`, for the amount `d`; `2^64` or more is an overflow.
   let balance ← liftArith (addChecked (← getBalance state index) delta)
   state.setBalance index balance
 
 /-- The state with a balance lowered by an amount, or set to zero if the amount is larger. -/
 def decreaseBalance (state : BeaconState preset fork) (index : ValidatorIndex) (delta : Gwei) :
     Except AccessorError (BeaconState preset fork) := do
+  -- The balance `b` becomes `b - d` if `d ≤ b`, for the amount `d`, and else 0.
   state.setBalance index (saturatingSub (← getBalance state index) delta)
 
-/-- The epoch at which a validator that starts to exit now leaves, before Electra.
-
-It is the latest exit epoch of the registry, and at least the first epoch an exit may take.
-
-If that epoch already holds as many exits as the churn limit, the validator leaves one epoch later.
--/
+/-- The epoch at which a validator that starts to exit now leaves, before Electra. -/
 def exitQueueEpoch (config : Config) (state : BeaconState preset fork) :
     Except AccessorError Epoch := do
   let validators := state.validators.data.toList
+  -- The first epoch an exit may take, `e + 1 + MAX_SEED_LOOKAHEAD` for the current epoch `e`.
   let earliest ← liftArith (computeActivationExitEpoch preset (getCurrentEpoch state))
+  -- The exit queue epoch `q`: the latest exit epoch of the registry, and at least that first one.
   let latest := (validators.filter (·.exitEpoch != FAR_FUTURE_EPOCH)).foldl
     (fun latest validator => max latest validator.exitEpoch) earliest
+  -- The number of validators that exit at `q`.
   let churn := (validators.filter (·.exitEpoch == latest)).length
+  -- If that number has reached the churn limit, the validator leaves at `q + 1`.
   if (getValidatorChurnLimit config state).toNat ≤ churn then liftArith (addChecked latest 1)
   else return latest
 
@@ -149,20 +150,21 @@ From Electra the queue counts balance, as [EIP-7251] specifies, so the exit spen
 -/
 def exitQueue (config : Config) (state : BeaconState preset fork) (exitBalance : Gwei) :
     Except AccessorError (BeaconState preset fork × Epoch) :=
+  -- From Electra the exit spends churn of balance.
   if electra : .pectra ≤ fork then computeExitEpochAndUpdateChurn config state electra exitBalance
+  -- Before Electra the queue counts validators, and the state stays the same.
   else return (state, ← exitQueueEpoch config state)
 
-/-- The state in which a validator starts to exit, unless it has already started.
-
-It leaves at the epoch of the exit queue for its effective balance.
-
-It may withdraw a fixed delay after that. -/
+/-- The state in which a validator starts to exit, unless it has already started. -/
 def initiateValidatorExit (config : Config) (state : BeaconState preset fork)
     (index : ValidatorIndex) : Except AccessorError (BeaconState preset fork) := do
   let validator ← getValidator state index
+  -- An exit epoch other than `FAR_FUTURE_EPOCH` means it has started, and nothing changes.
   if validator.exitEpoch != FAR_FUTURE_EPOCH then return state
   else
+    -- It leaves at the epoch of the exit queue for its effective balance.
     let (state, exitEpoch) ← exitQueue config state validator.effectiveBalance
+    -- It may withdraw `MIN_VALIDATOR_WITHDRAWABILITY_DELAY` epochs after that.
     let withdrawableEpoch ←
       liftArith (addChecked exitEpoch config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY)
     state.setValidator index { validator with exitEpoch, withdrawableEpoch }
@@ -173,6 +175,7 @@ Before the fork at which the list loses its limit, an append to a full list is a
 def appendWithinLimit {switch : Base.Fork} {α : Type} {limit : Nat}
     (list : ForkList switch fork α limit) (item : α) :
     Except AccessorError (ForkList switch fork α limit) :=
+  -- Before the fork at which the list loses its limit, the list stays within it.
   if fits : fork < switch → list.data.size + 1 ≤ limit then
     .ok ⟨list.data.push item, fun before => by simpa using fits before⟩
   else .error (.listFull limit)
@@ -187,51 +190,49 @@ def addPendingDeposit (state : BeaconState preset fork) (electra : .pectra ≤ f
 
 /-- From Electra: the state in which the excess balance of a validator waits as a pending deposit.
 
-The excess is the balance above the activation balance.
-
-The deposit carries the signature of the point at infinity and the genesis slot.
-
-That tells it apart from a deposit that comes as a request. -/
+The genesis slot of the deposit tells it apart from a deposit that comes as a request. -/
 def queueExcessActiveBalance (state : BeaconState preset fork) (electra : .pectra ≤ fork)
     (index : ValidatorIndex) : Except AccessorError (BeaconState preset fork) := do
   let balance ← getBalance state index
+  -- Only a balance `b` above `MIN_ACTIVATION_BALANCE` has an excess.
   if preset.MIN_ACTIVATION_BALANCE < balance then
+    -- The deposit of `b - MIN_ACTIVATION_BALANCE`, with the key and credentials of the validator.
+    --
+    -- It carries the signature of the point at infinity and the slot `GENESIS_SLOT`.
     let validator ← getValidator state index
     let deposit : PendingDeposit := ⟨validator.pubkey, validator.withdrawalCredentials,
       balance - preset.MIN_ACTIVATION_BALANCE,
       Cryptography.Bls.Signatures.G2_POINT_AT_INFINITY, GENESIS_SLOT⟩
     let pending ← appendWithinLimit (state.pendingDeposits electra) deposit
+    -- The balance becomes `MIN_ACTIVATION_BALANCE`.
     let state ← state.setBalance index preset.MIN_ACTIVATION_BALANCE
     return { state with pendingDeposits := fun _ => pending }
   else return state
 
-/-- From Electra: the state in which a validator has compounding credentials.
-
-The first byte of its credentials becomes the compounding prefix, and the rest stays.
-
-Its balance above the activation balance then waits as a pending deposit. -/
+/-- From Electra: the state in which a validator has compounding credentials. -/
 def switchToCompoundingValidator (state : BeaconState preset fork) (electra : .pectra ≤ fork)
     (index : ValidatorIndex) : Except AccessorError (BeaconState preset fork) := do
   let validator ← getValidator state index
+  -- Byte 0 of its credentials becomes `0x02`, the compounding prefix, and the rest stays.
   let withdrawalCredentials :=
     validator.withdrawalCredentials.set 0 COMPOUNDING_WITHDRAWAL_PREFIX[0]
+  -- Its balance above `MIN_ACTIVATION_BALANCE` then waits as a pending deposit.
   queueExcessActiveBalance (← state.setValidator index { validator with withdrawalCredentials })
     electra index
 
-/-- The share of the whistleblower reward that goes to the proposer.
-
-Before Altair it is the reward over a fixed quotient, and from Altair a fixed weight of it. -/
+/-- The share of the whistleblower reward that goes to the proposer. -/
 def proposerShare (preset : Preset) (fork : Base.Fork) (whistleblowerReward : Gwei) :
     Except AccessorError Gwei :=
+  -- From Altair `floor(w * PROPOSER_WEIGHT / WEIGHT_DENOMINATOR)`, for the reward `w`.
   if .altair ≤ fork then
     return (← liftArith (mulChecked whistleblowerReward PROPOSER_WEIGHT)) / WEIGHT_DENOMINATOR
+  -- Before Altair `floor(w / PROPOSER_REWARD_QUOTIENT)`.
   else return whistleblowerReward / preset.PROPOSER_REWARD_QUOTIENT
 
-/-- From Gloas: the state without the pending builder payments of the blocks of a proposer.
-
-Each of those payments becomes the payment of no bid. -/
+/-- From Gloas: the state without the pending builder payments of the blocks of a proposer. -/
 def cancelProposerPayments (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (proposer : ValidatorIndex) : BeaconState preset fork :=
+  -- Each payment whose proposer is the validator becomes the payment of no bid.
   let cancel (payment : BuilderPendingPayment) :=
     if payment.proposerIndex = proposer then .empty else payment
   let payments := RootedVector.ofVector ((state.builderPendingPayments gloas).elements.map cancel)
@@ -239,36 +240,40 @@ def cancelProposerPayments (state : BeaconState preset fork) (gloas : .glamsterd
 
 /-- The state after a validator is slashed.
 
-The validator exits, cannot withdraw before a fixed number of epochs, and pays a first penalty.
-
-Its effective balance joins the slashed balance of the epoch, which sets a later penalty.
-
-The proposer and the whistleblower share a reward, and the proposer is the whistleblower by default.
-
-From Gloas the pending builder payments of the blocks it proposed are cancelled. -/
+The proposer is the whistleblower by default. -/
 def slashValidator (config : Config) (state : BeaconState preset fork)
     (slashedIndex : ValidatorIndex) (whistleblowerIndex : Option ValidatorIndex := none) :
     Except AccessorError (BeaconState preset fork) := do
   let epoch := getCurrentEpoch state
+  -- The validator starts to exit.
   let state ← initiateValidatorExit config state slashedIndex
+  -- It is slashed, and cannot withdraw before `e + EPOCHS_PER_SLASHINGS_VECTOR`, for the epoch `e`.
   let validator ← getValidator state slashedIndex
   let withdrawableEpoch := max validator.withdrawableEpoch
     (← liftArith (addChecked epoch preset.EPOCHS_PER_SLASHINGS_VECTOR))
   let state ← state.setValidator slashedIndex
     { validator with slashed := true, withdrawableEpoch }
+  -- Its effective balance `b` joins the slashings, which set a later penalty.
+  --
+  -- It joins entry `e mod EPOCHS_PER_SLASHINGS_VECTOR`.
   let slashed ← readCircular state.slashings.elements epoch
   let slashed ← liftArith (addChecked slashed validator.effectiveBalance)
   let slashings ← writeCircularRooted state.slashings epoch slashed
   let state := { state with slashings }
+  -- It pays `floor(b / MIN_SLASHING_PENALTY_QUOTIENT)` at once, by the quotient of the fork.
   let parameters := parameters preset fork
   let state ← decreaseBalance state slashedIndex
     (validator.effectiveBalance / parameters.MIN_SLASHING_PENALTY_QUOTIENT)
+  -- The whistleblower is the proposer of the slot unless one is given.
   let proposerIndex ← getBeaconProposerIndex state
   let whistleblowerIndex := whistleblowerIndex.getD proposerIndex
+  -- The whistleblower reward is `w = floor(b / WHISTLEBLOWER_REWARD_QUOTIENT)`, by the fork.
   let whistleblowerReward := validator.effectiveBalance / parameters.WHISTLEBLOWER_REWARD_QUOTIENT
+  -- The proposer earns its share of `w`, and the whistleblower the rest.
   let proposerReward ← proposerShare preset fork whistleblowerReward
   let state ← increaseBalance state proposerIndex proposerReward
   let state ← increaseBalance state whistleblowerIndex (whistleblowerReward - proposerReward)
+  -- From Gloas the pending builder payments of its blocks are cancelled, as EIP-7732 specifies.
   return if gloas : .glamsterdam ≤ fork then cancelProposerPayments state gloas slashedIndex
     else state
 

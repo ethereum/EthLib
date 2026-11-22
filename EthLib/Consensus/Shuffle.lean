@@ -61,18 +61,22 @@ namespace Shuffle
 
 /-- The seed followed by the round number, as one byte. -/
 def roundInput (seed : Bytes32) (round : Nat) : ByteArray :=
+  -- `seed || r`, with the round number `r` as one byte.
   ⟨seed.toArray.push (UInt8.ofNat round)⟩
 
 /-- The pivot of a round: the first eight bytes of a hash, little-endian, modulo the count. -/
 def pivot (seed : Bytes32) (round count : Nat) : Nat :=
+  -- The round key `K_i` of round `i` of the cipher, in `Z_N` for the count `N`.
   bytesToUint ((Cryptography.Hash.Sha256.hash32 (roundInput seed round)).take 8) % count
 
 /-- The seed and the round number, followed by the bucket number as four bytes. -/
 def bucketInput (seed : Bytes32) (round bucket : Nat) : ByteArray :=
+  -- `seed || r || b`, with the bucket number `b` as 4 bytes, little-endian.
   ⟨(roundInput seed round).data ++ (uintToBytes 4 bucket).toArray⟩
 
 /-- The 256 bits of a round that decide the positions of one bucket of 256 positions. -/
 def bucketBits (seed : Bytes32) (round bucket : Nat) : Bytes32 :=
+  -- The SHA-256 hash of that input.
   Cryptography.Hash.Sha256.hash32 (bucketInput seed round bucket)
 
 /-- The bit of a position in the bits of its bucket, least significant first in each byte. -/
@@ -80,6 +84,7 @@ def bitAt (bits : Bytes32) (position : Nat) : Bool :=
   have h : position % 256 / 8 < 32 := by
     have := Nat.mod_lt position (by decide : 0 < 256)
     omega
+  -- For the position `x`: bit `x mod 8` of byte `floor((x mod 256) / 8)`, the round function.
   bits[position % 256 / 8] >>> (position % 8).toUInt8 &&& 1 == 1
 
 /-- One round of swap-or-not on one index.
@@ -88,20 +93,27 @@ The index pairs with its reflection about the pivot, modulo the count.
 
 The bit at the greater of the two decides the swap, so both read the same bit. -/
 def swapOrNot (count pivot : Nat) (bit : Nat → Bool) (index : Nat) : Nat :=
+  -- `X' = K_i - X mod N`, for the index `X`, as Hoang, Morris and Rogaway specify.
+  --
+  -- `K + N - X` stays a natural number, since `K < N` and `X < N`.
   let flip := (pivot + count - index) % count
+  -- With `X^ = max(X, X')`, `X` becomes `X'` when `F_i(X^) = 1`, and else stays.
   if bit (max index flip) then flip else index
 
 /-- One round on every index.
 
 Each bucket of 256 positions is hashed once for the round. -/
 def round (seed : Bytes32) (count roundNumber : Nat) (indices : Array Nat) : Array Nat :=
+  -- The bits of every bucket of the round, from bucket 0 to `floor(N / 256)`.
   let buckets := Array.ofFn (n := count / 256 + 1) fun bucket =>
     bucketBits seed roundNumber bucket.val
   let bit position := bitAt (buckets.getD (position / 256) (Vector.replicate 32 0)) position
+  -- The round on each index, with one pivot for all.
   indices.map (swapOrNot count (pivot seed roundNumber count) bit)
 
 /-- One round of swap-or-not on one index, hashing the bucket of its position directly. -/
 def indexRound (seed : Bytes32) (count roundNumber index : Nat) : Nat :=
+  -- The round on the index, with the bits of the bucket of the position it reads.
   swapOrNot count (pivot seed roundNumber count)
     (fun position => bitAt (bucketBits seed roundNumber (position / 256)) position) index
 
@@ -109,12 +121,14 @@ def indexRound (seed : Bytes32) (count roundNumber index : Nat) : Nat :=
 
 A pivot does not depend on the index, so the indices of one seed can share them. -/
 def pivots (rounds : Nat) (seed : Bytes32) (count : Nat) : Array Nat :=
+  -- `K_r` for each round `r` below the number of rounds.
   Array.ofFn (n := rounds) fun roundNumber => pivot seed roundNumber.val count
 
 /-- Every round on one index, in order, each with its pivot from the pivots of the seed.
 
 Each round hashes once, for the bucket of the position it reads. -/
 def shuffledIndexBy (pivots : Array Nat) (seed : Bytes32) (count index : Nat) : Nat :=
+  -- Rounds `0` to `R - 1` in order, for `R` pivots.
   (List.range pivots.size).foldl (fun index roundNumber =>
     swapOrNot count (pivots.getD roundNumber 0)
       (fun position => bitAt (bucketBits seed roundNumber (position / 256)) position) index) index
@@ -127,6 +141,7 @@ def shuffledIndex (rounds : Nat) (seed : Bytes32) (count index : Nat) : Nat :=
 
 /-- Every round on each index below the count, in order, one round at a time for all of them. -/
 def shuffledPositions (rounds : Nat) (seed : Bytes32) (count : Nat) : Array UInt64 :=
+  -- From the identity `0, ..., N - 1`, each round in order on every index.
   ((List.range rounds).foldl (fun indices roundNumber => round seed count roundNumber indices)
     (Array.range count)).map UInt64.ofNat
 
@@ -141,6 +156,7 @@ A shuffle of more indices reaches a position whose bucket number does not fit in
 The check comes before any round. -/
 def computeShuffledPermutation (preset : Preset) (count : UInt64) (seed : Bytes32) :
     Except ShuffleError (Array UInt64) :=
+  -- `N ≤ 2^40`, so that each bucket number fits in 4 bytes.
   if count.toNat ≤ 2 ^ 40 then
     .ok (Shuffle.shuffledPositions preset.SHUFFLE_ROUND_COUNT.toNat seed count.toNat)
   else .error (.countTooLarge count)
@@ -156,6 +172,7 @@ Both checks come before any round.
 It runs the rounds on that index alone, so its cost does not grow with the count. -/
 def computeShuffledIndex (preset : Preset) (index count : UInt64) (seed : Bytes32) :
     Except ShuffleError UInt64 :=
+  -- The index is below the count `N`, and `N ≤ 2^40`.
   if index < count then
     if count.toNat ≤ 2 ^ 40 then
       .ok (UInt64.ofNat
@@ -178,14 +195,19 @@ It takes the shuffled positions as an argument, so the committees of an epoch ca
 It gives the committee of the rule when those positions are the shuffle of the list. -/
 def shuffledCommittee (indices : Array ValidatorIndex) (shuffled : Array UInt64)
     (index count : UInt64) : Except ShuffleError (Array ValidatorIndex) := do
+  -- There is at least one committee, and the bounds below fit in 64 bits.
   if count = 0 then throw (.noCommittee index)
   unless index.toNat + 1 < 2 ^ 64 ∧ indices.size * (index.toNat + 1) < 2 ^ 64 do
     throw (.overflow indices.size index)
+  -- The committee spans `floor(L * i / c)` up to, not including, `floor(L * (i + 1) / c)`.
+  --
+  -- Here `L` is the number of indices, `i` the committee and `c` the count of committees.
   let start := indices.size * index.toNat / count.toNat
   let stop := indices.size * (index.toNat + 1) / count.toNat
   -- The first position to shuffle at or past the length is the larger of the two.
   if start < stop ∧ indices.size < stop then
     throw (.indexOutOfRange (UInt64.ofNat (max start indices.size)) (UInt64.ofNat indices.size))
+  -- Member `j` of the committee is the index at shuffled position `floor(L * i / c) + j`.
   return ((List.range (stop - start)).map fun i =>
     indices.getD (shuffled.getD (start + i) 0).toNat 0).toArray
 
@@ -196,6 +218,7 @@ It fails as the shuffle does, before it cuts the committee.
 So above `2^40` indices it fails even for an empty committee, where the rule shuffles nothing. -/
 def computeCommittee (preset : Preset) (indices : Array ValidatorIndex) (seed : Bytes32)
     (index count : UInt64) : Except ShuffleError (Array ValidatorIndex) := do
+  -- The shuffle of all the indices with the seed, then the committee cut from it.
   shuffledCommittee indices
     (← computeShuffledPermutation preset (UInt64.ofNat indices.size) seed) index count
 
