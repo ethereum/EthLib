@@ -58,6 +58,7 @@ open Serialization.Ssz
 A type that is not a container has none. -/
 def fieldSpelling (shape : Desc) (marks : List (String × Spelling)) : Spelling :=
   match shape with
+  -- Each named field takes its mark, and every other field the spelling that marks nothing.
   | .container names _ | .progressiveContainer _ names _ =>
     .plain (names.map fun name => (marks.lookup name).getD .opaque)
   | _ => .opaque
@@ -82,11 +83,13 @@ variable {preset : Preset} {fork : Base.Fork}
 
 /-- The participation flags of a state are decimal strings. -/
 instance : ApiSpelling (BeaconState preset fork) :=
+  -- The source types the participation of Altair as an array of `Uint8`, each a decimal string.
   .ofFields (BeaconState preset fork)
     [("previous_epoch_participation", .digits), ("current_epoch_participation", .digits)]
 
 /-- The transactions and the block access list of a payload are hex. -/
 instance : ApiSpelling (ExecutionPayload preset fork) :=
+  -- The source: from Gloas, a transaction and a block access list are hex strings.
   .ofFields (ExecutionPayload preset fork)
     [("transactions", transactionsSpelling), ("block_access_list", .plain [.byte])]
 
@@ -142,6 +145,9 @@ instance : ApiSpelling InclusionList :=
   .ofFields InclusionList [("transactions", transactionsSpelling)]
 
 /-- The URL of a builder entry is text. -/
+-- The source types the URL of a builder entry as a string.
+--
+-- Its SSZ form is the UTF-8 bytes of the URL, exactly as in JSON.
 instance : ApiSpelling BuilderEntry := .ofFields BuilderEntry [("url", .text)]
 
 /-- A builder configuration holds builder entries. -/
