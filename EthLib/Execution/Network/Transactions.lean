@@ -9,7 +9,7 @@ public import EthLib.Serialization.Rlp.Codec
 /-!
 # `Execution.Network.Transactions`
 
-The transaction exchange of the eth capability, from "Protocol Messages" of [`caps/eth.md`][eth].
+The transaction exchange of the eth capability, from Protocol Messages in [`caps/eth.md`][eth].
 
 [eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#protocol-messages
 
@@ -24,7 +24,7 @@ A typed one crosses it as the byte string `tx-type || tx-data`, as [EIP-2976][ei
 
 The messages carry each transaction as its RLP item, next to the bytes it was read from.
 
-From eth/68 on, an announcement has three lists of equal length, as [EIP-5793][eip-5793] says.
+From eth/68 on, an announcement has three lists, by [EIP-5793][eip-5793], of equal length.
 
 From eth/72 on, it also has a 16-byte bitmap of the cells that the peer holds.
 
@@ -72,7 +72,9 @@ namespace Announcement
 
 /-- The announcement as an RLP list, in the field order of its version. -/
 def toItem : Announcement → Item
+  -- EIP-5793: `[types: B, [size_0: P, size_1: P, ...], [hash_0: B_32, hash_1: B_32, ...]]`.
   | eth68 t s h => .list [Codec.toItem t, Codec.toItem s, Codec.toItem h]
+  -- EIP-8070: then `cell_mask: B_16`.
   | eth72 t s h c => .list [Codec.toItem t, Codec.toItem s, Codec.toItem h, Codec.toItem c]
 
 /-- The types, the sizes and the hashes of an announcement. -/
@@ -81,6 +83,7 @@ def lists : Announcement → ByteArray × List Nat × List Hash32
 
 /-- Whether an announcement has as many types and sizes as hashes. -/
 def lengthsAgree (a : Announcement) : Bool :=
+  -- NewPooledTransactionHashes of eth.md: the three lists have an equal number of items.
   let (t, s, h) := a.lists
   t.size == h.length && s.length == h.length
 
@@ -90,10 +93,12 @@ eth/68 to eth/71 read three fields, and eth/72 reads four.
 
 The reader of messages also checks that the three lists have equal lengths. -/
 def ofItem (version : EthVersion) (item : Item) : Except RlpError Announcement := do
+  -- Before eth/72, the three lists of EIP-5793.
   if version < .eth72 then
     match ← item.fields 3 with
     | [t, s, h] => return eth68 (← t.field 0) (← s.field 1) (← h.field 2)
     | items => throw (.wrongFieldCount 3 items.length)
+  -- From eth/72, `cell_mask: B_16` comes fourth, by EIP-8070.
   else
     match ← item.fields 4 with
     | [t, s, h, c] => return eth72 (← t.field 0) (← s.field 1) (← h.field 2) (← c.field 3)
@@ -127,11 +132,18 @@ Each encoding hashed is a slice of the bytes read, so nothing is encoded again.
 -/
 def wireHash (tx : Encoded) : Hash32 :=
   match tx.item with
+  -- EIP-2976: a legacy transaction hashes as `keccak256(rlp(LegacyTransaction))`.
   | .list _ => Cryptography.Hash.Keccak.keccak256 tx.bytes
   | .bytes b =>
+    -- EIP-2976: a typed transaction hashes as `keccak256(TypedTransaction)`.
+    --
+    -- That is the bytes `TransactionType || TransactionPayload`.
     let canonical := Cryptography.Hash.Keccak.keccak256 b
     match b.data.toList with
     | type :: rest =>
+      -- EIP-4844: the network form wraps the payload body with the blobs, commitments and proofs.
+      --
+      -- So the hash is over the type `0x03` and the RLP of the payload body.
       if type = BLOB_TX_TYPE then
         let form : ByteArray := ⟨rest.toArray⟩
         -- The body is the first item of the network form, and its bytes are the first encoding.
@@ -168,11 +180,12 @@ Whether the transactions `txs` answer a request of the hashes `requested`.
 
 The transactions must be in the order of the request.
 
-The peer may leave some out, as "PooledTransactions (0x0a)" says.
+The peer may leave some out, as the section PooledTransactions (0x0a) says.
 
 So their hashes form a sublist of the requested hashes.
 -/
 def checkPooled (requested : List Hash32) (txs : List Encoded) : Except PoolError Unit :=
+  -- PooledTransactions: the order of the request, with some transactions left out.
   if (txs.map wireHash).isSublist requested then pure () else throw .notRequested
 
 end EthLib.Execution.Network
