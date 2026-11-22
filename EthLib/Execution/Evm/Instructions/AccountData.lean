@@ -69,20 +69,34 @@ def accountCode (evm : Evm fork Meter) (address : Address) : Except EvmError Byt
 /-- BALANCE: replace an address with the balance of its account. -/
 def balanceStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let (word, evm) ← popWord evm
+  -- The address is `mu_s[0] mod 2^160`.
   let address := toAddressMasked word
+  -- EIP-2929: an address not in the accessed set is a cold access, and joins the set.
+  --
+  -- It joins before the charge; a halt discards the set either way.
   let (cold, evm) := accessAddress evm address
+  -- From Berlin, the price of a cold or warm access; before, a price set by the fork alone.
   let evm ← chargeGas evm (balanceCost fork cold)
+  -- The read of the account, which EIP-7928 records.
   let evm := recordAccountRead evm address
+  -- `mu'_s[0] = sigma[mu_s[0] mod 2^160]_b`, or 0 for an address with no account.
   let evm ← pushWord evm (evm.state.getAccount address).balance
   return advance evm
 
 /-- EXTCODESIZE: replace an address with the size of the code of its account. -/
 def extcodesizeStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let (word, evm) ← popWord evm
+  -- The address is `mu_s[0] mod 2^160`.
   let address := toAddressMasked word
+  -- EIP-2929: an address not in the accessed set is a cold access, and joins the set.
+  --
+  -- It joins before the charge; a halt discards the set either way.
   let (cold, evm) := accessAddress evm address
+  -- The price of the access, and from Glamsterdam a warm access more for the code, by EIP-8038.
   let evm ← chargeGas evm (externalBaseCost fork cold)
+  -- The read of the account, which EIP-7928 records.
   let evm := recordAccountRead evm address
+  -- `mu'_s[0] = ||b||`, the size of the code `b` of the account.
   let code ← accountCode evm address
   let evm ← pushWord evm (BitVec.ofNat 256 code.size)
   return advance evm
@@ -95,11 +109,20 @@ def extcodecopyStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) :=
   let (start, evm) ← popWord evm
   let (offset, evm) ← popWord evm
   let (size, evm) ← popWord evm
+  -- The address is `mu_s[0] mod 2^160`.
   let address := toAddressMasked word
+  -- EIP-2929: an address not in the accessed set is a cold access, and joins the set.
+  --
+  -- It joins before the charge; a halt discards the set either way.
   let (cold, evm) := accessAddress evm address
+  -- The price of the access, plus `G_copy` per word copied, plus the growth of memory.
   let cost := externalBaseCost fork cold + OPCODE_COPY_PER_WORD * wordCount size.toNat
   let evm ← chargeGasAndMemory evm cost [(start, size)]
+  -- The read of the account, which EIP-7928 records.
   let evm := recordAccountRead evm address
+  -- `mu'_m[mu_s[1] ... mu_s[1] + mu_s[3] - 1] = b[mu_s[2] ... mu_s[2] + mu_s[3] - 1]`.
+  --
+  -- A byte of `b` past its end reads as 0.
   let code ← accountCode evm address
   let value := bufferBytes code offset.toNat size.toNat
   return advance { evm with memory := memoryWrite evm.memory start.toNat value }
@@ -113,10 +136,19 @@ def codeHashWord (account : State.Account) : U256 :=
 An address with no account, or with the empty account, gives 0. -/
 def extcodehashStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let (word, evm) ← popWord evm
+  -- EIP-1052: the first 96 bits of the word are zeroed, and the other 160 bits are the address.
   let address := toAddressMasked word
+  -- EIP-2929: an address not in the accessed set is a cold access, and joins the set.
+  --
+  -- It joins before the charge; a halt discards the set either way.
   let (cold, evm) := accessAddress evm address
+  -- From Berlin, the price of a cold or warm access; before, a price set by the fork alone.
   let evm ← chargeGas evm (extcodehashCost fork cold)
+  -- The read of the account, which EIP-7928 records.
   let evm := recordAccountRead evm address
+  -- EIP-1052: the Keccak-256 hash of the code of the account.
+  --
+  -- An account that does not exist, or is empty as EIP-161 defines it, gives 0.
   let evm ← pushWord evm (codeHashWord (evm.state.getAccount address))
   return advance evm
 

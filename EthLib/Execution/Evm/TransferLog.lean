@@ -63,8 +63,11 @@ Each address fills a word, with zeros in front.
 By default it comes from the system address, as in EIP-7708. -/
 def transferLog (sender recipient : Address) (amount : U256)
     (emitter : Address := SYSTEM_ADDRESS) : Log where
+  -- The emitter: `SYSTEM_ADDRESS` by EIP-7708, unless the caller gives another.
   address := emitter
+  -- Its topics are the hash of `Transfer(address,address,uint256)`, the sender and the recipient.
   topics := [TRANSFER_TOPIC, U256.toBeBytes sender.toU256, U256.toBeBytes recipient.toU256]
+  -- Its data is the amount in wei, as a big-endian word.
   data := ⟨(U256.toBeBytes amount).toArray⟩
 
 /-- The logs at fork `fork` after a move of `amount` wei from `sender` to `recipient`.
@@ -79,6 +82,7 @@ By default the log is that of EIP-7708, from Glamsterdam. -/
 def pushTransferLog (fork : Fork) (logs : Array Log) (sender recipient : Address)
     (amount : U256) (emitter : Address := SYSTEM_ADDRESS) (activation : Fork := .glamsterdam) :
     Array Log :=
+  -- EIP-7708: a move of a nonzero value to a different account issues the log.
   if fork ≥ activation ∧ amount ≠ 0 ∧ sender ≠ recipient then
     logs.push (transferLog sender recipient amount emitter)
   else logs
@@ -90,6 +94,7 @@ From Glamsterdam, the move adds the log of EIP-7708, as the receipts have it.
 Before Glamsterdam, it adds the same log from `0xee…ee`. -/
 def pushSimulatedTransferLog (fork : Fork) (logs : Array Log) (sender recipient : Address)
     (amount : U256) : Array Log :=
+  -- From Glamsterdam, the log of EIP-7708; before, the same log from `0xee…ee`, from Frontier on.
   if fork ≥ .glamsterdam then pushTransferLog fork logs sender recipient amount
   else pushTransferLog fork logs sender recipient amount SIMULATED_TRANSFER_ADDRESS .frontier
 

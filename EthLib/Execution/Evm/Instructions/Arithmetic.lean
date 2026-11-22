@@ -48,7 +48,9 @@ def sdiv (x y : U256) : U256 :=
   else if dividend = -2 ^ 255 ∧ divisor = -1 then
     U256.fromSigned (-2 ^ 255)
   else
-    -- `get_sign(dividend * divisor) * (abs(dividend) // abs(divisor))`
+    -- `sgn(mu_s[0] / mu_s[1]) * floor(|mu_s[0] / mu_s[1]|)`, the Yellow Paper's SDIV.
+    --
+    -- The code takes the sign of the product, which is that of the quotient.
     U256.fromSigned ((dividend * divisor).sign * (dividend.natAbs / divisor.natAbs : Nat))
 
 /-- The remainder, or 0 for a divisor of 0. -/
@@ -63,7 +65,7 @@ def smod (x y : U256) : U256 :=
   if divisor = 0 then
     0
   else
-    -- `get_sign(x) * (abs(x) % abs(y))`
+    -- `sgn(mu_s[0]) * (|mu_s[0]| mod |mu_s[1]|)`, the Yellow Paper's SMOD.
     U256.fromSigned (dividend.sign * (dividend.natAbs % divisor.natAbs : Nat))
 
 /-- The sum modulo `z`, without wrapping first, or 0 for `z = 0`. -/
