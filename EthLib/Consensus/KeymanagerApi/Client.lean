@@ -53,6 +53,7 @@ structure KeyState where
 
 /-- Whether a key is active: the client holds it. -/
 def KeyState.isActive (state : KeyState) (pubkey : BLSPubkey) : Bool :=
+  -- EthLib reads an active key of the source as a key that the client holds locally.
   state.localKeys.any (·.pubkey == pubkey)
 
 /-- Whether the client holds a key that cannot be deleted through the API. -/

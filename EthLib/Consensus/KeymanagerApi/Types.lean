@@ -24,10 +24,6 @@ For those, the round trip holds for the document that the text holds, not for th
 
 A key and an address are `0x` hex, read in either letter case and written in lowercase.
 
-An integer is decimal digits in a string, with no sign and no leading zero.
-
-The source's pattern admits 20 digits, so a value of 2^64 or more is refused here.
-
 Two values hold a JSON document as text: a keystore and the slashing protection data.
 
 Their readers parse the text, and their writers print the document, with operations they take.
@@ -91,6 +87,7 @@ def ofProtection {α : Type} : Except SlashingProtectionError α → Except Keym
 [types]: https://github.com/ethereum/keymanager-APIs/tree/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types
 -/
 def readString (path : String) (document : Json) : Except KeymanagerError String :=
+  -- The schema: the type is string, with no pattern.
   ofProtection (Interchange.readString path document)
 
 /-- A 64-bit integer, `Uint64` of [`uint.yaml`], below 2^64.
@@ -98,6 +95,11 @@ def readString (path : String) (document : Json) : Except KeymanagerError String
 [`uint.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/uint.yaml
 -/
 def readUint64 (path : String) (document : Json) : Except KeymanagerError UInt64 :=
+  -- The schema: a string with the pattern ^(0|[1-9][0-9]{0,19})$.
+  --
+  -- So decimal digits, with no sign and no leading zero.
+  --
+  -- The pattern admits 20 digits; EthLib refuses a value of 2^64 or more.
   ofProtection (Interchange.readUInt64 path document)
 
 /-- A BLS public key of 48 bytes, from [`public_key.yaml`].
@@ -105,6 +107,7 @@ def readUint64 (path : String) (document : Json) : Except KeymanagerError UInt64
 [`public_key.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/public_key.yaml
 -/
 def readPubkey (path : String) (document : Json) : Except KeymanagerError BLSPubkey :=
+  -- The schema: the pattern ^0x[a-fA-F0-9]{96}$, so 48 bytes.
   ofProtection (Interchange.readBytes path 48 document)
 
 /-- An execution address of 20 bytes, from [`eth_address.yaml`].
@@ -114,6 +117,7 @@ The source states no checksum rule for the letter case, so none is checked.
 [`eth_address.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/eth_address.yaml
 -/
 def readEthAddress (path : String) (document : Json) : Except KeymanagerError ExecutionAddress :=
+  -- The schema: the pattern ^0x[a-fA-F0-9]{40}$, so 20 bytes.
   ofProtection (Interchange.readBytes path 20 document)
 
 /-- A BLS signature of 96 bytes, from [`signature.yaml`].
@@ -121,6 +125,7 @@ def readEthAddress (path : String) (document : Json) : Except KeymanagerError Ex
 [`signature.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/signature.yaml
 -/
 def readSignature (path : String) (document : Json) : Except KeymanagerError BLSSignature :=
+  -- The schema: the pattern ^0x[a-fA-F0-9]{192}$, so 96 bytes.
   ofProtection (Interchange.readBytes path 96 document)
 
 /-- A boolean. -/
@@ -150,6 +155,7 @@ structure JsonText where
 /-- A JSON document held as text in a string, read by a reader of the document. -/
 def readEmbedded {α : Type} (text : JsonText) (path : String)
     (read : Json → Except KeymanagerError α) (document : Json) : Except KeymanagerError α := do
+  -- The schema: a string that holds a JSON serialized document.
   match text.parse (← readString path document) with
   | .ok inner => read inner
   | .error _ => throw (.notJson path)
@@ -165,10 +171,12 @@ Decryption reads its fields, so this reader asks only for JSON.
 -/
 def readKeystore (text : JsonText) (path : String) (document : Json) :
     Except KeymanagerError Json :=
+  -- The schema: a string that holds the JSON of an ERC-2335 keystore; decryption checks its fields.
   readEmbedded text path .ok document
 
 /-- EIP-3076 slashing protection data, from its document, with the error of EIP-3076 kept. -/
 def slashingProtectionOfDocument (document : Json) : Except KeymanagerError Interchange :=
+  -- The schema: the data in the format of EIP-3076.
   (Interchange.ofJson document).mapError .slashingProtection
 
 /-- EIP-3076 slashing protection data, held as text, from [`slashing_protection.yaml`].
@@ -188,17 +196,20 @@ def slashingProtectionJson (text : JsonText) (interchange : Interchange) : Json 
 /-- A field of an object, which must be present, read by a reader of its value. -/
 def requiredField {α : Type} (path name : String) (read : String → Json → Except KeymanagerError α)
     (document : Json) : Except KeymanagerError α := do
+  -- The schema: a required property is present.
   read s!"{path}.{name}" (← ofProtection (Interchange.field path name document))
 
 /-- A field of an object, which may be absent, read by a reader of its value. -/
 def optionalField {α : Type} (path name : String) (read : String → Json → Except KeymanagerError α)
     (document : Json) : Except KeymanagerError (Option α) :=
+  -- The schema: an optional property may be absent; when present, it must read.
   match document.getObjVal? name with
   | .ok value => do return some (← read s!"{path}.{name}" value)
   | .error _ => .ok none
 
 /-- The field of an optional value, none when it is unset. -/
 def optionalFields {α : Type} (name : String) (write : α → Json) : Option α → List (String × Json)
+  -- An unset optional property is left out.
   | some value => [(name, write value)]
   | none => []
 
@@ -260,6 +271,7 @@ structure ErrorResponse where
 /-- The definition of a remote key, from its object. -/
 def readSignerDefinition (path : String) (document : Json) :
     Except KeymanagerError SignerDefinition := do
+  -- The schema: the public key is required; the URL and the read-only flag are optional.
   return {
     pubkey := ← requiredField path "pubkey" readPubkey document
     url := ← optionalField path "url" readString document
@@ -274,6 +286,7 @@ def signerDefinitionJson (definition : SignerDefinition) : Json :=
 /-- A remote key to import, from its object. -/
 def readImportRemoteSignerDefinition (path : String) (document : Json) :
     Except KeymanagerError ImportRemoteSignerDefinition := do
+  -- The schema: the public key is required, and the URL is optional.
   return {
     pubkey := ← requiredField path "pubkey" readPubkey document
     url := ← optionalField path "url" readString document }
@@ -285,6 +298,7 @@ def importRemoteSignerDefinitionJson (definition : ImportRemoteSignerDefinition)
 
 /-- A fee recipient, from its object. -/
 def readFeeRecipient (path : String) (document : Json) : Except KeymanagerError FeeRecipient := do
+  -- The schema: the address is required, and the public key is optional.
   return {
     pubkey := ← optionalField path "pubkey" readPubkey document
     ethaddress := ← requiredField path "ethaddress" readEthAddress document }
@@ -296,6 +310,7 @@ def feeRecipientJson (recipient : FeeRecipient) : Json :=
 
 /-- A gas limit, from its object. -/
 def readGasLimit (path : String) (document : Json) : Except KeymanagerError GasLimit := do
+  -- The schema: the gas limit is required, and the public key is optional.
   return {
     pubkey := ← optionalField path "pubkey" readPubkey document
     gasLimit := ← requiredField path "gas_limit" readUint64 document }
@@ -307,6 +322,7 @@ def gasLimitJson (limit : GasLimit) : Json :=
 
 /-- The body of an error response, from its object. -/
 def readErrorResponse (path : String) (document : Json) : Except KeymanagerError ErrorResponse := do
+  -- The schema: the message is required.
   return { message := ← requiredField path "message" readString document }
 
 /-- The body of an error response as the API writes it. -/
@@ -325,6 +341,7 @@ It requires every field, where the source lists none as required, since the cont
 -/
 def readSignedVoluntaryExit (path : String) (document : Json) :
     Except KeymanagerError SignedVoluntaryExit :=
+  -- EthLib reads it with the reader of the Beacon API, with the departures listed above.
   (BeaconApi.ofApiJson SignedVoluntaryExit document).mapError fun _ => .field path
 
 /-- A signed voluntary exit as the API writes it.
@@ -343,10 +360,12 @@ structure DeleteKeysRequest where
 
 /-- An array of public keys, each read in turn. -/
 def readPubkeys (path : String) (document : Json) : Except KeymanagerError (List BLSPubkey) :=
+  -- The schema: an array whose items are public keys.
   ofProtection (Interchange.readArray path (fun path => Interchange.readBytes path 48) document)
 
 /-- A request to delete keys, from its object. -/
 def readDeleteKeysRequest (document : Json) : Except KeymanagerError DeleteKeysRequest := do
+  -- The schema of the request body: the public keys are required.
   return { pubkeys := ← requiredField "" "pubkeys" readPubkeys document }
 
 /-! ## Responses -/
@@ -360,6 +379,7 @@ structure Response where
 
 /-- A response with HTTP 400 and the body of an error. -/
 def badRequest (message : String) : Response :=
+  -- The source: a request that was malformed and could not be processed, with an error body.
   ⟨400, errorResponseJson ⟨message⟩⟩
 
 end EthLib.Consensus.KeymanagerApi
