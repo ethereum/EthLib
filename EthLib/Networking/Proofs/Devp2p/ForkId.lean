@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Cryptography.Proofs.Hash.Crc.Basic
 public import EthLib.Networking.Devp2p.ForkId
 public import EthLib.Serialization.Proofs.Rlp.Codec
@@ -96,6 +97,25 @@ theorem _root_.List.findIdx?_eq_of_nodup {α : Type} [DecidableEq α] {l : List 
   have := hl.eq_of_getElem_eq (by omega) hj h
   omega
 
+/-- Values below 2^64 that give the same 8-byte big-endian bytes, one after the other, are equal. -/
+theorem flatMap_natToBytes_inj :
+    ∀ {l l' : List Nat}, (∀ v ∈ l, v < 2 ^ 64) → (∀ v ∈ l', v < 2 ^ 64) →
+      l.flatMap (natToBytes 8) = l'.flatMap (natToBytes 8) → l = l'
+  | [], [], _, _, _ => rfl
+  | [], v :: _, _, _, h => by
+    have := congrArg List.length h
+    simp [natToBytes_length] at this <;> omega
+  | v :: _, [], _, _, h => by
+    have := congrArg List.length h
+    simp [natToBytes_length] at this <;> omega
+  | v :: l, v' :: l', hl, hl', h => by
+    simp only [List.flatMap_cons] at h
+    obtain ⟨hv, hrest⟩ := List.append_inj h (by simp [natToBytes_length])
+    have h64 : (2 : Nat) ^ 64 = 256 ^ 8 := rfl
+    rw [natToBytes_inj (h64 ▸ hl v (by simp)) (h64 ▸ hl' v' (by simp)) hv,
+      flatMap_natToBytes_inj (fun x hx => hl x (by simp [hx])) (fun x hx => hl' x (by simp [hx]))
+        hrest]
+
 namespace Schedule
 
 variable (s : Schedule) (number timestamp : Nat)
@@ -147,6 +167,49 @@ theorem mem_forks {a : Activation} (h : a ∈ s.forks) :
   rcases h with ⟨b, hb, rfl⟩ | ⟨t, ht, rfl⟩
   · exact .inl ⟨b, hb, rfl⟩
   · exact .inr ⟨t, ht, rfl⟩
+
+/-! ## Forks below 2^64 -/
+
+/-- When its forks are below 2^64, `FORK_NEXT` holds the first fork that the head has not reached.
+
+It is 0 when the head has passed every fork. -/
+theorem forkId_next_toNat (hb : s.Bounded) :
+    (s.forkId number timestamp).next.toNat =
+      match s.forks[(s.passed number timestamp).length]? with
+      | none => 0
+      | some a => activationValue a := by
+  rw [forkId_next]
+  split
+  · rfl
+  · rename_i a ha
+    exact UInt64.toNat_ofNat_of_lt' (hb a (List.mem_of_getElem? ha))
+
+/-- When its forks are below 2^64, so are the forks that a head has passed. -/
+theorem passed_bounded (hb : s.Bounded) :
+    ∀ a ∈ s.passed number timestamp, activationValue a < ACTIVATION_BOUND :=
+  fun a ha => hb a ((List.takeWhile_sublist _).subset ha)
+
+/--
+Two lists of forks below 2^64 give one checksum input exactly when they hold the same values.
+
+So the input that `FORK_HASH` checksums holds each such fork whole.
+-/
+theorem checksumInput_eq_iff {g : Hash32} {forks forks' : List Activation}
+    (h : ∀ a ∈ forks, activationValue a < ACTIVATION_BOUND)
+    (h' : ∀ a ∈ forks', activationValue a < ACTIVATION_BOUND) :
+    checksumInput g forks = checksumInput g forks' ↔
+      forks.map activationValue = forks'.map activationValue := by
+  have hflat (l : List Activation) : l.flatMap (fun a => natToBytes 8 (activationValue a)) =
+      (l.map activationValue).flatMap (natToBytes 8) := by
+    simp [List.flatMap_map]
+  simp only [checksumInput, ByteArray.mk.injEq, hflat]
+  constructor
+  · intro he
+    have := congrArg Array.toList he
+    simp only [List.append_cancel_left_eq] at this
+    exact flatMap_natToBytes_inj (by simpa using h) (by simpa using h') this
+  · intro he
+    rw [he]
 
 /-! ## Validation -/
 
@@ -335,6 +398,31 @@ theorem mainnet_separated : mainnet.Separated := by
       reduceCtorEq, Activation.time.injEq, List.not_mem_nil, and_false, false_or, or_false] at hf
     rcases hf with ⟨-, rfl⟩ | ⟨-, rfl⟩ | ⟨-, rfl⟩ | ⟨-, rfl⟩ | ⟨-, rfl⟩ | ⟨-, rfl⟩ <;>
       simp [TIMESTAMP_THRESHOLD]
+
+/-- When its activations and `FORK_NEXT_VALUE` are below 2^64, so are its forks. -/
+theorem bounded_of_activations
+    (hact : ∀ p ∈ s.config.activations, activationValue p.2 < ACTIVATION_BOUND)
+    (hmerge : ∀ n, s.mergeForkBlock = some n → n < ACTIVATION_BOUND) : s.Bounded := by
+  intro a ha
+  rcases mem_forks s ha with ⟨b, hb, rfl⟩ | ⟨t, ht, rfl⟩
+  · rcases mem_blocks s hb with ⟨f, -, hf⟩ | hm
+    · exact hact _ hf
+    · exact hmerge b hm
+  · obtain ⟨⟨f, hf⟩, -⟩ := mem_times s ht
+    exact hact _ hf
+
+/-- When its forks fit rule 1a, each is below 2^64. -/
+theorem bounded_of_separated (hs : s.Separated) : s.Bounded := by
+  intro a ha
+  rcases mem_forks s ha with ⟨b, hb, rfl⟩ | ⟨t, ht, rfl⟩
+  · have := hs.1 b hb
+    simp only [activationValue, ACTIVATION_BOUND, TIMESTAMP_THRESHOLD] at this ⊢
+    omega
+  · exact (hs.2 t ht).2
+
+/-- The forks of mainnet are below 2^64. -/
+theorem mainnet_bounded : mainnet.Bounded :=
+  bounded_of_separated mainnet mainnet_separated
 
 end Schedule
 

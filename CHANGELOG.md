@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- `Schedule.Bounded` checks that every fork of a fork identifier schedule is below `2^64`, as EIP-2124 and EIP-6122 hold each fork as a `uint64` ([#3855](https://github.com/ethereum/EthLib/issues/3855)).
+  `readSchedule_bounded` proves that the schedule reader of the exports returns only such schedules, and `mainnet_bounded` that mainnet is one.
+  For such a schedule, `checksumInput_eq_iff` proves that the checksum input holds each fork whole, and `forkId_next_toNat` that `FORK_NEXT` holds the next fork whole.
+
 - `processTransaction_stateGas_le_of_glamsterdam` proves that from Glamsterdam the state gas that a transaction adds to its block is at most the gas it used before its refund, so subtracting it for the execution gas of the block never floors at zero ([#3851](https://github.com/ethereum/EthLib/issues/3851)).
 
 - `length_transactions_lt_of_checkBlock` proves that from Fusaka a block that passes its checks has fewer than `2^32 - 1` transactions, so every position of its block access list fits 32 bits ([#3849](https://github.com/ethereum/EthLib/issues/3849)).

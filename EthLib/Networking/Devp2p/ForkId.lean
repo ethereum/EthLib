@@ -166,6 +166,29 @@ def forkId (s : Schedule) (number timestamp : Nat) : ForkId where
 def checksums (s : Schedule) : List (Vector UInt8 4) :=
   (List.range (s.forks.length + 1)).map fun k => checksum s.genesisHash (s.forks.take k)
 
+/--
+Whether each fork of a schedule has a block number or timestamp below 2^64.
+
+[EIP-2124][eip-2124] hashes each fork as a big-endian `uint64`, and `FORK_NEXT` is a `uint64`.
+
+[EIP-6122][eip-6122] does the same for the forks by time.
+
+The block of `FORK_NEXT_VALUE` of [EIP-3675][eip-3675] is one of these forks.
+
+So only such a schedule has fork identifiers that hold its forks whole.
+
+The schedule reader of the exports refuses any fork of 2^64 or more.
+
+[eip-2124]: https://eips.ethereum.org/EIPS/eip-2124#specification
+[eip-6122]: https://eips.ethereum.org/EIPS/eip-6122#specification
+[eip-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#fork-identifier
+-/
+def Bounded (s : Schedule) : Prop :=
+  ∀ a ∈ s.forks, activationValue a < ACTIVATION_BOUND
+
+instance (s : Schedule) : Decidable s.Bounded :=
+  inferInstanceAs (Decidable (∀ a ∈ s.forks, _))
+
 end Schedule
 
 /-- Why a node refuses the fork identifier of a peer. -/
