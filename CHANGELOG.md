@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- `processMessage_messagePays` and `processCreateMessage_messagePays` prove that from Glamsterdam every call whose code runs at an account with a nonce or code, and every creation at an address with neither, pays for the fresh slots it counts (`MessagePays`), whether or not it ends with an error ([#4038](https://github.com/ethereum/EthLib/issues/4038), sixth part).
+  A message that fails rolls back its state gas to the floor of its meter, and its counted slots to those of its start, with no hypothesis on the state.
+  `accountDeployable_of_create_step` is now public.
+
 - `paysSlots_messageInstruction` proves that from Glamsterdam each call and creation pays for the fresh slots it counts (`PaysSlots`), given that each message it sends pays (`MessagePays`) ([#4038](https://github.com/ethereum/EthLib/issues/4038), fifth part).
   `paysSlots_step` gives the same for every step of a running frame whose code, when not empty, runs at an account with a nonce or code.
 
