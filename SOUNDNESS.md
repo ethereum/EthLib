@@ -3671,7 +3671,7 @@ Those are the committees of the epoch so far.
 It also assumes that the honest validators of the slots still to come hold the share that the rule counts for them.
 They hold a third of the margin on top of it.
 The rule checks none of these; they are assumptions on the run.
-The theorem takes an anchored store from an anchor state with `Invariant`, a positive slot duration and a fork before Gloas.
+The theorem takes an anchored store from an anchor state with `Invariant` and a positive slot duration, at every fork.
 It takes two seed lookaheads of at least one epoch, and a ring of mixes longer than the minimum lookahead plus one.
 It takes an increment that is a whole number of 100 Gwei, and `MaxEffectiveBalancesAligned`.
 From the second it derives the aligned balances of the head's pulled-up state.
@@ -3809,7 +3809,10 @@ That evidence is `HistoricalDirectSafetyEvidence`, `CrossStoreDirectSafetyEviden
 Each evidence alternative is relative to the anchor, so with enough churn since the anchor it holds with no accountable key.
 The theorem covers executions whose honest stores verify signatures with BLS (`checks = .bls`).
 The specification's pulled-up head state processes slots with BLS checks, and a run under other checks can differ from it.
-The fork is Fulu or later and before Gloas.
+The fork is Fulu or later.
+From Gloas it takes three premises, each saying nothing before Gloas.
+`room` says that the anchor's registry leaves room up to the horizon, and `weights` that the head weights of the configuration fit.
+`supply` is a `CheckpointHeadWeightCeiling`: each weight of the weak-head test at an honest justified state through the limit is at most 2·10^17 Gwei.
 A private step of the same file shows that each call keeps the call invariant, given the invariant at every earlier call.
 The call invariant and the walk of a call are in `ConfirmedCalls.lean`.
 The step derives `QuorumDriftWithin` with `Execution.quorumDriftWithin`, and the honest target count with `Execution.honestTargetVotes_of_byzantineStakeAtMost`.

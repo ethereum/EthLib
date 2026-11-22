@@ -53,7 +53,7 @@ A validator active at the source and inactive at that epoch was inactive there i
 So its exit epoch in the source is at most that epoch, which the near exit reserve counts. -/
 private theorem exitStake_le_exitReserveNear {post : Fork}
     {source : BeaconState preset fork} {later : BeaconState preset post}
-    (preGloas : fork < .glamsterdam) (fixedWindow : preset.SeedLookaheadAtLeastThree)
+    (within : source.RegistryWithinLimit) (fixedWindow : preset.SeedLookaheadAtLeastThree)
     (kept : ActiveKept (activityFixedEpoch source) source later)
     {epoch : Epoch} (low : getCurrentEpoch source ≤ epoch)
     (high : epoch.toNat ≤ (getCurrentEpoch source).toNat + 3) :
@@ -73,7 +73,7 @@ private theorem exitStake_le_exitReserveNear {post : Fork}
     omega
   rw [kept epoch fixed] at absent
   unfold activeVoters at active
-  rw [List.mem_toFinset, mem_getActiveValidatorIndices (source.validators.bound preGloas)] at active
+  rw [List.mem_toFinset, mem_getActiveValidatorIndices within] at active
   obtain ⟨validator, found, current⟩ := active
   simp only [isActiveAt, found, Option.map_some, Option.getD_some] at absent
   simp only [found, Option.any_some, decide_eq_true_eq]
@@ -92,7 +92,7 @@ The committees of a full epoch hold every validator active in it at the head sta
 So each omitted source validator is inactive there, and the near reserve bounds their stake. -/
 private theorem windowExitBoundWith_of_activeKept (store : Store preset fork)
     (source : BeaconState preset fork) (head : Root) (first last : Slot)
-    {headState : BeaconState preset fork} (preGloas : fork < .glamsterdam)
+    {headState : BeaconState preset fork} (within : source.RegistryWithinLimit)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (fixedWindow : preset.SeedLookaheadAtLeastThree)
     (headOk : store.blockState head = .ok headState)
     (kept : ActiveKept (activityFixedEpoch source) source headState)
@@ -105,7 +105,7 @@ private theorem windowExitBoundWith_of_activeKept (store : Store preset fork)
   intro epoch epochStart next epochEnd members startOk nextOk endOk firstLe lastLe membersOk
   obtain ⟨low, high⟩ := near epoch epochStart next epochEnd startOk nextOk endOk firstLe lastLe
   refine Nat.le_trans (stake_mono ?_)
-    (exitStake_le_exitReserveNear preGloas fixedWindow kept low high)
+    (exitStake_le_exitReserveNear within fixedWindow kept low high)
   intro v member
   simp only [Finset.mem_filter] at member ⊢
   refine ⟨member.1, ?_⟩
@@ -158,16 +158,21 @@ That omitted stake is at most the near exit reserve.
 
 It needs a seed lookahead of at least three, and a checkpoint at most two epochs before the parent.
 
+The source state's registry is within the limit (`within`).
+
+From Gloas the type of the registry does not give it.
+
 The alternative is a block collision between two honest stores by the horizon. -/
 theorem Execution.receiverWindowExitsNear_of_sourceOnParentChain
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (fixedWindow : preset.SeedLookaheadAtLeastThree)
-    (preGloas : fork < .glamsterdam) {time : ℕ} {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
+    {time : ℕ} {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ}
     (callerTime : (e.world n).time ≤ time) {checkpoint : Checkpoint}
     {source : BeaconState preset fork} {block parent : BeaconBlock preset fork} {first : Slot}
     (sourceOk : ((e.world n).state u).checkpointState checkpoint = .ok source)
+    (within : source.RegistryWithinLimit)
     (parentOk : ((e.world n).state u).block block.parentRoot = .ok parent)
     (firstOk : addChecked parent.slot 1 = .ok first)
     (onChain : SourceOnParentChain ((e.world n).state u) checkpoint block.parentRoot parent)
@@ -251,7 +256,7 @@ theorem Execution.receiverWindowExitsNear_of_sourceOnParentChain
     rw [getCurrentEpoch, sourceSlot]
     exact computeEpochAtSlot_computeStartSlotAtEpoch (UInt64.lt_iff_toNat_lt.mpr positive)
       boundaryOk
-  refine windowExitBoundWith_of_activeKept _ boundaryState head.root first finish preGloas
+  refine windowExitBoundWith_of_activeKept _ boundaryState head.root first finish within
     positive fixedWindow (Store.blockState_ok_iff.mpr headStateFound) run.active ?_
   -- A full epoch of the window is after the parent's epoch and before the receiver's.
   intro epoch epochStart next epochEnd startOk nextOk endOk firstLe lastLe
