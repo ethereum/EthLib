@@ -75,6 +75,7 @@ This is the only inverse. -/
 def toAffine (inverse : F → F) (p : Coords F) : Option (F × F) :=
   if p.z = 0 then none
   else
+    -- `x = X / Z^2` and `y = Y / Z^3`, with one inverse.
     let zi := inverse p.z
     let zi2 := zi * zi
     some (p.x * zi2, p.y * zi2 * zi)
@@ -85,19 +86,26 @@ When `a = 0`, the term `a Z^4` is skipped.
 
 The small multiples are sums, which cost less than products. -/
 @[specialize] def double (a : F) (p : Coords F) : Coords F :=
+  -- dbl-1998-cmo-2: `XX = X1^2`, `YY = Y1^2`.
   let xx := p.x * p.x
   let yy := p.y * p.y
+  -- `S = 4*X1*YY`.
   let xyy := p.x * yy
   let xyy2 := xyy + xyy
   let s := xyy2 + xyy2
+  -- `M = 3*XX+a*ZZ^2`, with `ZZ = Z1^2`.
   let l := if a = 0 then xx + xx + xx else
     let zz := p.z * p.z
     xx + xx + xx + a * zz * zz
+  -- `T = M^2-2*S`.
   let t := l * l - (s + s)
+  -- `8*YY^2`, as three doublings of `YY^2`.
   let y4 := yy * yy
   let y4x2 := y4 + y4
   let y4x4 := y4x2 + y4x2
+  -- `Y1*Z1`.
   let yz := p.y * p.z
+  -- `X3 = T`, `Y3 = M*(S-T)-8*YY^2`, `Z3 = 2*Y1*Z1`.
   ⟨t, l * (s - t) - (y4x4 + y4x4), yz + yz⟩
 
 /-- `P + Q`, by formula (5) of Cohen, Miyaji and Ono, with the curve's `a`.
@@ -111,22 +119,31 @@ When `Q` has `Z = 1`, the products by its `Z` are skipped. -/
   if p.z = 0 then q
   else if q.z = 0 then p
   else
+    -- add-1998-cmo-2: `Z1Z1 = Z1^2`.
     let z1z1 := p.z * p.z
+    -- `Z2Z2 = Z2^2`, `U1 = X1*Z2Z2`, `S1 = Y1*Z2*Z2Z2`, and `Z1*Z2` for `Z3`.
+    --
+    -- With `Z2 = 1` they are `X1`, `Y1` and `Z1`, so their products are skipped.
     let (u1, s1, z1z2) := if q.z = 1 then (p.x, p.y, p.z) else
       let z2z2 := q.z * q.z
       (p.x * z2z2, p.y * q.z * z2z2, p.z * q.z)
+    -- `U2 = X2*Z1Z1`, `S2 = Y2*Z1*Z1Z1`.
     let u2 := q.x * z1z1
     let s2 := q.y * p.z * z1z1
+    -- `H = U2-U1`, `r = S2-S1`.
     let h := u2 - u1
     let r := s2 - s1
     if h = 0 then
       -- One `x`: the same point, or opposite points.
       if r = 0 then double a p else infinity
     else
+      -- `HH = H^2`, `HHH = H*HH`, `V = U1*HH`.
       let hh := h * h
       let hhh := h * hh
       let v := u1 * hh
+      -- `X3 = r^2-HHH-2*V`.
       let x3 := r * r - hhh - (v + v)
+      -- `Y3 = r*(V-X3)-S1*HHH` and `Z3 = Z1*Z2*H`.
       ⟨x3, r * (v - x3) - s1 * hhh, z1z2 * h⟩
 
 /-- `k P`, for `k < 2^fuel`, by double and add on the bits of `k`, low bit first.
