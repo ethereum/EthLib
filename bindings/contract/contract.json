@@ -2149,7 +2149,7 @@
    "error_class": "EnrError",
    "docstring": "The sequence number of a record."},
   {"summary":
-   "Whether a record is a valid \"v4\" record: its signature verifies under its public key.",
+   "Whether a record is a valid v4 record: its signature verifies under its public key.",
    "signature": "(record: bytes) -> bool",
    "operation": "EthLib.Networking.Enr.verifyV4",
    "method": "enr_verify_v4",
@@ -2176,9 +2176,9 @@
       {"constructor": "invalidPort", "code": 18}]}],
    "error_class": "EnrError",
    "docstring":
-   "Whether a record is a valid \"v4\" record: its signature verifies under its public key.\n\nThe signature is on the Keccak-256 hash of the RLP encoding of the content.\n\nThe RLP decoder accepts only canonical bytes, so for a decoded record this is what was signed.\n\nECDSA accepts a high `s` here, since the EIP adds no low-s rule."},
+   "Whether a record is a valid v4 record: its signature verifies under its public key.\n\nThe signature is on the Keccak-256 hash of the RLP encoding of the content.\n\nThe RLP decoder accepts only canonical bytes, so for a decoded record this is what was signed.\n\nECDSA accepts a high `s` here, since the EIP adds no low-s rule."},
   {"summary":
-   "The node ID of a \"v4\" record: the Keccak-256 hash of `x` then `y` of its public key.",
+   "The node ID of a v4 record: the Keccak-256 hash of `x` then `y` of its public key.",
    "signature": "(record: bytes) -> bytes",
    "operation": "EthLib.Networking.Enr.nodeId",
    "method": "enr_node_id",
@@ -2205,7 +2205,7 @@
       {"constructor": "invalidPort", "code": 18}]}],
    "error_class": "EnrError",
    "docstring":
-   "The node ID of a \"v4\" record: the Keccak-256 hash of `x` then `y` of its public key.\n\nIt does not check the signature."},
+   "The node ID of a v4 record: the Keccak-256 hash of `x` then `y` of its public key.\n\nIt does not check the signature."},
   {"summary":
    "The bytes of a record, signed again with a private key by the \"v4\" scheme.",
    "signature": "(secret_key: bytes, record: bytes) -> bytes",

@@ -461,11 +461,11 @@ def enr_seq(record: bytes) -> int:
     ...
 
 def enr_verify_v4(record: bytes) -> bool:
-    """Whether a record is a valid "v4" record: its signature verifies under its public key."""
+    """Whether a record is a valid v4 record: its signature verifies under its public key."""
     ...
 
 def enr_node_id(record: bytes) -> bytes:
-    """The node ID of a "v4" record: the Keccak-256 hash of `x` then `y` of its public key."""
+    """The node ID of a v4 record: the Keccak-256 hash of `x` then `y` of its public key."""
     ...
 
 def enr_sign_v4(secret_key: bytes, record: bytes) -> bytes:

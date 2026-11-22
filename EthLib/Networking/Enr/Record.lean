@@ -6,25 +6,11 @@ public import EthLib.Serialization.Rlp.Codec
 /-!
 # `Networking.Enr.Record`
 
-Ethereum Node Records, from the sections "RLP Encoding" and "Text Encoding" of EIP-778.
+Ethereum Node Records, in their RLP and text encodings.
 
-Source: [EIP-778][eip-778].
+The sources are the sections Specification, RLP Encoding and Text Encoding of [EIP-778][eip-778].
 
 A record is a signed list of key and value pairs that says how to reach a node.
-
-It is the RLP list `[signature, seq, k1, v1, k2, v2, ...]`, at most 300 bytes long.
-
-The keys are byte strings, sorted and unique.
-
-Every record has the key `id`, which names its identity scheme.
-
-All other keys are optional.
-
-The EIP does not name the order, so the keys here increase in lexicographic byte order.
-
-A value is any RLP item.
-
-The text form is `enr:`, then the URL-safe base64 of the RLP bytes, without padding.
 
 [eip-778]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-778.md
 -/
@@ -83,7 +69,7 @@ inductive EnrError where
   | base64 (e : Base64.Base64Error)
   /-- The record has no `id` pair, which names its identity scheme. -/
   | missingId
-  /-- The identity scheme is not "v4".
+  /-- The identity scheme is not `v4`.
 
   The field holds the value of the `id` pair, which is a list when it is not a byte string. -/
   | unknownScheme (scheme : Item)
@@ -144,60 +130,85 @@ def Enr.get (r : Enr) (key : ByteArray) : Option Item :=
 /-- The pairs as RLP items: each key, then its value. -/
 def flatten : List (ByteArray × Item) → List Item
   | [] => []
+  -- The remainder of the record is `k, v, ...`: each key, then its value.
   | (key, value) :: rest => .bytes key :: value :: flatten rest
 
 /-- The content that the identity scheme signs: the RLP list `[seq, k1, v1, ...]`. -/
 def Enr.content (r : Enr) : Item :=
+  -- RLP Encoding: `content = [seq, k, v, ...]`.
   .list (Codec.toItem r.seq :: flatten r.pairs)
 
 /-- The RLP encoding of a record, `[signature, seq, k1, v1, ...]`.
 
 It does not check the size or the order of the keys. -/
 def Enr.encode (r : Enr) : Except RlpError ByteArray :=
+  -- RLP Encoding: `record = [signature, seq, k, v, ...]`.
   Serialization.Rlp.encode (.list (.bytes r.signature :: Codec.toItem r.seq :: flatten r.pairs))
 
 /-- The pairs of the items after the sequence number, two items each. -/
 def readPairs : List Item → Except EnrError (List (ByteArray × Item))
   | [] => return []
+  -- A key is a byte sequence, and its value is any RLP item.
   | .bytes key :: value :: rest => return (key, value) :: (← readPairs rest)
+  -- A list in the place of a key is no byte sequence.
   | .list _ :: _ :: _ => throw .keyNotBytes
+  -- A last key without a value makes no pair.
   | [_] => throw .missingValue
 
 /-- Succeeds when each key comes before the next, so the keys are sorted and unique. -/
 def checkKeys : List (ByteArray × Item) → Except EnrError Unit
+  -- The key/value pairs must be sorted by key and must be unique.
+  --
+  -- The EIP does not name the order, so EthLib takes the lexicographic byte order.
+  --
+  -- Each key strictly below the next gives both rules at once.
   | p :: q :: rest =>
     if keyLt p.1 q.1 then checkKeys (q :: rest)
+    -- Any key may be present only once.
     else if p.1 = q.1 then throw (.repeatedKey q.1)
+    -- A larger key before a smaller one breaks the order.
     else throw (.unsortedKeys p.1 q.1)
   | _ => return ()
 
 /-- The record that `bytes` encodes.
 
-It fails on more than 300 bytes, which the EIP says implementations should reject.
+It fails on more than 300 bytes, and on bytes that are not one RLP item.
 
-It fails on bytes that are not one RLP item, and on keys that do not strictly increase.
-
-It fails on a record without the key `id`, the one key that the EIP requires.
+It fails on keys that do not strictly increase, and on a record without the key `id`.
 
 It does not check the signature, which is the work of the identity scheme. -/
 def decode (bytes : ByteArray) : Except EnrError Enr := do
+  -- RLP Encoding: the maximum encoded size is 300 bytes.
+  --
+  -- Implementations should reject larger records, and EthLib rejects them.
   if MAX_RECORD_SIZE < bytes.size then throw (.tooLarge bytes.size)
+  -- RLP Encoding: the record is one RLP item, and the RLP decoder accepts only canonical bytes.
   let item ← (Serialization.Rlp.decode bytes).mapError .rlp
   match item with
+  -- `record = [signature, seq, k, v, ...]`, with the signature a byte string.
   | .list (.bytes signature :: seqItem :: rest) =>
+    -- `seq` is a 64-bit unsigned integer, and EthLib reads it as an RLP scalar below 2^64.
     let seq ← (Codec.ofItem seqItem : Except RlpError UInt64).mapError .invalidSeq
+    -- The remainder of the record consists of key/value pairs.
     let pairs ← readPairs rest
+    -- The pairs must be sorted by key and must be unique.
     checkKeys pairs
+    -- All keys except `id` are optional, so a record without `id` is refused.
     unless pairs.any (·.1 = KEY_ID) do throw .missingId
+    -- The signature is left to the identity scheme, which validates it.
     return ⟨signature, seq, pairs⟩
+  -- A list in the place of the signature is no signature.
   | .list (.list _ :: _ :: _) => throw .signatureNotBytes
+  -- The signature and `seq` must both be present.
   | .list items => throw (.tooFewItems items.length)
+  -- A record is an RLP list, never a byte string.
   | .bytes _ => throw .notAList
 
 /-- The record that an RLP item holds, as the decoder reads the bytes of the item.
 
 A message of node discovery carries a record as such an item. -/
 def ofItem (item : Item) : Except EnrError Enr := do
+  -- Not in EIP-778: EthLib encodes the item again, so every check of the decoder applies to it.
   decode (← (Serialization.Rlp.encode item).mapError .rlp)
 
 /-- The prefix of the text form, `enr:`. -/
@@ -205,6 +216,9 @@ def TEXT_PREFIX : List Char := ['e', 'n', 'r', ':']
 
 /-- The text form of a record: `enr:`, then the base64 of its RLP encoding. -/
 def Enr.toText (r : Enr) : Except RlpError String := do
+  -- Text Encoding: the base64 encoding of the RLP representation, prefixed by `enr:`.
+  --
+  -- Implementations should use the URL-safe base64 alphabet and omit padding, and EthLib does.
   return String.ofList TEXT_PREFIX ++ Base64.encode (← r.encode)
 
 /-- The record of a text form.
@@ -212,9 +226,17 @@ def Enr.toText (r : Enr) : Except RlpError String := do
 It fails unless the text is `enr:`, then the base64 of bytes that the decoder accepts. -/
 def fromText (text : String) : Except EnrError Enr :=
   match text.toList with
+  -- Text Encoding: the text starts with `enr:`.
   | 'e' :: 'n' :: 'r' :: ':' :: rest => do
+    -- The rest is base64, which EthLib reads only in the URL-safe alphabet and without padding.
+    --
+    -- The EIP says implementations should use that form, and EthLib reads no other.
+    --
+    -- So `=`, `+` and `/` fail.
     let bytes ← (Base64.decodeList TEXT_PREFIX.length rest).mapError .base64
+    -- Those bytes are the RLP representation, which the decoder reads with all its checks.
     decode ⟨bytes.toArray⟩
+  -- A text without the prefix `enr:` is no record.
   | _ => throw .missingPrefix
 
 end EthLib.Networking.Enr
