@@ -195,7 +195,7 @@ def rhoOffsets : Vector Nat LANES := Id.run do
     offsets := offsets.setIfInBounds (x + 5 * y) (((t + 1) * (t + 2) / 2) % W)
     -- Step 3b: move to the next lane of the walk.
     (x, y) := (y, (2 * x + 3 * y) % 5)
-  -- Step 4: return the offsets of all 25 lanes.
+  -- Step 4: the output is the offsets of all 25 lanes.
   return offsets
 
 end Internal
@@ -262,7 +262,7 @@ Reading bit `(z - 1) mod w` for bit `z` is a rotation by 1 towards the high bits
   let d2 := c1 ^^^ rotl c3 1
   let d3 := c2 ^^^ rotl c4 1
   let d4 := c3 ^^^ rotl c0 1
-  -- Steps 3 and 4: return A', where A'[x, y] = A[x, y] ^ D[x].
+  -- Steps 3 and 4: the output is A', where A'[x, y] = A[x, y] ^ D[x].
   ⟨A.a0 ^^^ d0, A.a1 ^^^ d1, A.a2 ^^^ d2, A.a3 ^^^ d3, A.a4 ^^^ d4,
    A.a5 ^^^ d0, A.a6 ^^^ d1, A.a7 ^^^ d2, A.a8 ^^^ d3, A.a9 ^^^ d4,
    A.a10 ^^^ d0, A.a11 ^^^ d1, A.a12 ^^^ d2, A.a13 ^^^ d3, A.a14 ^^^ d4,
@@ -845,7 +845,8 @@ The digest is the four lanes of `Trunc_256(S)`: lanes 0 to 3, bits 0 to 255 of t
 A reader that breaks those conditions gives no Keccak-256 digest, so this is internal. -/
 @[inline] def Internal.keccak256Read (len : Nat) (read : Nat → UInt64) : Lanes4 :=
   -- Algorithm 8, steps 1 to 6: absorb N at r = 136 bytes, with f = KECCAK-p[1600, 24].
-  -- Steps 7 to 9: return Trunc_256(S), as d = 256 <= r = 1088.
+  --
+  -- Steps 7 to 9: the digest is Trunc_256(S), as d = 256 <= r = 1088.
   Internal.squeezeLanes256 (Internal.spongeAbsorb keccakF RATE_256 len read)
 
 /-- Keccak-256 of a string of lanes: the message of 8 bytes a lane, and its digest as lanes. -/
@@ -867,7 +868,8 @@ So `c = 1024`, `d = 512`, and `r = 1600 - c = 576` bits, that is 72 bytes.
 Unlike SHA3-512 of §6.1, the message `N` gets no `01` suffix before the padding. -/
 def keccak512 (msg : ByteArray) : Vector UInt8 DIGEST_LEN_512 :=
   -- Algorithm 8, steps 1 to 6: absorb N at r = 72 bytes, with f = KECCAK-p[1600, 24].
-  -- Steps 7 to 9: return Trunc_512(S), as d = 512 <= r = 576.
+  --
+  -- Steps 7 to 9: the digest is Trunc_512(S), as d = 512 <= r = 576.
   Internal.squeeze512 (Internal.spongeAbsorb keccakF RATE_512 msg.size (Internal.laneAt msg))
 
 /-! ## Incremental hashing

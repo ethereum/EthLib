@@ -165,7 +165,7 @@ def wholeCubeRoot (value : Nat) : Nat :=
   (List.range 3).foldl (fun best candidate => if candidate ^ 3 ≤ value then candidate else best) 0
 
 /--
-Whether a word is `int(2^30 * sqrt(prime))`.
+Whether a word is `floor(2^30 * sqrt(prime))`.
 
 It is exactly when `word^2 ≤ prime * 2^60 < (word + 1)^2`.
 -/
@@ -173,21 +173,25 @@ def isSquareRootTimes2Pow30 (prime word : Nat) : Bool :=
   word ^ 2 ≤ prime * 2 ^ 60 && prime * 2 ^ 60 < (word + 1) ^ 2
 
 /--
-Whether a word is `int(2^30 * cbrt(prime))`.
+Whether a word is `floor(2^30 * cbrt(prime))`.
 
 It is exactly when `word^3 ≤ prime * 2^90 < (word + 1)^3`.
 -/
 def isCubeRootTimes2Pow30 (prime word : Nat) : Bool :=
   word ^ 3 ≤ prime * 2 ^ 90 && prime * 2 ^ 90 < (word + 1) ^ 3
 
-/-- The constants of the left line are `int(2^30 * sqrt(p))` for p = 2, 3, 5, 7, as in `rmd160.txt`. -/
+/-- The constants of the left line are `floor(2^30 * sqrt(p))` for p = 2, 3, 5, 7.
+
+The paper's `rmd160.txt` gives the same values. -/
 theorem K_from_square_roots :
     ([2, 3, 5, 7].zip ((K.toList.drop 1).map UInt32.toNat)).all
       (fun pair => isSquareRootTimes2Pow30 pair.1 pair.2) = true ∧
     K[0] = 0 := by
   decide +kernel
 
-/-- The constants of the right line are `int(2^30 * cbrt(p))` for p = 2, 3, 5, 7, as in `rmd160.txt`. -/
+/-- The constants of the right line are `floor(2^30 * cbrt(p))` for p = 2, 3, 5, 7.
+
+The paper's `rmd160.txt` gives the same values. -/
 theorem K'_from_cube_roots :
     ([2, 3, 5, 7].zip ((K'.toList.take 4).map UInt32.toNat)).all
       (fun pair => isCubeRootTimes2Pow30 pair.1 pair.2) = true ∧

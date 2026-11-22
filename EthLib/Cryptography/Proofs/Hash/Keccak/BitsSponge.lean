@@ -353,7 +353,7 @@ theorem outputByte_ofLanes (a : Keccak.State) {i : Nat} (hi : i < 200) :
   apply BitVec.eq_of_getLsbD_eq
   intro j hj
   rw [outputByte_bit _ _ _ hj, bytesOfLane_bit _ _ _ (by omega) hj]
-  -- Output bit `8 * i + j` lies in lane `((i / 8) % 5, i / 40)`, at bit `8 * (i % 8) + j`.
+  -- Output bit `8 i + j` lies in lane `((i / 8) mod 5, i / 40)`, at bit `8 (i mod 8) + j`.
   have hdiv : (8 * i + j) / 64 = i / 8 := by omega
   have hx : xy ((8 * i + j) / 64 % 5) = ⟨(i / 8) % 5, by omega⟩ :=
     Fin.ext (by simp only [xy, hdiv, Nat.mod_mod])

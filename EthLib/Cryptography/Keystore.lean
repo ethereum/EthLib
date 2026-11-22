@@ -268,7 +268,7 @@ def readKdf (value : Json) : Except KeystoreError Kdf := do
   -- The output length and salt, which both functions take.
   let common : Except KeystoreError (Nat × ByteArray) := do
     let length ← param "kdf.dklen" "dklen"
-    -- Not in ERC-2335's tables: `dklen` below 32 leaves no `decryption_key[16:32]` (step 0).
+    -- Not in ERC-2335's tables: a key of fewer than 32 bytes has no bytes 16 to 31 for step 0.
     if length < 32 then throw (.shortKey length)
     return (length, ← bytes "kdf.salt" (← field "kdf.params" params "salt"))
   -- Decryption key, KDF table: `"pbkdf2"` has `"c"`, `"dklen"`, `"prf": "hmac-sha256"`, `"salt"`.
@@ -318,9 +318,9 @@ def deriveKey (password : ByteArray) (kdf : Kdf) : Except KeystoreError ByteArra
 
 /-- SHA-256 of key bytes 16 through 31 followed by the ciphertext ("Password verification"). -/
 def passwordChecksum (key message : ByteArray) : Vector UInt8 32 :=
-  -- Steps 0 and 1: `DK_slice = decryption_key[16:32]`, `pre_image = DK_slice | cipher_message`.
+  -- Steps 0 and 1: the pre-image is bytes 16 to 31 of the decryption key, then the cipher message.
   --
-  -- Step 2: `checksum = SHA256(pre_image)`.
+  -- Step 2: the checksum is the SHA-256 digest of the pre-image.
   Hash.Sha256.hash32 (key.extract 16 32 ++ message)
 
 /-- The AES-128 key: the first 16 bytes of a derived key of 32 bytes or more. -/
@@ -337,10 +337,10 @@ A longer key is truncated to its first 16 bytes for AES.
 -/
 def decryptWithKey (store : Store) (key : ByteArray) : Except KeystoreError ByteArray := do
   if h : 32 ≤ key.size then
-    -- Password verification, steps 3 and 4: `valid_password = checksum == checksum_message`.
+    -- Password verification, steps 3 and 4: the password is valid when the two checksums are equal.
     if passwordChecksum key store.message != store.checksum then
       throw .checksumMismatch
-    -- Secret decryption: AES-128-CTR under the first 16 bytes of `decryption_key`.
+    -- Secret decryption: AES-128-CTR under the first 16 bytes of the decryption key.
     --
     -- Departure: ERC-2335 cites RFC 3686, but its `iv` is the whole 16-byte first counter block.
     --
@@ -425,7 +425,7 @@ def encrypt (kdf : Kdf) (iv : Aes.Block) (metadata : Metadata) (password : Strin
   if h : 32 ≤ key.size then
     -- Secret decryption, run forward: CTR mode is its own inverse.
     let message := Aes.ctr (Aes.ciph .aes128 (aesKey key h)) 128 iv secret
-    -- The checksum module holds `SHA256(decryption_key[16:32] | cipher_message)`.
+    -- The checksum module holds the SHA-256 digest of key bytes 16 to 31 and the cipher message.
     return Json.mkObj ([("crypto", Json.mkObj [
       ("kdf", kdf.toJson),
       ("checksum", moduleJson "sha256" [] (hexText (passwordChecksum key message).toList)),
