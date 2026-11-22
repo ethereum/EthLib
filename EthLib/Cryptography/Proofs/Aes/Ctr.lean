@@ -241,7 +241,7 @@ theorem blockToNat_repeat_inc {m : Nat} (hm : m ≤ 128) (T : Block) (k : Nat) :
     rw [hdiv, hmod, hnext,
       blockToNat_blockOfNat (div_mul_add_lt (blockToNat_lt T) hm (Nat.mod_lt _ hpos))]
 
-/-- The counters `i` and `j` increments after `T` differ, for `i != j` below `2^m`.
+/-- The counters `i` and `j` increments after `T` differ, for distinct `i` and `j` below `2^m`.
 
 These are the counters of SP 800-38A Appendix B.1 for a message of at most `2^m` blocks.
 

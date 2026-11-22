@@ -154,7 +154,7 @@ private theorem recover_of_decompress {hash : Vector UInt8 32} {r s : Nat} {id :
   simp only [Except.bind]
   rw [hpt, ite_eq_right hqi]
 
-/-- `d G` is not `O` when `d != 0`, since `G` has order `n`. -/
+/-- `d G` is not `O` when `d` is nonzero, since `G` has order `n`. -/
 theorem mul_generator_ne_infinity {d : Fn} (hd : d ≠ 0) : mul d generator ≠ .infinity := by
   intro h
   have h0 := congrArg toPoint h
@@ -338,7 +338,7 @@ private theorem recover_spec {hash : Vector UInt8 32} {r s : Nat} {id : Fin 2} {
     refine ⟨hr, hs, y, rfl, hc, hpar, ?_⟩
     exact toPoint_recovered (Fn.inv ⟨r, hr.2⟩) ⟨s, hs.2⟩ (Fin.ofNat _ (hashToInt hash)) hc
 
-/-- A point of the curve has `y != 0`: `-7` is not a cube. -/
+/-- A point of the curve has a nonzero `y`: `-7` is not a cube. -/
 private theorem y_ne_zero {x y : Fp} (h : (Point.affine x y).isOnCurve = true) : y ≠ 0 := by
   rintro rfl
   have h0 := (isOnCurve_affine x 0).mp h
@@ -378,7 +378,7 @@ theorem recover_neg_s {hash : Vector UInt8 32} {r s : Nat} {id : Fin 2} {q : Poi
 
 Their difference is `2 r^(-1) s R`.
 
-It is not `O`, since `R` is not `O` and `2 r^(-1) s != 0` mod `n`. -/
+It is not `O`, since `R` is not `O` and `2 r^(-1) s` is nonzero mod `n`. -/
 theorem recover_ne {hash : Vector UInt8 32} {r s : Nat} {q0 q1 : Point} (h0 : recover hash r s 0 = .ok q0)
     (h1 : recover hash r s 1 = .ok q1) : q0 ≠ q1 := by
   obtain ⟨hr, hs, y0, -, hc0, hpar0, hq0⟩ := recover_spec h0

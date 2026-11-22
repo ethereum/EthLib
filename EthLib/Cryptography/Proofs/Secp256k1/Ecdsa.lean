@@ -84,7 +84,7 @@ theorem verify_sign (d k : Fn) (hash : Vector UInt8 32) (hd : d ≠ 0) {x y : Fp
     ⟨Nat.pos_of_ne_zero hr, Nat.mod_lt _ (by decide)⟩
   have hss : 0 < sig.val ∧ sig.val < Fn.modulus := ⟨Nat.pos_of_ne_zero (fun h => hs (Fin.ext h)), sig.isLt⟩
   have hG := isOnCurve_generator
-  -- The key `d G` is valid: `d != 0` and `G` has order `n`.
+  -- The key `d G` is valid: `d` is nonzero and `G` has order `n`.
   have hQ : mul d generator ≠ .infinity ∧ (mul d generator).isOnCurve = true := by
     refine ⟨fun h => ?_, isOnCurve_mul d hG⟩
     have h0 := congrArg toPoint h

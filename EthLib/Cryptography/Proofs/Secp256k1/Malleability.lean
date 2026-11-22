@@ -40,7 +40,7 @@ theorem verify_s_eq_or_neg {q : Point} {hash : Vector UInt8 32} {r s s' : Nat}
     hR ▸ isOnCurve_add (isOnCurve_mul _ hG) (isOnCurve_mul _ hqc)
   have hc' : (affine x' y').isOnCurve = true :=
     hR' ▸ isOnCurve_add (isOnCurve_mul _ hG) (isOnCurve_mul _ hqc)
-  -- Each point is `s^(-1) X` for the same `X = e G + r Q`, and `X != 0`.
+  -- Each point is `s^(-1) X` for the same `X = e G + r Q`, and `X` is not `O`.
   set X := Fn.toZMod (Fin.ofNat _ (hashToInt hash)) • toPoint generator
     + Fn.toZMod ⟨r, hr.2⟩ • toPoint q
   have hP : toPoint (affine x' y) = (Fn.toZMod ⟨s, hs.2⟩)⁻¹ • X := by

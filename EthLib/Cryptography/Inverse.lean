@@ -44,7 +44,7 @@ So each coefficient times `a` equals its remainder, mod `m`.
 
 The result is the coefficient of the gcd, reduced mod `m`.
 
-When `m` is prime, it is the inverse of `a` for `a != 0`, and it sends `0` to `0`. -/
+When `m` is prime, it is the inverse of a nonzero `a`, and it sends `0` to `0`. -/
 def Fin.inverse {m : Nat} [NeZero m] (a : Fin m) : Fin m :=
   -- Algorithm 2.142, step 1: Algorithm 2.107 on `a` and `m`, with `x2 = 1` and `x1 = 0`.
   --

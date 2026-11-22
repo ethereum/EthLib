@@ -120,7 +120,7 @@ theorem verify_sign (d k : Fn) (e : Nat) (hd : d ≠ 0) {x y : Fp}
   have hss : 0 < sig.val ∧ sig.val < Fn.modulus :=
     ⟨Nat.pos_of_ne_zero (fun h => hs (Fin.ext h)), sig.isLt⟩
   have hG := isOnCurve_generator
-  -- The key `d G` is valid: `d != 0` and `G` has order `n`.
+  -- The key `d G` is valid: `d` is nonzero and `G` has order `n`.
   have hQ : mul d generator ≠ .infinity ∧ (mul d generator).isOnCurve = true :=
     ⟨mul_generator_ne_infinity hd, isOnCurve_mul d hG⟩
   rw [verify, dite_eq_left hrr, dite_eq_left hss, ite_eq_left hQ]
@@ -234,7 +234,7 @@ theorem verify_s_eq_or_neg {q : Point} {e r s s' : Nat}
     hR ▸ isOnCurve_add (isOnCurve_mul _ hG) (isOnCurve_mul _ hqc)
   have hc' : (affine x' y').isOnCurve = true :=
     hR' ▸ isOnCurve_add (isOnCurve_mul _ hG) (isOnCurve_mul _ hqc)
-  -- Each point is `s^(-1) X` for the same `X = e G + r Q`, and `X != 0`.
+  -- Each point is `s^(-1) X` for the same `X = e G + r Q`, and `X` is not `O`.
   set X := Fn.toZMod (Fin.ofNat _ e) • toPoint generator + Fn.toZMod ⟨r, hr.2⟩ • toPoint q
   have hP : toPoint (affine x' y) = (Fn.toZMod ⟨s, hs.2⟩)⁻¹ • X := by
     rw [← hR, toPoint_rebuilt _ _ hqc]

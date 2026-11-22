@@ -18,7 +18,7 @@ At most `2 p + 1 < 3 q` points exist, so the count is `q` or `2 q`.
 
 A count of `2 q` needs a point `(x, 0)` with `x^3 = -3`.
 
-Euler's criterion rules it out: `(-3)^((p - 1) / 3) != 1`, since `p = 1 mod 3`.
+Euler's criterion rules it out: `(-3)^((p - 1) / 3)` is not 1, since `p = 1 mod 3`.
 -/
 
 @[expose] public section

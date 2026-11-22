@@ -26,7 +26,7 @@ Step 2 rejects the point `O`, which a zero key gives.
 The key is secret, and this function makes no constant-time claim.
 -/
 def ecdh (sk : Fn) (pk : Point) : Except Secp256k1Error (Vector UInt8 32) :=
-  -- §3.2.2.1, step 1: check that `Q != O`.
+  -- §3.2.2.1, step 1: check that `Q` is not `O`.
   if pk = .infinity then .error .pointAtInfinity
   -- §3.2.2.1, step 2: check that `y_Q^2 = x_Q^3 + a x_Q + b (mod p)`.
   --

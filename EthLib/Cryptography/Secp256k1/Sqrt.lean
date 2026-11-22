@@ -79,7 +79,7 @@ Since `p = 3 mod 4`, a square `a` has the root `c = a^((p + 1) / 4)`.
 
 By Euler's criterion, `c^2 = a^((p + 1) / 2) = a * a^((p - 1) / 2) = a`.
 
-When `a` is not a square, `c^2 != a`, so the check rejects it.
+When `a` is not a square, `c^2` differs from `a`, so the check rejects it.
 
 The power and the check run in Montgomery form. -/
 def Fp.sqrt (a : Fp) : Option Fp :=
