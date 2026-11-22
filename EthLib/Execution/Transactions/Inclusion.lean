@@ -20,8 +20,6 @@ Source: [`Paper.tex` at `efc5f9a`][yp].
 
 The step comments write the Yellow Paper's relations in ASCII.
 
-Only `ethereum/execution-specs` orders the checks: [Osaka][es-osaka], [Amsterdam][es-amsterdam].
-
 The EIPs that add a rule:
 
 - [EIP-1559][eip1559], the base fee
@@ -33,8 +31,6 @@ The EIPs that add a rule:
 These rules hold up to Glamsterdam, which changes the rule on the gas of the block and the order.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
-[es-osaka]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/osaka/fork.py
-[es-amsterdam]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/amsterdam/fork.py
 [eip1559]: https://eips.ethereum.org/EIPS/eip-1559#specification
 [eip3607]: https://eips.ethereum.org/EIPS/eip-3607#specification
 [eip4844]: https://eips.ethereum.org/EIPS/eip-4844#execution-layer-validation
@@ -91,7 +87,7 @@ A simulation can lift that cap. -/
 def executionCapacity (fork : Fork) (tx : Transaction) (lifted : LiftedRules := {}) : Nat :=
   -- From Glamsterdam, the least of `2^24` and the gas limit; before, the gas limit itself.
   --
-  -- A simulation may lift the cap; the source has no such mode.
+  -- A simulation may lift the cap.
   if fork ≥ .glamsterdam then
     if lifted.gasCap then tx.gas.toNat else min TX_MAX_GAS_LIMIT tx.gas.toNat
   else tx.gas.toNat
@@ -256,7 +252,7 @@ def checkSender (fork : Fork) (state : TransactionState) (sender : Address) (tx 
   if signed then
     -- The code of the sender.
     --
-    -- A state without that code gives an error of its own, where the source reads a full state.
+    -- A state without that code gives an error of its own.
     let code ← (state.getCode account.codeHash).mapError fun _ => .missingCode account.codeHash
     -- `sigma[S(T)]_c = KEC(())`, by EIP-3607, which EIP-7702 relaxes from Pectra.
     --
@@ -285,13 +281,11 @@ def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork
   --
   -- The transaction fails when its maximum fee per gas, or its gas price, is below the base fee.
   --
-  -- A simulation may pay a maximum fee of 0 at a base fee of 0; the source has no such mode.
+  -- A simulation may pay a maximum fee of 0 at a base fee of 0.
   let baseFee := paidBaseFee env tx lifted
   let coversBaseFee := failIf (tx.maxFeePerGas < baseFee)
     (.insufficientMaxFeePerGas tx.maxFeePerGas baseFee)
   -- The sender, recovered from the signature, unless a simulation gives the sender.
-  --
-  -- The source has no such mode.
   let recover : Except InclusionError Address :=
     match knownSender with
     | some sender => pure sender
@@ -299,8 +293,6 @@ def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork
   -- A transaction that names a chain fails when that chain is not the chain of the block.
   --
   -- A legacy transaction with a given sender has no signature, so it names no chain.
-  --
-  -- The source has no such mode.
   let checkChain : Except InclusionError Unit :=
     if knownSender.isSome && tx.type == 0 then pure ()
     else (checkChainId fork chainId tx).mapError .transaction

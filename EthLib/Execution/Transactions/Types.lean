@@ -19,15 +19,15 @@ That covers the gas limit, the gas price and the two fee caps, which [EIP-1559][
 
 So they are 256-bit words here, and a larger value fails at decoding.
 
-[execution-specs][es] at `391d8a0` reads them otherwise: it types them `Uint`, unbounded.
+Without that bound, a larger value would still fail in a block in all but one case.
 
-In a block, both readings refuse a fee of 2^256 or more, since no balance can pay it.
+A fee of 2^256 or more fails, since no balance can pay it.
 
 The fee is the gas limit times the gas price, or times the maximum fee per gas.
 
-The readings differ only for a gas limit of 2^256 or more with a price of 0, before Fusaka.
+So the bound alone rejects only a gas limit of 2^256 or more with a price of 0, before Fusaka.
 
-The unbounded reading accepts it in a block whose gas limit is at least as large.
+Such a transaction fails here, even in a block whose gas limit is at least as large.
 
 From Fusaka, [EIP-7825][eip7825] caps the gas limit at 2^24.
 
@@ -39,7 +39,6 @@ Source: [`Paper.tex` at `efc5f9a`][yp].
 [eip1559]: https://eips.ethereum.org/EIPS/eip-1559#specification
 [eip7825]: https://eips.ethereum.org/EIPS/eip-7825#specification
 [eip8037]: https://eips.ethereum.org/EIPS/eip-8037#transaction-validation
-[es]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/prague/transactions.py
 -/
 
 @[expose] public section
@@ -213,12 +212,7 @@ structure SetCodeTransaction where
 
   The other kinds of transaction hold their nonce in 256 bits.
 
-  No EIP fixes this width.
-
-  Provenance: the set-code transaction class of [execution-specs][es] at `391d8a0`.
-
-  [es]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/prague/transactions.py
-  -/
+  No EIP fixes this width. -/
   nonce : UInt64
   /-- The most wei per unit of gas that goes to the fee recipient of the block. -/
   maxPriorityFeePerGas : U256
