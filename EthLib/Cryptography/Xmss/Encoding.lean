@@ -67,7 +67,7 @@ end Internal
 
 Returns nothing when the digest is not a codeword. -/
 def codeword? (d : Digest) : Option (Vector (Fin CHAIN_LENGTH) V) :=
-  -- "It is a codeword when `x_v = ... = x_63 = 0` and `sum_{i<v} x_i = T`".
+  -- It is a codeword when `x_v = ... = x_63 = 0` and `sum_{i<v} x_i = T`.
   --
   -- Digits 58 to 63 have no chain, so a codeword sets them to zero.
   let tailZero := (List.finRange (DIGITS - V)).all fun j =>

@@ -85,7 +85,9 @@ The seed must be 32 uniform bytes, kept secret.
 def keyGenWith (seed : Seed) : m (SecretKey × PublicKey) := do
   -- FIPS 205 takes `SK.prf` and `PK.seed` as inputs; leanSPHINCS derives them from `SK.seed`.
   let key ← expandKey H seed
-  -- Algorithm 18, line 4: `return ((SK.seed, SK.prf, PK.seed, PK.root), (PK.seed, PK.root))`.
+  -- Algorithm 18, line 4: the secret key is `(SK.seed, SK.prf, PK.seed, PK.root)`.
+  --
+  -- The public key is `(PK.seed, PK.root)`.
   --
   -- The secret key keeps `SK.seed` alone, since it regenerates the rest.
   return (⟨seed⟩, ← publicKeyOf H key.pkSeed (prf H key.pkSeed seed))
