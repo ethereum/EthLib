@@ -36,43 +36,6 @@ open Base
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
 
-/-- An upgrade writes the version of its fork, and the current epoch, into the state. -/
-private theorem upgradeNext_forkVersions {pre : ForkedBeaconState preset}
-    {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
-    (computed : upgradeNext config checks pre = .ok post) :
-    post.val.state.forkVersions = ⟨pre.state.forkVersions.currentVersion,
-      config.forkVersion post.val.fork, getCurrentEpoch pre.state⟩ := by
-  obtain ⟨fork, state⟩ := pre
-  cases fork
-  case phase0 =>
-    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, upgraded, rfl⟩ := computed
-    exact (upgradeToAltair_spec upgraded).2.2.2.2.2.2
-  case altair | bellatrix | shapella =>
-    simp only [upgradeNext, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    rfl
-  case dencun =>
-    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, upgraded, rfl⟩ := computed
-    exact (upgradeToElectra_spec upgraded).2.2.2
-  case pectra =>
-    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, upgraded, rfl⟩ := computed
-    exact (upgradeToFulu_spec upgraded).2.2
-  case fusaka =>
-    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, upgraded, rfl⟩ := computed
-    exact (upgradeToGloas_spec upgraded).2.2.2.2
-  case glamsterdam =>
-    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, upgraded, rfl⟩ := computed
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
-    rfl
-  all_goals
-    simp only [upgradeNext] at computed
-    cases computed
-
 /-- No name appears twice in the spec map. -/
 theorem specMap_keys_nodup (config : Config) (preset : Preset) :
     ((specMap config preset).map (·.1)).Nodup := by
@@ -187,11 +150,6 @@ theorem genesisInfo_version {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
   exact congrArg ForkVersions.currentVersion frame.forkVersions
 
 /-! ## The version of the fork along a chain -/
-
-/-- A fork before Altair has the genesis fork version. -/
-private theorem forkVersion_of_lt_altair (before : fork < .altair) :
-    config.forkVersion fork = config.GENESIS_FORK_VERSION := by
-  cases fork <;> first | rfl | exact absurd before (by decide)
 
 /-- The genesis state that deposits build holds the version of its fork as its current version. -/
 private theorem initializeBeaconStateFromEth1_currentVersion {eth1BlockHash : Hash32}

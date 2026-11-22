@@ -1,12 +1,12 @@
 module
 
+public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 public import EthLib.Consensus.Proofs.Transition.Totality.Bound
 public import EthLib.Consensus.Transition.StateTransition
 import EthLib.Consensus.Proofs.Accessors
 import EthLib.Consensus.Proofs.Mutators
 import EthLib.Consensus.Proofs.PayloadTimeliness
 import EthLib.Consensus.Proofs.Transition.ActiveKept
-import EthLib.Consensus.Proofs.Transition.BalanceDrift
 import EthLib.Consensus.Proofs.Transition.Block
 import EthLib.Consensus.Proofs.Transition.BlockRewards
 import EthLib.Consensus.Proofs.Transition.BuilderRequests
@@ -20,6 +20,7 @@ import EthLib.Consensus.Proofs.Transition.ParentPayload
 import EthLib.Consensus.Proofs.Transition.Payload
 import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 import EthLib.Consensus.Proofs.Transition.Requests
+import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 import EthLib.Consensus.Proofs.Transition.Withdrawals
 import Mathlib.Data.Nat.Sqrt
 
@@ -1065,14 +1066,21 @@ private theorem Steady.of_validators {a b : BeaconState preset fork}
   ⟨ActiveStep.of_validators (congrArg (·.data) validators) slot,
     effectiveKept_data (congrArg (·.data) validators), by rw [validators]⟩
 
+/-- A step that keeps the size of the registry and each effective balance keeps their sum. -/
+theorem effectiveBalanceSum_eq_of_effectiveKept {a b : BeaconState preset fork}
+    (sized : b.validators.data.size = a.validators.data.size) (kept : EffectiveKept a b) :
+    effectiveBalanceSum b = effectiveBalanceSum a := by
+  refine effectiveBalanceSum_eq_of_map (Array.ext (by simpa using sized) fun j inB inA => ?_)
+  have same := kept j (by simpa using inA)
+  simp only [effectiveAt, Array.getElem?_eq_getElem (by simpa using inB),
+    Array.getElem?_eq_getElem (by simpa using inA), Option.map_some, Option.getD_some] at same
+  simpa using UInt64.toNat_inj.mp same
+
 /-- A steady step keeps the sum of the effective balances. -/
 private theorem Steady.effectiveBalanceSum_eq {a b : BeaconState preset fork}
     (steady : Steady a b) :
-    effectiveBalanceSum b = effectiveBalanceSum a := by
-  rw [effectiveBalanceSum_eq_sum_range, effectiveBalanceSum_eq_sum_range, steady.2.2]
-  congr 1
-  refine List.map_congr_left fun j member => ?_
-  exact steady.2.1 j (List.mem_range.mp member)
+    effectiveBalanceSum b = effectiveBalanceSum a :=
+  effectiveBalanceSum_eq_of_effectiveKept steady.2.2 steady.2.1
 
 private theorem Steady.total {a b : BeaconState preset fork} (steady : Steady a b) :
     getTotalActiveBalance b = getTotalActiveBalance a :=
@@ -1573,6 +1581,16 @@ private theorem rise_executionRequests {s t : BeaconState preset fork}
       (Rise.foldlM_zero (fun _ _ _ ok => rise_consolidationRequest ok) consolidations)
   simpa using whole
 
+/-- Proposer slashings, then attester slashings, add only the whistleblower share. -/
+private theorem rise_slashings {body : BeaconBlockBody preset fork}
+    {attesters : List (AttesterSlashing preset fork)} {a proposed b : BeaconState preset fork}
+    (proposersOk : body.proposerSlashings.data.toList.foldlM
+      (processProposerSlashing config checks) a = .ok proposed)
+    (attestersOk : attesters.foldlM (processAttesterSlashing config checks) proposed = .ok b) :
+    Rise 0 a b :=
+  (Rise.foldlM_zero (fun _ _ _ ok => rise_proposerSlashing ok) proposersOk).trans
+    (Rise.foldlM_zero (fun _ _ _ ok => rise_attesterSlashing ok) attestersOk)
+
 /-- The operations run the slashings, the attestations, then the steps that bring deposits.
 
 The slashings bring only their share of the new slashed balances. -/
@@ -1596,14 +1614,6 @@ private theorem rise_operations {input last : BeaconState preset fork}
       (ok : processBlsToExecutionChange config checks a signed = .ok b) : Tail a b :=
     Tail.of_flags (frame_processBlsToExecutionChange ok).registryGrows
       (effectiveKept_blsChange ok) (fixed_blsChange ok).flags
-  have slashings {a proposersDone slashingsDone : BeaconState preset fork}
-      (proposersOk : body.proposerSlashings.data.toList.foldlM
-        (processProposerSlashing config checks) a = .ok proposersDone)
-      (attestersOk : body.attesterSlashings.data.toList.foldlM
-        (processAttesterSlashing config checks) proposersDone = .ok slashingsDone) :
-      Rise 0 a slashingsDone :=
-    (Rise.foldlM_zero (fun _ _ _ ok => rise_proposerSlashing ok) proposersOk).trans
-      (Rise.foldlM_zero (fun _ _ _ ok => rise_attesterSlashing ok) attestersOk)
   unfold processOperations at computed
   split at computed
   · rename_i gloas
@@ -1611,7 +1621,8 @@ private theorem rise_operations {input last : BeaconState preset fork}
     simp only [bind_ok_iff, ← Array.foldlM_toList] at computed
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
       attestedOk, _, exitsOk, _, changesOk, paid⟩ := computed
-    refine ⟨_, _, _, proposersOk, attestersOk, attestedOk, slashings proposersOk attestersOk, ?_⟩
+    refine ⟨_, _, _, proposersOk, attestersOk, attestedOk,
+      rise_slashings proposersOk attestersOk, ?_⟩
     have whole :=
       (Rise.foldlM_zero (fun _ _ _ ok => (fixed_voluntaryExit ok).rise) exitsOk).trans <|
       (Rise.foldlM_zero (fun _ _ _ ok => (fixed_blsChange ok).rise) changesOk).trans
@@ -1625,7 +1636,7 @@ private theorem rise_operations {input last : BeaconState preset fork}
   simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
   obtain ⟨_, _, _, _, _, proposersOk, _, attestersOk, _, attestedOk, _, depositedOk, exited,
     exitsOk, changed, changesOk, requestsOk⟩ := computed
-  refine ⟨_, _, _, proposersOk, attestersOk, attestedOk, slashings proposersOk attestersOk, ?_⟩
+  refine ⟨_, _, _, proposersOk, attestersOk, attestedOk, rise_slashings proposersOk attestersOk, ?_⟩
   have deposits := Rise.foldlM (amount := fun deposit : Deposit => deposit.data.amount.toNat)
     (fun _ _ _ ok => rise_deposit ok) depositedOk
   have exits := Rise.foldlM_zero (fun _ _ _ ok => (fixed_voluntaryExit ok).rise) exitsOk
@@ -2053,6 +2064,31 @@ theorem processBlock_supply_le_cap {engine : ExecutionEngine preset fork}
   have bound := rise.2
   unfold supply quotient at bound
   unfold blockRewardCap
+  omega
+
+/-- At the turn of an attester slashing of a block, the supply is bounded.
+
+The turn is the state that the steps before that attester slashing reach.
+
+The supply is the balances plus the pending deposits.
+
+It is at most one sum of three terms.
+
+They are the supply before the block, the Gwei of the deposits of the block, and a reward.
+
+The reward is the rise of the slashed balances over the whistleblower quotient. -/
+theorem slashingTurn_supply_le {engine : ExecutionEngine preset fork}
+    {state turn : BeaconState preset fork} {block : BeaconBlock preset fork} {j : Nat}
+    (turned : SlashingTurn config checks engine state block j turn) :
+    balanceSum turn + pendingDepositSum turn ≤
+      balanceSum state + pendingDepositSum state + blockDepositAmount block.body +
+        (slashedBalanceSum turn - slashedBalanceSum state) /
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat := by
+  obtain ⟨input, proposed, started, proposersOk, attestersOk⟩ := turned
+  rw [← Array.foldlM_toList] at proposersOk
+  have rise := ((rise_operationsInput started).trans (rise_slashings proposersOk attestersOk)).2
+  have split := blockDepositAmount_eq block.body
+  unfold supply quotient at rise
   omega
 
 /-- A block does not lower the weight of the flags, at the base reward of the state before it. -/

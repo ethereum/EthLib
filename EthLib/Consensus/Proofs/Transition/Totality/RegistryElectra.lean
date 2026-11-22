@@ -670,4 +670,41 @@ theorem processRegistryUpdates_total_of_electra {config : Config}
   · have := afterExits validator member finite
     omega
 
+/-- From Electra, starting the exit of a validator in the registry succeeds.
+
+The registry is within its limit, and its effective balances sum below `2^64`.
+
+The increment is positive, and at most the least churn and the largest churn.
+
+A bound covers the first epoch of a new exit, the end of the exit queue and each set exit epoch.
+
+The churn carried plus three times the exit churn ceiling is below `2^64`.
+
+The bound plus the cost still owed plus the withdrawal delay is below `2^64 - 1`. -/
+theorem initiateValidatorExit_total_of_electra {config : Config}
+    {state : BeaconState preset fork} {index : ValidatorIndex} {bound : Nat}
+    (electra : .pectra ≤ fork) (within : state.RegistryWithinLimit)
+    (summed : effectiveBalanceSum state < 2 ^ 64)
+    (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
+    (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
+    (maximum :
+      preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT)
+    (inside : index.toNat < state.validators.data.size)
+    (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ bound)
+    (queue : (state.earliestExitEpoch electra).toNat ≤ bound)
+    (exits : ExitsBelow state bound)
+    (carried : (state.exitBalanceToConsume electra).toNat + 3 * exitChurnCeiling config state <
+      2 ^ 64)
+    (room : bound + exitCost preset state + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat <
+      2 ^ 64 - 1) :
+    ∃ after, initiateValidatorExit config state index = .ok after := by
+  -- The cost at the position of the validator is at most the cost still owed.
+  have cost : exitCostOf preset state.validators.data[index.toNat] ≤ exitCost preset state := by
+    rw [← exitCostAt_single inside, exitCost_eq_exitCostAt]
+    exact exitCostAt_single_le (List.mem_range.mpr inside)
+  obtain ⟨after, ok, -⟩ := initiateValidatorExit_kept (start := state) within summed increment
+    minimum maximum first carried ⟨rfl, rfl, rfl, queue, exits, Nat.le_max_left _ _⟩ inside
+    (by omega)
+  exact ⟨after, ok⟩
+
 end EthLib.Consensus

@@ -76,13 +76,19 @@ theorem genesisValidatorsRoot_chainStep {x y : ForkedBeaconState preset}
     obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok computed
     exact (frame_processBlock blockOk).genesisValidatorsRoot
 
+/-- Steps of a chain keep the genesis validators root of their first state. -/
+theorem genesisValidatorsRoot_chainSteps {x y : ForkedBeaconState preset}
+    (steps : Relation.ReflTransGen (ChainStep config checks) x y) :
+    y.state.genesisValidatorsRoot = x.state.genesisValidatorsRoot := by
+  induction steps with
+  | refl => rfl
+  | tail _ step ih => exact (genesisValidatorsRoot_chainStep step).trans ih
+
 /-- A run keeps the genesis validators root of its first state. -/
 theorem _root_.EthLib.Consensus.Run.genesisValidatorsRoot {g a : ForkedBeaconState preset}
     (run : Run config checks g a) :
-    a.state.genesisValidatorsRoot = g.state.genesisValidatorsRoot := by
-  induction run with
-  | nil => rfl
-  | snoc _ step ih => exact (genesisValidatorsRoot_chainStep step.chainStep).trans ih
+    a.state.genesisValidatorsRoot = g.state.genesisValidatorsRoot :=
+  genesisValidatorsRoot_chainSteps run.chainSteps
 
 /-- A run from a genesis of deposits reaches only states that hold versions of the config. -/
 theorem _root_.EthLib.Consensus.Run.forkVersions_ofConfig {g a : ForkedBeaconState preset}

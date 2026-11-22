@@ -28,7 +28,8 @@ open Base Uint64 Serialization.Ssz
 
 variable {preset : Preset} {fork : Base.Fork}
 
-private def ExitsBelow (state : BeaconState preset fork) (ceiling : Nat) : Prop :=
+/-- Each exit epoch that is set in the registry is at most a ceiling. -/
+def ExitsBelow (state : BeaconState preset fork) (ceiling : Nat) : Prop :=
   ∀ validator ∈ state.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
     validator.exitEpoch.toNat ≤ ceiling
 
@@ -107,7 +108,16 @@ private theorem exitQueueEpoch_exists_ok {config : Config} {state : BeaconState 
   · refine ⟨latest, ?_, by omega⟩
     simp only [full, ↓reduceIte]
 
-private theorem initiateValidatorExit_exists_ok {config : Config} {state : BeaconState preset fork}
+/-- Before Electra, starting the exit of a validator in the registry succeeds.
+
+A ceiling covers the first epoch of a new exit and each exit epoch that is set.
+
+The ceiling plus one plus the withdrawal delay is below `2^64`.
+
+The state after keeps the slot and the size of the registry.
+
+Each exit epoch that is set in it is at most the ceiling plus one. -/
+theorem initiateValidatorExit_exists_ok {config : Config} {state : BeaconState preset fork}
     {index : ValidatorIndex} {ceiling : Nat} (before : fork < .pectra)
     (inside : index.toNat < state.validators.data.size)
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)

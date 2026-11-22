@@ -249,13 +249,12 @@ theorem slashedAt_forward {x y : ForkedBeaconState preset}
   have same : u = w := Option.some.inj (uFound.symm.trans wFound)
   exact ⟨w, by simpa using Array.mem_of_getElem? wFound, same ▸ uKey.trans keyEq, wFlag⟩
 
-/-- A key of an epoch is the key of a validator active at that epoch. -/
-theorem mem_keysAt_epoch {fork : Fork} {state : BeaconState preset fork}
-    (early : fork < .glamsterdam) (epoch : Epoch) (key : Cryptography.Bls.BLSPubkey) :
+/-- Within the registry limit, a key of an epoch is the key of a validator active at that epoch. -/
+theorem mem_keysAt_epoch_of_within {fork : Fork} {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) (epoch : Epoch) (key : Cryptography.Bls.BLSPubkey) :
     key ∈ keysAt state (getActiveValidatorIndices state epoch) ↔
       ∃ (i : Nat) (v : Validator), state.validators.data[i]? = some v ∧ v.pubkey = key ∧
         isActiveValidator v epoch = true := by
-  have within := state.validators.bound early
   simp only [keysAt, List.mem_toFinset, List.mem_filterMap]
   constructor
   · rintro ⟨index, active, read⟩
@@ -267,6 +266,14 @@ theorem mem_keysAt_epoch {fork : Fork} {state : BeaconState preset fork}
     refine ⟨i.toUInt64, (mem_getActiveValidatorIndices within).mpr
       ⟨v, by simpa [numeric] using found, active⟩, ?_⟩
     simp [numeric, found, same]
+
+/-- A key of an epoch is the key of a validator active at that epoch. -/
+theorem mem_keysAt_epoch {fork : Fork} {state : BeaconState preset fork}
+    (early : fork < .glamsterdam) (epoch : Epoch) (key : Cryptography.Bls.BLSPubkey) :
+    key ∈ keysAt state (getActiveValidatorIndices state epoch) ↔
+      ∃ (i : Nat) (v : Validator), state.validators.data[i]? = some v ∧ v.pubkey = key ∧
+        isActiveValidator v epoch = true :=
+  mem_keysAt_epoch_of_within (state.validators.bound early) epoch key
 
 /-- Distinct registry keys identify the boundary support with this epoch's exiting cohort.
 

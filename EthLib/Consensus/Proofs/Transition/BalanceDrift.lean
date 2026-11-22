@@ -3,7 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Genesis
 import EthLib.Base.Proofs.Nat
-import EthLib.Consensus.Proofs.Transition.ActiveKept
+public import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.ChainRoots
 public import EthLib.Consensus.Proofs.Transition.Committees
 import EthLib.Consensus.Proofs.Transition.Requests
@@ -2216,5 +2216,75 @@ theorem joining_growth_from_admission {g x y : ForkedBeaconState preset}
     effectiveAt y i ≤ pathCredits i tail.balancePath :=
   balanceDrift_join_of_sources shared tail genesis early
     (fun run early => run.pendingConsolidation_sources genesis early delay) i newKey
+
+/-! ## The proposer across the steps of a slashing -/
+
+section SlashDebit
+
+variable {fork : Fork}
+
+/-- A state reads the same proposer as an earlier state when it keeps four things of it.
+
+These are the slot, the payload inputs, activity and effective balances. -/
+theorem getBeaconProposerIndex_of_kept {r w : BeaconState preset fork}
+    (keeps : StepKeeps r w) (inputs : PayloadInputs r w) (effective : EffectiveKept r w) :
+    getBeaconProposerIndex w = getBeaconProposerIndex r := by
+  apply getBeaconProposerIndex_congr inputs.slot inputs.randaoMixes
+    (fun fulu => by rw [inputs.proposerLookahead])
+    (keeps.2.2.getActiveValidatorIndicesChecked_eq (getCurrentEpoch_le_activityFixedEpoch r))
+  intro j inside
+  have same := effective j inside
+  have inside' := Nat.lt_of_lt_of_le inside keeps.1
+  simp only [effectiveAt, Array.getElem?_eq_getElem inside, Array.getElem?_eq_getElem inside',
+    Option.map_some, Option.getD_some] at same
+  rw [Array.getElem?_eq_getElem inside, Array.getElem?_eq_getElem inside', Option.map_some,
+    Option.map_some, UInt64.toNat_inj.mp same]
+
+/-- The proposer read after the first steps of a slashing equals that of an earlier state.
+
+Those steps are the exit, the slashed mark, the slashings write and the debit.
+
+The two reads are equal whether they succeed or fail.
+
+The state before the slashing keeps the slot, the payload inputs and activity of the earlier state.
+
+It also keeps its effective balances. -/
+theorem getBeaconProposerIndex_slashDebit
+    {r u exited marked lowered : BeaconState preset fork} {index : ValidatorIndex}
+    {current : Validator} {withdrawableEpoch : Epoch}
+    {slashings : Serialization.Ssz.RootedVector Gwei preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat}
+    {penalty : Gwei}
+    (keeps : StepKeeps r u) (inputs : PayloadInputs r u) (effective : EffectiveKept r u)
+    (exitOk : initiateValidatorExit config u index = .ok exited)
+    (currentOk : getValidator exited index = .ok current)
+    (markedOk : exited.setValidator index { current with slashed := true, withdrawableEpoch } =
+      .ok marked)
+    (lowerOk : decreaseBalance { marked with slashings } index penalty = .ok lowered) :
+    getBeaconProposerIndex lowered = getBeaconProposerIndex r := by
+  have exitGrows := (frame_initiateValidatorExit exitOk).registryGrows
+  have markedSize := (sameSizes_setValidator markedOk).1
+  have keepsLowered : StepKeeps r lowered :=
+    ((keeps.trans (stepKeeps_initiateValidatorExit exitOk)).trans
+      ((stepKeeps_setValidator currentOk (fun _ _ => by rfl) markedOk).trans
+        (StepKeeps.of_validators (state := marked) (after := { marked with slashings })))).trans
+      (stepKeeps_decreaseBalance lowerOk)
+  have inputsLowered : PayloadInputs r lowered :=
+    ((inputs.trans (payloadInputs_initiateValidatorExit exitOk)).trans
+      ((payloadInputs_setValidator markedOk).trans
+        (⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ :
+          PayloadInputs marked { marked with slashings }))).trans
+      (payloadInputs_decreaseBalance lowerOk)
+  have effectiveLowered : EffectiveKept r lowered :=
+    effectiveKept_trans effective
+      (effectiveKept_trans
+        (effectiveKept_trans (effectiveKept_exit exitOk)
+          (effectiveKept_setValidator currentOk markedOk rfl) exitGrows)
+        (effectiveKept_trans (effectiveKept_data (s := marked) (t := { marked with slashings }))
+          (effectiveKept_decrease lowerOk) (Nat.le_refl _))
+        (exitGrows.trans (Nat.le_of_eq markedSize.symm)))
+      keeps.1
+  exact getBeaconProposerIndex_of_kept keepsLowered inputsLowered effectiveLowered
+
+end SlashDebit
 
 end EthLib.Consensus

@@ -355,6 +355,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Shape
 public import EthLib.Consensus.Proofs.Transition.Totality.ShapeBlock
 public import EthLib.Consensus.Proofs.Transition.Totality.Signers
 public import EthLib.Consensus.Proofs.Transition.Totality.SlashedBlock
+public import EthLib.Consensus.Proofs.Transition.Totality.SlashValidator
 public import EthLib.Consensus.Proofs.Transition.Totality.Slashings
 public import EthLib.Consensus.Proofs.Transition.Totality.Slot
 public import EthLib.Consensus.Proofs.Transition.Totality.Supply

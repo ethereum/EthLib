@@ -145,7 +145,7 @@ private theorem RunBounded.registryLoad_le (holds : RunBounded config start budg
   (Nat.le_mul_of_pos_left _ (one_le_registryLoadFactor fork)).trans holds.load
 
 /-- The registry size is at most the bound on the load. -/
-private theorem RunBounded.size_le (holds : RunBounded config start budget elapsed state) :
+theorem RunBounded.size_le (holds : RunBounded config start budget elapsed state) :
     state.validators.data.size ≤ start.load := by
   have := holds.registryLoad_le
   unfold registryLoad at this
