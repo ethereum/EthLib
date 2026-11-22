@@ -1,6 +1,26 @@
 module
 
-/-! The SSZ type universe, written as data. -/
+/-!
+The SSZ type universe, written as data.
+
+The core typing rules are stated in EthLib's own terms, one rule per comment.
+
+The basic types are the boolean and the unsigned integers, and every other type is composite.
+
+Every list, bitlist and byte list, progressive or not, is variable-size, as is a compatible union.
+
+A vector or a container is variable-size when one of its parts is.
+
+Every other type is fixed-size.
+
+[EIP-7916][eip7916] adds the progressive list and the progressive bitlist.
+
+[EIP-7495][eip7495] adds the progressive container, and [EIP-8016][eip8016] the compatible union.
+
+[eip7916]: https://github.com/ethereum/EIPs/blob/875fcf6d084c096195fec170310514444f537133/EIPS/eip-7916.md#progressivelisttype-and-progressivebitlist
+[eip7495]: https://github.com/ethereum/EIPs/blob/875fcf6d084c096195fec170310514444f537133/EIPS/eip-7495.md#progressivecontaineractive_fields
+[eip8016]: https://github.com/ethereum/EIPs/blob/875fcf6d084c096195fec170310514444f537133/EIPS/eip-8016.md#compatibleunionselector-type
+-/
 
 @[expose] public section
 
@@ -29,13 +49,17 @@ inductive Desc where
   | bitVector (length : Nat)
   /-- A variable number of bits, up to a limit. -/
   | bitList (limit : Nat)
-  /-- A variable number of bits, up to a limit where one is declared. -/
+  /-- A variable number of bits, up to a limit where one is declared.
+
+  EIP-7916 gives a progressive bitlist no limit, so the optional one is EthLib's own. -/
   | progressiveBitList (limit : Option Nat)
   /-- A fixed number of elements. -/
   | vector (element : Desc) (length : Nat)
   /-- A variable number of elements, up to a limit. -/
   | list (element : Desc) (limit : Nat)
-  /-- A variable number of elements, up to a limit where one is declared. -/
+  /-- A variable number of elements, up to a limit where one is declared.
+
+  EIP-7916 gives a progressive list no limit, so the optional one is EthLib's own. -/
   | progressiveList (element : Desc) (limit : Option Nat)
   /-- A fixed sequence of named fields. -/
   | container (names : List String) (fields : List Desc)
@@ -45,14 +69,20 @@ inductive Desc where
   | compatibleUnion (selectors : List Nat) (options : List Desc)
   deriving Inhabited
 
-/-- Zero is reserved for possible optional values.
+/-- The least selector of a union, since zero is reserved for possible optional values.
 
-Source: [EIP-8016](https://eips.ethereum.org/EIPS/eip-8016). -/
+Source: [EIP-8016, the selector range][range].
+
+[range]: https://github.com/ethereum/EIPs/blob/875fcf6d084c096195fec170310514444f537133/EIPS/eip-8016.md#why-are-compatibleunion-selectors-limited-to-1--127
+-/
 abbrev minSelector : Nat := 1
 
-/-- The high bit is reserved for future extensions.
+/-- The greatest selector of a union, since the high bit is reserved for future extensions.
 
-Source: [EIP-8016](https://eips.ethereum.org/EIPS/eip-8016). -/
+Source: [EIP-8016, the selector range][range].
+
+[range]: https://github.com/ethereum/EIPs/blob/875fcf6d084c096195fec170310514444f537133/EIPS/eip-8016.md#why-are-compatibleunion-selectors-limited-to-1--127
+-/
 abbrev maxSelector : Nat := 127
 
 /-- Whether a count is within a capacity its shape declares only where it has one. -/
@@ -98,18 +128,30 @@ mutual
 /--
 Encoded width in bytes, where the type has one.
 
-Nothing is returned for a type whose encoding varies with the value it holds.
+Nothing is returned for a variable-size type.
 -/
 def Desc.fixedSize : Desc → Option Nat
+  -- boolean: one byte.
   | .bool => some 1
+  -- uintN: `N / 8` bytes; the type holds the byte width `N / 8`.
   | .uint width => some width
+  -- ByteVector[N]: `N` bytes.
   | .byteVector length => some length
+  -- Bitvector[N]: `ceil(N / 8)` bytes.
+  --
   -- A fixed bit count still takes whole bytes, so the last one may be part padding.
   | .bitVector length => some ((length + 7) / 8)
+  -- Vector[type, N]: fixed-size when its element type is, then `N` times the element width.
   | .vector element length => element.fixedSize.map (· * length)
+  -- Container: fixed-size when every field is, then the sum of the field widths.
   | .container _ fields => Desc.fieldsFixedSize fields
+  -- EIP-7495: a ProgressiveContainer serializes as a Container of its declared fields.
+  --
   -- A gap contributes no bytes, so only the declared fields are measured.
   | .progressiveContainer _ _ fields => Desc.fieldsFixedSize fields
+  -- Every list, bitlist and byte list is variable-size, and so are the progressive ones.
+  --
+  -- EIP-8016: a compatible union is variable-size, even when its options share one fixed width.
   | _ => none
 
 /-- Total width of a field list, where every field has one. -/
@@ -150,7 +192,7 @@ def Desc.deepestNesting : List Desc → Nat
 end
 
 /--
-The six unsigned integers SSZ defines, named as the specification names them.
+The six unsigned integers SSZ defines, uintN for N in 8, 16, 32, 64, 128 and 256.
 
 A width in a declaration is a byte count, so eight bytes is a sixty-four-bit integer.
 -/
@@ -166,7 +208,7 @@ def Desc.uint8 : Desc := .uint 1
 
 @[inherit_doc Desc.uint8] def Desc.uint256 : Desc := .uint 32
 
-/-- Whether the type encodes to the same width whatever value it holds. -/
+/-- Whether the type is fixed-size. -/
 def Desc.isFixed (d : Desc) : Bool := d.fixedSize.isSome
 
 /--
@@ -176,6 +218,7 @@ A fixed field sits there whole, and a variable one leaves an offset in its place
 -/
 def Desc.leadingWidth : List Desc → Nat
   | [] => 0
+  -- A fixed-size field takes its width, and a variable-size one its offset of 4 bytes.
   | field :: rest => field.fixedSize.getD bytesPerOffset + Desc.leadingWidth rest
 
 end EthLib.Serialization.Ssz
