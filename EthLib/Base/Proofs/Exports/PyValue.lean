@@ -1,6 +1,8 @@
 module
 
 public import EthLib.Base.Exports.PyValueCore
+-- The theorem on the wrapper unfolds the conversion of an error into the result of an export.
+import all EthLib.Base.Exports.Result
 
 /-!
 # Proofs: `Base.Exports.PyValueCore`
@@ -214,7 +216,7 @@ instance {α : Type} [ToPy α] [FromPy α] [LawfulPy α] [NoFailurePy α] :
 theorem pyExport_items {α β : Type} [ToPyItems α] [FromPyItems α] [LawfulPyItems α] [ToPy β]
     [FromPy β] [LawfulPy β] (f : α → Result β) (a : α) :
     pyExport f (.tuple (ToPyItems.items a).toArray) = toPy <$> f a := by
-  simp [pyExport, LawfulPyItems.ofItems_items, Except.mapError]
+  simp [pyExport, toResult, LawfulPyItems.ofItems_items, Except.mapError]
   rfl
 
 /-- The digit that a value below 16 writes reads back as that value. -/
