@@ -8,19 +8,11 @@ public import EthLib.Networking.Encoding.ByteReader
 
 The binary records of protocol buffers, from the [encoding guide][encoding].
 
-A message is a sequence of records, as "Message Structure" says.
+A message is a sequence of records, as the section Message Structure of the guide says.
 
 A record is a key, then a value.
 
-The key is a varint: the field number times eight, plus the wire type.
-
-The wire type says how long the value is, so a reader can skip a field it does not know.
-
-The guide's "Base 128 Varints" asks for no shortest form.
-
-So a reader accepts a varint longer than its value needs.
-
-A reader skips a group, and checks that its end matches its start, as "Groups" says.
+The wire type in the key says how long the value is, so a reader can skip a field it does not know.
 
 A reader rejects field numbers outside 1 to `2^29 - 1`, the range of [the proto2 guide][fields].
 
@@ -110,35 +102,68 @@ def Record.WellFormed (r : Record) : Prop :=
 
 It may run to ten bytes, and its value must be below `2^64`. -/
 def readVarint (bytes : List UInt8) : Except ProtobufError (UInt64 × List UInt8) := do
+  -- Base 128 Varints: the varint ends at the first byte whose MSB, the continuation bit, is clear.
   let (head, rest) := Varint.split bytes
+  -- Base 128 Varints: one to ten bytes, each with its MSB set but the last.
+  --
+  -- The section asks for no shortest form, so no minimality check is made here.
   let groups ← (Varint.groups Varint.maxLength head).mapError .varint
+  -- Base 128 Varints: the 7-bit payloads, little-endian, are an unsigned 64-bit integer.
+  --
+  -- The guide leaves a sum of `2^64` or more unspecified, and this reader rejects it.
   if 2 ^ 64 ≤ Varint.valueOf groups then throw (.varint (.overflow (Varint.valueOf groups)))
   return (UInt64.ofNat (Varint.valueOf groups), rest)
 
 /-- The field number and the wire type of the key at the start of the input. -/
 def readKey (bytes : List UInt8) : Except ProtobufError (Nat × Nat × List UInt8) := do
+  -- Message Structure: the tag is the varint `(f << 3) | t`, for field number `f`, wire type `t`.
+  --
+  -- The guide's card encodes it as a uint32 varint, and this reader takes any 64-bit varint.
+  --
+  -- A tag of `2^32` or more has a field number above `2^29 - 1`, so the next check rejects it.
   let (key, rest) ← readVarint bytes
+  -- Message Structure: the rest of the integer, after the low 3 bits, is the field number.
   let field := key.toNat / 8
+  -- The proto2 guide: field numbers run from 1 to `2^29 - 1`.
   if field = 0 ∨ maxField < field then throw (.fieldNumber field)
+  -- Message Structure: the low 3 bits are the wire type.
   return (field, key.toNat % 8, rest)
 
 /-- The first `n` bytes of the input, and the bytes after them. -/
 def readFixed (n : Nat) (bytes : List UInt8) : Except ProtobufError (Vector UInt8 n × List UInt8) :=
+  -- The next `n` bytes, all in the input.
+  --
+  -- They are a lump of Non-varint Numbers, or the payload of a length-delimited record.
   Encoding.ByteReader.vector (.truncated n bytes.length) n bytes
 
 /-- A length-delimited value: a varint length, then that many bytes. -/
 def readLen (bytes : List UInt8) : Except ProtobufError (ByteArray × List UInt8) := do
+  -- Length-Delimited Records: the length is a varint immediately after the tag.
+  --
+  -- The guide encodes it as an int32 varint, for at most 2 GB.
+  --
+  -- This reader takes any 64-bit length, and a length past the end of the input fails.
   let (size, rest) ← readVarint bytes
+  -- Length-Delimited Records: the payload of that many bytes follows.
   let (value, rest) ← readFixed size.toNat rest
   return (⟨value.toArray⟩, rest)
 
 /-- The value of a wire type other than a group, and the bytes after it. -/
 def readScalar (wire : Nat) (bytes : List UInt8) : Except ProtobufError (Value × List UInt8) :=
   match wire with
+  -- Message Structure: wire type 0, `VARINT`, is a varint.
   | 0 => (readVarint bytes).map fun (v, rest) => (.varint v, rest)
+  -- Non-varint Numbers: wire type 1, `I64`, is a fixed eight-byte lump.
   | 1 => (readFixed 8 bytes).map fun (b, rest) => (.i64 b, rest)
+  -- Length-Delimited Records: wire type 2, `LEN`, is a length, then that many bytes.
   | 2 => (readLen bytes).map fun (b, rest) => (.len b, rest)
+  -- Non-varint Numbers: wire type 5, `I32`, is a fixed four-byte lump.
   | 5 => (readFixed 4 bytes).map fun (b, rest) => (.i32 b, rest)
+  -- Message Structure lists the six wire types 0 to 5, so this reader rejects 6 and 7.
+  --
+  -- Type 3, `SGROUP`, never reaches this point: the record and group readers take it first.
+  --
+  -- Type 4, `EGROUP`, reaches it only outside any group, where it is malformed.
   | _ => .error (.wireType wire)
 
 /-- The bytes after every open group, checking that each end matches its start.
@@ -147,19 +172,28 @@ The list holds the field numbers of the open groups, innermost first.
 
 Each step reads a key, so a budget of one step per input byte never runs out. -/
 def skipGroup : Nat → List Nat → List UInt8 → Except ProtobufError (List UInt8)
+  -- Every group is closed: the bytes after the last end tag remain.
   | _, [], bytes => .ok bytes
   -- Out of steps inside a group: one more byte is needed, for an end key.
   | 0, _ :: _, bytes => .error (.truncated 1 bytes.length)
   | fuel + 1, expected :: outer, bytes => do
+    -- Groups: the next key is a field of the group, a nested start, or the end tag that closes it.
     let (field, wire, rest) ← readKey bytes
     match wire with
+    -- Groups: an `SGROUP` tag with no payload starts a group, here nested in the open one.
     | 3 => skipGroup fuel (field :: expected :: outer) rest
+    -- Groups: an `EGROUP` tag with no payload ends a group, and its field number must match.
+    --
+    -- `7:EGROUP` where `8:EGROUP` is expected makes the message malformed.
     | 4 => if field = expected then skipGroup fuel outer rest else throw (.groupEnd field)
+    -- Any other record of the group is read and dropped, as a group keeps no content here.
     | _ => skipGroup fuel (expected :: outer) (← readScalar wire rest).2
 
 /-- The record at the start of the input, and the bytes after it. -/
 def readRecord (bytes : List UInt8) : Except ProtobufError (Record × List UInt8) := do
+  -- Message Structure: a record is a tag, then the payload its wire type describes.
   let (field, wire, rest) ← readKey bytes
+  -- Groups: an `SGROUP` tag starts a group, read up to its matching `EGROUP` tag.
   if wire = 3 then
     return (⟨field, .group⟩, ← skipGroup rest.length [field] rest)
   let (value, rest) ← readScalar wire rest
@@ -171,15 +205,20 @@ def records (bytes : List UInt8) : Except ProtobufError (List Record) :=
 where
   /-- Each record takes at least one byte, so a budget of the input length never runs out. -/
   go : Nat → List UInt8 → List Record → Except ProtobufError (List Record)
+    -- Condensed Reference Card: a message is `(tag value)*`, so it may end after any record.
     | _, [], acc => .ok acc.reverse
     -- Out of fuel: unreachable, so the fields are arbitrary.
     | 0, bytes@(_ :: _), _ => .error (.truncated 1 bytes.length)
+    -- Otherwise the next record starts here.
     | fuel + 1, bytes@(_ :: _), acc => do
       let (record, rest) ← readRecord bytes
       go fuel rest (record :: acc)
 
 /-- The values of one field, in the order of the records. -/
 def valuesOf (rs : List Record) (field : Nat) : List Value :=
+  -- Repeated Elements: records of one field may interleave with others, and keep their order.
+  --
+  -- A packed payload stays one `LEN` value here, since only the field's type can split it.
   rs.filterMap fun r => if r.field = field then some r.value else none
 
 /-! ## Writing -/
@@ -192,22 +231,35 @@ def stringRecord (field : Nat) (s : String) : Record := lenRecord field s.toUTF8
 
 /-- The key of a field number and a wire type. -/
 def encodeKey (field wire : Nat) : List UInt8 :=
+  -- Message Structure: the varint `(f << 3) | t`, written `8 f + t`, as each caller passes `t < 8`.
+  --
+  -- A field number in range keeps the tag below `2^32`, so it fits the 64-bit varint.
   Varint.encode (UInt64.ofNat (field * 8 + wire))
 
 /-- The bytes of a value after its key; a group writes only its end key. -/
 def encodeValue (field : Nat) : Value → List UInt8
+  -- `VARINT`: the value as a varint.
   | .varint v => Varint.encode v
+  -- `I64` and `I32`: the eight or four bytes as they are.
   | .i64 bytes => bytes.toList
   | .i32 bytes => bytes.toList
+  -- Length-Delimited Records: the length as a varint, then the payload.
+  --
+  -- The guide caps the length at 2 GB, and this writer takes any length below `2^64`.
   | .len bytes => Varint.encode (UInt64.ofNat bytes.size) ++ bytes.data.toList
+  -- Groups: the start tag has an empty payload, and the end tag of the same field closes it.
+  --
+  -- A group keeps no content, so nothing is written between the two tags.
   | .group => encodeKey field 4
 
 /-- The bytes of a record. -/
 def encodeRecord (r : Record) : List UInt8 :=
+  -- Message Structure: the tag, then the payload.
   encodeKey r.field r.value.wireType ++ encodeValue r.field r.value
 
 /-- The bytes of a sequence of records. -/
 def encodeRecords (rs : List Record) : List UInt8 :=
+  -- Condensed Reference Card: a message is `(tag value)*`, its records one after the other.
   rs.flatMap encodeRecord
 
 /-- The bytes of a message made of a sequence of records. -/

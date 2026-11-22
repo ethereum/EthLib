@@ -13354,7 +13354,7 @@
       {"constructor": "nonMinimal", "code": 5}]}],
    "error_class": "VarintError",
    "docstring":
-   "The 64-bit value a varint denotes, or why it is not a valid varint.\n\nThe rules are checked in this order:\n\n1. The ten-byte cap, while reading, so the work stays bounded.\n2. Minimal encoding.\n3. The 64-bit range.\n\n# Why minimality is enforced\n\nThe specification only says SHOULD.\n\nRejecting padding means each length has exactly one encoding.\n\nSo a message cannot be re-sent with a different prefix that differs only in padding."},
+   "The 64-bit value a varint denotes, or why it is not a valid varint."},
   {"summary": "The unsigned varint of a value below `2^63`.",
    "signature": "(value: int) -> bytes",
    "operation": "EthLib.Networking.Encoding.Uvarint.Exports.encodeExport",
