@@ -1098,6 +1098,22 @@ def test_no_bids_outside_bellatrix_to_fulu(fork: str):
     assert info.value.code == 0
 
 
+def test_is_eligible_for_bid_without_an_active_validator():
+    # Every validator has exited, so the slot has no proposer to compare with the key.
+    document = consensus.api_json("minimal", "bellatrix", "BeaconState", _fork_state("bellatrix"))
+    for validator in document["validators"]:
+        validator["exit_epoch"] = "0"
+    state = consensus.api_ssz("minimal", "bellatrix", "BeaconState", document)
+    pubkey = G2ProofOfPossession.SkToPk(REGISTRANT_KEY)
+    kept = [_signed_registration(100)]
+    message = (
+        "EthLib.Consensus.TransitionError.accessor (EthLib.Consensus.AccessorError.noCandidates)"
+    )
+    with raises(TransitionError, message) as info:
+        _eligible("bellatrix", state, kept, int(document["slot"]), ZERO, pubkey)
+    assert info.value.code == 1
+
+
 def test_is_eligible_for_bid_state_that_does_not_decode():
     with raises(
         TransitionError, "state rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 10233 0"
