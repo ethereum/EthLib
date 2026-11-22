@@ -423,6 +423,22 @@ def expectedExcessBlobGas {parentFork fork : Fork} (hLondon : .london ≤ parent
   BlobBaseFee.calcExcessBlobGas fork (schedule h)
     (parentExcessBlobGas parent) (parentBlobGasUsed parent) (parent.baseFeePerGas hLondon)
 
+/-- The excess blob gas that a parent gives to a child at `fork`, number and time, from Dencun.
+
+It is 0 before Dencun, where a header has no excess, and on a parent before London.
+
+A parent before London has no base fee, and so no blob gas fields.
+
+The schedule is that of the chain at the number and the time of the child. -/
+def childExcessBlobGas (config : ChainConfig) (fork : Fork) {parentFork : Fork}
+    (parent : Header parentFork) (number time : Nat) : Nat :=
+  if h : .dencun ≤ fork then
+    if hLondon : .london ≤ parentFork then
+      expectedExcessBlobGas hLondon h parent
+        (BlobBaseFee.chainBlobSchedule config fork number time)
+    else 0
+  else 0
+
 /-- The base fee that a parent gives to its child. -/
 def expectedBaseFee {parentFork : Fork} (hLondon : .london ≤ parentFork)
     (parent : Header parentFork) : Nat :=

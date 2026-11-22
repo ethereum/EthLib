@@ -81,11 +81,34 @@ private theorem simulateBlock_spec {chain chain' : BlockChain} {base : RecentBlo
   split at h
   · rename_i parent hP
     simp only [bind_ok_iff, mapError_ok_iff] at h
-    obtain ⟨ph, hph, -, -, -, -, -, -, calls, -, res, -, hash, hh, hEq⟩ := h
+    obtain ⟨-, -, ph, hph, -, -, -, -, -, -, calls, -, res, -, hash, hh, hEq⟩ := h
     simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at hEq
     obtain ⟨rfl, -, rfl⟩ := hEq
     exact ⟨parent, ph, hP, hph, res, _, _, hash, _, _, hh, rfl, rfl⟩
   · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- A simulated block has an excess blob gas below `2^64`, which its parent gives it. -/
+private theorem simulateBlock_excess_lt {chain chain' : BlockChain} {base parent : RecentBlock}
+    {fork : Fork} {number time budget budget' : Nat} {request : BlockStateCall}
+    {validation : Bool} {b : SimulatedBlock}
+    (h : simulateBlock chain base fork number time request validation budget =
+      .ok (chain', budget', b))
+    (hParent : chain.recent.getLast? = some parent) :
+    childExcessBlobGas chain.config fork parent.header number time < 2 ^ 64 := by
+  simp only [simulateBlock, hParent, bind_ok_iff, mapError_ok_iff] at h
+  obtain ⟨_, hens, -⟩ := h
+  exact ensure_ok_iff.mp hens
+
+/-- A simulated block fails with an internal error if its parent gives an excess of `2^64` or more.
+
+No header holds such an excess. -/
+theorem simulateBlock_eq_error_of_excess {chain : BlockChain} {base parent : RecentBlock}
+    {fork : Fork} {number time budget : Nat} {request : BlockStateCall} {validation : Bool}
+    (hParent : chain.recent.getLast? = some parent)
+    (big : 2 ^ 64 ≤ childExcessBlobGas chain.config fork parent.header number time) :
+    simulateBlock chain base fork number time request validation budget =
+      .error (callInternalError "the excess blob gas is 2^64 or more") := by
+  simp [simulateBlock, hParent, ensure, Nat.not_lt.mpr big, bind, Except.bind]
 
 /-- A simulated block follows the last block of its chain, at the number that it is given.
 
@@ -143,7 +166,7 @@ theorem simulateBlock_transactions {chain chain' : BlockChain} {base : RecentBlo
   simp only [simulateBlock] at h
   split at h
   · simp only [bind_ok_iff, mapError_ok_iff] at h
-    obtain ⟨_, -, _, -, _, -, _, -, filled, hFill, _, -, _, -, hEq⟩ := h
+    obtain ⟨_, -, _, -, _, -, _, -, _, -, filled, hFill, _, -, _, -, hEq⟩ := h
     simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at hEq
     obtain ⟨-, -, rfl⟩ := hEq
     simp only [fillCalls, bind, Except.bind, Option.isNone_iff_eq_none, ge_iff_le,
@@ -841,7 +864,7 @@ private theorem simulateBlock_valid_spec {chain chain' : BlockChain} {base : Rec
   split at h
   · rename_i parent hP
     simp only [bind_ok_iff, mapError_ok_iff] at h
-    obtain ⟨_, -, _, -, _, -, _, -, filled, -, result, hResult, hash, -, hEq⟩ := h
+    obtain ⟨_, -, _, -, _, -, _, -, _, -, filled, -, result, hResult, hash, -, hEq⟩ := h
     simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at hEq
     obtain ⟨-, -, rfl⟩ := hEq
     rw [hState, hMoves] at hResult
@@ -882,20 +905,6 @@ private theorem outputRoots_of_transactionsRoot {fork : Fork} {txs txs' : List T
   obtain ⟨withdrawalRoot, hWithdrawal, h⟩ := bind_ok_iff.mp h
   cases h
   simp only [hTx, hPost, hReceipt, hWithdrawal, bind, Except.bind, pure, Except.pure]
-
-/-- The excess blob gas that a parent gives is at most its excess plus its blob gas used. -/
-private theorem calcExcessBlobGas_le_add {fork : Fork} {schedule : BlobSchedule}
-    {excess used baseFee : Nat} :
-    Fees.BlobBaseFee.calcExcessBlobGas fork schedule excess used baseFee ≤ excess + used := by
-  have hd : used * (schedule.max.toNat - schedule.target.toNat) / schedule.max.toNat ≤ used :=
-    Nat.div_le_of_le_mul (by
-      rw [Nat.mul_comm schedule.max.toNat]
-      exact Nat.mul_le_mul_left _ (Nat.sub_le _ _))
-  unfold Fees.BlobBaseFee.calcExcessBlobGas
-  dsimp only
-  split
-  · exact Nat.zero_le _
-  · split <;> omega
 
 /-- Dropping the signature keeps the gas limit. -/
 private theorem Transaction.gas_unsigned (tx : Transaction) : tx.unsigned.gas = tx.gas := by
@@ -1042,7 +1051,7 @@ private theorem simulateBlock_valid_header {chain chain' : BlockChain} {base : R
   split at h
   · rename_i parent hP
     simp only [bind_ok_iff, mapError_ok_iff] at h
-    obtain ⟨parentHash, hph, _, -, _, -, _, -, filled, -, result, hResult, hash, -, hEq⟩ := h
+    obtain ⟨_, -, parentHash, hph, _, -, _, -, _, -, filled, -, result, hResult, hash, -, hEq⟩ := h
     simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at hEq
     obtain ⟨-, -, rfl⟩ := hEq
     rw [hState, hMoves] at hResult
@@ -1082,8 +1091,6 @@ Its time must fit the 256 bits of the header.
 
 The parent's gas limit must be at least 5,000, the least that the gas limit rule allows.
 
-The excess blob gas and the blob gas used of the parent must add up to less than `2^64`.
-
 The block takes the transactions `txs` and any root `root`, and must fit the size limit.
 
 Each of `txs` is the signed form of a call, with a gas limit of at most `2^32 - 1`. -/
@@ -1097,7 +1104,6 @@ theorem checkBlock_simulateBlock {chain chain' : BlockChain} {base parent : Rece
     (hNumber : number = parent.header.number + 1)
     (hTime : parent.header.timestamp.toNat < time) (hTimeBits : time < 2 ^ 256)
     (hGasLimit : Fees.GasLimit.LIMIT_MINIMUM ≤ parent.header.gasLimit)
-    (hExcess : parentExcessBlobGas parent.header + parentBlobGasUsed parent.header < 2 ^ 64)
     (hUnsigned : txs.map Transaction.unsigned = b.record.block.transactions)
     (hGas : ∀ tx ∈ txs, tx.gas.toNat ≤ Evm.GasCosts.TX_MAX_TOTAL_GAS_LIMIT)
     (hSize : (do validateBlockSize (← bodyItems (b.withTransactions txs root))) = .ok ()) :
@@ -1136,10 +1142,14 @@ theorem checkBlock_simulateBlock {chain chain' : BlockChain} {base parent : Rece
   refine ⟨fun _ => hLondon, by omega, fun hD hL => ?_, hUsed, ?_, fun _ => rfl,
     by rw [hT]; exact hTime, hNumber, by simp, fun h => absurd h (Nat.not_lt.mpr hParis),
     fun _ => ⟨by simp only [ge_iff_le, hParis, ↓reduceIte], rfl, rfl⟩, hph⟩
-  · simp only [hL, ↓reduceDIte, hT]
-    have hle : expectedExcessBlobGas hL hD parent.header
-        (Fees.BlobBaseFee.chainBlobSchedule chain.config fork number time) < 2 ^ 64 :=
-      Nat.lt_of_le_of_lt calcExcessBlobGas_le_add hExcess
+  · -- The simulation checked that the excess that the parent gives fits 64 bits.
+    have hle := simulateBlock_excess_lt h hParent
+    have hx : childExcessBlobGas chain.config fork parent.header number time =
+        expectedExcessBlobGas hL hD parent.header
+          (Fees.BlobBaseFee.chainBlobSchedule chain.config fork number time) := by
+      simp only [childExcessBlobGas, hD, hL, ↓reduceDIte]
+    rw [hx] at hle
+    simp only [hT, hx]
     exact UInt64.toNat_ofNat_of_lt' hle
   · have hNot : ¬(parent.fork < .london ∧ .london ≤ fork) := fun h => absurd hLondon
       (Nat.not_le.mpr h.1)
@@ -1276,8 +1286,6 @@ Its time must fit the 256 bits of the header.
 
 The parent's gas limit must be at least 5,000, the least that the gas limit rule allows.
 
-The excess blob gas and the blob gas used of the parent must add up to less than `2^64`.
-
 The block with `txs` and their root `root` must fit the size limit, which depends on the signatures.
 
 That block has the gas used, the other roots and the logs Bloom of the simulated block.
@@ -1312,14 +1320,13 @@ theorem stateTransition_of_simulateBlock {chain chain' : BlockChain} {base : Rec
     (hNumber : number = parent.header.number + 1)
     (hTime : parent.header.timestamp.toNat < time) (hTimeBits : time < 2 ^ 256)
     (hGasLimit : Fees.GasLimit.LIMIT_MINIMUM ≤ parent.header.gasLimit)
-    (hExcess : parentExcessBlobGas parent.header + parentBlobGasUsed parent.header < 2 ^ 64)
     (hSize : (do validateBlockSize (← bodyItems (b.withTransactions txs root))) = .ok ())
     (available : chain.state.HasCodes) :
     stateTransition chain (b.withTransactions txs root) false = .ok b.record.state ∨
       ∃ i s, b.senders[i]? = some s ∧ stateTransition chain (b.withTransactions txs root) false =
         .error (.invalidTransaction i (.senderNotEoa s)) := by
   have hCheck := checkBlock_simulateBlock h hParent hLondon hParentFork hParis hNumber hTime
-    hTimeBits hGasLimit hExcess hUnsigned hGas hSize
+    hTimeBits hGasLimit hUnsigned hGas hSize
   rcases stateTransition_of_simulateBlock_or h hFork hHegota hUnsigned hSenders hGas hBlob hRoot
     hCheck with ok | ⟨i, e, he, hE⟩
   · exact .inl ok

@@ -828,6 +828,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `eth_sendRawTransaction` and `eth_simulateV1` fail with an internal error when the excess blob gas of the next or simulated block is `2^64` or more, where they truncated it to 64 bits ([#3850](https://github.com/ethereum/EthLib/issues/3850)).
+  `childExcessBlobGas` computes the excess blob gas that a parent gives to a child at a number and a time, and the Engine's `builtExcessBlobGas` and `ChainView.nextExcessBlobGas` are instances of it.
+  `ChainView.nextBlobSchedule` gives the schedule of the next block.
+  `ChainView.nextEnvironment` takes a proof that the next excess blob gas is below `2^64`, and so does `baseFeeOf_nextEnvironment`.
+  `checkBlock_simulateBlock` and `stateTransition_of_simulateBlock` no longer take a bound on the parent's excess plus blob gas.
+  `simulateBlock_eq_error_of_excess` states the failure.
+
 - `dnsdisc.parse_entry` and `dnsdisc.resolve` give code 8, a refused node record, for a record whose RLP encoding fails, in place of code 0 ([#3605](https://github.com/ethereum/EthLib/issues/3605)).
   The message stays `record has no RLP encoding`, and every export that encodes a record now gives it.
   The encoder fails only for a payload of `2^64` bytes or more, so no record of a test reaches this failure.

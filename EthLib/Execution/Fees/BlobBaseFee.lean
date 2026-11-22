@@ -150,6 +150,20 @@ The schedule has `target ≤ max`, so `max - target` never truncates.
 
 A parent without the blob gas fields counts all three as 0.
 
+The source computes these steps in 64 bits, which fail on an overflow; EthLib uses naturals.
+
+The header check compares the result with the 64-bit excess of the header.
+
+So a result of `2^64` or more makes the header invalid, as the failure would.
+
+A block that is built or simulated takes the result only below `2^64`, and fails otherwise.
+
+Two values on the way can still pass `2^64` while the result stays below.
+
+They are the parent's excess plus its blob gas, and its blob gas times `max - target`.
+
+SOUNDNESS.md records both cases, which no chain with the schedules of the EIPs reaches.
+
 [eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#header-extension
 [eip-7918]: https://eips.ethereum.org/EIPS/eip-7918#functions -/
 def calcExcessBlobGas (fork : Fork) (schedule : BlobSchedule)

@@ -117,11 +117,14 @@ The notes give 32 zero bytes of extra data, but the fixtures show empty data, wh
 
 The notes give no root of the parent beacon block, and EthLib takes a zero root, as the fixtures do.
 
-After a block without a slot, the notes omit the slot, and EthLib takes 0. -/
+After a block without a slot, the notes omit the slot, and EthLib takes 0.
+
+The excess blob gas is the one that the header rule gives, which the simulation checks first.
+
+So it is below `2^64`, and the header holds it exactly. -/
 def simulatedHeader (config : ChainConfig) (fork : Fork) (base parent : RecentBlock)
     (parentHash : Hash32) (number time : Nat) (o : BlockOverrides) (validation : Bool) :
     Header fork :=
-  let schedule := Fees.BlobBaseFee.chainBlobSchedule config fork number time
   { parentHash
     ommersHash := EMPTY_OMMER_HASH
     coinbase := o.feeRecipient.getD
@@ -145,10 +148,8 @@ def simulatedHeader (config : ChainConfig) (fork : Fork) (base parent : RecentBl
       | none => if validation then expectedBaseFeeAcross parent.header else 0
     withdrawalsRoot := fun _ => 0
     blobGasUsed := fun _ => 0
-    excessBlobGas := fun h =>
-      if hLondon : .london ≤ parent.fork then
-        (expectedExcessBlobGas hLondon h parent.header schedule).toUInt64
-      else 0
+    excessBlobGas := fun _ =>
+      UInt64.ofNat (childExcessBlobGas config fork parent.header number time)
     parentBeaconBlockRoot := fun _ => 0
     requestsHash := fun _ => 0
     blockAccessListHash := fun _ => 0
@@ -287,6 +288,9 @@ def simulateBlock (chain : BlockChain) (base : RecentBlock) (fork : Fork) (numbe
     (request : BlockStateCall) (validation : Bool) (budget : Nat) :
     Except RpcError (BlockChain × Nat × SimulatedBlock) := do
   let some parent := chain.recent.getLast? | throw (callInternalError "no parent block")
+  -- The header holds the excess blob gas in 64 bits, so a larger excess builds no block.
+  let excess := childExcessBlobGas chain.config fork parent.header number time
+  ensure (excess < 2 ^ 64) (callInternalError "the excess blob gas is 2^64 or more")
   let parentHash ← parent.header.hash.mapError fun _ => BlockRecord.encodingError "parent hash"
   let o := request.blockOverrides
   let header : Header fork :=
