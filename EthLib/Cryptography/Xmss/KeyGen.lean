@@ -97,8 +97,11 @@ Key generation passes the derivations of `S`.
 
 The secret key keeps `S`, `P` and the top tree. -/
 def keyGenFrom (prf : SeedPrf m) (s : Seed) : m (PublicKey × SecretKey) := do
+  -- `P = Th(0^128, A_param, S)`.
   let pp ← publicParamOf prf
+  -- The top tree, whose root `X^1_{h,0}` is in the public key.
   let top ← build H pp prf .top LAYER_HEIGHT 0
+  -- "Return `pk = (X^1_{h,0}, P)` and `sk = S_0`"; the key keeps `S`, `P` and the top tree.
   return ({ root := top.value, publicParam := pp },
     { schemeSeed := s, publicParam := pp, top, cache := [] })
 
@@ -114,6 +117,7 @@ The public key is the top tree's root and `P`.
 
 The seed must be 32 uniform bytes, kept secret. -/
 def keyGenWith (seed : Seed) : m (PublicKey × SecretKey) := do
+  -- `S = H("leanXMSS" | S_0)`.
   let s ← schemeSeed H seed
   Internal.keyGenFrom H (seedPrf H s) s
 

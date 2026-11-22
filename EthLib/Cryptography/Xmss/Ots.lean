@@ -12,19 +12,19 @@ Revealing a chain at position `k` lets anyone reach the positions above `k`.
 
 It reveals nothing about the positions below.
 
-The chains of key `e` on layer `l`, for `i < 58` and `mu < 3`:
-
-```text
-    C_{i,0}      = H_{i mod 2}(P | A_prf(l, e, floor(i / 2)) | S)
-    C_{i,mu+1}   = Th(P, A_chain(l, e, mu), C_{i,mu} | LE_128(i))
-    leaf X_{0,e} = Th(P, A_leaf(l, e), C_{0,3} | ... | C_{57,3})
-```
+Key `e` on layer `l` has the chains `C_{i,mu}`, for `i < 58` and positions `mu <= 3`.
 
 Every definition takes the hash `H` and makes its calls in a fixed order.
 
 Chains go by index, and each chain is walked step by step from its start.
 
 Source: the leanXMSS specification draft, section "WOTS+C".
+
+The chains are the hash chains of Construction 2 of [ePrint 2025/055][hbms], §4.2.
+
+The chain index sits in the payload, where Construction 2 puts it in the tweak.
+
+[hbms]: https://eprint.iacr.org/2025/055
 -/
 
 @[expose] public section
@@ -44,6 +44,8 @@ def chainStarts (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32
     m (Vector Digest V) := do
   -- One derivation per pair of chains, so 29 derivations for 58 chains.
   let pairs ← ofFnInOrder (V / 2) fun j => prf pp (addrPrf layer e j) #[]
+  -- `C_{i,0} = H_{i mod 2}(P | A_prf(l, e, floor(i / 2)) | S)`.
+  --
   -- Chain `i` takes half `i mod 2` of derivation `floor(i / 2)`.
   return Vector.ofFn fun i =>
     halfOf ⟨i.val % 2, Nat.mod_lt _ (by decide)⟩
@@ -56,6 +58,7 @@ The chain index follows the value, so every chain of a key shares the step's add
 `LE_128(i)` is two lanes: `i` in the first, below `2^64`, and zero in the second. -/
 def chainStep (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
     (mu : Fin (CHAIN_LENGTH - 1)) (value : Digest) : m Digest :=
+  -- `C_{i,mu+1} = Th(P, A_chain(l, e, mu), C_{i,mu} | LE_128(i))`.
   th H pp (addrChain layer e mu) #[value.lo, value.hi, i.val.toUInt64, 0]
 
 /-- Walk chain `i` for `steps` steps, starting at position `start`.
@@ -70,6 +73,7 @@ def chain (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
 /-- The Merkle leaf of a one-time key, from the ends of its 58 chains. -/
 def otsLeafHash (pp : PublicParam) (layer : Layer) (e : UInt32) (ends : Vector Digest V) :
     m Digest :=
+  -- `X_{0,e} = Th(P, A_leaf(l, e), C_{0,3} | ... | C_{57,3})`.
   th H pp (addrLeaf layer e) (digestLanes ends)
 
 /-- `X_{0,e}`: the leaf of key `e`, computed from the derivations of the seed. -/
@@ -87,6 +91,7 @@ def otsPublicLeaf (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt
 `M` is the 32-byte message on the bottom layer, and a 16-byte root on the top. -/
 def messageDigest (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
     (rho : Randomizer) : m Digest :=
+  -- `D_c = Th(P, A_msg(l, e), M | rho_c)`.
   th H pp (addrMsg layer e) (msg ++ rho.toArray)
 
 /-- `R_0`: the base every randomizer trial adds to, derived at `A_rnd(l, e)` with suffix `M`.
@@ -96,6 +101,7 @@ With the derivations from the scheme seed `S`, it is `Th(P, A_rnd(l, e), S | M)`
 Since `S` is in the input, the randomizers stay secret until signed. -/
 def randomizerBase (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32)
     (msg : Array UInt64) : m Randomizer := do
+  -- `R_0 = Th(P, A_rnd(l, e), S | M)`.
   return halfOf 0 (← prf pp (addrRnd layer e) msg)
 
 /-! ## Randomizers as words
