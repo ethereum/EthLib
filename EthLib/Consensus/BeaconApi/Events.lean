@@ -115,6 +115,9 @@ def all : List EventTopic :=
 
 /-- The topic that a name gives, if any. -/
 def ofName? (text : String) : Option EventTopic :=
+  -- The source: a topic is a value of the enum of the topics parameter.
+  --
+  -- EthLib's choice: the name must match a value exactly.
   all.find? (·.name == text)
 
 end EventTopic
@@ -124,10 +127,18 @@ end EventTopic
 def readEventTopic (text : String) : Except ErrorMessage EventTopic :=
   match EventTopic.ofName? text with
   | some topic => .ok topic
+  -- The source: a topic that cannot be parsed gives code 400.
+  --
+  -- EthLib's message follows the example of the source.
   | none => .error { code := 400, message := s!"Invalid topic: {text}" }
 
 /-- The topics of a request, in order, or an error with code 400 for a name that is no topic. -/
 def readEventTopics (texts : List String) : Except ErrorMessage (List EventTopic) :=
+  -- Each name in turn; the first name that is no topic ends the answer with code 400.
+  --
+  -- The source asks for unique items; EthLib's choice accepts a repeated name.
+  --
+  -- A repeated name subscribes once, since a client receives an event whose topic is among them.
   texts.mapM readEventTopic
 
 /-- An event: its topic and its data. -/
@@ -141,16 +152,18 @@ namespace ApiEvent
 
 /-- Whether a client that subscribed to some topics receives an event. -/
 def subscribed (topics : List EventTopic) (event : ApiEvent) : Bool :=
+  -- The source: a client receives the events of the topics that it subscribed to.
   topics.contains event.topic
 
-/-- The message of an event in the stream: a line with the topic and a line with the data.
+/-- The message of an event in the stream.
 
 The writer must give the JSON text of the data on one line, as a compact writer does.
 
-A line break in that text would end the data line, so the message would be malformed.
-
-A blank line ends the message. -/
+A line break in that text would end the data line, so the message would be malformed. -/
 def toStream (write : Json → String) (event : ApiEvent) : String :=
+  -- The examples of the source: the line `event: <topic>`, then the line `data: <JSON>`.
+  --
+  -- The server-sent event format: a blank line ends the message and dispatches it.
   s!"event: {event.topic.name}\ndata: {write event.data}\n\n"
 
 end ApiEvent
@@ -158,6 +171,9 @@ end ApiEvent
 /-- The messages of the events that a client receives, in order. -/
 def eventStream (write : Json → String) (topics : List EventTopic) (events : List ApiEvent) :
     String :=
+  -- The messages of the subscribed events, in the order of the events, one after another.
+  --
+  -- The source allows comment lines that start with a colon; EthLib's choice sends none.
   String.join ((events.filter (·.subscribed topics)).map (·.toStream write))
 
 end EthLib.Consensus.BeaconApi
