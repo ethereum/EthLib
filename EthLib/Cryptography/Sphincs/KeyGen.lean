@@ -9,12 +9,7 @@ Key generation.
 
 The secret key is `SK.seed`, 32 bytes, and nothing more.
 
-Two hashes of it under the scheme's 11-byte ASCII name give `PK.seed` and `SK.prf`:
-
-```text
-    PK.seed = Trunc_n(H("leanSPHINCS" | SK.seed | BE_8(0)))
-    SK.prf  = H("leanSPHINCS" | SK.seed | BE_8(1))
-```
+Two hashes of it under the scheme's 11-byte ASCII name give `PK.seed` and `SK.prf`.
 
 `SK.prf` keeps all 32 bytes, so predicting a randomizer is as hard as guessing `SK.seed`.
 
@@ -59,7 +54,9 @@ variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
 /-- The key expansion of `SK.seed`: `PK.seed` from domain 0, then `SK.prf` from domain 1. -/
 def expandKey (seed : Seed) : m ExpandedKey := do
+  -- `PK.seed = Trunc_n(H("leanSPHINCS" | SK.seed | BE_8(0)))`.
   let pkSeed := trunc N (← H (expandInput seed 0))
+  -- `SK.prf = H("leanSPHINCS" | SK.seed | BE_8(1))`, all 32 bytes.
   let skPrf ← H (expandInput seed 1)
   return { pkSeed, skPrf }
 
@@ -69,6 +66,11 @@ def expandKey (seed : Seed) : m ExpandedKey := do
 
 Computing the root builds the whole top tree: `2^10` one-time keys. -/
 def publicKeyOf (pkSeed : PkSeed) (prf : Prf m) : m PublicKey := do
+  -- Algorithm 18, lines 1 to 3: `PK.root <- xmss_node(SK.seed, 0, h', PK.seed, ADRS)`.
+  --
+  -- The address names the top layer, `d - 1`, and its tree 0.
+  --
+  -- Here `h'` is the top tree's height, 10, since the layers differ in height.
   let root ← treeRoot H pkSeed prf .top 0
   return { pkSeed, root }
 
@@ -81,7 +83,11 @@ The seed must be 32 uniform bytes, kept secret.
 
 `SK.prf` is not part of the public key, but `Gen` derives it all the same. -/
 def keyGenWith (seed : Seed) : m (SecretKey × PublicKey) := do
+  -- FIPS 205 takes `SK.prf` and `PK.seed` as inputs; leanSPHINCS derives them from `SK.seed`.
   let key ← expandKey H seed
+  -- Algorithm 18, line 4: `return ((SK.seed, SK.prf, PK.seed, PK.root), (PK.seed, PK.root))`.
+  --
+  -- The secret key keeps `SK.seed` alone, since it regenerates the rest.
   return (⟨seed⟩, ← publicKeyOf H key.pkSeed (prf H key.pkSeed seed))
 
 /-- `Gen`: the key pair of `SK.seed`.

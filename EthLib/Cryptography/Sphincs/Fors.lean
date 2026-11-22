@@ -17,14 +17,9 @@ Node indices run across the trees.
 
 In tree `kappa`, node `j` at height `z` has tree index `kappa 2^(a - z) + j`.
 
-For leaf `s` of tree `kappa` and `1 <= z <= a`:
+Leaf `s` of tree `kappa` is `Y_{0,s}`, the hash of its secret `sk_{kappa,s}`.
 
-```text
-    sk_{kappa,s}  = PRF(PK.seed, SK.seed, ADRS_fprf(idx, kappa 2^a + s))
-    Y_{0,s}       = F(PK.seed, ADRS_fors(idx, 0, kappa 2^a + s), sk_{kappa,s})
-    Y_{z,j}       = H(PK.seed, ADRS_fors(idx, z, kappa 2^(a-z) + j), Y_{z-1,2j} | Y_{z-1,2j+1})
-    Fors.key(idx) = T_k(PK.seed, ADRS_roots(idx), Y^0_{a,0} | ... | Y^23_{a,0})
-```
+The tree's nodes are `Y_{z,j}` for `1 <= z <= a`, and its root is `Y^kappa_{a,0}`.
 
 The FORS public key `Fors.key(idx)` is one digest, which the bottom one-time key signs.
 
@@ -66,11 +61,17 @@ variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
 It is FIPS 205's `fors_skGen`, one `PRF` call. -/
 def forsSecret (prf : Prf m) (idx : Nat) (kappa : Fin FORS_TREES) (s : Nat) : m Digest :=
+  -- Algorithm 14, lines 2 to 5.
+  --
+  -- `sk_{kappa,s} = PRF(PK.seed, SK.seed, ADRS_fprf(idx, kappa 2^a + s))`.
   prf (adrsFprf idx (forsTreeIndex kappa 0 s))
 
 /-- `Y_{0,s}`: leaf `s` of tree `kappa` of instance `idx`, `F` of its secret. -/
 def forsLeafHash (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES) (s : Nat)
     (secret : Digest) : m Digest :=
+  -- Algorithm 15, lines 3 to 5.
+  --
+  -- `Y_{0,s} = F(PK.seed, ADRS_fors(idx, 0, kappa 2^a + s), sk_{kappa,s})`.
   th H pkSeed (adrsFors idx 0 (forsTreeIndex kappa 0 s)) (packBytes secret)
 
 /-- The parent at a position of tree `kappa` of instance `idx`, from its children.
@@ -78,6 +79,10 @@ def forsLeafHash (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES) (s : Nat
 The position's level is the height `z`, and its index is the index `j`. -/
 def forsNodeHash (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES) (p : Merkle.Position)
     (left right : Digest) : m Digest :=
+  -- Algorithm 15, lines 9 to 11.
+  --
+  -- `Y_{z,j} = H(PK.seed, ADRS_fors(idx, z, kappa 2^(a-z) + j), Y_{z-1,2j} | Y_{z-1,2j+1})`.
+  --
   -- The payload is the left child, then the right child.
   th H pkSeed (adrsFors idx p.level (forsTreeIndex kappa p.level p.index))
     (packBytes left ++ packBytes right)
@@ -103,6 +108,7 @@ def forsRoot (pkSeed : PkSeed) (prf : Prf m) (idx : Nat) (kappa : Fin FORS_TREES
 The input has `48 + 24 * 16 = 432` bytes. -/
 def forsPkFromRoots (pkSeed : PkSeed) (idx : Nat) (roots : Vector Digest FORS_TREES) :
     m Digest :=
+  -- Algorithm 17, lines 22 to 24: `Fors.key(idx) = T_k(PK.seed, ADRS_roots(idx), Y^0_{a,0} | ...)`.
   th H pkSeed (adrsRoots idx) (packDigests roots)
 
 /-- `Fors.key(idx)`: the FORS public key of instance `idx`, from the roots of its trees. -/

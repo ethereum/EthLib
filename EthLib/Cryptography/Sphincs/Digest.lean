@@ -5,22 +5,13 @@ public import EthLib.Cryptography.Sphincs.Fors
 /-!
 # The leanSPHINCS message digest
 
-The message digest, and the randomizer the signer hashes into it.
-
-```text
-    M'  = 0x00 | 0x0b | "leanSPHINCS" | M
-    R   = PRF_msg(SK.prf, PK.seed, M') = Trunc_n(H(SK.prf | PK.seed | M'))
-    Z   = R | PK.seed | PK.root | M
-    D   = H_msg(R, PK.seed, PK.root, M) = Trunc_m(H(Z | BE_32(0)) | H(Z | BE_32(1)))
-```
+The message digest `D`, and the randomizer `R` the signer hashes into it.
 
 `H_msg` is MGF1 of RFC 8017 on Keccak-256, and `D` has `m = 34` bytes `g_0` to `g_33`.
 
-FIPS 205 Algorithm 19 splits them into three fields, each read most significant bit first:
+FIPS 205 Algorithm 19 splits them into three fields, each read most significant bit first.
 
-```text
-    [ md: 30 | tree: 3 | leaf: 1 ]
-```
+The fields `md`, `tree` and `leaf` take 30, 3 and 1 bytes, in this order.
 
 - `md` gives the leaf of each FORS tree: `(s_0, ..., s_23) = base_2b(md, a, k)`.
 - `tree` is a big-endian integer cut to `h - h_0 = 18` bits: the bottom tree.
@@ -54,6 +45,7 @@ The framing separates `PRF_msg` from the other calls.
 
 Verification never computes `PRF_msg`, so no signature depends on the context. -/
 def framedMessage (msg : Message) : ByteArray :=
+  -- Algorithm 22, line 8: `M' = 0x00 | 0x0b | "leanSPHINCS" | M`.
   ByteArray.mk #[0, UInt8.ofNat SEED_TAG.length] ++ ByteArray.mk SEED_TAG.toArray ++ packBytes msg
 
 /-- `R = PRF_msg(SK.prf, opt_rand, M') = Trunc_n(H(SK.prf | opt_rand | M'))`.
@@ -62,6 +54,7 @@ Signing is deterministic, with `opt_rand = PK.seed`, so the input has `32 + 16 +
 
 `SK.prf` is secret, so the randomizer is unpredictable to anyone without the secret key. -/
 def prfMsg (skPrf : HashOutput) (optRand : PkSeed) (msg : Message) : m Randomizer := do
+  -- Algorithm 19, line 3: `R = PRF_msg(SK.prf, opt_rand, M') = Trunc_n(H(SK.prf | opt_rand | M'))`.
   return trunc N (← H (packBytes skPrf ++ packBytes optRand ++ framedMessage msg))
 
 /-! ## The digest -/
@@ -76,9 +69,13 @@ Call `i` hashes `Z | BE_32(i)` with `Z = R | PK.seed | PK.root | M`, 84 bytes, c
 The message is not framed, so it stays on 16-byte boundaries. -/
 def hMsg (rho : Randomizer) (pkSeed : PkSeed) (pkRoot : Digest) (msg : Message) :
     m MessageDigest := do
+  -- Algorithm 19, line 5, with `M` in place of `M'`: `Z = R | PK.seed | PK.root | M`.
   let z := packBytes rho ++ packBytes pkSeed ++ packBytes pkRoot ++ packBytes msg
   -- The calls hash the same `Z`, and only their counter differs.
   let calls ← ofFnInOrder DIGEST_CALLS fun i => H (z ++ packBytes (toByte 4 i.val))
+  -- `D = MGF1(Z, m) = Trunc_m(H(Z | BE_32(0)) | H(Z | BE_32(1)))`, with no inner hash of `Z`.
+  --
+  -- FIPS 205 §11.2 applies MGF1 to `R | PK.seed | SHA-256(R | PK.seed | PK.root | M)` instead.
   return trunc DIGEST_BYTES calls.flatten
 
 /-- Bit `p` of a byte string, most significant bit first, as `base_2b` reads it.
@@ -114,16 +111,25 @@ theorem msbField_lt {k : Nat} (x : Vector UInt8 k) (offset width : Nat) :
 
 Leaf `s_kappa` is bits `10 kappa` to `10 kappa + 9` of the digest, most significant first. -/
 def digestLeaves (d : MessageDigest) : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES :=
+  -- Algorithm 19, line 6: `md <- digest[0 : ceil(k a / 8)]`.
+  --
+  -- Algorithm 16, line 2, reads it as `base_2b(md, a, k)`.
   Vector.ofFn fun kappa =>
     ⟨msbField d (FORS_HEIGHT * kappa.val) FORS_HEIGHT, msbField_lt d _ FORS_HEIGHT⟩
 
 /-- The tree index: bytes 30 to 32 of the digest, as a big-endian integer cut to 18 bits. -/
 def digestTree (d : MessageDigest) : Nat :=
+  -- Algorithm 19, lines 7 and 9: `idx_tree <- toInt(tmp_idx_tree, ...) mod 2^(h - h/d)`.
+  --
+  -- Here the bottom height `h_0` stands for `h/d`, since the layers differ in height.
   EthLib.Base.bytesToNat ((d.toList.drop MD_BYTES).take TREE_INDEX_BYTES)
     % 2 ^ (HEIGHT - LOWER_HEIGHT)
 
 /-- The bottom leaf index: byte 33 of the digest, cut to 8 bits. -/
 def digestLeaf (d : MessageDigest) : Nat :=
+  -- Algorithm 19, lines 8 and 10: `idx_leaf <- toInt(tmp_idx_leaf, ...) mod 2^(h/d)`.
+  --
+  -- Here `h_0` stands for `h/d`.
   EthLib.Base.bytesToNat ((d.toList.drop (MD_BYTES + TREE_INDEX_BYTES)).take LEAF_INDEX_BYTES)
     % 2 ^ LOWER_HEIGHT
 
