@@ -41,15 +41,21 @@ structure Extension where
 
 /-- Read an extension without interpreting its payload (§4.2). -/
 def readExtension : Reader Extension := do
+  -- `ExtensionType extension_type;`, two bytes, kept even when unrecognized.
   let kind ← codePoint
+  -- `opaque extension_data<0..2^16-1>;`, kept opaque.
   return ⟨kind, (← blob 2 0 65535).toByteArray⟩
 
 /-- Encode an extension without selecting an algorithm (§4.2). -/
 def encodeExtension (extension : Extension) : Except Error (List UInt8) := do
+  -- `ExtensionType extension_type;` in two bytes, then `opaque extension_data<0..2^16-1>;`.
   return Base.natToBytes 2 extension.kind.val ++ (← encodeBlob 2 0 65535 extension.data.data.toList)
 
 /-- No extension type occurs twice in one block, RFC 8446 §4.2. -/
 def uniqueExtensions (extensions : List Extension) : Bool :=
+  -- There MUST NOT be more than one extension of the same type in a given extension block.
+  --
+  -- So removing the repeated types leaves the list as long as it was.
   (extensions.map (·.kind)).eraseDups.length == extensions.length
 
 /-- The first extension type that occurs again later in a block, or 0 when none does. -/
@@ -60,15 +66,21 @@ def repeatedKind : List Extension → CodePoint
 
 /-- Read an extension block, preserving its order and rejecting duplicate types (§4.2). -/
 def readExtensions (minimum : Nat) : Reader (List Extension) := do
+  -- `Extension extensions<minimum..2^16-1>;`, with the floor of the enclosing message.
   let extensions ← items 2 minimum 65535 readExtension
+  -- §4.2: no extension type twice in the block.
+  --
+  -- EthLib names the first repeated type in its own error, where §4.2 names no alert.
   require (uniqueExtensions extensions = true) (.duplicateExtension (repeatedKind extensions))
   return extensions
 
 /-- Encode a block after checking its length and uniqueness (§4.2). -/
 def encodeExtensions (minimum : Nat) (extensions : List Extension) :
     Except Error (List UInt8) := do
+  -- §4.2: no extension type twice in the block, which a sender also meets.
   Base.ensure (uniqueExtensions extensions = true)
     (.duplicateExtension (repeatedKind extensions))
+  -- `Extension extensions<minimum..2^16-1>;`, in the caller's order.
   encodeItems 2 minimum 65535 encodeExtension extensions
 
 /-- The ClientHello fields whose values are not fixed by RFC 8446 §4.1.2.
@@ -144,36 +156,61 @@ def encodeCodePoints (width minimum maximum : Nat) (values : List CodePoint) :
 
 /-- Read a certificate entry, keeping its DER bytes opaque (§4.4.2). -/
 def readCertificateEntry : Reader CertificateEntry := do
+  -- The X509 case: `opaque cert_data<1..2^24-1>;`.
   let data ← blob 3 1 (2 ^ 24 - 1)
+  -- `Extension extensions<0..2^16-1>;`.
   return ⟨data.toByteArray, ← readExtensions 0⟩
 
 /-- Encode a certificate entry with a nonempty certificate (§4.4.2). -/
 def encodeCertificateEntry (entry : CertificateEntry) : Except Error (List UInt8) := do
+  -- The X509 case: `opaque cert_data<1..2^24-1>;`.
   let certificate ← encodeBlob 3 1 (2 ^ 24 - 1) entry.data.data.toList
+  -- `Extension extensions<0..2^16-1>;`.
   return certificate ++ (← encodeExtensions 0 entry.extensions)
 
 /-- Encode the body fields, checking each presentation-language bound. -/
 def encodeBody (hashLength : Nat) : Message → Except Error (List UInt8)
+  -- §4.1.2, ClientHello.
   | .clientHello h => do
+    -- `opaque legacy_session_id<0..32>;`.
     let session ← encodeBlob 1 0 32 h.legacySessionId.data.toList
+    -- `CipherSuite cipher_suites<2..2^16-2>;`.
     let suites ← encodeCodePoints 2 2 65534 h.cipherSuites
+    -- `Extension extensions<8..2^16-1>;`.
     let extensions ← encodeExtensions 8 h.extensions
+    -- `ProtocolVersion legacy_version = 0x0303;`, `Random random;`, then the vectors above.
+    --
+    -- The compression methods are one byte, set to zero, after their one-byte length.
     return [3, 3] ++ h.random.toList ++ session ++ suites ++ [1, 0] ++ extensions
+  -- §4.1.3, ServerHello, also the form of a HelloRetryRequest.
   | .serverHello h => do
+    -- `opaque legacy_session_id_echo<0..32>;`.
     let session ← encodeBlob 1 0 32 h.legacySessionIdEcho.data.toList
+    -- `Extension extensions<6..2^16-1>;`.
     let extensions ← encodeExtensions 6 h.extensions
+    -- `ProtocolVersion legacy_version = 0x0303;`, `Random random;`, then the session ID echo.
     return [3, 3] ++ h.random.toList ++ session ++
+      -- `CipherSuite cipher_suite;`, `uint8 legacy_compression_method = 0;`, the extensions.
       Base.natToBytes 2 h.cipherSuite.val ++ [0] ++ extensions
+  -- §4.3.1: `Extension extensions<0..2^16-1>;`.
   | .encryptedExtensions extensions => encodeExtensions 0 extensions
+  -- §4.3.2, CertificateRequest.
   | .certificateRequest request => do
+    -- `opaque certificate_request_context<0..2^8-1>;`.
     let context ← encodeBlob 1 0 255 request.context.data.toList
+    -- `Extension extensions<2..2^16-1>;`.
     return context ++ (← encodeExtensions 2 request.extensions)
+  -- §4.4.2, Certificate.
   | .certificate certificate => do
+    -- `opaque certificate_request_context<0..2^8-1>;`.
     let context ← encodeBlob 1 0 255 certificate.context.data.toList
+    -- `CertificateEntry certificate_list<0..2^24-1>;`.
     return context ++ (← encodeItems 3 0 (2 ^ 24 - 1)
       encodeCertificateEntry certificate.entries)
+  -- §4.4.3: `SignatureScheme algorithm;`, then `opaque signature<0..2^16-1>;`.
   | .certificateVerify algorithm signature => do
     return Base.natToBytes 2 algorithm.val ++ (← encodeBlob 2 0 65535 signature.data.toList)
+  -- §4.4.4: `opaque verify_data[Hash.length];`, with no length prefix.
   | .finished verifyData => do
     Base.ensure (verifyData.size = hashLength) .length
     return verifyData.data.toList
@@ -183,45 +220,79 @@ def encodeBody (hashLength : Nat) : Message → Except Error (List UInt8)
 Legacy constants are checked for TLS 1.3; version negotiation is left to the handshake steps. -/
 def readBody (hashLength : Nat) (kind : UInt8) : Reader Message := do
   match kind.toNat with
+  -- The client hello, type 1, §4.1.2.
   | 1 =>
+    -- `ProtocolVersion legacy_version = 0x0303;`.
     require ((← uint 2) = 0x0303) .constant
+    -- `Random random;`, 32 bytes.
     let random ← vector 32
+    -- `opaque legacy_session_id<0..32>;`, kept for the check of RFC 9001 §8.4 by the caller.
     let session ← blob 1 0 32
+    -- `CipherSuite cipher_suites<2..2^16-2>;`, unrecognized suites kept.
     let suites ← items 2 2 65534 codePoint
+    -- `opaque legacy_compression_methods<1..2^8-1>;`.
+    --
+    -- §4.1.2: in TLS 1.3 this vector MUST contain exactly one byte, set to zero.
     require ((← bytes 2) = [1, 0]) .constant
+    -- `Extension extensions<8..2^16-1>;`.
     return .clientHello ⟨random, session.toByteArray, suites, ← readExtensions 8⟩
+  -- The server hello, type 2, §4.1.3, whose structure a HelloRetryRequest shares.
   | 2 =>
+    -- `ProtocolVersion legacy_version = 0x0303;`.
     require ((← uint 2) = 0x0303) .constant
+    -- `Random random;`, 32 bytes.
     let random ← vector 32
+    -- `opaque legacy_session_id_echo<0..32>;`.
     let session ← blob 1 0 32
+    -- `CipherSuite cipher_suite;`.
     let suite ← codePoint
+    -- `uint8 legacy_compression_method = 0;`.
     require ((← uint 1) = 0) .constant
+    -- `Extension extensions<6..2^16-1>;`.
     return .serverHello ⟨random, session.toByteArray, suite, ← readExtensions 6⟩
+  -- Encrypted extensions, type 8, §4.3.1: `Extension extensions<0..2^16-1>;`.
   | 8 => return .encryptedExtensions (← readExtensions 0)
+  -- The certificate request, type 13, §4.3.2.
   | 13 =>
+    -- `opaque certificate_request_context<0..2^8-1>;`.
     let context ← blob 1 0 255
+    -- `Extension extensions<2..2^16-1>;`.
     return .certificateRequest ⟨context.toByteArray, ← readExtensions 2⟩
+  -- The certificate, type 11, §4.4.2.
   | 11 =>
+    -- `opaque certificate_request_context<0..2^8-1>;`.
     let context ← blob 1 0 255
+    -- `CertificateEntry certificate_list<0..2^24-1>;`, each entry in the X509 form.
     return .certificate ⟨context.toByteArray, ← items 3 0 (2 ^ 24 - 1) readCertificateEntry⟩
+  -- The certificate verify, type 15, §4.4.3.
   | 15 =>
+    -- `SignatureScheme algorithm;`, unrecognized schemes kept.
     let algorithm ← codePoint
+    -- `opaque signature<0..2^16-1>;`.
     return .certificateVerify algorithm (← blob 2 0 65535).toByteArray
+  -- The finished message, type 20, §4.4.4: `opaque verify_data[Hash.length];`.
   | 20 => return .finished (← bytes hashLength).toByteArray
+  -- Any other type is not one of the seven messages of the certificate handshake.
+  --
+  -- Among them are the new session ticket (4), end of early data (5) and key update (24).
   | _ => throw (.messageType kind)
 
 /-- Add the type and uint24 body length, RFC 8446 §4. -/
 def frameList (kind : UInt8) (body : List UInt8) : Except Error (List UInt8) := do
+  -- `HandshakeType msg_type;`, then `uint24 length;`, the remaining bytes in the message.
   return kind :: (← encodeBlob 3 0 (2 ^ 24 - 1) body)
 
 /-- Read a handshake envelope, preserving arbitrary bytes after that message (§4). -/
 def readFrame : Reader (UInt8 × List UInt8) := do
+  -- `HandshakeType msg_type;`, one byte.
   let kind ← uint 1
+  -- `uint24 length;`, then that many bytes of the message.
   let body ← blob 3 0 (2 ^ 24 - 1)
   return (UInt8.ofNat kind, body)
 
 /-- Encode one complete handshake message with the caller's negotiated hash length. -/
 def encodeList (hashLength : Nat) (message : Message) : Except Error (List UInt8) := do
+  -- §4: the type of the message, its length, then its body.
   frameList message.type (← encodeBody hashLength message)
 
 /-- Read one complete message from input with no TLS record header, RFC 9001 §4.
@@ -234,7 +305,10 @@ Handshake types other than these seven are rejected.
 
 Unknown extension types and algorithm identifiers survive. -/
 def decodeList (hashLength : Nat) : Reader Message := do
+  -- RFC 9001 §4: CRYPTO data carries the handshake messages, with no record layer.
   let (kind, body) ← readFrame
+  -- RFC 8446 §4: the body is the structure that the type selects, and it fills the length exactly.
+  --
   -- An incomplete field inside an already complete envelope cannot be repaired by more input.
   StateT.lift ((exact (readBody hashLength kind) body).mapError fun
     | .truncated .. => .length
@@ -242,6 +316,7 @@ def decodeList (hashLength : Nat) : Reader Message := do
 
 /-- The ServerHello random that identifies HelloRetryRequest, RFC 8446 §4.1.3. -/
 def retryRandom : Vector UInt8 32 :=
+  -- The special value of §4.1.3: the SHA-256 of the string HelloRetryRequest.
   #v[0xcf, 0x21, 0xad, 0x74, 0xe5, 0x9a, 0x61, 0x11,
     0xbe, 0x1d, 0x8c, 0x02, 0x1e, 0x65, 0xb8, 0x91,
     0xc2, 0xa2, 0x11, 0x16, 0x7a, 0xbb, 0x8c, 0x5e,
@@ -249,7 +324,9 @@ def retryRandom : Vector UInt8 32 :=
 
 /-- Distinguish HelloRetryRequest before processing ServerHello extensions (§4.1.3). -/
 def Message.isRetry : Message → Bool
+  -- §4.1.3: a server hello whose Random matches this value is processed as a HelloRetryRequest.
   | .serverHello h => h.random == retryRandom
+  -- Only a server hello can be a HelloRetryRequest.
   | _ => false
 
 /-- Encode one complete handshake message as packed bytes. -/
