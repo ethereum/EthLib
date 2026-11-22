@@ -58,7 +58,9 @@ inductive ConfigError where
   | notObject
   /-- The blob schedules are present, not null, and not a JSON object. -/
   | schedulesNotObject
-  /-- The time of a fork is not a natural number below `2^64`, the bound of a block's time. -/
+  /-- The time of a fork is not a natural number below `2^64`.
+
+  The fork identifier holds each fork time as a `uint64`. -/
   | timeNotNumber (fork : Fork)
   /-- The entry of a fork is not an object with three natural numbers. -/
   | scheduleMalformed (fork : Fork)
@@ -94,8 +96,8 @@ def readTime (j : Json) (fork : Fork) (name : String) : Except ConfigError (Opti
   match j.getObjVal? (name ++ "Time") with
   | .error _ => pure none
   | .ok v => match v.getNat? with
-    -- A block's time is below `2^64`, so a larger time is refused.
-    | .ok t => if t < 2 ^ 64 then pure (some t) else throw (.timeNotNumber fork)
+    -- The fork identifier hashes a fork time in 64 bits, so a larger time is refused.
+    | .ok t => if t < ACTIVATION_BOUND then pure (some t) else throw (.timeNotNumber fork)
     | .error _ => throw (.timeNotNumber fork)
 
 /-- The blob schedule of one entry: its target, maximum and update fraction. -/
@@ -231,7 +233,7 @@ It activates with its fork, by time. -/
 def Writable (config : ChainConfig) : Prop :=
   config.Ordered ∧
   (∀ f t, (f, Activation.time t) ∈ config.activations →
-    f ∈ forkNames.map Prod.fst ∧ t < 2 ^ 64) ∧
+    f ∈ forkNames.map Prod.fst ∧ t < ACTIVATION_BOUND) ∧
   config.blobSchedules.Pairwise (fun x y => ∀ f g, x.1 = some f → y.1 = some g → f < g) ∧
   (∀ g a s, (g, a, s) ∈ config.blobSchedules →
     ∃ f t, g = some f ∧ .dencun ≤ f ∧ a = .time t ∧ (f, Activation.time t) ∈ config.activations)

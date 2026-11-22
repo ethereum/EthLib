@@ -346,14 +346,21 @@ def test_config_zero_chain_id() -> None:
     assert error(chain) == {**INTERNAL_ERROR, "data": "eth_config: zero chain ID"}
 
 
-def test_config_activation_overflow() -> None:
-    """An activation that the fork ID cannot encode is rejected instead of truncated."""
+@pytest.mark.parametrize(
+    "activations",
+    [
+        [["dencun", "block", 0], ["pectra", "time", 2**64]],
+        [["dencun", "block", 2**64]],
+    ],
+    ids=["time", "block"],
+)
+def test_config_activation_overflow(activations: list[list[object]]) -> None:
+    """An activation that the fork ID cannot encode is rejected when the configuration is read."""
     chain = genesis_chain()
-    chain = replace(
-        chain,
-        config={**chain.config, "activations": [["dencun", "block", 0], ["pectra", "time", 2**64]]},
-    )
-    assert error(chain) == {**INTERNAL_ERROR, "data": "eth_config: activation is not below 2^64"}
+    chain = replace(chain, config={**chain.config, "activations": activations})
+    with raises(rpc.RpcError, "an activation is not below 2^64") as caught:
+        answer(chain)
+    assert caught.value.code == 0
 
 
 def test_pending_fork_block() -> None:
