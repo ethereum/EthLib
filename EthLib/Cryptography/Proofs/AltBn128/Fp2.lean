@@ -112,10 +112,10 @@ instance : CommRing Fp2 where
 theorem i_mul_i : i * i = -1 := by
   apply ext <;> simp [Cryptography.Fp2.i]
 
-/-- The constant `2` of the twist addition is the numeral of `Fp2`. -/
+/-- The element `2` of `Fp` is the numeral `2` of `Fp2`. -/
 @[simp] theorem ofFp_two : ofFp 2 = 2 := rfl
 
-/-- The constant `3` of the twist addition is the numeral of `Fp2`. -/
+/-- The element `3` of `Fp` is the numeral `3` of `Fp2`. -/
 @[simp] theorem ofFp_three : ofFp 3 = 3 := rfl
 
 end Ring

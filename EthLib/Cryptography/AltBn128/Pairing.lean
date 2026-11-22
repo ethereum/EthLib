@@ -64,20 +64,29 @@ end Fp2
 /-- `b2 = 3 / (9 + i)`, the constant of the twist, from EIP-197. -/
 def b2 : Fp2 := Fp2.mul (Fp2.ofFp 3) (Fp2.inv ⟨9, 1⟩)
 
+/-- The numeral `2` of `Fp2`, the element `2` of `Fp`. -/
+instance instOfNatTwo : OfNat Fp2 2 := ⟨Fp2.ofFp 2⟩
+
+/-- The numeral `3` of `Fp2`, the element `3` of `Fp`. -/
+instance instOfNatThree : OfNat Fp2 3 := ⟨Fp2.ofFp 3⟩
+
+/-- The twist as a short Weierstrass curve, with `a = 0`, `b2`, and the inverse of `Fp2`.
+
+Its points then add by the rule of SEC 1 v2 §2.2.1, which `G_1` uses over `Fp`. -/
+instance instTwistParams : ShortWeierstrass.Params Fp2 := ⟨0, b2, Fp2.inv⟩
+
 /-- A point of the twist over `Fp2`, or the point at infinity. -/
-inductive Point2 where
-  /-- The point at infinity, the zero of the group. -/
-  | infinity
-  /-- The point `(x, y)`. -/
-  | affine (x y : Fp2)
-deriving DecidableEq, Repr, Inhabited
+abbrev Point2 := ShortWeierstrass.Point Fp2
 
 namespace Point2
 
-/-- Whether a point satisfies `y^2 = x^3 + b2`. -/
-def isOnCurve : Point2 → Bool
-  | infinity => true
-  | affine x y => y * y == x * x * x + b2
+-- The constructors are restated at the twist's point type, under the names of the twist.
+
+/-- The point at infinity, the zero of the group. -/
+@[match_pattern] abbrev infinity : Point2 := ShortWeierstrass.Point.infinity
+
+/-- The point `(x, y)`. -/
+@[match_pattern] abbrev affine (x y : Fp2) : Point2 := ShortWeierstrass.Point.affine x y
 
 /-- The generator `P2` of `G_2`, from EIP-197 §"Definition of the groups".
 
@@ -88,41 +97,6 @@ def generator : Point2 :=
       11559732032986387107991004021392285783925812861821192530917403151452391805634⟩
     ⟨8495653923123431417604973247489272438418190587263600148770280649306958101930,
       4082367875863433681332203403145435568316851327593401208105741076214120093531⟩
-
-/-- The sum of two points, by the addition rule of [SEC 1 v2][sec1] §2.2.1.
-
-The rule is stated over `Fp`, and the same formulas hold over `Fp2`.
-
-[sec1]: https://www.secg.org/sec1-v2.pdf
--/
-def add : Point2 → Point2 → Point2
-  -- Rules 1 and 2: `O + O = O` and `(x, y) + O = O + (x, y) = (x, y)`.
-  | infinity, q => q
-  | p, infinity => p
-  | affine x1 y1, affine x2 y2 =>
-    if x1 = x2 then
-      -- Rule 3: `(x, y) + (x, -y) = O`.
-      if y2 = -y1 then infinity
-      else
-        -- Rule 5, with `a = 0`: `lambda = (3 x1^2 + a) / (2 y1)`.
-        --
-        -- On the curve, the same `x` gives `y2 = y1` or `y2 = -y1`, so the points are equal here.
-        --
-        -- Then `y1 != -y1`, so `y1 != 0`, as rule 5 asks.
-        let l := Fp2.ofFp 3 * x1 * x1 * Fp2.inv (Fp2.ofFp 2 * y1)
-        -- Rule 5: `x3 = lambda^2 - 2 x1`, written `lambda^2 - x1 - x2` since `x1 = x2`.
-        let x3 := l * l - x1 - x2
-        -- Rule 5: `y3 = lambda (x1 - x3) - y1`.
-        affine x3 (l * (x1 - x3) - y1)
-    else
-      -- Rule 4: `lambda = (y2 - y1) / (x2 - x1)`.
-      let l := (y2 - y1) * (x2 - x1).inv
-      -- Rule 4: `x3 = lambda^2 - x1 - x2`.
-      let x3 := l * l - x1 - x2
-      -- Rule 4: `y3 = lambda (x1 - x3) - y1`.
-      affine x3 (l * (x1 - x3) - y1)
-
-instance : Add Point2 := ⟨add⟩
 
 /-- `k P`, for `k < 2^fuel`, by double and add on the bits of `k`. -/
 def mulBits : Nat → Nat → Point2 → Point2
@@ -314,13 +288,15 @@ def linefunc (r q : Point2) (xt yt : Fp) : Fp12 :=
   | .affine x1 y1, .affine x2 y2 =>
     -- The draft tests `Q_1 = Q_2`, then `Q_1 = -Q_2`; on the curve, both have `x_1 = x_2`.
     if x1 ≠ x2 then
-      -- `l := (y_2 - y_1) / (x_2 - x_1)`, then `return (l * (x - x_1) + y_1 - y)`.
+      -- Distinct `x`: the slope is `l = (y_2 - y_1) / (x_2 - x_1)`.
+      --
+      -- The line is then `l (x - x_1) + y_1 - y`.
       slopeLine ((y2 - y1) * (x2 - x1).inv) x1 y1 xt yt
     else if y1 = y2 then
-      -- `if (Q_1 = Q_2) then l := (3 * x_1^2) / (2 * y_1)`, then the same return.
-      slopeLine (Fp2.ofFp 3 * x1 * x1 * Fp2.inv (Fp2.ofFp 2 * y1)) x1 y1 xt yt
+      -- `Q_1 = Q_2`: the slope is `l = 3 x_1^2 / (2 y_1)`, and the line is the same.
+      slopeLine (3 * x1 * x1 * Fp2.inv (2 * y1)) x1 y1 xt yt
     else
-      -- `else if (Q_1 = -Q_2) then return x - x_1`.
+      -- `Q_1 = -Q_2`: the line is the vertical `x - x_1`.
       verticalLine x1 xt
   -- The loop never meets the point at infinity on points of order `q`.
   | _, _ => Fp12.one
@@ -365,9 +341,7 @@ def millerLoop (q : Point2) (xp yp : Fp) : Fp12 :=
   --
   -- Line 13 reads only `-Q2`, so the negation is taken here.
   let q1 := frobenius q
-  let nq2 := match frobenius q1 with
-    | .affine x y => Point2.affine x (-y)
-    | .infinity => .infinity
+  let nq2 := -frobenius q1
   -- Line 12: `f <- f * l_{T,Q1}(P); T <- T + Q1`.
   --
   -- Its `T <- T + Q1` is computed once, inside line 13.

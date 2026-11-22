@@ -834,6 +834,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the points of `G_2` on the alt_bn128 twist are the shared short Weierstrass points over `Fp2` ([#4061](https://github.com/ethereum/EthLib/issues/4061)).
+  `AltBn128.Point2` is now `ShortWeierstrass.Point Fp2`, through the new instance `AltBn128.instTwistParams` with `a = 0` and `b2`.
+  Its sum, negation and curve test are those of the shared rule, so `AltBn128.Point2.add` and `AltBn128.Point2.isOnCurve` are gone.
+  Dot notation still finds `p + q` and `p.isOnCurve`, and `-p` is new.
+  `Point2.infinity` and `Point2.affine` keep their names, as abbreviations of the shared constructors.
+  `Fp2` gets the numerals `2` and `3` of the rule, as `AltBn128.instOfNatTwo` and `AltBn128.instOfNatThree`.
+  The generic extension gets `0` and `1` in its specification module instead of its proofs.
+  No value changes, and the theorems about `G_2`, the pairing and ECPAIRING keep their statements.
+
 - In Lean, the readers of byte fields move from Base to Networking, next to their only users, the QUIC and TLS wire formats and Protobuf ([#3841](https://github.com/ethereum/EthLib/issues/3841)).
   The modules `EthLib.Base.ByteReader` and `EthLib.Base.Proofs.ByteReader` are now `EthLib.Networking.Encoding.ByteReader` and `EthLib.Networking.Proofs.Encoding.ByteReader`, and the namespace `EthLib.Base.ByteReader` is now `EthLib.Networking.Encoding.ByteReader`.
 

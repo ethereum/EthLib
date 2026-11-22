@@ -42,6 +42,10 @@ variable {F : Type} [FieldOps F]
 
 @[inline] def ofFp (x : F) : Fp2 F := ⟨x, FieldOps.zero⟩
 
+-- The numerals `0` and `1` of the extension.
+instance : Zero (Fp2 F) := ⟨zero⟩
+instance : One (Fp2 F) := ⟨one⟩
+
 @[inline] def add (a b : Fp2 F) : Fp2 F := ⟨a.c0 + b.c0, a.c1 + b.c1⟩
 @[inline] def sub (a b : Fp2 F) : Fp2 F := ⟨a.c0 - b.c0, a.c1 - b.c1⟩
 @[inline] def neg (a : Fp2 F)   : Fp2 F := ⟨-a.c0, -a.c1⟩

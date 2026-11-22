@@ -59,82 +59,46 @@ theorem twist_nonsingular_of {x y : Fp2} (h : y * y = x * x * x + b2) : twist.No
 
 namespace Point2
 
+/-- The identity of `Fp2` keeps the operations, the numerals and the inverse of the rule.
+
+It sends the constants of the twist to `0` and `b2`. -/
+theorem embedding : ShortWeierstrass.Embedding (id : Fp2 → Fp2) 0 b2 where
+  injective := Function.injective_id
+  map_add _ _ := rfl
+  map_sub _ _ := rfl
+  map_mul _ _ := rfl
+  map_neg _ := rfl
+  map_zero := rfl
+  map_two := rfl
+  map_three := rfl
+  map_inv _ := rfl
+  map_a := rfl
+  map_b := rfl
+
 /-- The group element of a point.
 
 A pair off the twist has none, and goes to `0`: every theorem assumes the point is on the twist. -/
-def toPoint : Point2 → twist.Point
-  | infinity => 0
-  | affine x y => if h : y * y = x * x * x + b2 then .some _ _ (twist_nonsingular_of h) else 0
+abbrev toPoint (p : Point2) : twist.Point := ShortWeierstrass.Point.toPoint 0 b2 id p
 
 /-- The twist test, as an equation in `Fp2`. -/
 theorem isOnCurve_affine (x y : Fp2) : (affine x y).isOnCurve = true ↔ y * y = x * x * x + b2 := by
-  simp only [isOnCurve, beq_iff_eq]
+  rw [ShortWeierstrass.Point.isOnCurve_affine embedding, id, id, zero_mul, add_zero]
 
 theorem toPoint_affine {x y : Fp2} (h : (affine x y).isOnCurve = true) :
     toPoint (affine x y) = .some _ _ (twist_nonsingular_of ((isOnCurve_affine x y).mp h)) :=
-  dite_eq_left ((isOnCurve_affine x y).mp h)
+  ShortWeierstrass.Point.toPoint_affine embedding h
 
 @[simp] theorem toPoint_infinity : toPoint infinity = 0 := rfl
 
 /-! ## Addition -/
 
-/-- A pair whose coordinates are those of a group element is on the twist, and is that element. -/
-private theorem affine_of_eq {x3 y3 : Fp2} {P : twist.Point} (h : ∃ h3, P = .some x3 y3 h3) :
-    (affine x3 y3).isOnCurve = true ∧ toPoint (affine x3 y3) = P := by
-  obtain ⟨h3, rfl⟩ := h
-  have hc : (affine x3 y3).isOnCurve = true :=
-    (isOnCurve_affine x3 y3).mpr ((twist_equation_iff _ _).mp h3.1)
-  exact ⟨hc, toPoint_affine hc⟩
-
-/-- The rule for two points of the twist, both away from infinity. -/
-private theorem add_affine {x1 y1 x2 y2 : Fp2} (h1 : (affine x1 y1).isOnCurve = true)
-    (h2 : (affine x2 y2).isOnCurve = true) :
-    (affine x1 y1 + affine x2 y2).isOnCurve = true
-      ∧ toPoint (affine x1 y1 + affine x2 y2)
-        = toPoint (affine x1 y1) + toPoint (affine x2 y2) := by
-  have e1 := (isOnCurve_affine x1 y1).mp h1
-  have e2 := (isOnCurve_affine x2 y2).mp h2
-  rw [toPoint_affine h1, toPoint_affine h2]
-  show (add (affine x1 y1) (affine x2 y2)).isOnCurve = true
-    ∧ toPoint (add (affine x1 y1) (affine x2 y2)) = _
-  simp only [add, Fp2.ofFp_two, Fp2.ofFp_three, Fp2.inv_eq_inv]
-  by_cases hx : x1 = x2
-  · subst hx
-    rw [ite_eq_left rfl]
-    by_cases hy : y2 = -y1
-    · -- Opposite points sum to `O`.
-      rw [ite_eq_left hy, ShortWeierstrass.add_of_y_eq_neg _ _ hy]
-      exact ⟨rfl, rfl⟩
-    · -- Same `x`, not opposite: the points are equal, and the tangent doubles.
-      rw [ite_eq_right hy]
-      have hy2 : y2 = y1 := by
-        have : (y2 - y1) * (y2 + y1) = 0 := by linear_combination e2 - e1
-        rcases mul_eq_zero.mp this with h | h
-        · exact sub_eq_zero.mp h
-        · exact absurd (eq_neg_of_add_eq_zero_left h) hy
-      subst hy2
-      exact affine_of_eq (ShortWeierstrass.add_self_of_y_ne _ hy (by ring) rfl rfl)
-  · -- Different `x`: the chord.
-    rw [ite_eq_right hx]
-    exact affine_of_eq (ShortWeierstrass.add_of_x_ne _ _ hx rfl rfl rfl)
-
 theorem isOnCurve_add {p q : Point2} (hp : p.isOnCurve = true) (hq : q.isOnCurve = true) :
-    (p + q).isOnCurve = true := by
-  cases p with
-  | infinity => exact hq
-  | affine x1 y1 =>
-    cases q with
-    | infinity => exact hp
-    | affine x2 y2 => exact (add_affine hp hq).1
+    (p + q).isOnCurve = true :=
+  ShortWeierstrass.Point.isOnCurve_add embedding hp hq
 
 theorem toPoint_add {p q : Point2} (hp : p.isOnCurve = true) (hq : q.isOnCurve = true) :
-    toPoint (p + q) = toPoint p + toPoint q := by
-  cases p with
-  | infinity => exact (zero_add _).symm
-  | affine x1 y1 =>
-    cases q with
-    | infinity => exact (add_zero _).symm
-    | affine x2 y2 => exact (add_affine hp hq).2
+    toPoint (p + q) = toPoint p + toPoint q :=
+  ShortWeierstrass.Point.toPoint_add embedding hp hq
 
 /-! ## Scalar multiplication -/
 
@@ -175,19 +139,8 @@ theorem toPoint_mulBits (fuel k : Nat) {p : Point2} (hp : p.isOnCurve = true) (h
 
 /-- Two points on the twist with the same group element are equal. -/
 theorem toPoint_inj {p q : Point2} (hp : p.isOnCurve = true) (hq : q.isOnCurve = true) :
-    toPoint p = toPoint q ↔ p = q := by
-  refine ⟨fun h => ?_, fun h => h ▸ rfl⟩
-  cases p with
-  | infinity =>
-    cases q with
-    | infinity => rfl
-    | affine x y => rw [toPoint_affine hq] at h; cases h
-  | affine x1 y1 =>
-    cases q with
-    | infinity => rw [toPoint_affine hp] at h; cases h
-    | affine x2 y2 =>
-      rw [toPoint_affine hp, toPoint_affine hq, Affine.Point.some.injEq] at h
-      rw [h.1, h.2]
+    toPoint p = toPoint q ↔ p = q :=
+  ShortWeierstrass.Point.toPoint_inj embedding hp hq
 
 /-- Only the point at infinity goes to `0`. -/
 theorem toPoint_eq_zero {p : Point2} (hp : p.isOnCurve = true) : toPoint p = 0 ↔ p = infinity :=
@@ -195,13 +148,8 @@ theorem toPoint_eq_zero {p : Point2} (hp : p.isOnCurve = true) : toPoint p = 0 �
 
 /-- Every group element is the element of a point on the twist. -/
 theorem toPoint_surjective (P : twist.Point) :
-    ∃ p : Point2, p.isOnCurve = true ∧ toPoint p = P := by
-  cases P with
-  | zero => exact ⟨infinity, rfl, rfl⟩
-  | some x y h =>
-    have hc : (affine x y).isOnCurve = true :=
-      (isOnCurve_affine x y).mpr ((twist_equation_iff x y).mp h.1)
-    exact ⟨affine x y, hc, toPoint_affine hc⟩
+    ∃ p : Point2, p.isOnCurve = true ∧ toPoint p = P :=
+  ShortWeierstrass.Point.toPoint_surjective embedding Function.surjective_id P
 
 /-! ## The subgroup check of ECPAIRING -/
 
