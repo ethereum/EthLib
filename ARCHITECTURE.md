@@ -12,8 +12,8 @@ With these fixed, two people can write two modules at the same time and expect t
 EthLib aims to specify the whole Ethereum protocol in Lean, and to prove what the protocol guarantees.
 In its end state, from the bytes a node receives, EthLib defines every value a correct node computes, and its theorems say why the result is secure.
 
-A definition is in scope when a published source specifies it: an EIP, an RFC, a paper, a specification repository, or another primary source.
-EthLib is a specification in its own right, at the same level as the others.
+A definition is in scope when a published source specifies it: an EIP, an RFC, a paper, or another primary source, or, as a reference point, a specification repository.
+EthLib is a formal specification in its own right.
 It follows what they define, and none of them shapes how EthLib is organised.
 
 The rest of this section lists what that goal covers, part by part.
@@ -279,8 +279,8 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
   That cost is the conversions at call sites, the edited theorems and the breaking change for Lean importers.
 - Such a structure follows its source.
   It names a role, not validity, so a check such as `KeyValidate` stays a function or a separate type.
-  A conversion between two of these types appears only where the source converts, as `Root(header.execution_block_hash)` does in consensus-specs.
-  A name that the source only aliases, such as `Hash32 = Bytes32` in execution-specs, stays an `abbrev`.
+  A conversion between two of these types appears only where the rule converts, as the execution block hash becomes a root in consensus-specs.
+  A name that the source only aliases, as execution-specs aliases `Hash32` to `Bytes32`, stays an `abbrev`.
   Two sources can disagree on whether a name is a type of its own, as they do for `Hash32`.
   Its definition then records both readings and the choice.
 - An integer keeps the range its source gives it.
@@ -530,7 +530,8 @@ When a constant depends on both, the function of the fork takes the preset as an
 
 ## Sources
 
-EthLib is a specification at the same level as execution-specs and consensus-specs, so its code stands on its own.
+EthLib is a formal specification, and its code stands on its own.
+The texts of execution-specs and consensus-specs are reference points, not formal specifications.
 The code cites only primary sources as the authority for a rule.
 Such a source is an EIP or an RFC with its section, a NIST or SEC standard, or a paper.
 Where no primary source states a rule, the doc comment states the rule itself, in words and in mathematics.
@@ -538,13 +539,12 @@ A reader then needs no other specification.
 A contributor may read execution-specs and consensus-specs to understand a rule and to check the work.
 The code does not cite them as the authority for a rule.
 
-A comment in the code may still name execution-specs or consensus-specs in a provenance note.
-The note names the text and the commit where a rule is stated.
-If it is known, the note also names the commit that EthLib took the rule from.
+Where execution-specs or consensus-specs is the only text that states a rule, a provenance note may name it.
+The note is one short line: the text and its file at a pinned commit, with its section where the text has one.
 [`CONTRIBUTING.md`](CONTRIBUTING.md#sources-of-truth) says when to write one, and where.
 A provenance note is not a citation of authority.
-A step comment may also name the function of those texts that holds a step, as [`CONTRIBUTING.md`](CONTRIBUTING.md#step-comments) explains, and it is not a citation of authority either.
-It states the step in mathematical notation or in short, plain words, and never quotes code in a programming language.
+Step comments never trace those texts or name their functions, as [`CONTRIBUTING.md`](CONTRIBUTING.md#step-comments) explains.
+They state each step formally, in EthLib's own terms, and never quote code in a programming language.
 
 Test vectors are a further exception, because a test must say what it checks against.
 Each fixture keeps its pinned origin and digests in `tests/`.
