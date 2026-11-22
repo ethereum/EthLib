@@ -101,16 +101,23 @@ Small balances cost the attacker little to top up, so the deposits bound the per
 
 Otherwise both the churn and the top-ups bound it, and the period waits for the longer. -/
 def phase0PeriodEpochs (N t T delta Delta : UInt64) : Except ArithError Epoch := do
+  -- Let `D = SAFETY_DECAY`.
   let D := SAFETY_DECAY
+  -- Let `l = T * (200 + 3 * D)` and `h = t * (200 + 12 * D)`.
   let low ← mulChecked T (200 + 3 * D)
   let high ← mulChecked t (200 + 12 * D)
+  -- When `l < h`, the churn and the top-ups both bound the period.
   if high > low then
+    -- The churn takes `floor(N * (h - l) / (600 * delta * (2 * t + T)))` epochs.
     let churnDivisor ← mulChecked (← mulChecked 600 delta)
       (← addChecked (← mulChecked 2 t) T)
     let epochsForValidatorSetChurn ← divChecked (← mulChecked N (high - low)) churnDivisor
+    -- The top-ups take `floor(N * (200 + 3 * D) / (600 * Delta))` epochs.
     let epochsForBalanceTopUps ←
       divChecked (← mulChecked N (200 + 3 * D)) (← mulChecked 600 Delta)
+    -- The epochs are the longer of the two.
     return max epochsForValidatorSetChurn epochsForBalanceTopUps
+  -- Else the top-ups take `floor(3 * N * D * t / (200 * Delta * (T - t)))` epochs.
   else
     let numerator ← mulChecked (← mulChecked (← mulChecked 3 N) D) t
     let denominator ← mulChecked (← mulChecked 200 Delta) (← subChecked T t)
@@ -123,12 +130,18 @@ The average balance divides the total active balance by the number of active val
 So a state without active validators has no period. -/
 def computeWeakSubjectivityPeriodPhase0 (config : Config) (state : BeaconState preset fork) :
     Except WeakSubjectivityError Epoch := do
+  -- `N` is the number of validators active in the current epoch.
   let N := (getActiveValidatorIndices state (getCurrentEpoch state)).length.toUInt64
+  -- `t = floor(floor(B / N) / ETH_TO_GWEI)`, for the total active balance `B`.
   let total ← (getTotalActiveBalance state).mapError .accessor
   let t := (← (divChecked total N).mapError .arith) / ETH_TO_GWEI
+  -- `T = floor(MAX_EFFECTIVE_BALANCE / ETH_TO_GWEI)`.
   let T := preset.MAX_EFFECTIVE_BALANCE / ETH_TO_GWEI
+  -- `delta` is the churn limit of validators.
   let delta := getValidatorChurnLimit config state
+  -- `Delta = MAX_DEPOSITS * SLOTS_PER_EPOCH`.
   let Delta ← (mulChecked preset.MAX_DEPOSITS preset.SLOTS_PER_EPOCH).mapError .arith
+  -- The period is `MIN_VALIDATOR_WITHDRAWABILITY_DELAY` plus the epochs of the analysis.
   let epochs ← (phase0PeriodEpochs N t T delta Delta).mapError .arith
   (addChecked config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY epochs).mapError .arith
 
@@ -138,25 +151,36 @@ def computeWeakSubjectivityPeriodPhase0 (config : Config) (state : BeaconState p
 
 The churn must change the decayed margin, `SAFETY_DECAY / 100` of half the balance. -/
 def balanceChurnPeriod (minDelay total churn : UInt64) : Except ArithError Epoch := do
+  -- Let `t` be the total and `delta` the churn, as EIP-8061 writes them.
+  --
+  -- The churn takes `floor(SAFETY_DECAY * t / (2 * delta * 100))` epochs.
   let epochsForValidatorSetChurn ←
     divChecked (← mulChecked SAFETY_DECAY total) (← mulChecked (← mulChecked 2 churn) 100)
+  -- The period adds them to the minimum delay.
   addChecked minDelay epochsForValidatorSetChurn
 
 /-- Electra and Fulu: the weak subjectivity period of a state, with the churn of its balance. -/
 def computeWeakSubjectivityPeriodElectra (config : Config) (state : BeaconState preset fork) :
     Except WeakSubjectivityError Epoch := do
+  -- The total active balance, and the churn limit of balance.
   let total ← (getTotalActiveBalance state).mapError .accessor
   let churn ← (getBalanceChurnLimit config state).mapError .accessor
+  -- The period is `MIN_VALIDATOR_WITHDRAWABILITY_DELAY` plus the epochs of the churn.
   (balanceChurnPeriod config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY total churn).mapError .arith
 
 /-- From Gloas: the churn that the period counts, a weighted sum of the three churns.
 
-Exits weigh two thirds, activations one third and consolidations one. -/
+[EIP-8061] gives the weights.
+
+[EIP-8061]: https://eips.ethereum.org/EIPS/eip-8061#churn-computations
+-/
 def gloasWeightedChurn (config : Config) (state : BeaconState preset fork) :
     Except WeakSubjectivityError Gwei := do
+  -- Let `E`, `A` and `C` be the churn limits of exits, activations and consolidations.
   let exit ← (getExitChurnLimit config state).mapError .accessor
   let activation ← (getActivationChurnLimit config state).mapError .accessor
   let consolidation ← (getConsolidationChurnLimit config state).mapError .accessor
+  -- The churn is `floor(2 * E / 3) + floor(A / 3) + C`, as EIP-8061 specifies.
   let exitPart := (← (mulChecked 2 exit).mapError .arith) / 3
   let sum ← (addChecked exitPart (activation / 3)).mapError .arith
   (addChecked sum consolidation).mapError .arith
@@ -164,8 +188,10 @@ def gloasWeightedChurn (config : Config) (state : BeaconState preset fork) :
 /-- From Gloas: the weak subjectivity period of a state, with the weighted churn. -/
 def computeWeakSubjectivityPeriodGloas (config : Config) (state : BeaconState preset fork) :
     Except WeakSubjectivityError Epoch := do
+  -- The total active balance, and the weighted churn.
   let total ← (getTotalActiveBalance state).mapError .accessor
   let churn ← gloasWeightedChurn config state
+  -- The period is `MIN_VALIDATOR_WITHDRAWABILITY_DELAY` plus the churn epochs, as EIP-8061 says.
   (balanceChurnPeriod config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY total churn).mapError .arith
 
 /-! ## The period and the staleness check -/
@@ -173,27 +199,34 @@ def computeWeakSubjectivityPeriodGloas (config : Config) (state : BeaconState pr
 /-- The weak subjectivity period of a state, by the rule of its fork. -/
 def computeWeakSubjectivityPeriod (config : Config) (state : BeaconState preset fork) :
     Except WeakSubjectivityError Epoch :=
+  -- From Gloas the period counts the weighted churn.
   if .glamsterdam ≤ fork then computeWeakSubjectivityPeriodGloas config state
+  -- In Electra and Fulu it counts the churn of balance.
   else if .pectra ≤ fork then computeWeakSubjectivityPeriodElectra config state
+  -- Before Electra it counts validators and top-ups.
   else computeWeakSubjectivityPeriodPhase0 config state
 
 /-- Whether a checkpoint is still within its weak subjectivity period at the time of a store.
 
 The state is the state at the checkpoint, which the client supplies with it.
 
-The state must hold the checkpoint's root at the checkpoint's epoch, and be at that epoch.
+It fails when the state does not hold the root of the checkpoint at its epoch.
 
-The check then compares the current epoch of the store with the end of the period. -/
+It also fails when the state is not at that epoch. -/
 def isWithinWeakSubjectivityPeriod {storeFork : Base.Fork} (config : Config)
     (store : Store preset storeFork) (wsState : BeaconState preset fork)
     (wsCheckpoint : Checkpoint) : Except WeakSubjectivityError Bool := do
+  -- The state holds the root of the checkpoint at the epoch of the checkpoint.
   let root ← (getBlockRoot wsState wsCheckpoint.epoch).mapError .accessor
   if root ≠ wsCheckpoint.root then throw (.blockRootMismatch wsCheckpoint.root root)
+  -- The epoch `e` of the slot of the state is the epoch of the checkpoint.
   let wsStateEpoch := computeEpochAtSlot preset wsState.slot
   if wsStateEpoch ≠ wsCheckpoint.epoch then throw (.epochMismatch wsCheckpoint.epoch wsStateEpoch)
+  -- Let `w` be the period of the state, and `c` the epoch of the current slot of the store.
   let wsPeriod ← computeWeakSubjectivityPeriod config wsState
   let currentSlot ← (store.getCurrentSlot config).mapError .forkChoice
   let currentEpoch := computeEpochAtSlot preset currentSlot
+  -- The checkpoint is within its period when `c ≤ e + w`.
   return currentEpoch ≤ (← (addChecked wsStateEpoch wsPeriod).mapError .arith)
 
 end EthLib.Consensus

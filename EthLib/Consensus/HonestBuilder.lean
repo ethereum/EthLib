@@ -52,15 +52,7 @@ variable {preset : Preset} {fork : Base.Fork}
 
 /-- From Gloas: the bid of a builder for a payload that it built on a state.
 
-It builds on the parent hash of the payload, and on the root of the latest block header.
-
-It commits to the block hash, the RANDAO mix and the gas limit of the payload.
-
-It also commits to the root of the requests of the payload, and to the commitments of its blobs.
-
 The slot, the fee recipient, the builder and the value are given.
-
-It asks for no payment on the execution layer.
 
 From Heze the bits of the inclusion lists that the builder saw are given too.
 
@@ -71,11 +63,15 @@ def getExecutionPayloadBid (state : BeaconState preset fork)
     (feeRecipient : ExecutionAddress) (builderIndex : BuilderIndex) (value : Gwei)
     (inclusionListBits : Since .hegota fork (InclusionListBits preset)) :
     Except Err (ExecutionPayloadBid preset fork) := do
+  -- The parent root is the root of the latest block header of the state.
   let parentBlockRoot ← SszType.hashTreeRoot state.latestBlockHeader
+  -- The root of the requests of the payload.
   let executionRequestsRoot ← SszType.hashTreeRoot requests
   return {
+    -- It builds on the parent hash of the payload.
     parentBlockHash := payload.parentHash
     parentBlockRoot := parentBlockRoot
+    -- It commits to the block hash, the RANDAO mix and the gas limit of the payload.
     blockHash := payload.blockHash
     prevRandao := payload.prevRandao
     feeRecipient := feeRecipient
@@ -83,16 +79,14 @@ def getExecutionPayloadBid (state : BeaconState preset fork)
     builderIndex := builderIndex
     slot := slot
     value := value
+    -- It asks for no payment on the execution layer.
     executionPayment := 0
+    -- It commits to the commitments of the blobs of the payload, and to the root of its requests.
     blobKzgCommitments := blobKzgCommitments
     executionRequestsRoot := executionRequestsRoot
     inclusionListBits := inclusionListBits }
 
 /-- From Gloas: the signed bid of a proposer that builds its own payload.
-
-The bid is for the slot of the state, from the reserved builder index, with no value.
-
-Its signature is the signature at infinity.
 
 It fails when the bid fails. -/
 def getSelfBuiltExecutionPayloadBid (state : BeaconState preset fork)
@@ -100,13 +94,15 @@ def getSelfBuiltExecutionPayloadBid (state : BeaconState preset fork)
     (blobKzgCommitments : BlobKZGCommitments preset fork) (feeRecipient : ExecutionAddress)
     (inclusionListBits : Since .hegota fork (InclusionListBits preset)) :
     Except Err (SignedExecutionPayloadBid preset fork) := do
+  -- The bid is for the slot of the state.
+  --
+  -- Its builder index is `BUILDER_INDEX_SELF_BUILD` and its value 0, as EIP-7732 specifies.
   let bid ← getExecutionPayloadBid state payload requests blobKzgCommitments state.slot
     feeRecipient BUILDER_INDEX_SELF_BUILD 0 inclusionListBits
+  -- Its signature is the point at infinity, as EIP-7732 specifies.
   return ⟨bid, Signatures.G2_POINT_AT_INFINITY⟩
 
 /-- From Gloas: the envelope that reveals a payload and its requests, after the block of its bid.
-
-It names the builder of the bid of the block, the root of the block and the parent of the block.
 
 It fails when the root of the block fails. -/
 def getExecutionPayloadEnvelope (block : BeaconBlock preset fork) (gloas : .glamsterdam ≤ fork)
@@ -116,7 +112,9 @@ def getExecutionPayloadEnvelope (block : BeaconBlock preset fork) (gloas : .glam
   return {
     payload := payload
     executionRequests := requests
+    -- It names the builder of the bid of the block.
     builderIndex := (block.body.signedExecutionPayloadBid gloas).message.builderIndex
+    -- It names the root of the block, and the parent root of the block.
     beaconBlockRoot := beaconBlockRoot
     parentBeaconBlockRoot := block.parentRoot }
 
@@ -131,16 +129,20 @@ inductive BuilderSigningError where
 def getExecutionPayloadBidSignature (config : Config) (state : BeaconState preset fork)
     (bid : ExecutionPayloadBid preset fork) (key : Signatures.SecretKey) :
     Except BuilderSigningError BLSSignature := do
+  -- The signing root under `DOMAIN_BEACON_BUILDER`, at the epoch of the slot of the bid.
   let root ← (builderSigningRoot config state bid
     (some (computeEpochAtSlot preset bid.slot))).mapError .root
+  -- The BLS signature of that root with the key.
   (Signatures.sign key (packBytes root)).mapError .bls
 
 /-- The signature of an envelope by a builder with a secret key. -/
 def getExecutionPayloadEnvelopeSignature (config : Config) (state : BeaconState preset fork)
     (envelope : ExecutionPayloadEnvelope preset fork) (key : Signatures.SecretKey) :
     Except BuilderSigningError BLSSignature := do
+  -- The signing root under `DOMAIN_BEACON_BUILDER`, at the current epoch of the state.
   let root ← (builderSigningRoot config state envelope
     (some (computeEpochAtSlot preset state.slot))).mapError .root
+  -- The BLS signature of that root with the key.
   (Signatures.sign key (packBytes root)).mapError .bls
 
 end EthLib.Consensus
