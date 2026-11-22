@@ -14,12 +14,13 @@ The transition fails in three ways: the block is invalid, the run aborts, or the
 
 An error of the state is a missing account, a missing code, a short balance or an overflow.
 
-Four hypotheses exclude every abort and every error of the state.
+Five hypotheses exclude every abort and every error of the state.
 
 - The fork is before Hegotá, whose rules are not yet specified.
 - Every nonce of the state is at most `2^64 - 1`, by [EIP-2681][e2681].
 - The state holds the code of every account.
 - The supply plus the ether that the block creates leaves room for every credit.
+- The numbers of the header that an instruction pushes as words are below `2^256`.
 
 Under them, an abort can only be an error of the state, and no error of the state can occur.
 
@@ -52,6 +53,8 @@ The state must hold the code of every account.
 
 Its supply plus the ether that the block creates must leave room for every credit.
 
+The numbers of the header that the block pushes as words must fit them.
+
 Then the transition neither aborts nor fails with an error of the state.
 
 A system call that must succeed fails only with an error that does not abort, on any state.
@@ -61,6 +64,7 @@ theorem stateTransition_eq_error_invalid {chain : BlockChain} {block : Block for
     {checkSeal : Bool} {e : BlockError} (before : fork < .hegota)
     (hfit : chain.state.NoncesFit) (available : chain.state.HasCodes)
     (room : SupplyRoom fork (chain.state.supply + createdWei block))
+    (hwords : ∀ hashes, (blockEnvironment chain.config hashes block.header).WordsFit)
     (h : stateTransition chain block checkSeal = .error e) :
     (∀ error, e ≠ .aborted error) ∧ (∀ error, e ≠ .state error) ∧
       (∀ address error, e = .systemCallFailed address error → error.aborts = false) ∧
@@ -85,7 +89,7 @@ theorem stateTransition_eq_error_invalid {chain : BlockChain} {block : Block for
   refine ⟨fun error he => ?_, fun error he => (noState error).2 he, fun address error he => ?_,
     fun index codeHash he => ?_⟩
   · subst he
-    obtain ⟨s, rfl⟩ := stateTransition_aborted before hfit h
+    obtain ⟨s, rfl⟩ := stateTransition_aborted before hfit hwords h
     exact (noState s).1 rfl
   · subst he
     exact stateTransition_systemCallFailed h

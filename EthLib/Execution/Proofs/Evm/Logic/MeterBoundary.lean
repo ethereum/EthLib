@@ -391,7 +391,8 @@ theorem instruction_meterFields {op : Op}
   case jumpi => exact jumpiStep_meterFields ok
   case jumpdest => exact jumpdestStep_meterFields ok
   case «return» => exact returnStep_meterFields ok
-  case caller | callvalue | calldatasize | timestamp | number => exact readFrame_meterFields ok
+  case caller | callvalue | calldatasize | timestamp => exact readFrame_meterFields ok
+  case number => exact readFrame_meterFields (readFrame_of_readNumber ok)
   case log n =>
     have hz : n = 0 := by simpa using supported
     subst n

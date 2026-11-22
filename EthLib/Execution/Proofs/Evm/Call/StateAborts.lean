@@ -7,7 +7,9 @@ import EthLib.Execution.Proofs.Evm.Call.ContractAddress
 /-!
 # Proofs: a call or a creation aborts only with an error of the state
 
-Four kinds of error abort a run: an error of the state, an encoding, an opcode and a fork.
+Five kinds of error abort a run: an error of the state, an encoding, an opcode, a fork, a word.
+
+The last is a number of the environment that no word holds.
 
 Every opcode of a fork has an instruction there, so no step fails for an unspecified opcode.
 
@@ -21,7 +23,13 @@ EIP-2681 bounds every nonce by `2^64 - 1`, and every call keeps that bound.
 
 So does every creation whose address starts with a nonce below `2^64 - 1`.
 
+An instruction aborts on a number of its environment that no word holds.
+
+A message and every message that it sends share one environment, so a bound on it holds for all.
+
 So a run from a state whose nonces fit aborts only with an error of the state.
+
+The numbers that its environment pushes as words must fit them.
 -/
 
 @[expose] public section
@@ -33,11 +41,28 @@ open EthLib.Execution.State (TransactionState)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
+/-! ## The numbers that the EVM pushes as words -/
+
+/-- The numbers of a block that an instruction pushes as words are below `2^256`.
+
+They are the number, the gas limit, the difficulty, the base fee and the blob base fee. -/
+def BlockEnvironment.WordsFit (env : BlockEnvironment fork) : Prop :=
+  env.number < 2 ^ 256 ∧ env.gasLimit < 2 ^ 256 ∧ env.difficulty < 2 ^ 256 ∧
+    (∀ h, env.baseFeePerGas h < 2 ^ 256) ∧ ∀ h, env.blobBaseFee h < 2 ^ 256
+
+/-- The numbers of a block and a transaction that an instruction pushes as words fit them.
+
+Those of the transaction are its gas price. -/
+def WordsFit (block : BlockEnvironment fork) (tx : TransactionEnvironment fork) : Prop :=
+  block.WordsFit ∧ tx.gasPrice < 2 ^ 256
+
 /-! ## Results that abort only with an error of the state -/
 
-/-- The error is no unspecified opcode, no failure of encoding and no unspecified fork. -/
+/-- The error is no unspecified opcode, no failure of encoding, no unspecified fork and no word.
+
+An error of a word is a number of the environment of `2^256` or more. -/
 private def Harmless : EvmError → Prop
-  | .unspecifiedOpcode _ | .encoding _ | .forkNotYetSpecified _ => False
+  | .unspecifiedOpcode _ | .encoding _ | .forkNotYetSpecified _ | .wordOverflow _ => False
   | _ => True
 
 /-- A harmless error that aborts is an error of the state. -/
@@ -216,16 +241,20 @@ private theorem fine_returnOpStep [LawfulGasMeter Meter] {op : Op}
     | cases hstep
     | (simp only [returnStep, revertStep, haltWithOutput]; fine)
 
-/-- Each instruction of the environment is fine. -/
+/-- Each instruction of the environment is fine when the numbers it pushes fit a word. -/
 private theorem fine_environmentStep [LawfulGasMeter Meter] {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hstep : environmentStep fork op = some run) (evm : Evm fork Meter) : Fine (run evm) := by
+    (hstep : environmentStep fork op = some run) {evm : Evm fork Meter}
+    (hwords : WordsFit evm.message.blockEnv evm.message.txEnv) : Fine (run evm) := by
+  obtain ⟨⟨hnumber, hlimit, hdifficulty, hbase, hblob⟩, hprice⟩ := hwords
   cases op <;> simp only [environmentStep, Option.some.injEq, reduceCtorEq] at hstep
   all_goals (try split at hstep) <;> (try simp only [Option.some.injEq, reduceCtorEq] at hstep) <;>
     (try subst hstep)
+  -- Each number that an instruction reads fits a word, so it reads it as a word.
   all_goals first
     | cases hstep
-    | (simp only [blockhashStep, blobhashStep, readFrame]; fine)
+    | (simp only [blockhashStep, blobhashStep, readNumber, readFrame, hnumber, hlimit,
+        hdifficulty, hbase, hblob, hprice, ↓reduceIte]; fine)
 
 /-- Each instruction that reads another account is fine. -/
 private theorem fine_accountStep [LawfulGasMeter Meter] {op : Op}
@@ -273,10 +302,11 @@ private theorem fine_selfdestructOpStep [LawfulGasMeter Meter] {op : Op}
   simp only [selfdestructStep, finishSelfdestruct]
   fine
 
-/-- An instruction that gives the next frame is fine. -/
+/-- An instruction that gives the next frame is fine when the numbers it pushes fit a word. -/
 private theorem fine_instruction [LawfulGasMeter Meter] {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}
-    (hrun : instruction fork op = some run) (evm : Evm fork Meter) : Fine (run evm) := by
+    (hrun : instruction fork op = some run) (evm : Evm fork Meter)
+    (hwords : WordsFit evm.message.blockEnv evm.message.txEnv) : Fine (run evm) := by
   unfold Evm.instruction at hrun
   rcases orElse_eq_some hrun with hf | hrun
   · exact fine_stackOnlyStep hf evm
@@ -287,7 +317,7 @@ private theorem fine_instruction [LawfulGasMeter Meter] {op : Op}
   rcases orElse_eq_some hrun with hf | hrun
   · exact fine_returnOpStep hf evm
   rcases orElse_eq_some hrun with hf | hrun
-  · exact fine_environmentStep hf evm
+  · exact fine_environmentStep hf hwords
   rcases orElse_eq_some hrun with hf | hrun
   · exact fine_accountStep hf evm
   rcases orElse_eq_some hrun with hf | hrun
@@ -382,9 +412,10 @@ private theorem fine_messageInstruction [LawfulGasMeter Meter] {op : Op}
       | cases hc
       | exact fine_createStep hfit
 
-/-- A step from a frame whose nonces fit is fine. -/
+/-- A step from a frame whose nonces fit is fine when the numbers it pushes fit a word. -/
 private theorem fine_step [LawfulGasMeter Meter] {evm : Evm fork Meter}
-    (hfit : evm.state.NoncesFit) : Fine (step fork evm) := by
+    (hfit : evm.state.NoncesFit) (hwords : WordsFit evm.message.blockEnv evm.message.txEnv) :
+    Fine (step fork evm) := by
   unfold step
   split
   · dsimp only
@@ -392,7 +423,7 @@ private theorem fine_step [LawfulGasMeter Meter] {evm : Evm fork Meter}
     · exact Fine.throw trivial
     · rename_i op decoded
       split
-      · exact Fine.map _ (fine_instruction (by assumption) evm)
+      · exact Fine.map _ (fine_instruction (by assumption) evm hwords)
       · rename_i hi
         split
         · exact fine_messageInstruction (by assumption) hfit
@@ -405,11 +436,14 @@ private theorem fine_step [LawfulGasMeter Meter] {evm : Evm fork Meter}
             cases h
   · exact Fine.map _ (Fine.ok _)
 
-/-- A step from a frame whose nonces fit aborts only with an error of the state. -/
+/-- A step from a frame whose nonces fit aborts only with an error of the state.
+
+The numbers that its environment pushes as words must fit them. -/
 theorem step_aborts_state [LawfulGasMeter Meter] {evm : Evm fork Meter} {e : EvmError}
-    (hfit : evm.state.NoncesFit) (h : step fork evm = .error e) (aborts : e.aborts = true) :
+    (hfit : evm.state.NoncesFit) (hwords : WordsFit evm.message.blockEnv evm.message.txEnv)
+    (h : step fork evm = .error e) (aborts : e.aborts = true) :
     ∃ error, e = .state error :=
-  (fine_step hfit e h).state aborts
+  (fine_step hfit hwords e h).state aborts
 
 /-! ## A run of a frame -/
 
@@ -429,10 +463,15 @@ Each message that the runner runs from such a state must fail only with an error
 
 Each message that the runner completes must keep every nonce within the bound.
 
-For a creation, both are needed only when its address starts with a nonce of at most 1. -/
+For a creation, both are needed only when its address starts with a nonce of at most 1.
+
+The numbers that the environment of the frame pushes as words must fit them.
+
+The first condition needs the same of the environment of each message. -/
 private theorem runFrame_state [LawfulGasMeter Meter] {bound : Nat}
     {runChild : MessageRunner fork Meter bound}
     (never : ∀ caller message lt e, caller.state.NoncesFit →
+      WordsFit message.blockEnv message.txEnv →
       (message.target = none → (caller.state.getAccount message.currentTarget).nonce ≤ 1) →
       runChild caller message lt = .error e → ∃ error, e = .state error)
     (keeps : ∀ caller message lt ended, runChild caller message lt = .ok ended →
@@ -440,30 +479,43 @@ private theorem runFrame_state [LawfulGasMeter Meter] {bound : Nat}
       (message.target = none → (caller.state.getAccount message.currentTarget).nonce ≤ 1) →
       ended.val.state.NoncesFit)
     {evm : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound}
-    (hfit : evm.state.NoncesFit) (e : EvmError)
+    (hfit : evm.state.NoncesFit) (hwords : WordsFit evm.message.blockEnv evm.message.txEnv)
+    (e : EvmError)
     (h : runFrame (step fork) (step_decreases fork) bound runChild evm within = .error e) :
     ∃ error, e = .state error := by
-  revert hfit h
+  revert hfit hwords h
   refine runFrame_induct
-    (motive := fun evm _ r => evm.state.NoncesFit → r = .error e → ∃ error, e = .state error)
+    (motive := fun evm _ r => evm.state.NoncesFit →
+      WordsFit evm.message.blockEnv evm.message.txEnv → r = .error e → ∃ error, e = .state error)
     ?case1 ?case2 ?case3 ?case4 ?case5 ?case6 ?case7 ?case8 evm within
-  all_goals (intros; rename_i hfit h)
+  all_goals (intros; rename_i hfit hwords h)
   case case1 hstep aborts =>
     cases h
-    exact (fine_step hfit _ hstep).state aborts
-  case case3 hstep _ ih => exact ih (stepRules_noncesFit.step hstep hfit) h
+    exact (fine_step hfit hwords _ hstep).state aborts
+  case case3 hstep _ ih =>
+    -- A step to the next frame keeps the message, so it keeps the environment.
+    refine ih (stepRules_noncesFit.step hstep hfit) ?_ h
+    rw [(stepRules_messageCode.step hstep).1]
+    exact hwords
   case case4 hstep _ _ ran =>
     cases h
-    exact never _ _ _ _ ((stepRules_noncesFit.step hstep).1 hfit)
+    -- The message that the step sends has the environment of the frame.
+    obtain ⟨hblock, htx⟩ := env_of_step_eq_child hstep
+    exact never _ _ _ _ ((stepRules_noncesFit.step hstep).1 hfit) (hblock ▸ htx ▸ hwords)
       (step_eq_child_create_nonce_le hstep) ran
   case case5 hstep _ _ _ _ _ resumed aborts =>
     cases h
     exact (fine_resume hstep _ resumed).state aborts
   case case7 hstep _ _ _ ran _ resumed _ ih =>
-    refine ih ?_ h
-    rw [(sameContext_of_step_eq_child hstep resumed).state, state_incorporateChild]
-    exact keeps _ _ _ _ ran ((stepRules_noncesFit.step hstep).1 hfit)
-      (step_eq_child_create_nonce_le hstep)
+    -- The frame that resumes has the message of the caller, which is the message of the frame.
+    have context := sameContext_of_step_eq_child hstep resumed
+    refine ih ?_ ?_ h
+    · rw [context.state, state_incorporateChild]
+      exact keeps _ _ _ _ ran ((stepRules_noncesFit.step hstep).1 hfit)
+        (step_eq_child_create_nonce_le hstep)
+    · obtain ⟨kept, -⟩ := (stepRules_messageCode.step hstep).1
+      rw [context.message, message_incorporateChild, kept]
+      exact hwords
   all_goals cases h
 
 /-! ## The calls and the creations of a run -/
@@ -499,14 +551,18 @@ private theorem noncesFit_moveEther {tx tx' : TransactionState} {sender recipien
 
 A creation must start at an address whose nonce is below `2^64 - 1`.
 
+The numbers that the environment of the message pushes as words must fit them.
+
 The proof is by strong induction on the gas of the message, for calls and creations together. -/
 private theorem processMessage_state_of_gas [LawfulGasMeter Meter] (n : Nat) :
     (∀ (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n → state.NoncesFit →
+      WordsFit message.blockEnv message.txEnv →
       ∀ e, processMessage fork message state substate meter held = .error e →
         ∃ error, e = .state error) ∧
     (∀ (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n → state.NoncesFit →
+      WordsFit message.blockEnv message.txEnv →
       (state.getAccount message.currentTarget).nonce < MAX_NONCE →
       ∀ e, processCreateMessage fork message state substate meter held = .error e →
         ∃ error, e = .state error) := by
@@ -514,17 +570,17 @@ private theorem processMessage_state_of_gas [LawfulGasMeter Meter] (n : Nat) :
   | _ n ih =>
     -- Each message that the frame sends has less gas, so it fails only so and keeps the bound.
     have never : ∀ (caller : Evm fork Meter) (child : Message fork), child.gas < n →
-        caller.state.NoncesFit →
+        caller.state.NoncesFit → WordsFit child.blockEnv child.txEnv →
         (child.target = none → (caller.state.getAccount child.currentTarget).nonce ≤ 1) →
         ∀ e, (match child.target with
           | some _ => processMessage (Meter := Meter) fork child caller.state caller.substate.child
           | none => processCreateMessage (Meter := Meter) fork child caller.state
             caller.substate.child) = .error e → ∃ error, e = .state error := by
-      intro caller child lt hfit hnonce e h
+      intro caller child lt hfit hwords hnonce e h
       split at h
-      · exact (ih child.gas lt).1 child _ _ _ _ rfl hfit e h
+      · exact (ih child.gas lt).1 child _ _ _ _ rfl hfit hwords e h
       · rename_i hnone
-        exact (ih child.gas lt).2 child _ _ _ _ rfl hfit
+        exact (ih child.gas lt).2 child _ _ _ _ rfl hfit hwords
           (Nat.lt_of_le_of_lt (hnonce hnone) (by decide)) e h
     have keeps : ∀ (caller : Evm fork Meter) (child : Message fork) ended, (match child.target with
           | some _ => processMessage (Meter := Meter) fork child caller.state caller.substate.child
@@ -540,9 +596,10 @@ private theorem processMessage_state_of_gas [LawfulGasMeter Meter] (n : Nat) :
           (Nat.lt_of_le_of_lt (hnonce hnone) (by decide)) h
     have call : ∀ (message : Message fork) (state : TransactionState) (substate : Substate)
         (meter : Meter) (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
-        state.NoncesFit → ∀ e, processMessage fork message state substate meter held = .error e →
+        state.NoncesFit → WordsFit message.blockEnv message.txEnv →
+        ∀ e, processMessage fork message state substate meter held = .error e →
         ∃ error, e = .state error := by
-      intro message state substate meter held hn hfit e h
+      intro message state substate meter held hn hfit hwords e h
       have start : (startState fork message state).NoncesFit := noncesFit_startState hfit
       rw [processMessage_unfold] at h
       simp only [Except.map] at h
@@ -557,9 +614,9 @@ private theorem processMessage_state_of_gas [LawfulGasMeter Meter] (n : Nat) :
                 | none => processCreateMessage fork child caller.state caller.substate.child)
               (startFrame message entry substate' meter) held = .error e),
             ∃ error, e = .state error := fun entered _ _ hrun =>
-          runFrame_state (fun caller child lt e hfit hnonce =>
-              never caller child (hn ▸ lt) hfit hnonce e)
-            (fun caller child _ ended ran => keeps caller child ended ran) entered _ hrun
+          runFrame_state (fun caller child lt e hfit hwords hnonce =>
+              never caller child (hn ▸ lt) hfit hwords hnonce e)
+            (fun caller child _ ended ran => keeps caller child ended ran) entered hwords _ hrun
         split at hdo
         · rcases Base.bind_eq_error hdo with hm | ⟨entry, hentry, hdo⟩
           · exact mapError_state_eq_error hm
@@ -576,7 +633,7 @@ private theorem processMessage_state_of_gas [LawfulGasMeter Meter] (n : Nat) :
             | (cases hdo; done)
             | (rename_i hrun; cases hdo; exact ran start hrun)
       · cases h
-    refine ⟨call, fun message state substate meter held hn hfit htarget e h => ?_⟩
+    refine ⟨call, fun message state substate meter held hn hfit hwords htarget e h => ?_⟩
     rw [processCreateMessage_unfold] at h
     rcases Base.bind_eq_error h with hp | ⟨prepared, hprep, h⟩
     · unfold prepareCreation at hp
@@ -594,7 +651,7 @@ private theorem processMessage_state_of_gas [LawfulGasMeter Meter] (n : Nat) :
       · cases hprep
         exact marked
     rcases Base.bind_eq_error h with hm | ⟨⟨evm, used⟩, -, h⟩
-    · exact call message prepared substate meter held hn ready e hm
+    · exact call message prepared substate meter held hn ready hwords e hm
     split at h
     split at h
     · rename_i hdep
@@ -609,24 +666,30 @@ private theorem processMessage_state_of_gas [LawfulGasMeter Meter] (n : Nat) :
            · cases hs)
     · cases h
 
-/-- A call from a state whose nonces fit fails only with an error of the state. -/
+/-- A call from a state whose nonces fit fails only with an error of the state.
+
+The numbers that its environment pushes as words must fit them. -/
 theorem processMessage_eq_error [LawfulGasMeter Meter] {message : Message fork}
     {state : TransactionState} {substate : Substate} {meter : Meter}
     {held : GasMeter.gasHeld meter ≤ message.gas} {e : EvmError} (hfit : state.NoncesFit)
+    (hwords : WordsFit message.blockEnv message.txEnv)
     (h : processMessage fork message state substate meter held = .error e) :
     ∃ error, e = .state error :=
-  (processMessage_state_of_gas message.gas).1 message state substate meter held rfl hfit e h
+  (processMessage_state_of_gas message.gas).1 message state substate meter held rfl hfit hwords e h
 
 /-- A creation from a state whose nonces fit fails only with an error of the state.
 
-Its address must start with a nonce below `2^64 - 1`. -/
+Its address must start with a nonce below `2^64 - 1`.
+
+The numbers that its environment pushes as words must fit them. -/
 theorem processCreateMessage_eq_error [LawfulGasMeter Meter] {message : Message fork}
     {state : TransactionState} {substate : Substate} {meter : Meter}
     {held : GasMeter.gasHeld meter ≤ message.gas} {e : EvmError} (hfit : state.NoncesFit)
+    (hwords : WordsFit message.blockEnv message.txEnv)
     (htarget : (state.getAccount message.currentTarget).nonce < MAX_NONCE)
     (h : processCreateMessage fork message state substate meter held = .error e) :
     ∃ error, e = .state error :=
-  (processMessage_state_of_gas message.gas).2 message state substate meter held rfl hfit htarget
-    e h
+  (processMessage_state_of_gas message.gas).2 message state substate meter held rfl hfit hwords
+    htarget e h
 
 end EthLib.Execution.Evm

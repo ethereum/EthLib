@@ -293,7 +293,7 @@ private theorem noMiss_environmentStep [LawfulGasMeter Meter] {op : Op}
     (try subst hstep)
   all_goals first
     | cases hstep
-    | (simp only [blockhashStep, blobhashStep, readFrame]; no_miss)
+    | (simp only [blockhashStep, blobhashStep, readNumber, readFrame]; no_miss)
 
 /-- Each instruction of a log has no missing code. -/
 private theorem noMiss_logOpStep [LawfulGasMeter Meter] {op : Op}

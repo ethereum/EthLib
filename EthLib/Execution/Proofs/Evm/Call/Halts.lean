@@ -109,7 +109,8 @@ set_option hygiene false in
 local macro "errkept_tac" : tactic => `(tactic| (
   simp only [binaryOp, unaryOp, ternaryOp, expStep, keccak256Step, popStep, pushN, dupN, swapN,
     dupnStep, swapnStep, exchangeStep, popWord, pushWord, chargeGas, chargeStateGas,
-    refillStateGas, chargeGasAndMemory, readFrame, advance, recordAccountRead, recordStorageRead,
+    refillStateGas, chargeGasAndMemory, readNumber, readFrame, advance, recordAccountRead,
+    recordStorageRead,
     stopStep, jumpStep, jumpiStep, jumpdestStep, mloadStep, mstoreStep, mstore8Step, mcopyStep,
     calldataloadStep, copyToMemory, returndatacopyStep, haltWithOutput, returnStep, revertStep,
     blockhashStep, blobhashStep, balanceStep, extcodesizeStep, extcodecopyStep, extcodehashStep,

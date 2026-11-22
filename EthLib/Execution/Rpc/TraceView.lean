@@ -81,6 +81,7 @@ def stepErrorText : EvmError → String
   | .unspecifiedOpcode _ => "unspecified opcode"
   | .encoding _ => "encoding error"
   | .forkNotYetSpecified _ => "fork not yet specified"
+  | .wordOverflow _ => "value above a word"
 
 /-- Memory as words of 32 bytes, the last one padded with zeros. -/
 def memoryWords (memory : ByteArray) : List Json :=

@@ -824,6 +824,18 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, GASPRICE, NUMBER, DIFFICULTY, GASLIMIT, BASEFEE and BLOBBASEFEE abort the execution with the new error `EvmError.wordOverflow` when the number they push is `2^256` or more ([#3848](https://github.com/ethereum/EthLib/issues/3848)).
+  They pushed the number modulo `2^256`, a value that no source gives; execution-specs fails there with an error that is not an exception of the EVM.
+  The new step `readNumber` reads such a number; `EvmError.aborts` is true on the new error, and the trace text of the error is `value above a word`.
+  `environmentStep_blobbasefee` takes the hypothesis that the blob base fee is below `2^256`, and `environmentStep_blobbasefee_of_le` states the abort above it.
+  `BlockEnvironment.WordsFit` and `WordsFit` state that the numbers of an environment fit words.
+  `step_aborts_state`, `processMessage_eq_error`, `processCreateMessage_eq_error`, `processMessageCall_eq_error`, `processTransaction_eq_error`, `applyBody_aborted`, `stateTransition_aborted` and `stateTransition_eq_error_invalid` take that bound as a new hypothesis.
+  `errorsMeet_stateTransition` and `errorsMeet_stateTransition_of_plain` ask the body to meet the property only in the environments that the header gives, one for each list of recent hashes, where they asked it in every environment.
+  `env_of_step_eq_child` states that a message a step sends has the environment of its frame.
+  `push_of_readNumber` and `push_of_readNumberG` are the program-logic rules of an instruction that reads a number.
+  `readNumber_pays`, `MeterRules.readNumber_keeps`, `readFrame_of_readNumber`, `readNumber_sameContext` and `memory_readNumber` carry the facts of an instruction that reads the frame over to it.
+  Migration: pass a proof that the numbers of the block, and the gas price of the transaction, are below `2^256`.
+
 - In Lean, `Blocks.Exports.oneLine` moves to `EthLib.Exports.oneLine`, beside the shared conversion of export errors ([#3605](https://github.com/ethereum/EthLib/issues/3605)).
   The exports that printed an error on one line by hand use it, and their messages stay the same.
 

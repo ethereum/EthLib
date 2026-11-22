@@ -372,6 +372,67 @@ theorem push_of_readFrame {byte : UInt8} {op : Op} {cost : Nat} {f : Evm fork Na
       (At code message (pc + 1) (word :: stack) memory (gas - cost) state substate returnData) :=
   (push_of_readFrameG hlt hbyte decoded hrun hword hgas hstack).toHoare
 
+/-- An instruction that reads a number below `2^256` reads it as a word. -/
+private theorem readNumber_of_lt {Meter : Type} [GasMeter Meter] {cost : Nat}
+    {value : Evm fork Meter → Nat} {evm : Evm fork Meter} (h : value evm < 2 ^ 256) :
+    readNumber cost value evm = readFrame cost (fun _ => BitVec.ofNat 256 (value evm)) evm := by
+  simp only [readNumber, h, ↓reduceIte]
+
+/-- An opcode whose instruction reads a number pushes it as a word, and pays its price.
+
+The read must give `n` on every frame with the code, the message, the counter and the memory.
+
+That number must be below `2^256`, or the instruction aborts.
+
+The stack needs room for one more word.
+
+It holds over the steps from frames that are monotone in gas. -/
+theorem push_of_readNumberG {byte : UInt8} {op : Op} {cost : Nat} {value : Evm fork Nat → Nat}
+    {n : Nat} (hlt : pc < code.size) (hbyte : code[pc] = byte)
+    (decoded : Op.ofByte fork byte = some op)
+    (hrun : instruction (Meter := Nat) fork op = some (readNumber cost value))
+    (hword : ∀ evm : Evm fork Nat, evm.code = code → evm.message = message → evm.pc = pc →
+      evm.memory = memory → value evm = n)
+    (hfit : n < 2 ^ 256) (hgas : cost ≤ gas) (hstack : stack.length < STACK_LIMIT) :
+    HoareG fork (At code message pc stack memory gas state substate returnData)
+      (At code message (pc + 1) (BitVec.ofNat 256 n :: stack) memory (gas - cost) state substate
+        returnData) := by
+  apply At.ruleG_of_follows hlt hbyte decoded hrun
+  · -- The frame and the one with less gas read the same number, which fits a word.
+    rintro _ ⟨hcode, -, hm, hpc, -, hmem, -⟩ k low rfl
+    have same := hword low hcode hm hpc hmem
+    have high := hword (addGas k low) hcode hm hpc hmem
+    rw [readNumber_of_lt (same ▸ hfit), readNumber_of_lt (evm := addGas k low) (high ▸ hfit),
+      same, high]
+    exact follows_readFrame cost _ fun _ => rfl
+  rintro evm ⟨hcode, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, hrd⟩
+  have same := hword evm hcode hm hpc hmem
+  rw [readNumber_of_lt (same ▸ hfit), readFrame_of_length_lt (by rw [hst]; exact hstack),
+    charge_nat (by rw [hg]; exact hgas)]
+  exact ⟨_, rfl, hcode, hj, hm, by simp [hpc], by
+      dsimp only
+      rw [same, hst], hmem,
+    by simp [hg], hrun, herr, hout, hs, hss, hrd⟩
+
+/-- An opcode whose instruction reads a number pushes it as a word, and pays its price.
+
+The read must give `n` on every frame with the code, the message, the counter and the memory.
+
+That number must be below `2^256`, or the instruction aborts.
+
+The stack needs room for one more word. -/
+theorem push_of_readNumber {byte : UInt8} {op : Op} {cost : Nat} {value : Evm fork Nat → Nat}
+    {n : Nat} (hlt : pc < code.size) (hbyte : code[pc] = byte)
+    (decoded : Op.ofByte fork byte = some op)
+    (hrun : instruction (Meter := Nat) fork op = some (readNumber cost value))
+    (hword : ∀ evm : Evm fork Nat, evm.code = code → evm.message = message → evm.pc = pc →
+      evm.memory = memory → value evm = n)
+    (hfit : n < 2 ^ 256) (hgas : cost ≤ gas) (hstack : stack.length < STACK_LIMIT) :
+    Hoare fork (At code message pc stack memory gas state substate returnData)
+      (At code message (pc + 1) (BitVec.ofNat 256 n :: stack) memory (gas - cost) state substate
+        returnData) :=
+  (push_of_readNumberG hlt hbyte decoded hrun hword hfit hgas hstack).toHoare
+
 /-- CALLER pushes the address of the caller of the message as a word, for 2 gas.
 
 It holds over the steps from frames that are monotone in gas and never abort with less gas. -/

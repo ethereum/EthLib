@@ -56,6 +56,18 @@ def readFrame (cost : Nat) (value : Evm fork Meter → U256) (evm : Evm fork Met
   let evm ← pushWord evm (value evm)
   return advance evm
 
+/-- An instruction that pays `cost`, then pushes a number that it reads from the environment.
+
+A number of `2^256` or more fits no word, and aborts the execution once the price is paid. -/
+def readNumber (cost : Nat) (value : Evm fork Meter → Nat) (evm : Evm fork Meter) :
+    Except EvmError (Evm fork Meter) :=
+  -- The number is read from the frame before the price is paid, in both branches.
+  if value evm < 2 ^ 256 then readFrame cost (fun _ => BitVec.ofNat 256 (value evm)) evm
+  else do
+    -- The price comes first, so a frame short of gas halts before the number becomes a word.
+    let _ ← chargeGas evm cost
+    throw (.wordOverflow (value evm))
+
 /-- An instruction that pops `x`, pays `cost` and pushes `f x`. -/
 def unaryOp (cost : Nat) (f : U256 → U256) (evm : Evm fork Meter) :
     Except EvmError (Evm fork Meter) := do

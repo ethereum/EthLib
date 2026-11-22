@@ -207,6 +207,24 @@ theorem readFrame_sameContext {cost : Nat} {value : Evm fork Meter → U256}
   cases h
   exact ((chargeGas_sameContext h1).trans (pushWord_sameContext h2)).advance
 
+/-- An instruction that reads a number and succeeds is the one that reads that number as a word.
+
+So every fact about an instruction that reads the frame holds for it. -/
+theorem readFrame_of_readNumber {cost : Nat} {value : Evm fork Meter → Nat}
+    {evm after : Evm fork Meter} (h : readNumber cost value evm = .ok after) :
+    readFrame cost (fun _ => BitVec.ofNat 256 (value evm)) evm = .ok after := by
+  unfold readNumber at h
+  split at h
+  · exact h
+  · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+
+/-- An instruction that reads a number keeps the message, the state, the substate and the code. -/
+theorem readNumber_sameContext {cost : Nat} {value : Evm fork Meter → Nat}
+    {evm after : Evm fork Meter} (h : readNumber cost value evm = .ok after) :
+    SameContext evm after :=
+  readFrame_sameContext (readFrame_of_readNumber h)
+
 /-- A one-operand instruction keeps the message, the state, the substate and the code. -/
 theorem unaryOp_sameContext {cost : Nat} {f : U256 → U256} {evm after : Evm fork Meter}
     (h : unaryOp cost f evm = .ok after) : SameContext evm after := by
@@ -291,6 +309,12 @@ theorem memory_readFrame {cost : Nat} {value : Evm fork Meter → U256}
   obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
   cases h
   simp only [advance, memory_pushWord h2, memory_chargeGas h1]
+
+/-- An instruction that reads a number keeps memory. -/
+theorem memory_readNumber {cost : Nat} {value : Evm fork Meter → Nat}
+    {evm after : Evm fork Meter} (h : readNumber cost value evm = .ok after) :
+    after.memory = evm.memory :=
+  memory_readFrame (readFrame_of_readNumber h)
 
 /-- A one-operand instruction keeps memory. -/
 theorem memory_unaryOp {cost : Nat} {f : U256 → U256} {evm after : Evm fork Meter}

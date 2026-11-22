@@ -283,7 +283,7 @@ theorem getBaseFeePerBlobGas_lt_iff_of_threshold {schedule : BlobSchedule}
 
 Each value is about 177.4457 times the update fraction, since `ln 2^256` is about 177.4457.
 
-From that excess on, BLOBBASEFEE pushes the fee modulo `2^256`. -/
+From that excess on, BLOBBASEFEE aborts the execution, since no word holds the fee. -/
 def blobBaseFeeOverflowExcess (fork : Fork) : Since .dencun fork Nat := fun _ =>
   if fork ≥ .bpo2 then 2073394371
   else if fork ≥ .bpo1 then 1480995878

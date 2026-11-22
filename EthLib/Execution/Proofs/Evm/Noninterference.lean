@@ -215,6 +215,15 @@ private theorem readFrame_stateFree (cost : Nat) (value : Evm fork Meter → U25
   state_free
   simp only [hvalue]
 
+private theorem readNumber_stateFree (cost : Nat) (value : Evm fork Meter → Nat)
+    (hvalue : ∀ evm other, value { evm with state := other } = value evm) :
+    StateFree (readNumber cost value) := by
+  intro evm other
+  simp only [readNumber, hvalue]
+  split
+  · exact readFrame_stateFree cost _ (fun _ _ => rfl) evm other
+  · state_free
+
 private theorem expStep_stateFree : StateFree (expStep (Meter := Meter) fork) := by
   intro evm other
   simp only [expStep]
@@ -443,6 +452,7 @@ private theorem environmentStep_stateFree {op : Op}
     | with_reducible exact blockhashStep_stateFree
     | with_reducible exact blobhashStep_stateFree _
     | with_reducible exact readFrame_stateFree _ _ fun _ _ => rfl
+    | with_reducible exact readNumber_stateFree _ _ fun _ _ => rfl
 
 private theorem logOpStep_stateFree {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)}

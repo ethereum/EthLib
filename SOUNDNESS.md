@@ -2088,7 +2088,7 @@ Those for EXTCODESIZE, a frame past the end of its code and `Logic.sstore_of_acc
 
 The facts of `Logic/NoAbort.lean` are for the one-counter meter too.
 `Logic.NoAbort` says that a result is no error that aborts the run.
-An error of the state aborts, and so do an opcode with no instruction, an encoding error and a fork with no specification.
+An error of the state aborts, and so do an opcode with no instruction, an encoding error, a fork with no specification and a number of the environment that no word holds.
 Each instruction of `Logic/RunMono.lean` except SSTORE never aborts, such as `Logic.noAbort_log` for LOG0 to LOG4.
 `Logic.NoAbortLow` says that the step from every frame with less gas than a frame does not abort.
 `Logic.HoareGA` and `Logic.SpecGA` are triples over the steps of `Logic.StepG` from frames that are `Logic.NoAbortLow`.
@@ -7570,12 +7570,21 @@ BLS key generation fails after 16 attempts, a bound that EthLib chose.
 The ERC-2333 master and child derivations reuse key generation, so they share the bound.
 An attempt fails only when its 48-byte output is a multiple of `r`.
 
-One instruction has an outcome that no source defines.
-BLOBBASEFEE pushes the base fee per blob gas, which has no upper bound.
-[EIP-7516](https://eips.ethereum.org/EIPS/eip-7516#specification) does not say what the instruction pushes when the fee is `2^256` or more.
-At such a fee [execution-specs](https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/cancun/vm/instructions/environment.py#L582-L605) fails, with an error that is not an exception of the EVM, so the outcome of the block is not specified.
-EthLib pushes the fee modulo `2^256`, and the frame goes on.
+Six instructions have an outcome that no source defines.
+GASPRICE, NUMBER, DIFFICULTY, GASLIMIT, BASEFEE and BLOBBASEFEE push a number of the transaction or the block that execution-specs holds without an upper bound.
+No source says what they push when the number is `2^256` or more, and [EIP-7516](https://eips.ethereum.org/EIPS/eip-7516#specification) is silent for the blob base fee.
+At such a number execution-specs fails, in [`block.py`](https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/cancun/vm/instructions/block.py) and [`environment.py`](https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/cancun/vm/instructions/environment.py#L582-L605) of Cancun for instance.
+Its error is not an exception of the EVM, so the outcome of the block is not specified.
+EthLib aborts the execution there with `wordOverflow`, as it does for other cases without an outcome, so the block has no outcome either.
 The question is open upstream as [execution-specs#4044](https://github.com/ethereum/execution-specs/issues/4044).
+The cases differ in how a chain reaches them.
+A gas limit can grow by a 1024th of the parent's in each block, with no maximum, so valid headers reach `2^256` after about 164,000 blocks.
+A difficulty can grow by a 2048th in each block before Paris, though mining long before `2^256` is out of reach.
+The blob base fee needs an excess blob gas that a genesis or a fork sets, as the paragraphs below show.
+The gas price is at most a fee field of the transaction, which is a word.
+The base fee rises only above a block's target, and every transaction of that block pays it from a balance below `2^256`, so it stays below the bound on a chain.
+The number of a block grows by one per block.
+GAS needs no such rule here: the gas limit of a transaction is a word, so the gas left of a frame stays below `2^256`.
 
 At an excess blob gas `x`, the fee is `fake_exponential(1, x, fraction)` of [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#helpers), which is monotone in `x` (`fakeExponential_mono`).
 The excess is a 64-bit field of the header, so a header can hold an excess at which the fee reaches `2^256`.
@@ -7587,7 +7596,8 @@ For each mainnet blob schedule, the least such excess is about 177.4457 times th
 - BPO2 and the forks after it, fraction 11684671: from 2073394371.
 
 `getBaseFeePerBlobGas_blobSchedule_lt_iff` (`Proofs/Fees/BlobBaseFee.lean`) proves that each value is exact: the fee is below `2^256` exactly below it.
-Below it, when the block sets no blob price and has the schedule of its fork, the instruction pushes the fee itself, as the source does (`toNat_blobBaseFee_of_lt`).
+Below it, when the block sets no blob price and has the schedule of its fork, the fee is below `2^256`, so the instruction pushes the fee itself, as the source does (`toNat_blobBaseFee_of_lt`).
+From it on, the instruction aborts (`environmentStep_blobbasefee_of_le`).
 A schedule that a chain sets itself has no such evaluation.
 Under any schedule, an excess of at most 161 update fractions gives a fee of at most `3^161`, below `2^256` (`getBaseFeePerBlobGas_lt_of_le`, `Proofs/Fees/BlobBaseFeeBound.lean`).
 

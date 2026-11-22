@@ -545,7 +545,9 @@ A creation goes to an address where a contract may be deployed in the state of `
 
 A call runs at the current target of `evm`, or runs code only at an account that holds code.
 
-The state that the message starts from has read the account that the message runs at. -/
+The state that the message starts from has read the account that the message runs at.
+
+The message has the block and the transaction of `evm`. -/
 private def Sends (evm : Evm fork Meter) : StepResult fork Meter → Prop
   | .next _ => True
   | .child caller message resume =>
@@ -555,7 +557,8 @@ private def Sends (evm : Evm fork Meter) : StepResult fork Meter → Prop
     (message.target = none → evm.state.accountDeployable message.currentTarget = true) ∧
     (message.target ≠ none → message.currentTarget = evm.message.currentTarget ∨
       StaticCode evm.state message) ∧
-    message.currentTarget ∈ caller.state.accountReads
+    message.currentTarget ∈ caller.state.accountReads ∧
+    message.blockEnv = evm.message.blockEnv ∧ message.txEnv = evm.message.txEnv
 
 /-- A result that says what it sends from a frame says it from a frame with the same accounts.
 
@@ -565,12 +568,12 @@ private theorem Sends.lift {evm evm' : Evm fork Meter} {result : StepResult fork
   cases result with
   | next _ => trivial
   | child caller message resume =>
-    obtain ⟨r1, r2, r3, r4⟩ := r
+    obtain ⟨r1, r2, r3, r4, r5, r6⟩ := r
     have hd : ∀ a, evm'.state.accountDeployable a = evm.state.accountDeployable a := by
       intro a
       exact State.TransactionState.accountDeployable_congr (getAccount_of_staticStep h a)
         (h.state a List.not_mem_nil).2.1
-    refine ⟨r1, fun c => ?_, fun c => ?_, r4⟩
+    refine ⟨r1, fun c => ?_, fun c => ?_, r4, h.message ▸ r5, h.message ▸ r6⟩
     · rw [← hd]
       exact r2 c
     · rcases r3 c with hc | hc
@@ -605,7 +608,7 @@ private theorem sends_finishCall {kind : CallKind} {call : CallOperands}
     · obtain ⟨after, -, rfl⟩ := Base.map_ok_iff.mp h
       trivial
     · cases h
-      refine ⟨.inl ⟨_, _, _, rfl⟩, ?_, ?_, ?_⟩
+      refine ⟨.inl ⟨_, _, _, rfl⟩, ?_, ?_, ?_, ?_, ?_⟩
       · intro c
         simp at c
       rotate_left
@@ -614,6 +617,9 @@ private theorem sends_finishCall {kind : CallKind} {call : CallOperands}
           exact pre.tracker.accountReads _ hread
         · simp only [currentTarget_callMessage, hk, ↓reduceIte]
           exact Std.ExtTreeSet.mem_insert_self
+      -- A call message copies the block and the transaction of its caller.
+      · simp
+      · simp
       intro _
       by_cases hk : kind = .call ∨ kind = .staticcall
       · refine .inr fun nonempty => ?_
@@ -686,13 +692,16 @@ private theorem sends_launchCreate {evm : Evm fork Meter} {value : U256}
     split at hr
     · rename_i hd
       cases hr
-      refine ⟨.inr ⟨_, _, rfl⟩, fun _ => ?_, fun c => absurd rfl c, ?_⟩
+      refine ⟨.inr ⟨_, _, rfl⟩, fun _ => ?_, fun c => absurd rfl c, ?_, ?_, ?_⟩
       rotate_left
       · obtain ⟨_, -, hacc, -⟩ := State.TransactionState.reads_modifyState
           (Base.mapError_ok_iff.mp hstate)
         rw [hacc]
         exact Std.ExtTreeSet.mem_insert.mpr
           (.inr (cx.tracker.accountReads _ Std.ExtTreeSet.mem_insert_self))
+      -- A creation message copies the block and the transaction of its caller.
+      · exact (congrArg Message.blockEnv c2.message :)
+      · exact (congrArg Message.txEnv c2.message :)
       rw [← State.TransactionState.accountDeployable_congr (getAccount_of_staticStep c2 _)
         (c2.state _ List.not_mem_nil).2.1]
       exact hd
@@ -769,6 +778,13 @@ theorem step_eq_child_resume {evm caller : Evm fork Meter} {message : Message fo
     ∃ newAccount address, resume = resumeCreate fork caller newAccount address :=
   (sends_step h).1
 
+/-- A message that a step sends has the block and the transaction of the frame that sends it. -/
+theorem env_of_step_eq_child {evm caller : Evm fork Meter} {message : Message fork}
+    {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (h : step fork evm = .ok (.child caller message resume)) :
+    message.blockEnv = evm.message.blockEnv ∧ message.txEnv = evm.message.txEnv :=
+  (sends_step h).2.2.2.2
+
 /-- A call instruction sends only messages with a target. -/
 theorem callStep_target_ne {kind : CallKind} {evm caller : Evm fork Meter}
     {message : Message fork} {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
@@ -828,7 +844,7 @@ theorem step_eq_child_currentRead {evm caller : Evm fork Meter} {message : Messa
     {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (h : step fork evm = .ok (.child caller message resume)) :
     message.currentTarget ∈ caller.state.accountReads :=
-  (sends_step h).2.2.2
+  (sends_step h).2.2.2.1
 
 /-- The frame that resumes after a message has the context of the caller that takes in the child.
 
