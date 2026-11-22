@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports.PyValue
+public import EthLib.Execution.Exports.Errors
 public import EthLib.Execution.Blocks
 public import EthLib.Execution.Transactions.Envelope
 public import EthLib.Serialization.Exports.Rlp
@@ -132,9 +133,7 @@ def receiptLogsBloomExport (fork receipt : ByteArray) : Result ByteArray := do
 def validateSizeExport (fork block : ByteArray) : Result UInt8 := do
   let fork ← forkUpTo .glamsterdam fork
   let b : Block fork Item ← toResult "block rejected" (Block.decode (fun _ => fork) block)
-  -- The message keeps the full name of the error, unlike the instance of block errors.
-  (validateBlockSize b).map (fun () => 1) |>.mapError
-    fun e => (e.code, s!"block invalid: {oneLine e}")
+  toResult none ((validateBlockSize b).map fun () => 1)
 
 /-- The blob schedules that a chain sets itself.
 
@@ -182,9 +181,7 @@ The header's blob schedule is the last given one that it has reached, else that 
 def validateHeaderOf (args : HeaderCheckArgs) : Result Unit := do
   let ⟨parentFork, fork, parent, header, schedule⟩ ← headerCheckInputs args
   if hFork : parentFork ≤ fork then
-    -- The message keeps the full name of the error, unlike the instance of block errors.
-    (validateHeader hFork parent header schedule).mapError
-      fun e => (e.code, s!"header invalid: {oneLine e}")
+    toResult none (validateHeader hFork parent header schedule)
   else rejectArgument none "the parent's fork is after the fork"
 
 /-- Check a header at a fork against its parent at the parent's fork, at every fork.
@@ -204,9 +201,7 @@ The header's blob schedule is the last given one that it has reached, else that 
 def checkHeaderOf (args : HeaderCheckArgs) : Result Unit := do
   let ⟨parentFork, fork, parent, header, schedule⟩ ← headerCheckInputs args
   if hFork : parentFork ≤ fork then
-    -- The message keeps the full name of the error, unlike the instance of block errors.
-    (checkHeader hFork parent header schedule).mapError
-      fun e => (e.code, s!"header invalid: {oneLine e}")
+    toResult none (checkHeader hFork parent header schedule)
   else rejectArgument none "the parent's fork is after the fork"
 
 /-- Check a header against its parent at two named forks, every check but the proof of work.

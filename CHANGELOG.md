@@ -830,6 +830,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- The block checks and the state transition of the execution layer give their block errors through the shared conversion ([#3605](https://github.com/ethereum/EthLib/issues/3605)).
+  No error code changes, but some messages change in Python.
+  `blocks.validate_size`, `blocks.validate_header` and `blocks.check_header` give `block invalid: ` and the short name of the block error, with any inner error still named in full, such as `block invalid: wrongDifficulty (expected := 131072) (actual := 0)`.
+  They gave `block invalid: ` or `header invalid: `, then the full Lean name, such as `EthLib.Execution.Blocks.BlockError.wrongDifficulty`.
+  `blocks.state_transition` and `rpc.serve`, which reads the blocks of a chain, give `block invalid: encoding (…)` for a block that does not decode, in place of `block rejected: …`.
+  A transaction of the body that does not decode keeps its message, `transaction N does not decode: …`, which the block error instance now gives.
+  In Lean, the messages and the instances of the transaction, inclusion, EVM abort and block errors move to the new module `Execution.Exports.Errors`, with their names unchanged.
+
 - In Lean, `eth_sendRawTransaction` and `eth_simulateV1` fail with an internal error when the excess blob gas of the next or simulated block is `2^64` or more, where they truncated it to 64 bits ([#3850](https://github.com/ethereum/EthLib/issues/3850)).
   `childExcessBlobGas` computes the excess blob gas that a parent gives to a child at a number and a time, and the Engine's `builtExcessBlobGas` and `ChainView.nextExcessBlobGas` are instances of it.
   `ChainView.nextBlobSchedule` gives the schedule of the next block.
