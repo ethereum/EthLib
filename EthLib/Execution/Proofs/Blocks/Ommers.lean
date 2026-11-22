@@ -141,7 +141,7 @@ theorem validateOmmers_eq_ok_iff {fork : Fork} {config : ChainConfig} {checkSeal
   simp only [bind_ok_iff, exists_unit, ensure_ok_iff, forM_ok_iff, mapError_ok_iff,
     Bool.and_eq_true, decide_eq_true_eq, bne_iff_ne, ne_eq, Bool.not_eq_true',
     Bool.eq_false_iff, List.contains_iff_mem, and_assoc]
-  -- The hash check compares by `==`, which holds exactly for equal hashes.
+  -- The hash check compares by boolean equality, which holds exactly for equal hashes.
   exact exists_congr fun _ => and_congr_right fun _ =>
     and_congr_left fun _ => ⟨eq_of_beq, fun h => h ▸ beq_self_eq_true _⟩
 

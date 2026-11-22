@@ -92,7 +92,7 @@ def attestationDataIndex (fork : Base.Fork) (slot headSlot : Slot)
 
 /-- The attestation data of an attester, from the head block and the state at its slot.
 
-The guide takes the state of the head block through the empty slots up to the slot of the duty.
+The state of the head block goes through the empty slots up to the slot of the duty.
 
 So the slot of the data is the slot of the state.
 

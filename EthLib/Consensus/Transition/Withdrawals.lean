@@ -313,17 +313,13 @@ From Gloas the sweep of builders follows, and the sweep of validators always com
 
 Each part continues the withdrawal indices of the part before it.
 
-Provenance: `get_expected_withdrawals` of the [Gloas beacon chain text][gloas] of consensus-specs.
-
 A part that a fork lacks reads nothing, with a count of 0.
 
 A count of 2^64 or more is an error.
-
-[gloas]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/gloas/beacon-chain.md#modified-get_expected_withdrawals
 -/
 def getExpectedWithdrawals (state : BeaconState preset fork) (capella : .shapella ≤ fork) :
     Except TransitionError ExpectedWithdrawals := do
-  -- `withdrawal_index = state.next_withdrawal_index`.
+  -- The withdrawal indices start at the next withdrawal index of the state.
   let start := state.nextWithdrawalIndex capella
   -- Get builder withdrawals, from Gloas.
   let (builders, withdrawalIndex, builderCount) ←
@@ -334,19 +330,19 @@ def getExpectedWithdrawals (state : BeaconState preset fork) (capella : .shapell
     (if electra : .pectra ≤ fork then
       getPendingPartialWithdrawals state electra withdrawalIndex builders
     else pure (#[], withdrawalIndex, 0))
-  -- `withdrawals.extend(partial_withdrawals)`, after the builder withdrawals.
+  -- The partial withdrawals follow the builder withdrawals.
   let prior := builders ++ partials
   -- Get builders sweep withdrawals, from Gloas.
   let (buildersSweep, withdrawalIndex, buildersSweepCount) ←
     (if gloas : .glamsterdam ≤ fork then
       getBuildersSweepWithdrawals state gloas withdrawalIndex prior
     else pure (#[], withdrawalIndex, 0))
-  -- `withdrawals.extend(builders_sweep_withdrawals)`.
+  -- The withdrawals of the sweep of builders follow.
   let prior := prior ++ buildersSweep
   -- Get validators sweep withdrawals.
   let (sweep, _, sweepCount) ←
     getValidatorsSweepWithdrawals state capella withdrawalIndex prior
-  -- The parts count on `Nat`; each `uint64` count of the source fails here if it reaches 2^64.
+  -- The parts count in naturals, and each count fails here if it reaches 2^64.
   let builderCount ← liftAccessor (liftArith (Uint64.ofNatChecked builderCount))
   let partialCount ← liftAccessor (liftArith (Uint64.ofNatChecked partialCount))
   let buildersSweepCount ← liftAccessor (liftArith (Uint64.ofNatChecked buildersSweepCount))
@@ -412,22 +408,11 @@ def updateNextWithdrawalValidatorIndex (state : BeaconState preset fork)
   if count = 0 then throw (.arith .divisionByZero)
   return { state with nextWithdrawalValidatorIndex := fun _ => (next.toNat % count).toUInt64 }
 
-/-!
-Provenance: consensus-specs gives the steps of the three updates below.
-
-The [Electra beacon chain text][electra] gives the update of the queued partial withdrawals.
-
-The [Gloas beacon chain text][gloas] gives the two updates of the builders.
-
-[electra]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/electra/beacon-chain.md#new-update_pending_partial_withdrawals
-[gloas]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/gloas/beacon-chain.md#new-update_builder_pending_withdrawals
--/
-
 /-- From Electra: the state without the queued partial withdrawals that were read. -/
 def updatePendingPartialWithdrawals (state : BeaconState preset fork) (electra : .pectra ≤ fork)
     (count : UInt64) : BeaconState preset fork :=
   let queue := state.pendingPartialWithdrawals electra
-  -- `state.pending_partial_withdrawals[processed_partial_withdrawals_count:]`.
+  -- The queue without its first `count` entries, those that were read.
   let rest : PendingPartialWithdrawals preset fork :=
     ⟨queue.data.extract count.toNat queue.data.size, fun before => by
       have := queue.bound before
@@ -446,7 +431,7 @@ def updatePayloadExpectedWithdrawals (state : BeaconState preset fork)
 def updateBuilderPendingWithdrawals (state : BeaconState preset fork)
     (gloas : .glamsterdam ≤ fork) (count : UInt64) : BeaconState preset fork :=
   let queue := (state.builderPendingWithdrawals gloas).data
-  -- `state.builder_pending_withdrawals[processed_builder_withdrawals_count:]`.
+  -- The queue without its first `count` entries, those that were read.
   let rest : BuilderPendingWithdrawals := ⟨queue.extract count.toNat queue.size⟩
   { state with builderPendingWithdrawals := fun _ => rest }
 
@@ -459,11 +444,11 @@ def updateNextWithdrawalBuilderIndex (state : BeaconState preset fork)
     (gloas : .glamsterdam ≤ fork) (count : UInt64) :
     Except AccessorError (BeaconState preset fork) := do
   let size := (state.builders gloas).data.size
-  -- `if len(state.builders) > 0:`.
+  -- An empty registry of builders leaves the state as it is.
   if size = 0 then return state
-  -- `next_index = state.next_withdrawal_builder_index + processed_builders_sweep_count`.
+  -- Add the number of builders visited to the next index, and fail at 2^64 or more.
   let next ← liftArith (addChecked (state.nextWithdrawalBuilderIndex gloas) count)
-  -- `state.next_withdrawal_builder_index = next_index % len(state.builders)`.
+  -- That sum modulo the number of builders becomes the next index.
   return { state with nextWithdrawalBuilderIndex := fun _ => (next.toNat % size).toUInt64 }
 
 /-- From Gloas: whether the parent of the next block has its payload.

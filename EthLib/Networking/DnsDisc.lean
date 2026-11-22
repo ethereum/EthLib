@@ -366,7 +366,7 @@ def walk (lookup : String → Option String) (domain : String) :
       | _, .branch hashes =>
         walk lookup domain budget (hashes.map (tree, ·) ++ pending) (hash :: visited) found
       | .records, .enr record =>
-        -- The client must "decode, verify the node record".
+        -- The client must decode the node record and verify it.
         unless Enr.verifyV4 record do throw (.badRecord name)
         walk lookup domain budget pending (hash :: visited)
           { found with records := found.records ++ [record] }

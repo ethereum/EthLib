@@ -16,7 +16,7 @@ theorem Value.beq_eq (left right : Value) : Value.beq left right = true ↔ left
     generalizing right <;> (first | cases right | (rename_i right; cases right)) <;>
     simp [Value.beq, Value.beqList, *]
 
-/-- The comparison `==` on values is equality. -/
+/-- The boolean comparison of two values holds exactly when they are equal. -/
 instance : LawfulBEq Value where
   rfl := (Value.beq_eq _ _).mpr rfl
   eq_of_beq := (Value.beq_eq _ _).mp

@@ -15,18 +15,15 @@ Six keys of the key table of [EIP-778] give the addresses and ports.
 
 The consensus layer adds `quic` and `quic6`: the UDP ports of libp2p over QUIC, for IPv4 and IPv6.
 
-Provenance: the [ENR structure] of the consensus networking text states these two keys.
-
-A port is a "big endian integer" with no stated size.
+[EIP-778] makes a port a big-endian integer, with no stated size.
 
 Here it is an RLP scalar below `2^16`: no leading zero byte, and zero is the empty string.
 
-When `tcp6` or `udp6` is absent, the `tcp` or `udp` port "applies to both IP addresses".
+When `tcp6` or `udp6` is absent, the `tcp` or `udp` port applies to both IP addresses.
 
 No source gives `quic` that rule, so an IPv6 endpoint without `quic6` has no QUIC port.
 
 [EIP-778]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-778.md#L50-L67
-[ENR structure]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/phase0/p2p-interface.md#L1712-L1731
 -/
 
 @[expose] public section
@@ -116,7 +113,7 @@ def Endpoint.inherit (e6 : Endpoint 16) (e4 : Option (Endpoint 4)) : Endpoint 16
 
 /-- An IPv6 port to write: none when it equals the IPv4 port, which then applies to both.
 
-[EIP-778] says that declaring one port in both keys "should be avoided".
+[EIP-778] says that declaring one port in both keys should be avoided.
 
 [EIP-778]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-778.md#L64-L66
 -/

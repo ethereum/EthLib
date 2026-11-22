@@ -151,7 +151,7 @@ def decrypt (key : Fn) (sharedMac ciphertext : ByteArray) : Except EciesError By
         simp [OVERHEAD, EPHEMERAL_KEY_SIZE, IV_SIZE, TAG_SIZE] at h ⊢; omega⟩
     let c : ByteArray :=
       ⟨((bytes.drop (EPHEMERAL_KEY_SIZE + IV_SIZE)).take (bytes.length - OVERHEAD)).toArray⟩
-    -- Bob checks whether `d == MAC(sha256(k_M), iv || c)`, with `s` as the tag says.
+    -- Bob checks whether `d = MAC(sha256(k_M), iv || c)`, with `s` as the tag says.
     if bytes.drop (bytes.length - TAG_SIZE) = (tag macKey iv c sharedMac).data.toList then
       -- The source writes `m = AES(k_E, iv || c)`, but `iv` is the counter block of `AES`.
       --

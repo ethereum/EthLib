@@ -602,13 +602,13 @@ def checkAttributes (config : ChainConfig) (version : Nat) (head : KnownPayload)
     Except EngineError (Σ fork, PayloadAttributes fork) := do
   -- The fork of the attributes is the active fork at the number after the head and at their time.
   let timestamp := attributes.2.timestamp
-  -- "`payloadAttributes.timestamp` does not fall within the time frame" of the fork: `-38005`.
+  -- A timestamp in the time frame of no fork gives `-38005`.
   let some fork := config.activeFork (head.number + 1) timestamp.toNat
     | throw (.unsupportedFork none)
   unless attributesTakeFork version fork do throw (.unsupportedFork (some fork))
-  -- Only version 2 takes two structures, and "the wrong version of the structure" gives `-38003`.
+  -- Only version 2 takes two structures, and the wrong version of the structure gives `-38003`.
   let some atFork := PayloadAttributes.atFork attributes fork | throw .invalidPayloadAttributes
-  -- "Verify that `payloadAttributes.timestamp` is greater than `timestamp`" of the head: `-38003`.
+  -- The timestamp of the payload attributes must exceed that of the head, else `-38003`.
   unless head.timestamp < timestamp.toNat do throw .invalidPayloadAttributes
   return ⟨fork, atFork⟩
 

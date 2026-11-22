@@ -49,17 +49,17 @@ From Gloas a block carries a bid, and its payload arrives later in an envelope.
 
 The block itself is then checked in full, and only its payload may be optimistic.
 
-The [optimistic sync guide] has no text for Gloas, so EthLib reads it there, a choice of its own.
+For Gloas, EthLib defines optimistic sync by its own choice, as follows.
 
 From Gloas a root of the optimistic set names a block whose payload is not yet judged.
 
-The gossip rules of Gloas key the status of a payload by the root of its block the same way.
+From Gloas the status of a payload is keyed by the root of its block, in gossip too.
 
 From Gloas the ancestors of a payload are the payloads that it builds on, not every ancestor block.
 
 A bid builds on the payload whose block hash it names as its parent block hash.
 
-The [fork choice of Gloas] reads a full parent by the same test.
+A full parent is read by the same test.
 
 A block whose payload a child skipped, by building on that block alone, is not one of them.
 
@@ -95,8 +95,6 @@ From Heze the node also records whether a payload satisfies the inclusion lists 
 
 A payload not yet validated counts as satisfying them, until the execution layer judges it.
 
-[optimistic sync guide]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/bellatrix/optimistic-sync.md
-[fork choice of Gloas]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/gloas/fork-choice.md#new-get_parent_payload_status
 -/
 
 @[expose] public section
@@ -109,7 +107,7 @@ variable {preset : Preset} {fork : Fork}
 
 /-- The optimistic blocks of a node, beside the blocks it imported, by root.
 
-The guide keeps the states of the blocks there too, which no rule here reads. -/
+No rule here reads the states of the blocks, so the store keeps none. -/
 structure OptimisticStore (preset : Preset) (fork : Fork) where
   /-- The roots of the blocks imported optimistically whose payload is not yet judged.
 
@@ -275,7 +273,7 @@ def PayloadLink (child parent : Root) : Prop :=
 
 /-- Before Gloas: the latest block of the chain of a known block that is not optimistic, by root.
 
-The guide assumes that the execution layer never found the block itself invalid.
+It assumes that the execution layer never found the block itself invalid.
 
 The walk follows parent roots, and also stops at the genesis block, whose parent root is zero.
 
@@ -464,7 +462,7 @@ The optimistic store must hold only blocks that the fork choice accepted, so dro
 
 So a tree that empties with nothing invalidated, as in a long stall, does not count.
 
-The guide asks that every viable branch was invalidated, which needs history the store drops.
+A rule that every viable branch was invalidated would need history that the store drops.
 
 This rule approximates it: one invalidated block above the justified block is enough.
 

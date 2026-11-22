@@ -252,7 +252,7 @@ private theorem lookup_fulu_of_consensusPairs {config : Config} {genesisValidato
 
 /-- Once Fulu has an epoch, a record built from the consensus pairs holds the `cgc` written.
 
-This holds at every epoch, before Fulu too, as the Fulu networking text requires. -/
+This holds at every epoch, before Fulu too, as a node must write it once Fulu has an epoch. -/
 theorem lookup_cgc_of_consensusPairs {config : Config} {genesisValidatorsRoot : Root}
     {epoch : Epoch} {count : UInt64} {attnets : Attnets count} {syncnets : Syncnets} {cgc : UInt64}
     {pairs : List (ByteArray × Serialization.Rlp.Item)} {nfd : ForkDigest} {sk : Fn}
@@ -266,7 +266,7 @@ theorem lookup_cgc_of_consensusPairs {config : Config} {genesisValidatorsRoot : 
 
 /-- Once Fulu has an epoch, a record built from the consensus pairs holds the `nfd` written.
 
-This holds at every epoch, before Fulu too, as the Fulu networking text requires. -/
+This holds at every epoch, before Fulu too, as a node must write it once Fulu has an epoch. -/
 theorem lookup_nfd_of_consensusPairs {config : Config} {genesisValidatorsRoot : Root}
     {epoch : Epoch} {count : UInt64} {attnets : Attnets count} {syncnets : Syncnets} {cgc : UInt64}
     {pairs : List (ByteArray × Serialization.Rlp.Item)} {nfd : ForkDigest} {sk : Fn}
