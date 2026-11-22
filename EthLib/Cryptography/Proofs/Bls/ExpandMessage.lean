@@ -13,13 +13,13 @@ public import Mathlib.Data.Rat.Floor
 
 Sources:
 
-- [RFC 9380 §5.2](https://www.rfc-editor.org/rfc/rfc9380#section-5.2), `hash_to_field`.
-- [RFC 9380 §5.3.1](https://www.rfc-editor.org/rfc/rfc9380#section-5.3.1), `expand_message_xmd`.
+- [RFC 9380 §5.2](https://www.rfc-editor.org/rfc/rfc9380#section-5.2), the hash to the field.
+- [RFC 9380 §5.3.1](https://www.rfc-editor.org/rfc/rfc9380#section-5.3.1), the message expansion.
 - [RFC 9380 §5.3.3](https://www.rfc-editor.org/rfc/rfc9380#section-5.3.3), DSTs over 255 bytes.
 - [RFC 8017 §4](https://www.rfc-editor.org/rfc/rfc8017#section-4), I2OSP and OS2IP.
 - [FIPS 180-4 §6.2](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf), SHA-256.
 
-The file restates `expand_message_xmd` and `hash_to_field` as a model over lists of bytes.
+The file restates the message expansion and the hash to the field as a model over lists of bytes.
 
 The model hashes with the FIPS 180-4 model of SHA-256.
 
@@ -68,7 +68,7 @@ def block (b0 dstPrime : List UInt8) : Nat → List UInt8
   | 1 => sha256 (b0 ++ i2osp 1 1 ++ dstPrime)
   | i + 2 => sha256 (strxor b0 (block b0 dstPrime (i + 1)) ++ i2osp (i + 2) 1 ++ dstPrime)
 
-/-- `expand_message_xmd` of RFC 9380 §5.3.1 with SHA-256.
+/-- The message expansion of RFC 9380 §5.3.1 with SHA-256.
 
 SHA-256 has `b_in_bytes = 32` and `s_in_bytes = 64`.
 
@@ -90,7 +90,9 @@ def securityLevel : Nat := 128
 /-- The bytes per element `L = ceil((ceil(log2(p)) + k) / 8)` of RFC 9380 §5. -/
 def fieldBytes : Nat := ⌈((Nat.clog 2 Fp.modulus + securityLevel : Nat) : ℚ) / 8⌉₊
 
-/-- `hash_to_field` of RFC 9380 §5.2 into `GF(p^2)`, where `m = 2`, with `expand_message_xmd`.
+/-- The hash to the field of RFC 9380 §5.2 into `GF(p^2)`, where `m = 2`.
+
+It reads the message expansion of §5.3.1.
 
 Each element is the pair `(e_0, e_1)` of its coordinates over `GF(p)`. -/
 def hashToField (msg dst : List UInt8) (count : Nat) :
@@ -195,7 +197,7 @@ private theorem foldl_nextBlock (b0 dstPrime : ByteArray) (hb0 : b0.size = 32)
       List.map_append]
     simp only [List.map_cons, List.map_nil, hb]
 
-/-! ## `expand_message_xmd` -/
+/-! ## The message expansion -/
 
 /-- The tag that the code uses is the model's, and it has at most 255 bytes. -/
 private theorem shortDst_toList (dst : ByteArray) (hdst : dst.size + 17 < 2 ^ 61) :
@@ -217,7 +219,7 @@ private theorem shortDst_toList (dst : ByteArray) (hdst : dst.size + 17 < 2 ^ 61
     exact ⟨trivial, by omega⟩
 
 /--
-The message expansion is `expand_message_xmd` of RFC 9380 §5.3.1 with SHA-256.
+The message expansion is the one of RFC 9380 §5.3.1 with SHA-256.
 
 It holds for every message shorter than 2^61 - 323 bytes and every DST shorter than 2^61 - 17 bytes.
 
@@ -288,7 +290,7 @@ theorem expandMessageXmd_eq_spec (msg dst : ByteArray) (lenInBytes : Nat)
     simp only [nextBlock] at hl
     simpa [List.flatMap_def] using congrArg (fun l => some (List.take lenInBytes l.flatten)) hl
 
-/-! ## `hash_to_field` -/
+/-! ## The hash to the field -/
 
 /-- The big-endian reading of the code is OS2IP. -/
 private theorem bytesToNat_eq_os2ip (bytes : List UInt8) :
@@ -318,7 +320,7 @@ private theorem toZMod_fpFromBytesL (uniform : ByteArray) (off : Nat) :
   exact Fp.toZMod_ofNat _
 
 /--
-The hash to `Fp2` is `hash_to_field` of RFC 9380 §5.2 with `expand_message_xmd`.
+The hash to `Fp2` is the hash to the field of RFC 9380 §5.2, with the message expansion of §5.3.1.
 
 It holds for every message shorter than 2^61 - 323 bytes and every DST shorter than 2^61 - 17 bytes.
 

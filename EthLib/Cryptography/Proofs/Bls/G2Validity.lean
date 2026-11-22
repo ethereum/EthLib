@@ -17,7 +17,7 @@ The twist also matches draft-07, §4.2.1.
 
 The cubic `x^3 + 4 (1 + i)` has no root in `Fp2`.
 
-So every affine solution `(x, y)` has `y != 0`, and its derivative `2 y` in `y` is nonzero.
+So every affine solution `(x, y)` has `y ≠ 0`, and its derivative `2 y` in `y` is nonzero.
 
 The kernel checks that the generator is on the twist, so the generator is valid.
 -/
@@ -87,7 +87,7 @@ private theorem cube_ne_32_zmod (n : ZMod Fp.modulus) :
 
 If `x^3 = -4*(1 + i)`, taking norms into `Fp` yields `N(x)^3 = N(-4 - 4*i) = 32`.
 
-Euler's cubic criterion (`32^((p - 1) / 3) != 1 mod p`) rules out any cube equal to `32` in `Fp`.
+Euler's cubic criterion (`32^((p - 1) / 3) ≠ 1 mod p`) rules out any cube equal to `32` in `Fp`.
 -/
 theorem cube_add_bTwist_ne_zero (x : Fp2) :
     x * x * x + bTwist ≠ 0 := by
@@ -104,10 +104,10 @@ theorem cube_add_bTwist_ne_zero (x : Fp2) :
   push_toZMod at hz
   exact cube_ne_32_zmod (Fp.toZMod (Fp2.norm x)) (hz.trans hbt)
 
-/-- Because `x^3 + bTwist` has no root, any affine solution has `2 * y != 0` and is nonsingular. -/
+/-- Because `x^3 + bTwist` has no root, any affine solution has `2 * y ≠ 0` and is nonsingular. -/
 theorem valid_of_affine_equation {x y : Fp2}
     (h : y * y = x * x * x + bTwist) : Valid ⟨x, y, Fp2.one⟩ := by
-  -- Because `x^3 + bTwist != 0`, `y` cannot be zero.
+  -- Because `x^3 + bTwist ≠ 0`, `y` cannot be zero.
   have hy : y ≠ 0 := by
     intro hy
     apply cube_add_bTwist_ne_zero x
@@ -121,7 +121,7 @@ theorem valid_of_affine_equation {x y : Fp2}
     show Fp2.one = (1 : Fp2) from rfl]
   constructor
   · linear_combination h
-  -- Select the `y`-partial derivative `2 * y` of `y^2 - x^3 - bTwist` and show `2 * y != 0`.
+  -- Select the `y`-partial derivative `2 * y` of `y^2 - x^3 - bTwist` and show `2 * y ≠ 0`.
   · right
     left
     simpa using _root_.mul_ne_zero h2 hy

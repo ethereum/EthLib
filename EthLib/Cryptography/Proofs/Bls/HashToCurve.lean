@@ -61,7 +61,7 @@ private theorem swuX1_non_zero_denom (u : Fp2)
 
 /-- Fundamental SSWU polynomial identity (`RFC 9380 §6.6.2`).
 
-When `Z^2 * u^4 + Z * u^2 != 0`, `g(x2(u)) = (Z * u^2)^3 * g(x1(u))`.
+When `Z^2 * u^4 + Z * u^2 ≠ 0`, `g(x2(u)) = (Z * u^2)^3 * g(x1(u))`.
 -/
 theorem swuG_x2_eq (u : Fp2)
     (hdenom : ((Z * (u * u)) * (Z * (u * u)) + Z * (u * u)).isZero = false) :

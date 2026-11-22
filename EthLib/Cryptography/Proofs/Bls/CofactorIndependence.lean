@@ -16,7 +16,7 @@ The kernel checks every multiple `[0..12]` and `[0..22]`, in the model of `Fp`.
 
 namespace EthLib.Cryptography.Bls.CofactorCertificate
 
-/-- Turns a kernel check of `Q != [n] * P` into a fact about the curve group. -/
+/-- Turns a kernel check of `Q ≠ [n] * P` into a fact about the curve group. -/
 theorem not_nsmul_cert (P Q : G2) (hp : G2.Valid P) (hq : G2.Valid Q)
     (n fuel : Nat) (hn : n < 2 ^ fuel)
     (hc : Q.projectiveEq (G2.mulNatAux fuel P n) = false) :

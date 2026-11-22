@@ -61,7 +61,7 @@ def millerDouble (T : G2 F) (xp yp : F) (f : Fp12 F) : G2 F × Fp12 F :=
   let three := Fp2.ofFp (BaseField.ofNat 3)
   let xx := T.x * T.x
   let zz := T.z * T.z
-  -- Line_function, case `Q_1 = Q_2`: `l := (3 * x_1^2) / (2 * y_1)`, on `E`.
+  -- The line function, case `Q_1 = Q_2`: `l := (3 * x_1^2) / (2 * y_1)`, on `E`.
   --
   -- On the twist, `x_1 = X / Z^2`, `y_1 = Y / Z^3`, and the slope is `lambda = 3 X^2 / (2 Y Z)`.
   --
@@ -69,7 +69,7 @@ def millerDouble (T : G2 F) (xp yp : F) (f : Fp12 F) : G2 F × Fp12 F :=
   let c0 := three * xx * T.x - two * (T.y * T.y)
   let c2 := -(three * xx * zz * Fp2.ofFp xp)
   let c3 := two * T.y * zz * T.z * Fp2.ofFp yp
-  -- A.2: `f := f^2 * Line_function(T, T, P); T := T + T`.
+  -- A.2: `f := f^2 * g` and `T := T + T`, with `g` the tangent line at `T`, evaluated at `P`.
   (T.double, f * f * lineValue c0 c2 c3)
 
 /-- Addition step: `(T, f) ↦ (T + Q, f l)`, with `l` the line through `T` and `Q = (xq, yq)`.
@@ -79,7 +79,7 @@ The line is the draft's line times `c w^3`, as above, with `c = -D` for the `D` 
 The loop never adds `T = ±Q` on points of order `r`, so the draft's other cases never arise. -/
 def millerAdd (T : G2 F) (xq yq : Fp2 F) (xp yp : F) (f : Fp12 F) : G2 F × Fp12 F :=
   let zz := T.z * T.z
-  -- Line_function, last case: `l := (y_2 - y_1) / (x_2 - x_1)`, on `E`.
+  -- The line function, last case: `l := (y_2 - y_1) / (x_2 - x_1)`, on `E`.
   --
   -- On the twist, `x_1 = X / Z^2`, `y_1 = Y / Z^3`, and the slope is `lambda = N / D`.
   let n := yq * zz * T.z - T.y
@@ -90,7 +90,7 @@ def millerAdd (T : G2 F) (xq yq : Fp2 F) (xp yp : F) (f : Fp12 F) : G2 F × Fp12
   let c0 := n * xq - d * yq
   let c2 := -(n * Fp2.ofFp xp)
   let c3 := d * Fp2.ofFp yp
-  -- A.2: `f := f * Line_function(T, Q, P); T := T + Q`.
+  -- A.2: `f := f * g` and `T := T + Q`, with `g` the line through `T` and `Q`, evaluated at `P`.
   (G2.add T ⟨xq, yq, Fp2.one⟩, f * lineValue c0 c2 c3)
 
 /-- Walk bits `n - 1` down to `0` of `s` from `(T, f)`.
@@ -99,9 +99,9 @@ At each bit it doubles `T`, then adds `Q` if the bit is set. -/
 def millerSteps (s : Nat) (xq yq : Fp2 F) (xp yp : F) : Nat → G2 F → Fp12 F → Fp12 F
   | 0, _, f => f
   | n + 1, T, f =>
-    -- A.2: `for i = L-1 downto 0`, with `i = n`.
+    -- A.2: the loop runs `i` from `L - 1` down to 0; here `i = n`.
     let (T, f) := millerDouble T xp yp f
-    -- A.2: `if (c_i = 1) then`, with `c_i` the bit `n` of `s`.
+    -- A.2: the addition step runs when `c_i = 1`, with `c_i` the bit `n` of `s`.
     let (T, f) := if (s >>> n) &&& 1 = 1 then millerAdd T xq yq xp yp f else (T, f)
     millerSteps s xq yq xp yp n T f
 
@@ -113,7 +113,7 @@ So the steps start one bit below it.
 
 `Nat.log2 0 = 0`, so `s = 0` takes no steps. -/
 def millerLoop (s : Nat) (q : Fp2 F × Fp2 F) (p : F × F) : Fp12 F :=
-  -- A.2: `f := 1; T := Q`, then the loop from `L - 1`, with `L` the index of the top bit of `s`.
+  -- A.2: `f := 1` and `T := Q`, then the loop from `L - 1`, with `L` the top bit index of `s`.
   millerSteps s q.1 q.2 p.1 p.2 s.log2 ⟨q.1, q.2, Fp2.one⟩ Fp12.one
 
 /-! ## Final exponentiation -/

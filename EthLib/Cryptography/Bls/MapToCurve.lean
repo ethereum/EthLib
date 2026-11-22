@@ -45,7 +45,7 @@ def Aprime : F := BaseField.ofNat
 def Bprime : F := BaseField.ofNat
   0x12e2908d11688030018b12e8753eee3b2016c1f0f24f4070a0b9c14fcef35ef55a23215a316ceaa5d1cc48e98e172be0
 
-/-- `map_to_curve_simple_swu`, RFC 9380 §6.6.2: a point of `E'` for `u`.
+/-- The simplified SWU map of RFC 9380 §6.6.2: a point of `E'` for `u`.
 
 `Z` is not a square, so one of `g(x1)` and `g(x2)` is a square.
 
@@ -58,22 +58,22 @@ def simpleSwuG1 (u : F) : Except BlsError (F × F) := do
   --
   -- Step 1: `tv1 = inv0(Z^2 * u^4 + Z * u^2)`.
   --
-  -- Step 3: if `tv1 == 0`, set `x1 = B' / (Z * A')`.
+  -- Step 3: if `tv1 = 0`, then `x1 = B' / (Z * A')`.
   --
-  -- Step 2: else `x1 = (-B' / A') * (1 + tv1)`.
+  -- Step 2: otherwise `x1 = (-B' / A') * (1 + tv1)`.
   let x1 := if BaseField.isZero denominator then Bprime * BaseField.inverse (Z * Aprime)
     else (-Bprime * BaseField.inverse Aprime) * (BaseField.one + BaseField.inverse denominator)
   -- Step 4: `gx1 = x1^3 + A' * x1 + B'`.
   let gx1 := x1 * x1 * x1 + Aprime * x1 + Bprime
   -- Step 5: `x2 = Z * u^2 * x1`.
   let x2 := zu2 * x1
-  -- Steps 7 and 8: `x = x1` if `is_square(gx1)`, else `x = x2`.
+  -- Steps 7 and 8: `x = x1` if `gx1` is a square, and `x = x2` otherwise.
   let x := if (BaseField.sqrt gx1).isSome then x1 else x2
   -- Steps 6 to 8: `y = sqrt(gx1)` or `y = sqrt(gx2)`, with `gx2 = x2^3 + A' * x2 + B'`.
   --
   -- The square root of the chosen `g(x)` is taken again, rather than kept from the test.
   let some y := BaseField.sqrt (x * x * x + Aprime * x + Bprime) | throw .notASquare
-  -- Steps 9 and 10: if `sgn0(u) != sgn0(y)`, set `y = -y`; return `(x, y)`.
+  -- Steps 9 and 10: if `sgn0(u) ≠ sgn0(y)`, then `y = -y`; the output is `(x, y)`.
   return (x, if BaseField.sgn0 u = BaseField.sgn0 y then y else -y)
 
 -- The coefficients `k_(1,j)` of `x_num`.
@@ -233,29 +233,29 @@ def isoMapG1 (xp yp : F) : G1 F :=
 /-- `h_eff` for G1, from RFC 9380 §8.8.1. -/
 def H_EFF_G1 : Nat := 0xd201000000010001
 
-/-- `clear_cofactor` for G1: the multiple by `h_eff`. -/
+/-- The cofactor clearing for G1: the multiple by `h_eff`. -/
 def clearCofactorG1 (point : G1 F) : G1 F :=
-  -- §7: `clear_cofactor(P) := h_eff * P`.
+  -- §7: the cofactor clearing sends `P` to `h_eff * P`.
   G1.mulNat point H_EFF_G1
 
-/-- `map_to_curve` then `clear_cofactor` for G1: a point of the subgroup for `u`. -/
+/-- The map to the curve, then the cofactor clearing, for G1: a point of the subgroup for `u`. -/
 def mapToG1 (u : F) : Except BlsError (G1 F) := do
-  -- §6.6.3 step 1: `(x', y') = map_to_curve_simple_swu(u)`, a point of `E'`.
+  -- §6.6.3 step 1: `(x', y')` is the image of `u` by the simplified SWU map, a point of `E'`.
   let (xp, yp) ← simpleSwuG1 u
-  -- Step 2: `(x, y) = iso_map(x', y')`, a point of `E`.
+  -- Step 2: `(x, y)` is the image of `(x', y')` by the isogeny, a point of `E`.
   --
   -- Step 3 returns `(x, y)`; the field-to-curve document of EIP-2537 then clears the cofactor.
   return clearCofactorG1 (isoMapG1 xp yp)
 
 /-! ## G2 -/
 
-/-- `map_to_curve` then `clear_cofactor` for G2: a point of the subgroup for `u`.
+/-- The map to the curve, then the cofactor clearing, for G2: a point of the subgroup for `u`.
 
 The error is the case where the SSWU map finds no square root, which the RFC excludes. -/
 def mapToG2 (u : Fp2 F) : Except BlsError (G2 F) := do
-  -- §6.6.3 step 1: `(x', y') = map_to_curve_simple_swu(u)`, a point of `E'`.
+  -- §6.6.3 step 1: `(x', y')` is the image of `u` by the simplified SWU map, a point of `E'`.
   let (xp, yp) ← HashToCurve.simpleSwu u
-  -- Step 2: `(x, y) = iso_map(x', y')`, a point of `E`.
+  -- Step 2: `(x, y)` is the image of `(x', y')` by the isogeny, a point of `E`.
   --
   -- Step 3 returns `(x, y)`; the field-to-curve document of EIP-2537 then clears the cofactor.
   return HashToCurve.clearCofactor (HashToCurve.isoMapG2 xp yp)

@@ -36,14 +36,14 @@ open EthLib.Base (packBytes)
 
 /-! ## Sign convention -/
 
-/-- True iff `y > p − y`, the "lex-larger" half. -/
+/-- True iff `y > p − y`, so `y` is the larger of `y` and `-y` as integers below `p`. -/
 @[inline] def Fp.signBit (y : Fp) : Bool :=
   -- `sign_GF_p(y) = 1` iff `y > (p - 1) / 2`, which is `y > p - y` for an odd `p`.
   y.val > Fp.modulus - y.val
 
 /-- Lex-order sign on `Fp2`: compare `c1` first, then `c0`. -/
 def Fp2.signBit (y : Fp2) : Bool :=
-  -- `sign_GF_p^2(y') = sign_GF_p(y'_1)` if `y'_1 != 0`, else `sign_GF_p(y'_0)`.
+  -- `sign_GF_p^2(y') = sign_GF_p(y'_1)` if `y'_1 ≠ 0`, and `sign_GF_p(y'_0)` otherwise.
   if !y.c1.isZero then
     Fp.signBit y.c1
   else
@@ -129,7 +129,7 @@ For a point on the curve, the proofs show that it holds exactly when `[r] P = O`
 
 `[t^2]` is two products by the 64-bit `|t|`, so the test takes about 128 doublings. -/
 def inSubgroup (p : G1) : Bool :=
-  -- `subgroup_check_E1(P)`: `O` lies in every subgroup.
+  -- The subgroup check of `G1`: `O` lies in every subgroup.
   if p.isInfinity then true
   else projectiveEq (sigma p) (neg (mulNat (mulNat p blsX) blsX))
 
@@ -138,11 +138,11 @@ def inSubgroup (p : G1) : Bool :=
 KZG accepts the point at infinity, so it tests for that encoding before calling this.
 -/
 def keyValidatePoint (bytes : Vector UInt8 48) : Except BlsError G1 := do
-  -- Steps 1 and 2: `xP = pubkey_to_point(PK)`, or INVALID.
+  -- Steps 1 and 2: `xP` is the point that `PK` encodes, or INVALID.
   let p ← uncompress bytes
   -- Step 3: INVALID if `xP` is the identity element, which is on the curve.
   if p.isInfinity then throw .pointAtInfinity
-  -- Step 4: `pubkey_subgroup_check(xP)`, against small-subgroup attacks.
+  -- Step 4: INVALID unless `xP` is in `G1`, against small-subgroup attacks.
   if !inSubgroup p then throw .notInSubgroup
   -- Step 5: VALID.
   return p
@@ -207,7 +207,7 @@ def uncompress (bytes : Vector UInt8 96) : Except BlsError G2 :=
     let cleared := packBytes (bytes.set 0 (head &&& 0x1f))
     -- Step 6: `x = x_0 + x_1 u`, from the halves that step 3 of C.1 writes, `x_1` first.
     --
-    -- Not in Appendix C: `x_0 >= p` or `x_1 >= p` is INVALID, since step 3 of C.1 never writes it.
+    -- Not in Appendix C: `x_0 ≥ p` or `x_1 ≥ p` is INVALID, since step 3 of C.1 never writes it.
     --
     -- The BLS draft, §2.2, rejects any string that serialization does not output.
     let c1Bytes := cleared.extract 0 48
@@ -236,7 +236,7 @@ For a point on the twist, the proofs show that it holds exactly when `[r] P = O`
 
 `t` is negative, so `[t] P` is `-[|t|] P`, one product by the 64-bit `|t|`. -/
 def inSubgroup (p : G2) : Bool :=
-  -- `subgroup_check_E2(P)`: `O` lies in every subgroup.
+  -- The subgroup check of `G2`: `O` lies in every subgroup.
   if p.isInfinity then true
   else (psi p).projectiveEq (neg (p.mulNat blsX))
 

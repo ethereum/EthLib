@@ -605,7 +605,7 @@ private theorem cube_add_four_ne_zero_zmod (x : ZMod Fp.modulus) :
 
 /-- The curve right-hand side `x^3 + 4` never vanishes over the base field.
 
-So every point on the curve `y^2 = x^3 + 4` has `y != 0`.
+So every point on the curve `y^2 = x^3 + 4` has `y ≠ 0`.
 
 This makes the two square roots `y` and `-y` distinct, so the sign bit of a compressed point always selects exactly one of them.
 -/

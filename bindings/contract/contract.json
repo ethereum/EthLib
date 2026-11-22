@@ -447,7 +447,7 @@
    "docstring":
    "A compressed `G2` point, decoded, checked in the subgroup, and compressed again."},
   {"summary":
-   "`expand_message_xmd(msg, DST, len_in_bytes)` of [RFC 9380 §5.3.1][xmd], with SHA-256 as `H`.",
+   "The message expansion of [RFC 9380 §5.3.1][xmd], with SHA-256 as `H`.",
    "signature": "(message: bytes, dst: bytes, length: int) -> bytes",
    "operation": "EthLib.Cryptography.Bls.HashToCurve.expandMessageXmd",
    "method": "bls_expand_message_xmd",
@@ -472,9 +472,9 @@
       {"constructor": "keyGenHkdf", "code": 16}]}],
    "error_class": "BlsError",
    "docstring":
-   "`expand_message_xmd(msg, DST, len_in_bytes)` of [RFC 9380 §5.3.1][xmd], with SHA-256 as `H`.\n\nIt returns `len_in_bytes` uniform bytes, derived from the message under the tag.\n\nEach step of the RFC is marked in the body by its number.\n\nThe RFC aborts on a tag longer than 255 bytes.\n\nThis function instead replaces such a tag by its hash, as [§5.3.3][long] specifies.\n\nIt rejects the two other cases of step 2 with a typed error.\n\n[xmd]: https://www.rfc-editor.org/rfc/rfc9380#section-5.3.1\n[long]: https://www.rfc-editor.org/rfc/rfc9380#section-5.3.3"},
+   "The message expansion of [RFC 9380 §5.3.1][xmd], with SHA-256 as `H`.\n\nIt returns `len_in_bytes` uniform bytes, derived from the message under the tag.\n\nEach step of the RFC is marked in the body by its number.\n\nThe RFC aborts on a tag longer than 255 bytes.\n\nThis function instead replaces such a tag by its hash, as [§5.3.3][long] specifies.\n\nIt rejects the two other cases of step 2 with a typed error.\n\n[xmd]: https://www.rfc-editor.org/rfc/rfc9380#section-5.3.1\n[long]: https://www.rfc-editor.org/rfc/rfc9380#section-5.3.3"},
   {"summary":
-   "`hash_to_curve(msg)` of [RFC 9380 §3][h2c], for the suite `BLS12381G2_XMD:SHA-256_SSWU_RO_`.",
+   "The hash to curve of [RFC 9380 §3][h2c], for the suite `BLS12381G2_XMD:SHA-256_SSWU_RO_`.",
    "signature": "(message: bytes, dst: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Bls.HashToCurve.hashToG2",
    "method": "bls_hash_to_g2",
@@ -499,7 +499,7 @@
       {"constructor": "keyGenHkdf", "code": 16}]}],
    "error_class": "BlsError",
    "docstring":
-   "`hash_to_curve(msg)` of [RFC 9380 §3][h2c], for the suite `BLS12381G2_XMD:SHA-256_SSWU_RO_`.\n\nThe result is a point of the subgroup `G2`, derived from the message under the tag.\n\n`map_to_curve` is the simplified SWU map to `E'`, then the 3-isogeny to `E`, by [§6.6.3][ab0].\n\nEach step of the RFC is marked in the body by its number.\n\n[h2c]: https://www.rfc-editor.org/rfc/rfc9380#section-3\n[ab0]: https://www.rfc-editor.org/rfc/rfc9380#section-6.6.3"},
+   "The hash to curve of [RFC 9380 §3][h2c], for the suite `BLS12381G2_XMD:SHA-256_SSWU_RO_`.\n\nThe result is a point of the subgroup `G2`, derived from the message under the tag.\n\nThe map to the curve is the simplified SWU map to `E'`, then the 3-isogeny to `E`, by [§6.6.3][ab0].\n\nEach step of the RFC is marked in the body by its number.\n\n[h2c]: https://www.rfc-editor.org/rfc/rfc9380#section-3\n[ab0]: https://www.rfc-editor.org/rfc/rfc9380#section-6.6.3"},
   {"summary":
    "The pairing `e(P, Q)` of a compressed `G1` point and a compressed `G2` point.",
    "signature": "(g1_point: bytes, g2_point: bytes) -> bytes",

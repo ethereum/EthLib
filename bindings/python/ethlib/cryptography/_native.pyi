@@ -81,11 +81,11 @@ def bls_decode_g2(point: bytes) -> bytes:
     ...
 
 def bls_expand_message_xmd(message: bytes, dst: bytes, length: int) -> bytes:
-    """`expand_message_xmd(msg, DST, len_in_bytes)` of [RFC 9380 §5.3.1][xmd], with SHA-256 as `H`."""
+    """The message expansion of [RFC 9380 §5.3.1][xmd], with SHA-256 as `H`."""
     ...
 
 def bls_hash_to_g2(message: bytes, dst: bytes) -> bytes:
-    """`hash_to_curve(msg)` of [RFC 9380 §3][h2c], for the suite `BLS12381G2_XMD:SHA-256_SSWU_RO_`."""
+    """The hash to curve of [RFC 9380 §3][h2c], for the suite `BLS12381G2_XMD:SHA-256_SSWU_RO_`."""
     ...
 
 def bls_pairing(g1_point: bytes, g2_point: bytes) -> bytes:

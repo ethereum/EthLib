@@ -17,7 +17,7 @@ The twist also matches draft-07, §4.2.1.
 <https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-07>
 
 - The kernel checks `[r] g_2 = 0` in the model of `Fp`, by double and add on a fuel argument.
-- Since `r` is prime and `g_2 != 0`, the order of `g_2` is exactly `r`.
+- Since `r` is prime and `g_2 ≠ 0`, the order of `g_2` is exactly `r`.
 - The map `s ↦ [s] g_2` is linear in `s` modulo `r`.
 -/
 
@@ -77,13 +77,13 @@ theorem modulus_smul_generator :
   exact h
 
 theorem toPoint_generator_ne_zero : toPoint generator ≠ 0 := by
-  -- Because `z = 1 != 0`, `generator` maps to `Point.some ...`, which cannot equal `Point.zero`.
+  -- Because `z = 1 ≠ 0`, `generator` maps to `Point.some ...`, which cannot equal `Point.zero`.
   have hz : ¬ (Fp2.one : Fp2).isZero = true := by rw [Fp2.one_isZero]; decide
   rw [toPoint, Point.toAffine_of_Z_ne_zero valid_generator
     (by exact fun h => absurd (isZero_iff.mpr h) hz)]
   exact fun h => by cases h
 
-/-- Because `r` is prime and `[r] * g_2 = 0` with `g_2 != 0`, the order of `g_2` cannot be `1` and must be `r`. -/
+/-- Because `r` is prime and `[r] * g_2 = 0` with `g_2 ≠ 0`, the order of `g_2` is `r`. -/
 theorem addOrderOf_toPoint_generator :
     addOrderOf (toPoint generator) = Fr.modulus :=
   addOrderOf_eq_prime modulus_smul_generator toPoint_generator_ne_zero
@@ -92,7 +92,7 @@ theorem addOrderOf_toPoint_generator :
 
 theorem nsmul_generator_mod (k : Nat) :
     k • toPoint generator = (k % Fr.modulus) • toPoint generator := by
-  -- Split `k = r * (k / r) + k % r` and annihilate the multiple of `r`.
+  -- Split `k = r * (k / r) + k mod r` and annihilate the multiple of `r`.
   conv_lhs => rw [← Nat.div_add_mod k Fr.modulus]
   rw [add_nsmul, Nat.mul_comm Fr.modulus (k / Fr.modulus), mul_nsmul',
       modulus_smul_generator, nsmul_zero]

@@ -26,7 +26,7 @@ Section C.1 encodes a point, and Section C.2 decodes it.
 - Decoding then encoding gives back the exact 96 input bytes.
 - So two different byte strings never decode to the same point.
 
-The last two facts need `y != 0` on the twist.
+The last two facts need `y ≠ 0` on the twist.
 
 That holds because `x^3 + 4 (1 + i)` has no root in `Fp2`.
 -/
@@ -679,7 +679,7 @@ private theorem ba_extract_append_extract {b : ByteArray} (hsz : b.size = 96) :
 
 - Infinity accepts only `0xc0` followed by 95 zero bytes, matching `G2.infinityBytes`.
 - Finite inputs decode canonical `c1` and `c0`.
-- Because `yPos != 0`, the selected root reproduces the input sign flag `s`.
+- Because `yPos ≠ 0`, the selected root reproduces the input sign flag `s`.
 -/
 theorem compress_uncompress {b : Vector UInt8 96} {q : G2}
     (h : G2.uncompress b = .ok q) : G2.compress q = b := by

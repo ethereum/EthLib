@@ -25,7 +25,7 @@ variable {F : Type} [BaseField F]
 
 open EthLib.Cryptography.Bls
 
-/-! ## `expand_message_xmd` (RFC 9380 §5.3.1)
+/-! ## Message expansion (RFC 9380 §5.3.1)
 
 The message expansion of [RFC 9380 §5.3.1][xmd], with SHA-256 as the hash `H`.
 
@@ -79,7 +79,7 @@ def strxor (a b : ByteArray) : ByteArray :=
   -- XOR the bytes at each position.
   ⟨Array.zipWith (· ^^^ ·) a.data b.data⟩
 
-/-- `expand_message_xmd(msg, DST, len_in_bytes)` of [RFC 9380 §5.3.1][xmd], with SHA-256 as `H`.
+/-- The message expansion of [RFC 9380 §5.3.1][xmd], with SHA-256 as `H`.
 
 It returns `len_in_bytes` uniform bytes, derived from the message under the tag.
 
@@ -105,7 +105,8 @@ def expandMessageXmd
   -- Step 2: abort if `ell > 255`, since steps 8 and 10 write the index `i` in one byte.
   if ell > 255 then
     throw (.expandMessageTooManyBlocks ell)
-  -- Step 2 aborts if `len(DST) > 255`, since step 3 writes the length in one byte.
+  -- Step 2 aborts on a tag longer than 255 bytes, since step 3 writes its length in one byte.
+  --
   -- §5.3.3 instead replaces the tag by `H("H2C-OVERSIZE-DST-" || DST)`, 32 bytes long.
   let dst :=
     if dst.size > 255 then
@@ -137,10 +138,10 @@ def expandMessageXmd
     prev := bi
   -- Step 11: `uniform_bytes = b_1 || ... || b_ell`.
   let mut out := bs.foldl (· ++ ·) ByteArray.empty
-  -- Step 12: `return substr(uniform_bytes, 0, len_in_bytes)`.
+  -- Step 12: the output is the first `len_in_bytes` bytes of `uniform_bytes`.
   return out.extract 0 lenInBytes
 
-/-! ## `hash_to_field` for Fp2 (RFC 9380 §5.2)
+/-! ## Hash to the field `Fp2` (RFC 9380 §5.2)
 
 The hash to the field of [RFC 9380 §5.2][h2f], for `F = GF(p^2)` with extension degree `m = 2`.
 
@@ -158,14 +159,14 @@ def fpFromBytesL (b : ByteArray) : F :=
   -- The big-endian integer of the bytes, reduced mod `p` by the field.
   BaseField.ofNat (Base.bytesToNat b.data.toList)
 
-/-- `hash_to_field(msg, count)` of [RFC 9380 §5.2][h2f]: `count` elements of `Fp2`.
+/-- The hash to the field of [RFC 9380 §5.2][h2f]: `count` elements of `Fp2` from the message.
 
 The suite `BLS12381G2_XMD:SHA-256_SSWU_RO_` of [§8.8.2][suite] fixes the parameters:
 
 - `m = 2`, since `Fp2` has degree 2 over `Fp`.
 - `k = 128`, the target security level in bits.
 - `L = ceil((ceil(log2(p)) + k) / 8) = ceil((381 + 128) / 8) = 64`.
-- The message expansion is `expand_message_xmd` with SHA-256.
+- The message expansion is the one of §5.3.1, with SHA-256.
 
 Each element reads `m * L = 128` bytes of the expansion.
 
@@ -183,7 +184,7 @@ def hashToFieldFp2
   let m := 2
   -- Step 1: `len_in_bytes = count * m * L`.
   let lenInBytes := count * m * l
-  -- Step 2: `uniform_bytes = expand_message(msg, DST, len_in_bytes)`.
+  -- Step 2: `uniform_bytes` is the expansion of `msg` under `DST` to `len_in_bytes` bytes.
   let uniform ← expandMessageXmd msg dst lenInBytes
   -- Step 3: for `i` from 0 to `count - 1`.
   return Vector.ofFn fun i =>
@@ -201,7 +202,7 @@ def hashToFieldFp2
 
 The twist `E : y^2 = x^3 + 4 * (1 + I)` has `A = 0`, so the simplified SWU map does not apply to it.
 
-[RFC 9380 §6.6.3][ab0] maps to a curve `E'` with `A' B' != 0`, then follows a 3-isogeny to `E`.
+[RFC 9380 §6.6.3][ab0] maps to a curve `E'` with `A' B' ≠ 0`, then follows a 3-isogeny to `E`.
 
 The constants are those of the suite `BLS12381G2_XMD:SHA-256_SSWU_RO_`, [§8.8.2][suite].
 
@@ -227,7 +228,7 @@ def Aprime : Fp2 F := ⟨BaseField.zero, BaseField.ofNat 240⟩
 -/
 def Bprime : Fp2 F := Fp2.ofNats 1012 1012
 
-/-- `map_to_curve_simple_swu(u)` of [RFC 9380 §6.6.2][sswu]: a point of `E' : y^2 = g(x)`.
+/-- The simplified SWU map of [RFC 9380 §6.6.2][sswu]: a point of `E' : y^2 = g(x)` for `u`.
 
 Here `g(x) = x^3 + A' * x + B'`.
 
@@ -247,7 +248,8 @@ def simpleSwu (u : Fp2 F) : Except BlsError (Fp2 F × Fp2 F) := do
   let x1 :=
     -- Step 1: `tv1 = inv0(Z^2 * u^4 + Z * u^2)`, which is 0 exactly when the denominator is.
     if denom.isZero then
-      -- Step 3: if `tv1 == 0`, set `x1 = B' / (Z * A')`.
+      -- Step 3: if `tv1 = 0`, then `x1 = B' / (Z * A')`.
+      --
       -- The denominator is 0 when `Z * u^2` is 0 or -1.
       Bprime / (Z * Aprime)
     else
@@ -258,7 +260,8 @@ def simpleSwu (u : Fp2 F) : Except BlsError (Fp2 F × Fp2 F) := do
   match Fp2.sqrt gx1 with
   | some y =>
     -- Step 7: `gx1` is a square, so `x = x1` and `y = sqrt(gx1)`.
-    -- Step 9: if `sgn0(u) != sgn0(y)`, set `y = -y`.
+    --
+    -- Step 9: if `sgn0(u) ≠ sgn0(y)`, then `y = -y`.
     return (x1, if Fp2.sgn0 u = Fp2.sgn0 y then y else -y)
   | none =>
     -- Step 5: `x2 = Z * u^2 * x1`, needed only when `gx1` is not a square.
@@ -267,7 +270,7 @@ def simpleSwu (u : Fp2 F) : Except BlsError (Fp2 F × Fp2 F) := do
     match Fp2.sqrt (x2 * x2 * x2 + Aprime * x2 + Bprime : Fp2 F) with
     | none => .error .notASquare
     | some y =>
-      -- Step 9: if `sgn0(u) != sgn0(y)`, set `y = -y`.
+      -- Step 9: if `sgn0(u) ≠ sgn0(y)`, then `y = -y`.
       return (x2, if Fp2.sgn0 u = Fp2.sgn0 y then y else -y)
 
 /-! ## 3-isogeny map `E' → E` (RFC 9380 Appendix E.3)
@@ -349,7 +352,7 @@ def k42 : Fp2 F := Fp2.ofNats
   0x12
   0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaa99
 
-/-- The 3-isogeny `iso_map` of [RFC 9380 Appendix E.3][iso], from `(x', y')` on `E'` to `E`.
+/-- The 3-isogeny of [RFC 9380 Appendix E.3][iso], from `(x', y')` on `E'` to `E`.
 
 - `x = x_num / x_den`, where `x_den` is monic of degree 2.
 - `y = y' * y_num / y_den`, where `y_den` is monic of degree 3.
@@ -376,7 +379,7 @@ def isoMapG2 (xp yp : Fp2 F) : G2 F :=
 
 /-! ## Cofactor clearing (RFC 9380 Appendix G.3)
 
-`clear_cofactor` sends a point of the twist to the subgroup `G2` of order `r`.
+The cofactor clearing sends a point of the twist to the subgroup `G2` of order `r`.
 
 [RFC 9380 Appendix G.3][g3] computes it with the endomorphism `psi`.
 
@@ -425,7 +428,7 @@ The parameter is negative, so this is `-[|c1|] P`.
 -/
 def mulNegX (P : G2 F) : G2 F := G2.neg (P.mulNat blsX)
 
-/-- `clear_cofactor_bls12381_g2(P)` of [RFC 9380 Appendix G.3][g3].
+/-- The cofactor clearing of `P` for `G2` of BLS12-381, by [RFC 9380 Appendix G.3][g3].
 
 Each step of the RFC is marked in the body by its number.
 
@@ -448,7 +451,7 @@ def clearCofactor (P : G2 F) : G2 F :=
   let t3 := G2.add t3 t2
   -- Step 9: `t3 = t3 - t1`.
   let t3 := G2.add t3 (G2.neg t1)
-  -- Steps 10 and 11: `Q = t3 - P`, then `return Q`.
+  -- Steps 10 and 11: the output is `Q = t3 - P`.
   G2.add t3 (G2.neg P)
 
 /-- The scalar `h_eff` of the suites for `G2` of BLS12-381, RFC 9380 §8.8.2.
@@ -465,11 +468,11 @@ def H_EFF_G2 : Nat :=
 
 /-! ## Top-level pipeline -/
 
-/-- `hash_to_curve(msg)` of [RFC 9380 §3][h2c], for the suite `BLS12381G2_XMD:SHA-256_SSWU_RO_`.
+/-- The hash to curve of [RFC 9380 §3][h2c], for the suite `BLS12381G2_XMD:SHA-256_SSWU_RO_`.
 
 The result is a point of the subgroup `G2`, derived from the message under the tag.
 
-`map_to_curve` is the simplified SWU map to `E'`, then the 3-isogeny to `E`, by [§6.6.3][ab0].
+The map to the curve is the simplified SWU map to `E'`, then the 3-isogeny to `E`, by [§6.6.3][ab0].
 
 Each step of the RFC is marked in the body by its number.
 
@@ -477,14 +480,16 @@ Each step of the RFC is marked in the body by its number.
 [ab0]: https://www.rfc-editor.org/rfc/rfc9380#section-6.6.3
 -/
 def hashToG2 (msg : ByteArray) (dst : ByteArray) : Except BlsError (G2 F) := do
-  -- Step 1: `u = hash_to_field(msg, 2)`.
+  -- Step 1: `u` is the pair of elements of `Fp2` that the hash to the field gives for `msg`.
   let us ← hashToFieldFp2 msg dst 2
   -- Steps 2 and 3, first half: the simplified SWU map of `u[0]` and `u[1]` to `E'`.
   let (x0, y0) ← simpleSwu us[0]
   let (x1, y1) ← simpleSwu us[1]
   -- Steps 2 and 3, second half: `Q0` and `Q1` are the images on `E` by the 3-isogeny.
+  --
   -- Step 4: `R = Q0 + Q1`.
-  -- Steps 5 and 6: `P = clear_cofactor(R)`, then `return P`.
+  --
+  -- Steps 5 and 6: the output `P` is `R` with its cofactor cleared.
   return clearCofactor (G2.add (isoMapG2 x0 y0) (isoMapG2 x1 y1))
 
 end EthLib.Cryptography.Bls.HashToCurve
