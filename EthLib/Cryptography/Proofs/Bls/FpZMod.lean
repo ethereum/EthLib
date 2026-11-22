@@ -411,23 +411,6 @@ theorem powLimbs_sqrtExponent (a : Fp) :
   rw [Montgomery.toZMod_powLimbs, val_sqrtExponent]
   exact (toZMod_pow a _).symm
 
-/-- The square root that the extensions read from `Fp` is its own square root.
-
-The square root of `Fp` fails only with the error for a non-square, so the two agree on errors too.
--/
-theorem sqrtOrError_eq (a : Fp) : sqrtOrError a = Fp.sqrt a := by
-  -- The test is left as a Boolean variable, so no proof step evaluates the power.
-  have hs : Fp.sqrt a = .error .notASquare ∨ ∃ s, Fp.sqrt a = .ok s := by
-    unfold Fp.sqrt Fp.sqrtCandidate
-    rw [powLimbs_sqrtExponent]
-    generalize powNat a ((modulus + 1) / 4) = c
-    by_cases h : (c * c).beq a = true
-    · exact Or.inr ⟨c, ite_eq_left h⟩
-    · exact Or.inl (ite_eq_right h)
-  -- `unfold` would reduce the match on the root, and so evaluate the power: rewrite instead.
-  rw [sqrtOrError, baseField_sqrt]
-  rcases hs with h | ⟨s, h⟩ <;> rw [h] <;> rfl
-
 /-! ## Bridge: spec operations = Mathlib operations -/
 
 /-- The map to `ZMod p` sends a power to the power. -/

@@ -35,10 +35,10 @@ private abbrev toF (a : Fp) : F := Fp.toZMod a
 /-! ## The SSWU map onto `E'` -/
 
 /-- The right-hand side `g(x) = x^3 + A' * x + B'` of `E'`. -/
-private def g (x : Fp) : Fp := x * x * x + Aprime * x + Bprime
+private def g {K : Type} [BaseField K] (x : K) : K := x * x * x + Aprime * x + Bprime
 
 /-- The first candidate `x1` of the SSWU map. -/
-private def x1 (u : Fp) : Fp :=
+private def x1 {K : Type} [BaseField K] (u : K) : K :=
   if BaseField.isZero (Z * (u * u) * (Z * (u * u)) + Z * (u * u)) then
     Bprime * BaseField.inverse (Z * Aprime)
   else (-Bprime * BaseField.inverse Aprime) *
@@ -132,42 +132,58 @@ private theorem sqrt_ok (u : Fp) :
   push_toZMod at h hg ⊢
   linear_combination h - hg
 
-/-- The SSWU map succeeds on every input (RFC 9380 §6.6.2). -/
-theorem simpleSwuG1_ok (u : Fp) : ∃ p, simpleSwuG1 u = .ok p := by
-  have h := sqrt_ok u
-  revert h
+/-- The square root of the base field succeeds exactly when the one of `Fp` does. -/
+private theorem isSome_baseField_sqrt (a : Fp) : (BaseField.sqrt a).isSome = (Fp.sqrt a).isOk := by
+  rw [Fp.baseField_sqrt]
+  cases Fp.sqrt a <;> rfl
+
+/-- The SSWU map succeeds when its last square root does, over any base field. -/
+private theorem simpleSwuG1_ok_of {K : Type} [BaseField K] (u : K)
+    (h : ∃ c, BaseField.sqrt (g (if (BaseField.sqrt (g (x1 u))).isSome then x1 u
+      else Z * (u * u) * x1 u)) = some c) :
+    ∃ p, simpleSwuG1 u = .ok p := by
+  obtain ⟨c, hc⟩ := h
+  revert hc
   unfold simpleSwuG1 g x1
-  rw [show (sqrtOrError : Fp → Except BlsError Fp) = Fp.sqrt from funext Fp.sqrtOrError_eq]
-  generalize Fp.sqrt = sqrtFn
-  rintro ⟨c, hc⟩
+  intro hc
   dsimp only
   rw [hc]
   exact ⟨_, rfl⟩
 
--- The last step of the map: a square root `y` of `g(x)` gives `(x, ±y)` on `E'`.
-private theorem curve_of_bind {s : Except BlsError Fp} {x : Fp} {f : Fp → Fp} {p : Fp × Fp}
-    (hf : ∀ y, f y * f y = y * y) (hs : ∀ c, s = .ok c → c * c = x * x * x + Aprime * x + Bprime)
-    (h : (s >>= fun y => pure (x, f y)) = Except.ok p) :
+/-- The SSWU map succeeds on every input (RFC 9380 §6.6.2). -/
+theorem simpleSwuG1_ok (u : Fp) : ∃ p, simpleSwuG1 u = .ok p := by
+  refine simpleSwuG1_ok_of u ?_
+  obtain ⟨c, hc⟩ := sqrt_ok u
+  rw [isSome_baseField_sqrt]
+  exact ⟨c, by rw [Fp.baseField_sqrt, hc]; rfl⟩
+
+/-- Every output `(x, y)` of the SSWU map lies on the curve, over any base field.
+
+It assumes that every root the square root returns squares to its input.
+
+It also assumes that a negation does not change a square. -/
+private theorem simpleSwuG1_curve_eq_of {K : Type} [BaseField K] {u : K} {p : K × K}
+    (hsqrt : ∀ {a c : K}, BaseField.sqrt a = some c → c * c = a)
+    (hneg : ∀ y : K, -y * -y = y * y) (h : simpleSwuG1 u = .ok p) :
     p.2 * p.2 = p.1 * p.1 * p.1 + Aprime * p.1 + Bprime := by
-  cases s with
-  | error e => cases h
-  | ok c =>
+  revert h
+  unfold simpleSwuG1
+  extract_lets zu2 den x1 gx1 x2 x
+  intro h
+  split at h
+  · rename_i y hy
     cases h
-    exact (hf c).trans (hs c rfl)
+    -- The sign of `y` does not change its square.
+    refine Eq.trans ?_ (hsqrt hy)
+    split
+    · rfl
+    · exact hneg y
+  · cases h
 
 /-- Every output `(x, y)` of the SSWU map lies on `E' : y^2 = x^3 + A' * x + B'`. -/
 theorem simpleSwuG1_curve_eq {u : Fp} {p : Fp × Fp} (h : simpleSwuG1 u = .ok p) :
-    p.2 * p.2 = p.1 * p.1 * p.1 + Aprime * p.1 + Bprime := by
-  have hsqrt : ∀ {a c : Fp}, sqrtOrError a = .ok c → c * c = a :=
-    fun hs => Fp.sqrt_ok ((Fp.sqrtOrError_eq _).symm.trans hs)
-  revert h
-  unfold simpleSwuG1
-  generalize (sqrtOrError : Fp → Except BlsError Fp) = sqrtFn at hsqrt ⊢
-  intro h
-  refine curve_of_bind (fun y => ?_) (fun c hc => hsqrt hc) h
-  split
-  · rfl
-  · exact neg_mul_neg y y
+    p.2 * p.2 = p.1 * p.1 * p.1 + Aprime * p.1 + Bprime :=
+  simpleSwuG1_curve_eq_of Fp.baseField_sqrt_mul_self (fun y => neg_mul_neg y y) h
 
 /-! ## Polynomials as coefficient lists, lowest degree first
 

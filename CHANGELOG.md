@@ -824,6 +824,18 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the SSWU map of BLS12-381 `G1` reads the square root of the base field as an option, and the wrapper `sqrtOrError` is removed ([#4009](https://github.com/ethereum/EthLib/pull/4009)).
+  The map gives the same points and fails with the same error.
+  `Fp.sqrtOrError_eq` and `map_sqrtOrError` are removed.
+  Migration: use `BaseField.sqrt`, with `Fp.baseField_sqrt` and `BaseField.Hom.map_sqrt`.
+
+- In Lean, BLS12-381 `G2 F` is an abbreviation of `G1 (Fp2 F)`, and the operations of `G1` ask for the field operations alone ([#4007](https://github.com/ethereum/EthLib/pull/4007)).
+  `G2` runs the formulas of `G1`, with mixed addition, and gives the same points.
+  `G2.zero`, `G2.neg`, `G2.add` and `G2.mul` are aliases of the operations of `G1`; `G2.double`, `G2.mulNat`, `G2.toAffine`, `G2.isInfinity` and `G2.projectiveEq` are removed, and a caller writes field notation such as `p.double`.
+  The group law is proved once in `G1.Law`, and the theorems of `G1Group` and `G2Group` keep their statements; `G1.doubleSpec`, `G1.addSpec`, `G1.double_eq_doubleSpec` and `G1.add_eq_addSpec` are removed.
+  `G1.map` takes a `FieldOps.Hom`, which `BaseField.Hom` extends, so a caller writes `G1.map f.toHom`; `G2.map f` is `G1.map (Fp2.hom f)`.
+  `FieldOps.Embedding` moves to `Proofs/BaseField`, `Fp.embedding` to `FpZMod`, and the fuel ladder `mulNatAux` of `G1Order` to `CurveMap`, over any base field.
+
 - In Lean, the target and the maximum of a blob schedule are `UInt64`, as EIP-7892 types them, and the update fraction stays `Nat` ([#3845](https://github.com/ethereum/EthLib/issues/3845)).
   `BlobSchedule` gains the bound `maxBlobGas_lt`: the blob gas of the maximum, `GAS_PER_BLOB * max`, is below `2^64`.
   `GAS_PER_BLOB` moves to `EthLib.Base`, and `Fees.BlobBaseFee` exports it under its old name.
