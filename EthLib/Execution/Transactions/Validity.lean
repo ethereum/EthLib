@@ -39,10 +39,7 @@ Hegotá has no rules of its own here yet, so the exports reject it.
 
 The step comments write the terms of `g_0` in the notation of §6.2, in ASCII.
 
-Only `ethereum/execution-specs` writes out the order of the checks, in its [fork folders][es].
-
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
-[es]: https://github.com/ethereum/execution-specs/tree/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks
 -/
 
 @[expose] public section
@@ -386,7 +383,7 @@ def validateTransaction (fork : Fork) (sender : Address) (tx : Transaction)
     (lifted : LiftedRules := {}) : Except TransactionError Nat := do
   -- The checks are named first and run below in the order of each fork.
   --
-  -- The gas limit covers the larger of the intrinsic gas and the floor, which the source splits.
+  -- The gas limit covers the larger of the intrinsic gas and the floor.
   let minimum := minimumGas fork sender tx
   let coversMinimum := ensure (minimum ≤ tx.gas.toNat) (.insufficientGas minimum tx.gas.toNat)
   -- From Shapella, the init code of a creation is at most the largest init code size of the fork.
@@ -399,13 +396,13 @@ def validateTransaction (fork : Fork) (sender : Address) (tx : Transaction)
     (.priorityFeeGreaterThanMaxFee (feeCaps tx).1 (feeCaps tx).2)
   -- First at every fork: the type exists at the fork.
   --
-  -- The sources reject an unknown type when they decode it.
+  -- Decoding rejects an unknown type too.
   ensure (tx.fork ≤ fork) (.unsupportedType tx.type)
   if fork ≥ .glamsterdam then
     -- From Glamsterdam: the nonce, the init code, then the gas limit is at most `2^32 - 1`.
     nonceFits
     initCodeFits
-    -- A simulation may lift this cap; the source has no such mode.
+    -- A simulation may lift this cap.
     unless lifted.totalGasCap do
       ensure (tx.gas.toNat ≤ TX_MAX_TOTAL_GAS_LIMIT) (.gasLimitExceeded tx.gas.toNat)
     -- Then the fees, then the blobs and the authorizations.
@@ -417,7 +414,7 @@ def validateTransaction (fork : Fork) (sender : Address) (tx : Transaction)
     --
     -- The two are one check on their maximum, so the error carries that maximum.
     --
-    -- A simulation may lift this cap; the source has no such mode.
+    -- A simulation may lift this cap.
     unless lifted.gasCap do ensure (minimum ≤ TX_MAX_GAS_LIMIT) (.intrinsicGasAboveLimit minimum)
   else
     -- Before Glamsterdam: the gas, the init code, then from Fusaka the gas limit is at most `2^24`.
@@ -465,19 +462,17 @@ The signature comes before the gas, since from Glamsterdam the intrinsic gas rea
 From Glamsterdam the gas and nonce rules check the contents already. -/
 def checkTransaction (fork : Fork) (chainId : UInt64) (tx : Transaction) :
     Except TransactionError (Address × Nat) := do
-  -- From Glamsterdam the source checks the chain, then the sender, then the rest with the sender.
+  -- The chain and the signature come first at every fork, then the rules of the transaction alone.
   --
-  -- Before, it checks the transaction alone before the chain and the sender.
+  -- In a block before Glamsterdam, the rules of the transaction alone come first.
   --
-  -- Here the chain and the signature come first at every fork.
-  --
-  -- So before Glamsterdam, one that also fails a gas or nonce rule reports the chain or signature.
+  -- So before Glamsterdam, its error can differ from the error of the block check.
   checkChainId fork chainId tx
   let sender ← recoverSender fork tx
   let gas ← validateTransaction fork sender tx
   -- Before Glamsterdam, the blobs and the authorizations come last.
   --
-  -- The source checks them after the fee checks of the block, kept apart here.
+  -- In a block they come after the block gas, the chain, the sender and the base fee.
   if fork < .glamsterdam then checkContents fork tx
   return (sender, gas)
 

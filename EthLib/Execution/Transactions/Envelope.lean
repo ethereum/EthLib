@@ -246,12 +246,11 @@ From Glamsterdam, a byte string whose first byte is from `0xc0` to `0xfe` is a l
 
 No EIP says that a block may hold a legacy transaction in this form.
 
-EthLib follows execution-specs at commit [`a7dbafac`][es] here, whose Amsterdam fork accepts it.
+EthLib accepts it all the same.
 
 The first byte `0xff` is a type that no fork has, as before Glamsterdam.
 
-[eip-2718]: https://eips.ethereum.org/EIPS/eip-2718#backwards-compatibility
-[es]: https://github.com/ethereum/execution-specs/tree/a7dbafac0c0ec82e7b2e20959cc7c00ce958442a -/
+[eip-2718]: https://eips.ethereum.org/EIPS/eip-2718#backwards-compatibility -/
 def decodeBodyTransaction (fork : Fork) : Item → Except TransactionError Transaction
   | .list items => (.legacy <$> Codec.ofItem (.list items)).mapError .decoding
   | .bytes bytes =>

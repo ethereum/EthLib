@@ -36,8 +36,6 @@ The step comments write the equations of the paper in ASCII.
 
 The prices `p` and `f` and the cap of a fifth are in the [Shanghai version][yp-shanghai].
 
-Only `ethereum/execution-specs` joins the later EIPs: [Osaka][es-osaka], [Amsterdam][es-amsterdam].
-
 The EIPs that change them:
 
 - [EIP-1559][eip1559], the price per gas, the priority fee and the burn
@@ -66,8 +64,6 @@ The EIPs of Glamsterdam that change them:
 
 [yp-berlin]: https://github.com/ethereum/yellowpaper/blob/beacfbd29ccc04dfd790f2282d4c4b1c0afc9b5a/Paper.tex
 [yp-shanghai]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
-[es-osaka]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/osaka/fork.py
-[es-amsterdam]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/amsterdam/fork.py
 [eip1559]: https://eips.ethereum.org/EIPS/eip-1559#specification
 [eip3529]: https://eips.ethereum.org/EIPS/eip-3529#specification
 [eip4844]: https://eips.ethereum.org/EIPS/eip-4844#gas-accounting
@@ -207,7 +203,7 @@ def gasUsed (fork : Fork) (sender : Address) (tx : Transaction) (gasLeft refundC
     Nat :=
   -- The gas used before the refund, the Yellow Paper's `T_g - g'`.
   --
-  -- From Glamsterdam the gas left also holds the state gas left, which the source subtracts apart.
+  -- From Glamsterdam the gas left also holds the state gas left in the reservoir.
   let used := tx.gas.toNat - gasLeft
   -- The gas used after the refund, `T_g - g*`.
   let afterRefund := used - gasRefund fork used refundCounter
@@ -318,7 +314,7 @@ def transactionBlockGas (fork : Fork) (sender : Address) (tx : Transaction)
     let state := stateGasUsed.toNat
     -- The gas used before the refund minus that state gas, at least the call data floor.
     --
-    -- The gas left here already holds the state gas left, which the source subtracts on its own.
+    -- The gas left here already holds the state gas left in the reservoir.
     ⟨max (tx.gas.toNat - gasLeft - state) (calldataFloor fork sender tx), state,
       -- The blob gas of the transaction.
       calculateTotalBlobGas tx⟩

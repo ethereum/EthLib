@@ -62,8 +62,6 @@ Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
 The step comments write its equations in ASCII.
 
-Only `ethereum/execution-specs` writes out each step: [Osaka][es-osaka], [Amsterdam][es-amsterdam].
-
 The EIPs that change it:
 
 - [EIP-161][eip161], the deletion of touched empty accounts
@@ -78,8 +76,6 @@ The EIPs that change it:
 The run records what it reads, for the block access list of EIP-7928.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
-[es-osaka]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/osaka/fork.py
-[es-amsterdam]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/amsterdam/fork.py
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
 [eip684]: https://eips.ethereum.org/EIPS/eip-684#specification
 [eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification
@@ -139,11 +135,9 @@ def startAccessedAddresses (fork : Fork) (coinbase sender target : Address) (tx 
     let accessed := accessed.insertMany (tx.accesses.map (·.account))
     -- The beneficiary `H_c`, from Shapella by EIP-3651.
     --
-    -- A set ignores the order of its insertions, so the order of the source does not matter.
+    -- A set ignores the order of its insertions.
     --
-    -- From Glamsterdam the source warms these addresses after the authorizations.
-    --
-    -- The warm check of the delegate still sees the same set.
+    -- The warm check of the delegate, after the authorizations, sees every address of this set.
     --
     -- The Berlin paper has no `H_c`.
     if fork ≥ .shapella then accessed.insert coinbase else accessed
@@ -179,7 +173,7 @@ def messageTarget (sender : Address) (nonce : Nat) (tx : Transaction) :
   | some to => .ok to
   -- A creation targets the address that the sender and its nonce give.
   --
-  -- The source reads the nonce after its increment, minus 1; here it is the nonce before.
+  -- The nonce is the sender's nonce before the transaction increments it.
   | none => (createAddress sender nonce).mapError .encoding
 
 /-- The message of a transaction from `sender` to `target`, with `gas` gas, at `fork`.
@@ -321,7 +315,7 @@ def prepareFirstFrame {fork : Fork} (chainId : Nat) (message : Message fork)
     let state := state.recordAccountRead address
     -- A creation fails when the created address has code, a nonce or storage.
     --
-    -- Before Glamsterdam the source gives the same failure when the message runs, with no gas left.
+    -- That failure leaves no execution gas, at every fork.
     unless state.accountDeployable address do throw (.addressCollision address, state)
     -- From Glamsterdam, it pays the state gas of a new account.
     --
@@ -585,7 +579,7 @@ def processTransactionWith {fork : Fork} {M : Type → Type} [Monad M] [MonadExc
     (observe : TransactionObserver M fork) (env : BlockEnvironment fork) (block : BlockState)
     (included : Included) (tx : Transaction) (precompiles : Address → Option Address := some)
     (lifted : LiftedRules := {}) : M TransactionOutput :=
-  -- No source specifies Hegotá yet.
+  -- No EIP fixes the rules of Hegotá yet.
   if .hegota ≤ fork then throw (.forkNotYetSpecified fork)
   -- The gas meter of EIP-8037, with state gas, from Glamsterdam; before, a counter of gas left.
   else if fork ≥ .glamsterdam then

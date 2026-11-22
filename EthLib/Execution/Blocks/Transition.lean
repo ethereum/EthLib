@@ -508,7 +508,7 @@ With `checkSeal` off, the proof of work is left out, as for chains that run with
 From Hegotá it fails, since the rules of that fork are not yet specified here. -/
 def stateTransition (chain : BlockChain) {fork : Fork} (block : Block fork Transaction)
     (checkSeal : Bool := true) : Except BlockError State := do
-  -- No source specifies Hegotá yet.
+  -- No EIP fixes the rules of Hegotá yet.
   if .hegota ≤ fork then throw (.aborted (.forkNotYetSpecified fork))
   -- The fork of the block is the one that the chain activates at it.
   let active := chain.config.activeFork block.header.number block.header.timestamp.toNat
