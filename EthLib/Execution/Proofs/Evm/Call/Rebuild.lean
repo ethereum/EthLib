@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Proofs.Evm.Call.NonceOrCodeWrites
+public import EthLib.Execution.Proofs.Evm.Call.NonceOrCode
 public import EthLib.Execution.Proofs.Evm.Call.Reads
 public import EthLib.Execution.Proofs.Evm.Call.StepRules
 public import EthLib.Execution.Proofs.State.Frame
@@ -36,6 +36,8 @@ Every account that the transaction created held no nonzero word in the block sta
 That ties the storage of a call to the storage of the block state at every key not written.
 
 No account with nonce 0 has the code hash of a delegation indicator of [EIP-7702][eip7702].
+
+Each nonce or code that a step or a message keeps comes from the proof that messages keep them.
 
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
 [eip7702]: https://eips.ethereum.org/EIPS/eip-7702#behavior
@@ -756,31 +758,27 @@ theorem RebuildState.rollbackOnError {block : BlockState} {snapshot : Transactio
 
 /-! ## Steps of an EVM frame -/
 
-/-- A step that keeps the rebuild property, each nonce or code, the message, and the code. -/
+/-- A step that keeps the rebuild property, the message, and the code. -/
 private def RebuildStep (block : BlockState) (a b : Evm fork Meter) : Prop :=
-  (RebuildState block a.state → RebuildState block b.state ∧ KeepsNonceOrCode a.state b.state) ∧
-    b.message = a.message ∧ b.code = a.code
+  (RebuildState block a.state → RebuildState block b.state) ∧ b.message = a.message ∧
+    b.code = a.code
 
 omit [GasMeter Meter] in
 private theorem RebuildStep.refl {block : BlockState} (evm : Evm fork Meter) :
     RebuildStep block evm evm :=
-  ⟨fun valid => ⟨valid, .refl evm.state⟩, rfl, rfl⟩
+  ⟨id, rfl, rfl⟩
 
 omit [GasMeter Meter] in
 private theorem RebuildStep.trans {block : BlockState} {a b c : Evm fork Meter}
     (hab : RebuildStep block a b) (hbc : RebuildStep block b c) : RebuildStep block a c :=
-  ⟨fun va => by
-      obtain ⟨vb, kb⟩ := hab.1 va
-      obtain ⟨vc, kc⟩ := hbc.1 vb
-      exact ⟨vc, kb.trans kc⟩,
-    hbc.2.1.trans hab.2.1, hbc.2.2.trans hab.2.2⟩
+  ⟨fun va => hbc.1 (hab.1 va), hbc.2.1.trans hab.2.1, hbc.2.2.trans hab.2.2⟩
 
 omit [GasMeter Meter] in
 private theorem RebuildStep.of_sameWrites {block : BlockState} {a b : Evm fork Meter}
     (hsw : SameWrites b.state a.state) (hp : b.state.parent = a.state.parent)
     (hm : b.message = a.message) (hc : b.code = a.code)
     (hcr : b.state.createdAccounts = a.state.createdAccounts) : RebuildStep block a b :=
-  ⟨fun va => ⟨va.of_sameWrites hsw hp hcr, hsw.keepsNonceOrCode hp⟩, hm, hc⟩
+  ⟨fun va => va.of_sameWrites hsw hp hcr, hm, hc⟩
 
 omit [GasMeter Meter] in
 private theorem RebuildStep.of_sameContext {block : BlockState} {a b : Evm fork Meter}
@@ -959,6 +957,10 @@ private theorem rebuildStep_sloadStep {block : BlockState} {evm after : Evm fork
 private theorem rebuildStep_sstoreStep {block : BlockState} {evm after : Evm fork Meter}
     (hnc : RebuildState block evm.state → HasNonceOrCode evm.state evm.message.currentTarget)
     (h : sstoreStep evm = .ok after) : RebuildStep block evm after := by
+  -- The step keeps each nonce or code up to its end, and its write changes no account.
+  --
+  -- So the target has a nonce or code when it writes.
+  have hk := (stepRules_keepsNonceOrCode (fork := fork)).toOrdinaryStepRules.sstoreStep h
   unfold Evm.sstoreStep at h
   split at h
   · simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
@@ -988,12 +990,15 @@ private theorem rebuildStep_sstoreStep {block : BlockState} {evm after : Evm for
       · simp [throw, throwThe, MonadExceptOf.throw] at h
       · obtain ⟨st, hst, h⟩ := Base.bind_ok_iff.mp h
         cases h
+        have hst' := Base.mapError_ok_iff.mp hst
         refine ⟨fun vevm => ?_, m5.2.1, m5.2.2⟩
-        obtain ⟨ve5, ke5⟩ := m5.1 vevm
+        -- The write keeps every account, so the target had a nonce or code before it.
         have hcur : HasNonceOrCode e5.state e2.message.currentTarget :=
-          ke5.2 _ (sc2.message.symm ▸ hnc vevm)
-        obtain ⟨vst, kst⟩ := ve5.setStorage hcur (Base.mapError_ok_iff.mp hst)
-        exact ⟨vst, ke5.trans kst⟩
+          (HasNonceOrCode.congr (by
+            unfold TransactionState.getAccount
+            rw [TransactionState.getAccountOptional_setStorage hst'])).mp
+            (by rw [sc2.message]; exact hk.2 _ (hnc vevm))
+        exact (m5.1 vevm).setStorage hcur hst' |>.1
     · exact ha.trans (rebuildStep_exceptionalHalt _ _)
 
 private theorem rebuildStep_tstoreStep {block : BlockState} {evm after : Evm fork Meter}
@@ -1006,35 +1011,31 @@ private theorem rebuildStep_tstoreStep {block : BlockState} {evm after : Evm for
   · cases h
     exact (RebuildStep.of_sameContext ((popWord_sameContext h1).trans
       ((popWord_sameContext h2).trans (chargeGas_sameContext h3)))).trans
-      ⟨fun ve3 => ve3.setTransientStorage _ _ _, rfl, rfl⟩
+      ⟨fun ve3 => (ve3.setTransientStorage _ _ _).1, rfl, rfl⟩
 
 private theorem rebuildStep_selfdestructStep {block : BlockState} {evm after : Evm fork Meter}
     (hnc : RebuildState block evm.state → HasNonceOrCode evm.state evm.message.currentTarget)
     (h : selfdestructStep fork evm = .ok after) : RebuildStep block evm after := by
-  obtain ⟨word, -, paid, -, hpaid_static, hpaid_state, -, ⟨refund, finished⟩ | ⟨error, rfl⟩⟩ :=
-    selfdestructStep_eq_ok h
-  · have hpaid : RebuildStep block evm paid :=
-      RebuildStep.of_sameWrites
-        (hpaid_state ▸ SameWrites.recordAccountRead evm.state (toAddressMasked word))
-        (by rw [hpaid_state]; rfl) hpaid_static.message hpaid_static.code
-        (by rw [hpaid_state]; rfl)
-    unfold finishSelfdestruct at finished
+  obtain ⟨word, -, paid, -, hpaid_static, hpaid_state, -, hend⟩ := selfdestructStep_eq_ok h
+  -- The paid frame only adds a read.
+  have sw : SameWrites paid.state evm.state :=
+    hpaid_state ▸ SameWrites.recordAccountRead evm.state (toAddressMasked word)
+  have hp : paid.state.parent = evm.state.parent := by rw [hpaid_state]; rfl
+  have hpaid : RebuildStep block evm paid :=
+    RebuildStep.of_sameWrites sw hp hpaid_static.message hpaid_static.code
+      (by rw [hpaid_state]; rfl)
+  rcases hend with ⟨refund, finished⟩ | ⟨error, rfl⟩
+  · unfold finishSelfdestruct at finished
     split at finished
     · cases finished
     · obtain ⟨state, hst, finished⟩ := Base.bind_ok_iff.mp finished
       cases finished
       refine ⟨fun vevm => ?_, hpaid.2.1, hpaid.2.2⟩
-      obtain ⟨vpaid, kpaid⟩ := hpaid.1 vevm
+      -- So it keeps each nonce or code, and the originator still has one.
       have hcur : HasNonceOrCode paid.state paid.message.currentTarget :=
-        kpaid.2 _ (hpaid.2.1.symm ▸ hnc vevm)
-      obtain ⟨vst, kst⟩ := vpaid.selfdestructTransfer hcur (Base.mapError_ok_iff.mp hst)
-      exact ⟨vst, kpaid.trans kst⟩
-  · have hpaid : RebuildStep block evm paid :=
-      RebuildStep.of_sameWrites
-        (hpaid_state ▸ SameWrites.recordAccountRead evm.state (toAddressMasked word))
-        (by rw [hpaid_state]; rfl) hpaid_static.message hpaid_static.code
-        (by rw [hpaid_state]; rfl)
-    exact hpaid.trans (rebuildStep_exceptionalHalt paid error)
+        (sw.keepsNonceOrCode hp).2 _ (hpaid.2.1.symm ▸ hnc vevm)
+      exact ((hpaid.1 vevm).selfdestructTransfer hcur (Base.mapError_ok_iff.mp hst)).1
+  · exact hpaid.trans (rebuildStep_exceptionalHalt paid error)
 
 private theorem rebuildStep_instruction {block : BlockState} {op : Op}
     {run : Evm fork Meter → Except EvmError (Evm fork Meter)} {evm after : Evm fork Meter}
@@ -1114,8 +1115,7 @@ private theorem rebuildStep_popCallOperands {block : BlockState} {kind : CallKin
     by rw [hst]⟩ (by rw [hst]) hs.message hs.code (by rw [hst])
 
 private theorem rebuildStep_incorporateChild {block : BlockState} {caller child : Evm fork Meter}
-    (hc : RebuildState block caller.state →
-      RebuildState block child.state ∧ KeepsNonceOrCode caller.state child.state) :
+    (hc : RebuildState block caller.state → RebuildState block child.state) :
     RebuildStep block caller (incorporateChild fork caller child) :=
   ⟨fun vc => by
       rw [state_incorporateChild]
@@ -1125,8 +1125,7 @@ private theorem rebuildStep_incorporateChild {block : BlockState} {caller child 
 private def RebuildChild (block : BlockState) (caller : Evm fork Meter) (message : Message fork)
     (child : Evm fork Meter) : Prop :=
   (message.shouldTransferValue = true → message.caller = caller.message.currentTarget) →
-    RebuildState block caller.state →
-      RebuildState block child.state ∧ KeepsNonceOrCode caller.state child.state
+    RebuildState block caller.state → RebuildState block child.state
 
 private theorem rebuildStep_finishCall {block : BlockState} {kind : CallKind} {call : CallOperands}
     {callee : Callee} {subCall newAccount expandBy : Nat} {evm : Evm fork Meter}
@@ -1218,9 +1217,7 @@ private theorem rebuildStep_launchCreate {block : BlockState} {evm : Evm fork Me
     have c2 : RebuildStep block evm e2 := c0.trans (.of_sameContext
       ((chargeStateGas_sameContext h1).trans (chargeGas_sameContext h2)))
     have ms : RebuildStep block evm { e2 with state } :=
-      c2.trans ⟨fun ve2 => by
-        obtain ⟨vst, kst, -⟩ := ve2.incrementNonce (Base.mapError_ok_iff.mp hst)
-        exact ⟨vst, kst⟩, rfl, rfl⟩
+      c2.trans ⟨fun ve2 => (ve2.incrementNonce (Base.mapError_ok_iff.mp hst)).1, rfl, rfl⟩
     split at hr
     · cases hr
       have md : RebuildStep block evm { e2 with state, gas := GasMeter.drain e2.gas } :=
@@ -1433,6 +1430,7 @@ theorem accountDeployable_of_create_step {evm caller : Evm fork Meter}
 
 /-! ## Messages and creations -/
 
+/-- A frame has the rebuild property, and runs code only at an account with a nonce or code. -/
 private def FrameInv (block : BlockState) (evm : Evm fork Meter) : Prop :=
   RebuildState block evm.state ∧
     (evm.code.size ≠ 0 → HasNonceOrCode evm.state evm.message.currentTarget)
@@ -1454,40 +1452,79 @@ def CreateRebuild (block : BlockState) (message : Message fork) (state : Transac
       HasNonceOrCode state message.caller) →
     RebuildState block after.state ∧ KeepsNonceOrCode state after.state
 
+/-- A frame keeps each nonce or code, the block, the message and the code.
+
+It also keeps the rebuild property, if the first frame has the invariant. -/
+private def RebuildFrame (block : BlockState) (a b : Evm fork Meter) : Prop :=
+  KeepsNonceOrCodeFrame a b ∧ (FrameInv block a → RebuildState block b.state)
+
+/-- The relation composes, from the first frame to the second and from the second to the third.
+
+The frame between keeps a nonce or code at its current target, so it has the invariant too. -/
+private theorem RebuildFrame.trans {block : BlockState} {a b c : Evm fork Meter}
+    (hab : RebuildFrame block a b) (hbc : RebuildFrame block b c) : RebuildFrame block a c :=
+  ⟨stepRules_keepsNonceOrCodeFrame.trans hab.1 hbc.1, fun ia =>
+    hbc.2 ⟨hab.2 ia, fun hs => hab.1.1.1.2 _ (hab.1.2.1.symm ▸ ia.2 (hab.1.2.2 ▸ hs))⟩⟩
+
+/-- A call that keeps each nonce or code and the rebuild property. -/
+private abbrev RebuildCall (block : BlockState) (message : Message fork)
+    (state : TransactionState) (substate : Substate) (meter : Meter) (ended : Evm fork Meter) :
+    Prop :=
+  KeepsNonceOrCodeCall message state substate meter ended ∧
+    CallRebuild block message state substate meter ended
+
+/-- A creation that keeps each nonce or code and the rebuild property. -/
+private abbrev RebuildCreate (block : BlockState) (message : Message fork)
+    (state : TransactionState) (substate : Substate) (meter : Meter) (ended : Evm fork Meter) :
+    Prop :=
+  KeepsNonceOrCodeCreate message state substate meter ended ∧
+    CreateRebuild block message state substate meter ended
+
+/-- Each step keeps each nonce or code, and the rebuild property from a frame with the invariant.
+
+A message that the step sends must keep them too. -/
 private theorem rebuild_step_child {block : BlockState} {evm : Evm fork Meter}
-    {result : StepResult fork Meter} (hinv : FrameInv block evm)
-    (h : step fork evm = .ok result) :
-    StepResult.Keeps (RebuildStep block)
-      (ChildRelByKind (CallRebuild block) (CreateRebuild block)) evm result := by
-  obtain ⟨hstep, hsize⟩ := rebuildStep_step (fun hs _ => hinv.2 hs) h
+    {result : StepResult fork Meter} (h : step fork evm = .ok result) :
+    StepResult.Keeps (RebuildFrame block)
+      (ChildRelByKind (RebuildCall block) (RebuildCreate block)) evm result := by
+  have kstep := keepsNonceOrCodeFrame_step h
+  -- The rebuild half of the step, from a frame with the invariant.
+  have rstep : FrameInv block evm →
+      result.Keeps (RebuildStep block) (RebuildChild block) evm ∧
+        (∀ caller message resume, result = .child caller message resume →
+          evm.code.size ≠ 0) :=
+    fun ia => rebuildStep_step (fun hs _ => ia.2 hs) h
   cases result with
-  | next after => exact hstep
+  | next after => exact ⟨kstep, fun ia => (rstep ia).1.1 ia.1⟩
   | child caller message resume =>
-    obtain ⟨hcaller, hres⟩ := hstep
+    refine ⟨⟨kstep.1, fun ia => (rstep ia).1.1.1 ia.1⟩, fun child after resumed hchild =>
+      ⟨kstep.2 child after resumed
+        (ChildRelByKind.mono (fun _ _ _ _ _ h => h.1) (fun _ _ _ _ _ h => h.1) hchild),
+      fun ia => ((rstep ia).1.2 child after resumed fun htr vcaller => ?_).1 ia.1⟩⟩
+    -- The caller keeps the nonce or code of the current target.
+    have kcaller := kstep.1
     have hcur : HasNonceOrCode evm.state evm.message.currentTarget :=
-      hinv.2 (hsize caller message resume rfl)
-    obtain ⟨vcaller, kcaller⟩ := hcaller.1 hinv.1
+      ia.2 ((rstep ia).2 caller message resume rfl)
     have hcur_caller : HasNonceOrCode caller.state caller.message.currentTarget :=
-      kcaller.2 _ (hcaller.2.1.symm ▸ hcur)
-    refine ⟨hcaller, fun child after resumed hchild => hres child after resumed fun htr _ => ?_⟩
+      kcaller.1.1.2 _ (kcaller.2.1.symm ▸ hcur)
     unfold ChildRelByKind ChildRel at hchild
     rcases ht : message.target with _ | target
     · simp only [ht] at hchild
       obtain ⟨hdep, hnc_caller⟩ := accountDeployable_of_create_step hcur h ht
-      exact hchild vcaller hdep (.inr hnc_caller)
+      exact (hchild.2 vcaller hdep (.inr hnc_caller)).1
     · simp only [ht] at hchild
       have hcode : message.code.size ≠ 0 → HasNonceOrCode caller.state message.currentTarget := by
         intro hne
         rcases step_eq_child_staticCode h (by simp [ht]) with heq | hstatic
         · rw [heq]
-          exact kcaller.2 _ hcur
-        · exact kcaller.2 _ (.inr (hstatic hne))
+          exact kcaller.1.1.2 _ hcur
+        · exact kcaller.1.1.2 _ (.inr (hstatic hne))
       have hval : ¬(message.shouldTransferValue = true ∧ message.value ≠ 0) ∨
           HasNonceOrCode caller.state message.caller := by
         by_cases hv : message.shouldTransferValue = true ∧ message.value ≠ 0
         · exact .inr (htr hv.1 ▸ hcur_caller)
         · exact .inl hv
-      exact (hchild vcaller hcode hval).2
+      exact (hchild.2 vcaller hcode hval).2.1
 
 /-- From Spurious Dragon, by induction on gas, calls and creations keep the rebuild property.
 
@@ -1502,21 +1539,25 @@ theorem processMessage_rebuildState_induction [LawfulGasMeter Meter]
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
         CreateRebuild block message state substate meter ended.val) := by
-  refine processMessage_rel_byKind (R := RebuildStep block) (Inv := FrameInv block)
-    (Mcall := CallRebuild block) (Mcreate := CreateRebuild block)
-    RebuildStep.refl RebuildStep.trans ?_ ?_ ?_ ?_ ?_ ?_ ?_ n
-  · intro a b ⟨va, ha⟩ hab
-    obtain ⟨vb, kb⟩ := hab.1 va
-    exact ⟨vb, fun hs => kb.2 _ (hab.2.1.symm ▸ ha (hab.2.2 ▸ hs))⟩
-  · intro evm error _
-    exact rebuildStep_exceptionalHalt evm error
-  · intro evm result hinv h
-    exact rebuild_step_child hinv h
-  · intro evm _
-    exact RebuildStep.of_sameWrites ⟨rfl, rfl, rfl, rfl, rfl⟩ rfl rfl rfl rfl
-  · intro address evm after h _
-    exact rebuildStep_runPrecompile h
-  · intro message state entry substate entrySubstate meter ended hentered hrun vstate hcode hval
+  have T := stepRules_keepsNonceOrCodeFrame (fork := fork) (Meter := Meter)
+  have both := processMessage_rel_byKind (R := RebuildFrame block) (Inv := fun _ => True)
+    (Mcall := RebuildCall block) (Mcreate := RebuildCreate block)
+    (fun evm => ⟨T.refl evm, fun ia => ia.1⟩) RebuildFrame.trans (fun _ _ => trivial)
+    (fun evm error _ => ⟨T.static (staticStep_exceptionalHalt evm error), fun ia => ia.1⟩)
+    (fun _ h => rebuild_step_child h)
+    (fun evm _ => ⟨T.sameContext ⟨rfl, rfl, rfl, rfl⟩, fun ia => ia.1⟩)
+    (fun h _ => ⟨T.static (staticStep_runPrecompile h), fun ia =>
+      (rebuildStep_runPrecompile (block := block) h).1 ia.1⟩)
+    ?_ ?_ n
+  · exact ⟨fun message state substate meter held hn ended h =>
+      (both.1 message state substate meter held hn ended h).2,
+    fun message state substate meter held hn ended h =>
+      (both.2 message state substate meter held hn ended h).2⟩
+  · intro message state entry substate entrySubstate meter ended hentered hrun
+    have hframe := hrun trivial
+    -- Each nonce or code that the call keeps comes from its frame.
+    have kcall := keepsNonceOrCodeCall_rollbackOnError hentered hframe.1
+    refine ⟨kcall, fun vstate hcode hval => ⟨kcall.2, ?_, kcall.1.1⟩⟩
     have kentry := keepsNonceOrCode_entered hentered
     have ventry : RebuildState block entry := by
       obtain ⟨vstart, kstart⟩ := vstate.startState message
@@ -1525,23 +1566,21 @@ theorem processMessage_rebuildState_induction [LawfulGasMeter Meter]
       · rcases hval with hno | hcaller
         · exact absurd ht hno
         · exact (vstart.moveEther (kstart.2 _ hcaller) hmove).1
-    have hinv_start : FrameInv block (startFrame message entry entrySubstate meter) :=
-      ⟨ventry, fun hs => kentry.2 _ (hcode hs)⟩
-    have hstep_run := hrun hinv_start
-    obtain ⟨vended, kended⟩ := hstep_run.1 ventry
-    have hmsg : (rollbackOnError state ended).message = message :=
-      (message_rollbackOnError state ended).trans hstep_run.2.1
-    exact ⟨hmsg, vstate.rollbackOnError vended (kentry.trans kended)⟩
-  · intro message state prepared substate meter evm after hprep hmcall hdep vstate hdeploy hval
+    have vended := hframe.2 ⟨ventry, fun hs => kentry.2 _ (hcode hs)⟩
+    exact (vstate.rollbackOnError vended (kentry.trans hframe.1.1.1)).1
+  · intro message state prepared substate meter evm after hprep hmcall hdep
+    -- Each nonce or code that the creation keeps comes from the call of its init code.
+    have kcreate := keepsNonceOrCodeCreate_depositCode hfork hprep hmcall.1 hdep
+    refine ⟨kcreate, fun vstate hdeploy hval => ⟨?_, kcreate.1⟩⟩
     obtain ⟨vprep, kprep, hnonce_prep⟩ := vstate.prepareCreation hfork hdeploy hprep
     have hval_prep : ¬(message.shouldTransferValue = true ∧ message.value ≠ 0) ∨
         HasNonceOrCode prepared message.caller :=
       hval.imp id (kprep.2 _)
-    obtain ⟨hmsg, vevm, kevm⟩ := hmcall vprep (fun _ => .inl hnonce_prep) hval_prep
+    obtain ⟨hmsg, vevm, kevm⟩ := hmcall.2 vprep (fun _ => .inl hnonce_prep) hval_prep
     have hnonce_evm : 1 ≤ (evm.state.getAccount evm.message.currentTarget).nonce := by
       rw [hmsg]
       exact Nat.le_trans hnonce_prep (kevm.1 message.currentTarget)
-    exact vstate.depositCode vevm (kprep.trans kevm) hnonce_evm hdep
+    exact (vstate.depositCode vevm (kprep.trans kevm) hnonce_evm hdep).1
 
 /-- From Spurious Dragon, a call keeps the rebuild property.
 

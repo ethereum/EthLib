@@ -109,38 +109,36 @@ private theorem createdAccounts_finishSelfdestruct {beneficiary : Address} {refu
     cases h
     exact createdAccounts_selfdestructTransfer (Base.mapError_ok_iff.mp hst)
 
-/-- Each write of a step keeps each nonce or code, and creates no account. -/
-private theorem stepRules_plain : StepRules fork (fun a b : Evm fork StateGasMeter =>
-    KeepsNonceOrCode a.state b.state ∧ CreatesPlain a.state b.state) where
-  trans hab hbc := ⟨hab.1.trans hbc.1, CreatesPlain.trans hab.1 hab.2 hbc.2⟩
-  static h := ⟨stepRules_keepsNonceOrCode.static h, createsPlain_of_eq h.created⟩
-  sstore evm address key value state gain h :=
-    ⟨stepRules_keepsNonceOrCode.sstore evm address key value state gain h,
-      createsPlain_of_eq (TransactionState.createdAccounts_setStorage h)⟩
-  tstore evm address key value :=
-    ⟨stepRules_keepsNonceOrCode.tstore evm address key value, createsPlain_of_eq rfl⟩
-  log log hs hsub hm hc :=
-    ⟨stepRules_keepsNonceOrCode.log log hs hsub hm hc, createsPlain_of_eq (by rw [hs])⟩
-  selfdestruct beneficiary refund h :=
-    ⟨stepRules_keepsNonceOrCode.selfdestruct beneficiary refund h,
-      createsPlain_of_eq (createdAccounts_finishSelfdestruct h)⟩
-  incrementNonce evm address state hn h :=
-    ⟨stepRules_keepsNonceOrCode.incrementNonce evm address state hn h,
-      createsPlain_of_eq (TransactionState.createdAccounts_modifyState h)⟩
-  incorporate h := by rw [state_incorporateChild]; exact h
-
 /-! ## The frame relation -/
 
-/-- What a step keeps of the state: each nonce or code, the created accounts and the block.
+/-- What a step keeps of the state: each nonce or code and the block, and the created accounts.
 
 It also keeps the message and the code. -/
 private abbrev StateRel (a b : Evm fork StateGasMeter) : Prop :=
-  ((KeepsNonceOrCode a.state b.state ∧ CreatesPlain a.state b.state) ∧
-    b.state.parent = a.state.parent) ∧ b.message = a.message ∧ b.code = a.code
+  KeepsNonceOrCodeFrame a b ∧ CreatesPlain a.state b.state
 
-/-- Each write of a step keeps the state relation. -/
-private theorem stepRules_state : StepRules fork (StateRel (fork := fork)) :=
-  (stepRules_plain.and stepRules_parent).and stepRules_messageCode
+/-- Each write of a step keeps the state relation.
+
+The proof that steps keep each nonce or code gives the first half. -/
+private theorem stepRules_state : StepRules fork (StateRel (fork := fork)) where
+  trans hab hbc := ⟨stepRules_keepsNonceOrCodeFrame.trans hab.1 hbc.1,
+    CreatesPlain.trans hab.1.1.1 hab.2 hbc.2⟩
+  static h := ⟨stepRules_keepsNonceOrCodeFrame.static h, createsPlain_of_eq h.created⟩
+  sstore evm address key value state gain h :=
+    ⟨stepRules_keepsNonceOrCodeFrame.sstore evm address key value state gain h,
+      createsPlain_of_eq (TransactionState.createdAccounts_setStorage h)⟩
+  tstore evm address key value :=
+    ⟨stepRules_keepsNonceOrCodeFrame.tstore evm address key value, createsPlain_of_eq rfl⟩
+  log log hs hsub hm hc :=
+    ⟨stepRules_keepsNonceOrCodeFrame.log log hs hsub hm hc, createsPlain_of_eq (by rw [hs])⟩
+  selfdestruct beneficiary refund h :=
+    ⟨stepRules_keepsNonceOrCodeFrame.selfdestruct beneficiary refund h,
+      createsPlain_of_eq (createdAccounts_finishSelfdestruct h)⟩
+  incrementNonce evm address state hn h :=
+    ⟨stepRules_keepsNonceOrCodeFrame.incrementNonce evm address state hn h,
+      createsPlain_of_eq (TransactionState.createdAccounts_modifyState h)⟩
+  incorporate h :=
+    ⟨stepRules_keepsNonceOrCodeFrame.incorporate h.1, by rw [state_incorporateChild]; exact h.2⟩
 
 /-- The meter keeps its starting reservoir, its committed spill and its baseline. -/
 private abbrev MeterKept (a b : StateGasMeter) : Prop :=
@@ -197,8 +195,8 @@ private theorem frameRel_trans {a b c : Evm fork StateGasMeter} (hab : FrameRel 
 private theorem frameInv_keeps {a b : Evm fork StateGasMeter} (ha : FrameInv a)
     (hab : FrameRel a b) : FrameInv b := by
   intro hs
-  rw [hab.1.2.1]
-  exact hab.1.1.1.1.2 _ (ha (hab.1.2.2 ▸ hs))
+  rw [hab.1.1.2.1]
+  exact hab.1.1.1.1.2 _ (ha (hab.1.1.2.2 ▸ hs))
 
 /-- An exceptional halt is related to the frame it halts. -/
 private theorem frameRel_halt (evm : Evm fork StateGasMeter) (error : EvmError) :
@@ -218,9 +216,8 @@ It pays for its slots. -/
 private def CallPays (message : Message fork) (state : TransactionState) (substate : Substate)
     (meter : StateGasMeter) (ended : Evm fork StateGasMeter) : Prop :=
   (message.code.size ≠ 0 → HasNonceOrCode state message.currentTarget) →
-    ended.message = message ∧
-      ((KeepsNonceOrCode state ended.state ∧ CreatesPlain state ended.state) ∧
-        ended.state.parent = state.parent) ∧
+    KeepsNonceOrCodeCall message state substate meter ended ∧
+      CreatesPlain state ended.state ∧
       ended.gas.baseline = meter.baseline ∧
       (ended.error ≠ none → ended.gas.stateGasUsed = meter.restore.stateGasUsed) ∧
       MessagePays message state substate meter ended
@@ -231,8 +228,8 @@ It keeps each nonce or code, the created accounts and the block, and pays for it
 private def CreatePays (message : Message fork) (state : TransactionState) (substate : Substate)
     (meter : StateGasMeter) (ended : Evm fork StateGasMeter) : Prop :=
   ¬HasNonceOrCode state message.currentTarget →
-    ((KeepsNonceOrCode state ended.state ∧ CreatesPlain state ended.state) ∧
-      ended.state.parent = state.parent) ∧ MessagePays message state substate meter ended
+    (KeepsNonceOrCodeCreate message state substate meter ended ∧
+      CreatesPlain state ended.state) ∧ MessagePays message state substate meter ended
 
 /-- A step that sends a message runs code. -/
 private theorem code_size_ne_zero_of_step_child {evm caller : Evm fork StateGasMeter}
@@ -253,53 +250,43 @@ private theorem child_pays {evm caller child : Evm fork StateGasMeter} {message 
     (hinv : FrameInv evm) (h : step fork evm = .ok (.child caller message resume))
     (hcaller : KeepsNonceOrCode evm.state caller.state)
     (hchild : ChildRelByKind CallPays CreatePays caller message child) :
-    ((KeepsNonceOrCode caller.state child.state ∧ CreatesPlain caller.state child.state) ∧
-        child.state.parent = caller.state.parent) ∧
-      ChildRel MessagePays caller message child := by
+    ChildRelByKind KeepsNonceOrCodeCall KeepsNonceOrCodeCreate caller message child ∧
+      CreatesPlain caller.state child.state ∧ ChildRel MessagePays caller message child := by
   have hcur : HasNonceOrCode evm.state evm.message.currentTarget :=
     hinv (code_size_ne_zero_of_step_child h)
-  unfold ChildRelByKind ChildRel at hchild
-  unfold ChildRel
+  unfold ChildRelByKind ChildRel at hchild ⊢
   rcases ht : message.target with _ | target
   · -- A creation goes to an address with no nonce or code in the state of its caller.
-    simp only [ht] at hchild
+    simp only [ht] at hchild ⊢
     obtain ⟨hn0, hc0, -⟩ := TransactionState.accountDeployable_eq_true_iff.mp
       (accountDeployable_of_create_step hcur h ht).1
-    exact hchild fun hnc => hnc.elim (fun hn => by omega) (fun hc => hc hc0)
+    obtain ⟨⟨hk, hc⟩, hp⟩ := hchild fun hnc => hnc.elim (fun hn => by omega) (fun hc => hc hc0)
+    exact ⟨hk, hc, hp⟩
   · -- A call runs at the current account, or runs code only at an account with code.
-    simp only [ht] at hchild
+    simp only [ht] at hchild ⊢
     have hcode : message.code.size ≠ 0 → HasNonceOrCode caller.state message.currentTarget := by
       intro hne
       rcases step_eq_child_staticCode h (by simp [ht]) with heq | hstatic
       · rw [heq]
         exact hcaller.2 _ hcur
       · exact hcaller.2 _ (.inr (hstatic hne))
-    obtain ⟨-, hk, -, -, hp⟩ := hchild hcode
-    exact ⟨hk, hp⟩
+    obtain ⟨hk, hc, -, -, hp⟩ := hchild hcode
+    exact ⟨hk, hc, hp⟩
 
-/-- The frame that resumes after a message keeps the state relation from the frame before. -/
-private theorem stateRel_resume {evm caller child after : Evm fork StateGasMeter}
+/-- The frame that resumes after a message keeps the created accounts from the frame before.
+
+That needs the caller to keep each nonce or code of the frame before. -/
+private theorem createsPlain_resume {evm caller child after : Evm fork StateGasMeter}
     {message : Message fork}
     {resume : Evm fork StateGasMeter → Except EvmError (Evm fork StateGasMeter)}
     (h : step fork evm = .ok (.child caller message resume)) (resumed : resume child = .ok after)
-    (hcaller : StateRel evm caller)
-    (hchild : (KeepsNonceOrCode caller.state child.state ∧
-      CreatesPlain caller.state child.state) ∧ child.state.parent = caller.state.parent) :
-    StateRel evm after := by
-  have same := sameContext_of_step_eq_child h resumed
-  -- The frame that resumes has the state of the child, and the message and code of the caller.
-  have hs : after.state = child.state := same.state.trans (state_incorporateChild caller child)
-  refine ⟨⟨⟨?_, ?_⟩, ?_⟩, ?_, ?_⟩
-  · rw [hs]
-    exact hcaller.1.1.1.trans hchild.1.1
-  · rw [hs]
-    exact CreatesPlain.trans hcaller.1.1.1 hcaller.1.1.2 hchild.1.2
-  · rw [hs]
-    exact hchild.2.trans hcaller.1.2
-  · rw [same.message, message_incorporateChild]
-    exact hcaller.2.1
-  · rw [same.code, code_incorporateChild]
-    exact hcaller.2.2
+    (hcaller : StateRel evm caller) (hchild : CreatesPlain caller.state child.state) :
+    CreatesPlain evm.state after.state := by
+  -- The frame that resumes has the state of the child.
+  have hs : after.state = child.state :=
+    (sameContext_of_step_eq_child h resumed).state.trans (state_incorporateChild caller child)
+  rw [hs]
+  exact CreatesPlain.trans hcaller.1.1.1 hcaller.2 hchild
 
 /-- From Glamsterdam, each step of a running frame keeps the frame relation.
 
@@ -317,9 +304,10 @@ private theorem frameRel_step (hfork : .glamsterdam ≤ fork) {evm : Evm fork St
   | next after => exact ⟨hs, hm, hp⟩
   | child caller message resume =>
     refine ⟨⟨hs.1, hm.1, hp.1⟩, fun child after resumed hchild => ?_⟩
-    obtain ⟨hk, hpay⟩ := child_pays hinv h hs.1.1.1.1 hchild
-    exact ⟨stateRel_resume h resumed hs.1 hk, hm.2 child after resumed trivial,
-      hp.2 child after resumed hpay⟩
+    obtain ⟨hk, hc, hpay⟩ := child_pays hinv h hs.1.1.1.1 hchild
+    exact ⟨⟨(keepsNonceOrCodeFrame_step h).2 child after resumed hk,
+        createsPlain_resume h resumed hs.1 hc⟩,
+      hm.2 child after resumed trivial, hp.2 child after resumed hpay⟩
 
 /-- A precompile pays for its slots from a frame with no error. -/
 private theorem paysSlots_runPrecompile {address : Nat} {evm after : Evm fork StateGasMeter}
@@ -388,16 +376,15 @@ private theorem callPays_rollbackOnError {message : Message fork}
     CallPays message state substate meter (rollbackOnError state ended) := by
   intro hcode
   have kentry := keepsNonceOrCode_entered hentry
-  obtain ⟨⟨⟨⟨hk, hc⟩, hpar⟩, hmsg, -⟩, hmeter, hpays⟩ :=
-    hrun (fun hs => kentry.2 _ (hcode hs)) rfl
-  -- The frame keeps each nonce or code and the block of the state the call is sent from.
+  obtain ⟨⟨hframe, hc⟩, hmeter, hpays⟩ := hrun (fun hs => kentry.2 _ (hcode hs)) rfl
+  -- The call keeps each nonce or code and the block, as every call does.
+  have kcall := keepsNonceOrCodeCall_rollbackOnError (meter := meter) hentry hframe
   have cplain : CreatesPlain state ended.state :=
     CreatesPlain.trans kentry (createsPlain_of_eq (createdAccounts_entered hentry)) hc
-  have hpar' : ended.state.parent = state.parent := hpar.trans (parent_entered hentry)
+  have hpar' : ended.state.parent = state.parent :=
+    hframe.1.2.trans (parent_entered hentry)
   have hkept : MeterKept meter (rollbackOnError state ended).gas :=
     meterRules_kept.trans hmeter (meterRules_kept.rollbackOnError state ended)
-  have hkeeps : KeepsNonceOrCode state (rollbackOnError state ended).state :=
-    keepsNonceOrCode_rollbackOnError (kentry.trans hk) hpar'
   -- The rest depends on whether the frame failed.
   have hend : ((rollbackOnError state ended).error ≠ none →
         (rollbackOnError state ended).gas.stateGasUsed = meter.restore.stateGasUsed) ∧
@@ -433,9 +420,8 @@ private theorem callPays_rollbackOnError {message : Message fork}
       have := Int.min_le_left meter.stateGasUsed meter.restore.stateGasUsed
       rw [Int.mul_sub]
       omega
-  refine ⟨(message_rollbackOnError state ended).trans hmsg,
-    ⟨⟨hkeeps, cplain.of_created (createdAccounts_rollbackOnError state ended).1⟩,
-      (parent_rollbackOnError state ended).trans hpar'⟩, hkept.2.2, hend.1, ?_⟩
+  refine ⟨kcall, cplain.of_created (createdAccounts_rollbackOnError state ended).1, hkept.2.2,
+    hend.1, ?_⟩
   exact ⟨hkept.1, hkept.2.1, hend.2⟩
 
 /-- A charge of a deposit of code does not lower the net state gas. -/
@@ -515,16 +501,17 @@ private theorem createPays_depositCode (hfork : .glamsterdam ≤ fork) {message 
     CreatePays message state substate meter after := by
   intro hnc
   -- The start of the creation gives the address a nonce.
+  have hsd : Fork.spuriousDragon ≤ fork := Nat.le_trans (by decide) hfork
   have hnonce : 1 ≤ (prepared.getAccount message.currentTarget).nonce := by
     unfold prepareCreation at hp
-    have hsd : Fork.spuriousDragon ≤ fork := Nat.le_trans (by decide) hfork
     simp only [hsd, ↓reduceIte] at hp
     rw [(TransactionState.getAccount_incrementNonce (Base.mapError_ok_iff.mp hp)).1]
     exact Nat.succ_le_of_lt (Nat.succ_pos _)
-  obtain ⟨hmsg, ⟨⟨hk, hc⟩, hpar⟩, hbase, herr, hgrant, hcomm, hfloor⟩ :=
-    hm (fun _ => .inl hnonce)
+  obtain ⟨kcall, hc, hbase, herr, hgrant, hcomm, hfloor⟩ := hm (fun _ => .inl hnonce)
+  -- The creation keeps each nonce or code and the block, as every creation does.
+  have kcreate := keepsNonceOrCodeCreate_depositCode hsd hp kcall hd
+  obtain ⟨⟨hk, hpar⟩, hmsg⟩ := kcall
   have kprep := keepsNonceOrCode_prepareCreation hp
-  have kevm : KeepsNonceOrCode state evm.state := kprep.trans hk
   have cevm : CreatesPlain state evm.state :=
     CreatesPlain.trans kprep (createsPlain_prepareCreation hnc hp) hc
   have pevm : evm.state.parent = state.parent := hpar.trans (parent_prepareCreation hp)
@@ -532,7 +519,6 @@ private theorem createPays_depositCode (hfork : .glamsterdam ≤ fork) {message 
   have hnonce_evm : 1 ≤ (evm.state.getAccount evm.message.currentTarget).nonce := by
     rw [hmsg]
     exact Nat.le_trans hnonce (hk.1 message.currentTarget)
-  have kafter := keepsNonceOrCode_depositCode kevm pevm hnonce_evm hd
   rw [nonceOrCodeFreshSlots_prepareCreation hnc hp] at hfloor
   rcases depositCode_slots hd with ⟨hs, hg⟩ | ⟨hs, hg⟩ | ⟨hs, hg⟩
   · -- A failed creation puts back the state, and its meter is rolled back.
@@ -546,22 +532,18 @@ private theorem createPays_depositCode (hfork : .glamsterdam ≤ fork) {message 
       · rw [hg]
         simp only [StateGasMeter.halt, StateGasMeter.restore, StateGasMeter.stateGasUsed, hgrant,
           hcomm, hbase]
-    refine ⟨⟨⟨?_, ?_⟩, ?_⟩, hmeter.1.trans hgrant, hmeter.2.1.trans hcomm, ?_⟩
-    · exact kafter
+    refine ⟨⟨kcreate, ?_⟩, hmeter.1.trans hgrant, hmeter.2.1.trans hcomm, ?_⟩
     · rw [hs]
       exact cevm.of_created rfl
-    · rw [hs]
-      exact pevm
     · rw [hcard, hused, Int.sub_self, Int.mul_zero, Int.add_zero]
       exact Int.min_le_right _ _
   · -- The state and the meter of the init code stay.
+    refine ⟨⟨kcreate, hs ▸ cevm⟩, ?_⟩
     unfold MessagePays
     rw [hs, hg]
-    exact ⟨⟨⟨kevm, cevm⟩, pevm⟩, hgrant, hcomm, hfloor⟩
+    exact ⟨hgrant, hcomm, hfloor⟩
   · -- The code goes to the address, which keeps its nonce, and the deposit charges state gas.
-    refine ⟨⟨⟨kafter,
-      cevm.of_created (TransactionState.createdAccounts_setCode hs)⟩,
-      (TransactionState.parent_setCode hs).trans pevm⟩,
+    refine ⟨⟨kcreate, cevm.of_created (TransactionState.createdAccounts_setCode hs)⟩,
       hmeter.1.trans hgrant, hmeter.2.1.trans hcomm, ?_⟩
     rw [nonceOrCodeFreshSlots_setCode hnonce_evm hs]
     exact hfloor.trans hg

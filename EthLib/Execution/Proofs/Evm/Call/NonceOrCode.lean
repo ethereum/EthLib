@@ -29,6 +29,10 @@ That holds whatever the state, and whether or not the message ends with an error
 
 The rebuild property of the state is not needed.
 
+The proofs of the rebuild property and of the slot surplus reuse the relation of frames below.
+
+They also reuse its rules for a step, a call and a creation.
+
 [EIP-161][eip161] starts the nonce of a new account at 1.
 
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
@@ -91,24 +95,34 @@ private theorem keepsNonceOrCode_depositCode_of_prepared (hfork : .spuriousDrago
   exact Nat.le_trans hnonce (hk.1 address)
 
 /-- A frame that keeps each nonce or code and the block, with its message and code. -/
-private abbrev KeepsFrame (a b : Evm fork Meter) : Prop :=
+abbrev KeepsNonceOrCodeFrame (a b : Evm fork Meter) : Prop :=
   (KeepsNonceOrCode a.state b.state ∧ b.state.parent = a.state.parent) ∧
     b.message = a.message ∧ b.code = a.code
 
-/-- A call that keeps each nonce or code and the block, and ends with its own message. -/
-private abbrev KeepsCall (message : Message fork) (state : TransactionState) (_ : Substate)
+/-- A call that keeps each nonce or code and the block, and ends with its own message.
+
+It reads no substate and no meter, so it fits the shape of a relation of messages. -/
+abbrev KeepsNonceOrCodeCall (message : Message fork) (state : TransactionState) (_ : Substate)
     (_ : Meter) (ended : Evm fork Meter) : Prop :=
   (KeepsNonceOrCode state ended.state ∧ ended.state.parent = state.parent) ∧
     ended.message = message
 
-/-- A creation that keeps each nonce or code and the block. -/
-private abbrev KeepsCreate (_ : Message fork) (state : TransactionState) (_ : Substate)
+/-- A creation that keeps each nonce or code and the block.
+
+It reads no message, no substate and no meter, so it fits the shape of a relation of messages. -/
+abbrev KeepsNonceOrCodeCreate (_ : Message fork) (state : TransactionState) (_ : Substate)
     (_ : Meter) (ended : Evm fork Meter) : Prop :=
   KeepsNonceOrCode state ended.state ∧ ended.state.parent = state.parent
 
+/-- Each write of a step keeps each nonce or code and the block, with the message and the code. -/
+theorem stepRules_keepsNonceOrCodeFrame :
+    StepRules fork (KeepsNonceOrCodeFrame (fork := fork) (Meter := Meter)) :=
+  (stepRules_keepsNonceOrCode.and stepRules_parent).and stepRules_messageCode
+
 /-- A child, a call or a creation, keeps each nonce or code and the block of its caller. -/
 private theorem keeps_of_childRelByKind {caller child : Evm fork Meter} {message : Message fork}
-    (h : ChildRelByKind (Meter := Meter) KeepsCall KeepsCreate caller message child) :
+    (h : ChildRelByKind (Meter := Meter) KeepsNonceOrCodeCall KeepsNonceOrCodeCreate caller message
+      child) :
     KeepsNonceOrCode caller.state child.state ∧ child.state.parent = caller.state.parent := by
   unfold ChildRelByKind ChildRel at h
   split at h
@@ -118,12 +132,13 @@ private theorem keeps_of_childRelByKind {caller child : Evm fork Meter} {message
 /-- A frame that resumes after a message keeps each nonce or code and the block of the frame before.
 
 It also keeps its message and its code. -/
-private theorem keepsFrame_resume {evm caller child after : Evm fork Meter}
+private theorem keepsNonceOrCodeFrame_resume {evm caller child after : Evm fork Meter}
     {message : Message fork} {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (h : step fork evm = .ok (.child caller message resume)) (resumed : resume child = .ok after)
-    (hcaller : KeepsFrame evm caller)
-    (hchild : ChildRelByKind (Meter := Meter) KeepsCall KeepsCreate caller message child) :
-    KeepsFrame evm after := by
+    (hcaller : KeepsNonceOrCodeFrame evm caller)
+    (hchild : ChildRelByKind (Meter := Meter) KeepsNonceOrCodeCall KeepsNonceOrCodeCreate caller
+      message child) :
+    KeepsNonceOrCodeFrame evm after := by
   have same := sameContext_of_step_eq_child h resumed
   obtain ⟨hk, hp⟩ := keeps_of_childRelByKind hchild
   -- The frame that resumes has the state of the child, and the message and code of the caller.
@@ -138,6 +153,47 @@ private theorem keepsFrame_resume {evm caller child after : Evm fork Meter}
     exact hcaller.2.1
   · rw [same.code, code_incorporateChild]
     exact hcaller.2.2
+
+/-- Each step keeps each nonce or code and the block, with the message and the code.
+
+A message that the step sends must keep them too, and a call must end with its own message. -/
+theorem keepsNonceOrCodeFrame_step {evm : Evm fork Meter} {result : StepResult fork Meter}
+    (h : step fork evm = .ok result) :
+    StepResult.Keeps KeepsNonceOrCodeFrame
+      (ChildRelByKind KeepsNonceOrCodeCall KeepsNonceOrCodeCreate) evm result := by
+  have r := stepRules_keepsNonceOrCodeFrame.step h
+  cases result with
+  | next after => exact r
+  | child caller message resume =>
+    exact ⟨r.1, fun child after hres hc => keepsNonceOrCodeFrame_resume h hres r.1 hc⟩
+
+/-- A call keeps each nonce or code and the block after its rollback, and ends with its message.
+
+Its frame must keep them from the state that the call enters. -/
+theorem keepsNonceOrCodeCall_rollbackOnError {message : Message fork}
+    {state entry : TransactionState} {substate entrySubstate : Substate} {meter : Meter}
+    {ended : Evm fork Meter}
+    (hentry : Entered fork message state substate entry entrySubstate)
+    (hrun : KeepsNonceOrCodeFrame (startFrame message entry entrySubstate meter) ended) :
+    KeepsNonceOrCodeCall message state substate meter (rollbackOnError state ended) :=
+  ⟨⟨keepsNonceOrCode_rollbackOnError ((keepsNonceOrCode_entered hentry).trans hrun.1.1)
+      (hrun.1.2.trans (parent_entered hentry)),
+    (parent_rollbackOnError state ended).trans (hrun.1.2.trans (parent_entered hentry))⟩,
+    (message_rollbackOnError state ended).trans hrun.2.1⟩
+
+/-- From Spurious Dragon, a creation keeps each nonce or code and the block after its deposit.
+
+The call of its init code must keep them from the prepared state. -/
+theorem keepsNonceOrCodeCreate_depositCode (hfork : .spuriousDragon ≤ fork)
+    {message : Message fork} {state prepared : TransactionState} {substate : Substate}
+    {meter : Meter} {evm after : Evm fork Meter}
+    (hp : prepareCreation fork state message.currentTarget = .ok prepared)
+    (hm : KeepsNonceOrCodeCall message prepared substate meter evm)
+    (hd : depositCode fork state evm = .ok after) :
+    KeepsNonceOrCodeCreate message state substate meter after :=
+  ⟨keepsNonceOrCode_depositCode_of_prepared hfork hp hm.1.1 hm.1.2
+      (congrArg (·.currentTarget) hm.2) hd,
+    (parent_depositCode hd).trans (hm.1.2.trans (parent_prepareCreation hp))⟩
 
 /-- From Spurious Dragon, every call and creation keeps each nonce or code.
 
@@ -154,34 +210,17 @@ theorem processMessage_keepsNonceOrCode_induction [LawfulGasMeter Meter]
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
         KeepsNonceOrCode state ended.val.state) := by
-  have T := ((stepRules_keepsNonceOrCode (fork := fork) (Meter := Meter)).and
-    stepRules_parent).and stepRules_messageCode
-  -- Each step keeps the relation, a message it sends included.
-  have steps : ∀ {evm : Evm fork Meter} {result : StepResult fork Meter}, True →
-      step fork evm = .ok result →
-      StepResult.Keeps KeepsFrame (ChildRelByKind KeepsCall KeepsCreate) evm result := by
-    intro evm result _ h
-    have r := T.step h
-    cases result with
-    | next after => exact r
-    | child caller message resume =>
-      exact ⟨r.1, fun child after hres hc => keepsFrame_resume h hres r.1 hc⟩
+  have T := stepRules_keepsNonceOrCodeFrame (fork := fork) (Meter := Meter)
   have both := processMessage_rel_byKind (fork := fork) (Meter := Meter)
-    (R := KeepsFrame) (Inv := fun _ => True) (Mcall := KeepsCall) (Mcreate := KeepsCreate)
+    (R := KeepsNonceOrCodeFrame) (Inv := fun _ => True) (Mcall := KeepsNonceOrCodeCall)
+    (Mcreate := KeepsNonceOrCodeCreate)
     T.refl T.trans (fun _ _ => trivial)
     (fun evm error _ => T.static (staticStep_exceptionalHalt evm error))
-    steps
+    (fun _ h => keepsNonceOrCodeFrame_step h)
     (fun _ _ => T.sameContext ⟨rfl, rfl, rfl, rfl⟩)
     (fun h _ => T.static (staticStep_runPrecompile h))
-    (fun {_ state _ _ _ _ ended} hentry hrun =>
-      ⟨⟨keepsNonceOrCode_rollbackOnError ((keepsNonceOrCode_entered hentry).trans
-          (hrun trivial).1.1) ((hrun trivial).1.2.trans (parent_entered hentry)),
-        (parent_rollbackOnError state ended).trans
-          ((hrun trivial).1.2.trans (parent_entered hentry))⟩,
-        (message_rollbackOnError state ended).trans (hrun trivial).2.1⟩)
-    (fun hp hm hd => ⟨keepsNonceOrCode_depositCode_of_prepared hfork hp hm.1.1 hm.1.2
-        (congrArg (·.currentTarget) hm.2) hd,
-      (parent_depositCode hd).trans (hm.1.2.trans (parent_prepareCreation hp))⟩)
+    (fun hentry hrun => keepsNonceOrCodeCall_rollbackOnError hentry (hrun trivial))
+    (fun hp hm hd => keepsNonceOrCodeCreate_depositCode hfork hp hm hd)
     n
   exact ⟨fun message state substate meter held hn ended h =>
       (both.1 message state substate meter held hn ended h).1.1,
