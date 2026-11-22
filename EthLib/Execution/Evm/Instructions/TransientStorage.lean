@@ -30,7 +30,11 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- TLOAD: replace a key with the word at that key of the transient storage. -/
 def tloadStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
+  -- EIP-1153: `TLOAD` "pops one 32-byte word from the top of the stack".
+  --
+  -- It "treats this value as the address" and "pushes the value on top of the stack".
   let (word, evm) ← popWord evm
+  -- "gas cost of `TLOAD` is the same as a hot `SLOAD`", 100.
   let evm ← chargeGas evm OPCODE_TLOAD
   let value := evm.state.getTransientStorage evm.message.currentTarget (U256.toBeBytes word)
   let evm ← pushWord evm value
@@ -38,9 +42,12 @@ def tloadStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
 
 /-- TSTORE: write a word at a key of the transient storage. -/
 def tstoreStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
+  -- EIP-1153: "The word on the top is the address, and the next is the value."
   let (word, evm) ← popWord evm
   let (value, evm) ← popWord evm
+  -- "Gas cost for `TSTORE` is the same as a warm `SSTORE` of a dirty slot", 100.
   let evm ← chargeGas evm OPCODE_TSTORE
+  -- "If the `TSTORE` opcode is called within the context of a `STATICCALL`", it fails, once paid.
   if evm.message.isStatic then
     throw .writeInStaticContext
   else
@@ -53,6 +60,7 @@ def tstoreStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
 Other opcodes give none, and so do both opcodes before Dencun. -/
 def transientStorageStep (fork : Fork) :
     Op → Option (Evm fork Meter → Except EvmError (Evm fork Meter))
+  -- `0x5c` TLOAD and `0x5d` TSTORE, from Dencun by EIP-1153.
   | .tload => if .dencun ≤ fork then some tloadStep else none
   | .tstore => if .dencun ≤ fork then some tstoreStep else none
   | _ => none
