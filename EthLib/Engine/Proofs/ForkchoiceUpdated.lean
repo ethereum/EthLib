@@ -866,12 +866,12 @@ The result is then the attributes at that fork. -/
 theorem checkAttributes_eq_ok_iff {version : Nat} {head : KnownPayload}
     {a : Σ f, PayloadAttributes f} {fork : Fork} {b : PayloadAttributes fork} :
     checkAttributes config version head a = .ok ⟨fork, b⟩ ↔
-      config.activeFork (head.number.toNat + 1) a.2.timestamp.toNat = some fork ∧
+      config.activeFork (head.number + 1) a.2.timestamp.toNat = some fork ∧
         attributesTakeFork version fork = true ∧ PayloadAttributes.atFork a fork = some b ∧
-        head.timestamp < a.2.timestamp := by
+        head.timestamp < a.2.timestamp.toNat := by
   constructor
   · intro h
-    cases hF : config.activeFork (head.number.toNat + 1) a.2.timestamp.toNat with
+    cases hF : config.activeFork (head.number + 1) a.2.timestamp.toNat with
     | none => simp [checkAttributes, hF, throw, throwThe, MonadExceptOf.throw] at h
     | some fork' =>
       cases hT : attributesTakeFork version fork' with
@@ -883,7 +883,7 @@ theorem checkAttributes_eq_ok_iff {version : Nat} {head : KnownPayload}
         | none =>
           simp [checkAttributes, hF, hT, hA, throw, throwThe, MonadExceptOf.throw] at h
         | some b' =>
-          by_cases hTime : head.timestamp < a.2.timestamp
+          by_cases hTime : head.timestamp < a.2.timestamp.toNat
           · simp only [checkAttributes, hF, hT, hA, hTime, bind, Except.bind, pure, Except.pure,
               reduceIte, Except.ok.injEq, Sigma.mk.injEq] at h
             obtain ⟨rfl, hb⟩ := h
@@ -897,12 +897,12 @@ theorem checkAttributes_eq_ok_iff {version : Nat} {head : KnownPayload}
 /-- Attributes of no fork, or of a fork that the version does not take, give `-38005`. -/
 theorem checkAttributes_eq_error_of_unsupportedFork {version : Nat} {head : KnownPayload}
     {a : Σ f, PayloadAttributes f}
-    (h : ∀ fork, config.activeFork (head.number.toNat + 1) a.2.timestamp.toNat = some fork →
+    (h : ∀ fork, config.activeFork (head.number + 1) a.2.timestamp.toNat = some fork →
       attributesTakeFork version fork = false) :
     checkAttributes config version head a =
       .error (.unsupportedFork
-        (config.activeFork (head.number.toNat + 1) a.2.timestamp.toNat)) := by
-  cases hF : config.activeFork (head.number.toNat + 1) a.2.timestamp.toNat with
+        (config.activeFork (head.number + 1) a.2.timestamp.toNat)) := by
+  cases hF : config.activeFork (head.number + 1) a.2.timestamp.toNat with
   | none => simp [checkAttributes, hF, throw, throwThe, MonadExceptOf.throw]
   | some fork =>
     simp [checkAttributes, hF, h fork hF, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
@@ -947,7 +947,7 @@ theorem attributesForkAt_of_attributesTakeFork {version : Nat} (hv : version ≠
 Only version 2 takes two structures, so only it can fail this way. -/
 theorem checkAttributes_eq_error_of_wrong_structure {version : Nat} {head : KnownPayload}
     {a : Σ f, PayloadAttributes f} {fork : Fork}
-    (hFork : config.activeFork (head.number.toNat + 1) a.2.timestamp.toNat = some fork)
+    (hFork : config.activeFork (head.number + 1) a.2.timestamp.toNat = some fork)
     (hTake : attributesTakeFork version fork = true) (hAt : attributesForkAt fork ≠ a.1) :
     checkAttributes config version head a = .error .invalidPayloadAttributes := by
   have hNone : PayloadAttributes.atFork a fork = none := by
@@ -958,11 +958,12 @@ theorem checkAttributes_eq_error_of_wrong_structure {version : Nat} {head : Know
 /-- Attributes that pass the other checks, with a timestamp not above the head's, give `-38003`. -/
 theorem checkAttributes_eq_error_of_not_after_head {version : Nat} {head : KnownPayload}
     {a : Σ f, PayloadAttributes f} {fork : Fork} {b : PayloadAttributes fork}
-    (hFork : config.activeFork (head.number.toNat + 1) a.2.timestamp.toNat = some fork)
+    (hFork : config.activeFork (head.number + 1) a.2.timestamp.toNat = some fork)
     (hTake : attributesTakeFork version fork = true)
-    (hAt : PayloadAttributes.atFork a fork = some b) (hTime : a.2.timestamp ≤ head.timestamp) :
+    (hAt : PayloadAttributes.atFork a fork = some b)
+    (hTime : a.2.timestamp.toNat ≤ head.timestamp) :
     checkAttributes config version head a = .error .invalidPayloadAttributes := by
-  have hNot : ¬ head.timestamp < a.2.timestamp := UInt64.not_lt.mpr hTime
+  have hNot : ¬ head.timestamp < a.2.timestamp.toNat := Nat.not_lt.mpr hTime
   simp [checkAttributes, hFork, hTake, hAt, hNot, bind, Except.bind, throw, throwThe,
     MonadExceptOf.throw]
 
@@ -1556,8 +1557,8 @@ theorem forkchoiceUpdatedCall_payloadAttributesJson {version : Nat} {fork e : Fo
     (a : PayloadAttributes fork) (custody : Option (Vector UInt8 16))
     (hUpdate : forkchoiceUpdated transition tree finalized s = .ok (status, some s.headBlockHash))
     (hKnown : tree.lookup s.headBlockHash = some known)
-    (hTime : known.timestamp < a.timestamp)
-    (hFork : config.activeFork (known.number.toNat + 1) a.timestamp.toNat = some e)
+    (hTime : known.timestamp < a.timestamp.toNat)
+    (hFork : config.activeFork (known.number + 1) a.timestamp.toNat = some e)
     (hTakes : attributesTakeFork version e = true)
     (hShape : attributesForkAt e = attributesForkAt fork) :
     ∃ a' : PayloadAttributes e,
@@ -1605,8 +1606,8 @@ theorem forkchoiceUpdatedCall_payloadAttributesJson_of_gloas {fork : Fork}
     {known : KnownPayload} (a : PayloadAttributes fork) (custody : Option (Vector UInt8 16))
     (hUpdate : forkchoiceUpdated transition tree finalized s = .ok (status, some s.headBlockHash))
     (hKnown : tree.lookup s.headBlockHash = some known)
-    (hTime : known.timestamp < a.timestamp)
-    (hFork : config.activeFork (known.number.toNat + 1) a.timestamp.toNat = some .glamsterdam) :
+    (hTime : known.timestamp < a.timestamp.toNat)
+    (hFork : config.activeFork (known.number + 1) a.timestamp.toNat = some .glamsterdam) :
     ∃ a' : PayloadAttributes .glamsterdam,
       forkchoiceUpdatedCall config transition 4 tree finalized
           (forkchoiceUpdatedParamsJson 4 s (some a) custody) =
@@ -1634,8 +1635,8 @@ theorem forkchoiceUpdatedCall_payloadAttributesJson_of_heze {fork : Fork}
     {known : KnownPayload} (a : PayloadAttributes fork) (custody : Option (Vector UInt8 16))
     (hUpdate : forkchoiceUpdated transition tree finalized s = .ok (status, some s.headBlockHash))
     (hKnown : tree.lookup s.headBlockHash = some known)
-    (hTime : known.timestamp < a.timestamp)
-    (hFork : config.activeFork (known.number.toNat + 1) a.timestamp.toNat = some .hegota) :
+    (hTime : known.timestamp < a.timestamp.toNat)
+    (hFork : config.activeFork (known.number + 1) a.timestamp.toNat = some .hegota) :
     ∃ a' : PayloadAttributes .hegota,
       forkchoiceUpdatedCall config transition 5 tree finalized
           (forkchoiceUpdatedParamsJson 5 s (some a) custody) =

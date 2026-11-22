@@ -166,6 +166,10 @@ inductive BlockError where
 
   The hash of the list is none only before Glamsterdam, where no check reads it. -/
   | wrongBlockAccessListHash (expected : Hash32) (actual : Option Hash32)
+  /-- A block that is built has the excess blob gas `excess`, which is `2^64` or more.
+
+  A header holds the excess in 64 bits, so no header of the block can hold it. -/
+  | excessBlobGasOverflow (excess : Nat)
 
 /-- Why the ommers of a block are not valid. -/
 inductive OmmerError where
@@ -290,6 +294,8 @@ def instReprBlockError.reprPrec : BlockError → Nat → Std.Format
   | .wrongBlockAccessListHash expected actual, p =>
     blockErrorFormat "wrongBlockAccessListHash"
       [namedArg "expected" expected, namedArg "actual" actual] p
+  | .excessBlobGasOverflow excess, p =>
+    blockErrorFormat "excessBlobGasOverflow" [namedArg "excess" excess] p
 
 /-- The form of an ommer error in Lean syntax, with its arguments.
 
@@ -373,6 +379,7 @@ def BlockError.code : BlockError → UInt32
   | .undecodableTransaction .. => 254
   | .blockAccessList _ => 255
   | .wrongBlockAccessListHash .. => 256
+  | .excessBlobGasOverflow _ => 257
 
 /-- The stable code of an error, one per constructor, for the C exports.
 

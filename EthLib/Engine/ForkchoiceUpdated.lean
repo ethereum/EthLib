@@ -238,10 +238,10 @@ structure KnownPayload where
   parentHash : Hash32
   /-- Whether the block and its ancestors are valid. -/
   valid : Bool
-  /-- The number of the block. -/
-  number : UInt64
-  /-- The time of the block, in seconds since the Unix epoch. -/
-  timestamp : UInt64
+  /-- The number of the block, unbounded as in its header. -/
+  number : Nat
+  /-- The time of the block, in seconds since the Unix epoch, unbounded as in its header. -/
+  timestamp : Nat
   /-- For a block of proof of work, its total difficulty and its parent's; `none` otherwise. -/
   powTotalDifficulty : Option (Nat × Nat)
   deriving DecidableEq, Repr
@@ -590,26 +590,26 @@ def PayloadAttributes.atFork (a : Σ f, PayloadAttributes f) (fork : Fork) :
 
 /-- The checks of decoded payload attributes against the head that they build on.
 
-The fork of the attributes is the active fork at the number after the head and at their timestamp.
+The time check is point 8 of the update in Paris.
 
-A version of the method that does not take that fork gives `-38005`, as do attributes of no fork.
+The structure check of version 2 comes from Shanghai, and the fork check from Cancun on.
 
-Attributes whose structure is not that of the fork give `-38003`.
-
-Only version 2 can fail that way, since each other version takes a single structure.
-
-Attributes whose timestamp is not above that of the head give `-38003` too.
+The number and the time of the head are unbounded, as its header holds them.
 
 The result is the attributes at their fork. -/
 def checkAttributes (config : ChainConfig) (version : Nat) (head : KnownPayload)
     (attributes : Σ f, PayloadAttributes f) :
     Except EngineError (Σ fork, PayloadAttributes fork) := do
+  -- The fork of the attributes is the active fork at the number after the head and at their time.
   let timestamp := attributes.2.timestamp
-  let some fork := config.activeFork (head.number.toNat + 1) timestamp.toNat
+  -- "`payloadAttributes.timestamp` does not fall within the time frame" of the fork: `-38005`.
+  let some fork := config.activeFork (head.number + 1) timestamp.toNat
     | throw (.unsupportedFork none)
   unless attributesTakeFork version fork do throw (.unsupportedFork (some fork))
+  -- Only version 2 takes two structures, and "the wrong version of the structure" gives `-38003`.
   let some atFork := PayloadAttributes.atFork attributes fork | throw .invalidPayloadAttributes
-  unless head.timestamp < timestamp do throw .invalidPayloadAttributes
+  -- "Verify that `payloadAttributes.timestamp` is greater than `timestamp`" of the head: `-38003`.
+  unless head.timestamp < timestamp.toNat do throw .invalidPayloadAttributes
   return ⟨fork, atFork⟩
 
 /-- A version of the method: its status, the new head, and the payload attributes of a build.

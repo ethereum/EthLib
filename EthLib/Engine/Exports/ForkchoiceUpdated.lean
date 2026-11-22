@@ -65,7 +65,7 @@ open Lean (Json)
 open EthLib.Exports (Result PyValue UnreadArgument pyExport rejectArgument toResult)
 open EthLib.Base
 open EthLib.Base.ChainConfig.Exports (configOfJson)
-open EthLib.Serialization.JsonRpc (dataJson fixed uint uint64)
+open EthLib.Serialization.JsonRpc (dataJson fixed uint)
 
 /-- One block of the tree: its block hash, parent hash, validity, number and timestamp.
 
@@ -78,8 +78,8 @@ def knownOfJson (j : Json) : Result (Hash32 × KnownPayload) := do
     ⟨s!"tree: {reprStr (EngineError.invalidParams e)}"⟩
   let hash (name : String) : Result Hash32 :=
     toResult none ((fixed name 32 (j.getObjValD name)).mapError unread)
-  let number (name : String) : Result UInt64 :=
-    toResult none ((uint64 name (j.getObjValD name)).mapError unread)
+  let number (name : String) : Result Nat :=
+    toResult none ((uint name (j.getObjValD name)).mapError unread)
   let total (name : String) (v : Json) : Result Nat :=
     toResult none ((uint name v).mapError unread)
   let pow ← match (j.getObjVal? "totalDifficulty").toOption,
