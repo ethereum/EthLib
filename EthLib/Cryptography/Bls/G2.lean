@@ -82,11 +82,15 @@ def c2Psi : Fp2 F :=
 
 /-- `psi(x, y) = (c1_psi · frobenius(x), c2_psi · frobenius(y))`, RFC 9380, Appendix G.3. -/
 def psi (P : G2 F) : G2 F :=
+  -- The point at infinity maps to itself.
   if P.z.isZero then P else
-    -- Normalise to affine form, then map the coordinates, with `Z = 1`.
+    -- An affine point has `xd = yd = 1`, as Appendix G.3 allows.
     let (x, y) := P.toAffine
+    -- Step 1: `qxn = c1 * frobenius(xn)`, where `frobenius(x0 + I * x1) = x0 - I * x1`.
     let qx := c1Psi * x.conjugate
+    -- Step 3: `qyn = c2 * frobenius(yn)`.
     let qy := c2Psi * y.conjugate
+    -- Steps 2, 4 and 5: `qxd = qyd = 1`, so the result is affine, with `Z = 1`.
     ⟨qx, qy, Fp2.one⟩
 
 end G2
