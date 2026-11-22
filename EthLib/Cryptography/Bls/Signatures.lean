@@ -261,7 +261,7 @@ def fastAggregateVerify
 
 /-! ## Ethereum wrappers
 
-The step comments follow the section Extensions of `specs/altair/bls.md` at `aa16bb4c`:
+For context, the consensus-specs state these two rules in Extensions of `altair/bls.md`:
 <https://github.com/ethereum/consensus-specs/blob/aa16bb4c/specs/altair/bls.md#extensions>
 -/
 
@@ -269,7 +269,7 @@ The step comments follow the section Extensions of `specs/altair/bls.md` at `aa1
 
 It fails on an empty list and on any invalid key. -/
 def ethAggregatePubkeys (pubkeys : Array BLSPubkey) : Except BlsError BLSPubkey := do
-  -- eth_aggregate_pubkeys: the list holds at least one key, and every key passes key validation.
+  -- The list holds at least one key, and every key passes key validation.
   --
   -- The result is the sum of the keys, as points of `G1`.
   return pointToPubkey (← aggregatePubkeyPoint pubkeys)
@@ -281,7 +281,7 @@ It is the fast aggregate verification of the draft, except on an empty key list.
 An empty key list passes exactly with the signature of the point at infinity. -/
 def ethFastAggregateVerify
     (pubkeys : Array BLSPubkey) (msg : ByteArray) (sig : BLSSignature) : Bool :=
-  -- eth_fast_aggregate_verify: an empty key list is VALID with the infinity signature.
+  -- An empty key list is VALID exactly with the encoding of the point at infinity.
   --
   -- On an empty list with another signature, the draft's verification returns INVALID anyway.
   if pubkeys.isEmpty then
