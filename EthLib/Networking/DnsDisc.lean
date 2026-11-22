@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Base32
+public import EthLib.Networking.Encoding.Base32
 public import EthLib.Networking.Enr.V4
 public import EthLib.Networking.Rlpx.Handshake
 
@@ -47,6 +47,7 @@ A signature with `n - s` and the other recovery id verifies too: the source has 
 namespace EthLib.Networking.DnsDisc
 
 open EthLib.Base
+open EthLib.Networking.Encoding
 open EthLib.Cryptography.Secp256k1
 
 /-- The number of bytes of the hash that names an entry. -/

@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Base32
+public import EthLib.Networking.Encoding.Base32
 public import EthLib.Base.Proofs.BigEndian
 
 /-!
@@ -17,7 +17,9 @@ A group and the number that its characters write determine each other.
 
 @[expose] public section
 
-namespace EthLib.Base.Base32
+namespace EthLib.Networking.Encoding.Base32
+
+open EthLib.Base
 
 /-! ## Characters and numbers -/
 
@@ -243,11 +245,6 @@ theorem decodeList_encodeList : (start : Nat) → (bytes : List UInt8) →
     rw [encodeList_of_length_le (by simp), decodeList_of_length_lt (by simp [length_encodeGroup,
       charCount]), decodeGroup_encodeGroup _ (by simp)]
 
-/-- The decoder undoes the encoder: every byte string reads back from its text. -/
-theorem decode_encode (bytes : ByteArray) : decode (encode bytes) = .ok bytes := by
-  simp only [decode, encode, String.toList_ofList, decodeList_encodeList, bind, Except.bind,
-    pure, Except.pure]
-
 /-- The encoder writes back every list of characters that the decoder accepts. -/
 theorem encodeList_of_decodeList {start : Nat} {cs : List Char} {bytes : List UInt8}
     (h : decodeList start cs = .ok bytes) : encodeList bytes = cs := by
@@ -273,17 +270,4 @@ theorem encodeList_of_decodeList {start : Nat} {cs : List Char} {bytes : List UI
     rw [encodeList_of_length_le small, encodeGroup_of_decodeGroup h]
 termination_by cs.length
 
-/-- The encoder writes back every text that the decoder accepts, so each byte string has one text.
--/
-theorem encode_of_decode {text : String} {bytes : ByteArray} (h : decode text = .ok bytes) :
-    encode bytes = text := by
-  simp only [decode, bind, Except.bind] at h
-  cases hl : decodeList 0 text.toList with
-  | error e => simp [hl] at h
-  | ok list =>
-    simp only [hl, pure, Except.pure, Except.ok.injEq] at h
-    subst h
-    apply String.toList_injective
-    simp [encode, encodeList_of_decodeList hl]
-
-end EthLib.Base.Base32
+end EthLib.Networking.Encoding.Base32

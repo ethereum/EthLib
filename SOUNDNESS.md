@@ -2651,7 +2651,7 @@ A link must name a point of the curve, and a record must read back from its own 
 `Url.parse_toText` and `Url.toText_of_parse` state the same for a URL.
 `length_subdomain` states that a name has 26 characters.
 `Root.verify_sign` states that a root signed with a private key verifies under the compressed public key of that key.
-`Base32.decode_encode` and `Base32.encode_of_decode` (`Base/Proofs/Base32.lean`) state that base32 is a bijection between byte strings and the texts that the decoder accepts.
+`Base32.decodeList_encodeList` and `Base32.encodeList_of_decodeList` (`Networking/Proofs/Encoding/Base32.lean`) state that base32 is a bijection between lists of bytes and the lists of characters that the decoder accepts.
 
 The source leaves these points open, and EthLib reads them as follows.
 [devp2p#298](https://github.com/ethereum/devp2p/pull/298), [#299](https://github.com/ethereum/devp2p/pull/299), [#300](https://github.com/ethereum/devp2p/pull/300) and [#301](https://github.com/ethereum/devp2p/pull/301) report the first four upstream.

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Networking.DnsDisc
-public import EthLib.Base.Proofs.Base32
+public import EthLib.Networking.Proofs.Encoding.Base32
 public import EthLib.Base.Proofs.Base64
 public import EthLib.Base.Proofs.Bytes
 public import EthLib.Networking.Proofs.Enr.Record
@@ -31,6 +31,7 @@ A list resolves only from a root that the key signed, with a sequence number not
 namespace EthLib.Networking.DnsDisc
 
 open EthLib.Base
+open EthLib.Networking.Encoding
 open EthLib.Cryptography.Secp256k1
 
 /-- The entries for which the text round trip holds.
