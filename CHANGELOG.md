@@ -9,6 +9,8 @@ Not yet released.
 
 ### Proof additions
 
+- `processTransaction_stateGas_le_of_glamsterdam` proves that from Glamsterdam the state gas that a transaction adds to its block is at most the gas it used before its refund, so subtracting it for the execution gas of the block never floors at zero ([#3851](https://github.com/ethereum/EthLib/issues/3851)).
+
 - `length_transactions_lt_of_checkBlock` proves that from Fusaka a block that passes its checks has fewer than `2^32 - 1` transactions, so every position of its block access list fits 32 bits ([#3849](https://github.com/ethereum/EthLib/issues/3849)).
   `applyBody_nonceChanges_le` proves that the body records no nonce above `2^64 - 1` when the state before it meets EIP-2681, so every nonce of the list fits 64 bits.
   `one_le_lengthPrefix_size`, `one_le_encode_size`, `joinEncodings_size_ge` and `encode_list_size_gt` bound the size of an RLP encoding from below.

@@ -2305,6 +2305,10 @@ Four theorems in `Execution/Proofs/Transactions/Process.lean` give the gas used 
 `processTransaction_gasUsed_of_glamsterdam` covers Glamsterdam, where EIP-8037 splits the gas into execution gas and a reservoir.
 Its gas left is the execution gas left plus the reservoir left, and it gives the two block gas counts of EIP-7778 and EIP-8037.
 At Glamsterdam, a negative state gas used counts as 0 in both block gas counts, a case that EIP-8037 leaves open.
+The execution gas of the block is the gas used before the refund minus that state gas, a subtraction that execution-specs makes on unsigned integers, which raise below zero.
+`processTransaction_stateGas_le_of_glamsterdam` (`Execution/Proofs/Transactions/StateGas.lean`) proves that the state gas is at most that gas used, so subtracting it in natural numbers never floors at zero.
+The gas used before the refund is itself the gas limit minus the execution gas left and the reservoir left.
+That this first subtraction never floors is not proved: a refill of state gas can raise what a frame holds above what it started with, and no theorem yet bounds the refills of a whole run by its charges.
 From Hegotá a run fails as not yet specified, so there is no gas used to state.
 
 `prepareFirstFrame_of_applyAuthorizations` gives the first frame of a call that moves no ether, after its authorizations.
