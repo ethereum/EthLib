@@ -123,11 +123,19 @@ def computeRootsOfUnity (order : Nat) : Array Fr :=
     (computeRootsOfUnity order).size = order := by
   simp [computeRootsOfUnity]
 
-/-! ## Polynomials in coefficient form -/
+/-! ## Polynomials in coefficient form
+
+The step comments of this section quote consensus-specs at `8a3df1d7`.
+
+They quote its section "Polynomials in coefficient form", of the Fulu file:
+<https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/fulu/polynomial-commitments-sampling.md#polynomials-in-coefficient-form>
+-/
 
 /-- Sum the coefficient-form polynomials `a` and `b`. -/
 def addPolynomialcoeff (a b : PolynomialCoeff) : PolynomialCoeff :=
+  -- add_polynomialcoeff: `a, b = (a, b) if len(a) >= len(b) else (b, a)`.
   let (a, b) := if a.size ≥ b.size then (a, b) else (b, a)
+  -- `[a[i] + (b[i] if i < length_b else BLSFieldElement(0)) for i in range(length_a)]`.
   Array.ofFn (n := a.size) fun i =>
     let bi := if h : i.val < b.size then b[i.val] else Fr.zero
     a[i] + bi
@@ -139,12 +147,16 @@ It rejects factors whose sizes sum to more than 8192.
 So a product has at most 8191 coefficients. -/
 def multiplyPolynomialcoeff (a b : PolynomialCoeff) :
     Except KzgError PolynomialCoeff := do
+  -- multiply_polynomialcoeff: `assert len(a) + len(b) <= FIELD_ELEMENTS_PER_EXT_BLOB`.
   if a.size + b.size > FIELD_ELEMENTS_PER_EXT_BLOB then
     throw (.polynomialProductTooLong a.size b.size)
+  -- `r = PolynomialCoeff([BLSFieldElement(0)])`, then the loop over `power, coef`.
   return (Array.finRange a.size).foldl (init := #[Fr.zero]) fun r power =>
     let coef := a[power]
+    -- `summand = [BLSFieldElement(0)] * power + [coef * x for x in b]`.
     let summand : PolynomialCoeff :=
       Array.replicate power.val Fr.zero ++ b.map (· * coef)
+    -- `r = add_polynomialcoeff(r, summand)`.
     addPolynomialcoeff r summand
 
 /-- Long division of two coefficient-form polynomials.
@@ -156,18 +168,17 @@ It rejects an empty divisor.
 It also rejects a divisor with a zero leading coefficient, when the loop would run. -/
 def dividePolynomialcoeff (a b : PolynomialCoeff) :
     Except KzgError PolynomialCoeff := do
-  -- An empty divisor is invalid.
+  -- Not in divide_polynomialcoeff, which reads `b[bpos]` and fails on an empty divisor.
   if hb : b.size = 0 then
     throw .zeroDivisorPolynomial
-  -- A dividend shorter than the divisor has quotient zero.
-  --
-  -- The specification's loop runs zero times and returns the empty list.
+  -- `while diff >= 0` runs zero times when `a` is shorter than `b`, so `o` stays empty.
   else if hab : a.size < b.size then
     return #[]
   else
+    -- `bpos = len(b) - 1`.
     let bpos := b.size - 1
     let lead := b[bpos]'(by omega)
-    -- A zero leading coefficient would make every quotient step a division by zero.
+    -- Not in the source: a zero `b[bpos]` would make every `a[apos] / b[bpos]` divide by zero.
     --
     -- Field division by zero returns 0 here, so it would fail silently.
     if lead.isZero then
@@ -182,13 +193,19 @@ def dividePolynomialcoeff (a b : PolynomialCoeff) :
       (init := (a.toVector, (Array.empty : PolynomialCoeff)))
       fun (r, o) t =>
         have ht : t.val < a.size + 1 - b.size := by have := t.isLt; omega
+        -- `apos = len(a) - 1`, then `apos -= 1` and `diff -= 1` at each step.
         let apos := a.size - 1 - t.val
         let diff := apos - bpos
+        -- `quot = a[apos] / b[bpos]`.
         let quot := r[apos]'(by omega) * bLeadInv
+        -- `a[diff + i] = a[diff + i] - b[i] * quot`, for `i` from `bpos` down to 0.
+        --
+        -- The order of `i` does not matter: each step writes a distinct entry.
         let r := (Array.finRange b.size).foldl
           (fun r i =>
             have hi := i.isLt
             r.set (diff + i.val) (r[diff + i.val]'(by omega) - b[i] * quot) (by omega)) r
+        -- `o.insert(0, quot)`.
         (r, #[quot] ++ o)
     return o
 
@@ -201,34 +218,43 @@ The points `xs` must be pairwise distinct.
 The weights invert `xs[i] - xs[j]`, and inversion in `Fr` sends 0 to 0. -/
 def interpolatePolynomialcoeff
     (xs ys : Array Fr) : Except KzgError PolynomialCoeff :=
-  -- The interpolation nodes and values must come in equal numbers
+  -- interpolate_polynomialcoeff: `assert len(xs) == len(ys)`.
   if h : xs.size ≠ ys.size then
     throw (.inputLengthMismatch "ys" xs.size ys.size)
   else
+    -- `r = PolynomialCoeff([BLSFieldElement(0)])`, then the loop over `i`.
     (Array.finRange xs.size).foldlM (init := #[Fr.zero]) fun r i => do
+      -- `summand = PolynomialCoeff([ys[i]])`, then the loop over `j != i`.
       let summand ← (Array.finRange ys.size).foldlM (init := #[ys[i.val]'(by omega)])
         fun summand j =>
           if j.val ≠ i.val then
             let xj := xs[j.val]'(by omega)
+            -- `weight_adjustment = (xs[i] - xs[j]).inverse()`.
             let weightAdj := (xs[i] - xj).inverse
+            -- `summand = multiply_polynomialcoeff(summand, [-weight_adjustment * xs[j], ...])`.
             multiplyPolynomialcoeff summand #[(-weightAdj) * xj, weightAdj]
           else
             pure summand
+      -- `r = add_polynomialcoeff(r, summand)`.
       return addPolynomialcoeff r summand
 
 /-- Compute the vanishing polynomial on `xs` (coefficient form). -/
 def vanishingPolynomialcoeff (xs : Array Fr) : Except KzgError PolynomialCoeff :=
+  -- vanishing_polynomialcoeff: `p = [1]`, then `p = multiply_polynomialcoeff(p, [-x, 1])`.
   xs.foldlM (init := #[Fr.one]) fun p x =>
     multiplyPolynomialcoeff p #[-x, Fr.one]
 
 /-- Evaluate a coefficient-form polynomial at `z` by Horner's rule, from the last coefficient. -/
 def evaluatePolynomialcoeff
     (polynomialCoeff : PolynomialCoeff) (z : Fr) : Fr :=
+  -- evaluate_polynomialcoeff: `y = 0`, then `y = y * z + coef` over `polynomial_coeff[::-1]`.
   polynomialCoeff.foldr (init := Fr.zero) fun c y => y * z + c
 
 /-- Convert evaluation form to coefficient form via inverse FFT. -/
 def polynomialEvalToCoeff (polynomial : Polynomial) : PolynomialCoeff :=
+  -- polynomial_eval_to_coeff: `roots_of_unity = compute_roots_of_unity(FIELD_ELEMENTS_PER_BLOB)`.
   let roots := computeRootsOfUnity FIELD_ELEMENTS_PER_BLOB
+  -- `fft_field(bit_reversal_permutation(polynomial), roots_of_unity, inv=True)`.
   fftField (bitReversalPermutation polynomial) roots (inv := true)
 
 
