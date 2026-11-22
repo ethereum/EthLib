@@ -8,19 +8,13 @@ public import EthLib.Engine.PreparePayload
 
 The event of the Beacon API that gives the payload attributes of a proposal.
 
+It covers the forks from Bellatrix to Gloas.
+
 A beacon node sends it when it has computed the attributes for a slot.
-
-It names the slot, the proposer, and the parent block on both layers, from Bellatrix to Gloas.
-
-From Gloas it also names the safe and the finalized block hashes of the forkchoice update.
-
-The attributes are those of the Engine API, with two changes of spelling.
-
-Keys are in snake case, and integers are decimal text instead of hexadecimal.
 
 How often a node sends the event may depend on its configuration, so only its content is given.
 
-The [event stream] gives the fields of the event.
+The [event stream] gives the fields of the event, and a step comment names the field it follows.
 
 [event stream]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/eventstream/index.yaml#L143
 -/
@@ -69,17 +63,22 @@ def withdrawalFields (w : Execution.Blocks.Withdrawal) : List (String × Attribu
 
 Each fork has the fields of its version of the structure. -/
 def attributeFields (a : PayloadAttributes fork) : List (String × AttributeValue) :=
+  -- `PayloadAttributesV1`: `timestamp`, `prevRandao` and `suggestedFeeRecipient`.
   [("timestamp", .scalar (.quantity a.timestamp.toNat)),
       ("prevRandao", .scalar (.data a.prevRandao.toList)),
       ("suggestedFeeRecipient", .scalar (.data a.suggestedFeeRecipient.toList))] ++
+    -- `PayloadAttributesV2`, from Shapella, appends `withdrawals`.
     (if h : .shapella ≤ fork then
       [("withdrawals", .objects ((a.withdrawals h).map withdrawalFields))] else []) ++
+    -- `PayloadAttributesV3`, from Dencun, appends `parentBeaconBlockRoot`.
     (if h : .dencun ≤ fork then
       [("parentBeaconBlockRoot", .scalar (.data (a.parentBeaconBlockRoot h).toList))]
       else []) ++
+    -- `PayloadAttributesV4`, from Glamsterdam, appends `slotNumber` and `targetGasLimit`.
     (if h : .glamsterdam ≤ fork then
       [("slotNumber", .scalar (.quantity (a.slotNumber h).toNat)),
         ("targetGasLimit", .scalar (.quantity (a.targetGasLimit h).toNat))] else []) ++
+    -- `PayloadAttributesV5`, from Hegota, appends `inclusionListTransactions`.
     (if h : .hegota ≤ fork then
       [("inclusionListTransactions",
         .byteStrings ((a.inclusionListTransactions h).map (·.data.toList)))] else [])
@@ -91,6 +90,7 @@ def attributeFields (a : PayloadAttributes fork) : List (String × AttributeValu
 The export derivation has the same function at compile time only, so a specification cannot call it.
 -/
 def snakeName (name : String) : String :=
+  -- Difference 1: snake case identifiers rather than camel case.
   name.toList.foldl
     (fun out c => if c.isUpper then out ++ "_" ++ c.toLower.toString else out.push c) ""
 
@@ -101,6 +101,7 @@ def AttributeScalar.engineJson : AttributeScalar → Json
 
 /-- A value as the Beacon API writes it: an integer as decimal text. -/
 def AttributeScalar.apiJson : AttributeScalar → Json
+  -- Difference 2: integers as quoted decimals rather than big-endian hex.
   | .quantity n => .str (toString n)
   | .data bytes => dataJson bytes
 
@@ -126,6 +127,9 @@ def AttributeValue.apiJson : AttributeValue → Json
 
 /-- Payload attributes as the Beacon API writes them: snake case keys and decimal integers. -/
 def apiPayloadAttributesJson (a : PayloadAttributes fork) : Json :=
+  -- The payload attributes: the Beacon API encoding of `PayloadAttributesV<N>` of the Engine API.
+  --
+  -- It has the fields of the Engine API object, with the two differences of spelling.
   Json.mkObj ((attributeFields a).map fun (name, value) => (snakeName name, value.apiJson))
 
 /-! ## The event -/
@@ -166,29 +170,27 @@ The state must be at the slot of the proposal, after the empty slots and before 
 
 Its latest block header then holds the state root of the parent, which the event does not check.
 
-The slot is that of the state, and the proposer is the one that the state gives for it.
-
-The parent root is the root of the latest block header of the state.
-
-The parent block hash is the head of the update.
-
-From Gloas the safe and the finalized block hashes are those of the update.
-
-Until Gloas the number of the parent block is that of the latest payload header of the state.
-
-Before the merge it is the number of the terminal block of proof of work, which the caller gives.
-
 It fails when the proposer or the root of the header cannot be computed. -/
 def payloadAttributesEvent (state : BeaconState preset fork)
     (forks : .bellatrix ≤ fork ∧ fork < .hegota)
     (update : ForkchoiceState) (attributes : PayloadAttributes fork) (terminalNumber : UInt64) :
     Except ProposerError (PayloadAttributesEvent fork) := do
+  -- The proposer index: the proposer that the state at the proposal slot gives.
   let proposerIndex ← (getBeaconProposerIndex state).mapError .accessor
+  -- The parent block root: the root of the latest block header of the state.
   let parentBlockRoot ← (hashTreeRoot state.latestBlockHeader).mapError .ssz
+  -- The proposal slot is the slot of the state.
   return { proposerIndex, proposalSlot := state.slot, parentBlockRoot
+           -- Until Gloas, the parent block number: that of the latest payload header of the state.
+           --
+           -- Before the merge, it is the number of the terminal block of proof of work.
+           --
+           -- The caller gives that number.
            parentBlockNumber := fun before =>
              parentBlockNumber state ⟨forks.1, before⟩ terminalNumber
+           -- The parent block hash is the head of the update.
            parentBlockHash := update.headBlockHash
+           -- From Gloas, the safe and the finalized block hashes that the update passes.
            safeBlockHash := fun _ => update.safeBlockHash
            finalizedBlockHash := fun _ => update.finalizedBlockHash, attributes }
 
@@ -196,12 +198,16 @@ namespace PayloadAttributesEvent
 
 /-- The data of the event, as JSON. -/
 def dataJson (e : PayloadAttributesEvent fork) : Json :=
+  -- The proposer index and the proposal slot, as quoted decimals.
   Json.mkObj ([("proposer_index", uintJson e.proposerIndex),
       ("proposal_slot", uintJson e.proposalSlot)] ++
+    -- The parent block number, removed from Gloas onwards.
     (if h : fork < .glamsterdam then [("parent_block_number", uintJson (e.parentBlockNumber h))]
       else []) ++
+    -- The parent block root on the beacon chain, and the parent block hash on the execution chain.
     [("parent_block_root", ChainEvent.rootJson e.parentBlockRoot),
       ("parent_block_hash", Serialization.JsonRpc.dataJson e.parentBlockHash.toList)] ++
+    -- The safe and the finalized block hashes, added from Gloas onwards.
     (if h : .glamsterdam ≤ fork then
       [("safe_block_hash", Serialization.JsonRpc.dataJson (e.safeBlockHash h).toList),
         ("finalized_block_hash", Serialization.JsonRpc.dataJson (e.finalizedBlockHash h).toList)]
@@ -210,6 +216,7 @@ def dataJson (e : PayloadAttributesEvent fork) : Json :=
 
 /-- The event of the stream, with the consensus version of the fork beside its data. -/
 def toApiEvent (e : PayloadAttributesEvent fork) : ApiEvent :=
+  -- The version is the beacon fork at the proposal slot, beside the data.
   ⟨.payloadAttributes,
     { version := fork.consensusVersion?, data := e.dataJson : ApiEnvelope }.toJson⟩
 

@@ -10,33 +10,13 @@ public import EthLib.Engine.PayloadBodies
 
 The C export of `engine_getPayloadBodiesByHash` and `engine_getPayloadBodiesByRange`.
 
-The store crosses as a list of entries, one per block, with no hash twice.
-
-An entry holds the block hash, and its number if the block is canonical.
-
-Then come the fork of the block, its transactions, its withdrawals and its block access list.
-
-No two canonical entries share a number.
-
-The node serves every entry by its hash.
-
-The withdrawals are `None` exactly before Shapella.
-
-Each withdrawal is a tuple of the index, the validator index, the address and the amount.
-
-The block access list must be `None` before Glamsterdam, and is `None` from it when pruned.
-
-The fork is at most Glamsterdam.
+The store crosses as a list of entries, one per block.
 
 The number of the latest known block and the request limit cross beside the store.
-
-A canonical entry must hold the latest known block, and the limit must be at least 32.
 
 The request is a JSON-RPC request object, with its method and its parameters.
 
 The result is the JSON answer, as a Python value.
-
-A JSON-RPC error has the code of its Engine API error, without the sign: 32602 or 38004.
 
 A malformed store, block number or limit has code 0.
 
@@ -70,13 +50,20 @@ def storeField {α : Type} {f fork : Fork} (what : String) (x : Option α) :
 
 /-- The hash, the canonical number and the stored body of an entry. -/
 def storedOf (entry : BodyEntry) : Result (Bytes32 × Option Nat × StoredBody) := do
+  -- An entry holds the block hash, and its number if the block is canonical.
+  --
+  -- Then come the fork of the block, its transactions, its withdrawals and its block access list.
   let (hash, number, forkName, transactions, withdrawals, accessList) := entry
   -- The methods are specified up to Glamsterdam, the fork of their version 2.
   let fork ← EthLib.Exports.forkUpTo .glamsterdam forkName.toUTF8
+  -- Each withdrawal is a tuple of the index, the validator index, the address and the amount.
   let withdrawals := withdrawals.map fun ws =>
     ws.map fun (index, validatorIndex, address, amount) =>
       ({ index, validatorIndex, address, amount } : Withdrawal)
+  -- The withdrawals are `None` exactly before Shapella.
   let withdrawals ← storeField (f := .shapella) (fork := fork) "withdrawals" withdrawals
+  -- The block access list must be `None` before Glamsterdam, and is `None` from it when pruned.
+  --
   -- From Glamsterdam, `None` is a pruned list, so the field is always given there.
   let accessList ← storeField (f := .glamsterdam) (fork := fork) "block access list"
     (if .glamsterdam ≤ fork then some accessList else accessList.map some)
@@ -99,6 +86,7 @@ def payloadBodiesOf (args : List BodyEntry × Nat × Nat × PyValue) : Result Py
     rejectArgument none "store: two canonical entries at a number"
   let canonical (n : Nat) : Option StoredBody :=
     (entries.find? (·.2.1 == some n)).map (·.2.2)
+  -- A canonical entry must hold the latest known block, and the limit must be at least 32.
   if missing : (canonical latest).isSome = false then
     rejectArgument none s!"store: no canonical entry at the latest known block {latest}"
   else
@@ -106,6 +94,7 @@ def payloadBodiesOf (args : List BodyEntry × Nat × Nat × PyValue) : Result Py
     rejectArgument none s!"store: a limit of {maxRequest}, below {MIN_BODIES_REQUEST_LIMIT}"
   else
   let store : BodyStore := {
+    -- The node serves every entry by its hash.
     byHash := fun hash => (entries.find? (·.1 == hash)).map (·.2.2)
     canonical, latest, latest_held := Bool.not_eq_false _ ▸ missing
     maxRequest, le_maxRequest := Nat.not_lt.1 below }
@@ -114,6 +103,7 @@ def payloadBodiesOf (args : List BodyEntry × Nat × Nat × PyValue) : Result Py
     | rejectArgument none "request: no method"
   let some (version, byRange) := bodiesMethod method | rejectArgument none s!"no method {method}"
   let params := request.getObjValD "params"
+  -- A JSON-RPC error has the code of its Engine API error, without the sign: 32602 or 38004.
   let answer : Json ← match version, byRange with
     | 1, false =>
       let hashes ← toResult "engine error" (bodiesByHashParams params)
