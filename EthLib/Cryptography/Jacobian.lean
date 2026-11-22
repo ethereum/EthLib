@@ -7,7 +7,7 @@ public import EthLib.Cryptography.Inverse
 
 A point `(x, y)` of the curve `y^2 = x^3 + a x + b` has the Jacobian forms `(X, Y, Z)`.
 
-They satisfy `x = X / Z^2` and `y = Y / Z^3`, for any `Z != 0`.
+They satisfy `x = X / Z^2` and `y = Y / Z^3`, for any nonzero `Z`.
 
 A form with `Z = 0` is the point at infinity.
 

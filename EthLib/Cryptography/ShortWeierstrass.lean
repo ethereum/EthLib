@@ -93,7 +93,7 @@ The same formulas hold over any field of characteristic other than 2, such as `F
         --
         -- On the curve, the same `x` gives `y2 = y1` or `y2 = -y1`, so the points are equal here.
         --
-        -- Then `y1 != -y1`, so `y1 != 0`, as rule 5 asks.
+        -- Then `y1` differs from `-y1`, so `y1` is nonzero, as rule 5 asks.
         let l := (if (a : F) = 0 then 3 * x1 * x1 else 3 * x1 * x1 + a) * inv (2 * y1)
         -- Rule 5: `x3 = lambda^2 - 2 x1`, written `lambda^2 - x1 - x2` since `x1 = x2`.
         let x3 := l * l - x1 - x2

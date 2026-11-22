@@ -147,7 +147,9 @@ def mulNatAux : Nat → Coords → Nat → Coords
 
 /-! ## The values agree with `Fp` -/
 
-/-- The kernel evaluates the equality test of naturals directly, and the spec writes `==`. -/
+/-- The kernel evaluates the equality test of naturals directly.
+
+It agrees with the equality test that the spec writes. -/
 private theorem beq_eq (a b : Nat) : Nat.beq a b = (a == b) :=
   Bool.eq_iff_iff.mpr (by simp)
 

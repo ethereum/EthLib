@@ -9,7 +9,7 @@ public import Mathlib.NumberTheory.LucasPrimality
 Lucas' test proves `m` prime from a witness `g` whose order is `m - 1`.
 
 - `g^(m - 1) = 1` mod `m`.
-- `g^((m - 1) / q) != 1` mod `m`, for each prime `q` that divides `m - 1`.
+- `g^((m - 1) / q)` is not 1 mod `m`, for each prime `q` that divides `m - 1`.
 
 `prime_of_lucas` takes `m - 1` as a list of prime powers `q^e`.
 

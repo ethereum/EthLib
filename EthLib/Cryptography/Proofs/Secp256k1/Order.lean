@@ -22,7 +22,7 @@ A group of `2 n` points would hold a point of order 2, which is `(x, 0)` with `x
 
 No such `x` exists, because `-7` is not a cube mod `p`.
 
-The kernel checks that by Euler's criterion: `(-7)^((p - 1) / 3) != 1`, since `p = 1 mod 3`.
+The kernel checks that by Euler's criterion: `(-7)^((p - 1) / 3)` is not 1, since `p = 1 mod 3`.
 
 With `n` points, `n X = 0` for every point `X`, so the scalars of `Fn` act on the group.
 

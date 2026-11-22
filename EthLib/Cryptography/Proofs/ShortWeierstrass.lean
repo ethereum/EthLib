@@ -92,7 +92,7 @@ theorem add_of_x_ne {x1 y1 x2 y2 : F} (h1 : (curve a b).Nonsingular x1 y1) (h2 :
   subst hX hY
   exact ⟨_, Point.add_of_X_ne hx⟩
 
-/-- Rule 5: a point with `y != -y` doubles along the tangent.
+/-- Rule 5: a point whose `y` differs from `-y` doubles along the tangent.
 
 Its slope is `l = (3 x^2 + a) / (2 y)`. -/
 theorem add_self_of_y_ne {x y : F} (h : (curve a b).Nonsingular x y) (hy : y ≠ -y) {l x3 y3 : F}

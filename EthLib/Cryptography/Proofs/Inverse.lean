@@ -10,7 +10,7 @@ Each coefficient times `a` equals its remainder mod `m`, at every step.
 
 So at the end, the result times `a` is the gcd of `a` and `m`.
 
-For a prime `m` and `a != 0` the gcd is `1`, so the result is the inverse in `ZMod m`.
+For a prime `m` and a nonzero `a` the gcd is `1`, so the result is the inverse in `ZMod m`.
 
 For `a = 0` the result is `0`, as for the inverse of `ZMod m`.
 -/

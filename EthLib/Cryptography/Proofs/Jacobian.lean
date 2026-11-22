@@ -7,13 +7,13 @@ public import EthLib.Cryptography.Proofs.ShortWeierstrass
 /-!
 # Proofs: Jacobian coordinates follow the group law
 
-Each Jacobian form `(X, Y, Z)` with `Z != 0` gives the affine point `(X / Z^2, Y / Z^3)`.
+Each Jacobian form `(X, Y, Z)` with a nonzero `Z` gives the affine point `(X / Z^2, Y / Z^3)`.
 
 Doubling and addition of forms give the forms of the group's sums.
 
 So double and add on forms computes `k P`, and one shared chain of doublings computes `k P + l Q`.
 
-The proofs map each coordinate to the field `ZMod m`, for a prime `m != 2`.
+The proofs map each coordinate to the field `ZMod m`, for a prime `m` other than 2.
 
 A change of field representation commutes with every formula, on every form.
 
@@ -356,7 +356,7 @@ theorem toPoint_of_z_ne_zero {p : Jacobian m} (hp : OnCurve A B p) (hz : p.z ≠
 omit [(ShortWeierstrass.curve A B).IsElliptic] in
 theorem onCurve_infinity : OnCurve A B (infinity : Jacobian m) := fun h => absurd rfl h
 
-/-- A form with `Z != 0` and the affine point `(x, y)` is on the curve and maps to that point. -/
+/-- A form with a nonzero `Z` and affine values `(x, y)` is on the curve and maps to `(x, y)`. -/
 theorem spec_of_eq {r : Jacobian m} {x y : ZMod m}
     (h : (ShortWeierstrass.curve A B).Nonsingular x y) (hz : r.z ≠ 0)
     (hx : affX r = x) (hy : affY r = y) :
@@ -376,7 +376,7 @@ theorem toAffine_of_z_eq_zero {p : Jacobian m} (hz : p.z = 0) : p.toAffine = non
   simp [toAffine, Coords.toAffine, hz]
 
 omit [(ShortWeierstrass.curve A B).IsElliptic] in
-/-- A form with `Z != 0` gives the affine point `(X / Z^2, Y / Z^3)`. -/
+/-- A form with a nonzero `Z` gives the affine point `(X / Z^2, Y / Z^3)`. -/
 theorem toAffine_of_z_ne_zero {p : Jacobian m} (hz : p.z ≠ 0) :
     ∃ x y, p.toAffine = some (x, y) ∧ toZ x = affX p ∧ toZ y = affY p := by
   refine ⟨p.x * (Fin.inverse p.z * Fin.inverse p.z),
@@ -391,7 +391,7 @@ include ha h2
 
 /-- Doubling a form on the curve gives a form on the curve, with twice the group element.
 
-The formula must use the curve's `a`, and `2 != 0` in the field. -/
+The formula must use the curve's `a`, and 2 must be nonzero in the field. -/
 theorem double_spec {p : Jacobian m} (hp : OnCurve A B p) :
     OnCurve A B (double a p) ∧ toPoint A B (double a p) = toPoint A B p + toPoint A B p := by
   have hz3 : toZ (double a p).z = 2 * toZ p.y * toZ p.z := by
@@ -732,7 +732,7 @@ variable {G : Type} [OfNat G 0] [OfNat G 1] [Add G] [Sub G] [Mul G] [DecidableEq
 
 /-- Double and add stays on the curve.
 
-The representation must hold the curve's `a`, and `2 != 0` in `ZMod m`. -/
+The representation must hold the curve's `a`, and 2 must be nonzero in `ZMod m`. -/
 theorem isOnCurve_mulBits (hf : Embedding f A B) (hz : ∀ x, toZ x = f x)
     (hr : Representation encode inverse read) (ha : toZ (read a) = A) (h2 : (2 : ZMod m) ≠ 0)
     (fuel k : Nat) {p : Point (Fin m)} (hp : p.isOnCurve = true) :
