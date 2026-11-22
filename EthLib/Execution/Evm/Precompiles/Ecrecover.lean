@@ -8,7 +8,10 @@ public import EthLib.Execution.Evm.Machine.Memory
 /-!
 # `Evm.Precompiles.Ecrecover`
 
-The ECRECOVER precompile at address `0x01`, from Appendix E of the Yellow Paper.
+The ECRECOVER precompile at address `0x01`, from Appendix E of the Yellow Paper, Shanghai version.
+
+The source is `Paper.tex` at `efc5f9a`:
+<https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex>
 
 It returns the address that signed a 32-byte hash, so contracts can check signatures.
 
@@ -52,20 +55,27 @@ def GAS_ECRECOVER : Nat := 3000
 
 /-- 32 bytes of the call data from `start`, zero-padded on the right. -/
 def word (data : ByteArray) (start : Nat) : Vector UInt8 32 :=
+  -- `d[0..(||I_d|| - 1)] = I_d` and `d[||I_d||..] = (0, 0, ...)`.
   Vector.ofFn fun i => byteAt data (start + i.val)
 
 /-- The output for a hash and the integers `v`, `r` and `s`. -/
 def output (hash : Vector UInt8 32) (v r s : Nat) : ByteArray :=
-  -- `v` is 27 or 28, the recovery id plus 27.
+  -- `||o|| = 0` if `v` is not in `{27, 28}`.
   if hv : v = 27 ∨ v = 28 then
-    -- The recovery rejects `r` and `s` outside `[1, n - 1]`, as the Yellow Paper does first.
+    -- `||o|| = 0` if `r = 0 or r >= secp256k1n or s = 0 or s >= secp256k1n`.
+    --
+    -- The recovery makes that check, before it solves for the key.
+    --
+    -- `||o|| = 0` if `ECDSARECOVER(h, v - 27, r, s)` is empty.
     match Ecdsa.recover hash r s ⟨v - 27, by omega⟩ with
+    -- `o[0..11] = 0` and `o[12..31] = KEC(ECDSARECOVER(h, v - 27, r, s))[12..31]`.
     | .ok (.affine x y) => ⟨(List.replicate 12 0 ++ (address x y).toList).toArray⟩
     | _ => ByteArray.empty
   else ByteArray.empty
 
 /-- The operation of the precompile: read the four words, then compute the output. -/
 def compute (data : ByteArray) : ByteArray :=
+  -- `h = d[0..31]`, `v = d[32..63]`, `r = d[64..95]` and `s = d[96..127]`.
   output (word data 0) (Base.bytesToNat (word data 32).toList)
     (Base.bytesToNat (word data 64).toList) (Base.bytesToNat (word data 96).toList)
 
@@ -75,6 +85,7 @@ Returns the output, or the lack of gas that ends the call and consumes it all.
 
 The gas is charged first, then the operation runs. -/
 def ecrecover (data : ByteArray) (gas : Nat) : Except EcrecoverError ByteArray :=
+  -- `Xi_PRE`: the call fails if `g < g_r`, with `g_r = 3000`; else it returns `o`.
   if gas < GAS_ECRECOVER then .error (.outOfGas GAS_ECRECOVER gas) else .ok (compute data)
 
 end EthLib.Execution.Evm.Precompiles.Ecrecover
