@@ -80,16 +80,23 @@ instance : ToSpecValue BlobScheduleEntry :=
 instance : ToSpecValue GasLimitScheduleEntry :=
   ⟨fun entry => .entry [("EPOCH", entry.EPOCH.toNat), ("GAS_LIMIT", entry.GAS_LIMIT.toNat)]⟩
 
-/-- The JSON of a value in the spec map.
-
-An integer is a quoted decimal integer, and a byte string is lowercase hex after `0x`.
-
-A list is an array, and an entry of a schedule is an object. -/
+/-- The JSON of a value in the spec map. -/
 def specValueJson : SpecValue → Json
+  -- The source: a numeric value is returned as a quoted integer, decimal in its examples.
   | .int value => .str (toString value)
+  -- The source: a value that starts with `0x` is returned as a hex string.
+  --
+  -- EthLib writes lowercase hex after `0x`.
   | .bytes value => .str (hexString value)
+  -- The source does not say how to write a text, such as the name of a preset.
+  --
+  -- EthLib writes it as a string.
   | .text value => .str value
+  -- The source: an array value is returned as a JSON array.
   | .list items => .arr (items.map specValueJson).toArray
+  -- The example of the source writes an entry of the blob schedule as an object of quoted integers.
+  --
+  -- EthLib writes every entry of a schedule so, that of the gas limit too.
   | .entry fields => Json.mkObj (fields.map fun (name, value) => (name, .str (toString value)))
 
 /-- Each value of a preset under its name, with the four values that it derives from the others. -/
@@ -279,6 +286,9 @@ def configEntries (config : Config) : List (String × SpecValue) := [
 
 /-- The spec map of a configuration and a preset: each value under the name of the source. -/
 def specMap (config : Config) (preset : Preset) : List (String × Json) :=
+  -- The source: a map of the constants, the presets and the configuration of every known fork.
+  --
+  -- EthLib's map holds the configuration, then the presets, and no constants.
   (configEntries config ++ presetEntries preset).map fun (name, value) =>
     (name, specValueJson value)
 
@@ -289,6 +299,7 @@ def specMap (config : Config) (preset : Preset) : List (String × Json) :=
 It holds the version of the fork, the version of the next fork, and the epoch of the next fork. -/
 def nextForkEntry (config : Config) (fork : Fork) : Option ForkVersions :=
   (config.nextFork fork).map fun (next, epoch) =>
+    -- The fork object of the source: the version before, the version after, and the fork epoch.
     { previousVersion := config.forkVersion fork
       currentVersion := config.forkVersion next
       epoch }
@@ -297,14 +308,15 @@ def nextForkEntry (config : Config) (fork : Fork) : Option ForkVersions :=
 def forksBeforeHeze : List Fork :=
   [.phase0, .altair, .bellatrix, .shapella, .dencun, .pectra, .fusaka, .glamsterdam]
 
-/-- The fork schedule of a configuration, Phase 0 first.
-
-The entry of Phase 0 has the genesis version as both versions, and epoch 0.
-
-Each later consensus fork up to Heze follows, with the version before it and its fork epoch.
-
-A fork at the farthest epoch is listed too. -/
+/-- The fork schedule of a configuration, Phase 0 first. -/
 def forkSchedule (config : Config) : List ForkVersions :=
+  -- The source: every fork that the node knows, past, present and future.
+  --
+  -- Phase 0 has the genesis version as both versions, and epoch 0.
+  --
+  -- Each later consensus fork up to Heze follows, with the version before it and its fork epoch.
+  --
+  -- A fork at the farthest epoch, which is not yet scheduled, is listed too.
   { previousVersion := config.GENESIS_FORK_VERSION
     currentVersion := config.GENESIS_FORK_VERSION
     epoch := 0 } :: forksBeforeHeze.filterMap (nextForkEntry config)
@@ -327,6 +339,7 @@ instance : ApiSpelling DepositContract := .unmarked
 
 /-- The deposit contract of a configuration. -/
 def depositContract (config : Config) : DepositContract :=
+  -- The source: the ID of the chain of the deposit contract, and its address.
   { chainId := config.DEPOSIT_CHAIN_ID, address := config.DEPOSIT_CONTRACT_ADDRESS }
 
 /-- The genesis of the chain: its time, the root of its validators and its fork version. -/
@@ -347,13 +360,15 @@ instance : SszType GenesisInfo :=
 
 instance : ApiSpelling GenesisInfo := .unmarked
 
-/-- The genesis of the chain: the time and the root of its genesis state, and the genesis version.
-
-The version is the one of the configuration, which the domain of a deposit also uses. -/
+/-- The genesis of the chain: the time and root of its genesis state, and the genesis version. -/
 def genesisInfo {preset : Preset} {fork : Fork} (config : Config)
     (state : BeaconState preset fork) : GenesisInfo :=
+  -- The source: the genesis time, the root of the genesis validators and the genesis fork version.
+  --
+  -- The time and the root are those that the state records.
   { genesisTime := state.genesisTime
     genesisValidatorsRoot := state.genesisValidatorsRoot
+    -- EthLib takes the version of the configuration, which the domain of a deposit also uses.
     genesisForkVersion := config.GENESIS_FORK_VERSION }
 
 end EthLib.Consensus.BeaconApi

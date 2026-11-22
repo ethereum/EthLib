@@ -41,10 +41,12 @@ class ApiSpelling (α : Type) where
 
 /-- The JSON document of a value, as the API writes its data. -/
 def toApiJson {α : Type} [SszType α] [ApiSpelling α] (x : α) : Except Err Json :=
+  -- The JSON mapping of SSZ, with the spelling that the type declares.
   jsonOf (SszType.desc α) (ApiSpelling.spelling α) (SszType.toValue x)
 
 /-- The value that a JSON document holds, read as the API writes its data. -/
 def ofApiJson (α : Type) [SszType α] [ApiSpelling α] (document : Json) : Except Err α := do
+  -- The JSON mapping of SSZ read back with the spelling of the type, then the value it holds.
   SszType.ofValue (← valueOf (SszType.desc α) (ApiSpelling.spelling α) document)
 
 /-- The SSZ body of a response that carries a value. -/
@@ -88,6 +90,9 @@ namespace ApiEnvelope
 
 /-- The JSON object of an envelope, with each metadata field that is present. -/
 def toJson (envelope : ApiEnvelope) : Json :=
+  -- The source: the data under a data key at the top level, and the metadata in other keys.
+  --
+  -- Each metadata key is written only when the endpoint gives it.
   .mkObj <|
     (envelope.version.map fun v => ("version", Json.str v.name)).toList ++
     (envelope.executionOptimistic.map fun b => ("execution_optimistic", Json.bool b)).toList ++
@@ -99,13 +104,16 @@ def toJson (envelope : ApiEnvelope) : Json :=
 def readKey {β : Type} (document : Json) (key : String) (read : Json → Option β) :
     Except EnvelopeError (Option β) :=
   match document.getObjVal? key with
+  -- An absent key gives no value.
   | .error _ => .ok none
+  -- A present key must hold a value of its form.
   | .ok value => match read value with
     | some b => .ok (some b)
     | none => .error (.badField key)
 
 /-- A version, written as its exact name. -/
 def readVersion : Json → Option ConsensusVersion
+  -- The source: a string among the names of the consensus versions.
   | .str name => ConsensusVersion.ofName? name
   | _ => none
 
@@ -116,21 +124,20 @@ def readBool : Json → Option Bool
 
 /-- A root of 32 bytes, written as hex after its `0x` marker, with digits in either case. -/
 def readRoot : Json → Option Root
+  -- The source: a root is a string of `0x` and 64 hex digits, in either case, so 32 bytes.
   | .str text => match ofHex text with
     | .ok data => Base.exactBytes? 32 ⟨data⟩
     | .error _ => none
   | _ => none
 
-/-- The envelope that a JSON document holds.
-
-The document must be an object with data.
-
-Each metadata key that is present must hold a value of its form.
-
-Every other key is ignored. -/
+/-- The envelope that a JSON document holds. -/
 def ofJson (document : Json) : Except EnvelopeError ApiEnvelope := do
+  -- The source: every JSON response is an object with its data under the data key.
   let .obj _ := document | throw .notAnObject
   let .ok data := document.getObjVal? "data" | throw .missingData
+  -- Each metadata key that is present must hold a value of its form.
+  --
+  -- The source may add a key without a new version, so every other key is ignored.
   return {
     version := ← readKey document "version" readVersion
     executionOptimistic := ← readKey document "execution_optimistic" readBool
@@ -140,14 +147,14 @@ def ofJson (document : Json) : Except EnvelopeError ApiEnvelope := do
 
 end ApiEnvelope
 
-/-- The value that a response of one version carries.
-
-The envelope must name that version, and its data must hold a value of the type. -/
+/-- The value that a response of one version carries. -/
 def readVersioned (α : Type) [SszType α] [ApiSpelling α] (expected : ConsensusVersion)
     (document : Json) : Except EnvelopeError α := do
   let envelope ← ApiEnvelope.ofJson document
+  -- The envelope must name that version: the version selects the type of the data.
   unless envelope.version = some expected do
     throw (.wrongVersion expected envelope.version)
+  -- Its data must hold a value of the type.
   match ofApiJson α envelope.data with
   | .ok x => return x
   | .error fault => throw (.data fault)
@@ -180,6 +187,7 @@ namespace ErrorMessage
 
 /-- The JSON object of an error body. -/
 def toJson (error : ErrorMessage) : Json :=
+  -- The source: the code and the message, and the stack traces only when there are some.
   .mkObj <| [("code", Json.num error.code), ("message", Json.str error.message)] ++
     (error.stacktraces.map fun lines => ("stacktraces", Json.arr (lines.map .str).toArray)).toList
 
@@ -190,6 +198,11 @@ def readStrings : Json → Option (List String)
 
 /-- A code: a JSON number whose value is a natural number, however it is written. -/
 def readCode : Json → Option Nat
+  -- The source types the code as a JSON number.
+  --
+  -- EthLib reads a code only when it is a natural number.
+  --
+  -- A number m * 10^-e is a natural number when m >= 0 and 10^e divides m.
   | .num n =>
     if 0 ≤ n.mantissa ∧ (10 ^ n.exponent : Int) ∣ n.mantissa then
       some (n.mantissa / 10 ^ n.exponent).toNat
@@ -198,8 +211,10 @@ def readCode : Json → Option Nat
 
 /-- The error body that a JSON document holds. -/
 def ofJson (document : Json) : Option ErrorMessage := do
+  -- The source: a code and a message are required.
   let code ← readCode (← (document.getObjVal? "code").toOption)
   let .str message ← (document.getObjVal? "message").toOption | none
+  -- The source: the stack traces are optional, and present ones are a list of strings.
   let stacktraces ← match document.getObjVal? "stacktraces" with
     | .error _ => some none
     | .ok lines => (readStrings lines).map some
@@ -211,18 +226,21 @@ namespace IndexedErrorMessage
 
 /-- The JSON object of an error body that lists the failed items. -/
 def toJson (error : IndexedErrorMessage) : Json :=
+  -- The source: the code, the message, and each failure with its index and its message.
   .mkObj [("code", Json.num error.code), ("message", Json.str error.message),
     ("failures", Json.arr (error.failures.map fun (index, message) =>
       Json.mkObj [("index", Json.num index), ("message", Json.str message)]).toArray)]
 
 /-- One failure: the position of its item and a message. -/
 def readFailure (document : Json) : Option (Nat × String) := do
+  -- The source: the index of the item in the request, a number, and a message, both required.
   let index ← ErrorMessage.readCode (← (document.getObjVal? "index").toOption)
   let .str message ← (document.getObjVal? "message").toOption | none
   return (index, message)
 
 /-- The error body that a JSON document holds. -/
 def ofJson (document : Json) : Option IndexedErrorMessage := do
+  -- The source: a code, a message and a list of failures, all required.
   let code ← ErrorMessage.readCode (← (document.getObjVal? "code").toOption)
   let .str message ← (document.getObjVal? "message").toOption | none
   let .arr failures ← (document.getObjVal? "failures").toOption | none
