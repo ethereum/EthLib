@@ -20,7 +20,7 @@ An unknown name or fork, or an input that does not decode, has code 0.
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport toResult)
 
 /-- The JSON response of the committees endpoint. -/
 def apiCommitteesOf
@@ -29,7 +29,7 @@ def apiCommitteesOf
   let (name, fork, state, epoch, index, slot) := args
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let state ← decodeInput (BeaconState preset fork) state
-  let envelope ← apiError (BeaconApi.committeesResponse state epoch index slot)
+  let envelope ← toResult none (BeaconApi.committeesResponse state epoch index slot)
   return PyValue.ofJson envelope.toJson
 
 /-- The JSON response of the committees endpoint, as a `dict`.
@@ -46,7 +46,7 @@ def apiSyncCommitteesOf (args : String × String × ByteArray × Option UInt64) 
   let (name, fork, state, epoch) := args
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let state ← decodeInput (BeaconState preset fork) state
-  let envelope ← apiError (BeaconApi.syncCommitteesResponse state epoch)
+  let envelope ← toResult none (BeaconApi.syncCommitteesResponse state epoch)
   return PyValue.ofJson envelope.toJson
 
 /-- The JSON response of the sync committees endpoint, as a `dict`.
@@ -62,7 +62,7 @@ def apiPtcOf (args : String × String × ByteArray × Option PyValue × Option U
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let config ← configWithValue name replacements
   let state ← decodeInput (BeaconState preset fork) state
-  let envelope ← apiError (BeaconApi.ptcResponse config state slot)
+  let envelope ← toResult none (BeaconApi.ptcResponse config state slot)
   return PyValue.ofJson envelope.toJson
 
 /-- The JSON response of the PTC endpoint, as a `dict`.
@@ -80,7 +80,7 @@ def apiPtcSszOf (args : String × String × ByteArray × Option PyValue × Optio
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let config ← configWithValue name replacements
   let state ← decodeInput (BeaconState preset fork) state
-  apiError (BeaconApi.ptcSsz config state slot)
+  toResult none (BeaconApi.ptcSsz config state slot)
 
 /-- The SSZ body of the PTC answer, as `bytes`.
 

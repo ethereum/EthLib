@@ -25,11 +25,12 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Lean KeymanagerApi
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue pyExport rejectArgument toResult)
 
-/-- The result of a step of the Keymanager API, with the code of its error. -/
-def runKeymanager {α : Type} (result : Except KeymanagerError α) : Result α :=
-  result.mapError fun e => (e.code, s!"keymanager value rejected with code {e.code}")
+/-- A value that the Keymanager API rejects reaches Python with its code, as the message says. -/
+instance : ExportError KeymanagerError where
+  code := KeymanagerError.code
+  message e := s!"keymanager value rejected with code {e.code}"
 
 /-- The JSON parser and printer of the Lean toolchain, which the exports supply to the API. -/
 def toolchainJsonText : JsonText := ⟨Json.parse, Json.compress⟩
@@ -39,30 +40,30 @@ def keymanagerJsonOf (args : String × PyValue) : Result PyValue := do
   let (schema, document) := args
   let document := document.toJson
   let written ← match schema with
-    | "Pubkey" => runKeymanager do return Interchange.bytesJson (← readPubkey "" document)
-    | "EthAddress" => runKeymanager do return Interchange.bytesJson (← readEthAddress "" document)
-    | "Uint64" => runKeymanager do return Interchange.uint64Json (← readUint64 "" document)
-    | "Graffiti" | "Url" => runKeymanager do return stringJson (← readString "" document)
-    | "Signature" => runKeymanager do return Interchange.bytesJson (← readSignature "" document)
+    | "Pubkey" => toResult none do return Interchange.bytesJson (← readPubkey "" document)
+    | "EthAddress" => toResult none do return Interchange.bytesJson (← readEthAddress "" document)
+    | "Uint64" => toResult none do return Interchange.uint64Json (← readUint64 "" document)
+    | "Graffiti" | "Url" => toResult none do return stringJson (← readString "" document)
+    | "Signature" => toResult none do return Interchange.bytesJson (← readSignature "" document)
     | "Keystore" =>
-      runKeymanager do
+      toResult none do
         return embeddedJson toolchainJsonText (← readKeystore toolchainJsonText "" document)
     | "SlashingProtectionData" =>
-      runKeymanager do
+      toResult none do
         return slashingProtectionJson toolchainJsonText
           (← readSlashingProtection toolchainJsonText "" document)
     | "SignerDefinition" =>
-      runKeymanager do return signerDefinitionJson (← readSignerDefinition "" document)
+      toResult none do return signerDefinitionJson (← readSignerDefinition "" document)
     | "ImportRemoteSignerDefinition" =>
-      runKeymanager do
+      toResult none do
         return importRemoteSignerDefinitionJson (← readImportRemoteSignerDefinition "" document)
-    | "FeeRecipient" => runKeymanager do return feeRecipientJson (← readFeeRecipient "" document)
-    | "GasLimit" => runKeymanager do return gasLimitJson (← readGasLimit "" document)
+    | "FeeRecipient" => toResult none do return feeRecipientJson (← readFeeRecipient "" document)
+    | "GasLimit" => toResult none do return gasLimitJson (← readGasLimit "" document)
     | "ErrorResponse" =>
-      runKeymanager do return errorResponseJson (← readErrorResponse "" document)
+      toResult none do return errorResponseJson (← readErrorResponse "" document)
     | "SignedVoluntaryExit" =>
-      runKeymanager do signedVoluntaryExitJson (← readSignedVoluntaryExit "" document)
-    | _ => throw (0, s!"the Keymanager API has no schema {schema}")
+      toResult none do signedVoluntaryExitJson (← readSignedVoluntaryExit "" document)
+    | _ => rejectArgument none s!"the Keymanager API has no schema {schema}"
   return PyValue.ofJson written
 
 /-- A value of a schema of the Keymanager API, read from its JSON and written back.
@@ -88,7 +89,7 @@ def chainViewOf (chain : String × String × String × ByteArray) : Result Chain
   let preset ← presetOf name
   let config ← configOf configName
   let fork ← forkOf fork.toUTF8
-  let state ← EthLib.Exports.toResult "state rejected"
+  let state ← toResult "state rejected"
     (Serialization.Ssz.SszType.deserialize (BeaconState preset fork) data)
   return { preset, fork, config, state }
 
@@ -97,14 +98,14 @@ def keymanagerRunOf (args : Nat × Nat × ExecutionAddress × UInt64 × String �
     Option (String × String × String × ByteArray) × List (String × String × PyValue) ×
     PyValue) : Result (List (Nat × PyValue) × PyValue) := do
   let (memory, work, feeRecipient, gasLimit, graffiti, protection, chain, calls, builder) := args
-  let builder ← runKeymanager (readClientBuilderConfig builder.toJson)
+  let builder ← toResult none (readClientBuilderConfig builder.toJson)
   let chain ← match chain with
     | some chain => some <$> chainViewOf chain
     | none => pure none
   let config : ClientConfig :=
     { limits := { memory, work }, defaultFeeRecipient := feeRecipient,
       defaultGasLimit := gasLimit, defaultGraffiti := graffiti, builder }
-  let record ← runKeymanager
+  let record ← toResult none
     (readSlashingProtection toolchainJsonText "" (.str protection))
   let start : KeyState := { localKeys := [], remoteKeys := [], protection := record }
   let (responses, state) := calls.foldl (init := ([], start)) fun (responses, state) call =>

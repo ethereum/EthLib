@@ -26,17 +26,17 @@ An unknown name, query or fork, or an input that does not decode, has code 0.
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz Cryptography.Kzg
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport rejectArgument toResult)
 
 /-- The response to a query on a signed block. -/
 def blockQuery {preset : Preset} {fork : Fork} (block : SignedBeaconBlock preset fork)
     (query : String) : Result BeaconApi.ApiEnvelope :=
   match query with
-  | "block" => apiError (BeaconApi.blockResponse block)
-  | "root" => apiError (BeaconApi.blockRootResponse block)
-  | "attestations" => apiError (BeaconApi.blockAttestationsResponse block)
-  | "blinded_block" => apiError (BeaconApi.blindedBlockResponse block)
-  | _ => throw (0, s!"no block query is named {query}")
+  | "block" => toResult none (BeaconApi.blockResponse block)
+  | "root" => toResult none (BeaconApi.blockRootResponse block)
+  | "attestations" => toResult none (BeaconApi.blockAttestationsResponse block)
+  | "blinded_block" => toResult none (BeaconApi.blindedBlockResponse block)
+  | _ => rejectArgument none s!"no block query is named {query}"
 
 /-- The JSON response to a query on a signed block. -/
 def apiBlockQueryOf (args : String × String × ByteArray × String) : Result PyValue := do
@@ -58,9 +58,9 @@ def apiBlockQueryExport (args : PyValue) : Result PyValue := pyExport apiBlockQu
 def blockQuerySsz {preset : Preset} {fork : Fork} (block : SignedBeaconBlock preset fork)
     (query : String) : Result ByteArray :=
   match query with
-  | "block" => apiError (BeaconApi.blockSsz block)
-  | "blinded_block" => apiError (BeaconApi.blindedBlockSsz block)
-  | _ => throw (0, s!"no block query with an SSZ body is named {query}")
+  | "block" => toResult none (BeaconApi.blockSsz block)
+  | "blinded_block" => toResult none (BeaconApi.blindedBlockSsz block)
+  | _ => rejectArgument none s!"no block query with an SSZ body is named {query}"
 
 /-- The SSZ body of the answer to a query, from the preset, the fork and the SSZ of the block. -/
 def apiBlockQuerySszOf (args : String × String × ByteArray × String) : Result ByteArray := do
@@ -84,7 +84,7 @@ def apiBlobsOf
   let (name, fork, block, blobs, hashes) := args
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let block ← decodeInput (SignedBeaconBlock preset fork) block
-  let envelope ← apiError (BeaconApi.blobsResponse block blobs hashes)
+  let envelope ← toResult none (BeaconApi.blobsResponse block blobs hashes)
   return PyValue.ofJson envelope.toJson
 
 /-- The JSON response of the blobs endpoint, as a `dict`.
@@ -102,7 +102,7 @@ def apiBlobsSszOf
   let (name, fork, block, blobs, hashes) := args
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let block ← decodeInput (SignedBeaconBlock preset fork) block
-  apiError (BeaconApi.blobsSsz block blobs hashes)
+  toResult none (BeaconApi.blobsSsz block blobs hashes)
 
 /-- The SSZ body of the blobs answer, as `bytes`.
 
@@ -116,7 +116,7 @@ def apiHeaderOf (args : StoreCaseArgs ByteArray) : Result PyValue := do
   let ⟨preset, fork, config, store⟩ ←
     storeOfCase (name, fork, anchorState, anchorBlock, steps, verify)
   let block ← decodeInput (SignedBeaconBlock preset fork) block
-  let envelope ← apiError (BeaconApi.headerResponse config store block)
+  let envelope ← toResult none (BeaconApi.headerResponse config store block)
   return PyValue.ofJson envelope.toJson
 
 /-- The JSON response of the header endpoint for a signed block, as a `dict`.
@@ -133,7 +133,7 @@ def apiHeadersOf (args : StoreCaseArgs (List ByteArray × Option UInt64 × Optio
   let (name, fork, anchorState, anchorBlock, steps, verify, headers, slot, parentRoot) := args
   let ⟨_, _, config, store⟩ ← storeOfCase (name, fork, anchorState, anchorBlock, steps, verify)
   let headers ← headers.mapM (decodeInput SignedBeaconBlockHeader)
-  let envelope ← apiError (BeaconApi.headersResponse config store headers slot parentRoot)
+  let envelope ← toResult none (BeaconApi.headersResponse config store headers slot parentRoot)
   return PyValue.ofJson envelope.toJson
 
 /-- The JSON response of the headers endpoint, as a `dict`.
@@ -150,7 +150,7 @@ def apiColumnsOf (args : String × String × List ByteArray × Option (List UInt
   let (name, fork, sidecars, indices) := args
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let sidecars ← sidecars.mapM (decodeInput (DataColumnSidecar preset fork))
-  let envelope ← apiError (BeaconApi.columnsResponse sidecars indices)
+  let envelope ← toResult none (BeaconApi.columnsResponse sidecars indices)
   return PyValue.ofJson envelope.toJson
 
 /-- The JSON response of the columns endpoint, as a `dict`.
@@ -167,7 +167,7 @@ def apiColumnsSszOf (args : String × String × List ByteArray × Option (List U
   let (name, fork, sidecars, indices) := args
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let sidecars ← sidecars.mapM (decodeInput (DataColumnSidecar preset fork))
-  apiError (BeaconApi.columnsSsz sidecars indices)
+  toResult none (BeaconApi.columnsSsz sidecars indices)
 
 /-- The SSZ body of the columns answer, as `bytes`.
 
@@ -181,7 +181,7 @@ def apiPayloadEnvelopeOf (args : StoreCaseArgs (Root × ByteArray)) : Result PyV
   let ⟨preset, fork, _, store⟩ ←
     storeOfCase (name, fork, anchorState, anchorBlock, steps, verify)
   let signed ← decodeInput (SignedExecutionPayloadEnvelope preset fork) signed
-  let envelope ← apiError (BeaconApi.payloadEnvelopeResponse store root signed)
+  let envelope ← toResult none (BeaconApi.payloadEnvelopeResponse store root signed)
   return PyValue.ofJson envelope.toJson
 
 /-- The JSON response of the envelope endpoint, as a `dict`.
@@ -198,7 +198,7 @@ def apiPayloadEnvelopeSszOf (args : StoreCaseArgs (Root × ByteArray)) : Result 
   let ⟨preset, fork, _, store⟩ ←
     storeOfCase (name, fork, anchorState, anchorBlock, steps, verify)
   let signed ← decodeInput (SignedExecutionPayloadEnvelope preset fork) signed
-  apiError (BeaconApi.payloadEnvelopeSsz store root signed)
+  toResult none (BeaconApi.payloadEnvelopeSsz store root signed)
 
 /-- The SSZ body of the envelope answer, as `bytes`.
 
@@ -219,7 +219,7 @@ def apiCachedEnvelopeOf (args : String × String × Option (UInt64 × ByteArray)
   let (name, fork, cached, slot, root) := args
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let cache ← cachedEnvelopeInput preset fork cached
-  let answer ← apiError (BeaconApi.cachedEnvelopeResponse cache slot root)
+  let answer ← toResult none (BeaconApi.cachedEnvelopeResponse cache slot root)
   return PyValue.ofJson answer.toJson
 
 /-- The JSON response of the endpoint that gives a proposer its envelope, as a `dict`.
@@ -238,7 +238,7 @@ def apiCachedEnvelopeSszOf
   let (name, fork, cached, slot, root) := args
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let cache ← cachedEnvelopeInput preset fork cached
-  apiError (BeaconApi.cachedEnvelopeSsz cache slot root)
+  toResult none (BeaconApi.cachedEnvelopeSsz cache slot root)
 
 /-- The SSZ body of the endpoint that gives a proposer its envelope, as `bytes`.
 

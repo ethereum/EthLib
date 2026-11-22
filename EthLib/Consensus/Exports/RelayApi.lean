@@ -30,7 +30,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport toResult)
+open EthLib.Exports (Result PyValue pyExport rejectArgument toResult)
 
 /-- The SSZ bytes of the bid that a relay serves from a submission, under a key. -/
 def relaySubmissionBidOf (args : String × String × ByteArray × Cryptography.Bls.BLSPubkey) :
@@ -43,7 +43,7 @@ def relaySubmissionBidOf (args : String × String × ByteArray × Cryptography.B
       (SszType.deserialize (SubmitBlockRequest preset fork) data)
     let bid ← toResult "header rejected" (request.bid range pubkey)
     toResult "value rejected" (SszType.serialize bid)
-  else throw (0, s!"no Relay API submissions at {fork.name}")
+  else rejectArgument none s!"no Relay API submissions at {fork.name}"
 
 /-- The SSZ bytes of the bid that a relay serves from a submission, under a key.
 
@@ -65,7 +65,7 @@ def relayValidatorsOf (args : String × String × ByteArray × List ByteArray) :
     let documents ← response.mapM fun entry =>
       toResult "value rejected" (BeaconApi.toApiJson entry)
     return PyValue.ofJson (Lean.Json.arr documents.toArray)
-  else throw (0, s!"no Relay API list of validators at {fork.name}")
+  else rejectArgument none s!"no Relay API list of validators at {fork.name}"
 
 /-- At Fulu only: the list of validators that a relay serves, as a `list` of `dict`.
 
@@ -142,7 +142,7 @@ def relayReceivedKeepsExport (args : PyValue) : Result PyValue := pyExport relay
 /-- Delivered payloads, read from their JSON, sorted by value in an order and written back. -/
 def relaySortDeliveredOf (args : String × List PyValue) : Result PyValue := do
   let (name, documents) := args
-  let some order := RelayApi.OrderBy.ofName? name | throw (0, s!"unknown order {name}")
+  let some order := RelayApi.OrderBy.ofName? name | rejectArgument none s!"unknown order {name}"
   let entries ← documents.mapM fun document =>
     toResult "document rejected" (BeaconApi.ofApiJson RelayApi.BidTraceV2 document.toJson)
   let written ← (RelayApi.sortBy order entries).mapM fun entry =>

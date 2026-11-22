@@ -32,11 +32,11 @@ So has an argument that the query does not take, or a wrong count of identifiers
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport rejectArgument toResult)
 
 /-- The error of an argument that a query does not take, with code 0. -/
 def refuseArgument {α : Type} (query argument : String) : Result α :=
-  throw (0, s!"the query {query} takes no {argument}")
+  rejectArgument none s!"the query {query} takes no {argument}"
 
 /-- The response to a query on the registries of a state, from the texts of the request. -/
 def registryQuery {preset : Preset} {fork : Fork} (state : BeaconState preset fork)
@@ -44,39 +44,39 @@ def registryQuery {preset : Preset} {fork : Fork} (state : BeaconState preset fo
     Result BeaconApi.ApiEnvelope := do
   match query with
   | "validators" =>
-    let ids ← apiError (BeaconApi.readValidatorIds inQuery ids)
-    let filter ← apiError (BeaconApi.readStatusFilter statuses)
-    apiError (BeaconApi.validatorsResponse state ids filter)
+    let ids ← toResult none (BeaconApi.readValidatorIds inQuery ids)
+    let filter ← toResult none (BeaconApi.readStatusFilter statuses)
+    toResult none (BeaconApi.validatorsResponse state ids filter)
   | "validator" =>
     if !statuses.isEmpty then refuseArgument query "statuses"
     else if inQuery then refuseArgument query "query string"
     else
-      let [text] := ids | throw (0, "the query validator takes exactly one identifier")
-      let id ← apiError (BeaconApi.parseValidatorId text)
-      let entry ← apiError (BeaconApi.stateValidator state id)
-      let data ← apiError (entry.toJson.mapError fun fault =>
+      let [text] := ids | rejectArgument none "the query validator takes exactly one identifier"
+      let id ← toResult none (BeaconApi.parseValidatorId text)
+      let entry ← toResult none (BeaconApi.stateValidator state id)
+      let data ← toResult none (entry.toJson.mapError fun fault =>
         BeaconApi.internalError (reprStr fault))
       return { data }
   | "validator_balances" =>
     if !statuses.isEmpty then refuseArgument query "statuses"
     else
-      let ids ← apiError (BeaconApi.readValidatorIds inQuery ids)
-      apiError (BeaconApi.balancesResponse state ids)
+      let ids ← toResult none (BeaconApi.readValidatorIds inQuery ids)
+      toResult none (BeaconApi.balancesResponse state ids)
   | "validator_identities" =>
     if !statuses.isEmpty then refuseArgument query "statuses"
     else if inQuery then refuseArgument query "query string"
     else
-      let ids ← apiError (BeaconApi.readValidatorIds false ids)
-      apiError (BeaconApi.identitiesResponse state ids)
+      let ids ← toResult none (BeaconApi.readValidatorIds false ids)
+      toResult none (BeaconApi.identitiesResponse state ids)
   | "builders" =>
     if inQuery then refuseArgument query "query string"
     -- A state before Gloas gets its error before the identifiers and statuses are read.
     else if .glamsterdam ≤ fork then
-      let ids ← apiError (BeaconApi.readBuilderIds ids)
-      let filter ← apiError (statuses.mapM BeaconApi.BuilderStatus.parse)
-      apiError (BeaconApi.buildersResponse state ids filter)
-    else apiError (BeaconApi.buildersResponse state [] [])
-  | _ => throw (0, s!"no registry query is named {query}")
+      let ids ← toResult none (BeaconApi.readBuilderIds ids)
+      let filter ← toResult none (statuses.mapM BeaconApi.BuilderStatus.parse)
+      toResult none (BeaconApi.buildersResponse state ids filter)
+    else toResult none (BeaconApi.buildersResponse state [] [])
+  | _ => rejectArgument none s!"no registry query is named {query}"
 
 /-- The JSON response to a query on the registries of a state. -/
 def apiRegistryQueryOf
@@ -104,8 +104,8 @@ def apiValidatorBalancesSszOf
   let (name, fork, state, ids, inQuery) := args
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let state ← decodeInput (BeaconState preset fork) state
-  let ids ← apiError (BeaconApi.readValidatorIds inQuery (ids.getD []))
-  apiError (BeaconApi.balancesSsz state ids)
+  let ids ← toResult none (BeaconApi.readValidatorIds inQuery (ids.getD []))
+  toResult none (BeaconApi.balancesSsz state ids)
 
 /-- The SSZ body of the balances answer, as `bytes`.
 

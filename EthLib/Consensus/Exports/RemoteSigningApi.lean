@@ -28,18 +28,20 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Lean Base RemoteSigningApi
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport toResult)
 
-/-- The code and the message of a document that is not a request, on one line. -/
-def requestFault (error : RequestError) : UInt32 × String :=
-  (error.code, s!"request rejected: {(repr error).pretty 1000}")
+/-- A document that is not a request reaches Python with its code, and its message on one line. -/
+instance : ExportError RequestError where
+  code := RequestError.code
+  message e := (repr e).pretty 1000
 
 /-- A request of the Remote-signing API, read and written again. -/
 def readSigningRequestOf (args : String × PyValue) : Result PyValue := do
   let (name, document) := args
   let preset ← presetOf name
-  let request ← (SigningRequest.ofJson preset document.toJson).mapError requestFault
-  let written ← (request.toJson).mapError fun fault => (0, s!"request not written: {reprStr fault}")
+  let request ← toResult "request rejected" (SigningRequest.ofJson preset document.toJson)
+  let written ← toResult none ((request.toJson).mapError fun fault =>
+    UnreadArgument.mk s!"request not written: {reprStr fault}")
   return PyValue.ofJson written
 
 /-- A request of the Remote-signing API, read and written again as the signer reads it.
@@ -60,9 +62,9 @@ def signingRequestRootOf (args : String × String × PyValue) : Result ByteArray
   let (name, configName, document) := args
   let preset ← presetOf name
   let config ← configOf configName
-  let request ← (SigningRequest.ofJson preset document.toJson).mapError requestFault
-  let root ← (requestSigningRoot config request).mapError fun fault =>
-    (0, s!"root not computed: {reprStr fault}")
+  let request ← toResult "request rejected" (SigningRequest.ofJson preset document.toJson)
+  let root ← toResult none ((requestSigningRoot config request).mapError fun fault =>
+    UnreadArgument.mk s!"root not computed: {reprStr fault}")
   return ⟨root.toArray⟩
 
 /-- The root that a remote signer signs for a request of the Remote-signing API.
@@ -80,8 +82,9 @@ def signingRequestRootExport (args : PyValue) : Result PyValue :=
 
 /-- The secret keys of a signer, each 32 big-endian bytes, or code 0 for a key that is not one. -/
 def secretKeysOf (keys : List ByteArray) : Result (List Cryptography.Bls.Signatures.SecretKey) :=
-  keys.mapM fun key => (Cryptography.Bls.Signatures.SecretKey.fromBytes key).mapError fun _ =>
-    (0, "a secret key is not 32 bytes below the group order, or is zero")
+  keys.mapM fun key => toResult none
+    ((Cryptography.Bls.Signatures.SecretKey.fromBytes key).mapError fun _ =>
+      UnreadArgument.mk "a secret key is not 32 bytes below the group order, or is zero")
 
 /-- The answer of the sign endpoint of a signer, and its record after the call. -/
 def remoteSignerSignOf (args : String × String × List ByteArray × ByteArray × String × PyValue) :
@@ -114,8 +117,8 @@ def remoteSignerSignExport (args : PyValue) : Result PyValue :=
 /-- The answer of the public keys endpoint of a signer that holds some secret keys. -/
 def remoteSignerPublicKeysOf (keys : List ByteArray) : Result PyValue := do
   let state : SignerState := ⟨← secretKeysOf keys, ⟨Vector.replicate 32 0, []⟩⟩
-  let document ← (publicKeysJson (publicKeys state)).mapError fun fault =>
-    (0, s!"keys not written: {reprStr fault}")
+  let document ← toResult none ((publicKeysJson (publicKeys state)).mapError fun fault =>
+    UnreadArgument.mk s!"keys not written: {reprStr fault}")
   return PyValue.ofJson document
 
 /-- The answer of the public keys endpoint of a remote signer: its public keys as hex.

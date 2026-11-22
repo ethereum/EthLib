@@ -22,17 +22,18 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Lean Base Cryptography.Bls
-open EthLib.Exports (Result)
+open EthLib.Exports (ExportError Result UnreadArgument rejectArgument toResult)
 
-/-- The result of a step of slashing protection, with the code of its error. -/
-def runProtection {α : Type} (result : Except SlashingProtectionError α) : Result α :=
-  result.mapError fun e => (e.code, s!"slashing protection failed with code {e.code}")
+/-- A failed step of slashing protection reaches Python with its code, which the message names. -/
+instance : ExportError SlashingProtectionError where
+  code := SlashingProtectionError.code
+  message e := s!"slashing protection failed with code {e.code}"
 
 /-- An interchange file from its JSON text. -/
 def interchangeOf (text : ByteArray) : Result Interchange := do
-  let some text := String.fromUTF8? text | throw (0, "the interchange is not UTF-8")
-  let .ok document := Json.parse text | throw (0, "the interchange is not JSON")
-  runProtection (Interchange.ofJson document)
+  let some text := String.fromUTF8? text | rejectArgument none "the interchange is not UTF-8"
+  let .ok document := Json.parse text | rejectArgument none "the interchange is not JSON"
+  toResult none (Interchange.ofJson document)
 
 /-- The JSON text of an interchange file. -/
 def interchangeText (interchange : Interchange) : ByteArray :=
@@ -40,7 +41,8 @@ def interchangeText (interchange : Interchange) : ByteArray :=
 
 /-- Bytes of a fixed length, or code 0 with a message that names them. -/
 def fixedBytesOf (what : String) (size : Nat) (bytes : ByteArray) : Result (Vector UInt8 size) :=
-  Base.exactBytes size bytes fun actual => (0, s!"{what} is {size} bytes, not {actual}")
+  toResult none (Base.exactBytes size bytes fun actual =>
+    UnreadArgument.mk s!"{what} is {size} bytes, not {actual}")
 
 /-- An interchange file as the format writes it again, from its JSON text. -/
 @[export eth_consensus_read_slashing_interchange]
@@ -54,7 +56,7 @@ It returns the record, or the code of the error of a file of another chain. -/
 def importSlashingInterchangeExport (held file : ByteArray) : Result ByteArray := do
   let held ← interchangeOf held
   let file ← interchangeOf file
-  return interchangeText (← runProtection (held.importChecked file))
+  return interchangeText (← toResult none (held.importChecked file))
 
 /-- Whether a key may sign a block of a slot with a signing root, given a record.
 
@@ -65,7 +67,7 @@ def checkBlockSigningExport (text pubkey : ByteArray) (slot : UInt64) (signingRo
   let interchange ← interchangeOf text
   let pubkey ← fixedBytesOf "the public key" 48 pubkey
   let signingRoot ← fixedBytesOf "the signing root" 32 signingRoot
-  runProtection (interchange.checkBlock pubkey slot signingRoot)
+  toResult none (interchange.checkBlock pubkey slot signingRoot)
   return true
 
 /-- Whether a key may sign a vote of two epochs with a signing root, given a record.
@@ -77,7 +79,7 @@ def checkAttestationSigningExport (text pubkey : ByteArray) (sourceEpoch targetE
   let interchange ← interchangeOf text
   let pubkey ← fixedBytesOf "the public key" 48 pubkey
   let signingRoot ← fixedBytesOf "the signing root" 32 signingRoot
-  runProtection (interchange.checkAttestation pubkey sourceEpoch targetEpoch signingRoot)
+  toResult none (interchange.checkAttestation pubkey sourceEpoch targetEpoch signingRoot)
   return true
 
 /-- The record after a key signs a block, as JSON text. -/
