@@ -65,9 +65,6 @@ omit [FieldOps F] in
 protected theorem ext {a b : Fp2 F} (h0 : a.c0 = b.c0) (h1 : a.c1 = b.c1) : a = b := by
   cases a; cases b; simp_all
 
-instance : Zero (Fp2 F) := ⟨zero⟩
-instance : One (Fp2 F) := ⟨one⟩
-
 /-! The field operations of the extension are its own operations. -/
 
 @[simp] theorem fieldOps_zero : (FieldOps.zero : Fp2 F) = 0 := rfl

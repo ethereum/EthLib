@@ -5,7 +5,9 @@ public import EthLib.Cryptography.Jacobian
 /-!
 # Short Weierstrass curves
 
-The curve `E: y^2 = x^3 + a x + b` over a prime field, written once for every such curve.
+The curve `E: y^2 = x^3 + a x + b` over a field of characteristic other than 2.
+
+It is written once for every such curve.
 
 A point is the point at infinity `O`, or a pair `(x, y)` that satisfies the equation.
 
@@ -15,7 +17,9 @@ The points form a group under the addition rule of SEC 1 v2 §2.2.1.
 
 The rule is written in affine coordinates, as SEC 1 prints it.
 
-Scalar multiplication runs in Jacobian coordinates instead, with one inverse at the end.
+Scalar multiplication over a prime field runs in Jacobian coordinates instead.
+
+It takes one inverse, at the end.
 
 Each curve gives its field, the constants `a` and `b`, and the inverse that its rule uses.
 -/
@@ -68,32 +72,39 @@ def neg : Point F → Point F
   | infinity => infinity
   | affine x y => affine x (-y)
 
-/-- The sum of two points, by the addition rule of SEC 1 v2 §2.2.1.
+/-- The sum of two points, by the addition rule of [SEC 1 v2][sec1] §2.2.1.
 
-- Rules 1 and 2: `O + P = P + O = P`.
-- Rule 3: `(x, y) + (x, -y) = O`.
-- Rule 4, for `x1 != x2`: the chord's slope `l = (y2 - y1) / (x2 - x1)`.
-- Rule 5, for `P + P` with `y1 != 0`: the tangent's slope `l = (3 x1^2 + a) / (2 y1)`.
+SEC 1 states the rule over a prime field.
 
-Rules 4 and 5 then give `x3 = l^2 - x1 - x2` and `y3 = l (x1 - x3) - y1`.
+The same formulas hold over any field of characteristic other than 2, such as `Fp2`.
 
-Rule 5 writes `x3 = l^2 - 2 x1`, which is `l^2 - x1 - x2` when `x1 = x2`. -/
+[sec1]: https://www.secg.org/sec1-v2.pdf
+-/
 @[specialize] def add : Point F → Point F → Point F
+  -- Rules 1 and 2: `O + O = O` and `(x, y) + O = O + (x, y) = (x, y)`.
   | infinity, q => q
   | p, infinity => p
   | affine x1 y1, affine x2 y2 =>
     if x1 = x2 then
-      -- The same x: two points of the curve are then equal, or opposite.
+      -- Rule 3: `(x, y) + (x, -y) = O`.
       if y2 = -y1 then infinity
       else
-        -- Doubling, with the tangent's slope; when `a = 0`, the term `a` is skipped.
+        -- Rule 5: `lambda = (3 x1^2 + a) / (2 y1)`; when `a = 0`, the term `a` is skipped.
+        --
+        -- On the curve, the same `x` gives `y2 = y1` or `y2 = -y1`, so the points are equal here.
+        --
+        -- Then `y1 != -y1`, so `y1 != 0`, as rule 5 asks.
         let l := (if (a : F) = 0 then 3 * x1 * x1 else 3 * x1 * x1 + a) * inv (2 * y1)
+        -- Rule 5: `x3 = lambda^2 - 2 x1`, written `lambda^2 - x1 - x2` since `x1 = x2`.
         let x3 := l * l - x1 - x2
+        -- Rule 5: `y3 = lambda (x1 - x3) - y1`.
         affine x3 (l * (x1 - x3) - y1)
     else
-      -- Two different x: the chord's slope.
+      -- Rule 4: `lambda = (y2 - y1) / (x2 - x1)`.
       let l := (y2 - y1) * inv (x2 - x1)
+      -- Rule 4: `x3 = lambda^2 - x1 - x2`.
       let x3 := l * l - x1 - x2
+      -- Rule 4: `y3 = lambda (x1 - x3) - y1`.
       affine x3 (l * (x1 - x3) - y1)
 
 instance : Add (Point F) := ⟨add⟩

@@ -180,7 +180,7 @@ theorem linefunc_eq_line {x₁ y₁ x₂ y₂ : Fp2} (h₁ : (Point2.affine x₁
       simp only [ne_eq, not_true_eq_false, ite_false, ite_true, true_and, hny]
       rw [slopeLine_eq, slope_of_Y_ne rfl (by rwa [ShortWeierstrass.negY_eq]),
         ShortWeierstrass.negY_eq]
-      simp only [ShortWeierstrass.curve, Fp2.ofFp_two, Fp2.ofFp_three, Fp2.inv_eq_inv]
+      simp only [ShortWeierstrass.curve, Fp2.inv_eq_inv]
       have hl : 3 * x₁ * x₁ * (2 * y₁)⁻¹ =
           (3 * x₁ ^ 2 + 2 * 0 * x₁ + 0 - 0 * y₁) / (y₁ - -y₁) := by
         rw [show y₁ - -y₁ = 2 * y₁ by ring]
@@ -373,9 +373,7 @@ private theorem millerLoop_eq (q : Point2) (xp yp : Fp) :
       (loopSteps q xp yp 64 (Fp12.one, q)).1 *
         linefunc (loopSteps q xp yp 64 (Fp12.one, q)).2 (frobenius q) xp yp *
         linefunc ((loopSteps q xp yp 64 (Fp12.one, q)).2 + frobenius q)
-          (match frobenius (frobenius q) with
-            | .affine x y => .affine x (-y)
-            | .infinity => .infinity) xp yp := by
+          (-frobenius (frobenius q)) xp yp := by
   rw [← foldl_loopStep]
   rfl
 
@@ -512,6 +510,8 @@ theorem pairing_eq_finalExponentiation_loop {Q : Point2} (hQ : Q.isOnCurve = tru
     have hq2r := frobenius_order hq1 hq1r
     obtain ⟨X2, Y2, hq2eq⟩ : ∃ X2 Y2, frobenius (frobenius Q) = .affine X2 Y2 := ⟨_, _, rfl⟩
     rw [hq2eq] at hq2 hq2u hq2r ⊢
+    -- The negation of the rule keeps `x` and negates `y`.
+    rw [show -Point2.affine X2 Y2 = Point2.affine X2 (-Y2) from rfl]
     obtain ⟨hn2, hn2u⟩ := toPoint_affine_neg hq2
     have hn2r : Fr.modulus • (Point2.affine X2 (-Y2)).toPoint = 0 := by
       simp [hn2u, hq2r]
@@ -525,7 +525,7 @@ theorem pairing_eq_finalExponentiation_loop {Q : Point2} (hQ : Q.isOnCurve = tru
       exact hne _ (by decide +kernel) le_rfl
     have hq10 : frobenius Q ≠ .infinity := by
       simp only [Q, frobenius]
-      exact fun h => Point2.noConfusion h
+      exact fun h => by cases h
 
     have e1 : ATE_LOOP_COUNT • untwist Q.toPoint = untwist R.toPoint := by rw [hR, map_nsmul]
     have e3 : -frobeniusHom (frobeniusHom (untwist Q.toPoint)) =
@@ -549,7 +549,7 @@ theorem pairing_eq_finalExponentiation_loop {Q : Point2} (hQ : Q.isOnCurve = tru
       · rw [linefunc_eq_line_of_order (Point2.isOnCurve_add hRc hq1) hn2
           (by rw [Point2.toPoint_add hRc hq1, nsmul_add, hRr, hq1r, add_zero]) h0
 
-          (fun h => Point2.noConfusion h)]
+          (fun h => by cases h)]
     rw [e3, ← hq1u, e1, ← map_add, ← Point2.toPoint_add hRc hq1]
     simp only [finalExponentiation_mul]
     rw [hF, linefunc_eq_line_of_order hRc hq1 hRr hR0 hq10, hl2]
