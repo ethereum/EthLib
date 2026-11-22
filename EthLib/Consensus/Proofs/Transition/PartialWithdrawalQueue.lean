@@ -352,7 +352,7 @@ theorem blockExecution_departureQueues {fork : Fork}
 /-- The head of a block moves only the partial withdrawals among the departure queues. -/
 theorem blockHead_departureQueues {fork : Fork} (electra : .pectra ≤ fork)
     {s headed executed revealed voted : BeaconState preset fork}
-    {block : BeaconBlock preset fork} {before : fork < .hegota} {taken : Nat}
+    {block : BeaconBlock preset fork} {before : fork < .hegota} {taken : UInt64}
     (headedOk : processBlockHeader s block = .ok headed)
     (executedFrame : departureQueues electra executed =
       departureQueues electra (updatePendingPartialWithdrawals headed electra taken))
@@ -473,9 +473,10 @@ theorem justification_departureQueues {fork : Fork} {s t : BeaconState preset fo
 
 /-- The pending partial withdrawals that a payment read are the ones it removes from the front. -/
 theorem updatePendingPartialWithdrawals_toList {fork : Fork} (state : BeaconState preset fork)
-    (electra : .pectra ≤ fork) (count : ℕ) :
+    (electra : .pectra ≤ fork) (count : UInt64) :
     ((updatePendingPartialWithdrawals state electra count).pendingPartialWithdrawals
-      electra).data.toList = (state.pendingPartialWithdrawals electra).data.toList.drop count := by
+      electra).data.toList =
+        (state.pendingPartialWithdrawals electra).data.toList.drop count.toNat := by
   simp only [updatePendingPartialWithdrawals, Array.toList_extract, List.extract_eq_take_drop]
   exact List.take_of_length_le (by simp)
 
@@ -486,12 +487,13 @@ theorem getExpectedWithdrawals_partials {fork : Fork} {state : BeaconState prese
     (ok : getExpectedWithdrawals state capella = .ok expected) :
     ∃ (partials : Array Withdrawal) (next : WithdrawalIndex),
       getPendingPartialWithdrawals state electra (state.nextWithdrawalIndex capella) #[] =
-        .ok (partials, next, expected.processedPartialWithdrawalsCount) := by
+        .ok (partials, next, expected.processedPartialWithdrawalsCount.toNat) := by
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
   unfold getExpectedWithdrawals at ok
   simp only [notGloas, electra, ↓reduceDIte, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at ok
-  obtain ⟨_, rfl, ⟨partials, next, count⟩, partialsOk, _, rfl, _, _, rfl⟩ := ok
+    Except.ok.injEq, liftCount_ok_iff] at ok
+  obtain ⟨_, rfl, ⟨partials, next, count⟩, partialsOk, _, rfl, _, _, _, -, _, ⟨-, rfl⟩, _, -, _, -,
+    rfl⟩ := ok
   exact ⟨partials, next, partialsOk⟩
 
 end EthLib.Consensus

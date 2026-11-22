@@ -1205,7 +1205,7 @@ private theorem PartialsAt.transfer {f : Fork} {s t : BeaconState preset f} {rea
   exact UInt64.le_trans reached forward
 
 private theorem PartialsAt.drop {f : Fork} {s : BeaconState preset f} {reached : Prop}
-    (held : PartialsAt reached s) (electra : .pectra ≤ f) (count : Nat) :
+    (held : PartialsAt reached s) (electra : .pectra ≤ f) (count : UInt64) :
     PartialsAt reached (updatePendingPartialWithdrawals s electra count) := by
   intro witness entry member
   apply held witness entry

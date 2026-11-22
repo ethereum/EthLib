@@ -2716,7 +2716,7 @@ private def blockPartialsTaken {fork : Fork} (state : BeaconState preset fork)
     (block : BeaconBlock preset fork) : Nat :=
   if capella : .shapella ≤ fork then
     (((processBlockHeader state block >>= (getExpectedWithdrawals · capella)).toOption).map
-      (·.processedPartialWithdrawalsCount)).getD 0
+      (·.processedPartialWithdrawalsCount.toNat)).getD 0
   else 0
 
 private theorem block_indexedTrace_sites {fork : Fork} (electra : .pectra ≤ fork)
@@ -2873,7 +2873,7 @@ private theorem block_indexedTrace_sites {fork : Fork} (electra : .pectra ≤ fo
   obtain ⟨planned, plannedOk, executedFrame⟩ :=
     blockExecution_departureQueues electra early executedOk
   have headFrame := blockHead_departureQueues electra headedOk executedFrame revealedOk votedOk
-  have taken : blockPartialsTaken s block = planned.processedPartialWithdrawalsCount := by
+  have taken : blockPartialsTaken s block = planned.processedPartialWithdrawalsCount.toNat := by
     simp [blockPartialsTaken, capella, headedOk, plannedOk, Except.toOption, bind, Except.bind]
   have headQueue :
       headed.pendingPartialWithdrawals electra = s.pendingPartialWithdrawals electra := by
@@ -2942,7 +2942,8 @@ private theorem block_indexedTrace_sites {fork : Fork} (electra : .pectra ≤ fo
     change (t.pendingPartialWithdrawals electra).data.toList =
       (operated.pendingPartialWithdrawals electra).data.toList at last
     change (voted.pendingPartialWithdrawals electra).data.toList =
-      ((s.pendingPartialWithdrawals electra).data.extract planned.processedPartialWithdrawalsCount
+      ((s.pendingPartialWithdrawals electra).data.extract
+        planned.processedPartialWithdrawalsCount.toNat
         (s.pendingPartialWithdrawals electra).data.size).toList at head
     rw [last, requestsAppended, firstAppended, head, taken, List.filterMap_append,
       List.append_assoc]
@@ -5748,7 +5749,7 @@ private theorem block_exit_sites {fork : Fork} (electra : .pectra ≤ fork)
   obtain ⟨planned, plannedOk, executedFrame⟩ :=
     blockExecution_departureQueues electra early executedOk
   have headFrame := blockHead_departureQueues electra headedOk executedFrame revealedOk votedOk
-  have taken : blockPartialsTaken s block = planned.processedPartialWithdrawalsCount := by
+  have taken : blockPartialsTaken s block = planned.processedPartialWithdrawalsCount.toNat := by
     simp [blockPartialsTaken, capella, headedOk, plannedOk, Except.toOption, bind, Except.bind]
   obtain ⟨_, synced⟩ := processSyncAggregate_eq syncedOk
   have tailFrame : departureQueues electra t = departureQueues electra operated := by
@@ -5781,7 +5782,8 @@ private theorem block_exit_sites {fork : Fork} (electra : .pectra ≤ fork)
     change (t.pendingPartialWithdrawals electra).data.toList =
       (operated.pendingPartialWithdrawals electra).data.toList at lastQueue
     change (voted.pendingPartialWithdrawals electra).data.toList =
-      ((s.pendingPartialWithdrawals electra).data.extract planned.processedPartialWithdrawalsCount
+      ((s.pendingPartialWithdrawals electra).data.extract
+        planned.processedPartialWithdrawalsCount.toNat
         (s.pendingPartialWithdrawals electra).data.size).toList at firstQueue
     rw [lastQueue, appended, firstQueue, taken]
     simp
@@ -5898,13 +5900,14 @@ private theorem expected_partial_pass {fork : Fork} {state : BeaconState preset 
     ∃ partials next,
       getPendingPartialWithdrawals state electra
         (state.nextWithdrawalIndex (Nat.le_trans (by decide) electra)) #[] =
-          .ok (partials, next, expected.processedPartialWithdrawalsCount) := by
+          .ok (partials, next, expected.processedPartialWithdrawalsCount.toNat) := by
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
   unfold getExpectedWithdrawals at computed
   simp only [notGloas, electra, ↓reduceDIte, pure, Except.pure, bind_ok_iff,
-    Except.ok.injEq] at computed
+    Except.ok.injEq, liftCount_ok_iff] at computed
   obtain ⟨⟨builders, index1, count1⟩, first, ⟨partials, index2, count2⟩, partialsOk,
-    ⟨buildersSweep, index3, count3⟩, third, ⟨sweep, index4, count4⟩, _, rfl⟩ := computed
+    ⟨buildersSweep, index3, count3⟩, third, ⟨sweep, index4, count4⟩, _, _, -, _, ⟨-, rfl⟩, _, -,
+    _, -, rfl⟩ := computed
   cases first
   cases third
   exact ⟨partials, index2, partialsOk⟩
@@ -5942,9 +5945,9 @@ private theorem partial_event_expected_le (charged : PartialCost (config := conf
     (computed : getExpectedWithdrawals state (Nat.le_trans (by decide) electra) = .ok expected) :
     cost ⟨.withdrawals, ⟨fork, state⟩, ⟨fork, finish⟩, credit, debit⟩ ≤
       ((((state.pendingPartialWithdrawals electra).data.toList.take
-        expected.processedPartialWithdrawalsCount).filter keep).map (·.amount.toNat)).sum ∧
+        expected.processedPartialWithdrawalsCount.toNat).filter keep).map (·.amount.toNat)).sum ∧
       ∀ entry ∈ (state.pendingPartialWithdrawals electra).data.toList.take
-        expected.processedPartialWithdrawalsCount,
+        expected.processedPartialWithdrawalsCount.toNat,
         entry.withdrawableEpoch ≤ getCurrentEpoch state := by
   obtain ⟨partials, next, partialsOk⟩ := expected_partial_pass early computed
   exact ⟨charged.paid electra credit debit early partialsOk,
@@ -5957,21 +5960,21 @@ private theorem execution_partial_consumption (charged : PartialCost (config := 
     (ok : processBlockExecution config checks engine s body bellatrix = .ok t) :
     ∃ expected, getExpectedWithdrawals s (Nat.le_trans (by decide) electra) = .ok expected ∧
       (s.pendingPartialWithdrawals electra).data.toList.take
-          expected.processedPartialWithdrawalsCount ++
+          expected.processedPartialWithdrawalsCount.toNat ++
         (t.pendingPartialWithdrawals electra).data.toList =
           (s.pendingPartialWithdrawals electra).data.toList ∧
       cost ⟨.withdrawals, ⟨fork, s⟩, ⟨fork, t⟩, credit, debit⟩ ≤
         ((((s.pendingPartialWithdrawals electra).data.toList.take
-          expected.processedPartialWithdrawalsCount).filter keep).map (·.amount.toNat)).sum ∧
+          expected.processedPartialWithdrawalsCount.toNat).filter keep).map (·.amount.toNat)).sum ∧
       ∀ entry ∈ (s.pendingPartialWithdrawals electra).data.toList.take
-        expected.processedPartialWithdrawalsCount,
+        expected.processedPartialWithdrawalsCount.toNat,
         entry.withdrawableEpoch ≤ getCurrentEpoch s := by
   obtain ⟨expected, expectedOk, queues⟩ := blockExecution_departureQueues electra early ok
   have same := congrArg (fun q => q.2.2.2.2) queues
   change (t.pendingPartialWithdrawals electra).data =
     (s.pendingPartialWithdrawals electra).data.extract
-      expected.processedPartialWithdrawalsCount (s.pendingPartialWithdrawals electra).data.size
-          at same
+      expected.processedPartialWithdrawalsCount.toNat
+      (s.pendingPartialWithdrawals electra).data.size at same
   have reads := partial_event_expected_le charged (electra := electra)
     (finish := t) (credit := credit) (debit := debit)
     early expectedOk
@@ -5991,10 +5994,10 @@ private theorem block_partial_removal {fork : Fork} {s headed finish : BeaconSta
       .ok expected) :
     (Step.block engine signed due applied).partialsRemoved =
       (headed.pendingPartialWithdrawals electra).data.toList.take
-        expected.processedPartialWithdrawalsCount := by
+        expected.processedPartialWithdrawalsCount.toNat := by
   have capella : .shapella ≤ fork := Nat.le_trans (by decide) electra
   have taken : blockPartialsTaken s signed.message =
-      expected.processedPartialWithdrawalsCount := by
+      expected.processedPartialWithdrawalsCount.toNat := by
     simp [blockPartialsTaken, capella, header, computed, Except.toOption, bind, Except.bind]
   simp only [Step.partialsRemoved, electra, ↓reduceDIte, Step.partialsTaken, taken]
   obtain ⟨_, _, rfl⟩ := processBlockHeader_eq header
