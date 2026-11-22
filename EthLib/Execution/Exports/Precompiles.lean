@@ -17,14 +17,14 @@ public section
 
 namespace EthLib.Execution.Evm.Precompiles.Exports
 
-open EthLib.Exports (ExportError Result PyValue forkUpTo pyExport rejectArgument toResult)
+open EthLib.Exports (ExportError Result PyValue forkUpTo oneLine pyExport rejectArgument toResult)
 
 open EthLib.Execution.Evm.Precompiles
 
 /-- A precompile error reaches Python with its code, and its message prints it on one line. -/
 instance : ExportError PrecompileError where
   code := PrecompileError.code
-  message := fun e => (repr e).pretty 1000000
+  message := oneLine
 
 /-- Run the precompile at the address on the call data, with the gas given, at the fork named.
 

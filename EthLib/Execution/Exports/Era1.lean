@@ -16,12 +16,12 @@ public section
 
 namespace EthLib.Execution.History.Exports
 
-open EthLib.Exports (ExportError Result PyValue pyExport toResult)
+open EthLib.Exports (ExportError Result PyValue oneLine pyExport toResult)
 
 /-- A rejected file reaches Python with its code, and its message prints the error on one line. -/
 instance : ExportError Era1Error where
   code := Era1Error.code
-  message := fun e => (repr e).pretty 1000000
+  message := oneLine
 
 /-- The contents of an era1 file, as plain values.
 

@@ -47,15 +47,11 @@ public section
 
 namespace EthLib.Execution.Blocks.Exports
 
-open EthLib.Exports (ExportError Result PyValue UnreadArgument forkUpTo pyExport rejectArgument
-  toResult)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument forkUpTo oneLine pyExport
+  rejectArgument toResult)
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
-
-/-- A value printed on one line, however long its numbers and hashes are. -/
-def oneLine {α : Type} [Repr α] (a : α) : String :=
-  (repr a).pretty 1000000
 
 /-- The hash of a header in RLP form, after the decoder at the fork accepts it. -/
 @[export eth_block_header_hash]

@@ -30,7 +30,7 @@ public section
 
 namespace EthLib.Execution.Blocks.Exports
 
-open EthLib.Exports (ExportError Result PyValue forkUpTo pyExport rejectArgument toResult)
+open EthLib.Exports (ExportError Result PyValue forkUpTo oneLine pyExport rejectArgument toResult)
 
 /-- The difficulty of a block at a named fork, from its number, its timestamp and its parent.
 

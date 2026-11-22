@@ -824,6 +824,9 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Blocks.Exports.oneLine` moves to `EthLib.Exports.oneLine`, beside the shared conversion of export errors ([#3605](https://github.com/ethereum/EthLib/issues/3605)).
+  The exports that printed an error on one line by hand use it, and their messages stay the same.
+
 - The optimistic sync, slashing protection, Keymanager API, Builder API, ENR, DNS discovery and execution JSON-RPC exports turn their errors into a code and a message through the shared conversion ([#3605](https://github.com/ethereum/EthLib/issues/3605)).
   No error code changes, but some messages change in Python.
   The optimistic sync exports give their fork choice error after `optimistic sync: `, in place of `optimistic sync failed with code N`.
