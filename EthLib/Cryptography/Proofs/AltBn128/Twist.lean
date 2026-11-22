@@ -2,8 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.AltBn128.Fp2
 public import EthLib.Cryptography.Proofs.AltBn128.Field
-public import EthLib.Cryptography.Proofs.ShortWeierstrass
-public import Mathlib.Tactic.Module
+public import EthLib.Cryptography.Proofs.Jacobian
 
 /-!
 # Proofs: the group law of the twist
@@ -13,6 +12,8 @@ public import Mathlib.Tactic.Module
 The twist is `y^2 = x^3 + b2` over `Fp2`, with `b2 = 3 / (9 + i)`.
 
 Its addition follows the rule of `G_1`, which is the group law of Mathlib over any field.
+
+Its scalar multiplication runs in Jacobian coordinates, as over the prime fields.
 
 Points on the twist and group elements correspond one to one.
 
@@ -102,38 +103,19 @@ theorem toPoint_add {p q : Point2} (hp : p.isOnCurve = true) (hq : q.isOnCurve =
 
 /-! ## Scalar multiplication -/
 
+/-- `2` is not zero in `Fp2`, so doubling on the twist follows the group law. -/
+private theorem two_ne_zero' : (2 : Fp2) ≠ 0 := fun h => absurd (congrArg Fp2.c0 h) (by decide)
+
 theorem isOnCurve_mulBits (fuel k : Nat) {p : Point2} (hp : p.isOnCurve = true) :
-    (mulBits fuel k p).isOnCurve = true := by
-  induction fuel generalizing k p with
-  | zero => rfl
-  | succ fuel ih =>
-    have hrest := ih (k / 2) (isOnCurve_add hp hp)
-    simp only [mulBits]
-    split
-    · exact isOnCurve_add hp hrest
-    · exact hrest
+    (mulBits fuel k p).isOnCurve = true :=
+  ShortWeierstrass.Point.isOnCurve_mulBits_field embedding rfl Jacobian.Coords.Embedding.id
+    (fun _ => rfl) (fun _ => rfl) rfl two_ne_zero' fuel k hp
 
 /-- Double and add computes `k P`, when `k < 2^fuel`. -/
 theorem toPoint_mulBits (fuel k : Nat) {p : Point2} (hp : p.isOnCurve = true) (hk : k < 2 ^ fuel) :
-    toPoint (mulBits fuel k p) = k • toPoint p := by
-  induction fuel generalizing k p with
-  | zero =>
-    obtain rfl : k = 0 := by simpa using hk
-    simp [mulBits]
-  | succ fuel ih =>
-    have hk2 : k / 2 < 2 ^ fuel := by rw [Nat.pow_succ] at hk; omega
-    have hrest := ih (k / 2) (isOnCurve_add hp hp) hk2
-    rw [toPoint_add hp hp] at hrest
-    simp only [mulBits]
-    split
-    · -- An odd `k` is `2 (k / 2) + 1`.
-      rw [toPoint_add hp (isOnCurve_mulBits fuel _ (isOnCurve_add hp hp)), hrest]
-      conv_rhs => rw [show k = 2 * (k / 2) + 1 by omega]
-      module
-    · -- An even `k` is `2 (k / 2)`.
-      rw [hrest]
-      conv_rhs => rw [show k = 2 * (k / 2) by omega]
-      module
+    toPoint (mulBits fuel k p) = k • toPoint p :=
+  ShortWeierstrass.Point.toPoint_mulBits_field embedding rfl Jacobian.Coords.Embedding.id
+    (fun _ => rfl) (fun _ => rfl) rfl two_ne_zero' fuel k hp hk
 
 /-! ## Points and group elements correspond -/
 

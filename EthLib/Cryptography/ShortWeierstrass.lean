@@ -17,7 +17,7 @@ The points form a group under the addition rule of SEC 1 v2 §2.2.1.
 
 The rule is written in affine coordinates, as SEC 1 prints it.
 
-Scalar multiplication over a prime field runs in Jacobian coordinates instead.
+Scalar multiplication runs in Jacobian coordinates instead, over any such field.
 
 It takes one inverse, at the end.
 
@@ -115,12 +115,15 @@ end Affine
 
 section Jacobian
 
+/-- The Jacobian form of a point: `(x, y, 1)`, or `(1, 1, 0)` at infinity. -/
+def toCoords {F : Type} [OfNat F 0] [OfNat F 1] : Point F → Jacobian.Coords F
+  | infinity => .infinity
+  | affine x y => ⟨x, y, 1⟩
+
 variable {m : Nat} [NeZero m]
 
-/-- The Jacobian form of a point. -/
-def toJacobian : Point (Fin m) → Jacobian m
-  | infinity => .infinity
-  | affine x y => .ofAffine x y
+/-- The Jacobian form of a point over the integers mod `m`. -/
+def toJacobian (p : Point (Fin m)) : Jacobian m := Jacobian.ofCoords p.toCoords
 
 /-- The point of Jacobian coordinates in a representation of the field.
 
@@ -140,11 +143,13 @@ The steps run in Jacobian coordinates, in a representation of the field.
 
 It takes the maps into and out of that representation, its inverse, and the curve's `a` in it.
 
+The representation can be the field itself, with the identity for both maps.
+
 Only the conversion back takes an inverse. -/
-@[specialize] def mulBits {G : Type} [OfNat G 0] [OfNat G 1] [Add G] [Sub G] [Mul G]
-    [DecidableEq G] (encode : Fin m → G) (inverse : G → G) (read : G → Fin m) (a : G)
-    (fuel k : Nat) (p : Point (Fin m)) : Point (Fin m) :=
-  ofCoords inverse read (Jacobian.Coords.mulBits a fuel k ((toJacobian p).toCoords.map encode))
+@[specialize] def mulBits {F G : Type} [OfNat F 0] [OfNat F 1] [OfNat G 0] [OfNat G 1]
+    [Add G] [Sub G] [Mul G] [DecidableEq G] (encode : F → G) (inverse : G → G) (read : G → F)
+    (a : G) (fuel k : Nat) (p : Point F) : Point F :=
+  ofCoords inverse read (Jacobian.Coords.mulBits a fuel k (p.toCoords.map encode))
 
 end Jacobian
 

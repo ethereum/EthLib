@@ -852,6 +852,19 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the shared Jacobian scalar multiplication of short Weierstrass curves works over any field, and `G_2` of alt_bn128 uses it ([#4092](https://github.com/ethereum/EthLib/issues/4092)).
+  `ShortWeierstrass.Point.mulBits` takes a point over any field `F`, with maps between `F` and its representation, where it took `Fin m`.
+  The new `ShortWeierstrass.Point.toCoords` gives the Jacobian form of a point over any field, and `toJacobian` is that form over `Fin m`.
+  `Jacobian.ofAffine` is gone: `toCoords` gives `(x, y, 1)`.
+  `AltBn128.Point2.mulBits` is the shared multiplication over `Fp2`, with one inverse at the end where the affine rule took one at each step.
+  The new theorems `Jacobian.Coords.double_spec`, `add_spec`, `toPoint_mulBits` and `toPoint_mulAdd` state the group law of the forms of a nonsingular curve, over any field in which `2` is not zero.
+  `ShortWeierstrass.Point.toPoint_mulBits_field` and `isOnCurve_mulBits_field` state that the shared multiplication computes `k P`, on the curve, over any such field and in any representation.
+  The chains also stay on the curve, by `Jacobian.Coords.onCurve_mulBits`, `onCurve_mulAddAux` and `onCurve_mulAdd`, and the joint chain computes `k P + l Q` by `toPoint_mulAddAux`.
+  Bridges relate forms over `Fin m` to their values in `ZMod m` (`Jacobian.onCurve_iff`, `Jacobian.toPoint_eq` and the `Jacobian.map_*` lemmas), and points to forms over any field (`ShortWeierstrass.Point.toCoords_spec` and `ofCoords_spec`).
+  `Jacobian.Coords.Embedding.id` states that the identity is a change of representation.
+  The theorems about forms over `Fin m`, about the prime-field curves and about `G_2` keep their statements, and now follow from these.
+  No value changes for points on the curve, the only points that ECPAIRING passes to the multiplication of `G_2`.
+
 - In Lean, the points of `G_2` on the alt_bn128 twist are the shared short Weierstrass points over `Fp2` ([#4061](https://github.com/ethereum/EthLib/issues/4061)).
   `AltBn128.Point2` is now `ShortWeierstrass.Point Fp2`, through the new instance `AltBn128.instTwistParams` with `a = 0` and `b2`.
   Its sum, negation and curve test are those of the shared rule, so `AltBn128.Point2.add` and `AltBn128.Point2.isOnCurve` are gone.
