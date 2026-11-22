@@ -67,9 +67,9 @@ It is 9000 up to BPO5.
 
 From Glamsterdam, it is the price of a write to an account plus the stipend, 11300. -/
 def callValueCost (fork : Fork) (value : U256) : Nat :=
-  -- `C_XFER(mu) = G_callvalue` if `mu_s[2] != 0`, else 0.
+  -- `C_XFER(mu) = G_callvalue` if `mu_s[2] > 0`, else 0.
   --
-  -- From Glamsterdam, `CALL_VALUE` "is redefined as `ACCOUNT_WRITE + CALL_STIPEND`", by EIP-8038.
+  -- From Glamsterdam, EIP-8038 redefines `CALL_VALUE` as `ACCOUNT_WRITE + CALL_STIPEND`.
   if value = 0 then 0
   else if fork ≥ .glamsterdam then ACCOUNT_WRITE + CALL_STIPEND
   else CALL_VALUE
@@ -85,10 +85,10 @@ def callNewAccountCost (fork : Fork) (state : TransactionState) (to : Address) (
     Nat :=
   -- From Glamsterdam, `GAS_NEW_ACCOUNT` is metered in state gas by EIP-8037, so this price is 0.
   if fork ≥ .glamsterdam then 0
-  -- `C_NEW = G_newaccount` if `DEAD(sigma, t)` and `mu_s[2] != 0`, from Spurious Dragon by EIP-161.
+  -- `C_NEW = G_newaccount` if `DEAD(sigma, t)` and `mu_s[2] > 0`, from Spurious Dragon by EIP-161.
   else if fork ≥ .spuriousDragon then
     if value = 0 ∨ state.isAccountAlive to then 0 else NEW_ACCOUNT
-  -- Before, 25000 gas "when the destination is non-existent", whatever the value, by EIP-161 (b).
+  -- Before, 25000 gas when the destination does not exist, whatever the value, by EIP-161 (b).
   else if state.accountExists to then 0 else NEW_ACCOUNT
 
 /-- The gas of a call that asks for `gas`, with value `value` and an extra price `extraGas`.
@@ -108,7 +108,7 @@ They differ for a request above the bound that the frame can pay, and this follo
 When the frame cannot even pay the extra price, the call asks for its whole gas, and fails. -/
 def messageCallGas (fork : Fork) (value : U256) (gas gasLeft memoryCost extraGas : Nat)
     (stipend : Nat := CALL_STIPEND) : MessageCallGas :=
-  -- `G_callstipend` if `mu_s[2] != 0`, else 0.
+  -- `G_callstipend` if `mu_s[2] > 0`, else 0.
   let stipend := if value = 0 then 0 else stipend
   -- `C_GASCAP = min(L(mu_g - C_EXTRA), mu_s[0])` if `mu_g >= C_EXTRA`, else `mu_s[0]`.
   --

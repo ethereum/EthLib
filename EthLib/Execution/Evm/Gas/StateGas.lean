@@ -81,14 +81,14 @@ namespace StateGasMeter
 
 /-- The meter of a frame that starts with `gas` execution gas and a reservoir of `reservoir`. -/
 def start (gas reservoir : Nat) : StateGasMeter :=
-  -- `state_gas_from_gas_left` is "initialized to `0` at the start of each call frame".
+  -- EIP-8037: the state gas from the gas left is 0 at the start of each call frame.
   --
-  -- `state_gas_baseline` is the reservoir at the entry of the frame.
+  -- The baseline is the reservoir at the entry of the frame.
   ⟨gas, reservoir, reservoir, 0, 0, reservoir⟩
 
 /-- The meter after a charge of `amount` execution gas, or out of gas. -/
 def charge (meter : StateGasMeter) (amount : Nat) : Except EvmError StateGasMeter :=
-  -- "Execution-gas charges deduct from `gas_left` only."
+  -- EIP-8037: a charge of execution gas deducts from the gas left only.
   if meter.gasLeft < amount then .error .outOfGas
   else .ok { meter with gasLeft := meter.gasLeft - amount }
 
@@ -98,10 +98,10 @@ The charge takes the reservoir first.
 
 Past the reservoir, it takes execution gas, and adds that part to the spill. -/
 def chargeState (meter : StateGasMeter) (amount : Nat) : Except EvmError StateGasMeter :=
-  -- "State-gas charges deduct from `state_gas_reservoir` first."
+  -- EIP-8037: a charge of state gas deducts from the reservoir first.
   if amount ≤ meter.reservoir then .ok { meter with reservoir := meter.reservoir - amount }
   else if amount ≤ meter.reservoir + meter.gasLeft then
-    -- "the remainder deducts from `gas_left` and increments `state_gas_from_gas_left`".
+    -- The remainder deducts from the gas left, and adds to the state gas from the gas left.
     let rest := amount - meter.reservoir
     .ok { meter with reservoir := 0, gasLeft := meter.gasLeft - rest, spill := meter.spill + rest }
   else .error .outOfGas
@@ -112,9 +112,9 @@ The refill credits the pools in the reverse order of a charge.
 
 It credits execution gas first, up to the spill, and the rest goes to the reservoir. -/
 def refill (meter : StateGasMeter) (amount : Nat) : StateGasMeter :=
-  -- "credited to `gas_left` first ... up to the current value of `state_gas_from_gas_left`".
+  -- EIP-8037: the refill goes to the gas left first, up to the state gas from the gas left.
   --
-  -- "any remainder is credited to `state_gas_reservoir`".
+  -- Any remainder goes to the reservoir.
   let back := min amount meter.spill
   { meter with
     gasLeft := meter.gasLeft + back
@@ -125,20 +125,20 @@ def refill (meter : StateGasMeter) (amount : Nat) : StateGasMeter :=
 
 The spill moves to the committed part, and the baseline becomes the reservoir. -/
 def commit (meter : StateGasMeter) : StateGasMeter :=
-  -- `state_gas_committed += state_gas_from_gas_left`.
+  -- The spill adds to the committed part.
   --
-  -- `state_gas_baseline = state_gas_reservoir`, and `state_gas_from_gas_left = 0`.
+  -- The baseline becomes the reservoir, and the spill becomes 0.
   { meter with committed := meter.committed + meter.spill, baseline := meter.reservoir, spill := 0 }
 
 /-- The meter after a rollback to the baseline, when the frame reverts or halts.
 
 The spill returns to execution gas, and the reservoir becomes the baseline. -/
 def restore (meter : StateGasMeter) : StateGasMeter :=
-  -- `gas_left += state_gas_from_gas_left`, then `state_gas_from_gas_left = 0`.
+  -- The spill returns to the gas left, then becomes 0.
   --
-  -- `state_gas_reservoir = state_gas_baseline`.
+  -- The reservoir becomes the baseline.
   --
-  -- The meter keeps no `evm_state_gas_used`: it follows from the reservoir and the spill.
+  -- The meter keeps no count of the state gas used: it follows from the reservoir and the spill.
   { meter with gasLeft := meter.gasLeft + meter.spill, spill := 0, reservoir := meter.baseline }
 
 /-- The meter after a rollback to the start of the frame, which also undoes the commits.
@@ -154,7 +154,7 @@ def restoreToEntry (meter : StateGasMeter) : StateGasMeter :=
 
 /-- The meter after an exceptional halt: a rollback, then no execution gas left. -/
 def halt (meter : StateGasMeter) : StateGasMeter :=
-  -- "the same restore is applied, but the child's `gas_left` is consumed (set to zero)".
+  -- EIP-8037: the same restore applies, and the gas left of the child becomes 0.
   { meter.restore with gasLeft := 0 }
 
 /-- The meter after the reservoir pays back the spill, as far as both go.
@@ -163,9 +163,9 @@ A refill can reach the reservoir while execution gas paid the charge it undoes.
 
 The merge of a child that succeeds moves that gas back. -/
 def repay (meter : StateGasMeter) : StateGasMeter :=
-  -- `d = min(state_gas_reservoir, state_gas_from_gas_left)`.
+  -- The repayment is the least of the reservoir and the spill.
   --
-  -- `gas_left += d`, `state_gas_reservoir -= d` and `state_gas_from_gas_left -= d`.
+  -- The gas left gains it, and the reservoir and the spill each lose it.
   let back := min meter.reservoir meter.spill
   { meter with
     gasLeft := meter.gasLeft + back
@@ -174,7 +174,7 @@ def repay (meter : StateGasMeter) : StateGasMeter :=
 
 /-- The meter of a frame that passes on its whole reservoir to a message. -/
 def drain (meter : StateGasMeter) : StateGasMeter :=
-  -- "`state_gas_reservoir` is passed to a child frame in full"; "The parent keeps none of it".
+  -- EIP-8037: the reservoir passes to a child frame in full, and the parent keeps none of it.
   { meter with reservoir := 0 }
 
 /-- The caller and the child at the start of a call that passes on `gas` execution gas.
@@ -199,15 +199,15 @@ A child that failed has already rolled back.
 
 The merge of a child that succeeds then repays the spill from the reservoir. -/
 def absorb (caller child : StateGasMeter) (succeeded : Bool) : StateGasMeter :=
-  -- The child's `gas_left` returns; its `state_gas_from_gas_left` "is added to the parent's".
+  -- The gas left of the child returns, and its spill adds to that of the parent.
   let merged :=
     { caller with
       gasLeft := caller.gasLeft + child.gasLeft
       reservoir := caller.reservoir + child.reservoir
       spill := caller.spill + child.spill }
-  -- The reservoir: "On the child's exit it becomes the parent's again".
+  -- EIP-8037: on the exit of the child, its reservoir becomes the parent's again.
   --
-  -- The repayment applies "to successful children only".
+  -- The repayment applies to a child that succeeds only.
   if succeeded then merged.repay else merged
 
 /-- The execution gas that the meter holds: the gas left, and the spill a rollback credits back.

@@ -143,7 +143,9 @@ def environmentStep (fork : Fork) : Op → Option (Evm fork Meter → Except Evm
   | .blobhash => if h : .dencun ≤ fork then some (blobhashStep h) else none
   | .blobbasefee =>
     if h : .dencun ≤ fork then
-      -- BLOBBASEFEE: `get_blob_gasprice(header)` of EIP-7516, which has no bound.
+      -- BLOBBASEFEE: the blob base fee of the block, as EIP-4844 defines it, by EIP-7516.
+      --
+      -- It has no bound.
       --
       -- It reaches `2^256` at an excess blob gas of about 177.4457 times the update fraction.
       --
