@@ -1,12 +1,12 @@
 module
 
 public import EthLib.Base.Hex
-public import EthLib.Base.Unicode
 public import EthLib.Cryptography.Aes.Ctr
 public import EthLib.Cryptography.Bls.KeyPath
 public import EthLib.Cryptography.Bls.Signatures
 public import EthLib.Cryptography.Hash.Pbkdf2
 public import EthLib.Cryptography.Hash.Scrypt
+public import EthLib.Cryptography.Unicode
 public import Lean.Data.Json
 
 /-!
@@ -175,7 +175,7 @@ def isControl (c : Char) : Bool :=
 /-- Normalize, strip controls and encode in UTF-8, in that order ("Password requirements"). -/
 def passwordBytes (password : String) : ByteArray :=
   -- The NFKD form first, then the control codes stripped, then UTF-8.
-  (String.ofList ((Base.Unicode.nfkd password).toList.filter (!isControl ·))).toUTF8
+  (String.ofList ((Unicode.nfkd password).toList.filter (!isControl ·))).toUTF8
 
 /-- A JSON field, with its name retained in any error. -/
 def field (what : String) (value : Json) (name : String) : Except KeystoreError Json :=

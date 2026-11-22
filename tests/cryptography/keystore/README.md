@@ -6,7 +6,7 @@ Both decrypt to `0x000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce
 The ERC material is CC0.
 
 `unicode/UnicodeData.txt` and `unicode/NormalizationTest.txt` are the unmodified Unicode Character Database 16.0.0 files from <https://www.unicode.org/Public/16.0.0/ucd/>.
-The data and the generated Lean table retain the Unicode License V3 in `unicode/LICENSE` and `EthLib/Base/Unicode/LICENSE`.
+The data and the generated Lean table retain the Unicode License V3 in `unicode/LICENSE` and `EthLib/Cryptography/Unicode/LICENSE`.
 `SHA256SUMS` pins the downloaded bytes.
 
 The Python suite checks all five NFKD column relations in `NormalizationTest.txt`.

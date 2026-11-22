@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Unicode.Data
+public import EthLib.Cryptography.Unicode.Data
 public import Init.Data.Array.BinSearch
 
 /-!
@@ -18,7 +18,7 @@ The tables come from the pinned Unicode Character Database, not the host's Unico
 
 @[expose] public section
 
-namespace EthLib.Base.Unicode
+namespace EthLib.Cryptography.Unicode
 
 /-- The value of a code point in a table sorted by its first component. -/
 def lookup {α : Type} [Inhabited α] (table : Array (Nat × α)) (code : Nat) : Option α :=
@@ -71,4 +71,4 @@ It fully decomposes compatibility mappings, then orders non-starters by combinin
 def nfkd (text : String) : String :=
   String.ofList (canonicalOrder (text.toList.flatMap decompose))
 
-end EthLib.Base.Unicode
+end EthLib.Cryptography.Unicode

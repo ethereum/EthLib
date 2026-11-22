@@ -834,6 +834,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, NFKD normalization moves from Base to Cryptography, next to the EIP-2335 keystore, its only user ([#3840](https://github.com/ethereum/EthLib/issues/3840)).
+  The modules `EthLib.Base.Unicode` and `EthLib.Base.Unicode.Data` are now `EthLib.Cryptography.Unicode` and `EthLib.Cryptography.Unicode.Data`, and the namespace `EthLib.Base.Unicode` is now `EthLib.Cryptography.Unicode`.
+  `EthLib.Base` no longer imports them.
+  The Unicode License of the table is now `EthLib/Cryptography/Unicode/LICENSE`.
+
 - In Lean, three list lemmas of Base give way to the Batteries lemmas they repeat ([#3839](https://github.com/ethereum/EthLib/issues/3839)).
   `Base.forall₂_of_mapM_ok` and `Base.mapM_ok_of_forall₂` are the two directions of `List.mapM_eq_ok_iff_forall₂`.
   `Base.forall₂_of_mapM_some` is the forward direction of `List.mapM_eq_some_iff_forall₂`.
