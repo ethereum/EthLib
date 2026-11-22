@@ -36,7 +36,9 @@ Each word costs 3, and the square of the words over 512 is added.
 
 Source: the memory cost `C_mem` of Appendix H.1 of the Yellow Paper. -/
 def memoryGasCost (sizeInBytes : Nat) : Nat :=
+  -- The words `a`, the size rounded up to whole words.
   let sizeInWords := wordCount sizeInBytes
+  -- `C_mem(a) = G_memory · a + floor(a^2 / 512)`, with `G_memory = 3`.
   let linearCost := sizeInWords * MEMORY_PER_WORD
   let quadraticCost := sizeInWords ^ 2 / 512
   linearCost + quadraticCost
@@ -63,15 +65,21 @@ Source: the memory growth `M` of Appendix H.1 of the Yellow Paper. -/
 def extendMemory (currentSize : Nat) : List (U256 × U256) → ExtendMemory
   | [] => ⟨0, 0⟩
   | (startPosition, size) :: extensions =>
+    -- `M(s, f, l) = s` for `l = 0`.
     if size = 0 then
       extendMemory currentSize extensions
     else
+      -- Else `M(s, f, l) = max(s, ceil((f + l) / 32))`, in bytes, so 32 times `M`.
+      --
+      -- The `if` below takes the max.
       let beforeSize := ceil32 currentSize
       let afterSize := ceil32 (startPosition.toNat + size.toNat)
       if afterSize ≤ beforeSize then
         extendMemory currentSize extensions
       else
+        -- The next range starts from the grown size, as in `M(M(s, f_1, l_1), f_2, l_2)`.
         let rest := extendMemory afterSize extensions
+        -- Appendix H.1: `C_mem(mu'_i) - C_mem(mu_i)`, as a sum of one difference per growing range.
         ⟨memoryGasCost afterSize - memoryGasCost beforeSize + rest.cost,
           afterSize - beforeSize + rest.expandBy⟩
 
