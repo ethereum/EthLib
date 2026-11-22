@@ -21,7 +21,7 @@ Before London that base fee is 0, so the tip is the whole gas price.
 
 The two lists of base fees end with the base fees of the block after the newest one.
 
-The descriptions of both lists say that this value "can be derived from the newest block".
+The descriptions of both lists say that this value can be derived from the newest block.
 
 It is the base fee that the header rule gives to a child of the newest block.
 
@@ -91,6 +91,7 @@ def Percentile.lt (p q : Percentile) : Bool :=
 
 /-- A reward percentile: a JSON number from 0 to 100. -/
 def percentile : Json → Read Percentile
+  -- A JSON number `m × 10^-e`, read exactly, from 0 to 100 as the schema bounds it.
   | .num ⟨m, e⟩ =>
     if m < 0 then reject "rewardPercentile: below 0"
     else if 100 * 10 ^ e < m.toNat then reject "rewardPercentile: above 100"
@@ -110,8 +111,11 @@ The percentile is of `total`, the gas used by all of them, and `before` is the g
 
 The last transaction gives its tip when none before it does, and no transaction gives 0. -/
 def tipAt (p : Percentile) (total : Nat) : Nat → List (Nat × Nat) → Nat
+  -- No transaction: 0.
   | _, [] => 0
+  -- The last transaction gives its tip when none before it reached the share.
   | _, [(tip, _)] => tip
+  -- The first transaction at which the gas so far reaches `p / 100` of the total, compared exactly.
   | before, (tip, gas) :: rest =>
     if p.num * total ≤ (before + gas) * 100 * 10 ^ p.exponent then tip
     else tipAt p total (before + gas) rest
@@ -138,6 +142,7 @@ namespace BlockRecord
 
 /-- The gas that each transaction of a block used: the growth of the cumulative gas of receipts. -/
 def gasUsedList (r : BlockRecord) : List Nat :=
+  -- `R[n]_u - R[n - 1]_u`, with `R[-1]_u = 0`, Yellow Paper §12.3.
   let cumulative := r.receipts.map (·.2.cumulativeGasUsed)
   List.zipWith (· - ·) cumulative (0 :: cumulative)
 
@@ -147,11 +152,13 @@ The tip is the price per gas that the transaction pays, minus the base fee of th
 
 The list stops at the shorter of the transactions and the receipts. -/
 def tips (r : BlockRecord) : List (Nat × Nat) :=
+  -- The effective gas price minus the base fee, which is 0 before London.
   (r.block.transactions.map fun tx => effectiveGasPrice r.baseFee tx - r.baseFee).zip
     r.gasUsedList
 
 /-- The tips of a block in ascending order, each with its gas. -/
 def sortedTips (r : BlockRecord) : List (Nat × Nat) :=
+  -- The transactions in ascending order of effective tip per gas, as the method sorts them.
   r.tips.mergeSort fun a b => decide (a.1 ≤ b.1)
 
 /-- The tip of a block at each percentile, weighted by gas used, or 0 for an empty block. -/
@@ -162,6 +169,7 @@ def rewards (r : BlockRecord) (ps : List Percentile) : List Nat :=
 
 It is never before the fork of the block itself. -/
 def nextFork (r : BlockRecord) (config : ChainConfig) : Fork :=
+  -- The child has the next number and comes a second later at least: EthLib takes that time.
   match config.activeFork (r.block.header.number + 1) (r.block.header.timestamp.toNat + 1) with
   | some fork => if r.fork ≤ fork then fork else r.fork
   | none => r.fork
@@ -170,6 +178,7 @@ def nextFork (r : BlockRecord) (config : ChainConfig) : Fork :=
 
 The rule gives the initial base fee to the first London block. -/
 def nextBaseFee (r : BlockRecord) (config : ChainConfig) : Nat :=
+  -- The base fee of EIP-1559 for the child, the initial one at the first London block.
   if .london ≤ r.nextFork config then expectedBaseFeeAcross r.block.header else 0
 
 /-- The base fee per blob gas of the block after a block, or 0 before Dencun.
@@ -183,6 +192,7 @@ def nextBlobBaseFee (r : BlockRecord) (config : ChainConfig) : Nat :=
     (r.block.header.timestamp.toNat + 1)
   if h : .dencun ≤ fork then
     if hLondon : .london ≤ r.fork then
+      -- The base fee per blob gas of the excess blob gas that the header rule gives the child.
       getBaseFeePerBlobGas (schedule h) (expectedExcessBlobGas hLondon h r.block.header schedule)
     else 0
   else 0
@@ -203,6 +213,7 @@ The blocks are canonical blocks and the pending block, in order.
 
 A block off the canonical chain is never in the range, so it should not be the newest block. -/
 def feeHistoryBlocks (v : ChainView) (count : Nat) (newest : BlockRecord) : List BlockRecord :=
+  -- The blocks numbered from `newest - count + 1` to `newest` that the node holds.
   (v.canonical ++ v.pending.toList).filter fun r =>
     r.block.header.number ≤ newest.block.header.number &&
       newest.block.header.number < r.block.header.number + count
@@ -212,19 +223,25 @@ def feeHistoryBlocks (v : ChainView) (count : Nat) (newest : BlockRecord) : List
 The percentiles must strictly increase, and the node must hold the newest block. -/
 def feeHistory (v : ChainView) (count : Nat) (newest : BlockParam) (ps : List Percentile) :
     Except RpcError FeeHistory := do
+  -- Each percentile above the one before, EthLib's reading of monotonically increasing: -32602.
   unless percentilesIncreasing ps do
     throw (RpcError.invalidParams "rewardPercentiles: not strictly increasing")
   match ← v.resolve newest with
+  -- A newest block that the node does not hold: -32001.
   | none => throw (resourceNotFound.toRpcError (some (.str "newest block not found")))
   | some last =>
     let blocks := v.feeHistoryBlocks count last
     return {
+      -- The lowest number of the range, or the one after the newest for an empty range.
       oldestBlock := (blocks.head?.map (·.block.header.number)).getD
         (last.block.header.number + 1)
+      -- The base fees of each block, then those of the block after the newest.
       baseFeePerGas := blocks.map (·.baseFee) ++ [last.nextBaseFee v.config]
       baseFeePerBlobGas := blocks.map (·.blobGasPrice v.config) ++ [last.nextBlobBaseFee v.config]
+      -- The gas used over the gas limit, and the blob gas used over the most blob gas.
       gasUsedRatio := blocks.map fun r => (r.block.header.gasUsed, r.block.header.gasLimit)
       blobGasUsedRatio := blocks.map (·.blobGasRatio v.config)
+      -- The tips at the percentiles, left out when none is requested.
       reward := if ps.isEmpty then none else some (blocks.map (·.rewards ps)) }
 
 /-- The base fee per gas of the block after the head, as `eth_baseFee` returns it. -/
@@ -235,6 +252,7 @@ end ChainView
 
 /-- A ratio as JSON, with at most 18 decimal places, rounded down. -/
 def feeRatioJson (ratio : Nat × Nat) : Json :=
+  -- At most 18 decimal places, rounded down, EthLib's choice, as the schema fixes no precision.
   ratioJson 18 ratio.1 ratio.2
 
 /-- The fee history as the JSON object of the method. -/

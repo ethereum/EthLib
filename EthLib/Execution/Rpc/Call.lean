@@ -36,9 +36,9 @@ That gas limit may be above the cap on the gas of a transaction of EIP-7825, whi
 
 A request that names no fee falls under a rule of the source.
 
-It "MUST NOT fail solely because the sender cannot afford the gas fees" of the node's defaults.
+It must not fail solely because the sender cannot afford the gas fees of the node's defaults.
 
-It adds that this "does not waive balance requirements for a non-zero transaction `value`".
+It adds that this does not waive the balance requirement for a value that is not zero.
 
 So a request that names no fee pays no fee, and the code sees the price of the node's choice.
 
@@ -58,27 +58,11 @@ A transaction must hold the fee at its caps, but a call needs only the fee that 
 
 The blob fee cap is not checked against the base fee per blob gas.
 
-A missing fee cap is the base fee plus the priority fee, and a missing priority fee is 0.
-
-The sender must hold the value, and still hold it once it has paid the fee.
-
-Otherwise the call fails with code 809.
-
 As in a transaction, the nonce of the sender grows by one and the fee leaves its balance.
 
 The nonce of the request is not checked, as the source fixes no rule for it.
 
 Nor is the nonce of the sender bounded, as EIP-2681 bounds it for a transaction.
-
-The gas past the intrinsic gas splits between execution gas and a reservoir as in a transaction.
-
-A gas limit below the intrinsic gas fails with code 800.
-
-So does one below the floor of EIP-7623, from Pectra.
-
-A fee cap or a gas price below the base fee fails with code 806.
-
-A priority fee above the fee cap fails with code 804.
 
 The call ignores the field `type`, as the [text of the method][rules] requires.
 
@@ -92,17 +76,9 @@ They also include blob hashes before Cancun, and authorizations before Prague.
 
 The kind of the request has the fork of the latest of these fields, so its fork check covers them.
 
-An empty list of blob hashes, or a blob fee cap without blob hashes, is invalid at every fork.
-
-The text names no code for these rejections, and the fixtures expect -32000.
+The text names no code for its rejections, and the fixtures expect -32000.
 
 That is the code of invalid input in [EIP-1474][eip-1474], which EthLib gives them.
-
-A field that the kind of the request cannot carry is an invalid parameter.
-
-So is a chain other than the node's.
-
-So is a creation with blob hashes or authorizations.
 
 Past their reading as bytes, a call never reads the blobs, their commitments or their proofs.
 
@@ -112,21 +88,9 @@ The other checks of a transaction before its block do not run.
 
 They are the checks of the blobs and of the authorization list, and of a sender with code.
 
-The call answers the data that the message returns.
+The source fixes the answer of a revert, and no answer for a halt other than a revert.
 
-A revert answers the error of code 3 and message `"execution reverted"`, as the source fixes.
-
-Its data is the output of the revert.
-
-The source fixes no answer for a halt other than a revert.
-
-Here it is code 801 for a lack of gas and 4 for an invalid opcode.
-
-These codes come from `src/error-groups/` of the source.
-
-Any other halt is code -32000, such as a creation at an address that has code.
-
-A call at a fork that EthLib does not yet specify fails with code -32603.
+EthLib takes the codes of the other answers from `src/error-groups/` of the source.
 
 [execute]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/execute.yaml
 [rules]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/eth/execute.yaml#L11-L24
@@ -215,8 +179,10 @@ The blobs, their commitments and their proofs are never checked, and leave the r
 -/
 def GenericTransaction.toTransaction (tx : GenericTransaction) (chainId : UInt64)
     (nonce gas maxFee : Nat) : Except RpcError Transaction := do
+  -- The type of the request, else the kind its fields imply, EthLib's reading; above 4 is invalid.
   let kind := tx.kind
   ensure (kind ≤ 4) (callParamError "type: not a transaction type")
+  -- Each field that the kind lacks is an invalid parameter.
   ensure (¬(kind ≤ 1 && (tx.maxFeePerGas.isSome || tx.maxPriorityFeePerGas.isSome)))
     (callParamError "a fee cap needs type 2, 3 or 4")
   ensure (¬(2 ≤ kind && tx.gasPrice.isSome)) (callParamError "a gas price needs type 0 or 1")
@@ -225,8 +191,10 @@ def GenericTransaction.toTransaction (tx : GenericTransaction) (chainId : UInt64
   ensure (¬(kind ≠ 3 && (tx.blobVersionedHashes.isSome || tx.maxFeePerBlobGas.isSome)))
     (callParamError "blobs need type 3")
   ensure (¬(kind ≠ 4 && tx.authorizationList.isSome)) (callParamError "authorizations need type 4")
+  -- A chain other than the node's is an invalid parameter.
   if let some c := tx.chainId then
     ensure (c = chainId.toNat) (callParamError "chainId: not the chain of the node")
+  -- Each number must fit in 256 bits, else an invalid parameter.
   let nonce ← callWord "nonce" nonce
   let gas ← callWord "gas" gas
   let value ← callWord "value" (tx.value.getD 0)
@@ -235,6 +203,7 @@ def GenericTransaction.toTransaction (tx : GenericTransaction) (chainId : UInt64
   let maxPriorityFeePerGas ← callWord "maxPriorityFeePerGas" (tx.maxPriorityFeePerGas.getD 0)
   let maxFeePerGas ← callWord "maxFeePerGas" maxFee
   let gasPrice ← callWord "gasPrice" (tx.gasPrice.getD 0)
+  -- The transaction of the kind, with a signature of 0.
   if kind = 0 then
     return .legacy { nonce, gasPrice, gas, to := tx.to, value, data, v := 0, r := 0, s := 0 }
   if kind = 1 then
@@ -243,6 +212,7 @@ def GenericTransaction.toTransaction (tx : GenericTransaction) (chainId : UInt64
   if kind = 2 then
     return .feeMarket { chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gas, to := tx.to,
                         value, data, accessList, yParity := 0, r := 0, s := 0 }
+  -- EIP-4844 and EIP-7702: types 3 and 4 have a recipient.
   let some to := tx.to | throw (callParamError "type 3 and type 4 need a recipient")
   if kind = 3 then
     return .blob { chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gas, to, value, data,
@@ -278,12 +248,14 @@ The sender is `sender`, the target `target`, and the code sees the price per gas
 
 The gas past the intrinsic gas `intrinsic` splits between execution gas and a reservoir.
 
-These are the steps that `runTransaction` takes between buying the gas and running the message. -/
+These are the steps that a transaction takes between buying its gas and running its message. -/
 def transactionStart {fork : Fork} (env : BlockEnvironment fork) (state : TransactionState)
     (sender target : Address) (gasPrice intrinsic : Nat) (tx : Transaction) :
     Except EvmError (Message fork × Substate) := do
+  -- The environment of the transaction: the Yellow Paper's `I_o` is the sender, `I_p` the price.
   let txEnv : TransactionEnvironment fork :=
     { origin := sender, gasPrice, blobVersionedHashes := fun _ => tx.blobHashes }
+  -- The gas past the intrinsic gas: execution gas, and from Glamsterdam a reservoir, by EIP-8037.
   let gas := allocateGas fork tx intrinsic
   let message ← transactionMessage env txEnv state sender target gas.execution tx
   return ({ message with reservoir := gas.reservoir },
@@ -295,42 +267,57 @@ def callInternalError (reason : String) : RpcError :=
 
 /-- The call of a request on the state after a block, ready to run, or the error that stops it.
 
-The block is the one that `p` names, and `choices` are the choices of the node.
-
-The type of the request is dropped first, so that its other fields decide its kind. -/
+The block is the one that `p` names, and `choices` are the choices of the node. -/
 def ChainView.prepareCall (v : ChainView) (tx : GenericTransaction) (p : BlockParam)
     (choices : CallChoices) : Except RpcError CallSetup :=
+  -- The text of the method ignores the type of the request, so the other fields decide the kind.
   let tx : GenericTransaction := { tx with type := none }
   v.ofBlock p fun r => do
     let ce := choices.environment v r
     let fork := ce.fork
+    -- A request that names no fee pays none, so its environment has a base fee of 0.
     let env := if tx.namesFee then ce.env else { ce.env with baseFeePerGas := fun _ => 0 }
+    -- A fork that EthLib does not yet specify: EthLib's rejection, code -32603.
     ensure (fork < .hegota) (callInternalError "fork not yet specified")
+    -- The text of the method rejects empty blob hashes, or a blob fee cap without them: -32000.
     ensure (tx.blobVersionedHashes ≠ some []) (callRuleError "blobVersionedHashes: empty")
     ensure (¬(tx.maxFeePerBlobGas.isSome ∧ tx.blobVersionedHashes.isNone))
       (callRuleError "maxFeePerBlobGas: no blobVersionedHashes")
+    -- The sender of the request, else the node's choice.
     let sender := tx.sender.getD choices.sender
+    -- The state after the block, with no write yet.
     let state := TransactionState.ofBlock ⟨r.state, ∅, ∅, ∅, ∅⟩
     let account := state.getAccount sender
+    -- The gas limit of the request, else the node's choice, else that of the environment.
     let gas := tx.gas.getD (choices.gasLimit.getD env.gasLimit)
+    -- A missing fee cap is the base fee plus the priority fee, and a missing priority fee is 0.
     let baseFee := baseFeeOf env
     let priority := tx.maxPriorityFeePerGas.getD 0
     let maxFee := tx.maxFeePerGas.getD (baseFee + priority)
+    -- The unsigned transaction at the sender's nonce, with a fee cap of 0 when no fee is named.
     let t ← tx.toTransaction env.chainId account.nonce gas (if tx.namesFee then maxFee else 0)
+    -- A priority fee above the fee cap: code 804.
     if 2 ≤ tx.kind && tx.namesFee then
       ensure (priority ≤ maxFee) (priorityFeeAboveCap.toRpcError)
+    -- A field whose EIP is not active at the block: code -32000.
     ensure (t.fork ≤ fork) (callRuleError "a field is not active at the fork of the block")
+    -- A fee cap or a gas price below the base fee: code 806.
     ensure (¬(tx.namesFee && t.maxFeePerGas < baseFee)) feeCapBelowBaseFee.toRpcError
+    -- The price per gas that the code sees: the effective gas price, or the node's choice.
     let price := if tx.namesFee then effectiveGasPrice baseFee t else choices.gasPrice
+    -- The sender holds the value, else code 809.
     ensure (t.value.toNat ≤ account.balance.toNat) insufficientFunds.toRpcError
     let target ← (messageTarget sender account.nonce t).mapError fun _ =>
       callInternalError "no address for the creation"
+    -- A request that names a fee buys its gas as a transaction does; the nonce grows in both cases.
     let bought :=
       if tx.namesFee then buyGas env state sender t else state.incrementNonce fork sender
     let state ← bought.mapError fun
       | .insufficientBalance _ => insufficientFunds.toRpcError
       | _ => callInternalError "the account of the sender"
+    -- The sender still holds the value once it has paid the fee, else code 809.
     ensure (t.value.toNat ≤ (state.getAccount sender).balance.toNat) insufficientFunds.toRpcError
+    -- A gas limit below the intrinsic gas, or from Pectra the floor of EIP-7623: code 800.
     ensure (minimumGas fork sender t ≤ gas) intrinsicGasTooLow.toRpcError
     let (message, substate) ←
       (transactionStart env state sender target price (intrinsicGas fork sender t) t).mapError
@@ -342,6 +329,7 @@ def ChainView.prepareCall (v : ChainView) (tx : GenericTransaction) (p : BlockPa
 From Glamsterdam, the gas meter also meters state gas. -/
 def CallSetup.run (s : CallSetup) : Except EvmError CallOutput :=
   let paid := paidWrites s.sender s.message.currentTarget s.transaction
+  -- From Glamsterdam, the meter of EIP-8037; before, one counter of gas.
   if s.fork ≥ .glamsterdam then
     processMessageCall (Meter := StateGasMeter) s.env.chainId.toNat s.message s.state s.substate
       s.transaction.authorizations paid
@@ -356,15 +344,21 @@ def revertError (output : ByteArray) : RpcError :=
 
 /-- The error of a call that halts for a reason other than a revert. -/
 def haltError : EvmError → RpcError
+  -- A lack of gas: code 801.
   | .outOfGas => ranOutOfGas.toRpcError
+  -- An invalid opcode: code 4.
   | .invalidOpcode _ => invalidOpcode.toRpcError
+  -- Any other halt, such as a creation at an address that has code: code -32000, EthLib's choice.
   | _ => { code := -32000, message := "execution failed" }
 
 /-- The answer of a call whose message gave `o`: its return data, or the error that stopped it. -/
 def callAnswer (o : CallOutput) : Except RpcError ByteArray :=
   match o.error with
+  -- The data that the message returns.
   | none => .ok o.output
+  -- A revert: code 3, with the output of the revert as its data, as the source fixes.
   | some .revert => .error (revertError o.output)
+  -- Another halt: the source fixes no answer.
   | some e => .error (haltError e)
 
 /-- The call of a request on the state after a block, and the output of its message.
