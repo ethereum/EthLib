@@ -881,6 +881,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- A QUIC 0-RTT packet that carries a RETIRE_CONNECTION_ID frame now fails with PROTOCOL_VIOLATION, as the verified [erratum 7365](https://www.rfc-editor.org/errata/eid7365) of RFC 9000 asks ([#4222](https://github.com/ethereum/EthLib/issues/4222)).
+  The erratum corrects Table 3 of §12.4 to allow the frame in 1-RTT packets only, as the end of §12.5 already said.
+  `decode_frame` on a 0-RTT packet now raises `QuicError` with the local code 9 for frame type `0x19`, where it returned the frame.
+  In Lean, `Frame.allowed` of a RETIRE_CONNECTION_ID frame is false for 0-RTT, so `Frame.decode` rejects it there.
+
 - In Lean, the shared Jacobian scalar multiplication of short Weierstrass curves works over any field, and `G_2` of alt_bn128 uses it ([#4092](https://github.com/ethereum/EthLib/issues/4092)).
   `ShortWeierstrass.Point.mulBits` takes a point over any field `F`, with maps between `F` and its representation, where it took `Fin m`.
   The new `ShortWeierstrass.Point.toCoords` gives the Jacobian form of a point over any field, and `toJacobian` is that form over `Fin m`.

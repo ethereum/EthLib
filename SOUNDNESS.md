@@ -1051,7 +1051,7 @@ These are the expectations of a receiver whose largest received packet lies betw
 
 `Frame.decode_encode` (`Networking/Proofs/Quic/Frame.lean`) proves the round trip for an encoded frame permitted in its packet type.
 A STREAM frame without LEN consumes the remaining packet, so its round trip has no trailing bytes.
-`Frame.decode_ne_ok_of_not_allowed` proves that a frame forbidden by Table 3 cannot be accepted.
+`Frame.decode_ne_ok_of_not_allowed` proves that a frame forbidden by Table 3, with its verified erratum 7365, cannot be accepted.
 `Frame.valid_of_decode` proves that a decoded frame meets the format checks.
 They cover ACK range underflow, offset limits, stream-count limits, token lengths, connection-ID lengths and the retirement order of §19.15.
 A frame body that ends early or breaks one of these checks is FRAME_ENCODING_ERROR (§20.1).

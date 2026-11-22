@@ -154,7 +154,12 @@ def Frame.Valid : Frame → Prop
 instance (frame : Frame) : Decidable frame.Valid := by
   cases frame <;> unfold Frame.Valid <;> infer_instance
 
-/-- Packet types that can carry this frame, RFC 9000 §12.4, Table 3. -/
+/-- Packet types that can carry this frame, RFC 9000 §12.4, Table 3.
+
+The table follows its verified [erratum 7365](https://www.rfc-editor.org/errata/eid7365).
+
+The erratum allows RETIRE_CONNECTION_ID in 1-RTT packets only.
+-/
 def Frame.allowed (frame : Frame) (packet : Packet.PacketType) : Bool :=
   match frame with
   -- Pkts IH01, and ih01 for CONNECTION_CLOSE of type 0x1c: every packet type.
@@ -162,18 +167,16 @@ def Frame.allowed (frame : Frame) (packet : Packet.PacketType) : Bool :=
   -- Pkts IH_1: Initial, Handshake and 1-RTT, not 0-RTT.
   | .ack _ | .crypto .. => packet != .zeroRtt
   -- Pkts ___1: 1-RTT only.
-  | .newToken _ | .pathResponse _ | .handshakeDone => packet == .oneRtt
+  --
+  -- RETIRE_CONNECTION_ID is ___1 by verified erratum 7365, as the end of §12.5 says.
+  --
+  -- The published Table 3 prints __01 for it.
+  | .newToken _ | .retireConnectionId _ | .pathResponse _ | .handshakeDone => packet == .oneRtt
   -- Pkts ih01: only type 0x1c can appear in Initial or Handshake packets.
   --
   -- So type 0x1d takes 0-RTT and 1-RTT.
   | .connectionClose _ none _ => packet == .zeroRtt || packet == .oneRtt
   -- Pkts __01: 0-RTT and 1-RTT.
-  --
-  -- RETIRE_CONNECTION_ID falls here, as the published Table 3 lists it.
-  --
-  -- Departure: the verified erratum 7365 of RFC 9000 makes it ___1, as the end of §12.5 says.
-  --
-  -- EthLib keeps the published table, so it accepts RETIRE_CONNECTION_ID in 0-RTT.
   | _ => packet == .zeroRtt || packet == .oneRtt
 
 /-- Reject a malformed frame as FRAME_ENCODING_ERROR, RFC 9000 §§19 and 20.1. -/
