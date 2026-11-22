@@ -874,9 +874,10 @@ def test_server_checks_the_encryption_level(
     assert error.value.code == code
 
 
-def ticket(early_data: bytes | None = None) -> hs.FlightMessage:
+def ticket(early_data: bytes | None = None, extensions: bytes = b"") -> hs.FlightMessage:
     # RFC 8446 §4.6.1: lifetime, age_add, nonce, ticket and extensions.
-    extensions = b"" if early_data is None else b"\x00\x2a\x00\x04" + early_data
+    if early_data is not None:
+        extensions += b"\x00\x2a\x00\x04" + early_data
     body = (60).to_bytes(4, "big") + bytes(4) + b"\x00\x00\x01x"
     body += len(extensions).to_bytes(2, "big") + extensions
     return {"level": "application", "data": b"\x04" + len(body).to_bytes(3, "big") + body}
@@ -888,6 +889,19 @@ def test_completed_client_accepts_session_ticket_without_changing_transcript(
 ) -> None:
     client_config, _, client, _ = client_flight()
     result = hs.client_step(client_config, SERVER_PEER_ID, client["state"], ticket(early_data))
+    assert result == {"state": client["state"], "output": [], "completion": None}
+
+
+def grease_extension(size: int) -> bytes:
+    # One extension of the GREASE type 0x0a0a (RFC 8701), which a receiver ignores.
+    return b"\x0a\x0a" + (size - 4).to_bytes(2, "big") + bytes(size - 4)
+
+
+def test_ticket_extensions_reach_their_bound() -> None:
+    # RFC 9846 §4.7.1: `Extension extensions<0..2^16-1>;`, where RFC 8446 §4.6.1 printed 2^16-2.
+    client_config, _, client, _ = client_flight()
+    incoming = ticket(extensions=grease_extension(2**16 - 1))
+    result = hs.client_step(client_config, SERVER_PEER_ID, client["state"], incoming)
     assert result == {"state": client["state"], "output": [], "completion": None}
 
 
