@@ -12,45 +12,11 @@ The C export of an execution node that runs a script of Engine API requests.
 
 The node starts from one block, valid, as its head, with the state after it.
 
-That block crosses without its body, so its header must commit to an empty body.
-
-Its header must also commit to its ommers.
-
-The configuration, the state and the block take the forms of the export on a chain.
-
-A block of proof of work also takes its total difficulty, and the terminal one.
-
-Each request is a JSON-RPC request object, run in order on the node that the requests before left.
-
-The methods are `engine_newPayload`, `engine_forkchoiceUpdated` and `engine_getPayload`.
-
-A request whose method starts with `eth_` goes to the JSON-RPC API, on the chain view of the node.
-
-Its network ID is the chain ID, and its response is the whole response object of that API.
-
-A node that gives no chain view raises.
-
 The result has one object per request, with the response and the forkchoice state of the node.
-
-The response has the result of the method, or its error object with the negative code.
-
-The forkchoice state is that of the node after the request.
-
-An update that starts a build stores it, and a request for its ID returns it.
-
-The builder of the node takes the suggested fee recipient, no extra data and no transaction.
-
-Before Glamsterdam its target gas limit is 30000000, a choice of this export.
 
 An unknown Engine API method, an argument that Lean cannot read, or an answer with no JSON, raises.
 
 Its code is then 0, as for a JSON-RPC request with no ID.
-
-An unknown method of the JSON-RPC API gets the error object of that API.
-
-That answer is a valid status of version 6, or a valid head at version 5.
-
-Each needs the inclusion list verdict of Bogota, whose execution rules are not here yet.
 -/
 
 public section
@@ -71,7 +37,8 @@ def responseJson (answer : Except EngineError Json) : Json :=
 
 /-- The builder of this export: the suggested fee recipient, no extra data and no transaction.
 
-Its target gas limit, which counts only before Glamsterdam, is 30000000. -/
+Its target gas limit, which counts only before Glamsterdam, is 30000000, a choice of this export.
+-/
 def exportBuilder : Node.Builder := fun attributes =>
   (⟨attributes.2.suggestedFeeRecipient, ByteArray.empty, 30000000⟩, [])
 
@@ -82,17 +49,24 @@ def nodeCall (setup : TrustedSetup) (node : Node) (request : Json) : Result (Jso
   let some method := (request.getObjValAs? String "method").toOption
     | rejectArgument none "request: no method"
   let params := request.getObjValD "params"
+  -- The methods are `engine_newPayload`, `engine_forkchoiceUpdated` and `engine_getPayload`.
+  --
+  -- A valid status of version 6 has no JSON here, so it raises.
+  --
+  -- It needs the inclusion list verdict of Bogota, whose execution rules are not here yet.
   if let some version := newPayloadVersion method then
     let (answer, next) := node.newPayloadStep version params
     let answer ← match answer with
       | .ok (status, reason) => .ok <$> statusJson version status reason
       | .error e => pure (.error e)
     return (responseJson answer, next)
+  -- An update that starts a build stores it, and a request for its ID returns it.
   if let some version := forkchoiceUpdatedVersion method then
     let (answer, next) := node.forkchoiceUpdatedBuildStep exportBuilder version params
     let answer ← match answer with
       | .ok (status, id) =>
         if version < 5 then pure (.ok (forkchoiceUpdatedResponseJson status none id))
+        -- A valid head at version 5 also needs that verdict, so it raises.
         else if status.status = .valid then
           rejectArgument none "no inclusion list verdict: Bogota does not run here"
         else pure (.ok (forkchoiceUpdatedResponseV2Json status none none id))
@@ -107,9 +81,15 @@ def nodeCall (setup : TrustedSetup) (node : Node) (request : Json) : Result (Jso
         | .error (.engine e) => pure (.error e)
         | .error e => toResult none (.error e)
     return (responseJson answer, node)
+  -- A request whose method starts with `eth_` goes to the JSON-RPC API, on the chain view.
+  --
+  -- Its network ID is the chain ID, and a node that gives no chain view raises.
   if method.startsWith "eth_" then
     let some view := node.view node.config.chainId.toNat setup
       | rejectArgument none "the node gives no chain view"
+    -- Its response is the whole response object of that API.
+    --
+    -- An unknown method of the JSON-RPC API gets the error object of that API.
     let some response := view.serve (.ok request)
       | rejectArgument none "request: a notification"
     return (response, node)
@@ -127,6 +107,7 @@ Then come the terminal total difficulty, the total difficulty of the block and t
 def runNodeOf (args : PyValue × ByteArray × (String × ByteArray × List ByteArray) × Nat × Nat ×
     PyValue) : Result PyValue := do
   let (config, state, anchor, terminalTotalDifficulty, totalDifficulty, requests) := args
+  -- A block of proof of work also takes its total difficulty, and the terminal one.
   unless terminalTotalDifficulty < 2 ^ 256 do
     rejectArgument none
       s!"config: a terminal total difficulty of {terminalTotalDifficulty}, not below 2^256"
@@ -134,16 +115,26 @@ def runNodeOf (args : PyValue × ByteArray × (String × ByteArray × List ByteA
     terminalTotalDifficulty := BitVec.ofNat 256 terminalTotalDifficulty
     terminalBlockHash := 0
     terminalBlockNumber := 0 }
+  -- The configuration, the state and the block take the forms of the export on a chain.
   let chain ← Execution.Blocks.Exports.chainOf config state [anchor]
   let some block := chain.recent.head? | rejectArgument none "anchor: no block"
+  -- The block crosses without its body, so its header must commit to an empty body.
+  --
+  -- Its header must also commit to its ommers.
   let some node := Node.start chain.config transition block chain.state totalDifficulty
     | rejectArgument none
         "anchor: no hash, a body that is not empty, or a total below the difficulty"
   let .arr requests := requests.toJson | rejectArgument none "requests: not an array"
   let setup ← toResult none ((Cryptography.Kzg.Exports.embeddedSetup ()).mapError
     fun e => UnreadArgument.mk s!"setup: {e.message}")
+  -- Each request is a JSON-RPC request object.
+  --
+  -- The requests run in order, each on the node that the requests before it left.
   let (_, out) ← requests.toList.foldlM (init := (node, #[])) fun (node, out) request => do
     let (response, next) ← nodeCall setup node request
+    -- The response has the result of the method, or its error object with the negative code.
+    --
+    -- The forkchoice state is that of the node after the request.
     return (next, out.push (Json.mkObj [("response", response),
       ("forkchoice", forkchoiceStateJson next.forkchoice)]))
   return .ofJson (.arr out)

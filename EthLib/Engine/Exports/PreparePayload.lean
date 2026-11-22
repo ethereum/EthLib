@@ -13,37 +13,13 @@ Two cover the update, one from Bellatrix to Fulu and one from Gloas.
 
 A third gives the finalized block hash of a store, from Bellatrix.
 
-The state, the block hashes, the fee recipient and each block of proof of work are SSZ bytes.
+Their arguments and their results are typed Python values.
 
-The preset, the configuration and the fork are named in UTF-8.
+The preset, the configuration and the fork are named in UTF-8, with replacements of values.
 
-The configuration of the name holds, with its replacements.
+The states, the blocks, the hashes and the fee recipient are SSZ bytes.
 
-The result is JSON text in UTF-8: `null`, or the forkchoice state and the payload attributes.
-
-Their fields carry the names of the Engine API, with hex data and hex quantities.
-
-The withdrawals appear from Capella, and the parent beacon block root from Deneb.
-
-From Gloas the slot number and the target gas limit appear.
-
-The custody columns are 16 bytes of an SSZ bitvector that the caller gives, else `null`.
-
-The consensus layer types this set as an SSZ bitvector: column `i` is bit `i mod 8` of byte `i / 8`.
-
-The export from Gloas builds its store from an anchor state, an anchor block and steps.
-
-It reads the finalized block hash from that store.
-
-Those steps take the form of the fork choice export.
-
-Its arguments and its result are typed Python values, and the result is the `dict` of that JSON.
-
-The head is a block root and a payload status: 0 empty, 1 full or 2 pending.
-
-From Heze the result also holds the transactions of the inclusion lists, in hex.
-
-The Engine API has no field for them, so they sit beside the payload attributes.
+The result of an update is the value of its JSON: the forkchoice state and the payload attributes.
 
 An input that does not decode, an unknown name or a fork that the export does not cover has code 0.
 
@@ -64,6 +40,13 @@ open EthLib.Serialization.JsonRpc (dataJson)
 /-- The forkchoice update of a proposer as JSON, with the fields of its fork and some others. -/
 def updateJson {fork : Fork} (update : ForkchoiceState) (attributes : PayloadAttributes fork)
     (others : List (String × Json) := []) : Json :=
+  -- The fields carry the names of the Engine API, with hex data and hex quantities.
+  --
+  -- The withdrawals appear from Capella, and the parent beacon block root from Deneb.
+  --
+  -- From Gloas the slot number and the target gas limit appear.
+  --
+  -- From Heze the payload attributes also hold the transactions of the inclusion lists, in hex.
   Json.mkObj ([("forkchoiceState", forkchoiceStateJson update),
     ("payloadAttributes", payloadAttributesJson attributes)] ++ others)
 
@@ -81,9 +64,11 @@ It is `None` when the proposer asks for nothing, before the merge. -/
 def prepareExecutionPayloadOf (args : PrepareArgs) : Result PyValue := do
   let (name, fork, state, replacements, safe, finalized, feeRecipient, powChain) := args
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  -- The configuration of the name holds, with its replacements.
   let config ← configWithValue name replacements
   let ⟨bellatrix⟩ ← holds (.bellatrix ≤ fork ∧ fork < .glamsterdam)
     s!"no payload preparation at {fork.name}"
+  -- Each block of proof of work is SSZ bytes too.
   let state ← decodeInput (BeaconState preset fork) state
   let safe ← decodeInput Root safe
   let finalized ← decodeInput Root finalized
@@ -91,6 +76,7 @@ def prepareExecutionPayloadOf (args : PrepareArgs) : Result PyValue := do
   let powChain ← powChain.mapM (decodeInput PowBlock)
   let prepared ← toResult none
     (prepareExecutionPayload config state bellatrix safe finalized feeRecipient powChain)
+  -- The result is `None`, or the forkchoice state and the payload attributes.
   return match prepared with
     | some (update, attributes) => .ofJson (updateJson update attributes)
     | none => .none
@@ -132,19 +118,27 @@ def preparePayloadOnStore
   let config ← configWithValue name replacements
   let ⟨gloas⟩ ← holds (.glamsterdam ≤ fork) s!"no payload preparation on a store at {fork.name}"
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
+  -- The store comes from an anchor state, an anchor block and steps.
+  --
+  -- Those steps take the form of the fork choice export.
   let anchorState ← decodeInput (BeaconState preset fork) anchorState
   let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
   let (store, _) ← replayForkChoice config checks anchorState anchorBlock steps
+  -- The head is a block root and a payload status: 0 empty, 1 full or 2 pending.
   let head : ForkChoiceNode :=
     { root := ← decodeInput Root headRoot, payloadStatus := ← payloadStatusOfCode headStatus }
   let state ← decodeInput (BeaconState preset fork) state
   let safe ← decodeInput Root safe
   let feeRecipient ← decodeInput ExecutionAddress feeRecipient
+  -- The custody columns are 16 bytes of an SSZ bitvector that the caller gives, else `null`.
+  --
+  -- The consensus layer types this set so: column `i` is bit `i mod 8` of byte `i / 8`.
   let custody ← match custodyColumns with
     | some bytes => do
       let _ ← decodeInput (Serialization.Ssz.Bitvector preset.NUMBER_OF_COLUMNS.toNat) bytes
       pure (dataJson bytes.toList)
     | none => pure Json.null
+  -- The finalized block hash is read from the store.
   let finalized ← toResult none
     ((store.getFinalizedExecutionBlockHash (Nat.le_trans (by decide) gloas)).mapError
       ProposerError.forkChoice)

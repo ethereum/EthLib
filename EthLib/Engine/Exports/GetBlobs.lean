@@ -10,17 +10,9 @@ public import EthLib.Engine.GetBlobs
 
 The C export of `engine_getBlobs`, versions 1 to 4.
 
-The blob pool crosses as a list of entries, one per versioned hash, with no hash twice.
-
-An entry holds the hash, the blob or `None`, the blob proof or `None`, and the cells or `None`.
-
-The cells are a list of 128 items, each a cell and its proof, or `None`.
-
-`None` in place of the list means that the pool holds no cell.
+The blob pool crosses as a list of entries, one per versioned hash.
 
 Whether the pool serves, its request limit and the active fork of the node cross beside it.
-
-The limit must be at least 128, and the fork at most Glamsterdam.
 
 The request is a JSON-RPC request object, with its method and its parameters.
 
@@ -51,9 +43,12 @@ abbrev PoolEntry :=
 
 /-- The pooled blob of an entry, whose list of cells must have one item per cell. -/
 def pooledOf (entry : PoolEntry) : Result (Bytes32 × PooledBlob) := do
+  -- An entry holds the hash, the blob or `None`, the blob proof or `None`, and the cells or `None`.
   let (hash, blob, proof, cells) := entry
   let cells ← match cells with
+    -- `None` in place of the list means that the pool holds no cell.
     | none => pure (Vector.replicate CELLS_PER_EXT_BLOB none)
+    -- The cells are a list of 128 items, each a cell and its proof, or `None`.
     | some cells => toResult none (exactArray CELLS_PER_EXT_BLOB cells.toArray fun count =>
       UnreadArgument.mk s!"pool: {count} cells, not {CELLS_PER_EXT_BLOB}")
   return (hash, ⟨blob, proof, cells⟩)
@@ -72,6 +67,7 @@ def getBlobsOf (args : List PoolEntry × Bool × Nat × String × PyValue) : Res
     rejectArgument none "pool: two entries with one versioned hash"
   -- The method is specified up to Glamsterdam, the fork of its version 4.
   let fork ← EthLib.Exports.forkUpTo .glamsterdam forkName.toUTF8
+  -- The limit must be at least 128.
   if below : maxRequest < MIN_BLOBS_REQUEST_LIMIT then
     rejectArgument none s!"pool: a limit of {maxRequest}, below {MIN_BLOBS_REQUEST_LIMIT}"
   else
