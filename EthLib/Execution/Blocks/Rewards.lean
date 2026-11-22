@@ -37,20 +37,29 @@ def WEI_PER_ETHER : Nat := 10 ^ 18
 
 /-- The block reward at a fork before Paris: `R_block` of the Yellow Paper, 11.3, in wei. -/
 def blockReward (fork : Fork) : Nat :=
+  -- §11.3: `R_block = 10^18 × 5` before Byzantium.
   if fork < .byzantium then 5 * WEI_PER_ETHER
+  -- `10^18 × 3` from Byzantium, by EIP-649.
   else if fork < .constantinople then 3 * WEI_PER_ETHER
+  -- `10^18 × 2` from Constantinople, by EIP-1234.
   else 2 * WEI_PER_ETHER
 
 /-- The reward of the beneficiary of a block with `ommers` ommers: `(1 + n / 32) · R_block`.
 
 The 32nd of the block reward is rounded down, which leaves it exact for every fork. -/
 def minerReward (fork : Fork) (ommers : Nat) : Nat :=
+  -- §11.3: `(1 + ||B_U|| / 32) R_block`, as `R_block + ||B_U|| × (R_block / 32)`.
+  --
+  -- That is exact, since 32 divides each `R_block`.
   blockReward fork + ommers * (blockReward fork / 32)
 
 /-- The reward of the beneficiary of an ommer `age` blocks older than the block.
 
 It is `(1 + (U_i - H_i) / 8) · R_block = (8 - age) · R_block / 8` of the Yellow Paper, 11.3. -/
 def ommerReward (fork : Fork) (age : Nat) : Nat :=
+  -- §11.3: `R = (1 + (U_i - H_i) / 8) R_block`, and `U_i - H_i = -age`.
+  --
+  -- EIP-649 writes `(8 - k) R_block / 8`, exact since 8 divides `R_block`.
   (8 - age) * blockReward fork / 8
 
 /-- Pay the rewards of a block at `number`: its beneficiary first, then each ommer's.
@@ -60,9 +69,12 @@ Each ommer is given by its beneficiary and its number.
 From Paris on there is no reward, and the state is unchanged. -/
 def payRewards (fork : Fork) (tx : TransactionState) (coinbase : Address) (number : Nat)
     (ommers : List (Address × Nat)) : Except StateError TransactionState :=
+  -- From Paris, EIP-3675 ends the rewards.
   if .paris ≤ fork then .ok tx
   else do
+    -- §11.3, `Omega`: `sigma'[B_H_c]_b = sigma[B_H_c]_b + (1 + ||B_U|| / 32) R_block`.
     let tx ← tx.createEther fork coinbase (BitVec.ofNat 256 (minerReward fork ommers.length))
+    -- Then `sigma'[U_c]_b = sigma[U_c]_b + R` for each ommer `U`, summed for a shared address.
     ommers.foldlM
       (fun tx (beneficiary, ommerNumber) => tx.createEther fork beneficiary
         (BitVec.ofNat 256 (ommerReward fork (number - ommerNumber))))

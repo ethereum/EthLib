@@ -99,17 +99,26 @@ structure GenesisParams where
 /-- The genesis header at `fork` whose state has the root `root`. -/
 def genesisHeader (fork : Fork) (params : GenesisParams) (root : Hash32) :
     Except BlockError (Header fork) := do
+  -- `TRIE(∅)` of an empty body, as §4.3.2 gives, where Appendix I writes 0.
+  --
+  -- The withdrawals root is `TRIE(∅)` too, by EIP-4895.
   let emptyRoot ← (transactionsRoot []).mapError .trie
   let emptyReceipts ← (receiptsRoot (fork := fork) []).mapError .trie
   let emptyWithdrawals ← (withdrawalsRoot []).mapError .trie
   let emptyAccessList ← (BlockAccessList.hash []).mapError .encoding
   return {
+    -- Appendix I: `H_p = 0`, and `H_o = KEC(RLP(()))`, the hash of no ommers.
     parentHash := 0
     ommersHash := EMPTY_OMMER_HASH
+    -- The chain chooses `H_c`, where Appendix I has `0_160`.
     coinbase := params.coinbase
+    -- `H_r`, the root of the allocation.
     stateRoot := root
     transactionsRoot := emptyRoot
     receiptRoot := emptyReceipts
+    -- `H_b = 0`, `H_i = 0` and `H_g = 0`.
+    --
+    -- The chain chooses `H_d`, `H_l`, `H_s`, `H_x`, `H_m` and `H_n`.
     bloom := 0
     difficulty := params.difficulty
     number := 0
@@ -119,20 +128,29 @@ def genesisHeader (fork : Fork) (params : GenesisParams) (root : Hash32) :
     extraData := params.extraData
     prevRandao := params.prevRandao
     nonce := params.nonce
+    -- EIP-1559: the chain chooses the base fee.
     baseFeePerGas := fun _ => params.baseFeePerGas
+    -- EIP-4895: `TRIE(∅)`, no withdrawal.
     withdrawalsRoot := fun _ => emptyWithdrawals
+    -- EIP-4844: no blob gas used; the chain chooses the excess blob gas.
     blobGasUsed := fun _ => 0
     excessBlobGas := fun _ => params.excessBlobGas
+    -- EIP-4788: no parent beacon block, so 0.
     parentBeaconBlockRoot := fun _ => 0
+    -- EIP-7685: the hash of no request.
     requestsHash := fun _ => requestsHash []
+    -- EIP-7928: the hash of an empty block access list.
     blockAccessListHash := fun _ => emptyAccessList
+    -- EIP-7843: the chain chooses the slot number.
     slotNumber := fun _ => params.slotNumber
   }
 
 /-- The genesis block at `fork` of a chain that starts with the state `alloc`. -/
 def genesis (fork : Fork) (params : GenesisParams) (alloc : State) :
     Except BlockError (Block fork Transaction) := do
+  -- `TRIE(L_S(sigma))` of the allocation, §4.1.
   let root ← (stateRoot keccak256 alloc).mapError .trie
+  -- The header, then no transaction, no ommer and, from Shapella, no withdrawal.
   return ⟨← genesisHeader fork params root, [], [], fun _ => []⟩
 
 end EthLib.Execution.Blocks
