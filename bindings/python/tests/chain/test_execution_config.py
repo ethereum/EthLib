@@ -147,8 +147,26 @@ def test_no_time_refused() -> None:
             SCHEDULE_OUT_OF_BOUNDS,
             "scheduleOutOfBounds",
         ),
+        (
+            {"target": 3, "max": 2**64, "baseFeeUpdateFraction": 1},
+            SCHEDULE_OUT_OF_BOUNDS,
+            "scheduleOutOfBounds",
+        ),
+        (
+            {"target": 3, "max": 2**47, "baseFeeUpdateFraction": 1},
+            SCHEDULE_OUT_OF_BOUNDS,
+            "scheduleOutOfBounds",
+        ),
     ],
-    ids=["no-fraction", "text", "target-above-max", "max-zero", "fraction-zero"],
+    ids=[
+        "no-fraction",
+        "text",
+        "target-above-max",
+        "max-zero",
+        "fraction-zero",
+        "max-2^64",
+        "max-blob-gas-2^64",
+    ],
 )
 def test_bad_entry_refused(entry: dict, code: int, fault: str) -> None:
     """An entry without three natural numbers, or out of the bounds of a schedule, is refused."""
@@ -207,5 +225,25 @@ def test_write_refuses_what_a_file_cannot_hold() -> None:
     """A schedule without a fork has no name in a file, so the writer refuses the configuration."""
     config = {**CONFIG, "blobSchedules": [*CONFIG["blobSchedules"], ["time", 1800000000, 1, 2, 3]]}
     with raises(chain.ChainError, "config: a configuration file cannot hold it whole") as error:
+        chain.write_execution_config(config)
+    assert error.value.code == 0
+
+
+def test_largest_schedule_read() -> None:
+    """The largest maximum whose blob gas, at 2^17 per blob, stays below 2^64 is read."""
+    config = copy.deepcopy(EXAMPLE)
+    config["blobSchedule"]["bpo2"] = {"target": 1, "max": 2**47 - 1, "baseFeeUpdateFraction": 1}
+    assert chain.execution_blob_schedule(BASE, config, 0, 1767387784) == (1, 2**47 - 1, 1)
+
+
+@pytest.mark.parametrize("maximum", [2**47, 2**64], ids=["blob-gas-2^64", "2^64"])
+def test_export_schedule_out_of_bounds_refused(maximum: int) -> None:
+    """The reader of the other exports refuses the schedules that the file reader refuses."""
+    config = {**CONFIG, "blobSchedules": [["bpo2", "time", 1767387784, 1, maximum, 1]]}
+    with raises(
+        chain.ChainError,
+        "a blob schedule needs target ≤ max, 0 < max, "
+        "0 < update fraction and a blob gas of max below 2^64",
+    ) as error:
         chain.write_execution_config(config)
     assert error.value.code == 0

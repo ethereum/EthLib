@@ -148,10 +148,11 @@ The header check needs no fork for a schedule, so none carries one. -/
 def blobSchedulesOf (entries : List (Nat × Nat × Nat × Nat)) :
     Result (List (Option Fork × Activation × BlobSchedule)) :=
   entries.mapM fun (time, target, max, fraction) =>
-    if h : target ≤ max ∧ 0 < max ∧ 0 < fraction then
-      pure (none, .time time, ⟨target, max, fraction, h.1, h.2.1, h.2.2⟩)
+    match BlobSchedule.ofNat? target max fraction with
+    | some schedule => pure (none, .time time, schedule)
     -- No error type covers a blob schedule of the binding, so its code is 0.
-    else rejectArgument none "a blob schedule needs target ≤ max, 0 < max and 0 < update fraction"
+    | none => rejectArgument none <| "a blob schedule needs target ≤ max, 0 < max, " ++
+        "0 < update fraction and a blob gas of max below 2^64"
 
 /-- The arguments of a header check.
 

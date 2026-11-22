@@ -62,7 +62,11 @@ inductive ConfigError where
   | timeNotNumber (fork : Fork)
   /-- The entry of a fork is not an object with three natural numbers. -/
   | scheduleMalformed (fork : Fork)
-  /-- The entry of a fork has a target above its maximum, or a maximum or fraction of 0. -/
+  /-- The entry of a fork has a target above its maximum, or a maximum or fraction of 0.
+
+  It is also this error when the blob gas of the maximum reaches `2^64`.
+
+  So a target or a maximum of `2^64` or more is refused. -/
   | scheduleOutOfBounds (fork : Fork)
   /-- A fork has an entry, but the file gives it no time. -/
   | scheduleWithoutTime (fork : Fork)
@@ -99,10 +103,10 @@ def readSchedule (fork : Fork) (v : Json) : Except ConfigError BlobSchedule :=
   match v.getObjValAs? Nat "target", v.getObjValAs? Nat "max",
       v.getObjValAs? Nat "baseFeeUpdateFraction" with
   | .ok target, .ok max, .ok fraction =>
-    -- The target is at most the maximum, and the maximum and the fraction are positive.
-    if h : target ≤ max ∧ 0 < max ∧ 0 < fraction then
-      pure ⟨target, max, fraction, h.1, h.2.1, h.2.2⟩
-    else throw (.scheduleOutOfBounds fork)
+    -- The three numbers must meet the bounds of a schedule, which keep the first two in 64 bits.
+    match BlobSchedule.ofNat? target max fraction with
+    | some schedule => pure schedule
+    | none => throw (.scheduleOutOfBounds fork)
   | _, _, _ => throw (.scheduleMalformed fork)
 
 /-- The activation by time that a configuration gives a fork, if it gives one. -/
@@ -186,7 +190,7 @@ def readExecutionConfig (base : ChainConfig) (j : Json) : Except ConfigError Cha
 
 /-- The entry of a blob schedule: its target, maximum and update fraction, as JSON numbers. -/
 def scheduleJson (s : BlobSchedule) : Json :=
-  Json.mkObj [("target", toJson s.target), ("max", toJson s.max),
+  Json.mkObj [("target", toJson s.target.toNat), ("max", toJson s.max.toNat),
     ("baseFeeUpdateFraction", toJson s.baseFeeUpdateFraction)]
 
 /-- The fork times and blob schedules of a configuration, as a configuration file holds them.

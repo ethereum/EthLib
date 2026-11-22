@@ -5426,7 +5426,18 @@ The reader takes a reading where its sources leave a choice:
   The reader takes a time that the file leaves out from the configuration it merges into, and refuses an entry whose fork has a time in neither.
 - The reader reads only the time keys and the blob schedules.
   No EIP names the keys of the forks by block number, such as `londonBlock`, so those come from the configuration it merges into.
-- The reader bounds times below `2^64`, the bound of a block's time, but not the numbers of a schedule, which EIP-7892 types as 64-bit.
+- The reader bounds times below `2^64`, the bound of a block's time.
+  EIP-7892 types the target and the maximum of a schedule as 64-bit integers, and EthLib types them `UInt64`.
+  Every reader of a schedule also refuses a maximum whose blob gas, at `2^17` per blob, reaches `2^64`, a bound that EIP-7892 does not state.
+  A header holds the blob gas of its block in 64 bits ([EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#header-extension)), so no block could use that much blob gas.
+  The maximum still enters the reserve price rule of EIP-7918 through `(max - target) // max`, so refusing it is a restriction that EthLib chooses.
+  With this bound, the blob gas of the target and of the maximum never overflows 64 bits.
+- The excess blob gas of a header follows [EIP-7918](https://eips.ethereum.org/EIPS/eip-7918#functions), which computes with unbounded integers.
+  A computation in 64 bits that fails on overflow can refuse a block that EthLib accepts, in two cases.
+  The parent's blob gas times `max - target` can reach `2^64`, which needs a schedule whose maximum is in the millions.
+  Under one schedule, the maximum must be at least 11,863,284; after a change of schedule, a parent of two blobs under a new maximum of `2^46` is enough.
+  The parent's excess plus its blob gas can reach `2^64` while the excess that follows stays below.
+  No chain with the schedules of the EIPs reaches either case.
 - The reader refuses forks whose times break the order of the timeline.
 - The writer leaves out what a file cannot hold: a schedule without a fork or of a fork with no name, a second schedule of one fork, and the time of a fork with no name.
   It writes a schedule of Shanghai, which the reader ignores, since blob schedules start at Cancun.

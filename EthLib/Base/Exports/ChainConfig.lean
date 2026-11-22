@@ -79,7 +79,7 @@ def activationOfJson (j : Json) : Result (Fork × Activation) := do
 
 A fork name in front gives the fork that the schedule belongs to.
 
-The target must be at most the maximum, and the maximum and the fraction must be positive. -/
+The three numbers must meet the bounds of a schedule, so the target and maximum stay in 64 bits. -/
 def blobScheduleOfJson (j : Json) : Result (Option Fork × Activation × BlobSchedule) := do
   let (fork, kind, n, target, max, fraction) ← match j with
     | .arr #[.str kind, n, target, max, fraction] => pure (none, kind, n, target, max, fraction)
@@ -89,9 +89,10 @@ def blobScheduleOfJson (j : Json) : Result (Option Fork × Activation × BlobSch
   let some target := target.getNat?.toOption | throw (0, "a blob schedule has no target")
   let some max := max.getNat?.toOption | throw (0, "a blob schedule has no maximum")
   let some fraction := fraction.getNat?.toOption | throw (0, "a blob schedule has no fraction")
-  if h : target ≤ max ∧ 0 < max ∧ 0 < fraction then
-    return (fork, ← activationOf kind n, ⟨target, max, fraction, h.1, h.2.1, h.2.2⟩)
-  else throw (0, "a blob schedule needs target ≤ max, 0 < max and 0 < update fraction")
+  let some schedule := BlobSchedule.ofNat? target max fraction
+    | throw (0, "a blob schedule needs target ≤ max, 0 < max, " ++
+        "0 < update fraction and a blob gas of max below 2^64")
+  return (fork, ← activationOf kind n, schedule)
 
 /-- The deposit contract address of a configuration: `0x` and forty hex digits. -/
 def depositContractOfJson (j : Json) : Result Address := do
@@ -155,7 +156,7 @@ def executionConfigOf (base file : PyValue) : Result ChainConfig := do
 
 It is the target, the maximum and the update fraction, if the chain sets a schedule there. -/
 def executionBlobScheduleOf (args : PyValue × PyValue × UInt64 × UInt64) :
-    Result (Option (Nat × Nat × Nat)) := do
+    Result (Option (UInt64 × UInt64 × Nat)) := do
   let (base, file, number, timestamp) := args
   let config ← executionConfigOf base file
   return (config.blobScheduleAt number.toNat timestamp.toNat).map

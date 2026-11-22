@@ -32,16 +32,16 @@ def excessBlobGasGrowth {forks : Nat → Fork} (dencun : ∀ i, .dencun ≤ fork
     (schedules : (i : Nat) → Since .dencun (forks i) BlobSchedule) (k : Nat) : Nat :=
   ((List.range k).map fun i =>
     GAS_PER_BLOB *
-      ((schedules (i + 1) (dencun (i + 1))).max -
-        (schedules (i + 1) (dencun (i + 1))).target)).sum
+      ((schedules (i + 1) (dencun (i + 1))).max.toNat -
+        (schedules (i + 1) (dencun (i + 1))).target.toNat)).sum
 
 /-- One more header adds the bound of its own schedule. -/
 theorem excessBlobGasGrowth_succ {forks : Nat → Fork} (dencun : ∀ i, .dencun ≤ forks i)
     (schedules : (i : Nat) → Since .dencun (forks i) BlobSchedule) (k : Nat) :
     excessBlobGasGrowth dencun schedules (k + 1) =
       excessBlobGasGrowth dencun schedules k + GAS_PER_BLOB *
-        ((schedules (k + 1) (dencun (k + 1))).max -
-          (schedules (k + 1) (dencun (k + 1))).target) := by
+        ((schedules (k + 1) (dencun (k + 1))).max.toNat -
+          (schedules (k + 1) (dencun (k + 1))).target.toNat) := by
   simp [excessBlobGasGrowth, List.range_succ]
 
 /-- Along valid headers from Dencun, the excess grows by at most the bounds of the children.
@@ -56,7 +56,7 @@ theorem excessBlobGas_le_of_checkHeader {forks : Nat → Fork} {k : Nat}
     (valid : ∀ i (hi : i < k),
       checkHeader (mono i hi) (headers i) (headers (i + 1)) (schedules (i + 1)) = .ok ())
     (used : ∀ i < k, ((headers i).blobGasUsed (dencun i)).toNat ≤
-      GAS_PER_BLOB * (schedules (i + 1) (dencun (i + 1))).max) :
+      GAS_PER_BLOB * (schedules (i + 1) (dencun (i + 1))).max.toNat) :
     ((headers k).excessBlobGas (dencun k)).toNat ≤
       ((headers 0).excessBlobGas (dencun 0)).toNat + excessBlobGasGrowth dencun schedules k := by
   induction k with
@@ -69,8 +69,8 @@ theorem excessBlobGas_le_of_checkHeader {forks : Nat → Fork} {k : Nat}
     -- The parent's excess and blob gas used are its fields, since it is from Dencun.
     have hStep : ((headers (k + 1)).excessBlobGas (dencun (k + 1))).toNat ≤
         ((headers k).excessBlobGas (dencun k)).toNat +
-          GAS_PER_BLOB * ((schedules (k + 1) (dencun (k + 1))).max -
-            (schedules (k + 1) (dencun (k + 1))).target) := by
+          GAS_PER_BLOB * ((schedules (k + 1) (dencun (k + 1))).max.toNat -
+            (schedules (k + 1) (dencun (k + 1))).target.toNat) := by
       rw [hExcess]
       simp only [expectedExcessBlobGas, parentExcessBlobGas, parentBlobGasUsed, dencun k,
         ↓reduceDIte]
@@ -87,7 +87,7 @@ theorem excessBlobGasGrowth_of_eq {forks : Nat → Fork} {dencun : ∀ i, .dencu
     {schedules : (i : Nat) → Since .dencun (forks i) BlobSchedule} {schedule : BlobSchedule}
     {k : Nat} (same : ∀ i, 0 < i → i ≤ k → schedules i (dencun i) = schedule) :
     excessBlobGasGrowth dencun schedules k =
-      k * (GAS_PER_BLOB * (schedule.max - schedule.target)) := by
+      k * (GAS_PER_BLOB * (schedule.max.toNat - schedule.target.toNat)) := by
   induction k with
   | zero => simp [excessBlobGasGrowth]
   | succ k ih =>
@@ -102,7 +102,7 @@ theorem blobGasUsed_le_of_stateTransition {fork : Fork} (h : .dencun ≤ fork)
     {post : State.State} (applied : stateTransition chain block checkSeal = .ok post) :
     (block.header.blobGasUsed h).toNat ≤ GAS_PER_BLOB *
       (chainBlobSchedule chain.config fork block.header.number
-        block.header.timestamp.toNat h).max := by
+        block.header.timestamp.toNat h).max.toNat := by
   obtain ⟨-, -, -, hashes, output, roots, -, hApply, -, hChecks, -⟩ := stateTransition_eq_ok applied
   obtain ⟨_, _, txs, _, _, _, _, hTxs, _, _, _, _, _, _, hGas, _⟩ := applyBody_eq_ok hApply
   rw [← blobGasUsed_of_outputChecks h hChecks, hGas]
@@ -174,11 +174,11 @@ theorem excessBlobGas_le_of_stateTransition {forks : Nat → Fork} (dencun : ∀
   have used : ∀ i < k, ((blocks i).header.blobGasUsed (dencun i)).toNat ≤
       GAS_PER_BLOB * (chainBlobSchedule (chains 0).config (forks (i + 1))
         (blocks (i + 1)).header.number (blocks (i + 1)).header.timestamp.toNat
-        (dencun (i + 1))).max := by
+        (dencun (i + 1))).max.toNat := by
     intro i hi
     have h1 := blobGasUsed_le_of_stateTransition (dencun i) (applied i (Nat.le_of_lt hi))
     rw [hConfig i (Nat.le_of_lt hi)] at h1
-    exact Nat.le_trans h1 (Nat.mul_le_mul_left _ (grows i hi))
+    exact Nat.le_trans h1 (Nat.mul_le_mul_left _ (UInt64.le_iff_toNat_le.mp (grows i hi)))
   exact excessBlobGas_le_of_checkHeader (headers := fun i => (blocks i).header)
     (schedules := fun i => chainBlobSchedule (chains 0).config (forks i)
       (blocks i).header.number (blocks i).header.timestamp.toNat)

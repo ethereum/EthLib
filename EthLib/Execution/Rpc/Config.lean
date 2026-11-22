@@ -208,7 +208,8 @@ def ConfigObject.toJson (c : ConfigObject) : Json :=
     ("activationTime", Lean.toJson c.activationTime),
     ("blobSchedule", Json.mkObj [
       ("baseFeeUpdateFraction", Lean.toJson c.blobSchedule.baseFeeUpdateFraction),
-      ("max", Lean.toJson c.blobSchedule.max), ("target", Lean.toJson c.blobSchedule.target)]),
+      ("max", Lean.toJson c.blobSchedule.max.toNat),
+      ("target", Lean.toJson c.blobSchedule.target.toNat)]),
     ("chainId", quantityJson c.chainId.toNat),
     ("forkId", dataJson c.forkId.toList),
     ("precompiles", configAddressesJson c.precompiles),

@@ -887,9 +887,9 @@ private theorem outputRoots_of_transactionsRoot {fork : Fork} {txs txs' : List T
 private theorem calcExcessBlobGas_le_add {fork : Fork} {schedule : BlobSchedule}
     {excess used baseFee : Nat} :
     Fees.BlobBaseFee.calcExcessBlobGas fork schedule excess used baseFee ≤ excess + used := by
-  have hd : used * (schedule.max - schedule.target) / schedule.max ≤ used :=
+  have hd : used * (schedule.max.toNat - schedule.target.toNat) / schedule.max.toNat ≤ used :=
     Nat.div_le_of_le_mul (by
-      rw [Nat.mul_comm schedule.max]
+      rw [Nat.mul_comm schedule.max.toNat]
       exact Nat.mul_le_mul_left _ (Nat.sub_le _ _))
   unfold Fees.BlobBaseFee.calcExcessBlobGas
   dsimp only

@@ -824,6 +824,21 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the target and the maximum of a blob schedule are `UInt64`, as EIP-7892 types them, and the update fraction stays `Nat` ([#3845](https://github.com/ethereum/EthLib/issues/3845)).
+  `BlobSchedule` gains the bound `maxBlobGas_lt`: the blob gas of the maximum, `GAS_PER_BLOB * max`, is below `2^64`.
+  `GAS_PER_BLOB` moves to `EthLib.Base`, and `Fees.BlobBaseFee` exports it under its old name.
+  `BlobSchedule.ofNat?` builds a schedule from three natural numbers when they meet its bounds.
+  `ofNat?_isSome_iff` states when it builds one, `target_toNat_of_ofNat?`, `max_toNat_of_ofNat?` and `baseFeeUpdateFraction_of_ofNat?` what it holds, and `ofNat?_toNat` the round trip.
+  The reader of a configuration file, the configuration reader of the exports and the blob schedules of the header check build their schedules with it.
+  So they refuse a target or a maximum of `2^64` or more, and a maximum of `2^47` or more, whose blob gas reaches `2^64`.
+  The statements on the excess blob gas read the target and the maximum through `UInt64.toNat`: `calcExcessBlobGas_of_lt`, `calcExcessBlobGas_eq_sub`, `calcExcessBlobGas_of_lt_fusaka`, `calcExcessBlobGas_of_below`, `le_calcExcessBlobGas_of_below`, `calcExcessBlobGas_le`, `excessBlobGasGrowth`, `excessBlobGasGrowth_succ`, `excessBlobGas_le_of_checkHeader`, `excessBlobGasGrowth_of_eq` and `blobGasUsed_le_of_stateTransition`.
+  In `excessBlobGas_le_of_stateTransition`, the hypothesis that the maximum never falls compares the two maximums as `UInt64`.
+  `getObjVal_configObject_blobSchedule` writes the target and the maximum as the JSON numbers of their `toNat`.
+  The C export `execution_blob_schedule` returns the same integers, now typed as 64-bit.
+  Migration: read `s.target.toNat` and `s.max.toNat` where a natural number is needed, and build a schedule from numbers with `BlobSchedule.ofNat?`.
+  In Python, `blocks.validate_header` and the configuration readers of `chain` refuse a blob schedule whose maximum is `2^47` or more.
+  The message of the two readers that are not the file reader becomes `a blob schedule needs target ≤ max, 0 < max, 0 < update fraction and a blob gas of max below 2^64`.
+
 - In Lean, the KZG trusted setup decodes its hex strings with the reader of Base, and its own copy is removed ([#3837](https://github.com/ethereum/EthLib/issues/3837)).
   `TrustedSetup.nibble?`, `TrustedSetup.hexToBytesAux` and `TrustedSetup.hexToBytes?` are removed, and the decoders of the setup give the same results.
   `SetupLagrange.coords_of_encodes`, `SetupTorsion.modulus_smul_eq_zero`, `TrustedSetup.hexListToBytes_mem` and `TrustedSetup.hexListToBytes_getElem` state `Base.hexBytes? s.toList` where they stated `TrustedSetup.hexToBytes? s`.
