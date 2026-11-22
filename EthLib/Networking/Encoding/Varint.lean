@@ -13,14 +13,7 @@ Each group takes one byte.
 
 The top bit of a byte is the continuation bit: it is set on every byte but the last.
 
-```text
-    300 = 0b10_0101100
-
-    group 0 = 0101100 = 0x2c   ->  byte 0x2c | 0x80 = 0xac   (more bytes follow)
-    group 1 = 0000010 = 0x02   ->  byte 0x02                 (last byte)
-
-    300  ->  [ 0xac, 0x02 ]
-```
+For example, 300 has the groups `0x2c` and `0x02`, so its bytes are `0xac 0x02`.
 
 The consensus layer sets three rules for the length prefix:
 
@@ -28,8 +21,8 @@ The consensus layer sets three rules for the length prefix:
 - It MUST NOT exceed 10 bytes.
 - It MUST decode into a type that holds every `Uint64` value.
 
-The byte format is "Base 128 Varints" of the protobuf encoding guide:
-<https://protobuf.dev/programming-guides/encoding/#varints>.
+The byte format is Base 128 Varints of the protobuf encoding guide:
+<https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/encoding.md#base-128-varints-varints>
 -/
 
 @[expose] public section
@@ -104,29 +97,32 @@ def encodeAux : Nat → Nat → List UInt8
   -- Out of budget: write nothing.
   | _, 0 => []
   | n, fuel + 1 =>
-      -- The value fits in one group: this is the last byte.
+      -- Base 128 Varints: if `n < 2^7`, one byte holds the 7-bit payload `n`, with its MSB clear.
+      --
+      -- The MSB is the continuation bit, so a clear MSB makes this the last byte.
       if n < groupSize then
         [UInt8.ofNat n]
-      -- Otherwise write the low group with the continuation bit, then the rest.
+      -- Otherwise the payload `n mod 2^7` comes first, with the MSB set, since a byte follows.
+      --
+      -- The payloads are in little-endian order, so the next bytes encode `floor(n / 2^7)`.
       else
         UInt8.ofNat (n % groupSize + continuation) :: encodeAux (n / groupSize) fuel
 
 /-- A 64-bit value as an unsigned protobuf varint. -/
 def encode (v : UInt64) : List UInt8 :=
+  -- Base 128 Varints: an unsigned 64-bit integer takes one to ten bytes, so the budget suffices.
   encodeAux v.toNat maxLength
 
-/-- The number that a list of varint bytes denotes, least significant group first.
-
-Each byte contributes its low seven bits.
-
-The continuation bit marks structure, not value, so it is dropped.
-
-```text
-    [ b_0, b_1, ..., b_k ]  ->  (b_0 mod 128) + 128 * ((b_1 mod 128) + 128 * (...))
-```
--/
+/-- The number that a list of varint bytes denotes, least significant group first. -/
 def valueOf : List UInt8 → Nat
   | [] => 0
+  -- Base 128 Varints: the MSB of each byte is dropped, as it only marks the end of the number.
+  --
+  -- The payloads are little-endian: `b_0 ... b_k` denotes the sum of `(b_i mod 2^7) * 2^(7 i)`.
+  --
+  -- That sum is the guide's reverse-and-concatenate of the payloads, written as arithmetic.
+  --
+  -- It is `(b_0 mod 2^7) + 2^7 * v`, for the value `v` of `b_1 ... b_k`.
   | b :: bs => b.toNat % groupSize + groupSize * valueOf bs
 
 /-- The bytes of one varint that fills the whole input, read at most `fuel` bytes deep.
@@ -142,18 +138,19 @@ Reading stops once the budget is spent, so the work is bounded by the cap, not b
 A long run of continuation bytes is rejected at byte eleven.
 -/
 def groups : Nat → List UInt8 → Except VarintError (List UInt8)
-  -- The input ran out before a last byte.
+  -- The input ran out while the last MSB read said a byte follows, or before any byte.
   | _, [] => .error .unterminated
-  -- Every allowed byte carried the continuation bit, and more bytes follow.
+  -- At most ten bytes, the cap of the consensus layer, and ten bytes had their MSB set.
   | 0, _ :: _ => .error .tooLong
   | fuel + 1, b :: bs =>
+      -- Base 128 Varints: a clear MSB says no byte of the varint follows.
       if b.toNat < continuation then
-        -- A last byte must also be the last byte of the input.
+        -- The varint fills the whole input, so this byte must also end the input.
         match bs with
         | [] => .ok [b]
         | more@(_ :: _) => .error (.trailingBytes more.length)
       else
-        -- A continued byte: keep it, and read the rest with one byte less of budget.
+        -- A set MSB says the next byte is part of the varint, with one byte less of budget.
         (groups fuel bs).map (b :: ·)
 
 /-- The bytes of a varint at the start of the input, and the bytes after them.
@@ -163,6 +160,11 @@ A varint ends at its first byte below `0x80`.
 The prefix holds at most eleven bytes, so the decoder still sees an overlong prefix.
 -/
 def split (bs : List UInt8) : List UInt8 × List UInt8 :=
+  -- The varint ends at the first byte with a clear MSB, searched among the first ten bytes.
+  --
+  -- With no such byte there, the prefix takes an eleventh byte, which decoding rejects as too long.
+  --
+  -- An input that ends first is the whole prefix, which decoding rejects as unterminated.
   let k := (bs.take maxLength).findIdx (·.toNat < continuation) + 1
   (bs.take k, bs.drop k)
 
@@ -175,30 +177,25 @@ Dropping that group would denote the same value.
 A single byte is always minimal, the byte `0x00` included.
 -/
 def nonMinimal (gs : List UInt8) : Bool :=
+  -- More than one byte, and the last payload is zero: the last byte is exactly `0x00`.
   1 < gs.length && gs.getLast? == some 0
 
-/-- The 64-bit value a varint denotes, or why it is not a valid varint.
-
-The rules are checked in this order:
-
-1. The ten-byte cap, while reading, so the work stays bounded.
-2. Minimal encoding.
-3. The 64-bit range.
-
-# Why minimality is enforced
-
-The specification only says SHOULD.
-
-Rejecting padding means each length has exactly one encoding.
-
-So a message cannot be re-sent with a different prefix that differs only in padding.
--/
+/-- The 64-bit value a varint denotes, or why it is not a valid varint. -/
 def decode (bs : List UInt8) : Except VarintError UInt64 :=
+  -- The ten-byte cap is checked first, while reading, so the work stays bounded.
   match groups maxLength bs with
   | .error e => .error e
   | .ok gs =>
+      -- Next, minimality: the consensus layer only says the length prefix SHOULD be minimal.
+      --
+      -- EthLib rejects padding anyway, so that each length has exactly one encoding.
+      --
+      -- So a message cannot be re-sent with a prefix that differs only in padding.
       if nonMinimal gs then
         .error (.nonMinimal gs.length)
+      -- Last, the range: Base 128 Varints encodes unsigned 64-bit integers, below `2^64`.
+      --
+      -- The guide leaves a larger sum unspecified, and the consensus layer needs a 64-bit value.
       else if 2 ^ 64 ≤ valueOf gs then
         .error (.overflow (valueOf gs))
       else
