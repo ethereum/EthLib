@@ -4,9 +4,6 @@ module
 # `BitReversal`
 
 The bit reversal of an index, and the bit-reversal permutation of an array.
-
-The step comments quote the functions of the same names in consensus-specs at `8a3df1d7`:
-<https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/deneb/polynomial-commitments.md>
 -/
 
 @[expose] public section
@@ -24,9 +21,11 @@ def reverseBitsAux (x r : Nat) : Nat → Nat
 
 `order` must be a positive power of two. -/
 def reverseBits (n order : Nat) : Nat :=
-  -- reverse_bits: `assert is_power_of_two(order)` is left to the callers.
+  -- `order` must be a power of two; that check is left to the callers.
   --
-  -- `n` over `order.bit_length() - 1` bits, reversed; that count is `log2 order`.
+  -- The lowest `b - 1` bits of `n` are reversed, where `b` is the bit length of `order`.
+  --
+  -- That count `b - 1` is `log2 order`.
   reverseBitsAux n 0 order.log2
 
 /-- With `r` on top of `bits` reversed bits, the result stays below `(r + 1) * 2^bits`. -/
@@ -56,7 +55,7 @@ Here `rev` reverses the bits of an index below the size.
 
 The permutation is an involution when the size is a power of two. -/
 def bitReversalPermutation {α : Type _} (seq : Array α) : Array α :=
-  -- bit_reversal_permutation: `[sequence[reverse_bits(i, len(sequence))] for i in ...]`.
+  -- Entry `i` of the output is entry `rev(i)` of the input, for every `i` below the size.
   Array.ofFn (n := seq.size) fun i =>
     seq[reverseBits i.val seq.size]'(reverseBits_lt _ (Nat.lt_of_le_of_lt (Nat.zero_le _) i.isLt))
 

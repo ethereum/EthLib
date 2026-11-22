@@ -8254,7 +8254,7 @@ No specification file imports it.
 The setup raises three separate assumptions, and each use of KZG relies on a different subset of them.
 
 - Provenance: the embedded bytes are the ceremony's output.
-  They match consensus-specs `presets/mainnet/trusted_setups/trusted_setup_4096.json` byte for byte, and `Kzg/TrustedSetupData.lean` records that source, the commit it comes from and its sha256.
+  They match the published setup file byte for byte, and `Kzg/TrustedSetupData.lean` records its SHA-256.
 - Algebraic consistency: the bytes decode to valid points, the monomial points are powers of one secret, and the Lagrange points are the matching basis.
   For the embedded bytes, the first part is proved only in part, the third is proved if the bytes decode, and the second is not.
   `TrustedSetup.ofHex_valid` (`Proofs/Kzg/TrustedSetup.lean`) proves that, if they decode, each point is on its curve.

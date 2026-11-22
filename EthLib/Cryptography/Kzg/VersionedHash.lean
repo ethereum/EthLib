@@ -24,7 +24,7 @@ def VERSIONED_HASH_VERSION_KZG : UInt8 := 0x01
 
 /-- The version byte, then the last 31 bytes of the SHA-256 of a compressed G1 commitment. -/
 def kzgCommitmentToVersionedHash (commitment : Vector UInt8 48) : Vector UInt8 32 :=
-  -- kzg_to_versioned_hash: `VERSIONED_HASH_VERSION_KZG + sha256(commitment)[1:]`.
+  -- The version byte `0x01`, then bytes 1 to 31 of `SHA-256(commitment)`.
   (Hash.Sha256.hash32 (Base.packBytes commitment)).set 0 VERSIONED_HASH_VERSION_KZG
 
 end EthLib.Cryptography.Kzg
