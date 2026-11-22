@@ -11,26 +11,16 @@ An Ethereum transaction carries a signature, not a public key.
 
 The key is rebuilt from the signature and the hash, then hashed into the sender's address.
 
-The verification equation `R = u1 G + u2 Q` can be solved for `Q`:
+The recovery id picks the signer's point `R`, whose `x` is `r`.
 
-```text
-s R = e G + r Q, so Q = r^(-1) (s R - e G)
-```
-
-`R` is not sent, but its `x` is `r`, so `R` is one of the two points with that `x`.
-
-The recovery id picks one: `0` for an even `y`, `1` for an odd `y`.
+The id `0` names an even `y`, and `1` an odd `y`.
 
 That is the recovery identifier of Appendix F of the Yellow Paper, Shanghai version.
 
-The source is `Paper.tex` at `efc5f9a`:
-<https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex>
-
 It declares the ids 2 and 3 invalid.
 
-SEC 1 also tries `x = r + j n` for `j` up to the cofactor `h = 1`, for the rare `x_R >= n`.
-
-Ethereum uses only the ids 0 and 1, so it never tries `x = r + n`, and neither does recovery here.
+The source is `Paper.tex` at `efc5f9a`:
+<https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex>
 -/
 
 @[expose] public section
@@ -43,17 +33,27 @@ namespace Ecdsa
 
 The recovery id gives the parity of the `y` of `R`. -/
 def recover (hash : Vector UInt8 32) (r s : Nat) (recoveryId : Fin 2) : Except Secp256k1Error Point :=
-  -- `r` and `s` lie in `[1, n - 1]`, as verification requires.
+  -- Not a step of §4.1.6: `0 < r, s < secp256k1n`, as ECREC in Appendix E asks.
   if hr : 0 < r ∧ r < Fn.modulus then
     if hs : 0 < s ∧ s < Fn.modulus then do
-      -- Steps 1.1 to 1.3, with `j = 0`: `R` is the point with `x = r`, since `r < n < p`.
+      -- Step 1 runs `j` from 0 to `h = 1`; the ids name only `j = 0`, so a failure is final.
+      --
+      -- That loses only the rare signatures whose `x_R >= n`.
+      --
+      -- Steps 1.1 to 1.3: `x = r + 0 n < p`, and `R` from `02 || X`, of even `y`.
+      --
+      -- Step 1.6.3 turns `R` into `-R`, of odd `y`: the id picks one of the two directly.
       let R ← Point.decompress (Fin.ofNat _ r) (recoveryId == 1)
       -- Step 1.4 asks `n R = O`, which holds for every point: the cofactor is 1.
-      -- Steps 1.5 and 1.6.1: `Q = r^(-1) (s R - e G) = (r^(-1) s) R + (-(r^(-1) e)) G`.
+      --
+      -- Step 1.5: `e` from the hash, by steps 2 and 3 of verification.
       let e : Fn := Fin.ofNat _ (hashToInt hash)
+      -- Step 1.6.1: `Q = r^(-1) (s R - e G) = (r^(-1) s) R + (-(r^(-1) e)) G`.
+      --
+      -- It solves `s R = e G + r Q`, the verification equation times `s`.
       let rInv := Fn.inv ⟨r, hr.2⟩
       let q := Point.mulAdd (rInv * ⟨s, hs.2⟩) R (-(rInv * e)) .generator
-      -- A public key is never `O`.
+      -- Step 1.6.2 is left to the caller, and a public key is never `O`.
       if q = .infinity then .error .pointAtInfinity else .ok q
     else .error (.scalarOutOfRange s)
   else .error (.scalarOutOfRange r)
