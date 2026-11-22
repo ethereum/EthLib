@@ -18,6 +18,9 @@ A polynomial in evaluation form is an array of 4096 elements of `Fr`.
 The length is checked where a polynomial enters an operation.
 
 A polynomial in coefficient form is also an array of `Fr`, for the cells.
+
+The step comments of the evaluation form quote consensus-specs at `8a3df1d7`:
+<https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/deneb/polynomial-commitments.md>
 -/
 
 @[expose] public section
@@ -47,12 +50,16 @@ abbrev Bytes48 := Vector UInt8 48
 
 It rejects an integer of at least the modulus. -/
 def bytesToBlsField (b : Bytes32) : Except KzgError Fr :=
+  -- bytes_to_bls_field: `field_element = int.from_bytes(b, KZG_ENDIANNESS)`.
+  --
+  -- `assert field_element < BLS_MODULUS`.
   match Fr.fromBytesBE b with
   | .ok f    => .ok f
   | .error _ => .error (.invalidFieldElement none)
 
 /-- Encode `x` as 32 big-endian bytes. -/
 @[inline] def blsFieldToBytes (x : Fr) : Bytes32 :=
+  -- bls_field_to_bytes: `int.to_bytes(int(x), 32, KZG_ENDIANNESS)`.
   ⟨x.toBytesBE.data, Montgomery.toBytesBE_size x⟩
 
 /-- The 32 bytes of field element `i`, in bytes that hold `k` field elements in a row. -/
@@ -80,6 +87,7 @@ def computePowersAux (x current : Fr) : Nat → List Fr
 
 /-- Return `[x^0, x^1, ..., x^(n-1)]`. -/
 def computePowers (x : Fr) (n : Nat) : Array Fr :=
+  -- compute_powers: `current_power = BLSFieldElement(1)`, then `current_power * x`, `n` times.
   (computePowersAux x Fr.one n).toArray
 
 /-- The `order`-th roots of unity in `Fr`: the powers of a primitive `order`-th root.
@@ -90,9 +98,15 @@ Every caller passes 64, 128, 4096 or 8192, which divide `r - 1`.
 
 For another order, the powers are those of an element that is not a primitive `order`-th root. -/
 def computeRootsOfUnity (order : Nat) : Array Fr :=
+  -- compute_roots_of_unity: `assert (BLS_MODULUS - 1) % int(order) == 0` is left out.
+  --
+  -- Every caller passes an order that divides `BLS_MODULUS - 1`.
+  --
+  -- `root_of_unity = pow(PRIMITIVE_ROOT_OF_UNITY, (BLS_MODULUS - 1) // int(order), BLS_MODULUS)`.
   let exponent := (BLS_MODULUS - 1) / order
   let root :=
     (Fr.ofNat PRIMITIVE_ROOT_OF_UNITY) ^ (Fr.ofNat exponent)
+  -- `return compute_powers(root_of_unity, order)`.
   computePowers root order
 
 @[simp] theorem length_computePowersAux (x current : Fr) (n : Nat) :
@@ -146,6 +160,7 @@ def dividePolynomialcoeff (a b : PolynomialCoeff) :
   if hb : b.size = 0 then
     throw .zeroDivisorPolynomial
   -- A dividend shorter than the divisor has quotient zero.
+  --
   -- The specification's loop runs zero times and returns the empty list.
   else if hab : a.size < b.size then
     return #[]
@@ -223,6 +238,7 @@ def polynomialEvalToCoeff (polynomial : Polynomial) : PolynomialCoeff :=
 
 It rejects a 32-byte chunk of at least the modulus. -/
 def blobToPolynomial (blob : Blob) : Except KzgError Polynomial :=
+  -- blob_to_polynomial: `bytes_to_bls_field` of each 32-byte slice `i`, in order.
   bytesToBlsFields (k := FIELD_ELEMENTS_PER_BLOB) blob
 
 /-! ## Evaluating a polynomial in evaluation form -/
@@ -242,20 +258,27 @@ Value `i` of the polynomial is its value at point `i` of the domain.
 The two arrays must have the same length, and the evaluation reads them as pairs. -/
 def evaluatePolynomialInEvaluationFormAux
     (polynomial domain : Array Fr) (z : Fr) : Fr :=
+  -- The caller checks the width and passes `roots_of_unity_brp`.
+  --
+  -- evaluate_polynomial_in_evaluation_form: `width = len(polynomial)`.
   let width := polynomial.size
+  -- `inverse_width = BLSFieldElement(width).inverse()`.
   let inverseWidth := (Fr.ofNat width).inverse
   let points := polynomial.zip domain
+  -- `if z in roots_of_unity_brp: return polynomial[eval_index]`.
   match points.find? (·.2 == z) with
-  -- Fast path: z is in the domain.
   | some (y, _) => y
   | none =>
     -- The barycentric formula, where `z` is not in the domain, so no `z - domain[i]` is zero.
     --
-    -- One batch inversion gives every `1 / (z - D[i])`.
+    -- `b = z - roots_of_unity_brp[i]`, all inverted with one batch inversion.
     let inverses := Fr.batchInverse (points.map fun (_, d) => z - d)
+    -- `a = polynomial[i] * roots_of_unity_brp[i]`, and `result += a / b`.
     let acc := (points.zip inverses).foldl (init := Fr.zero) fun acc ((y, d), inv) =>
       acc + y * d * inv
+    -- `r = z.pow(BLSFieldElement(width)) - BLSFieldElement(1)`.
     let r := z ^ (Fr.ofNat width) - Fr.one
+    -- `result = result * r * inverse_width`.
     acc * r * inverseWidth
 
 /-- Evaluate an evaluation-form polynomial at `z`.
@@ -269,8 +292,10 @@ Otherwise it is the barycentric formula, for the domain size `W`:
 It rejects a polynomial that does not have exactly 4096 elements. -/
 def evaluatePolynomialInEvaluationForm
     (polynomial : Polynomial) (z : Fr) : Except KzgError Fr :=
+  -- evaluate_polynomial_in_evaluation_form: `assert width == FIELD_ELEMENTS_PER_BLOB`.
   if polynomial.size ≠ FIELD_ELEMENTS_PER_BLOB then
     .error (.badPolynomialSize polynomial.size)
+  -- `roots_of_unity_brp = bit_reversal_permutation(compute_roots_of_unity(...))`.
   else
     .ok (evaluatePolynomialInEvaluationFormAux polynomial
       (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB) z)

@@ -13,6 +13,13 @@ The point evaluation precompile at address `0x0a`, from EIP-4844.
 It checks a KZG proof that the polynomial of a blob takes a value `y` at a point `z`.
 
 The call data names the blob by the versioned hash of its commitment.
+
+Source: "Point evaluation precompile" of [EIP-4844][eip-4844].
+
+The step comments of the proof check quote consensus-specs at `8a3df1d7`:
+<https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/deneb/polynomial-commitments.md>
+
+[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#point-evaluation-precompile
 -/
 
 @[expose] public section
@@ -98,39 +105,58 @@ It decodes the inputs and `[tau]_2`, then runs the KZG check with `[tau]_2` alon
 The check holds when the quotient `(p(X) - y) / (X - z)` is a polynomial. -/
 def verifyKzgProof (commitment : Bytes48) (z y : Bytes32) (proof : Bytes48) :
     Except PointEvaluationError Bool := do
-  -- The inputs are decoded in the order of EIP-4844.
+  -- verify_kzg_proof: the inputs are decoded in its order, commitment, `z`, `y`, proof.
+  --
+  -- `bytes_to_kzg_commitment(commitment_bytes)`.
   let commitmentPoint ←
     (validateKzgG1Point commitment).mapError fun _ => .invalidCommitment commitment
+  -- `bytes_to_bls_field(z_bytes)` and `bytes_to_bls_field(y_bytes)`, which reject `>= BLS_MODULUS`.
   let zField ← (Fr.fromBytesBE z).mapError fun _ =>
     .invalidFieldElement (EthLib.Base.bytesToNat z.toList)
   let yField ← (Fr.fromBytesBE y).mapError fun _ =>
     .invalidFieldElement (EthLib.Base.bytesToNat y.toList)
+  -- `bytes_to_kzg_proof(proof_bytes)`.
   let proofPoint ← (validateKzgG1Point proof).mapError fun _ => .invalidProof proof
+  -- `KZG_SETUP_G2_MONOMIAL[1]`, the only point of the setup that the check reads.
   let tau ← (TrustedSetup.g2MonomialOfHex 1).mapError fun _ => .invalidTrustedSetup
+  -- `return verify_kzg_proof_impl(...)`.
   return verifyKzgProofWith tau commitmentPoint zField yField proofPoint
 
 /-- The output of every successful call: two 32-byte big-endian words.
 
 They are the number of field elements in a blob, then the order of the scalar field. -/
 def output : ByteArray :=
+  -- point_evaluation_precompile: `U256(FIELD_ELEMENTS_PER_BLOB).to_be_bytes32() + ...`.
+  --
+  -- The rest of the line is `U256(BLS_MODULUS).to_be_bytes32()`.
   ⟨(natToBytes 32 FIELD_ELEMENTS_PER_BLOB ++ natToBytes 32 Fr.modulus).toArray⟩
 
 /-- The call: it checks the length, charges the gas, then checks the hash and the proof.
 
 Once the length is checked, the call data splits into fields of 32, 32, 32, 48 and 48 bytes. -/
 def pointEvaluation (data : ByteArray) (gas : Nat) : Except PointEvaluationError ByteArray :=
+  -- point_evaluation_precompile: `assert len(input) == 192`.
+  --
+  -- It is checked before the gas, and either failure consumes all the gas given.
   if fits : data.size = INPUT_BYTES then do
+    -- The call costs `POINT_EVALUATION_PRECOMPILE_GAS`.
     if gas < GAS_POINT_EVALUATION then
       throw (.outOfGas GAS_POINT_EVALUATION gas)
+    -- `versioned_hash = input[:32]`, `z = input[32:64]`, `y = input[64:96]`.
+    --
+    -- `commitment = input[96:144]` and `proof = input[144:192]`.
     let versionedHash := readBytes data 0 32 (by simp [fits, INPUT_BYTES])
     let z := readBytes data 32 32 (by simp [fits, INPUT_BYTES])
     let y := readBytes data 64 32 (by simp [fits, INPUT_BYTES])
     let commitment := readBytes data 96 48 (by simp [fits, INPUT_BYTES])
     let proof := readBytes data 144 48 (by simp [fits, INPUT_BYTES])
+    -- `assert kzg_to_versioned_hash(commitment) == versioned_hash`.
     if kzgCommitmentToVersionedHash commitment ≠ versionedHash then
       throw (.versionedHashMismatch (kzgCommitmentToVersionedHash commitment) versionedHash)
+    -- `assert verify_kzg_proof(commitment, z, y, proof)`.
     if !(← verifyKzgProof commitment z y proof) then
       throw .proofRejected
+    -- `return Bytes(U256(FIELD_ELEMENTS_PER_BLOB).to_be_bytes32() + ...)`.
     return output
   else .error (.invalidInputLength data.size)
 
