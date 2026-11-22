@@ -824,23 +824,6 @@ private theorem credentials_slashValidator {u w : BeaconState preset fork}
   rw [registry]
   exact getValidator_eq_ok_iff.mp laterRead
 
-/-- A state reads the same proposer as an earlier state when it keeps four things of it.
-
-These are the slot, the payload inputs, activity and effective balances. -/
-private theorem getBeaconProposerIndex_of_kept {r w : BeaconState preset fork}
-    (keeps : StepKeeps r w) (inputs : PayloadInputs r w) (effective : EffectiveKept r w) :
-    getBeaconProposerIndex w = getBeaconProposerIndex r := by
-  apply getBeaconProposerIndex_congr inputs.slot inputs.randaoMixes
-    (fun fulu => by rw [inputs.proposerLookahead])
-    (keeps.2.2.getActiveValidatorIndicesChecked_eq (getCurrentEpoch_le_activityFixedEpoch r))
-  intro j inside
-  have same := effective j inside
-  have inside' := Nat.lt_of_lt_of_le inside keeps.1
-  simp only [effectiveAt, Array.getElem?_eq_getElem inside, Array.getElem?_eq_getElem inside',
-    Option.map_some, Option.getD_some] at same
-  rw [Array.getElem?_eq_getElem inside, Array.getElem?_eq_getElem inside', Option.map_some,
-    Option.map_some, UInt64.toNat_inj.mp same]
-
 /-- A slashing with the proposer as whistleblower debits the slashed validator its initial penalty.
 
 It credits the whistleblower reward to the proposer that an earlier kept state reads. -/
@@ -865,30 +848,9 @@ private theorem ledger_slashValidator {r u w : BeaconState preset fork} {index :
       Option.getD_some] at kept
     exact UInt64.toNat_inj.mp kept
   -- The proposer is read after the exit, the slashed mark, the slashings write and the debit.
-  have exitGrows := (frame_initiateValidatorExit exitOk).registryGrows
-  have markedSize := (sameSizes_setValidator markedOk).1
-  have keepsLowered : StepKeeps r lowered :=
-    ((keeps.trans (stepKeeps_initiateValidatorExit exitOk)).trans
-      ((stepKeeps_setValidator currentOk (fun _ _ => by rfl) markedOk).trans
-        (StepKeeps.of_validators (state := marked) (after := { marked with slashings })))).trans
-      (stepKeeps_decreaseBalance lowerOk)
-  have inputsLowered : PayloadInputs r lowered :=
-    ((inputs.trans (payloadInputs_initiateValidatorExit exitOk)).trans
-      ((payloadInputs_setValidator markedOk).trans
-        (⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ :
-          PayloadInputs marked { marked with slashings }))).trans
-      (payloadInputs_decreaseBalance lowerOk)
-  have effectiveLowered : EffectiveKept r lowered :=
-    effectiveKept_trans effective
-      (effectiveKept_trans
-        (effectiveKept_trans (effectiveKept_exit exitOk)
-          (effectiveKept_setValidator currentOk markedOk rfl) exitGrows)
-        (effectiveKept_trans (effectiveKept_data (s := marked) (t := { marked with slashings }))
-          (effectiveKept_decrease lowerOk) (Nat.le_refl _))
-        (exitGrows.trans (Nat.le_of_eq markedSize.symm)))
-      keeps.1
   have proposerRead : getBeaconProposerIndex r = .ok proposer := by
-    rw [← getBeaconProposerIndex_of_kept keepsLowered inputsLowered effectiveLowered]
+    rw [← getBeaconProposerIndex_slashDebit keeps inputs effective exitOk currentOk markedOk
+      lowerOk]
     exact proposerOk
   refine ⟨proposer, proposerRead, ?_⟩
   -- The balances move only by the debit and the two credits.
