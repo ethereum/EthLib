@@ -365,7 +365,6 @@ Not yet released.
   From Gloas it takes the receiver's check of the payload status that the vote names.
 
 - `Execution.blocks_of_partiallySynchronous_of_anchorSlot` delivers a block at every fork, when from Gloas the anchor block is not after the anchor state ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
-  `Execution.blocks_of_partiallySynchronous` is now its corollary before Gloas, with its statement unchanged.
   It needs partial synchrony, the sender's read of the receiver's finalized checkpoint, and a receiver that admits the delivered blocks.
   Otherwise bounded honest stores collide.
   From Gloas the payload of a full parent reaches the receiver through `Execution.payloadVerified_of_partiallySynchronous`.
@@ -972,6 +971,9 @@ Not yet released.
 - In Lean, `getUnslashedAttestingIndices_exists_ok` in `EthLib.Consensus.Proofs.Transition.Totality.Justification` drops its premise that the registry stays within its limit, which its proof did not read.
   Committee membership alone puts each signer in the registry, by `getPendingAttestingIndices_lt`.
   Migration: delete the `within` argument ([#4253](https://github.com/ethereum/EthLib/pull/4253)).
+
+- In Lean, `Execution.blocks_of_partiallySynchronous` is removed; it has no reader.
+  Migration: use `Execution.blocks_of_partiallySynchronous_of_anchorSlot` (added earlier in 0.4.0), passing `fun gloas => absurd gloas (Nat.not_le_of_lt preGloas)` for `anchorSlot` and `start v honest` and `start u receiver` for the two starts.
 
 - In Lean, the confirmed root of a run of fast-confirmation calls covers honest heads from Gloas too, and keeps its Fulu floor.
   `Execution.confirmedRoot_covers` takes `room`, `weights` and `supply`, gated on Gloas, instead of `preGloas`.
