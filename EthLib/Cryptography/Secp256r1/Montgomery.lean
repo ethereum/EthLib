@@ -137,7 +137,7 @@ theorem subRaw_val (a b : Raw) (ha : a.val < Fp.modulus) (hb : b.val < Fp.modulu
 
 The low word is then dropped, which divides by `2^64`. -/
 @[inline] def row (a : Raw) (x : UInt64) (t : Words64) : Words64 :=
-  -- CIOS, the multiplication loop `for j=0 to s-1`, `C := 0` first.
+  -- CIOS, the multiplication loop over `j` from `0` to `s - 1`, with `C := 0` first.
   --
   -- `(C,S) := t[j] + a[j]*b[i] + C`, `t[j] := S`; the paper's modulus `n` is `p` here.
   let u0 := mac a.w0 x t.w0 0
@@ -253,7 +253,7 @@ theorem row_spec (a : Raw) (x : UInt64) (t : Words64) (ha : a.val < Fp.modulus)
 
 /-- The rows of `a b`, before the last correction: one row for each word of `b`. -/
 @[inline] def mulAcc (a b : Raw) : Words64 :=
-  -- CIOS: `for i=0 to s-1`, with `s = 4` and `t` set to `0` first.
+  -- CIOS: one row for each `i` from `0` to `s - 1`, with `s = 4` and `t = 0` first.
   row a b.w3 (row a b.w2 (row a b.w1 (row a b.w0 ⟨0, 0, 0, 0, 0⟩)))
 
 /-- The rows give `a b` plus a multiple of `p`, divided by `2^256`, and stay below `2 p`. -/

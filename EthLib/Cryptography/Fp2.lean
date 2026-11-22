@@ -117,9 +117,9 @@ When the base-field candidate and square root are one exponentiation each, as ov
 [source]: https://eprint.iacr.org/2012/685
 -/
 def sqrt (a : Fp2 F) : Option (Fp2 F) :=
-  -- Step 1: `if a1 = 0`.
+  -- Step 1: the case `a1 = 0`.
   if BaseField.isZero a.c1 then
-    -- Step 2: `return SQRT_q(a0)`.
+    -- Step 2: the root is `SQRT_q(a0)`.
     --
     -- That root exists only when `a0` is a square of the base field.
     --
@@ -130,7 +130,7 @@ def sqrt (a : Fp2 F) : Option (Fp2 F) :=
   else
     -- Step 4: `alpha <- a0^2 - beta a1^2`, with `beta = -1`.
     --
-    -- Steps 5 to 8: `gamma <- chi_q(alpha)`, and `return false` if `gamma = -1`.
+    -- Steps 5 to 8: `gamma <- chi_q(alpha)`, and the input is not a square when `gamma = -1`.
     --
     -- Step 9: `alpha <- SQRT_q(alpha)`.
     --
@@ -162,11 +162,11 @@ The sign is the parity of `x_0`, or the parity of `x_1` when `x_0 = 0`.
 def sgn0 (x : Fp2 F) : Bool :=
   -- Step 1: `sign_0 = x_0 mod 2`.
   let s0 := BaseField.sgn0 x.c0
-  -- Step 2: `zero_0 = x_0 == 0`.
+  -- Step 2: `zero_0` is true exactly when `x_0 = 0`.
   let z0 := BaseField.isZero x.c0
   -- Step 3: `sign_1 = x_1 mod 2`.
   let s1 := BaseField.sgn0 x.c1
-  -- Steps 4 and 5: `return sign_0 OR (zero_0 AND sign_1)`.
+  -- Steps 4 and 5: the sign is `sign_0 OR (zero_0 AND sign_1)`.
   s0 || (z0 && s1)
 
 end BaseField
