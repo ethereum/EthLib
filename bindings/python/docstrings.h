@@ -339,10 +339,10 @@
   "The sequence number of a record."
 
 #define DOC_enr_verify_v4 \
-  "Whether a record is a valid \"v4\" record: its signature verifies under its public key."
+  "Whether a record is a valid v4 record: its signature verifies under its public key."
 
 #define DOC_enr_node_id \
-  "The node ID of a \"v4\" record: the Keccak-256 hash of `x` then `y` of its public key."
+  "The node ID of a v4 record: the Keccak-256 hash of `x` then `y` of its public key."
 
 #define DOC_enr_sign_v4 \
   "The bytes of a record, signed again with a private key by the \"v4\" scheme."

@@ -15,14 +15,6 @@ Six keys of the key table of [EIP-778] give the addresses and ports.
 
 The consensus layer adds `quic` and `quic6`: the UDP ports of libp2p over QUIC, for IPv4 and IPv6.
 
-[EIP-778] makes a port a big-endian integer, with no stated size.
-
-Here it is an RLP scalar below `2^16`: no leading zero byte, and zero is the empty string.
-
-When `tcp6` or `udp6` is absent, the `tcp` or `udp` port applies to both IP addresses.
-
-No source gives `quic` that rule, so an IPv6 endpoint without `quic6` has no QUIC port.
-
 [EIP-778]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-778.md#L50-L67
 -/
 
@@ -70,31 +62,34 @@ structure Endpoint (size : Nat) where
   quic : Option UInt16
   deriving DecidableEq, Repr
 
-/-- The address under a key, if the record has the key.
-
-The value must be a byte string of exactly `size` bytes. -/
+/-- The address under a key, if the record has the key. -/
 def readAddress (r : Enr) (key : ByteArray) (size : Nat) :
     Except EnrError (Option (Vector UInt8 size)) :=
   match r.get key with
+  -- All keys except `id` are optional, including IP addresses.
   | none => return none
+  -- `ip`: IPv4 address, 4 bytes; `ip6`: IPv6 address, 16 bytes.
+  --
+  -- The value is a byte string of exactly `size` bytes, and any other value fails.
   | some value => some <$> (Codec.ofItem value).mapError fun _ => .invalidAddress key value
 
-/-- The port under a key, if the record has the key.
-
-The value must be an RLP scalar below `2^16`. -/
+/-- The port under a key, if the record has the key. -/
 def readPort (r : Enr) (key : ByteArray) : Except EnrError (Option UInt16) :=
   match r.get key with
+  -- All keys except `id` are optional, including ports.
   | none => return none
+  -- A port is a big endian integer, and EIP-778 states no size.
+  --
+  -- EthLib reads an RLP scalar below 2^16: no leading zero byte, and zero is the empty string.
   | some value => some <$> (Codec.ofItem value).mapError fun _ => .invalidPort key value
 
 /-- The IPv4 and IPv6 endpoints of a record, each absent when its address is.
 
-It reads all eight keys first, so a malformed value fails even when its address is absent.
-
-The IPv6 endpoint takes the `tcp` and `udp` ports when `tcp6` and `udp6` are absent.
-
 It does not check the signature. -/
 def Enr.endpoints (r : Enr) : Except EnrError (Option (Endpoint 4) × Option (Endpoint 16)) := do
+  -- EthLib reads all eight keys first.
+  --
+  -- So a malformed value fails even when its address is absent.
   let ip ← readAddress r KEY_IP 4
   let ip6 ← readAddress r KEY_IP6 16
   let tcp ← readPort r KEY_TCP
@@ -103,34 +98,42 @@ def Enr.endpoints (r : Enr) : Except EnrError (Option (Endpoint 4) × Option (En
   let udp6 ← readPort r KEY_UDP6
   let quic ← readPort r KEY_QUIC
   let quic6 ← readPort r KEY_QUIC6
+  -- If no `tcp6` / `udp6` port is provided, the `tcp` / `udp` port applies to both IP addresses.
+  --
+  -- No source gives `quic` that rule, so an IPv6 endpoint without `quic6` has no QUIC port.
   return (ip.map (⟨·, tcp, udp, quic⟩), ip6.map (⟨·, tcp6 <|> tcp, udp6 <|> udp, quic6⟩))
 
 /-- The IPv6 endpoint as a reader sees it, next to an IPv4 endpoint.
 
 A TCP or UDP port that it lacks is the one of the IPv4 endpoint. -/
 def Endpoint.inherit (e6 : Endpoint 16) (e4 : Option (Endpoint 4)) : Endpoint 16 :=
+  -- If no `tcp6` / `udp6` port is provided, the `tcp` / `udp` port applies to both IP addresses.
+  --
+  -- The QUIC port is not inherited, as no source gives `quic` that rule.
   { e6 with tcp := e6.tcp <|> e4.bind (·.tcp), udp := e6.udp <|> e4.bind (·.udp) }
 
 /-- An IPv6 port to write: none when it equals the IPv4 port, which then applies to both.
 
-[EIP-778] says that declaring one port in both keys should be avoided.
+The source is the paragraph after the key table of [EIP-778].
 
 [EIP-778]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-778.md#L64-L66
 -/
 def ipv6Port (port6 port : Option UInt16) : Option UInt16 :=
+  -- Declaring the same port number in both `tcp`, `tcp6` or `udp`, `udp6` should be avoided.
+  --
+  -- The IPv4 port applies to both addresses when the IPv6 key is absent, so none is written.
   if port6 = port then none else port6
 
 /-- The pairs of an IPv4 and an IPv6 endpoint, in key order, to put in a new record.
-
-An absent value writes no pair.
-
-An IPv6 TCP or UDP port equal to the IPv4 one is not written again.
 
 Other entries fall between these keys, so a caller merges them in key order. -/
 def endpointPairs (e4 : Option (Endpoint 4)) (e6 : Option (Endpoint 16)) :
     List (ByteArray × Item) :=
   let tcp := e4.bind (·.tcp)
   let udp := e4.bind (·.udp)
+  -- The pairs must be sorted by key: `ip < ip6 < quic < quic6 < tcp < tcp6 < udp < udp6`.
+  --
+  -- An IPv6 TCP or UDP port equal to the IPv4 one is not written again.
   [(KEY_IP, (e4.map (·.ip)).map Codec.toItem),
     (KEY_IP6, (e6.map (·.ip)).map Codec.toItem),
     (KEY_QUIC, (e4.bind (·.quic)).map Codec.toItem),
@@ -139,6 +142,7 @@ def endpointPairs (e4 : Option (Endpoint 4)) (e6 : Option (Endpoint 16)) :
     (KEY_TCP6, (ipv6Port (e6.bind (·.tcp)) tcp).map Codec.toItem),
     (KEY_UDP, udp.map Codec.toItem),
     (KEY_UDP6, (ipv6Port (e6.bind (·.udp)) udp).map Codec.toItem)].filterMap
+    -- All keys except `id` are optional, so an absent value writes no pair.
     fun (key, value) => value.map (key, ·)
 
 end EthLib.Networking.Enr
