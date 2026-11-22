@@ -53,13 +53,23 @@ So a code crosses as a pair: whether it is negative, then its absolute value.
 namespace EthLib.Execution.Rpc.Exports
 
 open Lean (Json)
-open EthLib.Exports (Result PyValue ToPy UnreadArgument rejectArgument toPy pyExport toResult)
+open EthLib.Exports (ExportError Result PyValue ToPy UnreadArgument rejectArgument toPy pyExport
+  toResult)
 open EthLib.Serialization.JsonRpc (Read RpcError address bytes reject uint uint64)
 
 derive_py BlockTag
 derive_py_laws BlockTag
 derive_py BlockParam
 derive_py_laws BlockParam
+
+/-- A JSON-RPC error reaches Python with its code without its sign.
+
+Its message is its data when the data is a string, and its own message otherwise. -/
+instance : ExportError RpcError where
+  code e := e.code.natAbs.toUInt32
+  message e := match e.data with
+    | some (.str reason) => reason
+    | _ => e.message
 
 /-- An error code crosses as whether it is negative, then its absolute value. -/
 local instance : ToPy Int := ⟨fun i => toPy (decide (i < 0), i.natAbs)⟩
@@ -96,9 +106,7 @@ def readingOf {α : Type} [ToPy α] (schema : String) (value : PyValue)
   let reading :=
     if containsBytes value then reject s!"{schema}: not a JSON value"
     else reader schema value.toJson
-  match reading with
-  | .ok a => .ok (toPy a)
-  | .error reason => .error ((RpcError.invalidParams reason).code.natAbs.toUInt32, reason)
+  toResult none ((reading.map toPy).mapError RpcError.invalidParams)
 
 /-- The value of a parameter under the schema of the given name, or why the schema rejects it. -/
 def readParamOf (args : String × PyValue) : Result PyValue :=
@@ -319,11 +327,11 @@ def serveExport (args : PyValue) : Result PyValue :=
 
 /-- Encode a JSON access list with the same reader and RLP codec as the query methods. -/
 def encodeBlockAccessListOf (value : PyValue) : Result ByteArray := do
-  let bal ← (if containsBytes value then reject "block access list: not a JSON value"
-    else blockAccessListOfJson value.toJson).mapError fun reason =>
-      ((RpcError.invalidParams reason).code.natAbs.toUInt32, reason)
-  (Serialization.Rlp.Codec.encode bal).mapError fun _ =>
-    (internalError.code.natAbs.toUInt32, "cannot encode block access list")
+  let reading := if containsBytes value then reject "block access list: not a JSON value"
+    else blockAccessListOfJson value.toJson
+  let bal ← toResult none (reading.mapError RpcError.invalidParams)
+  toResult none ((Serialization.Rlp.Codec.encode bal).mapError fun _ =>
+    internalError.toRpcError (some (.str "cannot encode block access list")))
 
 /-- Encode a block access-list JSON value as its EIP-7928 RLP bytes.
 
@@ -342,9 +350,9 @@ def encodeBlockAccessListExport (args : PyValue) : Result PyValue :=
 def applyOverridesOf (args : ByteArray × PyValue) : Result ByteArray := do
   let (input, value) := args
   let state ← toResult none (State.Exports.ofInput input)
-  let overrides ← (if containsBytes value then reject "stateOverrides: not a JSON value"
-    else stateOverrides value.toJson).mapError fun reason =>
-      ((RpcError.invalidParams reason).code.natAbs.toUInt32, reason)
+  let reading := if containsBytes value then reject "stateOverrides: not a JSON value"
+    else stateOverrides value.toJson
+  let overrides ← toResult none (reading.mapError RpcError.invalidParams)
   State.Exports.rootOf (applyOverrides state overrides)
 
 /-- The state root after the account overrides of one block of `eth_simulateV1`.

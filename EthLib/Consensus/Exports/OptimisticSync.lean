@@ -26,7 +26,7 @@ Whether a node is optimistic is read from a fork choice store, built by a run of
 
 An input that does not decode, an unknown name or a fork without the rule has code 0.
 
-A failed step has the code of its fork choice error.
+A failed step has the code of its fork choice error, and its printed form after `optimistic sync: `.
 
 From Heze an export reads the answers on the inclusion lists after a run of steps.
 -/
@@ -37,10 +37,6 @@ namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
 open EthLib.Exports (Result PyValue UnreadArgument pyExport rejectArgument toResult)
-
-/-- The result of a step of optimistic sync, with the code of its error. -/
-def runOptimistic {α : Type} (result : Except ForkChoiceError α) : Result α :=
-  result.mapError fun e => (e.code, s!"optimistic sync failed with code {e.code}")
 
 /-- The preset and the fork, which must be from Bellatrix, or code 0. -/
 def optimisticPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
@@ -81,7 +77,7 @@ def isOptimisticCandidateBlockExport (name fork : ByteArray) (blocks : Array Byt
   let (preset, fork) ← optimisticPresetAndFork name fork
   let store ← optimisticStoreOf preset fork blocks []
   let block ← decodeInput (BeaconBlock preset fork) block
-  runOptimistic (store.isOptimisticCandidateBlock currentSlot block safeSlots)
+  toResult "optimistic sync" (store.isOptimisticCandidateBlock currentSlot block safeSlots)
 
 /-- From Bellatrix: the root of the latest block of a chain that is not optimistic.
 
@@ -92,7 +88,7 @@ def latestVerifiedAncestorOf
   let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8
   let status ← payloadStatusOf code.toUInt64
   let store ← optimisticStoreOf preset fork blocks optimisticRoots
-  runOptimistic (store.latestVerifiedAncestor ⟨root, status⟩)
+  toResult "optimistic sync" (store.latestVerifiedAncestor ⟨root, status⟩)
 
 /-- From Bellatrix: the root of the latest block of a chain that is not optimistic.
 
@@ -112,7 +108,7 @@ def onValidPayloadOf (args : String × String × Array ByteArray × List Root ×
   let (name, fork, blocks, optimisticRoots, root) := args
   let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8
   let store ← optimisticStoreOf preset fork blocks optimisticRoots
-  return (← runOptimistic (store.onValidPayload root)).optimisticRoots
+  return (← toResult "optimistic sync" (store.onValidPayload root)).optimisticRoots
 
 /-- From Bellatrix: the optimistic roots after the payload of a block is found valid, as a list.
 
@@ -131,7 +127,7 @@ def onInvalidatedPayloadOf (args : String × String × Array ByteArray × List R
   let (name, fork, blocks, optimisticRoots, first) := args
   let (preset, fork) ← optimisticPresetAndFork name.toUTF8 fork.toUTF8
   let store ← optimisticStoreOf preset fork blocks optimisticRoots
-  return (← runOptimistic (store.onInvalidatedPayload first)).optimisticRoots
+  return (← toResult "optimistic sync" (store.onInvalidatedPayload first)).optimisticRoots
 
 /-- From Bellatrix: the optimistic roots after a block is found the first invalid one, as a list.
 
@@ -175,7 +171,7 @@ def isOptimisticNodeOf (args : String × String × ByteArray × ByteArray × Lis
   let optimistic : OptimisticStore preset fork :=
     { optimisticRoots := roots, head := ⟨head, status⟩,
       blocks := Std.TreeMap.ofList ((anchorRoot, anchorBlock) :: blocks) }
-  runOptimistic (isOptimisticNode config optimistic store)
+  toResult "optimistic sync" (isOptimisticNode config optimistic store)
 
 /-- From Bellatrix: whether a node is optimistic, after a run of fork choice steps.
 
@@ -232,7 +228,8 @@ def inclusionListSatisfactionOf (args : String × String × ByteArray × ByteArr
           optimisticRoots := if status = PAYLOAD_STATUS_NOT_VALIDATED then kept else []
           head := { root := Vector.replicate 32 0 }
           blocks := store.blocks }
-        let (_, store) ← runOptimistic (optimistic.onValidatedPayload store heze root satisfied)
+        let (_, store) ← toResult "optimistic sync"
+          (optimistic.onValidatedPayload store heze root satisfied)
         pure store
     return roots.map ((store.payloadInclusionListSatisfaction heze)[·]?)
   else rejectArgument none s!"no inclusion lists at {fork.name}"

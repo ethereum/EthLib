@@ -141,7 +141,7 @@ INTERCHANGE = (
         pytest.param(
             SlashingProtectionError,
             1,
-            "slashing protection failed with code 1",
+            'EthLib.Consensus.SlashingProtectionError.field ".metadata"',
             lambda: consensus.read_slashing_interchange(b"{}"),
             id="slashing-protection",
         ),
@@ -284,7 +284,10 @@ INTERCHANGE = (
         pytest.param(
             ForkChoiceError,
             2,
-            "optimistic sync failed with code 2",
+            (
+                "optimistic sync: no known block has root "
+                "0x0000000000000000000000000000000000000000000000000000000000000000"
+            ),
             lambda: consensus.latest_verified_ancestor("mainnet", "bellatrix", [], [], bytes(32)),
             id="optimistic-sync",
         ),
@@ -834,7 +837,7 @@ INTERCHANGE = (
         pytest.param(
             KeymanagerError,
             1,
-            "keymanager value rejected with code 1",
+            'EthLib.Consensus.KeymanagerApi.KeymanagerError.field ""',
             lambda: consensus.keymanager_json("Pubkey", 5),
             id="keymanager-value",
         ),

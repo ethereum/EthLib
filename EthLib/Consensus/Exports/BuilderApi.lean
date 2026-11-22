@@ -10,6 +10,7 @@ public import EthLib.Consensus.BuilderApi.RequestAuth
 public import EthLib.Consensus.BuilderApi.Submit
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Consensus.Exports.Ssz
+public import EthLib.Consensus.Exports.Transition
 public import EthLib.Serialization.Exports.Ssz
 
 /-!
@@ -32,6 +33,8 @@ The configuration names the chain, whose genesis fork version enters the domain.
 For a signature check, an unknown name, an unsigned container or a fork out of range has code 0.
 
 Bytes that do not decode, or a root that fails, keep the code of their SSZ error.
+
+A failed step of the transition keeps its code, and its printed form on one line.
 -/
 
 public section
@@ -196,8 +199,8 @@ def isEligibleForBidOf
   if range : HasBuilderApi fork then
     let state ← decodeRejected (BeaconState preset fork) "state" state
     let entries ← kept.mapM (decodeRejected SignedValidatorRegistrationV1 "registry")
-    (liftAccessor (BuilderApi.isEligibleForBid state range ⟨entries⟩ slot parentHash
-      pubkey)).mapError fun e => (e.code, reprStr e)
+    toResult none (liftAccessor (BuilderApi.isEligibleForBid state range ⟨entries⟩ slot
+      parentHash pubkey))
   else rejectArgument none s!"no Builder API messages at {fork.name}"
 
 /-- Whether a builder serves a request for a bid.
@@ -260,8 +263,8 @@ def isEligibleForBidGloasOf
     let state ← decodeRejected (BeaconState preset fork) "state" state
     let received ← received.mapM (decodeRejected ProposerPreferences "preferences")
     let preferences (index : ValidatorIndex) := received.find? (·.validatorIndex = index)
-    (BuilderApi.isEligibleForBidGloas state gloas preferences slot parentHash parentRoot
-      pubkey).mapError fun e => (e.code, reprStr e)
+    toResult none (BuilderApi.isEligibleForBidGloas state gloas preferences slot parentHash
+      parentRoot pubkey)
   else rejectArgument none s!"no Gloas bids at {fork.name}"
 
 /-- From Gloas: whether a builder serves a request for a bid.
@@ -303,7 +306,7 @@ def validateBidOf
         feeRecipient with
     | .ok true => return none
     | .ok false => return some "bad_signature"
-    | .error (.fault e) => throw (e.code, reprStr e)
+    | .error (.fault e) => toResult none (.error e)
     | .error e => return some (ValidateBidError.reason e)
   else rejectArgument none s!"no Gloas bids at {fork.name}"
 

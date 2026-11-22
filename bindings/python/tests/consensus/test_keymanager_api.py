@@ -20,6 +20,9 @@ SOURCE = Path(__file__).resolve().parents[4] / "tests/consensus/keymanager_api"
 ERROR = consensus.KeymanagerError
 # The codes of the Lean error: a malformed field, text that is not JSON, rejected EIP-3076 data.
 FIELD, NOT_JSON, PROTECTION = 1, 2, 3
+# The Lean names of the error types, which each message starts with.
+KEYMANAGER = "EthLib.Consensus.KeymanagerApi.KeymanagerError"
+PROTECTION_ERROR = "EthLib.Consensus.SlashingProtectionError"
 # The schemas of the source whose values carry hex, which the writer gives in lowercase.
 HEX = {"Pubkey", "EthAddress", "Signature"}
 # The schemas whose values hold a JSON document as text.
@@ -128,8 +131,9 @@ def test_signer_definition_readonly():
     for flag in (True, False):
         document = {"pubkey": pubkey, "readonly": flag}
         assert consensus.keymanager_json("SignerDefinition", document) == document
-    with raises(ERROR, f"keymanager value rejected with code {FIELD}"):
+    with raises(ERROR, f'{KEYMANAGER}.field ".readonly"') as info:
         consensus.keymanager_json("SignerDefinition", {"pubkey": pubkey, "readonly": "true"})
+    assert info.value.code == FIELD
 
 
 def test_hex_in_either_case():
@@ -139,8 +143,9 @@ def test_hex_in_either_case():
     for name, value in (("Pubkey", pubkey), ("EthAddress", address)):
         upper = "0x" + value[2:].upper()
         assert consensus.keymanager_json(name, upper) == value.lower()
-    with raises(ERROR, f"keymanager value rejected with code {FIELD}"):
+    with raises(ERROR, f'{KEYMANAGER}.field ""') as info:
         consensus.keymanager_json("Pubkey", "0X" + pubkey[2:])
+    assert info.value.code == FIELD
 
 
 @pytest.mark.parametrize(
@@ -168,14 +173,16 @@ def test_uint64_accepts(text: str):
 )
 def test_uint64_refuses(text: str):
     """A string outside the pattern, or with a value of 2^64 or more, is refused."""
-    with raises(ERROR, f"keymanager value rejected with code {FIELD}"):
+    with raises(ERROR, f'{KEYMANAGER}.field ""') as info:
         consensus.keymanager_json("Uint64", text)
+    assert info.value.code == FIELD
 
 
 def test_uint64_refuses_number():
     """An integer must be a string, so a bare JSON number is refused."""
-    with raises(ERROR, f"keymanager value rejected with code {FIELD}"):
+    with raises(ERROR, f'{KEYMANAGER}.field ""') as info:
         consensus.keymanager_json("Uint64", 30000000)
+    assert info.value.code == FIELD
 
 
 @pytest.mark.parametrize(
@@ -190,8 +197,9 @@ def test_uint64_refuses_number():
 )
 def test_hex_refused(name: str, value: str):
     """Hex of the wrong length, with a non-hex digit, or without its marker is refused."""
-    with raises(ERROR, f"keymanager value rejected with code {FIELD}"):
+    with raises(ERROR, f'{KEYMANAGER}.field ""') as info:
         consensus.keymanager_json(name, value)
+    assert info.value.code == FIELD
 
 
 def test_optional_field_null():
@@ -200,8 +208,9 @@ def test_optional_field_null():
     assert consensus.keymanager_json("ImportRemoteSignerDefinition", {"pubkey": pubkey}) == {
         "pubkey": pubkey
     }
-    with raises(ERROR, f"keymanager value rejected with code {FIELD}"):
+    with raises(ERROR, f'{KEYMANAGER}.field ".url"') as info:
         consensus.keymanager_json("ImportRemoteSignerDefinition", {"pubkey": pubkey, "url": None})
+    assert info.value.code == FIELD
 
 
 def test_undeclared_names():
@@ -210,38 +219,45 @@ def test_undeclared_names():
     document = {"pubkey": pubkey, "extra": "1"}
     assert consensus.keymanager_json("ImportRemoteSignerDefinition", document) == {"pubkey": pubkey}
     signed = _example(*_schema("SignedVoluntaryExit"))
-    with raises(ERROR, f"keymanager value rejected with code {FIELD}"):
+    with raises(ERROR, f'{KEYMANAGER}.field ""') as info:
         consensus.keymanager_json("SignedVoluntaryExit", {**signed, "extra": "1"})
+    assert info.value.code == FIELD
 
 
 def test_required_field():
     """An object without a field that its schema requires is refused."""
-    with raises(ERROR, f"keymanager value rejected with code {FIELD}"):
+    with raises(ERROR, f'{KEYMANAGER}.field ".ethaddress"') as info:
         consensus.keymanager_json(
             "FeeRecipient", {"pubkey": _load("types/public_key.yaml")["example"]}
         )
+    assert info.value.code == FIELD
 
 
 def test_keystore_not_json():
     """A keystore whose text is not JSON is refused with its own code."""
-    with raises(ERROR, f"keymanager value rejected with code {NOT_JSON}"):
+    with raises(ERROR, f'{KEYMANAGER}.notJson ""') as info:
         consensus.keymanager_json("Keystore", "{not json")
+    assert info.value.code == NOT_JSON
 
 
 def test_slashing_protection_malformed():
     """Slashing protection data without its list of keys is refused with the EIP-3076 code."""
     document = json.loads(_load("types/slashing_protection.yaml")["example"])
     del document["data"]
-    with raises(ERROR, f"keymanager value rejected with code {PROTECTION}"):
+    with raises(
+        ERROR, f'{KEYMANAGER}.slashingProtection ({PROTECTION_ERROR}.field ".data")'
+    ) as info:
         consensus.keymanager_json("SlashingProtectionData", json.dumps(document))
+    assert info.value.code == PROTECTION
 
 
 def test_slashing_protection_version():
     """Slashing protection data of another version of EIP-3076 is refused with the EIP-3076 code."""
     document = json.loads(_load("types/slashing_protection.yaml")["example"])
     document["metadata"]["interchange_format_version"] = "4"
-    with raises(ERROR, f"keymanager value rejected with code {PROTECTION}"):
+    with raises(ERROR, f'{KEYMANAGER}.slashingProtection ({PROTECTION_ERROR}.version "4")') as info:
         consensus.keymanager_json("SlashingProtectionData", json.dumps(document))
+    assert info.value.code == PROTECTION
 
 
 def test_unknown_schema():
@@ -374,12 +390,16 @@ def test_import_example():
     key = bytes.fromhex(a[2:])
     root = bytes(32)
     # A block at the slot of the limit conflicts with it, which has no signing root.
-    with raises(SlashingProtectionError, "slashing protection failed with code 3"):
+    with raises(SlashingProtectionError, f"{PROTECTION_ERROR}.slashableBlock 81952") as info:
         consensus.check_block_signing(record, key, 81952, root)
+    assert info.value.code == 3
     consensus.check_block_signing(record, key, 81953, root)
     # A vote with the target of the limit is a double vote with it.
-    with raises(SlashingProtectionError, "slashing protection failed with code 5"):
+    with raises(
+        SlashingProtectionError, f"{PROTECTION_ERROR}.slashableAttestation 2290 3007"
+    ) as info:
         consensus.check_attestation_signing(record, key, 2290, 3007, root)
+    assert info.value.code == 5
     consensus.check_attestation_signing(record, key, 2290, 3008, root)
 
 
@@ -400,8 +420,9 @@ def test_data_of_imported_keys_only():
     assert [_statuses(response) for response in responses] == [["imported", "imported"]]
     root = bytes(32)
     for key in (a, b):
-        with raises(SlashingProtectionError, "slashing protection failed with code 3"):
+        with raises(SlashingProtectionError, f"{PROTECTION_ERROR}.slashableBlock 100") as info:
             consensus.check_block_signing(record, bytes.fromhex(key[2:]), 100, root)
+        assert info.value.code == 3
     consensus.check_block_signing(record, bytes.fromhex(c[2:]), 100, root)
 
 
@@ -466,8 +487,10 @@ def test_unknown_call():
 
 def test_bad_starting_record():
     """A starting record that does not read is refused with the code of EIP-3076 data."""
-    with raises(ERROR, f"keymanager value rejected with code {PROTECTION}"):
+    field = '.field ".metadata.interchange_format_version"'
+    with raises(ERROR, f"{KEYMANAGER}.slashingProtection ({PROTECTION_ERROR}{field})") as info:
         consensus.keymanager_run(MEMORY, WORK, *DEFAULTS, '{"metadata": {}}', None, [])
+    assert info.value.code == PROTECTION
 
 
 def _calls(*calls: tuple[str, str, Any]) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
@@ -517,8 +540,9 @@ def test_delete_use_case():
     assert json.loads(again["slashing_protection"]) == returned
     assert state["local_keys"] == []
     record = state["slashing_protection"].encode()
-    with raises(SlashingProtectionError, "slashing protection failed with code 3"):
+    with raises(SlashingProtectionError, f"{PROTECTION_ERROR}.slashableBlock 100") as info:
         consensus.check_block_signing(record, bytes.fromhex(a[2:]), 100, bytes(32))
+    assert info.value.code == 3
 
 
 def test_delete_bad_request():
@@ -597,10 +621,14 @@ def test_move_a_key():
     root = b"\x01" * 32
     for record in (old_record, new_record):
         # A block at slot 100 with another root, and a vote around the old one, are refused.
-        with raises(SlashingProtectionError, "slashing protection failed with code 3"):
+        with raises(SlashingProtectionError, f"{PROTECTION_ERROR}.slashableBlock 100") as info:
             consensus.check_block_signing(record, key, 100, root)
-        with raises(SlashingProtectionError, "slashing protection failed with code 5"):
+        assert info.value.code == 3
+        with raises(
+            SlashingProtectionError, f"{PROTECTION_ERROR}.slashableAttestation 8 11"
+        ) as info:
             consensus.check_attestation_signing(record, key, 8, 11, root)
+        assert info.value.code == 5
     consensus.check_block_signing(new_record, key, 101, root)
 
 
@@ -981,5 +1009,6 @@ def test_builder_config_set_replaces():
 def test_builder_config_client_meets_the_rules():
     """A client whose own builders break a rule of a set is refused."""
     client = dict(NO_BUILDER, builders=[{"url": "https://a.example"}, {"url": "https://a.example"}])
-    with raises(ERROR, f"keymanager value rejected with code {FIELD}"):
+    with raises(ERROR, f'{KEYMANAGER}.field ".builders"') as info:
         _builder_calls(client)
+    assert info.value.code == FIELD
