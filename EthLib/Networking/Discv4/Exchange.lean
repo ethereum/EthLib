@@ -5,28 +5,17 @@ public import EthLib.Networking.Discv4.Packet
 /-!
 # `Networking.Discv4.Exchange`
 
-When a node of discv4 answers a packet, from "Endpoint Proof" and the packets of [discv4].
+When a node of discv4 answers a packet.
+
+The sources are the section Endpoint Proof and the sections of the packets of [discv4].
 
 A node answers a query only from an endpoint that has proved that it takes part in discovery.
 
 That guards against traffic amplification: a forged source address gets no large answer.
 
-An endpoint is proved when it sent a Pong with the hash of this node's most recent Ping to it.
+The source requires that endpoint proof, with must, before FindNode and ENRRequest get an answer.
 
-The proof lasts 12 hours, and 12 hours exactly still counts.
-
-The source states that check as a "must", which applies to FindNode and ENRRequest.
-
-It states the other rules as "should" or "may", and this module makes them rules.
-
-- A packet whose expiration lies in the past is not processed.
-- A Ping gets a Pong that carries the hash of that Ping.
-- A Pong without the hash of the most recent Ping is ignored.
-- FindNode gets Neighbors, and ENRRequest gets ENRResponse, only from a proved endpoint.
-
-An ENRResponse holds the hash of its ENRRequest, and its record should be signed by its sender.
-
-The source keys the proof by "the sender", which this module reads as its IP address and UDP port.
+It states the other rules with should or may, and this module makes them all rules.
 
 The node's own Ping, after 12 hours without contact, is left to the caller.
 
@@ -79,12 +68,15 @@ structure Local where
   /-- Its node record, as an RLP item. -/
   record : Item
 
-/-- Whether an address has proved its endpoint at a time.
-
-It has, when its last Pong with the hash of the node's Ping came at most 12 hours earlier. -/
+/-- Whether an address has proved its endpoint at a time. -/
 def proven (now : Nat) (state : PeerState) (address : Address) : Bool :=
+  -- Endpoint Proof: the sender is verified if it sent a valid Pong with matching ping hash.
+  --
+  -- The source keys the proof by the sender, which EthLib reads as its IP address and UDP port.
   match (state address).lastPong with
+  -- That Pong came within the last 12 hours; 12 hours exactly still counts.
   | some time => time ≤ now && now ≤ time + ENDPOINT_PROOF_SECONDS
+  -- No such Pong, so the sender is not verified.
   | none => false
 
 /-- The most nodes of one Neighbors packet.
@@ -98,6 +90,9 @@ def MAX_NEIGHBORS : Nat := 12
 
 The source asks for the closest 16 nodes, so they take two packets. -/
 def neighborsPackets (expiration : Nat) (nodes : List Node) : List Packet :=
+  -- The source writes Neighbors packets, in the plural, and gives no count per packet.
+  --
+  -- EthLib puts at most twelve nodes in each, so each packet stays within 1280 bytes.
   if nodes.length ≤ MAX_NEIGHBORS then [.neighbors nodes expiration]
   else .neighbors (nodes.take MAX_NEIGHBORS) expiration ::
     neighborsPackets expiration (nodes.drop MAX_NEIGHBORS)
@@ -106,59 +101,75 @@ decreasing_by simp only [List.length_drop, MAX_NEIGHBORS] at *; omega
 
 /-- The state after the node sends a Ping with a hash to an address. -/
 def sendPing (state : PeerState) (address : Address) (hash : Vector UInt8 32) : PeerState :=
+  -- The node keeps the hash of its most recent Ping, which a Pong must carry.
   state.set address { state address with lastPing := some hash }
 
 /-- The expiration of a packet; an ENRResponse has none. -/
 def Packet.expiration? : Packet → Option Nat
+  -- Each `packet-data` but that of ENRResponse holds `expiration`, an absolute UNIX time stamp.
   | .ping _ _ _ e _ | .pong _ _ e _ | .findNode _ e | .neighbors _ e | .enrRequest e => some e
   | .enrResponse .. => none
 
 /-- Whether a packet has expired at a time: its expiration lies in the past. -/
 def Packet.expired (now : Nat) (p : Packet) : Bool :=
   match p.expiration? with
+  -- A time stamp that lies in the past is strictly before now, so `e = now` has not expired.
   | some e => e < now
+  -- ENRResponse has no `expiration`, so it never expires.
   | none => false
 
 /-- The state of a node after it receives a packet from an address, and the packets it sends back.
-
-An expired packet changes nothing and gets no answer.
-
-A Ping gets a Pong with the hash of the Ping, addressed to the IP and port it came from.
-
-A Pong with the hash of the most recent Ping records the time; any other Pong changes nothing.
-
-FindNode and ENRRequest get an answer only from an address that is proven at that time.
-
-Neighbors and ENRResponse are answers, which the node checks on their own. -/
+-/
 def receive (node : Local) (now : Nat) (state : PeerState) (address : Address)
     (received : Received) :
     PeerState × List Packet :=
+  -- Packets containing a time stamp that lies in the past may not be processed.
+  --
+  -- EthLib does not process them: the state stays, and no answer is sent.
   if received.packet.expired now then (state, [])
   else
     match received.packet with
+    -- Ping: the recipient should reply with a Pong, whose `ping-hash` is the hash of the Ping.
+    --
+    -- Not in the source: `to` is the IP address and UDP port that the Ping came from.
+    --
+    -- Its TCP port is the one that the Ping gives in `from`.
     | .ping _ sender _ _ _ =>
       (state, [.pong ⟨address.ip, address.port, sender.tcpPort⟩ received.hash node.expiration
         node.enrSeq])
+    -- Pong: a Pong with the hash of the most recent Ping proves the endpoint from now.
     | .pong _ hash _ _ =>
       if (state address).lastPing = some hash then
         (state.set address { state address with lastPong := some now }, [])
+      -- Implementations should ignore pongs without the hash of the most recent ping.
       else (state, [])
+    -- FindNode: Neighbors with the closest nodes to `target`, only from a verified sender.
     | .findNode target _ =>
       (state, if proven now state address then
         neighborsPackets node.expiration (node.neighbors target) else [])
+    -- ENRRequest: an ENRResponse with the node's record, only from a verified sender.
+    --
+    -- Its `request-hash` is the hash of the entire ENRRequest packet.
+    --
+    -- EthLib takes the `hash` of its header, the value that a Pong echoes as `ping-hash`.
+    --
+    -- That hash covers every byte of the packet after it.
     | .enrRequest _ =>
       (state, if proven now state address then [.enrResponse received.hash node.record] else [])
+    -- Neighbors and ENRResponse are replies, which the node checks on their own.
     | .neighbors .. | .enrResponse .. => (state, [])
 
-/-- Whether an ENRResponse answers an ENRRequest that the node sent.
-
-It holds the hash of the whole ENRRequest packet.
-
-The node should verify that its record is signed by the key that signed the response. -/
+/-- Whether an ENRResponse answers an ENRRequest that the node sent. -/
 def acceptEnrResponse (request response : Received) : Bool :=
   match request.packet, response.packet with
+  -- `request-hash` is the hash of the entire ENRRequest packet being replied to.
+  --
+  -- EthLib compares it with the `hash` of the request header, as for `ping-hash`.
+  --
+  -- The recipient should verify that the record is signed by the key that signed the response.
   | .enrRequest _, .enrResponse hash record =>
     hash == request.hash && recordSignedBy response.sender record
+  -- Only an ENRResponse answers an ENRRequest.
   | _, _ => false
 
 /-- An event of a node: a Ping that it sends, or a packet that it receives. -/

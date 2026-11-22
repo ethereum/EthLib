@@ -6,23 +6,15 @@ public import EthLib.Networking.Rlpx.Handshake
 /-!
 # `Networking.Discv4.Packet`
 
-The packets of the Node Discovery Protocol v4, from "Wire Protocol" of [`discv4.md`][discv4].
+The packets of the Node Discovery Protocol v4.
+
+The source is the section Wire Protocol of [`discv4.md`][discv4].
 
 [discv4]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv4.md#wire-protocol
 
-A packet is `hash || signature || packet-type || packet-data`, at most 1280 bytes.
+A packet is a header, then its data, an RLP list with one form for each packet type.
 
-The hash is the Keccak-256 hash of the bytes after it.
-
-The signature is `r || s || v`, with the recovery id `v`.
-
-It signs the Keccak-256 hash of `packet-type || packet-data`.
-
-The spec writes only `sign`, and the packets of EIP-8 recover their key from that hash.
-
-The data is an RLP list, one form for each packet type.
-
-EIP-8 asks the reader to ignore the Ping version, extra list items and the bytes after the list.
+EIP-8 relaxes the reading of every packet.
 
 EIP-868 adds the record packets, and the record sequence number of Ping and Pong.
 
@@ -99,10 +91,20 @@ deriving DecidableEq
 
 /-- An endpoint as the RLP list `[ip, udp-port, tcp-port]`. -/
 def Endpoint.toItem (e : Endpoint) : Item :=
+  -- Ping: `from = [sender-ip, sender-udp-port, sender-tcp-port]`.
+  --
+  -- And `to = [recipient-ip, recipient-udp-port, 0]`.
+  --
+  -- Not in the source: EthLib writes and reads any TCP port in `to`, so a nonzero one is kept.
   .list [Codec.toItem e.ip, Codec.toItem e.udpPort, Codec.toItem e.tcpPort]
 
 /-- The endpoint in the RLP list `[ip, udp-port, tcp-port]`. -/
 def Endpoint.ofItem (item : Item) : Except RlpError Endpoint := do
+  -- Exactly the three items `[ip, udp-port, tcp-port]`, each port below 2^16.
+  --
+  -- EIP-8 ignores additional list elements in any packet, which may cover this nested list.
+  --
+  -- EthLib ignores them only in `packet-data`, as Wire Protocol writes, and refuses a fourth item.
   match ← item.fields 3 with
   | [ip, u, t] => return ⟨← Codec.ofItem ip, ← Codec.ofItem u, ← Codec.ofItem t⟩
   | items => throw (.wrongFieldCount 3 items.length)
@@ -119,11 +121,13 @@ deriving DecidableEq
 
 /-- A node as the RLP list `[ip, udp-port, tcp-port, node-id]`. -/
 def Node.toItem (n : Node) : Item :=
+  -- Neighbors: `nodes = [[ip, udp-port, tcp-port, node-id], ...]`, the endpoint flattened.
   .list [Codec.toItem n.endpoint.ip, Codec.toItem n.endpoint.udpPort,
     Codec.toItem n.endpoint.tcpPort, Codec.toItem n.id]
 
 /-- The node in the RLP list `[ip, udp-port, tcp-port, node-id]`. -/
 def Node.ofItem (item : Item) : Except RlpError Node := do
+  -- Exactly the four items `[ip, udp-port, tcp-port, node-id]`, with a 64-byte `node-id`.
   match ← item.fields 4 with
   | [ip, u, t, id] =>
     return ⟨⟨← Codec.ofItem ip, ← Codec.ofItem u, ← Codec.ofItem t⟩, ← Codec.ofItem id⟩
@@ -154,74 +158,93 @@ namespace Packet
 
 /-- The packet type. -/
 def type : Packet → UInt8
+  -- `packet-type` is a single byte, the number in the heading of each packet section.
   | ping .. => 0x01
   | pong .. => 0x02
   | findNode .. => 0x03
   | neighbors .. => 0x04
+  -- EIP-868 adds the types 0x05 and 0x06.
   | enrRequest _ => 0x05
   | enrResponse .. => 0x06
 
 /-- The item of an optional sequence number: one item when present, none when absent. -/
 def enrSeqItems : Option UInt64 → List Item
+  -- The `enr-seq` field is optional, so a packet without it ends at its expiration.
   | none => []
   | some n => [Codec.toItem n]
 
 /-- The items of the packet data. -/
 def fields : Packet → List Item
+  -- Ping (0x01): `packet-data = [version, from, to, expiration, enr-seq ...]`.
   | ping v f t e s =>
     [Codec.toItem v, Codec.toItem f, Codec.toItem t, Codec.toItem e] ++ enrSeqItems s
+  -- Pong (0x02): `packet-data = [to, ping-hash, expiration, enr-seq, ...]`.
   | pong t h e s => [Codec.toItem t, Codec.toItem h, Codec.toItem e] ++ enrSeqItems s
+  -- FindNode (0x03): `packet-data = [target, expiration, ...]`.
   | findNode t e => [Codec.toItem t, Codec.toItem e]
+  -- Neighbors (0x04): `packet-data = [nodes, expiration, ...]`.
   | neighbors ns e => [Codec.toItem ns, Codec.toItem e]
+  -- ENRRequest (0x05): `packet-data = [expiration]`.
   | enrRequest e => [Codec.toItem e]
+  -- ENRResponse (0x06): `packet-data = [request-hash, ENR]`.
   | enrResponse h r => [Codec.toItem h, r]
 
-/--
-The optional sequence number in the items after the fixed fields.
-
-EIP-868 makes the first of them the sequence number, so it must be an integer below `2^64`.
-
-The items after it are ignored, as EIP-8 asks.
--/
+/-- The optional sequence number in the items after the fixed fields. -/
 def readEnrSeq : List Item → Except RlpError (Option UInt64)
+  -- The `enr-seq` field is optional.
   | [] => .ok none
+  -- EIP-868: the first item after the fixed fields is `enr-seq`, the record sequence number.
+  --
+  -- EIP-778 makes that number a 64-bit unsigned integer, so it is below 2^64.
+  --
+  -- EIP-8: the reader ignores any additional list elements, here those after `enr-seq`.
   | item :: _ => some <$> Codec.ofItem item
 
-/--
-The packet of the type `type` whose data is the RLP list of the items `items`.
-
-The fixed fields come first, and the reader ignores the items after them.
--/
+/-- The packet of the type `type` whose data is the RLP list of the items `items`. -/
 def ofItems (type : UInt8) (items : List Item) : Except Discv4Error Packet :=
+  -- Each type reads its fixed fields first, in the order of its `packet-data`.
+  --
+  -- Wire Protocol and EIP-8: the reader ignores any additional elements in the `packet-data` list.
+  --
+  -- Ping (0x01): `[version, from, to, expiration, enr-seq ...]`.
   if type = 0x01 then
     match items with
+    -- EIP-8: the reader does not validate the version, so any integer is kept.
     | v :: f :: t :: e :: rest => Except.mapError .rlp do
       return ping (← Codec.ofItem v) (← Codec.ofItem f) (← Codec.ofItem t) (← Codec.ofItem e)
         (← readEnrSeq rest)
     | _ => .error (.rlp (.wrongFieldCount 4 items.length))
+  -- Pong (0x02): `[to, ping-hash, expiration, enr-seq, ...]`, with a 32-byte `ping-hash`.
   else if type = 0x02 then
     match items with
     | t :: h :: e :: rest => Except.mapError .rlp do
       return pong (← Codec.ofItem t) (← Codec.ofItem h) (← Codec.ofItem e) (← readEnrSeq rest)
     | _ => .error (.rlp (.wrongFieldCount 3 items.length))
+  -- FindNode (0x03): `[target, expiration, ...]`, the `target` a 64-byte secp256k1 public key.
+  --
+  -- EthLib checks only its 64 bytes, not that it is a point of the curve.
   else if type = 0x03 then
     match items with
     | t :: e :: _ => Except.mapError .rlp do
       return findNode (← Codec.ofItem t) (← Codec.ofItem e)
     | _ => .error (.rlp (.wrongFieldCount 2 items.length))
+  -- Neighbors (0x04): `[nodes, expiration, ...]`.
   else if type = 0x04 then
     match items with
     | ns :: e :: _ => Except.mapError .rlp do
       return neighbors (← Codec.ofItem ns) (← Codec.ofItem e)
     | _ => .error (.rlp (.wrongFieldCount 2 items.length))
+  -- ENRRequest (0x05): `[expiration]`; by EIP-8, the items after it are ignored.
   else if type = 0x05 then
     match items with
     | e :: _ => Except.mapError .rlp do return enrRequest (← Codec.ofItem e)
     | _ => .error (.rlp (.wrongFieldCount 1 items.length))
+  -- ENRResponse (0x06): `[request-hash, ENR]`, the record kept as an RLP item.
   else if type = 0x06 then
     match items with
     | h :: r :: _ => Except.mapError .rlp do return enrResponse (← Codec.ofItem h) r
     | _ => .error (.rlp (.wrongFieldCount 2 items.length))
+  -- EIP-8: discovery packets with unknown packet type should be discarded silently.
   else .error (.unknownType type)
 
 end Packet
@@ -242,16 +265,28 @@ def keccak (bytes : List UInt8) : Vector UInt8 32 :=
 /--
 The packet that the node with the private key `key` sends.
 
-The signature is deterministic, by RFC 6979, with the low `s` of EIP-2.
-
 It fails when the packet would exceed 1280 bytes.
 -/
 def encode (key : Fn) (p : Packet) : Except Discv4Error ByteArray := do
+  -- `packet-data` is the RLP list of the fields of the packet type.
   let data ← (Serialization.Rlp.encode (.list p.fields)).mapError .rlp
+  -- The signed bytes are `packet-type || packet-data`.
   let signed := p.type :: data.data.toList
+  -- `signature = sign(packet-type || packet-data)`, by the node's identity key.
+  --
+  -- The source writes only sign; EthLib signs `keccak256(packet-type || packet-data)`.
+  --
+  -- That is the hash from which the signed packets of EIP-8 recover their key.
+  --
+  -- Not in the source: the nonce is that of RFC 6979, and `s` is low, as EIP-2 asks.
   let sig ← (Ecdsa.sign key (keccak signed)).mapError .secp256k1
+  -- The signature is 65 bytes, `r || s || v`, with the recovery id `v`.
   let body := (Rlpx.signatureBytes sig).toList ++ signed
+  -- `packet = hash || signature || packet-type || packet-data`.
+  --
+  -- And `hash = keccak256(signature || packet-type || packet-data)`.
   let packet := (keccak body).toList ++ body
+  -- The maximum size of any packet is 1280 bytes.
   if MAX_PACKET_SIZE < packet.length then throw (.tooLarge packet.length)
   return ⟨packet.toArray⟩
 
@@ -261,14 +296,17 @@ def signatureOf (bytes : List UInt8) : Vector UInt8 65 :=
 
 /--
 The packet of the type `type` with the data `data`, signed by `sig`, under the hash `hash`.
-
-It reads one RLP item from the data and ignores the bytes after it, as EIP-8 asks.
 -/
 def readBody (hash : Vector UInt8 32) (sig : Vector UInt8 65) (type : UInt8)
     (data : List UInt8) : Except Discv4Error Received := do
+  -- The sender is the key that `r || s || v` recovers from `keccak256(packet-type || data)`.
+  --
+  -- The signed bytes run to the end of the packet, with any data after the RLP list.
   let sender ← (Rlpx.recoverSigner (keccak (type :: data)) sig).mapError
     fun _ => .invalidSignature
+  -- EIP-8: the reader ignores any data after the first RLP value in any packet.
   let (item, _) ← (decodeItem ⟨data.toArray⟩ 0 data.length (by simp [ByteArray.size])).mapError .rlp
+  -- That value is an RLP list, whose items take the form of the packet type.
   let p ← Packet.ofItems type (← item.toItems.mapError .rlp)
   return ⟨p, sender, hash⟩
 
@@ -281,29 +319,33 @@ It does not check the expiration, which needs the reader's clock.
 -/
 def decode (packet : ByteArray) : Except Discv4Error Received :=
   let bytes := packet.data.toList
+  -- The maximum size of any packet is 1280 bytes.
   if MAX_PACKET_SIZE < bytes.length then .error (.tooLarge bytes.length)
   else
+    -- `packet-header = hash || signature || packet-type`: 32 bytes, 65 bytes, then one byte.
     match bytes.drop HEADER_SIZE with
     | [] => .error (.tooShort bytes.length)
     | type :: data =>
+      -- `hash = keccak256(signature || packet-type || packet-data)`, over every byte after it.
       if bytes.take 32 = (keccak (bytes.drop 32)).toList then
         readBody (keccak (bytes.drop 32)) (signatureOf bytes) type data
       else .error (.hashMismatch ⟨(bytes.take 32).toArray⟩ ⟨(keccak (bytes.drop 32)).toArray⟩)
 
-/--
-Whether the record of an ENRResponse is signed by the sender of the packet.
-
-The record must be a valid "v4" record, and its public key must be the sender's key.
--/
+/-- Whether the record of an ENRResponse is signed by the sender of the packet. -/
 def recordSignedBy (sender : Point) (record : Item) : Bool :=
+  -- The recipient should verify that the record is signed by the key that signed the response.
+  --
+  -- The record is read back from its RLP bytes, in the form of EIP-778.
   match Serialization.Rlp.encode record with
   | .error _ => false
   | .ok bytes =>
     match Enr.decode bytes with
     | .error _ => false
     | .ok r =>
+      -- Node Records: all records must use the identity scheme v4, with a secp256k1 key.
       match r.publicKeyV4 with
       | .error _ => false
+      -- The record verifies under the scheme v4, and its key signed the packet.
       | .ok key => Enr.verifyV4 r && decide (key = sender)
 
 end EthLib.Networking.Discv4
