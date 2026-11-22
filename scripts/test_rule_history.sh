@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # The rule history must write exactly the lines that scripts/RuleHistoryTest
 # plants, pass its own file, and fail on a changed, missing or extra line, a
-# missing file, a scan that finds no rule, a missing fork type and an unknown
-# argument.
+# missing file, lines in another order or count, a missing final line end, a
+# scan that finds no rule, a missing fork type, an unknown argument and a
+# failure of the tool.
 # Run from anywhere.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 FAIL=0
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
@@ -92,6 +93,34 @@ expect_fail "a line missing from the file" "+ RuleHistoryTest.Rules.limit${TAB}-
 { cat "$WORK/expected"; echo "RuleHistoryTest.Rules.gone${TAB}-${TAB}1"; } >"$WORK/case"
 expect_fail "a line of a rule that no longer exists" "- RuleHistoryTest.Rules.gone${TAB}-${TAB}1"
 
+# The same lines in another order, or one line twice: no line is new or gone.
+# The check prints the first line where the file and the code differ.
+EARLY="RuleHistoryTest.Rules.access · false${TAB}early${TAB}800"
+MIDDLE="RuleHistoryTest.Rules.access · false${TAB}middle${TAB}2100"
+awk 'NR == 4 { held = $0; next } NR == 5 { print; print held; next } { print }' \
+  "$WORK/expected" >"$WORK/case"
+expect_fail "a file with two lines swapped" "- line 4: $MIDDLE"
+expect_fail "the line of the code where a swapped file differs" "+ line 4: $EARLY"
+
+awk 'NR == 4 { print } { print }' "$WORK/expected" >"$WORK/case"
+expect_fail "a file with a line written twice" "- line 5: $EARLY"
+grep -qxF -- "rule-history: $WORK/case holds the lines of the code in another order or count" \
+  "$WORK/err" || { echo "FAIL: a line written twice is not named as such"; FAIL=1; }
+expect_fail "the line of the code where a doubled line differs" "+ line 5: $MIDDLE"
+
+# An editor can drop the final line end, or add a blank line at the end.
+# Both leave every line with text in place.
+END_LINE=$(($(wc -l <"$WORK/expected") + 1))
+LAST=$(tail -n 1 "$WORK/expected")
+printf '%s' "$(cat "$WORK/expected")" >"$WORK/case"
+expect_fail "a file without its final line end" "- line $((END_LINE - 1)): $LAST"
+grep -qxF -- "rule-history: $WORK/case has no line end after its last line" "$WORK/err" \
+  || { echo "FAIL: a file without its final line end is not named so"; FAIL=1; }
+
+{ cat "$WORK/expected"; echo; } >"$WORK/case"
+expect_fail "a file with a blank line at the end" "- line $END_LINE: (blank line)"
+expect_fail "the line of the code past the end of the file" "+ line $END_LINE: (past the last line)"
+
 history --check --file "$WORK/missing" >"$WORK/out"; got=$?
 if [ "$got" -eq 1 ] && grep -qxF -- "+ RuleHistoryTest.Rules.limit${TAB}-${TAB}24576" "$WORK/out"; then
   echo "ok:   a missing file fails the check"
@@ -122,5 +151,25 @@ expect_exit "a namespace with no fork type" 3 \
   --check --file "$WORK/expected"
 
 expect_exit "an unknown argument" 2 "unknown argument --chek" --chek
+
+# A failure of the tool exits with 4, never with the 1 of a changed value.
+expect_crash() {
+  local what=$1 got
+  shift
+  lake exe rule-history "$@" >"$WORK/out" 2>"$WORK/err"; got=$?
+  if [ "$got" -eq 4 ] && grep -q '^rule-history: ' "$WORK/err"; then
+    echo "ok:   $what exits with 4"
+  else
+    echo "FAIL: exit $got on $what, expected 4"; cat "$WORK/out" "$WORK/err"; FAIL=1
+  fi
+}
+
+expect_crash "a module that does not exist" \
+  --module RuleHistoryTest.Missing --scope RuleHistoryTest.Rules --base RuleHistoryTest.Base \
+  --check --file "$WORK/expected"
+
+expect_crash "a file that cannot be read" \
+  --module RuleHistoryTest --scope RuleHistoryTest.Rules --base RuleHistoryTest.Base \
+  --check --file "$WORK"
 
 exit "$FAIL"

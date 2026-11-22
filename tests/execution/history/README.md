@@ -23,6 +23,7 @@ Three of its lines, with the sources of their values:
 | `Execution.Evm.GasCosts.WARM_ACCESS` | `-` | 100 | EIP-2929 |
 
 `lake exe rule-history` writes the file from the compiled code, and `lake exe rule-history --check` fails when the code computes another value, and prints the changed lines.
+When the file holds the same lines in another order or count, the check prints the first line that differs.
 The file records what the code computes and is not a test vector.
 The code under test wrote it, so it shows that a value changed, and never that a value is right.
 
