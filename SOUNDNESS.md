@@ -5450,8 +5450,13 @@ The reader takes a reading where its sources leave a choice:
 - The reader bounds times below `2^64`, since the fork identifier of [EIP-6122](https://eips.ethereum.org/EIPS/eip-6122#specification) hashes each fork time as a `uint64`.
   The configuration reader of the exports bounds every activation, by block or by time, the same way, and so does the schedule reader of the fork identifier exports.
   `eth_config` bounds the forks that the head has passed the same way.
+  `readSchedule_bounded` (`Networking/Proofs/Exports/ForkId.lean`) proves that every fork of a schedule that the fork identifier exports read is below `2^64`.
+  For such a schedule, `passed_bounded`, `checksumInput_eq_iff` and `forkId_next_toNat` (`Networking/Proofs/Devp2p/ForkId.lean`) show that the identifier holds each fork whole.
+  A Lean caller can still build a schedule with a larger fork, and its identifier then holds that fork modulo `2^64`.
+  `Schedule.Bounded` is the check that such a caller applies first.
   No reader bounds a block's own time, which its header holds in 256 bits.
-  No EIP bounds a fork block or a fork time itself, so refusing an activation of `2^64` or more is EthLib's choice.
+  No EIP bounds a fork block or a fork time in the chain configuration; only the fork identifier holds them as `uint64`.
+  So refusing an activation of `2^64` or more is EthLib's choice.
   The export reader gives the activation of a blob schedule the same bound, though no fork identifier holds it.
   It applies to every export that reads a configuration, the block transition among them, though only the fork identifier needs it.
   EIP-7892 types the target and the maximum of a schedule as 64-bit integers, and EthLib types them `UInt64`.
