@@ -1505,6 +1505,44 @@ def test_legacy_compression_must_be_null(client_role: bool) -> None:
     assert error.value.code == 0x12F
 
 
+def with_version(data: bytes, version: bytes) -> hs.FlightMessage:
+    # The legacy_version field follows the 4-byte handshake header of a hello.
+    assert data[4:6] == b"\x03\x03"
+    return {"level": "initial", "data": data[:4] + version + data[6:]}
+
+
+@pytest.mark.parametrize("receiver", ["server", "client", "retry", "second_hello"])
+def test_legacy_version_must_be_tls12(
+    receiver: Literal["server", "client", "retry", "second_hello"],
+) -> None:
+    # RFC 9846 §§4.2.2 to 4.2.4 require protocol_version for a legacy_version other than 0303.
+    client_config, server_config, client, server = server_flight()
+    with raises(hs.TlsStepError, PREFIX + "protocolVersion") as error:
+        if receiver == "server":
+            changed = with_version(client["output"][0]["data"], b"\x03\x04")
+            hs.server_step(server_config, hs.server_start(server_config), changed)
+        elif receiver == "client":
+            changed = with_version(server["output"][0]["data"], b"\x03\x02")
+            hs.client_step(client_config, SERVER_PEER_ID, client["state"], changed)
+        elif receiver == "retry":
+            server_hello = decoded(server["output"][0])
+            assert server_hello[0] == "server_hello"
+            retry: tls.ServerHello = {**server_hello[1], "random": HELLO_RETRY_RANDOM}
+            data = tls.encode_message(32, ("server_hello", retry))
+            changed = with_version(data, b"\x03\x04")
+            hs.client_step(client_config, SERVER_PEER_ID, client["state"], changed)
+        else:
+            client_config["initial_shares"] = []
+            first = hs.client_start(client_config)["output"][0]
+            waiting = hs.server_step(server_config, hs.server_start(server_config), first)
+            sent = decoded(waiting["output"][0])
+            assert sent[0] == "server_hello"
+            assert sent[1]["random"] == HELLO_RETRY_RANDOM
+            changed = with_version(first["data"], b"\x03\x04")
+            hs.server_step(server_config, waiting["state"], changed)
+    assert error.value.code == 0x146
+
+
 def test_duplicate_handshake_extensions_use_illegal_parameter() -> None:
     client_config, client, flight = client_before(1)
     # RFC 8446 §4.2 forbids duplicate extensions, independently of their contents.

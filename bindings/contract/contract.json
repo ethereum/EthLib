@@ -13568,7 +13568,8 @@
       {"constructor": "constant", "code": 4},
       {"constructor": "duplicateExtension", "code": 5},
       {"constructor": "messageType", "code": 6},
-      {"constructor": "retry", "code": 7}]}],
+      {"constructor": "retry", "code": 7},
+      {"constructor": "legacyVersion", "code": 8}]}],
    "error_class": "TlsHandshakeError",
    "docstring":
    "Encode one handshake message with its header and the caller's hash length, RFC 8446 §4."},
@@ -13586,7 +13587,8 @@
       {"constructor": "constant", "code": 4},
       {"constructor": "duplicateExtension", "code": 5},
       {"constructor": "messageType", "code": 6},
-      {"constructor": "retry", "code": 7}]}],
+      {"constructor": "retry", "code": 7},
+      {"constructor": "legacyVersion", "code": 8}]}],
    "error_class": "TlsHandshakeError",
    "docstring":
    "Decode one complete message and return its fields and trailing bytes, RFC 8446 §4."},
@@ -13604,7 +13606,8 @@
       {"constructor": "constant", "code": 4},
       {"constructor": "duplicateExtension", "code": 5},
       {"constructor": "messageType", "code": 6},
-      {"constructor": "retry", "code": 7}]}],
+      {"constructor": "retry", "code": 7},
+      {"constructor": "legacyVersion", "code": 8}]}],
    "error_class": "TlsHandshakeError",
    "docstring":
    "Encode a structured extension payload without selecting an algorithm or protocol."},
@@ -13622,7 +13625,8 @@
       {"constructor": "constant", "code": 4},
       {"constructor": "duplicateExtension", "code": 5},
       {"constructor": "messageType", "code": 6},
-      {"constructor": "retry", "code": 7}]}],
+      {"constructor": "retry", "code": 7},
+      {"constructor": "legacyVersion", "code": 8}]}],
    "error_class": "TlsHandshakeError",
    "docstring":
    "Decode an extension in the payload form that its message context requires."},
@@ -13640,7 +13644,8 @@
       {"constructor": "constant", "code": 4},
       {"constructor": "duplicateExtension", "code": 5},
       {"constructor": "messageType", "code": 6},
-      {"constructor": "retry", "code": 7}]}],
+      {"constructor": "retry", "code": 7},
+      {"constructor": "legacyVersion", "code": 8}]}],
    "error_class": "TlsHandshakeError",
    "docstring":
    "Return the SHA-256 transcript of complete handshake messages and its hash, RFC 8446 §4.4.1.\n\nA HelloRetryRequest replaces ClientHello1 with its synthetic `message_hash` message."},

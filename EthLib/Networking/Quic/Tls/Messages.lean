@@ -221,13 +221,15 @@ def encodeBody (hashLength : Nat) : Message → Except Error (List UInt8)
 
 /-- Read a body by its HandshakeType, RFC 8446 §4.
 
-Legacy constants are checked for TLS 1.3; version negotiation is left to the handshake steps. -/
+Legacy constants are checked for TLS 1.3; the supported versions extension is left to the steps. -/
 def readBody (hashLength : Nat) (kind : UInt8) : Reader Message := do
   match kind.toNat with
   -- The client hello, type 1, §4.1.2.
   | 1 =>
     -- `ProtocolVersion legacy_version = 0x0303;`.
-    require ((← uint 2) = 0x0303) .constant
+    --
+    -- RFC 9846 §4.2.2: a server that receives another value answers with protocol_version.
+    require ((← uint 2) = 0x0303) .legacyVersion
     -- `Random random;`, 32 bytes.
     let random ← vector 32
     -- `opaque legacy_session_id<0..32>;`, kept for the check of RFC 9001 §8.4 by the caller.
@@ -247,7 +249,9 @@ def readBody (hashLength : Nat) (kind : UInt8) : Reader Message := do
   -- The server hello, type 2, §4.1.3, whose structure a HelloRetryRequest shares.
   | 2 =>
     -- `ProtocolVersion legacy_version = 0x0303;`.
-    require ((← uint 2) = 0x0303) .constant
+    --
+    -- RFC 9846 §§4.2.3 and 4.2.4: a client that receives another value sends protocol_version.
+    require ((← uint 2) = 0x0303) .legacyVersion
     -- `Random random;`, 32 bytes.
     let random ← vector 32
     -- `opaque legacy_session_id_echo<0..32>;`.

@@ -18,6 +18,7 @@ CODES = {
     "duplicateExtension": 5,
     "messageType": 6,
     "retry": 7,
+    "legacyVersion": 8,
 }
 
 # Source: RFC 8446 §§4.1.2, 4.1.3, 4.3.1, 4.3.2 and 4.4.2–4.4.4.
@@ -203,13 +204,22 @@ def test_client_hello_extensions_below_their_floor() -> None:
     assert info.value.code == CODES["length"]
 
 
-def test_legacy_constants() -> None:
+@pytest.mark.parametrize("index", [0, 1])
+def test_legacy_version(index: int) -> None:
+    # RFC 9846 §§4.2.2 and 4.2.3 fix legacy_version to 0303 in both hellos, with its own alert.
+    data = bytes.fromhex(MESSAGES[index][1])
+    for version in [b"\x03\x04", b"\x03\x02", b"\x02\x03"]:
+        with raises(tls.TlsHandshakeError, f"{PREFIX}legacyVersion") as info:
+            tls.decode_message(32, data[:4] + version + data[6:])
+        assert info.value.code == CODES["legacyVersion"]
+
+
+def test_legacy_compression() -> None:
     data = bytes.fromhex(MESSAGES[0][1])
-    # RFC 8446 §4.1.2 fixes legacy_version to 0303 and compression to 01 00.
-    for malformed in [data[:5] + b"\x04" + data[6:], data[:44] + b"\x01" + data[45:]]:
-        with raises(tls.TlsHandshakeError, f"{PREFIX}constant") as info:
-            tls.decode_message(32, malformed)
-        assert info.value.code == CODES["constant"]
+    # RFC 9846 §4.2.2 fixes the compression methods to 01 00.
+    with raises(tls.TlsHandshakeError, f"{PREFIX}constant") as info:
+        tls.decode_message(32, data[:44] + b"\x01" + data[45:])
+    assert info.value.code == CODES["constant"]
 
 
 def test_unknown_extensions_keep_their_order() -> None:
