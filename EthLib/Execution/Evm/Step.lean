@@ -64,7 +64,7 @@ def readFrame (cost : Nat) (value : Evm fork Meter → U256) (evm : Evm fork Met
     Except EvmError (Evm fork Meter) := do
   -- `mu'_g = mu_g - C`, then `mu'_s[0]` is a word read from the frame after the charge.
   --
-  -- So GAS pushes `mu'_g`, as Appendix H says in words, where its formula reads `mu_g`.
+  -- So GAS pushes `mu'_g`, as the text of Appendix H.2 says, where its formula reads `mu_g`.
   let evm ← chargeGas evm cost
   let evm ← pushWord evm (value evm)
   return advance evm

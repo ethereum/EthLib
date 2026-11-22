@@ -36,11 +36,20 @@ def empty : Stack := ⟨[], Nat.zero_le _⟩
 
 /-- The top word and the rest of the stack, or an underflow when the stack is empty. -/
 def pop : Stack → Except EvmError (U256 × Stack)
+  -- §9.4.2: `||mu_s|| < delta_w` makes `Z` hold.
+  --
+  -- Each of the `delta_w` pops checks one word, so one fails exactly when `||mu_s|| < delta_w`.
   | ⟨[], _⟩ => .error .stackUnderflow
+  -- `mu_s[0]`, and the rest of the stack.
   | ⟨x :: rest, h⟩ => .ok (x, ⟨rest, Nat.le_of_succ_le h⟩)
 
 /-- The stack with a word on top, or an overflow when the stack is full. -/
 def push (stack : Stack) (x : U256) : Except EvmError Stack :=
+  -- §9.4.2: `||mu_s|| - delta_w + alpha_w > 1024` makes `Z` hold.
+  --
+  -- The instruction pops its `delta_w` words first and pushes one at a time.
+  --
+  -- So a push onto 1024 words is exactly that case.
   if h : stack.val.length = STACK_LIMIT then .error .stackOverflow
   else .ok ⟨x :: stack.val, Nat.lt_of_le_of_ne stack.property h⟩
 
