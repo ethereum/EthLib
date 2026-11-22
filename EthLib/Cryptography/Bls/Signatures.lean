@@ -265,8 +265,11 @@ def fastAggregateVerify
 
 /-! ## Ethereum wrappers
 
-Only the consensus-specs state these two rules, in Extensions of `specs/altair/bls.md`:
-<https://github.com/ethereum/consensus-specs/blob/aa16bb4c/specs/altair/bls.md#extensions>
+Ethereum adds two rules around the procedures of the draft.
+
+Key aggregation sums a non-empty list of valid keys.
+
+Fast aggregate verification accepts an empty key list with the encoding of the point at infinity.
 -/
 
 /-- The aggregation of Ethereum public keys: the sum of the validated keys.
