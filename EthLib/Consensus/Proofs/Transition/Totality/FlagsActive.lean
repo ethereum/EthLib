@@ -381,7 +381,7 @@ private theorem flagsFrame_operationsInput {block : BeaconBlock preset fork}
     (fun _ ok => .of_sizes (frame_processEth1Data ok).flags (sameSizes_processEth1Data ok))
 
 /-- The steps of a block before its operations keep the slot and activity. -/
-private theorem activeStep_operationsInput {block : BeaconBlock preset fork}
+theorem activeStep_operationsInput {block : BeaconBlock preset fork}
     {input : BeaconState preset fork}
     (started : OperationsInput config checks engine state block input) :
     ActiveStep state input :=

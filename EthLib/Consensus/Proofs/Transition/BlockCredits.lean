@@ -368,7 +368,7 @@ private theorem Kept.reads (kept : Kept s t) {base : ℕ → ℕ} (reads : Reads
     Reads t base := kept.steady.reads reads
 
 /-- A kept step keeps the proposer of the slot. -/
-private theorem Kept.proposer (kept : Kept s t) :
+theorem Kept.proposer (kept : Kept s t) :
     getBeaconProposerIndex t = getBeaconProposerIndex s :=
   getBeaconProposerIndex_congr kept.inputs.slot kept.inputs.randaoMixes
     (fun fulu => by rw [kept.inputs.proposerLookahead])
@@ -381,19 +381,26 @@ section KeptSteps
 
 variable {fork : Fork} {s t : BeaconState preset fork}
 
-private theorem Kept.foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
+/-- A fold whose every step is a kept step is a kept step.
+
+A kept step keeps the frame, the payload inputs, activity and the effective balances.
+
+It also keeps the registry lifecycle, and each old validator later inside the epoch. -/
+theorem Kept.foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
     (each : ∀ a x b, step a x = .ok b → Kept a b) {items : List α}
     (computed : items.foldlM step s = .ok t) : Kept s t :=
   foldlM_ok_invariant (Kept s) (fun _ _ _ before ok => before.trans (each _ _ _ ok))
     (Kept.refl s) computed
 
-private theorem kept_processProposerSlashing {slashing : ProposerSlashing}
+/-- A proposer slashing is a kept step. -/
+theorem Kept.of_processProposerSlashing {slashing : ProposerSlashing}
     (computed : processProposerSlashing config checks s slashing = .ok t) : Kept s t :=
   ⟨(frame_processProposerSlashing computed).toFrame, payloadInputs_processProposerSlashing computed,
     stepKeeps_processProposerSlashing computed, effectiveKept_proposerSlashing computed,
     registryLifecycle_processProposerSlashing computed, lives_processProposerSlashing computed⟩
 
-private theorem kept_processAttesterSlashing {slashing : AttesterSlashing preset fork}
+/-- An attester slashing is a kept step. -/
+theorem Kept.of_processAttesterSlashing {slashing : AttesterSlashing preset fork}
     (computed : processAttesterSlashing config checks s slashing = .ok t) : Kept s t :=
   ⟨(frame_processAttesterSlashing computed).toFrame,
     payloadInputs_processAttesterSlashing computed, stepKeeps_processAttesterSlashing computed,
@@ -666,7 +673,7 @@ private theorem credited_processProposerSlashing {slashing : ProposerSlashing}
     ∃ p c sl o sh, Credited s t p c sl ∅ o sh := by
   obtain ⟨proposer, slashed, validator, read, found, unslashed, ⟨later, laterFound, marked⟩,
     ledger, eligible⟩ := ledger_processProposerSlashing early computed
-  have kept := kept_processProposerSlashing computed
+  have kept := Kept.of_processProposerSlashing computed
   have grow := FlagKeeps.of_flags kept.frame.registryGrows (flags_proposerSlashing computed)
   have effective : effectiveAt ⟨fork, t⟩ slashed.toNat = validator.effectiveBalance.toNat :=
     (effectiveAt_of_kept kept found).trans (effectiveAt_eq_of_found found)
@@ -690,7 +697,7 @@ private theorem credited_processAttesterSlashing {slashing : AttesterSlashing pr
     ∃ p c sl o sh, Credited s t p c sl ∅ o sh := by
   obtain ⟨proposer, slashed, read, newly, eligibles, ledger⟩ :=
     ledger_processAttesterSlashing early computed
-  have kept := kept_processAttesterSlashing computed
+  have kept := Kept.of_processAttesterSlashing computed
   have grow := FlagKeeps.of_flags kept.frame.registryGrows (flags_attesterSlashing computed)
   have effective : ∀ v ∈ slashed, effectiveAt ⟨fork, t⟩ v.toNat = effectiveAt ⟨fork, s⟩ v.toNat :=
     fun v member => by
