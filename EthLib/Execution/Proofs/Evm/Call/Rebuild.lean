@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Proofs.Evm.Call.Nonce
+public import EthLib.Execution.Proofs.Evm.Call.NonceOrCodeWrites
 public import EthLib.Execution.Proofs.Evm.Call.Reads
 public import EthLib.Execution.Proofs.Evm.Call.StepRules
 public import EthLib.Execution.Proofs.State.Frame
@@ -51,41 +51,6 @@ open EthLib.Execution.State (Account BlockState EMPTY_ACCOUNT EMPTY_CODE_HASH Re
   Rebuildable StateError StorageMap TransactionState getAccount_eq_empty_of_createEther)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
-
-/-! ## Accounts with a nonce or code -/
-
-/-- Whether the account at `address` in `tx` has a positive nonce or holds code. -/
-def HasNonceOrCode (tx : TransactionState) (address : Address) : Prop :=
-  1 ≤ (tx.getAccount address).nonce ∨ (tx.getAccount address).codeHash ≠ EMPTY_CODE_HASH
-
-/-- An account with a nonce or code is not the empty account. -/
-theorem HasNonceOrCode.ne_empty {tx : TransactionState} {address : Address}
-    (h : HasNonceOrCode tx address) : tx.getAccount address ≠ EMPTY_ACCOUNT := by
-  intro hempty
-  rcases h with hn | hc
-  · rw [hempty] at hn
-    exact Nat.not_succ_le_zero 0 hn
-  · rw [hempty] at hc
-    exact hc rfl
-
-/-- Two states with the same account at `address` agree on whether it has a nonce or code. -/
-theorem HasNonceOrCode.congr {tx tx' : TransactionState} {address : Address}
-    (h : tx'.getAccount address = tx.getAccount address) :
-    HasNonceOrCode tx' address ↔ HasNonceOrCode tx address := by
-  simp only [HasNonceOrCode, h]
-
-/-- Whether `tx'` lowers no nonce of `tx`, and keeps a nonce or code wherever `tx` has one. -/
-def KeepsNonceOrCode (tx tx' : TransactionState) : Prop :=
-  NonceLe tx tx' ∧ ∀ address, HasNonceOrCode tx address → HasNonceOrCode tx' address
-
-/-- Every state keeps its own nonces, and a nonce or code wherever it has one. -/
-theorem KeepsNonceOrCode.refl (tx : TransactionState) : KeepsNonceOrCode tx tx :=
-  ⟨NonceLe.refl tx, fun _ h => h⟩
-
-/-- Two transitions that lower no nonce and keep each nonce or code compose. -/
-theorem KeepsNonceOrCode.trans {a b c : TransactionState}
-    (hab : KeepsNonceOrCode a b) (hbc : KeepsNonceOrCode b c) : KeepsNonceOrCode a c :=
-  ⟨hab.1.trans hbc.1, fun address h => hbc.2 address (hab.2 address h)⟩
 
 /-! ## Delegations and nonces -/
 
@@ -191,15 +156,6 @@ theorem RebuildState.ofBlock {block : BlockState} (valid : Rebuildable block)
 theorem RebuildEnd.toRebuildInvariant {block : BlockState} {tx : TransactionState}
     (valid : RebuildEnd block tx) : RebuildInvariant tx :=
   ⟨valid.code, valid.emptyStorage⟩
-
-/-- Same writes on the same block lower no nonce and keep each nonce or code. -/
-theorem SameWrites.keepsNonceOrCode {tx snapshot : TransactionState}
-    (h : SameWrites snapshot tx) (hp : snapshot.parent = tx.parent) :
-    KeepsNonceOrCode tx snapshot := by
-  refine ⟨fun address => ?_, fun address hnc => ?_⟩
-  · rw [h.getAccount hp address]
-    exact Nat.le_refl _
-  · exact (HasNonceOrCode.congr (h.getAccount hp address)).mpr hnc
 
 /-- Same writes on the same block keep the rebuild property, if no created account held storage. -/
 private theorem RebuildState.of_sameWrites_of_created {block : BlockState}
@@ -322,9 +278,7 @@ theorem RebuildState.setStorage {block : BlockState} {tx tx' : TransactionState}
   have hacc : ∀ other, tx'.getAccount other = tx.getAccount other := by
     intro other
     simp only [TransactionState.getAccount, TransactionState.getAccountOptional_setStorage h]
-  have hk : KeepsNonceOrCode tx tx' :=
-    ⟨nonceLe_setStorage h, fun other hc => (HasNonceOrCode.congr (hacc other)).mpr hc⟩
-  refine ⟨?_, hk⟩
+  refine ⟨?_, keepsNonceOrCode_setStorage h⟩
   unfold TransactionState.setStorage at h
   split at h
   · cases h
@@ -364,7 +318,7 @@ theorem RebuildState.setTransientStorage {block : BlockState} {tx : TransactionS
       KeepsNonceOrCode tx (tx.setTransientStorage address key value) :=
   ⟨⟨⟨valid.parent, valid.code, valid.emptyStorage, valid.clears,
       valid.delegations.congr fun _ => rfl⟩, valid.plain, valid.created⟩,
-    ⟨fun _ => Nat.le_refl _, fun _ h => h⟩⟩
+    keepsNonceOrCode_setTransientStorage tx address key value⟩
 
 /-- Touching an account keeps the rebuild property. -/
 theorem RebuildState.touchAccount {block : BlockState} {tx : TransactionState}
@@ -409,8 +363,7 @@ theorem RebuildState.touchAccount {block : BlockState} {tx : TransactionState}
         · rw [hwrites]
           exact hslot key,
       fun other hmem key => valid.created other (hcreated ▸ hmem) key⟩,
-    ⟨nonceLe_touchAccount tx address,
-      fun other hc => (HasNonceOrCode.congr (hacc other)).mpr hc⟩⟩
+    keepsNonceOrCode_touchAccount tx address⟩
 
 /-- Raising the nonce of an account keeps the rebuild property. -/
 theorem RebuildState.incrementNonce {block : BlockState} {tx tx' : TransactionState}
@@ -426,14 +379,7 @@ theorem RebuildState.incrementNonce {block : BlockState} {tx tx' : TransactionSt
     left
     rw [hself]
     exact Nat.succ_le_succ (Nat.zero_le _)
-  have hk : KeepsNonceOrCode tx tx' := by
-    refine ⟨nonceLe_incrementNonce h, fun other hc => ?_⟩
-    by_cases hne : other = address
-    · exact hne ▸ hnc_self
-    · have ho : tx'.getAccount other = tx.getAccount other := by
-        simp only [TransactionState.getAccount, hother other hne]
-      exact (HasNonceOrCode.congr ho).mpr hc
-  refine ⟨?_, hk, hnc_self⟩
+  refine ⟨?_, keepsNonceOrCode_incrementNonce h, hnc_self⟩
   have hp : tx'.parent = block := (TransactionState.parent_incrementNonce h).trans valid.parent
   have hclears : tx'.storageClears = tx.storageClears := by subst htx'; rfl
   have hwrites : tx'.storageWrites = tx.storageWrites := by subst htx'; rfl
@@ -476,12 +422,7 @@ theorem RebuildState.createEther {block : BlockState} {tx tx' : TransactionState
     {target : Address} {amount : U256} (valid : RebuildState block tx)
     (h : tx.createEther fork target amount = .ok tx') :
     RebuildState block tx' ∧ KeepsNonceOrCode tx tx' := by
-  have hk : KeepsNonceOrCode tx tx' := by
-    refine ⟨nonceLe_createEther h, fun other hc => ?_⟩
-    obtain ⟨-, hn, hcode⟩ := TransactionState.getAccount_createEther h other
-    rcases hc with h1 | h2
-    · exact .inl (hn ▸ h1)
-    · exact .inr (hcode ▸ h2)
+  have hk := keepsNonceOrCode_createEther h
   refine ⟨?_, hk⟩
   have hp : tx'.parent = block := (TransactionState.parent_createEther h).trans valid.parent
   have hinv := valid.toRebuildInvariant.createEther h
@@ -547,7 +488,7 @@ private theorem RebuildState.modifyState_of_hasNonceOrCode {block : BlockState}
       1 ≤ account.nonce ∨ account.codeHash ≠ EMPTY_CODE_HASH)
     (hcode : ∀ account, f (tx.getAccount address) = .ok account → account.nonce = 0 →
       account.codeHash = (tx.getAccount address).codeHash) :
-    RebuildState block tx' ∧ KeepsNonceOrCode tx tx' ∧ HasNonceOrCode tx' address := by
+    RebuildState block tx' := by
   obtain ⟨account, hf, htx'⟩ := modifyState_eq_of_hasNonceOrCode h hkeeps
   obtain ⟨acc', hf', hself, hother⟩ := TransactionState.modifyState_eq_ok h
   rw [hf, Except.ok.injEq] at hf'
@@ -556,18 +497,6 @@ private theorem RebuildState.modifyState_of_hasNonceOrCode {block : BlockState}
     unfold HasNonceOrCode
     rw [hself]
     exact hkeeps account hf
-  have hk : KeepsNonceOrCode tx tx' := by
-    refine ⟨fun other => ?_, fun other hc => ?_⟩
-    · by_cases hne : other = address
-      · subst hne
-        rw [hself]
-        exact hnonce account hf
-      · rw [hother other hne]
-        exact Nat.le_refl _
-    · by_cases hne : other = address
-      · exact hne ▸ hnc_self
-      · exact (HasNonceOrCode.congr (hother other hne)).mpr hc
-  refine ⟨?_, hk, hnc_self⟩
   have hp : tx'.parent = block := (TransactionState.parent_modifyState h).trans valid.parent
   have hclears : tx'.storageClears = tx.storageClears := by subst htx'; rfl
   have hwrites : tx'.storageWrites = tx.storageWrites := by subst htx'; rfl
@@ -605,17 +534,17 @@ theorem RebuildState.setAccountBalance {block : BlockState} {tx tx' : Transactio
     {address : Address} {amount : U256} (valid : RebuildState block tx)
     (hnc : HasNonceOrCode tx address) (h : tx.setAccountBalance fork address amount = .ok tx') :
     RebuildState block tx' ∧ KeepsNonceOrCode tx tx' := by
-  obtain ⟨valid', hk, -⟩ := valid.modifyState_of_hasNonceOrCode h
+  refine ⟨valid.modifyState_of_hasNonceOrCode h
     (fun account hf => by cases hf; exact Nat.le_refl _)
     (fun account hf => by cases hf; exact hnc)
-    (fun account hf _ => by cases hf; rfl)
-  exact ⟨valid', hk⟩
+    (fun account hf _ => by cases hf; rfl), keepsNonceOrCode_setAccountBalance h⟩
 
 /-- Moving ether from an account that has a nonce or code keeps the rebuild property. -/
 theorem RebuildState.moveEther {block : BlockState} {tx tx' : TransactionState}
     {sender recipient : Address} {amount : U256} (valid : RebuildState block tx)
     (hnc : HasNonceOrCode tx sender) (h : tx.moveEther fork sender recipient amount = .ok tx') :
     RebuildState block tx' ∧ KeepsNonceOrCode tx tx' := by
+  refine ⟨?_, keepsNonceOrCode_moveEther h⟩
   obtain ⟨debited, hdeb, hcred⟩ := Base.bind_ok_iff.mp h
   have hdebit : ∀ account, Account.debit sender amount (tx.getAccount sender) = .ok account →
       account.nonce = (tx.getAccount sender).nonce ∧
@@ -626,15 +555,14 @@ theorem RebuildState.moveEther {block : BlockState} {tx tx' : TransactionState}
     · cases hf
     · cases hf
       exact ⟨rfl, rfl⟩
-  obtain ⟨v1, k1, -⟩ := valid.modifyState_of_hasNonceOrCode hdeb
+  have v1 := valid.modifyState_of_hasNonceOrCode hdeb
     (fun account hf => by rw [(hdebit account hf).1]; exact Nat.le_refl _)
     (fun account hf => by
       obtain ⟨hn, hc⟩ := hdebit account hf
       rw [hn, hc]
       exact hnc)
     (fun account hf _ => (hdebit account hf).2)
-  obtain ⟨v2, k2⟩ := v1.createEther hcred
-  exact ⟨v2, k1.trans k2⟩
+  exact (v1.createEther hcred).1
 
 /-- SELFDESTRUCT moving the balance of an account with a nonce or code keeps the property. -/
 theorem RebuildState.selfdestructTransfer {block : BlockState} {tx tx' : TransactionState}
@@ -642,27 +570,25 @@ theorem RebuildState.selfdestructTransfer {block : BlockState} {tx tx' : Transac
     (hnc : HasNonceOrCode tx originator)
     (h : selfdestructTransfer fork tx originator beneficiary = .ok tx') :
     RebuildState block tx' ∧ KeepsNonceOrCode tx tx' := by
+  refine ⟨?_, keepsNonceOrCode_selfdestructTransfer h⟩
   unfold Evm.selfdestructTransfer at h
   dsimp only at h
   split at h
   · obtain ⟨moved, hm, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨v1, k1⟩ := valid.moveEther hnc hm
     split at h
-    · obtain ⟨v2, k2⟩ := v1.setAccountBalance (k1.2 originator hnc) h
-      exact ⟨v2, k1.trans k2⟩
+    · exact (v1.setAccountBalance (k1.2 originator hnc) h).1
     · cases h
-      exact ⟨v1, k1⟩
+      exact v1
   · obtain ⟨credited, hc, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨v1, k1⟩ := valid.createEther hc
-    obtain ⟨v2, k2⟩ := v1.setAccountBalance (k1.2 originator hnc) h
-    exact ⟨v2, k1.trans k2⟩
+    exact (v1.setAccountBalance (k1.2 originator hnc) h).1
 
 /-- Wiping the storage of a deployable address and marking it created keeps the rebuild property. -/
 private theorem RebuildState.destroyStorage_markAccountCreated {block : BlockState}
     {tx : TransactionState} {address : Address} (valid : RebuildState block tx)
     (hdep : tx.accountDeployable address = true) :
-    let wiped := (tx.destroyStorage address).markAccountCreated address
-    RebuildState block wiped ∧ KeepsNonceOrCode tx wiped := by
+    RebuildState block ((tx.destroyStorage address).markAccountCreated address) := by
   obtain ⟨hn0, hc0, hst0⟩ := TransactionState.accountDeployable_eq_true_iff.mp hdep
   have hnot_addr : ¬HasNonceOrCode tx address := by
     rintro (hn | hc)
@@ -683,12 +609,10 @@ private theorem RebuildState.destroyStorage_markAccountCreated {block : BlockSta
         simp [TransactionState.ofBlock]
       simp only [hnone, hnot, ↓reduceIte]
       exact hz
-  dsimp only
   have hacc : ∀ other,
       ((tx.destroyStorage address).markAccountCreated address).getAccount other =
         tx.getAccount other := fun _ => rfl
-  refine ⟨⟨⟨valid.parent, valid.code, ?_, ?_, valid.delegations.congr hacc⟩, ?_, ?_⟩,
-    ⟨fun _ => Nat.le_refl _, fun _ h => h⟩⟩
+  refine ⟨⟨valid.parent, valid.code, ?_, ?_, valid.delegations.congr hacc⟩, ?_, ?_⟩
   · intro other hempty key
     by_cases hne : other = address
     · subst hne
@@ -735,13 +659,13 @@ theorem RebuildState.prepareCreation (hfork : .spuriousDragon ≤ fork) {block :
     (h : prepareCreation fork tx address = .ok prepared) :
     RebuildState block prepared ∧ KeepsNonceOrCode tx prepared ∧
       1 ≤ (prepared.getAccount address).nonce := by
+  have hk := keepsNonceOrCode_prepareCreation h
   unfold Evm.prepareCreation at h
   simp only [show fork ≥ .spuriousDragon from hfork, ↓reduceIte] at h
   have hinc := Base.mapError_ok_iff.mp h
-  obtain ⟨v1, k1⟩ := valid.destroyStorage_markAccountCreated hdep
-  obtain ⟨v2, k2, -⟩ := v1.incrementNonce hinc
+  obtain ⟨v2, -, -⟩ := (valid.destroyStorage_markAccountCreated hdep).incrementNonce hinc
   obtain ⟨hself, -⟩ := TransactionState.getAccount_incrementNonce hinc
-  refine ⟨v2, k1.trans k2, ?_⟩
+  refine ⟨v2, hk, ?_⟩
   rw [hself]
   exact Nat.succ_le_of_lt (Nat.succ_pos _)
 
@@ -750,6 +674,7 @@ theorem RebuildState.setCode {block : BlockState} {tx tx' : TransactionState}
     {address : Address} {code : ByteArray} (valid : RebuildState block tx)
     (hnonce : 1 ≤ (tx.getAccount address).nonce) (h : tx.setCode fork address code = .ok tx') :
     RebuildState block tx' ∧ KeepsNonceOrCode tx tx' := by
+  refine ⟨?_, keepsNonceOrCode_setCode hnonce h⟩
   have hcode : ∀ hash bytes, tx'.getCode hash = .ok bytes → keccak256 bytes = hash := by
     intro hash bytes hread
     by_cases heq : hash = keccak256 code
@@ -769,11 +694,10 @@ theorem RebuildState.setCode {block : BlockState} {tx tx' : TransactionState}
       exact valid.code hash bytes hread
   dsimp only [TransactionState.setCode] at h
   split at h
-  · obtain ⟨v, hk, -⟩ := valid.modifyState_of_hasNonceOrCode h
+  · exact valid.modifyState_of_hasNonceOrCode h
       (fun account hf => by cases hf; exact Nat.le_refl _)
       (fun account hf => by cases hf; exact .inl hnonce)
       (fun account hf h0 => by cases hf; exact absurd h0 (Nat.pos_iff_ne_zero.mp hnonce))
-    exact ⟨v, hk⟩
   · rename_i hne_hash
     let mid : TransactionState :=
       { tx with codeWrites := tx.codeWrites.insert (keccak256 code) code }
@@ -784,11 +708,10 @@ theorem RebuildState.setCode {block : BlockState} {tx tx' : TransactionState}
           exact hcode hash bytes hread,
         valid.emptyStorage, valid.clears, valid.delegations.congr fun _ => rfl⟩,
         valid.plain, valid.created⟩
-    obtain ⟨v, hk, -⟩ := hmid.modifyState_of_hasNonceOrCode h
+    exact hmid.modifyState_of_hasNonceOrCode h
       (fun account hf => by cases hf; exact Nat.le_refl _)
       (fun account hf => by cases hf; exact .inl hnonce)
       (fun account hf h0 => by cases hf; exact absurd h0 (Nat.pos_iff_ne_zero.mp hnonce))
-    exact ⟨v, hk⟩
 
 /-- Depositing code keeps the rebuild property.
 
@@ -799,27 +722,25 @@ theorem RebuildState.depositCode {block : BlockState} {snapshot : TransactionSta
     (hnonce : 1 ≤ (evm.state.getAccount evm.message.currentTarget).nonce)
     (h : depositCode fork snapshot evm = .ok after) :
     RebuildState block after.state ∧ KeepsNonceOrCode snapshot after.state := by
+  refine ⟨?_, keepsNonceOrCode_depositCode hk (vevm.parent.trans vsnap.parent.symm) hnonce h⟩
   obtain ⟨-, -, hcases⟩ := depositCode_cases h
   rcases hcases with hrest | hsame | hset
   · rw [hrest]
-    have hsw := sameWrites_restoreTxState evm.state snapshot
-    have hp : (evm.state.restoreTxState snapshot).parent = snapshot.parent :=
-      vevm.parent.trans vsnap.parent.symm
-    exact ⟨vsnap.restoreTxState vevm, hsw.keepsNonceOrCode hp⟩
+    exact vsnap.restoreTxState vevm
   · rw [hsame]
-    exact ⟨vevm, hk⟩
-  · obtain ⟨vafter, kafter⟩ := vevm.setCode hnonce hset
-    exact ⟨vafter, hk.trans kafter⟩
+    exact vevm
+  · exact (vevm.setCode hnonce hset).1
 
 /-- Starting the state of a call keeps the rebuild property. -/
 theorem RebuildState.startState {block : BlockState} {tx : TransactionState}
     (valid : RebuildState block tx) (message : Message fork) :
     RebuildState block (startState fork message tx) ∧
       KeepsNonceOrCode tx (startState fork message tx) := by
+  refine ⟨?_, keepsNonceOrCode_startState message tx⟩
   unfold Evm.startState
   split
-  · exact valid.touchAccount message.currentTarget
-  · exact ⟨valid, .refl tx⟩
+  · exact (valid.touchAccount message.currentTarget).1
+  · exact valid
 
 /-- Rolling back on error to a snapshot with the rebuild property keeps the property. -/
 theorem RebuildState.rollbackOnError {block : BlockState} {snapshot : TransactionState}
@@ -827,14 +748,11 @@ theorem RebuildState.rollbackOnError {block : BlockState} {snapshot : Transactio
     (vended : RebuildState block ended.state) (hk : KeepsNonceOrCode snapshot ended.state) :
     RebuildState block (rollbackOnError snapshot ended).state ∧
       KeepsNonceOrCode snapshot (rollbackOnError snapshot ended).state := by
+  refine ⟨?_, keepsNonceOrCode_rollbackOnError hk (vended.parent.trans vsnap.parent.symm)⟩
   unfold Evm.rollbackOnError
   split
-  · dsimp only
-    have hsw := sameWrites_restoreTxState ended.state snapshot
-    have hp : (ended.state.restoreTxState snapshot).parent = snapshot.parent :=
-      vended.parent.trans vsnap.parent.symm
-    exact ⟨vsnap.restoreTxState vended, hsw.keepsNonceOrCode hp⟩
-  · exact ⟨vended, hk⟩
+  · exact vsnap.restoreTxState vended
+  · exact vended
 
 /-! ## Steps of an EVM frame -/
 
@@ -1599,14 +1517,14 @@ theorem processMessage_rebuildState_induction [LawfulGasMeter Meter]
   · intro address evm after h _
     exact rebuildStep_runPrecompile h
   · intro message state entry substate entrySubstate meter ended hentered hrun vstate hcode hval
-    obtain ⟨ventry, kentry⟩ : RebuildState block entry ∧ KeepsNonceOrCode state entry := by
+    have kentry := keepsNonceOrCode_entered hentered
+    have ventry : RebuildState block entry := by
       obtain ⟨vstart, kstart⟩ := vstate.startState message
       rcases hentered with ⟨_, rfl, _⟩ | ⟨ht, hmove, _⟩
-      · exact ⟨vstart, kstart⟩
+      · exact vstart
       · rcases hval with hno | hcaller
         · exact absurd ht hno
-        · obtain ⟨ventry, kentry⟩ := vstart.moveEther (kstart.2 _ hcaller) hmove
-          exact ⟨ventry, kstart.trans kentry⟩
+        · exact (vstart.moveEther (kstart.2 _ hcaller) hmove).1
     have hinv_start : FrameInv block (startFrame message entry entrySubstate meter) :=
       ⟨ventry, fun hs => kentry.2 _ (hcode hs)⟩
     have hstep_run := hrun hinv_start

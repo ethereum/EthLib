@@ -9,6 +9,13 @@ Not yet released.
 
 ### Proof additions
 
+- Each fact that a write of a transaction state keeps each nonce or code now has one proof ([#4144](https://github.com/ethereum/EthLib/issues/4144)).
+  The new module `EthLib.Execution.Proofs.Evm.Call.NonceOrCodeWrites` holds `HasNonceOrCode`, `KeepsNonceOrCode` and the lemma of each write, below both the rebuild property and the theorems on messages.
+  None of them needs the rebuild property of the state.
+  `keepsNonceOrCode_setStorage`, `_setTransientStorage`, `_touchAccount`, `_createEther`, `_setAccountBalance`, `_depositCode` and `_startState` are new, and `keepsNonceOrCode_of_getAccountOptional` and `keepsNonceOrCode_rollbackOnError` are now public.
+  The `RebuildState` lemmas of the same writes keep their statements, and take their second half from these.
+  `EthLib.Execution.Proofs.Evm.Call.NonceOrCode` no longer imports `EthLib.Execution.Proofs.Evm.Call.Rebuild`.
+
 - `processTransaction_gasLeft_le_of_glamsterdam` proves that from Glamsterdam the execution gas left and the reservoir left of a transaction are at most its gas limit less its intrinsic gas, so its gas used before the refund never floors at zero ([#4038](https://github.com/ethereum/EthLib/issues/4038)).
   `processMessageCall_stateGasUsed_nonneg` proves that the net state gas of the message of a transaction is at least 0, for a message that runs at its recipient from a state with no fresh slot, with no other hypothesis on the state before the transaction.
   SOUNDNESS.md ("Transaction gas") no longer records this as a gap.

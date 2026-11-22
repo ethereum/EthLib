@@ -28,6 +28,7 @@ public import EthLib.Execution.Proofs.Evm.Call.NoninterferenceRun
 public import EthLib.Execution.Proofs.Evm.Call.Nonce
 public import EthLib.Execution.Proofs.Evm.Call.NonceOrCode
 public import EthLib.Execution.Proofs.Evm.Call.NonceOrCodeFreshSlots
+public import EthLib.Execution.Proofs.Evm.Call.NonceOrCodeWrites
 public import EthLib.Execution.Proofs.Evm.Call.NoncesFit
 public import EthLib.Execution.Proofs.Evm.Call.Depth
 public import EthLib.Execution.Proofs.Evm.Call.Observe
