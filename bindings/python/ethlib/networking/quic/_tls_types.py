@@ -4,14 +4,14 @@ from typing import Literal, TypeAlias, TypedDict
 
 
 class Extension(TypedDict):
-    """An extension type and its exact data, in RFC 8446 §4.2 wire order."""
+    """An extension type and its exact data, in RFC 9846 §4.3 wire order."""
 
     kind: int
     data: bytes
 
 
 class ClientHello(TypedDict):
-    """The variable fields of a TLS 1.3 ClientHello, RFC 8446 §4.1.2."""
+    """The variable fields of a TLS 1.3 ClientHello, RFC 9846 §4.2.2."""
 
     random: bytes
     legacy_session_id: bytes
@@ -20,7 +20,7 @@ class ClientHello(TypedDict):
 
 
 class ServerHello(TypedDict):
-    """The variable fields shared by ServerHello and HelloRetryRequest, RFC 8446 §4.1.3."""
+    """The variable fields shared by ServerHello and HelloRetryRequest, RFC 9846 §4.2.3."""
 
     random: bytes
     legacy_session_id_echo: bytes
@@ -29,7 +29,7 @@ class ServerHello(TypedDict):
 
 
 class CertificateEntry(TypedDict):
-    """Opaque certificate bytes and per-certificate extensions, RFC 8446 §4.4.2."""
+    """Opaque certificate bytes and per-certificate extensions, RFC 9846 §4.5.1."""
 
     data: bytes
     extensions: list[Extension]
@@ -43,14 +43,14 @@ class Certificate(TypedDict):
 
 
 class CertificateRequest(TypedDict):
-    """A certificate request context and its extensions, RFC 8446 §4.3.2."""
+    """A certificate request context and its extensions, RFC 9846 §4.4.2."""
 
     context: bytes
     extensions: list[Extension]
 
 
 class KeyShareEntry(TypedDict):
-    """A named group and its opaque key-exchange bytes, RFC 8446 §4.2.8."""
+    """A named group and its opaque key-exchange bytes, RFC 9846 §4.3.8."""
 
     group: int
     key_exchange: bytes

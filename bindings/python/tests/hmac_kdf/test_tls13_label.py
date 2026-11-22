@@ -1,4 +1,4 @@
-"""TLS 1.3 HkdfLabel and HKDF-Expand-Label against RFC 9001 Appendix A and RFC 8446 §7.1."""
+"""TLS 1.3 HkdfLabel and HKDF-Expand-Label against RFC 9001 Appendix A and RFC 9846 §7.1."""
 
 from collections.abc import Callable
 
@@ -37,7 +37,7 @@ def test_rfc_9001_key_update() -> None:
 
 
 def test_largest_fields() -> None:
-    # RFC 8446 §7.1: a label of 255 bytes with its prefix, a context of 255 bytes, a uint16 length.
+    # RFC 9846 §7.1: a label of 255 bytes with its prefix, a context of 255 bytes, a uint16 length.
     encoded = tls13_hkdf_label(b"x" * 249, bytes(255), 65535)
     assert encoded == b"\xff\xff\xff" + b"tls13 " + b"x" * 249 + b"\xff" + bytes(255)
 

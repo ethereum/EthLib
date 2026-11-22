@@ -1068,7 +1068,7 @@ These codecs do not implement transport state, flow-control credit, sender-role 
 
 ### QUIC v1 key derivation
 
-The labelled HKDF proofs (`Cryptography/Proofs/Hash/Tls13.lean`) state the field bounds of RFC 8446 §7.1, the label encoding and agreement with HKDF-SHA-256.
+The labelled HKDF proofs (`Cryptography/Proofs/Hash/Tls13.lean`) state the field bounds of RFC 9846 §7.1, the label encoding and agreement with HKDF-SHA-256.
 The QUIC proofs (`Networking/Proofs/Quic/Keys.lean`) state the Initial and packet key derivations of RFC 9001 §5.1 and §5.2 and prove that they succeed.
 The keys have their required lengths in their types for AES-128-GCM and ChaCha20-Poly1305 with SHA-256.
 The Python suite checks the secrets, keys and labels of RFC 9001 Appendix A.1, and the keys of Appendix A.5.
@@ -1090,7 +1090,7 @@ These results establish neither cryptographic security nor constant-time executi
 ### TLS 1.3 handshake codecs
 
 `decode_encode` and `encode_injective` (`Networking/Proofs/Quic/Tls/Messages.lean`) prove that every successfully encoded handshake message recovers its fields, with arbitrary trailing bytes, and that successful encodings are injective.
-The messages are ClientHello, ServerHello, EncryptedExtensions, CertificateRequest, Certificate, CertificateVerify and Finished, with the layouts of RFC 8446 §4.
+The messages are ClientHello, ServerHello, EncryptedExtensions, CertificateRequest, Certificate, CertificateVerify and Finished, with the layouts of RFC 9846 §4.
 The caller supplies the hash length of Finished.
 The decoders check field bounds, the fixed TLS 1.3 legacy fields and duplicate extension types.
 `encode_of_decode` proves that every accepted input is the message's successful encoding followed by the returned suffix.
@@ -1111,20 +1111,20 @@ They do not check negotiation, extension placement, required extensions, message
 ### TLS 1.3 transcripts
 
 `Transcript.append` retains exactly the received bytes of one complete SHA-256 handshake message, including its four-byte header.
-The transcript proofs (`Networking/Proofs/Quic/Tls/Transcript.lean`) state that preservation and the HelloRetryRequest replacement of RFC 8446 §4.4.1.
+The transcript proofs (`Networking/Proofs/Quic/Tls/Transcript.lean`) state that preservation and the HelloRetryRequest replacement of RFC 9846 §4.1.
 A retry replaces one saved ClientHello with a synthetic `message_hash`, then appends the received retry bytes.
 A retry after another message or a second retry is rejected.
 The transcript always hashes with SHA-256; the steps must reject a suite with another hash.
 
 The Python suite checks the RFC 8448 §3 transcript, and its SHA-256 hash against an independent SHA-256.
-It also checks the CertificateVerify signed content of RFC 8446 §4.4.3, including the zero separator and the role's context string.
+It also checks the CertificateVerify signed content of RFC 9846 §4.5.2, including the zero separator and the role's context string.
 
 The message codec covers the initial certificate handshake.
 The steps below handle post-handshake NewSessionTicket separately and reject TLS KeyUpdate, which [RFC 9001 §6](https://www.rfc-editor.org/rfc/rfc9001#section-6) forbids.
 
 ### libp2p QUIC TLS handshake
 
-`clientStep` and `serverStep` (`Networking/Quic/Tls/Handshake.lean`) process one complete encoded message at a time, under [RFC 8446 §4](https://www.rfc-editor.org/rfc/rfc8446#section-4) and [RFC 9001 §4](https://www.rfc-editor.org/rfc/rfc9001#section-4).
+`clientStep` and `serverStep` (`Networking/Quic/Tls/Handshake.lean`) process one complete encoded message at a time, under [RFC 9846 §4](https://www.rfc-editor.org/rfc/rfc9846#section-4) and [RFC 9001 §4](https://www.rfc-editor.org/rfc/rfc9001#section-4).
 They check message order, encryption level, extension placement, offered selections, retry continuity, certificate authentication, CertificateVerify and Finished.
 The caller supplies reassembled CRYPTO data and validates the opaque QUIC transport parameters.
 The steps require those parameters in ClientHello and EncryptedExtensions.
@@ -1137,7 +1137,7 @@ Configuration rejects any listed algorithm that lacks a backend.
 The available groups are X25519 and P-256, and CertificateVerify supports only ecdsa_secp256r1_sha256.
 The caller also chooses the certificate policy described above and whether the server rejects a nonempty legacy session ID, the SHOULD of [RFC 9001 §8.4](https://www.rfc-editor.org/rfc/rfc9001#section-8.4).
 Local credentials must omit the deprecated unique-ID fields even when the receive policy tolerates them.
-EthLib does not settle the application profile left open by [RFC 8446 §9.1](https://www.rfc-editor.org/rfc/rfc8446#section-9.1), the RSA requirements or the other maintainer choices of [#2163](https://github.com/ethereum/EthLib/issues/2163).
+EthLib does not settle the application profile left open by [RFC 9846 §9.1](https://www.rfc-editor.org/rfc/rfc9846#section-9.1), the RSA requirements or the other maintainer choices of [#2163](https://github.com/ethereum/EthLib/issues/2163).
 
 The steps require ALPN `libp2p` and mutual certificate authentication, as [libp2p TLS at 4facaf9](https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/tls/tls.md) specifies.
 The client omits SNI, and the server ignores received SNI as its Future Extensibility section requires.
@@ -1169,10 +1169,24 @@ They also check malformed negotiation, signatures, Finished values and post-hand
 
 Completed clients accept and discard well-formed NewSessionTicket messages, without adding them to the handshake transcript.
 They reject post-handshake CertificateRequest and TLS KeyUpdate, as [RFC 9001 §§4.4 and 6](https://www.rfc-editor.org/rfc/rfc9001#section-4.4) require.
-Errors carry QUIC connection codes; a malformed peer key share or a degenerate shared secret is illegal_parameter, the incorrect-field alert of RFC 8446 §6.2, and a local cryptographic failure is internal_error.
+Errors carry QUIC connection codes; a malformed peer key share or a degenerate shared secret is illegal_parameter, the incorrect-field alert of RFC 9846 §6.2, and a local cryptographic failure is internal_error.
 A message at an earlier encryption level than expected is a PROTOCOL_VIOLATION, by [RFC 9001 §4.1.3](https://www.rfc-editor.org/rfc/rfc9001#section-4.1.3).
-A hello without supported_versions is a protocol_version error, by [RFC 8446 Appendix D](https://www.rfc-editor.org/rfc/rfc8446#appendix-D); on the server, the ALPN, session-ID and extension-placement checks run first.
+A hello without supported_versions is a protocol_version error, by [RFC 9846 Appendix E](https://www.rfc-editor.org/rfc/rfc9846#appendix-E); on the server, the ALPN, session-ID and extension-placement checks run first.
 The caller sends the connection close and destroys the saved state.
+
+The TLS modules follow [RFC 9846](https://www.rfc-editor.org/rfc/rfc9846), which obsoletes RFC 8446, and cite its section numbers.
+These choices remain where RFC 9846 leaves room, or where it and the IANA registry differ:
+
+- A completed client parses each NewSessionTicket, checks its extension placement and the early_data value of [RFC 9001 §4.6.1](https://www.rfc-editor.org/rfc/rfc9001#section-4.6.1), then discards it.
+  RFC 9846 §4.7.1 says that a client without resumption MUST silently ignore the message, so rejecting a malformed ticket departs from that MUST.
+- The server does not take the MAY of RFC 9846 §4.3.7 to abort on a repeated group in supported_groups; the client never sends one.
+- Table 1 of RFC 9846 §4.3 lists server_name in CertificateRequest, from RFC 9261.
+  The [IANA registry](https://www.iana.org/assignments/tls-extensiontype-values) notes that this entry covers only the ClientCertificateRequest of client-generated authenticator requests ([RFC 9261](https://www.rfc-editor.org/rfc/rfc9261)).
+  So the client still rejects server_name in a handshake CertificateRequest with illegal_parameter.
+- Table 1 lists only recommended extensions and omits max_fragment_length and signed_certificate_timestamp; their placements come from the IANA registry.
+- The steps decode a whole message before they check its type.
+  A message of the wrong type with a malformed field gets the alert of that field.
+  For example, a ServerHello with another legacy_version sent to a server gets protocol_version, where unexpected_message would fit better.
 
 ### QUIC v1 packet protection
 

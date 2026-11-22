@@ -6,7 +6,7 @@ public import EthLib.Cryptography.Hash.Sha256
 /-!
 # SHA-256 handshake transcripts
 
-[RFC 8446 §4.4.1][transcript] hashes complete handshake messages with their headers.
+[RFC 9846 §4.1][transcript] hashes complete handshake messages with their headers.
 
 The transcript retains the received bytes, including unknown extensions and their order.
 
@@ -14,7 +14,7 @@ The caller must have negotiated a cipher suite whose hash is SHA-256.
 
 Other message-order checks and all authentication checks belong to the handshake steps.
 
-[transcript]: https://www.rfc-editor.org/rfc/rfc8446#section-4.4.1
+[transcript]: https://www.rfc-editor.org/rfc/rfc9846#section-4.1
 -/
 
 @[expose] public section
@@ -32,7 +32,7 @@ structure Transcript where
   retried : Bool := false
   deriving Repr, DecidableEq
 
-/-- The SHA-256 synthetic handshake message of RFC 8446 §4.4.1. -/
+/-- The SHA-256 synthetic handshake message of RFC 9846 §4.1. -/
 def messageHash (clientHello : ByteArray) : ByteArray :=
   -- `message_hash || 00 00 Hash.length || Hash(ClientHello1)`.
   --
@@ -53,36 +53,36 @@ def singleClientHello (input : ByteArray) : Bool :=
 The result records framing and retry handling, without authenticating the handshake. -/
 def Transcript.append (transcript : Transcript) (encoded : ByteArray) :
     Except Error Transcript := do
-  -- §4.4.1: each message includes its header, carrying the handshake type and length.
+  -- §4.1: each message includes its header, carrying the handshake type and length.
   let message ← exact (decodeList 32) encoded.data.toList
   if message.isRetry then
-    -- §4.1.4: a client that receives a second HelloRetryRequest MUST abort.
+    -- §4.2.4: a client that receives a second HelloRetryRequest MUST abort.
     --
     -- EthLib returns its retry error instead of the alert of the RFC.
     --
     -- EthLib's check: the transcript so far is exactly one ClientHello, which the retry answers.
     Base.ensure (transcript.retried = false ∧ singleClientHello transcript.bytes = true) .retry
-    -- §4.4.1: ClientHello1 is replaced with the synthetic message that holds its hash.
+    -- §4.1: ClientHello1 is replaced with the synthetic message that holds its hash.
     --
     -- So the bytes become `message_hash || 00 00 Hash.length || Hash(ClientHello1)`.
     --
     -- Then the HelloRetryRequest follows them.
     return ⟨messageHash transcript.bytes ++ encoded, true⟩
   else
-    -- §4.4.1: `M1 || M2 || ... || Mn`, each message appended as received.
+    -- §4.1: `M1 || M2 || ... || Mn`, each message appended as received.
     return ⟨transcript.bytes ++ encoded, transcript.retried⟩
 
 /-- Build a SHA-256 transcript from complete messages, rejecting framing and retry errors. -/
 def transcript (messages : List ByteArray) : Except Error Transcript :=
-  -- §4.4.1: the messages in the order they were sent, from the first ClientHello.
+  -- §4.1: the messages in the order they were sent, from the first ClientHello.
   messages.foldlM Transcript.append {}
 
-/-- Hash the saved handshake bytes, RFC 8446 §4.4.1. -/
+/-- Hash the saved handshake bytes, RFC 9846 §4.1. -/
 def Transcript.hash (transcript : Transcript) : Vector UInt8 32 :=
   -- `Transcript-Hash(M1, M2, ... Mn) = Hash(M1 || M2 || ... || Mn)`, where `Hash` is SHA-256.
   Sha256.hash32 transcript.bytes
 
-/-- CertificateVerify's signed content, RFC 8446 §4.4.3.
+/-- CertificateVerify's signed content, RFC 9846 §4.5.2.
 
 The caller hashes the transcript through Certificate, before CertificateVerify. -/
 def certificateVerifyInput (server : Bool) (digest : Vector UInt8 32) : ByteArray :=

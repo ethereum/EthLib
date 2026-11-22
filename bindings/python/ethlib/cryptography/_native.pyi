@@ -289,11 +289,11 @@ def hkdf_sha256(salt: bytes, ikm: bytes, info: bytes, length: int) -> bytes:
     ...
 
 def tls13_hkdf_label(label: bytes, context: bytes, length: int) -> bytes:
-    """The HkdfLabel of RFC 8446 §7.1, for a label without its `tls13 ` prefix."""
+    """The HkdfLabel of RFC 9846 §7.1, for a label without its `tls13 ` prefix."""
     ...
 
 def tls13_expand_label(secret: bytes, label: bytes, context: bytes, length: int) -> bytes:
-    """Expand a SHA-256 secret with a TLS 1.3 label and context, RFC 8446 §7.1."""
+    """Expand a SHA-256 secret with a TLS 1.3 label and context, RFC 9846 §7.1."""
     ...
 
 def concat_kdf_sha256(z: bytes, fixed_info: bytes, length: int) -> bytes:
@@ -1749,7 +1749,7 @@ def quic_packet_keys(suite: str, secret: bytes) -> tuple[bytes, bytes, bytes]:
     ...
 
 def quic_tls_client_start(config: dict[str, object]) -> dict[str, object]:
-    """Start a client certificate handshake under an explicit policy, RFC 8446 §4.1.2."""
+    """Start a client certificate handshake under an explicit policy, RFC 9846 §4.2.2."""
     ...
 
 def quic_tls_server_start(config: dict[str, object]) -> dict[str, object]:
@@ -1769,19 +1769,19 @@ def quic_tls_key_schedule(shared_secret: bytes, hello_transcript: bytes, server_
     ...
 
 def quic_tls_derive_secret(secret: bytes, label: bytes, messages: bytes) -> bytes:
-    """Derive a SHA-256 secret from encoded handshake messages, RFC 8446 §7.1."""
+    """Derive a SHA-256 secret from encoded handshake messages, RFC 9846 §7.1."""
     ...
 
 def quic_tls_finished(secret: bytes, transcript: bytes) -> bytes:
-    """Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4."""
+    """Compute the Finished `verify_data` over the transcript that precedes it, RFC 9846 §4.5.3."""
     ...
 
 def quic_tls_message_encode(hash_length: int, message: TlsMessage) -> bytes:
-    """Encode one handshake message with its header and the caller's hash length, RFC 8446 §4."""
+    """Encode one handshake message with its header and the caller's hash length, RFC 9846 §4."""
     ...
 
 def quic_tls_message_decode(hash_length: int, data: bytes) -> tuple[TlsMessage, bytes]:
-    """Decode one complete message and return its fields and trailing bytes, RFC 8446 §4."""
+    """Decode one complete message and return its fields and trailing bytes, RFC 9846 §4."""
     ...
 
 def quic_tls_payload_encode(payload: TlsPayload) -> TlsExtension:
@@ -1793,11 +1793,11 @@ def quic_tls_payload_decode(form: TlsPayloadForm, extension: TlsExtension) -> Tl
     ...
 
 def quic_tls_transcript(messages: list[bytes]) -> tuple[bytes, bytes]:
-    """Return the SHA-256 transcript of complete handshake messages and its hash, RFC 8446 §4.4.1."""
+    """Return the SHA-256 transcript of complete handshake messages and its hash, RFC 9846 §4.1."""
     ...
 
 def quic_tls_certificate_verify_input(server: bool, digest: bytes) -> bytes:
-    """Build the CertificateVerify signed content from a SHA-256 transcript hash, RFC 8446 §4.4.3."""
+    """Build the CertificateVerify signed content from a SHA-256 transcript hash, RFC 9846 §4.5.2."""
     ...
 
 def quic_protect(suite: str, secret: bytes, number: int, offset: int, header: bytes, plaintext: bytes) -> bytes:

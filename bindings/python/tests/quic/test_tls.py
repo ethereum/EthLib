@@ -99,7 +99,7 @@ def test_finished() -> None:
 
 @pytest.mark.parametrize("label", [b"", b"x" * 250])
 def test_derive_label_bounds(label: bytes) -> None:
-    # RFC 8446 §7.1 bounds the prefixed label to 7..255 bytes.
+    # RFC 9846 §7.1 bounds the prefixed label to 7..255 bytes.
     with raises(quic.Tls13Error, f"EthLib.Cryptography.Hash.Tls13.Error.labelLength {len(label)}"):
         quic.tls_derive_secret(bytes(32), label, b"")
 

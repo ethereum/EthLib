@@ -1,4 +1,4 @@
-"""TLS handshake wire layouts of RFC 8446, with the RFC 8448 §3 trace."""
+"""TLS handshake wire layouts of RFC 9846, with the RFC 8448 §3 trace."""
 
 import pytest
 
@@ -21,7 +21,7 @@ CODES = {
     "legacyVersion": 8,
 }
 
-# Source: RFC 8446 §§4.1.2, 4.1.3, 4.3.1, 4.3.2 and 4.4.2–4.4.4.
+# Source: RFC 9846 §§4.2.2, 4.2.3, 4.4.1, 4.4.2 and 4.5.1–4.5.3.
 # These small layouts are derived by hand from the field widths and bounds.
 # They pin wire syntax, with opaque certificate and signature bytes, rather than authentication.
 VERSIONS: tls.Extension = {"kind": 43, "data": bytes([2, 3, 4])}
@@ -122,7 +122,7 @@ def test_incomplete_envelope(message: tls.Message, encoded: str) -> None:
     ],
 )
 def test_extension_payload(payload: tls.Payload, kind: int, encoded: str) -> None:
-    # Sources: RFC 8446 §§4.2.1, 4.2.3, 4.2.7, 4.2.8; RFC 7301 §3.1; RFC 9001 §8.2.
+    # Sources: RFC 9846 §§4.3.1, 4.3.3, 4.3.7, 4.3.8; RFC 7301 §3.1; RFC 9001 §8.2.
     extension: tls.Extension = {"kind": kind, "data": bytes.fromhex(encoded)}
     assert tls.encode_payload(payload) == extension
     assert tls.decode_payload(payload[0], extension) == payload
@@ -180,7 +180,7 @@ def test_bad_payload(form: tls.PayloadForm, kind: int, data: str, error: str) ->
         # A CertificateRequest block of 1 byte holds no whole extension, though its floor is 0.
         ("0d00000400000100", "length"),
         ("ff000000", "messageType 255"),
-        # A peer cannot send the transcript's synthetic message_hash (§4.4.1).
+        # A peer cannot send the transcript's synthetic message_hash (§4.1).
         ("fe000020" + "00" * 32, "messageType 254"),
         ("1400001f" + "00" * 31, "length"),
         ("14000021" + "00" * 33, "trailing 1"),
@@ -240,7 +240,7 @@ def test_duplicate_extension_encoding() -> None:
 
 
 def test_duplicate_extension_type_with_different_data() -> None:
-    # RFC 8446 §4.2 forbids repeated extension types even when their data differs.
+    # RFC 9846 §4.3 forbids repeated extension types even when their data differs.
     extensions: list[tls.Extension] = [
         {"kind": 0xAAAA, "data": bytes([0xAB])},
         {"kind": 0xAAAA, "data": bytes([0xCD])},
@@ -284,7 +284,7 @@ def test_rfc8448_trace() -> None:
 
 
 def test_hello_retry_request_layout() -> None:
-    # Source: RFC 8446 §4.1.3 fixes the retry random and retains the ServerHello layout.
+    # Source: RFC 9846 §4.2.3 fixes the retry random and retains the ServerHello layout.
     random = bytes.fromhex("cf21ad74e59a6111be1d8c021e65b891c2a211167abb8c5e079e09e2c8a8339c")
     encoded = bytes.fromhex("0200002e0303") + random + bytes.fromhex("001301000006002b00020304")
     message: tls.Message = ("server_hello", {**SMALL_SERVER, "random": random})

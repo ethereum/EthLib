@@ -25,7 +25,7 @@ open EthLib.Base
 open EthLib.Cryptography.Hash
 open Tls13 (Secret)
 
-/-- Derive-Secret succeeds for every label within the bounds of RFC 8446 §7.1. -/
+/-- Derive-Secret succeeds for every label within the bounds of RFC 9846 §7.1. -/
 theorem deriveSecret_ok (secret : Secret) (label messages : ByteArray)
     (hlabel : 0 < label.size ∧ label.size ≤ 249) :
     ∃ output, deriveSecret secret label messages = .ok output :=
@@ -42,7 +42,7 @@ theorem handshakeSecret_ok (sharedSecret : ByteArray) :
   refine ⟨Tls13.extract (packBytes derived) sharedSecret, ?_⟩
   simp only [handshakeSecret, hd, bind, Except.bind, pure, Except.pure]
 
-/-- Deriving the master secret always succeeds. -/
+/-- Deriving the Main Secret always succeeds. -/
 theorem masterSecret_ok (handshake : Secret) :
     ∃ output, masterSecret handshake = .ok output := by
   obtain ⟨derived, hd⟩ := deriveSecret_ok handshake "derived".toUTF8 .empty
@@ -98,7 +98,7 @@ theorem keySchedule_congr_hash (shared hello hello' server server' : ByteArray)
     keySchedule shared hello server = keySchedule shared hello' server' := by
   simp only [keySchedule, deriveSecret, hhello, hserver]
 
-/-- The Finished value of RFC 8446 §4.4.4 exists for every SHA-256 traffic secret and transcript. -/
+/-- The Finished value of RFC 9846 §4.5.3 exists for every SHA-256 traffic secret and transcript. -/
 theorem finished_ok (secret : Secret) (transcript : ByteArray) :
     ∃ output, finished secret transcript = .ok output := by
   obtain ⟨key, hk⟩ := Tls13.expandLabel_ok secret "finished".toUTF8 .empty 32

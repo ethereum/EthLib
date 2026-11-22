@@ -50,7 +50,7 @@ structure Certificate where
 
 /-- The authenticated peer ID, with its certificate.
 
-The certificate key later checks TLS CertificateVerify (RFC 8446 §4.4.3). -/
+The certificate key later checks TLS CertificateVerify (RFC 9846 §4.5.2). -/
 structure AuthenticatedPeer where
   peerId : ByteArray
   certificate : Certificate

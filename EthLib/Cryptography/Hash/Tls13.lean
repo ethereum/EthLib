@@ -7,7 +7,7 @@ public import EthLib.Cryptography.Hash.Hkdf
 /-!
 # TLS 1.3 labelled HKDF over SHA-256
 
-[RFC 8446 §7.1][tls] binds each expansion to a label, a context and the requested length.
+[RFC 9846 §7.1][tls] binds each expansion to a label, a context and the requested length.
 
 The label carries the prefix `tls13 `, which separates these uses from other uses of HKDF.
 
@@ -15,7 +15,7 @@ Secrets have 32 bytes, and each expansion carries its output length in its type.
 
 The secrets are secret, and EthLib makes no constant-time claim for them (SOUNDNESS.md A3).
 
-[tls]: https://www.rfc-editor.org/rfc/rfc8446#section-7.1
+[tls]: https://www.rfc-editor.org/rfc/rfc9846#section-7.1
 -/
 
 @[expose] public section
@@ -24,7 +24,7 @@ namespace EthLib.Cryptography.Hash.Tls13
 
 open EthLib.Base
 
-/-- A SHA-256 secret of `Hash.length = 32` bytes, RFC 8446 §7.1. -/
+/-- A SHA-256 secret of `Hash.length = 32` bytes, RFC 9846 §7.1. -/
 abbrev Secret := Vector UInt8 32
 
 /-- Malformed `HkdfLabel` fields or an output beyond the HKDF limit. -/
@@ -53,7 +53,7 @@ def extract (salt ikm : ByteArray) : Secret :=
   -- `PRK = HMAC-Hash(salt, IKM)`, with SHA-256.
   Hmac.hmac32 salt ikm
 
-/-- Serialize `HkdfLabel` after checking the field bounds of RFC 8446 §7.1.
+/-- Serialize `HkdfLabel` after checking the field bounds of RFC 9846 §7.1.
 
 The supplied label excludes the `tls13 ` prefix. -/
 def hkdfLabel (label context : ByteArray) (length : Nat) : Except Error ByteArray := do
@@ -64,13 +64,13 @@ def hkdfLabel (label context : ByteArray) (length : Nat) : Except Error ByteArra
   -- `uint16 length = Length`.
   if 65535 < length then throw (.lengthOverflow length)
   let fullLabel := "tls13 ".toUTF8 ++ label
-  -- The fields in order: `length` in two big-endian bytes, by RFC 8446 §3.3.
+  -- The fields in order: `length` in two big-endian bytes, by RFC 9846 §3.3.
   --
   -- Then each vector after its one-byte length, by §3.4, since each holds at most 255 bytes.
   return ⟨(natToBytes 2 length).toArray⟩ ++ ⟨#[UInt8.ofNat fullLabel.size]⟩ ++
     fullLabel ++ ⟨#[UInt8.ofNat context.size]⟩ ++ context
 
-/-- `HKDF-Expand-Label` with SHA-256, RFC 8446 §7.1.
+/-- `HKDF-Expand-Label` with SHA-256, RFC 9846 §7.1.
 
 RFC 5869 §2.3 limits the output to `255 * 32` bytes.
 

@@ -57,7 +57,7 @@ instance : ExportError Error where
   code := Error.code
   message := reprStr
 
-/-- Start a client certificate handshake under an explicit policy, RFC 8446 §4.1.2. -/
+/-- Start a client certificate handshake under an explicit policy, RFC 9846 §4.2.2. -/
 @[export eth_quic_tls_client_start]
 def clientStartExport (args : PyValue) : Result PyValue :=
   pyExport (fun (config : Config) => toResult "TLS handshake rejected" (clientStart config)) args
