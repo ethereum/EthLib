@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- `TransactionState.freshSlots` is the finite set of slots whose word was zero before the transaction and is not zero now, by `mem_freshSlots` ([#4038](https://github.com/ethereum/EthLib/issues/4038), first part).
+  A transaction with no write has none (`freshSlots_ofBlock`), and a storage write adds or removes only its own slot (`freshSlots_setStorage`, `card_freshSlots_setStorage`).
+  `sstoreStateGas_sub_sstoreStateRefill` proves that from Glamsterdam the state gas of a storage write, net of its refill, is the state gas of a new slot times the change in the number of fresh slots.
+
 - `Schedule.Bounded` checks that every fork of a fork identifier schedule is below `2^64`, as EIP-2124 and EIP-6122 hold each fork as a `uint64` ([#3855](https://github.com/ethereum/EthLib/issues/3855)).
   `readSchedule_bounded` proves that the schedule reader of the exports returns only such schedules, and `mainnet_bounded` that mainnet is one.
   For such a schedule, `checksumInput_eq_iff` proves that the checksum input holds each fork whole, and `forkId_next_toNat` that `FORK_NEXT` holds the next fork whole.
