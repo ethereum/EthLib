@@ -53,22 +53,32 @@ open Base Serialization.Ssz
 def responseDesc (preset : Preset) (config : Config) (chunkFork : Fork) (id : ProtocolId) :
     Option Desc :=
   match id.protocol with
+  -- Status: the status of the fork of its version, and no type for an unknown version.
   | .status => (statusFork id.version).map fun f => SszType.desc (Status f)
+  -- Goodbye and ping: a 64-bit integer.
   | .goodbye | .ping => some (SszType.desc UInt64)
+  -- Metadata: the metadata of the fork of its version, and no type for an unknown version.
   | .metadata => (metadataFork id.version).map fun f => SszType.desc (MetaData config f)
+  -- Blocks by range and by root: a Phase 0 block at version 1, and a block of the chunk fork later.
   | .beaconBlocksByRange | .beaconBlocksByRoot =>
     some (SszType.desc (SignedBeaconBlock preset (if id.version = 1 then .phase0 else chunkFork)))
+  -- Blocks by head: a block of the chunk fork.
   | .beaconBlocksByHead => some (SszType.desc (SignedBeaconBlock preset chunkFork))
+  -- The light client protocols: the bootstrap or the update of the chunk fork.
   | .lightClientBootstrap => some (SszType.desc (LightClientBootstrap preset chunkFork))
   | .lightClientUpdatesByRange => some (SszType.desc (LightClientUpdate preset chunkFork))
   | .lightClientFinalityUpdate => some (SszType.desc (LightClientFinalityUpdate preset chunkFork))
   | .lightClientOptimisticUpdate =>
     some (SszType.desc (LightClientOptimisticUpdate preset chunkFork))
+  -- Blob sidecars: a blob sidecar, the same type at each fork.
   | .blobSidecarsByRange | .blobSidecarsByRoot => some (SszType.desc (BlobSidecar preset))
+  -- Data column sidecars: a column sidecar of the chunk fork.
   | .dataColumnSidecarsByRange | .dataColumnSidecarsByRoot =>
     some (SszType.desc (DataColumnSidecar preset chunkFork))
+  -- Payload envelopes: a signed envelope of the chunk fork.
   | .executionPayloadEnvelopesByRange | .executionPayloadEnvelopesByRoot =>
     some (SszType.desc (SignedExecutionPayloadEnvelope preset chunkFork))
+  -- Inclusion lists: a signed inclusion list.
   | .inclusionListsByIndices => some (SszType.desc SignedInclusionList)
 
 /-- The size limit that the networking specification sets on the chunks of a protocol, at a fork.
@@ -76,19 +86,22 @@ def responseDesc (preset : Preset) (config : Config) (chunkFork : Fork) (id : Pr
 Data column sidecars have one from Gloas, and inclusion lists from Heze. -/
 def ReqRespProtocol.sizeLimit (preset : Preset) (config : Config) (chunkFork : Fork) :
     ReqRespProtocol → Option UInt64
+  -- Data column sidecars, from Gloas: the largest size of a column sidecar.
   | .dataColumnSidecarsByRange | .dataColumnSidecarsByRoot =>
     if .glamsterdam ≤ chunkFork then some (computeMaxDataColumnSidecarSize preset config) else none
+  -- Inclusion lists, from Heze: `MAX_SIGNED_INCLUSION_LIST_SIZE`.
   | .inclusionListsByIndices =>
     if .hegota ≤ chunkFork then some preset.MAX_SIGNED_INCLUSION_LIST_SIZE else none
+  -- No other protocol has a size limit.
   | _ => none
 
-/-- The length bounds of one successful response chunk of a protocol version, for its fork.
-
-They are the bounds of its type, with the largest held to the size limit of the protocol. -/
+/-- The length bounds of one successful response chunk of a protocol version, for its fork. -/
 def responseBounds (preset : Preset) (config : Config) (chunkFork : Fork) (id : ProtocolId) :
     Option (UInt64 × UInt64) :=
+  -- The least and the largest length of the type of the chunk, none when it has no type.
   (responseDesc preset config chunkFork id).map fun shape =>
     let bounds := Networking.ReqResp.payloadBounds shape
+    -- With a size limit `L` for the protocol, the largest length `b` becomes `min(b, L)`.
     match id.protocol.sizeLimit preset config chunkFork with
     | some limit => (bounds.1, min bounds.2 limit)
     | none => bounds

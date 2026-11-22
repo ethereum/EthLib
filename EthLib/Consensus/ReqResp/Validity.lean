@@ -191,25 +191,31 @@ structure ResponseBlock where
 It fails when the root of the block cannot be computed. -/
 def ResponseBlock.ofSigned {preset : Preset} {fork : Fork} (block : SignedBeaconBlock preset fork) :
     Except Err ResponseBlock := do
+  -- The root of the message of the block, which leaves out the signature.
   let root ← SszType.hashTreeRoot block.message
   return { slot := block.message.slot, parentRoot := block.message.parentRoot, root }
 
 /-- Whether a relation holds between each item of a list and the item after it. -/
 def allAdjacent {α : Type} (r : α → α → Bool) : List α → Bool
+  -- `r a b` for the first two items `a` and `b`, and the same on the list from `b`.
   | a :: tail@(b :: _) => r a b && allAdjacent r tail
+  -- A list of fewer than two items has no such pair.
   | _ => true
 
 /-- Whether each block of a list has a higher slot than the block before it. -/
 def ResponseBlock.slotsAscending (blocks : List ResponseBlock) : Bool :=
+  -- The slot of each block is below the slot of the block after it.
   allAdjacent (fun a b => a.slot < b.slot) blocks
 
 /-- Whether each block of a list names the block before it as its parent. -/
 def ResponseBlock.parentsLinked (blocks : List ResponseBlock) : Bool :=
+  -- The parent root of each block is the root of the block before it.
   allAdjacent (fun a b => b.parentRoot == a.root) blocks
 
 /-- Whether a slot is one that a request for blocks by range names. -/
 def BeaconBlocksByRangeRequest.containsSlot (request : BeaconBlocksByRangeRequest)
     (slot : Slot) : Bool :=
+  -- `x ≤ s < x + n`, for the start slot `x`, the count `n` and the slot `s`.
   decide (InCountRange request.startSlot request.count slot)
 
 /-- Whether the blocks of a response are valid for a request for blocks by range.
@@ -217,19 +223,26 @@ def BeaconBlocksByRangeRequest.containsSlot (request : BeaconBlocksByRangeReques
 The fork is the one in effect when the request is served; it sets the request limit. -/
 def isValidBlocksByRangeResponse (config : Config) (fork : Fork)
     (request : BeaconBlocksByRangeRequest) (blocks : List ResponseBlock) : Bool :=
+  -- At most as many blocks as the count of the request.
   blocks.length ≤ request.count.toNat &&
+    -- At most the request limit of blocks at the fork.
     blocks.length ≤ (config.maxRequestBlocks fork).toNat &&
+    -- Each block lies in the requested slots.
     blocks.all (fun block => request.containsSlot block.slot) &&
+    -- The slots of the blocks increase.
     ResponseBlock.slotsAscending blocks &&
+    -- When the step is 1, each block names the block before it as its parent.
     (request.step != 1 || ResponseBlock.parentsLinked blocks)
 
 /-- Whether the blocks of a response are valid for a request for blocks by root. -/
 def isValidBlocksByRootResponse {config : Config} {fork : Fork}
     (request : BeaconBlocksByRootRequest config fork) (blocks : List ResponseBlock) : Bool :=
+  -- At most as many blocks as requested roots, and the root of each block is a requested root.
   blocks.length ≤ request.data.size && blocks.all (fun block => request.data.contains block.root)
 
 /-- Whether each block of a list is the parent of the block before it, at a lower slot. -/
 def ResponseBlock.ancestryLinked (blocks : List ResponseBlock) : Bool :=
+  -- For each block `a` and the block `b` after it, `b` has a lower slot and is the parent of `a`.
   allAdjacent (fun a b => b.slot < a.slot && a.parentRoot == b.root) blocks
 
 /-- Whether the blocks of a response are valid for a request for blocks by head.
@@ -237,9 +250,12 @@ def ResponseBlock.ancestryLinked (blocks : List ResponseBlock) : Bool :=
 The request limit is the one of Deneb, whatever the fork that serves the request. -/
 def isValidBlocksByHeadResponse (config : Config) (request : BeaconBlocksByHeadRequest)
     (blocks : List ResponseBlock) : Bool :=
+  -- At most as many blocks as the count, and at most `MAX_REQUEST_BLOCKS_DENEB`.
   blocks.length ≤ request.count.toNat &&
     blocks.length ≤ config.MAX_REQUEST_BLOCKS_DENEB.toNat &&
+    -- The root of the first block, if any, is the requested root.
     blocks.head?.all (fun first => first.root == request.beaconRoot) &&
+    -- Each block is the parent of the block before it, at a lower slot.
     ResponseBlock.ancestryLinked blocks
 
 /-- What a response check reads from a light client update: its attested slot and its digest.
@@ -257,36 +273,45 @@ structure ResponseUpdate where
 /-- What a response check reads from a light client update, sent with a digest. -/
 def ResponseUpdate.ofUpdate {preset : Preset} {fork : Fork}
     (update : LightClientUpdate preset fork) (digest : ForkDigest) : ResponseUpdate :=
+  -- The slot of the beacon header of the attested header, and the digest of the chunk.
   { attestedSlot := update.attestedHeader.beacon.slot, digest }
 
 /-- The sync committee period of an update: the period of the slot of its attested header. -/
 def ResponseUpdate.period (preset : Preset) (update : ResponseUpdate) : UInt64 :=
+  -- Let `s` be the attested slot.
+  --
+  -- The period is `floor(floor(s / SLOTS_PER_EPOCH) / EPOCHS_PER_SYNC_COMMITTEE_PERIOD)`.
   computeSyncCommitteePeriodAtSlot preset update.attestedSlot
 
-/-- Whether the digest of a light client chunk is the fork digest of the epoch of a slot.
-
-The fork at that epoch must be from Altair, which adds light clients.
-
-The digest is computed with the root of the genesis validators of the chain. -/
+/-- Whether the digest of a light client chunk is the fork digest of the epoch of a slot. -/
 def lightClientDigestMatches (preset : Preset) (config : Config) (genesisValidatorsRoot : Root)
     (slot : Slot) (digest : ForkDigest) : Bool :=
+  -- The epoch `e` of the slot.
   let epoch := computeEpochAtSlot preset slot
+  -- The fork at `e` is from Altair, which adds light clients.
   .altair ≤ config.forkAtEpoch epoch &&
+    -- The digest is the fork digest of `e`, under the root of the genesis validators of the chain.
+    --
+    -- A digest that cannot be computed matches nothing.
     (computeForkDigest config genesisValidatorsRoot epoch).toOption == some digest
 
 /-- Whether the digest of an update is the fork digest of the epoch of its attested header. -/
 def ResponseUpdate.digestMatches (preset : Preset) (config : Config)
     (genesisValidatorsRoot : Root) (update : ResponseUpdate) : Bool :=
+  -- The digest of the update matches at its attested slot.
   lightClientDigestMatches preset config genesisValidatorsRoot update.attestedSlot update.digest
 
 /-- Whether the updates of a response are valid for a request for light client updates by range. -/
 def isValidLightClientUpdatesByRangeResponse (preset : Preset) (config : Config)
     (genesisValidatorsRoot : Root) (request : LightClientUpdatesByRangeRequest)
     (updates : List ResponseUpdate) : Bool :=
+  -- At most `min(MAX_REQUEST_LIGHT_CLIENT_UPDATES, n)` updates, for the count `n`.
   updates.length ≤ lightClientUpdatesLimit request.count &&
+    -- The period of each update lies in the requested periods, and its digest matches.
     updates.all (fun update =>
       decide (InCountRange request.startPeriod request.count (update.period preset)) &&
         update.digestMatches preset config genesisValidatorsRoot) &&
+    -- Each update has period `p + 1`, for the period `p` of the update before it.
     allAdjacent (fun a b => (b.period preset).toNat == (a.period preset).toNat + 1) updates
 
 /-- What a response check reads from a light client bootstrap: its slot, its root and its digest.
@@ -309,6 +334,7 @@ It fails when the root of the beacon header cannot be computed. -/
 def ResponseBootstrap.ofBootstrap {preset : Preset} {fork : Fork}
     (bootstrap : LightClientBootstrap preset fork) (digest : ForkDigest) :
     Except Err ResponseBootstrap := do
+  -- The slot and the root of the beacon header of the header of the bootstrap.
   let header := bootstrap.header.beacon
   let root ← SszType.hashTreeRoot header
   return { slot := header.slot, root, digest }
@@ -318,7 +344,9 @@ def ResponseBootstrap.ofBootstrap {preset : Preset} {fork : Fork}
 The request is the root of the block whose bootstrap it asks for. -/
 def isValidLightClientBootstrapResponse (preset : Preset) (config : Config)
     (genesisValidatorsRoot : Root) (request : Root) (bootstraps : List ResponseBootstrap) : Bool :=
+  -- At most one bootstrap.
   bootstraps.length ≤ 1 &&
+    -- Its root is the requested root, and its digest matches at its slot.
     bootstraps.all (fun bootstrap =>
       bootstrap.root == request &&
         lightClientDigestMatches preset config genesisValidatorsRoot bootstrap.slot
@@ -341,35 +369,37 @@ structure ResponseSidecar where
 It fails when the root of the header cannot be computed. -/
 def ResponseSidecar.ofBlob {preset : Preset} (sidecar : BlobSidecar preset) :
     Except Err ResponseSidecar := do
+  -- The slot and the root of the header of the block, and the index of the blob.
   let header := sidecar.signedBlockHeader.message
   let blockRoot ← SszType.hashTreeRoot header
   return { slot := header.slot, blockRoot, index := sidecar.index }
 
 /-- What a response check reads from a column sidecar.
 
-Before Gloas, the slot and root come from the header; it fails when that root cannot be computed.
-
-From Gloas, the sidecar carries the slot and root of its block. -/
+Before Gloas, it fails when the root of the header cannot be computed. -/
 def ResponseSidecar.ofColumn {preset : Preset} {fork : Fork}
     (sidecar : DataColumnSidecar preset fork) : Except Err ResponseSidecar :=
+  -- From Gloas, the sidecar carries the slot and the root of its block.
   if gloas : .glamsterdam ≤ fork then
     return ⟨sidecar.slot gloas, sidecar.beaconBlockRoot gloas, sidecar.index⟩
   else do
+    -- Before Gloas, they are the slot and the root of the header of the block.
     let header := (sidecar.signedBlockHeader (Nat.lt_of_not_le gloas)).message
     let blockRoot ← SszType.hashTreeRoot header
     return { slot := header.slot, blockRoot, index := sidecar.index }
 
-/-- Whether a blob sidecar may follow another in a response by range.
-
-It is the next blob of the same block, or the first blob of a block at a later slot. -/
+/-- Whether a blob sidecar may follow another in a response by range. -/
 def ResponseSidecar.nextBlob (a b : ResponseSidecar) : Bool :=
+  -- At one slot, `b` is the next blob of the same block: index `i + 1`, for the index `i` of `a`.
   if a.slot = b.slot then b.blockRoot == a.blockRoot && b.index.toNat == a.index.toNat + 1
+  -- Otherwise `b` is at a later slot, and is the first blob of its block, at index 0.
   else a.slot < b.slot && b.index == 0
 
-/-- Whether a column sidecar may follow another in a response by range.
-
-It is a later column of the same block, or it belongs to a block at a later slot. -/
+/-- Whether a column sidecar may follow another in a response by range. -/
 def ResponseSidecar.nextColumn (a b : ResponseSidecar) : Bool :=
+  -- At one slot, `b` is a later column of the same block.
+  --
+  -- Otherwise `b` belongs to a block at a later slot.
   if a.slot = b.slot then b.blockRoot == a.blockRoot && a.index < b.index else a.slot < b.slot
 
 /-- Whether the sidecars of a response are valid for a request for blob sidecars by range.
@@ -383,23 +413,34 @@ From Fulu no new blob sidecars exist, so the Electra count stays the limit.
 The request limit is the most blobs of the most blocks, taken without overflow. -/
 def isValidBlobSidecarsByRangeResponse (config : Config) (fork : Fork)
     (request : BlobSidecarsByRangeRequest) (sidecars : List ResponseSidecar) : Bool :=
+  -- Let `m` be the most blobs of one block at the fork, and `n` the count of the request.
+  --
+  -- At most `n * m` sidecars, in natural numbers.
   sidecars.length ≤ request.count.toNat * (blobSidecarLimit config fork).toNat &&
+    -- At most `MAX_REQUEST_BLOCKS_DENEB * m` sidecars, in natural numbers.
     sidecars.length ≤
       config.MAX_REQUEST_BLOCKS_DENEB.toNat * (blobSidecarLimit config fork).toNat &&
+    -- Each sidecar lies in the requested slots, with an index below `m`.
     sidecars.all (fun sidecar =>
       decide (InCountRange request.startSlot request.count sidecar.slot) &&
         sidecar.index.toNat < (blobSidecarLimit config fork).toNat) &&
+    -- The first sidecar, if any, has index 0.
     sidecars.head?.all (fun first => first.index == 0) &&
+    -- Each sidecar is the next blob of its block, or the first blob of a block at a later slot.
     allAdjacent ResponseSidecar.nextBlob sidecars
 
 /-- Whether the sidecars of a response are valid for a request for blob sidecars by root. -/
 def isValidBlobSidecarsByRootResponse {config : Config} {fork : Fork}
     (request : BlobSidecarsByRootRequest config fork) (sidecars : List ResponseSidecar) : Bool :=
+  -- At most as many sidecars as the request names.
+  --
+  -- The block root and the index of each sidecar are a pair that the request names.
   sidecars.length ≤ request.data.size &&
     sidecars.all (fun sidecar => request.data.contains ⟨sidecar.blockRoot, sidecar.index⟩)
 
 /-- The sidecars of a response grouped by slot: each group is a longest run with one slot. -/
 def ResponseSidecar.groupBySlot (sidecars : List ResponseSidecar) : List (List ResponseSidecar) :=
+  -- Two adjacent sidecars fall in one group when they have one slot.
   sidecars.splitBy (fun a b => a.slot == b.slot)
 
 /-- Whether the sidecars of a response are valid for a request for column sidecars by range.
@@ -409,25 +450,34 @@ A response holds every sidecar of each block it serves; here that means every re
 The request limit is the most sidecars of the most blocks, taken without overflow. -/
 def isValidDataColumnSidecarsByRangeResponse (preset : Preset) (config : Config)
     (request : DataColumnSidecarsByRangeRequest preset) (sidecars : List ResponseSidecar) : Bool :=
+  -- Let `N` be `NUMBER_OF_COLUMNS` and `n` the count of the request.
+  --
+  -- At most `n * N` sidecars, and at most `MAX_REQUEST_BLOCKS_DENEB * N`, in natural numbers.
   sidecars.length ≤ request.count.toNat * preset.NUMBER_OF_COLUMNS.toNat &&
     sidecars.length ≤ config.MAX_REQUEST_BLOCKS_DENEB.toNat * preset.NUMBER_OF_COLUMNS.toNat &&
+    -- Each sidecar lies in the requested slots, with an index below `N` that the request names.
     sidecars.all (fun sidecar =>
       decide (InCountRange request.startSlot request.count sidecar.slot) &&
         sidecar.index < preset.NUMBER_OF_COLUMNS && request.columns.data.contains sidecar.index) &&
+    -- Each sidecar is a later column of its block, or belongs to a block at a later slot.
     allAdjacent ResponseSidecar.nextColumn sidecars &&
+    -- The sidecars of each slot hold each requested column.
     (ResponseSidecar.groupBySlot sidecars).all (fun block =>
       request.columns.data.all (fun column => block.any (·.index == column)))
 
 /-- The number of column sidecars that a request by root names. -/
 def DataColumnSidecarsByRootRequest.columnCount {preset : Preset} {config : Config}
     (request : DataColumnSidecarsByRootRequest preset config) : Nat :=
+  -- The sum, over the identifiers of the request, of their numbers of columns.
   (request.data.map (·.columns.data.size)).sum
 
 /-- Whether the sidecars of a response are valid for a request for column sidecars by root. -/
 def isValidDataColumnSidecarsByRootResponse {preset : Preset} {config : Config}
     (request : DataColumnSidecarsByRootRequest preset config)
     (sidecars : List ResponseSidecar) : Bool :=
+  -- At most as many sidecars as the request names columns.
   sidecars.length ≤ request.columnCount &&
+    -- Each sidecar has the block root and one of the columns of an identifier of the request.
     sidecars.all (fun sidecar => request.data.any (fun identifier =>
       identifier.blockRoot == sidecar.blockRoot && identifier.columns.data.contains sidecar.index))
 
@@ -450,14 +500,14 @@ structure ResponseEnvelope where
 /-- What a response check reads from a signed payload envelope, from Gloas. -/
 def ResponseEnvelope.ofSigned {preset : Preset} {fork : Fork} (gloas : .glamsterdam ≤ fork)
     (envelope : SignedExecutionPayloadEnvelope preset fork) : ResponseEnvelope :=
+  -- The slot of the payload, the root of the block, and the parent hash and hash of the payload.
   let payload := envelope.message.payload
   ⟨payload.slotNumber gloas, envelope.message.beaconBlockRoot, payload.parentHash,
     payload.blockHash⟩
 
-/-- Whether a payload envelope may follow another in a response by range.
-
-It has a higher slot, and its payload names the payload before it as its parent. -/
+/-- Whether a payload envelope may follow another in a response by range. -/
 def ResponseEnvelope.next (a b : ResponseEnvelope) : Bool :=
+  -- `b` has a higher slot, and the parent hash of its payload is the hash of the payload of `a`.
   a.slot < b.slot && b.parentHash == a.blockHash
 
 /-- Whether the envelopes of a response are valid for a request for payload envelopes by range.
@@ -466,28 +516,34 @@ The fork is the one in effect when the request is served; it sets the request li
 def isValidExecutionPayloadEnvelopesByRangeResponse (config : Config) (fork : Fork)
     (request : ExecutionPayloadEnvelopesByRangeRequest) (envelopes : List ResponseEnvelope) :
     Bool :=
+  -- At most as many envelopes as the count, and at most the request limit of blocks at the fork.
   envelopes.length ≤ request.count.toNat &&
     envelopes.length ≤ (config.maxRequestBlocks fork).toNat &&
+    -- Each envelope lies in the requested slots.
     envelopes.all (fun envelope =>
       decide (InCountRange request.startSlot request.count envelope.slot)) &&
+    -- The slots increase, and each payload names the payload before it as its parent.
     allAdjacent ResponseEnvelope.next envelopes
 
 /-- Whether the envelopes of a response are valid for a request for payload envelopes by root. -/
 def isValidExecutionPayloadEnvelopesByRootResponse {config : Config}
     (request : ExecutionPayloadEnvelopesByRootRequest config)
     (envelopes : List ResponseEnvelope) : Bool :=
+  -- At most as many envelopes as requested roots, and the block root of each is a requested root.
   envelopes.length ≤ request.data.size &&
     envelopes.all (fun envelope => request.data.contains envelope.beaconBlockRoot)
 
 /-- The number of seats that a request asks for, which bounds the number of its lists. -/
 def InclusionListsByIndicesRequest.listCount {preset : Preset}
     (request : InclusionListsByIndicesRequest preset) : Nat :=
+  -- The number of set bits.
   request.indices.bits.count true
 
 /-- Whether a validator holds a seat of a committee that a request asks for. -/
 def InclusionListsByIndicesRequest.asksFor {preset : Preset}
     (request : InclusionListsByIndicesRequest preset) (committee : InclusionListCommittee preset)
     (validator : ValidatorIndex) : Bool :=
+  -- Some seat `i` of the committee has bit `i` set and holds the validator.
   (request.indices.bits.zip committee).any fun (asked, member) => asked && member == validator
 
 /-- Whether the lists of a response are valid for a request for inclusion lists by indices.
@@ -496,8 +552,12 @@ The committee is the inclusion list committee of the slot, on the chain of the d
 def isValidInclusionListsByIndicesResponse {preset : Preset} (config : Config)
     (request : InclusionListsByIndicesRequest preset) (committee : InclusionListCommittee preset)
     (lists : List InclusionList) : Bool :=
+  -- At most as many lists as requested seats, and at most `MAX_REQUEST_INCLUSION_LIST`.
   lists.length ≤ request.listCount &&
     lists.length ≤ config.MAX_REQUEST_INCLUSION_LIST.toNat &&
+    -- Each list has the requested slot and dependent root.
+    --
+    -- Its validator holds a requested seat.
     lists.all fun list =>
       list.slot == request.slot && list.dependentRoot == request.dependentRoot &&
         request.asksFor committee list.validatorIndex

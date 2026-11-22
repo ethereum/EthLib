@@ -143,6 +143,7 @@ def ReqRespProtocol.versions (fork : Fork) : ReqRespProtocol → List Nat
 
 /-- The protocol IDs of a fork: each protocol with each version that the fork defines. -/
 def protocolIds (fork : Fork) : List ProtocolId :=
+  -- Each protocol in the order of the list, with each version of the fork, oldest first.
   ReqRespProtocol.all.flatMap fun protocol =>
     (protocol.versions fork).map fun version => ⟨protocol, version⟩
 
@@ -151,10 +152,18 @@ def protocolIds (fork : Fork) : List ProtocolId :=
 The version is written in decimal with no leading zero, and is positive.
 -/
 def ProtocolId.parse? (text : String) : Option ProtocolId := do
+  -- The text is `/eth2/beacon_chain/req/`, then a body, then `/ssz_snappy`.
   let rest ← Networking.Gossip.dropPrefix? "/eth2/beacon_chain/req/".toList text.toList
   let body ← Networking.Gossip.dropSuffix? "/ssz_snappy".toList rest
+  -- The body starts with the name of a protocol, then `/`.
+  --
+  -- No name holds `/`, so at most one protocol matches.
   let protocol ← ReqRespProtocol.all.find? fun p => (p.name ++ "/").toList.isPrefixOf body
+  -- The rest of the body is the version, in decimal with no leading zero.
+  --
+  -- It is below `2^64`, a bound of EthLib.
   let version ← Networking.Gossip.parseSubnetId (body.drop (protocol.name.length + 1))
+  -- The version is positive.
   if version = 0 then none else some ⟨protocol, version.toNat⟩
 
 /-- The status of a node, which each peer sends when it connects; Fulu adds a field. -/
@@ -182,6 +191,7 @@ instance {fork : Fork} : SszType (Status fork) :=
 
 /-- The fork whose status a version of the status protocol carries. -/
 def statusFork : Nat → Option Fork
+  -- Version 1 carries the status of Phase 0, and version 2 that of Fulu.
   | 1 => some .phase0
   | 2 => some .fusaka
   | _ => none
@@ -206,6 +216,7 @@ instance {config : Config} {fork : Fork} : SszType (MetaData config fork) :=
 
 /-- The fork whose metadata a version of the metadata protocol carries. -/
 def metadataFork : Nat → Option Fork
+  -- Version 1 carries the metadata of Phase 0, 2 that of Altair, and 3 that of Fulu.
   | 1 => some .phase0
   | 2 => some .altair
   | 3 => some .fusaka
@@ -231,10 +242,13 @@ inductive GoodbyeReason where
 
 /-- The reason that a goodbye message carries. -/
 def GoodbyeReason.ofCode (code : UInt64) : GoodbyeReason :=
+  -- Codes 1, 2 and 3 are a shutdown of the client, an irrelevant network, and a fault or error.
   if code = 1 then .clientShutDown
   else if code = 2 then .irrelevantNetwork
   else if code = 3 then .faultOrError
+  -- Codes 4 to 127 are reserved.
   else if 4 ≤ code ∧ code ≤ 127 then .reserved code
+  -- Code 0 and codes from 128 on are kept as they are.
   else .other code
 
 /-- The code that a goodbye reason stands for. -/
@@ -250,6 +264,7 @@ The bound is computed without overflow, so a range past the largest value stops 
 
 Requests by range name their slots or their light client periods this way. -/
 def InCountRange (start count value : UInt64) : Prop :=
+  -- `x ≤ v < x + n` in natural numbers, for the start `x`, the count `n` and the value `v`.
   start.toNat ≤ value.toNat ∧ value.toNat < start.toNat + count.toNat
 
 instance (start count value : UInt64) : Decidable (InCountRange start count value) :=
@@ -271,6 +286,7 @@ instance : SszType BeaconBlocksByRangeRequest :=
 
 /-- The most blocks in one request: Deneb lowers the limit. -/
 def Config.maxRequestBlocks (config : Config) (fork : Fork) : UInt64 :=
+  -- `MAX_REQUEST_BLOCKS_DENEB` from Deneb, and `MAX_REQUEST_BLOCKS` before it.
   if .dencun ≤ fork then config.MAX_REQUEST_BLOCKS_DENEB else config.MAX_REQUEST_BLOCKS
 
 /-- A request for blocks by the roots of their messages. -/
@@ -291,10 +307,9 @@ instance : SszType LightClientUpdatesByRangeRequest :=
 
 /-- The most light client updates that a request of a count of periods allows.
 
-It is the smaller of the request limit of 128 and the count.
-
 The updates query of the Beacon API reads the same limit. -/
 def lightClientUpdatesLimit (count : UInt64) : Nat :=
+  -- `min(MAX_REQUEST_LIGHT_CLIENT_UPDATES, n)` for the count `n`, where the constant is 128.
   min MAX_REQUEST_LIGHT_CLIENT_UPDATES.toNat count.toNat
 
 /-- A request for the blob sidecars of a range of slots. -/
