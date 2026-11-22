@@ -5,7 +5,7 @@ public import EthLib.Networking.Encoding.Protobuf
 /-!
 # `Networking.Gossip.Rpc`
 
-The RPC that carries gossip between two peers, from [pubsub, "The RPC"][rpc].
+The RPC that carries gossip between two peers, from [pubsub, section The RPC][rpc].
 
 An RPC holds subscriptions, published messages and control messages.
 
@@ -232,6 +232,10 @@ def recordsOf (bytes : ByteArray) : Except RpcError (List Record) :=
 /-- A subscription change. -/
 def decodeSubOpts (bytes : ByteArray) : Except RpcError SubOpts := do
   let rs ← recordsOf bytes
+  -- SubOpts of the pubsub schema: `subscribe = 1` and `topicid = 2`.
+  --
+  -- The extensions schema adds `requestsPartial = 3` and `supportsSendingPartial = 4`.
+  --
   -- A bool is written as 0 or 1.
   --
   -- Reading any other value as true is a choice of EthLib.
@@ -247,27 +251,34 @@ def decodeSubOpts (bytes : ByteArray) : Except RpcError SubOpts := do
 /-- A published message, which `StrictNoSign` forbids to hold any of four fields. -/
 def decodeMessage (bytes : ByteArray) : Except RpcError Message := do
   let rs ← recordsOf bytes
+  -- StrictNoSign, consuming side: `from`, `seqno`, `signature` and `key` are absent, else reject.
   if let some r := rs.find? (·.field ∈ signedFields) then throw (.signed r.field)
+  -- Message: `data = 2`, optional bytes.
   let data ← singular bytesOf .empty rs 2
+  -- Message: `topic = 4`, a required string, so a message without it is rejected.
   let some topic := (← repeated stringOf rs 4).getLast? | throw .missingTopic
   return { data, topic }
 
 /-- An IHAVE message. -/
 def decodeIHave (bytes : ByteArray) : Except RpcError IHave := do
   let rs ← recordsOf bytes
+  -- ControlIHave, v1.0: `topicID = 1`, optional string, and `messageIDs = 2`, repeated bytes.
   return { topicId := ← singular stringOf "" rs 1, messageIds := ← repeated bytesOf rs 2 }
 
 /-- An IWANT message. -/
 def decodeIWant (bytes : ByteArray) : Except RpcError IWant := do
+  -- ControlIWant, v1.0: `messageIDs = 1`, repeated bytes.
   return { messageIds := ← repeated bytesOf (← recordsOf bytes) 1 }
 
 /-- A GRAFT message. -/
 def decodeGraft (bytes : ByteArray) : Except RpcError Graft := do
+  -- ControlGraft, v1.0: `topicID = 1`, optional string.
   return { topicId := ← singular stringOf "" (← recordsOf bytes) 1 }
 
 /-- A peer offered in a PRUNE. -/
 def decodePeerInfo (bytes : ByteArray) : Except RpcError PeerInfo := do
   let rs ← recordsOf bytes
+  -- PeerInfo, v1.1: `peerID = 1` and `signedPeerRecord = 2`, optional bytes.
   return {
     peerId := ← singular bytesOf .empty rs 1
     signedPeerRecord := ← singular bytesOf .empty rs 2 }
@@ -275,20 +286,24 @@ def decodePeerInfo (bytes : ByteArray) : Except RpcError PeerInfo := do
 /-- A PRUNE message. -/
 def decodePrune (bytes : ByteArray) : Except RpcError Prune := do
   let rs ← recordsOf bytes
+  -- ControlPrune: `topicID = 1` of v1.0, then `peers = 2` and `backoff = 3`, in seconds, of v1.1.
   let peers ← (← repeated bytesOf rs 2).mapM decodePeerInfo
   return { topicId := ← singular stringOf "" rs 1, peers, backoff := ← singular uint64Of 0 rs 3 }
 
 /-- An IDONTWANT message. -/
 def decodeIDontWant (bytes : ByteArray) : Except RpcError IDontWant := do
+  -- ControlIDontWant, v1.2: `messageIDs = 1`, repeated bytes.
   return { messageIds := ← repeated bytesOf (← recordsOf bytes) 1 }
 
 /-- The extensions of a control message. -/
 def decodeControlExtensions (bytes : ByteArray) : Except RpcError ControlExtensions := do
+  -- ControlExtensions: `partialMessages = 10`, optional bool; the experimental fields are skipped.
   return { partialMessages := (← singular uint64Of 0 (← recordsOf bytes) 10) != 0 }
 
 /-- The control messages of an RPC. -/
 def decodeControl (bytes : ByteArray) : Except RpcError Control := do
   let rs ← recordsOf bytes
+  -- ControlMessage: fields 1 to 4 of v1.0, `idontwant = 5` of v1.2, `extensions = 6` of v1.3.
   return {
     ihave := ← (← repeated bytesOf rs 1).mapM decodeIHave
     iwant := ← (← repeated bytesOf rs 2).mapM decodeIWant
@@ -307,6 +322,9 @@ def Control.merge (a b : Control) : Control :=
 /-- A partial message. -/
 def decodePartial (bytes : ByteArray) : Except RpcError PartialMessagesExtension := do
   let rs ← recordsOf bytes
+  -- PartialMessagesExtension: `topicID = 1` and `groupID = 2`, optional bytes.
+  --
+  -- Then `partialMessage = 3` and `partsMetadata = 4`, optional bytes, kept only when present.
   return {
     topicId := ← singular bytesOf .empty rs 1
     groupId := ← singular bytesOf .empty rs 2
@@ -318,8 +336,12 @@ def decodePartial (bytes : ByteArray) : Except RpcError PartialMessagesExtension
 The control field is singular: each occurrence is decoded alone, then they merge. -/
 def decodeRpc (bytes : ByteArray) : Except RpcError Rpc := do
   let rs ← recordsOf bytes
+  -- The RPC: `subscriptions = 1` and `publish = 2`, repeated.
   let subscriptions ← (← repeated bytesOf rs 1).mapM decodeSubOpts
   let publish ← (← repeated bytesOf rs 2).mapM decodeMessage
+  -- Protobuf of v1.0: `control = 3`, optional; each occurrence decodes alone, then the lists join.
+  --
+  -- The extensions schema: `partial = 10`, optional; the experimental RPC fields are skipped.
   let control := (← (← repeated bytesOf rs 3).mapM decodeControl).foldl Control.merge {}
   return { subscriptions, publish, control, partialMessage := ← lastMessage decodePartial rs 10 }
 
@@ -332,12 +354,14 @@ It writes the control field only when a control list is not empty, or it has ext
 
 /-- The bytes of a subscription change. -/
 def SubOpts.encode (s : SubOpts) : ByteArray :=
+  -- The two flags of the partial message extension only when true.
   serialize ([⟨1, .varint (if s.subscribe then 1 else 0)⟩, stringRecord 2 s.topicId] ++
     (if s.requestsPartial then [⟨3, .varint 1⟩] else []) ++
     if s.supportsSendingPartial then [⟨4, .varint 1⟩] else [])
 
 /-- The bytes of a message: its data, then its topic. -/
 def Message.encode (m : Message) : ByteArray :=
+  -- StrictNoSign, producing side: no `from`, `seqno`, `signature` or `key`, not even empty.
   serialize [lenRecord 2 m.data, stringRecord 4 m.topic]
 
 /-- The bytes of an IHAVE message. -/
@@ -367,6 +391,7 @@ def IDontWant.encode (m : IDontWant) : ByteArray :=
 
 /-- The bytes of the extensions of a control message. -/
 def ControlExtensions.encode (e : ControlExtensions) : ByteArray :=
+  -- The flag only when true.
   serialize (if e.partialMessages then [⟨10, .varint 1⟩] else [])
 
 /-- The bytes of the control messages of an RPC. -/
@@ -385,6 +410,7 @@ def PartialMessagesExtension.encode (m : PartialMessagesExtension) : ByteArray :
 def Rpc.encode (rpc : Rpc) : ByteArray :=
   serialize (rpc.subscriptions.map (lenRecord 1 ∘ SubOpts.encode) ++
     rpc.publish.map (lenRecord 2 ∘ Message.encode) ++
+    -- The control field only when it holds a control message or extensions.
     (if rpc.control = {} then [] else [lenRecord 3 rpc.control.encode]) ++
     rpc.partialMessage.toList.map (lenRecord 10 ∘ PartialMessagesExtension.encode))
 
@@ -394,6 +420,7 @@ def Rpc.encode (rpc : Rpc) : ByteArray :=
 
 The flag counts only in a subscription: an unsubscription ignores it. -/
 def SubOpts.asksPartial (s : SubOpts) : Bool :=
+  -- Partial messages: the flags are ignored when the peer sends an unsubscribe.
   s.subscribe && s.requestsPartial
 
 /-- Whether the sender can send partial messages on the topic of a subscription change.
@@ -402,12 +429,14 @@ A sender that asks for partial messages can send them too.
 
 The flags count only in a subscription: an unsubscription ignores them. -/
 def SubOpts.sendsPartial (s : SubOpts) : Bool :=
+  -- Partial messages: a node that requests partial messages must support sending them.
   s.subscribe && (s.supportsSendingPartial || s.requestsPartial)
 
 /-- Whether only the first RPC of a stream carries extensions, if any does.
 
 Two extensions within one RPC are not seen here, since the decoder keeps the last one. -/
 def checkExtensionsOrder (rpcs : List Rpc) : Bool :=
+  -- v1.3: the Extensions control message is in the first message on the stream, and never again.
   rpcs.drop 1 |>.all (·.control.extensions.isNone)
 
 end EthLib.Networking.Gossip
