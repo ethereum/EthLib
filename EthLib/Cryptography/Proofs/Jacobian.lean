@@ -60,12 +60,6 @@ def toZ (x : Fin m) : ZMod m := (x.val : ZMod m)
 theorem toZ_ofNat [NeZero m] (n : Nat) : toZ (Fin.ofNat m n) = (n : ZMod m) := by
   simp [toZ]
 
--- The numerals of the formulas.
-@[simp] theorem toZ_two [NeZero m] : toZ (2 : Fin m) = 2 := toZ_ofNat 2
-@[simp] theorem toZ_three [NeZero m] : toZ (3 : Fin m) = 3 := toZ_ofNat 3
-@[simp] theorem toZ_four [NeZero m] : toZ (4 : Fin m) = 4 := toZ_ofNat 4
-@[simp] theorem toZ_eight [NeZero m] : toZ (8 : Fin m) = 8 := toZ_ofNat 8
-
 theorem toZ_eq_zero [NeZero m] {x : Fin m} : toZ x = 0 ↔ x = 0 := by
   rw [toZ, ZMod.natCast_eq_zero_iff]
   constructor
@@ -229,70 +223,6 @@ theorem toAffine_eq [NeZero m] (p : Jacobian m) :
         let zi := Fin.inverse p.z
         let zi2 := zi * zi
         some (p.x * zi2, p.y * zi2 * zi) := rfl
-
-/-- Doubling on `Fin m` is formula (6) of Cohen, Miyaji and Ono, for every input.
-
-Each small multiple is a product. -/
-theorem double_eq_formula [NeZero m] (a : Fin m) (p : Jacobian m) :
-    double a p =
-    let xx := p.x * p.x
-    let yy := p.y * p.y
-    let zz := p.z * p.z
-    let s := 4 * p.x * yy
-    let l := 3 * xx + a * zz * zz
-    let t := l * l - 2 * s
-    ⟨t, l * (s - t) - 8 * yy * yy, 2 * p.y * p.z⟩ := by
-  have hl : (if a = 0 then p.x * p.x + p.x * p.x + p.x * p.x else
-      p.x * p.x + p.x * p.x + p.x * p.x + a * (p.z * p.z) * (p.z * p.z)) =
-      3 * (p.x * p.x) + a * (p.z * p.z) * (p.z * p.z) := by
-    apply toZ_injective
-    by_cases ha : a = 0
-    · simp only [ha, ite_true, toZ_add, toZ_mul, toZ_three, toZ_zero]
-      ring
-    · simp only [ha, ite_false, toZ_add, toZ_mul, toZ_three]
-      ring
-  dsimp only [double, Coords.double, ofCoords, toCoords]
-  rw [hl]
-  congr 1 <;> apply toZ_injective <;>
-    simp only [toZ_add, toZ_sub, toZ_mul, toZ_two, toZ_three, toZ_four, toZ_eight] <;>
-    ring
-
-/-- Addition on `Fin m` is formula (5) of Cohen, Miyaji and Ono, for every input.
-
-It has no shortcut for `Z = 1`. -/
-theorem add_eq_formula [NeZero m] (a : Fin m) (p q : Jacobian m) :
-    add a p q =
-    if p.z = 0 then q
-    else if q.z = 0 then p
-    else
-      let z1z1 := p.z * p.z
-      let z2z2 := q.z * q.z
-      let u1 := p.x * z2z2
-      let u2 := q.x * z1z1
-      let s1 := p.y * q.z * z2z2
-      let s2 := q.y * p.z * z1z1
-      let h := u2 - u1
-      let r := s2 - s1
-      if h = 0 then
-        -- One `x`: the same point, or opposite points.
-        if r = 0 then double a p else infinity
-      else
-        let hh := h * h
-        let hhh := h * hh
-        let v := u1 * hh
-        let x3 := r * r - hhh - 2 * v
-        ⟨x3, r * (v - x3) - s1 * hhh, p.z * q.z * h⟩ := by
-  have hmixed : (if q.z = 1 then (p.x, p.y, p.z) else
-      let z2z2 := q.z * q.z
-      (p.x * z2z2, p.y * q.z * z2z2, p.z * q.z)) =
-        (p.x * (q.z * q.z), p.y * q.z * (q.z * q.z), p.z * q.z) := by
-    by_cases hz : q.z = 1 <;> simp [hz]
-  have htwo (v : Fin m) : v + v = 2 * v := by
-    apply toZ_injective
-    simp only [toZ_add, toZ_mul, toZ_two]
-    ring
-  simp only [add, Coords.add, hmixed, htwo]
-  split_ifs <;> rfl
 
 /-- No bits leave the point at infinity. -/
 theorem mulBits_zero [NeZero m] (a : Fin m) (k : Nat) (p : Jacobian m) :
