@@ -22,23 +22,22 @@ Not yet released.
 - In Lean, `Base.hexValue?_toUpper` and `Base.hexBytesFrom?_map_toUpper` state that a hex digit, and a run of hex digits, decode the same in uppercase ([#3837](https://github.com/ethereum/EthLib/issues/3837)).
   The SSZ JSON codec uses them for its case rule.
 
-- An attester slashing of one validator by two signatures on a double or surround vote is accepted at its turn in a block within the limits ([#3431](https://github.com/ethereum/EthLib/issues/3431)).
+- At a state where the facts of a chain hold, an attester slashing of one validator by two signatures on a double or surround vote succeeds at its turn in a block within the limits ([#3431](https://github.com/ethereum/EthLib/issues/3431)).
   Otherwise the validator is already slashed there.
   `DirectSafety.signedConflict_attesterSlashing_accepted_at` (`DirectSafety/Includable.lean`) states it for a key active at a state of a run.
   The pair of votes is a `DirectSafety.VotePairAt`, and the result is conditional on the inclusion of the slashing and on the success of the steps before it.
   `slashValidator_ok_of_block` (`Totality/ChainBlock.lean`) states that slashing succeeds at that turn, at the state that `SlashingTurn` (`Transition/Invariants.lean`) describes.
   `SlashRoom` with `slashValidator_ok_of_room` (`Totality/SlashValidator.lean`) gives a room that suffices for slashing to succeed.
+  `slashingTurn_kept` there states that the steps from the operations to that turn keep the frame, activity and the proposer.
   `slashingTurn_exits`, `slashingTurn_supply_le` and `slashingTurn_slashed_le` bound the exits, the supply and the slashed balances at that turn.
   `initiateValidatorExit_total_of_electra` states that an exit succeeds from Electra within bounds on the exit queue, the churn and the exit epochs.
   `slashings_initiateValidatorExit` states that an exit keeps the slashed balances.
   `forkVersions_eq_of_fork` states that two states at one fork, on chains from one genesis, hold the same versions.
-  `DirectSafety.mem_keysAt_epoch_of_within` is `DirectSafety.mem_keysAt_epoch` with the registry limit in place of a fork before Gloas, which keeps its statement.
-  Some earlier private declarations are now public, with unchanged statements: `ExitsBelow`, `initiateValidatorExit_exists_ok`, `activeStep_operationsInput`, `RunBounded.size_le`, `BlockCredits.Kept.proposer` and `BlockCredits.Kept.foldlM`.
-  `BlockCredits.Kept.of_processProposerSlashing` and `BlockCredits.Kept.of_processAttesterSlashing` are public too; they were `kept_processProposerSlashing` and `kept_processAttesterSlashing`.
-  `upgradeNext_forkVersions` and `forkVersion_of_lt_altair` move from `BeaconApi/Config.lean` to `Transition/ForkVersions.lean`, public.
-  Their statements are unchanged, except that they leave the `BeaconApi` namespace and `forkVersion_of_lt_altair` binds `{config}` before `{fork}`.
-  `getBeaconProposerIndex_slashDebit` (`Transition/BalanceDrift.lean`) is new: it holds the steps by which the block ledger read the proposer of a slashing.
-  `DirectSafety.genesisValidatorsRoot_chainSteps` (`DirectSafety/Signatures.lean`) is new: steps of a chain keep the genesis validators root, and `Run.genesisValidatorsRoot` reads it.
+  `DirectSafety.mem_keysAt_epoch_of_within` is `DirectSafety.mem_keysAt_epoch` with the registry limit in place of a fork before Gloas; `DirectSafety.mem_keysAt_epoch` keeps its statement.
+  Some earlier private declarations are now public, with unchanged statements: `ExitsBelow`, `initiateValidatorExit_exists_ok`, `activeStep_operationsInput`, `RunBounded.size_le`, and `getBeaconProposerIndex_of_kept`, which moves from `Transition/BlockLedger.lean` to `Transition/BalanceDrift.lean`.
+  `upgradeNext_forkVersions` and `forkVersion_of_lt_altair` move from `BeaconApi/Config.lean` and are public in `Transition/ForkVersions.lean`, outside the `BeaconApi` namespace.
+  `getBeaconProposerIndex_slashDebit` (`Transition/BalanceDrift.lean`) is new: the exit, the slashed mark, the slashings write and the debit of a slashing keep the proposer that an earlier state reads.
+  `DirectSafety.genesisValidatorsRoot_chainSteps` (`DirectSafety/Signatures.lean`) is new: steps of a chain keep the genesis validators root.
   `effectiveBalanceSum_eq_of_effectiveKept` (`Totality/SupplyBlock.lean`) is new: a step that keeps the size of the registry and each effective balance keeps their sum.
 
 - In Lean, the laws of a four-word Montgomery field are proved once in `Word64.Montgomery`, from the laws of its sum, difference and product that an instance of `Word64.Montgomery.Laws` gives ([#3827](https://github.com/ethereum/EthLib/issues/3827)).

@@ -1581,8 +1581,7 @@ private theorem rise_executionRequests {s t : BeaconState preset fork}
       (Rise.foldlM_zero (fun _ _ _ ok => rise_consolidationRequest ok) consolidations)
   simpa using whole
 
-/-- The proposer slashings of a body, then attester slashings, add only the whistleblower share.
--/
+/-- Proposer slashings, then attester slashings, add only the whistleblower share. -/
 private theorem rise_slashings {body : BeaconBlockBody preset fork}
     {attesters : List (AttesterSlashing preset fork)} {a proposed b : BeaconState preset fork}
     (proposersOk : body.proposerSlashings.data.toList.foldlM

@@ -5,10 +5,10 @@ public import EthLib.Consensus.Proofs.Transition.AttesterSlashingAccepted
 public import EthLib.Consensus.Proofs.Transition.Totality.ChainBlock
 import EthLib.Consensus.Proofs.DirectSafety.ChurnBounds
 import EthLib.Consensus.Proofs.Transition.ActiveKept
-import EthLib.Consensus.Proofs.Transition.BlockCredits
 import EthLib.Consensus.Proofs.Transition.Chain
 import EthLib.Consensus.Proofs.Transition.ForkVersions
 import EthLib.Consensus.Proofs.Transition.Totality.FlagsActive
+import EthLib.Consensus.Proofs.Transition.Totality.SlashValidator
 import EthLib.Consensus.Proofs.Transition.ValidatorKeys
 
 /-!
@@ -40,11 +40,11 @@ The validator must be slashable at the epoch of the state.
 
 At a state where the facts of a chain hold, take a key active there.
 
-Take a block within the limits in the same epoch whose body holds the slashing of its validator.
+Take a block within the limits, at a later slot in the same epoch, whose body holds its slashing.
 
 Suppose the steps before that slashing succeed; the count checks of the operations are not read.
 
-Then at the state they reach the slashing meets these and succeeds, or the key is already slashed.
+Then at the state they reach the slashing meets these and succeeds, or its validator is already slashed.
 
 Both cases are under that inclusion and that success; nothing is said when either fails.
 -/
@@ -177,11 +177,10 @@ structure VotePairAt (config : Config) (checks : SignatureChecks) (g : ForkedBea
   read1 : z1.state.forkVersions.versionAt d1.target.epoch = config.forkVersion f1
   /-- A run from `g` reaches the second reference state. -/
   run2 : Nonempty (Run config checks g z2)
-  /-- The second reference state reads the second version at the target epoch of the second data.
-  -/
+  /-- The second reference state reads the second version at the second data's target epoch. -/
   read2 : z2.state.forkVersions.versionAt d2.target.epoch = config.forkVersion f2
 
-/-- A validator of `x`, active at the epoch of `x`, is slashed at the turn of its slashing.
+/-- At the turn of its slashing, a validator of `x` active at the epoch of `x` keeps its key.
 
 A pair of votes has a signature on each signing root that verifies for its key alone.
 
@@ -190,8 +189,6 @@ Take a block within the limits, applied at `x` at a later slot in the epoch of `
 Its body contains the slashing of the validator by those votes, at a position.
 
 The steps before that slashing succeed, and reach a state.
-
-There the validator has the same key.
 
 The slashing succeeds there, or the validator is already slashed there. -/
 private theorem attesterSlashing_accepted_of_active {config : Config} {checks : SignatureChecks}
@@ -265,15 +262,9 @@ private theorem attesterSlashing_accepted_of_active {config : Config} {checks : 
     omega
   have blockWithin : block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ startEpoch + epochs := by
     omega
-  -- The steps before the slashing are kept steps.
-  obtain ⟨input, proposed, started, proposersOk, attestersOk⟩ := id turned
-  rw [← Array.foldlM_toList] at proposersOk
-  have keptProposed : BlockCredits.Kept input proposed := BlockCredits.Kept.foldlM
-    (fun _ _ _ ok => BlockCredits.Kept.of_processProposerSlashing ok) proposersOk
-  have keptTurn : BlockCredits.Kept proposed turn := BlockCredits.Kept.foldlM
-    (fun _ _ _ ok => BlockCredits.Kept.of_processAttesterSlashing ok) attestersOk
-  have frameInput := (frame_operationsInput started).toFrame
-  have frameTurn := frameInput.trans (keptProposed.frame.trans keptTurn.frame)
+  -- The steps before the slashing keep the frame and activity.
+  obtain ⟨input, started, frameKept, keepsKept, -⟩ := slashingTurn_kept turned
+  have frameTurn := (frame_operationsInput started).toFrame.trans frameKept
   -- The validator keeps its key at the turn.
   have prefixTurn : validatorKeys x.state <+: validatorKeys turn :=
     ((validatorKeys_prefix_and_distinct_of_chainSteps slotsSteps).1.trans
@@ -287,7 +278,7 @@ private theorem attesterSlashing_accepted_of_active {config : Config} {checks : 
     rw [frameTurn.slot]
   have slotsActive := activeKept_of_chainSteps slotsSteps
   have stepActive : ActiveStep advanced turn :=
-    (activeStep_operationsInput started).trans (keptProposed.keeps.2.trans keptTurn.keeps.2)
+    (activeStep_operationsInput started).trans keepsKept.2
   have activeTurn : isActiveAt turn (getCurrentEpoch x.state) i = true := by
     rw [stepActive.2 _ (epochAdvanced ▸ getCurrentEpoch_le_activityFixedEpoch advanced),
       slotsActive _ (getCurrentEpoch_le_activityFixedEpoch x.state)]
@@ -360,11 +351,13 @@ The slashing succeeds there, or the validator is already slashed there.
 
 Both cases hold under that inclusion and that success; nothing is said when either fails.
 
+The signatures and the states that read each vote are assumptions, not facts of the run.
+
 The pair is a double or surround vote.
 
 Each vote is read at a state of a run from the genesis at the fork of `x`.
 
-That suffices but is not necessary.
+Reading each vote at the fork of `x` suffices but is not necessary.
 
 A slashing at the next fork can still read a vote whose target is before that fork's epoch.
 

@@ -1808,13 +1808,13 @@ def OperationsInput (config : Config) (checks : SignatureChecks) {fork : Fork}
 
 /-- A state that a block reaches when the steps before its attester slashing at a position succeed.
 
-Those steps are the ones before its operations, its proposer slashings and its earlier ones.
+Those steps are the ones before its operations, its proposer slashings and earlier attester ones.
 
 It holds only when those steps succeed, and it does not read the count checks of the operations.
 
 The block need not have an attester slashing at the position.
 
-When it has as many or fewer than the position, the folds run all of them. -/
+When it has at most that many attester slashings, that fold runs all of them. -/
 def SlashingTurn (config : Config) (checks : SignatureChecks) {fork : Fork}
     (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
     (block : BeaconBlock preset fork) (j : Nat) (turn : BeaconState preset fork) : Prop :=

@@ -7,7 +7,7 @@ public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadBlock
 public import EthLib.Consensus.Proofs.Transition.Totality.ShapeBlock
 public import EthLib.Consensus.Proofs.Transition.Totality.SlashedBlock
 public import EthLib.Consensus.Proofs.Transition.Totality.SupplyBlock
-import EthLib.Consensus.Proofs.Transition.BlockCredits
+import EthLib.Consensus.Proofs.Transition.BalanceNotRaisedBlock
 import EthLib.Consensus.Proofs.Transition.Totality.SlashValidator
 
 /-!
@@ -660,21 +660,14 @@ theorem slashValidator_ok_of_block [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.to
   obtain ⟨sizeTurn, effectiveTurn, slashedTurn⟩ :=
     slashingTurn_slashed_le advancedHolds.shaped.capped turned
   have supplyTurn := slashingTurn_supply_le turned
-  obtain ⟨input, proposed, started, proposersOk, attestersOk⟩ := id turned
-  rw [← Array.foldlM_toList] at proposersOk
-  have keptProposed : BlockCredits.Kept input proposed := BlockCredits.Kept.foldlM
-    (fun _ _ _ ok => BlockCredits.Kept.of_processProposerSlashing ok) proposersOk
-  have keptTurn : BlockCredits.Kept proposed turn := BlockCredits.Kept.foldlM
-    (fun _ _ _ ok => BlockCredits.Kept.of_processAttesterSlashing ok) attestersOk
+  obtain ⟨input, started, frameKept, -, proposerKept⟩ := slashingTurn_kept turned
   have frameInput := frame_operationsInput started
-  have turnSlot : turn.slot = advanced.slot :=
-    keptTurn.frame.slot.trans (keptProposed.frame.slot.trans frameInput.slot)
+  have turnSlot : turn.slot = advanced.slot := frameKept.slot.trans frameInput.slot
   have epochTurn : getCurrentEpoch turn = getCurrentEpoch advanced := by
     unfold getCurrentEpoch
     rw [turnSlot]
-  have balancesMatch : BalancesMatch turn := keptTurn.frame.balancesMatch
-    (keptProposed.frame.balancesMatch
-      (frameInput.balancesMatch advancedHolds.invariant.balancesMatch))
+  have balancesMatch : BalancesMatch turn :=
+    frameKept.balancesMatch (frameInput.balancesMatch advancedHolds.invariant.balancesMatch)
   -- The validator keeps its effective balance, within the largest cap and the budget.
   let validator := turn.validators.data[index.toNat]
   have found : getValidator turn index = .ok validator :=
@@ -761,13 +754,13 @@ theorem slashValidator_ok_of_block [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.to
   have proposerRegistered : block.proposerIndex.toNat < turn.validators.data.size :=
     Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp (getValidator_eq_ok_iff.mp proposerFound)).1
       ((frame_processBlockHeader headerOk).registryGrows.trans <| growsExecuted.trans <|
-        (frame_processRandao randaoOk).registryGrows.trans <| growsInput.trans <|
-          keptProposed.frame.registryGrows.trans keptTurn.frame.registryGrows)
+        (frame_processRandao randaoOk).registryGrows.trans <| growsInput.trans
+          frameKept.registryGrows)
   have proposerInside : block.proposerIndex.toNat < turn.balances.data.size := by
     rw [balancesMatch]
     exact proposerRegistered
   have turnProposer : getBeaconProposerIndex turn = .ok block.proposerIndex := by
-    rw [keptTurn.proposer, keptProposed.proposer]
+    rw [proposerKept]
     exact (operationsInput_proposer conditions.run.apart started).1
   -- The balances at the turn are within the budget.
   have supplyEq : (start.afterBlocks step (blocks + 1)).supply =

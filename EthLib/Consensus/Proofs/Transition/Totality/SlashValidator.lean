@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.Mutators
-import EthLib.Consensus.Proofs.Transition.BalanceDrift
+public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 
 /-!
 # Proofs: when slashing one validator succeeds
@@ -15,6 +15,8 @@ Each of those steps can fail on checked arithmetic or on a read outside the regi
 The room here excludes each failure, with the proposer as whistleblower.
 
 It is enough for slashing to succeed; it is not the least room that slashing needs.
+
+The slashings of a block before an attester slashing keep the frame, activity and the proposer.
 -/
 
 @[expose] public section
@@ -193,5 +195,39 @@ theorem slashValidator_ok_of_room {config : Config} {state : BeaconState preset 
   simp only [slashValidator, exitOk, currentOk, liftArith, windowOk, markedOk, amountOk',
     totalOk, slashingsOk, loweredOk, proposerLowered, shareOk, raisedOk, Option.getD_none, lastOk,
     bind, Except.bind, pure, Except.pure, Except.mapError, penalty, reward]
+
+/-- The steps from the operations of a block to the turn of an attester slashing keep three things.
+
+They keep the frame, activity and the proposer read, which may fail on both states.
+
+The turn is the state that the steps before that attester slashing reach. -/
+theorem slashingTurn_kept {config : Config} {checks : SignatureChecks}
+    {engine : ExecutionEngine preset fork} {state turn : BeaconState preset fork}
+    {block : BeaconBlock preset fork} {j : Nat}
+    (turned : SlashingTurn config checks engine state block j turn) :
+    ∃ input, OperationsInput config checks engine state block input ∧ Frame input turn ∧
+      StepKeeps input turn ∧ getBeaconProposerIndex turn = getBeaconProposerIndex input := by
+  obtain ⟨input, proposed, started, proposersOk, attestersOk⟩ := turned
+  rw [← Array.foldlM_toList] at proposersOk
+  -- Each slashing keeps the frame, the payload inputs, activity and the effective balances.
+  let Keeps (a b : BeaconState preset fork) : Prop :=
+    Frame a b ∧ PayloadInputs a b ∧ StepKeeps a b ∧ EffectiveKept a b
+  have trans {a b c : BeaconState preset fork} (one : Keeps a b) (two : Keeps b c) : Keeps a c :=
+    ⟨one.1.trans two.1, one.2.1.trans two.2.1, one.2.2.1.trans two.2.2.1,
+      effectiveKept_trans one.2.2.2 two.2.2.2 one.2.2.1.1⟩
+  have proposedKeeps : Keeps input proposed :=
+    foldlM_ok_invariant (Keeps input) (fun _ _ _ before ok => trans before
+      ⟨(frame_processProposerSlashing ok).toFrame, payloadInputs_processProposerSlashing ok,
+        stepKeeps_processProposerSlashing ok, effectiveKept_proposerSlashing ok⟩)
+      ⟨Frame.refl input, PayloadInputs.refl input, StepKeeps.refl input, effectiveKept_refl input⟩
+      proposersOk
+  have turnKeeps : Keeps input turn :=
+    foldlM_ok_invariant (Keeps input) (fun _ _ _ before ok => trans before
+      ⟨(frame_processAttesterSlashing ok).toFrame, payloadInputs_processAttesterSlashing ok,
+        stepKeeps_processAttesterSlashing ok, effectiveKept_attesterSlashing ok⟩)
+      proposedKeeps attestersOk
+  -- Those four things fix the proposer.
+  exact ⟨input, started, turnKeeps.1, turnKeeps.2.2.1,
+    getBeaconProposerIndex_of_kept turnKeeps.2.2.1 turnKeeps.2.1 turnKeeps.2.2.2⟩
 
 end EthLib.Consensus

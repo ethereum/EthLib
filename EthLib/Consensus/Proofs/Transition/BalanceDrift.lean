@@ -2226,7 +2226,7 @@ variable {fork : Fork}
 /-- A state reads the same proposer as an earlier state when it keeps four things of it.
 
 These are the slot, the payload inputs, activity and effective balances. -/
-private theorem getBeaconProposerIndex_of_kept {r w : BeaconState preset fork}
+theorem getBeaconProposerIndex_of_kept {r w : BeaconState preset fork}
     (keeps : StepKeeps r w) (inputs : PayloadInputs r w) (effective : EffectiveKept r w) :
     getBeaconProposerIndex w = getBeaconProposerIndex r := by
   apply getBeaconProposerIndex_congr inputs.slot inputs.randaoMixes

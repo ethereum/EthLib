@@ -678,7 +678,7 @@ The increment is positive, and at most the least churn and the largest churn.
 
 A bound covers the first epoch of a new exit, the end of the exit queue and each set exit epoch.
 
-The churn carried plus three churn bounds fits in 64 bits.
+The churn carried plus three times the exit churn ceiling is below `2^64`.
 
 The bound plus the cost still owed plus the withdrawal delay is below `2^64 - 1`. -/
 theorem initiateValidatorExit_total_of_electra {config : Config}

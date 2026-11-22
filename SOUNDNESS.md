@@ -5009,19 +5009,23 @@ Slashing can fail on checked arithmetic (exit queue, withdrawable epoch, slashin
 `slashValidator_ok_of_block` (`Consensus/Proofs/Transition/Totality/ChainBlock.lean`) derives that room inside a block and returns the success of slashing.
 The facts of a chain hold before the slots that lead to the block, and the block is within limits that a block step covers.
 The steps before an attester slashing of the block that names at least one validator succeed (`SlashingTurn`).
-That entry then supplies the budget of one name; the theorem says nothing about the rest of the block, and does not record the count checks of the operations.
+That attester slashing then supplies the budget of one name; the theorem says nothing about the rest of the block, and does not record the count checks of the operations.
 It takes the hypotheses of `ChainHolds.of_stateTransitionAcross` except the inclusion delay.
 The success of the slots and of the steps before the slashing replaces the success of the whole block.
 It also takes a nonzero length of the slashings vector, which no fact of a chain gives.
 `signedConflict_attesterSlashing_accepted_at` (`DirectSafety/Includable.lean`) puts the two together for a key active at a state `x` of a run from a genesis of deposits, at which the facts of a chain hold.
 Take a pair of votes (`VotePairAt`), each read at a state of a run from the genesis at the fork of `x`, with a signature on each signing root that verifies for the key alone.
-It names a validator of `x` with that key, chosen before the block.
+The theorem takes these signatures and reading states as arguments; `SignedConflict` does not supply them, since it carries a relation of signatures, not the signatures themselves.
+The theorem names a validator of `x` with that key, chosen before the block.
 Take any block within the limits, applied at `x` at a later slot in the epoch of `x`, whose body holds the slashing of that validator by those votes at a position.
 If the steps before that slashing succeed, then at the state they reach the validator still has the key.
 The slashing succeeds there, or the validator is already slashed there.
 It is conditional on that inclusion; it does not show that a proposer includes the slashing, or that the block passes its other checks.
+The conclusion is that the operation succeeds; it does not state that the validator is slashed in the state after it.
+The block must be at a later slot in the epoch of `x`, so the theorem does not cover a block at the first slot of an epoch, or a block whose parent state is in an earlier epoch.
+The key must be active at `x`; the theorem does not cover a validator that has exited but is not yet withdrawable, which the protocol can still slash.
 The same fork suffices but is not necessary.
-A slashing at the next fork can still read a vote whose target is before that fork's epoch, under the previous version; no block-turn acceptance theorem states that case.
+A slashing at the next fork can still read a vote whose target is before that fork's epoch, under the previous version; no theorem states acceptance at the turn in that case.
 The pairs of headers are left out: they arise only from a proposer slashing that a tail already processed, so that run already slashed the key.
 The relation of signatures is an argument; the theorems say who signed only when it is the relation of real signatures.
 

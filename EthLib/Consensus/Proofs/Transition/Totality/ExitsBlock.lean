@@ -987,7 +987,7 @@ private theorem moves_parentPayload (rates : Rates preset config)
     builders.moves.trans <| exits.moves.trans last.moves
   exact whole.mono (by omega)
 
-/-- The proposer slashings of a body, then attester slashings, keep the bounds for free. -/
+/-- The proposer slashings of a body, then attester slashings, keep the bounds and spend nothing. -/
 private theorem moves_slashings (rates : Rates preset config) {body : BeaconBlockBody preset fork}
     {attesters : List (AttesterSlashing preset fork)} {a proposed b : BeaconState preset fork}
     (proposersOk : body.proposerSlashings.data.toList.foldlM (processProposerSlashing config checks)
@@ -1281,7 +1281,7 @@ From Gloas it also adds the cost of the withdrawal requests of the parent payloa
 
 From Electra the churn carried for exits is at most one of two bounds, whichever is larger.
 
-They are the churn before the block and one churn bound. -/
+They are the churn before the block and the exit churn ceiling of the turn. -/
 theorem slashingTurn_exits {engine : ExecutionEngine preset fork}
     {state turn : BeaconState preset fork} {block : BeaconBlock preset fork} {j : Nat}
     (turned : SlashingTurn config checks engine state block j turn)
