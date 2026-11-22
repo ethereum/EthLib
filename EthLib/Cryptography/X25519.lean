@@ -34,7 +34,9 @@ abbrev Key := Vector UInt8 32
 
 /-- Clear the three low bits and high bit, and set bit 254, RFC 7748 §5. -/
 def decodeScalar (key : Key) : Nat :=
-  -- `k_list[0] &= 248`, `k_list[31] &= 127`, `k_list[31] |= 64`, then decode little-endian.
+  -- Clear the three low bits of byte 0 and bit 7 of byte 31, and set bit 6 of byte 31.
+  --
+  -- Then decode the 32 bytes in little-endian order.
   bytesToUint (Vector.ofFn fun i : Fin 32 =>
     if i.val = 0 then key[i] &&& 248
     else if i.val = 31 then (key[i] &&& 127) ||| 64
@@ -42,7 +44,9 @@ def decodeScalar (key : Key) : Nat :=
 
 /-- Mask bit 255, then reduce even a noncanonical coordinate, RFC 7748 §5. -/
 def decodeUCoordinate (u : Key) : Fp :=
-  -- `u_list[-1] &= (1<<(bits%8))-1`, which is `127` for `bits = 255`, then little-endian.
+  -- Keep the low `bits mod 8 = 7` bits of the last byte, with `bits = 255`.
+  --
+  -- Then decode the 32 bytes in little-endian order.
   --
   -- §5 asks to accept a non-canonical value as if reduced modulo `p`, so it is reduced here.
   Fin.ofNat modulus (bytesToUint (Vector.ofFn fun i : Fin 32 =>
@@ -50,7 +54,9 @@ def decodeUCoordinate (u : Key) : Fp :=
 
 /-- Encode a reduced coordinate as 32 little-endian bytes, RFC 7748 §5. -/
 def encodeUCoordinate (u : Fp) : Key :=
-  -- `u = u % p`, then 32 bytes in little-endian order; the element is already below `p`.
+  -- Reduce `u` modulo `p`, then write 32 bytes in little-endian order.
+  --
+  -- The element is already below `p`.
   uintToBytes 32 u.val
 
 /-- The two projective points of the ladder and its pending swap, RFC 7748 §5. -/
@@ -70,7 +76,7 @@ def conditionalSwap (swap : Bool) (s : LadderState) : LadderState :=
 
 /-- One differential addition and doubling step, RFC 7748 §5. -/
 def ladderStep (u : Fp) (bit : Bool) (state : LadderState) : LadderState :=
-  -- `swap ^= k_t`, the conditional swap, then `swap = k_t`.
+  -- The conditional swap on `swap XOR k_t`, then `swap = k_t`.
   let s := conditionalSwap (state.swap != bit) state
   -- `A = x_2 + z_2`, `AA = A^2`, `B = x_2 - z_2`, `BB = B^2`, `E = AA - BB`.
   let a := s.x2 + s.z2
@@ -93,7 +99,9 @@ def ladderStep (u : Fp) (bit : Bool) (state : LadderState) : LadderState :=
 def ladder (scalar : Nat) (u : Fp) : LadderState :=
   -- `x_1 = u`, `x_2 = 1`, `z_2 = 0`, `x_3 = u`, `z_3 = 1`, `swap = 0`.
   --
-  -- `For t = bits-1 down to 0`, with `bits = 255` and `k_t = (k >> t) & 1`.
+  -- One step for each `t` from `bits - 1` down to `0`, with `bits = 255`.
+  --
+  -- `k_t` is bit `t` of `k`.
   (List.range 255).foldl (fun s i =>
     ladderStep u (scalar.testBit (254 - i)) s) ⟨1, 0, u, 1, false⟩
 
@@ -107,7 +115,7 @@ def x25519 (scalar u : Key) : Key :=
   let state := ladder (decodeScalar scalar) (decodeUCoordinate u)
   -- The final conditional swap.
   let s := conditionalSwap state.swap state
-  -- `Return x_2 * (z_2^(p - 2))`, encoded as 32 bytes.
+  -- The result is `x_2 * (z_2^(p - 2))`, encoded as 32 bytes.
   encodeUCoordinate (Fin.ofNat modulus
     (s.x2.val * Nat.powMod s.z2.val (modulus - 2) modulus))
 

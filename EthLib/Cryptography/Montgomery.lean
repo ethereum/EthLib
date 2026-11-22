@@ -292,7 +292,7 @@ instance : Words 0 where
   mac _ _ _ c _ := ((), c)
   -- CIOS: `(C,S) := t[s] + C`, `t[s-1] := S`, `t[s] := t[s+1] + C`.
   --
-  -- Here `top` holds `t[s]` and `t[s+1]`.
+  -- Here the word above the others holds `t[s]` and `t[s+1]`.
   sh _ _ _ c _ top := let x := top + c; ((x &&& 0xFFFFFFFF, ()), x >>> 32)
   red _ _ _ top := ((), top >>> 32)
   subb _ _ br _ := ((), br)
@@ -327,7 +327,9 @@ variable {n : Nat} [inst : Words n]
 /-- `t + a b + c` on `n + 1` words: the low word, then the words above it. -/
 @[inline] def macS (t : UInt64 × inst.W) (a : Nat → UInt64) (b c : UInt64) (k : Nat) :
     (UInt64 × inst.W) × UInt64 :=
-  -- CIOS, the multiplication loop `for j=0 to s-1`: `(C,S) := t[j] + a[j]*b[i] + C`, `t[j] := S`.
+  -- CIOS, the multiplication loop over `j` from `0` to `s - 1`: `(C,S) := t[j] + a[j]*b[i] + C`.
+  --
+  -- Then `t[j] := S`.
   let x := mac t.1 (a k) b c
   -- The next words take the carry `C`.
   let r := Words.mac t.2 a b x.2 (k + 1)
@@ -349,7 +351,9 @@ variable {n : Nat} [inst : Words n]
   --
   -- The low word of the sum is `0`, so only its carry goes on.
   let x := mac t.1 m (p 0) 0
-  -- `for j=1 to s-1`: `(C,S) := t[j] + m*n[j] + C`, `t[j-1] := S`, then the top words.
+  -- The loop over `j` from `1` to `s - 1`: `(C,S) := t[j] + m*n[j] + C`, `t[j-1] := S`.
+  --
+  -- Then the top words.
   Words.sh t.2 p m x.2 1 top
 
 /-- `t - p - br` on `n + 1` words: the low word, then the others and the borrow. -/
@@ -567,13 +571,13 @@ private theorem low_zero {m x y z : Nat} (hm : m = x * y % 2 ^ 32)
 `m` is the multiple of `p` that makes the low word of the sum zero. -/
 @[inline] def step (p : Nat → UInt64) (pinv : UInt64) (a b : Nat → UInt64) (i : Nat)
     (st : Words.W n × UInt64) : Words.W n × UInt64 :=
-  -- CIOS, the multiplication loop `for j=0 to s-1`, with `C := 0` first.
+  -- CIOS, the multiplication loop over `j` from `0` to `s - 1`, with `C := 0` first.
   --
   -- The paper's modulus `n` is `p` here.
   let r := Words.mac st.1 a (b i) 0 0
   -- `m := t[0]*n'[0] mod W`, with `W = 2^32` and `n'[0] = -p^(-1) mod W`.
   let m := (Words.word r.1 0 * pinv) &&& 0xFFFFFFFF
-  -- `(C,S) := t[s] + C`, `t[s] := S`, `t[s+1] := C` is the sum `st.2 + r.2`, one 64-bit word.
+  -- `(C,S) := t[s] + C`, `t[s] := S`, `t[s+1] := C` is one 64-bit sum: the top word plus the carry.
   --
   -- The reduction loop follows, with the shift by one word integrated, as the paper improves it.
   Words.red r.1 p m (st.2 + r.2)
@@ -648,7 +652,7 @@ theorem step_spec {p : Nat → UInt64} {pinv : UInt64} (hp : Fits n p 0)
 /-- `x - p` when `x ≥ p`, else `x`, for `x < 2 p` given as words and the word above them. -/
 @[inline] def reduce (p : Nat → UInt64) (t : Words.W n) (top : UInt64) {β : Type}
     (out : Words.W n → β) : β :=
-  -- Step 3 of the paper: `if u >= n then return u - n else return u`.
+  -- Step 3 of the paper: the result is `u - n` when `u >= n`, and `u` otherwise.
   let d := Words.subb t p 0 0
   -- The borrow exceeds the top word exactly when `x < p`.
   if top < d.2 then out t else out d.1
@@ -697,7 +701,7 @@ theorem reduce_spec {p : Nat → UInt64} (hp : Fits n p 0) {t : Words.W n} {top 
 /-- The CIOS product `a b 2 ^ (-32 n)` mod `p`, reduced, given to `out`. -/
 @[inline] def mulWords (p : Nat → UInt64) (pinv : UInt64) (a b : Nat → UInt64) {β : Type}
     (out : Words.W n → β) : β :=
-  -- CIOS: `for i=0 to s-1`, with the array `t` set to `0` first.
+  -- CIOS: one step for each `i` from `0` to `s - 1`, with the array `t` set to `0` first.
   let st := Words.fold (n := n) (step p pinv a b) 0 (Words.zero, 0)
   -- The result is the first `s + 1` words of `t`, below `2 p`, then one subtraction.
   reduce p st.1 st.2 out
