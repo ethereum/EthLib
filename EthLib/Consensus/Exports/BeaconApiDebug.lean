@@ -24,7 +24,7 @@ An unknown name or fork, or an input that does not decode, has code 0.
 namespace EthLib.Consensus.Exports
 
 open Lean Base
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport toResult)
 
 /-- An optimistic store with the blocks of a store and the roots not yet verified. -/
 def optimisticWithBlocks {preset : Preset} {fork : Fork} (store : Store preset fork)
@@ -36,7 +36,7 @@ def apiForkChoiceOf (args : StoreCaseArgs (List Root × Option PyValue)) : Resul
   let (name, fork, anchorState, anchorBlock, steps, verify, roots, replacements) := args
   let ⟨_, _, config, store⟩ ←
     storeOfCaseWith (name, fork, anchorState, anchorBlock, steps, verify) replacements
-  let envelope ← apiError
+  let envelope ← toResult none
     (BeaconApi.forkChoiceResponse config store (optimisticWithBlocks store roots))
   return PyValue.ofJson envelope.toJson
 
@@ -53,7 +53,7 @@ def apiChainHeadsOf (args : StoreCaseArgs (List Root × Option PyValue)) : Resul
   let (name, fork, anchorState, anchorBlock, steps, verify, roots, replacements) := args
   let ⟨_, _, _, store⟩ ←
     storeOfCaseWith (name, fork, anchorState, anchorBlock, steps, verify) replacements
-  let envelope ← apiError
+  let envelope ← toResult none
     (BeaconApi.chainHeadsResponse store (optimisticWithBlocks store roots))
   return PyValue.ofJson envelope.toJson
 

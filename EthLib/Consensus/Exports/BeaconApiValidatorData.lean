@@ -23,7 +23,7 @@ An unknown name or fork, or an input that does not decode, has code 0.
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport toResult)
 
 /-- An optimistic store that knows only which roots are not yet verified. -/
 def optimisticOf {preset : Preset} {fork : Fork} (roots : List Root) :
@@ -35,7 +35,7 @@ def apiAttestationDataOf (args : StoreCaseArgs (List Root × UInt64 × UInt64)) 
     Result PyValue := do
   let (name, fork, anchorState, anchorBlock, steps, verify, roots, slot, committeeIndex) := args
   let ⟨_, _, config, store⟩ ← storeOfCase (name, fork, anchorState, anchorBlock, steps, verify)
-  let envelope ← apiError (BeaconApi.attestationDataResponse config store (optimisticOf roots)
+  let envelope ← toResult none (BeaconApi.attestationDataResponse config store (optimisticOf roots)
     slot committeeIndex)
   return PyValue.ofJson envelope.toJson
 
@@ -53,8 +53,8 @@ def apiPayloadAttestationDataOf (args : StoreCaseArgs (UInt64 × Bool × Bool)) 
     Result PyValue := do
   let (name, fork, anchorState, anchorBlock, steps, verify, slot, present, available) := args
   let ⟨_, _, config, store⟩ ← storeOfCase (name, fork, anchorState, anchorBlock, steps, verify)
-  match ← apiError (BeaconApi.payloadAttestationDataResponse config store slot present available)
-  with
+  match ← toResult none
+      (BeaconApi.payloadAttestationDataResponse config store slot present available) with
   | none => return .none
   | some envelope => return PyValue.ofJson envelope.toJson
 
@@ -75,7 +75,7 @@ def apiAggregateAttestationOf (args : String × String × ByteArray × List Byte
   let state ← decodeInput (BeaconState preset fork) state
   let attestations ← attestations.mapM (decodeInput (Attestation preset fork))
   let singles ← singles.mapM (decodeInput SingleAttestation)
-  let envelope ← apiError (BeaconApi.aggregateAttestationResponse state (optimisticOf roots)
+  let envelope ← toResult none (BeaconApi.aggregateAttestationResponse state (optimisticOf roots)
     attestations singles dataRoot slot committeeIndex)
   return PyValue.ofJson envelope.toJson
 
@@ -97,8 +97,9 @@ def apiSyncCommitteeContributionOf (args : String × String × ByteArray × List
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let state ← decodeInput (BeaconState preset fork) state
   let messages ← messages.mapM (decodeInput SyncCommitteeMessage)
-  let envelope ← apiError (BeaconApi.syncCommitteeContributionResponse state (optimisticOf roots)
-    messages slot subcommitteeIndex root)
+  let envelope ← toResult none
+    (BeaconApi.syncCommitteeContributionResponse state (optimisticOf roots) messages slot
+      subcommitteeIndex root)
   return PyValue.ofJson envelope.toJson
 
 /-- The JSON response of the contribution endpoint, as a `dict`.

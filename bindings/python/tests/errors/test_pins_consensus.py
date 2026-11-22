@@ -32,6 +32,16 @@ STATE = phase0_state(1)
 # A phase0 beacon block of zero fields, as SSZ bytes: 84 bytes of fixed fields, then the body.
 BLOCK = bytes(80) + (84).to_bytes(4, "little") + bytes(200) + (220).to_bytes(4, "little") * 5
 
+# The same block, signed: the offset of the block, then a signature of 96 zero bytes.
+SIGNED_BLOCK = (100).to_bytes(4, "little") + bytes(96) + BLOCK
+
+# An EIP-3076 interchange of version 5 with a zero genesis validators root and no data.
+INTERCHANGE = (
+    b'{"metadata":{"interchange_format_version":"5","genesis_validators_root":"0x'
+    + b"00" * 32
+    + b'"},"data":[]}'
+)
+
 # An export turns the typed error of an operation into a code and a message.
 # Each case pins one way of doing so, with the code and the message that Python sees.
 
@@ -578,6 +588,303 @@ BLOCK = bytes(80) + (84).to_bytes(4, "little") + bytes(200) + (220).to_bytes(4, 
             "input rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 356 0",
             lambda: consensus.verify_data_column_sidecar_kzg_proofs("minimal", "fusaka", b"", b""),
             id="column-input",
+        ),
+        # No container has the name Nope.
+        pytest.param(
+            SszError,
+            0,
+            "no container Nope at phase0",
+            lambda: consensus.api_json("mainnet", "phase0", "Nope", b""),
+            id="api-json-container",
+        ),
+        # No container has the name Nope.
+        pytest.param(
+            SszError,
+            0,
+            "no container Nope at phase0",
+            lambda: consensus.api_ssz("mainnet", "phase0", "Nope", {}),
+            id="api-ssz-container",
+        ),
+        # No state query has the name nope.
+        pytest.param(
+            ConsensusError,
+            0,
+            "no state query is named nope",
+            lambda: consensus.api_state_query("mainnet", "phase0", STATE, "nope", None),
+            id="api-state-query-name",
+        ),
+        # Only the RANDAO mix takes an epoch.
+        pytest.param(
+            ConsensusError,
+            0,
+            "the query root takes no epoch",
+            lambda: consensus.api_state_query("mainnet", "phase0", STATE, "root", 1),
+            id="api-state-query-epoch",
+        ),
+        # Pending deposits start at Electra.
+        pytest.param(
+            ConsensusError,
+            400,
+            "pending_deposits is not in a state before electra",
+            lambda: consensus.api_state_query("mainnet", "phase0", STATE, "pending_deposits", None),
+            id="api-state-query-fork",
+        ),
+        # The root of a state has no SSZ body.
+        pytest.param(
+            ConsensusError,
+            0,
+            "the query root has no SSZ body",
+            lambda: consensus.api_state_query_ssz("mainnet", "phase0", STATE, "root"),
+            id="api-state-query-ssz",
+        ),
+        # No block query has the name nope.
+        pytest.param(
+            ConsensusError,
+            0,
+            "no block query is named nope",
+            lambda: consensus.api_block_query("mainnet", "phase0", SIGNED_BLOCK, "nope"),
+            id="api-block-query-name",
+        ),
+        # No block query with an SSZ body has the name nope.
+        pytest.param(
+            ConsensusError,
+            0,
+            "no block query with an SSZ body is named nope",
+            lambda: consensus.api_block_query_ssz("mainnet", "phase0", SIGNED_BLOCK, "nope"),
+            id="api-block-query-ssz-name",
+        ),
+        # No registry query has the name nope.
+        pytest.param(
+            ConsensusError,
+            0,
+            "no registry query is named nope",
+            lambda: consensus.api_registry_query("mainnet", "phase0", STATE, "nope"),
+            id="api-registry-name",
+        ),
+        # The balances take no filter of statuses.
+        pytest.param(
+            ConsensusError,
+            0,
+            "the query validator_balances takes no statuses",
+            lambda: consensus.api_registry_query(
+                "mainnet", "phase0", STATE, "validator_balances", statuses=["active"]
+            ),
+            id="api-registry-argument",
+        ),
+        # One validator is named by exactly one identifier.
+        pytest.param(
+            ConsensusError,
+            0,
+            "the query validator takes exactly one identifier",
+            lambda: consensus.api_registry_query("mainnet", "phase0", STATE, "validator", ids=[]),
+            id="api-registry-identifier",
+        ),
+        # No validator identifier is x.
+        pytest.param(
+            ConsensusError,
+            400,
+            "Invalid validator ID: x",
+            lambda: consensus.api_registry_query(
+                "mainnet", "phase0", STATE, "validators", ids=["x"]
+            ),
+            id="api-registry-id",
+        ),
+        # No duties have the name nope.
+        pytest.param(
+            ConsensusError,
+            0,
+            "no duties are named nope",
+            lambda: consensus.api_duties("mainnet", "phase0", STATE, "nope", 0, bytes(32)),
+            id="api-duties-name",
+        ),
+        # The latest update is of finality or optimistic kind, not nope.
+        pytest.param(
+            ConsensusError,
+            0,
+            "no latest update is of kind nope",
+            lambda: consensus.api_light_client_latest("minimal", "altair", "nope", None),  # ty: ignore[invalid-argument-type]
+            id="api-light-client-latest",
+        ),
+        # A chunk starts with 8 bytes, and the input has 1.
+        pytest.param(
+            ConsensusError,
+            0,
+            "chunk rejected: EthLib.Consensus.BeaconApi.ChunkError.truncated 0 8 1",
+            lambda: consensus.api_light_client_decode_updates("minimal", bytes(32), b"\x00"),
+            id="api-light-client-chunk",
+        ),
+        # Builders start at Gloas.
+        pytest.param(
+            ConsensusError,
+            0,
+            "no builder before gloas, at phase0",
+            lambda: consensus.api_builder_status("mainnet", "phase0", STATE, 0),
+            id="api-builder-status-fork",
+        ),
+        # Epoch 1000 is after the next epoch of a state at slot 1.
+        pytest.param(
+            ConsensusError,
+            400,
+            "Epoch 1000 is after the next epoch",
+            lambda: consensus.api_committees("mainnet", "phase0", STATE, epoch=1000),
+            id="api-committees",
+        ),
+        # No validator identifier is x.
+        pytest.param(
+            ConsensusError,
+            400,
+            "Invalid validator ID: x",
+            lambda: consensus.api_attestation_rewards("mainnet", "phase0", STATE, 0, ids=["x"]),
+            id="api-rewards-id",
+        ),
+        # The Builder API serves Bellatrix to Fulu.
+        pytest.param(
+            SszError,
+            0,
+            "no Builder API messages at phase0",
+            lambda: consensus.is_valid_builder_signature("mainnet", "phase0", "Nope", b""),
+            id="builder-fork",
+        ),
+        # No signed message of the Builder API has the name Nope.
+        pytest.param(
+            SszError,
+            0,
+            "no signed message Nope in the Builder API",
+            lambda: consensus.is_valid_builder_signature("mainnet", "bellatrix", "Nope", b""),
+            id="builder-message",
+        ),
+        # The empty input is no beacon state.
+        pytest.param(
+            TransitionError,
+            0,
+            "state rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 2736633 0",
+            lambda: consensus.is_eligible_for_bid(
+                "mainnet", "bellatrix", b"", [], 0, bytes(32), bytes(48)
+            ),
+            id="builder-decode",
+        ),
+        # Bids of the execution payload start at Gloas.
+        pytest.param(
+            TransitionError,
+            0,
+            "no Gloas bids at bellatrix",
+            lambda: consensus.validate_bid("mainnet", "bellatrix", b"", b"", 0, b"", bytes(20)),
+            id="builder-gloas-fork",
+        ),
+        # The Builder API serves Bellatrix to Fulu.
+        pytest.param(
+            SszError,
+            0,
+            "no Builder API version at phase0",
+            lambda: consensus.builder_api_json("mainnet", "phase0", "Nope", b""),
+            id="builder-version",
+        ),
+        # A body is an object, not a number.
+        pytest.param(
+            SszError,
+            0,
+            "body rejected: not an object",
+            lambda: consensus.builder_api_ssz("mainnet", "bellatrix", "SignedBuilderBid", 5),
+            id="builder-body-object",
+        ),
+        # A body holds its data.
+        pytest.param(
+            SszError,
+            0,
+            "body rejected: no data",
+            lambda: consensus.builder_api_ssz(
+                "mainnet", "bellatrix", "SignedBuilderBid", {"version": "bellatrix"}
+            ),
+            id="builder-body-data",
+        ),
+        # A body names its version.
+        pytest.param(
+            SszError,
+            0,
+            "body rejected: version absent, expected bellatrix",
+            lambda: consensus.builder_api_ssz(
+                "mainnet", "bellatrix", "SignedBuilderBid", {"data": {}}
+            ),
+            id="builder-body-version",
+        ),
+        # The optimistic flag holds a boolean, not a number.
+        pytest.param(
+            SszError,
+            0,
+            "body rejected: malformed execution_optimistic",
+            lambda: consensus.builder_api_ssz(
+                "mainnet",
+                "bellatrix",
+                "SignedBuilderBid",
+                {"version": "bellatrix", "data": {}, "execution_optimistic": 5},
+            ),
+            id="builder-body-field",
+        ),
+        # The data of a signed builder bid is an object, not a number.
+        pytest.param(
+            SszError,
+            74,
+            "document rejected: EthLib.Serialization.Ssz.Err.structNotAnObject",
+            lambda: consensus.builder_api_ssz(
+                "mainnet", "bellatrix", "SignedBuilderBid", {"version": "bellatrix", "data": 5}
+            ),
+            id="builder-body-document",
+        ),
+        # A public key is a hex string, not a number.
+        pytest.param(
+            KeymanagerError,
+            1,
+            "keymanager value rejected with code 1",
+            lambda: consensus.keymanager_json("Pubkey", 5),
+            id="keymanager-value",
+        ),
+        # The Relay API serves Bellatrix to Fulu.
+        pytest.param(
+            SszError,
+            0,
+            "no Relay API submissions at phase0",
+            lambda: consensus.relay_submission_bid("mainnet", "phase0", b"", bytes(48)),
+            id="relay-fork",
+        ),
+        # No order has the name nope.
+        pytest.param(
+            SszError,
+            0,
+            "unknown order nope",
+            lambda: consensus.relay_sort_delivered("nope", []),  # ty: ignore[invalid-argument-type]
+            id="relay-order",
+        ),
+        # A secret key is 32 bytes.
+        pytest.param(
+            RemoteSigningError,
+            0,
+            "a secret key is not 32 bytes below the group order, or is zero",
+            lambda: consensus.remote_signer_public_keys([b""]),
+            id="remote-signing-key",
+        ),
+        # The byte 0xff starts no UTF-8 character.
+        pytest.param(
+            SlashingProtectionError,
+            0,
+            "the interchange is not UTF-8",
+            lambda: consensus.read_slashing_interchange(b"\xff"),
+            id="slashing-protection-utf8",
+        ),
+        # The text x is not JSON.
+        pytest.param(
+            SlashingProtectionError,
+            0,
+            "the interchange is not JSON",
+            lambda: consensus.read_slashing_interchange(b"x"),
+            id="slashing-protection-json",
+        ),
+        # A public key is 48 bytes.
+        pytest.param(
+            SlashingProtectionError,
+            0,
+            "the public key is 48 bytes, not 0",
+            lambda: consensus.check_block_signing(INTERCHANGE, b"", 0, bytes(32)),
+            id="slashing-protection-key",
         ),
     ],
 )
