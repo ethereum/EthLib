@@ -12,27 +12,7 @@ The base types of the execution JSON-RPC API that the shared JSON-RPC readers do
 
 They are those of [`base-types.yaml`][types].
 
-A `byte` is one or two lowercase hex digits behind `0x`, so `0x5` and `0x05` are both the byte 5.
-
-Its writer writes the digits of the number, without a leading zero.
-
-A `uint` is a number of any size, written as a quantity is.
-
-A `uint32` and a `uint256` are quantities below `2^32` and `2^256`.
-
-A `uintDecimal` is a number in decimal digits, without `0x` and without leading zeros.
-
 A fixed byte string, such as `bytes4` or `hash32`, has exactly two lowercase digits per byte.
-
-A `bytesMax32` has at most 64 lowercase digits, an odd count and leading zeros included.
-
-A storage slot takes this type, and its digits write a number on 32 bytes.
-
-The value `notFound` is the JSON `null`, which a method answers when it finds nothing.
-
-A `ratio` is a JSON number from 0 to 1.
-
-The source does not fix how many digits it has, so its writer takes that count as a parameter.
 
 [types]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/base-types.yaml
 -/
@@ -47,6 +27,7 @@ open EthLib.Serialization.JsonRpc
 
 /-- A byte: one or two lowercase hex digits, where a leading zero is allowed. -/
 def byte (what : String) (j : Json) : Read UInt8 := do
+  -- The schema: one or two lowercase hex digits behind 0x, so 0x5 and 0x05 are both the byte 5.
   let digits ← hexDigits what j
   if digits.size = 0 ∨ digits.size > 2 then reject s!"{what}: not one or two hex digits" else
   let mut value : UInt8 := 0
@@ -61,14 +42,17 @@ def byteJson (b : UInt8) : Json := quantityJson b.toNat
 
 /-- A 32-bit number. -/
 def uint32 (what : String) (j : Json) : Read UInt32 :=
+  -- The schema: a quantity below `2^32`.
   return (← quantity what 32 j).toUInt32
 
 /-- A 256-bit number. -/
 def uint256 (what : String) (j : Json) : Read U256 :=
+  -- The schema: a quantity below `2^256`.
   return BitVec.ofNat 256 (← quantity what 256 j)
 
 /-- A number in decimal digits, without leading zeros. -/
 def uintDecimal (what : String) : Json → Read Nat
+  -- The schema: decimal digits in a string, without 0x and without leading zeros.
   | .str s => do
     let digits := s.toUTF8
     if digits.size = 0 then reject s!"{what}: no digits" else
@@ -96,6 +80,7 @@ A value of 0 is written `0`.
 
 At 18 places, the writer of numbers would print `0.e-8`, which is not JSON. -/
 def ratioJson (places num den : Nat) : Json :=
+  -- The schema: a number from 0 to 1, with no count of digits, so the count is a parameter.
   let digits := min num den * 10 ^ places / den
   if digits = 0 then .num 0 else .num ⟨(digits : Nat), places⟩
 
@@ -125,6 +110,7 @@ def bytes256 (what : String) (j : Json) : Read (Vector UInt8 256) := fixed what 
 
 /-- A storage slot: at most 64 lowercase hex digits, read as a number on 32 big-endian bytes. -/
 def bytesMax32 (what : String) (j : Json) : Read Bytes32 := do
+  -- The schema: at most 64 lowercase hex digits, an odd count and leading zeros included.
   let digits ← hexDigits what j
   if digits.size > 64 then reject s!"{what}: more than 64 hex digits" else
   let mut value := 0

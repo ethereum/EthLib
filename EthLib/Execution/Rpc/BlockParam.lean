@@ -11,31 +11,9 @@ A query names the block by its number, by a tag, or by its hash.
 
 The schemas are those of [`block.yaml`][block].
 
-The tag `earliest` names the lowest block the node holds, and `latest` the head of its chain.
+A hash or a number may also come in an object of [EIP-1898][eip1898].
 
-The tag `safe` names the most recent block that is safe from reorgs under honest majority.
-
-The tag `finalized` names the most recent block that is final.
-
-The tag `pending` names a block that the node builds on top of `latest`.
-
-A range of blocks takes every tag but `pending`.
-
-A hash may also come in the object of [EIP-1898][eip1898], with a flag that the block be canonical.
-
-That flag is `false` when absent.
-
-A number may come in such an object too.
-
-Both objects forbid other members, and none of their members may be `null`.
-
-The schema for a number, a tag or a hash is an `anyOf`, so a string may match it in two ways.
-
-A string of exactly 64 hex digits whose first digit is not `0` is both a number and a hash.
-
-The official fixtures read such a string as a hash, as in [a balance query by hash][fixture].
-
-So the reader reads a string as a hash first, then as a number, then as a tag.
+A string of 64 hex digits that may be a number reads as a hash, as [a fixture][fixture] shows.
 
 [block]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/block.yaml
 [fixture]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/tests/eth_getBalance/get-balance-blockhash.io
@@ -108,12 +86,14 @@ def blockNumberOrTag (what : String) (j : Json) : Read BlockParam :=
 
 /-- A block number or a tag other than `pending`, the schema `BlockNumberOrTagForRange`. -/
 def blockNumberOrTagForRange (what : String) (j : Json) : Read BlockParam := do
+  -- The schema: a range takes every tag but pending.
   match ← blockNumberOrTag what j with
   | .tag .pending => reject s!"{what}: pending is not a block of a range"
   | p => pure p
 
 /-- The flag `requireCanonical` of an object of EIP-1898: a boolean, `false` when absent. -/
 def requireCanonical (what : String) : Option Json → Read Bool
+  -- EIP-1898: the flag is false when absent.
   | none => pure false
   | some (.bool b) => pure b
   | some _ => reject s!"{what}: requireCanonical is not a boolean"
@@ -125,6 +105,11 @@ A string reads as a hash if it can, else as a number, else as a tag.
 An object is one of the two objects of EIP-1898, with no other member. -/
 def blockNumberOrTagOrHash (what : String) (j : Json) : Read BlockParam :=
   match j with
+  -- The schema is a union, so a string may match it in two ways.
+  --
+  -- A string of exactly 64 hex digits whose first digit is not 0 is both a number and a hash.
+  --
+  -- EthLib reads it as a hash first, as a fixture does, then as a number, then as a tag.
   | .str _ =>
     match hash32 what j, uint what j, blockTag what j with
     | .ok h, _, _ => pure (.hash h false)
@@ -134,9 +119,13 @@ def blockNumberOrTagOrHash (what : String) (j : Json) : Read BlockParam :=
   | .obj kvs => do
     let members := kvs.toList
     match members.lookup "blockNumber", members.lookup "blockHash" with
+    -- EIP-1898: a block number, and the schema allows no other member.
+    --
+    -- The schema allows null for no member of either object.
     | some n, none =>
       unless members.length = 1 do reject s!"{what}: a member other than blockNumber"
       return .number (← uint what n)
+    -- EIP-1898: a block hash and the optional flag, and the schema allows no other member.
     | none, some h =>
       unless members.all fun (k, _) => k == "blockHash" || k == "requireCanonical" do
         reject s!"{what}: a member other than blockHash and requireCanonical"

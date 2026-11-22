@@ -8,29 +8,13 @@ public import EthLib.Execution.Rpc.Base
 
 The header of a block as JSON: the object `Header` of [`block.yaml`][schema].
 
-The object holds the hash of the header and each field of the header, under the names below.
-
-- The ommers hash is `sha3Uncles`, the beneficiary `miner` and the receipts root `receiptsRoot`.
-- The bloom filter is `logsBloom`, and the mix digest, the RANDAO mix from Paris, is `mixHash`.
-- Each other field has its own name, such as `parentHash` or `baseFeePerGas`.
-
-The object allows no other name.
+The object holds the hash of the header and each field of the header, and no other field.
 
 The header methods of [`block.yaml`][methods] say that a field MUST be omitted before its fork.
 
 The schema requires none of the fields from a fork, so they stay optional after their fork too.
 
 Here the object holds a field exactly from its fork on, as the [fixtures][tests] of the source do.
-
-The hash of a header fails when RLP cannot encode a field, so the writer can fail too.
-
-A method writes the object with the hash that the node keeps for the block instead.
-
-The reader reads the fields of the fork, and nothing else that is not `null`.
-
-Like the other readers of objects, it ignores a field whose value is `null`.
-
-It also requires the hash to be the hash of the header that it reads.
 
 [schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/block.yaml
 [methods]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/block.yaml
@@ -71,6 +55,11 @@ def hash32Json (h : Hash32) : Json := dataJson h.toList
 
 /-- The fields of a header object: the given hash, then each field of the header. -/
 def headerFields {fork : Fork} (hash : Hash32) (h : Header fork) : List (String × Json) :=
+  -- The hash, then each field under its name in the schema.
+  --
+  -- The ommers hash is named after the uncles, the beneficiary after the miner.
+  --
+  -- The mix digest, the RANDAO mix from Paris, keeps the name of the mix hash.
   [("hash", hash32Json hash), ("parentHash", hash32Json h.parentHash),
     ("sha3Uncles", hash32Json h.ommersHash), ("miner", dataJson h.coinbase.toList),
     ("stateRoot", hash32Json h.stateRoot), ("transactionsRoot", hash32Json h.transactionsRoot),
@@ -80,6 +69,7 @@ def headerFields {fork : Fork} (hash : Hash32) (h : Header fork) : List (String 
     ("timestamp", quantityJson h.timestamp.toNat),
     ("extraData", dataJson h.extraData.data.toList), ("mixHash", hash32Json h.prevRandao),
     ("nonce", dataJson h.nonce.toList)] ++
+    -- Each field of a later fork, exactly from that fork on, as the fixtures write it.
     sinceField "baseFeePerGas" quantityJson h.baseFeePerGas ++
     sinceField "withdrawalsRoot" hash32Json h.withdrawalsRoot ++
     sinceField "blobGasUsed" (fun x : UInt64 => quantityJson x.toNat) h.blobGasUsed ++
@@ -93,6 +83,9 @@ def headerFields {fork : Fork} (hash : Hash32) (h : Header fork) : List (String 
 
 It fails when the header has no hash, since RLP cannot encode one of its fields. -/
 def headerJson {fork : Fork} (h : Header fork) : Except RlpError Json := do
+  -- The hash of the header, which fails when RLP cannot encode a field.
+  --
+  -- A method writes the hash that the node keeps for the block instead.
   let hash ← h.hash
   return Json.mkObj (headerFields hash h)
 
@@ -110,7 +103,9 @@ A field whose value is `null` counts as absent.
 
 The hash must be the hash of the header that the other fields give. -/
 def headerOfJson (fork : Fork) (j : Json) : Read (Header fork) := do
+  -- Each field that is not null, as in the other readers of objects.
   let fs ← fields "header" j
+  -- Exactly the hash and the fields of the fork.
   unless hasExactly fs (headerNames fork) do reject "header: wrong fields"
   let get := field "header" fs
   let hash ← hash32 "hash" (← get "hash")
@@ -140,6 +135,7 @@ def headerOfJson (fork : Fork) (j : Json) : Read (Header fork) := do
     blockAccessListHash :=
       ← readSince fork (hash32 "blockAccessListHash") fs "blockAccessListHash"
     slotNumber := ← readSince fork (uint64 "slotNumber") fs "slotNumber" }
+  -- The hash is the hash of the header that the other fields give.
   match header.hash with
   | .ok computed => if computed = hash then return header else reject "hash: not the header hash"
   | .error _ => reject "header: no hash"
