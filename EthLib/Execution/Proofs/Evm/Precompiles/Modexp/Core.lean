@@ -50,7 +50,8 @@ theorem compute_size (data : ByteArray) (l : Lengths) : (compute data l).size = 
 
 /-- The output is the mathematical `base ^ exponent mod modulus`.
 
-EIP-198: "returns an output `(BASE**EXPONENT) % MODULUS`".
+EIP-198 returns the output `BASE^EXPONENT mod MODULUS`.
+
 The case of a zero modulus is not in EIP-198.
 
 Appendix E of the Yellow Paper takes `x mod 0` to be zero. -/
@@ -65,7 +66,7 @@ theorem compute_eq_pow_mod (data : ByteArray) (l : Lengths) :
   · -- A zero modulus gives the number 0 (written as zero bytes).
     rw [bytesToNat_natToBytes, Nat.zero_mod]
   · next h =>
-    -- No truncation: the remainder is below the modulus, which fits in `len_mod` bytes.
+    -- No truncation: the remainder is below the modulus, which fits in `length_of_MODULUS` bytes.
     rw [bytesToNat_natToBytes_of_lt, Nat.powMod_def]
     -- The side goal is that bound, stated on the loop.
     rw [Nat.powMod_def]

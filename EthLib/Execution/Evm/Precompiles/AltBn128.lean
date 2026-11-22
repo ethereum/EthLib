@@ -136,11 +136,11 @@ def ecmul (fork : Fork) (data : ByteArray) (gas : Nat) : Except AltBn128Error By
     throw (.outOfGas cost gas)
   -- MUL input: a curve point and a scalar `(x, s)`; a short input is padded with zeros.
   let p0 ← bytesToG1 (bufferRead data 0 64)
-  -- The scalar can be any number between `0` and `2**256-1`.
+  -- The scalar can be any number between `0` and `2^256 - 1`.
   let n := bytesToNat (bufferRead data 64 32)
   -- Output: the curve point `s * x`.
   --
-  -- A 32-byte scalar is below `2**256`, so 256 bits cover it.
+  -- A 32-byte scalar is below `2^256`, so 256 bits cover it.
   return ⟨(g1ToBytes (Point.mulBits 256 n p0)).toArray⟩
 
 /-- An element of `Fp` from 32 bytes. -/

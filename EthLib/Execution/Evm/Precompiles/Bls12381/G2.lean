@@ -70,12 +70,12 @@ def G2_MAX_DISCOUNT : Nat := 524
 
 /-- The discount for `k` pairs. -/
 def discountG2 (k : Nat) : Nat :=
-  -- The table covers `k <= 128`, and `max_discount` applies for `k > 128`.
+  -- The table covers `k <= 128`, and the maximum discount applies for `k > 128`.
   if h : 0 < k ∧ k ≤ 128 then G2_K_DISCOUNT[k - 1] else G2_MAX_DISCOUNT
 
 /-- The price of G2MSM on `k` pairs: `k * 22500 * discount / 1000`, rounded down. -/
 def bls12G2MsmGas (k : Nat) : Nat :=
-  -- `gas_cost = k * multiplication_cost * discount(k) // multiplier`.
+  -- EIP-2537: `floor(k * c * discount(k) / 1000)`, for the price `c` of one multiplication.
   k * GAS_G2MUL * discountG2 k / MULTIPLIER
 
 /-- The sum of `[m]P` over the pairs, each point checked to be in the subgroup.
@@ -95,7 +95,7 @@ def bls12G2Msm (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray :
   -- The length is checked before the gas is charged; either error burns all the gas.
   if data.size = 0 ∨ data.size % LENGTH_PER_PAIR_G2 ≠ 0 then
     throw (.invalidInputLength data.size)
-  -- `k = floor(len(input) / LEN_PER_PAIR)`, exact here.
+  -- `k`, the input length over the length of a pair, exact here.
   let k := data.size / LENGTH_PER_PAIR_G2
   if gas < bls12G2MsmGas k then
     throw (.outOfGas (bls12G2MsmGas k) gas)

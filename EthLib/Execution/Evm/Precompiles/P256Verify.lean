@@ -67,7 +67,7 @@ def isValid (bytes : List UInt8) : Bool :=
   -- Check 3: `0 <= qx < p` and `0 <= qy < p`.
   if hx : qx < Fp.modulus then
     if hy : qy < Fp.modulus then
-      -- Check 5: `(qx, qy) != (0, 0)`, the encoding of the point at infinity.
+      -- Check 5: `(qx, qy)` is not `(0, 0)`, the encoding of the point at infinity.
       --
       -- The verification runs check 2 on `r` and `s`, then check 4 on the curve equation.
       --

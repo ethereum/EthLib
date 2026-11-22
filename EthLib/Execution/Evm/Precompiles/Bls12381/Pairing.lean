@@ -8,7 +8,9 @@ public import EthLib.Cryptography.Bls.Pairing
 
 The BLS12-381 pairing check of EIP-2537, at address `0x0f`.
 
-The source raises each Miller loop to the final exponent, and this check raises their product once.
+EIP-2537 writes a product of pairings, each with its final exponentiation.
+
+This check raises the product of the Miller loops to the final exponent once.
 
 Both orders give the same result, because `(a * b)^e = a^e * b^e`.
 -/
@@ -30,7 +32,7 @@ def GAS_PAIRING_BASE : Nat := 37700
 
 /-- The price of a pairing check on `k` pairs. -/
 def bls12PairingGas (k : Nat) : Nat :=
-  -- `gas_cost = 32600*k + 37700`.
+  -- EIP-2537: `32600 * k + 37700`.
   GAS_PAIRING_PER_PAIR * k + GAS_PAIRING_BASE
 
 /-- The 32-byte word of a boolean: 1 for true, 0 for false. -/
@@ -47,7 +49,7 @@ def bls12Pairing (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray
   -- The length is checked before the gas is charged; either error burns all the gas.
   if data.size = 0 ∨ data.size % LENGTH_PER_PAIRING_PAIR ≠ 0 then
     throw (.invalidInputLength data.size)
-  -- `k = floor(len(input) / LEN_PER_PAIR)`, exact here.
+  -- `k`, the input length over the length of a pair, exact here.
   let k := data.size / LENGTH_PER_PAIRING_PAIR
   if gas < bls12PairingGas k then
     throw (.outOfGas (bls12PairingGas k) gas)
@@ -59,7 +61,7 @@ def bls12Pairing (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray
   -- Each point is expected to be in the subgroup of order `q`.
   let pairs ← rawPairs.mapM fun (rawG1, rawG2) => do
     return (← bytesToG1 rawG1 true, ← bytesToG2 rawG2 true)
-  -- `e(P1, Q1) * e(P2, Q2) * ... * e(Pk, Qk) == 1`.
+  -- `e(P1, Q1) * e(P2, Q2) * ... * e(Pk, Qk) = 1`.
   return ⟨(boolWord (pairingCheck pairs.toArray)).toArray⟩
 
 end EthLib.Execution.Evm.Precompiles.Bls12381

@@ -18,7 +18,7 @@ Three EIPs set the price, each from its fork:
 
 EIP-198 takes the exponent bits from the first 32 bytes of `EXPONENT`.
 
-EIP-198 says: "the index of the highest bit in the first 32 bytes of `EXPONENT`".
+EIP-198 takes the index of the highest set bit in the first 32 bytes of `EXPONENT`.
 
 When those 32 bytes are all zero, it returns exactly `8 * (length_of_EXPONENT - 32)`.
 
@@ -26,8 +26,8 @@ EIP-7883 scales that 8 to 16.
 
 The EIP-7883 pseudocode, read literally, differs in two ways for an exponent longer than 32 bytes:
 
-- It writes `exponent & (2**256 - 1)`, the LOW 256 bits of the whole exponent.
-- When those bits are zero it adds `(0).bit_length() - 1 = -1`, one iteration less.
+- It takes `exponent mod 2^256`, the low 256 bits of the whole exponent.
+- When those bits are zero it adds the bit length of 0 minus 1, that is -1, one iteration less.
 
 The EIP-2565 pseudocode is the same, with 8 in place of 16.
 
@@ -43,7 +43,7 @@ open EthLib.Base (Fork)
 /-- The multiplication complexity, set by the longer of the base and the modulus. -/
 def complexity (fork : Fork) (baseLen modLen : Nat) : Nat :=
   let maxLength := max baseLen modLen
-  -- `math.ceil(max_length / 8)`, in integers.
+  -- The 8-byte words of the longer length, rounded up.
   let words := (maxLength + WORD_BYTES - 1) / WORD_BYTES
   if fork ≥ .fusaka then
     -- EIP-7883: a flat 16 up to 32 bytes, and twice the square of the words above.
