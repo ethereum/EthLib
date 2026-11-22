@@ -23,7 +23,9 @@ Consensus-specs writes these operations out at `8a3df1d7`, as a reference point:
 
 EIP-4844 links that file at `86fb82b2`, where the proof function returns no `y`.
 
-There the `G2` setup has another name, and the negation of `z` is computed as `(r - z) mod r`.
+There entry 1 of the `G2` setup has another name.
+
+There also the negation of `z` is computed as `(r - z) mod r`, for the modulus `r` of `Fr`.
 -/
 
 @[expose] public section
@@ -94,11 +96,11 @@ def bytesToKzgProof (b : Bytes48) : Except KzgError KZGProof :=
 def computeChallenge (blob : Blob) (commitment : KZGCommitment) : Fr :=
   -- The degree bound 4096, as 16 big-endian bytes.
   let degreePoly : ByteArray := ⟨(Base.natToBytes 16 FIELD_ELEMENTS_PER_BLOB).toArray⟩
-  -- The hash input is the domain separator of the blob challenge, then the degree bound.
+  -- The hash input is the 16 ASCII bytes `FSBLOBVERIFY_V1_`, then the degree bound.
   --
   -- Then come the blob and the commitment.
   let data := FIAT_SHAMIR_PROTOCOL_DOMAIN ++ degreePoly ++ ⟨blob.toArray⟩ ++ ⟨commitment.toArray⟩
-  -- The challenge is the hash of that input, reduced to an element of `Fr`.
+  -- The challenge is the SHA-256 of that input, read as a big-endian integer, mod `r`.
   Fr.hashToBlsField data
 
 /-- The linear combination `sum_i scalars_i * points_i` of decoded points.
@@ -131,11 +133,11 @@ def computeQuotientEvalWithinDomain
   let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB
   -- The denominators `z (z - omega_i)`, for every `i` at once.
   --
-  -- One batch inversion gives every `1 / (z * (z - omega_i))`.
+  -- One batch inversion gives every `1 / (z (z - omega_i))`.
   --
   -- The skipped term has denominator zero, which inverts to zero and is never read.
   let inverses := Fr.batchInverse (domain.map fun omega_i => z * (z - omega_i))
-  -- The quotient sums one term per point `omega_i` of the domain, from 0.
+  -- The quotient starts at 0 and gains one term per point `omega_i` of the domain.
   --
   -- The caller passes 4096 values, so the zip drops no entry.
   ((domain.zip polynomial).zip inverses).foldl (init := Fr.zero)
@@ -172,10 +174,10 @@ def computeKzgProofImpl (setup : TrustedSetup)
   -- All the inverses of the denominators with one inversion, for the divisions below.
   let inverses := Fr.batchInverse denominatorPoly
 
-  -- The quotient `q_i = (p_i - y) / (omega_i - z)`, for the 4096 values that `y = p(z)` checked.
+  -- One quotient value `q_i` per point `omega_i`, for the 4096 values that `y = p(z)` checked.
   let quotient : Array Fr :=
     (domain.zip (polynomialShifted.zip inverses)).map fun (omega_i, a, inverse_i) =>
-      -- When `omega_i - z = 0`, `z` is a point of the domain, the special case.
+      -- When `omega_i = z`, `q_i` is `q(z)`, by the sum over the domain above.
       if (omega_i - z).isZero then
         computeQuotientEvalWithinDomain omega_i polynomial y
       -- Otherwise `q_i = (p_i - y) / (omega_i - z)`.
@@ -265,7 +267,7 @@ def computeVerifyKzgProofBatchChallenge (commitments : Array KZGCommitment) (zs 
   let degreePoly : ByteArray := ⟨(Base.natToBytes 8 FIELD_ELEMENTS_PER_BLOB).toArray⟩
   -- The number of openings, as 8 big-endian bytes.
   let numCommitments : ByteArray := ⟨(Base.natToBytes 8 commitments.size).toArray⟩
-  -- The hash input is the domain separator of the batch check, the bound and the number.
+  -- The hash input is the 16 ASCII bytes `RCKZGBATCH___V1_`, the bound and the number.
   --
   -- Then, per opening: the commitment, `z` and `y` as 32 big-endian bytes each, and the proof.
   let data := ((commitments.zip zs).zip (ys.zip proofs)).foldl
@@ -275,7 +277,7 @@ def computeVerifyKzgProofBatchChallenge (commitments : Array KZGCommitment) (zs 
         ++ ⟨(blsFieldToBytes z).toArray⟩
         ++ ⟨(blsFieldToBytes y).toArray⟩
         ++ ⟨proof.toArray⟩
-  -- The challenge `r` is the hash of that input, reduced to an element of `Fr`.
+  -- The challenge is the SHA-256 of that input, read as a big-endian integer, mod `r`.
   Fr.hashToBlsField data
 
 /-- Verify multiple KZG proofs efficiently using a random linear combination. -/

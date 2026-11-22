@@ -205,7 +205,7 @@ It serves to divide by a polynomial that vanishes on the unshifted domain. -/
 def cosetFftField
     (vals : Array Fr) (rootsOfUnity : Array Fr)
     (inv : Bool := false) : Array Fr :=
-  -- The coset is shifted by `g = 7`, the primitive root of unity of `Fr`.
+  -- The coset is shifted by `g = 7`, which generates the multiplicative group of `Fr`.
   let shiftFactor : Fr := Fr.ofNat PRIMITIVE_ROOT_OF_UNITY
   if inv then
     -- The inverse transform comes first.

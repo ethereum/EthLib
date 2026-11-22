@@ -40,7 +40,7 @@ If every cell were missing, the polynomial would be `Z(x) = x^n - 1`, with `n = 
 Recovery needs at least half of the cells, so that case never arises. -/
 def constructVanishingPolynomial
     (missingCellIndices : Array CellIndex) : Except KzgError PolynomialCoeff := do
-  -- At least one cell must be present.
+  -- At least one cell must be present: the source assumes it, and EthLib checks it here.
   --
   -- With every cell missing, the short polynomial has 129 coefficients, too many for the writes.
   if missingCellIndices.size ≥ CELLS_PER_EXT_BLOB then
@@ -119,9 +119,9 @@ def recoverPolynomialcoeff
   -- For the polynomial P(x) to recover, (E*Z)(x) and (P*Z)(x) agree over the FFT domain.
   let extTimesZero : Array Fr := Array.zipWith (· * ·) zeroPolyEval extended
 
-  -- The coefficients of (E*Z)(x) on the domain, by the inverse FFT.
+  -- The coefficients of (P*Z)(x), by the inverse FFT of the values of (E*Z)(x) on the domain.
   --
-  -- (P*Z)(x) has degree below 8192, so the inverse FFT of (E*Z)(x) gives its coefficients.
+  -- (P*Z)(x) has degree below 8192 and the same values there, so those are its coefficients.
   let extTimesZeroCoeffs := fftField extTimesZero rouExt (inv := true)
 
   -- Next step is to divide the polynomial (P*Z)(x) by polynomial Z(x) to get P(x).
@@ -167,7 +167,7 @@ def recoverCellsAndKzgProofs (setup : TrustedSetup)
   if cells.size ≠ cellIndices.size then
     throw (.inputLengthMismatch "cells" cellIndices.size cells.size)
 
-  -- It requires `64 <= k <= 128` for the number `k` of cell indices: here the lower bound.
+  -- The number `k` of cell indices must satisfy `64 <= k <= 128`; here the lower bound.
   if cellIndices.size < CELLS_PER_EXT_BLOB / 2 then
     throw (.notEnoughCells cellIndices.size)
 

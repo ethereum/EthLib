@@ -187,7 +187,7 @@ def computeCellsAndKzgProofsPolynomialcoeff (setup : TrustedSetup)
     (polynomialCoeff : PolynomialCoeff) : Except KzgError (Array Cell × Array KZGProof) := do
   let n := FIELD_ELEMENTS_PER_CELL
   let size := polynomialCoeff.size
-  -- The direct method computes and proves each cell on its own.
+  -- The source computes and proves each cell on its own.
   --
   -- Here one FFT gives all the cells, and the FK20 method below gives all the proofs.
   let cells := cellsOfExtendedEvaluations (extendedEvaluations polynomialCoeff)
@@ -239,11 +239,11 @@ def computeVerifyCellKzgProofBatchChallenge
     (cellIndices : Array CellIndex)
     (cosetsEvals : Array CosetEvals)
     (proofs : Array KZGProof) : Fr :=
-  -- The hash input starts from the domain separator of the batch check of cell proofs.
+  -- The hash input starts with the 16 ASCII bytes `RCKZGCBATCH__V1_`.
   --
   -- Then come 8 big-endian bytes each of the blob size 4096 and the cell size 64.
   --
-  -- Then 8 bytes each of the number of commitments and the number of cells.
+  -- Then 8 big-endian bytes each of the number of commitments and the number of cells.
   let h := RANDOM_CHALLENGE_KZG_CELL_BATCH_DOMAIN
     ++ ⟨(Base.natToBytes 8 FIELD_ELEMENTS_PER_BLOB).toArray⟩
     ++ ⟨(Base.natToBytes 8 FIELD_ELEMENTS_PER_CELL).toArray⟩
@@ -253,14 +253,16 @@ def computeVerifyCellKzgProofBatchChallenge
   let h := commitments.foldl (init := h) fun h c => h ++ ⟨c.toArray⟩
   -- One entry per cell, from four arrays of one length, which the callers check.
   let cells := (commitmentIndices.zip cellIndices).zip (cosetsEvals.zip proofs)
-  -- For each cell `k`: its commitment index and cell index as 8 bytes, its values, its proof.
+  -- For each cell, in order: its commitment index and its cell index, as 8 big-endian bytes each.
+  --
+  -- Then its 64 values, as 32 big-endian bytes each, and its 48-byte proof.
   let h := cells.foldl (init := h) fun h ((commitmentIndex, cellIndex), (evals, proof)) =>
     let h := h ++ ⟨(Base.natToBytes 8 commitmentIndex).toArray⟩
     let h := h ++ ⟨(Base.natToBytes 8 cellIndex).toArray⟩
     let h := evals.foldl (init := h) fun h ce =>
       h ++ ⟨(blsFieldToBytes ce).toArray⟩
     h ++ ⟨proof.toArray⟩
-  -- The challenge is the hash of that input, reduced to an element of `Fr`.
+  -- The challenge is the SHA-256 of that input, read as a big-endian integer, mod `r`.
   Fr.hashToBlsField h
 
 /-- Verify that a set of cells belong to their commitments, given distinct commitments.

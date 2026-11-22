@@ -102,7 +102,7 @@ def computeRootsOfUnity (order : Nat) : Array Fr :=
   --
   -- Every caller passes an order that divides `r - 1`.
   --
-  -- The root is `w = 7^((r - 1) / order) mod r`, where 7 is the primitive root of unity.
+  -- The root is `w = 7^((r - 1) / order) mod r`, where 7 generates the group of units of `Fr`.
   let exponent := (BLS_MODULUS - 1) / order
   let root :=
     (Fr.ofNat PRIMITIVE_ROOT_OF_UNITY) ^ (Fr.ofNat exponent)
@@ -148,13 +148,13 @@ def multiplyPolynomialcoeff (a b : PolynomialCoeff) :
   -- The sizes of `a` and `b` must sum to at most 8192.
   if a.size + b.size > FIELD_ELEMENTS_PER_EXT_BLOB then
     throw (.polynomialProductTooLong a.size b.size)
-  -- The product `r` starts as the zero polynomial, then gains one summand per coefficient of `a`.
+  -- The product starts as the zero polynomial `[0]`, then gains one summand per coefficient of `a`.
   return (Array.finRange a.size).foldl (init := #[Fr.zero]) fun r power =>
     let coef := a[power]
     -- The summand of coefficient `a_k` is `a_k x^k b(x)`: `k` zeros, then `a_k b_j` for each `j`.
     let summand : PolynomialCoeff :=
       Array.replicate power.val Fr.zero ++ b.map (· * coef)
-    -- The summand is added to `r`.
+    -- The summand is added to the product.
     addPolynomialcoeff r summand
 
 /-- Long division of two coefficient-form polynomials.
@@ -166,7 +166,7 @@ It rejects an empty divisor.
 It also rejects a divisor with a zero leading coefficient, when the loop would run. -/
 def dividePolynomialcoeff (a b : PolynomialCoeff) :
     Except KzgError PolynomialCoeff := do
-  -- An empty divisor has no leading coefficient, so it is rejected.
+  -- An empty divisor has no leading coefficient, so it is rejected, where the source fails too.
   if hb : b.size = 0 then
     throw .zeroDivisorPolynomial
   -- When `a` is shorter than `b`, no step runs, and the quotient is empty.
@@ -176,9 +176,9 @@ def dividePolynomialcoeff (a b : PolynomialCoeff) :
     -- The leading coefficient of `b` has index `|b| - 1`.
     let bpos := b.size - 1
     let lead := b[bpos]'(by omega)
-    -- A zero leading coefficient of `b` would make every step divide by zero, so it is rejected.
+    -- A zero leading coefficient of `b` is rejected here, a check the source does not make.
     --
-    -- Field division by zero returns 0 here, so it would fail silently.
+    -- Every step would divide by zero, and division by zero in `Fr` returns 0: a silent failure.
     if lead.isZero then
       throw .zeroDivisorPolynomial
     -- The divisor's leading coefficient does not change, so its costly inverse is computed once.
@@ -220,9 +220,9 @@ def interpolatePolynomialcoeff
   if h : xs.size ≠ ys.size then
     throw (.inputLengthMismatch "ys" xs.size ys.size)
   else
-    -- `r` starts as the zero polynomial, then gains one summand per point `i`.
+    -- The result starts as the zero polynomial `[0]`, then gains one summand per point `i`.
     (Array.finRange xs.size).foldlM (init := #[Fr.zero]) fun r i => do
-      -- The summand of point `i` is `ys[i] * prod_(j != i) (x - xs[j]) / (xs[i] - xs[j])`.
+      -- The summand of point `i` is `ys[i] * prod_(j ≠ i) (x - xs[j]) / (xs[i] - xs[j])`.
       let summand ← (Array.finRange ys.size).foldlM (init := #[ys[i.val]'(by omega)])
         fun summand j =>
           if j.val ≠ i.val then
@@ -233,7 +233,7 @@ def interpolatePolynomialcoeff
             multiplyPolynomialcoeff summand #[(-weightAdj) * xj, weightAdj]
           else
             pure summand
-      -- The summand is added to `r`.
+      -- The summand is added to the result.
       return addPolynomialcoeff r summand
 
 /-- Compute the vanishing polynomial on `xs` (coefficient form). -/
@@ -245,14 +245,14 @@ def vanishingPolynomialcoeff (xs : Array Fr) : Except KzgError PolynomialCoeff :
 /-- Evaluate a coefficient-form polynomial at `z` by Horner's rule, from the last coefficient. -/
 def evaluatePolynomialcoeff
     (polynomialCoeff : PolynomialCoeff) (z : Fr) : Fr :=
-  -- From `y = 0`, `y = y z + c_k` for `k` from the last coefficient down to `c_0`.
+  -- From `y = 0`, `y := y z + c_k` for `k` from the last index down to 0.
   polynomialCoeff.foldr (init := Fr.zero) fun c y => y * z + c
 
 /-- Convert evaluation form to coefficient form via inverse FFT. -/
 def polynomialEvalToCoeff (polynomial : Polynomial) : PolynomialCoeff :=
   -- The 4096-th roots of unity, in their natural order.
   let roots := computeRootsOfUnity FIELD_ELEMENTS_PER_BLOB
-  -- The inverse FFT of the values, put back from bit-reversed order to natural order.
+  -- The values go from bit-reversed to natural order, then the inverse FFT gives the coefficients.
   fftField (bitReversalPermutation polynomial) roots (inv := true)
 
 
