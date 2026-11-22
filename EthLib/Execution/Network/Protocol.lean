@@ -7,7 +7,7 @@ public import EthLib.Networking.Devp2p.P2p
 
 The versions of the eth capability, and the message IDs that each version uses.
 
-The source is [`caps/eth.md`][eth] of the devp2p specifications, with its "Change Log".
+The source is [`caps/eth.md`][eth] of the devp2p specifications, with its change log.
 
 [eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md
 
@@ -97,6 +97,9 @@ def EthVersion.capability (v : EthVersion) : Capability := ⟨ETH_NAME, v.number
 
 It is the count of an eth version that EthLib specifies, and 0 for any other capability. -/
 def ethLength (c : Capability) : Nat :=
+  -- rlpx.md, Message ID-based Multiplexing: each capability states how many message IDs it needs.
+  --
+  -- A version of eth that EthLib does not specify takes none here.
   if c.name = ETH_NAME then ((EthVersion.ofNumber? c.version).map (·.messageCount)).getD 0
   else 0
 

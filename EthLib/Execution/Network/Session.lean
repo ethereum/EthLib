@@ -9,19 +9,19 @@ The rules of an eth session, from [`caps/eth.md`][eth], and when snap may run be
 
 [eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md
 
-"Basic Operation" asks each side to send Status first.
+The section Basic Operation asks each side to send Status first.
 
 The session is active once the peer's Status has arrived, and any other message may then come.
 
-A response repeats the request ID of a request that this node sent, as "Protocol Messages" says.
+A response repeats the request ID of a request of this node, as the section Protocol Messages says.
 
 So the session keeps the requests that no response has answered yet.
 
 A node must not send a transaction twice to one peer, nor back to the peer it came from.
 
-"Transactions (0x02)" states this rule, so the session keeps the hashes sent and received.
+The section Transactions (0x02) states this rule, so the session keeps the hashes sent and received.
 
-"NewBlockHashes (0x01)" and "NewBlock (0x07)" ask a proof-of-stake node to discard them.
+The sections NewBlockHashes (0x01) and NewBlock (0x07) ask a proof-of-stake node to discard them.
 
 The session is that of a proof-of-stake network.
 
@@ -38,7 +38,7 @@ The session reads every message, sent or received, as one of its negotiated vers
 
 The decoder of that version gives such messages, and the session does not check it again.
 
-A peer that keeps sending NewBlock or NewBlockHashes "should be disconnected", with no count.
+eth.md asks to disconnect a peer that keeps sending NewBlock or NewBlockHashes, but sets no count.
 
 So the session only discards each such message.
 -/
@@ -92,7 +92,7 @@ inductive EthSessionError where
 
   The source fixes no reaction to it in general.
 
-  "Cells (0x15)" asks to disconnect a peer that sends elements it was not asked for. -/
+  The section Cells (0x15) asks to disconnect a peer that sends elements it was not asked for. -/
   | unsolicited (requestId : UInt64)
   /-- A BlockRangeUpdate announces a range that starts after it ends. -/
   | badRange (earliest latest : Nat)
@@ -141,78 +141,71 @@ end Message
 The session after the peer sends the message `m`, and what to do with the message.
 
 The node has the schedule `s`, and its head has a block number and a timestamp.
-
-- Before the peer's Status, only a Status that passes its checks is accepted.
-- A second Status gives its own error, and the source fixes no reaction to it.
-- NewBlockHashes and NewBlock are discarded.
-- A BlockRangeUpdate must announce a valid range.
-- A response must answer a pending request, and the oldest one it answers leaves the list.
-- The hashes of received transactions join the received ones.
 -/
 def receiveEth (s : Schedule) (number timestamp : Nat) (session : EthSession) (m : Message) :
     Except EthSessionError (EthSession × EthVerdict) := do
   match session.remoteStatus with
+  -- Basic Operation: before the peer's Status, only a Status that passes its checks.
   | none =>
     let .status status := m | throw (.beforeStatus m.id)
     (checkStatus session.version s number timestamp status).mapError .badStatus
     return ({ session with remoteStatus := some status }, .accept)
   | some _ =>
     match m with
+    -- A second Status gets its own error; the source fixes no reaction to it.
     | .status _ => throw .secondStatus
+    -- EIP-3675: past the merge, which the session assumes, NewBlockHashes and NewBlock are dropped.
     | .newBlockHashes _ | .newBlock .. => return (session, .discard)
+    -- BlockRangeUpdate: a peer with `earliest > latest` should be disconnected.
     | .blockRangeUpdate r =>
       if r.Valid then return (session, .accept) else throw (.badRange r.earliest r.latest)
     | _ =>
+      -- A response repeats the request ID of a pending request of its type.
+      --
+      -- The oldest request it answers leaves the list.
       let pending ← match m.responseId? with
         | none => pure session.pending
         | some i =>
           if session.pending.any (Message.answers · m) then
             pure (session.pending.eraseP (Message.answers · m))
           else throw (.unsolicited i)
+      -- The transactions that the peer sent join the received ones.
       return ({ session with pending, receivedTxs := session.receivedTxs ++ m.transactionHashes },
         .accept)
 
 /--
 The session after this node sends the message `m`, or none when the node must not send it.
 
-"Basic Operation" asks each side to send Status first, and the session is active once both have.
-
-Before that, only a Status may be sent.
-
-A Status is never refused, since the source fixes no rule on a second one.
-
-A Transactions message must hold at least one transaction, as "Transactions (0x02)" says.
-
-It is refused when one of its transactions appears twice.
-
-It is refused too when it holds one that this node sent before, or that the peer sent.
-
-In an active session, a PooledTransactions message is never refused for a resend.
-
 The session does not track the requests of the peer, so it does not check what a response answers.
-
-The transactions of both messages are recorded as sent.
-
-A request joins the pending ones.
 -/
 def sendEth (session : EthSession) (m : Message) : Option EthSession :=
+  -- Basic Operation: Status goes first, and other messages only once the peer's Status has come.
+  --
+  -- This node also waits until it has sent its own.
   match m, session.statusSent && session.remoteStatus.isSome with
+  -- A Status is never refused, since the source fixes no rule on a second one.
   | .status _, _ => some { session with statusSent := true }
+  -- Before both Status messages, nothing else may be sent.
   | _, false => none
+  -- Transactions (0x02): at least one new transaction, no resend in the session, nor a relay back.
+  --
+  -- A hash twice in one message counts as a resend; the hashes then count as sent.
   | .transactions _, true =>
     let hashes := m.transactionHashes
     if hashes ≠ [] ∧ hashes.Nodup ∧
         ∀ h ∈ hashes, h ∉ session.sentTxs ∧ h ∉ session.receivedTxs then
       some { session with sentTxs := session.sentTxs ++ hashes }
     else none
+  -- PooledTransactions answers a request, so a resend is not refused; its hashes count as sent.
   | .pooledTransactions .., true =>
     some { session with sentTxs := session.sentTxs ++ m.transactionHashes }
+  -- A request joins the pending ones; any other message passes, NewBlock and NewBlockHashes too.
   | _, true =>
     if m.isRequest then some { session with pending := session.pending ++ [m] } else some session
 
 /-- Whether these shared capabilities, with their first IDs, meet the eth requirement of snap.
 
-`caps/snap.md` calls snap "a dependent satellite of eth", in [Relation to eth][rel].
+`caps/snap.md` calls snap a dependent satellite of eth, in [Relation to eth][rel].
 
 So snap needs some version of eth among the shared capabilities.
 
