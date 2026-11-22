@@ -324,12 +324,8 @@ private theorem paysSlots_runPrecompile {address : Nat} {evm after : Evm fork St
     · rename_i hc
       cases h
       -- A charge of execution gas keeps the net state gas.
-      refine Or.inr ⟨fun hf => hf.2.1 herr, fun _ => ⟨herr, ?_⟩⟩
-      simp only [GasMeter.charge, StateGasMeter.charge] at hc
-      split at hc
-      · cases hc
-      · cases hc
-        exact le_rfl
+      exact Or.inr ⟨fun hf => hf.2.1 herr, fun _ =>
+        ⟨herr, by unfold slotSurplus; rw [StateGasMeter.stateGasUsed_charge hc]⟩⟩
 
 /-- The state that a message enters counts the slots of the state it is sent from. -/
 private theorem nonceOrCodeFreshSlots_entered {message : Message fork}
@@ -428,29 +424,13 @@ private theorem callPays_rollbackOnError {message : Message fork}
 private theorem stateGasUsed_le_chargeCodeDeposit {meter after : StateGasMeter} {size : Nat}
     (h : chargeCodeDeposit fork meter size = .ok after) :
     meter.stateGasUsed ≤ after.stateGasUsed := by
-  have hc : ∀ {a b : StateGasMeter} {amount : Nat}, GasMeter.charge a amount = .ok b →
-      a.stateGasUsed ≤ b.stateGasUsed := by
-    intro a b amount h
-    simp only [GasMeter.charge, StateGasMeter.charge] at h
-    split at h
-    · cases h
-    · cases h
-      exact le_rfl
   unfold chargeCodeDeposit at h
   split at h
-  · obtain ⟨mid, h1, h2⟩ := Base.bind_ok_iff.mp h
-    refine (hc h1).trans ?_
-    simp only [GasMeter.chargeState, StateGasMeter.chargeState] at h2
-    split at h2
-    · cases h2
-      simp only [StateGasMeter.stateGasUsed]
-      omega
-    · split at h2
-      · cases h2
-        simp only [StateGasMeter.stateGasUsed]
-        omega
-      · cases h2
-  · exact hc h
+  · -- A charge of execution gas keeps the net state gas, and one of state gas raises it.
+    obtain ⟨mid, h1, h2⟩ := Base.bind_ok_iff.mp h
+    rw [StateGasMeter.stateGasUsed_chargeState h2, StateGasMeter.stateGasUsed_charge h1]
+    omega
+  · exact (StateGasMeter.stateGasUsed_charge h).ge
 
 /-- The frame that ends a creation, after the deposit of code.
 
