@@ -35,8 +35,12 @@ variable {preset : Preset} {fork : Base.Fork}
 /-- From Altair: the indices of the sync committee of the next period, with possible repeats. -/
 def getNextSyncCommitteeIndices (state : BeaconState preset fork) :
     Except AccessorError (Vector ValidatorIndex preset.SYNC_COMMITTEE_SIZE.toNat) := do
+  -- The next epoch `e + 1`, for the current epoch `e`, and its seed for sync committees.
   let epoch ← liftArith (addChecked (getCurrentEpoch state) 1)
   let seed ← getSeed state epoch DOMAIN_SYNC_COMMITTEE
+  -- `SYNC_COMMITTEE_SIZE` members, weighted by effective balance, among those active in `e + 1`.
+  --
+  -- The candidates are read in shuffled order, and one may be drawn more than once.
   computeBalanceWeightedSelection state
     (← getActiveValidatorIndicesChecked state epoch).toArray seed preset.SYNC_COMMITTEE_SIZE true
 
@@ -44,6 +48,7 @@ def getNextSyncCommitteeIndices (state : BeaconState preset fork) :
 
 Each key must be valid, and there must be at least one. -/
 def aggregatePubkeys (pubkeys : Array BLSPubkey) : Except AccessorError BLSPubkey :=
+  -- The sum of the keys in G1, compressed to 48 bytes.
   (Cryptography.Bls.Signatures.ethAggregatePubkeys pubkeys).mapError fun
     | .invalidPubkey position => .invalidPubkeys pubkeys.size position
     | _ => .invalidPubkeys pubkeys.size none
@@ -53,6 +58,7 @@ def aggregatePubkeys (pubkeys : Array BLSPubkey) : Except AccessorError BLSPubke
 It holds the public keys of its members in committee order, and their aggregate. -/
 def getNextSyncCommittee (state : BeaconState preset fork) :
     Except AccessorError (SyncCommittee preset) := do
+  -- The public keys of the drawn members in committee order, then their aggregate.
   let indices ← getNextSyncCommitteeIndices state
   let pubkeys ← indices.mapM fun index => return (← getValidator state index).pubkey
   return ⟨pubkeys, ← aggregatePubkeys pubkeys.toArray⟩
