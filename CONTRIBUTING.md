@@ -75,6 +75,11 @@ A step comment is formal, short and precise, like the text of an RFC or a FIPS s
   That covers the Python of `ethereum/execution-specs`, of `ethereum/consensus-specs` and of the reference code in an EIP.
   It also covers a loop, a condition or an assertion written in the syntax of a language, such as `for log in receipt.logs:` or `pubkey_size == 48 and amount_size == 8`.
   The Lean line under the comment is already the code, and the same step in another programming language gives an auditor nothing new to check.
+- A step comment names things in plain words, never by the code identifiers of a source, such as the snake_case field names of EIP-7928.
+  It writes `-- A storage key of an account never appears both among its storage changes and among its storage reads.`
+  The notation of a formula, such as `V`, `P_i` or `int2octets`, stays, and so does the name of the function that holds a step, as the paragraph below allows.
+- A step that keeps the words of its source writes them as plain text, without quotation marks or Markdown emphasis such as bold.
+  EIP-7928 writes "Record **post-transaction nonces** for:", so the comment reads `-- Record post-transaction nonces for:`, followed by its list of accounts.
 
 Where only `ethereum/consensus-specs` or `ethereum/execution-specs` writes out the steps of a rule, a step comment may name the function of that text that holds the step, and it states the step as the list above says.
 A provenance note then links the file at a pinned release or commit, with its section, in the doc comment of the definition or in a section comment above several definitions.
@@ -112,9 +117,10 @@ Their code is worth reading as a check on EthLib's own work.
 A defect in a specification often lives on in the code built from it.
 An edge case that an implementation handles with care can point to a proof or a test vector that EthLib lacks.
 
-When EthLib work finds a defect, or a rule with a subtle edge case, look at how the main implementations of that rule handle it.
-For the protocol, these are the consensus and execution clients.
-For a shared component, such as libp2p, BLS signatures or KZG commitments, they are the libraries that the clients use for it.
+When EthLib work finds a defect, or a rule with a subtle edge case, look at how the implementations of that rule handle it.
+For the protocol, these are the consensus and execution clients in production on Ethereum mainnet.
+For a shared component, such as libp2p, BLS signatures or KZG commitments, they are the libraries that those clients depend on for it.
+No other project is in scope.
 Look only at the implementations of the rule that the work touches: do not scan their repositories for other bugs.
 
 - If the flaw is a security vulnerability, do not disclose it in public.
