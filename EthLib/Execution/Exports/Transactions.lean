@@ -48,12 +48,11 @@ public section
 
 namespace EthLib.Execution.Transactions.Exports
 
-open EthLib.Exports (ExportError Result PyValue UnreadArgument forkUpTo pyExport rejectArgument
-  toResult)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument forkUpTo oneLine pyExport
+  rejectArgument toResult)
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
-open EthLib.Execution.Blocks.Exports (oneLine)
 
 /-- An RLP error, with the index of each structure field on the way to it. -/
 def rlpMessage : RlpError → String

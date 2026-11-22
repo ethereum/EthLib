@@ -34,7 +34,7 @@ public section
 
 namespace EthLib.Execution.Blocks.Exports
 
-open EthLib.Exports (ExportError Result PyValue UnreadArgument forkUpTo pyExport toResult)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument forkUpTo oneLine pyExport toResult)
 open EthLib.Base
 open EthLib.Serialization.Rlp
 open EthLib.Execution.Transactions.Exports (abortMessage inclusionMessage message

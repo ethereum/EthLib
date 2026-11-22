@@ -21,14 +21,14 @@ public section
 namespace EthLib.Engine.Exports
 
 open Lean (Json)
-open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport toResult)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument oneLine pyExport toResult)
 open EthLib.Base
 open EthLib.Execution.Rpc (accountProofOfJson)
 
 /-- An answer that does not hold reaches Python with its code, and its message is on one line. -/
 instance : ExportError Execution.State.AccountProofError where
   code := Execution.State.AccountProofError.code
-  message := fun e => (repr e).pretty 1000000
+  message := oneLine
 
 /-- Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256.
 

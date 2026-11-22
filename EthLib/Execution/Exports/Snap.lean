@@ -20,7 +20,8 @@ public section
 
 namespace EthLib.Execution.Network.Snap.Exports
 
-open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport rejectArgument toResult)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument oneLine pyExport rejectArgument
+  toResult)
 open EthLib.Execution.Network
 
 /-- A message for a rejected message, phrased for someone reading a Python traceback. -/
@@ -116,7 +117,7 @@ def answerToOption : RangeAnswer → Option Bool
 /-- A range answer that does not verify reaches Python with its code, on one line. -/
 instance : ExportError SnapRangeError where
   code := SnapRangeError.code
-  message := fun e => (repr e).pretty 1000000
+  message := oneLine
 
 /-- A slot of a range from a pair of a key hash and its data. -/
 def toRangeEntry (pair : Base.Hash32 × ByteArray) : RangeEntry ByteArray := ⟨pair.1, pair.2⟩
