@@ -48,7 +48,7 @@ The integer `v` holds `V_i`, so the right shift `V_i >> 1` halves it.
 `LSB_1(V_i)` is the last bit of the string, the parity of `v`. -/
 def mul (X Y : Block) : Block :=
   let x := blockToNat X
-  -- Step 3, for i = 0 to 127, with `(Z_i, V_i)` as a pair of integers.
+  -- Step 3, for each i from 0 to 127, with `(Z_i, V_i)` held as a pair of integers.
   let step (zv : Nat × Nat) (i : Nat) : Nat × Nat :=
     let (z, v) := zv
     let z := if (x / 2 ^ (127 - i)) % 2 = 1 then z ^^^ v else z
