@@ -21,17 +21,18 @@ namespace EthLib.Execution.Evm
 
 open EthLib.Base
 
-/-- The sum, modulo 2^256. -/
+/-- The sum, modulo 2^256, that ADD pushes: `mu'_s[0] = mu_s[0] + mu_s[1]`. -/
 def add (x y : U256) : U256 := x + y
 
-/-- The difference, modulo 2^256. -/
+/-- The difference, modulo 2^256, that SUB pushes: `mu'_s[0] = mu_s[0] - mu_s[1]`. -/
 def sub (x y : U256) : U256 := x - y
 
-/-- The product, modulo 2^256. -/
+/-- The product, modulo 2^256, that MUL pushes: `mu'_s[0] = mu_s[0] × mu_s[1]`. -/
 def mul (x y : U256) : U256 := x * y
 
 /-- The quotient, rounded down, or 0 for a divisor of 0. -/
 def div (dividend divisor : U256) : U256 :=
+  -- DIV: 0 if `mu_s[1] = 0`, else `floor(mu_s[0] / mu_s[1])`.
   if divisor = 0 then 0 else BitVec.ofNat 256 (dividend.toNat / divisor.toNat)
 
 /-- The signed quotient, rounded toward 0, or 0 for a divisor of 0.
@@ -43,18 +44,21 @@ def sdiv (x y : U256) : U256 :=
   -- The operands, read in two's complement.
   let dividend := U256.toSigned x
   let divisor := U256.toSigned y
+  -- SDIV: 0 if `mu_s[1] = 0`.
   if divisor = 0 then
     0
+  -- `-2^255` if `mu_s[0] = -2^255` and `mu_s[1] = -1`.
   else if dividend = -2 ^ 255 ∧ divisor = -1 then
     U256.fromSigned (-2 ^ 255)
   else
-    -- `sgn(mu_s[0] / mu_s[1]) * floor(|mu_s[0] / mu_s[1]|)`, the Yellow Paper's SDIV.
+    -- Otherwise `sgn(mu_s[0] / mu_s[1]) * floor(|mu_s[0] / mu_s[1]|)`.
     --
     -- The code takes the sign of the product, which is that of the quotient.
     U256.fromSigned ((dividend * divisor).sign * (dividend.natAbs / divisor.natAbs : Nat))
 
 /-- The remainder, or 0 for a divisor of 0. -/
 def mod (x y : U256) : U256 :=
+  -- MOD: 0 if `mu_s[1] = 0`, else `mu_s[0] mod mu_s[1]`.
   if y = 0 then 0 else BitVec.ofNat 256 (x.toNat % y.toNat)
 
 /-- The signed remainder, with the sign of the dividend, or 0 for a divisor of 0. -/
@@ -62,18 +66,21 @@ def smod (x y : U256) : U256 :=
   -- The operands, read in two's complement.
   let dividend := U256.toSigned x
   let divisor := U256.toSigned y
+  -- SMOD: 0 if `mu_s[1] = 0`.
   if divisor = 0 then
     0
   else
-    -- `sgn(mu_s[0]) * (|mu_s[0]| mod |mu_s[1]|)`, the Yellow Paper's SMOD.
+    -- Otherwise `sgn(mu_s[0]) * (|mu_s[0]| mod |mu_s[1]|)`.
     U256.fromSigned (dividend.sign * (dividend.natAbs % divisor.natAbs : Nat))
 
 /-- The sum modulo `z`, without wrapping first, or 0 for `z = 0`. -/
 def addmod (x y z : U256) : U256 :=
+  -- ADDMOD: 0 if `mu_s[2] = 0`, else `(mu_s[0] + mu_s[1]) mod mu_s[2]`, over the integers.
   if z = 0 then 0 else BitVec.ofNat 256 ((x.toNat + y.toNat) % z.toNat)
 
 /-- The product modulo `z`, without wrapping first, or 0 for `z = 0`. -/
 def mulmod (x y z : U256) : U256 :=
+  -- MULMOD: 0 if `mu_s[2] = 0`, else `(mu_s[0] × mu_s[1]) mod mu_s[2]`, over the integers.
   if z = 0 then 0 else BitVec.ofNat 256 ((x.toNat * y.toNat) % z.toNat)
 
 /-- The power, modulo 2^256.
@@ -82,12 +89,18 @@ Square-and-multiply keeps every step below 2^512.
 
 The power `base^exponent` alone can have 2^264 bits. -/
 def exp (base exponent : U256) : U256 :=
+  -- EXP: `mu'_s[0] = mu_s[0]^mu_s[1]` modulo `2^256`, with `0^0 = 1`.
   BitVec.ofNat 256 (Nat.powMod base.toNat exponent.toNat (2 ^ 256))
 
 /-- The low `byteNum + 1` bytes of `value`, read as a signed integer, widened to 32 bytes.
 
 A `byteNum` above 31 leaves `value` as it is. -/
 def signextend (byteNum value : U256) : U256 :=
+  -- SIGNEXTEND: `t = 256 - 8(mu_s[0] + 1)`, with bits counted from the most significant.
+  --
+  -- Bit `i` of the result is bit `t` of `mu_s[1]` for `i ≤ t`, and bit `i` of `mu_s[1]` otherwise.
+  --
+  -- For `mu_s[0] > 31`, `t < 0`, so the word stays as it is.
   if byteNum.toNat > 31 then
     value
   else

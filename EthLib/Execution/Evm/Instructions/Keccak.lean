@@ -27,7 +27,11 @@ open EthLib.Cryptography.Hash.Keccak (keccak256)
 
 /-- The word pushed for `data`: the Keccak-256 digest of `data`, read as a big-endian word.
 
-The digest has exactly 32 bytes, so it fits in one word with nothing cut. -/
+The digest has exactly 32 bytes, so it fits in one word with nothing cut.
+
+KECCAK256 reads `data` as `mu_m[mu_s[0] ... (mu_s[0] + mu_s[1] - 1)]`.
+
+It pushes `mu'_s[0] = KEC(data)`. -/
 def keccak (data : ByteArray) : U256 := U256.fromBeBytes (keccak256 data)
 
 end EthLib.Execution.Evm
