@@ -33,6 +33,7 @@ variable {α : Type} [SszType α]
 
 /-- A value with its root, computed on its first read. -/
 def of (value : α) : Rooted α :=
+  -- The kept root is the root of the value, deferred to its first read.
   ⟨value, Thunk.mk fun _ => SszType.root value, rfl⟩
 
 /-- Two rooted values with the same value are the same, since the value fixes the root. -/
@@ -60,6 +61,7 @@ instance {α : Type} [SszType α] : SszType (Rooted α) where
   desc := desc α
   toValue r := toValue r.value
   ofValue value := Rooted.of <$> ofValue value
+  -- The root is the kept one, which equals the root of the value by the proof it carries.
   root r := r.cached.get
   encode r := encode r.value
 
