@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Base.Uint64
+
 /-!
 # `Networking.Gossip.Parameters`
 
@@ -58,16 +60,30 @@ structure GossipsubParameters where
 The gossipsub parameters, given the slot duration in milliseconds and the slots per epoch.
 
 A seen message ID lasts two epochs, in whole seconds, with the remainder dropped.
+
+The slot duration and the slots per epoch are 64-bit configuration values.
+
+So two epochs in milliseconds must fit 64 bits, and an overflow is an error.
+
+Provenance: the [phase 0 networking text][p2p] of consensus-specs states these parameters.
+
+[p2p]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/phase0/p2p-interface.md#the-gossip-domain-gossipsub
 -/
-def gossipsubParameters (slotDurationMs slotsPerEpoch : Nat) : GossipsubParameters where
-  D := 8
-  D_low := 6
-  D_high := 12
-  D_lazy := 6
-  heartbeat_interval_ms := 700
-  fanout_ttl := 60
-  mcache_len := 6
-  mcache_gossip := 3
-  seen_ttl := slotDurationMs * slotsPerEpoch * 2 / 1000
+def gossipsubParameters (slotDurationMs slotsPerEpoch : UInt64) :
+    Except Base.ArithError GossipsubParameters := do
+  -- `SLOT_DURATION_MS * SLOTS_PER_EPOCH * 2`, on `uint64`, where an overflow fails.
+  let epochMs ← Base.Uint64.mulChecked slotDurationMs slotsPerEpoch
+  let twoEpochsMs ← Base.Uint64.mulChecked epochMs 2
+  return {
+    D := 8
+    D_low := 6
+    D_high := 12
+    D_lazy := 6
+    heartbeat_interval_ms := 700
+    fanout_ttl := 60
+    mcache_len := 6
+    mcache_gossip := 3
+    -- `seen_ttl = milliseconds_to_seconds(...)`: whole seconds, with the remainder dropped.
+    seen_ttl := (twoEpochsMs / 1000).toNat }
 
 end EthLib.Networking.Gossip

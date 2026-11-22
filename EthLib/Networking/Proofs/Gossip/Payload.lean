@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Uint64
 public import EthLib.Networking.Gossip.Parameters
 public import EthLib.Networking.Gossip.Payload
 public import EthLib.Networking.Proofs.Snappy.Block
@@ -18,6 +19,8 @@ Properties of the size limits on gossip, and of the gossipsub parameters.
 - Data that it accepts leaves 1024 bytes of the largest gossip message for framing.
 - It accepts the block of the compressor for a payload within the cap and its type bound.
 - It rejects a payload length above the bounds from the preamble alone, before it decompresses.
+- The gossipsub parameters exist exactly when two epochs in milliseconds fit 64 bits.
+- Then a seen message ID lasts two epochs in whole seconds, never a wrapped value.
 - The mesh bounds and the message cache windows are ordered.
 -/
 
@@ -142,16 +145,67 @@ theorem _root_.EthLib.Networking.Gossip.PayloadError.code_injective
   cases e₁ <;> cases e₂ <;>
     first | rfl | (simp only [PayloadError.code] at h; exact absurd h (by decide))
 
+/-- The gossipsub parameters exist exactly when two epochs in milliseconds are below 2^64. -/
+theorem gossipsubParameters_isOk_iff (slotDurationMs slotsPerEpoch : UInt64) :
+    (∃ p, gossipsubParameters slotDurationMs slotsPerEpoch = .ok p) ↔
+      slotDurationMs.toNat * slotsPerEpoch.toNat * 2 < 2 ^ 64 := by
+  simp only [gossipsubParameters, bind, Except.bind]
+  cases h1 : Base.Uint64.mulChecked slotDurationMs slotsPerEpoch with
+  | error e =>
+    -- The product of one epoch already overflows, so twice it does too.
+    have : ¬ slotDurationMs.toNat * slotsPerEpoch.toNat < 2 ^ 64 := fun h => by
+      simp [Base.Uint64.mulChecked_of_lt h] at h1
+    simp only [reduceCtorEq, exists_false, false_iff]
+    omega
+  | ok epochMs =>
+    obtain ⟨-, he⟩ := Base.Uint64.mulChecked_ok_iff.mp h1
+    simp only
+    cases h2 : Base.Uint64.mulChecked epochMs 2 with
+    | error e =>
+      -- Twice the epoch overflows.
+      have : ¬ epochMs.toNat * (2 : UInt64).toNat < 2 ^ 64 := fun h => by
+        simp [Base.Uint64.mulChecked_of_lt h] at h2
+      simp only [reduceCtorEq, exists_false, false_iff]
+      simp only [UInt64.reduceToNat, he] at this
+      omega
+    | ok twoEpochsMs =>
+      obtain ⟨hlt, -⟩ := Base.Uint64.mulChecked_ok_iff.mp h2
+      simp only [UInt64.reduceToNat, he] at hlt
+      simpa [pure, Except.pure] using hlt
+
+/-- When the parameters exist, a seen message ID lasts two epochs, in whole seconds. -/
+theorem gossipsubParameters_seen_ttl {slotDurationMs slotsPerEpoch : UInt64}
+    {p : GossipsubParameters} (h : gossipsubParameters slotDurationMs slotsPerEpoch = .ok p) :
+    p.seen_ttl = slotDurationMs.toNat * slotsPerEpoch.toNat * 2 / 1000 := by
+  simp only [gossipsubParameters, bind, Except.bind] at h
+  cases h1 : Base.Uint64.mulChecked slotDurationMs slotsPerEpoch with
+  | error e => simp [h1] at h
+  | ok epochMs =>
+    cases h2 : Base.Uint64.mulChecked epochMs 2 with
+    | error e => simp [h1, h2] at h
+    | ok twoEpochsMs =>
+      simp only [h1, h2, pure, Except.pure, Except.ok.injEq] at h
+      subst h
+      obtain ⟨-, he⟩ := Base.Uint64.mulChecked_ok_iff.mp h1
+      obtain ⟨-, htwo⟩ := Base.Uint64.mulChecked_ok_iff.mp h2
+      simp [UInt64.toNat_div, htwo, he]
+
 /-- The mesh bounds are ordered: `D_low ≤ D ≤ D_high`, and gossip goes to `D_lazy` peers. -/
-theorem gossipsubParameters_mesh (slotDurationMs slotsPerEpoch : Nat) :
-    let p := gossipsubParameters slotDurationMs slotsPerEpoch
+theorem gossipsubParameters_mesh {slotDurationMs slotsPerEpoch : UInt64} {p : GossipsubParameters}
+    (h : gossipsubParameters slotDurationMs slotsPerEpoch = .ok p) :
     p.D_low ≤ p.D ∧ p.D ≤ p.D_high ∧ 0 < p.D_lazy := by
-  simp [gossipsubParameters]
+  simp only [gossipsubParameters, bind, Except.bind] at h
+  split at h <;> try split at h
+  all_goals first | cases h | skip
+  all_goals simp_all
 
 /-- A node tells peers only of messages that it still keeps whole. -/
-theorem gossipsubParameters_mcache (slotDurationMs slotsPerEpoch : Nat) :
-    (gossipsubParameters slotDurationMs slotsPerEpoch).mcache_gossip ≤
-      (gossipsubParameters slotDurationMs slotsPerEpoch).mcache_len := by
-  simp [gossipsubParameters]
+theorem gossipsubParameters_mcache {slotDurationMs slotsPerEpoch : UInt64}
+    {p : GossipsubParameters} (h : gossipsubParameters slotDurationMs slotsPerEpoch = .ok p) :
+    p.mcache_gossip ≤ p.mcache_len := by
+  simp only [gossipsubParameters, bind, Except.bind] at h
+  split at h <;> try split at h
+  all_goals first | cases h | skip
+  all_goals simp_all
 
 end EthLib.Networking.Proofs.Gossip.Payload
