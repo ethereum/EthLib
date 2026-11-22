@@ -2733,7 +2733,7 @@ Every random value, such as an ID nonce, a masking IV or an ephemeral key, is an
 The source leaves three points open, and EthLib reads them as follows.
 It gives no lifetime for a challenge ("a short duration") or for a session, so both last until they are replaced.
 The nonce layout, the counter in the first 32 bits, is "strongly recommended", not required, and the theorems on nonces hold for that layout only.
-The number of messages per key "is limited" with no number, so the counter wraps after `2^32` messages, and then only the random bytes keep nonces apart.
+The number of messages per key "is limited" with no number; [Widths that the networking sources leave open](#widths-that-the-networking-sources-leave-open) records the wrap of the counter.
 
 EthLib also simplifies two points of the source.
 A node keeps one pending request per endpoint, the most recent, while the source allows several; a WHOAREYOU then refers to that one.
@@ -2759,6 +2759,28 @@ They follow [Protocol Messages](https://github.com/ethereum/devp2p/blob/88f1c808
 The source leaves two points open, and EthLib reads them as follows.
 The message table calls a FINDNODE distance "a positive integer", while the next sentence gives distance 0 a meaning; EthLib accepts 0, and [devp2p#297](https://github.com/ethereum/devp2p/pull/297) proposes that reading.
 The source recommends at most 16 nodes in an answer but fixes no limit on `total`, so the limit is an input.
+
+### Widths that the networking sources leave open
+
+Where a networking source gives a number no width, EthLib picks one, and this section records each choice with its reason.
+
+- The ports of a discv4 endpoint are `UInt16` (`Networking/Discv4/Packet.lean`).
+  [`discv4.md`](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv4.md#ping-packet-0x01) gives a port no width, but a UDP or TCP port is 16 bits ([RFC 768](https://www.rfc-editor.org/rfc/rfc768), [RFC 9293 §3.1](https://www.rfc-editor.org/rfc/rfc9293#section-3.1)), so a larger port is refused.
+- `total` of NODES, REGCONFIRMATION and TOPICNODES, and `wait-time` of REGCONFIRMATION, are `UInt64` (`Networking/Discv5/Message.lean`).
+  [`discv5-wire.md`](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-wire.md#protocol-messages) gives them no width, while its [WHOAREYOU packet](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-wire.md#whoareyou-packet-flag--1) types `enr-seq` as `uint64`.
+  No count of responses or wait in milliseconds comes near `2^64`, so refusing a larger value loses nothing.
+- The outgoing counter of a discv5 session is `UInt32` and wraps after `2^32` messages (`Networking/Discv5/Node.lean`).
+  [`discv5-wire.md`](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-wire.md#packet-encoding) requires a unique nonce for each message packet.
+  [`discv5-theory.md`](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-theory.md#session-cache) recommends the counter in the first 32 bits and random data in the other 64.
+  It limits the messages per key without a number.
+  After a wrap, two nonces of one session repeat only if they share the counter and the 8 random bytes.
+  Of `n` messages sealed under one key, at most `n^2 / 2^33` pairs share a counter.
+  So with uniform random bytes the chance of any repeat is at most `n^2 / 2^97`, which is `2^-17` after `2^40` messages.
+  EthLib does not start a new handshake before the wrap, since the source fixes no limit.
+  The random bytes are an input, so uniqueness rests on the caller drawing them at random.
+- The Altair message ID writes the topic length in 8 bytes, and keeps the low 64 bits of a length of `2^64` or more (`Networking/Gossip/MessageId.lean`).
+  The [Altair networking text](https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/altair/p2p-interface.md#topics-and-messages) converts the length with `Uint64`, which fails there.
+  No byte string that a node holds in memory reaches `2^64` bytes, so no reachable message ID differs.
 
 ### multistream-select negotiation and the TCP upgrade
 

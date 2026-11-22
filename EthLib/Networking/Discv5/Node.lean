@@ -32,6 +32,8 @@ The text gives no lifetime for a challenge or a session, so they last until repl
 
 The counter wraps after `2^32` messages, a bound that the text leaves to the node.
 
+After a wrap, two nonces repeat only if their 8 random bytes repeat too.
+
 [the theory text]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-theory.md#sessions
 -/
 

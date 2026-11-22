@@ -85,6 +85,8 @@ The length of the topic is a 64-bit integer, written as eight little-endian byte
 
 A topic of 2^64 bytes or more has no 64-bit length, and the bytes keep the low 64 bits of it.
 
+The source fails there instead, but no byte string in memory reaches that length.
+
 The length marks where the topic ends and the bytes start.
 -/
 def hashInput (domain : Vector UInt8 4) (topic bytes : ByteArray) : ByteArray :=
