@@ -34,6 +34,9 @@ RuleHistoryTest.Rules.access · true | late | 100
 (RuleHistoryTest.Rules.blobs · _).base | early | none
 (RuleHistoryTest.Rules.blobs · _).base | middle | some 6
 (RuleHistoryTest.Rules.blobs · _).base | late | some 9
+(RuleHistoryTest.Rules.blobs · _).cap | early | none
+(RuleHistoryTest.Rules.blobs · _).cap | middle | some 8
+(RuleHistoryTest.Rules.blobs · _).cap | late | some 12
 (RuleHistoryTest.Rules.blobs · _).refund | early | none
 (RuleHistoryTest.Rules.blobs · _).refund | middle | some 0
 (RuleHistoryTest.Rules.blobs · _).refund | late | some 1
@@ -44,6 +47,9 @@ RuleHistoryTest.Rules.limit | - | 24576
 (RuleHistoryTest.Rules.schedule ·).base | early | 21000
 (RuleHistoryTest.Rules.schedule ·).base | middle | 21000
 (RuleHistoryTest.Rules.schedule ·).base | late | 21000
+(RuleHistoryTest.Rules.schedule ·).cap | early | 6
+(RuleHistoryTest.Rules.schedule ·).cap | middle | 9
+(RuleHistoryTest.Rules.schedule ·).cap | late | 9
 (RuleHistoryTest.Rules.schedule ·).refund | early | 15000
 (RuleHistoryTest.Rules.schedule ·).refund | middle | 4800
 (RuleHistoryTest.Rules.schedule ·).refund | late | 4800
