@@ -9,6 +9,13 @@ Not yet released.
 
 ### Proof additions
 
+- The rebuild proof of a message and the proof that a message pays for its slots take each nonce or code they keep from the proof that every message keeps them ([#4235](https://github.com/ethereum/EthLib/issues/4235), first part).
+  `KeepsNonceOrCodeFrame`, `KeepsNonceOrCodeCall` and `KeepsNonceOrCodeCreate` in `EthLib.Execution.Proofs.Evm.Call.NonceOrCode` are now public.
+  The new lemmas `stepRules_keepsNonceOrCodeFrame`, `keepsNonceOrCodeFrame_step`, `keepsNonceOrCodeCall_rollbackOnError` and `keepsNonceOrCodeCreate_depositCode` there state the rule of each step, call and creation.
+  `keepsNonceOrCode_setCode_of_not_hasNonceOrCode` in `EthLib.Execution.Proofs.Evm.Call.NonceOrCodeWrites` proves that new code at an account with neither a nonce nor code keeps each nonce or code; the rebuild proof of a delegation uses it.
+  `EthLib.Execution.Proofs.Evm.Call.Rebuild` now imports `EthLib.Execution.Proofs.Evm.Call.NonceOrCode`.
+  No statement changes.
+
 - Each fact that a write of a transaction state keeps each nonce or code now has one proof ([#4144](https://github.com/ethereum/EthLib/issues/4144)).
   The new module `EthLib.Execution.Proofs.Evm.Call.NonceOrCodeWrites` holds `HasNonceOrCode`, `KeepsNonceOrCode` and the lemma of each write, below both the rebuild property and the theorems on messages.
   None of them needs the rebuild property of the state.

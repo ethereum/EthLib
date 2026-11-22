@@ -190,18 +190,10 @@ private theorem rebuildState_delegate_of_plain {block : BlockState} {tx tx' : Tr
       (bumped.storageWrites = tx.storageWrites.erase authority ∧
         bumped.storageClears = tx.storageClears.insert authority) :=
     hstore.imp id fun hs => hs.2
-  have hk : KeepsNonceOrCode tx bumped := by
-    refine ⟨fun other => ?_, fun other hc => ?_⟩
-    · by_cases hne : other = authority
-      · subst hne
-        rw [hn0]
-        exact Nat.zero_le _
-      · rw [hacc other hne]
-        exact Nat.le_refl _
-    · by_cases hne : other = authority
-      · exact hne ▸ hnc_self
-      · exact (HasNonceOrCode.congr (hacc other hne)).mpr hc
-  refine ⟨⟨⟨hp.trans valid.parent, ?_, ?_, ?_, ?_⟩, ?_, ?_⟩, hk⟩
+  -- The authority had neither a nonce nor code, so the new code and the new nonce keep both.
+  refine ⟨⟨⟨hp.trans valid.parent, ?_, ?_, ?_, ?_⟩, ?_, ?_⟩,
+    (keepsNonceOrCode_setCode_of_not_hasNonceOrCode hplain hcode).trans
+      (keepsNonceOrCode_incrementNonce hnonce)⟩
   · intro hash bytes hread
     rw [TransactionState.getCode_modifyState hnonce] at hread
     exact code_setCode valid.code hcode hash bytes hread

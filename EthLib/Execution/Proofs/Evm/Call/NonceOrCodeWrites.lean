@@ -12,7 +12,11 @@ A write keeps each nonce or code when it lowers no nonce, and each account with 
 
 The writes below do on any state, with two exceptions.
 
-New code needs a nonce at its account, which a creation from Spurious Dragon sets first.
+New code needs a nonce at its account, or neither a nonce nor code there.
+
+A creation from Spurious Dragon sets the nonce first.
+
+A delegation may find its authority with neither.
 
 A rollback or a deposit of code needs a frame that kept them.
 
@@ -206,6 +210,20 @@ theorem keepsNonceOrCode_setCode {tx tx' : TransactionState} {address : Address}
     left
     rw [hself]
     exact hnonce
+  · exact (HasNonceOrCode.congr (by unfold TransactionState.getAccount; rw [hother other hne])).mpr
+      hnc
+
+/-- New code at an account with neither a nonce nor code keeps each nonce or code.
+
+That account had none to keep, and every other account stays. -/
+theorem keepsNonceOrCode_setCode_of_not_hasNonceOrCode {tx tx' : TransactionState}
+    {address : Address} {code : ByteArray} (hplain : ¬HasNonceOrCode tx address)
+    (h : tx.setCode fork address code = .ok tx') : KeepsNonceOrCode tx tx' := by
+  obtain ⟨-, hother⟩ := TransactionState.getAccount_setCode h
+  refine ⟨nonceLe_setCode h, fun other hnc => ?_⟩
+  by_cases hne : other = address
+  · subst hne
+    exact absurd hnc hplain
   · exact (HasNonceOrCode.congr (by unfold TransactionState.getAccount; rw [hother other hne])).mpr
       hnc
 
