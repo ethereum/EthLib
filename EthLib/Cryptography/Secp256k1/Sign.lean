@@ -49,7 +49,7 @@ def signWith (d e : Fn) : (fuel : Nat) → NonceState → Except Secp256k1Error 
     -- Step h.3 also asks `k` in `[1, q-1]`, or the generator moves on to the next candidate.
     if ht : 0 < t ∧ t < Fn.modulus then
       let k : Fn := ⟨t, ht.2⟩
-      -- Step 1: the ephemeral key pair `(k, R)`, with `R = k G`.
+      -- Step 1: the ephemeral key pair `(k, R)`, with `R = k G` and `k` from RFC 6979.
       match mul k generator with
       -- `G` has order `n`, so `k G` is never `O` for `k` in `[1, n-1]`.
       | .infinity => signWith d e fuel (nonceReject state)
@@ -60,7 +60,9 @@ def signWith (d e : Fn) : (fuel : Nat) → NonceState → Except Secp256k1Error 
         let s := k.inv * (e + r * d)
         -- Steps 3 and 6 return to step 1 when `r = 0` or `s = 0`.
         --
-        -- Step 1 then takes the next candidate, by step h.3 of RFC 6979 §3.2.
+        -- Step 1 then takes the next candidate: RFC 6979 §3.2 step h.3 asks it for `r = 0`.
+        --
+        -- For `s = 0` the next candidate is EthLib's choice.
         if r = 0 ∨ s = 0 then signWith d e fuel (nonceReject state)
         -- Step 3 lets `r` meet a publicly verifiable criterion: here `x_R = r`.
         --

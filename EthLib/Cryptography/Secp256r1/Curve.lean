@@ -107,16 +107,25 @@ It is the verifying operation of SEC 1 v2 §4.1.4.
 
 The signature is valid when `R = (e / s) G + (r / s) q` is not `O` and its `x` is `r` mod `n`. -/
 def verify (q : Point) (e r s : Nat) : Bool :=
-  -- Step 1: `r` and `s` lie in `[1, n - 1]`, and the key is valid.
+  -- Step 1: if `r` and `s` are not both integers in `[1, n-1]`, output "invalid".
   if hr : 0 < r ∧ r < Fn.modulus then
     if hs : 0 < s ∧ s < Fn.modulus then
+      -- Not a step of §4.1.4: steps 1 and 3 of SEC 1 v2 §3.2.2.1, not `O` and on the curve.
+      --
+      -- Its step 2 holds by the type, and its step 4, `n Q = O`, since `h = 1`.
       if q ≠ .infinity ∧ q.isOnCurve then
+        -- Steps 2 and 3 are done by the caller, which passes the integer `e` of the hash.
+        --
+        -- `e` is taken mod `n` here, which leaves `u1` of step 4 unchanged.
+        --
+        -- Step 4: `u1 = e s^(-1) mod n` and `u2 = r s^(-1) mod n`.
         let sInv := Fn.inv ⟨s, hs.2⟩
         let u1 := (Fin.ofNat _ e : Fn) * sInv
         let u2 := (⟨r, hr.2⟩ : Fn) * sInv
-        -- Steps 5 to 8: `R = u1 G + u2 q` must not be `O`, and `x_R mod n` must be `r`.
+        -- Step 5: `R = (x_R, y_R) = u1 G + u2 Q_U`, and "invalid" if `R = O`.
         match Point.mulAdd u1 .generator u2 q with
         | .infinity => false
+        -- Steps 6 to 8: `v = x_R mod n`, and "valid" exactly when `v = r`.
         | .affine x _ => x.val % Fn.modulus == r
       else false
     else false
