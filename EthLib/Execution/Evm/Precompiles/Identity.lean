@@ -6,7 +6,10 @@ public import EthLib.Execution.Evm.Words
 /-!
 # `Evm.Precompiles.Identity`
 
-The IDENTITY precompile at address `0x04`, from Appendix E of the Yellow Paper.
+The IDENTITY precompile at address `0x04`, from Appendix E of the Yellow Paper, Shanghai version.
+
+The source is `Paper.tex` at `efc5f9a`:
+<https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex>
 
 It returns its call data unchanged, so contracts can copy memory cheaply.
 
@@ -26,7 +29,9 @@ def GAS_BASE : Nat := 15
 def GAS_PER_WORD : Nat := 3
 
 /-- The gas a call with `size` bytes of call data is charged. -/
-def gasCost (size : Nat) : Nat := GAS_BASE + GAS_PER_WORD * wordCount size
+def gasCost (size : Nat) : Nat :=
+  -- `g_r = 15 + 3 * ceil(||I_d|| / 32)`.
+  GAS_BASE + GAS_PER_WORD * wordCount size
 
 /-- Why an IDENTITY call fails. -/
 inductive IdentityError where
@@ -55,7 +60,13 @@ def IdentityError.code : IdentityError → UInt32
 
 /-- The call: the call data itself, once the gas covers the price. -/
 def identity (data : ByteArray) (gas : Nat) : Except IdentityError ByteArray :=
+  -- `g_r`, the price of the call.
   let cost := gasCost data.size
+  -- Appendix E, `Xi_PRE`: `(empty, 0, A, ())` if `g < g_r`, else `(sigma, g - g_r, A, o)`.
+  --
+  -- Here the call returns an error or the output, and the call frame applies the rest.
+  --
+  -- `o = I_d`.
   if gas < cost then .error (.outOfGas cost gas) else .ok data
 
 end EthLib.Execution.Evm.Precompiles.Identity
