@@ -101,6 +101,8 @@ def test_frame_encoding_error(encoded: str) -> None:
         ("zero_rtt", "0200000000"),
         ("zero_rtt", "060000"),
         ("zero_rtt", "1b" + "00" * 8),
+        # RETIRE_CONNECTION_ID is 1-RTT only, by verified erratum 7365 of RFC 9000.
+        ("zero_rtt", "1901"),
         ("initial", "0801ab"),
         ("handshake", "0801ab"),
     ],
@@ -117,10 +119,12 @@ def test_forbidden_packet_types(packet: quic.PacketType, encoded: str) -> None:
 @pytest.mark.parametrize("packet", ["initial", "handshake", "zero_rtt"])
 def test_table_3(frame: quic.Frame, encoded: str, packet: quic.PacketType) -> None:
     # RFC 9000 §12.4, Table 3: I/H carry only PADDING, PING, ACK, CRYPTO and transport close.
-    # 0-RTT excludes ACK, CRYPTO, NEW_TOKEN, PATH_RESPONSE and HANDSHAKE_DONE.
+    # 0-RTT excludes ACK, CRYPTO, NEW_TOKEN, RETIRE_CONNECTION_ID, PATH_RESPONSE and HANDSHAKE_DONE.
     kind = int(encoded[:2], 16)
     allowed = (
-        kind in {0, 1, 2, 3, 6, 28} if packet != "zero_rtt" else kind not in {2, 3, 6, 7, 27, 30}
+        kind in {0, 1, 2, 3, 6, 28}
+        if packet != "zero_rtt"
+        else kind not in {2, 3, 6, 7, 25, 27, 30}
     )
     if allowed:
         assert quic.decode_frame(packet, bytes.fromhex(encoded)) == (frame, b"")
