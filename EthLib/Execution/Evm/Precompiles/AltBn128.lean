@@ -73,10 +73,14 @@ def AltBn128Error.code : AltBn128Error → UInt32
   | .notInSubgroup _ => 5
 
 /-- The price of an addition: 500 from EIP-196, and 150 from Istanbul by EIP-1108. -/
-def ecaddGas (fork : Fork) : Nat := if fork ≥ .istanbul then 150 else 500
+def ecaddGas (fork : Fork) : Nat :=
+  -- EIP-196, Gas costs: `500`; EIP-1108, Specification: `150`, here from Istanbul.
+  if fork ≥ .istanbul then 150 else 500
 
 /-- The price of a multiplication: 40000 from EIP-196, and 6000 from Istanbul by EIP-1108. -/
-def ecmulGas (fork : Fork) : Nat := if fork ≥ .istanbul then 6000 else 40000
+def ecmulGas (fork : Fork) : Nat :=
+  -- EIP-196, Gas costs: `40000`; EIP-1108, Specification: `6 000`, here from Istanbul.
+  if fork ≥ .istanbul then 6000 else 40000
 
 /-- The price of a pairing check on `size` bytes, with one pair per whole 192 bytes.
 
@@ -84,23 +88,31 @@ EIP-197 charges 100000, plus 80000 per pair.
 
 From Istanbul, EIP-1108 charges 45000, plus 34000 per pair. -/
 def ecpairingGas (fork : Fork) (size : Nat) : Nat :=
+  -- EIP-197: `80 000 * k + 100 000`; EIP-1108: `34 000 * k + 45 000`, here from Istanbul.
+  --
+  -- `k` is the length of the input divided by 192, rounded down here, since the gas comes first.
   if fork ≥ .istanbul then 34000 * (size / 192) + 45000 else 80000 * (size / 192) + 100000
 
 /-- A point of `G_1` from 64 bytes, with `(0, 0)` for the point at infinity. -/
 def bytesToG1 (raw : List UInt8) : Except AltBn128Error Point := do
+  -- EIP-196, Encoding: field elements are 32 byte big-endian numbers, a point is `(x, y)`.
   let x := bytesToNat (raw.take 32)
   let y := bytesToNat (raw.drop 32)
+  -- Invalid input: a coordinate equal or larger than the field modulus `p`.
   if hx : x < Fp.modulus then
     if hy : y < Fp.modulus then
+      -- The point at infinity is encoded as `(0, 0)`.
       if x = 0 ∧ y = 0 then
         return .infinity
       let point := Point.affine ⟨x, hx⟩ ⟨y, hy⟩
+      -- Invalid input: a point that does not lie on the curve `Y^2 = X^3 + 3`.
       if point.isOnCurve then return point else throw (.notOnCurve ⟨raw.toArray⟩)
     else throw (.invalidFieldElement y)
   else throw (.invalidFieldElement x)
 
 /-- The 64 bytes of a point: its two coordinates, and all zeros for the point at infinity. -/
 def g1ToBytes : Point → List UInt8
+  -- EIP-196, Encoding: the length of the returned data is always as specified, 64 bytes.
   | .infinity => List.replicate 64 0
   | .affine x y => natToBytes 32 x.val ++ natToBytes 32 y.val
 
@@ -109,8 +121,10 @@ def ecadd (fork : Fork) (data : ByteArray) (gas : Nat) : Except AltBn128Error By
   let cost := ecaddGas fork
   if gas < cost then
     throw (.outOfGas cost gas)
+  -- ADD input: two curve points; a short input is padded with zeros, surplus bytes are ignored.
   let p0 ← bytesToG1 (bufferRead data 0 64)
   let p1 ← bytesToG1 (bufferRead data 64 64)
+  -- Output: the curve point `x + y`.
   return ⟨(g1ToBytes (p0 + p1)).toArray⟩
 
 /-- ECMUL: the point in the call data times the scalar after it, once the gas is charged.
@@ -120,13 +134,18 @@ def ecmul (fork : Fork) (data : ByteArray) (gas : Nat) : Except AltBn128Error By
   let cost := ecmulGas fork
   if gas < cost then
     throw (.outOfGas cost gas)
+  -- MUL input: a curve point and a scalar `(x, s)`; a short input is padded with zeros.
   let p0 ← bytesToG1 (bufferRead data 0 64)
+  -- The scalar can be any number between `0` and `2**256-1`.
   let n := bytesToNat (bufferRead data 64 32)
-  -- A 32-byte scalar is below `2^256`, so 256 bits cover it.
+  -- Output: the curve point `s * x`.
+  --
+  -- A 32-byte scalar is below `2**256`, so 256 bits cover it.
   return ⟨(g1ToBytes (Point.mulBits 256 n p0)).toArray⟩
 
 /-- An element of `Fp` from 32 bytes. -/
 def bytesToFp (raw : List UInt8) : Except AltBn128Error Fp :=
+  -- EIP-197, Encoding: 32 byte big-endian numbers; an encoding value of `p` or larger is invalid.
   let value := bytesToNat raw
   if h : value < Fp.modulus then .ok ⟨value, h⟩ else .error (.invalidFieldElement value)
 
@@ -134,15 +153,18 @@ def bytesToFp (raw : List UInt8) : Except AltBn128Error Fp :=
 
 Each coordinate gives its `i` part first. -/
 def bytesToG2 (raw : List UInt8) : Except AltBn128Error Point2 := do
+  -- Elements `a * i + b` of `F_p^2` are encoded as two elements of `F_p`, `(a, b)`.
   let x1 ← bytesToFp (raw.take 32)
   let x0 ← bytesToFp ((raw.drop 32).take 32)
   let y1 ← bytesToFp ((raw.drop 64).take 32)
   let y0 ← bytesToFp (raw.drop 96)
   let x : Fp2 := ⟨x0, x1⟩
   let y : Fp2 := ⟨y0, y1⟩
+  -- The point at infinity is encoded as `(0, 0)`.
   if x = ⟨0, 0⟩ ∧ y = ⟨0, 0⟩ then
     return .infinity
   let point := Point2.affine x y
+  -- Not an element of `G_2` if not on the curve `Y^2 = X^3 + 3/(i+9)`.
   if point.isOnCurve then return point else throw (.notOnCurve ⟨raw.toArray⟩)
 
 /-- The 128 bytes of a point of the twist, with the `i` part of each coordinate first.
@@ -167,8 +189,13 @@ Source: [EIP-197][eip197], section Specification.
 [eip197]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-197.md#specification
 -/
 def decodePair (data : ByteArray) (index : Nat) : Except AltBn128Error (Point × Point2) := do
+  -- Input pair `(aj, bj)` of `(G_1 x G_2)^k`, 64 then 128 bytes.
   let p ← bytesToG1 (bufferRead data (192 * index) 64)
   let q ← bytesToG2 (bufferRead data (192 * index + 64) 128)
+  -- For `G_2`, the order of the element has to be checked to be equal to the group order `q`.
+  --
+  -- Here the check is `q * Q = 0`: `q` is prime, so the order is 1 or `q`, and 1 is infinity.
+  --
   -- The order has 254 bits, so 256 bits of the scalar cover it.
   if Point2.mulBits 256 Fr.modulus q ≠ .infinity then
     throw (.notInSubgroup ⟨(bufferRead data (192 * index + 64) 128).toArray⟩)
@@ -176,6 +203,7 @@ def decodePair (data : ByteArray) (index : Nat) : Except AltBn128Error (Point ×
 
 /-- The 32-byte word of a boolean: 31 zero bytes, then `1` for true and `0` for false. -/
 def ecpairingWord (result : Bool) : List UInt8 :=
+  -- EIP-197, Encoding: always exactly 32 bytes, a 32 byte big-endian number.
   List.replicate 31 0 ++ [if result then 1 else 0]
 
 /-- ECPAIRING: the word 1 when the product of the pairings of the pairs is 1, and 0 otherwise.
@@ -186,9 +214,16 @@ EIP-197 does not order the two, so this module orders them. -/
 def ecpairing (fork : Fork) (data : ByteArray) (gas : Nat) : Except AltBn128Error ByteArray := do
   if gas < ecpairingGas fork data.size then
     throw (.outOfGas (ecpairingGas fork data.size) gas)
+  -- If the input length is not a multiple of `192`, the call fails.
   if data.size % 192 ≠ 0 then
     throw (.invalidInputLength data.size)
+  -- `k` is the length of the input divided by `192`; empty input is valid.
   let pairs ← (List.range (data.size / 192)).mapM (decodePair data)
+  -- One if `log_P1(a1) * log_P2(b1) + ... + log_P1(ak) * log_P2(bk) = 0` in `F_q`, else zero.
+  --
+  -- That holds exactly when the product of the pairings `e(aj, bj)` is 1.
+  --
+  -- The pairing is bilinear and non-degenerate, so `e(P1, P2)` has order `q`.
   return ⟨(ecpairingWord (pairingCheck pairs)).toArray⟩
 
 end EthLib.Execution.Evm.Precompiles.AltBn128
