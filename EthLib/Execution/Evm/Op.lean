@@ -132,6 +132,7 @@ namespace Op
 
 /-- The byte of an opcode. -/
 def toByte : Op → UInt8
+  -- The bytes of Appendix H.2, and for a later opcode the byte that its EIP gives.
   | .stop => 0x00
   | .add => 0x01
   | .mul => 0x02
@@ -203,9 +204,13 @@ def toByte : Op → UInt8
   | .tload => 0x5c
   | .tstore => 0x5d
   | .mcopy => 0x5e
+  -- Appendix H.2: PUSH0 to PUSH32 are `0x5f` to `0x7f`, so PUSHn is `0x5f + n`.
   | .push n => (0x5f + n.val).toUInt8
+  -- DUP1 to DUP16 are `0x80` to `0x8f`, so DUP(n + 1) is `0x80 + n`.
   | .dup n => (0x80 + n.val).toUInt8
+  -- SWAP1 to SWAP16 are `0x90` to `0x9f`, so SWAP(n + 1) is `0x90 + n`.
   | .swap n => (0x90 + n.val).toUInt8
+  -- LOG0 to LOG4 are `0xa0` to `0xa4`, so LOGn is `0xa0 + n`.
   | .log n => (0xa0 + n.val).toUInt8
   | .dupn => 0xe6
   | .swapn => 0xe7
@@ -222,33 +227,43 @@ def toByte : Op → UInt8
 
 /-- The fork that adds an opcode. -/
 def since : Op → Fork
-  -- EIP-7
+  -- EIP-7 adds DELEGATECALL at Homestead.
   | .delegatecall => .homestead
-  -- EIP-211, EIP-214 and EIP-140
+  -- At Byzantium: EIP-211 adds RETURNDATASIZE and RETURNDATACOPY.
+  --
+  -- EIP-214 adds STATICCALL, and EIP-140 REVERT.
   | .returndatasize | .returndatacopy | .staticcall | .revert => .byzantium
-  -- EIP-145, EIP-1052 and EIP-1014
+  -- EIP-145 adds SHL, SHR and SAR, EIP-1052 EXTCODEHASH and EIP-1014 CREATE2, at Constantinople.
   | .shl | .shr | .sar | .extcodehash | .create2 => .constantinople
-  -- EIP-1344 and EIP-1884
+  -- EIP-1344 adds CHAINID and EIP-1884 SELFBALANCE, at Istanbul.
   | .chainid | .selfbalance => .istanbul
-  -- EIP-3198
+  -- EIP-3198 adds BASEFEE at London.
   | .basefee => .london
-  -- EIP-3855 adds PUSH0, and the other pushes date from Frontier.
+  -- EIP-3855 adds PUSH0 at Shapella, and the other pushes date from Frontier.
   | .push n => if n = 0 then .shapella else .frontier
-  -- EIP-4844, EIP-7516, EIP-1153 and EIP-5656
+  -- EIP-4844 adds BLOBHASH, EIP-7516 BLOBBASEFEE and EIP-5656 MCOPY, at Dencun.
+  --
+  -- EIP-1153 adds TLOAD and TSTORE, at Dencun too.
   | .blobhash | .blobbasefee | .tload | .tstore | .mcopy => .dencun
-  -- EIP-7939
+  -- EIP-7939 adds CLZ at Fusaka.
   | .clz => .fusaka
-  -- EIP-7843 and EIP-8024
+  -- EIP-7843 adds SLOTNUM, and EIP-8024 DUPN, SWAPN and EXCHANGE, at Glamsterdam.
   | .slotnum | .dupn | .swapn | .exchange => .glamsterdam
+  -- Every other opcode dates from Frontier, PREVRANDAO under the name DIFFICULTY until Paris.
   | _ => .frontier
 
 /-- The opcode of a byte, at the fork that adds that opcode or later, or none. -/
 def decode (byte : UInt8) : Option Op :=
   let b := byte.toNat
+  -- Appendix H.2: PUSH0 to PUSH32 are `0x5f` to `0x7f`, so PUSHn is `0x5f + n`.
   if h : 0x5f ≤ b ∧ b ≤ 0x7f then some (.push ⟨b - 0x5f, by omega⟩)
+  -- DUP1 to DUP16 are `0x80` to `0x8f`, so DUP(n + 1) is `0x80 + n`.
   else if h : 0x80 ≤ b ∧ b ≤ 0x8f then some (.dup ⟨b - 0x80, by omega⟩)
+  -- SWAP1 to SWAP16 are `0x90` to `0x9f`, so SWAP(n + 1) is `0x90 + n`.
   else if h : 0x90 ≤ b ∧ b ≤ 0x9f then some (.swap ⟨b - 0x90, by omega⟩)
+  -- LOG0 to LOG4 are `0xa0` to `0xa4`, so LOGn is `0xa0 + n`.
   else if h : 0xa0 ≤ b ∧ b ≤ 0xa4 then some (.log ⟨b - 0xa0, by omega⟩)
+  -- Each other byte that Appendix H.2 or a later EIP gives to an opcode.
   else match b with
     | 0x00 => some .stop
     | 0x01 => some .add
@@ -333,10 +348,14 @@ def decode (byte : UInt8) : Option Op :=
     | 0xfa => some .staticcall
     | 0xfd => some .revert
     | 0xff => some .selfdestruct
+    -- Any other byte, INVALID at `0xfe` among them, has `delta_w = ∅`, so `Z` of §9.4.2 holds.
     | _ => none
 
 /-- The opcode of a byte at a fork, or none when the fork has no opcode with that byte. -/
 def ofByte (fork : Fork) (byte : UInt8) : Option Op :=
+  -- A byte names an opcode only from the fork that adds that opcode.
+  --
+  -- Before that fork, the byte is no instruction.
   (decode byte).filter fun op => op.since ≤ fork
 
 end Op
