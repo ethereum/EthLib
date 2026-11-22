@@ -70,11 +70,11 @@ The receiver decodes the payload with the type of the fork that the digest names
 
 So the check reads the digest, and not a fork that the receiver may have read from it.
 
-The [networking text of Altair light clients] asks for results in consecutive order by period.
+A server returns the updates in consecutive order by period.
 
 EthLib reads that as periods with no gap, so a server that lacks a period stops there.
 
-It also asks for at least the earliest known result of the range, which may come after the start.
+A server returns at least its earliest known update of the range, which may come after the start.
 
 The check cannot see which periods the server knows.
 
@@ -166,7 +166,6 @@ A validator may hold several seats, so a seat count bounds the lists, and a list
 [EIP-7594]: https://eips.ethereum.org/EIPS/eip-7594#networking
 [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#p2p-changes
 [EIP-7805]: https://eips.ethereum.org/EIPS/eip-7805#p2p-changes
-[networking text of Altair light clients]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/altair/light-client/p2p-interface.md#lightclientupdatesbyrange
 -/
 
 @[expose] public section

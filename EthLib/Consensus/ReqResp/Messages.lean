@@ -403,28 +403,22 @@ The configuration values are 64-bit, so a sum or product of 2^64 or more is an e
 
 From Gloas, a zero denominator is an error too, which happens exactly when both quotients are 0.
 
-Provenance: the [phase 0][phase0] and [Gloas][gloas] networking texts of consensus-specs give it.
-
 [EIP-8061]: https://eips.ethereum.org/EIPS/eip-8061#weak-subjectivity-period
-[phase0]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/phase0/p2p-interface.md#compute_min_epochs_for_block_requests
-[gloas]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/gloas/p2p-interface.md#modified-compute_min_epochs_for_block_requests
 -/
 def Config.computeMinEpochsForBlockRequests (config : Config) (fork : Fork) :
     Except ArithError Epoch := do
   if .glamsterdam ≤ fork then
-    -- `numerator = 3 * CHURN_LIMIT_QUOTIENT_GLOAS * CONSOLIDATION_CHURN_LIMIT_QUOTIENT`.
+    -- The numerator `3 * E * C`.
     let exitWeight ← Uint64.mulChecked 3 config.CHURN_LIMIT_QUOTIENT_GLOAS
     let numerator ← Uint64.mulChecked exitWeight config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT
-    -- The denominator reuses the product `3 * CHURN_LIMIT_QUOTIENT_GLOAS` of the numerator.
-
-    -- `denominator = 2 * CONSOLIDATION_CHURN_LIMIT_QUOTIENT + 3 * CHURN_LIMIT_QUOTIENT_GLOAS`.
+    -- The denominator `2 * C + 3 * E`, which reuses the product `3 * E` of the numerator.
     let consolidationWeight ← Uint64.mulChecked 2 config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT
     let denominator ← Uint64.addChecked consolidationWeight exitWeight
-    -- `MIN_VALIDATOR_WITHDRAWABILITY_DELAY + (numerator // denominator) // 2`.
+    -- `MIN_VALIDATOR_WITHDRAWABILITY_DELAY + floor(floor(3 * E * C / (2 * C + 3 * E)) / 2)`.
     let quotient ← Uint64.divChecked numerator denominator
     Uint64.addChecked config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY (quotient / 2)
   else
-    -- `MIN_VALIDATOR_WITHDRAWABILITY_DELAY + CHURN_LIMIT_QUOTIENT // 2`.
+    -- `MIN_VALIDATOR_WITHDRAWABILITY_DELAY + floor(CHURN_LIMIT_QUOTIENT / 2)`.
     Uint64.addChecked config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY (config.CHURN_LIMIT_QUOTIENT / 2)
 
 end EthLib.Consensus

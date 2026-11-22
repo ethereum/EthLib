@@ -18,11 +18,7 @@ The `nfd` entry holds the digest of that next fork, or four zero bytes when none
 
 A node reads the epoch from its wall clock, not from the chain it has synced.
 
-Provenance: the `eth2` field of the [phase0 networking text], and its [Fulu networking text].
-
 [EIP-7892]: https://eips.ethereum.org/EIPS/eip-7892#enr
-[phase0 networking text]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/phase0/p2p-interface.md#L1749-L1802
-[Fulu networking text]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/fulu/p2p-interface.md#L865-L954
 -/
 
 @[expose] public section
@@ -73,7 +69,7 @@ def bootnodeForkId (config : Config) : Except Err EnrForkId := do
 
 /-- Whether a node writes the Fulu entries `cgc` and `nfd` at an epoch.
 
-The Fulu networking text says that they "MUST be added once" Fulu has an epoch.
+A node must write them once Fulu has an epoch.
 
 A node from Fulu on writes them too, a rule of EthLib so that its reader accepts the record.
 
@@ -112,9 +108,9 @@ A different fork digest now means another fork or another chain, so the node may
 
 With the same digest, a different next fork stops the two only from the earlier next fork epoch.
 
-The Fulu networking text has a node weigh `nfd` with the next fork of `eth2`.
+A node weighs the `nfd` of a peer together with the next fork of its `eth2`.
 
-On a mismatch, the node "MUST NOT disconnect before the fork boundary", and it may from then on.
+On a mismatch, the node must not disconnect before the fork boundary, and it may from then on.
 
 Each `nfd` is none for a peer that does not write it. -/
 def mayDisconnect (localId remoteId : EnrForkId) (localNfd remoteNfd : Option ForkDigest)

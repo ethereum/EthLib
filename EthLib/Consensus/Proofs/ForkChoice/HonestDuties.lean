@@ -34,7 +34,7 @@ An honest validator signs a vote of its own only as its duty allows.
 
 It votes at the attestation deadline of a slot of its assignment, with an up-to-date store.
 
-The vote holds the data that the guide of the honest validator builds from the head.
+The vote holds the data that an honest validator builds from the head.
 
 It cannot be slashed together with a vote of the validator that its view holds.
 
@@ -128,7 +128,7 @@ variable (config checks)
 
 The state of the head block goes through the empty slots up to the slot, when it is older.
 
-The data then follows the guide of the honest validator. -/
+The data is then that of an honest validator. -/
 def HonestVoteData (store : Store preset fork) (slot : Slot) (committeeIndex : CommitteeIndex)
     (data : AttestationData) : Prop :=
   ∃ head block headState state, store.getHead config = .ok head ∧

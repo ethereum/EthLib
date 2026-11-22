@@ -553,7 +553,7 @@ theorem epochSlots_eq_ok_iff {epoch : Epoch} {slots : List Slot} :
 
 /-- An epoch whose first slot plus the length of an epoch reaches `2^64` has no slots.
 
-The guides compute that sum as a 64-bit integer, which overflows there. -/
+That sum, as a 64-bit integer, overflows there. -/
 theorem epochSlots_eq_error {epoch : Epoch}
     (big : 2 ^ 64 ≤ epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat) :
     epochSlots preset epoch = .error .overflow := by

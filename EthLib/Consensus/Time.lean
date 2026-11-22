@@ -77,7 +77,7 @@ def computeStartSlotAtEpoch (preset : Preset) (epoch : Epoch) : Except ArithErro
 
 /-- The slots of an epoch, in order.
 
-The guides add the length of an epoch to its first slot, as a 64-bit sum.
+The length of an epoch adds to its first slot as a 64-bit sum.
 
 So the slot after the last one must be a 64-bit slot too. -/
 def epochSlots (preset : Preset) (epoch : Epoch) : Except ArithError (List Slot) := do

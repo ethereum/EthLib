@@ -40,7 +40,7 @@ Each duty signs one object at one epoch:
 - From Gloas, the data of a payload attestation message is signed at the epoch of its slot.
 - From Gloas, the preferences of a proposer are signed at the fork version of their slot's epoch.
 
-The guides of the later forks, up to Heze, change none of these duties and only add others.
+The later forks, up to Heze, change none of these duties and only add others.
 
 Gloas adds the payload timeliness duties and the preferences of proposers.
 

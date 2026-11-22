@@ -140,7 +140,7 @@ def GAS_PER_ROUND : Nat := 1
 Any other input fails before the charge, so its price is 0. -/
 def gasCost (data : ByteArray) : Nat :=
   match Base.exactBytes? INPUT_BYTES data with
-  -- EIP-152, "Gas costs and benchmarks": each operation costs `GFROUND * rounds` gas.
+  -- EIP-152, section Gas costs and benchmarks: each operation costs `GFROUND * rounds` gas.
   | some input => GAS_PER_ROUND * (readRounds input).toNat
   | none => 0
 

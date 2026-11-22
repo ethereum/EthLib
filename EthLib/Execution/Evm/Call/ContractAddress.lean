@@ -59,12 +59,12 @@ def create2Preimage (sender : Address) (salt : U256) (initCodeHash : Vector UInt
     ByteArray :=
   -- `L_A(s, n, zeta, i) = (255) . s . zeta . KEC(i)` otherwise.
   --
-  -- EIP-1014 writes it `0xff ++ address ++ salt ++ keccak256(init_code)`.
+  -- EIP-1014 writes the same bytes: `0xff`, the sender, the salt and the hash of the init code.
   ⟨#[0xff]⟩ ++ ⟨sender.toArray⟩ ++ ⟨(U256.toBeBytes salt).toArray⟩ ++ ⟨initCodeHash.toArray⟩
 
 /-- The address of the contract that the sender makes with CREATE2, from a salt and init code. -/
 def create2Address (sender : Address) (salt : U256) (initCode : ByteArray) : Address :=
-  -- EIP-1014: `keccak256( 0xff ++ address ++ salt ++ keccak256(init_code))[12:]`.
+  -- EIP-1014: the address is the last 20 bytes of the Keccak-256 hash of that preimage.
   addressOfHash (keccak256 (create2Preimage sender salt (keccak256 initCode)))
 
 end EthLib.Execution.Evm
