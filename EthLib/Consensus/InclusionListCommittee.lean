@@ -35,14 +35,14 @@ variable {preset : Preset} {fork : Fork}
 
 /-- The inclusion list committee of a slot.
 
-Seat `i` holds member `i` of the beacon committees of the slot, counted modulo their number.
-
-Those committees share one shuffle of the active validators, computed once for the slot.
+The beacon committees of the slot share one shuffle, computed once for the slot.
 
 A slot whose committees hold no validator has no committee, and that is an error. -/
 def getInclusionListCommittee (state : BeaconState preset fork) (slot : Slot) :
     Except AccessorError (InclusionListCommittee preset) := do
+  -- The `m` members of the beacon committees of the slot, committee after committee.
   let members ← slotCommitteeMembers state slot
+  -- Seat `i` holds member `i mod m`.
   if nonempty : 0 < members.size then
     return Vector.ofFn fun i => members[i.val % members.size]'(Nat.mod_lt _ nonempty)
   else throw .noCandidates
@@ -54,6 +54,7 @@ def firstInclusionListSlot (state : BeaconState preset fork) (validator : Valida
     List Slot → Except AccessorError (Option Slot)
   | [] => return none
   | slot :: rest => do
+    -- The first slot, in order, whose committee holds the validator.
     let committee ← getInclusionListCommittee state slot
     if validator ∈ committee.toList then return some slot
     else firstInclusionListSlot state validator rest
@@ -65,8 +66,10 @@ The epoch can be at most the next epoch of the state, since later committees are
 A validator with seats in several slots gets the first of them. -/
 def getInclusionListCommitteeAssignment (state : BeaconState preset fork) (epoch : Epoch)
     (validator : ValidatorIndex) : Except AccessorError (Option Slot) := do
+  -- The epoch is at most `e + 1`, for the current epoch `e`.
   let nextEpoch ← liftArith (addChecked (getCurrentEpoch state) 1)
   if nextEpoch < epoch then throw (.epochTooFar epoch nextEpoch)
+  -- The first of its slots whose committee holds the validator.
   firstInclusionListSlot state validator (← liftArith (epochSlots preset epoch))
 
 /-- The root that a member signs for an inclusion list, on the chain of a state.
@@ -74,6 +77,7 @@ def getInclusionListCommitteeAssignment (state : BeaconState preset fork) (epoch
 The domain is that of the inclusion list committee, at the fork version of the list's epoch. -/
 def inclusionListSigningRoot (config : Config) (state : BeaconState preset fork)
     (list : InclusionList) : Except Err Root := do
+  -- The domain of the committee at the fork version of the epoch of the list.
   let version := config.computeForkVersion (computeEpochAtSlot preset list.slot)
   let domain ← computeDomain config DOMAIN_INCLUSION_LIST_COMMITTEE version
     state.genesisValidatorsRoot
@@ -84,6 +88,7 @@ def inclusionListSigningRoot (config : Config) (state : BeaconState preset fork)
 A member index outside the registry is an error. -/
 def isValidInclusionListSignature (config : Config) (state : BeaconState preset fork)
     (signed : SignedInclusionList) : Except AccessorError Bool := do
+  -- The signature verifies under the key of the member that the list names.
   let validator ← getValidator state signed.message.validatorIndex
   let root ← (inclusionListSigningRoot config state signed.message).mapError .ssz
   return Signatures.verify validator.pubkey (packBytes root)
@@ -100,6 +105,7 @@ inductive InclusionListSigningError where
 def getInclusionListSignature (config : Config) (state : BeaconState preset fork)
     (list : InclusionList) (key : Signatures.SecretKey) :
     Except InclusionListSigningError BLSSignature := do
+  -- The BLS signature of the signing root of the list.
   let root ← (inclusionListSigningRoot config state list).mapError .root
   (Signatures.sign key (packBytes root)).mapError .bls
 

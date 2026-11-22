@@ -33,6 +33,7 @@ namespace Config
 
 It is the latest consensus fork whose first epoch is at or before the epoch. -/
 def forkAtEpoch (config : Config) (epoch : Epoch) : Fork :=
+  -- From the latest fork down, the first whose fork epoch is at most the epoch.
   if config.HEZE_FORK_EPOCH ≤ epoch then .hegota
   else if config.GLOAS_FORK_EPOCH ≤ epoch then .glamsterdam
   else if config.FULU_FORK_EPOCH ≤ epoch then .fusaka
@@ -49,6 +50,7 @@ A fork that changes only the execution layer, or only the blob schedule, keeps t
 
 The configuration lists the forks up to Heze, the last fork on the timeline. -/
 def forkVersion (config : Config) (fork : Fork) : Version :=
+  -- From the latest consensus fork down, the version of the first at or before the fork.
   if .hegota ≤ fork then config.HEZE_FORK_VERSION
   else if .glamsterdam ≤ fork then config.GLOAS_FORK_VERSION
   else if .fusaka ≤ fork then config.FULU_FORK_VERSION
@@ -61,12 +63,14 @@ def forkVersion (config : Config) (fork : Fork) : Version :=
 
 /-- The version of the fork at an epoch. -/
 def computeForkVersion (config : Config) (epoch : Epoch) : Version :=
+  -- The version of the fork at the epoch.
   config.forkVersion (config.forkAtEpoch epoch)
 
 /-- The consensus fork after a consensus fork, with its first epoch.
 
 Heze has no next fork yet, and a fork of the execution layer or of the blob schedule has none. -/
 def nextFork (config : Config) : Fork → Option (Fork × Epoch)
+  -- Each consensus fork to the next, with the fork epoch of the configuration.
   | .phase0 => some (.altair, config.ALTAIR_FORK_EPOCH)
   | .altair => some (.bellatrix, config.BELLATRIX_FORK_EPOCH)
   | .bellatrix => some (.shapella, config.CAPELLA_FORK_EPOCH)
@@ -75,6 +79,7 @@ def nextFork (config : Config) : Fork → Option (Fork × Epoch)
   | .pectra => some (.fusaka, config.FULU_FORK_EPOCH)
   | .fusaka => some (.glamsterdam, config.GLOAS_FORK_EPOCH)
   | .glamsterdam => some (.hegota, config.HEZE_FORK_EPOCH)
+  -- Heze and the other forks have none.
   | _ => none
 
 end Config
@@ -110,14 +115,17 @@ With no such entry, the limit of Electra holds, from the first epoch of Electra.
 [EIP-7892]: https://eips.ethereum.org/EIPS/eip-7892#consensus-layer-configuration
 -/
 def getBlobParameters (config : Config) (epoch : Epoch) : BlobParameters :=
+  -- The entry with the latest first epoch at or before the epoch, as EIP-7892 specifies.
   match latestStarted (·.EPOCH) config.BLOB_SCHEDULE epoch with
   | some entry => ⟨entry.EPOCH, entry.MAX_BLOBS_PER_BLOCK⟩
+  -- Else the limit of Electra, from the first epoch of Electra.
   | none => ⟨config.ELECTRA_FORK_EPOCH, config.MAX_BLOBS_PER_BLOCK_ELECTRA⟩
 
 /-- The largest blob limit, among the limit of Electra and the limits of the schedule.
 
 It need not be the limit at the current epoch. -/
 def largestBlobLimit (config : Config) : UInt64 :=
+  -- The maximum of `MAX_BLOBS_PER_BLOCK_ELECTRA` and every limit of the schedule.
   config.BLOB_SCHEDULE.foldl (fun largest entry => max largest entry.MAX_BLOBS_PER_BLOCK)
     config.MAX_BLOBS_PER_BLOCK_ELECTRA
 
@@ -136,6 +144,7 @@ Every entry starts at or after that epoch, so the schedule recommends nothing be
 [EIP-8261]: https://eips.ethereum.org/EIPS/eip-8261#gas-limit-schedule
 -/
 def getScheduledGasLimit (config : Config) (epoch : Epoch) : Option UInt64 :=
+  -- The limit of the entry with the latest start at or before the epoch, as EIP-8261 says.
   (latestStarted (·.EPOCH) config.GAS_LIMIT_SCHEDULE epoch).map (·.GAS_LIMIT)
 
 end Config

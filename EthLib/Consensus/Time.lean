@@ -29,20 +29,24 @@ open Base Uint64
 
 /-- Seconds in milliseconds, or the largest 64-bit integer when the product does not fit. -/
 def secondsToMilliseconds (seconds : UInt64) : UInt64 :=
+  -- `1000 * t` for `t` seconds, saturated at `2^64 - 1`.
   if UINT64_MAX / 1000 < seconds then UINT64_MAX else seconds * 1000
 
 /-- Milliseconds in whole seconds, rounded down. -/
 def millisecondsToSeconds (milliseconds : UInt64) : UInt64 :=
+  -- `floor(t / 1000)` for `t` milliseconds.
   milliseconds / 1000
 
 /-- The time at the start of a slot, in milliseconds, from the time of genesis. -/
 def computeTimeAtSlotMs (config : Config) (genesisTimeMs : UInt64) (slot : Slot) :
     Except ArithError UInt64 := do
+  -- `g + s * SLOT_DURATION_MS`, for the genesis time `g` and the slot `s`.
   addChecked genesisTimeMs (← mulChecked slot config.SLOT_DURATION_MS)
 
 /-- The time at the start of a slot, in seconds, from the time of genesis. -/
 def computeTimeAtSlot (config : Config) (genesisTime : UInt64) (slot : Slot) :
     Except ArithError UInt64 := do
+  -- The time in milliseconds from the genesis time in milliseconds, then in whole seconds.
   return millisecondsToSeconds
     (← computeTimeAtSlotMs config (secondsToMilliseconds genesisTime) slot)
 
@@ -51,20 +55,26 @@ def computeTimeAtSlot (config : Config) (genesisTime : UInt64) (slot : Slot) :
 A time before genesis has no slot. -/
 def computeSlotAtTimeMs (config : Config) (genesisTimeMs timeMs : UInt64) :
     Except ArithError Slot := do
+  -- `floor((t - g) / SLOT_DURATION_MS)`, for the time `t` and the genesis time `g`.
+  --
+  -- It fails for `t < g`.
   divChecked (← subChecked timeMs genesisTimeMs) config.SLOT_DURATION_MS
 
 /-- The slot at a time in seconds, from the time of genesis. -/
 def computeSlotAtTime (config : Config) (genesisTime time : UInt64) : Except ArithError Slot :=
+  -- Both times in milliseconds.
   computeSlotAtTimeMs config (secondsToMilliseconds genesisTime) (secondsToMilliseconds time)
 
 /-- The epoch that contains a slot. -/
 def computeEpochAtSlot (preset : Preset) (slot : Slot) : Epoch :=
+  -- `floor(s / SLOTS_PER_EPOCH)`, for the slot `s`.
   slot / preset.SLOTS_PER_EPOCH
 
 /-- From Altair: the period of the sync committees that contains an epoch.
 
 A period is a fixed number of epochs, and one sync committee serves through each. -/
 def computeSyncCommitteePeriod (preset : Preset) (epoch : Epoch) : UInt64 :=
+  -- `floor(e / EPOCHS_PER_SYNC_COMMITTEE_PERIOD)`.
   epoch / preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD
 
 /-- From Altair: the period of the sync committees that contains a slot. -/
@@ -73,6 +83,7 @@ def computeSyncCommitteePeriodAtSlot (preset : Preset) (slot : Slot) : UInt64 :=
 
 /-- The first slot of an epoch. -/
 def computeStartSlotAtEpoch (preset : Preset) (epoch : Epoch) : Except ArithError Slot :=
+  -- `e * SLOTS_PER_EPOCH`.
   mulChecked epoch preset.SLOTS_PER_EPOCH
 
 /-- The slots of an epoch, in order.
@@ -89,11 +100,13 @@ def epochSlots (preset : Preset) (epoch : Epoch) : Except ArithError (List Slot)
 
 The delay keeps the validators of an epoch fixed once the seed of its committees is known. -/
 def computeActivationExitEpoch (preset : Preset) (epoch : Epoch) : Except ArithError Epoch := do
+  -- `e + 1 + MAX_SEED_LOOKAHEAD`.
   addChecked (← addChecked epoch 1) preset.MAX_SEED_LOOKAHEAD
 
 /-- A part of a slot, in milliseconds and rounded down, from that part in basis points. -/
 def getSlotComponentDurationMs (config : Config) (basisPoints : UInt64) :
     Except ArithError UInt64 := do
+  -- `floor(b * SLOT_DURATION_MS / BASIS_POINTS)`, for `b` basis points.
   return (← mulChecked basisPoints config.SLOT_DURATION_MS) / BASIS_POINTS
 
 /-- The time into a slot after which a proposer does not reorganize its head. -/
@@ -102,22 +115,26 @@ def getProposerReorgCutoffMs (config : Config) : Except ArithError UInt64 :=
 
 /-- The time into a slot at which an attestation is due. -/
 def getAttestationDueMs (config : Config) (fork : Fork) : Except ArithError UInt64 :=
+  -- From Gloas, the earlier deadline, as EIP-7732 specifies.
   getSlotComponentDurationMs config <|
     if fork ≥ .glamsterdam then config.ATTESTATION_DUE_BPS_GLOAS else config.ATTESTATION_DUE_BPS
 
 /-- The time into a slot at which an aggregate is due. -/
 def getAggregateDueMs (config : Config) (fork : Fork) : Except ArithError UInt64 :=
+  -- From Gloas, the earlier deadline, as EIP-7732 specifies.
   getSlotComponentDurationMs config <|
     if fork ≥ .glamsterdam then config.AGGREGATE_DUE_BPS_GLOAS else config.AGGREGATE_DUE_BPS
 
 /-- From Altair: the time into a slot at which a sync committee message is due. -/
 def getSyncMessageDueMs (config : Config) (fork : Fork) : Except ArithError UInt64 :=
+  -- From Gloas, the earlier deadline, as EIP-7732 specifies.
   getSlotComponentDurationMs config <|
     if fork ≥ .glamsterdam then config.SYNC_MESSAGE_DUE_BPS_GLOAS
     else config.SYNC_MESSAGE_DUE_BPS
 
 /-- From Altair: the time into a slot at which a sync committee contribution is due. -/
 def getContributionDueMs (config : Config) (fork : Fork) : Except ArithError UInt64 :=
+  -- From Gloas, the earlier deadline, as EIP-7732 specifies.
   getSlotComponentDurationMs config <|
     if fork ≥ .glamsterdam then config.CONTRIBUTION_DUE_BPS_GLOAS
     else config.CONTRIBUTION_DUE_BPS

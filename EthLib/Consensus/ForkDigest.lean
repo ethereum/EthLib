@@ -51,16 +51,20 @@ They also hold the first epoch of each blob schedule entry at or after the first
 [EIP-7892]: https://eips.ethereum.org/EIPS/eip-7892#modified-compute_fork_digest
 -/
 def digestEpochs (config : Config) : List Epoch :=
+  -- The first epochs of the consensus forks from Altair to Heze.
   let forks := [config.ALTAIR_FORK_EPOCH, config.BELLATRIX_FORK_EPOCH, config.CAPELLA_FORK_EPOCH,
     config.DENEB_FORK_EPOCH, config.ELECTRA_FORK_EPOCH, config.FULU_FORK_EPOCH,
     config.GLOAS_FORK_EPOCH, config.HEZE_FORK_EPOCH]
+  -- The first epochs of the blob schedule entries from the first epoch of Fulu.
   let blobs := (config.BLOB_SCHEDULE.map (·.EPOCH)).filter (config.FULU_FORK_EPOCH ≤ ·)
+  -- With epoch 0, sorted, and each epoch once.
   ((0 :: forks ++ blobs).mergeSort (· ≤ ·)).eraseDups
 
 /-- Among the epochs at which the fork digest can change, the latest at or before an epoch.
 
 Epoch 0 is one of them, so it always exists. -/
 def digestStart (config : Config) (epoch : Epoch) : Epoch :=
+  -- The largest of those epochs that is at most the epoch, from 0.
   config.digestEpochs.foldl (fun start next => if next ≤ epoch then max start next else start) 0
 
 end Config
@@ -72,6 +76,7 @@ The search takes these epochs in increasing order, and finds none when no digest
 The receiver decodes a message with the types of the fork at that epoch. -/
 def forkOfDigest (config : Config) (genesisValidatorsRoot : Root) (digest : ForkDigest) :
     Option Epoch :=
+  -- The first epoch, in increasing order, whose digest is the digest given.
   config.digestEpochs.find? fun start =>
     match computeForkDigest config genesisValidatorsRoot start with
     | .ok found => found == digest
@@ -91,6 +96,7 @@ So it can fail when that fork's digest equals an earlier one, though it then ask
 
 Two epochs of one fork may share a digest, since the search still reads that fork. -/
 def digestsIdentify (config : Config) (genesisValidatorsRoot : Root) : Bool :=
+  -- For each epoch of the list, the search on its digest finds an epoch of the same fork.
   config.digestEpochs.all fun start =>
     match computeForkDigest config genesisValidatorsRoot start with
     | .ok digest =>

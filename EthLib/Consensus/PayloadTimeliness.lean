@@ -62,13 +62,17 @@ def balanceWeightedSearch (preset : Preset) (fork : Base.Fork) (indices : Array 
     (selected : Array ValidatorIndex) (bound : selected.size ≤ size) (i : Nat)
     (random : { random // random = drawHash fork seed i }) :
     Except AccessorError (Vector ValidatorIndex size) :=
+  -- The selection stops once it holds `size` candidates.
   if full : selected.size = size then .ok ⟨selected, full⟩
   else do
+    -- Draw `i` reads the candidate at position `order(i mod n)`, and accepts it by its balance.
     let position := order (i % indices.size)
     let accepted ← drawAccepts preset fork random.1 i (balances.getD position 0)
+    -- An accepted candidate joins the selection.
     let next : { next : Array ValidatorIndex // next.size ≤ size } :=
       if accepted then ⟨selected.push (indices.getD position 0), by simp; omega⟩
       else ⟨selected, bound⟩
+    -- A new hash only when draw `i + 1` starts a new block of draws.
     let random : { random // random = drawHash fork seed (i + 1) } :=
       if start : (i + 1) % drawsPerHash fork = 0 then ⟨drawHash fork seed (i + 1), rfl⟩
       else ⟨random.1, random.2.trans (drawHash_succ start).symm⟩
@@ -92,8 +96,10 @@ So a shuffled selection fails for more than `2^40` candidates, before its first 
 def computeBalanceWeightedSelection (state : BeaconState preset fork)
     (indices : Array ValidatorIndex) (seed : Bytes32) (size : UInt64) (shuffleIndices : Bool) :
     Except AccessorError (Vector ValidatorIndex size.toNat) := do
+  -- There is at least one candidate.
   if indices.size = 0 then throw .noCandidates
   unless indices.size < 2 ^ 64 do throw (.arith .overflow)
+  -- The effective balance of each candidate.
   let balances ← indices.mapM fun index => return (← getValidator state index).effectiveBalance
   if shuffleIndices ∧ size ≠ 0 ∧ 2 ^ 40 < indices.size then
     throw (.shuffle (.countTooLarge indices.size.toUInt64))
@@ -103,8 +109,10 @@ def computeBalanceWeightedSelection (state : BeaconState preset fork)
   let pivots := if shuffleIndices then
       Shuffle.pivots preset.SHUFFLE_ROUND_COUNT.toNat seed indices.size
     else #[]
+  -- The order of the candidates: shuffled, or as given.
   let order : Nat → Nat :=
     if shuffleIndices then Shuffle.shuffledIndexBy pivots seed indices.size else id
+  -- The draws from draw 0.
   balanceWeightedSearch preset fork indices balances order seed size.toNat #[] (Nat.zero_le _) 0
     ⟨drawHash fork seed 0, rfl⟩
 
@@ -116,18 +124,21 @@ The count of those committees in the slot is given. -/
 def computePtcOf (state : BeaconState preset fork) (slot : Slot) (epochSeed : Bytes32)
     (perSlot : UInt64) (active : Array ValidatorIndex) (shuffled : Array UInt64) :
     Except AccessorError (PayloadTimelinessCommittee preset) := do
+  -- The seed `SHA-256(epoch seed || s as 8 bytes, little-endian)`, for the slot `s`.
   let seed :=
     Cryptography.Hash.Sha256.hash32 ⟨epochSeed.toArray ++ (uintToBytes 8 slot.toNat).toArray⟩
+  -- `PTC_SIZE` members, weighted by effective balance, from the slot's committees.
+  --
+  -- EIP-7732 specifies that sampling.
+  --
+  -- The members are read in committee order, not shuffled.
   let members ← slotCommitteeMembersOf preset slot perSlot active shuffled
   computeBalanceWeightedSelection state members seed preset.PTC_SIZE false
 
-/-- The payload timeliness committee of a slot, which may hold a validator more than once.
-
-It is drawn from the members of the beacon committees of the slot, in their order.
-
-Its seed is the hash of the seed of the epoch for this duty and the slot as 8 bytes. -/
+/-- The payload timeliness committee of a slot, which may hold a validator more than once. -/
 def computePtc (state : BeaconState preset fork) (slot : Slot) :
     Except AccessorError (PayloadTimelinessCommittee preset) := do
+  -- The seed of the epoch of the slot for this duty, and its shuffle of attesters.
   let epoch := computeEpochAtSlot preset slot
   let epochSeed ← getSeed state epoch DOMAIN_PTC_ATTESTER
   let (active, shuffled) ← attesterShuffle state epoch
@@ -142,12 +153,17 @@ def ptcWindowPosition (config : Config) (state : BeaconState preset fork) (slot 
     Except AccessorError UInt64 := do
   let epoch := computeEpochAtSlot preset slot
   let outOfRange := AccessorError.ptcSlotOutOfRange slot state.slot
+  -- The epoch `x` of the slot is at or after the first epoch of Gloas.
   unless config.GLOAS_FORK_EPOCH ≤ epoch do throw outOfRange
   let stateEpoch := getCurrentEpoch state
+  -- Here `s` is the slot, `P = SLOTS_PER_EPOCH` and `e` the current epoch.
+  --
+  -- The previous epoch, `x + 1 = e`, takes position `s mod P`.
   if epoch < stateEpoch then
     unless epoch + 1 = stateEpoch do throw outOfRange
     return slot % preset.SLOTS_PER_EPOCH
   else
+    -- Else `e ≤ x ≤ e + MIN_SEED_LOOKAHEAD`, at position `(x - e + 1) * P + s mod P`.
     unless epoch ≤ (← liftArith (addChecked stateEpoch preset.MIN_SEED_LOOKAHEAD)) do
       throw outOfRange
     let offset ← liftArith do
@@ -157,6 +173,7 @@ def ptcWindowPosition (config : Config) (state : BeaconState preset fork) (slot 
 /-- The payload timeliness committee of a slot, as the window of the state keeps it. -/
 def getPtc (config : Config) (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (slot : Slot) : Except AccessorError (PayloadTimelinessCommittee preset) := do
+  -- The committee at the position of the slot in the window.
   let position ← ptcWindowPosition config state slot
   match (state.ptcWindow gloas).elements[position.toNat]? with
   | some committee => return committee
@@ -165,6 +182,7 @@ def getPtc (config : Config) (state : BeaconState preset fork) (gloas : .glamste
 /-- The members of a committee whose bit is set, in committee order. -/
 def ptcAttesters (committee : PayloadTimelinessCommittee preset)
     (bits : PayloadTimelinessCommitteeBits preset) : List ValidatorIndex :=
+  -- Member `j` attests when bit `j` is set.
   (committee.toList.zip bits.bits.toList).filterMap fun (member, bit) =>
     if bit then some member else none
 
@@ -180,6 +198,7 @@ An index that appears twice in the committee appears twice in the indices. -/
 def getIndexedPayloadAttestation (config : Config) (state : BeaconState preset fork)
     (gloas : .glamsterdam ≤ fork) (attestation : PayloadAttestation preset) :
     Except AccessorError (IndexedPayloadAttestation preset) := do
+  -- The attesters of the committee of the slot of the vote, sorted, with their repeats.
   let committee ← getPtc config state gloas attestation.data.slot
   let attesters := ptcAttesters committee attestation.aggregationBits
   let sorted := attesters.mergeSort (· ≤ ·)
@@ -188,14 +207,16 @@ def getIndexedPayloadAttestation (config : Config) (state : BeaconState preset f
 
 /-- Whether an indexed vote of the committee has signers, in sorted order, and a valid signature.
 
-The signature is an aggregate of the keys of the signers, over the vote, in the epoch of its slot.
-
 An index may repeat, since the committee may hold a validator twice. -/
 def isValidIndexedPayloadAttestation (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (attestation : IndexedPayloadAttestation preset) :
     Except TransitionError Bool := do
   let indices := attestation.attestingIndices.data.toList
+  -- The indices are nonempty and sorted, repeats allowed.
   if indices = [] ∨ indices ≠ indices.mergeSort (· ≤ ·) then return false
+  -- The signature is the aggregate of the keys of the signers over the vote.
+  --
+  -- The domain is that of the committee, at the epoch of the slot of the vote.
   let pubkeys ← indices.toArray.mapM fun index => do
     return (← liftAccessor (getValidator state index)).pubkey
   let domain ← liftAccessor (getDomain config state DOMAIN_PTC_ATTESTER
@@ -204,20 +225,19 @@ def isValidIndexedPayloadAttestation (config : Config) (checks : SignatureChecks
   return checks.fastAggregateVerify pubkeys (packBytes signingRoot)
     attestation.signature
 
-/-- The state after a payload attestation of a block, which the state does not change.
-
-The vote must be on the parent of the block, at the slot before that of the state.
-
-Its signers must sign it, as an indexed vote of the committee of that slot. -/
+/-- The state after a payload attestation of a block, which the state does not change. -/
 def processPayloadAttestation (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (attestation : PayloadAttestation preset) :
     Except TransitionError (BeaconState preset fork) := do
   let data := attestation.data
+  -- The vote is on the parent of the block.
   ensure (data.beaconBlockRoot = state.latestBlockHeader.parentRoot)
     (.payloadAttestationNotForParent data.beaconBlockRoot state.latestBlockHeader.parentRoot)
+  -- Its slot is the slot before that of the state.
   ensure (data.slot.toNat + 1 = state.slot.toNat)
     (.payloadAttestationWrongSlot data.slot state.slot)
+  -- Its signers sign it, as an indexed vote of the committee of that slot.
   let indexed ← liftAccessor (getIndexedPayloadAttestation config state gloas attestation)
   let valid ← isValidIndexedPayloadAttestation config checks state indexed
   ensure (valid = true) (.invalidPayloadAttestation data.slot indexed.attestingIndices.data.size)
@@ -228,13 +248,18 @@ def processPayloadAttestation (config : Config) (checks : SignatureChecks)
 The epoch is that of the position after the first. -/
 def ptcWindowSlot (preset : Preset) (firstEpoch : Epoch) (position : Nat) :
     Except AccessorError Slot := liftArith do
+  -- Let `f` be the first epoch and `P = SLOTS_PER_EPOCH`.
+  --
+  -- Position `q` is slot `q mod P` of epoch `f + floor(q / P)`.
   let perEpoch := preset.SLOTS_PER_EPOCH.toNat
   let epoch ← addChecked firstEpoch (position / perEpoch).toUInt64
   addChecked (← computeStartSlotAtEpoch preset epoch) (position % perEpoch).toUInt64
 
 /-- The window of committees when the field first appears, at the fork or at genesis.
 
-The previous epoch holds committees of index zero, and the other epochs their computed committees.
+The previous epoch holds committees whose every seat is validator 0.
+
+The other epochs hold their computed committees.
 -/
 def initializePtcWindow (state : BeaconState preset fork) :
     Except AccessorError (PayloadTimelinessCommitteeWindow preset) :=
@@ -250,7 +275,9 @@ def initializePtcWindow (state : BeaconState preset fork) :
       return (← getSeed state epoch DOMAIN_PTC_ATTESTER, getCommitteeCountPerSlot state epoch,
         ← attesterShuffle state epoch)
   RootedVector.ofVector <$> (Vector.range _).mapM fun position => do
+    -- The positions of the previous epoch hold committees whose every seat is validator 0.
     if position < perEpoch then return Vector.replicate _ 0
+    -- Each later position holds the computed committee of its slot.
     let slot ← ptcWindowSlot preset current (position - perEpoch)
     match inputs[(position - perEpoch) / perEpoch]? with
     | some shared =>
@@ -266,16 +293,20 @@ The last epoch of the window becomes the epoch after the lookahead, with its com
 def processPtcWindow (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
     Except AccessorError (BeaconState preset fork) := do
   let perEpoch := preset.SLOTS_PER_EPOCH.toNat
+  -- The epoch `e + MIN_SEED_LOOKAHEAD + 1`, for the current epoch `e`.
   let nextEpoch ← liftArith do
     addChecked (← addChecked (getCurrentEpoch state) preset.MIN_SEED_LOOKAHEAD) 1
   -- The new committees read the same two seeds, shuffle and count, so these are computed once.
   let inputs : Except AccessorError _ := do
     return (← getSeed state nextEpoch DOMAIN_PTC_ATTESTER, getCommitteeCountPerSlot state nextEpoch,
       ← attesterShuffle state nextEpoch)
+  -- The committees of each slot of that epoch.
   let fresh ← (Vector.range perEpoch).mapM fun offset => do
     let slot ← ptcWindowSlot preset nextEpoch offset
     let (epochSeed, perSlot, active, shuffled) ← inputs
     computePtcOf state slot epochSeed perSlot active shuffled
+  -- The window drops its first `SLOTS_PER_EPOCH` committees, and the new ones join its end.
+  --
   -- The committees that stay keep their leaves in the tree of the window.
   --
   -- So only the new committees are hashed, with the levels above the leaves.

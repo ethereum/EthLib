@@ -37,6 +37,7 @@ variable {preset : Preset} {fork : Base.Fork}
 
 /-- The seed of the proposer draw of a slot: the hash of the epoch's seed and the slot. -/
 def proposerSlotSeed (seed : Bytes32) (slot : Slot) : Bytes32 :=
+  -- `SHA-256(seed || s as 8 bytes, little-endian)`, for the slot `s`, as EIP-7917 specifies.
   Cryptography.Hash.Sha256.hash32 ⟨seed.toArray ++ (uintToBytes 8 slot.toNat).toArray⟩
 
 /-- The proposer of a slot, drawn from candidates with the seed of the slot.
@@ -44,15 +45,20 @@ def proposerSlotSeed (seed : Bytes32) (slot : Slot) : Bytes32 :=
 Before Gloas it is the proposer draw; from Gloas, a balance-weighted selection of one. -/
 def computeSlotProposer (state : BeaconState preset fork) (indices : Array ValidatorIndex)
     (seed : Bytes32) : Except AccessorError ValidatorIndex := do
+  -- From Gloas, one candidate of a shuffled balance-weighted selection, as EIP-7732 specifies.
   if .glamsterdam ≤ fork then
     let selected ← computeBalanceWeightedSelection state indices seed 1 true
     return selected[0]
+  -- Before Gloas, the proposer draw.
   else computeProposerIndex state indices seed
 
 /-- The proposers of the slots of an epoch, drawn from candidates with a seed of the epoch. -/
 def computeProposerIndices (state : BeaconState preset fork) (epoch : Epoch) (seed : Bytes32)
     (indices : Array ValidatorIndex) :
     Except AccessorError (Vector ValidatorIndex preset.SLOTS_PER_EPOCH.toNat) := do
+  -- Slot `s = e * SLOTS_PER_EPOCH + j` for each `j < SLOTS_PER_EPOCH`, for the epoch `e`.
+  --
+  -- Its proposer is drawn with the seed of the slot, as EIP-7917 specifies.
   let start ← liftArith (computeStartSlotAtEpoch preset epoch)
   (Vector.range _).mapM fun offset => do
     let slot ← liftArith (addChecked start offset.toUInt64)
@@ -61,6 +67,7 @@ def computeProposerIndices (state : BeaconState preset fork) (epoch : Epoch) (se
 /-- The candidates to propose among the active validators of an epoch, unslashed from Gloas. -/
 def proposerCandidates (state : BeaconState preset fork) (active : Array ValidatorIndex) :
     Array ValidatorIndex :=
+  -- From Gloas the slashed validators are not candidates, as EIP-8045 specifies.
   if .glamsterdam ≤ fork then
     active.filter fun index =>
       match state.validators.data[index.toNat]? with
@@ -71,33 +78,38 @@ def proposerCandidates (state : BeaconState preset fork) (active : Array Validat
 /-- The proposers of the slots of an epoch. -/
 def getBeaconProposerIndices (state : BeaconState preset fork) (epoch : Epoch) :
     Except AccessorError (Vector ValidatorIndex preset.SLOTS_PER_EPOCH.toNat) := do
+  -- The candidates among the active validators of the epoch, and its seed for proposers.
   let active ← getActiveValidatorIndicesChecked state epoch
   let seed ← getSeed state epoch DOMAIN_BEACON_PROPOSER
   computeProposerIndices state epoch seed (proposerCandidates state active.toArray)
 
 /-- From Fulu: the proposers of the current epoch and of each epoch of the seed lookahead.
 
-They are those of the current epoch first, then of each later epoch in turn.
-
-An epoch past 2^64 - 1 is an error. -/
+An epoch past `2^64 - 1` is an error. -/
 def initializeProposerLookahead (state : BeaconState preset fork) : Except AccessorError
     (Vector ValidatorIndex
       ((preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat)) := do
+  -- The proposers of epochs `e` to `e + MIN_SEED_LOOKAHEAD` in turn, for the epoch `e`.
+  --
+  -- EIP-7917 specifies that lookahead.
   let epochs ← (Vector.range (preset.MIN_SEED_LOOKAHEAD.toNat + 1)).mapM fun offset => do
     let epoch ← liftArith (addChecked (getCurrentEpoch state) offset.toUInt64)
     getBeaconProposerIndices state epoch
   return epochs.flatten
 
-/-- The state with its lookahead of proposers moved by one epoch.
+/-- The state with its lookahead of proposers moved by one epoch, as [EIP-7917] specifies.
 
-The last epoch of the lookahead becomes the epoch after the seed lookahead. -/
+[EIP-7917]: https://eips.ethereum.org/EIPS/eip-7917#specification
+-/
 def processProposerLookahead (state : BeaconState preset fork) (fulu : .fusaka ≤ fork) :
     Except AccessorError (BeaconState preset fork) := do
   let lookahead := state.proposerLookahead fulu
   let perEpoch := preset.SLOTS_PER_EPOCH.toNat
+  -- The proposers of epoch `e + MIN_SEED_LOOKAHEAD + 1`, for the current epoch `e`.
   let epoch ← liftArith do
     addChecked (← addChecked (getCurrentEpoch state) preset.MIN_SEED_LOOKAHEAD) 1
   let last ← getBeaconProposerIndices state epoch
+  -- The lookahead drops its first `SLOTS_PER_EPOCH` entries, and those proposers join its end.
   let moved := Vector.ofFn fun (position : Fin _) =>
     if kept : position.val + perEpoch < lookahead.size then lookahead[position.val + perEpoch]
     else last[position.val + perEpoch - lookahead.size]'(by
