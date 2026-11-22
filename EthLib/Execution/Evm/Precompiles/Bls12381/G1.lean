@@ -27,16 +27,23 @@ def GAS_G1ADD : Nat := 375
 
 The points need not be in the subgroup, only on the curve. -/
 def bls12G1Add (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray := do
-  -- The length is checked before the gas is charged.
+  -- Error case: input has invalid length.
+  --
+  -- The length is checked before the gas is charged; either error burns all the gas.
   if data.size ≠ 256 then
     throw (.invalidInputLength data.size)
   let bytes := data.data.toList
+  -- G1 addition: `375` gas.
   if gas < GAS_G1ADD then
     throw (.outOfGas GAS_G1ADD gas)
+  -- Two G1 points, `128` bytes each.
+  --
   -- Both paddings are checked before either point is decoded.
   let first ← unpadG1 (bytes.take 128)
   let second ← unpadG1 (bytes.drop 128)
+  -- There is no subgroup check for the G1 addition precompile.
   let sum := G1.add (← bytesToG1 first false) (← bytesToG1 second false)
+  -- Output: a single G1 point, `128` bytes.
   return ⟨(padG1 (g1ToBytes sum)).toArray⟩
 
 /-- `LENGTH_PER_PAIR`: an encoded G1 point, then a 32-byte scalar. -/
@@ -63,30 +70,39 @@ def G1_MAX_DISCOUNT : Nat := 519
 
 /-- The discount for `k` pairs. -/
 def discountG1 (k : Nat) : Nat :=
+  -- The table covers `k <= 128`, and `max_discount` applies for `k > 128`.
   if h : 0 < k ∧ k ≤ 128 then G1_K_DISCOUNT[k - 1] else G1_MAX_DISCOUNT
 
 /-- The price of G1MSM on `k` pairs: `k * 12000 * discount / 1000`, rounded down. -/
-def bls12G1MsmGas (k : Nat) : Nat := k * GAS_G1MUL * discountG1 k / MULTIPLIER
+def bls12G1MsmGas (k : Nat) : Nat :=
+  -- `gas_cost = k * multiplication_cost * discount(k) // multiplier`.
+  k * GAS_G1MUL * discountG1 k / MULTIPLIER
 
 /-- The sum of `[m]P` over the pairs, each point checked to be in the subgroup.
 
 The scalar `m` is the full 32-byte integer, not reduced. -/
 def g1Msm (pairs : List (List UInt8 × List UInt8)) : Except Bls12381Error G1 :=
   pairs.foldlM (init := G1.zero) fun sum (raw, scalar) => do
+    -- Error case: an input is on the curve but not in the correct subgroup.
     let point ← bytesToG1 raw true
+    -- The scalar is not required to be less than or equal to the subgroup order `q`.
     return G1.add sum (G1.mulNat point (bytesToNat scalar))
 
 /-- The multi-scalar multiplication of the pairs in the call data. -/
 def bls12G1Msm (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray := do
-  -- The length is checked before the gas is charged.
+  -- G1 MSM expects `160*k` bytes, `k` being a positive integer; an empty input is an error.
+  --
+  -- The length is checked before the gas is charged; either error burns all the gas.
   if data.size = 0 ∨ data.size % LENGTH_PER_PAIR_G1 ≠ 0 then
     throw (.invalidInputLength data.size)
+  -- `k = floor(len(input) / LEN_PER_PAIR)`, exact here.
   let k := data.size / LENGTH_PER_PAIR_G1
   if gas < bls12G1MsmGas k then
     throw (.outOfGas (bls12G1MsmGas k) gas)
   -- Every padding is checked before any point is decoded.
   let pairs ← (chunks LENGTH_PER_PAIR_G1 k data.data.toList).mapM fun pair => do
     return (← unpadG1 (pair.take 128), pair.drop 128)
+  -- Output: a single G1 point, `128` bytes.
   return ⟨(padG1 (g1ToBytes (← g1Msm pairs))).toArray⟩
 
 /-- The price of MAP_FP_TO_G1, from EIP-2537, Gas schedule. -/
@@ -94,13 +110,19 @@ def GAS_G1MAP : Nat := 5500
 
 /-- The point of G1 that RFC 9380 maps a field element to. -/
 def bls12MapFpToG1 (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray := do
-  -- The length is checked before the gas is charged.
+  -- Error case: input has invalid length.
+  --
+  -- The length is checked before the gas is charged; either error burns all the gas.
   if data.size ≠ 64 then
     throw (.invalidInputLength data.size)
+  -- Fp-to-G1 mapping: `5500` gas.
   if gas < GAS_G1MAP then
     throw (.outOfGas GAS_G1MAP gas)
+  -- `64` bytes, an element of Fp; error case: input is not correctly encoded.
   let u ← bytesToFieldElement (← unpadFp data.data.toList)
+  -- The full algorithm of the field-to-curve document: SSWU, isogeny, then cofactor clearing.
   let point ← (Cryptography.Bls.MapToCurve.mapToG1 u).mapError fun _ => .notASquare
+  -- Output: an encoded G1 point, `128` bytes.
   return ⟨(padG1 (g1ToBytes point)).toArray⟩
 
 end EthLib.Execution.Evm.Precompiles.Bls12381
