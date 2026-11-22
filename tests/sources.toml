@@ -107,6 +107,7 @@ directories = ["bindings/python/tests/secp256k1/tiny_secp256k1"]
 commit = "46976b2a9bf99f727fb87dc8c809e3a3cdc6b445"
 directories = [
   "bindings/python/tests/consensus/deposit_tree",
+  "bindings/python/tests/precompile/eips",
   "bindings/python/tests/state/dao",
 ]
 

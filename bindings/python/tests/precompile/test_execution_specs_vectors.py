@@ -87,7 +87,7 @@ AMPLE_GAS = 10**9
 
 
 # The EIP-2537 cases that `test_eip2537.py` runs, keyed by file.
-EIP2537 = _load(Path(__file__).parent / "eip2537_cases.json")
+EIP2537 = _load(Path(__file__).parent / "eips" / "eip2537_cases.json")
 
 
 def _outcome(case: dict) -> tuple:
@@ -169,7 +169,7 @@ P256_CASES = [
 # The cases of EIP-7951 that `test_p256verify.py` runs, by input.
 EIP7951 = {
     _hex(case["Input"]): case["Expected"]
-    for case in _load(Path(__file__).parent / "eip7951_cases.json")
+    for case in _load(Path(__file__).parent / "eips" / "eip7951_cases.json")
 }
 
 
