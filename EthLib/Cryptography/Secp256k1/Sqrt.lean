@@ -44,6 +44,7 @@ The last three steps append the remaining bits of the exponent, in the same way.
 
 So the power takes 253 squarings and 13 products. -/
 @[inline] def sqrtCandidate (a : Montgomery) : Montgomery :=
+  -- Up to `x223`, `x_(j + k) = x_j^(2^k) x_k`, with `x_k = a^(2^k - 1)` and `x_1 = a`.
   let x2 := squareTimes 1 a * a
   let x3 := squareTimes 1 x2 * a
   let x6 := squareTimes 3 x3 * x3
@@ -55,13 +56,19 @@ So the power takes 253 squarings and 13 products. -/
   let x176 := squareTimes 88 x88 * x88
   let x220 := squareTimes 44 x176 * x44
   let x223 := squareTimes 3 x220 * x3
+  -- The 223 ones, then a zero and 22 ones: 23 squarings and the product by `x_22`.
   let x246 := squareTimes 23 x223 * x22
+  -- Four zeros and two ones: 6 squarings and the product by `x_2`.
   let x252 := squareTimes 6 x246 * x2
+  -- The last two zeros: 2 squarings.
   squareTimes 2 x252
 
 /-- A square root of `a`, or `none` when `a` is not a square. -/
 @[inline] def sqrt (a : Montgomery) : Option Montgomery :=
   let c := sqrtCandidate a
+  -- Euler's criterion, HAC Fact 2.146 (i): `c^2 = a^((p + 1) / 2) = a * a^((p - 1) / 2)`.
+  --
+  -- That is `a` exactly when `a` is a square.
   if square c = a then some c else none
 
 end Montgomery
