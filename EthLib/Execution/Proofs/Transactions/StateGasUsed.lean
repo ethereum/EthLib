@@ -78,34 +78,9 @@ private theorem Floored.commit (meter : StateGasMeter) : Floored meter (GasMeter
 
 /-! ## The fresh slots of the first frame -/
 
-open EthLib.Execution.State (Account StateError TransactionState)
-
-/-- A change of an account adds no fresh slot: it keeps every word, or deletes the account. -/
-private theorem freshSlots_modifyState {tx tx' : TransactionState} {address : Address}
-    {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
-    tx'.freshSlots ⊆ tx.freshSlots := by
-  rintro ⟨other, key⟩ hmem
-  rw [TransactionState.mem_freshSlots] at hmem ⊢
-  rw [TransactionState.getStorageOriginal_modifyState h,
-    TransactionState.getStorage_modifyState h] at hmem
-  split_ifs at hmem
-  · exact absurd rfl hmem.2
-  · exact hmem
-
-/-- Setting the code of an address adds no fresh slot. -/
-private theorem freshSlots_setCode {tx tx' : TransactionState} {address : Address}
-    {code : ByteArray} (h : tx.setCode fork address code = .ok tx') :
-    tx'.freshSlots ⊆ tx.freshSlots := by
-  dsimp only [TransactionState.setCode] at h
-  split at h
-  · exact freshSlots_modifyState h
-  · -- A new entry of code is no word of the storage.
-    exact fun _ hslot => freshSlots_modifyState h hslot
-
-/-- A record of an account read keeps the fresh slots. -/
-private theorem freshSlots_recordAccountRead (tx : TransactionState) (address : Address) :
-    (tx.recordAccountRead address).freshSlots = tx.freshSlots :=
-  rfl
+open EthLib.Execution.State (TransactionState)
+open EthLib.Execution.State.TransactionState
+  (freshSlots_modifyState freshSlots_recordAccountRead freshSlots_setCode)
 
 /-- An authorization that sets the code of its authority adds no fresh slot. -/
 private theorem freshSlots_delegate {state state' : TransactionState} {authority : Address}

@@ -47,8 +47,7 @@ private theorem stateGasUsed_chargeGas {evm after : Evm fork StateGasMeter} {amo
     (h : chargeGas evm amount = .ok after) : after.gas.stateGasUsed = evm.gas.stateGasUsed := by
   obtain ⟨gas, hgas, h⟩ := Base.bind_ok_iff.mp h
   cases h
-  obtain ⟨-, rfl⟩ := StateGasMeter.charge_eq_ok_iff.mp hgas
-  rfl
+  exact StateGasMeter.stateGasUsed_charge hgas
 
 /-- A charge of state gas raises the net state gas by its amount. -/
 private theorem stateGasUsed_chargeStateGas {evm after : Evm fork StateGasMeter} {amount : Nat}

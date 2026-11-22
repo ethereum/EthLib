@@ -41,18 +41,6 @@ variable {fork : Fork}
 
 /-! ## The meter and the counted slots of the parts of a call -/
 
-/-- The merge of a child adds its net state gas, less its grant and its committed spill. -/
-private theorem stateGasUsed_absorb_net (caller child : StateGasMeter) (succeeded : Bool) :
-    (StateGasMeter.absorb caller child succeeded).stateGasUsed =
-      caller.stateGasUsed + child.stateGasUsed - child.grant - child.committed := by
-  unfold StateGasMeter.absorb
-  split
-  · rw [StateGasMeter.stateGasUsed_repay]
-    simp only [StateGasMeter.stateGasUsed]
-    omega
-  · simp only [StateGasMeter.stateGasUsed]
-    omega
-
 /-- A refill of state gas lowers the surplus by its amount. -/
 private theorem slotSurplus_refillStateGas (evm : Evm fork StateGasMeter) (amount : Nat) :
     slotSurplus (refillStateGas evm amount) = slotSurplus evm - amount := by
@@ -93,7 +81,7 @@ private theorem slotSurplus_incorporateChild {message : Message fork} {substate 
     split <;> rfl
   refine ⟨herr, ?_⟩
   -- The merge adds the net state gas of the child, less the reservoir it started with.
-  simp only [slotSurplus, hgas, hstate, stateGasUsed_absorb_net, hgrant, hcommitted]
+  simp only [slotSurplus, hgas, hstate, StateGasMeter.stateGasUsed_absorb_sub, hgrant, hcommitted]
   simp only [StateGasMeter.start] at hle ⊢
   rw [Int.mul_sub] at hle
   omega

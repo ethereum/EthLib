@@ -18,6 +18,8 @@ A transaction with no write has no fresh slot.
 
 A storage write adds its slot to the fresh slots, or removes it, and changes no other slot.
 
+A change of an account, new code and a record of a read add no fresh slot.
+
 [eip8037]: https://eips.ethereum.org/EIPS/eip-8037#specification
 -/
 
@@ -144,6 +146,32 @@ theorem card_freshSlots_setStorage {tx tx' : TransactionState} {address : Addres
     split_ifs <;> simp_all [Finset.insert_eq_of_mem, Finset.card_erase_of_mem, Int.ofNat_sub hpos]
   · -- The slot was not fresh: the write makes it fresh, or leaves it out.
     split_ifs <;> simp_all [Finset.card_insert_of_notMem, Finset.erase_eq_of_notMem]
+
+/-- A change of an account adds no fresh slot: it keeps every word, or deletes the account. -/
+theorem freshSlots_modifyState {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
+    tx'.freshSlots ⊆ tx.freshSlots := by
+  rintro ⟨other, key⟩ hmem
+  rw [mem_freshSlots] at hmem ⊢
+  rw [getStorageOriginal_modifyState h, getStorage_modifyState h] at hmem
+  split_ifs at hmem
+  · exact absurd rfl hmem.2
+  · exact hmem
+
+/-- New code at an address adds no fresh slot. -/
+theorem freshSlots_setCode {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {code : ByteArray} (h : tx.setCode fork address code = .ok tx') :
+    tx'.freshSlots ⊆ tx.freshSlots := by
+  dsimp only [setCode] at h
+  split at h
+  · exact freshSlots_modifyState h
+  · -- A new entry of code is no word of the storage.
+    exact fun _ hslot => freshSlots_modifyState h hslot
+
+/-- A record of the read of an account keeps the fresh slots. -/
+theorem freshSlots_recordAccountRead (tx : TransactionState) (address : Address) :
+    (tx.recordAccountRead address).freshSlots = tx.freshSlots :=
+  rfl
 
 end TransactionState
 

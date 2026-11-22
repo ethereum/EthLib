@@ -7,7 +7,9 @@ public import EthLib.Execution.Evm.Gas.StateGas
 
 A charge of state gas fails exactly when the reservoir and the execution gas do not cover it.
 
-A charge raises the net state gas by its amount, and a refill lowers it by its amount.
+A charge of state gas raises the net state gas by its amount, and a refill lowers it by its amount.
+
+A charge of execution gas keeps it.
 
 So execution gas, plus the reservoir, plus the net state gas, stays the same.
 
@@ -23,7 +25,9 @@ A rollback credits the spill back, and lowers the net state gas as EIP-8037 writ
 
 A rollback to the start leaves no net state gas.
 
-The net state gas of a merge is that of the caller plus that of the child.
+A merge adds the net state gas of the child, less its grant and the spill it committed.
+
+A child that got the whole reservoir of the caller and committed nothing adds its own net state gas.
 -/
 
 @[expose] public section
@@ -64,6 +68,12 @@ theorem charge_eq_ok_iff {meter after : StateGasMeter} {amount : Nat} :
       exact ⟨by omega, rfl⟩
     · rintro ⟨-, rfl⟩
       rfl
+
+/-- A charge of execution gas keeps the net state gas. -/
+theorem stateGasUsed_charge {meter after : StateGasMeter} {amount : Nat}
+    (h : meter.charge amount = .ok after) : after.stateGasUsed = meter.stateGasUsed := by
+  obtain ⟨-, rfl⟩ := charge_eq_ok_iff.mp h
+  rfl
 
 /-- An exceptional halt leaves no execution gas, and the reservoir of the baseline. -/
 theorem halt_eq (meter : StateGasMeter) :
@@ -284,6 +294,18 @@ theorem cancel_enter (meter : StateGasMeter) (gas : Nat) :
       { meter with gasLeft := meter.gasLeft + gas } := by
   simp only [enter, drain, cancel, start, Nat.zero_add]
 
+/-- A merge adds the net state gas of the child, less its grant and its committed spill. -/
+theorem stateGasUsed_absorb_sub (caller child : StateGasMeter) (succeeded : Bool) :
+    (absorb caller child succeeded).stateGasUsed =
+      caller.stateGasUsed + child.stateGasUsed - child.grant - child.committed := by
+  unfold absorb
+  split
+  · rw [stateGasUsed_repay]
+    simp only [stateGasUsed]
+    omega
+  · simp only [stateGasUsed]
+    omega
+
 /-- The net state gas of a merge is that of the caller plus that of the child.
 
 The child got the whole reservoir of the caller, and committed nothing. -/
@@ -291,13 +313,10 @@ theorem stateGasUsed_absorb (meter child : StateGasMeter) (gas : Nat) (succeeded
     (grant : child.grant = meter.reservoir) (committed : child.committed = 0) :
     (absorb (meter.enter gas).1 child succeeded).stateGasUsed =
       meter.stateGasUsed + child.stateGasUsed := by
-  unfold absorb
-  split
-  · rw [stateGasUsed_repay]
-    simp only [enter, drain, stateGasUsed]
-    omega
-  · simp only [enter, drain, stateGasUsed]
-    omega
+  -- Entering the call moves the whole reservoir of the caller to the child.
+  rw [stateGasUsed_absorb_sub, grant, committed]
+  simp only [enter, drain, stateGasUsed]
+  omega
 
 /-- A merge returns the execution gas and the spill of the child to the caller. -/
 theorem budget_absorb (caller child : StateGasMeter) (succeeded : Bool) :

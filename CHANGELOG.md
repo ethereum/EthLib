@@ -9,6 +9,12 @@ Not yet released.
 
 ### Proof additions
 
+- The fresh-slot facts of a change of an account, of new code and of a record of a read are now shared lemmas ([#4235](https://github.com/ethereum/EthLib/issues/4235), second part).
+  `TransactionState.freshSlots_modifyState`, `freshSlots_setCode` and `freshSlots_recordAccountRead` in `EthLib.Execution.Proofs.State.FreshSlots` are new public lemmas, taken from private copies in `EthLib.Execution.Proofs.Transactions.StateGasUsed`.
+  The new lemma `StateGasMeter.stateGasUsed_absorb_sub` in `EthLib.Execution.Proofs.Evm.Gas.StateGas` gives the net state gas of any merge of a child, and `stateGasUsed_absorb` now follows from it.
+  The new lemma `StateGasMeter.stateGasUsed_charge` there proves that a charge of execution gas keeps the net state gas, in place of three proofs by hand in the slot-surplus proofs.
+  No statement changes.
+
 - The rebuild proof of a message and the proof that a message pays for its slots take each nonce or code they keep from the proof that every message keeps them ([#4235](https://github.com/ethereum/EthLib/issues/4235), first part).
   `KeepsNonceOrCodeFrame`, `KeepsNonceOrCodeCall` and `KeepsNonceOrCodeCreate` in `EthLib.Execution.Proofs.Evm.Call.NonceOrCode` are now public.
   The new lemmas `stepRules_keepsNonceOrCodeFrame`, `keepsNonceOrCodeFrame_step`, `keepsNonceOrCodeCall_rollbackOnError` and `keepsNonceOrCodeCreate_depositCode` there state the rule of each step, call and creation.
