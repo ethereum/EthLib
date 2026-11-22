@@ -48,12 +48,6 @@ Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
 The step comments write the paper's formulas in ASCII: `mu_s[i]` is the `i`-th stack item.
 
-Only `ethereum/execution-specs` spells out the order of the charges of Glamsterdam.
-
-They quote `call`, `callcode` and `generic_call` in [Amsterdam's `system.py`][es-amsterdam].
-
-They quote `calculate_delegation_cost` in its [`vm/eoa_delegation.py`][es-delegation].
-
 The EIPs that add or change an instruction define it:
 
 - [EIP-7][eip7], DELEGATECALL
@@ -64,8 +58,6 @@ The EIPs that add or change an instruction define it:
 - [EIP-8037][eip8037], the state gas of a new account, in Last Call
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
-[es-amsterdam]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/amsterdam/vm/instructions/system.py
-[es-delegation]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/amsterdam/vm/eoa_delegation.py
 [eip7]: https://eips.ethereum.org/EIPS/eip-7#specification
 [eip211]: https://eips.ethereum.org/EIPS/eip-211#specification
 [eip214]: https://eips.ethereum.org/EIPS/eip-214#specification
@@ -129,23 +121,23 @@ Only then does it read the delegate, which EIP-7928 records.
 Before Pectra, the call runs the code of the account at `address`. -/
 def accessDelegation (evm : Evm fork Meter) (address : Address) (known : Nat) :
     Except EvmError (Callee × Evm fork Meter) := do
-  -- `code = get_code(tx_state, get_account(tx_state, address).code_hash)`.
+  -- The code of the account at the address.
   let code ← accountCode evm address
-  -- `if not is_valid_delegation(code): return False, address, GasCosts.ZERO`, from Pectra.
+  -- From Pectra, a code that is a delegation indicator names a delegate; else none, at no cost.
   let delegate := if fork ≥ .pectra then delegatedAddress code else none
   match delegate with
   | some delegate =>
-    -- `delegation_gas_cost = GasCosts.WARM_ACCESS` if warm, `GasCosts.COLD_ACCOUNT_ACCESS` if cold.
+    -- The access to the delegate costs a warm access if the delegate is accessed, else a cold one.
     let (cold, evm) := accessAddress evm delegate
     let cost := accountAccessCost fork cold
-    -- `check_gas(evm, extra_gas + extend_memory.cost)`, before the read of the delegate.
+    -- The frame must hold the known price and that access, before the read of the delegate.
     --
     -- Before Glamsterdam the check is new here; the later charge is at least as large.
     --
     -- The delegate joins the accessed set before the check; a halt discards the set either way.
     checkGas evm (known + cost)
     let evm := recordAccountRead evm delegate
-    -- `code = get_code(tx_state, code_hash)` of the delegate, one delegation deep only.
+    -- The code of the delegate, one delegation deep only.
     let code ← accountCode evm delegate
     return (⟨delegate, code, true, cost⟩, evm)
   | none => return (⟨address, code, false, 0⟩, evm)
@@ -154,9 +146,9 @@ def accessDelegation (evm : Evm fork Meter) (address : Address) (known : Nat) :
 
 The return data is empty. -/
 def skipCall (evm : Evm fork Meter) (gas reservoir : Nat) : Except EvmError (Evm fork Meter) := do
-  -- The paper's "otherwise" case: `(sigma, C_CALLGAS(sigma, mu, A), A*, 0, ())`, so `x = 0`.
+  -- The paper's otherwise case: `(sigma, C_CALLGAS(sigma, mu, A), A*, 0, ())`, so `x = 0`.
   --
-  -- From Glamsterdam, `restore_child_gas(...)` gives back the reservoir too.
+  -- From Glamsterdam, the reservoir comes back too.
   let evm ←
     pushWord { evm with gas := GasMeter.credit evm.gas gas reservoir, returnData := .empty } 0
   return advance evm
@@ -173,11 +165,11 @@ The start of that output fills the output range of memory, as far as either goes
 def resumeCall (fork : Fork) (caller : Evm fork Meter) (newAccount : Nat)
     (outputStart outputSize : U256) (child : Evm fork Meter) :
     Except EvmError (Evm fork Meter) := do
-  -- `incorporate_child(evm, child_evm)`, the paper's `mu'_g = mu_g - C_CALLGAS + g'`.
+  -- The caller takes back the gas of the callee, the paper's `mu'_g = mu_g - C_CALLGAS + g'`.
   let evm := incorporateChild fork caller child
-  -- EIP-8037: "if the child frame reverts or halts exceptionally", the state gas is refilled.
+  -- EIP-8037: if the child frame reverts or halts exceptionally, the state gas is refilled.
   let evm := if child.error.isNone then evm else refillStateGas evm newAccount
-  -- `evm.return_data = child_evm.output`, the paper's `mu'_o = o`.
+  -- The output of the callee becomes the return data, the paper's `mu'_o = o`.
   let evm := { evm with returnData := child.output }
   -- `mu'_s[0] = x`: 1 when the callee succeeded, 0 when it failed.
   let evm ← pushWord evm (if child.error.isNone then 1 else 0)
@@ -239,7 +231,7 @@ def popCallValue (kind : CallKind) (evm : Evm fork Meter) :
 The value comes third. -/
 def popCallOperands (kind : CallKind) (evm : Evm fork Meter) :
     Except EvmError (CallOperands × Evm fork Meter) := do
-  -- "the operand order is: gas, to, value, in offset, in size, out offset, out size".
+  -- The operands are, in order: gas, to, value, in offset, in size, out offset and out size.
   --
   -- DELEGATECALL and STATICCALL pop no value; `mu_s[3]` to `mu_s[6]` become `mu_s[2]` to `mu_s[5]`.
   let (gas, evm) ← popWord evm
@@ -262,7 +254,7 @@ def callExtraGas (fork : Fork) (kind : CallKind) (state : State.TransactionState
     (call : CallOperands) (cold : Bool) (callee : Callee) : Nat :=
   -- `C_EXTRA = C_aaccess(t, A) + C_XFER(mu) + C_NEW(sigma, mu)`, plus the access to a delegate.
   --
-  -- `C_NEW` is `G_newaccount` if `DEAD(sigma, t)` and `mu_s[2] != 0`, for CALL only.
+  -- `C_NEW` is `G_newaccount` if `DEAD(sigma, t)` and `mu_s[2] > 0`, for CALL only.
   --
   -- The paper's CALLCODE inherits `C_NEW`; only CALL pays it here, as CALLCODE creates no account.
   let newAccountCost :=
@@ -276,7 +268,7 @@ From Glamsterdam, CALL with value to a dead account pays the state gas of a new 
 Other calls, and calls before Glamsterdam, pay none. -/
 def callNewAccountStateGas (fork : Fork) (kind : CallKind) (state : State.TransactionState)
     (call : CallOperands) : Nat :=
-  -- `new_account_charged = has_value and not is_account_alive(tx_state, to)`.
+  -- From Glamsterdam, CALL with a nonzero value to an account that is not alive pays it.
   if fork ≥ .glamsterdam ∧ kind = .call ∧ call.value ≠ 0 ∧ ¬state.isAccountAlive call.address then
     GasCosts.NEW_ACCOUNT_STATE_GAS
   else 0
@@ -331,12 +323,12 @@ It gets back the gas, the reservoir, and the `newAccount` state gas it paid. -/
 def finishCall (kind : CallKind) (call : CallOperands) (callee : Callee)
     (subCall newAccount expandBy : Nat) (evm : Evm fork Meter) :
     Except EvmError (StepResult fork Meter) :=
-  -- The paper halts on `not I_w and w = CALL and mu_s[2] != 0`, here after the charge.
+  -- The paper halts when the frame is static, `w` is CALL and `mu_s[2] > 0`, here after the charge.
   if kind = .call ∧ evm.message.isStatic ∧ call.value ≠ 0 then .error .writeInStaticContext
   else
-    -- `call_state_gas_reservoir = drain_state_gas_reservoir(evm.gas_meter)`.
+    -- The message takes the whole state gas reservoir of the frame.
     let reservoir := GasMeter.reservoir evm.gas
-    -- `evm.memory += b"\x00" * extend_memory.expand_by`.
+    -- Memory grows by the bytes that the call paid for.
     let evm := callerFrame evm expandBy
     -- The paper runs `Theta` only if `mu_s[2] <= sigma[I_a]_b`.
     if (evm.state.getAccount evm.message.currentTarget).balance < call.value then
@@ -355,24 +347,26 @@ The gas it passes on is then a part of the execution gas left after both. -/
 def payCall (kind : CallKind) (call : CallOperands) (memoryCost extraGas newAccount : Nat)
     (evm : Evm fork Meter) : Except EvmError (Nat × Evm fork Meter) := do
   if fork ≥ .glamsterdam ∧ kind = .call then
-    -- `charge_gas(evm, extra_gas + extend_memory.cost)`.
+    -- First the extra price and the growth of memory.
     let evm ← chargeGas evm (extraGas + memoryCost)
-    -- `if new_account_charged: charge_state_gas(evm, StateGasCosts.NEW_ACCOUNT)`.
+    -- Then the state gas of a new account, if the call creates one.
     --
-    -- EIP-8037 applies it "only when the target account does not exist", with a positive value.
+    -- EIP-8037 charges it only when the target account does not exist, with a positive value.
+    --
+    -- From Paris no account is empty, by EIP-7523, so an account that is not alive does not exist.
     let evm ← chargeStateGas evm newAccount
-    -- "CHILD GRANT": `calculate_message_call_gas(value, gas, evm.gas_meter.gas_left, ...)`.
+    -- Then the gas of the message, from the execution gas left.
     --
     -- Its memory cost and extra gas are 0, since both are paid already.
     let callGas := messageCallGas fork call.value call.gas.toNat (GasMeter.gasLeft evm.gas) 0 0
-    -- `charge_gas(evm, message_call_gas.cost)`.
+    -- The frame pays that gas.
     let evm ← chargeGas evm callGas.cost
     return (callGas.subCall, evm)
   else
     -- `C_CALL = C_GASCAP + C_EXTRA`, with the memory cost of `M(M(mu_i, ...), ...)`.
     let callGas :=
       messageCallGas fork call.value call.gas.toNat (GasMeter.gasLeft evm.gas) memoryCost extraGas
-    -- `charge_gas(evm, message_call_gas.cost + extend_memory.cost)`.
+    -- The frame pays `C_CALL` and the growth of memory in one charge.
     let evm ← chargeGas evm (callGas.cost + memoryCost)
     return (callGas.subCall, evm)
 
@@ -391,24 +385,24 @@ That price is the access, the price of the value and the growth of memory, by EI
 The reads of the address and of a delegate stay even when the call then halts. -/
 def callStep (kind : CallKind) (evm : Evm fork Meter) :
     Except EvmError (StepResult fork Meter) := do
-  -- "STACK".
+  -- The operands, from the stack.
   let (call, evm) ← popCallOperands kind evm
-  -- From Glamsterdam, first: `if evm.is_static and value != U256(0): raise WriteInStaticContext`.
+  -- From Glamsterdam, first, CALL with a nonzero value in a static frame fails.
   if fork ≥ .glamsterdam ∧ kind = .call ∧ evm.message.isStatic ∧ call.value ≠ 0 then
     throw .writeInStaticContext
-  -- "GAS (STATE-INDEPENDENT)": `extend_memory = calculate_gas_extend_memory(...)` of both ranges.
+  -- The growth of memory for the input and the output ranges, which needs no state.
   let ranges := [(call.inputStart, call.inputSize), (call.outputStart, call.outputSize)]
   let growth := extendMemory evm.memory.size ranges
-  -- `is_cold_access = to not in evm.accessed_addresses`, the paper's `A*_a = A_a union {t}`.
+  -- The access is cold when `t` is not in `A_a`, and then `A*_a = A_a union {t}`.
   --
   -- The address joins the accessed set before the check; a halt discards the set either way.
   let (cold, evm) := accessAddress evm call.address
-  -- `check_gas(evm, access_gas_cost + transfer_gas_cost + extend_memory.cost)`.
+  -- The frame must hold the access, the price of the value and the growth of memory.
   --
   -- Before Glamsterdam the check is new here; the later charge is at least as large.
   let known := callBaseCost fork cold + callValueCost fork call.value + growth.cost
   checkGas evm known
-  -- "STATE ACCESS": the read of `t`, which EIP-7928 records.
+  -- The read of `t`, which EIP-7928 records.
   let evm := recordAccountRead evm call.address
   keepReads evm .next do
     let (callee, evm) ← accessDelegation evm call.address known
