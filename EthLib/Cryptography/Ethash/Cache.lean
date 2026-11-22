@@ -92,16 +92,18 @@ The appendix names that item by the first byte, and the specification by the fir
 The definition follows the specification. -/
 def cacheRound (cache : Array Item) : Array Item :=
   let n := cache.size
-  -- `for i in range(n)`.
+  -- Item `i` for `i` from 0 to `n - 1`, in order.
   (List.range n).foldl
     (fun c i =>
       -- Each index is below the size, which the round keeps, so no default is read.
       let current := c.getD i (Vector.replicate 16 0)
-      -- `o[(i-1+n) % n]`.
+      -- The item before, cyclically: item `(i - 1) mod n`.
       let previous := c.getD ((i + n - 1) % n) (Vector.replicate 16 0)
-      -- Specification: `v = o[i][0] % n`, the first word; J.3.2 reads the first byte.
+      -- The second item is item `v`, with `v` the first word of item `i`, mod `n`.
+      --
+      -- J.3.2 reads the first byte instead.
       let other := c.getD (current[0].toNat % n) (Vector.replicate 16 0)
-      -- `o[i] = sha3_512(map(xor, o[(i-1+n) % n], o[v]))`.
+      -- Item `i` becomes the Keccak-512 digest of the XOR of the item before and item `v`.
       c.setIfInBounds i (hashItem (bytesOfWords (Vector.zipWith (· ^^^ ·) previous other))))
     cache
 
@@ -111,7 +113,7 @@ It has one item per 64 bytes of the cache size, after three rounds over the init
 def cache (number : Nat) : Array Item :=
   -- `c = E_cacherounds(c', J_cacherounds)`, over `n = floor(c_size / J_hashbytes)` items.
   --
-  -- That is `for _ in range(CACHE_ROUNDS)` of the specification.
+  -- `J_cacherounds = 3` rounds of RandMemoHash.
   Nat.repeat cacheRound CACHE_ROUNDS (initialCache (cacheSize number / HASH_BYTES) (seed number))
 
 /-! ## The dataset items -/
@@ -125,7 +127,7 @@ The appendix writes `a · (p ⊕ b)`, and the specification and every client `(a
 
 The definition follows the specification. -/
 def fnv (a b : UInt32) : UInt32 :=
-  -- Specification: `((v1 * FNV_PRIME) ^ v2) % 2**32`.
+  -- `(a · p) ⊕ b mod 2^32`, with `p` the FNV prime.
   a * FNV_PRIME ^^^ b
 
 /-- The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3.
@@ -143,20 +145,20 @@ The definition follows the specification.
 The index is below `2^32` while the dataset has fewer than `2^32` items. -/
 def datasetItem (cache : Array Item) (i : Nat) : Item :=
   let n := cache.size
-  -- `mix = copy.copy(cache[i % n])`.
+  -- The mix starts as cache item `i mod n`.
   let first := cache.getD (i % n) (Vector.replicate 16 0)
-  -- `mix[0] ^= i`, then `mix = sha3_512(mix)`.
+  -- Its first word is XORed with `i`, then the mix becomes its Keccak-512 digest.
   let mix := hashItem (bytesOfWords (first.set 0 (first[0] ^^^ i.toUInt32)))
-  -- `for j in range(DATASET_PARENTS)`.
+  -- The 256 parents, for `j < 256`.
   let mix := (List.range DATASET_PARENTS).foldl
     (fun mix j =>
-      -- `cache_index = fnv(i ^ j, mix[j % r])`, with `r = 16`.
+      -- Parent `j` is cache item `FNV(i ⊕ j, mix_(j mod 16)) mod n`.
       let parent := cache.getD ((fnv (i ^^^ j).toUInt32 mix[j % 16]).toNat % n)
         (Vector.replicate 16 0)
-      -- `mix = map(fnv, mix, cache[cache_index % n])`.
+      -- Word `w` of the mix becomes `FNV(mix_w, parent_w)`.
       Vector.zipWith fnv mix parent)
     mix
-  -- `return sha3_512(mix)`.
+  -- The item is the Keccak-512 digest of the last mix.
   hashItem (bytesOfWords mix)
 
 end EthLib.Cryptography.Ethash

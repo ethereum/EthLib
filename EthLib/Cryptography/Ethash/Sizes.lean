@@ -73,9 +73,9 @@ def noDivisorFrom (n : Nat) : Nat → Nat → Bool
 
 /-- Whether `n` is prime, by trial division up to its square root. -/
 def isPrime (n : Nat) : Bool :=
-  -- The specification's `range(2, int(x**0.5))` skips `floor(sqrt(x))`.
+  -- Trial division tries every divisor from 2 to `floor(sqrt(n))`.
   --
-  -- It is tried here, as the specification's own tables need.
+  -- The specification skips `floor(sqrt(n))`, but its own tables need it tried.
   2 ≤ n && noDivisorFrom n n 2
 
 /-- The largest `x - 2 · unit · k` whose quotient by `unit` is prime, from `x` down.
@@ -90,7 +90,9 @@ where
   go : Nat → Nat → Nat
     -- The fuel bounds the loop, which the specification leaves unbounded.
     | 0, x => x
-    -- `while not isprime(sz / HASH_BYTES): sz -= 2 * HASH_BYTES`, or `MIX_BYTES` for the dataset.
+    -- While the quotient of the size by the unit is not prime, the size drops by two units.
+    --
+    -- The unit is one hash, 64 bytes, for the cache, and one mix, 128 bytes, for the dataset.
     --
     -- It is the `E_prime` of J.2.
     | fuel + 1, x => if isPrime (x / unit) then x else go fuel (x - 2 * unit)
@@ -99,18 +101,18 @@ where
 
 The search starts one hash below the linear size. -/
 def cacheSize (number : Nat) : Nat :=
-  -- `sz = CACHE_BYTES_INIT + CACHE_BYTES_GROWTH * (block_number // EPOCH_LENGTH)`.
+  -- The linear size is `2^24 + 2^17 · floor(number / 30000)` bytes.
   --
-  -- `sz -= HASH_BYTES`, then the prime search.
+  -- One hash, 64 bytes, comes off it, then the prime search starts.
   primeSize (CACHE_BYTES_INIT + CACHE_BYTES_GROWTH * epoch number - HASH_BYTES) HASH_BYTES
 
 /-- The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2.
 
 The search starts one mix below the linear size. -/
 def datasetSize (number : Nat) : Nat :=
-  -- `sz = DATASET_BYTES_INIT + DATASET_BYTES_GROWTH * (block_number // EPOCH_LENGTH)`.
+  -- The linear size is `2^30 + 2^23 · floor(number / 30000)` bytes.
   --
-  -- `sz -= MIX_BYTES`, then the prime search.
+  -- One mix, 128 bytes, comes off it, then the prime search starts.
   primeSize (DATASET_BYTES_INIT + DATASET_BYTES_GROWTH * epoch number - MIX_BYTES) MIX_BYTES
 
 end EthLib.Cryptography.Ethash
