@@ -639,7 +639,7 @@ private theorem step_credits_generic {r m l : ForkedBeaconState preset}
   have mEpoch : getCurrentEpoch m.state = getCurrentEpoch r.state :=
     UInt64.le_antisymm (same ▸ step.chainStep.currentEpoch_le)
       (currentEpoch_le_of_chainSteps pre.chainSteps)
-  have oneEffective := step_same_epoch_effective step early (same.trans mEpoch.symm)
+  have oneEffective := step_same_epoch_effective step (same.trans mEpoch.symm)
   have effectiveEnd : ∀ i, i < r.state.validators.data.size →
       effectiveAt l i = effectiveAt r i := fun i inside =>
     (oneEffective i (Nat.lt_of_lt_of_le inside
@@ -699,7 +699,7 @@ private theorem step_credits_generic {r m l : ForkedBeaconState preset}
     have whole := pre.snoc (.block engine signed due ok)
     refine ⟨effectiveEnd, ?_⟩
     have rootRead : getTotalActiveBalance r.state = .ok read :=
-      (total_active_congr rEarly mEarly
+      (total_active_congr
         ((activeKept_of_chainSteps whole.chainSteps).mono
           (getCurrentEpoch_le_activityFixedEpoch _)) same
         effectiveEnd).symm.trans readOk
@@ -713,7 +713,7 @@ private theorem step_credits_generic {r m l : ForkedBeaconState preset}
     have activeR := activeKept_of_chainSteps pre.chainSteps
     have sizeR := registryGrows_of_chainSteps pre.chainSteps
     have totalBefore : getTotalActiveBalance before = .ok total :=
-      (total_active_congr rEarly mEarly
+      (total_active_congr
         (activeR.mono (getCurrentEpoch_le_activityFixedEpoch _)) mEpoch effective).trans totalOk
     have afterSlot := (frame_processBlock processed).slot
     have insideR : ∀ i ∈ previous ∪ current, i.toNat < r.state.validators.data.size := by
@@ -743,7 +743,7 @@ private theorem step_credits_generic {r m l : ForkedBeaconState preset}
       have previousSame : getPreviousEpoch u = getPreviousEpoch r.state := by
         simp only [getPreviousEpoch, uEpoch]
       have siteTotal : getTotalActiveBalance u = .ok total :=
-        (total_active_congr mEarly mEarly
+        (total_active_congr
           (siteActive.2.mono (getCurrentEpoch_le_activityFixedEpoch _))
           (by simp only [getCurrentEpoch, siteActive.1]) siteEffective).trans totalBefore
       refine attestation_flagPotential mEarly altair attested credited
@@ -1028,7 +1028,7 @@ theorem epoch_total_transport {r s : ForkedBeaconState preset}
     getTotalActiveBalance r.state = .ok total := by
   have effective := (epoch_credits_generic inner altair early same high replayed).1
   have rEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps inner.chainSteps) early
-  exact (total_active_congr rEarly early
+  exact (total_active_congr
     ((activeKept_of_chainSteps inner.chainSteps).mono
       (getCurrentEpoch_le_activityFixedEpoch _)) same effective).symm.trans computed
 

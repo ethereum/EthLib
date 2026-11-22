@@ -413,7 +413,7 @@ private theorem crossing_fall {z z' : ForkedBeaconState preset} (altair : .altai
     rw [found, Option.some.injEq] at read'
     subst old'
     exact Internal.assigned_of_active isActive
-  have upgradedSame := balanceDrift_upgrades_active upgraded early i a aRead
+  have upgradedSame := balanceDrift_upgrades_active upgraded i a aRead
     (by rwa [life.activationEpoch activated])
   rw [upgradedSame, advancedEq]
   exact fall
@@ -764,7 +764,7 @@ private theorem block_floor {f : Fork}
     obtain ⟨_, syncedEq⟩ := processSyncAggregate_eq synced
     intro w read
     exact unslashed w (by rw [syncedEq]; exact read)
-  have operationsFloor := processOperations_floor early fulu (startedFrame.balancesMatch matched)
+  have operationsFloor := processOperations_floor fulu (startedFrame.balancesMatch matched)
     operatedOk
     inputFound capped lastClear
   obtain ⟨w, lastFound, samePubkey⟩ := validators_getElem?_of_validatorKeys_prefix
@@ -1084,22 +1084,22 @@ private theorem withdrawalRequest_queueAppend {fork : Fork} {s t : BeaconState p
   · exact partialWithdrawal_queueAppend withdrawn
 
 private theorem slashValidator_partialsSame {fork : Fork} {s t : BeaconState preset fork}
-    (early : fork < .glamsterdam) {index : ValidatorIndex} {whistleblower : Option ValidatorIndex}
+    {index : ValidatorIndex} {whistleblower : Option ValidatorIndex}
     (ok : slashValidator config s index whistleblower = .ok t) : PartialsSame s t := by
   intro electra
-  obtain ⟨exited, exitedOk, frame⟩ := slashValidator_departureQueues electra early ok
+  obtain ⟨exited, exitedOk, frame⟩ := slashValidator_departureQueues electra ok
   exact (pendingPartialWithdrawals_eq_of_queues (congrArg (·.2.2.2.2) frame)).trans
     (partialsSame_initiateValidatorExit exitedOk electra)
 
 private theorem proposerSlashing_partialsSame {fork : Fork} {s t : BeaconState preset fork}
-    (early : fork < .glamsterdam) {slashing : ProposerSlashing}
+    {slashing : ProposerSlashing}
     (ok : processProposerSlashing config checks s slashing = .ok t) : PartialsSame s t := by
   simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := ok
-  exact slashValidator_partialsSame early slashed
+  exact slashValidator_partialsSame slashed
 
 private theorem attesterSlashing_partialsSame {fork : Fork} {s t : BeaconState preset fork}
-    (early : fork < .glamsterdam) {slashing : AttesterSlashing preset fork}
+    {slashing : AttesterSlashing preset fork}
     (ok : processAttesterSlashing config checks s slashing = .ok t) : PartialsSame s t := by
   simp only [processAttesterSlashing, bind_ok_iff, ensure_ok_iff] at ok
   obtain ⟨_, _, _, _, _, _, _, _, _, _, ⟨folded, flag⟩, foldedOk, ok⟩ := ok
@@ -1113,7 +1113,7 @@ private theorem attesterSlashing_partialsSame {fork : Fork} {s t : BeaconState p
   split at stepped
   · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at stepped
     obtain ⟨_, slashed, rfl⟩ := stepped
-    exact kept.trans (slashValidator_partialsSame early slashed)
+    exact kept.trans (slashValidator_partialsSame slashed)
   · cases stepped; exact kept
 
 private theorem consolidationRequest_partialsSame {fork : Fork} {s t : BeaconState preset fork}
@@ -1171,11 +1171,11 @@ private theorem operations_queueAppend {fork : Fork} {s t : BeaconState preset f
         (frame_processExecutionRequests called).slot⟩)
       (fun {a b} gloas _ => False.elim ((Nat.not_le_of_lt early) gloas)) ok
   have first := PartialsSame.foldlM
-    (fun _ _ _ called => proposerSlashing_partialsSame early called) proposers
+    (fun _ _ _ called => proposerSlashing_partialsSame called) proposers
   have second := PartialsSame.foldlM
-    (fun _ _ _ called => attesterSlashing_partialsSame early called) slashings
+    (fun _ _ _ called => attesterSlashing_partialsSame called) slashings
   have third := PartialsSame.foldlM
-    (fun _ _ _ called => .of_frame fun e => attestation_departureQueues e early called)
+    (fun _ _ _ called => .of_frame fun e => attestation_departureQueues e called)
     attestations
   exact (chain (same (first.trans (second.trans third))
     (((Frame.foldlM (fun _ _ _ called => frame_processAttestation called) attestations).slot).trans
@@ -1210,8 +1210,11 @@ private theorem block_partialLedger {fork : Fork} {s t : BeaconState preset fork
     Except.ok.injEq] at paid executedOk votedOk synced
   subst paid
   obtain ⟨expected, expectedOk, executedFrame⟩ :=
-    blockExecution_departureQueues electra early executedOk
-  obtain ⟨partials, next, partialsOk⟩ := getExpectedWithdrawals_partials electra early expectedOk
+    ((blockExecution_departureQueues electra executedOk).resolve_right
+      fun ⟨g, _⟩ => Nat.not_le_of_lt early g).2
+  obtain ⟨_, partials, _, next, partialsOk, read⟩ :=
+    getExpectedWithdrawals_partials electra expectedOk
+  obtain ⟨-, rfl, rfl⟩ := read.resolve_right fun ⟨g, _⟩ => Nat.not_le_of_lt early g
   have headFrame := blockHead_departureQueues electra headedOk executedFrame revealedOk votedOk
   have headQueue : (voted.pendingPartialWithdrawals electra).data.toList =
       (s.pendingPartialWithdrawals electra).data.toList.drop
@@ -1276,7 +1279,8 @@ private theorem run_partialLedger {x y : ForkedBeaconState preset}
       ∀ v, runQueuePaid tail v = ∑ j ∈ (Finset.range consumed).filter
         (fun j => ledger[j]?.map (·.validatorIndex) = some v), paid j := by
   refine Run.induction_of_same_epoch
-    (motive := fun w r => getCurrentEpoch w.state = getCurrentEpoch x.state →
+    (motive := fun w r => w.fork < .glamsterdam →
+      getCurrentEpoch w.state = getCurrentEpoch x.state →
       ∀ electra' : .pectra ≤ w.fork,
       ∃ (appended : List PendingPartialWithdrawal) (consumed : ℕ) (paid : ℕ → ℕ),
         let ledger := (x.state.pendingPartialWithdrawals electra).data.toList ++ appended
@@ -1288,17 +1292,17 @@ private theorem run_partialLedger {x y : ForkedBeaconState preset}
           (0 < paid j → w.withdrawableEpoch ≤ getCurrentEpoch x.state)) ∧
         ∀ v, runQueuePaid r v = ∑ j ∈ (Finset.range consumed).filter
           (fun j => ledger[j]?.map (·.validatorIndex) = some v), paid j)
-    ?_ ?_ ?_ tail early same same
-  · intro _ _
+    ?_ ?_ ?_ tail same early same
+  · intro _ _ _
     refine ⟨[], 0, fun _ => 0, ?_⟩
     simp [runQueuePaid]
-  · intro f s t engine signed due ok pre fEarly ih epochT electraT
+  · intro f s t engine signed due ok pre ih fEarly epochT electraT
     have processed := (applySignedBlock_ok ok).2.1
     have epochS : getCurrentEpoch s = getCurrentEpoch x.state := by
       rw [← epochT]
       simp only [getCurrentEpoch, processBlock_slot processed]
     obtain ⟨appended, consumed, paid, bounded, queue, charged, beyond, entries, sums⟩ :=
-      ih epochS electraT
+      ih fEarly epochS electraT
     obtain ⟨headed, partials, next, count, new, headedOk, partialsOk, stepQueue, late⟩ :=
       block_partialLedger electraT fEarly processed
     obtain ⟨pay, counted, stepBeyond, stepEntries, stepSums⟩ :=
@@ -1363,12 +1367,13 @@ private theorem run_partialLedger {x y : ForkedBeaconState preset}
         have small := Finset.mem_range.mp member
         rw [prefixAt (consumed + k) (by omega), queue, List.getElem?_drop]
         simp
-  · intro middle last cached next pre ok lastEq cachedOk epochNext ih epochLast electraLast
+  · intro middle last cached next pre ok lastEq cachedOk epochNext ih lastEarly epochLast
+      electraLast
     subst lastEq
     have epochMiddle : getCurrentEpoch middle.state = getCurrentEpoch x.state :=
       epochNext.symm.trans epochLast
     obtain ⟨appended, consumed, paid, bounded, queue, charged, beyond, entries, sums⟩ :=
-      ih epochMiddle electraLast
+      ih lastEarly epochMiddle electraLast
     obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
     refine ⟨appended, consumed, paid, bounded, ?_, charged, beyond, entries, fun v => ?_⟩
     · rw [← queue, cachedEq]
@@ -1470,13 +1475,13 @@ private theorem blockQueuePaid_support {fork : Fork} (before : BeaconState prese
           exact List.mem_toFinset.mpr (List.mem_map.mpr ⟨w, present, by simpa using named⟩)
   · exact ⟨∅, by simp, fun v paid => by simp [blockQueuePaid, electra] at paid⟩
 
-/-- Inside one epoch before Gloas, take a run with at most one block.
+/-- Inside one epoch, take a run with at most one block.
 
 From the queue, it pays at most as many validators as one sweep may pay.
 
 A run without blocks pays nothing from the queue. -/
 private theorem owed_card {x y : ForkedBeaconState preset} (run : Run config checks x y)
-    (early : y.fork < .glamsterdam) (same : getCurrentEpoch y.state = getCurrentEpoch x.state)
+    (same : getCurrentEpoch y.state = getCurrentEpoch x.state)
     (single : run.blockCount ≤ 1) :
     (∃ owed : Finset ValidatorIndex,
       owed.card ≤ preset.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP.toNat ∧
@@ -1488,10 +1493,10 @@ private theorem owed_card {x y : ForkedBeaconState preset} (run : Run config che
         owed.card ≤ preset.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP.toNat ∧
         ∀ v, runQueuePaid r v ≠ 0 → v ∈ owed) ∧
       (r.blockCount = 0 → ∀ v, runQueuePaid r v = 0))
-    ?_ ?_ ?_ run early same single
+    ?_ ?_ ?_ run same single
   · exact fun _ => ⟨⟨∅, by simp, fun v paid => by simp [runQueuePaid] at paid⟩,
       fun _ _ => rfl⟩
-  · intro f s t engine signed due ok pre _ ih count
+  · intro f s t engine signed due ok pre ih count
     have none : pre.blockCount = 0 := by simp [Run.blockCount] at count; omega
     have zero := (ih (by omega)).2 none
     obtain ⟨indices, card, covers⟩ := blockQueuePaid_support s signed.message
@@ -1546,23 +1551,24 @@ private theorem run_floor {x y : ForkedBeaconState preset} (tail : Run config ch
       (tail.blockCount ≤ 1 →
         extra ≤ min (runQueuePaid tail v) (EB - preset.MIN_ACTIVATION_BALANCE.toNat)) := by
   refine Run.induction_of_same_epoch
-    (motive := fun w r => getCurrentEpoch w.state = getCurrentEpoch x.state →
+    (motive := fun w r => w.fork < .glamsterdam →
+      getCurrentEpoch w.state = getCurrentEpoch x.state →
       (∀ u, w.state.validators.data[v.toNat]? = some u → u.slashed = false) →
       ∃ extra : ℕ, min (actualBalanceAt x v.toNat) EB ≤
           actualBalanceAt w v.toNat + r.blockCount * S + extra ∧
         extra ≤ runQueuePaid r v ∧
         (r.blockCount ≤ 1 →
           extra ≤ min (runQueuePaid r v) (EB - preset.MIN_ACTIVATION_BALANCE.toNat)))
-    ?_ ?_ ?_ tail early same same unslashed
-  · intro _ _
+    ?_ ?_ ?_ tail same early same unslashed
+  · intro _ _ _
     exact ⟨0, by simp [Run.blockCount], Nat.zero_le _, fun _ => Nat.zero_le _⟩
-  · intro f s t engine signed due ok pre fEarly ih epochT clearT
+  · intro f s t engine signed due ok pre ih fEarly epochT clearT
     have processed := (applySignedBlock_ok ok).2.1
     have epochS : getCurrentEpoch s = getCurrentEpoch x.state := by
       rw [← epochT]
       simp only [getCurrentEpoch, processBlock_slot processed]
     have clearS := unslashed_before (Step.block engine signed due ok).slashedPersistence clearT
-    obtain ⟨extra, floor, paid, single⟩ := ih epochS clearS
+    obtain ⟨extra, floor, paid, single⟩ := ih fEarly epochS clearS
     have blockFloor := step ok pre (pre.snoc (.block engine signed due ok)) fEarly epochS clearT
     refine ⟨extra + min (blockQueuePaid s signed.message v)
       (EB - preset.MIN_ACTIVATION_BALANCE.toNat), ?_, ?_, ?_⟩
@@ -1575,17 +1581,18 @@ private theorem run_floor {x y : ForkedBeaconState preset} (tail : Run config ch
     · intro count
       simp only [Run.blockCount] at count
       have none : pre.blockCount = 0 := by omega
-      have zero := (owed_card pre fEarly epochS (by omega)).2 none v
+      have zero := (owed_card pre epochS (by omega)).2 none v
       have extraZero : extra = 0 := by
         have := single (by omega)
         rw [zero] at this
         omega
       simp only [runQueuePaid, stepQueuePaid, zero, Nat.zero_add, extraZero]
       exact Nat.le_refl _
-  · intro middle last cached next pre ok lastEq cachedOk epochNext ih epochLast clearLast
+  · intro middle last cached next pre ok lastEq cachedOk epochNext ih lastEarly epochLast clearLast
     have clearMiddle := unslashed_before (Step.slot ok).slashedPersistence clearLast
     subst lastEq
-    obtain ⟨extra, floor, paid, single⟩ := ih (epochNext.symm.trans epochLast) clearMiddle
+    obtain ⟨extra, floor, paid, single⟩ :=
+      ih lastEarly (epochNext.symm.trans epochLast) clearMiddle
     obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
     refine ⟨extra, ?_, ?_, ?_⟩
     · simpa [Run.blockCount, actualBalanceAt, cachedEq] using floor
@@ -1611,9 +1618,9 @@ private theorem justification_same {f : Fork} {s t : BeaconState preset f}
   · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
     exact ⟨by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest]⟩
 
-/-- Inside one epoch before Gloas, a run keeps each inactivity score of its first state. -/
+/-- Inside one epoch, a run keeps each inactivity score of its first state. -/
 private theorem scores_of_same_epoch {x y : ForkedBeaconState preset}
-    (tail : Run config checks x y) (early : y.fork < .glamsterdam)
+    (tail : Run config checks x y)
     (same : getCurrentEpoch y.state = getCurrentEpoch x.state) {i : ℕ}
     (inside : i < x.state.validators.data.size) (ax : .altair ≤ x.fork) (ay : .altair ≤ y.fork) :
     (y.state.inactivityScores ay).data[i]? = (x.state.inactivityScores ax).data[i]? :=
@@ -1621,7 +1628,7 @@ private theorem scores_of_same_epoch {x y : ForkedBeaconState preset}
     (motive := fun w _ => ∀ aw : .altair ≤ w.fork,
       (w.state.inactivityScores aw).data[i]? = (x.state.inactivityScores ax).data[i]?)
     (fun _ => rfl)
-    (fun _ _ _ ok pre _ ih aw => by
+    (fun _ _ _ ok pre ih aw => by
       have grows := Nat.lt_of_lt_of_le inside pre.registryLifecycle.size_le
       rw [scoreKept_processBlock (applySignedBlock_ok ok).2.1 grows aw]
       exact ih aw)
@@ -1630,7 +1637,7 @@ private theorem scores_of_same_epoch {x y : ForkedBeaconState preset}
       obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
       subst cachedEq
       exact ih aw)
-    tail early same ay
+    tail same ay
 
 /-- The arithmetic that closes the fall of a credited voter. -/
 private theorem fall_credit_arith {EB after gRewarded gTrue gSub gLow c credit q down inc nS : ℕ}
@@ -1772,7 +1779,7 @@ theorem effectiveFall_le
         (validatorKeys_prefix_and_distinct_of_chainSteps run.chainSteps).1,
         fun altair altair' => Run.currentSyncCommittee_eq_of_same_epoch run wEarly same altair
           altair'⟩,
-      run.effectiveKept_of_same_epoch wEarly same, run.registryLifecycle.size_le,
+      run.effectiveKept_of_same_epoch same, run.registryLifecycle.size_le,
       fun i => activeKept_of_chainSteps run.chainSteps _
         (getCurrentEpoch_le_activityFixedEpoch _) i⟩
   obtain ⟨⟨-, keysP, committeeP⟩, keptP, growsP, activeP⟩ :=
@@ -1781,14 +1788,14 @@ theorem effectiveFall_le
   have totalAt : ∀ {w : ForkedBeaconState preset} (run : Run config checks R w),
       w.fork < .glamsterdam → getCurrentEpoch w.state = getCurrentEpoch R.state →
       getTotalActiveBalance w.state = getTotalActiveBalance R.state :=
-    fun run wEarly same => DirectSafety.total_active_congr Rearly wEarly
+    fun run wEarly same => DirectSafety.total_active_congr
       ((activeKept_of_chainSteps run.chainSteps).mono
         (getCurrentEpoch_le_activityFixedEpoch _)) same
-      (run.effectiveKept_of_same_epoch wEarly same)
+      (run.effectiveKept_of_same_epoch same)
   have totalP : getTotalActiveBalance state = getTotalActiveBalance R.state :=
     totalAt (boundary.append tailP) Pearly callEpoch
   -- The validators that the boundary block pays from the queue.
-  obtain ⟨⟨owed, owedCard, covers⟩, -⟩ := owed_card boundary Tearly boundaryEpoch single
+  obtain ⟨⟨owed, owedCard, covers⟩, -⟩ := owed_card boundary boundaryEpoch single
   refine ⟨fun v => min (runQueuePaid boundary v)
     (effective v.toNat - preset.MIN_ACTIVATION_BALANCE.toNat), owed, ?_, ?_, ?_⟩
   · intro v absent
@@ -1805,7 +1812,7 @@ theorem effectiveFall_le
       | none => simp [effective, balanceAt, state, read]
       | some val =>
         have capped := ((history.append boundary).append tailP).effectiveBalance_capped genesis
-          caps.activation caps.compounding Pearly val (Array.mem_of_getElem? read)
+          caps.activation caps.compounding val (Array.mem_of_getElem? read)
         have top : withdrawalMaxEffectiveBalance preset P.fork val ≤
             preset.MAX_EFFECTIVE_BALANCE_ELECTRA := by
           simp only [withdrawalMaxEffectiveBalance, electraP, ↓reduceIte, getMaxEffectiveBalance]
@@ -1905,7 +1912,7 @@ theorem effectiveFall_le
         rw [sEpochR]
         exact UInt64.lt_of_lt_of_le isActiveS.2 ordered
       have capS := (histX.append pre).effectiveBalance_capped genesis caps.activation
-        caps.compounding fEarly valS (Array.mem_of_getElem? foundS)
+        caps.compounding valS (Array.mem_of_getElem? foundS)
       have floor := block_floor fEarly fuluF invS.balancesMatch
         (applySignedBlock_ok ok).2.1 foundS later capS clearAfter
       have tEpoch : getCurrentEpoch t = getCurrentEpoch R.state := by
@@ -1952,13 +1959,13 @@ theorem effectiveFall_le
       rw [this, hEB]
     have histZ := histT.append toZ
     have invZ := reach_invariant genesis histZ
-    have capZ := histZ.effectiveBalance_capped genesis caps.activation caps.compounding Zearly valZ
+    have capZ := histZ.effectiveBalance_capped genesis caps.activation caps.compounding valZ
       (Array.mem_of_getElem? foundZ)
     have nextZ : (getCurrentEpoch z'.state).toNat = (getCurrentEpoch z.state).toNat + 1 := by
       rw [z'Epoch, zEpochR]; exact next
     have altairZ : .altair ≤ z.fork := by rw [ZT, ← PT]; exact altairP
     have holdsZ : PendingConsolidationInvariant config z.state :=
-      fun electra => Run.pendingConsolidation_invariant histZ genesis Zearly electra delayPos
+      fun electra => Run.pendingConsolidation_invariant histZ genesis electra delayPos
     obtain ⟨cached, justified, scored, rewarded, cachedOk, justifiedOk, scoredOk, rewardedOk,
       fallZ⟩ := crossing_fall altairZ edge z'Early nextZ bands holdsZ invZ.balancesMatch delayPos
         foundZ activeZ (clearZ valZ foundZ) capZ
@@ -1967,7 +1974,7 @@ theorem effectiveFall_le
     have insideZ' : v.toNat < z'.state.validators.data.size :=
       Nat.lt_of_lt_of_le insideZ (Run.nil.snoc (.slot edge)).registryLifecycle.size_le
     have yEff : effectiveAt y v.toNat = effectiveAt z' v.toNat :=
-      fromZ'.effectiveKept_of_same_epoch early z'Epoch.symm v.toNat insideZ'
+      fromZ'.effectiveKept_of_same_epoch z'Epoch.symm v.toNat insideZ'
     -- The state that the rewards read is the last state of the epoch, after justification.
     obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
     have justifiedSame := justification_same justifiedOk
@@ -2030,8 +2037,8 @@ theorem effectiveFall_le
           (((justified.inactivityScores altairZ).data[v.toNat]?).map (·.toNat)).getD 0 =
             score v.toNat := by
         have insideT := Nat.lt_of_lt_of_le insideR boundary.registryLifecycle.size_le
-        have zScore := scores_of_same_epoch toZ Zearly zEpoch insideT altairT altairZ
-        have pScore := scores_of_same_epoch tailP Pearly (callEpoch.trans boundaryEpoch.symm)
+        have zScore := scores_of_same_epoch toZ zEpoch insideT altairT altairZ
+        have pScore := scores_of_same_epoch tailP (callEpoch.trans boundaryEpoch.symm)
           insideT altairT altairP
         simp only [score, altairP, dite_true, state]
         rw [justifiedSame.2.2.2, pScore, ← zScore, cachedEq]

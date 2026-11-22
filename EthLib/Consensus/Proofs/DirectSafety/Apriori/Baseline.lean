@@ -486,7 +486,7 @@ theorem RoundLedger.sourceFalling_of_firstDown
     cases flag : v'.slashed
     · rfl
     · exact absurd unset' (run_slashed_exit_assigned (shared.append (ledger.stops i).pre)
-        supported.1 caps.activation caps.compounding early delay i v' atStop flag)
+        supported.1 caps.activation caps.compounding delay i v' atStop flag)
   have split₁ := (pre.snoc_append_eq step rest).symm.trans split
   have firstDown : FirstDown (ledger.stops i).pre i := by
     rcases Run.prefix_total pre _ ((ledger.stops i).pre.snoc assigning) remaining split₁ split₂

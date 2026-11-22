@@ -588,12 +588,12 @@ private theorem Stop.firstUpdate_of_firstDown_regime
       (getCurrentEpoch_succ_lt_farFuture twoSlots stop.state.state)) replayed drop
 private theorem effectiveAt_eq_of_epoch_zero
     (tail : Run config checks x y)
-    (early : y.fork < .glamsterdam) (zero : (getCurrentEpoch y.state).toNat = 0)
+    (zero : (getCurrentEpoch y.state).toNat = 0)
     (inside : i < x.state.validators.data.size) : effectiveAt y i = effectiveAt x i := by
   have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tail.chainSteps)
   have same : getCurrentEpoch y.state = getCurrentEpoch x.state :=
     UInt64.toNat_inj.mp (by omega)
-  exact run_same_epoch_effective tail early same i inside
+  exact run_same_epoch_effective tail same i inside
 private theorem firstUpdate_of_retained_firstDown_regime
     (shared : Run config checks g x) (tail : Run config checks x y)
     (supported : Supported shared tail high) (regime : .pectra ≤ x.fork ∨ y.fork < .pectra)
@@ -618,7 +618,7 @@ private theorem firstUpdate_of_retained_firstDown_regime
     subst step
     have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post.chainSteps)
     have nZero : (getCurrentEpoch n.state).toNat = 0 := by omega
-    have equal := run_same_epoch_effective (Run.nil.snoc (.slot ok)) nEarly
+    have equal := run_same_epoch_effective (Run.nil.snoc (.slot ok))
       (UInt64.toNat_inj.mp (by
         have previous := UInt64.le_iff_toNat_le.mp
           (currentEpoch_le_of_chainSteps (Run.nil.snoc (.slot ok)).chainSteps)
@@ -716,7 +716,7 @@ private theorem retained_effective_loss_regime
   · have early := supported.2.2.2.2.1
     have inside : i.toNat < x.state.validators.data.size :=
         (Array.getElem?_eq_some_iff.mp initial).1
-    have same := effectiveAt_eq_of_epoch_zero tail early zero inside
+    have same := effectiveAt_eq_of_epoch_zero tail zero inside
     omega
   · exact retained_effective_loss_positive_regime shared tail supported regime (by omega)
       i v w initial final unslashed clean activated active replayed

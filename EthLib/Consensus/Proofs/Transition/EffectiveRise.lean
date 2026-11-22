@@ -68,16 +68,17 @@ private theorem run_queueFrom {x y : ForkedBeaconState preset} (tail : Run confi
       QueueFrom L (getCurrentEpoch x.state) y.state := by
   revert altair
   refine Run.induction_of_same_epoch
-    (fun w _ => .altair ≤ w.fork → ∀ L, QueueFrom L (getCurrentEpoch x.state) x.state →
+    (fun w _ => w.fork < .glamsterdam → .altair ≤ w.fork →
+      ∀ L, QueueFrom L (getCurrentEpoch x.state) x.state →
         QueueFrom L (getCurrentEpoch x.state) w.state)
-    (fun _ _ h => h)
-    (fun _ _ _ ok pre early prior altair => ?_)
-    (fun _ _ lastEq cachedOk _ prior altair => ?_) tail early same
-  · have step := riseStep_processBlock altair early delay (applySignedBlock_ok ok).2.1
+    (fun _ _ _ h => h)
+    (fun _ _ _ ok pre prior early altair => ?_)
+    (fun _ _ lastEq cachedOk _ prior lastEarly altair => ?_) tail same early
+  · have step := riseStep_processBlock altair delay (applySignedBlock_ok ok).2.1
     have le := currentEpoch_le_of_chainSteps pre.chainSteps
     intro L start electra
     -- An entry queued before the block keeps its source exit, which the invariant assigns.
-    obtain ⟨old, new⟩ := prior altair L start electra
+    obtain ⟨old, new⟩ := prior early altair L start electra
     obtain ⟨grows, added⟩ := step.2.2 electra
     refine ⟨fun c member => grows c (old c member), fun c member => ?_⟩
     rcases added c member with before | ⟨w, read, later, -⟩
@@ -91,7 +92,7 @@ private theorem run_queueFrom {x y : ForkedBeaconState preset} (tail : Run confi
     · exact .inr ⟨w, read, UInt64.lt_of_le_of_lt le later⟩
   · subst lastEq
     obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
-    exact prior altair
+    exact prior lastEarly altair
 
 /-! ### What the epoch keeps up to the update of the effective balances -/
 
@@ -875,7 +876,7 @@ private theorem rise_edge {z z' : ForkedBeaconState preset}
     have one := kept i inside
     simp only [effectiveAt, read, found, Option.map_some, Option.getD_some] at one
     exact one
-  have upgradedLe := balanceDrift_upgrades_upper upgraded early i
+  have upgradedLe := balanceDrift_upgrades_upper upgraded i
   have endSame : effectiveAt ⟨z.fork, { epoched with slot := nextSlot }⟩ i =
       effectiveAt ⟨z.fork, after⟩ i := by
     simp only [effectiveAt, validators]
@@ -965,18 +966,18 @@ private theorem run_depositCarry {x y : ForkedBeaconState preset} (tail : Run co
     ∀ (one : .pectra ≤ y.fork) (two : .pectra ≤ x.fork),
       y.state.depositBalanceToConsume one = x.state.depositBalanceToConsume two :=
   Run.induction_of_same_epoch
-    (fun w _ => ∀ (one : .pectra ≤ w.fork) (two : .pectra ≤ x.fork),
+    (fun w _ => w.fork < .glamsterdam → ∀ (one : .pectra ≤ w.fork) (two : .pectra ≤ x.fork),
       w.state.depositBalanceToConsume one = x.state.depositBalanceToConsume two)
-    (fun _ _ => rfl)
-    (fun _ _ _ ok _ early prior one two => by
+    (fun _ _ _ => rfl)
+    (fun _ _ _ ok _ prior early one two => by
       rw [show _ = _ from congrFun (depositCarry_processBlock early (applySignedBlock_ok ok).2.1)
         one]
-      exact prior one two)
-    (fun _ _ lastEq cachedOk _ prior => by
+      exact prior early one two)
+    (fun _ _ lastEq cachedOk _ prior lastEarly => by
       subst lastEq
       obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
-      exact prior)
-    tail early same
+      exact prior lastEarly)
+    tail same early
 
 /-- Gains of distinct entries, each on a distinct list with a value, sum to at most the values.
 
@@ -1181,8 +1182,8 @@ theorem effectiveRise_le
   -- What the states of the epoch keep from `R`.
   have activeP := activeKept_of_chainSteps tailP.chainSteps
   have activeZ := activeKept_of_chainSteps toZ.chainSteps
-  have keptP : EffectiveKept r q := tailP.effectiveKept_of_same_epoch Fearly callEpoch
-  have keptZ : EffectiveKept r zs := toZ.effectiveKept_of_same_epoch Fearly zEpoch
+  have keptP : EffectiveKept r q := tailP.effectiveKept_of_same_epoch callEpoch
+  have keptZ : EffectiveKept r zs := toZ.effectiveKept_of_same_epoch zEpoch
   have growsP := tailP.registryLifecycle.size_le
   have growsZ := toZ.registryLifecycle.size_le
   have keysP := (validatorKeys_prefix_and_distinct_of_chainSteps tailP.chainSteps).1
@@ -1197,20 +1198,20 @@ theorem effectiveRise_le
   have invZ := Run.invariant invG histZ
   have invP := Run.invariant invG histP
   have holdsZ : PendingConsolidationInvariant config zs := fun electra =>
-    histZ.pendingConsolidation_invariant genesis Fearly electra withdrawDelay
+    histZ.pendingConsolidation_invariant genesis electra withdrawDelay
   have holdsP : PendingConsolidationInvariant config q := fun electra =>
-    histP.pendingConsolidation_invariant genesis Fearly electra withdrawDelay
+    histP.pendingConsolidation_invariant genesis electra withdrawDelay
   have holdsR : PendingConsolidationInvariant config r := fun electra =>
-    history.pendingConsolidation_invariant genesis Fearly electra withdrawDelay
+    history.pendingConsolidation_invariant genesis electra withdrawDelay
   -- The slashes, exits, withdrawal epochs and queues inside the epoch.
   have reachable : ∀ {w : ForkedBeaconState preset}, Run config checks ⟨F, r⟩ w →
       w.fork < .glamsterdam → PendingConsolidationInvariant config w.state :=
     fun pre early electra =>
-      (history.append pre).pendingConsolidation_invariant genesis early electra withdrawDelay
+      (history.append pre).pendingConsolidation_invariant genesis electra withdrawDelay
   have queueP := run_queueFrom tailP Fearly altair callEpoch withdrawDelay reachable
   have queueZ := run_queueFrom toZ Fearly altair zEpoch withdrawDelay reachable
-  have wdP := Run.withdrawableKept_of_same_epoch tailP Fearly fulu callEpoch invR.balancesMatch
-  have wdZ := Run.withdrawableKept_of_same_epoch toZ Fearly fulu zEpoch invR.balancesMatch
+  have wdP := Run.withdrawableKept_of_same_epoch tailP fulu callEpoch invR.balancesMatch
+  have wdZ := Run.withdrawableKept_of_same_epoch toZ fulu zEpoch invR.balancesMatch
   -- The slot that ends the epoch.
   have nextZ : (getCurrentEpoch z'.state).toNat = (getCurrentEpoch zs).toNat + 1 := by
     rw [z'Epoch, epochZ]; exact nextR
@@ -1238,15 +1239,15 @@ theorem effectiveRise_le
     unfold getPreviousEpoch; rw [epochZ, he]
   -- The states of the epoch read the total of `R`, errors included.
   have totalPR : getTotalActiveBalance q = getTotalActiveBalance r :=
-    DirectSafety.total_active_congr Fearly Fearly
+    DirectSafety.total_active_congr
       (activeP.mono (getCurrentEpoch_le_activityFixedEpoch r)) (epochP.trans he.symm) keptP
   have totalZR : getTotalActiveBalance zs = getTotalActiveBalance r :=
-    DirectSafety.total_active_congr Fearly Fearly
+    DirectSafety.total_active_congr
       (activeZ.mono (getCurrentEpoch_le_activityFixedEpoch r)) (epochZ.trans he.symm) keptZ
   have resetEpoch : getCurrentEpoch reset = e := by
     rw [← epochZ]; simp only [getCurrentEpoch, resetSlot]
   have totalResetZ : getTotalActiveBalance reset = getTotalActiveBalance zs :=
-    DirectSafety.total_active_congr Fearly Fearly
+    DirectSafety.total_active_congr
       (fun ep le i =>
         resetActive ep (UInt64.le_trans le (getCurrentEpoch_le_activityFixedEpoch zs)) i)
       (resetEpoch.trans epochZ.symm) resetKept
@@ -1577,7 +1578,7 @@ theorem effectiveRise_le
       refine (swap _).trans (gainSum.trans (le_of_eq ?_))
       rfl
   -- The corrections of the branch of `y` inside the epoch.
-  have bc := Run.balanceCorrections_of_same_epoch toZ Fearly fulu zEpoch invR.balancesMatch
+  have bc := Run.balanceCorrections_of_same_epoch toZ fulu zEpoch invR.balancesMatch
     invR.exitsOrdered
   extract_lets stateZ pZ positionsZ validatorZ effectiveZ currentZ beforeZ recentZ
     slashedZ totalZ baseZ seatRewardZ seatsZ syncZ syncProposerZ
@@ -1669,7 +1670,7 @@ theorem effectiveRise_le
     split
     · exact Nat.le_refl _
     · exact UInt64.le_iff_toNat_le.mp caps.compounding
-  have cappedR := history.effectiveBalance_capped genesis caps.activation caps.compounding Fearly
+  have cappedR := history.effectiveBalance_capped genesis caps.activation caps.compounding
   -- The crossing of each validator.
   obtain ⟨cross, crossEq⟩ : ∃ f : ℕ → ℕ, ∀ i, f i = (if effective i < cap i then
       (if effective i + preset.upwardBand < actual i + slashBack i + syncP i + credit i then
@@ -1701,7 +1702,7 @@ theorem effectiveRise_le
       Nat.lt_of_lt_of_le (Nat.lt_of_lt_of_le inside growsZ)
         (Run.nil.snoc (.slot edge)).registryLifecycle.size_le
     have yEff : effectiveAt y i = effectiveAt z' i :=
-      fromZ'.effectiveKept_of_same_epoch early z'Epoch.symm i insideZ'
+      fromZ'.effectiveKept_of_same_epoch z'Epoch.symm i insideZ'
     have upd := updateBound i vZ readZ
     rw [← yEff, effZ, ← effR] at upd
     -- The balance at the update.

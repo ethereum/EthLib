@@ -900,11 +900,11 @@ private theorem deposit_churn_le_exits {g x a : ForkedBeaconState preset}
         Nat.le_of_eq (congrArg (·.data.size) same).symm⟩
   have resetEpoch : getCurrentEpoch reset = getCurrentEpoch cached := by
     simp only [getCurrentEpoch, kept.1.1]
-  have resetTotal := total_active_congr aEarly aEarly
+  have resetTotal := total_active_congr
     (kept.1.2.mono (getCurrentEpoch_le_activityFixedEpoch cached)) resetEpoch kept.2.1
   have cachedEpoch : getCurrentEpoch cached = getCurrentEpoch a.state := by
     simp only [getCurrentEpoch, slot]
-  have cachedTotal := total_active_congr aEarly aEarly
+  have cachedTotal := total_active_congr
     (ActiveKept.of_validators (congrArg (·.data) validators) _) cachedEpoch
     (effectiveKept_data (congrArg (·.data) validators))
   -- Before Gloas the deposit churn is the activation and exit churn.

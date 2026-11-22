@@ -2326,11 +2326,11 @@ private theorem slot_step_targets {g x m last : ForkedBeaconState preset}
     have xEarly : x.fork < .glamsterdam :=
       Nat.lt_of_le_of_lt (fork_le_of_chainSteps pre.chainSteps) beforeFork
     have lifeXM : RegistryLifecycle x.state m.state := pre.registryLifecycle
-    have capXM := (Internal.CapStep.run pre caps.activation caps.compounding beforeFork).1
+    have capXM := (Internal.CapStep.run pre caps.activation caps.compounding).1
     have orderedM : OrderedAt config m.state :=
-      (shared.append pre).pendingConsolidationsOrdered genesis beforeFork delay
-    have orderedX := shared.pendingConsolidationsOrdered genesis xEarly delay
-    have cappedX := shared.effectiveBalance_capped genesis caps.activation caps.compounding xEarly
+      (shared.append pre).pendingConsolidationsOrdered genesis delay
+    have orderedX := shared.pendingConsolidationsOrdered genesis delay
+    have cappedX := shared.effectiveBalance_capped genesis caps.activation caps.compounding
     -- The cached state is the state of the step, up to its roots.
     have lifeMC : RegistryLifecycle m.state cached := .of_data (by rw [cachedEq])
     have slotMC : cached.slot = m.state.slot := by rw [cachedEq]
@@ -2432,14 +2432,14 @@ private theorem slot_step_targets {g x m last : ForkedBeaconState preset}
 
 /-- A block keeps the shape of the queue: it only appends entries that are new since X. -/
 private theorem block_step {f : Fork} {e0 : Epoch} {L : List PendingConsolidation} {n : ℕ}
-    (electra : .pectra ≤ f) (early : f < .glamsterdam)
+    (electra : .pectra ≤ f)
     (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     {engine : ExecutionEngine preset f} {signed : SignedBeaconBlock preset f}
     {s t : BeaconState preset f}
     (ok : applySignedBlock config checks engine s signed true = .ok t)
     (started : e0 ≤ getCurrentEpoch s) (shape : Shape L e0 n s) : Shape L e0 n t := by
   have grown := ConsolidationQueueRise.appendStep_processBlock (Nat.le_trans (by decide) electra)
-    early delay (applySignedBlock_ok ok).2.1
+    delay (applySignedBlock_ok ok).2.1
   exact shape.grow electra grown.2.2 grown.2.1 started
 
 /-- The consolidation credits of a run from X to the targets in `T` are within the caps.
@@ -2495,7 +2495,7 @@ private theorem run_credits_targets {g x y : ForkedBeaconState preset}
               (capBound x high)).sum := by
       cases step with
       | block engine signed due ok =>
-        refine ⟨0, block_step inFork early (by omega) ok started shape, fun {added} addedOk T => ?_⟩
+        refine ⟨0, block_step inFork (by omega) ok started shape, fun {added} addedOk T => ?_⟩
         have none : (added.filter (·.source = .consolidations)) = [] :=
           List.filter_eq_nil_iff.mpr fun e member => by
             simpa using PinDrift.Internal.blockReplay_noConsolidations inFork early engine _ _
@@ -3488,7 +3488,7 @@ The cap lies above `MAX_EFFECTIVE_BALANCE` and above the key's effective balance
 
 The charge covers the minimum stake plus the downward band after division by the quotient. -/
 private theorem Ctx.step_facts {g x m : ForkedBeaconState preset} {high : ℕ}
-    (c : Ctx config checks g x high) (hm : Run config checks x m) (mEarly : m.fork < .glamsterdam)
+    (c : Ctx config checks g x high) (hm : Run config checks x m)
     {i : ℕ} {val : Validator} (found : m.state.validators.data[i]? = some val) :
     0 < (EthLib.Consensus.parameters preset .fusaka).MIN_SLASHING_PENALTY_QUOTIENT.toNat ∧
       preset.MAX_EFFECTIVE_BALANCE.toNat ≤
@@ -3507,7 +3507,7 @@ private theorem Ctx.step_facts {g x m : ForkedBeaconState preset} {high : ℕ}
     UInt64.le_iff_toNat_le.mp (Internal.minimum_cap c.caps.activation c.caps.compounding val),
     ?_, le_smul_ceilDiv (β := Nat) positiveQ⟩
   have := Run.effectiveBalance_capped (c.shared.append hm) c.genesis c.caps.activation
-    c.caps.compounding mEarly val (Array.mem_of_getElem? found)
+    c.caps.compounding val (Array.mem_of_getElem? found)
   have e : effectiveAt m i = val.effectiveBalance.toNat := by simp [effectiveAt, found]
   rw [e]
   exact UInt64.le_iff_toNat_le.mp this
@@ -3566,7 +3566,7 @@ private theorem Ctx.cross {g x m n z : ForkedBeaconState preset} {high : ℕ}
   have fuluM : .fusaka ≤ m.fork := Nat.le_trans c.fulu hxm
   have shared' := c.shared.append hm
   have xm := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps hm.chainSteps)
-  obtain ⟨positiveQ, capLe, capEB, hB⟩ := c.step_facts hm mEarly found
+  obtain ⟨positiveQ, capLe, capEB, hB⟩ := c.step_facts hm found
   obtain ⟨z', pre', post', -, hz', ineq⟩ := PinDrift.Internal.epochFloor shared' c.genesis c.caps
     c.delay
     c.vector positiveQ (pre.snoc (Step.slot ok)) fuluM early
@@ -3580,7 +3580,7 @@ private theorem Ctx.cross {g x m n z : ForkedBeaconState preset} {high : ℕ}
   have nz' := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post'.chainSteps)
   have insideM : i < m.state.validators.data.size := (Array.getElem?_eq_some_iff.mp found).1
   have effEq : effectiveAt z' i = effectiveAt m i :=
-    run_same_epoch_effective pre' z'Early hz' i insideM
+    run_same_epoch_effective pre' hz' i insideM
   have altairX : .altair ≤ x.fork := Nat.le_trans (by decide) c.fulu
   have altairZ : .altair ≤ z'.fork :=
     Nat.le_trans altairX (Nat.le_trans hxm (fork_le_of_chainSteps pre'.chainSteps))
@@ -3713,7 +3713,7 @@ private theorem Ctx.inside {g x m n : ForkedBeaconState preset} {high : ℕ}
   have mEarly : m.fork < .glamsterdam := Nat.lt_of_le_of_lt mn early
   have fuluM : .fusaka ≤ m.fork := Nat.le_trans c.fulu hxm
   have shared' := c.shared.append hm
-  obtain ⟨positiveQ, capLe, capEB, hB⟩ := c.step_facts hm mEarly found
+  obtain ⟨positiveQ, capLe, capEB, hB⟩ := c.step_facts hm found
   obtain ⟨z', pre', post', -, -, ineq⟩ := PinDrift.Internal.epochFloor shared' c.genesis c.caps
     c.delay
     c.vector positiveQ seg fuluM early (Or.inl same) i val found activated exit slashedCond
@@ -3790,7 +3790,7 @@ private theorem final_arith (K band Bq B S C φ0 φk J J' T : ℕ)
 It was unslashed at the start `z` of the climb, so its withdrawal waits a whole slashings vector. -/
 private theorem Ctx.slashed_window {g x z m : ForkedBeaconState preset} {high : ℕ}
     (c : Ctx config checks g x high) (hz : Run config checks x z) (rm : Run config checks z m)
-    (mEarly : m.fork < .glamsterdam) (i : ℕ) (v0 val : Validator)
+    (i : ℕ) (v0 val : Validator)
     (found0 : z.state.validators.data[i]? = some v0)
     (found : m.state.validators.data[i]? = some val)
     (unslashed0 : v0.slashed = false) (epoch : ℕ) (inside : epoch ≤ high + 1) :
@@ -3798,7 +3798,7 @@ private theorem Ctx.slashed_window {g x z m : ForkedBeaconState preset} {high : 
       epoch + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat / 2 < val.withdrawableEpoch.toNat := by
   intro flag
   have lower := rm.newly_slashed_withdrawableEpoch c.caps.activation c.caps.compounding
-    mEarly c.delay i v0 val found0 found unslashed0 flag
+    c.delay i v0 val found0 found unslashed0 flag
   have window := c.guard.2.2.2.2.2.2.2.2.2.2.1
   have xz := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps hz.chainSteps)
   unfold driftHorizon at window
@@ -3959,7 +3959,7 @@ private theorem Ctx.inv_step {g x z y q p' m : ForkedBeaconState preset} {high :
   have mEarly : m.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (Nat.le_trans (fork_le_of_chainSteps ins.chainSteps)
       (Step.slot ok).chainStep.fork_le) pEarly
-  have slashedCond := c.slashed_window hz rm mEarly i v0 val found0 found unslashed0
+  have slashedCond := c.slashed_window hz rm i v0 val found0 found unslashed0
     (getCurrentEpoch p'.state).toNat (by omega)
   have sameQ : getCurrentEpoch q.state = getCurrentEpoch m.state := cm.symm
   have stepP : (getCurrentEpoch p'.state).toNat = (getCurrentEpoch m.state).toNat + 1 := by
@@ -4114,7 +4114,7 @@ private theorem Ctx.claimAt {g x z y p : ForkedBeaconState preset} {high : ℕ}
       (getCurrentEpoch m.state).toNat + 1 < w.exitEpoch.toNat := fun w hw => by
     have := exitLate p rest w hw
     omega
-  have slashedCond := c.slashed_window hz rm mEarly i v0 val found0 found unslashed0
+  have slashedCond := c.slashed_window hz rm i v0 val found0 found unslashed0
     (getCurrentEpoch p.state).toNat (by omega)
   have inside := Ctx.inside c hm ins pEarly cm.symm i val found activated exit' slashedCond hyst
     local_
@@ -4547,7 +4547,7 @@ theorem Run.new_key_effective_floor {g x y : ForkedBeaconState preset}
     have inside : i < n.state.validators.data.size := by
       obtain ⟨val, found, -⟩ := (pre0.snoc (Step.slot ok)).registryLifecycle.validators i v0 found0
       exact (Array.getElem?_eq_some_iff.mp found).1
-    exact run_same_epoch_effective rest0 early (UInt64.toNat_inj.mp (by omega)) i inside
+    exact run_same_epoch_effective rest0 (UInt64.toNat_inj.mp (by omega)) i inside
   rw [sameEff]
   have kd : keyDebits i events = (events.map (PinDrift.Internal.syncDebit i)).sum +
       (events.map (floorPartialDebit i.toUInt64)).sum := rfl

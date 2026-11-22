@@ -339,7 +339,7 @@ private theorem funding_block_replay {fork : Fork} {s : BeaconState preset fork}
         (fun _ _ ok => congrArg (·.data.size) (processBlockExecution_validators ok))
         (fun _ _ ok => effectiveKept_data
           (congrArg (·.data) (processBlockExecution_validators ok)))
-        (fun _ _ ok _ => SamePendingQueue.blockExecution early ok) headedBound executionOk
+        (fun _ _ ok _ => SamePendingQueue.blockExecution ok) headedBound executionOk
     · cases executionOk
       exact headedBound
   have randaoBound : FundingReplay extra s randao := by

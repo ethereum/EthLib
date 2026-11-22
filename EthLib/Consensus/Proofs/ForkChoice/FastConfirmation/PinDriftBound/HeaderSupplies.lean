@@ -380,7 +380,7 @@ theorem activeNewlySlashed_unwithdrawn (h : Setting config checks g split fin pu
   obtain ⟨tailC⟩ := h.toCounted
   have finSplit := UInt64.le_iff_toNat_le.mp h.finalized
   obtain ⟨uAssigned, -⟩ := tailC.newly_slashed_withdrawableEpoch h.caps.activation
-    h.caps.compounding h.early (Internal.Setting.delay h) i s u foundS foundC cleanS slashedC
+    h.caps.compounding (Internal.Setting.delay h) i s u foundS foundC cleanS slashedC
   by_cases unset : s.exitEpoch = FAR_FUTURE_EPOCH
   · obtain ⟨c, member, index, -⟩ := tailC.departure_charge_of_assigned i s u foundS foundC unset
       uAssigned
@@ -395,7 +395,7 @@ theorem activeNewlySlashed_unwithdrawn (h : Setting config checks g split fin pu
         (Array.mem_of_getElem? foundS))
     have exited : s.exitEpoch.toNat ≤ (getCurrentEpoch split).toNat := by omega
     have withdrawn : s.withdrawableEpoch.toNat ≤ (getCurrentEpoch split).toNat := by omega
-    have clean := (Run.retired_validator tailC h.caps.activation h.caps.compounding h.early i s u
+    have clean := (Run.retired_validator tailC h.caps.activation h.caps.compounding i s u
       foundS foundC (UInt64.le_iff_toNat_le.mpr exited) cleanS
       (UInt64.le_iff_toNat_le.mpr withdrawn)).1
     simp [slashedC] at clean
@@ -824,7 +824,7 @@ private theorem cut_balance_core (h : Setting config checks g split fin pulled a
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   have capSplit : PinTerms.capAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat ≤
       PinTerms.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat :=
-    Internal.cap_le_cap_of_run h.caps toPulled h.early v.toNat
+    Internal.cap_le_cap_of_run h.caps toPulled v.toNat
   -- the largest effective balance on R's run
   obtain ⟨M, hM⟩ : ∃ M, M = ((fromFin.append tail).balancePath.map
       fun z => effectiveAt z v.toNat).foldl max 0 := ⟨_, rfl⟩
@@ -858,14 +858,14 @@ private theorem cut_balance_core (h : Setting config checks g split fin pulled a
   have capped : ∀ z ∈ fromC.balancePath, effectiveAt z v.toNat ≤ PinTerms.capAt z v.toNat := by
     intro z member
     obtain ⟨zs, rfl, ⟨r1⟩, -⟩ := Internal.balancePath_state fromC member
-    exact Internal.effective_le_cap_at (toFin.append (toC.append r1)) h.genesis h.caps h.early
+    exact Internal.effective_le_cap_at (toFin.append (toC.append r1)) h.genesis h.caps
       v.toNat
   have capCeil : ∀ z ∈ fromC.balancePath,
       PinTerms.capAt z v.toNat ≤ PinTerms.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset)
         v.toNat := by
     intro z member
     obtain ⟨zs, rfl, -, ⟨r2⟩⟩ := Internal.balancePath_state fromC member
-    exact Nat.le_trans (Internal.cap_le_cap_of_run h.caps r2 h.early v.toNat) capSplit
+    exact Nat.le_trans (Internal.cap_le_cap_of_run h.caps r2 v.toNat) capSplit
   obtain ⟨-, sameC, afterC, -⟩ := Internal.effective_ceiling_flip h fromC
     (Run.invariant h.genesis.invariant (toFin.append toC)) v.toNat insideC Bc
     (PinTerms.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) capped capCeil ceil
@@ -878,7 +878,7 @@ private theorem cut_balance_core (h : Setting config checks g split fin pulled a
         obtain ⟨front, atHead⟩ := Run.balancePath_head fromC
         rw [atHead]
         exact List.mem_cons_self)
-      have capAtC := Internal.effective_le_cap_at (toFin.append toC) h.genesis h.caps h.early
+      have capAtC := Internal.effective_le_cap_at (toFin.append toC) h.genesis h.caps
         v.toNat
       change effectiveAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat ≤ _
       omega
@@ -1003,10 +1003,10 @@ private theorem cut_balance_core (h : Setting config checks g split fin pulled a
       omega
   · have headroom := Internal.rise_of_notKept h v.toNat kept
     have capped : balanceAt split v.toNat ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat :=
-      Internal.effectiveAt_le_capMax (toFin.append fromFin) h.genesis h.caps h.early v.toNat
+      Internal.effectiveAt_le_capMax (toFin.append fromFin) h.genesis h.caps v.toNat
     have cappedR : balanceAt pulled v.toNat ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat :=
       Internal.effectiveAt_le_capMax (toFin.append (fromFin.append tail)) h.genesis h.caps
-        h.early v.toNat
+        v.toNat
     omega
 
 /-- A key that the shared run slashes is bounded by its finalized balance or by R's balance.
@@ -1071,7 +1071,7 @@ private theorem cut_balance_le (h : Setting config checks g split fin pulled anc
     · have sameE : getCurrentEpoch split = getCurrentEpoch fin :=
         UInt64.toNat_inj.mp (by omega)
       exact le_max_of_le_left
-        (run_same_epoch_effective fromFin h.early sameE v.toNat inFin).le
+        (run_same_epoch_effective fromFin sameE v.toNat inFin).le
     · refine le_max_of_le_right (cut_balance_core h fromFin tail high endEpoch replayedF replayed
         v hW (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩) fromFin
         (Run.nil_append fromFin) inFin ?_ (fun hle => absurd hle flat)
@@ -1122,12 +1122,12 @@ The run starts at `b`, so each of its steps starts at the epoch of `b` or later.
 Thus a cutoff before the start epoch includes no epoch rewards from the run. -/
 private theorem balanceEvents_late {f : Fork} {b : BeaconState preset f}
     {y : ForkedBeaconState preset} (tail : Run config checks ⟨f, b⟩ y)
-    (early : y.fork < .glamsterdam) (same : getCurrentEpoch y.state = getCurrentEpoch b)
+    (same : getCurrentEpoch y.state = getCurrentEpoch b)
     {high : ℕ} (late : high + 1 < (getCurrentEpoch b).toNat) :
     tail.balanceEvents high = .ok [] := by
   refine Run.induction_of_same_epoch (fun _ r => r.balanceEvents high = .ok []) rfl ?_ ?_ tail
-    early same
-  · intro _ s _ _ _ _ _ pre _ prior
+    same
+  · intro _ s _ _ _ _ _ pre prior
     have started : (getCurrentEpoch b).toNat ≤ (getCurrentEpoch s).toNat :=
       UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
     have skipped : ¬ (getCurrentEpoch s).toNat ≤ high + 1 := by omega
@@ -1181,7 +1181,7 @@ private theorem cut_whistle (h : Setting config checks g split fin pulled anc co
     simp
   refine (scan.trans (slashings.le.trans limits)).trans ?_
   by_cases late : high + 1 < (getCurrentEpoch b).toNat
-  · rw [balanceEvents_late pre h.early sameEpoch late] at replayed
+  · rw [balanceEvents_late pre sameEpoch late] at replayed
     cases replayed
     simp
   have endEpoch : (getCurrentEpoch split).toNat ≤ high + 1 := by rw [sameEpoch]; omega
@@ -1218,7 +1218,7 @@ private theorem cut_whistle (h : Setting config checks g split fin pulled anc co
       UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps rest.chainSteps)
     have epochB : (getCurrentEpoch b).toNat = (getCurrentEpoch split).toNat := by rw [sameEpoch]
     have withdrawable := ((rest.append toPulled).newly_slashed_withdrawableEpoch h.caps.activation
-      h.caps.compounding h.early (Internal.Setting.delay h) j u wP foundA foundP clean markedP).2
+      h.caps.compounding (Internal.Setting.delay h) j u wP foundA foundP clean markedP).2
     have p : P j := by
       refine ⟨?_, by simp [foundS, markedS], ?_⟩
       · cases foundB : b.validators.data[j]? with
@@ -1228,7 +1228,7 @@ private theorem cut_whistle (h : Setting config checks g split fin pulled anc co
       · exact Internal.slashedRB_of_withdrawable config pulled anc fin foundP markedP (by omega)
     have sameEpochA : getCurrentEpoch split = getCurrentEpoch a.state :=
       UInt64.toNat_inj.mp (by omega)
-    have kept := rest.effectiveKept_of_same_epoch h.early sameEpochA j
+    have kept := rest.effectiveKept_of_same_epoch sameEpochA j
       (Array.getElem?_eq_some_iff.mp foundA).1
     have read : balanceAt split j = effectiveAt a j := kept
     simp only [p, ↓reduceIte, quotient, read, sameFork, le_refl]
@@ -1563,7 +1563,7 @@ theorem budget_branchR (h : Setting config checks g split fin pulled anc counted
     obtain ⟨wP, foundP, slashedP⟩ :=
       (after.append toPulled).slashedPersistence v.toNat w foundN slashedN
     have withdrawable := ((((Run.nil.snoc step).append after).append toPulled)
-      |>.newly_slashed_withdrawableEpoch h.caps.activation h.caps.compounding h.early
+      |>.newly_slashed_withdrawableEpoch h.caps.activation h.caps.compounding
         (Internal.Setting.delay h)
         v.toNat u wP foundM foundP unslashedM slashedP).2
     have cut : v ∈ Internal.cutKeys config pulled anc fin split := by
@@ -2420,7 +2420,7 @@ theorem earlier_charge (h : Setting config checks g split fin pulled anc counted
   obtain ⟨vc, foundC, -⟩ := isActiveAt_eq_true_iff.mp activeC
   have insideC : i < cc.state.validators.data.size := (Array.getElem?_eq_some_iff.mp foundC).1
   have effEq : effectiveAt cc i = c0.amount := by
-    have same := run_same_epoch_effective rest0 pEarly
+    have same := run_same_epoch_effective rest0
       (UInt64.toNat_inj.mp (by omega)) i insideC
     have atP : effectiveAt p i = c0.amount := by simp [effectiveAt, foundP, amount]
     omega
@@ -2435,14 +2435,14 @@ theorem earlier_charge (h : Setting config checks g split fin pulled anc counted
   have toCC : Run config checks ⟨fork, split⟩ cc := pre0.snoc (Step.slot ok)
   have cFork : fork ≤ cc.fork := fork_le_of_chainSteps toCC.chainSteps
   have startEff : effectiveAt cc i ≤ PinTerms.capAt cc i :=
-    Internal.effective_le_cap_at (shared.append (fromFin.append toCC)) h.genesis h.caps ccEarly i
+    Internal.effective_le_cap_at (shared.append (fromFin.append toCC)) h.genesis h.caps i
   have capCC : PinTerms.capAt cc i ≤ PinTerms.capAt a i :=
-    Internal.cap_le_cap_of_run h.caps tail2 aEarly i
+    Internal.cap_le_cap_of_run h.caps tail2 i
   have alignedCap : PinTerms.capAt a i % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
     have := congrArg UInt64.toNat
       (withdrawalMaxEffectiveBalance_aligned (fork := a.fork) h.aligned old)
     simpa [PinTerms.capAt, foundA, UInt64.toNat_mod] using this
-  have capCeil := Internal.capCeil_path tail2 h.caps aEarly (Nat.le_trans aFork cFork) i
+  have capCeil := Internal.capCeil_path tail2 h.caps (Nat.le_trans aFork cFork) i
   have aEpoch' : (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch counted).toNat := aEpoch
   have nearC := h.near
   have near : (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by omega
@@ -2493,7 +2493,7 @@ theorem earlier_charge (h : Setting config checks g split fin pulled anc counted
     -- the switch step is a block step, so it keeps the epoch and the effective balances
     have epochEq := epochAt insideC
     have effS' : effectiveAt s' i = effectiveAt s i :=
-      run_same_epoch_effective (Run.nil.snoc step1 : Run config checks s s') s'Early
+      run_same_epoch_effective (Run.nil.snoc step1 : Run config checks s s')
         (UInt64.toNat_inj.mp epochEq) i insideS
     have minLe : preset.MIN_ACTIVATION_BALANCE.toNat ≤
         preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat :=
@@ -2506,15 +2506,15 @@ theorem earlier_charge (h : Setting config checks g split fin pulled anc counted
       (by omega) preset.MIN_ACTIVATION_BALANCE.toNat minLe alignedMin (by omega)
       (effectiveAt cc i + preset.upwardBand) (by omega)
       (fun z member => Nat.le_trans
-        (Internal.capCeil_path pre1 h.caps sEarly (Nat.le_trans sFork cFork) i z member) capS)
+        (Internal.capCeil_path pre1 h.caps (Nat.le_trans sFork cFork) i z member) capS)
     -- the run from the switch to the key's state, at its cap
     obtain ⟨-, ceil2⟩ := ceiling_run h (toCC.append (pre1.snoc step1)) post1 aEarly aFork i
       insideS' highC (by omega) near (PinTerms.capAt a i) capEnd alignedCap
       (Nat.le_trans (Internal.effective_le_cap_at (shared.append (fromFin.append
-        (toCC.append (pre1.snoc step1)))) h.genesis h.caps s'Early i)
-        (Internal.cap_le_cap_of_run h.caps post1 aEarly i))
+        (toCC.append (pre1.snoc step1)))) h.genesis h.caps i)
+        (Internal.cap_le_cap_of_run h.caps post1 i))
       (effectiveAt cc i + Internal.stepCredit (fun _ => true) (fun _ => true) i step1) (by omega)
-      (Internal.capCeil_path post1 h.caps aEarly (Nat.le_trans aFork
+      (Internal.capCeil_path post1 h.caps (Nat.le_trans aFork
         (fork_le_of_chainSteps (toCC.append (pre1.snoc step1)).chainSteps)) i)
     -- the credits of the three parts are at most the sources of C's run
     have notSlot := Internal.step_flip_not_slot step1 s'Early

@@ -246,7 +246,7 @@ private theorem selectedInputs_of_history {g x y : ForkedBeaconState preset}
     have lifecycle : ∀ e ∈ events, RegistryLifecycle x.state e.before.state := fun e member =>
       (replay_event_provenance shared tail genesis early high endEpoch events replayed e
         member).1
-    have notInitial := history.fresh_not_initial shared genesis electra xEarly delay lifecycle
+    have notInitial := history.fresh_not_initial shared genesis electra delay lifecycle
     have covered := history.actual_payment_coverage electra notInitial
     rw [show (((payments.zip allocations).filter fun pair =>
         pair.1.1.tag.isFresh).map
@@ -270,7 +270,6 @@ private theorem epochInput_facts {g x u : ForkedBeaconState preset}
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
-    (early : u.fork < .glamsterdam)
     (cached : processSlot u.state = .ok s) :
     BalancesMatch s ∧ ExitsOrdered s ∧
       PendingConsolidationsOrdered config (getCurrentEpoch s).toNat s ∧
@@ -291,11 +290,11 @@ private theorem epochInput_facts {g x u : ForkedBeaconState preset}
   have bounded := getCurrentEpoch_succ_lt_farFuture twoSlots u.state
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cached
   exact ⟨invariant.balancesMatch, invariant.exitsOrdered,
-    run.pendingConsolidationsOrdered genesis early delay,
+    run.pendingConsolidationsOrdered genesis delay,
     run.exit_withdrawable_delay genesis,
     run.activationExitOrder genesis,
-    run.effectiveBalance_capped genesis caps.activation caps.compounding early,
-    run.pendingConsolidations_apart genesis early delay,
+    run.effectiveBalance_capped genesis caps.activation caps.compounding,
+    run.pendingConsolidations_apart genesis delay,
     pre.registryLifecycle.trans (.of_data rfl), start,
     UInt64.lt_iff_toNat_lt.mpr (by
       change (getCurrentEpoch u.state).toNat < FAR_FUTURE_EPOCH.toNat
@@ -454,7 +453,7 @@ private theorem reservedReplay_slot_last {g x : ForkedBeaconState preset} {fork 
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps pre.chainSteps) early
   obtain ⟨matched, exits, ordered, delayed, activationOrder, capped, apartAll, startLife,
     startCurrent, finite⟩ :=
-    epochInput_facts (u := ⟨fork, s⟩) shared pre genesis caps delay twoSlots early cachedOk
+    epochInput_facts (u := ⟨fork, s⟩) shared pre genesis caps delay twoSlots cachedOk
   -- The cache keeps the registry, the balances, the slot and the queue.
   obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
   have sameEpoch : getCurrentEpoch cached = getCurrentEpoch s := by
@@ -520,7 +519,7 @@ private theorem reservedReplay_slot_last {g x : ForkedBeaconState preset} {fork 
     refine ⟨w, found, fun far' => ?_⟩
     rw [far'] at activated
     exact absurd (UInt64.lt_of_le_of_lt activated finite) (UInt64.lt_irrefl _)
-  have slashedSpan := epochPrefix_slashedSpan pre caps.activation caps.compounding early
+  have slashedSpan := epochPrefix_slashedSpan pre caps.activation caps.compounding
     cachedOk justifiedOk scoredOk rewardsOk registry slashings resetOk depositsOk
   have horizon : next.toNat ≤ horizonEnd x high := by
     have epochs : (getCurrentEpoch cached).toNat = (getCurrentEpoch s).toNat := by
@@ -536,8 +535,8 @@ private theorem reservedReplay_slot_last {g x : ForkedBeaconState preset} {fork 
       assignment cachedErasure prior cachedRetired cachedCover cachedFuture startLife
       (UInt64.lt_of_le_of_lt startCurrent finite) startCurrent ordered exits finite delayed
       delayTwo activationOrder nextOk twoSlots capped unique apart sources initialZero
-      slashedSpan horizon (Run.pendingConsolidationsOrdered shared genesis earlyX delay)
-      (run_slashed_exit_assigned shared genesis caps.activation caps.compounding earlyX delay)
+      slashedSpan horizon (Run.pendingConsolidationsOrdered shared genesis delay)
+      (run_slashed_exit_assigned shared genesis caps.activation caps.compounding delay)
       provenance
   -- The pass keeps a sublist of the queue, and pays from states with the pass input's registry.
   have shape := pass.pass_shape
@@ -982,7 +981,7 @@ private theorem reservedReplay_run {g x y : ForkedBeaconState preset}
   obtain ⟨initialOwned, initial, frame, cover, future⟩ :=
     reservedFrame_initial shared genesis xEarly high electraX rounding
   -- The sources of the queue at `x` have their exits assigned there.
-  have initialSources := (shared.pendingConsolidation_invariant genesis xEarly electraX delay).2
+  have initialSources := (shared.pendingConsolidation_invariant genesis electraX delay).2
   revert early endEpoch roundingAt
   induction tail generalizing events with
   | nil =>
@@ -1038,7 +1037,7 @@ private theorem reservedReplay_run {g x y : ForkedBeaconState preset}
     -- The run facts at the step input.
     have invariant := (run_justified_separated whole genesis).1
     have slashedExit : SlashedExitAssigned middle.state := fun i v found flag =>
-      run_slashed_exit_assigned whole genesis caps.activation caps.compounding middleEarly delay
+      run_slashed_exit_assigned whole genesis caps.activation caps.compounding delay
         i v found flag
     have finite : getCurrentEpoch middle.state < FAR_FUTURE_EPOCH := by
       have ne := getCurrentEpoch_ne_farFuture twoSlots middle.state

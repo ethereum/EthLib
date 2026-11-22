@@ -495,22 +495,20 @@ theorem Run.induction_of_same_period {x : ForkedBeaconState preset} (period : Ep
     (blockStep : ∀ {f : Fork} {s t : BeaconState preset f} (engine : ExecutionEngine preset f)
       (signed : SignedBeaconBlock preset f) (due : upgradeDue config ⟨f, s⟩ = false)
       (ok : applySignedBlock config checks engine s signed true = .ok t)
-      (pre : Run config checks x ⟨f, s⟩), f < .glamsterdam → motive ⟨f, s⟩ pre →
+      (pre : Run config checks x ⟨f, s⟩), motive ⟨f, s⟩ pre →
         motive ⟨f, t⟩ (pre.snoc (.block engine signed due ok)))
     (slotStep : ∀ {middle last : ForkedBeaconState preset} (pre : Run config checks x middle)
-      (ok : advanceSlotAcross config checks middle = .ok last), last.fork < .glamsterdam →
+      (ok : advanceSlotAcross config checks middle = .ok last),
       (getCurrentEpoch last.state = getCurrentEpoch middle.state ∨
         getCurrentEpoch last.state % period ≠ 0) →
       motive middle pre → motive last (pre.snoc (.slot ok)))
     {y : ForkedBeaconState preset} (tail : Run config checks x y)
-    (early : y.fork < .glamsterdam)
     (same : (getCurrentEpoch y.state).toNat / max 1 period.toNat =
       (getCurrentEpoch x.state).toNat / max 1 period.toNat) :
     motive y tail := by
   induction tail with
   | nil => exact start
   | @snoc middle last pre step ih =>
-    have middleEarly := Nat.lt_of_le_of_lt step.chainStep.fork_le early
     have low := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
     have high := UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
     have midSame : (getCurrentEpoch middle.state).toNat / max 1 period.toNat =
@@ -518,11 +516,11 @@ theorem Run.induction_of_same_period {x : ForkedBeaconState preset} (period : Ep
       have above := Nat.div_le_div_right (c := max 1 period.toNat) high
       have below := Nat.div_le_div_right (c := max 1 period.toNat) low
       omega
-    have prior := ih middleEarly midSame
+    have prior := ih midSame
     cases step with
-    | block engine signed due ok => exact blockStep engine signed due ok pre early prior
+    | block engine signed due ok => exact blockStep engine signed due ok pre prior
     | slot ok =>
-      refine slotStep pre ok early ?_ prior
+      refine slotStep pre ok ?_ prior
       rcases epoch_same_or_not_start high (same.trans midSame.symm) with equal | inside
       · exact .inl (UInt64.toNat_inj.mp equal)
       · refine .inr fun zero => inside ?_

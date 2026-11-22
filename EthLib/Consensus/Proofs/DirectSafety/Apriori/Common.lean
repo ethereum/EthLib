@@ -698,9 +698,9 @@ private theorem scheduled_effective_le_cap {g x y : ForkedBeaconState preset}
     effectiveAt y i ≤ (withdrawalMaxEffectiveBalance preset x.fork v).toNat := by
   obtain ⟨genesis, _, caps, _, early, endEpoch, guard⟩ := supported
   obtain ⟨w, read, credentials⟩ := tail.compounding_of_exit_assigned caps.activation
-    caps.compounding early i v found assigned
+    caps.compounding i v found assigned
   have cap := (shared.append tail).effectiveBalance_capped genesis caps.activation
-    caps.compounding early w (Array.mem_of_getElem? read)
+    caps.compounding w (Array.mem_of_getElem? read)
   have atEnd : effectiveAt y i = w.effectiveBalance.toNat := by simp [effectiveAt, read]
   have regime := (guarded_fork_regime (shared.append tail) genesis high endEpoch guard).2
   have kept : withdrawalMaxEffectiveBalance preset y.fork w ≤
@@ -1329,8 +1329,8 @@ theorem oldBoundary_le {g x y : ForkedBeaconState preset}
     have bound : effectiveAt y i ≤ effectiveAt x i := by
       rcases (guarded_fork_regime (shared.append tail) genesis high endEpoch guard).2 with
         _ | before
-      · exact (run_same_epoch_effective tail early same i inside).le
-      · exact tail.effectiveAt_le_of_same_epoch before same i inside
+      · exact (run_same_epoch_effective tail same i inside).le
+      · exact tail.effectiveAt_le_of_same_epoch same i inside
     have oldWeight := effectiveWeight_of_member uniqueX
       (by simpa using Array.mem_of_getElem? found)
     have newWeight := effectiveWeight_of_member uniqueY

@@ -302,47 +302,46 @@ The second state is in the same epoch and keeps the activity of that epoch.
 
 It also keeps the effective balance of every validator of the first state. -/
 theorem total_active_congr {f h : Fork} {s : BeaconState preset f}
-    {t : BeaconState preset h} (before : f < .glamsterdam) (after : h < .glamsterdam)
+    {t : BeaconState preset h}
     (active : ActiveKept (getCurrentEpoch s) s t) (epoch : getCurrentEpoch t = getCurrentEpoch s)
     (effective : ∀ i, i < s.validators.data.size →
       effectiveAt ⟨h, t⟩ i = effectiveAt ⟨f, s⟩ i) :
     getTotalActiveBalance t = getTotalActiveBalance s := by
   classical
-  let indices := getActiveValidatorIndices s (getCurrentEpoch s)
   have checked := active.getActiveValidatorIndicesChecked_eq (UInt64.le_refl _)
-  have inside (i : ValidatorIndex) (member : i ∈ indices) : i.toNat < s.validators.data.size := by
-    obtain ⟨v, found, _⟩ := (mem_getActiveValidatorIndices (s.validators.bound before)).mp member
-    exact (Array.getElem?_eq_some_iff.mp found).1
   have targetIndices := active.getActiveValidatorIndices_eq (UInt64.le_refl _)
-  have targetInside (i : ValidatorIndex) (member : i ∈ indices) :
-      i.toNat < t.validators.data.size := by
-    change i ∈ getActiveValidatorIndices s (getCurrentEpoch s) at member
-    rw [← targetIndices] at member
-    obtain ⟨v, found, _⟩ := (mem_getActiveValidatorIndices (t.validators.bound after)).mp member
-    exact (Array.getElem?_eq_some_iff.mp found).1
-  have sum : Models.stake (fun i => balanceAt t i.toNat) indices.toFinset =
-      Models.stake (fun i => balanceAt s i.toNat) indices.toFinset := by
-    apply Finset.sum_congr rfl
-    intro i member
-    exact effective i.toNat (inside i (List.mem_toFinset.mp member))
-  have sourceNone : indices.find? (s.validators.data.size ≤ ·.toNat) = none := by
-    apply List.find?_eq_none.mpr
-    intro i member
-    have bound := inside i member
-    simp only [decide_eq_true_eq]
-    omega
-  have targetNone : indices.find? (t.validators.data.size ≤ ·.toNat) = none := by
-    apply List.find?_eq_none.mpr
-    intro i member
-    have bound := targetInside i member
-    simp only [decide_eq_true_eq]
-    omega
   unfold getTotalActiveBalance
-  rw [epoch, checked, getActiveValidatorIndicesChecked_of_within
-    (state := s) (s.validators.bound before)]
-  simp only [bind, Except.bind]
-  change getTotalBalance t indices = getTotalBalance s indices
-  simp only [getTotalBalance, sourceNone, targetNone, sumMarked_markIndices_eq_stake, sum]
+  rw [epoch, checked]
+  cases found : getActiveValidatorIndicesChecked s (getCurrentEpoch s) with
+  | error e => rfl
+  | ok indices =>
+    simp only [bind, Except.bind]
+    have listed := getActiveValidatorIndicesChecked_ok found
+    have inside (i : ValidatorIndex) (member : i ∈ indices) :
+        i.toNat < s.validators.data.size :=
+      lt_size_of_mem_getActiveValidatorIndices (listed ▸ member)
+    have targetInside (i : ValidatorIndex) (member : i ∈ indices) :
+        i.toNat < t.validators.data.size := by
+      rw [listed, ← targetIndices] at member
+      exact lt_size_of_mem_getActiveValidatorIndices member
+    have sum : Models.stake (fun i => balanceAt t i.toNat) indices.toFinset =
+        Models.stake (fun i => balanceAt s i.toNat) indices.toFinset := by
+      apply Finset.sum_congr rfl
+      intro i member
+      exact effective i.toNat (inside i (List.mem_toFinset.mp member))
+    have sourceNone : indices.find? (s.validators.data.size ≤ ·.toNat) = none := by
+      apply List.find?_eq_none.mpr
+      intro i member
+      have bound := inside i member
+      simp only [decide_eq_true_eq]
+      omega
+    have targetNone : indices.find? (t.validators.data.size ≤ ·.toNat) = none := by
+      apply List.find?_eq_none.mpr
+      intro i member
+      have bound := targetInside i member
+      simp only [decide_eq_true_eq]
+      omega
+    simp only [getTotalBalance, sourceNone, targetNone, sumMarked_markIndices_eq_stake, sum]
 
 end DirectSafety
 
@@ -752,17 +751,15 @@ theorem hysteresis_of_run_slot {g middle last : ForkedBeaconState preset}
     (genesis : Genesis config checks g) (bands : preset.IncrementWithinUpwardBand)
     (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
     (run : Run config checks g middle) (ok : advanceSlotAcross config checks middle = .ok last)
-    (early : last.fork < .glamsterdam) (first : last.state.slot % preset.SLOTS_PER_EPOCH = 0) :
+    (first : last.state.slot % preset.SLOTS_PER_EPOCH = 0) :
     Hysteresis last.state := by
   obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
-  have middleEarly : middle.fork < .glamsterdam :=
-    Nat.lt_of_le_of_lt (processUpgrades_fork_le (forked := ⟨middle.fork, advanced⟩) upgraded) early
   have kept : last.state.slot = advanced.slot := processUpgrades_slot upgraded
   exact Hysteresis.upgrade (forked := ⟨middle.fork, advanced⟩)
     (hysteresis_of_advanceSlot bands advancedOk (kept ▸ first)) (caps.maxEffective_eq activation)
     caps.compounding
     (advanceSlot_capped advancedOk
-      (run.effectiveBalance_capped genesis caps.activation caps.compounding middleEarly))
+      (run.effectiveBalance_capped genesis caps.activation caps.compounding))
     upgraded
 
 /-- The state at the first slot of an epoch, reached by slot steps, is within the bands. -/
@@ -986,7 +983,7 @@ theorem balanceDrift_slot_upper {f : Fork} {s t : BeaconState preset f}
 
 private theorem balanceDrift_upgrade_upper {s : ForkedBeaconState preset}
     {t : {t : ForkedBeaconState preset // s.fork < t.fork}}
-    (ok : upgradeNext config checks s = .ok t) (early : t.val.fork < .glamsterdam) (i : Nat) :
+    (ok : upgradeNext config checks s = .ok t) (i : Nat) :
     effectiveAt t.val i ≤ effectiveAt s i := by
   have reset {f : Fork} {a b : BeaconState preset f} {electra : .pectra ≤ f}
       {index : ValidatorIndex} (ok : queuePreActivation a electra index = .ok b) :
@@ -1036,19 +1033,19 @@ private theorem balanceDrift_upgrade_upper {s : ForkedBeaconState preset}
     · cases ok; exact previous
   · obtain ⟨_, upgraded, rfl⟩ := ok
     simp only [effectiveAt, (upgradeToFulu_spec upgraded).1, Nat.le_refl]
-  · obtain ⟨_, _, rfl⟩ := ok
-    exact False.elim (Nat.lt_irrefl _ early)
-  · obtain ⟨_, _, rfl⟩ := ok
-    exact False.elim ((by decide : ¬Fork.hegota < Fork.glamsterdam) early)
+  · obtain ⟨_, upgraded, rfl⟩ := ok
+    simp only [effectiveAt, (upgradeToGloas_spec upgraded).1, Nat.le_refl]
+  · obtain ⟨_, upgraded, rfl⟩ := ok
+    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    exact Nat.le_refl _
 
 theorem balanceDrift_upgrades_upper {s t : ForkedBeaconState preset}
-    (ok : processUpgrades config checks s = .ok t) (early : t.fork < .glamsterdam) (i : Nat) :
+    (ok : processUpgrades config checks s = .ok t) (i : Nat) :
     effectiveAt t i ≤ effectiveAt s i := by
   fun_induction processUpgrades config checks s generalizing t with
   | case1 s due ih =>
     obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp ok
-    exact (ih next rest early).trans (balanceDrift_upgrade_upper nextOk
-      (Nat.lt_of_le_of_lt (processUpgrades_fork_le rest) early) i)
+    exact (ih next rest).trans (balanceDrift_upgrade_upper nextOk i)
   | case2 s notDue => cases ok; exact Nat.le_refl _
 
 /-- A slot inside one epoch only caches the slot.
@@ -1091,14 +1088,14 @@ Inside one epoch no slot crosses an epoch boundary.
 
 So a slot step only runs `processSlot` and sets the slot.
 
-Before Gloas, a block step is one `applySignedBlock` call. -/
+A block step is one `applySignedBlock` call. -/
 theorem Run.induction_of_same_epoch {x : ForkedBeaconState preset}
     (motive : (z : ForkedBeaconState preset) → Run config checks x z → Prop)
     (start : motive x .nil)
     (blockStep : ∀ {f : Fork} {s t : BeaconState preset f} (engine : ExecutionEngine preset f)
       (signed : SignedBeaconBlock preset f) (due : upgradeDue config ⟨f, s⟩ = false)
       (ok : applySignedBlock config checks engine s signed true = .ok t)
-      (pre : Run config checks x ⟨f, s⟩), f < .glamsterdam → motive ⟨f, s⟩ pre →
+      (pre : Run config checks x ⟨f, s⟩), motive ⟨f, s⟩ pre →
         motive ⟨f, t⟩ (pre.snoc (.block engine signed due ok)))
     (slotStep : ∀ {middle last : ForkedBeaconState preset} {cached : BeaconState preset middle.fork}
       {next : Slot} (pre : Run config checks x middle)
@@ -1109,11 +1106,10 @@ theorem Run.induction_of_same_epoch {x : ForkedBeaconState preset}
         getCurrentEpoch middle.state → motive middle pre →
       motive last (pre.snoc (.slot ok)))
     {y : ForkedBeaconState preset} (tail : Run config checks x y)
-    (early : y.fork < .glamsterdam) (same : getCurrentEpoch y.state = getCurrentEpoch x.state) :
+    (same : getCurrentEpoch y.state = getCurrentEpoch x.state) :
     motive y tail := by
-  refine Run.induction_of_same_period 1 motive start blockStep ?_ tail early
-    (by simp only [same])
-  intro middle last pre ok lastEarly inside prior
+  refine Run.induction_of_same_period 1 motive start blockStep ?_ tail (by simp only [same])
+  intro middle last pre ok inside prior
   have kept : getCurrentEpoch last.state = getCurrentEpoch middle.state := by
     rcases inside with equal | inside
     · exact equal
@@ -1122,28 +1118,28 @@ theorem Run.induction_of_same_epoch {x : ForkedBeaconState preset}
   rw [lastEq] at kept
   exact slotStep pre ok lastEq cachedOk kept prior
 
-/-- Within one epoch before Gloas, each existing index keeps its effective balance. -/
+/-- Within one epoch, each existing index keeps its effective balance. -/
 theorem Run.effectiveKept_of_same_epoch {x y : ForkedBeaconState preset}
-    (_tail : Run config checks x y) (_early : y.fork < .glamsterdam)
+    (_tail : Run config checks x y)
     (_same : getCurrentEpoch y.state = getCurrentEpoch x.state) :
     EffectiveKept x.state y.state :=
   Run.induction_of_same_epoch (fun z _ => EffectiveKept x.state z.state) (effectiveKept_refl _)
-    (fun _ _ _ ok pre early prior =>
-      effectiveKept_trans prior (effectiveKept_block early (applySignedBlock_ok ok).2.1)
+    (fun _ _ _ ok pre prior =>
+      effectiveKept_trans prior (effectiveKept_processBlock (applySignedBlock_ok ok).2.1)
         pre.registryLifecycle.size_le)
     (fun _ _ lastEq cachedOk _ prior => by
       subst lastEq
       obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
       exact prior)
-    _tail _early _same
+    _tail _same
 
-/-- Within one epoch before Electra, an existing index cannot gain effective balance. -/
+/-- Within one epoch, an existing index cannot gain effective balance. -/
 theorem Run.effectiveAt_le_of_same_epoch {x y : ForkedBeaconState preset}
-    (tail : Run config checks x y) (early : y.fork < .pectra)
+    (tail : Run config checks x y)
     (same : getCurrentEpoch y.state = getCurrentEpoch x.state)
     (i : Nat) (present : i < x.state.validators.data.size) :
     effectiveAt y i ≤ effectiveAt x i :=
-  Nat.le_of_eq (tail.effectiveKept_of_same_epoch (Nat.lt_trans early (by decide)) same i present)
+  Nat.le_of_eq (tail.effectiveKept_of_same_epoch same i present)
 
 private theorem balanceDrift_credits_append (i : Nat) (a b : List (ForkedBeaconState preset))
     (x : ForkedBeaconState preset) :
@@ -1186,7 +1182,7 @@ private theorem balanceDrift_gain {x y : ForkedBeaconState preset}
       have update := balanceDrift_slot_upper advanced i inside
       change effectiveAt ⟨middle.fork, next⟩ i ≤
         max (effectiveAt middle i) (actualBalanceAt ⟨middle.fork, next⟩ i) at update
-      have upgrade := balanceDrift_upgrades_upper upgraded early i
+      have upgrade := balanceDrift_upgrades_upper upgraded i
       have credits : pathCredits i (pre.snoc (.slot ok)).balancePath =
           pathCredits i pre.balancePath +
             ((actualBalanceAt ⟨middle.fork, next⟩ i - actualBalanceAt middle i) +
@@ -1335,7 +1331,7 @@ private theorem balanceDrift_preActivation_excludes {f : Fork} {s : BeaconState 
 
 private theorem balanceDrift_upgrade_active {s : ForkedBeaconState preset}
     {t : {t : ForkedBeaconState preset // s.fork < t.fork}}
-    (ok : upgradeNext config checks s = .ok t) (early : t.val.fork < .glamsterdam)
+    (ok : upgradeNext config checks s = .ok t)
     (i : Nat) (v : Validator) (found : s.state.validators.data[i]? = some v)
     (activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH) :
     effectiveAt t.val i = effectiveAt s i := by
@@ -1397,13 +1393,14 @@ private theorem balanceDrift_upgrade_active {s : ForkedBeaconState preset}
       · cases ok; exact previous
   · obtain ⟨_, upgraded, rfl⟩ := ok
     simp only [effectiveAt, (upgradeToFulu_spec upgraded).1]
-  · obtain ⟨_, _, rfl⟩ := ok
-    exact False.elim (Nat.lt_irrefl _ early)
-  · obtain ⟨_, _, rfl⟩ := ok
-    exact False.elim ((by decide : ¬Fork.hegota < Fork.glamsterdam) early)
+  · obtain ⟨_, upgraded, rfl⟩ := ok
+    simp only [effectiveAt, (upgradeToGloas_spec upgraded).1]
+  · obtain ⟨_, upgraded, rfl⟩ := ok
+    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    rfl
 
 theorem balanceDrift_upgrades_active {s t : ForkedBeaconState preset}
-    (ok : processUpgrades config checks s = .ok t) (early : t.fork < .glamsterdam)
+    (ok : processUpgrades config checks s = .ok t)
     (i : Nat) (v : Validator) (found : s.state.validators.data[i]? = some v)
     (activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH) :
     effectiveAt t i = effectiveAt s i := by
@@ -1411,9 +1408,8 @@ theorem balanceDrift_upgrades_active {s t : ForkedBeaconState preset}
   | case1 s due ih =>
     obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp ok
     obtain ⟨w, located, lifecycle⟩ := (registryLifecycle_upgradeNext nextOk).validators i v found
-    exact (ih next rest early w located (by rwa [lifecycle.activationEpoch activated])).trans
-      (balanceDrift_upgrade_active nextOk
-        (Nat.lt_of_le_of_lt (processUpgrades_fork_le rest) early) i v found activated)
+    exact (ih next rest w located (by rwa [lifecycle.activationEpoch activated])).trans
+      (balanceDrift_upgrade_active nextOk i v found activated)
   | case2 s notDue => cases ok; rfl
 
 /-- The balance at the start of a path is at most the balance at any of its states plus its debits.
@@ -1459,7 +1455,7 @@ theorem _root_.EthLib.Consensus.Run.effectiveAt_ge_of_balanceFloor
     have assigned : w.activationEpoch ≠ FAR_FUTURE_EPOCH := by
       rwa [lifecycle.activationEpoch activated]
     obtain ⟨z, locatedZ, capMono⟩ := pre.validatorCap_mono caps.activation caps.compounding
-      middleEarly i v found
+      i v found
     have eq : z = w := by rw [located, Option.some.injEq] at locatedZ; exact locatedZ.symm
     subst z
     have capMiddle := UInt64.le_trans cap capMono
@@ -1478,7 +1474,7 @@ theorem _root_.EthLib.Consensus.Run.effectiveAt_ge_of_balanceFloor
       have updated := balanceDrift_reference_slot advanced i w located reference
         aligned funded prior capMiddle
       obtain ⟨a, read, life⟩ := (registryLifecycle_advanceSlot advanced).validators i w located
-      have kept := balanceDrift_upgrades_active upgraded early i a read
+      have kept := balanceDrift_upgrades_active upgraded i a read
         (by rwa [life.activationEpoch assigned])
       rwa [kept]
 
@@ -1505,8 +1501,7 @@ theorem effective_loss_from_balance {g x y : ForkedBeaconState preset}
   have value : reference.toNat = rounded := by
     dsimp [reference]; rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
   by_cases affordable : pathDebits i tail.balancePath ≤ actualBalanceAt x i
-  · have capped := shared.effectiveBalance_capped genesis caps.activation caps.compounding
-      (Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early) v
+  · have capped := shared.effectiveBalance_capped genesis caps.activation caps.compounding v
       (Array.mem_of_getElem? found)
     obtain ⟨rest, path⟩ := Run.balancePath_head tail
     have bound := tail.effectiveAt_ge_of_balanceFloor caps early i v found activated reference
@@ -2186,7 +2181,7 @@ private theorem balanceDrift_admission_step {g x y : ForkedBeaconState preset}
     obtain ⟨next, advanced, upgraded⟩ := bind_ok_iff.mp ok
     have funded := admissionFunded_slot matched sources advanced i absent
     change effectiveAt ⟨x.fork, next⟩ i ≤ actualBalanceAt ⟨x.fork, next⟩ i at funded
-    have upper := balanceDrift_upgrades_upper upgraded early i
+    have upper := balanceDrift_upgrades_upper upgraded i
     simp only [Step.balancePath, advanced, Except.toOption, pathCredits, zero,
       Nat.sub_zero, Nat.add_zero]
     omega
@@ -2215,7 +2210,7 @@ theorem joining_growth_from_admission {g x y : ForkedBeaconState preset}
     (i : Nat) (newKey : x.state.validators.data.size ≤ i) :
     effectiveAt y i ≤ pathCredits i tail.balancePath :=
   balanceDrift_join_of_sources shared tail genesis early
-    (fun run early => run.pendingConsolidation_sources genesis early delay) i newKey
+    (fun run _ => run.pendingConsolidation_sources genesis delay) i newKey
 
 /-! ## The proposer across the steps of a slashing -/
 

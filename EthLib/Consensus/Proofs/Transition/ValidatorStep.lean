@@ -3631,7 +3631,7 @@ private theorem CapStepR.block {f : Fork} {s t : BeaconState preset f}
         · exact ⟨framed (frame_processBlockExecution executed)
             (processBlockExecution_validators executed)
             (fun _ => processBlockExecution_proposerLookahead executed)
-            (fun before => SamePendingQueue.blockExecution before executed),
+            (fun _ => SamePendingQueue.blockExecution executed),
             fun before => (early before).elim⟩)
       (fun revealed => by
         obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
@@ -4914,6 +4914,23 @@ private theorem CapStep.step {s t : ForkedBeaconState preset}
     obtain ⟨last, assigned, _⟩ := CapStep.upgrades activation compounding upgrades
     exact ⟨first.trans last, fun c => assigned early c ∘ partials c⟩
 
+/-- Each step of a run is a cap step, at every fork. -/
+private theorem CapStepR.run_all {s t : ForkedBeaconState preset}
+    (run : Run config checks s t)
+    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
+    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA) :
+    CapStepR config s.state t.state := by
+  induction run with
+  | nil => exact CapStepR.refl _
+  | snoc pre step ih =>
+    refine ih.trans ?_
+    cases step with
+    | block engine signed due ok =>
+      exact (CapStepR.block compounding (applySignedBlock_ok ok).2.1).1
+    | slot ok =>
+      obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp ok
+      exact (CapStepR.slot slotOk).1.trans (CapStep.upgrades activation compounding upgrades).1
+
 /-- A validator's withdrawal cap is at least the maximum effective balance before Electra. -/
 theorem minimum_cap
     (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
@@ -5681,17 +5698,27 @@ theorem CapStep.upgrade {s : ForkedBeaconState preset}
         (fun reached => (Nat.not_le_of_lt early reached).elim)
         (held (Nat.lt_trans t.property early))⟩
 
+/-- Along a run, each step is a cap step, and the invariant of the transition is kept.
+
+Before Gloas only, the queued partial withdrawals stay assigned.
+
+Before Gloas only, an unassigned validator keeps its eligible balance.
+
+That needs a run from genesis, aligned caps and a finite epoch. -/
 theorem CapStep.run {s t : ForkedBeaconState preset}
     (run : Run config checks s t)
     (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
-    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
-    (early : t.fork < .glamsterdam) :
-    CapStep config s.state t.state ∧ (AssignedPartials s.state → AssignedPartials t.state) ∧
+    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA) :
+    CapStep config s.state t.state ∧
+      (t.fork < .glamsterdam → AssignedPartials s.state → AssignedPartials t.state) ∧
       (Invariant s.state → Invariant t.state) ∧
-      (Genesis (config := config) (checks := checks) s → MaxEffectiveBalancesAligned preset →
-        getCurrentEpoch t.state < FAR_FUTURE_EPOCH → UnassignedEligibleBalance t.state) := by
-  obtain ⟨step, partials, invariant, funded⟩ := CapStepR.run run activation compounding early
-  exact ⟨step.toCapStep, fun held => (partials False held.at).old, invariant, funded⟩
+      (t.fork < .glamsterdam → Genesis (config := config) (checks := checks) s →
+        MaxEffectiveBalancesAligned preset →
+        getCurrentEpoch t.state < FAR_FUTURE_EPOCH → UnassignedEligibleBalance t.state) :=
+  ⟨(CapStepR.run_all run activation compounding).toCapStep,
+    fun early held => ((CapStepR.run run activation compounding early).2.1 False held.at).old,
+    fun held => Run.invariant held run,
+    fun early => (CapStepR.run run activation compounding early).2.2.2⟩
 
 /-- Every stage of an epoch trace is a cap step. -/
 theorem CapStep.epochTrace {f : Fork} {s t : BeaconState preset f}

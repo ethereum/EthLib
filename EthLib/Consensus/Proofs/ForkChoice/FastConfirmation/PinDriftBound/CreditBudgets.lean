@@ -181,7 +181,7 @@ private theorem pending_key_claim (h : Setting config checks g split fin pulled 
     intro fork
     exact (Nat.not_le_of_lt before (Nat.le_trans (by decide) fork)).elim
   have finPartials : Internal.AssignedPartials fin :=
-    (Internal.CapStep.run toFin h.caps.activation h.caps.compounding h.early).2.1 genesisPartials
+    (Internal.CapStep.run toFin h.caps.activation h.caps.compounding).2.1 h.early genesisPartials
   have noEntry : ((((fin.pendingPartialWithdrawals electra).data.toList.filter
       fun entry => decide (entry.validatorIndex = v)).filter
         (fun entry => entry.withdrawableEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1)).map
@@ -2699,7 +2699,7 @@ theorem slashedRB_of_withdrawable (config : Config)
   rw [Internal.slashedRB_eq]
   simpa [found, slashed] using late
 
-/-- A key unslashed at `c` and slashed later on a run before Gloas has a late withdrawable epoch.
+/-- A key unslashed at `c` and slashed later on a run has a late withdrawable epoch.
 
 That epoch is at least `c`'s epoch plus the length of the slashings vector. -/
 private theorem withdrawable_of_clean_run (caps : CapOrder preset)
@@ -2707,14 +2707,14 @@ private theorem withdrawable_of_clean_run (caps : CapOrder preset)
     {c : BeaconState preset fork} (inside : i < c.validators.data.size)
     (clean : ∀ u, c.validators.data[i]? = some u → u.slashed = false)
     {a : ForkedBeaconState preset} (run : Run config checks ⟨fork, c⟩ a)
-    (low : a.fork < .glamsterdam) (u : Validator)
+    (u : Validator)
     (foundU : a.state.validators.data[i]? = some u) (flag : u.slashed = true) :
     (getCurrentEpoch c).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
       u.withdrawableEpoch.toNat := by
   obtain ⟨uC, foundC⟩ : ∃ uC, c.validators.data[i]? = some uC :=
     ⟨_, Array.getElem?_eq_getElem inside⟩
   have lower := (run.newly_slashed_withdrawableEpoch caps.activation caps.compounding
-    low delay i uC u foundC foundU (clean uC foundC) flag).2
+    delay i uC u foundC foundU (clean uC foundC) flag).2
   simp only at lower
   exact lower
 
@@ -2731,7 +2731,7 @@ theorem slashedRB_of_newly_slashed
   have finSplit := UInt64.le_iff_toNat_le.mp h.finalized
   have delayed := withdrawable_of_clean_run h.caps (Internal.Setting.delay h) i
     (Array.getElem?_eq_some_iff.mp foundS).1
-    (fun u found => by rw [foundS] at found; cases found; exact cleanS) tail h.early w foundP
+    (fun u found => by rw [foundS] at found; cases found; exact cleanS) tail w foundP
     slashedP
   exact Internal.slashedRB_of_withdrawable config pulled anc fin foundP slashedP (by omega)
 
@@ -2843,7 +2843,7 @@ theorem slashed_withdrawable_of_clean
         w.withdrawableEpoch.toNat := by
   intro wP foundP slashedP
   have newly := withdrawable_of_clean_run h.caps (Internal.Setting.delay h) v.toNat inside clean run
-    h.early wP foundP slashedP
+    wP foundP slashedP
   have finalizedNat := UInt64.le_iff_toNat_le.mp finalized
   omega
 
@@ -2903,13 +2903,13 @@ private theorem slashed_withdrawable_vector
     (inside : v.toNat < c.validators.data.size)
     (clean : ∀ u, c.validators.data[v.toNat]? = some u → u.slashed = false)
     {a : ForkedBeaconState preset} (run : Run config checks ⟨fork, c⟩ a)
-    (low : a.fork < .glamsterdam) (u : Validator)
+    (u : Validator)
     (foundU : a.state.validators.data[v.toNat]? = some u) (flag : u.slashed = true) :
     (getCurrentEpoch fin).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
       u.withdrawableEpoch.toNat := by
   have finC := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps toC.chainSteps)
   have lower := withdrawable_of_clean_run h.caps (Internal.Setting.delay h) v.toNat inside clean run
-    low u foundU flag
+    u foundU flag
   simp only at finC
   omega
 
@@ -2922,10 +2922,10 @@ private theorem slashed_beyond_horizon
     (inside : v.toNat < c.validators.data.size)
     (clean : ∀ u, c.validators.data[v.toNat]? = some u → u.slashed = false)
     {a : ForkedBeaconState preset} (run : Run config checks ⟨fork, c⟩ a)
-    (low : a.fork < .glamsterdam) (u : Validator)
+    (u : Validator)
     (foundU : a.state.validators.data[v.toNat]? = some u) (flag : u.slashed = true) :
     (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat := by
-  have := slashed_withdrawable_vector h v toC inside clean run low u foundU flag
+  have := slashed_withdrawable_vector h v toC inside clean run u foundU flag
   have half := Internal.depthFin_lt_half h
   omega
 
@@ -3016,7 +3016,7 @@ theorem slash_floor_across (h : Setting config checks g split fin pulled anc cou
     intro a runA restA evsA evA ua foundA flagA
     have floor := Internal.slashed_floor h (toC.append runA) (e := pulled) (Nat.le_succ _) restA
       (getCurrentEpoch pulled).toNat (Nat.le_succ _) evA v ua foundA
-      (fun flag => slashed_withdrawable_vector h v toC inside clean runA h.early ua foundA flag)
+      (fun flag => slashed_withdrawable_vector h v toC inside clean runA ua foundA flag)
       (PinTerms.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
       (Internal.path_le_cap_pulled h (toC.append runA) restA .nil v.toNat)
       (fun before step after _ _ _ => .inr fun u foundU => by
@@ -3024,7 +3024,7 @@ theorem slash_floor_across (h : Setting config checks g split fin pulled anc cou
         have same := Option.some.inj (foundW'.symm.trans foundU)
         have low := Nat.lt_of_le_of_lt
           (fork_le_of_chainSteps ((Run.nil.snoc step).append after).chainSteps) h.early
-        exact slashed_beyond_horizon h v toC inside clean (runA.append before) low u foundU
+        exact slashed_beyond_horizon h v toC inside clean (runA.append before) u foundU
           (same ▸ flagW'))
     have capEq : PinTerms.capAt (⟨fork, a⟩ : ForkedBeaconState preset) v.toNat =
         (withdrawalMaxEffectiveBalance preset fork ua).toNat := by
@@ -3076,7 +3076,7 @@ theorem slash_floor_across (h : Setting config checks g split fin pulled anc cou
     have slashable : (getCurrentEpoch mS).toNat < valM.withdrawableEpoch.toNat :=
       Internal.newly_slashed_unwithdrawable h.genesis h.caps (shared.append (toC.append (pre.append
         pre')))
-        step h.early foundM foundN cleanM slashedN
+        step foundM foundN cleanM slashedN
     -- before the step the key is withdrawable beyond the epoch of the step
     have wide : ∀ {m1 : ForkedBeaconState preset} (toM1 : Run config checks ⟨fork, c⟩ m1)
         (toM : Run config checks m1 ⟨fork, mS⟩) (u : Validator),
@@ -3087,7 +3087,7 @@ theorem slash_floor_across (h : Setting config checks g split fin pulled anc cou
         Nat.lt_of_le_of_lt (fork_le_of_chainSteps toM.chainSteps) h.early
       have reach : (getCurrentEpoch mS).toNat ≤ (getCurrentEpoch pulled).toNat := by omega
       by_cases flag : u.slashed = true
-      · have := slashed_beyond_horizon h v toC inside clean toM1 low u foundU flag
+      · have := slashed_beyond_horizon h v toC inside clean toM1 u foundU flag
         omega
       · have clean : u.slashed = false := by simpa using flag
         have farBound := getCurrentEpoch_succ_lt_farFuture h.twoSlots pulled
@@ -3134,7 +3134,7 @@ theorem slash_floor_across (h : Setting config checks g split fin pulled anc cou
         exact wide (pre.append before) toM u foundU)
     rw [ite_eq_right startSlashed] at floor1
     have floor2 := slashedTail (pre.append (pre'.snoc step)) post ok2 valN foundN slashedN
-    have capMono := Internal.cap_le_cap_of_run h.caps (pre'.snoc step) h.early v.toNat
+    have capMono := Internal.cap_le_cap_of_run h.caps (pre'.snoc step) v.toNat
     rw [atZ] at capMono
     rw [evEq]
     simp only [List.map_append, List.sum_append] at floor1 floor2 ⊢
@@ -3295,8 +3295,8 @@ theorem slash_floor_from_slashed
   obtain ⟨val, foundZ, slashedZ⟩ := r1.slashedPersistence v.toNat uF foundF (slashedFin uF foundF)
   have assigned : val.exitEpoch ≠ FAR_FUTURE_EPOCH :=
     run_slashed_exit_assigned (shared.append r1) h.genesis h.caps.activation
-      h.caps.compounding h.early (Internal.Setting.delay h) v.toNat val foundZ slashedZ
-  have kept := r2.slashed_withdrawable_eq h.caps.activation h.caps.compounding h.early
+      h.caps.compounding (Internal.Setting.delay h) v.toNat val foundZ slashedZ
+  have kept := r2.slashed_withdrawable_eq h.caps.activation h.caps.compounding
     v.toNat val wP foundZ foundP slashedZ assigned
   have capEq : PinTerms.capAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat =
       (withdrawalMaxEffectiveBalance preset fork val).toNat := by
@@ -3312,7 +3312,7 @@ theorem slash_floor_from_slashed
     (fun before step after _ _ _ => .inr fun u foundU => by
       have low := Nat.lt_of_le_of_lt
         (fork_le_of_chainSteps ((Run.nil.snoc step).append after).chainSteps) h.early
-      have keptU := before.slashed_withdrawable_eq h.caps.activation h.caps.compounding low
+      have keptU := before.slashed_withdrawable_eq h.caps.activation h.caps.compounding
         v.toNat val u foundZ foundU slashedZ assigned
       have lateW := late
       rw [kept.2] at lateW

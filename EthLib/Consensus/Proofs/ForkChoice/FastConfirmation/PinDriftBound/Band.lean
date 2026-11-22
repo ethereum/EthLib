@@ -125,7 +125,7 @@ theorem slashed_waits {g : ForkedBeaconState preset}
     (toSplit : Run config checks g ⟨fork, split⟩) (genesis : Genesis config checks g)
     (toPulled : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     (toCounted : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
-    (early : fork < .glamsterdam) (caps : CapOrder preset)
+    (caps : CapOrder preset)
     (withdrawDelay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     {i : ℕ} {validator : Validator} (found : pulled.validators.data[i]? = some validator)
     (slashed : validator.slashed = true)
@@ -135,7 +135,7 @@ theorem slashed_waits {g : ForkedBeaconState preset}
   by_cases inside : i < split.validators.data.size
   · have oldFound := Array.getElem?_eq_getElem inside
     cases oldSlashed : split.validators.data[i].slashed
-    · exact (toPulled.newly_slashed_withdrawableEpoch caps.activation caps.compounding early
+    · exact (toPulled.newly_slashed_withdrawableEpoch caps.activation caps.compounding
         withdrawDelay i _ validator oldFound found oldSlashed slashed).2
     · obtain ⟨now, nowFound, nowSlashed⟩ :=
         toCounted.slashedPersistence i _ oldFound oldSlashed
@@ -148,7 +148,7 @@ theorem slashed_waits {g : ForkedBeaconState preset}
       ⟨_, Array.getElem?_eq_getElem arrived⟩
     have unslashedAtN := PinDrift.Internal.fresh_unslashed (toSplit.append pre) step genesis
       (Nat.le_of_not_lt notYet) arrivedFound
-    have delayed := (post.newly_slashed_withdrawableEpoch caps.activation caps.compounding early
+    have delayed := (post.newly_slashed_withdrawableEpoch caps.activation caps.compounding
       withdrawDelay i w validator arrivedFound found unslashedAtN slashed).2
     have forward : (getCurrentEpoch split).toNat ≤ (getCurrentEpoch n.state).toNat :=
       UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps (pre.snoc step).chainSteps)

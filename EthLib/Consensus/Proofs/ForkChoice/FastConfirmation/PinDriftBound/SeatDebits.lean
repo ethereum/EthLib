@@ -115,12 +115,12 @@ private theorem NoSync.record {fork : Fork} {source : BalanceSource}
 /-- The effective balance of a key at a state of a run from genesis is at most the largest cap. -/
 theorem effectiveAt_le_capMax {g m : ForkedBeaconState preset}
     (run : Run config checks g m) (genesis : Genesis (config := config) (checks := checks) g)
-    (caps : CapOrder preset) (early : m.fork < .glamsterdam) (v : ℕ) :
+    (caps : CapOrder preset) (v : ℕ) :
     effectiveAt m v ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by
   cases found : m.state.validators.data[v]? with
   | none => simp [effectiveAt, found]
   | some w =>
-    exact (DirectSafety.Apriori.Internal.effectiveAt_le_withdrawalMax run genesis caps early
+    exact (DirectSafety.Apriori.Internal.effectiveAt_le_withdrawalMax run genesis caps
       found).trans ((withdrawalMaxEffectiveBalance_le_largestEffectiveBalance preset m.fork w).trans
         (max_le (UInt64.le_iff_toNat_le.mp (UInt64.le_trans caps.activation caps.compounding))
           (max_le (UInt64.le_iff_toNat_le.mp caps.compounding) le_rfl)))

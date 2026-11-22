@@ -30,7 +30,9 @@ public import EthLib.Consensus.Proofs.Participation
 
 A ledger reads how the balances move from one state to another, validator by validator.
 
-Each step of a block before Gloas moves the balances within a ledger.
+Each step of a block moves the balances within a ledger.
+
+From Gloas the payload of the parent runs first.
 -/
 
 @[expose] public section
@@ -530,11 +532,17 @@ private theorem lives_processConsolidationRequest {electra : .pectra ≤ fork}
   · exact lives_switchToCompoundingValidator switched
   · exact lives_queueConsolidation accepted.sourceAt accepted.sourceStays queued
 
-theorem lives_processExecutionRequests {body : BeaconBlockBody preset fork}
-    {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
-    (computed : processExecutionRequests config s body electra = .ok t) : Lives s t := by
-  simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at computed
-  obtain ⟨_, depositsOk, _, withdrawalsOk, consolidationsOk⟩ := computed
+/-- Deposit, withdrawal and consolidation requests, in turn, keep each old validator later.
+
+They activate no new validator. -/
+private theorem lives_requests {electra : .pectra ≤ fork} {deposits : List DepositRequest}
+    {withdrawals : List WithdrawalRequest} {consolidations : List ConsolidationRequest}
+    {deposited withdrawn : BeaconState preset fork}
+    (depositsOk : deposits.foldlM (processDepositRequest · electra ·) s = .ok deposited)
+    (withdrawalsOk :
+      withdrawals.foldlM (processWithdrawalRequest config · electra ·) deposited = .ok withdrawn)
+    (consolidationsOk : consolidations.foldlM (processConsolidationRequest config · electra ·)
+      withdrawn = .ok t) : Lives s t := by
   -- The deposit requests only queue, so they keep the registry.
   have deposits := foldlM_ok_invariant
     (fun u : BeaconState preset fork => u.validators = s.validators)
@@ -551,6 +559,39 @@ theorem lives_processExecutionRequests {body : BeaconBlockBody preset fork}
       withdrawalsOk)
     (.of_frame (Frame.foldlM (fun _ _ _ ok => (frame_processConsolidationRequest ok).toFrame)
       consolidationsOk))
+
+theorem lives_processExecutionRequests {body : BeaconBlockBody preset fork}
+    {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
+    (computed : processExecutionRequests config s body electra = .ok t) : Lives s t := by
+  simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at computed
+  obtain ⟨_, depositsOk, _, withdrawalsOk, consolidationsOk⟩ := computed
+  exact lives_requests depositsOk withdrawalsOk consolidationsOk
+
+/-- From Gloas, after the payload of the parent, an old validator read at both ends is later.
+
+A new validator is not activated. -/
+theorem lives_processParentExecutionPayload {gloas : .glamsterdam ≤ fork}
+    {body : BeaconBlockBody preset fork}
+    (computed : processParentExecutionPayload config checks s gloas body = .ok t) :
+    Lives s t := by
+  rcases processParentExecutionPayload_ok computed with ⟨-, -, rfl⟩ |
+    ⟨-, settled, _, _, consolidated, _, _, _, settledOk, depositsOk, withdrawalsOk,
+      consolidationsOk, buildersOk, exitsOk, -, rfl⟩
+  · exact Lives.refl _
+  -- Settling the payment and the requests of builders keep the registry of validators.
+  have builders := foldlM_ok_invariant
+    (fun u : BeaconState preset fork => u.validators = consolidated.validators)
+    (fun _ _ _ before ok => by
+      obtain ⟨_, rfl⟩ := processBuilderDepositRequest_builders ok
+      exact before) rfl buildersOk
+  have exits := foldlM_ok_invariant
+    (fun u : BeaconState preset fork => u.validators = consolidated.validators)
+    (fun _ _ _ before ok => by
+      obtain ⟨_, rfl⟩ := processBuilderExitRequest_builders ok
+      exact before) builders exitsOk
+  exact Lives.of_data_left (u := settled) (by rw [settleParentPayment_eq settledOk])
+    ((lives_requests depositsOk withdrawalsOk consolidationsOk).of_data_right
+      (congrArg (·.data) exits))
 
 /-- An unslashed validator, active by an epoch, whose exit is unset or not yet withdrawable. -/
 def Eligible (E : Epoch) (w : Validator) : Prop :=
@@ -687,34 +728,66 @@ private theorem applyExpectedWithdrawals_validators {capella : .shapella ≤ for
       rfl
   rw [four, three, queued, two, one]
 
-/-- Before Gloas, the withdrawal step pays only some validators.
+/-- Withdrawals keep the validators and lower balances only.
 
-These are the validators that the withdrawals of the payload name. -/
-private theorem ledger_processWithdrawals {capella : .shapella ≤ fork}
-    {payload : Until .glamsterdam fork (ExecutionPayload preset fork)} (early : fork < .glamsterdam)
-    (computed : processWithdrawals s capella payload = .ok t) :
-    Ledger s t (((payload early).withdrawals capella).data.toList.map (·.validatorIndex)).toFinset
-      ∅ 0 0 0 := by
-  obtain ⟨expected, -, -, appliedOk⟩ := processWithdrawals_expected early computed
-  have validators := applyExpectedWithdrawals_validators appliedOk
-  have sizes := (sameSizes_processWithdrawals computed).2
-  have balance : ∀ v : ValidatorIndex, actualBalanceAt ⟨fork, t⟩ v.toNat =
-      actualBalanceAt ⟨fork, s⟩ v.toNat -
-        withdrawnFrom ((payload early).withdrawals capella).data v := by
-    intro v
-    cases found : s.balances.data[v.toNat]? with
-    | none =>
-      have missing : t.balances.data[v.toNat]? = none := by
-        rw [Array.getElem?_eq_none_iff] at found ⊢
-        omega
-      simp [actualBalanceAt, found, missing]
-    | some balance =>
-      have lowered := processWithdrawals_balance early computed found
-      cases later : t.balances.data[v.toNat]? <;> simp_all [actualBalanceAt]
+A balance that no withdrawal names stays.
+
+From Gloas a withdrawal of a builder lowers no balance of a validator. -/
+private theorem applyWithdrawals_moves : ∀ (withdrawals : List Withdrawal)
+    (a b : BeaconState preset fork), withdrawals.foldlM applyWithdrawal a = .ok b →
+    b.validators = a.validators ∧ ∀ v : ValidatorIndex,
+      actualBalanceAt ⟨fork, b⟩ v.toNat ≤ actualBalanceAt ⟨fork, a⟩ v.toNat ∧
+      ((∀ w ∈ withdrawals, w.validatorIndex ≠ v) →
+        actualBalanceAt ⟨fork, b⟩ v.toNat = actualBalanceAt ⟨fork, a⟩ v.toNat)
+  | [], a, b, ok => by
+    cases ok
+    exact ⟨rfl, fun _ => ⟨Nat.le_refl _, fun _ => rfl⟩⟩
+  | w :: rest, a, b, ok => by
+    rw [List.foldlM_cons, bind_ok_iff] at ok
+    obtain ⟨m, step, restOk⟩ := ok
+    obtain ⟨same, moves⟩ := applyWithdrawals_moves rest m b restOk
+    have first : m.validators = a.validators ∧ ∀ v : ValidatorIndex,
+        actualBalanceAt ⟨fork, m⟩ v.toNat ≤ actualBalanceAt ⟨fork, a⟩ v.toNat ∧
+        (w.validatorIndex ≠ v →
+          actualBalanceAt ⟨fork, m⟩ v.toNat = actualBalanceAt ⟨fork, a⟩ v.toNat) := by
+      unfold applyWithdrawal at step
+      split at step
+      · simp only [bind_ok_iff] at step
+        obtain ⟨_, _, set⟩ := step
+        obtain ⟨_, rfl⟩ := setBuilder_ok set
+        exact ⟨rfl, fun _ => ⟨Nat.le_refl _, fun _ => rfl⟩⟩
+      · have lowered := actualBalanceAt_decreaseBalance step
+        obtain ⟨_, rfl⟩ := decreaseBalance_eq_ok_iff.mp step
+        refine ⟨rfl, fun v => ⟨?_, fun other => ?_⟩⟩
+        · rw [lowered]
+          exact Nat.sub_le _ _
+        · rw [lowered]
+          split_ifs with equal
+          · exact absurd (UInt64.toNat_inj.mp equal) other
+          · exact Nat.sub_zero _
+    refine ⟨same.trans first.1, fun v => ⟨((moves v).1).trans (first.2 v).1, fun none => ?_⟩⟩
+    exact ((moves v).2 fun x member => none x (List.mem_cons_of_mem w member)).trans
+      ((first.2 v).2 (none w List.mem_cons_self))
+
+/-- The expected withdrawals pay only the indices they name. -/
+private theorem ledger_applyExpectedWithdrawals {capella : .shapella ≤ fork}
+    {expected : ExpectedWithdrawals}
+    (computed : applyExpectedWithdrawals s capella expected = .ok t) :
+    Ledger s t (expected.withdrawals.toList.map (·.validatorIndex)).toFinset ∅ 0 0 0 := by
+  have validators := applyExpectedWithdrawals_validators computed
+  obtain ⟨applied, appliedOk, balances, -⟩ := applyExpectedWithdrawals_balances computed
+  unfold applyWithdrawals at appliedOk
+  rw [← Array.foldlM_toList] at appliedOk
+  obtain ⟨-, moves⟩ := applyWithdrawals_moves _ _ _ appliedOk
+  have point (v : ValidatorIndex) :
+      actualBalanceAt ⟨fork, t⟩ v.toNat = actualBalanceAt ⟨fork, applied⟩ v.toNat := by
+    simp only [actualBalanceAt, balances]
   exact {
-    up := fun v => by simp only [balance v, Pi.zero_apply]; omega
+    up := fun v => by
+      simp only [point v, Pi.zero_apply, Nat.add_zero]
+      exact (moves v).1
     down := fun v notPaid _ => by
-      rw [balance v, withdrawnFrom_eq_zero fun w member same =>
+      rw [point v, (moves v).2 fun w member same =>
         notPaid (List.mem_toFinset.mpr (List.mem_map.mpr ⟨w, member, same⟩))]
       simp
     converted := fun v member => absurd member (Finset.notMem_empty v)
@@ -723,32 +796,73 @@ private theorem ledger_processWithdrawals {capella : .shapella ≤ fork}
     fresh := fun v member => absurd member (Finset.notMem_empty v)
     switched := fun v member => absurd member (Finset.notMem_empty v) }
 
-/-- The withdrawals of a payload pay at most as many validators as the payload has withdrawals. -/
+/-- The withdrawal step pays at most as many indices as a payload has withdrawals.
+
+From Gloas a block whose parent has no payload pays none. -/
+private theorem ledger_processWithdrawals {capella : .shapella ≤ fork}
+    {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
+    (computed : processWithdrawals s capella payload = .ok t) :
+    ∃ paid : Finset ValidatorIndex, Ledger s t paid ∅ 0 0 0 ∧
+      paid.card ≤ preset.MAX_WITHDRAWALS_PER_PAYLOAD.toNat := by
+  have counted {expected : ExpectedWithdrawals}
+      (found : getExpectedWithdrawals s capella = .ok expected) :
+      (expected.withdrawals.toList.map (·.validatorIndex)).toFinset.card ≤
+        preset.MAX_WITHDRAWALS_PER_PAYLOAD.toNat := by
+    refine (List.toFinset_card_le _).trans ?_
+    rw [List.length_map, Array.length_toList]
+    exact getExpectedWithdrawals_size found
+  unfold processWithdrawals at computed
+  split at computed
+  · split at computed
+    · simp only [bind_ok_iff, liftAccessor_ok] at computed
+      obtain ⟨expected, found, applied⟩ := computed
+      exact ⟨_, ledger_applyExpectedWithdrawals applied, counted found⟩
+    · cases computed
+      exact ⟨∅, Ledger.refl s, Nat.zero_le _⟩
+  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨expected, found, _, _, applied⟩ := computed
+    exact ⟨_, ledger_applyExpectedWithdrawals applied, counted found⟩
+
+/-- The withdrawals of a block pay at most as many indices as a payload has withdrawals.
+
+From Gloas the bid that follows moves no balance. -/
 theorem ledger_processBlockExecution {engine : ExecutionEngine preset fork}
     {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork}
-    (early : fork < .glamsterdam)
     (computed : processBlockExecution config checks engine s body bellatrix = .ok t) :
     ∃ paid : Finset ValidatorIndex, Ledger s t paid ∅ 0 0 0 ∧
       paid.card ≤ if .shapella ≤ fork then preset.MAX_WITHDRAWALS_PER_PAYLOAD.toNat else 0 := by
   unfold processBlockExecution at computed
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
-  simp only [notGloas, ↓reduceDIte] at computed
+  split at computed
+  · rename_i gloas
+    simp only [bind_ok_iff] at computed
+    obtain ⟨middle, withdrawnOk, bidOk⟩ := computed
+    obtain ⟨paid, ledger, card⟩ := ledger_processWithdrawals withdrawnOk
+    obtain ⟨payments, rfl⟩ := processExecutionPayloadBid_eq bidOk
+    have whole := ledger.trans (Ledger.of_eq (s := middle) (t := { middle with
+      builderPendingPayments := payments
+      latestExecutionPayloadBid := fun _ => (body.signedExecutionPayloadBid gloas).message })
+      rfl rfl)
+    rw [Finset.union_empty, Finset.union_empty, add_zero] at whole
+    refine ⟨_, whole, ?_⟩
+    have capella : .shapella ≤ fork := Nat.le_trans (by decide) gloas
+    simp only [capella, ↓reduceIte]
+    exact card
   split at computed
   · rename_i capella
     simp only [bind_ok_iff] at computed
     obtain ⟨middle, withdrawnOk, paidOk⟩ := computed
+    obtain ⟨paid, ledger, card⟩ := ledger_processWithdrawals withdrawnOk
     obtain ⟨-, header, -, rfl⟩ := processExecutionPayload_ok paidOk
-    have ledger := (ledger_processWithdrawals early withdrawnOk).trans
+    have whole := ledger.trans
       (Ledger.of_eq (t := { middle with latestExecutionPayloadHeader := fun _ => header })
         rfl rfl)
-    rw [Finset.union_empty, Finset.union_empty, add_zero] at ledger
-    refine ⟨_, ledger, ?_⟩
+    rw [Finset.union_empty, Finset.union_empty, add_zero] at whole
+    refine ⟨_, whole, ?_⟩
     simp only [capella, ↓reduceIte]
-    refine (List.toFinset_card_le _).trans ?_
-    rw [List.length_map, Array.length_toList]
-    exact ((body.executionPayload _).withdrawals capella).bound early
+    exact card
   · rename_i capella
     simp only [capella, ↓reduceIte, nonpos_iff_eq_zero, Finset.card_eq_zero, exists_eq_right]
+    dsimp only at computed
     split at computed
     · obtain ⟨-, header, -, rfl⟩ := processExecutionPayload_ok computed
       exact Ledger.of_eq rfl rfl
@@ -828,7 +942,7 @@ private theorem credentials_slashValidator {u w : BeaconState preset fork}
 
 It credits the whistleblower reward to the proposer that an earlier kept state reads. -/
 private theorem ledger_slashValidator {r u w : BeaconState preset fork} {index : ValidatorIndex}
-    {validator : Validator} (early : fork < .glamsterdam)
+    {validator : Validator}
     (keeps : StepKeeps r u) (inputs : PayloadInputs r u) (effective : EffectiveKept r u)
     (found : u.validators.data[index.toNat]? = some validator)
     (computed : slashValidator config u index none = .ok w) :
@@ -882,11 +996,10 @@ private theorem ledger_slashValidator {r u w : BeaconState preset fork} {index :
         (current.effectiveBalance /
           (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT).toNat - reward.toNat :=
     UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr shareLe)
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
-  simp only [notGloas, ↓reduceDIte] at final
-  subst w
+  have cancelled := (slashValidator_last (last := last) (after := w) (index := index)
+    (by subst final; rfl)).2
   have point (v : ValidatorIndex) :
-      actualBalanceAt ⟨fork, last⟩ v.toNat =
+      actualBalanceAt ⟨fork, w⟩ v.toNat =
         (actualBalanceAt ⟨fork, u⟩ v.toNat - if v = index then
           validator.effectiveBalance.toNat /
             (parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat else 0) +
@@ -894,7 +1007,9 @@ private theorem ledger_slashValidator {r u w : BeaconState preset fork} {index :
           (if v = proposer then validator.effectiveBalance.toNat /
             (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - reward.toNat
             else 0) := by
-    rw [actualBalanceAt_increaseBalance lastOk, actualBalanceAt_increaseBalance raiseOk,
+    rw [show actualBalanceAt ⟨fork, w⟩ v.toNat = actualBalanceAt ⟨fork, last⟩ v.toNat by
+        simp only [actualBalanceAt, cancelled],
+      actualBalanceAt_increaseBalance lastOk, actualBalanceAt_increaseBalance raiseOk,
       actualBalanceAt_decreaseBalance lowerOk, leftReward]
     have start : actualBalanceAt ⟨fork, { marked with slashings }⟩ v.toNat =
         actualBalanceAt ⟨fork, u⟩ v.toNat := by
@@ -935,7 +1050,6 @@ The penalty is read at the effective balance of that validator.
 
 The slashing credits the whistleblower reward to the proposer of the slot. -/
 theorem ledger_processProposerSlashing {slashing : ProposerSlashing}
-    (early : fork < .glamsterdam)
     (computed : processProposerSlashing config checks s slashing = .ok t) :
     ∃ (proposer slashed : ValidatorIndex) (validator : Validator),
       getBeaconProposerIndex s = .ok proposer ∧
@@ -950,7 +1064,7 @@ theorem ledger_processProposerSlashing {slashing : ProposerSlashing}
   simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, _, _, _, _, _, validator, found, _, slashable, _, _, _, _, slashed⟩ := computed
   have read := getValidator_eq_ok_iff.mp found
-  obtain ⟨proposer, proposerRead, ledger⟩ := ledger_slashValidator early (StepKeeps.refl s)
+  obtain ⟨proposer, proposerRead, ledger⟩ := ledger_slashValidator (StepKeeps.refl s)
     (PayloadInputs.refl s) (effectiveKept_refl s) read slashed
   refine ⟨proposer, _, validator, proposerRead, read, ?_, ?_, ledger,
     eligible_of_slashable slashable⟩
@@ -969,7 +1083,7 @@ From it, slashing each slashable index of a list in turn debits each slashed val
 
 It also credits the proposer of the earlier state. -/
 private theorem ledger_foldSlashIfSlashable {r : BeaconState preset fork}
-    (early : fork < .glamsterdam) (chosen : ValidatorIndex)
+    (chosen : ValidatorIndex)
     (choice : ∀ p, getBeaconProposerIndex r = .ok p → p = chosen) :
     ∀ (indices : List ValidatorIndex) {u w : BeaconState preset fork} {flag flag' : Bool},
       StepKeeps r u → PayloadInputs r u → EffectiveKept r u →
@@ -1005,9 +1119,9 @@ private theorem ledger_foldSlashIfSlashable {r : BeaconState preset fork}
       obtain ⟨next, slashed, rfl, rfl⟩ := first
       have read := getValidator_eq_ok_iff.mp found
       obtain ⟨proposer, proposerRead, one⟩ :=
-        ledger_slashValidator early keeps inputs effective read slashed
+        ledger_slashValidator keeps inputs effective read slashed
       rw [choice proposer proposerRead] at one proposerRead
-      obtain ⟨set, _, marks, eligibles, two⟩ := ledger_foldSlashIfSlashable early chosen choice rest
+      obtain ⟨set, _, marks, eligibles, two⟩ := ledger_foldSlashIfSlashable chosen choice rest
         (keeps.trans (stepKeeps_slashValidator slashed))
         (inputs.trans (payloadInputs_slashValidator slashed))
         (effectiveKept_trans effective (effectiveKept_slash slashed) keeps.1)
@@ -1065,13 +1179,12 @@ private theorem ledger_foldSlashIfSlashable {r : BeaconState preset fork}
             simp [fresh, effectiveIndex]
           · simp [equal]
     · cases first
-      exact ledger_foldSlashIfSlashable early chosen choice rest keeps inputs effective size tail
+      exact ledger_foldSlashIfSlashable chosen choice rest keeps inputs effective size tail
 
 /-- An attester slashing slashes some validators, each not slashed before.
 
 It debits each its initial penalty and credits the whistleblower rewards to the proposer. -/
 theorem ledger_processAttesterSlashing {slashing : AttesterSlashing preset fork}
-    (early : fork < .glamsterdam)
     (computed : processAttesterSlashing config checks s slashing = .ok t) :
     ∃ (proposer : ValidatorIndex) (slashed : Finset ValidatorIndex),
       (slashed.Nonempty → getBeaconProposerIndex s = .ok proposer) ∧
@@ -1094,7 +1207,7 @@ theorem ledger_processAttesterSlashing {slashing : AttesterSlashing preset fork}
     | ok p => exact ⟨p, fun q found => (Except.ok.inj found).symm⟩
     | error _ => exact ⟨0, fun q found => by cases found⟩
   obtain ⟨slashed, nonempty, marks, eligibles, ledger⟩ :=
-    ledger_foldSlashIfSlashable early chosen choice _
+    ledger_foldSlashIfSlashable chosen choice _
       (StepKeeps.refl s) (PayloadInputs.refl s) (effectiveKept_refl s) rfl folded
   exact ⟨chosen, slashed, nonempty, marks, eligibles, ledger⟩
 
@@ -1370,20 +1483,23 @@ theorem ledger_depositWithdrawalRequests {electra : .pectra ≤ fork}
       exact Ledger.of_eq (congrArg (·.data) kept.2.1) (congrArg (·.data) kept.1)
   simpa only [Finset.empty_union, add_zero] using one.trans two
 
-/-- The requests of the execution layer convert at most one validator per consolidation request.
+/-- Deposit, withdrawal and consolidation requests, run in turn, move no balance but conversions.
 
-They move no other balance. -/
-theorem ledger_processExecutionRequests {body : BeaconBlockBody preset fork}
-    {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
-    (computed : processExecutionRequests config s body electra = .ok t) :
+Each consolidation request converts at most one validator. -/
+private theorem ledger_requests {electra : .pectra ≤ fork} {deposits : List DepositRequest}
+    {withdrawals : List WithdrawalRequest} {consolidations : List ConsolidationRequest}
+    {deposited withdrawn : BeaconState preset fork}
+    (depositsOk : deposits.foldlM (processDepositRequest · electra ·) s = .ok deposited)
+    (withdrawalsOk :
+      withdrawals.foldlM (processWithdrawalRequest config · electra ·) deposited = .ok withdrawn)
+    (consolidationsOk : consolidations.foldlM (processConsolidationRequest config · electra ·)
+      withdrawn = .ok t) :
     ∃ conv : Finset ValidatorIndex, Ledger s t ∅ conv 0 0 0 ∧
-      conv.card ≤ preset.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD.toNat := by
-  simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at computed
-  obtain ⟨deposited, deposits, withdrawn, withdrawals, consolidations⟩ := computed
-  have first := ledger_depositWithdrawalRequests (electra := electra.1) deposits withdrawals
+      conv.card ≤ consolidations.length := by
+  have first := ledger_depositWithdrawalRequests depositsOk withdrawalsOk
   -- Each consolidation request converts at most one validator.
   have three : ∀ (requests : List ConsolidationRequest) (u : BeaconState preset fork),
-      requests.foldlM (processConsolidationRequest config · electra.1 ·) u = .ok t →
+      requests.foldlM (processConsolidationRequest config · electra ·) u = .ok t →
       ∃ conv : Finset ValidatorIndex, Ledger u t ∅ conv 0 0 0 ∧ conv.card ≤ requests.length := by
     intro requests
     induction requests with
@@ -1402,12 +1518,58 @@ theorem ledger_processExecutionRequests {body : BeaconBlockBody preset fork}
       have := Finset.card_union_le conv conv'
       simp only [List.length_cons]
       omega
-  obtain ⟨conv, ledger, card⟩ := three _ _ consolidations
+  obtain ⟨conv, ledger, card⟩ := three _ _ consolidationsOk
+  exact ⟨conv, by simpa only [Finset.empty_union, add_zero] using first.trans ledger, card⟩
+
+/-- The requests of the execution layer convert at most one validator per consolidation request.
+
+They move no other balance. -/
+theorem ledger_processExecutionRequests {body : BeaconBlockBody preset fork}
+    {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
+    (computed : processExecutionRequests config s body electra = .ok t) :
+    ∃ conv : Finset ValidatorIndex, Ledger s t ∅ conv 0 0 0 ∧
+      conv.card ≤ preset.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD.toNat := by
+  simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at computed
+  obtain ⟨deposited, deposits, withdrawn, withdrawals, consolidations⟩ := computed
+  obtain ⟨conv, ledger, card⟩ := ledger_requests deposits withdrawals consolidations
   have bound := (body.executionRequests electra).consolidations.bound electra.2
-  refine ⟨conv, ?_, ?_⟩
-  · simpa only [Finset.empty_union, add_zero] using first.trans ledger
+  refine ⟨conv, ledger, ?_⟩
   simp only [Array.length_toList] at card
   omega
+
+/-- From Gloas, the payload of the parent changes no balance outside a set of converted validators.
+
+The set has at most the preset's most consolidation requests per payload.
+
+No balance rises.
+
+A converted balance falls to no less than the smaller of its old balance and the activation balance.
+-/
+theorem ledger_processParentExecutionPayload {gloas : .glamsterdam ≤ fork}
+    {body : BeaconBlockBody preset fork}
+    (computed : processParentExecutionPayload config checks s gloas body = .ok t) :
+    ∃ conv : Finset ValidatorIndex, Ledger s t ∅ conv 0 0 0 ∧
+      conv.card ≤ preset.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD.toNat := by
+  have bound := (processParentExecutionPayload_counts computed).2.1
+  rcases processParentExecutionPayload_ok computed with ⟨-, -, rfl⟩ |
+    ⟨-, settled, _, _, _, _, _, _, settledOk, depositsOk, withdrawalsOk, consolidationsOk,
+      buildersOk, exitsOk, -, rfl⟩
+  · exact ⟨∅, Ledger.refl _, Nat.zero_le _⟩
+  -- Settling the payment and the requests of builders keep the balances and the validators.
+  have settledEq := settleParentPayment_eq settledOk
+  have settle := Ledger.of_eq (s := s) (t := settled) (by rw [settledEq]) (by rw [settledEq])
+  have builders := Ledger.foldlM (fun _ _ _ ok => by
+    obtain ⟨_, rfl⟩ := processBuilderDepositRequest_builders ok
+    exact Ledger.of_eq rfl rfl) buildersOk
+  have exits := Ledger.foldlM (fun _ _ _ ok => by
+    obtain ⟨_, rfl⟩ := processBuilderExitRequest_builders ok
+    exact Ledger.of_eq rfl rfl) exitsOk
+  obtain ⟨conv, requests, card⟩ := ledger_requests depositsOk withdrawalsOk consolidationsOk
+  refine ⟨conv, ?_, ?_⟩
+  · exact ((settle.zero_left requests).zero_right builders).zero_right exits |>.zero_right
+      (Ledger.of_eq rfl rfl)
+  · simp only [Array.length_toList] at card
+    omega
 
 /-- The sync aggregate step keeps the registry and the current sync committee. -/
 theorem processSyncAggregate_kept {altair : .altair ≤ fork}

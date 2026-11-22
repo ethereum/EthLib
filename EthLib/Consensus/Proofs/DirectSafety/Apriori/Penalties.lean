@@ -315,7 +315,7 @@ private theorem segment_penalties_core {g x m n : ForkedBeaconState preset}
   -- The pass reads the registry and the total of `m`, and the scores of the start `x`.
   obtain ⟨activeKept, effectiveKept, passEpoch, registry⟩ :=
     pass_kept_of_effective inner effective uEpoch cachedOk justified scored
-  have totalSame := total_active_congr mEarly uEarly
+  have totalSame := total_active_congr
     (activeKept.mono (getCurrentEpoch_le_activityFixedEpoch _)) passEpoch effectiveKept
   have sizes : x.state.validators.data.size ≤ pass.validators.data.size := by
     rw [registry.1]
@@ -1347,7 +1347,7 @@ The key was unslashed at `x`, so its new slashing delays withdrawal by the slash
 
 The guard keeps the window below half that vector. -/
 private theorem retained_slashed_bound {x s : ForkedBeaconState preset} {high : Nat}
-    (pre : Run config checks x s) (caps : CapOrder preset) (early : s.fork < .glamsterdam)
+    (pre : Run config checks x s) (caps : CapOrder preset)
     (guard : aprioriGuardAt config x high) (cutoff : Epoch) (cutoffLe : cutoff.toNat ≤ high + 1) :
     ∀ (i : Nat) (v : Validator), (x.state.validators.data[i]?).any (fun old =>
         isActiveValidator old (getCurrentEpoch x.state) && !old.slashed) = true →
@@ -1358,7 +1358,7 @@ private theorem retained_slashed_bound {x s : ForkedBeaconState preset} {high : 
   | none => simp [old] at cohort
   | some u =>
     simp only [old, Option.any_some, Bool.and_eq_true, Bool.not_eq_true'] at cohort
-    have lower := pre.newly_slashed_withdrawableEpoch caps.activation caps.compounding early
+    have lower := pre.newly_slashed_withdrawableEpoch caps.activation caps.compounding
       (by omega) i u v old found cohort.2 slashed
     rw [UInt64.lt_iff_toNat_lt]
     unfold driftHorizon at short
@@ -1384,7 +1384,7 @@ private theorem retained_block_reachable {g x : ForkedBeaconState preset} {high 
   have holds := (run_justified_separated (shared.append pre) genesis).1
   exact retained_block x cutoff early holds.balancesMatch caps.compounding engine block ok events
     replayed holds.exitsOrdered (registryGrows_of_chainSteps pre.chainSteps) cutoffLe
-    (retained_slashed_bound pre caps early guard cutoff
+    (retained_slashed_bound pre caps guard cutoff
       ((UInt64.le_iff_toNat_le.mp cutoffLe).trans endEpoch))
 
 end
@@ -1418,7 +1418,7 @@ private theorem retained_run_bound {g x y : ForkedBeaconState preset}
       | slot ok =>
         simpa using retained_slot x aElectra before delay holds.balancesMatch holds.exitsOrdered
           (reached.activationExitOrder genesis)
-          (fun witness => reached.pendingConsolidation_invariant genesis aEarly witness (by omega))
+          (fun witness => reached.pendingConsolidation_invariant genesis witness (by omega))
           (registryGrows_of_chainSteps pre.chainSteps) ok added addedOk
       | @block fork s t engine signed due ok =>
         have processed := (applySignedBlock_ok ok).2.1
@@ -1510,9 +1510,9 @@ private theorem eligible_le_retained_anchor {g x r z y : ForkedBeaconState prese
   have finite := finite_of_earlier before
   rw [same] at finite before
   have ordered := reached_exit_delay shared (pre.append inner) genesis guard
-  have effective := run_same_epoch_effective inner zEarly same
+  have effective := run_same_epoch_effective inner same
   have exits := (run_justified_separated (shared.append pre) genesis).1.exitsOrdered
-  have slashedBound := retained_slashed_bound pre caps rEarly guard (getCurrentEpoch r.state)
+  have slashedBound := retained_slashed_bound pre caps guard (getCurrentEpoch r.state)
     (by omega)
   have inside : ∀ i ∈ penaltyCohort x, i < r.state.validators.data.size := fun i member =>
     Nat.lt_of_lt_of_le (penaltyCohort_inside xEarly member) sizes
@@ -1552,7 +1552,7 @@ private theorem eligible_le_retained_anchor {g x r z y : ForkedBeaconState prese
         apply UInt64.not_le.mp
         intro withdrawn
         have exited := UInt64.le_trans (exits _ (Array.mem_of_getElem? foundR)) withdrawn
-        have stays := inner.retired_validator caps.activation caps.compounding zEarly
+        have stays := inner.retired_validator caps.activation caps.compounding
           i v w' foundR foundZ exited (Bool.eq_false_iff.mpr slashed) withdrawn
         rw [stays.2.2] at notWithdrawable
         exact absurd (UInt64.lt_of_lt_of_le notWithdrawable withdrawn) (UInt64.lt_irrefl _)
@@ -2309,7 +2309,7 @@ private theorem floorProducer_pre {g x y : ForkedBeaconState preset}
     simp only
         [minSlashingPenaltyQuotient, positive, ↓reduceIte, EthLib.Consensus.parameters, mBefore]
     split_ifs <;> omega
-  · have cap := shared.effectiveBalance_capped genesis caps.activation caps.compounding xEarly v
+  · have cap := shared.effectiveBalance_capped genesis caps.activation caps.compounding v
       (Array.mem_of_getElem? initial)
     have notAfter : ¬ .pectra ≤ x.fork := Nat.not_le_of_gt before
     simp only [withdrawalMaxEffectiveBalance, notAfter, ↓reduceIte] at cap
@@ -2696,7 +2696,7 @@ private theorem pre_validator_cap (shared : Run config checks g x)
     v.effectiveBalance.toNat ≤ preset.MAX_EFFECTIVE_BALANCE.toNat := by
   have caps := supported.2.2.1
   have bound := (shared.append tail).effectiveBalance_capped supported.1 caps.activation
-    caps.compounding (Nat.lt_trans early (by decide)) v member
+    caps.compounding v member
   have notElectra : ¬ Fork.pectra ≤ y.fork := Nat.not_le_of_lt early
   simpa [withdrawalMaxEffectiveBalance, getMaxEffectiveBalance, notElectra] using
     UInt64.le_iff_toNat_le.mp bound

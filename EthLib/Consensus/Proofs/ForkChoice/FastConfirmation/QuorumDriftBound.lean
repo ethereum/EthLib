@@ -153,7 +153,7 @@ theorem quorumDrift_le_quorumReserve
       isActiveAt boundary (getCurrentEpoch boundary) i :=
     activeKept_of_chainSteps (edge.append tailP).chainSteps _ fixed
   have keptP : EffectiveKept boundary pulled :=
-    (edge.append tailP).effectiveKept_of_same_epoch early callEpoch
+    (edge.append tailP).effectiveKept_of_same_epoch callEpoch
   have insideR {i : ℕ} (active : isActiveAt boundary (getCurrentEpoch boundary) i = true) :
       i < boundary.validators.data.size := by
     obtain ⟨_, found, -⟩ := isActiveAt_eq_true_iff.mp active
@@ -168,7 +168,7 @@ theorem quorumDrift_le_quorumReserve
         isActiveAt boundary (getCurrentEpoch boundary) i :=
       activeKept_of_chainSteps (edge.append tailS).chainSteps _ fixed
     have keptS : EffectiveKept boundary state :=
-      (edge.append tailS).effectiveKept_of_same_epoch early sameEpoch
+      (edge.append tailS).effectiveKept_of_same_epoch sameEpoch
     have totals : total.toNat = pulledTotal.toNat := by
       rw [getTotalActiveBalance_toNat totalOk, getTotalActiveBalance_toNat pulledOk,
         activeBalanceTotal, activeBalanceTotal, sameEpoch, callEpoch]
@@ -192,10 +192,10 @@ theorem quorumDrift_le_quorumReserve
   have invM := Run.invariant invG (history.append edge)
   -- The branch corrections from the boundary state, and from the middle state.
   obtain ⟨debitedKeys, -, -, -, debitedCard, -, gainSide, -, -, -, -, -, -, -, capsKept, -, -⟩ :=
-    (edge.append tailP).balanceCorrections_of_same_epoch early fulu callEpoch invR.balancesMatch
+    (edge.append tailP).balanceCorrections_of_same_epoch fulu callEpoch invR.balancesMatch
       invR.exitsOrdered
   obtain ⟨-, creditedKeys, pc, deposit, -, creditedCard, -, lossSide, zeroOff, electraZero, budget,
-    -, -, -, -, -, -⟩ := tailP.balanceCorrections_of_same_epoch early fulu
+    -, -, -, -, -, -⟩ := tailP.balanceCorrections_of_same_epoch fulu
       (callEpoch.trans middleEpoch.symm) invM.balancesMatch invM.exitsOrdered
   have blocksLe : (edge.append tailP).blockCount ≤
       pulled.slot.toNat - currentEpochStart pulled + 1 := by

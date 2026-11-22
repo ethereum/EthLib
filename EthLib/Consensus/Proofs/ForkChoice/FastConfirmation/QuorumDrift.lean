@@ -87,7 +87,7 @@ private theorem run_boundaryEpoch {g : ForkedBeaconState preset}
     | slot ok =>
       by_cases first : last.state.slot % preset.SLOTS_PER_EPOCH = 0
       · exact ⟨last.state, fun _ => rfl, rfl,
-          hysteresis_of_run_slot genesis bands caps activation pre ok early first,
+          hysteresis_of_run_slot genesis bands caps activation pre ok first,
           ⟨pre.snoc (.slot ok)⟩, ⟨.nil⟩⟩
       · have next := (advanceSlotAcross_cases ok).1
         have notFirst : ¬ preset.SLOTS_PER_EPOCH.toNat ∣ middle.state.slot.toNat + 1 := by

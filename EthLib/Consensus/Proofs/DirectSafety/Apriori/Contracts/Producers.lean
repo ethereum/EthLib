@@ -124,7 +124,7 @@ theorem total_same_epoch {x y : ForkedBeaconState preset}
   have inside : ∀ i ∈ getActiveValidatorIndices x.state (getCurrentEpoch x.state),
       i.toNat < x.state.validators.data.size := fun i member =>
     lt_size_of_mem_getActiveValidatorIndices member
-  have weights := run_same_epoch_effective tail early same
+  have weights := run_same_epoch_effective tail same
   have active := (activeKept_of_chainSteps tail.chainSteps).getActiveValidatorIndices_eq
     (getCurrentEpoch_le_activityFixedEpoch x.state)
   have totalValue := (getTotalBalance_ok_iff_stake.mp (getTotalActiveBalance_ok computed)).2.2

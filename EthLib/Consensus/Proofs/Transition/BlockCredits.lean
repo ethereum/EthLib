@@ -183,7 +183,7 @@ Take each validator active in the previous or the current epoch.
 
 Its weight must be the base reward that the attestation reads for it. -/
 private theorem attestation_credit {attestation : Attestation preset fork}
-    {parent : Slot} (altair : .altair ≤ fork) (early : fork < .glamsterdam)
+    {parent : Slot} (altair : .altair ≤ fork)
     (computed : processAttestation config checks s parent attestation = .ok t) :
     ∃ (proposer : ValidatorIndex) (credit : ℕ), getBeaconProposerIndex s = .ok proposer ∧
       Ledger s t ∅ ∅ 0 (fun v => if v = proposer then credit else 0) 0 ∧
@@ -202,9 +202,12 @@ private theorem attestation_credit {attestation : Attestation preset fork}
   obtain ⟨_, recent, _, slotEpoch, _, _, _, _, _, _, _, _, earned, earnedOk, _, _, _, _, _, _,
     total, totalOk, attesters, attestersOk, ⟨updated, numerator⟩, folded, proposer, proposerOk,
     raised, raisedOk, final⟩ := computed
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
-  simp only [notGloas, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at final
-  subst final
+  -- From Gloas the last write records payment weights, which no balance or flag reads.
+  obtain ⟨payments, rfl⟩ : ∃ payments, t = { raised with builderPendingPayments := payments } := by
+    split at final
+    · exact ⟨_, recordPaymentWeight_eq final⟩
+    · cases final
+      exact ⟨_, rfl⟩
   rw [getBeaconProposerIndex_setEpochParticipation] at proposerOk
   have denominator : ((WEIGHT_DENOMINATOR - PROPOSER_WEIGHT) * WEIGHT_DENOMINATOR /
       PROPOSER_WEIGHT).toNat = 448 := by decide
@@ -321,9 +324,9 @@ private theorem Steady.activeBalanceTotal (kept : Steady s t) :
   activeBalanceTotal_eq kept.epoch kept.keeps.2.2 kept.effective kept.keeps.1
 
 /-- A steady step keeps the read of the total active balance, with its errors. -/
-private theorem Steady.total (kept : Steady s t) (early : fork < .glamsterdam) :
+private theorem Steady.total (kept : Steady s t) :
     getTotalActiveBalance t = getTotalActiveBalance s :=
-  DirectSafety.total_active_congr early early
+  DirectSafety.total_active_congr
     (kept.keeps.2.2.mono (getCurrentEpoch_le_activityFixedEpoch s)) kept.epoch kept.effective
 
 /-- The base rewards that a kept step reads at the active validators.
@@ -661,11 +664,10 @@ private theorem effectiveAt_eq_of_found {validator : Validator}
   simp [effectiveAt, found]
 
 private theorem credited_processProposerSlashing {slashing : ProposerSlashing}
-    (early : fork < .glamsterdam)
     (computed : processProposerSlashing config checks s slashing = .ok t) :
     ∃ p c sl o sh, Credited s t p c sl ∅ o sh := by
   obtain ⟨proposer, slashed, validator, read, found, unslashed, ⟨later, laterFound, marked⟩,
-    ledger, eligible⟩ := ledger_processProposerSlashing early computed
+    ledger, eligible⟩ := ledger_processProposerSlashing computed
   have kept := kept_processProposerSlashing computed
   have grow := FlagKeeps.of_flags kept.frame.registryGrows (flags_proposerSlashing computed)
   have effective : effectiveAt ⟨fork, t⟩ slashed.toNat = validator.effectiveBalance.toNat :=
@@ -685,11 +687,10 @@ private theorem credited_processProposerSlashing {slashing : ProposerSlashing}
     exact ⟨validator, found, eligible⟩
 
 private theorem credited_processAttesterSlashing {slashing : AttesterSlashing preset fork}
-    (early : fork < .glamsterdam)
     (computed : processAttesterSlashing config checks s slashing = .ok t) :
     ∃ p c sl o sh, Credited s t p c sl ∅ o sh := by
   obtain ⟨proposer, slashed, read, newly, eligibles, ledger⟩ :=
-    ledger_processAttesterSlashing early computed
+    ledger_processAttesterSlashing computed
   have kept := kept_processAttesterSlashing computed
   have grow := FlagKeeps.of_flags kept.frame.registryGrows (flags_attesterSlashing computed)
   have effective : ∀ v ∈ slashed, effectiveAt ⟨fork, t⟩ v.toNat = effectiveAt ⟨fork, s⟩ v.toNat :=
@@ -714,10 +715,10 @@ private theorem credited_processAttesterSlashing {slashing : AttesterSlashing pr
   · simpa using recentFlagSum_mono_below grow altair base count support
 
 private theorem credited_processAttestation {attestation : Attestation preset fork}
-    {parent : Slot} (early : fork < .glamsterdam) (altair : .altair ≤ fork)
+    {parent : Slot} (altair : .altair ≤ fork)
     (computed : processAttestation config checks s parent attestation = .ok t) :
     ∃ p c sl o sh, Credited s t p c sl ∅ o sh := by
-  obtain ⟨proposer, credit, read, ledger, potential⟩ := attestation_credit altair early computed
+  obtain ⟨proposer, credit, read, ledger, potential⟩ := attestation_credit altair computed
   exact ⟨proposer, credit, ∅, _, _, ledger, kept_processAttestation computed,
     flagKeeps_processAttestation computed, fun _ => read,
     fun v => by simp, fun v => by simp, fun v member => absurd member (Finset.notMem_empty v),
@@ -776,13 +777,13 @@ private theorem credited_join {x y : BeaconState preset fork}
   rw [Finset.empty_union] at joined
   exact ⟨_, _, _, _, _, joined⟩
 
-/-- From Fulu and before Gloas, the operations before the requests credit like operations.
+/-- From Fulu and before Heze, the operations before the requests credit like operations.
 
 They convert no validator. -/
 private theorem credited_operationsPrefix {body : BeaconBlockBody preset fork} {parent : Slot}
     {before : fork < .hegota}
     {proposed attested voted deposited exited changed : BeaconState preset fork}
-    (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork) (matched : BalancesMatch s)
+    (fulu : .fusaka ≤ fork) (matched : BalancesMatch s)
     (proposersOk : body.proposerSlashings.data.toList.foldlM
       (processProposerSlashing config checks) s = .ok proposed)
     (attestersOk : body.attesterSlashings.data.toList.foldlM
@@ -801,12 +802,12 @@ private theorem credited_operationsPrefix {body : BeaconBlockBody preset fork} {
       (held : Credited s x p c sl ∅ o sh) : BalancesMatch x :=
     held.kept.frame.balancesMatch matched
   obtain ⟨_, _, _, _, _, one⟩ := Credited.foldlM
-    (fun _ _ _ _ ok => credited_processProposerSlashing early ok) matched proposersOk
+    (fun _ _ _ _ ok => credited_processProposerSlashing ok) matched proposersOk
   obtain ⟨_, _, _, _, _, two⟩ := Credited.foldlM
-    (fun _ _ _ _ ok => credited_processAttesterSlashing early ok) (matchedAt one) attestersOk
+    (fun _ _ _ _ ok => credited_processAttesterSlashing ok) (matchedAt one) attestersOk
   obtain ⟨_, _, _, _, _, upTwo⟩ := credited_join one two
   obtain ⟨_, _, _, _, _, three⟩ := Credited.foldlM
-    (fun _ _ _ _ ok => credited_processAttestation early altair ok) (matchedAt upTwo)
+    (fun _ _ _ _ ok => credited_processAttestation altair ok) (matchedAt upTwo)
     attestationsOk
   obtain ⟨_, _, _, _, _, upThree⟩ := credited_join upTwo three
   obtain ⟨_, _, _, _, _, four⟩ := Credited.foldlM
@@ -818,27 +819,63 @@ private theorem credited_operationsPrefix {body : BeaconBlockBody preset fork} {
   obtain ⟨_, _, _, _, _, six⟩ := credited_processBlsToExecutionChanges changesOk
   exact credited_join upFive six
 
-/-- From Fulu and before Gloas, the operations of a block credit like operations.
+/-- From Fulu, the operations of a block credit like operations.
 
-They convert at most one validator for each consolidation request. -/
+Before Gloas they convert at most one validator for each consolidation request.
+
+From Gloas they carry no request, and convert no validator. -/
 private theorem credited_processOperations {body : BeaconBlockBody preset fork} {parent : Slot}
-    (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork) (matched : BalancesMatch s)
+    (fulu : .fusaka ≤ fork) (matched : BalancesMatch s)
     (computed : processOperations config checks s body parent = .ok t) :
     ∃ p c sl cv o sh, Credited s t p c sl cv o sh ∧
-      cv.card ≤ preset.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD.toNat := by
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) fulu
+      cv.card ≤ if .glamsterdam ≤ fork then 0
+        else preset.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD.toNat := by
+  have altair : .altair ≤ fork := Nat.le_trans (by decide) fulu
+  have capella : .shapella ≤ fork := Nat.le_trans (by decide) fulu
+  have matchedAt {x : BeaconState preset fork} {p c sl o sh}
+      (held : Credited s x p c sl ∅ o sh) : BalancesMatch x :=
+    held.kept.frame.balancesMatch matched
   unfold processOperations at computed
   split at computed
-  · rename_i later
-    exact False.elim (Nat.not_le_of_lt early later)
+  · rename_i gloas
+    unfold processOperationsGloas at computed
+    simp only [bind_ok_iff, ← Array.foldlM_toList] at computed
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
+      attestationsOk, exited, exitsOk, changed, changesOk, paidOk⟩ := computed
+    obtain ⟨_, _, _, _, _, one⟩ := Credited.foldlM
+      (fun _ _ _ _ ok => credited_processProposerSlashing ok) matched proposersOk
+    obtain ⟨_, _, _, _, _, two⟩ := Credited.foldlM
+      (fun _ _ _ _ ok => credited_processAttesterSlashing ok) (matchedAt one) attestersOk
+    obtain ⟨_, _, _, _, _, upTwo⟩ := credited_join one two
+    obtain ⟨_, _, _, _, _, three⟩ := Credited.foldlM
+      (fun _ _ _ _ ok => credited_processAttestation altair ok) (matchedAt upTwo) attestationsOk
+    obtain ⟨_, _, _, _, _, upThree⟩ := credited_join upTwo three
+    obtain ⟨_, _, _, _, _, four⟩ := Credited.foldlM
+      (fun _ _ _ _ ok => credited_processVoluntaryExit ok) (matchedAt upThree) exitsOk
+    obtain ⟨_, _, _, _, _, upFour⟩ := credited_join upThree four
+    -- The changes of credentials run as in a block before Gloas.
+    have changes : processBlsToExecutionChanges config checks exited body = .ok changed := by
+      unfold processBlsToExecutionChanges
+      simp only [capella, ↓reduceDIte, ← Array.foldlM_toList]
+      exact changesOk
+    obtain ⟨_, _, _, _, _, five⟩ := credited_processBlsToExecutionChanges changes
+    obtain ⟨_, _, _, _, _, upFive⟩ := credited_join upFour five
+    -- The payload attestations keep the state.
+    have same := foldlM_ok_invariant (fun u : BeaconState preset fork => u = changed)
+      (fun _ _ _ before ok => (processPayloadAttestation_eq ok).trans before) rfl paidOk
+    subst same
+    exact ⟨_, _, _, _, _, _, upFive, by simp [gloas]⟩
+  rename_i notGloas
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) fulu
   simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
   obtain ⟨_, _, _, _, a, proposersOk, b, attestersOk, c, attestationsOk, d, depositsOk, e,
     exitsOk, f, changesOk, requestsOk⟩ := computed
-  obtain ⟨_, _, _, _, _, upSix⟩ := credited_operationsPrefix early fulu matched proposersOk
+  simp only [electra, ↓reduceDIte] at requestsOk
+  obtain ⟨_, _, _, _, _, upSix⟩ := credited_operationsPrefix fulu matched proposersOk
     attestersOk attestationsOk depositsOk exitsOk changesOk
   obtain ⟨conv, seven, count⟩ := credited_processExecutionRequests requestsOk
   obtain ⟨_, _, _, _, _, upSeven⟩ := credited_join upSix seven
-  exact ⟨_, _, _, _, _, _, upSeven, count⟩
+  exact ⟨_, _, _, _, _, _, upSeven, by simpa [notGloas] using count⟩
 
 /-- A block's operations before its consolidation requests keep whether each validator compounds.
 
@@ -869,7 +906,7 @@ theorem compoundingKept_beforeConsolidations {body : BeaconBlockBody preset fork
       ∃ later, withdrawn.validators.data[v.toNat]? = some later ∧
         hasCompoundingWithdrawalCredential later =
           hasCompoundingWithdrawalCredential validator := by
-  obtain ⟨_, _, _, _, _, ops⟩ := credited_operationsPrefix early fulu matched proposedOk
+  obtain ⟨_, _, _, _, _, ops⟩ := credited_operationsPrefix fulu matched proposedOk
     attestedOk votedOk depositedOk exitedOk changedOk
   have both := ops.ledger.trans
     (ledger_depositWithdrawalRequests (electra := electra) requestedOk withdrawnOk)
@@ -878,11 +915,11 @@ theorem compoundingKept_beforeConsolidations {body : BeaconBlockBody preset fork
 
 end CreditedSteps
 
-/-- Take a validator that stays unslashed through the operations of a block.
+/-- From Fulu, take a validator that stays unslashed through the operations of a block.
 
 Its effective balance is within its largest.
 
-Before Gloas, the operations keep its balance at least the smaller of two amounts.
+The operations keep its balance at least the smaller of two amounts.
 
 They are its balance and its effective balance before the operations.
 
@@ -892,7 +929,7 @@ That is the largest effective balance before the conversion. -/
 theorem _root_.EthLib.Consensus.processOperations_floor {fork : Fork}
     {s t : BeaconState preset fork}
     {body : BeaconBlockBody preset fork} {parentSlot : Slot}
-    (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork) (matched : BalancesMatch s)
+    (fulu : .fusaka ≤ fork) (matched : BalancesMatch s)
     (computed : processOperations config checks s body parentSlot = .ok t)
     {v : ValidatorIndex} {val : Validator} (found : s.validators.data[v.toNat]? = some val)
     (capped : val.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork val)
@@ -900,7 +937,7 @@ theorem _root_.EthLib.Consensus.processOperations_floor {fork : Fork}
     min (actualBalanceAt ⟨fork, s⟩ v.toNat) val.effectiveBalance.toNat ≤
       actualBalanceAt ⟨fork, t⟩ v.toNat := by
   obtain ⟨_, _, _, conv, _, slash, ops, -⟩ :=
-    credited_processOperations early fulu matched computed
+    credited_processOperations fulu matched computed
   -- The validator stays unslashed, so the operations charge it no slashing penalty.
   have noSlash : slash v = 0 := by
     have bound := ops.penalized v
@@ -954,7 +991,6 @@ private theorem steady_processEth1Data {before : fork < .hegota}
 
 private theorem steady_processBlockExecution {engine : ExecutionEngine preset fork}
     {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork}
-    (_early : fork < .glamsterdam)
     (computed : processBlockExecution config checks engine s body bellatrix = .ok t) :
     Steady s t := by
   refine ⟨stepKeeps_processBlockExecution computed, ?_⟩
@@ -969,11 +1005,13 @@ private theorem kept_processSyncAggregate {altair : .altair ≤ fork}
     .of_data (by rw [(processSyncAggregate_kept computed).1]),
     Lives.of_data (by rw [(processSyncAggregate_kept computed).1])⟩
 
-/-- The balances of a block from Fulu and before Gloas, read at each validator.
+/-- The balances of a block from Fulu, read at each validator.
 
-Withdrawals pay at most as many validators as a payload has withdrawals.
+Withdrawals pay at most the preset's `MAX_WITHDRAWALS_PER_PAYLOAD` validators.
 
-Consolidation requests convert at most as many validators as a payload has requests.
+Consolidation requests convert at most its `MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD` validators.
+
+From Gloas those requests run in the payload of the parent, before the header.
 
 The sync committee pays and charges each member at most its seats times the participant reward.
 
@@ -987,7 +1025,7 @@ From Electra, deposits credit no balance in the block.
 
 The slashed validators were not slashed before, and pay their initial penalty. -/
 theorem block_balances {engine : ExecutionEngine preset fork}
-    {block : BeaconBlock preset fork} (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork)
+    {block : BeaconBlock preset fork} (fulu : .fusaka ≤ fork)
     (matched : BalancesMatch s) (computed : processBlock config checks engine s block = .ok t) :
     ∃ (paid conv slashed : Finset ValidatorIndex) (sync other slash : ValidatorIndex → ℕ)
       (proposer : ValidatorIndex) (credit share : ℕ),
@@ -1016,50 +1054,74 @@ theorem block_balances {engine : ExecutionEngine preset fork}
   have altair : .altair ≤ fork := Nat.le_trans (by decide) fulu
   have capella : .shapella ≤ fork := Nat.le_trans (by decide) fulu
   have bellatrix : .bellatrix ≤ fork := Nat.le_trans (by decide) fulu
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) fulu
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
-  have hegota : fork < .hegota := Nat.lt_trans early (by decide)
-  unfold processBlock at computed
-  simp only [altair, ↓reduceDIte] at computed
-  unfold processBlockAltair at computed
-  simp only [stateBeforeOperations, notGloas, bellatrix, hegota, ↓reduceDIte, pure_bind,
-    bind_assoc, bind_ok_iff] at computed
-  obtain ⟨headed, headedOk, executed, executedOk, revealed, revealedOk, voted, votedOk, operated,
-    operatedOk, synced⟩ := computed
-  -- The header, the payload, the reveal and the vote.
-  obtain ⟨paid, executedLedger, paidCount⟩ := ledger_processBlockExecution early executedOk
-  have toVoted : Ledger s voted paid ∅ 0 0 0 :=
-    (ledger_processBlockHeader headedOk).zero_left
-      ((executedLedger.zero_right (ledger_processRandao revealedOk)).zero_right
-        (ledger_processEth1Data votedOk))
+  obtain ⟨voted, operated, started, operatedOk, -, synced⟩ := processBlock_operationsInput computed
+  simp only [altair, ↓reduceDIte] at synced
+  -- The steps before the operations keep both flag lists and form a frame.
+  have growVoted : ParticipationKept s voted := flags_operationsInput started
+  have frameVoted : Frame s voted := (frame_operationsInput started).toFrame
+  obtain ⟨parented, headed, executed, revealed, paidOk, headedOk, executedOk, revealedOk,
+    votedOk⟩ := started
+  simp only [bellatrix, ↓reduceDIte] at executedOk
+  -- From Gloas the payload of the parent runs first, and its requests convert validators.
+  obtain ⟨convPre, parentLedger, convPreCount, steadyParent, livesParent, lifeParent⟩ :
+      ∃ conv : Finset ValidatorIndex, Ledger s parented ∅ conv 0 0 0 ∧
+        conv.card ≤ (if .glamsterdam ≤ fork then
+          preset.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD.toNat else 0) ∧
+        Steady s parented ∧ Lives s parented ∧ RegistryLifecycle s parented := by
+    split at paidOk
+    · rename_i gloas
+      obtain ⟨conv, ledger, count⟩ := ledger_processParentExecutionPayload paidOk
+      have effective := effectiveKept_parentPayload paidOk
+      refine ⟨conv, ledger, by simpa [gloas] using count,
+        ⟨⟨Nat.le_of_eq effective.2.symm, ?_⟩, effective.1⟩,
+        lives_processParentExecutionPayload paidOk, ?_⟩
+      · exact processParentExecutionPayload_step_of ActiveStep ActiveStep.refl ActiveStep.trans
+          (fun frame validators =>
+            ActiveStep.of_validators (congrArg (·.data) validators) frame.slot)
+          activeStep_processWithdrawalRequest activeStep_processConsolidationRequest paidOk
+      · exact processParentExecutionPayload_step_of RegistryLifecycle RegistryLifecycle.refl
+          (fun one two => one.trans two)
+          (fun _ validators => .of_data (congrArg (·.data) validators))
+          registryLifecycle_processWithdrawalRequest registryLifecycle_processConsolidationRequest
+          paidOk
+    · cases paidOk
+      exact ⟨∅, Ledger.refl s, Nat.zero_le _, steady_of_validators rfl rfl, Lives.refl s,
+        .refl s⟩
+  -- Before Heze the vote on the deposit contract follows the reveal.
+  have votedStep : Ledger revealed voted ∅ ∅ 0 0 0 ∧ Steady revealed voted ∧
+      voted.validators.data = revealed.validators.data := by
+    split at votedOk
+    · refine ⟨ledger_processEth1Data votedOk, steady_processEth1Data votedOk, ?_⟩
+      obtain ⟨_, _, rest⟩ := processEth1Data_eq votedOk
+      rw [← rest]
+    · cases votedOk
+      exact ⟨Ledger.refl _, steady_of_validators rfl rfl, rfl⟩
+  -- The header, the withdrawals and the bid or payload, the reveal and the vote.
+  obtain ⟨paid, executedLedger, paidCount⟩ := ledger_processBlockExecution executedOk
+  have toVoted : Ledger s voted paid convPre 0 0 0 := by
+    simpa only [Finset.empty_union, Finset.union_empty, add_zero] using
+      (((parentLedger.zero_right (ledger_processBlockHeader headedOk)).trans
+        executedLedger).zero_right (ledger_processRandao revealedOk)).zero_right votedStep.1
   have steadyVoted : Steady s voted :=
-    (steady_processBlockHeader headedOk).trans <|
-      (steady_processBlockExecution early executedOk).trans <|
-        (steady_processRandao revealedOk).trans (steady_processEth1Data votedOk)
-  -- The steps before the operations form the operations input, which keeps both flag lists.
-  have growVoted : ParticipationKept s voted := flags_operationsInput
-    ⟨s, headed, executed, revealed, by simp [notGloas]; rfl, headedOk,
-      by simpa [bellatrix] using executedOk, revealedOk, by simpa [hegota] using votedOk⟩
-  have frameVoted : Frame s voted :=
-    (frame_processBlockHeader headedOk).toFrame.trans <|
-      (frame_processBlockExecution executedOk).toFrame.trans <|
-        (frame_processRandao revealedOk).toFrame.trans (frame_processEth1Data votedOk).toFrame
-  have votedValidators : voted.validators.data = s.validators.data := by
-    have h1 : headed.validators = s.validators := by
+    steadyParent.trans <| (steady_processBlockHeader headedOk).trans <|
+      (steady_processBlockExecution executedOk).trans <|
+        (steady_processRandao revealedOk).trans votedStep.2.1
+  have afterParent : voted.validators.data = parented.validators.data := by
+    have h1 : headed.validators = parented.validators := by
       obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
       rfl
     have h2 : executed.validators = headed.validators :=
-      validators_processBlockExecution early executedOk
+      processBlockExecution_validators executedOk
     have h3 : revealed.validators = executed.validators := by
       obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealedOk
       rfl
-    have h4 : voted.validators.data = revealed.validators.data := by
-      obtain ⟨_, _, rest⟩ := processEth1Data_eq votedOk
-      rw [← rest]
-    rw [h4, h3, h2, h1]
+    rw [votedStep.2.2, h3, h2, h1]
+  have livesVoted : Lives s voted := livesParent.of_data_right afterParent
+  have lifeVoted : RegistryLifecycle s voted :=
+    lifeParent.trans (RegistryLifecycle.of_data afterParent)
   -- The operations and the sync aggregate.
   obtain ⟨proposer, credit, slashed, conv, other, slash, ops, convCount⟩ :=
-    credited_processOperations early fulu (frameVoted.balancesMatch matched) operatedOk
+    credited_processOperations fulu (frameVoted.balancesMatch matched) operatedOk
   obtain ⟨proposer', reward, share, sync, rewardOk, read', shareBound, seats, syncLedger⟩ :=
     ledger_processSyncAggregate synced
   have syncKept := kept_processSyncAggregate synced
@@ -1079,11 +1141,16 @@ theorem block_balances {engine : ExecutionEngine preset fork}
     intro x member
     obtain ⟨later, found, _⟩ := (ops.newly x member).2
     exact effectiveAt_of_kept syncKept found
-  refine ⟨paid ∪ ∅ ∪ ∅, ∅ ∪ conv ∪ ∅, slashed, 0 + 0 + sync,
+  refine ⟨paid ∪ ∅ ∪ ∅, convPre ∪ conv ∪ ∅, slashed, 0 + 0 + sync,
     0 + other + fun v => if v = proposer' then share else 0, 0 + slash + 0,
     if 0 < share then proposer' else proposer, credit, share,
     (toVoted.trans ops.ledger).trans syncLedger, by simpa [capella] using paidCount,
-    by simpa using convCount, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+    ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · -- The conversions come from the payload of the parent from Gloas, and from the operations
+    -- before it.
+    have union := Finset.card_union_le convPre conv
+    rw [Finset.union_empty]
+    split at convPreCount <;> split at convCount <;> omega
   · intro v
     have first := ops.credited v
     have sumSame : ∑ x ∈ slashed, effectiveAt ⟨fork, operated⟩ x.toNat /
@@ -1132,7 +1199,7 @@ theorem block_balances {engine : ExecutionEngine preset fork}
     exact ⟨fun v => by simpa using seats v, shareBound⟩
   · obtain ⟨reward', rewardOk'⟩ := syncRead
     exact ⟨reward', (syncParticipantReward_congr
-      ((steadyVoted.trans ops.kept.steady).total early).symm).trans rewardOk'⟩
+      (steadyVoted.trans ops.kept.steady).total.symm).trans rewardOk'⟩
   · intro altair' base count big reads support
     have votedReads : Reads voted base := steadyVoted.reads reads
     -- The steps before the operations keep both lists of flags, so the potential stays.
@@ -1145,17 +1212,16 @@ theorem block_balances {engine : ExecutionEngine preset fork}
       support i (Nat.le_trans frameVoted.registryGrows
         (Nat.le_trans ops.kept.frame.registryGrows outside))
     omega
-  · exact Lives.of_data_left votedValidators
+  · exact livesVoted.trans
       (ops.kept.lives.trans syncKept.lives ops.kept.lifecycle (.of_frame syncKept.frame))
-  · exact (RegistryLifecycle.of_data votedValidators).trans
-      (ops.kept.lifecycle.trans syncKept.lifecycle)
+      lifeVoted (.of_frame (ops.kept.frame.trans syncKept.frame))
+  · exact lifeVoted.trans (ops.kept.lifecycle.trans syncKept.lifecycle)
   · intro v member
     obtain ⟨old, found, eligible⟩ := ops.eligible v member
     have epoch : getCurrentEpoch voted = getCurrentEpoch s := by
       simp only [getCurrentEpoch, frameVoted.slot]
     rw [epoch] at eligible
-    rw [votedValidators] at found
-    exact ⟨old, found, eligible⟩
+    exact livesVoted.back lifeVoted (.of_frame frameVoted) found eligible
 
 end Block
 

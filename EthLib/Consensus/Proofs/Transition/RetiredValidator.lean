@@ -7,7 +7,7 @@ public import EthLib.Consensus.Proofs.Transition.ValidatorStep
 
 A validator is retired when it is unslashed and its exit and withdrawable epochs have passed.
 
-Each step before Gloas keeps it unslashed and keeps both epochs.
+Each step keeps it unslashed and keeps both epochs.
 -/
 
 @[expose] public section
@@ -23,12 +23,11 @@ theorem Run.retired_validator {x y : ForkedBeaconState preset}
     (run : Run config checks x y)
     (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
     (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
-    (early : y.fork < .glamsterdam)
     (i : Nat) (v w : Validator) (before : x.state.validators.data[i]? = some v)
     (after : y.state.validators.data[i]? = some w) (exited : v.exitEpoch ≤ getCurrentEpoch x.state)
     (clean : v.slashed = false) (withdrawn : v.withdrawableEpoch ≤ getCurrentEpoch x.state) :
     w.slashed = false ∧ w.exitEpoch = v.exitEpoch ∧ w.withdrawableEpoch = v.withdrawableEpoch :=
-  (CapStep.run run activation compounding early).1.retired i v w before after exited clean withdrawn
+  (CapStep.run run activation compounding).1.retired i v w before after exited clean withdrawn
 
 /-- A block keeps the exit and withdrawal epochs of an unslashed retired validator. -/
 theorem processBlock_retired_validator {f : Fork} {s t : BeaconState preset f}
