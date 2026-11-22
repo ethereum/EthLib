@@ -36,8 +36,6 @@ The data API lists the [delivered payloads] and the [received bids].
 
 Their entries have the types of [`bids.yaml`].
 
-A filter keeps the entries whose fields equal each value that it gives.
-
 The limit and the cursor of a query are not modelled here.
 
 The JSON of a received bid is that of its bid, plus the two timestamps as strings.
@@ -82,12 +80,14 @@ def get (store : SubmissionStore preset fork) (pubkey : BLSPubkey) :
     Option (SubmitBlockRequest preset fork) :=
   store.entries.find? (·.message.builderPubkey = pubkey)
 
-/-- The store after a submission: it replaces the entry of its builder, whatever their values.
-
-A submission for another slot leaves the store as it was. -/
+/-- The store after a submission. -/
 def submit (store : SubmissionStore preset fork) (request : SubmitBlockRequest preset fork) :
     SubmissionStore preset fork :=
+  -- The rule names no slot, so the store holds one slot, and another slot leaves it as it was.
   if request.message.slot = store.slot then
+    -- A new submission overwrites the previous one of the same builder key.
+    --
+    -- It does so even when it is less profitable.
     { store with
       entries := request ::
         store.entries.filter (·.message.builderPubkey ≠ request.message.builderPubkey) }
@@ -144,18 +144,20 @@ structure ValidatorsResponse.Sound (preset : Preset) (schedule : Slot → Option
     schedule slot = some index → keyOf index = some key → registry.find? key = some signed →
     response.countP (·.slot = slot) = 1
 
-/-- The entries of a schedule for a count of slots from a first slot, in the order of the slots.
-
-A slot number of 2^64 or more, or a slot whose proposer has no key or registration, has no entry. -/
+/-- The entries of a schedule for a count of slots from a first slot, in the order of the slots. -/
 def scheduledEntries (schedule : Slot → Option ValidatorIndex)
     (keyOf : ValidatorIndex → Option BLSPubkey) (registry : Registry) (first count : Nat) :
     ValidatorsResponse :=
   (List.range count).filterMap fun offset =>
+    -- A slot is a 64-bit integer, so a slot number of 2^64 or more has no entry.
     if fits : first + offset < 2 ^ 64 then do
       let slot : Slot := ⟨⟨first + offset, fits⟩⟩
+      -- The validator with the duty to propose in the slot, by the schedule.
       let index ← schedule slot
+      -- Its signed registration: a slot without a registered validator is omitted.
       let key ← keyOf index
       let entry ← registry.find? key
+      -- Each entry includes the slot and the validator with the duty.
       some ⟨slot, index, entry⟩
     else none
 
@@ -169,8 +171,10 @@ def validatorPubkey? (state : BeaconState preset fork) (index : ValidatorIndex) 
 Other slots, and slots past the end of the lookahead, have none. -/
 def lookaheadSchedule (state : BeaconState preset fork) (fulu : .fusaka ≤ fork) (slot : Slot) :
     Option ValidatorIndex :=
+  -- EIP-7917: the lookahead holds the proposers of two epochs, from the current epoch's start.
   if currentEpochStart state ≤ slot.toNat ∧
       slot.toNat < currentEpochStart state + 2 * preset.SLOTS_PER_EPOCH.toNat then
+    -- The proposer of slot s is at index s minus the first slot of the current epoch.
     (state.proposerLookahead fulu)[slot.toNat - currentEpochStart state]?
   else none
 
@@ -179,6 +183,7 @@ def lookaheadSchedule (state : BeaconState preset fork) (fulu : .fusaka ≤ fork
 It covers the current and next epoch, in the order of the slots. -/
 def validatorsResponse (state : BeaconState preset fork) (fulu : .fusaka ≤ fork)
     (registry : Registry) : ValidatorsResponse :=
+  -- The validators scheduled to propose in the current and next epoch.
   scheduledEntries (lookaheadSchedule state fulu) (validatorPubkey? state) registry
     (currentEpochStart state) (2 * preset.SLOTS_PER_EPOCH.toNat)
 
@@ -234,6 +239,7 @@ namespace BidTraceV2WithTimestamp
 
 /-- The JSON of a signed integer of 64 bits: its decimal digits, after a minus sign if negative. -/
 def int64Json (x : Int64) : Lean.Json :=
+  -- An Int64 of the API is a string, and EthLib writes it in decimal, as the example does.
   .str (toString x.toInt)
 
 /-- The integer that a text spells as decimal digits, after a minus sign if negative.
@@ -241,6 +247,7 @@ def int64Json (x : Int64) : Lean.Json :=
 Any text gives an integer, so the reader checks that writing it again gives the text back. -/
 def decimalInt (text : String) : Int :=
   match text.toList with
+  -- A minus sign negates the digits that follow.
   | '-' :: digits => -(Nat.ofDigitChars 10 digits 0 : Int)
   | digits => Nat.ofDigitChars 10 digits 0
 
@@ -254,13 +261,17 @@ The reader of an unsigned integer accepts a JSON number, by the mapping of SSZ t
 def readInt64 : Lean.Json → Except Err Int64
   | .str text =>
     let i := decimalInt text
+    -- The text that the writer gives for i, with -2^63 ≤ i < 2^63.
     if toString i = text ∧ -2 ^ 63 ≤ i ∧ i < 2 ^ 63 then .ok (Int64.ofInt i)
     else .error .typeMismatch
+  -- The type of an Int64 of the API is string, so any other JSON value is refused.
   | _ => .error .typeMismatch
 
 /-- The JSON object of a received bid: the object of the bid, with the two timestamps added. -/
 def toJson (entry : BidTraceV2WithTimestamp) : Except Err Lean.Json := do
+  -- The object of the bid, with its fields flat.
   let .obj fields ← BeaconApi.toApiJson entry.bid | throw .typeMismatch
+  -- Then the two timestamps, each under its key.
   return .obj ((fields.insert "timestamp" (int64Json entry.timestamp)).insert "timestamp_ms"
     (int64Json entry.timestampMs))
 
@@ -271,6 +282,7 @@ The reader takes the two timestamps out of the object, then reads the rest as a 
 So, as for a bid, a key that the source does not declare is refused. -/
 def ofJson (document : Lean.Json) : Except Err BidTraceV2WithTimestamp := do
   let .obj fields := document | throw .structNotAnObject
+  -- The schema marks no field as required, and EthLib reads each one, as for the bid.
   let some timestamp := (document.getObjVal? "timestamp").toOption
     | throw (.missingField "timestamp")
   let some timestampMs := (document.getObjVal? "timestamp_ms").toOption
@@ -292,7 +304,9 @@ namespace OrderBy
 
 /-- The string of an order in a query. -/
 def name : OrderBy → String
+  -- Ascending value, lowest value first.
   | .ascending => "value"
+  -- Descending value, highest value first.
   | .descending => "-value"
 
 /-- The order that a string names, if any. -/
@@ -318,6 +332,7 @@ structure DeliveredFilter where
 
 /-- Whether a filter keeps a delivered payload: each present filter equals its field. -/
 def DeliveredFilter.keeps (filter : DeliveredFilter) (entry : BidTraceV2) : Bool :=
+  -- Query arguments are used as filters: each one given keeps the entries with that field.
   filter.slot.all (· = entry.trace.slot) &&
     filter.blockHash.all (· = entry.trace.blockHash) &&
     filter.blockNumber.all (· = entry.blockNumber) &&
@@ -337,15 +352,15 @@ structure ReceivedFilter where
 
 /-- Whether a filter keeps a received bid: each present filter equals its field. -/
 def ReceivedFilter.keeps (filter : ReceivedFilter) (entry : BidTraceV2WithTimestamp) : Bool :=
+  -- The source says so of delivered payloads only, and EthLib reads received bids the same way.
   filter.slot.all (· = entry.bid.trace.slot) &&
     filter.blockHash.all (· = entry.bid.trace.blockHash) &&
     filter.blockNumber.all (· = entry.bid.blockNumber) &&
     filter.builderPubkey.all (· = entry.bid.trace.builderPubkey)
 
-/-- Delivered payloads, sorted by value in the given order.
-
-The source does not order payloads of equal value; here they keep their input order. -/
+/-- Delivered payloads, sorted by value in the given order. -/
 def sortBy (order : OrderBy) (entries : List BidTraceV2) : List BidTraceV2 :=
+  -- The source does not order payloads of equal value, and the stable sort keeps their order.
   match order with
   | .ascending => entries.mergeSort fun a b => a.trace.value ≤ b.trace.value
   | .descending => entries.mergeSort fun a b => b.trace.value ≤ a.trace.value
@@ -371,22 +386,27 @@ inductive RegistrationAnswer where
 
 /-- The status of an answer, if the source gives one. -/
 def RegistrationAnswer.status : RegistrationAnswer → Option Nat
+  -- Success: 200, with the signed registration.
   | .found _ => some 200
+  -- Error: 400, with an error message.
   | .badRequest _ => some 400
+  -- The source lists no answer for a key that the relay does not hold.
   | .notHeld => none
 
 /-- The answer of a relay to a request for the registration of a key.
 
-The key is the text of the `pubkey` query parameter: `0x` and 96 hex digits.
-
-The relay looks it up among the registrations that it kept. -/
+The key is the text of the `pubkey` query parameter. -/
 def getValidatorRegistration (registry : Registry) (pubkey : Option String) : RegistrationAnswer :=
   match pubkey with
+  -- The parameter is required: without it, 400, with the message of the source's example.
   | none => .badRequest ⟨400, "missing pubkey argument", none⟩
   | some text =>
+    -- A key is `0x` and 96 hex digits, so 48 bytes.
     match parseHexBytes 48 text with
+    -- A key that does not read gets 400, with a message of EthLib's, since the source gives none.
     | none => .badRequest ⟨400, "invalid pubkey argument", none⟩
     | some key =>
+      -- The latest registration that the relay holds for the key.
       match registry.find? key with
       | some signed => .found signed
       | none => .notHeld
@@ -404,8 +424,11 @@ The relay source does not fix the key that signs the served bid, so it is an arg
 It fails when the header of the payload cannot be computed, which never happens. -/
 def SubmitBlockRequest.bid (request : SubmitBlockRequest preset fork)
     (range : HasBuilderApi fork) (pubkey : BLSPubkey) : Except Err (BuilderBid preset fork) :=
+  -- The header of the payload, the value of the bid trace as it is, and the key.
   getBid request.executionPayload request.message.value pubkey
+    -- From Deneb: the commitments to the blobs of the payload, which the relay returns.
     (fun deneb => .ofSszList (request.blobsBundle ⟨deneb, range.2⟩).commitments)
+    -- From Electra: the requests of the submission.
     (fun electra => request.executionRequests ⟨electra, range.2⟩)
 
 end EthLib.Consensus

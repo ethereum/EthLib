@@ -11,19 +11,7 @@ public import EthLib.Consensus.Containers.ProposerPreferences
 
 From Gloas, a proposer asks a builder for a bid with a request that names the parent block.
 
-The builder serves the request only when six rules hold, in the order of the source.
-
-The slot must be that of the builder's state, transitioned to that slot.
-
-The key must be that of the proposer of the slot, and that proposer must be active.
-
-The proposer must have sent its preferences on gossip.
-
-The parent hash must be the block hash of the latest bid, or the latest block hash of the state.
-
-The proposer may build on the parent with its payload or without it, so both are allowed.
-
-The parent root must be the root of the latest block header of the state.
+The builder serves the request only when six rules hold.
 
 The proposer checks a bid it fetched with eight rules, then with the signature of the builder.
 
@@ -47,11 +35,12 @@ open Base Cryptography.Bls Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork}
 
-/-- From Gloas: whether a block hash is that of the parent with its payload, or without it.
-
-The latest bid of the state names the first, and the latest block hash the second. -/
+/-- From Gloas: whether a block hash is that of the parent with its payload, or without it. -/
 def isParentBlockHash (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (parentHash : Hash32) : Bool :=
+  -- The parent with its payload, by the latest bid of the state.
+  --
+  -- Or the parent without it, by the latest block hash of the state.
   parentHash == (state.latestExecutionPayloadBid gloas).blockHash ||
     parentHash == state.latestBlockHash gloas
 
@@ -68,13 +57,21 @@ def isEligibleForBidGloas (state : BeaconState preset fork) (gloas : .glamsterda
     (preferences : ValidatorIndex → Option ProposerPreferences) (slot : Slot)
     (parentHash : Hash32) (parentRoot : Root) (pubkey : BLSPubkey) :
     Except TransitionError Bool := do
+  -- The source asserts each rule, and EthLib gives false for a failed one, as before Gloas.
+  --
+  -- The slot of the request is the slot of the state.
   if slot ≠ state.slot then return false
+  -- The key is that of the proposer of the slot.
   let index ← liftAccessor (getBeaconProposerIndex state)
   let proposer ← liftAccessor (getValidator state index)
   if proposer.pubkey ≠ pubkey then return false
+  -- The proposer is active in the current epoch.
   if !isActiveValidator proposer (getCurrentEpoch state) then return false
+  -- The builder received the preferences of the proposer on the gossip topic.
   if (preferences index).isNone then return false
+  -- The proposer may build on the parent with its payload or without it, so both are allowed.
   if !isParentBlockHash state gloas parentHash then return false
+  -- The parent root is the root of the latest block header of the state.
   return parentRoot == (← liftSsz (SszType.hashTreeRoot state.latestBlockHeader))
 
 /-- Why a proposer refuses a bid it fetched from a builder. -/
@@ -121,9 +118,7 @@ The state is that of the proposal, before the block under construction.
 
 The preferences are the proposer's, and the gas limit is that of the parent payload of the bid.
 
-The rules run in the order of the source, so the first that fails names the error.
-
-The source asserts the rules and returns the signature check, so the signature gives the result. -/
+The rules run in the order of the source, so the first that fails names the error. -/
 def validateBid (config : Config) (checks : SignatureChecks) (state : BeaconState preset fork)
     (gloas : .glamsterdam ≤ fork) (preferences : ProposerPreferences) (parentGasLimit : UInt64)
     (signed : SignedExecutionPayloadBid preset fork) (feeRecipient : ExecutionAddress) :
@@ -131,25 +126,34 @@ def validateBid (config : Config) (checks : SignatureChecks) (state : BeaconStat
   let bid := signed.message
   let lift {α : Type} (result : Except TransitionError α) : Except ValidateBidError α :=
     result.mapError .fault
+  -- The builder of the bid is active.
   unless ← lift (liftAccessor (isActiveBuilder state gloas bid.builderIndex)) do
     throw (.inactiveBuilder bid.builderIndex)
+  -- The slot of the bid is the slot of the state.
   unless bid.slot = state.slot do throw (.wrongSlot state.slot bid.slot)
+  -- The fee recipient of the bid is the proposer's, even when the builder pays on execution.
   unless bid.feeRecipient = feeRecipient do
     throw (.wrongFeeRecipient feeRecipient bid.feeRecipient)
+  -- The bid builds on the parent with its payload, or without it.
   unless isParentBlockHash state gloas bid.parentBlockHash do
     throw (.wrongParentHash bid.parentBlockHash (state.latestExecutionPayloadBid gloas).blockHash
       (state.latestBlockHash gloas))
+  -- The parent root of the bid is the root of the latest block header of the state.
   let parentRoot ← lift (liftSsz (SszType.hashTreeRoot state.latestBlockHeader))
   unless bid.parentBlockRoot = parentRoot do
     throw (.wrongParentRoot parentRoot bid.parentBlockRoot)
+  -- The RANDAO mix of the bid is the mix of the current epoch of the state.
   let randao ← lift (liftAccessor (getRandaoMix state (getCurrentEpoch state)))
   unless bid.prevRandao = randao do throw (.wrongPrevRandao randao bid.prevRandao)
+  -- The gas limit of the bid moves from that of the parent payload toward the proposer's target.
   unless ← lift (liftAccessor (liftArith
       (isGasLimitTargetCompatible parentGasLimit bid.gasLimit preferences.targetGasLimit))) do
     throw (.incompatibleGasLimit parentGasLimit bid.gasLimit preferences.targetGasLimit)
+  -- A bid of positive value: the builder can cover that value.
   if 0 < bid.value then
     unless ← lift (liftAccessor (canBuilderCoverBid state gloas bid.builderIndex bid.value)) do
       throw (.cannotCoverBid bid.builderIndex bid.value)
+  -- The source asserts the rules above and returns the signature check, which gives the result.
   lift (verifyExecutionPayloadBidSignature config checks state gloas signed)
 
 end EthLib.Consensus.BuilderApi

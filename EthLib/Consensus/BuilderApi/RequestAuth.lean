@@ -13,19 +13,11 @@ The message holds data that the proposer agreed with the builder, and the slot o
 
 A builder checks the version header, the data, the slot and the signature of each request.
 
-A failed signature gives 401, and every other failed check gives 400.
-
-A request for a bid must name the slot of its path.
-
-A request that submits preferences must not name a slot that has passed.
-
-A builder should keep accepted preferences for each proposer and slot.
-
-A bid that it serves for that slot keeps its execution payment within their cap.
-
 These are the checks of the authentication.
 
 The source also refuses a malformed body and a request without its timing headers, outside them.
+
+A builder should keep the preferences that it accepts, and must honor their cap in its bids.
 
 The [builder specification] gives the rules for [preferences] and for [bid requests].
 
@@ -61,13 +53,18 @@ inductive AuthFailure where
 
 /-- The status that a failed check gives: 401 for the signature, and 400 for any other. -/
 def AuthFailure.status : AuthFailure → Nat
+  -- A signature that fails to verify gets 401.
   | .badSignature => 401
+  -- Every other failed check gets 400.
   | _ => 400
 
 /-- The failures of the version header, which must name the fork of the body's type.
 
 The authentication and the preferences exist from Gloas only, so the header must be `gloas`. -/
 def headerFailures (versionHeader : Option String) : List AuthFailure :=
+  -- The source gives 400 for a header that is absent or names a fork it does not recognize.
+  --
+  -- EthLib also refuses any fork but Gloas, the fork of the body's type.
   if versionHeader = some ConsensusVersion.gloas.name then [] else [.badVersion]
 
 /-- The data that a proposer and a builder agree: the data agreed out of band, if any.
@@ -76,44 +73,49 @@ Otherwise it is the default data from the builder's URL. -/
 def agreedData (outOfBand : Option ByteArray) (builderUrl : String) :
     Except AuthDataError ByteArray :=
   match outOfBand with
+  -- The data agreed with the builder out of band, when there is some.
   | some data => .ok data
+  -- Else the default data from the builder's URL, which the validator should use.
   | none => defaultAuthData builderUrl
 
 /-- The failures of the data of an authentication, against the data agreed with the builder.
 
 Empty data fails, even when the agreed data is empty too. -/
 def dataFailures (agreed : ByteArray) (auth : BuilderRequestAuth) : List AuthFailure :=
+  -- A zero-length data is invalid.
   (if auth.data.data.isEmpty then [.emptyData] else []) ++
+    -- The data matches the value agreed with the proposer.
     (if auth.data.data = agreed.data then [] else [.dataMismatch])
 
 /-- The failures of the signature of an authentication, against the key of the path. -/
 def signatureFailures (config : Config) (checks : SignatureChecks) (pubkey : BLSPubkey)
     (auth : SignedBuilderRequestAuth) : Except Err (List AuthFailure) := do
+  -- The signature verifies against the key of the path.
   return if ← verifyBuilderRequestAuthSignature config checks auth pubkey then [] else
     [.badSignature]
 
 /-- From Gloas: every check that fails on the authentication of a request for a bid.
-
-The data must be the agreed data, and the slot must be the slot of the path.
 
 The agreed data is the data agreed out of band, or by default the data from the builder's URL. -/
 def authFailures (config : Config) (checks : SignatureChecks) (agreed : ByteArray)
     (pathSlot : Slot) (pubkey : BLSPubkey) (versionHeader : Option String)
     (auth : SignedBuilderRequestAuth) : Except Err (List AuthFailure) := do
   let signature ← signatureFailures config checks pubkey auth
+  -- The version header, then the data.
   return headerFailures versionHeader ++ dataFailures agreed auth.message ++
+    -- The slot of the authentication matches the slot of the path.
     (if auth.message.slot = pathSlot then [] else [.slotMismatch]) ++ signature
 
-/-- From Gloas: every check that fails on a request that submits preferences.
-
-The slot of the authentication has passed when it is before the builder's current slot.
-
-The source defines a passed slot no more precisely. -/
+/-- From Gloas: every check that fails on a request that submits preferences. -/
 def preferencesFailures (config : Config) (checks : SignatureChecks) (agreed : ByteArray)
     (currentSlot : Slot) (pubkey : BLSPubkey) (versionHeader : Option String)
     (request : BuilderPreferencesRequest) : Except Err (List AuthFailure) := do
   let signature ← signatureFailures config checks pubkey request.auth
+  -- The version header, then the data.
   return headerFailures versionHeader ++ dataFailures agreed request.auth.message ++
+    -- The slot of the authentication has not already passed.
+    --
+    -- The source defines a passed slot no more precisely, and EthLib takes one before the current.
     (if request.auth.message.slot < currentSlot then [.slotPassed] else []) ++ signature
 
 /-- Whether a status may answer a request whose checks of the authentication fail as listed.
@@ -149,28 +151,28 @@ def get (store : PreferencesStore) (pubkey : BLSPubkey) (slot : Slot) :
 /-- The store with preferences kept under a key and a slot, ahead of every earlier entry. -/
 def keep (store : PreferencesStore) (pubkey : BLSPubkey) (slot : Slot)
     (preferences : BuilderPreferences) : PreferencesStore :=
+  -- The newest entry first, so that it hides an earlier one for the same key and slot.
   ⟨((pubkey, slot), preferences) :: store.entries⟩
 
-/-- From Gloas: the store after a request that submits preferences under the key of its path.
-
-When no check of the request fails, it keeps the preferences under that key and the request's slot.
-
-Otherwise it is unchanged. -/
+/-- From Gloas: the store after a request that submits preferences under the key of its path. -/
 def submit (store : PreferencesStore) (config : Config) (checks : SignatureChecks)
     (agreed : ByteArray) (currentSlot : Slot) (pubkey : BLSPubkey) (versionHeader : Option String)
     (request : BuilderPreferencesRequest) : Except Err PreferencesStore := do
   let failures ← preferencesFailures config checks agreed currentSlot pubkey versionHeader request
+  -- When no check fails, the store keeps the preferences per proposer and per slot.
   return if failures = [] then
     store.keep pubkey request.auth.message.slot request.preferences
+  -- Otherwise the store is unchanged.
   else store
 
 end PreferencesStore
 
-/-- From Gloas: whether a bid keeps within the preferences kept for its proposer at its slot.
-
-Without kept preferences, any execution payment is allowed. -/
+/-- From Gloas: whether a bid keeps within the preferences kept for its proposer at its slot. -/
 def BidHonorsPreferences {preset : Preset} {fork : Fork} (store : PreferencesStore)
     (pubkey : BLSPubkey) (bid : ExecutionPayloadBid preset fork) : Prop :=
+  -- A bid for a slot with stored preferences honors their cap on the execution payment.
+  --
+  -- Without them, the builder may serve a bid with any execution payment.
   ∀ preferences, store.get pubkey bid.slot = some preferences →
     bid.executionPayment ≤ preferences.maxExecutionPayment
 
