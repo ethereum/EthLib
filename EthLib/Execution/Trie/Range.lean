@@ -13,7 +13,11 @@ That holds when the hash resists collisions, as Keccak-256 is assumed to.
 
 The snap capability of devp2p sends such ranges, as [`caps/snap.md`][snap] says.
 
-Its sections "AccountRange (0x01)" and "StorageRanges (0x03)" describe the proofs.
+Its sections AccountRange (0x01) and StorageRanges (0x03) describe the proofs.
+
+Those sections state what the proof shows, not how to check it.
+
+The check below is EthLib's own algorithm.
 
 [snap]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md
 
@@ -123,6 +127,7 @@ A path that is no prefix of an end compares with every extension of itself as it
 So it falls wholly before, inside or after the range. -/
 def rangePlace (left : List Nibble) (right : Option (List Nibble)) (pre : List Nibble) :
     RangePlace :=
+  -- A prefix of an end lies on the path of that end.
   if pre.isPrefixOf left || right.any pre.isPrefixOf then .boundary
   else if pre < left then .before
   else if right.any (· < pre) then .after
@@ -137,10 +142,13 @@ def rangePlace (left : List Nibble) (right : Option (List Nibble)) (pre : List N
 Unlike a proof of one key, a range proof is a set of nodes, so the nodes come in any order. -/
 def lookupNode (nodes : List (Hash32 × ByteArray)) (reference : Item) : Except ProofError Item :=
   match reference with
+  -- `n(I, i) = c(I, i)` when `||RLP(c(I, i))|| < 32`: the node inside its parent, Appendix D.
   | .list _ => .ok reference
   | .bytes digest =>
+    -- `n(∅, i) = ()`, no node.
     if digest.size = 0 then
       .ok reference
+    -- `n(I, i) = KEC(RLP(c(I, i)))`: the proof node with that hash.
     else if digest.size = 32 then
       match nodes.find? fun (hash, _) => hash.toList == digest.data.toList with
       | some (_, encoded) => (decode encoded).mapError .rlp
@@ -172,6 +180,7 @@ def checkSubtree (hash : ByteArray → Hash32) (nodes : List (Hash32 × ByteArra
   | 0, _, _, _ => .error (.proof (.missingNode none))
   | fuel + 1, reference, pre, entries =>
     match rangePlace left right pre with
+    -- No entry lies before the range.
     | .before => if entries.isEmpty then .ok false else .error .mismatch
     -- Any node after the range holds a key there.
     | .after => if entries.isEmpty then .ok (reference != .bytes .empty) else .error .mismatch
@@ -180,6 +189,7 @@ def checkSubtree (hash : ByteArray → Hash32) (nodes : List (Hash32 × ByteArra
       let node ← (patricialize hash entries pre.length).mapError .rlp
       let held ← (encodeInternalNode hash node).mapError .rlp
       if held = reference then .ok false else .error .mismatch
+    -- A node on the path of an end: held inside its parent, or a proof node found by its hash.
     | .boundary => do
       let item ← (lookupNode nodes reference).mapError .proof
       if item = .bytes .empty then
@@ -201,6 +211,7 @@ def checkSubtree (hash : ByteArray → Hash32) (nodes : List (Hash32 × ByteArra
         else
           throw .mismatch
       | .branch subnodes value =>
+        -- Each key has 64 nibbles, so no key ends at a branch.
         if value.size ≠ 0 then throw .branchValue
         -- Each entry goes on below the branch, to the child of its next nibble.
         unless entries.all fun (key, _) => pre.length < key.length do throw .mismatch
@@ -226,14 +237,18 @@ With no entry, the range runs from the start to the end of the trie.
 It then returns false, since the trie holds no key from the start on. -/
 def verifyRange (hash : ByteArray → Hash32) (root start : Hash32)
     (entries : List (Hash32 × ByteArray)) (proof : List ByteArray) : Except RangeError Bool := do
+  -- `y(I)` of Appendix D: each key, a 32-byte hash, as its path of 64 nibbles.
   let obj := entries.map fun (key, value) => (bytesToNibbleList ⟨key.toArray⟩, value)
   let left := bytesToNibbleList ⟨start.toArray⟩
   -- Each error names the first entry that breaks its rule, which exists when the rule fails.
   let keys := obj.map Prod.fst
+  -- The sections send consecutive entries; EthLib reads that as strictly increasing hashes.
   unless strictlyIncreasing keys do
     throw (.unsorted (((keys.zip keys.tail).findIdx fun (a, b) => !decide (a < b)) + 1))
+  -- No entry lies below the starting hash, where the range starts.
   if obj.any fun (key, _) => key < left then
     throw (.beforeStart (obj.findIdx fun (key, _) => key < left))
+  -- EthLib's rule: no value is empty, since a value of a state or storage trie never is.
   let emptyIndex := obj.findIdx fun (_, value) => value.size = 0
   if obj.any fun (_, value) => value.size = 0 then throw (.emptyValue emptyIndex)
   if proof.isEmpty then
@@ -244,6 +259,7 @@ def verifyRange (hash : ByteArray → Hash32) (root start : Hash32)
     | .error (.rlp error) => throw (.rlp error)
     -- The values were checked above, so this error never occurs.
     | .error .emptyValue => throw (.emptyValue emptyIndex)
+  -- With a proof: a walk from the root along the starting hash and the last entry.
   else
     let nodes := proof.map fun encoded => (hash encoded, encoded)
     checkSubtree hash nodes left (obj.getLast?.map Prod.fst) (left.length + 2)
