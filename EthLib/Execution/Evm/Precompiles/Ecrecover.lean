@@ -62,7 +62,7 @@ def word (data : ByteArray) (start : Nat) : Vector UInt8 32 :=
 def output (hash : Vector UInt8 32) (v r s : Nat) : ByteArray :=
   -- `||o|| = 0` if `v` is not in `{27, 28}`.
   if hv : v = 27 ∨ v = 28 then
-    -- `||o|| = 0` if `r = 0 or r >= secp256k1n or s = 0 or s >= secp256k1n`.
+    -- `||o|| = 0` unless `0 < r < secp256k1n` and `0 < s < secp256k1n`.
     --
     -- The recovery makes that check, before it solves for the key.
     --

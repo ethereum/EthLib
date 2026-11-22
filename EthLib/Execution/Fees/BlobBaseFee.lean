@@ -52,17 +52,17 @@ def fakeExponentialLoop (numerator denominator : Nat) : Nat → Nat → Nat → 
   -- Out of fuel: unreachable with the fuel below.
   | 0, _, _, output => output
   | fuel + 1, i, numeratorAccum, output =>
-    -- `while numerator_accum > 0:`
+    -- The sum stops at the first term `a_i = 0`.
     if numeratorAccum = 0 then
       output
     else
       -- The call carries the three updates of the loop body, from the old `i` and accumulator.
       --
-      -- `i += 1`.
+      -- The next step is `i + 1`.
       fakeExponentialLoop numerator denominator fuel (i + 1)
-        -- `numerator_accum = (numerator_accum * numerator) // (denominator * i)`.
+        -- `a_(i+1) = floor(a_i * n / (d * i))`, for the numerator `n` and the denominator `d`.
         (numeratorAccum * numerator / (denominator * i))
-        -- `output += numerator_accum`, which the EIP runs first, on the old accumulator.
+        -- The sum gains `a_i`, the term before the update.
         (output + numeratorAccum)
 
 /-- Enough steps for the loop of the exponential to stop.
@@ -75,26 +75,26 @@ def fakeExponentialFuel (factor numerator denominator : Nat) : Nat :=
 
 /-- `factor * e^(numerator / denominator)`, from the Taylor series in integers.
 
-Source: `fake_exponential` in [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#helpers), Helpers.
+Source: the fake exponential of [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#helpers).
 
 A denominator of 0 gives 0, where the EIP divides by 0. -/
 def fakeExponential (factor numerator denominator : Nat) : Nat :=
-  -- The loop runs with enough fuel to stop on `numerator_accum = 0`, as the EIP's does.
+  -- The loop runs with enough fuel to stop on a zero term, as the loop of the EIP does.
   fakeExponentialLoop numerator denominator (fakeExponentialFuel factor numerator denominator)
-    -- `i = 1`.
+    -- The first step is `i = 1`.
     1
-    -- `numerator_accum = factor * denominator`.
+    -- `a_1 = factor * d`.
     (factor * denominator)
-    -- `output = 0`.
+    -- The sum starts at 0.
     0
-    -- `return output // denominator`.
+    -- The result is the sum divided by `d`, rounded down.
     / denominator
 
 /-- The base fee per blob gas at a given excess.
 
 Source: [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#gas-accounting), Gas accounting. -/
 def getBaseFeePerBlobGas (schedule : BlobSchedule) (excessBlobGas : Nat) : Nat :=
-  -- `fake_exponential(MIN_BASE_FEE_PER_BLOB_GAS, header.excess_blob_gas, ...)`.
+  -- `MIN_BASE_FEE_PER_BLOB_GAS * e^(x / F)` in integers, for the excess `x` and the fraction `F`.
   --
   -- The EIP's `BLOB_BASE_FEE_UPDATE_FRACTION` is the update fraction of the schedule.
   --
@@ -144,17 +144,17 @@ def chainBlobSchedule (config : ChainConfig) (fork : Fork) (number timestamp : N
 
 /-- The excess blob gas of a block at `fork`, from its parent's excess, blob gas and base fee.
 
-The steps are those of `calc_excess_blob_gas` in [EIP-7918][eip-7918], at every fork from Dencun.
+The steps are those of the excess blob gas of [EIP-7918][eip-7918], at every fork from Dencun.
 
 Before Fusaka, the reserve price branch is skipped, as in [EIP-4844][eip-4844].
 
 A parent without the blob gas fields counts all three as 0.
 
-The source computes these steps in 64 bits, which fail on an overflow; EthLib uses naturals.
+EthLib computes these steps in naturals, where a 64-bit computation fails on an overflow.
 
 The header check compares the result with the 64-bit excess of the header.
 
-So a result of `2^64` or more makes the header invalid, as the failure would.
+So a result of `2^64` or more makes the header invalid, as that failure would.
 
 A block that is built or simulated takes the result only below `2^64`, and fails otherwise.
 
@@ -170,27 +170,27 @@ def calcExcessBlobGas (fork : Fork) (schedule : BlobSchedule)
     (parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas : Nat) : Nat :=
   -- The schedule is the one of this block, as EIP-7918 asks, at every step.
   --
-  -- `target_blob_gas = GAS_PER_BLOB * blobSchedule.target`, below `2^64` by the schedule's bound.
+  -- The target blob gas `T = GAS_PER_BLOB * target`, below `2^64` by the schedule's bound.
   let targetBlobGas := GAS_PER_BLOB * schedule.target.toNat
-  -- `if parent.excess_blob_gas + parent.blob_gas_used < target_blob_gas: return 0`.
+  -- With the parent's excess `e` and blob gas used `u`, the excess is 0 when `e + u < T`.
   if parentExcessBlobGas + parentBlobGasUsed < targetBlobGas then
     0
-  -- `if BLOB_BASE_COST * parent.base_fee_per_gas > GAS_PER_BLOB * ...:`
+  -- From Fusaka, the reserve price of EIP-7918 binds when `BLOB_BASE_COST * f > GAS_PER_BLOB * b`.
   --
-  -- The `...` is `get_base_fee_per_blob_gas(parent)`.
+  -- Here `f` is the base fee of the parent, and `b` its base fee per blob gas.
   --
-  -- It reads the parent's excess with this block's fraction.
+  -- That base fee per blob gas reads the parent's excess with this block's fraction.
   else if fork ≥ .fusaka ∧ BLOB_BASE_COST * parentBaseFeePerGas >
       GAS_PER_BLOB * getBaseFeePerBlobGas schedule parentExcessBlobGas then
-    -- `return parent.excess_blob_gas + parent.blob_gas_used * (max - target) // max`.
+    -- The excess is then `e + floor(u * (max - target) / max)`.
     --
-    -- Here `max` and `target` are `blobSchedule.max` and `blobSchedule.target`.
+    -- Here `max` and `target` are those of the blob schedule.
     --
     -- The schedule has `target ≤ max`, so `max - target` never truncates.
     parentExcessBlobGas +
       parentBlobGasUsed * (schedule.max.toNat - schedule.target.toNat) / schedule.max.toNat
   else
-    -- `return parent.excess_blob_gas + parent.blob_gas_used - target_blob_gas`.
+    -- Otherwise the excess is `e + u - T`.
     parentExcessBlobGas + parentBlobGasUsed - targetBlobGas
 
 end EthLib.Execution.Fees.BlobBaseFee

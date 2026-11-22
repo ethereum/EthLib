@@ -33,7 +33,7 @@ EIP-198, Specification. -/
 def parseLengths (data : ByteArray) : Lengths where
   -- EIP-198: the input is `<length_of_BASE> <length_of_EXPONENT> <length_of_MODULUS> ...`.
   --
-  -- EIP-198: "every length is a 32-byte left-padded integer", so each is a 32-byte big-endian read.
+  -- EIP-198: every length is a 32-byte left-padded integer, so each is a 32-byte big-endian read.
   base := readNat data 0 LENGTH_HEADER_BYTES
   exponent := readNat data LENGTH_HEADER_BYTES LENGTH_HEADER_BYTES
   modulus := readNat data (2 * LENGTH_HEADER_BYTES) LENGTH_HEADER_BYTES
@@ -42,9 +42,9 @@ def parseLengths (data : ByteArray) : Lengths where
 
 EIP-7823, Specification. -/
 def checkLengths (l : Lengths) : Except ModexpError Unit :=
-  -- EIP-7823: each length "MUST be less than or equal to 8192 bits (1024 bytes)".
+  -- EIP-7823: each length is at most 8192 bits, 1024 bytes.
   --
-  -- "the precompile execution stops, returns an error, and consumes all gas".
+  -- Otherwise the call stops, returns an error and consumes all the gas.
   --
   -- EIP-7823 names no order; checking base, exponent, modulus reports the first oversized one.
   if l.base > MAX_LENGTH_BYTES then .error (.lengthTooLarge .base l.base)
@@ -78,18 +78,18 @@ def checkLengthsAt (fork : Fork) (l : Lengths) : Except ModexpError Unit :=
 /-- The operation of the precompile: the output bytes, once the gas is paid.
 
 - The power is computed by square-and-multiply, one step per bit of the exponent.
-- A zero modulus gives `len_mod` zero bytes, since the Yellow Paper takes `x mod 0 = 0`.
+- A zero modulus gives `length_of_MODULUS` zero bytes, since the Yellow Paper takes `x mod 0 = 0`.
 - An empty base and modulus give an empty output. -/
 def compute (data : ByteArray) (l : Lengths) : ByteArray :=
-  -- EIP-198: `<BASE> <EXPONENT> <MODULUS>`, and "excess data is ignored".
+  -- EIP-198: `<BASE> <EXPONENT> <MODULUS>`, and any data after them is ignored.
   let base := readNat data BASE_OFFSET l.base
   let exponent := readNat data l.exponentStart l.exponent
   let modulus := readNat data l.modulusStart l.modulus
-  -- EIP-198: the output is `(BASE**EXPONENT) % MODULUS`.
+  -- EIP-198: the output is `BASE^EXPONENT mod MODULUS`.
   --
   -- EIP-198 leaves the modulus 0 open; the Yellow Paper, Appendix E, takes `x mod 0` to be zero.
   let result := if modulus = 0 then 0 else Nat.powMod base exponent modulus
-  -- EIP-198: "as a byte array with the same length as the modulus".
+  -- EIP-198: the output is a byte array with the same length as the modulus.
   --
   -- The result is below the modulus, so it fits in `length_of_MODULUS` bytes.
   ByteArray.mk (natToBytes l.modulus result).toArray
@@ -115,7 +115,7 @@ def modexp (fork : Fork) (data : ByteArray) (gas : Nat) : Except ModexpError Byt
     --
     -- The base, the full exponent and the modulus are read only once the gas is paid.
     let cost := requiredGas fork data l
-    -- Step 4: EIP-198 "if there is enough gas, returns an output"; else the call fails.
+    -- Step 4: EIP-198 returns the output if the gas suffices; else the call fails.
     if gas < cost then .error (.outOfGas cost gas) else .ok (compute data l)
 
 end EthLib.Execution.Evm.Precompiles.Modexp
