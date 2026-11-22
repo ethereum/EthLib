@@ -93,12 +93,12 @@ def validateOmmers {fork : Fork} (config : ChainConfig) (checkSeal : Bool)
   let encoded ← (encode (ommersItem ommers)).mapError .encoding
   ensure (keccak256 encoded == header.ommersHash)
     (.wrongOmmersHash header.ommersHash (keccak256 encoded))
-  -- Each ommer is a valid header, numbered below the block.
+  -- §11.1: `V(U)` for each `U` in `B_U`, and its number is below the block's.
   ommers.forM fun ommer => do
     ensure (1 ≤ ommer.2.number && ommer.2.number < header.number)
       (.numberOutOfRange ommer.2.number header.number)
     checkOmmerHeader config checkSeal recent ommer
-  -- At most two ommers.
+  -- §11.1: `||B_U|| ≤ 2`.
   ensure (ommers.length ≤ MAX_OMMERS) (.tooManyOmmers ommers.length)
   let ommerHashes ← ommers.mapM (headerHash ·.2)
   -- At most two ommers are left, so two equal hashes make the first hash the repeated one.
@@ -108,16 +108,18 @@ def validateOmmers {fork : Fork} (config : ChainConfig) (checkSeal : Bool)
   let recentHashes ← recent.mapM fun b => headerHash b.header
   let recentOmmerHashes ← (recent.flatMap fun b => b.ommers.map (headerHash ·.2)).mapM id
   (ommers.zip ommerHashes).forM fun (ommer, hash) => do
-    -- No ommer is a block of the chain.
+    -- `H ≠ U` of `s(U, H)`: no ommer is the block or a block of the recent chain.
     ensure (hash != blockHash && !recentHashes.contains hash) (.ommerInChain hash)
     -- No ommer is an ommer of a recent block, which is stricter than the Yellow Paper.
     ensure (!recentOmmerHashes.contains hash) (.ommerAlreadyIncluded hash)
-    -- An ommer is one to six blocks older than the block.
+    -- §11.1: `k(U, P(B_H)_H, 6)` makes `U` a sibling of one of the block's six nearest ancestors.
+    --
+    -- So its number is one to six below the block's.
     let age := header.number - ommer.2.number
     ensure (1 ≤ age && age ≤ MAX_OMMER_DEPTH) (.wrongAge hash age)
     -- Its parent is a recent block of the chain.
     ensure (recentHashes.contains ommer.2.parentHash) (.parentNotRecent hash ommer.2.parentHash)
-    -- But not the parent of the block itself, which would make it a sibling.
+    -- Its parent is not the block's parent: `k` starts at `P(B_H)_H`, so `U` is no sibling of `B`.
     ensure (ommer.2.parentHash != header.parentHash) (.siblingOfBlock hash)
 
 end EthLib.Execution.Blocks

@@ -57,6 +57,9 @@ A fork keeps the delay of the last fork before it that set one.
 
 From Paris on there is no bomb, and the delay is not read. -/
 def bombDelay (fork : Fork) : Nat :=
+  -- `kappa` of §4.3.4, one case for each range of forks.
+  --
+  -- §4.3.4 leaves `kappa` undefined before Byzantium; there EIP-2 reads `H_i` itself, so 0.
   if fork < .byzantium then 0
   else if fork < .constantinople then 3000000
   else if fork < .muirGlacier then 5000000
@@ -71,8 +74,9 @@ def bombDelay (fork : Fork) : Nat :=
 
 The floor makes the term 0 while the exponent is negative, in the first two periods. -/
 def bomb (fork : Fork) (number : Nat) : Nat :=
-  -- Natural subtraction stops at 0, as `max(H_i - κ, 0)` does.
+  -- `floor(H'_i / 100000)`, with `H'_i = max(H_i - kappa, 0)`: natural subtraction stops at 0.
   let periods := (number - bombDelay fork) / BOMB_PERIOD
+  -- `epsilon = floor(2^(floor(H'_i / 100000) - 2))`, which is 0 while the exponent is negative.
   if 2 ≤ periods then 2 ^ (periods - 2) else 0
 
 /-- The factor of the step that the time since the parent gives, before the bomb.
@@ -90,18 +94,21 @@ The last form is `ς_2` of the Yellow Paper, 4.3.4, and [EIP-100][eip-100] gives
 def timeFactor (fork : Fork) (timestamp parentTimestamp : Nat) (parentHasOmmers : Bool) : Int :=
   -- A valid block is later than its parent, so `Δ` is positive.
   let elapsed : Int := timestamp - parentTimestamp
+  -- Frontier, EIP-2 item 4: 1 if `H_s - P(H)_H_s < 13`, else -1.
   if fork < .homestead then
     if timestamp < parentTimestamp + 13 then 1 else -1
+  -- Homestead, EIP-2: `max(1 - floor((H_s - P(H)_H_s) / 10), -99)`.
   else if fork < .byzantium then
     max (1 - elapsed / 10) (-99)
+  -- From Byzantium, `varsigma_2 = max(y - floor((H_s - P(H)_H_s) / 9), -99)` of §4.3.4.
+  --
+  -- `y = 2` if the parent has ommers, else 1, by EIP-100.
   else
     max ((if parentHasOmmers then 2 else 1) - elapsed / 9) (-99)
 
 /-- The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris.
 
-```text
-    D(H) = max(D_min, P_d + ⌊P_d / 2048⌋ · factor + ε)
-```
+It is `D(H) = max(D_min, P_d + ⌊P_d / 2048⌋ · factor + ε)`.
 
 `P_d` is the parent's difficulty, and `ε` is the bomb.
 
@@ -115,11 +122,15 @@ The genesis block has no parent, and its difficulty is part of the chain's confi
 -/
 def blockDifficulty (fork : Fork) (number timestamp parentTimestamp parentDifficulty : Nat)
     (parentHasOmmers : Bool) : Nat :=
+  -- From Paris, EIP-3675: the difficulty is 0.
   if .paris ≤ fork then 0
   else
+    -- `x = floor(P(H)_H_d / 2048)`.
     let step : Int := parentDifficulty / DIFFICULTY_BOUND_DIVISOR
     let factor := timeFactor fork timestamp parentTimestamp parentHasOmmers
-    -- The minimum applies after the bomb is added, as in the formula above.
+    -- `D(H) = max(D_min, P(H)_H_d + x × varsigma_2 + epsilon)`: the minimum comes after the bomb.
+    --
+    -- EIP-100 floors at `min(P(H)_H_d, D_min)` before the bomb; this follows §4.3.4.
     max MINIMUM_DIFFICULTY (parentDifficulty + step * factor + bomb fork number).toNat
 
 end EthLib.Execution.Blocks

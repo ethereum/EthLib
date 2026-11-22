@@ -178,9 +178,13 @@ From Paris every header passes: this specification ends the rule at Paris, as it
 
 The header check takes no chain configuration, so a caller with one applies this rule as well. -/
 def daoExtraDataValid (config : ChainConfig) {fork : Fork} (header : Header fork) : Bool :=
+  -- EIP-779 sets no end; the rule ends at Paris, by the choice of this specification.
   if fork < .paris then
     match daoForkBlock config with
     | some first =>
+      -- EIP-779: the ten blocks from the fork block carry the extra data `dao-hard-fork`.
+      --
+      -- On mainnet these are the blocks `[1920000, 1920009]`.
       if first ≤ header.number ∧ header.number < first + DAO_EXTRA_DATA_BLOCKS then
         decide (header.extraData = DAO_EXTRA_DATA)
       else true
@@ -191,6 +195,7 @@ def daoExtraDataValid (config : ChainConfig) {fork : Fork} (header : Header fork
 
 Each account gives its whole balance, so the move never lacks funds. -/
 def applyDaoFork (fork : Fork) (tx : TransactionState) : Except StateError TransactionState :=
+  -- EIP-779: at the beginning of the block, all ether of each account in `L` goes to the contract.
   DAO_ACCOUNTS.foldlM
     (fun tx address => tx.moveEther fork address DAO_RECOVERY (tx.getAccount address).balance)
     tx
