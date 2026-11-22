@@ -53,23 +53,17 @@ The answer is `hi` or a limit with which the call completes.
 It is the least such limit when the limits that complete form an interval. -/
 def searchGas (v : ChainView) (tx : GenericTransaction) (p : BlockParam) (c : CallChoices)
     (lo hi : Nat) : Nat :=
+  -- `hi` stays a limit that completes, as the caller checks it first; the search stops at `lo + 1`.
   if lo + 1 < hi then
     let mid := (lo + hi) / 2
+    -- Down to `mid` when the call completes there, else up from it.
     if v.Completes tx p c mid then v.searchGas tx p c lo mid else v.searchGas tx p c mid hi
   else hi
 termination_by hi - lo
 
 /-- The answer of `eth_estimateGas`: a gas limit with which the call completes.
 
-The source asks for an estimate, and nothing more.
-
-Its text reads "an estimate of how much gas is necessary to allow the transaction to complete".
-
-The method first runs the call at the gas limit of the request, or at the default one.
-
-If that call fails, the method fails with the error of `eth_call`, the revert of code 3 included.
-
-Otherwise it runs a binary search between 0 and that limit.
+The source asks for an estimate of the gas that lets the transaction complete, and no more.
 
 If the limits that complete form an interval, the answer is the least positive one.
 
@@ -82,10 +76,13 @@ When the request names a fee, the first call buys its whole gas limit.
 The sender must then hold that fee. -/
 def estimateGas (v : ChainView) (tx : GenericTransaction) (p : BlockParam) (c : CallChoices) :
     Except RpcError Nat := do
+  -- The call prepared as for a call: a rejection fails the method, and the gas limit is set.
   let s ← v.prepareCall tx p c
   let hi := s.transaction.gas.toNat
+  -- The call at that limit; a failure is the error of a call, the revert of code 3 included.
   let (_, o) ← v.runCall { tx with gas := some hi } p c
   let _ ← callAnswer o
+  -- Then a binary search between 0 and that limit, EthLib's choice, as the source asks an estimate.
   return v.searchGas tx p c 0 hi
 
 end ChainView
@@ -112,7 +109,7 @@ The reads are those of the state tracker, which a revert keeps.
 
 The fixture [`create-al-abi-revert.io`][abi-revert] asks for them when the call fails.
 
-Its text reads "The server should return the accessed slots regardless of failure".
+Its text asks the server to return the accessed slots regardless of failure.
 
 An address without a storage key is left out when the transaction accesses it from the start.
 
@@ -134,20 +131,26 @@ So do the contracts that the code of the call creates.
 -/
 def accessedList (s : CallSetup) (o : CallOutput) : List Access :=
   let state := o.state
+  -- The keys read or written at each address; a revert keeps the reads.
   let keys := state.storageWrites.foldl
     (fun keys address slots => keys.insert address ((keys.getD address ∅).insertMany slots.keys))
     state.storageReads
   let addresses := (state.accountReads.insertMany state.accountWrites.keys).insertMany keys.keys
+  -- Warm from the start by EIP-2929: the sender, the recipient or created contract, precompiles.
+  --
+  -- From Shapella the beneficiary too, by EIP-3651, which the text of the method does not name.
   let anyway := fun address =>
     address == s.sender || address == s.message.currentTarget ||
       (precompileAddresses s.fork).contains address ||
       (s.fork ≥ .shapella && address == s.env.coinbase)
+  -- Such an address is left out unless it has a storage key.
   addresses.toList.filterMap fun address =>
     let slots := (keys.getD address ∅).toList
     if slots.isEmpty && anyway address then none else some ⟨address, slots⟩
 
 /-- The gas that the call `s` uses, after its refund, when its message gave `o`. -/
 def callGasUsed (s : CallSetup) (o : CallOutput) : Nat :=
+  -- The gas used by the rule of a transaction, from its gas left with the reservoir and its refund.
   gasUsed s.fork s.sender s.transaction (o.gasLeft + o.reservoir) o.refund
 
 /-- The message of the error that `eth_call` answers for the output `o`, or none for data. -/
@@ -178,9 +181,13 @@ It also fails when the second call is rejected, such as when the gas no longer c
 -/
 def createAccessList (v : ChainView) (tx : GenericTransaction) (p : BlockParam)
     (c : CallChoices) : Except RpcError AccessListResult := do
+  -- The call as requested.
   let (s, o) ← v.runCall tx p c
+  -- No access list before Berlin, by the text of the method: code -32000.
   ensure (.berlin ≤ s.fork) (callRuleError "no access list before Berlin")
+  -- The addresses and keys it accessed.
   let accessList := accessedList s o
+  -- The call again with that list; its gas used and its error are the answer.
   let (s, o) ← v.runCall { tx with accessList := some accessList } p c
   return { accessList, gasUsed := callGasUsed s o, error := callErrorMessage o }
 

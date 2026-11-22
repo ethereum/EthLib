@@ -102,12 +102,15 @@ def genericTransactionFields : List String :=
 
 A field outside the schema is rejected even when its value is `null`. -/
 def genericTransaction (j : Json) : Read GenericTransaction := do
+  -- The schema allows no field that it does not name.
   if let .obj kvs := j then
     unless hasOnly kvs.toList genericTransactionFields do
       reject "transaction: a field outside the schema"
+  -- Each field is optional; a field of value null counts as absent, a leniency beyond the schema.
   let fs ← fields "transaction" j
   let opt {α : Type} (name : String) (f : String → Json → Read α) : Read (Option α) :=
     (fs.lookup name).mapM (f name)
+  -- The type is a byte, each other number an unsigned integer with no bound, but authorizations.
   return {
     type := ← opt "type" byte
     nonce := ← opt "nonce" uint
@@ -134,17 +137,25 @@ namespace GenericTransaction
 
 A blob fee cap alone names no fee. -/
 def namesFee (tx : GenericTransaction) : Bool :=
+  -- A gas price, a fee cap or a priority fee; the blob fee cap is not one of them.
   tx.gasPrice.isSome || tx.maxFeePerGas.isSome || tx.maxPriorityFeePerGas.isSome
 
 /-- The kind of the transaction: its type, else the latest kind whose own fields it has. -/
 def kind (tx : GenericTransaction) : UInt8 :=
   match tx.type with
+  -- The type of the request, when it names one.
   | some t => t
+  -- Else EthLib's inference, since the source fixes no kind: the latest kind whose fields it has.
   | none =>
+    -- An authorization list: type 4, EIP-7702.
     if tx.authorizationList.isSome then 4
+    -- Blob hashes or a blob fee cap: type 3, EIP-4844.
     else if tx.blobVersionedHashes.isSome || tx.maxFeePerBlobGas.isSome then 3
+    -- A fee cap or a priority fee: type 2, EIP-1559.
     else if tx.maxFeePerGas.isSome || tx.maxPriorityFeePerGas.isSome then 2
+    -- An access list: type 1, EIP-2930.
     else if tx.accessList.isSome then 1
+    -- Else a legacy transaction.
     else 0
 
 end GenericTransaction
