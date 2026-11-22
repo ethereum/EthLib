@@ -89,21 +89,30 @@ def decimalValue : List UInt8 → Nat → Option Nat
 
 /-- Parse one decimal child index without a BIP-32 apostrophe, ERC-2334, Backwards Compatibility. -/
 def parseIndex (segment : String) : Except KeyPathError UInt32 := do
+  -- Path: the indices are integers; EthLib reads nonempty ASCII decimal digits.
+  --
+  -- Backwards Compatibility: the `'` character is invalid.
   let bytes := segment.toByteArray.data.toList
   if bytes.isEmpty then throw (.invalidIndex segment)
   let some value := decimalValue bytes 0 | throw (.invalidIndex segment)
+  -- ERC-2333, The Tree Structure: `0 <= i < 2**32`.
   if value < 2 ^ 32 then return UInt32.ofNat value
   else throw (.indexOutOfRange value)
 
 /-- Parse a purpose-12381 path of at least four indices, ERC-2334, Path and Purpose. -/
 def parsePath (text : String) : Except KeyPathError Path := do
   -- The character splitter reduces in the kernel; splitting on the string "/" does not.
+  --
+  -- Notation: `/` separates the tree into depths.
   match text.splitToList (· == '/') with
   | root :: parts =>
+    -- Notation: `m` denotes the master node.
     if root != "m" then throw (.invalidRoot root)
+    -- Path: `m / purpose / coin_type / account / use`, and at least 4 levels MUST be used.
     match parts with
     | purpose :: coinType :: account :: use :: subpath =>
       let purpose ← parseIndex purpose
+      -- Purpose: `purpose` is set to `12381`.
       if purpose != PURPOSE then throw (.invalidPurpose purpose)
       return ⟨← parseIndex coinType, ← parseIndex account, ← parseIndex use,
         ← subpath.mapM parseIndex⟩
@@ -115,9 +124,13 @@ def Path.toString (path : Path) : String :=
   "m/" ++ String.intercalate "/" (path.indices.map fun index => ToString.toString index.toNat)
 
 /-- The Ethereum withdrawal path, ERC-2334, Validator keys. -/
-def withdrawalPath (index : UInt32) : Path := ⟨3600, index, 0, []⟩
+def withdrawalPath (index : UInt32) : Path :=
+  -- `m/12381/3600/i/0`, with the coin type `3600`.
+  ⟨3600, index, 0, []⟩
 
 /-- The signing key is child zero of the withdrawal key, ERC-2334, Validator keys. -/
-def signingPath (index : UInt32) : Path := ⟨3600, index, 0, [0]⟩
+def signingPath (index : UInt32) : Path :=
+  -- `m/12381/3600/i/0/0`.
+  ⟨3600, index, 0, [0]⟩
 
 end EthLib.Cryptography.Bls.KeyPath
