@@ -19,7 +19,15 @@ The Yellow Paper, Shanghai version, records it in its appendix Anomalies on the 
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
+Only `ethereum/execution-specs` spells out the steps of the caller after its callee.
+
+The step comments quote `incorporate_child_on_success` and `incorporate_child_on_error`.
+
+They are in [Spurious Dragon's `vm/__init__.py`][es-spurious]; [Berlin's][es-berlin] adds accesses.
+
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
+[es-spurious]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/spurious_dragon/vm/__init__.py#L145-L194
+[es-berlin]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/berlin/vm/__init__.py
 -/
 
 @[expose] public section
@@ -47,6 +55,11 @@ Block 2675119 of the main network deleted that empty account after a call to it 
 The rule keeps that history, and applies when the child touched 0x03 or was a call to it. -/
 def touchedOnError (fork : Fork) (caller child : Evm fork Meter) : Std.ExtTreeSet Address :=
   let touched := caller.substate.touchedAccounts
+  -- `if RIPEMD160_ADDRESS in child_evm.touched_accounts:` 0x03 stays touched.
+  --
+  -- `if child_evm.message.current_target == RIPEMD160_ADDRESS:` it stays touched if empty.
+  --
+  -- Either case runs `evm.touched_accounts.add(RIPEMD160_ADDRESS)`.
   if fork ≥ .spuriousDragon ∧ fork < .paris ∧
       (RIPEMD160_ADDRESS ∈ child.substate.touchedAccounts ∨
         (child.message.currentTarget = RIPEMD160_ADDRESS ∧
@@ -60,7 +73,9 @@ From Spurious Dragon to Paris, they gain those of the child, and its target when
 def touchedOnSuccess (fork : Fork) (caller child : Evm fork Meter) : Std.ExtTreeSet Address :=
   let touched := caller.substate.touchedAccounts
   if fork ≥ .spuriousDragon ∧ fork < .paris then
+    -- `evm.touched_accounts.update(child_evm.touched_accounts)`.
     let touched := touched.insertMany child.substate.touchedAccounts.toList
+    -- `if account_exists_and_is_empty(..., child_evm.message.current_target):` it is touched.
     if child.state.accountExistsAndIsEmpty child.message.currentTarget then
       touched.insert child.message.currentTarget
     else touched
@@ -74,18 +89,28 @@ A child that succeeds also passes on its logs, its refund, its accounts to delet
 
 A child that fails passes on none of them. -/
 def incorporateChild (fork : Fork) (caller child : Evm fork Meter) : Evm fork Meter :=
+  -- `evm.gas_left += child_evm.gas_left`; from Glamsterdam the reservoir returns too, by EIP-8037.
   let gas := GasMeter.absorb caller.gas child.gas child.error.isNone
   if child.error.isNone then
     { caller with
       gas
       state := child.state
       substate := {
+        -- `evm.accounts_to_delete.update(child_evm.accounts_to_delete)`.
         accountsToDelete :=
           caller.substate.accountsToDelete.insertMany child.substate.accountsToDelete.toList
+        -- `evm.logs += child_evm.logs`.
         logs := caller.substate.logs ++ child.substate.logs
+        -- Not in the source: the logs that a simulation reports follow the logs.
         simulatedLogs := caller.substate.simulatedLogs ++ child.substate.simulatedLogs
         touchedAccounts := touchedOnSuccess fork caller child
+        -- `evm.refund_counter += child_evm.refund_counter`.
         refundCounter := caller.substate.refundCounter + child.substate.refundCounter
+        -- `evm.accessed_addresses.update(child_evm.accessed_addresses)`, from Berlin.
+        --
+        -- And `evm.accessed_storage_keys.update(child_evm.accessed_storage_keys)`.
+        --
+        -- The child started from the caller's sets, so its sets hold both.
         accessedAddresses := child.substate.accessedAddresses
         accessedStorageKeys := child.substate.accessedStorageKeys } }
   else

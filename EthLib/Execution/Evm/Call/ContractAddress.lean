@@ -37,25 +37,34 @@ open EthLib.Cryptography.Hash.Keccak (keccak256)
 
 /-- The address in a Keccak-256 hash: its last 20 bytes. -/
 def addressOfHash (hash : Vector UInt8 32) : Address :=
+  -- `B_{96..255}(KEC(...))`, the rightmost 160 bits.
   hash.drop 12
 
 /-- The preimage of the address of CREATE: the RLP list of the sender and its nonce.
 
 The encoding succeeds for every nonce below `2^256`. -/
 def createPreimage (sender : Address) (nonce : Nat) : Except RlpError ByteArray :=
+  -- `L_A(s, n, zeta, i) = RLP((s, n))` if `zeta = {}`.
   encode (.list [Codec.toItem sender, Codec.toItem nonce])
 
 /-- The address of the contract that the sender makes with CREATE, at its nonce. -/
 def createAddress (sender : Address) (nonce : Nat) : Except RlpError Address := do
+  -- `ADDR(s, n, zeta, i) = B_{96..255}(KEC(L_A(s, n, zeta, i)))`.
+  --
+  -- The paper passes `sigma[s]_n - 1` after the nonce grows; callers here pass the nonce before.
   return addressOfHash (keccak256 (← createPreimage sender nonce))
 
 /-- The preimage of the address of CREATE2: `0xff`, the sender, the salt, the hash of the code. -/
 def create2Preimage (sender : Address) (salt : U256) (initCodeHash : Vector UInt8 32) :
     ByteArray :=
+  -- `L_A(s, n, zeta, i) = (255) . s . zeta . KEC(i)` otherwise.
+  --
+  -- EIP-1014 writes it `0xff ++ address ++ salt ++ keccak256(init_code)`.
   ⟨#[0xff]⟩ ++ ⟨sender.toArray⟩ ++ ⟨(U256.toBeBytes salt).toArray⟩ ++ ⟨initCodeHash.toArray⟩
 
 /-- The address of the contract that the sender makes with CREATE2, from a salt and init code. -/
 def create2Address (sender : Address) (salt : U256) (initCode : ByteArray) : Address :=
+  -- EIP-1014: `keccak256( 0xff ++ address ++ salt ++ keccak256(init_code))[12:]`.
   addressOfHash (keccak256 (create2Preimage sender salt (keccak256 initCode)))
 
 end EthLib.Execution.Evm
