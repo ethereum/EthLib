@@ -834,6 +834,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, three list lemmas of Base give way to the Batteries lemmas they repeat ([#3839](https://github.com/ethereum/EthLib/issues/3839)).
+  `Base.forall₂_of_mapM_ok` and `Base.mapM_ok_of_forall₂` are the two directions of `List.mapM_eq_ok_iff_forall₂`.
+  `Base.forall₂_of_mapM_some` is the forward direction of `List.mapM_eq_some_iff_forall₂`.
+  The module `EthLib.Base.Proofs.FoldlM` is gone: `Base.foldlM_exists_ok_of_distinct` is now in `EthLib.Base.Proofs.MapM`, unchanged.
+
 - In Lean, the big-endian conversions of other layers are defined through `Base.bytesToNat` and `Base.natToBytes` ([#3838](https://github.com/ethereum/EthLib/issues/3838)).
   The reading side covers RLP scalars, AES counter blocks and the size in an RLPx frame header.
   The writing side covers AES counter blocks, `I2OSP` of hash to curve, that frame size, RPC storage keys and the counter of a discv5 nonce.

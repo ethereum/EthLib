@@ -1,10 +1,10 @@
 module
 
-public import EthLib.Base.Proofs.Forall2
 public import EthLib.Consensus.Containers.Requests
 public import EthLib.Consensus.Proofs.Containers.Builder
 public import EthLib.Consensus.Proofs.Containers.Execution
 public import EthLib.Consensus.Proofs.Containers.Misc
+import Batteries.Data.List.Lemmas
 public import Mathlib.Data.List.Forall2
 
 /-!
@@ -93,7 +93,7 @@ theorem getExecutionRequestsList_spec {preset : Preset} {fork : Fork}
     List.Forall₂
       (fun list bytes => ∃ data, list.bytes = .ok data ∧ bytes = ⟨list.type.toArray⟩ ++ data)
       (requests.typedLists.filter (·.count != 0)) out := by
-  refine (forall₂_of_mapM_ok made).imp fun list bytes step => ?_
+  refine (List.mapM_eq_ok_iff_forall₂.mp made).imp fun list bytes step => ?_
   cases data : list.bytes with
   | error e => simp [data, bind, Except.bind] at step
   | ok data' =>
