@@ -93,6 +93,27 @@ Such a defect must never stay only in EthLib: report it to the repository that o
 Bugs come from EthLib's own work.
 Do not search the upstream repositories for bugs outside of it.
 
+### Implementations of an affected rule
+
+EthLib is a specification, and no implementation of the protocol is a source for its rules, as [Sources of truth](#sources-of-truth) says.
+Their code is worth reading as a check on EthLib's own work.
+A defect in a specification often lives on in the code built from it.
+An edge case that an implementation handles with care can point to a proof or a test vector that EthLib lacks.
+
+When EthLib work finds a defect, or a rule with a subtle edge case, look at how the main implementations of that rule handle it.
+For the protocol, these are the consensus and execution clients.
+For a shared component, such as libp2p, BLS signatures or KZG commitments, they are the libraries that the clients use for it.
+Look only at the implementations of the rule that the work touches: do not scan their repositories for other bugs.
+
+- If the flaw is a security vulnerability, do not disclose it in public.
+  Report it privately through the security policy of that repository, or through the [Ethereum bug bounty program](https://ethereum.org/bug-bounty/) when the program covers it.
+- Otherwise, confirm the flaw at the head of the default branch of that repository, and search its open and closed issues and pull requests.
+  Then open a pull request or an issue there, in its style, as for a defect in a document.
+- If an implementation shows a case that EthLib does not prove or test, open an EthLib issue for the missing proof or vector.
+  Take the expected result from the specification, never from the implementation.
+  Describe the case from the documents alone: EthLib's own issues, pull requests and code never name an implementation.
+- Keep reports to an implementation out of EthLib: a link to one names the implementation, and a link to a private report discloses it.
+
 ## Layout
 
 ```text
