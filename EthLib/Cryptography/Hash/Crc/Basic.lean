@@ -50,7 +50,9 @@ The eight bits of a byte enter the division as the next eight coefficients of M(
 The least significant bit of a byte is its highest coefficient, so it enters first.
 -/
 def shiftByte (g : UInt32) (r : UInt32) (byte : UInt8) : UInt32 :=
-  -- Bit 7 of the lowest numbered byte is the most significant bit, of x^(n-1), then bit 6 follows.
+  -- Bit 7 of the lowest numbered byte is the most significant bit, of x^(n-1).
+  --
+  -- Bit 6 comes next.
   --
   -- RFC 3720 §2.3.3 numbers bits from the most significant, so its bit 7 is worth 2^0.
   (List.range 8).foldl (fun acc i => shift g acc ((byte >>> i.toUInt8) &&& 1 == 1)) r

@@ -132,7 +132,7 @@ Each round applies four quarter-rounds, one per column or row. -/
   let x15 := s.x15
   -- The first 16 updates of RFC 7914 §3, the column round.
   --
-  -- They start with `x_4 = x_4 xor ((x_0 + x_12) <<< 7)`.
+  -- They start with `x_4 := x_4 xor ((x_0 + x_12) <<< 7)`.
   let x4 := x4 ^^^ rotl32 (x0 + x12) 7
   let x8 := x8 ^^^ rotl32 (x4 + x0) 9
   let x12 := x12 ^^^ rotl32 (x8 + x4) 13
@@ -149,7 +149,7 @@ Each round applies four quarter-rounds, one per column or row. -/
   let x7 := x7 ^^^ rotl32 (x3 + x15) 9
   let x11 := x11 ^^^ rotl32 (x7 + x3) 13
   let x15 := x15 ^^^ rotl32 (x11 + x7) 18
-  -- The last 16 updates, the row round, start with `x_1 = x_1 xor ((x_0 + x_3) <<< 7)`.
+  -- The last 16 updates, the row round, start with `x_1 := x_1 xor ((x_0 + x_3) <<< 7)`.
   let x1 := x1 ^^^ rotl32 (x0 + x3) 7
   let x2 := x2 ^^^ rotl32 (x1 + x0) 9
   let x3 := x3 ^^^ rotl32 (x2 + x1) 13
@@ -187,7 +187,7 @@ def rounds : Nat → State → State
 def salsa208Core (input : State) : State :=
   -- The state `x` starts as the input `in`, then the eight rounds run.
   let output := rounds 4 input
-  -- Output word `i` is `x_i + in_i mod 2^32`.
+  -- Output word `i` is `(x_i + in_i) mod 2^32`.
   ⟨output.x0 + input.x0, output.x1 + input.x1, output.x2 + input.x2,
     output.x3 + input.x3, output.x4 + input.x4, output.x5 + input.x5,
     output.x6 + input.x6, output.x7 + input.x7, output.x8 + input.x8,
@@ -315,7 +315,7 @@ def scrypt (password salt : ByteArray) (n r p length : Nat) : Except ScryptError
   -- `N` must be larger than 1, a power of 2, and less than `2^(128 * r / 8)`.
   if r = 0 then throw (.invalidBlockSize r)
   if !validCost n r then throw (.invalidCost n)
-  -- `p` is positive and at most `((2^32-1) * hLen) / MFLen`, here `p * MFLen <= (2^32-1) * hLen`.
+  -- `p` is positive and at most `((2^32-1) * hLen) / MFLen`, here `p * MFLen ≤ (2^32-1) * hLen`.
   if p = 0 ∨ Pbkdf2.MAX_LENGTH < p * 128 * r then throw (.invalidParallelization p)
   -- `dkLen` is positive and at most `(2^32 - 1) * hLen`.
   if length = 0 then throw .emptyOutput

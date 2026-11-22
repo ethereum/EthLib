@@ -38,12 +38,12 @@ namespace EthLib.Cryptography.Hash.Ripemd160
 /-! ## Words -/
 
 /--
-Rotate left by `n` bits, `rol_n` of the pseudo-code.
+Rotate left by `n` bits, `rol_s` of the pseudo-code with `s = n`.
 
 The amount `n` is between 1 and 31.
 -/
 @[inline] def rol (x : UInt32) (n : UInt32) : UInt32 :=
-  -- `rol_s` is the cyclic left shift, or rotation, over s positions.
+  -- The cyclic left shift, or rotation, over `n` positions.
   (x <<< n) ||| (x >>> (32 - n))
 
 /-- The nonlinear function `f(j, x, y, z)` of the group of sixteen steps `group = j / 16`. -/
@@ -115,7 +115,7 @@ def IV : Vector UInt32 5 := #v[0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0
 
 /-- The zero bytes between the `0x80` byte and the length, so that the blocks are whole. -/
 def paddingZeros (size : Nat) : Nat :=
-  -- RFC 1320 §3.1: "0" bits until the length is congruent to 448 modulo 512.
+  -- RFC 1320 §3.1: 0 bits until the length is congruent to 448 modulo 512.
   --
   -- In bytes: the message, the byte `0x80` and the zeros fill all but 8 bytes of a 64-byte block.
   (64 - (size + 9) % 64) % 64
@@ -140,7 +140,7 @@ The padded message: the message, a set bit, zeros, then its length in bits.
 The message is whole bytes, so the set bit and the seven zero bits after it are the byte `0x80`.
 -/
 def pad (message : ByteArray) : ByteArray :=
-  -- RFC 1320 §3.1: a single "1" bit, then "0" bits; §3.2: then the 64-bit length.
+  -- RFC 1320 §3.1: a single 1 bit, then 0 bits; §3.2: then the 64-bit length.
   message.push 0x80 ++ ⟨Array.replicate (paddingZeros message.size) 0⟩ ++ lengthBytes message.size
 
 /-! ## One block -/

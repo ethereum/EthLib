@@ -182,7 +182,7 @@ def isCubeRootTimes2Pow30 (prime word : Nat) : Bool :=
 
 /-- The constants of the left line are `floor(2^30 * sqrt(p))` for p = 2, 3, 5, 7.
 
-The paper's `rmd160.txt` gives the same values. -/
+The authors' `rmd160.txt` gives the same values. -/
 theorem K_from_square_roots :
     ([2, 3, 5, 7].zip ((K.toList.drop 1).map UInt32.toNat)).all
       (fun pair => isSquareRootTimes2Pow30 pair.1 pair.2) = true ∧
@@ -191,7 +191,7 @@ theorem K_from_square_roots :
 
 /-- The constants of the right line are `floor(2^30 * cbrt(p))` for p = 2, 3, 5, 7.
 
-The paper's `rmd160.txt` gives the same values. -/
+The authors' `rmd160.txt` gives the same values. -/
 theorem K'_from_cube_roots :
     ([2, 3, 5, 7].zip ((K'.toList.take 4).map UInt32.toNat)).all
       (fun pair => isCubeRootTimes2Pow30 pair.1 pair.2) = true ∧

@@ -698,9 +698,9 @@ def xorBlockByte (rate : Nat) (S : State) (p : Nat) (b : UInt8) : State :=
 
 7. Let `Z` be the empty string.
 8. Let `Z = Z || Trunc_r(S)`.
-9. If `d <= |Z|`, then return `Trunc_d(Z)`; else continue.
+9. If `d ≤ |Z|`, then return `Trunc_d(Z)`; else continue.
 
-Here `d = 256 <= r = 1088`, so step 9 returns at once, and step 10 never runs.
+Here `d = 256 ≤ r = 1088`, so step 9 returns at once, and step 10 never runs.
 
 So the digest is `Trunc_256(S)`, lanes 0 to 3 of the state.
 
@@ -721,9 +721,9 @@ def squeeze256 (S : State) : Vector UInt8 DIGEST_LEN_256 :=
 
 7. Let `Z` be the empty string.
 8. Let `Z = Z || Trunc_r(S)`.
-9. If `d <= |Z|`, then return `Trunc_d(Z)`; else continue.
+9. If `d ≤ |Z|`, then return `Trunc_d(Z)`; else continue.
 
-Here `d = 512 <= r = 576`, so step 9 returns at once, and step 10 never runs.
+Here `d = 512 ≤ r = 576`, so step 9 returns at once, and step 10 never runs.
 
 So the digest is `Trunc_512(S)`, the 64 bytes of lanes 0 to 7, least significant byte first. -/
 def squeeze512 (S : State) : Vector UInt8 DIGEST_LEN_512 :=
@@ -846,7 +846,7 @@ A reader that breaks those conditions gives no Keccak-256 digest, so this is int
 @[inline] def Internal.keccak256Read (len : Nat) (read : Nat → UInt64) : Lanes4 :=
   -- Algorithm 8, steps 1 to 6: absorb N at r = 136 bytes, with f = KECCAK-p[1600, 24].
   --
-  -- Steps 7 to 9: the digest is Trunc_256(S), as d = 256 <= r = 1088.
+  -- Steps 7 to 9: the digest is Trunc_256(S), as d = 256 ≤ r = 1088.
   Internal.squeezeLanes256 (Internal.spongeAbsorb keccakF RATE_256 len read)
 
 /-- Keccak-256 of a string of lanes: the message of 8 bytes a lane, and its digest as lanes. -/
@@ -869,7 +869,7 @@ Unlike SHA3-512 of §6.1, the message `N` gets no `01` suffix before the padding
 def keccak512 (msg : ByteArray) : Vector UInt8 DIGEST_LEN_512 :=
   -- Algorithm 8, steps 1 to 6: absorb N at r = 72 bytes, with f = KECCAK-p[1600, 24].
   --
-  -- Steps 7 to 9: the digest is Trunc_512(S), as d = 512 <= r = 576.
+  -- Steps 7 to 9: the digest is Trunc_512(S), as d = 512 ≤ r = 576.
   Internal.squeeze512 (Internal.spongeAbsorb keccakF RATE_512 msg.size (Internal.laneAt msg))
 
 /-! ## Incremental hashing
