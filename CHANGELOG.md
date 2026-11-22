@@ -834,6 +834,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, base32 moves from Base to Networking, next to its only user, node discovery by DNS ([#3841](https://github.com/ethereum/EthLib/issues/3841)).
+  The modules `EthLib.Base.Base32` and `EthLib.Base.Proofs.Base32` are now `EthLib.Networking.Encoding.Base32` and `EthLib.Networking.Proofs.Encoding.Base32`, and the namespace `EthLib.Base.Base32` is now `EthLib.Networking.Encoding.Base32`.
+  The string forms `Base32.encode` and `Base32.decode`, which nothing used, are gone with their theorems `Base32.decode_encode` and `Base32.encode_of_decode`.
+  `Base32.decodeList_encodeList` and `Base32.encodeList_of_decodeList` state the same bijection on lists of characters.
+
 - In Lean, NFKD normalization moves from Base to Cryptography, next to the EIP-2335 keystore, its only user ([#3840](https://github.com/ethereum/EthLib/issues/3840)).
   The modules `EthLib.Base.Unicode` and `EthLib.Base.Unicode.Data` are now `EthLib.Cryptography.Unicode` and `EthLib.Cryptography.Unicode.Data`, and the namespace `EthLib.Base.Unicode` is now `EthLib.Cryptography.Unicode`.
   `EthLib.Base` no longer imports them.

@@ -19,6 +19,7 @@ public import EthLib.Networking.Proofs.Devp2p.Session
 public import EthLib.Networking.Proofs.Discv4.Exchange
 public import EthLib.Networking.Proofs.DnsDisc
 public import EthLib.Networking.Proofs.Discv4.Packet
+public import EthLib.Networking.Proofs.Encoding.Base32
 public import EthLib.Networking.Proofs.Encoding.Protobuf
 public import EthLib.Networking.Proofs.Encoding.Uvarint
 public import EthLib.Networking.Proofs.Encoding.Varint
