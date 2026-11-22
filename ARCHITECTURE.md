@@ -539,7 +539,7 @@ A reader then needs no other specification.
 A contributor may read execution-specs and consensus-specs to understand a rule and to check the work.
 The code does not cite them as the authority for a rule.
 
-The Lean text never names or links them, as [`CONTRIBUTING.md`](CONTRIBUTING.md#sources-of-truth) says.
+The Lean text and the READMEs of the modules under `EthLib/` never name or link them, as [`CONTRIBUTING.md`](CONTRIBUTING.md#sources-of-truth) says.
 Their pinned commits belong to the test suites that run their vectors.
 Step comments never trace those texts or name their functions, as [`CONTRIBUTING.md`](CONTRIBUTING.md#step-comments) explains.
 They state each step formally, in EthLib's own terms, and never quote code in a programming language.

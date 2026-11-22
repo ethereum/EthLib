@@ -45,8 +45,9 @@ You can read them to understand a rule and to check your work.
 If no primary source states a rule, state the rule itself in the doc comment.
 
 The Lean text never names or links execution-specs or consensus-specs, in a doc comment or in any other comment.
+The READMEs of the modules under `EthLib/` never name or link them either.
 Their pinned commits belong to the test suites that run their vectors, as [`ARCHITECTURE.md`](ARCHITECTURE.md#sources) explains.
-Where execution-specs or consensus-specs is the only text that states a rule, the doc comment states the rule itself, formally.
+Where execution-specs or consensus-specs is the only text that states a rule, the doc comment or the README states the rule itself, formally.
 Where a reader needs context, one short line gives it in EthLib's own words, without naming either text.
 Some EIPs state a rule only through a link to consensus-specs at a pinned commit, as EIP-4844 does for its KZG functions.
 Such a rule cites the EIP.
