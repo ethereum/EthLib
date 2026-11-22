@@ -82,13 +82,13 @@ def ExecutionPayload.empty (preset : Preset) (fork : Base.Fork) :
 It holds one once its header is not the empty header. -/
 def isMergeTransitionComplete (state : BeaconState preset fork)
     (bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam) : Bool :=
+  -- The latest payload header differs from the header whose fields are all zero or empty.
   state.latestExecutionPayloadHeader bellatrix != .empty preset fork
 
-/-- From Bellatrix: whether a block carries the first payload of the chain.
-
-The state holds no payload yet, and the payload of the block is not the empty payload. -/
+/-- From Bellatrix: whether a block carries the first payload of the chain. -/
 def isMergeTransitionBlock (state : BeaconState preset fork) (body : BeaconBlockBody preset fork)
     (bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam) : Bool :=
+  -- The state holds no payload yet, and the payload of the block is not the empty payload.
   !isMergeTransitionComplete state bellatrix &&
     body.executionPayload bellatrix != .empty preset fork
 
@@ -96,6 +96,7 @@ def isMergeTransitionBlock (state : BeaconState preset fork) (body : BeaconBlock
 -/
 def isExecutionEnabled (state : BeaconState preset fork) (body : BeaconBlockBody preset fork)
     (bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam) : Bool :=
+  -- The block is the merge block, or the state already holds a payload.
   isMergeTransitionBlock state body bellatrix || isMergeTransitionComplete state bellatrix
 
 /-! ## The execution layer -/
@@ -103,6 +104,7 @@ def isExecutionEnabled (state : BeaconState preset fork) (body : BeaconBlockBody
 /-- From Electra: the request lists of a payload request, each with its type byte. -/
 def NewPayloadRequest.requestsList (request : NewPayloadRequest preset fork) :
     Except Err (Since .pectra fork (List ByteArray)) :=
+  -- EIP-7685: each nonempty list of requests, as its type byte then its data.
   if electra : .pectra ≤ fork then do
     let lists ← getExecutionRequestsList (request.executionRequests electra)
     pure fun _ => lists
@@ -119,19 +121,20 @@ abbrev PayloadCheck (preset : Preset) (fork : Base.Fork) :=
   ExecutionPayload preset fork → Since .dencun fork Root → Since .pectra fork (List ByteArray) →
     Bool
 
-/-- Whether the execution layer accepts a payload request, from its three checks.
-
-A payload with a transaction of no bytes is invalid.
-
-The block hash of the payload must be the hash of its block, and the payload must be valid.
-
-From Deneb, the versioned hashes must also be those of the blob transactions of the payload. -/
+/-- Whether the execution layer accepts a payload request, from its three checks. -/
 def verifyAndNotify (isValidBlockHash : PayloadCheck preset fork)
     (isValidVersionedHashes : NewPayloadRequest preset fork → Bool)
     (notifyNewPayload : PayloadCheck preset fork) (request : NewPayloadRequest preset fork) :
     Except Err Bool := do
   let payload := request.executionPayload
   let requests ← request.requestsList
+  -- A payload with a transaction of no bytes is invalid.
+  --
+  -- The block hash of the payload is the hash of its block.
+  --
+  -- From Deneb, the versioned hashes are those of the blob transactions of the payload.
+  --
+  -- The payload is valid on the state of the execution layer.
   return !payload.hasEmptyTransaction &&
     isValidBlockHash payload request.parentBeaconBlockRoot requests &&
     (decide (fork < .dencun) || isValidVersionedHashes request) &&
@@ -176,60 +179,63 @@ def commitmentVersionedHash (commitment : Cryptography.Kzg.KZGCommitment) : Vers
 def BeaconBlockBody.blobCommitments (body : BeaconBlockBody preset fork)
     (bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam) :
     Array Cryptography.Kzg.KZGCommitment :=
+  -- From Deneb the commitments of the body, before it none.
   if deneb : .dencun ≤ fork then (body.blobKzgCommitments ⟨deneb, bellatrix.2⟩).data else #[]
 
-/-- From Deneb: the most blobs that a block may commit to, at the current epoch of a state.
-
-Electra raises the limit, and from Fulu the blob schedule of the configuration sets it. -/
+/-- From Deneb: the most blobs that a block may commit to, at the current epoch of a state. -/
 def maxBlobsPerBlock (config : Config) (state : BeaconState preset fork) : UInt64 :=
+  -- From Fulu the blob schedule sets it for the epoch, as EIP-7892 specifies.
   if .fusaka ≤ fork then (config.getBlobParameters (getCurrentEpoch state)).maxBlobsPerBlock
+  -- Electra raises it, as EIP-7691 specifies.
   else if .pectra ≤ fork then config.MAX_BLOBS_PER_BLOCK_ELECTRA
+  -- Deneb sets `MAX_BLOBS_PER_BLOCK`.
   else config.MAX_BLOBS_PER_BLOCK
 
-/-- The payload request of a block, for the execution layer.
-
-From Deneb it holds the versioned hashes of the blobs and the parent root of the latest header.
-
-From Electra it holds the requests of the block. -/
+/-- The payload request of a block, for the execution layer. -/
 def BeaconBlockBody.newPayloadRequest (state : BeaconState preset fork)
     (body : BeaconBlockBody preset fork) (bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam) :
     NewPayloadRequest preset fork where
   executionPayload := body.executionPayload bellatrix
+  -- From Deneb, the versioned hash of each blob commitment, in order.
   versionedHashes deneb :=
     let commitments := body.blobKzgCommitments ⟨deneb, bellatrix.2⟩
     ⟨commitments.data.map commitmentVersionedHash, by simpa using commitments.bound bellatrix.2⟩
+  -- From Deneb, the parent root of the latest block header, as EIP-4788 asks.
+  --
+  -- The header is that of this block, so the root is that of its parent.
   parentBeaconBlockRoot _ := state.latestBlockHeader.parentRoot
+  -- From Electra, the requests of the block.
   executionRequests electra := body.executionRequests ⟨electra, bellatrix.2⟩
 
-/-- From Bellatrix to Fulu: the state after the execution payload of a block.
-
-Once the merge is complete, and always from Capella, the payload must extend the latest payload.
-
-It must read the RANDAO mix of the current epoch, and carry the time of the slot of the state.
-
-From Deneb, the block must commit to at most the blobs that a block may hold.
-
-The execution layer must accept the payload request of the block.
-
-The state then keeps the header of the payload. -/
+/-- From Bellatrix to Fulu: the state after the execution payload of a block. -/
 def processExecutionPayload (config : Config) (engine : ExecutionEngine preset fork)
     (state : BeaconState preset fork) (body : BeaconBlockBody preset fork)
     (bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam) :
     Except TransitionError (BeaconState preset fork) := do
   let payload := body.executionPayload bellatrix
   let latest := state.latestExecutionPayloadHeader bellatrix
+  -- Once the merge is complete, and always from Capella, the payload extends the latest payload.
+  --
+  -- Its parent hash is the block hash of the latest payload header.
   ensure ((.shapella ≤ fork ∨ isMergeTransitionComplete state bellatrix = true) →
     payload.parentHash = latest.blockHash)
     (.wrongPayloadParentHash payload.parentHash latest.blockHash)
+  -- EIP-4399: its previous RANDAO is the latest RANDAO mix before the reveal of this block.
+  --
+  -- That is the mix of the current epoch, since the reveal of this block runs later.
   let mix ← liftAccessor (getRandaoMix state (getCurrentEpoch state))
   ensure (payload.prevRandao = mix) (.wrongPayloadRandao payload.prevRandao mix)
+  -- Its timestamp is the time of the slot of the state.
   let time ← liftAccessor (liftArith (computeTimeAtSlot config state.genesisTime state.slot))
   ensure (payload.timestamp = time) (.wrongPayloadTimestamp payload.timestamp time)
+  -- From Deneb the block commits to at most the blobs that a block may hold.
   let blobs := (body.blobCommitments bellatrix).size
   ensure (blobs ≤ (maxBlobsPerBlock config state).toNat)
     (.tooManyBlobCommitments blobs (maxBlobsPerBlock config state).toNat)
+  -- The execution layer accepts the payload request of the block.
   let valid ← liftSsz (engine.verifyAndNotifyNewPayload (body.newPayloadRequest state bellatrix))
   ensure (valid = true) (.invalidExecutionPayload payload.blockHash)
+  -- The state keeps the header of the payload.
   let header ← liftSsz payload.header
   return { state with latestExecutionPayloadHeader := fun _ => header }
 
