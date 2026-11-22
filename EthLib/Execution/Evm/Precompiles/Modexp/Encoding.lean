@@ -23,6 +23,7 @@ open EthLib.Execution.Evm (bufferRead)
 
 /-- The big-endian integer held by `size` bytes of the call data from `start`. -/
 def readNat (data : ByteArray) (start size : Nat) : Nat :=
+  -- EIP-198: "Call data is assumed to be infinitely right-padded with zero bytes".
   bytesToNat (bufferRead data start size)
 
 end EthLib.Execution.Evm.Precompiles.Modexp
