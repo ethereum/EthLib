@@ -60,13 +60,14 @@ def gas : Transaction → U256
   | .blob tx => tx.gas
   | .setCode tx => tx.gas
 
-/-- The nonce of a transaction. -/
+/-- The nonce of a transaction, as a 256-bit word. -/
 def nonce : Transaction → U256
   | .legacy tx => tx.nonce
   | .accessList tx => tx.nonce
   | .feeMarket tx => tx.nonce
   | .blob tx => tx.nonce
-  | .setCode tx => tx.nonce
+  -- A set-code transaction holds its nonce in 64 bits, which a word holds unchanged.
+  | .setCode tx => BitVec.ofNat 256 tx.nonce.toNat
 
 /-- The ether that a transaction sends, in wei. -/
 def value : Transaction → U256

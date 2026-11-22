@@ -185,8 +185,19 @@ It always has a recipient, so it never creates a contract. -/
 structure SetCodeTransaction where
   /-- The chain of the transaction, a 64-bit number. -/
   chainId : UInt64
-  /-- The number of transactions that the sender sent before. -/
-  nonce : U256
+  /-- The number of transactions that the sender sent before, a 64-bit number.
+
+  So a nonce of 2^64 or more fails at decoding.
+
+  The other kinds of transaction hold their nonce in 256 bits.
+
+  No EIP fixes this width.
+
+  Provenance: the set-code transaction class of [execution-specs][es] at `391d8a0`.
+
+  [es]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/prague/transactions.py
+  -/
+  nonce : UInt64
   /-- The most wei per unit of gas that goes to the fee recipient of the block. -/
   maxPriorityFeePerGas : U256
   /-- The most wei per unit of gas that the sender pays, base fee included. -/

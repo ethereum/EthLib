@@ -67,6 +67,13 @@ private theorem callWord_error {what : String} {n : Nat} {e : RpcError}
   split at h <;> cases h
   rfl
 
+/-- A number too large for 64 bits fails with the code of invalid parameters. -/
+private theorem callUint64_error {what : String} {n : Nat} {e : RpcError}
+    (h : callUint64 what n = .error e) : e.code = -32602 := by
+  unfold callUint64 at h
+  split at h <;> cases h
+  rfl
+
 /-- A failed check of a parameter has the code of invalid parameters. -/
 private theorem ensure_param {condition : Prop} [Decidable condition] {reason : String}
     {e : RpcError} (h : ensure condition (callParamError reason) = .error e) :
@@ -86,6 +93,7 @@ private theorem toTransaction_error {tx : GenericTransaction} {chainId : UInt64}
   all_goals subst h
   all_goals first
     | exact callWord_error (by assumption)
+    | exact callUint64_error (by assumption)
     | exact ensure_param (by assumption)
     | rfl
 
@@ -100,6 +108,18 @@ private theorem callWord_ok {what : String} {n : Nat} {x : U256}
 private theorem lt_of_callWord_ok {what : String} {n : Nat} {x : U256}
     (h : callWord what n = .ok x) : n < 2 ^ 256 :=
   callWord_ok h ▸ x.isLt
+
+/-- A number that fits 64 bits keeps its value. -/
+private theorem callUint64_ok {what : String} {n : Nat} {x : UInt64}
+    (h : callUint64 what n = .ok x) : x.toNat = n := by
+  unfold callUint64 at h
+  split at h <;> cases h
+  rfl
+
+/-- A number that fits 64 bits is below `2 ^ 64`. -/
+private theorem lt_of_callUint64_ok {what : String} {n : Nat} {x : UInt64}
+    (h : callUint64 what n = .ok x) : n < 2 ^ 64 :=
+  callUint64_ok h ▸ x.toNat_lt
 
 /-- A kind of at most 4 is one of the five types. -/
 private theorem kind_cases {k : UInt8} (h : k ≤ 4) : k = 0 ∨ k = 1 ∨ k = 2 ∨ k = 3 ∨ k = 4 := by
@@ -129,7 +149,9 @@ Type 3 and type 4 need a recipient.
 
 The nonce, the gas limit and the fee cap that the call gives are below `2 ^ 256`.
 
-So is each number of the request that the transaction carries. -/
+So is each number of the request that the transaction carries.
+
+For type 4, the nonce is below `2 ^ 64`. -/
 theorem exists_toTransaction_eq_ok_iff {tx : GenericTransaction} {chainId : UInt64}
     {nonce gas maxFee : Nat} :
     (∃ t, tx.toTransaction chainId nonce gas maxFee = .ok t) ↔
@@ -143,7 +165,8 @@ theorem exists_toTransaction_eq_ok_iff {tx : GenericTransaction} {chainId : UInt
       (3 ≤ tx.kind → tx.to.isSome) ∧
       nonce < 2 ^ 256 ∧ gas < 2 ^ 256 ∧ tx.value.getD 0 < 2 ^ 256 ∧
       tx.maxPriorityFeePerGas.getD 0 < 2 ^ 256 ∧ maxFee < 2 ^ 256 ∧
-      tx.gasPrice.getD 0 < 2 ^ 256 ∧ tx.maxFeePerBlobGas.getD 0 < 2 ^ 256 := by
+      tx.gasPrice.getD 0 < 2 ^ 256 ∧ tx.maxFeePerBlobGas.getD 0 < 2 ^ 256 ∧
+      (tx.kind = 4 → nonce < 2 ^ 64) := by
   constructor
   · rintro ⟨t, h⟩
     unfold GenericTransaction.toTransaction at h
@@ -159,6 +182,9 @@ theorem exists_toTransaction_eq_ok_iff {tx : GenericTransaction} {chainId : UInt
       have := lt_of_callWord_ok (what := "maxFeePerGas") (by assumption)
       have := lt_of_callWord_ok (what := "gasPrice") (by assumption)
       try have := lt_of_callWord_ok (what := "maxFeePerBlobGas") (by assumption)
+      -- Type 4 checks the word of the nonce again, against `2 ^ 64`.
+      try have := lt_of_callUint64_ok (what := "nonce") (by assumption)
+      try have := callWord_ok (what := "nonce") (by assumption)
       simp only [ensure_ok_iff] at *
     all_goals simp_all
     -- Only type 4 is left, which no branch names by its number.
@@ -166,12 +192,13 @@ theorem exists_toTransaction_eq_ok_iff {tx : GenericTransaction} {chainId : UInt
       have := kind_eq_four ‹tx.kind ≤ 4› ‹¬tx.kind = 0› ‹¬tx.kind = 1› ‹¬tx.kind = 2›
         ‹¬tx.kind = 3›
       simp_all
-  · rintro ⟨hk, h1, h2, h3, h4, h5, h6, h7, hn, hg, hv, hp, hm, hgp, hb⟩
+  · rintro ⟨hk, h1, h2, h3, h4, h5, h6, h7, hn, hg, hv, hp, hm, hgp, hb, h64⟩
     unfold GenericTransaction.toTransaction
     rcases kind_cases hk with hk' | hk' | hk' | hk' | hk' <;>
     rcases hc : tx.chainId with _ | c <;>
     rcases hto : tx.to with _ | to <;>
-    simp_all [ensure, callWord, bind, Except.bind, pure, Except.pure]
+    simp_all [ensure, callWord, callUint64, Nat.mod_eq_of_lt hn, bind, Except.bind, pure,
+      Except.pure]
 
 /-- The blobs, commitments and proofs of a request leave the result of the conversion unchanged.
 
@@ -216,6 +243,8 @@ private theorem toTransaction_fields {tx : GenericTransaction} {chainId : UInt64
     have := callWord_ok (what := "maxFeePerGas") (by assumption)
     have := callWord_ok (what := "gasPrice") (by assumption)
     try have := callWord_ok (what := "maxFeePerBlobGas") (by assumption)
+    try have := callUint64_ok (what := "nonce") (by assumption)
+    have := lt_of_callWord_ok (what := "nonce") (by assumption)
     simp only [ensure_ok_iff] at *
   all_goals simp_all [Transaction.type, Transaction.nonce, Transaction.gas, Transaction.value,
     Transaction.to, Transaction.data, Transaction.accesses, Transaction.authorizations,

@@ -824,6 +824,17 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the nonce of a set-code transaction is `UInt64`, and the other kinds keep a nonce of 256 bits ([#3846](https://github.com/ethereum/EthLib/issues/3846)).
+  So a set-code transaction with a nonce of `2^64` or more fails at decoding, with `scalarTooLarge`, where the rule of EIP-2681 refused it with `nonceOverflow`.
+  `Transaction.nonce` still returns a `U256`, and gives the 64-bit nonce unchanged.
+  `typedFields` takes the nonce as a `Nat`.
+  The JSON reader of transactions reads the nonce of type 4 as a 64-bit quantity.
+  `GenericTransaction.toTransaction` refuses a type 4 nonce of `2^64` or more with `nonce: too large`, through the new `callUint64`.
+  `exists_toTransaction_eq_ok_iff` gains the conjunct `tx.kind = 4 → nonce < 2 ^ 64`.
+  Migration: read `tx.nonce.toNat` of a `SetCodeTransaction` where a natural number is needed.
+  `eth_simulateV1` answers a set-code call with such a nonce with -32602 and `transaction: nonce: too large`, where it answered -32603.
+  In Python, `transactions.check`, `tx_hash`, `recover_sender` and `intrinsic_gas` report `decoding: field 1: scalarTooLarge <nonce> 64` for such a transaction.
+
 - The configuration reader of the exports refuses an activation, by block or by time, of `2^64` or more, as the reader of a client configuration file already refused such a time ([#3854](https://github.com/ethereum/EthLib/issues/3854)).
   `Base.ACTIVATION_BOUND` is that bound, `2^64`: the fork identifier of EIP-2124 and EIP-6122 hashes each fork block and time as a `uint64`.
   The file reader, the export reader and `eth_config` all read it, and the doc of the file reader's error now cites the fork identifier instead of a block's time.
