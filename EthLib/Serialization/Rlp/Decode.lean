@@ -34,11 +34,14 @@ namespace EthLib.Serialization.Rlp
 
 /-- The number that the `k` bytes of `input` from `pos` write in base 256, after the value `acc`.
 
-Each byte multiplies the value so far by 256, then adds itself. -/
+With `acc = 0`, it is the `x` that the equation for `BE` gives for those bytes. -/
 def readBigEndian (input : ByteArray) (pos k acc : Nat)
     (inside : pos + k ≤ input.size := by omega) : Nat :=
   match k with
   | 0 => acc
+  -- Horner's rule for `x = sum_{n=0}^{m-1} b_n * 256^(m - 1 - n)` over the `m` bytes.
+  --
+  -- Each byte `b_n` takes the value so far times 256, plus `b_n`.
   | k + 1 => readBigEndian input (pos + 1) k
       (256 * acc + (input[pos]'(by omega)).toNat) (by omega)
 
@@ -48,22 +51,22 @@ The bytes of `input` from `pos` to `stop` follow the first byte.
 
 The result is the kind of payload, the number `k` of bytes that write the length, and the length.
 
-- From `0x80` to `0xb7`, a byte string of `first - 0x80` bytes, and `k = 0`.
-- From `0xb8` to `0xbf`, a byte string whose length is on the next `k = first - 0xb7` bytes.
-- From `0xc0` to `0xf7`, a list payload of `first - 0xc0` bytes, and `k = 0`.
-- From `0xf8` to `0xff`, a list payload whose length is on the next `k = first - 0xf7` bytes.
+A byte below `0x80` is its own encoding and announces nothing, so it is not passed here.
 
-A byte below `0x80` is its own encoding and announces nothing, so it is not passed here. -/
+The Yellow Paper defines only the encoding, so each case inverts a case of `R_b` or `R_l`. -/
 def readPrefix (input : ByteArray) (first : UInt8) (pos stop : Nat)
     (bounded : stop ≤ input.size := by omega) :
     Except RlpError (PayloadKind × Nat × Nat) :=
-  -- The short forms write the length in the first byte.
+  -- From `0x80` to `0xb7`, `R_b` case 2: a byte string of `first - 128` bytes, and `k = 0`.
   if first < 0xb8 then
     .ok (.bytes, 0, first.toNat - 0x80)
+  -- From `0xb8` to `0xbf`, `R_b` case 3: `k = first - 183` bytes of `BE(||x||)` follow.
   else if first < 0xc0 then
     readLongLength .bytes (first.toNat - 0xb7)
+  -- From `0xc0` to `0xf7`, `R_l` case 1: a list payload of `first - 192` bytes, and `k = 0`.
   else if first < 0xf8 then
     .ok (.list, 0, first.toNat - 0xc0)
+  -- From `0xf8` to `0xff`, `R_l` case 2: `k = first - 247` bytes of `BE(||s(x)||)` follow.
   else
     readLongLength .list (first.toNat - 0xf7)
 where
@@ -76,12 +79,16 @@ where
     -- No length bytes would write a length of zero, which takes the short form.
     else if zero : k = 0 then
       .error (.longFormForShortLength 0)
-    -- `BE` has no leading zero byte, and `k` is at least 1 here.
+    -- `BE` asks `b_0 ≠ 0`, so its first byte is not zero, and `k` is at least 1 here.
     else if input[pos]'(by omega) = 0 then
       .error .leadingZeroInLength
     else
       let length := readBigEndian input pos k 0 (by omega)
-      -- A length below 56 fits in the first byte, so its long form is never written.
+      -- The long form is the case `56 <= ||x|| < 2^64`, or the same for `||s(x)||`.
+      --
+      -- So a length below 56 is never in it.
+      --
+      -- With `k = first - 183` or `k = first - 247`, `k <= 8`, so the length is below `2^64`.
       if length < 56 then
         .error (.longFormForShortLength length)
       else
@@ -101,28 +108,33 @@ inductive ItemHead (pos stop : Nat) where
 It checks every rule of an item except those on the items of a list, which come later. -/
 def readHead (input : ByteArray) (pos stop : Nat) (bounded : stop ≤ input.size := by omega) :
     Except RlpError (ItemHead pos stop) :=
-  -- There is no first byte.
+  -- Every encoding has a first byte.
   if hPos : pos < stop then
     let first := input[pos]'(by omega)
-    -- A byte below `0x80` is its own encoding.
+    -- `R_b` case 1: a byte below 128 is its own encoding, a byte string of length 1.
     if first < 0x80 then
       .ok (.bytes ⟨#[first]⟩ (pos + 1) (by omega) (by omega))
     else do
       let (kind, k, length) ← readPrefix input first (pos + 1) stop
-      -- The payload starts after the `k` bytes of its length.
+      -- The payload starts after the first byte and the `k` bytes of its length.
       let start := pos + 1 + k
       -- The payload must fit in what is left of the input.
       if hFit : start + length ≤ stop then
         match kind with
         | .bytes =>
-          -- One byte below `0x80` is its own encoding, never `0x81` then the byte.
+          -- `R_b` case 2 applies only where case 1 does not.
+          --
+          -- So a single byte below 128 is never written as `0x81`, then the byte.
           if low : length = 1 ∧ ∃ inside : start < input.size, input[start] < 0x80 then
             .error (.singleByteWithPrefix (input[start]'low.2.1))
+          -- The byte string `x` is the payload itself.
           else
             .ok (.bytes (input.extract start (start + length)) (start + length) (by omega) hFit)
+        -- The payload of a list is `s(x)`, which the caller splits into items.
         | .list => .ok (.list start (start + length) (by omega) (by omega) hFit)
       else
         .error (.inputTooShort length (stop - start))
+  -- No first byte: the input ends early.
   else
     .error (.inputTooShort 1 0)
 
@@ -144,17 +156,21 @@ A nested list opens on top of `current`, and returns to it when its payload ends
 So the loop runs in constant native stack, whatever the depth of the nesting. -/
 def decodeItemsLoop (input : ByteArray) (pos : Nat) (current : OpenList input.size)
     (outer : List (OpenList input.size)) : Except RlpError (List Item) :=
+  -- `s(x)` of the list is read factor by factor, each factor `RLP(x[i])` inside the payload.
   if hPos : pos < current.stop then
     match readHead input pos current.stop current.bounded with
     | .error e => .error e
+    -- A byte string `x[i]` joins the items of the list.
     | .ok (.bytes value next after within) =>
       decodeItemsLoop input next { current with done := .bytes value :: current.done } outer
+    -- A list `x[i]` opens, and its own payload is read before the rest of this one.
     | .ok (.list start next after ordered within) =>
       decodeItemsLoop input start ⟨next, by have := current.bounded; omega, []⟩ (current :: outer)
   else
     -- The payload of `current` ends at `pos`, so the list is whole.
     match outer with
     | [] => .ok current.done.reverse
+    -- The whole list is the next item of the list that holds it.
     | parent :: rest =>
       decodeItemsLoop input pos
         { parent with done := .list current.done.reverse :: parent.done } rest
@@ -228,10 +244,12 @@ def splitItems (input : ByteArray) (pos stop : Nat) (bounded : stop ≤ input.si
   if pos < stop then
     match readHead input pos stop bounded with
     | .error e => .error e
+    -- Each factor `RLP(x[i])` of `s(x)` is the bytes from its first byte to the end of its payload.
     | .ok (.bytes _ next _ _) =>
       splitItems input next stop bounded (done.push (input.extract pos next))
     | .ok (.list _ next _ _ _) =>
       splitItems input next stop bounded (done.push (input.extract pos next))
+  -- The factors end exactly at the end of the payload.
   else
     .ok done
 termination_by stop - pos
@@ -242,7 +260,9 @@ Only the head of each item is read, so the items themselves are not checked. -/
 def listEncodings (input : ByteArray) : Except RlpError (List ByteArray) :=
   match readHead input 0 input.size with
   | .error e => .error e
+  -- The input must be `R_l(x)` for a list `x`, not `R_b(x)`.
   | .ok (.bytes ..) => .error .bytesAsList
+  -- The factors of `s(x)`, when the encoding of the list is the whole input.
   | .ok (.list start next _ _ within) =>
     if next = input.size then (splitItems input start next within #[]).map (·.toList)
     else .error (.trailingBytes (input.size - next))
@@ -268,6 +288,7 @@ def Encoded.parts (e : Encoded) : Except RlpError (List Encoded) :=
 The envelope is `[request-id, payload]`, and the payload is a list. -/
 def payloadEncodings (data : ByteArray) : Except RlpError (List ByteArray) := do
   match ← listEncodings data with
+  -- Exactly two items: the request ID, which is skipped, then the payload list.
   | [_, payload] => listEncodings payload
   | encodings => throw (.wrongFieldCount 2 encodings.length)
 
