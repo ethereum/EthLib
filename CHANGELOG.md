@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- `keepsNonceOrCode_processMessage` and `keepsNonceOrCode_processCreateMessage` prove that from Spurious Dragon every call and creation lowers no nonce and keeps a nonce or code wherever an account has one, with no hypothesis on the state ([#4038](https://github.com/ethereum/EthLib/issues/4038), third part).
+  `processMessage_rebuildState` and `processCreateMessage_rebuildState` also need the rebuild property of the state, a code condition at the target or a deployable target, and a value condition.
+  `stepRules_keepsNonceOrCode` gives the same for each step, at every fork.
+
 - `nonceOrCodeFreshSlots` counts the fresh slots of the accounts with a nonce or code, the only accounts where code runs ([#4038](https://github.com/ethereum/EthLib/issues/4038), second part).
   `sstoreStateGas_sub_sstoreStateRefill_of_hasNonceOrCode` proves that from Glamsterdam a storage write at such an account pays for them: its state gas net of its refill is the state gas of a new slot times their change.
   The count stays through a read, a write of transient storage, a change that keeps the nonce and the code, a move of ether, a touch, a nonce rise or new code at an account that already has a nonce or code, and the start of a creation at an account with none.
