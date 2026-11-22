@@ -17,7 +17,7 @@ The tool finds the rules by their type, so a new rule is listed without editing 
 - A rule from the fork to `Nat` gives one value per fork.
 - A rule from the fork and a `Bool` to `Nat` gives two values per fork, one per `Bool`.
 - A rule from the fork to `Option Nat` gives one value per fork, or none.
-- A rule from the fork to a structure gives one value per field of type `Nat`.
+- A rule from the fork to a structure gives one value per field of type `Nat` or `UInt64`.
 - A rule whose structure is given from a fork on gives those values from that fork, and none before.
 
 It skips every other type, such as a list of addresses or an opcode table.
@@ -78,9 +78,9 @@ inductive Shape where
   | bool (arg : Bool)
   /-- `Fork → Option Nat`. -/
   | option
-  /-- `Fork → S`, one field of `S` of type `Nat`. -/
+  /-- `Fork → S`, one field of `S` of type `Nat` or `UInt64`. -/
   | field (proj : Name)
-  /-- `(fork : Fork) → Since first fork S`, one field of `S` of type `Nat`. -/
+  /-- `(fork : Fork) → Since first fork S`, one field of `S` of type `Nat` or `UInt64`. -/
   | since (first : Name) (proj : Name)
   deriving Inhabited
 
@@ -96,7 +96,7 @@ def natE : Expr := mkConst ``Nat
 /-- The type `Option Nat`. -/
 def optNatE : Expr := mkApp (mkConst ``Option [Level.zero]) natE
 
-/-- The projections of the fields of `S` whose type is `Nat`, in the order of the fields. -/
+/-- The projections of the fields of `S` whose type is `Nat` or `UInt64`, in field order. -/
 def natFields (env : Environment) (s : Name) : List Name :=
   if !isStructure env s then [] else
     (getStructureFields env s).toList.filterMap fun f =>
@@ -104,7 +104,8 @@ def natFields (env : Environment) (s : Name) : List Name :=
       match env.find? proj with
       | some info =>
         match info.type with
-        | .forallE _ (.const s' []) (.const ``Nat []) _ => if s' == s then some proj else none
+        | .forallE _ (.const s' []) (.const t []) _ =>
+          if s' == s && (t == ``Nat || t == ``UInt64) then some proj else none
         | _ => none
       | none => none
 
@@ -164,6 +165,13 @@ def forks (c : Config) (env : Environment) : Option (List Name) :=
   | some (.inductInfo info) => some info.ctors
   | _ => none
 
+/-- The field `p` of `e`, read as a term of type `Nat`. -/
+def fieldTerm (p : Name) (e : Expr) : MetaM Expr := do
+  let read := mkApp (mkConst p) e
+  match (← getConstInfo p).type with
+  | .forallE _ _ (.const ``UInt64 []) _ => return mkApp (mkConst ``UInt64.toNat) read
+  | _ => return read
+
 /-- The value of a rule at a fork, as a term of type `Option Nat`. -/
 def valueTerm (fs : List Name) (r : Rule) (fork : Name) : MetaM Expr := do
   let some_ (e : Expr) := mkApp2 (mkConst ``Option.some [Level.zero]) natE e
@@ -173,12 +181,12 @@ def valueTerm (fs : List Name) (r : Rule) (fork : Name) : MetaM Expr := do
   | .nat => return some_ at_
   | .bool b => return some_ (mkApp at_ (toExpr b))
   | .option => return at_
-  | .field p => return some_ (mkApp (mkConst p) at_)
+  | .field p => return some_ (← fieldTerm p at_)
   | .since first p =>
     if fs.idxOf first ≤ fs.idxOf fork then
       -- The compiler erases the proof that the fork is reached, so `lcProof` stands in for it.
       let reached ← mkAppM ``LE.le #[mkConst first, mkConst fork]
-      return some_ (mkApp (mkConst p) (mkApp at_ (mkApp (mkConst ``lcProof) reached)))
+      return some_ (← fieldTerm p (mkApp at_ (mkApp (mkConst ``lcProof) reached)))
     else
       return mkApp (mkConst ``Option.none [Level.zero]) natE
 
