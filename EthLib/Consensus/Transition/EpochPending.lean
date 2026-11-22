@@ -60,10 +60,14 @@ A known key at a position of `2^64` or more has no validator index, an overflow.
 The read at that index then always finds the validator. -/
 def depositTargetStatus (state : BeaconState preset fork) (nextEpoch : Epoch)
     (pubkey : BLSPubkey) : Except AccessorError (Bool × Bool) :=
+  -- The first validator of the registry with the key, if any.
   match state.validators.data.findIdx? (·.pubkey == pubkey) with
   | some position => do
     let index ← liftArith (ofNatChecked position)
     let validator ← getValidator state index
+    -- It exits when its exit epoch is below `FAR_FUTURE_EPOCH`.
+    --
+    -- It is withdrawn when its withdrawable epoch is below the next epoch.
     return (validator.exitEpoch < FAR_FUTURE_EPOCH, validator.withdrawableEpoch < nextEpoch)
   | none => return (false, false)
 
@@ -85,22 +89,27 @@ def passPendingDeposits (config : Config) (checks : SignatureChecks)
         pass.rest.length + pass.postponed.size ≤ deposits.length + postponed.size }
   | [] => return ⟨⟨state, [], postponed, processed, false⟩, by simp⟩
   | deposit :: rest => do
+    -- The pass stops at a deposit that waits, or once `MAX_PENDING_DEPOSITS_PER_EPOCH` are read.
     if stop deposit || preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat ≤ count then
       return ⟨⟨state, deposit :: rest, postponed, processed, false⟩, Nat.le_refl _⟩
     let (exited, withdrawn) ← liftAccessor (depositTargetStatus state nextEpoch deposit.pubkey)
+    -- A deposit to a withdrawn validator never becomes active: it is credited outside the churn.
     if withdrawn then
       let state ← applyPendingDeposit config checks state deposit
       let pass ← passPendingDeposits config checks stop nextEpoch available state processed
         (count + 1) postponed rest
       return ⟨pass.1, by have := pass.2; simp only [List.length_cons]; omega⟩
+    -- A deposit to a validator that exits is postponed to the end of the queue.
     else if exited then
       let pass ← passPendingDeposits config checks stop nextEpoch available state processed
         (count + 1) (postponed.push deposit) rest
       return ⟨pass.1, by have := pass.2; simp only [Array.size_push] at this; simp; omega⟩
     else
+      -- Any other deposit that does not fit in the churn left stops the pass: the churn is reached.
       let total ← liftAccessor (liftArith (addChecked processed deposit.amount))
       if available < total then
         return ⟨⟨state, deposit :: rest, postponed, processed, true⟩, Nat.le_refl _⟩
+      -- Else it takes its amount of churn and is credited.
       let state ← applyPendingDeposit config checks state deposit
       let pass ← passPendingDeposits config checks stop nextEpoch available state total
         (count + 1) postponed rest
@@ -110,6 +119,7 @@ def passPendingDeposits (config : Config) (checks : SignatureChecks)
 
 From Fulu there are none. -/
 def bridgeDepositsPending (state : BeaconState preset fork) : Bool :=
+  -- In Electra, the deposit index of the old mechanism is below the first index of a request.
   if electra : .pectra ≤ fork ∧ fork < .fusaka then
     have before : fork < .hegota := Nat.lt_trans electra.2 (by decide)
     state.eth1DepositIndex before < state.depositRequestsStartIndex ⟨electra.1, before⟩
@@ -117,22 +127,17 @@ def bridgeDepositsPending (state : BeaconState preset fork) : Bool :=
 
 /-- From Electra: whether a pending deposit waits for a later epoch.
 
-It waits if it entered the queue after a slot, the first slot of the finalized epoch.
-
-In Electra a request also waits while deposits of the old mechanism remain. -/
+The slot given is the first slot of the finalized epoch. -/
 def depositWaits (state : BeaconState preset fork) (finalizedSlot : Slot)
     (deposit : PendingDeposit) : Bool :=
+  -- In Electra a request waits while deposits of the old mechanism remain.
+  --
+  -- A request is a deposit with a slot after `GENESIS_SLOT`.
+  --
+  -- Any deposit waits if it entered the queue after the first slot of the finalized epoch.
   (bridgeDepositsPending state && GENESIS_SLOT < deposit.slot) || finalizedSlot < deposit.slot
 
 /-- From Electra: the state after the pending deposits of an epoch.
-
-The churn available is the churn left from the last epoch and the churn of deposits.
-
-A request waits while deposits of the old mechanism remain, in Electra only.
-
-The queue keeps the deposits not reached, then the postponed ones.
-
-If the pass stopped at the churn, the churn not used carries over, and else none does.
 
 A 64-bit overflow is an error.
 
@@ -141,14 +146,20 @@ def processPendingDeposits (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (electra : .pectra ≤ fork) :
     Except TransitionError (BeaconState preset fork) := do
   let nextEpoch ← liftAccessor (liftArith (addChecked (getCurrentEpoch state) 1))
+  -- The churn available is the churn left from the last epoch plus the churn of deposits.
+  --
+  -- From Gloas the churn of deposits is the churn of activations, as EIP-8061 specifies.
   let churn ← liftAccessor (depositChurnLimit config state)
   let available ←
     liftAccessor (liftArith (addChecked (state.depositBalanceToConsume electra) churn))
+  -- The first slot of the finalized epoch.
   let finalizedSlot ← liftAccessor
     (liftArith (computeStartSlotAtEpoch preset state.finalizedCheckpoint.epoch))
   let queue := state.pendingDeposits electra
+  -- One pass from the front of the queue, with no churn taken yet.
   let pass ← passPendingDeposits config checks (depositWaits state finalizedSlot) nextEpoch
     available state 0 0 #[] queue.data.toList
+  -- The queue keeps the deposits not reached, then the postponed ones.
   let pending : PendingDeposits preset fork :=
     ⟨pass.1.rest.toArray ++ pass.1.postponed, fun before => by
       have fits : pass.1.rest.length + pass.1.postponed.size ≤ queue.data.size := by
@@ -156,6 +167,7 @@ def processPendingDeposits (config : Config) (checks : SignatureChecks)
       have bound := queue.bound before
       rw [Array.size_append, List.size_toArray]
       omega⟩
+  -- If the pass stopped at the churn, the churn not used carries over, and else none does.
   let carried ← if pass.1.churnReached then
       liftAccessor (liftArith (subChecked available pass.1.processed))
     else pure 0
