@@ -14,15 +14,13 @@ The messages of the eth capability, read by their message ID and the negotiated 
 
 A message on the wire is its message ID, then the RLP list of its data.
 
-"Message Encoding" of [`rlpx.md`][rlpx] defines this form.
+The section Message Encoding of [`rlpx.md`][rlpx] defines this form.
 
 [rlpx]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/rlpx.md#message-encoding
 
 Here the ID is relative to the capability: Status is 0x00 whatever offset RLPx gives eth.
 
 A message whose ID the version does not use is rejected.
-
-So is a message that EthLib does not read yet.
 
 Each transaction, header and access list of a message keeps the bytes it was read from.
 
@@ -93,7 +91,7 @@ inductive Message where
 
 /-- Every way a message can be rejected. -/
 inductive EthError where
-  /-- The version does not use the message ID, or EthLib does not read that message yet. -/
+  /-- The version does not use the message ID. -/
   | unknownId (id : Nat)
   /-- The data is not RLP of the shape that the message asks for. -/
   | rlp (error : RlpError)
@@ -134,6 +132,7 @@ def id : Message → Nat
 
 /-- The envelope of a request or a response: `[request-id, payload]`, from EIP-2481. -/
 def envelope (requestId : UInt64) (payload : Item) : Item :=
+  -- EIP-2481: the request ID first, then the list of the message, as `[request-id: P, [...]]`.
   .list [Codec.toItem requestId, payload]
 
 /-- The envelope of eth/70, `[request-id, part, payload]`.
@@ -143,6 +142,9 @@ def withPart {α : Type} [Codec α] (requestId : UInt64) (part : Option α) (pay
     Item :=
   match part with
   | none => envelope requestId payload
+  -- EIP-7975, eth/70: GetReceipts is `[request-id: P, firstBlockReceiptIndex: P, [...]]`.
+  --
+  -- And Receipts is `[request-id: P, lastBlockIncomplete: {0,1}, [...]]`.
   | some p => .list [Codec.toItem requestId, Codec.toItem p, payload]
 
 /-- The data of the message, as one RLP item. -/
@@ -178,9 +180,11 @@ The envelope is `[request-id, part, payload]` from eth/70 on, and `[request-id, 
 -/
 def readWithPart {α β : Type} [Codec α] [Codec β] (version : EthVersion) (item : Item) :
     Except RlpError (UInt64 × Option α × β) := do
+  -- Before eth/70, the envelope of EIP-2481, with no part.
   if version < .eth70 then
     let (i, p) ← readEnvelope (α := β) item
     return (i, none, p)
+  -- From eth/70, EIP-7975 puts one item between the request ID and the list.
   else
     match ← item.fields 3 with
     | [i, k, p] => return (← i.field 0, some (← k.field 1), ← p.field 2)
@@ -205,6 +209,7 @@ def requestId? : Message → Option UInt64
 
 It is the response type of the request type, and it repeats the request ID. -/
 def answers (request response : Message) : Bool :=
+  -- eth.md, Protocol Messages: each response type answers one request type, with its `request-id`.
   match request, response with
   | getBlockHeaders i _, blockHeaders j _ => i == j
   | getBlockBodies i _, blockBodies j _ => i == j
@@ -225,11 +230,15 @@ On other bytes, they would keep unrelated slices.
 BlockRangeUpdate exists from eth/69 on. -/
 def ofItem (version : EthVersion) (id : Nat) (item : Item) (data : ByteArray) :
     Except EthError Message :=
+  -- Status (0x00): six fields on eth/68, seven from eth/69.
   if id = STATUS_ID then (status <$> Status.ofItem version item).mapError .rlp
+  -- NewBlockHashes (0x01): read, though a node of a proof-of-stake network discards it.
   else if id = NEW_BLOCK_HASHES_ID then (newBlockHashes <$> Codec.ofItem item).mapError .rlp
+  -- Transactions (0x02): each transaction keeps the bytes it was read from.
   else if id = TRANSACTIONS_ID then Except.mapError .rlp do
     let txs ← Codec.ofItem item
     return transactions (← Encoded.zip txs (← listEncodings data))
+  -- GetBlockHeaders (0x03) to BlockBodies (0x06), each in the envelope of EIP-2481.
   else if id = GET_BLOCK_HEADERS_ID then
     ((fun (i, r) => getBlockHeaders i r) <$> readEnvelope item).mapError .rlp
   else if id = BLOCK_HEADERS_ID then Except.mapError .rlp do
@@ -239,43 +248,59 @@ def ofItem (version : EthVersion) (id : Nat) (item : Item) (data : ByteArray) :
     ((fun (i, hs) => getBlockBodies i hs) <$> readEnvelope item).mapError .rlp
   else if id = BLOCK_BODIES_ID then
     ((fun (i, bs) => blockBodies i bs) <$> readEnvelope item).mapError .rlp
+  -- NewBlock (0x07): `[block, td: P]`, read, though a node of a proof-of-stake network discards it.
   else if id = NEW_BLOCK_ID then Except.mapError .rlp do
     match ← item.fields 2 with
     | [b, td] => return newBlock b (← td.field 1)
     | items => throw (.wrongFieldCount 2 items.length)
+  -- NewPooledTransactionHashes (0x08): `[txtypes: B, [txsize₁: P, ...], [txhash₁: B_32, ...]]`.
+  --
+  -- eth/72 appends `cells: B_16`, by EIP-8070.
+  --
+  -- eth.md: the three lists hold an equal number of items.
   else if id = NEW_POOLED_TRANSACTION_HASHES_ID then do
     let a ← (Announcement.ofItem version item).mapError .rlp
     let (t, s, h) := a.lists
     if a.lengthsAgree then return newPooledTransactionHashes a
     else throw (.unequalLengths t.size s.length h.length)
+  -- GetPooledTransactions (0x09) and PooledTransactions (0x0a), in the envelope of EIP-2481.
   else if id = GET_POOLED_TRANSACTIONS_ID then
     ((fun (i, hs) => getPooledTransactions i hs) <$> readEnvelope item).mapError .rlp
   else if id = POOLED_TRANSACTIONS_ID then Except.mapError .rlp do
     let (i, txs) ← readEnvelope item
     return pooledTransactions i (← Encoded.zip txs (← payloadEncodings data))
+  -- GetReceipts (0x0f) and Receipts (0x10); from eth/70, the forms of EIP-7975.
   else if id = GET_RECEIPTS_ID then
     ((fun (i, k, hs) => getReceipts i k hs) <$> readWithPart version item).mapError .rlp
   else if id = RECEIPTS_ID then
     ((fun (i, b, ls) => receipts i b ls) <$> readWithPart version item).mapError .rlp
+  -- GetBlockAccessLists (0x12) and BlockAccessLists (0x13), from eth/71 by EIP-8159.
   else if id = GET_BLOCK_ACCESS_LISTS_ID ∧ EthVersion.eth71 ≤ version then
     ((fun (i, hs) => getBlockAccessLists i hs) <$> readEnvelope item).mapError .rlp
   else if id = BLOCK_ACCESS_LISTS_ID ∧ EthVersion.eth71 ≤ version then Except.mapError .rlp do
     let (i, ls) ← readEnvelope item
     return blockAccessLists i (← Encoded.zip ls (← payloadEncodings data))
+  -- GetCells (0x14) and Cells (0x15), from eth/72 by EIP-8070, in the forms of eth.md.
+  --
+  -- GetCells: `[request-id: P, [txhash₁: B_32, ...], cells: B_16]`.
   else if id = GET_CELLS_ID ∧ EthVersion.eth72 ≤ version then Except.mapError .rlp do
     match ← item.fields 3 with
     | [i, hs, m] => return getCells (← i.field 0) (← hs.field 1) (← m.field 2)
     | items => throw (.wrongFieldCount 3 items.length)
+  -- Cells: `[request-id: P, [txhash₁: B_32, ...], [[cell₁: B_2048, ...], ...], cells: B_16]`.
   else if id = CELLS_ID ∧ EthVersion.eth72 ≤ version then Except.mapError .rlp do
     match ← item.fields 4 with
     | [i, hs, gs, m] => return cells (← i.field 0) (← hs.field 1) (← gs.field 2) (← m.field 3)
     | items => throw (.wrongFieldCount 4 items.length)
+  -- BlockRangeUpdate (0x11), from eth/69 by EIP-7642.
   else if id = BLOCK_RANGE_UPDATE_ID ∧ EthVersion.eth69 ≤ version then
     (blockRangeUpdate <$> Codec.ofItem item).mapError .rlp
+  -- Any other ID: the version assigns no message to it, such as 0x0b to 0x0e.
   else .error (.unknownId id)
 
 /-- The message with the ID `id` whose data is the RLP encoding `data`. -/
 def decode (version : EthVersion) (id : Nat) (data : ByteArray) : Except EthError Message := do
+  -- rlpx.md, Message Encoding: the message data is an RLP list, read here once decompressed.
   ofItem version id (← (Serialization.Rlp.decode data).mapError .rlp) data
 
 /-- The RLP encoding of the data of a message. -/
@@ -287,6 +312,7 @@ def encode (m : Message) : Except EthError ByteArray :=
 It must repeat the request ID, and its headers must pass the check of the request. -/
 def checkHeaderResponse (request response : Message) : Except HeadersError Unit :=
   match request, response with
+  -- The response mirrors the request ID, by EIP-2481, then its headers match the request.
   | getBlockHeaders i r, blockHeaders j hs => if i = j then checkHeaders r hs else throw .notAnswer
   | _, _ => throw .notAnswer
 
@@ -295,6 +321,7 @@ def checkHeaderResponse (request response : Message) : Except HeadersError Unit 
 It must repeat the request ID, and its transactions must be requested ones, in order. -/
 def checkPooledResponse (request response : Message) : Except PoolError Unit :=
   match request, response with
+  -- The response mirrors the request ID, by EIP-2481, then its transactions match the request.
   | getPooledTransactions i hs, pooledTransactions j txs =>
     if i = j then checkPooled hs txs else throw .notAnswer
   | _, _ => throw .notAnswer
@@ -307,6 +334,7 @@ There `blobs` is the number of blobs of each transaction of the response. -/
 def checkCellsResponse (blobs : List Nat) (request response : Message) :
     Except CellsError Unit :=
   match request, response with
+  -- The response mirrors the request ID, then its cells match the request.
   | getCells i requested requestMask, cells j hashes groups mask =>
     if i = j then checkCells requested requestMask blobs hashes groups mask else throw .notAnswer
   | _, _ => throw .notAnswer
@@ -315,7 +343,7 @@ def checkCellsResponse (blobs : List Nat) (request response : Message) :
 
 `expected` holds the access list hash of the header of each requested block.
 
-`eth.md` gives each element of the response one requested block.
+The section BlockAccessLists of `eth.md` gives each element of the response one requested block.
 
 So the response has exactly one entry per request.
 
