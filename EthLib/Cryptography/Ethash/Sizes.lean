@@ -73,9 +73,9 @@ def noDivisorFrom (n : Nat) : Nat → Nat → Bool
 
 /-- Whether `n` is prime, by trial division up to its square root. -/
 def isPrime (n : Nat) : Bool :=
-  -- Trial division tries every divisor from 2 to `floor(sqrt(x))`.
+  -- Trial division tries every divisor from 2 to `floor(sqrt(n))`.
   --
-  -- The specification skips `floor(sqrt(x))`, but its own tables need it tried.
+  -- The specification skips `floor(sqrt(n))`, but its own tables need it tried.
   2 ≤ n && noDivisorFrom n n 2
 
 /-- The largest `x - 2 · unit · k` whose quotient by `unit` is prime, from `x` down.
@@ -101,7 +101,7 @@ where
 
 The search starts one hash below the linear size. -/
 def cacheSize (number : Nat) : Nat :=
-  -- The linear size is `2^24 + 2^17 * floor(number / 30000)` bytes.
+  -- The linear size is `2^24 + 2^17 · floor(number / 30000)` bytes.
   --
   -- One hash, 64 bytes, comes off it, then the prime search starts.
   primeSize (CACHE_BYTES_INIT + CACHE_BYTES_GROWTH * epoch number - HASH_BYTES) HASH_BYTES
@@ -110,7 +110,7 @@ def cacheSize (number : Nat) : Nat :=
 
 The search starts one mix below the linear size. -/
 def datasetSize (number : Nat) : Nat :=
-  -- The linear size is `2^30 + 2^23 * floor(number / 30000)` bytes.
+  -- The linear size is `2^30 + 2^23 · floor(number / 30000)` bytes.
   --
   -- One mix, 128 bytes, comes off it, then the prime search starts.
   primeSize (DATASET_BYTES_INIT + DATASET_BYTES_GROWTH * epoch number - MIX_BYTES) MIX_BYTES

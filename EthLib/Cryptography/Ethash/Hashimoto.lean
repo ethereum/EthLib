@@ -36,7 +36,7 @@ structure PowOutput where
   /-- The Keccak-256 hash of the seed and the mix digest, compared with the target. -/
   result : ByteArray
 
-/-- The 32 words of the mix compressed to 8: `fnv(fnv(fnv(m[4k], m[4k+1]), m[4k+2]), m[4k+3])`.
+/-- The 32 words of the mix compressed to 8, each FNV folded over 4 consecutive words.
 
 The appendix writes a compression whose indices do not match the clients.
 
@@ -62,11 +62,11 @@ def hashimotoLight (datasetSize : Nat) (cache : Array Item) (headerHash nonce : 
   -- The 64 accesses, for `i < 64`.
   let mix := (List.range ACCESSES).foldl
     (fun mix i =>
-      -- Access `i` picks the pair `p = fnv(i xor s_0, mix_(i mod 32)) mod pairs`.
+      -- Access `i` picks the pair `p = FNV(i ⊕ s_0, mix_(i mod 32))` mod the number of pairs.
       --
       -- Here `p` counts pairs, so the items read are `2 p` and `2 p + 1`.
       let p := (fnv (i.toUInt32 ^^^ s[0]) mix[i % 32]).toNat % pairs
-      -- Word `w` of the mix becomes `fnv(mix_w, d_w)`, with `d` item `2 p` then item `2 p + 1`.
+      -- Word `w` of the mix becomes `FNV(mix_w, d_w)`, with `d` item `2 p` then item `2 p + 1`.
       --
       -- Each item is computed from the cache, as a verifier without the dataset does.
       Vector.zipWith fnv mix (datasetItem cache (2 * p) ++ datasetItem cache (2 * p + 1)))

@@ -99,7 +99,7 @@ def cacheRound (cache : Array Item) : Array Item :=
       let current := c.getD i (Vector.replicate 16 0)
       -- The item before, cyclically: item `(i - 1) mod n`.
       let previous := c.getD ((i + n - 1) % n) (Vector.replicate 16 0)
-      -- Item `v`, with `v` the first word of item `i`, mod `n`.
+      -- The second item is item `v`, with `v` the first word of item `i`, mod `n`.
       --
       -- J.3.2 reads the first byte instead.
       let other := c.getD (current[0].toNat % n) (Vector.replicate 16 0)
@@ -127,7 +127,7 @@ The appendix writes `a · (p ⊕ b)`, and the specification and every client `(a
 
 The definition follows the specification. -/
 def fnv (a b : UInt32) : UInt32 :=
-  -- `((a * p) xor b) mod 2^32`, with `p` the FNV prime.
+  -- `(a · p) ⊕ b mod 2^32`, with `p` the FNV prime.
   a * FNV_PRIME ^^^ b
 
 /-- The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3.
@@ -152,10 +152,10 @@ def datasetItem (cache : Array Item) (i : Nat) : Item :=
   -- The 256 parents, for `j < 256`.
   let mix := (List.range DATASET_PARENTS).foldl
     (fun mix j =>
-      -- Parent `j` is cache item `fnv(i xor j, mix_(j mod 16)) mod n`.
+      -- Parent `j` is cache item `FNV(i ⊕ j, mix_(j mod 16)) mod n`.
       let parent := cache.getD ((fnv (i ^^^ j).toUInt32 mix[j % 16]).toNat % n)
         (Vector.replicate 16 0)
-      -- Word `w` of the mix becomes `fnv(mix_w, parent_w)`.
+      -- Word `w` of the mix becomes `FNV(mix_w, parent_w)`.
       Vector.zipWith fnv mix parent)
     mix
   -- The item is the Keccak-512 digest of the last mix.
