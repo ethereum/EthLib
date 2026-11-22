@@ -39,7 +39,9 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- POP: drop the top word. -/
 def popStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
+  -- POP: `delta_w = 1` and `alpha_w = 0`, so the top item is dropped.
   let (_, evm) ← popWord evm
+  -- `G_base`, after the pop.
   let evm ← chargeGas evm OPCODE_POP
   return advance evm
 
@@ -47,32 +49,42 @@ def popStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
 
 The code reads as zeros past its end. -/
 def pushData (code : ByteArray) (pc n : Nat) : U256 :=
+  -- `c(mu_{pc} + 1 ... mu_{pc} + n)`, with `c(x) = 0` past the end of the code, Appendix H.2.
   BitVec.ofNat 256 (bytesToNat (bufferRead code (pc + 1) n))
 
 /-- PUSHn: push the next `n` bytes of code, then skip them.
 
 PUSH0 costs the base price, by EIP-3855, and the other pushes the very low price. -/
 def pushN (n : Fin 33) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
+  -- `G_base` for PUSH0, by EIP-3855, and `G_verylow` for the others.
   let evm ← chargeGas evm (if n.val = 0 then OPCODE_PUSH0 else OPCODE_PUSH)
+  -- `mu'_s[0]` is the next `n` bytes of code, as a big-endian word; PUSH0 pushes 0.
   let evm ← pushWord evm (pushData evm.code evm.pc n)
+  -- `N(mu_{pc}, w) = mu_{pc} + n + 1`, past the bytes that were pushed.
   return advance evm (1 + n)
 
 /-- DUP(n + 1): push a copy of the word at depth `n`. -/
 def dupN (n : Fin 16) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
+  -- `G_verylow` is charged before the stack check; `Z` does not order the two halts.
   let evm ← chargeGas evm OPCODE_DUP
   match evm.stack.val[n.val]? with
+  -- `Z` halts when `||mu_s|| < delta_w`, with `delta_w = n + 1`.
   | none => .error .stackUnderflow
+  -- DUP(n + 1): `mu'_s[0] = mu_s[n]`.
   | some x =>
     let evm ← pushWord evm x
     return advance evm
 
 /-- SWAP(n + 1): exchange the top word with the word at depth `n + 1`. -/
 def swapN (n : Fin 16) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
+  -- `G_verylow` is charged before the stack check; `Z` does not order the two halts.
   let evm ← chargeGas evm OPCODE_SWAP
   match evm.stack with
   | ⟨top :: rest, h⟩ =>
     match rest[n.val]? with
+    -- `Z` halts when `||mu_s|| < delta_w`, with `delta_w = n + 2`.
     | none => .error .stackUnderflow
+    -- SWAP(n + 1): `mu'_s[0] = mu_s[n + 1]` and `mu'_s[n + 1] = mu_s[0]`.
     | some x =>
       -- The new list has the length of the old one, so it stays within the limit.
       let swapped : Stack := ⟨x :: rest.set n.val top, by simpa using h⟩
@@ -81,12 +93,16 @@ def swapN (n : Fin 16) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter)
 
 /-- The number of bytes that the exponent of EXP takes, without leading zero bytes. -/
 def exponentBytes (exponent : U256) : Nat :=
+  -- `1 + floor(log_256(mu_s[1]))` for `mu_s[1] > 0`, and 0 for `mu_s[1] = 0`.
   (bitLength exponent.toNat + 7) / 8
 
 /-- EXP: the base price, plus a price per byte of the exponent that depends on the fork. -/
 def expStep (fork : Fork) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let (base, evm) ← popWord evm
   let (exponent, evm) ← popWord evm
+  -- Appendix H.1: `G_exp + G_expbyte × (1 + floor(log_256(mu_s[1])))`, or `G_exp` for 0.
+  --
+  -- EIP-160 raises `G_expbyte` from 10 to 50 at Spurious Dragon.
   let cost := OPCODE_EXP_BASE + (gasSchedule fork).OPCODE_EXP_PER_BYTE * exponentBytes exponent
   let evm ← chargeGas evm cost
   let evm ← pushWord evm (exp base exponent)
@@ -94,14 +110,18 @@ def expStep (fork : Fork) (evm : Evm fork Meter) : Except EvmError (Evm fork Met
 
 /-- The price of KECCAK256 on `size` bytes, before the growth of memory: 30 and 6 for each word. -/
 def keccak256Cost (size : U256) : Nat :=
+  -- Appendix H.1: `G_keccak256 + G_keccak256word × ceil(mu_s[1] / 32)`.
   OPCODE_KECCAK256_BASE + OPCODE_KECCAK256_PER_WORD * wordCount size.toNat
 
 /-- KECCAK256: hash `size` bytes of memory from `start`, after the memory grows to hold them. -/
 def keccak256Step (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let (start, evm) ← popWord evm
   let (size, evm) ← popWord evm
+  -- The price, plus `C_mem(mu'_i) - C_mem(mu_i)` with `mu'_i = M(mu_i, mu_s[0], mu_s[1])`.
   let evm ← chargeGasAndMemory evm (keccak256Cost size) [(start, size)]
+  -- `mu_m[mu_s[0] ... (mu_s[0] + mu_s[1] - 1)]`.
   let data := memoryReadBytes evm.memory start.toNat size.toNat
+  -- `mu'_s[0] = KEC` of those bytes.
   let evm ← pushWord evm (keccak data)
   return advance evm
 
