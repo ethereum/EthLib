@@ -57,16 +57,16 @@ def ChaCha20Poly1305Error.code : ChaCha20Poly1305Error → UInt32
 
 /-- Add, XOR and rotate four 32-bit words, RFC 8439 §2.1. -/
 def quarterRound (a b c d : UInt32) : UInt32 × UInt32 × UInt32 × UInt32 :=
-  -- `a = a + b`, then `d = (d xor a) <<< 16`.
+  -- `a := a + b mod 2^32`, then `d := (d xor a) <<< 16`.
   let a := a + b
   let d := rotl32 (d ^^^ a) 16
-  -- `c = c + d`, then `b = (b xor c) <<< 12`.
+  -- `c := c + d mod 2^32`, then `b := (b xor c) <<< 12`.
   let c := c + d
   let b := rotl32 (b ^^^ c) 12
-  -- `a = a + b`, then `d = (d xor a) <<< 8`.
+  -- `a := a + b mod 2^32`, then `d := (d xor a) <<< 8`.
   let a := a + b
   let d := rotl32 (d ^^^ a) 8
-  -- `c = c + d`, then `b = (b xor c) <<< 7`.
+  -- `c := c + d mod 2^32`, then `b := (b xor c) <<< 7`.
   let c := c + d
   let b := rotl32 (b ^^^ c) 7
   (a, b, c, d)
@@ -76,14 +76,14 @@ def quarterRoundState (s : State) (a b c d : Fin 16) : State :=
   let (w, x, y, z) := quarterRound s[a] s[b] s[c] s[d]
   (((s.set a w).set b x).set c y).set d z
 
-/-- Four column rounds, then four diagonal rounds, RFC 8439 §2.3. -/
+/-- One column round, then one diagonal round, of four quarter rounds each, RFC 8439 §2.3. -/
 def doubleRound (s : State) : State :=
-  -- §2.3.1, the inner block: column rounds, the quarter rounds on (0, 4, 8, 12) to (3, 7, 11, 15).
+  -- §2.3.1, the inner block: the column round, quarter rounds on (0, 4, 8, 12) to (3, 7, 11, 15).
   let s := quarterRoundState s 0 4 8 12
   let s := quarterRoundState s 1 5 9 13
   let s := quarterRoundState s 2 6 10 14
   let s := quarterRoundState s 3 7 11 15
-  -- The diagonal rounds are quarter rounds on (0, 5, 10, 15) to (3, 4, 9, 14).
+  -- The diagonal round, quarter rounds on (0, 5, 10, 15) to (3, 4, 9, 14).
   let s := quarterRoundState s 0 5 10 15
   let s := quarterRoundState s 1 6 11 12
   let s := quarterRoundState s 2 7 8 13
@@ -127,7 +127,7 @@ def block (key : Key) (counter : UInt32) (nonce : Nonce) : Vector UInt8 64 :=
 
 /-- Successive blocks after the caller checks their counter bound, RFC 8439 §2.4. -/
 def keyStream (key : Key) (counter : UInt32) (nonce : Nonce) (blocks : Nat) : ByteArray :=
-  -- §2.4.1: block `j` of the key stream is the ChaCha20 block of the key, `counter + j`, the nonce.
+  -- §2.4.1: key stream block `j` is the ChaCha20 block of the key, `counter + j` and the nonce.
   (List.range blocks).foldl (fun bytes i =>
     bytes ++ packBytes (block key (counter + UInt32.ofNat i) nonce)) .empty
 
@@ -160,7 +160,7 @@ def poly1305Accumulator (r : Nat) (message : ByteArray) : Nat :=
     --
     -- For a chunk of `k` bytes, the byte `0x01` adds `256^k`.
     let n := bytesToUint (⟨chunk.data, rfl⟩ : Vector UInt8 chunk.size) + 256 ^ chunk.size
-    -- `a = ((a + n) r) mod p`.
+    -- `a := (r * (a + n)) mod p`.
     ((acc + n) * r) % (2 ^ 130 - 5)) 0
 
 /-- The low 128 bits of the accumulator plus the key's high half, RFC 8439 §2.5. -/
