@@ -824,6 +824,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the attestation and sync committee rewards of the Beacon API fail with code 500 when a signed amount does not fit the `Int64` of the response types ([#3853](https://github.com/ethereum/EthLib/issues/3853)).
+  The amounts stay unbounded integers, and the responses check them once, with `int64Fits` and the `fits` of each answer type, before they write the answer.
+  `attestationRewardsResponse_ok` and `syncCommitteeRewardsResponse_ok` gain a conjunct: every amount of an answer fits.
+  Migration: a proof that destructures the conclusion of either lemma takes one more component.
+
 - In Lean, an Engine node keeps the number and the time of each known block unbounded, as its header holds them, and the build of a payload fails on an excess blob gas of `2^64` or more ([#3852](https://github.com/ethereum/EthLib/issues/3852)).
   `KnownPayload.number` and `KnownPayload.timestamp` are `Nat`, so a block with a time of `2^64` or more no longer wraps to a small time in the check that the attributes come after the head.
   `checkAttributes` compares the head's time with the `toNat` of the attributes' time, and `checkAttributes_eq_ok_iff`, `checkAttributes_eq_error_of_unsupportedFork`, `checkAttributes_eq_error_of_wrong_structure` and `checkAttributes_eq_error_of_not_after_head` state the checks on `Nat`.

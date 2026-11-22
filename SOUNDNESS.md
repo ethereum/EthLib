@@ -6546,6 +6546,15 @@ Both assume that the balance covers the participant reward once per seat of the 
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_sync_rewards.py`) checks each reward against the balances of the pinned sync aggregate vectors, the proposer with its share.
 It checks the selection of named members once each, by index or key, and code 400 for an invalid identifier and for a state before Altair.
 
+The [response types](https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/rewards.yaml) give each signed amount of the attestation and sync committee rewards the type `Int64`.
+The [schema of `Int64`](https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/primitive.yaml) is a decimal string with no stated range, and EthLib reads its name as the signed 64-bit range, from `-2^63` to `2^63 - 1`.
+EthLib computes these amounts as unbounded integers.
+An attestation amount is the difference of two 64-bit unsigned amounts, and a sync committee reward sums such amounts over the seats of a validator, so both can fall outside that range.
+Rather than a 64-bit signed field, which would wrap or need a check at each part, the response checks every amount once, before it writes the answer.
+An answer with an amount outside `-2^63` to `2^63 - 1` fails with code 500, since the response types cannot hold it.
+`attestationRewardsResponse_ok` and `syncCommitteeRewardsResponse_ok` show that every amount of an answer fits.
+No lemma shows the converse, that an amount outside the range gives code 500, and no Python vector reaches that case.
+
 The block rewards are in the same module, read from the state at the slot of the block, before it.
 `blockRewards` runs the steps of the block before its operations, then the proposer slashings, the attester slashings and the attestations, as the block does.
 Each of these three parts is the rise of the proposer's balance over its step; from Altair the sync aggregate part is the share of the proposer that the sync aggregate step computes, times the number of signatures.
