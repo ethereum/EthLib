@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Base.BigEndian
+
 /-!
 # `Serialization.Rlp.Item`
 
@@ -179,9 +181,9 @@ The Yellow Paper defines `BE(x)` as the bytes `b` with `x = sum_n b_n * 256^(k -
 
 Here `k` is the number of bytes.
 
-This is that sum, computed one byte at a time. -/
+This is that sum, computed by the big-endian reading of the base layer. -/
 def ofBigEndian (bytes : List UInt8) : Nat :=
-  bytes.foldl (fun acc byte => 256 * acc + byte.toNat) 0
+  Base.bytesToNat bytes
 
 /-- The item of a scalar `n`: the byte string `BE(n)`.
 

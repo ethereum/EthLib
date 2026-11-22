@@ -31,29 +31,6 @@ namespace EthLib.Serialization.Rlp
 
 open EthLib.Base (byteArray_getElem_eq_get!)
 
-/-- Bytes read in base 256 from a running value `acc` stay below `(acc + 1) * 256^count`. -/
-theorem foldl_bigEndian_lt (bytes : List UInt8) (acc : Nat) :
-    bytes.foldl (fun acc byte => 256 * acc + byte.toNat) acc < (acc + 1) * 256 ^ bytes.length := by
-  induction bytes generalizing acc with
-  | nil => simp
-  | cons b bs ih =>
-    simp only [List.foldl_cons, List.length_cons]
-    have hb := b.toNat_lt
-    have step := ih (256 * acc + b.toNat)
-    -- `256 * acc + b + 1 <= 256 * (acc + 1)`, then multiply both sides by `256^count`.
-    have hle : (256 * acc + b.toNat + 1) * 256 ^ bs.length ≤ (acc + 1) * 256 ^ (bs.length + 1) := by
-      rw [Nat.pow_succ, ← Nat.mul_assoc, Nat.mul_comm (acc + 1) (256 ^ bs.length),
-        Nat.mul_comm ((256 ^ bs.length) * (acc + 1)) 256, ← Nat.mul_assoc,
-        Nat.mul_comm 256 (256 ^ bs.length), Nat.mul_assoc]
-      rw [Nat.mul_comm (256 * acc + b.toNat + 1)]
-      exact Nat.mul_le_mul_left _ (by omega)
-    omega
-
-/-- Bytes read in base 256 are below `256^count`. -/
-theorem ofBigEndian_lt (bytes : List UInt8) : ofBigEndian bytes < 256 ^ bytes.length := by
-  have := foldl_bigEndian_lt bytes 0
-  simpa [ofBigEndian] using this
-
 /-- What an accepted length in the long form is made of. -/
 theorem readLongLength_ok {input : ByteArray} {pos stop : Nat} {kind kind' : PayloadKind}
     {k k' length : Nat} (hStop : stop ≤ input.size)
@@ -78,7 +55,7 @@ theorem readLongLength_ok {input : ByteArray} {pos stop : Nat} {kind kind' : Pay
           obtain ⟨rfl, rfl, rfl⟩ := h
           have hLen := length_extract_toList input pos (pos + k) hEnd
           refine ⟨rfl, rfl, by omega, by omega, ?_, ?_⟩
-          · have := ofBigEndian_lt (input.extract pos (pos + k)).data.toList
+          · have := Base.bytesToNat_lt (input.extract pos (pos + k)).data.toList
             rwa [hLen, show pos + k - pos = k by omega] at this
           · -- The length bytes have no leading zero, so they are `BE` of the length.
             apply bigEndian_unique

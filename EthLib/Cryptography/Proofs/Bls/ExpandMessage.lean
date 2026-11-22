@@ -110,22 +110,11 @@ private theorem hash_toList {x : ByteArray} (admitted : x.size < 2 ^ 61) :
     (Hash.Sha256.hash x).data.toList = Spec.sha256 x.data.toList := by
   rw [Hash.Sha256.hash_eq_spec x admitted, Spec.sha256, Array.toArray_toList]
 
-/-- The low byte of a number, as the code takes it. -/
-private theorem ofNat_and_255 (n : Nat) : UInt8.ofNat (n &&& 255) = UInt8.ofNat n := by
-  rw [show (255 : Nat) = 2 ^ 8 - 1 from rfl, Nat.and_two_pow_sub_one_eq_mod, UInt8.ofNat_mod_size]
-
-private theorem i2osp_one (n : Nat) : (i2osp n 1).data.toList = Spec.i2osp n 1 := by
-  simp only [i2osp, Spec.i2osp, Base.natToBytes, Base.natToBytes.go, Array.toList_ofFn,
-    List.ofFn_succ, List.ofFn_zero, ofNat_and_255]
-  simp
-
-private theorem i2osp_two (n : Nat) : (i2osp n 2).data.toList = Spec.i2osp n 2 := by
-  simp only [i2osp, Spec.i2osp, Base.natToBytes, Base.natToBytes.go, Array.toList_ofFn,
-    List.ofFn_succ, List.ofFn_zero, ofNat_and_255]
-  simp [Nat.shiftRight_eq_div_pow]
+/-- The code writes `n` on `len` bytes as the reference does. -/
+private theorem i2osp_toList (n len : Nat) : (i2osp n len).data.toList = Spec.i2osp n len := rfl
 
 @[simp] private theorem i2osp_size (n len : Nat) : (i2osp n len).size = len := by
-  simp [i2osp, ByteArray.size]
+  simp [i2osp, ByteArray.size, Base.natToBytes_length]
 
 private theorem strxor_toList (a b : ByteArray) :
     (strxor a b).data.toList = Spec.strxor a.data.toList b.data.toList :=
@@ -190,7 +179,7 @@ private theorem foldl_nextBlock (b0 dstPrime : ByteArray) (hb0 : b0.size = 32)
         = Spec.block b0.data.toList dstPrime.data.toList 1 := by
       rw [hash_toList (by simp only [ByteArray.size_append, i2osp_size]; omega), Spec.block,
         ByteArray.data_append, ByteArray.data_append, Array.toList_append, Array.toList_append,
-        i2osp_one]
+        i2osp_toList]
     simp [h1]
   | succ n ih =>
     obtain ⟨hl, hp, hs⟩ := ih
@@ -200,7 +189,7 @@ private theorem foldl_nextBlock (b0 dstPrime : ByteArray) (hb0 : b0.size = 32)
         = Spec.block b0.data.toList dstPrime.data.toList (n + 1 + 1) := by
       rw [hash_toList (by simp only [ByteArray.size_append, i2osp_size, strxor_size]; omega),
         Spec.block, ByteArray.data_append, ByteArray.data_append, Array.toList_append,
-        Array.toList_append, i2osp_one, strxor_toList, hp, show 2 + 1 * n = n + 2 by omega]
+        Array.toList_append, i2osp_toList, strxor_toList, hp, show 2 + 1 * n = n + 2 by omega]
     refine ⟨?_, hb, Hash.Sha256.hash_size _⟩
     rw [nextBlock, Array.toList_push, List.map_append, hl, List.range_succ (n := n + 1),
       List.map_append]
@@ -264,13 +253,13 @@ theorem expandMessageXmd_eq_spec (msg dst : ByteArray) (lenInBytes : Nat)
   set mp := (⟨Array.replicate Hash.Sha256.BLOCK_SIZE_BYTES 0⟩ : ByteArray) ++ msg
     ++ i2osp lenInBytes 2 ++ i2osp 0 1 ++ dp with hmp_def
   have hdp : dp.data.toList = D.data.toList ++ Spec.i2osp D.size 1 := by
-    rw [hdp_def, ByteArray.data_append, Array.toList_append, i2osp_one]
+    rw [hdp_def, ByteArray.data_append, Array.toList_append, i2osp_toList]
   have hdps : dp.size ≤ 256 := by
     rw [hdp_def, ByteArray.size_append, i2osp_size]
     omega
   have hmpl : mp.data.toList = Spec.i2osp 0 64 ++ msg.data.toList ++ Spec.i2osp lenInBytes 2
       ++ Spec.i2osp 0 1 ++ dp.data.toList := by
-    rw [hpad, ← i2osp_two, ← i2osp_one 0, hmp_def]
+    rw [hpad, ← i2osp_toList lenInBytes 2, ← i2osp_toList 0 1, hmp_def]
     simp only [ByteArray.data_append, Array.toList_append]
   have hmps : mp.size < 2 ^ 61 := by
     have hz : (⟨Array.replicate Hash.Sha256.BLOCK_SIZE_BYTES 0⟩ : ByteArray).size = 64 :=

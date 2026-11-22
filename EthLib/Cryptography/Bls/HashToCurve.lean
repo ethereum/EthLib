@@ -63,10 +63,7 @@ Every caller passes `n < 256^len`, so the two agree:
 [utils]: https://www.rfc-editor.org/rfc/rfc9380#section-4
 -/
 def i2osp (n : Nat) (len : Nat) : ByteArray :=
-  ByteArray.mk <| Array.ofFn (n := len) fun i =>
-    -- Byte `i` holds bits `8 (len - 1 - i)` to `8 (len - 1 - i) + 7` of `n`.
-    -- So byte 0 holds the most significant byte, as big-endian order requires.
-    UInt8.ofNat ((n >>> ((len - 1 - i.val) * 8)) &&& 0xff)
+  ⟨(Base.natToBytes len n).toArray⟩
 
 /-- `strxor(a, b)` of [RFC 9380 §4][utils]: the bitwise XOR of two byte strings.
 
