@@ -218,4 +218,162 @@ theorem stateTransition_rebuild_nonce {chain : BlockChain} {block : Block fork T
     (toNat_ofNat_nonce (stateTransition_noncesFit hfit h) address).trans
       (congrArg UInt64.toNat (hall address).2.1)⟩
 
+/-! ## The nonces that the builder records -/
+
+/-- Every nonce that the builder records, at any account and position, is within the bound. -/
+private def RecordedFit (b : AccessListBuilder) : Prop :=
+  ∀ (address : Address) (index : UInt32) (nonce : Nat),
+    (b.accounts[address]?.bind fun r : AccountRecord => r.nonceChanges[index]?) = some nonce →
+      nonce ≤ MAX_NONCE
+
+/-- A change of a record that keeps its nonces keeps every recorded nonce within the bound. -/
+private theorem RecordedFit.record {b : AccessListBuilder} (hb : RecordedFit b) (address : Address)
+    (f : AccountRecord → AccountRecord) (hget : ∀ r, (f r).nonceChanges = r.nonceChanges) :
+    RecordedFit (b.record address f) := by
+  refine fun other index nonce h => ?_
+  rw [AccessListBuilder.record_at_of_get b address other f (·.nonceChanges) hget rfl] at h
+  exact hb other index nonce h
+
+/-- An account write whose new nonce is within the bound keeps every recorded nonce within it. -/
+private theorem RecordedFit.recordAccountWrite {b b' : AccessListBuilder}
+    {tx : TransactionState} {address : Address} {written : Option State.Account}
+    (hb : RecordedFit b) (hle : (written.getD EMPTY_ACCOUNT).nonce ≤ MAX_NONCE)
+    (h : b.recordAccountWrite tx address written = .ok b') : RecordedFit b' := by
+  refine fun other index nonce hn => ?_
+  by_cases ha : address = other
+  · subst ha
+    rw [AccessListBuilder.recordAccountWrite_nonce_at h index] at hn
+    dsimp only at hn
+    split at hn
+    · -- At the current position, the write records its own nonce, or nothing.
+      split at hn
+      · cases hn
+        exact hle
+      · cases hn
+    · exact hb address index nonce hn
+  · rw [AccessListBuilder.recordAccountWrite_ne h ha] at hn
+    exact hb other index nonce hn
+
+/-- Recording a call within the bound keeps every recorded nonce within the bound. -/
+private theorem RecordedFit.recordTransaction {b b' : AccessListBuilder} {tx : TransactionState}
+    (hb : RecordedFit b) (hfit : tx.NoncesFit) (h : b.recordTransaction tx = .ok b') :
+    RecordedFit b' := by
+  unfold AccessListBuilder.recordTransaction at h
+  obtain ⟨b₃, h₃, h⟩ := bind_ok_iff.mp h
+  cases h
+  -- The reads bring accounts into the list and keep every nonce.
+  have h₂ : RecordedFit (tx.storageReads.foldl
+      (fun b address keys => b.record address fun r =>
+        { r with storageReads := r.storageReads.insertMany keys.toList })
+      (tx.accountReads.foldl (fun b address => b.record address id) b)) := by
+    rw [Std.ExtTreeMap.foldl_eq_foldl_toList, Std.ExtTreeSet.foldl_eq_foldl_toList]
+    refine List.foldlRecOn _ _ (motive := RecordedFit) ?_
+      fun c hc _ _ => hc.record _ _ fun _ => rfl
+    exact List.foldlRecOn _ _ (motive := RecordedFit) hb fun c hc _ _ => hc.record _ _ fun _ => rfl
+  -- Each account write records the nonce of an account of the call.
+  rw [Std.ExtTreeMap.foldlM_eq_foldlM_toList] at h₃
+  have hfit₃ : RecordedFit b₃ := by
+    refine foldlM_ok_invariant_of_mem RecordedFit (fun c x c' hx hc hstep => ?_) h₂ h₃
+    have hw := Std.ExtTreeMap.mem_toList_iff_getElem?_eq_some.mp hx
+    refine hc.recordAccountWrite ?_ hstep
+    have := hfit x.1
+    simpa [TransactionState.getAccount, TransactionState.getAccountOptional, hw] using this
+  -- The storage writes keep every nonce.
+  rw [Std.ExtTreeMap.foldl_eq_foldl_toList]
+  refine List.foldlRecOn _ _ (motive := RecordedFit) hfit₃ fun c hc x _ => ?_
+  rw [Std.ExtTreeMap.foldl_eq_foldl_toList]
+  refine List.foldlRecOn _ _ (motive := RecordedFit) hc fun d hd y _ => ?_
+  refine fun other index nonce hn => ?_
+  rw [AccessListBuilder.recordStorageWrite_keep d x.1 other y.1 y.2 (·.nonceChanges)
+    (fun _ _ _ => rfl) rfl] at hn
+  exact hd other index nonce hn
+
+/-- The block state and the recorded nonces of a body are all within the bound. -/
+private def BodyFits (body : BodyState) : Prop :=
+  body.block.NoncesFit ∧ RecordedFit body.builder
+
+/-- A call within the bound that joins a body within the bound keeps it within the bound. -/
+private theorem BodyFits.join {body body' : BodyState} {tx : TransactionState}
+    (hb : BodyFits body) (hfit : tx.NoncesFit) (h : body.join tx = .ok body') :
+    BodyFits body' := by
+  refine ⟨BodyState.noncesFit_join h hfit, ?_⟩
+  obtain ⟨builder, hrecord, rfl⟩ := BodyState.join_eq_ok h
+  exact hb.2.recordTransaction hfit hrecord
+
+/-- A system call that joins a body within the bound keeps it within the bound. -/
+private theorem BodyFits.systemCall {env : BlockEnvironment fork} {body body' : BodyState}
+    {target : Address} {data : ByteArray} {out : SystemCallOutput} (hb : BodyFits body)
+    (hcall : systemCall env body.block target data = .ok out)
+    (hjoin : body.join out.state = .ok body') : BodyFits body' :=
+  hb.join (systemCall_noncesFit hb.1 hcall) hjoin
+
+/-- The body of a block records every new nonce within the bound of EIP-2681.
+
+Every nonce of the block state that it starts from must be within the bound.
+
+So the 64-bit nonces of its block access list hold every recorded nonce unchanged. -/
+theorem applyBody_nonceChanges_le {config : ChainConfig} {env : BlockEnvironment fork}
+    {block : Block fork Transaction} {start : BlockState} {output : BlockOutput fork}
+    (hfit : start.NoncesFit) (h : applyBody config env block start = .ok output)
+    {address : Address} {record : AccountRecord}
+    (hrecord : output.body.builder.accounts[address]? = some record)
+    {index : UInt32} {nonce : Nat} (hnonce : record.nonceChanges[index]? = some nonce) :
+    nonce ≤ MAX_NONCE := by
+  obtain ⟨state, body, txs, withdrawn, requested, hdao, hsys, htxs, hWithdrawn, hStays, hreq, -,
+    hBuilder, -⟩ := applyBody_eq_ok h
+  -- The builder starts with no record, on a block state within the bound.
+  have fitInit : BodyFits (.init state) :=
+    ⟨daoTransfer_noncesFit hfit hdao, fun _ _ _ hn => by
+      simp [BodyState.init, AccessListBuilder.init] at hn⟩
+  -- The system calls at the start.
+  have fitSys : BodyFits body := by
+    obtain ⟨mid, hFirst, hNoFirst, hSecond, hNoSecond⟩ := startSystemCalls_eq_ok hsys
+    have first : BodyFits mid := by
+      by_cases hd : .dencun ≤ fork
+      · obtain ⟨out, hout, hjoin⟩ := hFirst hd
+        exact fitInit.systemCall hout hjoin
+      · rw [hNoFirst hd]
+        exact fitInit
+    by_cases hp : .pectra ≤ fork
+    · obtain ⟨out, hout, hjoin⟩ := hSecond hp
+      exact first.systemCall hout hjoin
+    · rw [hNoSecond hp]
+      exact first
+  -- The transactions, each at its own position.
+  have fitTxs : BodyFits txs.body :=
+    (applyTransactions_steps (fun a b : BodyOutput fork => BodyFits a.body → BodyFits b.body)
+      (fun _ => id) (fun hab hbc fit => hbc (hab fit))
+      (fun hstep fit => by
+        obtain ⟨included, out, hcheck, hout, -, -, hjoin⟩ := applyTransaction_eq_ok hstep
+        -- A new position keeps the block state and the records.
+        exact BodyFits.join (by exact fit) (noncesFit_processTransaction fit.1 hcheck hout) hjoin)
+      htxs).1 fitSys
+  -- A new position keeps the block state and the records.
+  have fitBegin : BodyFits (txs.body.beginIndex (block.transactions.length + 1)) := fitTxs
+  -- The withdrawals change only balances.
+  have fitWithdrawn : BodyFits withdrawn := by
+    by_cases hShapella : .shapella ≤ fork
+    · obtain ⟨tx, htx, hj⟩ := hWithdrawn hShapella
+      refine fitBegin.join (fun address => ?_) hj
+      rw [(State.TransactionState.getAccount_foldlM_createEther _ _ _ htx address).2.1]
+      exact fitTxs.1 address
+    · rw [hStays hShapella]
+      exact fitBegin
+  -- The calls to the request contracts.
+  have fitRequested : BodyFits requested := by
+    obtain ⟨hNoPectra, hPectra⟩ := blockRequests_eq_ok hreq
+    by_cases hp : .pectra ≤ fork
+    · obtain ⟨_, read, -, hread, hResult⟩ := hPectra hp
+      obtain ⟨rfl, -⟩ := Prod.mk.inj hResult
+      refine foldlM_ok_invariant (fun st : BodyState × List ByteArray => BodyFits st.1)
+        (fun st c st' fit hstep => ?_) fitWithdrawn hread
+      obtain ⟨out, hout, hjoin, -⟩ := readRequest_eq_ok hstep
+      exact BodyFits.systemCall fit (checkedSystemCall_ok hout).2.1 hjoin
+    · obtain ⟨rfl, -⟩ := Prod.mk.inj (hNoPectra hp)
+      exact fitWithdrawn
+  -- The rewards leave the builder as the requests left it.
+  refine fitRequested.2 address index nonce ?_
+  rw [← hBuilder, hrecord]
+  exact hnonce
+
 end EthLib.Execution.Blocks

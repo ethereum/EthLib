@@ -2332,6 +2332,15 @@ That check makes the nonce of the transaction equal that of its sender, and belo
 The bound on the state before the first block is a hypothesis: the genesis allocation must meet it.
 From Glamsterdam, `stateTransition_rebuild_nonce` turns the 64-bit nonces that the block access list rebuilds into the nonces after the block, with no loss.
 
+The block access list of EIP-7928 holds two numbers in fixed widths that EthLib computes as natural numbers and converts without a check.
+A new nonce is a 64-bit integer there, and execution-specs fails when a nonce of `2^64` or more is converted.
+`applyBody_nonceChanges_le` (`Execution/Proofs/Blocks/NoncesFit.lean`) proves that the body records no nonce above `2^64 - 1` when the state before it meets the bound, so the conversion never wraps.
+Only a state before the block that breaks EIP-2681, such as a genesis allocation with a nonce above `2^64 - 1`, could reach it.
+Each position of the body is a 32-bit integer there, including those of the system calls before and after the transactions.
+`length_transactions_lt_of_checkBlock` (`Execution/Proofs/Blocks/Transition.lean`) proves that from Fusaka a block that passes its checks has fewer than `2^32 - 1` transactions, since its RLP is at most 8 MiB.
+The transition checks the block before its body runs, and the list exists only from Glamsterdam, after Fusaka, so no position of a list that is read reaches `2^32`.
+A simulation of `eth_simulateV1` runs a body without the checks of a block and with overrides of the state, so neither bound is proved there.
+
 The nonce of a transaction has two widths.
 A set-code transaction, the type that EIP-7702 adds, holds its nonce in 64 bits, so a nonce of `2^64` or more fails at decoding.
 The other kinds hold it in 256 bits: section 4.2 of the Yellow Paper, Shanghai version, puts the nonce `T_n` in `N_256`.

@@ -205,6 +205,7 @@ def AccountRecord.toChanges (address : Address) (r : AccountRecord) : AccountCha
     storageChanges := slots.mergeSort fun s t => s.slot.toNat ≤ t.slot.toNat
     storageReads := reads.mergeSort fun s t => s.toNat ≤ t.toNat
     balanceChanges := r.balanceChanges.toList.map fun (index, balance) => ⟨index, balance⟩
+    -- The source checks this conversion, and from a state that meets EIP-2681 no nonce wraps.
     nonceChanges := r.nonceChanges.toList.map fun (index, nonce) => ⟨index, UInt64.ofNat nonce⟩
     codeChanges := r.codeChanges.toList.map fun (index, code) => ⟨index, code⟩ }
 

@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- `length_transactions_lt_of_checkBlock` proves that from Fusaka a block that passes its checks has fewer than `2^32 - 1` transactions, so every position of its block access list fits 32 bits ([#3849](https://github.com/ethereum/EthLib/issues/3849)).
+  `applyBody_nonceChanges_le` proves that the body records no nonce above `2^64 - 1` when the state before it meets EIP-2681, so every nonce of the list fits 64 bits.
+  `one_le_lengthPrefix_size`, `one_le_encode_size`, `joinEncodings_size_ge` and `encode_list_size_gt` bound the size of an RLP encoding from below.
+
 - In Lean, `Base.hexValue?_toUpper` and `Base.hexBytesFrom?_map_toUpper` state that a hex digit, and a run of hex digits, decode the same in uppercase ([#3837](https://github.com/ethereum/EthLib/issues/3837)).
   The SSZ JSON codec uses them for its case rule.
 

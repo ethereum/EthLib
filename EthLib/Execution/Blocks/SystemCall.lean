@@ -199,6 +199,7 @@ def BodyState.init (block : BlockState) : BodyState := ⟨block, .init block⟩
 
 /-- Begin the position `index` of the body, from the block state so far. -/
 def BodyState.beginIndex (body : BodyState) (index : Nat) : BodyState :=
+  -- The source checks this conversion; from Fusaka, no position of a checked block wraps.
   { body with builder := body.builder.beginIndex (UInt32.ofNat index) body.block }
 
 /-- The body once a call that ends with the state `tx` joins it.
