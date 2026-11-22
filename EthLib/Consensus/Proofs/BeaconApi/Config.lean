@@ -151,11 +151,6 @@ theorem genesisInfo_version {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
 
 /-! ## The version of the fork along a chain -/
 
-/-- A fork before Altair has the genesis fork version. -/
-private theorem forkVersion_of_lt_altair (before : fork < .altair) :
-    config.forkVersion fork = config.GENESIS_FORK_VERSION := by
-  cases fork <;> first | rfl | exact absurd before (by decide)
-
 /-- The genesis state that deposits build holds the version of its fork as its current version. -/
 private theorem initializeBeaconStateFromEth1_currentVersion {eth1BlockHash : Hash32}
     {eth1Timestamp : UInt64} {deposits : Array Deposit} {state : BeaconState preset fork}

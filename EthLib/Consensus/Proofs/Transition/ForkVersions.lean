@@ -121,6 +121,97 @@ theorem upgradeNext_forkVersions {pre : ForkedBeaconState preset}
     simp only [upgradeNext] at computed
     cases computed
 
+/-- A fork before Altair has the genesis fork version. -/
+theorem forkVersion_of_lt_altair {fork : Fork} (before : fork < .altair) :
+    config.forkVersion fork = config.GENESIS_FORK_VERSION := by
+  cases fork <;> first | rfl | exact absurd before (by decide)
+
+/-- The versions that a chain from a genesis of deposits holds at a fork.
+
+Before Altair it is the genesis version twice, from epoch 0.
+
+At a later fork the previous version is that of the fork before it, and the current one its own.
+
+The epoch is the one of the config at which the fork is due. -/
+private def ForkEntry (config : Config) (fork : Fork) (versions : ForkVersions) : Prop :=
+  (fork < .altair ∧
+      versions = ⟨config.GENESIS_FORK_VERSION, config.GENESIS_FORK_VERSION, GENESIS_EPOCH⟩) ∨
+    ∃ previous epoch, config.nextFork previous = some (fork, epoch) ∧
+      versions = ⟨config.forkVersion previous, config.forkVersion fork, epoch⟩
+
+/-- A fork follows at most one fork in the schedule, at one epoch. -/
+private theorem nextFork_unique {previous other fork : Fork} {epoch later : Epoch}
+    (one : config.nextFork previous = some (fork, epoch))
+    (two : config.nextFork other = some (fork, later)) : previous = other ∧ epoch = later := by
+  cases previous <;>
+    simp only [Config.nextFork, reduceCtorEq, Option.some.injEq, Prod.mk.injEq] at one <;>
+    obtain ⟨rfl, rfl⟩ := one <;>
+    cases other <;> simp_all [Config.nextFork]
+
+/-- A fork that follows another in the schedule is Altair or later. -/
+private theorem altair_le_of_nextFork {previous fork : Fork} {epoch : Epoch}
+    (next : config.nextFork previous = some (fork, epoch)) : .altair ≤ fork := by
+  cases previous <;>
+    simp only [Config.nextFork, reduceCtorEq, Option.some.injEq, Prod.mk.injEq] at next <;>
+    obtain ⟨rfl, -⟩ := next <;> decide
+
+/-- An upgrade that is due keeps the versions equal to the entry of the fork. -/
+private theorem forkEntry_upgrade {pre : ForkedBeaconState preset}
+    {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
+    (computed : upgradeNext config checks pre = .ok post) (due : upgradeDue config pre = true)
+    (holds : ForkEntry config pre.fork pre.state.forkVersions) :
+    ForkEntry config post.val.fork post.val.state.forkVersions := by
+  have versions := upgradeNext_forkVersions computed
+  have fork := upgradeNext_fork computed
+  -- The upgrade is due at the epoch of the next fork.
+  have next : config.nextFork pre.fork = some (post.val.fork, getCurrentEpoch pre.state) := by
+    cases found : config.nextFork pre.fork with
+    | none => simp [found] at fork
+    | some entry =>
+      obtain ⟨nextFork, epoch⟩ := entry
+      rw [found] at fork
+      simp only [Option.map_some, Option.some.injEq] at fork
+      simp only [upgradeDue, found, Bool.and_eq_true, Option.any_some, beq_iff_eq] at due
+      simp [fork, getCurrentEpoch, due.2]
+  refine .inr ⟨pre.fork, getCurrentEpoch pre.state, next, ?_⟩
+  rw [versions]
+  rcases holds with ⟨early, same⟩ | ⟨previous, epoch, -, same⟩
+  · -- A fork before Altair has the genesis version.
+    rw [same, forkVersion_of_lt_altair early]
+  · rw [same]
+
+/-- Two states that chains from one genesis of deposits reach at one fork hold the same versions.
+
+The genesis holds the genesis version twice.
+
+Each upgrade writes the current version before it, the version of its fork, and its epoch. -/
+theorem forkVersions_eq_of_fork {fork0 : Fork} {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
+    {deposits : Array Deposit} {genesis : BeaconState preset fork0}
+    {a b : ForkedBeaconState preset}
+    (initialized : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp
+      deposits = .ok genesis)
+    (toA : Relation.ReflTransGen (ChainStep config checks) ⟨fork0, genesis⟩ a)
+    (toB : Relation.ReflTransGen (ChainStep config checks) ⟨fork0, genesis⟩ b)
+    (same : a.fork = b.fork) :
+    a.state.forkVersions = b.state.forkVersions := by
+  obtain ⟨before, -⟩ := initializeBeaconStateFromEth1_frame initialized
+  have start : ForkEntry config fork0 genesis.forkVersions :=
+    .inl ⟨before, initializeBeaconStateFromEth1_forkVersions initialized⟩
+  have entryA := chainSteps_forkVersions (property := ForkEntry config)
+    (fun computed due holds => forkEntry_upgrade computed due holds) toA start
+  have entryB := chainSteps_forkVersions (property := ForkEntry config)
+    (fun computed due holds => forkEntry_upgrade computed due holds) toB start
+  generalize a.state.forkVersions = versionsA at entryA ⊢
+  generalize b.state.forkVersions = versionsB at entryB ⊢
+  rw [same] at entryA
+  rcases entryA with ⟨earlyA, sameA⟩ | ⟨previous, epoch, nextA, sameA⟩ <;>
+    rcases entryB with ⟨earlyB, sameB⟩ | ⟨other, later, nextB, sameB⟩
+  · rw [sameA, sameB]
+  · exact absurd (altair_le_of_nextFork nextB) (Nat.not_le_of_lt earlyA)
+  · exact absurd (altair_le_of_nextFork nextA) (Nat.not_le_of_lt earlyB)
+  · obtain ⟨rfl, rfl⟩ := nextFork_unique nextA nextB
+    rw [sameA, sameB]
+
 /-- Both fork versions are versions of forks of the config. -/
 def ForkVersions.OfConfig (config : Config) (versions : ForkVersions) : Prop :=
   (∃ previous : Fork, versions.previousVersion = config.forkVersion previous) ∧
