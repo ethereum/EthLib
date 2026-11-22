@@ -44,3 +44,6 @@ EthLib/Cryptography/Sphincs/Digest.lean | C15 | FIPS 205 Algorithms 19 and 20 wr
 EthLib/Cryptography/Sphincs/Digest.lean | C15 | FIPS 205 Algorithms 19 and 20 write these steps in this notation | idx_leaf <- toInt(tmp_idx_leaf, ...) mod 2^(h/d)
 EthLib/Cryptography/Sphincs/KeyGen.lean | C15 | FIPS 205 Algorithm 18 writes this step in this notation | PK.root <- xmss_node(SK.seed, 0, h', PK.seed, ADRS)
 EthLib/Cryptography/Xmss/Tree.lean | C15 | the XMSS paper writes the authentication path in this notation | pi_lambda = X_{lambda, floor(e / 2^lambda) xor 1}
+EthLib/Networking/Quic/Frame.lean | C15 | RFC 9000 §19.3.1 writes the ACK range formulas in this notation | largest = previous_smallest - gap - 2
+EthLib/Networking/Quic/Frame.lean | C15 | RFC 9000 §19.3.1 writes the ACK range formulas in this notation | smallest = largest - ack_range
+EthLib/Networking/Quic/Tls/Transcript.lean | C15 | RFC 8446 §4.4.1 writes the synthetic message in this notation | message_hash || 00 00 Hash.length || Hash(ClientHello1)
