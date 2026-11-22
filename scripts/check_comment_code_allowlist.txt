@@ -79,3 +79,9 @@ EthLib/Networking/Quic/Varint.lean | C15 | RFC 9000 Appendix A.1 writes the deco
 EthLib/Networking/Quic/Varint.lean | C15 | RFC 9000 Appendix A.1 writes the decoding in this pseudocode | v = data.next_byte()
 EthLib/Networking/Quic/Packet.lean | C15 | RFC 9000 Appendix A.3 writes the decoding in this pseudocode | candidate_pn <= expected_pn - pn_hwin and candidate_pn < (1 << 62) - pn_win
 EthLib/Networking/Quic/Packet.lean | C15 | RFC 9000 Appendix A.3 writes the decoding in this pseudocode | candidate_pn > expected_pn + pn_hwin and candidate_pn >= pn_win
+EthLib/Networking/Quic/Tls.lean | C15 | RFC 8446 §4.4.4 writes the Finished computation in this notation | finished_key = HKDF-Expand-Label(BaseKey, "finished", "", Hash.length)
+EthLib/Networking/Quic/Tls.lean | C15 | RFC 8446 §4.4.4 writes the Finished computation in this notation | verify_data = HMAC(finished_key, Transcript-Hash(...))
+EthLib/Networking/Quic/Tls/Crypto.lean | C15 | RFC 8446 §4.2.8.2 writes the point form in this presentation language | legacy_form = 4
+EthLib/Networking/Quic/Tls/Messages.lean | C15 | RFC 8446 §§4.1.2 and 4.1.3 write the hello fields in this presentation language | ProtocolVersion legacy_version = 0x0303;
+EthLib/Networking/Quic/Tls/Messages.lean | C15 | RFC 8446 §4.1.3 writes the ServerHello fields in this presentation language | uint8 legacy_compression_method = 0;
+EthLib/Networking/Quic/Tls/Messages.lean | C15 | RFC 8446 §4.4.4 writes the Finished field in this presentation language | opaque verify_data[Hash.length];

@@ -50,19 +50,32 @@ The label excludes the `tls13 ` prefix, which the labelled expansion adds.
 
 The empty message argument hashes to SHA-256 of the empty string, rather than an empty context. -/
 def deriveSecret (secret : Secret) (label messages : ByteArray) : Except Tls13.Error Secret :=
+  -- §7.1: `HKDF-Expand-Label(Secret, Label, Transcript-Hash(Messages), Hash.length)`.
+  --
+  -- `Transcript-Hash(Messages)` is the SHA-256 hash of the messages (§4.4.1), of 32 bytes.
   Tls13.expandLabel secret label (packBytes (Sha256.hash32 messages)) 32
 
 /-- The early secret without a pre-shared key, RFC 8446 §7.1. -/
-def earlySecret : Secret := Tls13.extract (packBytes zeros) (packBytes zeros)
+def earlySecret : Secret :=
+  -- §7.1: if PSK is not in use, `Early Secret = HKDF-Extract(0, 0)`.
+  --
+  -- The salt `0` is the 0-value, and the PSK, which is not available, is the 0-value too.
+  Tls13.extract (packBytes zeros) (packBytes zeros)
 
 /-- Mix the shared secret into the early secret, RFC 8446 §7.1. -/
 def handshakeSecret (sharedSecret : ByteArray) : Except Tls13.Error Secret := do
+  -- `Derive-Secret(., "derived", "")`, from the Early Secret.
   let derived ← deriveSecret earlySecret "derived".toUTF8 .empty
+  -- `(EC)DHE -> HKDF-Extract = Handshake Secret`: the salt is the derived secret.
+  --
+  -- The input keying material is the (EC)DHE shared secret.
   return Tls13.extract (packBytes derived) sharedSecret
 
 /-- Derive the master secret from the handshake secret, RFC 8446 §7.1. -/
 def masterSecret (handshake : Secret) : Except Tls13.Error Secret := do
+  -- `Derive-Secret(., "derived", "")`, from the Handshake Secret.
   let derived ← deriveSecret handshake "derived".toUTF8 .empty
+  -- `0 -> HKDF-Extract = Master Secret`: the salt is the derived secret, the input the 0-value.
   return Tls13.extract (packBytes derived) (packBytes zeros)
 
 /-- The secrets through the first application traffic generation, RFC 8446 §7.1. -/
@@ -94,16 +107,27 @@ The function does not check that the second transcript extends the first.
 Each transcript includes handshake headers and excludes record headers, as §4.4.1 requires. -/
 def keySchedule (sharedSecret helloTranscript serverTranscript : ByteArray) :
     Except Tls13.Error KeySchedule := do
+  -- The left side of the §7.1 diagram: the Handshake Secret, from the (EC)DHE shared secret.
   let handshake ← handshakeSecret sharedSecret
+  -- Then the Master Secret, from the Handshake Secret.
   let master ← masterSecret handshake
+  -- `Derive-Secret(., "c hs traffic", ClientHello...ServerHello)`, from the Handshake Secret.
   let clientHandshake ← deriveSecret handshake "c hs traffic".toUTF8 helloTranscript
+  -- `Derive-Secret(., "s hs traffic", ClientHello...ServerHello)`, from the Handshake Secret.
   let serverHandshake ← deriveSecret handshake "s hs traffic".toUTF8 helloTranscript
+  -- `Derive-Secret(., "c ap traffic", ClientHello...server Finished)`, from the Master Secret.
   let clientApplication ← deriveSecret master "c ap traffic".toUTF8 serverTranscript
+  -- `Derive-Secret(., "s ap traffic", ClientHello...server Finished)`, from the Master Secret.
   let serverApplication ← deriveSecret master "s ap traffic".toUTF8 serverTranscript
+  -- Not derived: the binder key, the client early traffic and early exporter master secrets.
+  --
+  -- They need a PSK.
+  --
+  -- Not derived either: the exporter and resumption master secrets.
   return ⟨earlySecret, handshake, master, clientHandshake, serverHandshake,
     clientApplication, serverApplication⟩
 
-/-- Finished `verify_data`, the HMAC of the transcript hash under the finished key, RFC 8446 §4.4.4.
+/-- The Finished `verify_data` of RFC 8446 §4.4.4.
 
 During the handshake the secret is the sender's handshake traffic secret, the base key of §4.4.
 
@@ -111,7 +135,11 @@ The transcript ends before the Finished message being computed.
 
 Comparing a received value with this one is left to the caller. -/
 def finished (trafficSecret : Secret) (transcript : ByteArray) : Except Tls13.Error Secret := do
+  -- `finished_key = HKDF-Expand-Label(BaseKey, "finished", "", Hash.length)`, with 32 bytes.
   let key ← Tls13.expandLabel trafficSecret "finished".toUTF8 .empty 32
+  -- `verify_data = HMAC(finished_key, Transcript-Hash(...))`, with HMAC-SHA-256.
+  --
+  -- The transcript is the Handshake Context, then Certificate and CertificateVerify if present.
   return Hmac.hmac32 (packBytes key) (packBytes (Sha256.hash32 transcript))
 
 end EthLib.Networking.Quic.Tls
