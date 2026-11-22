@@ -1765,7 +1765,7 @@ def quic_tls_server_step(config: dict[str, object], state: dict[str, object], me
     ...
 
 def quic_tls_key_schedule(shared_secret: bytes, hello_transcript: bytes, server_transcript: bytes) -> tuple[bytes, bytes, bytes, bytes, bytes, bytes, bytes]:
-    """Return the early, handshake, master, two handshake traffic and two application traffic secrets."""
+    """Return the early, handshake, main, two handshake traffic and two application traffic secrets."""
     ...
 
 def quic_tls_derive_secret(secret: bytes, label: bytes, messages: bytes) -> bytes:

@@ -46,7 +46,7 @@ SHARED_SECRET = bytes.fromhex("8bd4054fb55b9d63fdfbacf9f04b9f0d35e6d63f537563efd
 SECRETS = quic.KeySchedule(
     early=bytes.fromhex("33ad0a1c607ec03b09e6cd9893680ce210adf300aa1f2660e1b22e10f170f92a"),
     handshake=bytes.fromhex("1dc826e93606aa6fdc0aadc12f741b01046aa6b99f691ed221a9f0ca043fbeac"),
-    master=bytes.fromhex("18df06843d13a08bf2a449844c5f8a478001bc4d4c627984d5a41da8d0402919"),
+    main=bytes.fromhex("18df06843d13a08bf2a449844c5f8a478001bc4d4c627984d5a41da8d0402919"),
     client_handshake=bytes.fromhex(
         "b3eddb126e067f35a780b3abf45e2d8f3b1a950738f52e9600746a0e27a55a21"
     ),
@@ -82,7 +82,7 @@ def test_derived_secrets() -> None:
         == SECRETS.client_handshake
     )
     assert (
-        quic.tls_derive_secret(SECRETS.master, b"s ap traffic", SERVER_TRANSCRIPT)
+        quic.tls_derive_secret(SECRETS.main, b"s ap traffic", SERVER_TRANSCRIPT)
         == SECRETS.server_application
     )
 

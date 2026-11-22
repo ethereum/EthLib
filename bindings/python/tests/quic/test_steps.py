@@ -169,16 +169,16 @@ def reference_schedule(shared: bytes, hello: bytes, server: bytes) -> hs.Traffic
     empty_hash = hashlib.sha256(b"").digest()
     early = extract(bytes(32), bytes(32))
     handshake = extract(expand(early, b"derived", empty_hash), shared)
-    master = extract(expand(handshake, b"derived", empty_hash), bytes(32))
+    main = extract(expand(handshake, b"derived", empty_hash), bytes(32))
     hello_hash, server_hash = hashlib.sha256(hello).digest(), hashlib.sha256(server).digest()
     return {
         "early": early,
         "handshake": handshake,
-        "master": master,
+        "main": main,
         "client_handshake": expand(handshake, b"c hs traffic", hello_hash),
         "server_handshake": expand(handshake, b"s hs traffic", hello_hash),
-        "client_application": expand(master, b"c ap traffic", server_hash),
-        "server_application": expand(master, b"s ap traffic", server_hash),
+        "client_application": expand(main, b"c ap traffic", server_hash),
+        "server_application": expand(main, b"s ap traffic", server_hash),
     }
 
 
