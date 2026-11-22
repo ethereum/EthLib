@@ -191,10 +191,10 @@ It keeps every other character as often as the NFKD form holds it.
 These three facts determine the prepared string. -/
 theorem exists_passwordBytes_eq_toUTF8 (password : String) :
     ∃ prepared : String, passwordBytes password = prepared.toUTF8 ∧
-      prepared.toList.Sublist (Base.Unicode.nfkd password).toList ∧
+      prepared.toList.Sublist (Unicode.nfkd password).toList ∧
       (∀ c ∈ prepared.toList, isControl c = false) ∧
       ∀ c, isControl c = false →
-        prepared.toList.count c = (Base.Unicode.nfkd password).toList.count c := by
+        prepared.toList.count c = (Unicode.nfkd password).toList.count c := by
   refine ⟨_, rfl, ?_, ?_, ?_⟩
   · rw [String.toList_ofList]
     exact List.filter_sublist
@@ -207,7 +207,7 @@ theorem exists_passwordBytes_eq_toUTF8 (password : String) :
 
 /-- A password already in NFKD form and free of control codes prepares to its own UTF-8 bytes. -/
 theorem passwordBytes_eq_toUTF8 {password : String}
-    (hn : Base.Unicode.nfkd password = password)
+    (hn : Unicode.nfkd password = password)
     (hc : ∀ c ∈ password.toList, isControl c = false) :
     passwordBytes password = password.toUTF8 := by
   unfold passwordBytes

@@ -26,7 +26,7 @@ open EthLib.Exports (Result PyValue pyExport ExportError toResult)
 /-- Unicode 16.0.0 Normalization Form KD, UAX #15 rev. 56, §1.3. -/
 @[export eth_keystore_nfkd]
 def nfkd (args : PyValue) : Result PyValue :=
-  pyExport (fun text : String => pure (Base.Unicode.nfkd text)) args
+  pyExport (fun text : String => pure (Cryptography.Unicode.nfkd text)) args
 
 /-- NFKD, control removal and UTF-8 encoding, ERC-2335 "Password requirements". -/
 @[export eth_keystore_password]
