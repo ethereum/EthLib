@@ -13,6 +13,12 @@ A message is its type byte, then the RLP list of its fields.
 The first field of every message is the request ID, a byte string of at most 8 bytes.
 
 A node record in a message stays an RLP item, for the ENR decoder to read.
+
+The text gives `total` and `wait-time` no width; its WHOAREYOU packet types `enr-seq` as `uint64`.
+
+EthLib reads `total` and `wait-time` as 64-bit integers, so a larger value is refused.
+
+No count of responses or wait in milliseconds comes near `2^64`.
 -/
 
 @[expose] public section

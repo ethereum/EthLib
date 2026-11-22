@@ -80,7 +80,14 @@ def Discv4Error.code : Discv4Error → UInt32
   | .unknownType _ => 6
   | .rlp _ => 7
 
-/-- A node's address: `[ip, udp-port, tcp-port]`. -/
+/-- A node's address: `[ip, udp-port, tcp-port]`.
+
+`discv4.md` gives a port no width.
+
+A UDP or TCP port is 16 bits, as [RFC 768] and [RFC 9293] fix it, so a larger port is refused.
+
+[RFC 768]: https://www.rfc-editor.org/rfc/rfc768
+[RFC 9293]: https://www.rfc-editor.org/rfc/rfc9293#section-3.1 -/
 structure Endpoint where
   /-- The IP address: 4 bytes for IPv4, 16 for IPv6. -/
   ip : ByteArray
