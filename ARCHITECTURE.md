@@ -543,7 +543,8 @@ The note names the text and the commit where a rule is stated.
 If it is known, the note also names the commit that EthLib took the rule from.
 [`CONTRIBUTING.md`](CONTRIBUTING.md#sources-of-truth) says when to write one, and where.
 A provenance note is not a citation of authority.
-A step comment may also quote a line of those texts to trace a step, as [`CONTRIBUTING.md`](CONTRIBUTING.md#step-comments) explains, and it is not a citation of authority either.
+A step comment may also name the function of those texts that holds a step, as [`CONTRIBUTING.md`](CONTRIBUTING.md#step-comments) explains, and it is not a citation of authority either.
+It states the step in mathematical notation or in short, plain words, and never quotes code in a programming language.
 
 Test vectors are a further exception, because a test must say what it checks against.
 Each fixture keeps its pinned origin and digests in `tests/`.
