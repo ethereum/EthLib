@@ -13,48 +13,19 @@ Its parameter is the raw form of the transaction, and its result is the hash of 
 
 The raw form of a blob transaction is its network form, with its blobs, commitments and proofs.
 
-The source says so for EIP-4844, with its KZG proofs, and for EIP-7594, with cell proofs.
+The source asks for proofs per blob by EIP-4844, and for cell proofs from Fusaka by EIP-7594.
 
-It also says that a node rejects cell proofs before the PeerDAS fork of EIP-7594.
+From Fusaka, the source lets a node still accept proofs per blob and convert them, at a cost.
 
-That fork is Fusaka.
-
-From Fusaka, the source says that a node "may" still accept proofs per blob and convert them.
-
-The conversion computes the cell proofs of each blob, and the source calls it expensive.
-
-This method takes the choice that the word "may" leaves, and rejects that form from Fusaka.
-
-The hash is that of the transaction alone, without its blobs, commitments and proofs.
+EthLib takes the stricter choice and rejects that form from Fusaka.
 
 Which transactions a pool keeps is the choice of the node, and the source does not fix it.
 
-Here the pool accepts each transaction that passes these checks:
+EthLib keeps each transaction that the next block could include, a future nonce allowed.
 
-- its raw form decodes at the fork of the next block;
-- the counts of its blobs, commitments and proofs match, and each commitment has its hash;
-- its KZG proofs verify against the trusted setup of the view;
-- the inclusion checks pass in the next block, against the state of the head.
-
-The next block is taken one second after the head, its earliest time, as in the fee history.
-
-Its fork, base fees and blob schedule are those that the fee history gives it.
+The next block is EthLib's choice: one second after the head, as in the fee history.
 
 So in the last slot before a fork by time, a transaction is decoded at the fork before it.
-
-Its gas limit is that of the head, and no transaction runs before this one.
-
-A nonce above that of the sender is a future transaction, which a pool may keep for later.
-
-So the checks read the state of the head with the nonce of the sender raised to that nonce.
-
-A nonce below that of the sender still fails.
-
-A raw form that does not decode, or whose blobs fail their counts, hashes or proofs, gets `-32000`.
-
-A failed inclusion check gets the code of the error groups that names its condition.
-
-A failed inclusion check that no code names gets `-32003`, "Transaction rejected".
 
 [submit]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/submit.yaml
 -/
@@ -96,28 +67,24 @@ def submitErrorGroups : List ErrorGroup :=
 
 /-- The code of the error groups that names the condition of a failed inclusion check, if any.
 
-The code 800 says "Intrinsic gas too low / Intrinsic gas exceeds gas limit".
-
-A gas limit of a transaction below its intrinsic gas, or below the floor of EIP-7623, gets 800.
-
-An intrinsic gas above the cap of EIP-7825 gets no code, since that cap is not a gas limit.
-
-The method checks a transaction with no gas used before it in the block.
-
-So the gas allowance of the block is exceeded exactly when the gas limit is above the block's.
-
-That is the condition of 803.
-
-The cost behind 809 also counts the blob gas at its fee cap, beyond "gas * price + value". -/
+An intrinsic gas above the cap of EIP-7825 gets no code, since that cap is not a gas limit. -/
 def rpcCode : InclusionError → Option ErrorCode
+  -- A gas limit below the intrinsic gas, or below the floor of EIP-7623: 800.
   | .transaction (.insufficientGas ..) => some intrinsicGasTooLow
+  -- No gas is used before, so the block's gas is exceeded exactly above its gas limit: 803.
   | .gasAllowanceExceeded .. => some gasLimitAboveBlock
+  -- A priority fee above the fee cap: 804.
   | .transaction (.priorityFeeGreaterThanMaxFee ..) => some priorityFeeAboveCap
+  -- A signature that names no sender: 1001.
   | .transaction (.invalidSignature) => some invalidSender
+  -- A fee cap below the base fee: 806.
   | .insufficientMaxFeePerGas .. => some feeCapBelowBaseFee
+  -- A nonce below or above that of the sender: 1 or 2.
   | .nonceTooLow .. => some nonceTooLow
   | .nonceTooHigh .. => some nonceTooHigh
+  -- A balance below the cost, which also counts the blob gas at its fee cap: 809.
   | .insufficientBalance .. => some insufficientFunds
+  -- Any other condition, which no code of the groups names.
   | _ => none
 
 /-- What makes a transaction invalid, as the data of its error. -/
@@ -162,6 +129,7 @@ def inclusionErrorText : InclusionError → String
 
 /-- The error object of a failed check: the code of its condition, else `-32003`. -/
 def submitError (e : InclusionError) : RpcError :=
+  -- EthLib's choice: -32003, Transaction rejected, for a condition that no code names.
   ((rpcCode e).getD transactionRejected).toRpcError (some (.str (inclusionErrorText e)))
 
 /-- What makes a raw form invalid, as the data of its error. -/
@@ -179,6 +147,9 @@ The other fields of the account are those of the state. -/
 def withFutureNonce (state : TransactionState) (sender : Address) (tx : Transaction) :
     TransactionState :=
   let account := state.getAccount sender
+  -- A nonce above that of the sender raises it, so that a future transaction passes.
+  --
+  -- A nonce below it is left, and still fails.
   if account.nonce < tx.nonce.toNat then
     state.setAccount sender (some { account with nonce := tx.nonce.toNat })
   else state
@@ -191,7 +162,7 @@ def nextBlobSchedule (v : ChainView) : Since .dencun (v.head.nextFork v.config) 
   chainBlobSchedule v.config (v.head.nextFork v.config) (header.number + 1)
     (header.timestamp.toNat + 1)
 
-/-- The excess blob gas that the header rule gives the next block, or 0 before Dencun. -/
+/-- The excess blob gas of the next block, by EIP-4844 and EIP-7918, or 0 before Dencun. -/
 def nextExcessBlobGas (v : ChainView) : Nat :=
   let header := v.head.block.header
   childExcessBlobGas v.config (v.head.nextFork v.config) header (header.number + 1)
@@ -199,29 +170,30 @@ def nextExcessBlobGas (v : ChainView) : Nat :=
 
 /-- The environment of the next block, in which a submitted transaction is checked.
 
-It is one second after the head.
-
-Its fork, base fee and blob schedule are those of the fee history.
-
-Its excess blob gas is the one that the header rule gives it, which must fit 64 bits.
-
-Its gas limit is that of the head, and its other fields are those of the head or 0. -/
+Its excess blob gas must fit 64 bits. -/
 def nextEnvironment (v : ChainView) (fits : v.nextExcessBlobGas < 2 ^ 64) :
     BlockEnvironment (v.head.nextFork v.config) :=
   let head := v.head
   let header := head.block.header
+  -- EthLib's choice: the block after the head, one second later, with the head's gas limit.
   { chainId := v.config.chainId
     coinbase := header.coinbase
     number := header.number + 1
     gasLimit := header.gasLimit
     timestamp := header.timestamp + 1
+    -- A field that no check reads: 0, or empty.
     difficulty := 0
     blockHashes := []
+    -- The base fee of EIP-1559 after the head, as the fee history gives it.
     baseFeePerGas := fun _ => head.nextBaseFee v.config
+    -- A field that no check reads: 0.
     prevRandao := fun _ => 0
+    -- The excess blob gas after the head, by EIP-4844 and from Fusaka by EIP-7918.
     excessBlobGas := fun _ => UInt64.ofNatLT v.nextExcessBlobGas fits
+    -- A field that no check reads: 0.
     parentBeaconBlockRoot := fun _ => 0
     slotNumber := fun _ => 0
+    -- The blob schedule of the chain at that number and time, as in the fee history.
     blobSchedule := v.nextBlobSchedule }
 
 /-- The hash of a submitted transaction, or the error of the check that it fails.
@@ -230,12 +202,22 @@ When the next block's excess blob gas is `2^64` or more, the result is an intern
 
 No header holds such an excess. -/
 def sendRawTransaction (v : ChainView) (bytes : ByteArray) : Except RpcError Hash32 := do
+  -- The fork of the next block, one second after the head.
   let fork := v.head.nextFork v.config
   let invalid := fun (e : NetworkError) =>
     invalidInput.toRpcError (some (.str (networkErrorText e)))
+  -- The raw form decodes at that fork, else code -32000, EthLib's choice.
+  --
+  -- Before Fusaka, a form with cell proofs fails here, as the source asks.
+  --
+  -- From Fusaka, a form with proofs per blob has no wrapper version, so it fails here too.
   let raw ← (decodeRawTransaction fork bytes).mapError invalid
+  -- EIP-4844 and EIP-7594: the counts, the versioned hashes and the proofs.
+  --
+  -- The proofs verify against the trusted setup of the view, else code -32000, EthLib's choice.
   if let .network w := raw then
     (validateNetwork v.setup fork w).mapError invalid
+  -- The state of the head, with no transaction before this one.
   let head := TransactionState.ofBlock ⟨v.head.state, ∅, ∅, ∅, ∅⟩
   -- A signature that names no sender fails in the inclusion checks, with its own code.
   let state := match recoverSender fork raw.tx with
@@ -245,7 +227,9 @@ def sendRawTransaction (v : ChainView) (bytes : ByteArray) : Except RpcError Has
   let some env := if h : v.nextExcessBlobGas < 2 ^ 64 then some (v.nextEnvironment h) else none
     | throw (internalError.toRpcError
         (some (.str "next block: the excess blob gas is 2^64 or more")))
+  -- The inclusion checks in the next block, with no gas used before, else their code.
   discard <| (checkInclusion v.config.chainId env ⟨0, 0, 0⟩ state raw.tx).mapError submitError
+  -- EIP-4844: the hash of the transaction alone, without its blobs, commitments and proofs.
   (transactionHash raw.tx).mapError fun _ =>
     internalError.toRpcError (some (.str "transaction hash: the transaction has no RLP encoding"))
 
