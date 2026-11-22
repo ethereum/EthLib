@@ -383,7 +383,7 @@ private theorem foldl_msmWindowStep {n nW : Nat} (pts : Vector G1 n)
 
 /-- The window-recomposition invariant.
 
-After `t` windows, the accumulator holds `Σ_j (sⱼ >>> ((nW − t)·8)) · Pⱼ`. -/
+After `t` windows, the accumulator holds `Σ_j ⌊sⱼ / 2^((nW − t)·8)⌋ · Pⱼ`. -/
 private theorem msmAcc_spec {n : Nat} (pts : Vector G1 n) (vals : Vector Nat n)
     (nW : Nat) (hval : ∀ j (hj : j < n), Valid pts[j])
     (hbound : ∀ j (hj : j < n), vals[j] < 2 ^ (nW * 8)) :

@@ -27,7 +27,7 @@ namespace EthLib.Cryptography.Bls.KeyDerivation
 open EthLib.Cryptography.Bls.Signatures
 open EthLib.Cryptography.Hash
 
-/-- Master derivation reuses BLS key generation, ERC-2333, `hkdf_mod_r()` rationale. -/
+/-- Master derivation reuses BLS key generation, as the rationale of ERC-2333 says. -/
 theorem deriveMasterSk_eq_keyGen (seed : ByteArray) :
     deriveMasterSk seed = keyGen seed := rfl
 

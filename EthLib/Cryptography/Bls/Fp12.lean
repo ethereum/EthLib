@@ -68,7 +68,7 @@ Over `Fp`, it equals `a * a` when `a^(p^4 - p^2 + 1) = 1`, and also at zero.
 
 Here `p` is the modulus of `Fp`, and `z_k` in `Fp2` is the coefficient of `w^k`.
 
-It is the "cubic over a quadratic extension" form of §3.2, with `x = w` and `y = w^3`.
+It is the form of §3.2 as a cubic extension over a quadratic one, with `x = w` and `y = w^3`.
 
 So the element is `a + b x + c x^2`, with `a = z0 + z3 y`, `b = z1 + z4 y`, `c = z2 + z5 y`.
 

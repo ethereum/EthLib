@@ -95,7 +95,7 @@ def parseIndex (segment : String) : Except KeyPathError UInt32 := do
   let bytes := segment.toByteArray.data.toList
   if bytes.isEmpty then throw (.invalidIndex segment)
   let some value := decimalValue bytes 0 | throw (.invalidIndex segment)
-  -- ERC-2333, The Tree Structure: `0 <= i < 2**32`.
+  -- ERC-2333, The Tree Structure: `0 <= i < 2^32`.
   if value < 2 ^ 32 then return UInt32.ofNat value
   else throw (.indexOutOfRange value)
 
@@ -108,7 +108,7 @@ def parsePath (text : String) : Except KeyPathError Path := do
   | root :: parts =>
     -- Notation: `m` denotes the master node.
     if root != "m" then throw (.invalidRoot root)
-    -- Path: `m / purpose / coin_type / account / use`, and at least 4 levels MUST be used.
+    -- Path: `m / purpose / coin_type / account / use`; a path has at least 4 levels.
     match parts with
     | purpose :: coinType :: account :: use :: subpath =>
       let purpose ← parseIndex purpose

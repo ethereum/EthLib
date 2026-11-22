@@ -53,7 +53,7 @@ def keyGenLoop (ikm keyInfo : ByteArray) : (salt : ByteArray) → (attempts : Na
       fun _ => .keyGenHkdf
     -- Step 7: `SK = OS2IP(OKM) mod r`.
     let sk := Fr.ofNat (Base.bytesToNat okm.data.toList)
-    -- Steps 3 and 8: loop while `SK == 0`, else return `SK`.
+    -- Steps 3 and 8: repeat while `SK = 0`; otherwise the key is `SK`.
     if h : sk = 0 then keyGenLoop ikm keyInfo salt attempts else return ⟨sk, h⟩
 
 /-- Key generation (§2.3): a secret key from at least 32 bytes of input keying material.
@@ -63,7 +63,7 @@ It fails on a shorter input, and when every attempt gives a multiple of `r`.
 The key material is secret, and this function does not run in constant time. -/
 def keyGen (ikm : ByteArray) (keyInfo : ByteArray := ByteArray.empty) :
     Except BlsError SecretKey :=
-  -- `IKM MUST be at least 32 bytes long`.
+  -- The input keying material has at least 32 bytes.
   if ikm.size < 32 then .error (.keyGenIkmTooShort ikm.size)
   -- Steps 1 and 2: `salt = "BLS-SIG-KEYGEN-SALT-"` and `SK = 0`, so the loop runs once at least.
   else keyGenLoop ikm keyInfo KEYGEN_SALT KEYGEN_ATTEMPTS

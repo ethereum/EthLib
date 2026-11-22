@@ -77,7 +77,7 @@ def pointToSignature (p : G2) : BLSSignature := G2.compress p
 
 The key is secret, and this function does not run in constant time. -/
 def skToPk (sk : SecretKey) : BLSPubkey :=
-  -- Steps 1 to 3: `xP = SK * P`, and `PK = point_to_pubkey(xP)`.
+  -- Steps 1 to 3: `xP = SK * P`, and `PK` is the encoding of `xP`.
   pointToPubkey (G1.mul G1.generator sk.val)
 
 /-- The subgroup check of a signature point (§2.7, step 3). -/
@@ -91,16 +91,16 @@ The key is secret, and this function does not run in constant time.
 
 The error comes from the hash to curve, which never fails. -/
 def coreSign (sk : SecretKey) (msg dst : ByteArray) : Except BlsError BLSSignature := do
-  -- Step 1: `Q = hash_to_point(message)`.
+  -- Step 1: `Q` is the hash of the message to `G2`.
   let q ← HashToCurve.hashToG2 msg dst
-  -- Steps 2 to 4: `R = SK * Q`, and `signature = point_to_signature(R)`.
+  -- Steps 2 to 4: `R = SK * Q`, and the signature is the encoding of `R`.
   return pointToSignature (G2.mul q sk.val)
 
 /-- The core verification: check `e(P, R) = e(PK, H(message))` (§2.7).
 
 It returns `false` on any invalid input. -/
 def coreVerify (pk msg sig dst : ByteArray) : Bool :=
-  -- Steps 1 and 2: `R = signature_to_point(signature)`, or INVALID.
+  -- Steps 1 and 2: `R` is the point that the signature encodes, or INVALID.
   --
   -- A signature of any length other than 96 bytes is not an output of the encoding.
   match exactBytes? 96 sig with
@@ -109,19 +109,19 @@ def coreVerify (pk msg sig dst : ByteArray) : Bool :=
   match G2.uncompress sig with
   | .error _ => false
   | .ok r =>
-    -- Step 3: `signature_subgroup_check(R)`.
+    -- Step 3: INVALID unless `R` is in `G2`.
     signatureSubgroupCheck r &&
-    -- Steps 4 and 5: `KeyValidate(PK)` and `xP = pubkey_to_point(PK)`, by one decoding.
+    -- Steps 4 and 5: `PK` passes key validation and encodes `xP`, by one decoding.
     match exactBytes? 48 pk with
     | none => false
     | some pk =>
       match G1.keyValidatePoint pk with
       | .error _ => false
       | .ok xP =>
-        -- Step 6: `Q = hash_to_point(message)`.
+        -- Step 6: `Q` is the hash of the message to `G2`.
         match HashToCurve.hashToG2 msg dst with
         | .error _ => false
-        -- Steps 7 to 9: `C1 = pairing(Q, xP)`, `C2 = pairing(R, P)`, and VALID iff `C1 == C2`.
+        -- Steps 7 to 9: `C1 = e(Q, xP)`, `C2 = e(R, P)`, and VALID exactly when `C1 = C2`.
         --
         -- The test is `e(P, R) * e(-xP, Q) = 1`, with the point of `G1` first.
         --
@@ -136,14 +136,14 @@ As in the draft, it does not check that a signature lies in the subgroup. -/
 def aggregate (sigs : Array BLSSignature) : Except BlsError BLSSignature := do
   -- The precondition `n >= 1`.
   if sigs.isEmpty then throw .emptySignatureList
-  -- Steps 1 to 6: `aggregate = aggregate + signature_to_point(signature_i)`, or INVALID.
+  -- Steps 1 to 6: the sum of the points that the signatures encode, or INVALID.
   --
   -- The sum starts at the point at infinity, so step 1 is the first addition.
   --
   -- Adding a point to the point at infinity returns that point exactly.
   let agg ← sigs.foldlM
     (fun agg sig => return G2.add agg (← G2.uncompress sig)) G2.zero
-  -- Steps 7 and 8: `signature = point_to_signature(aggregate)`.
+  -- Steps 7 and 8: the signature is the encoding of the sum.
   return pointToSignature agg
 
 /-- The pair `(-PK, H(message))` of one key and its message in the aggregate verification (§2.9).
@@ -151,12 +151,12 @@ def aggregate (sigs : Array BLSSignature) : Except BlsError BLSSignature := do
 It fails when the key is not 48 bytes or fails key validation. -/
 def keyMessagePair (dst : ByteArray) (entry : ByteArray × ByteArray) :
     Except BlsError (G1 × G2) := do
-  -- Steps 6 and 7: `KeyValidate(PK_i)` and `xP = pubkey_to_point(PK_i)`, by one decoding.
+  -- Steps 6 and 7: `PK_i` passes key validation and encodes `xP`, by one decoding.
   let some pk := exactBytes? 48 entry.1 | throw .invalidG1Point
   let xP ← G1.keyValidatePoint pk
-  -- Step 8: `Q = hash_to_point(message_i)`.
+  -- Step 8: `Q` is the hash of the message `message_i` to `G2`.
   let q ← HashToCurve.hashToG2 entry.2 dst
-  -- The factor of step 9 is `pairing(Q, xP)`; the pair is `(-xP, Q)`, for a product equal to 1.
+  -- The factor of step 9 is `e(Q, xP)`; the pair is `(-xP, Q)`, for a product equal to 1.
   return (G1.neg xP, q)
 
 /-- The core aggregate verification: check `e(P, R) = prod_i e(PK_i, H(message_i))` (§2.9).
@@ -165,19 +165,19 @@ It returns `false` on an empty list, on lists of two sizes and on any invalid in
 def coreAggregateVerify (pks msgs : Array ByteArray) (sig dst : ByteArray) : Bool :=
   -- The precondition `n >= 1`, with as many messages as keys.
   if pks.isEmpty || pks.size != msgs.size then false else
-  -- Steps 1 and 2: `R = signature_to_point(signature)`, or INVALID.
+  -- Steps 1 and 2: `R` is the point that the signature encodes, or INVALID.
   match exactBytes? 96 sig with
   | none => false
   | some sig =>
   match G2.uncompress sig with
   | .error _ => false
   | .ok r =>
-    -- Step 3: `signature_subgroup_check(R)`.
+    -- Step 3: INVALID unless `R` is in `G2`.
     signatureSubgroupCheck r &&
     -- Steps 4 to 8: one pair `(-xP_i, Q_i)` for each key, or INVALID.
     match (pks.zip msgs).mapM (keyMessagePair dst) with
     | .error _ => false
-    -- Steps 9 to 11: `C1 = C1 * pairing(Q, xP)` over `i`, `C2 = pairing(R, P)`, and `C1 == C2`.
+    -- Steps 9 to 11: `C1 = prod_i e(Q_i, xP_i)`, `C2 = e(R, P)`, and VALID iff `C1 = C2`.
     --
     -- The test is `e(P, R) * prod_i e(-xP_i, Q_i) = 1`, with the points of `G1` first.
     --
@@ -210,9 +210,11 @@ It is the core signature of the public key under that tag.
 
 The key is secret, and this function does not run in constant time. -/
 def popProve (sk : SecretKey) : Except BlsError BLSSignature :=
-  -- Step 1: `PK = SkToPk(SK)`.
+  -- Step 1: `PK` is the public key of `SK`.
   --
-  -- Steps 2 to 5: `Q = hash_pubkey_to_point(PK)`, `R = SK * Q`, `proof = point_to_signature(R)`.
+  -- Steps 2 to 5: `Q` is the hash of `PK` to `G2` under the public key tag, and `R = SK * Q`.
+  --
+  -- The proof is the encoding of `R`.
   --
   -- That is the core signature of `PK` under the public key tag.
   coreSign sk ⟨(skToPk sk).toArray⟩ POP_DST
@@ -221,7 +223,7 @@ def popProve (sk : SecretKey) : Except BlsError BLSSignature :=
 
 It is the core verification of the public key as message, under the public key tag. -/
 def popVerify (pk : BLSPubkey) (proof : BLSSignature) : Bool :=
-  -- Steps 1 to 9 are those of the core verification, with `hash_pubkey_to_point` at step 6.
+  -- Steps 1 to 9 of the core verification, with the hash under the public key tag at step 6.
   coreVerify (packBytes pk) (packBytes pk) (packBytes proof) POP_DST
 
 /-- Add one validated public key to a running point sum.
@@ -229,7 +231,7 @@ def popVerify (pk : BLSPubkey) (proof : BLSSignature) : Bool :=
 It rejects a key that fails key validation (§2.5), and reports its position in the list. -/
 def addPubkeyPoint (agg : G1) (entry : BLSPubkey × Nat) : Except BlsError G1 := do
   let (pk, i) := entry
-  -- Step 3: `next = pubkey_to_point(PK_i)`, with key validation added.
+  -- Step 3: `next` is the point that `PK_i` encodes, with key validation added.
   match G1.keyValidatePoint pk with
   | .error _ => throw (.invalidPubkey (some i))
   -- Step 4: `aggregate = aggregate + next`.
@@ -251,15 +253,15 @@ def aggregatePubkeyPoint (pubkeys : Array BLSPubkey) : Except BlsError G1 := do
 It returns `false` on an empty list and on a key that fails key validation. -/
 def fastAggregateVerify
     (pubkeys : Array BLSPubkey) (msg : ByteArray) (sig : BLSSignature) : Bool :=
-  -- Steps 1 to 4: `aggregate`, the sum of the keys, or INVALID.
+  -- Steps 1 to 4: the sum of the keys, or INVALID.
   match aggregatePubkeyPoint pubkeys with
   | .error _ => false
-  -- Steps 5 and 6: `PK = point_to_pubkey(aggregate)`, and `CoreVerify(PK, message, signature)`.
+  -- Steps 5 and 6: `PK` is the encoding of the sum, and the core verification of the signature.
   | .ok agg => verify (pointToPubkey agg) msg sig
 
 /-! ## Ethereum wrappers
 
-The step comments quote the section Extensions of `specs/altair/bls.md` at `aa16bb4c`:
+The step comments follow the section Extensions of `specs/altair/bls.md` at `aa16bb4c`:
 <https://github.com/ethereum/consensus-specs/blob/aa16bb4c/specs/altair/bls.md#extensions>
 -/
 
@@ -267,9 +269,9 @@ The step comments quote the section Extensions of `specs/altair/bls.md` at `aa16
 
 It fails on an empty list and on any invalid key. -/
 def ethAggregatePubkeys (pubkeys : Array BLSPubkey) : Except BlsError BLSPubkey := do
-  -- eth_aggregate_pubkeys: `assert len(pubkeys) > 0`, and `assert all(bls.KeyValidate(...))`.
+  -- eth_aggregate_pubkeys: the list holds at least one key, and every key passes key validation.
   --
-  -- Then `result += pubkey` for each key, as a sum of points of `G1`.
+  -- The result is the sum of the keys, as points of `G1`.
   return pointToPubkey (← aggregatePubkeyPoint pubkeys)
 
 /-- The fast aggregate verification of Ethereum.
@@ -279,12 +281,12 @@ It is the fast aggregate verification of the draft, except on an empty key list.
 An empty key list passes exactly with the signature of the point at infinity. -/
 def ethFastAggregateVerify
     (pubkeys : Array BLSPubkey) (msg : ByteArray) (sig : BLSSignature) : Bool :=
-  -- `if len(pubkeys) == 0 and signature == G2_POINT_AT_INFINITY: return True`.
+  -- eth_fast_aggregate_verify: an empty key list is VALID with the infinity signature.
   --
   -- On an empty list with another signature, the draft's verification returns INVALID anyway.
   if pubkeys.isEmpty then
     sig = G2_POINT_AT_INFINITY
-  -- `return bls.FastAggregateVerify(pubkeys, message, signature)`.
+  -- Otherwise, the fast aggregate verification of the draft.
   else
     fastAggregateVerify pubkeys msg sig
 

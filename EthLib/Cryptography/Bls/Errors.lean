@@ -18,7 +18,7 @@ namespace EthLib.Cryptography.Bls
 inductive BlsError where
   /-- The pubkey list was empty. -/
   | emptyPubkeyList
-  /-- A pubkey was not `BYTES_PER_PUBKEY` bytes long. -/
+  /-- A pubkey was not 48 bytes long. -/
   | badPubkeySize (actual : Nat)
   /-- Pubkey bytes failed `KeyValidate`.
 
@@ -38,9 +38,9 @@ inductive BlsError where
   | nonCanonicalFieldElement
   /-- A field element had no square root (not a quadratic residue). -/
   | notASquare
-  /-- `expand_message_xmd` was asked for more than 65535 bytes. -/
+  /-- The message expansion was asked for more than 65535 bytes. -/
   | expandMessageOutputTooLong (len : Nat)
-  /-- `expand_message_xmd` would need more than 255 hash blocks. -/
+  /-- The message expansion would need more than 255 hash blocks. -/
   | expandMessageTooManyBlocks (ell : Nat)
   /-- The aggregation got no signature. -/
   | emptySignatureList

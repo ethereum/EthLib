@@ -16,7 +16,7 @@ Two independent points of order `r` would make `r^2` divide `#E(Fp)`, by Lagrang
 
 So every point of order `r` in `G1` is a multiple of the generator.
 
-So each key that key validation accepts is `[a] g_1` with `a != 0`.
+So each key that key validation accepts is `[a] g_1` with `a ≠ 0`.
 
 Key validation is the one of draft-04, §2.5.
 <https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04>
@@ -136,7 +136,7 @@ theorem mul_generator_isInfinity_iff (s : Fr) :
     rw [Fr.val_zero]
     exact Nat.dvd_zero _
 
-/-- `KeyValidate` (`IRTF draft-irtf-cfrg-bls-signature-04 §2.5`) rejects `0` and requires `inSubgroup` so `a != 0`. -/
+/-- Key validation (BLS signature draft, §2.5) rejects `0` and requires the subgroup, so `a ≠ 0`. -/
 theorem exists_mul_generator_of_keyValidatePoint {bytes : Vector UInt8 48} {P : G1}
     (h : keyValidatePoint bytes = .ok P) :
     Valid P ∧ ∃ a : Fr, a ≠ 0 ∧ toPoint P = toPoint (mul generator a) := by
@@ -158,7 +158,7 @@ theorem exists_mul_generator_of_keyValidatePoint {bytes : Vector UInt8 48} {P : 
         cases h
         have hvalid : Valid P := uncompress_valid hunc
         obtain ⟨a, ha⟩ := exists_mul_generator_of_inSubgroup hvalid hsub
-        -- Because `P` is not at infinity, `toPoint P != 0`, forcing the discrete logarithm `a != 0`.
+        -- Because `P` is not at infinity, `toPoint P ≠ 0`, forcing the discrete logarithm `a ≠ 0`.
         refine ⟨hvalid, a, ?_, ha⟩
         intro ha0
         subst ha0
