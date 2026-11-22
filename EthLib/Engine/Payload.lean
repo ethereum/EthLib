@@ -15,8 +15,6 @@ Its version follows the fork: 1 at Paris, 2 at Shapella, 3 from Dencun to BPO5, 
 
 The Engine API calls the execution side of Glamsterdam Amsterdam.
 
-Versions 2 and 3 append fields to the one before, so one type with fields by fork holds the three.
-
 Version 4 appends the block access list of EIP-7928 and the slot number of EIP-7843.
 
 The header holds the hash of the list and the slot number, and the body holds neither.
@@ -53,6 +51,7 @@ open EthLib.Execution.Transactions (TransactionError)
 
 /-- An execution payload at fork `fork`, from Paris on. -/
 structure ExecutionPayload (fork : Fork) : Type where
+  -- `ExecutionPayloadV1`, in its order: `DATA` of 32, 20, 32, 32, 256 and 32 bytes.
   /-- The hash of the parent block. -/
   parentHash : Hash32
   /-- The account that receives the fees of the block. -/
@@ -65,6 +64,7 @@ structure ExecutionPayload (fork : Fork) : Type where
   logsBloom : Bytes256
   /-- The RANDAO mix that the block reads. -/
   prevRandao : Bytes32
+  -- `blockNumber`, `gasLimit`, `gasUsed` and `timestamp`: `QUANTITY` of 64 bits.
   /-- The number of the block. -/
   blockNumber : UInt64
   /-- The most gas that the transactions of the block may use. -/
@@ -73,16 +73,25 @@ structure ExecutionPayload (fork : Fork) : Type where
   gasUsed : UInt64
   /-- The time of the block, in seconds since the Unix epoch. -/
   timestamp : UInt64
+  -- `extraData`: `DATA` of 0 to 32 bytes.
+  --
+  -- The type leaves the bound out, and the readers and the payload form of a block check it.
   /-- Free bytes that the producer of the block chooses. -/
   extraData : ByteArray
+  -- `baseFeePerGas`: `QUANTITY` of 256 bits, and `blockHash`: `DATA` of 32 bytes.
   /-- The base fee per gas. -/
   baseFeePerGas : U256
   /-- The hash of the header of the block. -/
   blockHash : Hash32
+  -- `transactions`: each `TransactionType || TransactionPayload` or `LegacyTransaction`, EIP-2718.
   /-- The bytes of each transaction, in the order that they run. -/
   transactions : List ByteArray
+  -- `ExecutionPayloadV2` appends `withdrawals`, an array of `WithdrawalV1`.
+  --
+  -- Versions 2 and 3 append fields to the one before, so one type with fields by fork holds 1 to 3.
   /-- The withdrawals, from Shapella. -/
   withdrawals : Since .shapella fork (List Withdrawal)
+  -- `ExecutionPayloadV3` appends `blobGasUsed` and `excessBlobGas`, `QUANTITY` of 64 bits.
   /-- The blob gas that the transactions use, from Dencun. -/
   blobGasUsed : Since .dencun fork UInt64
   /-- The blob gas above the target before the block, from Dencun. -/
@@ -97,11 +106,11 @@ structure ForkchoiceState where
   headBlockHash : Hash32
   /-- The safe block, which must be the head or one of its ancestors.
 
-  It may be all zero bytes while the chain has no safe block. -/
+  It may be all zero bytes until the transition block is finalized. -/
   safeBlockHash : Hash32
   /-- The most recent finalized block.
 
-  It may be all zero bytes while the chain has no finalized block. -/
+  It may be all zero bytes until the transition block is finalized. -/
   finalizedBlockHash : Hash32
   deriving DecidableEq, Repr
 
@@ -121,6 +130,9 @@ inductive Status where
 
 /-- The name of a status, as the Engine API writes it. -/
 def Status.name : Status → String
+  -- `PayloadStatusV1`: `status` is one of these five names.
+  --
+  -- From version 2 of `engine_newPayload`, `INVALID` supplants `INVALID_BLOCK_HASH`.
   | .valid => "VALID"
   | .invalid => "INVALID"
   | .syncing => "SYNCING"
@@ -191,6 +203,7 @@ instance : Repr EngineError where
 
 /-- The code of an error: its JSON-RPC code is the negative of this number. -/
 def EngineError.code : EngineError → UInt32
+  -- The table of errors of the Engine API, `-32602` from JSON-RPC and `-38001` to `-38006`.
   | .invalidParams _ => 32602
   | .unsupportedFork _ => 38005
   | .invalidForkchoiceState .. => 38002
@@ -225,6 +238,7 @@ The codes start at 401, above the codes of the errors of a block.
 
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def PayloadError.code : PayloadError → UInt32
+  -- Not in the source: the Engine API gives these reasons only as the message `validationError`.
   | .invalidTransaction .. => 401
   | .noEncoding => 402
   | .wrongBlockHash .. => 403
