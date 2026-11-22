@@ -202,11 +202,16 @@ The source is silent on the other kinds, which type 2 cannot carry.
 So EthLib makes authorizations type 4, and a gas price type 0, or type 1 with an access list. -/
 def simulateType (tx : GenericTransaction) : UInt8 :=
   match tx.type with
+  -- The type of the call, when it has one.
   | some t => t
   | none =>
+    -- EthLib's choice: authorizations make type 4.
     if tx.authorizationList.any (!·.isEmpty) then 4
+    -- Blob hashes make type 3, as the fixtures show.
     else if tx.blobVersionedHashes.any (!·.isEmpty) then 3
+    -- EthLib's choice: a gas price makes type 0, or type 1 with an access list.
     else if tx.gasPrice.isSome then if tx.accessList.isSome then 1 else 0
+    -- Else type 2, as the notes say.
     else 2
 
 /-- A call of a simulation with its defaults filled in.
@@ -219,6 +224,9 @@ The sender is the zero address, as the notes say.
 
 The other fields keep their defaults of a call: no value, no data and no fee. -/
 def withDefaults (tx : GenericTransaction) (nonce gas : Nat) : GenericTransaction :=
+  -- Each field that the call omits: its type above, the nonce after the earlier calls, the gas.
+  --
+  -- The sender is the zero address, as the notes say.
   { tx with
     type := some tx.simulateType
     nonce := some (tx.nonce.getD nonce)
@@ -264,8 +272,11 @@ A number above the next one leaves a gap, which empty blocks fill a block time a
 def planBlocks (blockTime number time : Nat) : List BlockStateCall → List PlannedBlock
   | [] => []
   | c :: cs =>
+    -- The number of the overrides, else the next number.
     let n := c.blockOverrides.number.getD (number + 1)
+    -- The blocks skipped before it, which empty blocks fill.
     let gap := n - (number + 1)
+    -- The time of the overrides, else one block time after the last block of the gap.
     let t := c.blockOverrides.time.getD (time + blockTime * (gap + 1))
     ⟨gap, n, t, c⟩ :: planBlocks blockTime n t cs
 
@@ -273,6 +284,7 @@ def planBlocks (blockTime number time : Nat) : List BlockStateCall → List Plan
 def expandBlocks (blockTime number time : Nat) : List PlannedBlock → List (Nat × Nat)
   | [] => []
   | b :: bs =>
+    -- The gap blocks, a block time apart, then the block itself.
     (List.range b.gap).map (fun i => (number + 1 + i, time + blockTime * (i + 1))) ++
       (b.number, b.time) :: expandBlocks blockTime b.number b.time bs
 
@@ -299,8 +311,10 @@ The plan follows a block of the given number and time. -/
 def checkOrder (blockTime number time : Nat) : List PlannedBlock → Except RpcError Unit
   | [] => .ok ()
   | b :: bs => do
+    -- The number increases, else code -38020.
     ensure (number < b.number)
       (blockNumberOrder.toRpcError (some (.str s!"{b.number} <= {number}")))
+    -- The time is past that of the block before, the last gap block if any, else code -38021.
     let before := time + blockTime * b.gap
     ensure (before < b.time) (blockTimeOrder.toRpcError (some (.str s!"{b.time} <= {before}")))
     checkOrder blockTime b.number b.time bs
@@ -314,15 +328,20 @@ def AccountOverride.changesState (o : AccountOverride) : Bool :=
 /-- The storage of an account after an override of its slots. -/
 def StorageOverride.apply (storage : Std.ExtTreeMap Bytes32 U256) :
     StorageOverride → Std.ExtTreeMap Bytes32 U256
+  -- A full override replaces the whole storage.
   | .full slots => slots.foldl (fun m (k, v) => m.insert k v) ∅
+  -- A diff override sets its slots and keeps the others.
   | .diff slots => slots.foldl (fun m (k, v) => m.insert k v) storage
 
 /-- The state after the override of the account at an address.
 
 An override that changes the state creates the account when it has none. -/
 def applyAccountOverride (s : State) (a : Address) (o : AccountOverride) : State :=
+  -- A move of a precompile alone leaves the state as it is.
   if o.changesState then
+    -- The account, or the empty account when the address has none.
     let account := (s.getAccountOptional a).getD EMPTY_ACCOUNT
+    -- Each field that the override sets replaces the field of the account.
     let account := { account with
       nonce := o.nonce.getD account.nonce
       balance := o.balance.getD account.balance
@@ -347,9 +366,12 @@ def precompileMoves (overrides : List (Address × AccountOverride)) : List (Addr
 /-- Check the moves of precompiles of a block at a fork. -/
 def checkMoves (fork : Fork) (overrides : List (Address × AccountOverride)) :
     Except RpcError Unit :=
+  -- Two moves to one address give no error, as the fixtures show, though the method lists -38023.
   (precompileMoves overrides).forM fun (a, b) => do
+    -- Only a precompile of the fork moves, else code -32000, as the fixtures show.
     ensure (a ∈ precompileAddresses fork)
       (invalidInput.toRpcError (some (.str s!"account {hexString a.toList} is not a precompile")))
+    -- And not to its own address, else code -38022.
     ensure (a ≠ b) movePrecompileToItself.toRpcError
 
 /-! ## The checks before the execution -/
@@ -366,17 +388,25 @@ structure SimulatePlan where
 It checks the base block, the limit and the order, then the fork and the moves of each block. -/
 def ChainView.planSimulate (v : ChainView) (payload : SimulatePayload) (p : BlockParam)
     (choices : SimulateChoices) : Except RpcError SimulatePlan := do
+  -- The base block of the request, else code -32000, as the fixtures show.
   let some base ← v.resolve p | throw (invalidInput.toRpcError (some (.str "header not found")))
   let number := base.block.header.number
   let time := base.block.header.timestamp.toNat
   let blocks := planBlocks choices.blockTime number time payload.blockStateCalls
+  -- At most the blocks that the node allows, else code -38026.
+  --
+  -- EthLib's choice: gap blocks count, which the notes leave open.
   ensure (PlannedBlock.count blocks ≤ choices.maxBlocks)
     (clientLimitExceeded.toRpcError (some (.str "too many blocks")))
+  -- Numbers and times that strictly increase, else code -38020 or -38021.
   checkOrder choices.blockTime number time blocks
   let blocks ← blocks.mapM fun b => do
+    -- The fork of each block, at its number and its time.
     let some fork := v.config.activeFork b.number b.time
       | throw (callInternalError "no fork for the block")
+    -- EthLib's choice: a fork that EthLib does not yet specify is an internal error.
     ensure (fork < .hegota) (callInternalError "fork not yet specified")
+    -- The moves of precompiles of the block.
     checkMoves fork b.request.stateOverrides
     return (b, fork)
   return { base, blocks }
