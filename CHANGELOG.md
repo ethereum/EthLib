@@ -824,6 +824,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- `dnsdisc.parse_entry` and `dnsdisc.resolve` give code 8, a refused node record, for a record whose RLP encoding fails, in place of code 0 ([#3605](https://github.com/ethereum/EthLib/issues/3605)).
+  The message stays `record has no RLP encoding`, and every export that encodes a record now gives it.
+  The encoder fails only for a payload of `2^64` bytes or more, so no record of a test reaches this failure.
+
 - In Lean, GASPRICE, NUMBER, DIFFICULTY, GASLIMIT, BASEFEE and BLOBBASEFEE abort the execution with the new error `EvmError.wordOverflow` when the number they push is `2^256` or more ([#3848](https://github.com/ethereum/EthLib/issues/3848)).
   They pushed the number modulo `2^256`, a value that no source gives; execution-specs fails there with an error that is not an exception of the EVM.
   The new step `readNumber` reads such a number; `EvmError.aborts` is true on the new error, and the trace text of the error is `value above a word`.
@@ -845,7 +849,6 @@ Not yet released.
   Slashing protection and the Keymanager API give their error on one line, in place of `slashing protection failed with code N` and `keymanager value rejected with code N`.
   That form is the full Lean name of the constructor and its arguments, such as `EthLib.Consensus.SlashingProtectionError.slashableBlock 100`, with roots as hex behind `0x`.
   The Builder API gives a failed step of the transition on one line, as the other consensus exports do.
-  `enr.from_text`, `enr.sign_v4` and `enr.make_record_v4` give `record is not one RLP item`, the message of an RLP error of a record, in place of `record has no RLP encoding`.
   `dnsdisc.verify_root` gives `root does not have the fields e=, l=, seq= and sig=, in that order` for a text that is no root, in place of `text is not a root`.
 
 - In Lean, the nonce of a set-code transaction is `UInt64`, and the other kinds keep a nonce of 256 bits ([#3846](https://github.com/ethereum/EthLib/issues/3846)).
