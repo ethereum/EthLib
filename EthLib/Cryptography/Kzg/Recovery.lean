@@ -16,10 +16,9 @@ The Reed-Solomon recovery routine for cell proofs.
 
 EIP-7594 adds it at the Fusaka fork.
 
-Consensus-specs writes this recovery out at `8a3df1d7`, as a reference point:
-<https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/fulu/polynomial-commitments-sampling.md>
+[EIP-7594, Specification][eip-7594] lets a node rebuild the data from at least half of it.
 
-EIP-7594 links that file at `9d377fd5`; the later text has the interface used here.
+[eip-7594]: https://eips.ethereum.org/EIPS/eip-7594#specification
 -/
 
 @[expose] public section
@@ -40,7 +39,7 @@ If every cell were missing, the polynomial would be `Z(x) = x^n - 1`, with `n = 
 Recovery needs at least half of the cells, so that case never arises. -/
 def constructVanishingPolynomial
     (missingCellIndices : Array CellIndex) : Except KzgError PolynomialCoeff := do
-  -- At least one cell must be present: the source assumes it, and EthLib checks it here.
+  -- At least one cell must be present, and EthLib checks it here.
   --
   -- With every cell missing, the short polynomial has 129 coefficients, too many for the writes.
   if missingCellIndices.size ≥ CELLS_PER_EXT_BLOB then

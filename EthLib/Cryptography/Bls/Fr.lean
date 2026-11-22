@@ -157,9 +157,6 @@ def fromBytesBE (b : Vector UInt8 32) : Except BlsError Fr :=
 /-- Hash the data, and convert the digest to an element of `Fr`.
 
 The output is not uniform over `Fr`.
-
-Consensus-specs writes this hash out at `8a3df1d7`, as a reference point:
-<https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/deneb/polynomial-commitments.md#hash_to_bls_field>
 -/
 def hashToBlsField (data : ByteArray) : Fr :=
   -- The digest `d = SHA-256(data)`.

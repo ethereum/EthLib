@@ -18,9 +18,6 @@ A polynomial in evaluation form is an array of 4096 elements of `Fr`.
 The length is checked where a polynomial enters an operation.
 
 A polynomial in coefficient form is also an array of `Fr`, for the cells.
-
-Consensus-specs writes the evaluation form out at `8a3df1d7`, as a reference point:
-<https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/deneb/polynomial-commitments.md>
 -/
 
 @[expose] public section
@@ -123,11 +120,7 @@ def computeRootsOfUnity (order : Nat) : Array Fr :=
     (computeRootsOfUnity order).size = order := by
   simp [computeRootsOfUnity]
 
-/-! ## Polynomials in coefficient form
-
-Consensus-specs writes these operations out at `8a3df1d7`, as a reference point:
-<https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/fulu/polynomial-commitments-sampling.md#polynomials-in-coefficient-form>
--/
+/-! ## Polynomials in coefficient form -/
 
 /-- Sum the coefficient-form polynomials `a` and `b`. -/
 def addPolynomialcoeff (a b : PolynomialCoeff) : PolynomialCoeff :=
@@ -166,7 +159,7 @@ It rejects an empty divisor.
 It also rejects a divisor with a zero leading coefficient, when the loop would run. -/
 def dividePolynomialcoeff (a b : PolynomialCoeff) :
     Except KzgError PolynomialCoeff := do
-  -- An empty divisor has no leading coefficient, so it is rejected, where the source fails too.
+  -- An empty divisor has no leading coefficient, so it is rejected.
   if hb : b.size = 0 then
     throw .zeroDivisorPolynomial
   -- When `a` is shorter than `b`, no step runs, and the quotient is empty.
@@ -176,7 +169,7 @@ def dividePolynomialcoeff (a b : PolynomialCoeff) :
     -- The leading coefficient of `b` has index `|b| - 1`.
     let bpos := b.size - 1
     let lead := b[bpos]'(by omega)
-    -- A zero leading coefficient of `b` is rejected here, a check the source does not make.
+    -- A zero leading coefficient of `b` is rejected, and EthLib checks it here.
     --
     -- Every step would divide by zero, and division by zero in `Fr` returns 0: a silent failure.
     if lead.isZero then

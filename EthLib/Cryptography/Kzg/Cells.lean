@@ -23,10 +23,9 @@ Each cell carries its own KZG multi-evaluation proof.
 
 So a verifier can sample any set of cells without downloading the whole blob.
 
-Consensus-specs writes these operations out at `8a3df1d7`, as a reference point:
-<https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/fulu/polynomial-commitments-sampling.md>
+[EIP-7594, Specification][eip-7594] authenticates each cell against its blob's KZG commitment.
 
-EIP-7594 links that file at `9d377fd5`; the later text has the interface used here.
+[eip-7594]: https://eips.ethereum.org/EIPS/eip-7594#specification
 -/
 
 @[expose] public section
@@ -187,7 +186,7 @@ def computeCellsAndKzgProofsPolynomialcoeff (setup : TrustedSetup)
     (polynomialCoeff : PolynomialCoeff) : Except KzgError (Array Cell × Array KZGProof) := do
   let n := FIELD_ELEMENTS_PER_CELL
   let size := polynomialCoeff.size
-  -- The source computes and proves each cell on its own.
+  -- The direct method computes and proves each cell on its own.
   --
   -- Here one FFT gives all the cells, and the FK20 method below gives all the proofs.
   let cells := cellsOfExtendedEvaluations (extendedEvaluations polynomialCoeff)

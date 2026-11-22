@@ -18,14 +18,12 @@ Each operation that reads the trusted setup takes it as its first argument.
 
 Each operation that can reject its input returns `Except KzgError`.
 
-Consensus-specs writes these operations out at `8a3df1d7`, as a reference point:
-<https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/deneb/polynomial-commitments.md>
+The scheme is PolyCommit_DL, §3.2 of Kate, Zaverucha and Goldberg, ASIACRYPT 2010:
+<https://www.iacr.org/archive/asiacrypt2010/6477178/6477178.pdf>
 
-EIP-4844 links that file at `86fb82b2`, where the proof function returns no `y`.
+[EIP-4844, Cryptographic helpers][eip-4844] uses its check of one opening and its batch check.
 
-There entry 1 of the `G2` setup has another name.
-
-There also the negation of `z` is computed as `(r - z) mod r`, for the modulus `r` of `Fr`.
+[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#cryptographic-helpers
 -/
 
 @[expose] public section

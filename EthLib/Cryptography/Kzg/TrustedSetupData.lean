@@ -5,19 +5,15 @@ module
 
 The KZG trusted setup, as the compressed points the ceremony published.
 
-The source is consensus-specs `presets/mainnet/trusted_setups/trusted_setup_4096.json`.
+The points are the final output of the KZG ceremony, for 4096 field elements per blob.
 
-It last changed in ethereum/consensus-specs#3583, at commit `39d22849d1034e50eae45200700d94052de539ae`, which took it from the final output of the KZG ceremony.
+SHA-256 of their setup file: `f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f`.
 
-At that commit the file has sha256 `f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f`.
+The arrays below hold its three lists, point for point, as hex without the `0x` prefix.
 
-The arrays below hold its three lists, point for point, without the `0x` prefix:
-
-```text
-g1_lagrange  ->  g1LagrangeHex   4096 points of 48 bytes
-g1_monomial  ->  g1MonomialHex   4096 points of 48 bytes
-g2_monomial  ->  g2MonomialHex     65 points of 96 bytes
-```
+- The Lagrange form of the `G1` setup: 4096 points of 48 bytes.
+- The monomial form of the `G1` setup: 4096 points of 48 bytes.
+- The monomial form of the `G2` setup: 65 points of 96 bytes.
 
 The setup is trusted, not proved.
 

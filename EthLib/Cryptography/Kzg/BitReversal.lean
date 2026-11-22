@@ -4,9 +4,6 @@ module
 # `BitReversal`
 
 The bit reversal of an index, and the bit-reversal permutation of an array.
-
-Consensus-specs writes these operations out at `8a3df1d7`, as a reference point:
-<https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/deneb/polynomial-commitments.md>
 -/
 
 @[expose] public section

@@ -8,11 +8,6 @@ public import EthLib.Cryptography.Kzg.BitReversal
 # `Fft`
 
 Number-theoretic transforms over `Fr`, including a coset variant.
-
-Consensus-specs writes these transforms out at `8a3df1d7`, as a reference point:
-<https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/fulu/polynomial-commitments-sampling.md>
-
-EIP-7594 links that file at `9d377fd5`; the later text has the interface used here.
 -/
 
 @[expose] public section
@@ -147,7 +142,7 @@ def fftField
 
 Output `i` is `sum_j [w_i^j] vals[j]`, where `w_i` is entry `i` of the roots of unity.
 
-Consensus-specs has no FFT in `G1`, since it computes cell proofs one by one.
+The direct method computes cell proofs one by one, with no FFT in `G1`.
 
 The butterflies are those of the FFT over `Fr`.
 
