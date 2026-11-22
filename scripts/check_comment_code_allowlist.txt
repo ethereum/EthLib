@@ -47,3 +47,35 @@ EthLib/Cryptography/Xmss/Tree.lean | C15 | the XMSS paper writes the authenticat
 EthLib/Networking/Quic/Frame.lean | C15 | RFC 9000 §19.3.1 writes the ACK range formulas in this notation | largest = previous_smallest - gap - 2
 EthLib/Networking/Quic/Frame.lean | C15 | RFC 9000 §19.3.1 writes the ACK range formulas in this notation | smallest = largest - ack_range
 EthLib/Networking/Quic/Tls/Transcript.lean | C15 | RFC 8446 §4.4.1 writes the synthetic message in this notation | message_hash || 00 00 Hash.length || Hash(ClientHello1)
+EthLib/Networking/Quic/Keys.lean | C15 | RFC 9001 §5.2 writes the initial secrets in this pseudocode | initial_salt = 0x38762cf7f55934b34d179ae6a4c80cadccbb7f0a
+EthLib/Networking/Quic/Keys.lean | C15 | RFC 9001 §5.2 writes the initial secrets in this pseudocode | initial_secret = HKDF-Extract(initial_salt, client_dst_connection_id)
+EthLib/Networking/Quic/Keys.lean | C15 | RFC 9001 §5.2 writes the initial secrets in this pseudocode | client_initial_secret = HKDF-Expand-Label(initial_secret, "client in", "", Hash.length)
+EthLib/Networking/Quic/Keys.lean | C15 | RFC 9001 §5.2 writes the initial secrets in this pseudocode | server_initial_secret = HKDF-Expand-Label(initial_secret, "server in", "", Hash.length)
+EthLib/Networking/Quic/Packet.lean | C15 | RFC 9000 Appendix A.2 writes the encoding in this pseudocode | num_unacked = full_pn + 1
+EthLib/Networking/Quic/Packet.lean | C15 | RFC 9000 Appendix A.2 writes the encoding in this pseudocode | num_unacked = full_pn - largest_acked
+EthLib/Networking/Quic/Packet.lean | C15 | RFC 9000 erratum 9281 writes the corrected Appendix A.2 in this pseudocode | num_bytes = floor(min_bits / 8) + 1
+EthLib/Networking/Quic/Packet.lean | C15 | RFC 9000 Appendix A.2 writes the encoding in this pseudocode | encode(full_pn, num_bytes)
+EthLib/Networking/Quic/Packet.lean | C15 | RFC 9000 Appendix A.3 writes the decoding in this pseudocode | pn_win = 1 << pn_nbits
+EthLib/Networking/Quic/Packet.lean | C15 | RFC 9000 Appendix A.3 writes the decoding in this pseudocode | candidate_pn = (expected_pn & ~pn_mask) | truncated_pn
+EthLib/Networking/Quic/Packet.lean | C15 | RFC 9000 Appendix A.3 writes the decoding in this pseudocode | pn_mask = pn_win - 1
+EthLib/Networking/Quic/Packet.lean | C10 | RFC 9000 Appendix A.3 writes the decoding in this pseudocode | candidate_pn <= expected_pn - pn_hwin and candidate_pn < (1 << 62) - pn_win
+EthLib/Networking/Quic/Packet.lean | C15 | RFC 9000 Appendix A.3 writes the decoding in this pseudocode | pn_hwin = pn_win / 2
+EthLib/Networking/Quic/Packet.lean | C5 | RFC 9000 Appendix A.3 writes the decoding in this pseudocode | return candidate_pn + pn_win
+EthLib/Networking/Quic/Packet.lean | C10 | RFC 9000 Appendix A.3 writes the decoding in this pseudocode | candidate_pn > expected_pn + pn_hwin and candidate_pn >= pn_win
+EthLib/Networking/Quic/Packet.lean | C5 | RFC 9000 Appendix A.3 writes the decoding in this pseudocode | return candidate_pn - pn_win
+EthLib/Networking/Quic/Packet.lean | C5 | RFC 9000 Appendix A.3 writes the decoding in this pseudocode | return candidate_pn
+EthLib/Networking/Quic/Protection.lean | C15 | RFC 9001 §5.4.3 writes header protection in this pseudocode | mask = AES-ECB(hp_key, sample)
+EthLib/Networking/Quic/Protection.lean | C15 | RFC 9001 §5.4.4 writes header protection in this pseudocode | mask = ChaCha20(hp_key, counter, nonce, {0,0,0,0,0})
+EthLib/Networking/Quic/Protection.lean | C15 | RFC 9001 §5.4.1 writes header protection in this pseudocode | packet[pn_offset:pn_offset+pn_length] ^= mask[1:1+pn_length]
+EthLib/Networking/Quic/Protection.lean | C15 | RFC 9001 §5.4.2 writes header protection in this pseudocode | sample_offset = pn_offset + 4
+EthLib/Networking/Quic/Protection.lean | C15 | RFC 9001 §5.4.2 writes header protection in this pseudocode | sample = packet[sample_offset..sample_offset+sample_length]
+EthLib/Networking/Quic/Protection.lean | C15 | RFC 9001 §5.4.1 writes header protection in this pseudocode | mask = header_protection(hp_key, sample)
+EthLib/Networking/Quic/Protection.lean | C1 | RFC 9001 §5.4.1 writes header protection in this pseudocode | (packet[0] & 0x80) == 0x80
+EthLib/Networking/Quic/Protection.lean | C15 | RFC 9001 §5.4.1 writes header protection in this pseudocode | pn_length = (packet[0] & 0x03) + 1
+EthLib/Networking/Quic/Protection.lean | C7 | RFC 9001 §5.4.2 writes header protection in this pseudocode | §5.4.2: `pn_offset = 1 + len(connection_id)` in a short header.
+EthLib/Networking/Quic/Protection.lean | C15 | RFC 9001 §5.4.2 writes header protection in this pseudocode | pn_offset = 1 + len(connection_id)
+EthLib/Networking/Quic/Protection.lean | C15 | RFC 9000 Appendix A.3 writes the decoding in this pseudocode | expected_pn = largest_pn + 1
+EthLib/Networking/Quic/Varint.lean | C15 | RFC 9000 Appendix A.1 writes the decoding in this pseudocode | v = (v << 8) + data.next_byte()
+EthLib/Networking/Quic/Varint.lean | C15 | RFC 9000 Appendix A.1 writes the decoding in this pseudocode | v = data.next_byte()
+EthLib/Networking/Quic/Packet.lean | C15 | RFC 9000 Appendix A.3 writes the decoding in this pseudocode | candidate_pn <= expected_pn - pn_hwin and candidate_pn < (1 << 62) - pn_win
+EthLib/Networking/Quic/Packet.lean | C15 | RFC 9000 Appendix A.3 writes the decoding in this pseudocode | candidate_pn > expected_pn + pn_hwin and candidate_pn >= pn_win
