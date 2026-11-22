@@ -315,7 +315,7 @@ theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : L
       items 2 2 65534 codePoint d >>= fun (suites, e) =>
       bytes 2 e >>= fun (compression, f) =>
       require (compression = [1, 0]) .constant f >>= fun (_, g) =>
-      readExtensions 8 g >>= fun (extensions, h) =>
+      readExtensions 7 g >>= fun (extensions, h) =>
         .ok (.clientHello ⟨random, session.toByteArray, suites, extensions⟩, h)) =
           .ok (message, rest) at parsed
     simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
@@ -381,7 +381,7 @@ theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : L
     have sameKind : kind = 13 := UInt8.toNat_inj.mp tag
     subst kind
     change (blob 1 0 255 input >>= fun (context, suffix) =>
-      readExtensions 2 suffix >>= fun (extensions, trailing) =>
+      readExtensions 0 suffix >>= fun (extensions, trailing) =>
         .ok (.certificateRequest ⟨context.toByteArray, extensions⟩, trailing)) =
           .ok (message, rest) at parsed
     simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed

@@ -48,11 +48,18 @@ MESSAGES: list[tuple[tls.Message, str]] = [
         ("server_hello", SMALL_SERVER),
         "0200002e0303" + "00" * 32 + "001301000006002b00020304",
     ),
+    # RFC 9846 §4.2.2: the smallest extension block, a lone supported_versions of 7 bytes.
+    (
+        ("client_hello", {**SMALL_CLIENT, "extensions": [VERSIONS]}),
+        "010000320303" + "00" * 32 + "000002130101000007002b0003020304",
+    ),
     (("encrypted_extensions", []), "080000020000"),
     (
         ("certificate_request", {"context": b"", "extensions": [SIGNATURES]}),
         "0d00000b000008000d000400020403",
     ),
+    # RFC 9846 §4.4.2: the extension block of a CertificateRequest may be empty.
+    (("certificate_request", {"context": b"", "extensions": []}), "0d000003000000"),
     (("certificate", {"context": b"", "entries": []}), "0b00000400000000"),
     (
         (
@@ -169,6 +176,8 @@ def test_bad_payload(form: tls.PayloadForm, kind: int, data: str, error: str) ->
         ("080000030001aa", "length"),
         ("0800000a00080039000000390000", "duplicateExtension 57"),
         ("0b000009000000050000000000", "length"),
+        # A CertificateRequest block of 1 byte holds no whole extension, though its floor is 0.
+        ("0d00000400000100", "length"),
         ("ff000000", "messageType 255"),
         # A peer cannot send the transcript's synthetic message_hash (§4.4.1).
         ("fe000020" + "00" * 32, "messageType 254"),
@@ -180,6 +189,18 @@ def test_bad_message(encoded: str, error: str) -> None:
     with raises(tls.TlsHandshakeError, f"{PREFIX}{error}") as info:
         tls.decode_message(32, bytes.fromhex(encoded))
     assert info.value.code == CODES[error.split()[0]]
+
+
+def test_client_hello_extensions_below_their_floor() -> None:
+    # RFC 9846 §4.2.2: `Extension extensions<7..2^16-1>;`, and this block has 6 bytes.
+    extensions: list[tls.Extension] = [{"kind": 0xAAAA, "data": bytes(2)}]
+    with raises(tls.TlsHandshakeError, f"{PREFIX}length") as info:
+        tls.encode_message(32, ("client_hello", {**SMALL_CLIENT, "extensions": extensions}))
+    assert info.value.code == CODES["length"]
+    encoded = "010000310303" + "00" * 32 + "000002130101000006aaaa00020000"
+    with raises(tls.TlsHandshakeError, f"{PREFIX}length") as info:
+        tls.decode_message(32, bytes.fromhex(encoded))
+    assert info.value.code == CODES["length"]
 
 
 def test_legacy_constants() -> None:

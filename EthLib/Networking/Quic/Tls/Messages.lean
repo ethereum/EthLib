@@ -176,8 +176,10 @@ def encodeBody (hashLength : Nat) : Message → Except Error (List UInt8)
     let session ← encodeBlob 1 0 32 h.legacySessionId.data.toList
     -- `CipherSuite cipher_suites<2..2^16-2>;`.
     let suites ← encodeCodePoints 2 2 65534 h.cipherSuites
-    -- `Extension extensions<8..2^16-1>;`.
-    let extensions ← encodeExtensions 8 h.extensions
+    -- RFC 9846 §4.2.2: `Extension extensions<7..2^16-1>;`.
+    --
+    -- RFC 8446 printed a floor of 8, which its verified erratum 8423 corrects to 7.
+    let extensions ← encodeExtensions 7 h.extensions
     -- `ProtocolVersion legacy_version = 0x0303;`, `Random random;`, then the vectors above.
     --
     -- The compression methods are one byte, set to zero, after their one-byte length.
@@ -198,8 +200,10 @@ def encodeBody (hashLength : Nat) : Message → Except Error (List UInt8)
   | .certificateRequest request => do
     -- `opaque certificate_request_context<0..2^8-1>;`.
     let context ← encodeBlob 1 0 255 request.context.data.toList
-    -- `Extension extensions<2..2^16-1>;`.
-    return context ++ (← encodeExtensions 2 request.extensions)
+    -- RFC 9846 §4.4.2: `Extension extensions<0..2^16-1>;`.
+    --
+    -- RFC 8446 printed a floor of 2, which RFC 9846 §1.2 corrects to 0.
+    return context ++ (← encodeExtensions 0 request.extensions)
   -- §4.4.2, Certificate.
   | .certificate certificate => do
     -- `opaque certificate_request_context<0..2^8-1>;`.
@@ -234,8 +238,12 @@ def readBody (hashLength : Nat) (kind : UInt8) : Reader Message := do
     --
     -- §4.1.2: in TLS 1.3 this vector MUST contain exactly one byte, set to zero.
     require ((← bytes 2) = [1, 0]) .constant
-    -- `Extension extensions<8..2^16-1>;`.
-    return .clientHello ⟨random, session.toByteArray, suites, ← readExtensions 8⟩
+    -- RFC 9846 §4.2.2: `Extension extensions<7..2^16-1>;`.
+    --
+    -- The smallest block is one supported versions extension that lists one version.
+    --
+    -- That is 4 header bytes, 1 length byte and 2 version bytes.
+    return .clientHello ⟨random, session.toByteArray, suites, ← readExtensions 7⟩
   -- The server hello, type 2, §4.1.3, whose structure a HelloRetryRequest shares.
   | 2 =>
     -- `ProtocolVersion legacy_version = 0x0303;`.
@@ -256,8 +264,10 @@ def readBody (hashLength : Nat) (kind : UInt8) : Reader Message := do
   | 13 =>
     -- `opaque certificate_request_context<0..2^8-1>;`.
     let context ← blob 1 0 255
-    -- `Extension extensions<2..2^16-1>;`.
-    return .certificateRequest ⟨context.toByteArray, ← readExtensions 2⟩
+    -- RFC 9846 §4.4.2: `Extension extensions<0..2^16-1>;`, so the block may be empty.
+    --
+    -- The handshake steps require the signature algorithms extension in it.
+    return .certificateRequest ⟨context.toByteArray, ← readExtensions 0⟩
   -- The certificate, type 11, §4.4.2.
   | 11 =>
     -- `opaque certificate_request_context<0..2^8-1>;`.
