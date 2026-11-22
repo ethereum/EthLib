@@ -152,23 +152,28 @@ def findCommitteeOf (preset : Preset) (validatorIndex : ValidatorIndex) (perSlot
     (active : Array ValidatorIndex) (shuffled : Array UInt64) :
     List (Slot × CommitteeIndex) →
       Except ValidatorDutyError (Option (Array ValidatorIndex × CommitteeIndex × Slot))
+  -- No listed committee holds the validator.
   | [] => return none
   | (slot, index) :: rest => do
+    -- The committee of the index at the slot, cut from the shuffle with the count per slot.
     let committee ← (beaconCommitteeOf preset slot index perSlot active shuffled).mapError .accessor
+    -- The first committee that holds the validator gives the answer, with its index and slot.
     if validatorIndex ∈ committee then return some (committee, index, slot)
+    -- Otherwise the search goes on with the rest.
     findCommitteeOf preset validatorIndex perSlot active shuffled rest
 
 /-- The slots of an epoch, each with the indices of its committees, in order. -/
 def committeePositions (state : BeaconState preset fork) (epoch : Epoch) :
     Except ValidatorDutyError (List (Slot × CommitteeIndex)) := do
+  -- The `SLOTS_PER_EPOCH` slots of the epoch `e`, from slot `e * SLOTS_PER_EPOCH`.
   let slots ← (epochSlots preset epoch).mapError .arith
+  -- The count `c` of committees per slot in `e`.
   let perSlot := getCommitteeCountPerSlot state epoch
+  -- Each slot with each index `i`, for `0 ≤ i < c`, slot by slot.
   return slots.flatMap fun slot =>
     (List.range perSlot.toNat).map fun index => (slot, index.toUInt64)
 
 /-- The committee of a validator in an epoch, with the index and the slot of the committee.
-
-The epoch must be at most the next one, since later committees are not known yet.
 
 A validator that is not active in the epoch has no committee.
 
@@ -182,7 +187,9 @@ The committees share one shuffle of the active validators, computed at most once
 def getCommitteeAssignment (state : BeaconState preset fork) (epoch : Epoch)
     (validatorIndex : ValidatorIndex) :
     Except ValidatorDutyError (Option (Array ValidatorIndex × CommitteeIndex × Slot)) := do
+  -- Let `e` be the epoch asked, and `n = c + 1` for the current epoch `c`.
   let nextEpoch ← (addChecked (getCurrentEpoch state) 1).mapError .arith
+  -- `e ≤ n`, since the committees of later epochs are not known yet.
   if epoch ≤ nextEpoch then
     match ← committeePositions state epoch with
     -- Only a preset with no slot in an epoch lists no committee.
@@ -196,38 +203,49 @@ def getCommitteeAssignment (state : BeaconState preset fork) (epoch : Epoch)
     -- So reading the shuffle first changes no error.
     | positions@(_ :: _) =>
       let (active, shuffled) ← (attesterShuffle state epoch).mapError .accessor
+      -- The first committee of `e` that holds the validator, slot by slot and index by index.
       findCommitteeOf preset validatorIndex (getCommitteeCountPerSlot state epoch) active shuffled
         positions
+  -- An epoch after `n` is an error.
   else throw (.epochTooFar epoch nextEpoch)
 
 /-- Whether a validator proposes the block of the slot of a state. -/
 def isProposer (state : BeaconState preset fork) (validatorIndex : ValidatorIndex) :
     Except ValidatorDutyError Bool := do
+  -- The proposer of the slot of the state is the validator.
   return (← (getBeaconProposerIndex state).mapError .accessor) == validatorIndex
 
 /-- From Gloas: the first of some slots whose payload timeliness committee holds a validator. -/
 def findPtcSlot (config : Config) (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (validatorIndex : ValidatorIndex) : List Slot → Except ValidatorDutyError (Option Slot)
+  -- No listed slot has a committee that holds the validator.
   | [] => return none
   | slot :: rest => do
+    -- The payload timeliness committee of the slot.
     let committee ← (getPtc config state gloas slot).mapError .accessor
+    -- The first slot whose committee holds the validator gives the answer.
     if validatorIndex ∈ committee.toList then return some slot
+    -- Otherwise the search goes on with the rest.
     findPtcSlot config state gloas validatorIndex rest
 
 /-- From Gloas: the slot of an epoch whose payload timeliness committee holds a validator.
 
-The epoch must be at most the lookahead of seeds after the current one.
-
 A validator in no committee of the epoch has no slot.
 
-It fails for an epoch after that one, and when the committee of a slot has no value.
+It fails for an epoch more than the lookahead of seeds after the current one.
 
-It also fails when the last epoch, the first slot or that slot plus an epoch overflows 64 bits. -/
+It also fails when the committee of a slot has no value.
+
+It fails too when that last epoch, the first slot or that slot plus an epoch overflows 64 bits. -/
 def getPtcAssignment (config : Config) (state : BeaconState preset fork)
     (gloas : .glamsterdam ≤ fork) (epoch : Epoch) (validatorIndex : ValidatorIndex) :
     Except ValidatorDutyError (Option Slot) := do
+  -- Let `e` be the epoch asked, and `c` the current epoch.
+  --
+  -- `e ≤ c + MIN_SEED_LOOKAHEAD`, and a later epoch is an error.
   let maxEpoch ← (addChecked (getCurrentEpoch state) preset.MIN_SEED_LOOKAHEAD).mapError .arith
   unless epoch ≤ maxEpoch do throw (.epochTooFar epoch maxEpoch)
+  -- The first slot of `e` whose committee holds the validator, slot by slot.
   findPtcSlot config state gloas validatorIndex (← (epochSlots preset epoch).mapError .arith)
 
 /-- From Gloas: the slots after the slot of a state that a validator proposes, in order.
@@ -237,54 +255,66 @@ The state keeps the proposers from the start of its epoch, for the lookahead of 
 It fails when the first slot of the epoch, or a slot of the lookahead, overflows 64 bits. -/
 def getUpcomingProposalSlots (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (validatorIndex : ValidatorIndex) : Except ValidatorDutyError (List Slot) := do
+  -- The first slot `x_0 = c * SLOTS_PER_EPOCH` of the current epoch `c`.
   let startSlot ← (computeStartSlotAtEpoch preset (getCurrentEpoch state)).mapError .arith
+  -- The proposers of the slots from `x_0` on, one for each slot.
   let lookahead := state.proposerLookahead (Nat.le_trans (by decide) gloas)
   -- Each offset of the lookahead gives a slot, which must be a 64-bit slot.
   let slots ← (List.finRange lookahead.size).mapM fun offset =>
     if startSlot.toNat + offset.val < 2 ^ 64 then
       .ok (startSlot + offset.val.toUInt64, lookahead[offset])
     else .error (.arith .overflow)
+  -- The slots `x` with `s < x`, for the slot `s` of the state, whose proposer is the validator.
   return (slots.filter fun (slot, proposer) => state.slot < slot ∧ proposer = validatorIndex).map
     (·.1)
 
 /-- From Altair: whether a validator serves on the sync committee of the period of an epoch.
 
-The period must be the current one or the next, since the state holds only those committees. -/
+It fails for a period other than the current one or the next. -/
 def isAssignedToSyncCommittee (state : BeaconState preset fork) (altair : .altair ≤ fork)
     (epoch : Epoch) (validatorIndex : ValidatorIndex) : Except ValidatorDutyError Bool := do
+  -- The period `p = floor(e / EPOCHS_PER_SYNC_COMMITTEE_PERIOD)` of the epoch `e`.
   let period := computeSyncCommitteePeriod preset epoch
+  -- The period `q` of the current epoch.
   let currentPeriod := computeSyncCommitteePeriod preset (getCurrentEpoch state)
+  -- `p` is `q` or `q + 1`, since the state holds only those two committees.
   let nextPeriod ← (addChecked currentPeriod 1).mapError .arith
   unless period = currentPeriod ∨ period = nextPeriod do
     throw (.periodOutOfRange period currentPeriod)
+  -- The key of the validator.
   let pubkey := (← (getValidator state validatorIndex).mapError .accessor).pubkey
+  -- In period `q` the key is in the current committee.
   if period = currentPeriod then
     return (state.currentSyncCommittee altair).value.pubkeys.contains pubkey
+  -- In period `q + 1` the key is in the next committee.
   else
     return (state.nextSyncCommittee altair).value.pubkeys.contains pubkey
 
 /-- From Altair: the sync committee subnets of a validator for the next slot.
 
-The committee is the current one, unless the next slot starts a new period.
-
-Each seat of the validator in the committee gives the subnet of its subcommittee.
-
 The subnets come once each, in increasing order. -/
 def computeSubnetsForSyncCommittee (state : BeaconState preset fork) (altair : .altair ≤ fork)
     (validatorIndex : ValidatorIndex) : Except ValidatorDutyError (List UInt64) := do
+  -- The committee of the next slot: the current one, unless the next slot starts a new period.
   let syncCommittee ← (syncCommitteeAtNextSlot state altair).mapError .arith
+  -- The key of the validator.
   let targetPubkey := (← (getValidator state validatorIndex).mapError .accessor).pubkey
+  -- Let `m = floor(SYNC_COMMITTEE_SIZE / SYNC_COMMITTEE_SUBNET_COUNT)`, the size of a subcommittee.
+  --
+  -- Each seat `j` of the key gives the subnet `floor(j / m)`.
+  --
+  -- The subnets form a set, given here once each, in increasing order.
   return (syncSubnetsOfPubkey syncCommittee targetPubkey).mergeSort (· ≤ ·)
 
 /-! ## Signatures -/
 
-/-- The signature of an object by a secret key, under a domain type at an epoch.
-
-It signs the signing root of the object with the domain of the state at that epoch. -/
+/-- The signature of an object by a secret key, under a domain type at an epoch. -/
 def signAtEpoch {α : Type} [SszType α] (config : Config) (state : BeaconState preset fork)
     (domainType : DomainType) (epoch : Epoch) (object : α) (key : Signatures.SecretKey) :
     Except ValidatorDutyError BLSSignature := do
+  -- The domain of the type at the epoch, from the state.
   let domain ← (getDomain config state domainType (some epoch)).mapError .accessor
+  -- The BLS signature of the signing root of the object under that domain.
   let signingRoot ← (computeSigningRoot object domain).mapError .ssz
   (Signatures.sign key (packBytes signingRoot)).mapError .bls
 
@@ -292,19 +322,23 @@ def signAtEpoch {α : Type} [SszType α] (config : Config) (state : BeaconState 
 def getEpochSignature (config : Config) (state : BeaconState preset fork)
     (block : BeaconBlock preset fork) (key : Signatures.SecretKey) :
     Except ValidatorDutyError BLSSignature :=
+  -- The epoch `e` of the slot of the block.
   let epoch := computeEpochAtSlot preset block.slot
+  -- The signature of `e` under the RANDAO domain at `e`.
   signAtEpoch config state DOMAIN_RANDAO epoch epoch key
 
 /-- The signature of a block by its proposer, in the epoch of its slot. -/
 def getBlockSignature (config : Config) (state : BeaconState preset fork)
     (block : BeaconBlock preset fork) (key : Signatures.SecretKey) :
     Except ValidatorDutyError BLSSignature :=
+  -- The signature of the block under the proposer domain at the epoch of its slot.
   signAtEpoch config state DOMAIN_BEACON_PROPOSER (computeEpochAtSlot preset block.slot) block key
 
 /-- The signature of attestation data, in its target epoch. -/
 def getAttestationSignature (config : Config) (state : BeaconState preset fork)
     (attestationData : AttestationData) (key : Signatures.SecretKey) :
     Except ValidatorDutyError BLSSignature :=
+  -- The signature of the data under the attester domain at its target epoch.
   signAtEpoch config state DOMAIN_BEACON_ATTESTER attestationData.target.epoch attestationData key
 
 /-- The selection proof of a slot: the signature of the slot, in its epoch.
@@ -312,12 +346,14 @@ def getAttestationSignature (config : Config) (state : BeaconState preset fork)
 It decides whether the validator aggregates for its committee in that slot. -/
 def getSlotSignature (config : Config) (state : BeaconState preset fork) (slot : Slot)
     (key : Signatures.SecretKey) : Except ValidatorDutyError BLSSignature :=
+  -- The signature of the slot under the selection proof domain at the epoch of the slot.
   signAtEpoch config state DOMAIN_SELECTION_PROOF (computeEpochAtSlot preset slot) slot key
 
 /-- An aggregate with the index of its aggregator and its selection proof. -/
 def getAggregateAndProof (config : Config) (state : BeaconState preset fork)
     (aggregatorIndex : ValidatorIndex) (aggregate : Attestation preset fork)
     (key : Signatures.SecretKey) : Except ValidatorDutyError (AggregateAndProof preset fork) := do
+  -- The aggregate and its aggregator, with the selection proof of the slot of the aggregate.
   return {
     aggregatorIndex, aggregate,
     selectionProof := ← getSlotSignature config state aggregate.data.slot key }
@@ -326,23 +362,26 @@ def getAggregateAndProof (config : Config) (state : BeaconState preset fork)
 def getAggregateAndProofSignature (config : Config) (state : BeaconState preset fork)
     (aggregateAndProof : AggregateAndProof preset fork) (key : Signatures.SecretKey) :
     Except ValidatorDutyError BLSSignature :=
+  -- The signature under the aggregate and proof domain at the epoch of the aggregate's slot.
   signAtEpoch config state DOMAIN_AGGREGATE_AND_PROOF
     (computeEpochAtSlot preset aggregateAndProof.aggregate.data.slot) aggregateAndProof key
 
 /-- From Altair: the message of a sync committee member for a block root, at the slot of the state.
-
-It signs the root in the current epoch. -/
+-/
 def getSyncCommitteeMessage (config : Config) (state : BeaconState preset fork) (blockRoot : Root)
     (validatorIndex : ValidatorIndex) (key : Signatures.SecretKey) :
     Except ValidatorDutyError SyncCommitteeMessage := do
+  -- The signature of the root under the sync committee domain at the current epoch.
   let signature ←
     signAtEpoch config state DOMAIN_SYNC_COMMITTEE (getCurrentEpoch state) blockRoot key
+  -- The message names the slot of the state, the root and the validator.
   return { slot := state.slot, beaconBlockRoot := blockRoot, validatorIndex, signature }
 
 /-- From Altair: the selection proof of a subcommittee at a slot, in the epoch of the slot. -/
 def getSyncCommitteeSelectionProof (config : Config) (state : BeaconState preset fork)
     (slot : Slot) (subcommitteeIndex : UInt64) (key : Signatures.SecretKey) :
     Except ValidatorDutyError BLSSignature :=
+  -- The signature of the slot and the subcommittee index, under the sync selection proof domain.
   signAtEpoch config state DOMAIN_SYNC_COMMITTEE_SELECTION_PROOF (computeEpochAtSlot preset slot)
     ({ slot, subcommitteeIndex } : SyncAggregatorSelectionData) key
 
@@ -350,14 +389,17 @@ def getSyncCommitteeSelectionProof (config : Config) (state : BeaconState preset
 def getContributionAndProof (config : Config) (state : BeaconState preset fork)
     (aggregatorIndex : ValidatorIndex) (contribution : SyncCommitteeContribution preset)
     (key : Signatures.SecretKey) : Except ValidatorDutyError (ContributionAndProof preset) := do
+  -- The selection proof of the slot and the subcommittee of the contribution.
   let selectionProof ← getSyncCommitteeSelectionProof config state contribution.slot
     contribution.subcommitteeIndex key
+  -- The contribution and its aggregator, with that proof.
   return { aggregatorIndex, contribution, selectionProof }
 
 /-- From Altair: the signature of a contribution and proof, in the epoch of its slot. -/
 def getContributionAndProofSignature (config : Config) (state : BeaconState preset fork)
     (contributionAndProof : ContributionAndProof preset) (key : Signatures.SecretKey) :
     Except ValidatorDutyError BLSSignature :=
+  -- The signature under the contribution and proof domain at the epoch of the slot.
   signAtEpoch config state DOMAIN_CONTRIBUTION_AND_PROOF
     (computeEpochAtSlot preset contributionAndProof.contribution.slot) contributionAndProof key
 
@@ -367,6 +409,7 @@ The message names its validator, but the signature covers only the data. -/
 def getPayloadAttestationMessageSignature (config : Config) (state : BeaconState preset fork)
     (message : PayloadAttestationMessage) (key : Signatures.SecretKey) :
     Except ValidatorDutyError BLSSignature :=
+  -- The signature of the data alone under the PTC attester domain at the epoch of its slot.
   signAtEpoch config state DOMAIN_PTC_ATTESTER (computeEpochAtSlot preset message.data.slot)
     message.data key
 
@@ -378,7 +421,9 @@ So a proposer can sign its preferences for the first epoch of a fork in the epoc
 def getProposerPreferencesSignature (config : Config) (state : BeaconState preset fork)
     (preferences : ProposerPreferences) (key : Signatures.SecretKey) :
     Except ValidatorDutyError BLSSignature := do
+  -- The signing root under the preferences domain, at the fork version of the proposal epoch.
   let root ← (proposerPreferencesSigningRoot config state preferences).mapError .ssz
+  -- The BLS signature of that root.
   (Signatures.sign key (packBytes root)).mapError .bls
 
 /-- From Gloas: the signed preferences of a proposer for a slot, on the chain of a head.
@@ -388,9 +433,12 @@ def getSignedProposerPreferences (config : Config) (store : Store preset fork)
     (state : BeaconState preset fork) (headRoot : Root) (proposalSlot : Slot)
     (validatorIndex : ValidatorIndex) (feeRecipient : ExecutionAddress) (targetGasLimit : UInt64)
     (key : Signatures.SecretKey) : Except ValidatorDutyError SignedProposerPreferences := do
+  -- The dependent root of the epoch of the proposal slot, on the chain of the head.
   let dependentRoot ← (store.getShufflingDependentRoot headRoot
     (computeEpochAtSlot preset proposalSlot)).mapError .forkChoice
+  -- The preferences of the validator for the slot, with that root.
   let message := { dependentRoot, proposalSlot, validatorIndex, feeRecipient, targetGasLimit }
+  -- The preferences with their signature.
   return { message, signature := ← getProposerPreferencesSignature config state message key }
 
 /-! ## Inclusion lists -/
@@ -404,10 +452,13 @@ def getSignedInclusionList (config : Config) (store : Store preset fork)
     (state : BeaconState preset fork) (headRoot : Root) (slot : Slot)
     (validatorIndex : ValidatorIndex) (transactions : List InclusionListTransaction)
     (key : Signatures.SecretKey) : Except ValidatorDutyError SignedInclusionList := do
+  -- The dependent root of the epoch of the slot, on the chain of the head.
   let dependentRoot ← (store.getShufflingDependentRoot headRoot
     (computeEpochAtSlot preset slot)).mapError .forkChoice
+  -- The list names the slot, the member, that root and the transactions.
   let message : InclusionList :=
     { slot, validatorIndex, dependentRoot, transactions := ⟨transactions.toArray⟩ }
+  -- The signature of the list by the member.
   let signature ← (getInclusionListSignature config state message key).mapError fun
     | .root error => .ssz error
     | .bls error => .bls error
@@ -415,14 +466,15 @@ def getSignedInclusionList (config : Config) (store : Store preset fork)
 
 /-- From Heze: the key of the inclusion lists that a payload of a slot answers to.
 
-The key is the slot before, with the dependent root of that slot on the chain of a parent block.
-
 A slot 0 has no slot before it, and that is an error. -/
 def inclusionListView (store : Store preset fork) (parentRoot : Root) (slot : Slot) :
     Except ValidatorDutyError (Slot × Root) := do
+  -- The slot `s - 1` before the slot `s`.
   let previous ← (subChecked slot 1).mapError .arith
+  -- The dependent root of the epoch of `s - 1`, on the chain of the parent block.
   let dependentRoot ← (store.getShufflingDependentRoot parentRoot
     (computeEpochAtSlot preset previous)).mapError .forkChoice
+  -- The key is `s - 1` with that root.
   return (previous, dependentRoot)
 
 /-- From Heze: the transactions that a proposer asks its payload to include, on a head.
@@ -433,19 +485,20 @@ They come from every valid list that the proposer saw, timely or not, without eq
 def getPayloadInclusionListTransactions (store : Store preset fork) (heze : .hegota ≤ fork)
     (state : BeaconState preset fork) (headRoot : Root) :
     Except ValidatorDutyError (List InclusionListTransaction) := do
+  -- The key of the lists for the slot of the state, on the chain of the head.
   let (previous, dependentRoot) ← inclusionListView store headRoot state.slot
+  -- The transactions of the lists under that key, timely or not, without equivocators.
   return (store.inclusionLists heze).transactions previous dependentRoot false
 
-/-- From Heze: the bits that a builder sets in its bid, from the lists it saw.
-
-A seat of the committee of the slot before the bid is set when its member sent a list.
-
-The list must count, timely or not. -/
+/-- From Heze: the bits that a builder sets in its bid, from the lists it saw. -/
 def getBidInclusionListBits (store : Store preset fork) (heze : .hegota ≤ fork)
     (state : BeaconState preset fork) (bid : ExecutionPayloadBid preset fork) :
     Except ValidatorDutyError (InclusionListBits preset) := do
+  -- The key of the lists for the slot of the bid, on the chain of its parent block.
   let (previous, dependentRoot) ← inclusionListView store bid.parentBlockRoot bid.slot
+  -- The inclusion list committee of the slot before the bid.
   let committee ← (getInclusionListCommittee state previous).mapError .accessor
+  -- A seat is set when its member sent a list that counts under the key, timely or not.
   return (store.inclusionLists heze).bits committee previous dependentRoot false
 
 /-- From Heze: whether the bits of a bid cover every list that the proposer saw.
@@ -454,8 +507,11 @@ A proposer includes only a bid whose bits set every seat whose member sent a lis
 def isBidInclusionListInclusive (store : Store preset fork) (heze : .hegota ≤ fork)
     (state : BeaconState preset fork) (bid : ExecutionPayloadBid preset fork) :
     Except ValidatorDutyError Bool := do
+  -- The key of the lists for the slot of the bid, on the chain of its parent block.
   let (previous, dependentRoot) ← inclusionListView store bid.parentBlockRoot bid.slot
+  -- The inclusion list committee of the slot before the bid.
   let committee ← (getInclusionListCommittee state previous).mapError .accessor
+  -- Each seat that the lists seen set, timely or not, is set in the bits of the bid.
   return (store.inclusionLists heze).isInclusive committee previous dependentRoot
     (bid.inclusionListBits heze) false
 
