@@ -10,7 +10,7 @@ public import EthLib.Execution.Network.Blocks
 
 The check of a block body against the header that it was requested for.
 
-It follows "Block Encoding and Validity" in [`caps/eth.md`][eth].
+It follows the section Block Encoding and Validity of [`caps/eth.md`][eth].
 
 A node fetches headers first, then asks for their bodies with GetBlockBodies (0x05).
 
@@ -98,10 +98,12 @@ An RLP list starts with a byte of at least `0xc0`, so the two forms never stand 
 [eip-2718]: https://eips.ethereum.org/EIPS/eip-2718#transactiontype-only-goes-up-to-0x7f -/
 def transactionBytes (tx : Encoded) : Except BodyError ByteArray :=
   match tx.item with
+  -- `typed-tx = tx-type || tx-data`, with `tx-type` at most `0x7f` by EIP-2718; empty is refused.
   | .bytes b =>
     if h : 0 < b.size then
       if b[0] < 0x80 then .ok b else .error (.untypedTransaction (some b[0]))
     else .error (.untypedTransaction none)
+  -- A list is a `legacy-tx`, which stands for the bytes it was read from.
   | .list _ => .ok tx.bytes
 
 /-- The bytes of each transaction of a body, in order. -/
@@ -116,7 +118,9 @@ def checkGasLimits {fork : Fork} (header : Header fork) (transactions : Item) :
     Except BodyError Unit := do
   let items ← transactions.toItems.mapError .decoding
   (List.range items.length).zip items |>.forM fun (i, item) => do
+    -- Each transaction decodes at the fork, so a type that the fork lacks fails.
     let tx ← (decodeBodyTransaction fork item).mapError (.invalidTransaction i)
+    -- The gas limit of each transaction does not exceed the gas limit of the block.
     ensure (tx.gas.toNat ≤ header.gasLimit) (.gasLimitAboveBlock i tx.gas.toNat header.gasLimit)
 
 /-- The transactions of a body match the transactions root of the header.
@@ -125,6 +129,7 @@ Each of them is then one of the fork, with a gas limit at most that of the heade
 def checkTransactions {fork : Fork} (header : Header fork) (transactions : Encoded) :
     Except BodyError Unit := do
   let values ← transactionValues transactions
+  -- The `txs-root` of the header is the trie root of the transactions, by index.
   let root ← (indexedRoot values).mapError .trie
   ensure (root == header.transactionsRoot) (.wrongTransactionsRoot header.transactionsRoot root)
   checkGasLimits header transactions.item
@@ -133,6 +138,7 @@ def checkTransactions {fork : Fork} (header : Header fork) (transactions : Encod
 def checkWithdrawals {fork : Fork} (header : Header fork) (h : .shapella ≤ fork)
     (withdrawals : Item) : Except BodyError Unit := do
   let ws : List Withdrawal ← (Codec.ofItem withdrawals).mapError .decoding
+  -- The `withdrawals-root` of the header is the trie root of the withdrawals, by EIP-4895.
   let root ← (withdrawalsRoot ws).mapError .trie
   ensure (root == header.withdrawalsRoot h) (.wrongWithdrawalsRoot (header.withdrawalsRoot h) root)
 
@@ -144,9 +150,12 @@ The decoder keeps those bytes as its RLP encoding. -/
 def checkOmmers {fork : Fork} (header : Header fork) (ommers : Encoded) :
     Except BodyError Unit := do
   let items ← ommers.item.toItems.mapError .decoding
+  -- At most two ommers.
   ensure (items.length ≤ MAX_OMMERS) (.tooManyOmmers items.length)
+  -- `keccak256(ommers)` is the `ommers-hash` of the header, over the bytes the list was read from.
   ensure (keccak256 ommers.bytes == header.ommersHash)
     (.wrongOmmersHash header.ommersHash (keccak256 ommers.bytes))
+  -- Each ommer is a header list whose number, its ninth field, is at most that of the block.
   (List.range items.length).zip items |>.forM fun (i, ommer) => do
     let n ← (headerNumber ommer).mapError .decoding
     ensure (n ≤ header.number) (.ommerAfterBlock i n)
@@ -156,36 +165,25 @@ Check a body against the header that it was requested for.
 
 The body is the RLP list of the transactions and the ommers, then the withdrawals from Shapella.
 
-The check fails with the first of the following that does not hold.
-
-1. The body is a list of 2 items before Shapella and of 3 items from Shapella.
-2. Each transaction sent as a byte string starts with a type below `0x80`.
-3. The trie root of the transactions is the transactions root of the header.
-4. Each transaction decodes at the fork, with a gas limit at most the gas limit of the header.
-5. From Shapella, the trie root of the withdrawals is the withdrawals root of the header.
-6. The ommers list holds at most two items.
-7. The Keccak-256 hash of the ommers list is the ommers hash of the header.
-8. Each ommer is a list whose ninth field, the block number, is at most that of the block.
+The check fails with the first rule that does not hold, in the order of the lines below.
 
 The check does not decode the ommers further, since their validity is left to the chain.
 
-"Block Encoding and Validity" lists these among the rules of data validity.
+The rules that the check marks come from the data validity rules of Block Encoding and Validity.
 
 The check reads only the body and the header.
 
 It leaves out three rules of that section, each for a reason.
 
-- "The block `header` must be valid."
+- The block header must be valid.
   The header checks of the eth protocol decide it before the body is asked for.
-- The transactions "must be valid for inclusion into the chain at the block's number".
-  Step 4 checks only that each decodes at the fork, so a type that the fork lacks is rejected.
+- The transactions must be valid for inclusion into the chain at the number of the block.
+  The check reads only that each decodes at the fork, so a type that the fork lacks is rejected.
   The rest needs the state before the block.
 - The ommer headers must be valid, and must be recent ancestors not included before.
   That needs the chain.
 
-Step 4 follows "The `gas-limit` of each transaction must not exceed the `gas-limit` of the block."
-
-The sum of the gas limits may exceed that of the block.
+The section bounds the gas limit of each transaction by that of the block, not their sum.
 
 Take a block of gas limit 30,000,000 and two transactions of gas limit 20,000,000 each.
 
@@ -201,14 +199,19 @@ So the check never encodes an item that a peer chose.
 -/
 def checkBody {fork : Fork} (header : Header fork) (body : Encoded) : Except BodyError Unit := do
   let items ← body.parts.mapError .decoding
+  -- From Shapella, `[transactions, ommers, withdrawals]`, by EIP-4895.
   if h : .shapella ≤ fork then
     match items with
     | [transactions, ommers, withdrawals] =>
+      -- The transactions: types, the transactions root, then decoding and gas limits.
       checkTransactions header transactions
+      -- The withdrawals root.
       checkWithdrawals header h withdrawals.item
+      -- The ommers: their count, the ommers hash and their numbers.
       checkOmmers header ommers
     | [_, _] => throw .missingWithdrawals
     | _ => throw (.decoding (.wrongFieldCount 3 items.length))
+  -- Before Shapella, `[transactions, ommers]`.
   else
     match items with
     | [transactions, ommers] =>
@@ -221,6 +224,7 @@ def checkBody {fork : Fork} (header : Header fork) (body : Encoded) : Except Bod
 
 It lists the transactions and the ommers, then the withdrawals from Shapella. -/
 def bodyOf {fork : Fork} (block : Block fork Transaction) : Except RlpError Item := do
+  -- `block-body = [transactions, ommers, withdrawals]`, the withdrawals from Shapella.
   let transactions ← block.transactions.mapM bodyItem
   return .list ([.list transactions, ommersItem block.ommers] ++ Item.ofSince block.withdrawals)
 
