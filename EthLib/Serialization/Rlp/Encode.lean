@@ -19,27 +19,9 @@ The payload of a list is the encodings of its items, one after another.
 
 A single byte below `0x80` is the one exception: it is its own encoding, with no prefix.
 
-A payload is short when it has fewer than 56 bytes.
+For example, the list of the byte strings `cat` and `dog` encodes as `c8 83 63 61 74 83 64 6f 67`.
 
-The first byte of an encoding tells a byte string from a list, and a short payload from a long one:
-
-- `0x00` to `0x7f`: a single byte below `0x80`, which is its own encoding.
-- `0x80` to `0xb7`: a short byte string, with `0x80 + length`.
-- `0xb8` to `0xbf`: a long byte string, with `0xb7 + k`, then `BE(length)` on its `k` bytes.
-- `0xc0` to `0xf7`: a short list, with `0xc0 + length`.
-- `0xf8` to `0xff`: a long list, with `0xf7 + k`, then `BE(length)` on its `k` bytes.
-
-For example, the list of "cat" and "dog" encodes as:
-
-```text
-[ c8 | 83 63 61 74 | 83 64 6f 67 ]
-```
-
-A length must be below `2^64`, so `BE(length)` has at most 8 bytes.
-
-That keeps the first byte of a long byte string at most `0xb7 + 8 = 0xbf`, below every list.
-
-It also keeps the first byte of a long list at most `0xf7 + 8 = 0xff`, which is still a byte.
+Its prefix `c8` is `0xc0 + 8`, and each byte string is the prefix `83 = 0x80 + 3`, then 3 bytes.
 
 A payload of `2^64` bytes or more has no encoding.
 
@@ -59,39 +41,46 @@ inductive PayloadKind where
 
 /-- The prefix byte of an empty payload: `0x80` for a byte string, `0xc0` for a list. -/
 def PayloadKind.offset : PayloadKind → Nat
+  -- 128 in `R_b`.
   | .bytes => 0x80
+  -- 192 in `R_l`.
   | .list => 0xc0
 
-/-- The prefix of a payload of `length` bytes.
+/-- The prefix that `R_b` or `R_l` writes before a payload of `length` bytes.
 
-- Below 56 bytes, it is the one byte `offset + length`.
-- Below `2^64` bytes, it is the byte `offset + 55 + k`, then `BE(length)` on its `k` bytes.
-- From `2^64` bytes on, there is no prefix.
-
-The offset is `0x80` for a byte string and `0xc0` for a list.
-
-The Yellow Paper writes `offset + 55` as 183 for a byte string and 247 for a list. -/
+It fails from `2^64` bytes on. -/
 def lengthPrefix (kind : PayloadKind) (length : Nat) : Except RlpError ByteArray :=
+  -- `R_b` case 2 and `R_l` case 1, below 56: the one byte `128 + ||x||` or `192 + ||s(x)||`.
   if length < 56 then
     .ok ⟨#[UInt8.ofNat (kind.offset + length)]⟩
+  -- `R_b` case 3, below `2^64`: `(183 + ||BE(||x||)||) · BE(||x||)`.
+  --
+  -- `R_l` case 2 is the same, with 247 and `||s(x)||` for 183 and `||x||`.
+  --
+  -- The Yellow Paper's 183 and 247 are the offsets 128 and 192 plus 55.
   else if length < 2 ^ 64 then
     -- Below `2^64`, `BE(length)` has at most 8 bytes.
-    -- So the first byte is at most `0xc0 + 55 + 8 = 0xff`.
+    --
+    -- So the first byte of a byte string is at most `183 + 8 = 191`, below 192, where lists start.
+    --
+    -- And the first byte of a list is at most `247 + 8 = 255`, which is still a byte.
     let lengthBytes := bigEndian length
     .ok (⟨#[UInt8.ofNat (kind.offset + 55 + lengthBytes.size)]⟩ ++ lengthBytes)
+  -- The last case of `R_b` and of `R_l`: from `2^64` bytes on, `∅`, no encoding.
   else
     .error (.payloadTooLong length)
 
 /-- Whether `data` is a single byte below `0x80`: then it is its own encoding. -/
 def isSingleLowByte (data : ByteArray) : Bool :=
+  -- The condition of `R_b` case 1: `||x|| = 1` and `x[0] < 128`.
   if h : data.size = 1 then decide (data[0] < 0x80) else false
 
 /-- `R_b` of the Yellow Paper: the encoding of a byte string. -/
 def encodeBytes (data : ByteArray) : Except RlpError ByteArray :=
-  -- One byte below `0x80` is its own encoding.
+  -- `R_b` case 1: `x` itself, if `||x|| = 1` and `x[0] < 128`.
   if isSingleLowByte data then
     .ok data
-  -- Any other byte string takes the prefix of its length.
+  -- `R_b` cases 2 to 4: the prefix of `||x||`, then `x`, or no encoding.
   else do
     return (← lengthPrefix .bytes data.size) ++ data
 
@@ -101,8 +90,17 @@ mutual
 
 It fails only when a payload has `2^64` bytes or more. -/
 def encode : Item → Except RlpError ByteArray
+  -- `RLP(x) = R_b(x)` for `x` in `B`.
   | .bytes data => encodeBytes data
-  -- `R_l` of the Yellow Paper: the prefix, then the payload of the list.
+  -- `RLP(x) = R_l(x)` otherwise: the prefix of `||s(x)||`, then `s(x)`.
+  --
+  -- `R_l` gives no encoding when `s(x)` has none, so a failure of the payload stops here.
+  --
+  -- EthLib reads the `∅` of the guard `s(x) ≠ ∅` as no encoding, as the last case of `s` writes it.
+  --
+  -- The empty list has `s(x) = ()`, the empty sequence, so it encodes as `c0`.
+  --
+  -- The paper also writes `∅` for an empty value elsewhere, so this reading is EthLib's choice.
   | .list items => do
       let payload ← joinEncodings items
       return (← lengthPrefix .list payload.size) ++ payload
@@ -113,8 +111,9 @@ def encode : Item → Except RlpError ByteArray
 
 It fails when the encoding of one of them fails. -/
 def joinEncodings : List Item → Except RlpError ByteArray
+  -- The empty concatenation, for the empty list.
   | [] => .ok .empty
-  -- The first item's encoding, then the encodings of the rest after it.
+  -- `s(x) = RLP(x[0]) · RLP(x[1]) · ...`, and no encoding if one `RLP(x[i])` has none.
   | item :: rest => do
       let head ← encode item
       joinEncodingsFrom rest head
@@ -125,7 +124,9 @@ def joinEncodings : List Item → Except RlpError ByteArray
 Each encoding is appended in place, and the loop runs in constant stack for any length. -/
 def joinEncodingsFrom : List Item → ByteArray → Except RlpError ByteArray
   | [], out => .ok out
-  -- Each item's encoding, in order, and a failure if any of them fails.
+  -- The next factor `RLP(x[i])` of `s(x)`, appended to the bytes so far.
+  --
+  -- A failure of any of them is a failure of `s(x)`.
   | item :: rest, out => do
       let head ← encode item
       joinEncodingsFrom rest (out ++ head)

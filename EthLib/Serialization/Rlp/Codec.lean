@@ -83,6 +83,7 @@ The field's index is `count` minus the number of remaining items.
 A decoder checks the count first, so it never reads past the last item. -/
 def Item.readField {α : Type} [Codec α] (count : Nat) :
     List Item → Except RlpError (α × List Item)
+  -- No item is left, which cannot happen once the count is checked.
   | [] => .error (.wrongFieldCount count count)
   | item :: rest => do return (← Item.field (count - (rest.length + 1)) item, rest)
 
@@ -107,6 +108,9 @@ def Item.readSince {f fork : Fork} {α : Type} [Codec α] (count : Nat) (items :
 
 /-- The scalar that an item holds, if it is below `2 ^ bits`. -/
 def Item.toScalarBelow (bits : Nat) (item : Item) : Except RlpError Nat := do
+  -- `N_x` of the Yellow Paper, section Conventions, is the scalars below `2^x`.
+  --
+  -- Here `x` is the number of bits.
   let n ← item.toScalar
   if n < 2 ^ bits then .ok n else .error (.scalarTooLarge n bits)
 
@@ -143,6 +147,7 @@ instance : Codec UInt8 where
 /-- A boolean is the scalar 1 for true and 0 for false, so false is the empty byte string. -/
 instance : Codec Bool where
   toItem b := .scalar b.toNat
+  -- The scalars below `2^1` are 0 and 1, so every other scalar fails.
   ofItem item := do return (← item.toScalarBelow 1) == 1
 
 /-- A byte string of any length is itself. -/
@@ -191,8 +196,10 @@ The recipient of a transaction is an example: none is a contract creation.
 The Yellow Paper writes the recipient as a member of `B_20`, or of `B_0` for a creation. -/
 instance {α : Type} [Codec α] [NeverEmpty α] : Codec (Option α) where
   toItem
+    -- None is the empty byte string, the member of `B_0`.
     | none => .bytes .empty
     | some x => Codec.toItem x
+  -- The empty byte string is none, since no value of the type is written as it.
   ofItem item := if item = .bytes .empty then .ok none else some <$> Codec.ofItem item
 
 end EthLib.Serialization.Rlp

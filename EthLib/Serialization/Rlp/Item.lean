@@ -144,51 +144,46 @@ def RlpError.code : RlpError → UInt32
 
 /-- `n` in base 256, most significant byte first, using at most `fuel` bytes.
 
-# Why fuel
-
 The recursion counts down a byte budget instead of dividing `n`.
 
 The kernel unfolds such a definition directly, so it can evaluate the known answers.
-
-A budget of `n` bytes never runs out, since `n` has at most `n` digits in base 256.
 -/
 def bigEndianAux : Nat → Nat → ByteArray
   -- Out of budget: write nothing.
+  --
+  -- A budget of `n` bytes never runs out, since `n` has at most `n` digits in base 256.
   | _, 0 => .empty
   | n, fuel + 1 =>
-      -- No digit is left, and a zero byte here would be a leading zero.
+      -- `BE(0) = ()`: no digit is left, and a zero byte here would break `b_0 ≠ 0`.
       if n = 0 then
         .empty
-      -- The higher digits first, then the lowest one.
+      -- For `n > 0`, `BE(n) = BE(floor(n / 256)) · (n mod 256)`.
+      --
+      -- This recursion is equivalent to the sum that defines `BE` in Appendix B.
       else
         (bigEndianAux (n / 256) fuel).push (UInt8.ofNat (n % 256))
 
 /-- `BE` of the Yellow Paper: `n` in base 256, most significant byte first, with no leading zero.
 
-```text
-BE(0) = []
-BE(127) = [ 7f ]
-BE(1024) = [ 04 00 ]
-```
+For example, `BE(127)` is the byte `7f`, and `BE(1024)` is the bytes `04 00`.
 
 `BE(0)` is empty, since the Yellow Paper asks for the shortest such byte string. -/
 def bigEndian (n : Nat) : ByteArray :=
+  -- `BE(n)` of Appendix B, with a budget of `n` bytes.
   bigEndianAux n n
 
 /-- The number that `bytes` writes in base 256, most significant byte first.
 
-The Yellow Paper defines `BE(x)` as the bytes `b` with `x = sum_n b_n * 256^(k - 1 - n)`.
-
-Here `k` is the number of bytes.
-
-This is that sum, computed by the big-endian reading of the base layer. -/
+It inverts `BE` on the byte strings with no leading zero. -/
 def ofBigEndian (bytes : List UInt8) : Nat :=
+  -- The equation for `BE`: `x = sum_{n=0}^{k-1} b_n * 256^(k - 1 - n)`, for the `k` bytes `b`.
+  --
+  -- The big-endian reading of the base layer computes that sum.
   Base.bytesToNat bytes
 
-/-- The item of a scalar `n`: the byte string `BE(n)`.
-
-The Yellow Paper encodes a scalar `i` as `RLP(BE(i))`, so 0 is the empty byte string. -/
+/-- The item of a scalar `n`: the byte string `BE(n)`, so 0 is the empty byte string. -/
 def Item.scalar (n : Nat) : Item :=
+  -- `RLP(i) = RLP(BE(i))` for `i` in `N`, the equation of Appendix B for a scalar.
   .bytes (bigEndian n)
 
 end EthLib.Serialization.Rlp

@@ -37,16 +37,21 @@ It fails on a list, and on a byte string with a leading zero byte. -/
 def Item.toScalar : Item → Except RlpError Nat
   | .bytes data =>
     -- `BE` writes no leading zero byte, so such bytes are the encoding of no scalar.
+    --
+    -- The Yellow Paper asks clients to dismiss such data as non-canonical.
     if data.data.toList.head? = some 0 then
       .error .leadingZeroInScalar
+    -- Otherwise the bytes are `BE(i)` for the scalar `i` that their base-256 sum gives.
     else
       .ok (ofBigEndian data.data.toList)
+  -- `RLP(i) = RLP(BE(i))` is a byte string, never a list.
   | .list _ => .error .listAsScalar
 
 /-- The scalar that `input` encodes.
 
 It fails unless `input` is exactly the encoding of one scalar. -/
 def decodeScalar (input : ByteArray) : Except RlpError Nat := do
+  -- The item `x` with `RLP(x)` the whole input, then the scalar `i` with `x = BE(i)`.
   let item ← decode input
   item.toScalar
 
