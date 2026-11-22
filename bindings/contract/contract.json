@@ -11449,7 +11449,7 @@
    "errors": [],
    "error_class": "BlockError",
    "docstring":
-   "The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris.\n\n```text\n    D(H) = max(D_min, P_d + ⌊P_d / 2048⌋ · factor + ε)\n```\n\n`P_d` is the parent's difficulty, and `ε` is the bomb.\n\nThe factor is the one of the time since the parent.\n\nFrom Paris on, [EIP-3675] sets it to 0.\n\nThe genesis block has no parent, and its difficulty is part of the chain's configuration.\n\n[EIP-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#block-structure"},
+   "The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris.\n\nIt is `D(H) = max(D_min, P_d + ⌊P_d / 2048⌋ · factor + ε)`.\n\n`P_d` is the parent's difficulty, and `ε` is the bomb.\n\nThe factor is the one of the time since the parent.\n\nFrom Paris on, [EIP-3675] sets it to 0.\n\nThe genesis block has no parent, and its difficulty is part of the chain's configuration.\n\n[EIP-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#block-structure"},
   {"summary":
    "The RLP form of the forks of a chain, each with its first block.",
    "signature": "(forks: list[tuple[str, int]]) -> bytes",
