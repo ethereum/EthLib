@@ -69,7 +69,7 @@ def millerDouble (T : G2 F) (xp yp : F) (f : Fp12 F) : G2 F × Fp12 F :=
   let c0 := three * xx * T.x - two * (T.y * T.y)
   let c2 := -(three * xx * zz * Fp2.ofFp xp)
   let c3 := two * T.y * zz * T.z * Fp2.ofFp yp
-  -- A.2: `f := f^2 * l` and `T := T + T`, with `l` the line function of `T`, `T` at `P`.
+  -- A.2: `f := f^2 * g` and `T := T + T`, with `g` the tangent line at `T`, evaluated at `P`.
   (T.double, f * f * lineValue c0 c2 c3)
 
 /-- Addition step: `(T, f) ↦ (T + Q, f l)`, with `l` the line through `T` and `Q = (xq, yq)`.
@@ -90,7 +90,7 @@ def millerAdd (T : G2 F) (xq yq : Fp2 F) (xp yp : F) (f : Fp12 F) : G2 F × Fp12
   let c0 := n * xq - d * yq
   let c2 := -(n * Fp2.ofFp xp)
   let c3 := d * Fp2.ofFp yp
-  -- A.2: `f := f * l` and `T := T + Q`, with `l` the line function of `T`, `Q` at `P`.
+  -- A.2: `f := f * g` and `T := T + Q`, with `g` the line through `T` and `Q`, evaluated at `P`.
   (G2.add T ⟨xq, yq, Fp2.one⟩, f * lineValue c0 c2 c3)
 
 /-- Walk bits `n - 1` down to `0` of `s` from `(T, f)`.

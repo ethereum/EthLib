@@ -90,7 +90,9 @@ def securityLevel : Nat := 128
 /-- The bytes per element `L = ceil((ceil(log2(p)) + k) / 8)` of RFC 9380 §5. -/
 def fieldBytes : Nat := ⌈((Nat.clog 2 Fp.modulus + securityLevel : Nat) : ℚ) / 8⌉₊
 
-/-- The hash to the field of RFC 9380 §5.2 into `GF(p^2)`, where `m = 2`, with that expansion.
+/-- The hash to the field of RFC 9380 §5.2 into `GF(p^2)`, where `m = 2`.
+
+It reads the message expansion of §5.3.1.
 
 Each element is the pair `(e_0, e_1)` of its coordinates over `GF(p)`. -/
 def hashToField (msg dst : List UInt8) (count : Nat) :

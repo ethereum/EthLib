@@ -27,7 +27,7 @@ namespace EthLib.Cryptography.Bls.KeyDerivation
 open EthLib.Cryptography.Bls.Signatures
 open EthLib.Cryptography.Hash
 
-/-- Master derivation reuses BLS key generation, as the rationale of ERC-2333 says. -/
+/-- Master derivation reuses BLS key generation, as the Rationale of ERC-2333 states for it. -/
 theorem deriveMasterSk_eq_keyGen (seed : ByteArray) :
     deriveMasterSk seed = keyGen seed := rfl
 
@@ -38,7 +38,7 @@ theorem deriveMasterSk_ikmTooShort {seed : ByteArray} (h : seed.size < 32) :
 
 /-- The Lamport secret key is HKDF of 255 * 32 bytes, cut into 32-byte chunks.
 
-This is ERC-2333 `IKM_to_lamport_SK`, with HKDF-Expand and its checks. -/
+This is the Lamport secret key derivation of ERC-2333, with HKDF-Expand and its checks. -/
 theorem ikmToLamportSk_eq_hkdf (ikm salt : ByteArray) :
     (do
       let okm ← Hkdf.hkdf salt ikm ByteArray.empty (LAMPORT_CHUNKS * LAMPORT_CHUNK_SIZE)

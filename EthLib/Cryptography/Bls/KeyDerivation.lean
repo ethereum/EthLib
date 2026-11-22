@@ -42,13 +42,13 @@ namespace EthLib.Cryptography.Bls.KeyDerivation
 open EthLib.Cryptography.Bls.Signatures
 open EthLib.Cryptography.Hash
 
-/-- The 255 chunks of a Lamport secret key, ERC-2333 `IKM_to_lamport_SK`. -/
+/-- The 255 chunks of a Lamport secret key, ERC-2333. -/
 def LAMPORT_CHUNKS : Nat := 255
 
-/-- The 32 bytes of each Lamport chunk, ERC-2333 `IKM_to_lamport_SK`. -/
+/-- The 32 bytes of each Lamport chunk, ERC-2333. -/
 def LAMPORT_CHUNK_SIZE : Nat := 32
 
-/-- Expand the input to 255 consecutive 32-byte chunks, ERC-2333 `IKM_to_lamport_SK`.
+/-- Expand the input to 255 consecutive 32-byte chunks, the Lamport secret key of ERC-2333.
 
 ERC-2333 asks HKDF-Expand for 255 * 32 bytes, which are exactly the first 255 HKDF blocks. -/
 def ikmToLamportSk (ikm salt : ByteArray) : Vector ByteArray 255 :=
@@ -63,7 +63,7 @@ def ikmToLamportSk (ikm salt : ByteArray) : Vector ByteArray 255 :=
   Vector.ofFn fun i =>
     bytes.extract (LAMPORT_CHUNK_SIZE * i.val) (LAMPORT_CHUNK_SIZE * (i.val + 1))
 
-/-- Hash each chunk in order, steps 6 and 7 of the compressed Lamport public key of ERC-2333. -/
+/-- Hash each chunk in order, steps 6 and 7 of the compressed Lamport public key derivation. -/
 def hashLamportSk (key : Vector ByteArray 255) : ByteArray :=
   -- Steps 6 and 7: append the SHA-256 hash of chunk `i` of Lamport key `b`, here for one `b`.
   --
@@ -100,7 +100,7 @@ def deriveMasterSk (seed : ByteArray) : Except BlsError SecretKey :=
 
 It fails after 16 attempts of key generation, a bound that ERC-2333 does not have. -/
 def deriveChildSk (parent : SecretKey) (index : UInt32) : Except BlsError SecretKey :=
-  -- Step 0: the compressed Lamport public key of the parent key and the index.
+  -- Step 0: key generation takes the compressed Lamport public key of the parent key and the index.
   --
   -- Steps 1 and 2: `SK` is the key that key generation gives for that compressed key.
   --

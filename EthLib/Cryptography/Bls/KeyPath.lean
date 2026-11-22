@@ -108,7 +108,7 @@ def parsePath (text : String) : Except KeyPathError Path := do
   | root :: parts =>
     -- Notation: `m` denotes the master node.
     if root != "m" then throw (.invalidRoot root)
-    -- Path: `m / purpose / coin_type / account / use`; a path has at least 4 levels.
+    -- Path: `m / purpose / coin_type / account / use`; a path must have at least 4 levels.
     match parts with
     | purpose :: coinType :: account :: use :: subpath =>
       let purpose ← parseIndex purpose

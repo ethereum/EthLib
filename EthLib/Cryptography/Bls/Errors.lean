@@ -20,7 +20,7 @@ inductive BlsError where
   | emptyPubkeyList
   /-- A pubkey was not 48 bytes long. -/
   | badPubkeySize (actual : Nat)
-  /-- Pubkey bytes failed `KeyValidate`.
+  /-- Pubkey bytes failed key validation.
 
   The cause is a bad encoding, a point off the curve, the wrong subgroup, or the point at infinity.
 
@@ -30,7 +30,7 @@ inductive BlsError where
   | invalidG1Point
   /-- G2 point bytes could not be decompressed. -/
   | invalidG2Point
-  /-- `KeyValidate` rejected the point at infinity. -/
+  /-- Key validation rejected the point at infinity. -/
   | pointAtInfinity
   /-- A point was not in the prime-order subgroup. -/
   | notInSubgroup

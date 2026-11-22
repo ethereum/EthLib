@@ -63,7 +63,7 @@ It fails on a shorter input, and when every attempt gives a multiple of `r`.
 The key material is secret, and this function does not run in constant time. -/
 def keyGen (ikm : ByteArray) (keyInfo : ByteArray := ByteArray.empty) :
     Except BlsError SecretKey :=
-  -- The input keying material has at least 32 bytes.
+  -- The input keying material must have at least 32 bytes (§2.3); a shorter one fails.
   if ikm.size < 32 then .error (.keyGenIkmTooShort ikm.size)
   -- Steps 1 and 2: `salt = "BLS-SIG-KEYGEN-SALT-"` and `SK = 0`, so the loop runs once at least.
   else keyGenLoop ikm keyInfo KEYGEN_SALT KEYGEN_ATTEMPTS

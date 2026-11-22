@@ -136,7 +136,9 @@ theorem mul_generator_isInfinity_iff (s : Fr) :
     rw [Fr.val_zero]
     exact Nat.dvd_zero _
 
-/-- Key validation (BLS signature draft, §2.5) rejects `0` and requires the subgroup, so `a ≠ 0`. -/
+/-- Key validation (BLS signature draft-04, §2.5) rejects `0` and requires membership in `G1`.
+
+So the discrete logarithm `a` is not zero. -/
 theorem exists_mul_generator_of_keyValidatePoint {bytes : Vector UInt8 48} {P : G1}
     (h : keyValidatePoint bytes = .ok P) :
     Valid P ∧ ∃ a : Fr, a ≠ 0 ∧ toPoint P = toPoint (mul generator a) := by

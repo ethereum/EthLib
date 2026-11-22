@@ -111,7 +111,7 @@ def coreVerify (pk msg sig dst : ByteArray) : Bool :=
   | .ok r =>
     -- Step 3: INVALID unless `R` is in `G2`.
     signatureSubgroupCheck r &&
-    -- Steps 4 and 5: `PK` passes key validation and encodes `xP`, by one decoding.
+    -- Steps 4 and 5: `PK` passes key validation and encodes `xP`, by one decoding, or INVALID.
     match exactBytes? 48 pk with
     | none => false
     | some pk =>
@@ -121,7 +121,7 @@ def coreVerify (pk msg sig dst : ByteArray) : Bool :=
         -- Step 6: `Q` is the hash of the message to `G2`.
         match HashToCurve.hashToG2 msg dst with
         | .error _ => false
-        -- Steps 7 to 9: `C1 = e(Q, xP)`, `C2 = e(R, P)`, and VALID exactly when `C1 = C2`.
+        -- Steps 7 to 9: `C1 = e(xP, Q)`, `C2 = e(P, R)`, and VALID exactly when `C1 = C2`.
         --
         -- The test is `e(P, R) * e(-xP, Q) = 1`, with the point of `G1` first.
         --
@@ -134,9 +134,9 @@ It fails on an empty list and on a signature that does not decode.
 
 As in the draft, it does not check that a signature lies in the subgroup. -/
 def aggregate (sigs : Array BLSSignature) : Except BlsError BLSSignature := do
-  -- The precondition `n >= 1`.
+  -- The precondition `n ≥ 1`.
   if sigs.isEmpty then throw .emptySignatureList
-  -- Steps 1 to 6: the sum of the points that the signatures encode, or INVALID.
+  -- Steps 1 to 6: the aggregate is the sum of the points that the signatures encode, or INVALID.
   --
   -- The sum starts at the point at infinity, so step 1 is the first addition.
   --
@@ -151,19 +151,19 @@ def aggregate (sigs : Array BLSSignature) : Except BlsError BLSSignature := do
 It fails when the key is not 48 bytes or fails key validation. -/
 def keyMessagePair (dst : ByteArray) (entry : ByteArray × ByteArray) :
     Except BlsError (G1 × G2) := do
-  -- Steps 6 and 7: `PK_i` passes key validation and encodes `xP`, by one decoding.
+  -- Steps 6 and 7: `PK_i` passes key validation and encodes `xP`, by one decoding, or INVALID.
   let some pk := exactBytes? 48 entry.1 | throw .invalidG1Point
   let xP ← G1.keyValidatePoint pk
   -- Step 8: `Q` is the hash of the message `message_i` to `G2`.
   let q ← HashToCurve.hashToG2 entry.2 dst
-  -- The factor of step 9 is `e(Q, xP)`; the pair is `(-xP, Q)`, for a product equal to 1.
+  -- The factor of step 9 is `e(xP, Q)`; the pair is `(-xP, Q)`, for a product equal to 1.
   return (G1.neg xP, q)
 
 /-- The core aggregate verification: check `e(P, R) = prod_i e(PK_i, H(message_i))` (§2.9).
 
 It returns `false` on an empty list, on lists of two sizes and on any invalid input. -/
 def coreAggregateVerify (pks msgs : Array ByteArray) (sig dst : ByteArray) : Bool :=
-  -- The precondition `n >= 1`, with as many messages as keys.
+  -- The precondition `n ≥ 1`, with as many messages as keys.
   if pks.isEmpty || pks.size != msgs.size then false else
   -- Steps 1 and 2: `R` is the point that the signature encodes, or INVALID.
   match exactBytes? 96 sig with
@@ -177,7 +177,7 @@ def coreAggregateVerify (pks msgs : Array ByteArray) (sig dst : ByteArray) : Boo
     -- Steps 4 to 8: one pair `(-xP_i, Q_i)` for each key, or INVALID.
     match (pks.zip msgs).mapM (keyMessagePair dst) with
     | .error _ => false
-    -- Steps 9 to 11: `C1 = prod_i e(Q_i, xP_i)`, `C2 = e(R, P)`, and VALID iff `C1 = C2`.
+    -- Steps 9 to 11: `C1 = prod_i e(xP_i, Q_i)`, `C2 = e(P, R)`, and VALID iff `C1 = C2`.
     --
     -- The test is `e(P, R) * prod_i e(-xP_i, Q_i) = 1`, with the points of `G1` first.
     --
@@ -223,7 +223,9 @@ def popProve (sk : SecretKey) : Except BlsError BLSSignature :=
 
 It is the core verification of the public key as message, under the public key tag. -/
 def popVerify (pk : BLSPubkey) (proof : BLSSignature) : Bool :=
-  -- Steps 1 to 9 of the core verification, with the hash under the public key tag at step 6.
+  -- Steps 1 to 9 are those of the core verification.
+  --
+  -- Step 6 hashes under the public key tag.
   coreVerify (packBytes pk) (packBytes pk) (packBytes proof) POP_DST
 
 /-- Add one validated public key to a running point sum.
@@ -243,7 +245,7 @@ These are the first steps of fast aggregate verification, §3.3.4, with key vali
 
 It fails on an empty list and on a key that fails key validation. -/
 def aggregatePubkeyPoint (pubkeys : Array BLSPubkey) : Except BlsError G1 := do
-  -- The precondition `n >= 1`.
+  -- The precondition `n ≥ 1`.
   if pubkeys.isEmpty then throw .emptyPubkeyList
   -- Steps 1 to 4: the sum starts at the point at infinity, so step 1 is the first addition.
   pubkeys.zipIdx.foldlM addPubkeyPoint G1.zero
@@ -253,15 +255,17 @@ def aggregatePubkeyPoint (pubkeys : Array BLSPubkey) : Except BlsError G1 := do
 It returns `false` on an empty list and on a key that fails key validation. -/
 def fastAggregateVerify
     (pubkeys : Array BLSPubkey) (msg : ByteArray) (sig : BLSSignature) : Bool :=
-  -- Steps 1 to 4: the sum of the keys, or INVALID.
+  -- Steps 1 to 4: the aggregate is the sum of the keys, or INVALID.
   match aggregatePubkeyPoint pubkeys with
   | .error _ => false
-  -- Steps 5 and 6: `PK` is the encoding of the sum, and the core verification of the signature.
+  -- Step 5: `PK` is the encoding of the sum.
+  --
+  -- Step 6: the result is the core verification of the signature for `PK` and the message.
   | .ok agg => verify (pointToPubkey agg) msg sig
 
 /-! ## Ethereum wrappers
 
-For context, the consensus-specs state these two rules in Extensions of `altair/bls.md`:
+Only the consensus-specs state these two rules, in Extensions of `specs/altair/bls.md`:
 <https://github.com/ethereum/consensus-specs/blob/aa16bb4c/specs/altair/bls.md#extensions>
 -/
 
@@ -269,7 +273,7 @@ For context, the consensus-specs state these two rules in Extensions of `altair/
 
 It fails on an empty list and on any invalid key. -/
 def ethAggregatePubkeys (pubkeys : Array BLSPubkey) : Except BlsError BLSPubkey := do
-  -- The list holds at least one key, and every key passes key validation.
+  -- The list must hold at least one key, and every key must pass key validation, or the call fails.
   --
   -- The result is the sum of the keys, as points of `G1`.
   return pointToPubkey (← aggregatePubkeyPoint pubkeys)
@@ -286,7 +290,7 @@ def ethFastAggregateVerify
   -- On an empty list with another signature, the draft's verification returns INVALID anyway.
   if pubkeys.isEmpty then
     sig = G2_POINT_AT_INFINITY
-  -- Otherwise, the fast aggregate verification of the draft.
+  -- Otherwise, the result is the fast aggregate verification of the draft.
   else
     fastAggregateVerify pubkeys msg sig
 
