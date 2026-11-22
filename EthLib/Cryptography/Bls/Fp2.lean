@@ -36,6 +36,7 @@ abbrev one : Fp2 F := Cryptography.Fp2.one
 
 /-- Multiply by `1 + i`, the cubic-extension non-residue `ξ`. -/
 @[inline] def mulByOnePlusI (a : Fp2 F) : Fp2 F :=
+  -- `(c0 + c1 i)(1 + i) = (c0 - c1) + (c0 + c1) i`, since `i^2 = -1`.
   ⟨a.c0 - a.c1, a.c0 + a.c1⟩
 
 /-- The element `c0 + c1 * i`, from its two coordinates as integers.

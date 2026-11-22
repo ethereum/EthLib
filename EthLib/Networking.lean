@@ -15,6 +15,8 @@ public import EthLib.Networking.Discv5.Message
 public import EthLib.Networking.Discv5.Node
 public import EthLib.Networking.Discv5.Packet
 public import EthLib.Networking.Discv5.Session
+public import EthLib.Networking.Encoding.Base32
+public import EthLib.Networking.Encoding.ByteReader
 public import EthLib.Networking.Encoding.Protobuf
 public import EthLib.Networking.Encoding.Uvarint
 public import EthLib.Networking.Encoding.Varint

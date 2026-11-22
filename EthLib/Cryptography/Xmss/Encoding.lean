@@ -7,11 +7,7 @@ public import EthLib.Cryptography.Xmss.TweakableHash
 
 The target-sum code of WOTS+C (ePrint 2022/778).
 
-A 16-byte digest `D` has 64 digits of 2 bits each:
-
-```text
-    x_i = floor(LE^-1(D) / 4^i) mod 4,   i < 64
-```
+A 16-byte digest `D` has 64 digits of 2 bits each: `x_i = floor(LE^-1(D) / 4^i) mod 4`, `i < 64`.
 
 `D` is a codeword when its last 6 digits are zero and its first 58 sum to `T = 106`.
 
@@ -22,6 +18,14 @@ So the chain values revealed for one codeword never sign another.
 This replaces the Winternitz checksum.
 
 Source: the leanXMSS specification draft, section "WOTS+C", paragraph "Codewords".
+
+It is the target-sum code of Construction 6 of [ePrint 2025/055][hbms], §5.2.
+
+Construction 6 hashes to exactly 58 digits.
+
+Here the hash gives 64, and the 6 without a chain must be zero.
+
+[hbms]: https://eprint.iacr.org/2025/055
 -/
 
 @[expose] public section
@@ -63,6 +67,8 @@ end Internal
 
 Returns nothing when the digest is not a codeword. -/
 def codeword? (d : Digest) : Option (Vector (Fin CHAIN_LENGTH) V) :=
+  -- "It is a codeword when `x_v = ... = x_63 = 0` and `sum_{i<v} x_i = T`".
+  --
   -- Digits 58 to 63 have no chain, so a codeword sets them to zero.
   let tailZero := (List.finRange (DIGITS - V)).all fun j =>
     (Internal.digit d ⟨V + j.val, by have := j.isLt; simp only [V, DIGITS] at *; omega⟩).val == 0

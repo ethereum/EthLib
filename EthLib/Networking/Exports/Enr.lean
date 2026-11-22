@@ -72,6 +72,32 @@ instance : ExportError EnrError where
   code := EnrError.code
   message := message
 
+/-- A record that has no RLP encoding, with the code that the export gives it.
+
+The encoder fails only for a payload of `2^64` bytes or more.
+
+Python reads a code within the error class of the export.
+
+So the export picks one of its own codes. -/
+structure RecordEncodingError where
+  /-- The code of the failure for the export. -/
+  code : UInt32
+
+/-- A record with no RLP encoding reaches Python with the code of its export, and one message. -/
+instance : ExportError RecordEncodingError where
+  code e := e.code
+  message _ := "record has no RLP encoding"
+
+/-- The RLP bytes of a record, or the error of a record that has no RLP encoding.
+
+The caller maps the error of the encoder to a code of its own error class. -/
+def encodeRecord (code : Serialization.Rlp.RlpError → UInt32) (r : Enr) : Result ByteArray :=
+  toResult none (r.encode.mapError fun e => RecordEncodingError.mk (code e))
+
+/-- The code of a record with no RLP encoding: that of an RLP error of a record. -/
+def encodingCode (e : Serialization.Rlp.RlpError) : UInt32 :=
+  (EnrError.rlp e).code
+
 /-! ## Sizes -/
 
 @[export eth_enr_const_max_record_size]
@@ -82,9 +108,7 @@ def constMaxRecordSize (_ : Unit) : UInt64 := UInt64.ofNat MAX_RECORD_SIZE
 /-- The RLP bytes of a record in text form, after the decoder accepts the record. -/
 @[export eth_enr_from_text]
 def fromTextExport (text : String) : Result ByteArray := do
-  let r ← toResult none (fromText text)
-  -- An encoder failure keeps the code of an RLP error, with a message of its own.
-  r.encode.mapError fun e => ((EnrError.rlp e).code, "record has no RLP encoding")
+  encodeRecord encodingCode (← toResult none (fromText text))
 
 /-- The sequence number of a record. -/
 @[export eth_enr_seq]
@@ -117,7 +141,7 @@ def signV4Export (secretKey record : ByteArray) : Result ByteArray := do
   let sk ← privateKeyOf secretKey
   let r ← toResult none (decode record)
   let signed ← toResult none (signV4 sk r)
-  signed.encode.mapError fun e => ((EnrError.rlp e).code, "record has no RLP encoding")
+  encodeRecord encodingCode signed
 
 /-- The bytes of a new "v4" record of a private key, a sequence number and other pairs.
 
@@ -129,7 +153,7 @@ def makeRecordV4Export (secretKey : ByteArray) (seq : UInt64) (pairs : ByteArray
   let items ← toResult none ((Serialization.Rlp.decode pairs).mapError EnrError.rlp)
   let .list items := items | toResult none (.error EnrError.notAList)
   let r ← toResult none (makeRecordV4 sk seq (← toResult none (readPairs items)))
-  r.encode.mapError fun e => ((EnrError.rlp e).code, "record has no RLP encoding")
+  encodeRecord encodingCode r
 
 /-- A message for a refused consensus entry. -/
 def entryMessage : EntryError → String

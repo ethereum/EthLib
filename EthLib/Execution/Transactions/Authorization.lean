@@ -19,19 +19,7 @@ The transaction applies its authorizations in order, before its message runs.
 
 An authorization that fails a check is skipped, and the transaction goes on.
 
-- Its chain is 0 or the chain of the block.
-- Its nonce is below `2^64 - 1`.
-- Its signature recovers an authority, with a low `s`.
-- The authority has no code, or a delegation indicator.
-- The nonce of the authority is the nonce of the authorization.
-
-Once its signature recovers the authority, the authority is accessed, even if a later check fails.
-
-A valid authorization sets the delegation indicator of the address as the code of the authority.
-
-An authorization to the zero address clears that code instead.
-
-Either way, the nonce of the authority grows by one.
+The comments in the code mark each of the nine steps of EIP-7702.
 
 Up to BPO5, the transaction paid 25000 for each authorization, as the price of a new account.
 
@@ -87,6 +75,7 @@ def NULL_ADDRESS : Address := Vector.replicate 20 0
 
 It is the Keccak-256 hash of `0x05`, then the encoding of the chain, the address and the nonce. -/
 def authorizationHash (auth : Authorization) : Except RlpError Hash32 :=
+  -- Step 3: `msg = keccak(MAGIC || rlp([chain_id, address, nonce]))`.
   hashTypedItems SET_CODE_TX_MAGIC
     [Codec.toItem auth.chainId, Codec.toItem auth.address, Codec.toItem auth.nonce]
 
@@ -94,10 +83,14 @@ def authorizationHash (auth : Authorization) : Except RlpError Hash32 :=
 
 The parity is 0 or 1, `r` lies in `[1, n - 1]`, and `s` in `[1, n / 2]`. -/
 def recoverAuthority (auth : Authorization) : Option Address :=
+  -- Step 3: "Verify `s` is less than or equal to `secp256k1n/2`, as specified in EIP-2".
+  --
+  -- The parity, the range of `r` and `0 < s` are bounds of `ecrecover` the EIP leaves implicit.
   if auth.yParity.toNat < 2 ∧ 0 < auth.r.toNat ∧ auth.r.toNat < Fn.modulus ∧
       0 < auth.s.toNat ∧ Ecdsa.isLowS auth.s.toNat then
     match authorizationHash auth with
     | .ok hash =>
+      -- Step 3: `authority = ecrecover(msg, y_parity, r, s)`.
       match Ecdsa.recover hash auth.r.toNat auth.s.toNat (Fin.ofNat 2 auth.yParity.toNat) with
       | .ok (.affine x y) => some (address x y)
       | _ => none
@@ -108,6 +101,9 @@ def recoverAuthority (auth : Authorization) : Option Address :=
 
 Its nonce must also be below 2^64 - 1. -/
 def authorizationInScope (chainId : Nat) (auth : Authorization) : Bool :=
+  -- Step 1: "Verify the chain ID is 0 or the ID of the current chain."
+  --
+  -- Step 2: "Verify the `nonce` is less than `2**64 - 1`."
   (auth.chainId.toNat = 0 || auth.chainId.toNat = chainId) && auth.nonce.toNat < 2 ^ 64 - 1
 
 /-- Whether the authority may take an authorization: its code and its nonce allow it.
@@ -117,12 +113,18 @@ def authorityAccepts (state : TransactionState) (authority : Address) (auth : Au
     Except StateError Bool := do
   let account := state.getAccount authority
   let code ← state.getCode account.codeHash
+  -- Step 5: "Verify the code of `authority` is empty or already delegated."
+  --
+  -- Step 6: "Verify the nonce of `authority` is equal to `nonce`."
   return (code.size = 0 || isValidDelegation code) && account.nonce = auth.nonce.toNat
 
 /-- The code that an authorization sets.
 
 It is the delegation indicator, or no code for the zero address. -/
 def delegationCode (auth : Authorization) : ByteArray :=
+  -- Step 8: "If `address` is `0x0000000000000000000000000000000000000000`", clear the code.
+  --
+  -- Otherwise, `0xef0100 || address`.
   if auth.address = NULL_ADDRESS then .empty else delegationIndicator auth.address
 
 /-- The state after the authority takes a valid authorization at `fork`, and the refund.
@@ -141,9 +143,18 @@ From Glamsterdam, the refund is 0, since the intrinsic gas pays for no new accou
 [eip7523]: https://eips.ethereum.org/EIPS/eip-7523#specification -/
 def delegate (fork : Fork) (state : TransactionState) (authority : Address)
     (auth : Authorization) : Except StateError (TransactionState × Nat) := do
+  -- Step 7: "Add `PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST` gas to the global refund counter".
+  --
+  -- Up to BPO5 only: from Glamsterdam, EIP-2780 drops the refund.
+  --
+  -- The EIP's condition is "if `authority` is not empty"; here it is that the authority exists.
   let refund := if fork < .glamsterdam ∧ state.accountExists authority then
     AUTH_PER_EMPTY_ACCOUNT - REFUND_AUTH_PER_EXISTING_ACCOUNT else 0
+  -- Step 8: "Set the code of `authority` to be `0xef0100 || address`."
+  --
+  -- For the zero address, the code is cleared instead.
   let state ← state.setCode fork authority (delegationCode auth)
+  -- Step 9: "Increase the nonce of `authority` by one."
   let state ← state.incrementNonce fork authority
   return (state, refund)
 
@@ -166,17 +177,31 @@ variable {Meter : Type} [GasMeter Meter]
 
 /-- The meter once an accepted authorization from `authority` pays, from Glamsterdam, or the error.
 
-It pays state gas for a new account, then the first write, then state gas for a new indicator.
+It pays the charges of EIP-2780 that depend on the state.
 
 It runs before the authorization changes the state. -/
 def chargeAuthorization (done : Delegations Meter) (authority : Address) (auth : Authorization) :
     Except EvmError Meter := do
+  -- EIP-2780: "if the authority account does not already exist", charge the new account leaf.
+  --
+  -- That charge is `STATE_BYTES_PER_NEW_ACCOUNT × CPSB` in state gas.
   let meter ← if done.state.accountExists authority then pure done.meter
     else GasMeter.chargeState done.meter NEW_ACCOUNT_STATE_GAS
+  -- "if this is the first write to the authority within the transaction", charge `ACCOUNT_WRITE`.
+  --
+  -- "the charge is skipped when the write is already paid for", which the paid writes hold.
   let meter ← if authority ∈ done.paidWrites then pure meter
     else GasMeter.charge meter ACCOUNT_WRITE
+  -- Whether "the authority had no delegation indicator at transaction start".
   let before ← (done.state.getCode (done.state.getPreStateAccount authority).codeHash).mapError
     .state
+  -- "if the authorization sets a non-zero delegation target",
+  --
+  -- "the authority had no delegation indicator at transaction start",
+  --
+  -- "and no earlier authorization set one for that authority in this transaction":
+  --
+  -- charge `STATE_BYTES_PER_AUTH_BASE × CPSB` in state gas.
   if auth.address ≠ NULL_ADDRESS ∧ !isValidDelegation before ∧ authority ∉ done.delegated then
     GasMeter.chargeState meter AUTH_BASE_STATE_GAS
   else pure meter
@@ -194,9 +219,12 @@ def payAuthorization (fork : Fork) (done : Delegations Meter) (authority : Addre
     let meter ← chargeAuthorization done authority auth
     return { done with
       meter
+      -- Later writes are paid: the authority "was written by a preceding valid authorization".
       paidWrites := done.paidWrites.insert authority
+      -- An "earlier authorization set one for that authority", for a nonzero address.
       delegated := if auth.address ≠ NULL_ADDRESS then done.delegated.insert authority
         else done.delegated }
+  -- Before Glamsterdam, the intrinsic gas paid for the authorization.
   else .ok done
 
 /-- The delegations after one more authorization, on the chain `chainId` at `fork`.
@@ -210,19 +238,31 @@ From Glamsterdam, an authorization that lacks gas stops them with an error.
 An error comes with the state so far, whose reads stay. -/
 def applyAuthorization (fork : Fork) (chainId : Nat) (done : Delegations Meter)
     (auth : Authorization) : Except (EvmError × TransactionState) (Delegations Meter) :=
+  -- Steps 1 and 2.
   if authorizationInScope chainId auth then
+    -- Step 3; a failed step 3 skips the tuple.
     match recoverAuthority auth with
     | some authority => do
+      -- Step 4: "Add `authority` to `accessed_addresses`", and the read of EIP-7928.
       let done := { done with
         state := done.state.recordAccountRead authority
         accessed := done.accessed.insert authority }
       let halt (e : EvmError) := (e, done.state)
+      -- Steps 5 and 6.
       if ← (authorityAccepts done.state authority auth).mapError (halt ∘ .state) then
+        -- From Glamsterdam, EIP-2780 charges here.
+        --
+        -- Its charges "apply only after validation succeeds, before applying the authorization".
+        --
+        -- A lack of gas stops every authorization, where a failed step skips only its tuple.
         let done ← (payAuthorization fork done authority auth).mapError halt
+        -- Steps 7 to 9.
         let (state, refund) ← (delegate fork done.state authority auth).mapError (halt ∘ .state)
         return { done with state, refund := done.refund + refund }
+      -- "If any step above fails, immediately stop processing the tuple".
       else return done
     | none => .ok done
+  -- A failed step 1 or 2 skips the tuple.
   else .ok done
 
 /-- Apply the authorizations of a transaction in order, on the chain `chainId` at `fork`.
@@ -237,6 +277,7 @@ An error comes with the state so far, whose reads stay. -/
 def applyAuthorizations (fork : Fork) (chainId : Nat) (state : TransactionState)
     (accessed : Std.ExtTreeSet Address) (meter : Meter) (paidWrites : Std.ExtTreeSet Address)
     (auths : List Authorization) : Except (EvmError × TransactionState) (Delegations Meter) :=
+  -- "For each `[chain_id, address, nonce, y_parity, r, s]` tuple", in order.
   auths.foldlM (applyAuthorization fork chainId) ⟨state, accessed, 0, meter, paidWrites, ∅⟩
 
 end EthLib.Execution.Transactions

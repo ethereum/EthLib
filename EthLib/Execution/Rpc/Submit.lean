@@ -185,20 +185,31 @@ def withFutureNonce (state : TransactionState) (sender : Address) (tx : Transact
 
 namespace ChainView
 
+/-- The blob schedule of the next block, one second after the head. -/
+def nextBlobSchedule (v : ChainView) : Since .dencun (v.head.nextFork v.config) BlobSchedule :=
+  let header := v.head.block.header
+  chainBlobSchedule v.config (v.head.nextFork v.config) (header.number + 1)
+    (header.timestamp.toNat + 1)
+
+/-- The excess blob gas that the header rule gives the next block, or 0 before Dencun. -/
+def nextExcessBlobGas (v : ChainView) : Nat :=
+  let header := v.head.block.header
+  childExcessBlobGas v.config (v.head.nextFork v.config) header (header.number + 1)
+    (header.timestamp.toNat + 1)
+
 /-- The environment of the next block, in which a submitted transaction is checked.
 
 It is one second after the head.
 
 Its fork, base fee and blob schedule are those of the fee history.
 
-Its excess blob gas is the one that the header rule gives it.
+Its excess blob gas is the one that the header rule gives it, which must fit 64 bits.
 
 Its gas limit is that of the head, and its other fields are those of the head or 0. -/
-def nextEnvironment (v : ChainView) : BlockEnvironment (v.head.nextFork v.config) :=
+def nextEnvironment (v : ChainView) (fits : v.nextExcessBlobGas < 2 ^ 64) :
+    BlockEnvironment (v.head.nextFork v.config) :=
   let head := v.head
   let header := head.block.header
-  let fork := head.nextFork v.config
-  let schedule := chainBlobSchedule v.config fork (header.number + 1) (header.timestamp.toNat + 1)
   { chainId := v.config.chainId
     coinbase := header.coinbase
     number := header.number + 1
@@ -208,15 +219,16 @@ def nextEnvironment (v : ChainView) : BlockEnvironment (v.head.nextFork v.config
     blockHashes := []
     baseFeePerGas := fun _ => head.nextBaseFee v.config
     prevRandao := fun _ => 0
-    excessBlobGas := fun h =>
-      if hLondon : .london ≤ head.fork then
-        (expectedExcessBlobGas hLondon h header schedule).toUInt64
-      else 0
+    excessBlobGas := fun _ => UInt64.ofNatLT v.nextExcessBlobGas fits
     parentBeaconBlockRoot := fun _ => 0
     slotNumber := fun _ => 0
-    blobSchedule := schedule }
+    blobSchedule := v.nextBlobSchedule }
 
-/-- The hash of a submitted transaction, or the error of the check that it fails. -/
+/-- The hash of a submitted transaction, or the error of the check that it fails.
+
+When the next block's excess blob gas is `2^64` or more, the result is an internal error.
+
+No header holds such an excess. -/
 def sendRawTransaction (v : ChainView) (bytes : ByteArray) : Except RpcError Hash32 := do
   let fork := v.head.nextFork v.config
   let invalid := fun (e : NetworkError) =>
@@ -229,8 +241,11 @@ def sendRawTransaction (v : ChainView) (bytes : ByteArray) : Except RpcError Has
   let state := match recoverSender fork raw.tx with
     | .ok sender => withFutureNonce head sender raw.tx
     | .error _ => head
-  discard <| (checkInclusion v.config.chainId v.nextEnvironment ⟨0, 0, 0⟩ state raw.tx).mapError
-    submitError
+  -- The header holds the excess blob gas in 64 bits, so a larger excess builds no next block.
+  let some env := if h : v.nextExcessBlobGas < 2 ^ 64 then some (v.nextEnvironment h) else none
+    | throw (internalError.toRpcError
+        (some (.str "next block: the excess blob gas is 2^64 or more")))
+  discard <| (checkInclusion v.config.chainId env ⟨0, 0, 0⟩ state raw.tx).mapError submitError
   (transactionHash raw.tx).mapError fun _ =>
     internalError.toRpcError (some (.str "transaction hash: the transaction has no RLP encoding"))
 

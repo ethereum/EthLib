@@ -61,13 +61,30 @@ A byte-for-byte match with a client is a useful test, not a justification.
 ### Step comments
 
 A definition that implements a step-by-step procedure marks each step of its source in a `--` comment, right above the line that computes that step.
-The comment names the step and writes it in the notation of the source, in ASCII, so that an auditor can match the two line by line.
+The comment names the step and states it formally, in ASCII, so that an auditor can match the two line by line.
 For example, the line that computes RFC 6979 §3.2 step d has the comment `` -- Step d: `K = HMAC_K(V || 0x00 || int2octets(x) || bits2octets(h1))`. `` above it.
+A step of the Keccak sponge of FIPS 202 Algorithm 8 reads `-- Steps 3 to 6 for i < n - 1: from S = 0^b, S = f(S ^ (P_i || 0^c)), with P_i read from N.`
+Its bound `i < n - 1` marks a departure from the source: the last block is absorbed apart.
 
-Where only `ethereum/consensus-specs` or `ethereum/execution-specs` writes out the steps of a rule, a step comment may name the function in that text and quote the line of each step.
+A step comment is formal, short and precise, like the text of an RFC or a FIPS standard.
+
+- Where the source states its steps as formulas, as an RFC, a FIPS standard, the Yellow Paper or a paper does, the comment uses the notation of the source.
+- Pseudo-code that the source itself writes, such as `v[a] := (v[a] + v[b] + x) mod 2**w` in RFC 7693 §3.1, is the notation of the source and stays as the source writes it.
+- Where the source states a step in words, or only in code, the comment states it in mathematical notation or in short, plain words.
+- A step comment never quotes code in a programming language.
+  That covers the Python of `ethereum/execution-specs`, of `ethereum/consensus-specs` and of the reference code in an EIP.
+  It also covers a loop, a condition or an assertion written in the syntax of a language, such as `for log in receipt.logs:` or `pubkey_size == 48 and amount_size == 8`.
+  The Lean line under the comment is already the code, and the same step in another programming language gives an auditor nothing new to check.
+- A step comment names things in plain words, never by the code identifiers of a source, such as the snake_case field names of EIP-7928.
+  It writes `-- A storage key of an account never appears both among its storage changes and among its storage reads.`
+  The notation of a formula, such as `V`, `P_i` or `int2octets`, stays, and so does the name of the function that holds a step, as the paragraph below allows.
+- A step that keeps the words of its source writes them as plain text, without quotation marks or Markdown emphasis such as bold.
+  EIP-7928 writes "Record **post-transaction nonces** for:", so the comment reads `-- Record post-transaction nonces for:`, followed by its list of accounts.
+
+Where only `ethereum/consensus-specs` or `ethereum/execution-specs` writes out the steps of a rule, a step comment may name the function of that text that holds the step, and it states the step as the list above says.
 A provenance note then links the file at a pinned release or commit, with its section, in the doc comment of the definition or in a section comment above several definitions.
-A step comment that quotes those texts traces a step but is not a citation of authority, so the code still does not cite them as the authority for a rule.
-A defect found while quoting them is reported upstream, as [Defects found upstream](#defects-found-upstream) says, not copied into the code.
+A step comment that traces those texts is not a citation of authority, so the code still does not cite them as the authority for a rule.
+A defect found while tracing them is reported upstream, as [Defects found upstream](#defects-found-upstream) says, not copied into the code.
 
 Where EthLib departs from the steps of its source, the comment says how and why.
 Examples are a fork branch folded into one function, an overflow check, a loop bound, or a value computed once and reused.
@@ -92,6 +109,28 @@ Such a defect must never stay only in EthLib: report it to the repository that o
 
 Bugs come from EthLib's own work.
 Do not search the upstream repositories for bugs outside of it.
+
+### Implementations of an affected rule
+
+EthLib is a specification, and no implementation of the protocol is a source for its rules, as [Sources of truth](#sources-of-truth) says.
+Their code is worth reading as a check on EthLib's own work.
+A defect in a specification often lives on in the code built from it.
+An edge case that an implementation handles with care can point to a proof or a test vector that EthLib lacks.
+
+When EthLib work finds a defect, or a rule with a subtle edge case, look at how the implementations of that rule handle it.
+For the protocol, these are the consensus and execution clients in production on Ethereum mainnet.
+For a shared component, such as libp2p, BLS signatures or KZG commitments, they are the libraries that those clients depend on for it.
+No other project is in scope.
+Look only at the implementations of the rule that the work touches: do not scan their repositories for other bugs.
+
+- If the flaw is a security vulnerability, do not disclose it in public.
+  Report it privately through the security policy of that repository, or through the [Ethereum bug bounty program](https://ethereum.org/bug-bounty/) when the program covers it.
+- Otherwise, confirm the flaw at the head of the default branch of that repository, and search its open and closed issues and pull requests.
+  Then open a pull request or an issue there, in its style, as for a defect in a document.
+- If an implementation shows a case that EthLib does not prove or test, open an EthLib issue for the missing proof or vector.
+  Take the expected result from the specification, never from the implementation.
+  Describe the case from the documents alone: EthLib's own issues, pull requests and code never name an implementation.
+- Keep reports to an implementation out of EthLib: a link to one names the implementation, and a link to a private report discloses it.
 
 ## Layout
 

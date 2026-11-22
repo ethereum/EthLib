@@ -2,7 +2,7 @@ module
 
 public import EthLib.Networking.Quic.Wire
 public import EthLib.Networking.Proofs.Quic.Varint
-public import EthLib.Base.Proofs.ByteReader
+public import EthLib.Networking.Proofs.Encoding.ByteReader
 public import EthLib.Base.Proofs.Bytes
 
 /-!
@@ -15,7 +15,7 @@ Each reader recovers its field and preserves arbitrary trailing bytes.
 
 namespace EthLib.Networking.Quic.Wire
 
-open EthLib.Base.ByteReader (bytes_append uint_encode require_true)
+open EthLib.Networking.Encoding.ByteReader (bytes_append uint_encode require_true)
 
 @[simp] theorem byte_cons (head : UInt8) (rest : List UInt8) :
     byte (head :: rest) = .ok (head, rest) := rfl
@@ -27,7 +27,7 @@ open EthLib.Base.ByteReader (bytes_append uint_encode require_true)
 /-- Reading an opaque fixed-size field preserves its bytes exactly. -/
 theorem vector_encode (n : Nat) (value : Vector UInt8 n) (rest : List UInt8) :
     vector n (value.toList ++ rest) = .ok (value, rest) :=
-  Base.ByteReader.vector_append _ value rest
+  Encoding.ByteReader.vector_append _ value rest
 
 /-- Reading a length-prefixed string recovers its bytes and the following bytes. -/
 theorem blob_encode (data rest : List UInt8) (h : data.length < 2 ^ 62) :
@@ -38,7 +38,7 @@ theorem blob_encode (data rest : List UInt8) (h : data.length < 2 ^ 62) :
 /-- Reading a packed field through the list reader preserves its bytes and suffix. -/
 @[simp] theorem bytes_byteArray_append (field : ByteArray) (rest : List UInt8) :
     bytes field.size (field.data.toList ++ rest) = .ok (field.data.toList, rest) := by
-  show Base.ByteReader.bytes (Error.truncated field.size (field.data.toList ++ rest).length)
+  show Encoding.ByteReader.bytes (Error.truncated field.size (field.data.toList ++ rest).length)
     field.size (field.data.toList ++ rest) = _
   simpa using bytes_append (Error.truncated field.size (field.data.toList ++ rest).length)
     field.data.toList rest

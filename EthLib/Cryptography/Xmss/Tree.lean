@@ -8,11 +8,7 @@ public import EthLib.Cryptography.Xmss.Ots
 
 The Merkle trees of one layer, whose leaves are the layer's one-time keys.
 
-On layer `l`, for `1 <= lambda <= 16`:
-
-```text
-    X_{lambda,j} = Th(P, A_node(l, lambda, j), X_{lambda-1,2j} | X_{lambda-1,2j+1})
-```
+On layer `l`, the node `X_{lambda,j}` hashes its two children, for `1 <= lambda <= 16`.
 
 - The top layer is one tree, with root `X_{16,0}`.
 - The bottom layer is `2^16` trees whose node indices are global.
@@ -34,6 +30,12 @@ Every definition takes the hash `H`.
 A node computes its left subtree, then its right subtree, then its own hash.
 
 Source: the leanXMSS specification draft, section "Trees".
+
+Each tree is the Merkle tree of Construction 1 of [ePrint 2025/055][hbms], §3.3.
+
+The bottom layer's node indices are global across its trees, which Construction 1 does not need.
+
+[hbms]: https://eprint.iacr.org/2025/055
 -/
 
 @[expose] public section
@@ -53,6 +55,8 @@ The address holds the level modulo 17, and the index within the level.
 The tree hashes only at levels 1 to 16, so the address names the true level. -/
 def nodeHash (pp : PublicParam) (layer : Layer) (p : Merkle.Position) (left right : Digest) :
     m Digest :=
+  -- `X_{lambda,j} = Th(P, A_node(l, lambda, j), X_{lambda-1,2j} | X_{lambda-1,2j+1})`.
+  --
   -- The payload is the left child, then the right child.
   th H pp (addrNode layer (Fin.ofNat _ p.level) (UInt32.ofNat p.index))
     #[left.lo, left.hi, right.lo, right.hi]
@@ -78,14 +82,10 @@ def build (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (level j : Nat) :
 
 /-! ## The path -/
 
-/-- The path of key `e`, from the leaf up, level 0 first.
-
-```text
-    pi_lambda = X_{lambda, floor(e / 2^lambda) xor 1}
-```
--/
+/-- The path of key `e`, from the leaf up, level 0 first. -/
 def path (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : Nat) :
     m (Vector Digest LAYER_HEIGHT) :=
+  -- `pi_lambda = X_{lambda, floor(e / 2^lambda) xor 1}`, where `xor 1` flips the low bit.
   Merkle.path (nodeHash H pp layer) (leaves H pp prf layer) LAYER_HEIGHT e
 
 /-- `Tree.fold(l, e, X, pi)`: the root a path leads to from the leaf of key `e`. -/

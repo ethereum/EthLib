@@ -114,7 +114,7 @@ theorem simulateBlock_json_trace {chain chain' : BlockChain} {base : RecentBlock
   simp only [simulateBlock] at h
   split at h
   · simp only [bind_ok_iff, mapError_ok_iff] at h
-    obtain ⟨_, -, -, -, -, -, -, -, _, -, res, hres, _, -, hEq⟩ := h
+    obtain ⟨-, -, _, -, -, -, -, -, -, -, _, -, res, hres, _, -, hEq⟩ := h
     simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at hEq
     obtain ⟨-, -, hb⟩ := hEq
     have same := callsJson_trace (b := b) (by rw [← hb]; exact runBody_simulatedLogs hfork hres)

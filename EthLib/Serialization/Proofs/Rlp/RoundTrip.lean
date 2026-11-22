@@ -57,7 +57,7 @@ theorem bigEndian_length_bounds (length : Nat) (h1 : 56 ≤ length) (h2 : length
   have hValue := bigEndian_value length
   rcases hNil : (bigEndian length).data.toList with _ | ⟨b, bs⟩
   · rw [hNil] at hValue
-    simp [ofBigEndian] at hValue
+    rw [ofBigEndian_nil] at hValue
     omega
   · rw [hNil] at hSize
     simp at hSize

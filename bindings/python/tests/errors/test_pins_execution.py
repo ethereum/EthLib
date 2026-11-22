@@ -723,9 +723,19 @@ ACCOUNT_ANSWER = {
         pytest.param(
             BlockError,
             213,
-            "block rejected: EthLib.Serialization.Rlp.RlpError.bytesAsList",
+            "block invalid: encoding (EthLib.Serialization.Rlp.RlpError.bytesAsList)",
             lambda: blocks.state_transition(CONFIG, rlp.encode([]), [], "frontier", b"\x80"),
             id="block-transition-decode",
+        ),
+        # A typed transaction of type 1 does not decode at Frontier.
+        pytest.param(
+            BlockError,
+            254,
+            "transaction 0 does not decode: unsupportedType (type := 1)",
+            lambda: blocks.state_transition(
+                CONFIG, rlp.encode([]), [], "frontier", rlp.encode([HEADER, [b"\x01"], []])
+            ),
+            id="block-transition-transaction",
         ),
         # A state is an RLP list, not an empty string.
         pytest.param(

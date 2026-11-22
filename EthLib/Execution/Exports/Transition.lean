@@ -34,11 +34,10 @@ public section
 
 namespace EthLib.Execution.Blocks.Exports
 
-open EthLib.Exports (ExportError Result PyValue UnreadArgument forkUpTo pyExport toResult)
+open EthLib.Exports (Result PyValue UnreadArgument forkUpTo pyExport toResult)
 open EthLib.Base
 open EthLib.Serialization.Rlp
-open EthLib.Execution.Transactions.Exports (abortMessage inclusionMessage message
-  stateEntryItem)
+open EthLib.Execution.Transactions.Exports (stateEntryItem)
 
 /-- A recent block from its fork name, its header and its ommers, each header in RLP form.
 
@@ -69,18 +68,6 @@ def chainOf (config : PyValue) (state : ByteArray)
 def accountsItem (state : Execution.State.State) : Item :=
   .list (state.accounts.toList.map fun (address, account) => stateEntryItem state address account)
 
-/-- A message for a block error, phrased for a Python traceback. -/
-def blockErrorMessage : BlockError → String
-  | .invalidTransaction index e => s!"transaction {index} rejected: {inclusionMessage e}"
-  | .aborted e => abortMessage e
-  | .systemCallFailed address e => s!"system call to {hexString address.toList} failed: {oneLine e}"
-  | e => s!"block invalid: {(oneLine e).replace "EthLib.Execution.Blocks.BlockError." ""}"
-
-/-- A block error reaches Python with its code, and its message names the rule that failed. -/
-instance : ExportError BlockError where
-  code := BlockError.code
-  message := blockErrorMessage
-
 /-- A block from the name of its fork and its RLP form, with its transactions decoded.
 
 Each ommer is at the fork of its own number on the chain `config`.
@@ -89,12 +76,11 @@ A block or a transaction that does not decode has the code of its block error. -
 def blockOf (config : ChainConfig) (fork : String) (block : ByteArray) :
     Result ((fork : Fork) × Block fork Transactions.Transaction) := do
   let fork ← forkUpTo .glamsterdam fork.toUTF8
-  let raw : Block fork Item ← (Block.decode (forkAtBlock config) block).mapError
-    fun e => ((BlockError.encoding e).code, s!"block rejected: {reprStr e}")
+  let raw : Block fork Item ← toResult none
+    ((Block.decode (forkAtBlock config) block).mapError BlockError.encoding)
   let transactions ← raw.transactions.zipIdx.mapM fun (item, index) =>
-    (Transactions.decodeBodyTransaction fork item).mapError fun e =>
-      ((BlockError.undecodableTransaction index e).code,
-        s!"transaction {index} does not decode: {message e}")
+    toResult none ((Transactions.decodeBodyTransaction fork item).mapError
+      (BlockError.undecodableTransaction index))
   return ⟨fork, { raw with transactions }⟩
 
 /-- Run the state transition of a block on a chain, and give the state after it.

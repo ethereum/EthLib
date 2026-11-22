@@ -28,9 +28,9 @@ A full product is reduced two words at a time, with the inverse of the complemen
 
 A fused step is reduced one word at a time, with the inverse of the complement mod `2^64`.
 
-The fused operations interleave each word product with one reduction step.
+The fused operations scan the product by columns, and take one reduction word per column.
 
-That is the CIOS method of [Koç, Acar and Kaliski][cios].
+That is the Finely Integrated Product Scanning (FIPS) method of [Koç, Acar and Kaliski][cios], §7.
 
 [redc]: <https://doi.org/10.1090/S0025-5718-1985-0777282-X>
 

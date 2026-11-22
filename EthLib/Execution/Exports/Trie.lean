@@ -29,7 +29,8 @@ public section
 
 namespace EthLib.Execution.Trie.Exports
 
-open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport rejectArgument toResult)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument oneLine pyExport rejectArgument
+  toResult)
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
@@ -70,7 +71,7 @@ def rootExport (secured : UInt8) (input : ByteArray) : Result ByteArray := do
 /-- A proof that does not verify reaches Python with its code, and its message is on one line. -/
 instance : ExportError ProofError where
   code := ProofError.code
-  message := fun e => (repr e).pretty 1000000
+  message := oneLine
 
 /-- The value of `key` in the trie of `root`, as the nodes of `proof` show.
 
@@ -94,7 +95,7 @@ def verifyProofExport (root : ByteArray) (secured : UInt8) (key proof : ByteArra
 /-- A range that does not verify reaches Python with its code, and its message is on one line. -/
 instance : ExportError RangeError where
   code := RangeError.code
-  message := fun e => (repr e).pretty 1000000
+  message := oneLine
 
 /-- Check a range of the trie of a 32-byte root from a 32-byte start, with Keccak-256.
 

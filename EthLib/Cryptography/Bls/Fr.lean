@@ -156,9 +156,15 @@ def fromBytesBE (b : Vector UInt8 32) : Except BlsError Fr :=
 
 /-- Hash the data, and convert the digest to an element of `Fr`.
 
-The output is not uniform over `Fr`. -/
+The output is not uniform over `Fr`.
+
+The steps quote `hash_to_bls_field` of the consensus specifications, as a provenance note:
+<https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/deneb/polynomial-commitments.md#hash_to_bls_field>
+-/
 def hashToBlsField (data : ByteArray) : Fr :=
+  -- `hashed_data = hash(data)`, with SHA-256.
   let hashedData := Hash.sha256 data
+  -- `int.from_bytes(hashed_data, KZG_ENDIANNESS) % BLS_MODULUS`, big-endian, reduced mod `r`.
   Fr.ofNat (Base.bytesToNat hashedData.data.toList)
 
 end Fr

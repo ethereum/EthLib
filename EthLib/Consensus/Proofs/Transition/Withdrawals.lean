@@ -38,6 +38,13 @@ open Base Uint64 Cryptography.Bls Serialization.Ssz
 
 variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
 
+/-- A count of the expected withdrawals is 64 bits exactly when its count on `Nat` is below 2^64.
+
+It then holds that count, unwrapped. -/
+theorem liftCount_ok_iff {n : Nat} {count : UInt64} :
+    liftAccessor (liftArith (ofNatChecked n)) = .ok count ↔ n < 2 ^ 64 ∧ count.toNat = n := by
+  rw [liftAccessor_ok, liftArith, mapError_ok_iff, ofNatChecked_ok_iff]
+
 /-! ## Credentials that name an address -/
 
 /-- The new credentials start with the execution address prefix. -/
@@ -369,7 +376,8 @@ theorem getExpectedWithdrawals_run {state : BeaconState preset fork}
   unfold getExpectedWithdrawals at computed
   simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨⟨builders, index1, _⟩, buildersOk, ⟨partials, index2, _⟩, partialsOk,
-    ⟨buildersSweep, index3, _⟩, buildersSweepOk, ⟨sweep, index4, _⟩, sweepOk, rfl⟩ := computed
+    ⟨buildersSweep, index3, _⟩, buildersSweepOk, ⟨sweep, index4, _⟩, sweepOk,
+    _, _, _, _, _, _, _, _, rfl⟩ := computed
   have one : ConsecutiveFrom (state.nextWithdrawalIndex capella).toNat builders ∧
       index1.toNat = (state.nextWithdrawalIndex capella).toNat + builders.size := by
     split at buildersOk
@@ -472,7 +480,7 @@ theorem updateNextWithdrawalValidatorIndex_frame {state after : BeaconState pres
 /-- Moving the start of the next sweep of builders keeps the sizes and the recorded withdrawals.
 -/
 theorem updateNextWithdrawalBuilderIndex_frame {state after : BeaconState preset fork}
-    {gloas : .glamsterdam ≤ fork} {count : Nat}
+    {gloas : .glamsterdam ≤ fork} {count : UInt64}
     (computed : updateNextWithdrawalBuilderIndex state gloas count = .ok after) :
     SameSizes state after ∧
       after.payloadExpectedWithdrawals = state.payloadExpectedWithdrawals := by
@@ -851,7 +859,7 @@ theorem applyWithdrawals_balance {index : ValidatorIndex}
 
 /-- Moving the start of the next sweep of builders keeps the balances and the builders. -/
 theorem updateNextWithdrawalBuilderIndex_balances {state after : BeaconState preset fork}
-    {gloas : .glamsterdam ≤ fork} {count : Nat}
+    {gloas : .glamsterdam ≤ fork} {count : UInt64}
     (computed : updateNextWithdrawalBuilderIndex state gloas count = .ok after) :
     after.balances = state.balances ∧ after.builders = state.builders := by
   unfold updateNextWithdrawalBuilderIndex at computed
@@ -891,7 +899,7 @@ private theorem applyExpectedWithdrawals_after {state after : BeaconState preset
       after.builderPendingPayments = applied.builderPendingPayments ∧
       ∀ gloas : .glamsterdam ≤ fork, (after.builderPendingWithdrawals gloas).data.toList =
         (applied.builderPendingWithdrawals gloas).data.toList.drop
-          expected.processedBuilderWithdrawalsCount := by
+          expected.processedBuilderWithdrawalsCount.toNat := by
   unfold applyExpectedWithdrawals at computed
   simp only [bind_ok_iff] at computed
   obtain ⟨applied, appliedOk, indexed, indexedOk, swept, sweptOk, last⟩ := computed
@@ -909,7 +917,7 @@ private theorem applyExpectedWithdrawals_after {state after : BeaconState preset
       exact ⟨rfl, rfl, rfl, rfl⟩
   -- The sweep of builders only moves its start.
   have moved : ∀ (gloas : .glamsterdam ≤ fork) (before after : BeaconState preset fork)
-      (count : Nat), updateNextWithdrawalBuilderIndex before gloas count = .ok after →
+      (count : UInt64), updateNextWithdrawalBuilderIndex before gloas count = .ok after →
       after = before ∨ ∃ next, after = { before with nextWithdrawalBuilderIndex := next } := by
     intro gloas before after count computed
     unfold updateNextWithdrawalBuilderIndex at computed
@@ -925,7 +933,7 @@ private theorem applyExpectedWithdrawals_after {state after : BeaconState preset
       swept.builderPendingPayments = indexed.builderPendingPayments ∧
       ∀ gloas : .glamsterdam ≤ fork, (swept.builderPendingWithdrawals gloas).data.toList =
         (indexed.builderPendingWithdrawals gloas).data.toList.drop
-          expected.processedBuilderWithdrawalsCount := by
+          expected.processedBuilderWithdrawalsCount.toNat := by
     by_cases gloas : .glamsterdam ≤ fork
     · have electra : .pectra ≤ fork := Nat.le_trans (by decide) gloas
       simp only [gloas, electra, ↓reduceDIte] at sweptOk
@@ -935,7 +943,7 @@ private theorem applyExpectedWithdrawals_after {state after : BeaconState preset
             expected.processedBuilderWithdrawalsCount) electra
           expected.processedPartialWithdrawalsCount).builderPendingWithdrawals gloas).data.toList =
           (indexed.builderPendingWithdrawals gloas).data.toList.drop
-            expected.processedBuilderWithdrawalsCount := by
+            expected.processedBuilderWithdrawalsCount.toNat := by
         simp only [updatePendingPartialWithdrawals, updateBuilderPendingWithdrawals,
           updatePayloadExpectedWithdrawals, Array.toList_extract, List.extract_eq_take_drop]
         exact List.take_of_length_le (by simp)
@@ -975,7 +983,7 @@ theorem applyExpectedWithdrawals_builderQueues {state after : BeaconState preset
     after.builderPendingPayments = state.builderPendingPayments ∧
       (after.builderPendingWithdrawals gloas).data.toList =
         (state.builderPendingWithdrawals gloas).data.toList.drop
-          expected.processedBuilderWithdrawalsCount := by
+          expected.processedBuilderWithdrawalsCount.toNat := by
   obtain ⟨applied, appliedOk, -, -, payments, queue⟩ := applyExpectedWithdrawals_after computed
   -- Applying the withdrawals keeps both queues.
   have kept : applied.builderPendingPayments = state.builderPendingPayments ∧
@@ -1173,7 +1181,8 @@ theorem getExpectedWithdrawals_withdrawnFrom {state : BeaconState preset fork}
     unfold getExpectedWithdrawals at computed
     simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨⟨builders, index1, _⟩, buildersOk, ⟨partials, index2, _⟩, partialsOk,
-      ⟨buildersSweep, index3, _⟩, buildersSweepOk, ⟨sweep, index4, _⟩, sweepOk, rfl⟩ := computed
+      ⟨buildersSweep, index3, _⟩, buildersSweepOk, ⟨sweep, index4, _⟩, sweepOk,
+    _, _, _, _, _, _, _, _, rfl⟩ := computed
     -- The queued builder withdrawals take nothing from the validator.
     simp only [gloas, ↓reduceDIte] at buildersOk buildersSweepOk
     have one : AllBuilders builders := fun withdrawal member => by
@@ -1206,7 +1215,8 @@ theorem getExpectedWithdrawals_withdrawnFrom {state : BeaconState preset fork}
     unfold getExpectedWithdrawals at computed
     simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨⟨builders, index1, _⟩, buildersOk, ⟨partials, index2, _⟩, partialsOk,
-      ⟨buildersSweep, index3, _⟩, buildersSweepOk, ⟨sweep, index4, _⟩, sweepOk, rfl⟩ := computed
+      ⟨buildersSweep, index3, _⟩, buildersSweepOk, ⟨sweep, index4, _⟩, sweepOk,
+    _, _, _, _, _, _, _, _, rfl⟩ := computed
     have noGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
     simp only [noGloas, ↓reduceDIte, Except.ok.injEq, Prod.mk.injEq] at buildersOk buildersSweepOk
     obtain ⟨rfl, rfl, _⟩ := buildersOk

@@ -2,7 +2,7 @@
 
 from ethlib.serialization import rlp
 
-INVALID = "header invalid: EthLib.Execution.Blocks.BlockError."
+INVALID = "block invalid: "
 
 # EIP-1559, Specification: the elasticity multiplier and the base fee change denominator.
 ELASTICITY_MULTIPLIER = 2

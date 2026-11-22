@@ -304,7 +304,7 @@ private theorem getExpectedWithdrawals_builder (gloas : .glamsterdam ≤ fork)
       getBuildersSweepWithdrawals state gloas start before = .ok (swept, next, processed) ∧
       withdrawnFrom before (convertBuilderIndexToValidatorIndex index) =
         owedBy index ((state.builderPendingWithdrawals gloas).data.toList.take
-          expected.processedBuilderWithdrawalsCount) ∧
+          expected.processedBuilderWithdrawalsCount.toNat) ∧
       withdrawnFrom expected.withdrawals (convertBuilderIndexToValidatorIndex index) =
         withdrawnFrom (before ++ swept) (convertBuilderIndexToValidatorIndex index) := by
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) gloas
@@ -427,13 +427,14 @@ theorem BuilderDebtSettled.processWithdrawals {gloas : .glamsterdam ≤ fork}
   -- The step drops from what each builder owes the queued withdrawals that it pays.
   have total : ∀ index, pendingBuilderTotal after gloas index +
       owedBy index ((state.builderPendingWithdrawals gloas).data.toList.take
-        expected.processedBuilderWithdrawalsCount) = pendingBuilderTotal state gloas index := by
+        expected.processedBuilderWithdrawalsCount.toNat) =
+        pendingBuilderTotal state gloas index := by
     intro index
     have parts := owedBy_append (index := index)
       ((state.builderPendingWithdrawals gloas).data.toList.take
-        expected.processedBuilderWithdrawalsCount)
+        expected.processedBuilderWithdrawalsCount.toNat)
       ((state.builderPendingWithdrawals gloas).data.toList.drop
-        expected.processedBuilderWithdrawalsCount)
+        expected.processedBuilderWithdrawalsCount.toNat)
     rw [List.take_append_drop] at parts
     unfold pendingBuilderTotal
     rw [payments, queue]
@@ -526,9 +527,9 @@ theorem BuilderDebtSettled.withdrawnFrom_le {gloas : .glamsterdam ≤ fork}
   unfold pendingBuilderTotal at covered
   have parts := owedBy_append (index := index)
     ((state.builderPendingWithdrawals gloas).data.toList.take
-      expected.processedBuilderWithdrawalsCount)
+      expected.processedBuilderWithdrawalsCount.toNat)
     ((state.builderPendingWithdrawals gloas).data.toList.drop
-      expected.processedBuilderWithdrawalsCount)
+      expected.processedBuilderWithdrawalsCount.toNat)
   rw [List.take_append_drop] at parts
   omega
 

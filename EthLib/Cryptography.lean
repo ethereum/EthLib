@@ -23,6 +23,7 @@ public import EthLib.Cryptography.BaseField
 public import EthLib.Cryptography.Fp2
 public import EthLib.Cryptography.X25519
 public import EthLib.Cryptography.ChaCha20Poly1305
+public import EthLib.Cryptography.Unicode
 public import EthLib.Cryptography.Keystore
 
 /-!

@@ -2088,7 +2088,7 @@ Those for EXTCODESIZE, a frame past the end of its code and `Logic.sstore_of_acc
 
 The facts of `Logic/NoAbort.lean` are for the one-counter meter too.
 `Logic.NoAbort` says that a result is no error that aborts the run.
-An error of the state aborts, and so do an opcode with no instruction, an encoding error and a fork with no specification.
+An error of the state aborts, and so do an opcode with no instruction, an encoding error, a fork with no specification and a number of the environment that no word holds.
 Each instruction of `Logic/RunMono.lean` except SSTORE never aborts, such as `Logic.noAbort_log` for LOG0 to LOG4.
 `Logic.NoAbortLow` says that the step from every frame with less gas than a frame does not abort.
 `Logic.HoareGA` and `Logic.SpecGA` are triples over the steps of `Logic.StepG` from frames that are `Logic.NoAbortLow`.
@@ -2305,6 +2305,10 @@ Four theorems in `Execution/Proofs/Transactions/Process.lean` give the gas used 
 `processTransaction_gasUsed_of_glamsterdam` covers Glamsterdam, where EIP-8037 splits the gas into execution gas and a reservoir.
 Its gas left is the execution gas left plus the reservoir left, and it gives the two block gas counts of EIP-7778 and EIP-8037.
 At Glamsterdam, a negative state gas used counts as 0 in both block gas counts, a case that EIP-8037 leaves open.
+The execution gas of the block is the gas used before the refund minus that state gas, a subtraction that execution-specs makes on unsigned integers, which raise below zero.
+`processTransaction_stateGas_le_of_glamsterdam` (`Execution/Proofs/Transactions/StateGas.lean`) proves that the state gas is at most that gas used, so subtracting it in natural numbers never floors at zero.
+The gas used before the refund is itself the gas limit minus the execution gas left and the reservoir left.
+That this first subtraction never floors is not proved: a refill of state gas can raise what a frame holds above what it started with, and no theorem yet bounds the refills of a whole run by its charges.
 From Hegotá a run fails as not yet specified, so there is no gas used to state.
 
 `prepareFirstFrame_of_applyAuthorizations` gives the first frame of a call that moves no ether, after its authorizations.
@@ -2331,6 +2335,15 @@ That check makes the nonce of the transaction equal that of its sender, and belo
 `stateTransition_noncesFit` (`Execution/Proofs/Blocks/NoncesFit.lean`) proves that a block that passes its transition keeps the bound of the state before it.
 The bound on the state before the first block is a hypothesis: the genesis allocation must meet it.
 From Glamsterdam, `stateTransition_rebuild_nonce` turns the 64-bit nonces that the block access list rebuilds into the nonces after the block, with no loss.
+
+The block access list of EIP-7928 holds two numbers in fixed widths that EthLib computes as natural numbers and converts without a check.
+A new nonce is a 64-bit integer there, and execution-specs fails when a nonce of `2^64` or more is converted.
+`applyBody_nonceChanges_le` (`Execution/Proofs/Blocks/NoncesFit.lean`) proves that the body records no nonce above `2^64 - 1` when the state before it meets the bound, so the conversion never wraps.
+Only a state before the block that breaks EIP-2681, such as a genesis allocation with a nonce above `2^64 - 1`, could reach it.
+Each position of the body is a 32-bit integer there, including those of the system calls before and after the transactions.
+`length_transactions_lt_of_checkBlock` (`Execution/Proofs/Blocks/Transition.lean`) proves that from Fusaka a block that passes its checks has fewer than `2^32 - 1` transactions, since its RLP is at most 8 MiB.
+The transition checks the block before its body runs, and the list exists only from Glamsterdam, after Fusaka, so no position of a list that is read reaches `2^32`.
+A simulation of `eth_simulateV1` runs a body without the checks of a block and with overrides of the state, so neither bound is proved there.
 
 The nonce of a transaction has two widths.
 A set-code transaction, the type that EIP-7702 adds, holds its nonce in 64 bits, so a nonce of `2^64` or more fails at decoding.
@@ -2638,7 +2651,7 @@ A link must name a point of the curve, and a record must read back from its own 
 `Url.parse_toText` and `Url.toText_of_parse` state the same for a URL.
 `length_subdomain` states that a name has 26 characters.
 `Root.verify_sign` states that a root signed with a private key verifies under the compressed public key of that key.
-`Base32.decode_encode` and `Base32.encode_of_decode` (`Base/Proofs/Base32.lean`) state that base32 is a bijection between byte strings and the texts that the decoder accepts.
+`Base32.decodeList_encodeList` and `Base32.encodeList_of_decodeList` (`Networking/Proofs/Encoding/Base32.lean`) state that base32 is a bijection between lists of bytes and the lists of characters that the decoder accepts.
 
 The source leaves these points open, and EthLib reads them as follows.
 [devp2p#298](https://github.com/ethereum/devp2p/pull/298), [#299](https://github.com/ethereum/devp2p/pull/299), [#300](https://github.com/ethereum/devp2p/pull/300) and [#301](https://github.com/ethereum/devp2p/pull/301) report the first four upstream.
@@ -2720,7 +2733,7 @@ Every random value, such as an ID nonce, a masking IV or an ephemeral key, is an
 The source leaves three points open, and EthLib reads them as follows.
 It gives no lifetime for a challenge ("a short duration") or for a session, so both last until they are replaced.
 The nonce layout, the counter in the first 32 bits, is "strongly recommended", not required, and the theorems on nonces hold for that layout only.
-The number of messages per key "is limited" with no number, so the counter wraps after `2^32` messages, and then only the random bytes keep nonces apart.
+The number of messages per key "is limited" with no number; [Widths that the networking sources leave open](#widths-that-the-networking-sources-leave-open) records the wrap of the counter.
 
 EthLib also simplifies two points of the source.
 A node keeps one pending request per endpoint, the most recent, while the source allows several; a WHOAREYOU then refers to that one.
@@ -2746,6 +2759,28 @@ They follow [Protocol Messages](https://github.com/ethereum/devp2p/blob/88f1c808
 The source leaves two points open, and EthLib reads them as follows.
 The message table calls a FINDNODE distance "a positive integer", while the next sentence gives distance 0 a meaning; EthLib accepts 0, and [devp2p#297](https://github.com/ethereum/devp2p/pull/297) proposes that reading.
 The source recommends at most 16 nodes in an answer but fixes no limit on `total`, so the limit is an input.
+
+### Widths that the networking sources leave open
+
+Where a networking source gives a number no width, EthLib picks one, and this section records each choice with its reason.
+
+- The ports of a discv4 endpoint are `UInt16` (`Networking/Discv4/Packet.lean`).
+  [`discv4.md`](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv4.md#ping-packet-0x01) gives a port no width, but a UDP or TCP port is 16 bits ([RFC 768](https://www.rfc-editor.org/rfc/rfc768), [RFC 9293 §3.1](https://www.rfc-editor.org/rfc/rfc9293#section-3.1)), so a larger port is refused.
+- `total` of NODES, REGCONFIRMATION and TOPICNODES, and `wait-time` of REGCONFIRMATION, are `UInt64` (`Networking/Discv5/Message.lean`).
+  [`discv5-wire.md`](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-wire.md#protocol-messages) gives them no width, while its [WHOAREYOU packet](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-wire.md#whoareyou-packet-flag--1) types `enr-seq` as `uint64`.
+  No count of responses or wait in milliseconds comes near `2^64`, so refusing a larger value loses nothing.
+- The outgoing counter of a discv5 session is `UInt32` and wraps after `2^32` messages (`Networking/Discv5/Node.lean`).
+  [`discv5-wire.md`](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-wire.md#packet-encoding) requires a unique nonce for each message packet.
+  [`discv5-theory.md`](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-theory.md#session-cache) recommends the counter in the first 32 bits and random data in the other 64.
+  It limits the messages per key without a number.
+  After a wrap, two nonces of one session repeat only if they share the counter and the 8 random bytes.
+  Of `n` messages sealed under one key, at most `n^2 / 2^33` pairs share a counter.
+  So with uniform random bytes the chance of any repeat is at most `n^2 / 2^97`, which is `2^-17` after `2^40` messages.
+  EthLib does not start a new handshake before the wrap, since the source fixes no limit.
+  The random bytes are an input, so uniqueness rests on the caller drawing them at random.
+- The Altair message ID writes the topic length in 8 bytes, and keeps the low 64 bits of a length of `2^64` or more (`Networking/Gossip/MessageId.lean`).
+  The [Altair networking text](https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/altair/p2p-interface.md#topics-and-messages) converts the length with `Uint64`, which fails there.
+  No byte string that a node holds in memory reaches `2^64` bytes, so no reachable message ID differs.
 
 ### multistream-select negotiation and the TCP upgrade
 
@@ -5453,8 +5488,13 @@ The reader takes a reading where its sources leave a choice:
 - The reader bounds times below `2^64`, since the fork identifier of [EIP-6122](https://eips.ethereum.org/EIPS/eip-6122#specification) hashes each fork time as a `uint64`.
   The configuration reader of the exports bounds every activation, by block or by time, the same way, and so does the schedule reader of the fork identifier exports.
   `eth_config` bounds the forks that the head has passed the same way.
+  `readSchedule_bounded` (`Networking/Proofs/Exports/ForkId.lean`) proves that every fork of a schedule that the fork identifier exports read is below `2^64`.
+  For such a schedule, `passed_bounded`, `checksumInput_eq_iff` and `forkId_next_toNat` (`Networking/Proofs/Devp2p/ForkId.lean`) show that the identifier holds each fork whole.
+  A Lean caller can still build a schedule with a larger fork, and its identifier then holds that fork modulo `2^64`.
+  `Schedule.Bounded` is the check that such a caller applies first.
   No reader bounds a block's own time, which its header holds in 256 bits.
-  No EIP bounds a fork block or a fork time itself, so refusing an activation of `2^64` or more is EthLib's choice.
+  No EIP bounds a fork block or a fork time in the chain configuration; only the fork identifier holds them as `uint64`.
+  So refusing an activation of `2^64` or more is EthLib's choice.
   The export reader gives the activation of a blob schedule the same bound, though no fork identifier holds it.
   It applies to every export that reads a configuration, the block transition among them, though only the fork identifier needs it.
   EIP-7892 types the target and the maximum of a schedule as 64-bit integers, and EthLib types them `UInt64`.
@@ -7586,12 +7626,21 @@ BLS key generation fails after 16 attempts, a bound that EthLib chose.
 The ERC-2333 master and child derivations reuse key generation, so they share the bound.
 An attempt fails only when its 48-byte output is a multiple of `r`.
 
-One instruction has an outcome that no source defines.
-BLOBBASEFEE pushes the base fee per blob gas, which has no upper bound.
-[EIP-7516](https://eips.ethereum.org/EIPS/eip-7516#specification) does not say what the instruction pushes when the fee is `2^256` or more.
-At such a fee [execution-specs](https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/cancun/vm/instructions/environment.py#L582-L605) fails, with an error that is not an exception of the EVM, so the outcome of the block is not specified.
-EthLib pushes the fee modulo `2^256`, and the frame goes on.
+Six instructions have an outcome that no source defines.
+GASPRICE, NUMBER, DIFFICULTY, GASLIMIT, BASEFEE and BLOBBASEFEE push a number of the transaction or the block that execution-specs holds without an upper bound.
+No source says what they push when the number is `2^256` or more, and [EIP-7516](https://eips.ethereum.org/EIPS/eip-7516#specification) is silent for the blob base fee.
+At such a number execution-specs fails, in [`block.py`](https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/cancun/vm/instructions/block.py) and [`environment.py`](https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/cancun/vm/instructions/environment.py#L582-L605) of Cancun for instance.
+Its error is not an exception of the EVM, so the outcome of the block is not specified.
+EthLib aborts the execution there with `wordOverflow`, as it does for other cases without an outcome, so the block has no outcome either.
 The question is open upstream as [execution-specs#4044](https://github.com/ethereum/execution-specs/issues/4044).
+The cases differ in how a chain reaches them.
+A gas limit can grow by a 1024th of the parent's in each block, with no maximum, so valid headers reach `2^256` after about 164,000 blocks.
+A difficulty can grow by a 2048th in each block before Paris, though mining long before `2^256` is out of reach.
+The blob base fee needs an excess blob gas that a genesis or a fork sets, as the paragraphs below show.
+The gas price is at most a fee field of the transaction, which is a word.
+The base fee rises only above a block's target, and every transaction of that block pays it from a balance below `2^256`, so it stays below the bound on a chain.
+The number of a block grows by one per block.
+GAS needs no such rule here: the gas limit of a transaction is a word, so the gas left of a frame stays below `2^256`.
 
 At an excess blob gas `x`, the fee is `fake_exponential(1, x, fraction)` of [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#helpers), which is monotone in `x` (`fakeExponential_mono`).
 The excess is a 64-bit field of the header, so a header can hold an excess at which the fee reaches `2^256`.
@@ -7603,7 +7652,8 @@ For each mainnet blob schedule, the least such excess is about 177.4457 times th
 - BPO2 and the forks after it, fraction 11684671: from 2073394371.
 
 `getBaseFeePerBlobGas_blobSchedule_lt_iff` (`Proofs/Fees/BlobBaseFee.lean`) proves that each value is exact: the fee is below `2^256` exactly below it.
-Below it, when the block sets no blob price and has the schedule of its fork, the instruction pushes the fee itself, as the source does (`toNat_blobBaseFee_of_lt`).
+Below it, when the block sets no blob price and has the schedule of its fork, the fee is below `2^256`, so the instruction pushes the fee itself, as the source does (`toNat_blobBaseFee_of_lt`).
+From it on, the instruction aborts (`environmentStep_blobbasefee_of_le`).
 A schedule that a chain sets itself has no such evaluation.
 Under any schedule, an excess of at most 161 update fractions gives a fee of at most `3^161`, below `2^256` (`getBaseFeePerBlobGas_lt_of_le`, `Proofs/Fees/BlobBaseFeeBound.lean`).
 

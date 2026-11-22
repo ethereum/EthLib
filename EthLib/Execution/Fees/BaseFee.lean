@@ -9,23 +9,9 @@ A transaction pays the base fee for every unit of gas it uses, and the base fee 
 
 Each block sets its base fee from its parent's, so the fee follows demand for gas.
 
-The parent's gas target is half its gas limit, rounded down.
+Each line of the base fee check of the EIP is marked on the line that computes it.
 
-A parent that used more gas than its target raises the fee, and one that used less never raises it.
-
-The fee moves by one eighth of the scaled distance `base_fee * |used - target| // target`.
-
-Above the target, it rises by at least 1:
-
-```text
-    target = parent_gas_limit // 2
-
-    used = target:  base_fee
-    used > target:  base_fee + max(base_fee * (used - target) // target // 8, 1)
-    used < target:  base_fee - base_fee * (target - used) // target // 8
-```
-
-So a fall is at most `base_fee // 8`.
+A fall is at most `base_fee // 8`.
 
 A rise is at most `max(base_fee // 8, 1)` if the parent used at most twice its target.
 
@@ -72,40 +58,57 @@ def BASE_FEE_MAX_CHANGE_DENOMINATOR : Nat := 8
 
 Source: the base fee check in `validate_block` of [EIP-1559][eip-1559].
 
-The `max` with 1 raises the fee by at least 1 above the target.
-
-It does so even when one eighth of the scaled distance rounds down to 0.
-
-The same function of EIP-1559 also checks the gas limit of the new block first.
-
-It accepts a gas limit only if it is less than `parent_gas_limit // 1024` away from the parent's.
-
-It also requires a gas limit of at least 5000.
-
-So it accepts no gas limit when the parent's is below 4997.
-
-A target of 0 then never reaches the division.
-
-Here a target of 0 and `x / 0 = 0` make a parent above it give `base_fee + 1`.
-
 [eip-1559]: https://eips.ethereum.org/EIPS/eip-1559#specification
 -/
 def calculateBaseFeePerGas (parentGasLimit parentGasUsed parentBaseFeePerGas : Nat) : Nat :=
+  -- `parent_gas_target = self.parent(block).gas_limit // ELASTICITY_MULTIPLIER`.
+  --
+  -- The EIP checks the gas limit of the new block before the base fee.
+  --
+  -- That check accepts no gas limit when the parent's is below 4997.
+  --
+  -- So in the EIP, a target of 0 never reaches the divisions below.
+  --
+  -- Here a target of 0 and `x / 0 = 0` make a parent above it give `base_fee + 1`.
   let parentGasTarget := parentGasLimit / ELASTICITY_MULTIPLIER
+  -- `elif parent_gas_used == parent_gas_target:`
+  --
+  -- `expected_base_fee_per_gas = parent_base_fee_per_gas`.
+  --
+  -- The fork block branch before it is not here, as the header says.
   if parentGasUsed = parentGasTarget then
     parentBaseFeePerGas
+  -- `elif parent_gas_used > parent_gas_target:`
   else if parentGasUsed > parentGasTarget then
+    -- `gas_used_delta = parent_gas_used - parent_gas_target`.
     let gasUsedDelta := parentGasUsed - parentGasTarget
+    -- `base_fee_per_gas_delta = max(... // BASE_FEE_MAX_CHANGE_DENOMINATOR, 1)`, in three steps.
+    --
+    -- The first is `parent_base_fee_per_gas * gas_used_delta`.
     let parentFeeGasDelta := parentBaseFeePerGas * gasUsedDelta
+    -- Then `// parent_gas_target`.
     let targetFeeGasDelta := parentFeeGasDelta / parentGasTarget
+    -- Then `max(... // BASE_FEE_MAX_CHANGE_DENOMINATOR, 1)`.
+    --
+    -- The `max` raises the fee by at least 1, even when one eighth rounds down to 0.
     let baseFeePerGasDelta := max (targetFeeGasDelta / BASE_FEE_MAX_CHANGE_DENOMINATOR) 1
+    -- `expected_base_fee_per_gas = parent_base_fee_per_gas + base_fee_per_gas_delta`.
     parentBaseFeePerGas + baseFeePerGasDelta
+  -- `else:`
   else
+    -- `gas_used_delta = parent_gas_target - parent_gas_used`.
     let gasUsedDelta := parentGasTarget - parentGasUsed
+    -- `base_fee_per_gas_delta = ... // BASE_FEE_MAX_CHANGE_DENOMINATOR`, in three steps.
+    --
+    -- The first is `parent_base_fee_per_gas * gas_used_delta`.
     let parentFeeGasDelta := parentBaseFeePerGas * gasUsedDelta
+    -- Then `// parent_gas_target`.
     let targetFeeGasDelta := parentFeeGasDelta / parentGasTarget
+    -- Then `// BASE_FEE_MAX_CHANGE_DENOMINATOR`.
     let baseFeePerGasDelta := targetFeeGasDelta / BASE_FEE_MAX_CHANGE_DENOMINATOR
-    -- The fall is at most `parentBaseFeePerGas / 8`, so this subtraction never truncates.
+    -- `expected_base_fee_per_gas = parent_base_fee_per_gas - base_fee_per_gas_delta`.
+    --
+    -- The fall is at most `parent_base_fee_per_gas // 8`, so this subtraction never truncates.
     parentBaseFeePerGas - baseFeePerGasDelta
 
 end EthLib.Execution.Fees.BaseFee

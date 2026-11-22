@@ -53,23 +53,6 @@ open EthLib.Exports (ExportError Result PyValue UnreadArgument forkUpTo pyExport
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
-open EthLib.Execution.Blocks.Exports (oneLine)
-
-/-- An RLP error, with the index of each structure field on the way to it. -/
-def rlpMessage : RlpError → String
-  | .inField index error => s!"field {index}: {rlpMessage error}"
-  | error => (oneLine error).replace "EthLib.Serialization.Rlp.RlpError." ""
-
-/-- A message for a rejection, phrased for someone reading a Python traceback. -/
-def message : TransactionError → String
-  | .decoding error => s!"decoding: {rlpMessage error}"
-  | .encoding error => s!"encoding: {rlpMessage error}"
-  | error => (oneLine error).replace "EthLib.Execution.Transactions.TransactionError." ""
-
-/-- A rejection reaches Python with its code, and its message names the rule that failed. -/
-instance : ExportError TransactionError where
-  code := TransactionError.code
-  message := message
 
 /-- A count of gas as a `UInt64`, or an error from `2^64` on. -/
 def gasToUInt64 (gas : Nat) : Result UInt64 :=
@@ -168,16 +151,6 @@ It returns the gas used, the refund of the sender, the priority fee and the burn
 @[export eth_tx_settle]
 def settleExport (args : PyValue) : Result PyValue :=
   pyExport settleOf args
-
-/-- A message for a rejection by the block, phrased for a Python traceback. -/
-def inclusionMessage : InclusionError → String
-  | .transaction e => message e
-  | error => (oneLine error).replace "EthLib.Execution.Transactions.InclusionError." ""
-
-/-- A rejection by the block reaches Python with its code, and its message names the rule. -/
-instance : ExportError InclusionError where
-  code := InclusionError.code
-  message := inclusionMessage
 
 /-- The arguments of the check of a transaction against its block.
 
@@ -295,21 +268,6 @@ def stateEntryItem (state : State.State) (address : Address) (account : State.Ac
   let (address, nonce, balance, code, storage) := stateEntry state address account
   .list [Codec.toItem address, Codec.toItem nonce, Codec.toItem balance, Codec.toItem code,
     .list (storage.map fun (key, value) => Item.list [Codec.toItem key, Codec.toItem value])]
-
-/-- A message for an error that aborts a run, phrased for a Python traceback. -/
-def abortMessage (error : Evm.EvmError) : String :=
-  s!"the run aborted: {(oneLine error).replace "EthLib.Execution.Evm.EvmError." ""}"
-
-/-- An error that aborts a run reaches Python with a code and its message.
-
-An error of the state keeps its own code.
-
-Any other abort has code 0, since no error type of the specification gives it a code. -/
-instance : ExportError Evm.EvmError where
-  code
-    | .state s => s.code
-    | _ => 0
-  message := abortMessage
 
 /-- What a run leaves, and the accounts of the state after it.
 

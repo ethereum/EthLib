@@ -195,7 +195,7 @@ theorem honestAttestation_exists_ok {honest : Finset ValidatorIndex}
       (f := fun index =>
         constructSingleAttestation config state data committeeIndex index (key index))
       fun index _ => constructSingleAttestation_exists_ok (signed index).choose_spec
-    have made := forall₂_of_mapM_ok mapped
+    have made := List.mapM_eq_ok_iff_forall₂.mp mapped
     have kept := filter_singles_eq made
     have aggregated : ∃ aggregate : Attestation preset fork,
         constructAggregateOfSingleAttestations state data committeeIndex singles =
@@ -227,7 +227,7 @@ theorem honestAttestation_exists_ok {honest : Finset ValidatorIndex}
         cases failedAggregate
     obtain ⟨aggregate, aggregated⟩ := aggregated
     exact ⟨aggregate, bind_ok_iff.mpr ⟨committee, mapError_ok_iff.mpr committeeOk,
-      bind_ok_iff.mpr ⟨singles, mapM_ok_of_forall₂ made, aggregated⟩⟩⟩
+      bind_ok_iff.mpr ⟨singles, List.mapM_eq_ok_iff_forall₂.mpr made, aggregated⟩⟩⟩
   · rw [dite_eq_right electra]
     have before : fork < .pectra := Nat.lt_of_not_le electra
     -- Before Electra the data names the committee, and the committee fits the bits.
@@ -239,7 +239,7 @@ theorem honestAttestation_exists_ok {honest : Finset ValidatorIndex}
       (f := fun index => constructAttestation config state before data index (key index))
       fun index signer => constructAttestation_exists_ok committeeOk'
         (mem_honestSigners.mp signer).1 fitted (signed index).choose_spec
-    have made := forall₂_of_mapM_ok mapped
+    have made := List.mapM_eq_ok_iff_forall₂.mp mapped
     have kept := filter_attestations_eq made
     have aggregated : ∃ aggregate,
         constructAggregate state before data attestations = .ok aggregate := by
@@ -270,7 +270,7 @@ theorem honestAttestation_exists_ok {honest : Finset ValidatorIndex}
         cases failedAggregate
     obtain ⟨aggregate, aggregated⟩ := aggregated
     exact ⟨aggregate, bind_ok_iff.mpr ⟨committee, mapError_ok_iff.mpr committeeOk',
-      bind_ok_iff.mpr ⟨attestations, mapM_ok_of_forall₂ made, aggregated⟩⟩⟩
+      bind_ok_iff.mpr ⟨attestations, List.mapM_eq_ok_iff_forall₂.mpr made, aggregated⟩⟩⟩
 
 /-- From Electra, the honest attestation of a committee, from what it is built of.
 
@@ -297,7 +297,7 @@ theorem honestAttestation_spec (electra : .pectra ≤ fork) {honest : Finset Val
   obtain ⟨committee, committeeOk, built⟩ := bind_ok_iff.mp built
   rw [mapError_ok_iff] at committeeOk
   obtain ⟨singles, singlesOk, built⟩ := bind_ok_iff.mp built
-  have made := forall₂_of_mapM_ok singlesOk
+  have made := List.mapM_eq_ok_iff_forall₂.mp singlesOk
   have kept := filter_singles_eq made
   obtain ⟨-, other, otherOk, -, bits, sameData, -, aggregated⟩ :=
     constructAggregateOfSingleAttestations_spec built
@@ -342,7 +342,7 @@ theorem honestAttestation_signers (before : ¬.pectra ≤ fork)
   obtain ⟨committee, committeeOk, built⟩ := bind_ok_iff.mp built
   rw [mapError_ok_iff] at committeeOk
   obtain ⟨singles, singlesOk, built⟩ := bind_ok_iff.mp built
-  have made := forall₂_of_mapM_ok singlesOk
+  have made := List.mapM_eq_ok_iff_forall₂.mp singlesOk
   obtain ⟨-, -, -, -, -, sameData, -⟩ := constructAggregate_spec built
   obtain ⟨found, foundOk, members⟩ := mem_getAttestingIndices_constructAggregate built
   refine ⟨sameData, fun indices indicesOk index member => ?_⟩
@@ -418,7 +418,7 @@ theorem processAttestation_honestAttestation {budget scoreBound : Nat}
     rw [mapError_ok_iff, committeeOk, Except.ok.injEq] at otherOk
     subst otherOk
     obtain ⟨singles, singlesOk, built⟩ := bind_ok_iff.mp built
-    have made := forall₂_of_mapM_ok singlesOk
+    have made := List.mapM_eq_ok_iff_forall₂.mp singlesOk
     have kept := filter_singles_eq made
     obtain ⟨-, other, otherOk, -, -, sameData, -, -⟩ :=
       constructAggregateOfSingleAttestations_spec built
@@ -472,7 +472,7 @@ theorem processAttestation_honestAttestation {budget scoreBound : Nat}
     rw [mapError_ok_iff, indexEq, committeeOk, Except.ok.injEq] at otherOk
     subst otherOk
     obtain ⟨attestations, attestationsOk, built⟩ := bind_ok_iff.mp built
-    have made := forall₂_of_mapM_ok attestationsOk
+    have made := List.mapM_eq_ok_iff_forall₂.mp attestationsOk
     have kept := filter_attestations_eq made
     obtain ⟨other, otherOk, -, -, bits, sameData, -⟩ := constructAggregate_spec built
     rw [indexEq, committeeOk, Except.ok.injEq] at otherOk

@@ -54,7 +54,7 @@ def test_fixture_header_is_valid(pair) -> None:
     blocks.validate_header(fork, fork, parent, header)
 
 
-_INVALID_HEADER = "header invalid: EthLib.Execution.Blocks.BlockError."
+_INVALID_HEADER = "block invalid: "
 
 
 def _mutated(header: bytes, index: int, value: bytes) -> bytes:
@@ -178,7 +178,7 @@ def test_block_at_size_limit_is_valid() -> None:
 def test_block_above_size_limit_is_invalid() -> None:
     with raises(
         blocks.BlockError,
-        "block invalid: EthLib.Execution.Blocks.BlockError.blockTooLarge (size := 8388609)",
+        "block invalid: blockTooLarge (size := 8388609)",
     ) as error:
         blocks.validate_size("fusaka", _block_of_size(MAX_RLP_BLOCK_SIZE + 1))
     assert error.value.code == 214
@@ -200,8 +200,7 @@ def test_paris_header_fails_the_difficulty_before_paris() -> None:
     parent, header, _ = _headers(paris)
     with raises(
         blocks.BlockError,
-        "header invalid: EthLib.Execution.Blocks.BlockError.wrongDifficulty "
-        "(expected := 131072) (actual := 0)",
+        "block invalid: wrongDifficulty (expected := 131072) (actual := 0)",
     ) as error:
         blocks.validate_header("london", "london", parent, header)
     assert error.value.code == 215
@@ -245,8 +244,7 @@ def test_wrong_difficulty_before_paris_is_rejected() -> None:
     difficulty = int.from_bytes(rlp.decode(header)[7], "big") + 1
     with raises(
         blocks.BlockError,
-        "header invalid: EthLib.Execution.Blocks.BlockError.wrongDifficulty "
-        "(expected := 131136) (actual := 131137)",
+        "block invalid: wrongDifficulty (expected := 131136) (actual := 131137)",
     ) as error:
         blocks.check_header(
             fork, fork, parent, _mutated(header, 7, difficulty.to_bytes(8, "big").lstrip(b"\x00"))
@@ -269,7 +267,7 @@ def test_unsealed_header_fails_the_proof_of_work() -> None:
     )
     with raises(
         blocks.BlockError,
-        "header invalid: EthLib.Execution.Blocks.BlockError.proofOfWork "
+        "block invalid: proofOfWork "
         "(EthLib.Execution.Blocks.PowError.wrongMixDigest "
         f"(expected := 0x{mix.hex()}) (actual := 0x{fields[13].hex()}))",
     ) as error:

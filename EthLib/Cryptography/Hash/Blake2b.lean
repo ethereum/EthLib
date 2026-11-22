@@ -9,13 +9,7 @@ BLAKE2b runs F once per 128-byte block, with 12 rounds (§3.3).
 
 The BLAKE2F precompile lets the caller choose the number of rounds, so here it is an argument.
 
-Each step of the RFC is one definition:
-
-- The initialization vector, §2.6.
-- The message schedule, §2.7.
-- The rotation of a word, §2.3.
-- The mixing function G, §3.1.
-- One round of F, and F itself, §3.2.
+Each definition names its section of the RFC, and comments in the bodies quote the RFC's steps.
 
 The code is a direct transcription of the RFC, not a constant-time implementation.
 
@@ -76,6 +70,7 @@ The RFC defines it as `(x >> n) ^ (x << (w - n))`.
 
 Lean's `>>>` is the RFC's shift `>>`, so the rotation is spelled out. -/
 @[inline] def rotr (x : UInt64) (n : UInt64) : UInt64 :=
+  -- RFC: `x >>> n = (x >> n) ^ (x << (w - n))`, with `w = 64`.
   (x >>> n) ^^^ (x <<< (64 - n))
 
 /-- The mixing function G, RFC 7693 §3.1.
@@ -83,13 +78,21 @@ Lean's `>>>` is the RFC's shift `>>`, so the rotation is spelled out. -/
 It mixes the message words `x` and `y` into the words `a`, `b`, `c` and `d` of the work vector.
 -/
 def mix (v : Vector UInt64 16) (a b c d : Fin 16) (x y : UInt64) : Vector UInt64 16 :=
+  -- `v[a] := (v[a] + v[b] + x) mod 2**w`.
   let v := v.set a (v[a] + v[b] + x)
+  -- `v[d] := (v[d] ^ v[a]) >>> R1`, with `R1 = 32`.
   let v := v.set d (rotr (v[d] ^^^ v[a]) 32)
+  -- `v[c] := (v[c] + v[d]) mod 2**w`.
   let v := v.set c (v[c] + v[d])
+  -- `v[b] := (v[b] ^ v[c]) >>> R2`, with `R2 = 24`.
   let v := v.set b (rotr (v[b] ^^^ v[c]) 24)
+  -- `v[a] := (v[a] + v[b] + y) mod 2**w`.
   let v := v.set a (v[a] + v[b] + y)
+  -- `v[d] := (v[d] ^ v[a]) >>> R3`, with `R3 = 16`.
   let v := v.set d (rotr (v[d] ^^^ v[a]) 16)
+  -- `v[c] := (v[c] + v[d]) mod 2**w`.
   let v := v.set c (v[c] + v[d])
+  -- `v[b] := (v[b] ^ v[c]) >>> R4`, with `R4 = 63`.
   v.set b (rotr (v[b] ^^^ v[c]) 63)
 
 /-! ## The compression function F -/
@@ -98,20 +101,29 @@ def mix (v : Vector UInt64 16) (a b c d : Fin 16) (x y : UInt64) : Vector UInt64
 
 Read the work vector as a 4 x 4 matrix, row by row.
 
-The round applies G to the four columns, then to the four diagonals.
-
-The message words enter in the order of row `i mod 10` of the schedule. -/
+The round mixes its columns, then its diagonals. -/
 def round (m : Vector UInt64 16) (i : Nat) (v : Vector UInt64 16) : Vector UInt64 16 :=
+  -- `s[0..15] := SIGMA[i mod 10][0..15]`.
   let s := SIGMA[i % 10]
-  -- The four columns, such as `v[0], v[4], v[8], v[12]`.
+  -- The four columns.
+  --
+  -- `v := G( v, 0, 4,  8, 12, m[s[ 0]], m[s[ 1]] )`.
   let v := mix v 0 4  8 12 m[s[0]]  m[s[1]]
+  -- `v := G( v, 1, 5,  9, 13, m[s[ 2]], m[s[ 3]] )`.
   let v := mix v 1 5  9 13 m[s[2]]  m[s[3]]
+  -- `v := G( v, 2, 6, 10, 14, m[s[ 4]], m[s[ 5]] )`.
   let v := mix v 2 6 10 14 m[s[4]]  m[s[5]]
+  -- `v := G( v, 3, 7, 11, 15, m[s[ 6]], m[s[ 7]] )`.
   let v := mix v 3 7 11 15 m[s[6]]  m[s[7]]
-  -- The four diagonals, such as `v[0], v[5], v[10], v[15]`.
+  -- The four diagonals.
+  --
+  -- `v := G( v, 0, 5, 10, 15, m[s[ 8]], m[s[ 9]] )`.
   let v := mix v 0 5 10 15 m[s[8]]  m[s[9]]
+  -- `v := G( v, 1, 6, 11, 12, m[s[10]], m[s[11]] )`.
   let v := mix v 1 6 11 12 m[s[10]] m[s[11]]
+  -- `v := G( v, 2, 7,  8, 13, m[s[12]], m[s[13]] )`.
   let v := mix v 2 7  8 13 m[s[12]] m[s[13]]
+  -- `v := G( v, 3, 4,  9, 14, m[s[14]], m[s[15]] )`.
   mix v 3 4  9 14 m[s[14]] m[s[15]]
 
 /-- The rounds `start` to `start + count - 1` of F, in order.
@@ -135,16 +147,17 @@ It returns the new state.
 With 12 rounds it is the F of BLAKE2b. -/
 def compress (rounds : Nat) (h : Vector UInt64 8) (m : Vector UInt64 16) (t0 t1 : UInt64)
     (f : Bool) : Vector UInt64 8 :=
-  -- The work vector: the state, then the IV.
+  -- `v[0..7] := h[0..7]` and `v[8..15] := IV[0..7]`.
   let v : Vector UInt64 16 := h ++ IV
-  -- Mix in the offset: `t mod 2^64` into word 12, `t >> 64` into word 13.
+  -- `v[12] := v[12] ^ (t mod 2**w)`, the low word of the offset, given as `t0`.
   let v := v.set 12 (v[12] ^^^ t0)
+  -- `v[13] := v[13] ^ (t >> w)`, the high word, given as `t1`.
   let v := v.set 13 (v[13] ^^^ t1)
-  -- The last block inverts all bits of word 14.
+  -- `IF f = TRUE THEN v[14] := v[14] ^ 0xFF..FF`.
   let v := if f then v.set 14 (v[14] ^^^ 0xFFFFFFFFFFFFFFFF) else v
-  -- Rounds `0` to `rounds - 1`.
+  -- `FOR i = 0 TO r - 1 DO`, with `r` the given number of rounds.
   let v := roundsFrom m 0 rounds v
-  -- XOR the two halves of the work vector into the state.
+  -- `FOR i = 0 TO 7 DO h[i] := h[i] ^ v[i] ^ v[i + 8]`.
   Vector.ofFn fun i => h[i] ^^^ v[i] ^^^ v[i.val + 8]
 
 end EthLib.Cryptography.Hash.Blake2b

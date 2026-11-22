@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.BigEndian
 public import EthLib.Networking.Discv5.Handshake
 public import EthLib.Networking.Discv5.Session
 public import EthLib.Networking.Enr.V4
@@ -31,6 +32,8 @@ A packet that cannot be read, or a step that fails, leaves the state as it is an
 The text gives no lifetime for a challenge or a session, so they last until replaced.
 
 The counter wraps after `2^32` messages, a bound that the text leaves to the node.
+
+After a wrap, two nonces repeat only if their 8 random bytes repeat too.
 
 [the theory text]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-theory.md#sessions
 -/
@@ -154,7 +157,8 @@ structure Randoms where
 
 The text "strongly" recommends this layout, so that the nonces of a session differ. -/
 def counterNonce (counter : UInt32) (tail : Vector UInt8 8) : Vector UInt8 12 :=
-  (Vector.ofFn fun i : Fin 4 => UInt8.ofNat (counter.toNat / 256 ^ (3 - i.val))) ++ tail
+  (⟨(Base.natToBytes 4 counter.toNat).toArray, by simp [Base.natToBytes_length]⟩ : Vector UInt8 4)
+    ++ tail
 
 /-- An ordinary message packet sealed in a session, and the session with its counter raised. -/
 def sealInSession (node : Local) (rand : Randoms) (peer : NodeId) (session : Session)

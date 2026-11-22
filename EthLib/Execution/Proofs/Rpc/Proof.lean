@@ -89,14 +89,7 @@ theorem bytesMax32_quantityJson (what : String) (key : Bytes32) :
       List.map (fun c => c.val.toUInt8) (Nat.toDigits 16 (bytesToNat key.toList)) := by simp
   rw [hdata, forIn_hex, hval]
   · simp only [pure, Except.pure, Except.ok.injEq]
-    apply Vector.ext
-    intro i hi
-    rw [Vector.getElem_ofFn]
-    have h := congrArg (·[i]?) hv
-    rw [List.getElem?_eq_getElem (by rw [natToBytes_length]; exact hi), getElem_natToBytes hi,
-      List.getElem?_eq_getElem (by simpa using hi), Option.some.injEq,
-      Vector.getElem_toList] at h
-    rw [← h]
+    exact Vector.toList_inj.mp hv
   · intro c hc s
     obtain ⟨c', hc', rfl⟩ := List.mem_map.mp hc
     obtain ⟨d, hd, rfl⟩ := hall c' hc'

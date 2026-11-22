@@ -11097,7 +11097,7 @@
    "errors": [],
    "error_class": "ConsensusError",
    "docstring":
-   "The fewest epochs back from the current one over which a node must serve blocks, at a fork.\n\nIt covers the time a validator needs to withdraw, plus half of a churn quotient, rounded down.\n\nBefore Gloas, that quotient is `CHURN_LIMIT_QUOTIENT`.\n\nFrom Gloas, it comes from the weak subjectivity arithmetic of [EIP-8061].\n\nLet `E` be `CHURN_LIMIT_QUOTIENT_GLOAS` and `C` be `CONSOLIDATION_CHURN_LIMIT_QUOTIENT`.\n\nFor a large validator set the capped activation churn is negligible, so it drops out.\n\nThe exit churn is the stake over `E`, and the consolidation churn is the stake over `C`.\n\nExits weigh 2/3 against 1 for consolidations.\n\nThe stake over that weighted churn is `3 * E * C / (2 * C + 3 * E)`, rounded down.\n\n[EIP-8061]: https://eips.ethereum.org/EIPS/eip-8061#weak-subjectivity-period"},
+   "The fewest epochs back from the current one over which a node must serve blocks, at a fork.\n\nIt covers the time a validator needs to withdraw, plus half of a churn quotient, rounded down.\n\nBefore Gloas, that quotient is `CHURN_LIMIT_QUOTIENT`.\n\nFrom Gloas, it comes from the weak subjectivity arithmetic of [EIP-8061].\n\nLet `E` be `CHURN_LIMIT_QUOTIENT_GLOAS` and `C` be `CONSOLIDATION_CHURN_LIMIT_QUOTIENT`.\n\nFor a large validator set the capped activation churn is negligible, so it drops out.\n\nThe exit churn is the stake over `E`, and the consolidation churn is the stake over `C`.\n\nExits weigh 2/3 against 1 for consolidations.\n\nThe stake over that weighted churn is `3 * E * C / (2 * C + 3 * E)`, rounded down.\n\nThe configuration values are 64-bit, so a sum or product of 2^64 or more is an error.\n\nFrom Gloas, a zero denominator is an error too, which happens exactly when both quotients are 0.\n\nProvenance: the [phase 0][phase0] and [Gloas][gloas] networking texts of consensus-specs give it.\n\n[EIP-8061]: https://eips.ethereum.org/EIPS/eip-8061#weak-subjectivity-period\n[phase0]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/phase0/p2p-interface.md#compute_min_epochs_for_block_requests\n[gloas]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/gloas/p2p-interface.md#modified-compute_min_epochs_for_block_requests"},
   {"summary":
    "The gossip topics of a fork, in the order of the fork that adds each one.",
    "signature": "(name: str, fork: str) -> list[str]",
@@ -12761,7 +12761,7 @@
       {"constructor": "badRecord", "code": 17}]}],
    "error_class": "DnsDiscError",
    "docstring":
-   "Whether a root text is signed by a compressed public key of 33 bytes.\n\nA text that is no root comes back with the code of a root error."},
+   "Whether a root text is signed by a compressed public key of 33 bytes.\n\nA text that is no root comes back as the error of a root whose fields are wrong."},
   {"summary":
    "The node list at a domain, under a compressed public key, with a table as the DNS.",
    "signature":
@@ -14222,7 +14222,7 @@
    "errors": [],
    "error_class": "GossipError",
    "docstring":
-   "The gossipsub parameters, given the slot duration in milliseconds and the slots per epoch.\n\nA seen message ID lasts two epochs, in whole seconds, with the remainder dropped."},
+   "The gossipsub parameters, given the slot duration in milliseconds and the slots per epoch.\n\nA seen message ID lasts two epochs, in whole seconds, with the remainder dropped.\n\nThe slot duration and the slots per epoch are 64-bit configuration values.\n\nSo two epochs in milliseconds must fit 64 bits, and an overflow is an error.\n\nProvenance: the [phase 0 networking text][p2p] of consensus-specs states these parameters.\n\n[p2p]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/phase0/p2p-interface.md#the-gossip-domain-gossipsub"},
   {"summary":
    "What the router does with one RPC, with its client choices given as tables.",
    "signature":
@@ -14509,7 +14509,7 @@
       {"constructor": "missingCode", "code": 209}]}],
    "error_class": "TransactionError",
    "docstring":
-   "Check that a transaction may enter its block at `fork`, on the chain `chainId`.\n\nThe block has used the gas `used` before it, and `state` is the state.\n\nThe first check that fails gives the error, and the order depends on the fork.\n\nBefore Glamsterdam:\n\n- the rules alone, which read no sender then, so any address stands in for it;\n- the gas of the block, the chain, the signature and the base fee;\n- the blobs and the authorizations.\n\nFrom Glamsterdam:\n\n- the chain and the signature;\n- the rules alone, which check the blobs and the authorizations too;\n- the gas of the block and the base fee.\n\nAt every fork, the fee per blob gas and the sender come last.\n\nA simulation may give the sender, which skips the signature and the rule on the sender's code.\n\nA legacy transaction then names no chain, since only its signature does.\n\nA simulation may also lift some rules."},
+   "Check that a transaction may enter its block at `fork`, on the chain `chainId`.\n\nThe block has used the gas `used` before it, and `state` is the state.\n\nThe first check that fails gives the error, and the body marks the order of each fork.\n\nA simulation may give the sender, which skips the signature and the rule on the sender's code.\n\nA legacy transaction then names no chain, since only its signature does.\n\nA simulation may also lift some rules."},
   {"summary":
    "Check that a node may keep a transaction from a peer, at `fork` on the chain `chainId`.",
    "signature":

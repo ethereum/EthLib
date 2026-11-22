@@ -30,6 +30,8 @@ REVERT keeps both.
 
 A state that lacks data, such as the code of a code hash, also aborts the whole run.
 
+So does a number of the environment that no word holds, which an instruction would push.
+
 Each step lowers the measure of the frame, so the loop ends with no bound on its number of steps.
 
 A message gets less gas than its caller had, so the recursion of messages can end too.

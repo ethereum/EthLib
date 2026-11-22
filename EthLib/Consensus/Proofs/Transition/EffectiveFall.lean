@@ -1215,12 +1215,12 @@ private theorem block_partialLedger {fork : Fork} {s t : BeaconState preset fork
   have headFrame := blockHead_departureQueues electra headedOk executedFrame revealedOk votedOk
   have headQueue : (voted.pendingPartialWithdrawals electra).data.toList =
       (s.pendingPartialWithdrawals electra).data.toList.drop
-        expected.processedPartialWithdrawalsCount := by
+        expected.processedPartialWithdrawalsCount.toNat := by
     rw [← updatePendingPartialWithdrawals_toList s electra]
     exact congrArg (·.2.2.2.2.toList) headFrame
   obtain ⟨new, queue, late⟩ := operations_queueAppend early operatedOk electra
   obtain ⟨_, syncedEq⟩ := processSyncAggregate_eq synced
-  refine ⟨headed, partials, next, expected.processedPartialWithdrawalsCount, new, headedOk,
+  refine ⟨headed, partials, next, expected.processedPartialWithdrawalsCount.toNat, new, headedOk,
     partialsOk, ?_, ?_⟩
   · rw [syncedEq]
     exact queue.trans (congrArg (· ++ new) headQueue)

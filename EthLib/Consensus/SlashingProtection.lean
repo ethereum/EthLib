@@ -121,6 +121,8 @@ structure Interchange where
   data : List InterchangeEntry
   deriving DecidableEq, Repr
 
+open scoped HexRepr
+
 /-- Why an interchange file does not read, or why a signer refuses a message. -/
 inductive SlashingProtectionError where
   /-- A field is missing, has the wrong JSON type, or has a malformed value. -/

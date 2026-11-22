@@ -149,7 +149,9 @@ The power runs four bits of the exponent at a time.
 
 It fails when `a` is not a square. -/
 def sqrt (a : Fp) : Except BlsError Fp :=
+  -- RFC 9380, Appendix I.1, step 1: `return x^c1`, with `c1 = (q + 1) / 4`.
   let cand := sqrtCandidate a
+  -- The RFC guarantees the square only for a square `x`, so a power whose square is not `x` fails.
   if (cand * cand).beq a then .ok cand else .error .notASquare
 
 /-- The operations that the extensions and curves of BLS12-381 read from `Fp`. -/

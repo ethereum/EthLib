@@ -472,6 +472,8 @@ end BodyLeaves
 
 /-- The transition of a block fails only with errors of a property when its body does.
 
+The body must meet it in the environment that the header gives with each list of recent hashes.
+
 The property must hold for every error that is no abort, no state error and no failed system call.
 
 It need not hold for a failed system call or a transaction kept out of the block.
@@ -484,7 +486,8 @@ theorem errorsMeet_stateTransition_of_plain {chain : BlockChain} {block : Block 
     (plain : ∀ e, (∀ x, e ≠ .aborted x) → (∀ x, e ≠ .state x) →
       (∀ a x, e ≠ .systemCallFailed a x) → (∀ i x, e ≠ .invalidTransaction i x) → P e)
     (hegota : .hegota ≤ fork → P (.aborted (.forkNotYetSpecified fork)))
-    (body : ∀ env, ErrorsMeet P (applyBody chain.config env block ⟨chain.state, ∅, ∅, ∅, ∅⟩)) :
+    (body : ∀ hashes, ErrorsMeet P (applyBody chain.config
+      (blockEnvironment chain.config hashes block.header) block ⟨chain.state, ∅, ∅, ∅, ∅⟩)) :
     ErrorsMeet P (stateTransition chain block checkSeal) := by
   have other : ∀ {β : Type} {x : Except BlockError β}, ErrorsMeet Plain x → ErrorsMeet P x :=
     fun hx e h => plain e (hx e h).1 (hx e h).2.1 (hx e h).2.2.1 (hx e h).2.2.2
@@ -506,7 +509,7 @@ theorem errorsMeet_stateTransition_of_plain {chain : BlockChain} {block : Block 
         · exact ErrorsMeet.bind
             (other (ErrorsMeet.mapError fun _ _ => ⟨nofun, nofun, nofun, nofun⟩))
             fun _ _ => ErrorsMeet.pure _
-      refine ErrorsMeet.bind (body _) fun output _ => ?_
+      refine ErrorsMeet.bind (body hashes) fun output _ => ?_
       refine ErrorsMeet.bind ?_ fun _ _ => ErrorsMeet.pure _
       unfold outputRoots
       refine ErrorsMeet.bind (trie _) fun _ _ => ?_
@@ -540,6 +543,8 @@ theorem errorsMeet_stateTransition_of_plain {chain : BlockChain} {block : Block 
 
 /-- The transition of a block fails only with errors of a property when its body does.
 
+The body must meet it in the environment that the header gives with each list of recent hashes.
+
 The property must hold for every error that is neither an abort nor an error of the state.
 
 It must hold for the abort from Hegotá on, for a fork whose rules are not yet specified. -/
@@ -547,7 +552,8 @@ theorem errorsMeet_stateTransition {chain : BlockChain} {block : Block fork Tran
     {checkSeal : Bool} {P : BlockError → Prop}
     (plain : ∀ e, (∀ x, e ≠ .aborted x) → (∀ x, e ≠ .state x) → P e)
     (hegota : .hegota ≤ fork → P (.aborted (.forkNotYetSpecified fork)))
-    (body : ∀ env, ErrorsMeet P (applyBody chain.config env block ⟨chain.state, ∅, ∅, ∅, ∅⟩)) :
+    (body : ∀ hashes, ErrorsMeet P (applyBody chain.config
+      (blockEnvironment chain.config hashes block.header) block ⟨chain.state, ∅, ∅, ∅, ∅⟩)) :
     ErrorsMeet P (stateTransition chain block checkSeal) :=
   errorsMeet_stateTransition_of_plain (fun e ha hs _ _ => plain e ha hs) hegota body
 

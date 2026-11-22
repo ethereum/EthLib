@@ -7,7 +7,10 @@ public import EthLib.Execution.Evm.Words
 /-!
 # `Evm.Precompiles.Sha256`
 
-The SHA-256 precompile at address `0x02`, from Appendix E of the Yellow Paper.
+The SHA-256 precompile at address `0x02`, from Appendix E of the Yellow Paper, Shanghai version.
+
+The source is `Paper.tex` at `efc5f9a`:
+<https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex>
 
 It charges 60 gas, plus 12 for each 32-byte word of call data, then hashes the whole call data.
 
@@ -30,7 +33,9 @@ def GAS_BASE : Nat := 60
 def GAS_PER_WORD : Nat := 12
 
 /-- The gas a call with `size` bytes of call data is charged. -/
-def gasCost (size : Nat) : Nat := GAS_BASE + GAS_PER_WORD * wordCount size
+def gasCost (size : Nat) : Nat :=
+  -- `g_r = 60 + 12 * ceil(||I_d|| / 32)`.
+  GAS_BASE + GAS_PER_WORD * wordCount size
 
 /-- The one way a SHA-256 call can fail. -/
 inductive Sha256Error where
@@ -63,7 +68,13 @@ Returns the 32-byte digest, or the error that consumes all the gas.
 
 The gas is charged first, then the whole call data is hashed. -/
 def sha256 (data : ByteArray) (gas : Nat) : Except Sha256Error ByteArray :=
+  -- `g_r`, the price of the call.
   let cost := gasCost data.size
+  -- Appendix E, `Xi_PRE`: `(empty, 0, A, ())` if `g < g_r`, else `(sigma, g - g_r, A, o)`.
+  --
+  -- Here the call returns an error or the output, and the call frame applies the rest.
+  --
+  -- `o[0..31] = SHA256(I_d)`.
   if gas < cost then .error (.outOfGas cost gas) else .ok (Cryptography.Hash.sha256 data)
 
 end EthLib.Execution.Evm.Precompiles.Sha256

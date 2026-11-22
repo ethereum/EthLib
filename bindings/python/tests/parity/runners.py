@@ -271,17 +271,17 @@ _BLOCK_EXCEPTIONS = {
     "INVALID_WITHDRAWALS_ROOT": r"wrongWithdrawalsRoot",
     "SYSTEM_CONTRACT_EMPTY": r"systemContractEmpty",
     "SYSTEM_CONTRACT_CALL_FAILED": r"system call to .* failed",
-    "RLP_STRUCTURES_ENCODING": r"does not decode|block rejected",
+    "RLP_STRUCTURES_ENCODING": r"does not decode|block invalid: encoding",
     "RLP_BLOCK_LIMIT_EXCEEDED": r"blockTooLarge",
     # From Amsterdam, a block carries only the hash of its access list.
     # So a list that breaks a rule of its form shows as a wrong hash.
-    "INCORRECT_BLOCK_FORMAT": r"block rejected|wrongBlockAccessListHash",
+    "INCORRECT_BLOCK_FORMAT": r"block invalid: encoding|wrongBlockAccessListHash",
     "INVALID_GAS_USED": r"wrongGasUsed",
     "INVALID_BLOCK_ACCESS_LIST": r"wrongBlockAccessListHash|blockAccessList",
     "BLOCK_ACCESS_LIST_GAS_LIMIT_EXCEEDED": r"blockAccessList .*tooManyItems",
     # A header without the field of the hash, or with one too many, does not decode.
-    "INVALID_BAL_HASH": r"wrongBlockAccessListHash|block rejected",
-    "INVALID_BLOCK_HASH": r"block rejected",
+    "INVALID_BAL_HASH": r"wrongBlockAccessListHash|block invalid: encoding",
+    "INVALID_BLOCK_HASH": r"block invalid: encoding",
 }
 
 

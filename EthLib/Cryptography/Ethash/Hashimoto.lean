@@ -7,17 +7,9 @@ public import EthLib.Cryptography.Ethash.Cache
 
 The proof-of-work function of Ethash, from a cache: the hashimoto loop.
 
-A header hash and a nonce give a 64-byte seed, through Keccak-512.
-
-A mix of 128 bytes starts as two copies of the seed.
-
-Each of 64 accesses folds two adjacent dataset items into the mix with FNV.
+Each of 64 accesses folds two adjacent dataset items into a 128-byte mix with FNV.
 
 The seed and the mix choose the items, so a miner cannot know them in advance.
-
-The mix is compressed to 32 bytes, the mix digest.
-
-The result is the Keccak-256 hash of the seed and the mix digest.
 
 A verifier computes the 128 dataset items from the cache, without the dataset.
 
@@ -50,6 +42,9 @@ The appendix writes a compression whose indices do not match the clients.
 
 The definition follows the specification. -/
 def compress (mix : Vector UInt32 32) : Vector UInt32 8 :=
+  -- `for i in range(0, len(mix), 4)`, with `i = 4 k`.
+  --
+  -- `cmix.append(fnv(fnv(fnv(mix[i], mix[i+1]), mix[i+2]), mix[i+3]))`.
   Vector.ofFn fun k : Fin 8 =>
     fnv (fnv (fnv mix[4 * k.val] mix[4 * k.val + 1]) mix[4 * k.val + 2]) mix[4 * k.val + 3]
 
@@ -62,15 +57,26 @@ The nonce is 8 bytes, the most significant first, and the seed reads them revers
 The dataset size fixes the count of pairs of items that an access can choose. -/
 def hashimotoLight (datasetSize : Nat) (cache : Array Item) (headerHash nonce : ByteArray) :
     PowOutput :=
+  -- `s = sha3_512(header + nonce[::-1])`.
   let s := hashItem (headerHash ++ ⟨nonce.data.reverse⟩)
+  -- `n // mixhashes`, with `n = full_size / HASH_BYTES` and `mixhashes = 2`.
   let pairs := datasetSize / MIX_BYTES
+  -- `for i in range(ACCESSES)`.
   let mix := (List.range ACCESSES).foldl
     (fun mix i =>
-      -- Access `i` chooses a pair from FNV of `i ⊕ s[0]` and word `i mod 32` of the mix.
+      -- `p = fnv(i ^ s[0], mix[i % w]) % (n // mixhashes) * mixhashes`, with `w = 32`.
+      --
+      -- Here `p` counts pairs, so the items read are `2 p` and `2 p + 1`.
       let p := (fnv (i.toUInt32 ^^^ s[0]) mix[i % 32]).toNat % pairs
+      -- `mix = map(fnv, mix, newdata)`, with `newdata` the items `2 p + j` for `j < 2`.
+      --
+      -- `dataset_lookup(x)` is `calc_dataset_item(cache, x)`, as in `hashimoto_light`.
       Vector.zipWith fnv mix (datasetItem cache (2 * p) ++ datasetItem cache (2 * p + 1)))
+    -- `mix.extend(s)` twice: the mix starts as `s` replicated.
     (s ++ s)
+  -- `"mix digest": serialize_hash(cmix)`.
   let mixDigest := bytesOfWords (compress mix)
+  -- `"result": serialize_hash(sha3_256(s+cmix))`.
   ⟨mixDigest, ⟨(keccak256 (bytesOfWords s ++ mixDigest)).toArray⟩⟩
 
 end EthLib.Cryptography.Ethash

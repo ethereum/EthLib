@@ -948,4 +948,40 @@ theorem runBody_fillHeader {fork : Fork} {chain : BlockChain} {transactions : Li
       runBody chain ⟨header, transactions, [], withdrawals⟩ :=
   rfl
 
+/-- From Fusaka, a block that passes its checks has fewer than `2^32 - 1` transactions.
+
+The RLP of the block is at most 8 MiB, by [EIP-7934][eip7934], and each transaction takes a byte.
+
+So every position of its body fits 32 bits, that of the last system calls included.
+
+A position of the block access list of [EIP-7928][eip7928] is such a 32-bit number.
+
+[eip7934]: https://eips.ethereum.org/EIPS/eip-7934#specification
+[eip7928]: https://eips.ethereum.org/EIPS/eip-7928#specification -/
+theorem length_transactions_lt_of_checkBlock {fork : Fork} {config : ChainConfig}
+    {checkSeal : Bool} {recent : List RecentBlock} {block : Block fork Transaction}
+    (hFork : .fusaka ≤ fork) (h : checkBlock config checkSeal recent block = .ok ()) :
+    block.transactions.length < 2 ^ 32 - 1 := by
+  unfold checkBlock at h
+  obtain ⟨items, hitems, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, hsize, -⟩ := bind_ok_iff.mp h
+  rcases (validateBlockSize_eq_ok_iff items).mp hsize with hlt | ⟨bytes, hbytes, hle⟩
+  · exact absurd hFork (Nat.not_le_of_lt hlt)
+  -- The items of the body are the transactions, one each.
+  unfold bodyItems at hitems
+  cases hm : block.transactions.mapM bodyItem with
+  | error e => simp [hm, Except.mapError, bind, Except.bind] at hitems
+  | ok txs =>
+    simp [hm, Except.mapError, bind, Except.bind, pure, Except.pure] at hitems
+    subst hitems
+    have hlen := mapM_ok_length hm
+    -- The list of transactions is an item of the block, so it encodes to fewer bytes.
+    obtain ⟨-, hmem⟩ := Serialization.Rlp.encode_list_size_gt _ bytes hbytes
+    obtain ⟨ex, hex, hlt⟩ := hmem (Serialization.Rlp.Codec.toItem txs) (by simp)
+    -- Each transaction takes at least 1 byte of that encoding.
+    have hcount := (Serialization.Rlp.encode_list_size_gt _ ex hex).1
+    simp only [Serialization.Rlp.Codec.toItem, List.length_map] at hcount
+    simp only [MAX_RLP_BLOCK_SIZE] at hle
+    omega
+
 end EthLib.Execution.Blocks

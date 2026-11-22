@@ -47,6 +47,12 @@ def toResult {ε α : Type} [ExportError ε] (context : Option String) (result :
       | some context => s!"{context}: {message}"
       | none => message)
 
+/-- A value printed on one line, at a width wider than any message of an error.
+
+A message of an error uses it, so that a long error stays on one line. -/
+def oneLine {α : Type} [Repr α] (a : α) : String :=
+  (repr a).pretty 1000000
+
 /-- A Python argument that does not read, with the reason.
 
 No error type of the specification describes it. -/

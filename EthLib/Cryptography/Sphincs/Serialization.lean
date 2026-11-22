@@ -29,20 +29,11 @@ open Constants
 
 /-! ## Encoding -/
 
-/-- Encode a public key as 32 bytes, `PK.seed | PK.root`.
-
-```text
-    [ PK.seed: 16 | PK.root: 16 ]
-```
--/
+/-- Encode a public key as 32 bytes, `PK.seed | PK.root`, 16 bytes each. -/
 def encodePublicKey (pk : PublicKey) : ByteArray :=
   packBytes pk.pkSeed ++ packBytes pk.root
 
-/-- The 176 bytes of one FORS tree's opening.
-
-```text
-    [ secret: 16 | 10 path nodes: 160 ]
-```
+/-- The 176 bytes of one FORS tree's opening: the 16-byte secret, then 10 path nodes of 16 bytes.
 
 The path nodes run from height 0 up to height 9.
 -/
@@ -56,9 +47,7 @@ def encodeFors (openings : Vector TreeOpening FORS_TREES) : ByteArray :=
 
 /-- Encode one layer's signature: 1156 bytes on a lower layer, 1188 on the top one.
 
-```text
-    [ counter: 4 | 64 chain values: 1024 | h siblings: 16 h ]
-```
+It is the 4-byte counter, the 64 chain values (1024 bytes), then the `h` siblings (`16 h` bytes).
 
 - The counter is `BE_32(c)`, a big-endian 32-bit word.
 - Chain values are in chain order.
@@ -70,13 +59,14 @@ def encodeLayerSignature {layer : Layer} (sig : LayerSignature layer) : ByteArra
 
 /-- Encode a signature as 7740 bytes.
 
-```text
-    [ randomizer: 16 | FORS: 4224 | bottom: 1156 | middle: 1156 | top: 1188 ]
-```
+The fields are the randomizer (16 bytes), FORS (4224), then the bottom, middle and top layers.
 
-The layers run from the bottom up.
+The layers take 1156, 1156 and 1188 bytes, from the bottom up.
 -/
 def encodeSignature (sig : Signature) : ByteArray :=
+  -- FIPS 205 §9.2: `R`, then the FORS signature, then the hypertree signature.
+  --
+  -- Each layer starts with its 4-byte counter, which WOTS+C adds to FIPS 205's layout.
   packBytes sig.randomizer ++ encodeFors sig.fors ++ encodeLayerSignature sig.bottom
     ++ encodeLayerSignature sig.middle ++ encodeLayerSignature sig.top
 

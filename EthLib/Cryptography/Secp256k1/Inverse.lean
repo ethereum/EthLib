@@ -18,10 +18,6 @@ The low-word matrix construction follows §12.1, with 60 divsteps per jump.
 
 A table holds the matrices of 6 steps, generated from the divstep recurrence on low bits.
 
-A jump multiplies ten of them into one matrix of 60 steps.
-
-It then applies that matrix to the full remainders and residues.
-
 Thirteen jumps make 780 divsteps, and a loop that has not finished by then gives no candidate.
 
 The final check accepts only a canonical residue whose product with the input is one.
@@ -55,11 +51,17 @@ private structure Transition where
     UInt64 → UInt64 → UInt64 → UInt64 → Transition
   | 0, delta, _, _, aa, ab, ba, bb => ⟨delta, aa, ab, ba, bb⟩
   | fuel + 1, delta, f, g, aa, ab, ba, bb =>
+    -- §8: the second case of `divstep` is split by parity; even `g` gives `(1 + delta, f, g / 2)`.
+    --
+    -- The matrix rows follow `f` and `g`, scaled by 2 as in §8.1, so that no step divides.
     if g &&& 1 == 0 then
       jump fuel (delta + 1) f (g >>> 1) (aa + aa) (ab + ab) ba bb
-    -- The high bit tests whether the signed step state is positive.
+    -- `(1 - delta, g, (g - f) / 2)` if `delta > 0` and `g` is odd.
+    --
+    -- The high bit of `delta - 1` tests `delta > 0`.
     else if (delta - 1) >>> 63 == 0 then
       jump fuel (1 - delta) g ((g - f) >>> 1) (ba + ba) (bb + bb) (ba - aa) (bb - ab)
+    -- Otherwise `(1 + delta, f, (g + f) / 2)`, for an odd `g`.
     else
       jump fuel (delta + 1) f ((g + f) >>> 1) (aa + aa) (ab + ab) (ba + aa) (bb + ab)
 
@@ -196,19 +198,38 @@ private abbrev Wide := Montgomery.Words64
   | 0, _, f, g, d, _ =>
     if g.isZero then some (normalize finish d p (f.top >>> 63 != 0)) else none
   | fuel + 1, δ, f, g, d, e =>
+    -- Step 7: once `g = 0`, `f = +-1` and `d x = f mod p`, so `x^-1 = sgn(f) d mod p`.
+    --
+    -- Each jump already divided `d` by `2^60` mod `p`, so no factor `2^-744` is left.
+    --
+    -- The paper always runs its full count of divsteps.
+    --
+    -- This loop stops early instead, since a divstep with `g = 0` keeps `f`.
     if g.isZero then some (normalize finish d p (f.top >>> 63 != 0))
     else
+      -- §12.1, steps 2 and 3: the transition matrix of the next 60 divsteps, from the low words.
+      --
+      -- The paper takes 62 divsteps per jump; here 60, ten blocks of the 6-step table.
       let t := jumpBlocks 10 δ f.w0 g.w0 1 0 0 1
+      -- Step 4: `(f, g) <- T_i (f, g) / 2^60`.
       let nf := (lin t.aa t.ab f g).shr60
       let ng := (lin t.ba t.bb f g).shr60
+      -- In place of step 6, the matrix also updates the coefficients `(d, e)` of `x` mod `p`.
+      --
+      -- Each gains a multiple of `p` that makes it divisible by `2^60`, keeping `d x = f mod p`.
       let nd := adjust (lin t.aa t.ab d e) p pinv
       let ne := adjust (lin t.ba t.bb d e) p pinv
+      -- Step 5: `delta <- delta'`, then back to the low words for the next jump.
       run finish p pinv fuel t.delta nf ng nd ne
 
 @[noinline] private def candidate (p : Wide) (pinv : UInt64) (a : Nat) : Option Nat :=
   if a = 0 then none
   else
-    -- The attempt is limited to thirteen jumps.
+    -- §12.1, step 1: `f = p`, `g = x`, `delta = 1`, with the coefficients `d = 0` and `e = 1`.
+    --
+    -- Theorem 11.2 needs `floor((49 * 256 + 57) / 17) = 741` divsteps for 256-bit inputs.
+    --
+    -- So thirteen jumps, 780 divsteps, always suffice; a failure still falls back to Euclid.
     run Wide.lowNat p pinv 13 1 p (Wide.ofNat a) ⟨0, 0, 0, 0, 0⟩ ⟨1, 0, 0, 0, 0⟩
 
 /-- The candidate when it is the inverse of `a` mod `m`, or else the Euclidean inverse.

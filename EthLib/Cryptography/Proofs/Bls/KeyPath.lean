@@ -3,6 +3,7 @@ module
 public import Batteries.Data.List.Basic
 public import EthLib.Cryptography.Bls.KeyPath
 
+import Batteries.Data.List.Lemmas
 import Batteries.Data.String.Lemmas
 import EthLib.Base.Except
 import EthLib.Base.Proofs.Forall2
@@ -248,7 +249,7 @@ theorem parsePath_eq_ok_iff {text : String} {path : Path} :
           obtain ⟨cv, hc, av, ha, uv, hu, sv, hsv, h⟩ := h
           cases h
           exact ⟨p, c :: a :: u :: sub, rfl, hpv,
-            .cons hc (.cons ha (.cons hu (EthLib.Base.forall₂_of_mapM_ok hsv)))⟩
+            .cons hc (.cons ha (.cons hu (List.mapM_eq_ok_iff_forall₂.mp hsv)))⟩
         · simp [hpp, throw, throwThe, MonadExceptOf.throw] at h
           exact nomatch h
       · simp [hr, throw, throwThe, MonadExceptOf.throw] at h
@@ -278,7 +279,7 @@ theorem parsePath_eq_ok_iff {text : String} {path : Path} :
     unfold parsePath
     rw [hs]
     simp only [bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, hp, hc, ha, hu,
-      EthLib.Base.mapM_ok_of_forall₂ hsub]
+      List.mapM_eq_ok_iff_forall₂.mpr hsub]
     rfl
 
 /-- Parsing the written form of a path gives back the same path, at any depth. -/

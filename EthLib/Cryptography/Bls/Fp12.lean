@@ -9,10 +9,6 @@ The quadratic extension `Fp12 = Fp6[w] / (w^2 - v)`, with elements `c0 + c1 w`.
 
 With `w^2 = v`, the product is `(a0 + a1 w)(b0 + b1 w) = (a0 b0 + v a1 b1) + (a0 b1 + a1 b0) w`.
 
-The inverse comes from `(a0 + a1 w)(a0 - a1 w) = a0^2 - v a1^2`.
-
-So `(a0 + a1 w)^(-1) = (a0 - a1 w) / (a0^2 - v a1^2)`.
-
 The code is generic in the base field, as for `Fp2`.
 -/
 
@@ -39,11 +35,17 @@ variable {F : Type} [BaseField F]
 @[inline] def sub (a b : Fp12 F) : Fp12 F := ⟨a.c0 - b.c0, a.c1 - b.c1⟩
 @[inline] def neg (a : Fp12 F)   : Fp12 F := ⟨-a.c0, -a.c1⟩
 
-/-- Karatsuba-style multiplication. -/
+/-- The product, by the Karatsuba method of [Devegili et al.][dev], §3, with `β = v`.
+
+[dev]: https://eprint.iacr.org/2006/471
+-/
 def mul (a b : Fp12 F) : Fp12 F :=
+  -- §3: `v0 = a0 b0`, `v1 = a1 b1`.
   let t0 := a.c0 * b.c0
   let t1 := a.c1 * b.c1
+  -- §3: `c0 = v0 + β v1`.
   let c0 := t0 + t1.mulByV
+  -- §3: `c1 = (a0 + a1)(b0 + b1) - v0 - v1`.
   let c1 := (a.c0 + a.c1) * (b.c0 + b.c1) - t0 - t1
   ⟨c0, c1⟩
 
@@ -64,15 +66,20 @@ instance : Neg (Fp12 F) := ⟨neg⟩
 
 Over `Fp`, it equals `a * a` when `a^(p^4 - p^2 + 1) = 1`, and also at zero.
 
-Here `p` is the modulus of `Fp`, and `z_k` is the coefficient of `w^k`.
+Here `p` is the modulus of `Fp`, and `z_k` in `Fp2` is the coefficient of `w^k`.
 
-The pairs `A=(z0,z3)`, `B=(z1,z4)` and `C=(z2,z5)` represent elements of `Fp4`.
+It is the "cubic over a quadratic extension" form of §3.2, with `x = w` and `y = w^3`.
 
-Each pair uses the quadratic squaring formula of §3.1, with `y^2 = 1 + i`.
+So the element is `a + b x + c x^2`, with `a = z0 + z3 y`, `b = z1 + z4 y`, `c = z2 + z5 y`.
+
+These lie in `Fp4 = Fp2[y] / (y^2 - (1 + i))`.
 
 [source]: https://eprint.iacr.org/2009/565
 -/
 def cyclotomicSquare (a : Fp12 F) : Fp12 F :=
+  -- §3.1: `(a + b y)^2 = (a + i b)(a + b) - a b (1 + i) + 2 a b y`, with `y^2 = i`.
+  --
+  -- Here the constant `i` of §3.1 is `1 + i` of `Fp2`, as `y^2 = 1 + i`.
   let squareFp4 (x y : Fp2 F) :=
     let xy := x * y
     ((x + y.mulByOnePlusI) * (x + y) - xy - xy.mulByOnePlusI, xy + xy)
@@ -82,10 +89,19 @@ def cyclotomicSquare (a : Fp12 F) : Fp12 F :=
   let tripleAddDouble (x y : Fp2 F) :=
     let d := x + y
     d + d + x
+  -- The squares `a^2`, `b^2` and `c^2` in `Fp4`.
   let sa := squareFp4 a.c0.c0 a.c1.c1
   let sb := squareFp4 a.c1.c0 a.c0.c2
   let sc := squareFp4 a.c0.c1 a.c1.c2
-  -- The pair formulas are `3*A^2 - 2*conj A`, `3*y*C^2 + 2*conj B`, `3*B^2 - 2*conj C`.
+  -- §3.2, cubic form: `A = 3 a^2 - 2 conj(a)` and `C = 3 b^2 - 2 conj(c)`.
+  --
+  -- §3.2, cubic form: `B = 3 sqrt(i) c^2 + 2 conj(b)`.
+  --
+  -- Here `sqrt(i) = y`, since `y^2 = i`.
+  --
+  -- `conj` negates the `y` part, and `y (u0 + u1 y) = (1 + i) u1 + u0 y`.
+  --
+  -- The coefficients of `w^0` to `w^5` are then `A_0`, `B_0`, `C_0`, `A_1`, `B_1`, `C_1`.
   ⟨⟨tripleSubDouble sa.1 a.c0.c0, tripleSubDouble sb.1 a.c0.c1,
       tripleSubDouble sc.1 a.c0.c2⟩,
     ⟨tripleAddDouble sc.2.mulByOnePlusI a.c1.c0, tripleAddDouble sa.2 a.c1.c1,
@@ -93,6 +109,9 @@ def cyclotomicSquare (a : Fp12 F) : Fp12 F :=
 
 /-- Inversion via the conjugate. -/
 def inverse (a : Fp12 F) : Fp12 F :=
+  -- `(a0 + a1 w)(a0 - a1 w) = a0^2 - v a1^2`, an element of `Fp6`.
+  --
+  -- So `(a0 + a1 w)^(-1) = (a0 - a1 w) / (a0^2 - v a1^2)`.
   let norm := a.c0 * a.c0 - (a.c1 * a.c1).mulByV
   let invN := norm.inverse
   ⟨a.c0 * invN, -(a.c1 * invN)⟩

@@ -66,11 +66,19 @@ Its section Contract Creation defines the creation.
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
+Only `ethereum/execution-specs` spells out the order of the steps of a frame.
+
+The step comments quote `process_message` and `process_create_message` of Osaka.
+
+They are in [Osaka's `vm/interpreter.py`][es-osaka]; [Amsterdam's][es-amsterdam] adds its changes.
+
 [EIP-2][eip2], [EIP-161][eip161], [EIP-170][eip170] and [EIP-3541][eip3541] change the creation.
 
 [EIP-8037][eip8037-code], in Last Call, changes the price of the code.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
+[es-osaka]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/osaka/vm/interpreter.py
+[es-amsterdam]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/amsterdam/vm/interpreter.py
 [eip2]: https://eips.ethereum.org/EIPS/eip-2#specification
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
 [eip170]: https://eips.ethereum.org/EIPS/eip-170#specification
@@ -126,6 +134,9 @@ A precompile that succeeds charges its price and gives its output.
 
 A precompile that fails halts the frame exceptionally. -/
 def runPrecompile (fork : Fork) (address : Nat) (evm : Evm fork Meter) : Option (Evm fork Meter) :=
+  -- `PRE_COMPILED_CONTRACTS[evm.message.code_address](evm)`.
+  --
+  -- The price is charged after the run; either failure halts the frame exceptionally.
   match Precompiles.run fork address evm.message.data (GasMeter.gasLeft evm.gas) with
   | none => none
   | some (.error _) => some (exceptionalHalt evm (.precompile address))
@@ -168,6 +179,11 @@ A revert also rolls back the state gas of the frame.
 
 An exceptional halt has already rolled it back. -/
 def rollbackOnError (snapshot : TransactionState) (evm : Evm fork Meter) : Evm fork Meter :=
+  -- `if evm.error: restore_tx_state(tx_state, snapshot)`.
+  --
+  -- From Glamsterdam, a revert refills the state gas of the frame, by EIP-8037.
+  --
+  -- Amsterdam does it in `except Revert`; it moves here, beside the restore of the state.
   if evm.error.isSome then
     { evm with
       state := evm.state.restoreTxState snapshot
@@ -185,7 +201,11 @@ So the wipe changes no word.
 From Spurious Dragon, its nonce grows from 0 to 1. -/
 def prepareCreation (fork : Fork) (state : TransactionState) (address : Address) :
     Except EvmError TransactionState :=
+  -- `destroy_storage(tx_state, message.current_target)`.
+  --
+  -- `mark_account_created(tx_state, message.current_target)`.
   let state := (state.destroyStorage address).markAccountCreated address
+  -- `increment_nonce(tx_state, message.current_target)`, from Spurious Dragon by EIP-161.
   if fork ≥ .spuriousDragon then (state.incrementNonce fork address).mapError .state
   else .ok state
 
@@ -196,8 +216,11 @@ Up to BPO5, it pays 200 gas a byte.
 From Glamsterdam, it pays 6 gas a word to hash the code, then 1530 state gas a byte. -/
 def chargeCodeDeposit (fork : Fork) (meter : Meter) (size : Nat) : Except EvmError Meter :=
   if fork ≥ .glamsterdam then do
+    -- `6 * ceil(len/32)` (hash cost), by EIP-8037; Amsterdam charges it first.
     let meter ← GasMeter.charge meter (OPCODE_KECCAK256_PER_WORD * wordCount size)
+    -- `CPSB` per byte, in state gas, by EIP-8037.
     GasMeter.chargeState meter (size * CPSB)
+  -- `c = G_codedeposit * ||o||`, and `g** < c` is in `F`.
   else GasMeter.charge meter (size * CODE_DEPOSIT_PER_BYTE)
 
 /-- The deposit of the code leaves no more gas than the meter held. -/
@@ -222,23 +245,43 @@ When it cannot, it fails with no gas left, and from Byzantium with no output.
 From Glamsterdam, code longer than the limit fails before it pays. -/
 def depositCode (fork : Fork) (snapshot : TransactionState) (evm : Evm fork Meter) :
     Except EvmError (Evm fork Meter) :=
+  -- `else: restore_tx_state(tx_state, snapshot)`, for an init code that failed.
   if evm.error.isSome then .ok { evm with state := evm.state.restoreTxState snapshot }
   else
+    -- `contract_code = evm.output`.
     let code := evm.output
+    -- `except ExceptionalHalt`: `restore_tx_state(tx_state, snapshot)`, `evm.gas_left = Uint(0)`.
+    --
+    -- Osaka also sets `evm.output = b""`; before Byzantium the output stays, as Spurious Dragon's.
     let fail (error : EvmError) : Evm fork Meter :=
       { evm with
         state := evm.state.restoreTxState snapshot
         gas := GasMeter.exhaust evm.gas
         output := if fork ≥ .byzantium then .empty else evm.output
         error := some error }
+    -- From London, `F` holds when `o[0] = 0xef`, by EIP-3541.
     if fork ≥ .london ∧ code[0]? = some 0xef then .ok (fail .invalidContractPrefix)
+    -- From Glamsterdam, Amsterdam's `if len(contract_code) > MAX_CODE_SIZE: raise OutOfGasError`.
+    --
+    -- It comes before the charges.
     else if fork ≥ .glamsterdam ∧ (maxCodeSize fork).any (· < code.size) then .ok (fail .outOfGas)
     else
       match chargeCodeDeposit fork evm.gas code.size with
+      -- From Homestead, the failed charge is an exceptional halt, by EIP-2.
+      --
+      -- Before, a creation that cannot pay leaves "an empty contract", by item 3 of EIP-2.
       | .error e => .ok (if fork ≥ .homestead then fail e else { evm with output := .empty })
       | .ok gas =>
+        -- From Spurious Dragon, by EIP-170, code of "more than `MAX_CODE_SIZE` bytes" fails.
+        --
+        -- It fails "with an out of gas error".
+        --
+        -- Up to BPO5 the check comes after the charge, as in Osaka.
+        --
+        -- From Glamsterdam, the check above already rejected such code.
         if (maxCodeSize fork).any (· < code.size) then .ok (fail .outOfGas)
         else do
+          -- `set_code(tx_state, message.current_target, contract_code)`.
           let state ← (evm.state.setCode fork evm.message.currentTarget code).mapError .state
           return { evm with gas, state }
 
@@ -278,6 +321,7 @@ theorem gasHeld_depositCode_le [LawfulGasMeter Meter] {snapshot : TransactionSta
 /-- The state that a message starts its frame from: before Paris, its target is touched. -/
 def startState (fork : Fork) (message : Message fork) (state : TransactionState) :
     TransactionState :=
+  -- Before Paris, the target is touched, for the deletion of EIP-161.
   if fork < .paris then state.touchAccount message.currentTarget else state
 
 mutual
@@ -311,6 +355,9 @@ def processMessageWith [LawfulGasMeter Meter] {M : Type → Type} [Monad M]
       · exact ended.property⟩
   rollback <$> do
     let state := startState fork message state
+    -- `if message.should_transfer_value and message.value != 0: move_ether(...)`.
+    --
+    -- The depth check of the source sits in the caller, which runs no message past it.
     let transfers := message.shouldTransferValue ∧ message.value ≠ 0
     let state ←
       if transfers then
@@ -318,6 +365,11 @@ def processMessageWith [LawfulGasMeter Meter] {M : Type → Type} [Monad M]
           ((state.moveEther fork message.caller message.currentTarget message.value).mapError
             EvmError.state)
       else pure state
+    -- From Glamsterdam, `emit_transfer_log(evm, evm.caller, evm.current_target, evm.value)`.
+    --
+    -- EIP-7708 logs only a move "to a different account", which the push checks.
+    --
+    -- A simulation also logs the move before Glamsterdam, from `0xee…ee`.
     let substate :=
       if transfers then
         { substate with
@@ -327,14 +379,19 @@ def processMessageWith [LawfulGasMeter Meter] {M : Type → Type} [Monad M]
             message.currentTarget message.value }
       else substate
     let evm : Evm fork Meter := startFrame message state substate meter
+    -- `if evm.message.code_address in PRE_COMPILED_CONTRACTS:`
+    --
+    -- The transaction can map the code address to another precompile, as in a simulation.
     match precompileAddress fork message with
     | some address =>
+      -- `if not message.disable_precompiles:`, else the frame runs nothing.
       if message.disablePrecompiles then
         pure ⟨{ evm with running := false }, held⟩
       else
         match h : runPrecompile fork address evm with
         | some after => pure ⟨after, Nat.le_trans (gasHeld_runPrecompile_le h) held⟩
         | none => pure ⟨{ evm with running := false }, held⟩
+    -- `while evm.running and evm.pc < ulen(evm.code):` the steps of the code.
     | none =>
       runFrameWith observe (step fork) (step_decreases fork) message.gas
         (fun caller child _ =>
@@ -361,7 +418,9 @@ def processCreateMessageWith [LawfulGasMeter Meter] {M : Type → Type} [Monad M
     (held : GasMeter.gasHeld meter ≤ message.gas := by
       exact Nat.le_of_eq (LawfulGasMeter.gasHeld_start _ _)) :
     M { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas } := do
+  -- `snapshot = copy_tx_state(tx_state)`: the state before the creation, which a failure puts back.
   let prepared ← liftExcept (prepareCreation fork state message.currentTarget)
+  -- `evm = process_message(message)`.
   let ⟨evm, used⟩ ← processMessageWith fork observe message prepared substate meter held
   match h : depositCode fork state evm with
   | .error e => throw e

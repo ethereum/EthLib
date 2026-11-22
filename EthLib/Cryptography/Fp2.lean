@@ -101,17 +101,13 @@ variable {F : Type} [BaseField F]
 
 /-- A square root, by the [complex method][source] of Adj and Rodríguez-Henríquez, §V.A.
 
+The steps are those of its Algorithm 8.
+
 It relies on the base-field candidate, whose square is its input or the negation of its input.
 
 It returns `none` when the square root of the base field finds no root of the norm of the input.
 
 Which of the two roots it returns is not fixed, since every caller chooses the sign afterwards.
-
-Write the input as `a0 + a1*i` with `i^2 = -1`, and let `s` be a root of the norm `a0^2 + a1^2`.
-
-The base-field candidate `c` of `(a0 + s)/2` squares to it or to its negation.
-
-In the first case `c + (a1/(2*c))*i` is a root, and in the second `a1/(2*c) + c*i` is one.
 
 When the base-field candidate and square root are one exponentiation each, as over BLS12-381:
 
@@ -121,18 +117,40 @@ When the base-field candidate and square root are one exponentiation each, as ov
 [source]: https://eprint.iacr.org/2012/685
 -/
 def sqrt (a : Fp2 F) : Option (Fp2 F) :=
-  -- Real input: the candidate of `a0` squares to `a0` or to `-a0`.
+  -- Step 1: `if a1 = 0`.
   if BaseField.isZero a.c1 then
+    -- Step 2: `return SQRT_q(a0)`.
+    --
+    -- That root exists only when `a0` is a square of the base field.
+    --
+    -- Otherwise the candidate `c` squares to `-a0`, and `c i` is a root, since `i^2 = -1`.
     let c := BaseField.sqrtCandidate a.c0
     if BaseField.beq (c * c) a.c0 then some ⟨c, BaseField.zero⟩
     else some ⟨BaseField.zero, c⟩
   else
+    -- Step 4: `alpha <- a0^2 - beta a1^2`, with `beta = -1`.
+    --
+    -- Steps 5 to 8: `gamma <- chi_q(alpha)`, and `return false` if `gamma = -1`.
+    --
+    -- Step 9: `alpha <- SQRT_q(alpha)`.
+    --
+    -- Steps 5 to 9 are one call of the base-field square root, which fails on a non-square.
     match BaseField.sqrt (a.c0 * a.c0 + a.c1 * a.c1) with
     | none => none
     | some s =>
+      -- Step 10: `delta <- (a0 + alpha) / 2`.
       let u := (a.c0 + s) * BaseField.inverse (BaseField.ofNat 2 : F)
+      -- Steps 11 to 15 test `delta` and take `x0 <- SQRT_q(delta)`.
+      --
+      -- Here the candidate `c` of `delta` squares to `delta` or to `-delta`, with no test first.
       let c := BaseField.sqrtCandidate u
+      -- Step 16: `x1 <- a1 / (2 x0)`, with `x0 = c`.
       let d := a.c1 * BaseField.inverse (BaseField.ofNat 2 * c)
+      -- Step 17: `x <- x0 + x1 y`, with `y = i`, when `c^2 = delta`.
+      --
+      -- When `c^2 = -delta`, `x0 = d` is the root of step 13's `(a0 - alpha) / 2`, and `x1 = c`.
+      --
+      -- So the root is `d + c i`, with one exponentiation instead of a test and a square root.
       if BaseField.beq (c * c) u then some ⟨c, d⟩ else some ⟨d, c⟩
 
 /-- The sign `sgn0` of [RFC 9380 §4.1][sgn0], the case `m = 2` for `x = x_0 + x_1 * I`.

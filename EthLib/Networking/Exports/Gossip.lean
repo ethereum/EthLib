@@ -30,7 +30,8 @@ public section
 
 namespace EthLib.Networking.Gossip.Exports
 
-open EthLib.Exports (ExportError Result PyValue forkOfName pyExport rejectArgument toResult)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument forkOfName pyExport rejectArgument
+  toResult)
 
 derive_py SubOpts
 derive_py_laws SubOpts
@@ -110,11 +111,14 @@ derive_py_laws RouterState
 derive_py Out
 derive_py_laws Out
 
-/-- The gossipsub parameters, from the slot duration in milliseconds and the slots per epoch. -/
+/-- The gossipsub parameters, from the slot duration in milliseconds and the slots per epoch.
+
+Both are 64-bit integers, and an overflow of two epochs in milliseconds has code 0. -/
 @[export eth_gossip_parameters]
 def parametersExport (args : PyValue) : Result PyValue :=
-  pyExport (fun ((slotDurationMs, slotsPerEpoch) : Nat × Nat) =>
-    (pure (gossipsubParameters slotDurationMs slotsPerEpoch) : Result GossipsubParameters)) args
+  pyExport (fun ((slotDurationMs, slotsPerEpoch) : UInt64 × UInt64) =>
+    toResult none ((gossipsubParameters slotDurationMs slotsPerEpoch).mapError fun _ =>
+      UnreadArgument.mk "two epochs in milliseconds are not below 2^64")) args
 
 /-- The standing of a peer, from a table; a peer missing from it has every flag false.
 

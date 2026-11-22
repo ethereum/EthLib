@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.ByteReader
+public import EthLib.Networking.Encoding.ByteReader
 public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Base.Proofs.Bytes
 
@@ -12,7 +12,9 @@ Each reader recovers its field and preserves arbitrary trailing bytes.
 
 @[expose] public section
 
-namespace EthLib.Base.ByteReader
+namespace EthLib.Networking.Encoding.ByteReader
+
+open EthLib.Base
 
 /-- Reading as many bytes as a field holds returns that field and the bytes after it. -/
 @[simp] theorem bytes_append {ε : Type} (truncated : ε) (field rest : List UInt8) :
@@ -101,4 +103,4 @@ theorem require_ok_iff {ε : Type} (condition : Prop) [Decidable condition]
     require condition error input = .ok ((), rest) ↔ condition ∧ input = rest := by
   by_cases holds : condition <;> simp [require, holds]
 
-end EthLib.Base.ByteReader
+end EthLib.Networking.Encoding.ByteReader

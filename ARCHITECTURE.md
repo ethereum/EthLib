@@ -283,7 +283,6 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
   A name that the source only aliases, such as `Hash32 = Bytes32` in execution-specs, stays an `abbrev`.
   Two sources can disagree on whether a name is a type of its own, as they do for `Hash32`.
   Its definition then records both readings and the choice.
-  `EthLib/Base/Hash32.lean` does not record them yet.
 - An integer keeps the range its source gives it.
   An unbounded integer is a `Nat`, and a 64-bit one is a `UInt64`.
   Where the source makes overflow invalid, an operation that would overflow is an error, never a silent wrap.
@@ -544,7 +543,8 @@ The note names the text and the commit where a rule is stated.
 If it is known, the note also names the commit that EthLib took the rule from.
 [`CONTRIBUTING.md`](CONTRIBUTING.md#sources-of-truth) says when to write one, and where.
 A provenance note is not a citation of authority.
-A step comment may also quote a line of those texts to trace a step, as [`CONTRIBUTING.md`](CONTRIBUTING.md#step-comments) explains, and it is not a citation of authority either.
+A step comment may also name the function of those texts that holds a step, as [`CONTRIBUTING.md`](CONTRIBUTING.md#step-comments) explains, and it is not a citation of authority either.
+It states the step in mathematical notation or in short, plain words, and never quotes code in a programming language.
 
 Test vectors are a further exception, because a test must say what it checks against.
 Each fixture keeps its pinned origin and digests in `tests/`.

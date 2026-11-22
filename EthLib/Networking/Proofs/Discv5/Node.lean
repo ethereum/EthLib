@@ -3,6 +3,7 @@ module
 public import EthLib.Networking.Discv5.Node
 public import EthLib.Networking.Proofs.Discv5.Handshake
 public import EthLib.Networking.Proofs.Discv5.Session
+import EthLib.Base.Proofs.BigEndian
 
 /-!
 # `Networking.Proofs.Discv5.Node`
@@ -309,8 +310,8 @@ theorem handshake_agree {nodeA nodeB : Local} {randA randB : Randoms}
 /-- Each of the first 4 bytes of a nonce is one big-endian byte of its counter. -/
 theorem counterNonce_getElem (c : UInt32) (t : Vector UInt8 8) (i : Nat) (hi : i < 4) :
     (counterNonce c t)[i].toNat = c.toNat / 256 ^ (3 - i) % 256 := by
-  rw [counterNonce, Vector.getElem_append_left hi, Vector.getElem_ofFn]
-  simp
+  rw [counterNonce, Vector.getElem_append_left hi]
+  simp [Base.getElem_natToBytes hi]
 
 /-- Two nonces with different counters differ, whatever their last 8 bytes. -/
 theorem counterNonce_ne {c1 c2 : UInt32} (differ : c1 ≠ c2) (t1 t2 : Vector UInt8 8) :

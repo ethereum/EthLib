@@ -3,7 +3,7 @@ module
 public import EthLib.Base.BigEndian
 
 /-!
-# `Base.Base32`
+# `Networking.Encoding.Base32`
 
 The base32 of [RFC 4648 §6](https://www.rfc-editor.org/rfc/rfc4648#section-6), without padding.
 
@@ -12,7 +12,9 @@ The decoder accepts only the text that the encoder writes, so each byte string h
 
 @[expose] public section
 
-namespace EthLib.Base.Base32
+namespace EthLib.Networking.Encoding.Base32
+
+open EthLib.Base
 
 /-- Why the base32 decoder refused its input.
 
@@ -138,14 +140,4 @@ def decodeList (start : Nat) : List Char → Except Base32Error (List UInt8)
   -- The last zero to seven characters.
   | group => decodeGroup start group
 
-/-- The base32 text of a byte string, without padding. -/
-def encode (bytes : ByteArray) : String :=
-  String.ofList (encodeList bytes.data.toList)
-
-/-- The byte string of a base32 text without padding.
-
-It fails unless the encoder writes exactly this text. -/
-def decode (text : String) : Except Base32Error ByteArray := do
-  return ⟨(← decodeList 0 text.toList).toArray⟩
-
-end EthLib.Base.Base32
+end EthLib.Networking.Encoding.Base32

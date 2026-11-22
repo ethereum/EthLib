@@ -511,7 +511,7 @@ GENERATOR = bytes.fromhex("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f
         pytest.param(
             DnsDiscError,
             2,
-            "text is not a root",
+            "root does not have the fields e=, l=, seq= and sig=, in that order",
             lambda: dnsdisc.verify_root(bytes(33), "enrtree-branch:"),
             id="dnsdisc-verify-root",
         ),

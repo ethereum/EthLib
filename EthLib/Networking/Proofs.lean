@@ -19,6 +19,8 @@ public import EthLib.Networking.Proofs.Devp2p.Session
 public import EthLib.Networking.Proofs.Discv4.Exchange
 public import EthLib.Networking.Proofs.DnsDisc
 public import EthLib.Networking.Proofs.Discv4.Packet
+public import EthLib.Networking.Proofs.Encoding.Base32
+public import EthLib.Networking.Proofs.Encoding.ByteReader
 public import EthLib.Networking.Proofs.Encoding.Protobuf
 public import EthLib.Networking.Proofs.Encoding.Uvarint
 public import EthLib.Networking.Proofs.Encoding.Varint
@@ -28,6 +30,7 @@ public import EthLib.Networking.Proofs.Enr.Eth
 public import EthLib.Networking.Proofs.Enr.Record
 public import EthLib.Networking.Proofs.Enr.Security
 public import EthLib.Networking.Proofs.Enr.V4
+public import EthLib.Networking.Proofs.Exports.ForkId
 public import EthLib.Networking.Proofs.Gossip.Cache
 public import EthLib.Networking.Proofs.Gossip.Heartbeat
 public import EthLib.Networking.Proofs.Gossip.Membership

@@ -599,8 +599,8 @@ EXCEPTIONS: dict[str, str] = {
     "TR_InitCodeLimitExceeded": r"initCodeTooLarge",
     "TransactionException.INITCODE_SIZE_EXCEEDED": r"initCodeTooLarge",
     # A block that is not a list of its parts.
-    "RLP_ExpectedAsList": r"block rejected",
-    "BlockException.RLP_STRUCTURES_ENCODING": r"does not decode|block rejected",
+    "RLP_ExpectedAsList": r"block invalid: encoding",
+    "BlockException.RLP_STRUCTURES_ENCODING": r"does not decode|block invalid: encoding",
 }
 
 
@@ -652,9 +652,9 @@ def run_blockchain(root: Path, case: Case) -> None:
             with raises(
                 BlockError,
                 # The block decodes as a whole, so the header's error is that of its field 0.
-                "block rejected: EthLib.Serialization.Rlp.RlpError.inField 0 "
+                "block invalid: encoding (EthLib.Serialization.Rlp.RlpError.inField 0 "
                 "(EthLib.Serialization.Rlp.RlpError.wrongFieldCount "
-                f"{header_fields(fork)} {len(header)})",
+                f"{header_fields(fork)} {len(header)}))",
             ):
                 blocks.state_transition(config, state, recent_blocks, fork, raw, sealed(test))
             continue

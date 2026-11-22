@@ -7,11 +7,9 @@ public import EthLib.Cryptography.Sphincs.TweakableHash
 
 The target-sum code of WOTS+C (ePrint 2022/778).
 
-A 16-byte digest `D` has 64 digits of 2 bits each, read most significant first:
+A 16-byte digest `D` has 64 digits of 2 bits each, read most significant first.
 
-```text
-    x = base_2b(D, w, v),   x_i = floor(D_{floor(i / 4)} / 2^(6 - 2 (i mod 4))) mod 4
-```
+Digit `i` is `x_i = floor(D_{floor(i / 4)} / 2^(6 - 2 (i mod 4))) mod 4`, so `x = base_2b(D, w, v)`.
 
 `D_j` is byte `j` of `D`, so digit 0 is the top two bits of byte 0.
 
@@ -46,6 +44,10 @@ namespace Internal
 
 Digit `i` is two bits of byte `floor(i / 4)`, the top two bits for `i mod 4 = 0`. -/
 def digits (d : Digest) : Codeword :=
+  -- Algorithm 4, line 11: `baseb[out] <- (total >> bits) mod 2^b`, with `b = 2`.
+  --
+  -- A digit never crosses a byte, so it is read from its byte, without the running `total`.
+  --
   -- Byte `floor(i / 4)` holds digits `4 floor(i / 4)` to `4 floor(i / 4) + 3`, the first on top.
   Vector.ofFn fun i =>
     ⟨((d[i.val / 4]'(by have := i.isLt; simp only [V, N] at *; omega)).toNat

@@ -24,11 +24,7 @@ It fails at once, with no gas left, when that address has code, a nonce or stora
 
 [EIP-684][eip684] forbids the code and the nonce, and [EIP-7610][eip7610] the storage.
 
-From Berlin, the transaction starts with some addresses and storage keys accessed:
-
-- the sender, the recipient or the created address, and the precompiles of the fork;
-- each address and storage key of the access list;
-- from Shapella, the beneficiary of the block.
+From Berlin, the transaction starts with some addresses and storage keys accessed.
 
 From Pectra, the authorizations of a set code transaction apply before its message.
 
@@ -36,12 +32,7 @@ From Pectra, a recipient whose code is a delegation indicator runs the code of i
 
 The delegate is then accessed, and the message runs no precompile.
 
-From Glamsterdam, the first frame pays some gas before its code runs, in this order:
-
-- each accepted authorization pays what it writes, and that state gas is committed;
-- a transfer of ether to an account that is not alive pays the state gas of a new account;
-- the access to a delegate pays the price of an account access, cold or warm;
-- a creation pays the state gas of a new account when its address had none.
+From Glamsterdam, the first frame pays some gas before its code runs, in a fixed order.
 
 A lack of gas there halts the message before its frame runs.
 
@@ -69,6 +60,20 @@ Section 6.2 of the Yellow Paper, Shanghai version, defines the run of a transact
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
+The step comments write its equations in ASCII.
+
+Only `ethereum/execution-specs` spells out the first frame of Glamsterdam step by step.
+
+The step comments quote these files of its Osaka and Amsterdam forks:
+
+- `process_transaction` in [Osaka's `fork.py`][es-osaka] and [Amsterdam's][es-amsterdam];
+- `check_transaction` in [Amsterdam's `fork.py`][es-amsterdam];
+- `prepare_message` in Osaka's [`utils/message.py`][es-message];
+- `process_message_call` in Osaka's [`vm/interpreter.py`][es-osaka-vm];
+- `create_evm` and `process_top_level` in [Amsterdam's][es-amsterdam-vm];
+- `charge_value_transfer_to_non_alive_account` in [Amsterdam's][es-amsterdam-vm] too;
+- `resolve_delegated_code_address` in Amsterdam's [`vm/eoa_delegation.py`][es-delegation].
+
 The EIPs that change it:
 
 - [EIP-161][eip161], the deletion of touched empty accounts
@@ -83,6 +88,12 @@ The EIPs that change it:
 The run records what it reads, for the block access list of EIP-7928.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
+[es-osaka]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/osaka/fork.py
+[es-amsterdam]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/amsterdam/fork.py
+[es-message]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/osaka/utils/message.py
+[es-osaka-vm]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/osaka/vm/interpreter.py
+[es-amsterdam-vm]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/amsterdam/vm/interpreter.py
+[es-delegation]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/amsterdam/vm/eoa_delegation.py
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
 [eip684]: https://eips.ethereum.org/EIPS/eip-684#specification
 [eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification
@@ -114,6 +125,7 @@ def Transaction.blobHashes : Transaction → List Hash32
 
 /-- The addresses of the precompiles of `fork`. -/
 def precompileAddresses (fork : Fork) : List Address :=
+  -- `PRE_COMPILED_CONTRACTS.keys()`, the paper's `pi`.
   (Precompiles.ADDRESSES.filter (Precompiles.isPrecompile fork)).map
     fun address => toAddressMasked (BitVec.ofNat 256 address)
 
@@ -129,9 +141,25 @@ Before Berlin, no access counts, so the set is empty. -/
 def startAccessedAddresses (fork : Fork) (coinbase sender target : Address) (tx : Transaction) :
     Std.ExtTreeSet Address :=
   if fork ≥ .berlin then
+    -- `A*_a = a ∪ T_t` for a call, with `a = A0_a ∪ S(T) ∪ H_c ∪_{E in T_A} {E_a}`, `A0_a = pi`.
+    --
+    -- The paper adds a created address later, in `Lambda`; here it is added at once, the same set.
+    --
+    -- `accessed_addresses.add(tx_env.origin)`, then `accessed_addresses.add(current_target)`.
     let accessed := ((∅ : Std.ExtTreeSet Address).insert sender).insert target
+    -- `accessed_addresses.update(PRE_COMPILED_CONTRACTS.keys())`.
     let accessed := accessed.insertMany (precompileAddresses fork)
+    -- `accessed_addresses.update(tx_env.access_list_addresses)`.
     let accessed := accessed.insertMany (tx.accesses.map (·.account))
+    -- `accessed_addresses.add(block_env.coinbase)`, from Shapella by EIP-3651.
+    --
+    -- A set ignores the order of its insertions, so the order of the source does not matter.
+    --
+    -- Amsterdam warms them after the authorizations.
+    --
+    -- The warm check of the delegate still sees the same set.
+    --
+    -- The Berlin paper has no `H_c`.
     if fork ≥ .shapella then accessed.insert coinbase else accessed
   else ∅
 
@@ -141,6 +169,7 @@ They are the keys of its access list, from Berlin. -/
 def startAccessedStorageKeys (fork : Fork) (tx : Transaction) :
     Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32) :=
   if fork ≥ .berlin then
+    -- `A*_K = ∪_{E in T_A} {(E_a, E_s[i]) : i < ||E_s||}`.
     tx.accesses.foldl
       (fun keys access => keys.insert access.account ((keys.getD access.account ∅).insertMany
         access.slots))
@@ -160,7 +189,11 @@ The sender is `sender`, with nonce `nonce` before the transaction. -/
 def messageTarget (sender : Address) (nonce : Nat) (tx : Transaction) :
     Except EvmError Address :=
   match tx.to with
+  -- `current_target = tx.to`.
   | some to => .ok to
+  -- `current_target = compute_contract_address(tx_env.origin, ...nonce - Uint(1))`.
+  --
+  -- The nonce here is the one before the transaction, so it needs no `- 1`.
   | none => (createAddress sender nonce).mapError .encoding
 
 /-- The message of a transaction from `sender` to `target`, with `gas` gas, at `fork`.
@@ -174,8 +207,10 @@ def transactionMessage {fork : Fork} (env : BlockEnvironment fork)
       value := tx.value, data, codeAddress, code, depth := 0, shouldTransferValue := true,
       isStatic := false, disablePrecompiles := false }
   match tx.to with
+  -- `msg_data = tx.data`, `code = get_code(...)` of `tx.to`, `code_address = tx.to`.
   | some to =>
     start tx.data (some to) <$> (state.getCode (state.getAccount to).codeHash).mapError .state
+  -- `msg_data = Bytes(b"")`, `code = tx.data`, `code_address = None`.
   | none => .ok (start .empty none tx.data)
 
 /-! ## The message -/
@@ -216,8 +251,12 @@ def CallOutput.ofFrame {fork : Fork} (evm : Evm fork Meter) (refund : Nat)
   let gasLeft := GasMeter.gasLeft evm.gas
   let reservoir := GasMeter.reservoir evm.gas
   let used := GasMeter.stateGasUsed evm.gas
+  -- `if evm.error:` the frame keeps no `logs` and no `accounts_to_delete`.
+  --
+  -- The refund counter of the frame is dropped too, as Osaka's `refund_counter +=` is skipped.
   if evm.error.isSome then
     ⟨evm.state, gasLeft, reservoir, refund, #[], #[], ∅, ∅, evm.error, evm.output, used⟩
+  -- `else: logs = evm.logs; accounts_to_delete = evm.accounts_to_delete`, and the refund.
   else
     ⟨evm.state, gasLeft, reservoir, refund + evm.substate.refundCounter.toNat, evm.substate.logs,
       evm.substate.simulatedLogs, evm.substate.accountsToDelete, touched, none, evm.output, used⟩
@@ -229,6 +268,9 @@ The state stays `state`, from before the message.
 No execution gas is left, the reservoir `reservoir` comes back whole, and no state gas is used. -/
 def CallOutput.ofHalt (state : TransactionState) (reservoir : Nat) (error : EvmError) :
     CallOutput :=
+  -- Amsterdam's `except ExceptionalHalt` in `process_top_level`.
+  --
+  -- `restore_tx_state`, `restore_state_gas_to_entry` and `forfeit_remaining_gas`.
   ⟨state, 0, reservoir, 0, #[], #[], ∅, ∅, some error, .empty, 0⟩
 
 /-- The first frame of a transaction, ready to run, with a gas meter of type `Meter`. -/
@@ -282,37 +324,65 @@ def prepareFirstFrame {fork : Fork} (chainId : Nat) (message : Message fork)
     (state : TransactionState) (substate : Substate) (auths : List Authorization)
     (paidWrites : Std.ExtTreeSet Address) :
     Except (EvmError × TransactionState) (FirstFrame fork Meter) := do
+  -- Amsterdam's `gas_meter = GasMeter(gas_left=..., state_gas_left=..., state_gas_baseline=...)`.
+  --
+  -- Before Glamsterdam the meter is a counter of the gas left.
   let meter : Meter := GasMeter.start message.gas message.reservoir
   match message.target with
   | none =>
     let address := message.currentTarget
+    -- The read of the created address, for EIP-7928.
     let state := state.recordAccountRead address
+    -- `if not account_deployable(tx_env.state, current_target): raise AddressCollision()`.
+    --
+    -- Osaka returns the same failure from `process_message_call`, with no gas left.
     unless state.accountDeployable address do throw (.addressCollision address, state)
+    -- `if get_pre_state_account(tx_env.state, current_target) == EMPTY_ACCOUNT:`
+    --
+    -- `charge_state_gas_from_meter(gas_meter, StateGasCosts.NEW_ACCOUNT)`, from Glamsterdam.
     let meter ← if fork ≥ .glamsterdam ∧ state.getPreStateAccount address = EMPTY_ACCOUNT then
         (GasMeter.chargeState meter NEW_ACCOUNT_STATE_GAS).mapError (·, state)
       else pure meter
     return .ofMeter message state substate 0 meter
   | some target =>
+    -- `set_delegation(...)`, the authorizations of EIP-7702, then `commit_state_gas(gas_meter)`.
+    --
+    -- Without authorizations, the fold leaves all as it was and the commit changes nothing.
     let done ← applyAuthorizations fork chainId state substate.accessedAddresses meter paidWrites
       auths
     let meter := GasMeter.commit done.meter
+    -- `charge_value_transfer_to_non_alive_account(...)`, which reads the recipient for a value.
     let state := if message.value ≠ 0 then done.state.recordAccountRead target else done.state
+    -- `if value > U256(0) and not is_account_alive(state, recipient):`
+    --
+    -- `charge_state_gas_from_meter(gas_meter, StateGasCosts.NEW_ACCOUNT)`, from Glamsterdam.
     let meter ←
       if fork ≥ .glamsterdam ∧ message.value ≠ 0 ∧ !state.isAccountAlive target then
         (GasMeter.chargeState meter NEW_ACCOUNT_STATE_GAS).mapError (·, state)
       else pure meter
+    -- `accessed_addresses.update(accessed_authorities)`.
+    --
+    -- It moves after the charge, which reads no accessed address.
     let substate := { substate with accessedAddresses := done.accessed }
+    -- `resolve_delegated_code_address`: `code = get_code(state, ...target_address...)`.
     let state := state.recordAccountRead target
     let code ← (state.getCode (state.getAccount target).codeHash).mapError (.state ·, state)
+    -- `delegated_address = get_delegated_code_address(code)`, from Pectra.
     match if fork ≥ .pectra then delegatedAddress code else none with
     | some delegate =>
+      -- `charge_gas_from_meter(gas_meter, GasCosts.WARM_ACCESS)` if warm, else the cold access.
+      --
+      -- Only from Glamsterdam; Osaka charges nothing for it.
       let meter ← if fork ≥ .glamsterdam then
           (GasMeter.charge meter (accountAccessCost fork (delegate ∉ done.accessed))).mapError
             (·, state)
         else pure meter
+      -- `message.code = get_code(tx_state, get_account(tx_state, delegated_address).code_hash)`.
       let state := state.recordAccountRead delegate
       let code ← (state.getCode (state.getAccount delegate).codeHash).mapError (.state ·, state)
+      -- `message.disable_precompiles = True`, `message.code_address = delegated_address`.
       let message := { message with code, codeAddress := some delegate, disablePrecompiles := true }
+      -- `message.accessed_addresses.add(delegated_address)`.
       let substate := { substate with accessedAddresses := done.accessed.insert delegate }
       return .ofMeter message state substate done.refund meter
     | none => return .ofMeter { message with code } state substate done.refund meter
@@ -334,18 +404,24 @@ def processMessageCallWith {fork : Fork} [LawfulGasMeter Meter] {M : Type → Ty
     (message : Message fork) (state : TransactionState) (substate : Substate)
     (auths : List Authorization := []) (paidWrites : Std.ExtTreeSet Address := ∅) :
     M CallOutput :=
+  -- Amsterdam's `evm = create_evm(block_env, tx_env, gas_meter)`.
   match prepareFirstFrame (Meter := Meter) chainId message state substate auths paidWrites with
+  -- `except ExceptionalHalt as halt:` the state goes back to `prep_snapshot`, reads kept.
   | .error (e, read) =>
+    -- An error that aborts the whole execution, such as missing code, propagates instead.
     if e.aborts then throw e else pure (.ofHalt (state.withReadsOf read) message.reservoir e)
   | .ok first =>
     match message.target with
+    -- `if tx_env.is_create: process_create(evm)`.
     | none => do
       let ⟨evm, _⟩ ← processCreateMessageWith fork observe first.message first.state
         first.substate first.meter first.held
       return .ofFrame evm 0 evm.substate.touchedAccounts
+    -- `else: process_call(evm)`.
     | some target => do
       let ⟨evm, _⟩ ← processMessageWith fork observe first.message first.state first.substate
         first.meter first.held
+      -- From Spurious Dragon to Paris, the recipient joins `A_t`, for the deletion of EIP-161.
       let touched := evm.substate.touchedAccounts
       let touched := if fork ≥ .spuriousDragon ∧ fork < .paris ∧
         evm.state.accountExistsAndIsEmpty target then touched.insert target else touched
@@ -401,9 +477,13 @@ Each account to delete goes, then each touched account that is empty.
 From Glamsterdam, an account to delete keeps its balance, and goes only when that is 0. -/
 def deleteAccounts (fork : Fork) (state : TransactionState) (output : CallOutput) :
     Except State.StateError TransactionState := do
+  -- `for address in tx_output.accounts_to_delete:`, the paper's `sigma'[i] = {}` for `i in A_s`.
   let state ← output.accountsToDelete.foldlM (init := state) fun state address =>
+    -- `clear_account_preserving_balance(tx_env.state, address)`, from Glamsterdam.
     if fork ≥ .glamsterdam then state.clearAccountPreservingBalance fork address
+    -- `destroy_account(tx_state, address)` before.
     else pure (state.destroyAccount address)
+  -- `sigma'[i] = {}` for `i in A_t` if `DEAD(sigma*, i)`, from Spurious Dragon to Paris.
   return state.destroyTouchedEmptyAccounts fork output.touchedAccounts.toList
 
 /-- The accounts whose first write a transaction from `sender` to `target` has paid.
@@ -416,7 +496,9 @@ It also pays that of the target, for a creation or a transfer of ether.
 
 [eip2780]: https://eips.ethereum.org/EIPS/eip-2780#eip-7702-authorization-processing -/
 def paidWrites (sender target : Address) (tx : Transaction) : Std.ExtTreeSet Address :=
+  -- `accounts_with_paid_writes = {sender}`.
   let paid := (∅ : Std.ExtTreeSet Address).insert sender
+  -- `if is_create or tx.value > U256(0): accounts_with_paid_writes.add(recipient)`.
   if tx.to.isNone ∨ tx.value ≠ 0 then paid.insert target else paid
 
 /-- Run a transaction with a gas meter of type `Meter`, on the block state `block` at `fork`.
@@ -438,24 +520,38 @@ def runTransactionWith {fork : Fork} (Meter : Type) [GasMeter Meter] [LawfulGasM
     (env : BlockEnvironment fork) (block : BlockState) (included : Included) (tx : Transaction)
     (precompiles : Address → Option Address := some) (lifted : LiftedRules := {}) :
     M TransactionOutput := do
+  -- `tx_state = TransactionState(parent=block_env.state)`.
   let state := TransactionState.ofBlock block
   let sender := included.sender
+  -- `recipient = compute_contract_address(sender, sender_account.nonce)` for a creation.
   let target ← liftExcept (messageTarget sender (state.getAccount sender).nonce tx)
+  -- `increment_nonce(tx_state, sender)` and the fee, in `update_sender_state`.
   let state ← liftExcept ((buyGas env state sender tx lifted).mapError EvmError.state)
   let txEnv : TransactionEnvironment fork :=
     { origin := sender, gasPrice := included.gasPrice,
       blobVersionedHashes := fun _ => tx.blobHashes, precompiles }
+  -- `allocation = allocate_evm_gas(tx.gas, intrinsic)`.
+  --
+  -- Before Glamsterdam, it is the paper's `g = T_g - g_0`.
   let gas := allocateGas fork tx included.intrinsicGas lifted
+  -- `message = prepare_message(block_env, tx_env, tx)`.
   let message ← liftExcept (transactionMessage env txEnv state sender target gas.execution tx)
+  -- `tx_output = process_message_call(message)`, or `process_top_level(block_env, tx_env)`.
+  --
+  -- The paper's `Lambda_4` or `Theta_4`, from the accesses `A*`.
   let output ← processMessageCallWith (Meter := Meter) observe env.chainId.toNat
     { message with reservoir := gas.reservoir } state
     (startSubstate fork env.coinbase sender target tx) tx.authorizations
     (paidWrites sender target tx)
+  -- The gas left `g'`, with `tx_output.state_gas_left` from Glamsterdam.
   let gasLeft := output.gasLeft + output.reservoir
+  -- `block_output.block_gas_used += ...`, and the state gas from Glamsterdam.
   let blockGas := transactionBlockGas fork sender tx gasLeft output.refund output.stateGasUsed
   let gasBeforeRefund := gasUsed fork sender tx gasLeft 0
+  -- `settle_transaction_gas` and `disburse_gas_fees`: the paper's `g*` and `sigma*`.
   let (state, gasUsed) ← liftExcept
     ((settleGas env output.state sender tx gasLeft output.refund lifted).mapError EvmError.state)
+  -- Then the deletions, the paper's `sigma'`.
   let state ← liftExcept ((deleteAccounts fork state output).mapError EvmError.state)
   return ⟨state, gasUsed, blockGas, output.logs, output.simulatedLogs, output.error, output.output,
     gasBeforeRefund⟩
@@ -507,7 +603,9 @@ def processTransactionWith {fork : Fork} {M : Type → Type} [Monad M] [MonadExc
     (observe : TransactionObserver M fork) (env : BlockEnvironment fork) (block : BlockState)
     (included : Included) (tx : Transaction) (precompiles : Address → Option Address := some)
     (lifted : LiftedRules := {}) : M TransactionOutput :=
+  -- No source specifies Hegotá yet.
   if .hegota ≤ fork then throw (.forkNotYetSpecified fork)
+  -- The `GasMeter` of EIP-8037, with state gas, from Glamsterdam; before, a counter of gas left.
   else if fork ≥ .glamsterdam then
     runTransactionWith StateGasMeter observe env block included tx precompiles lifted
   else runTransactionWith Nat observe env block included tx precompiles lifted

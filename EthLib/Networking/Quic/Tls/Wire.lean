@@ -2,7 +2,7 @@ module
 
 public import EthLib.Base.BigEndian
 public import EthLib.Base.Except
-public import EthLib.Base.ByteReader
+public import EthLib.Networking.Encoding.ByteReader
 public import EthLib.Base.Bytes
 
 /-!
@@ -53,19 +53,19 @@ def Error.code : Error → UInt32
   | .retry => 7
 
 /-- A reader consumes a prefix of a byte list. -/
-abbrev Reader (α : Type) := Base.ByteReader.Reader Error α
+abbrev Reader (α : Type) := Encoding.ByteReader.Reader Error α
 
 /-- Require a format condition without consuming input. -/
 abbrev require (condition : Prop) [Decidable condition] (error : Error) : Reader Unit :=
-  Base.ByteReader.require condition error
+  Encoding.ByteReader.require condition error
 
 /-- Read exactly `n` bytes, without padding an incomplete field. -/
 abbrev bytes (n : Nat) : Reader (List UInt8) := fun input =>
-  Base.ByteReader.bytes (.truncated n input.length) n input
+  Encoding.ByteReader.bytes (.truncated n input.length) n input
 
 /-- Read a big-endian integer of the given width, RFC 8446 §3.3. -/
 abbrev uint (width : Nat) : Reader Nat := fun input =>
-  Base.ByteReader.uint (.truncated width input.length) width input
+  Encoding.ByteReader.uint (.truncated width input.length) width input
 
 /-- A two-byte protocol identifier, without an algorithm-selection policy. -/
 abbrev CodePoint := Fin (2 ^ 16)
@@ -77,7 +77,7 @@ def codePoint : Reader CodePoint := do
 
 /-- Read a fixed-size byte vector. -/
 abbrev vector (n : Nat) : Reader (Vector UInt8 n) := fun input =>
-  Base.ByteReader.vector (.truncated n input.length) n input
+  Encoding.ByteReader.vector (.truncated n input.length) n input
 
 /-- Read a vector whose encoded byte length lies between the inclusive bounds (§3.4). -/
 def blob (width minimum maximum : Nat) : Reader (List UInt8) := do

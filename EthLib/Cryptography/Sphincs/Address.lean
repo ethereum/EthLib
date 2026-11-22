@@ -36,9 +36,7 @@ open EthLib.Cryptography.Sphincs.Constants
 
 /-- `enc(l, tau, t, u_1, u_2, u_3)`: the 32 bytes of one address.
 
-```text
-    [ layer: 4 | tree: 12 | type: 4 | u_1: 4 | u_2: 4 | u_3: 4 ]
-```
+The fields take 4, 12, 4, 4, 4 and 4 bytes, in this order.
 
 - `layer` is the hypertree layer, counted from the bottom.
 - `tree` is the tree on that layer, written as a 96-bit word, so its first 4 bytes are zero.
@@ -49,6 +47,7 @@ open EthLib.Cryptography.Sphincs.Constants
 - Every word is big-endian.
 -/
 def encodeAdrs (layer : UInt32) (tree : UInt64) (type keyPair word2 word3 : UInt32) : Adrs :=
+  -- FIPS 205 §4.2: the layer address, the tree address, the type, then three words.
   toByte 4 layer.toNat ++ toByte 12 tree.toNat ++ toByte 4 type.toNat ++ toByte 4 keyPair.toNat
     ++ toByte 4 word2.toNat ++ toByte 4 word3.toNat
 

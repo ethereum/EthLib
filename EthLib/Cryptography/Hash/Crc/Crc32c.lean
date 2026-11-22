@@ -12,11 +12,7 @@ The Snappy framing format §3 checks each data chunk with it:
 
 It is the 32-bit CRC with the generator of the RFC.
 
-The RFC numbers the bits of a byte from the most significant: bit 0 is worth 2^7.
-
-[RFC 3720 §2.3.3][rfc3720-2.3.3] fixes that order.
-
-So the RFC's bit 7 of a byte, its highest coefficient, is the least significant bit.
+[RFC 3720 §2.3.3][rfc3720-2.3.3] numbers bits from the most significant, so its bit 7 is worth 2^0.
 
 [rfc3720-12.1]: https://www.rfc-editor.org/rfc/rfc3720#section-12.1
 [rfc3720-2.3.3]: https://www.rfc-editor.org/rfc/rfc3720#section-2.3.3

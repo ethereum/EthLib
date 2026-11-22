@@ -9,6 +9,16 @@ Not yet released.
 
 ### Proof additions
 
+- `Schedule.Bounded` checks that every fork of a fork identifier schedule is below `2^64`, as EIP-2124 and EIP-6122 hold each fork as a `uint64` ([#3855](https://github.com/ethereum/EthLib/issues/3855)).
+  `readSchedule_bounded` proves that the schedule reader of the exports returns only such schedules, and `mainnet_bounded` that mainnet is one.
+  For such a schedule, `checksumInput_eq_iff` proves that the checksum input holds each fork whole, and `forkId_next_toNat` that `FORK_NEXT` holds the next fork whole.
+
+- `processTransaction_stateGas_le_of_glamsterdam` proves that from Glamsterdam the state gas that a transaction adds to its block is at most the gas it used before its refund, so subtracting it for the execution gas of the block never floors at zero ([#3851](https://github.com/ethereum/EthLib/issues/3851)).
+
+- `length_transactions_lt_of_checkBlock` proves that from Fusaka a block that passes its checks has fewer than `2^32 - 1` transactions, so every position of its block access list fits 32 bits ([#3849](https://github.com/ethereum/EthLib/issues/3849)).
+  `applyBody_nonceChanges_le` proves that the body records no nonce above `2^64 - 1` when the state before it meets EIP-2681, so every nonce of the list fits 64 bits.
+  `one_le_lengthPrefix_size`, `one_le_encode_size`, `joinEncodings_size_ge` and `encode_list_size_gt` bound the size of an RLP encoding from below.
+
 - In Lean, `Base.hexValue?_toUpper` and `Base.hexBytesFrom?_map_toUpper` state that a hex digit, and a run of hex digits, decode the same in uppercase ([#3837](https://github.com/ethereum/EthLib/issues/3837)).
   The SSZ JSON codec uses them for its case rule.
 
@@ -842,6 +852,92 @@ Not yet released.
   `ValidatorStep`, `PinDriftBound.CreditBudgets` and `PinDriftBound.PreviousEpochRise` use it.
 
 ### Changes that break callers
+
+- In Lean, the readers of byte fields move from Base to Networking, next to their only users, the QUIC and TLS wire formats and Protobuf ([#3841](https://github.com/ethereum/EthLib/issues/3841)).
+  The modules `EthLib.Base.ByteReader` and `EthLib.Base.Proofs.ByteReader` are now `EthLib.Networking.Encoding.ByteReader` and `EthLib.Networking.Proofs.Encoding.ByteReader`, and the namespace `EthLib.Base.ByteReader` is now `EthLib.Networking.Encoding.ByteReader`.
+
+- In Lean, base32 moves from Base to Networking, next to its only user, node discovery by DNS ([#3841](https://github.com/ethereum/EthLib/issues/3841)).
+  The modules `EthLib.Base.Base32` and `EthLib.Base.Proofs.Base32` are now `EthLib.Networking.Encoding.Base32` and `EthLib.Networking.Proofs.Encoding.Base32`, and the namespace `EthLib.Base.Base32` is now `EthLib.Networking.Encoding.Base32`.
+  The string forms `Base32.encode` and `Base32.decode`, which nothing used, are gone with their theorems `Base32.decode_encode` and `Base32.encode_of_decode`.
+  `Base32.decodeList_encodeList` and `Base32.encodeList_of_decodeList` state the same bijection on lists of characters.
+
+- In Lean, NFKD normalization moves from Base to Cryptography, next to the EIP-2335 keystore, its only user ([#3840](https://github.com/ethereum/EthLib/issues/3840)).
+  The modules `EthLib.Base.Unicode` and `EthLib.Base.Unicode.Data` are now `EthLib.Cryptography.Unicode` and `EthLib.Cryptography.Unicode.Data`, and the namespace `EthLib.Base.Unicode` is now `EthLib.Cryptography.Unicode`.
+  `EthLib.Base` no longer imports them.
+  The Unicode License of the table is now `EthLib/Cryptography/Unicode/LICENSE`.
+
+- In Lean, three list lemmas of Base give way to the Batteries lemmas they repeat ([#3839](https://github.com/ethereum/EthLib/issues/3839)).
+  `Base.forall₂_of_mapM_ok` and `Base.mapM_ok_of_forall₂` are the two directions of `List.mapM_eq_ok_iff_forall₂`.
+  `Base.forall₂_of_mapM_some` is the forward direction of `List.mapM_eq_some_iff_forall₂`.
+  The module `EthLib.Base.Proofs.FoldlM` is gone: `Base.foldlM_exists_ok_of_distinct` is now in `EthLib.Base.Proofs.MapM`, unchanged.
+
+- In Lean, the big-endian conversions of other layers are defined through `Base.bytesToNat` and `Base.natToBytes` ([#3838](https://github.com/ethereum/EthLib/issues/3838)).
+  The reading side covers RLP scalars, AES counter blocks and the size in an RLPx frame header.
+  The writing side covers AES counter blocks, `I2OSP` of hash to curve, that frame size, RPC storage keys and the counter of a discv5 nonce.
+  No value changes.
+  `Rlp.ofBigEndian_lt` and `Rlp.foldl_bigEndian_lt` are gone: `Base.bytesToNat_lt` gives the bound.
+  `Execution.Rpc.getElem_natToBytes` moves to `Base.getElem_natToBytes`.
+  `Rlp.ofBigEndian_nil` and `Rlp.ofBigEndian_append_singleton` state the reading of no bytes and of a byte appended at the end.
+
+- In Lean, the four counts of the expected withdrawals are `UInt64`, as the source types them ([#3858](https://github.com/ethereum/EthLib/issues/3858)).
+  The parts still count on natural numbers, and a count of `2^64` or more fails, as the increment of a `uint64` count that reaches it would; no reachable value changes.
+  The updates of the queues and of the sweep of builders take the counts as `UInt64`, and the sweep of builders adds its count with no wrap.
+  Theorems that use a count as a list length take its `toNat`, among them `getExpectedWithdrawals_bounds`, `getExpectedWithdrawals_parts`, `getExpectedWithdrawals_partials` and `applyExpectedWithdrawals_builderQueues`.
+  `liftCount_ok_iff` states when a count converts.
+
+- In Lean, the fewest epochs over which a node serves blocks returns an `Except ArithError Epoch`, and fails where its `uint64` arithmetic overflows or, from Gloas, divides by zero ([#3857](https://github.com/ethereum/EthLib/issues/3857)).
+  Before Gloas the sum wrapped, and from Gloas the result was truncated to 64 bits and a zero denominator gave 0.
+  From Gloas the product `3 * CHURN_LIMIT_QUOTIENT_GLOAS * CONSOLIDATION_CHURN_LIMIT_QUOTIENT` now fails at `2^64`, where it was computed on natural numbers.
+  `computeMinEpochsForBlockRequests_toNat` states that a result is the count on natural numbers.
+  The mainnet and minimal values are unchanged.
+
+- In Lean, the gossipsub parameters take the slot duration and the slots per epoch as `UInt64`, and fail with an overflow when two epochs in milliseconds reach `2^64`, as the `uint64` arithmetic of the source does ([#3856](https://github.com/ethereum/EthLib/issues/3856)).
+  They return an `Except ArithError`, and the mesh and message cache theorems take the success as a hypothesis.
+  `gossipsubParameters_isOk_iff` states when they succeed, and `gossipsubParameters_seen_ttl` that the lifetime of a seen message ID is then two epochs in whole seconds.
+  In Python, `gossip.router.parameters` raises `GossipError` with `two epochs in milliseconds are not below 2^64` there, where it returned a lifetime from the unbounded product.
+  It also refuses a slot duration or a slots per epoch outside the 64-bit range.
+
+- The block checks and the state transition of the execution layer give their block errors through the shared conversion ([#3605](https://github.com/ethereum/EthLib/issues/3605)).
+  No error code changes, but some messages change in Python.
+  `blocks.validate_size`, `blocks.validate_header` and `blocks.check_header` give `block invalid: ` and the short name of the block error, with any inner error still named in full, such as `block invalid: wrongDifficulty (expected := 131072) (actual := 0)`.
+  They gave `block invalid: ` or `header invalid: `, then the full Lean name, such as `EthLib.Execution.Blocks.BlockError.wrongDifficulty`.
+  `blocks.state_transition` and `rpc.serve`, which reads the blocks of a chain, give `block invalid: encoding (…)` for a block that does not decode, in place of `block rejected: …`.
+  A transaction of the body that does not decode keeps its message, `transaction N does not decode: …`, which the block error instance now gives.
+  In Lean, the messages and the instances of the transaction, inclusion, EVM abort and block errors move to the new module `Execution.Exports.Errors`, with their names unchanged.
+
+- In Lean, `eth_sendRawTransaction` and `eth_simulateV1` fail with an internal error when the excess blob gas of the next or simulated block is `2^64` or more, where they truncated it to 64 bits ([#3850](https://github.com/ethereum/EthLib/issues/3850)).
+  `childExcessBlobGas` computes the excess blob gas that a parent gives to a child at a number and a time, and the Engine's `builtExcessBlobGas` and `ChainView.nextExcessBlobGas` are instances of it.
+  `ChainView.nextBlobSchedule` gives the schedule of the next block.
+  `ChainView.nextEnvironment` takes a proof that the next excess blob gas is below `2^64`, and so does `baseFeeOf_nextEnvironment`.
+  `checkBlock_simulateBlock` and `stateTransition_of_simulateBlock` no longer take a bound on the parent's excess plus blob gas.
+  `simulateBlock_eq_error_of_excess` states the failure.
+
+- `dnsdisc.parse_entry` and `dnsdisc.resolve` give code 8, a refused node record, for a record whose RLP encoding fails, in place of code 0 ([#3605](https://github.com/ethereum/EthLib/issues/3605)).
+  The message stays `record has no RLP encoding`, and every export that encodes a record now gives it.
+  The encoder fails only for a payload of `2^64` bytes or more, so no record of a test reaches this failure.
+
+- In Lean, GASPRICE, NUMBER, DIFFICULTY, GASLIMIT, BASEFEE and BLOBBASEFEE abort the execution with the new error `EvmError.wordOverflow` when the number they push is `2^256` or more ([#3848](https://github.com/ethereum/EthLib/issues/3848)).
+  They pushed the number modulo `2^256`, a value that no source gives; execution-specs fails there with an error that is not an exception of the EVM.
+  The new step `readNumber` reads such a number; `EvmError.aborts` is true on the new error, and the trace text of the error is `value above a word`.
+  `environmentStep_blobbasefee` takes the hypothesis that the blob base fee is below `2^256`, and `environmentStep_blobbasefee_of_le` states the abort above it.
+  `BlockEnvironment.WordsFit` and `WordsFit` state that the numbers of an environment fit words.
+  `step_aborts_state`, `processMessage_eq_error`, `processCreateMessage_eq_error`, `processMessageCall_eq_error`, `processTransaction_eq_error`, `applyBody_aborted`, `stateTransition_aborted` and `stateTransition_eq_error_invalid` take that bound as a new hypothesis.
+  `errorsMeet_stateTransition` and `errorsMeet_stateTransition_of_plain` ask the body to meet the property only in the environments that the header gives, one for each list of recent hashes, where they asked it in every environment.
+  `env_of_step_eq_child` states that a message a step sends has the environment of its frame.
+  `push_of_readNumber` and `push_of_readNumberG` are the program-logic rules of an instruction that reads a number.
+  `readNumber_pays`, `MeterRules.readNumber_keeps`, `readFrame_of_readNumber`, `readNumber_sameContext` and `memory_readNumber` carry the facts of an instruction that reads the frame over to it.
+  Migration: pass a proof that the numbers of the block, and the gas price of the transaction, are below `2^256`.
+
+- In Lean, `Blocks.Exports.oneLine` moves to `EthLib.Exports.oneLine`, beside the shared conversion of export errors ([#3605](https://github.com/ethereum/EthLib/issues/3605)).
+  The exports that printed an error on one line by hand use it, and their messages stay the same.
+
+- The optimistic sync, slashing protection, Keymanager API, Builder API, ENR, DNS discovery and execution JSON-RPC exports turn their errors into a code and a message through the shared conversion ([#3605](https://github.com/ethereum/EthLib/issues/3605)).
+  No error code changes, but some messages change in Python.
+  The optimistic sync exports give their fork choice error after `optimistic sync: `, in place of `optimistic sync failed with code N`.
+  Slashing protection and the Keymanager API give their error on one line, in place of `slashing protection failed with code N` and `keymanager value rejected with code N`.
+  That form is the full Lean name of the constructor and its arguments, such as `EthLib.Consensus.SlashingProtectionError.slashableBlock 100`, with roots as hex behind `0x`.
+  The Builder API gives a failed step of the transition on one line, as the other consensus exports do.
+  `dnsdisc.verify_root` gives `root does not have the fields e=, l=, seq= and sig=, in that order` for a text that is no root, in place of `text is not a root`.
 
 - In Lean, the nonce of a set-code transaction is `UInt64`, and the other kinds keep a nonce of 256 bits ([#3846](https://github.com/ethereum/EthLib/issues/3846)).
   So a set-code transaction with a nonce of `2^64` or more fails at decoding, with `scalarTooLarge`, where the rule of EIP-2681 refused it with `nonceOverflow`.
