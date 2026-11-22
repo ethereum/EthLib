@@ -9,23 +9,11 @@ The WHOAREYOU challenge and the ordinary message packet of discv5.
 
 The sources are three sections of `discv5-wire.md` in `ethereum/devp2p`.
 
-They are "WHOAREYOU Packet", "Ordinary Message Packet" and "Protocol Header":
+They are WHOAREYOU Packet, Ordinary Message Packet and Protocol Header:
 <https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-wire.md#packet-encoding>
 
-Steps 1 and 2 of "Handshake Steps" in `discv5-theory.md` use them:
+Steps 1 and 2 of the section Handshake Steps in `discv5-theory.md` use them:
 <https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-theory.md#handshake-steps>
-
-Node B answers a message it cannot decrypt with a WHOAREYOU packet.
-
-Its authdata is `id-nonce || enr-seq`, and its message is empty.
-
-The challenge data of the handshake is the unmasked packet.
-
-It is `masking-iv || static-header || authdata`.
-
-An ordinary message packet has the source node ID as its authdata.
-
-Its message is AES-GCM under a session key, with `masking-iv || header` as additional data.
 
 The caller chooses the masking IV, the nonce, the ID nonce and the session key.
 
@@ -86,8 +74,19 @@ structure Challenge where
 def makeWhoareyou (nodeIdA : NodeId) (maskingIv : Vector UInt8 16) (nonce : Vector UInt8 12)
     (idNonce : Vector UInt8 16) (enrSeq : UInt64) :
     Except SessionError (ByteArray × ByteArray) := do
+  -- Step 2: without session keys for A, or when decryption fails, node B answers with WHOAREYOU.
+  --
+  -- WHOAREYOU Packet: `flag = 1`, `authdata = id-nonce || enr-seq`, and `message` is empty.
+  --
+  -- Its `nonce` is the `nonce` of the message packet that caused it.
   let packet : Packet := ⟨maskingIv, ⟨nonce, .whoareyou idNonce enrSeq⟩, .empty⟩
+  -- `challenge-data = masking-iv || static-header || authdata`, the unmasked WHOAREYOU.
+  --
+  -- That is `masking-iv || header`, so EthLib computes it as the bytes of `message-ad`.
   let challengeData ← packet.messageAd.mapError .packet
+  -- `packet = masking-iv || masked-header || message`, with `message` empty.
+  --
+  -- `masking-key = dest-id[:16]`, with `dest-id = node-id-A`.
   let bytes ← (packet.encode nodeIdA).mapError .packet
   return (bytes, challengeData)
 
@@ -95,10 +94,14 @@ def makeWhoareyou (nodeIdA : NodeId) (maskingIv : Vector UInt8 16) (nonce : Vect
 
 It gives the nonce, the ID nonce, the `enr-seq` and the challenge data. -/
 def readWhoareyou (nodeIdA : NodeId) (bytes : ByteArray) : Except SessionError Challenge := do
+  -- Protocol Header: node A unmasks the header under `dest-id[:16]`, with `dest-id = node-id-A`.
   let packet ← (Packet.decode nodeIdA bytes).mapError .packet
+  -- WHOAREYOU Packet: `flag = 1`, and `authdata = id-nonce || enr-seq`.
   let .whoareyou idNonce enrSeq := packet.header.authdata
     | throw (.wrongFlag packet.header.authdata.flag 1)
+  -- Step 3: `challenge-data = masking-iv || static-header || authdata`, the unmasked WHOAREYOU.
   let challengeData ← packet.messageAd.mapError .packet
+  -- Step 3: the `nonce` mirrors that of the request packet, which traces the challenge to it.
   return ⟨packet.header.nonce, idNonce, enrSeq, challengeData⟩
 
 /-- An ordinary message packet from node A to node B, encrypted under a session key.
@@ -106,6 +109,9 @@ def readWhoareyou (nodeIdA : NodeId) (bytes : ByteArray) : Except SessionError C
 It fails when the packet would exceed 1280 bytes. -/
 def sealMessage (key : Aes.Key .aes128) (nodeIdA nodeIdB : NodeId) (maskingIv : Vector UInt8 16)
     (nonce : Vector UInt8 12) (plaintext : ByteArray) : Except SessionError ByteArray :=
+  -- Ordinary Message Packet: `flag = 0`, and `authdata = src-id`, with `src-id = node-id-A`.
+  --
+  -- `message` is AES-GCM under the session key, with `message-ad = masking-iv || header`.
   sealPacket .packet .encryption key nodeIdB maskingIv ⟨nonce, .message nodeIdA⟩ plaintext
 
 /-- Node B's reading of an ordinary message packet: the source node ID and the plaintext.
@@ -113,10 +119,18 @@ def sealMessage (key : Aes.Key .aes128) (nodeIdA nodeIdB : NodeId) (maskingIv : 
 `keyOf` gives the session key that node B holds for a source node ID, if any. -/
 def openMessage (keyOf : NodeId → Option (Aes.Key .aes128)) (nodeIdB : NodeId)
     (bytes : ByteArray) : Except SessionError (NodeId × ByteArray) := do
+  -- Protocol Header: node B unmasks the header under `dest-id[:16]`, with `dest-id = node-id-B`.
   let packet ← (Packet.decode nodeIdB bytes).mapError .packet
+  -- Ordinary Message Packet: `flag = 0`, and `authdata = src-id`.
   let .message srcId := packet.header.authdata
     | throw (.wrongFlag packet.header.authdata.flag 0)
+  -- Step 2: node B extracts the source node ID, and looks for its session keys with A.
+  --
+  -- Without keys, or when decryption fails, step 2 answers with a WHOAREYOU.
+  --
+  -- This reader gives an error instead.
   let some key := keyOf srcId | throw (.noSession srcId)
+  -- Step 2: node B decrypts and authenticates the message under those keys.
   return (srcId, ← openPacket .packet .decryption key packet)
 
 end EthLib.Networking.Discv5
