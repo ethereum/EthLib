@@ -22,7 +22,9 @@ GAS = 3000
 # Repository: ethereum/execution-specs
 # Commit: 391d8a05d5cb182542ac7e7330c858b6ee03f990
 # Licence: CC0-1.0
-CASES = json.loads((Path(__file__).resolve().parent / "ecrecover_cases.json").read_text())
+CASES = json.loads(
+    (Path(__file__).resolve().parent / "execution_specs" / "ecrecover_cases.json").read_text()
+)
 
 
 @pytest.mark.parametrize("fork", FORKS)

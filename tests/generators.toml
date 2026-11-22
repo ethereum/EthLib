@@ -430,6 +430,11 @@ generator = "NIST CAVS"
 cases = ["**"]
 generator = "BLAKE2 genkat-json"
 
+[[directories."bindings/python/tests/precompile/execution_specs"]]
+cases = ["ecrecover_cases.json", "alt_bn128_cases.json"]
+generator = "not established"
+checked = "the pytest.param lists of execution-specs at 391d8a05, in tests/frontier/precompiles/test_ecrecover.py and tests/byzantium, which write each expected output in the test source and name no program that computed it"
+
 [[directories."bindings/python/tests/noise/published_vector"]]
 cases = ["**"]
 generator = "noise-c vector-gen"
