@@ -50,7 +50,7 @@ Gap D asks whether the use of EthLib holds together.
 | C3 | A declaration reached the environment unchecked | leanchecker replays every declaration into the kernel every week, and on pushes to `master` | P |
 | D1 | A client misuses an operation | Docstrings in Lean | R B |
 | D2 | A dependency changes | Pinned in `lake-manifest.json` | P R B |
-| D3 | The KZG trusted setup is not what it should be | Bytes match the consensus-specs setup | P R B V |
+| D3 | The KZG trusted setup is not what it should be | `bindings/python/tests/kzg/test_trusted_setup.py` checks that the bytes match the pinned consensus-specs setup file | P R B V |
 | D4 | The vectors are wrong | They match their pinned upstream sources, and CI checks their pinned digests | V |
 
 The sections after the next one explain each row.
@@ -8255,6 +8255,9 @@ The setup raises three separate assumptions, and each use of KZG relies on a dif
 
 - Provenance: the embedded bytes are the ceremony's output.
   They match the published setup file byte for byte, and `Kzg/TrustedSetupData.lean` records its SHA-256.
+  `tests/sources.toml` pins that file, by its URL at a consensus-specs commit, its size and its SHA-256.
+  `bindings/python/tests/kzg/test_trusted_setup.py` checks that the file holds exactly three lists.
+  It also checks that each embedded array holds the points of the matching list, in order.
 - Algebraic consistency: the bytes decode to valid points, the monomial points are powers of one secret, and the Lagrange points are the matching basis.
   For the embedded bytes, the first part is proved only in part, the third is proved if the bytes decode, and the second is not.
   `TrustedSetup.ofHex_valid` (`Proofs/Kzg/TrustedSetup.lean`) proves that, if they decode, each point is on its curve.

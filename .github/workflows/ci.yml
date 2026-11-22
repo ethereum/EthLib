@@ -402,6 +402,13 @@ jobs:
           ETHLIB_ARCHIVES: ${{ runner.temp }}/archives
         run: uv run --no-sync pytest -m archive bindings/python/tests/history
 
+      # The embedded KZG trusted setup, against its pinned setup file of under 1 MB.
+      - name: pinned KZG trusted setup
+        if: matrix.python == '3.12'
+        env:
+          ETHLIB_ARCHIVES: ${{ runner.temp }}/archives
+        run: uv run --no-sync pytest -m archive bindings/python/tests/kzg/test_trusted_setup.py
+
       # The generators rewrite every case, so a changed vector shows up as a diff.
       - name: unchanged vectors
         run: git diff --exit-code -- tests/cryptography
