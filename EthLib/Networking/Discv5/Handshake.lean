@@ -6,33 +6,19 @@ public import EthLib.Networking.Discv5.Packet
 /-!
 # `Networking.Discv5.Handshake`
 
-The two sides of the discv5 handshake for the "v4" identity scheme.
+The two sides of the discv5 handshake for the identity scheme v4.
 
-The source is "Handshake Steps" of `discv5-theory.md` in `ethereum/devp2p`:
+The source is the section Handshake Steps of `discv5-theory.md` in `ethereum/devp2p`:
 <https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-theory.md#handshake-steps>
 
 Node A starts the handshake, and node B sent it the WHOAREYOU challenge.
-
-In step 3, node A makes an ephemeral key pair.
-
-It derives the session keys from `ecdh(dest-pubkey, ephemeral-key)`.
-
-It then signs the challenge data, its ephemeral public key and the ID of node B.
-
-In step 4, node B verifies that signature under the public key of node A.
-
-It then derives the session keys from its own static key and the ephemeral public key.
-
-The ephemeral public key is the 33-byte compressed point.
-
-"Handshake Message Packet" of `discv5-wire.md` gives that size for "v4".
 
 The challenge data, the node IDs and the public key of each peer are inputs here.
 
 The module also seals and opens the handshake message packet of node A.
 
-"Handshake Message Packet" of `discv5-wire.md` defines it:
-<https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-wire.md>
+The section Handshake Message Packet of `discv5-wire.md` defines it:
+<https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-wire.md#handshake-message-packet-flag--2>
 
 Node B verifies the ID signature under a public key of node A that it already holds.
 
@@ -108,9 +94,17 @@ def HandshakeError.code : HandshakeError → UInt32
 `destPubkey` is the static public key of node B. -/
 def initiateHandshake (ephemeralKey staticKey : Fn) (challengeData : ByteArray)
     (nodeIdA nodeIdB : NodeId) (destPubkey : Point) : Except HandshakeError HandshakeInit := do
+  -- Step 3: `ephemeral-pubkey` is the public key of `ephemeral-key`, on secp256k1 for v4.
+  --
+  -- It is the 33-byte compressed point, the `eph-key-size` of `discv5-wire.md` for v4.
   let ephemeralPubkey := (Point.mul ephemeralKey Point.generator).encodeCompressed
+  -- Step 3: `secret = ecdh(dest-pubkey, ephemeral-key)`.
   let secret ← (ecdh ephemeralKey destPubkey).mapError .keyAgreement
+  -- Step 3: `initiator-key` and `recipient-key`, by HKDF of `secret`, salted by `challenge-data`.
   let keys ← (deriveKeys secret challengeData nodeIdA nodeIdB).mapError .keyDerivation
+  -- `id-signature` signs `sha256(id-signature-input)` with the static private key of node A.
+  --
+  -- `id-signature-input = id-signature-text || challenge-data || ephemeral-pubkey || node-id-B`.
   let idSignature ← (idSign staticKey challengeData ephemeralPubkey nodeIdB).mapError .signing
   return ⟨ephemeralPubkey, idSignature, keys⟩
 
@@ -120,11 +114,18 @@ def initiateHandshake (ephemeralKey staticKey : Fn) (challengeData : ByteArray)
 def acceptHandshake (staticKey : Fn) (challengeData : ByteArray) (nodeIdA nodeIdB : NodeId)
     (srcPubkey : Point) (ephemeralPubkey idSignature : ByteArray) :
     Except HandshakeError SessionKeys := do
+  -- Step 4: node B verifies `id-signature` against the identity public key of A.
   unless idVerify srcPubkey challengeData ephemeralPubkey nodeIdB idSignature do
     throw .idSignature
+  -- `discv5-wire.md` gives `eph-key-size = 33` for v4, so EthLib rejects any other size.
   unless ephemeralPubkey.size = 33 do throw (.ephemeralKeySize ephemeralPubkey.size)
+  -- `ephemeral-pubkey` is a public key on secp256k1, so it must decode to a point of the curve.
   let ephemeral ← (Point.decode ephemeralPubkey).mapError .ephemeralKey
+  -- Step 4: the key derivation, from the static private key of B and `ephemeral-pubkey`.
+  --
+  -- This secret equals `ecdh(dest-pubkey, ephemeral-key)` of step 3, as `d_B (e G) = e (d_B G)`.
   let secret ← (ecdh staticKey ephemeral).mapError .keyAgreement
+  -- The HKDF of step 3, so both nodes hold the same `initiator-key` and `recipient-key`.
   (deriveKeys secret challengeData nodeIdA nodeIdB).mapError .keyDerivation
 
 /-! ## The handshake message packet -/
@@ -149,14 +150,6 @@ structure HandshakeReceived where
 
 /-- Node A's handshake message packet for node B, and the session keys of node A.
 
-"Handshake Message Packet" of `discv5-wire.md` gives the authdata.
-
-It holds the ID of node A, two sizes, the ID signature, the ephemeral key, then the record.
-
-The message is AES-GCM under the initiator key, with the nonce of the header.
-
-Its additional data is the masking IV, then the unmasked header.
-
 The caller chooses the masking IV, the nonce and whether to send the record.
 
 It fails when the packet would exceed 1280 bytes. -/
@@ -164,18 +157,23 @@ def sealHandshake (ephemeralKey staticKey : Fn) (challengeData : ByteArray)
     (nodeIdA nodeIdB : NodeId) (destPubkey : Point) (maskingIv : Vector UInt8 16)
     (nonce : Vector UInt8 12) (record plaintext : ByteArray) :
     Except HandshakeError (ByteArray × SessionKeys) := do
+  -- Step 3: the ephemeral key pair, the session keys and the ID signature of node A.
   let init ← initiateHandshake ephemeralKey staticKey challengeData nodeIdA nodeIdB destPubkey
+  -- Handshake Message Packet: `flag = 2`, with the `nonce` of the header.
+  --
+  -- `authdata = authdata-head || id-signature || eph-pubkey || record`, with `src-id = node-id-A`.
   let header : Header :=
     ⟨nonce, .handshake nodeIdA init.idSignature init.ephemeralPubkey record⟩
+  -- Step 3: the request is re-sent, encrypted under the new `initiator-key`.
+  --
+  -- `message` is AES-GCM of `message-pt` and `message-ad`, under `initiator-key` and `nonce`.
+  --
+  -- `message-ad = masking-iv || header`, and the packet masks the header under `node-id-B[:16]`.
   let bytes ← sealPacket .packet .encryption (sessionKey init.keys.initiatorKey) nodeIdB maskingIv
     header plaintext
   return (bytes, init.keys)
 
 /-- Node B's reading of a handshake message packet from node A.
-
-Node B unmasks the packet, and completes step 4 with the ID and the keys of the authdata.
-
-It then decrypts the message with the initiator key.
 
 `srcPubkey` is the public key of node A, which node B takes from the record it trusts.
 
@@ -184,11 +182,15 @@ This does not check that the record in the packet is that of node A.
 It does not check that the key of node A comes from that record, or the source ID against it. -/
 def openHandshake (staticKey : Fn) (challengeData : ByteArray) (nodeIdB : NodeId)
     (srcPubkey : Point) (bytes : ByteArray) : Except HandshakeError HandshakeReceived := do
+  -- Protocol Header: node B unmasks the header under `dest-id[:16]`, with `dest-id = node-id-B`.
   let packet ← (Packet.decode nodeIdB bytes).mapError .packet
+  -- Handshake Message Packet: `flag = 2`; EthLib takes `src-id` of `authdata-head` as `node-id-A`.
   let .handshake srcId idSignature ephemeralPubkey record := packet.header.authdata
     | throw (.notHandshake packet.header.authdata.flag)
+  -- Step 4: verify `id-signature`, then derive the session keys from `ephemeral-pubkey`.
   let keys ← acceptHandshake staticKey challengeData srcId nodeIdB srcPubkey ephemeralPubkey
     idSignature
+  -- Step 4: node B decrypts and authenticates the message under the new `initiator-key`.
   let plaintext ← openPacket .packet .decryption (sessionKey keys.initiatorKey) packet
   return ⟨srcId, record, plaintext, keys⟩
 
