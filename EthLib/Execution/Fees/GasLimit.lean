@@ -8,15 +8,11 @@ public import EthLib.Execution.Fees.BaseFee
 
 The rule that bounds the gas limit of a block by the gas limit of its parent.
 
-The gas limit moves by less than a 1024th of the parent's gas limit, and it is at least 5000.
-
-So a producer can raise or lower it only slowly, block after block.
-
-At the first London block, the rule reads the parent's gas limit times the elasticity multiplier.
-
-So the gas target after London can match the gas limit before it.
+A producer can raise or lower the gas limit only slowly, block after block.
 
 Section 4.4.4 of the Yellow Paper, Shanghai version, states the rule: [`Paper.tex`][yp].
+
+Each relation of the rule is marked on its line, with the parent's gas limit `P(H)_H_l'` it reads.
 
 [EIP-1559][eip-1559] doubles the parent's gas limit at the fork block in the same way.
 
@@ -34,24 +30,40 @@ def LIMIT_ADJUSTMENT_FACTOR : Nat := 1024
 /-- The smallest gas limit of a block. -/
 def LIMIT_MINIMUM : Nat := 5000
 
-/-- Whether a gas limit may follow the gas limit of the parent.
-
-The subtraction never stops at 0, since a 1024th of a gas limit is at most the gas limit. -/
+/-- Whether a gas limit may follow the gas limit of the parent. -/
 def checkGasLimit (gasLimit parentGasLimit : Nat) : Bool :=
+  -- The parent's gas limit here is already `P(H)_H_l'`.
+  --
+  -- `floor(P(H)_H_l' / 1024)`, computed once for the two bounds.
   let maxAdjustmentDelta := parentGasLimit / LIMIT_ADJUSTMENT_FACTOR
+  -- `H_l < P(H)_H_l' + floor(P(H)_H_l' / 1024)`.
   decide (gasLimit < parentGasLimit + maxAdjustmentDelta) &&
+    -- `H_l > P(H)_H_l' - floor(P(H)_H_l' / 1024)`.
+    --
+    -- The subtraction never stops at 0, since a 1024th of a gas limit is at most the gas limit.
     decide (parentGasLimit - maxAdjustmentDelta < gasLimit) &&
+    -- `H_l >= 5000`.
     decide (LIMIT_MINIMUM ≤ gasLimit)
 
 open EthLib.Base in
-/-- The gas limit that the rule reads, for a parent at `parentFork` and a child at `fork`.
+/-- The gas limit `P(H)_H_l'` that the rule reads, for a parent at `parentFork`.
 
-At the first London block, the parent is before London, and its gas limit is doubled.
+The child is at `fork`.
 
-Elsewhere it is the parent's gas limit. -/
+At the first London block, the parent's gas limit is doubled.
+
+So the gas target after London can match the gas limit before it. -/
 def parentGasLimitForCheck (parentFork fork : Fork) (parentGasLimit : Nat) : Nat :=
+  -- `P(H)_H_l' = P(H)_H_l * rho` if `H_i = F_London`, with `rho = 2`.
+  --
+  -- The first London block is the one whose parent is before London.
   if parentFork < .london ∧ .london ≤ fork then
     parentGasLimit * BaseFee.ELASTICITY_MULTIPLIER
+  -- `P(H)_H_l' = P(H)_H_l` if `H_i > F_London`.
+  --
+  -- The paper defines `P(H)_H_l'` only from London on.
+  --
+  -- Before London, the rule reads `P(H)_H_l` itself.
   else
     parentGasLimit
 
@@ -60,6 +72,7 @@ open EthLib.Base in
 
 The header checks from Paris on have a parent from London on, so they use the plain rule. -/
 def checkGasLimitAcross (parentFork fork : Fork) (gasLimit parentGasLimit : Nat) : Bool :=
+  -- The three relations on `H_l`, against `P(H)_H_l'`.
   checkGasLimit gasLimit (parentGasLimitForCheck parentFork fork parentGasLimit)
 
 end EthLib.Execution.Fees.GasLimit
