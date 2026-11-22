@@ -9,6 +9,7 @@ Reading and writing big-endian bytes undo each other.
 
 - Writing `n` on `len` bytes gives bytes that read back as `n % 256 ^ len`.
 - On `a + b` bytes, `n` is `n / 256 ^ b` on the first `a` bytes, then `n` on the last `b`.
+- Byte `i` of `n` on `len` bytes is the digit of `n` worth `256 ^ (len - 1 - i)`.
 - Zero on `len` bytes is `len` zero bytes.
 - Reading `k` bytes and writing the value back on `k` bytes gives the same bytes.
 - Two numbers below `256 ^ len` that write the same `len` bytes are equal.
@@ -54,6 +55,17 @@ theorem natToBytes_add (a b n : Nat) :
     -- Both sides end with the lowest byte, and the higher bytes are `n / 256` written on `a + b`.
     rw [← Nat.add_assoc, natToBytes_succ, ih, natToBytes_succ, List.append_assoc,
       Nat.div_div_eq_div_mul, Nat.pow_succ, Nat.mul_comm 256]
+
+/-- Byte `i` of a number written on `len` bytes is its digit worth `256 ^ (len - 1 - i)`. -/
+theorem getElem_natToBytes {len n i : Nat} (hi : i < len) :
+    (natToBytes len n)[i]'(by rw [natToBytes_length]; exact hi) =
+      UInt8.ofNat (n / 256 ^ (len - 1 - i) % 256) := by
+  have hsplit := natToBytes_add (i + 1) (len - 1 - i) n
+  rw [show i + 1 + (len - 1 - i) = len by omega, natToBytes_succ] at hsplit
+  simp only [hsplit]
+  rw [List.getElem_append_left (by simp [natToBytes_length]),
+    List.getElem_append_right (by simp [natToBytes_length])]
+  simp [natToBytes_length]
 
 /-- A number written on `len` bytes keeps only its remainder modulo `256 ^ len`. -/
 theorem natToBytes_mod (len n : Nat) : natToBytes len (n % 256 ^ len) = natToBytes len n := by

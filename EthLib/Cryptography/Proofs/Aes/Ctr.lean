@@ -31,31 +31,9 @@ theorem blockToNat_injective : Function.Injective blockToNat := by
   intro A B h
   exact Vector.toList_inj.mp (Base.bytesToNat_inj (by simp) h)
 
-/-- The bytes `z / 256^(n - 1 - i)`, for `i < n`, are `z` written on `n` bytes. -/
-private theorem ofFn_toUInt8_eq_natToBytes (n z : Nat) :
-    List.ofFn (fun i : Fin n => (z / 256 ^ (n - 1 - i.val)).toUInt8) = Base.natToBytes n z := by
-  induction n generalizing z with
-  | zero => rfl
-  | succ n ih =>
-    -- The last byte is `z mod 256`, and the bytes before it write `z / 256`.
-    rw [List.ofFn_succ_last, Base.natToBytes_succ, ← ih (z / 256)]
-    congr 1
-    · congr 1
-      funext i
-      rw [Nat.div_div_eq_div_mul, ← Nat.pow_succ']
-      congr 3
-      simp only [Fin.val_castSucc]
-      omega
-    · simp only [Fin.val_last, List.cons.injEq, and_true]
-      apply UInt8.toNat_inj.mp
-      simp [Nat.toUInt8_eq]
-
 /-- An integer below `2^128` survives the round trip through a block. -/
-theorem blockToNat_blockOfNat {z : Nat} (hz : z < 2 ^ 128) : blockToNat (blockOfNat z) = z := by
-  have h := ofFn_toUInt8_eq_natToBytes 16 z
-  simp only [show ∀ i : Fin 16, 16 - 1 - i.val = 15 - i.val from fun _ => rfl] at h
-  rw [blockToNat, blockOfNat, Vector.toList_ofFn, h]
-  exact Base.bytesToNat_natToBytes_of_lt (lt_of_lt_of_eq hz (by decide))
+theorem blockToNat_blockOfNat {z : Nat} (hz : z < 2 ^ 128) : blockToNat (blockOfNat z) = z :=
+  Base.bytesToNat_natToBytes_of_lt (lt_of_lt_of_eq hz (by decide))
 
 /-! ## The mode -/
 

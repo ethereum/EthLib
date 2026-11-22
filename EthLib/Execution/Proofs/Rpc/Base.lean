@@ -221,17 +221,6 @@ private theorem foldl_byteHexDigits (data : List UInt8) (acc : Nat) :
     simp only [Nat.toUInt8_eq, UInt8.toNat_ofNat']
     omega
 
-/-- Byte `i` of a number written on `len` bytes is its digit worth `256 ^ (len - 1 - i)`. -/
-theorem getElem_natToBytes {len n i : Nat} (hi : i < len) :
-    (natToBytes len n)[i]'(by rw [natToBytes_length]; exact hi) =
-      UInt8.ofNat (n / 256 ^ (len - 1 - i) % 256) := by
-  have hsplit := natToBytes_add (i + 1) (len - 1 - i) n
-  rw [show i + 1 + (len - 1 - i) = len by omega, natToBytes_succ] at hsplit
-  simp only [hsplit]
-  rw [List.getElem_append_left (by simp [natToBytes_length]),
-    List.getElem_append_right (by simp [natToBytes_length])]
-  simp [natToBytes_length]
-
 /-- A loop whose step multiplies by sixteen and adds the value of a digit computes the fold. -/
 theorem forIn_hex {ds : List UInt8}
     {f : UInt8 → Nat → Except String (ForInStep Nat)}
@@ -259,17 +248,10 @@ theorem bytesMax32_dataJson (what : String) (v : Bytes32) :
       = (v.toList.flatMap byteHexDigits).map fun c => c.val.toUInt8 := by simp
   rw [hdata, forIn_hex, foldl_byteHexDigits]
   · simp only [pure, Except.pure, Except.ok.injEq]
-    apply Vector.ext
-    intro i hi
+    -- The bytes of `v`, read as a number and written back on 32 bytes, are `v`.
     have hv := natToBytes_bytesToNat v.toList
-    simp only [Vector.length_toList] at hv
-    rw [Vector.getElem_ofFn]
-    have h := congrArg (·[i]?) hv
-    rw [List.getElem?_eq_getElem (by rw [natToBytes_length]; exact hi), getElem_natToBytes hi,
-      List.getElem?_eq_getElem (by simpa using hi), Option.some.injEq,
-      Vector.getElem_toList] at h
-    rw [← h]
-    rfl
+    rw [Vector.length_toList] at hv
+    exact Vector.toList_inj.mp hv
   · intro c hc s
     simp only [List.mem_map, List.mem_flatMap, byteHexDigits, List.mem_cons, List.not_mem_nil,
       or_false] at hc

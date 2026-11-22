@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.BigEndian
 public import EthLib.Networking.Discv5.Handshake
 public import EthLib.Networking.Discv5.Session
 public import EthLib.Networking.Enr.V4
@@ -156,7 +157,8 @@ structure Randoms where
 
 The text "strongly" recommends this layout, so that the nonces of a session differ. -/
 def counterNonce (counter : UInt32) (tail : Vector UInt8 8) : Vector UInt8 12 :=
-  (Vector.ofFn fun i : Fin 4 => UInt8.ofNat (counter.toNat / 256 ^ (3 - i.val))) ++ tail
+  (⟨(Base.natToBytes 4 counter.toNat).toArray, by simp [Base.natToBytes_length]⟩ : Vector UInt8 4)
+    ++ tail
 
 /-- An ordinary message packet sealed in a session, and the session with its counter raised. -/
 def sealInSession (node : Local) (rand : Randoms) (peer : NodeId) (session : Session)

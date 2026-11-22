@@ -834,6 +834,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the big-endian conversions of other layers are defined through `Base.bytesToNat` and `Base.natToBytes` ([#3838](https://github.com/ethereum/EthLib/issues/3838)).
+  The reading side covers RLP scalars, AES counter blocks and the size in an RLPx frame header.
+  The writing side covers AES counter blocks, `I2OSP` of hash to curve, that frame size, RPC storage keys and the counter of a discv5 nonce.
+  No value changes.
+  `Rlp.ofBigEndian_lt` and `Rlp.foldl_bigEndian_lt` are gone: `Base.bytesToNat_lt` gives the bound.
+  `Execution.Rpc.getElem_natToBytes` moves to `Base.getElem_natToBytes`.
+  `Rlp.ofBigEndian_nil` and `Rlp.ofBigEndian_append_singleton` state the reading of no bytes and of a byte appended at the end.
+
 - In Lean, the four counts of the expected withdrawals are `UInt64`, as the source types them ([#3858](https://github.com/ethereum/EthLib/issues/3858)).
   The parts still count on natural numbers, and a count of `2^64` or more fails, as the increment of a `uint64` count that reaches it would; no reachable value changes.
   The updates of the queues and of the sweep of builders take the counts as `UInt64`, and the sweep of builders adds its count with no wrap.

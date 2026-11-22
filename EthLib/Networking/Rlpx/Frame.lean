@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Networking.Rlpx.Handshake
+public import EthLib.Base.BigEndian
 
 /-!
 # `Networking.Rlpx.Frame`
@@ -105,12 +106,11 @@ def paddedSize (size : Nat) : Nat := (size + 15) / 16 * 16
 
 /-- The header: `frame-size` in 3 big-endian bytes, the header data, then zeros, 16 bytes. -/
 def header (size : Nat) : ByteArray :=
-  ⟨#[(size / 65536 % 256).toUInt8, (size / 256 % 256).toUInt8, (size % 256).toUInt8] ++
-    HEADER_DATA.toArray ++ Array.replicate 10 0⟩
+  ⟨(Base.natToBytes 3 size).toArray ++ HEADER_DATA.toArray ++ Array.replicate 10 0⟩
 
 /-- The frame size that the first 3 bytes of a header give. -/
 def readSize (header : List UInt8) : Nat :=
-  (header.take 3).foldl (fun acc b => 256 * acc + b.toNat) 0
+  Base.bytesToNat (header.take 3)
 
 /-- A MAC state as the 16 bytes of its MAC. -/
 def macBytes (h : Hasher256) : ByteArray := ⟨(macDigest h).toArray⟩

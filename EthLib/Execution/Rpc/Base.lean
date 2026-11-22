@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Serialization.JsonRpc
+public import EthLib.Base.BigEndian
 public import EthLib.Base.Hash32
 public import EthLib.Base.U256
 
@@ -131,7 +132,7 @@ def bytesMax32 (what : String) (j : Json) : Read Bytes32 := do
     match hexValue false c with
     | some d => value := 16 * value + d.toNat
     | none => reject s!"{what}: not a hex digit"
-  return Vector.ofFn fun i : Fin 32 => (value / 256 ^ (31 - i.val) % 256).toUInt8
+  return ⟨(Base.natToBytes 32 value).toArray, by simp [Base.natToBytes_length]⟩
 
 /-- A hash of 32 bytes. -/
 def hash32 (what : String) (j : Json) : Read Hash32 := fixed what 32 j

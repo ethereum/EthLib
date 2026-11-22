@@ -23,6 +23,14 @@ A bound on the number of bytes keeps the first byte of a prefix below 256.
 
 namespace EthLib.Serialization.Rlp
 
+/-- No bytes read as zero. -/
+theorem ofBigEndian_nil : ofBigEndian [] = 0 := rfl
+
+/-- A byte appended at the end is the lowest digit, below the earlier bytes shifted by one byte. -/
+theorem ofBigEndian_append_singleton (init : List UInt8) (last : UInt8) :
+    ofBigEndian (init ++ [last]) = 256 * ofBigEndian init + last.toNat := by
+  simp [ofBigEndian, Base.bytesToNat, Nat.mul_comm]
+
 /-- Zero has no digits, whatever the budget. -/
 theorem bigEndianAux_zero (fuel : Nat) : bigEndianAux 0 fuel = .empty := by
   cases fuel <;> simp [bigEndianAux]
@@ -55,15 +63,15 @@ theorem bigEndianAux_fuel (n fuel fuel' : Nat) (h : n ≤ fuel) (h' : n ≤ fuel
 theorem ofBigEndian_bigEndianAux (fuel n : Nat) (h : n ≤ fuel) :
     ofBigEndian (bigEndianAux n fuel).data.toList = n := by
   induction fuel generalizing n with
-  | zero => simp_all [bigEndianAux, ofBigEndian]
+  | zero => simp_all [bigEndianAux, ofBigEndian_nil]
   | succ fuel ih =>
     by_cases hn : n = 0
     · subst hn
-      simp [bigEndianAux_zero, ofBigEndian]
+      simp [bigEndianAux_zero, ofBigEndian_nil]
     · rw [bigEndianAux_succ n fuel hn]
       -- The higher digits read back as `n / 256`.
       have hq := ih (n / 256) (by omega)
-      simp only [ofBigEndian, List.foldl_append, List.foldl_cons, List.foldl_nil] at hq ⊢
+      rw [ofBigEndian_append_singleton]
       -- Then `256 * (n / 256) + n % 256 = n`.
       rw [hq, UInt8.toNat_ofNat']
       omega
@@ -100,8 +108,7 @@ theorem bigEndian_head_ne_zero (n : Nat) : ∀ b ∈ (bigEndian n).data.toList.h
         have hne : (bigEndianAux (n / 256) fuel).data.toList ≠ [] := by
           intro hnil
           have := ofBigEndian_bigEndianAux fuel (n / 256) (by omega)
-          rw [hnil] at this
-          simp [ofBigEndian] at this
+          rw [hnil, ofBigEndian_nil] at this
           omega
         intro b hb
         obtain ⟨x, xs, hx⟩ := List.exists_cons_of_ne_nil hne
@@ -149,11 +156,9 @@ theorem ofBigEndian_eq_zero (bytes : List UInt8) (h : ofBigEndian bytes = 0) :
   induction bytes using snocInduction with
   | nil => simp
   | append_singleton init last ih =>
-    simp only [ofBigEndian, List.foldl_append, List.foldl_cons, List.foldl_nil] at h
+    rw [ofBigEndian_append_singleton] at h
     -- `256 * v + last = 0` makes both `v` and `last` zero.
-    have hInit : ofBigEndian init = 0 := by
-      simp only [ofBigEndian]
-      omega
+    have hInit : ofBigEndian init = 0 := by omega
     have hLast : last.toNat = 0 := by omega
     intro b hb
     rcases List.mem_append.mp hb with hb | hb
@@ -168,11 +173,10 @@ So `BE(x)` is the only byte string with the two properties the Yellow Paper asks
 theorem bigEndian_unique (bytes : List UInt8) (h : ∀ b ∈ bytes.head?, b ≠ 0) :
     (bigEndian (ofBigEndian bytes)).data.toList = bytes := by
   induction bytes using snocInduction with
-  | nil => simp [ofBigEndian, bigEndian, bigEndianAux]
+  | nil => simp [ofBigEndian_nil, bigEndian, bigEndianAux]
   | append_singleton init last ih =>
     -- The bytes write `m = 256 * v + last`, where `v` is the number `init` writes.
-    have hm : ofBigEndian (init ++ [last]) = 256 * ofBigEndian init + last.toNat := by
-      simp [ofBigEndian]
+    have hm := ofBigEndian_append_singleton init last
     by_cases hInit : init = []
     · -- One byte, nonzero, so `m` is that byte.
       subst hInit
@@ -180,7 +184,7 @@ theorem bigEndian_unique (bytes : List UInt8) (h : ∀ b ∈ bytes.head?, b ≠ 
       have hPos : last.toNat ≠ 0 := fun h0 => hLast (UInt8.toNat_inj.mp h0)
       rw [hm]
       simp only [bigEndian]
-      have hval : 256 * ofBigEndian [] + last.toNat = last.toNat := by simp [ofBigEndian]
+      have hval : 256 * ofBigEndian [] + last.toNat = last.toNat := by simp [ofBigEndian_nil]
       rw [hval]
       obtain ⟨g, hg⟩ : ∃ g, last.toNat = g + 1 := ⟨last.toNat - 1, by omega⟩
       rw [hg, bigEndianAux_succ _ _ (by omega), ← hg, show last.toNat / 256 = 0 by
