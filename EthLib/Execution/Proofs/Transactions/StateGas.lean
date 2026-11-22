@@ -209,7 +209,7 @@ So subtracting the state gas from it, for the execution gas of the block, never 
 
 A net state gas below zero counts as 0, so the bound holds for it too.
 
-That the gas left and the reservoir left never exceed the gas limit is not stated here.
+Another theorem proves that the gas left and the reservoir left never exceed the gas limit.
 
 The run named here is the transaction's: its target, its paid state, its message and its call. -/
 theorem processTransaction_stateGas_le_of_glamsterdam {env : BlockEnvironment fork}

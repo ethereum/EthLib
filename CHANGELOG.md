@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- `processTransaction_gasLeft_le_of_glamsterdam` proves that from Glamsterdam the execution gas left and the reservoir left of a transaction are at most its gas limit less its intrinsic gas, so its gas used before the refund never floors at zero ([#4038](https://github.com/ethereum/EthLib/issues/4038)).
+  `processMessageCall_stateGasUsed_nonneg` proves that the net state gas of the message of a transaction is at least 0, for a message that runs at its recipient from a state with no fresh slot, with no other hypothesis on the state before the transaction.
+  SOUNDNESS.md ("Transaction gas") no longer records this as a gap.
+
 - `processMessage_messagePays` and `processCreateMessage_messagePays` prove that from Glamsterdam every call whose code runs at an account with a nonce or code, and every creation at an address with neither, pays for the fresh slots it counts (`MessagePays`), whether or not it ends with an error ([#4038](https://github.com/ethereum/EthLib/issues/4038), sixth part).
   A message that fails rolls back its state gas to the floor of its meter, and its counted slots to those of its start, with no hypothesis on the state.
   `accountDeployable_of_create_step` is now public.

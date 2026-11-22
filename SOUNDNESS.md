@@ -2308,7 +2308,11 @@ At Glamsterdam, a negative state gas used counts as 0 in both block gas counts, 
 The execution gas of the block is the gas used before the refund minus that state gas, a subtraction that execution-specs makes on unsigned integers, which raise below zero.
 `processTransaction_stateGas_le_of_glamsterdam` (`Execution/Proofs/Transactions/StateGas.lean`) proves that the state gas is at most that gas used, so subtracting it in natural numbers never floors at zero.
 The gas used before the refund is itself the gas limit minus the execution gas left and the reservoir left.
-That this first subtraction never floors is not proved: a refill of state gas can raise what a frame holds above what it started with, and no theorem yet bounds the refills of a whole run by its charges.
+`processTransaction_gasLeft_le_of_glamsterdam` (`Execution/Proofs/Transactions/StateGasUsed.lean`) proves that these are at most the gas limit less the intrinsic gas, so this first subtraction never floors either.
+A refill of state gas can raise what a frame holds above what it started with, but every refill of a run follows a charge of the same transaction.
+`processMessageCall_stateGasUsed_nonneg` proves that the net state gas of the message is at least 0, so for the message of a transaction the negative case above does not arise.
+It needs a state with no fresh slot and a message that runs at its recipient, as the message of a transaction has, and no other hypothesis on the state before the transaction.
+Its proof counts the fresh slots of the accounts with a nonce or code, the only accounts where code runs, so that a rollback of a call that created an account cannot add a counted slot.
 From Hegotá a run fails as not yet specified, so there is no gas used to state.
 
 `prepareFirstFrame_of_applyAuthorizations` gives the first frame of a call that moves no ether, after its authorizations.
