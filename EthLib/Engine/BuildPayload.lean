@@ -83,18 +83,11 @@ def gasTarget (attributes : PayloadAttributes fork) (choices : BuildChoices) : N
 
 /-- The excess blob gas that a parent gives to the block built on it, from Dencun.
 
-It is 0 before Dencun, where a header has no excess, and on a parent before London.
-
-A parent before London has no base fee, and so no blob gas fields. -/
+It is 0 before Dencun, where a header has no excess, and on a parent before London. -/
 def builtExcessBlobGas (config : ChainConfig) (parent : RecentBlock)
     (attributes : PayloadAttributes fork) : Nat :=
-  if h : .dencun ≤ fork then
-    if hLondon : .london ≤ parent.fork then
-      expectedExcessBlobGas hLondon h parent.header
-        (Execution.Fees.BlobBaseFee.chainBlobSchedule config fork (parent.header.number + 1)
-          attributes.timestamp.toNat)
-    else 0
-  else 0
+  childExcessBlobGas config fork parent.header (parent.header.number + 1)
+    attributes.timestamp.toNat
 
 /-- The header of a built block before its body runs, on a parent.
 

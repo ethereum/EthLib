@@ -51,22 +51,14 @@ theorem ChainView.sendRawTransaction_hash {v : ChainView} {bytes : ByteArray} {h
   · refine ⟨raw, rfl, ?_⟩
     rw [hd] at hok
     rcases raw with tx | w <;> dsimp only [RawTransaction.tx] at hok ⊢
-    · split at hok
-      · cases hok
-      · split at hok
-        · cases hok
-        · cases hok
-          assumption
+    · repeat' (split at hok)
+      all_goals first | (cases hok; done) | (cases hok; assumption)
     · rcases hv : validateNetwork v.setup (v.head.nextFork v.config) w with e | u <;>
         rw [hv] at hok
       · cases hok
       · dsimp only at hok
-        split at hok
-        · cases hok
-        · split at hok
-          · cases hok
-          · cases hok
-            assumption
+        repeat' (split at hok)
+        all_goals first | (cases hok; done) | (cases hok; assumption)
 
 /-- A network form is accepted only when its counts, its versioned hashes and its proofs pass. -/
 theorem ChainView.validateNetwork_of_sendRawTransaction {v : ChainView} {bytes : ByteArray}
@@ -113,8 +105,9 @@ theorem ChainView.call_sendRawTransaction (v : ChainView) (j : Lean.Json) :
         hash32Json <$> v.sendRawTransaction b) := rfl
 
 /-- The next block in which a transaction is checked has the next base fee of the fee history. -/
-theorem ChainView.baseFeeOf_nextEnvironment (v : ChainView) :
-    baseFeeOf v.nextEnvironment =
+theorem ChainView.baseFeeOf_nextEnvironment (v : ChainView)
+    (fits : v.nextExcessBlobGas < 2 ^ 64) :
+    baseFeeOf (v.nextEnvironment fits) =
       if .london ≤ v.head.nextFork v.config then v.baseFee else 0 := by
   unfold baseFeeOf
   split <;> simp_all [ChainView.nextEnvironment, ChainView.baseFee]
