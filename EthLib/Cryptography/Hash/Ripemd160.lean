@@ -38,12 +38,12 @@ namespace EthLib.Cryptography.Hash.Ripemd160
 /-! ## Words -/
 
 /--
-Rotate left by `n` bits, `rol_n` of the pseudo-code.
+Rotate left by `n` bits, `rol_s` of the pseudo-code with `s = n`.
 
 The amount `n` is between 1 and 31.
 -/
 @[inline] def rol (x : UInt32) (n : UInt32) : UInt32 :=
-  -- `rol_s`: "cyclic left shift (rotate) over s positions".
+  -- The cyclic left shift, or rotation, over `n` positions.
   (x <<< n) ||| (x >>> (32 - n))
 
 /-- The nonlinear function `f(j, x, y, z)` of the group of sixteen steps `group = j / 16`. -/
@@ -65,14 +65,14 @@ The amount `n` is between 1 and 31.
 /--
 The added constants `K(j)` of the left line, one per group of sixteen steps.
 
-For the last four groups, each is `int(2^30 * sqrt(p))` for p = 2, 3, 5, 7.
+For the last four groups, each is `floor(2^30 * sqrt(p))` for p = 2, 3, 5, 7.
 -/
 def K : Vector UInt32 5 := #v[0x00000000, 0x5A827999, 0x6ED9EBA1, 0x8F1BBCDC, 0xA953FD4E]
 
 /--
 The added constants `K'(j)` of the right line, one per group of sixteen steps.
 
-For the first four groups, each is `int(2^30 * cbrt(p))` for p = 2, 3, 5, 7.
+For the first four groups, each is `floor(2^30 * cbrt(p))` for p = 2, 3, 5, 7.
 -/
 def K' : Vector UInt32 5 := #v[0x50A28BE6, 0x5C4DD124, 0x6D703EF3, 0x7A6D76E9, 0x00000000]
 
@@ -115,7 +115,7 @@ def IV : Vector UInt32 5 := #v[0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0
 
 /-- The zero bytes between the `0x80` byte and the length, so that the blocks are whole. -/
 def paddingZeros (size : Nat) : Nat :=
-  -- RFC 1320 §3.1: "0" bits until the length is congruent to 448 modulo 512.
+  -- RFC 1320 §3.1: 0 bits until the length is congruent to 448 modulo 512.
   --
   -- In bytes: the message, the byte `0x80` and the zeros fill all but 8 bytes of a 64-byte block.
   (64 - (size + 9) % 64) % 64
@@ -128,7 +128,7 @@ RFC 1320 section 3.2 appends the low 64 bits of the bit length.
 The conversion and multiplication below implement that reduction modulo 2^64.
 -/
 def lengthBytes (size : Nat) : ByteArray :=
-  -- RFC 1320 §3.2: "only the low-order 64 bits of b are used", low-order word first.
+  -- RFC 1320 §3.2: only the low-order 64 bits of b are used, the low-order word first.
   --
   -- Each word puts its low-order byte first, as RFC 1320 §2 says.
   let bits : UInt64 := UInt64.ofNat size * 8
@@ -140,7 +140,7 @@ The padded message: the message, a set bit, zeros, then its length in bits.
 The message is whole bytes, so the set bit and the seven zero bits after it are the byte `0x80`.
 -/
 def pad (message : ByteArray) : ByteArray :=
-  -- RFC 1320 §3.1: a single "1" bit, then "0" bits; §3.2: then the 64-bit length.
+  -- RFC 1320 §3.1: a single 1 bit, then 0 bits; §3.2: then the 64-bit length.
   message.push 0x80 ++ ⟨Array.replicate (paddingZeros message.size) 0⟩ ++ lengthBytes message.size
 
 /-! ## One block -/
