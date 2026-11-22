@@ -20,7 +20,9 @@ namespace EthLib.Serialization.Ssz
 instance instSszTypeIte {p : Prop} [decision : Decidable p] {α β : Type} [SszType α]
     [SszType β] : SszType (@ite Type p decision α β) :=
   match decision with
+  -- Where `p` holds, the type, its bytes and its root are those of the first type.
   | .isTrue _ => inferInstanceAs (SszType α)
+  -- Where `p` fails, they are those of the second type.
   | .isFalse _ => inferInstanceAs (SszType β)
 
 end EthLib.Serialization.Ssz

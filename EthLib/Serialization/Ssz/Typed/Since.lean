@@ -23,19 +23,25 @@ open Base SszType
 
 /-- The names of fields that appear at a fork: all of them from that fork on, none before. -/
 def sinceNames (first fork : Fork) (names : List String) : List String :=
+  -- Present at the forks `f` with `first <= f`.
   if first ≤ fork then names else []
 
 /-- The names of fields that a fork removes: all of them before that fork, none from it on. -/
 def untilNames (last fork : Fork) (names : List String) : List String :=
+  -- Present at the forks `f` with `f < last`.
   if fork < last then names else []
 
 /-- The names of fields that one fork adds and a later fork removes. -/
 def duringNames (first last fork : Fork) (names : List String) : List String :=
+  -- Present at the forks `f` with `first <= f < last`.
   if first ≤ fork ∧ fork < last then names else []
 
 /-- A field present when `p` holds, in front of the fields that follow it. -/
 abbrev presentFieldsProd (p : Prop) [Decidable p] (α β : Type) [SszType α] [SszFields β] :
     SszFields ((p → α) × β) where
+  -- A present field is one more field of the container, at its place in the order.
+  --
+  -- An absent field is no field at all: no type, no value, no root and no bytes.
   descs := if p then desc α :: SszFields.descs β else SszFields.descs β
   toValues pair :=
     if present : p then toValue (pair.1 present) :: SszFields.toValues pair.2
@@ -59,10 +65,12 @@ abbrev presentFieldsProd (p : Prop) [Decidable p] (α β : Type) [SszType α] [S
   decodeSlots slots :=
     if present : p then
       match slots with
+      -- A fixed-size field decodes from its bytes in place, before any offset is trusted.
       | .inline bytes :: slots => do
         let field ← decode bytes
         let rest ← SszFields.decodeSlots slots
         return fun bodies => return (fun _ => field, ← rest bodies)
+      -- A variable-size field decodes from the next body, in declaration order.
       | .body _ :: slots => do
         let rest ← SszFields.decodeSlots slots
         return fun
@@ -78,6 +86,7 @@ abbrev presentFieldsProd (p : Prop) [Decidable p] (α β : Type) [SszType α] [S
 
 /-- A field present when `p` holds, as the last field of a container. -/
 abbrev presentFields (p : Prop) [Decidable p] (α : Type) [SszType α] : SszFields (p → α) where
+  -- As the last field: one field where present, and none where absent.
   descs := if p then [desc α] else []
   toValues field := if present : p then [toValue (field present)] else []
   ofValues values :=
