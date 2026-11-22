@@ -47,14 +47,22 @@ variable {F : Type} [BaseField F]
 @[inline] def sub (a b : Fp6 F) : Fp6 F := ⟨a.c0 - b.c0, a.c1 - b.c1, a.c2 - b.c2⟩
 @[inline] def neg (a : Fp6 F)   : Fp6 F := ⟨-a.c0, -a.c1, -a.c2⟩
 
-/-- School-book multiplication with `v^3 = 1 + i`. -/
+/-- The product, by the Karatsuba method of [Devegili et al.][dev], §4, with `β = 1 + i`.
+
+It equals the schoolbook product of the module header.
+
+[dev]: https://eprint.iacr.org/2006/471
+-/
 def mul (a b : Fp6 F) : Fp6 F :=
+  -- §4: `v0 = a0 b0`, `v1 = a1 b1`, `v2 = a2 b2`.
   let t0 := a.c0 * b.c0
   let t1 := a.c1 * b.c1
   let t2 := a.c2 * b.c2
-  -- (a1+a2)(b1+b2) − a1·b1 − a2·b2 = a1·b2 + a2·b1
+  -- §4: `c0 = v0 + β((a1 + a2)(b1 + b2) - v1 - v2)`.
   let c0 := ((a.c1 + a.c2) * (b.c1 + b.c2) - t1 - t2).mulByOnePlusI + t0
+  -- §4: `c1 = (a0 + a1)(b0 + b1) - v0 - v1 + β v2`.
   let c1 := (a.c0 + a.c1) * (b.c0 + b.c1) - t0 - t1 + t2.mulByOnePlusI
+  -- §4: `c2 = (a0 + a2)(b0 + b2) - v0 + v1 - v2`.
   let c2 := (a.c0 + a.c2) * (b.c0 + b.c2) - t0 - t2 + t1
   ⟨c0, c1, c2⟩
 
@@ -78,9 +86,11 @@ instance : Neg (Fp6 F) := ⟨neg⟩
 The caller must pass a nonzero `a`. -/
 def inverse (a : Fp6 F) : Fp6 F :=
   let xi := @Fp2.mulByOnePlusI F _
+  -- `t = t0 + t1 v + t2 v^2` is the adjugate of `a`: the product `a t` lies in `Fp2`.
   let t0 := a.c0 * a.c0 - xi (a.c1 * a.c2)
   let t1 := xi (a.c2 * a.c2) - a.c0 * a.c1
   let t2 := a.c1 * a.c1 - a.c0 * a.c2
+  -- `a t = a0 t0 + ξ (a2 t1 + a1 t2)`, the norm of `a`, so `a^(-1) = t / (a t)`.
   let det := a.c0 * t0 + xi (a.c2 * t1) + xi (a.c1 * t2)
   let invDet := det.inverse
   ⟨t0 * invDet, t1 * invDet, t2 * invDet⟩
