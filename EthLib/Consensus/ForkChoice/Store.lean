@@ -91,6 +91,9 @@ structure LatestMessage (fork : Fork) where
 
 /-- The epoch of a vote: its target epoch before Gloas, the epoch of its slot from Gloas. -/
 def getLatestMessageEpoch (preset : Preset) {fork : Fork} (message : LatestMessage fork) : Epoch :=
+  -- From Gloas `floor(s / SLOTS_PER_EPOCH)` for the slot `s` of the vote.
+  --
+  -- Before Gloas its target epoch.
   if gloas : .glamsterdam ≤ fork then computeEpochAtSlot preset (message.slot gloas)
   else message.epoch (Nat.lt_of_not_le gloas)
 
@@ -98,6 +101,7 @@ def getLatestMessageEpoch (preset : Preset) {fork : Fork} (message : LatestMessa
 
 A vote replaces an earlier one of the validator only when this number grows. -/
 def LatestMessage.rank {fork : Fork} (message : LatestMessage fork) : UInt64 :=
+  -- From Gloas the slot of the vote, before Gloas its target epoch.
   if gloas : .glamsterdam ≤ fork then message.slot gloas
   else message.epoch (Nat.lt_of_not_le gloas)
 
@@ -111,6 +115,7 @@ def LatestMessage.ofAttestation {preset : Preset} {fork : Fork}
   epoch := fun _ => attestation.data.target.epoch
   slot := fun _ => attestation.data.slot
   root := attestation.data.beaconBlockRoot
+  -- From Gloas the index of the data is the payload vote: 1 for present, as EIP-7732 specifies.
   payloadPresent := fun _ => attestation.data.index == 1
 
 /-- The order of checkpoints by epoch, then by root, which keys the checkpoint states. -/
@@ -477,22 +482,27 @@ variable {preset fork}
 
 /-- The store that starts from an anchor block and the state after it.
 
-The anchor is justified and finalized at the epoch of its state.
-
-From Gloas the anchor is timely for both deadlines, and has no payload and no committee vote yet.
+From Gloas the anchor has no payload and no committee vote yet.
 
 From Heze the store holds no inclusion list and no answer on inclusion lists yet. -/
 def getForkchoiceStore (config : Config) (anchorState : BeaconState preset fork)
     (anchorBlock : BeaconBlock preset fork) : Except ForkChoiceError (Store preset fork) := do
+  -- The state root of the anchor block must be the root of the anchor state.
   let stateRoot ← (SszType.hashTreeRoot anchorState).mapError .ssz
   if anchorBlock.stateRoot ≠ stateRoot then
     throw (.anchorStateMismatch anchorBlock.stateRoot stateRoot)
+  -- The anchor is justified and finalized at the epoch `e` of its state: the checkpoint `(e, r)`.
+  --
+  -- Here `r` is the root of the anchor block.
   let anchorRoot ← (SszType.hashTreeRoot anchorBlock).mapError .ssz
   let anchorEpoch := getCurrentEpoch anchorState
   let checkpoint : Checkpoint := ⟨anchorEpoch, anchorRoot⟩
+  -- The time of the store is the start of the slot of the anchor state, in milliseconds.
   let genesisTimeMs := secondsToMilliseconds anchorState.genesisTime
   let timeMs ← (computeTimeAtSlotMs config genesisTimeMs anchorState.slot).mapError .arith
   -- The maps of the fields from Gloas are built here, once, so that a read does not build them.
+  --
+  -- From Gloas the anchor is timely for the deadline of the payload committee.
   let ptcTimeliness := Std.TreeMap.empty.insert anchorRoot true
   let noVotes : Std.TreeMap Root (Vector (Option Bool) preset.PTC_SIZE.toNat) :=
     Std.TreeMap.empty.insert anchorRoot (Vector.replicate _ none)
@@ -506,6 +516,7 @@ def getForkchoiceStore (config : Config) (anchorState : BeaconState preset fork)
     equivocatingIndices := []
     blocks := Std.TreeMap.empty.insert anchorRoot anchorBlock
     blockStates := Std.TreeMap.empty.insert anchorRoot anchorState
+    -- From Gloas the anchor is timely for the attestation deadline.
     blockTimeliness := if .glamsterdam ≤ fork then Std.TreeMap.empty.insert anchorRoot true else ∅
     ptcTimeliness := fun _ => ptcTimeliness
     checkpointStates := Std.TreeMap.empty.insert checkpoint anchorState
@@ -523,14 +534,17 @@ variable (config : Config) (store : Store preset fork)
 
 /-- The current slot: the slot at the time of the store. -/
 def getCurrentSlot : Except ForkChoiceError Slot :=
+  -- `floor((t - g) / SLOT_DURATION_MS)`, for the time `t` and the genesis time `g`.
   (computeSlotAtTimeMs config store.genesisTimeMs store.timeMs).mapError .arith
 
 /-- The epoch of the current slot. -/
 def getCurrentStoreEpoch : Except ForkChoiceError Epoch :=
+  -- `floor(s / SLOTS_PER_EPOCH)`, for the current slot `s`.
   return computeEpochAtSlot preset (← store.getCurrentSlot config)
 
 /-- The time since the start of the current slot, in milliseconds. -/
 def getTimeIntoSlotMs : Except ForkChoiceError UInt64 := do
+  -- The time of the store less the start of the current slot.
   let start ← (computeTimeAtSlotMs config store.genesisTimeMs
     (← store.getCurrentSlot config)).mapError .arith
   return store.timeMs - start
@@ -543,47 +557,47 @@ def block (root : Root) : Except ForkChoiceError (BeaconBlock preset fork) :=
 
 /-- Whether the store holds the verified payload of the block with a root, from Gloas. -/
 def isPayloadVerified (gloas : .glamsterdam ≤ fork) (root : Root) : Bool :=
+  -- The root is a key of the verified payloads.
   (store.payloads gloas).contains root
 
-/-- The status of the payload of a parent, as a child block builds on it.
-
-Before Gloas a block has no separate payload, so the parent is pending.
-
-From Gloas the parent is full when the child's bid builds on the block hash of the parent's bid.
-
-Otherwise the child builds on the parent without its payload, so the parent is empty. -/
+/-- The status of the payload of a parent, as a child block builds on it. -/
 def parentPayloadStatus (block parent : BeaconBlock preset fork) : PayloadStatus :=
+  -- From Gloas the parent is full when the child's bid builds on the block hash of its bid.
   if gloas : .glamsterdam ≤ fork then
     if (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash =
         (parent.body.signedExecutionPayloadBid gloas).message.blockHash then .full
+    -- Otherwise the child builds on the parent without its payload, so the parent is empty.
     else .empty
+  -- Before Gloas a block has no separate payload, so the parent is pending.
   else .pending
 
 /-- The status of the payload of the parent of a block, which the store must hold. -/
 def getParentPayloadStatus (block : BeaconBlock preset fork) :
     Except ForkChoiceError PayloadStatus :=
+  -- The parent is the block of the parent root, which the store must hold.
   return parentPayloadStatus block (← store.block block.parentRoot)
 
 /-- Whether a block builds on the full parent: its parent with its payload. -/
 def isParentNodeFull (block : BeaconBlock preset fork) : Except ForkChoiceError Bool :=
+  -- The status of the parent is full.
   return (← store.getParentPayloadStatus block) == .full
 
 /-- The ancestor of a node at a slot: the node itself, or its latest ancestor at or below the slot.
 
-The walk follows parent roots.
-
-Each parent node gets the status of its payload as its child builds on it.
-
-Before Gloas that status is pending, so every node of the walk is pending. -/
+Before Gloas every node of the walk is pending. -/
 def getAncestor (node : ForkChoiceNode) (slot : Slot) : Except ForkChoiceError ForkChoiceNode :=
   match _found : store.blocks[node.root]? with
   | none => throw (.unknownBlock node.root)
   | some block =>
+    -- A block at or below the slot is the ancestor.
     if block.slot ≤ slot then pure node
     else
       match _parentFound : store.blocks[block.parentRoot]? with
       | none => throw (.unknownBlock block.parentRoot)
       | some parent =>
+        -- Else the walk goes to the parent, with the payload status that the block builds on.
+        --
+        -- A parent at a slot no lower than its block fails, so that the walk ends.
         if _lower : parent.slot < block.slot then
           getAncestor ⟨block.parentRoot, parentPayloadStatus block parent⟩ slot
         else throw (.parentSlotNotLower node.root)
@@ -594,19 +608,21 @@ decreasing_by
 
 /-- Whether a node descends from another: its ancestor at the other's slot is that node.
 
-From Gloas the ancestor has the same root, and the same payload status or a pending one.
-
 A pending ancestor stands for its block, so both of its payload statuses descend from it. -/
 def isAncestor (node ancestor : ForkChoiceNode) : Except ForkChoiceError Bool := do
+  -- The ancestor of the node at the slot of the other.
   let ancestorBlock ← store.block ancestor.root
   let found ← store.getAncestor node ancestorBlock.slot
+  -- From Gloas it has the same root, and the same payload status or a pending one.
   if .glamsterdam ≤ fork then
     return found.root == ancestor.root &&
       (found.payloadStatus == ancestor.payloadStatus || ancestor.payloadStatus == .pending)
+  -- Before Gloas it is the other node.
   else return found == ancestor
 
 /-- The checkpoint block of an epoch in the chain of a block: its ancestor at the epoch's start. -/
 def getCheckpointBlock (root : Root) (epoch : Epoch) : Except ForkChoiceError Root := do
+  -- For the epoch `e`, the root of the ancestor of the pending node at `e * SLOTS_PER_EPOCH`.
   let start ← (computeStartSlotAtEpoch preset epoch).mapError .arith
   return (← store.getAncestor ⟨root, .pending⟩ start).root
 
