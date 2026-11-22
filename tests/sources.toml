@@ -149,6 +149,7 @@ commit = "efc5f9a1f356cba376c978eedb63cb0363c2aa85"
 commit = "391d8a05d5cb182542ac7e7330c858b6ee03f990"
 release = "tests@v21.0.3"
 directories = [
+  "bindings/python/tests/precompile/execution_specs",
   "tests/engine", "tests/execution/blocks", "tests/execution/fees", "tests/execution/genesis",
   "tests/execution/modexp",
   "tests/execution/precompiles", "tests/execution/transactions",

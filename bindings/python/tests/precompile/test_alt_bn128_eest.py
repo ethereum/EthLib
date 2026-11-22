@@ -35,7 +35,7 @@ EIP_1108_FORKS = since("istanbul")
 # The `test_gas.py` files give no price; the price below is that of EIP-196, EIP-197 and EIP-1108.
 # The ported state test `stZeroKnowledge/test_pairing_test.py` calls the precompile from EVM code.
 # So it is not read.
-CASES = json.loads((Path(__file__).parent / "alt_bn128_cases.json").read_text())
+CASES = json.loads((Path(__file__).parent / "execution_specs" / "alt_bn128_cases.json").read_text())
 
 
 def price(fork: str, address: int, data: bytes) -> int:

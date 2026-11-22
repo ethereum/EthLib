@@ -109,7 +109,7 @@ known-third-party = ["ssz"]
 "scripts/test_*.py" = ["D"]
 "tests/**" = ["D"]
 # The evaluator dispatches on the name of each `ast` node class.
-"bindings/python/tests/precompile/extract_alt_bn128_cases.py" = ["N802"]
+"bindings/python/tests/precompile/execution_specs/extract_alt_bn128_cases.py" = ["N802"]
 
 [tool.codespell]
 # Names in the code: a re-encoding, plural data, a serializer, a truncated status, a regex,
