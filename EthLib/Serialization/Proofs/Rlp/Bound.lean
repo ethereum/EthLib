@@ -18,6 +18,8 @@ A list fails when one of its items fails.
 So the encoding fails exactly where the Yellow Paper gives no encoding, at some node of the tree.
 
 An encoding is at most 9 bytes longer than its payload, and 1 byte longer below 56 bytes.
+
+An encoding has at least 1 byte, and a list encodes to more bytes than it has items.
 -/
 
 @[expose] public section
@@ -120,6 +122,105 @@ theorem encode_list_size_le (items : List Item) (payload e : ByteArray)
     subst h
     have := (lengthPrefix_size_le _ _ _ hPre).1
     simp only [ByteArray.size_append]; omega
+
+/-- A prefix that exists has at least 1 byte. -/
+theorem one_le_lengthPrefix_size (kind : PayloadKind) (length : Nat) (pre : ByteArray)
+    (h : lengthPrefix kind length = .ok pre) : 1 ≤ pre.size := by
+  unfold lengthPrefix at h
+  by_cases hShort : length < 56
+  · rw [ite_eq_left hShort] at h
+    cases h
+    simp [ByteArray.size]
+  · rw [ite_eq_right hShort] at h
+    by_cases hLong : length < 2 ^ 64
+    · rw [ite_eq_left hLong] at h
+      cases h
+      simp only [ByteArray.size_append]
+      have h1 : ∀ b : UInt8, (ByteArray.mk #[b]).size = 1 := fun _ => rfl
+      rw [h1]
+      omega
+    · rw [ite_eq_right hLong] at h
+      cases h
+
+/-- An encoding that exists has at least 1 byte. -/
+theorem one_le_encode_size (x : Item) (e : ByteArray) (h : encode x = .ok e) : 1 ≤ e.size := by
+  cases x with
+  | bytes data =>
+    rw [encode, encodeBytes] at h
+    cases hSingle : isSingleLowByte data
+    · cases hPre : lengthPrefix .bytes data.size with
+      | error err => simp [hSingle, hPre, bind, Except.bind] at h
+      | ok pre =>
+        simp [hSingle, hPre, bind, Except.bind, pure, Except.pure] at h
+        subst h
+        have := one_le_lengthPrefix_size _ _ _ hPre
+        simp only [ByteArray.size_append]; omega
+    · -- A single low byte is its own encoding, of 1 byte.
+      simp only [hSingle, ↓reduceIte, Except.ok.injEq] at h
+      subst h
+      unfold isSingleLowByte at hSingle
+      split at hSingle
+      · omega
+      · cases hSingle
+  | list items =>
+    cases hJoin : joinEncodings items with
+    | error err => simp [encode, hJoin, bind, Except.bind] at h
+    | ok payload =>
+      cases hPre : lengthPrefix .list payload.size with
+      | error err => simp [encode, hJoin, hPre, bind, Except.bind] at h
+      | ok pre =>
+        simp [encode, hJoin, hPre, bind, Except.bind, pure, Except.pure] at h
+        subst h
+        have := one_le_lengthPrefix_size _ _ _ hPre
+        simp only [ByteArray.size_append]; omega
+
+/-- The joined encodings of items have at least 1 byte per item.
+
+Each item among them encodes, to at most as many bytes as the whole. -/
+theorem joinEncodings_size_ge :
+    (items : List Item) → (payload : ByteArray) → joinEncodings items = .ok payload →
+    items.length ≤ payload.size ∧
+      ∀ x ∈ items, ∃ e, encode x = .ok e ∧ e.size ≤ payload.size
+  | [], payload, _ => ⟨Nat.zero_le _, fun _ hx => absurd hx List.not_mem_nil⟩
+  | x :: xs, payload, h => by
+    rw [joinEncodings_cons] at h
+    cases hHead : encode x with
+    | error e => simp [hHead, bind, Except.bind] at h
+    | ok head =>
+      cases hTail : joinEncodings xs with
+      | error e => simp [hHead, hTail, bind, Except.bind] at h
+      | ok tail =>
+        simp [hHead, hTail, bind, Except.bind, pure, Except.pure] at h
+        subst h
+        have h1 := one_le_encode_size x head hHead
+        obtain ⟨hLen, hMem⟩ := joinEncodings_size_ge xs tail hTail
+        refine ⟨?_, fun y hy => ?_⟩
+        · simp only [ByteArray.size_append, List.length_cons]; omega
+        · rcases List.mem_cons.mp hy with rfl | hy
+          · exact ⟨head, hHead, by simp only [ByteArray.size_append]; omega⟩
+          · obtain ⟨e, he, hle⟩ := hMem y hy
+            exact ⟨e, he, by simp only [ByteArray.size_append]; omega⟩
+
+/-- The encoding of a list has more bytes than the list has items.
+
+Each item of the list encodes, to fewer bytes than the list. -/
+theorem encode_list_size_gt (items : List Item) (e : ByteArray)
+    (h : encode (.list items) = .ok e) :
+    items.length < e.size ∧ ∀ x ∈ items, ∃ ex, encode x = .ok ex ∧ ex.size < e.size := by
+  cases hJoin : joinEncodings items with
+  | error err => simp [encode, hJoin, bind, Except.bind] at h
+  | ok payload =>
+    cases hPre : lengthPrefix .list payload.size with
+    | error err => simp [encode, hJoin, hPre, bind, Except.bind] at h
+    | ok pre =>
+      simp [encode, hJoin, hPre, bind, Except.bind, pure, Except.pure] at h
+      subst h
+      -- The prefix adds at least 1 byte before the joined encodings.
+      have hpre := one_le_lengthPrefix_size _ _ _ hPre
+      obtain ⟨hLen, hMem⟩ := joinEncodings_size_ge items payload hJoin
+      refine ⟨by simp only [ByteArray.size_append]; omega, fun x hx => ?_⟩
+      obtain ⟨ex, hex, hle⟩ := hMem x hx
+      exact ⟨ex, hex, by simp only [ByteArray.size_append]; omega⟩
 
 /-- The prefix of a length fails only on a length of `2^64` or more. -/
 theorem lengthPrefix_error (kind : PayloadKind) (length : Nat) (err : RlpError)
