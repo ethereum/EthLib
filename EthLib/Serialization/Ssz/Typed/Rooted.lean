@@ -20,6 +20,8 @@ Basic elements are packed, several to a leaf, and a write rehashes the leaf that
 A decoded vector builds its tree on the first read of the root or the first write.
 
 A call that never needs the tree then never hashes it.
+
+In the comments, `H` is SHA-256 and `Z_h` is the root of an all-zero tree of height `h`.
 -/
 
 @[expose] public section
@@ -80,6 +82,7 @@ The Merkle node one level above a level whose subtrees have a height, at an inde
 The level stands in as the leaves, and an entry past it is the zero subtree of that height.
 -/
 def parentAt (height : Nat) (level : Array Bytes) (index : Nat) : Bytes :=
+  -- The parent `i` is `H(E[2i] || E[2i + 1])`, `E` the level, an entry past it read as `Z_h`.
   (Cryptography.Merkle.node (m := Id) (fun _ => combine)
     (fun position => level[position]?.getD (zeroSubtree height)) ⟨1, index⟩).run
 
@@ -92,6 +95,8 @@ theorem parentAt_eq (height : Nat) (level : Array Bytes) (index : Nat) :
 
 /-- The level above a level whose subtrees have a height: each pair of entries hashed together. -/
 def pairUp (height : Nat) (level : Array Bytes) : Array Bytes :=
+  -- A level of `n` entries has `ceil(n / 2)` parents above it.
+  --
   -- An odd last entry is paired with the zero subtree.
   Array.ofFn (n := (level.size + 1) / 2) fun index => parentAt height level index
 
@@ -101,7 +106,9 @@ The given level, whose subtrees have a height, then the given count of levels ab
 The first level is the one given, and each next one pairs up the entries of the one below.
 -/
 def buildLevels (height : Nat) (level : Array Bytes) : Nat → List (Array Bytes)
+  -- No level above: the given level is the top.
   | 0 => [level]
+  -- Each level above pairs up the one below, so `d` levels above the leaves reach depth `d`.
   | above + 1 => level :: buildLevels (height + 1) (pairUp height level) above
 
 /--
@@ -119,6 +126,7 @@ Each level above changes in one entry, the parent of the entry written below it.
 -/
 def updateLevels (height position : Nat) (node : Bytes) : List (Array Bytes) → List (Array Bytes)
   | [] => []
+  -- The entry at position `p` is written, then its parent at `floor(p / 2)` is rehashed above.
   | level :: rest =>
     let level := writeEntry level position node
     match rest with
@@ -204,6 +212,7 @@ The levels with a count of levels built on top, from the top level given.
 The height is that of the subtrees in the top level given.
 -/
 def raiseLevels (height : Nat) (levels : List (Array Bytes)) (count : Nat) : List (Array Bytes) :=
+  -- A tree of depth `d` raised to depth `d + c`: its top paired with zero subtrees `c` times.
   levels ++ (buildLevels height (levels.getLast?.getD #[]) count).tail
 
 /-- Raising the levels of a tree gives the levels of the same leaves up to a greater height. -/
@@ -230,12 +239,15 @@ theorem raiseLevels_buildLevels_leaves (level : Array Bytes) (above count : Nat)
 
 /-- The top node of a tree from its levels, or the zero subtree of its depth if it has no leaf. -/
 def topOfLevels (depth : Nat) (levels : List (Array Bytes)) : Bytes :=
+  -- The root is entry 0 of the top level; a tree with no leaf is all zero, so its root is `Z_d`.
   ((levels.getLast?.bind fun top => top[0]?)).getD (zeroSubtree depth)
 
 open SszType
 
 /-- The leaf of an element in a rooted sequence: its root, or the zero node if it has none. -/
 def leafRoot {α : Type} [SszType α] (a : α) : Bytes :=
+  -- A composite element is one leaf, its root.
+  --
   -- A lawful element always has a root, so the zero node never stands in.
   match root a with
   | .ok node => node
@@ -268,39 +280,50 @@ def elementBytes {α : Type} [SszType α] (a : α) : Bytes :=
 
 /-- How many elements of a basic type share one leaf: those that fit in a node, at least one. -/
 def perChunk (α : Type) [SszType α] : Nat :=
+  -- Basic elements of `L` bytes pack `k = 32 / L` to a chunk, since the basic widths divide 32.
   max 1 (bytesPerChunk / (desc α).itemLength)
 
 /-- The leaf at an index of basic elements: the encodings of its elements, padded to a node. -/
 def packedChunk {α : Type} [SszType α] (elements : Array α) (index : Nat) : Bytes :=
+  -- Chunk `i` holds the elements `i * k` to `i * k + k - 1`, serialized and concatenated.
+  --
+  -- With `k * L = 32`, this is chunk `i` of the packing of all the elements.
   let start := index * perChunk α
   -- A loop over the few elements of the leaf, never over the whole sequence.
   let piece := (elements.extract start (start + perChunk α)).foldl
     (fun bytes a => bytes ++ elementBytes a) #[]
+  -- Each chunk is right-padded with zero bytes to 32; only the last one can be short.
   piece ++ Array.replicate (bytesPerChunk - piece.size) 0
 
 /-- The leaves of basic elements, each holding the elements that share it. -/
 def packedChunks {α : Type} [SszType α] (elements : Array α) : Array Bytes :=
+  -- `n` elements fill `ceil(n / k)` chunks, as their packing does.
   Array.ofFn fun index : Fin ((elements.size + perChunk α - 1) / perChunk α) =>
     packedChunk elements index
 
 /-- The leaves of a rooted sequence: packed elements if they are basic, else their roots. -/
 def sequenceLeaves {α : Type} [SszType α] (elements : Array α) : Array Bytes :=
+  -- Basic elements: the chunks of their packing; composite elements: one chunk each, its root.
   if (desc α).isBasic then packedChunks elements else leafRoots elements
 
 /-- The count of leaves a capacity of elements takes, as SSZ measures a tree's width. -/
 def leafCapacity (α : Type) [SszType α] (count : Nat) : Nat :=
+  -- `N` basic elements of `L` bytes take `ceil(N * L / 32)` chunks, and `N` composite ones `N`.
   if (desc α).isBasic then chunksForBytes (count * (desc α).itemLength) else count
 
 /-- The position of the leaf that holds the element at an index. -/
 def leafIndex (α : Type) [SszType α] (index : Nat) : Nat :=
+  -- A packed element `i` sits in chunk `floor(i / k)`, and a composite one in leaf `i`.
   if (desc α).isBasic then index / perChunk α else index
 
 /-- The count of leaves that a count of elements fills. -/
 def leafCount (α : Type) [SszType α] (count : Nat) : Nat :=
+  -- `n` packed elements fill `ceil(n / k)` chunks, and `n` composite ones `n` leaves.
   if (desc α).isBasic then (count + perChunk α - 1) / perChunk α else count
 
 /-- The leaf that holds the element at an index, once that element is the one given. -/
 def leafNode {α : Type} [SszType α] (elements : Array α) (index : Nat) (a : α) : Bytes :=
+  -- A packed element changes its whole chunk, so the chunk is packed again from the elements.
   if (desc α).isBasic then packedChunk elements (index / perChunk α) else leafRoot a
 
 /-- A positive count of elements shares each leaf. -/
@@ -445,6 +468,7 @@ variable {α : Type} [SszType α] {length : Nat}
 
 /-- A vector with the levels of its tree, built from the leaves up on their first read. -/
 def ofVector (elements : Vector α length) : RootedVector α length :=
+  -- Vector[type, N]: a tree of the least depth `d` with `2^d >= C`, `C` the leaf capacity.
   let depth := depthFor (leafCapacity α length)
   ⟨elements, .later fun _ => buildLevels 0 (sequenceLeaves elements.toArray) depth, rfl⟩
 
@@ -462,6 +486,7 @@ def set (v : RootedVector α length) (index : Nat) (a : α)
   -- Read the tree first, so that the write finds the elements and the levels unshared.
   let levels := v.levels.get
   let elements := v.elements.set index a inside
+  -- The leaf that holds the element changes, then its path to the root, one parent per level.
   let node := leafNode elements.toArray index a
   ⟨elements, .now (updateLevels 0 (leafIndex α index) node levels), by
     simp only [levels, elements, node, Deferred.get_now]
@@ -498,6 +523,7 @@ The levels above the leaves are built again on their first read.
 -/
 def shift (v : RootedVector α length) {count : Nat} (fresh : Vector α count)
     (le : count ≤ length) : RootedVector α length :=
+  -- The elements after the first `c`, then the `c` fresh ones, so the vector keeps its length.
   let elements := v.shiftElements fresh le
   let depth := depthFor (leafCapacity α length)
   -- Basic elements share leaves, so a shift that is not by whole leaves moves every leaf.
@@ -544,6 +570,7 @@ instance {α : Type} [SszType α] {length : Nat} : SszType (RootedVector α leng
   desc := desc (Vector α length)
   toValue v := toValue v.elements
   ofValue value := ofVector <$> ofValue value
+  -- Vector[type, N]: the root of its leaves at the depth of the capacity, with no mix-in.
   root v := .ok (topOfLevels (depthFor (leafCapacity α length)) v.levels.get)
   encode v := encode v.elements
 

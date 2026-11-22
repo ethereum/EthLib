@@ -35,6 +35,17 @@ The root folds the tops of the trees along the spine, then mixes in the length.
 A decoded list builds its trees on the first read of the root or the first write.
 
 A list of basic elements packs them into shared leaves, several to a leaf.
+
+The progressive spine follows [EIP-7916][eip7916].
+
+Its root mixes in the length as [EIP-7916][eip7916-root] states for a progressive list.
+
+In the comments, `H` is SHA-256 and `Z_h` is the root of an all-zero tree of height `h`.
+
+`d(m)` is the least depth with `2^d(m) >= m`, and `len` is the length as a 32-byte word.
+
+[eip7916]: https://github.com/ethereum/EIPs/blob/875fcf6d084c096195fec170310514444f537133/EIPS/eip-7916.md#progressive-merkle-tree
+[eip7916-root]: https://github.com/ethereum/EIPs/blob/875fcf6d084c096195fec170310514444f537133/EIPS/eip-7916.md#merkleization
 -/
 
 @[expose] public section
@@ -51,6 +62,9 @@ Before the switch, they are the levels of the least deep tree that holds the lea
 From the switch on, there are none.
 -/
 def forkListLevels (switch fork : Fork) (leaves : Array Bytes) : List (Array Bytes) :=
+  -- Before the switch: the levels of depth `d(n)` over `n` leaves, the least deep tree.
+  --
+  -- EthLib's choice: the depth that the limit sets is reached only at the root, with zero subtrees.
   if fork < switch then buildLevels 0 leaves (depthFor leaves.size) else []
 
 /--
@@ -59,6 +73,7 @@ The levels of the trees on a progressive spine, from the tree that starts at a g
 Each tree stands over one run of the progressive spine, so a run at `level` has `2 * level` levels.
 -/
 def spineLevels (leaves : Array Bytes) (start level : Nat) : List (List (Array Bytes)) :=
+  -- EIP-7916: level `k` takes the next `4^k` chunks, in a tree of `4^k` leaves, so depth `2k`.
   (progressiveWindows (leaves.toList.drop start) level).map fun (window, windowLevel) =>
     buildLevels 0 window.toArray (2 * windowLevel)
 
@@ -105,7 +120,9 @@ A position just past the last tree opens a new tree that holds the one leaf.
 -/
 def spineWrite (level position : Nat) (node : Bytes) :
     List (List (Array Bytes)) → List (List (Array Bytes))
+  -- No tree left: the leaf opens the tree of level `k`, as its first of `4^k` leaves.
   | [] => [buildLevels 0 #[node] (2 * level)]
+  -- A position under `4^k` lies in the tree of level `k`; any other counts from the next tree.
   | levels :: rest =>
     if position < 4 ^ level then updateLevels 0 position node levels :: rest
     else levels :: spineWrite (level + 1) (position - 4 ^ level) node rest
@@ -116,10 +133,16 @@ The root of a progressive spine from the levels of its trees, closed by a zero n
 It is the progressive spine over the top of each tree, the first one at the given level.
 -/
 def spineRoot (level : Nat) (trees : List (List (Array Bytes))) : Bytes :=
+  -- EIP-7916: `H(a || b)`, `a` the root of the tree of level `k` and `b` the spine after it.
+  --
+  -- The root of that tree is the top of its levels, or `Z_{2k}` if it holds no leaf.
+  --
+  -- With no level left, the spine is the zero chunk.
   spine combine zeroChunk <| (trees.zipIdx level).map fun (levels, k) => topOfLevels (2 * k) levels
 
 /-- The levels of the spine trees of a fork-chosen list: none before the switch. -/
 def forkListSpine (switch fork : Fork) (leaves : Array Bytes) : List (List (Array Bytes)) :=
+  -- From the switch, the spine trees from the first leaf at level 0; before it, none.
   if fork < switch then [] else spineLevels leaves 0 0
 
 /-- An entry of a slice is the entry at the same offset from its start, inside the slice. -/
@@ -287,6 +310,7 @@ def set (l : RootedForkList switch fork α limit) (index : Nat) (a : α)
   let levels := l.levels.get
   let spine := l.spine.get
   let data := l.data.set index a inside
+  -- The leaf that holds the element changes, then its path to the top, one parent per level.
   let node := leafNode data index a
   -- Only one of the two holds trees: the levels before the switch, the spine from it on.
   let before := fork < switch
@@ -326,6 +350,7 @@ def push (l : RootedForkList switch fork α limit) (a : α)
   let levels := l.levels.get
   let spine := l.spine.get
   let data := l.data.push a
+  -- The new element sits in a new leaf, or in the last packed chunk, which changes.
   let node := leafNode data size a
   -- Only one of the two holds trees: the levels before the switch, the spine from it on.
   let before := fork < switch
@@ -335,6 +360,7 @@ def push (l : RootedForkList switch fork α limit) (a : α)
     intro other differ
     simp only [data, Array.getElem?_push, ite_eq_right differ]
   ⟨data, fun early => by simpa [data] using Nat.succ_le_of_lt (room early),
+    -- Before the switch, the tree first grows to the depth of the new leaf count, by zero subtrees.
     .now (if before then updateLevels 0 (leafIndex α size) node
       (raiseLevels depth levels (depthFor (leafCount α (size + 1)) - depth))
     else levels), by
@@ -388,11 +414,15 @@ instance {switch fork : Fork} {α : Type} [SszType α] {limit : Nat} :
   toValue l := toValue l.toForkList
   ofValue value := ofForkList <$> ofValue value
   root l :=
+    -- List[type, N]: `H(r || len)`, `r` the root of the leaves at the depth of the capacity.
+    --
+    -- The kept levels reach depth `d(n)` over `n` leaves, so the top is raised to the full depth.
     if fork < switch then
       let depth := depthFor (leafCount α l.data.size)
       let full := depthFor (leafCapacity α limit)
       .ok (mixIn (topOfLevels full (raiseLevels depth l.levels.get (full - depth)))
         (lengthWord l.data.size))
+    -- EIP-7916, Merkleization: `H(r || len)`, `r` the progressive root of the leaves.
     else .ok (mixIn (spineRoot 0 l.spine.get) (lengthWord l.data.size))
   encode l := encode l.toForkList
 
