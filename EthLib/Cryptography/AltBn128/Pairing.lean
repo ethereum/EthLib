@@ -98,12 +98,13 @@ def generator : Point2 :=
     ⟨8495653923123431417604973247489272438418190587263600148770280649306958101930,
       4082367875863433681332203403145435568316851327593401208105741076214120093531⟩
 
-/-- `k P`, for `k < 2^fuel`, by double and add on the bits of `k`. -/
-def mulBits : Nat → Nat → Point2 → Point2
-  | 0, _, _ => infinity
-  | fuel + 1, k, p =>
-    let rest := mulBits fuel (k / 2) (p + p)
-    if k % 2 = 1 then p + rest else rest
+/-- `k P`, for `k < 2^fuel`, by double and add on the bits of `k`, low bit first.
+
+The steps run in Jacobian coordinates over `Fp2`, with the twist's `a = 0`.
+
+Only the conversion back takes an inverse. -/
+def mulBits (fuel k : Nat) (p : Point2) : Point2 :=
+  ShortWeierstrass.Point.mulBits id Fp2.inv id 0 fuel k p
 
 end Point2
 

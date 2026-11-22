@@ -194,9 +194,6 @@ variable {m : Nat} [NeZero m]
 /-- The point at infinity. -/
 @[inline] def infinity : Jacobian m := ofCoords Coords.infinity
 
-/-- The Jacobian form `(x, y, 1)` of the point `(x, y)`. -/
-def ofAffine (x y : Fin m) : Jacobian m := ⟨x, y, 1⟩
-
 /-- The point `(x, y)` of a form, or nothing at infinity. -/
 @[inline] def toAffine (p : Jacobian m) : Option (Fin m × Fin m) :=
   Coords.toAffine Fin.inverse p.toCoords
