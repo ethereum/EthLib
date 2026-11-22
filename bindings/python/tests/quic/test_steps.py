@@ -891,33 +891,40 @@ def ticket(early_data: bytes | None = None, extensions: bytes = b"") -> hs.Fligh
     return {"level": "application", "data": b"\x04" + len(body).to_bytes(3, "big") + body}
 
 
-@pytest.mark.parametrize("early_data", [None, b"\xff" * 4])
-def test_completed_client_accepts_session_ticket_without_changing_transcript(
-    early_data: bytes | None,
+def framed_ticket(body: bytes) -> hs.FlightMessage:
+    # RFC 9846 §4: type 4 and a three-byte length delimit the message around any body.
+    return {"level": "application", "data": b"\x04" + len(body).to_bytes(3, "big") + body}
+
+
+@pytest.mark.parametrize(
+    "incoming",
+    [
+        ticket(),
+        ticket(b"\xff" * 4),
+        # RFC 9001 §4.6.1 names only 0xffffffff, but a client that never resumes reads no value.
+        ticket(bytes(4)),
+        # A misplaced signature_algorithms, which RFC 9846 §4.3 would reject, goes unread.
+        ticket(extensions=b"\x00\x0d\x00\x04\x00\x02\x08\x04"),
+        # Malformed: empty, truncated, an empty ticket, a vector past its end, a trailing byte.
+        framed_ticket(b""),
+        framed_ticket(bytes(7)),
+        framed_ticket(bytes(8) + b"\x00\x00\x00\x00\x00"),
+        framed_ticket(bytes(8) + b"\x00\x00\x01x\x00\x09"),
+        framed_ticket(ticket()["data"][4:] + b"\x00"),
+    ],
+)
+def test_completed_client_silently_ignores_every_session_ticket(
+    incoming: hs.FlightMessage,
 ) -> None:
+    # RFC 9846 §4.7.1: a client without resumption MUST silently ignore the message.
     client_config, _, client, _ = client_flight()
-    result = hs.client_step(client_config, SERVER_PEER_ID, client["state"], ticket(early_data))
-    assert result == {"state": client["state"], "output": [], "completion": None}
-
-
-def grease_extension(size: int) -> bytes:
-    # One extension of the GREASE type 0x0a0a (RFC 8701), which a receiver ignores.
-    return b"\x0a\x0a" + (size - 4).to_bytes(2, "big") + bytes(size - 4)
-
-
-def test_ticket_extensions_reach_their_bound() -> None:
-    # RFC 9846 §4.7.1: `Extension extensions<0..2^16-1>;`, where RFC 8446 §4.6.1 printed 2^16-2.
-    client_config, _, client, _ = client_flight()
-    incoming = ticket(extensions=grease_extension(2**16 - 1))
     result = hs.client_step(client_config, SERVER_PEER_ID, client["state"], incoming)
     assert result == {"state": client["state"], "output": [], "completion": None}
-
-
-def test_ticket_early_data_uses_quic_sentinel() -> None:
-    client_config, _, client, _ = client_flight()
-    with raises(hs.TlsStepError, PREFIX + "protocolViolation") as error:
-        hs.client_step(client_config, SERVER_PEER_ID, client["state"], ticket(bytes(4)))
-    assert error.value.code == 0x0A
+    # The connection stays up: a later KeyUpdate still meets the post-handshake checks.
+    key_update: hs.FlightMessage = {"level": "application", "data": b"\x18\x00\x00\x01\x00"}
+    with raises(hs.TlsStepError, PREFIX + "unexpectedMessage") as error:
+        hs.client_step(client_config, SERVER_PEER_ID, result["state"], key_update)
+    assert error.value.code == 0x10A
 
 
 def test_completed_client_rejects_a_ticket_at_the_handshake_level() -> None:
@@ -935,6 +942,7 @@ def test_completed_client_rejects_a_ticket_at_the_handshake_level() -> None:
         (b"\x18\x00\x00\x01\x00", "unexpectedMessage", 0x10A),
         (b"\x0d\x00\x00\x00", "protocolViolation", 0x0A),
         (b"\x04\x00\x00\x01", "decodeError", 0x132),
+        (b"\x04\x00\x00\x00\x00", "decodeError", 0x132),
     ],
 )
 def test_completed_client_rejects_forbidden_or_malformed_messages(
@@ -964,16 +972,6 @@ def test_completed_server_rejects_every_message(index: int, expected: str, code:
     with raises(hs.TlsStepError, PREFIX + expected) as error:
         hs.server_step(server_config, server["state"], incoming)
     assert error.value.code == code
-
-
-def test_ticket_rejects_an_extension_in_the_wrong_message() -> None:
-    client_config, _, client, _ = client_flight()
-    incoming = ticket(b"\xff" * 4)
-    # RFC 9846 §4.3 permits signature_algorithms in ClientHello and CertificateRequest only.
-    incoming["data"] = incoming["data"].replace(b"\x00\x2a\x00\x04", b"\x00\x0d\x00\x04")
-    with raises(hs.TlsStepError, PREFIX + "illegalParameter") as error:
-        hs.client_step(client_config, SERVER_PEER_ID, client["state"], incoming)
-    assert error.value.code == 0x12F
 
 
 @pytest.mark.parametrize("modes", [None, [1, 1]])
