@@ -9,9 +9,11 @@ public import EthLib.Base.Bytes
 
 The readers consume one field and return the bytes after it.
 
-RFC 9000 §16 defines the integer encoding.
+[RFC 9000 §16][rfc] defines the integer encoding.
 
 Headers (§17) and frames (§19) use it to prefix byte strings with their length.
+
+[rfc]: https://www.rfc-editor.org/rfc/rfc9000#section-16
 -/
 
 @[expose] public section
@@ -76,11 +78,14 @@ abbrev uint (n : Nat) : Reader Nat := fun input =>
 /-- Read one byte. -/
 def byte : Reader UInt8 := fun input =>
   match input with
+  -- No byte is left: the field is truncated.
   | [] => .error (.truncated 1 0)
+  -- The first byte, and the bytes after it.
   | head :: tail => .ok (head, tail)
 
 /-- Read a QUIC integer, accepting the nonminimal forms permitted by RFC 9000 §16. -/
 def varint : Reader Varint := fun input =>
+  -- A variable-length integer of §16, whose truncation is the truncation of the field.
   (Varint.decodeList input).mapError fun
     | .truncated needed available => .truncated needed available
 
@@ -89,20 +94,27 @@ abbrev require (condition : Prop) [Decidable condition] (error : Error) : Reader
   Encoding.ByteReader.require condition error
 
 /-- Read every remaining byte of a packet. -/
-def remainder : Reader (List UInt8) := fun input => .ok (input, [])
+def remainder : Reader (List UInt8) := fun input =>
+  -- Every byte left, and none after it.
+  .ok (input, [])
 
 /-- Convert a length to a QUIC integer, rejecting `2^62` or more. -/
 def checkedVarint (n : Nat) : Except Error Varint :=
+  -- §16: a variable-length integer holds at most 62 bits, so a length of `2^62` or more fails.
   if h : n < 2 ^ 62 then .ok ⟨n, h⟩ else .error .frameEncoding
 
 /-- Read a byte string prefixed by its length as a QUIC integer. -/
 def blob : Reader (List UInt8) := do
+  -- A length, as a variable-length integer (§16), such as Token Length (i) of §17.2.2.
   let n ← varint
+  -- Then exactly that many bytes, such as Token (..).
   bytes n.val
 
 /-- Encode a byte string whose length fits a QUIC integer. -/
 def encodeBlob (data : List UInt8) : Except Error (List UInt8) := do
+  -- The length of the string, as a variable-length integer (§16).
   let n ← checkedVarint data.length
+  -- The length in its shortest form, then the bytes of the string.
   return Varint.encodeList n ++ data
 
 end EthLib.Networking.Quic.Wire

@@ -7,11 +7,12 @@ public import EthLib.Base.BigEndian
 
 [RFC 9000 §16][rfc] encodes a value below `2^62` in 1, 2, 4 or 8 bytes.
 
-The first two bits select the length, and the remaining bits hold a big-endian integer.
+The decoder follows the sample decoding of [Appendix A.1][a1].
 
-The decoder accepts longer forms too, as §16 permits outside frame types.
+It accepts longer forms too, as §16 permits outside frame types.
 
 [rfc]: https://www.rfc-editor.org/rfc/rfc9000#section-16
+[a1]: https://www.rfc-editor.org/rfc/rfc9000#appendix-A.1
 -/
 
 @[expose] public section
@@ -29,10 +30,16 @@ namespace Varint
 abbrev Width := Fin 4
 
 /-- The number of bytes after the first byte: 0, 1, 3 or 7. -/
-def tailLength (width : Width) : Nat := 2 ^ width.val - 1
+def tailLength (width : Width) : Nat :=
+  -- §16: the two-bit prefix is the base-2 logarithm of the length in bytes.
+  --
+  -- Appendix A.1: `length = 1 << prefix`, and the first byte is one of those bytes.
+  2 ^ width.val - 1
 
 /-- The first value that this width cannot hold: `2^6`, `2^14`, `2^30` or `2^62`. -/
-def capacity (width : Width) : Nat := 64 * 256 ^ tailLength width
+def capacity (width : Width) : Nat :=
+  -- Table 4: 6 usable bits in the first byte, and 8 more in each byte after it.
+  64 * 256 ^ tailLength width
 
 /-- Every width carries at most 62 payload bits. -/
 theorem capacity_le (width : Width) : capacity width ≤ 2 ^ 62 := by
@@ -61,11 +68,20 @@ RFC 9000 §16 permits a longer form everywhere except in frame types.
 
 The value must be below the width's capacity, so its high bits fit under the two selector bits. -/
 def encodeWithList (width : Width) (value : Varint) (_ : value.val < capacity width) : List UInt8 :=
+  -- §16: the two most significant bits of the first byte hold the prefix of the width.
+  --
+  -- The value is written on the remaining bits, in network byte order.
+  --
+  -- So the low 6 bits of the first byte hold its high bits, below `2^6` by the bound on the value.
   UInt8.ofNat (width.val * 64 + value.val / 256 ^ tailLength width) ::
+    -- The bytes after the first hold the low bits of the value, big-endian.
     natToBytes (tailLength width) value.val
 
 /-- The shortest width that holds a value, required for frame types by RFC 9000 §12.4. -/
 def minWidth (value : Varint) : Width :=
+  -- Table 4: the ranges `0-63`, `0-16383` and `0-1073741823` take 1, 2 and 4 bytes.
+  --
+  -- Every other value below `2^62` takes 8 bytes.
   if value.val < 64 then 0
   else if value.val < 16384 then 1
   else if value.val < 1073741824 then 2
@@ -84,14 +100,21 @@ theorem lt_capacity_minWidth (value : Varint) : value.val < capacity (minWidth v
 
 /-- Write the shortest representation of a QUIC integer. -/
 def encodeList (value : Varint) : List UInt8 :=
+  -- §16 asks for the minimum number of bytes only in the Frame Type field.
+  --
+  -- EthLib writes the minimum everywhere, which every reader accepts.
   encodeWithList (minWidth value) value (lt_capacity_minWidth value)
 
 /-- The width that the high two bits of a first byte select. -/
 def selector (head : UInt8) : Width :=
+  -- Appendix A.1: `prefix = v >> 6`.
   ⟨head.toNat / 64, by have := head.toNat_lt; omega⟩
 
 /-- The value of a first byte and the bytes after it, for the width it selects. -/
 def valueOf (head : UInt8) (tail : List UInt8) : Nat :=
+  -- Appendix A.1: `v = v & 0x3f`, then `v = (v << 8) + data.next_byte()` for each byte after it.
+  --
+  -- EthLib folds that loop into one sum: `(v mod 2^6) * 256^(length - 1)` plus the tail.
   head.toNat % 64 * 256 ^ tailLength (selector head) + bytesToNat tail
 
 /-- A first byte and as many tail bytes as it selects give a value below `2^62`. -/
@@ -111,16 +134,18 @@ theorem valueOf_lt (head : UInt8) (tail : List UInt8)
 
 /-- Read one integer, returning the bytes after it and accepting longer representations.
 
-RFC 9000 §16 gives the length in the high two bits of the first byte.
-
 Only the bytes of the integer are measured, so reading many integers stays linear. -/
 def decodeList : List UInt8 → Except VarintError (Varint × List UInt8)
+  -- Appendix A.1: `v = data.next_byte()`, which an empty input does not have.
   | [] => .error (.truncated 1 0)
   | head :: rest =>
+    -- Appendix A.1: `length = 1 << prefix`, so `length - 1` bytes follow the first.
     let count := tailLength (selector head)
     let tail := rest.take count
+    -- Any length is read, the minimum or not, since §16 requires it only for frame types.
     if h : tail.length = count then
       .ok (⟨valueOf head tail, valueOf_lt head tail h⟩, rest.drop count)
+    -- Fewer than `length - 1` bytes remain: the integer is truncated.
     else .error (.truncated (count + 1) (rest.length + 1))
 
 /-- Write a value at a chosen width as bytes, including longer representations. -/
