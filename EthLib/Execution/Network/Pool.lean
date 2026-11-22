@@ -8,7 +8,7 @@ public import EthLib.Execution.Transactions.Inclusion
 
 The rules by which a node keeps a transaction that a peer sends, in its pool of transactions.
 
-The source is "Transaction Encoding and Validity" of [`caps/eth.md`][eth] in devp2p.
+The source is the section Transaction Encoding and Validity of [`caps/eth.md`][eth] in devp2p.
 
 [eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#transaction-encoding-and-validity
 
@@ -64,9 +64,22 @@ For later types, the price is the most fee per gas, and the most fee of the blob
 The errors are those of a transaction alone, a nonce too low, and a balance below the cost. -/
 def admitToPool (fork : Fork) (chainId : UInt64) (state : TransactionState)
     (tx : Transaction) : Except InclusionError Address := do
+  -- The type is known, the signature is valid, and the gas limit covers the intrinsic gas.
+  --
+  -- Stricter than the source, which allows it: the type must be active at the fork.
+  --
+  -- The chain ID and the other rules of a transaction alone must hold too.
   let (sender, _) ← (checkTransaction fork chainId tx).mapError .transaction
   let account := state.getAccount sender
+  -- The nonce is at least the nonce of the sender.
+  --
+  -- The source leaves nonce gaps to the node; EthLib accepts any gap.
+  --
+  -- The source checks the balance first; the order only chooses the error.
   failIf (tx.nonce.toNat < account.nonce) (.nonceTooLow account.nonce tx.nonce.toNat)
+  -- The balance covers `gas-limit * gas-price + value`.
+  --
+  -- For later types the price is the most fee per gas, and the most fee of the blobs adds to it.
   let cost := tx.maxGasFee + tx.value.toNat
   failIf (account.balance.toNat < cost) (.insufficientBalance account.balance.toNat cost)
   return sender
@@ -89,13 +102,16 @@ So a type that a later fork defines keeps the peer too.
 
 A decoded transaction has a type that some fork defines, so only its decoding can disconnect. -/
 def peerAction : InclusionError → PeerAction
+  -- A type that no fork defines: the peer should be disconnected.
   | .transaction (.unsupportedType type) => if typeFork type = none then .disconnect else .discard
+  -- Any other invalid transaction: the node keeps the peer.
   | _ => .discard
 
 /-- Whether a node may send a transaction whole to its peers in a Transactions message.
 
 A blob transaction is only announced by its hash, so it is never sent whole on its own. -/
 def mayBroadcastWhole (tx : Transaction) : Bool :=
+  -- EIP-4844: a blob transaction goes only by announcement and request.
   tx.type != BLOB_TX_TYPE
 
 end EthLib.Execution.Network

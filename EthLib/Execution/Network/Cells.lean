@@ -8,7 +8,7 @@ public import EthLib.Serialization.Rlp.Codec
 
 The cell exchange of eth/72, from three sections of [`caps/eth.md`][eth].
 
-They are "Blob Transaction and Cell Exchange", "GetCells (0x14)" and "Cells (0x15)".
+They are Blob Transaction and Cell Exchange, GetCells (0x14) and Cells (0x15).
 
 [eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#getcells-0x14
 
@@ -55,6 +55,7 @@ abbrev CellMask := Vector UInt8 16
 
 The checks here do not depend on this order. -/
 def CellMask.has (mask : CellMask) (i : Nat) : Bool :=
+  -- EthLib's own bit order: neither eth.md nor EIP-8070 fixes one, and the checks need none.
   if h : i / 8 < 16 then (mask[i / 8] >>> (i % 8).toUInt8) &&& 1 == 1 else false
 
 /-- The number of cell indices that a bitmap marks. -/
@@ -112,12 +113,20 @@ The request has the bitmap `requestMask`.
 def checkCells (requested : List Hash32) (requestMask : CellMask) (blobs : List Nat)
     (hashes : List Hash32) (groups : List (List ByteArray)) (mask : CellMask) :
     Except CellsError Unit := do
+  -- The response bitmap is a subset of the request bitmap.
   if !mask.subset requestMask then throw .maskNotSubset
+  -- The transactions are requested ones, and the peer may omit some.
+  --
+  -- eth.md fixes no order; EthLib asks the order of the request, as for PooledTransactions.
   if !hashes.isSublist requested then throw .notRequested
+  -- One group of cells for each transaction.
   if groups.length ≠ hashes.length then throw (.groupCount hashes.length groups.length)
+  -- Not in the source: the caller gives one blob count for each transaction.
   if blobs.length ≠ hashes.length then throw (.blobCount hashes.length blobs.length)
+  -- The group holds one cell for each blob and each marked index.
   for (i, group, n) in (List.range groups.length).zip (groups.zip blobs) do
     if group.length ≠ n * mask.count then throw (.cellCount i (n * mask.count) group.length)
+    -- Each cell is `B_2048`.
     for cell in group do
       if cell.size ≠ BYTES_PER_CELL then throw (.cellSize cell.size)
 
