@@ -10,13 +10,7 @@ The statuses that the Beacon API gives to a validator and to a builder.
 
 A validator has one of nine statuses, in four coarse groups: pending, active, exited, withdrawal.
 
-The group follows the activation, exit and withdrawable epochs of the validator.
-
-In a group, the status follows the eligibility epoch, the exit epoch, the slashing or the balance.
-
-A builder is exited once its withdrawable epoch is set, and otherwise active or pending.
-
-It is active once its deposit is before the finalized epoch.
+A builder has one of three statuses: pending, active, exited.
 
 The [API types] name both statuses; SOUNDNESS.md records where their conditions come from.
 
@@ -105,45 +99,65 @@ Each condition is the condition of its group, with the condition inside the grou
 def Holds (status : ValidatorStatus) (validator : Validator) (balance : Gwei) (epoch : Epoch) :
     Prop :=
   match status with
+  -- The status document that the schema links gives each condition.
+  --
+  -- Pending: epoch < activation epoch, with an eligibility epoch at the far future epoch.
   | .pendingInitialized =>
     epoch < validator.activationEpoch ∧
       validator.activationEligibilityEpoch = FAR_FUTURE_EPOCH
+  -- Pending, with an eligibility epoch below the far future epoch.
   | .pendingQueued =>
     epoch < validator.activationEpoch ∧
       validator.activationEligibilityEpoch < FAR_FUTURE_EPOCH
+  -- Active: activation epoch <= epoch < exit epoch, with an exit epoch at the far future epoch.
   | .activeOngoing =>
     validator.activationEpoch ≤ epoch ∧ epoch < validator.exitEpoch ∧
       validator.exitEpoch = FAR_FUTURE_EPOCH
+  -- Active, with an exit epoch below the far future epoch, and not slashed.
   | .activeExiting =>
     validator.activationEpoch ≤ epoch ∧ epoch < validator.exitEpoch ∧
       validator.exitEpoch < FAR_FUTURE_EPOCH ∧ validator.slashed = false
+  -- Active, with an exit epoch below the far future epoch, and slashed.
   | .activeSlashed =>
     validator.activationEpoch ≤ epoch ∧ epoch < validator.exitEpoch ∧
       validator.exitEpoch < FAR_FUTURE_EPOCH ∧ validator.slashed = true
+  -- Exited: exit epoch <= epoch < withdrawable epoch, and not slashed.
   | .exitedUnslashed =>
     validator.exitEpoch ≤ epoch ∧ epoch < validator.withdrawableEpoch ∧
       validator.slashed = false
+  -- Exited, and slashed.
   | .exitedSlashed =>
     validator.exitEpoch ≤ epoch ∧ epoch < validator.withdrawableEpoch ∧
       validator.slashed = true
+  -- Withdrawal: withdrawable epoch <= epoch, with a nonzero balance.
   | .withdrawalPossible => validator.withdrawableEpoch ≤ epoch ∧ balance ≠ 0
+  -- Withdrawal, with a zero balance.
   | .withdrawalDone => validator.withdrawableEpoch ≤ epoch ∧ balance = 0
 
 end ValidatorStatus
 
 /-- The status of a validator with a balance at an epoch.
 
-The group is the first that applies, in the order pending, active, exited, withdrawal. -/
+The group is the first that applies, in the order pending, active, exited, withdrawal.
+
+So each later group tests only its upper bound, and the withdrawal group none. -/
 def validatorStatus (validator : Validator) (balance : Gwei) (epoch : Epoch) : ValidatorStatus :=
+  -- Pending: epoch < activation epoch.
   if epoch < validator.activationEpoch then
+    -- Initialized while the eligibility epoch is the far future epoch, and queued after.
     if validator.activationEligibilityEpoch = FAR_FUTURE_EPOCH then .pendingInitialized
     else .pendingQueued
+  -- Active: epoch < exit epoch.
   else if epoch < validator.exitEpoch then
+    -- Ongoing with an exit epoch at the far future epoch.
     if validator.exitEpoch = FAR_FUTURE_EPOCH then .activeOngoing
+    -- Else slashed or exiting, by the slashed flag.
     else if validator.slashed then .activeSlashed
     else .activeExiting
+  -- Exited: epoch < withdrawable epoch, slashed or unslashed by the slashed flag.
   else if epoch < validator.withdrawableEpoch then
     if validator.slashed then .exitedSlashed else .exitedUnslashed
+  -- Withdrawal: done at a zero balance, and possible otherwise.
   else if balance = 0 then .withdrawalDone
   else .withdrawalPossible
 
@@ -165,17 +179,17 @@ def name : BuilderStatus → String
   | .active => "active"
   | .exited => "exited"
 
-/-- The condition of the source for a builder status, on a builder and the finalized epoch.
-
-A builder is active when its deposit is before the finalized epoch and it has not started to exit.
--/
+/-- The condition of the source for a builder status, on a builder and the finalized epoch. -/
 def Holds (status : BuilderStatus) (builder : Builder) (finalizedEpoch : Epoch) : Prop :=
   match status with
+  -- `types/api.yaml`, pending: a withdrawable epoch at the far future epoch, and not active.
   | .pending =>
     builder.withdrawableEpoch = FAR_FUTURE_EPOCH ∧
       ¬(builder.depositEpoch < finalizedEpoch ∧ builder.withdrawableEpoch = FAR_FUTURE_EPOCH)
+  -- Active: deposit epoch < finalized epoch, with a withdrawable epoch at the far future epoch.
   | .active =>
     builder.depositEpoch < finalizedEpoch ∧ builder.withdrawableEpoch = FAR_FUTURE_EPOCH
+  -- Exited: a withdrawable epoch other than the far future epoch.
   | .exited => builder.withdrawableEpoch ≠ FAR_FUTURE_EPOCH
 
 end BuilderStatus
@@ -184,8 +198,11 @@ end BuilderStatus
 def builderStatus (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (index : BuilderIndex) : Except AccessorError BuilderStatus := do
   let builder ← getBuilder state gloas index
+  -- Exited: a withdrawable epoch other than the far future epoch.
   if builder.withdrawableEpoch ≠ FAR_FUTURE_EPOCH then return .exited
+  -- Active: deposit epoch < finalized epoch, and no exit.
   if ← isActiveBuilder state gloas index then return .active
+  -- Pending: neither.
   return .pending
 
 end EthLib.Consensus.BeaconApi
