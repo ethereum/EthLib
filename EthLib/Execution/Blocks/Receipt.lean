@@ -13,7 +13,9 @@ The receipt of a transaction, at each fork.
 
 A receipt records the outcome of a transaction, the gas used so far, and the logs.
 
-Its RLP form is the list `[outcome, cumulative_gas_used, bloom, logs]`.
+Its RLP form is `L_R(R) = (R_z, R_u, R_b, R_l)`.
+
+Those are the outcome, the gas used so far, the Bloom filter of the logs and the logs.
 
 Before Byzantium, the outcome is the state root after the transaction.
 
@@ -63,11 +65,14 @@ variable {fork : Fork}
 
 /-- The item of an outcome: the 32 bytes of a state root, or the scalar 1 or 0 of a status. -/
 def toItem : Outcome fork → Item
+  -- Before Byzantium, the first item of `L_R` is the intermediate state root, 32 bytes.
   | .postState _ root => Codec.toItem root
+  -- From Byzantium, EIP-658 makes it the status, the scalar 1 or 0.
   | .status _ succeeded => Codec.toItem succeeded
 
 /-- The outcome that an item holds at `fork`: a status from Byzantium, a state root before. -/
 def ofItem (item : Item) : Except RlpError (Outcome fork) :=
+  -- EIP-658: the status from Byzantium, the state root before.
   if h : Fork.byzantium ≤ fork then .status h <$> Codec.ofItem item
   else .postState (Nat.lt_of_not_le h) <$> Codec.ofItem item
 
@@ -90,9 +95,11 @@ structure Receipt (fork : Fork) : Type where
 
 /-- A receipt is the list of its four fields, in order. -/
 instance {fork : Fork} : Codec (Receipt fork) where
+  -- Yellow Paper §4.4.1: `L_R(R) = (R_z, R_u, R_b, R_l)`.
   toItem r := .list [Codec.toItem r.outcome, Codec.toItem r.cumulativeGasUsed,
     Codec.toItem r.bloom, Codec.toItem r.logs]
   ofItem item := do
+    -- A list of exactly four items, read in the order of `L_R`.
     match ← item.fields 4 with
     | [outcome, cumulativeGasUsed, bloom, logs] =>
       return {
@@ -109,6 +116,9 @@ instance {fork : Fork} : Codec (Receipt fork) where
 The state root after the transaction is computed only before Byzantium. -/
 def Outcome.make (fork : Fork) (succeeded : Bool) (postStateRoot : Unit → Hash32) :
     Outcome fork :=
+  -- EIP-658: from Byzantium, the status replaces the intermediate state root.
+  --
+  -- The root is computed only in the other branch, where it is needed.
   if h : Fork.byzantium ≤ fork then .status h succeeded
   else .postState (Nat.lt_of_not_le h) (postStateRoot ())
 
@@ -117,6 +127,7 @@ def Outcome.make (fork : Fork) (succeeded : Bool) (postStateRoot : Unit → Hash
 Its Bloom filter is the filter of its logs. -/
 def makeReceipt {fork : Fork} (outcome : Outcome fork) (cumulativeGasUsed : Nat)
     (logs : List Log) : Receipt fork :=
+  -- `R_b` is the filter of the logs `R_l`: the OR of `M(O)` over each log `O`.
   ⟨outcome, cumulativeGasUsed, logsBloom logs, logs⟩
 
 /-- The receipts of some transactions, after `gasUsed` gas of their block.
@@ -127,6 +138,11 @@ From Glamsterdam, the gas it used is the gas that its sender paid. -/
 def makeReceiptsFrom {fork : Fork} (gasUsed : Nat) :
     List (Outcome fork × Nat × List Log) → List (Receipt fork)
   | [] => []
+  -- Yellow Paper §12.3: `R[n]_u = Upsilon^g(sigma[n - 1], B_T[n]) + R[n - 1]_u`.
+  --
+  -- Each result carries its `Upsilon^g`.
+  --
+  -- From Glamsterdam, it is the gas that its sender pays, by EIP-7778.
   | (outcome, gas, logs) :: rest =>
     makeReceipt outcome (gasUsed + gas) logs :: makeReceiptsFrom (gasUsed + gas) rest
 
@@ -137,6 +153,7 @@ Each transaction gives its outcome, the gas it used and its logs.
 From Glamsterdam, the gas it used is the gas that its sender paid. -/
 def makeReceipts {fork : Fork} (results : List (Outcome fork × Nat × List Log)) :
     List (Receipt fork) :=
+  -- `R[n]_u = 0` for `n < 0`.
   makeReceiptsFrom 0 results
 
 /-- Why some bytes hold no receipt. -/
@@ -170,6 +187,9 @@ The receipt of a typed transaction is the type, then the RLP form.
 
 It fails only when an RLP payload has `2^64` bytes or more. -/
 def encodeReceipt {fork : Fork} (type : UInt8) (r : Receipt fork) : Except RlpError ByteArray :=
+  -- Yellow Paper §4.4.2, the value of `p_R`: `RLP(L_R(R))` for `R_x = 0`.
+  --
+  -- And `(R_x) · RLP(L_R(R))` otherwise.
   if type = 0 then Codec.encode r else typedBytes type <$> Codec.encode r
 
 /-- The type of the transaction and the receipt that `bytes` hold at `fork`.
@@ -181,9 +201,15 @@ def decodeReceipt (fork : Fork) (bytes : ByteArray) :
     Except ReceiptError (UInt8 × Receipt fork) :=
   if h : 0 < bytes.size then
     let first := bytes[0]
+    -- EIP-2718: a legacy receipt is an RLP list, whose first byte is at least `0xc0`.
     if 0xc0 ≤ first then
       ((0, ·) <$> Codec.decode bytes).mapError .decoding
     else
+      -- Else the first byte is the type `R_x`, at most `0x7f` by EIP-2718.
+      --
+      -- The rest is `RLP(L_R(R))`.
+      --
+      -- The fork must have that type of transaction.
       match typeFork first with
       | some since =>
         if since ≤ fork then

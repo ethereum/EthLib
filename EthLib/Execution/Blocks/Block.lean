@@ -45,6 +45,7 @@ structure Block (fork : Fork) (Tx : Type) : Type where
 
 /-- The item of a list of ommers: the list of their headers, each in the form of its own fork. -/
 def ommersItem (ommers : List ((f : Fork) × Header f)) : Item :=
+  -- `L_H*(B_U)`: each ommer header as `L_H` of its own fork.
   .list (ommers.map fun ommer => Codec.toItem ommer.2)
 
 namespace Block
@@ -53,6 +54,11 @@ variable {fork : Fork} {Tx : Type} [Codec Tx]
 
 /-- The item of a block: `[header, transactions, ommers]`, then the withdrawals from Shapella. -/
 def toItem (b : Block fork Tx) : Item :=
+  -- Yellow Paper §4.4.3: `L_B(B) = (L_H(B_H), ~L_T*(B_T), L_H*(B_U), L_W*(B_W))`.
+  --
+  -- `L_W*(B_W)` comes only from Shapella, by EIP-4895.
+  --
+  -- The encoding of the type of the transactions gives `~L_T`: the RLP list, or the typed bytes.
   .list ([Codec.toItem b.header, Codec.toItem b.transactions, ommersItem b.ommers]
     ++ Item.ofSince b.withdrawals)
 
@@ -60,7 +66,7 @@ def toItem (b : Block fork Tx) : Item :=
 
 The chain gives the fork of each block number, and each ommer decodes at the fork of its number. -/
 def ofItem (forkOf : Nat → Fork) (item : Item) : Except RlpError (Block fork Tx) := do
-  -- Three parts, and a fourth from Shapella.
+  -- The parts of `L_B`, in order: three, and a fourth from Shapella.
   let n := 3 + Item.sinceCount .shapella fork
   let items ← item.fields n
   let (header, items) ← Item.readField (α := Header fork) n items
