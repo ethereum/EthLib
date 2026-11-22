@@ -13,20 +13,12 @@ The fork identifier of [EIP-2124][eip2124], with the forks by timestamp of [EIP-
 
 A node announces how far its chain has come, and a peer checks that against its own forks.
 
-- `FORK_HASH` is the CRC-32 of the genesis hash, then of each passed fork as a big-endian `uint64`.
-- `FORK_NEXT` is the block number or timestamp of the next fork, or 0 when no next fork is known.
-- The identifier is the RLP list `[FORK_HASH, FORK_NEXT]`.
-
-The forks by block come first, then the forks by time, each in ascending order and each value once.
-
-A fork at genesis is not a fork.
-
 The identifier reads only when forks activate, never their rules.
 
 So it holds for every fork of the timeline, Glamsterdam and Hegotá included.
 
-[eip2124]: https://eips.ethereum.org/EIPS/eip-2124#specification
-[eip6122]: https://eips.ethereum.org/EIPS/eip-6122#specification
+[eip2124]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-2124.md#specification
+[eip6122]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-6122.md#specification
 -/
 
 @[expose] public section
@@ -47,10 +39,11 @@ structure ForkId where
 
 namespace ForkId
 
-/-- An identifier as the RLP list `[FORK_HASH, FORK_NEXT]`.
-
-The hash is a byte string of 4 bytes, and the next fork is a scalar. -/
+/-- An identifier as the RLP list `[FORK_HASH, FORK_NEXT]`. -/
 def toItem (id : ForkId) : Item :=
+  -- The fork identifier is defined as `RLP([FORK_HASH, FORK_NEXT])`.
+  --
+  -- `FORK_HASH` is a 4 byte binary, so a byte string, and `FORK_NEXT` a `uint64`, so a scalar.
   .list [Codec.toItem id.hash, Codec.toItem id.next]
 
 /-- The identifier in the RLP list `[FORK_HASH, FORK_NEXT]`.
@@ -58,6 +51,7 @@ def toItem (id : ForkId) : Item :=
 The hash must have 4 bytes, and the next fork must be a scalar below 2^64. -/
 def ofItem (item : Item) : Except RlpError ForkId := do
   match ← item.fields 2 with
+  -- `[FORK_HASH, FORK_NEXT]`: a `[4]byte` and a `uint64`.
   | [hash, next] => return ⟨← hash.field 0, ← next.field 1⟩
   | items => throw (.wrongFieldCount 2 items.length)
 
@@ -87,83 +81,98 @@ namespace Schedule
 /--
 The fork blocks of a chain, in ascending order, each block once.
 
-A fork at block 0 is part of the genesis rules, so it is not a fork.
-
-Paris activates when the chain reaches a total difficulty, so no one knows its block in advance.
-
-[EIP-3675][eip-3675] puts its `FORK_NEXT_VALUE` in its place.
-
-That value is a block that the chain configuration sets.
-
-So the block of Paris is not a fork block, and `FORK_NEXT_VALUE` is one when the chain sets it.
+Paris takes the `FORK_NEXT_VALUE` of [EIP-3675][eip-3675] as its block, when the chain sets one.
 
 [eip-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#fork-identifier
 -/
 def blocks (s : Schedule) : List Nat :=
+  -- The forks by block of the chain configuration.
+  --
+  -- Paris activates at a total difficulty, so no one knows its block in advance: it is left out.
   let listed := s.config.activations.filterMap fun (fork, activation) =>
     match activation with
     | .block n => if fork = .paris then none else some n
     | .time _ => none
+  -- EIP-3675 sets `FORK_NEXT` to `FORK_NEXT_VALUE`, a block number that the chain sets.
+  --
+  -- So EthLib counts that block as a fork.
+  --
+  -- A non-Frontier ruleset already in the genesis is NOT considered a fork, so block 0 is dropped.
+  --
+  -- The fork block numbers are in ascending order, and a block of several forks appears once.
   ((listed ++ s.mergeForkBlock.toList).filter (0 < ·)).mergeSort.eraseDups
 
-/--
-The fork timestamps of a chain, in ascending order, each timestamp once.
-
-A fork at or before the genesis time is part of the genesis rules, so it is not a fork.
--/
+/-- The fork timestamps of a chain, in ascending order, each timestamp once. -/
 def times (s : Schedule) : List Nat :=
+  -- The forks by timestamp of the chain configuration.
   let listed := s.config.activations.filterMap fun (_, activation) =>
     match activation with
     | .block _ => none
     | .time t => some t
+  -- A non-Frontier ruleset already in the genesis is NOT considered a fork.
+  --
+  -- EthLib reads that as a fork at or before the genesis time, which the genesis block runs.
+  --
+  -- The timestamps are in ascending order, and a time of several forks appears once.
   (listed.filter (s.genesisTime < ·)).mergeSort.eraseDups
 
 /-- The forks of a chain: the forks by block, then the forks by time.
 
 [EIP-6122][eip-6122] puts the forks by time after the forks by block.
 
-[eip-6122]: https://eips.ethereum.org/EIPS/eip-6122#additional-rules
+[eip-6122]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-6122.md#additional-rules
 -/
 def forks (s : Schedule) : List Activation :=
+  -- EIP-6122: forks by timestamp MUST be scheduled at or after the forks by block.
+  --
+  -- So the forks by time come after the forks by block.
   s.blocks.map .block ++ s.times.map .time
 
-/-- The bytes that `FORK_HASH` checksums: the genesis hash, then each fork as 8 bytes.
-
-Each block number or timestamp is a big-endian `uint64`. -/
+/-- The bytes that `FORK_HASH` checksums: the genesis hash, then each fork as 8 bytes. -/
 def checksumInput (genesisHash : Hash32) (forks : List Activation) : ByteArray :=
+  -- `<genesis-hash> || uint64(f_1) || ... || uint64(f_k)`, each value big endian.
+  --
+  -- A value of 2^64 or more loses its high bytes, so only a bounded schedule checksums exactly.
   ⟨(genesisHash.toList ++ forks.flatMap fun a => natToBytes 8 (activationValue a)).toArray⟩
 
-/-- `FORK_HASH` after some forks: the CRC-32 of the genesis hash and of those forks.
-
-The CRC is a number, and `FORK_HASH` holds it as 4 big-endian bytes. -/
+/-- `FORK_HASH` after some forks: the CRC-32 of the genesis hash and of those forks. -/
 def checksum (genesisHash : Hash32) (forks : List Activation) : Vector UInt8 4 :=
+  -- `FORK_HASH = CRC32(<genesis-hash> || uint64(f_1) || ... || uint64(f_k))`, the IEEE CRC-32.
+  --
+  -- EIP-2124 writes `[4]byte` with no byte order.
+  --
+  -- Its RLP test vectors write the CRC big endian, so EthLib does too.
   ⟨(natToBytes 4 (Crc32.crc32 (checksumInput genesisHash forks)).toNat).toArray,
     by simp [natToBytes_length]⟩
 
-/--
-The passed forks at a head with a block number and a timestamp.
-
-They are the forks up to the first one that the head has not reached.
-
-A fork by block is reached by the block number, and a fork by time by the timestamp.
--/
+/-- The passed forks at a head with a block number and a timestamp. -/
 def passed (s : Schedule) (number timestamp : Nat) : List Activation :=
+  -- The fork block numbers or timestamps that already passed.
+  --
+  -- A fork by block is passed at its block number, and a fork by time at its timestamp.
+  --
+  -- EthLib stops at the first fork not reached, so no later fork counts as passed.
   s.forks.takeWhile (·.reached number timestamp)
 
-/-- The fork identifier of a node at a head with a block number and a timestamp.
-
-`FORK_NEXT` is the first fork that the head has not reached.
-
-It is 0 if the head has passed every fork. -/
+/-- The fork identifier of a node at a head with a block number and a timestamp. -/
 def forkId (s : Schedule) (number timestamp : Nat) : ForkId where
+  -- `FORK_HASH`: the checksum of the genesis hash and of the forks that already passed.
   hash := checksum s.genesisHash (s.passed number timestamp)
+  -- `FORK_NEXT`: the block number or timestamp of the next upcoming fork.
+  --
+  -- That is the first fork that the head has not reached.
   next :=
     match s.forks.dropWhile (·.reached number timestamp) with
+    -- `0` if no next fork is known: the head has passed every fork.
     | [] => 0
+    -- A `uint64`: the value wraps modulo 2^64 unless the schedule is bounded.
     | a :: _ => UInt64.ofNat (activationValue a)
 
 /-- `FORK_HASH` after each number of forks, from none to all of them. -/
 def checksums (s : Schedule) : List (Vector UInt8 4) :=
+  -- `forkhash_k = CRC32(<genesis-hash> || uint64(f_1) || ... || uint64(f_k))`.
+  --
+  -- Here `k` runs from 0 to the number of forks.
   (List.range (s.forks.length + 1)).map fun k => checksum s.genesisHash (s.forks.take k)
 
 /--
@@ -179,8 +188,8 @@ So only such a schedule has fork identifiers that hold its forks whole.
 
 The schedule reader of the exports refuses any fork of 2^64 or more.
 
-[eip-2124]: https://eips.ethereum.org/EIPS/eip-2124#specification
-[eip-6122]: https://eips.ethereum.org/EIPS/eip-6122#specification
+[eip-2124]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-2124.md#specification
+[eip-6122]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-6122.md#specification
 [eip-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#fork-identifier
 -/
 def Bounded (s : Schedule) : Prop :=
@@ -221,10 +230,15 @@ Every block number of a real chain is far below it, and every fork timestamp far
 -/
 def TIMESTAMP_THRESHOLD : Nat := 1438269973
 
-/-- Whether the local head has passed the next fork `next` that a peer announces.
-
-A next fork of 0 announces nothing, so it is never passed. -/
+/-- Whether the local head has passed the next fork `next` that a peer announces. -/
 def passedNext (number timestamp next : Nat) : Bool :=
+  -- Rule 1a: a remotely announced fork that is already passed locally.
+  --
+  -- A `FORK_NEXT` of 0 announces no fork, so it is never passed.
+  --
+  -- Every value is compared with the block number.
+  --
+  -- EthLib's bound: a value above the threshold is also a timestamp, passed at the head's time.
   0 < next && (next ≤ number || (TIMESTAMP_THRESHOLD < next && next ≤ timestamp))
 
 namespace Schedule
@@ -234,33 +248,39 @@ Whether a node at a head accepts the fork identifier of a peer, by the rules of 
 
 They are the validation rules of [EIP-2124][eip-2124].
 
-- 1: the two hashes match, so the nodes are at one fork.
-  The node refuses only if it has passed the next fork that the peer announces (1a).
-- 2: the hash of the peer is one of the node's earlier hashes, so the peer is syncing.
-  The node accepts if the peer announces the fork that follows that hash, and refuses otherwise.
-- 3: the hash of the peer is one of the node's later hashes, so the node is syncing, and it accepts.
-- 4: the node refuses in every other case.
-
 [EIP-6122][eip-6122] checks the forks by block before the forks by time, as the order of forks does.
 
-The node compares its earlier hashes from the first one, so the first match decides rule 2.
-
-[eip-2124]: https://eips.ethereum.org/EIPS/eip-2124#validation-rules
-[eip-6122]: https://eips.ethereum.org/EIPS/eip-6122#additional-rules
+[eip-2124]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-2124.md#validation-rules
+[eip-6122]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-6122.md#additional-rules
 -/
 def validate (s : Schedule) (number timestamp : Nat) (remote : ForkId) :
     Except ForkIdError Unit :=
+  -- The number of local past forks.
   let i := (s.passed number timestamp).length
+  -- Rule 1: the local and remote `FORK_HASH` match, so the nodes are in the same fork state.
   if (s.forkId number timestamp).hash = remote.hash then
+    -- Rule 1a: a remotely announced fork is already passed locally, so disconnect.
     if passedNext number timestamp remote.next.toNat then throw .localIncompatibleOrStale
+    -- Rule 1b: no remotely announced fork, or not yet passed locally, so connect.
     else pure ()
   else
+    -- Rule 2: the remote `FORK_HASH` is a subset of the local past forks.
+    --
+    -- That is the checksum of the first `j` forks, for some `j < i`: the remote node is syncing.
+    --
+    -- EthLib compares from the first checksum, so the first match decides.
     match (s.checksums.take i).findIdx? (· = remote.hash) with
     | some j =>
+      -- Rule 2: connect if the remote `FORK_NEXT` matches the locally following fork, fork `j + 1`.
       if (s.forks[j]?.map activationValue) = some remote.next.toNat then pure ()
+      -- Rule 4 otherwise: the remote node needs a software update.
       else throw .remoteStale
     | none =>
+      -- Rule 3: the remote `FORK_HASH` is a superset of the local past forks.
+      --
+      -- It is completed with locally known future forks: the checksum of more than `i` forks.
       if (s.checksums.drop (i + 1)).contains remote.hash then pure ()
+      -- Rule 4: reject in all other cases.
       else throw .localIncompatibleOrStale
 
 /--

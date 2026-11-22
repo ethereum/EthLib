@@ -5,23 +5,15 @@ public import EthLib.Networking.Devp2p.P2p
 /-!
 # `Networking.Devp2p.Session`
 
-The life of an RLPx session after the handshake, from the "p2p" capability of [`rlpx.md`][p2p].
+The life of an RLPx session after the handshake, from the p2p capability of [`rlpx.md`][p2p].
 
 [p2p]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/rlpx.md#p2p-capability
 
 The frame layer hands the session the data of each frame: the message ID, then the message.
 
-Each side sends Hello or Disconnect first, and no other message until it has received a Hello.
+The Snappy compression of the messages after Hello comes from [EIP-706][eip706].
 
-Once the peer's Hello arrives, the session is active, and any other message may come.
-
-A Ping asks for an immediate Pong, and a Disconnect may come at any time.
-
-The Hello is never compressed.
-
-From version 5 of both peers, every later message is compressed with Snappy ([EIP-706][eip706]).
-
-[eip706]: https://eips.ethereum.org/EIPS/eip-706
+[eip706]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-706.md#specification
 
 The IDs from `0x10` on belong to the capabilities that both peers share.
 
@@ -59,7 +51,7 @@ inductive DisconnectReason where
   | tooManyPeers
   /-- `0x05`: already connected. -/
   | alreadyConnected
-  /-- `0x06`: an incompatible version of the "p2p" capability. -/
+  /-- `0x06`: an incompatible version of the p2p capability. -/
   | incompatibleVersion
   /-- `0x07`: a null node identity was received. -/
   | nullIdentity
@@ -125,6 +117,11 @@ inductive Phase where
 
 /-- The phase that the peer's Hello opens, given our own Hello and the IDs each capability takes. -/
 def Phase.opened (length : Capability → Nat) (ours theirs : Hello) : Phase :=
+  -- Upon receiving the Hello message a session is active.
+  --
+  -- Snappy when both versions are 5 or more: EIP-706 asks it of the remote one.
+  --
+  -- Both peers know the capabilities they share, and form the same message ID space from them.
   .active ours theirs (snappyEnabled ours.protocolVersion theirs.protocolVersion)
     (negotiate length ours.capabilities theirs.capabilities)
 
@@ -133,12 +130,17 @@ def Phase.opened (length : Capability → Nat) (ours theirs : Hello) : Phase :=
 A capability with first ID `b` holds the IDs from `b` on, below `b` plus the number it needs. -/
 def route (length : Capability → Nat) (offsets : List (Capability × Nat)) (id : Nat) :
     Option (Capability × Nat) :=
+  -- Multiplexing relies purely on the message ID.
+  --
+  -- A capability with first ID `b` that needs `n` IDs holds each `id` with `b ≤ id < b + n`.
+  --
+  -- EthLib hands it the message as `id - b`, the ID within that capability.
   (offsets.find? fun entry => entry.2 ≤ id && id < entry.2 + length entry.1).map fun entry =>
     (entry.1, id - entry.2)
 
 /-- What a received frame carries. -/
 inductive Event where
-  /-- A message of the "p2p" capability. -/
+  /-- A message of the p2p capability. -/
   | p2p (message : Message)
   /-- A message of a shared capability: its ID relative to the capability, and its data.
 
@@ -157,7 +159,7 @@ inductive SessionError where
   | beforeHello (id : Nat)
   /-- A second Hello came in an active session. -/
   | secondHello
-  /-- No message of the "p2p" capability or of a shared capability has the ID. -/
+  /-- No message of the p2p capability or of a shared capability has the ID. -/
   | unknownId (id : Nat)
   /-- A frame came after a Disconnect. -/
   | closed
@@ -180,52 +182,62 @@ def SessionError.code : SessionError → UInt32
   | .tooLarge _ => 5
   | .message e => 10 + e.code
 
-/--
-The session after one frame, with what the frame carries and what to send back.
-
-Before the peer's Hello, only Hello and Disconnect pass, and neither is compressed.
-
-Hello opens the session, and Disconnect closes it.
-
-In an active session, a Ping asks for a Pong, and a Disconnect closes the session.
-
-A second Hello is rejected.
-
-An ID from `0x10` on goes to the shared capability that holds it.
-
-Its data is decompressed when the session uses Snappy.
-
-Any other ID is rejected.
-
-Data of more than 16 MiB is rejected, as the source asks of every message.
-
-Compressed data is rejected when it declares that size, before it is decompressed.
-
-After a Disconnect, every frame is rejected.
--/
+/-- The session after one frame, with what the frame carries and what to send back. -/
 def receive (length : Capability → Nat) (ours : Hello) (phase : Phase) (frameData : ByteArray) :
     Except SessionError (Phase × Option Event × List Action) := do
   match phase with
+  -- If a Disconnect is received, a peer should disconnect immediately.
+  --
+  -- So EthLib rejects every frame after it.
   | .closed _ => throw .closed
   | .awaitHello =>
+    -- `frame-data = msg-id || msg-data`.
     let (id, rest) ← (splitFrame frameData).mapError .message
+    -- Both sides must send either Hello or a Disconnect message first.
+    --
+    -- No other messages may be sent until a Hello is received.
     if id != 0x00 && id != 0x01 then throw (.beforeHello id)
+    -- EIP-706: the handshake message is never compressed.
+    --
+    -- EthLib reads a Disconnect before Hello uncompressed, since the peer's version is unknown.
     match ← (decodeBody false id rest).mapError .message with
+    -- Upon receiving the Hello message a session is active.
+    --
+    -- Implementations must ignore any difference in protocol version, so no version fails.
     | .hello theirs => return (.opened length ours theirs, some (.p2p (.hello theirs)), [])
+    -- A Disconnect may come instead of Hello, and it closes the session.
     | .disconnect reason => return (.closed reason, some (.p2p (.disconnect reason)), [])
+    -- Not reached, since the ID is that of Hello or of Disconnect.
     | _ => throw (.beforeHello id)
   | .active _ _ snappy offsets =>
+    -- `frame-data = msg-id || msg-data`.
     let (id, rest) ← (splitFrame frameData).mapError .message
+    -- The p2p capability holds the IDs `0x00` to `0x0f`, and defines messages at `0x00` to `0x03`.
     if id < 0x04 then
+      -- With Snappy, every message after Hello is compressed, and Hello never is.
       match ← (decodeBody snappy id rest).mapError .message with
+      -- Hello is sent once by both sides, so a second one fails.
       | .hello _ => throw .secondHello
+      -- Ping requests an immediate reply of Pong from the peer.
       | .ping => return (phase, some (.p2p .ping), [.sendPong])
+      -- At any time after protocol negotiation, a Disconnect message may be sent.
       | .disconnect reason => return (.closed reason, some (.p2p (.disconnect reason)), [])
+      -- Pong is the reply to a Ping: EthLib keeps no record of the Pings it sent.
       | .pong => return (phase, some (.p2p .pong), [])
+    -- The IDs `0x04` to `0x0f` are reserved for the p2p capability, with no message there.
     else if id < BASE_PROTOCOL_LENGTH then throw (.unknownId id)
     else
+      -- The shared capability that holds the ID, by Message ID-based Multiplexing.
+      --
+      -- An ID that no shared capability holds fails.
       let some (capability, relativeId) := route length offsets id | throw (.unknownId id)
+      -- With Snappy, the data is decompressed.
+      --
+      -- Compressed data that declares more than 16 MiB fails before it is decompressed.
       let data ← (messageData snappy rest).mapError .message
+      -- Messages carrying uncompressed data larger than 16 MiB should be rejected.
+      --
+      -- The limit holds for every message, with or without Snappy.
       if MAX_MESSAGE_SIZE < data.size then throw (.tooLarge data.size)
       return (phase, some (.capability capability relativeId data), [])
 
