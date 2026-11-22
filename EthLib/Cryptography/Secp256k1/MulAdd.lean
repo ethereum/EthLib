@@ -25,26 +25,19 @@ The generator scalar splits at bit 128, using `G` and `2^128 G`.
 
 All four products share one chain of 129 signed digits and at most 128 doublings.
 
-The fixed generator uses fourteen-bit windows with tables of 4096 odd multiples.
-
 For an affine variable point, a six-entry table shares one denominator.
 
-At each step the low bits of both components select one joint digit, so one addition serves both.
+The variable scalar uses the endomorphism method of [Gallant, Lambert and Vanstone][glv].
 
-A component too large for two signed words takes five-bit windows instead.
+Its §4 splits the scalar, and its Algorithm 1 adds the two products in one chain of doublings.
 
-Then eight odd multiples share one denominator.
-
-Any other input takes the shared chain of doublings in Jacobian coordinates.
-
-The multiplication of two arbitrary points uses that chain too.
-
-The variable scalar uses the endomorphism method of Gallant, Lambert and Vanstone.
+The chains use signed digits, as its "simultaneous windowed-NAF" variant of §3 does.
 
 The [Guide to Elliptic Curve Cryptography][guide] describes it in Algorithms 3.35, 3.74 and 3.77.
 
 That book is by Hankerson, Menezes and Vanstone (Springer, 2004).
 
+[glv]: https://www.iacr.org/archive/crypto2001/21390189.pdf
 [guide]: <https://cacr.uwaterloo.ca/ecc/>
 -/
 
@@ -398,8 +391,22 @@ It also holds `floor(2^272 a / n)` and `floor(2^272 b / n)`. -/
 The rounded quotients come from products by the scaled constants, as in Algorithm 3.74. -/
 @[inline] def splitScalarWords (k : Raw) : (WordPair × Bool) × (WordPair × Bool) :=
   let c := splitConstants
+  -- GLV §4, "Finding v": write `(k, 0) = beta_1 v_1 + beta_2 v_2`.
+  --
+  -- Here `v_1 = (a, -b)` and `v_2 = (a + b, a)`, of determinant `a^2 + a b + b^2 = n`.
+  --
+  -- So `beta_1 = k a / n` and `beta_2 = k b / n`.
+  --
+  -- `b_1` and `b_2` approximate `round(beta_1)` and `round(beta_2)`.
+  --
+  -- Each multiplies `k` by a scaled constant and rounds at bit 272.
   let u := approximateWeight k c.aRecip
   let v := approximateWeight k c.bRecip
+  -- GLV's short vector `(k, 0) - (b_1 v_1 + b_2 v_2)`.
+  --
+  -- Its components are `k - b_1 a - b_2 (a + b)` and `b_1 b - b_2 a`.
+  --
+  -- The products are taken modulo `2^129`, enough for components below `2^128` in magnitude.
   let ua := lowProduct u c.a.lo c.a.hi 0
   let vb := lowProduct v c.sum.w0 c.sum.w1 c.sum.w2
   let ub := lowProduct u c.b.lo c.b.hi 0
@@ -541,6 +548,15 @@ Up to three doublings combine when the digits between them are zero. -/
     let ⟨al,ah,bl,bh,dv⟩ := recodeJoint xa0 xa1 xb0 xb1
     let ⟨cl,ch,dc⟩ := recodeRaw window xc0 xc1
     let ⟨dl,dh,dd⟩ := recodeRaw window xd0 xd1
+    -- GLV Algorithm 1, step 4.1: `R <- 2^w R`.
+    --
+    -- Unlike Algorithm 1, `w` is not fixed: the chain steps one bit at a time.
+    --
+    -- It merges up to three doublings past zero digits.
+    --
+    -- The recursion takes the low digit first and doubles the result of the higher digits.
+    --
+    -- So the operations run from the top digit down, as in step 4.
     let acc :=
       match fuel with
       | 0 => Coords.infinity
@@ -564,6 +580,11 @@ Up to three doublings combine when the digits between them are zero. -/
         else
           doubleUnlessInfinity double
             (packedJointChain window z table rt st (next + 1) al ah bl bh cl ch dl dh)
+    -- GLV Algorithm 1, step 4.2: `R <- R + (u_i P + v_i Q)`.
+    --
+    -- Here one joint digit adds for `a` and `b`, then one digit each for `c` and `d`.
+    --
+    -- The digits are signed, and a zero digit adds nothing.
     let acc := addPackedJoint acc table dv
     addPackedFixed z (addPackedFixed z acc window rt dc) window st dd
 termination_by fuel => fuel
@@ -584,6 +605,15 @@ Up to three doublings combine when the digits between them are zero. -/
     let ⟨bl,bh,db⟩ := recodeRaw .width5 xb0 xb1
     let ⟨cl,ch,dc⟩ := recodeRaw window xc0 xc1
     let ⟨dl,dh,dd⟩ := recodeRaw window xd0 xd1
+    -- GLV Algorithm 1, step 4.1: `R <- 2^w R`.
+    --
+    -- Unlike Algorithm 1, `w` is not fixed: the chain steps one bit at a time.
+    --
+    -- It merges up to three doublings past zero digits.
+    --
+    -- The recursion takes the low digit first and doubles the result of the higher digits.
+    --
+    -- So the operations run from the top digit down, as in step 4.
     let acc :=
       match fuel with
       | 0 => Coords.infinity
@@ -605,6 +635,11 @@ Up to three doublings combine when the digits between them are zero. -/
         else
           doubleUnlessInfinity double
             (packedCommonChain window z table pn qn rt st (next + 1) al ah bl bh cl ch dl dh)
+    -- GLV Algorithm 1, step 4.2: `R <- R + (u_i P + v_i Q)`.
+    --
+    -- Here one digit each adds for `a`, `b`, `c` and `d`.
+    --
+    -- The digits are signed, and a zero digit adds nothing.
     let acc := addPackedCommon acc table false pn da
     let acc := addPackedCommon acc table true qn db
     addPackedFixed z (addPackedFixed z acc window rt dc) window st dd
