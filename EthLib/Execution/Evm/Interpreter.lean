@@ -8,12 +8,6 @@ public import EthLib.Execution.Evm.Instructions.SelfDestruct
 
 The execution of one frame: a step for each opcode, and a loop of steps until the frame stops.
 
-A step runs the opcode at the program counter.
-
-A position past the end of the code holds STOP.
-
-A byte that is no opcode at the fork halts the frame.
-
 An opcode with no instruction aborts the whole run, since nothing here gives its result.
 
 A step gives the next frame, or a message to run first, for a call or a creation.
@@ -70,17 +64,23 @@ An opcode with no instruction yet fails with an error that aborts the run.
 
 The frame must run. -/
 def step (fork : Fork) (evm : Evm fork Meter) : Except EvmError (StepResult fork Meter) :=
+  -- Yellow Paper §9.4.1: `w = I_b[mu_{pc}]` if `mu_{pc} < ||I_b||`.
   if h : evm.pc < evm.code.size then
     let byte := evm.code[evm.pc]
     match Op.ofByte fork byte with
+    -- §9.4.2: `delta_w = ∅` for a byte that is no instruction at the fork, so `Z` holds.
     | none => throw (.invalidOpcode byte)
     | some op =>
+      -- Yellow Paper §9.5: `O` applies the instruction `w`, as Appendix H defines it.
       match instruction fork op with
       | some run => .next <$> run evm
       | none =>
+        -- A call or a creation runs a message first, so its step gives that message.
         match messageInstruction fork op with
         | some run => run evm
+        -- An opcode with no instruction yet aborts the run; the source has no such case.
         | none => throw (.unspecifiedOpcode byte)
+  -- `w = STOP` otherwise.
   else .next <$> stopStep evm
 
 /-- A choice among two instructions gives one of them. -/
@@ -198,22 +198,28 @@ def runFrameWith [LawfulGasMeter Meter] {M : Type → Type} [Monad M] [MonadExce
     (runChild : MessageRunnerIn M fork Meter bound)
     (evm : Evm fork Meter) (within : GasMeter.gasHeld evm.gas ≤ bound) :
     M { after : Evm fork Meter // GasMeter.gasHeld after.gas ≤ bound } :=
+  -- Yellow Paper §9.4: `X` cycles until `Z` holds or `H` gives an output.
   if running : evm.running then
     match result : step evm with
+    -- `Z` holds, or a check that a later EIP adds fails: no output, and §8 gives `g' = 0`.
     | .error e => do
       observe evm (.error e)
+      -- An error that aborts the whole run is no halt of the frame; the source has no such case.
       if e.aborts then throw e
       else pure ⟨exceptionalHalt evm e, by rw [gasHeld_exceptionalHalt]; exact Nat.zero_le _⟩
+    -- `X(O(sigma, mu, A, I))`: the next cycle, from the frame after the step.
     | .ok (.next after) => do
       observe evm (.ok (.next after))
       have lower : measure after < measure evm := decreases running result
       runFrameWith observe step decreases bound runChild after
         (Nat.le_trans (gasHeld_le_of_measure_lt lower) within)
+    -- A call or a creation: the message runs, then the step goes on from its result.
     | .ok (.child caller message resume) => do
       observe evm (.ok (.child caller message resume))
       have lower := decreases running result
       let ⟨child, used⟩ ← runChild caller message (Nat.lt_of_lt_of_le lower.1 within)
       match resumed : resume child with
+      -- The rest of the step can still halt the frame, or abort the run, as above.
       | .error e =>
         if e.aborts then throw e
         else pure ⟨exceptionalHalt evm e, by rw [gasHeld_exceptionalHalt]; exact Nat.zero_le _⟩
@@ -221,6 +227,7 @@ def runFrameWith [LawfulGasMeter Meter] {M : Type → Type} [Monad M] [MonadExce
         have lower : measure after < measure evm := lower.2 child after used resumed
         runFrameWith observe step decreases bound runChild after
           (Nat.le_trans (gasHeld_le_of_measure_lt lower) within)
+  -- `H(mu, I) ≠ ∅`: the frame halted, normally or by REVERT, and is the result.
   else pure ⟨evm, within⟩
 termination_by measure evm
 
