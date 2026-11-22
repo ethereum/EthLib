@@ -93,39 +93,44 @@ variable {preset : Preset} {fork : Fork} (config : Config) (store : Store preset
 
 /-- Whether an epoch starts after the current one, by the clock.
 
-The clock may run ahead by the maximum gossip clock disparity.
-
 A time before genesis, or one that leaves the 64-bit range, is an error. -/
 def isFutureEpoch (epoch : Epoch) (currentTimeMs : UInt64) : Except ForkChoiceError Bool := do
+  -- Let `t` be the clock plus `MAXIMUM_GOSSIP_CLOCK_DISPARITY`, since the clock may run ahead.
   let latest ← (addChecked currentTimeMs config.MAXIMUM_GOSSIP_CLOCK_DISPARITY).mapError .arith
+  -- The epoch is after the epoch of the slot at the time `t`.
   let slot ← (computeSlotAtTimeMs config store.genesisTimeMs latest).mapError .arith
   return computeEpochAtSlot preset slot < epoch
 
 /-- Whether the clock is in a range of slots: from a slot to a given count of slots after it.
 
-The range ends with the end of its last slot.
-
-The clock may run ahead or behind by the maximum gossip clock disparity, at both ends.
-
 A time or a slot that leaves the 64-bit range is an error. -/
 def isWithinSlotRange (slot : Slot) (slotRange currentTimeMs : UInt64) :
     Except ForkChoiceError Bool := do
+  -- Let `t` be the clock, `s` the slot, `r` the count, and `d` the maximum gossip disparity.
+  --
+  -- The range runs from the start of slot `s` to the start of slot `s + r + 1`.
+  --
+  -- So it ends with the end of slot `s + r`, and the clock may be off by `d` at both ends.
   let start ← (computeTimeAtSlotMs config store.genesisTimeMs slot).mapError .arith
   let latest ← (addChecked currentTimeMs config.MAXIMUM_GOSSIP_CLOCK_DISPARITY).mapError .arith
+  -- False when `t + d` is before the start of slot `s`.
   if latest < start then return false
   let after ← (addChecked slot slotRange >>= (addChecked · 1)).mapError .arith
   let stop ← (computeTimeAtSlotMs config store.genesisTimeMs after).mapError .arith
   let earliest ← (addChecked stop config.MAXIMUM_GOSSIP_CLOCK_DISPARITY).mapError .arith
+  -- Else true unless the start of slot `s + r + 1`, plus `d`, is before `t`.
   return !(earliest < currentTimeMs)
 
 /-- Whether the clock is in a slot, with the maximum gossip clock disparity at both ends. -/
 def isCurrentSlot (slot : Slot) (currentTimeMs : UInt64) : Except ForkChoiceError Bool :=
+  -- The range of the slot alone, a count of 0.
   store.isWithinSlotRange config slot 0 currentTimeMs
 
 /-- Whether a slot starts after the clock, which may run ahead by the maximum gossip disparity.
 
 A time or a slot that leaves the 64-bit range is an error. -/
 def isFutureSlot (slot : Slot) (currentTimeMs : UInt64) : Except ForkChoiceError Bool := do
+  -- The clock plus `MAXIMUM_GOSSIP_CLOCK_DISPARITY` is before the start of the slot.
   let start ← (computeTimeAtSlotMs config store.genesisTimeMs slot).mapError .arith
   let latest ← (addChecked currentTimeMs config.MAXIMUM_GOSSIP_CLOCK_DISPARITY).mapError .arith
   return latest < start
@@ -134,6 +139,7 @@ def isFutureSlot (slot : Slot) (currentTimeMs : UInt64) : Except ForkChoiceError
 
 A time or a slot that leaves the 64-bit range is an error. -/
 def isPastSlot (slot : Slot) (currentTimeMs : UInt64) : Except ForkChoiceError Bool := do
+  -- The start of the slot plus `MAXIMUM_GOSSIP_CLOCK_DISPARITY` is before the clock.
   let start ← (computeTimeAtSlotMs config store.genesisTimeMs slot).mapError .arith
   let latest ← (addChecked start config.MAXIMUM_GOSSIP_CLOCK_DISPARITY).mapError .arith
   return latest < currentTimeMs
@@ -142,6 +148,7 @@ def isPastSlot (slot : Slot) (currentTimeMs : UInt64) : Except ForkChoiceError B
 
 A slot or a time that leaves the 64-bit range is an error. -/
 def isWithinEpoch (epoch : Epoch) (currentTimeMs : UInt64) : Except ForkChoiceError Bool := do
+  -- The range from the first slot of the epoch to `SLOTS_PER_EPOCH - 1` slots after it.
   let start ← (computeStartSlotAtEpoch preset epoch).mapError .arith
   let range ← (subChecked preset.SLOTS_PER_EPOCH 1).mapError .arith
   store.isWithinSlotRange config start range currentTimeMs
@@ -151,6 +158,9 @@ def isWithinEpoch (epoch : Epoch) (currentTimeMs : UInt64) : Except ForkChoiceEr
 Both tests run, so an error of either one is an error. -/
 def isCurrentOrPreviousEpoch (epoch : Epoch) (currentTimeMs : UInt64) :
     Except ForkChoiceError Bool := do
+  -- Let `e` be the epoch.
+  --
+  -- The clock is in the epoch `e`, or in the epoch `e + 1`, in which `e` is the previous epoch.
   let current ← store.isWithinEpoch config epoch currentTimeMs
   let next ← (addChecked epoch 1).mapError .arith
   let previous ← store.isWithinEpoch config next currentTimeMs
@@ -158,6 +168,7 @@ def isCurrentOrPreviousEpoch (epoch : Epoch) (currentTimeMs : UInt64) :
 
 /-- The state after the head of the fork choice. -/
 def headState : Except ForkChoiceError (BeaconState preset fork) := do
+  -- The state that the store holds for the root of the head.
   store.blockState (← store.getHead config).root
 
 end Store
@@ -169,7 +180,9 @@ def isValidSignatureAtEpoch {α : Type} [Serialization.Ssz.SszType α] (config :
     (checks : SignatureChecks) (state : BeaconState preset fork) (domainType : DomainType)
     (epoch : Epoch) (object : α) (pubkey : Cryptography.Bls.BLSPubkey)
     (signature : Cryptography.Bls.BLSSignature) : Except ForkChoiceError Bool := do
+  -- The domain of the domain type at the epoch, in the state.
   let domain ← (getDomain config state domainType (some epoch)).mapError .accessor
+  -- The key signed the signing root of the object under that domain.
   let signingRoot ← (computeSigningRoot object domain).mapError .ssz
   return checks.verify pubkey (packBytes signingRoot) signature
 
@@ -178,6 +191,7 @@ def isValidSignatureAtSlot {α : Type} [Serialization.Ssz.SszType α] (config : 
     (checks : SignatureChecks) (state : BeaconState preset fork) (domainType : DomainType)
     (slot : Slot) (object : α) (pubkey : Cryptography.Bls.BLSPubkey)
     (signature : Cryptography.Bls.BLSSignature) : Except ForkChoiceError Bool :=
+  -- The check at the epoch of the slot.
   isValidSignatureAtEpoch config checks state domainType (computeEpochAtSlot preset slot) object
     pubkey signature
 
@@ -187,6 +201,7 @@ Earlier bits of another length cover nothing, since they belong to a committee o
 
 So new bits of a wrong length are not ignored here, and a later check rejects them. -/
 def isNonStrictSuperset (seenBits : List (List Bool)) (newBits : List Bool) : Bool :=
+  -- Some earlier bits have the length of the new bits, and set each bit that the new bits set.
   seenBits.any fun prior =>
     prior.length == newBits.length && (prior.zip newBits).all fun (bit, newBit) => !newBit || bit
 
