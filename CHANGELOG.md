@@ -16,6 +16,13 @@ Not yet released.
 - `registryLifecycle_processOperations` (`Transition/RegistryLifecycle.lean`) says that the operations of a block keep the lifecycle of the registry.
   `registryLifecycle_processBlock` and the effective-balance fall read it.
 
+- `Run.registryWithinLimit_of_room` (`ForkChoice/BlockRuns.lean`) bounds the registry of a run from the anchor at every fork.
+  From Gloas, a run that ends within the horizon keeps its registry within the limit, given the anchor's registry room.
+  Before Gloas, the type bounds it.
+  `Execution.quorumDriftWithin` reads it at the counting state.
+  `registryWithinLimit_of_anchorRoom` (`ForkChoice/BlockRuns.lean`) is the arithmetic that it shares with `Store.ForwardReachable.registriesWithinLimit_of_room`.
+  A registry at an epoch within the horizon fits the anchor's room if it grew by at most one epoch of pending deposits per epoch.
+
 - In Lean, the payload of the parent has a balance ledger from Gloas, and its old validators read at both ends are later.
   `BlockLedger.ledger_processParentExecutionPayload` changes no balance outside a set of converted validators.
   That set has at most the preset's most consolidation requests per payload; no balance rises, and only a conversion lowers one.
@@ -407,7 +414,8 @@ Not yet released.
   `unforgeable` is unchanged.
 
 - `quorumDrift_le_quorumReserve` bounds the drift of a fast-confirmation call's quorum by `quorumReserve` ([#2058](https://github.com/ethereum/EthLib/issues/2058)).
-  It compares the call's pulled-up state with a later state in the target's epoch or the next, before Gloas from Fulu.
+  It compares the call's pulled-up state with a later state in the target's epoch or the next, from Fulu.
+  It takes the counting state's registry within the limit, which the type of the registry gives before Gloas.
   `Execution.quorumDriftWithin` builds those runs from the stores and proves `QuorumDriftWithin` with BLS checks.
   The anchor state is reached by a run with BLS checks from a genesis built from deposits, and an epoch has at least one slot.
   `Execution.rootViable_of_checked_call` takes the same genesis and run for any signature checks; this theorem fixes them to BLS.
@@ -415,7 +423,7 @@ Not yet released.
   The preset keeps the bands of hysteresis, its seed lookahead covers at least one epoch, and the withdrawal delay is at least one epoch.
   The preset meets `CapOrder` and the new `ActivationWithinMaxEffective`, which together make `MAX_EFFECTIVE_BALANCE` equal `MIN_ACTIVATION_BALANCE`.
   `ActivationWithinMaxEffective.mainnet` and `ActivationWithinMaxEffective.minimal` show that it holds on both presets.
-  No separate headline discharges `QuorumDriftWithin`: a caller with BLS checks from Fulu to before Gloas composes `Execution.quorumDriftWithin` with `Execution.rootViable_of_checked_call` or `Execution.honestHeadsCover_of_checked_call`.
+  No separate headline discharges `QuorumDriftWithin`: a caller with BLS checks from Fulu composes `Execution.quorumDriftWithin` with `Execution.rootViable_of_checked_call` or `Execution.honestHeadsCover_of_checked_call`, passing the anchor's registry room from Gloas.
   `Execution.heldStatesBeforeUpgrade_of_bounded` derives their premise `HeldStatesBeforeUpgrade` from the horizon and `HonestStoreEpochsBounded`.
   `effectiveRise_le` bounds the rise of the active effective balances over an epoch end, and `effectiveFall_le` the fall of a voter's.
   `Run.balanceCorrections_of_same_epoch` bounds the balances along a branch inside one epoch.
@@ -964,6 +972,12 @@ Not yet released.
 - In Lean, `getUnslashedAttestingIndices_exists_ok` in `EthLib.Consensus.Proofs.Transition.Totality.Justification` drops its premise that the registry stays within its limit, which its proof did not read.
   Committee membership alone puts each signer in the registry, by `getPendingAttestingIndices_lt`.
   Migration: delete the `within` argument ([#4253](https://github.com/ethereum/EthLib/pull/4253)).
+
+- In Lean, the quorum drift of a call is bounded from Gloas too, and keeps its Fulu floor.
+  `quorumDrift_le_quorumReserve` takes `within` at the counting state instead of `early`.
+  `Execution.quorumDriftWithin` takes `room`, the anchor's registry room from Gloas, instead of `early`.
+  `setting_runs_of_call` drops `early`.
+  Migration: pass `within := BeaconState.registryWithinLimit_of_lt early state` and `room := fun g => absurd g (Nat.not_le_of_lt early)`, and delete the argument of `setting_runs_of_call`.
 
 - In Lean, `effectiveRise_le` and `effectiveFall_le` bound the effective-balance rise and fall from Gloas too, and keep their Fulu floor at `P`.
   They take `within`, the registry of the counting state within the limit, instead of `early`.

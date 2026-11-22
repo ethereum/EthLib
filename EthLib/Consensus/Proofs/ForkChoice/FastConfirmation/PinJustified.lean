@@ -273,7 +273,7 @@ theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store pr
         ⟨.bls, slot', childRoot, child, found, parent, le, ok⟩⟩
     obtain ⟨pulledEpoch, split, ⟨toFin⟩, ⟨fromFin⟩, ⟨toPulled⟩, ⟨toCounted⟩, finalizedS,
         laterS⟩ :=
-      setting_runs_of_call anchored start anchorSlot slots positive genesis pre preGloas fusaka
+      setting_runs_of_call anchored start anchorSlot slots positive genesis pre fusaka
         forkWindow bounded bands caps facts.activation caller callTime pulledOk targetOk
         ancOk finHeld finAnchor ancReads receiver high (agree u caller w receiver n k callTime high)
         held

@@ -3,7 +3,11 @@ module
 public import EthLib.Consensus.Proofs.ForkChoice.BlockStates
 public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
 public import EthLib.Consensus.Proofs.Transition.RunKept
+public import EthLib.Consensus.Proofs.Transition.Trace
 import EthLib.Consensus.Proofs.Transition.Totality.EpochBounds
+import EthLib.Consensus.Proofs.Transition.ForkBoundary
+import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadBlock
+import EthLib.Consensus.Proofs.Containers.State
 
 /-!
 # Proofs: the states of a store run on along its chains of blocks
@@ -442,5 +446,96 @@ def AnchorRegistryRoom (preset : Preset) (anchorState : BeaconState preset fork)
 def HeldRegistriesWithinLimit (store : Store preset fork) : Prop :=
   ∀ (root : Root) (state : BeaconState preset fork),
     store.blockStates[root]? = some state → state.RegistryWithinLimit
+
+/-- A registry fits within the limit when the anchor's room covers its growth.
+
+Its state is at an epoch within the horizon.
+
+Its size is at most the anchor's, plus one epoch of pending deposits per epoch since the anchor. -/
+theorem registryWithinLimit_of_anchorRoom {anchor state : BeaconState preset fork}
+    {horizon : Epoch}
+    (size : state.validators.data.size ≤ anchor.validators.data.size +
+      preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+        ((getCurrentEpoch state).toNat - (getCurrentEpoch anchor).toNat))
+    (inHorizon : getCurrentEpoch state ≤ horizon)
+    (room : AnchorRegistryRoom preset anchor horizon) : state.RegistryWithinLimit := by
+  have epochs := UInt64.le_iff_toNat_le.mp inHorizon
+  have more : preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+      ((getCurrentEpoch state).toNat - (getCurrentEpoch anchor).toNat) ≤
+      preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+        (horizon.toNat - (getCurrentEpoch anchor).toNat) :=
+    Nat.mul_le_mul_left _ (by omega)
+  unfold AnchorRegistryRoom at room
+  show state.validators.data.size ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat
+  omega
+
+/-- From Gloas, a step that keeps the fork adds at most one epoch of pending deposits per epoch.
+
+A slot runs no upgrade, since the fork is kept.
+
+A block adds no validator, since from Gloas a block has no legacy validator deposits. -/
+private theorem step_validators_size_le_of_gloas {checks : SignatureChecks}
+    {m y : ForkedBeaconState preset}
+    (step : Step config checks m y) (gloas : .glamsterdam ≤ m.fork) (same : y.fork ≤ m.fork) :
+    (getCurrentEpoch m.state).toNat ≤ (getCurrentEpoch y.state).toNat ∧
+      y.state.validators.data.size ≤ m.state.validators.data.size +
+        ((getCurrentEpoch y.state).toNat - (getCurrentEpoch m.state).toNat) *
+          preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat := by
+  cases step with
+  | slot ok =>
+    obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
+    have kept := processUpgrades_eq_of_fork_le upgraded same
+    subst kept
+    refine ⟨?_, advanceSlot_validators_size_le advancedOk⟩
+    rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, advanceSlot_slot advancedOk]
+    exact Nat.div_le_div_right (Nat.le_succ _)
+  | block engine signed _ ok =>
+    have blockOk := (applySignedBlock_ok ok).2.1
+    have grow := processBlock_validators_size_le blockOk
+    have none : blockDepositCount signed.message.body = 0 := by
+      unfold blockDepositCount
+      exact dite_eq_right_of_eq_false (eq_false (Nat.not_lt_of_le gloas))
+    have sameEpoch : getCurrentEpoch _ = getCurrentEpoch _ :=
+      congrArg (computeEpochAtSlot preset) (processBlock_slot blockOk)
+    dsimp only at sameEpoch ⊢
+    rw [sameEpoch]
+    exact ⟨Nat.le_refl _, by omega⟩
+
+/-- From Gloas, a run that keeps its fork grows its registry by its epochs of pending deposits. -/
+private theorem run_validators_size_le_of_gloas {checks : SignatureChecks}
+    {x : ForkedBeaconState preset} (gloas : .glamsterdam ≤ x.fork) :
+    ∀ {y : ForkedBeaconState preset}, Run config checks x y → y.fork ≤ x.fork →
+      (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch y.state).toNat ∧
+        y.state.validators.data.size ≤ x.state.validators.data.size +
+          preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+            ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) := by
+  intro y run same
+  induction run with
+  | nil => simp
+  | snoc pre step more =>
+    -- The fork never moves back, so the middle state is at the fork of both ends.
+    have low := fork_le_of_chainSteps pre.chainSteps
+    have high := step.chainStep.fork_le
+    obtain ⟨first, one⟩ := more (Nat.le_trans high same)
+    obtain ⟨second, two⟩ :=
+      step_validators_size_le_of_gloas step (Nat.le_trans gloas low) (Nat.le_trans same low)
+    exact ⟨first.trans second, growth_trans first second one two⟩
+
+/-- From Gloas, a run from the anchor that ends within the horizon ends within the limit.
+
+The anchor's registry must leave room for the pending deposits of each epoch up to the horizon.
+
+Before Gloas the type of the registry bounds it. -/
+theorem Run.registryWithinLimit_of_room {checks : SignatureChecks}
+    {last : BeaconState preset fork}
+    (tail : Run config checks ⟨fork, anchorState⟩ ⟨fork, last⟩) {horizon : Epoch}
+    (inHorizon : getCurrentEpoch last ≤ horizon)
+    (room : .glamsterdam ≤ fork → AnchorRegistryRoom preset anchorState horizon) :
+    last.RegistryWithinLimit := by
+  by_cases gloas : .glamsterdam ≤ fork
+  · have size := (run_validators_size_le_of_gloas (x := ⟨fork, anchorState⟩) gloas tail
+      (Nat.le_refl _)).2
+    exact registryWithinLimit_of_anchorRoom size inHorizon (room gloas)
+  · exact BeaconState.registryWithinLimit_of_lt (Nat.lt_of_not_le gloas) last
 
 end EthLib.Consensus

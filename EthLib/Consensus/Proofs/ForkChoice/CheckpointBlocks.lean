@@ -997,17 +997,8 @@ theorem Store.ForwardReachable.registriesWithinLimit_of_room {config : Config}
       state.validators.data.size ≤ anchorState.validators.data.size +
         preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
           ((getCurrentEpoch state).toNat - (getCurrentEpoch anchorState).toNat) →
-      state.RegistryWithinLimit := by
-    intro state le bound
-    have epochs := UInt64.le_iff_toNat_le.mp le
-    have more : preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
-        ((getCurrentEpoch state).toNat - (getCurrentEpoch anchorState).toNat) ≤
-        preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
-          (horizon.toNat - (getCurrentEpoch anchorState).toNat) :=
-      Nat.mul_le_mul_left _ (by omega)
-    unfold AnchorRegistryRoom at room
-    show state.validators.data.size ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat
-    omega
+      state.RegistryWithinLimit :=
+    fun _ le bound => registryWithinLimit_of_anchorRoom bound le room
   have blockLe := forward.blockState_epoch_le_current slots anchorSlot epochOk
   refine ⟨fun root state held => within state (UInt64.le_trans (blockLe root state held) inHorizon)
     (blockBound root state held), fun state stateOk => ?_⟩

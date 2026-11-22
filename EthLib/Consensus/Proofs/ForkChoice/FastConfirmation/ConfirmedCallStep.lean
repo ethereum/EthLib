@@ -1172,8 +1172,9 @@ private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : �
     have maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat := by
       have : 3 ≤ preset.MAX_SEED_LOOKAHEAD.toNat := exitWindow
       omega
-    exact e.quorumDriftWithin anchored start anchorSlot slots positive genesis pre preGloas
-      fusaka forkWindow bounded maxLookahead band withdrawDelay caps activation
+    exact e.quorumDriftWithin anchored start anchorSlot slots positive genesis pre
+      (fun gloas => absurd gloas (Nat.not_le_of_lt preGloas)) fusaka forkWindow bounded
+      maxLookahead band withdrawDelay caps activation
   have good : Good (e := e) horizon limit := ⟨agree, finality, blocks, quorum⟩
   have anchorFacts := anchor_facts ctx
   have member : n ∈ events := List.mem_of_getElem? calls.1
