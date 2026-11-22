@@ -1573,6 +1573,17 @@ private theorem rise_executionRequests {s t : BeaconState preset fork}
       (Rise.foldlM_zero (fun _ _ _ ok => rise_consolidationRequest ok) consolidations)
   simpa using whole
 
+/-- The proposer slashings of a body, then attester slashings, add only the whistleblower share.
+-/
+private theorem rise_slashings {body : BeaconBlockBody preset fork}
+    {attesters : List (AttesterSlashing preset fork)} {a proposed b : BeaconState preset fork}
+    (proposersOk : body.proposerSlashings.data.toList.foldlM
+      (processProposerSlashing config checks) a = .ok proposed)
+    (attestersOk : attesters.foldlM (processAttesterSlashing config checks) proposed = .ok b) :
+    Rise 0 a b :=
+  (Rise.foldlM_zero (fun _ _ _ ok => rise_proposerSlashing ok) proposersOk).trans
+    (Rise.foldlM_zero (fun _ _ _ ok => rise_attesterSlashing ok) attestersOk)
+
 /-- The operations run the slashings, the attestations, then the steps that bring deposits.
 
 The slashings bring only their share of the new slashed balances. -/
@@ -1596,14 +1607,6 @@ private theorem rise_operations {input last : BeaconState preset fork}
       (ok : processBlsToExecutionChange config checks a signed = .ok b) : Tail a b :=
     Tail.of_flags (frame_processBlsToExecutionChange ok).registryGrows
       (effectiveKept_blsChange ok) (fixed_blsChange ok).flags
-  have slashings {a proposersDone slashingsDone : BeaconState preset fork}
-      (proposersOk : body.proposerSlashings.data.toList.foldlM
-        (processProposerSlashing config checks) a = .ok proposersDone)
-      (attestersOk : body.attesterSlashings.data.toList.foldlM
-        (processAttesterSlashing config checks) proposersDone = .ok slashingsDone) :
-      Rise 0 a slashingsDone :=
-    (Rise.foldlM_zero (fun _ _ _ ok => rise_proposerSlashing ok) proposersOk).trans
-      (Rise.foldlM_zero (fun _ _ _ ok => rise_attesterSlashing ok) attestersOk)
   unfold processOperations at computed
   split at computed
   · rename_i gloas
@@ -1611,7 +1614,8 @@ private theorem rise_operations {input last : BeaconState preset fork}
     simp only [bind_ok_iff, ← Array.foldlM_toList] at computed
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
       attestedOk, _, exitsOk, _, changesOk, paid⟩ := computed
-    refine ⟨_, _, _, proposersOk, attestersOk, attestedOk, slashings proposersOk attestersOk, ?_⟩
+    refine ⟨_, _, _, proposersOk, attestersOk, attestedOk,
+      rise_slashings proposersOk attestersOk, ?_⟩
     have whole :=
       (Rise.foldlM_zero (fun _ _ _ ok => (fixed_voluntaryExit ok).rise) exitsOk).trans <|
       (Rise.foldlM_zero (fun _ _ _ ok => (fixed_blsChange ok).rise) changesOk).trans
@@ -1625,7 +1629,7 @@ private theorem rise_operations {input last : BeaconState preset fork}
   simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
   obtain ⟨_, _, _, _, _, proposersOk, _, attestersOk, _, attestedOk, _, depositedOk, exited,
     exitsOk, changed, changesOk, requestsOk⟩ := computed
-  refine ⟨_, _, _, proposersOk, attestersOk, attestedOk, slashings proposersOk attestersOk, ?_⟩
+  refine ⟨_, _, _, proposersOk, attestersOk, attestedOk, rise_slashings proposersOk attestersOk, ?_⟩
   have deposits := Rise.foldlM (amount := fun deposit : Deposit => deposit.data.amount.toNat)
     (fun _ _ _ ok => rise_deposit ok) depositedOk
   have exits := Rise.foldlM_zero (fun _ _ _ ok => (fixed_voluntaryExit ok).rise) exitsOk
@@ -2053,6 +2057,31 @@ theorem processBlock_supply_le_cap {engine : ExecutionEngine preset fork}
   have bound := rise.2
   unfold supply quotient at bound
   unfold blockRewardCap
+  omega
+
+/-- At the turn of an attester slashing of a block, the supply is bounded.
+
+The turn is the state that the steps before that attester slashing reach.
+
+The supply is the balances plus the pending deposits.
+
+It is at most one sum of three terms.
+
+They are the supply before the block, the Gwei of the deposits of the block, and a reward.
+
+The reward is the rise of the slashed balances over the whistleblower quotient. -/
+theorem slashingTurn_supply_le {engine : ExecutionEngine preset fork}
+    {state turn : BeaconState preset fork} {block : BeaconBlock preset fork} {j : Nat}
+    (turned : SlashingTurn config checks engine state block j turn) :
+    balanceSum turn + pendingDepositSum turn ≤
+      balanceSum state + pendingDepositSum state + blockDepositAmount block.body +
+        (slashedBalanceSum turn - slashedBalanceSum state) /
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat := by
+  obtain ⟨input, proposed, started, proposersOk, attestersOk⟩ := turned
+  rw [← Array.foldlM_toList] at proposersOk
+  have rise := ((rise_operationsInput started).trans (rise_slashings proposersOk attestersOk)).2
+  have split := blockDepositAmount_eq block.body
+  unfold supply quotient at rise
   omega
 
 /-- A block does not lower the weight of the flags, at the base reward of the state before it. -/

@@ -161,6 +161,18 @@ private theorem Holds.spend {s : BeaconState preset fork} {r u v : Nat}
     (holds : Holds config start ceiling s r u) (le : u ≤ v) : Holds config start ceiling s r v :=
   { holds with potential := Nat.le_trans holds.potential (by omega) }
 
+/-- A state holds the bounds from itself, with the ceiling and nothing spent. -/
+private theorem Holds.initial {state : BeaconState preset fork}
+    (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
+    (exits : ExitsBelow state ceiling)
+    (queues : ∀ electra : .pectra ≤ fork, (state.earliestExitEpoch electra).toNat ≤ ceiling ∧
+      (state.earliestConsolidationEpoch electra).toNat ≤ ceiling) :
+    Holds config state ceiling state ceiling 0 := by
+  refine ⟨first, Nat.le_refl _, fun k member finite => ?_, fun electra => (queues electra).1,
+    fun electra => (queues electra).2, fun _ => Nat.le_max_left _ _, by omega⟩
+  obtain ⟨validator, inside, rfl⟩ := List.mem_map.mp member
+  exact exits validator (Array.mem_toList_iff.mp inside) finite
+
 /-- A step keeps the bounds, and spends at most a cost of the budget. -/
 private def Moves (config : Config) (start : BeaconState preset fork) (ceiling cost : Nat)
     (a b : BeaconState preset fork) : Prop :=
@@ -975,6 +987,16 @@ private theorem moves_parentPayload (rates : Rates preset config)
     builders.moves.trans <| exits.moves.trans last.moves
   exact whole.mono (by omega)
 
+/-- The proposer slashings of a body, then attester slashings, keep the bounds for free. -/
+private theorem moves_slashings (rates : Rates preset config) {body : BeaconBlockBody preset fork}
+    {attesters : List (AttesterSlashing preset fork)} {a proposed b : BeaconState preset fork}
+    (proposersOk : body.proposerSlashings.data.toList.foldlM (processProposerSlashing config checks)
+      a = .ok proposed)
+    (attestersOk : attesters.foldlM (processAttesterSlashing config checks) proposed = .ok b) :
+    Moves config start ceiling 0 a b :=
+  (Moves.foldlM (fun _ _ _ ok => moves_proposerSlashing rates ok) proposersOk).trans₀
+    (Moves.foldlM (fun _ _ _ ok => moves_attesterSlashing rates ok) attestersOk)
+
 /-- The operations of a block spend the cost of its withdrawal requests before Gloas only.
 
 That cost counts each amount up to a cap on the sum of the balances where the requests start. -/
@@ -985,14 +1007,6 @@ private theorem moves_operations (rates : Rates preset config)
     (ok : processOperations config checks a body parentSlot = .ok b) :
     Moves config start ceiling
       (if .glamsterdam ≤ fork then 0 else partialExitCost preset cap body) a b := by
-  have proposers {a b : BeaconState preset fork}
-      (ok : body.proposerSlashings.data.toList.foldlM (processProposerSlashing config checks) a =
-        .ok b) : Moves config start ceiling 0 a b :=
-    Moves.foldlM (fun _ _ _ ok => moves_proposerSlashing rates ok) ok
-  have attesters {a b : BeaconState preset fork}
-      (ok : body.attesterSlashings.data.toList.foldlM (processAttesterSlashing config checks) a =
-        .ok b) : Moves config start ceiling 0 a b :=
-    Moves.foldlM (fun _ _ _ ok => moves_attesterSlashing rates ok) ok
   have attestations {a b : BeaconState preset fork}
       (ok : body.attestations.data.toList.foldlM (processAttestation config checks · parentSlot ·)
         a = .ok b) : Moves config start ceiling 0 a b :=
@@ -1014,7 +1028,7 @@ private theorem moves_operations (rates : Rates preset config)
     simp only [bind_ok_iff, ← Array.foldlM_toList] at ok
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
       attestedOk, _, exitsOk, _, changesOk, paid⟩ := ok
-    exact (proposers proposersOk).trans₀ <| (attesters attestersOk).trans₀ <|
+    exact (moves_slashings rates proposersOk attestersOk).trans₀ <|
       (attestations attestedOk).trans₀ <| (exits exitsOk).trans₀ <|
       (Moves.foldlM (fun _ _ _ ok => change ok) changesOk).trans₀
       (Moves.foldlM (fun _ _ _ ok => by rw [processPayloadAttestation_eq ok]; exact Moves.refl _)
@@ -1038,7 +1052,7 @@ private theorem moves_operations (rates : Rates preset config)
       · simp only [pure, Except.pure, Except.ok.injEq] at requestsOk
         exact requestsOk ▸ (Moves.refl _).mono (Nat.zero_le _)
     have whole : Moves config start ceiling _ a b :=
-      (proposers proposersOk).trans <| (attesters attestersOk).trans <|
+      (moves_slashings rates proposersOk attestersOk).trans <|
       (attestations attestedOk).trans <|
       (Moves.foldlM (fun _ _ _ ok => (Plain.deposit ok).moves) depositedOk).trans <|
       (exits exitsOk).trans <| changes.trans requested
@@ -1134,13 +1148,7 @@ private theorem processBlock_exits_churn {engine : ExecutionEngine preset fork}
       Nat.le_trans (Nat.le_trans (Nat.le_add_right _ _)
         (processBlock_supply_le_cap_of_requestsStart computed started reached)) capped)
       operated)).trans tail.moves
-  -- The start holds the bounds with the ceiling and nothing spent.
-  have initial : Holds config state ceiling state ceiling 0 := by
-    refine ⟨first, Nat.le_refl _, fun k member finite => ?_, fun electra => (queues electra).1,
-      fun electra => (queues electra).2, fun _ => Nat.le_max_left _ _, by omega⟩
-    obtain ⟨validator, inside, rfl⟩ := List.mem_map.mp member
-    exact exits validator (Array.mem_toList_iff.mp inside) finite
-  obtain ⟨reached, final⟩ := whole ceiling 0 initial
+  obtain ⟨reached, final⟩ := whole ceiling 0 (Holds.initial first exits queues)
   have spent : 0 + ((if .glamsterdam ≤ fork then partialExitCost preset cap block.body else 0) +
       (if .glamsterdam ≤ fork then 0 else partialExitCost preset cap block.body) + 0) =
         partialExitCost preset cap block.body := by
@@ -1242,5 +1250,70 @@ theorem processBlock_exitBalanceToConsume_le {engine : ExecutionEngine preset fo
       by have := (state.earliestConsolidationEpoch electra).toNat_lt; omega⟩)
     (Nat.le_refl _)
   exact (queued electra).2.2
+
+/-- At the turn of an attester slashing of a block, a bound covers the exits.
+
+The turn is the state that the steps before that attester slashing reach.
+
+The bound covers the first epoch of a new exit and each exit epoch that is set.
+
+From Electra it also covers the end of the exit queue.
+
+Before the block, each exit epoch that is set is at most a ceiling.
+
+From Electra so are the ends of both queues.
+
+The ceiling covers the first epoch of a new exit.
+
+The increment is positive.
+
+It is at most the least churn, the largest churn and the least balance to activate.
+
+The withdrawal delay is positive.
+
+A cap is at least the sum of the balances before the block.
+
+The bound plus the cost still owed is at most the ceiling plus the cost owed before the block.
+
+It adds the cost of the validators that joined.
+
+From Gloas it also adds the cost of the withdrawal requests of the parent payload, capped.
+
+From Electra the churn carried for exits is at most one of two bounds, whichever is larger.
+
+They are the churn before the block and one churn bound. -/
+theorem slashingTurn_exits {engine : ExecutionEngine preset fork}
+    {state turn : BeaconState preset fork} {block : BeaconBlock preset fork} {j : Nat}
+    (turned : SlashingTurn config checks engine state block j turn)
+    (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
+    (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
+    (maximum :
+      preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT)
+    (activation : preset.EFFECTIVE_BALANCE_INCREMENT ≤ preset.MIN_ACTIVATION_BALANCE)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    {ceiling : Nat}
+    (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
+    (exits : ExitsBelow state ceiling)
+    (queues : ∀ electra : .pectra ≤ fork, (state.earliestExitEpoch electra).toNat ≤ ceiling ∧
+      (state.earliestConsolidationEpoch electra).toNat ≤ ceiling)
+    {cap : Nat} (capped : balanceSum state ≤ cap) :
+    ∃ reached, reached + exitCost preset turn ≤
+        ceiling + exitCost preset state + exitCostFrom preset turn state.validators.data.size +
+          (if .glamsterdam ≤ fork then partialExitCost preset cap block.body else 0) ∧
+      (getCurrentEpoch turn).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ reached ∧
+      ExitsBelow turn reached ∧
+      ∀ electra : .pectra ≤ fork, (turn.earliestExitEpoch electra).toNat ≤ reached ∧
+        (turn.exitBalanceToConsume electra).toNat ≤
+          max (state.exitBalanceToConsume electra).toNat (exitChurnCeiling config turn) := by
+  obtain ⟨input, proposed, started, proposersOk, attestersOk⟩ := turned
+  rw [← Array.foldlM_toList] at proposersOk
+  have rates : Rates preset config := ⟨increment, minimum, maximum, activation, delay⟩
+  have whole := (moves_operationsInput (start := state) (ceiling := ceiling) rates capped
+    started).trans (moves_slashings rates proposersOk attestersOk)
+  obtain ⟨reached, final⟩ := whole ceiling 0 (Holds.initial first exits queues)
+  simp only [Nat.zero_add, Nat.add_zero] at final
+  refine ⟨reached, final.potential, final.opens, fun validator member finite => final.exits _
+    (List.mem_map_of_mem (Array.mem_toList_iff.mpr member)) finite,
+    fun electra => ⟨final.exitQueue electra, final.churn electra⟩⟩
 
 end EthLib.Consensus

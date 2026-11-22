@@ -1,12 +1,12 @@
 module
 
+public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 public import EthLib.Consensus.Proofs.Transition.Totality.Bound
 public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
 public import EthLib.Consensus.Transition.StateTransition
 import EthLib.Consensus.Proofs.Accessors
 import EthLib.Consensus.Proofs.Mutators
 import EthLib.Consensus.Proofs.PayloadTimeliness
-import EthLib.Consensus.Proofs.Transition.BalanceDrift
 import EthLib.Consensus.Proofs.Transition.Block
 import EthLib.Consensus.Proofs.Transition.BuilderRequests
 import EthLib.Consensus.Proofs.Transition.Committees
@@ -534,6 +534,21 @@ private theorem Lowers.attesterSlashing {count : Nat} {a b : BeaconState preset 
   · cases ok
     exact before
 
+/-- The proposer slashings of a body, then attester slashings, keep the size of the registry.
+
+They do not raise the slashed balances plus the effective balances not slashed. -/
+private theorem lowers_slashings {count : Nat} {body : BeaconBlockBody preset fork}
+    {attesters : List (AttesterSlashing preset fork)} {a proposed b : BeaconState preset fork}
+    (proposersOk : body.proposerSlashings.data.toList.foldlM
+      (processProposerSlashing config checks) a = .ok proposed)
+    (attestersOk : attesters.foldlM (processAttesterSlashing config checks) proposed = .ok b) :
+    Lowers count a b :=
+  Lowers.trans
+    (foldlM_ok_steps (Lowers count) (Lowers.refl _) Lowers.trans
+      (fun _ _ _ ok => Lowers.proposerSlashing ok) proposersOk).1
+    (foldlM_ok_steps (Lowers count) (Lowers.refl _) Lowers.trans
+      (fun _ _ _ ok => Lowers.attesterSlashing ok) attestersOk).1
+
 end Potential
 
 /-- A block runs its two folds of slashings between steps that keep the slashed balances.
@@ -587,11 +602,8 @@ theorem processBlock_slashedBalanceSum_add_le {engine : ExecutionEngine preset f
       slashedBalanceSum state + unslashedBalanceSum state state.validators.data.size := by
   obtain ⟨_, _, _, head, sized, proposersOk, slashingsOk, later⟩ := processBlock_slashings computed
   -- The slashings run on the registry of the block, which they keep.
-  have slashed := (Lowers.trans
-    (foldlM_ok_steps (Lowers state.validators.data.size) (Lowers.refl _) Lowers.trans
-      (fun _ _ _ ok => Lowers.proposerSlashing ok) proposersOk).1
-    (foldlM_ok_steps (Lowers state.validators.data.size) (Lowers.refl _) Lowers.trans
-      (fun _ _ _ ok => Lowers.attesterSlashing ok) slashingsOk).1) sized
+  have slashed := lowers_slashings (count := state.validators.data.size) proposersOk slashingsOk
+    sized
   exact Nat.le_trans (potential_le_of_kept (Nat.le_of_eq slashed.1.symm) later) <|
     Nat.le_trans slashed.2 (potential_le_of_kept (Nat.le_refl _) head)
 
@@ -721,6 +733,32 @@ private theorem Bounded.attesterSlashing {a b : BeaconState preset fork}
   refine Nat.mul_le_mul_right _ ((length_sortedSet_le _).trans ?_)
   exact (List.length_filter_le _ _).trans (by simp)
 
+/-- The proposer slashings of a body, then a list of attester slashings, keep the bound.
+
+They raise the slashed balances by at most the largest cap for each name that they count. -/
+private theorem counted_slashings {body : BeaconBlockBody preset fork}
+    {attesters : List (AttesterSlashing preset fork)} {a proposed b : BeaconState preset fork}
+    (proposersOk : body.proposerSlashings.data.toList.foldlM
+      (processProposerSlashing config checks) a = .ok proposed)
+    (attestersOk : attesters.foldlM (processAttesterSlashing config checks) proposed = .ok b)
+    (bounded : Bounded a) :
+    Bounded b ∧ slashedBalanceSum b ≤ slashedBalanceSum a +
+      (body.proposerSlashings.data.size + (attesters.map fun slashing =>
+        slashing.attestation1.attestingIndices.data.size).sum) *
+        preset.largestEffectiveBalance := by
+  obtain ⟨boundedProposed, proposed⟩ := foldlM_counted Bounded slashedBalanceSum
+    (fun _ => 1) preset.largestEffectiveBalance
+    (fun _ _ _ ok => Bounded.proposerSlashing ok) proposersOk bounded
+  obtain ⟨boundedAttested, attested⟩ := foldlM_counted Bounded slashedBalanceSum
+    (fun slashing => slashing.attestation1.attestingIndices.data.size)
+    preset.largestEffectiveBalance
+    (fun _ _ _ ok => Bounded.attesterSlashing ok) attestersOk boundedProposed
+  simp only [List.map_const', List.sum_replicate, Nat.nsmul_eq_mul, Nat.mul_one,
+    Array.length_toList] at proposed
+  refine ⟨boundedAttested, ?_⟩
+  rw [Nat.add_mul]
+  omega
+
 end Counted
 
 /-- A block raises the slashed balances by at most the largest cap per validator its slashings name.
@@ -734,21 +772,62 @@ theorem processBlock_slashedBalanceSum_le_count {engine : ExecutionEngine preset
       slashedBalanceSum state + blockSlashingCount block.body * preset.largestEffectiveBalance := by
   obtain ⟨_, _, _, head, sized, proposersOk, slashingsOk, later⟩ := processBlock_slashings computed
   have bounded := (Bounded.of_capped capped).of_kept head.2.1 (Nat.le_of_eq sized)
-  obtain ⟨boundedProposed, proposed⟩ := foldlM_counted Bounded slashedBalanceSum
-    (fun _ => 1) preset.largestEffectiveBalance
-    (fun _ _ _ ok => Bounded.proposerSlashing ok) proposersOk bounded
-  have attested := (foldlM_counted Bounded slashedBalanceSum
-    (fun slashing => slashing.attestation1.attestingIndices.data.size)
-    preset.largestEffectiveBalance
-    (fun _ _ _ ok => Bounded.attesterSlashing ok) slashingsOk boundedProposed).2
+  have attested := (counted_slashings proposersOk slashingsOk bounded).2
   have kept : slashedBalanceSum after = slashedBalanceSum _ := congrArg
     (fun slashings => (slashings.elements.toList.map (·.toNat)).sum) later.1
   have started : slashedBalanceSum _ = slashedBalanceSum state := congrArg
     (fun slashings => (slashings.elements.toList.map (·.toNat)).sum) head.1
-  simp only [List.map_const', List.sum_replicate, Nat.nsmul_eq_mul, Nat.mul_one,
-    Array.length_toList] at proposed
   unfold blockSlashingCount
-  rw [Nat.add_mul]
   omega
+
+/-- At the turn of an attester slashing of a block, the slashed balances are bounded.
+
+The turn is the state that the steps before that attester slashing reach.
+
+The effective balances before the block are within their caps.
+
+The registry has the size it had before the block, and each earlier effective balance is kept.
+
+The slashed balances are at most those before the block plus one largest cap for each name counted.
+
+The names are those of the slashings before the turn.
+
+A proposer slashing counts one name.
+
+An attester slashing counts each index of its first attestation, with repeats. -/
+theorem slashingTurn_slashed_le {engine : ExecutionEngine preset fork}
+    {state turn : BeaconState preset fork} {block : BeaconBlock preset fork} {j : Nat}
+    (capped : EffectiveBalancesCapped state)
+    (turned : SlashingTurn config checks engine state block j turn) :
+    turn.validators.data.size = state.validators.data.size ∧ EffectiveKept state turn ∧
+      slashedBalanceSum turn ≤ slashedBalanceSum state +
+        (block.body.proposerSlashings.data.size +
+          ((block.body.attesterSlashings.data.toList.take j).map fun slashing =>
+            slashing.attestation1.attestingIndices.data.size).sum) *
+          preset.largestEffectiveBalance := by
+  obtain ⟨input, proposed, started, proposersOk, attestersOk⟩ := turned
+  rw [← Array.foldlM_toList] at proposersOk
+  obtain ⟨head, sized⟩ := Kept.operationsInput started
+  -- The slashings keep each earlier effective balance and grow the registry.
+  let Grows (a b : BeaconState preset fork) : Prop :=
+    EffectiveKept a b ∧ a.validators.data.size ≤ b.validators.data.size
+  have refl (a : BeaconState preset fork) : Grows a a := ⟨effectiveKept_refl a, Nat.le_refl _⟩
+  have trans {a b c : BeaconState preset fork} (one : Grows a b) (two : Grows b c) : Grows a c :=
+    ⟨effectiveKept_trans one.1 two.1 one.2, one.2.trans two.2⟩
+  have proposedGrows := (foldlM_ok_steps Grows refl trans (fun _ _ _ ok =>
+    ⟨effectiveKept_proposerSlashing ok, (frame_processProposerSlashing ok).registryGrows⟩)
+    proposersOk).1
+  have turnGrows := (foldlM_ok_steps Grows refl trans (fun _ _ _ ok =>
+    ⟨effectiveKept_attesterSlashing ok, (frame_processAttesterSlashing ok).registryGrows⟩)
+    attestersOk).1
+  -- They keep the size of the registry.
+  have turnSize := (lowers_slashings (count := input.validators.data.size) proposersOk
+    attestersOk rfl).1
+  have bounded := (Bounded.of_capped capped).of_kept head.2.1 (Nat.le_of_eq sized)
+  have counted := (counted_slashings proposersOk attestersOk bounded).2
+  have started : slashedBalanceSum input = slashedBalanceSum state := congrArg
+    (fun slashings => (slashings.elements.toList.map (·.toNat)).sum) head.1
+  refine ⟨turnSize.trans sized, effectiveKept_trans head.2.1
+    (trans proposedGrows turnGrows).1 head.2.2.registryGrows, by omega⟩
 
 end EthLib.Consensus
