@@ -9,11 +9,6 @@ From Bellatrix to Fulu, a proposer that uses external builders also builds a blo
 
 The [builder specification][validator] gives it four rules for choosing between the two.
 
-- It builds locally when the builders give no bid in time.
-- Builders have one second to give a bid, after which the proposer builds locally.
-- When the circuit breaker fires, it does not use the builders, and builds locally.
-- Once it has signed a blinded block, it must not fall back to a local block.
-
 The circuit breaker fires when the node judges the chain unhealthy.
 
 The source leaves its conditions to the implementation, so it is an input here.
@@ -53,24 +48,24 @@ The arrival is in milliseconds after the request for the bid.
 
 The last input is whether the proposer has already signed a blinded block for the slot.
 
-A signed blinded block keeps the builder, since the source forbids the local fallback then.
-
-Otherwise the circuit breaker, a missing bid, or a late bid gives the local payload.
-
-A bid that arrives at the tolerance exactly is in time, and the arrival is in whole milliseconds.
-
-The source triggers the last rule on publishing the blinded block, and signing is the safer trigger.
-
-With the circuit breaker fired after a blinded block is signed, the rule against a local block wins.
-
 The inputs are assumed consistent: a signed blinded block comes from a bid.
 -/
 def chooseSource (circuitBreaker : Bool) (bidArrival : Option Nat) (signedBlinded : Bool) :
     ProposalSource :=
+  -- How to avoid slashing: after a signed blinded block, the proposer must not build locally.
+  --
+  -- The source says this of a published blinded block, and EthLib takes the safer signed one.
+  --
+  -- This rule comes first, so it wins over a circuit breaker that fires after the signature.
   if signedBlinded then .builder
+  -- Liveness failsafe: when the circuit breaker fires, the proposer builds locally.
   else if circuitBreaker then .local
   else match bidArrival with
+    -- Builders have the tolerance of one second to give a bid, here in whole milliseconds.
+    --
+    -- A bid that arrives at the tolerance exactly is in time, else the proposer builds locally.
     | some arrival => if arrival ≤ BUILDER_PROPOSAL_DELAY_TOLERANCE * 1000 then .builder else .local
+    -- Without a bid from the builders, the proposer builds locally.
     | none => .local
 
 end EthLib.Consensus.BuilderApi

@@ -16,17 +16,9 @@ The first endpoint answers 200 with the payload.
 
 The second answers 202, and the builder publishes the block.
 
-A block is valid when it unblinds with the builder's payload into a full block.
-
-The full block must pass the state transition from the builder's state.
-
 The signature checks are an argument, and the source asks for BLS checks, which the export uses.
 
 The transition checks the signature of the proposer, which the [builder specification] asks for.
-
-The source does not say what a builder answers for a header that is not that of its payload.
-
-Such a block does not unblind, so it is invalid here and gets 400.
 
 [builder specification]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/bellatrix/builder.md#blinded-block-processing
 -/
@@ -80,10 +72,18 @@ def submitBlindedBlockStatus (config : Config) (checks : SignatureChecks)
     (range : HasBuilderApi fork) (payload : ExecutionPayload preset fork)
     (signed : SignedBlindedBeaconBlock preset fork) (version : SubmitVersion) : Nat :=
   match signed.unblind range payload with
+  -- The source does not say what a builder answers for a header that is not that of its payload.
+  --
+  -- Such a block does not unblind, so EthLib holds it invalid, with 400.
   | .error _ => 400
   | .ok full =>
+    -- The block is valid by the rules of consensus, and signed by the expected proposer.
+    --
+    -- The state transition from the builder's state checks both.
     match stateTransition config checks engine state full with
+    -- The API: the success of the endpoint for a valid block.
     | .ok _ => version.success
+    -- The API: 400 for an invalid block.
     | .error _ => 400
 
 end EthLib.Consensus.BuilderApi
