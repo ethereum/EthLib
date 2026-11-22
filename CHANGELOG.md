@@ -824,6 +824,18 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, an Engine node keeps the number and the time of each known block unbounded, as its header holds them, and the build of a payload fails on an excess blob gas of `2^64` or more ([#3852](https://github.com/ethereum/EthLib/issues/3852)).
+  `KnownPayload.number` and `KnownPayload.timestamp` are `Nat`, so a block with a time of `2^64` or more no longer wraps to a small time in the check that the attributes come after the head.
+  `checkAttributes` compares the head's time with the `toNat` of the attributes' time, and `checkAttributes_eq_ok_iff`, `checkAttributes_eq_error_of_unsupportedFork`, `checkAttributes_eq_error_of_wrong_structure` and `checkAttributes_eq_error_of_not_after_head` state the checks on `Nat`.
+  The statements on the JSON of the attributes of a forkchoice update, `forkchoiceUpdatedCall_payloadAttributesJson` and its forms for Glamsterdam and Hegotá, read the times the same way.
+  `buildPayload` fails with the new block error `excessBlobGasOverflow`, of code 257, when `builtExcessBlobGas`, the excess that the parent gives, is `2^64` or more; `buildPayload_eq_error_of_excessBlobGas_overflow` states it.
+  The refusals after that check, `buildPayload_eq_error_of_hash_eq_error`, `_of_runBody_eq_error`, `_of_checkBlock_eq_error` and `_of_outputChecks_eq_error`, take the hypothesis that the excess is below `2^64`.
+  `buildPayload_of_buildPayloadOnChain` and the refusals of `buildPayloadOnChain` give the head with the parent's number and time unconverted.
+  In Python, `engine.build_payload` builds on a parent whose number is `2^64` or more, where it refused it with code 0.
+  A parent whose time is `2^64` or more now fails with `-38003`, since the time of the attributes is a 64-bit number and cannot come after it.
+  `engine.forkchoice_updated` reads the numbers and times of its tree of known blocks unbounded.
+  Migration: read a known block's number and time as natural numbers, and pass the bound on the excess to the refusal lemmas.
+
 - In Lean, the SSWU map of BLS12-381 `G1` reads the square root of the base field as an option, and the wrapper `sqrtOrError` is removed ([#4009](https://github.com/ethereum/EthLib/pull/4009)).
   The map gives the same points and fails with the same error.
   `Fp.sqrtOrError_eq` and `map_sqrtOrError` are removed.

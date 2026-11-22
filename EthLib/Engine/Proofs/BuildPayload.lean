@@ -76,7 +76,7 @@ private theorem buildPayload_spec
     split at h
     next hA =>
       simp only [bind_ok_iff] at h
-      obtain ⟨parentHash, hHash, result, hR, u, hC, v, hF, list, hList, hEq⟩ := h
+      obtain ⟨-, -, parentHash, hHash, result, hR, u, hC, v, hF, list, hList, hEq⟩ := h
       simp only [pure, Except.pure, Except.ok.injEq] at hEq
       subst hEq
       have hHash' : parent.header.hash = .ok parentHash := by
@@ -368,8 +368,8 @@ theorem buildPayload_of_buildPayloadOnChain {version : Nat}
     ∃ parent attributes transactions,
       chain.recent.getLast? = some parent ∧
       checkAttributes chain.config version
-        ⟨parent.header.parentHash, true, UInt64.ofNat parent.header.number,
-          UInt64.ofNat parent.header.timestamp.toNat, none⟩ decoded = .ok ⟨fork, attributes⟩ ∧
+        ⟨parent.header.parentHash, true, parent.header.number,
+          parent.header.timestamp.toNat, none⟩ decoded = .ok ⟨fork, attributes⟩ ∧
       decodeTransactions fork 0 encoded = .ok transactions ∧
       buildPayload chain attributes choices transactions = .ok built := by
   unfold buildPayloadOnChain at h
@@ -403,26 +403,40 @@ theorem buildPayload_eq_error_of_activeFork_ne {parent : RecentBlock} (hh : ¬ .
         attributes.timestamp.toNat) fork) := by
   simp [buildPayload, hh, hp, ha, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
+/-- A build whose parent gives an excess blob gas of `2^64` or more fails.
+
+The error holds that excess, which no header can hold. -/
+theorem buildPayload_eq_error_of_excessBlobGas_overflow {parent : RecentBlock}
+    (hh : ¬ .hegota ≤ fork) (hp : chain.recent.getLast? = some parent)
+    (ha : chain.config.activeFork (parent.header.number + 1) attributes.timestamp.toNat
+      = some fork)
+    (ho : 2 ^ 64 ≤ builtExcessBlobGas chain.config parent attributes) :
+    buildPayload chain attributes choices transactions =
+      .error (.excessBlobGasOverflow (builtExcessBlobGas chain.config parent attributes)) := by
+  simp [buildPayload, hh, hp, ha, ensure, Nat.not_lt.mpr ho, bind, Except.bind]
+
 /-- A build whose parent header does not encode fails with the error of that encoding. -/
 theorem buildPayload_eq_error_of_hash_eq_error {parent : RecentBlock}
     {error : Serialization.Rlp.RlpError}
     (hh : ¬ .hegota ≤ fork) (hp : chain.recent.getLast? = some parent)
     (ha : chain.config.activeFork (parent.header.number + 1) attributes.timestamp.toNat
       = some fork)
+    (hb : builtExcessBlobGas chain.config parent attributes < 2 ^ 64)
     (hx : parent.header.hash = .error error) :
     buildPayload chain attributes choices transactions = .error (.encoding error) := by
-  simp [buildPayload, hh, hp, ha, hx, bind, Except.bind, Except.mapError]
+  simp [buildPayload, hh, hp, ha, ensure, hb, hx, bind, Except.bind, Except.mapError]
 
 /-- A build whose body does not run fails with the error of that run. -/
 theorem buildPayload_eq_error_of_runBody_eq_error {parent : RecentBlock} {parentHash : Hash32}
     {error : BlockError} (hh : ¬ .hegota ≤ fork) (hp : chain.recent.getLast? = some parent)
     (ha : chain.config.activeFork (parent.header.number + 1) attributes.timestamp.toNat
       = some fork)
+    (hb : builtExcessBlobGas chain.config parent attributes < 2 ^ 64)
     (hx : parent.header.hash = .ok parentHash)
     (hr : runBody chain ⟨buildHeader chain.config parent parentHash attributes choices,
       transactions, [], attributes.withdrawals⟩ = .error error) :
     buildPayload chain attributes choices transactions = .error error := by
-  simp [buildPayload, hh, hp, ha, hx, hr, bind, Except.bind, Except.mapError]
+  simp [buildPayload, hh, hp, ha, ensure, hb, hx, hr, bind, Except.bind, Except.mapError]
 
 /-- A build whose block fails the checks of its chain fails with the error of those checks. -/
 theorem buildPayload_eq_error_of_checkBlock_eq_error {parent : RecentBlock} {parentHash : Hash32}
@@ -430,6 +444,7 @@ theorem buildPayload_eq_error_of_checkBlock_eq_error {parent : RecentBlock} {par
     (hp : chain.recent.getLast? = some parent)
     (ha : chain.config.activeFork (parent.header.number + 1) attributes.timestamp.toNat
       = some fork)
+    (hb : builtExcessBlobGas chain.config parent attributes < 2 ^ 64)
     (hx : parent.header.hash = .ok parentHash)
     (hr : runBody chain ⟨buildHeader chain.config parent parentHash attributes choices,
       transactions, [], attributes.withdrawals⟩ = .ok result)
@@ -437,7 +452,7 @@ theorem buildPayload_eq_error_of_checkBlock_eq_error {parent : RecentBlock} {par
       ⟨fillHeader (buildHeader chain.config parent parentHash attributes choices) result.output
         result.roots, transactions, [], attributes.withdrawals⟩ = .error error) :
     buildPayload chain attributes choices transactions = .error error := by
-  simp [buildPayload, hh, hp, ha, hx, hr, hc, bind, Except.bind, Except.mapError]
+  simp [buildPayload, hh, hp, ha, ensure, hb, hx, hr, hc, bind, Except.bind, Except.mapError]
 
 /-- A build whose filled header disagrees with what its body gave fails with the first such error.
 
@@ -447,6 +462,7 @@ theorem buildPayload_eq_error_of_outputChecks_eq_error {parent : RecentBlock} {p
     (hp : chain.recent.getLast? = some parent)
     (ha : chain.config.activeFork (parent.header.number + 1) attributes.timestamp.toNat
       = some fork)
+    (hb : builtExcessBlobGas chain.config parent attributes < 2 ^ 64)
     (hx : parent.header.hash = .ok parentHash)
     (hr : runBody chain ⟨buildHeader chain.config parent parentHash attributes choices,
       transactions, [], attributes.withdrawals⟩ = .ok result)
@@ -457,7 +473,7 @@ theorem buildPayload_eq_error_of_outputChecks_eq_error {parent : RecentBlock} {p
       (fillHeader (buildHeader chain.config parent parentHash attributes choices) result.output
         result.roots) result.output result.roots) = .error error) :
     buildPayload chain attributes choices transactions = .error error := by
-  simp [buildPayload, hh, hp, ha, hx, hr, hc, hf, bind, Except.bind, Except.mapError]
+  simp [buildPayload, hh, hp, ha, ensure, hb, hx, hr, hc, hf, bind, Except.bind, Except.mapError]
 
 /-- A build on a chain with no recent block fails for a missing parent, with no head to apply. -/
 theorem buildPayloadOnChain_eq_error_of_getLast?_eq_none {version : Nat}
@@ -471,8 +487,8 @@ theorem buildPayloadOnChain_eq_error_of_checkAttributes_eq_error {version : Nat}
     {decoded : Σ f, PayloadAttributes f} {encoded : List ByteArray} {parent : RecentBlock}
     {error : EngineError} (hp : chain.recent.getLast? = some parent)
     (ha : checkAttributes chain.config version
-      ⟨parent.header.parentHash, true, UInt64.ofNat parent.header.number,
-        UInt64.ofNat parent.header.timestamp.toNat, none⟩ decoded = .error error) :
+      ⟨parent.header.parentHash, true, parent.header.number,
+        parent.header.timestamp.toNat, none⟩ decoded = .error error) :
     buildPayloadOnChain chain version decoded choices encoded = .error (.attributes error) := by
   simp [buildPayloadOnChain, hp, ha, bind, Except.bind, Except.mapError]
 
@@ -481,8 +497,8 @@ theorem buildPayloadOnChain_eq_error_of_decodeTransactions_eq_error {version : N
     {decoded : Σ f, PayloadAttributes f} {encoded : List ByteArray} {parent : RecentBlock}
     {error : PayloadError} (hp : chain.recent.getLast? = some parent)
     (ha : checkAttributes chain.config version
-      ⟨parent.header.parentHash, true, UInt64.ofNat parent.header.number,
-        UInt64.ofNat parent.header.timestamp.toNat, none⟩ decoded = .ok ⟨fork, attributes⟩)
+      ⟨parent.header.parentHash, true, parent.header.number,
+        parent.header.timestamp.toNat, none⟩ decoded = .ok ⟨fork, attributes⟩)
     (ht : decodeTransactions fork 0 encoded = .error error) :
     buildPayloadOnChain chain version decoded choices encoded = .error (.transaction error) := by
   simp [buildPayloadOnChain, hp, ha, ht, bind, Except.bind, Except.mapError]
@@ -492,8 +508,8 @@ theorem buildPayloadOnChain_eq_error_of_buildPayload_eq_error {version : Nat}
     {decoded : Σ f, PayloadAttributes f} {encoded : List ByteArray} {parent : RecentBlock}
     {error : BlockError} (hp : chain.recent.getLast? = some parent)
     (ha : checkAttributes chain.config version
-      ⟨parent.header.parentHash, true, UInt64.ofNat parent.header.number,
-        UInt64.ofNat parent.header.timestamp.toNat, none⟩ decoded = .ok ⟨fork, attributes⟩)
+      ⟨parent.header.parentHash, true, parent.header.number,
+        parent.header.timestamp.toNat, none⟩ decoded = .ok ⟨fork, attributes⟩)
     (ht : decodeTransactions fork 0 encoded = .ok transactions)
     (hb : buildPayload chain attributes choices transactions = .error error) :
     buildPayloadOnChain chain version decoded choices encoded = .error (.block error) := by

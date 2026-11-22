@@ -11801,7 +11801,8 @@
       {"constructor": "state", "code": 253},
       {"constructor": "undecodableTransaction", "code": 254},
       {"constructor": "blockAccessList", "code": 255},
-      {"constructor": "wrongBlockAccessListHash", "code": 256}]}],
+      {"constructor": "wrongBlockAccessListHash", "code": 256},
+      {"constructor": "excessBlobGasOverflow", "code": 257}]}],
    "error_class": "BlockError",
    "docstring":
    "Check the RLP size of a block, decoded at the fork: from Fusaka, at most 8 MiB."},
@@ -14827,7 +14828,8 @@
       {"constructor": "state", "code": 253},
       {"constructor": "undecodableTransaction", "code": 254},
       {"constructor": "blockAccessList", "code": 255},
-      {"constructor": "wrongBlockAccessListHash", "code": 256}]}],
+      {"constructor": "wrongBlockAccessListHash", "code": 256},
+      {"constructor": "excessBlobGasOverflow", "code": 257}]}],
    "error_class": "BlockError",
    "docstring":
    "Check a header at a fork against its parent at the parent's fork, at every fork.\n\nThe arguments are the forks of the parent and of the header, the parent and the header in RLP.\n\nLast come the blob schedules that the chain sets, each four integers.\n\nThe header's blob schedule is the last given one that it has reached, else that of its fork."},
@@ -14895,7 +14897,8 @@
       {"constructor": "state", "code": 253},
       {"constructor": "undecodableTransaction", "code": 254},
       {"constructor": "blockAccessList", "code": 255},
-      {"constructor": "wrongBlockAccessListHash", "code": 256}]}],
+      {"constructor": "wrongBlockAccessListHash", "code": 256},
+      {"constructor": "excessBlobGasOverflow", "code": 257}]}],
    "error_class": "BlockError",
    "docstring":
    "Check a header against its parent at two named forks, every check but the proof of work.\n\nTest chains that run without proof of work check their headers this way.\n\nThe arguments are those of the full check of a header.\n\nThe header's blob schedule is the last given one that it has reached, else that of its fork."},
@@ -14972,7 +14975,8 @@
       {"constructor": "state", "code": 253},
       {"constructor": "undecodableTransaction", "code": 254},
       {"constructor": "blockAccessList", "code": 255},
-      {"constructor": "wrongBlockAccessListHash", "code": 256}]}],
+      {"constructor": "wrongBlockAccessListHash", "code": 256},
+      {"constructor": "excessBlobGasOverflow", "code": 257}]}],
    "error_class": "BlockError",
    "docstring":
    "Run the state transition of a block on a chain, and give the state after it.\n\nThe arguments are the configuration of the chain, its state and its recent blocks.\n\nThen come the fork and the block, and whether to check the seal of the proof of work.\n\nIt returns the RLP list of two items: the state root, and the accounts of the state."},
@@ -15023,7 +15027,8 @@
       {"constructor": "state", "code": 253},
       {"constructor": "undecodableTransaction", "code": 254},
       {"constructor": "blockAccessList", "code": 255},
-      {"constructor": "wrongBlockAccessListHash", "code": 256}]}],
+      {"constructor": "wrongBlockAccessListHash", "code": 256},
+      {"constructor": "excessBlobGasOverflow", "code": 257}]}],
    "error_class": "BlockError",
    "docstring":
    "The genesis block at a fork, in RLP form.\n\nThe arguments are the fork, the fields of the header that the chain chooses, and the state.\n\nThe fields are in the order of the header, from the beneficiary to the slot number."},
@@ -15326,7 +15331,8 @@
       {"constructor": "state", "code": 253},
       {"constructor": "undecodableTransaction", "code": 254},
       {"constructor": "blockAccessList", "code": 255},
-      {"constructor": "wrongBlockAccessListHash", "code": 256}]}],
+      {"constructor": "wrongBlockAccessListHash", "code": 256},
+      {"constructor": "excessBlobGasOverflow", "code": 257}]}],
    "error_class": "EngineError",
    "docstring":
    "Build a payload on a chain, from attributes, the builder's choices and transactions.\n\nThe arguments are the configuration, the state, the recent blocks, the method and the attributes.\n\nThen come the fee recipient, the extra data, the target gas limit and the transactions.\n\nIt returns the block and the accounts after it in RLP form, the requests and the block value."},
@@ -15879,7 +15885,8 @@
       {"constructor": "state", "code": 253},
       {"constructor": "undecodableTransaction", "code": 254},
       {"constructor": "blockAccessList", "code": 255},
-      {"constructor": "wrongBlockAccessListHash", "code": 256}]}],
+      {"constructor": "wrongBlockAccessListHash", "code": 256},
+      {"constructor": "excessBlobGasOverflow", "code": 257}]}],
    "error_class": "RpcError",
    "docstring":
    "Answer requests of the execution JSON-RPC API from the chain that the arguments build.\n\nThe arguments are the configuration, the state of the lowest block, and the blocks.\n\nEach block is the name of its fork and its RLP form, the lowest block first.\n\nThen come the head, safe and finalized hashes, the network ID, and whether to check the seal.\n\nNext come the block numbers whose access lists are pruned, while their blocks remain available.\n\nFrom Glamsterdam, the access-list methods report code 4444 for a pruned list.\n\nThe last argument is the list of the texts of the requests.\n\nThe configuration may give `mergeForkBlock`, the `FORK_NEXT_VALUE` of EIP-3675.\n\nWhen the lowest block is not block zero, `eth_config` needs `genesisHash` and `genesisTime` there.\n\nWhen it is block zero, both are read from it, and any given values must match.\n\nIt returns the text of the response to each request, in order, or none for a notification.\n\nA block that does not decode or fails its transition has the code of its block error.\n\nAny other bad input has code 0."},

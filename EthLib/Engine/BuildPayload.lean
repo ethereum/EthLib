@@ -81,14 +81,30 @@ def gasTarget (attributes : PayloadAttributes fork) (choices : BuildChoices) : N
     (if h : .glamsterdam ≤ fork then (attributes.targetGasLimit h).toNat
     else choices.targetGasLimit.toNat)
 
+/-- The excess blob gas that a parent gives to the block built on it, from Dencun.
+
+It is 0 before Dencun, where a header has no excess, and on a parent before London.
+
+A parent before London has no base fee, and so no blob gas fields. -/
+def builtExcessBlobGas (config : ChainConfig) (parent : RecentBlock)
+    (attributes : PayloadAttributes fork) : Nat :=
+  if h : .dencun ≤ fork then
+    if hLondon : .london ≤ parent.fork then
+      expectedExcessBlobGas hLondon h parent.header
+        (Execution.Fees.BlobBaseFee.chainBlobSchedule config fork (parent.header.number + 1)
+          attributes.timestamp.toNat)
+    else 0
+  else 0
+
 /-- The header of a built block before its body runs, on a parent.
 
-The fields that the body gives are zero. -/
+The fields that the body gives are zero.
+
+The build checks first that the excess blob gas is below `2^64`, so the header holds it exactly. -/
 def buildHeader (config : ChainConfig) (parent : RecentBlock) (parentHash : Hash32)
     (attributes : PayloadAttributes fork) (choices : BuildChoices) : Header fork :=
   let number := parent.header.number + 1
   let timestamp := attributes.timestamp.toNat
-  let schedule := Execution.Fees.BlobBaseFee.chainBlobSchedule config fork number timestamp
   { parentHash
     ommersHash := EMPTY_OMMER_HASH
     coinbase := choices.feeRecipient
@@ -108,10 +124,7 @@ def buildHeader (config : ChainConfig) (parent : RecentBlock) (parentHash : Hash
     baseFeePerGas := fun _ => expectedBaseFeeAcross parent.header
     withdrawalsRoot := fun _ => 0
     blobGasUsed := fun _ => 0
-    excessBlobGas := fun h =>
-      if hLondon : .london ≤ parent.fork then
-        (expectedExcessBlobGas hLondon h parent.header schedule).toUInt64
-      else 0
+    excessBlobGas := fun _ => UInt64.ofNat (builtExcessBlobGas config parent attributes)
     parentBeaconBlockRoot := attributes.parentBeaconBlockRoot
     requestsHash := fun _ => 0
     blockAccessListHash := fun _ => 0
@@ -153,6 +166,8 @@ From Glamsterdam it also holds the block access list that the run of the body re
 
 It fails when the block cannot be built, or when it would fail the state transition.
 
+From Dencun it fails when the excess blob gas that the parent gives is `2^64` or more.
+
 The checks against the parent can fail, for instance on a timestamp not above the parent's.
 
 They also fail on extra data of more than 32 bytes.
@@ -172,6 +187,9 @@ def buildPayload (chain : BlockChain) (attributes : PayloadAttributes fork)
   let number := parent.header.number + 1
   let active := chain.config.activeFork number attributes.timestamp.toNat
   unless active = some fork do throw (.wrongFork active fork)
+  -- The header holds the excess blob gas in 64 bits, so a larger excess fails here.
+  let excess := builtExcessBlobGas chain.config parent attributes
+  ensure (excess < 2 ^ 64) (.excessBlobGasOverflow excess)
   let parentHash ← parent.header.hash.mapError .encoding
   let header := buildHeader chain.config parent parentHash attributes choices
   let result ← runBody chain ⟨header, transactions, [], attributes.withdrawals⟩
@@ -210,18 +228,14 @@ The last recent block is the head that the update applies.
 
 So the attributes must pass the checks of that version against it, which fix their fork.
 
-The transactions are in the form of an execution payload, and decode at that fork.
-
-The parent's number and time are read in 64 bits, as the payload tree of the update holds them.
-
-The result is meaningful only for a parent whose number and time fit 64 bits. -/
+The transactions are in the form of an execution payload, and decode at that fork. -/
 def buildPayloadOnChain (chain : BlockChain) (version : Nat) (attributes : Σ f, PayloadAttributes f)
     (choices : BuildChoices) (transactions : List ByteArray) :
     Except BuildError (Σ fork, BuiltPayload fork) := do
   let some parent := chain.recent.getLast? | throw (.block .noParent)
   -- The checks of the attributes read only the number and the time of the head.
   let head : KnownPayload := ⟨parent.header.parentHash, true,
-    UInt64.ofNat parent.header.number, UInt64.ofNat parent.header.timestamp.toNat, none⟩
+    parent.header.number, parent.header.timestamp.toNat, none⟩
   let ⟨fork, attributes⟩ ←
     (checkAttributes chain.config version head attributes).mapError .attributes
   let transactions ← (decodeTransactions fork 0 transactions).mapError .transaction
