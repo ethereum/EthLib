@@ -670,6 +670,12 @@ jobs:
 
       - run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_fork_cap.py
 
+      # No Lean comment quotes code in a programming language or cites the Python specs,
+      # except notation that its source writes, listed with a reason in the allowlist.
+      - run: uv run --no-project --python 3.12 python scripts/check_comment_code.py
+
+      - run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_comment_code.py
+
       # Every test cites only the pinned commits of tests/sources.toml, and every pinned
       # vector directory names its sources.
       # pyproject.toml and lakefile.lean declare one release version.

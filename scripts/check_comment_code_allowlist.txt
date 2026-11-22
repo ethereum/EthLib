@@ -1,0 +1,46 @@
+# Lean comments that keep code syntax because their source writes it so, each for a reason.
+#
+# One finding per line: its file, its rule, the reason, then the span or comment line.
+# The fields are separated by ` | `, and the text is the one that the check prints.
+# An entry fits only notation that the cited source itself writes, never Python of a spec.
+# A line that no longer matches a finding fails the check.
+
+EthLib/Execution/Transactions/Authorization.lean | C15 | EIP-7702 writes the signed message in this notation | msg = keccak(MAGIC || rlp([chain_id, address, nonce]))
+EthLib/Execution/Transactions/Authorization.lean | C15 | EIP-7702 writes the authorization tuple in this notation | [chain_id, address, nonce, y_parity, r, s]
+EthLib/Cryptography/Aes/Gcm.lean | C7 | NIST SP 800-38D §7.1 writes the lengths as `[len(A)]_64` | Any other IV is hashed with its length in bits: `GHASH_H(IV || 0^(s+64) || [len(IV)]_64)`.
+EthLib/Cryptography/Aes/Gcm.lean | C7 | NIST SP 800-38D §7.1 writes the lengths as `[len(A)]_64` | The padding `0^s` completes the last block, and `0^64 || [len(IV)]_64` is one more block.
+EthLib/Cryptography/Aes/Gcm.lean | C7 | NIST SP 800-38D §7.1 writes the lengths as `[len(A)]_64` | The block holds `[len(A)]_64 || [len(C)]_64` when both bit lengths are below `2^64`.
+EthLib/Cryptography/Bls/HashToCurve.lean | C15 | RFC 9380 §5.2 and §5.3.1 write these steps in this notation | ell = ceil(len_in_bytes / b_in_bytes)
+EthLib/Cryptography/Bls/HashToCurve.lean | C7 | RFC 9380 §5.2 and §5.3.1 write these steps in this notation | Step 3: `DST_prime = DST || I2OSP(len(DST), 1)`.
+EthLib/Cryptography/Bls/HashToCurve.lean | C15 | RFC 9380 §5.2 and §5.3.1 write these steps in this notation | l_i_b_str = I2OSP(len_in_bytes, 2)
+EthLib/Cryptography/Bls/HashToCurve.lean | C15 | RFC 9380 §5.2 and §5.3.1 write these steps in this notation | msg_prime = Z_pad || msg || l_i_b_str || I2OSP(0, 1) || DST_prime
+EthLib/Cryptography/Bls/HashToCurve.lean | C15 | RFC 9380 §5.2 and §5.3.1 write these steps in this notation | b_0 = H(msg_prime)
+EthLib/Cryptography/Bls/HashToCurve.lean | C15 | RFC 9380 §5.2 and §5.3.1 write these steps in this notation | uniform_bytes = b_1 || ... || b_ell
+EthLib/Cryptography/Bls/HashToCurve.lean | C13 | RFC 9380 §5.2 and §5.3.1 write these steps in this notation | len_in_bytes
+EthLib/Cryptography/Bls/HashToCurve.lean | C13 | RFC 9380 §5.2 and §5.3.1 write these steps in this notation | uniform_bytes
+EthLib/Cryptography/Bls/HashToCurve.lean | C15 | RFC 9380 §5.2 and §5.3.1 write these steps in this notation | len_in_bytes = count * m * L
+EthLib/Cryptography/Bls/HashToCurve.lean | C15 | RFC 9380 §5.2 and §5.3.1 write these steps in this notation | elm_offset = L * (j + i * m)
+EthLib/Cryptography/Bls/HashToCurve.lean | C15 | RFC 9380 §5.2 and §5.3.1 write these steps in this notation | e_j = OS2IP(substr(uniform_bytes, elm_offset, L)) mod p
+EthLib/Cryptography/Bls/KeyGen.lean | C15 | EIP-2333 writes the key derivation in this notation | OKM = HKDF-Expand(PRK, key_info || I2OSP(L, 2), L)
+EthLib/Cryptography/Hash/Blake2b.lean | C8 | RFC 7693 §3.1 and §3.2 write the mixing in this notation | `v[a] := (v[a] + v[b] + x) mod 2**w`.
+EthLib/Cryptography/Hash/Blake2b.lean | C8 | RFC 7693 §3.1 and §3.2 write the mixing in this notation | `v[c] := (v[c] + v[d]) mod 2**w`.
+EthLib/Cryptography/Hash/Blake2b.lean | C8 | RFC 7693 §3.1 and §3.2 write the mixing in this notation | `v[a] := (v[a] + v[b] + y) mod 2**w`.
+EthLib/Cryptography/Hash/Blake2b.lean | C8 | RFC 7693 §3.1 and §3.2 write the mixing in this notation | `v[12] := v[12] ^ (t mod 2**w)`, the low word of the offset, given as `t0`.
+EthLib/Cryptography/Hash/Keccak.lean | C7 | FIPS 202 §4 and §5.1 write the length of a string as `len(N)` | The number of rate-sized blocks the padded message splits into: `n = len(P) / r`.
+EthLib/Cryptography/Hash/Keccak.lean | C7 | FIPS 202 §4 and §5.1 write the length of a string as `len(N)` | There are `n - 1 = len(N) / r` blocks before the last one, since `n = len(N) / r + 1`.
+EthLib/Cryptography/Hash/Keccak.lean | C7 | FIPS 202 §4 and §5.1 write the length of a string as `len(N)` | Steps 1 and 2: the k = n - 1 blocks of P = N || pad(r, len(N)) before the last are in N.
+EthLib/Cryptography/Hash/Keccak.lean | C7 | FIPS 202 §4 and §5.1 write the length of a string as `len(N)` | The first 1 bit of the padding is bit 0 of byte len(N) mod r of the last block.
+EthLib/Cryptography/Hash/Keccak.lean | C7 | FIPS 202 §4 and §5.1 write the length of a string as `len(N)` | 1. Let `P = N || pad(r, len(N))`.
+EthLib/Cryptography/Hash/Keccak.lean | C7 | FIPS 202 §4 and §5.1 write the length of a string as `len(N)` | 2. Let `n = len(P) / r`.
+EthLib/Cryptography/Hash/Keccak.lean | C7 | FIPS 202 §4 and §5.1 write the length of a string as `len(N)` | Step 1: pad(r, len(N)) reads len(N) only mod r, which is the pending length.
+EthLib/Cryptography/Proofs/Hash/Keccak/Basic.lean | C7 | FIPS 202 §4 writes the length of a string as `len(N)` | FIPS 202 §4 cuts the padded message `P` into `n = len(P) / r` blocks of `r` bits.
+EthLib/Cryptography/Proofs/Hash/Keccak/Basic.lean | C7 | FIPS 202 §4 writes the length of a string as `len(N)` | The byte at index `len(b)` exists in both padded strings, which have one length.
+EthLib/Cryptography/Proofs/Hash/Keccak/Basic.lean | C7 | FIPS 202 §4 writes the length of a string as `len(N)` | For `a` it is padding byte `len(b) - len(a) >= 1`, for `b` padding byte 0.
+EthLib/Cryptography/Proofs/Hash/Keccak/Basic.lean | C7 | FIPS 202 §4 writes the length of a string as `len(N)` | The last of the n = len(N) / r + 1 blocks is the one the last permutation follows.
+EthLib/Cryptography/Sphincs/Constants.lean | C7 | FIPS 205 §10.2 writes the framed message in this notation | The length in bytes of the framed message `M' = 0x00 | len(ctx) | ctx | M` of `PRF_msg`.
+EthLib/Cryptography/Sphincs/Digest.lean | C7 | FIPS 205 Algorithms 19 and 20 write these steps in this notation | `M' = BE_8(0) | BE_8(len(ctx)) | ctx | M`: the message as pure SLH-DSA frames it.
+EthLib/Cryptography/Sphincs/Digest.lean | C15 | FIPS 205 Algorithms 19 and 20 write these steps in this notation | R = PRF_msg(SK.prf, opt_rand, M') = Trunc_n(H(SK.prf | opt_rand | M'))
+EthLib/Cryptography/Sphincs/Digest.lean | C15 | FIPS 205 Algorithms 19 and 20 write these steps in this notation | idx_tree <- toInt(tmp_idx_tree, ...) mod 2^(h - h/d)
+EthLib/Cryptography/Sphincs/Digest.lean | C15 | FIPS 205 Algorithms 19 and 20 write these steps in this notation | idx_leaf <- toInt(tmp_idx_leaf, ...) mod 2^(h/d)
+EthLib/Cryptography/Sphincs/KeyGen.lean | C15 | FIPS 205 Algorithm 18 writes this step in this notation | PK.root <- xmss_node(SK.seed, 0, h', PK.seed, ADRS)
+EthLib/Cryptography/Xmss/Tree.lean | C15 | the XMSS paper writes the authentication path in this notation | pi_lambda = X_{lambda, floor(e / 2^lambda) xor 1}
