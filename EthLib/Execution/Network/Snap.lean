@@ -31,7 +31,9 @@ There an empty storage root stands for the root of the empty trie.
 
 An empty code hash stands for the hash of empty code.
 
-"Data format" calls them an "empty list", but an empty field in RLP is the empty string `0x80`.
+The section Data format calls them an empty list, but RLP writes an empty field as the empty string.
+
+Its encoding is `0x80`.
 
 EthLib reads them as that string.
 
@@ -97,8 +99,15 @@ def SnapVersion.capability (v : SnapVersion) : Networking.Devp2p.Capability := �
 
 /-- The number of message IDs of a capability, for the multiplexing of RLPx.
 
-It is the count of an eth or snap version that EthLib specifies, and 0 for any other. -/
+It is the count of an eth or snap version that EthLib specifies, and 0 for any other.
+
+The source is [RLPx][rlpx], section Message ID-based Multiplexing.
+
+[rlpx]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/rlpx.md#message-id-based-multiplexing -/
 def capabilityLength (c : Networking.Devp2p.Capability) : Nat :=
+  -- RLPx: each capability states how many message IDs it needs.
+  --
+  -- EthLib knows the counts of eth and snap only, and gives 0 to any other.
   if c.name = SNAP_NAME then ((SnapVersion.ofNumber? c.version).map (·.messageCount)).getD 0
   else ethLength c
 
@@ -106,9 +115,12 @@ def capabilityLength (c : Networking.Devp2p.Capability) : Nat :=
 
 /-- The slim form of an account: the empty root and the empty code hash as empty strings. -/
 def slimAccount (account : State.Account) (storageRoot : Hash32) : Item :=
+  -- Data format: the fields of the account in their order, the nonce and the balance first.
   .list [Codec.toItem account.nonce, Codec.toItem account.balance,
+    -- Data format: the root of the empty trie becomes empty, here the empty string.
     if storageRoot = Trie.emptyTrieRoot Cryptography.Hash.Keccak.keccak256 then .bytes .empty
     else Codec.toItem storageRoot,
+    -- Data format: the hash of empty code becomes empty, here the empty string as well.
     if account.codeHash = State.EMPTY_CODE_HASH then .bytes .empty
     else Codec.toItem account.codeHash]
 
@@ -120,9 +132,11 @@ An empty code hash is the hash of empty code. -/
 def ofSlimAccount (item : Item) : Except RlpError (State.Account × Hash32) := do
   match ← item.fields 4 with
   | [n, b, r, c] =>
+    -- Data format, read back: the empty string is the root of the empty trie.
     let root ←
       if r = .bytes .empty then pure (Trie.emptyTrieRoot Cryptography.Hash.Keccak.keccak256)
       else r.field 2
+    -- The empty string also stands for the hash of empty code.
     let code ← if c = .bytes .empty then pure State.EMPTY_CODE_HASH else c.field 3
     return (⟨← n.field 0, ← b.field 1, code⟩, root)
   | items => throw (.wrongFieldCount 4 items.length)
@@ -134,7 +148,9 @@ There is none when the body is not the slim form itself, such as another encodin
 A byte string that holds the encoding of the slim form is not the slim form either. -/
 def fullAccount (body : Item) : Option ByteArray := do
   let .ok (account, storageRoot) := ofSlimAccount body | none
+  -- EthLib's rule, not in snap.md: the body is the slim form itself, so an account has one body.
   if slimAccount account storageRoot ≠ body then none
+  -- `p(a)` of Yellow Paper §4.1: `RLP((sigma[a]_n, sigma[a]_b, sigma[a]_s, sigma[a]_c))`.
   (State.encodeAccount account storageRoot).toOption
 
 /-! ## Messages -/
@@ -192,7 +208,7 @@ inductive SnapMessage where
 
   Each access list is its RLP item, or the empty string when the peer does not have it.
 
-  `snap.md` types an entry `B`, but hashes it as `keccak256(rlp.encode(bal))`.
+  `snap.md` types an entry `B`, but hashes it as the Keccak-256 hash of the RLP of the list.
 
   An access list is an RLP list.
 
@@ -263,6 +279,7 @@ def toItem : SnapMessage → Item
 
 /-- Whether a version uses a message ID: 0x06 and 0x07 on snap/1, 0x08 and 0x09 on snap/2. -/
 def usesId (version : SnapVersion) (id : Nat) : Bool :=
+  -- 0x00 to 0x05 on both versions; 0x06 and 0x07 on snap/1; 0x08 and 0x09 on snap/2, by EIP-8189.
   id < 0x06 || (version = .snap1 && id < 0x08) || (version = .snap2 && 0x08 ≤ id && id < 0x0a)
 
 /-- The message with the ID `id` and the data `item`, on the version `version`.
@@ -274,6 +291,7 @@ def ofItem (version : SnapVersion) (id : Nat) (item : Item) (data : ByteArray) :
     Except SnapError SnapMessage := do
   if !usesId version id then throw (.unknownId id)
   Except.mapError .rlp do
+    -- Each message is the list of its fields, in the order that Protocol Messages writes them.
     match id, ← item.toItems with
     | 0x00, [i, r, s, l, b] =>
       return getAccountRange (← i.field 0) (← r.field 1) (← s.field 2) (← l.field 3) (← b.field 4)
@@ -288,6 +306,7 @@ def ofItem (version : SnapVersion) (id : Nat) (item : Item) (data : ByteArray) :
       return getTrieNodes (← i.field 0) (← r.field 1) (← ps.field 2) (← b.field 3)
     | 0x07, [i, ns] => return trieNodes (← i.field 0) (← ns.field 1)
     | 0x08, [i, hs, b] => return getBlockAccessLists (← i.field 0) (← hs.field 1) (← b.field 2)
+    -- BlockAccessLists: each entry keeps its bytes, as its hash must match the one of its header.
     | 0x09, [i, ls] =>
       let requestId ← i.field 0
       let lists ← ls.toItems.mapError (.inField 1)
@@ -328,6 +347,7 @@ def requestId : SnapMessage → UInt64
 
 It is the response type of the request type, and it repeats the request ID. -/
 def answers (request response : SnapMessage) : Bool :=
+  -- Each response type with its request type, and the same request ID.
   match request, response with
   | getAccountRange i .., accountRange j .. => i == j
   | getStorageRanges i .., storageRanges j .. => i == j
@@ -345,11 +365,12 @@ Whether the codes of a ByteCodes answer a request of the code hashes `requested`
 
 The codes come in the order of the request.
 
-The peer skips the codes it does not have, as "GetByteCodes (0x04)" says.
+The peer skips the codes it does not have, as the section GetByteCodes (0x04) says.
 
 So the hashes of the codes form a sublist of the requested hashes.
 -/
 def codesAnswer (requested : List Hash32) (codes : List ByteArray) : Bool :=
+  -- ByteCodes: the hash of each code, in the order of the request, with gaps and a missing tail.
   (codes.map Cryptography.Hash.Keccak.keccak256).isSublist requested
 
 /--
@@ -357,7 +378,7 @@ Whether the access lists of a BlockAccessLists answer a request, by position.
 
 `expected` holds the access list hash of the header of each requested block.
 
-The peer may cut the list short from the tail, as "BlockAccessLists (0x09)" says.
+The peer may cut the list short from the tail, as the section BlockAccessLists (0x09) says.
 
 It puts the empty string for a list it does not have, as that section also says.
 
@@ -366,7 +387,9 @@ Every other entry must hash to the access list hash of its block.
 The hash reads the bytes that the entry was read from, which the decoder keeps as its encoding.
 -/
 def accessListsAnswer (expected : List Hash32) (lists : List Encoded) : Bool :=
+  -- No more entries than requests, cut from the tail.
   lists.length ≤ expected.length &&
+    -- Each entry is the empty string, or hashes to the access list hash of its block.
     (lists.zip expected).all fun (list, hash) =>
       list.item == .bytes .empty || Cryptography.Hash.Keccak.keccak256 list.bytes == hash
 
@@ -391,7 +414,9 @@ A path of more than 32 bytes is an error.
 [snap1]: https://github.com/ethereum/devp2p/blob/a1d196b39a9ed2d16e623e1d7a2ba9f3d77ae08f/caps/snap.md#gettrienodes-0x06
 -/
 def readPath (bytes : ByteArray) : Except SnapError TriePath :=
+  -- 32 bytes: a full path of 64 nibbles.
   if bytes.size = 32 then .ok (Trie.bytesToNibbleList bytes)
+  -- Fewer: a compact path, read as `HP(x, t)` of Appendix C of the Yellow Paper, with `t` dropped.
   else if bytes.size < 32 then
     match Trie.compactToNibbleList bytes with
     | .ok (path, _) => .ok path
@@ -415,7 +440,9 @@ The first path of a longer list names an account, and the others name nodes of i
 -/
 def readGroup : List ByteArray → Except SnapError PathGroup
   | [] => .error .emptyPathGroup
+  -- One path: a node of the account trie.
   | [path] => return .account (← readPath path)
+  -- More: the first path names the account, and the others name nodes of its storage trie.
   | account :: slot :: more => do
     let account ← readPath account
     let slot ← readPath slot
@@ -444,6 +471,7 @@ The check cannot tell the two apart, so it accepts an empty answer.
 The nodes are requested by path, not by hash, so they are checked here by count only.
 -/
 def trieNodesAnswer (groups : List PathGroup) (nodes : List ByteArray) : Bool :=
+  -- At most one node per path asked for; an empty answer passes.
   nodes.length ≤ nodeCount groups
 
 end EthLib.Execution.Network
