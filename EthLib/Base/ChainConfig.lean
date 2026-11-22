@@ -86,6 +86,18 @@ def BlobSchedule.ofNat? (target max baseFeeUpdateFraction : Nat) : Option BlobSc
            baseFeeUpdateFraction_pos := h.2.2.2 }
   else none
 
+/-- The bound of the block number or timestamp of an activation that a configuration gives.
+
+The fork identifier of [EIP-2124][eip-2124] and [EIP-6122][eip-6122] holds each as a `uint64`.
+
+So no fork identifier can encode an activation of `2^64` or more, as a passed fork or as the next.
+
+No EIP bounds a fork block or time itself, so the bound is a choice that SOUNDNESS.md records.
+
+[eip-2124]: https://eips.ethereum.org/EIPS/eip-2124#specification
+[eip-6122]: https://eips.ethereum.org/EIPS/eip-6122#specification -/
+abbrev ACTIVATION_BOUND : Nat := 2 ^ 64
+
 /-- The point of an execution chain from which a fork is active.
 
 [EIP-6953](https://eips.ethereum.org/EIPS/eip-6953#specification) describes both triggers. -/

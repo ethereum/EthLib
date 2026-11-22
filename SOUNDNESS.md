@@ -5426,7 +5426,13 @@ The reader takes a reading where its sources leave a choice:
   The reader takes a time that the file leaves out from the configuration it merges into, and refuses an entry whose fork has a time in neither.
 - The reader reads only the time keys and the blob schedules.
   No EIP names the keys of the forks by block number, such as `londonBlock`, so those come from the configuration it merges into.
-- The reader bounds times below `2^64`, the bound of a block's time.
+- The reader bounds times below `2^64`, since the fork identifier of [EIP-6122](https://eips.ethereum.org/EIPS/eip-6122#specification) hashes each fork time as a `uint64`.
+  The configuration reader of the exports bounds every activation, by block or by time, the same way, and so does the schedule reader of the fork identifier exports.
+  `eth_config` bounds the forks that the head has passed the same way.
+  No reader bounds a block's own time, which its header holds in 256 bits.
+  No EIP bounds a fork block or a fork time itself, so refusing an activation of `2^64` or more is EthLib's choice.
+  The export reader gives the activation of a blob schedule the same bound, though no fork identifier holds it.
+  It applies to every export that reads a configuration, the block transition among them, though only the fork identifier needs it.
   EIP-7892 types the target and the maximum of a schedule as 64-bit integers, and EthLib types them `UInt64`.
   Every reader of a schedule also refuses a maximum whose blob gas, at `2^17` per blob, reaches `2^64`, a bound that EIP-7892 does not state.
   A header holds the blob gas of its block in 64 bits ([EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#header-extension)), so no block could use that much blob gas.

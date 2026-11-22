@@ -397,6 +397,16 @@ def test_schedule_bytes() -> None:
     assert forkid.schedule(b"", 0, [], 5) == bytes.fromhex("c58080c105c0")
 
 
+def test_fork_value_past_64_bits() -> None:
+    # The identifier holds each fork block and time in 64 bits, so a larger one is refused.
+    with raises(ForkIdError, "a fork value is not below 2^64") as info:
+        forkid.fork_id(forkid.schedule(bytes(32), 0, [("pectra", TIME, 2**64)]), 0, 0)
+    assert info.value.code == 0
+    with raises(ForkIdError, "merge fork is not below 2^64") as info:
+        forkid.fork_id(forkid.schedule(bytes(32), 0, [], 2**64), 0, 0)
+    assert info.value.code == 0
+
+
 def test_typed_arguments() -> None:
     # A head of 2^64 does not read as a uint64, and a fork name must be a str.
     with raises(ForkIdError, f"expected an int below {2**64}, got {2**64}") as info:

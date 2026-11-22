@@ -824,6 +824,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- The configuration reader of the exports refuses an activation, by block or by time, of `2^64` or more, as the reader of a client configuration file already refused such a time ([#3854](https://github.com/ethereum/EthLib/issues/3854)).
+  `Base.ACTIVATION_BOUND` is that bound, `2^64`: the fork identifier of EIP-2124 and EIP-6122 hashes each fork block and time as a `uint64`.
+  The file reader, the export reader and `eth_config` all read it, and the doc of the file reader's error now cites the fork identifier instead of a block's time.
+  In Python, every export that reads the JSON form of a chain configuration fails with code 0 and `an activation is not below 2^64` on such an activation; `eth_config` no longer sees one.
+  The schedule reader of the fork identifier exports refuses a fork value or a merge fork block of `2^64` or more, with code 0.
+
 - In Lean, the attestation and sync committee rewards of the Beacon API fail with code 500 when a signed amount does not fit the `Int64` of the response types ([#3853](https://github.com/ethereum/EthLib/issues/3853)).
   The amounts stay unbounded integers, and the responses check them once, with `int64Fits` and the `fits` of each answer type, before they write the answer.
   `attestationRewardsResponse_ok` and `syncCommitteeRewardsResponse_ok` gain a conjunct: every amount of an answer fits.

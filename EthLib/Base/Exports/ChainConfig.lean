@@ -62,9 +62,16 @@ def hoodiActiveForkExport (args : PyValue) : Result PyValue := pyExport hoodiAct
 
 open Lean (Json)
 
-/-- An activation from its kind, `block` or `time`, and its number. -/
+/-- An activation from its kind, `block` or `time`, and its number.
+
+The number must be below `2^64`, since the fork identifier holds it in 64 bits.
+
+A blob schedule reads its activation here too, so it has the bound, though no identifier holds it.
+-/
 def activationOf (kind : String) (n : Json) : Result Activation := do
   let some n := n.getNat?.toOption | throw (0, "an activation has no number")
+  -- The fork identifier hashes an activation in 64 bits, so a larger one is refused.
+  unless n < ACTIVATION_BOUND do throw (0, "an activation is not below 2^64")
   match kind with
   | "block" => pure (.block n)
   | "time" => pure (.time n)
