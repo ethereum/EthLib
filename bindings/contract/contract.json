@@ -11350,7 +11350,7 @@
       {"constructor": "trailingBytes", "code": 10}]}],
    "error_class": "ReqRespError",
    "docstring":
-   "The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type.\n\nThe declared length must be at most the smaller of the largest encoding and the payload cap.\n\nIt must also be at least the smallest encoding, since a shorter payload cannot be of that type.\n\nThe length prefix must be the shortest varint of its value.\n\nThe specification only recommends this; requiring it gives each length exactly one prefix.\n\nAt most `32 + n + n / 6` bytes may follow a declared length `n`.\n\nThe stream is read until it holds `n` bytes, and it must then hold exactly `n` bytes.\n\nSo a stream that ends early, or whose last chunk runs past `n`, is rejected.\n\nAny byte after the chunk that completes `n` bytes is rejected, even a chunk that adds no bytes.\n\nThe caller deserializes the bytes, since it knows their SSZ type."},
+   "The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type.\n\nThe caller deserializes the bytes, since it knows their SSZ type."},
   {"summary":
    "One response chunk, given the number of context bytes that the method sends.",
    "signature":
@@ -14175,7 +14175,7 @@
    "errors": [],
    "error_class": "GossipError",
    "docstring":
-   "The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest.\n\nData that decompresses is hashed as its payload, under the domain `01 00 00 00`.\n\nOther data is hashed as it is, under the domain `00 00 00 00`.\n\nBefore Altair the topic is not hashed.\n\nA missing topic or data field of the protobuf message is the empty byte string."},
+   "The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest.\n\nA missing topic or data field of the protobuf message is the empty byte string."},
   {"summary":
    "The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type.",
    "signature": "(type_bound: int, data: bytes) -> bytes",
@@ -14190,7 +14190,7 @@
       {"constructor": "payloadTooLong", "code": 4}]}],
    "error_class": "GossipError",
    "docstring":
-   "The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type.\n\nThe data may be at most `32 + n + n / 6` bytes long, for the payload cap `n`.\n\nThe payload must decompress, and be at most the smaller of the cap and the bound.\n\nA length above that is rejected from the preamble of the data, before anything is decompressed.\n\nThe caller deserializes the bytes, since it knows their SSZ type."},
+   "The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type.\n\nThe caller deserializes the bytes, since it knows their SSZ type."},
   {"summary": "The RPC that the bytes encode, under the `StrictNoSign` policy.",
    "signature": "(data: bytes) -> dict[str, Any]",
    "operation": "EthLib.Networking.Gossip.Exports.rpcDecodeExport",
@@ -14222,7 +14222,7 @@
    "errors": [],
    "error_class": "GossipError",
    "docstring":
-   "The gossipsub parameters, given the slot duration in milliseconds and the slots per epoch.\n\nA seen message ID lasts two epochs, in whole seconds, with the remainder dropped.\n\nThe slot duration and the slots per epoch are 64-bit configuration values.\n\nSo two epochs in milliseconds must fit 64 bits, and an overflow is an error."},
+   "The gossipsub parameters, given the slot duration in milliseconds and the slots per epoch.\n\nTheir names are those of the Parameters section of gossipsub v1.0, with the heartbeat in ms:\n<https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.0.md#parameters>\n\nThe values are those the consensus layer sets, and some differ from the defaults there."},
   {"summary":
    "What the router does with one RPC, with its client choices given as tables.",
    "signature":

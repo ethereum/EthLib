@@ -12,9 +12,8 @@ The `ssz_snappy` encoding of consensus-layer requests and responses.
 
 A payload is the SSZ bytes of a message, sent as a varint length, then a Snappy framed stream.
 
-```text
-    [ SSZ length: varint | Snappy framed stream of the SSZ bytes ]
-```
+The stream follows the framing format of Snappy:
+<https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/framing_format.txt>
 
 A response chunk starts with a response code, then context bytes, then such a payload.
 
@@ -52,13 +51,16 @@ It is the worst-case size of a Snappy block of `n` bytes, from `snappy.cc` of `g
 
 The sum is a 64-bit integer, so a value of 2^64 or more is an error. -/
 def maxCompressedLen (n : UInt64) : Except ArithError UInt64 := do
+  -- `32 + n + n / 6`, where each sum is a checked 64-bit addition.
   addChecked (← addChecked 32 n) (← divChecked n 6)
 
 /-- The largest message a peer accepts on the gossip network, framing included.
 
 It allows 1024 bytes of overhead above the largest compressed payload, and at least 1 MiB. -/
 def maxMessageSize : Except ArithError UInt64 := do
+  -- The compressed bound of the largest payload, plus 1024 bytes of framing and encoding.
   let framed ← addChecked (← maxCompressedLen MAX_PAYLOAD_SIZE) 1024
+  -- At least 1 MiB, in case the payload cap is small.
   return max framed 1048576
 
 /-- The first byte of a response chunk. -/
@@ -81,6 +83,11 @@ namespace ResponseCode
 
 /-- The response code of a byte. -/
 def ofByte (b : UInt8) : ResponseCode :=
+  -- The response code is one unsigned byte.
+  --
+  -- 0 to 3 are the named codes, and 4 to 127 are reserved.
+  --
+  -- 128 to 255 are request-specific, as the grammar of a response chunk lists them.
   if b = 0 then .success
   else if b = 1 then .invalidRequest
   else if b = 2 then .serverError
@@ -144,35 +151,30 @@ def ReqRespError.code : ReqRespError → UInt32
 
 /-- The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type.
 
-The declared length must be at most the smaller of the largest encoding and the payload cap.
-
-It must also be at least the smallest encoding, since a shorter payload cannot be of that type.
-
-The length prefix must be the shortest varint of its value.
-
-The specification only recommends this; requiring it gives each length exactly one prefix.
-
-At most `32 + n + n / 6` bytes may follow a declared length `n`.
-
-The stream is read until it holds `n` bytes, and it must then hold exactly `n` bytes.
-
-So a stream that ends early, or whose last chunk runs past `n`, is rejected.
-
-Any byte after the chunk that completes `n` bytes is rejected, even a chunk that adds no bytes.
-
 The caller deserializes the bytes, since it knows their SSZ type. -/
 def decodePayload (typeMin typeBound : UInt64) (bs : ByteArray) :
     Except ReqRespError ByteArray := do
+  -- The header is the length `n` of the SSZ bytes, an unsigned varint of at most ten bytes.
+  --
+  -- It must be the shortest varint of its value.
+  --
+  -- The specification only recommends this; requiring it gives each length exactly one prefix.
   let (header, rest) := Varint.split bs.data.toList
   let declared ← (Varint.decode header).mapError .varint
+  -- `n` is at most the smaller of the largest encoding of the type and the payload cap.
   let bound := min typeBound MAX_PAYLOAD_SIZE
   if bound < declared then throw (.lengthOutOfBounds declared bound)
+  -- `n` is at least the smallest encoding, since a shorter payload cannot be of that type.
   if declared < typeMin then throw (.lengthBelowMinimum declared typeMin)
+  -- At most `32 + n + n / 6` bytes may follow the header.
   let compressedBound ← (maxCompressedLen declared).mapError .arith
   if compressedBound.toNat < rest.length then
     throw (.compressedTooLong rest.length compressedBound.toNat)
+  -- The stream is read until it holds `n` bytes.
   let (data, trailing) ← (Snappy.readFrames declared.toNat rest).mapError .frame
+  -- It must then hold exactly `n` bytes: an early end, or a last chunk past `n`, is invalid.
   if data.length ≠ declared.toNat then throw (.lengthMismatch declared data.length)
+  -- Any byte after the chunk that completes `n` bytes is invalid, even a chunk that adds none.
   if trailing ≠ [] then throw (.trailingBytes trailing.length)
   return ⟨data.toArray⟩
 
@@ -180,12 +182,14 @@ def decodePayload (typeMin typeBound : UInt64) (bs : ByteArray) :
 
 It is the inverse that proofs, tests and bindings use, not a compressor. -/
 def encodePayloadLiteral (data : ByteArray) : ByteArray :=
+  -- The varint of the SSZ length, then the framed stream of the SSZ bytes.
   ⟨(Varint.encode (UInt64.ofNat data.size)).toArray⟩ ++ Snappy.encodeFramesLiteral data
 
 /-- A payload that decodes to `data`: its length as a varint, then a stream that compresses.
 
 A chunk of the stream is compressed when that makes it shorter. -/
 def encodePayload (data : ByteArray) : ByteArray :=
+  -- The varint of the SSZ length, then the framed stream of the SSZ bytes.
   ⟨(Varint.encode (UInt64.ofNat data.size)).toArray⟩ ++ Snappy.encodeFrames data
 
 /-- One chunk of a response: its code, its context bytes and its SSZ bytes.
@@ -208,13 +212,16 @@ An error carries no context bytes, and its payload is an error message of at mos
 def decodeResponseChunk (contextBytes : Nat) (typeMin typeBound : UInt64)
     (bs : ByteArray) : Except ReqRespError ResponseChunk :=
   match bs.data.toList with
+  -- A chunk starts with its response code, one byte.
   | [] => throw .missingCode
   | b :: rest =>
     match ResponseCode.ofByte b with
+    -- Success: the context bytes, then the payload of the message type.
     | .success => do
       if rest.length < contextBytes then throw (.contextTruncated contextBytes rest.length)
       let payload ← decodePayload typeMin typeBound ⟨(rest.drop contextBytes).toArray⟩
       return ⟨.success, ⟨(rest.take contextBytes).toArray⟩, payload⟩
+    -- An error code: no context bytes, then an error message of at most 256 bytes.
     | code => do
       let payload ← decodePayload 0 MAX_ERROR_MESSAGE_SIZE ⟨rest.toArray⟩
       return ⟨code, ByteArray.empty, payload⟩
@@ -223,6 +230,7 @@ def decodeResponseChunk (contextBytes : Nat) (typeMin typeBound : UInt64)
 
 It is the inverse that proofs, tests and bindings use, not a compressor. -/
 def encodeResponseChunkLiteral (chunk : ResponseChunk) : ByteArray :=
+  -- The response code, the context bytes, then the payload.
   ⟨#[chunk.code.toByte]⟩ ++ chunk.context ++ encodePayloadLiteral chunk.payload
 
 /-- A response chunk that decodes to `chunk`, with its payload in a stream that compresses.
@@ -231,6 +239,7 @@ The code and the context bytes are written as they are.
 
 It does not check that the context bytes or the payload fit the method or the code. -/
 def encodeResponseChunk (chunk : ResponseChunk) : ByteArray :=
+  -- The response code, the context bytes, then the payload.
   ⟨#[chunk.code.toByte]⟩ ++ chunk.context ++ encodePayload chunk.payload
 
 end EthLib.Networking.ReqResp

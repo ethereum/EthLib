@@ -52,23 +52,25 @@ def PayloadError.code : PayloadError → UInt32
 /--
 The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type.
 
-The data may be at most `32 + n + n / 6` bytes long, for the payload cap `n`.
-
-The payload must decompress, and be at most the smaller of the cap and the bound.
-
-A length above that is rejected from the preamble of the data, before anything is decompressed.
-
 The caller deserializes the bytes, since it knows their SSZ type.
 -/
 def decodePayload (typeBound : UInt64) (data : ByteArray) : Except PayloadError ByteArray := do
+  -- The data has at most `32 + n + n / 6` bytes, for the payload cap `n`.
   let compressedBound ← (maxCompressedLen MAX_PAYLOAD_SIZE).mapError .arith
   if compressedBound.toNat < data.size then
     throw (.compressedTooLong data.size compressedBound.toNat)
+  -- The bound on the payload is the smaller of the cap and the size bound of the type.
   let bound := (min typeBound MAX_PAYLOAD_SIZE).toNat
   -- The preamble declares the payload length, so a long payload is rejected unread.
+  --
+  -- This early check is EthLib's choice.
+  --
+  -- A valid block decompresses to exactly its declared length, so such data fails a later check.
   if let .ok declared := Snappy.declaredLength data then
     if bound < declared then throw (.payloadTooLong declared bound)
+  -- The data is one Snappy block, which must decompress.
   let payload ← (Snappy.decompress data).mapError .snappy
+  -- The payload has at most as many bytes as the bound.
   if bound < payload.size then throw (.payloadTooLong payload.size bound)
   return payload
 

@@ -29,16 +29,19 @@ abbrev SubnetID := UInt64
 
 /-- The characters of a fork digest: two lowercase hex digits per byte, high digit first. -/
 def forkDigestChars (digest : Vector UInt8 4) : List Char :=
+  -- Each byte `x` gives the digits of `x / 16` and `x mod 16`, in `0-9a-f`.
   digest.toList.flatMap Base.byteHexDigits
 
 /-- The topic string of a fork digest and a name. -/
 def topicString (digest : Vector UInt8 4) (name : String) : String :=
+  -- The form `/eth2/D/N/ssz_snappy`, with `D` the eight hex digits of the digest.
   "/eth2/" ++ String.ofList (forkDigestChars digest) ++ "/" ++ name ++ "/ssz_snappy"
 
 /-- The name of the topic of one subnet.
 
 The subnet ID is in decimal, with no leading zero. -/
 def subnetTopicName (base : String) (subnetId : SubnetID) : String :=
+  -- The base name, then `_`, then the subnet ID in decimal.
   base ++ "_" ++ Nat.repr subnetId.toNat
 
 /-- Every way a string can fail to be a topic. -/
@@ -79,11 +82,15 @@ def parseForkDigest : List Char → Option (Vector UInt8 4)
 
 /-- The fork digest and the name of a topic string. -/
 def parseTopic (topic : String) : Except TopicError (Vector UInt8 4 × String) := do
+  -- The topic starts with `/eth2/`.
   let some rest := dropPrefix? "/eth2/".toList topic.toList | throw .notEth2
   let digestText := String.ofList (rest.take 9)
+  -- `D` is eight lowercase hex digits, then `/`.
   let some digest := parseForkDigest (rest.take 8) | throw (.forkDigest digestText)
   let some body := dropPrefix? ['/'] (rest.drop 8) | throw (.forkDigest digestText)
+  -- The topic ends with `/ssz_snappy`, the only encoding.
   let some name := dropSuffix? "/ssz_snappy".toList body | throw .encoding
+  -- What is left is `N`; no topic name contains `/`, so EthLib rejects one, for a unique split.
   if '/' ∈ name then throw (.name (String.ofList name))
   return (digest, String.ofList name)
 
@@ -95,11 +102,14 @@ So the parser accepts a string only if printing its value gives the string back.
 
 That rejects an empty string, a leading zero, a character that is not a digit, and 2^64 or more. -/
 def parseSubnetId (digits : List Char) : Option SubnetID :=
+  -- The value `sum d_i * 10^(k - 1 - i)` of the digits `d_0 ... d_(k-1)`, most significant first.
   let value := digits.foldl (fun acc c => 10 * acc + (c.toNat - '0'.toNat)) 0
+  -- Accepted only below 2^64 and when the decimal form of the value is the string itself.
   if value < 2 ^ 64 ∧ Nat.toDigits 10 value = digits then some value.toUInt64 else none
 
 /-- The subnet ID in the name of a subnet topic, given the base name the caller expects. -/
 def parseSubnetTopicName (base name : String) : Option SubnetID :=
+  -- The name is the base name, then `_`, then the subnet ID in decimal.
   (dropPrefix? (base ++ "_").toList name.toList).bind parseSubnetId
 
 end EthLib.Networking.Gossip
