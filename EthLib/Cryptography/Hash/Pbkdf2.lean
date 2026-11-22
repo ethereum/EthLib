@@ -54,6 +54,7 @@ def prf (password message : ByteArray) : Vector UInt8 32 := Hmac.hmac32 password
 def iterate (password : ByteArray) : Nat → Vector UInt8 32 → Vector UInt8 32 → Vector UInt8 32
   | 0, _, acc => acc
   | count + 1, previous, acc =>
+    -- `U_j = PRF (P, U_{j-1})`, XORed into `U_1 \xor ... \xor U_{j-1}`.
     let next := prf password ⟨previous.toArray⟩
     iterate password count next (Base.xorBytes acc next)
 
@@ -61,7 +62,9 @@ def iterate (password : ByteArray) : Nat → Vector UInt8 32 → Vector UInt8 32
 
 A derivation has a positive iteration count, and zero iterations give the block of one. -/
 def block (password salt : ByteArray) (iterations : Nat) (index : UInt32) : Vector UInt8 32 :=
+  -- `U_1 = PRF (P, S || INT (i))`, with `INT (i)` four octets, most significant first.
   let first := prf password (salt ++ Base.natToBytes4 index.toNat)
+  -- `F (P, S, c, i) = U_1 \xor U_2 \xor ... \xor U_c`.
   iterate password (iterations - 1) first first
 
 /-- Concatenate the requested blocks, RFC 8018 §5.2, steps 3 and 4. -/
@@ -69,7 +72,9 @@ def blocks (password salt : ByteArray) (iterations : Nat) :
     Nat → Nat → ByteArray → ByteArray
   | 0, _, out => out
   | count + 1, index, out =>
+    -- Step 3: `T_i = F (P, S, c, i)`.
     let next := block password salt iterations (UInt32.ofNat index)
+    -- Step 4: `T_1 || T_2 || ...`.
     blocks password salt iterations count (index + 1) (out ++ ⟨next.toArray⟩)
 
 /-- PBKDF2-HMAC-SHA-256, RFC 8018 §5.2, with the output length in bytes.
@@ -79,13 +84,21 @@ Its time grows with the iteration count times the 32-byte blocks of the output.
 The output can reach 128 GiB, so a caller must bound both first (SOUNDNESS.md D1). -/
 def pbkdf2 (password salt : ByteArray) (iterations length : Nat) :
     Except Pbkdf2Error ByteArray :=
+  -- The inputs: `c` and `dkLen` are positive integers.
   if iterations = 0 then .error .zeroIterations
   else if length = 0 then .error .emptyOutput
+  -- Step 1: if `dkLen > (2^32 - 1) * hLen`, output "derived key too long".
   else if MAX_LENGTH < length then .error (.outputTooLong length)
-  -- SHA-256 admits fewer than `2^64` bits (FIPS 180-4 §1), including HMAC's inner block.
+  -- Not a step of §5.2: SHA-256 admits fewer than `2^64` bits (FIPS 180-4 §1).
+  --
+  -- The bound covers HMAC's inner block.
   else if 2 ^ 61 ≤ password.size ∨ 2 ^ 61 ≤ 64 + salt.size + 4 then .error .inputTooLong
   else
+    -- Step 2: `l = CEIL (dkLen / hLen)`.
     let count := (length + HASH_LEN - 1) / HASH_LEN
+    -- Steps 3 to 5: `DK = T_1 || T_2 || ... || T_l<0..r-1>`.
+    --
+    -- Taking the first `dkLen` octets replaces `r = dkLen - (l - 1) * hLen`.
     .ok ((blocks password salt iterations count 1 ByteArray.empty).extract 0 length)
 
 end EthLib.Cryptography.Hash.Pbkdf2
