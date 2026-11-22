@@ -834,6 +834,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the fewest epochs over which a node serves blocks returns an `Except ArithError Epoch`, and fails where its `uint64` arithmetic overflows or, from Gloas, divides by zero ([#3857](https://github.com/ethereum/EthLib/issues/3857)).
+  Before Gloas the sum wrapped, and from Gloas the result was truncated to 64 bits and a zero denominator gave 0.
+  From Gloas the product `3 * CHURN_LIMIT_QUOTIENT_GLOAS * CONSOLIDATION_CHURN_LIMIT_QUOTIENT` now fails at `2^64`, where it was computed on natural numbers.
+  `computeMinEpochsForBlockRequests_toNat` states that a result is the count on natural numbers.
+  The mainnet and minimal values are unchanged.
+
 - In Lean, the gossipsub parameters take the slot duration and the slots per epoch as `UInt64`, and fail with an overflow when two epochs in milliseconds reach `2^64`, as the `uint64` arithmetic of the source does ([#3856](https://github.com/ethereum/EthLib/issues/3856)).
   They return an `Except ArithError`, and the mesh and message cache theorems take the success as a hypothesis.
   `gossipsubParameters_isOk_iff` states when they succeed, and `gossipsubParameters_seen_ttl` that the lifetime of a seen message ID is then two epochs in whole seconds.
