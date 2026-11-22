@@ -1404,7 +1404,7 @@ theorem Store.getCheckpointBlock_of_shared_origin {A B : Store preset fork}
     (reachedB : Store.Reachable config anchorState anchorBlock B)
     (anchorSlot : anchorBlock.slot = anchorState.slot)
     (same : ∀ (r : Root) b c, A.blocks[r]? = some b → B.blocks[r]? = some c → b = c)
-    (before : fork < .glamsterdam) {head origin x checkpoint : Root} {epoch : Epoch}
+    {head origin x checkpoint : Root} {epoch : Epoch}
     {originBlock : BeaconBlock preset fork}
     (headRead : A.getCheckpointBlock head epoch = .ok checkpoint)
     (originHeld : A.blocks[origin]? = some originBlock)
@@ -1419,12 +1419,15 @@ theorem Store.getCheckpointBlock_of_shared_origin {A B : Store preset fork}
     rw [UInt64.le_iff_toNat_le, boundaryNat, ← originEpoch]
     simp only [computeEpochAtSlot, UInt64.toNat_div]
     exact Nat.div_mul_le_self _ _
-  have walk := Store.getAncestor_of_isAncestor_of_lt before originHeld onChain
+  obtain ⟨reached, walk, rooted⟩ := Store.getAncestor_of_isAncestor originHeld onChain
   have through := Store.getAncestor_trans early walk
+  have reachedWalk := Store.getAncestor_root (store := A) reached .pending boundary
+  rw [rooted] at reachedWalk
   have originRead : A.getCheckpointBlock origin epoch = .ok checkpoint := by
     simp only [Store.getCheckpointBlock, boundaryOk, Except.mapError, bind, Except.bind]
       at headRead ⊢
-    rw [← through]
+    change ((fun n => n.root) <$> A.getAncestor ⟨origin, .pending⟩ boundary) = .ok checkpoint
+    rw [← reachedWalk, ← through]
     exact headRead
   obtain ⟨received, receivedHeld⟩ : ∃ b, B.blocks[origin]? = some b := by
     have read := above

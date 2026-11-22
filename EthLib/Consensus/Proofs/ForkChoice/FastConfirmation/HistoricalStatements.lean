@@ -197,6 +197,51 @@ def CheckpointStakeCeiling (cap last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k checkpoint state, (e.world k).time ≤ last →
     ((e.world k).state w).checkpointState checkpoint = .ok state → ActiveStakeAtMost cap state
 
+/-! ## From Gloas: honest registries stay within the limit -/
+
+/-- Honest held block states and justified states have their registries within the limit. -/
+def HonestRegistriesWithinLimit (last : ℕ) : Prop :=
+  ∀ w ∈ J, ∀ k, (e.world k).time ≤ last →
+    HeldRegistriesWithinLimit ((e.world k).state w) ∧
+    ∀ state : BeaconState preset fork,
+      ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint =
+        .ok state → state.RegistryWithinLimit
+
+/-- Honest registries stay within the limit at every fork when they do from Gloas.
+
+Before Gloas the type of the registry bounds it. -/
+theorem honestRegistries_of_gated {last : ℕ}
+    (registries : .glamsterdam ≤ fork → HonestRegistriesWithinLimit (e := e) last) :
+    HonestRegistriesWithinLimit (e := e) last := by
+  by_cases gloas : .glamsterdam ≤ fork
+  · exact registries gloas
+  have before : fork < .glamsterdam := Nat.lt_of_not_le gloas
+  exact fun _ _ _ _ => ⟨fun _ state _ => BeaconState.registryWithinLimit_of_lt before state,
+    fun state _ => BeaconState.registryWithinLimit_of_lt before state⟩
+
+/-- From Gloas, honest registries stay within the limit while the stores' epochs stay bounded.
+
+The anchor's registry must leave room up to that bound, and the anchor state must be sound.
+-/
+theorem Execution.honestRegistries_of_room (slots : 0 < config.SLOT_DURATION_MS)
+    (gloas : .glamsterdam ≤ fork) {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (sound : Invariant anchorState) {horizon : Epoch} {last : ℕ}
+    (bounded : HonestStoreEpochsBounded (e := e) horizon last)
+    (room : AnchorRegistryRoom preset anchorState horizon) :
+    HonestRegistriesWithinLimit (e := e) last := by
+  intro w member k time
+  have forward := e.forwardReachable
+    (fun w hw => (start w hw) ▸ Store.ForwardReachable.anchor anchored) k w member
+  obtain ⟨current, currentOk, _, _⟩ :=
+    forward.slots_le_current slots anchorSlot
+  have epochOk : ((e.world k).state w).getCurrentStoreEpoch config =
+      .ok (computeEpochAtSlot preset current) := by
+    simp [Store.getCurrentStoreEpoch, currentOk, bind, Except.bind, pure, Except.pure]
+  exact forward.registriesWithinLimit_of_room gloas sound anchorSlot epochOk
+    (bounded w member k _ time epochOk) room
+
 variable [DecidablePred (· ∈ J)]
 
 /-- Each nonempty window of the head between the two slots has little Byzantine stake.

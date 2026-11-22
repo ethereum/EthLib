@@ -83,7 +83,7 @@ public theorem signerHead_of_duty {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (preGloas : fork < .glamsterdam) {time first T : ℕ}
+    {time first T : ℕ}
     (roots : HeldBlockStateRootsNonzero (e := e) time)
     {root : Root} (covers : HonestHeadsCover (e := e) root first T)
     {v w : ValidatorIndex} (honest : v ∈ J) (receiver : w ∈ J) {k k' : ℕ}
@@ -103,11 +103,7 @@ public theorem signerHead_of_duty {anchor : Store preset fork}
   obtain ⟨signerHead, signerHeadOk, targetRead⟩ := honestData.target_read reachedV anchorSlot
     anchorBoundary (roots v honest k' k'Bound) reachedW checkpointKnown
   have supports := covers (e.world k').time low lt v honest k' signerHead rfl current signerHeadOk
-  have pending : signerHead = ⟨signerHead.root, .pending⟩ := by
-    have p := Store.getHead_pending preGloas signerHeadOk
-    cases signerHead
-    simp_all
-  rw [pending] at supports
+  rw [Store.isAncestor_getHead_root signerHeadOk] at supports
   exact ⟨signerHead.root, supports, targetRead⟩
 
 /-- A store's justified checkpoint descends from a root, given an honest duty vote for it.
@@ -128,7 +124,7 @@ public theorem justified_descends_of_duty {anchor : Store preset fork} {time T :
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (preGloas : fork < .glamsterdam) (roots : HeldBlockStateRootsNonzero (e := e) time)
+    (roots : HeldBlockStateRootsNonzero (e := e) time)
     (caller : u ∈ J) (callerHeld : ((e.world n).state u).blocks[root]? = some block)
     (callerTime : (e.world n).time ≤ time)
     (covers : HonestHeadsCover (e := e) root (e.world n).time T) (high : T ≤ time)
@@ -159,7 +155,7 @@ public theorem justified_descends_of_duty {anchor : Store preset fork} {time T :
   obtain ⟨justifiedBlock, justifiedKnown⟩ := justifiedKnown
   rw [← target] at justifiedKnown blockLe ⊢
   obtain ⟨head, supports, targetRead⟩ := signerHead_of_duty anchored start anchorSlot
-    anchorBoundary preGloas roots covers honest receiver duty afterCall (by omega) k'Bound
+    anchorBoundary roots covers honest receiver duty afterCall (by omega) k'Bound
     justifiedKnown
   -- The signer holds the root, as the same block as the caller.
   have rootRead := supports
@@ -168,7 +164,7 @@ public theorem justified_descends_of_duty {anchor : Store preset fork} {time T :
   have b'Found := Store.block_ok_iff.mp b'Ok
   rw [agree v honest u caller k' n k'Bound callerTime root b' block b'Found callerHeld] at b'Found
   -- The target is the head's ancestor at the first slot of its epoch, which is above the block.
-  have up := Store.isAncestor_of_getCheckpointBlock_above preGloas b'Found supports targetRead
+  have up := Store.isAncestor_of_getCheckpointBlock_above b'Found supports targetRead
       blockLe
   -- The store agrees with the signer on the walk.
   exact Store.isAncestor_of_same_blocks reachedW

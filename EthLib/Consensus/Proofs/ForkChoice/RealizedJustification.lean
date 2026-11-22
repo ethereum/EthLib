@@ -291,7 +291,6 @@ private theorem walk_realized_le_unrealized {store : Store preset fork}
 private theorem walk_realized_mono {store : Store preset fork}
     (reachable : Store.Reachable config anchorState anchorBlock store)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (before : fork < .glamsterdam)
     {root tip : Root} {block : BeaconBlock preset fork}
     {base state : BeaconState preset fork}
     (known : store.blocks[root]? = some block)
@@ -299,6 +298,7 @@ private theorem walk_realized_mono {store : Store preset fork}
     (tipStored : store.blockStates[tip]? = some state)
     (descends : store.isAncestor ⟨tip, .pending⟩ ⟨root, .pending⟩ = .ok true) :
     base.currentJustifiedCheckpoint.epoch ≤ state.currentJustifiedCheckpoint.epoch := by
+  obtain ⟨reached, walk, rooted⟩ := Store.getAncestor_of_isAncestor known descends
   have rel := reachable.relation_of_getAncestor
     (fun s t => Invariant s →
       Invariant t ∧ s.currentJustifiedCheckpoint.epoch ≤ t.currentJustifiedCheckpoint.epoch)
@@ -307,7 +307,7 @@ private theorem walk_realized_mono {store : Store preset fork}
       UInt64.le_trans (one holds).2 (two (one holds).1).2⟩)
     (fun computed holds => ⟨(stateTransition_invariant holds computed).1,
       stateTransition_currentJustified_mono holds computed⟩)
-    anchorSlot (Store.getAncestor_of_isAncestor_of_lt before known descends) tipStored baseStored
+    anchorSlot walk tipStored (rooted ▸ baseStored)
   exact (rel ((reachable.ordered sound).2 baseStored)).2
 
 /-- Every descendant source is at least as recent as the root's realized justification. -/
@@ -316,7 +316,6 @@ theorem Store.Reachable.realized_le_source {config : Config}
     {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
     (reachable : Store.Reachable config anchorState anchorBlock store)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (before : fork < .glamsterdam)
     {root tip : Root} {block : BeaconBlock preset fork} {base : BeaconState preset fork}
     {source : Checkpoint}
     (known : store.blocks[root]? = some block)
@@ -329,7 +328,7 @@ theorem Store.Reachable.realized_le_source {config : Config}
   obtain ⟨tipBlock, tipRead, current, _, read⟩ := read
   obtain ⟨state, held, _⟩ := reachable.blockStatesFromParents
     (Store.block_ok_iff.mp tipRead)
-  have mono := walk_realized_mono reachable sound anchorSlot before known stored held descends
+  have mono := walk_realized_mono reachable sound anchorSlot known stored held descends
   split at read
   · cases entry : store.unrealizedJustifications[tip]? with
     | none => simp [entry] at read

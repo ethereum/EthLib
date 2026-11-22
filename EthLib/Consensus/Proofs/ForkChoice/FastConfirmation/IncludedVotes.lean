@@ -53,7 +53,7 @@ private theorem includedVotes_carry {config : Config} {checks : SignatureChecks}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {store : Store preset fork}
     (reachable : Store.Reachable config anchorState anchorBlock store)
-    (sound : Invariant anchorState) (preGloas : fork < .glamsterdam)
+    (sound : Invariant anchorState)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     {seed : ForkChoiceNode} {seedSlot : Slot} {seedState : BeaconState preset fork}
@@ -62,10 +62,11 @@ private theorem includedVotes_carry {config : Config} {checks : SignatureChecks}
     {epoch : Epoch} {root : Root} {recent : Bool}
     (near : (getCurrentEpoch seedState).toNat ≤ epoch.toNat + 1)
     (seedRead : getBlockRoot seedState epoch = .ok root)
-    (weigh : ∀ (parent : Root) (parentState state after : BeaconState preset fork)
+    (weigh : ∀ (parent : Root) (status : PayloadStatus)
+        (parentState state after : BeaconState preset fork)
         (child : Root) (childBlock : BeaconBlock preset fork) (other : SignatureChecks),
       store.blockStates[parent]? = some parentState →
-      store.getAncestor ⟨parent, .pending⟩ seedSlot = .ok seed →
+      store.getAncestor ⟨parent, status⟩ seedSlot = .ok seed →
       store.blocks[child]? = some childBlock → childBlock.parentRoot = parent →
       getCurrentEpoch parentState = getCurrentEpoch seedState →
       (state = parentState ∨ ∃ slot, slot ≤ childBlock.slot ∧
@@ -124,7 +125,7 @@ private theorem includedVotes_carry {config : Config} {checks : SignatureChecks}
   rw [message] at slotsOk blockOk slotBounds
   have cjEq : state.currentJustifiedCheckpoint = advanced.currentJustifiedCheckpoint :=
     (frame_processBlock blockOk).currentJustified
-  rcases includedVotes_carry reachable sound preGloas positive window anchorBelow seedStored
+  rcases includedVotes_carry reachable sound positive window anchorBelow seedStored
       near seedRead weigh parentHeld walk with kept | justified
   swap
   · exact .inr (UInt64.le_trans justified
@@ -193,8 +194,8 @@ private theorem includedVotes_carry {config : Config} {checks : SignatureChecks}
   rw [countPos] at restAdvance
   simp only [advanceSlots, bind_ok_iff] at restAdvance
   obtain ⟨next, nextOk, tail⟩ := restAdvance
-  have justified := weigh _ parentState middle next node.root block blockChecks parentHeld
-    (by rwa [Store.parentPayloadStatus_of_lt preGloas] at walk) found rfl kept.2.1
+  have justified := weigh _ _ parentState middle next node.root block blockChecks parentHeld
+    walk found rfl kept.2.1
     middleShape middleKept nextOk (by rw [middleSlot]; exact Nat.mul_mod_left _ _)
   have nextInv := (advanceSlot_invariant middleInv nextOk).1
   rw [cjEq]
@@ -215,7 +216,6 @@ theorem includedVotes_votingSource_ge {config : Config} {checks : SignatureCheck
     {store : Store preset fork}
     (reachable : Store.Reachable config anchorState anchorBlock store)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
-    (preGloas : fork < .glamsterdam)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     (retained : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -266,7 +266,7 @@ theorem includedVotes_votingSource_ge {config : Config} {checks : SignatureCheck
       (above : store.isAncestor ⟨tip, .pending⟩ ⟨root, .pending⟩ = .ok true)
       (read : store.getVotingSource config tip = .ok source) :
       base.currentJustifiedCheckpoint.epoch ≤ source.epoch :=
-    reachable.realized_le_source sound (UInt64.le_of_eq anchorSlot) preGloas held stored above read
+    reachable.realized_le_source sound (UInt64.le_of_eq anchorSlot) held stored above read
   rcases seedVotes with realizedSeed | seedVotes
   · exact UInt64.le_trans realizedSeed (realizedLeSource seedHeld seedStored tipAbove sourceOk)
   have seedEpochEq : getCurrentEpoch seedState = computeEpochAtSlot preset seedBlock.slot := by
@@ -289,7 +289,7 @@ theorem includedVotes_votingSource_ge {config : Config} {checks : SignatureCheck
   -- A state that keeps the seed's votes and that the store counts can weigh them.
   have weighAt : ∀ (P : Root) (Ps W : BeaconState preset fork) (total : Gwei),
       store.blockStates[P]? = some Ps →
-      store.getAncestor ⟨P, .pending⟩ seedBlock.slot = .ok ⟨seed, .pending⟩ →
+      store.isAncestor ⟨P, .pending⟩ ⟨seed, .pending⟩ = .ok true →
       CountedState store config W →
       (W = Ps ∨ ∃ slot, processSlots config checks Ps slot = .ok W) →
       getCurrentEpoch Ps = getCurrentEpoch seedState →
@@ -320,11 +320,10 @@ theorem includedVotes_votingSource_ge {config : Config} {checks : SignatureCheck
               (decide (computeEpochAtSlot preset seedBlock.slot = target.epoch)),
             pending.data.target.root = target.root ∧
             ∃ indices, getPendingAttestingIndices W pending = .ok indices ∧ v ∈ indices) := by
-    intro P Ps W total stored walk counts shape epochP kept totalOk
+    intro P Ps W total stored aboveSeed counts shape epochP kept totalOk
     obtain ⟨run, epochW, readW, flagsW, pendingW⟩ := kept
     have epochSeed := epochW.trans seedEpochEq
     have list := listEpoch W epochSeed
-    have aboveSeed := Store.isAncestor_of_getAncestor walk
     obtain ⟨enough, clean⟩ := quorum P Ps W total stored aboveSeed counts shape epochW totalOk
     have activeW : ∀ v ∈ voters, v ∈ getActiveValidatorIndices W target.epoch := by
       intro v member
@@ -353,11 +352,14 @@ theorem includedVotes_votingSource_ge {config : Config} {checks : SignatureCheck
         (by rw [slotEpoch, pendingTarget, seedEpochEq]; exact seedLower)
         (by rw [slotEpoch, pendingTarget]; exact epochWNat)]
       exact indicesOk
+  -- The tip's walk reaches the seed's root, at a node of some payload status.
+  obtain ⟨seedNode, tipWalk, seedNodeRoot⟩ := Store.getAncestor_of_isAncestor seedHeld tipAbove
   -- The last slot of the seed's epoch justifies the target.
-  have weigh : ∀ (parent : Root) (parentState state after : BeaconState preset fork)
+  have weigh : ∀ (parent : Root) (status : PayloadStatus)
+      (parentState state after : BeaconState preset fork)
       (child : Root) (childBlock : BeaconBlock preset fork) (other : SignatureChecks),
       store.blockStates[parent]? = some parentState →
-      store.getAncestor ⟨parent, .pending⟩ seedBlock.slot = .ok ⟨seed, .pending⟩ →
+      store.getAncestor ⟨parent, status⟩ seedBlock.slot = .ok seedNode →
       store.blocks[child]? = some childBlock → childBlock.parentRoot = parent →
       getCurrentEpoch parentState = getCurrentEpoch seedState →
       (state = parentState ∨ ∃ slot, slot ≤ childBlock.slot ∧
@@ -377,13 +379,17 @@ theorem includedVotes_votingSource_ge {config : Config} {checks : SignatureCheck
       advanceSlot config other state = .ok after →
       (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
       target.epoch ≤ after.currentJustifiedCheckpoint.epoch := by
-    intro parent parentState state after child childBlock other stored walk childHeld
+    intro parent status parentState state after child childBlock other stored walk childHeld
       childParent epochP shape kept advanced lastSlot
+    -- The walk from the parent's pending node reaches the seed's root too.
+    obtain ⟨atSeed, pendingWalk, atSeedRoot⟩ := Store.getAncestor_pending_root walk
+    have aboveSeed := Store.isAncestor_of_getAncestor_root seedHeld rfl pendingWalk
+      (atSeedRoot.trans seedNodeRoot)
     have epochSeed := kept.2.1.trans seedEpochEq
     have counted : GENESIS_EPOCH + 1 < getCurrentEpoch state :=
       UInt64.lt_of_lt_of_le targetLate (by rw [epochSeed]; exact seedLower)
     obtain ⟨total, totalOk⟩ := advanceSlot_total_of_last advanced lastSlot counted
-    obtain ⟨rootOk, enough, votedW⟩ := weighAt parent parentState state total stored walk
+    obtain ⟨rootOk, enough, votedW⟩ := weighAt parent parentState state total stored aboveSeed
       ⟨parent, parentState, stored, shape.imp_right fun ⟨slot, le, ok⟩ =>
         ⟨checks, slot, child, childBlock, childHeld, childParent, le, ok⟩⟩
       (shape.imp_right fun ⟨slot, _, ok⟩ => ⟨slot, ok⟩) epochP kept totalOk
@@ -391,7 +397,6 @@ theorem includedVotes_votingSource_ge {config : Config} {checks : SignatureCheck
       totalOk enough votedW
     rwa [listEpoch state epochSeed] at result
   -- The tip keeps the seed's votes, or has justified the target.
-  have tipWalk := Store.getAncestor_of_isAncestor_of_lt preGloas seedHeld tipAbove
   have voting := sourceOk
   unfold Store.getVotingSource at voting
   simp only [bind_ok_iff] at voting
@@ -400,8 +405,8 @@ theorem includedVotes_votingSource_ge {config : Config} {checks : SignatureCheck
   obtain ⟨tipState, tipStored, -⟩ := reachable.blockStatesFromParents tipKnown
   have anchorBelow : anchorBlock.slot ≤ seedBlock.slot :=
     reachable.anchorSlot_le (UInt64.le_of_eq anchorSlot) seedHeld
-  rcases includedVotes_carry reachable sound preGloas positive window
-      (seed := ⟨seed, .pending⟩) anchorBelow seedStored near seedRead weigh
+  rcases includedVotes_carry reachable sound positive window
+      (seed := seedNode) anchorBelow (seedNodeRoot ▸ seedStored) near seedRead weigh
       (node := ⟨tip, .pending⟩) tipStored tipWalk with kept | justified
   swap
   · exact UInt64.le_trans justified (realizedLeSource tipKnown tipStored
@@ -434,7 +439,7 @@ theorem includedVotes_votingSource_ge {config : Config} {checks : SignatureCheck
         UInt64.lt_of_lt_of_le targetLate (by rw [tipEpochState]; exact seedLower)
       obtain ⟨total, totalOk⟩ := processJustificationAndFinalization_totalActiveBalance run counted
       obtain ⟨rootOk, enough, votedW⟩ := weighAt tip tipState tipState total tipStored
-        tipWalk ⟨tip, tipState, tipStored, .inl rfl⟩ (.inl rfl) kept.2.1 kept totalOk
+        tipAbove ⟨tip, tipState, tipStored, .inl rfl⟩ (.inl rfl) kept.2.1 kept totalOk
       have result := processJustificationAndFinalization_justifies run counted _ rootOk
         totalOk enough votedW
       rw [listEpoch tipState tipEpochState] at result

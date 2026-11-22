@@ -1291,6 +1291,23 @@ theorem onBlock_insert {checks : SignatureChecks} {sources : BlockSources preset
   refine ⟨by rw [b3, updateCheckpoints_blocks, b2, b1, b0], pre, state, found, transition, ?_⟩
   rw [bs3, updateCheckpoints_blockStates, bs2, bs1, bs0]
 
+/-- A new block that the handler accepts passed the check of its parent's payload.
+
+From Gloas, a block that builds on a full parent finds that payload verified. -/
+theorem onBlock_validateParentPayload {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork}
+    {blockRoot : Root} {after : Store preset fork}
+    (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
+    (new : ¬ store.blocks.contains blockRoot)
+    (added : store.onBlock config checks sources signed = .ok after) :
+    store.validateParentPayload signed.message = .ok () := by
+  simp only [onBlock, root, new, bind, Except.bind, Except.mapError, ↓reduceIte,
+    Bool.false_eq_true] at added
+  unfold addBlock at added
+  simp only [bind_ok_iff] at added
+  obtain ⟨state, valid, -⟩ := added
+  exact (validateOnBlock_ok valid).choose_spec.2.1
+
 /-- A new block that the handler accepts is not from the future, and is after the finalized slot.
 
 The checkpoint block of its parent at the finalized epoch is the finalized block. -/

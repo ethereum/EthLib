@@ -193,6 +193,17 @@ theorem getSupportedNode_exists {message : LatestMessage fork}
     · exact ⟨_, getSupportedNode_of_same_slot gloas found (UInt64.not_lt.mp lt)⟩
   · exact ⟨_, getSupportedNode_of_lt (Nat.lt_of_not_le gloas)⟩
 
+/-- A supported node descends from a pending node exactly as the vote's block does, at every fork.
+-/
+theorem isAncestor_getSupportedNode {message : LatestMessage fork} {node : ForkChoiceNode}
+    (supported : store.getSupportedNode message = .ok node) (root : Root) :
+    store.isAncestor node ⟨root, .pending⟩ =
+      store.isAncestor ⟨message.root, .pending⟩ ⟨root, .pending⟩ := by
+  by_cases gloas : .glamsterdam ≤ fork
+  · rw [isAncestor_head_pending gloas, getSupportedNode_root supported]
+  · rw [getSupportedNode_of_lt (Nat.lt_of_not_le gloas), Except.ok.injEq] at supported
+    rw [← supported]
+
 /-- From Gloas a vote for a block the store does not hold supports no node. -/
 theorem getSupportedNode_of_unknown {message : LatestMessage fork} (gloas : .glamsterdam ≤ fork)
     (missing : store.blocks[message.root]? = none) :
@@ -846,19 +857,54 @@ theorem getAttestationScore_ok_of_getHead (before : fork < .glamsterdam)
   | error error => simp [scoreOk] at weightOk
   | ok score => exact ⟨score, scoreOk⟩
 
-/-- Before Gloas, a head with a viable node besides the justified block has read its state.
+/-- A pending node is no payload decision of the previous slot.
+
+Neither is a node of a block older than the previous slot. -/
+theorem isPreviousSlotPayloadDecision_eq_false {node : ForkChoiceNode}
+    {block : BeaconBlock preset fork} {current : Slot}
+    (found : store.blocks[node.root]? = some block)
+    (slotRead : store.getCurrentSlot config = .ok current) (fits : block.slot.toNat + 1 < 2 ^ 64)
+    (older : node.payloadStatus = .pending ∨ block.slot.toNat + 1 ≠ current.toNat) :
+    store.isPreviousSlotPayloadDecision config node = .ok false := by
+  have nextOk : Uint64.addChecked block.slot 1 = .ok (block.slot + 1) :=
+    Uint64.addChecked_of_lt (by simpa using fits)
+  have nextNat : (block.slot + 1).toNat = block.slot.toNat + 1 :=
+    Uint64.toNat_add_of_lt (by simpa using fits)
+  simp only [isPreviousSlotPayloadDecision, Store.block, found, nextOk, slotRead,
+    Except.mapError, bind, Except.bind, pure, Except.pure, Except.ok.injEq]
+  rcases older with pending | differ
+  · simp [pending]
+  · have ne : (block.slot + 1 == current) = false := by
+      simp only [beq_eq_false_iff_ne, ne_eq]
+      intro same
+      exact differ (by rw [← nextNat, same])
+    simp [ne]
+
+/-- A head with a viable node other than the justified block's pending node has read its state.
+
+The node may be a payload node of the justified block; this holds at every fork.
+
+From Gloas the justified block must be older than the previous slot.
 
 It gives a receiver's justified state without assuming the read. -/
-theorem checkpointState_justified_of_getHead (before : fork < .glamsterdam)
+theorem checkpointState_justified_of_getHead
     {nodes : List ForkChoiceNode} {head node : ForkChoiceNode}
     (tree : store.getFilteredNodeTree config = .ok nodes)
     (found : store.getHead config = .ok head) (member : node ∈ nodes)
-    (other : node ≠ ⟨store.justifiedCheckpoint.root, .pending⟩) :
+    (other : node ≠ ⟨store.justifiedCheckpoint.root, .pending⟩)
+    (justifiedEarly : .glamsterdam ≤ fork → ∃ current justifiedBlock,
+      store.getCurrentSlot config = .ok current ∧
+      store.blocks[store.justifiedCheckpoint.root]? = some justifiedBlock ∧
+      justifiedBlock.slot.toNat + 1 < current.toNat) :
     ∃ state, store.checkpointState store.justifiedCheckpoint = .ok state := by
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   have walk : store.filterNodeTree config ⟨store.justifiedCheckpoint.root, .pending⟩ =
       .ok nodes := tree
-  simp only [getHead, notGloas, false_and, ↓reduceIte, tree, bind, Except.bind] at found
+  have nonemptyNodes : nodes.isEmpty = false := by
+    cases nodes with
+    | nil => cases member
+    | cons _ _ => rfl
+  simp only [getHead, nonemptyNodes, Bool.false_eq_true, and_false, ↓reduceIte, tree, bind,
+    Except.bind] at found
   -- The first step of the walk weighs the children of the justified block among the nodes.
   rw [getHeadFrom] at found
   obtain ⟨result, chosen⟩ : ∃ result, store.heaviestChild config store.justifiedTally nodes
@@ -888,7 +934,20 @@ theorem checkpointState_justified_of_getHead (before : fork < .glamsterdam)
   cases stateOk : store.checkpointState store.justifiedCheckpoint with
   | ok state => exact ⟨state, rfl⟩
   | error e =>
-    simp [getWeight, notGloas, justifiedTally, stateOk, bind, Except.bind, pure, Except.pure]
+  by_cases gloas : .glamsterdam ≤ fork
+  · -- From Gloas the child is a payload node of the justified block, older than the previous slot.
+    obtain ⟨current, justifiedBlock, currentOk, justifiedFound, early⟩ := justifiedEarly gloas
+    rw [getNodeChildren_of_pending gloas rfl, Except.ok.injEq] at childrenOk
+    subst childrenOk
+    have childRoot : child.root = store.justifiedCheckpoint.root := by
+      simp only [List.mem_cons] at childMem
+      rcases childMem with rfl | rest
+      · rfl
+      · split at rest <;> simp_all
+    have decision := isPreviousSlotPayloadDecision_eq_false (config := config)
+      (childRoot ▸ justifiedFound) currentOk (by have := current.toNat_lt; omega) (.inr (by omega))
+    simp [getWeight, gloas, decision, justifiedTally, stateOk, bind, Except.bind] at weightOk
+  · simp [getWeight, gloas, justifiedTally, stateOk, bind, Except.bind, pure, Except.pure]
       at weightOk
 
 /-- A node whose viable subtree can be computed is a known block.

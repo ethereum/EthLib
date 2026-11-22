@@ -200,6 +200,49 @@ theorem blockTree_isChild_iff {child root : Root} :
   simp only [BlockTree.IsChild, blockTree, ne_eq, reduceCtorEq, not_false_eq_true, true_and,
     treeParent, Option.map_eq_some_iff]
 
+/-- The children of a held node can be computed, when parents sit below their children.
+
+Each child is a held node of lower rank. -/
+theorem getNodeChildren_held (lower : store.ParentsBelow) {node : ForkChoiceNode}
+    {block : BeaconBlock preset fork} (found : store.blocks[node.root]? = some block) :
+    ∃ children, store.getNodeChildren node = .ok children ∧ ∀ child ∈ children,
+      ∃ childBlock, store.blocks[child.root]? = some childBlock ∧
+        store.nodeRank child < store.nodeRank node := by
+  -- A child block sits at a later slot than its parent, so its rank is lower.
+  have climbs : ∀ (child : ForkChoiceNode) (childBlock : BeaconBlock preset fork),
+      child.payloadStatus = .pending → store.blocks[child.root]? = some childBlock →
+      childBlock.parentRoot = node.root → store.nodeRank child < store.nodeRank node := by
+    intro child childBlock pending childFound parent
+    have below : childBlock.slot.toNat > block.slot.toNat :=
+      UInt64.lt_iff_toNat_lt.mp (lower _ childBlock block childFound (parent ▸ found))
+    have := childBlock.slot.toNat_lt
+    simp only [nodeRank, childFound, found, pending, ↓reduceIte]
+    split <;> omega
+  by_cases gloas : .glamsterdam ≤ fork
+  · by_cases pending : node.payloadStatus = .pending
+    · -- A pending node has the empty node and maybe the full node of its block.
+      refine ⟨_, getNodeChildren_of_pending gloas pending, fun child member => ⟨block, ?_, ?_⟩⟩ <;>
+        · simp only [List.mem_cons] at member
+          rcases member with rfl | member
+          · simp [nodeRank, found, pending]
+          · split at member
+            · rw [List.mem_singleton.mp member]
+              simp [nodeRank, found, pending]
+            · cases member
+    · obtain ⟨children, childrenOk⟩ :=
+        getNodeChildren_ok_of_known (status := node.payloadStatus) found
+      refine ⟨children, childrenOk, fun child member => ?_⟩
+      obtain ⟨childPending, childBlock, -, childFound, parent, -⟩ :=
+        (mem_getNodeChildren_of_gloas gloas pending childrenOk).mp member
+      exact ⟨childBlock, childFound, climbs child childBlock childPending childFound parent⟩
+  · have before : fork < .glamsterdam := Nat.lt_of_not_le gloas
+    obtain ⟨children, childrenOk⟩ :=
+      getNodeChildren_ok_of_known (status := node.payloadStatus) found
+    refine ⟨children, childrenOk, fun child member => ?_⟩
+    obtain ⟨childPending, childBlock, childFound, parent⟩ :=
+      (mem_getNodeChildren before childrenOk).mp member
+    exact ⟨childBlock, childFound, climbs child childBlock childPending childFound parent⟩
+
 /-- Before Gloas, the ancestor walk from a known block above the slot moves to its parent. -/
 theorem getAncestor_of_gt {node : ForkChoiceNode} {slot : Slot}
     {block parent : BeaconBlock preset fork} (before : fork < .glamsterdam)
@@ -329,34 +372,41 @@ theorem getAncestor_root_eq {start node ancestor : ForkChoiceNode}
     subst rFound
     exact absurd rAbove (UInt64.lt_irrefl _)
 
-/-- Before Gloas, a pending node descends from a known pending node exactly as in the tree. -/
+/-- A pending node descends from a known pending node exactly as in the tree. -/
 theorem isAncestor_iff {root : Root} {node : ForkChoiceNode} {block : BeaconBlock preset fork}
-    {result : Bool} (before : fork < .glamsterdam) (found : store.blocks[node.root]? = some block)
+    {result : Bool} (found : store.blocks[node.root]? = some block)
     (pending : node.payloadStatus = .pending)
     (computed : store.isAncestor ⟨root, .pending⟩ node = .ok result) :
     result = true ↔ (blockTree lower).Ancestor (some node.root) (some root) := by
   have known : store.block node.root = .ok block := block_ok_iff.mpr found
-  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-  simp only [isAncestor, known, later, ↓reduceIte, bind, Except.bind] at computed
   cases walk : store.getAncestor ⟨root, .pending⟩ block.slot with
-  | error e => simp [walk] at computed
+  | error e => simp [isAncestor, known, walk, bind, Except.bind] at computed
   | ok ancestor =>
-    simp only [walk, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨chain, origin, -⟩ := getAncestor_climbs (lower := lower) walk
+  by_cases gloas : .glamsterdam ≤ fork
+  · -- From Gloas the check reads only the root at a pending node.
+    simp only [isAncestor, known, walk, gloas, pending, ↓reduceIte, bind, Except.bind, pure,
+      Except.pure, Except.ok.injEq, beq_self_eq_true, Bool.or_true, Bool.and_true] at computed
     subst computed
-    obtain ⟨chain, origin, -⟩ := getAncestor_climbs (lower := lower) walk
-    have ancestorPending : ancestor.payloadStatus = .pending := by
-      rcases origin with rfl | ⟨_, _, _, _, _, _, status, _⟩
-      · rfl
-      · exact status ▸ parentPayloadStatus_of_lt before
     rw [beq_iff_eq]
-    constructor
-    · rintro rfl
-      exact chain
-    · intro above
-      have sameRoot := getAncestor_root_eq found walk above
-      cases ancestor
-      cases node
-      simp_all
+    exact ⟨fun same => same ▸ chain, getAncestor_root_eq found walk⟩
+  simp only [isAncestor, known, walk, gloas, ↓reduceIte, bind, Except.bind, pure, Except.pure,
+    Except.ok.injEq] at computed
+  subst computed
+  have before : fork < .glamsterdam := Nat.lt_of_not_le gloas
+  have ancestorPending : ancestor.payloadStatus = .pending := by
+    rcases origin with rfl | ⟨_, _, _, _, _, _, status, _⟩
+    · rfl
+    · exact status ▸ parentPayloadStatus_of_lt before
+  rw [beq_iff_eq]
+  constructor
+  · rintro rfl
+    exact chain
+  · intro above
+    have sameRoot := getAncestor_root_eq found walk above
+    cases ancestor
+    cases node
+    simp_all
 
 /-! ## Votes and weights -/
 
@@ -500,7 +550,7 @@ theorem getAttestationScore_eq_weight {node : ForkChoiceNode} {block : BeaconBlo
   · simp only [latestVote, equivocating, ↓reduceIte]
   · rw [getSupportedNode_of_lt before, Except.ok.injEq] at supportedOk
     subst supportedOk
-    rw [isAncestor_iff (lower := lower) before found pending computed']
+    rw [isAncestor_iff (lower := lower) found pending computed']
     simp only [latestVote, honest, Bool.false_eq_true, ↓reduceIte, message', Option.map_some]
     simp
 
@@ -938,7 +988,7 @@ theorem getWeight_eq_weight_withBoost {node : ForkChoiceNode} {block : BeaconBlo
   -- The boost counts exactly when the boosted block descends from the node.
   have counts : (∃ m, store.boostedRoot = some m ∧ (blockTree lower).Ancestor (some node.root) m) ↔
       result = true := by
-    simp [boostedRoot, zero, isAncestor_iff (lower := lower) before found pending check]
+    simp [boostedRoot, zero, isAncestor_iff (lower := lower) found pending check]
   cases result with
   | false =>
     simp only [Bool.false_eq_true, iff_false] at counts
@@ -1147,6 +1197,19 @@ theorem getHead_pending {head : ForkChoiceNode} (before : fork < .glamsterdam)
     · rcases (filterNodeTree_parent before rfl tree head mem).2 with rfl | ⟨pending, -⟩
       · rfl
       · exact pending
+
+/-- The head's ancestry at a pending node reads only the head's root, at every fork. -/
+theorem isAncestor_getHead_root {head : ForkChoiceNode} (found : store.getHead config = .ok head)
+    (root : Root) :
+    store.isAncestor head ⟨root, .pending⟩ =
+      store.isAncestor ⟨head.root, .pending⟩ ⟨root, .pending⟩ := by
+  by_cases gloas : .glamsterdam ≤ fork
+  · exact isAncestor_head_pending gloas head root
+  have pending := getHead_pending (Nat.lt_of_not_le gloas) found
+  obtain ⟨headRoot, status⟩ := head
+  simp only at pending
+  subst pending
+  rfl
 
 /-- Before Gloas, the walk from a pending node ends at a node that descends from what it does. -/
 theorem getHeadFrom_descends {nodes : List ForkChoiceNode} {ancestor : ForkChoiceNode}
@@ -1418,7 +1481,7 @@ theorem isAncestor_getHead_of_majority_withBoost {nodes : List ForkChoiceNode}
     simp [isAncestor, block_ok_iff.mpr nodeFound, later, walk, bind, Except.bind, pure,
       Except.pure]
   have same :=
-    (isAncestor_iff (lower := lower) before nodeFound nodePending computed).mpr ⟨n, step⟩
+    (isAncestor_iff (lower := lower) nodeFound nodePending computed).mpr ⟨n, step⟩
   obtain ⟨root, status⟩ := head
   simp only at headPending
   subst headPending
