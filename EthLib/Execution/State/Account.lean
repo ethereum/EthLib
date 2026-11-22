@@ -45,6 +45,7 @@ def EMPTY_ACCOUNT : Account := ⟨0, 0, EMPTY_CODE_HASH⟩
 
 /-- The RLP item of an account with the root of its storage. -/
 def Account.toItem (account : Account) (storageRoot : Hash32) : Item :=
+  -- Yellow Paper §4.1: `(sigma[a]_n, sigma[a]_b, sigma[a]_s, sigma[a]_c)`.
   .list [Codec.toItem account.nonce, Codec.toItem account.balance, Codec.toItem storageRoot,
     Codec.toItem account.codeHash]
 
@@ -52,6 +53,7 @@ def Account.toItem (account : Account) (storageRoot : Hash32) : Item :=
 
 The item must be a list of exactly four fields, each of which holds a value of its type. -/
 def Account.ofItem (item : Item) : Except RlpError (Account × Hash32) := do
+  -- A list of exactly four items, in the order of §4.1.
   match ← item.fields 4 with
   | [nonce, balance, storageRoot, codeHash] =>
     return (⟨← Codec.ofItem nonce, ← Codec.ofItem balance, ← Codec.ofItem codeHash⟩,
