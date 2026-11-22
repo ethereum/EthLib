@@ -58,6 +58,11 @@ theorem twist_equation_iff (x y : Fp2) : twist.Equation x y ↔ y * y = x * x * 
 theorem twist_nonsingular_of {x y : Fp2} (h : y * y = x * x * x + b2) : twist.Nonsingular x y :=
   equation_iff_nonsingular.mp ((twist_equation_iff x y).mpr h)
 
+/-- `2` is not zero in `Fp2`.
+
+Doubling on the twist and the tangent lines of the pairing need it. -/
+theorem fp2_two_ne_zero : (2 : Fp2) ≠ 0 := fun h => absurd (congrArg Fp2.c0 h) (by decide)
+
 namespace Point2
 
 /-- The identity of `Fp2` keeps the operations, the numerals and the inverse of the rule.
@@ -103,19 +108,16 @@ theorem toPoint_add {p q : Point2} (hp : p.isOnCurve = true) (hq : q.isOnCurve =
 
 /-! ## Scalar multiplication -/
 
-/-- `2` is not zero in `Fp2`, so doubling on the twist follows the group law. -/
-private theorem two_ne_zero' : (2 : Fp2) ≠ 0 := fun h => absurd (congrArg Fp2.c0 h) (by decide)
-
 theorem isOnCurve_mulBits (fuel k : Nat) {p : Point2} (hp : p.isOnCurve = true) :
     (mulBits fuel k p).isOnCurve = true :=
   ShortWeierstrass.Point.isOnCurve_mulBits_field embedding rfl Jacobian.Coords.Embedding.id
-    (fun _ => rfl) (fun _ => rfl) rfl two_ne_zero' fuel k hp
+    (fun _ => rfl) (fun _ => rfl) rfl fp2_two_ne_zero fuel k hp
 
 /-- Double and add computes `k P`, when `k < 2^fuel`. -/
 theorem toPoint_mulBits (fuel k : Nat) {p : Point2} (hp : p.isOnCurve = true) (hk : k < 2 ^ fuel) :
     toPoint (mulBits fuel k p) = k • toPoint p :=
   ShortWeierstrass.Point.toPoint_mulBits_field embedding rfl Jacobian.Coords.Embedding.id
-    (fun _ => rfl) (fun _ => rfl) rfl two_ne_zero' fuel k hp hk
+    (fun _ => rfl) (fun _ => rfl) rfl fp2_two_ne_zero fuel k hp hk
 
 /-! ## Points and group elements correspond -/
 

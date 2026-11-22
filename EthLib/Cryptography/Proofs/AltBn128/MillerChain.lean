@@ -167,7 +167,6 @@ theorem linefunc_eq_line {x₁ y₁ x₂ y₂ : Fp2} (h₁ : (Point2.affine x₁
   change _ = Miller.line ambientCurve (ShortWeierstrass.scaledHom ofFp2Hom w_ne_zero
     twist_coefficient _) (ShortWeierstrass.scaledHom ofFp2Hom w_ne_zero twist_coefficient _) _ _
   rw [ShortWeierstrass.line_scaledHom_some]
-  have h2 : (2 : Fp2) ≠ 0 := fun h => absurd (congrArg Fp2.c0 h) (by decide)
   simp only [linefunc]
   by_cases hx : x₁ = x₂
   · subst hx
@@ -176,7 +175,7 @@ theorem linefunc_eq_line {x₁ y₁ x₂ y₂ : Fp2} (h₁ : (Point2.affine x₁
       have hy0 := hdeg rfl rfl
       have hny : ¬(y₁ = -y₁) := fun h => hy0 (by
         have : 2 * y₁ = 0 := by linear_combination h
-        exact (mul_eq_zero.mp this).resolve_left h2)
+        exact (mul_eq_zero.mp this).resolve_left fp2_two_ne_zero)
       simp only [ne_eq, not_true_eq_false, ite_false, ite_true, true_and, hny]
       rw [slopeLine_eq, slope_of_Y_ne rfl (by rwa [ShortWeierstrass.negY_eq]),
         ShortWeierstrass.negY_eq]

@@ -862,6 +862,9 @@ Not yet released.
   The chains also stay on the curve, by `Jacobian.Coords.onCurve_mulBits`, `onCurve_mulAddAux` and `onCurve_mulAdd`, and the joint chain computes `k P + l Q` by `toPoint_mulAddAux`.
   Bridges relate forms over `Fin m` to their values in `ZMod m` (`Jacobian.onCurve_iff`, `Jacobian.toPoint_eq` and the `Jacobian.map_*` lemmas), and points to forms over any field (`ShortWeierstrass.Point.toCoords_spec` and `ofCoords_spec`).
   `Jacobian.Coords.Embedding.id` states that the identity is a change of representation.
+  The formulas over `Fin m`, `Jacobian.double_eq_formula` and `Jacobian.add_eq_formula`, are gone, with the numeral lemmas `Jacobian.toZ_two`, `toZ_three`, `toZ_four` and `toZ_eight` that only they used ([#4117](https://github.com/ethereum/EthLib/issues/4117)).
+  The forms over any field keep their formulas, `Jacobian.Coords.double_eq_formula` and `add_eq_formula`.
+  `AltBn128.fp2_two_ne_zero` states that `2` is not zero in `Fp2`, for the group law of the twist and for the lines of the pairing.
   The theorems about forms over `Fin m`, about the prime-field curves and about `G_2` keep their statements, and now follow from these.
   No value changes for points on the curve, the only points that ECPAIRING passes to the multiplication of `G_2`.
 
