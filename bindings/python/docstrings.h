@@ -210,10 +210,10 @@
   "HKDF, RFC 5869 §2: extract, then expand."
 
 #define DOC_tls13_hkdf_label \
-  "The HkdfLabel of RFC 8446 §7.1, for a label without its `tls13 ` prefix."
+  "The HkdfLabel of RFC 9846 §7.1, for a label without its `tls13 ` prefix."
 
 #define DOC_tls13_expand_label \
-  "Expand a SHA-256 secret with a TLS 1.3 label and context, RFC 8446 §7.1."
+  "Expand a SHA-256 secret with a TLS 1.3 label and context, RFC 9846 §7.1."
 
 #define DOC_concat_kdf_sha256 \
   "The first `length` bytes of `K(1) | K(2) | ...`, SP 800-56C Rev. 2 §4.1."
@@ -1305,7 +1305,7 @@
   "Derive the payload key, IV and header-protection key, in that order, RFC 9001 §5.1."
 
 #define DOC_quic_tls_client_start \
-  "Start a client certificate handshake under an explicit policy, RFC 8446 §4.1.2."
+  "Start a client certificate handshake under an explicit policy, RFC 9846 §4.2.2."
 
 #define DOC_quic_tls_server_start \
   "Start a server certificate handshake under an explicit policy."
@@ -1320,16 +1320,16 @@
   "Return the early, handshake, master, two handshake traffic and two application traffic secrets."
 
 #define DOC_quic_tls_derive_secret \
-  "Derive a SHA-256 secret from encoded handshake messages, RFC 8446 §7.1."
+  "Derive a SHA-256 secret from encoded handshake messages, RFC 9846 §7.1."
 
 #define DOC_quic_tls_finished \
-  "Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4."
+  "Compute the Finished `verify_data` over the transcript that precedes it, RFC 9846 §4.5.3."
 
 #define DOC_quic_tls_message_encode \
-  "Encode one handshake message with its header and the caller's hash length, RFC 8446 §4."
+  "Encode one handshake message with its header and the caller's hash length, RFC 9846 §4."
 
 #define DOC_quic_tls_message_decode \
-  "Decode one complete message and return its fields and trailing bytes, RFC 8446 §4."
+  "Decode one complete message and return its fields and trailing bytes, RFC 9846 §4."
 
 #define DOC_quic_tls_payload_encode \
   "Encode a structured extension payload without selecting an algorithm or protocol."
@@ -1338,10 +1338,10 @@
   "Decode an extension in the payload form that its message context requires."
 
 #define DOC_quic_tls_transcript \
-  "Return the SHA-256 transcript of complete handshake messages and its hash, RFC 8446 §4.4.1."
+  "Return the SHA-256 transcript of complete handshake messages and its hash, RFC 9846 §4.1."
 
 #define DOC_quic_tls_certificate_verify_input \
-  "Build the CertificateVerify signed content from a SHA-256 transcript hash, RFC 8446 §4.4.3."
+  "Build the CertificateVerify signed content from a SHA-256 transcript hash, RFC 9846 §4.5.2."
 
 #define DOC_quic_protect \
   "Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1 to 5.4."

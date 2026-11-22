@@ -7,7 +7,7 @@ public import EthLib.Base.Except
 /-!
 # Proofs: TLS 1.3 labelled HKDF
 
-Label serialization accepts exactly the field bounds of RFC 8446 §7.1.
+Label serialization accepts exactly the field bounds of RFC 9846 §7.1.
 
 The expansion adds only the output limit of HKDF-SHA-256, RFC 5869 §2.3.
 -/

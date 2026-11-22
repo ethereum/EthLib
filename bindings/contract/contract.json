@@ -1369,7 +1369,7 @@
    "docstring":
    "HKDF, RFC 5869 §2: extract, then expand.\n\nThe input keying material is secret, and this function makes no constant-time claim."},
   {"summary":
-   "The HkdfLabel of RFC 8446 §7.1, for a label without its `tls13 ` prefix.",
+   "The HkdfLabel of RFC 9846 §7.1, for a label without its `tls13 ` prefix.",
    "signature": "(label: bytes, context: bytes, length: int) -> bytes",
    "operation": "EthLib.Cryptography.Hash.Tls13.Exports.labelExport",
    "method": "tls13_hkdf_label",
@@ -1382,9 +1382,9 @@
       {"constructor": "hkdf", "code": 4}]}],
    "error_class": "Tls13Error",
    "docstring":
-   "The HkdfLabel of RFC 8446 §7.1, for a label without its `tls13 ` prefix."},
+   "The HkdfLabel of RFC 9846 §7.1, for a label without its `tls13 ` prefix."},
   {"summary":
-   "Expand a SHA-256 secret with a TLS 1.3 label and context, RFC 8446 §7.1.",
+   "Expand a SHA-256 secret with a TLS 1.3 label and context, RFC 9846 §7.1.",
    "signature":
    "(secret: bytes, label: bytes, context: bytes, length: int) -> bytes",
    "operation": "EthLib.Cryptography.Hash.Tls13.Exports.expandExport",
@@ -1398,7 +1398,7 @@
       {"constructor": "hkdf", "code": 4}]}],
    "error_class": "Tls13Error",
    "docstring":
-   "Expand a SHA-256 secret with a TLS 1.3 label and context, RFC 8446 §7.1."},
+   "Expand a SHA-256 secret with a TLS 1.3 label and context, RFC 9846 §7.1."},
   {"summary":
    "The first `length` bytes of `K(1) | K(2) | ...`, SP 800-56C Rev. 2 §4.1.",
    "signature": "(z: bytes, fixed_info: bytes, length: int) -> bytes",
@@ -13406,7 +13406,7 @@
    "docstring":
    "Derive the payload key, IV and header-protection key, in that order, RFC 9001 §5.1."},
   {"summary":
-   "Start a client certificate handshake under an explicit policy, RFC 8446 §4.1.2.",
+   "Start a client certificate handshake under an explicit policy, RFC 9846 §4.2.2.",
    "signature": "(config: dict[str, object]) -> dict[str, object]",
    "operation":
    "EthLib.Networking.Quic.Tls.Handshake.Exports.clientStartExport",
@@ -13430,7 +13430,7 @@
       {"constructor": "crypto", "code": null}]}],
    "error_class": "TlsStepError",
    "docstring":
-   "Start a client certificate handshake under an explicit policy, RFC 8446 §4.1.2."},
+   "Start a client certificate handshake under an explicit policy, RFC 9846 §4.2.2."},
   {"summary": "Start a server certificate handshake under an explicit policy.",
    "signature": "(config: dict[str, object]) -> dict[str, object]",
    "operation":
@@ -13523,9 +13523,9 @@
       {"constructor": "hkdf", "code": 4}]}],
    "error_class": "Tls13Error",
    "docstring":
-   "Return the early, handshake, master, two handshake traffic and two application traffic secrets.\n\nEach pair gives the client secret first.\n\nThe no-PSK schedule and transcript boundaries are those of RFC 8446 §7.1."},
+   "Return the early, handshake, master, two handshake traffic and two application traffic secrets.\n\nEach pair gives the client secret first.\n\nThe no-PSK schedule and transcript boundaries are those of RFC 9846 §7.1."},
   {"summary":
-   "Derive a SHA-256 secret from encoded handshake messages, RFC 8446 §7.1.",
+   "Derive a SHA-256 secret from encoded handshake messages, RFC 9846 §7.1.",
    "signature": "(secret: bytes, label: bytes, messages: bytes) -> bytes",
    "operation": "EthLib.Networking.Quic.Exports.deriveExport",
    "method": "quic_tls_derive_secret",
@@ -13538,9 +13538,9 @@
       {"constructor": "hkdf", "code": 4}]}],
    "error_class": "Tls13Error",
    "docstring":
-   "Derive a SHA-256 secret from encoded handshake messages, RFC 8446 §7.1.\n\nThe label excludes the `tls13 ` prefix."},
+   "Derive a SHA-256 secret from encoded handshake messages, RFC 9846 §7.1.\n\nThe label excludes the `tls13 ` prefix."},
   {"summary":
-   "Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4.",
+   "Compute the Finished `verify_data` over the transcript that precedes it, RFC 9846 §4.5.3.",
    "signature": "(secret: bytes, transcript: bytes) -> bytes",
    "operation": "EthLib.Networking.Quic.Exports.finishedExport",
    "method": "quic_tls_finished",
@@ -13553,9 +13553,9 @@
       {"constructor": "hkdf", "code": 4}]}],
    "error_class": "Tls13Error",
    "docstring":
-   "Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4.\n\nDuring the handshake the secret is the sender's handshake traffic secret."},
+   "Compute the Finished `verify_data` over the transcript that precedes it, RFC 9846 §4.5.3.\n\nDuring the handshake the secret is the sender's handshake traffic secret."},
   {"summary":
-   "Encode one handshake message with its header and the caller's hash length, RFC 8446 §4.",
+   "Encode one handshake message with its header and the caller's hash length, RFC 9846 §4.",
    "signature": "(hash_length: int, message: TlsMessage) -> bytes",
    "operation": "EthLib.Networking.Quic.Exports.messageEncodeExport",
    "method": "quic_tls_message_encode",
@@ -13572,9 +13572,9 @@
       {"constructor": "legacyVersion", "code": 8}]}],
    "error_class": "TlsHandshakeError",
    "docstring":
-   "Encode one handshake message with its header and the caller's hash length, RFC 8446 §4."},
+   "Encode one handshake message with its header and the caller's hash length, RFC 9846 §4."},
   {"summary":
-   "Decode one complete message and return its fields and trailing bytes, RFC 8446 §4.",
+   "Decode one complete message and return its fields and trailing bytes, RFC 9846 §4.",
    "signature": "(hash_length: int, data: bytes) -> tuple[TlsMessage, bytes]",
    "operation": "EthLib.Networking.Quic.Exports.messageDecodeExport",
    "method": "quic_tls_message_decode",
@@ -13591,7 +13591,7 @@
       {"constructor": "legacyVersion", "code": 8}]}],
    "error_class": "TlsHandshakeError",
    "docstring":
-   "Decode one complete message and return its fields and trailing bytes, RFC 8446 §4."},
+   "Decode one complete message and return its fields and trailing bytes, RFC 9846 §4."},
   {"summary":
    "Encode a structured extension payload without selecting an algorithm or protocol.",
    "signature": "(payload: TlsPayload) -> TlsExtension",
@@ -13631,7 +13631,7 @@
    "docstring":
    "Decode an extension in the payload form that its message context requires."},
   {"summary":
-   "Return the SHA-256 transcript of complete handshake messages and its hash, RFC 8446 §4.4.1.",
+   "Return the SHA-256 transcript of complete handshake messages and its hash, RFC 9846 §4.1.",
    "signature": "(messages: list[bytes]) -> tuple[bytes, bytes]",
    "operation": "EthLib.Networking.Quic.Exports.transcriptExport",
    "method": "quic_tls_transcript",
@@ -13648,16 +13648,16 @@
       {"constructor": "legacyVersion", "code": 8}]}],
    "error_class": "TlsHandshakeError",
    "docstring":
-   "Return the SHA-256 transcript of complete handshake messages and its hash, RFC 8446 §4.4.1.\n\nA HelloRetryRequest replaces ClientHello1 with its synthetic `message_hash` message."},
+   "Return the SHA-256 transcript of complete handshake messages and its hash, RFC 9846 §4.1.\n\nA HelloRetryRequest replaces ClientHello1 with its synthetic `message_hash` message."},
   {"summary":
-   "Build the CertificateVerify signed content from a SHA-256 transcript hash, RFC 8446 §4.4.3.",
+   "Build the CertificateVerify signed content from a SHA-256 transcript hash, RFC 9846 §4.5.2.",
    "signature": "(server: bool, digest: bytes) -> bytes",
    "operation": "EthLib.Networking.Quic.Exports.certificateVerifyInputExport",
    "method": "quic_tls_certificate_verify_input",
    "errors": [],
    "error_class": "TlsHandshakeError",
    "docstring":
-   "Build the CertificateVerify signed content from a SHA-256 transcript hash, RFC 8446 §4.4.3."},
+   "Build the CertificateVerify signed content from a SHA-256 transcript hash, RFC 9846 §4.5.2."},
   {"summary":
    "Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1 to 5.4.",
    "signature":

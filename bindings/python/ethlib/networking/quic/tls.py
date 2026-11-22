@@ -37,12 +37,12 @@ def decode_payload(form: PayloadForm, extension: Extension) -> Payload:
 
 
 def transcript(messages: list[bytes]) -> tuple[bytes, bytes]:
-    """Return SHA-256 transcript bytes and their hash, with the retry rule of RFC 8446 §4.4.1."""
+    """Return SHA-256 transcript bytes and their hash, with the retry rule of RFC 9846 §4.1."""
     return _native.quic_tls_transcript(messages)
 
 
 def certificate_verify_input(server: bool, digest: bytes) -> bytes:
-    """Build CertificateVerify's signed content from a SHA-256 transcript hash, RFC 8446 §4.4.3."""
+    """Build CertificateVerify's signed content from a SHA-256 transcript hash, RFC 9846 §4.5.2."""
     return _native.quic_tls_certificate_verify_input(server, digest)
 
 

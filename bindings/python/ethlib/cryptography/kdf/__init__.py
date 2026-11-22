@@ -38,12 +38,12 @@ def hkdf(salt: bytes, ikm: bytes, info: bytes, length: int) -> bytes:
 
 
 def tls13_hkdf_label(label: bytes, context: bytes, length: int) -> bytes:
-    """The `HkdfLabel` of RFC 8446 §7.1, for a label given without its `tls13 ` prefix."""
+    """The `HkdfLabel` of RFC 9846 §7.1, for a label given without its `tls13 ` prefix."""
     return native_tls13_hkdf_label(label, context, length)
 
 
 def tls13_expand_label(secret: bytes, label: bytes, context: bytes, length: int) -> bytes:
-    """HKDF-Expand-Label of RFC 8446 §7.1 with SHA-256, on a 32-byte secret."""
+    """HKDF-Expand-Label of RFC 9846 §7.1 with SHA-256, on a 32-byte secret."""
     return native_tls13_expand_label(secret, label, context, length)
 
 

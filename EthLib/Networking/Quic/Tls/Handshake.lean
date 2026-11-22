@@ -9,7 +9,7 @@ public import EthLib.Networking.Quic.Keys
 /-!
 # The certificate handshake of libp2p QUIC
 
-The pure steps follow [RFC 8446 §4][tls] and [RFC 9001 §4][quic].
+The pure steps follow [RFC 9846 §4][tls] and [RFC 9001 §4][quic].
 
 Peer authentication and ALPN follow [libp2p TLS at 4facaf9][libp2p].
 
@@ -27,7 +27,7 @@ Ephemeral keys must be fresh and secret, and no function claims constant-time ex
 
 CertificateVerify signatures use the deterministic nonce of RFC 6979, so no caller supplies one.
 
-[tls]: https://www.rfc-editor.org/rfc/rfc8446#section-4
+[tls]: https://www.rfc-editor.org/rfc/rfc9846#section-4
 [quic]: https://www.rfc-editor.org/rfc/rfc9001#section-4
 [libp2p]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/tls/tls.md
 -/
@@ -43,9 +43,9 @@ open Wire
 inductive Error where
   | unexpectedMessage
   | illegalParameter
-  /-- The extension `type`, which the message needs, is absent (RFC 8446 §6.2). -/
+  /-- The extension `type`, which the message needs, is absent (RFC 9846 §6.2). -/
   | missingExtension (type : CodePoint)
-  /-- The extension `type` was not offered, or is not allowed here (RFC 8446 §6.2). -/
+  /-- The extension `type` was not offered, or is not allowed here (RFC 9846 §6.2). -/
   | unsupportedExtension (type : CodePoint)
   | handshakeFailure
   | protocolVersion
@@ -61,7 +61,7 @@ inductive Error where
 
 /-- The QUIC connection error, RFC 9000 §20.1; a TLS alert maps to 0x100 + alert, RFC 9001 §4.8. -/
 def Error.code : Error → UInt32
-  -- RFC 8446 §6: unexpected_message is alert 10, so the code is 0x0100 + 10.
+  -- RFC 9846 §6: unexpected_message is alert 10, so the code is 0x0100 + 10.
   | .unexpectedMessage => 0x10a
   -- illegal_parameter is alert 47.
   | .illegalParameter => 0x12f
@@ -87,7 +87,7 @@ def Error.code : Error → UInt32
   | .configuration => 0x150
   -- EthLib's choice: a rejected certificate is bad_certificate, alert 42.
   | .certificate _ => 0x12a
-  -- §§4.2.8.2 and 7.4.2 name no alert for a bad peer share or a degenerate secret.
+  -- §§4.3.8.2 and 7.4.2 name no alert for a bad peer share or a degenerate secret.
   --
   -- EthLib takes illegal_parameter, a field the peer got wrong (§6.2).
   | .crypto .keyShare | .crypto .sharedSecret => 0x12f
@@ -117,7 +117,7 @@ structure FlightMessage where
 
 The session-ID choice implements the server SHOULD of RFC 9001 §8.4.
 
-The policy has no default, since RFC 8446 §9.1 leaves that choice to an application profile. -/
+The policy has no default, since RFC 9846 §9.1 leaves that choice to an application profile. -/
 structure Policy where
   cipherSuites : List CodePoint
   groups : List CodePoint
@@ -147,7 +147,7 @@ structure Config where
   initialShares : List CodePoint
   transportParameters : ByteArray
 
-/-- The receive phase of a certificate handshake, RFC 8446 Appendix A. -/
+/-- The receive phase of a certificate handshake, RFC 9846 Appendix A. -/
 inductive Phase where
   | serverHello
   | encryptedExtensions
@@ -168,7 +168,7 @@ structure Retry where
   group : Option CodePoint
   cookie : Option Extension
 
-/-- The negotiated parameters and their transcript boundaries, RFC 8446 §7.1. -/
+/-- The negotiated parameters and their transcript boundaries, RFC 9846 §7.1. -/
 structure Negotiated where
   suite : CodePoint
   group : CodePoint
@@ -210,14 +210,14 @@ def libp2p : ByteArray := "libp2p".toUTF8
 
 /-- The two implemented SHA-256 suites; other transcript hashes are unavailable. -/
 def supportedSuite (suite : CodePoint) : Bool :=
-  -- RFC 8446 Appendix B.4: TLS_AES_128_GCM_SHA256 is {0x13,0x01}.
+  -- RFC 9846 Appendix B.4: TLS_AES_128_GCM_SHA256 is {0x13,0x01}.
   --
   -- TLS_CHACHA20_POLY1305_SHA256 is {0x13,0x03}.
   suite.val == 0x1301 || suite.val == 0x1303
 
 /-- Map a codec error to its alert: unexpected message, protocol version, or a malformed field.
 
-RFC 8446 §§4 and 6.2 name the alerts. -/
+RFC 9846 §§4 and 6.2 name the alerts. -/
 def wire {α : Type} (value : Except Wire.Error α) : Except Error α :=
   value.mapError fun
     -- §6.2: an inappropriate message, such as the wrong handshake message, is unexpected_message.
@@ -226,7 +226,7 @@ def wire {α : Type} (value : Except Wire.Error α) : Except Error α :=
     | .legacyVersion => .protocolVersion
     -- §6.2: a field that is incorrect, or inconsistent with other fields, is illegal_parameter.
     --
-    -- §4.2 names no alert for a repeated extension type, so EthLib takes this one.
+    -- §4.3 names no alert for a repeated extension type, so EthLib takes this one.
     | .constant | .duplicateExtension _ => .illegalParameter
     -- §6.2: a message that does not conform to the formal protocol syntax is decode_error.
     | _ => .decodeError
@@ -238,7 +238,7 @@ def saved {α : Type} : Option α → Except Error α
 
 /-- The first extension of a type; the message codec rejects duplicate types. -/
 def extension (kind : CodePoint) (extensions : List Extension) : Option Extension :=
-  -- §4.2: there MUST NOT be more than one extension of the same type in a block.
+  -- §4.3: there MUST NOT be more than one extension of the same type in a block.
   extensions.find? (fun e => e.kind == kind)
 
 /-- Require an optional field with the error appropriate to its protocol context. -/
@@ -246,7 +246,7 @@ def required {α : Type} (error : Error) : Option α → Except Error α
   | some value => .ok value
   | none => .error error
 
-/-- Read a required extension in its message-specific form, RFC 8446 §4.2. -/
+/-- Read a required extension in its message-specific form, RFC 9846 §4.3. -/
 def payload (form : PayloadForm) (extensions : List Extension) : Except Error Payload := do
   -- §6.2: a message without an extension it must carry is missing_extension.
   let value ← required (.missingExtension form.type) (extension form.type extensions)
@@ -264,30 +264,30 @@ def alpn (extensions : List Extension) : Except Error (List ByteArray) := do
   | .alpn protocols => return protocols
   | _ => throw .decodeError
 
-/-- Read the offered groups, RFC 8446 §4.2.7. -/
+/-- Read the offered groups, RFC 9846 §4.3.7. -/
 def groups (extensions : List Extension) : Except Error (List CodePoint) := do
-  -- §4.2.7: `NamedGroup named_group_list<2..2^16-1>;`, most preferred first.
+  -- §4.3.7: `NamedGroup named_group_list<2..2^16-1>;`, most preferred first.
   match ← payload .supportedGroups extensions with
   | .supportedGroups values => return values
   | _ => throw .decodeError
 
-/-- Read offered signature schemes, RFC 8446 §4.2.3. -/
+/-- Read offered signature schemes, RFC 9846 §4.3.3. -/
 def signatures (extensions : List Extension) : Except Error (List CodePoint) := do
-  -- §4.2.3: `SignatureScheme supported_signature_algorithms<2..2^16-2>;`.
+  -- §4.3.3: `SignatureScheme supported_signature_algorithms<2..2^16-2>;`.
   match ← payload .signatureAlgorithms extensions with
   | .signatureAlgorithms values => return values
   | _ => throw .decodeError
 
-/-- Read ClientHello's shares, RFC 8446 §4.2.8. -/
+/-- Read ClientHello's shares, RFC 9846 §4.3.8. -/
 def shares (extensions : List Extension) : Except Error (List KeyShareEntry) := do
-  -- §4.2.8: `KeyShareEntry client_shares<0..2^16-1>;`, in descending order of preference.
+  -- §4.3.8: `KeyShareEntry client_shares<0..2^16-1>;`, in descending order of preference.
   match ← payload .clientKeyShare extensions with
   | .clientKeyShare values => return values
   | _ => throw .decodeError
 
-/-- Select the first local preference also offered by the peer, RFC 8446 §4.1.1. -/
+/-- Select the first local preference also offered by the peer, RFC 9846 §4.2.1. -/
 def select (preferences offered : List CodePoint) : Except Error CodePoint :=
-  -- §4.1.1: the selecting side picks from the overlap; EthLib takes its own first preference.
+  -- §4.2.1: the selecting side picks from the overlap; EthLib takes its own first preference.
   --
   -- With no overlap, it MUST abort with handshake_failure or insufficient_security.
   --
@@ -300,7 +300,7 @@ def ephemeral (config : Config) (group : CodePoint) : Except Error (Vector UInt8
   let key ← required .configuration (config.ephemeralKeys.find? (fun key => key.group == group))
   return key.secret
 
-/-- Enforce digitalSignature when KeyUsage is present, RFC 8446 §4.4.2.2 and RFC 5280 §4.2.1.3. -/
+/-- Enforce digitalSignature when KeyUsage is present, RFC 9846 §4.5.1.2 and RFC 5280 §4.2.1.3. -/
 def checkSigningUsage (certificate : Libp2p.Tls.Certificate) : Except Error Unit :=
   certificate.extensions.forM fun value => do
     -- RFC 5280 §4.2.1.3: the key usage extension has the OID { id-ce 15 }, that is 2.5.29.15.
@@ -314,7 +314,7 @@ def checkSigningUsage (certificate : Libp2p.Tls.Certificate) : Except Error Unit
       match bits.content.toList with
       -- X.690 §8.6.2.1: bit 0, digitalSignature, is bit 8 of the first subsequent octet.
       --
-      -- RFC 8446 §4.4.2.2: the digitalSignature bit MUST be set.
+      -- RFC 9846 §4.5.1.2: the digitalSignature bit MUST be set.
       | _ :: first :: _ => ensure (first.toNat / 128 = 1) (.certificate .publicKey)
       -- An empty bit string has no digitalSignature bit set.
       | _ => throw (.certificate .publicKey)
@@ -330,7 +330,7 @@ def validateConfig (config : Config) : Except Error Unit := do
   ensure (config.policy.cipherSuites.all supportedSuite ∧
     config.policy.groups.all Crypto.supportedGroup ∧
     config.policy.signatureSchemes.all Crypto.supportedSignatureScheme) .configuration
-  -- RFC 8446 §4.2.8: the shares follow the order of the groups, with at most one per group.
+  -- RFC 9846 §4.3.8: the shares follow the order of the groups, with at most one per group.
   --
   -- EthLib's check: no group is listed twice, and no group has two ephemeral keys.
   ensure (config.initialShares.Sublist config.policy.groups ∧
@@ -346,9 +346,9 @@ def validateConfig (config : Config) : Except Error Unit := do
   -- libp2p permits a receiver to tolerate unique IDs, but a sender must omit them.
   ensure (peer.certificate.issuerUniqueId = false ∧ peer.certificate.subjectUniqueId = false)
     .configuration
-  -- RFC 8446 §4.4.2.2: the certificate MUST allow its key to be used for signing.
+  -- RFC 9846 §4.5.1.2: the certificate MUST allow its key to be used for signing.
   checkSigningUsage peer.certificate
-  -- §4.4.3: the signing key is the private key of the certificate that is sent.
+  -- §4.5.2: the signing key is the private key of the certificate that is sent.
   ensure (Crypto.publicKeyMatches config.signingKey peer.certificate.spki = true) .configuration
 
 /-- Build a typed payload's extension, checking its presentation bounds. -/
@@ -357,18 +357,18 @@ def encodedPayload (value : Payload) : Except Error Extension := wire (encodePay
 /-- Encode a complete outgoing handshake message, then retain those exact transcript bytes. -/
 def emit (state : State) (level : Level) (message : Message) :
     Except Error (State × FlightMessage) := do
-  -- RFC 8446 §4: the handshake type, the uint24 length, then the body.
+  -- RFC 9846 §4: the handshake type, the uint24 length, then the body.
   --
   -- With SHA-256, `Hash.length` is 32, the length of Finished.
   let data ← wire (encode 32 message)
-  -- §4.4.1: the transcript takes the message exactly as sent, its header included.
+  -- §4.1: the transcript takes the message exactly as sent, its header included.
   let transcript ← wire (state.transcript.append data)
   -- RFC 9001 §4.1.3: TLS hands the bytes to QUIC with their encryption level.
   return ({ state with transcript }, ⟨level, data⟩)
 
-/-- Preserve an accepted incoming message byte for byte, RFC 8446 §4.4.1. -/
+/-- Preserve an accepted incoming message byte for byte, RFC 9846 §4.1. -/
 def receive (state : State) (input : FlightMessage) : Except Error State := do
-  -- §4.4.1: the transcript takes the message exactly as received, its header included.
+  -- §4.1: the transcript takes the message exactly as received, its header included.
   return { state with transcript := ← wire (state.transcript.append input.data) }
 
 /-- Check that a message arrived at its required QUIC encryption level, RFC 9001 §4. -/
@@ -383,44 +383,44 @@ def checkLevel (expected : Level) (input : FlightMessage) : Except Error Unit :=
 /-- Decode one complete message at its required QUIC encryption level, RFC 9001 §4. -/
 def readMessage (expected : Level) (input : FlightMessage) : Except Error Message := do
   checkLevel expected input
-  -- RFC 8446 §4: exactly one handshake message, with the 32-byte Finished of SHA-256.
+  -- RFC 9846 §4: exactly one handshake message, with the 32-byte Finished of SHA-256.
   wire (Wire.exact (decodeList 32) input.data.data.toList)
 
 /-- Empty saved inputs before either endpoint receives a message. -/
 def initialState (phase : Phase) : State := ⟨phase, {}, none, none, none, [], none⟩
 
-/-- Build a key-share entry from the configured secret, RFC 8446 §4.2.8. -/
+/-- Build a key-share entry from the configured secret, RFC 9846 §4.3.8. -/
 def localShare (config : Config) (group : CodePoint) : Except Error KeyShareEntry := do
   let secret ← ephemeral config group
-  -- §§4.2.8.2 and 7.4.2: the key exchange bytes are the public value of the secret.
+  -- §§4.3.8.2 and 7.4.2: the key exchange bytes are the public value of the secret.
   let bytes ← (Crypto.keyShare group secret).mapError Error.crypto
-  -- §4.2.8: the entry is the named group, then its key exchange bytes.
+  -- §4.3.8: the entry is the named group, then its key exchange bytes.
   return ⟨group, bytes⟩
 
 /-- Generate a TLS 1.3-only ClientHello without SNI, libp2p TLS Future Extensibility. -/
 def makeClientHello (config : Config) : Except Error ClientHello := do
-  -- §4.2.8: one share for each initial group, in the order of the supported groups.
+  -- §4.3.8: one share for each initial group, in the order of the supported groups.
   let keyShares ← config.initialShares.mapM (localShare config)
-  -- §4.2.1: the supported versions are 0x0304 alone, as RFC 9001 §4.2 forbids older versions.
+  -- §4.3.1: the supported versions are 0x0304 alone, as RFC 9001 §4.2 forbids older versions.
   let extensions ← [Payload.supportedVersions [0x0304],
-    -- §§4.2.7 and 4.2.3: the groups and signature schemes of the policy, in its order.
+    -- §§4.3.7 and 4.3.3: the groups and signature schemes of the policy, in its order.
     .supportedGroups config.policy.groups, .signatureAlgorithms config.policy.signatureSchemes,
-    -- §4.2.8: the key shares; libp2p tls.md, ALPN: the one protocol name libp2p.
+    -- §4.3.8: the key shares; libp2p tls.md, ALPN: the one protocol name libp2p.
     .clientKeyShare keyShares, .alpn [libp2p],
     -- RFC 9001 §8.2: endpoints MUST send the QUIC transport parameters extension.
     .quicTransportParameters config.transportParameters].mapM encodedPayload
-  -- §4.1.2: the random, an empty legacy session ID, the cipher suites, then the extensions.
+  -- §4.2.2: the random, an empty legacy session ID, the cipher suites, then the extensions.
   --
   -- The session ID is empty, since RFC 9001 §8.4 forbids the middlebox compatibility mode.
   --
   -- libp2p tls.md, Future Extensibility: the client sends no server name.
   return ⟨config.random, .empty, config.policy.cipherSuites, extensions⟩
 
-/-- Send ClientHello and wait for ServerHello or one retry, RFC 8446 §4.1.2. -/
+/-- Send ClientHello and wait for ServerHello or one retry, RFC 9846 §4.2.2. -/
 def clientStart (config : Config) : Except Error Step := do
   -- EthLib's check: the configuration is complete and consistent before any message.
   validateConfig config
-  -- §4.1.2: the client sends ClientHello as its first TLS message.
+  -- §4.2.2: the client sends ClientHello as its first TLS message.
   let hello ← makeClientHello config
   -- Appendix A.1: Send ClientHello moves START to WAIT_SH.
   --
@@ -433,12 +433,12 @@ def clientStart (config : Config) : Except Error Step := do
 def serverStart (config : Config) : Except Error State := do
   -- EthLib's check: the configuration is complete and consistent before any message.
   validateConfig config
-  -- §4.1.3: a ServerHello random equal to that of HelloRetryRequest would read as a retry.
+  -- §4.2.3: a ServerHello random equal to that of HelloRetryRequest would read as a retry.
   ensure (config.random ≠ retryRandom) .configuration
   -- Appendix A.2: START, waiting for ClientHello.
   return initialState .clientHello
 
-/-- The message contexts of RFC 8446 §4.2 and RFC 9001 §8.2. -/
+/-- The message contexts of RFC 9846 §4.3 and RFC 9001 §8.2. -/
 inductive Context where
   | clientHello | serverHello | retry | encryptedExtensions | certificateRequest | certificate
   | newSessionTicket
@@ -447,7 +447,15 @@ inductive Context where
 /-- Placement of every extension recognized here, with unknown types left uninterpreted. -/
 def allowedExtension (context : Context) (kind : CodePoint) : Bool :=
   let contexts := match kind.val with
-    -- §4.2, CH and EE: server name, max fragment length, supported groups and use SRTP.
+    -- CH and EE: server name, max fragment length, supported groups and use SRTP.
+    --
+    -- Table 1 of §4.3 lists all but max fragment length (1), which the IANA registry places.
+    --
+    -- Table 1 also lists CR for server name, from RFC 9261.
+    --
+    -- The IANA registry limits this CR to the request of a client-generated authenticator.
+    --
+    -- So a handshake CertificateRequest still may not carry it.
     --
     -- CH and EE too: heartbeat, ALPN, and the client and server certificate types.
     --
@@ -455,6 +463,10 @@ def allowedExtension (context : Context) (kind : CodePoint) : Bool :=
     | 0 | 1 | 10 | 14 | 15 | 16 | 19 | 20 | 57 =>
       some [Context.clientHello, .encryptedExtensions]
     -- Status request and signed certificate timestamp: CH, CR and CT.
+    --
+    -- Table 1 lists only recommended extensions, so it omits the timestamp (18).
+    --
+    -- The IANA registry places it.
     | 5 | 18 => some [.clientHello, .certificateRequest, .certificate]
     -- Signature algorithms, certificate authorities and signature algorithms cert: CH and CR.
     | 13 | 47 | 50 => some [.clientHello, .certificateRequest]
@@ -473,22 +485,24 @@ def allowedExtension (context : Context) (kind : CodePoint) : Bool :=
     -- An extension this table does not list is not recognized here.
     | _ => none
   match contexts with
-  -- §4.1.2: servers MUST ignore unrecognized extensions, and clients do too here.
+  -- §4.2.2: servers MUST ignore unrecognized extensions, and clients do too here.
   | none => true
   | some contexts => context ∈ contexts
 
-/-- Validate placement and, for a response, the corresponding request, RFC 8446 §4.2. -/
+/-- Validate placement and, for a response, the corresponding request, RFC 9846 §4.3. -/
 def checkExtensions (context : Context) (offered : Option (List Extension))
     (extensions : List Extension) : Except Error Unit :=
   extensions.forM fun value => do
-    -- §4.2: a recognized extension not specified for its message is illegal_parameter.
+    -- §4.3: a recognized extension not specified for its message is illegal_parameter.
     --
-    -- §6.2 also lists unsupported_extension for that case; erratum 6820 reports the clash.
+    -- RFC 9846 §6.2 names unsupported_extension only for a response that was not requested.
+    --
+    -- It settles the clash that erratum 6820 of RFC 8446 reported.
     ensure (allowedExtension context value.kind = true) .illegalParameter
     match offered with
     -- A ClientHello, a CertificateRequest or a NewSessionTicket answers no request.
     | none => pure ()
-    -- §4.2: a response holds only extensions that its request holds.
+    -- §4.3: a response holds only extensions that its request holds.
     --
     -- The exception is the cookie in HelloRetryRequest; any other is unsupported_extension.
     | some offered =>
@@ -496,95 +510,96 @@ def checkExtensions (context : Context) (offered : Option (List Extension))
         (offered.any (fun request => request.kind == value.kind)) = true)
         (.unsupportedExtension value.kind)
 
-/-- Read PSK identities while checking offer framing and binder count, RFC 8446 §4.2.11. -/
+/-- Read PSK identities while checking offer framing and binder count, RFC 9846 §4.3.11. -/
 def pskIdentities (extensions : List Extension) : Except Error (List ByteArray) := do
   match extension 41 extensions with
   | none => return []
   | some psk =>
-    -- §4.2.11, PskIdentity: `opaque identity<1..2^16-1>;`, then `uint32 obfuscated_ticket_age;`.
+    -- §4.3.11, PskIdentity: `opaque identity<1..2^16-1>;`, then `uint32 obfuscated_ticket_age;`.
     let identity : Wire.Reader ByteArray := do
       let name ← blob 2 1 65535
       let _ ← uint 4
       return name.toByteArray
     let reader : Wire.Reader (List ByteArray) := do
-      -- §4.2.11, OfferedPsks: `PskIdentity identities<7..2^16-1>;`.
+      -- §4.3.11, OfferedPsks: `PskIdentity identities<7..2^16-1>;`.
       let identities ← items 2 7 65535 identity
       -- `PskBinderEntry binders<33..2^16-1>;`, each `opaque PskBinderEntry<32..255>;`.
       let binders ← items 2 33 65535 (blob 1 32 255)
-      -- §4.2.11: one binder for each identity, in the same order.
+      -- §4.3.11: one binder for each identity, in the same order.
       --
-      -- §4.2.11 names no alert for a mismatch; EthLib takes illegal_parameter.
+      -- §4.3.11 names no alert for a mismatch; EthLib takes illegal_parameter.
       require (identities.length = binders.length) .constant
       return identities
     -- The extension data is one OfferedPsks, and nothing after it.
     wire (Wire.exact reader psk.data.data.toList)
 
-/-- Check the PSK offer's framing while declining to select it, RFC 8446 §§4.2.9 and 4.2.11. -/
+/-- Check the PSK offer's framing while declining to select it, RFC 9846 §§4.3.9 and 4.3.11. -/
 def checkPskOffer (extensions : List Extension) : Except Error Unit := do
   match extension 45 extensions with
   | none => pure ()
   | some modes =>
-    -- §4.2.9: `PskKeyExchangeMode ke_modes<1..255>;`, one byte per mode.
+    -- §4.3.9: `PskKeyExchangeMode ke_modes<1..255>;`, one byte per mode.
     let _ ← wire (Wire.exact (Wire.blob 1 1 255) modes.data.data.toList)
     pure ()
   match extension 41 extensions with
-  -- §4.2.10: a client that sends early data MUST supply the pre-shared key extension too.
+  -- §4.3.10: a client that sends early data MUST supply the pre-shared key extension too.
   --
-  -- §4.2.10 names no alert; EthLib takes illegal_parameter.
+  -- §4.3.10 names no alert; EthLib takes illegal_parameter.
   | none => ensure (extension 42 extensions = none) .illegalParameter
   | some psk =>
-    -- §4.2.11: the pre-shared key extension MUST be the last one, else illegal_parameter.
+    -- §4.3.11: the pre-shared key extension MUST be the last one, else illegal_parameter.
     ensure (extensions.getLast? = some psk) .illegalParameter
-    -- §4.2.9: a pre-shared key without PSK key exchange modes MUST abort the handshake.
+    -- §4.3.9: a pre-shared key without PSK key exchange modes MUST abort the handshake.
     --
-    -- §4.2.9 names no alert; EthLib takes missing_extension.
+    -- §4.3.9 names no alert; EthLib takes missing_extension.
     let _ ← required (.missingExtension 45) (extension 45 extensions)
-    -- §4.2.11: the offer is well formed, though the server never selects it.
+    -- §4.3.11: the offer is well formed, though the server never selects it.
     let _ ← pskIdentities extensions
     match extension 42 extensions with
     | none => pure ()
-    -- §4.2.10: in a ClientHello, the early data indication is `Empty`.
+    -- §4.3.10: in a ClientHello, the early data indication is `Empty`.
     | some early => ensure (early.data = ByteArray.empty) .decodeError
 
 /-- Validate the client offer; libp2p servers ignore SNI, including its opaque contents.
 
 A PSK offer is never selected, and early data is never accepted. -/
 def checkClientHello (config : Config) (hello : ClientHello) : Except Error Unit := do
-  -- §4.2: each recognized extension is one that ClientHello may carry.
+  -- §4.3: each recognized extension is one that ClientHello may carry.
   checkExtensions .clientHello none hello.extensions
   -- RFC 9001 §8.4: a server SHOULD treat a nonempty legacy session ID as a PROTOCOL_VIOLATION.
   --
   -- The policy says whether this server follows that SHOULD.
   ensure (config.policy.rejectLegacySessionId = false ∨ hello.legacySessionId = ByteArray.empty)
     .protocolViolation
-  -- Appendix D.2: a ClientHello without supported versions offers only TLS 1.2 or earlier.
+  -- Appendix E.2: a ClientHello without supported versions offers only TLS 1.2 or earlier.
   ensure (extension PayloadForm.supportedVersions.type hello.extensions).isSome .protocolVersion
   match ← payload .supportedVersions hello.extensions with
-  -- §4.2.1: the server selects only a listed version, and RFC 9001 §4.2 requires TLS 1.3.
+  -- §4.3.1: the server selects only a listed version, and RFC 9001 §4.2 requires TLS 1.3.
   --
   -- §6.2: a version recognized but not supported is protocol_version.
   | .supportedVersions versions => ensure ((0x0304 : CodePoint) ∈ versions) .protocolVersion
   | _ => throw .decodeError
   let offeredGroups ← groups hello.extensions
+  -- §4.3.7: a recipient MAY abort on a repeated group; this server does not.
   let keyShares ← shares hello.extensions
-  -- §4.2.8: each share is for a supported group, in the same order, and no group twice.
+  -- §4.3.8: each share is for a supported group, in the same order, and no group twice.
   --
   -- Servers MAY abort with illegal_parameter on a violation, and this server does.
   ensure ((keyShares.map (·.group)).Sublist offeredGroups ∧
     (keyShares.map (·.group)).Nodup) .illegalParameter
-  -- §4.2.3: a server that authenticates with a certificate needs signature algorithms.
+  -- §4.3.3: a server that authenticates with a certificate needs signature algorithms.
   --
   -- Without them it MUST abort with missing_extension.
   let _ ← signatures hello.extensions
   -- RFC 9001 §8.2: a ClientHello without QUIC transport parameters is missing_extension.
   let _ ← payload .quicTransportParameters hello.extensions
-  -- §§4.2.9 to 4.2.11: a PSK offer is well formed, though never selected.
+  -- §§4.3.9 to 4.3.11: a PSK offer is well formed, though never selected.
   checkPskOffer hello.extensions
 
-/-- The parts of ClientHello which a non-PSK retry must preserve, RFC 8446 §4.1.2. -/
+/-- The parts of ClientHello which a non-PSK retry must preserve, RFC 9846 §4.2.2. -/
 def stableHello (hello : ClientHello) : ClientHello :=
   { hello with extensions := hello.extensions.filter fun value =>
-      -- §4.1.2: a retry may change the key share (51), cookie (44) and early data (42).
+      -- §4.2.2: a retry may change the key share (51), cookie (44) and early data (42).
       --
       -- It may also change the padding (21) and pre-shared key (41); all else stays as sent.
       --
@@ -592,37 +607,37 @@ def stableHello (hello : ClientHello) : ClientHello :=
       value.kind != 51 && value.kind != 44 && value.kind != 42 && value.kind != 21 &&
       value.kind != 41 }
 
-/-- Check the second ClientHello against the retry and first offer, RFC 8446 §§4.1.2 and 4.1.4. -/
+/-- Check the second ClientHello against the retry and first offer, RFC 9846 §§4.2.2 and 4.2.4. -/
 def checkSecondHello (first second : ClientHello) (retry : Retry) : Except Error Unit := do
-  -- §4.1.2: the client MUST send the same ClientHello, apart from the changes it lists.
+  -- §4.2.2: the client MUST send the same ClientHello, apart from the changes it lists.
   --
-  -- §4.1.2 names no alert for the server; EthLib takes illegal_parameter for each change.
+  -- §4.2.2 names no alert for the server; EthLib takes illegal_parameter for each change.
   ensure (stableHello first = stableHello second) .illegalParameter
-  -- §4.1.2: early data is not permitted after a HelloRetryRequest.
+  -- §4.2.2: early data is not permitted after a HelloRetryRequest.
   ensure (extension 42 second.extensions = none) .illegalParameter
-  -- §4.2.2: the cookie of the retry, copied as received; without one, no cookie.
+  -- §4.3.2: the cookie of the retry, copied as received; without one, no cookie.
   ensure (extension 44 second.extensions = retry.cookie) .illegalParameter
   let originalIdentities ← pskIdentities first.extensions
   let updatedIdentities ← pskIdentities second.extensions
-  -- §4.1.2: the client may only remove pre-shared keys, so the rest keep their order.
+  -- §4.2.2: the client may only remove pre-shared keys, so the rest keep their order.
   ensure (updatedIdentities.Sublist originalIdentities) .illegalParameter
   match retry.group with
-  -- §4.2.8: the new key share holds a single entry, for the group the retry selected.
+  -- §4.3.8: the new key share holds a single entry, for the group the retry selected.
   | some group =>
     let keyShares ← shares second.extensions
     ensure (keyShares.map (·.group) = [group]) .illegalParameter
-  -- §4.1.2: without a group in the retry, the key share stays as sent.
+  -- §4.2.2: without a group in the retry, the key share stays as sent.
   | none =>
     ensure (extension 51 first.extensions = extension 51 second.extensions) .illegalParameter
 
-/-- Read and validate the selected TLS version before other ServerHello checks, RFC 8446 §4.2.1. -/
+/-- Read and validate the selected TLS version before other ServerHello checks, RFC 9846 §4.3.1. -/
 def selectedVersion (extensions : List Extension) : Except Error Unit := do
-  -- §4.2.1: clients MUST check for this extension before the rest of ServerHello.
+  -- §4.3.1: clients MUST check for this extension before the rest of the message.
   --
-  -- Appendix D.1: without it, the server chose TLS 1.2 or older, a protocol_version alert.
+  -- Appendix E.1: without it, the server chose TLS 1.2 or older, a protocol_version alert.
   ensure (extension PayloadForm.selectedVersion.type extensions).isSome .protocolVersion
   match ← payload .selectedVersion extensions with
-  -- §4.2.1: a version not offered, or older than TLS 1.3, is illegal_parameter.
+  -- §4.3.1: a version not offered, or older than TLS 1.3, is illegal_parameter.
   --
   -- The client offers 0x0304 alone, so every other value is one of those.
   | .selectedVersion version => ensure (version = 0x0304) .illegalParameter
@@ -639,7 +654,7 @@ def authenticate (config : Config) (expected : Option ByteArray) (chain : List B
     -- libp2p tls.md, Public Key Extension: a dialer checks that the peer ID is the one it expects.
     | some id => Libp2p.Tls.authenticatePeer config.policy.certificates config.now id chain)
       |>.mapError Error.certificate
-  -- RFC 8446 §4.4.2.2: the key MUST be allowed to sign; EthLib asks it of a client too.
+  -- RFC 9846 §4.5.1.2: the key MUST be allowed to sign, for a client as for a server.
   checkSigningUsage peer.certificate
   return peer
 
@@ -649,7 +664,7 @@ The peer's proof of key possession comes only from the CertificateVerify step. -
 def complete (config : Config) (expected : Option ByteArray) (state : State)
     (output : List FlightMessage) : Except Error Step := do
   let negotiated ← saved state.negotiated
-  -- RFC 8446 §7.1: the key schedule, from the shared secret and the two saved transcripts.
+  -- RFC 9846 §7.1: the key schedule, from the shared secret and the two saved transcripts.
   let secrets ← (keySchedule (packBytes negotiated.sharedSecret) negotiated.helloTranscript
     negotiated.serverTranscript).mapError fun _ => Error.configuration
   -- EthLib's check: the saved chain is authenticated again, so the result carries its identity.
@@ -662,7 +677,7 @@ def complete (config : Config) (expected : Option ByteArray) (state : State)
 /-- Start handshake traffic derivation at the exact ServerHello transcript boundary. -/
 def negotiate (state : State) (suite group : CodePoint) (shared : Vector UInt8 32) :
     Except Error State := do
-  -- RFC 8446 §7.1: the handshake traffic secrets take the transcript ClientHello...ServerHello.
+  -- RFC 9846 §7.1: the handshake traffic secrets take the transcript ClientHello...ServerHello.
   let hello := state.transcript.bytes
   -- The application secrets wait for server Finished, so their transcript is empty here.
   let secrets ← (keySchedule (packBytes shared) hello .empty).mapError fun _ => Error.configuration
@@ -671,118 +686,118 @@ def negotiate (state : State) (suite group : CodePoint) (shared : Vector UInt8 3
 /-- Retain the transcript through server Finished before deriving application traffic secrets. -/
 def serverBoundary (state : State) : Except Error State := do
   let negotiated ← saved state.negotiated
-  -- RFC 8446 §7.1: the application traffic secrets take ClientHello...server Finished.
+  -- RFC 9846 §7.1: the application traffic secrets take ClientHello...server Finished.
   let server := state.transcript.bytes
   let secrets ← (keySchedule (packBytes negotiated.sharedSecret)
     negotiated.helloTranscript server).mapError fun _ => Error.configuration
   return { state with negotiated := some { negotiated with serverTranscript := server, secrets } }
 
-/-- Encode the configured chain with an empty request context, RFC 8446 §4.4.2. -/
+/-- Encode the configured chain with an empty request context, RFC 9846 §4.5.1. -/
 def certificateMessage (config : Config) : Message :=
-  -- §4.4.2: the request context is empty in the main handshake.
+  -- §4.5.1: the request context is empty in the main handshake.
   --
   -- Each entry holds one certificate and no extensions.
   --
   -- libp2p tls.md, Peer Authentication: the chain is one certificate, as validation checks.
   .certificate ⟨.empty, config.certificates.map fun data => ⟨data, []⟩⟩
 
-/-- Sign the transcript through Certificate, with the sender's role, RFC 8446 §4.4.3.
+/-- Sign the transcript through Certificate, with the sender's role, RFC 9846 §4.5.2.
 
 The signature is a function of the signing key and the signed content alone. -/
 def sendCertificateVerify (config : Config) (server : Bool) (offered : List CodePoint)
     (state : State) : Except Error (State × FlightMessage) := do
-  -- §4.4.3: the algorithm is one the peer offered in its signature algorithms extension.
+  -- §4.5.2: the algorithm is one the peer offered in its signature algorithms extension.
   let algorithm ← select config.policy.signatureSchemes offered
-  -- §4.4.3: octet 32 repeated 64 times, the context string of the role, a 0 byte, the content.
+  -- §4.5.2: octet 32 repeated 64 times, the context string of the role, a 0 byte, the content.
   --
   -- The content is `Transcript-Hash(Handshake Context, Certificate)`, the transcript so far.
   let content := certificateVerifyInput server state.transcript.hash
-  -- §4.4.3: the signature with the private key of the certificate just sent.
+  -- §4.5.2: the signature with the private key of the certificate just sent.
   let signature ← (Crypto.signCertificateVerify algorithm config.signingKey content).mapError
     Error.crypto
-  -- §4.4.3: CertificateVerify follows Certificate, at the Handshake level.
+  -- §4.5.2: CertificateVerify follows Certificate, at the Handshake level.
   emit state .handshake (.certificateVerify algorithm signature)
 
-/-- Compute Finished before including its own encoding in the transcript, RFC 8446 §4.4.4. -/
+/-- Compute Finished before including its own encoding in the transcript, RFC 9846 §4.5.3. -/
 def sendFinished (server : Bool) (state : State) : Except Error (State × FlightMessage) := do
   let negotiated ← saved state.negotiated
-  -- §4.4: the Base Key is the handshake traffic secret of the sender.
+  -- §4.5: the Base Key is the handshake traffic secret of the sender.
   let secret := if server then negotiated.secrets.serverHandshake
     else negotiated.secrets.clientHandshake
-  -- §4.4.4: the finished key is `HKDF-Expand-Label(BaseKey, "finished", "", Hash.length)`.
+  -- §4.5.3: the finished key is `HKDF-Expand-Label(BaseKey, "finished", "", Hash.length)`.
   --
-  -- §4.4.4: the verify data is the HMAC, under that key, of the transcript hash so far.
+  -- §4.5.3: the verify data is the HMAC, under that key, of the transcript hash so far.
   let value ← (finished secret state.transcript.bytes).mapError
     fun _ => Error.configuration
   emit state .handshake (.finished (packBytes value))
 
-/-- Verify the peer's CertificateVerify before appending it to the transcript, RFC 8446 §4.4.3. -/
+/-- Verify the peer's CertificateVerify before appending it to the transcript, RFC 9846 §4.5.2. -/
 def checkCertificateVerify (config : Config) (expected : Option ByteArray) (server : Bool)
     (offered : List CodePoint) (state : State) (algorithm : CodePoint)
     (signature : ByteArray) : Except Error Unit := do
-  -- §4.4.3: the algorithm is one that this side offered; EthLib also requires it in the policy.
+  -- §4.5.2: the algorithm is one that this side offered; EthLib also requires it in the policy.
   --
-  -- §4.4.3 names no alert for this; EthLib takes illegal_parameter.
+  -- §4.5.2 names no alert for this; EthLib takes illegal_parameter.
   ensure (algorithm ∈ offered ∧ algorithm ∈ config.policy.signatureSchemes) .illegalParameter
-  -- §4.4.3: the public key of the end-entity certificate of the Certificate message.
+  -- §4.5.2: the public key of the end-entity certificate of the Certificate message.
   let peer ← authenticate config expected state.peerChain
-  -- §4.4.3: the content covered, from the transcript through Certificate.
+  -- §4.5.2: the content covered, from the transcript through Certificate.
   let content := certificateVerifyInput server state.transcript.hash
-  -- §4.4.3: if the verification fails, a decrypt_error alert.
+  -- §4.5.2: if the verification fails, a decrypt_error alert.
   ensure (Crypto.verifyCertificateVerify algorithm peer.certificate.spki content
     signature = true) .decryptError
 
-/-- Verify Finished against the saved transcript, RFC 8446 §4.4.4. -/
+/-- Verify Finished against the saved transcript, RFC 9846 §4.5.3. -/
 def checkFinished (server : Bool) (state : State) (value : ByteArray) : Except Error Unit := do
   let negotiated ← saved state.negotiated
-  -- §4.4: the Base Key is the handshake traffic secret of the sender of Finished.
+  -- §4.5: the Base Key is the handshake traffic secret of the sender of Finished.
   let secret := if server then negotiated.secrets.serverHandshake
     else negotiated.secrets.clientHandshake
-  -- §4.4.4: the expected verify data, over the transcript before this Finished.
+  -- §4.5.3: the expected verify data, over the transcript before this Finished.
   let expected ← (finished secret state.transcript.bytes).mapError
     fun _ => Error.configuration
-  -- §4.4.4: incorrect contents MUST terminate the connection with decrypt_error.
+  -- §4.5.3: incorrect contents MUST terminate the connection with decrypt_error.
   ensure (value = packBytes expected) .decryptError
 
 /-- Validate a certificate message and save its exact chain for later signature checks. -/
 def receiveCertificate (config : Config) (expected : Option ByteArray) (offered : List Extension)
     (state : State) (certificate : CertificateMessage) : Except Error State := do
-  -- §4.4.2.4: an empty server Certificate is decode_error.
+  -- §4.5.1.3: an empty server Certificate is decode_error.
   --
   -- An empty client Certificate MAY be certificate_required, and libp2p tls.md makes it so.
   let emptyError := if expected.isSome then Error.decodeError else .certificateRequired
   ensure (certificate.entries ≠ []) emptyError
-  -- §4.4.2: the context of a server Certificate SHALL be zero length.
+  -- §4.5.1: the context of a server Certificate SHALL be zero length.
   --
-  -- A client Certificate echoes the request context, empty in the main handshake (§4.3.2).
+  -- A client Certificate echoes the request context, empty in the main handshake (§4.4.2).
   --
   -- Neither section names an alert; EthLib takes illegal_parameter.
   ensure (certificate.context = ByteArray.empty) .illegalParameter
-  -- §4.4.2: entry extensions correspond to ones in ClientHello, or in CertificateRequest.
+  -- §4.5.1: entry extensions correspond to ones in ClientHello, or in CertificateRequest.
   certificate.entries.forM fun entry => checkExtensions .certificate (some offered) entry.extensions
   -- libp2p tls.md, Peer Authentication: the chain is checked before it is saved.
   let chain := certificate.entries.map (·.data)
   let _ ← authenticate config expected chain
   return { state with peerChain := chain }
 
-/-- The server flight after a usable client share, RFC 8446 §2. -/
+/-- The server flight after a usable client share, RFC 9846 §2. -/
 def serverFlight (config : Config) (state : State) (hello : ClientHello)
     (suite group : CodePoint) (share : KeyShareEntry) : Except Error Step := do
-  -- RFC 8446 §7.4.2: the shared secret is ECDH of the own ephemeral key and the client share.
+  -- RFC 9846 §7.4.2: the shared secret is ECDH of the own ephemeral key and the client share.
   let secret ← ephemeral config group
   let shared ← (Crypto.sharedSecret group secret share.keyExchange).mapError Error.crypto
-  -- §4.2.8: the server share is in the group of the client share it selected.
+  -- §4.3.8: the server share is in the group of the client share it selected.
   let ownShare ← localShare config group
-  -- §4.1.3: ServerHello holds only supported versions, with 0x0304, and the key share.
+  -- §4.2.3: ServerHello holds only supported versions, with 0x0304, and the key share.
   let extensions ← [Payload.selectedVersion 0x0304, .serverKeyShare ownShare].mapM encodedPayload
-  -- §4.1.3: the random, the echo of the client session ID, the selected suite, the extensions.
+  -- §4.2.3: the random, the echo of the client session ID, the selected suite, the extensions.
   --
   -- Appendix A.2: Send ServerHello, at the Initial level of RFC 9001 §4.1.5.
   let (state, sh) ← emit state .initial
     (.serverHello ⟨config.random, hello.legacySessionId, suite, extensions⟩)
   -- Appendix A.2: K_send = handshake, from the transcript through ServerHello (§7.1).
   let state ← negotiate state suite group shared
-  -- §4.3.1: EncryptedExtensions follows ServerHello immediately, at the Handshake level.
+  -- §4.4.1: EncryptedExtensions follows ServerHello immediately, at the Handshake level.
   --
   -- RFC 7301 §3.1: it names exactly one protocol, libp2p; RFC 9001 §8.2: the transport parameters.
   let extensions ← [Payload.alpn [libp2p],
@@ -790,7 +805,7 @@ def serverFlight (config : Config) (state : State) (hello : ClientHello)
   let (state, ee) ← emit state .handshake (.encryptedExtensions extensions)
   -- libp2p tls.md, Handshake Protocol: servers MUST require client authentication.
   --
-  -- §4.3.2: so CertificateRequest, with an empty context and the signature algorithms extension.
+  -- §4.4.2: so CertificateRequest, with an empty context and the signature algorithms extension.
   let requestExtensions ← [Payload.signatureAlgorithms config.policy.signatureSchemes].mapM
     encodedPayload
   let request : CertificateRequest := ⟨.empty, requestExtensions⟩
@@ -798,10 +813,10 @@ def serverFlight (config : Config) (state : State) (hello : ClientHello)
     (.certificateRequest request)
   -- Appendix A.2: Send Certificate + CertificateVerify.
   let (state, certificate) ← emit state .handshake (certificateMessage config)
-  -- §4.4.3: the server signs with an algorithm of the client's signature algorithms.
+  -- §4.5.2: the server signs with an algorithm of the client's signature algorithms.
   let offered ← signatures hello.extensions
   let (state, cv) ← sendCertificateVerify config true offered state
-  -- Appendix A.2: Send Finished, keyed by the server handshake traffic secret (§4.4).
+  -- Appendix A.2: Send Finished, keyed by the server handshake traffic secret (§4.5).
   let (state, sf) ← sendFinished true state
   -- Appendix A.2: K_send = application, from the transcript through server Finished (§7.1).
   let state ← serverBoundary state
@@ -821,11 +836,11 @@ def serverClientHello (config : Config) (state : State) (hello : ClientHello)
   checkClientHello config hello
   let offeredGroups ← groups hello.extensions
   let keyShares ← shares hello.extensions
-  -- §4.1.1: the server independently selects a cipher suite; no overlap is handshake_failure.
+  -- §4.2.1: the server independently selects a cipher suite; no overlap is handshake_failure.
   let suite ← select config.policy.cipherSuites hello.cipherSuites
-  -- §4.1.2: the server MUST ignore suites it does not support, so only a supported one is selected.
+  -- §4.2.2: the server MUST ignore suites it does not support, so only a supported one is selected.
   ensure (supportedSuite suite = true) .handshakeFailure
-  -- §4.1.1: it selects an (EC)DHE group; no overlap of supported groups is handshake_failure.
+  -- §4.2.1: it selects a key exchange group; no overlap of supported groups is handshake_failure.
   let group ← select config.policy.groups offeredGroups
   ensure (Crypto.supportedGroup group = true) .handshakeFailure
   match state.retry with
@@ -834,25 +849,25 @@ def serverClientHello (config : Config) (state : State) (hello : ClientHello)
   -- The second ClientHello, which answers this server's HelloRetryRequest.
   | some retry =>
     checkSecondHello (← saved state.hello) hello retry
-    -- §4.1.4: servers MUST negotiate the same cipher suite; EthLib asks the same group too.
+    -- §4.2.4: servers MUST negotiate the same cipher suite; EthLib asks the same group too.
     --
-    -- §4.1.4 names no alert for the server; EthLib takes illegal_parameter.
+    -- §4.2.4 names no alert for the server; EthLib takes illegal_parameter.
     ensure (suite = retry.suite ∧ retry.group = some group) .illegalParameter
   -- Appendix A.2: Recv ClientHello, then RECVD_CH.
   let state ← receive state input
   match keyShares.find? (fun share => share.group == group) with
   -- A share of the selected group: Select parameters, then NEGOTIATED.
   | some share => serverFlight config { state with hello := some hello } hello suite group share
-  -- §4.1.1: no share of the selected group, so the server MUST respond with HelloRetryRequest.
+  -- §4.2.1: no share of the selected group, so the server MUST respond with HelloRetryRequest.
   | none =>
-    -- §4.1.4: a second HelloRetryRequest MUST make the client abort, so none is sent.
+    -- §4.2.4: a second HelloRetryRequest MUST make the client abort, so none is sent.
     --
-    -- A second ClientHello without that share already fails the check of §4.2.8 above.
+    -- A second ClientHello without that share already fails the check of §4.3.8 above.
     ensure (state.retry.isNone = true) .illegalParameter
-    -- §4.1.4: supported versions, then the key share that names the selected group.
+    -- §4.2.4: supported versions, then the key share that names the selected group.
     let extensions ← [Payload.selectedVersion 0x0304, .retryKeyShare group].mapM encodedPayload
     let retry : Retry := ⟨suite, some group, none⟩
-    -- §4.1.3: HelloRetryRequest is a ServerHello with the special random of a retry.
+    -- §4.2.3: HelloRetryRequest is a ServerHello with the special random of a retry.
     --
     -- Appendix A.2: Send HelloRetryRequest, back to START.
     let (state, message) ← emit { state with hello := some hello, retry := some retry }
@@ -865,51 +880,51 @@ def retryGroup (extensions : List Extension) : Except Error (Option CodePoint) :
   -- A retry without a key share asks for no new share.
   | none => return none
   | some value =>
-    -- §4.2.8, KeyShareHelloRetryRequest: `NamedGroup selected_group;`.
+    -- §4.3.8, KeyShareHelloRetryRequest: `NamedGroup selected_group;`.
     match ← wire (decodePayload .retryKeyShare value) with
     | .retryKeyShare group => return some group
     | _ => throw .decodeError
 
-/-- Validate the cookie's opaque vector before echoing its exact bytes, RFC 8446 §4.2.2. -/
+/-- Validate the cookie's opaque vector before echoing its exact bytes, RFC 9846 §4.3.2. -/
 def retryCookie (extensions : List Extension) : Except Error (Option Extension) := do
   match extension 44 extensions with
   | none => return none
   | some value =>
-    -- §4.2.2: `opaque cookie<1..2^16-1>;`, and nothing after it.
+    -- §4.3.2: `opaque cookie<1..2^16-1>;`, and nothing after it.
     let _ ← wire (Wire.exact (Wire.blob 2 1 65535) value.data.data.toList)
     return some value
 
 /-- Respond to one effective retry while retaining the first ClientHello's other fields. -/
 def clientRetry (config : Config) (state : State) (hello : ClientHello)
     (server : ServerHello) (input : FlightMessage) : Except Error Step := do
-  -- §4.1.4: a second HelloRetryRequest MUST abort the handshake with unexpected_message.
+  -- §4.2.4: a second HelloRetryRequest MUST abort the handshake with unexpected_message.
   ensure (state.retry.isNone = true) .unexpectedMessage
-  -- §4.1.4: only extensions the client offered, apart from the cookie.
+  -- §4.2.4: only extensions the client offered, apart from the cookie.
   checkExtensions .retry (some hello.extensions) server.extensions
   let group ← retryGroup server.extensions
   let cookie ← retryCookie server.extensions
-  -- §4.1.4: a retry that would not change the ClientHello is illegal_parameter.
+  -- §4.2.4: a retry that would not change the ClientHello is illegal_parameter.
   ensure (group.isSome = true ∨ cookie.isSome = true) .illegalParameter
   let extensions ← match group with
-    -- §4.1.2: without a key share in the retry, the shares stay as sent.
+    -- §4.2.2: without a key share in the retry, the shares stay as sent.
     | none => pure hello.extensions
     | some group => do
       let offeredGroups ← groups hello.extensions
       let keyShares ← shares hello.extensions
-      -- §4.2.8: the group was among the supported groups, and had no share, else illegal_parameter.
+      -- §4.3.8: the group was among the supported groups, and had no share, else illegal_parameter.
       ensure (group ∈ offeredGroups ∧ ¬ group ∈ keyShares.map (·.group)) .illegalParameter
-      -- §4.2.8: the key share is replaced with one holding a single entry for that group.
+      -- §4.3.8: the key share is replaced with one holding a single entry for that group.
       let share ← localShare config group
       let replacement ← encodedPayload (.clientKeyShare [share])
       pure (hello.extensions.map fun value => if value.kind = 51 then replacement else value)
-  -- §4.1.2: early data is removed; a cookie of the first ClientHello goes too.
+  -- §4.2.2: early data is removed; a cookie of the first ClientHello goes too.
   let extensions := extensions.filter (fun value => value.kind != 42 && value.kind != 44)
-  -- §4.2.2: the cookie of the retry, copied as received.
+  -- §4.3.2: the cookie of the retry, copied as received.
   --
   -- The client offers no pre-shared key, so no extension has to stay last.
   let extensions := extensions ++ cookie.toList
   let hello := { hello with extensions }
-  -- §4.4.1: the transcript replaces ClientHello1 with its hash, then takes the retry.
+  -- §4.1: the transcript replaces ClientHello1 with its hash, then takes the retry.
   let state ← receive state input
   let retry : Retry := ⟨server.cipherSuite, group, cookie⟩
   -- Appendix A.1: Recv HelloRetryRequest, back to START, then Send ClientHello and WAIT_SH.
@@ -917,43 +932,45 @@ def clientRetry (config : Config) (state : State) (hello : ClientHello)
     .initial (.clientHello hello)
   return ⟨state, [message], none⟩
 
-/-- Check ServerHello or HelloRetryRequest against the client offer, RFC 8446 §§4.1.3 and 4.1.4. -/
+/-- Check ServerHello or HelloRetryRequest against the client offer, RFC 9846 §§4.2.3 and 4.2.4. -/
 def clientServerHello (config : Config) (state : State) (server : ServerHello)
     (input : FlightMessage) : Except Error Step := do
-  -- §4.2.1: the client checks the selected version before the rest of either message.
+  -- §4.3.1: after the server random tells the two forms apart, check supported versions first.
+  --
+  -- Both forms check it alike, so it runs here before the random.
   selectedVersion server.extensions
   let hello ← saved state.hello
-  -- §4.1.3: an echo of another session ID, or a suite that was not offered, is illegal_parameter.
+  -- §4.2.3: an echo of another session ID, or a suite that was not offered, is illegal_parameter.
   ensure (server.legacySessionIdEcho = hello.legacySessionId ∧
     server.cipherSuite ∈ hello.cipherSuites) .illegalParameter
   -- EthLib's check: the suite is also in the policy, with a SHA-256 transcript here.
   ensure (server.cipherSuite ∈ config.policy.cipherSuites ∧
     supportedSuite server.cipherSuite = true) .illegalParameter
-  -- §4.1.3 examines the random first; the checks common to both forms (§4.1.4) run before it.
+  -- §4.2.3 examines the random first; the checks common to both forms (§4.2.4) run before it.
   --
   -- A random equal to that of a retry makes this message a HelloRetryRequest.
   if server.random = retryRandom then
     clientRetry config state hello server input
   else
-    -- §4.2: only extensions the client offered, and only those that ServerHello may carry.
+    -- §4.3: only extensions the client offered, and only those that ServerHello may carry.
     checkExtensions .serverHello (some hello.extensions) server.extensions
     -- The client never offers a PSK, so a selected PSK identity is unsupported.
     ensure (extension 41 server.extensions = none) (.unsupportedExtension 41)
-    -- §4.2.8, KeyShareServerHello: `KeyShareEntry server_share;`.
+    -- §4.3.8, KeyShareServerHello: `KeyShareEntry server_share;`.
     let share ← match ← payload .serverKeyShare server.extensions with
       | .serverKeyShare share => pure share
       | _ => throw .decodeError
     let offered ← shares hello.extensions
-    -- §4.2.8: the server share is in the group of a client share, else illegal_parameter.
+    -- §4.3.8: the server share is in the group of a client share, else illegal_parameter.
     --
     -- EthLib's check: that group is also in the policy.
     ensure (share.group ∈ offered.map (·.group) ∧ share.group ∈ config.policy.groups)
       .illegalParameter
     match state.retry with
     | none => pure ()
-    -- §4.1.4: the suite of ServerHello is the one of the retry, else illegal_parameter.
+    -- §4.2.4: the suite of ServerHello is the one of the retry, else illegal_parameter.
     --
-    -- §4.2.8: after a retry with a key share, the group is the one it selected.
+    -- §4.3.8: after a retry with a key share, the group is the one it selected.
     | some retry =>
       ensure (server.cipherSuite = retry.suite ∧
         (retry.group = none ∨ retry.group = some share.group)) .illegalParameter
@@ -967,11 +984,11 @@ def clientServerHello (config : Config) (state : State) (server : ServerHello)
     -- Appendix A.1: WAIT_EE.
     return ⟨{ state with phase := .encryptedExtensions }, [], none⟩
 
-/-- Check EncryptedExtensions and the libp2p ALPN choice, RFC 8446 §4.3.1 and RFC 7301 §3.1. -/
+/-- Check EncryptedExtensions and the libp2p ALPN choice, RFC 9846 §4.4.1 and RFC 7301 §3.1. -/
 def clientEncryptedExtensions (state : State) (extensions : List Extension)
     (input : FlightMessage) : Except Error Step := do
   let hello ← saved state.hello
-  -- §4.3.1: a forbidden extension is illegal_parameter; §4.2: each answers one of ClientHello.
+  -- §4.4.1: a forbidden extension is illegal_parameter; §4.3: each answers one of ClientHello.
   checkExtensions .encryptedExtensions (some hello.extensions) extensions
   -- RFC 9001 §8.1: without ALPN, the client closes with no_application_protocol.
   let protocols ← alpn extensions
@@ -990,18 +1007,18 @@ def clientEncryptedExtensions (state : State) (extensions : List Extension)
   -- Appendix A.1 also lets WAIT_CERT_CR take Certificate; EthLib rejects it.
   return ⟨{ state with phase := .certificateRequest }, [], none⟩
 
-/-- Require handshake client authentication with an empty request context, RFC 8446 §4.3.2. -/
+/-- Require handshake client authentication with an empty request context, RFC 9846 §4.4.2. -/
 def clientCertificateRequest (config : Config) (state : State) (request : CertificateRequest)
     (input : FlightMessage) : Except Error Step := do
-  -- §4.2: each recognized extension is one that CertificateRequest may carry.
+  -- §4.3: each recognized extension is one that CertificateRequest may carry.
   checkExtensions .certificateRequest none request.extensions
-  -- §4.3.2: the context SHALL be zero length outside post-handshake authentication.
+  -- §4.4.2: the context SHALL be zero length outside post-handshake authentication.
   --
-  -- §4.3.2 names no alert; EthLib takes illegal_parameter.
+  -- §4.4.2 names no alert; EthLib takes illegal_parameter.
   ensure (request.context = ByteArray.empty) .illegalParameter
-  -- §4.3.2: the signature algorithms extension MUST be specified.
+  -- §4.4.2: the signature algorithms extension MUST be specified.
   let offered ← signatures request.extensions
-  -- §4.4.3: the client will sign with one of them.
+  -- §4.5.2: the client will sign with one of them.
   --
   -- EthLib checks the overlap here, before the server Certificate; none is handshake_failure.
   let _ ← select config.policy.signatureSchemes offered
@@ -1012,13 +1029,13 @@ def clientCertificateRequest (config : Config) (state : State) (request : Certif
 /-- Verify server Finished, then send the client's Certificate, CertificateVerify and Finished. -/
 def clientFinished (config : Config) (expected : ByteArray) (state : State)
     (value : ByteArray) (input : FlightMessage) : Except Error Step := do
-  -- §4.4.4: the server Finished, over the transcript through server CertificateVerify.
+  -- §4.5.3: the server Finished, over the transcript through server CertificateVerify.
   checkFinished true state value
   -- Appendix A.1: Recv Finished at WAIT_FINISHED; RFC 9001 §8.3 drops EndOfEarlyData.
   let state ← receive state input
   -- §7.1: the application traffic secrets take ClientHello...server Finished.
   let state ← serverBoundary state
-  -- §4.4.3: the client signs with an algorithm of CertificateRequest.
+  -- §4.5.2: the client signs with an algorithm of CertificateRequest.
   let request ← saved state.request
   let offered ← signatures request.extensions
   -- Appendix A.1: Send Certificate + CertificateVerify, at K_send = handshake.
@@ -1030,11 +1047,15 @@ def clientFinished (config : Config) (expected : ByteArray) (state : State)
 
 /-- Accept a well-formed ticket without resuming or extending the main handshake transcript.
 
-RFC 9001 §§4.5 and 4.6.1 allow tickets and constrain their early_data sentinel. -/
+RFC 9001 §§4.5 and 4.6.1 allow tickets and constrain their early_data sentinel.
+
+RFC 9846 §4.7.1: a client without resumption MUST silently ignore a ticket.
+
+This client still rejects a malformed ticket, a misplaced extension or another sentinel. -/
 def receiveTicket (input : FlightMessage) : Except Error Unit := do
   -- RFC 9001 §4.5 and Figure 5: tickets travel after the handshake, so at the 1-RTT level.
   checkLevel .application input
-  -- RFC 8446 §4: one handshake message, its type and its body.
+  -- RFC 9846 §4: one handshake message, its type and its body.
   let (kind, body) ← wire (Wire.exact readFrame input.data.data.toList)
   -- RFC 9001 §4.4: a post-handshake CertificateRequest (13) is a PROTOCOL_VIOLATION.
   if kind = 13 then throw .protocolViolation
@@ -1043,7 +1064,7 @@ def receiveTicket (input : FlightMessage) : Except Error Unit := do
   -- RFC 9001 §6: a TLS KeyUpdate is the error 0x010a, unexpected_message.
   ensure (kind = 4) .unexpectedMessage
   let reader : Wire.Reader (List Extension) := do
-    -- §4.6.1: `uint32 ticket_lifetime;` and `uint32 ticket_age_add;`.
+    -- §4.7.1: `uint32 ticket_lifetime;` and `uint32 ticket_age_add;`.
     let _ ← uint 4
     let _ ← uint 4
     -- `opaque ticket_nonce<0..255>;` and `opaque ticket<1..2^16-1>;`.
@@ -1054,7 +1075,7 @@ def receiveTicket (input : FlightMessage) : Except Error Unit := do
     -- RFC 8446 §4.6.1 printed 2^16-2, a calculation error that RFC 9846 §1.2 corrects.
     readExtensions 0
   let extensions ← wire (Wire.exact reader body)
-  -- §4.2: each recognized extension is one that NewSessionTicket may carry.
+  -- §4.3: each recognized extension is one that NewSessionTicket may carry.
   checkExtensions .newSessionTicket none extensions
   match extension 42 extensions with
   | none => pure ()
@@ -1091,7 +1112,7 @@ def clientStep (config : Config) (expected : ByteArray) (state : State)
   | .serverCertificate =>
     match ← readMessage .handshake input with
     | .certificate certificate =>
-      -- §4.4.2: its extensions correspond to ones from ClientHello.
+      -- §4.5.1: its extensions correspond to ones from ClientHello.
       let hello ← saved state.hello
       let state ← receiveCertificate config (some expected) hello.extensions state certificate
       -- Recv Certificate, then WAIT_CV.
@@ -1102,10 +1123,10 @@ def clientStep (config : Config) (expected : ByteArray) (state : State)
   | .serverCertificateVerify =>
     match ← readMessage .handshake input with
     | .certificateVerify algorithm signature =>
-      -- §4.4.3: the server signs with an algorithm of the client's signature algorithms.
+      -- §4.5.2: the server signs with an algorithm of the client's signature algorithms.
       let hello ← saved state.hello
       let offered ← signatures hello.extensions
-      -- §4.4.3: the signature covers the transcript through Certificate, so it is checked first.
+      -- §4.5.2: the signature covers the transcript through Certificate, so it is checked first.
       checkCertificateVerify config (some expected) true offered state algorithm signature
       -- Recv CertificateVerify, then WAIT_FINISHED.
       let state ← receive state input
@@ -1144,7 +1165,7 @@ def serverStep (config : Config) (state : State) (input : FlightMessage) : Excep
       --
       -- libp2p tls.md, Handshake Protocol: no client certificate fails, as §4.4.2.4 allows.
       ensure (certificate.entries ≠ []) .certificateRequired
-      -- §4.4.2: its extensions correspond to ones in CertificateRequest.
+      -- §4.5.1: its extensions correspond to ones in CertificateRequest.
       let request ← saved state.request
       let state ← receiveCertificate config none request.extensions state certificate
       -- Recv Certificate, then WAIT_CV.
@@ -1155,7 +1176,7 @@ def serverStep (config : Config) (state : State) (input : FlightMessage) : Excep
   | .clientCertificateVerify =>
     match ← readMessage .handshake input with
     | .certificateVerify algorithm signature =>
-      -- §4.4.3: the client signs with an algorithm of CertificateRequest.
+      -- §4.5.2: the client signs with an algorithm of CertificateRequest.
       let request ← saved state.request
       let offered ← signatures request.extensions
       checkCertificateVerify config none false offered state algorithm signature
@@ -1167,7 +1188,7 @@ def serverStep (config : Config) (state : State) (input : FlightMessage) : Excep
   | .clientFinished =>
     match ← readMessage .handshake input with
     | .finished value =>
-      -- §4.4.4: the client Finished, over the transcript through client CertificateVerify.
+      -- §4.5.3: the client Finished, over the transcript through client CertificateVerify.
       checkFinished false state value
       -- Recv Finished, then K_recv = application and CONNECTED.
       let state ← receive state input

@@ -8,14 +8,14 @@ public import EthLib.Base.Bytes
 /-!
 # TLS presentation-language fields
 
-[RFC 8446 §3.3][numbers] and [§3.4][vectors] use big-endian integers and length-prefixed vectors.
+[RFC 9846 §3.3][numbers] and [§3.4][vectors] use big-endian integers and length-prefixed vectors.
 
 Readers return the bytes after a field and reject truncated or out-of-range lengths.
 
 The errors are local codec errors, rather than TLS alerts or QUIC connection errors.
 
-[numbers]: https://www.rfc-editor.org/rfc/rfc8446#section-3.3
-[vectors]: https://www.rfc-editor.org/rfc/rfc8446#section-3.4
+[numbers]: https://www.rfc-editor.org/rfc/rfc9846#section-3.3
+[vectors]: https://www.rfc-editor.org/rfc/rfc9846#section-3.4
 -/
 
 @[expose] public section
@@ -36,7 +36,7 @@ inductive Error where
   | trailing (count : Nat)
   /-- A fixed field has another value, or an extension has the wrong type. -/
   | constant
-  /-- The extension type `type` occurs twice in one block (§4.2). -/
+  /-- The extension type `type` occurs twice in one block (§4.3). -/
   | duplicateExtension (type : Fin (2 ^ 16))
   /-- The handshake type `type` is not one this codec reads (§4). -/
   | messageType (type : UInt8)
@@ -68,7 +68,7 @@ abbrev require (condition : Prop) [Decidable condition] (error : Error) : Reader
 abbrev bytes (n : Nat) : Reader (List UInt8) := fun input =>
   Encoding.ByteReader.bytes (.truncated n input.length) n input
 
-/-- Read a big-endian integer of the given width, RFC 8446 §3.3. -/
+/-- Read a big-endian integer of the given width, RFC 9846 §3.3. -/
 abbrev uint (width : Nat) : Reader Nat := fun input =>
   -- §3.3: the given number of bytes, in network byte (big-endian) order.
   Encoding.ByteReader.uint (.truncated width input.length) width input

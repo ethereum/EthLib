@@ -8,11 +8,11 @@ public import EthLib.Networking.Proofs.Quic.Tls.Messages
 
 Ordinary messages keep all received bytes.
 
-A retry makes the replacement of [RFC 8446 §4.4.1][transcript].
+A retry makes the replacement of [RFC 9846 §4.1][transcript].
 
 These results make no claim about message ordering beyond the retry or about authentication.
 
-[transcript]: https://www.rfc-editor.org/rfc/rfc8446#section-4.4.1
+[transcript]: https://www.rfc-editor.org/rfc/rfc9846#section-4.1
 -/
 
 @[expose] public section
@@ -42,7 +42,7 @@ theorem append_eq_ok_of_retry (saved : Transcript) (encoded : ByteArray) (messag
   simp [Transcript.append, decoded, retry, first, hello, Base.ensure,
     bind, Except.bind, pure, Except.pure]
 
-/-- A second retry is rejected, regardless of its contents, RFC 8446 §4.1.4. -/
+/-- A second retry is rejected, regardless of its contents, RFC 9846 §4.2.4. -/
 theorem append_error_of_retried (saved : Transcript) (encoded : ByteArray) (message : Message)
     (decoded : Wire.exact (decodeList 32) encoded.data.toList = .ok message)
     (retry : message.isRetry = true) (already : saved.retried = true) :

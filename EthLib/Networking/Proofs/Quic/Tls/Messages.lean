@@ -125,14 +125,14 @@ theorem length_frameList {kind : UInt8} {body encoded : List UInt8}
   simp only [List.length_cons, List.length_append, Base.natToBytes_length]
   omega
 
-/-- A duplicate extension type cannot be emitted in a handshake block (§4.2). -/
+/-- A duplicate extension type cannot be emitted in a handshake block (§4.3). -/
 theorem encodeExtensions_duplicate (minimum : Nat) (extensions : List Extension)
     (duplicate : uniqueExtensions extensions = false) :
     encodeExtensions minimum extensions =
       .error (.duplicateExtension (repeatedKind extensions)) := by
   simp [encodeExtensions, Base.ensure, duplicate, bind, Except.bind]
 
-/-- A Finished message with the wrong hash length cannot be encoded (§4.4.4). -/
+/-- A Finished message with the wrong hash length cannot be encoded (§4.5.3). -/
 theorem encodeBody_finished_length (hashLength : Nat) (data : ByteArray)
     (wrong : data.size ≠ hashLength) :
     encodeBody hashLength (.finished data) = .error .length := by

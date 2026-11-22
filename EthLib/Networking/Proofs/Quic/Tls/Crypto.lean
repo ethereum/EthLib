@@ -10,7 +10,7 @@ public import EthLib.Serialization.Proofs.Der
 /-!
 # Proofs: handshake cryptographic checks
 
-X25519 exchanges agree and reject the all-zero result required by RFC 8446 §7.4.2.
+X25519 exchanges agree and reject the all-zero result required by RFC 9846 §7.4.2.
 
 CertificateVerify uses the certificate's key and the advertised P-256/SHA-256 scheme.
 -/
@@ -60,7 +60,7 @@ theorem sharedSecret_x25519_eq_ok_iff (privateKey peer output : Vector UInt8 32)
   · rintro ⟨rfl, nonzero⟩
     exact ⟨nonzero, rfl⟩
 
-/-- The all-zero X25519 output is never accepted, RFC 8446 §7.4.2. -/
+/-- The all-zero X25519 output is never accepted, RFC 9846 §7.4.2. -/
 theorem sharedSecret_x25519_nonzero (privateKey peer output : Vector UInt8 32)
     (accepted : sharedSecret 0x001d privateKey (packBytes peer) = .ok output) :
     output ≠ Vector.replicate 32 0 :=

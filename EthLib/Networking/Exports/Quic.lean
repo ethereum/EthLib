@@ -92,7 +92,7 @@ def packetExport (args : PyValue) : Result PyValue :=
 
 Each pair gives the client secret first.
 
-The no-PSK schedule and transcript boundaries are those of RFC 8446 §7.1. -/
+The no-PSK schedule and transcript boundaries are those of RFC 9846 §7.1. -/
 @[export eth_quic_tls_key_schedule]
 def scheduleExport (args : PyValue) : Result PyValue :=
   pyExport (fun (sharedSecret, helloTranscript, serverTranscript) => do
@@ -100,7 +100,7 @@ def scheduleExport (args : PyValue) : Result PyValue :=
     return (s.early, s.handshake, s.master, s.clientHandshake, s.serverHandshake,
       s.clientApplication, s.serverApplication)) args
 
-/-- Derive a SHA-256 secret from encoded handshake messages, RFC 8446 §7.1.
+/-- Derive a SHA-256 secret from encoded handshake messages, RFC 9846 §7.1.
 
 The label excludes the `tls13 ` prefix. -/
 @[export eth_quic_tls_derive_secret]
@@ -108,7 +108,7 @@ def deriveExport (args : PyValue) : Result PyValue :=
   pyExport (fun (secret, label, messages) =>
     toResult none (Tls.deriveSecret secret label messages)) args
 
-/-- Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4.
+/-- Compute the Finished `verify_data` over the transcript that precedes it, RFC 9846 §4.5.3.
 
 During the handshake the secret is the sender's handshake traffic secret. -/
 @[export eth_quic_tls_finished]
@@ -148,14 +148,14 @@ derive_py_laws Tls.PayloadForm
 derive_py Tls.Payload
 derive_py_laws Tls.Payload
 
-/-- Encode one handshake message with its header and the caller's hash length, RFC 8446 §4. -/
+/-- Encode one handshake message with its header and the caller's hash length, RFC 9846 §4. -/
 @[export eth_quic_tls_message_encode]
 def messageEncodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (hashLength, message) => do
     let data ← toResult none (Tls.encode hashLength message)
     return data) args
 
-/-- Decode one complete message and return its fields and trailing bytes, RFC 8446 §4. -/
+/-- Decode one complete message and return its fields and trailing bytes, RFC 9846 §4. -/
 @[export eth_quic_tls_message_decode]
 def messageDecodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (input : Nat × ByteArray) => do
@@ -173,7 +173,7 @@ def payloadEncodeExport (args : PyValue) : Result PyValue :=
 def payloadDecodeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (form, extension) => toResult none (Tls.decodePayload form extension)) args
 
-/-- Return the SHA-256 transcript of complete handshake messages and its hash, RFC 8446 §4.4.1.
+/-- Return the SHA-256 transcript of complete handshake messages and its hash, RFC 9846 §4.1.
 
 A HelloRetryRequest replaces ClientHello1 with its synthetic `message_hash` message. -/
 @[export eth_quic_tls_transcript]
@@ -182,7 +182,7 @@ def transcriptExport (args : PyValue) : Result PyValue :=
     let result ← toResult none (Tls.transcript messages)
     return (result.bytes, result.hash)) args
 
-/-- Build the CertificateVerify signed content from a SHA-256 transcript hash, RFC 8446 §4.4.3. -/
+/-- Build the CertificateVerify signed content from a SHA-256 transcript hash, RFC 9846 §4.5.2. -/
 @[export eth_quic_tls_certificate_verify_input]
 def certificateVerifyInputExport (args : PyValue) : Result PyValue :=
   pyExport (fun (server, digest) =>

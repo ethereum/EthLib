@@ -217,7 +217,7 @@ theorem serverStep_finished_eq (config : Config) (state : State) (input : Flight
   cases u
   exact (checkFinished_eq_ok_iff false state value).mp checked
 
-/-- A Finished value different from the derived HMAC is rejected, RFC 8446 §4.4.4. -/
+/-- A Finished value different from the derived HMAC is rejected, RFC 9846 §4.5.3. -/
 theorem checkFinished_rejects (server : Bool) (state : State) (negotiated : Negotiated)
     (value : ByteArray) (verifyData : Vector UInt8 32)
     (stored : state.negotiated = some negotiated)

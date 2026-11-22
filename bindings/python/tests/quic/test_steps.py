@@ -51,7 +51,7 @@ SERVER_PEER_ID = bytes.fromhex(
 )
 
 # A separately signed server certificate has noncritical KeyUsage = keyEncipherment only.
-# RFC 8446 §4.4.2.2 requires digitalSignature for the TLS signing key.
+# RFC 9846 §4.5.1.2 requires digitalSignature for the TLS signing key.
 BAD_KEY_USAGE_CERTIFICATE = bytes.fromhex(
     "308201f43082019aa003020102020103300a06082a8648ce3d040302301a311830160603550403130f4574684c696220"
     "544c532074657374301e170d3230303130313030303030305a170d3335303130313030303030305a301a311830160603"
@@ -101,7 +101,7 @@ P256_GENERATOR = (
 )
 # A square root of b modulo p, so (0, y) lies on P-256; p ≡ 3 (mod 4) gives b^((p + 1) / 4).
 P256_ZERO_X_Y = 0x66485C780E2F83D72433BD5D84A06BB6541C2AF31DAE871728BF856A174F93F4
-# RFC 8446 §4.1.3: the Random value that marks a ServerHello as a HelloRetryRequest.
+# RFC 9846 §4.2.3: the Random value that marks a ServerHello as a HelloRetryRequest.
 HELLO_RETRY_RANDOM = bytes.fromhex(
     "cf21ad74e59a6111be1d8c021e65b891c2a211167abb8c5e079e09e2c8a8339c"
 )
@@ -158,14 +158,14 @@ def extract(salt: bytes, value: bytes) -> bytes:
 
 
 def expand(secret: bytes, label: bytes, context: bytes) -> bytes:
-    # RFC 8446 §7.1, with the one SHA-256 output block of RFC 5869 §2.3.
+    # RFC 9846 §7.1, with the one SHA-256 output block of RFC 5869 §2.3.
     full_label = b"tls13 " + label
     info = b"\x00\x20" + bytes([len(full_label)]) + full_label + bytes([len(context)]) + context
     return hmac.digest(secret, info + b"\x01", "sha256")
 
 
 def reference_schedule(shared: bytes, hello: bytes, server: bytes) -> hs.TrafficSecrets:
-    # RFC 8446 §7.1: every expected secret is computed independently with stdlib HMAC.
+    # RFC 9846 §7.1: every expected secret is computed independently with stdlib HMAC.
     empty_hash = hashlib.sha256(b"").digest()
     early = extract(bytes(32), bytes(32))
     handshake = extract(expand(early, b"derived", empty_hash), shared)
@@ -250,7 +250,7 @@ def der_integer(value: int) -> bytes:
 
 
 def reference_signature(server: bool, transcript: bytes) -> bytes:
-    # RFC 8446 §4.4.3 content, signed with the certificate key 3 (server) or 1 (client).
+    # RFC 9846 §4.5.2 content, signed with the certificate key 3 (server) or 1 (client).
     context = (
         b"TLS 1.3, server CertificateVerify" if server else b"TLS 1.3, client CertificateVerify"
     )
@@ -490,7 +490,7 @@ def test_inconsistent_configuration_is_rejected(
 def test_invalid_local_p256_ephemeral_key_is_an_internal_error(secret: bytes) -> None:
     client_config = config(False, 0x0017)
     client_config["ephemeral_keys"][0]["secret"] = secret
-    # A local key failure is no peer's fault, so it maps to internal_error, RFC 8446 §6.2.
+    # A local key failure is no peer's fault, so it maps to internal_error, RFC 9846 §6.2.
     with raises(
         hs.TlsStepError, PREFIX + "crypto (EthLib.Networking.Quic.Tls.Crypto.Error.privateKey)"
     ) as error:
@@ -539,7 +539,7 @@ def test_server_requires_handshake_extensions(kind: int) -> None:
     hello = decoded(client["output"][0])
     assert hello[0] == "client_hello"
     replace_extension(hello[1]["extensions"], kind, None)
-    # RFC 8446 Appendix D.2: an offer without supported_versions is a TLS 1.2 offer.
+    # RFC 9846 Appendix E.2: an offer without supported_versions is a TLS 1.2 offer.
     expected, code = {16: ("noApplicationProtocol", 0x178), 43: ("protocolVersion", 0x146)}.get(
         kind, (f"missingExtension {kind}", 0x16D)
     )
@@ -626,13 +626,13 @@ def test_client_checks_server_hello_version_and_session_id(
     assert server_hello[0] == "server_hello"
     extensions = server_hello[1]["extensions"]
     if change == "tls12_version":
-        # RFC 8446 §4.2.1: a TLS 1.3 ServerHello selects exactly 0x0304.
+        # RFC 9846 §4.3.1: a TLS 1.3 ServerHello selects exactly 0x0304.
         replace_extension(extensions, 43, tls.encode_payload(("selected_version", 0x0303)))
     elif change == "no_version":
-        # RFC 8446 Appendix D.1: a ServerHello without supported_versions selects TLS 1.2.
+        # RFC 9846 Appendix E.1: a ServerHello without supported_versions selects TLS 1.2.
         replace_extension(extensions, 43, None)
     else:
-        # RFC 8446 §4.1.3: the server echoes the client's legacy_session_id unchanged.
+        # RFC 9846 §4.2.3: the server echoes the client's legacy_session_id unchanged.
         server_hello[1]["legacy_session_id_echo"] = bytes([1])
     with raises(hs.TlsStepError, PREFIX + expected) as error:
         hs.client_step(
@@ -710,10 +710,10 @@ def test_client_checks_the_certificate_request(
     request = decoded(flight[2])
     assert request[0] == "certificate_request"
     if change == "context":
-        # RFC 8446 §4.3.2: the context of a handshake CertificateRequest is empty.
+        # RFC 9846 §4.4.2: the context of a handshake CertificateRequest is empty.
         request[1]["context"] = bytes([1])
     elif change == "no_signature_algorithms":
-        # RFC 8446 §4.3.2: signature_algorithms MUST be present; unknown extensions are ignored.
+        # RFC 9846 §4.4.2: signature_algorithms MUST be present; unknown extensions are ignored.
         request[1]["extensions"] = [{"kind": 0xAAAA, "data": b""}]
     elif change == "no_extensions":
         # RFC 9846 §4.4.2: an empty extension block is well formed, yet lacks signature_algorithms.
@@ -723,7 +723,7 @@ def test_client_checks_the_certificate_request(
             request[1]["extensions"], 13, tls.encode_payload(("signature_algorithms", [0x0804]))
         )
     else:
-        # RFC 8446 §4.2: supported_versions is not specified for CertificateRequest.
+        # RFC 9846 §4.3: supported_versions is not specified for CertificateRequest.
         request[1]["extensions"].append(tls.encode_payload(("supported_versions", [0x0304])))
     with raises(hs.TlsStepError, PREFIX + expected) as error:
         hs.client_step(
@@ -883,7 +883,7 @@ def test_server_checks_the_encryption_level(
 
 
 def ticket(early_data: bytes | None = None, extensions: bytes = b"") -> hs.FlightMessage:
-    # RFC 8446 §4.6.1: lifetime, age_add, nonce, ticket and extensions.
+    # RFC 9846 §4.7.1: lifetime, age_add, nonce, ticket and extensions.
     if early_data is not None:
         extensions += b"\x00\x2a\x00\x04" + early_data
     body = (60).to_bytes(4, "big") + bytes(4) + b"\x00\x00\x01x"
@@ -969,7 +969,7 @@ def test_completed_server_rejects_every_message(index: int, expected: str, code:
 def test_ticket_rejects_an_extension_in_the_wrong_message() -> None:
     client_config, _, client, _ = client_flight()
     incoming = ticket(b"\xff" * 4)
-    # RFC 8446 §4.2 permits signature_algorithms in ClientHello and CertificateRequest only.
+    # RFC 9846 §4.3 permits signature_algorithms in ClientHello and CertificateRequest only.
     incoming["data"] = incoming["data"].replace(b"\x00\x2a\x00\x04", b"\x00\x0d\x00\x04")
     with raises(hs.TlsStepError, PREFIX + "illegalParameter") as error:
         hs.client_step(client_config, SERVER_PEER_ID, client["state"], incoming)
@@ -995,7 +995,7 @@ def test_server_can_decline_a_well_formed_psk_offer() -> None:
     client_config, server_config = config(False), config(True)
     hello = decoded(hs.client_start(client_config)["output"][0])
     assert hello[0] == "client_hello"
-    # RFC 8446 §4.2.11: one identity 'x', zero age and one 32-byte binder.
+    # RFC 9846 §4.3.11: one identity 'x', zero age and one 32-byte binder.
     psk = bytes.fromhex("000700017800000000002120") + bytes(32)
     hello[1]["extensions"].extend(
         [
@@ -1073,14 +1073,14 @@ def test_client_rejects_a_retry_for_a_group_already_shared() -> None:
     assert error.value.code == 0x12F
 
 
-# RFC 8446 §4.2.2: a cookie<1..2^16-1> holding one opaque byte.
+# RFC 9846 §4.3.2: a cookie<1..2^16-1> holding one opaque byte.
 COOKIE: tls.Extension = {"kind": 44, "data": bytes([0, 1, 7])}
 
 
 @pytest.mark.parametrize(
     ("extensions", "expected", "code"),
     [
-        # RFC 8446 §4.1.4: a retry that would not change ClientHello is illegal_parameter.
+        # RFC 9846 §4.2.4: a retry that would not change ClientHello is illegal_parameter.
         pytest.param([], "illegalParameter", 0x12F, id="no-change"),
         pytest.param(
             [tls.encode_payload(("retry_key_share", 0x0017))],
@@ -1088,11 +1088,11 @@ COOKIE: tls.Extension = {"kind": 44, "data": bytes([0, 1, 7])}
             0x12F,
             id="unoffered-group",
         ),
-        # RFC 8446 §4.2: early_data is not specified for HelloRetryRequest.
+        # RFC 9846 §4.3: early_data is not specified for HelloRetryRequest.
         pytest.param(
             [COOKIE, {"kind": 42, "data": b""}], "illegalParameter", 0x12F, id="early-data"
         ),
-        # RFC 8446 §4.1.4: an extension that the client did not offer is unsupported_extension.
+        # RFC 9846 §4.2.4: an extension that the client did not offer is unsupported_extension.
         pytest.param(
             [COOKIE, {"kind": 0xAAAA, "data": b""}],
             f"unsupportedExtension {0xAAAA}",
@@ -1148,15 +1148,15 @@ def test_server_checks_the_second_client_hello(
     shares: list[tls.KeyShareEntry] = [{"group": 0x001D, "key_exchange": X25519_CLIENT_PUBLIC}]
     second: tls.ClientHello = {**first[1], "extensions": list(first[1]["extensions"])}
     if change == "extra_share":
-        # RFC 8446 §4.1.2: the second ClientHello holds exactly the one requested share.
+        # RFC 9846 §4.2.2: the second ClientHello holds exactly the one requested share.
         shares.append({"group": 0x0017, "key_exchange": p256_public(1)})
     replace_extension(second["extensions"], 51, tls.encode_payload(("client_key_share", shares)))
     if change == "early_data":
-        # RFC 8446 §4.1.2: a client removes early_data after a retry.
+        # RFC 9846 §4.2.2: a client removes early_data after a retry.
         replace_extension(second["extensions"], 41, {"kind": 42, "data": b""})
         second["extensions"].append(psk)
     elif change == "cookie":
-        # RFC 8446 §4.1.2: a cookie is echoed only when the retry carried one.
+        # RFC 9846 §4.2.2: a cookie is echoed only when the retry carried one.
         second["extensions"].append(COOKIE)
     with raises(hs.TlsStepError, PREFIX + "illegalParameter") as error:
         hs.server_step(server_config, server["state"], message("initial", ("client_hello", second)))
@@ -1164,7 +1164,7 @@ def test_server_checks_the_second_client_hello(
 
 
 def unoffered_certificate_verify(original: hs.FlightMessage) -> hs.FlightMessage:
-    # RFC 8446 §4.4.3: the algorithm must be one that the receiver offered; it offered 0x0403.
+    # RFC 9846 §4.5.2: the algorithm must be one that the receiver offered; it offered 0x0403.
     verify = decoded(original)
     assert verify[0] == "certificate_verify"
     return message("handshake", ("certificate_verify", 0x0804, verify[2]))
@@ -1189,9 +1189,9 @@ def test_server_rejects_an_unoffered_certificate_verify_algorithm() -> None:
 
 CertificateChange = Literal["context", "entry_extension"]
 CERTIFICATE_CASES = [
-    # RFC 8446 §4.4.2: the context of a handshake Certificate is empty.
+    # RFC 9846 §4.5.1: the context of a handshake Certificate is empty.
     pytest.param("context", "illegalParameter", 0x12F, id="context"),
-    # RFC 8446 §4.4.2: an entry extension answers one that the receiver offered.
+    # RFC 9846 §4.5.1: an entry extension answers one that the receiver offered.
     # The entry carries status_request, type 5.
     pytest.param("entry_extension", "unsupportedExtension 5", 0x16E, id="entry-extension"),
 ]
@@ -1261,7 +1261,7 @@ def test_certificate_key_usage_must_allow_signing(
 
 
 def psk_offer(identities: list[tuple[bytes, int]], binder_byte: int) -> tls.Extension:
-    # RFC 8446 §4.2.11: identity ages and binders may change after a retry.
+    # RFC 9846 §4.3.11: identity ages and binders may change after a retry.
     encoded_identities = b"".join(
         len(identity).to_bytes(2, "big") + identity + age.to_bytes(4, "big")
         for identity, age in identities
@@ -1290,7 +1290,7 @@ def test_retry_preserves_psk_identities_but_allows_updated_ages_and_binders(
     )
     second: tls.ClientHello = {**first[1], "extensions": list(first[1]["extensions"])}
     replace_extension(second["extensions"], 51, key_share)
-    # RFC 8446 §4.2.11 requires pre_shared_key to be the last extension in ClientHello.
+    # RFC 9846 §4.3.11 requires pre_shared_key to be the last extension in ClientHello.
     psk = psk_offer([(identity, 1) for identity in identities], 1)
     replace_extension(second["extensions"], 41, psk)
     if identities == [b"x"]:
@@ -1309,15 +1309,15 @@ def test_retry_preserves_psk_identities_but_allows_updated_ages_and_binders(
 @pytest.mark.parametrize(
     ("change", "expected", "code"),
     [
-        # RFC 8446 §4.2.8: each share names a distinct group listed in supported_groups.
+        # RFC 9846 §4.3.8: each share names a distinct group listed in supported_groups.
         ("duplicate_share", "illegalParameter", 0x12F),
         ("unlisted_group_share", "illegalParameter", 0x12F),
-        # RFC 8446 §4.2.11: pre_shared_key is the last extension.
+        # RFC 9846 §4.3.11: pre_shared_key is the last extension.
         ("psk_not_last", "illegalParameter", 0x12F),
-        # RFC 8446 §4.2.10: early_data requires a PSK offer, and its ClientHello form is empty.
+        # RFC 9846 §4.3.10: early_data requires a PSK offer, and its ClientHello form is empty.
         ("early_data_without_psk", "illegalParameter", 0x12F),
         ("nonempty_early_data", "decodeError", 0x132),
-        # RFC 8446 §4.2.9: psk_key_exchange_modes holds a nonempty list.
+        # RFC 9846 §4.3.9: psk_key_exchange_modes holds a nonempty list.
         ("empty_psk_modes", "decodeError", 0x132),
     ],
 )
@@ -1365,7 +1365,7 @@ def test_cookie_only_retry_echoes_exact_cookie_and_preserves_key_share() -> None
     assert first[0] == "client_hello"
     server_hello = decoded(server["output"][0])
     assert server_hello[0] == "server_hello"
-    # RFC 8446 §4.2.2: a retry cookie is echoed unchanged, including opaque zero bytes.
+    # RFC 9846 §4.3.2: a retry cookie is echoed unchanged, including opaque zero bytes.
     cookie: tls.Extension = {"kind": 44, "data": bytes([0, 5, 255, 0, 1, 0, 255])}
     retry: tls.ServerHello = {
         **server_hello[1],
@@ -1478,7 +1478,7 @@ def test_p256_peer_share_requires_a_valid_uncompressed_point(
 
 def test_client_rejects_an_empty_server_certificate_with_decode_error() -> None:
     client_config, client, _ = client_before(3)
-    # RFC 8446 §4.4.2.4 requires decode_error for an empty server certificate list.
+    # RFC 9846 §4.5.1.3 requires decode_error for an empty server certificate list.
     empty = message("handshake", ("certificate", {"context": b"", "entries": []}))
     with raises(hs.TlsStepError, PREFIX + "decodeError") as error:
         hs.client_step(client_config, SERVER_PEER_ID, client["state"], empty)
@@ -1488,7 +1488,7 @@ def test_client_rejects_an_empty_server_certificate_with_decode_error() -> None:
 @pytest.mark.parametrize("client_role", [False, True])
 def test_legacy_compression_must_be_null(client_role: bool) -> None:
     client_config, server_config, client, server = server_flight()
-    # RFC 8446 §§4.1.2 and 4.1.3 require illegal_parameter for non-null compression.
+    # RFC 9846 §§4.2.2 and 4.2.3 require illegal_parameter for non-null compression.
     original = server["output"][0] if client_role else client["output"][0]
     data = original["data"]
     compression_index = 41 if client_role else 44
@@ -1545,7 +1545,7 @@ def test_legacy_version_must_be_tls12(
 
 def test_duplicate_handshake_extensions_use_illegal_parameter() -> None:
     client_config, client, flight = client_before(1)
-    # RFC 8446 §4.2 forbids duplicate extensions, independently of their contents.
+    # RFC 9846 §4.3 forbids duplicate extensions, independently of their contents.
     original = flight[1]["data"]
     assert original[0] == 8
     extensions = original[6:]
@@ -1565,7 +1565,7 @@ def test_psk_identity_and_binder_counts_must_agree() -> None:
     client_config, server_config = config(False), config(True)
     hello = decoded(hs.client_start(client_config)["output"][0])
     assert hello[0] == "client_hello"
-    # RFC 8446 §4.2.11 assigns one binder per identity.
+    # RFC 9846 §4.3.11 assigns one binder per identity.
     # Unequal counts are inconsistent fields: illegal_parameter under §6.2.
     # Both vectors are well-framed: two one-byte identities and a single 32-byte binder.
     psk = bytes.fromhex("000e0001780000000000017900000000002120") + bytes(32)
