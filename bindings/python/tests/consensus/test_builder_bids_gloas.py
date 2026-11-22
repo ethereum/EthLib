@@ -243,7 +243,7 @@ def test_validate_bid_of_a_self_built_payload():
     )
     with raises(TransitionError, message) as info:
         _validate(state, signed)
-    assert info.value.code != 0
+    assert info.value.code == 1
 
 
 @pytest.mark.parametrize(
@@ -296,6 +296,22 @@ def test_is_eligible_for_bid_gloas():
     at = state.rindex(pubkey) + EXIT_AFTER_KEY
     epoch = struct.pack("<Q", slot // SLOTS_PER_EPOCH)
     assert not eligible(state[:at] + epoch + state[at + 8 :])
+
+
+def test_is_eligible_for_bid_gloas_with_a_proposer_past_the_registry():
+    # The lookahead names a proposer past the last validator, so its key cannot be read.
+    document = consensus.api_json("minimal", FORK, "BeaconState", _state())
+    document["proposer_lookahead"] = ["1000000"] * len(document["proposer_lookahead"])
+    state = consensus.api_ssz("minimal", FORK, "BeaconState", document)
+    message = (
+        "EthLib.Consensus.TransitionError.accessor "
+        "(EthLib.Consensus.AccessorError.indexOutOfRange 1000000)"
+    )
+    with raises(TransitionError, message) as info:
+        consensus.is_eligible_for_bid_gloas(
+            "minimal", FORK, state, [], _slot(state), bytes(32), bytes(32), PUBKEY
+        )
+    assert info.value.code == 1
 
 
 @pytest.mark.parametrize("fork", ["fusaka", "bellatrix"])
