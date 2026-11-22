@@ -256,9 +256,13 @@ inductive Transaction where
 
 The type is the first byte of a typed transaction. -/
 def typeFork (type : UInt8) : Option Fork :=
+  -- EIP-2930 adds type 1 at Berlin.
   if type = 1 then some .berlin
+  -- EIP-1559 adds type 2 at London.
   else if type = 2 then some .london
+  -- EIP-4844 adds type 3, at Dencun by EIP-7569.
   else if type = 3 then some .dencun
+  -- EIP-7702 adds type 4, at Pectra by EIP-7600.
   else if type = 4 then some .pectra
   else none
 
@@ -266,6 +270,7 @@ namespace Transaction
 
 /-- The type of a transaction: 0 for a legacy transaction, else its EIP-2718 type. -/
 def type : Transaction → UInt8
+  -- Yellow Paper §4.2: `T_x = 0` for a legacy transaction.
   | .legacy _ => 0
   | .accessList _ => 1
   | .feeMarket _ => 2
@@ -276,10 +281,14 @@ def type : Transaction → UInt8
 
 A legacy transaction exists from Frontier. -/
 def fork (t : Transaction) : Fork :=
+  -- No EIP adds a typed transaction 0, the type of a legacy transaction, so its fork is Frontier.
   (typeFork t.type).getD .frontier
 
 /-- The transaction with a signature of 0, as a simulation runs a call. -/
 def unsigned : Transaction → Transaction
+  -- `T_r = T_s = 0`, with `T_w = 0` for a legacy transaction and `T_y = 0` for a typed one.
+  --
+  -- No source defines this form: a simulation gives its own sender instead of recovering it.
   | .legacy tx => .legacy { tx with v := 0, r := 0, s := 0 }
   | .accessList tx => .accessList { tx with yParity := 0, r := 0, s := 0 }
   | .feeMarket tx => .feeMarket { tx with yParity := 0, r := 0, s := 0 }
