@@ -57,16 +57,16 @@ def ChaCha20Poly1305Error.code : ChaCha20Poly1305Error → UInt32
 
 /-- Add, XOR and rotate four 32-bit words, RFC 8439 §2.1. -/
 def quarterRound (a b c d : UInt32) : UInt32 × UInt32 × UInt32 × UInt32 :=
-  -- `a += b; d ^= a; d <<<= 16;`
+  -- `a = a + b`, then `d = (d xor a) <<< 16`.
   let a := a + b
   let d := rotl32 (d ^^^ a) 16
-  -- `c += d; b ^= c; b <<<= 12;`
+  -- `c = c + d`, then `b = (b xor c) <<< 12`.
   let c := c + d
   let b := rotl32 (b ^^^ c) 12
-  -- `a += b; d ^= a; d <<<= 8;`
+  -- `a = a + b`, then `d = (d xor a) <<< 8`.
   let a := a + b
   let d := rotl32 (d ^^^ a) 8
-  -- `c += d; b ^= c; b <<<= 7;`
+  -- `c = c + d`, then `b = (b xor c) <<< 7`.
   let c := c + d
   let b := rotl32 (b ^^^ c) 7
   (a, b, c, d)
@@ -78,12 +78,12 @@ def quarterRoundState (s : State) (a b c d : Fin 16) : State :=
 
 /-- Four column rounds, then four diagonal rounds, RFC 8439 §2.3. -/
 def doubleRound (s : State) : State :=
-  -- §2.3.1, `inner_block`: the column rounds `Qround(state, 0, 4, 8, 12)` to `(3, 7, 11, 15)`.
+  -- §2.3.1, the inner block: column rounds, the quarter rounds on (0, 4, 8, 12) to (3, 7, 11, 15).
   let s := quarterRoundState s 0 4 8 12
   let s := quarterRoundState s 1 5 9 13
   let s := quarterRoundState s 2 6 10 14
   let s := quarterRoundState s 3 7 11 15
-  -- The diagonal rounds `Qround(state, 0, 5, 10, 15)` to `(3, 4, 9, 14)`.
+  -- The diagonal rounds are quarter rounds on (0, 5, 10, 15) to (3, 4, 9, 14).
   let s := quarterRoundState s 0 5 10 15
   let s := quarterRoundState s 1 6 11 12
   let s := quarterRoundState s 2 7 8 13
@@ -116,18 +116,18 @@ def serializeState (words : State) : Vector UInt8 64 :=
 
 /-- Twenty rounds and feed-forward, serialized little-endian, RFC 8439 §2.3. -/
 def block (key : Key) (counter : UInt32) (nonce : Nonce) : Vector UInt8 64 :=
-  -- §2.3.1: `state = constants | key | counter | nonce`, and `initial_state = state`.
+  -- §2.3.1: `state = constants | key | counter | nonce`, and the initial state is a copy of it.
   let initial := initialState key counter nonce
-  -- `for i=1 upto 10: inner_block(state)`.
+  -- Ten double rounds, each the inner block of §2.3.1.
   let final := (List.range 10).foldl (fun s _ => doubleRound s) initial
-  -- `state += initial_state`, word by word modulo `2^32`.
+  -- The initial state is added to the state, word by word modulo `2^32`.
   let words := Vector.zipWith (· + ·) final initial
-  -- `return serialize(state)`.
+  -- The block is the state serialized as 64 bytes, each word little-endian.
   serializeState words
 
 /-- Successive blocks after the caller checks their counter bound, RFC 8439 §2.4. -/
 def keyStream (key : Key) (counter : UInt32) (nonce : Nonce) (blocks : Nat) : ByteArray :=
-  -- §2.4.1: `key_stream = chacha20_block(key, counter+j, nonce)`, for each block `j`.
+  -- §2.4.1: block `j` of the key stream is the ChaCha20 block of the key, `counter + j`, the nonce.
   (List.range blocks).foldl (fun bytes i =>
     bytes ++ packBytes (block key (counter + UInt32.ofNat i) nonce)) .empty
 
@@ -138,57 +138,59 @@ def crypt (key : Key) (counter : UInt32) (nonce : Nonce) (input : ByteArray) :
   if counter.toNat + (input.size + 63) / 64 > 2 ^ 32 then
     .error (.counterExhausted counter.toNat input.size)
   else
-    -- §2.4.1: `encrypted_message += block ^ key_stream`, one block per started 64 bytes.
+    -- §2.4.1: the output is the input XOR the key stream, one block per started 64 bytes.
     --
     -- The XOR stops at the end of the input, so the last block is truncated as in §2.4.1.
     .ok (xorByteArray input (keyStream key counter nonce ((input.size + 63) / 64)))
 
 /-- Clamp the low half of a Poly1305 key, RFC 8439 §2.5. -/
 def clampR (key : Key) : Nat :=
-  -- §2.5.1: `r = le_bytes_to_num(key[0..15])`.
+  -- §2.5.1: `r` is bytes 0 to 15 of the key, read as a little-endian number.
   --
-  -- `clamp(r)`: `r &= 0x0ffffffc0ffffffc0ffffffc0fffffff`.
+  -- The clamp keeps the bits of `r` set in `0x0ffffffc0ffffffc0ffffffc0fffffff`.
   bytesToUint (Vector.ofFn fun i : Fin 16 => key[i.val]'(by omega)) &&&
     0x0ffffffc0ffffffc0ffffffc0fffffff
 
 /-- Accumulate 16-byte blocks with their appended one bit, RFC 8439 §2.5. -/
 def poly1305Accumulator (r : Nat) (message : ByteArray) : Nat :=
-  -- §2.5.1: `a = 0`, `p = (1<<130)-5`, `for i=1 upto ceil(msg length in bytes / 16)`.
+  -- §2.5.1: from `a = 0`, with `p = 2^130 - 5`, one step per started 16 bytes of the message.
   (List.range ((message.size + 15) / 16)).foldl (fun acc i =>
     let chunk := message.extract (16 * i) (16 * i + 16)
-    -- `n = le_bytes_to_num(msg[((i-1)*16)..(i*16)] | [0x01])`.
+    -- `n` is chunk `i` of up to 16 bytes, then the byte `0x01`, read as a little-endian number.
     --
-    -- The byte `0x01` after the chunk adds `256^len(chunk)`.
+    -- For a chunk of `k` bytes, the byte `0x01` adds `256^k`.
     let n := bytesToUint (⟨chunk.data, rfl⟩ : Vector UInt8 chunk.size) + 256 ^ chunk.size
-    -- `a += n`, then `a = (r * a) % p`.
+    -- `a = ((a + n) r) mod p`.
     ((acc + n) * r) % (2 ^ 130 - 5)) 0
 
 /-- The low 128 bits of the accumulator plus the key's high half, RFC 8439 §2.5. -/
 def poly1305 (key : Key) (message : ByteArray) : Tag :=
-  -- §2.5.1: `s = le_bytes_to_num(key[16..31])`.
+  -- §2.5.1: `s` is bytes 16 to 31 of the key, read as a little-endian number.
   let s := bytesToUint (Vector.ofFn fun i : Fin 16 => key[16 + i.val]'(by omega))
-  -- `a += s`, then `return num_to_16_le_bytes(a)`, which keeps the low 128 bits.
+  -- The tag is `(a + s) mod 2^128`, as 16 little-endian bytes.
   uintToBytes 16 (poly1305Accumulator (clampR key) message + s)
 
 /-- The first 32 bytes of ChaCha20 block zero, RFC 8439 §2.6. -/
 def poly1305Key (key : Key) (nonce : Nonce) : Key :=
-  -- §2.6.1: `counter = 0`, `block = chacha20_block(key,counter,nonce)`.
+  -- §2.6.1: the ChaCha20 block of the key and the nonce, under the counter 0.
   let bytes := block key 0 nonce
-  -- `return block[0..31]`.
+  -- The one-time key is its first 32 bytes.
   Vector.ofFn fun i : Fin 32 => bytes[i.val]'(by omega)
 
 /-- Up to 15 zero bytes complete a multiple of 16, RFC 8439 §2.8.1. -/
 def pad16 (bytes : ByteArray) : ByteArray :=
-  -- `if (len(x) % 16)==0 then return NULL else return copies(0, 16-(len(x)%16))`.
+  -- For an input of `L` bytes, the padding is empty if 16 divides `L`.
   --
-  -- The outer `% 16` gives the empty string in the first case.
+  -- Otherwise it is `16 - (L mod 16)` zero bytes.
+  --
+  -- The outer reduction modulo 16 gives the empty string in the first case.
   ⟨Array.replicate ((16 - bytes.size % 16) % 16) 0⟩
 
 /-- Pad the AAD and ciphertext, then append their 64-bit lengths, RFC 8439 §2.8. -/
 def macData (aad ciphertext : ByteArray) : ByteArray :=
-  -- §2.8.1: `mac_data = aad | pad16(aad)`, then `mac_data |= ciphertext | pad16(ciphertext)`.
+  -- §2.8.1: the MAC data is the AAD, its padding, the ciphertext and its padding.
   --
-  -- Then `mac_data |= num_to_8_le_bytes(aad.length)`, and the same for `ciphertext.length`.
+  -- Then come the byte lengths of the AAD and of the ciphertext, as 8 little-endian bytes each.
   aad ++ pad16 aad ++ ciphertext ++ pad16 ciphertext ++
     packBytes (uintToBytes 8 aad.size) ++ packBytes (uintToBytes 8 ciphertext.size)
 
@@ -204,9 +206,9 @@ def checkLengths (aadLength textLength : Nat) : Except ChaCha20Poly1305Error Uni
 def encrypt (key : Key) (nonce : Nonce) (aad plaintext : ByteArray) :
     Except ChaCha20Poly1305Error (ByteArray × Tag) := do
   checkLengths aad.size plaintext.size
-  -- §2.8.1: `ciphertext = chacha20_encrypt(key, 1, nonce, plaintext)`.
+  -- §2.8.1: the ciphertext is the ChaCha20 encryption of the plaintext from the counter 1.
   let ciphertext ← crypt key 1 nonce plaintext
-  -- `otk = poly1305_key_gen(key, nonce)`, `tag = poly1305_mac(mac_data, otk)`.
+  -- The tag is Poly1305 of the MAC data, under the one-time key of §2.6 from the key and nonce.
   --
   -- The nonce is the caller's 96 bits: the `constant | iv` split is left to the protocol.
   return (ciphertext, poly1305 (poly1305Key key nonce) (macData aad ciphertext))
