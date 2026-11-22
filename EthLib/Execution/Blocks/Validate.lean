@@ -38,11 +38,7 @@ Section 4.3.4 of the Berlin version states them: [`Paper.tex`][yp-berlin].
 
 The step comments write the relations of `V(H)` in ASCII.
 
-Only `ethereum/execution-specs` spells out the order of the checks.
-
-The step comments quote `validate_header` in [Osaka's `fork.py`][es-osaka].
-
-Before Paris they quote it in [London's][es-london], and before London in [Berlin's][es-berlin].
+The checks run in a fixed order, and the first that fails gives the error of the header.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [yp-berlin]: https://github.com/ethereum/yellowpaper/blob/beacfbd29ccc04dfd790f2282d4c4b1c0afc9b5a/Paper.tex
@@ -50,9 +46,6 @@ Before Paris they quote it in [London's][es-london], and before London in [Berli
 [eip-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#block-structure
 [eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#header-extension
 [eip-7934]: https://eips.ethereum.org/EIPS/eip-7934#specification
-[es-osaka]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/osaka/fork.py#L347
-[es-london]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/london/fork.py#L289
-[es-berlin]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/berlin/fork.py#L220
 -/
 
 @[expose] public section
@@ -414,18 +407,18 @@ def OmmerError.code : OmmerError → UInt32
 
 /-- The first error whose condition fails, in order, or success when every condition holds. -/
 def firstFailure : List (Bool × BlockError) → Except BlockError Unit
-  -- Each `if ...: raise InvalidBlock` of the source, in order.
+  -- The checks in order: the first that fails makes the block invalid.
   | [] => .ok ()
   | (condition, error) :: rest => if condition then firstFailure rest else .error error
 
 /-- The excess blob gas of a parent, or 0 for a parent before Dencun. -/
 def parentExcessBlobGas {parentFork : Fork} (parent : Header parentFork) : Nat :=
-  -- EIP-4844: for the first post-fork block, `parent.excess_blob_gas` is evaluated as `0`.
+  -- EIP-4844: for the first block after the fork, the excess blob gas of the parent counts as 0.
   if h : .dencun ≤ parentFork then (parent.excessBlobGas h).toNat else 0
 
 /-- The blob gas that a parent used, or 0 for a parent before Dencun. -/
 def parentBlobGasUsed {parentFork : Fork} (parent : Header parentFork) : Nat :=
-  -- EIP-4844: for the first post-fork block, `parent.blob_gas_used` is evaluated as `0`.
+  -- EIP-4844: for the first block after the fork, the blob gas used by the parent counts as 0.
   if h : .dencun ≤ parentFork then (parent.blobGasUsed h).toNat else 0
 
 /-- The excess blob gas that a parent gives to a header at `fork`, from Dencun on.
@@ -434,7 +427,9 @@ The blob schedule is the header's, by default the schedule of the fork. -/
 def expectedExcessBlobGas {parentFork fork : Fork} (hLondon : .london ≤ parentFork)
     (h : .dencun ≤ fork) (parent : Header parentFork)
     (schedule : Since .dencun fork BlobSchedule := BlobBaseFee.blobSchedule fork) : Nat :=
-  -- EIP-4844: `calc_excess_blob_gas(parent)`; Osaka: `calculate_excess_blob_gas(parent_header)`.
+  -- EIP-4844: the excess blob gas follows from the excess blob gas and blob gas used of the parent.
+  --
+  -- From Osaka it also reads the base fee of the parent, by EIP-7918, under the blob schedule.
   BlobBaseFee.calcExcessBlobGas fork (schedule h)
     (parentExcessBlobGas parent) (parentBlobGasUsed parent) (parent.baseFeePerGas hLondon)
 
@@ -457,9 +452,9 @@ def childExcessBlobGas (config : ChainConfig) (fork : Fork) {parentFork : Fork}
 /-- The base fee that a parent gives to its child. -/
 def expectedBaseFee {parentFork : Fork} (hLondon : .london ≤ parentFork)
     (parent : Header parentFork) : Nat :=
-  -- `calculate_base_fee_per_gas(header.gas_limit, parent_header.gas_limit, ...)`.
+  -- EIP-1559: the base fee follows from the gas limit, the gas used and the base fee of the parent.
   --
-  -- The check of the gas limit inside it is a check of its own here, run just before.
+  -- The check of the gas limit is a check of its own, run just before.
   BaseFee.calculateBaseFeePerGas parent.gasLimit parent.gasUsed (parent.baseFeePerGas hLondon)
 
 /-- The base fee that a parent gives to a header at London or later.
@@ -467,7 +462,7 @@ def expectedBaseFee {parentFork : Fork} (hLondon : .london ≤ parentFork)
 The parent of the first London block has no base fee, and the header takes the initial base fee.
 -/
 def expectedBaseFeeAcross {parentFork : Fork} (parent : Header parentFork) : Nat :=
-  -- EIP-1559: `if INITIAL_FORK_BLOCK_NUMBER == block.number: ... = INITIAL_BASE_FEE`.
+  -- EIP-1559: the first block of the fork has the base fee `INITIAL_BASE_FEE`.
   --
   -- That block is the one whose parent is before London, which has no base fee.
   if hLondon : .london ≤ parentFork then expectedBaseFee hLondon parent else INITIAL_BASE_FEE
@@ -477,9 +472,9 @@ def expectedBaseFeeAcross {parentFork : Fork} (parent : Header parentFork) : Nat
 A parent has ommers when its ommers hash is not the hash of the empty list. -/
 def expectedDifficulty {parentFork fork : Fork} (parent : Header parentFork)
     (header : Header fork) : Nat :=
-  -- `H_d = D(H)`, as `calculate_block_difficulty(header.number, header.timestamp, ...)`.
+  -- `H_d = D(H)`, from the number and time of the header, and the time and difficulty of `P(H)`.
   --
-  -- Its last arguments are `parent_header.difficulty` and `parent_has_ommers`.
+  -- From Byzantium, `D(H)` also reads whether `P(H)` has ommers, by EIP-100.
   blockDifficulty fork header.number header.timestamp.toNat parent.timestamp.toNat
     parent.difficulty (parent.ommersHash != EMPTY_OMMER_HASH)
 
@@ -496,14 +491,12 @@ def headerChecks {parentFork fork : Fork} (_hFork : parentFork ≤ fork)
     List (Bool × BlockError) :=
   -- From Paris, a parent before London has no base fee to read.
   --
-  -- It runs first, before every check of the source.
-  --
-  -- The source's chain never holds such a parent, so it has no such check.
+  -- It runs first, before every other check.
   let parentCheck :=
     if .paris ≤ fork then
       [(decide (.london ≤ parentFork), BlockError.parentBeforeLondon parentFork)]
     else []
-  -- From Dencun, EIP-4844: `assert block.header.excess_blob_gas == calc_excess_blob_gas(...)`.
+  -- From Dencun, EIP-4844: the excess blob gas of the header is the one its parent gives.
   let excessCheck :=
     if h : .dencun ≤ fork then
       if hLondon : .london ≤ parentFork then
@@ -512,9 +505,7 @@ def headerChecks {parentFork fork : Fork} (_hFork : parentFork ≤ fork)
         [(decide (actual = expected), BlockError.wrongExcessBlobGas expected actual)]
       else []
     else []
-  -- From London, `H_f = F(H)`.
-  --
-  -- `if expected_base_fee_per_gas != header.base_fee_per_gas: raise InvalidBlock`.
+  -- From London, `H_f = F(H)`, the base fee that the parent gives.
   let baseFeeCheck :=
     if h : .london ≤ fork then
       let baseFee := header.baseFeePerGas h
@@ -522,56 +513,44 @@ def headerChecks {parentFork fork : Fork} (_hFork : parentFork ≤ fork)
         BlockError.wrongBaseFee (expectedBaseFeeAcross parent) baseFee)]
     else []
   let workChecks :=
-    -- Before Paris, `H_d = D(H)`: `if header.difficulty != block_difficulty: raise InvalidBlock`.
+    -- Before Paris, `H_d = D(H)`.
     if fork < .paris then
       [(decide (header.difficulty = expectedDifficulty parent header),
         BlockError.wrongDifficulty (expectedDifficulty parent header) header.difficulty)]
-    -- From Paris: `H_d = 0`, `H_n = 0x0000000000000000` and `H_o = KEC(RLP(()))`.
-    --
-    -- `if header.difficulty != 0`.
-    --
-    -- `if header.nonce != b"\x00\x00\x00\x00\x00\x00\x00\x00"`.
-    --
-    -- `if header.ommers_hash != EMPTY_OMMER_HASH`.
+    -- From Paris, EIP-3675: `H_d = 0`, then `H_n = 0x0000000000000000`, then `H_o = KEC(RLP(()))`.
     --
     -- `H_a = PREVRANDAO()` is not checked here: the value comes from the beacon chain.
     else
       [(decide (header.difficulty = 0), BlockError.nonzeroDifficulty header.difficulty),
         (decide (header.nonce = Vector.replicate 8 0), .nonzeroNonce header.nonce),
         (decide (header.ommersHash = EMPTY_OMMER_HASH), .wrongOmmersHash header.ommersHash)]
-  -- `block_parent_hash = keccak256(rlp.encode(parent_header))`.
+  -- `H_p = KEC(RLP(P(H)))`.
   --
-  -- `if header.parent_hash != block_parent_hash: raise InvalidBlock`.
-  --
-  -- A parent header with no RLP form fails here, which the source's typed header cannot do.
+  -- A parent header with no RLP form fails here.
   let parentHashCheck :=
     match parent.hash with
     | .ok parentHash =>
       (decide (header.parentHash = parentHash),
         BlockError.wrongParentHash (some parentHash) header.parentHash)
     | .error e => (false, BlockError.encoding e)
-  -- The parent's fork, then `if header.number < Uint(1): raise InvalidBlock`, then the excess.
+  -- The fork of the parent, then `H_i >= 1`, then the excess blob gas.
   parentCheck ++ [(decide (1 ≤ header.number), .genesisNumber)] ++ excessCheck ++
-    -- `H_g <= H_l`: `if header.gas_used > header.gas_limit: raise InvalidBlock`.
+    -- `H_g <= H_l`.
     [(decide (header.gasUsed ≤ header.gasLimit),
         .gasUsedAboveLimit header.gasUsed header.gasLimit),
-      -- `H_l < P(H)_H_l' + floor(P(H)_H_l' / 1024)`, `H_l > P(H)_H_l' - ...`, `H_l >= 5000`.
+      -- `|H_l - P(H)_H_l'| < floor(P(H)_H_l' / 1024)` and `H_l >= 5000`.
       --
-      -- From London the source checks them inside the base fee; before London, after the number.
+      -- They run right after the gas used, at every fork.
       --
-      -- Here they run right after the gas used, at every fork.
-      --
-      -- At the first London block, London's file skips this check.
-      --
-      -- EIP-1559 checks it there against twice the parent's limit, as here.
+      -- At the first London block, EIP-1559 checks them against twice the parent's limit.
       (GasLimit.checkGasLimitAcross parentFork fork header.gasLimit parent.gasLimit,
         .invalidGasLimit header.gasLimit parent.gasLimit)] ++ baseFeeCheck ++
-    -- `H_s > P(H)_H_s`: `if header.timestamp <= parent_header.timestamp: raise InvalidBlock`.
+    -- `H_s > P(H)_H_s`.
     [(decide (parent.timestamp.toNat < header.timestamp.toNat),
         .timestampNotAfterParent header.timestamp.toNat parent.timestamp.toNat),
-      -- `H_i = P(H)_H_i + 1`: `if header.number != parent_header.number + Uint(1)`.
+      -- `H_i = P(H)_H_i + 1`.
       (decide (header.number = parent.number + 1), .wrongNumber (parent.number + 1) header.number),
-      -- `||H_x|| <= 32`: `if len(header.extra_data) > 32: raise InvalidBlock`.
+      -- `||H_x|| <= 32`.
       (decide (header.extraData.size ≤ MAX_EXTRA_DATA_BYTES),
         .extraDataTooLong header.extraData.size)] ++
     workChecks ++ [parentHashCheck]
@@ -597,14 +576,14 @@ def validateHeader {parentFork fork : Fork} (hFork : parentFork ≤ fork)
     (schedule : Since .dencun fork BlobSchedule := BlobBaseFee.blobSchedule fork) :
     Except BlockError Unit := do
   checkHeader hFork parent header schedule
-  -- Before Paris, last: `n <= 2^256 / H_d` and `m = H_m`, the `validate_proof_of_work(header)`.
+  -- Before Paris, last, the proof of work: `n <= 2^256 / H_d` and `m = H_m`.
   if fork < .paris then (checkProofOfWork header).mapError .proofOfWork
 
 /-- Check the RLP size of a block: from Fusaka, at most the most bytes. -/
 def validateBlockSize {fork : Fork} {Tx : Type} [Codec Tx] (block : Block fork Tx) :
     Except BlockError Unit :=
   if fork ≥ .fusaka then do
-    -- EIP-7934: `len(rlp.encode(block)) > MAX_RLP_BLOCK_SIZE` makes the block invalid.
+    -- EIP-7934: a block whose RLP encoding exceeds `MAX_RLP_BLOCK_SIZE` bytes is invalid.
     let bytes ← block.encode.mapError .encoding
     firstFailure [(decide (bytes.size ≤ MAX_RLP_BLOCK_SIZE), .blockTooLarge bytes.size)]
   else .ok ()

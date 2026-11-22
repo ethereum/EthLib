@@ -219,7 +219,7 @@ The empty list has the RLP form `0xc0`.
 
 It fails only when a field has `2^64` bytes or more, since RLP cannot encode it. -/
 def hash (bal : BlockAccessList) : Except RlpError Hash32 := do
-  -- EIP-7928: `block_access_list_hash: Hash32 = keccak256(rlp.encode(block_access_list))`.
+  -- EIP-7928: the hash is `keccak256(rlp(L))` of the list `L`.
   return keccak256 (← Codec.encode bal)
 
 /-! ## The checks of the list alone -/
@@ -284,22 +284,22 @@ def Error.code : Error → UInt32
 def checkAccount (a : AccountChanges) : Except Error Unit := do
   let address := a.address
   let slots := a.storageChanges.map (·.slot.toNat)
-  -- "storage_changes: Slots by storage key value (ascending)".
+  -- The storage changes come by ascending storage key.
   --
-  -- Strict order gives "Each storage key MUST appear at most once in `storage_changes`".
+  -- The order is strict, so each storage key appears at most once among them.
   ensure (ascending slots) (.slotsNotAscending address)
   a.storageChanges.forM fun s => do
-    -- "Each `SlotChanges` entry MUST contain at least one `StorageChange`."
+    -- The changes of each slot hold at least one change.
     ensure (!s.changes.isEmpty) (.slotWithoutChange address s.slot)
-    -- "within each slot, changes by block access index (ascending)", each index at most once.
+    -- Within each slot, the changes come by strictly ascending block access index.
     ensure (ascending (s.changes.map (·.index.toNat))) (.storageChangesNotAscending address s.slot)
-  -- "storage_reads: By storage key value (ascending)", each key at most once.
+  -- The storage reads come by strictly ascending storage key.
   ensure (ascending (a.storageReads.map (·.toNat))) (.readsNotAscending address)
-  -- "A storage key MUST NOT appear in both `storage_changes` and `storage_reads`".
+  -- A storage key never appears both among the storage changes and among the storage reads.
   a.storageReads.forM fun r => ensure (!slots.contains r.toNat) (.readAndWritten address r)
-  -- "balance_changes, nonce_changes, code_changes: By block access index (ascending)".
+  -- The balance, nonce and code changes come by strictly ascending block access index.
   --
-  -- "Each `block_access_index` MUST appear at most once per change list".
+  -- So each block access index appears at most once in each list of changes.
   ensure (ascending (a.balanceChanges.map (·.index.toNat))) (.balanceChangesNotAscending address)
   ensure (ascending (a.nonceChanges.map (·.index.toNat))) (.nonceChangesNotAscending address)
   ensure (ascending (a.codeChanges.map (·.index.toNat))) (.codeChangesNotAscending address)
@@ -308,9 +308,9 @@ def checkAccount (a : AccountChanges) : Except Error Unit := do
 
 The error names the first account that does not. -/
 def checkAddresses : List AccountChanges → Except Error Unit
-  -- "Accounts: Lexicographic by address".
+  -- The accounts come in strict lexicographic order of address.
   --
-  -- Strict order gives "Each address MUST appear exactly once in `BlockAccessList`".
+  -- So each address appears at most once; EIP-7928 asks exactly once, and this check gives at most.
   | a :: b :: rest =>
     if addressKey a.address < addressKey b.address then checkAddresses (b :: rest)
     else .error (.accountsNotAscending b.address)
@@ -322,7 +322,7 @@ Once the checks of each account pass, no key of an account appears twice.
 
 So this counts the accounts and the distinct storage keys of each account, as EIP-7928 does. -/
 def itemCount (bal : BlockAccessList) : Nat :=
-  -- `bal_items = storage_keys + addresses`.
+  -- The items are the addresses plus the storage keys.
   (bal.map fun a => 1 + a.storageChanges.length + a.storageReads.length).sum
 
 /-- Check a block access list alone, in a block with the gas limit `gasLimit`.
@@ -337,7 +337,7 @@ def check (bal : BlockAccessList) (gasLimit : Nat) : Except Error Unit := do
   -- The order and the uniqueness of each account, then of the accounts.
   bal.forM checkAccount
   checkAddresses bal
-  -- `bal_items <= block_gas_limit // ITEM_COST`.
+  -- EIP-7928: there are at most `floor(H_l / ITEM_COST)` items.
   let limit := gasLimit / ITEM_COST
   ensure (itemCount bal ≤ limit) (.tooManyItems (itemCount bal) limit)
 

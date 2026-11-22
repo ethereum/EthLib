@@ -44,9 +44,7 @@ namespace Withdrawal
 
 /-- The item of a withdrawal: the list `[index, validator_index, address, amount]`. -/
 def toItem (w : Withdrawal) : Item :=
-  -- EIP-4895: "serialized as a RLP list according to the schema".
-  --
-  -- The schema is `[index, validator_index, address, amount]`.
+  -- EIP-4895: a withdrawal is the RLP list of its index, validator index, address and amount.
   .list [Codec.toItem w.index, Codec.toItem w.validatorIndex, Codec.toItem w.address,
     Codec.toItem w.amount]
 
@@ -72,15 +70,13 @@ The withdrawals run together as one transaction on the block state `block`.
 It fails only when a balance would reach `2^256`, which EIP-4895 leaves out. -/
 def withdrawalState (fork : Fork) (block : BlockState) (withdrawals : List Withdrawal) :
     Except StateError TransactionState :=
-  -- EIP-4895: "For each `withdrawal` in the list", in order.
+  -- EIP-4895: each withdrawal of the list, in order.
   --
   -- The withdrawals share one transaction state, a choice that EIP-4895 leaves open.
   withdrawals.foldlM
-    -- "increases the balance of the `address` specified by the `amount` given".
+    -- It increases the balance of its address by its amount, converted from Gwei to wei.
     --
-    -- "a conversion to units of wei must be performed".
-    --
-    -- The source says the change "**MUST** not fail"; here a balance of `2^256` fails.
+    -- EIP-4895 says that the change must not fail; here a balance of `2^256` fails.
     (fun tx w => tx.createEther fork w.address (BitVec.ofNat 256 (w.amount.toNat * GWEI_TO_WEI)))
     (TransactionState.ofBlock block)
 

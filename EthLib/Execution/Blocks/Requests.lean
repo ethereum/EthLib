@@ -108,25 +108,25 @@ def fieldAt (data : List UInt8) (offset size : Nat) : List UInt8 :=
 /-- The deposit request of the data of a deposit log: its five fields, one after the other. -/
 def depositRequestOfEvent (data : ByteArray) : Except DepositError ByteArray := do
   let bytes := data.data.toList
-  -- EIP-6110: `if len(deposit_event_data) != 576: return False`.
+  -- EIP-6110: the data of a deposit log has 576 bytes.
   if bytes.length ≠ DEPOSIT_EVENT_LENGTH then throw (.wrongLength bytes.length)
   -- The head holds the offset of each field, one word for each.
   --
-  -- `pubkey_offset != 160 or withdrawal_credentials_offset != 256 or amount_offset != 320`.
+  -- The public key starts at 160, the withdrawal credentials at 256 and the amount at 320.
   --
-  -- `or signature_offset != 384 or index_offset != 512`.
+  -- The signature starts at 384 and the index at 512.
   DEPOSIT_EVENT_FIELDS.zipIdx.forM fun ((offset, _), field) =>
     if wordAt bytes (32 * field) = offset then pure () else
       throw (.wrongOffset field (wordAt bytes (32 * field)))
   -- Each field starts with its size.
   --
-  -- `pubkey_size == 48 and withdrawal_credentials_size == 32 and amount_size == 8`.
+  -- The public key has 48 bytes, the withdrawal credentials 32 and the amount 8.
   --
-  -- `and signature_size == 96 and index_size == 8`.
+  -- The signature has 96 bytes and the index 8.
   DEPOSIT_EVENT_FIELDS.zipIdx.forM fun ((offset, size), field) =>
     if wordAt bytes offset = size then pure () else
       throw (.wrongSize field (wordAt bytes offset))
-  -- `return pubkey + withdrawal_credentials + amount + signature + index`.
+  -- The request is the five fields in that order, without their sizes and padding.
   return ⟨(DEPOSIT_EVENT_FIELDS.flatMap fun (offset, size) => fieldAt bytes offset size).toArray⟩
 
 /-- Whether a log is a deposit: it comes from the deposit contract, with the deposit topic first.
@@ -135,9 +135,9 @@ The deposit contract is the one of the chain, at `depositContract`.
 
 It can emit other events, and their logs are not deposits. -/
 def isDepositLog (depositContract : Address) (log : Log) : Bool :=
-  -- EIP-6110: `if log.address == DEPOSIT_CONTRACT_ADDRESS:`, here the contract of the chain.
+  -- EIP-6110: the log comes from the deposit contract, here the contract of the chain.
   --
-  -- `if len(log.topics) > 0 and log.topics[0] == DEPOSIT_EVENT_SIGNATURE_HASH:`.
+  -- Its first topic is `DEPOSIT_EVENT_SIGNATURE_HASH`.
   log.address = depositContract && log.topics.head? = some DEPOSIT_EVENT_SIGNATURE_HASH
 
 /-- The data of the deposit requests of a block: the request of each deposit log, in order.
@@ -147,12 +147,12 @@ The deposit contract of the chain is at `depositContract`.
 The logs are those of the receipts of the block, in order. -/
 def depositRequests (depositContract : Address) (logs : List Log) :
     Except DepositError ByteArray := do
-  -- EIP-6110: `for receipt in receipts: for log in receipt.logs:`, the logs of the block in order.
+  -- EIP-6110: each deposit log of the block, in order, gives one request.
   --
-  -- `assert is_valid_deposit_event_data(log.data)`, then `event_data_to_deposit_request`.
+  -- A deposit log whose data has another layout makes the block invalid.
   let requests ← (logs.filter (isDepositLog depositContract)).mapM fun log =>
     depositRequestOfEvent log.data
-  -- `return b''.join(deposit_requests)`.
+  -- The requests, one after the other.
   return requests.foldl (· ++ ·) .empty
 
 /-! ## The requests hash -/
@@ -161,11 +161,9 @@ def depositRequests (depositContract : Address) (logs : List Log) :
 
 Each list is its type byte, then its data, and the lists come in the order of their types. -/
 def requestsHash (requests : List ByteArray) : Hash32 :=
-  -- EIP-7685: `m = sha256()`, then `return m.digest()`.
-  --
-  -- Feeding `m` each digest in turn hashes their concatenation.
+  -- EIP-7685: `sha256(sha256(r_1) || ... || sha256(r_k))` over the lists `r_i` in order.
   Cryptography.Hash.Sha256.hash32
-    -- `for r in block_requests: if len(r) > 1: m.update(sha256(r).digest())`.
+    -- Only a list of more than 1 byte, one with data, enters the hash.
     ((requests.filter (·.size > 1)).foldl (fun acc r => acc ++ Cryptography.Hash.sha256 r) .empty)
 
 end EthLib.Execution.Blocks
