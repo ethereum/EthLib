@@ -13,11 +13,9 @@ Blobs pay in blob gas, which has a fee market of its own.
 
 Each header carries the excess blob gas: the blob gas used above the target so far.
 
-The fee grows exponentially with the excess:
+The fee grows exponentially with the excess, as the Rationale of EIP-4844 says.
 
-```text
-    base_fee_per_blob_gas ~ MIN_BASE_FEE_PER_BLOB_GAS * e^(excess_blob_gas / baseFeeUpdateFraction)
-```
+It is about `MIN_BASE_FEE_PER_BLOB_GAS * e^(excess_blob_gas / BLOB_BASE_FEE_UPDATE_FRACTION)`.
 
 The excess is a `Nat` here, and the header extension of EIP-4844 stores it in 64 bits.
 
@@ -54,12 +52,18 @@ def fakeExponentialLoop (numerator denominator : Nat) : Nat → Nat → Nat → 
   -- Out of fuel: unreachable with the fuel below.
   | 0, _, _, output => output
   | fuel + 1, i, numeratorAccum, output =>
-    -- `while numerator_accum > 0`
+    -- `while numerator_accum > 0:`
     if numeratorAccum = 0 then
       output
     else
+      -- The call carries the three updates of the loop body, from the old `i` and accumulator.
+      --
+      -- `i += 1`.
       fakeExponentialLoop numerator denominator fuel (i + 1)
-        (numeratorAccum * numerator / (denominator * i)) (output + numeratorAccum)
+        -- `numerator_accum = (numerator_accum * numerator) // (denominator * i)`.
+        (numeratorAccum * numerator / (denominator * i))
+        -- `output += numerator_accum`, which the EIP runs first, on the old accumulator.
+        (output + numeratorAccum)
 
 /-- Enough steps for the loop of the exponential to stop.
 
@@ -73,26 +77,28 @@ def fakeExponentialFuel (factor numerator denominator : Nat) : Nat :=
 
 Source: `fake_exponential` in [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#helpers), Helpers.
 
-```text
-    i = 1
-    output = 0
-    numerator_accum = factor * denominator
-    while numerator_accum > 0:
-        output += numerator_accum
-        numerator_accum = (numerator_accum * numerator) // (denominator * i)
-        i += 1
-    return output // denominator
-```
-
 A denominator of 0 gives 0, where the EIP divides by 0. -/
 def fakeExponential (factor numerator denominator : Nat) : Nat :=
-  fakeExponentialLoop numerator denominator (fakeExponentialFuel factor numerator denominator) 1
-    (factor * denominator) 0 / denominator
+  -- The loop runs with enough fuel to stop on `numerator_accum = 0`, as the EIP's does.
+  fakeExponentialLoop numerator denominator (fakeExponentialFuel factor numerator denominator)
+    -- `i = 1`.
+    1
+    -- `numerator_accum = factor * denominator`.
+    (factor * denominator)
+    -- `output = 0`.
+    0
+    -- `return output // denominator`.
+    / denominator
 
 /-- The base fee per blob gas at a given excess.
 
 Source: [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#gas-accounting), Gas accounting. -/
 def getBaseFeePerBlobGas (schedule : BlobSchedule) (excessBlobGas : Nat) : Nat :=
+  -- `fake_exponential(MIN_BASE_FEE_PER_BLOB_GAS, header.excess_blob_gas, ...)`.
+  --
+  -- The EIP's `BLOB_BASE_FEE_UPDATE_FRACTION` is the update fraction of the schedule.
+  --
+  -- EIP-7691 and the BPO forks change that fraction, and EIP-7892 makes it configuration.
   fakeExponential MIN_BASE_FEE_PER_BLOB_GAS excessBlobGas schedule.baseFeeUpdateFraction
 
 /-- The mainnet blob schedule of a fork, from Dencun on.
@@ -142,12 +148,6 @@ The steps are those of `calc_excess_blob_gas` in [EIP-7918][eip-7918], at every 
 
 Before Fusaka, the reserve price branch is skipped, as in [EIP-4844][eip-4844].
 
-The parent's blob base fee, `get_base_fee_per_blob_gas(parent)`, uses this block's schedule.
-
-The step comments write `max` and `target` for `blobSchedule.max` and `blobSchedule.target`.
-
-The schedule has `target ≤ max`, so `max - target` never truncates.
-
 A parent without the blob gas fields counts all three as 0.
 
 The source computes these steps in 64 bits, which fail on an overflow; EthLib uses naturals.
@@ -168,15 +168,25 @@ SOUNDNESS.md records both cases, which no chain with the schedules of the EIPs r
 [eip-7918]: https://eips.ethereum.org/EIPS/eip-7918#functions -/
 def calcExcessBlobGas (fork : Fork) (schedule : BlobSchedule)
     (parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas : Nat) : Nat :=
+  -- The schedule is the one of this block, as EIP-7918 asks, at every step.
+  --
   -- `target_blob_gas = GAS_PER_BLOB * blobSchedule.target`, below `2^64` by the schedule's bound.
   let targetBlobGas := GAS_PER_BLOB * schedule.target.toNat
   -- `if parent.excess_blob_gas + parent.blob_gas_used < target_blob_gas: return 0`.
   if parentExcessBlobGas + parentBlobGasUsed < targetBlobGas then
     0
-  -- if BLOB_BASE_COST * parent.base_fee_per_gas > GAS_PER_BLOB * get_base_fee_per_blob_gas(parent):
+  -- `if BLOB_BASE_COST * parent.base_fee_per_gas > GAS_PER_BLOB * ...:`
+  --
+  -- The `...` is `get_base_fee_per_blob_gas(parent)`.
+  --
+  -- It reads the parent's excess with this block's fraction.
   else if fork ≥ .fusaka ∧ BLOB_BASE_COST * parentBaseFeePerGas >
       GAS_PER_BLOB * getBaseFeePerBlobGas schedule parentExcessBlobGas then
     -- `return parent.excess_blob_gas + parent.blob_gas_used * (max - target) // max`.
+    --
+    -- Here `max` and `target` are `blobSchedule.max` and `blobSchedule.target`.
+    --
+    -- The schedule has `target ≤ max`, so `max - target` never truncates.
     parentExcessBlobGas +
       parentBlobGasUsed * (schedule.max.toNat - schedule.target.toNat) / schedule.max.toNat
   else
