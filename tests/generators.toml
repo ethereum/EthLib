@@ -101,6 +101,11 @@ imports = ["ssz"]
 
 # BLS and the other cryptographic suites.
 
+[generators."kzg-ceremony-verifier"]
+computes = "kzg-ceremony-verifier, which checks the final transcript of the KZG ceremony and writes its setup file"
+version = "kzg-ceremony-verifier c4bc7ac3, on the transcript of SHA-256 8ed1c73857e77ae98ea23e36cdcf828ccbf32b423fddc7480de658f9d116c848"
+source = "https://github.com/ethereum/kzg-ceremony-verifier/blob/c4bc7ac3962508680860b1a74ffc8f50461e8b5d/output_setups/trusted_setup_4096.json, the same bytes as the pinned file, and ethereum/consensus-specs#3583"
+
 [generators."bls12-381-tests v0.1.2"]
 computes = "main.py of bls12-381-tests: values from py_ecc, verdicts written by the author and checked with py_ecc and milagro-bls-binding (batch_verify with milagro-bls-binding only)"
 version = "bls12-381-tests v0.1.2 (89ff3a86), py_ecc 5.2.0, milagro-bls-binding 1.7.0"
@@ -771,6 +776,10 @@ checked = "the file holds mainnet blocks 0 to 8191 with receipts and total diffi
 cases = ["**"]
 generator = "not established"
 checked = "the file is the SSZ genesis state of mainnet; the tests read only its genesis validators root, and it records no generating tool"
+
+[[archives."consensus-specs@aa16bb4c/trusted_setup_4096.json"]]
+cases = ["**"]
+generator = "kzg-ceremony-verifier"
 
 # The modules that the Python tests run.
 

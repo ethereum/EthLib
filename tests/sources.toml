@@ -277,6 +277,13 @@ url = "https://raw.githubusercontent.com/eth-clients/mainnet/8cad4805e9cb5aa5e8e
 size = 5404504
 sha256 = "bbdf6fa5ffd6ead8ca6714c60a17d14d48ccaabbb18622b8485f88b58633d620"
 
+# The KZG trusted setup of the mainnet presets, a file used as it is, for the embedded setup.
+[archives."consensus-specs@aa16bb4c/trusted_setup_4096.json"]
+repository = "ethereum/consensus-specs"
+url = "https://raw.githubusercontent.com/ethereum/consensus-specs/aa16bb4c156184e9548a997d53efaf2a228a6304/presets/mainnet/trusted_setups/trusted_setup_4096.json"
+size = 881553
+sha256 = "f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f"
+
 # The assets of a pinned release that no test reads, by download URL, each with its reason.
 # The release watcher fails on an asset of a pinned release that is neither here nor an archive.
 [unread_assets]
