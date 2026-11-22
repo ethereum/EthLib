@@ -2,7 +2,23 @@ module
 
 public import EthLib.Serialization.Ssz.Codec.Serialize
 
-/-! Turning bytes back into a value, refusing anything a value would not have produced. -/
+/-!
+Turning bytes back into a value, refusing anything a value would not have produced.
+
+Serialization is injective, so an input encodes at most one value.
+
+An input that encodes none is refused.
+
+The core rules are stated in EthLib's own terms, one step per comment.
+
+[EIP-7495][eip7495] and [EIP-7916][eip7916] deserialize the progressive types as the core ones.
+
+[EIP-8016][eip8016] adds the compatible union.
+
+[eip7495]: https://github.com/ethereum/EIPs/blob/875fcf6d084c096195fec170310514444f537133/EIPS/eip-7495.md#deserialization
+[eip7916]: https://github.com/ethereum/EIPs/blob/875fcf6d084c096195fec170310514444f537133/EIPS/eip-7916.md#serialization
+[eip8016]: https://github.com/ethereum/EIPs/blob/875fcf6d084c096195fec170310514444f537133/EIPS/eip-8016.md#deserialization
+-/
 
 @[expose] public section
 
@@ -33,12 +49,14 @@ def readUint (data : Bytes) (start width : Nat) : Nat :=
 
 /-- The offset table at the front of an encoding, one entry per variable-size part. -/
 def readOffsets (data : Bytes) (count : Nat) : List Nat :=
-  -- Read consecutive four-byte entries without interpreting their body spans yet.
+  -- Offset `i` is the little-endian uint32 at bytes `4i` to `4i + 4`.
+  --
+  -- The spans between offsets are checked later, as a whole.
   (List.range count).map fun i => readUint data (i * bytesPerOffset) bytesPerOffset
 
 /-- Bits recovered from packed bytes, the first bit lowest in the first byte. -/
 def unpackBits (data : Bytes) (count : Nat) : Array Bool :=
-  -- Division by eight selects the byte, and the remainder selects its bit from the low end.
+  -- Bit `i` is bit `i mod 8` of byte `floor(i / 8)`, as the packing put it.
   (Array.range count).map fun i => (data[i / 8]?.getD 0 >>> UInt8.ofNat (i % 8)) &&& 1 == 1
 
 /--
@@ -63,11 +81,11 @@ def highestBit (byte : UInt8) : Nat :=
 The loop runs in constant stack for any number of offsets. -/
 def offsetSpansFrom : List Nat → Nat → List Nat → Except Err (List Nat)
   | [], _, done => .ok done.reverse
-  -- The final body is closed by the budget rather than by another offset.
+  -- The last body runs from its offset to the end of the scope, so its offset is at most the scope.
   | [start], scope, done =>
       if scope < start then .error (.offsetPastScope start scope)
       else .ok ((scope - start) :: done).reverse
-  -- Every other body ends where the next one begins.
+  -- Every other body ends where the next one begins, so offsets never decrease.
   | start :: next :: rest, scope, done =>
       if next < start then .error (.offsetUnordered start next)
       else offsetSpansFrom (next :: rest) scope ((next - start) :: done)
@@ -89,10 +107,12 @@ def readSlots : List Desc → Bytes → Nat → Except Err (List Slot × Nat)
   | [], _, position => .ok ([], position)
   | field :: fields, data, position =>
     match field.fixedSize with
+    -- A fixed-size field sits in place, over its own width.
     | some width => do
       if position + width > data.size then throw (.truncated (position + width) data.size)
       let (rest, ending) ← readSlots fields data (position + width)
       return (.inline (data.extract position (position + width)) :: rest, ending)
+    -- A variable-size field leaves its four-byte offset in place.
     | none => do
       if position + bytesPerOffset > data.size then
         throw (.truncated (position + bytesPerOffset) data.size)
@@ -137,7 +157,9 @@ The slots of a struct's fixed part, and where that part ends.
 The budget is settled first, so no slot is read past the input.
 -/
 def structSlots (fields : List Desc) (data : Bytes) : Except Err (List Slot × Nat) := do
-  -- A composite encoding faces the same four-byte offset bound as serialization.
+  -- EthLib's own bound: an input of `2^32` bytes or more is refused.
+  --
+  -- Serialization never writes one, since four-byte offsets could not address it.
   if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
   structBudget fields data.size
   readSlots fields data 0
@@ -145,7 +167,7 @@ def structSlots (fields : List Desc) (data : Bytes) : Except Err (List Slot × N
 /-- Each field's own bytes, once the offsets in the fixed part are checked against the input. -/
 def structBodies (data : Bytes) (slots : List Slot) (leading : Nat) : Except Err (List Bytes) := do
   let offsets := bodyStarts slots
-  -- With no bodies, the slots just read are the whole encoding.
+  -- With no bodies, the slots just read are the whole encoding, and no unused byte follows.
   if offsets.isEmpty then
     if data.size != leading then throw (.scope leading data.size)
     return slots.map Slot.held
@@ -167,52 +189,64 @@ def structSlices (fields : List Desc) (data : Bytes) : Except Err (List Bytes) :
 /-- Byte ranges of a fixed-count sequence, with offsets only for variable-size elements. -/
 def vectorSlices (element : Desc) (length : Nat) (data : Bytes) :
     Except Err (List Bytes) := do
+  -- EthLib's own bound, as for a struct: serialization never writes `2^32` bytes or more.
   if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
   match element.fixedSize with
+  -- Fixed-size elements of width `w`: `N * w` bytes, element `i` at bytes `i * w` to `(i + 1) * w`.
   | some width =>
     let expected := width * length
     if data.size != expected then throw (.scope expected data.size)
     return (List.range length).map fun i => data.extract (i * width) ((i + 1) * width)
   | none =>
     -- The count is declared, so the table's own width is known before it is read.
+    --
+    -- The table of `N` offsets takes `4N` bytes, which the scope must hold.
     let expectedFirst := length * bytesPerOffset
     if data.size < expectedFirst then throw (.scopeTooSmall expectedFirst data.size)
     if length == 0 then return []
     let offsets := readOffsets data length
+    -- The first body starts right after the table, so the first offset is `4N`.
     if offsets.headD 0 != expectedFirst then
       throw (.firstOffset expectedFirst (offsets.headD 0))
     let spans ← offsetSpans offsets data.size
-    -- `zipWith` pairs each offset with its span in a loop of constant stack.
+    -- Each offset is paired with its span, in a loop of constant stack.
     return List.zipWith (fun start span => data.extract start (start + span)) offsets spans
 
 /-- Where each element's bytes sit, for a sequence whose count the encoding carries. -/
 def listSlices (element : Desc) (limit : Option Nat) (data : Bytes) :
     Except Err (List Bytes) := do
+  -- EthLib's own bound, as for a struct: serialization never writes `2^32` bytes or more.
   if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
   let scope := data.size
+  -- An empty scope holds the empty list.
   if scope == 0 then return []
   match element.fixedSize with
   | some width =>
     -- Elements of no width pack to nothing, so no count of them spends a byte.
     if width == 0 then throw .scopeWidthless
+    -- Fixed-size elements: the scope is a multiple of the width `w`, and the count is `scope / w`.
     if scope % width != 0 then throw (.scopeUndivided scope width)
     let count := scope / width
+    -- The count is at most the limit, where the type has one.
     if let some cap := limit then
       if count > cap then throw (.overLimit cap count)
     return (List.range count).map fun i => data.extract (i * width) ((i + 1) * width)
   | none =>
     -- The first offset is the table's own width, so it gives the count as well as the start.
+    --
+    -- So it is at least 4, a multiple of 4 and at most the scope, and the count is `first / 4`.
     if scope < bytesPerOffset then throw (.scopeTooSmall bytesPerOffset scope)
     let first := readUint data 0 bytesPerOffset
     if first < bytesPerOffset then throw (.offsetBelowTable first)
     if first % bytesPerOffset != 0 then throw (.offsetUnaligned first)
     if first > scope then throw (.offsetPastScope first scope)
     let count := first / bytesPerOffset
+    -- The count is at most the limit, where the type has one.
     if let some cap := limit then
       if count > cap then throw (.overLimit cap count)
     let offsets := readOffsets data count
     let spans ← offsetSpans offsets scope
-    -- `zipWith` pairs each offset with its span in a loop of constant stack.
+    -- Each offset is paired with its span, in a loop of constant stack.
     return List.zipWith (fun start span => data.extract start (start + span)) offsets spans
 
 /--
@@ -230,7 +264,10 @@ def unpackDelimited (limit : Option Nat) (data : Bytes) : Except Err (Array Bool
   if final == 0 then
     if data.all (· == 0) then throw .noDelimiter else throw .trailingZeros
   -- Inside the final byte, the closing bit is the highest one set.
+  --
+  -- So the count is `8 * (n - 1) + h`, for `n` bytes and that bit at position `h`.
   let count := 8 * (data.size - 1) + highestBit final
+  -- The count is at most the limit, where the type has one.
   if let some cap := limit then
     if count > cap then throw (.overLimit cap count)
   return unpackBits data count
@@ -239,24 +276,30 @@ mutual
 
 /-- The value an encoding holds, read against the type it is meant to fit. -/
 def deserialize : Desc → Bytes → Except Err Value
+  -- boolean: exactly one byte, `0x00` for false or `0x01` for true; any other byte is refused.
   | .bool, data => do
     if data.size != 1 then throw (.scope 1 data.size)
     match data[0]?.getD 0 with
     | 0 => return .bool false
     | 1 => return .bool true
     | byte => throw (.notABit byte.toNat)
+  -- uintN: exactly `N / 8` bytes, read little-endian; the type holds the byte width `N / 8`.
   | .uint width, data => do
     if data.size != width then throw (.scope width data.size)
     return .uint (readUint data 0 width)
   -- A byte array is read as a sequence of bytes would be, the size bound first.
+  --
+  -- ByteVector[N]: exactly `N` bytes.
   | .byteVector length, data => do
     if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
     if data.size != length then throw (.scope length data.size)
     return .bytes data
+  -- ByteList[N]: at most `N` bytes, the size bound first.
   | .byteList limit, data => do
     if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
     if data.size > limit then throw (.overLimit limit data.size)
     return .bytes data
+  -- Bitvector[N]: exactly `ceil(N / 8)` bytes.
   | .bitVector length, data => do
     let expected := (length + 7) / 8
     if data.size != expected then throw (.scope expected data.size)
@@ -265,19 +308,29 @@ def deserialize : Desc → Bytes → Except Err Value
       let last := data[data.size - 1]?.getD 0
       if last >>> UInt8.ofNat (length % 8) != 0 then throw (.paddingBits last)
     return .bits (unpackBits data length)
+  -- Bitlist[N]: the closing bit gives the count, at most `N`.
   | .bitList limit, data => return .bits (← unpackDelimited (some limit) data)
+  -- EIP-7916: a ProgressiveBitlist reads as a Bitlist[N], bounded only where a shape declares it.
   | .progressiveBitList limit, data => return .bits (← unpackDelimited limit data)
+  -- Vector[type, N]: `N` elements, each read against the element type.
   | .vector element length, data => do
     let slices ← vectorSlices element length data
     return .seq (← deserializeEach element slices)
+  -- List[type, N]: the count follows from the scope, then each element is read.
   | .list element limit, data => do
     let slices ← listSlices element (some limit) data
     return .seq (← deserializeEach element slices)
+  -- EIP-7916: a ProgressiveList reads as a List[type, N], bounded only where a shape declares it.
   | .progressiveList element limit, data => do
     let slices ← listSlices element limit data
     return .seq (← deserializeEach element slices)
+  -- Container: the fields in declaration order.
   | .container _ fields, data => return .seq (← deserializeStruct fields data)
+  -- EIP-7495: a ProgressiveContainer reads as a Container of its declared fields.
   | .progressiveContainer _ _ fields, data => return .seq (← deserializeStruct fields data)
+  -- EIP-8016: the first byte of the scope is the selector, and the rest is the selected type.
+  --
+  -- An input of less than one byte has no selector, and is refused.
   | .compatibleUnion selectors options, data => do
     if data.size < 1 then throw .noSelector
     deserializeOption selectors options (data[0]?.getD 0).toNat (data.extract 1 data.size)
@@ -299,19 +352,22 @@ def deserializeEachFrom (element : Desc) : List Bytes → List Value → Except 
 termination_by slices => (sizeOf element, slices.length)
 
 /--
-Each field of a struct, decoded in the order the specification reads them:
+Each field of a struct, decoded from its encoding.
 
-1. The budget: the input against the width of the fixed part.
-2. The fixed part: each fixed field, read in place.
-3. The table: the offsets, as a whole.
-4. The bodies: each variable field, in declaration order.
+An input breaking several rules is refused for the first one met, in the order of the steps below.
 
-An input breaking several rules is refused for the first one met in that order.
+That order is EthLib's choice, so that one input always gets one refusal.
 -/
 def deserializeStruct (fields : List Desc) (data : Bytes) : Except Err (List Value) := do
+  -- EthLib's step 1, the budget: the input against the width of the fixed part.
+  --
+  -- EthLib's step 2, the fixed part: each fixed field and each offset, read in place.
   let (slots, leading) ← structSlots fields data
   -- Fixed fields are checked before any offset is trusted, if there are offsets at all.
   if !(bodyStarts slots).isEmpty then checkInline fields slots
+  -- EthLib's step 3, the table: the offsets as a whole, against the fixed part and the scope.
+  --
+  -- EthLib's step 4, the bodies: each variable field, in declaration order.
   let slices ← structBodies data slots leading
   -- A fixed field checked above decodes the same way here, so only a body can refuse now.
   deserializeFields fields slices
@@ -344,9 +400,12 @@ The option is searched for here rather than looked up and returned.
 What is decoded then stays a part of the union's own type.
 -/
 def deserializeOption : List Nat → List Desc → Nat → Bytes → Except Err Value
+  -- EIP-8016: a selector that names no option is out of bounds, and refused.
   | [], [], selector, _ => .error (.unknownSelector selector)
   | chosen :: selectors, option :: options, selector, data =>
     if chosen == selector then do
+      -- EIP-8016 makes a union with a selector outside 1 to 127 an illegal type.
+      --
       -- A legal declaration names only selectors in range, so an encoding is held to that range.
       checkSelector selector
       return .union selector (← deserialize option data)
