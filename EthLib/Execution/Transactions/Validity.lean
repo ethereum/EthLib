@@ -39,13 +39,7 @@ Hegotá has no rules of its own here yet, so the exports reject it.
 
 The step comments write the terms of `g_0` in the notation of §6.2, in ASCII.
 
-Only `ethereum/execution-specs` spells out the order of the checks, step by step.
-
-The step comments quote the validation of `osaka/` and `amsterdam/` in the [fork folders][es].
-
-They quote `validate_transaction` in `transactions.py`.
-
-They also quote `process_transaction` and `check_transaction` in `fork.py`.
+Only `ethereum/execution-specs` writes out the order of the checks, in its [fork folders][es].
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [es]: https://github.com/ethereum/execution-specs/tree/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks
@@ -152,7 +146,7 @@ def accessListCost (fork : Fork) (accessList : List Access) : Nat :=
 
 /-- The bytes of an access list: 20 per address and 32 per storage key. -/
 def accessListBytes (accessList : List Access) : Nat :=
-  -- EIP-7981: "addresses (20 bytes each) and storage keys (32 bytes each)".
+  -- EIP-7981: 20 bytes for each address and 32 bytes for each storage key.
   (accessList.map fun a => 20 + 32 * a.slots.length).sum
 
 /-- The data price of an access list from Glamsterdam: 64 gas per byte, 0 before.
@@ -162,7 +156,7 @@ def accessListBytes (accessList : List Access) : Nat :=
 [eip-7981]: https://eips.ethereum.org/EIPS/eip-7981#specification -/
 def accessListDataCost (fork : Fork) (accessList : List Access) : Nat :=
   if fork ≥ .glamsterdam then
-    -- `access_list_data_cost = 64 * access_list_bytes`.
+    -- EIP-7981: 64 gas per byte of the access list.
     --
     -- The 64 is 4 floor tokens per byte, as in EIP-7976, times 16 gas per floor token.
     --
@@ -185,20 +179,20 @@ A transaction that calls its own sender pays neither of the last two.
 [eip-2780]: https://eips.ethereum.org/EIPS/eip-2780#intrinsic-gas-costs -/
 def baseCost (fork : Fork) (sender : Address) (tx : Transaction) : Nat :=
   if fork ≥ .glamsterdam then
-    -- EIP-2780: "`tx.sender` is charged `TX_BASE_COST`".
+    -- EIP-2780: the sender pays `TX_BASE_COST`.
     TX_BASE_COST +
-      -- "`tx.to` is charged based on its type".
+      -- The charge for the recipient depends on its kind.
       match tx.to with
-      -- "if `None` (contract-creation transaction), charge `CREATE_ACCESS`".
+      -- A contract creation costs `CREATE_ACCESS`.
       --
       -- A creation pays no value charge, which `CREATE_ACCESS` covers.
       | none => CREATE_ACCESS
       | some to =>
-        -- "if self-transfer (`tx.sender == tx.to`), there are no charges", for value too.
+        -- A transfer to the sender itself costs nothing, for its value too.
         if to = sender then 0
-        -- "otherwise, charge `COLD_ACCOUNT_ACCESS`".
+        -- Any other recipient costs `COLD_ACCOUNT_ACCESS`.
         --
-        -- Then `tx.value`: "if zero, there are no charges", "otherwise, charge `TX_VALUE_COST`".
+        -- A nonzero value then costs `TX_VALUE_COST`, and a zero value nothing.
         else (gasSchedule fork).COLD_ACCOUNT_ACCESS + if tx.value = 0 then 0 else TX_VALUE_COST
   -- `G_transaction`, a term of `g_0`.
   else TX_BASE
@@ -211,9 +205,9 @@ def baseCost (fork : Fork) (sender : Address) (tx : Transaction) : Nat :=
 
 [eip-8037]: https://eips.ethereum.org/EIPS/eip-8037#parameter-changes -/
 def authorizationCost (fork : Fork) : Nat :=
-  -- From Glamsterdam, EIP-2780: "each EIP-7702 authorization is charged" this base cost.
+  -- From Glamsterdam, EIP-2780 charges this base cost for each authorization of EIP-7702.
   --
-  -- Before, EIP-7702 adds `PER_EMPTY_ACCOUNT_COST * authorization list length`.
+  -- Before, EIP-7702 charges `PER_EMPTY_ACCOUNT_COST` for each authorization.
   if fork ≥ .glamsterdam then EXECUTION_PER_AUTH_BASE_COST else AUTH_PER_EMPTY_ACCOUNT
 
 /-- The price of a contract creation at `fork` beyond the base, for `size` bytes of init code.
@@ -241,7 +235,7 @@ def intrinsicGas (fork : Fork) (sender : Address) (tx : Transaction) : Nat :=
   --
   -- Then the data of `T_i` or `T_d`.
   baseCost fork sender tx + dataCost fork tx.data +
-    -- The creation term, "if `T_t = {}`, 0 otherwise".
+    -- The creation term if `T_t = {}`, 0 otherwise.
     (if tx.to.isNone then createCost fork tx.data.size else 0) +
     -- The access list term, then the access list data of EIP-7981.
     accessListCost fork tx.accesses + accessListDataCost fork tx.accesses +
@@ -250,7 +244,7 @@ def intrinsicGas (fork : Fork) (sender : Address) (tx : Transaction) : Nat :=
 
 /-- The tokens of call data: 1 per zero byte and 4 per nonzero byte. -/
 def tokens (data : ByteArray) : Nat :=
-  -- EIP-7623: `tokens_in_calldata = zero_bytes_in_calldata + nonzero_bytes_in_calldata * 4`.
+  -- EIP-7623: the tokens are the zero bytes plus 4 times the nonzero bytes.
   zeroBytes data + 4 * (data.size - zeroBytes data)
 
 /-- The floor tokens of call data at `fork`.
@@ -261,11 +255,11 @@ From Glamsterdam, [EIP-7976][eip-7976] counts 4 tokens for every byte.
 
 [eip-7976]: https://eips.ethereum.org/EIPS/eip-7976#specification -/
 def floorTokens (fork : Fork) (data : ByteArray) : Nat :=
-  -- EIP-7976 counts `(zero_bytes_in_calldata + nonzero_bytes_in_calldata) * 4` floor tokens.
+  -- EIP-7976 counts 4 floor tokens for every byte, zero or not.
   --
   -- The 4 per byte reuses the gas price of a token, which is also 4.
   --
-  -- Before, the floor counts `tokens_in_calldata`.
+  -- Before, the floor counts the tokens of EIP-7623.
   if fork ≥ .glamsterdam then TX_DATA_TOKEN_STANDARD * data.size else tokens data
 
 /-- The call data floor of a transaction from `sender`, at `fork`.
@@ -278,15 +272,15 @@ EIP-7976 raises the price to 16 at Glamsterdam, and EIP-2780 replaces 21000 by t
 
 [eip-7623]: https://eips.ethereum.org/EIPS/eip-7623#specification -/
 def calldataFloor (fork : Fork) (sender : Address) (tx : Transaction) : Nat :=
-  -- EIP-7623: `21000 + TOTAL_COST_FLOOR_PER_TOKEN * tokens_in_calldata`.
+  -- EIP-7623: 21000 plus the floor price per token times the tokens.
   --
-  -- The base stands for 21000, and EIP-7981 adds `access_list_data_cost`.
+  -- The base stands for 21000, and EIP-7981 adds the data price of the access list.
   baseCost fork sender tx + (gasSchedule fork).TX_DATA_TOKEN_FLOOR * floorTokens fork tx.data +
     accessListDataCost fork tx.accesses
 
 /-- The least gas limit of a transaction at `fork`: its intrinsic gas, and from Pectra the floor. -/
 def minimumGas (fork : Fork) (sender : Address) (tx : Transaction) : Nat :=
-  -- EIP-7623: "below its intrinsic gas cost (take the maximum of these two calculations)".
+  -- EIP-7623: the gas limit covers the larger of the intrinsic gas and the floor.
   if fork ≥ .pectra then max (intrinsicGas fork sender tx) (calldataFloor fork sender tx)
   else intrinsicGas fork sender tx
 
@@ -310,12 +304,12 @@ Sources: [EIP-4844][eip-4844], [EIP-7594][eip-7594], [EIP-7702][eip-7702].
 [eip-7702]: https://eips.ethereum.org/EIPS/eip-7702#set-code-transaction -/
 def checkContents (fork : Fork) : Transaction → Except TransactionError Unit
   | .blob tx =>
-    -- `if blob_count == 0: raise NoBlobDataError`.
+    -- A blob transaction fails without a blob.
     if tx.blobVersionedHashes.isEmpty then .error .noBlobData
-    -- `if blob_count > BLOB_COUNT_LIMIT: raise BlobCountExceededError`, from Fusaka.
+    -- From Fusaka, it fails with more than 6 blobs.
     else if fork ≥ .fusaka ∧ MAX_BLOBS_PER_TRANSACTION < tx.blobVersionedHashes.length then
       .error (.blobCountExceeded tx.blobVersionedHashes.length)
-    -- `if blob_versioned_hash[0:1] != VERSIONED_HASH_VERSION_KZG`, for each hash.
+    -- It fails when the first byte of a versioned hash is not the KZG version `0x01`.
     else if tx.blobVersionedHashes.any
         (fun h => h[0] != Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG) then
       -- Some hash has the wrong version, so the first such hash has an index below the length.
@@ -323,9 +317,9 @@ def checkContents (fork : Fork) : Transaction → Except TransactionError Unit
         (fun h => h[0] != Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG)
       .error (.invalidBlobVersionedHash index (tx.blobVersionedHashes.getD index 0))
     else .ok ()
-  -- `if not any(tx.authorizations): raise EmptyAuthorizationListError`.
+  -- A set code transaction fails without an authorization.
   --
-  -- A blob or set code transaction always has a recipient here, so the check of `tx.to` is moot.
+  -- A blob or set code transaction always has a recipient here, so a check of it is moot.
   | .setCode tx => if tx.authorizations.isEmpty then .error .emptyAuthorizationList else .ok ()
   | _ => .ok ()
 
@@ -392,15 +386,15 @@ def validateTransaction (fork : Fork) (sender : Address) (tx : Transaction)
     (lifted : LiftedRules := {}) : Except TransactionError Nat := do
   -- The checks are named first and run below in the order of each fork.
   --
-  -- `max(intrinsic.regular, intrinsic.calldata_floor) > tx.gas`, which Amsterdam splits in two.
+  -- The gas limit covers the larger of the intrinsic gas and the floor, which the source splits.
   let minimum := minimumGas fork sender tx
   let coversMinimum := ensure (minimum ≤ tx.gas.toNat) (.insufficientGas minimum tx.gas.toNat)
-  -- `if tx.to == Bytes0(b"") and len(tx.data) > MAX_INIT_CODE_SIZE`, from Shapella.
+  -- From Shapella, the init code of a creation is at most the largest init code size of the fork.
   let initCodeFits := ensure (fork ≥ .shapella → tx.to = none → tx.data.size ≤ maxInitCodeSize fork)
     (.initCodeTooLarge tx.data.size)
-  -- `if U256(tx.nonce) >= U256(U64.MAX_VALUE): raise NonceOverflowError`.
+  -- The nonce is below `2^64 - 1`.
   let nonceFits := ensure (tx.nonce.toNat < 2 ^ 64 - 1) (.nonceOverflow tx.nonce.toNat)
-  -- `if tx.max_fee_per_gas < tx.max_priority_fee_per_gas`, for a fee market transaction.
+  -- The priority fee per gas is at most the maximum fee per gas, for a fee market transaction.
   let feesOrdered := ensure (feesInverted tx = false)
     (.priorityFeeGreaterThanMaxFee (feeCaps tx).1 (feeCaps tx).2)
   -- First at every fork: the type exists at the fork.
@@ -408,7 +402,7 @@ def validateTransaction (fork : Fork) (sender : Address) (tx : Transaction)
   -- The sources reject an unknown type when they decode it.
   ensure (tx.fork ≤ fork) (.unsupportedType tx.type)
   if fork ≥ .glamsterdam then
-    -- Amsterdam: the nonce, the init code, then `if tx.gas > GasCosts.TX_MAX_TOTAL_GAS_LIMIT`.
+    -- From Glamsterdam: the nonce, the init code, then the gas limit is at most `2^32 - 1`.
     nonceFits
     initCodeFits
     -- A simulation may lift this cap; the source has no such mode.
@@ -417,23 +411,23 @@ def validateTransaction (fork : Fork) (sender : Address) (tx : Transaction)
     -- Then the fees, then the blobs and the authorizations.
     feesOrdered
     checkContents fork tx
-    -- Then `intrinsic_gas > tx.gas` and `intrinsic.calldata_floor > tx.gas`, as one check.
+    -- Then the gas limit covers the intrinsic gas and the floor, in one check.
     coversMinimum
-    -- Then `intrinsic.execution > GasCosts.TX_MAX_GAS_LIMIT`, and the same for the floor.
+    -- Then the intrinsic gas and the floor are each at most `2^24`.
     --
     -- The two are one check on their maximum, so the error carries that maximum.
     --
     -- A simulation may lift this cap; the source has no such mode.
     unless lifted.gasCap do ensure (minimum ≤ TX_MAX_GAS_LIMIT) (.intrinsicGasAboveLimit minimum)
   else
-    -- Osaka: the gas, the init code, then `if tx.gas > GasCosts.TX_MAX_GAS_LIMIT`, from Fusaka.
+    -- Before Glamsterdam: the gas, the init code, then from Fusaka the gas limit is at most `2^24`.
     coversMinimum
     initCodeFits
     ensure (fork ≥ .fusaka → tx.gas.toNat ≤ TX_MAX_GAS_LIMIT) (.gasLimitExceeded tx.gas.toNat)
     -- Then the nonce and the fees.
     nonceFits
     feesOrdered
-  -- `return intrinsic`; the floor is computed again where the gas is settled.
+  -- The intrinsic gas; the floor is computed again where the gas is settled.
   return intrinsicGas fork sender tx
 where
   /-- Whether the priority fee per gas is above the maximum fee per gas. -/
@@ -471,11 +465,9 @@ The signature comes before the gas, since from Glamsterdam the intrinsic gas rea
 From Glamsterdam the gas and nonce rules check the contents already. -/
 def checkTransaction (fork : Fork) (chainId : UInt64) (tx : Transaction) :
     Except TransactionError (Address × Nat) := do
-  -- Amsterdam's `process_transaction` checks the chain, then calls `check_transaction`.
+  -- From Glamsterdam the source checks the chain, then the sender, then the rest with the sender.
   --
-  -- That runs `sender = recover_sender(tx)`, then `intrinsic = validate_transaction(tx, sender)`.
-  --
-  -- Osaka's `process_transaction` runs `validate_transaction(tx)` before the chain and the sender.
+  -- Before, it checks the transaction alone before the chain and the sender.
   --
   -- Here the chain and the signature come first at every fork.
   --
@@ -485,7 +477,7 @@ def checkTransaction (fork : Fork) (chainId : UInt64) (tx : Transaction) :
   let gas ← validateTransaction fork sender tx
   -- Before Glamsterdam, the blobs and the authorizations come last.
   --
-  -- Osaka's `check_transaction` checks them after the fee checks of the block, kept apart here.
+  -- The source checks them after the fee checks of the block, kept apart here.
   if fork < .glamsterdam then checkContents fork tx
   return (sender, gas)
 
