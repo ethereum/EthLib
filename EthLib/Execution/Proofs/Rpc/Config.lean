@@ -119,7 +119,8 @@ theorem getObjVal_configObject_forkId {s : Schedule} {number time : Nat} {c : Co
 theorem getObjVal_configObject_blobSchedule (c : ConfigObject) :
     c.toJson.getObjVal? "blobSchedule" = .ok (Lean.Json.mkObj [
       ("baseFeeUpdateFraction", Lean.toJson c.blobSchedule.baseFeeUpdateFraction),
-      ("max", Lean.toJson c.blobSchedule.max), ("target", Lean.toJson c.blobSchedule.target)]) := by
+      ("max", Lean.toJson c.blobSchedule.max.toNat),
+      ("target", Lean.toJson c.blobSchedule.target.toNat)]) := by
   unfold ConfigObject.toJson
   exact EthLib.Base.Json.getObjVal?_mkObj (by simp) (by simp)
 

@@ -15,6 +15,11 @@ public import EthLib.Cryptography.Kzg.Errors
 The Reed-Solomon recovery routine for cell proofs.
 
 EIP-7594 adds it at the Fusaka fork.
+
+The step comments quote the functions of the same names in consensus-specs at `8a3df1d7`:
+<https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/fulu/polynomial-commitments-sampling.md>
+
+EIP-7594 links that file at `9d377fd5`; the later text has the interface used here.
 -/
 
 @[expose] public section
@@ -35,22 +40,24 @@ If every cell were missing, the polynomial would be `Z(x) = x^n - 1`, with `n = 
 Recovery needs at least half of the cells, so that case never arises. -/
 def constructVanishingPolynomial
     (missingCellIndices : Array CellIndex) : Except KzgError PolynomialCoeff := do
+  -- Not in construct_vanishing_polynomial, which assumes that some cell is present.
+  --
   -- With every cell missing, the short polynomial has 129 coefficients, too many for the writes.
   if missingCellIndices.size ≥ CELLS_PER_EXT_BLOB then
     throw .tooManyMissingCells
-  -- The small domain: the 128-th roots of unity.
+  -- `roots_of_unity_reduced = compute_roots_of_unity(CELLS_PER_EXT_BLOB)`, the small domain.
   let rouReduced := computeRootsOfUnity CELLS_PER_EXT_BLOB
 
-  -- The vanishing polynomial over the small domain, with roots in bit-reversed order.
+  -- `short_zero_poly = vanishing_polynomialcoeff([roots_of_unity_reduced[reverse_bits(...)]])`.
   let xs : Array Fr := missingCellIndices.map fun mci =>
     rouReduced[reverseBits mci CELLS_PER_EXT_BLOB]'(by
       rw [size_computeRootsOfUnity]
       exact reverseBits_lt _ (by decide))
   let shortZeroPoly ← vanishingPolynomialcoeff xs
 
-  -- Extend it to the full domain, by the closed form of the vanishing polynomial of a coset.
+  -- `zero_poly_coeff[i * FIELD_ELEMENTS_PER_CELL] = coeff`, and the other coefficients are 0.
   --
-  -- Coefficient `64 i` is coefficient `i` of the short polynomial, and the others are zero.
+  -- That is the closed form of the vanishing polynomial over a coset, on the full domain.
   return Array.ofFn (n := FIELD_ELEMENTS_PER_EXT_BLOB) fun j =>
     if h : j.val % FIELD_ELEMENTS_PER_CELL = 0 ∧
         j.val / FIELD_ELEMENTS_PER_CELL < shortZeroPoly.size then
@@ -61,15 +68,21 @@ def constructVanishingPolynomial
 def recoverPolynomialcoeff
     (cellIndices : Array CellIndex) (cosetsEvals : Array CosetEvals)
     : Except KzgError PolynomialCoeff := do
-  -- Each cell index needs its values, so a length mismatch fails instead of reading zeros.
+  -- recover_polynomialcoeff: `zip(..., strict=True)` fails when the two lengths differ.
+  --
+  -- Without the check, the cells without values would read as zeros.
   if cosetsEvals.size ≠ cellIndices.size then
     throw (.inputLengthMismatch "cosetsEvals" cellIndices.size cosetsEvals.size)
-  -- The extended domain, called the FFT domain below.
+  -- `roots_of_unity_extended = compute_roots_of_unity(FIELD_ELEMENTS_PER_EXT_BLOB)`.
+  --
+  -- This extended domain is the FFT domain of the comments below.
   let rouExt := computeRootsOfUnity FIELD_ELEMENTS_PER_EXT_BLOB
 
-  -- Flatten the values of the cosets, with zeros for the missing cells.
+  -- `extended_evaluation_rbo[start:end] = cell`, with zeros for the missing cells.
   --
   -- Let E(x) be the polynomial of degree below 8192 through these values.
+  --
+  -- The callers check the indices and lengths, so the guards below never apply.
   --
   -- A cell index of 128 or more names no cell, and a cell shorter than 64 values reads as zeros.
   let extendedRbo : Vector Fr FIELD_ELEMENTS_PER_EXT_BLOB :=
@@ -82,8 +95,11 @@ def recoverPolynomialcoeff
             acc.set (ci * FIELD_ELEMENTS_PER_CELL + j.val) v (cell_slot_lt hci j.isLt)
         else acc
 
+  -- `extended_evaluation = bit_reversal_permutation(extended_evaluation_rbo)`.
   let extended := bitReversalPermutation extendedRbo.toArray
 
+  -- `missing_cell_indices` and `zero_poly_coeff = construct_vanishing_polynomial(...)`.
+  --
   -- The vanishing polynomial Z(x) of the missing points, in coefficient form.
   --
   -- There are only 128 cells, so a linear lookup is fast enough.
@@ -91,14 +107,16 @@ def recoverPolynomialcoeff
     (Array.range CELLS_PER_EXT_BLOB).filter fun ci => !cellIndices.contains ci
   let zeroPolyCoeff ← constructVanishingPolynomial missing
 
-  -- Convert Z(x) to evaluation form over the FFT domain.
+  -- `zero_poly_eval = fft_field(zero_poly_coeff, roots_of_unity_extended)`.
   let zeroPolyEval := fftField zeroPolyCoeff rouExt
 
-  -- Compute (E*Z)(x) = E(x) * Z(x) in evaluation form over the FFT domain.
+  -- `extended_evaluation_times_zero = [a * b for a, b in zip(...)]`: (E*Z)(x) on the domain.
   --
   -- For the polynomial P(x) to recover, (E*Z)(x) and (P*Z)(x) agree over the FFT domain.
   let extTimesZero : Array Fr := Array.zipWith (· * ·) zeroPolyEval extended
 
+  -- `extended_evaluation_times_zero_coeffs = fft_field(..., inv=True)`.
+  --
   -- (P*Z)(x) has degree below 8192, so the inverse FFT of (E*Z)(x) gives its coefficients.
   let extTimesZeroCoeffs := fftField extTimesZero rouExt (inv := true)
 
@@ -114,17 +132,19 @@ def recoverPolynomialcoeff
   --
   -- So it would mask a broken vanishing polynomial.
 
-  -- Convert (P*Z)(x) to evaluation form over a coset of the FFT domain.
+  -- `extended_evaluations_over_coset = coset_fft_field(...)`: (P*Z)(x) on the coset.
   let pzOverCoset := cosetFftField extTimesZeroCoeffs rouExt
-  -- Convert Z(x) to evaluation form over a coset of the FFT domain.
+  -- `zero_poly_over_coset = coset_fft_field(zero_poly_coeff, roots_of_unity_extended)`.
   let zOverCoset  := cosetFftField zeroPolyCoeff       rouExt
-  -- Compute P(x) = (P*Z)(x) / Z(x) in evaluation form over a coset of the FFT domain.
+  -- `reconstructed_poly_over_coset = [a / b for a, b in zip(...)]`: P(x) on the coset.
+  --
   -- One batch inversion gives every `1 / Z(x)`.
   let zInverses := Fr.batchInverse zOverCoset
   let pOverCoset : Array Fr := Array.zipWith (· * ·) pzOverCoset zInverses
-  -- Convert P(x) to coefficient form.
+  -- `reconstructed_poly_coeff = coset_fft_field(..., inv=True)`.
   let pCoeff := cosetFftField pOverCoset rouExt (inv := true)
 
+  -- `return PolynomialCoeff(reconstructed_poly_coeff[:FIELD_ELEMENTS_PER_BLOB])`.
   return pCoeff.extract 0 FIELD_ELEMENTS_PER_BLOB
 
 /-- Recover every cell and every cell proof from at least half of the cells.
@@ -139,35 +159,39 @@ def recoverCellsAndKzgProofs (setup : TrustedSetup)
     (cellIndices : Array CellIndex) (cells : Array Cell)
     : Except KzgError (Array Cell × Array KZGProof) := do
 
-  -- There must be an equal number of cells and indices.
+  -- recover_cells_and_kzg_proofs: `assert len(cell_indices) == len(cells)`.
   if cells.size ≠ cellIndices.size then
     throw (.inputLengthMismatch "cells" cellIndices.size cells.size)
 
-  -- At least 50% of cells must be provided.
+  -- `assert CELLS_PER_EXT_BLOB // 2 <= len(cell_indices) <= CELLS_PER_EXT_BLOB`.
   if cellIndices.size < CELLS_PER_EXT_BLOB / 2 then
     throw (.notEnoughCells cellIndices.size)
 
-  -- There must not be more cells than can exist in a single blob.
+  -- The upper bound of the same assert.
   if cellIndices.size > CELLS_PER_EXT_BLOB then
     throw (.tooManyCells cellIndices.size)
 
-  -- Cell indices must be within bounds.
+  -- `assert cell_index < CELLS_PER_EXT_BLOB`, checked here before the order.
   if cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) then
     throw (.cellIndexOutOfBounds ((cellIndices.find? (· ≥ CELLS_PER_EXT_BLOB)).getD 0))
 
-  -- Cell indices must be strictly ascending.
+  -- `assert len(cell_indices) == len(set(cell_indices))` and `cell_indices == sorted(...)`.
   --
-  -- This enforces two requirements at once: no duplicates, and ascending order.
+  -- A strictly ascending list enforces both at once.
   if (cellIndices.zip (cellIndices.extract 1)).any (fun (prev, next) => next ≤ prev) then
     let pairs := cellIndices.zip (cellIndices.extract 1)
     let (previous, next) := (pairs.find? (fun (prev, next) => next ≤ prev)).getD (0, 0)
     throw (.indicesNotAscending previous next)
 
-  -- Convert cells to coset evaluations.
+  -- `cosets_evals = [cell_to_coset_evals(cell) for cell in cells]`.
+  --
+  -- `assert len(cell) == BYTES_PER_CELL` holds by the type.
   let cosetsEvals : Array CosetEvals ← cells.mapM fun c =>
     cellToCosetEvals c
 
+  -- `polynomial_coeff = recover_polynomialcoeff(cell_indices, cosets_evals)`.
   let polyCoeff ← recoverPolynomialcoeff cellIndices cosetsEvals
+  -- `return compute_cells_and_kzg_proofs_polynomialcoeff(polynomial_coeff)`.
   computeCellsAndKzgProofsPolynomialcoeff setup polyCoeff
 
 end EthLib.Cryptography.Kzg

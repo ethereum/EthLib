@@ -22,7 +22,7 @@ An unknown name, or an input that does not decode, has code 0.
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue pyExport rejectArgument toResult)
 
 /-- The query that the last segment of the path of an endpoint names, with an optional epoch.
 
@@ -42,13 +42,13 @@ def stateQueryOf (name : String) (epoch : Option UInt64) : Result BeaconApi.Stat
   | "root", some _ | "fork", some _ | "finality_checkpoints", some _ | "pending_deposits", some _
   | "pending_partial_withdrawals", some _ | "pending_consolidations", some _
   | "proposer_lookahead", some _ | "builder_pending_payments", some _
-  | "builder_pending_withdrawals", some _ => throw (0, s!"the query {name} takes no epoch")
-  | _, _ => throw (0, s!"no state query is named {name}")
+  | "builder_pending_withdrawals", some _ => rejectArgument none s!"the query {name} takes no epoch"
+  | _, _ => rejectArgument none s!"no state query is named {name}"
 
-/-- The error of the API as the error of an export, with its code. -/
-def apiError {α : Type} : Except BeaconApi.ErrorMessage α → Result α
-  | .ok x => .ok x
-  | .error e => .error (e.code.toUInt32, e.message)
+/-- An error response of the API reaches Python with its HTTP or specific code and its message. -/
+instance : ExportError BeaconApi.ErrorMessage where
+  code e := e.code.toUInt32
+  message e := e.message
 
 /-- The JSON response to a query on a state. -/
 def apiStateQueryOf (args : String × String × ByteArray × String × Option UInt64) :
@@ -56,7 +56,7 @@ def apiStateQueryOf (args : String × String × ByteArray × String × Option UI
   let (name, fork, state, query, epoch) := args
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let state ← decodeInput (BeaconState preset fork) state
-  let envelope ← apiError (BeaconApi.stateQuery state (← stateQueryOf query epoch))
+  let envelope ← toResult none (BeaconApi.stateQuery state (← stateQueryOf query epoch))
   return PyValue.ofJson envelope.toJson
 
 /-- The JSON response to a query on a state, as a `dict`.
@@ -75,8 +75,8 @@ def apiStateQuerySszOf (args : String × String × ByteArray × String) : Result
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let state ← decodeInput (BeaconState preset fork) state
   let some body := BeaconApi.stateQuerySsz state (← stateQueryOf query none)
-    | throw (0, s!"the query {query} has no SSZ body")
-  apiError body
+    | rejectArgument none s!"the query {query} has no SSZ body"
+  toResult none body
 
 /-- The SSZ body of the response to a query on a state, as `bytes`.
 

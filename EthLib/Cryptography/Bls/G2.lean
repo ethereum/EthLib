@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Bls.Fp2
-public import EthLib.Cryptography.Bls.Fr
+public import EthLib.Cryptography.Bls.G1
 
 /-!
 # `G2`
@@ -10,9 +10,9 @@ The twisted curve `E' : y^2 = x^3 + 4 (1 + i)` over `Fp2`.
 
 It has the shape of `G1`, with coordinates in `Fp2` and the constant `4 (1 + i)` instead of `4`.
 
-The formulas are those of `G1`, with the operations of `Fp2`.
+The formulas of `G1` read only the field operations and never the constant of the curve.
 
-The code is generic in the base field, as for `Fp2`.
+So a point of `G2` is a point of `G1` over `Fp2`, and the two groups share one implementation.
 -/
 
 @[expose] public section
@@ -24,13 +24,14 @@ namespace EthLib.Cryptography.Bls
 `z = 0` is the point at infinity.
 
 The base field is `Fp` unless stated. -/
-structure G2 (F : Type := Fp) where
-  x : Fp2 F
-  y : Fp2 F
-  z : Fp2 F
-deriving Inhabited, BEq, Repr
+abbrev G2 (F : Type := Fp) : Type := G1 (Fp2 F)
 
 namespace G2
+
+-- The operations of `G1` that are written with their namespace keep their names under `G2`.
+--
+-- The ones read with field notation are left out, since an alias would hide the one of `G1`.
+export G1 (zero neg add mul)
 
 variable {F : Type} [BaseField F]
 
@@ -54,91 +55,8 @@ def generatorY1 : Nat :=
 def generator : G2 F :=
   ⟨Fp2.ofNats generatorX0 generatorX1, Fp2.ofNats generatorY0 generatorY1, Fp2.one⟩
 
-/-- The point at infinity. -/
-def zero : G2 F := ⟨Fp2.one, Fp2.one, Fp2.zero⟩
-
-@[inline] def isInfinity (p : G2 F) : Bool := p.z.isZero
-
 /-- The constant `b' = 4·(1 + i)` defining the G2 curve. -/
 def bTwist : Fp2 F := Fp2.ofNats 4 4
-
-/-- Jacobian point doubling for `a = 0` curves. -/
-def double (p : G2 F) : G2 F :=
-  if p.z.isZero then p else
-    let two := Fp2.ofFp (BaseField.ofNat 2)
-    let three := Fp2.ofFp (BaseField.ofNat 3)
-    let eight := Fp2.ofFp (BaseField.ofNat 8)
-    let A := p.x * p.x
-    let B := p.y * p.y
-    let C := B * B
-    let D := two * ((p.x + B) * (p.x + B) - A - C)
-    let E := three * A
-    let F := E * E
-    let x' := F - two * D
-    let y' := E * (D - x') - eight * C
-    let z' := two * p.y * p.z
-    ⟨x', y', z'⟩
-
-@[inline] def neg (p : G2 F) : G2 F := ⟨p.x, -p.y, p.z⟩
-
-/-- Jacobian addition (Bernstein–Lange 2007). -/
-def add (p q : G2 F) : G2 F :=
-  if p.z.isZero then q else
-  if q.z.isZero then p else
-    let two := Fp2.ofFp (BaseField.ofNat 2)
-    let z1z1 := p.z * p.z
-    let z2z2 := q.z * q.z
-    let u1   := p.x * z2z2
-    let u2   := q.x * z1z1
-    let s1   := p.y * q.z * z2z2
-    let s2   := q.y * p.z * z1z1
-    if u1.beq u2 then
-      if s1.beq s2 then double p else zero
-    else
-      let h := u2 - u1
-      let i := (two * h) * (two * h)
-      let j := h * i
-      let r := two * (s2 - s1)
-      let v := u1 * i
-      let x' := r * r - j - two * v
-      let y' := r * (v - x') - two * s1 * j
-      let z' := ((p.z + q.z) * (p.z + q.z) - z1z1 - z2z2) * h
-      ⟨x', y', z'⟩
-
-instance : Add (G2 F) := ⟨add⟩
-instance : Neg (G2 F) := ⟨neg⟩
-
-/-- Project a Jacobian point to affine `(x, y)`. Undefined at infinity. -/
-def toAffine (p : G2 F) : Fp2 F × Fp2 F :=
-  if p.z.isZero then (Fp2.zero, Fp2.zero)
-  else
-    let zinv  := p.z.inverse
-    let zinv2 := zinv * zinv
-    let zinv3 := zinv2 * zinv
-    (p.x * zinv2, p.y * zinv3)
-
-/-- Scalar multiplication via double-and-add. -/
-def mulNat (p : G2 F) (k : Nat) : G2 F :=
-  if k = 0 then zero
-  else
-    let half := mulNat (double p) (k / 2)
-    if k % 2 = 1 then add p half else half
-termination_by k
-decreasing_by omega
-
-@[inline] def mul (p : G2 F) (s : Fr) : G2 F := mulNat p s.val
-
-/-- Whether two Jacobian triples denote the same point.
-
-Two finite triples agree when `X1 Z2^2 = X2 Z1^2` and `Y1 Z2^3 = Y2 Z1^3`.
-
-Two triples at infinity agree, and a finite triple never agrees with one at infinity. -/
-def projectiveEq (p q : G2 F) : Bool :=
-  if p.z.isZero then q.z.isZero
-  else if q.z.isZero then false
-  else
-    (p.x * (q.z * q.z)).beq (q.x * (p.z * p.z)) &&
-    (p.y * ((q.z * q.z) * q.z)).beq (q.y * ((p.z * p.z) * p.z))
 
 /-! ## The endomorphism `psi`
 
@@ -164,11 +82,15 @@ def c2Psi : Fp2 F :=
 
 /-- `psi(x, y) = (c1_psi · frobenius(x), c2_psi · frobenius(y))`, RFC 9380, Appendix G.3. -/
 def psi (P : G2 F) : G2 F :=
+  -- The point at infinity maps to itself.
   if P.z.isZero then P else
-    -- Normalise to affine form, then map the coordinates, with `Z = 1`.
+    -- An affine point has `xd = yd = 1`, as Appendix G.3 allows.
     let (x, y) := P.toAffine
+    -- Step 1: `qxn = c1 * frobenius(xn)`, where `frobenius(x0 + I * x1) = x0 - I * x1`.
     let qx := c1Psi * x.conjugate
+    -- Step 3: `qyn = c2 * frobenius(yn)`.
     let qy := c2Psi * y.conjugate
+    -- Steps 2, 4 and 5: `qxd = qyd = 1`, so the result is affine, with `Z = 1`.
     ⟨qx, qy, Fp2.one⟩
 
 end G2

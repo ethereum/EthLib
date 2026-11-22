@@ -54,7 +54,7 @@ PeerDAS uses `d = 4095` and `D = 64`, so `S` has 4096 scalars.
 
 namespace EthLib.Cryptography.Kzg
 
-open EthLib.Cryptography.Bls (G1 G2 Fr TargetGroup)
+open EthLib.Cryptography.Bls (G1 G2 Fr TargetGroup G2.neg)
 open scoped EthLib.Cryptography.Bls.Fr
 
 /-! ## Bilinear strong Diffie–Hellman -/

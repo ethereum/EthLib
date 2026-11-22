@@ -21,7 +21,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue UnreadArgument pyExport rejectArgument toResult)
 
 /-- The rewards and the penalties of each validator for one kind of vote, as the vectors hold them.
 
@@ -46,22 +46,22 @@ def runDeltas {preset : Preset} {fork : Fork} (config : Config) (component : Str
   if altair : .altair ≤ fork then
     match component with
     | "source_deltas" =>
-      runTransition (getFlagIndexDeltas state altair ⟨TIMELY_SOURCE_FLAG_INDEX.toNat, by decide⟩)
+      toResult none (getFlagIndexDeltas state altair ⟨TIMELY_SOURCE_FLAG_INDEX.toNat, by decide⟩)
     | "target_deltas" =>
-      runTransition (getFlagIndexDeltas state altair ⟨TIMELY_TARGET_FLAG_INDEX.toNat, by decide⟩)
+      toResult none (getFlagIndexDeltas state altair ⟨TIMELY_TARGET_FLAG_INDEX.toNat, by decide⟩)
     | "head_deltas" =>
-      runTransition (getFlagIndexDeltas state altair ⟨TIMELY_HEAD_FLAG_INDEX.toNat, by decide⟩)
-    | "inactivity_penalty_deltas" => runTransition (getInactivityPenaltyDeltas config state)
-    | component => throw (0, s!"no deltas {component} at {fork.name}")
+      toResult none (getFlagIndexDeltas state altair ⟨TIMELY_HEAD_FLAG_INDEX.toNat, by decide⟩)
+    | "inactivity_penalty_deltas" => toResult none (getInactivityPenaltyDeltas config state)
+    | component => rejectArgument none s!"no deltas {component} at {fork.name}"
   else
     have before := Nat.lt_of_not_le altair
     match component with
-    | "source_deltas" => runTransition (getSourceDeltas state before)
-    | "target_deltas" => runTransition (getTargetDeltas state before)
-    | "head_deltas" => runTransition (getHeadDeltas state before)
-    | "inclusion_delay_deltas" => runTransition (getInclusionDelayDeltas state before)
-    | "inactivity_penalty_deltas" => runTransition (getInactivityPenaltyDeltas config state)
-    | component => throw (0, s!"no deltas {component} at {fork.name}")
+    | "source_deltas" => toResult none (getSourceDeltas state before)
+    | "target_deltas" => toResult none (getTargetDeltas state before)
+    | "head_deltas" => toResult none (getHeadDeltas state before)
+    | "inclusion_delay_deltas" => toResult none (getInclusionDelayDeltas state before)
+    | "inactivity_penalty_deltas" => toResult none (getInactivityPenaltyDeltas config state)
+    | component => rejectArgument none s!"no deltas {component} at {fork.name}"
 
 /-- The SSZ bytes of the rewards and the penalties of each validator.
 
@@ -71,8 +71,9 @@ def encodeDeltas (preset : Preset) (deltas : Array Gwei × Array Gwei) : Result 
   let limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat
   if within : rewards.size ≤ limit ∧ penalties.size ≤ limit then
     let deltas : Deltas limit := ⟨⟨rewards, within.1⟩, ⟨penalties, within.2⟩⟩
-    (SszType.serialize deltas).mapError fun e => (0, s!"deltas rejected: {reprStr e}")
-  else throw (0, "deltas longer than the registry limit")
+    toResult none ((SszType.serialize deltas).mapError fun e =>
+      UnreadArgument.mk s!"deltas rejected: {reprStr e}")
+  else rejectArgument none "deltas longer than the registry limit"
 
 /-- The rewards and the penalties of each validator for one kind of vote, as SSZ bytes. -/
 def rewardsDeltasOf

@@ -30,21 +30,23 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz Cryptography.Bls
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport rejectArgument
+  toResult)
 
-/-- The result of a duty, with the code of its error. -/
-def runDuty {α : Type} (result : Except ValidatorDutyError α) : Result α :=
-  result.mapError fun e => (e.code, toString e)
+/-- A failed duty reaches Python with its code and its printed error. -/
+instance : ExportError ValidatorDutyError where
+  code := ValidatorDutyError.code
+  message := toString
 
 /-- The proof that a fork is at least Altair, or code 0. -/
 def altairOf (fork : Fork) : Result (PLift (.altair ≤ fork)) :=
   if altair : .altair ≤ fork then return ⟨altair⟩
-  else throw (0, s!"no sync committee at {fork.name}")
+  else rejectArgument none s!"no sync committee at {fork.name}"
 
 /-- The proof that a fork is at least Gloas, or code 0. -/
 def gloasOf (fork : Fork) : Result (PLift (.glamsterdam ≤ fork)) :=
   if gloas : .glamsterdam ≤ fork then return ⟨gloas⟩
-  else throw (0, s!"no payload timeliness committee at {fork.name}")
+  else rejectArgument none s!"no payload timeliness committee at {fork.name}"
 
 /-- The committee assignment of a validator in an epoch, if it has one. -/
 def getCommitteeAssignmentOf
@@ -54,7 +56,7 @@ def getCommitteeAssignmentOf
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let _ ← configWithValue name replacements
   let state ← decodeInput (BeaconState preset fork) state
-  let assignment ← runDuty (getCommitteeAssignment state epoch validatorIndex)
+  let assignment ← toResult none (getCommitteeAssignment state epoch validatorIndex)
   return assignment.map fun (committee, index, slot) => (committee.toList, index, slot)
 
 /-- The committee assignment of a validator in an epoch, if it has one.
@@ -72,7 +74,7 @@ def isProposerOf (args : String × String × ByteArray × Option PyValue × UInt
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let _ ← configWithValue name replacements
   let state ← decodeInput (BeaconState preset fork) state
-  runDuty (isProposer state validatorIndex)
+  toResult none (isProposer state validatorIndex)
 
 /-- Whether a validator proposes the block of the slot of a state.
 
@@ -89,7 +91,7 @@ def isAssignedToSyncCommitteeOf
   let _ ← configWithValue name replacements
   let ⟨altair⟩ ← altairOf fork
   let state ← decodeInput (BeaconState preset fork) state
-  runDuty (isAssignedToSyncCommittee state altair epoch validatorIndex)
+  toResult none (isAssignedToSyncCommittee state altair epoch validatorIndex)
 
 /-- From Altair: whether a validator serves on the sync committee of the period of an epoch.
 
@@ -107,7 +109,7 @@ def computeSubnetsForSyncCommitteeOf
   let _ ← configWithValue name replacements
   let ⟨altair⟩ ← altairOf fork
   let state ← decodeInput (BeaconState preset fork) state
-  runDuty (computeSubnetsForSyncCommittee state altair validatorIndex)
+  toResult none (computeSubnetsForSyncCommittee state altair validatorIndex)
 
 /-- From Altair: the sync committee subnets of a validator for the next slot, as a list.
 
@@ -124,41 +126,45 @@ def getValidatorSignatureOf
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let config ← configWithValue name replacements
   let state ← decodeInput (BeaconState preset fork) state
-  let key ← (Signatures.SecretKey.fromBytes secretKey).mapError fun _ =>
-    (0, "the secret key is not a nonzero scalar below the group order")
+  let key ← toResult none ((Signatures.SecretKey.fromBytes secretKey).mapError fun _ =>
+    UnreadArgument.mk "the secret key is not a nonzero scalar below the group order")
   let signature ← match duty with
     | "randao" => do
-      runDuty (getEpochSignature config state (← decodeInput (BeaconBlock preset fork) object) key)
+      toResult none
+        (getEpochSignature config state (← decodeInput (BeaconBlock preset fork) object) key)
     | "block" => do
-      runDuty (getBlockSignature config state (← decodeInput (BeaconBlock preset fork) object) key)
+      toResult none
+        (getBlockSignature config state (← decodeInput (BeaconBlock preset fork) object) key)
     | "attestation" => do
-      runDuty (getAttestationSignature config state (← decodeInput AttestationData object) key)
+      toResult none
+        (getAttestationSignature config state (← decodeInput AttestationData object) key)
     | "slot" => do
-      runDuty (getSlotSignature config state (← decodeInput UInt64 object) key)
+      toResult none (getSlotSignature config state (← decodeInput UInt64 object) key)
     | "aggregate_and_proof" => do
-      runDuty (getAggregateAndProofSignature config state
+      toResult none (getAggregateAndProofSignature config state
         (← decodeInput (AggregateAndProof preset fork) object) key)
     | "sync_committee_message" => do
       let ⟨_⟩ ← altairOf fork
-      let message ← runDuty (getSyncCommitteeMessage config state
+      let message ← toResult none (getSyncCommitteeMessage config state
         (← decodeInput Root object) 0 key)
       pure message.signature
     | "sync_committee_selection_proof" => do
       let ⟨_⟩ ← altairOf fork
       let data ← decodeInput SyncAggregatorSelectionData object
-      runDuty (getSyncCommitteeSelectionProof config state data.slot data.subcommitteeIndex key)
+      toResult none
+        (getSyncCommitteeSelectionProof config state data.slot data.subcommitteeIndex key)
     | "contribution_and_proof" => do
       let ⟨_⟩ ← altairOf fork
-      runDuty (getContributionAndProofSignature config state
+      toResult none (getContributionAndProofSignature config state
         (← decodeInput (ContributionAndProof preset) object) key)
     | "payload_attestation_message" => do
       let ⟨_⟩ ← gloasOf fork
-      runDuty (getPayloadAttestationMessageSignature config state
+      toResult none (getPayloadAttestationMessageSignature config state
         (← decodeInput PayloadAttestationMessage object) key)
     | "proposer_preferences" => do
-      runDuty (getProposerPreferencesSignature config state
+      toResult none (getProposerPreferencesSignature config state
         (← decodeInput ProposerPreferences object) key)
-    | other => throw (0, s!"unknown duty {other}")
+    | other => rejectArgument none s!"unknown duty {other}"
   return packBytes signature
 
 /-- The signature of the object of a duty, by a secret key of 32 big-endian bytes.
@@ -199,7 +205,7 @@ def getPtcAssignmentOf
   let config ← configWithValue name replacements
   let ⟨gloas⟩ ← gloasOf fork
   let state ← decodeInput (BeaconState preset fork) state
-  runDuty (getPtcAssignment config state gloas epoch validatorIndex)
+  toResult none (getPtcAssignment config state gloas epoch validatorIndex)
 
 /-- From Gloas: the slot of an epoch whose payload timeliness committee holds a validator.
 
@@ -218,7 +224,7 @@ def getUpcomingProposalSlotsOf
   let _ ← configWithValue name replacements
   let ⟨gloas⟩ ← gloasOf fork
   let state ← decodeInput (BeaconState preset fork) state
-  runDuty (getUpcomingProposalSlots state gloas validatorIndex)
+  toResult none (getUpcomingProposalSlots state gloas validatorIndex)
 
 /-- From Gloas: the slots after the slot of a state that a validator proposes, as a list.
 

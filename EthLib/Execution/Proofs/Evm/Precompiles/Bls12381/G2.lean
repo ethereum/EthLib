@@ -20,7 +20,7 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Encoding
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
 open EthLib.Base (bind_ok_iff mapError_ok_iff natToBytes_length)
-open EthLib.Cryptography.Bls (G2)
+open EthLib.Cryptography.Bls (G2 G2.add)
 
 /-- The raw bytes of a G2 point have 192 bytes, and its padded encoding 256. -/
 theorem length_padG2_g2ToBytes (point : G2) : (padG2 (g2ToBytes point)).length = 256 := by

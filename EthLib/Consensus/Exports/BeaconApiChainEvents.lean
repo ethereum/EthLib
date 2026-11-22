@@ -24,12 +24,18 @@ An unknown name or fork, an input that does not decode or a bad configuration ha
 namespace EthLib.Consensus.Exports
 
 open Lean Base
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue pyExport rejectArgument toResult)
 
-/-- The code and the message of an error of the events. -/
-def chainEventError : BeaconApi.ChainEventError → UInt32 × String
-  | .forkChoice e => (e.code, s!"fork choice: {e}")
-  | .dependentRoot e => (0, s!"dependent root: {e.message}")
+/-- An error of the events reaches Python with a code, and a message that names its source.
+
+An error of the fork choice keeps its code, and a dependent root that cannot be read has code 0. -/
+instance : ExportError BeaconApi.ChainEventError where
+  code
+    | .forkChoice e => e.code
+    | .dependentRoot _ => 0
+  message
+    | .forkChoice e => s!"fork choice: {e}"
+    | .dependentRoot e => s!"dependent root: {e.message}"
 
 /-- An event of the stream as the name of its topic and the text of its data. -/
 def eventRecord (event : BeaconApi.ApiEvent) : String × String :=
@@ -53,8 +59,8 @@ def apiChainEventsOf (args : StoreCaseArgs (Nat × ByteArray × List Root × Opt
   let genesisRoot ← decodeInput Root genesisRoot
   let (before, _) ← replayForkChoice config checks anchorState anchorBlock (steps.take first)
   let (after, _) ← replayForkChoice config checks anchorState anchorBlock steps
-  let events ← (BeaconApi.chainEvents config roots.contains genesisRoot before after).mapError
-    chainEventError
+  let events ← toResult none
+    (BeaconApi.chainEvents config roots.contains genesisRoot before after)
   return events.map fun e => eventRecord (e.toApiEvent fork)
 
 /-- The events of the fork choice between two stores of a case.
@@ -84,9 +90,10 @@ def apiFastConfirmationEventOf (args : StoreCaseArgs (Option PyValue)) :
   let anchorState ← decodeInput (BeaconState preset fork) anchorState
   let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
   let (_, lastRun, _) ← replayForkChoiceConfirming config checks anchorState anchorBlock steps
-  let some (store, fcr) := lastRun | throw (0, "no run of the fast confirmation rule passed")
-  let currentSlot ← runForkChoice (store.getCurrentSlot config)
-  let event ← runForkChoice (BeaconApi.fastConfirmationEvent store fcr currentSlot)
+  let some (store, fcr) := lastRun
+    | rejectArgument none "no run of the fast confirmation rule passed"
+  let currentSlot ← toResult "fork choice" (store.getCurrentSlot config)
+  let event ← toResult "fork choice" (BeaconApi.fastConfirmationEvent store fcr currentSlot)
   return eventRecord ((BeaconApi.ChainEvent.fastConfirmation event).toApiEvent fork)
 
 /-- The event of the last run of the fast confirmation rule in a case that passed.

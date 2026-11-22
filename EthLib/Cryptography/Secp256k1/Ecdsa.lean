@@ -10,18 +10,7 @@ ECDSA verification over secp256k1, from SEC 1 v2 §4.1.4.
 
 A signature on a 32-byte hash is a pair of integers `(r, s)`.
 
-The signer picks a secret nonce `k` and sets `R = k G`.
-
-The signature is `r = x_R mod n` and `s = k^(-1) (e + r d) mod n`.
-
-Here `d` is the private key and `e` the hash read as an integer.
-
-The verifier knows `Q = d G`, not `d`, and rebuilds `R` from public values:
-
-- `u1 = e s^(-1) mod n` and `u2 = r s^(-1) mod n`.
-- `u1 G + u2 Q = s^(-1) (e + r d) G = k G = R`.
-
-The signature is valid when the `x` of that point is `r` mod `n`.
+The signer's point is `R = k G`, for a secret nonce `k`, and `r` is its `x` mod `n`.
 
 ## The low-s rule
 
@@ -40,10 +29,12 @@ namespace EthLib.Cryptography.Secp256k1
 
 namespace Ecdsa
 
-/-- The integer `e` of a hash, by SEC 1 v2 §4.1.4 step 3.
-
-`n` has 256 bits, as many as the hash, so step 3.2 keeps every bit. -/
-def hashToInt (hash : Vector UInt8 32) : Nat := Base.bytesToNat hash.toList
+/-- The integer `e` of a hash, by SEC 1 v2 §4.1.4 step 3. -/
+def hashToInt (hash : Vector UInt8 32) : Nat :=
+  -- Step 3.2: `E = H`, since `ceil(log2 n) = 256 = 8 hashlen` keeps every bit.
+  --
+  -- Steps 3.1, 3.3 and 3.4: the octets of `H`, read as a big-endian integer by SEC 1 v2 §2.3.8.
+  Base.bytesToNat hash.toList
 
 /-- Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4.
 
@@ -53,18 +44,25 @@ A key from the decoder always is.
 
 The key `O` would accept any `r` that some `u1 G` hits, so it is rejected here too. -/
 def verify (q : Point) (hash : Vector UInt8 32) (r s : Nat) : Bool :=
-  -- Step 1: `r` and `s` lie in `[1, n - 1]`, and the key is valid.
+  -- Step 1: if `r` and `s` are not both integers in `[1, n-1]`, output "invalid".
   if hr : 0 < r ∧ r < Fn.modulus then
     if hs : 0 < s ∧ s < Fn.modulus then
+      -- Not a step of §4.1.4: the key check of SEC 1 v2 §3.2.2.1, on the curve and not `O`.
       if q ≠ .infinity ∧ q.isOnCurve then
-        -- Steps 3 and 4: `e` acts mod `n`, like every scalar.
+        -- Step 2 is done by the caller: the input is the hash `H`, not the message.
+        --
+        -- Step 3: `e` from `H`, taken mod `n`, which leaves `u1` of step 4 unchanged.
         let e : Fn := Fin.ofNat _ (hashToInt hash)
         let sInv := Fn.inv ⟨s, hs.2⟩
+        -- Step 4: `u1 = e s^(-1) mod n` and `u2 = r s^(-1) mod n`.
         let u1 := e * sInv
         let u2 := (⟨r, hr.2⟩ : Fn) * sInv
-        -- Steps 5 to 8: `R = u1 G + u2 Q` must not be `O`, and `x_R mod n` must be `r`.
+        -- Step 5: `R = (x_R, y_R) = u1 G + u2 Q_U`, and "invalid" if `R = O`.
+        --
+        -- For a valid signature, `R = s^(-1) (e + r d_U) G = k G`, the signer's point.
         match Point.mulAdd u1 .generator u2 q with
         | .infinity => false
+        -- Steps 6 to 8: `v = x_R mod n`, and "valid" exactly when `v = r`.
         | .affine x _ => x.val % Fn.modulus == r
       else false
     else false

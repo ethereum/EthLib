@@ -44,13 +44,16 @@ instance : ExportError ForkIdError where
   code := ForkIdError.code
   message := forkIdMessage
 
-/-- The activation of one fork in `[name, kind, value]`. -/
+/-- The activation of one fork in `[name, kind, value]`.
+
+The value must be below `2^64`, since the fork identifier holds it in 64 bits. -/
 def readActivation (item : Item) : Result (Fork × Activation) := do
   let .ok [name, kind, value] := item.fields 3 |
     rejectArgument none "a fork is not [name, kind, value]"
   let .ok name := name.toBytes | rejectArgument none "a fork name is not a byte string"
   let fork ← forkOfName name
   let .ok (value : Nat) := Codec.ofItem value | rejectArgument none "a fork value is not a scalar"
+  unless value < ACTIVATION_BOUND do rejectArgument none "a fork value is not below 2^64"
   match (Codec.ofItem kind : Except RlpError Nat) with
   | .ok 0 => return (fork, .block value)
   | .ok 1 => return (fork, .time value)
@@ -68,7 +71,10 @@ def readSchedule (bytes : ByteArray) : Result Schedule := do
   let .ok (time : Nat) := Codec.ofItem time | rejectArgument none "genesis time is not a scalar"
   let mergeForkBlock ← match (Codec.ofItem merge : Except RlpError (List Nat)) with
     | .ok [] => pure none
-    | .ok [n] => pure (some n)
+    | .ok [n] =>
+      -- The merge fork block is a fork block of the identifier, so it has the same bound.
+      unless n < ACTIVATION_BOUND do rejectArgument none "merge fork is not below 2^64"
+      pure (some n)
     | _ => rejectArgument none "merge fork is not a list of at most one block"
   let .ok forks := forks.toItems | rejectArgument none "forks are not a list"
   let activations ← forks.mapM readActivation

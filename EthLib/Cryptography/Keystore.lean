@@ -169,10 +169,12 @@ structure Store where
 
 /-- C0, C1 and Delete, the codes removed by ERC-2335, "Password requirements". -/
 def isControl (c : Char) : Bool :=
+  -- C0 is `0x00` to `0x1F`, Delete is `0x7F`, and C1 is `0x80` to `0x9F`, all inclusive.
   c.toNat ≤ 0x1F || (0x7F ≤ c.toNat && c.toNat ≤ 0x9F)
 
 /-- Normalize, strip controls and encode in UTF-8, in that order ("Password requirements"). -/
 def passwordBytes (password : String) : ByteArray :=
+  -- The NFKD form first, then the control codes stripped, then UTF-8.
   (String.ofList ((Base.Unicode.nfkd password).toList.filter (!isControl ·))).toUTF8
 
 /-- A JSON field, with its name retained in any error. -/
@@ -248,6 +250,7 @@ def readMetadata (value : Json) : Except KeystoreError Metadata := do
 /-- The function, parameters and message that every ERC-2335 module requires ("Modules"). -/
 def moduleFields (what : String) (value : Json) :
     Except KeystoreError (String × Json × Json) := do
+  -- Modules: each has a `function`, its `params`, and a `message`.
   let name ← string s!"{what}.function" (← field what value "function")
   let params ← field what value "params"
   object s!"{what}.params" params
@@ -265,13 +268,16 @@ def readKdf (value : Json) : Except KeystoreError Kdf := do
   -- The output length and salt, which both functions take.
   let common : Except KeystoreError (Nat × ByteArray) := do
     let length ← param "kdf.dklen" "dklen"
+    -- Not in ERC-2335's tables: `dklen` below 32 leaves no `decryption_key[16:32]` (step 0).
     if length < 32 then throw (.shortKey length)
     return (length, ← bytes "kdf.salt" (← field "kdf.params" params "salt"))
+  -- Decryption key, KDF table: `"pbkdf2"` has `"c"`, `"dklen"`, `"prf": "hmac-sha256"`, `"salt"`.
   if name = "pbkdf2" then
     let (length, salt) ← common
     let prf ← string "kdf.prf" (← field "kdf.params" params "prf")
     if prf ≠ "hmac-sha256" then throw (.unsupportedFunction "kdf.prf" prf)
     return .pbkdf2 (← param "kdf.c" "c") length salt
+  -- `"scrypt"` has `"dklen"`, `"n"`, `"p"`, `"r"` and `"salt"`.
   else if name = "scrypt" then
     let (length, salt) ← common
     return .scrypt (← param "kdf.n" "n") (← param "kdf.r" "r") (← param "kdf.p" "p") length salt
@@ -279,14 +285,19 @@ def readKdf (value : Json) : Except KeystoreError Kdf := do
 
 /-- Read the version, metadata and supported cryptographic modules ("JSON schema"). -/
 def readStore (value : Json) : Except KeystoreError Store := do
+  -- Version: the `version` is set to `4`.
   let version ← number "version" (← field "keystore" value "version")
   if version ≠ 4 then throw (.unsupportedVersion version)
   let metadata ← readMetadata value
   let crypto ← field "keystore" value "crypto"
   let kdf ← readKdf (← field "crypto" crypto "kdf")
+  -- Password verification, hash table: `"sha256"`, which lists no `params`.
+  --
+  -- Any `params` given are read as an object, then ignored.
   let (checksumFunction, _, checksum) ← moduleFields "checksum" (← field "crypto" crypto "checksum")
   if checksumFunction ≠ "sha256" then throw (.unsupportedFunction "checksum" checksumFunction)
   let checksum ← fixed "checksum.message" 32 checksum
+  -- Secret decryption, cipher table: `"aes-128-ctr"`, with the param `"iv"`.
   let (cipherFunction, params, message) ← moduleFields "cipher" (← field "crypto" crypto "cipher")
   if cipherFunction ≠ "aes-128-ctr" then throw (.unsupportedFunction "cipher" cipherFunction)
   return ⟨kdf, checksum, ← fixed "cipher.iv" 16 (← field "cipher.params" params "iv"),
@@ -307,6 +318,9 @@ def deriveKey (password : ByteArray) (kdf : Kdf) : Except KeystoreError ByteArra
 
 /-- SHA-256 of key bytes 16 through 31 followed by the ciphertext ("Password verification"). -/
 def passwordChecksum (key message : ByteArray) : Vector UInt8 32 :=
+  -- Steps 0 and 1: `DK_slice = decryption_key[16:32]`, `pre_image = DK_slice | cipher_message`.
+  --
+  -- Step 2: `checksum = SHA256(pre_image)`.
   Hash.Sha256.hash32 (key.extract 16 32 ++ message)
 
 /-- The AES-128 key: the first 16 bytes of a derived key of 32 bytes or more. -/
@@ -323,17 +337,26 @@ A longer key is truncated to its first 16 bytes for AES.
 -/
 def decryptWithKey (store : Store) (key : ByteArray) : Except KeystoreError ByteArray := do
   if h : 32 ≤ key.size then
+    -- Password verification, steps 3 and 4: `valid_password = checksum == checksum_message`.
     if passwordChecksum key store.message != store.checksum then
       throw .checksumMismatch
+    -- Secret decryption: AES-128-CTR under the first 16 bytes of `decryption_key`.
+    --
+    -- Departure: ERC-2335 cites RFC 3686, but its `iv` is the whole 16-byte first counter block.
+    --
+    -- So this runs SP 800-38A §6.5, with the increment of Appendix B.1 over `m = 128` bits.
     return Aes.ctr (Aes.ciph .aes128 (aesKey key h)) 128 store.iv store.message
   else throw (.shortKey key.size)
 
 /-- Prepare the password, check the caller's limits, then decrypt a parsed keystore. -/
 def decryptStore (limits : KdfLimits) (store : Store) (password : String) :
     Except KeystoreError ByteArray := do
+  -- Password requirements: NFKD, control codes stripped, UTF-8.
   let password := passwordBytes password
+  -- Not in ERC-2335: the caller's bounds on the cost of the KDF, checked before it runs.
   unless limits.admits password.size store.kdf do
     throw (.limitExceeded store.kdf.memory (store.kdf.work password.size))
+  -- Decryption key, then password verification and secret decryption.
   decryptWithKey store (← deriveKey password store.kdf)
 
 /-- Decrypt an ERC-2335 keystore value, or report the step that failed.
@@ -397,9 +420,12 @@ ERC-2335 requires the public key when the secret is a private key, and the calle
 -/
 def encrypt (kdf : Kdf) (iv : Aes.Block) (metadata : Metadata) (password : String)
     (secret : ByteArray) : Except KeystoreError Json := do
+  -- Decryption key: the KDF of the prepared password.
   let key ← deriveKey (passwordBytes password) kdf
   if h : 32 ≤ key.size then
+    -- Secret decryption, run forward: CTR mode is its own inverse.
     let message := Aes.ctr (Aes.ciph .aes128 (aesKey key h)) 128 iv secret
+    -- The checksum module holds `SHA256(decryption_key[16:32] | cipher_message)`.
     return Json.mkObj ([("crypto", Json.mkObj [
       ("kdf", kdf.toJson),
       ("checksum", moduleJson "sha256" [] (hexText (passwordChecksum key message).toList)),

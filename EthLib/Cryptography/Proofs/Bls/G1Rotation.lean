@@ -55,7 +55,8 @@ theorem rotate_toPoint {x y x' : Fp} (hv : Valid ⟨x, y, Fp.one⟩) (hv' : Vali
     rotate (toPoint ⟨x, y, Fp.one⟩) = embed (toPoint ⟨x', y, Fp.one⟩) := by
   have hb : fpToFp12 betaZ ^ 3 = 1 := by rw [← map_pow, betaZ_cube, map_one]
   have hr (a : Fp) : rep ⟨a, y, Fp.one⟩ = ![Fp.toZMod a, Fp.toZMod y, 1] := by
-    rw [rep, Fp.one_def, Fp.toZMod_one]
+    show ![Fp.toZMod a, Fp.toZMod y, Fp.toZMod Fp.one] = _
+    rw [Fp.one_def, Fp.toZMod_one]
   rw [Valid, hr] at hv hv'
   have e1 : toPoint ⟨x, y, Fp.one⟩ = _ :=
     (congrArg (Jacobian.Point.toAffine curve) (hr x)).trans (Jacobian.Point.toAffine_some hv)

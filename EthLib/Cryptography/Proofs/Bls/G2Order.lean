@@ -26,69 +26,16 @@ The twist also matches draft-07, §4.2.1.
 namespace EthLib.Cryptography.Bls.G2
 
 open WeierstrassCurve.Jacobian
+open G1 (projectiveEq)
 
 set_option maxRecDepth 8000
 
 /-! ## `[r] * g_2 = 0` -/
 
-/-- Fuel-based double-and-add, structurally recursive so the kernel can evaluate it.
-
-The spec's `mulNat` is well-founded recursion, which does not reduce definitionally. -/
-def mulNatAux {F : Type} [BaseField F] : Nat → G2 F → Nat → G2 F
-  | 0, _, _ => zero
-  | fuel + 1, p, k =>
-    if k = 0 then zero
-    else
-      let half := mulNatAux fuel (double p) (k / 2)
-      if k % 2 = 1 then add p half else half
-
-theorem mulNatAux_eq (fuel : Nat) (p : G2) (k : Nat)
-    (hk : k < 2 ^ fuel) : mulNatAux fuel p k = mulNat p k := by
-  induction fuel generalizing p k with
-  | zero =>
-    have : k = 0 := by simpa using hk
-    subst this
-    rw [mulNatAux, mulNat_def]
-    simp
-  | succ fuel ih =>
-    rw [mulNatAux, mulNat_def]
-    by_cases h0 : k = 0
-    · simp [h0]
-    · have h2 : k / 2 < 2 ^ fuel := by
-        rw [Nat.pow_succ] at hk
-        omega
-      rw [ite_eq_right h0, ite_eq_right h0, ih (double p) (k / 2) h2]
-
-/-- A map of base fields commutes with the ladder. -/
-theorem map_mulNatAux {F G : Type} [BaseField F] [BaseField G] (f : BaseField.Hom F G)
-    (fuel : Nat) (p : G2 F) (k : Nat) :
-    map f (mulNatAux fuel p k) = mulNatAux fuel (map f p) k := by
-  induction fuel generalizing p k with
-  | zero => exact map_zero f
-  | succ fuel ih =>
-    rw [mulNatAux, mulNatAux]
-    split
-    · exact map_zero f
-    · dsimp only
-      rw [← map_double, ← ih]
-      split
-      · exact map_add f _ _
-      · rfl
-
-/-- A map of base fields commutes with the sum, written as a function. -/
-theorem map_add_fn {F G : Type} [BaseField F] [BaseField G] (f : BaseField.Hom F G)
-    (p q : G2 F) : map f (add p q) = add (map f p) (map f q) :=
-  map_add f p q
-
-/-- A map of base fields commutes with the negation, written as a function. -/
-theorem map_neg_fn {F G : Type} [BaseField F] [BaseField G] (f : BaseField.Hom F G)
-    (p : G2 F) : map f (neg p) = neg (map f p) :=
-  map_neg f p
-
 /-- A map of base fields keeps the projective equality of two points. -/
 theorem map_projectiveEq {F G : Type} [BaseField F] [BaseField G] (f : BaseField.Hom F G)
-    (p q : G2 F) : projectiveEq (map f p) (map f q) = projectiveEq p q := by
-  simp only [projectiveEq, map, Fp2.map_isZero, ← Fp2.map_mul, Fp2.map_beq]
+    (p q : G2 F) : projectiveEq (map f p) (map f q) = projectiveEq p q :=
+  G1.map_projectiveEq _ p q
 
 /-- The test for the point at infinity reads the same on the image in the model. -/
 theorem isInfinity_model (p : G2) : p.isInfinity = (map Fp.toModel p).isInfinity :=

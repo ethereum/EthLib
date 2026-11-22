@@ -8,6 +8,11 @@ public import EthLib.Cryptography.Kzg.BitReversal
 # `Fft`
 
 Number-theoretic transforms over `Fr`, including a coset variant.
+
+The step comments quote the functions of the same names in consensus-specs at `8a3df1d7`:
+<https://github.com/ethereum/consensus-specs/blob/8a3df1d79d70000801407e33d660171be9cd06d1/specs/fulu/polynomial-commitments-sampling.md>
+
+EIP-7594 links that file at `9d377fd5`; the later text has the interface used here.
 -/
 
 @[expose] public section
@@ -104,6 +109,9 @@ The values and the roots of unity must have the same length, a power of two.
 
 Values of any other shape have no transform, and they come back unchanged. -/
 def fftFieldIter (vals roots : Array Fr) : Array Fr :=
+  -- _fft_field recurses on `vals[::2]` and `vals[1::2]`; this loop runs the same butterflies.
+  --
+  -- `o[i] = x + y * roots_of_unity[i]` and `o[i + len(L)] = x - y * roots_of_unity[i]`.
   if h : vals.size = 2 ^ vals.size.log2 ∧ roots.size = vals.size then
     (fftStages ⟨roots, h.2⟩ vals.size.log2
       ⟨bitReversalPermutation vals, by simp [bitReversalPermutation]⟩ 1
@@ -119,20 +127,25 @@ def fftField
     (vals : Array Fr) (rootsOfUnity : Array Fr)
     (inv : Bool := false) : Array Fr :=
   if inv then
+    -- fft_field: `invlen = BLSFieldElement(len(vals)).pow(BLSFieldElement(BLS_MODULUS - 2))`.
     let invlen := (Fr.ofNat vals.size).inverse
+    -- `list(roots_of_unity[0:1]) + list(roots_of_unity[:0:-1])`.
+    --
     -- Root `i` of the inverse is root `n - i` of the forward transform, and root `0` stays.
     let n := rootsOfUnity.size
     let reversed := Array.ofFn (n := n) fun i =>
       rootsOfUnity[(n - i.val) % n]'(Nat.mod_lt _ (Nat.lt_of_le_of_lt (Nat.zero_le _) i.isLt))
+    -- `[x * invlen for x in _fft_field(vals, ...)]`.
     (fftFieldIter vals reversed).map (· * invlen)
   else
+    -- `return _fft_field(vals, roots_of_unity)`.
     fftFieldIter vals rootsOfUnity
 
 /-- The FFT in `G1` of `2^k` points, by the Cooley-Tukey recursion.
 
-```text
-    out[i] = sum_j [rootsOfUnity[i]^j] vals[j]
-```
+Output `i` is `sum_j [w_i^j] vals[j]`, where `w_i` is entry `i` of the roots of unity.
+
+Consensus-specs has no FFT in `G1`, since it computes cell proofs one by one.
 
 The butterflies are those of the FFT over `Fr`.
 
@@ -144,6 +157,7 @@ def fftG1Vector : (k : Nat) → Vector Bls.G1 (2 ^ k) → Vector Fr (2 ^ k) → 
     let l := fftG1Vector k (everyOther vals 0) halfRoots
     let r := fftG1Vector k (everyOther vals 1) halfRoots
     -- Each product [root_i] r_i serves two outputs, so it is computed once.
+    --
     -- The products are independent, so each runs as its own task.
     let tasks := Vector.ofFn (n := 2 ^ k) fun i => Task.spawn fun _ =>
       Bls.G1.mul r[i] (rootsOfUnity[i.val]'(by
@@ -173,12 +187,14 @@ def fftG1 (vals : Array Bls.G1) (rootsOfUnity : Array Fr) : Array Bls.G1 :=
 /-- Multiply successive values by successive powers of `factor`, starting at `shift`. -/
 def shiftValsAux (factor : Fr) : Fr → List Fr → List Fr
   | _, [] => []
+  -- shift_vals: `updated_vals.append(vals[i] * shift)` and `shift = shift * factor`.
   | shift, v :: rest => (v * shift) :: shiftValsAux factor (shift * factor) rest
 
 /-- Multiply `vals[i]` by `factor ^ i`, shifting the values onto a coset. -/
 def shiftVals
     (vals : Array Fr) (factor : Fr)
     : Array Fr :=
+  -- shift_vals: `shift = BLSFieldElement(1)`.
   (shiftValsAux factor Fr.one vals.toList).toArray
 
 /-- The FFT or the inverse FFT over a coset of the roots of unity.
@@ -187,12 +203,17 @@ It serves to divide by a polynomial that vanishes on the unshifted domain. -/
 def cosetFftField
     (vals : Array Fr) (rootsOfUnity : Array Fr)
     (inv : Bool := false) : Array Fr :=
+  -- coset_fft_field: `shift_factor = BLSFieldElement(PRIMITIVE_ROOT_OF_UNITY)`.
   let shiftFactor : Fr := Fr.ofNat PRIMITIVE_ROOT_OF_UNITY
   if inv then
+    -- `vals = fft_field(vals, roots_of_unity, inv)`.
     let post := fftField vals rootsOfUnity inv
+    -- `return shift_vals(vals, shift_factor.inverse())`.
     shiftVals post shiftFactor.inverse
   else
+    -- `vals = shift_vals(vals, shift_factor)`.
     let pre := shiftVals vals shiftFactor
+    -- `return fft_field(vals, roots_of_unity, inv)`.
     fftField pre rootsOfUnity inv
 
 end EthLib.Cryptography.Kzg

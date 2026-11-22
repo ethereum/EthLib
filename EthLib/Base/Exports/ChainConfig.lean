@@ -36,7 +36,8 @@ public section
 
 namespace EthLib.Base.ChainConfig.Exports
 
-open EthLib.Exports (Result PyValue pyExport forkOfName)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport forkOfName
+  rejectArgument toResult)
 
 /-- The name of the active fork of mainnet at a block, if a fork is active. -/
 def mainnetActiveForkOf (args : UInt64 × UInt64) : Result (Option String) :=
@@ -62,49 +63,61 @@ def hoodiActiveForkExport (args : PyValue) : Result PyValue := pyExport hoodiAct
 
 open Lean (Json)
 
-/-- An activation from its kind, `block` or `time`, and its number. -/
+/-- An activation from its kind, `block` or `time`, and its number.
+
+The number must be below `2^64`, since the fork identifier holds it in 64 bits.
+
+A blob schedule reads its activation here too, so it has the bound, though no identifier holds it.
+-/
 def activationOf (kind : String) (n : Json) : Result Activation := do
-  let some n := n.getNat?.toOption | throw (0, "an activation has no number")
+  let some n := n.getNat?.toOption | rejectArgument none "an activation has no number"
+  -- The fork identifier hashes an activation in 64 bits, so a larger one is refused.
+  unless n < ACTIVATION_BOUND do rejectArgument none "an activation is not below 2^64"
   match kind with
   | "block" => pure (.block n)
   | "time" => pure (.time n)
-  | _ => throw (0, s!"no activation kind {kind}")
+  | _ => rejectArgument none s!"no activation kind {kind}"
 
 /-- One activation of a configuration: a fork name, `block` or `time`, and a number. -/
 def activationOfJson (j : Json) : Result (Fork × Activation) := do
-  let .arr #[.str name, .str kind, n] := j | throw (0, "an activation is not [fork, kind, n]")
+  let .arr #[.str name, .str kind, n] := j
+    | rejectArgument none "an activation is not [fork, kind, n]"
   return (← forkOfName name.toUTF8, ← activationOf kind n)
 
 /-- One blob schedule of a configuration: its activation, target, maximum and update fraction.
 
 A fork name in front gives the fork that the schedule belongs to.
 
-The target must be at most the maximum, and the maximum and the fraction must be positive. -/
+The three numbers must meet the bounds of a schedule, so the target and maximum stay in 64 bits. -/
 def blobScheduleOfJson (j : Json) : Result (Option Fork × Activation × BlobSchedule) := do
   let (fork, kind, n, target, max, fraction) ← match j with
     | .arr #[.str kind, n, target, max, fraction] => pure (none, kind, n, target, max, fraction)
     | .arr #[.str name, .str kind, n, target, max, fraction] =>
       pure (some (← forkOfName name.toUTF8), kind, n, target, max, fraction)
-    | _ => throw (0, "a blob schedule is not [fork?, kind, n, target, max, fraction]")
-  let some target := target.getNat?.toOption | throw (0, "a blob schedule has no target")
-  let some max := max.getNat?.toOption | throw (0, "a blob schedule has no maximum")
-  let some fraction := fraction.getNat?.toOption | throw (0, "a blob schedule has no fraction")
-  if h : target ≤ max ∧ 0 < max ∧ 0 < fraction then
-    return (fork, ← activationOf kind n, ⟨target, max, fraction, h.1, h.2.1, h.2.2⟩)
-  else throw (0, "a blob schedule needs target ≤ max, 0 < max and 0 < update fraction")
+    | _ => rejectArgument none "a blob schedule is not [fork?, kind, n, target, max, fraction]"
+  let some target := target.getNat?.toOption | rejectArgument none "a blob schedule has no target"
+  let some max := max.getNat?.toOption | rejectArgument none "a blob schedule has no maximum"
+  let some fraction := fraction.getNat?.toOption
+    | rejectArgument none "a blob schedule has no fraction"
+  let some schedule := BlobSchedule.ofNat? target max fraction
+    | rejectArgument none ("a blob schedule needs target ≤ max, 0 < max, " ++
+        "0 < update fraction and a blob gas of max below 2^64")
+  return (fork, ← activationOf kind n, schedule)
 
 /-- The deposit contract address of a configuration: `0x` and forty hex digits. -/
 def depositContractOfJson (j : Json) : Result Address := do
   let text ← match j with
     | .str text => pure text
-    | .null => throw (0, "config: no depositContractAddress")
-    | _ => throw (0, "config: depositContractAddress is not text")
+    | .null => rejectArgument none "config: no depositContractAddress"
+    | _ => rejectArgument none "config: depositContractAddress is not text"
   let '0' :: 'x' :: digits := text.toList
-    | throw (0, "config: depositContractAddress does not start with 0x")
-  unless digits.length = 40 do throw (0, "config: depositContractAddress is not forty hex digits")
+    | rejectArgument none "config: depositContractAddress does not start with 0x"
+  unless digits.length = 40 do
+    rejectArgument none "config: depositContractAddress is not forty hex digits"
   let some bytes := hexBytes? digits
-    | throw (0, "config: depositContractAddress is not hex")
-  Base.exactBytes 20 bytes fun _ => (0, "config: depositContractAddress is not 20 bytes")
+    | rejectArgument none "config: depositContractAddress is not hex"
+  toResult none (Base.exactBytes 20 bytes fun _ =>
+    UnreadArgument.mk "config: depositContractAddress is not 20 bytes")
 
 /-- A chain configuration given as JSON, with no blob schedule of its own when none is given.
 
@@ -114,18 +127,20 @@ No fork by block number may come after a fork by timestamp in the timeline, as E
 
 The chain ID is a 64-bit number, so a larger one is rejected rather than reduced. -/
 def configOfJson (j : Json) : Result ChainConfig := do
-  let some chainId := (j.getObjValAs? Nat "chainId").toOption | throw (0, "config: no chainId")
-  unless chainId < 2 ^ 64 do throw (0, "config: chainId is not below 2^64")
+  let some chainId := (j.getObjValAs? Nat "chainId").toOption
+    | rejectArgument none "config: no chainId"
+  unless chainId < 2 ^ 64 do rejectArgument none "config: chainId is not below 2^64"
   let depositContractAddress ← depositContractOfJson (j.getObjValD "depositContractAddress")
-  let .arr activations := j.getObjValD "activations" | throw (0, "config: no activations")
+  let .arr activations := j.getObjValD "activations"
+    | rejectArgument none "config: no activations"
   let activations ← activations.toList.mapM activationOfJson
   -- EIP-6122 puts forks by time after forks by block, so none comes before a fork by block.
   unless activationsOrdered activations do
-    throw (0, "config: a fork by block comes after a fork by time")
+    rejectArgument none "config: a fork by block comes after a fork by time"
   let schedules ← match j.getObjValD "blobSchedules" with
     | .arr entries => entries.toList.mapM blobScheduleOfJson
     | .null => pure []
-    | _ => throw (0, "config: blobSchedules is not an array")
+    | _ => rejectArgument none "config: blobSchedules is not an array"
   return { chainId := UInt64.ofNat chainId, depositContractAddress := depositContractAddress,
             activations := activations, blobSchedules := schedules }
 
@@ -143,19 +158,23 @@ The arguments are the configuration as a `dict`, the block number and the timest
 @[export eth_active_fork]
 def activeForkExport (args : PyValue) : Result PyValue := pyExport activeForkOf args
 
+/-- A refused configuration file reaches Python with its code and its printed error. -/
+instance : ExportError ExecutionConfig.ConfigError where
+  code := ExecutionConfig.ConfigError.code
+  message := reprStr
+
 /-- A base configuration given as JSON, merged with the keys of a configuration file.
 
 A file that the reader refuses gives the code of its error. -/
 def executionConfigOf (base file : PyValue) : Result ChainConfig := do
   let base ← configOfJson base.toJson
-  (ExecutionConfig.readExecutionConfig base file.toJson).mapError
-    fun e => (e.code, s!"execution config: {reprStr e}")
+  toResult "execution config" (ExecutionConfig.readExecutionConfig base file.toJson)
 
 /-- The blob schedule of a chain at a block, from a base configuration and a configuration file.
 
 It is the target, the maximum and the update fraction, if the chain sets a schedule there. -/
 def executionBlobScheduleOf (args : PyValue × PyValue × UInt64 × UInt64) :
-    Result (Option (Nat × Nat × Nat)) := do
+    Result (Option (UInt64 × UInt64 × Nat)) := do
   let (base, file, number, timestamp) := args
   let config ← executionConfigOf base file
   return (config.blobScheduleAt number.toNat timestamp.toNat).map
@@ -179,7 +198,7 @@ def writeExecutionConfigOf (config : PyValue) : Result PyValue := do
   let blocks := { config with
     activations := config.activations.filter (·.2 matches .block _), blobSchedules := [] }
   unless (ExecutionConfig.readExecutionConfig blocks file).toOption == some config do
-    throw (0, "config: a configuration file cannot hold it whole")
+    rejectArgument none "config: a configuration file cannot hold it whole"
   return .ofJson file
 
 /-- The fork times and blob schedules of a configuration, as the `dict` of a configuration file.

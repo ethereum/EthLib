@@ -23,7 +23,7 @@ A fork before Gloas, or an index with no builder, has code 0.
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport toResult)
+open EthLib.Exports (Result PyValue pyExport rejectArgument toResult)
 
 /-- The status of a validator with a balance at an epoch, with the name of its group. -/
 def apiValidatorStatusOf (args : PyValue × UInt64 × UInt64) : Result (String × String) := do
@@ -47,8 +47,8 @@ def apiBuilderStatusOf (args : String × String × ByteArray × UInt64) : Result
   if gloas : .glamsterdam ≤ fork then
     match BeaconApi.builderStatus state gloas index with
     | .ok status => return status.name
-    | .error fault => throw (0, s!"no builder status: {reprStr fault}")
-  else throw (0, s!"no builder before gloas, at {fork.name}")
+    | .error fault => rejectArgument none s!"no builder status: {reprStr fault}"
+  else rejectArgument none s!"no builder before gloas, at {fork.name}"
 
 /-- The status of the builder at an index of a state, as its name.
 

@@ -2332,6 +2332,14 @@ That check makes the nonce of the transaction equal that of its sender, and belo
 The bound on the state before the first block is a hypothesis: the genesis allocation must meet it.
 From Glamsterdam, `stateTransition_rebuild_nonce` turns the 64-bit nonces that the block access list rebuilds into the nonces after the block, with no loss.
 
+The nonce of a transaction has two widths.
+A set-code transaction, the type that EIP-7702 adds, holds its nonce in 64 bits, so a nonce of `2^64` or more fails at decoding.
+The other kinds hold it in 256 bits: section 4.2 of the Yellow Paper, Shanghai version, puts the nonce `T_n` in `N_256`.
+A nonce of `2^64` or more of those kinds decodes, and the rule of EIP-2681 in the transaction check rejects it.
+EIP-7702 gives the outer fields of its transaction the meaning they have in EIP-4844, and states no width for the nonce.
+The 64-bit width follows the type that [execution-specs](https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/prague/transactions.py) at `391d8a0` gives that field, in its class `SetCodeTransaction`.
+Either way the transaction is invalid, so the two widths differ only in the error that names the reason.
+
 ### Logs paid for by gas
 
 The weight of a log, `48 + 33 * topics + data bytes`, bounds the length of its RLP encoding, for a log whose weight is below `2^64` (`encode_log_size_le`).
@@ -5442,7 +5450,24 @@ The reader takes a reading where its sources leave a choice:
   The reader takes a time that the file leaves out from the configuration it merges into, and refuses an entry whose fork has a time in neither.
 - The reader reads only the time keys and the blob schedules.
   No EIP names the keys of the forks by block number, such as `londonBlock`, so those come from the configuration it merges into.
-- The reader bounds times below `2^64`, the bound of a block's time, but not the numbers of a schedule, which EIP-7892 types as 64-bit.
+- The reader bounds times below `2^64`, since the fork identifier of [EIP-6122](https://eips.ethereum.org/EIPS/eip-6122#specification) hashes each fork time as a `uint64`.
+  The configuration reader of the exports bounds every activation, by block or by time, the same way, and so does the schedule reader of the fork identifier exports.
+  `eth_config` bounds the forks that the head has passed the same way.
+  No reader bounds a block's own time, which its header holds in 256 bits.
+  No EIP bounds a fork block or a fork time itself, so refusing an activation of `2^64` or more is EthLib's choice.
+  The export reader gives the activation of a blob schedule the same bound, though no fork identifier holds it.
+  It applies to every export that reads a configuration, the block transition among them, though only the fork identifier needs it.
+  EIP-7892 types the target and the maximum of a schedule as 64-bit integers, and EthLib types them `UInt64`.
+  Every reader of a schedule also refuses a maximum whose blob gas, at `2^17` per blob, reaches `2^64`, a bound that EIP-7892 does not state.
+  A header holds the blob gas of its block in 64 bits ([EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#header-extension)), so no block could use that much blob gas.
+  The maximum still enters the reserve price rule of EIP-7918 through `(max - target) // max`, so refusing it is a restriction that EthLib chooses.
+  With this bound, the blob gas of the target and of the maximum never overflows 64 bits.
+- The excess blob gas of a header follows [EIP-7918](https://eips.ethereum.org/EIPS/eip-7918#functions), which computes with unbounded integers.
+  A computation in 64 bits that fails on overflow can refuse a block that EthLib accepts, in two cases.
+  The parent's blob gas times `max - target` can reach `2^64`, which needs a schedule whose maximum is in the millions.
+  Under one schedule, the maximum must be at least 11,863,284; after a change of schedule, a parent of two blobs under a new maximum of `2^46` is enough.
+  The parent's excess plus its blob gas can reach `2^64` while the excess that follows stays below.
+  No chain with the schedules of the EIPs reaches either case.
 - The reader refuses forks whose times break the order of the timeline.
 - The writer leaves out what a file cannot hold: a schedule without a fork or of a fork with no name, a second schedule of one fork, and the time of a fork with no name.
   It writes a schedule of Shanghai, which the reader ignores, since blob schedules start at Cancun.
@@ -6551,6 +6576,15 @@ Both assume that the balance covers the participant reward once per seat of the 
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_sync_rewards.py`) checks each reward against the balances of the pinned sync aggregate vectors, the proposer with its share.
 It checks the selection of named members once each, by index or key, and code 400 for an invalid identifier and for a state before Altair.
 
+The [response types](https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/rewards.yaml) give each signed amount of the attestation and sync committee rewards the type `Int64`.
+The [schema of `Int64`](https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/primitive.yaml) is a decimal string with no stated range, and EthLib reads its name as the signed 64-bit range, from `-2^63` to `2^63 - 1`.
+EthLib computes these amounts as unbounded integers.
+An attestation amount is the difference of two 64-bit unsigned amounts, and a sync committee reward sums such amounts over the seats of a validator, so both can fall outside that range.
+Rather than a 64-bit signed field, which would wrap or need a check at each part, the response checks every amount once, before it writes the answer.
+An answer with an amount outside `-2^63` to `2^63 - 1` fails with code 500, since the response types cannot hold it.
+`attestationRewardsResponse_ok` and `syncCommitteeRewardsResponse_ok` show that every amount of an answer fits.
+No lemma shows the converse, that an amount outside the range gives code 500, and no Python vector reaches that case.
+
 The block rewards are in the same module, read from the state at the slot of the block, before it.
 `blockRewards` runs the steps of the block before its operations, then the proposer slashings, the attester slashings and the attestations, as the block does.
 Each of these three parts is the rise of the proposer's balance over its step; from Altair the sync aggregate part is the share of the proposer that the sync aggregate step computes, times the number of signatures.
@@ -7614,6 +7648,18 @@ Some official vectors expect more than a source says.
 The transaction tests of ethereum/tests reject 43 results whose gas limit is `2^64`, or whose gas limit times gas price exceeds `2^256 - 1`.
 No rule of the Yellow Paper rejects such a transaction alone, and EIP-7825 caps the gas limit only from Fusaka on.
 EthLib accepts them, and the suite asserts that it does, as `tests/execution/ethereum_tests/README.md` explains.
+
+The gas limit and the fee fields of a transaction have two readings.
+Section 4.2 of the [Yellow Paper](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex), Shanghai version, puts the gas limit and the gas price below `2^256`.
+[EIP-1559](https://eips.ethereum.org/EIPS/eip-1559#specification) asserts the same bound on its two fee caps.
+[execution-specs](https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/prague/transactions.py) at `391d8a0` types the four fields as unbounded integers.
+EthLib follows the Yellow Paper and EIP-1559: the fields are 256-bit words, so a value of `2^256` or more fails at decoding.
+In a block, both readings refuse a transaction whose fee reaches `2^256`, since no balance can pay it.
+That fee is the gas limit times the gas price, or times the maximum fee per gas.
+The readings differ in one case: a gas limit of `2^256` or more with a price of 0.
+The block must then have a gas limit at least as large, and the unbounded reading accepts the transaction, where EthLib refuses it.
+That case needs a chain whose gas limit reaches `2^256`, and it exists only before Fusaka.
+From Fusaka [EIP-7825](https://eips.ethereum.org/EIPS/eip-7825#specification) caps the gas limit of a transaction at `2^24`, and from Glamsterdam [EIP-8037](https://eips.ethereum.org/EIPS/eip-8037#transaction-validation) caps it at `2^32 - 1`.
 
 ### A2. Hypotheses inside theorems
 

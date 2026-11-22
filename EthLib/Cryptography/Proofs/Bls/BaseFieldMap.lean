@@ -112,6 +112,19 @@ theorem map_powNat (f : Hom F G) (a : Fp2 F) (e : Nat) :
       rw [map_mul] at h
       split <;> simp only [map_mul, h]
 
+/-- The map of base fields on both coordinates respects the field operations of the extension. -/
+def hom (f : Hom F G) : FieldOps.Hom (Fp2 F) (Fp2 G) where
+  toFun := map f
+  map_add := map_add f
+  map_sub := map_sub f
+  map_mul := map_mul f
+  map_neg := map_neg f
+  map_zero := map_zero f
+  map_one := map_one f
+  map_beq := map_beq f
+  map_isZero := map_isZero f
+  map_inverse := map_inverse f
+
 end Fp2
 
 namespace Fp6

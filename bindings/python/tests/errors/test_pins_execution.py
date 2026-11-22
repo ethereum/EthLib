@@ -402,6 +402,157 @@ ACCOUNT_ANSWER = {
             lambda: chain.execution_blob_schedule({}, {}, 0, 0),
             id="chain-blob-schedule",
         ),
+        # An activation is a list of a fork, a kind and a number, not a number.
+        pytest.param(
+            ChainError,
+            0,
+            "an activation is not [fork, kind, n]",
+            lambda: chain.active_fork({**CONFIG, "activations": [5]}, 0, 0),
+            id="chain-activation-shape",
+        ),
+        # An activation is by block or by time, not by slot.
+        pytest.param(
+            ChainError,
+            0,
+            "no activation kind slot",
+            lambda: chain.active_fork({**CONFIG, "activations": [["frontier", "slot", 0]]}, 0, 0),
+            id="chain-activation-kind",
+        ),
+        # The number of an activation is a number, not text.
+        pytest.param(
+            ChainError,
+            0,
+            "an activation has no number",
+            lambda: chain.active_fork(
+                {**CONFIG, "activations": [["frontier", "block", "x"]]}, 0, 0
+            ),
+            id="chain-activation-number",
+        ),
+        # An activation at block 2^64 does not fit in 64 bits.
+        pytest.param(
+            ChainError,
+            0,
+            "an activation is not below 2^64",
+            lambda: chain.active_fork(
+                {**CONFIG, "activations": [["frontier", "block", 2**64]]}, 0, 0
+            ),
+            id="chain-activation-bound",
+        ),
+        # A blob schedule is a list, not a number.
+        pytest.param(
+            ChainError,
+            0,
+            "a blob schedule is not [fork?, kind, n, target, max, fraction]",
+            lambda: chain.active_fork({**CONFIG, "blobSchedules": [5]}, 0, 0),
+            id="chain-schedule-shape",
+        ),
+        # The target of a blob schedule is a number, not text.
+        pytest.param(
+            ChainError,
+            0,
+            "a blob schedule has no target",
+            lambda: chain.active_fork({**CONFIG, "blobSchedules": [["time", 0, "x", 6, 1]]}, 0, 0),
+            id="chain-schedule-target",
+        ),
+        # The maximum of a blob schedule is a number, not text.
+        pytest.param(
+            ChainError,
+            0,
+            "a blob schedule has no maximum",
+            lambda: chain.active_fork({**CONFIG, "blobSchedules": [["time", 0, 3, "x", 1]]}, 0, 0),
+            id="chain-schedule-maximum",
+        ),
+        # The update fraction of a blob schedule is a number, not text.
+        pytest.param(
+            ChainError,
+            0,
+            "a blob schedule has no fraction",
+            lambda: chain.active_fork({**CONFIG, "blobSchedules": [["time", 0, 3, 6, "x"]]}, 0, 0),
+            id="chain-schedule-fraction",
+        ),
+        # A target of 7 is above a maximum of 6.
+        pytest.param(
+            ChainError,
+            0,
+            (
+                "a blob schedule needs target ≤ max, 0 < max, "
+                "0 < update fraction and a blob gas of max below 2^64"
+            ),
+            lambda: chain.active_fork({**CONFIG, "blobSchedules": [["time", 0, 7, 6, 1]]}, 0, 0),
+            id="chain-schedule-bounds",
+        ),
+        # The blob schedules are a list, not a number.
+        pytest.param(
+            ChainError,
+            0,
+            "config: blobSchedules is not an array",
+            lambda: chain.active_fork({**CONFIG, "blobSchedules": 5}, 0, 0),
+            id="chain-schedules-type",
+        ),
+        # The configuration names no deposit contract.
+        pytest.param(
+            ChainError,
+            0,
+            "config: no depositContractAddress",
+            lambda: chain.active_fork({"chainId": 1, "activations": []}, 0, 0),
+            id="chain-deposit-missing",
+        ),
+        # The deposit contract is an address, not a number.
+        pytest.param(
+            ChainError,
+            0,
+            "config: depositContractAddress is not text",
+            lambda: chain.active_fork({**CONFIG, "depositContractAddress": 5}, 0, 0),
+            id="chain-deposit-text",
+        ),
+        # The address 00 has no 0x in front.
+        pytest.param(
+            ChainError,
+            0,
+            "config: depositContractAddress does not start with 0x",
+            lambda: chain.active_fork({**CONFIG, "depositContractAddress": "00"}, 0, 0),
+            id="chain-deposit-prefix",
+        ),
+        # The address 0x00 has 2 hex digits, not 40.
+        pytest.param(
+            ChainError,
+            0,
+            "config: depositContractAddress is not forty hex digits",
+            lambda: chain.active_fork({**CONFIG, "depositContractAddress": "0x00"}, 0, 0),
+            id="chain-deposit-digits",
+        ),
+        # The digit z is not hex.
+        pytest.param(
+            ChainError,
+            0,
+            "config: depositContractAddress is not hex",
+            lambda: chain.active_fork({**CONFIG, "depositContractAddress": "0x" + "zz" * 20}, 0, 0),
+            id="chain-deposit-hex",
+        ),
+        # A chain ID of 2^64 does not fit in 64 bits.
+        pytest.param(
+            ChainError,
+            0,
+            "config: chainId is not below 2^64",
+            lambda: chain.active_fork({**CONFIG, "chainId": 2**64}, 0, 0),
+            id="chain-id-bound",
+        ),
+        # The configuration has no activations.
+        pytest.param(
+            ChainError,
+            0,
+            "config: no activations",
+            lambda: chain.active_fork({"chainId": 1, "depositContractAddress": bytes(20)}, 0, 0),
+            id="chain-activations-missing",
+        ),
+        # A configuration file is an object, not a number.
+        pytest.param(
+            ChainError,
+            1,
+            "execution config: EthLib.Base.ExecutionConfig.ConfigError.notObject",
+            lambda: chain.execution_blob_schedule(CONFIG, 5, 0, 0),  # ty: ignore[invalid-argument-type]
+            id="chain-execution-config",
+        ),
         # The Status announces eth/70 on an eth/69 session.
         pytest.param(
             EthWireError,

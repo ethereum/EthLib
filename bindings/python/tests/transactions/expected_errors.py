@@ -60,6 +60,11 @@ _AUTHORIZATION = [
 ]
 
 
+def _bits(kind: int, name: str) -> int:
+    """The bits of a scalar field: 64 for a typed chain ID and a set-code nonce, else 256."""
+    return 64 if (name == "CHAINID" and kind >= 1) or (name == "NONCE" and kind == 4) else 256
+
+
 def _field(kind: int, name: str) -> int:
     names = FIELDS[kind]
     if name in ("SIGNATURE_R", "SIGNATURE_S"):
@@ -278,8 +283,11 @@ def _one(
         return _signature_fault(fields, kind)
     if name == "INVALID_CHAINID":
         return _chain_fault(fields, kind, fork, chain_id)
-    if name == "NONCE_TOO_BIG":
-        return f"nonceOverflow (nonce := {_scalar(fields[_field(kind, 'NONCE')])})"
+    if name in ("NONCE_TOO_BIG", "NONCE_OVERFLOW"):
+        index = _field(kind, "NONCE")
+        overflow = f"nonceOverflow (nonce := {_scalar(fields[index])})"
+        fault = _scalar_fault(f"decoding: field {index}: ", fields[index], _bits(kind, "NONCE"))
+        return fault or overflow
     if name == "PRIORITY_GREATER_THAN_MAX_FEE_PER_GAS_2":
         priority = _scalar(fields[_field(kind, "PRIORITY")])
         maximum = _scalar(fields[_field(kind, "MAXFEE")])
@@ -297,16 +305,12 @@ def _one(
         return f"insufficientGas (needed := {intrinsic}) (gas := {limit})"
     if name == "INITCODE_SIZE_EXCEEDED":
         return f"initCodeTooLarge (size := {len(fields[_field(kind, 'DATA')])})"
-    if name == "NONCE_OVERFLOW":
-        index = _field(kind, "NONCE")
-        overflow = f"nonceOverflow (nonce := {_scalar(fields[index])})"
-        return _scalar_fault(f"decoding: field {index}: ", fields[index]) or overflow
     if name.endswith("_OVERFLOW"):
         field = name.removesuffix("_OVERFLOW")
         if field == "GASPRICE" and kind >= 2:
             field = "MAXFEE"
         at = f"decoding: field {_field(kind, field)}: "
-        fault = _scalar_fault(at, fields[_field(kind, field)])
+        fault = _scalar_fault(at, fields[_field(kind, field)], _bits(kind, field))
         assert fault is not None, (name, tx.hex())
         return fault
     for prefix, fault in (("RLP_LEADING_ZEROS_", "leadingZeroInScalar"), ("RLP_INVALID_", None)):
@@ -318,7 +322,7 @@ def _one(
                 return at + fault
             if field.removeprefix("SIGNATURE_") in _BYTES:
                 return at + ("listAsBytes" if isinstance(fields[index], list) else "bytesAsList")
-            return _scalar_fault(at, fields[index])
+            return _scalar_fault(at, fields[index], _bits(kind, field))
     raise KeyError(f"no message for the exception {name}")
 
 

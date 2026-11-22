@@ -1,36 +1,16 @@
 module
 
-public import EthLib.Cryptography.Bls.G1
+public import EthLib.Cryptography.Proofs.Bls.JacobianLaw
 public import EthLib.Cryptography.Proofs.Bls.FpZMod
-public import Mathlib.AlgebraicGeometry.EllipticCurve.Jacobian.Point
-public import Mathlib.Tactic.Module
 
 /-!
 # Proofs: the group structure of `G1`
 
 The points of `G1` are Jacobian triples on `y^2 = x^3 + 4` over `Fp`.
 
-Mathlib's Jacobian curves quotient the nonsingular triples by weighted scaling.
+The group law holds for the formulas over any field, through a map into a field of Mathlib.
 
-Mathlib also proves that the affine points form a commutative group.
-
-This file links the two.
-
-The algebra is stated over `ZMod p`, where `ring` and `linear_combination` work.
-
-A triple is valid when it is nonsingular, and so on the curve.
-
-For `z = 0`, validity pins the triple to the class of `(1, 1, 0)`.
-
-Each valid triple maps to a point of Mathlib's affine group.
-
-Zero, negation, doubling and addition keep validity, and they are the group law.
-
-The doubling formulas agree with Mathlib's doubling exactly.
-
-The addition formulas agree with Mathlib's addition up to the scaling `u = -(2 z_1 z_2)`.
-
-That agreement holds modulo the two curve equations.
+Here the map sends `Fp` to `ZMod p`, where Mathlib's elliptic curves give the group.
 -/
 
 @[expose] public section
@@ -39,138 +19,14 @@ namespace EthLib.Cryptography.Bls.G1
 
 open WeierstrassCurve (Jacobian)
 open WeierstrassCurve.Jacobian
-open scoped EthLib.Cryptography.Bls.Fp
-
-/-- Unfolding equation for `mulNat`.
-
-The compiler-generated equations of a recursive definition exist only in its defining module.
-
-So it is stated here. -/
-theorem mulNat_def (p : G1) (k : Nat) :
-    mulNat p k = if k = 0 then zero
-      else if k % 2 = 1 then add p (mulNat (double p) (k / 2))
-      else mulNat (double p) (k / 2) := by
-  rw [mulNat]
-
-/-! ## The formulas as printed
-
-The library writes its formulas for speed.
-
-A product by 2, 3 or 8 is written as additions, and a point with `z = 1` takes shorter formulas.
-
-The proofs below follow the explicit-formulas database as printed, stated here as `doubleSpec` and `addSpec`.
-
-`double_eq_doubleSpec` and `add_eq_addSpec` prove that both compute the same coordinates. -/
-
-/-- Doubling, as `dbl-2009-l` prints it. -/
-def doubleSpec (p : G1) : G1 :=
-  if p.z.isZero then p else
-    let A := p.x * p.x
-    let B := p.y * p.y
-    let C := B * B
-    let D := Fp.ofNat 2 * ((p.x + B) * (p.x + B) - A - C)
-    let E := Fp.ofNat 3 * A
-    let F := E * E
-    let x' := F - Fp.ofNat 2 * D
-    let y' := E * (D - x') - Fp.ofNat 8 * C
-    let z' := Fp.ofNat 2 * p.y * p.z
-    ⟨x', y', z'⟩
-
-/-- Addition, as `add-2007-bl` prints it, with the special cases first. -/
-def addSpec (p q : G1) : G1 :=
-  if p.z.isZero then q else
-  if q.z.isZero then p else
-    let z1z1 := p.z * p.z
-    let z2z2 := q.z * q.z
-    let u1   := p.x * z2z2
-    let u2   := q.x * z1z1
-    let s1   := p.y * q.z * z2z2
-    let s2   := q.y * p.z * z1z1
-    if u1.beq u2 then
-      if s1.beq s2 then double p else zero
-    else
-      let h := u2 - u1
-      let i := (Fp.ofNat 2 * h) * (Fp.ofNat 2 * h)
-      let j := h * i
-      let r := Fp.ofNat 2 * (s2 - s1)
-      let v := u1 * i
-      let x' := r * r - j - Fp.ofNat 2 * v
-      let y' := r * (v - x') - Fp.ofNat 2 * s1 * j
-      let z' := ((p.z + q.z) * (p.z + q.z) - z1z1 - z2z2) * h
-      ⟨x', y', z'⟩
-
-/-- `2`, `3` and `8` in `Fp`, as sums of ones, so `grind` can normalize them. -/
-private theorem fp_two : Fp.ofNat 2 = 1 + 1 :=
-  Fp.ext (by simp only [Fp.val_ofNat, Fp.val_add, Fp.val_one])
-private theorem fp_three : Fp.ofNat 3 = 1 + 1 + 1 :=
-  Fp.ext (by simp only [Fp.val_ofNat, Fp.val_add, Fp.val_one, Nat.mod_add_mod])
-private theorem fp_eight : Fp.ofNat 8 = 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 :=
-  Fp.ext (by simp only [Fp.val_ofNat, Fp.val_add, Fp.val_one, Nat.mod_add_mod])
-
-/-- The library's doubling gives the printed coordinates. -/
-theorem double_eq_doubleSpec : (double : G1 → G1) = doubleSpec := by
-  funext p
-  unfold double doubleSpec
-  simp only [Fp.baseField_isZero]
-  split
-  · rfl
-  · simp only [fp_two, fp_three, fp_eight, G1.mk.injEq]
-    refine ⟨?_, ?_, ?_⟩ <;> grind
-
-/-- For `q` with `z = 1`, the printed addition gives the mixed coordinates. -/
-private theorem addSpec_eq_addMixed (p : G1) (qx qy : Fp)
-    (hp : ¬p.z.isZero = true) (hq : ¬(1 : Fp).isZero = true) :
-    addSpec p ⟨qx, qy, 1⟩ = addMixed p ⟨qx, qy, 1⟩ := by
-  unfold addSpec addMixed
-  simp only [Fp.baseField_beq]
-  rw [ite_eq_right hp, ite_eq_right hq]
-  -- With z2 = 1, u1 and s1 reduce to x1 and y1.
-  have hu : p.x * (1 * 1) = p.x := by grind
-  have hs : p.y * 1 * (1 * 1) = p.y := by grind
-  simp only [hu, hs]
-  split
-  · rfl
-  · simp only [fp_two, G1.mk.injEq]
-    refine ⟨?_, ?_, ?_⟩ <;> grind
-
-/-- For finite `p` and `q`, the printed addition gives the general coordinates. -/
-private theorem addSpec_eq_addGeneral (p q : G1) (hp : ¬p.z.isZero = true) (hq : ¬q.z.isZero = true) :
-    addSpec p q = addGeneral p q := by
-  unfold addSpec addGeneral
-  simp only [Fp.baseField_beq]
-  rw [ite_eq_right hp, ite_eq_right hq]
-  split
-  · rfl
-  · simp only [fp_two, G1.mk.injEq]
-    refine ⟨?_, ?_, ?_⟩ <;> grind
-
-/-- The library's addition gives the printed coordinates. -/
-theorem add_eq_addSpec : (add : G1 → G1 → G1) = addSpec := by
-  funext p q
-  unfold add
-  simp only [Fp.baseField_isZero, Fp.baseField_beq, show (BaseField.one : Fp) = Fp.one from rfl]
-  by_cases hp : p.z.isZero = true
-  · rw [ite_eq_left hp, addSpec, ite_eq_left hp]
-  by_cases hq : q.z.isZero = true
-  · rw [ite_eq_right hp, ite_eq_left hq, addSpec, ite_eq_right hp, ite_eq_left hq]
-  rw [ite_eq_right hp, ite_eq_right hq]
-  split
-  -- `q` has `z = 1`: rebuild it with a literal one, then compare with the mixed formulas.
-  · rename_i h1
-    obtain ⟨qx, qy, qz⟩ := q
-    have hz : qz = 1 := Fp.beq_iff.mp h1
-    subst hz
-    exact (addSpec_eq_addMixed p qx qy hp hq).symm
-  · exact (addSpec_eq_addGeneral p q hp hq).symm
 
 /-- The BLS12-381 curve `y^2 = x^3 + 4`.
 
 It is a Mathlib Weierstrass curve in Jacobian coordinates over `ZMod Fp.modulus`. -/
-def curve : Jacobian (ZMod Fp.modulus) :=
-  { a₁ := 0, a₂ := 0, a₃ := 0, a₄ := 0, a₆ := 4 }
+def curve : Jacobian (ZMod Fp.modulus) := Law.curveOf 4
 
 /-- The Mathlib Jacobian representative of a spec point: its coordinates, mapped to `ZMod p`. -/
-def rep (P : G1) : Fin 3 → ZMod Fp.modulus := ![Fp.toZMod P.x, Fp.toZMod P.y, Fp.toZMod P.z]
+def rep (P : G1) : Fin 3 → ZMod Fp.modulus := Law.repOf Fp.embedding P
 
 @[simp] theorem rep_x (P : G1) : rep P 0 = Fp.toZMod P.x := rfl
 @[simp] theorem rep_y (P : G1) : rep P 1 = Fp.toZMod P.y := rfl
@@ -193,447 +49,72 @@ noncomputable def toPoint (P : G1) : curve.toAffine.Point :=
 
 /-! ## Boolean-test bridges -/
 
-theorem isZero_iff {a : Fp} : a.isZero = true ↔ Fp.toZMod a = 0 := by
-  rw [Fp.isZero_eq, beq_iff_eq, Fp.val_eq]
-  exact ZMod.val_eq_zero _
+theorem isZero_iff {a : Fp} : a.isZero = true ↔ Fp.toZMod a = 0 :=
+  Fp.embedding.isZero_iff a
 
-theorem beq_iff {a b : Fp} : a.beq b = true ↔ Fp.toZMod a = Fp.toZMod b := by
-  rw [Fp.toZMod_inj]
-  exact Fp.beq_iff
+theorem beq_iff {a b : Fp} : a.beq b = true ↔ Fp.toZMod a = Fp.toZMod b :=
+  Fp.embedding.beq_iff a b
 
-/-! ## Zero and negation -/
+/-- `2` is not zero in `ZMod p`, since `p` is odd. -/
+private theorem two_ne_zero' : (2 : ZMod Fp.modulus) ≠ 0 := by decide
 
-theorem rep_zero : rep zero = ![1, 1, 0] := by
-  funext i
-  fin_cases i
-  · exact Fp.toZMod_one
-  · exact Fp.toZMod_one
-  · exact Fp.toZMod_zero
+/-! ## The group law, from the formulas over any field -/
+
+theorem rep_zero : rep zero = ![1, 1, 0] := Law.repOf_zero Fp.embedding
+
+/-- On a valid triple, `z = 0` exactly when the point is the zero of the group.
+
+Singular triples with `z ≠ 0` also map to zero, so the hypothesis is needed. -/
+theorem isInfinity_eq_true_iff_toPoint_eq_zero {P : G1} (hP : Valid P) :
+    P.isInfinity = true ↔ toPoint P = 0 :=
+  Law.isInfinity_eq_true_iff_toPoint_eq_zero Fp.embedding 4 hP
 
 /-- The point at infinity passes the test for infinity. -/
 @[simp] theorem isInfinity_zero : (zero : G1).isInfinity = true := Fp.zero_isZero
 
-theorem valid_zero : Valid zero := by
-  rw [Valid, rep_zero]
-  exact nonsingular_zero
+theorem valid_zero : Valid zero := Law.valid_zero Fp.embedding 4
 
-theorem toPoint_zero : toPoint zero = 0 := by
-  rw [toPoint, rep_zero]
-  exact Point.toAffine_zero
+theorem toPoint_zero : toPoint zero = 0 := Law.toPoint_zero Fp.embedding 4
 
-/-- `negY` on our curve is plain negation (`a₁ = a₃ = 0`).
+theorem rep_neg (P : G1) : rep (neg P) = curve.neg (rep P) := Law.repOf_neg Fp.embedding 4 P
 
-Phrased over honest `ZMod` binders, so the algebra stays in `ring`-friendly land. -/
-private theorem curve_negY (Q : Fin 3 → ZMod Fp.modulus) :
-    curve.negY Q = -Q 1 := by
-  rw [negY, show curve.a₁ = 0 from rfl, show curve.a₃ = 0 from rfl]
-  ring
+theorem valid_neg {P : G1} (h : Valid P) : Valid (neg P) := Law.valid_neg Fp.embedding 4 h
 
-theorem rep_neg (P : G1) : rep (neg P) = curve.neg (rep P) := by
-  -- Each coordinate is rewritten, since a defeq check through the map to `ZMod p` would unfold it.
-  have hx : (neg P).x = P.x := rfl
-  have hy : (neg P).y = -P.y := rfl
-  have hz : (neg P).z = P.z := rfl
-  funext i
-  fin_cases i
-  · show Fp.toZMod (neg P).x = curve.neg (rep P) 0
-    rw [neg_X, rep_x, hx]
-  · show Fp.toZMod (neg P).y = curve.neg (rep P) 1
-    rw [neg_Y, curve_negY, rep_y, hy, Fp.toZMod_neg]
-  · show Fp.toZMod (neg P).z = curve.neg (rep P) 2
-    rw [neg_Z, rep_z, hz]
-
-theorem valid_neg {P : G1} (h : Valid P) : Valid (neg P) := by
-  rw [Valid, rep_neg]
-  exact nonsingular_neg h
-
-theorem toPoint_neg {P : G1} (h : Valid P) : toPoint (neg P) = -toPoint P := by
-  rw [toPoint, rep_neg]
-  exact Point.toAffine_neg h
-
-
-/-! ## Doubling
-
-The spec's Bernstein–Lange `dbl-2009-l` formulas coincide with Mathlib's `dblXYZ` on our curve.
-
-They agree *on the nose* (scaling `u = 1`), as pure polynomial identities.
-
-No curve equation is needed.
-
-Each component lemma is phrased over `ZMod` binders, so `ring` applies.
-
-It has the spec's exact let-expansion on the left.
-
-`rep_double` hands the spec expressions over by definitional equality. -/
-
-private theorem dblX_eq (x y z : ZMod Fp.modulus) :
-    3 * (x * x) * (3 * (x * x))
-        - 2 * (2 * ((x + y * y) * (x + y * y) - x * x - y * y * (y * y)))
-      = curve.dblX ![x, y, z] := by
-  rw [dblX, dblU_eq, curve_negY]
-  simp only [show curve.a₁ = 0 from rfl, show curve.a₂ = 0 from rfl,
-    show curve.a₄ = 0 from rfl, Matrix.cons_val_zero, Matrix.cons_val_one,
-    Matrix.cons_val_two, Matrix.head_cons, Matrix.tail_cons]
-  ring
-
-private theorem dblY_eq (x y z : ZMod Fp.modulus) :
-    3 * (x * x)
-          * (2 * ((x + y * y) * (x + y * y) - x * x - y * y * (y * y))
-            - (3 * (x * x) * (3 * (x * x))
-              - 2 * (2 * ((x + y * y) * (x + y * y) - x * x
-                - y * y * (y * y)))))
-        - 8 * (y * y * (y * y))
-      = curve.dblY ![x, y, z] := by
-  rw [dblY, curve_negY]
-  show _ = -curve.negDblY ![x, y, z]
-  rw [negDblY, dblX, dblU_eq, curve_negY]
-  simp only [show curve.a₁ = 0 from rfl, show curve.a₂ = 0 from rfl,
-    show curve.a₄ = 0 from rfl, Matrix.cons_val_zero, Matrix.cons_val_one,
-    Matrix.cons_val_two, Matrix.head_cons, Matrix.tail_cons]
-  ring
-
-private theorem dblZ_eq (x y z : ZMod Fp.modulus) :
-    2 * y * z = curve.dblZ ![x, y, z] := by
-  rw [dblZ, curve_negY]
-  simp only [Matrix.cons_val_zero, Matrix.cons_val_one, Matrix.cons_val_two,
-    Matrix.head_cons, Matrix.tail_cons]
-  ring
+theorem toPoint_neg {P : G1} (h : Valid P) : toPoint (neg P) = -toPoint P :=
+  Law.toPoint_neg Fp.embedding 4 h
 
 theorem rep_double {P : G1} (hz : ¬P.z.isZero = true) :
-    rep (double P) = curve.dblXYZ (rep P) := by
-  funext i
-  fin_cases i
-  · show Fp.toZMod (double P).x = curve.dblX ![Fp.toZMod P.x, Fp.toZMod P.y, Fp.toZMod P.z]
-    rw [double_eq_doubleSpec, doubleSpec, ite_eq_right hz, ← dblX_eq]
-    push_toZMod
-  · show Fp.toZMod (double P).y = curve.dblY ![Fp.toZMod P.x, Fp.toZMod P.y, Fp.toZMod P.z]
-    rw [double_eq_doubleSpec, doubleSpec, ite_eq_right hz, ← dblY_eq]
-    push_toZMod
-  · show Fp.toZMod (double P).z = curve.dblZ ![Fp.toZMod P.x, Fp.toZMod P.y, Fp.toZMod P.z]
-    rw [double_eq_doubleSpec, doubleSpec, ite_eq_right hz, ← dblZ_eq]
-    push_toZMod
+    rep (double P) = curve.dblXYZ (rep P) :=
+  Law.repOf_double Fp.embedding 4 hz
 
-theorem valid_double {P : G1} (h : Valid P) : Valid (double P) := by
-  by_cases hz : P.z.isZero = true
-  · rw [Valid, double_eq_doubleSpec, doubleSpec, ite_eq_left hz]
-    exact h
-  · rw [Valid, rep_double hz, ← add_of_equiv (Setoid.refl (rep P))]
-    exact nonsingular_add h h
+theorem valid_double {P : G1} (h : Valid P) : Valid (double P) :=
+  Law.valid_double Fp.embedding 4 h
 
 theorem toPoint_double {P : G1} (h : Valid P) :
-    toPoint (double P) = toPoint P + toPoint P := by
-  by_cases hz : P.z.isZero = true
-  · have h0 : toPoint P = 0 :=
-      Point.toAffine_of_Z_eq_zero (isZero_iff.mp hz)
-    rw [double_eq_doubleSpec, doubleSpec, show (if P.z.isZero = true then P else _) = P from ite_eq_left hz]
-    rw [h0, add_zero]
-  · rw [toPoint, rep_double hz, ← add_of_equiv (Setoid.refl (rep P))]
-    exact Point.toAffine_add h h
+    toPoint (double P) = toPoint P + toPoint P :=
+  Law.toPoint_double Fp.embedding 4 h
 
-/-! ## Addition
-
-The spec's Bernstein–Lange `add-2007-bl` formulas agree with Mathlib's `addXYZ`.
-
-They agree up to the weighted Jacobian scaling `u = -(2·z_1·z_2)`.
-
-They agree *modulo the curve equations* of the two inputs.
-
-The `linear_combination` coefficients below were computed symbolically.
-
-The special branches (`z = 0`, doubling, opposite points) go through Mathlib's equivalence lemmas.
-
-Those lemmas work at the affine level. -/
-
-/-- The curve equation of a valid point, in `linear_combination`-ready form (`y^2 = x^3 + 4z^6`).
-
-It is phrased over `rep` projections, so every operation is syntactically over `ZMod`. -/
+/-- The curve equation of a valid point, in `linear_combination`-ready form (`y^2 = x^3 + 4z^6`). -/
 theorem valid_equation {P : G1} (h : Valid P) :
-    rep P 1 ^ 2 = rep P 0 ^ 3 + 4 * rep P 2 ^ 6 := by
-  have heq := ((nonsingular_iff (rep P)).mp h).1
-  rw [equation_iff] at heq
-  simp only [show curve.a₁ = 0 from rfl, show curve.a₂ = 0 from rfl,
-    show curve.a₃ = 0 from rfl, show curve.a₄ = 0 from rfl,
-    show curve.a₆ = (4 : ZMod Fp.modulus) from rfl] at heq
-  linear_combination heq
+    rep P 1 ^ 2 = rep P 0 ^ 3 + 4 * rep P 2 ^ 6 :=
+  Law.valid_equation Fp.embedding 4 h
 
-/-- The three components of the spec's general-case addition.
-
-They are weighted scalings of Mathlib's `addXYZ`, modulo the two curve equations.
-
-The intermediate values of the Bernstein–Lange formula are *binders* pinned by defining equations.
-
-The caller instantiates them with the spec's own subexpressions.
-
-It discharges each equation by (cheap, small) definitional equality.
-
-This keeps the elaborator away from one giant cross-instance comparison.
-
-The `linear_combination` coefficients were computed symbolically and checked numerically. -/
-private theorem spec_add_components
-    (x1 y1 z1 x2 y2 z2 z11 z22 u1 u2 s1 s2 h i j r v xp : ZMod Fp.modulus)
-    (hz11 : z11 = z1 * z1) (hz22 : z22 = z2 * z2)
-    (hu1 : u1 = x1 * z22) (hu2 : u2 = x2 * z11)
-    (hs1 : s1 = y1 * z2 * z22) (hs2 : s2 = y2 * z1 * z11)
-    (hh : h = u2 - u1) (hi : i = 2 * h * (2 * h)) (hj : j = h * i)
-    (hr : r = 2 * (s2 - s1)) (hv : v = u1 * i)
-    (hxp : xp = r * r - j - 2 * v)
-    (hP : y1 ^ 2 = x1 ^ 3 + 4 * z1 ^ 6) (hQ : y2 ^ 2 = x2 ^ 3 + 4 * z2 ^ 6) :
-    xp = (-(2 * (z1 * z2))) ^ 2 * curve.addX ![x1, y1, z1] ![x2, y2, z2]
-    ∧ r * (v - xp) - 2 * s1 * j
-        = (-(2 * (z1 * z2))) ^ 3 * curve.addY ![x1, y1, z1] ![x2, y2, z2]
-    ∧ ((z1 + z2) * (z1 + z2) - z11 - z22) * h
-        = -(2 * (z1 * z2))
-            * WeierstrassCurve.Jacobian.addZ ![x1, y1, z1] ![x2, y2, z2] := by
-  subst hz11 hz22 hu1 hu2 hs1 hs2 hh hi hj hr hv hxp
-  refine ⟨?_, ?_, ?_⟩
-  · rw [addX]
-    simp only [show curve.a₁ = 0 from rfl, show curve.a₂ = 0 from rfl,
-      show curve.a₃ = 0 from rfl, show curve.a₄ = 0 from rfl,
-      show curve.a₆ = (4 : ZMod Fp.modulus) from rfl,
-      Matrix.cons_val_zero, Matrix.cons_val_one, Matrix.cons_val_two,
-      Matrix.head_cons, Matrix.tail_cons]
-    linear_combination (4 * z2 ^ 6) * hP + (4 * z1 ^ 6) * hQ
-  · rw [addY, curve_negY]
-    show _ = (-(2 * (z1 * z2))) ^ 3
-      * -curve.negAddY ![x1, y1, z1] ![x2, y2, z2]
-    rw [negAddY]
-    simp only [show curve.a₁ = 0 from rfl, show curve.a₂ = 0 from rfl,
-      show curve.a₃ = 0 from rfl, show curve.a₄ = 0 from rfl,
-      show curve.a₆ = (4 : ZMod Fp.modulus) from rfl,
-      Matrix.cons_val_zero, Matrix.cons_val_one, Matrix.cons_val_two,
-      Matrix.head_cons, Matrix.tail_cons]
-    linear_combination (8 * z2 ^ 6 * (y1 * z2 ^ 3 - y2 * z1 ^ 3)) * hP
-      + (8 * z1 ^ 6 * (y1 * z2 ^ 3 - y2 * z1 ^ 3)) * hQ
-  · rw [addZ]
-    simp only [Matrix.cons_val_zero, Matrix.cons_val_two,
-      Matrix.head_cons, Matrix.tail_cons]
-    ring
-
-/-! ### Branch extraction for `G1.add` -/
-
-private theorem add_of_left_zero {P Q : G1} (hz1 : P.z.isZero = true) :
-    add P Q = Q := by
-  rw [add_eq_addSpec, addSpec]
-  exact ite_eq_left hz1
-
-private theorem add_of_right_zero {P Q : G1} (hz1 : ¬P.z.isZero = true)
-    (hz2 : Q.z.isZero = true) : add P Q = P := by
-  rw [add_eq_addSpec, addSpec, ite_eq_right hz1]
-  exact ite_eq_left hz2
-
-private theorem add_of_dbl {P Q : G1} (hz1 : ¬P.z.isZero = true)
-    (hz2 : ¬Q.z.isZero = true)
-    (hu : (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true)
-    (hs : (P.y * Q.z * (Q.z * Q.z)).beq (Q.y * P.z * (P.z * P.z)) = true) :
-    add P Q = double P := by
-  rw [add_eq_addSpec, addSpec, ite_eq_right hz1, ite_eq_right hz2]
-  exact (ite_eq_left hu).trans (ite_eq_left hs)
-
-private theorem add_of_opp {P Q : G1} (hz1 : ¬P.z.isZero = true)
-    (hz2 : ¬Q.z.isZero = true)
-    (hu : (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true)
-    (hs : ¬(P.y * Q.z * (Q.z * Q.z)).beq (Q.y * P.z * (P.z * P.z)) = true) :
-    add P Q = zero := by
-  rw [add_eq_addSpec, addSpec, ite_eq_right hz1, ite_eq_right hz2]
-  exact (ite_eq_left hu).trans (ite_eq_right hs)
-
-private theorem rep_add_general {P Q : G1} (hP : Valid P) (hQ : Valid Q)
-    (hz1 : ¬P.z.isZero = true) (hz2 : ¬Q.z.isZero = true)
-    (hu : ¬(P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true) :
-    rep (add P Q)
-      = (-(2 * (rep P 2 * rep Q 2)))
-          • curve.addXYZ (rep P) (rep Q) := by
-  obtain ⟨hX, hY, hZ⟩ := spec_add_components (Fp.toZMod P.x) (Fp.toZMod P.y) (Fp.toZMod P.z)
-    (Fp.toZMod Q.x) (Fp.toZMod Q.y) (Fp.toZMod Q.z)
-    (Fp.toZMod (P.z * P.z))
-    (Fp.toZMod (Q.z * Q.z))
-    (Fp.toZMod (P.x * (Q.z * Q.z)))
-    (Fp.toZMod (Q.x * (P.z * P.z)))
-    (Fp.toZMod (P.y * Q.z * (Q.z * Q.z)))
-    (Fp.toZMod (Q.y * P.z * (P.z * P.z)))
-    (Fp.toZMod (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)))
-    (Fp.toZMod (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z *
-      P.z) - P.x * (Q.z * Q.z)))))
-    (Fp.toZMod ((Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x *
-      (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))))
-    (Fp.toZMod (Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))))
-    (Fp.toZMod ((P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) *
-      (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))))
-    (Fp.toZMod ((Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) * (Fp.ofNat 2
-      * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) - ((Q.x * (P.z * P.z) - P.x * (Q.z
-      * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z *
-      P.z) - P.x * (Q.z * Q.z))))) - Fp.ofNat 2 * ((P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z *
-      P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)))))))
-    (by push_toZMod) (by push_toZMod) (by push_toZMod) (by push_toZMod) (by push_toZMod)
-    (by push_toZMod) (by push_toZMod) (by push_toZMod) (by push_toZMod) (by push_toZMod)
-    (by push_toZMod) (by push_toZMod)
-    (valid_equation hP) (valid_equation hQ)
-  have hbranch : add P Q = G1.mk
-      ((Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) * (Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) - ((Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))) - Fp.ofNat 2 * ((P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))))
-      ((Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) * (((P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))) - ((Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) * (Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) - ((Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))) - Fp.ofNat 2 * ((P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))))) - Fp.ofNat 2 * (P.y * Q.z * (Q.z * Q.z)) * ((Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))))
-      (((P.z + Q.z) * (P.z + Q.z) - (P.z * P.z) - (Q.z * Q.z)) * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))) := by
-    rw [add_eq_addSpec, addSpec, ite_eq_right hz1, ite_eq_right hz2]
-    exact ite_eq_right hu
-  rw [hbranch]
-  funext k
-  -- Each side is pushed into `ZMod p`, since a defeq check through the map would unfold it.
-  fin_cases k
-  · have h := hX.trans ((smul_fin3_ext (curve.addXYZ (rep P) (rep Q))
-      (-(2 * (rep P 2 * rep Q 2)))).1).symm
-    show Fp.toZMod _ = _
-    push_toZMod at h ⊢
-    exact h
-  · have h := hY.trans ((smul_fin3_ext (curve.addXYZ (rep P) (rep Q))
-      (-(2 * (rep P 2 * rep Q 2)))).2.1).symm
-    show Fp.toZMod _ = _
-    push_toZMod at h ⊢
-    exact h
-  · have h := hZ.trans ((smul_fin3_ext (curve.addXYZ (rep P) (rep Q))
-      (-(2 * (rep P 2 * rep Q 2)))).2.2).symm
-    show Fp.toZMod _ = _
-    push_toZMod at h ⊢
-    exact h
-
-/-! ### The addition homomorphism -/
-
-/-- The two `beq` branch conditions of `G1.add`, restated over `rep` projections.
-
-They are definitionally equal to the originals.
-
-But every operation is syntactically over `ZMod`, as `linear_combination` needs. -/
-private theorem beq_x_iff {P Q : G1} :
-    (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true
-      ↔ rep P 0 * (rep Q 2 * rep Q 2) = rep Q 0 * (rep P 2 * rep P 2) := by
-  simp only [beq_iff, rep_x, rep_z, Fp.toZMod_mul]
-
-private theorem beq_y_iff {P Q : G1} :
-    (P.y * Q.z * (Q.z * Q.z)).beq (Q.y * P.z * (P.z * P.z)) = true
-      ↔ rep P 1 * rep Q 2 * (rep Q 2 * rep Q 2)
-          = rep Q 1 * rep P 2 * (rep P 2 * rep P 2) := by
-  simp only [beq_iff, rep_y, rep_z, Fp.toZMod_mul]
-
-private theorem two_ne_zero' : (2 : ZMod Fp.modulus) ≠ 0 := by decide
-
-/-- `P.z ≠ 0` in `ZMod` form. -/
-private theorem z_ne_zero {P : G1} (hz : ¬P.z.isZero = true) :
-    rep P 2 ≠ 0 := fun h => hz (isZero_iff.mpr h)
-
-/-- The scaling unit of the general addition branch is a unit. -/
-private theorem isUnit_scale {P Q : G1} (hz1 : ¬P.z.isZero = true)
-    (hz2 : ¬Q.z.isZero = true) :
-    IsUnit (-(2 * (rep P 2 * rep Q 2))) := by
-  exact (neg_ne_zero.mpr (mul_ne_zero two_ne_zero'
-    (mul_ne_zero (z_ne_zero hz1) (z_ne_zero hz2)))).isUnit
-
-theorem valid_add {P Q : G1} (hP : Valid P) (hQ : Valid Q) :
-    Valid (add P Q) := by
-  by_cases hz1 : P.z.isZero = true
-  · rw [add_of_left_zero hz1]
-    exact hQ
-  by_cases hz2 : Q.z.isZero = true
-  · rw [add_of_right_zero hz1 hz2]
-    exact hP
-  by_cases hu : (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true
-  · by_cases hs : (P.y * Q.z * (Q.z * Q.z)).beq (Q.y * P.z * (P.z * P.z)) = true
-    · rw [Valid, add_of_dbl hz1 hz2 hu hs]
-      exact valid_double hP
-    · rw [Valid, add_of_opp hz1 hz2 hu hs]
-      exact valid_zero
-  · rw [Valid, rep_add_general hP hQ hz1 hz2 hu]
-    rw [nonsingular_smul _ (isUnit_scale hz1 hz2),
-        ← add_of_not_equiv (fun heq => hu (beq_x_iff.mpr (by linear_combination X_eq_of_equiv heq)))]
-    exact nonsingular_add hP hQ
+theorem valid_add {P Q : G1} (hP : Valid P) (hQ : Valid Q) : Valid (add P Q) :=
+  Law.valid_add Fp.embedding 4 two_ne_zero' hP hQ
 
 theorem toPoint_add {P Q : G1} (hP : Valid P) (hQ : Valid Q) :
-    toPoint (add P Q) = toPoint P + toPoint Q := by
-  by_cases hz1 : P.z.isZero = true
-  · rw [add_of_left_zero hz1,
-      show toPoint P = 0 from Point.toAffine_of_Z_eq_zero (isZero_iff.mp hz1),
-      zero_add]
-  by_cases hz2 : Q.z.isZero = true
-  · rw [add_of_right_zero hz1 hz2,
-      show toPoint Q = 0 from Point.toAffine_of_Z_eq_zero (isZero_iff.mp hz2),
-      add_zero]
-  by_cases hu : (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true
-  · -- Cross-multiplied X-coordinates agree.
-    have hx : rep P 0 * rep Q 2 ^ 2 = rep Q 0 * rep P 2 ^ 2 := by
-      linear_combination beq_x_iff.mp hu
-    by_cases hs : (P.y * Q.z * (Q.z * Q.z)).beq (Q.y * P.z * (P.z * P.z)) = true
-    · -- Same point: spec doubles, and `toPoint Q = toPoint P`.
-      have hy : rep P 1 * rep Q 2 ^ 3 = rep Q 1 * rep P 2 ^ 3 := by
-        linear_combination beq_y_iff.mp hs
-      have hequiv : rep P ≈ rep Q :=
-        equiv_of_X_eq_of_Y_eq (z_ne_zero hz1) (z_ne_zero hz2) hx hy
-      rw [add_of_dbl hz1 hz2 hu hs, toPoint_double hP,
-        show toPoint P = toPoint Q from Point.toAffine_of_equiv hequiv]
-    · -- Opposite points: spec returns zero, and `toPoint Q = -toPoint P`.
-      have hy : rep P 1 * rep Q 2 ^ 3 ≠ rep Q 1 * rep P 2 ^ 3 := fun heq =>
-        hs (beq_y_iff.mpr (by linear_combination heq))
-      have hyneg := Y_eq_of_Y_ne ((nonsingular_iff (rep P)).mp hP).1
-        ((nonsingular_iff (rep Q)).mp hQ).1 hx hy
-      have hequiv : rep P ≈ curve.neg (rep Q) := by
-        refine equiv_of_X_eq_of_Y_eq (z_ne_zero hz1) ?_ ?_ ?_
-        · rw [neg_Z]
-          exact z_ne_zero hz2
-        · rw [neg_X, neg_Z]
-          exact hx
-        · rw [neg_Y, neg_Z]
-          exact hyneg
-      rw [add_of_opp hz1 hz2 hu hs, toPoint_zero,
-        show toPoint P = -toPoint Q from (Point.toAffine_of_equiv hequiv).trans
-          (Point.toAffine_neg hQ),
-        neg_add_cancel]
-  · -- General branch: the spec output is a unit scaling of `addXYZ`.
-    have hne : ¬rep P ≈ rep Q := fun heq =>
-      hu (beq_x_iff.mpr (by linear_combination X_eq_of_equiv heq))
-    rw [toPoint, rep_add_general hP hQ hz1 hz2 hu]
-    rw [Point.toAffine_of_equiv (smul_equiv _ (isUnit_scale hz1 hz2)),
-        ← add_of_not_equiv hne]
-    exact Point.toAffine_add hP hQ
+    toPoint (add P Q) = toPoint P + toPoint Q :=
+  Law.toPoint_add Fp.embedding 4 two_ne_zero' hP hQ
 
-/-! ### Scalar multiplication -/
-
-theorem valid_mulNat {P : G1} (h : Valid P) (k : Nat) : Valid (mulNat P k) := by
-  induction k using Nat.strongRecOn generalizing P with
-  | _ k ih =>
-    rw [mulNat_def]
-    split
-    · exact valid_zero
-    · rename_i hk
-      show Valid (if k % 2 = 1 then add P (mulNat (double P) (k / 2))
-        else mulNat (double P) (k / 2))
-      by_cases h2 : k % 2 = 1
-      · rw [ite_eq_left h2]
-        exact valid_add h (ih (k / 2) (by omega) (valid_double h))
-      · rw [ite_eq_right h2]
-        exact ih (k / 2) (by omega) (valid_double h)
+theorem valid_mulNat {P : G1} (h : Valid P) (k : Nat) : Valid (mulNat P k) :=
+  Law.valid_mulNat Fp.embedding 4 two_ne_zero' h k
 
 /-- The spec's double-and-add scalar multiplication is Mathlib's `ℕ` scalar action on the group.
 
 The group is the curve group. -/
 theorem toPoint_mulNat {P : G1} (h : Valid P) (k : Nat) :
-    toPoint (mulNat P k) = k • toPoint P := by
-  induction k using Nat.strongRecOn generalizing P with
-  | _ k ih =>
-    rw [mulNat_def]
-    split
-    · rename_i hk
-      subst hk
-      rw [toPoint_zero]
-      exact (zero_nsmul _).symm
-    · rename_i hk
-      show toPoint (if k % 2 = 1 then add P (mulNat (double P) (k / 2))
-        else mulNat (double P) (k / 2)) = k • toPoint P
-      by_cases h2 : k % 2 = 1
-      · obtain ⟨m, rfl⟩ : ∃ m, k = 2 * m + 1 := ⟨k / 2, by omega⟩
-        have hm : (2 * m + 1) / 2 = m := by omega
-        rw [ite_eq_left h2, toPoint_add h (valid_mulNat (valid_double h) _), hm,
-            ih m (by omega) (valid_double h), toPoint_double h]
-        module
-      · obtain ⟨m, rfl⟩ : ∃ m, k = 2 * m := ⟨k / 2, by omega⟩
-        have hm : 2 * m / 2 = m := by omega
-        rw [ite_eq_right h2, hm, ih m (by omega) (valid_double h), toPoint_double h]
-        module
+    toPoint (mulNat P k) = k • toPoint P :=
+  Law.toPoint_mulNat Fp.embedding 4 two_ne_zero' h k
 
 /-- The spec's `Fr`-scalar multiplication acts through the scalar's value. -/
 theorem toPoint_mul {P : G1} (h : Valid P) (s : Fr) :

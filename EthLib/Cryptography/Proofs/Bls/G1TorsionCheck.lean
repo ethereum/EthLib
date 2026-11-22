@@ -155,7 +155,7 @@ private theorem beq_eq (a b : Nat) : Nat.beq a b = (a == b) :=
 private def modelCoords (q : G1 Fp.Model) : Coords := (q.x.val, q.y.val, q.z.val)
 
 /-- A point and its image in the model have the same coordinates. -/
-private theorem coords_eq (q : G1) : coords q = modelCoords (G1.map Fp.toModel q) := by
+private theorem coords_eq (q : G1) : coords q = modelCoords (G1.map Fp.toModel.toHom q) := by
   simp only [coords, modelCoords, G1.map, Fp.val_toModel]
 
 private theorem modelCoords_double (q : G1 Fp.Model) :
@@ -230,9 +230,9 @@ theorem coords_addGeneral (p q : G1) :
   rw [coords_eq, G1.map_addGeneral, modelCoords_addGeneral, ← coords_eq, ← coords_eq]
 
 theorem coords_add (p q : G1) : coords (G1.add p q) = add (coords p) (coords q) := by
-  have h := G1.map_add Fp.toModel p q
-  rw [coords_eq, show G1.map Fp.toModel (G1.add p q) = G1.add (G1.map Fp.toModel p)
-    (G1.map Fp.toModel q) from h, modelCoords_add, ← coords_eq, ← coords_eq]
+  have h := G1.map_add Fp.toModel.toHom p q
+  rw [coords_eq, show G1.map Fp.toModel.toHom (G1.add p q) = G1.add (G1.map Fp.toModel.toHom p)
+    (G1.map Fp.toModel.toHom q) from h, modelCoords_add, ← coords_eq, ← coords_eq]
 
 theorem coords_neg (q : G1) : coords (G1.neg q) = neg (coords q) := by
   simp only [coords, neg, G1.neg, Fp.val_neg]

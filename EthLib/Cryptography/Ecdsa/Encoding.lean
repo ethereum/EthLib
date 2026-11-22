@@ -31,6 +31,7 @@ def SIGNATURE_LEN : Nat := 64
 
 Each integer is taken modulo `2^256`, so a value below `2^256` keeps its value. -/
 def toBytes (r s : Nat) : Vector UInt8 SIGNATURE_LEN :=
+  -- RFC 7518 §3.4 steps 2 to 4: `R` and `S` as 32 big-endian octets each, `R` then `S`.
   ⟨(Base.natToBytes 32 r ++ Base.natToBytes 32 s).toArray, by
     simp [Base.natToBytes_length, SIGNATURE_LEN]⟩
 

@@ -317,7 +317,7 @@ noncomputable def hom : G2.curve.toAffine.Point →+ G2.curve.toAffine.Point whe
 theorem toAffine_eq_div (p : G2) (hi : p.z.isZero = false) :
     p.toAffine = (p.x / p.z ^ 2, p.y / p.z ^ 3) := by
   have hz : ¬p.z.isZero = true := by simp [hi]
-  simp only [G2.toAffine, ite_eq_right hz]
+  simp only [G1.toAffine, Fp2.fieldOps_isZero, ite_eq_right hz]
   change (p.x * (p.z⁻¹ * p.z⁻¹), p.y * (p.z⁻¹ * p.z⁻¹ * p.z⁻¹)) = _
   apply Prod.ext <;> dsimp <;> simp only [div_eq_mul_inv] <;> ring
 
@@ -352,14 +352,14 @@ theorem toPoint_psi_add {P Q : G2} (hP : G2.Valid P) (hQ : G2.Valid Q) :
   rw [toPoint_psi (G2.valid_add hP hQ), G2.toPoint_add hP hQ, map_add,
     toPoint_psi hP, toPoint_psi hQ]
 
-/-- `psi` commutes with `G2.mulNat` on valid Jacobian representatives. -/
+/-- `psi` commutes with scalar multiplication on valid Jacobian representatives. -/
 theorem toPoint_psi_mulNat {P : G2} (hP : G2.Valid P) (n : Nat) :
-    G2.toPoint (psi (G2.mulNat P n)) = n • G2.toPoint (psi P) := by
+    G2.toPoint (psi (P.mulNat n)) = n • G2.toPoint (psi P) := by
   rw [toPoint_psi (G2.valid_mulNat hP n), G2.toPoint_mulNat hP, map_nsmul, toPoint_psi hP]
 
 /-- `psi(g_2) = [x] * g_2` for the BLS parameter `x`, checked in the kernel in the model of `Fp`. -/
 theorem psi_generator_projectiveEq :
-    G2.projectiveEq (psi (G2.generator : G2)) (mulNegX G2.generator) = true := by
+    (psi (G2.generator : G2)).projectiveEq (mulNegX G2.generator) = true := by
   unfold mulNegX
   rw [← G2.mulNatAux_eq 65 G2.generator blsX (by decide)]
   decide_g2_at_model [map_psi]

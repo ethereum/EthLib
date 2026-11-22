@@ -58,11 +58,17 @@ inductive ConfigError where
   | notObject
   /-- The blob schedules are present, not null, and not a JSON object. -/
   | schedulesNotObject
-  /-- The time of a fork is not a natural number below `2^64`, the bound of a block's time. -/
+  /-- The time of a fork is not a natural number below `2^64`.
+
+  The fork identifier holds each fork time as a `uint64`. -/
   | timeNotNumber (fork : Fork)
   /-- The entry of a fork is not an object with three natural numbers. -/
   | scheduleMalformed (fork : Fork)
-  /-- The entry of a fork has a target above its maximum, or a maximum or fraction of 0. -/
+  /-- The entry of a fork has a target above its maximum, or a maximum or fraction of 0.
+
+  It is also this error when the blob gas of the maximum reaches `2^64`.
+
+  So a target or a maximum of `2^64` or more is refused. -/
   | scheduleOutOfBounds (fork : Fork)
   /-- A fork has an entry, but the file gives it no time. -/
   | scheduleWithoutTime (fork : Fork)
@@ -90,8 +96,8 @@ def readTime (j : Json) (fork : Fork) (name : String) : Except ConfigError (Opti
   match j.getObjVal? (name ++ "Time") with
   | .error _ => pure none
   | .ok v => match v.getNat? with
-    -- A block's time is below `2^64`, so a larger time is refused.
-    | .ok t => if t < 2 ^ 64 then pure (some t) else throw (.timeNotNumber fork)
+    -- The fork identifier hashes a fork time in 64 bits, so a larger time is refused.
+    | .ok t => if t < ACTIVATION_BOUND then pure (some t) else throw (.timeNotNumber fork)
     | .error _ => throw (.timeNotNumber fork)
 
 /-- The blob schedule of one entry: its target, maximum and update fraction. -/
@@ -99,10 +105,10 @@ def readSchedule (fork : Fork) (v : Json) : Except ConfigError BlobSchedule :=
   match v.getObjValAs? Nat "target", v.getObjValAs? Nat "max",
       v.getObjValAs? Nat "baseFeeUpdateFraction" with
   | .ok target, .ok max, .ok fraction =>
-    -- The target is at most the maximum, and the maximum and the fraction are positive.
-    if h : target ≤ max ∧ 0 < max ∧ 0 < fraction then
-      pure ⟨target, max, fraction, h.1, h.2.1, h.2.2⟩
-    else throw (.scheduleOutOfBounds fork)
+    -- The three numbers must meet the bounds of a schedule, which keep the first two in 64 bits.
+    match BlobSchedule.ofNat? target max fraction with
+    | some schedule => pure schedule
+    | none => throw (.scheduleOutOfBounds fork)
   | _, _, _ => throw (.scheduleMalformed fork)
 
 /-- The activation by time that a configuration gives a fork, if it gives one. -/
@@ -186,7 +192,7 @@ def readExecutionConfig (base : ChainConfig) (j : Json) : Except ConfigError Cha
 
 /-- The entry of a blob schedule: its target, maximum and update fraction, as JSON numbers. -/
 def scheduleJson (s : BlobSchedule) : Json :=
-  Json.mkObj [("target", toJson s.target), ("max", toJson s.max),
+  Json.mkObj [("target", toJson s.target.toNat), ("max", toJson s.max.toNat),
     ("baseFeeUpdateFraction", toJson s.baseFeeUpdateFraction)]
 
 /-- The fork times and blob schedules of a configuration, as a configuration file holds them.
@@ -227,7 +233,7 @@ It activates with its fork, by time. -/
 def Writable (config : ChainConfig) : Prop :=
   config.Ordered ∧
   (∀ f t, (f, Activation.time t) ∈ config.activations →
-    f ∈ forkNames.map Prod.fst ∧ t < 2 ^ 64) ∧
+    f ∈ forkNames.map Prod.fst ∧ t < ACTIVATION_BOUND) ∧
   config.blobSchedules.Pairwise (fun x y => ∀ f g, x.1 = some f → y.1 = some g → f < g) ∧
   (∀ g a s, (g, a, s) ∈ config.blobSchedules →
     ∃ f t, g = some f ∧ .dencun ≤ f ∧ a = .time t ∧ (f, Activation.time t) ∈ config.activations)

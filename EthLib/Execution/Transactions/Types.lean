@@ -13,11 +13,33 @@ The five kinds of transaction, and the fork that adds each kind.
 
 A transaction is legacy, or it is typed as [EIP-2718](https://eips.ethereum.org/EIPS/eip-2718) asks.
 
-Section 4.2 of the Yellow Paper, Shanghai version, bounds each integer field below 2^256.
+Section 4.2 of the Yellow Paper, Shanghai version, puts the integer fields below 2^256.
+
+That covers the gas limit, the gas price and the two fee caps, which [EIP-1559][eip1559] bounds too.
+
+So they are 256-bit words here, and a larger value fails at decoding.
+
+[execution-specs][es] at `391d8a0` reads them otherwise: it types them `Uint`, unbounded.
+
+In a block, both readings refuse a fee of 2^256 or more, since no balance can pay it.
+
+The fee is the gas limit times the gas price, or times the maximum fee per gas.
+
+The readings differ only for a gas limit of 2^256 or more with a price of 0, before Fusaka.
+
+The unbounded reading accepts it in a block whose gas limit is at least as large.
+
+From Fusaka, [EIP-7825][eip7825] caps the gas limit at 2^24.
+
+From Glamsterdam, [EIP-8037][eip8037] caps it at 2^32 - 1 instead.
 
 Source: [`Paper.tex` at `efc5f9a`][yp].
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
+[eip1559]: https://eips.ethereum.org/EIPS/eip-1559#specification
+[eip7825]: https://eips.ethereum.org/EIPS/eip-7825#specification
+[eip8037]: https://eips.ethereum.org/EIPS/eip-8037#transaction-validation
+[es]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/prague/transactions.py
 -/
 
 @[expose] public section
@@ -185,8 +207,19 @@ It always has a recipient, so it never creates a contract. -/
 structure SetCodeTransaction where
   /-- The chain of the transaction, a 64-bit number. -/
   chainId : UInt64
-  /-- The number of transactions that the sender sent before. -/
-  nonce : U256
+  /-- The number of transactions that the sender sent before, a 64-bit number.
+
+  So a nonce of 2^64 or more fails at decoding.
+
+  The other kinds of transaction hold their nonce in 256 bits.
+
+  No EIP fixes this width.
+
+  Provenance: the set-code transaction class of [execution-specs][es] at `391d8a0`.
+
+  [es]: https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/prague/transactions.py
+  -/
+  nonce : UInt64
   /-- The most wei per unit of gas that goes to the fee recipient of the block. -/
   maxPriorityFeePerGas : U256
   /-- The most wei per unit of gas that the sender pays, base fee included. -/

@@ -130,6 +130,7 @@ Each round applies four quarter-rounds, one per column or row. -/
   let x13 := s.x13
   let x14 := s.x14
   let x15 := s.x15
+  -- The first 16 updates of the C reference, the column round, from `x[ 4] ^= R(x[ 0]+x[12], 7)`.
   let x4 := x4 ^^^ rotl32 (x0 + x12) 7
   let x8 := x8 ^^^ rotl32 (x4 + x0) 9
   let x12 := x12 ^^^ rotl32 (x8 + x4) 13
@@ -146,6 +147,7 @@ Each round applies four quarter-rounds, one per column or row. -/
   let x7 := x7 ^^^ rotl32 (x3 + x15) 9
   let x11 := x11 ^^^ rotl32 (x7 + x3) 13
   let x15 := x15 ^^^ rotl32 (x11 + x7) 18
+  -- The last 16 updates, the row round, from `x[ 1] ^= R(x[ 0]+x[ 3], 7)`.
   let x1 := x1 ^^^ rotl32 (x0 + x3) 7
   let x2 := x2 ^^^ rotl32 (x1 + x0) 9
   let x3 := x3 ^^^ rotl32 (x2 + x1) 13
@@ -167,6 +169,7 @@ Each round applies four quarter-rounds, one per column or row. -/
 /-- Four double rounds give the eight rounds of Salsa20/8, RFC 7914 §3. -/
 def rounds : Nat → State → State
   | 0, s => s
+  -- `for (i = 8;i > 0;i -= 2)`: four passes of the double round.
   | count + 1, s => rounds count (doubleRound s)
 
 /-- XOR the corresponding words of two states. -/
@@ -180,7 +183,9 @@ def rounds : Nat → State → State
 
 /-- Add the input words after the eight rounds, RFC 7914 §3. -/
 def salsa208Core (input : State) : State :=
+  -- `x[i] = in[i]`, then the eight rounds.
   let output := rounds 4 input
+  -- `out[i] = x[i] + in[i]`.
   ⟨output.x0 + input.x0, output.x1 + input.x1, output.x2 + input.x2,
     output.x3 + input.x3, output.x4 + input.x4, output.x5 + input.x5,
     output.x6 + input.x6, output.x7 + input.x7, output.x8 + input.x8,
@@ -199,7 +204,9 @@ def blockMixLoop (input : ByteArray) : (count i : Nat) →
     64 * i + 64 * count ≤ input.size → State → ByteArray → ByteArray → ByteArray
   | 0, _, _, _, even, odd => even ++ odd
   | count + 1, i, whole, previous, even, odd =>
+    -- Step 2: `T = X xor B[i]` and `X = Salsa (T)`; the branches below store `Y[i] = X`.
     let next := salsa208Core (previous.xor (State.ofBytes input (64 * i) (by omega)))
+    -- Step 3 puts the even `Y[i]` first and the odd ones after, so each goes to its half here.
     if i % 2 = 0 then
       blockMixLoop input count (i + 1) (by omega) next (even ++ next.bytes) odd
     else
@@ -218,8 +225,10 @@ theorem blockMixLoop_size (input : ByteArray) (count i : Nat)
 
 /-- BlockMix with its `128 * r` byte length preserved, RFC 7914 §4. -/
 def blockMixCore (r : Nat) (positive : 0 < r) (input : MixBlock r) : MixBlock r :=
+  -- Step 1: `X = B[2 * r - 1]`.
   let previous := State.ofBytes input.val (128 * r - 64) (by have := input.property; omega)
   let whole : 64 * 0 + 64 * (2 * r) ≤ input.val.size := by have := input.property; omega
+  -- Steps 2 and 3: `i = 0 to 2 * r - 1`, then `B' = (Y[0], Y[2], ..., Y[1], Y[3], ...)`.
   ⟨blockMixLoop input.val (2 * r) 0 whole previous ByteArray.empty ByteArray.empty,
     by rw [blockMixLoop_size]; simp; omega⟩
 
@@ -232,6 +241,7 @@ def blockMix (input : ByteArray) (r : Nat) : Except ScryptError ByteArray :=
 
 /-- `Integerify`: the last 64 bytes of a ROMix value as a little-endian integer, RFC 7914 §5. -/
 def integerify (r : Nat) (x : MixBlock r) : Nat :=
+  -- `B[2 * r - 1]`, as the RFC defines `Integerify`.
   (x.val.extract (128 * r - 64) (128 * r)).data.foldr (fun byte acc => 256 * acc + byte.toNat) 0
 
 /-- Store each `X` before its BlockMix step, RFC 7914 §5, step 2. -/
@@ -239,6 +249,7 @@ def romixFill (r : Nat) (positive : 0 < r) {n : Nat} : (count i : Nat) → i + c
     Vector (MixBlock r) n → MixBlock r → Vector (MixBlock r) n × MixBlock r
   | 0, _, _, table, x => (table, x)
   | count + 1, i, whole, table, x =>
+    -- `V[i] = X`, then `X = scryptBlockMix (X)`.
     let table := table.set i x (by omega)
     romixFill r positive count (i + 1) (by omega) table (blockMixCore r positive x)
 
@@ -247,7 +258,9 @@ def romixRead (r : Nat) (positive : 0 < r) (n : Nat) (nonzero : 0 < n)
     (table : Vector (MixBlock r) n) : Nat → MixBlock r → MixBlock r
   | 0, x => x
   | count + 1, x =>
+    -- `j = Integerify (X) mod N`.
     let index := integerify r x % n
+    -- `T = X xor V[j]`, then `X = scryptBlockMix (T)`.
     let mixed : MixBlock r := ⟨Base.xorByteArray x.val (table[index]'(Nat.mod_lt _ nonzero)).val,
       by rw [Base.xorByteArray_size]; exact x.property⟩
     romixRead r positive n nonzero table count (blockMixCore r positive mixed)
@@ -255,11 +268,16 @@ def romixRead (r : Nat) (positive : 0 < r) (n : Nat) (nonzero : 0 < n)
 /-- ROMix with its input size in the type, RFC 7914 §5. -/
 def romixCore (r : Nat) (positive : 0 < r) (n : Nat) (nonzero : 0 < n)
     (input : MixBlock r) : MixBlock r :=
+  -- Steps 1 and 2: `X = B`, then `N` rounds that fill `V`; step 2 overwrites each slot first.
   let (table, x) := romixFill r positive n 0 (by omega) (Vector.replicate n input) input
+  -- Steps 3 and 4: `N` rounds that read `V`, and `B' = X`.
   romixRead r positive n nonzero table n x
 
 /-- The cost bound of RFC 7914 §§2 and 5, without constructing `2^(16 * r)`. -/
 def validCost (n r : Nat) : Bool :=
+  -- `N` must be larger than 1, a power of 2, and less than `2^(128 * r / 8)`.
+  --
+  -- For a power of 2, `N < 2^(16 * r)` is `log2 N < 16 * r`, since `128 * r / 8 = 16 * r`.
   1 < n && n &&& (n - 1) == 0 && n.log2 < 16 * r
 
 /-- ROMix on `128 * r` bytes with a valid power-of-two cost, RFC 7914 §5.
@@ -280,6 +298,7 @@ def mixBlocks (input : ByteArray) (n r : Nat) :
     Nat → Nat → ByteArray → Except ScryptError ByteArray
   | 0, _, out => .ok out
   | count + 1, offset, out => do
+    -- `B[i] = scryptROMix (r, B[i], N)`, for `B[i]` at `128 * r * i`.
     let mixed ← romix (input.extract offset (offset + 128 * r)) n r
     mixBlocks input n r count (offset + 128 * r) (out ++ mixed)
 
@@ -289,13 +308,21 @@ It holds `128 * r * N` bytes of table, `128 * r * p` bytes per buffer and `lengt
 
 So a caller must bound `r * N`, `r * p` and `length` first, as a keystore gives them. -/
 def scrypt (password salt : ByteArray) (n r p length : Nat) : Except ScryptError ByteArray := do
+  -- `r = 0` already breaks the `N` bound; a separate check gives it its own error.
+  --
+  -- `N` must be larger than 1, a power of 2, and less than `2^(128 * r / 8)`.
   if r = 0 then throw (.invalidBlockSize r)
   if !validCost n r then throw (.invalidCost n)
+  -- `p` is positive and at most `((2^32-1) * hLen) / MFLen`, here `p * MFLen <= (2^32-1) * hLen`.
   if p = 0 ∨ Pbkdf2.MAX_LENGTH < p * 128 * r then throw (.invalidParallelization p)
+  -- `dkLen` is positive and at most `(2^32 - 1) * hLen`.
   if length = 0 then throw .emptyOutput
   if Pbkdf2.MAX_LENGTH < length then throw (.outputTooLong length)
+  -- Step 1: `B[0] || ... || B[p - 1] = PBKDF2-HMAC-SHA256 (P, S, 1, p * 128 * r)`.
   let expanded ← (Pbkdf2.pbkdf2 password salt 1 (p * 128 * r)).mapError ScryptError.pbkdf2
+  -- Step 2: `B[i] = scryptROMix (r, B[i], N)` for `i = 0 to p - 1`.
   let mixed ← mixBlocks expanded n r p 0 ByteArray.empty
+  -- Step 3: `DK = PBKDF2-HMAC-SHA256 (P, B[0] || ... || B[p - 1], 1, dkLen)`.
   (Pbkdf2.pbkdf2 password mixed 1 length).mapError ScryptError.pbkdf2
 
 end EthLib.Cryptography.Hash.Scrypt

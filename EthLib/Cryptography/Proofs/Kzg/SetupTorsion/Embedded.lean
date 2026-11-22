@@ -50,7 +50,7 @@ theorem SetupTorsion.g1MonomialHex_check :
 /-- Each byte string that the hexadecimal decoder returns decodes from one of the strings. -/
 theorem TrustedSetup.hexListToBytes_mem {hex : Array String} {bytes : Array ByteArray}
     (h : TrustedSetup.hexListToBytes hex = .ok bytes) :
-    ∀ b ∈ bytes, ∃ str ∈ hex, TrustedSetup.hexToBytes? str = some b := by
+    ∀ b ∈ bytes, ∃ str ∈ hex, Base.hexBytes? str.toList = some b := by
   intro b hb
   obtain ⟨str, hmem, hstr⟩ := array_mapM_ok_mem h b hb
   refine ⟨str, hmem, ?_⟩

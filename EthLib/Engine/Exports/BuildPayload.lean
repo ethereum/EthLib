@@ -45,9 +45,7 @@ Then come the requests of the block and its value in wei.
 
 An error has the code of its Engine API error, of the transaction, or of the block.
 
-Code 0 is for a chain that does not decode, and for an unknown method.
-
-It is also for a parent number or time past 64 bits, and for a result without an encoding. -/
+Code 0 is for a chain that does not decode, an unknown method, or a result with no encoding. -/
 def buildPayloadOf
     (args : PyValue × ByteArray × List (String × ByteArray × List ByteArray) × String × PyValue ×
       Address × ByteArray × UInt64 × List ByteArray) :
@@ -55,10 +53,6 @@ def buildPayloadOf
   let (config, state, recent, method, attributes, feeRecipient, extraData, target, txs) := args
   let chain ← Execution.Blocks.Exports.chainOf config state recent
   let some version := forkchoiceUpdatedVersion method | rejectArgument none s!"no method {method}"
-  -- The payload tree holds 64-bit numbers and times, so a parent past them is malformed input.
-  if let some parent := chain.recent.getLast? then
-    unless parent.header.number < UInt64.size ∧ parent.header.timestamp.toNat < UInt64.size do
-      rejectArgument none "recent: the parent's number or time does not fit 64 bits"
   let decoded ← toResult "engine error" (payloadAttributesOfVersion version attributes.toJson)
   let ⟨_, built⟩ ← toResult none
     (buildPayloadOnChain chain version decoded ⟨feeRecipient, extraData, target⟩ txs)

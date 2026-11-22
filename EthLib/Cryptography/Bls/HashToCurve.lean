@@ -426,7 +426,7 @@ The parameter is negative, so this is `-[|c1|] P`.
 
 [g3]: https://www.rfc-editor.org/rfc/rfc9380#appendix-G.3
 -/
-def mulNegX (P : G2 F) : G2 F := G2.neg (G2.mulNat P blsX)
+def mulNegX (P : G2 F) : G2 F := G2.neg (P.mulNat blsX)
 
 /-- `clear_cofactor_bls12381_g2(P)` of [RFC 9380 Appendix G.3][g3].
 
@@ -440,7 +440,7 @@ def clearCofactor (P : G2 F) : G2 F :=
   -- Step 2: `t2 = psi(P)`.
   let t2 := psi P
   -- Steps 3 and 4: `t3 = 2 * P`, then `t3 = psi2(t3)`.
-  let t3 := psi2 (G2.double P)
+  let t3 := psi2 P.double
   -- Step 5: `t3 = t3 - t2`.
   let t3 := G2.add t3 (G2.neg t2)
   -- Step 6: `t2 = t1 + t2`.

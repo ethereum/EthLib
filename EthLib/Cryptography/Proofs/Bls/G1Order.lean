@@ -38,65 +38,9 @@ theorem valid_generator : Valid generator :=
 
 /-! ## `[r]g_1 = 0` -/
 
-/-- Fuel-based double-and-add, structurally recursive so the kernel can evaluate it.
-
-The spec's `mulNat` is well-founded recursion, which does not reduce definitionally.
-
-Correctness: `mulNatAux_eq`. -/
-def mulNatAux {F : Type} [BaseField F] : Nat → G1 F → Nat → G1 F
-  | 0, _, _ => zero
-  | fuel + 1, p, k =>
-    if k = 0 then zero
-    else
-      let half := mulNatAux fuel (double p) (k / 2)
-      if k % 2 = 1 then add p half else half
-
-theorem mulNatAux_eq (fuel : Nat) (p : G1) (k : Nat)
-    (hk : k < 2 ^ fuel) : mulNatAux fuel p k = mulNat p k := by
-  induction fuel generalizing p k with
-  | zero =>
-    have : k = 0 := by simpa using hk
-    subst this
-    rw [mulNatAux, mulNat_def]
-    simp
-  | succ fuel ih =>
-    rw [mulNatAux, mulNat_def]
-    by_cases h0 : k = 0
-    · simp [h0]
-    · have h2 : k / 2 < 2 ^ fuel := by
-        rw [Nat.pow_succ] at hk
-        omega
-      rw [ite_eq_right h0, ite_eq_right h0, ih (double p) (k / 2) h2]
-
-/-- A map of base fields commutes with the ladder. -/
-theorem map_mulNatAux {F G : Type} [BaseField F] [BaseField G] (f : BaseField.Hom F G)
-    (fuel : Nat) (p : G1 F) (k : Nat) :
-    map f (mulNatAux fuel p k) = mulNatAux fuel (map f p) k := by
-  induction fuel generalizing p k with
-  | zero => exact map_zero f
-  | succ fuel ih =>
-    rw [mulNatAux, mulNatAux]
-    split
-    · exact map_zero f
-    · dsimp only
-      rw [← map_double, ← ih]
-      split
-      · exact map_add f _ _
-      · rfl
-
 /-- The test for the point at infinity reads the same on the image in the model. -/
-theorem isInfinity_model (p : G1) : p.isInfinity = (map Fp.toModel p).isInfinity :=
-  (map_isInfinity Fp.toModel p).symm
-
-/-- A map of base fields commutes with the sum, written as a function. -/
-theorem map_add_fn {F G : Type} [BaseField F] [BaseField G] (f : BaseField.Hom F G)
-    (p q : G1 F) : map f (add p q) = add (map f p) (map f q) :=
-  map_add f p q
-
-/-- A map of base fields commutes with the negation, written as a function. -/
-theorem map_neg_fn {F G : Type} [BaseField F] [BaseField G] (f : BaseField.Hom F G)
-    (p : G1 F) : map f (neg p) = neg (map f p) :=
-  map_neg f p
+theorem isInfinity_model (p : G1) : p.isInfinity = (map Fp.toModel.toHom p).isInfinity :=
+  (map_isInfinity Fp.toModel.toHom p).symm
 
 /-- Decides a test for the point at infinity on points of `Fp` in the model.
 

@@ -9,6 +9,8 @@ public import EthLib.Cryptography.Proofs.Bls.BaseFieldMap
 
 A map of base fields acts on each coordinate of a point of `G1` or `G2`.
 
+The code of `G1` reads only the field operations, so a map that respects those is enough for it.
+
 When it respects the operations of the base fields, it commutes with each curve operation.
 
 So a computation on one base field gives the same point on the other, once mapped.
@@ -20,63 +22,67 @@ namespace EthLib.Cryptography.Bls
 
 open EthLib.Cryptography.BaseField (Hom)
 
-variable {F G : Type} [BaseField F] [BaseField G]
-
 namespace G1
 
-/-- The map of base fields, applied to the three coordinates. -/
-def map (f : Hom F G) (p : G1 F) : G1 G := ⟨f p.x, f p.y, f p.z⟩
+variable {F G : Type} [FieldOps F] [FieldOps G]
 
-@[simp] private theorem map_x (f : Hom F G) (p : G1 F) : (map f p).x = f p.x := rfl
-@[simp] private theorem map_y (f : Hom F G) (p : G1 F) : (map f p).y = f p.y := rfl
-@[simp] private theorem map_z (f : Hom F G) (p : G1 F) : (map f p).z = f p.z := rfl
+/-- A map of the field operations, applied to the three coordinates. -/
+def map (f : FieldOps.Hom F G) (p : G1 F) : G1 G := ⟨f p.x, f p.y, f p.z⟩
+
+@[simp] private theorem map_x (f : FieldOps.Hom F G) (p : G1 F) : (map f p).x = f p.x := rfl
+@[simp] private theorem map_y (f : FieldOps.Hom F G) (p : G1 F) : (map f p).y = f p.y := rfl
+@[simp] private theorem map_z (f : FieldOps.Hom F G) (p : G1 F) : (map f p).z = f p.z := rfl
 
 /-- The map of a point given by its coordinates. -/
-theorem map_mk (f : Hom F G) (x y z : F) : map f ⟨x, y, z⟩ = ⟨f x, f y, f z⟩ := rfl
+theorem map_mk (f : FieldOps.Hom F G) (x y z : F) : map f ⟨x, y, z⟩ = ⟨f x, f y, f z⟩ := rfl
 
-theorem map_generator (f : Hom F G) : map f generator = generator := by
-  simp only [map, generator, f.map_ofNat, f.map_one]
-
-theorem map_zero (f : Hom F G) : map f zero = zero := by
+theorem map_zero (f : FieldOps.Hom F G) : map f zero = zero := by
   simp only [map, zero, f.map_zero, f.map_one]
 
-theorem map_isInfinity (f : Hom F G) (p : G1 F) : (map f p).isInfinity = p.isInfinity := by
+theorem map_isInfinity (f : FieldOps.Hom F G) (p : G1 F) :
+    (map f p).isInfinity = p.isInfinity := by
   simp only [map, isInfinity, f.map_isZero]
 
-theorem map_double (f : Hom F G) (p : G1 F) : map f p.double = (map f p).double := by
+theorem map_double (f : FieldOps.Hom F G) (p : G1 F) :
+    map f p.double = (map f p).double := by
   unfold double map
   simp only [f.map_isZero]
-  cases BaseField.isZero p.z
+  cases FieldOps.isZero p.z
   · simp only [Bool.false_eq_true, ↓reduceIte, f.map_add, f.map_sub, f.map_mul]
   · simp only [↓reduceIte]
 
-theorem map_neg (f : Hom F G) (p : G1 F) : map f (-p) = -map f p := by
+theorem map_neg (f : FieldOps.Hom F G) (p : G1 F) : map f (-p) = -map f p := by
   show map f (neg p) = neg (map f p)
   simp only [map, neg, f.map_neg]
 
-theorem map_addGeneral (f : Hom F G) (p q : G1 F) :
+theorem map_addGeneral (f : FieldOps.Hom F G) (p q : G1 F) :
     map f (addGeneral p q) = addGeneral (map f p) (map f q) := by
   unfold addGeneral
   simp only [apply_ite (map f), map_double, map_zero, map_mk, map_x, map_y, map_z,
     ← f.map_mul, ← f.map_add, ← f.map_sub, f.map_beq]
 
-theorem map_addMixed (f : Hom F G) (p q : G1 F) :
+theorem map_addMixed (f : FieldOps.Hom F G) (p q : G1 F) :
     map f (addMixed p q) = addMixed (map f p) (map f q) := by
   unfold addMixed
   simp only [apply_ite (map f), map_double, map_zero, map_mk, map_x, map_y, map_z,
     ← f.map_mul, ← f.map_add, ← f.map_sub, f.map_beq]
 
-theorem map_add (f : Hom F G) (p q : G1 F) : map f (p + q) = map f p + map f q := by
+theorem map_add (f : FieldOps.Hom F G) (p q : G1 F) : map f (p + q) = map f p + map f q := by
   show map f (add p q) = add (map f p) (map f q)
   unfold add
   simp only [apply_ite (map f), map_addMixed, map_addGeneral, map_z, f.map_isZero,
     ← f.map_one, f.map_beq]
 
-private theorem map_add' (f : Hom F G) (p q : G1 F) :
+/-- A map of the field operations commutes with the sum, written as a function. -/
+theorem map_add_fn (f : FieldOps.Hom F G) (p q : G1 F) :
     map f (add p q) = add (map f p) (map f q) :=
   map_add f p q
 
-theorem map_toAffine (f : Hom F G) (p : G1 F) :
+/-- A map of the field operations commutes with the negation, written as a function. -/
+theorem map_neg_fn (f : FieldOps.Hom F G) (p : G1 F) : map f (neg p) = neg (map f p) :=
+  map_neg f p
+
+theorem map_toAffine (f : FieldOps.Hom F G) (p : G1 F) :
     Prod.map f f p.toAffine = (map f p).toAffine := by
   unfold toAffine
   simp only [map, f.map_isZero]
@@ -84,7 +90,7 @@ theorem map_toAffine (f : Hom F G) (p : G1 F) :
   · simp only [Prod.map, f.map_zero]
   · simp only [Prod.map, f.map_mul, f.map_inverse]
 
-theorem map_mulNat (f : Hom F G) (p : G1 F) (k : Nat) :
+theorem map_mulNat (f : FieldOps.Hom F G) (p : G1 F) (k : Nat) :
     map f (mulNat p k) = mulNat (map f p) k := by
   induction k using Nat.strongRecOn generalizing p with
   | _ k ih =>
@@ -99,12 +105,72 @@ theorem map_mulNat (f : Hom F G) (p : G1 F) (k : Nat) :
         exact map_add f p _
       · exact h
 
-theorem map_mul (f : Hom F G) (p : G1 F) (s : Fr) : map f (p.mul s) = (map f p).mul s :=
+theorem map_mul (f : FieldOps.Hom F G) (p : G1 F) (s : Fr) : map f (p.mul s) = (map f p).mul s :=
   map_mulNat f p s.val
+
+/-- A map of the field operations keeps the projective equality of two points. -/
+theorem map_projectiveEq (f : FieldOps.Hom F G) (p q : G1 F) :
+    projectiveEq (map f p) (map f q) = projectiveEq p q := by
+  simp only [projectiveEq, map, f.map_isZero, ← f.map_mul, f.map_beq]
+
+/-! ### Double and add -/
+
+/-- Unfolding equation for the scalar multiplication, in the shape that the proofs rewrite with. -/
+theorem mulNat_def (p : G1 F) (k : Nat) :
+    mulNat p k = if k = 0 then zero
+      else if k % 2 = 1 then add p (mulNat (double p) (k / 2))
+      else mulNat (double p) (k / 2) := by
+  rw [mulNat]
+
+/-- Double and add on a fuel argument, structurally recursive so that the kernel can evaluate it.
+
+The scalar multiplication recurses on well-founded recursion, which does not reduce by definition.
+
+With enough fuel the two agree. -/
+def mulNatAux : Nat → G1 F → Nat → G1 F
+  | 0, _, _ => zero
+  | fuel + 1, p, k =>
+    if k = 0 then zero
+    else
+      let half := mulNatAux fuel (double p) (k / 2)
+      if k % 2 = 1 then add p half else half
+
+theorem mulNatAux_eq (fuel : Nat) (p : G1 F) (k : Nat)
+    (hk : k < 2 ^ fuel) : mulNatAux fuel p k = mulNat p k := by
+  induction fuel generalizing p k with
+  | zero =>
+    have : k = 0 := by simpa using hk
+    subst this
+    rw [mulNatAux, mulNat_def]
+    simp
+  | succ fuel ih =>
+    rw [mulNatAux, mulNat_def]
+    by_cases h0 : k = 0
+    · simp [h0]
+    · have h2 : k / 2 < 2 ^ fuel := by
+        rw [Nat.pow_succ] at hk
+        omega
+      rw [ite_eq_right h0, ite_eq_right h0, ih (double p) (k / 2) h2]
+
+/-- A map of the field operations commutes with the ladder. -/
+theorem map_mulNatAux (f : FieldOps.Hom F G)
+    (fuel : Nat) (p : G1 F) (k : Nat) :
+    map f (mulNatAux fuel p k) = mulNatAux fuel (map f p) k := by
+  induction fuel generalizing p k with
+  | zero => exact map_zero f
+  | succ fuel ih =>
+    rw [mulNatAux, mulNatAux]
+    split
+    · exact map_zero f
+    · dsimp only
+      rw [← map_double, ← ih]
+      split
+      · exact map_add f _ _
+      · rfl
 
 /-! ### Multi-scalar multiplication -/
 
-theorem map_msmCombine (f : Hom F G) (nW : Nat) (acc : G1 F) (kk : Nat) (S : G1 F) :
+theorem map_msmCombine (f : FieldOps.Hom F G) (nW : Nat) (acc : G1 F) (kk : Nat) (S : G1 F) :
     map f (msmCombine nW acc kk S) = msmCombine nW (map f acc) kk (map f S) := by
   unfold msmCombine
   split
@@ -114,8 +180,8 @@ theorem map_msmCombine (f : Hom F G) (nW : Nat) (acc : G1 F) (kk : Nat) (S : G1 
     rfl
   · exact map_add f _ _
 
-/-- A map of base fields commutes with the buckets of a window. -/
-theorem map_msmBuckets (f : Hom F G) {n nW : Nat} (points : Vector (G1 F) n)
+/-- A map of the field operations commutes with the buckets of a window. -/
+theorem map_msmBuckets (f : FieldOps.Hom F G) {n nW : Nat} (points : Vector (G1 F) n)
     (digits : Vector (Vector (Fin 256) nW) n) (k : Fin nW) :
     (msmBuckets points digits k).map (map f) = msmBuckets (points.map (map f)) digits k := by
   unfold msmBuckets
@@ -125,18 +191,18 @@ theorem map_msmBuckets (f : Hom F G) {n nW : Nat} (points : Vector (G1 F) n)
   dsimp only
   by_cases hc : (digits[j.val][k.val]).val ≠ 0
   · rw [ite_eq_left hc, ite_eq_left hc, Vector.map_set, Vector.getElem_map, Vector.getElem_map,
-      map_add']
+      map_add_fn]
   · rw [ite_eq_right hc, ite_eq_right hc]
 
-/-- A map of base fields commutes with the running sum of the buckets. -/
-theorem map_msmRunning (f : Hom F G) (bs : Vector (G1 F) 256) :
+/-- A map of the field operations commutes with the running sum of the buckets. -/
+theorem map_msmRunning (f : FieldOps.Hom F G) (bs : Vector (G1 F) 256) :
     msmRunning (bs.map (map f)) = ⟨map f (msmRunning bs).1, map f (msmRunning bs).2⟩ := by
   unfold msmRunning
   rw [show (⟨zero, zero⟩ : MProd (G1 G) (G1 G)) = ⟨map f zero, map f zero⟩ by rw [map_zero]]
   refine List.foldl_hom (init := (⟨zero, zero⟩ : MProd (G1 F) (G1 F)))
     (fun rp : MProd (G1 F) (G1 F) => (⟨map f rp.1, map f rp.2⟩ : MProd (G1 G) (G1 G)))
     fun rp vv => ?_
-  simp only [Vector.getElem_map, map_add']
+  simp only [Vector.getElem_map, map_add_fn]
 
 /-- A fold over a list zipped with its own image, read through a map of the state. -/
 private theorem foldl_zip_hom {α β₁ β₂ γ₁ γ₂ : Type} (g : γ₁ → γ₂) (ws : List α)
@@ -176,7 +242,7 @@ private theorem msmBody_congr {n n' : Nat} (h : n = n') (pts : Vector (G1 F) n)
   subst h
   rw [Vector.ext fun j hj => hp j hj hj, Vector.ext fun j hj => hv j hj hj]
 
-private theorem map_msmBody (f : Hom F G) {n : Nat} (pts : Vector (G1 F) n)
+private theorem map_msmBody (f : FieldOps.Hom F G) {n : Nat} (pts : Vector (G1 F) n)
     (vals : Vector Nat n) : map f (msmBody pts vals) = msmBody (pts.map (map f)) vals := by
   unfold msmBody
   by_cases h0 : n = 0
@@ -195,83 +261,80 @@ private theorem map_msmBody (f : Hom F G) {n : Nat} (pts : Vector (G1 F) n)
   rw [← map_msmBuckets, map_msmRunning]
   rfl
 
-/-- A map of base fields commutes with the multi-scalar multiplication. -/
-theorem map_msm (f : Hom F G) (points : Array (G1 F)) (scalars : Array Fr) :
+/-- A map of the field operations commutes with the multi-scalar multiplication. -/
+theorem map_msm (f : FieldOps.Hom F G) (points : Array (G1 F)) (scalars : Array Fr) :
     map f (msm points scalars) = msm (points.map (map f)) scalars := by
   rw [msm_eq_msmBody, msm_eq_msmBody, map_msmBody]
   refine msmBody_congr (by rw [Array.size_map]) _ _ _ _ (fun j hj hj' => ?_) (fun j _ _ => ?_)
   · rw [Vector.getElem_map, Vector.getElem_ofFn, Vector.getElem_ofFn, Array.getElem_map]
   · rw [Vector.getElem_ofFn, Vector.getElem_ofFn]
 
+section BaseField
+
+variable {F G : Type} [BaseField F] [BaseField G]
+
+theorem map_generator (f : Hom F G) : map f.toHom generator = generator := by
+  simp only [map, generator, f.map_ofNat, f.map_one]
+
+end BaseField
+
 end G1
 
 namespace G2
 
-/-- The map of base fields, applied to the three coordinates in `Fp2`. -/
-def map (f : Hom F G) (p : G2 F) : G2 G := ⟨p.x.map f, p.y.map f, p.z.map f⟩
+variable {F G : Type} [BaseField F] [BaseField G]
 
-@[simp] private theorem map_x (f : Hom F G) (p : G2 F) : (map f p).x = p.x.map f := rfl
-@[simp] private theorem map_y (f : Hom F G) (p : G2 F) : (map f p).y = p.y.map f := rfl
-@[simp] private theorem map_z (f : Hom F G) (p : G2 F) : (map f p).z = p.z.map f := rfl
+/-- The map of base fields, applied to the three coordinates in `Fp2`. -/
+def map (f : Hom F G) (p : G2 F) : G2 G := G1.map (Fp2.hom f) p
 
 /-- The map of a point given by its coordinates. -/
 theorem map_mk (f : Hom F G) (x y z : Fp2 F) :
     map f ⟨x, y, z⟩ = ⟨x.map f, y.map f, z.map f⟩ := rfl
 
 theorem map_generator (f : Hom F G) : map f generator = generator := by
-  simp only [map, generator, Fp2.map_one]
-  simp only [Fp2.ofNats, Fp2.map, f.map_ofNat]
+  simp only [map, G1.map, Fp2.hom, generator, Fp2.ofNats, Fp2.map_mk, f.map_ofNat, Fp2.map_one]
 
-theorem map_zero (f : Hom F G) : map f zero = zero := by
-  simp only [map, zero, Fp2.map_zero, Fp2.map_one]
+theorem map_zero (f : Hom F G) : map f zero = zero := G1.map_zero (Fp2.hom f)
 
-theorem map_isInfinity (f : Hom F G) (p : G2 F) : (map f p).isInfinity = p.isInfinity := by
-  simp only [map, isInfinity, Fp2.map_isZero]
+theorem map_isInfinity (f : Hom F G) (p : G2 F) : (map f p).isInfinity = p.isInfinity :=
+  G1.map_isInfinity (Fp2.hom f) p
 
 theorem map_bTwist (f : Hom F G) : (bTwist : Fp2 F).map f = bTwist := by
   simp only [bTwist, Fp2.ofNats, Fp2.map, f.map_ofNat]
 
-theorem map_double (f : Hom F G) (p : G2 F) : map f p.double = (map f p).double := by
-  unfold double
-  simp only [apply_ite (map f), map_mk, map_x, map_y, map_z, Fp2.map_isZero,
-    ← Fp2.map_mul, ← Fp2.map_add, ← Fp2.map_sub, ← f.map_ofNat, ← Fp2.map_ofFp]
+theorem map_double (f : Hom F G) (p : G2 F) : map f p.double = (map f p).double :=
+  G1.map_double (Fp2.hom f) p
 
-theorem map_neg (f : Hom F G) (p : G2 F) : map f (-p) = -map f p := by
-  show map f (neg p) = neg (map f p)
-  simp only [map, neg, Fp2.map_neg]
+theorem map_neg (f : Hom F G) (p : G2 F) : map f (-p) = -map f p := G1.map_neg (Fp2.hom f) p
 
-theorem map_add (f : Hom F G) (p q : G2 F) : map f (p + q) = map f p + map f q := by
-  show map f (add p q) = add (map f p) (map f q)
-  unfold add
-  simp only [apply_ite (map f), map_double, map_zero, map_mk, map_x, map_y, map_z,
-    Fp2.map_isZero, ← Fp2.map_mul, ← Fp2.map_add, ← Fp2.map_sub, ← f.map_ofNat,
-    ← Fp2.map_ofFp, Fp2.map_beq]
+/-- A map of base fields commutes with the negation, written as a function. -/
+theorem map_neg_fn (f : Hom F G) (p : G2 F) : map f (neg p) = neg (map f p) := map_neg f p
+
+theorem map_add (f : Hom F G) (p q : G2 F) : map f (p + q) = map f p + map f q :=
+  G1.map_add (Fp2.hom f) p q
+
+/-- A map of base fields commutes with the sum, written as a function. -/
+theorem map_add_fn (f : Hom F G) (p q : G2 F) : map f (add p q) = add (map f p) (map f q) :=
+  map_add f p q
 
 theorem map_toAffine (f : Hom F G) (p : G2 F) :
-    Prod.map (Fp2.map f) (Fp2.map f) p.toAffine = (map f p).toAffine := by
-  unfold toAffine
-  simp only [map, Fp2.map_isZero]
-  split
-  · simp only [Prod.map, Fp2.map_zero]
-  · simp only [Prod.map, Fp2.map_mul, Fp2.map_inverse]
+    Prod.map (Fp2.map f) (Fp2.map f) p.toAffine = (map f p).toAffine :=
+  G1.map_toAffine (Fp2.hom f) p
 
 theorem map_mulNat (f : Hom F G) (p : G2 F) (k : Nat) :
-    map f (mulNat p k) = mulNat (map f p) k := by
-  induction k using Nat.strongRecOn generalizing p with
-  | _ k ih =>
-    rw [mulNat.eq_1 p k, mulNat.eq_1 (map f p) k]
-    split
-    · exact map_zero f
-    · have h := ih (k / 2) (by omega) p.double
-      rw [map_double] at h
-      dsimp only
-      split
-      · rw [← h]
-        exact map_add f p _
-      · exact h
+    map f (p.mulNat k) = (map f p).mulNat k :=
+  G1.map_mulNat (Fp2.hom f) p k
 
-theorem map_mul (f : Hom F G) (p : G2 F) (s : Fr) : map f (p.mul s) = (map f p).mul s :=
+theorem map_mul (f : Hom F G) (p : G2 F) (s : Fr) : map f (mul p s) = mul (map f p) s :=
   map_mulNat f p s.val
+
+-- The double and add of `G1` keeps its names under `G2`.
+export G1 (mulNat_def mulNatAux mulNatAux_eq)
+
+/-- A map of base fields commutes with the ladder. -/
+theorem map_mulNatAux (f : Hom F G) (fuel : Nat) (p : G2 F) (k : Nat) :
+    map f (mulNatAux fuel p k) = mulNatAux fuel (map f p) k :=
+  G1.map_mulNatAux (Fp2.hom f) fuel p k
 
 end G2
 

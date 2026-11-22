@@ -31,7 +31,7 @@ A chunk that cannot be built or read also has code 0.
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport toResult)
+open EthLib.Exports (Result PyValue UnreadArgument pyExport rejectArgument toResult)
 
 /-- The bootstrap answer for a block of the store after the steps of a fork choice case. -/
 def apiLightClientBootstrapOf (args : StoreCaseArgs (Option PyValue × Root)) :
@@ -39,7 +39,7 @@ def apiLightClientBootstrapOf (args : StoreCaseArgs (Option PyValue × Root)) :
   let (name, fork, anchorState, anchorBlock, steps, verify, replacements, root) := args
   let ⟨_, _, _, store⟩ ← storeOfCase (name, fork, anchorState, anchorBlock, steps, verify)
   let config ← configWithValue name replacements
-  let envelope ← apiError (BeaconApi.bootstrapResponse config store root)
+  let envelope ← toResult none (BeaconApi.bootstrapResponse config store root)
   return PyValue.ofJson envelope.toJson
 
 /-- The JSON response of the bootstrap endpoint, as a `dict`.
@@ -59,7 +59,7 @@ def apiLightClientBootstrapSszOf (args : StoreCaseArgs (Option PyValue × Root))
   let (name, fork, anchorState, anchorBlock, steps, verify, replacements, root) := args
   let ⟨_, _, _, store⟩ ← storeOfCase (name, fork, anchorState, anchorBlock, steps, verify)
   let config ← configWithValue name replacements
-  apiError do BeaconApi.apiSszOr500 (← BeaconApi.bootstrapFor config store root)
+  toResult none do BeaconApi.apiSszOr500 (← BeaconApi.bootstrapFor config store root)
 
 /-- The SSZ body of the bootstrap answer, as `bytes`.
 
@@ -67,10 +67,6 @@ The arguments are those of the JSON answer. -/
 @[export eth_consensus_api_light_client_bootstrap_ssz]
 def apiLightClientBootstrapSszExport (args : PyValue) : Result PyValue :=
   pyExport apiLightClientBootstrapSszOf args
-
-/-- The result of building or reading chunks, with code 0 for a failure. -/
-def runChunks {α : Type} (act : Except BeaconApi.ChunkError α) : Result α :=
-  act.mapError fun e => (0, s!"chunk rejected: {reprStr e}")
 
 /-- The updates that a node knows, by period, each decoded with the fork that it names. -/
 def knownUpdates (preset : Preset) (known : List (UInt64 × String × ByteArray)) :
@@ -94,8 +90,10 @@ def apiLightClientUpdatesOf
   let config ← configWithValue name replacements
   let known ← knownUpdates preset known
   let updates := BeaconApi.updatesInRange known startPeriod count
-  for ⟨_, update⟩ in updates do runChunks (BeaconApi.checkUpdateFork config update)
-  return PyValue.ofJson (← apiError (BeaconApi.updatesJson updates))
+  for ⟨_, update⟩ in updates do
+    toResult none ((BeaconApi.checkUpdateFork config update).mapError fun e =>
+      UnreadArgument.mk s!"chunk rejected: {reprStr e}")
+  return PyValue.ofJson (← toResult none (BeaconApi.updatesJson updates))
 
 /-- The JSON response of the updates endpoint, as a `list` of `dict`.
 
@@ -114,8 +112,9 @@ def apiLightClientUpdatesSszOf (args : UpdatesArgs) : Result ByteArray := do
   let preset ← presetOf name
   let config ← configWithValue name replacements
   let known ← knownUpdates preset known
-  runChunks (BeaconApi.encodeUpdateChunks config genesisValidatorsRoot
-    (BeaconApi.updatesInRange known startPeriod count))
+  let chunks := BeaconApi.encodeUpdateChunks config genesisValidatorsRoot
+    (BeaconApi.updatesInRange known startPeriod count)
+  toResult none (chunks.mapError fun e => UnreadArgument.mk s!"chunk rejected: {reprStr e}")
 
 /-- The SSZ body of the updates answer, as `bytes`.
 
@@ -136,7 +135,9 @@ def apiLightClientDecodeUpdatesOf (args : String × Option PyValue × Root × By
   let (name, replacements, genesisValidatorsRoot, data) := args
   let preset ← presetOf name
   let config ← configWithValue name replacements
-  let updates ← runChunks (BeaconApi.decodeUpdateChunks preset config genesisValidatorsRoot data)
+  let updates ← toResult none
+    ((BeaconApi.decodeUpdateChunks preset config genesisValidatorsRoot data).mapError fun e =>
+      UnreadArgument.mk s!"chunk rejected: {reprStr e}")
   updates.mapM fun ⟨fork, update⟩ => do
     return (fork.name, ← toResult "value rejected" (SszType.serialize update))
 
@@ -156,9 +157,9 @@ def apiLightClientLatestOf (args : String × String × String × Option ByteArra
   let (preset, fork) ← lightClientPresetAndFork name.toUTF8 fork.toUTF8
   let latest ← latest.mapM (decodeInput (LightClientUpdate preset fork))
   let envelope ← match kind with
-    | "finality" => apiError (BeaconApi.finalityUpdateResponse latest)
-    | "optimistic" => apiError (BeaconApi.optimisticUpdateResponse latest)
-    | other => throw (0, s!"no latest update is of kind {other}")
+    | "finality" => toResult none (BeaconApi.finalityUpdateResponse latest)
+    | "optimistic" => toResult none (BeaconApi.optimisticUpdateResponse latest)
+    | other => rejectArgument none s!"no latest update is of kind {other}"
   return PyValue.ofJson envelope.toJson
 
 /-- The JSON response of the finality or the optimistic update endpoint, as a `dict`.

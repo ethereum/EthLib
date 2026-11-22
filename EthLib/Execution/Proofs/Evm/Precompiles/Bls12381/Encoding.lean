@@ -23,7 +23,7 @@ public import EthLib.Base.Proofs.Except
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
 open EthLib.Base (bytesToNat natToBytes)
-open EthLib.Cryptography.Bls (Fp Fp2 G1 G2)
+open EthLib.Cryptography.Bls (Fp Fp2 G1 G2 G2.zero)
 
 /-! ## Padding -/
 
@@ -177,14 +177,8 @@ private theorem throw_bind {α β : Type} (e : Bls12381Error) (f : α → Except
     (throw e >>= f) = throw e := rfl
 
 /-- The affine form of a point with `z = 1` is its `x` and `y`. -/
-theorem g1_toAffine_one (x y : Fp) : G1.toAffine ⟨x, y, Fp.one⟩ = (x, y) := by
-  have hinv : Cryptography.BaseField.inverse Fp.one = Fp.one := Fp.toZMod.injective (by
-    rw [Fp.baseField_inverse, Fp.toZMod_inverse, Fp.one_def, Fp.toZMod_one, inv_one])
-  have hz : Cryptography.BaseField.isZero Fp.one = false := Fp.one_isZero
-  simp only [G1.toAffine, hz, hinv, Bool.false_eq_true, ↓reduceIte]
-  have hone (a : Fp) : a * Fp.one = a := Fp.toZMod.injective (by
-    rw [Fp.toZMod_mul, Fp.one_def, Fp.toZMod_one, mul_one])
-  rw [hone, hone, hone, hone]
+theorem g1_toAffine_one (x y : Fp) : G1.toAffine ⟨x, y, Fp.one⟩ = (x, y) :=
+  G1.Law.toAffine_mk_one Fp.embedding x y
 
 /-- The point at infinity encodes as 96 zero bytes. -/
 theorem g1ToBytes_of_isZero {p : G1} (h : p.z.isZero = true) :
@@ -291,8 +285,8 @@ set_option maxRecDepth 8000 in
 /-- The point at infinity encodes as 192 zero bytes. -/
 theorem g2ToBytes_of_isZero {p : G2} (h : p.z.isZero = true) :
     g2ToBytes p = List.replicate 192 0 := by
-  simp only [g2ToBytes, G2.toAffine, h, ↓reduceIte, Fp2.zero_eq_zero, Fp2.zero_c0, Fp2.zero_c1,
-    Fp.val_zero]
+  simp only [g2ToBytes, G1.toAffine, Cryptography.Fp2.fieldOps_isZero, h, ↓reduceIte,
+    Cryptography.Fp2.fieldOps_zero, Fp2.zero_c0, Fp2.zero_c1, Fp.val_zero]
   rfl
 
 /-- The G2 decoder reads two elements `x` and `y` of `Fp2`, and succeeds in exactly two cases.

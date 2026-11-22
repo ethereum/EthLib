@@ -160,6 +160,8 @@ No active fork, a zero chain ID or a fork outside Dencun to Glamsterdam gives an
 
 So does a passed fork whose block or time is not below 2^64, which a fork ID cannot encode.
 
+The configuration readers of the exports already refuse such a fork, so only Lean reaches this.
+
 The block number stays fixed for future timestamp forks.
 
 The fork ID is then the one of that activation when the head has passed every fork block. -/
@@ -172,7 +174,7 @@ def configObject (s : Schedule) (number activationTime : Nat) : Except RpcError 
       throw (methodNotSupported.toRpcError (some (.str "eth_config: unsupported fork")))
     unless s.config.chainId ≠ 0 do
       throw (internalError.toRpcError (some (.str "eth_config: zero chain ID")))
-    unless (s.passed number timestamp).all (fun a => activationValue a < 2 ^ 64) do
+    unless (s.passed number timestamp).all (fun a => activationValue a < ACTIVATION_BOUND) do
       throw (internalError.toRpcError (some (.str "eth_config: activation is not below 2^64")))
     return {
       fork := fork
@@ -208,7 +210,8 @@ def ConfigObject.toJson (c : ConfigObject) : Json :=
     ("activationTime", Lean.toJson c.activationTime),
     ("blobSchedule", Json.mkObj [
       ("baseFeeUpdateFraction", Lean.toJson c.blobSchedule.baseFeeUpdateFraction),
-      ("max", Lean.toJson c.blobSchedule.max), ("target", Lean.toJson c.blobSchedule.target)]),
+      ("max", Lean.toJson c.blobSchedule.max.toNat),
+      ("target", Lean.toJson c.blobSchedule.target.toNat)]),
     ("chainId", quantityJson c.chainId.toNat),
     ("forkId", dataJson c.forkId.toList),
     ("precompiles", configAddressesJson c.precompiles),

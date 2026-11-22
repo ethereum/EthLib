@@ -47,17 +47,19 @@ HMAC pads its key with zero bytes, so an empty salt gives the same key.
 
 The input keying material is secret, and this function makes no constant-time claim.
 -/
-def extract (salt ikm : ByteArray) : ByteArray := hmac salt ikm
+def extract (salt ikm : ByteArray) : ByteArray :=
+  -- `PRK = HMAC-Hash(salt, IKM)`.
+  hmac salt ikm
 
 /--
 The blocks `T(i)` to `T(i + count - 1)` of RFC 5869 §2.3, concatenated.
-
-Each block is `HMAC-Hash(PRK, T(i - 1) | info | i)`, with the counter `i` as one byte.
 -/
 def expandBlocks (prk info previous : ByteArray) (i : Nat) : (count : Nat) → ByteArray
   | 0 => ByteArray.empty
   | count + 1 =>
+    -- `T(i) = HMAC-Hash(PRK, T(i-1) | info | i)`, with the counter as a single octet.
     let t := hmac prk (previous ++ info ++ ⟨#[UInt8.ofNat i]⟩)
+    -- `T = T(1) | T(2) | ...`.
     t ++ expandBlocks prk info t (i + 1) count
 
 /--
@@ -68,11 +70,13 @@ It rejects a key shorter than `HashLen` bytes, and an output longer than `255 * 
 The pseudorandom key is secret, and this function makes no constant-time claim.
 -/
 def expand (prk info : ByteArray) (length : Nat) : Except HkdfError ByteArray :=
+  -- The inputs: `PRK` of at least `HashLen` octets, and `L <= 255*HashLen`.
   if prk.size < HASH_LEN then .error (.keyTooShort prk.size)
   else if 255 * HASH_LEN < length then .error (.outputTooLong length)
   else
-    -- `N = ceil(L / HashLen)` blocks cover the output.
+    -- `N = ceil(L/HashLen)`.
     let count := (length + HASH_LEN - 1) / HASH_LEN
+    -- `T(0)` is the empty string, and `OKM` is the first `L` octets of `T`.
     .ok ((expandBlocks prk info ByteArray.empty 1 count).extract 0 length)
 
 /-- The blocks of the expansion are 32 bytes each. -/
@@ -107,6 +111,7 @@ HKDF, RFC 5869 §2: extract, then expand.
 The input keying material is secret, and this function makes no constant-time claim.
 -/
 def hkdf (salt ikm info : ByteArray) (length : Nat) : Except HkdfError ByteArray :=
+  -- Step 1: Extract (§2.2), then step 2: Expand (§2.3).
   expand (extract salt ikm) info length
 
 end EthLib.Cryptography.Hash.Hkdf

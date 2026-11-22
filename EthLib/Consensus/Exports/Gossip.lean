@@ -26,13 +26,15 @@ public section
 
 namespace EthLib.Consensus.Exports
 
-open EthLib.Exports (Result PyValue pyExport forkOfName forkUpTo)
+open EthLib.Exports (ExportError Result PyValue pyExport forkOfName forkUpTo rejectArgument
+  toResult)
 
 open Lean Base Networking.Gossip
 
-/-- A subnet, or the code and the message of its error. -/
-def subnetResult {α : Type} (result : Except (SubnetError ShuffleError) α) : Result α :=
-  result.mapError fun e => (e.code, s!"subnet rejected: {reprStr e}")
+/-- A subnet error reaches Python with its code and its printed form. -/
+instance : ExportError (SubnetError ShuffleError) where
+  code := SubnetError.code
+  message := reprStr
 
 /-- The names of the gossip topics of a fork. -/
 def gossipTopicsOf (args : String × String) : Result (List String) := do
@@ -52,7 +54,7 @@ def gossipTopicsExport (args : PyValue) : Result PyValue := pyExport gossipTopic
 def computeSubnetForAttestationExport (name : ByteArray)
     (committeesPerSlot slot committeeIndex : UInt64) : Result UInt64 := do
   let name ← nameOf name
-  subnetResult (computeSubnetForAttestation (← presetOf name) (← configOf name)
+  toResult "subnet rejected" (computeSubnetForAttestation (← presetOf name) (← configOf name)
     committeesPerSlot slot committeeIndex)
 
 /-- The subnet of a blob sidecar at a fork, from its blob index. -/
@@ -60,18 +62,19 @@ def computeSubnetForAttestationExport (name : ByteArray)
 def computeSubnetForBlobSidecarExport (name fork : ByteArray) (blobIndex : UInt64) :
     Result UInt64 := do
   let config ← configOf (← nameOf name)
-  subnetResult (computeSubnetForBlobSidecar config (← forkOfName fork) blobIndex)
+  toResult "subnet rejected" (computeSubnetForBlobSidecar config (← forkOfName fork) blobIndex)
 
 /-- The subnet of a data column sidecar, from its column index. -/
 @[export eth_consensus_compute_subnet_for_data_column_sidecar]
 def computeSubnetForDataColumnSidecarExport (name : ByteArray) (columnIndex : UInt64) :
     Result UInt64 := do
-  subnetResult (computeSubnetForDataColumnSidecar (← configOf (← nameOf name)) columnIndex)
+  toResult "subnet rejected"
+    (computeSubnetForDataColumnSidecar (← configOf (← nameOf name)) columnIndex)
 
 /-- The attestation subnets of a node ID in an epoch. -/
 def computeSubscribedSubnetsOf (args : String × NodeID × UInt64) : Result (List UInt64) := do
   let (name, id, epoch) := args
-  subnetResult (computeSubscribedSubnets (← presetOf name) (← configOf name) id epoch)
+  toResult "subnet rejected" (computeSubscribedSubnets (← presetOf name) (← configOf name) id epoch)
 
 /-- The attestation subnets of a node ID in an epoch, as a list.
 
@@ -88,7 +91,8 @@ def gossipTopicBoundExport (name fork topic : ByteArray) : Result UInt64 := do
   let config ← configOf name
   let fork ← forkUpTo .hegota fork
   let topicName ← nameOf topic
-  let some topic := GossipTopic.ofName? topicName | throw (0, s!"{topicName} names no topic")
+  let some topic := GossipTopic.ofName? topicName
+    | rejectArgument none s!"{topicName} names no topic"
   unless (config.gossipTopics fork).contains topic do
     throw (BoundsError.topicNotAtFork topicName fork).fault
   let some bound := topicBound preset config fork topic

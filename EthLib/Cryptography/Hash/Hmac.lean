@@ -20,15 +20,11 @@ def IPAD : UInt8 := 0x36
 /-- The outer pad byte `opad`. -/
 def OPAD : UInt8 := 0x5c
 
-/--
-The key as one block of `B` bytes, where `B` is the block size of SHA-256.
-
-A key longer than a block is hashed first.
-
-Zero bytes then fill the block.
--/
+/-- The key as one block of `B` bytes, where `B` is the block size of SHA-256. -/
 def blockKey (key : ByteArray) : ByteArray :=
+  -- A key longer than `B` bytes is first hashed with `H`, to `L` bytes.
   let short := if key.size > Sha256.BLOCK_SIZE_BYTES then Sha256.hash key else key
+  -- Step (1): append zeros to the end of `K` to create a `B` byte string.
   short ++ ⟨Array.replicate (Sha256.BLOCK_SIZE_BYTES - short.size) 0⟩
 
 /-- Each byte of a block XORed with one pad byte. -/
@@ -41,7 +37,11 @@ HMAC-SHA-256 of a message under a secret key: `H(K ^ opad, H(K ^ ipad, text))`.
 The key is secret, and this function makes no constant-time claim.
 -/
 def hmac (key message : ByteArray) : ByteArray :=
+  -- Step (1): `K` as a `B` byte string.
   let k := blockKey key
+  -- Steps (2) to (4): `H(K XOR ipad, text)`, the inner hash.
+  --
+  -- Steps (5) to (7): `H(K XOR opad, ...)` of the inner hash, the output.
   Sha256.hash (xorPad k OPAD ++ Sha256.hash (xorPad k IPAD ++ message))
 
 /--

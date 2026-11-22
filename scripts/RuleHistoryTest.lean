@@ -57,21 +57,24 @@ def target : Fork → Option Nat
   | .late => some 6
   | _ => none
 
-/-- Two fields of type `Nat`, and one of another type, which the tool skips. -/
+/-- Two fields of type `Nat`, one of type `UInt64`, and one of another type, which is skipped. -/
 structure Schedule where
   base : Nat
   refund : Nat
+  cap : UInt64
   enabled : Bool
 
-/-- One line per fork for each field of type `Nat`: base 21000, and refund 15000, 4800 and 4800. -/
-def schedule : Fork → Schedule
-  | .early => ⟨21000, 15000, false⟩
-  | _ => ⟨21000, 4800, true⟩
+/-- One line per fork for each field of type `Nat` or `UInt64`.
 
-/-- From `middle` on: base none, 6 and 9, and refund none, 0 and 1. -/
+Base is 21000, refund is 15000, 4800 and 4800, and cap is 6, 9 and 9. -/
+def schedule : Fork → Schedule
+  | .early => ⟨21000, 15000, 6, false⟩
+  | _ => ⟨21000, 4800, 9, true⟩
+
+/-- From `middle` on: base none, 6 and 9, refund none, 0 and 1, and cap none, 8 and 12. -/
 def blobs : (fork : Fork) → Since .middle fork Schedule
-  | .late, _ => ⟨9, 1, true⟩
-  | _, _ => ⟨6, 0, true⟩
+  | .late, _ => ⟨9, 1, 12, true⟩
+  | _, _ => ⟨6, 0, 8, true⟩
 
 /-- Another argument than the fork: skipped. -/
 def preset (scale : Nat) (fork : Fork) : Nat := scale * cost fork

@@ -87,9 +87,9 @@ def accessListJson (l : List Access) : Json := listJson accessJson l
 def u256Json (x : U256) : Json := quantityJson x.toNat
 
 /-- The fields of a typed transaction that every type has, before its type-specific fields. -/
-def typedFields (type : UInt8) (chainId : UInt64) (nonce gas value : U256) (data : ByteArray)
-    (accessList : List Access) (yParity r s : U256) : List (String × Json) :=
-  [("type", byteJson type), ("chainId", quantityJson chainId.toNat), ("nonce", u256Json nonce),
+def typedFields (type : UInt8) (chainId : UInt64) (nonce : Nat) (gas value : U256)
+    (data : ByteArray) (accessList : List Access) (yParity r s : U256) : List (String × Json) :=
+  [("type", byteJson type), ("chainId", quantityJson chainId.toNat), ("nonce", quantityJson nonce),
     ("gas", u256Json gas), ("value", u256Json value), ("input", dataJson data.data.toList),
     ("accessList", accessListJson accessList), ("yParity", u256Json yParity),
     ("v", u256Json yParity), ("r", u256Json r), ("s", u256Json s)]
@@ -104,17 +104,20 @@ def transactionFields (gasPrice : Nat) : Transaction → List (String × Json)
       ("s", u256Json tx.s)] ++
     if 35 ≤ tx.v.toNat then [("chainId", quantityJson ((tx.v.toNat - 35) / 2))] else []
   | .accessList tx =>
-    typedFields 1 tx.chainId tx.nonce tx.gas tx.value tx.data tx.accessList tx.yParity tx.r tx.s ++
+    typedFields 1 tx.chainId tx.nonce.toNat tx.gas tx.value tx.data tx.accessList tx.yParity
+        tx.r tx.s ++
       [("to", optionJson (fun (a : Address) => dataJson a.toList) tx.to),
         ("gasPrice", quantityJson gasPrice)]
   | .feeMarket tx =>
-    typedFields 2 tx.chainId tx.nonce tx.gas tx.value tx.data tx.accessList tx.yParity tx.r tx.s ++
+    typedFields 2 tx.chainId tx.nonce.toNat tx.gas tx.value tx.data tx.accessList tx.yParity
+        tx.r tx.s ++
       [("to", optionJson (fun (a : Address) => dataJson a.toList) tx.to),
         ("gasPrice", quantityJson gasPrice),
         ("maxPriorityFeePerGas", u256Json tx.maxPriorityFeePerGas),
         ("maxFeePerGas", u256Json tx.maxFeePerGas)]
   | .blob tx =>
-    typedFields 3 tx.chainId tx.nonce tx.gas tx.value tx.data tx.accessList tx.yParity tx.r tx.s ++
+    typedFields 3 tx.chainId tx.nonce.toNat tx.gas tx.value tx.data tx.accessList tx.yParity
+        tx.r tx.s ++
       [("to", dataJson tx.to.toList), ("gasPrice", quantityJson gasPrice),
         ("maxPriorityFeePerGas", u256Json tx.maxPriorityFeePerGas),
         ("maxFeePerGas", u256Json tx.maxFeePerGas),
@@ -122,7 +125,8 @@ def transactionFields (gasPrice : Nat) : Transaction → List (String × Json)
         ("blobVersionedHashes",
           listJson (fun (h : Bytes32) => dataJson h.toList) tx.blobVersionedHashes)]
   | .setCode tx =>
-    typedFields 4 tx.chainId tx.nonce tx.gas tx.value tx.data tx.accessList tx.yParity tx.r tx.s ++
+    typedFields 4 tx.chainId tx.nonce.toNat tx.gas tx.value tx.data tx.accessList tx.yParity
+        tx.r tx.s ++
       [("to", dataJson tx.to.toList), ("gasPrice", quantityJson gasPrice),
         ("maxPriorityFeePerGas", u256Json tx.maxPriorityFeePerGas),
         ("maxFeePerGas", u256Json tx.maxFeePerGas),
@@ -181,6 +185,8 @@ def transactionOfJson (j : Json) : Read Transaction := do
                    blobVersionedHashes := ← array "blobVersionedHashes" (bytes32 "blob hash")
                      (← get "blobVersionedHashes") }
   if type = 4 then
+    -- A set-code transaction holds its nonce in 64 bits.
+    let nonce ← uint64 "nonce" (← get "nonce")
     return .setCode { chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gas, to, value, data,
                       accessList, yParity, r, s
                       authorizations := ← array "authorizationList" authorization

@@ -67,19 +67,6 @@ private theorem prime_sq_dvd_card_of_independent {G : Type*} [AddCommGroup G] [F
   rw [hk]
   ring
 
-/-- `Valid` is required because singular `z != 0` triples also map to `0` under `toPoint`. -/
-theorem isInfinity_eq_true_iff_toPoint_eq_zero {P : G1} (hP : Valid P) :
-    P.isInfinity = true ↔ toPoint P = 0 := by
-  constructor
-  · intro h
-    exact Point.toAffine_of_Z_eq_zero (isZero_iff.mp h)
-  · intro h
-    -- A finite nonsingular representative maps to `Point.some`, never `0`.
-    by_contra hne
-    have hz : Fp.toZMod P.z ≠ 0 := fun hz0 => hne (isZero_iff.mpr hz0)
-    rw [toPoint, Point.toAffine_of_Z_ne_zero hP hz] at h
-    cases h
-
 /-- Rules out a rank-2 `r`-torsion subgroup inside `E(Fp)` once `#E(Fp) <= 2 * p + 1` meets Lagrange's theorem. -/
 theorem modulus_sq_gt_card_bound : 2 * Fp.modulus + 1 < Fr.modulus ^ 2 := by
   decide +kernel

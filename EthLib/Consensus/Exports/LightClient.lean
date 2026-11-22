@@ -33,23 +33,26 @@ public section
 
 namespace EthLib.Consensus.Exports
 
-open EthLib.Exports (Result PyValue ToPy FromPy LawfulPy toPy fromPy pyExport toResult)
+open EthLib.Exports (ExportError Result PyValue ToPy FromPy LawfulPy UnreadArgument toPy
+  fromPy pyExport rejectArgument toResult)
 open Base Serialization.Ssz
 
-/-- A result of the light client, with the code of its error. -/
-def runLightClient {α : Type} (act : Except LightClientError α) : Result α :=
-  act.mapError fun e => (e.code, s!"light client: {e}")
+/-- An error of the light client reaches Python with its code and its printed form. -/
+instance : ExportError LightClientError where
+  code := LightClientError.code
+  message := toString
 
 /-- The preset and a fork of the light client, from Altair. -/
 def lightClientPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
   let preset ← presetOf (← nameOf name)
   let fork ← forkOf fork
-  runLightClient (LightClientError.requireFork fork)
+  toResult "light client" (LightClientError.requireFork fork)
   return (preset, fork)
 
 /-- A value of a type, decoded from its SSZ bytes, with code 0 when it does not decode. -/
 def decodeAs (α : Type) [SszType α] (data : ByteArray) : Result α :=
-  (SszType.deserialize α data).mapError fun e => (0, s!"input rejected: {reprStr e}")
+  toResult none ((SszType.deserialize α data).mapError fun e =>
+    UnreadArgument.mk s!"input rejected: {reprStr e}")
 
 /-- A step of a sync. -/
 inductive SyncStep where
@@ -92,15 +95,15 @@ instance : LawfulPy SyncHeader where
 /-- A fork of the light client, by name, that is not later than the fork of a store. -/
 def dataFork (name : String) (store : Fork) : Result {fork : Fork // fork ≤ store} := do
   let fork ← forkOf name.toUTF8
-  runLightClient (LightClientError.requireFork fork)
+  toResult "light client" (LightClientError.requireFork fork)
   if earlier : fork ≤ store then return ⟨fork, earlier⟩
-  else throw (0, s!"data of {fork.name} is later than a store of {store.name}")
+  else rejectArgument none s!"data of {fork.name} is later than a store of {store.name}"
 
 /-- The slot, the beacon root and the execution root of a header. -/
 def headerRecord {preset : Preset} {fork : Fork} (config : Config)
     (header : LightClientHeader preset fork) : Result SyncHeader := do
   let beacon ← toResult "root rejected" (SszType.hashTreeRoot header.beacon)
-  let execution ← runLightClient (getLcExecutionRoot config header)
+  let execution ← toResult "light client" (getLcExecutionRoot config header)
   return ⟨header.beacon.slot, beacon, execution⟩
 
 /-- The headers of a sync, step by step, from a bootstrap for a trusted block root.
@@ -117,7 +120,7 @@ def lightClientSyncOf (args : String × String × String × Option PyValue × Ro
   let ⟨bootstrapFork, earlier⟩ ← dataFork bootstrapFork fork
   let bootstrap ← decodeAs (LightClientBootstrap preset bootstrapFork) bootstrap
   let mut store : (fork : Fork) × LightClientStore preset fork :=
-    ⟨fork, ← runLightClient
+    ⟨fork, ← toResult "light client"
       (do initializeLightClientStore config trusted (← bootstrap.upgrade config fork earlier))⟩
   let mut out := #[]
   for step in steps do
@@ -126,17 +129,18 @@ def lightClientSyncOf (args : String × String × String × Option PyValue × Ro
     | .update forkName slot data =>
       let ⟨updateFork, earlier⟩ ← dataFork forkName storeFork
       let update ← decodeAs (LightClientUpdate preset updateFork) data
-      store := ⟨storeFork, ← runLightClient do
+      store := ⟨storeFork, ← toResult "light client" do
         processLightClientUpdate config SignatureChecks.bls current
           (← update.upgrade config storeFork earlier) slot genesisValidatorsRoot⟩
     | .force slot =>
-      store := ⟨storeFork, ← runLightClient (processLightClientStoreForceUpdate current slot)⟩
+      store := ⟨storeFork,
+        ← toResult "light client" (processLightClientStoreForceUpdate current slot)⟩
     | .upgrade forkName =>
       let next ← forkOf forkName.toUTF8
-      runLightClient (LightClientError.requireFork next)
+      toResult "light client" (LightClientError.requireFork next)
       if later : storeFork ≤ next then
-        store := ⟨next, ← runLightClient (current.upgrade config next later)⟩
-      else throw (0, s!"a store of {storeFork.name} cannot go back to {next.name}")
+        store := ⟨next, ← toResult "light client" (current.upgrade config next later)⟩
+      else rejectArgument none s!"a store of {storeFork.name} cannot go back to {next.name}"
     out := out.push
       (← headerRecord config store.2.finalizedHeader,
         ← headerRecord config store.2.optimisticHeader)
@@ -167,7 +171,7 @@ def blockToLightClientHeaderOf
   let config ← configWithValue name replacements
   let block ← decodeAs (SignedBeaconBlock preset fork) block
   let root ← toResult "root rejected" (SszType.hashTreeRoot block.message)
-  let header ← runLightClient (blockToLightClientHeader config block)
+  let header ← toResult "light client" (blockToLightClientHeader config block)
   return (root, ← toResult "value rejected" (SszType.serialize header))
 
 /-- The root of a block, given as bytes, and the bytes of its light client header, as a pair. -/
@@ -186,8 +190,8 @@ def lightClientUpdateProofsOf
     | "LightClientUpdate" => decodeAs (LightClientUpdate preset fork) data
     | "LightClientFinalityUpdate" =>
       LightClientFinalityUpdate.toUpdate <$> decodeAs (LightClientFinalityUpdate preset fork) data
-    | other => throw (0, s!"no update of type {other}")
-  runLightClient do
+    | other => rejectArgument none s!"no update of type {other}"
+  toResult "light client" do
     Base.ensure (← isValidLightClientHeader config update.attestedHeader)
       (.invalidHeader update.attestedHeader.beacon.slot)
     validateFinality config update
@@ -219,10 +223,12 @@ def isBetterUpdateOf
   let newUpdate ← decodeAs (LightClientUpdate preset fork) newUpdate
   let oldUpdate ← decodeAs (LightClientUpdate preset oldFork) oldUpdate
   if earlier : fork ≤ oldFork then
-    return isBetterUpdate (← runLightClient (newUpdate.upgrade config oldFork earlier)) oldUpdate
+    return isBetterUpdate
+      (← toResult "light client" (newUpdate.upgrade config oldFork earlier)) oldUpdate
   else
     let later := Nat.le_of_lt (Nat.lt_of_not_le earlier)
-    return isBetterUpdate newUpdate (← runLightClient (oldUpdate.upgrade config fork later))
+    return isBetterUpdate newUpdate
+      (← toResult "light client" (oldUpdate.upgrade config fork later))
 
 /-- Whether a new update, given as bytes, ranks above an old one for a forced update.
 
@@ -251,7 +257,7 @@ def createLightClientBootstrapOf
   let (name, fork, replacements, state, block) := args
   let (preset, fork) ← lightClientPresetAndFork name.toUTF8 fork.toUTF8
   let config ← configWithValue name replacements
-  let bootstrap ← runLightClient (createLightClientBootstrap config
+  let bootstrap ← toResult "light client" (createLightClientBootstrap config
     (← decodeAs (BeaconState preset fork) state) (← decodeAs (SignedBeaconBlock preset fork) block))
   toResult "value rejected" (SszType.serialize bootstrap)
 
@@ -269,7 +275,7 @@ def serializeUpdate {preset : Preset} {fork : Fork} (type : String)
     toResult "value rejected" (SszType.serialize (createLightClientFinalityUpdate update))
   | "LightClientOptimisticUpdate" =>
     toResult "value rejected" (SszType.serialize (createLightClientOptimisticUpdate update))
-  | other => throw (0, s!"no update of type {other}")
+  | other => rejectArgument none s!"no update of type {other}"
 
 /-- The update that a full node serves for a block, from the blocks and their post states. -/
 def createLightClientUpdateOf
@@ -284,13 +290,13 @@ def createLightClientUpdateOf
   let config ← configWithValue name replacements
   if earlier : finalizedFork ≤ attestedFork then
     let finalized ← finalizedBlock.mapM (decodeAs (SignedBeaconBlock preset finalizedFork))
-    let update ← runLightClient (createLightClientUpdate config
+    let update ← toResult "light client" (createLightClientUpdate config
       (← decodeAs (BeaconState preset fork) state)
       (← decodeAs (SignedBeaconBlock preset fork) block)
       (← decodeAs (BeaconState preset attestedFork) attestedState)
       (← decodeAs (SignedBeaconBlock preset attestedFork) attestedBlock) finalized earlier)
     serializeUpdate type update
-  else throw (0, s!"finalized fork {finalizedFork.name} after {attestedFork.name}")
+  else rejectArgument none s!"finalized fork {finalizedFork.name} after {attestedFork.name}"
 
 /-- The update that a full node serves for a block, from the blocks and their post states.
 

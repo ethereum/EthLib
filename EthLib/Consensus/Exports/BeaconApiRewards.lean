@@ -22,7 +22,7 @@ An unknown name or fork, or an input that does not decode, has code 0.
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport toResult)
 
 /-- The JSON response of the attestation rewards endpoint. -/
 def apiAttestationRewardsOf (args : String × String × ByteArray × Option PyValue × UInt64 ×
@@ -31,8 +31,8 @@ def apiAttestationRewardsOf (args : String × String × ByteArray × Option PyVa
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let config ← configWithValue name replacements
   let state ← decodeInput (BeaconState preset fork) state
-  let ids ← apiError (BeaconApi.readValidatorIds false ids)
-  let envelope ← apiError (BeaconApi.attestationRewardsResponse config state epoch ids)
+  let ids ← toResult none (BeaconApi.readValidatorIds false ids)
+  let envelope ← toResult none (BeaconApi.attestationRewardsResponse config state epoch ids)
   return PyValue.ofJson envelope.toJson
 
 /-- The JSON response of the attestation rewards endpoint, as a `dict`.
@@ -51,8 +51,8 @@ def apiSyncCommitteeRewardsOf (args : String × String × ByteArray × ByteArray
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let state ← decodeInput (BeaconState preset fork) state
   let aggregate ← decodeInput (SyncAggregate preset) aggregate
-  let ids ← apiError (BeaconApi.readValidatorIds false ids)
-  let envelope ← apiError (BeaconApi.syncCommitteeRewardsResponse state aggregate ids)
+  let ids ← toResult none (BeaconApi.readValidatorIds false ids)
+  let envelope ← toResult none (BeaconApi.syncCommitteeRewardsResponse state aggregate ids)
   return PyValue.ofJson envelope.toJson
 
 /-- The JSON response of the sync committee rewards endpoint, as a `dict`.
@@ -74,7 +74,7 @@ def apiBlockRewardsOf (args : String × String × ByteArray × ByteArray × Opti
   let config ← configWithValue name replacements
   let state ← decodeInput (BeaconState preset fork) state
   let signed ← decodeInput (SignedBeaconBlock preset fork) block
-  let envelope ← apiError (BeaconApi.blockRewardsResponse config SignatureChecks.acceptAll
+  let envelope ← toResult none (BeaconApi.blockRewardsResponse config SignatureChecks.acceptAll
     (.constant true) state signed.message)
   return PyValue.ofJson envelope.toJson
 

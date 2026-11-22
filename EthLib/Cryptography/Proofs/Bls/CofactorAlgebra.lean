@@ -27,14 +27,8 @@ theorem c1Psi_norm : (c1Psi : Fp2) * c1Psi.conjugate = c1Psi2 := by
 theorem c2Psi_norm : (c2Psi : Fp2) * c2Psi.conjugate = -1 := by
   decide_eq_at_model [map_c2Psi]
 
-private theorem toAffine_one (x y : Fp2) :
-    G2.toAffine ⟨x, y, Fp2.one⟩ = (x, y) := by
-  unfold G2.toAffine
-  have hz : (Fp2.one : Fp2).isZero = false := Fp2.one_isZero
-  have hi : (Fp2.one : Fp2).inverse = (1 : Fp2) := by
-    rw [Fp2.one_eq_one, ← one_mul (1 : Fp2).inverse]
-    exact Fp2.mul_inverse_cancel one_ne_zero
-  simp only [hz, Bool.false_eq_true, ↓reduceIte, hi, mul_one]
+private theorem toAffine_one (x y : Fp2) : G1.toAffine ⟨x, y, Fp2.one⟩ = (x, y) :=
+  G1.Law.toAffine_mk_one Fp2.embedding x y
 
 private theorem psi_noninf (P : G2) (hz : P.z.isZero = false) :
     psi P = ⟨c1Psi * P.toAffine.1.conjugate, c2Psi * P.toAffine.2.conjugate, Fp2.one⟩ := by
@@ -69,9 +63,9 @@ theorem psi2_cube_noninf (P : G2) (hz : P.z.isZero = false) :
   have h := congrArg (fun c : Fp2 => c * P.toAffine.1) c1Psi2_cube
   simpa only [pow_succ, pow_zero, one_mul, mul_assoc] using h
 
-private theorem isZero_eq_of_projectiveEq {p q : G2} (h : G2.projectiveEq p q = true) :
+private theorem isZero_eq_of_projectiveEq {p q : G2} (h : p.projectiveEq q = true) :
     p.z.isZero = q.z.isZero := by
-  unfold G2.projectiveEq at h
+  simp only [G1.projectiveEq, Fp2.fieldOps_isZero] at h
   by_cases hp : p.z.isZero = true
   · rw [ite_eq_left hp] at h
     exact hp.trans h.symm
@@ -81,20 +75,20 @@ private theorem isZero_eq_of_projectiveEq {p q : G2} (h : G2.projectiveEq p q = 
       cases h
     · exact (Bool.eq_false_iff.mpr hp).trans (Bool.eq_false_iff.mpr hq).symm
 
-/-- Affine coordinate normalization is invariant under `G2.projectiveEq`. -/
-theorem toAffine_eq_of_projectiveEq {p q : G2} (h : G2.projectiveEq p q = true) :
+/-- Affine coordinate normalization is invariant under projective equality. -/
+theorem toAffine_eq_of_projectiveEq {p q : G2} (h : p.projectiveEq q = true) :
     p.toAffine = q.toAffine := by
   have hi := isZero_eq_of_projectiveEq h
   by_cases hp : p.z.isZero = true
   · have hq : q.z.isZero = true := hi.symm.trans hp
-    simp [G2.toAffine, hp, hq]
+    simp [G1.toAffine, hp, hq]
   · have hq : ¬q.z.isZero = true := fun hq => hp (hi.trans hq)
     have hp0 : p.z ≠ 0 := fun hz => hp (Fp2.isZero_iff.mpr hz)
     have hq0 : q.z ≠ 0 := fun hz => hq (Fp2.isZero_iff.mpr hz)
-    unfold G2.projectiveEq at h
+    simp only [G1.projectiveEq, Fp2.fieldOps_isZero, Fp2.fieldOps_beq] at h
     rw [ite_eq_right hp, ite_eq_right hq, Bool.and_eq_true,
       Fp2.beq_iff_eq, Fp2.beq_iff_eq] at h
-    unfold G2.toAffine
+    simp only [G1.toAffine, Fp2.fieldOps_isZero]
     rw [ite_eq_right hp, ite_eq_right hq]
     change (p.x * (p.z⁻¹ * p.z⁻¹), p.y * (p.z⁻¹ * p.z⁻¹ * p.z⁻¹)) =
       (q.x * (q.z⁻¹ * q.z⁻¹), q.y * (q.z⁻¹ * q.z⁻¹ * q.z⁻¹))
@@ -104,9 +98,9 @@ theorem toAffine_eq_of_projectiveEq {p q : G2} (h : G2.projectiveEq p q = true) 
     · field_simp
       linear_combination h.2
 
-/-- `psi` respects `G2.projectiveEq`, including at infinity. -/
-theorem psi_projectiveEq_of_projectiveEq {p q : G2} (h : G2.projectiveEq p q = true) :
-    G2.projectiveEq (psi p) (psi q) = true := by
+/-- `psi` respects projective equality, including at infinity. -/
+theorem psi_projectiveEq_of_projectiveEq {p q : G2} (h : p.projectiveEq q = true) :
+    (psi p).projectiveEq (psi q) = true := by
   have hi := isZero_eq_of_projectiveEq h
   by_cases hp : p.z.isZero = true
   · have hq := hi.symm.trans hp
@@ -127,7 +121,7 @@ theorem psi_toPoint_eq_of_toPoint_eq {p q : G2} (hp : G2.Valid p) (hq : G2.Valid
 
 private theorem affine_neg {p : G2} (hz : p.z.isZero = false) :
     (G2.neg p).toAffine = (p.toAffine.1, -p.toAffine.2) := by
-  simp only [G2.toAffine, G2.neg, hz, Bool.false_eq_true, ↓reduceIte]
+  simp only [G1.toAffine, G2.neg, Fp2.fieldOps_isZero, hz, Bool.false_eq_true, ↓reduceIte]
   rw [neg_mul]
 
 /-- `psi` commutes with Jacobian negation on all representatives. -/
@@ -146,9 +140,9 @@ theorem psi_toPoint_neg {p : G2} (hp : G2.Valid p) :
     G2.toPoint (psi (G2.neg p)) = -G2.toPoint (psi p) := by
   rw [psi_neg, G2.toPoint_neg (psi_valid hp)]
 
-/-- `psi2` respects `G2.projectiveEq`, including at infinity. -/
-theorem psi2_projectiveEq_of_projectiveEq {p q : G2} (h : G2.projectiveEq p q = true) :
-    G2.projectiveEq (psi2 p) (psi2 q) = true := by
+/-- `psi2` respects projective equality, including at infinity. -/
+theorem psi2_projectiveEq_of_projectiveEq {p q : G2} (h : p.projectiveEq q = true) :
+    (psi2 p).projectiveEq (psi2 q) = true := by
   rw [← psi_psi_eq_psi2 p, ← psi_psi_eq_psi2 q]
   exact psi_projectiveEq_of_projectiveEq (psi_projectiveEq_of_projectiveEq h)
 
@@ -167,12 +161,12 @@ theorem psi2_toPoint_neg {p : G2} (hp : G2.Valid p) :
 
 /-- Three applications of `psi2` are projectively equal to `G2.neg P` for every `P`. -/
 theorem psi2_cube_projectiveEq_neg (P : G2) :
-    G2.projectiveEq (psi2 (psi2 (psi2 P))) (G2.neg P) = true := by
+    (psi2 (psi2 (psi2 P))).projectiveEq (G2.neg P) = true := by
   cases hz : P.z.isZero with
   | true =>
     have hpsi2 : psi2 P = P := by simp [psi2, hz]
     rw [hpsi2, hpsi2, hpsi2]
-    unfold G2.projectiveEq
+    unfold G1.projectiveEq
     simp [G2.neg, hz]
   | false =>
     rw [psi2_cube_noninf P hz]
@@ -181,13 +175,10 @@ theorem psi2_cube_projectiveEq_neg (P : G2) :
       rw [Fp2.isZero_iff.mpr h0] at hz
       cases hz
     have hone_nz : ¬(Fp2.one : Fp2).isZero = true := by rw [Fp2.one_isZero]; decide
-    unfold G2.projectiveEq
-    dsimp only
+    simp only [G1.projectiveEq, Fp2.fieldOps_isZero, Fp2.fieldOps_beq]
     rw [ite_eq_right hone_nz, ite_eq_right (by simp [hnz])]
     dsimp only [G2.neg]
-    unfold G2.toAffine
-    rw [hz]
-    dsimp only
+    simp only [G1.toAffine, Fp2.fieldOps_isZero, hz, Bool.false_eq_true, ↓reduceIte]
     rw [Bool.and_eq_true, Fp2.beq_iff_eq, Fp2.beq_iff_eq]
     change P.x * (P.z⁻¹ * P.z⁻¹) * (P.z * P.z) = P.x * (1 * 1) ∧
       -(P.y * (P.z⁻¹ * P.z⁻¹ * P.z⁻¹)) * (P.z * P.z * P.z) = -P.y * (1 * 1 * 1)
@@ -203,7 +194,7 @@ theorem psi2_cube_toPoint {P : G2} (hP : G2.Valid P) :
 
 /-- Six applications of `psi` are projectively equal to `G2.neg P`. -/
 theorem psi_six_projectiveEq_neg (P : G2) :
-    G2.projectiveEq (psi (psi (psi (psi (psi (psi P)))))) (G2.neg P) = true := by
+    (psi (psi (psi (psi (psi (psi P)))))).projectiveEq (G2.neg P) = true := by
   rw [psi_psi_eq_psi2, psi_psi_eq_psi2, psi_psi_eq_psi2]
   exact psi2_cube_projectiveEq_neg P
 
@@ -221,7 +212,7 @@ theorem toPoint_mulNegX {P : G2} (hP : G2.Valid P) :
 /-- Group expression computed by `clearCofactor` (`RFC 9380 Appendix G.3`) on valid twist points. -/
 theorem clearCofactor_group_expression {P : G2} (hP : G2.Valid P) :
     G2.toPoint (clearCofactor P) =
-      G2.toPoint (psi2 (G2.double P)) - G2.toPoint (psi P) +
+      G2.toPoint (psi2 P.double) - G2.toPoint (psi P) +
       (blsX * blsX + blsX) • G2.toPoint P -
       blsX • G2.toPoint (psi P) - G2.toPoint P := by
   unfold clearCofactor
@@ -260,7 +251,7 @@ theorem clearCofactor_modulus_smul {P : G2} (hP : G2.Valid P)
     (h0 : Fr.modulus • G2.toPoint P = 0) : Fr.modulus • G2.toPoint (clearCofactor P) = 0 := by
   rw [clearCofactor_group_expression hP]
   have h1 := psi_modulus_smul hP h0
-  have hd : Fr.modulus • G2.toPoint (G2.double P) = 0 := by
+  have hd : Fr.modulus • G2.toPoint P.double = 0 := by
     rw [G2.toPoint_double hP, nsmul_add, h0, zero_add]
   have h2 := psi2_modulus_smul (G2.valid_double hP) hd
   simp only [nsmul_sub, nsmul_add, h0, h1, h2]
@@ -290,9 +281,9 @@ theorem toPoint_clearCofactor_add {P Q : G2} (hP : G2.Valid P) (hQ : G2.Valid Q)
   rw [toPoint_clearCofactor (G2.valid_add hP hQ), G2.toPoint_add hP hQ,
     map_add, toPoint_clearCofactor hP, toPoint_clearCofactor hQ]
 
-/-- `clearCofactor` commutes with `G2.mulNat` on all valid twist points. -/
+/-- `clearCofactor` commutes with scalar multiplication on all valid twist points. -/
 theorem toPoint_clearCofactor_mulNat {P : G2} (hP : G2.Valid P) (n : Nat) :
-    G2.toPoint (clearCofactor (G2.mulNat P n)) = n • G2.toPoint (clearCofactor P) := by
+    G2.toPoint (clearCofactor (P.mulNat n)) = n • G2.toPoint (clearCofactor P) := by
   rw [toPoint_clearCofactor (G2.valid_mulNat hP n), G2.toPoint_mulNat hP,
     map_nsmul, toPoint_clearCofactor hP]
 

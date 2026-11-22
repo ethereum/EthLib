@@ -52,16 +52,28 @@ def Bprime : F := BaseField.ofNat
 The error is the case where neither is, which the RFC excludes. -/
 def simpleSwuG1 (u : F) : Except BlsError (F × F) := do
   let zu2 := Z * (u * u)
+  -- The denominator `Z^2 * u^4 + Z * u^2` of step 1.
   let denominator := zu2 * zu2 + zu2
-  -- `x1 = (-B' / A') * (1 + 1 / denominator)`, or `B' / (Z * A')` when the denominator is 0.
+  -- Steps 1 to 3 are folded into one test of the denominator, which is 0 exactly when `tv1` is.
+  --
+  -- Step 1: `tv1 = inv0(Z^2 * u^4 + Z * u^2)`.
+  --
+  -- Step 3: if `tv1 == 0`, set `x1 = B' / (Z * A')`.
+  --
+  -- Step 2: else `x1 = (-B' / A') * (1 + tv1)`.
   let x1 := if BaseField.isZero denominator then Bprime * BaseField.inverse (Z * Aprime)
     else (-Bprime * BaseField.inverse Aprime) * (BaseField.one + BaseField.inverse denominator)
+  -- Step 4: `gx1 = x1^3 + A' * x1 + B'`.
   let gx1 := x1 * x1 * x1 + Aprime * x1 + Bprime
+  -- Step 5: `x2 = Z * u^2 * x1`.
   let x2 := zu2 * x1
-  -- `x1` when `g(x1)` is a square, and `x2` otherwise.
-  let x := if (sqrtOrError gx1).isOk then x1 else x2
-  let y ← sqrtOrError (x * x * x + Aprime * x + Bprime)
-  -- The sign of `y` follows the sign of `u`.
+  -- Steps 7 and 8: `x = x1` if `is_square(gx1)`, else `x = x2`.
+  let x := if (BaseField.sqrt gx1).isSome then x1 else x2
+  -- Steps 6 to 8: `y = sqrt(gx1)` or `y = sqrt(gx2)`, with `gx2 = x2^3 + A' * x2 + B'`.
+  --
+  -- The square root of the chosen `g(x)` is taken again, rather than kept from the test.
+  let some y := BaseField.sqrt (x * x * x + Aprime * x + Bprime) | throw .notASquare
+  -- Steps 9 and 10: if `sgn0(u) != sgn0(y)`, set `y = -y`; return `(x, y)`.
   return (x, if BaseField.sgn0 u = BaseField.sgn0 y then y else -y)
 
 -- The coefficients `k_(1,j)` of `x_num`.
@@ -197,6 +209,7 @@ def K4 : List F :=
 
 /-- The polynomial with the coefficients `coefficients`, lowest first, at `x`. -/
 def evaluate (coefficients : List F) (x : F) : F :=
+  -- Horner's rule: `k_0 + x * (k_1 + x * (...))`.
   coefficients.foldr (fun coefficient acc => coefficient + x * acc) BaseField.zero
 
 /-- The 11-isogeny of RFC 9380 Appendix E.2, from `E'` to `E : y^2 = x^3 + 4`.
@@ -204,22 +217,34 @@ def evaluate (coefficients : List F) (x : F) : F :=
 - `x = x_num / x_den`, where `x_den` is monic of degree 10.
 - `y = y' * y_num / y_den`, where `y_den` is monic of degree 15. -/
 def isoMapG1 (xp yp : F) : G1 F :=
+  -- `x_num = k_(1,11) * x'^11 + ... + k_(1,1) * x' + k_(1,0)`.
   let xNum := evaluate K1 xp
+  -- `x_den = x'^10 + k_(2,9) * x'^9 + ... + k_(2,1) * x' + k_(2,0)`.
   let xDen := evaluate K2 xp + BaseField.powNat xp 10
+  -- `y_num = k_(3,15) * x'^15 + ... + k_(3,1) * x' + k_(3,0)`.
   let yNum := evaluate K3 xp
+  -- `y_den = x'^15 + k_(4,14) * x'^14 + ... + k_(4,1) * x' + k_(4,0)`.
   let yDen := evaluate K4 xp + BaseField.powNat xp 15
+  -- §6.6.3: a zero denominator MUST return the identity point on `E`.
   if BaseField.isZero xDen || BaseField.isZero yDen then G1.zero
+  -- `x = x_num / x_den` and `y = y' * y_num / y_den`.
   else ⟨xNum * BaseField.inverse xDen, yp * yNum * BaseField.inverse yDen, BaseField.one⟩
 
 /-- `h_eff` for G1, from RFC 9380 §8.8.1. -/
 def H_EFF_G1 : Nat := 0xd201000000010001
 
 /-- `clear_cofactor` for G1: the multiple by `h_eff`. -/
-def clearCofactorG1 (point : G1 F) : G1 F := G1.mulNat point H_EFF_G1
+def clearCofactorG1 (point : G1 F) : G1 F :=
+  -- §7: `clear_cofactor(P) := h_eff * P`.
+  G1.mulNat point H_EFF_G1
 
 /-- `map_to_curve` then `clear_cofactor` for G1: a point of the subgroup for `u`. -/
 def mapToG1 (u : F) : Except BlsError (G1 F) := do
+  -- §6.6.3 step 1: `(x', y') = map_to_curve_simple_swu(u)`, a point of `E'`.
   let (xp, yp) ← simpleSwuG1 u
+  -- Step 2: `(x, y) = iso_map(x', y')`, a point of `E`.
+  --
+  -- Step 3 returns `(x, y)`; the field-to-curve document of EIP-2537 then clears the cofactor.
   return clearCofactorG1 (isoMapG1 xp yp)
 
 /-! ## G2 -/
@@ -228,7 +253,11 @@ def mapToG1 (u : F) : Except BlsError (G1 F) := do
 
 The error is the case where the SSWU map finds no square root, which the RFC excludes. -/
 def mapToG2 (u : Fp2 F) : Except BlsError (G2 F) := do
+  -- §6.6.3 step 1: `(x', y') = map_to_curve_simple_swu(u)`, a point of `E'`.
   let (xp, yp) ← HashToCurve.simpleSwu u
+  -- Step 2: `(x, y) = iso_map(x', y')`, a point of `E`.
+  --
+  -- Step 3 returns `(x, y)`; the field-to-curve document of EIP-2537 then clears the cofactor.
   return HashToCurve.clearCofactor (HashToCurve.isoMapG2 xp yp)
 
 end EthLib.Cryptography.Bls.MapToCurve

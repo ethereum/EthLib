@@ -21,12 +21,6 @@ open EthLib.Cryptography.BaseField (Hom)
 
 variable {F G : Type} [BaseField F] [BaseField G]
 
-theorem map_sqrtOrError (f : Hom F G) (a : F) :
-    sqrtOrError (f a) = (sqrtOrError a).map f := by
-  unfold sqrtOrError
-  rw [f.map_sqrt]
-  cases BaseField.sqrt a <;> rfl
-
 namespace HashToCurve
 
 theorem map_fpFromBytesL (f : Hom F G) (b : ByteArray) :
@@ -101,7 +95,7 @@ theorem map_isoMapG2 (f : Hom F G) (xp yp : Fp2 F) :
     ← map_k30 f, ← map_k31 f, ← map_k32 f, ← map_k33 f, ← map_k40 f, ← map_k41 f, ← map_k42 f,
     ← Fp2.map_mul, ← Fp2.map_add, Fp2.map_isZero,
     ← Fp2.map_div, apply_ite (G2.map f), G2.map_zero]
-  simp only [G2.map, Fp2.map_one]
+  simp only [G2.map, G1.map, Fp2.hom, Fp2.map_one]
 
 theorem map_c1Psi (f : Hom F G) : (c1Psi : Fp2 F).map f = c1Psi := by
   unfold c1Psi
@@ -122,8 +116,8 @@ theorem map_psi (f : Hom F G) (P : G2 F) : (psi P).map f = psi (P.map f) := by
   rw [hz, ← G2.map_toAffine]
   cases P.z.isZero
   · obtain ⟨x, y⟩ := P.toAffine
-    simp only [Bool.false_eq_true, ↓reduceIte, Prod.map, G2.map, ← map_c1Psi f, ← map_c2Psi f,
-      ← Fp2.map_conjugate, ← Fp2.map_mul, Fp2.map_one]
+    simp only [Bool.false_eq_true, ↓reduceIte, Prod.map, G2.map, G1.map, Fp2.hom, ← map_c1Psi f,
+      ← map_c2Psi f, ← Fp2.map_conjugate, ← Fp2.map_mul, Fp2.map_one]
   · rfl
 
 theorem map_psi2 (f : Hom F G) (P : G2 F) : (psi2 P).map f = psi2 (P.map f) := by
@@ -132,7 +126,7 @@ theorem map_psi2 (f : Hom F G) (P : G2 F) : (psi2 P).map f = psi2 (P.map f) := b
   rw [hz, ← G2.map_toAffine]
   cases P.z.isZero
   · obtain ⟨x, y⟩ := P.toAffine
-    simp only [Bool.false_eq_true, ↓reduceIte, Prod.map, G2.map, ← map_c1Psi2 f,
+    simp only [Bool.false_eq_true, ↓reduceIte, Prod.map, G2.map, G1.map, Fp2.hom, ← map_c1Psi2 f,
       ← Fp2.map_mul, ← Fp2.map_neg, Fp2.map_one]
   · rfl
 
@@ -142,9 +136,9 @@ theorem map_mulNegX (f : Hom F G) (P : G2 F) : (mulNegX P).map f = mulNegX (P.ma
 
 theorem map_clearCofactor (f : Hom F G) (P : G2 F) :
     (clearCofactor P).map f = clearCofactor (P.map f) := by
-  have hadd : ∀ p q : G2 F, (G2.add p q).map f = G2.add (p.map f) (q.map f) :=
-    G2.map_add f
-  have hneg : ∀ p : G2 F, (G2.neg p).map f = G2.neg (p.map f) := G2.map_neg f
+  have hadd : ∀ p q : G2 F, G2.map f (G2.add p q) = G2.add (p.map f) (q.map f) :=
+    G2.map_add_fn f
+  have hneg : ∀ p : G2 F, G2.map f (G2.neg p) = G2.neg (p.map f) := G2.map_neg_fn f
   simp only [clearCofactor, hadd, hneg, map_mulNegX, map_psi, map_psi2, G2.map_double]
 
 theorem map_hashToG2 (f : Hom F G) (msg dst : ByteArray) :
@@ -181,28 +175,27 @@ theorem map_simpleSwuG1 (f : Hom F G) (u : F) :
     simpleSwuG1 (f u) = (simpleSwuG1 u).map (Prod.map f f) := by
   unfold simpleSwuG1
   simp only [← map_Z f, ← map_Aprime f, ← map_Bprime f, ← f.map_mul, ← f.map_add,
-    f.map_isZero, ← f.map_inverse, ← f.map_neg, ← f.map_one, ← apply_ite f, map_sqrtOrError]
+    f.map_isZero, ← f.map_inverse, ← f.map_neg, ← f.map_one, ← apply_ite f, f.map_sqrt]
   generalize Z * (u * u) = zu2
   generalize (if BaseField.isZero (zu2 * zu2 + zu2) = true then
       Bprime * BaseField.inverse (Z * Aprime)
     else -Bprime * BaseField.inverse Aprime * (BaseField.one + BaseField.inverse (zu2 * zu2 + zu2)))
     = x1
-  cases sqrtOrError (x1 * x1 * x1 + Aprime * x1 + Bprime) with
-  | ok _ =>
-    simp only [Except.map, Except.isOk, Except.toBool, ↓reduceIte, bind, Except.bind]
-    cases sqrtOrError (x1 * x1 * x1 + Aprime * x1 + Bprime) with
-    | ok y =>
-      simp only [pure, Except.pure, Prod.map, apply_ite f.toFun, f.map_neg,
-        f.map_sgn0]
-    | error e => rfl
-  | error _ =>
-    simp only [Except.map, Except.isOk, Except.toBool, Bool.false_eq_true, ↓reduceIte, bind,
-      Except.bind]
-    cases sqrtOrError (zu2 * x1 * (zu2 * x1) * (zu2 * x1) + Aprime * (zu2 * x1) + Bprime) with
-    | ok y =>
-      simp only [pure, Except.pure, Prod.map, apply_ite f.toFun, f.map_neg,
-        f.map_sgn0]
-    | error e => rfl
+  cases BaseField.sqrt (x1 * x1 * x1 + Aprime * x1 + Bprime) with
+  | some _ =>
+    simp only [Option.map_some, Option.isSome_some, ↓reduceIte]
+    cases BaseField.sqrt (x1 * x1 * x1 + Aprime * x1 + Bprime) with
+    | some y =>
+      simp only [Option.map_some, pure, Except.pure, Except.map, Prod.map, apply_ite f.toFun,
+        f.map_neg, f.map_sgn0]
+    | none => rfl
+  | none =>
+    simp only [Option.map_none, Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
+    cases BaseField.sqrt (zu2 * x1 * (zu2 * x1) * (zu2 * x1) + Aprime * (zu2 * x1) + Bprime) with
+    | some y =>
+      simp only [Option.map_some, pure, Except.pure, Except.map, Prod.map, apply_ite f.toFun,
+        f.map_neg, f.map_sgn0]
+    | none => rfl
 
 theorem map_k1_0 (f : Hom F G) : f (k1_0 : F) = k1_0 := f.map_ofNat _
 theorem map_k1_1 (f : Hom F G) : f (k1_1 : F) = k1_1 := f.map_ofNat _
@@ -285,19 +278,19 @@ theorem map_evaluate (f : Hom F G) (coefficients : List F) (x : F) :
     rw [ih]
 
 theorem map_isoMapG1 (f : Hom F G) (xp yp : F) :
-    (isoMapG1 xp yp).map f = isoMapG1 (f xp) (f yp) := by
+    (isoMapG1 xp yp).map f.toHom = isoMapG1 (f xp) (f yp) := by
   unfold isoMapG1
   simp only [← map_K1 f, ← map_K2 f, ← map_K3 f, ← map_K4 f, ← map_evaluate, ← f.map_powNat,
     ← f.map_add, f.map_isZero, ← f.map_mul, ← f.map_inverse, ← f.map_one,
-    apply_ite (G1.map f), G1.map_zero]
+    apply_ite (G1.map f.toHom), G1.map_zero]
   simp only [G1.map]
 
 theorem map_clearCofactorG1 (f : Hom F G) (point : G1 F) :
-    (clearCofactorG1 point).map f = clearCofactorG1 (point.map f) :=
-  G1.map_mulNat f point H_EFF_G1
+    (clearCofactorG1 point).map f.toHom = clearCofactorG1 (point.map f.toHom) :=
+  G1.map_mulNat f.toHom point H_EFF_G1
 
 theorem map_mapToG1 (f : Hom F G) (u : F) :
-    mapToG1 (f u) = (mapToG1 u).map (G1.map f) := by
+    mapToG1 (f u) = (mapToG1 u).map (G1.map f.toHom) := by
   unfold mapToG1
   rw [map_simpleSwuG1]
   cases simpleSwuG1 u with

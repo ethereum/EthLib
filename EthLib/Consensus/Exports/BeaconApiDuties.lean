@@ -22,7 +22,7 @@ An unknown name, kind or fork, or an input that does not decode, has code 0.
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (Result PyValue pyExport rejectArgument toResult)
 
 /-- The kind of duties that the name of an endpoint asks for. -/
 def dutyKindOf (kind : String) : Result BeaconApi.DutyKind :=
@@ -32,7 +32,7 @@ def dutyKindOf (kind : String) : Result BeaconApi.DutyKind :=
   | "proposer_v2" => return .proposerV2
   | "sync" => return .sync
   | "ptc" => return .ptc
-  | _ => throw (0, s!"no duties are named {kind}")
+  | _ => rejectArgument none s!"no duties are named {kind}"
 
 /-- The JSON response of a duties endpoint. -/
 def apiDutiesOf (args : String × String × ByteArray × Option PyValue × String × UInt64 ×
@@ -42,7 +42,8 @@ def apiDutiesOf (args : String × String × ByteArray × Option PyValue × Strin
   let config ← configWithValue name replacements
   let state ← decodeInput (BeaconState preset fork) state
   let kind ← dutyKindOf kind
-  let envelope ← apiError (BeaconApi.dutiesResponse config state kind epoch indices genesisRoot)
+  let envelope ← toResult none
+    (BeaconApi.dutiesResponse config state kind epoch indices genesisRoot)
   return PyValue.ofJson envelope.toJson
 
 /-- The JSON response of a duties endpoint, as a `dict`.

@@ -55,7 +55,7 @@ public section
 namespace EthLib.Engine.Exports
 
 open Lean (Json)
-open EthLib.Exports (Result PyValue pyExport rejectArgument)
+open EthLib.Exports (Result PyValue pyExport rejectArgument toResult)
 open EthLib.Base
 open EthLib.Consensus
 open EthLib.Consensus.Exports
@@ -89,7 +89,7 @@ def prepareExecutionPayloadOf (args : PrepareArgs) : Result PyValue := do
   let finalized ← decodeInput Root finalized
   let feeRecipient ← decodeInput ExecutionAddress feeRecipient
   let powChain ← powChain.mapM (decodeInput PowBlock)
-  let prepared ← runProposer
+  let prepared ← toResult none
     (prepareExecutionPayload config state bellatrix safe finalized feeRecipient powChain)
   return match prepared with
     | some (update, attributes) => .ofJson (updateJson update attributes)
@@ -145,9 +145,10 @@ def preparePayloadOnStore
       let _ ← decodeInput (Serialization.Ssz.Bitvector preset.NUMBER_OF_COLUMNS.toNat) bytes
       pure (dataJson bytes.toList)
     | none => pure Json.null
-  let finalized ← runProposer
-    ((store.getFinalizedExecutionBlockHash (Nat.le_trans (by decide) gloas)).mapError .forkChoice)
-  let (update, attributes) ← runProposer (prepareExecutionPayloadGloas config checks
+  let finalized ← toResult none
+    ((store.getFinalizedExecutionBlockHash (Nat.le_trans (by decide) gloas)).mapError
+      ProposerError.forkChoice)
+  let (update, attributes) ← toResult none (prepareExecutionPayloadGloas config checks
     store head state gloas safe finalized feeRecipient targetGasLimit)
   return .ofJson (updateJson update attributes [("custodyColumns", custody)])
 
@@ -180,7 +181,7 @@ def finalizedExecutionBlockHashOf (args : String × String × ByteArray × ByteA
   let anchorState ← decodeInput (BeaconState preset fork) anchorState
   let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
   let (store, _) ← replayForkChoice config checks anchorState anchorBlock steps
-  let hash ← runForkChoice (store.getFinalizedExecutionBlockHash bellatrix)
+  let hash ← toResult "fork choice" (store.getFinalizedExecutionBlockHash bellatrix)
   return ⟨hash.toArray⟩
 
 /-- From Bellatrix: the 32 bytes of the finalized block hash of a store.

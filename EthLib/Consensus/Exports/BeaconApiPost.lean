@@ -63,7 +63,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Base Serialization.Ssz Networking.Gossip BeaconApi
-open EthLib.Exports (Result PyValue FromPy fromPy pyExport)
+open EthLib.Exports (Result PyValue FromPy fromPy pyExport rejectArgument toResult)
 open Cryptography.Kzg.Exports (embeddedSetup)
 
 /-- A request to an endpoint: its time, the name of its endpoint, its items and its level. -/
@@ -104,43 +104,45 @@ def decodePoolInput {preset : Preset} {fork : Fork} (input : PostInput) :
       let attestations ← decodePoolItems (Attestation preset fork) items
       return .attestations (Nat.lt_of_not_le electra) attestations
   | "attester_slashings" =>
-    let [slashing] := items | throw (0, "the attester slashing endpoint takes one slashing")
+    let [slashing] := items
+      | rejectArgument none "the attester slashing endpoint takes one slashing"
     return .attesterSlashing (← decodeInput (AttesterSlashing preset fork) slashing)
   | "proposer_slashings" =>
-    let [slashing] := items | throw (0, "the proposer slashing endpoint takes one slashing")
+    let [slashing] := items
+      | rejectArgument none "the proposer slashing endpoint takes one slashing"
     return .proposerSlashing (← decodeInput ProposerSlashing slashing)
   | "voluntary_exits" =>
-    let [signed] := items | throw (0, "the voluntary exit endpoint takes one exit")
+    let [signed] := items | rejectArgument none "the voluntary exit endpoint takes one exit"
     return .voluntaryExit (← decodeInput SignedVoluntaryExit signed)
   | "bls_to_execution_changes" =>
     if capella : .shapella ≤ fork then
       return .blsToExecutionChanges capella (← decodePoolItems SignedBLSToExecutionChange items)
-    else throw (0, "the endpoint of changes of BLS credentials serves only from Capella")
+    else rejectArgument none "the endpoint of changes of BLS credentials serves only from Capella"
   | "sync_committees" =>
     if altair : .altair ≤ fork then
       return .syncCommitteeMessages altair (← decodePoolItems SyncCommitteeMessage items)
-    else throw (0, "the sync committee endpoints serve only from Altair")
+    else rejectArgument none "the sync committee endpoints serve only from Altair"
   | "payload_attestations" =>
     if gloas : .glamsterdam ≤ fork then
       return .payloadAttestations gloas (← decodePoolItems PayloadAttestationMessage items)
-    else throw (0, "the payload attestation endpoint serves only from Gloas")
+    else rejectArgument none "the payload attestation endpoint serves only from Gloas"
   | "aggregate_and_proofs" =>
     return .aggregateAndProofs (← decodePoolItems (SignedAggregateAndProof preset fork) items)
   | "contribution_and_proofs" =>
     if altair : .altair ≤ fork then
       let contributions ← decodePoolItems (SignedContributionAndProof preset) items
       return .contributionAndProofs altair contributions
-    else throw (0, "the sync committee endpoints serve only from Altair")
+    else rejectArgument none "the sync committee endpoints serve only from Altair"
   | "proposer_preferences" =>
     if gloas : .glamsterdam ≤ fork then
       return .proposerPreferences gloas (← decodePoolItems SignedProposerPreferences items)
-    else throw (0, "the proposer preferences endpoint serves only from Gloas")
+    else rejectArgument none "the proposer preferences endpoint serves only from Gloas"
   | "execution_payload_bids" =>
     if gloas : .glamsterdam ≤ fork then
-      let [bid] := items | throw (0, "the bid endpoint takes one bid")
+      let [bid] := items | rejectArgument none "the bid endpoint takes one bid"
       return .executionPayloadBid gloas (← decodeInput (SignedExecutionPayloadBid preset fork) bid)
-    else throw (0, "the bid endpoint serves only from Gloas")
-  | endpoint => throw (0, s!"the pool endpoint {endpoint} is not specified")
+    else rejectArgument none "the bid endpoint serves only from Gloas"
+  | endpoint => rejectArgument none s!"the pool endpoint {endpoint} is not specified"
 
 /-- A request to a publish endpoint, with its level of checks. -/
 inductive PublishRequest (preset : Preset) (fork : Fork) where
@@ -154,28 +156,28 @@ def broadcastValidationOf : Option String → Result BroadcastValidation
   | none | some "gossip" => return .gossip
   | some "consensus" => return .consensus
   | some "consensus_and_equivocation" => return .consensusAndEquivocation
-  | some level => throw (0, s!"the broadcast validation {level} is not specified")
+  | some level => rejectArgument none s!"the broadcast validation {level} is not specified"
 
 /-- The request of a publish endpoint, if the endpoint is one, from the bytes of its item. -/
 def decodePublishInput {preset : Preset} {fork : Fork} (input : PostInput) :
     Result (Option (PublishRequest preset fork)) := do
   match input.endpoint with
   | "blocks" =>
-    let [signed] := input.items | throw (0, "the block endpoint takes one block")
+    let [signed] := input.items | rejectArgument none "the block endpoint takes one block"
     return some (.block (← decodeInput (SignedBeaconBlock preset fork) signed))
   | "execution_payload_envelopes" =>
     if gloas : .glamsterdam ≤ fork then
-      let [signed] := input.items | throw (0, "the envelope endpoint takes one envelope")
+      let [signed] := input.items | rejectArgument none "the envelope endpoint takes one envelope"
       let envelope ← decodeInput (SignedExecutionPayloadEnvelope preset fork) signed
       return some (.envelope gloas envelope)
-    else throw (0, "the envelope endpoint serves only from Gloas")
+    else rejectArgument none "the envelope endpoint serves only from Gloas"
   | _ => return none
 
 /-- The events of a request, each as the name of its topic and its JSON data. -/
 def eventRecords {preset : Preset} {fork : Fork} (events : List (ObjectEvent preset fork)) :
     Result (List (String × String)) :=
   events.mapM fun event => do
-    let event ← runForkChoice ((event.toApiEvent fork).mapError .ssz)
+    let event ← toResult "fork choice" ((event.toApiEvent fork).mapError ForkChoiceError.ssz)
     return (event.topic.name, event.data.compress)
 
 /-- The status code and the failed items of the answer to a pool request. -/
@@ -218,7 +220,7 @@ def apiPostOf (args : String × String × ByteArray × ByteArray × List GossipB
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let (store, statuses) ← gossipCaseStore (preset := preset) (fork := fork) config checks
     anchorState anchorBlock blocks finalized
-  let setup ← runForkChoice ((embeddedSetup ()).mapError .kzg)
+  let setup ← toResult "fork choice" ((embeddedSetup ()).mapError ForkChoiceError.kzg)
   let sources := emptySources setup
   -- The execution layer accepts every payload, so no block is optimistic.
   let optimistic : Root → Bool := fun _ => false
@@ -229,19 +231,20 @@ def apiPostOf (args : String × String × ByteArray × ByteArray × List GossipB
   for input in inputs do
     -- The clock of the node reaches the time of each request before the node answers it.
     if store.timeMs < input.currentTimeMs then
-      store ← runForkChoice (store.onTick config input.currentTimeMs)
+      store ← toResult "fork choice" (store.onTick config input.currentTimeMs)
     let context : SubmitContext preset fork :=
       { config, checks, setup, store, statuses, currentTimeMs := input.currentTimeMs }
     let publishes := input.endpoint ∈ ["blocks", "execution_payload_envelopes"]
     if !publishes && input.level.isSome then
-      throw (0, "a pool endpoint takes no broadcast validation")
+      rejectArgument none "a pool endpoint takes no broadcast validation"
     let level ← broadcastValidationOf input.level
     match ← decodePublishInput input with
     | some request =>
       let (outcome, next, after) := match request with
         | .block signed => publishBlock context sources seen level signed
         | .envelope gloas signed => publishEnvelope context sources seen level gloas signed
-      let events ← runForkChoice <| Except.mapError .ssz <| match request with
+      let events ← toResult "fork choice" <| Except.mapError ForkChoiceError.ssz <|
+        match request with
         | .block signed => publishBlockEvents context seen optimistic signed outcome
         | .envelope gloas signed =>
           publishEnvelopeEvents context seen optimistic gloas signed outcome
@@ -252,7 +255,8 @@ def apiPostOf (args : String × String × ByteArray × ByteArray × List GossipB
         let root ← match request with
           | .block signed =>
             if decide (Fork.bellatrix ≤ fork ∧ fork < Fork.glamsterdam) then
-              some <$> runForkChoice ((SszType.hashTreeRoot signed.message).mapError .ssz)
+              some <$> toResult "fork choice"
+                ((SszType.hashTreeRoot signed.message).mapError ForkChoiceError.ssz)
             else pure none
           | .envelope _ signed => pure (some signed.message.beaconBlockRoot)
         if let some root := root then statuses := statuses.insert root PAYLOAD_STATUS_VALID
@@ -263,7 +267,8 @@ def apiPostOf (args : String × String × ByteArray × ByteArray × List GossipB
     | none =>
       let request ← decodePoolInput input
       let items := request.items context
-      let events ← runForkChoice ((submittedEvents context seen items).mapError .ssz)
+      let events ← toResult "fork choice"
+        ((submittedEvents context seen items).mapError ForkChoiceError.ssz)
       let (outcome, next) := submitList context seen items
       seen := next
       let (status, failures) := submitAnswer outcome
@@ -293,7 +298,8 @@ def apiGossipEventOf (args : String × String × String × ByteArray) :
   let preset ← presetOf name
   let fork ← forkOf fork.toUTF8
   let message ← decodeGossipInput (preset := preset) (fork := fork) topic ⟨0, 0, topic, data⟩
-  let events ← runForkChoice ((eventsOfGossip .accept message).mapError .ssz)
+  let events ← toResult "fork choice"
+    ((eventsOfGossip .accept message).mapError ForkChoiceError.ssz)
   return (← eventRecords events).head?
 
 /-- The event that an object gives if gossip accepts it, by the name of its gossip topic.

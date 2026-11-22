@@ -32,7 +32,7 @@ Each root below is a root of the error polynomial of the batch.
 namespace EthLib.Cryptography.Kzg
 
 open EthLib.Base (array_mapM_ok array_mapM_exists_ok)
-open EthLib.Cryptography.Bls (G1 G2 Fr)
+open EthLib.Cryptography.Bls (G1 G2 Fr G2.neg)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial
@@ -397,7 +397,7 @@ theorem verifyBlobKzgProofBatch_empty (s : TrustedSetup) :
   simp [verifyBlobKzgProofBatch, Array.foldlM, verifyKzgProofBatch, hpowers,
     g1LincombPoints_empty]
   -- Both pairs hold the point at infinity, so the pairing check sees an empty product.
-  have hinf : ∀ pq ∈ #[((G1.zero : G1), (s.g2Monomial[1]'(by decide)).neg),
+  have hinf : ∀ pq ∈ #[((G1.zero : G1), G2.neg (s.g2Monomial[1]'(by decide))),
       ((G1.zero : G1).add G1.zero, (G2.generator : G2))],
       (pq.1.isInfinity || pq.2.isInfinity) = true := by
     simp [Bls.G1.add, Bls.G1.isInfinity, Bls.G1.zero, Bls.Fp.isZero]

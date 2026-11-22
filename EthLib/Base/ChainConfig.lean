@@ -15,6 +15,11 @@ It also gives the blob parameters that a fork or an activation of the chain sets
 
 namespace EthLib.Base
 
+/-- The blob gas of one blob.
+
+Source: [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#parameters). -/
+def GAS_PER_BLOB : Nat := 2 ^ 17
+
 /-- The blob parameters of one fork, or of one change that a chain configures.
 
 Source: [EIP-7892](https://eips.ethereum.org/EIPS/eip-7892#blob-base-fee-computations).
@@ -25,7 +30,11 @@ So a chain can change them at an activation of its own.
 
 [EIP-7840][eip-7840] names them in the configuration file of a client.
 
+EIP-7892 types the target and the maximum as 64-bit integers, and the fraction as unbounded.
+
 The bounds exclude the schedules that would divide by 0 or subtract below 0.
+
+They also keep the blob gas of a full block below `2^64`.
 
 For a schedule written in numbers, `decide` proves them.
 
@@ -33,18 +42,61 @@ For a schedule written in numbers, `decide` proves them.
 [eip-7892]: https://eips.ethereum.org/EIPS/eip-7892#blob-schedule-configuration -/
 structure BlobSchedule where
   /-- The blobs per block that the fee aims for. -/
-  target : Nat
+  target : UInt64
   /-- The most blobs a block may carry. -/
-  max : Nat
+  max : UInt64
   /-- The excess that multiplies the fee by about e. -/
   baseFeeUpdateFraction : Nat
   /-- The target is at most the maximum, so the subtraction `max - target` never truncates. -/
   target_le_max : target ≤ max := by decide
   /-- The maximum is positive, so the reserve price rule never divides by 0. -/
   max_pos : 0 < max := by decide
+  /-- The blob gas of `max` blobs is below `2^64`.
+
+  A header holds the blob gas of its block in 64 bits, as [EIP-4844][eip-4844] sets.
+
+  So the blob gas of the target and of the maximum never overflows 64 bits.
+
+  EIP-7892 does not state this bound: EthLib adds it, and SOUNDNESS.md records it.
+
+  [eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#header-extension -/
+  maxBlobGas_lt : GAS_PER_BLOB * max.toNat < 2 ^ 64 := by decide
   /-- The update fraction is positive, so the exponential never divides by 0. -/
   baseFeeUpdateFraction_pos : 0 < baseFeeUpdateFraction := by decide
   deriving Repr, DecidableEq
+
+/-- The blob schedule with a target, a maximum and an update fraction, if they meet its bounds.
+
+The target must be at most the maximum, and the maximum and the fraction must be positive.
+
+The blob gas of the maximum must be below `2^64`, so neither number reaches `2^64`.
+
+Every reader of a blob schedule builds it with this function. -/
+def BlobSchedule.ofNat? (target max baseFeeUpdateFraction : Nat) : Option BlobSchedule :=
+  if h : target ≤ max ∧ 0 < max ∧ GAS_PER_BLOB * max < 2 ^ 64 ∧ 0 < baseFeeUpdateFraction then
+    -- The blob gas bound keeps the maximum, and so the target, below `2^64`.
+    have hmax : max < 2 ^ 64 := Nat.lt_of_le_of_lt (Nat.le_mul_of_pos_left max (by decide)) h.2.2.1
+    have toNat_max : (UInt64.ofNat max).toNat = max := UInt64.toNat_ofNat_of_lt' hmax
+    have toNat_target : (UInt64.ofNat target).toNat = target :=
+      UInt64.toNat_ofNat_of_lt' (Nat.lt_of_le_of_lt h.1 hmax)
+    some { target := .ofNat target, max := .ofNat max, baseFeeUpdateFraction
+           target_le_max := by rw [UInt64.le_iff_toNat_le, toNat_target, toNat_max]; exact h.1
+           max_pos := by rw [UInt64.lt_iff_toNat_lt, toNat_max]; exact h.2.1
+           maxBlobGas_lt := by rw [toNat_max]; exact h.2.2.1
+           baseFeeUpdateFraction_pos := h.2.2.2 }
+  else none
+
+/-- The bound of the block number or timestamp of an activation that a configuration gives.
+
+The fork identifier of [EIP-2124][eip-2124] and [EIP-6122][eip-6122] holds each as a `uint64`.
+
+So no fork identifier can encode an activation of `2^64` or more, as a passed fork or as the next.
+
+No EIP bounds a fork block or time itself, so the bound is a choice that SOUNDNESS.md records.
+
+[eip-2124]: https://eips.ethereum.org/EIPS/eip-2124#specification
+[eip-6122]: https://eips.ethereum.org/EIPS/eip-6122#specification -/
+abbrev ACTIVATION_BOUND : Nat := 2 ^ 64
 
 /-- The point of an execution chain from which a fork is active.
 

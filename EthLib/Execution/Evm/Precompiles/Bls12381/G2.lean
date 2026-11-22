@@ -18,7 +18,7 @@ Every fork from Pectra accepts the same inputs at the same prices.
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
 open EthLib.Base (bytesToNat)
-open EthLib.Cryptography.Bls (G2)
+open EthLib.Cryptography.Bls (G2 G2.add G2.zero)
 
 /-- The price of G2ADD, from EIP-2537, Gas schedule. -/
 def GAS_G2ADD : Nat := 600
@@ -27,16 +27,23 @@ def GAS_G2ADD : Nat := 600
 
 The points need not be in the subgroup, only on the curve. -/
 def bls12G2Add (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray := do
-  -- The length is checked before the gas is charged.
+  -- Error case: input has invalid length.
+  --
+  -- The length is checked before the gas is charged; either error burns all the gas.
   if data.size ≠ 512 then
     throw (.invalidInputLength data.size)
   let bytes := data.data.toList
+  -- G2 addition: `600` gas.
   if gas < GAS_G2ADD then
     throw (.outOfGas GAS_G2ADD gas)
+  -- Two G2 points, `256` bytes each.
+  --
   -- Both paddings are checked before either point is decoded.
   let first ← unpadG2 (bytes.take 256)
   let second ← unpadG2 (bytes.drop 256)
+  -- There is no subgroup check for the G2 addition precompile.
   let sum := G2.add (← bytesToG2 first false) (← bytesToG2 second false)
+  -- Output: a single G2 point, `256` bytes.
   return ⟨(padG2 (g2ToBytes sum)).toArray⟩
 
 /-- `LENGTH_PER_PAIR`: an encoded G2 point, then a 32-byte scalar. -/
@@ -63,30 +70,39 @@ def G2_MAX_DISCOUNT : Nat := 524
 
 /-- The discount for `k` pairs. -/
 def discountG2 (k : Nat) : Nat :=
+  -- The table covers `k <= 128`, and `max_discount` applies for `k > 128`.
   if h : 0 < k ∧ k ≤ 128 then G2_K_DISCOUNT[k - 1] else G2_MAX_DISCOUNT
 
 /-- The price of G2MSM on `k` pairs: `k * 22500 * discount / 1000`, rounded down. -/
-def bls12G2MsmGas (k : Nat) : Nat := k * GAS_G2MUL * discountG2 k / MULTIPLIER
+def bls12G2MsmGas (k : Nat) : Nat :=
+  -- `gas_cost = k * multiplication_cost * discount(k) // multiplier`.
+  k * GAS_G2MUL * discountG2 k / MULTIPLIER
 
 /-- The sum of `[m]P` over the pairs, each point checked to be in the subgroup.
 
 The scalar `m` is the full 32-byte integer, not reduced. -/
 def g2Msm (pairs : List (List UInt8 × List UInt8)) : Except Bls12381Error G2 :=
   pairs.foldlM (init := G2.zero) fun sum (raw, scalar) => do
+    -- Error case: an input is on the curve but not in the correct subgroup.
     let point ← bytesToG2 raw true
-    return G2.add sum (G2.mulNat point (bytesToNat scalar))
+    -- The scalar is not required to be less than or equal to the subgroup order `q`.
+    return G2.add sum (point.mulNat (bytesToNat scalar))
 
 /-- The multi-scalar multiplication of the pairs in the call data. -/
 def bls12G2Msm (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray := do
-  -- The length is checked before the gas is charged.
+  -- G2 MSM expects `288*k` bytes, `k` being a positive integer; an empty input is an error.
+  --
+  -- The length is checked before the gas is charged; either error burns all the gas.
   if data.size = 0 ∨ data.size % LENGTH_PER_PAIR_G2 ≠ 0 then
     throw (.invalidInputLength data.size)
+  -- `k = floor(len(input) / LEN_PER_PAIR)`, exact here.
   let k := data.size / LENGTH_PER_PAIR_G2
   if gas < bls12G2MsmGas k then
     throw (.outOfGas (bls12G2MsmGas k) gas)
   -- Every padding is checked before any point is decoded.
   let pairs ← (chunks LENGTH_PER_PAIR_G2 k data.data.toList).mapM fun pair => do
     return (← unpadG2 (pair.take 256), pair.drop 256)
+  -- Output: a single G2 point, `256` bytes.
   return ⟨(padG2 (g2ToBytes (← g2Msm pairs))).toArray⟩
 
 /-- The price of MAP_FP2_TO_G2, from EIP-2537, Gas schedule. -/
@@ -94,16 +110,23 @@ def GAS_G2MAP : Nat := 23800
 
 /-- The point of G2 that RFC 9380 maps an element of `Fp2` to, `c0` given first. -/
 def bls12MapFp2ToG2 (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray := do
-  -- The length is checked before the gas is charged.
+  -- Error case: input has invalid length.
+  --
+  -- The length is checked before the gas is charged; either error burns all the gas.
   if data.size ≠ 128 then
     throw (.invalidInputLength data.size)
+  -- Fp2-to-G2 mapping: `23800` gas.
   if gas < GAS_G2MAP then
     throw (.outOfGas GAS_G2MAP gas)
+  -- `128` bytes, an element of Fp2; error case: input is not correctly encoded.
+  --
   -- Both paddings are checked before either field element is read.
   let c0 ← unpadFp (data.data.toList.take 64)
   let c1 ← unpadFp (data.data.toList.drop 64)
   let u ← bytesToFq2 (c0 ++ c1)
+  -- The full algorithm of the field-to-curve document: SSWU, isogeny, then cofactor clearing.
   let point ← (Cryptography.Bls.MapToCurve.mapToG2 u).mapError fun _ => .notASquare
+  -- Output: an encoded G2 point, `256` bytes.
   return ⟨(padG2 (g2ToBytes point)).toArray⟩
 
 end EthLib.Execution.Evm.Precompiles.Bls12381

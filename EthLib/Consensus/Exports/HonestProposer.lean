@@ -26,16 +26,18 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz Cryptography.Bls
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport rejectArgument
+  toResult)
 
-/-- The result of a step of a proposer, with the code of its error. -/
-def runProposer {α : Type} (result : Except ProposerError α) : Result α :=
-  result.mapError fun e => (e.code, toString e)
+/-- A failed step of a proposer reaches Python with its code and its printed error. -/
+instance : ExportError ProposerError where
+  code := ProposerError.code
+  message := toString
 
 /-- The proof of a condition on the fork, or code 0 with a message. -/
 def holds (condition : Prop) [Decidable condition] (message : String) :
     Result (PLift condition) :=
-  if proof : condition then return ⟨proof⟩ else throw (0, message)
+  if proof : condition then return ⟨proof⟩ else rejectArgument none message
 
 /-- Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data. -/
 def getEth1VoteOf
@@ -47,8 +49,9 @@ def getEth1VoteOf
   let ⟨before⟩ ← holds (fork < .hegota) s!"no Eth1 vote at {fork.name}"
   let state ← decodeInput (BeaconState preset fork) state
   let blocks ← chain.mapM fun (timestamp, data) => return (timestamp, ← decodeInput Eth1Data data)
-  let vote ← runProposer (getEth1Vote config state before Prod.fst Prod.snd blocks)
-  (SszType.serialize vote).mapError fun e => (0, s!"vote rejected: {reprStr e}")
+  let vote ← toResult none (getEth1Vote config state before Prod.fst Prod.snd blocks)
+  toResult none ((SszType.serialize vote).mapError fun e =>
+    UnreadArgument.mk s!"vote rejected: {reprStr e}")
 
 /-- Before Heze: the Eth1 vote of a proposer on a state, as the SSZ bytes of the Eth1 data.
 
@@ -80,7 +83,7 @@ def computeNewStateRootOf
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let state ← decodeInput (BeaconState preset fork) state
   let block ← decodeInput (BeaconBlock preset fork) block
-  let root ← runProposer (computeNewStateRoot config checks (.constant true) state block)
+  let root ← toResult none (computeNewStateRoot config checks (.constant true) state block)
   return ⟨root.toArray⟩
 
 /-- The root of the state after a block, to set as its state root, as 32 bytes.
@@ -99,8 +102,9 @@ def computeOnChainAggregateExport (name fork : ByteArray) (aggregates : Array By
   let (preset, fork) ← transitionPresetAndFork name fork
   let ⟨electra⟩ ← holds (.pectra ≤ fork) s!"no on-chain aggregate at {fork.name}"
   let aggregates ← aggregates.toList.mapM (decodeInput (Attestation preset fork))
-  let attestation ← runProposer (computeOnChainAggregate electra aggregates)
-  (SszType.serialize attestation).mapError fun e => (0, s!"attestation rejected: {reprStr e}")
+  let attestation ← toResult none (computeOnChainAggregate electra aggregates)
+  toResult none ((SszType.serialize attestation).mapError fun e =>
+    UnreadArgument.mk s!"attestation rejected: {reprStr e}")
 
 /-- From Altair: the sync aggregate of a block from the contributions of subcommittees.
 
@@ -111,8 +115,9 @@ def processSyncCommitteeContributionsExport (name fork : ByteArray)
   let (preset, fork) ← transitionPresetAndFork name fork
   let ⟨_⟩ ← holds (.altair ≤ fork) s!"no sync aggregate at {fork.name}"
   let contributions ← contributions.toList.mapM (decodeInput (SyncCommitteeContribution preset))
-  let aggregate ← runProposer (processSyncCommitteeContributions contributions)
-  (SszType.serialize aggregate).mapError fun e => (0, s!"sync aggregate rejected: {reprStr e}")
+  let aggregate ← toResult none (processSyncCommitteeContributions contributions)
+  toResult none ((SszType.serialize aggregate).mapError fun e =>
+    UnreadArgument.mk s!"sync aggregate rejected: {reprStr e}")
 
 /-- From Electra: the requests of an execution block, as SSZ bytes.
 
@@ -121,9 +126,10 @@ They come from the list that the execution layer gives, one typed list per entry
 def getExecutionRequestsExport (name fork : ByteArray) (list : Array ByteArray) :
     Result ByteArray := do
   let (preset, fork) ← transitionPresetAndFork name fork
-  unless .pectra ≤ fork do throw (0, s!"no execution requests at {fork.name}")
-  let requests ← runProposer (getExecutionRequests (preset := preset) (fork := fork) list.toList)
-  (SszType.serialize requests).mapError fun e => (0, s!"requests rejected: {reprStr e}")
+  unless .pectra ≤ fork do rejectArgument none s!"no execution requests at {fork.name}"
+  let requests ← toResult none (getExecutionRequests (preset := preset) (fork := fork) list.toList)
+  toResult none ((SszType.serialize requests).mapError fun e =>
+    UnreadArgument.mk s!"requests rejected: {reprStr e}")
 
 /-- From Fulu: the number of custody groups of a node, from the indices of its validators. -/
 def getValidatorsCustodyRequirementOf
@@ -132,9 +138,9 @@ def getValidatorsCustodyRequirementOf
   let (name, fork, state, replacements, indices) := args
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let config ← configWithValue name replacements
-  unless .fusaka ≤ fork do throw (0, s!"no validator custody at {fork.name}")
+  unless .fusaka ≤ fork do rejectArgument none s!"no validator custody at {fork.name}"
   let state ← decodeInput (BeaconState preset fork) state
-  runProposer (getValidatorsCustodyRequirement config state indices)
+  toResult none (getValidatorsCustodyRequirement config state indices)
 
 /-- From Fulu: the number of custody groups of a node, from the indices of its validators.
 

@@ -113,11 +113,15 @@ def test_cases_cover_each_network() -> None:
     assert {c["exception"] for c in _CASES} == {None, "BlockException.INCORRECT_EXCESS_BLOB_GAS"}
 
 
-@pytest.mark.parametrize("schedule", [(0, 7, 6, 3338477), (0, 0, 0, 3338477), (0, 1, 2, 0)])
+@pytest.mark.parametrize(
+    "schedule", [(0, 7, 6, 3338477), (0, 0, 0, 3338477), (0, 1, 2, 0), (0, 1, 2**47, 3338477)]
+)
 def test_schedule_out_of_bounds_rejected(schedule) -> None:
     case = _CASES[0]
     with raises(
-        blocks.BlockError, "a blob schedule needs target ≤ max, 0 < max and 0 < update fraction"
+        blocks.BlockError,
+        "a blob schedule needs target ≤ max, 0 < max, "
+        "0 < update fraction and a blob gas of max below 2^64",
     ) as error:
         blocks.validate_header(
             FORK, FORK, bytes.fromhex(case["parent"]), bytes.fromhex(case["header"]), [schedule]

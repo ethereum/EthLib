@@ -32,11 +32,6 @@ namespace EthLib.Execution.Fees.BlobBaseFee
 
 open EthLib.Base
 
-/-- The blob gas of one blob.
-
-Source: [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#parameters). -/
-def GAS_PER_BLOB : Nat := 2 ^ 17
-
 /-- The fee at an excess of 0.
 
 Source: [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#parameters). -/
@@ -47,8 +42,8 @@ def MIN_BASE_FEE_PER_BLOB_GAS : Nat := 1
 Source: [EIP-7918](https://eips.ethereum.org/EIPS/eip-7918#parameters). -/
 def BLOB_BASE_COST : Nat := 2 ^ 13
 
--- The blob parameters are chain configuration, so their type lives in `Base`.
-export EthLib.Base (BlobSchedule)
+-- The blob parameters are chain configuration, so they live in `Base` with the gas of a blob.
+export EthLib.Base (BlobSchedule GAS_PER_BLOB)
 
 /-- The loop of the exponential of EIP-4844, from step `i`, run at most `fuel` times.
 
@@ -143,27 +138,35 @@ def chainBlobSchedule (config : ChainConfig) (fork : Fork) (number timestamp : N
 
 /-- The excess blob gas of a block at `fork`, from its parent's excess, blob gas and base fee.
 
-Before Fusaka, it is the parent's excess plus its blob gas, minus the target, and at least 0.
+The steps are those of `calc_excess_blob_gas` in [EIP-7918][eip-7918], at every fork from Dencun.
 
-Source: [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#header-extension).
+Before Fusaka, the reserve price branch is skipped, as in [EIP-4844][eip-4844].
 
-From Fusaka, [EIP-7918](https://eips.ethereum.org/EIPS/eip-7918#functions) adds a reserve price.
+The parent's blob base fee, `get_base_fee_per_blob_gas(parent)`, uses this block's schedule.
 
-- Below it, a blob costs less than `2^13` units of execution gas.
-- The excess then grows by `parentBlobGasUsed * (max - target) // max`.
-- Below the target, the excess is 0 whatever the prices.
-- The parent's blob base fee uses this block's schedule.
+The step comments write `max` and `target` for `blobSchedule.max` and `blobSchedule.target`.
 
-A parent without the blob gas fields counts all three as 0. -/
+The schedule has `target ≤ max`, so `max - target` never truncates.
+
+A parent without the blob gas fields counts all three as 0.
+
+[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#header-extension
+[eip-7918]: https://eips.ethereum.org/EIPS/eip-7918#functions -/
 def calcExcessBlobGas (fork : Fork) (schedule : BlobSchedule)
     (parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas : Nat) : Nat :=
-  let targetBlobGas := GAS_PER_BLOB * schedule.target
+  -- `target_blob_gas = GAS_PER_BLOB * blobSchedule.target`, below `2^64` by the schedule's bound.
+  let targetBlobGas := GAS_PER_BLOB * schedule.target.toNat
+  -- `if parent.excess_blob_gas + parent.blob_gas_used < target_blob_gas: return 0`.
   if parentExcessBlobGas + parentBlobGasUsed < targetBlobGas then
     0
+  -- if BLOB_BASE_COST * parent.base_fee_per_gas > GAS_PER_BLOB * get_base_fee_per_blob_gas(parent):
   else if fork ≥ .fusaka ∧ BLOB_BASE_COST * parentBaseFeePerGas >
       GAS_PER_BLOB * getBaseFeePerBlobGas schedule parentExcessBlobGas then
-    parentExcessBlobGas + parentBlobGasUsed * (schedule.max - schedule.target) / schedule.max
+    -- `return parent.excess_blob_gas + parent.blob_gas_used * (max - target) // max`.
+    parentExcessBlobGas +
+      parentBlobGasUsed * (schedule.max.toNat - schedule.target.toNat) / schedule.max.toNat
   else
+    -- `return parent.excess_blob_gas + parent.blob_gas_used - target_blob_gas`.
     parentExcessBlobGas + parentBlobGasUsed - targetBlobGas
 
 end EthLib.Execution.Fees.BlobBaseFee

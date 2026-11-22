@@ -26,6 +26,7 @@ namespace EthLib.Cryptography.Aes
 
 SP 800-38A §4.1 reads a bit string as an integer with the first bit most significant. -/
 def blockToNat (T : Block) : Nat :=
+  -- The inverse of `[x]_m` of §5.4, with `m = 128`: the first bit is the most significant.
   T.toList.foldl (fun acc b => acc * 256 + b.toNat) 0
 
 /-- The block that spells `x mod 2^128`, first byte most significant. -/
@@ -39,6 +40,7 @@ It adds one, modulo `2^m`, to the `m` least significant bits, and keeps the othe
 Appendix B.1 asks for `m ≤ 128`, and a larger `m` acts as `m = 128`. -/
 def inc (m : Nat) (T : Block) : Block :=
   let x := blockToNat T
+  -- B.1: the low `m` bits `[x]_m` become `[x+1 mod 2^m]_m`, and the other bits stay.
   blockOfNat (x / 2 ^ m * 2 ^ m + (x % 2 ^ m + 1) % 2 ^ m)
 
 /-! ## The mode -/
@@ -58,6 +60,9 @@ where
   go : Nat → Block → List UInt8 → Array UInt8 → Array UInt8
     | 0, _, _, out => out
     | n + 1, T, data, out =>
+      -- `O_j = CIPH_K(T_j)` and `C_j = P_j XOR O_j`, then `T_(j+1)` from the incrementing function.
+      --
+      -- For the last, partial block, `C*_n = P*_n XOR MSB_u(O_n)`.
       go n (inc m T) (data.drop 16) (out ++ List.zipWith (· ^^^ ·) (data.take 16) (ciph T).toList)
 
 /-- CTR encryption and decryption of SP 800-38A §6.5.
@@ -68,6 +73,7 @@ The first counter is given, and each next one is the standard increment of the o
 
 The data has `n = ceil(len / 16)` blocks, and the output has the length of the data. -/
 def ctr (ciph : Block → Block) (m : Nat) (initialCounter : Block) (data : ByteArray) : ByteArray :=
+  -- §6.5: `n` blocks, the last one partial when the length is not a multiple of 16.
   ⟨(xorKeystream ciph m ((data.size + 15) / 16) initialCounter data.data.toList).toArray⟩
 
 end EthLib.Cryptography.Aes

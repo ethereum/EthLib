@@ -118,8 +118,8 @@ def KnownBlock.block (b : KnownBlock) : RecentBlock :=
 
 /-- A known block as the forkchoice update reads it: its parent, validity, number and time. -/
 def KnownBlock.toKnownPayload (b : KnownBlock) : KnownPayload :=
-  ⟨b.block.header.parentHash, b.validity.isValid, UInt64.ofNat b.block.header.number,
-    UInt64.ofNat b.block.header.timestamp.toNat, b.powTotalDifficulty⟩
+  ⟨b.block.header.parentHash, b.validity.isValid, b.block.header.number,
+    b.block.header.timestamp.toNat, b.powTotalDifficulty⟩
 
 /-- An execution node, as the Engine API sees it. -/
 structure Node where
@@ -163,9 +163,7 @@ The node keeps the block with an empty body, so its header must commit to it and
 
 There is no node when the header has no hash, or commits to another body or other ommers.
 
-There is none either when a total is below the difficulty.
-
-The forkchoice update reads the number and the time of the block in 64 bits. -/
+There is none either when a total is below the difficulty. -/
 def start (config : ChainConfig) (transition : TransitionConfiguration) (anchor : RecentBlock)
     (post : Execution.State.State) (totalDifficulty : Nat) : Option Node := do
   let hash ← anchor.header.hash.toOption

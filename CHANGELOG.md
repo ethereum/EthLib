@@ -843,6 +843,73 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the nonce of a set-code transaction is `UInt64`, and the other kinds keep a nonce of 256 bits ([#3846](https://github.com/ethereum/EthLib/issues/3846)).
+  So a set-code transaction with a nonce of `2^64` or more fails at decoding, with `scalarTooLarge`, where the rule of EIP-2681 refused it with `nonceOverflow`.
+  `Transaction.nonce` still returns a `U256`, and gives the 64-bit nonce unchanged.
+  `typedFields` takes the nonce as a `Nat`.
+  The JSON reader of transactions reads the nonce of type 4 as a 64-bit quantity.
+  `GenericTransaction.toTransaction` refuses a type 4 nonce of `2^64` or more with `nonce: too large`, through the new `callUint64`.
+  `exists_toTransaction_eq_ok_iff` gains the conjunct `tx.kind = 4 → nonce < 2 ^ 64`.
+  Migration: read `tx.nonce.toNat` of a `SetCodeTransaction` where a natural number is needed.
+  `eth_simulateV1` answers a set-code call with such a nonce with -32602 and `transaction: nonce: too large`, where it answered -32603.
+  In Python, `transactions.check`, `tx_hash`, `recover_sender` and `intrinsic_gas` report `decoding: field 1: scalarTooLarge <nonce> 64` for such a transaction.
+
+- The configuration reader of the exports refuses an activation, by block or by time, of `2^64` or more, as the reader of a client configuration file already refused such a time ([#3854](https://github.com/ethereum/EthLib/issues/3854)).
+  `Base.ACTIVATION_BOUND` is that bound, `2^64`: the fork identifier of EIP-2124 and EIP-6122 hashes each fork block and time as a `uint64`.
+  The file reader, the export reader and `eth_config` all read it, and the doc of the file reader's error now cites the fork identifier instead of a block's time.
+  In Python, every export that reads the JSON form of a chain configuration fails with code 0 and `an activation is not below 2^64` on such an activation; `eth_config` no longer sees one.
+  The schedule reader of the fork identifier exports refuses a fork value or a merge fork block of `2^64` or more, with code 0.
+
+- In Lean, the attestation and sync committee rewards of the Beacon API fail with code 500 when a signed amount does not fit the `Int64` of the response types ([#3853](https://github.com/ethereum/EthLib/issues/3853)).
+  The amounts stay unbounded integers, and the responses check them once, with `int64Fits` and the `fits` of each answer type, before they write the answer.
+  `attestationRewardsResponse_ok` and `syncCommitteeRewardsResponse_ok` gain a conjunct: every amount of an answer fits.
+  Migration: a proof that destructures the conclusion of either lemma takes one more component.
+
+- In Lean, an Engine node keeps the number and the time of each known block unbounded, as its header holds them, and the build of a payload fails on an excess blob gas of `2^64` or more ([#3852](https://github.com/ethereum/EthLib/issues/3852)).
+  `KnownPayload.number` and `KnownPayload.timestamp` are `Nat`, so a block with a time of `2^64` or more no longer wraps to a small time in the check that the attributes come after the head.
+  `checkAttributes` compares the head's time with the `toNat` of the attributes' time, and `checkAttributes_eq_ok_iff`, `checkAttributes_eq_error_of_unsupportedFork`, `checkAttributes_eq_error_of_wrong_structure` and `checkAttributes_eq_error_of_not_after_head` state the checks on `Nat`.
+  The statements on the JSON of the attributes of a forkchoice update, `forkchoiceUpdatedCall_payloadAttributesJson` and its forms for Glamsterdam and Hegotá, read the times the same way.
+  `buildPayload` fails with the new block error `excessBlobGasOverflow`, of code 257, when `builtExcessBlobGas`, the excess that the parent gives, is `2^64` or more; `buildPayload_eq_error_of_excessBlobGas_overflow` states it.
+  The refusals after that check, `buildPayload_eq_error_of_hash_eq_error`, `_of_runBody_eq_error`, `_of_checkBlock_eq_error` and `_of_outputChecks_eq_error`, take the hypothesis that the excess is below `2^64`.
+  `buildPayload_of_buildPayloadOnChain` and the refusals of `buildPayloadOnChain` give the head with the parent's number and time unconverted.
+  In Python, `engine.build_payload` builds on a parent whose number is `2^64` or more, where it refused it with code 0.
+  A parent whose time is `2^64` or more now fails with `-38003`, since the time of the attributes is a 64-bit number and cannot come after it.
+  `engine.forkchoice_updated` reads the numbers and times of its tree of known blocks unbounded.
+  Migration: read a known block's number and time as natural numbers, and pass the bound on the excess to the refusal lemmas.
+
+- In Lean, the SSWU map of BLS12-381 `G1` reads the square root of the base field as an option, and the wrapper `sqrtOrError` is removed ([#4009](https://github.com/ethereum/EthLib/pull/4009)).
+  The map gives the same points and fails with the same error.
+  `Fp.sqrtOrError_eq` and `map_sqrtOrError` are removed.
+  Migration: use `BaseField.sqrt`, with `Fp.baseField_sqrt` and `BaseField.Hom.map_sqrt`.
+
+- In Lean, BLS12-381 `G2 F` is an abbreviation of `G1 (Fp2 F)`, and the operations of `G1` ask for the field operations alone ([#4007](https://github.com/ethereum/EthLib/pull/4007)).
+  `G2` runs the formulas of `G1`, with mixed addition, and gives the same points.
+  `G2.zero`, `G2.neg`, `G2.add` and `G2.mul` are aliases of the operations of `G1`; `G2.double`, `G2.mulNat`, `G2.toAffine`, `G2.isInfinity` and `G2.projectiveEq` are removed, and a caller writes field notation such as `p.double`.
+  The group law is proved once in `G1.Law`, and the theorems of `G1Group` and `G2Group` keep their statements; `G1.doubleSpec`, `G1.addSpec`, `G1.double_eq_doubleSpec` and `G1.add_eq_addSpec` are removed.
+  `G1.map` takes a `FieldOps.Hom`, which `BaseField.Hom` extends, so a caller writes `G1.map f.toHom`; `G2.map f` is `G1.map (Fp2.hom f)`.
+  `FieldOps.Embedding` moves to `Proofs/BaseField`, `Fp.embedding` to `FpZMod`, and the fuel ladder `mulNatAux` of `G1Order` to `CurveMap`, over any base field.
+
+- In Lean, the target and the maximum of a blob schedule are `UInt64`, as EIP-7892 types them, and the update fraction stays `Nat` ([#3845](https://github.com/ethereum/EthLib/issues/3845)).
+  `BlobSchedule` gains the bound `maxBlobGas_lt`: the blob gas of the maximum, `GAS_PER_BLOB * max`, is below `2^64`.
+  `GAS_PER_BLOB` moves to `EthLib.Base`, and `Fees.BlobBaseFee` exports it under its old name.
+  `BlobSchedule.ofNat?` builds a schedule from three natural numbers when they meet its bounds.
+  `ofNat?_isSome_iff` states when it builds one, `target_toNat_of_ofNat?`, `max_toNat_of_ofNat?` and `baseFeeUpdateFraction_of_ofNat?` what it holds, and `ofNat?_toNat` the round trip.
+  The reader of a configuration file, the configuration reader of the exports and the blob schedules of the header check build their schedules with it.
+  So they refuse a target or a maximum of `2^64` or more, and a maximum of `2^47` or more, whose blob gas reaches `2^64`.
+  The statements on the excess blob gas read the target and the maximum through `UInt64.toNat`: `calcExcessBlobGas_of_lt`, `calcExcessBlobGas_eq_sub`, `calcExcessBlobGas_of_lt_fusaka`, `calcExcessBlobGas_of_below`, `le_calcExcessBlobGas_of_below`, `calcExcessBlobGas_le`, `excessBlobGasGrowth`, `excessBlobGasGrowth_succ`, `excessBlobGas_le_of_checkHeader`, `excessBlobGasGrowth_of_eq` and `blobGasUsed_le_of_stateTransition`.
+  In `excessBlobGas_le_of_stateTransition`, the hypothesis that the maximum never falls compares the two maximums as `UInt64`.
+  `getObjVal_configObject_blobSchedule` writes the target and the maximum as the JSON numbers of their `toNat`.
+  The C export `execution_blob_schedule` returns the same integers, now typed as 64-bit.
+  Migration: read `s.target.toNat` and `s.max.toNat` where a natural number is needed, and build a schedule from numbers with `BlobSchedule.ofNat?`.
+  In Python, `blocks.validate_header` and the configuration readers of `chain` refuse a blob schedule whose maximum is `2^47` or more.
+  The message of the two readers that are not the file reader becomes `a blob schedule needs target ≤ max, 0 < max, 0 < update fraction and a blob gas of max below 2^64`.
+
+- In Lean, the KZG trusted setup decodes its hex strings with the reader of Base, and its own copy is removed ([#3837](https://github.com/ethereum/EthLib/issues/3837)).
+  `TrustedSetup.nibble?`, `TrustedSetup.hexToBytesAux` and `TrustedSetup.hexToBytes?` are removed, and the decoders of the setup give the same results.
+  `SetupLagrange.coords_of_encodes`, `SetupTorsion.modulus_smul_eq_zero`, `TrustedSetup.hexListToBytes_mem` and `TrustedSetup.hexListToBytes_getElem` state `Base.hexBytes? s.toList` where they stated `TrustedSetup.hexToBytes? s`.
+  In `SetupTorsion`, `nibble?_eq` becomes `hexValue?_eq` and `hexToBytesAux_eq` becomes `hexBytesFrom?_eq`, on the Base readers, and `byte_eq` states `16 * a + b` in place of `a <<< 4 ||| b`, for any two numbers, with no bound.
+  Migration: write `Base.hexBytes? s.toList` for `TrustedSetup.hexToBytes? s`.
+
 - In Lean, the SSZ JSON codec reads hex with the readers of Base, and its own copies are removed ([#3837](https://github.com/ethereum/EthLib/issues/3837)).
   `Ssz.hexDigit` and `Ssz.hexBytesFrom` are removed, and `Ssz.hexBytes` reads its digits with `Base.hexBytes?`, with the same results.
   The lemmas `Ssz.hexDigit_toUpper`, `Ssz.hexBytesFrom_map_toUpper`, `Ssz.hexBytesFrom_eq` and `Ssz.hexBytes_cons` are removed.

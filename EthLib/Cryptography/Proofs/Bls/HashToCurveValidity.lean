@@ -47,9 +47,7 @@ private theorem toAffine_equation {P : G2} (hP : G2.Valid P)
     have := Fp2.isZero_iff.mpr h
     rw [hz] at this
     cases this
-  unfold G2.toAffine
-  rw [hz]
-  dsimp only
+  simp only [G1.toAffine, Fp2.fieldOps_isZero, hz, Bool.false_eq_true, ↓reduceIte]
   change (P.y * (P.z⁻¹ * P.z⁻¹ * P.z⁻¹)) * (P.y * (P.z⁻¹ * P.z⁻¹ * P.z⁻¹)) =
     (P.x * (P.z⁻¹ * P.z⁻¹)) * (P.x * (P.z⁻¹ * P.z⁻¹)) * (P.x * (P.z⁻¹ * P.z⁻¹)) + G2.bTwist
   field_simp
@@ -123,7 +121,7 @@ theorem psi2_neg_y (P : G2) (hp : P.z.isZero = false) :
 
 /-- `psi2` commutes with curve negation. -/
 theorem psi2_neg (P : G2) : psi2 (G2.neg P) = G2.neg (psi2 P) := by
-  unfold psi2 G2.toAffine G2.neg
+  unfold psi2 G1.toAffine G2.neg
   dsimp only
   by_cases hp : P.z.isZero = true
   · simp [hp]

@@ -27,7 +27,7 @@ The code comes from the error type, so it means the same thing in every export.
 
 Code 0 is left for an argument that does not read.
 
-No error type of the specification uses it. -/
+Some cases of specification error types have code 0 too, when no code of theirs covers them. -/
 class ExportError (ε : Type) where
   /-- The code of an error. -/
   code : ε → UInt32
@@ -54,7 +54,7 @@ structure UnreadArgument where
   /-- Why the argument does not read. -/
   reason : String
 
-/-- An argument that does not read has code 0, since no error type of the specification has it. -/
+/-- An argument that does not read has code 0, the code that is left for it. -/
 instance : ExportError UnreadArgument where
   code _ := 0
   message e := e.reason

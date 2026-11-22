@@ -77,7 +77,7 @@ The most blobs come from the blob schedule of the block.
 
 A block before Dencun has no blobs. -/
 def maxBlobGasPerBlock {fork : Fork} (env : BlockEnvironment fork) : Nat :=
-  if h : .dencun ≤ fork then GAS_PER_BLOB * (env.blobSchedule h).max else 0
+  if h : .dencun ≤ fork then GAS_PER_BLOB * (env.blobSchedule h).max.toNat else 0
 
 /-- The gas of a transaction that must fit in the execution gas that its block has left, at `fork`.
 
