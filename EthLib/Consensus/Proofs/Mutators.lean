@@ -903,6 +903,16 @@ theorem balances_initiateValidatorExit {config : Config} {state after : BeaconSt
     obtain ⟨_, rfl⟩ := setValidator_ok set
     rfl
 
+/-- Starting an exit keeps the slashed balances. -/
+theorem slashings_initiateValidatorExit {config : Config} {state after : BeaconState preset fork}
+    {index : ValidatorIndex} (computed : initiateValidatorExit config state index = .ok after) :
+    after.slashings = state.slashings := by
+  obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, _, _, _, queue, _, set⟩⟩ := initiateValidatorExit_ok computed
+  · rfl
+  · obtain ⟨_, _, rfl⟩ := exitQueue_eq queue
+    obtain ⟨_, rfl⟩ := setValidator_ok set
+    rfl
+
 /-- Starting an exit keeps the balances, the slot and the proposer lookahead.
 
 It keeps the effective balance of the validator that exits. -/

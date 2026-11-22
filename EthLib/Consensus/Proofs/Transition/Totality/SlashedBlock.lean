@@ -77,14 +77,6 @@ private theorem same_decrease {s t : BeaconState preset fork} {i : ValidatorInde
     (ok : decreaseBalance s i amount = .ok t) : t.slashings = s.slashings :=
   same_setBalance (decreaseBalance_ok ok).choose_spec
 
-private theorem same_exit {s t : BeaconState preset fork}
-    {i : ValidatorIndex} (ok : initiateValidatorExit config s i = .ok t) :
-    t.slashings = s.slashings := by
-  obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, _, _, _, queue, _, set⟩⟩ := initiateValidatorExit_ok ok
-  · rfl
-  · obtain ⟨_, _, queued⟩ := exitQueue_eq queue
-    rw [same_setValidator set, queued]
-
 private theorem same_exitChurn {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {balance : Gwei} {epoch : Epoch}
     (ok : computeExitEpochAndUpdateChurn config s electra balance = .ok (t, epoch)) :
@@ -126,7 +118,7 @@ private theorem same_withdrawalRequest {s t : BeaconState preset fork}
     t.slashings = s.slashings := by
   rcases withdrawalRequest_cases ok with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · rfl
-  · exact same_exit exited
+  · exact slashings_initiateValidatorExit exited
   · exact same_partialWithdrawal withdrawn
 
 private theorem same_depositRequest {s t : BeaconState preset fork}
@@ -373,7 +365,7 @@ private theorem slashedBalanceSum_slash {a b : BeaconState preset fork} {i : Val
     subst done
     split <;> exact ⟨validators, written⟩
   have earlier : marked.slashings = a.slashings :=
-    (same_setValidator markedOk).trans (same_exit exitedOk)
+    (same_setValidator markedOk).trans (slashings_initiateValidatorExit exitedOk)
   -- The slashed balances rise by the effective balance of the validator.
   have nonzero : preset.EPOCHS_PER_SLASHINGS_VECTOR ≠ 0 := by
     intro zero
@@ -565,7 +557,7 @@ private theorem processBlock_slashings {engine : ExecutionEngine preset fork}
     processOperations_folds_of Kept Kept.refl Kept.trans
       (fun deposited => ⟨same_deposit deposited, effectiveKept_processDeposit deposited,
         (frame_processDeposit deposited).toFrame⟩)
-      (fun exited => ⟨same_exit (processVoluntaryExit_initiates exited),
+      (fun exited => ⟨slashings_initiateValidatorExit (processVoluntaryExit_initiates exited),
         effectiveKept_voluntaryExit exited, (frame_processVoluntaryExit exited).toFrame⟩)
       (fun changed => by
         obtain ⟨_, _, _, _, _, set⟩ := processBlsToExecutionChange_ok changed

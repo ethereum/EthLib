@@ -82,6 +82,45 @@ theorem initializeBeaconStateFromEth1_forkVersions {fork : Fork} {eth1BlockHash 
   obtain ⟨_, _, _, activated, _, frame, rfl⟩ := initializeBeaconStateFromEth1_frame computed
   exact frame.forkVersions
 
+/-- An upgrade writes the current version before it as the previous version of the state.
+
+It writes the version of its fork as the current version, and the current epoch as its epoch. -/
+theorem upgradeNext_forkVersions {pre : ForkedBeaconState preset}
+    {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
+    (computed : upgradeNext config checks pre = .ok post) :
+    post.val.state.forkVersions = ⟨pre.state.forkVersions.currentVersion,
+      config.forkVersion post.val.fork, getCurrentEpoch pre.state⟩ := by
+  obtain ⟨fork, state⟩ := pre
+  cases fork
+  case phase0 =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    exact (upgradeToAltair_spec upgraded).2.2.2.2.2.2
+  case altair | bellatrix | shapella =>
+    simp only [upgradeNext, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    rfl
+  case dencun =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    exact (upgradeToElectra_spec upgraded).2.2.2
+  case pectra =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    exact (upgradeToFulu_spec upgraded).2.2
+  case fusaka =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    exact (upgradeToGloas_spec upgraded).2.2.2.2
+  case glamsterdam =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    rfl
+  all_goals
+    simp only [upgradeNext] at computed
+    cases computed
+
 /-- Both fork versions are versions of forks of the config. -/
 def ForkVersions.OfConfig (config : Config) (versions : ForkVersions) : Prop :=
   (∃ previous : Fork, versions.previousVersion = config.forkVersion previous) ∧
