@@ -7,9 +7,7 @@ public import EthLib.Networking.Libp2p.Yamux
 /-!
 # The upgrade of a TCP connection between consensus nodes
 
-A raw TCP connection gets security first, then a stream multiplexer over the secured channel.
-
-Each is chosen by one multistream-select negotiation, as [libp2p connections][up] says.
+The upgrade follows the section Upgrading Connections of [libp2p connections][up].
 
 On TCP, the consensus layer uses Noise for security, named as in [noise-libp2p][noise].
 
@@ -30,7 +28,9 @@ The consensus layer names only Noise, and whether a node may propose another fir
 namespace EthLib.Networking.Libp2p.Upgrade
 
 /-- The name of noise-libp2p in multistream-select. -/
-def noiseId : ByteArray := "/noise".toUTF8
+def noiseId : ByteArray :=
+  -- noise-libp2p is identified by the protocol ID string /noise.
+  "/noise".toUTF8
 
 /-- What a consensus node on TCP supports for the upgrade: mplex always, yamux maybe. -/
 structure TcpProfile where
@@ -39,18 +39,28 @@ structure TcpProfile where
   deriving DecidableEq, Repr
 
 /-- The security protocols that a node proposes, and also those it supports: Noise only. -/
-def securityProposals : List ByteArray := [noiseId]
+def securityProposals : List ByteArray :=
+  -- The consensus layer names only Noise.
+  [noiseId]
 
 /-- The multiplexers that a node proposes in order, and also those it supports.
 
 yamux comes first when the node supports it. -/
 def TcpProfile.muxers (profile : TcpProfile) : List ByteArray :=
+  -- mplex is required and yamux allowed; with both, yamux takes precedence in the negotiation.
   if profile.supportsYamux then [Yamux.protocolId, Mplex.protocolId] else [Mplex.protocolId]
 
 /-- The security protocol, then the multiplexer, that a dialer and a listener agree on. -/
 def upgrade (dialer listener : TcpProfile) : Option (ByteArray × ByteArray) := do
+  -- Security is always established first, by one multistream-select negotiation.
+  --
+  -- The dialer proposes and the listener echoes a protocol it supports, or answers na.
   let security ← Multistream.negotiate securityProposals securityProposals
+  -- Then the Noise handshake secures the channel.
+  --
+  -- The stream multiplexer is negotiated over the encrypted channel, in the same manner.
   let muxer ← Multistream.negotiate dialer.muxers listener.muxers
+  -- With security and stream multiplexing established, the upgrade is complete.
   return (security, muxer)
 
 end EthLib.Networking.Libp2p.Upgrade
