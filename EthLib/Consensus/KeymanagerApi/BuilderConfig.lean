@@ -15,19 +15,7 @@ A configuration names the builders that a key asks for bids, and the terms of ea
 
 The operator may leave out fields, and the [schema] says how each one resolves.
 
-An omitted list of builders is the list of the client.
-
-An omitted term of an entry is the default of the key, and then that of the client.
-
-An omitted cap on the execution payment is that of the client.
-
-Omitted authentication data is the default data of the URL of the entry.
-
-Omitted builder keys are the empty list, which accepts any builder.
-
 A get gives the resolved configuration, so a set of that answer fixes every value.
-
-A set replaces the stored configuration in full, and a delete removes it.
 
 [the source]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/builder_config.yaml
 [schema]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/builder_entry.yaml
@@ -104,6 +92,7 @@ def BuilderEntrySetting.resolvedAuthData (entry : BuilderEntrySetting) :
     Except BuilderApi.AuthDataError ByteArray :=
   match entry.authData with
   | some data => .ok data
+  -- The schema: omitted data is derived from the URL of the entry, as the default auth data.
   | none => BuilderApi.defaultAuthData entry.url
 
 /-- An entry with every term fixed, from the defaults of its key and of the client. -/
@@ -111,10 +100,14 @@ def BuilderEntrySetting.resolve (client : ClientBuilderConfig) (minBid builderBo
     (entry : BuilderEntrySetting) : Except BuilderApi.AuthDataError ResolvedBuilderEntry := do
   return {
     url := entry.url
+    -- The schema: omitted data comes from the URL, as above.
     authData := ← entry.resolvedAuthData
     terms := {
+      -- The schema: omitted builder keys resolve to the empty list, which accepts any builder.
       builderPubkeys := entry.builderPubkeys.getD []
+      -- The schema: an omitted cap on the execution payment takes that of the client.
       maxExecutionPayment := entry.maxExecutionPayment.getD client.maxExecutionPayment
+      -- The schema: an omitted floor or weight takes the default of the key, given here.
       minBid := entry.minBid.getD minBid
       builderBoostFactor := entry.builderBoostFactor.getD builderBoostFactor } }
 
@@ -123,8 +116,12 @@ def BuilderEntrySetting.resolve (client : ClientBuilderConfig) (minBid builderBo
 The defaults of the key apply to the builders of the client too, as the schema says. -/
 def BuilderConfigSetting.resolve (client : ClientBuilderConfig) (config : BuilderConfigSetting) :
     Except BuilderApi.AuthDataError ResolvedBuilderConfig := do
+  -- The schema: the defaults of the key, and else those of the client.
   let minBid := config.minBid.getD client.minBid
   let builderBoostFactor := config.builderBoostFactor.getD client.builderBoostFactor
+  -- The schema: an omitted list of builders resolves to the builders of the client.
+  --
+  -- Each entry resolves against the defaults of the key.
   let builders ← (config.builders.getD client.builders).mapM
     (BuilderEntrySetting.resolve client minBid builderBoostFactor)
   return { minBid, builderBoostFactor, builders }
@@ -148,8 +145,10 @@ def ResolvedBuilderConfig.toSetting (config : ResolvedBuilderConfig) : BuilderCo
 /-- Authentication data: `0x` and between 1 and 4096 bytes of hex, in either letter case. -/
 def readAuthData (path : String) (document : Json) : Except KeymanagerError ByteArray := do
   let text ← readString path document
+  -- The schema: the pattern ^0x(?:[a-fA-F0-9]{2}){1,4096}$.
   match Serialization.Ssz.ofHex text with
   | .ok bytes =>
+    -- So 1 to 4096 bytes; a zero-length value is invalid.
     if 1 ≤ bytes.size ∧ bytes.size ≤ MAX_BUILDER_AUTH_DATA_SIZE then .ok ⟨bytes⟩
     else .error (.field path)
   | .error _ => .error (.field path)
@@ -157,6 +156,11 @@ def readAuthData (path : String) (document : Json) : Except KeymanagerError Byte
 /-- A URL: a string of 1 to 2048 bytes. -/
 def readBuilderUrl (path : String) (document : Json) : Except KeymanagerError String := do
   let url ← readString path document
+  -- The schema: a URI of 1 to 2048 characters.
+  --
+  -- EthLib's choice: it counts UTF-8 bytes, as a block request bounds its URL.
+  --
+  -- EthLib checks no URI form.
   if 1 ≤ url.utf8ByteSize ∧ url.utf8ByteSize ≤ MAX_BUILDER_URL_SIZE then .ok url
   else .error (.field path)
 
@@ -164,11 +168,13 @@ def readBuilderUrl (path : String) (document : Json) : Except KeymanagerError St
 def readBuilderPubkeys (path : String) (document : Json) :
     Except KeymanagerError (List BLSPubkey) := do
   let keys ← readPubkeys path document
+  -- The schema: at most 64 items.
   if keys.length ≤ MAX_BUILDER_PUBKEYS then .ok keys else .error (.field path)
 
 /-- An entry of a configuration, from its object; its URL is required. -/
 def readBuilderEntrySetting (path : String) (document : Json) :
     Except KeymanagerError BuilderEntrySetting := do
+  -- The schema of an entry: the URL is required, and every other field is optional.
   return {
     url := ← requiredField path "url" readBuilderUrl document
     authData := ← optionalField path "auth_data" readAuthData document
@@ -180,13 +186,16 @@ def readBuilderEntrySetting (path : String) (document : Json) :
 /-- At most 64 entries of a configuration, each read in turn. -/
 def readBuilderEntries (path : String) (document : Json) :
     Except KeymanagerError (List BuilderEntrySetting) := do
+  -- The schema: an array.
   let .arr elements := document | .error (.field path)
   let entries ← elements.toList.zipIdx.mapM fun (element, index) =>
     readBuilderEntrySetting s!"{path}[{index}]" element
+  -- The schema: at most 64 items.
   if entries.length ≤ MAX_BUILDER_ENTRIES then .ok entries else .error (.field path)
 
 /-- A configuration, from its object; every field may be left out. -/
 def readBuilderConfigSetting (document : Json) : Except KeymanagerError BuilderConfigSetting := do
+  -- The schema: no field is required.
   return {
     minBid := ← optionalField "" "min_bid" readUint64 document
     builderBoostFactor := ← optionalField "" "builder_boost_factor" readUint64 document
@@ -194,16 +203,17 @@ def readBuilderConfigSetting (document : Json) : Except KeymanagerError BuilderC
 
 /-! ## The rules of a set -/
 
-/-- Why a configuration may not be set: an entry whose authentication data does not resolve.
-
-Two entries with the same URL and the same authentication data are refused too.
+/-- Why a configuration may not be set, if it may not.
 
 Omitted data is compared as the default data of the URL, as the schema says. -/
 def BuilderConfigSetting.refusal (config : BuilderConfigSetting) : Option String :=
+  -- The URL and the decoded authentication data of each entry.
   match (config.builders.getD []).mapM fun entry => do
       return (entry.url, ← entry.resolvedAuthData) with
+  -- EthLib's choice: omitted data that its URL cannot give is refused.
   | .error _ => some "an entry has no authentication data and its URL gives none"
   | .ok pairs =>
+    -- The source: no two entries share both their URL, as the exact string, and their data.
     if pairs.Nodup then none else some "two entries share their URL and authentication data"
 
 /-- The builder configuration of a client, from an object of the keymanager form.
@@ -213,6 +223,7 @@ Each field is required: the floor, the weight, the cap on the execution payment 
 The builders must meet the rules of a set, as those of a key do.
 -/
 def readClientBuilderConfig (document : Json) : Except KeymanagerError ClientBuilderConfig := do
+  -- EthLib's form of the configuration of the client, which the source leaves to it.
   let minBid ← requiredField "" "min_bid" readUint64 document
   let builderBoostFactor ← requiredField "" "builder_boost_factor" readUint64 document
   let maxExecutionPayment ← requiredField "" "max_execution_payment" readUint64 document
@@ -227,6 +238,7 @@ def authDataJson (data : ByteArray) : Json :=
 
 /-- The JSON of a resolved entry, with every field. -/
 def resolvedBuilderEntryJson (entry : ResolvedBuilderEntry) : Json :=
+  -- The source: a get returns each field of an entry with the value that will be used.
   Json.mkObj [
     ("url", stringJson entry.url),
     ("auth_data", authDataJson entry.authData),
@@ -237,6 +249,7 @@ def resolvedBuilderEntryJson (entry : ResolvedBuilderEntry) : Json :=
 
 /-- The JSON of a resolved configuration, with every field. -/
 def resolvedBuilderConfigJson (config : ResolvedBuilderConfig) : Json :=
+  -- The source: a get returns a fully resolved configuration.
   Json.mkObj [
     ("min_bid", Interchange.uint64Json config.minBid),
     ("builder_boost_factor", Interchange.uint64Json config.builderBoostFactor),

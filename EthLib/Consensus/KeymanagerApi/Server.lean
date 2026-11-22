@@ -32,21 +32,26 @@ def pathSegments (path : String) : List String :=
 
 /-- The response with HTTP 404 for a path that is not served. -/
 def notFound : Response :=
+  -- EthLib's choice: the source lists no response for a path that it does not define.
   ⟨404, errorResponseJson ⟨"Path not found"⟩⟩
 
 /-- A call on the key that a segment of a path names; a segment that is no key gets HTTP 400. -/
 def withPubkey (segment : String) (state : KeyState)
     (call : Cryptography.Bls.BLSPubkey → Response × KeyState) : Response × KeyState :=
+  -- The source: the path parameter is a public key, 48 bytes of hex after 0x.
   match readPubkey "pubkey" (.str segment) with
   | .ok pubkey => call pubkey
+  -- The source: a malformed request gets HTTP 400.
   | .error _ => (badRequest "the public key of the path does not read", state)
 
 /-- The response of the call that a method and a path name, and the state after it. -/
 def handle (text : JsonText) (config : ClientConfig) (chain : Option ChainView) (state : KeyState)
     (method path : String) (body : Json) : Response × KeyState :=
+  -- The path before the first question mark, and the query after it.
   let route := (path.splitOn "?").headD ""
   let query := ((path.splitOn "?").drop 1).headD ""
   match method, pathSegments route with
+  -- The paths of the OpenAPI document, each with its methods.
   | "GET", ["eth", "v1", "keystores"] => getKeystores state
   | "POST", ["eth", "v1", "keystores"] => postKeystores text config.limits state body
   | "DELETE", ["eth", "v1", "keystores"] => deleteKeystores text state body
