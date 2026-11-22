@@ -18,8 +18,8 @@ The text of the error of a step is a choice of this specification, since the sou
 
 [`opcode-tracer.yaml`][schema] defines the answers.
 
-[methods]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/debug/trace.yaml
-[schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/opcode-tracer.yaml
+[methods]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/debug/trace.yaml
+[schema]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/schemas/opcode-tracer.yaml
 -/
 
 @[expose] public section
@@ -36,27 +36,29 @@ open EthLib.Serialization.JsonRpc
 
 /-- The configuration of the opcode logger in a request.
 
-A named tracer is out of the scope of the source, so a request for one fails.
-
-The timeout, the debug flag and the configuration of a named tracer change no answer.
-
-They are read and left aside. -/
+A named tracer is out of the scope of the source, so a request for one fails. -/
 def traceConfig (j : Json) : Read TraceConfig := do
   let fs ← fields "trace config" j
   let flag (name : String) : Read Bool :=
     match fs.lookup name with
     | some v => bool name v
     | none => pure false
+  -- An absent or empty tracer name runs the opcode logger.
+  --
+  -- A named tracer fails, since its output is out of the scope of the source.
   if let some t := fs.lookup "tracer" then
     unless (← string "tracer" t).isEmpty do reject "tracer: named tracers are not supported"
+  -- The timeout, the debug flag and the configuration of a named tracer are read and left aside.
   if let some t := fs.lookup "timeout" then discard <| string "timeout" t
   if let some d := fs.lookup "debug" then discard <| bool "debug" d
   if let some c := fs.lookup "tracerConfig" then discard <| fields "tracerConfig" c
+  -- The step limit: an integer of at least 0, and 0, the default, means no limit.
   let limit ← match fs.lookup "limit" with
     | some v => do
       let n ← integer "limit" v
       if n < 0 then reject "limit: negative" else pure n.toNat
     | none => pure 0
+  -- Each flag is false by default.
   return { disableStack := ← flag "disableStack", enableMemory := ← flag "enableMemory"
            enableReturnData := ← flag "enableReturnData", disableStorage := ← flag "disableStorage"
            limit }
@@ -85,6 +87,7 @@ def stepErrorText : EvmError → String
 
 /-- Memory as words of 32 bytes, the last one padded with zeros. -/
 def memoryWords (memory : ByteArray) : List Json :=
+  -- Chunks of 32 bytes, chunk `i` from offset `32 i`, each written as a 32-byte word.
   (List.range ((memory.size + 31) / 32)).map fun i =>
     dataJson ((List.range 32).map fun j => byteAt memory (32 * i + j))
 
@@ -94,20 +97,26 @@ The refund counter is given only when it is not zero, as the [entry schema][sche
 
 Empty memory and empty return data are left out.
 
-The fixtures leave them out, and they match this form field for field.
+The schema requires that.
 
 [schema]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/schemas/opcode-tracer.yaml#L144-L199
 -/
 def structLogJson (e : StructLog) : Json :=
   Json.mkObj <|
+    -- The five required fields.
     [("pc", Json.num e.pc), ("op", .str e.op), ("gas", Json.num e.gas),
       ("gasCost", Json.num e.gasCost), ("depth", Json.num e.depth)] ++
+    -- The error only when there is one, never as null or an empty string.
     (e.error.map fun err => [("error", Json.str (stepErrorText err))]).getD [] ++
+    -- The refund only when it is not zero, as the schema requires.
     (if e.refund = 0 then [] else [("refund", Json.num e.refund)]) ++
+    -- The stack when recorded, bottom first.
     (e.stack.map fun s => [("stack", listJson (quantityJson ·.toNat) s)]).getD [] ++
+    -- The memory and the return data when recorded and not empty, as the schema requires.
     ((e.memory.filter (·.size ≠ 0)).map fun m =>
       [("memory", Json.arr (memoryWords m).toArray)]).getD [] ++
     ((e.returnData.filter (·.size ≠ 0)).map fun d => [("returnData", dataJson d.toList)]).getD [] ++
+    -- The storage when recorded, with each key and value as a 32-byte word.
     (e.storage.map fun slots =>
       [("storage", Json.mkObj (slots.map fun (k, v) => (hexString k.toList, wordJson v)))]).getD []
 
@@ -143,7 +152,11 @@ def genesisNotTraceable : RpcError :=
 
 Block 0 fails, and so does a block whose parent the node does not hold. -/
 def traceChain (v : ChainView) (r : BlockRecord) : Except RpcError BlockChain :=
+  -- Block 0 has no parent, and the methods answer it with an error.
   if r.block.header.number = 0 then .error genesisNotTraceable
+  -- Else the block runs on the state of its parent on the canonical chain.
+  --
+  -- Without that parent, the answer is the error of pruned history, 4444.
   else match v.parentChain r with
     | some chain => .ok chain
     | none => .error (prunedHistoryUnavailable.toRpcError none)
@@ -172,6 +185,7 @@ def traceBlockByParam (v : ChainView) (config : TraceConfig) (p : BlockParam) :
     Except RpcError (List (Hash32 × TransactionTrace)) := do
   match ← v.resolve p with
   | some r => v.traceBlockRecord config r
+  -- A block that the node does not hold: block 0, a number below its lowest block, or not found.
   | none =>
     match p with
     | .number 0 => .error genesisNotTraceable
