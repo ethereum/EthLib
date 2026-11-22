@@ -89,8 +89,8 @@ ERC-2333's `HKDF_mod_r` loops until the key is not zero, without a bound, so tha
 
 | Handler | Cases | Source |
 | --- | ---: | --- |
-| `eth_aggregate_pubkeys` | 8 | consensus-specs `v1.7.0-beta.4` |
-| `eth_fast_aggregate_verify` | 12 | consensus-specs `v1.7.0-beta.4` |
+| `eth_aggregate_pubkeys` | 8 | the pinned consensus test vectors |
+| `eth_fast_aggregate_verify` | 12 | the pinned consensus test vectors |
 | `sign` | 10 | `ethereum/bls12-381-tests` `v0.1.2` |
 | `verify` | 29 | `ethereum/bls12-381-tests` `v0.1.2` |
 | `aggregate` | 6 | `ethereum/bls12-381-tests` `v0.1.2` |
@@ -98,6 +98,7 @@ ERC-2333's `HKDF_mod_r` loops until the key is not zero, without a bound, so tha
 | `aggregate_verify` | 5 | `ethereum/bls12-381-tests` `v0.1.2` |
 
 Each case matches its source byte for byte, and no case's expected value comes from EthLib.
+`tests/sources.toml` records the commit of each source.
 `tests/cryptography/hash_to_curve/` adds the hash to G2 and `expand_message_xmd` cases of RFC 9380.
 Each directory has a `SHA256SUMS` that pins its cases, and CI checks the pins.
 [`tests/cryptography/README.md`](../../../tests/cryptography/README.md) explains the pins and the check against the upstream archives.

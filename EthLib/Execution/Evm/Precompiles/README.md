@@ -138,6 +138,8 @@ They run the official vectors of the family through the table, at the prices tha
 They run at the fork that adds the family, at each fork that changes it, and at the latest fork.
 A test of the price, which costs little, runs at every fork from the fork that adds the family.
 Each vector file has its pinned source, as `tests/sources.toml` records it.
+In the sections below, the execution conformance tests are the test cases and vector files of the
+execution layer's test release that `tests/sources.toml` pins.
 
 ## Sources
 
@@ -147,7 +149,6 @@ Each family cites its primary source, with the section:
 - The EIP that adds the precompile, and each EIP that changes it later.
 - The standard that defines the arithmetic, such as RFC 7693 for BLAKE2b or SEC 1 for ECDSA.
 
-The code does not cite execution-specs.
 A doc comment names a function of a source only when the cited EIP or standard defines it.
 
 ## This page
@@ -209,8 +210,9 @@ Only the recovery ids 2 and 3 reach such a point, and the precompile accepts onl
 
 ### Test vectors
 
-`bindings/python/tests/precompile/test_ecrecover.py` runs the 52 cases of `test_precompiles` in
-`tests/frontier/precompiles/test_ecrecover.py` of execution-specs, at the pinned commit.
+`bindings/python/tests/precompile/test_ecrecover.py` runs 52 ECRECOVER cases of the execution
+conformance tests.
+The test file names the file they come from.
 
 ## SHA256
 
@@ -308,7 +310,7 @@ A call succeeds exactly when the gas covers the price, and then returns its call
 ### Test vectors
 
 `bindings/python/tests/precompile/test_identity_absence.py` runs the IDENTITY calls of the
-execution-specs tests, and the calls of addresses that have no precompile.
+execution conformance tests, and the calls of addresses that have no precompile.
 
 ## MODEXP
 
@@ -390,8 +392,8 @@ No theorem bounds the cost of computing the result, which the price is meant to 
 from Byzantium.
 It checks the prices of the 15 `modexp_nagydani_*` cases from the tables of EIP-2565 and EIP-7883,
 at the forks of each.
-`test_execution_specs_vectors.py` and `test_modexp_state_tests.py` run the MODEXP vectors of
-execution-specs and of the state tests.
+`test_execution_specs_vectors.py` runs the MODEXP vector files of the execution conformance tests.
+`test_modexp_state_tests.py` runs the MODEXP calls of their EIP-198 state tests, at each fork.
 
 ## alt_bn128
 
@@ -467,7 +469,7 @@ Both outputs are reached (`ecpairing_generators`, `ecpairing_generator_neg`, `ec
 ### Test vectors
 
 `bindings/python/tests/precompile/test_alt_bn128.py` checks the three precompiles against py_ecc.
-`test_alt_bn128_eest.py` runs the cases of the EIP-196 and EIP-197 tests of execution-specs.
+`test_alt_bn128_eest.py` runs the cases of the EIP-196 and EIP-197 execution conformance tests.
 Both run on each side of EIP-1108, at the prices of each fork.
 
 ## BLAKE2F
@@ -626,7 +628,7 @@ Decoding undoes encoding for points on the curve, and every decoded point has on
 
 `bindings/python/tests/precompile/test_eip2537.py` runs the test vectors of EIP-2537, with the MSM
 cases above 8 pairs.
-`test_execution_specs_vectors.py` runs the EIP-2537 vectors of execution-specs.
+`test_execution_specs_vectors.py` runs the EIP-2537 vectors of the execution conformance tests.
 
 ## P256VERIFY
 
