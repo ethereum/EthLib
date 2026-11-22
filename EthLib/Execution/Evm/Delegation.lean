@@ -34,10 +34,12 @@ def DELEGATION_SIZE : Nat := 23
 
 /-- The delegation indicator of an address: the marker, then the address. -/
 def delegationIndicator (address : Address) : ByteArray :=
+  -- EIP-7702: `0xef0100 || address`.
   DELEGATION_MARKER ++ ⟨address.toArray⟩
 
 /-- Whether some code is a delegation indicator: the marker, then exactly one address. -/
 def isValidDelegation (code : ByteArray) : Bool :=
+  -- The 23 bytes of `0xef0100 || address`, and nothing else.
   code.size = DELEGATION_SIZE && code.extract 0 3 = DELEGATION_MARKER
 
 /-- The address that a delegation indicator delegates to, or none for any other code. -/
