@@ -34,8 +34,10 @@ open EthLib.Serialization.Rlp
 
 /-- An access list entry is the list of its account and its storage slots. -/
 instance : Codec Access where
+  -- Yellow Paper §4.2: an entry of the access list is `E = (E_a, E_s)`.
   toItem a := .list [Codec.toItem a.account, Codec.toItem a.slots]
   ofItem item := do
+    -- A list of exactly two items, read in that order.
     match ← item.fields 2 with
     | [account, slots] =>
       return { account := ← Item.field 0 account, slots := ← Item.field 1 slots }
@@ -43,9 +45,11 @@ instance : Codec Access where
 
 /-- An authorization is the list of its six fields, in order. -/
 instance : Codec Authorization where
+  -- EIP-7702: the chain ID, the address, the nonce, the parity of `y`, then `r` and `s`.
   toItem a := .list [Codec.toItem a.chainId, Codec.toItem a.address, Codec.toItem a.nonce,
     Codec.toItem a.yParity, Codec.toItem a.r, Codec.toItem a.s]
   ofItem item := do
+    -- A list of exactly six items, read in that order.
     match ← item.fields 6 with
     | [chainId, address, nonce, yParity, r, s] =>
       return {
@@ -59,10 +63,12 @@ instance : Codec Authorization where
 
 /-- A legacy transaction is the list of its nine fields, in order. -/
 instance : Codec LegacyTransaction where
+  -- Yellow Paper §4.2: `L_T(T) = (T_n, T_p, T_g, T_t, T_v, p, T_w, T_r, T_s)` for `T_x = 0`.
   toItem tx := .list [Codec.toItem tx.nonce, Codec.toItem tx.gasPrice, Codec.toItem tx.gas,
     Codec.toItem tx.to, Codec.toItem tx.value, Codec.toItem tx.data, Codec.toItem tx.v,
     Codec.toItem tx.r, Codec.toItem tx.s]
   ofItem item := do
+    -- A list of exactly nine items, read in the order of `L_T`.
     match ← item.fields 9 with
     | [nonce, gasPrice, gas, to, value, data, v, r, s] =>
       return {
@@ -79,10 +85,12 @@ instance : Codec LegacyTransaction where
 
 /-- The payload of a transaction of type 1 is the list of its eleven fields, in order. -/
 instance : Codec AccessListTransaction where
+  -- `L_T(T) = (T_c, T_n, T_p, T_g, T_t, T_v, p, T_A, T_y, T_r, T_s)` for `T_x = 1`.
   toItem tx := .list [Codec.toItem tx.chainId, Codec.toItem tx.nonce, Codec.toItem tx.gasPrice,
     Codec.toItem tx.gas, Codec.toItem tx.to, Codec.toItem tx.value, Codec.toItem tx.data,
     Codec.toItem tx.accessList, Codec.toItem tx.yParity, Codec.toItem tx.r, Codec.toItem tx.s]
   ofItem item := do
+    -- A list of exactly eleven items, read in the order of `L_T`.
     match ← item.fields 11 with
     | [chainId, nonce, gasPrice, gas, to, value, data, accessList, yParity, r, s] =>
       return {
@@ -101,11 +109,13 @@ instance : Codec AccessListTransaction where
 
 /-- The payload of a transaction of type 2 is the list of its twelve fields, in order. -/
 instance : Codec FeeMarketTransaction where
+  -- `L_T(T) = (T_c, T_n, T_f, T_m, T_g, T_t, T_v, p, T_A, T_y, T_r, T_s)` for `T_x = 2`.
   toItem tx := .list [Codec.toItem tx.chainId, Codec.toItem tx.nonce,
     Codec.toItem tx.maxPriorityFeePerGas, Codec.toItem tx.maxFeePerGas, Codec.toItem tx.gas,
     Codec.toItem tx.to, Codec.toItem tx.value, Codec.toItem tx.data, Codec.toItem tx.accessList,
     Codec.toItem tx.yParity, Codec.toItem tx.r, Codec.toItem tx.s]
   ofItem item := do
+    -- A list of exactly twelve items, read in the order of `L_T`.
     match ← item.fields 12 with
     | [chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gas, to, value, data, accessList,
         yParity, r, s] =>
@@ -126,12 +136,16 @@ instance : Codec FeeMarketTransaction where
 
 /-- The payload of a transaction of type 3 is the list of its fourteen fields, in order. -/
 instance : Codec BlobTransaction where
+  -- EIP-4844: `(T_c, T_n, T_f, T_m, T_g, T_t, T_v, p, T_A)`, then the maximum fee per blob gas.
+  --
+  -- Then the versioned hashes, then `T_y`, `T_r` and `T_s`.
   toItem tx := .list [Codec.toItem tx.chainId, Codec.toItem tx.nonce,
     Codec.toItem tx.maxPriorityFeePerGas, Codec.toItem tx.maxFeePerGas, Codec.toItem tx.gas,
     Codec.toItem tx.to, Codec.toItem tx.value, Codec.toItem tx.data, Codec.toItem tx.accessList,
     Codec.toItem tx.maxFeePerBlobGas, Codec.toItem tx.blobVersionedHashes,
     Codec.toItem tx.yParity, Codec.toItem tx.r, Codec.toItem tx.s]
   ofItem item := do
+    -- A list of exactly fourteen items, read in that order.
     match ← item.fields 14 with
     | [chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gas, to, value, data, accessList,
         maxFeePerBlobGas, blobVersionedHashes, yParity, r, s] =>
@@ -154,12 +168,16 @@ instance : Codec BlobTransaction where
 
 /-- The payload of a transaction of type 4 is the list of its thirteen fields, in order. -/
 instance : Codec SetCodeTransaction where
+  -- EIP-7702: `(T_c, T_n, T_f, T_m, T_g, T_t, T_v, p, T_A)`, then the authorization list.
+  --
+  -- Then `T_y`, `T_r` and `T_s`.
   toItem tx := .list [Codec.toItem tx.chainId, Codec.toItem tx.nonce,
     Codec.toItem tx.maxPriorityFeePerGas, Codec.toItem tx.maxFeePerGas, Codec.toItem tx.gas,
     Codec.toItem tx.to, Codec.toItem tx.value, Codec.toItem tx.data, Codec.toItem tx.accessList,
     Codec.toItem tx.authorizations, Codec.toItem tx.yParity, Codec.toItem tx.r,
     Codec.toItem tx.s]
   ofItem item := do
+    -- A list of exactly thirteen items, read in that order.
     match ← item.fields 13 with
     | [chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gas, to, value, data, accessList,
         authorizations, yParity, r, s] =>
@@ -183,6 +201,7 @@ instance : Codec SetCodeTransaction where
 
 /-- The bytes of a typed transaction: its type, then its payload. -/
 def typedBytes (type : UInt8) (payload : ByteArray) : ByteArray :=
+  -- EIP-2718: the type byte, then the payload.
   ⟨#[type]⟩ ++ payload
 
 /-- The bytes of a transaction.
@@ -191,7 +210,11 @@ A legacy transaction is its RLP encoding, and a typed transaction is its type th
 
 It fails only when an RLP payload has 2^64 bytes or more. -/
 def encodeTransaction : Transaction → Except RlpError ByteArray
+  -- Yellow Paper, §4.4.2: `RLP(L_T(T))` for `T_x = 0`.
   | .legacy tx => Codec.encode tx
+  -- `(T_x) · RLP(L_T(T))` otherwise.
+  --
+  -- `L_T` of types 3 and 4 comes from EIP-4844 and EIP-7702.
   | .accessList tx => typedBytes 1 <$> Codec.encode tx
   | .feeMarket tx => typedBytes 2 <$> Codec.encode tx
   | .blob tx => typedBytes 3 <$> Codec.encode tx
@@ -201,13 +224,16 @@ def encodeTransaction : Transaction → Except RlpError ByteArray
 
 A legacy transaction is its RLP list, and a typed transaction the byte string of its bytes. -/
 def bodyItem : Transaction → Except RlpError Item
+  -- Yellow Paper §4.4.3: `~L_T(T) = L_T(T)` for `T_x = 0`.
   | .legacy tx => .ok (Codec.toItem tx)
+  -- And `(T_x) · RLP(L_T(T))` otherwise, as one byte string.
   | tx => .bytes <$> encodeTransaction tx
 
 /-- The typed transaction of type `type` that `payload` encodes.
 
 A type that no fork has holds no transaction. -/
 def decodePayload (type : UInt8) (payload : ByteArray) : Except TransactionError Transaction :=
+  -- The payload of type 1, 2, 3 or 4 is `RLP(L_T(T))` of EIP-2930, 1559, 4844 or 7702.
   if type = 1 then (.accessList <$> Codec.decode payload).mapError .decoding
   else if type = 2 then (.feeMarket <$> Codec.decode payload).mapError .decoding
   else if type = 3 then (.blob <$> Codec.decode payload).mapError .decoding
@@ -222,9 +248,13 @@ Any other first byte is a type, which the fork must have. -/
 def decodeTransaction (fork : Fork) (bytes : ByteArray) : Except TransactionError Transaction :=
   if h : 0 < bytes.size then
     let first := bytes[0]
+    -- EIP-2718: a first byte in `[0xc0, 0xfe]` starts a legacy transaction, and `0xff` is reserved.
+    --
+    -- Here `0xff` goes to the RLP decoder, which finds no list: it would need `2^56` bytes or more.
     if 0xc0 ≤ first then
       (.legacy <$> Codec.decode bytes).mapError .decoding
     else
+      -- Else the first byte is the type, which the fork must have, and the rest is the payload.
       match typeFork first with
       | some since =>
         if since ≤ fork then decodePayload first (bytes.extract 1 bytes.size)
@@ -252,9 +282,12 @@ The first byte `0xff` is a type that no fork has, as before Glamsterdam.
 
 [eip-2718]: https://eips.ethereum.org/EIPS/eip-2718#backwards-compatibility -/
 def decodeBodyTransaction (fork : Fork) : Item → Except TransactionError Transaction
+  -- `~L_T(T) = L_T(T)`, a list, for a legacy transaction.
   | .list items => (.legacy <$> Codec.ofItem (.list items)).mapError .decoding
+  -- A byte string `(T_x) · RLP(L_T(T))` for a typed one.
   | .bytes bytes =>
     if h : 0 < bytes.size then
+      -- A type below `0xc0`, or from Glamsterdam a legacy transaction in bytes, but never `0xff`.
       if bytes[0] < 0xc0 ∨ (.glamsterdam ≤ fork ∧ bytes[0] ≠ 0xff) then
         decodeTransaction fork bytes
       else .error (.unsupportedType bytes[0])
@@ -262,6 +295,9 @@ def decodeBodyTransaction (fork : Fork) : Item → Except TransactionError Trans
 
 /-- The hash of a transaction: the Keccak-256 hash of its bytes. -/
 def transactionHash (tx : Transaction) : Except RlpError Hash32 := do
+  -- The Keccak-256 hash of the bytes above, type byte included.
+  --
+  -- Neither EIP-2718 nor the Yellow Paper defines this hash.
   return Cryptography.Hash.Keccak.keccak256 (← encodeTransaction tx)
 
 end EthLib.Execution.Transactions
