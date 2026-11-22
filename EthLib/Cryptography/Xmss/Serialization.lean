@@ -25,36 +25,29 @@ open Constants
 
 /-! ## Encoding -/
 
-/-- Encode a public key as 32 bytes.
-
-```text
-    [ root: 16 | public parameter: 16 ]
-```
--/
+/-- Encode a public key as 32 bytes: the 16-byte root, then the 16-byte public parameter. -/
 def encodePublicKey (pk : PublicKey) : ByteArray :=
   packBytes pk.root.bytes ++ packBytes pk.publicParam.bytes
 
 /-- Encode one layer's signature as 1200 bytes.
 
-```text
-    [ randomizer: 16 | 58 chain values: 928 | 16 siblings: 256 ]
-```
+The bytes are the randomizer (16), the 58 chain values (928), then the 16 siblings (256).
 
 - Chain values are in chain order.
 - Siblings run from the leaf up to the root.
 -/
 def encodeLayerSignature (sig : LayerSignature) : ByteArray :=
+  -- `rho | y_0 | ... | y_{v-1} | pi_0 | ... | pi_{h-1}`, `16 (1 + v + h) = 1200` bytes.
   packBytes sig.randomizer.bytes ++ packDigests sig.chainValues ++ packDigests sig.path
 
 /-- Encode a signature as 2404 bytes.
 
-```text
-    [ leaf index: 4 | bottom layer: 1200 | top layer: 1200 ]
-```
+The bytes are the leaf index (4), the bottom layer (1200), then the top layer (1200).
 
 The leaf index is a little-endian 32-bit word.
 -/
 def encodeSignature (sig : Signature) : ByteArray :=
+  -- `LE_32(idx)`, the bottom layer's signature, then the top layer's: `4 + 1200 + 1200`.
   packBytes (uintToBytes LEAF_INDEX_SIZE sig.leafIndex.toNat)
     ++ encodeLayerSignature sig.bottom ++ encodeLayerSignature sig.top
 

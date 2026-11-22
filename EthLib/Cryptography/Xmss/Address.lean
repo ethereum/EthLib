@@ -9,17 +9,19 @@ Addresses keep the hash inputs of a key distinct.
 
 Every hash call of a key is `H(P | A | M)`, and `A` names the call site.
 
-One hash for every call site would expose many targets at once:
+One hash for every call site would expose many targets at once.
 
-```text
-per key   2^32 leaf indices x 58 chains x 3 steps   ~ 2^40
-```
+Over its `2^32` leaf indices, a key makes `2^32 * 58 * 3`, about `2^40`, chain steps alone.
 
 Finding one preimage among `M` targets costs `2^128 / M`.
 
 Giving each call site its own address removes the discount.
 
 Source: the leanXMSS specification draft, section "Address encoding".
+
+The address plays the part of the tweak of [ePrint 2025/055][hbms], §7.1, with its own layout.
+
+[hbms]: https://eprint.iacr.org/2025/055
 -/
 
 @[expose] public section
@@ -32,9 +34,7 @@ open EthLib.Cryptography.Xmss.Constants
 
 /-- `enc(tau, mu, hi, lo)`: the 16 bytes of one address, as two lanes.
 
-```text
-    [ lo: 4 | hi: 3 | tau + 32 mu: 1 | zero: 8 ]
-```
+The bytes are `lo` (4), `hi` (3), `tau + 32 mu` (1), then 8 zero bytes.
 
 - `tau < 32` is the address type.
 - `mu < 8` is a chain position, zero outside chain steps.
@@ -47,6 +47,8 @@ So `lo` is bits 0 to 31 of the first lane, `hi` bits 32 to 55, and the type byte
 -/
 def encodeAddress (tau : Fin 32) (mu : Fin 8) (hi : Fin (2 ^ 24)) (lo : UInt32) :
     Address :=
+  -- `enc(tau, mu, hi, lo) = LE_32(lo) | LE_24(hi) | LE_8(tau + 32 mu) | 0^64`.
+  --
   -- Type and position share one byte: `tau` in bits 0 to 4, `mu` in bits 5 to 7.
   ⟨lo.toUInt64 ||| (UInt64.ofNat hi.val <<< 32) ||| (UInt64.ofNat (tau.val + 32 * mu.val) <<< 56),
     0⟩
