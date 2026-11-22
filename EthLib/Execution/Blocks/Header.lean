@@ -118,6 +118,11 @@ namespace Header
 
 /-- The count of fields of a header at `fork`: the 15 of Frontier, and those added since. -/
 def fieldCount (fork : Fork) : Nat :=
+  -- The 15 fields `H_p` to `H_n` of Frontier, with the mix hash `H_m` for `H_a` before Paris.
+  --
+  -- Then `H_f` from London and `H_w` from Shapella.
+  --
+  -- Then three fields from Dencun, one from Pectra and two from Glamsterdam.
   15 + Item.sinceCount .london fork + Item.sinceCount .shapella fork
     + 3 * Item.sinceCount .dencun fork + Item.sinceCount .pectra fork
     + 2 * Item.sinceCount .glamsterdam fork
@@ -126,6 +131,19 @@ variable {fork : Fork}
 
 /-- The item of a header: the list of the fields that it holds, in order. -/
 def toItem (h : Header fork) : Item :=
+  -- Yellow Paper §4.4.3: `L_H(H)` lists `H_p, H_o, H_c, H_r, H_t, H_e, H_b, H_d`.
+  --
+  -- Then `H_i, H_l, H_g, H_s, H_x, H_a, H_n`, and `H_f` from London and `H_w` from Shapella.
+  --
+  -- Then the blob gas used and the excess blob gas of EIP-4844, from Dencun.
+  --
+  -- Then the parent beacon block root of EIP-4788, from Dencun.
+  --
+  -- Then the requests hash of EIP-7685, from Pectra.
+  --
+  -- Then the block access list hash of EIP-7928 and the slot of EIP-7843, from Glamsterdam.
+  --
+  -- EIP-7685, EIP-7928 and EIP-7843 do not place their fields: each is appended last, in order.
   .list ([Codec.toItem h.parentHash, Codec.toItem h.ommersHash,
     Codec.toItem h.coinbase, Codec.toItem h.stateRoot, Codec.toItem h.transactionsRoot,
     Codec.toItem h.receiptRoot, Codec.toItem h.bloom, Codec.toItem h.difficulty,
@@ -139,6 +157,7 @@ def toItem (h : Header fork) : Item :=
 /-- The header that an item holds: a list of the fields of the fork, in order. -/
 def ofItem (item : Item) : Except RlpError (Header fork) := do
   let n := fieldCount fork
+  -- A list with exactly the fields of the fork, read in the order of `L_H`.
   let items ← item.fields n
   let (parentHash, items) ← Item.readField (α := Hash32) n items
   let (ommersHash, items) ← Item.readField (α := Hash32) n items
@@ -155,6 +174,7 @@ def ofItem (item : Item) : Except RlpError (Header fork) := do
   let (extraData, items) ← Item.readField (α := ByteArray) n items
   let (prevRandao, items) ← Item.readField (α := Bytes32) n items
   let (nonce, items) ← Item.readField (α := Bytes8) n items
+  -- Each later field is read only from the fork that adds it.
   let (baseFeePerGas, items) ← Item.readSince (f := .london) (α := Nat) n items
   let (withdrawalsRoot, items) ← Item.readSince (f := .shapella) (α := Hash32) n items
   let (blobGasUsed, items) ← Item.readSince (f := .dencun) (α := UInt64) n items
@@ -182,6 +202,9 @@ Section 4.4.4 of the Yellow Paper finds the parent of a block by this hash.
 
 It fails only when a field has `2^64` bytes or more, since RLP cannot encode it. -/
 def hash {fork : Fork} (h : Header fork) : Except RlpError Hash32 := do
+  -- Yellow Paper §4.4.4: the parent `P(H)` is the block whose header hashes to `H_p`.
+  --
+  -- That hash is `KEC(RLP(L_H(H)))`, of the header in its entirety.
   let bytes ← Codec.encode h
   return keccak256 bytes
 
@@ -192,7 +215,7 @@ def NUMBER_FIELD : Nat := 8
 
 The number is the ninth field at every fork, and every fork has at least 15 fields. -/
 def numberOfItem (item : Item) : Except RlpError Nat := do
-  -- The header is a list, and its number is at the same index at every fork.
+  -- The header is a list, and its number `H_i` is at the same index of `L_H` at every fork.
   let items ← item.toItems
   match items[NUMBER_FIELD]? with
   | some field => Item.field NUMBER_FIELD field

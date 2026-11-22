@@ -10,15 +10,9 @@ public import EthLib.Execution.Evm.Log
 
 The logs Bloom filter: 2048 bits that summarize the addresses and topics of some logs.
 
-Each entry, an address or a topic, sets three bits.
-
-They are the first three 16-bit words of its Keccak-256 hash, each taken modulo 2048.
-
-The filter is the OR of the bits of every entry.
+Each entry, an address or a topic, sets three bits that its Keccak-256 hash chooses.
 
 So a reader can skip a block whose filter lacks a bit of the entry it looks for.
-
-The filter is written as 256 bytes, big-endian, so bit `k` is bit `2047 - k` from the first byte.
 
 Section 4.4.1 of the Yellow Paper, Shanghai version, defines it: [`Paper.tex`][yp].
 
@@ -39,29 +33,45 @@ namespace Bloom
 They are the first three big-endian 16-bit words of its hash, each modulo 2048. -/
 def bits (entry : ByteArray) : List Nat :=
   let h := keccak256 entry
+  -- Yellow Paper §4.4.1: `m(x, i) = KEC(x)[i, i + 1] mod 2048`, for `i` in `{0, 2, 4}`.
+  --
+  -- The pair of bytes is read as a big-endian 16-bit number.
   [(h[0].toNat * 256 + h[1].toNat) % 2048, (h[2].toNat * 256 + h[3].toNat) % 2048,
     (h[4].toNat * 256 + h[5].toNat) % 2048]
 
 /-- The filter of one entry: its three bits set. -/
 def ofEntry (entry : ByteArray) : BitVec 2048 :=
+  -- `M_3:2048(x)` is `y = 0` except `B_(2047 - m(x, i))(y) = 1` for `i` in `{0, 2, 4}`.
+  --
+  -- `B_j` counts the bits big-endian from the first byte.
+  --
+  -- In a 2048-bit number written big-endian, that bit has the weight `2^m(x, i)`.
   (bits entry).foldr (fun k acc => BitVec.twoPow 2048 k ||| acc) 0
 
 /-- The entries of a log: its address, then each of its topics. -/
 def entries (log : Log) : List ByteArray :=
+  -- `{O_a} ∪ O_t`, as a list: a repeated topic sets the same bits again.
   ⟨log.address.toArray⟩ :: log.topics.map fun t => ⟨t.toArray⟩
 
 /-- The filter of some logs: the OR of the filters of all their entries. -/
 def ofLogs (logs : List Log) : BitVec 2048 :=
+  -- Each `M(O)` ORs `M_3:2048(x)` over `x` in `{O_a} ∪ O_t`.
+  --
+  -- The filter ORs `M(O)` over the logs.
+  --
+  -- OR is associative, so one fold over the entries of all the logs gives the same bits.
   ((logs.flatMap entries).map ofEntry).foldr (· ||| ·) 0
 
 /-- The 256 bytes of a filter, the most significant byte first. -/
 def toBytes (bloom : BitVec 2048) : Bytes256 :=
+  -- `B_j` reads the bytes big-endian, so the bit of weight `2^k` is bit `2047 - k`.
   ⟨(natToBytes 256 bloom.toNat).toArray, by simp [natToBytes_length]⟩
 
 /-- Whether a filter has every bit of an entry.
 
 A false answer shows that no log of the filter has the entry. -/
 def mayContain (bloom : BitVec 2048) (entry : ByteArray) : Bool :=
+  -- Each bit that `M_3:2048(x)` sets must be set in the filter.
   (bits entry).all bloom.getLsbD
 
 end Bloom
