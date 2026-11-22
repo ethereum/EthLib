@@ -16,7 +16,7 @@ The Reed-Solomon recovery routine for cell proofs.
 
 EIP-7594 adds it at the Fusaka fork.
 
-[EIP-7594, Specification][eip-7594] lets a node rebuild the data from at least half of it.
+[EIP-7594, Specification][eip-7594]: a node with at least 50% of the columns rebuilds the matrix.
 
 [eip-7594]: https://eips.ethereum.org/EIPS/eip-7594#specification
 -/
@@ -39,7 +39,7 @@ If every cell were missing, the polynomial would be `Z(x) = x^n - 1`, with `n = 
 Recovery needs at least half of the cells, so that case never arises. -/
 def constructVanishingPolynomial
     (missingCellIndices : Array CellIndex) : Except KzgError PolynomialCoeff := do
-  -- At least one cell must be present, and EthLib checks it here.
+  -- EthLib's own check: at least one cell must be present.
   --
   -- With every cell missing, the short polynomial has 129 coefficients, too many for the writes.
   if missingCellIndices.size ≥ CELLS_PER_EXT_BLOB then

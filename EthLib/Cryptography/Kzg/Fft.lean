@@ -142,7 +142,7 @@ def fftField
 
 Output `i` is `sum_j [w_i^j] vals[j]`, where `w_i` is entry `i` of the roots of unity.
 
-The direct method computes cell proofs one by one, with no FFT in `G1`.
+Computing each cell proof on its own needs no FFT in `G1`; the FK20 cell proofs use this one.
 
 The butterflies are those of the FFT over `Fr`.
 

@@ -156,6 +156,8 @@ def fromBytesBE (b : Vector UInt8 32) : Except BlsError Fr :=
 
 /-- Hash the data, and convert the digest to an element of `Fr`.
 
+The element is `SHA-256(data) mod r`, with the digest read as a big-endian integer.
+
 The output is not uniform over `Fr`.
 -/
 def hashToBlsField (data : ByteArray) : Fr :=

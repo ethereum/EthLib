@@ -169,7 +169,7 @@ def dividePolynomialcoeff (a b : PolynomialCoeff) :
     -- The leading coefficient of `b` has index `|b| - 1`.
     let bpos := b.size - 1
     let lead := b[bpos]'(by omega)
-    -- A zero leading coefficient of `b` is rejected, and EthLib checks it here.
+    -- EthLib's own check: a zero leading coefficient of `b` is rejected.
     --
     -- Every step would divide by zero, and division by zero in `Fr` returns 0: a silent failure.
     if lead.isZero then

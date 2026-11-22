@@ -21,7 +21,13 @@ Each operation that can reject its input returns `Except KzgError`.
 The scheme is PolyCommit_DL, §3.2 of Kate, Zaverucha and Goldberg, ASIACRYPT 2010:
 <https://www.iacr.org/archive/asiacrypt2010/6477178/6477178.pdf>
 
-[EIP-4844, Cryptographic helpers][eip-4844] uses its check of one opening and its batch check.
+[EIP-4844, Cryptographic helpers][eip-4844] uses two operations of this module.
+
+They are the check of one opening and the batch check of blob proofs.
+
+The proof function of the text that EIP-4844 points to returns no `y`.
+
+Here the proof function also returns `y = p(z)`.
 
 [eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#cryptographic-helpers
 -/
@@ -98,7 +104,9 @@ def computeChallenge (blob : Blob) (commitment : KZGCommitment) : Fr :=
   --
   -- Then come the blob and the commitment.
   let data := FIAT_SHAMIR_PROTOCOL_DOMAIN ++ degreePoly ++ ⟨blob.toArray⟩ ++ ⟨commitment.toArray⟩
-  -- The challenge is the SHA-256 of that input, read as a big-endian integer, mod `r`.
+  -- The challenge is the SHA-256 of that input, read as a big-endian integer.
+  --
+  -- It is reduced modulo the modulus of `Fr`.
   Fr.hashToBlsField data
 
 /-- The linear combination `sum_i scalars_i * points_i` of decoded points.
@@ -275,7 +283,9 @@ def computeVerifyKzgProofBatchChallenge (commitments : Array KZGCommitment) (zs 
         ++ ⟨(blsFieldToBytes z).toArray⟩
         ++ ⟨(blsFieldToBytes y).toArray⟩
         ++ ⟨proof.toArray⟩
-  -- The challenge is the SHA-256 of that input, read as a big-endian integer, mod `r`.
+  -- The challenge is the SHA-256 of that input, read as a big-endian integer.
+  --
+  -- It is reduced modulo the modulus of `Fr`.
   Fr.hashToBlsField data
 
 /-- Verify multiple KZG proofs efficiently using a random linear combination. -/

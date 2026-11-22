@@ -3,11 +3,13 @@ module
 /-!
 # `TrustedSetupData`
 
-The KZG trusted setup, as the compressed points the ceremony published.
+The KZG trusted setup, as compressed points.
 
-The points are the final output of the KZG ceremony, for 4096 field elements per blob.
+The points come from a JSON setup file for 4096 field elements per blob.
 
-SHA-256 of their setup file: `f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f`.
+That file takes them from the final output of the KZG ceremony.
+
+The file has SHA-256 `f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f`.
 
 The arrays below hold its three lists, point for point, as hex without the `0x` prefix.
 
@@ -18,6 +20,7 @@ The arrays below hold its three lists, point for point, as hex without the `0x` 
 The setup is trusted, not proved.
 
 KZG binding relies on the ceremony secret remaining unknown.
+
 Parsing and honest-proof correctness do not require this secrecy assumption.
 
 The decoder checks that each point is on its curve, not that it is in the subgroup.

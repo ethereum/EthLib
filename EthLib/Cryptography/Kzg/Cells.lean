@@ -23,9 +23,9 @@ Each cell carries its own KZG multi-evaluation proof.
 
 So a verifier can sample any set of cells without downloading the whole blob.
 
-[EIP-7594, Specification][eip-7594] authenticates each cell against its blob's KZG commitment.
+[EIP-7594, Networking][eip-7594] adds cell proofs: a commitment opens to a cell at its index.
 
-[eip-7594]: https://eips.ethereum.org/EIPS/eip-7594#specification
+[eip-7594]: https://eips.ethereum.org/EIPS/eip-7594#networking
 -/
 
 @[expose] public section
@@ -261,7 +261,9 @@ def computeVerifyCellKzgProofBatchChallenge
     let h := evals.foldl (init := h) fun h ce =>
       h ++ ⟨(blsFieldToBytes ce).toArray⟩
     h ++ ⟨proof.toArray⟩
-  -- The challenge is the SHA-256 of that input, read as a big-endian integer, mod `r`.
+  -- The challenge is the SHA-256 of that input, read as a big-endian integer.
+  --
+  -- It is reduced modulo the modulus of `Fr`.
   Fr.hashToBlsField h
 
 /-- Verify that a set of cells belong to their commitments, given distinct commitments.
@@ -295,11 +297,11 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
     let repeated := commitments.zipIdx.find? (fun (c, i) => commitments.idxOf? c ≠ some i)
     throw (.duplicateCommitments ((repeated.map (·.2)).getD 0))
 
-  -- The check is `pairing(LL, LR) = pairing(RL, [1])`, with `LL = sum_k r^k pi_k`.
+  -- The check is `e(LL, LR) = e(RL, [1])`, for the points `LL`, `LR` and `RL` defined below.
   --
-  -- `LR = [s^n]`, and `RL = RLC - RLI + RLP`, the three sums of steps 4.1 to 4.3.
+  -- Cell `k` has the shift `h_k` and the proof `pi_k`.
   --
-  -- Cell `k` has the shift `h_k` and the interpolation polynomial `I_k` of its values.
+  -- Its values have the interpolation polynomial `I_k`.
   --
   -- Commitment `i` has the weight `w_i`, the sum of `r^k` over its cells.
   --
@@ -309,28 +311,28 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
   let n := FIELD_ELEMENTS_PER_CELL
   let numCommitments := commitments.size
 
-  -- Step 1: a challenge `r` and its powers `r^0, ..., r^(m - 1)`, for `m` cells.
+  -- A challenge `r` and its powers `r^0, ..., r^(m - 1)`, for `m` cells.
   let r := computeVerifyCellKzgProofBatchChallenge
             commitments commitmentIndices cellIndices cosetsEvals proofs
   let rPowers := computePowers r numCells
 
-  -- Step 2: `LL = sum_k r^k pi_k`, for the proof `pi_k` of cell `k`.
+  -- `LL = sum_k r^k pi_k`.
   --
-  -- The proofs are decoded once, for this sum and for RLP.
+  -- The proofs are decoded once, for this sum and for `RLP` below.
   let proofsG1 ← proofs.mapM uncompressG1
   let ll : G1 ← g1LincombPoints proofsG1 rPowers
 
-  -- Step 3: `LR = [s^n]`.
+  -- `LR = [s^n]`, in `G2`.
   let lr : G2 := setup.g2Monomial[FIELD_ELEMENTS_PER_CELL]'(by decide)
 
-  -- Step 4.1a: `w_i`, the sum of all `r^k` for which cell `k` has commitment `i`.
+  -- The weight `w_i`, the sum of all `r^k` for which cell `k` has commitment `i`.
   --
   -- Each commitment index is checked above, so no `r^k` is lost.
   let weights : Array Fr := (commitmentIndices.zip rPowers).foldl
     (init := Array.replicate numCommitments Fr.zero)
     fun weights (i, rPower) => weights.modify i (· + rPower)
 
-  -- Step 4.1b: `RLC = sum_i w_i C_i`, for commitment `C_i`.
+  -- `RLC = sum_i w_i C_i`, for commitment `C_i`.
   let rlc : G1 ← g1LincombPoints (← commitments.mapM uncompressG1) weights
 
   -- The coset shift `h_k` of every cell `k`.
@@ -342,11 +344,11 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
     if h : n * cellIndex < domain.size then pure domain[n * cellIndex]
     else throw (.cellIndexOutOfBounds cellIndex)
 
-  -- Step 4.2: `RLI = [sum_k r^k I_k(s)]`.
+  -- `RLI = [sum_k r^k I_k(s)]`.
   --
   -- Each `I_k` comes from one inverse FFT over its coset, not from Lagrange interpolation.
   --
-  -- That is the inverse DFT method of the post on the universal verification equation.
+  -- The post on the universal verification equation suggests field IDFTs adjusted to cosets.
   let sumInterp : PolynomialCoeff ← (shifts.zip (cosetsEvals.zip rPowers)).foldlM
     (init := Array.replicate n Fr.zero)
     fun sumInterp (shift, evals, rPower) => do
@@ -355,15 +357,15 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
       pure (addPolynomialcoeff sumInterp scaled)
   let rli : G1 ← g1LincombPoints (setup.g1Monomial.toArray.extract 0 n) sumInterp
 
-  -- Step 4.3: `RLP = sum_k (r^k * h_k^n) pi_k`.
+  -- `RLP = sum_k (r^k h_k^n) pi_k`.
   let weightedRPowers : Array Fr :=
     Array.zipWith (fun rPower shift => rPower * shift ^ (Fr.ofNat n)) rPowers shifts
   let rlp : G1 ← g1LincombPoints proofsG1 weightedRPowers
 
-  -- Step 4.4: `RL = RLC - RLI + RLP`.
+  -- `RL = RLC - RLI + RLP`.
   let rl : G1 := Bls.G1.add (Bls.G1.add rlc (Bls.G1.neg rli)) rlp
 
-  -- Step 5: `pairing(LL, LR) = pairing(RL, [1])`, as `e(LL, LR) * e(RL, -[1]) = 1`.
+  -- The check `e(LL, LR) = e(RL, [1])`, as `e(LL, LR) * e(RL, -[1]) = 1`.
   return Bls.pairingCheck #[
     (ll, lr),
     (rl, Bls.G2.neg (setup.g2Monomial[0]'(by decide)))
