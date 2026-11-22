@@ -139,8 +139,7 @@ def test_later_schedule_wins() -> None:
     blocks.validate_header(FORK, FORK, parent, header, [(0, 1, 2, 3338477)] + own)
     with raises(
         blocks.BlockError,
-        "header invalid: EthLib.Execution.Blocks.BlockError.wrongExcessBlobGas "
-        "(expected := 184942592) (actual := 182321152)",
+        "block invalid: wrongExcessBlobGas (expected := 184942592) (actual := 182321152)",
     ) as error:
         blocks.validate_header(FORK, FORK, parent, header, own + [(0, 1, 2, 3338477)])
     assert error.value.code == WRONG_EXCESS_BLOB_GAS
