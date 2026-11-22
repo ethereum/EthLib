@@ -36,7 +36,6 @@ The type universe covers unsigned integers, booleans, byte sequences, bitfields,
 Legacy positional unions, including their nullable first option, are not implemented.
 
 The reference is the Python implementation in [`ethereum/ssz-specs`](https://github.com/ethereum/ssz-specs), which serves as the official specification, together with [EIP-7495](https://eips.ethereum.org/EIPS/eip-7495), [EIP-7916](https://eips.ethereum.org/EIPS/eip-7916), and [EIP-8016](https://eips.ethereum.org/EIPS/eip-8016).
-The prose it replaced is the [last SSZ text in consensus-specs](https://github.com/ethereum/consensus-specs/blob/802485ec74a6986542bd53bf153189623aab440c/ssz/simple-serialize.md).
 
 A type is described by a *declaration*, and the data it holds by a *value*; the two are separate pieces of data.
 A declaration that comes from outside must be checked with `Desc.wellFormed` before it is used, because the low-level operations do not repeat that check at every recursive step.
