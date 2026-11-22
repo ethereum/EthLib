@@ -7,19 +7,13 @@ public import EthLib.Networking.Encoding.Uvarint
 
 mplex carries many streams over one connection, one frame at a time.
 
-A frame is an unsigned varint header, an unsigned varint length, then that many bytes of data.
-
-The header holds the stream ID above three flag bits.
-
 The source asks a sender to write at most 1 MiB in a message, and nothing in a close or a reset.
 
 The decoder refuses a frame that breaks either rule, and applies the 1 MiB limit to every frame.
 
-That bounds the memory a peer can make it use, a stream name included.
-
 The source marks mplex as deprecated and recommends QUIC or yamux instead.
 
-The source is [mplex, "Message format" and "Protocol"][mplex].
+The source is the sections Message format and Protocol of [mplex][mplex].
 
 [mplex]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/mplex/README.md#message-format
 -/
@@ -35,7 +29,7 @@ open EthLib.Networking.Encoding
 The networking specification of the consensus layer gives it, since the mplex source does not. -/
 def protocolId : ByteArray := "/mplex/6.7.0".toUTF8
 
-/-- What a frame does to its stream, "Flag Values". -/
+/-- What a frame does to its stream, from the section Flag Values. -/
 inductive Flag where
   /-- Open a stream; the data is its name. -/
   | newStream
@@ -55,6 +49,9 @@ inductive Flag where
 
 /-- The value of a flag, from 0 to 6. -/
 def Flag.toNat : Flag → Nat
+  -- Flag Values: NewStream 0, MessageReceiver 1, MessageInitiator 2, CloseReceiver 3.
+  --
+  -- Then CloseInitiator 4, ResetReceiver 5 and ResetInitiator 6.
   | .newStream => 0
   | .messageReceiver => 1
   | .messageInitiator => 2
@@ -72,20 +69,26 @@ def Flag.ofNat? : Nat → Option Flag
   | 4 => some .closeInitiator
   | 5 => some .resetReceiver
   | 6 => some .resetInitiator
+  -- Not in the source: 7 fits three flag bits, but Flag Values gives it no meaning.
   | _ => none
 
 /-- Whether a frame of this flag closes or resets its stream, so the source asks for no data. -/
 def Flag.ends : Flag → Bool
+  -- Closing a stream and Resetting a stream: flags 3 to 6 have a zero length body.
   | .closeReceiver | .closeInitiator | .resetReceiver | .resetInitiator => true
   | _ => false
 
 /-- The first stream ID that does not fit a header.
 
 A header holds 63 bits, and the flag takes three of them. -/
-def streamIdBound : Nat := 2 ^ 60
+def streamIdBound : Nat :=
+  -- Message format: a header has at most 9 bytes, so the maximum stream ID is `2^60 - 1`.
+  2 ^ 60
 
-/-- The most data in one message: 1 MiB, from "Writing to a stream". -/
-def maxData : Nat := 1048576
+/-- The most data in one message: 1 MiB, from the section Writing to a stream. -/
+def maxData : Nat :=
+  -- Up to 1 MiB per message, that is `2^20` bytes.
+  1048576
 
 /-- One frame: its stream, its flag and its data. -/
 structure Frame where
@@ -133,22 +136,40 @@ def MplexError.code : MplexError → UInt32
   | .dataOnEnd _ => 5
   | .truncated _ _ => 6
 
-/-- The bytes of a frame: header, length, then data.
+/-- The bytes of a frame.
 
 The frame must be valid; the bytes of any other frame are not specified. -/
 def encode (frame : Frame) : List UInt8 :=
+  -- Message format: a header uvarint, a length uvarint, then length bytes of data.
+  --
+  -- The lower three bits of the header are the flag, and the rest the stream ID: `8 * id + flag`.
   Uvarint.encode (8 * frame.streamId + frame.flag.toNat) ++ Uvarint.encode frame.data.size ++
     frame.data.data.toList
 
 /-- The frame at the start of the input, and the bytes after it. -/
 def decode (bytes : List UInt8) : Except MplexError (Frame × List UInt8) := do
+  -- Message format: the header is an unsigned varint.
   let (header, rest) ← (Uvarint.decode bytes).mapError .header
+  -- `flag = header & 0x07`.
+  --
+  -- Not in the source: a value outside Flag Values is refused.
   let some flag := Flag.ofNat? (header % 8) | throw .unknownFlag
+  -- The data segment is length prefixed by another unsigned varint.
   let (length, rest) ← (Uvarint.decode rest).mapError .length
+  -- Writing to a stream: up to 1 MiB per message.
+  --
+  -- Not in the source: the decoder applies the limit to every flag, a stream name included.
+  --
+  -- It checks the length before it reads the data, to bound the memory a peer can make it use.
   if maxData < length then throw (.tooLong length)
+  -- Closing a stream and Resetting a stream: a close or a reset has a zero length body.
+  --
+  -- The source asks this of the sender; the decoder also refuses a frame that breaks it.
   if flag.ends ∧ length ≠ 0 then throw (.dataOnEnd length)
+  -- The data: `length` bytes.
   let body := rest.take length
   if body.length < length then throw (.truncated length body.length)
+  -- `id = header >> 3`.
   return (⟨header / 8, flag, ⟨body.toArray⟩⟩, rest.drop length)
 
 end EthLib.Networking.Libp2p.Mplex
