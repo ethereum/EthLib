@@ -123,6 +123,7 @@ instance {preset : Preset} : SszType (DataColumnsByRootIdentifier preset) :=
 
 /-- The generalized index of the list of blob commitments, in the tree of a block body. -/
 def blobKzgCommitmentsGindex (preset : Preset) (fork : Fork) : Except Err Nat :=
+  -- The path through the body: its field of blob commitments.
   SszType.getGeneralizedIndex (BeaconBlockBody preset fork)
     [.position ((BeaconBlockBody.names fork).idxOf "blob_kzg_commitments")]
 
@@ -135,14 +136,14 @@ theorem not_glamsterdam_le {fork : Fork} (beforeGloas : fork < .glamsterdam) :
     ¬.glamsterdam ≤ fork :=
   fun after => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le beforeGloas after)
 
-/-- The commitments that the cells of a sidecar answer to.
-
-Before Gloas the sidecar carries them; from Gloas they come from the bid of the block. -/
+/-- The commitments that the cells of a sidecar answer to. -/
 def DataColumnSidecar.commitments {preset : Preset} {fork : Fork}
     (sidecar : DataColumnSidecar preset fork)
     (bidCommitments : Since .glamsterdam fork (BlobKZGCommitments preset fork)) :
     BlobKZGCommitments preset fork :=
+  -- Before Gloas, those that the sidecar carries.
   if beforeGloas : fork < .glamsterdam then sidecar.kzgCommitments beforeGloas
+  -- From Gloas, those of the bid of the block, as EIP-7732 specifies.
   else bidCommitments (not_lt_glamsterdam beforeGloas)
 
 /-- From Gloas, the commitments in the bid of a block.
@@ -150,33 +151,39 @@ def DataColumnSidecar.commitments {preset : Preset} {fork : Fork}
 The sidecars that name the block by its root answer to them. -/
 def BeaconBlock.bidCommitments {preset : Preset} {fork : Fork} (block : BeaconBlock preset fork) :
     Since .glamsterdam fork (BlobKZGCommitments preset fork) :=
+  -- The commitments of the signed bid in the body.
   fun gloas => (block.body.signedExecutionPayloadBid gloas).message.blobKzgCommitments
 
-/-- Whether a sidecar has a valid shape.
-
-Its index names a column, and it has at least one commitment, one cell and one proof each.
-
-Before Gloas the count stays within the blob limit at the epoch of the slot of its header. -/
+/-- Whether a sidecar has a valid shape. -/
 def verifyDataColumnSidecar (preset : Preset) (config : Config) {fork : Fork}
     (sidecar : DataColumnSidecar preset fork)
     (bidCommitments : Since .glamsterdam fork (BlobKZGCommitments preset fork)) : Bool :=
+  -- Let `n` be the number of commitments that the cells answer to.
   let count := (sidecar.commitments bidCommitments).data.size
+  -- Before Gloas, `n` is at most the blob limit at the epoch of the slot of the header.
   let withinLimit := if beforeGloas : fork < .glamsterdam then
     let epoch := computeEpochAtSlot preset (sidecar.signedBlockHeader beforeGloas).message.slot
     count ≤ (config.getBlobParameters epoch).maxBlobsPerBlock.toNat
+  -- From Gloas there is no such bound.
   else true
+  -- The index is below `NUMBER_OF_COLUMNS`, `n` is not 0, and the column has `n` cells.
+  --
+  -- The column also has as many proofs as cells.
+  --
+  -- From Gloas the rule asks for a nonempty column; with `n` cells it is the same as `n` not 0.
   sidecar.index < preset.NUMBER_OF_COLUMNS && count != 0 && withinLimit &&
     sidecar.column.data.size == count && sidecar.column.data.size == sidecar.kzgProofs.data.size
 
 /-- Whether the cells of a sidecar match its commitments, by their proofs.
-
-Each cell sits at the index of the column in the extended blob of its row.
 
 The batch check fails with an error on inputs it cannot read, such as unequal counts. -/
 def verifyDataColumnSidecarKzgProofs {preset : Preset} {fork : Fork} (setup : TrustedSetup)
     (sidecar : DataColumnSidecar preset fork)
     (bidCommitments : Since .glamsterdam fork (BlobKZGCommitments preset fork)) :
     Except KzgError Bool :=
+  -- Cell `j` of the column answers to commitment `j`, with proof `j`.
+  --
+  -- Every cell sits at the index of the column in the extended blob of its row.
   verifyCellKzgProofBatch setup (sidecar.commitments bidCommitments).data
     (Array.replicate sidecar.column.data.size sidecar.index.toNat) sidecar.column.data
     sidecar.kzgProofs.data
@@ -185,12 +192,19 @@ def verifyDataColumnSidecarKzgProofs {preset : Preset} {fork : Fork} (setup : Tr
 
 It is the size of a sidecar with a cell and a proof for each blob of the largest blob limit.
 
-Only the cells and proofs vary in size, so it adds their bytes to the fewest bytes of a sidecar.
-
 Heze keeps the sidecar of Gloas, so the size reads the layout of Gloas.
 
 It is the largest 64-bit integer when the size does not fit. -/
 def computeMaxDataColumnSidecarSize (preset : Preset) (config : Config) : UInt64 :=
+  -- Let `m` be the largest blob limit, among that of Electra and those of the schedule.
+  --
+  -- The size is that of a sidecar with `m` cells and `m` proofs.
+  --
+  -- Only the cells and the proofs vary in size, so no sidecar is serialized.
+  --
+  -- The size adds their bytes to the fewest bytes of a sidecar, which gives the same number.
+  --
+  -- A size of `2^64` or more becomes `2^64 - 1`.
   UInt64.ofNat (min ((SszType.desc (DataColumnSidecar preset .glamsterdam)).minSize +
     config.largestBlobLimit.toNat * (Constants.BYTES_PER_CELL + Constants.BYTES_PER_PROOF))
     UINT64_MAX.toNat)
@@ -202,73 +216,80 @@ def verifyKzgCommitmentsInclusionProof (preset : Preset) {fork : Fork}
     (commitments : BlobKZGCommitments preset fork)
     (branch : Vector Bytes32 preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat)
     (bodyRoot : Root) : Bool :=
+  -- The leaf is the root of the list, at the generalized index of the list in the body.
   match blobKzgCommitmentsGindex preset fork, SszType.hashTreeRoot commitments with
   | .ok gindex, .ok leaf =>
+    -- Its position is that index among the nodes of its level.
     match getSubtreeIndex gindex with
     | .ok index =>
+      -- The branch climbs `KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH` levels from the leaf.
+      --
+      -- It ends at the body root.
       isValidMerkleBranch leaf branch.toList preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat
         index bodyRoot
+    -- An index that names no node fails the check.
     | .error _ => false
+  -- A generalized index or a root that cannot be computed fails the check.
   | _, _ => false
 
-/-- Before Gloas: whether the branch of a sidecar climbs from its commitments to its body root.
-
-The branch has the depth of the inclusion proof. -/
+/-- Before Gloas: whether the branch of a sidecar climbs from its commitments to its body root. -/
 def verifyDataColumnSidecarInclusionProof (preset : Preset) {fork : Fork}
     (beforeGloas : fork < .glamsterdam) (sidecar : DataColumnSidecar preset fork) : Bool :=
+  -- Its commitments, its branch, and the body root of its header.
   verifyKzgCommitmentsInclusionProof preset (sidecar.kzgCommitments beforeGloas)
     (sidecar.kzgCommitmentsInclusionProof beforeGloas)
     (sidecar.signedBlockHeader beforeGloas).message.bodyRoot
 
 /-- The largest number of column sidecars in one request: every column of the most blocks. -/
 def computeMaxRequestDataColumnSidecars (preset : Preset) (config : Config) : UInt64 :=
+  -- `MAX_REQUEST_BLOCKS_DENEB * NUMBER_OF_COLUMNS`.
   config.MAX_REQUEST_BLOCKS_DENEB * preset.NUMBER_OF_COLUMNS
 
 /-- The entries of one row: each cell with its proof, in the order of the columns.
 
-Cell `i` and proof `i` form the entry of column `i`.
-
 The row stops at the shorter of the two arrays; an extended blob gives 128 of each. -/
 def matrixRow (row : RowIndex) (cells : Array Cell) (proofs : Array KZGProof) :
     List MatrixEntry :=
+  -- Cell `i` and proof `i` form the entry of column `i` in the row.
   (cells.toList.zip proofs.toList).zipIdx.map fun ((cell, proof), column) =>
     ⟨cell, proof, column.toUInt64, row⟩
 
 /-- The row of one blob: the cells and proofs of its extended blob. -/
 def computeMatrixRow (setup : TrustedSetup) (blob : Blob) (row : Nat) :
     Except KzgError (List MatrixEntry) := do
+  -- The cells and the proofs of the extended blob.
   let (cells, proofs) ← computeCellsAndKzgProofs setup blob
+  -- Cell `i` and proof `i` form the entry of column `i` in the row.
   return matrixRow row.toUInt64 cells proofs
 
 /-- The matrix of a list of blobs: the cells and proofs of each extended blob, row after row. -/
 def computeMatrix (setup : TrustedSetup) (blobs : List Blob) :
     Except KzgError (List MatrixEntry) := do
+  -- Blob `r` gives row `r`.
   let rows ← blobs.zipIdx.mapM fun (blob, row) => computeMatrixRow setup blob row
+  -- The rows, one after another.
   return rows.flatten
 
 /-- The full matrix of `count` rows, recovered from some of its entries.
 
-Each row is recovered from the entries that name it, in their order.
-
-The recovery fails unless they name at least half of the columns, each column once. -/
+The recovery of a row fails unless its entries name at least half of the columns, each once. -/
 def recoverMatrix (setup : TrustedSetup) (partialMatrix : List MatrixEntry) (count : UInt64) :
     Except KzgError (List MatrixEntry) := do
+  -- Each row `r < count` in turn.
   let rows ← (List.range count.toNat).mapM fun row => do
+    -- The entries whose row is `r`, in their order.
     let entries := partialMatrix.filter (·.rowIndex = row.toUInt64)
+    -- The cells and the proofs of the whole extended blob are recovered.
+    --
+    -- They come from the column index and the cell of each of those entries.
     let (cells, proofs) ← recoverCellsAndKzgProofs setup
       (entries.map (·.columnIndex.toNat)).toArray (entries.map (·.cell)).toArray
+    -- Cell `i` and proof `i` form the entry of column `i` in row `r`.
     return matrixRow row.toUInt64 cells proofs
+  -- The rows, one after another.
   return rows.flatten
 
-/-- The column sidecars of a block, from the cells and the proofs of each of its blobs.
-
-Sidecar `i` takes cell `i` and proof `i` of every row, in the order of the blobs.
-
-Before Gloas each sidecar carries the signed header, the commitments and their branch.
-
-Then the rows must match the commitments, one row each.
-
-From Gloas each sidecar carries the slot and the root of the block. -/
+/-- The column sidecars of a block, from the cells and the proofs of each of its blobs. -/
 def getDataColumnSidecars (preset : Preset) {fork : Fork}
     (signedBlockHeader : Until .glamsterdam fork SignedBeaconBlockHeader)
     (kzgCommitments : Until .glamsterdam fork (BlobKZGCommitments preset fork))
@@ -277,14 +298,20 @@ def getDataColumnSidecars (preset : Preset) {fork : Fork}
     (beaconBlockRoot : Since .glamsterdam fork Root) (slot : Since .glamsterdam fork Slot)
     (cellsAndKzgProofs : List (Array Cell × Array KZGProof)) :
     Except Err (List (DataColumnSidecar preset fork)) := do
+  -- Before Gloas, a count of rows other than the count of commitments is an error.
   if beforeGloas : fork < .glamsterdam then
     let count := (kzgCommitments beforeGloas).data.size
     if cellsAndKzgProofs.length ≠ count then throw (.count count cellsAndKzgProofs.length)
+  -- Sidecar `i` serves column `i`, for each `i < NUMBER_OF_COLUMNS`.
+  --
+  -- With no rows, each of these sidecars has an empty column.
   (List.range preset.NUMBER_OF_COLUMNS.toNat).mapM fun column => do
+    -- Cell `i` of every row, in the order of the blobs; a row without it is an error.
     let cells ← cellsAndKzgProofs.mapM fun (cells, _) =>
       match cells[column]? with
       | some cell => pure cell
       | none => throw (.count preset.NUMBER_OF_COLUMNS.toNat cells.size)
+    -- Proof `i` of every row, in the order of the blobs; a row without it is an error.
     let proofs ← cellsAndKzgProofs.mapM fun (_, proofs) =>
       match proofs[column]? with
       | some proof => pure proof
@@ -293,30 +320,35 @@ def getDataColumnSidecars (preset : Preset) {fork : Fork}
     let limit := preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
     if cellsBound : fork < .glamsterdam → cells.toArray.size ≤ limit then
       if proofsBound : fork < .glamsterdam → proofs.toArray.size ≤ limit then
+        -- Before Gloas the sidecar carries the signed header, the commitments and their branch.
+        --
+        -- From Gloas it carries the slot and the root of the block, as EIP-7732 specifies.
         return ⟨column.toUInt64, ⟨cells.toArray, cellsBound⟩, kzgCommitments,
           ⟨proofs.toArray, proofsBound⟩, signedBlockHeader, kzgCommitmentsInclusionProof,
           slot, beaconBlockRoot⟩
+    -- Before Gloas, more than `MAX_BLOB_COMMITMENTS_PER_BLOCK` cells or proofs is an error.
     throw (.count limit (max cells.length proofs.length))
 
 /-- The branch from the list of blob commitments of a body up to its root, nearest node first. -/
 def blobKzgCommitmentsInclusionProof {preset : Preset} {fork : Fork}
     (body : BeaconBlockBody preset fork) :
     Except Err (Vector Bytes32 preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat) := do
+  -- The generalized index of the list of blob commitments.
   let gindex ← blobKzgCommitmentsGindex preset fork
+  -- The sibling of each node on the path from that index up to the body root, bottom up.
   let nodes ← buildProof (SszType.desc (BeaconBlockBody preset fork)) (SszType.toValue body) gindex
+  -- Each sibling is one 32-byte chunk.
   let nodes ← nodes.mapM toChunk
+  -- Any count of siblings other than `KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH` is an error.
   Base.exactArray preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat nodes.toArray
     (.count preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat)
 
-/-- The column sidecars of a signed block from Deneb's body on, with the cells of its blobs.
-
-Before Gloas the header, the commitments and their branch come from the block.
-
-From Gloas the root and the slot of the block name it. -/
+/-- The column sidecars of a signed block from Deneb's body on, with the cells of its blobs. -/
 def getDataColumnSidecarsFromBlock {preset : Preset} {fork : Fork} (deneb : .dencun ≤ fork)
     (signed : SignedBeaconBlock preset fork)
     (cellsAndKzgProofs : List (Array Cell × Array KZGProof)) :
     Except Err (List (DataColumnSidecar preset fork)) := do
+  -- Before Gloas, the signed header of the block, the commitments of its body and their branch.
   if beforeGloas : fork < .glamsterdam then
     let header ← signed.signedHeader
     let branch ← blobKzgCommitmentsInclusionProof signed.message.body
@@ -324,6 +356,7 @@ def getDataColumnSidecarsFromBlock {preset : Preset} {fork : Fork} (deneb : .den
     getDataColumnSidecars preset (fun _ => header)
       (fun _ => signed.message.body.blobKzgCommitments ⟨deneb, beforeGloas⟩) (fun _ => branch)
       (absurd · gloas) (absurd · gloas) cellsAndKzgProofs
+  -- From Gloas, the root of the block and its slot.
   else
     let root ← SszType.hashTreeRoot signed.message
     getDataColumnSidecars preset (absurd · beforeGloas) (absurd · beforeGloas)
@@ -334,6 +367,9 @@ def getDataColumnSidecarsFromColumnSidecar {preset : Preset} {fork : Fork}
     (sidecar : DataColumnSidecar preset fork)
     (cellsAndKzgProofs : List (Array Cell × Array KZGProof)) :
     Except Err (List (DataColumnSidecar preset fork)) :=
+  -- Before Gloas, the signed header, the commitments and the branch that the sidecar carries.
+  --
+  -- From Gloas, the root and the slot of the block that it carries.
   getDataColumnSidecars preset sidecar.signedBlockHeader sidecar.kzgCommitments
     sidecar.kzgCommitmentsInclusionProof sidecar.beaconBlockRoot sidecar.slot cellsAndKzgProofs
 
@@ -394,6 +430,7 @@ instance {preset : Preset} {fork : Fork} : SszType (PartialDataColumnSidecar pre
 /-- The headers that a partial sidecar carries: at most one before Gloas, and none from Gloas. -/
 def headers {preset : Preset} {fork : Fork} (sidecar : PartialDataColumnSidecar preset fork) :
     Array (PartialDataColumnHeader preset fork) :=
+  -- Before Gloas, the list of at most one header, and from Gloas none.
   if before : fork < .glamsterdam then (sidecar.header before).data else #[]
 
 end PartialDataColumnSidecar
@@ -433,6 +470,7 @@ instance {fork : Fork} : SszType (PartialDataColumnGroupID fork) :=
 
 /-- The gossip group ID of a group: the version byte 0, then the SSZ bytes of the group. -/
 def toGroupId {fork : Fork} (group : PartialDataColumnGroupID fork) : Except Err ByteArray := do
+  -- The version byte 0, then the SSZ bytes of the group.
   return ByteArray.mk #[0] ++ (← SszType.serialize group)
 
 /-- The group that a gossip group ID names.
@@ -441,8 +479,11 @@ An ID whose first byte is not the version 0 names no group, since an unknown ver
 
 Nor does an ID whose remaining bytes are not the SSZ bytes of a group. -/
 def ofGroupId (fork : Fork) (bytes : ByteArray) : Option (PartialDataColumnGroupID fork) :=
+  -- The first byte is the version 0.
   if bytes.data[0]? = some 0 then
+    -- The group is the SSZ decoding of the remaining bytes, if they decode.
     (SszType.deserialize (PartialDataColumnGroupID fork) (bytes.extract 1 bytes.size)).toOption
+  -- An empty ID or another version names no group.
   else none
 
 end PartialDataColumnGroupID
@@ -450,27 +491,32 @@ end PartialDataColumnGroupID
 /-- Whether the branch of a header climbs from its commitments to its body root. -/
 def verifyPartialDataColumnHeaderInclusionProof (preset : Preset) {fork : Fork}
     (header : PartialDataColumnHeader preset fork) : Bool :=
+  -- The commitments of the header, its branch, and the body root of its signed header.
   verifyKzgCommitmentsInclusionProof preset header.kzgCommitments
     header.kzgCommitmentsInclusionProof header.signedBlockHeader.message.bodyRoot
 
 /-- The indices of the blobs whose cells a partial sidecar carries, in order. -/
 def PartialDataColumnSidecar.blobIndices {preset : Preset} {fork : Fork}
     (sidecar : PartialDataColumnSidecar preset fork) : Array Nat :=
+  -- The positions `i` whose bit is set, in increasing order.
   (sidecar.cellsPresentBitmap.bits.zipIdx.filter (·.1)).map (·.2)
 
 /-- Whether the cells of a partial sidecar match the commitments of their blobs, by their proofs.
-
-Each cell sits at the index of the column in the extended blob of its row.
 
 A set bit with no commitment fails with an error, and so do unequal counts. -/
 def verifyPartialDataColumnSidecarKzgProofs {preset : Preset} {fork : Fork}
     (setup : TrustedSetup) (sidecar : PartialDataColumnSidecar preset fork)
     (allCommitments : BlobKZGCommitments preset fork) (columnIndex : ColumnIndex) :
     Except KzgError Bool := do
+  -- The indices of the blobs whose bit is set, in increasing order.
   let indices := sidecar.blobIndices
+  -- The commitment of each of those blobs.
   let commitments ← indices.mapM fun index =>
     if inside : index < allCommitments.data.size then pure allCommitments.data[index]
     else throw (.commitmentIndexOutOfBounds index allCommitments.data.size)
+  -- The `j`-th cell present answers to the commitment of the `j`-th set bit, with proof `j`.
+  --
+  -- Every cell sits at the index of the column in the extended blob of its row.
   verifyCellKzgProofBatch setup commitments (Array.replicate indices.size columnIndex.toNat)
     sidecar.partialColumn.data sidecar.kzgProofs.data
 

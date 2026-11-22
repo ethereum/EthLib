@@ -56,14 +56,16 @@ def CustodyError.code : CustodyError → UInt32
 
 /-- The integer of the first eight bytes, least significant first. -/
 def firstUInt64 (bytes : Bytes32) : UInt64 :=
+  -- The sum of `b_i * 2^(8 * i)` over the bytes `b_i` with `i < 8`.
   (List.finRange 8).foldr (fun i acc => acc <<< 8 ||| (bytes[i.val]'(by omega)).toUInt64) 0
 
-/-- The group that one ID hashes to.
-
-It hashes the 32 bytes of the ID, least significant first, with SHA-256.
-
-Its first eight bytes, least significant first, give an integer modulo the number of groups. -/
+/-- The group that one ID hashes to. -/
 def groupOfId (config : Config) (id : NodeID) : CustodyIndex :=
+  -- Let `h` be the SHA-256 hash of the 32 bytes of the ID, least significant first.
+  --
+  -- Let `x` be the integer of the first eight bytes of `h`, least significant first.
+  --
+  -- The group is `x mod NUMBER_OF_CUSTODY_GROUPS`.
   firstUInt64 (Cryptography.Hash.Sha256.hash32 ⟨(U256.toBeBytes id).toArray.reverse⟩) %
     config.NUMBER_OF_CUSTODY_GROUPS
 
@@ -73,10 +75,15 @@ Each new ID takes one step of `fuel`, and the ID after `2^256 - 1` is `0`. -/
 def collectGroups (config : Config) (count : Nat) :
     Nat → NodeID → List CustodyIndex → Except CustodyError (List CustodyIndex)
   | fuel, id, groups =>
+    -- The search stops once `count` groups are found.
     if count ≤ groups.length then .ok groups
     else match fuel with
+      -- With no step left, the search fails.
       | 0 => .error (.outOfFuel groups.length count)
       | fuel + 1 =>
+        -- The group of the ID joins the list at its end, unless it is there already.
+        --
+        -- The search goes on with the next ID, `(id + 1) mod 2^256`.
         let group := groupOfId config id
         collectGroups config count fuel (id + 1)
           (if group ∈ groups then groups else groups ++ [group])
@@ -88,18 +95,25 @@ No bound on the search is proved: it ends only if the hashes hit `count` distinc
 So it takes at most `fuel` steps, and fails when they run out. -/
 def getCustodyGroups (config : Config) (nodeId : NodeID) (count : UInt64) (fuel : Nat) :
     Except CustodyError (List CustodyIndex) :=
+  -- A count above `NUMBER_OF_CUSTODY_GROUPS` is an error.
   if config.NUMBER_OF_CUSTODY_GROUPS < count then .error (.tooManyGroups count)
+  -- A count of `NUMBER_OF_CUSTODY_GROUPS` gives every group, with no hash.
   else if count = config.NUMBER_OF_CUSTODY_GROUPS then
     .ok ((List.range config.NUMBER_OF_CUSTODY_GROUPS.toNat).map UInt64.ofNat)
+  -- Else the groups that the search from the node ID finds, in increasing order.
   else (collectGroups config count.toNat fuel nodeId []).map List.mergeSort
 
 /-- The columns of one custody group: those congruent to it modulo the number of groups. -/
 def computeColumnsForCustodyGroup (config : Config) (preset : Preset) (group : CustodyIndex) :
     Except CustodyError (List ColumnIndex) :=
+  -- Let `G` be `NUMBER_OF_CUSTODY_GROUPS`, and `g` the group.
   let groups := config.NUMBER_OF_CUSTODY_GROUPS
+  -- The group is below `G`.
   if group < groups then
+    -- The columns `G * i + g`, for `i < floor(NUMBER_OF_COLUMNS / G)`, in increasing order.
     .ok ((List.range (preset.NUMBER_OF_COLUMNS / groups).toNat).map
       fun i => groups * UInt64.ofNat i + group)
+  -- A group of `G` or more is an error.
   else .error (.groupOutOfRange group)
 
 end EthLib.Consensus.DataAvailability
