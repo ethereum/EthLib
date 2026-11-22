@@ -84,6 +84,9 @@ It then adds the slot to the accessed storage keys.
 Before Berlin, no access is cold, and the frame stays as it is. -/
 def accessStorageKey (evm : Evm fork Meter) (address : Address) (key : Bytes32) :
     Bool × Evm fork Meter :=
+  -- EIP-2929: if the pair "is not yet in `accessed_storage_keys`", the access is cold.
+  --
+  -- The pair is then added "to `accessed_storage_keys`".
   if fork ≥ .berlin then
     let accessed := evm.substate.accessedStorageKeys
     let keys := accessed.getD address ∅
@@ -97,12 +100,14 @@ def accessStorageKey (evm : Evm fork Meter) (address : Address) (key : Bytes32) 
 
 It is the price of SLOAD up to Berlin, and of a warm access from Berlin. -/
 def sstoreReadCost (fork : Fork) : Nat :=
+  -- EIP-2200's `SLOAD_GAS`, which EIP-2929 sets to `WARM_STORAGE_READ_COST`.
   if fork ≥ .berlin then WARM_ACCESS else sloadCost fork false
 
 /-- The price of SSTORE to change a slot whose original value is not zero.
 
 From Berlin, it leaves out the price of a cold access, which SSTORE adds on its own. -/
 def sstoreResetCost (fork : Fork) : Nat :=
+  -- EIP-2200's `SSTORE_RESET_GAS`, which EIP-2929 sets to `5000 - COLD_SLOAD_COST`.
   if fork ≥ .berlin then COLD_STORAGE_WRITE - COLD_STORAGE_ACCESS else COLD_STORAGE_WRITE
 
 /-- The price of SSTORE in execution gas, from the original, current and new values of the slot.
@@ -110,34 +115,58 @@ def sstoreResetCost (fork : Fork) : Nat :=
 The flag says whether the access to the slot is cold. -/
 def sstoreCost (fork : Fork) (original current new : U256) (cold : Bool) : Nat :=
   if fork ≥ .glamsterdam then
+    -- EIP-8038: the access, cold or warm.
+    --
+    -- Then "additionally charge `STORAGE_WRITE`" when the write moves the slot from its original.
     (if cold then COLD_STORAGE_ACCESS else WARM_ACCESS) +
       if original = current ∧ current ≠ new then STORAGE_WRITE else 0
   else if fork ≥ .istanbul then
+    -- EIP-2929, from Berlin: a cold pair costs "an additional `COLD_SLOAD_COST` gas".
     let surcharge := if cold then COLD_STORAGE_ACCESS else 0
     surcharge +
+      -- EIP-2200: "If *original value* equals *current value*" and current differs from new:
       if original = current ∧ current ≠ new then
+        -- "If *original value* is 0, `SSTORE_SET_GAS` is deducted", else `SSTORE_RESET_GAS`.
         if original = 0 then STORAGE_SET else sstoreResetCost fork
+      -- The no-op and the dirty slot, which EIP-2200 tests first and last.
+      --
+      -- Both: "`SLOAD_GAS` is deducted".
       else sstoreReadCost fork
+  -- Before Istanbul, the rule before EIP-2200: the set price when a zero slot becomes nonzero.
+  --
+  -- Otherwise the reset price.
   else if new ≠ 0 ∧ current = 0 then STORAGE_SET
   else COLD_STORAGE_WRITE
 
 /-- The change of the refund counter by SSTORE, from the original, current and new values. -/
 def sstoreRefund (fork : Fork) (original current new : U256) : Int :=
+  -- EIP-2200's `SSTORE_CLEARS_SCHEDULE`, which EIP-3529 and EIP-8038 change.
   let clear : Int := (gasSchedule fork).REFUND_STORAGE_CLEAR
   if fork ≥ .istanbul then
+    -- "If *current value* equals *new value* (this is a no-op)": no refund.
     if current = new then 0 else
+      -- "If *new value* is 0 ..., add `SSTORE_CLEARS_SCHEDULE` gas to refund counter".
+      --
+      -- For a clean slot, `original = current`, so this covers both cases of the EIP.
       (if original ≠ 0 ∧ current ≠ 0 ∧ new = 0 then clear else 0) -
+      -- "If *current value* is 0 ..., remove `SSTORE_CLEARS_SCHEDULE` gas from refund counter".
       (if original ≠ 0 ∧ current = 0 then clear else 0) +
+      -- "If *original value* equals *new value* (this storage slot is reset)".
       (if original = new then
+        -- From Glamsterdam, EIP-8038 rule 3: "`STORAGE_WRITE` is refunded".
         if fork ≥ .glamsterdam then (STORAGE_WRITE : Int)
+        -- "If *original value* is 0, add `SSTORE_SET_GAS - SLOAD_GAS` to refund counter".
         else if original = 0 then (STORAGE_SET : Int) - sstoreReadCost fork
+        -- "Otherwise, add `SSTORE_RESET_GAS - SLOAD_GAS` gas to refund counter".
         else (sstoreResetCost fork : Int) - sstoreReadCost fork
       else 0)
+  -- Before Istanbul, the rule before EIP-2200: the clear refund when a nonzero slot becomes zero.
   else if new = 0 ∧ current ≠ 0 then clear
   else 0
 
 /-- The state gas that SSTORE charges at fork `fork`: from Glamsterdam, that of a new slot. -/
 def sstoreStateGas (fork : Fork) (original current new : U256) : Nat :=
+  -- EIP-8037: original 0, current 0, new `x`, a "New slot": `STATE_BYTES_PER_STORAGE_SET * CPSB`.
   if fork ≥ .glamsterdam ∧ original = 0 ∧ current = 0 ∧ new ≠ 0 then STORAGE_SET_STATE_GAS else 0
 
 /-- The state gas that SSTORE refills at fork `fork`.
@@ -146,15 +175,20 @@ From Glamsterdam, a slot that was zero at the start of the transaction can go ba
 
 That write refills the state gas of a new slot. -/
 def sstoreStateRefill (fork : Fork) (original current new : U256) : Nat :=
+  -- EIP-8037: original 0, current `x`, new 0, a "Cleared slot, zero at transaction start".
   if fork ≥ .glamsterdam ∧ original = 0 ∧ current ≠ 0 ∧ new = 0 then STORAGE_SET_STATE_GAS else 0
 
 /-- SLOAD: replace a key with the word at that key of the storage of the current account. -/
 def sloadStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
+  -- `0x54` SLOAD: `mu'_s[0] = sigma[I_a]_s[mu_s[0]]`.
   let (word, evm) ← popWord evm
   let key := U256.toBeBytes word
   let address := evm.message.currentTarget
+  -- `A'_K = A_K union {(I_a, mu_s[0])}`, from Berlin.
   let (cold, evm) := accessStorageKey evm address key
+  -- The price of a cold or a warm read.
   let evm ← chargeGas evm (sloadCost fork cold)
+  -- The read, which EIP-7928 records.
   let evm := recordStorageRead evm address key
   let evm ← pushWord evm (evm.state.getStorage address key)
   return advance evm
@@ -169,25 +203,39 @@ Once the check of the 2300 gas passes, it reads the slot.
 
 That read stays even when the write then lacks gas, by EIP-7928. -/
 def sstoreStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
+  -- From Glamsterdam, the static check comes first, as in execution-specs (Amsterdam).
+  --
+  -- So a static frame records no read for EIP-7928.
   if fork ≥ .glamsterdam ∧ evm.message.isStatic then throw .writeInStaticContext
+  -- `0x55` SSTORE: the key `mu_s[0]`, then the new value `mu_s[1]`.
   let (word, evm) ← popWord evm
   let (new, evm) ← popWord evm
+  -- EIP-2200: "If *gasleft* is less than or equal to gas stipend, fail the current call frame".
   if fork ≥ .istanbul ∧ GasMeter.gasLeft evm.gas ≤ CALL_STIPEND then
     throw .outOfGas
   else
     let key := U256.toBeBytes word
     let address := evm.message.currentTarget
+    -- The *original value*, at the start of the transaction, and the *current value*.
     let original := evm.state.getStorageOriginal address key
     let current := evm.state.getStorage address key
     let (cold, evm) := accessStorageKey evm address key
+    -- The read of the slot, which EIP-7928 records once the stipend check passes.
     let evm := recordStorageRead evm address key
     keepReads evm id do
+      -- From Glamsterdam: the refill, then execution gas, then state gas, in that order.
+      --
+      -- EIP-8037 meters state gas "at the end of the opcode execution".
+      --
+      -- The order does not show: a refill write is warm, and pays 100 of the 2300 left.
       let evm := refillStateGas evm (sstoreStateRefill fork original current new)
       let evm ← chargeGas evm (sstoreCost fork original current new cold)
       let evm ← chargeStateGas evm (sstoreStateGas fork original current new)
+      -- Before Glamsterdam, EIP-214's static check comes after the price, as in execution-specs.
       if evm.message.isStatic then
         throw .writeInStaticContext
       else
+        -- `sigma'[I_a]_s[mu_s[0]] = mu_s[1]`.
         let state ← (evm.state.setStorage address key new).mapError .state
         let refundCounter := evm.substate.refundCounter + sstoreRefund fork original current new
         return advance { evm with state, substate := { evm.substate with refundCounter } }
