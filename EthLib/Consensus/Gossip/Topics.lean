@@ -81,6 +81,7 @@ inductive GossipTopic where
 def GossipTopic.name : GossipTopic → String
   | .beaconBlock => "beacon_block"
   | .beaconAggregateAndProof => "beacon_aggregate_and_proof"
+  -- Each subnet topic, here and below, is its base name, an underscore, and its ID in decimal.
   | .beaconAttestation subnet => subnetTopicName "beacon_attestation" subnet
   | .voluntaryExit => "voluntary_exit"
   | .proposerSlashing => "proposer_slashing"
@@ -116,8 +117,12 @@ def GossipTopic.subnetBases : List (String × (SubnetID → GossipTopic)) :=
 
 /-- The topic with a name, if one has it. -/
 def GossipTopic.ofName? (name : String) : Option GossipTopic :=
+  -- A topic with no subnet has the name itself.
   match GossipTopic.global.find? (·.name == name) with
   | some topic => some topic
+  -- A subnet topic has a base name, an underscore, and a subnet ID in decimal below `2^64`.
+  --
+  -- The ID has no leading zero.
   | none => GossipTopic.subnetBases.findSome? fun (base, topic) =>
     (Networking.Gossip.parseSubnetTopicName base name).map topic
 
@@ -126,16 +131,18 @@ def SYNC_COMMITTEE_SUBNET_COUNT : UInt64 := Networking.Enr.SYNC_COMMITTEE_SUBNET
 
 /--
 The number of blob sidecar subnets: from Deneb, raised at Electra, and none from Fulu on.
-
-Before Deneb and from Fulu on there are no blob sidecar subnets.
 -/
 def Config.blobSidecarSubnetCount (config : Config) (fork : Fork) : UInt64 :=
+  -- None before Deneb, and none from Fulu, whose column sidecars replace blob sidecars.
   if fork < .dencun ∨ .fusaka ≤ fork then 0
+  -- `BLOB_SIDECAR_SUBNET_COUNT_ELECTRA` at Electra.
   else if .pectra ≤ fork then config.BLOB_SIDECAR_SUBNET_COUNT_ELECTRA
+  -- `BLOB_SIDECAR_SUBNET_COUNT` at Deneb.
   else config.BLOB_SIDECAR_SUBNET_COUNT
 
 /-- One topic for each subnet ID below a count, in increasing order. -/
 def subnetTopics (count : UInt64) (topic : SubnetID → GossipTopic) : List GossipTopic :=
+  -- The topics of the IDs `0, 1, ..., n - 1`, for the count `n`.
   (List.range count.toNat).map fun subnet => topic subnet.toUInt64
 
 /--
@@ -144,20 +151,30 @@ The gossip topics of a fork, in the order of the fork that adds each one.
 A fork before Altair has the topics of Phase 0.
 -/
 def Config.gossipTopics (config : Config) (fork : Fork) : List GossipTopic :=
+  -- Phase 0 has the block and aggregate topics, and `ATTESTATION_SUBNET_COUNT` attestation subnets.
   [.beaconBlock, .beaconAggregateAndProof] ++
   subnetTopics config.ATTESTATION_SUBNET_COUNT .beaconAttestation ++
+  -- Phase 0 also has the exit topic and the two slashing topics.
   [.voluntaryExit, .proposerSlashing, .attesterSlashing] ++
+  -- Altair adds the contribution topic and `SYNC_COMMITTEE_SUBNET_COUNT` sync committee subnets.
+  --
+  -- It adds the two light client update topics too.
   (if .altair ≤ fork then
     .syncCommitteeContributionAndProof ::
       subnetTopics SYNC_COMMITTEE_SUBNET_COUNT .syncCommittee ++
       [.lightClientFinalityUpdate, .lightClientOptimisticUpdate]
   else []) ++
+  -- Capella adds the topic of withdrawal credential changes.
   (if .shapella ≤ fork then [.blsToExecutionChange] else []) ++
+  -- Deneb and Electra have one topic per blob sidecar subnet, and the other forks none.
   subnetTopics (config.blobSidecarSubnetCount fork) .blobSidecar ++
+  -- Fulu adds `DATA_COLUMN_SIDECAR_SUBNET_COUNT` data column sidecar subnets.
   (if .fusaka ≤ fork then
     subnetTopics config.DATA_COLUMN_SIDECAR_SUBNET_COUNT .dataColumnSidecar
   else []) ++
+  -- Gloas adds the bid, payload, payload attestation and preference topics, as EIP-7732 specifies.
   (if .glamsterdam ≤ fork then GossipTopic.gloas else []) ++
+  -- Heze adds the topic of inclusion lists, as EIP-7805 specifies.
   (if .hegota ≤ fork then [.inclusionList] else [])
 
 /--
@@ -170,7 +187,11 @@ A product or a sum of 2^64 or more is an error, as in 64-bit arithmetic.
 def computeSubnetForAttestation (preset : Preset) (config : Config)
     (committeesPerSlot : UInt64) (slot : Slot) (committeeIndex : CommitteeIndex) :
     Except (SubnetError ShuffleError) SubnetID := do
+  -- A zero count of attestation subnets is an error.
   if config.ATTESTATION_SUBNET_COUNT = 0 then throw .zeroSubnetCount
+  -- Let `k` be the committees per slot, `s` the slot and `c` the committee index.
+  --
+  -- The subnet is `(k * (s mod SLOTS_PER_EPOCH) + c) mod ATTESTATION_SUBNET_COUNT`.
   let slotsSinceEpochStart := slot % preset.SLOTS_PER_EPOCH
   let committees ← (Uint64.mulChecked committeesPerSlot slotsSinceEpochStart).mapError
     fun _ => .subnetOverflow committeesPerSlot slotsSinceEpochStart
@@ -185,14 +206,19 @@ A fork with no blob sidecar subnets has no subnet for it.
 -/
 def computeSubnetForBlobSidecar (config : Config) (fork : Fork) (blobIndex : BlobIndex) :
     Except (SubnetError ShuffleError) SubnetID := do
+  -- Let `n` be the number of blob sidecar subnets of the fork.
   let count := config.blobSidecarSubnetCount fork
+  -- A fork with `n = 0` has no subnet for a blob sidecar, so this is an error.
   if count = 0 then throw .zeroSubnetCount
+  -- The subnet is `i mod n`, for the blob index `i`.
   return blobIndex % count
 
 /-- From Fulu: the subnet of a data column sidecar, its column modulo the number of subnets. -/
 def computeSubnetForDataColumnSidecar (config : Config) (columnIndex : UInt64) :
     Except (SubnetError ShuffleError) SubnetID := do
+  -- A zero count of column subnets is an error.
   if config.DATA_COLUMN_SIDECAR_SUBNET_COUNT = 0 then throw .zeroSubnetCount
+  -- The subnet is `j mod DATA_COLUMN_SIDECAR_SUBNET_COUNT`, for the column `j`.
   return columnIndex % config.DATA_COLUMN_SIDECAR_SUBNET_COUNT
 
 /--
@@ -203,6 +229,7 @@ The swap-or-not shuffle of the preset permutes the prefix of the node ID.
 def computeSubscribedSubnets (preset : Preset) (config : Config)
     (nodeId : Networking.Gossip.NodeID) (epoch : Epoch) :
     Except (SubnetError ShuffleError) (List SubnetID) :=
+  -- The rule of the network layer, with the shuffle of the preset as its permutation.
   Networking.Gossip.computeSubscribedSubnets config.toSubnetParameters
     (computeShuffledIndex preset)
     nodeId epoch

@@ -105,6 +105,9 @@ def validate (config : Config) (checks : SignatureChecks) (setup : TrustedSetup)
   | .blobSidecar blobs sidecar subnetId =>
     validateBlobSidecar config checks setup seen store blobs sidecar currentTimeMs subnetId
   | .dataColumnSidecar fulu sidecar subnetId =>
+    -- From Gloas a column sidecar names its block by its root and carries no header.
+    --
+    -- So its checks read the commitments of the bid of that block.
     if gloas : .glamsterdam ≤ fork then
       validateGloasDataColumnSidecar config setup seen store gloas sidecar currentTimeMs subnetId
     else
@@ -120,11 +123,7 @@ def validate (config : Config) (checks : SignatureChecks) (setup : TrustedSetup)
     validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs
   | .inclusionList _ signed => validateInclusionList config checks seen store signed currentTimeMs
 
-/-- The messages seen after a valid message, which hold its keys too.
-
-Before Electra the key of an attestation names its attester, the member whose bit is set.
-
-The key of an aggregate holds the root of its data. -/
+/-- The messages seen after a valid message, which hold its keys too. -/
 def record (config : Config) (store : Store preset fork) (seen : Seen) :
     GossipMessage preset fork → Except ForkChoiceError Seen
   | .attesterSlashing slashing => return seen.recordAttesterSlashing slashing
@@ -133,13 +132,17 @@ def record (config : Config) (store : Store preset fork) (seen : Seen) :
   | .blsToExecutionChange _ signed => return seen.recordBlsToExecutionChange signed
   | .beaconBlock signed => return seen.recordBeaconBlock signed
   | .beaconAttestation _ attestation _ => do
+    -- Before Electra the key names the attester, the member of the committee whose bit is set.
+    --
     -- A valid attestation sets one bit, so it has an attester, and this error never occurs.
     let some attester ← beaconAttestationAttester config store attestation
       | throw (.accessor (.bitOutOfRange attestation.aggregationBits.bits.size))
     return seen.recordAttestation attestation.data.target.epoch attester
   | .singleAttestation _ attestation _ =>
+    -- From Electra the key names the attester index that the attestation carries.
     return seen.recordAttestation attestation.data.target.epoch attestation.attesterIndex
   | .aggregateAndProof signed => do
+    -- The key of an aggregate holds the hash tree root of its data.
     let root ← (Serialization.Ssz.SszType.hashTreeRoot signed.message.aggregate.data).mapError
       .ssz
     return seen.recordAggregateAndProof signed root
@@ -148,6 +151,9 @@ def record (config : Config) (store : Store preset fork) (seen : Seen) :
   | .contributionAndProof _ signed => return seen.recordContributionAndProof signed
   | .blobSidecar _ sidecar _ => return seen.recordBlobSidecar sidecar
   | .dataColumnSidecar _ sidecar _ =>
+    -- From Gloas the key is the block root and the column.
+    --
+    -- Before Gloas it is the slot, the proposer and the column.
     if gloas : .glamsterdam ≤ fork then return seen.recordGloasDataColumnSidecar gloas sidecar
     else return seen.recordDataColumnSidecar (Nat.lt_of_not_le gloas) sidecar
   | .proposerPreferences _ signed => return seen.recordProposerPreferences signed
@@ -165,7 +171,9 @@ def validateGossipMessage {preset : Preset} {fork : Fork} (config : Config)
     (checks : SignatureChecks) (setup : TrustedSetup) (seen : Seen) (store : Store preset fork)
     (statuses : PayloadStatuses) (currentTimeMs : UInt64) (message : GossipMessage preset fork) :
     Except ForkChoiceError (ValidationResult × Seen) := do
+  -- The outcome by the rules of the topic of the message.
   let outcome ← message.validate config checks setup seen store statuses currentTimeMs
+  -- An accepted message adds its keys, and an ignored or rejected one leaves the keys as they are.
   if outcome.isAccept then return (outcome, ← message.record config store seen)
   else return (outcome, seen)
 
