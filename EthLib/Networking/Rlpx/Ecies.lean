@@ -12,11 +12,9 @@ The ECIES encryption of RLPx, from the section "ECIES Encryption" of [`rlpx.md`]
 
 [rlpx]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/rlpx.md#ecies-encryption
 
-A ciphertext of the message `m` is `R || iv || c || d`:
+A ciphertext of the message `m` is `R || iv || c || d`.
 
-```text
-    [ R: 65 | iv: 16 | c: len(m) | d: 32 ]
-```
+`R` has 65 bytes, `iv` 16, `d` 32, and `c` as many as `m`.
 
 The sender picks a random key `r` and a random `iv`.
 
@@ -78,6 +76,7 @@ The keys `k_E || k_M = KDF(S, 32)` of the shared secret `S`.
 The KDF of SP 800-56A takes no other input here, so its `FixedInfo` is empty.
 -/
 def deriveKeys (secret : Vector UInt8 32) : Except EciesError (Aes.Key .aes128 × ByteArray) := do
+  -- `k_E || k_M = KDF(S, 32)`.
   let keys ← (Hash.ConcatKdf.concatKdf ⟨secret.toArray⟩ .empty 32).mapError .keyDerivation
   -- The output has 32 bytes, so the default byte is never read.
   return (Vector.ofFn fun i => keys.data.getD i.val 0, keys.extract 16 32)
@@ -88,6 +87,7 @@ The encryption `c = AES(k_E, iv, m)`: AES-128 in counter mode, from the counter 
 The counter is the whole block, so the increment is modulo `2^128`.
 -/
 def cipher (encKey : Aes.Key .aes128) (iv : Aes.Block) (data : ByteArray) : ByteArray :=
+  -- `AES(k, iv, m)`: the AES-128 encryption function in CTR mode.
   Aes.ctr (Aes.ciph .aes128 encKey) 128 iv data
 
 /--
@@ -98,6 +98,13 @@ The shared data `s` is the `AUTHDATA` of the section "Notation" of `rlpx.md`.
 It is authenticated, but it is not part of the ciphertext.
 -/
 def tag (macKey : ByteArray) (iv : Aes.Block) (c sharedMac : ByteArray) : ByteArray :=
+  -- `d = MAC(sha256(k_M), iv || c)`, and `MAC(k, m)` is HMAC with SHA-256.
+  --
+  -- The section "ECIES Encryption" leaves out `s`, but "Notation" writes `AUTHDATA` to the HMAC.
+  --
+  -- The handshake passes `auth-size` and `ack-size` as `AUTHDATA`, so the tag covers `s`.
+  --
+  -- It is written last, after `iv || c`, just before the tag is computed.
   Hash.Hmac.hmac (Hash.Sha256.hash macKey) (⟨iv.toArray⟩ ++ c ++ sharedMac)
 
 /--
@@ -109,9 +116,13 @@ A zero `r` gives no shared secret, so it is an error.
 -/
 def encrypt (recipient : Point) (ephemeral : Fn) (iv : Aes.Block) (sharedMac m : ByteArray) :
     Except EciesError ByteArray := do
+  -- `S = P_x`, where `(P_x, P_y) = r * K_B`.
   let secret ← (ecdh ephemeral recipient).mapError .keyAgreement
+  -- `k_E || k_M = KDF(S, 32)`.
   let (encKey, macKey) ← deriveKeys secret
+  -- `c = AES(k_E, iv, m)`.
   let c := cipher encKey iv m
+  -- Alice sends `R || iv || c || d`, with `R = r * G` and the tag `d` of `iv || c` and `s`.
   return (Point.mul ephemeral Point.generator).encodeUncompressed ++ ⟨iv.toArray⟩ ++ c ++
     tag macKey iv c sharedMac
 
@@ -124,18 +135,27 @@ The tag is checked before the message is decrypted.
 -/
 def decrypt (key : Fn) (sharedMac ciphertext : ByteArray) : Except EciesError ByteArray :=
   let bytes := ciphertext.data.toList
+  -- A ciphertext shorter than `R`, `iv` and `d` is rejected; the source states no such check.
   if h : bytes.length < OVERHEAD then .error (.tooShort ciphertext.size)
   else do
+    -- `R` is the first 65 bytes of `R || iv || c || d`.
     let ephemeral ← (Point.decode ⟨(bytes.take EPHEMERAL_KEY_SIZE).toArray⟩).mapError
       .invalidEphemeralKey
+    -- `S = P_x`, where `(P_x, P_y) = k_B * R`.
     let secret ← (ecdh key ephemeral).mapError .keyAgreement
+    -- `k_E || k_M = KDF(S, 32)`.
     let (encKey, macKey) ← deriveKeys secret
+    -- `iv` and `c` follow `R`, and `d` is the last 32 bytes.
     let iv : Aes.Block :=
       ⟨((bytes.drop EPHEMERAL_KEY_SIZE).take IV_SIZE).toArray, by
         simp [OVERHEAD, EPHEMERAL_KEY_SIZE, IV_SIZE, TAG_SIZE] at h ⊢; omega⟩
     let c : ByteArray :=
       ⟨((bytes.drop (EPHEMERAL_KEY_SIZE + IV_SIZE)).take (bytes.length - OVERHEAD)).toArray⟩
+    -- Bob checks whether `d == MAC(sha256(k_M), iv || c)`, with `s` as the tag says.
     if bytes.drop (bytes.length - TAG_SIZE) = (tag macKey iv c sharedMac).data.toList then
+      -- The source writes `m = AES(k_E, iv || c)`, but `iv` is the counter block of `AES`.
+      --
+      -- So `m = AES(k_E, iv, c)`: CTR mode decrypts with the encryption function.
       .ok (cipher encKey iv c)
     else .error .tagMismatch
 
