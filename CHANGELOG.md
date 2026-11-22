@@ -901,6 +901,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- A completed TLS 1.3 client now silently ignores every 1-RTT NewSessionTicket, whatever its body, as [RFC 9846 §4.7.1](https://www.rfc-editor.org/rfc/rfc9846#section-4.7.1) requires of a client without resumption ([#4241](https://github.com/ethereum/EthLib/issues/4241)).
+  It parses only the message type and length, so it no longer checks the ticket's fields, its extension placement or the early_data value of RFC 9001 §4.6.1.
+  `client_step` now returns the unchanged state for such a ticket, where it raised `TlsStepError` with decode_error (`0x132`), illegal_parameter (`0x12f`) or PROTOCOL_VIOLATION (`0x0a`).
+  A post-handshake CertificateRequest or KeyUpdate still fails as before.
+  In Lean, the new theorem `clientStep_ticket` states that a completed client keeps its state for any framed ticket at the 1-RTT level.
+
 - A TLS 1.3 hello whose legacy_version is not `0x0303` now fails with protocol_version, as RFC 9846 §§4.2.2 to 4.2.4 ask, where it failed with illegal_parameter ([#4234](https://github.com/ethereum/EthLib/issues/4234)).
   `decode_message` and `transcript` raise `TlsHandshakeError` with the new local code 8, `legacyVersion`, where they raised code 4, `constant`.
   `client_step` and `server_step` raise `TlsStepError` with the QUIC code `0x146`, where they raised `0x12f`.

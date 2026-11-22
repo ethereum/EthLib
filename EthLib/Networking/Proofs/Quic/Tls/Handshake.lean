@@ -3,6 +3,7 @@ module
 public import EthLib.Networking.Quic.Tls.Handshake
 public import EthLib.Networking.Proofs.Libp2p.Tls
 public import EthLib.Networking.Proofs.Quic.Tls.Crypto
+public import EthLib.Networking.Proofs.Quic.Tls.Messages
 public import EthLib.Base.Proofs.MapM
 
 /-!
@@ -15,6 +16,8 @@ Rejection theorems cover the libp2p ALPN check and the required client certifica
 Finished is accepted exactly when it matches the saved transcript.
 
 CertificateVerify also needs an offered scheme and an authenticated certificate.
+
+A completed dialer ignores every 1-RTT NewSessionTicket, whatever its body.
 
 No theorem here ties a completion to an earlier CertificateVerify over every reachable state.
 -/
@@ -244,6 +247,30 @@ theorem serverStep_finished (config : Config) (state : State) (input : FlightMes
     (rejected : checkFinished false state value = .error .decryptError) :
     serverStep config state input = .error .decryptError := by
   simp [serverStep, phase, message, rejected, bind, Except.bind]
+
+/-- A completed dialer ignores a 1-RTT NewSessionTicket, whatever its body, RFC 9846 §4.7.1.
+
+It keeps its state and sends nothing, so a malformed ticket leaves the connection up. -/
+theorem clientStep_ticket (config : Config) (expected : ByteArray) (state : State)
+    (input : FlightMessage) (body : ByteArray)
+    (phase : state.phase = .complete) (level : input.level = .application)
+    (framed : frame 4 body = .ok input.data) :
+    clientStep config expected state input = .ok ⟨state, [], none⟩ := by
+  -- The framed input is the four-byte header of type 4, then the body.
+  have bound : body.size < 2 ^ 24 := by
+    cases written : frameList 4 body.data.toList with
+    | error e => simp [frame, written, Except.map] at framed
+    | ok encoded => simpa using bound_of_frameList written
+  rw [frame_eq_ok 4 body bound, Except.ok.injEq] at framed
+  -- The envelope reads back as type 4 with nothing after it, and the body is never read.
+  have read := readFrame_frameList 4 body.data.toList [] (by simpa using bound)
+  simp only [frameList_eq_ok 4 body.data.toList (by simpa using bound), List.append_nil,
+    bind, Except.bind] at read
+  rw [show body.data.toList.length = body.size by simp] at read
+  have whole : Wire.exact readFrame input.data.data.toList = .ok (4, body.data.toList) := by
+    simp [← framed, Wire.exact, read, bind, Except.bind, pure, Except.pure]
+  simp [clientStep, phase, receiveTicket, checkLevel, level, whole, wire, ensure,
+    Except.mapError, bind, Except.bind, pure, Except.pure]
 
 /-- A normal server flight cannot report an authenticated completion before the client replies. -/
 private theorem serverFlight_completion (config : Config) (state : State) (hello : ClientHello)

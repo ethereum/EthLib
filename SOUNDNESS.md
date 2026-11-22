@@ -1167,7 +1167,11 @@ The step theorems do not establish a complete invariant over every state reachab
 The Python tests use independently signed libp2p certificates with known private keys and check both groups, both suites and retries against independent shared-secret, signature, HKDF and HMAC calculations.
 They also check malformed negotiation, signatures, Finished values and post-handshake messages.
 
-Completed clients accept and discard well-formed NewSessionTicket messages, without adding them to the handshake transcript.
+Completed clients silently ignore NewSessionTicket messages, as [RFC 9846 §4.7.1](https://www.rfc-editor.org/rfc/rfc9846#section-4.7.1) requires of a client without resumption.
+They parse only the message type and length, so a malformed ticket at the 1-RTT level leaves the connection up.
+The ticket body therefore never gets the decode_error of RFC 9846 §6.
+RFC 9846 §1.2 lists ignoring such a ticket as a change from RFC 8446, so EthLib reads §4.7.1 as taking precedence.
+A broken type or length still gets decode_error.
 They reject post-handshake CertificateRequest and TLS KeyUpdate, as [RFC 9001 §§4.4 and 6](https://www.rfc-editor.org/rfc/rfc9001#section-4.4) require.
 Errors carry QUIC connection codes; a malformed peer key share or a degenerate shared secret is illegal_parameter, the incorrect-field alert of RFC 9846 §6.2, and a local cryptographic failure is internal_error.
 A message at an earlier encryption level than expected is a PROTOCOL_VIOLATION, by [RFC 9001 §4.1.3](https://www.rfc-editor.org/rfc/rfc9001#section-4.1.3).
@@ -1175,10 +1179,11 @@ A hello without supported_versions is a protocol_version error, by [RFC 9846 App
 The caller sends the connection close and destroys the saved state.
 
 The TLS modules follow [RFC 9846](https://www.rfc-editor.org/rfc/rfc9846), which obsoletes RFC 8446, and cite its section numbers.
-These choices remain where RFC 9846 leaves room, or where it and the IANA registry differ:
+These choices remain where RFC 9846 leaves room, where it and the IANA registry differ, or where it and RFC 9001 conflict:
 
-- A completed client parses each NewSessionTicket, checks its extension placement and the early_data value of [RFC 9001 §4.6.1](https://www.rfc-editor.org/rfc/rfc9001#section-4.6.1), then discards it.
-  RFC 9846 §4.7.1 says that a client without resumption MUST silently ignore the message, so rejecting a malformed ticket departs from that MUST.
+- [RFC 9001 §4.6.1](https://www.rfc-editor.org/rfc/rfc9001#section-4.6.1) says that a client MUST treat an early_data value other than 0xffffffff in a NewSessionTicket as a PROTOCOL_VIOLATION.
+  RFC 9846 §4.7.1 says that a client without resumption MUST silently ignore the whole message, so the two MUSTs conflict for such a client.
+  The client follows RFC 9846 and never parses that value, which only enables 0-RTT on a later connection that this client never opens.
 - The server does not take the MAY of RFC 9846 §4.3.7 to abort on a repeated group in supported_groups; the client never sends one.
 - Table 1 of RFC 9846 §4.3 lists server_name in CertificateRequest, from RFC 9261.
   The [IANA registry](https://www.iana.org/assignments/tls-extensiontype-values) notes that this entry covers only the ClientCertificateRequest of client-generated authenticator requests ([RFC 9261](https://www.rfc-editor.org/rfc/rfc9261)).

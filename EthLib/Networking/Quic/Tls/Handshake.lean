@@ -475,6 +475,8 @@ def allowedExtension (context : Context) (kind : CodePoint) : Bool :=
     -- Pre-shared key: CH and SH.
     | 41 => some [.clientHello, .serverHello]
     -- Early data: CH, EE and NST.
+    --
+    -- NST follows Table 1, though a client without resumption never parses a ticket.
     | 42 => some [.clientHello, .encryptedExtensions, .newSessionTicket]
     -- Supported versions and key share: CH, SH and HRR.
     | 43 | 51 => some [.clientHello, .serverHello, .retry]
@@ -1045,48 +1047,30 @@ def clientFinished (config : Config) (expected : ByteArray) (state : State)
   let (state, finished) ← sendFinished false state
   complete config (some expected) state [certificate, cv, finished]
 
-/-- Accept a well-formed ticket without resuming or extending the main handshake transcript.
-
-RFC 9001 §§4.5 and 4.6.1 allow tickets and constrain their early_data sentinel.
+/-- Ignore a 1-RTT NewSessionTicket, whatever its body, since this client never resumes.
 
 RFC 9846 §4.7.1: a client without resumption MUST silently ignore a ticket.
 
-This client still rejects a malformed ticket, a misplaced extension or another sentinel. -/
+So the body is never parsed, and the early_data MUST of RFC 9001 §4.6.1 goes unchecked.
+
+Post-handshake authentication and TLS KeyUpdate stay errors, RFC 9001 §§4.4 and 6. -/
 def receiveTicket (input : FlightMessage) : Except Error Unit := do
   -- RFC 9001 §4.5 and Figure 5: tickets travel after the handshake, so at the 1-RTT level.
   checkLevel .application input
-  -- RFC 9846 §4: one handshake message, its type and its body.
-  let (kind, body) ← wire (Wire.exact readFrame input.data.data.toList)
+  -- RFC 9846 §4: one handshake message, whose type and length delimit it.
+  let (kind, _) ← wire (Wire.exact readFrame input.data.data.toList)
   -- RFC 9001 §4.4: a post-handshake CertificateRequest (13) is a PROTOCOL_VIOLATION.
   if kind = 13 then throw .protocolViolation
-  -- Only NewSessionTicket (4) is accepted here.
+  -- Only NewSessionTicket (4) is ignored here.
   --
   -- RFC 9001 §6: a TLS KeyUpdate is the error 0x010a, unexpected_message.
   ensure (kind = 4) .unexpectedMessage
-  let reader : Wire.Reader (List Extension) := do
-    -- §4.7.1: `uint32 ticket_lifetime;` and `uint32 ticket_age_add;`.
-    let _ ← uint 4
-    let _ ← uint 4
-    -- `opaque ticket_nonce<0..255>;` and `opaque ticket<1..2^16-1>;`.
-    let _ ← blob 1 0 255
-    let _ ← blob 2 1 65535
-    -- RFC 9846 §4.7.1: `Extension extensions<0..2^16-1>;`.
-    --
-    -- RFC 8446 §4.6.1 printed 2^16-2, a calculation error that RFC 9846 §1.2 corrects.
-    readExtensions 0
-  let extensions ← wire (Wire.exact reader body)
-  -- §4.3: each recognized extension is one that NewSessionTicket may carry.
-  checkExtensions .newSessionTicket none extensions
-  match extension 42 extensions with
-  | none => pure ()
-  -- RFC 9001 §4.6.1: an early data value other than 0xffffffff is a PROTOCOL_VIOLATION.
-  | some value => ensure (value.data = [255, 255, 255, 255].toByteArray) .protocolViolation
 
 /-- Advance the dialer's certificate handshake by one complete message.
 
 An authenticated result follows verification of server Finished and transmission of client Finished.
 
-Completed clients accept tickets, RFC 9001 §4.5.
+Completed clients ignore tickets, RFC 9846 §4.7.1.
 
 They reject post-handshake authentication and TLS KeyUpdate, RFC 9001 §§4.4 and 6. -/
 def clientStep (config : Config) (expected : ByteArray) (state : State)

@@ -233,6 +233,16 @@ def test_unknown_extensions_keep_their_order() -> None:
     assert tls.decode_message(32, encoded) == (message, b"")
 
 
+def test_extensions_reach_their_bound() -> None:
+    # RFC 9846 §4.4.1: `Extension extensions<0..2^16-1>;`, here one GREASE extension (RFC 8701).
+    extension: tls.Extension = {"kind": 0x0A0A, "data": bytes(2**16 - 5)}
+    message: tls.Message = ("encrypted_extensions", [extension])
+    body = b"\xff\xff\x0a\x0a" + (2**16 - 5).to_bytes(2, "big") + bytes(2**16 - 5)
+    encoded = b"\x08" + len(body).to_bytes(3, "big") + body
+    assert tls.encode_message(32, message) == encoded
+    assert tls.decode_message(32, encoded) == (message, b"")
+
+
 def test_duplicate_extension_encoding() -> None:
     with raises(tls.TlsHandshakeError, f"{PREFIX}duplicateExtension 57") as info:
         tls.encode_message(32, ("encrypted_extensions", [PARAMETERS, PARAMETERS]))
