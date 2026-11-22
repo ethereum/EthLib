@@ -1234,7 +1234,9 @@ theorem processEpoch_stateBeforeRewards {config : Config} {checks : SignatureChe
 
 /-- An answer comes from a state at the last slot of an epoch past the first, for the epoch before.
 
-Its total rewards and its ideal rewards are read from the state that the rewards step reads. -/
+Its total rewards and its ideal rewards are read from the state that the rewards step reads.
+
+Each of their signed amounts fits 64 bits, as the response types require. -/
 theorem attestationRewardsResponse_ok {config : Config} {epoch : Epoch}
     {ids : List ValidatorId} {envelope : ApiEnvelope}
     (answered : attestationRewardsResponse config state epoch ids = .ok envelope) :
@@ -1243,6 +1245,7 @@ theorem attestationRewardsResponse_ok {config : Config} {epoch : Epoch}
       ∃ rewarded ideal entries, stateBeforeRewards config state = .ok rewarded ∧
         idealAttestationRewards rewarded = .ok ideal ∧
         attestationRewards config rewarded ids = .ok entries ∧
+        ideal.all (·.fits) = true ∧ entries.all (·.fits) = true ∧
         envelope = { data := .mkObj [("ideal_rewards", .arr (ideal.map (·.toJson)).toArray),
           ("total_rewards", .arr (entries.map (·.toJson)).toArray)] } := by
   unfold attestationRewardsResponse at answered
@@ -1253,10 +1256,12 @@ theorem attestationRewardsResponse_ok {config : Config} {epoch : Epoch}
     cases thrown
   · simp only [unknown, ↓reduceIte, bind_ok_iff, mapError_ok_iff, pure, Except.pure,
       Except.ok.injEq] at answered
-    obtain ⟨rewarded, rewardedOk, ideal, idealOk, entries, entriesOk, rfl⟩ := answered
+    obtain ⟨rewarded, rewardedOk, ideal, idealOk, entries, entriesOk, _, fits, rfl⟩ := answered
     simp only [not_or, not_not] at unknown
+    have fit := ensure_ok_iff.mp fits
+    rw [Bool.and_eq_true] at fit
     exact ⟨unknown.1, unknown.2.1, unknown.2.2, rewarded, ideal, entries, rewardedOk, idealOk,
-      entriesOk, rfl⟩
+      entriesOk, fit.1, fit.2, rfl⟩
 
 /-! ## Sync committee rewards -/
 
@@ -1469,19 +1474,22 @@ theorem syncCommitteeRewards_balance_of_proposer {config : Config} {checks : Sig
       simpa using fun flag => signed ⟨seat, mem, flag⟩
     simp [none]
 
-/-- An answer comes only from Altair, and lists the sync committee rewards of the request. -/
+/-- An answer comes only from Altair, and lists the sync committee rewards of the request.
+
+Each reward fits 64 bits, as the response types require. -/
 theorem syncCommitteeRewardsResponse_ok {aggregate : SyncAggregate preset}
     {ids : List ValidatorId} {envelope : ApiEnvelope}
     (answered : syncCommitteeRewardsResponse state aggregate ids = .ok envelope) :
     ∃ (altair : .altair ≤ fork) (entries : List SyncCommitteeReward),
       syncCommitteeRewards state altair aggregate ids = .ok entries ∧
+        entries.all (·.fits) = true ∧
         envelope = { data := .arr (entries.map (·.toJson)).toArray } := by
   unfold syncCommitteeRewardsResponse at answered
   by_cases altair : .altair ≤ fork
   · simp only [altair, ↓reduceDIte, bind_ok_iff, mapError_ok_iff, pure, Except.pure,
       Except.ok.injEq] at answered
-    obtain ⟨entries, entriesOk, rfl⟩ := answered
-    exact ⟨altair, entries, entriesOk, rfl⟩
+    obtain ⟨entries, entriesOk, _, fits, rfl⟩ := answered
+    exact ⟨altair, entries, entriesOk, ensure_ok_iff.mp fits, rfl⟩
   · simp [altair] at answered
 
 /-- Before Altair a block has no sync aggregate, and the answer is the error with code 400. -/

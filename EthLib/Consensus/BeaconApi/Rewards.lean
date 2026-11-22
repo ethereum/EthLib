@@ -94,6 +94,35 @@ structure IdealAttestationRewards where
 def intJson (n : Int) : Json :=
   .str (toString n)
 
+/-- Whether a signed amount fits the 64-bit signed integers of the response types.
+
+The response [types] give each signed amount the type [`Int64`][int64].
+
+Its name reads as a signed 64-bit integer, from `-2^63` to `2^63 - 1`; the schema states no range.
+
+An attestation amount is the difference of two 64-bit unsigned amounts, so it can fall outside.
+
+A sync committee reward sums one such amount over each seat of a validator, so it can too.
+
+[types]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/rewards.yaml
+[int64]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/primitive.yaml -/
+def int64Fits (n : Int) : Bool :=
+  decide (-2 ^ 63 ≤ n ∧ n < 2 ^ 63)
+
+/-- Whether each signed amount of the rewards of one validator fits 64 bits. -/
+def AttestationRewards.fits (rewards : AttestationRewards) : Bool :=
+  int64Fits rewards.head && int64Fits rewards.target && int64Fits rewards.source &&
+    int64Fits rewards.inactivity
+
+/-- Whether each signed amount of the ideal rewards of one balance fits 64 bits. -/
+def IdealAttestationRewards.fits (rewards : IdealAttestationRewards) : Bool :=
+  int64Fits rewards.head && int64Fits rewards.target && int64Fits rewards.source &&
+    int64Fits rewards.inactivity
+
+/-- The error of an answer with a signed amount outside 64 bits, with code 500. -/
+def rewardOutOfRange : ErrorMessage :=
+  internalError "a reward does not fit a signed 64-bit integer"
+
 /-- The fields of the inclusion reward, present only when there is one. -/
 def inclusionDelayJson (reward : Option Gwei) : List (String × Json) :=
   (reward.map fun amount => ("inclusion_delay", uintJson amount)).toList
@@ -292,7 +321,9 @@ The parts are read after the steps of the epoch transition that come before the 
 
 Any other epoch, or a state at another slot, gives the error with code 404.
 
-A failure of the rewards computation gives the error with code 500. -/
+A failure of the rewards computation gives the error with code 500.
+
+So does a signed amount outside 64 bits, which the response types cannot hold. -/
 def attestationRewardsResponse (config : Config) (state : BeaconState preset fork)
     (epoch : Epoch) (ids : List ValidatorId) : Except ErrorMessage ApiEnvelope := do
   if getCurrentEpoch state = GENESIS_EPOCH ∨ getPreviousEpoch state ≠ epoch ∨
@@ -302,6 +333,8 @@ def attestationRewardsResponse (config : Config) (state : BeaconState preset for
   let state ← (stateBeforeRewards config state).mapError fault
   let ideal ← (idealAttestationRewards state).mapError fault
   let total ← (attestationRewards config state ids).mapError fault
+  -- The response types give each signed amount 64 bits, so an answer with a larger one fails.
+  ensure (ideal.all (·.fits) && total.all (·.fits)) rewardOutOfRange
   return { data := .mkObj [("ideal_rewards", .arr (ideal.map (·.toJson)).toArray),
     ("total_rewards", .arr (total.map (·.toJson)).toArray)] }
 
@@ -318,6 +351,10 @@ structure SyncCommitteeReward where
   /-- The net reward of its seats. -/
   reward : Int
   deriving DecidableEq, Repr
+
+/-- Whether the reward of one member fits 64 bits. -/
+def SyncCommitteeReward.fits (entry : SyncCommitteeReward) : Bool :=
+  int64Fits entry.reward
 
 /-- The JSON of the reward of one member, as the API writes it. -/
 def SyncCommitteeReward.toJson (entry : SyncCommitteeReward) : Json :=
@@ -380,13 +417,17 @@ The rewards do not check the signature of the aggregate, which the block passed.
 
 A state before Altair gives the error with code 400.
 
-A failure of the rewards computation gives the error with code 500. -/
+A failure of the rewards computation gives the error with code 500.
+
+So does a reward outside 64 bits, which the response types cannot hold. -/
 def syncCommitteeRewardsResponse (state : BeaconState preset fork)
     (aggregate : SyncAggregate preset) (ids : List ValidatorId) :
     Except ErrorMessage ApiEnvelope := do
   if altair : .altair ≤ fork then
     let entries ← (syncCommitteeRewards state altair aggregate ids).mapError
       fun _ => internalError "no sync committee rewards"
+    -- The response types give each reward 64 bits, so an answer with a larger one fails.
+    ensure (entries.all (·.fits)) rewardOutOfRange
     return { data := .arr (entries.map (·.toJson)).toArray }
   else throw invalidSyncRewardsRequest
 
