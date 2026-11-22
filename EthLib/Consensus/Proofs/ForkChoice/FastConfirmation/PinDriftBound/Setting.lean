@@ -1837,7 +1837,7 @@ theorem credited_piece {g : ForkedBeaconState preset}
         · rcases hK i (by split at pos <;> omega) with member | ⟨altair', w, hv, mem⟩
           · exact .inl (Finset.mem_union_right _ member)
           · have committee := (Run.snoc pre (Step.block engine signed due ok)
-                ).currentSyncCommittee_eq_of_same_period early same altair' altair
+                ).currentSyncCommittee_eq_of_same_period same altair' altair
             exact .inr ⟨w, hv, by rw [← committee]; exact mem⟩
         · rcases hB i prior with member | ⟨w, found, mem⟩
           · exact .inl (Finset.mem_union_left _ member)
@@ -1865,7 +1865,7 @@ theorem credited_piece {g : ForkedBeaconState preset}
                 (run_justified_separated (shared.append pre) genesis).1.balancesMatch
             obtain ⟨w, hv, mem⟩ := sync_debit_seat (i := i) altair' synced matchedT (by omega)
             have committee := (Run.snoc pre (Step.block engine signed due ok)
-                ).currentSyncCommittee_eq_of_same_period early same altair' altair
+                ).currentSyncCommittee_eq_of_same_period same altair' altair
             refine ⟨w, hv, ?_⟩
             rw [← committee]
             exact mem
@@ -2318,39 +2318,31 @@ theorem seat_union_card (h : Setting config checks g split fin pulled anc counte
         preset.SYNC_COMMITTEE_SIZE.toNat := fun _ _ => Vector.length_toList
   -- R's first two committees are the current and next ones at the split
   have firstR : LsR 0 = Lcur := by
-    obtain ⟨z, r1, r2, alt, -, per, hL⟩ := familyR 0 (Nat.zero_le _)
-    have earlyZ : z.fork < .glamsterdam :=
-      Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
+    obtain ⟨z, r1, -, alt, -, per, hL⟩ := familyR 0 (Nat.zero_le _)
     rw [hL, ← hLcur]
-    exact r1.currentSyncCommittee_eq_of_same_period earlyZ (by rw [hP]; simpa using per) alt
+    exact r1.currentSyncCommittee_eq_of_same_period (by rw [hP]; simpa using per) alt
       altairF
   have secondR : 1 ≤ nR → LsR 1 = Lnext := fun one => by
-    obtain ⟨z, r1, r2, alt, -, per, hL⟩ := familyR 1 one
-    have earlyZ : z.fork < .glamsterdam :=
-      Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
+    obtain ⟨z, r1, -, alt, -, per, hL⟩ := familyR 1 one
     rw [hL, ← hLnext]
-    exact r1.currentSyncCommittee_eq_nextSyncCommittee_of_next_period earlyZ
+    exact r1.currentSyncCommittee_eq_nextSyncCommittee_of_next_period
       h.facts.syncPeriod (by rw [hP]; simpa using per) alt altairF
   -- C's committees hold them too
   have firstC : ∃ j ≤ nC, LsC j = Lcur := by
     refine ⟨(getCurrentEpoch split).toNat / P - (getCurrentEpoch fin).toNat / P, by omega, ?_⟩
     obtain ⟨z, r1, r2, alt, cut, per, hL⟩ := familyC
       ((getCurrentEpoch split).toNat / P - (getCurrentEpoch fin).toNat / P) (by omega)
-    have earlyZ : z.fork < .glamsterdam :=
-      Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
     rw [hL, ← hLcur]
     rcases Run.prefix_total r1 r2 fromFin tailC cut rfl with ⟨r, -⟩ | ⟨r, -⟩
-    · exact (r.currentSyncCommittee_eq_of_same_period h.early
+    · exact (r.currentSyncCommittee_eq_of_same_period
         (by rw [hP]; simp only; omega) altairF alt).symm
-    · exact r.currentSyncCommittee_eq_of_same_period earlyZ
+    · exact r.currentSyncCommittee_eq_of_same_period
         (by rw [hP]; simp only; omega) alt altairF
   have secondC : 1 ≤ nR → ∃ j ≤ nC, LsC j = Lnext := fun one => by
     refine ⟨(getCurrentEpoch split).toNat / P - (getCurrentEpoch fin).toNat / P + 1,
       by omega, ?_⟩
     obtain ⟨z, r1, r2, alt, cut, per, hL⟩ := familyC
       ((getCurrentEpoch split).toNat / P - (getCurrentEpoch fin).toNat / P + 1) (by omega)
-    have earlyZ : z.fork < .glamsterdam :=
-      Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
     rw [hL, ← hLnext]
     rcases Run.prefix_total r1 r2 fromFin tailC cut rfl with ⟨r, -⟩ | ⟨r, -⟩
     · exfalso
@@ -2358,7 +2350,7 @@ theorem seat_union_card (h : Setting config checks g split fin pulled anc counte
       simp only at order
       have := Nat.div_le_div_right (c := P) order
       omega
-    · exact r.currentSyncCommittee_eq_nextSyncCommittee_of_next_period earlyZ
+    · exact r.currentSyncCommittee_eq_nextSyncCommittee_of_next_period
         h.facts.syncPeriod (by rw [hP]; simp only; omega) alt altairF
   -- the positions that hold a key of the committees of each run
   have distinctR : PubkeysDistinct pulled :=

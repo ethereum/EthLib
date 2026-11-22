@@ -1265,34 +1265,33 @@ private theorem upgradeToElectra {checks : SignatureChecks} {pre : BeaconState p
 
 /-- Each upgrade either samples the first committees or carries their keys into the new registry.
 
-It also keeps the keys of both committees, up to Fulu. -/
+It also keeps the keys of both committees, at every upgrade from Altair. -/
 private theorem upgradeNextStep {pre : ForkedBeaconState preset}
     {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
     (ok : Consensus.upgradeNext config checks pre = .ok post) :
     (SyncCommitteeKeys pre.state → SyncCommitteeKeys post.val.state) ∧
-      (post.val.fork < .glamsterdam →
       ∀ (a : .altair ≤ post.val.fork) (a' : .altair ≤ pre.fork),
         (post.val.state.currentSyncCommittee a).value.pubkeys.toList =
           (pre.state.currentSyncCommittee a').value.pubkeys.toList ∧
         (post.val.state.nextSyncCommittee a).value.pubkeys.toList =
-          (pre.state.nextSyncCommittee a').value.pubkeys.toList) := by
+          (pre.state.nextSyncCommittee a').value.pubkeys.toList := by
   obtain ⟨fork, state⟩ := pre
   cases fork
   case phase0 =>
     simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, upgraded, rfl⟩ := ok
     exact ⟨fun _ => upgradeToAltair upgraded,
-      fun _ _ a' => absurd a' (by change ¬ Fork.altair ≤ Fork.phase0; decide)⟩
+      fun _ a' => absurd a' (by change ¬ Fork.altair ≤ Fork.phase0; decide)⟩
   case altair | bellatrix | shapella =>
     simp only [Consensus.upgradeNext, pure, Except.pure, Except.ok.injEq] at ok
     subst ok
     exact ⟨fun holds => carryFields (by dsimp; decide) (by dsimp; decide) (by decide) holds,
-      fun _ a a' => carryFields_committees (by dsimp; decide) (by dsimp; decide) a' a⟩
+      fun a a' => carryFields_committees (by dsimp; decide) (by dsimp; decide) a' a⟩
   case dencun =>
     simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, upgraded, rfl⟩ := ok
     have electra := upgradeToElectra (checks := checks) upgraded
-    exact ⟨electra.1, fun _ => electra.2⟩
+    exact ⟨electra.1, electra.2⟩
   case pectra =>
     simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, upgraded, rfl⟩ := ok
@@ -1300,7 +1299,7 @@ private theorem upgradeNextStep {pre : ForkedBeaconState preset}
     obtain ⟨_, _, rfl⟩ := upgraded
     exact ⟨fun holds => carryFields (config := config) (post := .fusaka)
       (by decide) (by decide) (by decide) holds,
-      fun _ a a' => carryFields_committees (config := config) (post := .fusaka)
+      fun a a' => carryFields_committees (config := config) (post := .fusaka)
         (by change Fork.pectra < Fork.fusaka; decide) (by decide) a' a⟩
   case fusaka =>
     simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
@@ -1308,14 +1307,12 @@ private theorem upgradeNextStep {pre : ForkedBeaconState preset}
     simp only [Consensus.upgradeToGloas, bind_ok_iff] at upgraded
     obtain ⟨_, _, _, _, onboarded⟩ := upgraded
     obtain ⟨⟨_, _, rfl⟩, _⟩ := onboardBuildersFromPendingDeposits_spec onboarded
-    exact ⟨fun holds _ => holds (by dsimp; decide),
-      fun early => absurd early (by change ¬ Fork.glamsterdam < Fork.glamsterdam; decide)⟩
+    exact ⟨fun holds _ => holds (by dsimp; decide), fun _ _ => ⟨rfl, rfl⟩⟩
   case glamsterdam =>
     simp only [Consensus.upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, upgraded, rfl⟩ := ok
     obtain ⟨_, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
-    exact ⟨fun holds _ => holds (by dsimp; decide),
-      fun early => absurd early (by change ¬ Fork.hegota < Fork.glamsterdam; decide)⟩
+    exact ⟨fun holds _ => holds (by dsimp; decide), fun _ _ => ⟨rfl, rfl⟩⟩
   all_goals simp only [Consensus.upgradeNext] at ok; cases ok
 
 /-- Each upgrade either samples the first committees or carries their keys into the new registry. -/
@@ -1520,33 +1517,29 @@ private abbrev curKeys (state : ForkedBeaconState preset) (altair : .altair ≤ 
 private abbrev nxtKeys (state : ForkedBeaconState preset) (altair : .altair ≤ state.fork) :=
   (state.state.nextSyncCommittee altair).value.pubkeys.toList
 
-/-- The upgrades due at a slot keep the keys of both sync committees before Gloas. -/
+/-- The upgrades due at a slot keep the keys of both sync committees. -/
 private theorem processUpgrades_committees {forked after : ForkedBeaconState preset}
     (upgrades : processUpgrades config checks forked = .ok after)
-    (early : after.fork < .glamsterdam) (altair' : .altair ≤ forked.fork)
-    (altair : .altair ≤ after.fork) :
+    (altair' : .altair ≤ forked.fork) (altair : .altair ≤ after.fork) :
     curKeys after altair = curKeys forked altair' ∧
       nxtKeys after altair = nxtKeys forked altair' := by
   have kept := processUpgrades_induction (config := config) (checks := checks)
-    (property := fun post => forked.fork ≤ post.fork ∧ (post.fork < .glamsterdam →
-      ∀ a : .altair ≤ post.fork,
-        curKeys post a = curKeys forked altair' ∧ nxtKeys post a = nxtKeys forked altair'))
+    (property := fun post => forked.fork ≤ post.fork ∧ ∀ a : .altair ≤ post.fork,
+        curKeys post a = curKeys forked altair' ∧ nxtKeys post a = nxtKeys forked altair')
     (fun {pre post} holds next => by
       have later : forked.fork ≤ post.val.fork := Nat.le_trans holds.1 (Nat.le_of_lt post.property)
-      refine ⟨later, fun beforeGloas a => ?_⟩
-      have preEarly : pre.fork < .glamsterdam := Nat.lt_trans post.property beforeGloas
-      have moved := (SyncCommitteeKeys.upgradeNextStep next).2 beforeGloas a
-        (Nat.le_trans altair' holds.1)
-      have prior := holds.2 preEarly (Nat.le_trans altair' holds.1)
+      refine ⟨later, fun a => ?_⟩
+      have moved := (SyncCommitteeKeys.upgradeNextStep next).2 a (Nat.le_trans altair' holds.1)
+      have prior := holds.2 (Nat.le_trans altair' holds.1)
       exact ⟨moved.1.trans prior.1, moved.2.trans prior.2⟩)
-    (forked := forked) ⟨Nat.le_refl _, fun _ _ => ⟨rfl, rfl⟩⟩ upgrades
-  exact kept.2 early altair
+    (forked := forked) ⟨Nat.le_refl _, fun _ => ⟨rfl, rfl⟩⟩ upgrades
+  exact kept.2 altair
 
 /-- A slot with its upgrades keeps the keys of both sync committees inside a period.
 
 When it starts the next period, the keys of the current committee are the next ones before. -/
 private theorem advanceSlotAcross_committees {forked after : ForkedBeaconState preset}
-    (ok : advanceSlotAcross config checks forked = .ok after) (early : after.fork < .glamsterdam)
+    (ok : advanceSlotAcross config checks forked = .ok after)
     (altair : .altair ≤ after.fork) (altair' : .altair ≤ forked.fork) :
     (epochOf after = epochOf forked ∧
       curKeys after altair = curKeys forked altair' ∧
@@ -1561,7 +1554,7 @@ private theorem advanceSlotAcross_committees {forked after : ForkedBeaconState p
   have epoch : getCurrentEpoch after.state = getCurrentEpoch advanced := by
     simp only [getCurrentEpoch, processUpgrades_slot upgrades]
   have epochNat : epochOf after = (getCurrentEpoch advanced).toNat := congrArg UInt64.toNat epoch
-  have moved := processUpgrades_committees upgrades early altair' altair
+  have moved := processUpgrades_committees upgrades altair' altair
   rw [epochNat]
   rcases (SyncCommitteeKeys.advanceSlotStep slotOk).2 with ⟨same, keeps⟩ | ⟨plus, inside, boundary⟩
   · exact .inl ⟨same, moved.1.trans (by simp only [curKeys, keeps.1]),
@@ -1613,13 +1606,13 @@ private theorem committees_step {α : Type} {period ex em el : Nat}
     · rw [succ] at h
       exact kept.1.trans (prior.2 nonzero h)
 
-/-- Along a run, the keys of the committees follow the periods of the epochs before Gloas.
+/-- Along a run, the keys of the committees follow the periods of the epochs.
 
 Inside the period of the start they stay.
 
 In the next period the keys of the current committee are the next ones at the start. -/
 private theorem Run.committees_of_periods {x y : ForkedBeaconState preset}
-    (tail : Run config checks x y) (early : y.fork < .glamsterdam)
+    (tail : Run config checks x y)
     (altair : .altair ≤ y.fork) (altair' : .altair ≤ x.fork) :
     (epochOf y / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat =
         epochOf x / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat →
@@ -1631,10 +1624,9 @@ private theorem Run.committees_of_periods {x y : ForkedBeaconState preset}
   induction tail with
   | nil => exact ⟨fun _ => ⟨rfl, rfl⟩, fun _ h => absurd h (by omega)⟩
   | @snoc middle last pre step ih =>
-    have midEarly := Nat.lt_of_le_of_lt step.chainStep.fork_le early
     have midAltair := Nat.le_trans altair' (fork_le_of_chainSteps pre.chainSteps)
     have low := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
-    refine committees_step low ?_ (ih midEarly midAltair)
+    refine committees_step low ?_ (ih midAltair)
     cases step with
     | block engine signed _ ok =>
       have processed := (applySignedBlock_ok ok).2.1
@@ -1644,28 +1636,28 @@ private theorem Run.committees_of_periods {x y : ForkedBeaconState preset}
       · simp only [epochOf, getCurrentEpoch, slot]
       · simp only [curKeys, same.1]
       · simp only [nxtKeys, same.2.1]
-    | slot ok => exact advanceSlotAcross_committees ok early altair midAltair
+    | slot ok => exact advanceSlotAcross_committees ok altair midAltair
 
-/-- Inside one period of sync committees before Gloas, the keys of the current committee stay. -/
+/-- Inside one period of sync committees, from Altair, the keys of the current committee stay. -/
 theorem Run.currentSyncCommittee_eq_of_same_period {x y : ForkedBeaconState preset}
-    (tail : Run config checks x y) (early : y.fork < .glamsterdam)
+    (tail : Run config checks x y)
     (same : (getCurrentEpoch y.state).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat =
       (getCurrentEpoch x.state).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)
     (altair : .altair ≤ y.fork) (altair' : .altair ≤ x.fork) :
     (y.state.currentSyncCommittee altair).value.pubkeys.toList =
       (x.state.currentSyncCommittee altair').value.pubkeys.toList :=
-  ((tail.committees_of_periods early altair altair').1 same).1
+  ((tail.committees_of_periods altair altair').1 same).1
 
 /-- Across one sync-period boundary, the current sync committee is the next one of the start. -/
 theorem Run.currentSyncCommittee_eq_nextSyncCommittee_of_next_period
-    {x y : ForkedBeaconState preset} (tail : Run config checks x y) (early : y.fork < .glamsterdam)
+    {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (syncPeriod : preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD ≠ 0)
     (next : (getCurrentEpoch y.state).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat =
       (getCurrentEpoch x.state).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1)
     (altair : .altair ≤ y.fork) (altair' : .altair ≤ x.fork) :
     (y.state.currentSyncCommittee altair).value.pubkeys.toList =
       (x.state.nextSyncCommittee altair').value.pubkeys.toList :=
-  (tail.committees_of_periods early altair altair').2
+  (tail.committees_of_periods altair altair').2
     (fun zero => syncPeriod (UInt64.toNat_inj.mp (by rw [UInt64.toNat_zero]; exact zero))) next
 
 end EthLib.Consensus

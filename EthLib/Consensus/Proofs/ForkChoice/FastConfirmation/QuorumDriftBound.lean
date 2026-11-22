@@ -240,7 +240,7 @@ theorem quorumDrift_le_quorumReserve
       min headroom (crossing + (recipients + debited) * preset.upwardBand + debited * creditMax +
         transfers + depositGain) :=
     effectiveRise_le genesis history (edge.append tailP) (edge.append tailS) caps withdrawDelay
-      bands maxLookahead hysteresis early fulu callEpoch next
+      bands maxLookahead hysteresis (state.validators.bound early) fulu callEpoch next
       (n := nP) debitedKeys
       (debitedCard.trans (Nat.mul_le_mul_left _ blocksLe))
       (fun v off => (gainSide v off).trans
@@ -272,8 +272,8 @@ theorem quorumDrift_le_quorumReserve
           (if pc v + deposit v = 0 then 0
            else inc + 2 * preset.downwardBand + syncP v.toNat +
              min (pc v + deposit v) (below v)) :=
-    effectiveFall_le genesis history edge tailP tailS caps bands withdrawDelay hysteresis early
-      fulu
+    effectiveFall_le genesis history edge tailP tailS caps bands withdrawDelay hysteresis
+      (state.validators.bound early) fulu
       middleEpoch callEpoch next single counted (fun v => pc v + deposit v)
       (fun v => (lossSide v).trans (by rw [Nat.add_assoc]; exact Nat.le_refl _))
   -- Each voter loses at most its computed fall, and a band and its share if it was credited.

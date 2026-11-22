@@ -3706,7 +3706,7 @@ private theorem pre_credit_seat (h : Setting config checks g split fin pulled an
   · rcases gross i pos with inB | ⟨w, found, mem⟩
     · exact .inl inB
     · refine .inr ⟨w, found, ?_⟩
-      rw [pre.currentSyncCommittee_eq_of_same_period h.early samePeriod altair altair]
+      rw [pre.currentSyncCommittee_eq_of_same_period samePeriod altair altair]
       exact mem
 
 /-- Three roundings of an increment's reward are below the increment, from quotient thirty. -/

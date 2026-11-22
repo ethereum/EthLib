@@ -13,6 +13,9 @@ Not yet released.
   It was a private Phase 0 lemma of the upgrade to Altair.
   The totality of the unslashed signers and the upgrade to Altair read it ([#4253](https://github.com/ethereum/EthLib/pull/4253)).
 
+- `registryLifecycle_processOperations` (`Transition/RegistryLifecycle.lean`) says that the operations of a block keep the lifecycle of the registry.
+  `registryLifecycle_processBlock` and the effective-balance fall read it.
+
 - In Lean, the payload of the parent has a balance ledger from Gloas, and its old validators read at both ends are later.
   `BlockLedger.ledger_processParentExecutionPayload` changes no balance outside a set of converted validators.
   That set has at most the preset's most consolidation requests per payload; no balance rises, and only a conversion lowers one.
@@ -961,6 +964,16 @@ Not yet released.
 - In Lean, `getUnslashedAttestingIndices_exists_ok` in `EthLib.Consensus.Proofs.Transition.Totality.Justification` drops its premise that the registry stays within its limit, which its proof did not read.
   Committee membership alone puts each signer in the registry, by `getPendingAttestingIndices_lt`.
   Migration: delete the `within` argument ([#4253](https://github.com/ethereum/EthLib/pull/4253)).
+
+- In Lean, `effectiveRise_le` and `effectiveFall_le` bound the effective-balance rise and fall from Gloas too, and keep their Fulu floor at `P`.
+  They take `within`, the registry of the counting state within the limit, instead of `early`.
+  From Gloas the type of the registry does not give it.
+  Migration: pass `within := y.state.validators.bound early`.
+
+- In Lean, the sync-key lemmas hold through Gloas, still from Altair at both ends, and `depositCarry_processBlock` holds at every fork.
+  Their conclusions are unchanged.
+  `Run.currentSyncCommittee_eq_of_same_period`, `Run.currentSyncCommittee_eq_nextSyncCommittee_of_next_period`, `Run.currentSyncCommittee_eq_of_same_epoch` and `depositCarry_processBlock` drop their pre-Gloas binder.
+  Migration: delete the argument.
 
 - In Lean, the block and ledger lemmas of the quorumReserve route extend through Gloas, and their existing lower fork bounds remain.
   These drop their pre-Gloas binder (`DirectSafety.total_active_congr` drops two, `before` and `after`), with the same conclusion: `DirectSafety.total_active_congr`, `Run.effectiveKept_of_same_epoch`, `hysteresis_of_run_slot`, `balanceDrift_upgrades_upper`, `balanceDrift_upgrades_active`, `BlockLedger.ledger_processBlockExecution`, `BlockLedger.ledger_processProposerSlashing`, `BlockLedger.ledger_processAttesterSlashing`, `processOperations_floor`, `BlockCredits.block_balances`, `Run.withdrawableKept_of_same_epoch`, `Run.balanceCorrections_of_same_epoch`, `Run.effectiveBalance_capped`, `Run.pendingConsolidationsOrdered`, `Run.pendingConsolidation_invariant`, `ConsolidationQueueRise.appendStep_processBlock`, `ConsolidationQueueRise.riseStep_processBlock`, `SamePendingQueue.blockExecution`, `applyWithdrawals_departureQueues`, `attestation_departureQueues` and `slashValidator_departureQueues`.

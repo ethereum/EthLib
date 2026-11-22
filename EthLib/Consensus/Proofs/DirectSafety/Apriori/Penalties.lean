@@ -1327,7 +1327,7 @@ private theorem retained_block {fork : Fork} {s t : BeaconState preset fork}
   have sources := retained_block_sources x cutoff order ok ordered oldSize cutoffLe slashedBound
   have bound := funding_block_extra (extra := retainedSources x s cutoff) early matched engine
     block ok events replayed
-  have carry := depositCarry_processBlock early ok
+  have carry := depositCarry_processBlock ok
   have same : fundingCarry ⟨fork, t⟩ = fundingCarry ⟨fork, s⟩ := by
     simp only [fundingCarry, carry]
   have fewer : fundingPotential t (fundingSources t ++ retainedSources x t cutoff) ≤
@@ -1425,7 +1425,7 @@ private theorem retained_run_bound {g x y : ForkedBeaconState preset}
         have result := retained_block_reachable shared genesis pre caps guard before engine
           signed.message processed added (Step.balanceEvents_block before addedOk)
           (getCurrentEpoch s) (UInt64.le_refl _) within
-        have carry := depositCarry_processBlock before processed
+        have carry := depositCarry_processBlock processed
         have slot := (frame_processBlock processed).slot
         have spent : (added.map fun _ => (0 : Nat)).sum = 0 := by simp
         simpa only [getCurrentEpoch, slot, fundingCarry, carry, spent,
