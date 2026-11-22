@@ -43,16 +43,13 @@ EthLib is a formal specification.
 `ethereum/execution-specs` and `ethereum/consensus-specs` are reference points, not formal specifications, so the code never cites them as the authority for a rule.
 You can read them to understand a rule and to check your work.
 If no primary source states a rule, state the rule itself in the doc comment.
-Test vectors keep their pinned origin, as [`ARCHITECTURE.md`](ARCHITECTURE.md#sources) explains.
 
-Where execution-specs or consensus-specs is the only text that states a rule, and no primary source states it in its own text, the doc comment of the definition may carry a provenance note.
-The note is one short line that places an auditor in context: the text and its file at a pinned commit, with its section where the text has one.
-The note links in reference style, with the link definition at the end of the comment, so that the line stays short.
-An auditor who wants more reads that text there.
-A note that covers several definitions can go once, in a section comment (`/-! -/`) above them.
+The Lean text never names or links execution-specs or consensus-specs, in a doc comment or in any other comment.
+Their pinned commits belong to the test suites that run their vectors, as [`ARCHITECTURE.md`](ARCHITECTURE.md#sources) explains.
+Where execution-specs or consensus-specs is the only text that states a rule, the doc comment states the rule itself, formally.
+Where a reader needs context, one short line gives it in EthLib's own words, without naming either text.
 Some EIPs state a rule only through a link to consensus-specs at a pinned commit, as EIP-4844 does for its KZG functions.
-Such a rule cites the EIP, and it may also carry a provenance note.
-A provenance note says where a rule is stated, not which text makes the rule normative, so it is not a citation of authority.
+Such a rule cites the EIP.
 
 Do not cite another implementation as the authority for a behaviour.
 A byte-for-byte match with a client is a useful test, not a justification.
@@ -80,9 +77,8 @@ A step comment is formal, short and precise, like the text of an RFC or a FIPS s
 - A step that keeps the words of its source writes them as plain text, without quotation marks or Markdown emphasis such as bold.
   EIP-7928 writes "Record **post-transaction nonces** for:", so the comment reads `-- Record post-transaction nonces for:`, followed by its list of accounts.
 
-Step comments never trace `ethereum/consensus-specs` or `ethereum/execution-specs`, and never name their functions.
-Where one of those texts is the only one that states a rule, the provenance note of [Sources of truth](#sources-of-truth) places the auditor in context.
-The step comments then state each step formally, in EthLib's own terms.
+Step comments never trace `ethereum/consensus-specs` or `ethereum/execution-specs`, and never name them or their functions.
+Where one of those texts is the only one that states a rule, the step comments state each step formally, in EthLib's own terms.
 A defect found while reading them is reported upstream, as [Defects found upstream](#defects-found-upstream) says, not copied into the code.
 
 Where EthLib departs from the steps of its source, the comment says how and why.
@@ -168,7 +164,7 @@ The specification and the exports import nothing beyond the Lean toolchain.
   Clarity wins over speed unless speed is the point of the change.
 - Name things after the specification.
   If the paper calls it the randomizer, the code does too.
-  Where consensus-specs is the only text that states a rule, a definition may keep its name, such as `process_slots`, in Lean's casing, so that an auditor can find it.
+  Where consensus-specs is the only text that states a rule, a definition may keep the name of that rule, such as `process_slots`, in Lean's casing.
 - Write the digits of a new name in ASCII, such as `h1`, `x0` and `w2`, not `h₁`, `x₀` and `w₂`.
   Names that Lean, Mathlib or VCVio define, such as `mul_inv_cancel₀`, keep their own spelling.
   Prose writes powers and indices in ASCII too, as [WRITING.md](WRITING.md#mathematical-and-technical-conventions) says.

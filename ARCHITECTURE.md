@@ -282,7 +282,7 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
   A conversion between two of these types appears only where the rule converts, as the execution block hash becomes a root in consensus-specs.
   A name that the source only aliases, as execution-specs aliases `Hash32` to `Bytes32`, stays an `abbrev`.
   Two sources can disagree on whether a name is a type of its own, as they do for `Hash32`.
-  Its definition then records both readings and the choice.
+  Its doc comment then records both readings, each by the layer that holds it, and the choice.
 - An integer keeps the range its source gives it.
   An unbounded integer is a `Nat`, and a 64-bit one is a `UInt64`.
   Where the source makes overflow invalid, an operation that would overflow is an error, never a silent wrap.
@@ -357,7 +357,7 @@ A field with several facts has one sub-item per fact, each one sentence on its o
 Its fields describe behaviour and name no function, theorem, law or assumption, so that a renamed definition leaves the card correct.
 A type that crosses the boundary is named in backticks.
 A source is linked as `[text][ref]`, with the definition at the end of the comment.
-As [Sources](#sources) says, the Readings field cites only primary sources as the authority, and names execution-specs or consensus-specs only in a provenance note.
+As [Sources](#sources) says, the Readings field cites only primary sources, and never names execution-specs or consensus-specs.
 Where none of them settles a reading, the field states the reading itself.
 
 ## Forks
@@ -539,14 +539,12 @@ A reader then needs no other specification.
 A contributor may read execution-specs and consensus-specs to understand a rule and to check the work.
 The code does not cite them as the authority for a rule.
 
-Where execution-specs or consensus-specs is the only text that states a rule, a provenance note may name it.
-The note is one short line: the text and its file at a pinned commit, with its section where the text has one.
-[`CONTRIBUTING.md`](CONTRIBUTING.md#sources-of-truth) says when to write one, and where.
-A provenance note is not a citation of authority.
+The Lean text never names or links them, as [`CONTRIBUTING.md`](CONTRIBUTING.md#sources-of-truth) says.
+Their pinned commits belong to the test suites that run their vectors.
 Step comments never trace those texts or name their functions, as [`CONTRIBUTING.md`](CONTRIBUTING.md#step-comments) explains.
 They state each step formally, in EthLib's own terms, and never quote code in a programming language.
 
-Test vectors are a further exception, because a test must say what it checks against.
+Test vectors are the one exception, because a test must say what it checks against.
 Each fixture keeps its pinned origin and digests in `tests/`.
 Two tests that pin two commits of one repository can disagree without anyone noticing.
 So each repository that fixtures come from has one pinned commit, recorded in `tests/sources.toml`, and every test that reads from the repository uses it.
