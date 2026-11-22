@@ -7,29 +7,13 @@ public import EthLib.Consensus.BuilderApi.Registration
 
 From Bellatrix to Fulu, a proposer asks a builder for a bid on the payload of its slot.
 
-The builder serves the request only when four rules hold, in the order of the source.
-
-The slot must be that of the builder's state, transitioned to that slot.
-
-The key must have a registration that the builder keeps.
-
-The key must be that of the proposer of the slot.
-
-The parent hash must be the block hash of the latest payload header of the state.
-
-The builder then bids with the header of its payload, the value and its own key.
+The builder serves the request only when four rules hold, and then bids under its own key.
 
 From Deneb the bid also carries the commitments to the blobs, and from Electra the requests.
 
 The source gives no function that fills either, so the bid takes them as inputs.
 
-The proposer accepts a bid only when three rules hold, in the order of the source.
-
-The parent hash of the header must be the block hash of the latest payload header of the state.
-
-The fee recipient of the header must be the one the proposer registered.
-
-The signature of the builder must verify.
+The proposer accepts a bid only when three rules hold.
 
 The [builder specification] gives the builder's rules, and its [validator document] the proposer's.
 
@@ -58,26 +42,27 @@ It fails when the proposer of the state or its validator cannot be found. -/
 def isEligibleForBid (state : BeaconState preset fork) (range : HasBuilderApi fork)
     (registry : Registry) (slot : Slot) (parentHash : Hash32) (pubkey : BLSPubkey) :
     Except AccessorError Bool := do
+  -- Verify slot: the slot of the request is the slot of the state.
   if slot ≠ state.slot then return false
+  -- Verify the key: it is that of a validator whose registration the builder keeps.
   if (registry.find? pubkey).isNone then return false
+  -- Verify the key: it is that of the proposer of the slot.
   let index ← getBeaconProposerIndex state
   let proposer ← getValidator state index
   if pubkey ≠ proposer.pubkey then return false
+  -- Verify parent hash: it is the block hash of the latest payload header of the state.
   return parentHash == (state.latestExecutionPayloadHeader range).blockHash
 
-/-- From Bellatrix to Fulu: the status of a request for a header.
-
-It is 500, an internal error, when the proposer of the slot or its validator cannot be found.
-
-It is 400 when the builder does not serve the request.
-
-Otherwise it is 200 when the builder offers a bid, and 204 when it has none. -/
+/-- From Bellatrix to Fulu: the status of a request for a header. -/
 def getHeaderStatus (state : BeaconState preset fork) (range : HasBuilderApi fork)
     (registry : Registry) (slot : Slot) (parentHash : Hash32) (pubkey : BLSPubkey)
     (offered : Bool) : Nat :=
   match isEligibleForBid state range registry slot parentHash pubkey with
+  -- A proposer or validator that cannot be found is an internal error, 500, which the API lists.
   | .error _ => 500
+  -- The API: a request that the builder does not serve is invalid, and gets 400.
   | .ok false => 400
+  -- The API: 200 with the bid, and 204 when the builder cannot produce a header.
   | .ok true => if offered then 200 else 204
 
 /-- The bid of a builder on a payload: its header, the value to the proposer and the builder's key.
@@ -91,6 +76,9 @@ def getBid (payload : ExecutionPayload preset fork) (value : U256) (pubkey : BLS
     (blobKzgCommitments : Since .dencun fork (BlobKZGCommitments preset fork))
     (executionRequests : Since .pectra fork (ExecutionRequests preset fork)) :
     Except Err (BuilderBid preset fork) := do
+  -- Constructing the bid: the header of the payload, its lists replaced by their roots.
+  --
+  -- Then the commitments and the requests as given, the value, and the key of the builder.
   return ⟨← payload.header, blobKzgCommitments, executionRequests, value, pubkey⟩
 
 /-- Why a proposer refuses a bid. -/
@@ -120,10 +108,13 @@ def processBid (config : Config) (checks : SignatureChecks) (state : BeaconState
     (range : HasBuilderApi fork) (signed : SignedBuilderBid preset fork)
     (feeRecipient : ExecutionAddress) : Except BidError Unit := do
   let header := signed.message.header
+  -- Verify the header: its parent hash is the block hash of the latest payload header.
   unless header.parentHash = (state.latestExecutionPayloadHeader range).blockHash do
     throw (.wrongParentHash (state.latestExecutionPayloadHeader range).blockHash header.parentHash)
+  -- Its fee recipient is the one that the proposer registered last.
   unless header.feeRecipient = feeRecipient do
     throw (.wrongFeeRecipient feeRecipient header.feeRecipient)
+  -- Verify the bid signature, under the builder key of the bid.
   match verifyBuilderBidSignature config checks signed with
   | .error fault => throw (.root fault)
   | .ok false => throw (.badSignature signed.message.pubkey)

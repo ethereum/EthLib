@@ -7,19 +7,7 @@ public import EthLib.Consensus.BuilderApi
 
 From Bellatrix to Fulu, a validator registers its fee recipient and gas limit with each builder.
 
-A builder keeps a registration only when five rules hold, in the order of the source.
-
-The key must be that of a validator of the state.
-
-That validator must be active or pending in the current epoch.
-
-The time of the registration must be at most ten seconds ahead of the builder's clock.
-
-The source adds those ten seconds as a 64-bit integer, which fails on a clock near its limit.
-
-The time must not be earlier than the registration that the builder keeps for the key.
-
-The signature must verify.
+A builder keeps a registration only when five rules hold.
 
 The source keeps only the message of a registration, and EthLib keeps it with its signature.
 
@@ -49,11 +37,13 @@ def MAX_REGISTRATION_LOOKAHEAD : UInt64 := 10
 
 It reads only the activation epoch, not the queue of pending deposits. -/
 def isPendingForRegistration (validator : Validator) (epoch : Epoch) : Bool :=
+  -- Pending in an epoch: the activation epoch is after it.
   epoch < validator.activationEpoch
 
 /-- Whether a validator may register: active or pending in the current epoch of the state. -/
 def isEligibleForRegistration (state : BeaconState preset fork) (validator : Validator) : Bool :=
   let epoch := getCurrentEpoch state
+  -- Active or pending in the current epoch.
   isActiveValidator validator epoch || isPendingForRegistration validator epoch
 
 /-- Why a builder refuses a registration. -/
@@ -97,34 +87,42 @@ def find? (registry : Registry) (pubkey : BLSPubkey) : Option SignedValidatorReg
 
 /-- The registry that keeps a signed registration in place of the one for the same key. -/
 def insert (registry : Registry) (signed : SignedValidatorRegistrationV1) : Registry :=
+  -- The new registration first, and the one kept for its key dropped.
   ⟨signed :: registry.entries.filter (·.message.pubkey ≠ signed.message.pubkey)⟩
 
 end Registry
 
 /-- The validator of the state with a key, the first one when several share it. -/
 def validatorOfPubkey? (state : BeaconState preset fork) (pubkey : BLSPubkey) : Option Validator :=
+  -- The source takes the first index of the key among the keys of the validators.
   state.validators.data.toList.find? (·.pubkey = pubkey)
 
 /-- Whether a builder keeps a signed registration, checked at a time of its clock in seconds.
 
-The rules run in the order of the source, so the first that fails names the error.
-
-The clock plus the lookahead must fit in 64 bits, as the integers of the source do. -/
+The rules run in the order of the source, so the first that fails names the error. -/
 def processRegistration (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (registry : Registry)
     (signed : SignedValidatorRegistrationV1) (now : UInt64) : Except RegistrationError Unit := do
   let registration := signed.message
+  -- The key corresponds to a registered validator: a validator of the state has it.
   let some validator := validatorOfPubkey? state registration.pubkey
     | throw (.unknownValidator registration.pubkey)
+  -- The validator is eligible: active or pending in the current epoch.
   unless isEligibleForRegistration state validator do
     throw (.notEligible registration.pubkey (getCurrentEpoch state))
+  -- Not a step of its own: the source adds the lookahead to the clock in 64 bits.
+  --
+  -- That sum fails at 2^64 or more.
   unless now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat < 2 ^ 64 do
     throw (.clockOverflow now MAX_REGISTRATION_LOOKAHEAD)
+  -- The timestamp is not too far in the future: at most the clock plus the lookahead.
   unless registration.timestamp.toNat ≤ now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat do
     throw (.tooFarInFuture registration.timestamp now MAX_REGISTRATION_LOOKAHEAD)
+  -- The timestamp is not less than that of the registration kept for the key, if any.
   if let some previous := registry.find? registration.pubkey then
     unless previous.message.timestamp ≤ registration.timestamp do
       throw (.olderThanPrevious registration.timestamp previous.message.timestamp)
+  -- The signature of the registration verifies.
   match verifyRegistrationSignature config checks signed with
   | .error fault => throw (.root fault)
   | .ok false => throw (.badSignature registration.pubkey)
@@ -135,6 +133,7 @@ def registerValidatorStatus (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (registry : Registry)
     (signed : SignedValidatorRegistrationV1) (now : UInt64) : Nat :=
   match processRegistration config checks state registry signed now with
+  -- The API: 200 for a valid registration, and 400 for an invalid one.
   | .ok () => 200
   | .error _ => 400
 

@@ -28,12 +28,11 @@ open Base Serialization.Ssz
 
 /-- The consensus version that the Builder API gives a fork, if it gives one.
 
-It is the version of the fork from Bellatrix on.
-
 The Builder API starts at the Merge, so it names no earlier version.
 
 Hegotá has no consensus version yet, so it has none here either. -/
 def builderVersion? (fork : Fork) : Option ConsensusVersion :=
+  -- The version of the fork from Bellatrix on, and none before.
   if .bellatrix ≤ fork then fork.consensusVersion? else none
 
 /-- The versions that the Builder API names, from Bellatrix to Gloas.
@@ -50,18 +49,14 @@ def isBuilderVersion (version : ConsensusVersion) : Bool := version ∈ builderV
 
 /-- The status that the version header of a request gives, when it decides one.
 
-A header that is absent gives 400.
-
-So does a header that is not the exact name of a version of the Builder API.
-
-Otherwise the header decides no status.
-
 From Gloas this applies to every request with a body.
 
 Before Gloas it applies to the SSZ body of a signed blinded block. -/
 def versionHeaderStatus (header : Option String) : Option Nat :=
   match header.bind ConsensusVersion.ofName? with
+  -- The exact name of a version of the Builder API decides no status, and any other gets 400.
   | some version => if isBuilderVersion version then none else some 400
+  -- A header that is absent, or that names no version, gets 400.
   | none => some 400
 
 /-- The body of a request that registers validators: a list of signed registrations.
