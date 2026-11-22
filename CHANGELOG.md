@@ -834,6 +834,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the gossipsub parameters take the slot duration and the slots per epoch as `UInt64`, and fail with an overflow when two epochs in milliseconds reach `2^64`, as the `uint64` arithmetic of the source does ([#3856](https://github.com/ethereum/EthLib/issues/3856)).
+  They return an `Except ArithError`, and the mesh and message cache theorems take the success as a hypothesis.
+  `gossipsubParameters_isOk_iff` states when they succeed, and `gossipsubParameters_seen_ttl` that the lifetime of a seen message ID is then two epochs in whole seconds.
+  In Python, `gossip.router.parameters` raises `GossipError` with `two epochs in milliseconds are not below 2^64` there, where it returned a lifetime from the unbounded product.
+  It also refuses a slot duration or a slots per epoch outside the 64-bit range.
+
 - The block checks and the state transition of the execution layer give their block errors through the shared conversion ([#3605](https://github.com/ethereum/EthLib/issues/3605)).
   No error code changes, but some messages change in Python.
   `blocks.validate_size`, `blocks.validate_header` and `blocks.check_header` give `block invalid: ` and the short name of the block error, with any inner error still named in full, such as `block invalid: wrongDifficulty (expected := 131072) (actual := 0)`.

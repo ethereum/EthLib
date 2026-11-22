@@ -14222,7 +14222,7 @@
    "errors": [],
    "error_class": "GossipError",
    "docstring":
-   "The gossipsub parameters, given the slot duration in milliseconds and the slots per epoch.\n\nA seen message ID lasts two epochs, in whole seconds, with the remainder dropped."},
+   "The gossipsub parameters, given the slot duration in milliseconds and the slots per epoch.\n\nA seen message ID lasts two epochs, in whole seconds, with the remainder dropped.\n\nThe slot duration and the slots per epoch are 64-bit configuration values.\n\nSo two epochs in milliseconds must fit 64 bits, and an overflow is an error.\n\nProvenance: the [phase 0 networking text][p2p] of consensus-specs states these parameters.\n\n[p2p]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/phase0/p2p-interface.md#the-gossip-domain-gossipsub"},
   {"summary":
    "What the router does with one RPC, with its client choices given as tables.",
    "signature":

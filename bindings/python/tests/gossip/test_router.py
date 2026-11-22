@@ -101,6 +101,17 @@ def test_seen_lifetime_drops_the_remainder() -> None:
     assert parameters(1700, 1).seen_ttl == 3
 
 
+def test_seen_lifetime_fits_64_bits() -> None:
+    # The source multiplies on uint64, so two epochs of 2^63 ms overflow.
+    with raises(GossipError, "two epochs in milliseconds are not below 2^64"):
+        parameters(2**63, 1)
+    # One epoch of 2^32 slots of 2^32 ms already reaches 2^64.
+    with raises(GossipError, "two epochs in milliseconds are not below 2^64"):
+        parameters(2**32, 2**32)
+    # Two epochs of 2^63 - 1 ms are 2^64 - 2 ms, which fit.
+    assert parameters(2**63 - 1, 1).seen_ttl == (2**64 - 2) // 1000
+
+
 # Every field holds two distinct entries, and the message cache two windows.
 OLD = Message(data=b"old", topic=TOPIC)
 OLD_ID = gossip.message_id(FORK, TOPIC.encode(), OLD.data)
