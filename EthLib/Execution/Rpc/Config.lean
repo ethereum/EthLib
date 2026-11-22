@@ -13,27 +13,11 @@ Each configuration has the parameters at its activation, rather than at the head
 
 The configurations are those of the forks by timestamp, the named BPO forks included.
 
-A fork from Dencun on that activates at a block after genesis has no known activation time.
+The fork ID is the fork hash of [EIP-6122][eip-6122] that the node announces at that activation.
 
-It is never a next or last configuration, as EIP-7910 leaves such a fork out.
+The report covers Dencun (Cancun) through Glamsterdam (Amsterdam), and no later fork.
 
-The method fails when the head has not reached that block, or when that fork is the current one.
-
-A chain blob schedule that starts neither at genesis nor at a fork time makes the method fail.
-
-The fork ID is the `FORK_HASH` of [EIP-6122][eip-6122] that the node announces at that activation.
-
-The method requires the genesis hash and timestamp.
-
-It supports Dencun (Cancun) through Glamsterdam (Amsterdam).
-
-A head after Glamsterdam makes the method fail.
-
-A future fork after Glamsterdam is one that the node does not support, so the report leaves it out.
-
-When no supported fork is scheduled after the head, the next and last configurations are null.
-
-Before Cancun, EIP-7910 [permits nonstandard reports][compat]; this definition gives none.
+Before Cancun, EIP-7910 [permits nonstandard reports][compat], and EthLib gives none.
 
 [eip]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7910.md#specification
 [compat]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7910.md#backwards-compatibility
@@ -57,6 +41,7 @@ EIP-7910 names every precompile through Osaka.
 
 Any other address has the empty name, and no report uses it. -/
 def precompileName : Nat → String
+  -- EIP-7910: the names for Cancun, then those that Prague adds, then the one of Osaka.
   | 0x01 => "ECREC"
   | 0x02 => "SHA256"
   | 0x03 => "RIPEMD160"
@@ -75,10 +60,12 @@ def precompileName : Nat → String
   | 0x10 => "BLS12_MAP_FP_TO_G1"
   | 0x11 => "BLS12_MAP_FP2_TO_G2"
   | 0x100 => "P256VERIFY"
+  -- Any other address has no name in EIP-7910.
   | _ => ""
 
 /-- The names of the active precompiles, paired with their addresses. -/
 def configPrecompiles (fork : Fork) : List (String × Address) :=
+  -- EIP-7910: the precompiles active at the fork, each with its name and its 20-byte address.
   (Evm.Precompiles.ADDRESSES.filter (Evm.Precompiles.isPrecompile fork)).map
     fun address => (precompileName address, toAddressMasked (BitVec.ofNat 256 address))
 
@@ -94,10 +81,13 @@ From Amsterdam they also hold the builder contracts named by [EIP-8282][builders
 [eip-7773]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7773.md
 -/
 def configSystemContracts (config : ChainConfig) (fork : Fork) : List (String × Address) :=
+  -- EIP-7910, from Cancun: the beacon roots contract of EIP-4788.
   (if .dencun ≤ fork then [("BEACON_ROOTS_ADDRESS", BEACON_ROOTS_ADDRESS)] else []) ++
+  -- EthLib's choice, as no meta-EIP lists them: the builder contracts of EIP-8282, from Amsterdam.
   (if .glamsterdam ≤ fork then
     [("BUILDER_DEPOSIT_CONTRACT_ADDRESS", BUILDER_DEPOSIT_CONTRACT_ADDRESS),
       ("BUILDER_EXIT_CONTRACT_ADDRESS", BUILDER_EXIT_CONTRACT_ADDRESS)] else []) ++
+  -- EIP-7910, from Prague: four more, with the deposit contract that EIP-6110 sets per chain.
   (if .pectra ≤ fork then
     [("CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS", CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS),
       ("DEPOSIT_CONTRACT_ADDRESS", config.depositContractAddress),
@@ -106,13 +96,12 @@ def configSystemContracts (config : ChainConfig) (fork : Fork) : List (String ×
 
 /-- Every chain blob schedule starts at genesis or at the time of a fork.
 
-A schedule by block must start at block zero.
-
 [EIP-7892][eip-7892] ties each blob schedule to the time of a fork.
 
 [eip-7892]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7892.md#execution-layer-configuration
 -/
 def configBlobsAtForks (s : Schedule) : Bool :=
+  -- EIP-7892 ties each schedule to a fork time; EthLib also accepts one by block at block 0.
   s.config.blobSchedules.all fun (_, activation, _) =>
     match activation with
     | .block n => n == 0
@@ -120,6 +109,7 @@ def configBlobsAtForks (s : Schedule) : Bool :=
 
 /-- Whether the activation time of a fork is known: it activates by time or at block zero. -/
 def configTimeKnown (config : ChainConfig) (fork : Fork) : Bool :=
+  -- EIP-7910: a fork at genesis has time 0; EthLib's choice: a later fork by block has none.
   config.activations.all fun (f, activation) =>
     match activation with
     | .block n => f != fork || n == 0
@@ -129,6 +119,7 @@ def configTimeKnown (config : ChainConfig) (fork : Fork) : Bool :=
 
 It is zero when the head has reached no fork time after genesis. -/
 def configCurrentTime (s : Schedule) (timestamp : Nat) : Nat :=
+  -- EIP-7910: 0 for genesis, else the last fork time at or before the head.
   (0 :: s.times.filter (· ≤ timestamp)).getLast (by simp)
 
 /-- The parameters of one reported configuration.
@@ -156,26 +147,34 @@ structure ConfigObject where
 
 An activation time of zero stands for genesis, whose timestamp can be nonzero.
 
-No active fork, a zero chain ID or a fork outside Dencun to Glamsterdam gives an error.
+It fails when no fork is active, or when the fork is outside Dencun to Glamsterdam.
 
-So does a passed fork whose block or time is not below 2^64, which a fork ID cannot encode.
+It fails on a chain ID of zero, and on a passed block or time that is not below `2^64`.
 
-The configuration readers of the exports already refuse such a fork, so only Lean reaches this.
+The configuration readers of the exports refuse such a block or time, so only Lean reaches it.
 
 The block number stays fixed for future timestamp forks.
 
 The fork ID is then the one of that activation when the head has passed every fork block. -/
 def configObject (s : Schedule) (number activationTime : Nat) : Except RpcError ConfigObject := do
+  -- EIP-7910: 0 stands for genesis, so the time is at least that of genesis.
   let timestamp := max s.genesisTime activationTime
+  -- The fork active then, else EthLib's choice of code -32001.
   let some fork := s.config.activeFork number timestamp
     | throw (resourceNotFound.toRpcError (some (.str "eth_config: no active fork")))
   if h : .dencun ≤ fork then
+    -- A fork after Glamsterdam, which the report does not cover: EthLib's code -32004.
     unless fork ≤ .glamsterdam do
       throw (methodNotSupported.toRpcError (some (.str "eth_config: unsupported fork")))
+    -- EIP-7910 supports no chain ID of 0, and EthLib answers code -32603.
     unless s.config.chainId ≠ 0 do
       throw (internalError.toRpcError (some (.str "eth_config: zero chain ID")))
+    -- EIP-6122: each passed block or time is a 64-bit number, else no fork ID; EthLib's -32603.
     unless (s.passed number timestamp).all (fun a => activationValue a < ACTIVATION_BOUND) do
       throw (internalError.toRpcError (some (.str "eth_config: activation is not below 2^64")))
+    -- EIP-7910: the blob schedule of the fork, the chain ID, the fork hash of EIP-6122.
+    --
+    -- Then the precompiles and the system contracts of the fork.
     return {
       fork := fork
       sinceDencun := h
@@ -186,26 +185,35 @@ def configObject (s : Schedule) (number activationTime : Nat) : Except RpcError 
       precompiles := configPrecompiles fork
       systemContracts := configSystemContracts s.config fork }
   else
+    -- Before Cancun, EthLib gives no report: EthLib's code -32004.
     throw (methodNotSupported.toRpcError (some (.str "eth_config: before Cancun")))
 
 /-- Whether the node supports the fork that is active at a fork time, at a head's block number.
 
 The supported forks run up to Glamsterdam. -/
 def configSupported (s : Schedule) (number time : Nat) : Bool :=
+  -- EthLib's choice: the report covers the forks up to Glamsterdam.
   match s.config.activeFork number (max s.genesisTime time) with
   | some fork => decide (fork ≤ .glamsterdam)
   | none => false
 
 /-- The fork times after a head whose forks the node supports, in ascending order. -/
 def configFutureTimes (s : Schedule) (number timestamp : Nat) : List Nat :=
+  -- The fork times after the head whose forks EthLib supports, so a later fork is left out.
+  --
+  -- A fork at a block after genesis has no time, so it is never among them, as EIP-7910 asks.
   s.times.filter fun time => timestamp < time && configSupported s number time
 
 /-- A named address table as a JSON object, which orders its names alphabetically. -/
 def configAddressesJson (entries : List (String × Address)) : Json :=
+  -- EIP-7910: each name with its 20-byte address in hex, the names in alphabetical order.
   Json.mkObj (entries.map fun (name, address) => (name, dataJson address.toList))
 
 /-- The configuration object, with the six members required by EIP-7910. -/
 def ConfigObject.toJson (c : ConfigObject) : Json :=
+  -- EIP-7910: the activation time and the blob schedule as JSON numbers.
+  --
+  -- The chain ID as a hex quantity, and the fork ID as 4 bytes in hex.
   Json.mkObj [
     ("activationTime", Lean.toJson c.activationTime),
     ("blobSchedule", Json.mkObj [
@@ -228,6 +236,7 @@ structure ConfigReport where
 
 /-- The three members of an EIP-7910 response, with absent future configurations written as null. -/
 def ConfigReport.toJson (r : ConfigReport) : Json :=
+  -- EIP-7910: the current, the next and the last configurations, null when absent.
   Json.mkObj [("current", r.current.toJson), ("next", optionJson ConfigObject.toJson r.next),
     ("last", optionJson ConfigObject.toJson r.last)]
 
@@ -235,36 +244,40 @@ namespace ChainView
 
 /-- The fork-ID schedule of the view, when the view knows its genesis hash and timestamp. -/
 def schedule? (v : ChainView) : Option Schedule :=
+  -- EIP-6122: the fork hash starts from the genesis hash, and a fork at genesis is no fork.
   v.genesis.map fun (genesisHash, genesisTime) =>
     ⟨genesisHash, genesisTime, v.config, v.mergeForkBlock⟩
 
 /-- The configuration report at the head, which EIP-7910 requires to reflect the latest header.
 
-The genesis context is required even when the node has pruned its genesis block.
+It fails without the genesis hash and timestamp, even when the node has pruned its genesis block.
 
-The head must have passed every fork block, the Merge fork-ID block included.
+It fails when a blob schedule starts neither at genesis nor at a fork time.
 
-The current activation is the last fork time reached by the head, or zero for genesis.
+It fails when the head has not passed every fork block, the Merge fork-ID block included.
 
-The next and last configurations are those of the first and last supported fork times after it.
-
-A fork that activates at a block after genesis has no time, so it is never a next or last one.
-
-The current configuration cannot be left out, so the method fails when its time is unknown. -/
+It fails when the current fork activates at a block after genesis, since its time is unknown. -/
 def configReport (v : ChainView) : Except RpcError ConfigReport := do
+  -- The genesis hash and timestamp, else EthLib's choice of code -32603.
   let some s := v.schedule?
     | throw (internalError.toRpcError (some (.str "eth_config: genesis context unavailable")))
+  -- EIP-7892: each blob schedule starts at genesis or at a fork time, else EthLib's code -32603.
   unless configBlobsAtForks s do
     throw (internalError.toRpcError (some (.str "eth_config: blob schedule without a fork")))
+  -- EthLib's choice: the head has passed every fork block, the Merge one included, else -32603.
   unless s.blocks.all (· ≤ v.head.block.header.number) do
     throw (internalError.toRpcError (some (.str "eth_config: fork block not reached")))
   let number := v.head.block.header.number
   let timestamp := v.head.block.header.timestamp.toNat
+  -- The current configuration, at the last fork time that the head reached, or 0 for genesis.
   let current ← configObject s number (configCurrentTime s timestamp)
+  -- EIP-7910 leaves out a fork of unknown time; the current one cannot be, so EthLib's -32603.
   unless configTimeKnown s.config current.fork do
     throw (internalError.toRpcError (some (.str "eth_config: activation time is unknown")))
   match configFutureTimes s number timestamp with
+  -- EIP-7910: no supported fork after the head, so the next and the last are null.
   | [] => return ⟨current, none, none⟩
+  -- Else the first and the last supported fork times after the head.
   | first :: rest =>
     let next ← configObject s number first
     let last ← configObject s number ((first :: rest).getLast (by simp))

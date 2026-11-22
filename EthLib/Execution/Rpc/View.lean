@@ -25,13 +25,7 @@ A valid view follows the state transition from its lowest block on.
 
 [EIP-1898][eip1898] lets a query by hash require that the block be canonical.
 
-It says that the node SHOULD answer a block that it does not find with an error, code `-32001`.
-
-With the flag set, it SHOULD also answer a block off the canonical chain with code `-32000`.
-
-The view follows the second recommendation.
-
-A block that it does not find resolves to no block, and each method says what it answers then.
+A block that the view does not find resolves to no block, and each method says what it answers.
 
 [block]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/block.yaml
 [eip1898]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-1898.md#specification
@@ -75,6 +69,7 @@ Its body runs again on that chain, for its receipts, its logs and its block acce
 def BlockRecord.ofRun (chain : BlockChain) {fork : Fork} (block : Block fork Transaction)
     (hash : Hash32) (state : State) : Except BlockError BlockRecord := do
   let result ← runBody chain block
+  -- The block access list of EIP-7928, for a block whose header commits to one.
   let accessList := result.output.accessListHash.map fun _ => result.output.body.builder.build
   return ⟨fork, block, hash, state, result.output.receipts, result.output.logs, accessList⟩
 
@@ -82,12 +77,14 @@ def BlockRecord.ofRun (chain : BlockChain) {fork : Fork} (block : Block fork Tra
 
 Any later block gives none. -/
 def BlockRecord.genesis (r : BlockRecord) : Option (Hash32 × Nat) :=
+  -- EIP-6122: the fork hash starts from the hash of block 0, and a fork at its time is no fork.
   if r.block.header.number = 0 then some (r.hash, r.block.header.timestamp.toNat) else none
 
 /-- The block that a safe or finalized hash of the consensus layer names.
 
 A hash of thirty-two zero bytes names no block. -/
 def namedBlock (hash : Hash32) : Option Hash32 :=
+  -- Engine API of Paris: the safe and finalized hashes may be zero until the transition is final.
   if hash = Vector.replicate 32 0 then none else some hash
 
 /-- What a node holds when it answers a query. -/
@@ -202,10 +199,16 @@ def byHash (v : ChainView) (h : Hash32) : Option BlockRecord :=
 
 A safe or finalized hash that names no canonical block resolves to no block. -/
 def byTag (v : ChainView) : BlockTag → Option BlockRecord
+  -- The tags of the schema: the latest block is the head of the canonical chain.
   | .latest => some v.head
+  -- The earliest block is the lowest block that the node holds.
   | .earliest => some v.lowest
+  -- The safe and the finalized blocks are those of the consensus layer, when canonical.
+  --
+  -- Else the method answers as for an unknown block, as the schema says.
   | .safe => v.safe.bind v.canonicalByHash
   | .finalized => v.finalized.bind v.canonicalByHash
+  -- The pending block is a sample next block on top of the head, if the node built one.
   | .pending => v.pending
 
 /-- The error of a query by hash that requires a canonical block, when the block found is not. -/
@@ -216,12 +219,18 @@ def notCanonical : RpcError :=
 
 A query by hash that requires a canonical block fails when the block it finds is not one. -/
 def resolve (v : ChainView) : BlockParam → Except RpcError (Option BlockRecord)
+  -- A number names a canonical block.
   | .number n => .ok (v.byNumber n)
   | .tag t => .ok (v.byTag t)
+  -- EIP-1898: a hash names any block that the node holds.
   | .hash h requireCanonical =>
     match v.byHash h with
+    -- EIP-1898 recommends -32001 for a block not found; EthLib leaves the answer to each method.
     | none => .ok none
     | some r =>
+      -- EIP-1898 recommends code -32000 for a block off the canonical chain when the flag is set.
+      --
+      -- EthLib follows it.
       if requireCanonical && (v.canonicalByHash h).isNone then .error notCanonical
       else .ok (some r)
 
