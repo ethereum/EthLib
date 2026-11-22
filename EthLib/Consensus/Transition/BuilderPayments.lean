@@ -33,25 +33,29 @@ variable {preset : Preset} {fork : Base.Fork}
 /-- The withdrawals of the payments of the first epoch that reach a quorum, in their order. -/
 def releasedPayments (payments : List BuilderPendingPayment) (perEpoch : Nat) (quorum : Gwei) :
     List BuilderPendingWithdrawal :=
+  -- Among the first payments, as many as the count, those with a weight of at least the quorum.
   ((payments.take perEpoch).filter (quorum ≤ ·.weight)).map (·.withdrawal)
 
 /-- The payments moved by one epoch: the second half becomes the first, and the second is empty.
 -/
 def shiftPayments (payments : BuilderPendingPayments preset) : BuilderPendingPayments preset :=
+  -- Entry `i < P` takes entry `i + P`, for `P = SLOTS_PER_EPOCH`, and each later entry is empty.
   .ofVector <| Vector.ofFn fun (position : Fin _) =>
     if early : position.val < preset.SLOTS_PER_EPOCH.toNat then
       payments[position.val + preset.SLOTS_PER_EPOCH.toNat]'(by omega)
     else BuilderPendingPayment.empty
 
-/-- The state after the payments of the previous epoch are settled at the end of an epoch.
-
-Those that reach the quorum join the withdrawals, and the current epoch's payments move down. -/
+/-- The state after the payments of the previous epoch are settled at the end of an epoch. -/
 def processBuilderPendingPayments (state : BeaconState preset fork)
     (gloas : .glamsterdam ≤ fork) : Except AccessorError (BeaconState preset fork) := do
+  -- The quorum: six tenths of the active balance of one slot, as EIP-7732 specifies.
   let quorum ← getBuilderPaymentQuorumThreshold state
   let payments := state.builderPendingPayments gloas
+  -- The payments of the previous epoch that reach the quorum join the withdrawals, in order.
   let released := releasedPayments payments.elements.toList preset.SLOTS_PER_EPOCH.toNat quorum
   let withdrawals := (state.builderPendingWithdrawals gloas).data ++ released.toArray
+  -- The payments of the current epoch move down, and the second half empties.
+  --
   -- The shifted payments are built here, once, so that a read of the field does not build them.
   let shifted := shiftPayments payments
   return { state with
