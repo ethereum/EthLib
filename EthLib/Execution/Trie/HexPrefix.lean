@@ -32,11 +32,11 @@ namespace EthLib.Execution.Trie
 /-- A nibble: half a byte, from 0 to 15. -/
 abbrev Nibble := Fin 16
 
-/-- The high nibble of a byte, `(byte & 0xF0) >> 4`. -/
+/-- The high nibble of a byte, `floor(byte / 16)`. -/
 def highNibble (byte : UInt8) : Nibble :=
   ⟨byte.toNat / 16, by have := byte.toNat_lt; omega⟩
 
-/-- The low nibble of a byte, `byte & 0x0F`. -/
+/-- The low nibble of a byte, `byte mod 16`. -/
 def lowNibble (byte : UInt8) : Nibble :=
   ⟨byte.toNat % 16, by omega⟩
 
@@ -45,6 +45,7 @@ def lowNibble (byte : UInt8) : Nibble :=
 Source: the function `y` in Appendix D of the Yellow Paper, Shanghai version, in `Paper.tex`:
 <https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex#L1681>. -/
 def bytesToNibbleList (bytes : ByteArray) : List Nibble :=
+  -- `k'[i] = floor(k[i / 2] / 16)` for an even `i`, and `k[floor(i / 2)] mod 16` otherwise.
   bytes.data.toList.flatMap fun byte => [highNibble byte, lowNibble byte]
 
 /-- An even number of nibbles, two to a byte, high nibble first.
@@ -61,14 +62,17 @@ def packNibbles : (x : List Nibble) → x.length % 2 = 0 → List UInt8
 /-- `HP(x, t)`: the path `x` and the leaf flag `t` as bytes.
 
 Source: Appendix C of the Yellow Paper, Shanghai version, in `Paper.tex`:
-<https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex#L1651>.
-
-`f(t)` is 2 for a leaf and 0 for an extension. -/
+<https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex#L1651>. -/
 def nibbleListToCompact (x : List Nibble) (isLeaf : Bool) : ByteArray :=
+  -- `f(t) = 2` if `t ≠ 0`, and `0` otherwise, with `t` the leaf flag.
   if h : x.length % 2 = 0 then
+    -- `||x||` even: `(16 * f(t), 16 * x[0] + x[1], 16 * x[2] + x[3], ...)`.
+    --
     -- The first nibble `f(t)` and a 0 nibble of padding make the byte `16 * f(t)`.
     ⟨⟨packNibbles ((if isLeaf then 2 else 0) :: 0 :: x) (by simp only [List.length_cons]; omega)⟩⟩
   else
+    -- Otherwise: `(16 * (f(t) + 1) + x[0], 16 * x[1] + x[2], 16 * x[3] + x[4], ...)`.
+    --
     -- The first nibble `f(t) + 1` and `x[0]` make the byte `16 * (f(t) + 1) + x[0]`.
     ⟨⟨packNibbles ((if isLeaf then 3 else 1) :: x) (by simp only [List.length_cons]; omega)⟩⟩
 
@@ -102,6 +106,7 @@ instance : Repr HexPrefixError := ⟨HexPrefixError.reprPrec⟩
 def compactToNibbleList (compact : ByteArray) : Except HexPrefixError (List Nibble × Bool) :=
   match bytesToNibbleList compact with
   | firstNibble :: secondNibble :: rest =>
+    -- The first nibble is `f(t)` or `f(t) + 1`, so at most 3.
     if 3 < firstNibble.val then
       .error (.invalidFirstNibble firstNibble.val)
     -- An odd path starts at the second nibble, and the leaf flag is a first nibble of 2 or 3.

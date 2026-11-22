@@ -83,10 +83,13 @@ def TrieError.code : TrieError → UInt32
 
 No node is the empty byte string. -/
 def unencoded : Option InternalNode → Item
+  -- Not in Appendix D: `c(∅, i)` is undefined, so here it is `()`, as `n(∅, i)` is.
   | none => .bytes .empty
+  -- A leaf: `(HP(I_0[i .. (||I_0|| - 1)], 1), I_1)`, for the one pair `I` of `𝔍`.
   | some (.leaf restOfKey value) => .list [.bytes (nibbleListToCompact restOfKey true), .bytes value]
+  -- An extension: `(HP(I_0[i .. (j - 1)], 0), n(𝔍, j))`.
   | some (.extension keySegment subnode) => .list [.bytes (nibbleListToCompact keySegment false), subnode]
-  -- The 16 children, then the value.
+  -- A branch: `(u(0), u(1), ..., u(15), v)`, the 16 children, then the value.
   | some (.branch subnodes value) => .list (subnodes.toList ++ [.bytes value])
 
 /-- How a parent holds a node: `n` of the Yellow Paper, with a hash that may answer in a monad.
@@ -96,8 +99,12 @@ def unencoded : Option InternalNode → Item
 def encodeInternalNodeM {m : Type → Type} [Monad m] (hash : ByteArray → m Hash32)
     (node : Option InternalNode) : ExceptT RlpError m Item := do
   let encoded ← encode (unencoded node)
+  -- `n(𝔍, i) = c(𝔍, i)` if `||RLP(c(𝔍, i))|| < 32`.
+  --
+  -- The case `n(∅, i) = ()` falls here, since `RLP(()) = 0x80` has one byte.
   if encoded.size < 32 then
     return unencoded node
+  -- `n(𝔍, i) = KEC(RLP(c(𝔍, i)))` otherwise.
   else
     return .bytes ⟨(← hash encoded).toArray⟩
 
@@ -137,25 +144,27 @@ The first `level` nibbles of every path are already consumed.
 def patricializeStepM {m : Type → Type} [Monad m] (hash : ByteArray → m Hash32)
     (recurse : List (List Nibble × ByteArray) → Nat → ExceptT RlpError m (Option InternalNode)) :
     List (List Nibble × ByteArray) → Nat → ExceptT RlpError m (Option InternalNode)
+  -- No key: no node, held by a parent as `n(∅, i) = ()`, and so `TRIE(∅) = KEC(RLP(()))`.
   | [], _ => pure none
-  -- The rest of the one path, and its value.
+  -- `||𝔍|| = 1`: a leaf with the rest of the one path, and its value.
   | [(key, value)], level => pure (some (.leaf (key.drop level) value))
   | obj@((arbitraryKey, _) :: _ :: _), level => do
     let substring := arbitraryKey.drop level
-    -- The longest run of nibbles after `level` that every path shares.
+    -- `j - i`: the length of the longest run of nibbles after `i = level` that every path shares.
     let prefixLength :=
       obj.foldl (fun length (key, _) => min length (commonPrefixLength substring (key.drop level)))
         substring.length
+    -- `i ≠ j`, since `j - i > 0`: an extension consumes the run, and holds `n(𝔍, j)`.
     if 0 < prefixLength then
-      -- Every path shares the run, so an extension consumes it.
       let subnode ← encodeInternalNodeM hash (← recurse obj (level + prefixLength))
       return some (.extension (substring.take prefixLength) subnode)
+    -- Otherwise a branch.
     else
-      -- The value of the key whose path ends here, or the empty byte string.
+      -- `v = I_1` for the key with `||I_0|| = i`, or `()` when no key ends here.
       let value :=
         obj.foldl (fun value (key, keyValue) => if key.length = level then keyValue else value)
           .empty
-      -- The child of each next nibble holds the keys whose path continues with it, in order.
+      -- `u(j) = n({I ∈ 𝔍 : I_0[i] = j}, i + 1)` for each nibble `j`, in order.
       let subnodes ← mapMVector (fun nibble => do
           encodeInternalNodeM hash
             (← recurse (obj.filter fun (key, _) => key[level]? = some nibble) (level + 1)))
@@ -239,7 +248,9 @@ def trieGet (trie : Trie) (key : ByteArray) : ByteArray :=
 /-- The path of a key: its nibbles, after hashing it in a secured trie. -/
 def keyPathM {m : Type → Type} [Monad m] (hash : ByteArray → m Hash32) (secured : Bool)
     (key : ByteArray) : m (List Nibble) := do
+  -- A secured trie keys each value by `KEC(k)`, as `L_I` and `p(a)` of Yellow Paper §4.1 do.
   let bytes ← if secured then do pure ⟨(← hash key).toArray⟩ else pure key
+  -- `y`: each byte as its high nibble, then its low nibble.
   return bytesToNibbleList bytes
 
 /-- The path of a key, with a plain hash. -/
@@ -253,6 +264,7 @@ def prepareDataM {m : Type → Type} [Monad m] (hash : ByteArray → m Hash32)
     (data : List (ByteArray × ByteArray)) (secured : Bool) :
     ExceptT TrieError m (List (List Nibble × ByteArray)) :=
   data.mapM fun (preimage, value) =>
+    -- A key set to the empty byte string is no key, so an empty value here is an error.
     if value.size = 0 then
       throw .emptyValue
     else do
@@ -263,18 +275,14 @@ def prepareData (hash : ByteArray → Hash32) (data : List (ByteArray × ByteArr
     Except TrieError (List (List Nibble × ByteArray)) :=
   (prepareDataM (m := Id) hash data secured).run
 
-/-- `TRIE` of the Yellow Paper: the hash of the encoding of the root node.
-
-The root node is first held as a parent would hold it, and then hashed if its encoding is short.
-
-Both cases give the hash of the encoding of the root node:
-
-- A short encoding is hashed here.
-- A long encoding is replaced by its hash already, and that hash is the root. -/
+/-- `TRIE` of the Yellow Paper: the hash of the encoding of the root node, whatever its size. -/
 def rootM {m : Type → Type} [Monad m] (hash : ByteArray → m Hash32) (trie : Trie) :
     ExceptT TrieError m Hash32 := do
+  -- `y(𝔍)`: each key as a path of nibbles, after `KEC` in a secured trie.
   let obj ← prepareDataM hash trie.data trie.secured
+  -- `c(𝔍, 0)`.
   let rootNode ← (patricializeM hash obj 0).adapt .rlp
+  -- `TRIE(𝔍) = KEC(RLP(c(𝔍, 0)))`, whatever the size of the encoding.
   let encoded ← ((encode (unencoded rootNode)).mapError .rlp : Except TrieError ByteArray)
   ExceptT.lift (hash encoded)
 
