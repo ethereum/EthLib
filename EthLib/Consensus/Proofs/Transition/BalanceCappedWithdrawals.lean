@@ -242,14 +242,16 @@ theorem getExpectedWithdrawals_sweep_floor {state : BeaconState preset fork}
       (if electra : .pectra ≤ fork then
         getPendingPartialWithdrawals state electra (state.nextWithdrawalIndex capella) #[]
       else .ok (#[], state.nextWithdrawalIndex capella, 0)) =
-        .ok (partials, next, expected.processedPartialWithdrawalsCount) ∧
+        .ok (partials, next, expected.processedPartialWithdrawalsCount.toNat) ∧
       min (balance.toNat - withdrawnFrom partials index)
           (withdrawalMaxEffectiveBalance preset fork validator).toNat ≤
         balance.toNat - withdrawnFrom expected.withdrawals index := by
   have total := getExpectedWithdrawals_withdrawnFrom (.inl before) computed held
-  simp only [getExpectedWithdrawals, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  simp only [getExpectedWithdrawals, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
+    liftCount_ok_iff] at computed
   obtain ⟨⟨builders, index1, _⟩, buildersOk, ⟨partials, index2, _⟩, partialsOk,
-    ⟨buildersSweep, index3, _⟩, buildersSweepOk, ⟨sweep, index4, _⟩, sweepOk, rfl⟩ := computed
+    ⟨buildersSweep, index3, _⟩, buildersSweepOk, ⟨sweep, index4, _⟩, sweepOk,
+    _, -, _, ⟨-, rfl⟩, _, -, _, -, rfl⟩ := computed
   have noGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   simp only [noGloas, ↓reduceDIte, Except.ok.injEq, Prod.mk.injEq] at buildersOk buildersSweepOk
   obtain ⟨rfl, rfl, _⟩ := buildersOk
@@ -285,7 +287,8 @@ theorem getExpectedWithdrawals_capped {state : BeaconState preset fork}
   unfold getExpectedWithdrawals at computed
   simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨⟨builders, index1, _⟩, buildersOk, ⟨partials, index2, _⟩, partialsOk,
-    ⟨buildersSweep, index3, _⟩, buildersSweepOk, ⟨sweep, index4, _⟩, sweepOk, rfl⟩ := computed
+    ⟨buildersSweep, index3, _⟩, buildersSweepOk, ⟨sweep, index4, _⟩, sweepOk,
+    _, _, _, _, _, _, _, _, rfl⟩ := computed
   -- The withdrawals before the sweep take nothing from the validator.
   have quiet : ∀ {first : Array Withdrawal}, withdrawnFrom first index = 0 →
       ∀ {start : WithdrawalIndex} {result : Array Withdrawal × WithdrawalIndex × Nat},

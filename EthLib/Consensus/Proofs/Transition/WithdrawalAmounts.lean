@@ -319,19 +319,20 @@ From Gloas the queued builder withdrawals that are read number at most their que
 theorem getExpectedWithdrawals_bounds {capella : .shapella ≤ fork}
     {expected : ExpectedWithdrawals}
     (computed : getExpectedWithdrawals state capella = .ok expected) :
-    expected.processedSweepWithdrawalsCount ≤
+    expected.processedSweepWithdrawalsCount.toNat ≤
         min state.validators.data.size preset.MAX_VALIDATORS_PER_WITHDRAWALS_SWEEP.toNat ∧
-      (∀ gloas : .glamsterdam ≤ fork, expected.processedBuildersSweepCount ≤
+      (∀ gloas : .glamsterdam ≤ fork, expected.processedBuildersSweepCount.toNat ≤
         min (state.builders gloas).data.size preset.MAX_BUILDERS_PER_WITHDRAWALS_SWEEP.toNat) ∧
-      (∀ electra : .pectra ≤ fork, expected.processedPartialWithdrawalsCount ≤
+      (∀ electra : .pectra ≤ fork, expected.processedPartialWithdrawalsCount.toNat ≤
         (state.pendingPartialWithdrawals electra).data.size) ∧
-      (∀ gloas : .glamsterdam ≤ fork, expected.processedBuilderWithdrawalsCount ≤
+      (∀ gloas : .glamsterdam ≤ fork, expected.processedBuilderWithdrawalsCount.toNat ≤
         (state.builderPendingWithdrawals gloas).data.size) := by
   unfold getExpectedWithdrawals at computed
-  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, liftCount_ok_iff] at computed
   obtain ⟨⟨builders, index1, builderCount⟩, buildersOk, ⟨partials, index2, partialCount⟩,
     partialsOk, ⟨buildersSweep, index3, buildersSweepCount⟩, buildersSweepOk,
-    ⟨sweep, index4, sweepCount⟩, sweepOk, rfl⟩ := computed
+    ⟨sweep, index4, sweepCount⟩, sweepOk, _, ⟨-, rfl⟩, _, ⟨-, rfl⟩, _, ⟨-, rfl⟩, _, ⟨-, rfl⟩,
+    rfl⟩ := computed
   refine ⟨?_, fun gloas => ?_, fun electra => ?_, fun gloas => ?_⟩
   · unfold getValidatorsSweepWithdrawals at sweepOk
     simp only [bind_ok_iff, ensure_ok_iff] at sweepOk
@@ -829,7 +830,7 @@ theorem getExpectedWithdrawals_parts {capella : .shapella ≤ fork}
     ∃ (builders partials buildersSweep sweep : Array Withdrawal)
       (index1 index2 index3 index4 : WithdrawalIndex) (count1 count2 count3 count4 : Nat),
       expected.withdrawals = builders ++ partials ++ buildersSweep ++ sweep ∧
-      expected.processedBuilderWithdrawalsCount = count1 ∧
+      expected.processedBuilderWithdrawalsCount.toNat = count1 ∧
       (∀ gloas : .glamsterdam ≤ fork, getBuilderWithdrawals state gloas
         (state.nextWithdrawalIndex capella) #[] = .ok (builders, index1, count1)) ∧
       (fork < .glamsterdam → builders = #[] ∧ index1 = state.nextWithdrawalIndex capella) ∧
@@ -842,11 +843,11 @@ theorem getExpectedWithdrawals_parts {capella : .shapella ≤ fork}
       getValidatorsSweepWithdrawals state capella index3 (builders ++ partials ++ buildersSweep) =
         .ok (sweep, index4, count4) := by
   unfold getExpectedWithdrawals at computed
-  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, liftCount_ok_iff] at computed
   obtain ⟨⟨builders, index1, count1⟩, buildersOk, ⟨partials, index2, count2⟩, partialsOk,
-    ⟨buildersSweep, index3, count3⟩, buildersSweepOk, ⟨sweep, index4, count4⟩, sweepOk, rfl⟩ :=
-    computed
-  refine ⟨builders, partials, buildersSweep, sweep, index1, index2, index3, index4, count1,
+    ⟨buildersSweep, index3, count3⟩, buildersSweepOk, ⟨sweep, index4, count4⟩, sweepOk, _,
+    ⟨-, rfl⟩, _, -, _, -, _, -, rfl⟩ := computed
+  refine ⟨builders, partials, buildersSweep, sweep, index1, index2, index3, index4, _,
     count2, count3, count4, rfl, rfl, fun gloas => ?_, fun before => ?_, fun electra => ?_,
     fun before => ?_, fun gloas => ?_, fun before => ?_, sweepOk⟩
   · simpa only [gloas, ↓reduceDIte] using buildersOk

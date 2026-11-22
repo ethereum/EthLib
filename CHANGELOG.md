@@ -834,6 +834,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the four counts of the expected withdrawals are `UInt64`, as the source types them ([#3858](https://github.com/ethereum/EthLib/issues/3858)).
+  The parts still count on natural numbers, and a count of `2^64` or more fails, as the increment of a `uint64` count that reaches it would; no reachable value changes.
+  The updates of the queues and of the sweep of builders take the counts as `UInt64`, and the sweep of builders adds its count with no wrap.
+  Theorems that use a count as a list length take its `toNat`, among them `getExpectedWithdrawals_bounds`, `getExpectedWithdrawals_parts`, `getExpectedWithdrawals_partials` and `applyExpectedWithdrawals_builderQueues`.
+  `liftCount_ok_iff` states when a count converts.
+
 - In Lean, the fewest epochs over which a node serves blocks returns an `Except ArithError Epoch`, and fails where its `uint64` arithmetic overflows or, from Gloas, divides by zero ([#3857](https://github.com/ethereum/EthLib/issues/3857)).
   Before Gloas the sum wrapped, and from Gloas the result was truncated to 64 bits and a zero denominator gave 0.
   From Gloas the product `3 * CHURN_LIMIT_QUOTIENT_GLOAS * CONSOLIDATION_CHURN_LIMIT_QUOTIENT` now fails at `2^64`, where it was computed on natural numbers.

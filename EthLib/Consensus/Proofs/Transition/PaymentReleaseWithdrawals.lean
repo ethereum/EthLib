@@ -144,7 +144,7 @@ theorem processWithdrawals_paymentStep {gloas : .glamsterdam ≤ fork}
     have read : ∀ position,
         (paymentAt after gloas position).withdrawal = (paymentAt state gloas position).withdrawal :=
       fun position => by simp only [paymentAt, payments]
-    refine ⟨List.nodup_nil, ⟨expected.processedBuilderWithdrawalsCount, ?_⟩, nofun, nofun,
+    refine ⟨List.nodup_nil, ⟨expected.processedBuilderWithdrawalsCount.toNat, ?_⟩, nofun, nofun,
       nofun, fun slot opened => Or.inl ((paymentOpen_congr positions header bid read slot).mp
         opened), by rw [inputs.slot]; exact UInt64.le_refl _⟩
     simpa using queue

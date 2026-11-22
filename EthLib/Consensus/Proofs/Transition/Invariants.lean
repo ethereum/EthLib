@@ -1230,7 +1230,7 @@ omit laws keep in
 private theorem updateNextWithdrawalBuilderIndex_of (refl : ∀ s, R s s)
     (setIndex : ∀ (s : BeaconState preset fork) value,
       R s { s with nextWithdrawalBuilderIndex := value })
-    {gloas : .glamsterdam ≤ fork} {count : Nat}
+    {gloas : .glamsterdam ≤ fork} {count : UInt64}
     (computed : Consensus.updateNextWithdrawalBuilderIndex state gloas count = .ok after) :
     R state after := by
   unfold Consensus.updateNextWithdrawalBuilderIndex at computed
@@ -1243,7 +1243,7 @@ private theorem updateNextWithdrawalBuilderIndex_of (refl : ∀ s, R s s)
     exact setIndex _ _
 
 omit laws in
-theorem updateNextWithdrawalBuilderIndex {gloas : .glamsterdam ≤ fork} {count : Nat}
+theorem updateNextWithdrawalBuilderIndex {gloas : .glamsterdam ≤ fork} {count : UInt64}
     (computed : Consensus.updateNextWithdrawalBuilderIndex state gloas count = .ok after) :
     R state after :=
   updateNextWithdrawalBuilderIndex_of (fun s => keep (BlockFrame.refl s) rfl)
@@ -1456,7 +1456,7 @@ theorem frame_updateNextWithdrawalValidatorIndex {capella : .shapella ≤ fork}
     BlockFrame state after :=
   EpochFrameLaws.updateNextWithdrawalValidatorIndex (fun frame _ => frame) computed
 
-theorem frame_updateNextWithdrawalBuilderIndex {gloas : .glamsterdam ≤ fork} {count : Nat}
+theorem frame_updateNextWithdrawalBuilderIndex {gloas : .glamsterdam ≤ fork} {count : UInt64}
     (computed : updateNextWithdrawalBuilderIndex state gloas count = .ok after) :
     BlockFrame state after :=
   EpochFrameLaws.updateNextWithdrawalBuilderIndex (fun frame _ => frame) computed
