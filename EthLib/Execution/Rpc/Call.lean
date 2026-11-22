@@ -186,6 +186,11 @@ def callRuleError (reason : String) : RpcError :=
 def callWord (what : String) (n : Nat) : Except RpcError U256 :=
   if n < 2 ^ 256 then .ok (BitVec.ofNat 256 n) else .error (callParamError s!"{what}: too large")
 
+/-- A number of the request as a 64-bit integer, or the error of a number that does not fit. -/
+def callUint64 (what : String) (n : Nat) : Except RpcError UInt64 :=
+  if h : n < 2 ^ 64 then .ok (UInt64.ofNatLT n h)
+  else .error (callParamError s!"{what}: too large")
+
 /-- The unsigned transaction of a request, with every signature field 0.
 
 `nonce` is the nonce of the sender's account, and `gas` is the gas limit.
@@ -199,6 +204,8 @@ A fee, an access list, blob hashes, a blob fee cap or authorizations that its ki
 So does a chain other than `chainId`, a kind above 4, or type 3 or 4 without a recipient.
 
 So does a value, fee or fee cap of the request, or `nonce`, `gas` or `maxFee`, of `2 ^ 256` or more.
+
+Type 4 holds its nonce in 64 bits, so it also fails on a `nonce` of `2 ^ 64` or more.
 
 Each of these fails with the code of invalid parameters.
 
@@ -242,6 +249,8 @@ def GenericTransaction.toTransaction (tx : GenericTransaction) (chainId : UInt64
                    accessList, yParity := 0, r := 0, s := 0
                    maxFeePerBlobGas := ← callWord "maxFeePerBlobGas" (tx.maxFeePerBlobGas.getD 0)
                    blobVersionedHashes := tx.blobVersionedHashes.getD [] }
+  -- A set-code transaction holds its nonce in 64 bits.
+  let nonce ← callUint64 "nonce" nonce.toNat
   return .setCode { chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gas, to, value, data,
                     accessList, authorizations := tx.authorizationList.getD [], yParity := 0,
                     r := 0, s := 0 }

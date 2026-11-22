@@ -162,6 +162,50 @@ def test_equal_times_message() -> None:
     }
 
 
+# A call of each kind with a large nonce, and the error that the request gets.
+# A set-code call holds its nonce in 64 bits, so its conversion refuses a nonce of 2^64.
+# Every other nonce reaches the rule of EIP-2681, which simulation answers as an internal error.
+LARGE_NONCES = [
+    pytest.param(
+        4,
+        2**64,
+        {"code": -32602, "message": "Invalid params", "data": "transaction: nonce: too large"},
+        id="set-code-2^64",
+    ),
+    pytest.param(
+        4,
+        2**64 - 1,
+        {
+            "code": -32603,
+            "message": "Internal error",
+            "data": "the nonce 18446744073709551615 is at least 2^64 - 1",
+        },
+        id="set-code-2^64-1",
+    ),
+    pytest.param(
+        2,
+        2**64,
+        {
+            "code": -32603,
+            "message": "Internal error",
+            "data": "the nonce 18446744073709551616 is at least 2^64 - 1",
+        },
+        id="fee-market-2^64",
+    ),
+]
+
+
+@pytest.mark.parametrize(("kind", "nonce", "error"), LARGE_NONCES)
+def test_large_call_nonce(kind: int, nonce: int, error: dict[str, Any]) -> None:
+    """A call that gives a nonce of 2^64 - 1 or more fails, by the width of its kind."""
+    call: dict[str, Any] = {"type": hex(kind), "to": ADDRESS, "nonce": hex(nonce)}
+    if kind == 4:
+        call["authorizationList"] = []
+    (text,) = replay_chain().serve([_request({"blockStateCalls": [{"calls": [call]}]})])
+    assert text is not None
+    assert json.loads(text)["error"] == error
+
+
 def test_gap_block_times() -> None:
     """A gap block comes a block time after the block before, and the next block comes after it."""
     base = hex(HEAD_NUMBER - 1)

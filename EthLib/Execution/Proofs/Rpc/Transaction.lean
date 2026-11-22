@@ -367,9 +367,14 @@ private theorem transactionOfJson_extra (extra : List (String × Lean.Json)) (g 
     have r12 := rd "maxPriorityFeePerGas" _ rfl (isNull_quantityJson _)
     have r13 := rd "maxFeePerGas" _ rfl (isNull_quantityJson _)
     have r14 := rd "authorizationList" _ rfl (isNull_listJson _ _)
+    -- The reader first takes the 64-bit nonce as a word, as for every kind.
+    have rn : uint256 "nonce" (quantityJson t.nonce.toNat) =
+        .ok (BitVec.ofNat 256 t.nonce.toNat) := by
+      have h := uint256_quantityJson "nonce" (BitVec.ofNat 256 t.nonce.toNat)
+      rwa [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (Nat.lt_trans t.nonce.toNat_lt (by decide))] at h
     unfold transactionOfJson
     simp only [hfs, Base.ok_bind, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, rto,
-      byteJson,
+      rn, byteJson,
       u256Json, accessListJson, uint_quantityJson, uint256_quantityJson, uint64_toDigits,
       bytes_dataJson, byte_quantityJson _ hy, yParity_byte hy,
       array_of_items _ authorization authorizationJson _

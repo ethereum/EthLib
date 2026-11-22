@@ -2332,6 +2332,14 @@ That check makes the nonce of the transaction equal that of its sender, and belo
 The bound on the state before the first block is a hypothesis: the genesis allocation must meet it.
 From Glamsterdam, `stateTransition_rebuild_nonce` turns the 64-bit nonces that the block access list rebuilds into the nonces after the block, with no loss.
 
+The nonce of a transaction has two widths.
+A set-code transaction, the type that EIP-7702 adds, holds its nonce in 64 bits, so a nonce of `2^64` or more fails at decoding.
+The other kinds hold it in 256 bits: section 4.2 of the Yellow Paper, Shanghai version, puts the nonce `T_n` in `N_256`.
+A nonce of `2^64` or more of those kinds decodes, and the rule of EIP-2681 in the transaction check rejects it.
+EIP-7702 gives the outer fields of its transaction the meaning they have in EIP-4844, and states no width for the nonce.
+The 64-bit width follows the type that [execution-specs](https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/src/ethereum/forks/prague/transactions.py) at `391d8a0` gives that field, in its class `SetCodeTransaction`.
+Either way the transaction is invalid, so the two widths differ only in the error that names the reason.
+
 ### Logs paid for by gas
 
 The weight of a log, `48 + 33 * topics + data bytes`, bounds the length of its RLP encoding, for a log whose weight is below `2^64` (`encode_log_size_le`).
