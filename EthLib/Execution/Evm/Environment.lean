@@ -85,6 +85,11 @@ structure BlockEnvironment (fork : Fork) where
 It is the one that a simulation sets, else the one that the excess blob gas gives. -/
 def BlockEnvironment.blobBaseFee {fork : Fork} (env : BlockEnvironment fork)
     (h : .dencun ≤ fork) : Nat :=
+  -- A simulation's own base fee first; the source has no such override.
+  --
+  -- Else the base fee per blob gas of EIP-4844, with the update fraction of the blob schedule.
+  --
+  -- EIP-7892 makes that schedule part of the chain configuration.
   env.blobGasPrice.getD
     (Fees.BlobBaseFee.getBaseFeePerBlobGas (env.blobSchedule h) (env.excessBlobGas h).toNat)
 

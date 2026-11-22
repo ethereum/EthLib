@@ -36,7 +36,11 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 def haltWithOutput (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let (start, evm) ← popWord evm
   let (size, evm) ← popWord evm
+  -- `G_zero`, and `mu'_i = M(mu_i, mu_s[0], mu_s[1])` with its cost.
   let evm ← chargeGasAndMemory evm 0 [(start, size)]
+  -- Appendix H.2: `H_RETURN(mu) = mu_m[mu_s[0] ... (mu_s[0] + mu_s[1] - 1)]`.
+  --
+  -- By §9.4.4 it is the output `o`, and the frame halts.
   return { evm with
     output := memoryReadBytes evm.memory start.toNat size.toNat
     running := false }
@@ -49,7 +53,9 @@ def returnStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) :=
 
 The frame keeps its gas left, unlike an exceptional halt. -/
 def revertStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
+  -- EIP-140: the memory, its cost and the output of REVERT are those of RETURN.
   let evm ← haltWithOutput evm
+  -- §9.4: `X` gives `(∅, mu', A, I, o)`, so the state reverts and the gas left stays.
   return { evm with error := some .revert }
 
 /-- The instruction of RETURN or REVERT, at fork `fork`.
@@ -57,6 +63,7 @@ def revertStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
 Other opcodes give none, and so does REVERT before Byzantium. -/
 def returnOpStep (fork : Fork) : Op → Option (Evm fork Meter → Except EvmError (Evm fork Meter))
   | .«return» => some returnStep
+  -- EIP-140 adds REVERT at Byzantium.
   | .revert => if .byzantium ≤ fork then some revertStep else none
   | _ => none
 

@@ -69,14 +69,20 @@ No list is too short inside the window on a chain whose recent blocks are linked
 
 They must also number at least 255, or the number of the last block when that is fewer. -/
 def blockHash (hashes : List Hash32) (current n : Nat) : U256 :=
+  -- Appendix H.2: `mu'_s[0] = P({I_H}_p, mu_s[0], 0)`, which reads at most 256 ancestors.
+  --
+  -- So it is 0 unless `{I_H}_i - 256 ≤ mu_s[0] < {I_H}_i`, with `current = {I_H}_i`.
   if n < current ∧ current ≤ n + 256 then
+    -- The walk reads the list of recent hashes, the parent's last, in place of the parents.
     match hashes.reverse[current - n - 1]? with
     | some hash => U256.fromBeBytes hash
+    -- A list too short to hold the hash gives 0; the source reads headers and has no such case.
     | none => 0
   else 0
 
 /-- BLOCKHASH: replace a block number with the hash of that block. -/
 def blockhashStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
+  -- BLOCKHASH: `delta_w = 1`, `alpha_w = 1`, and the price `G_blockhash`.
   let (number, evm) ← popWord evm
   let evm ← chargeGas evm OPCODE_BLOCKHASH
   let block := evm.message.blockEnv
@@ -85,13 +91,16 @@ def blockhashStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := d
 
 /-- The versioned hash at `index` in a list, read as a word, or 0 past the end. -/
 def blobHash (hashes : List Hash32) (index : U256) : U256 :=
+  -- EIP-4844: the versioned hash at `index` of the transaction, read as a big-endian word.
   match hashes[index.toNat]? with
   | some hash => U256.fromBeBytes hash
+  -- And 0 for an index at or past the count of versioned hashes.
   | none => 0
 
 /-- BLOBHASH: replace an index with the versioned hash of that blob of the transaction. -/
 def blobhashStep (h : .dencun ≤ fork) (evm : Evm fork Meter) :
     Except EvmError (Evm fork Meter) := do
+  -- BLOBHASH reads `index` from the top of the stack, and costs `HASH_OPCODE_GAS`, 3.
   let (index, evm) ← popWord evm
   let evm ← chargeGas evm OPCODE_BLOBHASH
   let evm ← pushWord evm (blobHash (evm.message.txEnv.blobVersionedHashes h) index)
@@ -131,6 +140,7 @@ def environmentStep (fork : Fork) : Op → Option (Evm fork Meter → Except Evm
   -- GASLIMIT: `mu'_s[0] = {I_H}_l`, which has no bound.
   | .gaslimit => some (readNumber OPCODE_GASLIMIT fun evm => evm.message.blockEnv.gasLimit)
   | .chainid =>
+    -- EIP-1344 adds CHAINID, and EIP-1679 includes it at Istanbul.
     if .istanbul ≤ fork then
       -- CHAINID: `mu'_s[0] = beta`, which EthLib holds in 64 bits.
       some (readFrame OPCODE_CHAINID fun evm => BitVec.ofNat 256 evm.message.blockEnv.chainId.toNat)
