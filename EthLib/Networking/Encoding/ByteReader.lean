@@ -13,7 +13,9 @@ Each wire format supplies its own error type, and the error it reports for a tru
 
 @[expose] public section
 
-namespace EthLib.Base.ByteReader
+namespace EthLib.Networking.Encoding.ByteReader
+
+open EthLib.Base
 
 /-- A reader of a byte list, failing with an error of the given type. -/
 abbrev Reader (ε α : Type) := StateT (List UInt8) (Except ε) α
@@ -37,4 +39,4 @@ def uint {ε : Type} (truncated : ε) (n : Nat) : Reader ε Nat := do
 def require {ε : Type} (condition : Prop) [Decidable condition] (error : ε) : Reader ε Unit :=
   fun input => if condition then .ok ((), input) else .error error
 
-end EthLib.Base.ByteReader
+end EthLib.Networking.Encoding.ByteReader

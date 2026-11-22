@@ -21,7 +21,7 @@ Every accepted message re-encodes to exactly the bytes that decoding consumed.
 namespace EthLib.Networking.Quic.Tls
 
 open Wire
-open EthLib.Base.ByteReader (bytes_append uint_encode require_true)
+open EthLib.Networking.Encoding.ByteReader (bytes_append uint_encode require_true)
 open EthLib.Base (bind_ok_iff)
 
 attribute [local simp] EthLib.Base.toByteArray_data_toList
@@ -157,12 +157,12 @@ theorem readBody_encodeBody {hashLength : Nat} {message : Message} {body : List 
     simp only [encodeBody, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at written
     obtain ⟨session, hs, suites, hc, extensions, he, rfl⟩ := written
     simp [readBody, Message.type, List.append_assoc, blob_encode_of_encode hs,
-      codePoints_encode hc, readExtensions_encode he, require, Base.ByteReader.require]
+      codePoints_encode hc, readExtensions_encode he, require, Encoding.ByteReader.require]
   | serverHello h =>
     simp only [encodeBody, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at written
     obtain ⟨session, hs, extensions, he, rfl⟩ := written
     simp [readBody, Message.type, List.append_assoc, blob_encode_of_encode hs,
-      readExtensions_encode he, require, Base.ByteReader.require]
+      readExtensions_encode he, require, Encoding.ByteReader.require]
   | encryptedExtensions extensions =>
     simp [readBody, Message.type, readExtensions_encode written rest]
   | certificateRequest request =>
@@ -243,7 +243,7 @@ theorem encodeExtensions_of_readExtensions {minimum : Nat} {input rest : List UI
       .ok (values, trailing)) = .ok (extensions, rest) at parsed
   simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
   obtain ⟨⟨values, suffix⟩, valuesRead, ⟨u, trailing⟩, checked, rfl, rfl⟩ := parsed
-  obtain ⟨unique, rfl⟩ := (Base.ByteReader.require_ok_iff ..).mp checked
+  obtain ⟨unique, rfl⟩ := (Encoding.ByteReader.require_ok_iff ..).mp checked
   obtain ⟨encoded, written, same⟩ := encodeItems_of_items encodeExtension readExtension
     (fun _ _ _ accepted => encodeExtension_of_readExtension accepted) valuesRead
   refine ⟨encoded, ?_, same⟩
@@ -292,7 +292,7 @@ theorem frameList_of_readFrame {input rest body : List UInt8} {kind : UInt8}
   obtain ⟨encoded, written, same⟩ := encodeBlob_of_blob dataRead
   refine ⟨UInt8.ofNat tag :: encoded, ?_, ?_⟩
   · simp [frameList, written]
-  · rw [(Base.ByteReader.uint_ok_iff ..).mp tagRead |>.2, same]
+  · rw [(Encoding.ByteReader.uint_ok_iff ..).mp tagRead |>.2, same]
     rfl
 
 /-- An accepted message body re-encodes to its exact prefix and has the received type. -/
@@ -323,8 +323,8 @@ theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : L
       ⟨session, d⟩, sessionRead, ⟨suites, e⟩, suitesRead, ⟨compression, f⟩, compressionRead,
       ⟨v, g⟩, compressionCheck, ⟨extensions, h⟩, extensionsRead, rfl, rfl⟩ := parsed
     dsimp only at *
-    obtain ⟨rfl, rfl⟩ := (Base.ByteReader.require_ok_iff ..).mp versionCheck
-    obtain ⟨rfl, rfl⟩ := (Base.ByteReader.require_ok_iff ..).mp compressionCheck
+    obtain ⟨rfl, rfl⟩ := (Encoding.ByteReader.require_ok_iff ..).mp versionCheck
+    obtain ⟨rfl, rfl⟩ := (Encoding.ByteReader.require_ok_iff ..).mp compressionCheck
     obtain ⟨encodedSession, sessionWritten, sessionSame⟩ := encodeBlob_of_blob sessionRead
     obtain ⟨encodedSuites, suitesWritten, suitesSame⟩ := encodeCodePoints_of_items suitesRead
     obtain ⟨encodedExtensions, extensionsWritten, extensionsSame⟩ :=
@@ -332,9 +332,9 @@ theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : L
     refine ⟨rfl, [3, 3] ++ random.toList ++ encodedSession ++ encodedSuites ++
       [1, 0] ++ encodedExtensions, ?_, ?_⟩
     · simp [encodeBody, sessionWritten, suitesWritten, extensionsWritten]
-    · rw [(Base.ByteReader.uint_ok_iff ..).mp versionRead |>.2,
+    · rw [(Encoding.ByteReader.uint_ok_iff ..).mp versionRead |>.2,
         eq_toList_append_of_vector randomRead, sessionSame, suitesSame,
-        (Base.ByteReader.bytes_ok_iff ..).mp compressionRead |>.2, extensionsSame]
+        (Encoding.ByteReader.bytes_ok_iff ..).mp compressionRead |>.2, extensionsSame]
       simp only [List.append_assoc]
       rfl
   ·
@@ -355,18 +355,18 @@ theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : L
       ⟨session, d⟩, sessionRead, ⟨suite, e⟩, suiteRead, ⟨compression, f⟩, compressionRead,
       ⟨v, g⟩, compressionCheck, ⟨extensions, h⟩, extensionsRead, rfl, rfl⟩ := parsed
     dsimp only at *
-    obtain ⟨rfl, rfl⟩ := (Base.ByteReader.require_ok_iff ..).mp versionCheck
-    obtain ⟨rfl, rfl⟩ := (Base.ByteReader.require_ok_iff ..).mp compressionCheck
+    obtain ⟨rfl, rfl⟩ := (Encoding.ByteReader.require_ok_iff ..).mp versionCheck
+    obtain ⟨rfl, rfl⟩ := (Encoding.ByteReader.require_ok_iff ..).mp compressionCheck
     obtain ⟨encodedSession, sessionWritten, sessionSame⟩ := encodeBlob_of_blob sessionRead
     obtain ⟨encodedExtensions, extensionsWritten, extensionsSame⟩ :=
       encodeExtensions_of_readExtensions extensionsRead
     refine ⟨rfl, [3, 3] ++ random.toList ++ encodedSession ++ Base.natToBytes 2 suite.val ++
       [0] ++ encodedExtensions, ?_, ?_⟩
     · simp [encodeBody, sessionWritten, extensionsWritten]
-    · rw [(Base.ByteReader.uint_ok_iff ..).mp versionRead |>.2,
+    · rw [(Encoding.ByteReader.uint_ok_iff ..).mp versionRead |>.2,
         eq_toList_append_of_vector randomRead, sessionSame,
         eq_natToBytes_of_codePoint suiteRead,
-        (Base.ByteReader.uint_ok_iff ..).mp compressionRead |>.2, extensionsSame]
+        (Encoding.ByteReader.uint_ok_iff ..).mp compressionRead |>.2, extensionsSame]
       simp only [List.append_assoc]
       rfl
   ·
@@ -435,7 +435,7 @@ theorem encodeBody_of_readBody {hashLength : Nat} {kind : UInt8} {input rest : L
       .ok (.finished data.toByteArray, suffix)) = .ok (message, rest) at parsed
     simp only [bind_ok_iff, Except.ok.injEq, Prod.mk.injEq] at parsed
     obtain ⟨⟨data, suffix⟩, dataRead, rfl, rfl⟩ := parsed
-    obtain ⟨length, same⟩ := (Base.ByteReader.bytes_ok_iff ..).mp dataRead
+    obtain ⟨length, same⟩ := (Encoding.ByteReader.bytes_ok_iff ..).mp dataRead
     refine ⟨rfl, data, ?_, same⟩
     simp [encodeBody, Base.ensure, length]
   · simp [readBody, other.1, other.2.1, other.2.2.1, other.2.2.2.1,

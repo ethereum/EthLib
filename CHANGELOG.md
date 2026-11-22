@@ -834,6 +834,9 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the readers of byte fields move from Base to Networking, next to their only users, the QUIC and TLS wire formats and Protobuf ([#3841](https://github.com/ethereum/EthLib/issues/3841)).
+  The modules `EthLib.Base.ByteReader` and `EthLib.Base.Proofs.ByteReader` are now `EthLib.Networking.Encoding.ByteReader` and `EthLib.Networking.Proofs.Encoding.ByteReader`, and the namespace `EthLib.Base.ByteReader` is now `EthLib.Networking.Encoding.ByteReader`.
+
 - In Lean, base32 moves from Base to Networking, next to its only user, node discovery by DNS ([#3841](https://github.com/ethereum/EthLib/issues/3841)).
   The modules `EthLib.Base.Base32` and `EthLib.Base.Proofs.Base32` are now `EthLib.Networking.Encoding.Base32` and `EthLib.Networking.Proofs.Encoding.Base32`, and the namespace `EthLib.Base.Base32` is now `EthLib.Networking.Encoding.Base32`.
   The string forms `Base32.encode` and `Base32.decode`, which nothing used, are gone with their theorems `Base32.decode_encode` and `Base32.encode_of_decode`.
