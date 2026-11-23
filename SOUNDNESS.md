@@ -5999,7 +5999,11 @@ Each frame also records the logs that a simulation reports with `traceTransfers`
 They are its logs, with a log from `0xeeee…eeee` before Glamsterdam for each move of ether that EIP-7708 would log, in the order of execution.
 A frame that fails drops them with its logs.
 The flag is not an input of the blocks of a simulation, so they and their headers do not depend on it (`simulateBlocks_traceTransfers`, `Proofs/Rpc/SimulateCalls.lean`).
-The code of the receipts, their root and the bloom reads only the logs; no theorem yet states that the logs never depend on the simulated logs.
+The code of the receipts, their root and the bloom reads only the logs.
+At every fork, no step reads the simulated logs: from any frame with logs put in front of them, a step gives the same result with those logs in front (`step_prependSimulatedLogs`, `Proofs/Evm/Call/SimulatedLogsErase.lean`).
+So the simulated logs that a message starts with change nothing else that it computes: the error, or the frame but for its simulated logs, is the same (`processMessage_eraseSimulatedLogs`, `processCreateMessage_eraseSimulatedLogs`).
+The same holds of a message call (`processMessageCall_eraseSimulatedLogs`, `Proofs/Transactions/SimulatedLogs.lean`), so its logs, state and gas never depend on them.
+A transaction and a block always start their messages with no simulated log, so they have no such input to vary.
 Without the flag, a call reports the log objects of its receipt, with the same `logIndex` (`callLogInfos_false`).
 From Glamsterdam, a message that starts with equal lists of logs ends with equal lists (`simulatedLogs_processMessage`, `Proofs/Evm/Call/SimulatedLogs.lean`).
 So each result reports the logs of its receipt (`runBody_simulatedLogs`, `Proofs/Blocks/SimulatedLogs.lean`).
