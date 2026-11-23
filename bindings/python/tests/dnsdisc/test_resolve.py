@@ -92,6 +92,16 @@ def test_link_under_the_records_is_refused() -> None:
         dnsdisc.resolve(KEY, 0, DOMAIN, BUDGET, _zone(root, branch, links, LINK))
 
 
+def test_record_under_both_roots_is_refused() -> None:
+    # A record may only appear in the enr-root subtree, even when that subtree has it too.
+    name = dnsdisc.subdomain(RECORD)
+    branch = f"enrtree-branch:{name}"
+    links = f"enrtree-branch:{name},{name}"
+    root = dnsdisc.sign_root(SECRET_KEY, _hash(branch), _hash(links), 1)
+    with raises(DnsDiscError, f"the entry at {name}.{DOMAIN} is in the wrong subtree"):
+        dnsdisc.resolve(KEY, 0, DOMAIN, BUDGET, _zone(root, branch, links, RECORD))
+
+
 # The order of the group of secp256k1, from SEC 2 §2.4.1.
 ORDER = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 

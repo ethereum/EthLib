@@ -1027,6 +1027,13 @@ Not yet released.
   That lemma is in `EthLib.Consensus.Proofs.DirectSafety.ChurnBounds`, which the caller must import itself.
   The registry limit is `(RunBounded.size_le holds.bounded).trans (holds.run conditions within).load.1`, and the order of exits is `holds.invariant.exitsOrdered`.
 
+- `dnsdisc.resolve` refuses a list whose root of links reaches a node record, even when the root of records also reaches it.
+  EIP-1459 says that a record "may only appear in the `enr-root` subtree".
+  It gave the list, and skipped the record under the root of links, since the walk took a hash met in either subtree as read.
+  The go-ethereum client refuses such a list with `errENRInLinkTree`.
+  In Lean, `walk` and `walkCollision` track each hash with its subtree, in a `List (Subtree × Hash)` in place of a `List Hash`.
+  `records_of_resolve` and `links_of_resolve` in `EthLib.Networking.Proofs.DnsDisc` state that each entry that a subtree of a resolved list reaches is a branch or a leaf of that subtree.
+
 - The signed-conflict slashing theorem of [#3431](https://github.com/ethereum/EthLib/issues/3431) now also states that the slashing leaves the validator slashed ([#4244](https://github.com/ethereum/EthLib/issues/4244)).
   In `DirectSafety.signedConflict_attesterSlashing_accepted_at` (`DirectSafety/Includable.lean`), the right disjunct also gives the validator at the index in the state right after the slashing.
   That validator still has the key and is slashed.

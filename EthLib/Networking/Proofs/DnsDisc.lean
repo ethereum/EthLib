@@ -500,7 +500,7 @@ theorem DnsError.code_injective (e₁ e₂ : DnsError) (h : e₁.code = e₂.cod
 
 /-- Two walks from one state find the same, or the search finds a collision on their way. -/
 theorem walk_binds {lookup1 lookup2 : String → Option String} {domain : String} :
-    (budget : Nat) → (pending : List (Subtree × Hash)) → (visited : List Hash) →
+    (budget : Nat) → (pending : List (Subtree × Hash)) → (visited : List (Subtree × Hash)) →
       (found : Found) → {found1 found2 : Found} →
       walk lookup1 domain budget pending visited found = .ok found1 →
       walk lookup2 domain budget pending visited found = .ok found2 →
@@ -517,7 +517,7 @@ theorem walk_binds {lookup1 lookup2 : String → Option String} {domain : String
     intro pending visited found found1 found2 h1 h2
     rcases pending with _ | ⟨⟨tree, hash⟩, pending⟩
     · simp only [walk] at h1 h2; cases h1; cases h2; exact .inl rfl
-    by_cases hv : hash ∈ visited
+    by_cases hv : (tree, hash) ∈ visited
     · simp only [walk, hv, ↓reduceIte] at h1 h2
       simp only [walkCollision, hv, ↓reduceIte]
       exact ih pending visited found h1 h2
@@ -584,7 +584,7 @@ theorem resolve_ok {lookup : String → Option String} {key : Vector UInt8 33} {
 
 /-- The search for a collision between a lookup and itself finds nothing, from any state. -/
 theorem walkCollision_self (lookup : String → Option String) (domain : String) :
-    (budget : Nat) → (pending : List (Subtree × Hash)) → (visited : List Hash) →
+    (budget : Nat) → (pending : List (Subtree × Hash)) → (visited : List (Subtree × Hash)) →
       walkCollision lookup lookup domain budget pending visited = none := by
   intro budget
   induction budget with
@@ -636,7 +636,7 @@ theorem resolve_binds {lookup1 lookup2 : String → Option String} {key : Vector
 /-- A pair that the search finds from any state is a collision. -/
 theorem isCollision_of_walkCollision {lookup1 lookup2 : String → Option String}
     {domain : String} {pair : String × String} :
-    (budget : Nat) → (pending : List (Subtree × Hash)) → (visited : List Hash) →
+    (budget : Nat) → (pending : List (Subtree × Hash)) → (visited : List (Subtree × Hash)) →
       walkCollision lookup1 lookup2 domain budget pending visited = some pair →
       IsCollision pair := by
   intro budget
@@ -695,5 +695,190 @@ theorem verify_of_resolve {lookup : String → Option String} {key : Vector UInt
       root.verify key = true ∧ root.seq = list.1 := by
   obtain ⟨text, root, -, hl, hp, hv, -, -, rfl⟩ := resolve_ok h
   exact ⟨text, root, hl, hp, hv, rfl⟩
+
+/-! ## The subtree of each entry -/
+
+/-- The hashes that a subtree reaches from its root hash, through the branches at their names. -/
+inductive Reaches (lookup : String → Option String) (domain : String) (top : Hash) : Hash → Prop
+  /-- The root hash of the subtree. -/
+  | top : Reaches lookup domain top top
+  /-- A hash of the branch at the name of a hash that the subtree reaches. -/
+  | branch {hash next : Hash} {text : String} {hashes : List Hash} :
+      Reaches lookup domain top hash → lookup (nameOf hash domain) = some text →
+      Entry.parse text = .ok (.branch hashes) → next ∈ hashes → Reaches lookup domain top next
+
+/-- The entries that a subtree may hold: branches, and its node records or its links. -/
+def Subtree.Holds : Subtree → Entry → Prop
+  | _, .branch _ => True
+  | .records, .enr _ => True
+  | .links, .link _ => True
+  | _, _ => False
+
+/-- Hashes read with their subtrees, each at a name whose entry that subtree may hold.
+
+Each hash of a branch is read with the same subtree, or is still to read. -/
+def Closed (lookup : String → Option String) (domain : String)
+    (read pending : List (Subtree × Hash)) : Prop :=
+  ∀ p ∈ read, ∃ text e, lookup (nameOf p.2 domain) = some text ∧ Entry.parse text = .ok e ∧
+    p.1.Holds e ∧ ∀ hashes, e = .branch hashes → ∀ next ∈ hashes,
+      (p.1, next) ∈ read ∨ (p.1, next) ∈ pending
+
+/-- A walk that succeeds reads every hash still to read, and leaves nothing of a branch unread. -/
+theorem walk_closed {lookup : String → Option String} {domain : String} :
+    (budget : Nat) → (pending visited : List (Subtree × Hash)) → (found : Found) →
+      {result : Found} → walk lookup domain budget pending visited found = .ok result →
+      Closed lookup domain visited pending →
+      ∃ read, (∀ p, p ∈ visited ∨ p ∈ pending → p ∈ read) ∧ Closed lookup domain read [] := by
+  intro budget
+  induction budget with
+  | zero =>
+    intro pending visited found result h hc
+    cases pending with
+    | nil => exact ⟨visited, fun p hp => by simpa using hp, hc⟩
+    | cons _ _ => simp [walk] at h
+  | succ budget ih =>
+    intro pending visited found result h hc
+    rcases pending with _ | ⟨⟨tree, hash⟩, pending⟩
+    · exact ⟨visited, fun p hp => by simpa using hp, hc⟩
+    by_cases hv : (tree, hash) ∈ visited
+    · simp only [walk, hv, ↓reduceIte] at h
+      -- The hash is read already, so the hashes of each branch are read or still to read.
+      have hc2 : Closed lookup domain visited pending := by
+        intro p hp
+        obtain ⟨text, e, hl, hpe, holds, hb⟩ := hc p hp
+        refine ⟨text, e, hl, hpe, holds, fun hashes he next hn => ?_⟩
+        rcases hb hashes he next hn with m | m
+        · exact .inl m
+        · rcases List.mem_cons.1 m with m | m
+          · exact .inl (m ▸ hv)
+          · exact .inr m
+      obtain ⟨read, sub, closed⟩ := ih pending visited found h hc2
+      refine ⟨read, fun p hp => sub p ?_, closed⟩
+      rcases hp with hp | hp
+      · exact .inl hp
+      · rcases List.mem_cons.1 hp with rfl | hp
+        · exact .inl hv
+        · exact .inr hp
+    simp only [walk, hv, ↓reduceIte] at h
+    rcases hl : lookup (nameOf hash domain) with _ | text
+    · simp [hl] at h
+    simp only [hl] at h
+    by_cases hh : hashOf text = hash
+    swap
+    · simp [hh, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+    simp only [hh, ↓reduceIte] at h
+    rcases hp : Entry.parse text with err | entry
+    · simp [hp, bind, Except.bind] at h
+    simp only [hp, bind, Except.bind] at h
+    -- The walk reads the hash, then goes on with every hash of its entry still to read.
+    have step : ∀ next : List (Subtree × Hash), tree.Holds entry →
+        (∀ hashes, entry = .branch hashes → ∀ n ∈ hashes, (tree, n) ∈ next) →
+        (∀ p ∈ pending, p ∈ next) → ∀ found0,
+        walk lookup domain budget next ((tree, hash) :: visited) found0 = .ok result →
+        ∃ read, (∀ p, p ∈ visited ∨ p ∈ (tree, hash) :: pending → p ∈ read) ∧
+          Closed lookup domain read [] := by
+      intro next holds children rest found0 hw
+      have hc2 : Closed lookup domain ((tree, hash) :: visited) next := by
+        intro p hmem
+        rcases List.mem_cons.1 hmem with rfl | hmem
+        · exact ⟨text, entry, hl, hp, holds, fun hashes he n hn => .inr (children hashes he n hn)⟩
+        obtain ⟨text2, e, hl2, hpe, holds2, hb⟩ := hc p hmem
+        refine ⟨text2, e, hl2, hpe, holds2, fun hashes he n hn => ?_⟩
+        rcases hb hashes he n hn with m | m
+        · exact .inl (List.mem_cons_of_mem _ m)
+        · rcases List.mem_cons.1 m with m | m
+          · exact .inl (m ▸ List.mem_cons_self)
+          · exact .inr (rest _ m)
+      obtain ⟨read, sub, closed⟩ := ih next _ found0 hw hc2
+      refine ⟨read, fun p hmem => sub p ?_, closed⟩
+      rcases hmem with hmem | hmem
+      · exact .inl (List.mem_cons_of_mem _ hmem)
+      · rcases List.mem_cons.1 hmem with rfl | hmem
+        · exact .inl List.mem_cons_self
+        · exact .inr (rest _ hmem)
+    cases entry with
+    | branch hashes =>
+      exact step _ (by cases tree <;> trivial)
+        (fun _ he n hn => by
+          cases he
+          exact List.mem_append_left _ (List.mem_map_of_mem hn))
+        (fun _ m => List.mem_append_right _ m) _ (by cases tree <;> exact h)
+    | enr record =>
+      cases tree with
+      | records =>
+        by_cases hr : Enr.verifyV4 record = true
+        · simp only [hr, ↓reduceIte] at h
+          exact step _ trivial (fun _ he => by cases he) (fun _ m => m) _ h
+        · simp [hr, throw, throwThe, MonadExceptOf.throw] at h
+      | links => simp [throw, throwThe, MonadExceptOf.throw] at h
+    | link url =>
+      cases tree with
+      | records => simp [throw, throwThe, MonadExceptOf.throw] at h
+      | links => exact step _ trivial (fun _ he => by cases he) (fun _ m => m) _ h
+    | root r => cases tree <;> simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- A hash that a subtree reaches from a hash read with it is read with it. -/
+theorem mem_of_reaches {lookup : String → Option String} {domain : String}
+    {read : List (Subtree × Hash)} (closed : Closed lookup domain read []) {tree : Subtree}
+    {top hash : Hash} (start : (tree, top) ∈ read) (reach : Reaches lookup domain top hash) :
+    (tree, hash) ∈ read := by
+  induction reach with
+  | top => exact start
+  | @branch hash next text hashes _ hl hp hn ih =>
+    obtain ⟨text2, e, hl2, hp2, -, hb⟩ := closed _ ih
+    obtain rfl : text2 = text := Option.some.inj (hl2.symm.trans hl)
+    rw [hp] at hp2
+    cases hp2
+    rcases hb hashes rfl next hn with m | m
+    · exact m
+    · cases m
+
+/-- A resolved list reads both subtrees of its root, and every hash that they reach. -/
+theorem closed_of_resolve {lookup : String → Option String} {key : Vector UInt8 33}
+    {seenSeq : Nat} {domain : String} {budget : Nat} {list : Nat × Found} {text : String}
+    {root : Root} (h : resolve lookup key seenSeq domain budget = .ok list)
+    (hl : lookup domain = some text) (hp : Entry.parse text = .ok (.root root)) :
+    ∃ read, (.records, root.enrRoot) ∈ read ∧ (.links, root.linkRoot) ∈ read ∧
+      Closed lookup domain read [] := by
+  obtain ⟨text2, root2, found, hl2, hp2, -, -, hw, -⟩ := resolve_ok h
+  obtain rfl : text2 = text := Option.some.inj (hl2.symm.trans hl)
+  rw [hp] at hp2
+  cases hp2
+  obtain ⟨read, sub, closed⟩ := walk_closed budget _ [] _ hw (fun _ m => by cases m)
+  exact ⟨read, sub _ (.inr (by simp)), sub _ (.inr (by simp)), closed⟩
+
+/-- In a resolved list, each entry that the subtree of node records reaches is a branch or a record.
+
+The root is the one at the domain of the list. -/
+theorem records_of_resolve {lookup : String → Option String} {key : Vector UInt8 33}
+    {seenSeq : Nat} {domain : String} {budget : Nat} {list : Nat × Found} {text : String}
+    {root : Root} (h : resolve lookup key seenSeq domain budget = .ok list)
+    (hl : lookup domain = some text) (hp : Entry.parse text = .ok (.root root)) {hash : Hash}
+    {entryText : String} {e : Entry} (reach : Reaches lookup domain root.enrRoot hash)
+    (he : lookup (nameOf hash domain) = some entryText) (hpe : Entry.parse entryText = .ok e) :
+    (∃ hashes, e = .branch hashes) ∨ ∃ record, e = .enr record := by
+  obtain ⟨read, start, -, closed⟩ := closed_of_resolve h hl hp
+  obtain ⟨text2, e2, hl2, hp2, holds, -⟩ := closed _ (mem_of_reaches closed start reach)
+  obtain rfl : text2 = entryText := Option.some.inj (hl2.symm.trans he)
+  rw [hpe] at hp2
+  cases hp2
+  cases e <;> simp_all [Subtree.Holds]
+
+/-- In a resolved list, each entry that the subtree of links reaches is a branch or a link.
+
+The root is the one at the domain of the list. -/
+theorem links_of_resolve {lookup : String → Option String} {key : Vector UInt8 33}
+    {seenSeq : Nat} {domain : String} {budget : Nat} {list : Nat × Found} {text : String}
+    {root : Root} (h : resolve lookup key seenSeq domain budget = .ok list)
+    (hl : lookup domain = some text) (hp : Entry.parse text = .ok (.root root)) {hash : Hash}
+    {entryText : String} {e : Entry} (reach : Reaches lookup domain root.linkRoot hash)
+    (he : lookup (nameOf hash domain) = some entryText) (hpe : Entry.parse entryText = .ok e) :
+    (∃ hashes, e = .branch hashes) ∨ ∃ url, e = .link url := by
+  obtain ⟨read, -, start, closed⟩ := closed_of_resolve h hl hp
+  obtain ⟨text2, e2, hl2, hp2, holds, -⟩ := closed _ (mem_of_reaches closed start reach)
+  obtain rfl : text2 = entryText := Option.some.inj (hl2.symm.trans he)
+  rw [hpe] at hp2
+  cases hp2
+  cases e <;> simp_all [Subtree.Holds]
 
 end EthLib.Networking.DnsDisc
