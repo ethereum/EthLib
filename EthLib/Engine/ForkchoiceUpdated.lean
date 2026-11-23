@@ -124,9 +124,6 @@ def KnownPayload.isPow (p : KnownPayload) : Bool := p.powTotalDifficulty.isSome
 /-- The payloads that the execution layer holds, by block hash. -/
 abbrev PayloadTree := List (Hash32 × KnownPayload)
 
-/-- The hash of thirty-two zero bytes, which stands for no block. -/
-def ZERO_HASH : Hash32 := Vector.replicate 32 0
-
 /-- The hashes from a block back through its known ancestors, at most `fuel` of them. -/
 def ancestors (tree : PayloadTree) : Nat → Hash32 → List Hash32
   -- The fuel bounds the walk, so a tree whose parents form a cycle still ends.

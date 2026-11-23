@@ -139,7 +139,7 @@ def DOMAIN_SYNC_COMMITTEE_SELECTION_PROOF : DomainType := #v[0x08, 0x00, 0x00, 0
 def DOMAIN_CONTRIBUTION_AND_PROOF : DomainType := #v[0x09, 0x00, 0x00, 0x00]
 
 /-- From Bellatrix: the block hash of no execution payload, 32 zero bytes. -/
-def EMPTY_BLOCK_HASH : Base.Hash32 := Vector.replicate 32 0
+def EMPTY_BLOCK_HASH : Base.Hash32 := Base.ZERO_HASH
 
 /-- From Altair: the number of aggregators that each sync subcommittee aims to select. -/
 def TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE : UInt64 := 16

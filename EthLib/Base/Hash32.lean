@@ -28,4 +28,7 @@ EthLib takes the first reading: the name abbreviates 32 bytes, in both layers.
 Making it a type of its own takes a pull request that converts every use. -/
 abbrev Hash32 := Bytes32
 
+/-- The 32 zero bytes, which stand for no block hash, no root or an empty node of a branch. -/
+def ZERO_HASH : Hash32 := Vector.replicate 32 0
+
 end EthLib.Base

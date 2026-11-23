@@ -67,7 +67,7 @@ def blockToLightClientHeader (config : Config) (block : SignedBeaconBlock preset
     --
     -- Its branch is all zeros.
     return ⟨beacon, fun _ => ExecutionPayloadHeader.empty preset fork,
-      fun later => absurd later gloas, fun _ => Vector.replicate _ zeroBytes32⟩
+      fun later => absurd later gloas, fun _ => Vector.replicate _ ZERO_HASH⟩
   else
     -- Otherwise the header of the execution payload of the block.
     let payload := message.body.executionPayload
@@ -169,10 +169,10 @@ def createLightClientUpdate (config : Config) {signatureFork finalizedFork : For
         attestedState.slot
       pure ((attestedState.nextSyncCommittee altair).value,
         ← branchVector _ (← liftRoot (computeMerkleProof attestedState gindex)))
-    else pure (SyncCommittee.empty preset, Vector.replicate _ zeroBytes32)
+    else pure (SyncCommittee.empty preset, Vector.replicate _ ZERO_HASH)
   -- Without the finalized block, the empty header and a branch of zeros.
   let (finalizedHeader, finalityBranch) ← match finalizedBlock with
-    | none => pure (empty, Vector.replicate _ zeroBytes32)
+    | none => pure (empty, Vector.replicate _ ZERO_HASH)
     | some finalized => do
       -- Let `r` be the root of the finalized checkpoint of the attested state.
       let finalizedRoot := attestedState.finalizedCheckpoint.root
@@ -189,7 +189,7 @@ def createLightClientUpdate (config : Config) {signatureFork finalizedFork : For
           header.upgrade config fork finalizedEarlier
         else do
           -- At the genesis slot, `r` must be 32 zero bytes, and the header stays empty.
-          ensure (finalizedRoot = zeroBytes32) (.finalizedNotOfState finalizedRoot zeroBytes32)
+          ensure (finalizedRoot = ZERO_HASH) (.finalizedNotOfState finalizedRoot ZERO_HASH)
           pure empty
       -- The branch proves `r` in the attested state, at the index of the fork of its slot.
       let gindex ← finalizedRootGindexAtSlot (preset := preset) (fork := fork) config

@@ -85,7 +85,7 @@ theorem validateFinality_proves {config : Config} {update : LightClientUpdate pr
     (finality : update.isFinalityUpdate = true) :
     ∃ gindex leaf, finalizedRootGindexAtSlot (preset := preset) (fork := fork) config
         update.attestedHeader.beacon.slot = .ok gindex ∧
-      (update.finalizedHeader.beacon.slot = GENESIS_SLOT ∧ leaf = zeroBytes32 ∨
+      (update.finalizedHeader.beacon.slot = GENESIS_SLOT ∧ leaf = ZERO_HASH ∨
         update.finalizedHeader.beacon.slot ≠ GENESIS_SLOT ∧
           SszType.hashTreeRoot update.finalizedHeader.beacon = .ok leaf) ∧
       isValidNormalizedMerkleBranch leaf update.finalityBranch.toList gindex
@@ -267,7 +267,7 @@ theorem validateLightClientUpdate_finalized {config : Config} {checks : Signatur
     (state : α) (rooted : SszType.hashTreeRoot state = .ok update.attestedHeader.beacon.stateRoot) :
     ∃ gindex leaf, finalizedRootGindexAtSlot (preset := preset) (fork := fork) config
         update.attestedHeader.beacon.slot = .ok gindex ∧
-      (update.finalizedHeader.beacon.slot = GENESIS_SLOT ∧ leaf = zeroBytes32 ∨
+      (update.finalizedHeader.beacon.slot = GENESIS_SLOT ∧ leaf = ZERO_HASH ∨
         update.finalizedHeader.beacon.slot ≠ GENESIS_SLOT ∧
           SszType.hashTreeRoot update.finalizedHeader.beacon = .ok leaf) ∧
       ∀ node : Bytes32,
@@ -390,7 +390,7 @@ theorem validateLightClientUpdate_finalizedCheckpoint {config : Config}
     (layout : finalizedRootGindexAtSlot (preset := preset) (fork := fork) config
       update.attestedHeader.beacon.slot = .ok (finalizedRootGindex stateFork)) :
     ∃ leaf node,
-      (update.finalizedHeader.beacon.slot = GENESIS_SLOT ∧ leaf = zeroBytes32 ∨
+      (update.finalizedHeader.beacon.slot = GENESIS_SLOT ∧ leaf = ZERO_HASH ∨
         update.finalizedHeader.beacon.slot ≠ GENESIS_SLOT ∧
           SszType.hashTreeRoot update.finalizedHeader.beacon = .ok leaf) ∧
       SszType.hashTreeRoot state.finalizedCheckpoint.root = .ok node ∧
