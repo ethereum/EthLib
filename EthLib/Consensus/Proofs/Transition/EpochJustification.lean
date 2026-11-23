@@ -48,18 +48,17 @@ theorem getMatchingSourceAttestations_epoch {before : fork < .altair} {epoch : E
 /-- Each attester of a pending attestation is in the registry.
 
 It is a member of a committee, so an active validator. -/
-theorem getPendingAttestingIndices_lt {state : BeaconState preset fork}
-    {attestation : PendingAttestation preset} {attesters : List ValidatorIndex}
+theorem getPendingAttestingIndices_lt {attestation : PendingAttestation preset}
+    {attesters : List ValidatorIndex}
     (ok : getPendingAttestingIndices state attestation = .ok attesters) :
     ∀ index ∈ attesters, index.toNat < state.validators.data.size := by
   intro index member
-  simp only [getPendingAttestingIndices, bind, Except.bind] at ok
-  split at ok
-  · cases ok
-  · rename_i committee committeeOk
-    have inCommittee := mem_of_committeeAttesters ok member
-    have active := mem_getActiveValidatorIndices_of_getBeaconCommittee committeeOk inCommittee
-    exact lt_size_of_mem_getActiveValidatorIndices active
+  simp only [getPendingAttestingIndices, bind_ok_iff] at ok
+  obtain ⟨committee, committeeOk, attestersOk⟩ := ok
+  -- The attester sits in the committee, whose members are active, so in range.
+  have active := mem_getActiveValidatorIndices_of_getBeaconCommittee committeeOk
+    (mem_of_committeeAttesters attestersOk member)
+  exact lt_size_of_mem_getActiveValidatorIndices active
 
 /-- A justified checkpoint is that of its epoch.
 
