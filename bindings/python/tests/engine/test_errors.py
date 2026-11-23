@@ -3,7 +3,7 @@
 # The table of errors.
 #
 # Repository: ethereum/execution-apis
-# Commit: 3284ee80c3da3e516c53782dde75157cccf1ebdc
+# Commit: 1ca0818569467cff85b7f41372f22e728d5daa14
 # File: src/engine/common.md, section Errors
 
 import json

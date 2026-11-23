@@ -5,7 +5,7 @@ These directories keep the layout of the source, one directory for each method.
 
 The directory `error-groups` holds the groups of error codes of the API, from `src/error-groups/` of the source.
 
-- Source: [`ethereum/execution-apis`](https://github.com/ethereum/execution-apis) at commit `3284ee80c3da3e516c53782dde75157cccf1ebdc`.
+- Source: [`ethereum/execution-apis`](https://github.com/ethereum/execution-apis) at commit `1ca0818569467cff85b7f41372f22e728d5daa14`.
 - Authors: the contributors of `ethereum/execution-apis`.
 - Licence: CC0 1.0 Universal.
 
@@ -38,7 +38,7 @@ The two block access-list methods run against the same chain and the `bal` files
 The files of the other methods run through the readers of the parameters, without a chain.
 
 The view runs every file of `eth_simulateV1`, and compares its error code or its blocks.
-One file is expected to fail, for the reason that `SOUNDNESS.md` gives.
+Two files are expected to fail, for the reasons that `SOUNDNESS.md` gives.
 The results of the calls in each block are not yet specified, so the comparison leaves them out.
 
 The trie suite also checks each answer of `eth_getProof` against the state root of block 60.

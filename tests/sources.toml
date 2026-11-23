@@ -140,7 +140,7 @@ commit = "0899bcb4dcb12040ccf46bea0053a422812bf913"
 directories = ["bindings/python/tests/ethash/spec"]
 
 [repositories."ethereum/execution-apis"]
-commit = "3284ee80c3da3e516c53782dde75157cccf1ebdc"
+commit = "1ca0818569467cff85b7f41372f22e728d5daa14"
 directories = ["bindings/python/tests/rpc/fixtures", "tests/engine"]
 
 [repositories."ethereum/yellowpaper"]

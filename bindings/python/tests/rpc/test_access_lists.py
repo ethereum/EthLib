@@ -117,7 +117,7 @@ def _account(entry: dict[str, Any]) -> dict[str, Any]:
 
 @pytest.mark.parametrize("number", range(57, 61))
 def test_pinned_access_lists(number: int, answers: dict[str, dict[str, Any]]) -> None:
-    # Source: execution-apis 3284ee80, tools/chain/bal/block-000NN.json, copied byte for byte.
+    # Source: execution-apis 1ca08185, tools/chain/bal/block-000NN.json, copied byte for byte.
     pinned = json.loads((FIXTURES / "bal" / f"block-{number:05d}.json").read_text())
     decoded = answers[_request(METHODS[0], [hex(number)])]["result"]
     raw = bytes.fromhex(answers[_request(METHODS[1], [hex(number)])]["result"][2:])

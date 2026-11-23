@@ -1,7 +1,7 @@
 """The decoder of engine_getPayload results, against the OpenRPC examples of `tests/engine`."""
 
 # Rules: ethereum/execution-apis, src/engine/{paris,shanghai,cancun,prague,osaka,amsterdam}.md.
-# Commit: 3284ee80c3da3e516c53782dde75157cccf1ebdc.
+# Commit: 1ca0818569467cff85b7f41372f22e728d5daa14.
 
 import copy
 import json
@@ -50,8 +50,8 @@ def test_example(method: str, fork: str) -> None:
 
 
 def test_example_v6_rejected() -> None:
-    """The example of version 6 at the pin has no slot number, which version 4 payloads require."""
-    with raises(engine.EngineError, _INVALID + '"payload: not the fields of version 4"') as error:
+    """The blob of the example of version 6 at the pin has 2914 bytes, not the 131072 of a blob."""
+    with raises(engine.EngineError, _INVALID + '"blob: 2914 bytes, not 131072"') as error:
         engine.read_get_payload_result(
             "engine_getPayloadV6", "glamsterdam", EXAMPLES["engine_getPayloadV6"]
         )

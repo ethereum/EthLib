@@ -16,6 +16,16 @@ from .chain import FIXTURES, genesis_state, read_fixture, replay_chain
 # The vendored fixtures of the method.
 SIMULATE: Final = sorted((FIXTURES / "eth_simulateV1").glob("*.io"))
 
+# The fixtures that EthLib answers otherwise, with the reason that SOUNDNESS.md gives.
+DIVERGENT: Final = {
+    "ethSimulate-override-all-in-BlockStateCalls": (
+        "a gas limit of 1004 leaves no room for the block access list of the system calls"
+    ),
+    "ethSimulate-override-precompile-code-without-move": (
+        "the precompile keeps its address, so the code override at that address never runs"
+    ),
+}
+
 # The answer of a request that passes every check and runs its blocks.
 RESULT: Final = None
 
@@ -60,11 +70,41 @@ def _request(payload: Mapping[str, Any], *block: str) -> str:
 
 
 def test_every_fixture_is_vendored() -> None:
-    """The suite holds every fixture of the method at the pinned commit."""
-    assert len(SIMULATE) == 95
+    """The suite holds every fixture of the method at the pinned commit, and each divergent one."""
+    assert len(SIMULATE) == 101
+    assert set(DIVERGENT) <= {path.stem for path in SIMULATE}
 
 
-@pytest.mark.parametrize("path", SIMULATE, ids=lambda path: path.stem)
+def _divergent_answer(stem: str) -> dict[str, Any]:
+    """The answer of the view to the request of a divergent fixture."""
+    (exchange,) = read_fixture(FIXTURES / "eth_simulateV1" / f"{stem}.io").exchanges
+    (text,) = replay_chain().serve([exchange.request])
+    assert text is not None
+    return json.loads(text)
+
+
+def test_divergent_gas_limit() -> None:
+    """A block with a gas limit of 1004 is invalid, so the view answers an internal error."""
+    response = _divergent_answer("ethSimulate-override-all-in-BlockStateCalls")
+    assert response["error"]["code"] == -32603
+
+
+def test_divergent_precompile_code() -> None:
+    """The identity precompile keeps its address, so the call returns its input."""
+    response = _divergent_answer("ethSimulate-override-precompile-code-without-move")
+    assert [call["returnData"] for call in response["result"][0]["calls"]] == ["0x1234"]
+
+
+def _fixture_param(path: Path) -> object:
+    """A fixture as a case, expected to fail when EthLib answers it otherwise."""
+    reason = DIVERGENT.get(path.stem)
+    if reason is None:
+        return pytest.param(path, id=path.stem)
+    xfail = pytest.mark.xfail(strict=True, raises=AssertionError, reason=reason)
+    return pytest.param(path, id=path.stem, marks=xfail)
+
+
+@pytest.mark.parametrize("path", [_fixture_param(path) for path in SIMULATE])
 def test_fixture(path: Path) -> None:
     """The view answers the code or the blocks of the fixture; the source fixes no message."""
     (exchange,) = read_fixture(path).exchanges
