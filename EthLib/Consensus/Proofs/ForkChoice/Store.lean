@@ -473,6 +473,24 @@ theorem isAncestor_pending (gloas : .glamsterdam ≤ fork) (node : ForkChoiceNod
   · rfl
   · split <;> simp
 
+/-- From Gloas the payload status of the head does not change whether a block is in its chain.
+
+So a head given by its root, as a pending node, answers as the head that the fork choice finds. -/
+theorem isAncestor_head_pending (gloas : .glamsterdam ≤ fork) (head : ForkChoiceNode)
+    (root : Root) :
+    store.isAncestor head ⟨root, .pending⟩ =
+      store.isAncestor ⟨head.root, .pending⟩ ⟨root, .pending⟩ := by
+  rw [isAncestor_pending gloas, isAncestor_pending gloas]
+  simp only [bind, Except.bind]
+  split
+  · rfl
+  · rename_i ancestorBlock _
+    have same := getAncestor_root (store := store) head .pending ancestorBlock.slot
+    revert same
+    cases store.getAncestor head ancestorBlock.slot <;>
+      cases store.getAncestor ⟨head.root, .pending⟩ ancestorBlock.slot <;>
+      simp_all [Functor.map, Except.map, pure, Except.pure]
+
 /-- Each node of a block descends from the pending node of the parent of that block.
 
 The store must hold the block and its parent, the parent at an earlier slot.
@@ -639,6 +657,40 @@ theorem getCheckpointBlock_walk {root checkpoint : Root} {epoch : Epoch}
   subst ancestor
   exact ⟨boundary, mapError_ok_iff.mp boundaryOk, walk⟩
 
+/-- A checkpoint read is the root of a walk back to the first slot of the epoch, at every fork. -/
+theorem getCheckpointBlock_walk_root {root checkpoint : Root} {epoch : Epoch}
+    (read : store.getCheckpointBlock root epoch = .ok checkpoint) :
+    ∃ start ancestor, computeStartSlotAtEpoch preset epoch = .ok start ∧
+      store.getAncestor ⟨root, .pending⟩ start = .ok ancestor ∧ ancestor.root = checkpoint := by
+  unfold getCheckpointBlock at read
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at read
+  obtain ⟨start, startOk, ancestor, walk, eq⟩ := read
+  exact ⟨start, ancestor, mapError_ok_iff.mp startOk, walk, eq⟩
+
+/-- An ancestor of a tip reads the tip's checkpoint block at an epoch.
+
+That epoch's first slot must be at or before the ancestor. -/
+theorem getCheckpointBlock_of_descendant {tip below checkpoint : Root}
+    {belowBlock : BeaconBlock preset fork} {epoch : Epoch} {start : Slot}
+    (belowFound : store.blocks[below]? = some belowBlock)
+    (descends : store.isAncestor ⟨tip, .pending⟩ ⟨below, .pending⟩ = .ok true)
+    (startOk : computeStartSlotAtEpoch preset epoch = .ok start)
+    (within : start ≤ belowBlock.slot)
+    (read : store.getCheckpointBlock tip epoch = .ok checkpoint) :
+    store.getCheckpointBlock below epoch = .ok checkpoint := by
+  obtain ⟨start', ancestor, startOk', walk, rooted⟩ := getCheckpointBlock_walk_root read
+  rw [startOk, Except.ok.injEq] at startOk'
+  subst start'
+  -- The walk to the block's slot reaches its root; below that the walks agree on roots.
+  obtain ⟨reached, toBelow, reachedRoot⟩ := getAncestor_of_isAncestor belowFound descends
+  rw [getAncestor_trans within toBelow] at walk
+  have reachedWalk := getAncestor_root (store := store) reached .pending start
+  rw [reachedRoot, walk] at reachedWalk
+  simp only [getCheckpointBlock, startOk, Except.mapError, bind, Except.bind]
+  change ((fun x => x.root) <$> store.getAncestor ⟨below, .pending⟩ start) = .ok checkpoint
+  rw [← reachedWalk]
+  simp [rooted, Functor.map, Except.map]
+
 /-- A successful checkpoint read names a held ancestor at or before its epoch boundary. -/
 theorem isAncestor_of_getCheckpointBlock {root checkpoint : Root} {epoch : Epoch}
     (read : store.getCheckpointBlock root epoch = .ok checkpoint) :
@@ -647,13 +699,11 @@ theorem isAncestor_of_getCheckpointBlock {root checkpoint : Root} {epoch : Epoch
       store.isAncestor ⟨root, .pending⟩ ⟨checkpoint, .pending⟩ = .ok true := by
   by_cases gloas : .glamsterdam ≤ fork
   · -- From Gloas the walk reaches the checkpoint block, and a pending ancestor accepts any status.
-    unfold getCheckpointBlock at read
-    simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at read
-    obtain ⟨boundary, boundaryOk, ancestor, walk, rfl⟩ := read
+    obtain ⟨boundary, ancestor, boundaryOk, walk, rfl⟩ := getCheckpointBlock_walk_root read
     obtain ⟨block, held, le⟩ := getAncestor_le walk
     have stops : store.getAncestor ⟨root, .pending⟩ block.slot = .ok ancestor := by
       rw [getAncestor_trans le walk, getAncestor_of_le held (UInt64.le_refl _)]
-    exact ⟨boundary, block, mapError_ok_iff.mp boundaryOk, held, le, by
+    exact ⟨boundary, block, boundaryOk, held, le, by
       simp [isAncestor_pending gloas, block_ok_iff.mpr held, stops, bind, Except.bind, pure,
         Except.pure]⟩
   obtain ⟨boundary, boundaryOk, walk⟩ := getCheckpointBlock_walk (Nat.lt_of_not_le gloas) read
@@ -732,24 +782,57 @@ theorem getCurrentStoreEpoch_eq {config : Config} {slot : Slot} {epoch : Epoch}
   simpa [getCurrentStoreEpoch, slotOk, bind, Except.bind, pure, Except.pure]
     using epochOk.symm
 
+/-- A walk from a node reaches, from the pending node of its root, a node with the same root. -/
+theorem getAncestor_pending_root {node ancestor : ForkChoiceNode} {slot : Slot}
+    (walk : store.getAncestor node slot = .ok ancestor) :
+    ∃ reached, store.getAncestor ⟨node.root, .pending⟩ slot = .ok reached ∧
+      reached.root = ancestor.root := by
+  have same := getAncestor_root (store := store) node .pending slot
+  rw [walk] at same
+  cases pendingWalk : store.getAncestor ⟨node.root, .pending⟩ slot with
+  | error e => simp [pendingWalk, Functor.map, Except.map] at same
+  | ok reached =>
+    simp only [pendingWalk, Functor.map, Except.map, Except.ok.injEq] at same
+    exact ⟨reached, rfl, same.symm⟩
+
+/-- A pending walk that reaches a known root at its slot is a descent to its pending node. -/
+theorem isAncestor_of_getAncestor_root {root : Root} {node reached : ForkChoiceNode}
+    {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
+    (pending : node.payloadStatus = .pending)
+    (walk : store.getAncestor node block.slot = .ok reached) (rootEq : reached.root = root) :
+    store.isAncestor node ⟨root, .pending⟩ = .ok true := by
+  by_cases gloas : .glamsterdam ≤ fork
+  · simp [isAncestor_pending gloas, block_ok_iff.mpr found, walk, rootEq, bind, Except.bind,
+      pure, Except.pure]
+  have status := getAncestor_pending_of_lt (Nat.lt_of_not_le gloas) pending walk
+  have same : reached = ⟨root, .pending⟩ := by
+    cases reached
+    simp_all
+  exact same ▸ isAncestor_of_getAncestor walk
+
 /-- A checkpoint read on a head above a block is above the block.
 
 The block must be at or before the first slot of the checkpoint's epoch. -/
-theorem isAncestor_of_getCheckpointBlock_above (before : fork < .glamsterdam)
+theorem isAncestor_of_getCheckpointBlock_above
     {head root checkpoint : Root} {rootBlock : BeaconBlock preset fork} {epoch : Epoch}
     (rootKnown : store.blocks[root]? = some rootBlock)
     (supports : store.isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true)
     (read : store.getCheckpointBlock head epoch = .ok checkpoint)
     (blockLe : rootBlock.slot.toNat ≤ epoch.toNat * preset.SLOTS_PER_EPOCH.toNat) :
     store.isAncestor ⟨checkpoint, .pending⟩ ⟨root, .pending⟩ = .ok true := by
-  obtain ⟨boundary, boundaryOk, boundaryWalk⟩ := getCheckpointBlock_walk before read
+  obtain ⟨boundary, ancestor, boundaryOk, boundaryWalk, rooted⟩ :=
+    getCheckpointBlock_walk_root read
   have blockBelow : rootBlock.slot ≤ boundary := by
     apply UInt64.le_iff_toNat_le.mpr
     rw [(computeStartSlotAtEpoch_ok_iff.mp boundaryOk).2]
     exact blockLe
+  -- The head's walk to the block passes the checkpoint's node, whatever its payload status.
+  obtain ⟨reached, headWalk, reachedRoot⟩ := getAncestor_of_isAncestor rootKnown supports
   have through := getAncestor_trans blockBelow boundaryWalk
-  rw [getAncestor_of_isAncestor_of_lt before rootKnown supports] at through
-  exact isAncestor_of_getAncestor through.symm
+  rw [headWalk] at through
+  obtain ⟨pendingReached, pendingWalk, pendingRoot⟩ := getAncestor_pending_root through.symm
+  rw [rooted] at pendingWalk
+  exact isAncestor_of_getAncestor_root rootKnown rfl pendingWalk (pendingRoot.trans reachedRoot)
 
 /-- The root of the ancestor of a successful descent test is held. -/
 theorem held_of_isAncestor {node ancestor : ForkChoiceNode}
@@ -759,28 +842,30 @@ theorem held_of_isAncestor {node ancestor : ForkChoiceNode}
   obtain ⟨b, ok, -⟩ := bind_ok_iff.mp descends
   exact ⟨b, block_ok_iff.mp ok⟩
 
-/-- Two pending ancestors of one head are comparable before Gloas. -/
-theorem comparable_of_ancestors (before : fork < .glamsterdam) {head : ForkChoiceNode} {a b : Root}
+/-- Two pending ancestors of one head are comparable. -/
+theorem comparable_of_ancestors {head : ForkChoiceNode} {a b : Root}
     {aBlock bBlock : BeaconBlock preset fork}
     (aKnown : store.blocks[a]? = some aBlock) (bKnown : store.blocks[b]? = some bBlock)
     (ha : store.isAncestor head ⟨a, .pending⟩ = .ok true)
     (hb : store.isAncestor head ⟨b, .pending⟩ = .ok true) :
     store.isAncestor ⟨a, .pending⟩ ⟨b, .pending⟩ = .ok true ∨
       store.isAncestor ⟨b, .pending⟩ ⟨a, .pending⟩ = .ok true := by
-  have aw := getAncestor_of_isAncestor_of_lt before aKnown ha
-  have bw := getAncestor_of_isAncestor_of_lt before bKnown hb
+  obtain ⟨ra, aw, aRoot⟩ := getAncestor_of_isAncestor aKnown ha
+  obtain ⟨rb, bw, bRoot⟩ := getAncestor_of_isAncestor bKnown hb
   rcases UInt64.le_total bBlock.slot aBlock.slot with le | le
   · left
     have walk := (getAncestor_trans le aw).symm.trans bw
-    simp [isAncestor, block_ok_iff.mpr bKnown, walk,
-      bind, Except.bind, pure, Except.pure]
+    obtain ⟨reached, pendingWalk, reachedRoot⟩ := getAncestor_pending_root walk
+    rw [aRoot] at pendingWalk
+    exact isAncestor_of_getAncestor_root bKnown rfl pendingWalk (reachedRoot.trans bRoot)
   · right
     have walk := (getAncestor_trans le bw).symm.trans aw
-    simp [isAncestor, block_ok_iff.mpr aKnown, walk,
-      bind, Except.bind, pure, Except.pure]
+    obtain ⟨reached, pendingWalk, reachedRoot⟩ := getAncestor_pending_root walk
+    rw [bRoot] at pendingWalk
+    exact isAncestor_of_getAncestor_root aKnown rfl pendingWalk (reachedRoot.trans aRoot)
 
-/-- Two blocks above each other are the same block, before Gloas. -/
-theorem eq_of_isAncestor_antisymm (before : fork < .glamsterdam)
+/-- Two blocks above each other are the same block. -/
+theorem eq_of_isAncestor_antisymm
     {a b : Root} {aBlock bBlock : BeaconBlock preset fork}
     (aFound : store.blocks[a]? = some aBlock) (bFound : store.blocks[b]? = some bBlock)
     (up : store.isAncestor ⟨a, .pending⟩ ⟨b, .pending⟩ = .ok true)
@@ -791,9 +876,9 @@ theorem eq_of_isAncestor_antisymm (before : fork < .glamsterdam)
   obtain ⟨bBlock', bFound', ge⟩ := slot_le_of_isAncestor aFound down
   rw [bFound, Option.some.injEq] at bFound'
   subst bBlock'
-  have walk := getAncestor_of_isAncestor_of_lt before bFound up
+  obtain ⟨reached, walk, rooted⟩ := getAncestor_of_isAncestor bFound up
   rw [getAncestor_of_le aFound ge, Except.ok.injEq] at walk
-  exact congrArg ForkChoiceNode.root walk
+  rw [← rooted, ← walk]
 
 end Store
 

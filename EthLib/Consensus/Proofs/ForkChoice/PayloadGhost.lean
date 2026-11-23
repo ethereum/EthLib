@@ -1174,120 +1174,250 @@ theorem getHead_eq_ghost_full_withBoost_of_verified {nodes : List ForkChoiceNode
 
 /-! ## A majority of votes -/
 
-/-- From Gloas, the walk from a viable node reaches the slot of each viable ancestor.
+/-- From Gloas the walk goes down the tree of nodes: its end descends from its start. -/
+private theorem ancestor_getHeadFrom (lower : store.ParentsBelow) (gloas : .glamsterdam ≤ fork)
+    {nodes : List ForkChoiceNode} {start head : ForkChoiceNode}
+    (walk : store.getHeadFrom config tally nodes start = .ok head) :
+    (nodeTree lower).Ancestor start.toModel head.toModel := by
+  induction start using getHeadFrom.induct store with
+  | _ start ih =>
+    rw [getHeadFrom] at walk
+    cases chosen : store.heaviestChild config tally nodes start with
+    | error e => simp [chosen, bind, Except.bind] at walk
+    | ok result =>
+      cases result with
+      | none =>
+        simp [chosen, bind, Except.bind, pure, Except.pure] at walk
+        subst walk
+        exact .refl _
+      | some child =>
+        simp only [chosen, bind, Except.bind] at walk
+        split at walk
+        · rename_i lowerRank
+          obtain ⟨children, weighted, hc, hw, choice⟩ := heaviestChild_eq chosen
+          obtain ⟨key, mem, -⟩ := chooseHeaviest_some choice
+          obtain ⟨source, member, pair⟩ := mapM_ok_mem hw _ mem
+          have same : source = child := (weighNode_ok_iff.mp pair).1.symm
+          subst same
+          exact (isChild_of_mem_getNodeChildren gloas hc
+            (List.mem_filter.mp member).1).ancestor.trans (ih source lowerRank walk)
+        · cases walk
 
-Every block of the chain is viable, so the walk never meets an unknown parent. -/
-private theorem getAncestor_ok_of_viable_ancestor_of_gloas {nodes : List ForkChoiceNode}
-    (gloas : .glamsterdam ≤ fork)
-    (tree : store.getFilteredNodeTree config = .ok nodes) :
-    ∀ {n : ℕ} {start : ForkChoiceNode}, start ∈ nodes →
-      ∀ {root : Root} {rootBlock : BeaconBlock preset fork},
-        (blockTree lower).parent^[n] (some start.root) = some root →
-        store.blocks[root]? = some rootBlock →
-        (blockTree lower).Ancestor (some store.justifiedCheckpoint.root) (some root) →
-        ∃ found, store.getAncestor start rootBlock.slot = .ok found
-  | 0, start, startMem, root, rootBlock, step, rootFound, _ => by
-    obtain ⟨-, ⟨startBlock, startFound⟩, -⟩ := filterNodeTree_mem tree start startMem
-    cases step
-    rw [rootFound, Option.some.injEq] at startFound
-    subst startFound
-    exact ⟨_, getAncestor_of_le rootFound (UInt64.le_refl _)⟩
-  | n + 1, start, startMem, root, rootBlock, step, rootFound, belowJustified => by
-    obtain ⟨-, ⟨startBlock, startFound⟩, -⟩ := filterNodeTree_mem tree start startMem
-    by_cases le : startBlock.slot ≤ rootBlock.slot
-    · exact ⟨_, getAncestor_of_le startFound le⟩
-    · rw [Function.iterate_succ_apply, blockTree_parent_of startFound] at step
-      have closed := filterNodeTree_closed (T := nodeTree lower) (·.toModel) tree
-        (fun _ _ _ childrenOk _ nMem => isChild_of_mem_getNodeChildren gloas childrenOk nMem)
-        start startMem
-      have parentAbove : (blockTree lower).Ancestor (some root) (some startBlock.parentRoot) :=
-        ⟨n, step⟩
-      have justifiedAbove :
-          (nodeTree lower).Ancestor (some store.justifiedCheckpoint.root, none)
-            (some startBlock.parentRoot, none) :=
-        payloadTree_ancestor_none_of (belowJustified.trans parentAbove)
-      have parentAboveStart :
-          (nodeTree lower).Ancestor (some startBlock.parentRoot, none) start.toModel :=
-        payloadTree_ancestor_none_of ⟨1, blockTree_parent_of startFound⟩
-      obtain ⟨p, pMem, pModel⟩ := closed.2 (some startBlock.parentRoot, none) justifiedAbove
-        parentAboveStart
-      have pRoot : p.root = startBlock.parentRoot :=
-        Option.some.inj (Prod.mk.inj pModel).1.symm
-      obtain ⟨-, ⟨parentBlock, parentFound⟩, -⟩ := filterNodeTree_mem tree p pMem
-      rw [pRoot] at parentFound
-      -- The parent node that the start block builds on lies between that parent and the start.
-      have builtNode : (nodeTree lower).parent (some start.root, none) =
-          (some startBlock.parentRoot,
-            (parentPayloadStatus startBlock parentBlock).toStatus) := by
-        rw [nodeTree_parent_of startFound parentFound,
-          PayloadStatus.toStatus_of_ne_pending (parentPayloadStatus_ne_pending gloas)]
-      have builtBelow :
-          (nodeTree lower).Ancestor (some store.justifiedCheckpoint.root, none)
-            (some startBlock.parentRoot,
-              (parentPayloadStatus startBlock parentBlock).toStatus) :=
-        justifiedAbove.trans ⟨1, by
-          simp [nodeTree, payloadTree, statusParent,
-            PayloadStatus.toStatus_of_ne_pending (parentPayloadStatus_ne_pending gloas)]⟩
-      have builtAbove :
-          (nodeTree lower).Ancestor
-            (some startBlock.parentRoot,
-              (parentPayloadStatus startBlock parentBlock).toStatus) start.toModel :=
-        Ancestor.trans ⟨1, builtNode⟩ (payloadTree_ancestor_none_of (.refl _))
-      obtain ⟨q, qMem, qModel⟩ := closed.2 _ builtBelow builtAbove
-      have qEq : q = ⟨startBlock.parentRoot, parentPayloadStatus startBlock parentBlock⟩ :=
-        ForkChoiceNode.toModel_injective qModel.symm
-      subst qEq
-      rw [getAncestor_step startFound le parentFound
-        (lower start.root startBlock parentBlock startFound parentFound)]
-      exact getAncestor_ok_of_viable_ancestor_of_gloas gloas tree qMem step rootFound
-        belowJustified
+/-- From Gloas, a head walk that passes a node ends where the walk from that node ends.
 
-variable (lower) in
-/-- Take a viable node whose votes exceed half of the sum of the stake and the score of the boost.
+The head must descend from that node, and the node from the start. -/
+theorem getHeadFrom_of_visited (lower : store.ParentsBelow) (gloas : .glamsterdam ≤ fork)
+    {nodes : List ForkChoiceNode} {middle head : ForkChoiceNode}
+    (below : (nodeTree lower).Ancestor middle.toModel head.toModel) :
+    ∀ {start : ForkChoiceNode}, store.getHeadFrom config tally nodes start = .ok head →
+      (nodeTree lower).Ancestor start.toModel middle.toModel →
+      store.getHeadFrom config tally nodes middle = .ok head := by
+  intro start
+  induction start using getHeadFrom.induct store with
+  | _ start ih =>
+  intro walk above
+  by_cases same : start.toModel = middle.toModel
+  · rwa [← ForkChoiceNode.toModel_injective same]
+  have walk' := walk
+  rw [getHeadFrom] at walk'
+  cases chosen : store.heaviestChild config tally nodes start with
+  | error e => simp [chosen, bind, Except.bind] at walk'
+  | ok result =>
+  cases result with
+  | none =>
+    -- The walk stops at the start, so the start is the head, which descends from the node.
+    simp [chosen, bind, Except.bind, pure, Except.pure] at walk'
+    subst walk'
+    exact absurd (above.antisymm below) same
+  | some child =>
+  simp only [chosen, bind, Except.bind] at walk'
+  split at walk'
+  swap
+  · cases walk'
+  rename_i lowerRank
+  obtain ⟨children, weighted, childrenOk, weightedOk, choice⟩ := heaviestChild_eq chosen
+  obtain ⟨key, mem, -⟩ := chooseHeaviest_some choice
+  obtain ⟨source, member, pair⟩ := mapM_ok_mem weightedOk _ mem
+  have sameChild : source = child := (weighNode_ok_iff.mp pair).1.symm
+  subst sameChild
+  have childOf := isChild_of_mem_getNodeChildren (lower := lower) gloas childrenOk
+    (List.mem_filter.mp member).1
+  -- The head descends from the chosen child and from the node, so the two are comparable.
+  rcases below.total (ancestor_getHeadFrom lower gloas walk') with down | up
+  · rcases down.eq_or_parent with eq | par
+    · exact ih source lowerRank walk' (eq ▸ .refl _)
+    · rw [childOf.2] at par
+      exact absurd (above.antisymm par) same
+  · exact ih source lowerRank walk' up
 
-Those votes leave out the boost.
+open Models.ForkChoice in
+/-- From Gloas, the head walk from a node of the path descends from a viable target node.
 
-The head is then in its subtree.
+Below each node from that start to the target, the child toward it outweighs every viable rival.
 
-That holds from Gloas, away from the payload decisions of the previous slot.
+Rivals that are payload decisions of the previous slot are exempt from that comparison.
 
-When the boost does not apply, its score is 0.
+When any distinct viable rival exists, decision or not, the child toward it has positive weight.
 
-Each known block must sit at a later slot than its known parent.
+The weights count the votes of the justified state and the boost.
 
-A validator counts when it is active and not slashed in the justified state.
+No viable node from the start to the target may be a payload decision of the previous slot. -/
+theorem isAncestor_getHeadFrom_of_sibling_bound (lower : store.ParentsBelow)
+    (gloas : .glamsterdam ≤ fork) {nodes : List ForkChoiceNode}
+    (tree : store.getFilteredNodeTree config = .ok nodes)
+    (stateOk : store.checkpointState store.justifiedCheckpoint = .ok state)
+    {start target : ForkChoiceNode} (targetIn : target ∈ nodes)
+    (below : (nodeTree lower).Ancestor (some store.justifiedCheckpoint.root, none) start.toModel)
+    (onPath : (nodeTree lower).Ancestor start.toModel target.toModel)
+    (noDecision : ∀ n ∈ nodes, (nodeTree lower).Ancestor start.toModel n.toModel →
+      (nodeTree lower).Ancestor n.toModel target.toModel →
+      store.isPreviousSlotPayloadDecision config n = .ok false)
+    (sibling : ∀ p ∈ nodes, ∀ c ∈ nodes, ∀ d ∈ nodes,
+      (nodeTree lower).Ancestor start.toModel p.toModel →
+      (nodeTree lower).IsChild c.toModel p.toModel →
+      (nodeTree lower).IsChild d.toModel p.toModel →
+      (nodeTree lower).Ancestor c.toModel target.toModel → d.toModel ≠ c.toModel →
+      (store.isPreviousSlotPayloadDecision config d = .ok false →
+        weight (voters state).insertNone
+            (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
+            ((nodeView lower nodes).withBoost (store.boostedNode config gloas)) d.toModel <
+          weight (voters state).insertNone
+            (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
+            ((nodeView lower nodes).withBoost (store.boostedNode config gloas)) c.toModel) ∧
+      0 < weight (voters state).insertNone
+          (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
+          ((nodeView lower nodes).withBoost (store.boostedNode config gloas)) c.toModel)
+    {head : ForkChoiceNode}
+    (walk : store.getHeadFrom config store.justifiedTally nodes start = .ok head) :
+    store.isAncestor head target = .ok true := by
+  classical
+  have tallied := justifiedTally_of_state stateOk
+  have closed := filterNodeTree_closed (T := nodeTree lower) (·.toModel) tree
+    fun _ _ _ ok _ mem => isChild_of_mem_getNodeChildren gloas ok mem
+  obtain ⟨-, ⟨targetBlock, targetFound⟩, -⟩ := filterNodeTree_mem tree target targetIn
+  -- The weight with the boost of a node: its votes, and the boost below it.
+  let boosted := fun n : ForkChoiceNode =>
+    weight (voters state).insertNone
+      (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
+      ((nodeView lower nodes).withBoost (store.boostedNode config gloas)) n.toModel
+  -- Every node the walk visits lies between the start and the target.
+  suffices step : ∀ {node : ForkChoiceNode}, (nodeTree lower).Ancestor start.toModel node.toModel →
+      (nodeTree lower).Ancestor node.toModel target.toModel →
+      store.getHeadFrom config store.justifiedTally nodes node = .ok head →
+      store.isAncestor head target = .ok true from step (.refl _) onPath walk
+  intro node
+  induction node using getHeadFrom.induct store with
+  | _ node ih =>
+  intro fromStart onPath walk
+  by_cases atTarget : node.toModel = target.toModel
+  · obtain rfl := ForkChoiceNode.toModel_injective atTarget
+    exact isAncestor_getHeadFrom_of_gloas gloas walk targetFound
+  have nodeBelow := below.trans fromStart
+  have nodeIn : node ∈ nodes := by
+    obtain ⟨m, mIn, same⟩ := (closed target targetIn).2 _ nodeBelow onPath
+    rwa [ForkChoiceNode.toModel_injective same]
+  -- The child of the node towards the target is a viable child of the node.
+  obtain ⟨c, cChild, cAbove⟩ := onPath.exists_child atTarget
+  obtain ⟨path, pathIn, rfl⟩ := (closed target targetIn).2 c (nodeBelow.trans cChild.ancestor)
+    cAbove
+  rw [getHeadFrom] at walk
+  cases found : store.heaviestChild config store.justifiedTally nodes node with
+  | error e => simp [found, bind, Except.bind] at walk
+  | ok result =>
+  obtain ⟨children, weighted, childrenOk, weightedOk, choice⟩ := heaviestChild_eq found
+  have pathMem : path ∈ children.filter (· ∈ nodes) :=
+    (mem_children_nodeView gloas tree nodeBelow childrenOk).mp
+      (mem_children.mpr
+        ⟨View.mem_ofBlocks.mpr ⟨_, List.mem_toFinset.mpr (List.mem_map_of_mem pathIn), .refl _⟩,
+          cChild⟩)
+  obtain ⟨y, yMem, pathOk⟩ := exists_mem_of_mapM_ok weightedOk pathMem
+  obtain ⟨-, pathWeight, -⟩ := weighNode_ok_iff.mp pathOk
+  obtain ⟨-, ⟨pathBlock, pathFound⟩, -⟩ := filterNodeTree_mem tree path pathIn
+  have pathFromStart := fromStart.trans cChild.ancestor
+  have pathValue : y.2.1.toNat = boosted path := getWeight_eq_weight_withBoost_of_gloas
+    (lower := lower) gloas (noDecision path pathIn pathFromStart cAbove) tallied pathFound nodes
+    pathWeight
+  cases result with
+  | none =>
+    rw [chooseHeaviest_eq_none] at choice
+    subst choice
+    cases yMem
+  | some chosen =>
+  simp only [found, bind, Except.bind] at walk
+  split at walk
+  swap
+  · cases walk
+  obtain ⟨key, chosenMem, largest⟩ := chooseHeaviest_some choice
+  obtain ⟨source, sourceMem, sourceOk⟩ := mapM_ok_mem weightedOk _ chosenMem
+  obtain ⟨same, sourceWeight, -⟩ := weighNode_ok_iff.mp sourceOk
+  replace same : source = chosen := same.symm
+  subst same
+  -- The chosen child is the path child: any other child weighs less.
+  have chosenPath : source = path := by
+    by_contra other
+    have sourceIn : source ∈ nodes := of_decide_eq_true (List.mem_filter.mp sourceMem).2
+    have sourceChild := isChild_of_mem_getNodeChildren (lower := lower) gloas childrenOk
+      (List.mem_filter.mp sourceMem).1
+    have models : source.toModel ≠ path.toModel :=
+      fun eq => other (ForkChoiceNode.toModel_injective eq)
+    obtain ⟨-, ⟨nodeBlock, nodeFound⟩, -⟩ := filterNodeTree_mem tree source sourceIn
+    obtain ⟨beats, positive⟩ := sibling node nodeIn path pathIn source sourceIn
+      fromStart cChild sourceChild cAbove models
+    have le := toLex_le_of_compareWeighted_tiebreaker (largest y yMem)
+    rw [Prod.Lex.toLex_le_toLex] at le
+    have lower' : key.1.toNat < y.2.1.toNat := by
+      cases decision : store.isPreviousSlotPayloadDecision config source with
+      | error e => simp [getWeight, gloas, decision, bind, Except.bind] at sourceWeight
+      | ok verdict =>
+      cases verdict with
+      | true =>
+        simp [getWeight, gloas, decision, bind, Except.bind, pure, Except.pure] at sourceWeight
+        rw [← sourceWeight, UInt64.toNat_zero, pathValue]
+        exact positive
+      | false =>
+        rw [getWeight_eq_weight_withBoost_of_gloas (lower := lower) gloas decision tallied
+          nodeFound nodes sourceWeight, pathValue]
+        exact beats decision
+    dsimp only at le
+    rcases le with lt | ⟨eq, -⟩ <;> omega
+  subst chosenPath
+  exact ih source ‹_› pathFromStart cAbove walk
 
-Its stake is its effective balance, and the votes of the node are counted at that node. -/
-theorem ancestor_getHead_of_majority_withBoost_of_gloas {nodes : List ForkChoiceNode}
-    {node head : ForkChoiceNode} {score : Gwei} (gloas : .glamsterdam ≤ fork)
-    (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
-    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
-    (tree : store.getFilteredNodeTree config = .ok nodes) (viable : node ∈ nodes)
-    (votes : store.getAttestationScore node state = .ok score)
+open Models.ForkChoice in
+/-- From Gloas, a target whose votes exceed half the sum of stake and boost bounds its rivals.
+
+Below each node, a child toward the target has positive weight and outweighs every other child. -/
+theorem siblingBound_of_majority (lower : store.ParentsBelow) (gloas : .glamsterdam ≤ fork)
+    {nodes : List ForkChoiceNode} {target : ForkChoiceNode}
     (majority : Models.stake (balanceAt state) (voters state) +
-      store.boostScoreOfGloas config gloas < 2 * score.toNat)
-    (found : store.getHead config = .ok head) :
-    (nodeTree lower).Ancestor node.toModel head.toModel := by
-  obtain ⟨-, ⟨block, nodeFound⟩, -⟩ := filterNodeTree_mem tree node viable
-  have belowJustified :
-      (nodeTree lower).Ancestor (some store.justifiedCheckpoint.root, none) node.toModel :=
-    (filterNodeTree_closed (T := nodeTree lower) (·.toModel) tree
-      (fun _ _ _ childrenOk _ nMem => isChild_of_mem_getNodeChildren gloas childrenOk nMem) node
-      viable).1
-  have inView : node.toModel ∈ (nodeView lower nodes).blocks := by
-    simp only [nodeView, View.mem_ofBlocks, List.mem_toFinset, List.mem_map]
-    exact ⟨_, ⟨node, viable, rfl⟩, .refl _⟩
-  rw [getAttestationScore_eq_weight_of_gloas (lower := lower) gloas nodeFound nodes votes,
-    ← stake_boostStake] at majority
-  -- The boost only adds to the weight of the node.
-  replace majority := majority.trans_le (Nat.mul_le_mul_left 2 ((Nat.le_add_right _ _).trans_eq
-    (weight_withBoost (G := nodeView lower nodes) (store.boostedNode config gloas)
-      (store.boostScoreOfGloas config gloas) _).symm))
-  have model := ancestor_ghost_of_majority _ _
-    ((nodeView lower nodes).withBoost (store.boostedNode config gloas)) nodeOrder inView
-    belowJustified majority
-  rwa [getHead_eq_ghost_withBoost_of_gloas lower gloas noDecision justifiedState tree
-    (List.ne_nil_of_mem viable) found] at model
+        store.boostScoreOfGloas config gloas <
+      2 * weight (voters state) (balanceAt state) (nodeView lower nodes) target.toModel)
+    {p c d : ForkChoiceNode} (cChild : (nodeTree lower).IsChild c.toModel p.toModel)
+    (dChild : (nodeTree lower).IsChild d.toModel p.toModel)
+    (toward : (nodeTree lower).Ancestor c.toModel target.toModel) (other : d.toModel ≠ c.toModel) :
+    weight (voters state).insertNone
+        (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
+        ((nodeView lower nodes).withBoost (store.boostedNode config gloas)) d.toModel <
+      weight (voters state).insertNone
+        (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
+        ((nodeView lower nodes).withBoost (store.boostedNode config gloas)) c.toModel ∧
+    0 < weight (voters state).insertNone
+        (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
+        ((nodeView lower nodes).withBoost (store.boostedNode config gloas)) c.toModel := by
+  -- The child toward the target weighs at least the target's votes.
+  have targetWeight := weight_mono (V := voters state) (w := balanceAt state)
+    (G := nodeView lower nodes) toward
+  have cLower := weight_withBoost (V := voters state) (w := balanceAt state)
+    (G := nodeView lower nodes) (store.boostedNode config gloas)
+    (store.boostScoreOfGloas config gloas) c.toModel
+  -- Two children share at most the stake of the voters and the boost.
+  have sum := weight_withBoost_add_le (V := voters state) (w := balanceAt state)
+    (G := nodeView lower nodes) dChild cChild other (store.boostedNode config gloas)
+    (store.boostScoreOfGloas config gloas)
+  have total := weight_add_le (V := voters state) (w := balanceAt state)
+    (G := nodeView lower nodes) dChild cChild other
+  constructor <;> split_ifs at cLower <;> omega
+
 
 /-- Take a viable node whose votes exceed half of the sum of the stake and the score of the boost.
 
@@ -1317,29 +1447,56 @@ theorem isAncestor_getHead_of_majority_withBoost_of_gloas {nodes : List ForkChoi
       store.boostScoreOfGloas config gloas < 2 * score.toNat)
     (found : store.getHead config = .ok head) :
     store.isAncestor head node = .ok true := by
-  have above := ancestor_getHead_of_majority_withBoost_of_gloas lower gloas noDecision
-    justifiedState tree viable votes majority found
-  obtain ⟨-, ⟨nodeBlock, nodeFound⟩, -⟩ := filterNodeTree_mem tree node viable
+  obtain ⟨-, ⟨block, nodeFound⟩, -⟩ := filterNodeTree_mem tree node viable
   have belowJustified :
-      (blockTree lower).Ancestor (some store.justifiedCheckpoint.root) (some node.root) :=
-    filterNodeTree_root_ancestor lower tree node viable
-  have headIn : head ∈ nodes := by
-    have notEmpty : ¬ (.glamsterdam ≤ fork ∧ nodes.isEmpty = true) :=
-      fun ⟨_, empty⟩ => List.ne_nil_of_mem viable (List.isEmpty_iff.mp empty)
-    have headFrom := found
-    simp only [getHead, tree, notEmpty, ↓reduceIte, bind, Except.bind] at headFrom
-    rcases getHeadFrom_mem headFrom with rfl | mem
-    · exact (filterNodeTree_mem tree node viable).1
-    · exact mem
-  obtain ⟨n, step⟩ := payloadTree_ancestor_fst above
-  obtain ⟨ancestor, walk⟩ := getAncestor_ok_of_viable_ancestor_of_gloas (lower := lower) gloas tree
-    headIn step nodeFound belowJustified
-  have computed : store.isAncestor head node = .ok (ancestor.root == node.root &&
-      (ancestor.payloadStatus == node.payloadStatus || node.payloadStatus == .pending)) := by
-    simp [isAncestor, block_ok_iff.mpr nodeFound, gloas, walk, bind, Except.bind, pure,
-      Except.pure]
-  have same := (isAncestor_iff_of_gloas (lower := lower) gloas nodeFound computed).mpr above
-  exact same ▸ computed
+      (nodeTree lower).Ancestor (some store.justifiedCheckpoint.root, none) node.toModel :=
+    (filterNodeTree_closed (T := nodeTree lower) (·.toModel) tree
+      (fun _ _ _ childrenOk _ nMem => isChild_of_mem_getNodeChildren gloas childrenOk nMem) node
+      viable).1
+  rw [getAttestationScore_eq_weight_of_gloas (lower := lower) gloas nodeFound nodes votes]
+    at majority
+  have notEmpty : ¬ (.glamsterdam ≤ fork ∧ nodes.isEmpty = true) :=
+    fun ⟨_, empty⟩ => List.ne_nil_of_mem viable (List.isEmpty_iff.mp empty)
+  have headFrom := found
+  simp only [getHead, tree, notEmpty, ↓reduceIte, bind, Except.bind] at headFrom
+  exact isAncestor_getHeadFrom_of_sibling_bound
+    (start := ⟨store.justifiedCheckpoint.root, .pending⟩) lower gloas tree justifiedState viable
+    (.refl _) belowJustified (fun n nIn _ _ => noDecision n nIn)
+    (fun _ _ _ _ _ _ _ cChild dChild toward other =>
+      (siblingBound_of_majority lower gloas majority cChild dChild toward other).imp_left
+        fun beats _ => beats)
+    headFrom
+
+variable (lower) in
+/-- Take a viable node whose votes exceed half of the sum of the stake and the score of the boost.
+
+Those votes leave out the boost.
+
+The head is then in its subtree.
+
+That holds from Gloas, away from the payload decisions of the previous slot.
+
+When the boost does not apply, its score is 0.
+
+Each known block must sit at a later slot than its known parent.
+
+A validator counts when it is active and not slashed in the justified state.
+
+Its stake is its effective balance, and the votes of the node are counted at that node. -/
+theorem ancestor_getHead_of_majority_withBoost_of_gloas {nodes : List ForkChoiceNode}
+    {node head : ForkChoiceNode} {score : Gwei} (gloas : .glamsterdam ≤ fork)
+    (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
+    (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    (tree : store.getFilteredNodeTree config = .ok nodes) (viable : node ∈ nodes)
+    (votes : store.getAttestationScore node state = .ok score)
+    (majority : Models.stake (balanceAt state) (voters state) +
+      store.boostScoreOfGloas config gloas < 2 * score.toNat)
+    (found : store.getHead config = .ok head) :
+    (nodeTree lower).Ancestor node.toModel head.toModel :=
+  (isAncestor_iff_of_gloas (lower := lower) gloas
+    (filterNodeTree_mem tree node viable).2.1.choose_spec
+    (isAncestor_getHead_of_majority_withBoost_of_gloas lower gloas noDecision justifiedState tree
+      viable votes majority found)).mp rfl
 
 /-- From Gloas, when the boost does not apply, its score is 0. -/
 theorem boostScoreOfGloas_of_not_boost {gloas : .glamsterdam ≤ fork}
@@ -1466,8 +1623,17 @@ private theorem NodePath.mem_filterNodeTree {node leaf : ForkChoiceNode}
     simpa [viable, bind, Except.bind, pure, Except.pure] using belowOk.symm
   exact lift leaf (result ▸ List.mem_singleton_self leaf)
 
-/-- Before Gloas, every ancestor relation between held roots gives a child path. -/
-private theorem nodePath_of_ancestor (before : fork < .glamsterdam)
+/-- From Gloas, a held block built on a held full parent finds the parent's payload verified. -/
+def FullParentsVerified (store : Store preset fork) (gloas : .glamsterdam ≤ fork) : Prop :=
+  ∀ (root : Root) (block parent : BeaconBlock preset fork),
+    store.blocks[root]? = some block → store.blocks[block.parentRoot]? = some parent →
+    parentPayloadStatus block parent = .full → store.isPayloadVerified gloas block.parentRoot = true
+
+/-- Every ancestor relation between held roots gives a child path between their pending nodes.
+
+From Gloas, each held block that builds on a full parent must find that payload verified. -/
+private theorem nodePath_of_ancestor
+    (verified : ∀ gloas : .glamsterdam ≤ fork, store.FullParentsVerified gloas)
     {root leaf : Root} {block : BeaconBlock preset fork}
     (found : store.blocks[root]? = some block)
     (above : (blockTree lower).Ancestor (some root) (some leaf)) :
@@ -1483,64 +1649,78 @@ private theorem nodePath_of_ancestor (before : fork < .glamsterdam)
   | none => exact False.elim (childOf.1 rfl)
   | some child =>
     obtain ⟨childBlock, childFound, parent⟩ := blockTree_isChild_iff.mp childOf
-    have childrenOk : ∃ children, store.getNodeChildren ⟨root, .pending⟩ = .ok children := by
-      have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-      simp [getNodeChildren, later, pure, Except.pure]
-    obtain ⟨children, childrenOk⟩ := childrenOk
-    have childMem : (⟨child, .pending⟩ : ForkChoiceNode) ∈ children :=
-      (mem_getNodeChildren before childrenOk).mpr ⟨rfl, childBlock, childFound, parent⟩
     have slots := UInt64.lt_iff_toNat_lt.mp
       (lower child childBlock block childFound (parent ▸ found))
     have bound := childBlock.slot.toNat_lt
     have rankLower : store.nodeRank ⟨child, .pending⟩ < store.nodeRank ⟨root, .pending⟩ := by
       simp only [nodeRank, childFound, found, ↓reduceIte]
       omega
-    exact .step childrenOk childMem (ih _ (h ▸ rankLower) childFound childAbove rfl)
+    have rest := ih _ (h ▸ rankLower) childFound childAbove rfl
+    by_cases gloas : .glamsterdam ≤ fork
+    · -- From Gloas the path passes the payload node of the parent that the child builds on.
+      have notPending := parentPayloadStatus_ne_pending (block := childBlock) (parent := block)
+        gloas
+      obtain ⟨children, childrenOk⟩ :=
+        getNodeChildren_ok_of_known (status := parentPayloadStatus childBlock block) found
+      have childMem : (⟨child, .pending⟩ : ForkChoiceNode) ∈ children :=
+        (mem_getNodeChildren_of_gloas gloas notPending childrenOk).mpr
+          ⟨rfl, childBlock, block, childFound, parent, found, rfl⟩
+      have statusMem : (⟨root, parentPayloadStatus childBlock block⟩ : ForkChoiceNode) ∈
+          (⟨root, .empty⟩ ::
+            if store.isPayloadVerified gloas root then [⟨root, .full⟩] else []) := by
+        cases status : parentPayloadStatus childBlock block with
+        | pending => exact absurd status notPending
+        | empty => exact List.mem_cons_self
+        | full =>
+          have kept := verified gloas child childBlock block childFound (parent ▸ found) status
+          rw [parent] at kept
+          simp [kept]
+      exact .step (getNodeChildren_of_pending gloas rfl) statusMem
+        (.step childrenOk childMem rest)
+    · have before : fork < .glamsterdam := Nat.lt_of_not_le gloas
+      have childrenOk : ∃ children, store.getNodeChildren ⟨root, .pending⟩ = .ok children := by
+        have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+        simp [getNodeChildren, later, pure, Except.pure]
+      obtain ⟨children, childrenOk⟩ := childrenOk
+      have childMem : (⟨child, .pending⟩ : ForkChoiceNode) ∈ children :=
+        (mem_getNodeChildren before childrenOk).mpr ⟨rfl, childBlock, childFound, parent⟩
+      exact .step childrenOk childMem rest
 
-/-- A held block has a held leaf above it in the finite strict-slot tree, before Gloas. -/
-private theorem exists_leaf_above (lower : store.ParentsBelow) (before : fork < .glamsterdam)
-    {root : Root} {block : BeaconBlock preset fork}
-    (found : store.blocks[root]? = some block) :
-    ∃ leaf leafBlock, store.blocks[leaf]? = some leafBlock ∧
-      store.NodePath ⟨root, .pending⟩ ⟨leaf, .pending⟩ ∧
-      store.getNodeChildren ⟨leaf, .pending⟩ = .ok [] := by
-  induction h : store.nodeRank ⟨root, .pending⟩ using Nat.strong_induction_on
-      generalizing root block with
+/-- A held node has a held node without children below it, along a child path. -/
+private theorem exists_leaf_above (lower : store.ParentsBelow) {node : ForkChoiceNode}
+    {block : BeaconBlock preset fork} (found : store.blocks[node.root]? = some block) :
+    ∃ leaf leafBlock, store.blocks[leaf.root]? = some leafBlock ∧
+      store.NodePath node leaf ∧ store.getNodeChildren leaf = .ok [] := by
+  induction h : store.nodeRank node using Nat.strong_induction_on generalizing node block with
   | _ rank ih =>
-  have childrenOk : ∃ children, store.getNodeChildren ⟨root, .pending⟩ = .ok children := by
-    have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-    simp [getNodeChildren, later, pure, Except.pure]
-  obtain ⟨children, childrenOk⟩ := childrenOk
+  obtain ⟨children, childrenOk, held⟩ := getNodeChildren_held lower found
   by_cases empty : children = []
-  · exact ⟨root, block, found, .refl _, empty ▸ childrenOk⟩
+  · exact ⟨node, block, found, .refl _, empty ▸ childrenOk⟩
   obtain ⟨child, childMem⟩ := List.exists_mem_of_ne_nil _ empty
-  obtain ⟨pending, childBlock, childFound, parent⟩ :=
-    (mem_getNodeChildren before childrenOk).mp childMem
-  have slots := UInt64.lt_iff_toNat_lt.mp
-    (lower child.root childBlock block childFound (parent ▸ found))
-  have bound := childBlock.slot.toNat_lt
-  have rankLower : store.nodeRank child < store.nodeRank ⟨root, .pending⟩ := by
-    simp only [nodeRank, childFound, found, pending, ↓reduceIte]
-    omega
-  have childEq : child = ⟨child.root, .pending⟩ := by cases child; simp_all
-  obtain ⟨leaf, leafBlock, leafFound, path, terminal⟩ :=
-    ih _ (h ▸ (childEq ▸ rankLower)) childFound rfl
-  exact ⟨leaf, leafBlock, leafFound, .step childrenOk childMem (childEq ▸ path), terminal⟩
+  obtain ⟨childBlock, childFound, rankLower⟩ := held child childMem
+  obtain ⟨leaf, leafBlock, leafFound, path, terminal⟩ := ih _ (h ▸ rankLower) childFound rfl
+  exact ⟨leaf, leafBlock, leafFound, .step childrenOk childMem path, terminal⟩
 
-/-- Before Gloas, a child path follows the strict-slot block tree. -/
-private theorem NodePath.ancestor {node leaf : ForkChoiceNode} (path : store.NodePath node leaf)
-    (before : fork < .glamsterdam) :
+/-- A child path follows the strict-slot block tree. -/
+private theorem NodePath.ancestor {node leaf : ForkChoiceNode} (path : store.NodePath node leaf) :
     (blockTree lower).Ancestor (some node.root) (some leaf.root) := by
   induction path with
   | refl => exact .refl _
   | step read mem _ ih =>
-    obtain ⟨-, block, found, parent⟩ := (mem_getNodeChildren before read).mp mem
-    exact (blockTree_isChild_iff.mpr ⟨block, found, parent⟩).ancestor.trans ih
+    by_cases gloas : .glamsterdam ≤ fork
+    · exact (payloadTree_ancestor_fst
+        (isChild_of_mem_getNodeChildren (lower := lower) gloas read mem).ancestor).trans ih
+    · obtain ⟨-, block, found, parent⟩ := (mem_getNodeChildren (Nat.lt_of_not_le gloas) read).mp mem
+      exact (blockTree_isChild_iff.mpr ⟨block, found, parent⟩).ancestor.trans ih
 
 /-- A held leaf above `top` has a viability read, and if viable keeps `mid` in the filtered tree.
 
-The block `mid` lies between the start of the walk and `top`, before Gloas. -/
-theorem exists_leaf_above_mem_filterNodeTree (before : fork < .glamsterdam) {start mid top : Root}
+The block `mid` lies between the start of the walk and `top`.
+
+From Gloas, each held block that builds on a full parent must find that payload verified. -/
+theorem exists_leaf_above_mem_filterNodeTree
+    (verified : ∀ gloas : .glamsterdam ≤ fork, store.FullParentsVerified gloas)
+    {start mid top : Root}
     {midBlock topBlock : BeaconBlock preset fork} {nodes : List ForkChoiceNode}
     (midFound : store.blocks[mid]? = some midBlock)
     (topFound : store.blocks[top]? = some topBlock)
@@ -1553,13 +1733,18 @@ theorem exists_leaf_above_mem_filterNodeTree (before : fork < .glamsterdam) {sta
       (store.isViableLeaf config ⟨leaf, .pending⟩ = .ok true →
         (⟨mid, .pending⟩ : ForkChoiceNode) ∈ nodes) := by
   obtain ⟨startBlock, startRead⟩ := filterNodeTree_known walk
-  have toMid := nodePath_of_ancestor before startRead below
-  have toTop := nodePath_of_ancestor before midFound above
+  have toMid := nodePath_of_ancestor verified startRead below
+  have toTop := nodePath_of_ancestor verified midFound above
   obtain ⟨leaf, leafBlock, leafRead, leafPath, terminal⟩ :=
-    exists_leaf_above lower before topFound
-  refine ⟨leaf, leafBlock, leafRead, leafPath.ancestor before, ?_, ?_⟩
-  · exact (toMid.trans (toTop.trans leafPath)).isViableLeaf_ok walk terminal
+    exists_leaf_above lower (node := ⟨top, .pending⟩) topFound
+  -- The viability read of a leaf reads only its root.
+  have sameRead :
+      store.isViableLeaf config leaf = store.isViableLeaf config ⟨leaf.root, .pending⟩ := rfl
+  refine ⟨leaf.root, leafBlock, leafRead, leafPath.ancestor, ?_, ?_⟩
+  · rw [← sameRead]
+    exact (toMid.trans (toTop.trans leafPath)).isViableLeaf_ok walk terminal
   intro viable
+  rw [← sameRead] at viable
   obtain ⟨result, resultOk, lift⟩ := toMid.filterNodeTree walk
   exact lift _ (filterNodeTree_self resultOk (List.ne_nil_of_mem
     ((toTop.trans leafPath).mem_filterNodeTree resultOk terminal viable)))

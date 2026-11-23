@@ -667,6 +667,117 @@ theorem onAttesterSlashing_payloads {checks : SignatureChecks}
 
 end Store
 
+namespace Store
+
+/-- From Gloas, each held block is the anchor block, or has a held parent.
+
+When the block builds on that parent's full node, the parent's payload is verified. -/
+private abbrev ParentsVerifiedOrAnchor (anchorBlock : BeaconBlock preset fork)
+    (store : Store preset fork) (gloas : .glamsterdam ≤ fork) : Prop :=
+  ∀ (root : Root) (block : BeaconBlock preset fork), store.blocks[root]? = some block →
+    block = anchorBlock ∨ ∃ parent, store.blocks[block.parentRoot]? = some parent ∧
+      (parentPayloadStatus block parent = .full →
+        store.isPayloadVerified gloas block.parentRoot = true)
+
+/-- A step that keeps the blocks and every verified payload keeps the invariant. -/
+private theorem ParentsVerifiedOrAnchor.of_kept {gloas : .glamsterdam ≤ fork}
+    {store after : Store preset fork} (holds : ParentsVerifiedOrAnchor anchorBlock store gloas)
+    (blocks : after.blocks = store.blocks)
+    (kept : ∀ root, store.isPayloadVerified gloas root = true →
+      after.isPayloadVerified gloas root = true) :
+    ParentsVerifiedOrAnchor anchorBlock after gloas := by
+  intro root block found
+  rw [blocks] at found
+  rcases holds root block found with same | ⟨parent, parentFound, verified⟩
+  · exact .inl same
+  · exact .inr ⟨parent, blocks ▸ parentFound, fun full => kept _ (verified full)⟩
+
+/-- A block at a new root whose parent payload passed its check keeps the invariant. -/
+private theorem ParentsVerifiedOrAnchor.insert {gloas : .glamsterdam ≤ fork}
+    {store after : Store preset fork} {root : Root} {block : BeaconBlock preset fork}
+    (holds : ParentsVerifiedOrAnchor anchorBlock store gloas)
+    (fresh : store.blocks[root]? = none)
+    (blocks : after.blocks = store.blocks.insert root block)
+    (payloads : after.payloads gloas = store.payloads gloas)
+    (checked : store.validateParentPayload block = .ok ()) :
+    ParentsVerifiedOrAnchor anchorBlock after gloas := by
+  have sameVerified : ∀ r, after.isPayloadVerified gloas r = store.isPayloadVerified gloas r :=
+    fun r => by simp only [isPayloadVerified, payloads]
+  -- A held parent is not at the new root, so the insertion keeps it.
+  have keepsParent : ∀ {r : Root} {p : BeaconBlock preset fork}, store.blocks[r]? = some p →
+      after.blocks[r]? = some p := by
+    intro r p found
+    have differ : root ≠ r := fun same => by rw [same, found] at fresh; cases fresh
+    rw [blocks, getElem?_insert_root, ite_eq_right_iff.mpr (fun eq => absurd eq differ), found]
+  intro r b found
+  rw [blocks, getElem?_insert_root] at found
+  split at found
+  · cases found
+    obtain ⟨parent, parentFound, verified⟩ := (validateParentPayload_ok_iff gloas).mp checked
+    exact .inr ⟨parent, keepsParent parentFound, fun full => by
+      rw [sameVerified]
+      exact verified full⟩
+  · rcases holds r b found with same | ⟨parent, parentFound, verified⟩
+    · exact .inl same
+    · exact .inr ⟨parent, keepsParent parentFound, fun full => by
+        rw [sameVerified]
+        exact verified full⟩
+
+end Store
+
+/-- From Gloas, a reachable store keeps verified the payload of each full parent of a held block.
+
+The store must hold no block at the anchor's parent root. -/
+theorem Store.Reachable.fullParentsVerified
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (absent : store.blocks[anchorBlock.parentRoot]? = none)
+    (gloas : .glamsterdam ≤ fork) : store.FullParentsVerified gloas := by
+  have holds : Store.ParentsVerifiedOrAnchor anchorBlock store gloas := by
+    clear absent
+    induction reachable with
+    | anchor made =>
+      obtain ⟨anchorRoot, -, blocks, -⟩ := getForkchoiceStore_maps made
+      intro root block found
+      rw [blocks, getElem?_insert_root] at found
+      split at found
+      · exact .inl (Option.some.inj found).symm
+      · simp at found
+    | tick _ ticked ih =>
+      exact ih.of_kept (onTick_frame ticked).2.2.1
+        fun r v => by simpa [isPayloadVerified, onTick_payloads ticked gloas] using v
+    | block _ added ih =>
+      rcases onBlock_same_or_insert added with same | ⟨blockRoot, root, fresh, blocks, -⟩
+      · exact same ▸ ih
+      · exact ih.insert fresh blocks (onBlock_payloads added gloas)
+          (onBlock_validateParentPayload root
+            (by simp [Std.TreeMap.contains_eq_isSome_getElem?, fresh]) added)
+    | attestation _ attested ih =>
+      exact ih.of_kept (onAttestation_frame attested).2.1
+        fun r v => by simpa [isPayloadVerified, onAttestation_payloads attested gloas] using v
+    | attesterSlashing _ slashed ih =>
+      exact ih.of_kept (onAttesterSlashing_frame slashed).2.1
+        fun r v => by simpa [isPayloadVerified, onAttesterSlashing_payloads slashed gloas] using v
+    | payloadAttestation _ voted ih =>
+      obtain ⟨_, _, rfl⟩ := onPayloadAttestationMessage_onlyPtcVotes voted
+      exact ih
+    | envelope _ accepted ih =>
+      obtain ⟨_, _, _, _, recorded, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
+      obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+      exact ih.of_kept rfl fun r v => by
+        simp only [Store.isPayloadVerified] at v ⊢
+        simp [Std.TreeMap.contains_insert, v]
+    | @inclusionList _ _ _ heze _ _ accepted ih =>
+      obtain ⟨_, _, rfl⟩ := onInclusionList_ok heze accepted
+      exact ih
+  intro root block parent found parentFound full
+  rcases holds root block found with same | ⟨parent', parentFound', verified⟩
+  · subst same
+    rw [parentFound] at absent
+    cases absent
+  · rw [parentFound, Option.some.injEq] at parentFound'
+    subst parentFound'
+    exact verified full
+
 /-- In a reachable store, each known block has an unrealized justification. -/
 theorem Store.Reachable.unrealizedJustification_isSome
     (reachable : Store.Reachable config anchorState anchorBlock store) {root : Root}

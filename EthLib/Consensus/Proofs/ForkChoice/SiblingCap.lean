@@ -77,10 +77,10 @@ namespace Store
 
 variable {lower : store.ParentsBelow}
 
-/-- Before Gloas, a known block that descends from another in the tree descends in the store.
+/-- A known block that descends from another in the tree descends in the store.
 
 The other block must be known too. -/
-theorem isAncestor_of_blockTree_ancestor (before : fork < .glamsterdam) {root ancestor : Root}
+theorem isAncestor_of_blockTree_ancestor {root ancestor : Root}
     {block ancestorBlock : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
     (ancestorFound : store.blocks[ancestor]? = some ancestorBlock)
     (above : (blockTree lower).Ancestor (some ancestor) (some root)) :
@@ -89,10 +89,7 @@ theorem isAncestor_of_blockTree_ancestor (before : fork < .glamsterdam) {root an
   induction n generalizing root block with
   | zero =>
     cases chain
-    have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
-    simp only [isAncestor, later, ↓reduceIte, bind, Except.bind, block_ok_iff.mpr ancestorFound,
-      getAncestor_of_le (node := ⟨ancestor, .pending⟩) ancestorFound (UInt64.le_refl _), pure,
-      Except.pure, beq_self_eq_true]
+    exact isAncestor_self (node := ⟨ancestor, .pending⟩) ancestorFound
   | succ n ih =>
     rw [Function.iterate_succ_apply, blockTree_parent_of found] at chain
     cases parentFound : store.blocks[block.parentRoot]? with
@@ -195,7 +192,7 @@ Both lookaheads of the seed must be at least one epoch.
 
 The ring of mixes must be longer than the minimum lookahead plus two epochs. -/
 private theorem mem_committees_of_voteOrigin {checks : SignatureChecks}
-    (before : fork < .glamsterdam) (lower : store.ParentsBelow)
+    (lower : store.ParentsBelow)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
@@ -222,7 +219,7 @@ private theorem mem_committees_of_voteOrigin {checks : SignatureChecks}
   obtain ⟨voted, votedFound, -⟩ := origin.voted
   have isChild : (Store.blockTree lower).IsChild (some child) (some parentRoot) :=
     Store.blockTree_isChild_iff.mpr ⟨childBlock, childFound, childParent⟩
-  have voteDescends := Store.isAncestor_of_blockTree_ancestor (lower := lower) before votedFound
+  have voteDescends := Store.isAncestor_of_blockTree_ancestor (lower := lower) votedFound
     parentFound (isChild.ancestor.trans above)
   -- The head has a state, at or before the current slot.
   obtain ⟨headBlock, headBlockFound, -⟩ := Store.slot_le_of_isAncestor parentFound descends
@@ -346,6 +343,8 @@ theorem Store.active_of_mem_voters {state : BeaconState preset fork} {i : ℕ}
 
 /-- Two siblings and a set supporting neither weigh at most a finite window, plus one boost.
 
+The siblings are children of one node in any tree, with the votes of any view of it.
+
 The window contains every supporter index and every member of the additional set.
 
 The registry limit makes the conversion of supporter indices to validator indices injective.
@@ -356,39 +355,33 @@ It needs no committee read or history of the store.
 
 [fcr]: https://arxiv.org/abs/2405.00549v4
 -/
-theorem Store.weight_add_weight_add_stake_le_stake_withBoost
-    (lower : store.ParentsBelow) {state : BeaconState preset fork}
-    (within : state.RegistryWithinLimit)
-    (nodes : List ForkChoiceNode) (boosted : Option (Option Root)) (score : ℕ)
-    {root parent : Root} {sibling : Option Root} {block : BeaconBlock preset fork}
-    {N window : Finset ValidatorIndex}
-    (found : store.blocks[root]? = some block) (parentRoot : block.parentRoot = parent)
-    (siblingChild : sibling ∈ children (view lower nodes) (some parent))
-    (distinct : sibling ≠ some root)
-    (supportersInside : ∀ i ∈ supporters (voters state) (view lower nodes) (some root) ∪
-      supporters (voters state) (view lower nodes) sibling, i.toUInt64 ∈ window)
+theorem Store.weight_add_weight_add_stake_le_stake_withBoost_of_isChild {β : Type}
+    {T : BlockTree β} (G : View ℕ β T) {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) (boosted : Option β) (score : ℕ)
+    {parent child sibling : β} {N window : Finset ValidatorIndex}
+    (isChild : T.IsChild child parent) (siblingIsChild : T.IsChild sibling parent)
+    (distinct : sibling ≠ child)
+    (supportersInside : ∀ i ∈ supporters (voters state) G child ∪
+      supporters (voters state) G sibling, i.toUInt64 ∈ window)
     (inside : N ⊆ window)
-    (neither : ∀ v ∈ N, v.toNat ∉ supporters (voters state) (view lower nodes) (some root) ∧
-      v.toNat ∉ supporters (voters state) (view lower nodes) sibling) :
+    (neither : ∀ v ∈ N, v.toNat ∉ supporters (voters state) G child ∧
+      v.toNat ∉ supporters (voters state) G sibling) :
     weight (voters state).insertNone (boostStake (balanceAt state) score)
-        ((view lower nodes).withBoost boosted) (some root) +
+        (G.withBoost boosted) child +
       weight (voters state).insertNone (boostStake (balanceAt state) score)
-        ((view lower nodes).withBoost boosted) sibling +
+        (G.withBoost boosted) sibling +
       stake (fun v => balanceAt state v.toNat) N ≤
     stake (fun v => balanceAt state v.toNat) window + score := by
   classical
-  have isChild : (Store.blockTree lower).IsChild (some root) (some parent) :=
-    Store.blockTree_isChild_iff.mpr ⟨block, found, parentRoot⟩
-  have siblingIsChild := (mem_children.mp siblingChild).2
   refine (Nat.add_le_add_right (weight_withBoost_add_le isChild siblingIsChild (Ne.symm distinct)
     boosted score) _).trans ?_
   suffices key :
-      weight (Store.voters state) (balanceAt state) (Store.view lower nodes) (some root) +
-      weight (Store.voters state) (balanceAt state) (Store.view lower nodes) sibling +
+      weight (Store.voters state) (balanceAt state) G child +
+      weight (Store.voters state) (balanceAt state) G sibling +
       stake (fun v => balanceAt state v.toNat) N ≤
         stake (fun v => balanceAt state v.toNat) window by omega
-  set S := supporters (Store.voters state) (Store.view lower nodes) (some root) with hS
-  set S' := supporters (Store.voters state) (Store.view lower nodes) sibling with hS'
+  set S := supporters (Store.voters state) G child with hS
+  set S' := supporters (Store.voters state) G sibling with hS'
   -- The registry bound makes each conversion to UInt64 reversible on these supporters.
   have back : ∀ i ∈ S ∪ S', i.toUInt64.toNat = i := by
     intro i member
@@ -415,8 +408,8 @@ theorem Store.weight_add_weight_add_stake_le_stake_withBoost
     have := congrArg UInt64.toNat same
     rwa [back i hi, back j hj] at this
   -- Sum the disjoint supporter images and the additional set before enlarging to the window.
-  have split : weight (Store.voters state) (balanceAt state) (Store.view lower nodes) (some root) +
-      weight (Store.voters state) (balanceAt state) (Store.view lower nodes) sibling +
+  have split : weight (Store.voters state) (balanceAt state) G child +
+      weight (Store.voters state) (balanceAt state) G sibling +
       stake (fun v => balanceAt state v.toNat) N =
       stake (fun v => balanceAt state v.toNat) ((S ∪ S').image Nat.toUInt64 ∪ N) := by
     simp only [weight, stake]
@@ -430,6 +423,33 @@ theorem Store.weight_add_weight_add_stake_le_stake_withBoost
   · obtain ⟨i, hi, rfl⟩ := Finset.mem_image.mp image
     exact supportersInside i hi
   · exact inside hN
+
+/-- Two sibling blocks and a set supporting neither weigh at most a finite window, plus one boost.
+
+The window contains every supporter index and every member of the additional set. -/
+theorem Store.weight_add_weight_add_stake_le_stake_withBoost
+    (lower : store.ParentsBelow) {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit)
+    (nodes : List ForkChoiceNode) (boosted : Option (Option Root)) (score : ℕ)
+    {root parent : Root} {sibling : Option Root} {block : BeaconBlock preset fork}
+    {N window : Finset ValidatorIndex}
+    (found : store.blocks[root]? = some block) (parentRoot : block.parentRoot = parent)
+    (siblingChild : sibling ∈ children (view lower nodes) (some parent))
+    (distinct : sibling ≠ some root)
+    (supportersInside : ∀ i ∈ supporters (voters state) (view lower nodes) (some root) ∪
+      supporters (voters state) (view lower nodes) sibling, i.toUInt64 ∈ window)
+    (inside : N ⊆ window)
+    (neither : ∀ v ∈ N, v.toNat ∉ supporters (voters state) (view lower nodes) (some root) ∧
+      v.toNat ∉ supporters (voters state) (view lower nodes) sibling) :
+    weight (voters state).insertNone (boostStake (balanceAt state) score)
+        ((view lower nodes).withBoost boosted) (some root) +
+      weight (voters state).insertNone (boostStake (balanceAt state) score)
+        ((view lower nodes).withBoost boosted) sibling +
+      stake (fun v => balanceAt state v.toNat) N ≤
+    stake (fun v => balanceAt state v.toNat) window + score :=
+  weight_add_weight_add_stake_le_stake_withBoost_of_isChild (view lower nodes) within boosted
+    score (Store.blockTree_isChild_iff.mpr ⟨block, found, parentRoot⟩)
+    (mem_children.mp siblingChild).2 distinct supportersInside inside neither
 
 /-- Two children of a block weigh together at most the rule's count, plus the score of the boost.
 
@@ -457,7 +477,7 @@ The ring of mixes must be longer than the minimum lookahead plus two epochs.
 
 The registry of the state must hold at most the validators that the preset allows. -/
 theorem Store.ForwardReachableWith.weight_add_weight_add_stake_le_withBoost
-    {checks : SignatureChecks} (before : fork < .glamsterdam) (lower : store.ParentsBelow)
+    {checks : SignatureChecks} (lower : store.ParentsBelow)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
@@ -534,7 +554,7 @@ theorem Store.ForwardReachableWith.weight_add_weight_add_stake_le_withBoost
     reached.exists_voteOrigin_of_mem_supporters cIsChild supporter
   obtain ⟨low, high⟩ := Store.slot_mem_range_of_voteOrigin lower parentFound childFound childParent
     slotOk firstOk lastOk origin above
-  exact mem_committees_of_voteOrigin before lower anchorSlot reached minLookahead maxLookahead
+  exact mem_committees_of_voteOrigin lower anchorSlot reached minLookahead maxLookahead
     ring parentFound childFound childParent descends slotOk firstOk lastOk
     (isFullValidatorSetCovered_eq_false maximumOk (UInt64.le_trans low high) whole)
     participantsOk origin above
@@ -565,7 +585,7 @@ The ring of mixes must be longer than the minimum lookahead plus two epochs.
 
 The registry of the state must hold at most the validators that the preset allows. -/
 theorem Store.ForwardReachableWith.weight_add_weight_le_withBoost
-    {checks : SignatureChecks} (before : fork < .glamsterdam) (lower : store.ParentsBelow)
+    {checks : SignatureChecks} (lower : store.ParentsBelow)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
@@ -605,7 +625,7 @@ theorem Store.ForwardReachableWith.weight_add_weight_le_withBoost
     obtain ⟨-, lastValue⟩ := subChecked_ok_iff.mp lastOk
     rw [UInt64.le_iff_toNat_le] at blockLe stateLe ⊢
     omega
-  have bound := reached.weight_add_weight_add_stake_le_withBoost before lower anchorSlot
+  have bound := reached.weight_add_weight_add_stake_le_withBoost lower anchorSlot
     minLookahead maxLookahead ring within nodes boosted score found parentFound siblingChild
     distinct descends slotOk firstOk lastOk maximumOk
     (N := store.parentVotersOf state participants block parentBlock)

@@ -1013,7 +1013,7 @@ private theorem observed_facts [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : S
           upToDate currentOk honest duty slotLe before
         obtain ⟨justifiedBlock, justifiedKnown⟩ := Store.held_of_isAncestor headAbove
         have descends := (justified_descends_of_duty ctx.anchored ctx.start ctx.anchorSlot
-          ctx.anchorBoundary ctx.preGloas ctx.roots ctx.caller callerHeld nBound covers
+          ctx.anchorBoundary ctx.roots ctx.caller callerHeld nBound covers
           (by omega) receiver atTime ⟨justifiedBlock, justifiedKnown⟩
           ((UInt64.le_iff_toNat_le.mp blockLe).trans early) honest duty target (by omega)
           high').resolve_right collision

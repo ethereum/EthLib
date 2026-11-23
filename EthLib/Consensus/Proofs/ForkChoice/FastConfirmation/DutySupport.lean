@@ -184,16 +184,11 @@ theorem Execution.mem_supportersOf_of_latest_signed {anchor : Store preset fork}
       rwa [headEq] at descends
   obtain ⟨supported, supportedOk⟩ := Store.getSupportedNode_exists
     (message := LatestMessage.ofAttestation attestation) tipKnown
-  have supportedRoot := Store.getSupportedNode_root supportedOk
   have check : ((e.world k).state w).voteCountsFor ⟨root, .pending⟩ v = true := by
     apply Store.voteCountsFor_of_check _ latest (by simpa using counted)
     simp only [supportedOk, bind, Except.bind]
-    by_cases gloas : .glamsterdam ≤ fork
-    · rw [Store.isAncestor_head_pending gloas, supportedRoot]
-      exact votedDescends
-    · rw [Store.getSupportedNode_of_lt (Nat.lt_of_not_le gloas), Except.ok.injEq] at supportedOk
-      subst supportedOk
-      exact votedDescends
+    rw [Store.isAncestor_getSupportedNode supportedOk]
+    exact votedDescends
   simp only [List.mem_toFinset, List.mem_map] at active
   obtain ⟨entry, member, eq⟩ := active
   simp only [Store.supportersOf, List.mem_toFinset, List.mem_map, List.mem_filter]

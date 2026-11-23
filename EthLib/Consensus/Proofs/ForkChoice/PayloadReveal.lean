@@ -81,35 +81,6 @@ theorem shouldExtendPayload_of_timely {gloas : .glamsterdam ≤ fork} {root : Ro
     simp [shouldExtendPayload, Store.block, found, nextOk, current, verified, heze, onTime,
       present, Except.mapError, bind, Except.bind, pure, Except.pure, satisfied]
 
-/-- From Gloas the walk goes down the tree of nodes: its end descends from its start. -/
-private theorem ancestor_getHeadFrom (lower : store.ParentsBelow) (gloas : .glamsterdam ≤ fork)
-    {nodes : List ForkChoiceNode} {start head : ForkChoiceNode}
-    (walk : store.getHeadFrom config tally nodes start = .ok head) :
-    (nodeTree lower).Ancestor start.toModel head.toModel := by
-  induction start using getHeadFrom.induct store with
-  | _ start ih =>
-    rw [getHeadFrom] at walk
-    cases chosen : store.heaviestChild config tally nodes start with
-    | error e => simp [chosen, bind, Except.bind] at walk
-    | ok result =>
-      cases result with
-      | none =>
-        simp [chosen, bind, Except.bind, pure, Except.pure] at walk
-        subst walk
-        exact .refl _
-      | some child =>
-        simp only [chosen, bind, Except.bind] at walk
-        split at walk
-        · rename_i lowerRank
-          obtain ⟨children, weighted, hc, hw, choice⟩ := heaviestChild_eq chosen
-          obtain ⟨key, mem, -⟩ := chooseHeaviest_some choice
-          obtain ⟨source, member, pair⟩ := mapM_ok_mem hw _ mem
-          have same : source = child := (weighNode_ok_iff.mp pair).1.symm
-          subst same
-          exact (isChild_of_mem_getNodeChildren gloas hc
-            (List.mem_filter.mp member).1).ancestor.trans (ih source lowerRank walk)
-        · cases walk
-
 /-- From Gloas the walk from a node above the pending node of a block reaches that node.
 
 The end of the walk must descend from that pending node.
@@ -124,41 +95,10 @@ private theorem getHeadFrom_full (lower : store.ParentsBelow) (gloas : .glamster
     ∀ {start : ForkChoiceNode}, store.getHeadFrom config tally nodes start = .ok head →
       (nodeTree lower).Ancestor start.toModel (ForkChoiceNode.toModel ⟨root, .pending⟩) →
       store.getHeadFrom config tally nodes ⟨root, .full⟩ = .ok head := by
-  intro start
-  induction start using getHeadFrom.induct store with
-  | _ start ih =>
-  intro walk above
-  by_cases same : start = ⟨root, .pending⟩
-  · subst same
-    rw [getHeadFrom, step] at walk
-    simpa only [bind, Except.bind, rank, dite_true] using walk
-  rw [getHeadFrom] at walk
-  cases chosen : store.heaviestChild config tally nodes start with
-  | error e => simp [chosen, bind, Except.bind] at walk
-  | ok result =>
-    cases result with
-    | none =>
-      simp [chosen, bind, Except.bind, pure, Except.pure] at walk
-      subst walk
-      exact absurd (ForkChoiceNode.toModel_injective (above.antisymm below)) same
-    | some child =>
-      simp only [chosen, bind, Except.bind] at walk
-      split at walk
-      · rename_i lowerRank
-        obtain ⟨children, weighted, hc, hw, choice⟩ := heaviestChild_eq chosen
-        obtain ⟨key, mem, -⟩ := chooseHeaviest_some choice
-        obtain ⟨source, member, pair⟩ := mapM_ok_mem hw _ mem
-        have sameChild : source = child := (weighNode_ok_iff.mp pair).1.symm
-        subst sameChild
-        have childOf := isChild_of_mem_getNodeChildren (lower := lower) gloas hc
-          (List.mem_filter.mp member).1
-        rcases below.total (ancestor_getHeadFrom lower gloas walk) with down | up
-        · rcases down.eq_or_parent with eq | par
-          · exact ih source lowerRank walk (eq ▸ .refl _)
-          · rw [childOf.2] at par
-            exact absurd (ForkChoiceNode.toModel_injective (above.antisymm par)) same
-        · exact ih source lowerRank walk up
-      · cases walk
+  intro start walk above
+  have walk := getHeadFrom_of_visited lower gloas below walk above
+  rw [getHeadFrom, step] at walk
+  simpa only [bind, Except.bind, rank, dite_true] using walk
 
 /-- From Gloas the walk takes the full node of a verified block of the previous slot.
 

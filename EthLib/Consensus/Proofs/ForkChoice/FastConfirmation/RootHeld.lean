@@ -33,7 +33,7 @@ Otherwise two honest stores collide, or a held state's justification conflicts w
 theorem Execution.rootHeld_of_honest_vote {Δ : ℕ} {anchor : Store preset fork} {time : ℕ}
     {horizon : Epoch} {g : ForkedBeaconState preset} (pre : Run config checks g ⟨fork, anchorState⟩)
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
-    (preGloas : fork < .glamsterdam) (fits : DelayFits fork config genesisTimeMs Δ)
+    (fits : DelayFits fork config genesisTimeMs Δ)
     (admitted : BlocksAdmitted e 0 Δ time) (prompt : Prompt e time)
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
@@ -158,16 +158,15 @@ theorem Execution.rootHeld_of_honest_vote {Δ : ℕ} {anchor : Store preset fork
     have signerFinal : ((e.world k).state v).getCheckpointBlock root
         ((e.world r).state w).finalizedCheckpoint.epoch =
           .ok ((e.world r).state w).finalizedCheckpoint.root := by
-      have read := callerRead
-      simp only [Store.getCheckpointBlock, bind_ok_iff, mapError_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at read
-      obtain ⟨boundary, boundaryOk, ancestor, walk, -⟩ := read
+      obtain ⟨boundary, ancestor, boundaryOk, walk, -⟩ :=
+        Store.getCheckpointBlock_walk_root callerRead
       obtain ⟨reachedBlock, reachedFound, reachedLe⟩ := Store.getAncestor_le walk
       exact Store.getCheckpointBlock_of_same_blocks (reached v honest k) same boundaryOk
         (UInt64.le_trans ((reached u caller n).anchorSlot_le anchorLe reachedFound) reachedLe)
         ⟨signerBlock, signerKnown⟩ callerRead
-    obtain ⟨found, -⟩ := (e.blocks_of_partiallySynchronous sync preGloas admitted anchorStore
-      anchored honest receiver (by simp only [Nat.max_zero]; omega) rBound current finalizedKnown
+    obtain ⟨found, -⟩ := (e.blocks_of_partiallySynchronous_of_anchorSlot sync
+      (fun _ => anchorLe) admitted anchorStore honest receiver (anchored v honest)
+      (anchored w receiver) (by simp only [Nat.max_zero]; omega) rBound current finalizedKnown
       signerKnown signerFinal).resolve_right (e.not_honestCollision_of_agree agree)
     exact ⟨signerBlock, found⟩
   intro w receiver j atLeast atMost current

@@ -940,24 +940,6 @@ theorem getRestartResilientConfirmedRoot_eq_ok_iff {fcr : FastConfirmationStore}
       | error e => simp
       | ok onChain => cases onChain <;> simp [eq_comm]
 
-/-- From Gloas the payload status of the head does not change whether a block is in its chain.
-
-So a head given by its root, as a pending node, answers as the head that the fork choice finds. -/
-theorem isAncestor_head_pending (gloas : .glamsterdam ≤ fork) (head : ForkChoiceNode)
-    (root : Root) :
-    store.isAncestor head ⟨root, .pending⟩ =
-      store.isAncestor ⟨head.root, .pending⟩ ⟨root, .pending⟩ := by
-  rw [isAncestor_pending gloas, isAncestor_pending gloas]
-  simp only [bind, Except.bind]
-  split
-  · rfl
-  · rename_i ancestorBlock _
-    have same := getAncestor_root (store := store) head .pending ancestorBlock.slot
-    revert same
-    cases store.getAncestor head ancestorBlock.slot <;>
-      cases store.getAncestor ⟨head.root, .pending⟩ ancestorBlock.slot <;>
-      simp_all [Functor.map, Except.map, pure, Except.pure]
-
 /-- The fast confirmation of a slot records the head of the store as the head of the slot.
 
 The head of the slot before becomes the previous head. -/
