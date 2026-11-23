@@ -125,7 +125,7 @@ theorem chainStarts_bytes (pp : PublicParam) (s : Seed) (layer : Layer) (e : UIn
           ⟨i.val / 2, by have := i.isLt; simp only [V] at *; omega⟩).bytes
         ++ packBytes s.bytes)).toList.drop (16 * (i.val % 2))).take 16 := by
   rw [chainStarts, Id.run_bind, HashSig.ofFnInOrder_run]
-  simp only [Id.run_pure, Fin.getElem_fin, Vector.getElem_ofFn]
+  simp only [Id.run_pure, Fin.getElem_fin, getElem_cast_flatMap_halves, Vector.getElem_ofFn]
   -- The suffix is empty, so it adds no byte.
   have hempty : ∀ b : ByteArray, b ++ ⟨(lanesBytes #[]).toArray⟩ = b := fun b =>
     ByteArray.ext (by simp [ByteArray.data_append, lanesBytes])

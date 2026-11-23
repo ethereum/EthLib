@@ -9,6 +9,11 @@ Not yet released.
 
 ### Proof additions
 
+- `Xmss.chainStarts` builds the 58 chain starts with `Vector.flatMap` over the 29 derivations, and `Xmss.Internal.digit` reads a digit with one shift and `% 4` ([#4255](https://github.com/ethereum/EthLib/pull/4255)).
+  The new lemma `Xmss.getElem_cast_flatMap_halves` in `EthLib.Cryptography.Proofs.Xmss.Ots` gives chain `i` as half `i mod 2` of derivation `floor(i / 2)`.
+  The statements of `Xmss.chainStarts_seedPrf` and `XmssSecurity.Bridge.halves_eq` follow the new body of `chainStarts`.
+  Both functions keep their values, and `Xmss.digit_val` keeps its statement.
+
 - In Lean, `getPendingAttestingIndices_lt` in `EthLib.Consensus.Proofs.Transition.EpochJustification` says that each attester of a pending attestation is in the registry, at every fork.
   It was a private Phase 0 lemma of the upgrade to Altair.
   The totality of the unslashed signers and the upgrade to Altair read it ([#4253](https://github.com/ethereum/EthLib/pull/4253)).

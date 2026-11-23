@@ -228,13 +228,12 @@ theorem topPrfInput (seed : MasterSeed) (d : Derivations) (key : TopIndex) (j : 
 /-- Chain `i` starts at half `i mod 2` of the derivation of its pair. -/
 theorem halves_eq (f : ChainPair → HashOutput) (pairs : Fin (V / 2) → HashOutput)
     (hpairs : ∀ j, pairs j = f ⟨j.val, j.isLt⟩) :
-    (Vector.ofFn fun i : Fin V => Xmss.halfOf ⟨i.val % 2, Nat.mod_lt _ (by decide)⟩
-      ((Vector.ofFn fun j => ofOutput (pairs j))[i.val / 2]'(by
-        have := i.isLt; simp only [V] at *; omega)))
+    ((Vector.ofFn fun j => ofOutput (pairs j)).flatMap
+        fun p => #v[Xmss.halfOf 0 p, Xmss.halfOf 1 p]).cast (by decide)
       = ofChains fun chain => hashHalf chain.val (f (chainPair chain)) := by
   apply Vector.ext
   intro i hi
-  simp only [Vector.getElem_ofFn, ofChains, hpairs]
+  simp only [Xmss.getElem_cast_flatMap_halves, Vector.getElem_ofFn, ofChains, hpairs]
   rw [Xmss.Unforgeability.halfOf_mod_two_ofOutput]
   rfl
 

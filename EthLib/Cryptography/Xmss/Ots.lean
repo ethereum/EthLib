@@ -8,23 +8,7 @@ public import EthLib.Cryptography.Xmss.Encoding
 
 The WOTS+C one-time signature: 58 hash chains of 4 positions.
 
-Revealing a chain at position `k` lets anyone reach the positions above `k`.
-
-It reveals nothing about the positions below.
-
-Key `e` on layer `l` has the chains `C_{i,mu}`, for `i < 58` and positions `mu <= 3`.
-
-Every definition takes the hash `H` and makes its calls in a fixed order.
-
-Chains go by index, and each chain is walked step by step from its start.
-
 Source: the leanXMSS specification draft, section "WOTS+C".
-
-The chains are the hash chains of Construction 2 of [ePrint 2025/055][hbms], §4.2.
-
-The chain index sits in the payload, where Construction 2 puts it in the tweak.
-
-[hbms]: https://eprint.iacr.org/2025/055
 -/
 
 @[expose] public section
@@ -33,11 +17,15 @@ namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
+-- Every definition takes the hash `H` and makes its calls in a fixed order.
+-- Chains go by index, and each chain is walked step by step from its start.
 variable {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
 
 /-! ## Chains -/
 
 /-- The 29 derivations from the seed that start the 58 chains of one key.
+
+Key `e` on layer `l` has the chains `C_{i,mu}`, for `i < 58` and positions `mu <= 3`.
 
 Chains `2j` and `2j + 1` start at the two halves of derivation `j`, whose suffix is empty. -/
 def chainStarts (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32) :
@@ -46,26 +34,45 @@ def chainStarts (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32
   let pairs ← ofFnInOrder (V / 2) fun j => prf pp (addrPrf layer e j) #[]
   -- `C_{i,0} = H_{i mod 2}(P | A_prf(l, e, floor(i / 2)) | S)`.
   --
-  -- Chain `i` takes half `i mod 2` of derivation `floor(i / 2)`.
-  return Vector.ofFn fun i =>
-    halfOf ⟨i.val % 2, Nat.mod_lt _ (by decide)⟩
-      (pairs[i.val / 2]'(by have := i.isLt; simp only [V] at *; omega))
+  -- Chains `2j` and `2j + 1` start at the halves `H_0` and `H_1` of derivation `j`.
+  return (pairs.flatMap fun p => #v[halfOf 0 p, halfOf 1 p]).cast (by decide)
 
 /-- One step of chain `i`, from position `mu` to the next.
 
-The chain index follows the value, so every chain of a key shares the step's address.
+A step of the hash chains of Construction 2 of [ePrint 2025/055][hbms], §4.2.
 
-`LE_128(i)` is two lanes: `i` in the first, below `2^64`, and zero in the second. -/
+- `pp`: the 16-byte public parameter `P`.
+- `layer` and `e`: the layer, bottom or top, and the index of the one-time key on it.
+- `i`: the chain, from 0 to 57.
+- `mu`: the current position, from 0 to 2, so the step reaches position `mu + 1`.
+- `value`: the 16-byte chain value `C_{i,mu}`.
+
+[hbms]: https://eprint.iacr.org/2025/055
+-/
 def chainStep (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
     (mu : Fin (CHAIN_LENGTH - 1)) (value : Digest) : m Digest :=
   -- `C_{i,mu+1} = Th(P, A_chain(l, e, mu), C_{i,mu} | LE_128(i))`.
-  th H pp (addrChain layer e mu) #[value.lo, value.hi, i.val.toUInt64, 0]
+  --
+  -- `Th(P, A, M)` is the first 16 bytes of `H(P | A | M)`, with `H` Keccak-256.
+  th H pp
+    -- `A_chain(l, e, mu)` names the key and the step, so the 58 chains share it.
+    (addrChain layer e mu)
+    -- `M`: the two lanes of `C_{i,mu}`, then the two lanes of `LE_128(i)`.
+    #[value.lo, value.hi,
+      -- `LE_128(i)`: `i` in the first lane, zero in the second.
+      -- The index keeps the 58 chains apart, where Construction 2 uses the tweak.
+      i.val.toUInt64, 0]
 
 /-- Walk chain `i` for `steps` steps, starting at position `start`.
 
-The walk ends at position `start + steps`, which the bound keeps on the chain. -/
+The walk ends at position `start + steps`, which the bound keeps on the chain.
+
+Revealing a chain at position `k` lets anyone reach the positions above `k`.
+
+It reveals nothing about the positions below. -/
 def chain (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
     (start steps : Nat) (h : start + steps < CHAIN_LENGTH) (value : Digest) : m Digest :=
+  -- The generic walk of a hash chain, with the step of chain `i`.
   Wots.chain (chainStep H pp layer e i) start steps (Nat.le_sub_one_of_lt h) value
 
 /-! ## The one-time key's leaf -/
@@ -79,6 +86,7 @@ def otsLeafHash (pp : PublicParam) (layer : Layer) (e : UInt32) (ends : Vector D
 /-- `X_{0,e}`: the leaf of key `e`, computed from the derivations of the seed. -/
 def otsPublicLeaf (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32) :
     m Digest := do
+  -- The 58 chain starts, from 29 derivations of the seed.
   let starts ← chainStarts pp prf layer e
   -- Every chain walked from position 0 to position 3, chain 0 first.
   let ends ← ofFnInOrder V fun i => chain H pp layer e i 0 (CHAIN_LENGTH - 1) (by decide) starts[i]
@@ -116,8 +124,11 @@ The low lanes add modulo `2^64`, and the low lane wraps exactly when it ends bel
 
 That wrap carries 1 into the high lane, which adds the rest of `c` and drops its own carry. -/
 def trialRandomizer (base : Randomizer) (c : Nat) : Randomizer :=
+  -- The low lane adds the low 64 bits of `c`, modulo `2^64`.
   let lo := base.lo + UInt64.ofNat c
+  -- It wrapped exactly when it ends below the low lane of `R_0`.
   let carry : UInt64 := if lo < base.lo then 1 else 0
+  -- The high lane adds the rest of `c` and the carry, modulo `2^64`.
   ⟨lo, base.hi + UInt64.ofNat (c >>> 64) + carry⟩
 
 /-! ## Randomizer trials -/
@@ -149,31 +160,25 @@ abbrev TrialSource (m : Type → Type) :=
 def hashTrials : TrialSource m :=
   fun before => ⟨fun rho => codeword? <$> (do return halfOf 0 (← H (before ++ rho.toArray)))⟩
 
-/-- The trials as Keccak-256 computes them, with one permutation each.
+/-- The trials of a randomizer search, with one Keccak-256 permutation each.
 
-The randomizer is the last two lanes of the input.
-
-When the padding of the last block comes after them, only those two lanes change between trials.
-
-The state before the last permutation is then built once, with the randomizer lanes set to zero.
-
-A trial XORs its randomizer into the two lanes, permutes, and reads the digest from lanes 0 and 1.
-
-Otherwise each trial hashes its whole input.
-
-A theorem shows that they give the codewords of hashing each trial with Keccak-256. -/
+They give the codewords of hashing each trial's whole input, by a theorem. -/
 def keccakTrials : TrialSource Id := fun before =>
-  -- The padding of the last block comes after the randomizer's 16 bytes.
+  -- The fast path needs the randomizer's 16 bytes to end before the padding of the last block.
+  -- The leanXMSS inputs are 80 bytes at the bottom and 64 at the top, below the 136-byte rate.
   if (8 * before.size) % Hash.Keccak.RATE_256 + 16 < Hash.Keccak.RATE_256 then
-    -- The lanes past the fixed ones read as zero, so the randomizer lanes start at zero.
+    -- Only the randomizer changes between trials.
+    -- So the state before the last permutation is built once, with the randomizer lanes at zero.
     let S := Hash.Keccak.Internal.stateBeforeLastPermutation Hash.Keccak.keccakF
       Hash.Keccak.RATE_256 (8 * (before.size + 2)) (Hash.Keccak.Internal.laneOfArray before)
-    -- The randomizer fills lanes k and k + 1 of the last block.
+    -- The randomizer fills lanes `k` and `k + 1` of the last block.
     let k := (8 * before.size) % Hash.Keccak.RATE_256 / 8
     ⟨fun rho =>
+      -- One trial: XOR the randomizer into its two lanes, then one permutation.
       let T := Hash.Keccak.keccakF ((S.xorLane (k + 1) rho.hi).xorLane k rho.lo)
       -- The digest is the first 16 bytes of the output: lanes 0 and 1.
       pure (codeword? ⟨T.a0, T.a1⟩)⟩
+  -- Otherwise each trial hashes its whole input, which leanXMSS inputs never need.
   else hashTrials hashId before
 
 namespace Internal
