@@ -959,12 +959,6 @@ Not yet released.
 - `Internal.assigned_of_active` is moved to `Transition.ActiveKept` and says that an active validator has an assigned activation epoch.
   `ValidatorStep`, `PinDriftBound.CreditBudgets` and `PinDriftBound.PreviousEpochRise` use it.
 
-- In Lean, `Base.Fork.last` is the last fork, and `Base.Fork.le_last` states that every fork is at or before it.
-  The lookup of a fork by its name reads it, and so does the proof that the consensus fork upgrades stop.
-  So a fork added at the end changes neither of them.
-  `Base.Fork.le_hegota` is deprecated: use `Base.Fork.le_last`.
-  It stops holding once a fork follows Hegotá, so it goes then.
-
 ### Changes that break callers
 
 - The signed-conflict slashing theorem of [#3431](https://github.com/ethereum/EthLib/issues/3431) now also states that the slashing leaves the validator slashed ([#4244](https://github.com/ethereum/EthLib/issues/4244)).
@@ -3006,6 +3000,11 @@ Not yet released.
   The configuration given to `rpc_serve` takes the optional keys `mergeForkBlock`, `genesisHash` and `genesisTime`.
   It rejects a malformed value of these keys, one of the genesis pair without the other, and a genesis pair that disagrees with block zero.
   The C and Python function signatures stay the same.
+
+- In Lean, `Base.Fork.le_hegota` is removed: use `Base.Fork.le_last`.
+  `Base.Fork.last` is the last fork, and `Base.Fork.le_last` states that every fork is at or before it.
+  The lookup of a fork by its name reads it, and so does the proof that the consensus fork upgrades stop.
+  So a fork added at the end changes neither of them.
 
 ## 0.3.0
 

@@ -49,10 +49,6 @@ theorem frontier_le (f : Fork) : frontier ≤ f := Nat.zero_le f.ctorIdx
 theorem le_last (f : Fork) : f ≤ last := by
   cases f <;> decide
 
-/-- Hegotá is the last fork. -/
-@[deprecated "Use `le_last`, which states it for the last fork." (since := "2026-11-22")]
-theorem le_hegota (f : Fork) : f ≤ hegota := le_last f
-
 /-! ## The comparison
 
 Core derives these laws from the three instances above. -/

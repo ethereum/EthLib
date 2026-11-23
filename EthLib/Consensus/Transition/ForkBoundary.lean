@@ -88,7 +88,7 @@ termination_by Fork.last.ctorIdx + 1 - forked.fork.ctorIdx
 decreasing_by
   -- Each upgrade moves to a later fork, and no fork comes after the last one.
   have later : forked.fork.ctorIdx < next.val.fork.ctorIdx := next.property
-  have last : next.val.fork.ctorIdx ≤ Fork.last.ctorIdx := by cases next.val.fork <;> decide
+  have bounded : next.val.fork.ctorIdx ≤ Fork.last.ctorIdx := by cases next.val.fork <;> decide
   omega
 
 /-- The state after one slot, then after the upgrades due at the slot it reaches. -/

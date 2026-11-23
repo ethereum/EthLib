@@ -218,11 +218,15 @@ def name : Fork → String
   | glamsterdam => "glamsterdam"
   | hegota => "hegota"
 
-/-- The last fork of the list.
+/-- The last fork, in the order of the cases.
 
-Enumerations and termination measures that run to the end of the list read it.
+Enumerations and termination measures that run to the last fork read it.
 
-So they name no case, and a new fork at the end leaves them as they are. -/
+So they name no case, and a new fork at the end leaves them as they are.
+
+A new fork at the end moves this definition to it.
+
+Until it does, the fork upgrades have no proof that they stop, so the library does not build. -/
 def last : Fork := hegota
 
 /-- The fork with a name, if one has it. -/
