@@ -26,6 +26,8 @@ The reader is stated against X.690 itself, in terms of octets and numbers.
 - An OBJECT IDENTIFIER is one or more subidentifiers, each on the fewest base-128 octets.
 - A SEQUENCE passes validation exactly when each value it holds passes.
 - A SET OF also needs the encodings of those values in ascending order.
+- A value with under 128 content octets is its tag, one length octet, then its content.
+- A read of the values in a SEQUENCE reads each value in turn, and an empty input holds none.
 
 The ECDSA signature codec is checked against its own encoder, not against X.690.
 
@@ -1229,7 +1231,7 @@ theorem validate_eq_error_tag {value : Value}
 /-! ## SEQUENCE and SET OF -/
 
 /-- The size of a byte array is the length of its octet list. -/
-private theorem size_eq_length (b : ByteArray) : b.size = b.data.toList.length := by
+theorem size_eq_length (b : ByteArray) : b.size = b.data.toList.length := by
   rw [Array.length_toList]
   rfl
 
@@ -1241,6 +1243,103 @@ theorem size_lt_of_read_ok {input rest : ByteArray} {v : Value}
   refine ⟨?_, by rw [size_eq_length, size_eq_length, size_eq_length, hin, List.length_append]⟩
   rw [size_eq_length, size_eq_length]
   rcases hv with ⟨-, hv⟩ | ⟨k, -, -, -, -, hv⟩ <;> rw [hv] <;> simp <;> omega
+
+/-- An empty byte array has no octets. -/
+theorem data_toList_eq_nil_of_isEmpty {b : ByteArray} (h : b.isEmpty = true) :
+    b.data.toList = [] := by
+  have : b.size = 0 := by simpa [ByteArray.isEmpty] using h
+  rw [size_eq_length] at this
+  exact List.eq_nil_of_length_eq_zero this
+
+/-- An input whose first value has under 128 content octets starts with that value.
+
+It is the tag, one length octet, the content, then the rest. -/
+theorem data_toList_eq_of_read_ok {input rest : ByteArray} {v : Value} {content : List UInt8}
+    (h : read input = .ok (v, rest)) (hc : v.content.data.toList = content)
+    (small : content.length < 128) :
+    input.data.toList = v.tag :: UInt8.ofNat content.length :: (content ++ rest.data.toList) := by
+  obtain ⟨-, -, hin, hv⟩ := read_ok_iff.mp h
+  have hs : v.content.size = content.length := by rw [size_eq_length, hc]
+  rcases hv with ⟨-, he⟩ | ⟨k, -, -, -, big, -⟩
+  · rw [hin, he, hs, hc]
+    rfl
+  · omega
+
+/-- A tag, a length octet under 128 and a content of that length read as one value. -/
+theorem read_eq_ok_of_length_lt {tag : UInt8} {content rest : List UInt8}
+    (low : tag.toNat % 32 ≠ 31) (nonzero : tag ≠ 0) (small : content.length < 128) :
+    read ⟨(tag :: UInt8.ofNat content.length :: (content ++ rest)).toArray⟩ =
+      .ok (⟨tag, ⟨content.toArray⟩, ⟨(tag :: UInt8.ofNat content.length :: content).toArray⟩⟩,
+        ⟨rest.toArray⟩) :=
+  read_ok_iff.mpr ⟨low, nonzero, by simp,
+    .inl ⟨show content.toArray.size < 128 by simpa using small, by simp [ByteArray.size]⟩⟩
+
+/-- A read of siblings that returns a value has read that value first. -/
+theorem exists_of_children_go_eq_ok_cons {fuel : Nat} {input : ByteArray} {v : Value}
+    {vs : List Value} (h : children.go fuel input = .ok (v :: vs)) :
+    ∃ f rest, fuel = f + 1 ∧ read input = .ok (v, rest) ∧ children.go f rest = .ok vs := by
+  cases fuel with
+  | zero =>
+    simp only [children.go] at h
+    split at h <;> simp at h
+  | succ f =>
+    simp only [children.go] at h
+    by_cases he : input.isEmpty = true
+    · simp [he, pure, Except.pure] at h
+    · cases hr : read input with
+      | error e => simp [he, hr, bind, Except.bind] at h
+      | ok p =>
+        obtain ⟨w, rest⟩ := p
+        cases hg : children.go f rest with
+        | error e => simp [he, hr, hg, bind, Except.bind] at h
+        | ok ws =>
+          simp [he, hr, hg, bind, Except.bind, pure, Except.pure] at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact ⟨f, rest, rfl, rfl, hg⟩
+
+/-- A read of siblings that returns no value has read an empty input. -/
+theorem isEmpty_of_children_go_eq_ok_nil {fuel : Nat} {input : ByteArray}
+    (h : children.go fuel input = .ok []) : input.isEmpty = true := by
+  cases fuel with
+  | zero =>
+    simp only [children.go] at h
+    split at h
+    · assumption
+    · simp at h
+  | succ f =>
+    simp only [children.go] at h
+    by_cases he : input.isEmpty = true
+    · exact he
+    · cases hr : read input with
+      | error e => simp [he, hr, bind, Except.bind] at h
+      | ok p =>
+        cases hg : children.go f p.2 with
+        | error e => simp [he, hr, hg, bind, Except.bind] at h
+        | ok ws => simp [he, hr, hg, bind, Except.bind, pure, Except.pure] at h
+
+/-- A value read first, then siblings read from the rest, are the siblings of the input. -/
+theorem children_go_succ_eq_ok_of_read {fuel : Nat} {input rest : ByteArray} {v : Value}
+    {vs : List Value} (h : read input = .ok (v, rest))
+    (hg : children.go fuel rest = .ok vs) :
+    children.go (fuel + 1) input = .ok (v :: vs) := by
+  obtain ⟨hv, hs⟩ := size_lt_of_read_ok h
+  have he : input.isEmpty = false := by
+    simp only [ByteArray.isEmpty, beq_eq_false_iff_ne, ne_eq]
+    omega
+  simp [children.go, he, h, hg, bind, Except.bind, pure, Except.pure]
+
+/-- An empty input has no siblings, whatever the fuel. -/
+theorem children_go_empty (fuel : Nat) : children.go fuel ⟨#[]⟩ = .ok [] := by
+  cases fuel <;> rfl
+
+/-- Two siblings are read in turn, and nothing follows them. -/
+theorem exists_read_of_children_eq_ok_pair {input : ByteArray} {a b : Value}
+    (h : children input = .ok [a, b]) :
+    ∃ rest last, read input = .ok (a, rest) ∧ read rest = .ok (b, last) ∧
+      last.isEmpty = true := by
+  obtain ⟨f, rest, -, ha, h⟩ := exists_of_children_go_eq_ok_cons h
+  obtain ⟨g, last, -, hb, h⟩ := exists_of_children_go_eq_ok_cons h
+  exact ⟨rest, last, ha, hb, isEmpty_of_children_go_eq_ok_nil h⟩
 
 /-- Each value that a read of siblings returns has a header and is at most as long as the input. -/
 theorem children_go_sizes : ∀ (fuel : Nat) (input : ByteArray) (vs : List Value),

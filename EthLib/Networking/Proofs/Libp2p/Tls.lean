@@ -4,6 +4,7 @@ public import EthLib.Base.Proofs.Except
 public import EthLib.Networking.Libp2p.Tls
 public import EthLib.Networking.Proofs.Libp2p.PeerId
 public import EthLib.Serialization.Proofs.Der
+import EthLib.Cryptography.Proofs.Secp256r1.Encoding
 public import EthLib.Base.Except
 
 /-!
@@ -21,7 +22,7 @@ These theorems describe the concrete checks that a successful authentication pas
 - Its value counts 86400 seconds for each day from 1970-01-01 in a calendar model, plus the time.
 - A validity reads as two such times in order.
 - The endpoints of a parsed certificate are what its own validity field reads as.
-- A P-256 key reads from an SPKI exactly when it is 26 fixed octets, then an uncompressed point.
+- An SPKI reads as a P-256 key exactly when it is 26 fixed octets, then an uncompressed point.
 -/
 
 @[expose] public section
@@ -618,10 +619,14 @@ theorem criticalOid_spec (es : List Extension)
 
 /-! ## The P-256 key of a certificate -/
 
-/-- A step relabelled at the certificate boundary succeeds exactly when the step does. -/
+open Proofs.Der (data_toList_eq_nil_of_isEmpty data_toList_eq_of_read_ok read_eq_ok_of_length_lt
+  exists_read_of_children_eq_ok_pair children_go_succ_eq_ok_of_read children_go_empty
+  size_eq_length)
+
+/-- A DER step lifted to the certificate boundary returns a value exactly when the step does. -/
 private theorem der_ok_iff {α : Type} {x : Except Der.Error α} {a : α} :
-    der x = .ok a ↔ x = .ok a := by
-  cases x <;> simp [der, Except.mapError]
+    der x = .ok a ↔ x = .ok a :=
+  mapError_ok_iff
 
 /-- The fields of a value are its children, after a check of its tag. -/
 private theorem fields_ok_iff {tag : UInt8} {value : Der.Value} {values : List Der.Value} :
@@ -632,131 +637,30 @@ private theorem fields_ok_iff {tag : UInt8} {value : Der.Value} {values : List D
       simp [ensure, ht, der, Except.mapError, bind, Except.bind]
   · simp only [ensure, ht, ite_false, bind, Except.bind, reduceCtorEq, false_and]
 
-/-- The octets of a byte array are as many as its size. -/
-private theorem size_eq_length (b : ByteArray) : b.size = b.data.toList.length := by
-  rw [Array.length_toList]
-  rfl
-
-/-- An empty byte array has no octets. -/
-private theorem toList_of_isEmpty {b : ByteArray} (h : b.isEmpty = true) : b.data.toList = [] := by
-  have : b.size = 0 := by simpa [ByteArray.isEmpty] using h
-  rw [size_eq_length] at this
-  exact List.eq_nil_of_length_eq_zero this
-
-/-- A value with a content under 128 octets is its tag, its length octet, then its content. -/
-private theorem toList_of_read {input rest : ByteArray} {v : Der.Value} {content : List UInt8}
-    (h : Der.read input = .ok (v, rest)) (hc : v.content.data.toList = content)
-    (small : content.length < 128) :
-    input.data.toList = v.tag :: UInt8.ofNat content.length :: (content ++ rest.data.toList) := by
-  obtain ⟨-, -, hin, hv⟩ := Proofs.Der.read_ok_iff.mp h
-  have hs : v.content.size = content.length := by rw [size_eq_length, hc]
-  rcases hv with ⟨-, he⟩ | ⟨k, -, -, -, big, -⟩
-  · rw [hin, he, hs, hc]
-    rfl
-  · omega
-
-/-- A tag, a length octet under 128 and a content of that length read as one value. -/
-private theorem read_short {tag : UInt8} {content rest : List UInt8} (low : tag.toNat % 32 ≠ 31)
-    (nonzero : tag ≠ 0) (small : content.length < 128) :
-    Der.read ⟨(tag :: UInt8.ofNat content.length :: (content ++ rest)).toArray⟩ =
-      .ok (⟨tag, ⟨content.toArray⟩, ⟨(tag :: UInt8.ofNat content.length :: content).toArray⟩⟩,
-        ⟨rest.toArray⟩) :=
-  Proofs.Der.read_ok_iff.mpr ⟨low, nonzero, by simp,
-    .inl ⟨show content.toArray.size < 128 by simpa using small, by simp [ByteArray.size]⟩⟩
-
-/-- A read of siblings that returns a value has read that value first. -/
-private theorem children_go_cons {fuel : Nat} {input : ByteArray} {v : Der.Value}
-    {vs : List Der.Value} (h : Der.children.go fuel input = .ok (v :: vs)) :
-    ∃ f rest, fuel = f + 1 ∧ Der.read input = .ok (v, rest) ∧ Der.children.go f rest = .ok vs := by
-  cases fuel with
-  | zero =>
-    simp only [Der.children.go] at h
-    split at h <;> simp at h
-  | succ f =>
-    simp only [Der.children.go] at h
-    by_cases he : input.isEmpty = true
-    · simp [he, pure, Except.pure] at h
-    · cases hr : Der.read input with
-      | error e => simp [he, hr, bind, Except.bind] at h
-      | ok p =>
-        obtain ⟨w, rest⟩ := p
-        cases hg : Der.children.go f rest with
-        | error e => simp [he, hr, hg, bind, Except.bind] at h
-        | ok ws =>
-          simp [he, hr, hg, bind, Except.bind, pure, Except.pure] at h
-          obtain ⟨rfl, rfl⟩ := h
-          exact ⟨f, rest, rfl, rfl, hg⟩
-
-/-- A read of siblings that returns no value has read an empty input. -/
-private theorem isEmpty_of_children_go {fuel : Nat} {input : ByteArray}
-    (h : Der.children.go fuel input = .ok []) : input.isEmpty = true := by
-  cases fuel with
-  | zero =>
-    simp only [Der.children.go] at h
-    split at h
-    · assumption
-    · simp at h
-  | succ f =>
-    simp only [Der.children.go] at h
-    by_cases he : input.isEmpty = true
-    · exact he
-    · cases hr : Der.read input with
-      | error e => simp [he, hr, bind, Except.bind] at h
-      | ok p =>
-        cases hg : Der.children.go f p.2 with
-        | error e => simp [he, hr, hg, bind, Except.bind] at h
-        | ok ws => simp [he, hr, hg, bind, Except.bind, pure, Except.pure] at h
-
-/-- A value read first, then siblings read from the rest, are the siblings of the input. -/
-private theorem children_go_of_read {fuel : Nat} {input rest : ByteArray} {v : Der.Value}
-    {vs : List Der.Value} (h : Der.read input = .ok (v, rest))
-    (hg : Der.children.go fuel rest = .ok vs) :
-    Der.children.go (fuel + 1) input = .ok (v :: vs) := by
-  obtain ⟨hv, hs⟩ := Proofs.Der.size_lt_of_read_ok h
-  have he : input.isEmpty = false := by
-    simp only [ByteArray.isEmpty, beq_eq_false_iff_ne, ne_eq]
-    omega
-  simp [Der.children.go, he, h, hg, bind, Except.bind, pure, Except.pure]
-
-/-- An empty input has no siblings, whatever the fuel. -/
-private theorem children_go_empty (fuel : Nat) : Der.children.go fuel ⟨#[]⟩ = .ok [] := by
-  cases fuel <;> rfl
-
-/-- Two siblings are read in turn, and nothing follows them. -/
-private theorem children_pair {input : ByteArray} {a b : Der.Value}
-    (h : Der.children input = .ok [a, b]) :
-    ∃ rest last, Der.read input = .ok (a, rest) ∧ Der.read rest = .ok (b, last) ∧
-      last.isEmpty = true := by
-  obtain ⟨f, rest, -, ha, h⟩ := children_go_cons h
-  obtain ⟨g, last, -, hb, h⟩ := children_go_cons h
-  exact ⟨rest, last, ha, hb, isEmpty_of_children_go h⟩
-
-/-- An uncompressed point is 65 octets. -/
+/-- An input that the uncompressed decoder accepts is 65 octets. -/
 private theorem length_of_decodeUncompressed {key : List UInt8}
     {point : Cryptography.Secp256r1.Point}
     (h : Cryptography.Secp256r1.decodeUncompressed key = some point) : key.length = 65 := by
-  unfold Cryptography.Secp256r1.decodeUncompressed at h
-  split at h
-  · rename_i coords
-    by_cases hl : coords.length = 64
-    · simp [hl]
-    · simp [hl] at h
-  · simp at h
+  obtain ⟨x, y, -, -, rfl⟩ := Cryptography.Secp256r1.decodeUncompressed_eq_some_iff.mp h
+  simp [Cryptography.Secp256r1.encodeUncompressed, Cryptography.Secp256r1.Fp.toBytes,
+    natToBytes_length]
 
-/-- The octets of an algorithm with the key type id-ecPublicKey and the curve prime256v1. -/
+/-- The content octets of the algorithm id-ecPublicKey with the curve secp256r1. -/
 private abbrev p256Algorithm : List UInt8 :=
   [0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01,
     0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07]
 
-/-- A P-256 key reads from an SPKI exactly when the SPKI is 26 fixed octets, then the point.
+/-- A P-256 key reads from an SPKI exactly when the SPKI is 26 fixed octets, then its encoding.
 
-The octets are the DER of the algorithm id-ecPublicKey with the parameter prime256v1.
+They are a SEQUENCE header, the DER of id-ecPublicKey with secp256r1, then a BIT STRING header.
 
-These are the OIDs `1.2.840.10045.2.1` and `1.2.840.10045.3.1.7` of RFC 5480 §2.1.1.
+The two OIDs are `1.2.840.10045.2.1` of RFC 5480 §2.1.1 and `1.2.840.10045.3.1.7` of §2.1.1.1.
 
-The point is a BIT STRING without unused bits that holds an uncompressed point (RFC 5480 §2.2).
+The BIT STRING has no unused bits and holds an uncompressed point (RFC 5480 §2.2).
 
-So every other key type, curve, length form, unused-bit count and trailing octet is rejected. -/
+So every other key type, curve, parameter form and length form is rejected.
+
+So is an unused bit or a trailing octet. -/
 theorem readP256_eq_ok_iff {spki : ByteArray} {point : Cryptography.Secp256r1.Point} :
     readP256 spki = .ok point ↔ ∃ key, Cryptography.Secp256r1.decodeUncompressed key = some point ∧
       spki.data.toList = [0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02,
@@ -810,30 +714,34 @@ theorem readP256_eq_ok_iff {spki : ByteArray} {point : Cryptography.Secp256r1.Po
     obtain ⟨crest, hcread, cempty⟩ := Proofs.Der.exact_ok_iff.mp (der_ok_iff.mp hcurve)
     obtain ⟨hcread, -⟩ := Proofs.Der.readTag_ok_iff.mp hcread
     obtain ⟨ktag, kcontent⟩ := Proofs.Der.bitString_ok_iff.mp (der_ok_iff.mp hbytes)
-    obtain ⟨s1, s2, hoRead, hqRead, s2empty⟩ := children_pair achildren
-    obtain ⟨r1, r2, haRead, hkRead, r2empty⟩ := children_pair (fields_ok_iff.mp hvalues).2
+    obtain ⟨s1, s2, hoRead, hqRead, s2empty⟩ := exists_read_of_children_eq_ok_pair achildren
+    obtain ⟨r1, r2, haRead, hkRead, r2empty⟩ :=
+      exists_read_of_children_eq_ok_pair (fields_ok_iff.mp hvalues).2
     obtain ⟨srest, hsread, sempty⟩ := Proofs.Der.exact_ok_iff.mp (der_ok_iff.mp hseq)
     obtain ⟨hsread, stag⟩ := Proofs.Der.readTag_ok_iff.mp hsread
     have hq : q.encoded.data.toList =
         [0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07] := by
-      rw [toList_of_read hcread (content := [0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07])
-        (by rw [← ccontent]; rfl) (by decide), ctag, toList_of_isEmpty cempty]
+      rw [data_toList_eq_of_read_ok hcread
+        (content := [0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07])
+        (by rw [← ccontent]; rfl) (by decide), ctag, data_toList_eq_nil_of_isEmpty cempty]
       rfl
     have hs1 : s1.data.toList = q.encoded.data.toList := by
       obtain ⟨-, -, hin, -⟩ := Proofs.Der.read_ok_iff.mp hqRead
-      rw [hin, toList_of_isEmpty s2empty, List.append_nil]
+      rw [hin, data_toList_eq_nil_of_isEmpty s2empty, List.append_nil]
     have hacontent : algorithm.content.data.toList = p256Algorithm := by
-      rw [toList_of_read hoRead (content := [0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01])
+      rw [data_toList_eq_of_read_ok hoRead (content := [0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01])
         (by rw [← ocontent]; rfl) (by decide), otag, hs1, hq]
       rfl
     have hr1 : r1.data.toList = [0x03, 0x42, 0x00] ++ bytes.data.toList := by
-      rw [toList_of_read hkRead kcontent (by simp [hk]), ktag, toList_of_isEmpty r2empty]
+      rw [data_toList_eq_of_read_ok hkRead kcontent (by simp [hk]), ktag,
+        data_toList_eq_nil_of_isEmpty r2empty]
       simp [hk]
     have hscontent : sequence.content.data.toList =
         [0x30, 0x13] ++ p256Algorithm ++ [0x03, 0x42, 0x00] ++ bytes.data.toList := by
-      rw [toList_of_read haRead hacontent (by decide), atag, hr1]
+      rw [data_toList_eq_of_read_ok haRead hacontent (by decide), atag, hr1]
       rfl
-    rw [toList_of_read hsread hscontent (by simp [hk]), stag, toList_of_isEmpty sempty]
+    rw [data_toList_eq_of_read_ok hsread hscontent (by simp [hk]), stag,
+      data_toList_eq_nil_of_isEmpty sempty]
     simp [hk]
   · rintro ⟨key, hdec, hspki⟩
     have hk := length_of_decodeUncompressed hdec
@@ -847,19 +755,20 @@ theorem readP256_eq_ok_iff {spki : ByteArray} {point : Cryptography.Secp256r1.Po
       rw [show data.toList = _ from hspki]
       simp [hk]
     subst hdata
-    have hkey := read_short (tag := 3) (content := 0 :: key) (rest := []) (by decide) (by decide)
+    have hkey := read_eq_ok_of_length_lt (tag := 3) (content := 0 :: key) (rest := [])
+      (by decide) (by decide)
       (by simp [hk])
-    have halgorithm := read_short (tag := 0x30) (content := p256Algorithm)
+    have halgorithm := read_eq_ok_of_length_lt (tag := 0x30) (content := p256Algorithm)
       (rest := 3 :: UInt8.ofNat (0 :: key).length :: ((0 :: key) ++ [])) (by decide) (by decide)
       (by decide)
-    have hsequence := read_short (tag := 0x30) (rest := []) (by decide) (by decide)
+    have hsequence := read_eq_ok_of_length_lt (tag := 0x30) (rest := []) (by decide) (by decide)
       (content := 0x30 :: UInt8.ofNat p256Algorithm.length ::
         (p256Algorithm ++ (3 :: UInt8.ofNat (0 :: key).length :: ((0 :: key) ++ []))))
       (by simp [hk])
     have hexact := Proofs.Der.exact_ok_iff.mpr
       ⟨_, Proofs.Der.readTag_ok_iff.mpr ⟨hsequence, rfl⟩, rfl⟩
-    have hchildren := children_go_of_read halgorithm
-      (children_go_of_read (fuel := 87) hkey (children_go_empty _))
+    have hchildren := children_go_succ_eq_ok_of_read halgorithm
+      (children_go_succ_eq_ok_of_read (fuel := 87) hkey (children_go_empty _))
     have hsize : (⟨(0x30 :: UInt8.ofNat p256Algorithm.length :: (p256Algorithm ++
         (3 :: UInt8.ofNat (0 :: key).length :: ((0 :: key) ++ [])))).toArray⟩ : ByteArray).size =
         87 + 1 + 1 := by
@@ -893,7 +802,7 @@ theorem readP256_eq_ok_iff {spki : ByteArray} {point : Cryptography.Secp256r1.Po
 
 /-- An SPKI that a P-256 key reads from is 91 octets.
 
-That is the length that the key protobuf of a P-256 host key gives it. -/
+That is the length that the host key check of authentication requires of an ECDSA key. -/
 theorem size_of_readP256_eq_ok {spki : ByteArray} {point : Cryptography.Secp256r1.Point}
     (h : readP256 spki = .ok point) : spki.size = 91 := by
   obtain ⟨key, hdec, hspki⟩ := readP256_eq_ok_iff.mp h

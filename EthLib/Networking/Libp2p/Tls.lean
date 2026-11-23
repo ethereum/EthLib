@@ -379,7 +379,7 @@ def p256Oid : Oid :=
   -- X.690 §8.19: 0x2a for 1.2, 840 as 86 48, 10045 as ce 3d, then 3, 1 and 7.
   ⟨#[0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07]⟩
 
-/-- Decode an uncompressed P-256 SubjectPublicKeyInfo (RFC 5480 §§2.1.1, 2.2). -/
+/-- Decode an uncompressed P-256 SubjectPublicKeyInfo (RFC 5480 §§2.1.1, 2.1.1.1, 2.2). -/
 def readP256 (spki : ByteArray) : Except TlsCertError EthLib.Cryptography.Secp256r1.Point := do
   -- One SubjectPublicKeyInfo, with no byte after it.
   let sequence ← der (Der.exact 0x30 spki)

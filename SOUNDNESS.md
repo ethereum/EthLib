@@ -1003,11 +1003,11 @@ The days are counted in a calendar model of year and month lengths, not in the r
 `readValidity_eq_ok_iff` says that a validity reads as two such times in order.
 `readCertificate_validity` says that the endpoints of a parsed certificate are what its own validity field reads as.
 That field is located in the signed part that the input bytes encode.
-`readP256_eq_ok_iff` states exactly which SubjectPublicKeyInfo reads as a P-256 key, octet by octet (RFC 5480 §§2.1.1, 2.2).
+`readP256_eq_ok_iff` states exactly which SubjectPublicKeyInfo reads as a P-256 key, octet by octet (RFC 5480 §§2.1.1, 2.1.1.1, 2.2).
 It is 26 fixed octets, then the octets that the uncompressed P-256 point decoder accepts.
-The fixed octets are the DER of id-ecPublicKey with the parameter prime256v1, then the header of a BIT STRING without unused bits.
-So another key type such as id-ecDH, another curve, a long length form and a trailing octet are each rejected.
-`size_of_readP256_eq_ok` derives that such a key info has 91 octets, the length that a P-256 host key protobuf gives it.
+The fixed octets are a SEQUENCE header, the DER of id-ecPublicKey with the parameter secp256r1, then the header of a BIT STRING without unused bits.
+So another key type such as id-ecDH (RFC 5480 §2.1.2), another curve, another parameter form, a long length form, an unused bit and a trailing octet are each rejected.
+`size_of_readP256_eq_ok` derives that such a SubjectPublicKeyInfo has 91 octets, the length that the host key check of authentication requires of an ECDSA key.
 `boolean_ok_iff` states that a BOOLEAN is one octet, FF for TRUE and 00 for FALSE (X.690 §§8.2, 11.1).
 `bitString_ok_iff` states that the BIT STRING reader accepts exactly the octet 0, then the octets it returns.
 `validBits_ok_iff` states that BIT STRING contents count at most 7 unused bits, all zero (X.690 §§8.6.2, 11.2.1).

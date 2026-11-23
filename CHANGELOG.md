@@ -9,6 +9,12 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `readP256_eq_ok_iff` in `EthLib.Networking.Proofs.Libp2p.Tls` says that the libp2p TLS reader of a P-256 key accepts exactly a SubjectPublicKeyInfo of 26 fixed octets (RFC 5480 §§2.1.1, 2.1.1.1, 2.2), then octets that the uncompressed decoder accepts, and returns their point ([#4261](https://github.com/ethereum/EthLib/pull/4261)).
+  So it refuses another key type or curve, another parameter form, a long length form, an unused bit and a trailing octet.
+  `size_of_readP256_eq_ok` derives that such a SubjectPublicKeyInfo has 91 octets.
+  The proof reads public lemmas of `EthLib.Serialization.Proofs.Der` on a short value and on the values that a SEQUENCE holds; `Proofs.Der.size_eq_length` is public too.
+  No statement changes.
+
 - In Lean, `Secp256r1.decodeUncompressed_eq_some_iff` in the new module `EthLib.Cryptography.Proofs.Secp256r1.Encoding` says that the uncompressed decoder of SEC 1 v2 §2.3.4 accepts exactly the bytes `04 ‖ x ‖ y` of the affine points `(x, y)` on the curve, and returns that point ([#4260](https://github.com/ethereum/EthLib/pull/4260)).
   So it refuses the octet `00` of `O`, every prefix other than `04`, every length other than 65 bytes, a coordinate of `p` or more, and a pair off the curve.
   No statement changes.
