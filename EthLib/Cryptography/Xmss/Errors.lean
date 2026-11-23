@@ -35,11 +35,8 @@ inductive XmssError where
 
 /-- Human-readable description, used at the C-ABI boundary. -/
 def XmssError.message : XmssError → String
-  -- One line per rejection, phrased for someone reading a Python traceback.
   | .noAdmissibleEncoding layer key =>
       s!"no codeword within the trial limit for key {key} of layer {layer.toNat}"
-  -- The expected length is fixed by the parameter set.
-  -- So it is read from there rather than carried in the error.
   | .badPublicKeySize actual =>
       s!"bad public key size: {actual}, expected {PUB_KEY_SIZE}"
   | .badSignatureSize actual =>
