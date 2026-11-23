@@ -188,10 +188,10 @@ def SystemCallBurns (env : BlockEnvironment fork) (block : BlockState) (target :
     (data : ByteArray) (out : SystemCallOutput) (log : BurnLog) : Prop :=
   if .glamsterdam ≤ fork then
     MessageCallBurns (Meter := StateGasMeter) env.chainId.toNat (systemMessage env target data)
-      (.ofBlock block) .empty [] ∅ out.state log
+      (.ofBlock block) (systemSubstate env target) [] ∅ out.state log
   else
     MessageCallBurns (Meter := Nat) env.chainId.toNat (systemMessage env target data)
-      (.ofBlock block) .empty [] ∅ out.state log
+      (.ofBlock block) (systemSubstate env target) [] ∅ out.state log
 
 /-- Each system call that runs has a certificate of the surviving burns of its message. -/
 theorem systemCall_systemCallBurns {env : BlockEnvironment fork} {block : BlockState}

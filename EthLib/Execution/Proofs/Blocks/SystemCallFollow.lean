@@ -51,7 +51,7 @@ private theorem prepareFirstFrame_systemMessage {fork : Fork} {Meter : Type} [Ga
     {env : BlockEnvironment fork} {block : BlockState} {target : Address} {data : ByteArray}
     {first : FirstFrame fork Meter} (valid : RebuildState block (.ofBlock block))
     (h : prepareFirstFrame (Meter := Meter) env.chainId.toNat (systemMessage env target data)
-      (.ofBlock block) Substate.empty [] ∅ = .ok first) :
+      (.ofBlock block) (systemSubstate env target) [] ∅ = .ok first) :
     RebuildState block first.state ∧
       first.message.shouldTransferValue = false ∧
       (first.message.code.size ≠ 0 → HasNonceOrCode first.state first.message.currentTarget) := by
@@ -109,12 +109,13 @@ private theorem processMessageCall_systemMessage {fork : Fork} {Meter : Type} [G
     {block : BlockState} {target : Address} {data : ByteArray} {out : CallOutput}
     (valid : Rebuildable block) (delegations : DelegationsHaveNonce (.ofBlock block))
     (h : processMessageCall (Meter := Meter) env.chainId.toNat (systemMessage env target data)
-      (.ofBlock block) Substate.empty = .ok out) :
+      (.ofBlock block) (systemSubstate env target) = .ok out) :
     RebuildState block out.state := by
   have v0 := RebuildState.ofBlock valid delegations
   rw [processMessageCall_unfold] at h
   rcases hprep : prepareFirstFrame (Meter := Meter) env.chainId.toNat
-      (systemMessage env target data) (.ofBlock block) Substate.empty [] ∅ with ⟨e, read⟩ | first
+      (systemMessage env target data) (.ofBlock block) (systemSubstate env target) [] ∅
+    with ⟨e, read⟩ | first
   · rw [hprep] at h
     dsimp only at h
     split at h

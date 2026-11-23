@@ -79,7 +79,7 @@ theorem mem_startAccessedAddresses_of_mem {address : Address} (h : .berlin ≤ f
     (mem : address ∈ (((∅ : Std.ExtTreeSet Address).insert sender).insert target).insertMany
       (precompileAddresses fork)) :
     address ∈ startAccessedAddresses fork coinbase sender target tx := by
-  simp only [startAccessedAddresses, h, ↓reduceIte]
+  simp only [startAccessedAddresses, startAccessedAddressesOf, h, ↓reduceIte]
   split <;> simp only [Std.ExtTreeSet.mem_insert, Std.ExtTreeSet.mem_insertMany_list] <;>
     simp_all
 
@@ -121,7 +121,7 @@ theorem precompile_mem_startAccessedAddresses {address : Nat} (h : .berlin ≤ f
 theorem access_mem_startAccessedAddresses {access : Access} (h : .berlin ≤ fork)
     (mem : access ∈ tx.accesses) :
     access.account ∈ startAccessedAddresses fork coinbase sender target tx := by
-  simp only [startAccessedAddresses, h, ↓reduceIte]
+  simp only [startAccessedAddresses, startAccessedAddressesOf, h, ↓reduceIte]
   have : access.account ∈ tx.accesses.map (·.account) := List.mem_map_of_mem mem
   split <;> simp only [Std.ExtTreeSet.mem_insert, Std.ExtTreeSet.mem_insertMany_list,
     List.contains_iff_mem] <;> simp_all
@@ -132,14 +132,14 @@ theorem access_mem_startAccessedAddresses {access : Access} (h : .berlin ≤ for
 theorem coinbase_mem_startAccessedAddresses (h : .shapella ≤ fork) :
     coinbase ∈ startAccessedAddresses fork coinbase sender target tx := by
   have berlin : Fork.berlin ≤ fork := Nat.le_trans (by decide) h
-  simp only [startAccessedAddresses, berlin, h, ↓reduceIte]
+  simp only [startAccessedAddresses, startAccessedAddressesOf, berlin, h, ↓reduceIte]
   exact Std.ExtTreeSet.mem_insert_self
 
 /-- Before Berlin, a transaction starts with no access, since no access counts. -/
 theorem startAccessedAddresses_of_lt_berlin (h : fork < .berlin) :
     startAccessedAddresses fork coinbase sender target tx = ∅ := by
   have berlin : ¬Fork.berlin ≤ fork := Nat.not_le_of_lt h
-  simp only [startAccessedAddresses, berlin, ↓reduceIte]
+  simp only [startAccessedAddresses, startAccessedAddressesOf, berlin, ↓reduceIte]
 
 /-- A fold of access entries into storage keys keeps the keys it starts from and adds each slot. -/
 private theorem mem_getD_foldl_accesses {address : Address} {key : Bytes32}

@@ -204,12 +204,12 @@ theorem systemCall_nonceAbove {env : BlockEnvironment fork} {block : BlockState}
   -- The call runs one message, with either gas meter.
   have keeps : ∀ {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter] {call : CallOutput},
       processMessageCall (Meter := Meter) env.chainId.toNat (systemMessage env target data)
-        (.ofBlock block) Substate.empty = .ok call →
+        (.ofBlock block) (systemSubstate env target) = .ok call →
       NonceAbove fork n (call.state.getAccount address) := by
     intro Meter _ _ call hcall
     have := processMessageCall_keeps (address := address) hcall
       (fun t ht => Option.some.inj ht) (by have := above.1; omega)
-      (by simp [TransactionState.ofBlock]) (by simp [Substate.empty])
+      (by simp [TransactionState.ofBlock]) (by simp [systemSubstate, Substate.empty])
       (fun hlt => (before hlt).elim)
     exact ⟨Nat.lt_of_lt_of_le above.1 this.1, fun hlt => (before hlt).elim⟩
   simp only [systemCall] at h

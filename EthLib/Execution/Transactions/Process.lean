@@ -111,17 +111,17 @@ def precompileAddresses (fork : Fork) : List Address :=
   (Precompiles.ADDRESSES.filter (Precompiles.isPrecompile fork)).map
     fun address => toAddressMasked (BitVec.ofNat 256 address)
 
-/-- The addresses that a transaction has accessed when its message starts, at `fork`.
+/-- The addresses that a message from `sender` has accessed when it starts, at `fork`.
 
 They are the sender, and `target`: the recipient or the created address.
 
-Then come the precompiles and the addresses of the access list.
+Then come the precompiles and the addresses of the access list `accesses`.
 
 From Shapella, the beneficiary `coinbase` is one of them.
 
 Before Berlin, no access counts, so the set is empty. -/
-def startAccessedAddresses (fork : Fork) (coinbase sender target : Address) (tx : Transaction) :
-    Std.ExtTreeSet Address :=
+def startAccessedAddressesOf (fork : Fork) (coinbase sender target : Address)
+    (accesses : List Access) : Std.ExtTreeSet Address :=
   if fork ≥ .berlin then
     -- `A*_a = a ∪ T_t` for a call, with `a = A0_a ∪ S(T) ∪ H_c ∪_{E in T_A} {E_a}`, `A0_a = pi`.
     --
@@ -132,7 +132,7 @@ def startAccessedAddresses (fork : Fork) (coinbase sender target : Address) (tx 
     -- The precompiles, `A0_a = pi`.
     let accessed := accessed.insertMany (precompileAddresses fork)
     -- The address `E_a` of each entry `E` of the access list `T_A`.
-    let accessed := accessed.insertMany (tx.accesses.map (·.account))
+    let accessed := accessed.insertMany (accesses.map (·.account))
     -- The beneficiary `H_c`, from Shapella by EIP-3651.
     --
     -- A set ignores the order of its insertions.
@@ -142,6 +142,13 @@ def startAccessedAddresses (fork : Fork) (coinbase sender target : Address) (tx 
     -- The Berlin paper has no `H_c`.
     if fork ≥ .shapella then accessed.insert coinbase else accessed
   else ∅
+
+/-- The addresses that a transaction has accessed when its message starts, at `fork`.
+
+They are those of a message from `sender` to `target`, with the access list of the transaction. -/
+def startAccessedAddresses (fork : Fork) (coinbase sender target : Address) (tx : Transaction) :
+    Std.ExtTreeSet Address :=
+  startAccessedAddressesOf fork coinbase sender target tx.accesses
 
 /-- The storage keys that a transaction has accessed when its message starts, at `fork`.
 

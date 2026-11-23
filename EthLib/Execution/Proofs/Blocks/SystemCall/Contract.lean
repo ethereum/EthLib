@@ -248,12 +248,13 @@ private theorem processSystemMessage_of_run (Meter : Type) [GasMeter Meter]
         (processRunner fork message.gas) (startFrame message state substate meter) held =
           .ok stopped ∧ stopped.error = none ∧ Q state stopped.state stopped.output) :
     ∃ out, (processMessageCall (Meter := Meter) env.chainId.toNat
-      (systemMessage env target data) (.ofBlock block) Substate.empty).map (fun out =>
-        SystemCallOutput.mk out.state out.output out.error) = .ok out ∧ out.error = none ∧
+      (systemMessage env target data) (.ofBlock block) (systemSubstate env target)).map
+        (fun out => SystemCallOutput.mk out.state out.output out.error) = .ok out ∧
+      out.error = none ∧
       Q ((TransactionState.ofBlock block).recordAccountRead target) out.state out.output := by
   have hfirst := prepareFirstFrame_of_value_eq_zero (Meter := Meter)
     (chainId := env.chainId.toNat) (message := systemMessage env target data)
-    (state := .ofBlock block) (substate := Substate.empty) (paid := ∅) rfl rfl
+    (state := .ofBlock block) (substate := systemSubstate env target) (paid := ∅) rfl rfl
     (EthLib.Base.mapError_ok_iff.mp hcode) (fun _ => hdelegate)
   generalize hF : Transactions.FirstFrame.ofMeter (Meter := Meter) _ _ _ _ _ = first at hfirst
   have hstart : startState fork first.message first.state = first.state := by
@@ -334,7 +335,8 @@ theorem systemCall_of_spec {env : BlockEnvironment fork} {block : State.BlockSta
     rintro _ rfl
     exact isSome_of_getCode hsize (EthLib.Base.mapError_ok_iff.mp hcode)
   by_cases hglam : fork < .glamsterdam
-  · rw [systemCall_of_lt_glamsterdam hglam]
+  · rw [systemCall_of_lt_glamsterdam hglam,
+      ← systemSubstate_of_lt_glamsterdam (env := env) (target := target) hglam]
     refine processSystemMessage_of_run Nat hparis hcode hpre hdelegate
       fun message state substate meter held hcaller htarget hstatic henv hdata hcodeM hstate
         hmeter hheld => ?_
@@ -418,7 +420,7 @@ private theorem processSystemMessage_empty (Meter : Type) [GasMeter Meter] [Lawf
     {data : ByteArray} (hfork : .paris ≤ fork) (hcode : codeAt block target = .ok .empty)
     (hpre : Precompiles.addedAt target.toU256.toNat = none) :
     (processMessageCall (Meter := Meter) env.chainId.toNat (systemMessage env target data)
-      (.ofBlock block) Substate.empty).map (fun out =>
+      (.ofBlock block) (systemSubstate env target)).map (fun out =>
         SystemCallOutput.mk out.state out.output out.error) =
       .ok ⟨(TransactionState.ofBlock block).recordAccountRead target, .empty, none⟩ := by
   obtain ⟨⟨_, _, _⟩, h, rfl, rfl, rfl⟩ := processSystemMessage_of_run Meter
@@ -441,7 +443,8 @@ theorem systemCall_of_empty {env : BlockEnvironment fork} {block : State.BlockSt
   by_cases hglam : .glamsterdam ≤ fork
   · rw [systemCall_of_glamsterdam hglam]
     exact processSystemMessage_empty StateGasMeter hfork hcode hpre
-  · rw [systemCall_of_lt_glamsterdam (Nat.lt_of_not_le hglam)]
+  · rw [systemCall_of_lt_glamsterdam (Nat.lt_of_not_le hglam),
+      ← systemSubstate_of_lt_glamsterdam (env := env) (target := target) (Nat.lt_of_not_le hglam)]
     exact processSystemMessage_empty Nat hfork hcode hpre
 
 end EthLib.Execution.Blocks.SystemContract
