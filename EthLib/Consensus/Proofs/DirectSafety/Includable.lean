@@ -3,7 +3,7 @@ module
 public import EthLib.Consensus.Proofs.DirectSafety.Signatures
 public import EthLib.Consensus.Proofs.Transition.AttesterSlashingAccepted
 public import EthLib.Consensus.Proofs.Transition.Totality.ChainBlock
-import EthLib.Consensus.Proofs.DirectSafety.ChurnBounds
+import EthLib.Consensus.Proofs.Transition.BlockLedger
 import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.Chain
 import EthLib.Consensus.Proofs.Transition.ForkVersions
@@ -38,7 +38,9 @@ It must have the genesis validators root of the signatures, as each state of the
 
 The validator must be slashable at the epoch of the state.
 
-At a state where the facts of a chain hold, take a key active there.
+At a state where the facts of a chain hold, take a key of a validator there.
+
+The validator is activated and not yet withdrawable at the epoch of that state.
 
 Take a block within the limits, at a later slot in the same epoch, whose body holds its slashing.
 
@@ -53,7 +55,7 @@ Both cases are under that inclusion and that success; nothing is said when eithe
 
 namespace EthLib.Consensus.DirectSafety
 
-open Base Cryptography.Bls Serialization.Ssz
+open Base Cryptography.Bls Serialization.Ssz BlockLedger
 
 variable {preset : Preset} {fork : Fork}
 
@@ -153,7 +155,7 @@ theorem processAttesterSlashing_single_eq_slashValidator_run {config : Config}
     secondDomained secondRooted firstSignature secondSignature firstVerified secondVerified
     run.genesisValidatorsRoot windowFirst windowSecond found keyEq slashable attesters
 
-/-! ## A slashing of an active key in a block -/
+/-! ## A slashing in a block of a key not yet withdrawable -/
 
 /-- Two attestation data that the test of slashable votes flags, each with a signing root.
 
@@ -180,7 +182,107 @@ structure VotePairAt (config : Config) (checks : SignatureChecks) (g : ForkedBea
   /-- The second reference state reads the second version at the second data's target epoch. -/
   read2 : z2.state.forkVersions.versionAt d2.target.epoch = config.forkVersion f2
 
-/-- At the turn of its slashing, a validator of `x` active at the epoch of `x` keeps its key.
+/-- Slots inside the epoch of the first state keep its fork and its registry. -/
+private theorem validators_advanceSlotsAcross_of_epoch {config : Config}
+    {checks : SignatureChecks} :
+    ∀ (count : Nat) {x y : ForkedBeaconState preset},
+      advanceSlotsAcross config checks count x = .ok y →
+      (x.state.slot.toNat + count) / preset.SLOTS_PER_EPOCH.toNat =
+        (getCurrentEpoch x.state).toNat →
+      ∃ last : BeaconState preset x.fork, y = ⟨x.fork, last⟩ ∧
+        last.validators = x.state.validators
+  | 0, x, y, computed, _ => by
+    simp only [advanceSlotsAcross, pure, Except.pure, Except.ok.injEq] at computed
+    exact ⟨x.state, computed.symm, rfl⟩
+  | count + 1, x, y, computed, inside => by
+    simp only [advanceSlotsAcross, bind_ok_iff] at computed
+    obtain ⟨middle, middleOk, rest⟩ := computed
+    have middleSlot := advanceSlotsAcross_slot 1 (by
+      simpa [advanceSlotsAcross] using middleOk : advanceSlotsAcross config checks 1 x = .ok middle)
+    have xEpoch := getCurrentEpoch_toNat x.state
+    have sameEpoch : getCurrentEpoch middle.state = getCurrentEpoch x.state := by
+      apply UInt64.toNat_inj.mp
+      rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, middleSlot]
+      have upper : (x.state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat ≤
+          (x.state.slot.toNat + (count + 1)) / preset.SLOTS_PER_EPOCH.toNat :=
+        Nat.div_le_div_right (by omega)
+      have lower : x.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤
+          (x.state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat :=
+        Nat.div_le_div_right (by omega)
+      omega
+    have restInside : (middle.state.slot.toNat + count) / preset.SLOTS_PER_EPOCH.toNat =
+        (getCurrentEpoch middle.state).toNat := by
+      rw [sameEpoch, middleSlot, show x.state.slot.toNat + 1 + count =
+        x.state.slot.toNat + (count + 1) by omega]
+      exact inside
+    obtain ⟨cached, next, cachedOk, rfl⟩ := advanceSlotAcross_of_same_epoch middleOk sameEpoch
+    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    obtain ⟨last, rfl, same⟩ := validators_advanceSlotsAcross_of_epoch count rest restInside
+    exact ⟨last, rfl, same⟩
+
+/-- A step keeps validators later and the lifecycle, and never clears a set slashed flag. -/
+private def Ages {fork : Fork} (a b : BeaconState preset fork) : Prop :=
+  Lives a b ∧ RegistryLifecycle a b ∧ SlashedPersistence a b
+
+private theorem Ages.trans {fork : Fork} {a b c : BeaconState preset fork} (one : Ages a b)
+    (two : Ages b c) : Ages a c :=
+  ⟨one.1.trans two.1 one.2.1 two.2.2, one.2.1.trans two.2.1, one.2.2.trans two.2.2⟩
+
+private theorem Ages.of_validators {fork : Fork} {a b : BeaconState preset fork}
+    (same : b.validators = a.validators) : Ages a b :=
+  ⟨Lives.of_data (congrArg (·.data) same), .of_data (congrArg (·.data) same),
+    .of_data (congrArg (·.data) same)⟩
+
+/-- The steps of a block before its operations age the registry. -/
+private theorem ages_operationsInput {config : Config} {checks : SignatureChecks} {fork : Fork}
+    {engine : ExecutionEngine preset fork} {state input : BeaconState preset fork}
+    {block : BeaconBlock preset fork}
+    (started : OperationsInput config checks engine state block input) : Ages state input :=
+  started.step_of Ages (fun _ => Ages.of_validators rfl) Ages.trans
+    (fun _ paid => ⟨lives_processParentExecutionPayload paid,
+      registryLifecycle_processParentExecutionPayload paid,
+      .of_frame (frame_processParentExecutionPayload paid).toFrame⟩)
+    (fun headed => Ages.of_validators (by
+      obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed
+      rfl))
+    (fun _ executed => Ages.of_validators (processBlockExecution_validators executed))
+    (fun revealed => Ages.of_validators (by
+      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
+      rfl))
+    (fun _ voted => Ages.of_validators (by
+      obtain ⟨_, _, rest⟩ := processEth1Data_eq voted
+      rw [← rest]))
+
+/-- All proposer slashings and the first `j` attester slashings of a block age the registry. -/
+private theorem ages_slashings {config : Config} {checks : SignatureChecks} {fork : Fork}
+    {block : BeaconBlock preset fork} {j : Nat} {input proposed turn : BeaconState preset fork}
+    (proposersOk : block.body.proposerSlashings.data.foldlM (processProposerSlashing config checks)
+      input = .ok proposed)
+    (attestersOk : (block.body.attesterSlashings.data.toList.take j).foldlM
+      (processAttesterSlashing config checks) proposed = .ok turn) :
+    Ages input turn := by
+  rw [← Array.foldlM_toList] at proposersOk
+  have proposedAges : Ages input proposed :=
+    foldlM_ok_invariant (Ages input) (fun _ _ _ before ok => before.trans
+      ⟨lives_processProposerSlashing ok, registryLifecycle_processProposerSlashing ok,
+        .of_frame (frame_processProposerSlashing ok).toFrame⟩)
+      (Ages.of_validators rfl) proposersOk
+  exact foldlM_ok_invariant (Ages input) (fun _ _ _ before ok => before.trans
+      ⟨lives_processAttesterSlashing ok, registryLifecycle_processAttesterSlashing ok,
+        .of_frame (frame_processAttesterSlashing ok).toFrame⟩)
+      proposedAges attestersOk
+
+/-- The steps of a block through that prefix age the registry. -/
+private theorem ages_slashingTurn {config : Config} {checks : SignatureChecks} {fork : Fork}
+    {engine : ExecutionEngine preset fork} {state turn : BeaconState preset fork}
+    {block : BeaconBlock preset fork} {j : Nat}
+    (turned : SlashingTurn config checks engine state block j turn) : Ages state turn := by
+  obtain ⟨input, proposed, started, proposersOk, attestersOk⟩ := turned
+  exact (ages_operationsInput started).trans (ages_slashings proposersOk attestersOk)
+
+/-- At the turn of its slashing, a validator of `x` keeps its key.
+
+It is activated and not yet withdrawable at the epoch of `x`.
 
 A pair of votes has a signature on each signing root that verifies for its key alone.
 
@@ -191,7 +293,7 @@ Its body contains the slashing of the validator by those votes, at a position.
 The steps before that slashing succeed, and reach a state.
 
 The slashing succeeds there, or the validator is already slashed there. -/
-private theorem attesterSlashing_accepted_of_active {config : Config} {checks : SignatureChecks}
+private theorem attesterSlashing_accepted_of_lifetime {config : Config} {checks : SignatureChecks}
     [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat]
     {g x : ForkedBeaconState preset} (shared : Run config checks g x)
     (genesis : Genesis config checks g)
@@ -205,7 +307,8 @@ private theorem attesterSlashing_accepted_of_active {config : Config} {checks : 
     (holds : ChainHolds config start step budget startEpoch blocks x.state)
     (within : (getCurrentEpoch x.state).toNat ≤ startEpoch + epochs)
     {i : Nat} {validator : Validator} (found : x.state.validators.data[i]? = some validator)
-    (active : isActiveValidator validator (getCurrentEpoch x.state) = true)
+    (lifetime : validator.activationEpoch ≤ getCurrentEpoch x.state ∧
+      getCurrentEpoch x.state < validator.withdrawableEpoch)
     {d1 d2 : AttestationData} {f1 f2 : Fork} {r1 r2 : Root} {z1 z2 : ForkedBeaconState preset}
     (pair : VotePairAt config checks g d1 d2 f1 f2 r1 r2 z1 z2)
     (sameFork1 : z1.fork = x.fork) (sameFork2 : z2.fork = x.fork)
@@ -271,33 +374,56 @@ private theorem attesterSlashing_accepted_of_active {config : Config} {checks : 
       frameTurn.pubkeysPrefix)
   obtain ⟨current, currentFound, currentKey⟩ :=
     validators_getElem?_of_validatorKeys_prefix prefixTurn found
-  -- It is still active at the epoch of `x`, which is the epoch of the turn.
+  -- The epoch of the turn is the epoch of `x`.
   have epochTurn : getCurrentEpoch turn = getCurrentEpoch x.state := by
     rw [← epochAdvanced]
     unfold getCurrentEpoch
     rw [frameTurn.slot]
-  have slotsActive := activeKept_of_chainSteps slotsSteps
-  have stepActive : ActiveStep advanced turn :=
-    (activeStep_operationsInput started).trans keepsKept.2
-  have activeTurn : isActiveAt turn (getCurrentEpoch x.state) i = true := by
-    rw [stepActive.2 _ (epochAdvanced ▸ getCurrentEpoch_le_activityFixedEpoch advanced),
-      slotsActive _ (getCurrentEpoch_le_activityFixedEpoch x.state)]
-    exact isActiveAt_eq_true_iff.mpr ⟨validator, found, active⟩
-  obtain ⟨current', currentFound', currentActive⟩ := isActiveAt_eq_true_iff.mp activeTurn
-  rw [currentFound] at currentFound'
-  cases currentFound'
+  -- Unslashed at the turn, the validator is slashable there.
+  have slashableTurn : current.slashed = false →
+      isSlashableValidator current (getCurrentEpoch turn) = true := by
+    intro unslashed
+    rw [epochTurn]
+    by_cases far : validator.exitEpoch = FAR_FUTURE_EPOCH
+    · -- With no exit yet, it is active at the epoch of `x`, and stays active to the turn.
+      have active : isActiveValidator validator (getCurrentEpoch x.state) = true := by
+        have below := getCurrentEpoch_succ_lt_farFuture conditions.run.roots.twoSlots x.state
+        simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq, far]
+        refine ⟨lifetime.1, ?_⟩
+        rw [UInt64.lt_iff_toNat_lt]
+        omega
+      have slotsActive := activeKept_of_chainSteps slotsSteps
+      have stepActive : ActiveStep advanced turn :=
+        (activeStep_operationsInput started).trans keepsKept.2
+      have activeTurn : isActiveAt turn (getCurrentEpoch x.state) i = true := by
+        rw [stepActive.2 _ (epochAdvanced ▸ getCurrentEpoch_le_activityFixedEpoch advanced),
+          slotsActive _ (getCurrentEpoch_le_activityFixedEpoch x.state)]
+        exact isActiveAt_eq_true_iff.mpr ⟨validator, found, active⟩
+      obtain ⟨current', currentFound', currentActive⟩ := isActiveAt_eq_true_iff.mp activeTurn
+      rw [currentFound] at currentFound'
+      cases currentFound'
+      -- Its exit is no later than its withdrawable epoch.
+      have ordered := frameTurn.exitsOrdered
+        ((advanceSlotsAcross_invariant holds.invariant advancedOk).1.exitsOrdered)
+      have exitLe := ordered current (Array.mem_of_getElem? currentFound)
+      simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at currentActive
+      simp only [isSlashableValidator, unslashed, Bool.not_false, Bool.true_and,
+        Bool.and_eq_true, decide_eq_true_eq]
+      exact ⟨currentActive.1, UInt64.lt_of_lt_of_le currentActive.2 exitLe⟩
+    · -- With an exit set, it keeps its activation, and its withdrawable epoch only rises.
+      obtain ⟨last, same, sameValidators⟩ := validators_advanceSlotsAcross_of_epoch _ advancedOk
+        (by rw [Nat.add_sub_cancel' (Nat.le_of_lt later)]; exact sameEpoch)
+      obtain rfl : advanced = last := eq_of_heq (ForkedBeaconState.mk.inj same).2
+      have aged := ages_slashingTurn turned
+      have stays := aged.1.later i validator current (by rw [sameValidators]; exact found)
+        currentFound
+      simp only [isSlashableValidator, unslashed, stays.activation, Bool.not_false,
+        Bool.true_and, Bool.and_eq_true, decide_eq_true_eq]
+      exact ⟨lifetime.1, UInt64.lt_of_lt_of_le lifetime.2 (stays.withdrawable far).1⟩
   refine ⟨current, currentFound, currentKey, ?_⟩
   cases slashedFlag : current.slashed
   · right
-    -- Active at the turn, with its exit before its withdrawable epoch, it is slashable there.
-    have ordered := frameTurn.exitsOrdered
-      ((advanceSlotsAcross_invariant holds.invariant advancedOk).1.exitsOrdered)
-    have exitLe := ordered current (Array.mem_of_getElem? currentFound)
-    have slashable : isSlashableValidator current (getCurrentEpoch turn) = true := by
-      simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at currentActive
-      simp only [isSlashableValidator, slashedFlag, epochTurn, Bool.not_false, Bool.true_and,
-        Bool.and_eq_true, decide_eq_true_eq]
-      exact ⟨currentActive.1, UInt64.lt_of_lt_of_le currentActive.2 exitLe⟩
+    have slashable := slashableTurn slashedFlag
     -- The versions and the genesis root of the turn are those of the signatures.
     obtain ⟨hash, time, deposits, initialized⟩ := genesis
     obtain ⟨run1⟩ := pair.run1
@@ -354,7 +480,11 @@ private theorem processAttesterSlashing_single_slashed {config : Config}
   have read : getValidator after named = .ok current := getValidator_eq_ok_iff.mpr currentFound
   exact ⟨current, read, currentKey, by simpa [slashedFlag, read, Except.map] using flag⟩
 
-/-- A key active at `x` names a validator of `x`, chosen before the block.
+/-- A key names a validator of `x` that is activated and not yet withdrawable at the epoch of `x`.
+
+The validator is chosen before the block.
+
+Unlike an active validator, it may have exited; as with an active one, it may already be slashed.
 
 The state `x` lies on a run from a genesis of deposits.
 
@@ -412,7 +542,10 @@ theorem signedConflict_attesterSlashing_accepted_at {config : Config} {checks : 
     (activationIncrement : preset.EFFECTIVE_BALANCE_INCREMENT ≤ preset.MIN_ACTIVATION_BALANCE)
     (holds : ChainHolds config start step budget startEpoch blocks x.state)
     (within : (getCurrentEpoch x.state).toNat ≤ startEpoch + epochs)
-    {key : BLSPubkey} (member : key ∈ activeKeys x.state)
+    {key : BLSPubkey}
+    (lifetime : ∃ (i : Nat) (v : Validator), x.state.validators.data[i]? = some v ∧
+      v.pubkey = key ∧ v.activationEpoch ≤ getCurrentEpoch x.state ∧
+      getCurrentEpoch x.state < v.withdrawableEpoch)
     {d1 d2 : AttestationData} {f1 f2 : Fork} {r1 r2 : Root} {z1 z2 : ForkedBeaconState preset}
     (pair : VotePairAt config checks g d1 d2 f1 f2 r1 r2 z1 z2)
     (sameFork1 : z1.fork = x.fork) (sameFork2 : z2.fork = x.fork)
@@ -436,19 +569,18 @@ theorem signedConflict_attesterSlashing_accepted_at {config : Config} {checks : 
             (singleAttesterSlashing index d1 d2 s1 s2 attesters) = .ok after ∧
               getValidator after index = .ok slashed ∧ slashed.pubkey = key ∧
                 slashed.slashed = true) := by
-  -- The key names a validator of `x`, active at its epoch.
+  -- The key names a validator of `x`, activated and not yet withdrawable at its epoch.
   have registry : x.state.RegistryWithinLimit :=
     (RunBounded.size_le holds.bounded).trans (holds.run conditions within).load.1
-  obtain ⟨i, validator, found, keyEq, active⟩ :=
-    (mem_keysAt_epoch_of_within registry (getCurrentEpoch x.state) key).mp member
+  obtain ⟨i, validator, found, keyEq, activation, withdrawal⟩ := lifetime
   have numeric := toNat_toUInt64_of_lt registry (Array.getElem?_eq_some_iff.mp found).1
   subst keyEq
   refine ⟨i.toUInt64, validator, ⟨getValidator_eq_ok_iff.mpr (by rwa [numeric]), rfl⟩, ?_⟩
   intro engine block advanced turn j advancedOk later sameEpoch turned bounded atJ
-  obtain ⟨current, currentFound, currentKey, outcome⟩ := attesterSlashing_accepted_of_active
+  obtain ⟨current, currentFound, currentKey, outcome⟩ := attesterSlashing_accepted_of_lifetime
     shared genesis conditions fits covers withdrawable activationIncrement holds within found
-    active pair sameFork1 sameFork2 s1 s2 verified1 verified2 attesters advancedOk later sameEpoch
-    turned bounded atJ
+    ⟨activation, withdrawal⟩ pair sameFork1 sameFork2 s1 s2 verified1 verified2 attesters
+    advancedOk later sameEpoch turned bounded atJ
   have found : getValidator turn i.toUInt64 = .ok current :=
     getValidator_eq_ok_iff.mpr (by rwa [numeric])
   -- After a successful slashing, the validator at that index is slashed and keeps the key.
