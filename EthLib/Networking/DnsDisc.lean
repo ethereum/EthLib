@@ -372,11 +372,19 @@ def walk (lookup : String → Option String) (domain : String) :
     Nat → List (Subtree × Hash) → List (Subtree × Hash) → Found → Except DnsError Found
   | _, [], _, found => return found
   -- Not in the source: a budget bounds the hashes taken, since a lookup can make an endless tree.
+  --
+  -- Every hash taken counts, even one already read and skipped.
+  --
+  -- So a hash under both roots counts at least once in each subtree.
   | 0, _ :: _, _, _ => throw .tooManyEntries
   | budget + 1, (tree, hash) :: pending, visited, found =>
     -- The client must track hashes and domains already resolved, to avoid an infinite loop.
     --
-    -- EthLib follows no link, so it tracks only hashes, each with its subtree.
+    -- EthLib follows no link, so it tracks only hashes.
+    --
+    -- Not in the source: each hash is tracked with its subtree.
+    --
+    -- The source keeps the two subtrees apart so that clients can sync them independently.
     if (tree, hash) ∈ visited then walk lookup domain budget pending visited found
     else do
       -- Step 3: resolve the TXT record of the hash subdomain, `<hash>.<domain>`.
@@ -405,7 +413,9 @@ def walk (lookup : String → Option String) (domain : String) :
           { found with links := found.links ++ [url] }
       -- A leaf in the wrong subtree, or a root inside a subtree, is refused.
       --
-      -- A record may only appear in the `enr-root` subtree, even when that subtree has it too.
+      -- A record may only appear in the `enr-root` subtree.
+      --
+      -- So a leaf is refused in the wrong subtree even when the other subtree reaches it too.
       | _, _ => throw (.wrongSubtree name)
 
 /-- The node list at a domain, under a known key: its sequence number, records and links.

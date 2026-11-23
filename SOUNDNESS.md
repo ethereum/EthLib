@@ -2704,9 +2704,9 @@ Each entry must have the hash of its name.
 A link may sit only under the root of links, and a record only under the root of records.
 A record must verify under its own "v4" key, since the client must "decode, verify the node record".
 A hash met again in the same subtree is skipped, as the client "must track hashes and domains which are already resolved", and a budget bounds the number of hashes taken.
-A hash under both roots is read in each subtree.
-So a record that the root of links also reaches is refused, since the source says that it may only appear in the `enr-root` subtree.
-The go-ethereum client refuses it too, with `errENRInLinkTree`, since it walks the two subtrees apart.
+The source keeps the two subtrees apart so that clients can sync them independently, so each hash is tracked with its subtree, and a hash under both roots is read in each.
+Each hash taken counts against the budget, even one that was already read and is skipped.
+So a record that the root of links also reaches is refused, since a record "may only appear in the `enr-root` subtree".
 `resolve_binds` (`Networking/Proofs/DnsDisc.lean`) states that two lookups that serve one root and both resolve give one list, or `findCollision` returns two texts with one truncated hash.
 One root means the same subtree hashes and sequence number, so the statement covers a root whose signature text was swapped.
 `isCollision_of_findCollision` states that a pair that the search returns is a collision, with no other condition.

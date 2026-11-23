@@ -1030,8 +1030,9 @@ Not yet released.
 - `dnsdisc.resolve` refuses a list whose root of links reaches a node record, even when the root of records also reaches it.
   EIP-1459 says that a record "may only appear in the `enr-root` subtree".
   It gave the list, and skipped the record under the root of links, since the walk took a hash met in either subtree as read.
-  The go-ethereum client refuses such a list with `errENRInLinkTree`.
   In Lean, `walk` and `walkCollision` track each hash with its subtree, in a `List (Subtree × Hash)` in place of a `List Hash`.
+  A branch under both roots is now read in each subtree, so the hashes below it take from the budget in each.
+  A list near its budget can now end with too many entries.
   `records_of_resolve` and `links_of_resolve` in `EthLib.Networking.Proofs.DnsDisc` state that each entry that a subtree of a resolved list reaches is a branch or a leaf of that subtree.
 
 - The signed-conflict slashing theorem of [#3431](https://github.com/ethereum/EthLib/issues/3431) now also states that the slashing leaves the validator slashed ([#4244](https://github.com/ethereum/EthLib/issues/4244)).

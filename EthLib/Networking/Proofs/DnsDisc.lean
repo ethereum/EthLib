@@ -698,9 +698,9 @@ theorem verify_of_resolve {lookup : String → Option String} {key : Vector UInt
 
 /-! ## The subtree of each entry -/
 
-/-- The hashes that a subtree reaches from its root hash, through the branches at their names. -/
+/-- The hashes reached from a hash, through the branches at their names. -/
 inductive Reaches (lookup : String → Option String) (domain : String) (top : Hash) : Hash → Prop
-  /-- The root hash of the subtree. -/
+  /-- The hash it starts from. -/
   | top : Reaches lookup domain top top
   /-- A hash of the branch at the name of a hash that the subtree reaches. -/
   | branch {hash next : Hash} {text : String} {hashes : List Hash} :
@@ -723,7 +723,11 @@ def Closed (lookup : String → Option String) (domain : String)
     p.1.Holds e ∧ ∀ hashes, e = .branch hashes → ∀ next ∈ hashes,
       (p.1, next) ∈ read ∨ (p.1, next) ∈ pending
 
-/-- A walk that succeeds reads every hash still to read, and leaves nothing of a branch unread. -/
+/-- Take a walk that succeeds, from hashes read that each name an entry their subtree may hold.
+
+The hashes of each branch read are read or still to read.
+
+Then the walk reads every hash still to read, and leaves nothing of a branch unread. -/
 theorem walk_closed {lookup : String → Option String} {domain : String} :
     (budget : Nat) → (pending visited : List (Subtree × Hash)) → (found : Found) →
       {result : Found} → walk lookup domain budget pending visited found = .ok result →
@@ -817,7 +821,9 @@ theorem walk_closed {lookup : String → Option String} {domain : String} :
       | links => exact step _ trivial (fun _ he => by cases he) (fun _ m => m) _ h
     | root r => cases tree <;> simp [throw, throwThe, MonadExceptOf.throw] at h
 
-/-- A hash that a subtree reaches from a hash read with it is read with it. -/
+/-- Take hashes read that leave nothing of a branch unread.
+
+A hash reached from a hash read with a subtree is then read with that subtree. -/
 theorem mem_of_reaches {lookup : String → Option String} {domain : String}
     {read : List (Subtree × Hash)} (closed : Closed lookup domain read []) {tree : Subtree}
     {top hash : Hash} (start : (tree, top) ∈ read) (reach : Reaches lookup domain top hash) :
