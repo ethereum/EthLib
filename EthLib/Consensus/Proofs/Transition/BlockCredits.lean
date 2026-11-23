@@ -1079,11 +1079,7 @@ theorem block_balances {engine : ExecutionEngine preset fork}
           (fun frame validators =>
             ActiveStep.of_validators (congrArg (·.data) validators) frame.slot)
           activeStep_processWithdrawalRequest activeStep_processConsolidationRequest paidOk
-      · exact processParentExecutionPayload_step_of RegistryLifecycle RegistryLifecycle.refl
-          (fun one two => one.trans two)
-          (fun _ validators => .of_data (congrArg (·.data) validators))
-          registryLifecycle_processWithdrawalRequest registryLifecycle_processConsolidationRequest
-          paidOk
+      · exact registryLifecycle_processParentExecutionPayload paidOk
     · cases paidOk
       exact ⟨∅, Ledger.refl s, Nat.zero_le _, steady_of_validators rfl rfl, Lives.refl s,
         .refl s⟩
