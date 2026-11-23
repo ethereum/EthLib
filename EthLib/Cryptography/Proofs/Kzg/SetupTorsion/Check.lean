@@ -77,7 +77,7 @@ theorem hexValue?_eq (c : Char) : Base.hexValue? c = (digit c.toNat).map UInt8.o
   have eA : ('A' : Char).val.toNat = 65 := rfl
   have eF : ('F' : Char).val.toNat = 70 := rfl
   unfold Base.hexValue? digit
-  simp only [Char.le_def, Char.toNat, UInt32.le_iff_toNat_le, e0, e9, ea, ef, eA, eF]
+  simp only [Char.le_def, Char.toNat, UInt32.le_iff_toNat_le, e0, e9, ea, ef, eA, eF, true_and]
   split_ifs <;> simp only [Option.map_some, Option.map_none, Nat.toUInt8_eq]
   all_goals (congr 2; omega)
 

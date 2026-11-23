@@ -5,7 +5,9 @@ module
 
 The sixteen hex digits, as the encodings that write bytes in hex use them.
 
-Decoding reads digits in either letter case, and long inputs do not grow the stack.
+Decoding reads digits in either letter case, or in lowercase only.
+
+Long inputs do not grow the stack.
 -/
 
 @[expose] public section
@@ -36,11 +38,13 @@ def hexNat (width value : Nat) : String :=
   let digits := Nat.toDigits 16 value
   "0x" ++ String.ofList (List.replicate (width - digits.length) '0' ++ digits)
 
-/-- The value of one hex digit, in either letter case. -/
-def hexValue? (c : Char) : Option UInt8 :=
+/-- The value of one hex digit.
+
+A digit may be in either letter case, or only in lowercase when uppercase is not allowed. -/
+def hexValue? (c : Char) (upper : Bool := true) : Option UInt8 :=
   if '0' ≤ c ∧ c ≤ '9' then some (c.toNat - '0'.toNat).toUInt8
   else if 'a' ≤ c ∧ c ≤ 'f' then some (c.toNat - 'a'.toNat + 10).toUInt8
-  else if 'A' ≤ c ∧ c ≤ 'F' then some (c.toNat - 'A'.toNat + 10).toUInt8
+  else if upper ∧ 'A' ≤ c ∧ c ≤ 'F' then some (c.toNat - 'A'.toNat + 10).toUInt8
   else none
 
 /-- The bytes so far, then one byte for each pair of digits.

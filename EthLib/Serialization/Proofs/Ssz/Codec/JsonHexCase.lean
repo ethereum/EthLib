@@ -123,56 +123,12 @@ theorem ofHex_hexCase {text other : String} (cased : HexCase text other) :
   · rw [ofHex_marked marked, ofHex_marked markedOther, hexBytes, hexBytes, Base.hexBytes?,
       Base.hexBytes?, hexBytesFrom?_keptOrUpper digits upper _ kept]
 
-/-- The code of each of the sixteen digits: `0` to `9`, then `a` to `f`. -/
-private theorem hexDigitChar_val (digit : Fin 16) :
-    (Base.hexDigitChar digit).val.toNat =
-      if digit.val < 10 then 48 + digit.val else 87 + digit.val := by
-  revert digit
-  decide
-
-/-- The code of the uppercase form of each of the sixteen digits: `0` to `9`, then `A` to `F`. -/
-private theorem hexDigitChar_toUpper_val (digit : Fin 16) :
-    (Base.hexDigitChar digit).toUpper.val.toNat =
-      if digit.val < 10 then 48 + digit.val else 55 + digit.val := by
-  revert digit
-  decide
-
 /-- A character that reads as a digit is the lowercase digit of its value, or its uppercase form. -/
 private theorem hexValue?_eq_some {c : Char} {n : UInt8} (read : Base.hexValue? c = some n) :
     ∃ digit : Fin 16, digit.val.toUInt8 = n ∧
       (c = Base.hexDigitChar digit ∨ c = (Base.hexDigitChar digit).toUpper) := by
-  have e0 : ('0' : Char).val.toNat = 48 := rfl
-  have e9 : ('9' : Char).val.toNat = 57 := rfl
-  have ea : ('a' : Char).val.toNat = 97 := rfl
-  have ef : ('f' : Char).val.toNat = 102 := rfl
-  have eA : ('A' : Char).val.toNat = 65 := rfl
-  have eF : ('F' : Char).val.toNat = 70 := rfl
-  have same : ∀ d : Char, d.val.toNat = c.val.toNat → c = d := fun d h =>
-    Char.ext (UInt32.toNat_inj.mp h.symm)
-  unfold Base.hexValue? at read
-  simp only [Char.le_def, Char.toNat, UInt32.le_iff_toNat_le, e0, e9, ea, ef, eA, eF] at read
-  split at read
-  · rename_i h
-    cases read
-    refine ⟨⟨c.val.toNat - 48, by omega⟩, rfl, .inl (same _ ?_)⟩
-    rw [hexDigitChar_val]
-    dsimp only
-    split <;> omega
-  · split at read
-    · rename_i h
-      cases read
-      refine ⟨⟨c.val.toNat - 97 + 10, by omega⟩, rfl, .inl (same _ ?_)⟩
-      rw [hexDigitChar_val]
-      dsimp only
-      split <;> omega
-    · split at read
-      · rename_i h
-        cases read
-        refine ⟨⟨c.val.toNat - 65 + 10, by omega⟩, rfl, .inr (same _ ?_)⟩
-        rw [hexDigitChar_toUpper_val]
-        dsimp only
-        split <;> omega
-      · cases read
+  obtain ⟨digit, value, kept⟩ := Base.hexValue?_eq_some read
+  exact ⟨digit, value, kept.imp_right And.right⟩
 
 /-- Pairs of digits that read as bytes are the hex digits of those bytes, each in either case. -/
 private theorem keptOrUpper_of_hexBytesFrom? :

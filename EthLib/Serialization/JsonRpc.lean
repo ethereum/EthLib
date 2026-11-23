@@ -47,10 +47,7 @@ def reject {α : Type} (reason : String) : Read α := throw reason
 /-- The value of a hex digit, given as its ASCII byte; uppercase only when `upper` allows it. -/
 def hexValue (upper : Bool) (c : UInt8) : Option UInt8 :=
   -- The base types: the digits `0-9` and `a-f`, and `A-F` only in the address pattern.
-  if 48 ≤ c ∧ c ≤ 57 then some (c - 48)
-  else if 97 ≤ c ∧ c ≤ 102 then some (c - 87)
-  else if upper ∧ 65 ≤ c ∧ c ≤ 70 then some (c - 55)
-  else none
+  Base.hexValue? (Char.ofUInt8 c) upper
 
 /-- The ASCII bytes of a JSON string after its `0x` marker. -/
 def hexDigits (what : String) : Json → Read ByteArray

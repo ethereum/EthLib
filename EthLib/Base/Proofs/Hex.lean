@@ -45,6 +45,12 @@ theorem hexValue?_hexDigitChar (n : Fin 16) : hexValue? (hexDigitChar n) = some 
   revert n
   decide
 
+/-- Each lowercase digit decodes to its value when uppercase is not allowed. -/
+theorem hexValue?_false_hexDigitChar (n : Fin 16) :
+    hexValue? (hexDigitChar n) false = some n.val.toUInt8 := by
+  revert n
+  decide
+
 /-- Each uppercase digit decodes to the same value. -/
 theorem hexValue?_toUpper_hexDigitChar (n : Fin 16) :
     hexValue? (hexDigitChar n).toUpper = some n.val.toUInt8 := by
@@ -71,12 +77,68 @@ private theorem toUpper_of_not_lower {c : Char} (h : ¬ ('a'.val.toNat ≤ c.val
   unfold Char.toUpper
   simp only [h', ↓reduceDIte]
 
+/-- The code of each of the sixteen digits: `0` to `9`, then `a` to `f`. -/
+private theorem hexDigitChar_val (digit : Fin 16) :
+    (hexDigitChar digit).val.toNat = if digit.val < 10 then 48 + digit.val else 87 + digit.val := by
+  revert digit
+  decide
+
+/-- The code of the uppercase form of each of the sixteen digits: `0` to `9`, then `A` to `F`. -/
+private theorem hexDigitChar_toUpper_val (digit : Fin 16) :
+    (hexDigitChar digit).toUpper.val.toNat =
+      if digit.val < 10 then 48 + digit.val else 55 + digit.val := by
+  revert digit
+  decide
+
+/-- A character that decodes is the lowercase digit of its value.
+
+When uppercase is allowed, it may also be the uppercase form of that digit.
+
+So the decoder accepts no character outside the digits of the letter case it is given. -/
+theorem hexValue?_eq_some {c : Char} {upper : Bool} {n : UInt8}
+    (read : hexValue? c upper = some n) :
+    ∃ digit : Fin 16, digit.val.toUInt8 = n ∧
+      (c = hexDigitChar digit ∨ upper = true ∧ c = (hexDigitChar digit).toUpper) := by
+  have e0 : ('0' : Char).val.toNat = 48 := rfl
+  have e9 : ('9' : Char).val.toNat = 57 := rfl
+  have ea : ('a' : Char).val.toNat = 97 := rfl
+  have ef : ('f' : Char).val.toNat = 102 := rfl
+  have eA : ('A' : Char).val.toNat = 65 := rfl
+  have eF : ('F' : Char).val.toNat = 70 := rfl
+  have same : ∀ d : Char, d.val.toNat = c.val.toNat → c = d := fun d h =>
+    Char.ext (UInt32.toNat_inj.mp h.symm)
+  unfold hexValue? at read
+  simp only [Char.le_def, Char.toNat, UInt32.le_iff_toNat_le, e0, e9, ea, ef, eA, eF] at read
+  -- Each of the three ranges gives the digit of the value it reads.
+  split at read
+  · rename_i h
+    cases read
+    refine ⟨⟨c.val.toNat - 48, by omega⟩, rfl, .inl (same _ ?_)⟩
+    rw [hexDigitChar_val]
+    dsimp only
+    split <;> omega
+  · split at read
+    · rename_i h
+      cases read
+      refine ⟨⟨c.val.toNat - 97 + 10, by omega⟩, rfl, .inl (same _ ?_)⟩
+      rw [hexDigitChar_val]
+      dsimp only
+      split <;> omega
+    · split at read
+      · rename_i h
+        cases read
+        refine ⟨⟨c.val.toNat - 65 + 10, by omega⟩, rfl, .inr ⟨h.1, same _ ?_⟩⟩
+        rw [hexDigitChar_toUpper_val]
+        dsimp only
+        split <;> omega
+      · cases read
+
 /-- A hex digit has the same value in uppercase, and a character that is not a digit stays one. -/
 theorem hexValue?_toUpper (c : Char) : hexValue? c.toUpper = hexValue? c := by
   by_cases h : 'a'.val.toNat ≤ c.val.toNat ∧ c.val.toNat ≤ 'z'.val.toNat
   · have key := toUpper_val_of_lower h.1 h.2
     unfold hexValue?
-    simp only [Char.le_def, Char.toNat, UInt32.le_iff_toNat_le]
+    simp only [Char.le_def, Char.toNat, UInt32.le_iff_toNat_le, true_and]
     generalize c.toUpper = d at *
     have e0 : '0'.val.toNat = 48 := rfl
     have e9 : '9'.val.toNat = 57 := rfl

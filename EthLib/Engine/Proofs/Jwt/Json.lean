@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Engine.Jwt.Json
-public import EthLib.Base.Hex
+public import EthLib.Base.Proofs.Hex
 
 /-!
 # Proofs: the Unicode escapes and control characters of a JWT string
@@ -35,71 +35,13 @@ open EthLib.Base
 The reader accepts a digit from three ranges, and each digit carries a value below 16.
 -/
 
-/-- A character between two others has a code point between theirs. -/
-private theorem toNat_of_between {c lo hi : Char} (h : (lo ≤ c && c ≤ hi) = true) :
-    lo.toNat ≤ c.toNat ∧ c.toNat ≤ hi.toNat := by
-  simp only [Bool.and_eq_true, decide_eq_true_eq, Char.le_def] at h
-  simp only [Char.toNat]
-  exact ⟨UInt32.le_iff_toNat_le.mp h.1, UInt32.le_iff_toNat_le.mp h.2⟩
-
-/-- The digit that the escape reads is the hex digit of the library, as a number. -/
-private theorem read_eq (c : Char) :
-    (if digit c then some (c.toNat - '0'.toNat)
-      else if 'a' ≤ c && c ≤ 'f' then some (c.toNat - 'a'.toNat + 10)
-      else if 'A' ≤ c && c ≤ 'F' then some (c.toNat - 'A'.toNat + 10)
-      else none) = (hexValue? c).map UInt8.toNat := by
-  have h0 : ('0' : Char).toNat = 48 := by decide
-  have ha : ('a' : Char).toNat = 97 := by decide
-  have hA : ('A' : Char).toNat = 65 := by decide
-  unfold digit hexValue?
-  by_cases h1 : ('0' ≤ c && c ≤ '9') = true
-  · have := toNat_of_between h1
-    rw [show ('9' : Char).toNat = 57 by decide] at this
-    simp only [Bool.and_eq_true, decide_eq_true_eq] at h1
-    simp only [h1, and_self, ↓reduceIte, Option.map_some, Bool.and_self, decide_true]
-    rw [Nat.toUInt8, UInt8.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
-  · by_cases h2 : ('a' ≤ c && c ≤ 'f') = true
-    · have := toNat_of_between h2
-      rw [show ('f' : Char).toNat = 102 by decide] at this
-      simp only [Bool.and_eq_true, decide_eq_true_eq] at h1 h2 ⊢
-      simp only [h1, h2, and_self, ↓reduceIte, Option.map_some]
-      rw [Nat.toUInt8, UInt8.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
-    · by_cases h3 : ('A' ≤ c && c ≤ 'F') = true
-      · have := toNat_of_between h3
-        rw [show ('F' : Char).toNat = 70 by decide] at this
-        simp only [Bool.and_eq_true, decide_eq_true_eq] at h1 h2 h3 ⊢
-        simp only [h1, h2, h3, and_self, ↓reduceIte, Option.map_some]
-        rw [Nat.toUInt8, UInt8.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
-      · simp only [Bool.and_eq_true, decide_eq_true_eq] at h1 h2 h3
-        simp [h1, h2, h3]
-
 /-- A hex digit has a value below 16. -/
 private theorem toNat_lt_of_hexValue? {c : Char} {v : UInt8} (h : hexValue? c = some v) :
     v.toNat < 16 := by
-  have key : ∀ x, (hexValue? x).map UInt8.toNat = some v.toNat → v.toNat < 16 := by
-    intro x hx
-    rw [← read_eq] at hx
-    split at hx
-    · rename_i hc
-      have := toNat_of_between hc
-      rw [show ('0' : Char).toNat = 48 by decide, show ('9' : Char).toNat = 57 by decide] at this
-      rw [show ('0' : Char).toNat = 48 by decide, Option.some.injEq] at hx
-      omega
-    · split at hx
-      · rename_i hc
-        have := toNat_of_between hc
-        rw [show ('a' : Char).toNat = 97 by decide, show ('f' : Char).toNat = 102 by decide] at this
-        rw [show ('a' : Char).toNat = 97 by decide, Option.some.injEq] at hx
-        omega
-      · split at hx
-        · rename_i hc
-          have := toNat_of_between hc
-          rw [show ('A' : Char).toNat = 65 by decide,
-            show ('F' : Char).toNat = 70 by decide] at this
-          rw [show ('A' : Char).toNat = 65 by decide, Option.some.injEq] at hx
-          omega
-        · exact absurd hx (by simp)
-  exact key c (by rw [h]; rfl)
+  obtain ⟨digit, rfl, -⟩ := hexValue?_eq_some h
+  have := digit.isLt
+  simp only [Nat.toUInt8_eq, UInt8.toNat_ofNat']
+  omega
 
 /-- Fewer than four characters are no escape. -/
 theorem hex4_eq_none_of_length_lt {chars : List Char} (h : chars.length < 4) :
@@ -119,7 +61,7 @@ theorem hex4_cons_eq_some_iff {a b c d : Char} {t rest : List Char} {n : Nat} :
         hexValue? c = some vc ∧ hexValue? d = some vd ∧
         n = 4096 * va.toNat + 256 * vb.toNat + 16 * vc.toNat + vd.toNat := by
   simp only [hex4, List.take_succ_cons, List.take_zero, List.drop_succ_cons, List.drop_zero,
-    bind, Option.bind_eq_some_iff, pure, Option.some.injEq, Prod.mk.injEq, read_eq,
+    bind, Option.bind_eq_some_iff, pure, Option.some.injEq, Prod.mk.injEq,
     Option.map_eq_some_iff]
   constructor
   · rintro ⟨_, ⟨va, ha, rfl⟩, _, ⟨vb, hb, rfl⟩, _, ⟨vc, hc, rfl⟩, _, ⟨vd, hd, rfl⟩, hn, hr⟩
