@@ -28,10 +28,10 @@ variable {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
 Key `e` on layer `l` has the chains `C_{i,mu}`, for `i < 58` and positions `mu <= 3`.
 
 Chains `2j` and `2j + 1` start at the two halves of derivation `j`, whose suffix is empty. -/
-def chainStarts (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32) :
+def chainStarts (publicParam : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32) :
     m (Vector Digest V) := do
   -- One derivation per pair of chains, so 29 derivations for 58 chains.
-  let pairs ← ofFnInOrder (V / 2) fun j => prf pp (addrPrf layer e j) #[]
+  let pairs ← ofFnInOrder (V / 2) fun j => prf publicParam (addrPrf layer e j) #[]
   -- `C_{i,0} = H_{i mod 2}(P | A_prf(l, e, floor(i / 2)) | S)`.
   --
   -- Chains `2j` and `2j + 1` start at the halves `H_0` and `H_1` of derivation `j`.
@@ -41,7 +41,7 @@ def chainStarts (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32
 
 A step of the hash chains of Construction 2 of [ePrint 2025/055][hbms], §4.2.
 
-- `pp`: the 16-byte public parameter `P`.
+- `publicParam`: the 16-byte public parameter `P`.
 - `layer` and `e`: the layer, bottom or top, and the index of the one-time key on it.
 - `i`: the chain, from 0 to 57.
 - `mu`: the current position, from 0 to 2, so the step reaches position `mu + 1`.
@@ -49,12 +49,12 @@ A step of the hash chains of Construction 2 of [ePrint 2025/055][hbms], §4.2.
 
 [hbms]: https://eprint.iacr.org/2025/055
 -/
-def chainStep (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
+def chainStep (publicParam : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
     (mu : Fin (CHAIN_LENGTH - 1)) (value : Digest) : m Digest :=
   -- `C_{i,mu+1} = Th(P, A_chain(l, e, mu), C_{i,mu} | LE_128(i))`.
   --
   -- `Th(P, A, M)` is the first 16 bytes of `H(P | A | M)`, with `H` Keccak-256.
-  th H pp
+  th H publicParam
     -- `A_chain(l, e, mu)` names the key and the step, so the 58 chains share it.
     (addrChain layer e mu)
     -- `M`: the two lanes of `C_{i,mu}`, then the two lanes of `LE_128(i)`.
@@ -70,47 +70,48 @@ The walk ends at position `start + steps`, which the bound keeps on the chain.
 Revealing a chain at position `k` lets anyone reach the positions above `k`.
 
 It reveals nothing about the positions below. -/
-def chain (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
+def chain (publicParam : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
     (start steps : Nat) (h : start + steps < CHAIN_LENGTH) (value : Digest) : m Digest :=
   -- The generic walk of a hash chain, with the step of chain `i`.
-  Wots.chain (chainStep H pp layer e i) start steps (Nat.le_sub_one_of_lt h) value
+  Wots.chain (chainStep H publicParam layer e i) start steps (Nat.le_sub_one_of_lt h) value
 
 /-! ## The one-time key's leaf -/
 
 /-- The Merkle leaf of a one-time key, from the ends of its 58 chains. -/
-def otsLeafHash (pp : PublicParam) (layer : Layer) (e : UInt32) (ends : Vector Digest V) :
+def otsLeafHash (publicParam : PublicParam) (layer : Layer) (e : UInt32) (ends : Vector Digest V) :
     m Digest :=
   -- `X_{0,e} = Th(P, A_leaf(l, e), C_{0,3} | ... | C_{57,3})`.
-  th H pp (addrLeaf layer e) (digestLanes ends)
+  th H publicParam (addrLeaf layer e) (digestLanes ends)
 
 /-- `X_{0,e}`: the leaf of key `e`, computed from the derivations of the seed. -/
-def otsPublicLeaf (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32) :
+def otsPublicLeaf (publicParam : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32) :
     m Digest := do
   -- The 58 chain starts, from 29 derivations of the seed.
-  let starts ← chainStarts pp prf layer e
+  let starts ← chainStarts publicParam prf layer e
   -- Every chain walked from position 0 to position 3, chain 0 first.
-  let ends ← ofFnInOrder V fun i => chain H pp layer e i 0 (CHAIN_LENGTH - 1) (by decide) starts[i]
-  otsLeafHash H pp layer e ends
+  let ends ← ofFnInOrder V fun i => chain H publicParam layer e i 0 (CHAIN_LENGTH - 1)
+    (by decide) starts[i]
+  otsLeafHash H publicParam layer e ends
 
 /-! ## The digest a key signs -/
 
 /-- `D = Th(P, A_msg(l, e), M | rho)`: the digest key `e` signs under one randomizer.
 
 `M` is the 32-byte message on the bottom layer, and a 16-byte root on the top. -/
-def messageDigest (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
+def messageDigest (publicParam : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
     (rho : Randomizer) : m Digest :=
   -- `D_c = Th(P, A_msg(l, e), M | rho_c)`.
-  th H pp (addrMsg layer e) (msg ++ rho.toArray)
+  th H publicParam (addrMsg layer e) (msg ++ rho.toArray)
 
 /-- `R_0`: the base every randomizer trial adds to, derived at `A_rnd(l, e)` with suffix `M`.
 
 With the derivations from the scheme seed `S`, it is `Th(P, A_rnd(l, e), S | M)`.
 
 Since `S` is in the input, the randomizers stay secret until signed. -/
-def randomizerBase (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32)
+def randomizerBase (publicParam : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32)
     (msg : Array UInt64) : m Randomizer := do
   -- `R_0 = Th(P, A_rnd(l, e), S | M)`.
-  return halfOf 0 (← prf pp (addrRnd layer e) msg)
+  return halfOf 0 (← prf publicParam (addrRnd layer e) msg)
 
 /-! ## Randomizers as words
 
@@ -192,11 +193,11 @@ With the default source, each trial hashes `P | A_msg(l, e) | M | rho_c` to get 
 Only `rho_c` changes between trials, so the trials are built once from the lanes before it.
 
 The randomizer of trial `c` is the sum `rho_c` above. -/
-def findCodeword (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
+def findCodeword (publicParam : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
     (base : Randomizer) (c fuel : Nat) (trials : TrialSource m := hashTrials H) :
     m (Option (Randomizer × Vector (Fin CHAIN_LENGTH) V)) :=
   -- The input of every trial starts with `P | A_msg(l, e) | M`.
-  let t := trials (thInput pp (addrMsg layer e) msg)
+  let t := trials (thInput publicParam (addrMsg layer e) msg)
   Wots.findFirst (trialRandomizer base) t.codeword c fuel
 
 end Internal
@@ -206,16 +207,16 @@ end Internal
 namespace Internal
 
 /-- `Ots.sign(l, e, M)`, with the trials of its search taken from a source. -/
-def otsSignTrials (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32)
+def otsSignTrials (publicParam : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32)
     (msg : Array UInt64) (trials : TrialSource m) :
     m (Option (Randomizer × Vector Digest V)) := do
   -- Step 1: grind the randomizer until the digest is a codeword.
-  let base ← randomizerBase pp prf layer e msg
-  let some (rho, x) ← findCodeword H pp layer e msg base 0 MAX_RANDOMIZER_TRIALS trials
+  let base ← randomizerBase publicParam prf layer e msg
+  let some (rho, x) ← findCodeword H publicParam layer e msg base 0 MAX_RANDOMIZER_TRIALS trials
     | return none
   -- Step 2: reveal each chain at the position its digit names, chain 0 first.
-  let starts ← chainStarts pp prf layer e
-  let y ← ofFnInOrder V fun i => chain H pp layer e i 0 x[i] (by simp) starts[i]
+  let starts ← chainStarts publicParam prf layer e
+  let y ← ofFnInOrder V fun i => chain H publicParam layer e i 0 x[i] (by simp) starts[i]
   return some (rho, y)
 
 end Internal
@@ -231,21 +232,21 @@ Returns nothing when no trial gives a codeword.
 Deterministic, so signing one message again gives the same signature.
 
 Each trial of the search hashes its input with `H`. -/
-def otsSign (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32)
+def otsSign (publicParam : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32)
     (msg : Array UInt64) : m (Option (Randomizer × Vector Digest V)) :=
-  Internal.otsSignTrials H pp prf layer e msg (hashTrials H)
+  Internal.otsSignTrials H publicParam prf layer e msg (hashTrials H)
 
 /-- `Ots.leaf(l, e, M, rho, y)`: the leaf a claimed one-time signature leads to.
 
 Returns nothing when the digest is not a codeword. -/
-def otsLeaf (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
+def otsLeaf (publicParam : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
     (rho : Randomizer) (y : Vector Digest V) : m (Option Digest) := do
   -- Step 1: recompute the codeword.
-  let some x := codeword? (← messageDigest H pp layer e msg rho) | return none
+  let some x := codeword? (← messageDigest H publicParam layer e msg rho) | return none
   -- Step 2: walk chain `i` from position `x_i` to position 3, chain 0 first.
   let ends ← ofFnInOrder V fun i =>
-    chain H pp layer e i x[i] (CHAIN_LENGTH - 1 - x[i]) (by have := x[i].isLt; omega) y[i]
+    chain H publicParam layer e i x[i] (CHAIN_LENGTH - 1 - x[i]) (by have := x[i].isLt; omega) y[i]
   -- Step 3: hash the ends into the leaf.
-  return some (← otsLeafHash H pp layer e ends)
+  return some (← otsLeafHash H publicParam layer e ends)
 
 end EthLib.Cryptography.Xmss

@@ -88,7 +88,7 @@ theorem signRootWith_run (h : sk.IsOfSeed H seed) {b : Nat} (hb : b < 2 ^ LAYER_
   -- The top key's path, read from the top tree, is the path computed from the seed.
   have hpath : sk.top.path LAYER_HEIGHT b =
       (path H sk.publicParam (seedPrf H sk.schemeSeed) .top b).run := by
-    have := path_build_run (H := H) (pp := sk.publicParam) (prf := seedPrf H sk.schemeSeed)
+    have := path_build_run (H := H) (publicParam := sk.publicParam) (prf := seedPrf H sk.schemeSeed)
       (layer := .top) b
     rwa [Nat.div_eq_of_lt hb, ← h.top_eq] at this
   unfold signRootWith
@@ -167,7 +167,7 @@ theorem SecretKey.Reachable.isOfSeed {H : Array UInt64 → Id Lanes4} {seed : Se
 
 /-- **A reachable key gives the note's signature, byte for byte, at every leaf index.**
 
-`s` and `pp` are the scheme seed and the parameter of the seed.
+`s` and `publicParam` are the scheme seed and the parameter of the seed.
 
 - The bottom key `idx` signs the message, with its path in bottom tree `b`.
 - The top key `b` signs the root of bottom tree `b`, with its path in the top tree.
@@ -178,28 +178,30 @@ So the trees a key keeps, and the order it used them in, never change a signatur
 
 It holds for every hash in the identity monad. -/
 theorem SecretKey.Reachable.signWith_fst {H : Array UInt64 → Id Lanes4} {seed : Seed}
-    {sk : SecretKey} {s : Seed} {pp : PublicParam} (h : sk.Reachable H seed)
-    (hs : (Xmss.schemeSeed H seed).run = s) (hpp : (publicParamOf (seedPrf H s)).run = pp)
+    {sk : SecretKey} {s : Seed} {publicParam : PublicParam} (h : sk.Reachable H seed)
+    (hs : (Xmss.schemeSeed H seed).run = s) (hpp : (publicParamOf (seedPrf H s)).run = publicParam)
     (idx : LeafIndex) (msg : Message) :
     (signWith H sk idx msg).run.1 =
-      match (otsSign H pp (seedPrf H s) .bottom (UInt32.ofNat idx.toNat) msg.toArray).run with
+      match (otsSign H publicParam (seedPrf H s) .bottom
+        (UInt32.ofNat idx.toNat) msg.toArray).run with
       | none => .error (.noAdmissibleEncoding .bottom idx.toNat)
       | some (randomizer, chainValues) =>
-        match (otsSign H pp (seedPrf H s) .top (UInt32.ofNat (bottomTree idx))
-            (node H pp (seedPrf H s) .bottom LAYER_HEIGHT (bottomTree idx)).run.toArray).run with
+        match (otsSign H publicParam (seedPrf H s) .top (UInt32.ofNat (bottomTree idx))
+            (node H publicParam (seedPrf H s) .bottom LAYER_HEIGHT
+              (bottomTree idx)).run.toArray).run with
         | none => .error (.noAdmissibleEncoding .top (bottomTree idx))
         | some (topRandomizer, topChainValues) =>
           .ok
             { leafIndex := idx
               bottom :=
                 { randomizer := randomizer, chainValues := chainValues
-                  path := (path H pp (seedPrf H s) .bottom idx.toNat).run }
+                  path := (path H publicParam (seedPrf H s) .bottom idx.toNat).run }
               top :=
                 { randomizer := topRandomizer, chainValues := topChainValues
-                  path := (path H pp (seedPrf H s) .top (bottomTree idx)).run } } := by
+                  path := (path H publicParam (seedPrf H s) .top (bottomTree idx)).run } } := by
   have hk := h.isOfSeed
   have hsk : sk.schemeSeed = s := hk.schemeSeed_eq.trans hs
-  have hppk : sk.publicParam = pp := by rw [hk.publicParam_eq, hsk, hpp]
+  have hppk : sk.publicParam = publicParam := by rw [hk.publicParam_eq, hsk, hpp]
   subst hsk hppk
   have hfetch := (fetchTreeWith_run hk (bottomTree idx)).1
   -- The key's path and the root both come from the one build of bottom tree `b`.
@@ -207,7 +209,8 @@ theorem SecretKey.Reachable.signWith_fst {H : Array UInt64 → Id Lanes4} {seed 
       (bottomTree idx)).run.path LAYER_HEIGHT idx.toNat =
         (path H sk.publicParam (seedPrf H sk.schemeSeed) .bottom idx.toNat).run :=
     path_build_run _
-  have hroot := value_build_run (H := H) (pp := sk.publicParam) (prf := seedPrf H sk.schemeSeed)
+  have hroot := value_build_run (H := H) (publicParam := sk.publicParam)
+    (prf := seedPrf H sk.schemeSeed)
     (layer := .bottom) LAYER_HEIGHT (bottomTree idx)
   unfold signWith Internal.signWithTrials
   simp only [Internal.otsSignTrials_hashTrials]
@@ -243,28 +246,30 @@ theorem SecretKey.Reachable.signWith_fst {H : Array UInt64 → Id Lanes4} {seed 
 - The bottom key `idx` signs the message, and the path is the key's path in bottom tree `b`.
 - The top key `b` signs the root of bottom tree `b`, and the path is its path in the top tree. -/
 theorem SecretKey.Reachable.signWith_eq_ok {H : Array UInt64 → Id Lanes4} {seed : Seed}
-    {sk : SecretKey} {s : Seed} {pp : PublicParam} (h : sk.Reachable H seed)
-    (hs : (Xmss.schemeSeed H seed).run = s) (hpp : (publicParamOf (seedPrf H s)).run = pp)
+    {sk : SecretKey} {s : Seed} {publicParam : PublicParam} (h : sk.Reachable H seed)
+    (hs : (Xmss.schemeSeed H seed).run = s) (hpp : (publicParamOf (seedPrf H s)).run = publicParam)
     {idx : LeafIndex} {msg : Message} {σ : Signature} (hσ : (signWith H sk idx msg).run.1 = .ok σ) :
     σ.leafIndex = idx ∧
-      (otsSign H pp (seedPrf H s) .bottom (UInt32.ofNat idx.toNat) msg.toArray).run
+      (otsSign H publicParam (seedPrf H s) .bottom (UInt32.ofNat idx.toNat) msg.toArray).run
         = some (σ.bottom.randomizer, σ.bottom.chainValues) ∧
-      σ.bottom.path = (path H pp (seedPrf H s) .bottom idx.toNat).run ∧
-      (otsSign H pp (seedPrf H s) .top (UInt32.ofNat (bottomTree idx))
-          (node H pp (seedPrf H s) .bottom LAYER_HEIGHT (bottomTree idx)).run.toArray).run
+      σ.bottom.path = (path H publicParam (seedPrf H s) .bottom idx.toNat).run ∧
+      (otsSign H publicParam (seedPrf H s) .top (UInt32.ofNat (bottomTree idx))
+          (node H publicParam (seedPrf H s) .bottom LAYER_HEIGHT (bottomTree idx)).run.toArray).run
         = some (σ.top.randomizer, σ.top.chainValues) ∧
-      σ.top.path = (path H pp (seedPrf H s) .top (bottomTree idx)).run := by
+      σ.top.path = (path H publicParam (seedPrf H s) .top (bottomTree idx)).run := by
   rw [h.signWith_fst hs hpp] at hσ
   -- Each search either fails, which is an error, or gives the layer's signature.
-  cases hbottom : (otsSign H pp (seedPrf H s) .bottom (UInt32.ofNat idx.toNat) msg.toArray).run with
+  cases hbottom : (otsSign H publicParam (seedPrf H s) .bottom
+    (UInt32.ofNat idx.toNat) msg.toArray).run with
   | none =>
     rw [hbottom] at hσ
     cases hσ
   | some found =>
     obtain ⟨randomizer, chainValues⟩ := found
     rw [hbottom] at hσ
-    cases htop : (otsSign H pp (seedPrf H s) .top (UInt32.ofNat (bottomTree idx))
-        (node H pp (seedPrf H s) .bottom LAYER_HEIGHT (bottomTree idx)).run.toArray).run with
+    cases htop : (otsSign H publicParam (seedPrf H s) .top (UInt32.ofNat (bottomTree idx))
+        (node H publicParam (seedPrf H s) .bottom LAYER_HEIGHT
+          (bottomTree idx)).run.toArray).run with
     | none =>
       rw [htop] at hσ
       cases hσ

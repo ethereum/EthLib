@@ -38,13 +38,15 @@ open EthLib.Cryptography.Xmss.Constants
 variable {f : Array UInt64 → Lanes4}
 
 /-- An honest one-time signature, with any path, leads to the root its key's leaf and path give. -/
-theorem layerRoot_of_otsSign {pp : PublicParam} {prf : SeedPrf Id} {layer : Layer} {e : Nat}
+theorem layerRoot_of_otsSign {publicParam : PublicParam} {prf : SeedPrf Id}
+    {layer : Layer} {e : Nat}
     {msg : Array UInt64} {sig : LayerSignature}
-    (hots : (otsSign (pureHash f) pp prf layer (UInt32.ofNat e) msg).run
+    (hots : (otsSign (pureHash f) publicParam prf layer (UInt32.ofNat e) msg).run
       = some (sig.randomizer, sig.chainValues)) :
-    (layerRoot (pureHash f) pp layer e msg sig).run
-      = some (fold (pureHash f) pp layer e
-          (otsPublicLeaf (pureHash f) pp prf layer (UInt32.ofNat e)).run sig.path).run := by
+    (layerRoot (pureHash f) publicParam layer e msg sig).run
+      = some (fold (pureHash f) publicParam layer e
+          (otsPublicLeaf (pureHash f) publicParam prf layer
+            (UInt32.ofNat e)).run sig.path).run := by
   rw [layerRoot_run, otsLeaf_otsSign hots, Option.map_some]
 
 /-- Correctness: the public key of a seed verifies every signature of a key it reaches.
@@ -59,7 +61,7 @@ theorem verifyWith_keyGenWith_signWith {seed : Seed} {sk : SecretKey} {idx : Lea
   -- Step 1: the bottom layer leads to the root of bottom tree `b`, which the top key signed.
   have hb := layerRoot_of_otsSign hbottom
   rw [hbpath] at hb
-  have hbroot := fold_path (f := f) (pp := (publicParamOf
+  have hbroot := fold_path (f := f) (publicParam := (publicParamOf
     (seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run)).run)
     (prf := seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run)
     (layer := .bottom) σ.leafIndex.toNat
@@ -69,7 +71,7 @@ theorem verifyWith_keyGenWith_signWith {seed : Seed} {sk : SecretKey} {idx : Lea
   have ht := layerRoot_of_otsSign htop
   rw [htpath] at ht
   -- Step 3: the top key's leaf and honest path reach the root of the top tree.
-  have hroot := fold_path_top (f := f) (pp := (publicParamOf
+  have hroot := fold_path_top (f := f) (publicParam := (publicParamOf
     (seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run)).run)
     (prf := seedPrf (pureHash f) (schemeSeed (pureHash f) seed).run)
     (bottomTree_lt σ.leafIndex)

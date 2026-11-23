@@ -64,9 +64,10 @@ theorem isQueryBoundP_schemeSeed (hH : ∀ x, IsQueryBoundP (H x) p 1) (seed : S
   hH _
 
 /-- A derivation from the scheme seed is one call of `H`. -/
-theorem isQueryBoundP_seedPrf (hH : ∀ x, IsQueryBoundP (H x) p 1) (s : Seed) (pp : PublicParam)
+theorem isQueryBoundP_seedPrf (hH : ∀ x, IsQueryBoundP (H x) p 1) (s : Seed)
+    (publicParam : PublicParam)
     (address : Address) (suffix : Array UInt64) :
-    IsQueryBoundP (seedPrf H s pp address suffix) p 1 :=
+    IsQueryBoundP (seedPrf H s publicParam address suffix) p 1 :=
   hH _
 
 /-- Key generation is the scheme seed, the parameter and the top tree.
@@ -76,15 +77,17 @@ theorem isQueryBoundP_keyGenWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (seed : S
     IsQueryBoundP (keyGenWith H seed) p (1 + 205 * 2 ^ LAYER_HEIGHT) := by
   unfold keyGenWith Internal.keyGenFrom
   refine isQueryBoundP_bind (isQueryBoundP_schemeSeed hH seed) fun s _ =>
-    (isQueryBoundP_bind (isQueryBoundP_publicParamOf (isQueryBoundP_seedPrf hH s)) fun pp _ =>
+    (isQueryBoundP_bind (isQueryBoundP_publicParamOf
+      (isQueryBoundP_seedPrf hH s)) fun publicParam _ =>
       isQueryBoundP_bind (m := 0)
-        (isQueryBoundP_build hH (isQueryBoundP_seedPrf hH s) pp .top LAYER_HEIGHT 0)
+        (isQueryBoundP_build hH (isQueryBoundP_seedPrf hH s) publicParam .top LAYER_HEIGHT 0)
         fun _ _ => isQueryBoundP_pure _ _ 0).mono ?_
   simp [LAYER_HEIGHT]
 
 /-- The top key's signature of a root is one search: at most `2^32 + 204` calls. -/
 theorem isQueryBoundP_signRootWith (hH : ∀ x, IsQueryBoundP (H x) p 1)
-    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1)
+    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ publicParam a suffix, IsQueryBoundP
+      (prf publicParam a suffix) p 1)
     (sk : SecretKey) (b : Nat) (root : Digest) :
     IsQueryBoundP (signRootWith H prf sk b root) p (2 ^ 32 + 204) := by
   unfold signRootWith
@@ -96,7 +99,8 @@ theorem isQueryBoundP_signRootWith (hH : ∀ x, IsQueryBoundP (H x) p 1)
 
 /-- A bottom tree with its top signature: at most `205 * 2^16 - 1 + 2^32 + 204` calls. -/
 theorem isQueryBoundP_cacheTreeWith (hH : ∀ x, IsQueryBoundP (H x) p 1)
-    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1)
+    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ publicParam a suffix, IsQueryBoundP
+      (prf publicParam a suffix) p 1)
     (sk : SecretKey) (b : Nat) :
     IsQueryBoundP (cacheTreeWith H prf sk b) p (2 ^ LAYER_HEIGHT * 205 - 1 + (2 ^ 32 + 204)) := by
   unfold cacheTreeWith
@@ -107,7 +111,8 @@ theorem isQueryBoundP_cacheTreeWith (hH : ∀ x, IsQueryBoundP (H x) p 1)
 
 /-- Fetching a bottom tree costs at most building it. -/
 theorem isQueryBoundP_fetchTreeWith (hH : ∀ x, IsQueryBoundP (H x) p 1)
-    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1)
+    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ publicParam a suffix, IsQueryBoundP
+      (prf publicParam a suffix) p 1)
     (sk : SecretKey) (b : Nat) :
     IsQueryBoundP (fetchTreeWith H prf sk b) p (2 ^ LAYER_HEIGHT * 205 - 1 + (2 ^ 32 + 204)) := by
   unfold fetchTreeWith
@@ -131,7 +136,8 @@ theorem isQueryBoundP_fetchTreeWith_of_mem {prf : SeedPrf (OracleComp spec)} (sk
 
 At most `2^33 + 205 * 2^16 + 407` calls, for any key, when each derivation is one call. -/
 theorem isQueryBoundP_signWithTrials (hH : ∀ x, IsQueryBoundP (H x) p 1)
-    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1)
+    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ publicParam a suffix, IsQueryBoundP
+      (prf publicParam a suffix) p 1)
     (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
     IsQueryBoundP (Internal.signWithTrials H prf sk idx msg (hashTrials H)) p
       (2 * MAX_RANDOMIZER_TRIALS + 205 * 2 ^ LAYER_HEIGHT + 407) := by
@@ -192,21 +198,24 @@ variable {ι : Type} {spec : OracleSpec ι} (f : QueryImpl spec Id)
 include hH
 
 /-- A tweakable hash call is one call of `H`. -/
-theorem length_queriesWith_th (pp : PublicParam) (address : Address) (payload : Array UInt64) :
-    (queriesWith f (th H pp address payload)).length = 1 := by
+theorem length_queriesWith_th (publicParam : PublicParam) (address : Address)
+    (payload : Array UInt64) :
+    (queriesWith f (th H publicParam address payload)).length = 1 := by
   rw [th, queriesWith_bind, List.length_append, hH, queriesWith_pure, List.length_nil]
 
 /-- The starts of a key's chains are `29` derivations from the scheme seed. -/
-theorem length_queriesWith_chainStarts (s : Seed) (pp : PublicParam) (layer : Layer)
-    (e : UInt32) : (queriesWith f (chainStarts pp (seedPrf H s) layer e)).length = V / 2 := by
+theorem length_queriesWith_chainStarts (s : Seed) (publicParam : PublicParam) (layer : Layer)
+    (e : UInt32) : (queriesWith f (chainStarts publicParam
+      (seedPrf H s) layer e)).length = V / 2 := by
   rw [chainStarts, queriesWith_bind, List.length_append,
     length_queriesWith_ofFnInOrder_const f (V / 2) 1, queriesWith_pure, List.length_nil,
     Nat.mul_one, Nat.add_zero]
   exact fun _ => hH _
 
 /-- A key's leaf is `29` derivations, `58 * 3` chain steps and one hash: `204` calls. -/
-theorem length_queriesWith_otsPublicLeaf (s : Seed) (pp : PublicParam) (layer : Layer)
-    (e : UInt32) : (queriesWith f (otsPublicLeaf H pp (seedPrf H s) layer e)).length = 204 := by
+theorem length_queriesWith_otsPublicLeaf (s : Seed) (publicParam : PublicParam) (layer : Layer)
+    (e : UInt32) : (queriesWith f (otsPublicLeaf H publicParam
+      (seedPrf H s) layer e)).length = 204 := by
   rw [otsPublicLeaf, queriesWith_bind, List.length_append,
     length_queriesWith_chainStarts f H hH, queriesWith_bind, List.length_append,
     length_queriesWith_ofFnInOrder_const f V (CHAIN_LENGTH - 1), otsLeafHash,
@@ -216,11 +225,11 @@ theorem length_queriesWith_otsPublicLeaf (s : Seed) (pp : PublicParam) (layer : 
       _ _ _ _
 
 /-- A node at `level` is `2^level` leaves and `2^level - 1` hashes: `205 * 2^level - 1` calls. -/
-theorem length_queriesWith_xmssNode (s : Seed) (pp : PublicParam) (layer : Layer)
+theorem length_queriesWith_xmssNode (s : Seed) (publicParam : PublicParam) (layer : Layer)
     (level j : Nat) :
-    (queriesWith f (node H pp (seedPrf H s) layer level j)).length = 205 * 2 ^ level - 1 :=
+    (queriesWith f (node H publicParam (seedPrf H s) layer level j)).length = 205 * 2 ^ level - 1 :=
   length_queriesWith_node f _ _ 204 (fun _ _ _ => length_queriesWith_th f H hH _ _ _)
-    (fun _ => length_queriesWith_otsPublicLeaf f H hH s pp layer _) level j
+    (fun _ => length_queriesWith_otsPublicLeaf f H hH s publicParam layer _) level j
 
 /-- Key generation makes exactly `1 + 205 * 2^16` calls under fixed answers.
 

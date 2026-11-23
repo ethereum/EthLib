@@ -54,17 +54,18 @@ def KeptOk (sk : SecretKey) : Prop :=
   ∀ t ∈ sk.cache, t.top.isOk = true
 
 /-- The hash input of trial `j` of a search of key `e` on `layer`, from the base `base`. -/
-def trialInput (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
+def trialInput (publicParam : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
     (base : Randomizer) (j : ℕ) : HashInput :=
-  Hash.Keccak.lanesBytes (thInput pp (addrMsg layer e) (msg ++ (trialRandomizer base j).toArray))
+  Hash.Keccak.lanesBytes (thInput publicParam (addrMsg layer e) (msg ++
+    (trialRandomizer base j).toArray))
 
 /-- Every search with a base in the table found a codeword.
 
 Some trial in its window is cached, and its digest is a codeword. -/
 def SearchesFound (st : IdealState) : Prop :=
-  ∀ pp layer e msg u, st.2 (pp, addrRnd layer e, msg) = some u →
+  ∀ publicParam layer e msg u, st.2 (publicParam, addrRnd layer e, msg) = some u →
     ∃ j < MAX_RANDOMIZER_TRIALS, ∃ y,
-      st.1 (trialInput pp layer e msg (halfOf 0 (ofOutput u)) j) = some y ∧
+      st.1 (trialInput publicParam layer e msg (halfOf 0 (ofOutput u)) j) = some y ∧
         (codeword? (halfOf 0 (ofOutput y))).isSome
 
 /-! ## Steps that keep every search found -/
@@ -78,11 +79,12 @@ noncomputable instance : DecidablePred IsRndQuery := Classical.decPred _
 
 /-- A state whose cache grows and whose bases stay keeps every search found. -/
 theorem SearchesFound.mono {st st' : IdealState} (hst : SearchesFound st) (hC : st.1 ≤ st'.1)
-    (hT : ∀ pp layer e msg, st'.2 (pp, addrRnd layer e, msg) = st.2 (pp, addrRnd layer e, msg)) :
+    (hT : ∀ publicParam layer e msg, st'.2 (publicParam, addrRnd layer e, msg) = st.2 (publicParam,
+      addrRnd layer e, msg)) :
     SearchesFound st' := by
-  intro pp layer e msg u hu
+  intro publicParam layer e msg u hu
   rw [hT] at hu
-  obtain ⟨j, hj, y, hy, hcw⟩ := hst pp layer e msg u hu
+  obtain ⟨j, hj, y, hy, hcw⟩ := hst publicParam layer e msg u hu
   exact ⟨j, hj, y, hC hy, hcw⟩
 
 /-- A step that draws no base keeps every search found. -/
@@ -92,12 +94,13 @@ theorem SearchesFound.of_mem_support_idealImpl {t : PrfSpec.Domain} (ht : ¬IsRn
     (hw : w ∈ support ((SecretEncoding.idealImpl HashSpec PrfInput HashOutput t).run st)) :
     SearchesFound w.2 := by
   obtain ⟨hC, hT⟩ := le_of_mem_support_idealImpl hw
-  refine hst.mono hC fun pp layer e msg => ?_
-  cases h : st.2 (pp, addrRnd layer e, msg) with
+  refine hst.mono hC fun publicParam layer e msg => ?_
+  cases h : st.2 (publicParam, addrRnd layer e, msg) with
   | some v => exact hT h
   | none =>
     have hiff :=
-      SecretEncoding.isSome_snd_apply_iff_of_mem_support_idealImpl hw (pp, addrRnd layer e, msg)
+      SecretEncoding.isSome_snd_apply_iff_of_mem_support_idealImpl hw (publicParam,
+        addrRnd layer e, msg)
     rw [h] at hiff
     refine Option.not_isSome_iff_eq_none.mp fun hs => ?_
     rcases hiff.mp hs with hs | rfl
@@ -191,12 +194,13 @@ theorem simulateQ_queryH (x : Array UInt64) :
   rfl
 
 /-- The search of the second hop's game is the search over `H`, lifted. -/
-theorem simulateQ_findCodeword (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
+theorem simulateQ_findCodeword (publicParam : PublicParam) (layer : Layer) (e : UInt32)
+    (msg : Array UInt64)
     (base : Randomizer) (c fuel : ℕ) :
     simulateQ (HashSpec.withDerivationsLift PrfInput HashOutput)
-      (Internal.findCodeword queryH pp layer e msg base c fuel :
+      (Internal.findCodeword queryH publicParam layer e msg base c fuel :
         OracleComp OracleWorld _) =
-      Internal.findCodeword hashD pp layer e msg base c fuel := by
+      Internal.findCodeword hashD publicParam layer e msg base c fuel := by
   rw [findCodeword_map_monad (simulateQ (HashSpec.withDerivationsLift PrfInput HashOutput))
     (fun b => simulateQ_pure _ b) (fun x f => simulateQ_bind _ x f)]
   have h : (fun x => simulateQ (HashSpec.withDerivationsLift PrfInput HashOutput)
@@ -204,52 +208,56 @@ theorem simulateQ_findCodeword (pp : PublicParam) (layer : Layer) (e : UInt32) (
   rw [h]
 
 /-- In the ideal game, the search runs as over the random oracle, and keeps the table. -/
-theorem run_findCodeword_idealImpl (pp : PublicParam) (layer : Layer) (e : UInt32)
+theorem run_findCodeword_idealImpl (publicParam : PublicParam) (layer : Layer) (e : UInt32)
     (msg : Array UInt64) (base : Randomizer) (c fuel : ℕ) (C : HashSpec.QueryCache)
     (T : (PrfInput →ₒ HashOutput).QueryCache) :
     (simulateQ (SecretEncoding.idealImpl HashSpec PrfInput HashOutput)
-        (Internal.findCodeword hashD pp layer e msg base c fuel)).run (C, T) =
+        (Internal.findCodeword hashD publicParam layer e msg base c fuel)).run (C, T) =
       (fun z => (z.1, (z.2, T))) <$> (simulateQ HashSpec.romImpl
-        (Internal.findCodeword queryH pp layer e msg base c fuel)).run C := by
+        (Internal.findCodeword queryH publicParam layer e msg base c fuel)).run C := by
   rw [← simulateQ_findCodeword, run_simulateQ_idealImpl_withDerivationsLift]
 
 /-- A trial of the search over `H` is one query, whose answer's digest is tested. -/
-theorem codeword_messageDigest_queryH (pp : PublicParam) (layer : Layer) (e : UInt32)
+theorem codeword_messageDigest_queryH (publicParam : PublicParam) (layer : Layer) (e : UInt32)
     (msg : Array UInt64) (rho : Randomizer) :
-    (codeword? <$> messageDigest queryH pp layer e msg rho : OracleComp OracleWorld _) =
+    (codeword? <$> messageDigest queryH publicParam layer e msg rho : OracleComp OracleWorld _) =
       (fun u => codeword? (halfOf 0 (ofOutput u))) <$>
         liftM (HashSpec.query
-          (Hash.Keccak.lanesBytes (thInput pp (addrMsg layer e) (msg ++ rho.toArray)))) := by
+          (Hash.Keccak.lanesBytes (thInput publicParam (addrMsg layer e)
+            (msg ++ rho.toArray)))) := by
   simp only [messageDigest, th, queryH, HashSig.queryLanes,
     map_eq_bind_pure_comp, bind_assoc, pure_bind, Function.comp_apply]
   rfl
 
 /-- A search whose window holds a cached trial with a codeword digest finds a trial. -/
-theorem isSome_of_mem_support_findCodeword (pp : PublicParam) (layer : Layer) (e : UInt32)
+theorem isSome_of_mem_support_findCodeword (publicParam : PublicParam) (layer : Layer) (e : UInt32)
     (msg : Array UInt64) (base : Randomizer) (C : HashSpec.QueryCache)
     (h : ∃ j < MAX_RANDOMIZER_TRIALS, ∃ y,
-      C (trialInput pp layer e msg base j) = some y ∧ (codeword? (halfOf 0 (ofOutput y))).isSome)
+      C (trialInput publicParam layer e msg base j) = some y ∧ (codeword? (halfOf 0
+        (ofOutput y))).isSome)
     {z} (hz : z ∈ support ((simulateQ HashSpec.romImpl
-      (Internal.findCodeword queryH pp layer e msg base 0 MAX_RANDOMIZER_TRIALS)).run C)) :
+      (Internal.findCodeword queryH publicParam layer e msg base 0 MAX_RANDOMIZER_TRIALS)).run C)) :
     z.1.isSome := by
   obtain ⟨j, hj, y, hy, hcw⟩ := h
   rw [Internal.findCodeword_eq] at hz
   exact Wots.isSome_of_mem_support_findFirst_romImpl (trialRandomizer base) _ _ _
-    (codeword_messageDigest_queryH pp layer e msg) _ 0 C
+    (codeword_messageDigest_queryH publicParam layer e msg) _ 0 C
     ⟨j, Nat.zero_le _, by omega, y, hy, hcw⟩ z hz
 
 /-- The trial a search finds is in its window, and cached with a codeword digest. -/
-theorem exists_cached_of_mem_support_findCodeword (pp : PublicParam) (layer : Layer) (e : UInt32)
+theorem exists_cached_of_mem_support_findCodeword (publicParam : PublicParam)
+    (layer : Layer) (e : UInt32)
     (msg : Array UInt64) (base : Randomizer) (C : HashSpec.QueryCache) {z}
     (hz : z ∈ support ((simulateQ HashSpec.romImpl
-      (Internal.findCodeword queryH pp layer e msg base 0 MAX_RANDOMIZER_TRIALS)).run C))
+      (Internal.findCodeword queryH publicParam layer e msg base 0 MAX_RANDOMIZER_TRIALS)).run C))
     {rho x} (hx : z.1 = some (rho, x)) :
     ∃ j < MAX_RANDOMIZER_TRIALS, ∃ y,
-      z.2 (trialInput pp layer e msg base j) = some y ∧
+      z.2 (trialInput publicParam layer e msg base j) = some y ∧
         codeword? (halfOf 0 (ofOutput y)) = some x := by
   rw [Internal.findCodeword_eq] at hz
   obtain ⟨j, -, hj, rfl, y, hy, hcw⟩ := Wots.exists_cached_of_mem_support_findFirst_romImpl
-    (trialRandomizer base) _ _ _ (codeword_messageDigest_queryH pp layer e msg) _ 0 C z hz rho x hx
+    (trialRandomizer base) _ _ _
+      (codeword_messageDigest_queryH publicParam layer e msg) _ 0 C z hz rho x hx
   exact ⟨j, by omega, y, hy, hcw⟩
 
 /-! ## A new base rarely meets the cache -/
@@ -265,9 +273,9 @@ theorem trialRandomizer_inj_base {base base' : Randomizer} {j : ℕ}
   exact Hash.Keccak.Lanes2.toNat_injective (by omega)
 
 /-- The hash input of a trial fixes the base. -/
-theorem trialInput_injective_base (pp : PublicParam) (layer : Layer) (e : UInt32)
+theorem trialInput_injective_base (publicParam : PublicParam) (layer : Layer) (e : UInt32)
     (msg : Array UInt64)
-    (j : ℕ) : Function.Injective fun base => trialInput pp layer e msg base j := by
+    (j : ℕ) : Function.Injective fun base => trialInput publicParam layer e msg base j := by
   intro base base' h
   have hin := (thInput_inj (Hash.Keccak.lanesBytes_injective h)).2.2
   have hr := (Array.append_inj hin rfl).2
@@ -286,17 +294,19 @@ theorem natCard_isSome_le_enncard (C : HashSpec.QueryCache) {g : Digest → Hash
   exact QueryCache.encard_le_enncard _ fun _ ⟨_, hd, h⟩ => h ▸ hd
 
 /-- **A uniform base puts some trial in the cache with probability at most `2^32 |C| / 2^128`.** -/
-theorem prEvent_trial_cached_le (C : HashSpec.QueryCache) (pp : PublicParam) (layer : Layer)
+theorem prEvent_trial_cached_le (C : HashSpec.QueryCache)
+    (publicParam : PublicParam) (layer : Layer)
     (e : UInt32) (msg : Array UInt64) :
     Pr{let u ← $ᵗ HashOutput}[∃ j < MAX_RANDOMIZER_TRIALS,
-      (C (trialInput pp layer e msg (halfOf 0 (ofOutput u)) j)).isSome] ≤
+      (C (trialInput publicParam layer e msg (halfOf 0 (ofOutput u)) j)).isSome] ≤
       2 ^ 32 * (C.enncard / 2 ^ 128) := by
   have h := prEvent_exists_finset_le_card_mul (Finset.range MAX_RANDOMIZER_TRIALS)
-    ($ᵗ HashOutput) (fun j u => (C (trialInput pp layer e msg (halfOf 0 (ofOutput u)) j)).isSome)
+    ($ᵗ HashOutput) (fun j u => (C (trialInput publicParam layer e msg (halfOf 0
+      (ofOutput u)) j)).isSome)
     (ε := C.enncard / 2 ^ 128) fun j _ => by
-      rw [prEvent_halfOf_ofOutput (fun d => (C (trialInput pp layer e msg d j)).isSome)]
+      rw [prEvent_halfOf_ofOutput (fun d => (C (trialInput publicParam layer e msg d j)).isSome)]
       exact ENNReal.div_le_div_right
-        (natCard_isSome_le_enncard C (trialInput_injective_base pp layer e msg j)) _
+        (natCard_isSome_le_enncard C (trialInput_injective_base publicParam layer e msg j)) _
   refine (le_trans (prEvent_mono _ _ _ fun u ⟨j, hj, hc⟩ => ⟨j, Finset.mem_range.2 hj, hc⟩) h).trans
     (le_of_eq ?_)
   rw [Finset.card_range, MAX_RANDOMIZER_TRIALS, Nat.cast_pow, Nat.cast_ofNat]
@@ -304,33 +314,39 @@ theorem prEvent_trial_cached_le (C : HashSpec.QueryCache) (pp : PublicParam) (la
 /-! ## One search -/
 
 /-- A derivation already in the table is read from it. -/
-theorem run_prfD_of_some {pp : PublicParam} {a : Address} {s : Array UInt64} {st : IdealState}
-    {u : HashOutput} (h : st.2 (pp, a, s) = some u) :
-    (simulateQ (SecretEncoding.idealImpl HashSpec PrfInput HashOutput) (prfD pp a s)).run st =
+theorem run_prfD_of_some {publicParam : PublicParam} {a : Address}
+    {s : Array UInt64} {st : IdealState}
+    {u : HashOutput} (h : st.2 (publicParam, a, s) = some u) :
+    (simulateQ (SecretEncoding.idealImpl HashSpec PrfInput HashOutput)
+      (prfD publicParam a s)).run st =
       pure (ofOutput u, st) := by
   simp [prfD, SecretEncoding.idealImpl_run_derive_some h]
 
 /-- A derivation not yet in the table is drawn uniformly and stored. -/
-theorem run_prfD_of_none {pp : PublicParam} {a : Address} {s : Array UInt64} {st : IdealState}
-    (h : st.2 (pp, a, s) = none) :
-    (simulateQ (SecretEncoding.idealImpl HashSpec PrfInput HashOutput) (prfD pp a s)).run st =
-      (fun u => (ofOutput u, (st.1, st.2.cacheQuery (pp, a, s) u))) <$> ($ᵗ HashOutput) := by
+theorem run_prfD_of_none {publicParam : PublicParam} {a : Address}
+    {s : Array UInt64} {st : IdealState}
+    (h : st.2 (publicParam, a, s) = none) :
+    (simulateQ (SecretEncoding.idealImpl HashSpec PrfInput HashOutput)
+      (prfD publicParam a s)).run st =
+      (fun u => (ofOutput u, (st.1, st.2.cacheQuery (publicParam, a, s) u))) <$>
+        ($ᵗ HashOutput) := by
   simp [prfD, SecretEncoding.idealImpl_run_derive_none h]
 
 /-- A search draws or reads its base, then runs the codeword search from it. -/
-theorem run_search (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
+theorem run_search (publicParam : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
     (st : IdealState) :
     (simulateQ (SecretEncoding.idealImpl HashSpec PrfInput HashOutput)
-        (randomizerBase pp prfD layer e msg >>= fun base =>
-          Internal.findCodeword hashD pp layer e msg base 0 MAX_RANDOMIZER_TRIALS)).run st =
+        (randomizerBase publicParam prfD layer e msg >>= fun base =>
+          Internal.findCodeword hashD publicParam layer e msg base 0
+            MAX_RANDOMIZER_TRIALS)).run st =
       (simulateQ (SecretEncoding.idealImpl HashSpec PrfInput HashOutput)
-          (prfD pp (addrRnd layer e) msg)).run st >>= fun w =>
+          (prfD publicParam (addrRnd layer e) msg)).run st >>= fun w =>
         (simulateQ (SecretEncoding.idealImpl HashSpec PrfInput HashOutput)
-          (Internal.findCodeword hashD pp layer e msg (id (halfOf 0 w.1)) 0
+          (Internal.findCodeword hashD publicParam layer e msg (id (halfOf 0 w.1)) 0
             MAX_RANDOMIZER_TRIALS)).run w.2 := by
   -- `id` types the digest as a randomizer, so the rewritten term stays well typed.
-  have h : randomizerBase pp prfD layer e msg =
-      prfD pp (addrRnd layer e) msg >>= fun u => pure (id (halfOf 0 u) : Randomizer) := rfl
+  have h : randomizerBase publicParam prfD layer e msg =
+      prfD publicParam (addrRnd layer e) msg >>= fun u => pure (id (halfOf 0 u) : Randomizer) := rfl
   rw [h, bind_assoc]
   simp only [pure_bind, simulateQ_bind, StateT.run_bind]
 
@@ -347,14 +363,14 @@ A repeated search finds the cached trial of the earlier one, so it never fails.
 A new search meets the cache with probability at most `Q / 2^96`.
 
 Otherwise its trials are fresh, and all fail with probability at most `exp(-4000)`. -/
-theorem failsAtMost_search (Q : ℕ) (pp : PublicParam) (layer : Layer) (e : UInt32)
+theorem failsAtMost_search (Q : ℕ) (publicParam : PublicParam) (layer : Layer) (e : UInt32)
     (msg : Array UInt64) :
     FailsAtMost (fun r => r = none) Q ((Q : ℝ≥0∞) / 2 ^ 96 + ENNReal.ofReal (Real.exp (-4000)))
-      (randomizerBase pp prfD layer e msg >>= fun base =>
-        Internal.findCodeword hashD pp layer e msg base 0 MAX_RANDOMIZER_TRIALS) := by
+      (randomizerBase publicParam prfD layer e msg >>= fun base =>
+        Internal.findCodeword hashD publicParam layer e msg base 0 MAX_RANDOMIZER_TRIALS) := by
   rintro ⟨C, T⟩ hst
   rw [run_search]
-  cases hT : T (pp, addrRnd layer e, msg) with
+  cases hT : T (publicParam, addrRnd layer e, msg) with
   | some u =>
     rw [run_prfD_of_some hT, pure_bind]
     refine le_of_eq_of_le (prEvent_eq_zero_of_forall_mem_support _ _ fun z hz hE => ?_) zero_le
@@ -362,8 +378,9 @@ theorem failsAtMost_search (Q : ℕ) (pp : PublicParam) (layer : Layer) (e : UIn
     rw [run_findCodeword_idealImpl, support_map] at hz
     obtain ⟨w, hw, rfl⟩ := hz
     rcases hE.1 with hnone | hs
-    · obtain ⟨j, hj, y, hy, hcw⟩ := hst pp layer e msg u hT
-      have hsome := isSome_of_mem_support_findCodeword pp layer e msg _ C ⟨j, hj, y, hy, hcw⟩ hw
+    · obtain ⟨j, hj, y, hy, hcw⟩ := hst publicParam layer e msg u hT
+      have hsome := isSome_of_mem_support_findCodeword publicParam layer e msg _ C
+        ⟨j, hj, y, hy, hcw⟩ hw
       simp only at hnone
       simp [hnone] at hsome
     · exact hs (hst.mono hC fun _ _ _ _ => rfl)
@@ -371,7 +388,7 @@ theorem failsAtMost_search (Q : ℕ) (pp : PublicParam) (layer : Layer) (e : UIn
     rw [run_prfD_of_none hT, bind_map_left]
     by_cases hQ : C.enncard ≤ Q
     · refine (prEvent_bind_le_prEvent_add _ _ (fun u => ∃ j < MAX_RANDOMIZER_TRIALS,
-        (C (trialInput pp layer e msg (halfOf 0 (ofOutput u)) j)).isSome) _
+        (C (trialInput publicParam layer e msg (halfOf 0 (ofOutput u)) j)).isSome) _
         fun u hu => ?_).trans (add_le_add ?_ le_rfl)
       · -- A search that finds a trial leaves it cached, so a failure returns nothing.
         refine (prEvent_mono_of_support _ _ (fun z => z.1 = none) fun z hz hE => ?_).trans ?_
@@ -384,25 +401,27 @@ theorem failsAtMost_search (Q : ℕ) (pp : PublicParam) (layer : Layer) (e : UIn
             exfalso
             rcases hE.1 with hnone | hs
             · simp [hw1] at hnone
-            refine hs fun pp' layer' e' msg' u' hu' => ?_
-            by_cases hx : (pp', addrRnd layer' e', msg') = (pp, addrRnd layer e, msg)
+            refine hs fun publicParam' layer' e' msg' u' hu' => ?_
+            by_cases hx : (publicParam', addrRnd layer' e', msg') = (publicParam,
+              addrRnd layer e, msg)
             · simp only [Prod.mk.injEq, addrRnd_inj] at hx
               obtain ⟨h1, ⟨h2, h3⟩, h4⟩ := hx
               subst h1 h2 h3 h4
               simp only [QueryCache.cacheQuery_self, Option.some_inj] at hu'
               subst hu'
               obtain ⟨j, hj, y, hy, hcw⟩ :=
-                exists_cached_of_mem_support_findCodeword pp' layer' e' msg' _ C hw hw1
+                exists_cached_of_mem_support_findCodeword publicParam' layer' e' msg' _ C hw hw1
               exact ⟨j, hj, y, hy, by rw [hcw]; rfl⟩
             · rw [QueryCache.cacheQuery_of_ne _ _ hx] at hu'
-              obtain ⟨j, hj, y, hy, hcw⟩ := hst pp' layer' e' msg' u' hu'
+              obtain ⟨j, hj, y, hy, hcw⟩ := hst publicParam' layer' e' msg' u' hu'
               exact ⟨j, hj, y, hC hy, hcw⟩
         · rw [run_findCodeword_idealImpl, prEvent_map]
-          refine le_of_eq_of_le ?_ (prEvent_findCodeword_none_le pp layer e msg _ C fun j hj =>
+          refine le_of_eq_of_le ?_
+            (prEvent_findCodeword_none_le publicParam layer e msg _ C fun j hj =>
             Option.not_isSome_iff_eq_none.mp fun hs => hu ⟨j, hj, hs⟩)
           rw [StateT.run'_eq, prEvent_map]
           rfl
-      · exact (prEvent_trial_cached_le C pp layer e msg).trans (by
+      · exact (prEvent_trial_cached_le C publicParam layer e msg).trans (by
           rw [← two_pow_mul_div_two_pow 32 96]
           exact mul_le_mul_right (ENNReal.div_le_div_right hQ _) _)
     · refine le_of_eq_of_le (prEvent_eq_zero_of_forall_mem_support _ _ fun z hz hE => hQ ?_)
@@ -425,8 +444,8 @@ theorem isQueryBoundP_hashD (x : Array UInt64) : IsQueryBoundP (hashD x) IsRndQu
   (isQueryBoundP_map_iff _ _ _).2 (by simp [IsRndQuery, OracleSpec.withDerivationsLift])
 
 /-- A derivation away from every base's address draws no base. -/
-theorem isQueryBoundP_prfD {pp : PublicParam} {a : Address} {s : Array UInt64}
-    (ha : ∀ layer e, a ≠ addrRnd layer e) : IsQueryBoundP (prfD pp a s) IsRndQuery 0 :=
+theorem isQueryBoundP_prfD {publicParam : PublicParam} {a : Address} {s : Array UInt64}
+    (ha : ∀ layer e, a ≠ addrRnd layer e) : IsQueryBoundP (prfD publicParam a s) IsRndQuery 0 :=
   (isQueryBoundP_map_iff _ _ _).2 (by
     simp only [isQueryBoundP_query_iff, IsRndQuery]
     simp [ha])
@@ -441,38 +460,38 @@ theorem addrParam_ne_addrRnd (layer : Layer) (e : UInt32) : addrParam ≠ addrRn
   fun h => nomatch CallSite.encode_injective h
 
 /-- A tweakable hash call draws no base. -/
-theorem isQueryBoundP_th (pp : PublicParam) (a : Address) (payload : Array UInt64) :
-    IsQueryBoundP (th hashD pp a payload) IsRndQuery 0 :=
+theorem isQueryBoundP_th (publicParam : PublicParam) (a : Address) (payload : Array UInt64) :
+    IsQueryBoundP (th hashD publicParam a payload) IsRndQuery 0 :=
   isQueryBoundP_bind_zero _ _ (isQueryBoundP_hashD _) fun _ => isQueryBoundP_pure _ _ _
 
 /-- The chain starts of a key draw no base. -/
-theorem isQueryBoundP_chainStarts (pp : PublicParam) (layer : Layer) (e : UInt32) :
-    IsQueryBoundP (chainStarts pp prfD layer e) IsRndQuery 0 :=
+theorem isQueryBoundP_chainStarts (publicParam : PublicParam) (layer : Layer) (e : UInt32) :
+    IsQueryBoundP (chainStarts publicParam prfD layer e) IsRndQuery 0 :=
   isQueryBoundP_bind_zero _ _ (ofFnInOrder_isQueryBoundP_zero _ _ fun j =>
     isQueryBoundP_prfD (addrPrf_ne_addrRnd layer e j)) fun _ => isQueryBoundP_pure _ _ _
 
 /-- A walk on a chain draws no base. -/
-theorem isQueryBoundP_chain (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
+theorem isQueryBoundP_chain (publicParam : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
     (start steps : ℕ) (h : start + steps < CHAIN_LENGTH) (value : Digest) :
-    IsQueryBoundP (chain hashD pp layer e i start steps h value) IsRndQuery 0 :=
+    IsQueryBoundP (chain hashD publicParam layer e i start steps h value) IsRndQuery 0 :=
   chain_isQueryBoundP_zero _ (fun _ _ => isQueryBoundP_th _ _ _) _ _ _ _
 
 /-- The leaf of a key draws no base. -/
-theorem isQueryBoundP_otsPublicLeaf (pp : PublicParam) (layer : Layer) (e : UInt32) :
-    IsQueryBoundP (otsPublicLeaf hashD pp prfD layer e) IsRndQuery 0 :=
-  isQueryBoundP_bind_zero _ _ (isQueryBoundP_chainStarts pp layer e) fun _ =>
+theorem isQueryBoundP_otsPublicLeaf (publicParam : PublicParam) (layer : Layer) (e : UInt32) :
+    IsQueryBoundP (otsPublicLeaf hashD publicParam prfD layer e) IsRndQuery 0 :=
+  isQueryBoundP_bind_zero _ _ (isQueryBoundP_chainStarts publicParam layer e) fun _ =>
     isQueryBoundP_bind_zero _ _ (ofFnInOrder_isQueryBoundP_zero _ _ fun _ =>
       isQueryBoundP_chain _ _ _ _ _ _ _ _) fun _ => isQueryBoundP_th _ _ _
 
 /-- A node of a tree draws no base. -/
-theorem isQueryBoundP_node (pp : PublicParam) (layer : Layer) (level j : ℕ) :
-    IsQueryBoundP (node hashD pp prfD layer level j) IsRndQuery 0 :=
+theorem isQueryBoundP_node (publicParam : PublicParam) (layer : Layer) (level j : ℕ) :
+    IsQueryBoundP (node hashD publicParam prfD layer level j) IsRndQuery 0 :=
   merkleNode_isQueryBoundP_zero _ _ (fun _ => isQueryBoundP_otsPublicLeaf _ _ _)
     (fun _ _ _ => isQueryBoundP_th _ _ _) ⟨level, j⟩
 
 /-- A build of a tree draws no base. -/
-theorem isQueryBoundP_build (pp : PublicParam) (layer : Layer) (level j : ℕ) :
-    IsQueryBoundP (build hashD pp prfD layer level j) IsRndQuery 0 :=
+theorem isQueryBoundP_build (publicParam : PublicParam) (layer : Layer) (level j : ℕ) :
+    IsQueryBoundP (build hashD publicParam prfD layer level j) IsRndQuery 0 :=
   merkleBuild_isQueryBoundP_zero _ _ (fun _ => isQueryBoundP_otsPublicLeaf _ _ _)
     (fun _ _ _ => isQueryBoundP_th _ _ _) ⟨level, j⟩
 
@@ -500,17 +519,17 @@ theorem FailsAtMost.bind_of_noBase {α β : Type} {fail : β → Prop} {Q : ℕ}
     fun a _ => hf a
 
 /-- A one-time signature fails as its search does. -/
-theorem failsAtMost_otsSign (Q : ℕ) (pp : PublicParam) (layer : Layer) (e : UInt32)
+theorem failsAtMost_otsSign (Q : ℕ) (publicParam : PublicParam) (layer : Layer) (e : UInt32)
     (msg : Array UInt64) :
     FailsAtMost (fun r => r = none) Q ((Q : ℝ≥0∞) / 2 ^ 96 + ENNReal.ofReal (Real.exp (-4000)))
-      (otsSign hashD pp prfD layer e msg) := by
+      (otsSign hashD publicParam prfD layer e msg) := by
   unfold otsSign Internal.otsSignTrials
   rw [← bind_assoc]
-  refine (FailsAtMost.bind (ε₂ := 0) (failsAtMost_search Q pp layer e msg)
+  refine (FailsAtMost.bind (ε₂ := 0) (failsAtMost_search Q publicParam layer e msg)
     fun r hr => ?_).mono_bound (add_zero _).le
   rcases r with _ | ⟨rho, x⟩
   · exact absurd rfl hr
-  · exact FailsAtMost.bind_of_noBase (isQueryBoundP_chainStarts pp layer e) fun starts =>
+  · exact FailsAtMost.bind_of_noBase (isQueryBoundP_chainStarts publicParam layer e) fun starts =>
       FailsAtMost.bind_of_noBase (ofFnInOrder_isQueryBoundP_zero _ _ fun _ =>
         isQueryBoundP_chain _ _ _ _ _ _ _ _) fun _ => FailsAtMost.pure (by simp)
 

@@ -213,8 +213,8 @@ theorem failsAtMost_prfGame (Q : ℕ) (adversary : ReasonAdversary) {r : ℕ}
   unfold prfGame failGameOf Internal.keyGenFrom
   rw [pure_bind]
   simp only [bind_assoc]
-  refine FailsAtMost.bind_of_noBase isQueryBoundP_publicParamOf fun pp => ?_
-  refine FailsAtMost.bind_of_noBase (isQueryBoundP_build pp .top _ _) fun top => ?_
+  refine FailsAtMost.bind_of_noBase isQueryBoundP_publicParamOf fun publicParam => ?_
+  refine FailsAtMost.bind_of_noBase (isQueryBoundP_build publicParam .top _ _) fun top => ?_
   simp only [pure_bind]
   -- The key of key generation keeps no tree.
   refine (FailsAtMost.bind (failsAtMost_run_failSignerOf Q _ (hr _) _
@@ -222,11 +222,11 @@ theorem failsAtMost_prfGame (Q : ℕ) (adversary : ReasonAdversary) {r : ℕ}
   rcases z with ⟨⟨forgery, sk'⟩, log⟩
   dsimp only
   rw [show verifyWith (hashOf (HashSpec.withDerivationsLift PrfInput HashOutput))
-      { root := top.value, publicParam := pp } forgery.message forgery.signature = _ from
+      { root := top.value, publicParam := publicParam } forgery.message forgery.signature = _ from
     verifyWith_hashD _ _ _]
   refine (FailsAtMost.bind (failA := fun _ => False) (ε₁ := 0) (ε₂ := 0)
     (FailsAtMost.of_withDerivationsLift
-      (verifyWith queryH { root := top.value, publicParam := pp } forgery.message
+      (verifyWith queryH { root := top.value, publicParam := publicParam } forgery.message
         forgery.signature : OracleComp XmssSecurity.OracleWorld Bool))
     fun v _ => ?_).mono_bound (add_zero _).le
   exact FailsAtMost.pure (fail := SomeFailure) (a := (forgery, log, v)) hz

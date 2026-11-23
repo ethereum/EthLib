@@ -92,13 +92,13 @@ Returns nothing when the signed digest is not a codeword.
 - `e`: the signing key's index on its layer.
 - `msg`: the 32-byte message on the bottom layer, a 16-byte root on the top. -/
 def layerRoot {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
-    (pp : PublicParam) (layer : Layer) (e : Nat) (msg : Array UInt64)
+    (publicParam : PublicParam) (layer : Layer) (e : Nat) (msg : Array UInt64)
     (sig : LayerSignature) : m (Option Digest) := do
   -- Recover the key's leaf from the one-time signature.
-  let some leaf ← otsLeaf H pp layer (UInt32.ofNat e) msg sig.randomizer sig.chainValues
+  let some leaf ← otsLeaf H publicParam layer (UInt32.ofNat e) msg sig.randomizer sig.chainValues
     | return none
   -- Climb the key's path to its tree's root.
-  return some (← fold H pp layer e leaf sig.path)
+  return some (← fold H publicParam layer e leaf sig.path)
 
 /-- `Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key.
 
@@ -107,16 +107,16 @@ A yes or a no, never a reason.
 Which step rejected a well-formed signature carries no consensus meaning. -/
 def verifyWith {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
     (pk : PublicKey) (msg : Message) (sig : Signature) : m Bool := do
-  let pp := pk.publicParam
+  let publicParam := pk.publicParam
   -- Step 1: `X = Tree.fold(0, idx, Ots.leaf(0, idx, m, rho^0, y^0), pi^0)`.
   --
   -- The bottom key signs the message, so its path reaches bottom tree `b`'s root.
-  let some bottomRoot ← layerRoot H pp .bottom sig.leafIndex.toNat msg.toArray sig.bottom
+  let some bottomRoot ← layerRoot H publicParam .bottom sig.leafIndex.toNat msg.toArray sig.bottom
     | return false
   -- Step 2: `X' = Tree.fold(1, b, Ots.leaf(1, b, X, rho^1, y^1), pi^1)`.
   --
   -- The top key `b` signs that root, so its path reaches the top root.
-  let some root ← layerRoot H pp .top (bottomTree sig.leafIndex) bottomRoot.toArray sig.top
+  let some root ← layerRoot H publicParam .top (bottomTree sig.leafIndex) bottomRoot.toArray sig.top
     | return false
   -- Step 3: accept exactly when neither `Ots.leaf` fails and `X' = root`.
   return decide (root = pk.root)
