@@ -806,11 +806,13 @@ private theorem foldlM_signed {fork : Fork} {env : Evm.BlockEnvironment fork}
     · rw [hEq]
       exact Or.inr ⟨n, e, rfl, hP⟩
 
-/-- A simulated body whose transactions agree with the real ones agrees with the real body. -/
+/-- A simulated body whose transactions agree with the real ones agrees with the real body.
+
+The simulation must keep the cap on the items of the block access list, as a real body does. -/
 private theorem applyBody_signed {fork : Fork} {config : ChainConfig}
     {env : Evm.BlockEnvironment fork} {header : Header fork} {txs : List Transaction}
     {ws : Since .shapella fork (List Withdrawal)} {start : State.BlockState}
-    {overrides : BodyOverrides} {output : BlockOutput fork}
+    {overrides : BodyOverrides} {output : BlockOutput fork} (hCap : overrides.itemCap = true)
     (hT : ∀ body out, applyTransactions env body (txs.map Transaction.unsigned) overrides =
       .ok out → applyTransactions env body txs = .ok out ∨
         ∃ i e, applyTransactions env body txs = .error (.invalidTransaction i e) ∧
@@ -823,6 +825,7 @@ private theorem applyBody_signed {fork : Fork} {config : ChainConfig}
         ((∃ s, overrides.senders i = some s ∧ e = .senderNotEoa s)
           ∨ ∃ codeHash, e = .missingCode codeHash) := by
   unfold applyBody at h ⊢
+  rw [hCap] at h
   obtain ⟨state, hState, h⟩ := bind_ok_iff.mp h
   obtain ⟨body, hBody, h⟩ := bind_ok_iff.mp h
   obtain ⟨out, hOut, h⟩ := bind_ok_iff.mp h
@@ -1235,7 +1238,7 @@ private theorem stateTransition_of_simulateBlock_or {chain chain' : BlockChain} 
       rcases hP with rfl | hP
       · exact Or.inl ⟨_, hs, rfl⟩
       · exact Or.inr hP
-  rcases applyBody_signed hTxs hOutput with hReal | ⟨i, e, hErr, hP⟩
+  rcases applyBody_signed rfl hTxs hOutput with hReal | ⟨i, e, hErr, hP⟩
   · left
     have hBody : runBody chain (⟨header, txs, [], fun _ => []⟩ : Block fork Transaction) =
         .ok ⟨output, { roots with transactions := root }⟩ := by

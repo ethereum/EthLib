@@ -188,6 +188,8 @@ structure BodyOverrides where
   precompiles : Address → Option Address := some
   /-- The rules of a transaction that the simulation lifts. -/
   lifted : LiftedRules := {}
+  /-- Whether the block access list must fit the gas limit, as EIP-7928 asks. -/
+  itemCap : Bool := true
 
 /-- Run the transaction `tx`, the `index`-th of its block, after the transactions before it.
 
@@ -284,14 +286,18 @@ structure BlockOutput (fork : Fork) extends BodyOutput fork where
 
 /-- The hash of the block access list of a body at `fork`, or none before Glamsterdam.
 
-The list must fit the gas limit `gasLimit` of the block, as EIP-7928 asks. -/
-def accessListHashOf (fork : Fork) (body : BodyState) (gasLimit : Nat) :
+With `itemCap`, the list must fit the gas limit `gasLimit` of the block, as EIP-7928 asks.
+
+Without it, as in a simulation without validation, the list is not checked.
+
+A built list always passes the other checks of a list alone: its order and its uniqueness. -/
+def accessListHashOf (fork : Fork) (body : BodyState) (gasLimit : Nat) (itemCap : Bool := true) :
     Except BlockError (Option Hash32) := do
   if fork ≥ .glamsterdam then
     -- The block access list, from the reads and writes of the body.
     let bal := body.builder.build
-    -- The list must fit the gas limit of the block.
-    (BlockAccessList.check bal gasLimit).mapError .blockAccessList
+    -- The list must fit the gas limit of the block, unless the simulation lifts the cap.
+    if itemCap then (BlockAccessList.check bal gasLimit).mapError .blockAccessList
     -- The hash of the list.
     --
     -- The body gives the hash, which the header check reads.
@@ -306,7 +312,9 @@ The system calls at the start run at position 0 of the block access list.
 
 The withdrawals and the requests run at position `n + 1`, after the last of `n` transactions.
 
-From Glamsterdam, the body then builds its block access list, which must fit the gas limit.
+From Glamsterdam, the body then builds its block access list.
+
+The list must fit the gas limit, unless a simulation lifts that cap.
 
 A simulation runs the transactions with its overrides. -/
 def applyBody {fork : Fork} (config : ChainConfig) (env : BlockEnvironment fork)
@@ -337,7 +345,7 @@ def applyBody {fork : Fork} (config : ChainConfig) (env : BlockEnvironment fork)
   let state ← onBlock body.block fun tx =>
     payRewards fork tx block.header.coinbase block.header.number ommers
   -- From Glamsterdam: the block access list, its gas limit check, then its hash.
-  let accessListHash ← accessListHashOf fork body block.header.gasLimit
+  let accessListHash ← accessListHashOf fork body block.header.gasLimit overrides.itemCap
   return { output with body := { body with block := state }, requests, accessListHash }
 
 /-! ## The checks -/

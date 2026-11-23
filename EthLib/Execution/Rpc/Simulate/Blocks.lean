@@ -17,7 +17,8 @@ A simulated block runs through the body of a real block, with the changes of the
 - each call runs as a transaction from its given sender, with no signature;
 - the cap at `2^32 - 1` on the gas limit never applies;
 - without validation, a call skips the nonce check and the caps at `2^24` of EIP-8037;
-- without validation, a call with a fee cap of 0 pays nothing for its gas.
+- without validation, a call with a fee cap of 0 pays nothing for its gas;
+- without validation, the block access list need not fit the gas limit.
 
 Its roots, its gas used, its hash and its size are computed as for a real block.
 
@@ -338,8 +339,10 @@ def simulateBlock (chain : BlockChain) (base : RecentBlock) (fork : Fork) (numbe
   -- The calls with their defaults, then the body of a real block with the overrides.
   let (filled, budget) ← fillCalls env validation precompiles body budget request.calls
   let senders := filled.map (·.2)
+  -- Without validation, the block access list need not fit the gas limit, as a fixture shows.
   let overrides : BodyOverrides :=
-    { senders := (senders[·]?), precompiles, lifted := simulateLifted validation }
+    { senders := (senders[·]?), precompiles, lifted := simulateLifted validation
+      itemCap := validation }
   let block : Block fork Transaction :=
     ⟨header, filled.map (·.1), [], fun _ => o.withdrawals.getD []⟩
   let result ← (runBody chain block overrides blobGasPrice).mapError simulateBlockError

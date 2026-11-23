@@ -5934,6 +5934,7 @@ A simulated block differs from a real one in these places:
 - each call runs from its given sender with `r`, `s` and `yParity` 0, so it needs no signature and may come from an account with code;
 - no call fails for the code of its sender (`applyTransactions_ne_senderNotEoa`), so EthLib never gives `-38024`, which the method lists for a sender that is not an EOA;
 - the cap at `2^32 - 1` on the gas limit never applies, and without validation the nonce check and the caps at `2^24` of EIP-8037 do not either;
+- without validation, the block access list need not fit the gas limit;
 - without validation, a call whose fee cap is 0 pays nothing for its gas, apart from its blob gas, even below a base fee that the request sets;
 - the overrides of the accounts change the state before the block, and are not in its access list;
 - the default gas of a call follows the gas that its block has used, within a global budget of 50,000,000 that each call spends, and a call that overspends it gets `-38026`.
@@ -5969,6 +5970,7 @@ Where the source is silent or conflicts with itself for the blocks, EthLib follo
 - a nonce at `2^64 - 1` gets `-32603`, as the fixtures show;
 - a call that does not fit the gas or the blob gas left gets `-38015`, and a rule without a code of its own gets `-32602`;
 - without validation, a fee cap of 0 passes at any base fee, as a fixture shows at a base fee of 10;
+- without validation, the block access list need not fit the gas limit, as a fixture shows at a gas limit of 1004, where the bound of [EIP-7928](https://eips.ethereum.org/EIPS/eip-7928#block-access-list-size-constraint) allows no item, though the notes say that the list otherwise follows EIP-7928 without change; with validation it must, since the simulation then makes the checks of a real block;
 - a nonzero fee cap below the base fee still gets `-38012`;
 - a blob fee cap below a base fee per blob gas that the request sets still fails, with `-32602`;
 - the base block must be canonical, so that the hashes before each block are those of its chain;
@@ -5982,12 +5984,8 @@ Where the source is silent or conflicts with itself for the blocks, EthLib follo
 - no fixture of the pin covers the `0xeeee…eeee` logs, since every simulated block of the fixtures is from Glamsterdam, so hand-built tests check them;
 - a revert error has the message "execution reverted", without the decoded reason that the fixtures add.
 
-Two fixtures at the commit that `tests/sources.toml` pins disagree with EthLib, and the tests expect them to fail:
+One fixture at the commit that `tests/sources.toml` pins disagrees with EthLib, and the tests expect it to fail:
 
-- `ethSimulate-override-all-in-BlockStateCalls` sets the gas limit of a Glamsterdam block to 1004.
-  [EIP-7928](https://eips.ethereum.org/EIPS/eip-7928#specification) allows at most `gasLimit / 2000` items in the block access list, here none, and the system calls at the start of the block record accesses.
-  So EthLib finds the block invalid and answers `-32603`, while the fixture returns the block.
-  The notes do not say whether a simulation without validation keeps this bound.
 - `ethSimulate-override-precompile-code-without-move` gives code to the address of a precompile without moving the precompile.
   The [state override schema](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/execute.yaml) at that commit says that such code replaces the precompile, as the fixture shows.
   EthLib runs the precompile at its address, so the call returns its input instead of the result of the new code.
