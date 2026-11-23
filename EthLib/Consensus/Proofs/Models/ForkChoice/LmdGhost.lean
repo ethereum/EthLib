@@ -603,4 +603,49 @@ theorem weight_withBoost_add_le {p c c' : β} (hc : T.IsChild c p) (hc' : T.IsCh
     exact (hc.disjoint hc' hne hm hm'').elim
   all_goals omega
 
+variable (T V) in
+open scoped Classical in
+/-- The validators of `V` whose latest message conflicts with `b`, for the given latest messages.
+
+Their message is neither in the chain of `b` nor in its subtree. -/
+noncomputable def conflicting (latest : ν → Option β) (b : β) : Finset ν :=
+  {v ∈ V | ∃ m, latest v = some m ∧ ¬T.Ancestor m b ∧ ¬T.Ancestor b m}
+
+/-- The boost keeps LMD-GHOST in the subtree of the boosted block, against light conflicting votes.
+
+Take a block `b` of the view, and a block `a` in its chain.
+
+The boost goes to `b`, and the conflicting votes weigh less than its score.
+
+Then LMD-GHOST from `a` returns a block in the subtree of `b`.
+
+At each fork on the way, the child towards `b` weighs at least the score.
+
+Each other child weighs only conflicting votes. -/
+theorem ancestor_ghost_withBoost {a b : β} {score : ℕ} (hb : b ∈ G.blocks) (hab : T.Ancestor a b)
+    (light : stake w (conflicting T V G.latest b) < score) :
+    T.Ancestor b (ghost V.insertNone (boostStake w score) (G.withBoost (some b)) root a) := by
+  classical
+  refine ancestor_ghost_of_heavier _ _ _ root hb hab fun c hac hcb hca c' hc' hne => ?_
+  have hc := hac.isChild_parent hca
+  have hc'' := (mem_children.mp hc').2
+  -- No message in the subtree of the sibling is in the chain or in the subtree of `b`.
+  have off : ∀ {m}, T.Ancestor c' m → ¬T.Ancestor m b ∧ ¬T.Ancestor b m := fun hm =>
+    ⟨fun hmb => hc.disjoint hc'' hne.symm hcb (hm.trans hmb),
+      fun hbm => hc.disjoint hc'' hne.symm (hcb.trans hbm) hm⟩
+  -- So the sibling gets no boost, and its supporters all conflict with `b`.
+  have sibling : weight V.insertNone (boostStake w score) (G.withBoost (some b)) c' ≤
+      stake w (conflicting T V G.latest b) := by
+    rw [weight_withBoost, ite_eq_right fun ⟨m, hm, hc'm⟩ => (off (Option.some.inj hm ▸ hc'm)).1
+      (.refl _), Nat.add_zero]
+    refine stake_mono fun v hv => ?_
+    simp only [supporters, conflicting, Finset.mem_filter] at hv ⊢
+    obtain ⟨hv, m, hm, hc'm⟩ := hv
+    exact ⟨hv, m, hm, off hc'm⟩
+  -- The child towards `b` gets the boost.
+  have towards : score ≤ weight V.insertNone (boostStake w score) (G.withBoost (some b)) c := by
+    rw [weight_withBoost, ite_eq_left ⟨b, rfl, hcb⟩]
+    exact Nat.le_add_left _ _
+  omega
+
 end EthLib.Consensus.Models.ForkChoice
