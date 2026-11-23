@@ -432,7 +432,7 @@ Each votes for the target before the next epoch, unless two honest stores collid
 
 It assumes the honest count, and honest heads above a block of the epoch until the next one.
 
-From Gloas, it assumes honest held block states' registries within the limit up to the bound. -/
+From Gloas, it assumes honest held block states' registries within the limit up to `time`. -/
 theorem Execution.honestTargetVotes_signed_of_checked {anchor : Store preset fork} {Δ time : ℕ}
     {margin : ℕ} (slots : 0 < config.SLOT_DURATION_MS)
     (retained : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)

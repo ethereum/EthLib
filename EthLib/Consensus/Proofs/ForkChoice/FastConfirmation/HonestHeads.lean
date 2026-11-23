@@ -791,6 +791,8 @@ private theorem Execution.activeEquivocatorsRegistered_or_evidence {anchor : Sto
 /-- Honest justified states up to time `last` bound each weight of the weak-head test by `cap`.
 
 Each set of their validators that are active or known to the store to equivocate weighs at most it.
+
+It is an assumption on the run, and a cap at least the supply of ether satisfies it.
 -/
 def CheckpointHeadWeightCeiling (cap last : ℕ) : Prop :=
   ∀ w ∈ J, ∀ k (state : BeaconState preset fork), (e.world k).time ≤ last →
@@ -807,7 +809,7 @@ The anchor's registry must leave room up to the horizon.
 
 Every honest justified state must bound each weight of the weak-head test by `2 * 10^17` Gwei.
 
-That is each set of its validators that are active or known to equivocate.
+Those weights are stakes of sets of its validators that are active or known to equivocate.
 
 The committee windows must fit, and the proposer boost and the head reads must fit that cap.
 
@@ -871,11 +873,13 @@ Otherwise two honest stores collide by `last`, or direct-safety evidence holds.
 
 The evidence is relative to the anchor.
 
-Before Gloas it rests on the active-stake ceiling; from Gloas on the Gloas premises.
+Before Gloas it rests on the active-stake ceiling and the seed bound.
 
-From Gloas it needs the anchor's registry room and the bound on each weight of the weak-head test.
+It takes those two at every fork.
 
-It also needs the head-weight and committee-window bundles.
+From Gloas it rests on the anchor's registry room and a bound on each weight of the weak-head test.
+
+From Gloas it also needs the head-weight and committee-window bundles.
 
 The claim holds from every start time. -/
 theorem Execution.honestHeadsExist_or_evidence_of_gated {Δ : ℕ} (sync : e.Synchronous Δ)
@@ -916,7 +920,7 @@ theorem Execution.honestHeadsExist_or_evidence_of_gated {Δ : ℕ} (sync : e.Syn
 
 From Gloas it needs the anchor's registry room and the bound on each weight of the weak-head test.
 
-It also needs the head-weight and committee-window bundles.
+From Gloas it also needs the head-weight and committee-window bundles.
 
 Otherwise two honest stores collide by `last`, or direct-safety evidence holds.
 

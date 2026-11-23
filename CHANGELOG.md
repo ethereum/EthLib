@@ -44,7 +44,7 @@ Not yet released.
   `DirectSafety.genesisValidatorsRoot_chainSteps` (`DirectSafety/Signatures.lean`) is new: steps of a chain keep the genesis validators root.
   `effectiveBalanceSum_eq_of_effectiveKept` (`Totality/SupplyBlock.lean`) is new: a step that keeps the size of the registry and each effective balance keeps their sum.
 
-- `Store.getAncestor_pending_root` and `Store.isAncestor_of_getAncestor_root` (`ForkChoice/Store.lean`) are public.
+- `Store.getAncestor_pending_root` and `Store.isAncestor_of_getAncestor_root` (`ForkChoice/Store.lean`) are new.
   The first says that a walk from any node to a slot reaches the same root from that node's pending node.
   The second says that a walk from a pending start to a known block's slot that reaches that block's root gives descent to its pending node.
 
@@ -61,11 +61,13 @@ Not yet released.
 - `Store.HeadWeightAtMost` (`ForkChoice/HeadTotality.lean`) bounds the stake of every set of validators of a state that are active or known to equivocate: the weights that the weak-head test reads.
   `CheckpointHeadWeightCeiling` (`ForkChoice/FastConfirmation/HonestHeads.lean`) asks it of every honest justified state up to a time.
   It is the Gloas head endpoint's stake bound, restricted to the validators that the weak-head test reads.
+  `Store.headWeightAtMost_of_effectiveBalanceSum_le` derives it from a bound on the registry's effective-balance sum.
   `Execution.honestHeadsExist_or_evidence_of_gated` gives honest heads at every fork, from the pre-Gloas premises before Gloas and the Gloas ones, gated, from Gloas.
+  It takes the active-stake ceiling and the seed bound at every fork.
 
-- `Store.getCheckpointBlock_of_descendant` (`ForkChoice/Store.lean`) shows that a block below a descendant reads the descendant's checkpoint block, at an epoch whose first slot is at or before the block.
+- `Store.getCheckpointBlock_of_descendant` (`ForkChoice/Store.lean`) shows that an ancestor of a tip reads the tip's checkpoint block, at an epoch whose first slot is at or before the ancestor.
   It is the converse of `Store.getCheckpointBlock_of_isAncestor`.
-  `Store.isPreviousSlotPayloadDecision_eq_false` (`ForkChoice/Head.lean`) shows that a pending node, or a node of a block older than the previous slot, is no payload decision of the previous slot.
+  `Store.isPreviousSlotPayloadDecision_eq_false` (`ForkChoice/Head.lean`) shows that a pending node, or a node of a block not from the previous slot, is no payload decision of the previous slot.
 
 - `Store.isAncestor_getSupportedNode` (`ForkChoice/Head.lean`) shows that a supported node descends from a pending node exactly as the vote's block does, at every fork.
 
@@ -74,7 +76,7 @@ Not yet released.
 
 - `honestRegistries_of_gated` (`ForkChoice/FastConfirmation/HistoricalStatements.lean`) gives the honest registry bound at every fork from its Gloas form; before Gloas the type of the registry bounds it.
 
-- `Store.FullParentsVerified` (`ForkChoice/PayloadGhost.lean`) says that, from Gloas, each held block that builds on a held full parent finds its payload verified.
+- `Store.FullParentsVerified` (`ForkChoice/PayloadGhost.lean`) says that, from Gloas, each held block that builds on a held full parent finds the parent's payload verified.
   `Store.Reachable.fullParentsVerified` (`ForkChoice/StoreEntries.lean`) proves it for a reachable store that holds no block at the anchor's parent root.
   `Store.onBlock_validateParentPayload` (`ForkChoice/Handlers.lean`) shows that a new block the handler accepts passed the check of its parent's payload.
 
@@ -1110,21 +1112,21 @@ Not yet released.
   The new statements imply the old ones.
 
 - In Lean, `receiver_fullMaximum_of_head_window` holds at every fork.
-  It no longer takes `early : fork < .glamsterdam`; it takes `registries : .glamsterdam ≤ fork → HonestRegistriesWithinLimit time` in its place.
+  It no longer takes `early : fork < .glamsterdam`; it takes `registries : .glamsterdam ≤ fork → HonestRegistriesWithinLimit time` after `ceiling`.
   Migration: before Gloas, pass `fun gloas => absurd gloas (Nat.not_le_of_lt early)`.
   The new statement implies the old one.
 
 - In Lean, `Store.getHead_exists_of_gloas` no longer takes `supply : effectiveBalanceSum state ≤ 2 * 10 ^ 17`.
   It takes `heads : store.HeadWeightAtMost (2 * 10 ^ 17) state` in its place, and derives the active-stake bound from it.
   `Execution.honestHeadsExist_or_evidence_of_gloas` takes `heads : CheckpointHeadWeightCeiling (2 * 10 ^ 17) last` in place of `supply : CheckpointRegistryStakeCeiling (2 * 10 ^ 17) last`.
-  Migration: derive `heads` from the old bound: the stake of any set of validators is at most the registry's effective-balance sum.
+  Migration: derive `heads` from the old bound with `Store.headWeightAtMost_of_effectiveBalanceSum_le`, pointwise for the ceiling.
   The new statements imply the old ones.
 
 - In Lean, `CheckpointRegistryStakeCeiling` (`ForkChoice/FastConfirmation/HonestHeads.lean`, added earlier in 0.4.0) is removed: after the change of `Execution.honestHeadsExist_or_evidence_of_gloas` it had no reader.
-  Migration: state `CheckpointHeadWeightCeiling` instead; a bound on each honest justified state's effective-balance sum implies it.
+  Migration: state `CheckpointHeadWeightCeiling` instead; a bound on each honest justified state's effective-balance sum implies it, by `Store.headWeightAtMost_of_effectiveBalanceSum_le`.
 
 - In Lean, `Execution.callRolloverRead_or_evidence`, `Execution.honestHeadsCover_of_checked_call` and `Execution.rootViable_of_checked_call` hold at every fork and no longer take `preGloas : fork < .glamsterdam`.
-  They take `room`, `weights` and `supply` gated from Gloas as their last arguments, and `callRolloverRead_or_evidence` also a gated `fit`.
+  They take `room`, `weights` and `supply` gated from Gloas as their last arguments, and `Execution.callRolloverRead_or_evidence` also a gated `fit`.
   Their `supply` has the type `CheckpointHeadWeightCeiling (2 * 10 ^ 17) _`, the bound that the Gloas head endpoint now reads.
   Migration: drop `preGloas` and pass `fun gloas => absurd gloas (Nat.not_le_of_lt preGloas)` for each gated argument.
   The new statements imply the old ones.

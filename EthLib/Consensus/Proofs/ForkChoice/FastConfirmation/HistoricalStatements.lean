@@ -199,7 +199,9 @@ def CheckpointStakeCeiling (cap last : Nat) : Prop :=
 
 /-! ## From Gloas: honest registries stay within the limit -/
 
-/-- Honest held block states and justified states have their registries within the limit. -/
+/-- Honest held block states and justified states have their registries within the limit.
+
+This holds for each honest store at each event up to time `last`. -/
 def HonestRegistriesWithinLimit (last : ℕ) : Prop :=
   ∀ w ∈ J, ∀ k, (e.world k).time ≤ last →
     HeldRegistriesWithinLimit ((e.world k).state w) ∧

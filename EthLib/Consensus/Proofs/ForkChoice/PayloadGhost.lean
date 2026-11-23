@@ -1623,7 +1623,7 @@ private theorem NodePath.mem_filterNodeTree {node leaf : ForkChoiceNode}
     simpa [viable, bind, Except.bind, pure, Except.pure] using belowOk.symm
   exact lift leaf (result ▸ List.mem_singleton_self leaf)
 
-/-- From Gloas, each held block that builds on a held full parent finds its payload verified. -/
+/-- From Gloas, a held block built on a held full parent finds the parent's payload verified. -/
 def FullParentsVerified (store : Store preset fork) (gloas : .glamsterdam ≤ fork) : Prop :=
   ∀ (root : Root) (block parent : BeaconBlock preset fork),
     store.blocks[root]? = some block → store.blocks[block.parentRoot]? = some parent →

@@ -680,12 +680,38 @@ private theorem tiebreaker_exists_of_gloas {anchorState : BeaconState preset for
 variable (store) in
 /-- Every set of validators active in a state or known to equivocate weighs at most a cap there.
 
-The weak-head test of the head adds these weights. -/
+The store says which validators are known to equivocate.
+
+The weak-head test adds such weights: the votes for a block and the equivocators of its committees.
+-/
 def HeadWeightAtMost (cap : ℕ) (state : BeaconState preset fork) : Prop :=
   ∀ T : Finset ValidatorIndex, (∀ v ∈ T,
       v ∈ (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset ∨
         v ∈ store.equivocatingIndices) →
     stake (fun v => balanceAt state v.toNat) T ≤ cap
+
+variable (store) in
+/-- A cap on the effective balances of a whole registry caps each weight of the weak-head test.
+
+Any set of validators weighs at most the sum of the registry's effective balances. -/
+theorem headWeightAtMost_of_effectiveBalanceSum_le {cap : ℕ} {state : BeaconState preset fork}
+    (supply : effectiveBalanceSum state ≤ cap) : store.HeadWeightAtMost cap state := by
+  intro T _
+  refine le_trans ?_ supply
+  have whole : stake (balanceAt state) (Finset.range state.validators.data.size) =
+      effectiveBalanceSum state := by
+    rw [effectiveBalanceSum_eq_sum_range, stake, ← List.sum_toFinset _ List.nodup_range]
+    congr 1
+    ext
+    simp
+  rw [← whole]
+  unfold stake
+  rw [← Finset.sum_image (f := balanceAt state) (g := UInt64.toNat)
+    (fun a _ b _ same => UInt64.toNat_inj.mp same)]
+  -- A position outside the registry weighs nothing.
+  refine Finset.sum_le_sum_of_ne_zero fun n _ nonzero => Finset.mem_range.mpr ?_
+  refine Nat.lt_of_not_le fun outside => nonzero ?_
+  simp [balanceAt, Array.getElem?_eq_none outside]
 
 /-- The equivocator weight of some validators sums the stake of each equivocator among them. -/
 private theorem equivocatorWeight_eq (equivocators : List ValidatorIndex)

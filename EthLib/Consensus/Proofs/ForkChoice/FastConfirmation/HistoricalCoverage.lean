@@ -589,9 +589,11 @@ public theorem Execution.honestHeadsCover_of_viableAt [DecidablePred (· ∈ J)]
       -- The receiver's clock is at or past the caller's, so the block is before its slot.
       have slotLe := e.currentSlot_le_of_time_le start caller receiver lowK upToDate slotOk
         currentOk
-      -- Otherwise the root is a viable node above the justified block, so the head read its state.
+      -- Otherwise the root is a viable strict descendant of the justified block.
 
-      -- From Gloas the justified block is above the root, so older than the previous slot.
+      -- So the head read the justified state.
+
+      -- From Gloas the justified block is then older than the previous slot.
       have viable := route.resolve_left settled
       have notJustified : (⟨root, .pending⟩ : ForkChoiceNode) ≠
           ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ := fun same => settled (by

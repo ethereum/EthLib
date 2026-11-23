@@ -3665,10 +3665,10 @@ The caller's store is up to date at a slot start of the target's epoch, and its 
 The theorem concludes that honest validators with two thirds of the pulled-up head state's active balance each sent a `SignsTarget` statement.
 Each sent it before the start of the next epoch.
 Three times their stake is at least twice that balance plus the margin of the count.
-It holds at every fork; from Gloas it assumes that the honest stores' held block states' registries stay within the limit up to the bound.
 Each of them lies in `activeVoters` of that state, the validators active in its current epoch.
 Otherwise the theorem names two honest stores, up to the horizon, whose blocks collide at one root.
 It does not show that a later state counts these votes, or that the target is justified.
+The theorem holds at every fork; from Gloas it also assumes that every honest store's held block states have their registries within the limit up to `time`.
 `HonestTargetVotes` stands in for a bound on Byzantine stake and remains a hypothesis.
 `HonestHeadsCover` assumes that every up-to-date honest head descends from a block of the target's epoch, from the call through the start of the next epoch.
 `HeldBlockStateRootsNonzero` assumes that their blocks have nonzero state roots.
@@ -3676,7 +3676,7 @@ Block agreement between honest stores is not assumed: `Store.blocks_agree_or_col
 `CallerHeadAt` assumes that at the start of the next epoch the caller's up-to-date store has a head.
 The theorem assumes this read, since its conclusion has no evidence alternative.
 `Execution.callRolloverRead_or_evidence` in `Consensus/Proofs/ForkChoice/FastConfirmation/HonestHeads.lean` derives it for the caller of a checked call at every fork, up to a collision of two honest stores or `HistoricalDirectSafetyEvidence` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
-From Gloas it takes, gated on Gloas: the anchor registry's room (`AnchorRegistryRoom`), `Config.HeadWeightsFit`, `CheckpointHeadWeightCeiling` and `Config.CommitteeWindowsFit`.
+It also takes, gated on Gloas, the anchor registry's room (`AnchorRegistryRoom`), `Config.HeadWeightsFit`, `CheckpointHeadWeightCeiling` and `Config.CommitteeWindowsFit`.
 The window of that head over the target's epoch is derived: the theorem takes `Config.CommitteeWindowsFit` and reads it through `Store.getCommitteesBetweenSlots_exists`.
 The head's state is held, and the window ends before the current slot.
 The theorem also assumes `AssignmentWindowAgreement`, `ValidatedDutyVotes`, `Prompt` and `DelayFits`.
@@ -3688,7 +3688,8 @@ The alternatives are a collision between blocks held by honest stores, or accoun
 That evidence is `HistoricalDirectSafetyEvidence`, `CrossStoreJustifiedEvidence` or `HeldStateFinalityEvidence`.
 Each such store has a head, by `Execution.honestHeadsExist_or_evidence` in `HonestHeads.lean`, up to the same alternatives ([#2060](https://github.com/ethereum/EthLib/issues/2060), for pre-Gloas forks).
 It reads `CheckpointStakeCeiling`, `ProposerScoreFits`, the bound of `Config.CommitteeWindowsFit.seeds` on the epoch of the largest 64-bit time and the network and duty premises that the headline already takes.
-From Gloas the store has a head by `Execution.honestHeadsExist_or_evidence_of_gated` instead, which also reads the anchor registry's room, `Config.HeadWeightsFit` and `CheckpointHeadWeightCeiling`; the per-call theorems take these three gated from Gloas.
+From Gloas the store has a head by `Execution.honestHeadsExist_or_evidence_of_gated` instead.
+That theorem also reads the anchor registry's room, `Config.HeadWeightsFit` and `CheckpointHeadWeightCeiling`, which the per-call theorems take gated from Gloas.
 `CheckpointHeadWeightCeiling` is the Gloas head endpoint's stake bound, restricted to the validators that the weak-head test reads: those active or known to equivocate.
 The store holds its justified state because an honest vote for that checkpoint reaches it by the next slot and is accepted.
 So the store holds its justified block, and its filtered tree computes without error.

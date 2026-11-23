@@ -2399,7 +2399,7 @@ The caller's window reserve and the receiver's exit bound read one reserve value
 
 The receiver's justified block may instead descend from the block.
 
-Bounded honest stores may instead collide, or `HistoricalDirectSafetyEvidence` holds.
+Bounded honest stores may instead collide, or historical direct-safety evidence holds.
 
 From Gloas, honest registries must stay within the limit through `time`. -/
 public theorem Execution.source_surplus_or_historical_evidence_with [DecidablePred (· ∈ J)]

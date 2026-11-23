@@ -523,7 +523,7 @@ private theorem mem_window_of_mem_supporters {since last n : Nat} {u : Validator
       horizon, firstOk, lastOk, window, origin, voteDescends, low, high⟩
 
 open Models.ForkChoice in
-/-- From Gloas, every supporter of a node strictly below the parent's pending node is in the window.
+/-- From Gloas, each supporter of a strict descendant of the parent's pending node is in the window.
 
 Its vote is for the parent with a payload status after the parent's slot, or for a later block. -/
 private theorem mem_window_of_mem_nodeSupporters {since last n : Nat} {u : ValidatorIndex}
@@ -724,9 +724,9 @@ private theorem eq_of_path_two {β : Type} {T : BlockTree β} {start mid target 
     exact up.antisymm low
 
 open Models.ForkChoice in
-/-- From Gloas, a counted voter with a clean vote for a node supports its ancestors in the model.
+/-- From Gloas, a counted voter whose clean vote is for a descendant of a node supports that node.
 
-The model is the tree of nodes. -/
+The support is read in the tree of nodes. -/
 private theorem toNat_mem_nodeSupporters {store : Store preset fork}
     (lower : store.ParentsBelow) (gloas : .glamsterdam ≤ fork)
     {state : BeaconState preset fork} {nodes : List ForkChoiceNode}
@@ -755,7 +755,7 @@ private theorem toNat_mem_nodeSupporters {store : Store preset fork}
     simp [Store.latestNode, latest, notIn, supportedOk, Except.toOption]
 
 open Models.ForkChoice in
-/-- From Gloas, a clean latest vote supports only the ancestors of the node it supports. -/
+/-- A clean latest vote supports only the ancestors of the node it supports. -/
 private theorem ancestor_of_mem_nodeSupporters {store : Store preset fork}
     {lower : store.ParentsBelow} {state : BeaconState preset fork} {nodes : List ForkChoiceNode}
     {v : ValidatorIndex} {message : LatestMessage fork} {supported : ForkChoiceNode}
@@ -773,7 +773,7 @@ private theorem ancestor_of_mem_nodeSupporters {store : Store preset fork}
   exact vote ▸ above
 
 open Models.ForkChoice in
-/-- Validators that each support a model node have the stake of their indices there. -/
+/-- The stake of validators that each support a model node is at most that node's weight. -/
 private theorem stake_le_of_mem_supporters {β : Type} {T : BlockTree β}
     (G : Models.ForkChoice.View ℕ β T) {state : BeaconState preset fork}
     {X : Finset ValidatorIndex} {x : β}
@@ -800,7 +800,9 @@ It passes the node of the status that the block builds on.
 
 The margin counts the window, the score, twice the honest supporters and the honest parent voters.
 
-Every competing voter is a window member outside those sets, and the boost is at most the score. -/
+Every competing voter is a window member outside those sets, and the boost is at most the score.
+
+It also gives the block's honest supporters positive stake, and the path child positive weight. -/
 private theorem sibling_bound_of_window_margin [DecidablePred (· ∈ J)]
     {store : Store preset fork} (lower : store.ParentsBelow) (gloas : .glamsterdam ≤ fork)
     {state : BeaconState preset fork} (within : state.RegistryWithinLimit)
@@ -1306,7 +1308,7 @@ public theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
     · exact Nat.zero_le _
     · simp [Store.getProposerScore, stateRead, scoreOk, bind, Except.bind]
   by_cases gloas : .glamsterdam ≤ fork
-  · -- From Gloas the head's walk passes the parent's pending node; W1 runs from there.
+  · -- From Gloas the head's walk passes the parent's pending node, where the path bound applies.
     have headDescends : store.isAncestor ⟨head.root, .pending⟩ ⟨block.parentRoot, .pending⟩ =
         .ok true := by
       rw [← Store.isAncestor_getHead_root headRead]
@@ -1353,7 +1355,7 @@ public theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
           (.inr (by omega))
       · exact Store.isPreviousSlotPayloadDecision_eq_false found slotRead (by omega)
           (.inl (PayloadStatus.toStatus_injective statusEq))
-    -- The justified pending node is above the block's; at the block itself the head is above it.
+    -- The block descends from the justified node; when they coincide, the head descends from it.
     have closed := Store.filterNodeTree_closed (T := Store.nodeTree lower) (·.toModel) tree
       fun _ _ _ ok _ mem => Store.isChild_of_mem_getNodeChildren gloas ok mem
     have rootBelow : (Store.nodeTree lower).Ancestor (some store.justifiedCheckpoint.root, none)

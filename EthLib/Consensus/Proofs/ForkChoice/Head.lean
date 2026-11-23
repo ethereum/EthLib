@@ -859,7 +859,7 @@ theorem getAttestationScore_ok_of_getHead (before : fork < .glamsterdam)
 
 /-- A pending node is no payload decision of the previous slot.
 
-Neither is a node of a block older than the previous slot. -/
+Neither is a node of a block whose slot is not the previous slot. -/
 theorem isPreviousSlotPayloadDecision_eq_false {node : ForkChoiceNode}
     {block : BeaconBlock preset fork} {current : Slot}
     (found : store.blocks[node.root]? = some block)
@@ -880,9 +880,11 @@ theorem isPreviousSlotPayloadDecision_eq_false {node : ForkChoiceNode}
       exact differ (by rw [← nextNat, same])
     simp [ne]
 
-/-- A head with a viable node other than the justified block's pending node has read its state.
+/-- A head with a viable node besides the justified block's pending node read the justified state.
 
-The node may be a payload node of the justified block; this holds at every fork.
+This holds at every fork.
+
+From Gloas the node may be a payload node of the justified block.
 
 From Gloas the justified block must be older than the previous slot.
 

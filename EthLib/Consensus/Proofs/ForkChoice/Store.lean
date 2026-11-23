@@ -667,9 +667,9 @@ theorem getCheckpointBlock_walk_root {root checkpoint : Root} {epoch : Epoch}
   obtain ⟨start, startOk, ancestor, walk, eq⟩ := read
   exact ⟨start, ancestor, mapError_ok_iff.mp startOk, walk, eq⟩
 
-/-- A block below a descendant reads the descendant's checkpoint block at an earlier epoch.
+/-- An ancestor of a tip reads the tip's checkpoint block at an epoch.
 
-The epoch's first slot must be at or before the block. -/
+That epoch's first slot must be at or before the ancestor. -/
 theorem getCheckpointBlock_of_descendant {tip below checkpoint : Root}
     {belowBlock : BeaconBlock preset fork} {epoch : Epoch} {start : Slot}
     (belowFound : store.blocks[below]? = some belowBlock)
