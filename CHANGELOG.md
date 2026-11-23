@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `getPendingAttestingIndices_lt` in `Proofs.Transition.EpochJustification` says that each attester of a pending attestation is in the registry, at every fork.
+  It was a private Phase 0 lemma of the upgrade to Altair.
+  The totality of the unslashed signers and the upgrade to Altair read it.
+
 - The fresh-slot facts of a change of an account, of new code and of a record of a read are now shared lemmas ([#4235](https://github.com/ethereum/EthLib/issues/4235), second part).
   `TransactionState.freshSlots_modifyState`, `freshSlots_setCode` and `freshSlots_recordAccountRead` in `EthLib.Execution.Proofs.State.FreshSlots` are new public lemmas, taken from private copies in `EthLib.Execution.Proofs.Transactions.StateGasUsed`.
   The new lemma `StateGasMeter.stateGasUsed_absorb_sub` in `EthLib.Execution.Proofs.Evm.Gas.StateGas` gives the net state gas of any merge of a child, and `stateGasUsed_absorb` now follows from it.
@@ -938,6 +942,10 @@ Not yet released.
   `ValidatorStep`, `PinDriftBound.CreditBudgets` and `PinDriftBound.PreviousEpochRise` use it.
 
 ### Changes that break callers
+
+- In Lean, `getUnslashedAttestingIndices_exists_ok` drops its premise that the registry stays within its limit, which its proof did not read.
+  Committee membership alone puts each signer in the registry, by `getPendingAttestingIndices_lt`.
+  Migration: delete the `within` argument.
 
 - The TLS 1.3 key schedule names its Main Secret as [RFC 9846 §7.1](https://www.rfc-editor.org/rfc/rfc9846#section-7.1) does, where it kept the Master Secret of RFC 8446 ([#4242](https://github.com/ethereum/EthLib/issues/4242)).
   In Python, the field `master` of `KeySchedule` is now `main`; the tuple keeps its order, so positional reads are unchanged.
