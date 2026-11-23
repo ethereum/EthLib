@@ -46,7 +46,9 @@ Take a block within the limits, at a later slot in the same epoch, whose body ho
 
 Suppose the steps before that slashing succeed; the count checks of the operations are not read.
 
-Then at the state they reach the slashing meets these and succeeds, or its validator is already slashed.
+Then at the state they reach the slashing meets these and succeeds.
+
+Otherwise its validator is already slashed there.
 
 Both cases are under that inclusion and that success; nothing is said when either fails.
 -/
@@ -155,7 +157,7 @@ theorem processAttesterSlashing_single_eq_slashValidator_run {config : Config}
     secondDomained secondRooted firstSignature secondSignature firstVerified secondVerified
     run.genesisValidatorsRoot windowFirst windowSecond found keyEq slashable attesters
 
-/-! ## A slashing in a block of a key not yet withdrawable -/
+/-! ## A slashing in a block of a key activated and not yet withdrawable -/
 
 /-- Two attestation data that the test of slashable votes flags, each with a signing root.
 
@@ -182,7 +184,7 @@ structure VotePairAt (config : Config) (checks : SignatureChecks) (g : ForkedBea
   /-- The second reference state reads the second version at the second data's target epoch. -/
   read2 : z2.state.forkVersions.versionAt d2.target.epoch = config.forkVersion f2
 
-/-- Slots inside the epoch of the first state keep its fork and its registry. -/
+/-- Advancing to a slot still in the epoch of a state keeps its fork and its registry. -/
 private theorem validators_advanceSlotsAcross_of_epoch {config : Config}
     {checks : SignatureChecks} :
     ∀ (count : Nat) {x y : ForkedBeaconState preset},
@@ -220,7 +222,13 @@ private theorem validators_advanceSlotsAcross_of_epoch {config : Config}
     obtain ⟨last, rfl, same⟩ := validators_advanceSlotsAcross_of_epoch count rest restInside
     exact ⟨last, rfl, same⟩
 
-/-- A step keeps validators later and the lifecycle, and never clears a set slashed flag. -/
+/-- The registry of the second state is that of the first, aged.
+
+Each old validator keeps its index, its activation epoch and any assigned exit epoch.
+
+Once its exit is set, its withdrawable epoch only rises, and a set slashed flag stays set.
+
+New validators are not activated. -/
 private def Ages {fork : Fork} (a b : BeaconState preset fork) : Prop :=
   Lives a b ∧ RegistryLifecycle a b ∧ SlashedPersistence a b
 
@@ -272,7 +280,7 @@ private theorem ages_slashings {config : Config} {checks : SignatureChecks} {for
         .of_frame (frame_processAttesterSlashing ok).toFrame⟩)
       proposedAges attestersOk
 
-/-- The steps of a block through that prefix age the registry. -/
+/-- The steps of a block before its attester slashing at a position age the registry. -/
 private theorem ages_slashingTurn {config : Config} {checks : SignatureChecks} {fork : Fork}
     {engine : ExecutionEngine preset fork} {state turn : BeaconState preset fork}
     {block : BeaconBlock preset fork} {j : Nat}
