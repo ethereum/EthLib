@@ -62,8 +62,8 @@ theorem randomizerBase_queryH (publicParam : Xmss.PublicParam) (s : Xmss.Seed) (
     (Xmss.randomizerBase publicParam (Xmss.seedPrf queryH s) layer e msg :
       OracleComp HashSpec Xmss.Randomizer)
       = liftM (HashSpec.query
-          (Hash.Keccak.lanesBytes (Xmss.thInput publicParam (Xmss.addrRnd layer e)
-            (s.toArray ++ msg)))) >>=
+          (Hash.Keccak.lanesBytes
+            (Xmss.thInput publicParam (Xmss.CallSite.rnd layer e) (s.toArray ++ msg)))) >>=
         fun y => pure (ofRandomizer (y.extractLsb' 0 randomnessBits)) := by
   rw [Xmss.randomizerBase_seedPrf]
   unfold Xmss.th
@@ -74,14 +74,14 @@ theorem randomizerBase_queryH (publicParam : Xmss.PublicParam) (s : Xmss.Seed) (
 /-- The bottom randomizer base `R0(idx, m)` is the bottom derivation's input. -/
 theorem rndInput_toList (P : PublicParameter) (seed : MasterSeed) (index : LeafIndex)
     (message : Message) :
-    Hash.Keccak.lanesBytes (Xmss.thInput (ofParam P) (Xmss.addrRnd .bottom (ofLeafIndex index))
+    Hash.Keccak.lanesBytes (Xmss.thInput (ofParam P) (Xmss.CallSite.rnd .bottom (ofLeafIndex index))
       ((ofSeed seed).toArray ++ (ofMessage message).toArray))
       = rndInput P seed ⟨index, message⟩ := by
   rw [rndInput_eq]
   simp only [Xmss.thInput_eq_append,
     EthLib.Cryptography.Hash.Keccak.lanesBytes_append, Xmss.Unforgeability.toList_ofParam,
     Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_ofMessage,
-    Xmss.Unforgeability.toList_addrRnd, Xmss.Unforgeability.toNat_ofLeafIndex]
+    Xmss.Unforgeability.toList_encode_rnd, Xmss.Unforgeability.toNat_ofLeafIndex]
   -- The bottom layer adds no flag to `hi`.
   exact congrArg (fun x => bytesLE 16 P ++ fieldBytes (tweakFields 7 0 x index.val) ++
     (bytesLE 32 seed ++ bytesLE 32 message)) (by simp [Xmss.Layer.toNat])
@@ -89,14 +89,14 @@ theorem rndInput_toList (P : PublicParameter) (seed : MasterSeed) (index : LeafI
 /-- The top randomizer base `R0_top(b, r)` is the top derivation's input. -/
 theorem topRndInput_toList (P : PublicParameter) (seed : MasterSeed) (key : TopIndex)
     (root : Digest) :
-    Hash.Keccak.lanesBytes (Xmss.thInput (ofParam P) (Xmss.addrRnd .top (ofTopIndex key))
+    Hash.Keccak.lanesBytes (Xmss.thInput (ofParam P) (Xmss.CallSite.rnd .top (ofTopIndex key))
       ((ofSeed seed).toArray ++ (ofDigest root).toArray))
       = topRndInput P seed (key, root) := by
   rw [topRndInput_eq]
   simp only [Xmss.thInput_eq_append,
     EthLib.Cryptography.Hash.Keccak.lanesBytes_append, Xmss.Unforgeability.toList_ofParam,
     Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_ofDigest,
-    Xmss.Unforgeability.toList_addrRnd, Xmss.Unforgeability.toNat_ofTopIndex]
+    Xmss.Unforgeability.toList_encode_rnd, Xmss.Unforgeability.toNat_ofTopIndex]
   -- The top layer adds its flag to `hi`.
   exact congrArg (fun x => bytesLE 16 P ++ fieldBytes (tweakFields 7 0 x key.val) ++
     (bytesLE 32 seed ++ bytesLE 16 root)) (by simp [Xmss.Layer.toNat, topFlag])

@@ -84,15 +84,16 @@ variable {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4) (s : Seed
 /-- With the seed's derivations, the chain starts hash `P | A_prf(l, e, j) | S`. -/
 theorem chainStarts_seedPrf (publicParam : PublicParam) (layer : Layer) (e : UInt32) :
     chainStarts publicParam (seedPrf H s) layer e = (do
-      let pairs ← ofFnInOrder (V / 2) fun j => H (thInput publicParam (addrPrf layer e j) s.toArray)
+      let pairs ← ofFnInOrder (V / 2) fun j =>
+        H (thInput publicParam (CallSite.prf layer e j) s.toArray)
       return (pairs.flatMap fun p => #v[halfOf 0 p, halfOf 1 p]).cast (by decide)) := by
   simp only [chainStarts, seedPrf_empty]
 
 /-- With the seed's derivations, the randomizer base is `Th(P, A_rnd(l, e), S | M)`. -/
 theorem randomizerBase_seedPrf (publicParam : PublicParam) (layer : Layer) (e : UInt32)
     (msg : Array UInt64) :
-    randomizerBase publicParam (seedPrf H s) layer e msg = th H publicParam (addrRnd layer e)
-      (s.toArray ++ msg) :=
+    randomizerBase publicParam (seedPrf H s) layer e msg
+      = th H publicParam (CallSite.rnd layer e) (s.toArray ++ msg) :=
   rfl
 
 end SeedPrf

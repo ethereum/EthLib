@@ -74,25 +74,26 @@ theorem bytes_zero_lanes2 : (⟨0, 0⟩ : PublicParam).bytes = Vector.replicate 
 /-- `Th(P, A, M)` is the first 16 bytes of Keccak-256 of `P | A | M`.
 
 The payload `M` is the bytes of its lanes, each lane least significant byte first. -/
-theorem th_bytes (publicParam : PublicParam) (A : Address) (M : Array UInt64) :
-    (th hashId publicParam A M).run.bytes.toList =
-      (keccak256 (packBytes publicParam.bytes ++ packBytes A.bytes
+theorem th_bytes (publicParam : PublicParam) (site : CallSite) (M : Array UInt64) :
+    (th hashId publicParam site M).run.bytes.toList =
+      (keccak256 (packBytes publicParam.bytes ++ packBytes site.encode.bytes
         ++ ⟨(lanesBytes M).toArray⟩)).toList.take 16 := by
-  show (halfOf 0 (hash (thInput publicParam A M))).bytes.toList = _
+  show (halfOf 0 (hash (thInput publicParam site M))).bytes.toList = _
   rw [toList_bytes_halfOf, hash_bytes, thInput_eq_append, Hash.Keccak.lanesBytes_append,
     Hash.Keccak.lanesBytes_append, Hash.Keccak.lanesBytes_lanes2, Hash.Keccak.lanesBytes_lanes2,
     mk_append, mk_append, ← packBytes_eq_mk, ← packBytes_eq_mk]
   rfl
 
 /-- A derivation from the scheme seed `S` is Keccak-256 of `P | A | S | suffix`, all 32 bytes. -/
-theorem seedPrf_bytes (s : Seed) (publicParam : PublicParam) (A : Address) (suffix : Array UInt64) :
-    (seedPrf hashId s publicParam A suffix).run.bytes =
-      keccak256 (packBytes publicParam.bytes ++ packBytes A.bytes ++ packBytes s.bytes
+theorem seedPrf_bytes (s : Seed) (publicParam : PublicParam) (site : CallSite)
+    (suffix : Array UInt64) :
+    (seedPrf hashId s publicParam site suffix).run.bytes =
+      keccak256 (packBytes publicParam.bytes ++ packBytes site.encode.bytes ++ packBytes s.bytes
         ++ ⟨(lanesBytes suffix).toArray⟩) := by
-  show (hash (thInput publicParam A (s.toArray ++ suffix))).bytes = _
-  rw [hash_bytes, show thInput publicParam A
-    (s.toArray ++ suffix) = publicParam.toArray ++ A.toArray ++ s.toArray
-      ++ suffix from by simp only [thInput, ← Array.append_assoc]; rfl,
+  show (hash (thInput publicParam site (s.toArray ++ suffix))).bytes = _
+  rw [hash_bytes, show thInput publicParam site (s.toArray ++ suffix)
+      = publicParam.toArray ++ site.encode.toArray ++ s.toArray ++ suffix
+      from by simp only [thInput, ← Array.append_assoc]; rfl,
     Hash.Keccak.lanesBytes_append, Hash.Keccak.lanesBytes_append, Hash.Keccak.lanesBytes_append,
     Hash.Keccak.lanesBytes_lanes2, Hash.Keccak.lanesBytes_lanes2, Hash.Keccak.lanesBytes_lanes4,
     mk_append, mk_append, mk_append, ← packBytes_eq_mk, ← packBytes_eq_mk, ← packBytes_eq_mk]
@@ -110,9 +111,9 @@ theorem schemeSeed_bytes (seed : Seed) :
 /-- `P = H_0(0^128 | A_param | S)`: the first 16 bytes of the derivation at the zero parameter. -/
 theorem publicParamOf_bytes (s : Seed) :
     (publicParamOf (seedPrf hashId s)).run.bytes.toList =
-      (keccak256 (packBytes (Vector.replicate 16 0) ++ packBytes addrParam.bytes
+      (keccak256 (packBytes (Vector.replicate 16 0) ++ packBytes CallSite.param.encode.bytes
         ++ packBytes s.bytes)).toList.take 16 := by
-  show (halfOf 0 (seedPrf hashId s ⟨0, 0⟩ addrParam #[]).run).bytes.toList = _
+  show (halfOf 0 (seedPrf hashId s ⟨0, 0⟩ CallSite.param #[]).run).bytes.toList = _
   rw [toList_bytes_halfOf, seedPrf_bytes, bytes_zero_lanes2]
   rfl
 
@@ -123,8 +124,8 @@ theorem chainStarts_bytes (publicParam : PublicParam) (s : Seed) (layer : Layer)
     (e : UInt32) (i : Fin V) :
     ((chainStarts publicParam (seedPrf hashId s) layer e).run[i]).bytes.toList =
       ((keccak256 (packBytes publicParam.bytes
-        ++ packBytes (addrPrf layer e
-          ⟨i.val / 2, by have := i.isLt; simp only [V] at *; omega⟩).bytes
+        ++ packBytes (CallSite.prf layer e
+          ⟨i.val / 2, by have := i.isLt; simp only [V] at *; omega⟩).encode.bytes
         ++ packBytes s.bytes)).toList.drop (16 * (i.val % 2))).take 16 := by
   rw [chainStarts, Id.run_bind, HashSig.ofFnInOrder_run]
   simp only [Id.run_pure, Fin.getElem_fin, getElem_cast_flatMap_halves, Vector.getElem_ofFn]
@@ -139,9 +140,9 @@ theorem randomizerBase_bytes (publicParam : PublicParam) (s : Seed) (layer : Lay
     (msg : Array UInt64) :
     (randomizerBase publicParam (seedPrf hashId s) layer e msg).run.bytes.toList =
       (keccak256 (packBytes publicParam.bytes ++ packBytes
-        (addrRnd layer e).bytes ++ packBytes s.bytes
+        (CallSite.rnd layer e).encode.bytes ++ packBytes s.bytes
         ++ ⟨(lanesBytes msg).toArray⟩)).toList.take 16 := by
-  show (halfOf 0 (seedPrf hashId s publicParam (addrRnd layer e) msg).run).bytes.toList = _
+  show (halfOf 0 (seedPrf hashId s publicParam (CallSite.rnd layer e) msg).run).bytes.toList = _
   rw [toList_bytes_halfOf, seedPrf_bytes]
   rfl
 
@@ -152,7 +153,7 @@ theorem chainStep_bytes (publicParam : PublicParam) (layer : Layer) (e : UInt32)
     (mu : Fin (CHAIN_LENGTH - 1)) (v : Digest) :
     (chainStep hashId publicParam layer e i mu v).run.bytes.toList =
       (keccak256 (packBytes publicParam.bytes ++ packBytes
-        (addrChain layer e mu).bytes ++ packBytes v.bytes
+        (CallSite.chain layer e mu).encode.bytes ++ packBytes v.bytes
         ++ packBytes (uintToBytes 16 i.val))).toList.take 16 := by
   rw [chainStep, th_bytes,
     show (#[v.lo, v.hi, i.val.toUInt64, 0] : Array UInt64) =
@@ -167,7 +168,8 @@ theorem chain_succ_bytes (publicParam : PublicParam) (layer : Layer) (e : UInt32
     (start s : Nat) (h : start + (s + 1) < CHAIN_LENGTH) (v : Digest) :
     (chain hashId publicParam layer e i start (s + 1) h v).run.bytes.toList =
       (keccak256 (packBytes publicParam.bytes
-        ++ packBytes (addrChain layer e ⟨start + s, by simp only [CHAIN_LENGTH] at *; omega⟩).bytes
+        ++ packBytes
+          (CallSite.chain layer e ⟨start + s, by simp only [CHAIN_LENGTH] at *; omega⟩).encode.bytes
         ++ packBytes (chain hashId publicParam layer e i start s (by omega) v).run.bytes
         ++ packBytes (uintToBytes 16 i.val))).toList.take 16 :=
   chainStep_bytes publicParam layer e i _ _
@@ -180,7 +182,7 @@ The values `y_i` are the ends of its 58 chains. -/
 theorem otsLeafHash_bytes (publicParam : PublicParam) (layer : Layer) (e : UInt32)
     (ends : Vector Digest V) :
     (otsLeafHash hashId publicParam layer e ends).run.bytes.toList =
-      (keccak256 (packBytes publicParam.bytes ++ packBytes (addrLeaf layer e).bytes
+      (keccak256 (packBytes publicParam.bytes ++ packBytes (CallSite.leaf layer e).encode.bytes
         ++ packDigests ends)).toList.take 16 := by
   rw [otsLeafHash, th_bytes, packDigests_eq_mk]
 
@@ -190,7 +192,7 @@ With the derivations from the scheme seed, the starts are the halves of the deri
 theorem otsPublicLeaf_bytes (publicParam : PublicParam) (prf : SeedPrf Id)
     (layer : Layer) (e : UInt32) :
     (otsPublicLeaf hashId publicParam prf layer e).run.bytes.toList =
-      (keccak256 (packBytes publicParam.bytes ++ packBytes (addrLeaf layer e).bytes
+      (keccak256 (packBytes publicParam.bytes ++ packBytes (CallSite.leaf layer e).encode.bytes
         ++ packDigests (Vector.ofFn fun i =>
           (chain hashId publicParam layer e i 0 (CHAIN_LENGTH - 1)
           (by decide) (chainStarts publicParam prf layer e).run[i]).run))).toList.take 16 := by
@@ -203,7 +205,7 @@ theorem messageDigest_bytes (publicParam : PublicParam) (layer : Layer) (e : UIn
     (msg : Array UInt64)
     (rho : Randomizer) :
     (messageDigest hashId publicParam layer e msg rho).run.bytes.toList =
-      (keccak256 (packBytes publicParam.bytes ++ packBytes (addrMsg layer e).bytes
+      (keccak256 (packBytes publicParam.bytes ++ packBytes (CallSite.msg layer e).encode.bytes
         ++ ⟨(lanesBytes msg).toArray⟩ ++ packBytes rho.bytes)).toList.take 16 := by
   rw [messageDigest, th_bytes, Hash.Keccak.lanesBytes_append, Hash.Keccak.lanesBytes_lanes2,
     mk_append, ← packBytes_eq_mk]
@@ -214,7 +216,7 @@ theorem messageDigest_message_bytes (publicParam : PublicParam) (e : UInt32) (ms
     (rho : Randomizer) :
     (messageDigest hashId publicParam .bottom e msg.toArray rho).run.bytes.toList =
       (keccak256 (packBytes publicParam.bytes ++ packBytes
-        (addrMsg .bottom e).bytes ++ packBytes msg.bytes
+        (CallSite.msg .bottom e).encode.bytes ++ packBytes msg.bytes
         ++ packBytes rho.bytes)).toList.take 16 := by
   rw [messageDigest_bytes, Hash.Keccak.lanesBytes_lanes4, ← packBytes_eq_mk]
 
@@ -223,7 +225,7 @@ theorem messageDigest_root_bytes (publicParam : PublicParam) (e : UInt32) (root 
     (rho : Randomizer) :
     (messageDigest hashId publicParam .top e root.toArray rho).run.bytes.toList =
       (keccak256 (packBytes publicParam.bytes ++ packBytes
-        (addrMsg .top e).bytes ++ packBytes root.bytes
+        (CallSite.msg .top e).encode.bytes ++ packBytes root.bytes
         ++ packBytes rho.bytes)).toList.take 16 := by
   rw [messageDigest_bytes, Hash.Keccak.lanesBytes_lanes2, ← packBytes_eq_mk]
 
@@ -239,7 +241,8 @@ theorem nodeHash_bytes (publicParam : PublicParam) (layer : Layer) (p : Merkle.P
     (left right : Digest) :
     (nodeHash hashId publicParam layer p left right).run.bytes.toList =
       (keccak256 (packBytes publicParam.bytes
-        ++ packBytes (addrNode layer (Fin.ofNat _ p.level) (UInt32.ofNat p.index)).bytes
+        ++ packBytes
+          (CallSite.node layer (Fin.ofNat _ p.level) (UInt32.ofNat p.index)).encode.bytes
         ++ packBytes left.bytes ++ packBytes right.bytes)).toList.take 16 := by
   rw [nodeHash, th_bytes,
     show (#[left.lo, left.hi, right.lo, right.hi] : Array UInt64) =
@@ -251,7 +254,8 @@ theorem nodeHash_bytes (publicParam : PublicParam) (layer : Layer) (p : Merkle.P
 /-- Node `j` on level 0 is the leaf of one-time key `j`. -/
 theorem node_zero_bytes (publicParam : PublicParam) (prf : SeedPrf Id) (layer : Layer) (j : Nat) :
     (node hashId publicParam prf layer 0 j).run.bytes.toList =
-      (keccak256 (packBytes publicParam.bytes ++ packBytes (addrLeaf layer (UInt32.ofNat j)).bytes
+      (keccak256 (packBytes publicParam.bytes
+        ++ packBytes (CallSite.leaf layer (UInt32.ofNat j)).encode.bytes
         ++ packDigests (Vector.ofFn fun i => (chain hashId publicParam layer (UInt32.ofNat j) i 0
           (CHAIN_LENGTH - 1) (by decide)
           (chainStarts publicParam prf layer (UInt32.ofNat j)).run[i]).run))).toList.take 16 := by
@@ -264,7 +268,8 @@ theorem node_succ_bytes (publicParam : PublicParam) (prf : SeedPrf Id)
     (layer : Layer) (level j : Nat) :
     (node hashId publicParam prf layer (level + 1) j).run.bytes.toList =
       (keccak256 (packBytes publicParam.bytes
-        ++ packBytes (addrNode layer (Fin.ofNat _ (level + 1)) (UInt32.ofNat j)).bytes
+        ++ packBytes
+          (CallSite.node layer (Fin.ofNat _ (level + 1)) (UInt32.ofNat j)).encode.bytes
         ++ packBytes (node hashId publicParam prf layer level (2 * j)).run.bytes
         ++ packBytes (node hashId publicParam prf layer level
           (2 * j + 1)).run.bytes)).toList.take 16 := by

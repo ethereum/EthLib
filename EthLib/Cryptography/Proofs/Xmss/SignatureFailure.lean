@@ -13,11 +13,11 @@ A signature signs on two layers, and each layer searches for a codeword.
 
 Signing fails when either search finds none.
 
-Each search hashes at its key's message address, with a payload of one fixed length.
+Each search hashes at its key's message call site, with a payload of one fixed length.
 
 Before a search, the signer hashes no such input.
 
-The calls before it have other addresses.
+The calls before it have other call sites.
 
 So a cache that holds no trial input of either key keeps none until its search starts.
 
@@ -37,36 +37,30 @@ local notation "Hq" => Unforgeability.queryH (m := OracleComp XmssSecurity.Oracl
 
 /-! ## Trial inputs -/
 
-/-- A query of an input at address `A` whose payload has `k` lanes, `8 k` bytes.
+/-- A query of an input at a given call site whose payload has `k` lanes, `8 k` bytes.
 
-A key's codeword search queries only such inputs, at its message address. -/
-def IsTrialQuery (A : Address) (k : Nat) : XmssSecurity.OracleWorld.Domain → Prop
+A key's codeword search queries only such inputs, at its message call site. -/
+def IsTrialQuery (A : CallSite) (k : Nat) : XmssSecurity.OracleWorld.Domain → Prop
   | .inl _ => False
   | .inr x => ∃ publicParam payload, payload.size = k ∧ x = Hash.Keccak.lanesBytes
     (thInput publicParam A payload)
 
-noncomputable instance (A : Address) (k : Nat) : DecidablePred (IsTrialQuery A k) :=
+noncomputable instance (A : CallSite) (k : Nat) : DecidablePred (IsTrialQuery A k) :=
   Classical.decPred _
 
 /-- An input `P | A | M` has `4` lanes before its payload. -/
-theorem size_thInput (publicParam : PublicParam) (A : Address) (payload : Array UInt64) :
+theorem size_thInput (publicParam : PublicParam) (A : CallSite) (payload : Array UInt64) :
     (thInput publicParam A payload).size = 4 + payload.size := by
   rw [thInput, Array.size_append]
   rfl
 
-/-- A hash at another address is not a trial query. -/
-theorem isQueryBoundP_queryH_of_ne {A A' : Address} (k : Nat) (publicParam : PublicParam)
+/-- A hash at another call site is not a trial query. -/
+theorem isQueryBoundP_queryH_of_ne {A A' : CallSite} (k : Nat) (publicParam : PublicParam)
     (payload : Array UInt64) (hA : A' ≠ A) :
     IsQueryBoundP (Hq (thInput publicParam A' payload)) (IsTrialQuery A k) 0 := by
   refine (isQueryBoundP_map_iff _ _ _).2 ((isQueryBoundP_query_iff _ _ _).2 fun h => ?_)
   obtain ⟨_, _, _, heq⟩ := h
   exact absurd (thInput_inj (Hash.Keccak.lanesBytes_injective heq)).2.1 hA
-
-/-- An address on one layer is not the message address of a key on the other. -/
-theorem encodeAddress_ne_addrMsg {layer layer' : Layer} (hl : layer ≠ layer') (tau : Fin 32)
-    (mu : Fin 8) (a : Fin (2 ^ 23)) (e e' : UInt32) :
-    encodeAddress tau mu (layerHi layer a) e ≠ addrMsg layer' e' := fun h =>
-  hl (layerHi_inj.mp (encodeAddress_inj.mp h).2.2.1).1
 
 /-! ## A layer never queries the other layer's trial inputs -/
 
@@ -75,54 +69,57 @@ section OtherLayer
 variable {layer layer' : Layer} (hl : layer ≠ layer') (e' : UInt32) (k : Nat)
 include hl
 
-/-- A hash at an address of the layer is not a trial query of the other layer. -/
-theorem th_isQueryBoundP_otherLayer (publicParam : PublicParam) (tau : Fin 32) (mu : Fin 8)
-    (a : Fin (2 ^ 23)) (e : UInt32) (payload : Array UInt64) :
-    IsQueryBoundP (th Hq publicParam (encodeAddress tau mu (layerHi layer a) e) payload)
-      (IsTrialQuery (addrMsg layer' e') k) 0 :=
+/-- A hash at a call site of the layer is not a trial query of the other layer.
+
+The layer's flag in `hi` differs from the other layer's.
+
+So the call site is not the message call site of a key of the other layer. -/
+theorem th_isQueryBoundP_otherLayer (publicParam : PublicParam) (site : CallSite) {a : Fin (2 ^ 23)}
+    (hsite : site.hi = layerHi layer a) (payload : Array UInt64) :
+    IsQueryBoundP (th Hq publicParam site payload) (IsTrialQuery (CallSite.msg layer' e') k) 0 :=
   isQueryBoundP_bind_zero _ _
-    (isQueryBoundP_queryH_of_ne k publicParam payload (encodeAddress_ne_addrMsg hl _ _ _ _ _))
+    (isQueryBoundP_queryH_of_ne k publicParam payload (CallSite.ne_msg_of_hi hsite hl e'))
     fun _ => isQueryBoundP_pure _ _ _
 
 /-- A key's chain starts query no trial input of the other layer. -/
 theorem chainStarts_isQueryBoundP_otherLayer (publicParam : PublicParam)
     (seed : Seed) (e : UInt32) :
     IsQueryBoundP (chainStarts publicParam (seedPrf Hq seed) layer e)
-      (IsTrialQuery (addrMsg layer' e') k) 0 :=
+      (IsTrialQuery (CallSite.msg layer' e') k) 0 :=
   isQueryBoundP_bind_zero _ _
     (ofFnInOrder_isQueryBoundP_zero _ _ fun _ => isQueryBoundP_queryH_of_ne k publicParam _
-      (encodeAddress_ne_addrMsg hl _ _ _ _ _))
+      (CallSite.ne_msg_of_hi rfl hl e'))
     fun _ => isQueryBoundP_pure _ _ _
 
 /-- A walk along a key's chain queries no trial input of the other layer. -/
 theorem chain_isQueryBoundP_otherLayer (publicParam : PublicParam) (e : UInt32) (i : Fin V)
     (start steps : Nat) (h : start + steps < CHAIN_LENGTH) (value : Digest) :
     IsQueryBoundP (chain Hq publicParam layer e i start steps h value)
-      (IsTrialQuery (addrMsg layer' e') k) 0 :=
-  chain_isQueryBoundP_zero _ (fun _ _ => th_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _) _ _ _ _
+      (IsTrialQuery (CallSite.msg layer' e') k) 0 :=
+  chain_isQueryBoundP_zero _ (fun _ _ => th_isQueryBoundP_otherLayer hl e' k _ _ rfl _) _ _ _ _
 
 /-- A key's leaf, from the seed, queries no trial input of the other layer. -/
 theorem otsPublicLeaf_isQueryBoundP_otherLayer (publicParam : PublicParam)
     (seed : Seed) (e : UInt32) :
     IsQueryBoundP (otsPublicLeaf Hq publicParam (seedPrf Hq seed) layer e)
-      (IsTrialQuery (addrMsg layer' e') k) 0 :=
+      (IsTrialQuery (CallSite.msg layer' e') k) 0 :=
   isQueryBoundP_bind_zero _ _
     (chainStarts_isQueryBoundP_otherLayer hl e' k publicParam seed e) fun _ =>
     isQueryBoundP_bind_zero _ _ (ofFnInOrder_isQueryBoundP_zero _ _ fun _ =>
       chain_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _ _) fun _ =>
-      th_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _
+      th_isQueryBoundP_otherLayer hl e' k _ _ rfl _
 
 /-- A node hash of the layer queries no trial input of the other layer. -/
 theorem nodeHash_isQueryBoundP_otherLayer (publicParam : PublicParam) (q : Merkle.Position)
     (left right : Digest) :
     IsQueryBoundP (nodeHash Hq publicParam layer q left right)
-      (IsTrialQuery (addrMsg layer' e') k) 0 :=
-  th_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _
+      (IsTrialQuery (CallSite.msg layer' e') k) 0 :=
+  th_isQueryBoundP_otherLayer hl e' k _ _ rfl _
 
 /-- A node of the layer queries no trial input of the other layer. -/
 theorem node_isQueryBoundP_otherLayer (publicParam : PublicParam) (seed : Seed) (level j : Nat) :
     IsQueryBoundP (node Hq publicParam (seedPrf Hq seed) layer level j)
-      (IsTrialQuery (addrMsg layer' e') k) 0 :=
+      (IsTrialQuery (CallSite.msg layer' e') k) 0 :=
   merkleNode_isQueryBoundP_zero _ _
     (fun _ => otsPublicLeaf_isQueryBoundP_otherLayer hl e' k _ _ _)
     (fun _ _ _ => nodeHash_isQueryBoundP_otherLayer hl e' k _ _ _ _) _
@@ -130,7 +127,7 @@ theorem node_isQueryBoundP_otherLayer (publicParam : PublicParam) (seed : Seed) 
 /-- A build of the layer queries no trial input of the other layer. -/
 theorem build_isQueryBoundP_otherLayer (publicParam : PublicParam) (seed : Seed) (level j : Nat) :
     IsQueryBoundP (build Hq publicParam (seedPrf Hq seed) layer level j)
-      (IsTrialQuery (addrMsg layer' e') k) 0 :=
+      (IsTrialQuery (CallSite.msg layer' e') k) 0 :=
   merkleBuild_isQueryBoundP_zero _ _
     (fun _ => otsPublicLeaf_isQueryBoundP_otherLayer hl e' k _ _ _)
     (fun _ _ _ => nodeHash_isQueryBoundP_otherLayer hl e' k _ _ _ _) _
@@ -140,17 +137,17 @@ theorem findCodeword_isQueryBoundP_otherLayer (publicParam : PublicParam) (e : U
     (msg : Array UInt64)
     (base : Randomizer) (c fuel : Nat) :
     IsQueryBoundP (Internal.findCodeword Hq publicParam layer e msg base c fuel)
-      (IsTrialQuery (addrMsg layer' e') k) 0 := by
+      (IsTrialQuery (CallSite.msg layer' e') k) 0 := by
   rw [Internal.findCodeword_eq]
   exact findFirst_isQueryBoundP_zero _ _ (fun _ => isQueryBoundP_map_iff _ _ _ |>.2
-    (th_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _)) _ _
+    (th_isQueryBoundP_otherLayer hl e' k _ _ rfl _)) _ _
 
 /-- A one-time signature on the layer queries no trial input of the other layer. -/
 theorem otsSign_isQueryBoundP_otherLayer (publicParam : PublicParam) (seed : Seed) (e : UInt32)
     (msg : Array UInt64) :
     IsQueryBoundP (otsSign Hq publicParam (seedPrf Hq seed) layer e msg)
-      (IsTrialQuery (addrMsg layer' e') k) 0 := by
-  refine isQueryBoundP_bind_zero _ _ (th_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _)
+      (IsTrialQuery (CallSite.msg layer' e') k) 0 := by
+  refine isQueryBoundP_bind_zero _ _ (th_isQueryBoundP_otherLayer hl e' k _ _ rfl _)
     fun base => isQueryBoundP_bind_zero _ _
       (findCodeword_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _) fun r => ?_
   rcases r with _ | ⟨rho, x⟩
@@ -167,23 +164,24 @@ end OtherLayer
 theorem randomizerBase_isQueryBoundP (publicParam : PublicParam) (seed : Seed) (layer : Layer)
     (e : UInt32) (msg : Array UInt64) (k : Nat) :
     IsQueryBoundP (randomizerBase publicParam (seedPrf Hq seed) layer e msg)
-      (IsTrialQuery (addrMsg layer e) k) 0 :=
+      (IsTrialQuery (CallSite.msg layer e) k) 0 :=
   isQueryBoundP_bind_zero _ _ (isQueryBoundP_queryH_of_ne k publicParam _
-    fun h => nomatch CallSite.encode_injective h) fun _ => isQueryBoundP_pure _ _ _
+    fun h => nomatch h) fun _ => isQueryBoundP_pure _ _ _
 
 /-- **A key's one-time signature finds no codeword with probability at most `exp(-4000)`.**
 
-The cache holds no trial input of the key: no input at its message address of the trial length. -/
+The cache holds no trial input of the key: no input at its message call site of the trial length. -/
 theorem prEvent_otsSign_none_le (publicParam : PublicParam) (seed : Seed)
     (layer : Layer) (e : UInt32)
     (msg : Array UInt64) (cache : XmssSecurity.HashSpec.QueryCache)
-    (hcache : CacheAvoids (IsTrialQuery (addrMsg layer e) (msg.size + 2)) cache) :
+    (hcache : CacheAvoids (IsTrialQuery (CallSite.msg layer e) (msg.size + 2)) cache) :
     Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
       (otsSign Hq publicParam (seedPrf Hq seed) layer e msg)).run' cache}[z = none]
       ≤ ENNReal.ofReal (Real.exp (-4000)) := by
   unfold otsSign Internal.otsSignTrials
-  refine prEvent_run'_romImpl_bind_le (CacheAvoids (IsTrialQuery (addrMsg layer e) (msg.size + 2)))
-    _ _ _ (fun z hz => cache_eq_none_of_mem_support_run_romImpl
+  refine prEvent_run'_romImpl_bind_le
+    (CacheAvoids (IsTrialQuery (CallSite.msg layer e) (msg.size + 2))) _ _ _
+    (fun z hz => cache_eq_none_of_mem_support_run_romImpl
       (randomizerBase_isQueryBoundP publicParam seed layer e msg _) hcache hz) fun base c hc => ?_
   rw [run'_simulateQ_romImpl_bind]
   refine (prEvent_bind_le_prEvent_of_support _ _ (fun z => z.1 = none) _ fun z _ hz => ?_).trans ?_
@@ -205,11 +203,11 @@ theorem bottom_ne_top : Layer.bottom ≠ Layer.top := by decide
 
 /-- The trial queries of the bottom key of leaf index `idx`: 32-byte message, 16-byte trial. -/
 abbrev IsBottomTrialQuery (idx : LeafIndex) : XmssSecurity.OracleWorld.Domain → Prop :=
-  IsTrialQuery (addrMsg .bottom idx) 6
+  IsTrialQuery (CallSite.msg .bottom idx) 6
 
 /-- The trial queries of the top key above leaf index `idx`: 16-byte root, 16-byte trial. -/
 abbrev IsTopTrialQuery (idx : LeafIndex) : XmssSecurity.OracleWorld.Domain → Prop :=
-  IsTrialQuery (addrMsg .top (UInt32.ofNat (bottomTree idx))) 4
+  IsTrialQuery (CallSite.msg .top (UInt32.ofNat (bottomTree idx))) 4
 
 /- A concrete height would let Lean unfold a whole tree, so the height stays opaque. -/
 attribute [local irreducible] LAYER_HEIGHT
@@ -221,7 +219,7 @@ attribute [local irreducible] LAYER_HEIGHT
 The cache holds no trial input of the top key. -/
 theorem prEvent_signRootWith_error_le (sk : SecretKey) (b : Nat) (root : Digest)
     (cache : XmssSecurity.HashSpec.QueryCache)
-    (hcache : CacheAvoids (IsTrialQuery (addrMsg .top (UInt32.ofNat b)) 4) cache) :
+    (hcache : CacheAvoids (IsTrialQuery (CallSite.msg .top (UInt32.ofNat b)) 4) cache) :
     Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
       (signRootWith Hq (seedPrf Hq sk.schemeSeed) sk b root)).run' cache}[z.isOk = false]
       ≤ ENNReal.ofReal (Real.exp (-4000)) := by
@@ -242,8 +240,8 @@ The hash is a lazily sampled random oracle, and signing starts from any cache an
 
 The cache must hold no trial input of the two keys that sign:
 
-- the bottom key `idx`: inputs at its message address with a payload of 6 lanes, 48 bytes;
-- the top key above it: inputs at its message address with a payload of 4 lanes, 32 bytes.
+- the bottom key `idx`: inputs at its message call site with a payload of 6 lanes, 48 bytes;
+- the top key above it: inputs at its message call site with a payload of 4 lanes, 32 bytes.
 
 A bottom tree of `idx` that the key keeps must hold a top signature, not an error.
 

@@ -153,20 +153,20 @@ In the random oracle model, all `2^32` trials of one search miss the code with p
 The theorem assumes that the oracle's cache holds none of the trial inputs when the search starts, as an empty cache does.
 
 A whole signature fails with probability at most `2 exp(-4000)` (`prEvent_signWith_error_le`, `SignatureFailure.lean`).
-A trial input of a key carries the key's message address and a payload of one length.
+A trial input of a key is at the key's message call site, with a payload of one length.
 That length is 48 bytes on the bottom layer and 32 on the top.
 Before a key's search, the signer hashes no such input.
-Its other calls carry other addresses, and the input that grows the scheme seed has 40 bytes, too short to be a trial input.
+Its other calls are at other call sites, and the input that grows the scheme seed has 40 bytes, too short to be a trial input.
 The theorem assumes that the cache holds no trial input of the two keys when signing starts, as an empty cache does (`prEvent_signWith_error_le_empty`).
 It also assumes that a bottom tree of that index, if the key keeps one, holds a top signature, not an error; a key from `keyGen` keeps no bottom tree.
 Then the cache still holds none when each search starts, so each search fails with probability at most `exp(-4000)`.
 
 **Domain separation.**
-Every hash call carries an address that says where in the key it happens, so that two calls never hash the same input by accident (`Address.lean`, `TweakableHash.lean`).
-An address determines its type, its position and both fields (`encodeAddress_inj`), and the two layers never share an address (`layerHi_inj`).
+Every hash call names its call site: what it computes, and the arguments that kind of call takes, such as the layer, the key and the position.
+The hash reads the call site as a 16-byte address, so that two calls never hash the same input by accident (`Address.lean`, `TweakableHash.lean`).
 Two different call sites never share an address, whatever their kinds (`CallSite.encode_injective`).
-So each address of a key determines its own arguments (`addrPrf_inj` and the five like it).
-Finally, a hash input determines its public parameter, address and payload (`thInput_inj`).
+The type code keeps the kinds apart, and the top layer's bit keeps the two layers apart (`layerHi_inj`).
+Finally, a hash input determines its public parameter, call site and payload (`thInput_inj`).
 
 **The scheme in bytes.**
 The code holds its values as lanes, but the note writes every hash over bytes.

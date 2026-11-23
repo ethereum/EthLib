@@ -95,7 +95,7 @@ So the address of every node of the tree names its true level. -/
 theorem nodeHash_of_le {p : Merkle.Position} (hlevel : p.level ≤ LAYER_HEIGHT)
     (left right : Digest) :
     nodeHash H publicParam layer p left right
-      = th H publicParam (addrNode layer ⟨p.level, by omega⟩ (UInt32.ofNat p.index))
+      = th H publicParam (CallSite.node layer ⟨p.level, by omega⟩ (UInt32.ofNat p.index))
           #[left.lo, left.hi, right.lo, right.hi] := by
   simp only [nodeHash, Fin.ofNat, Nat.mod_eq_of_lt (Nat.lt_succ_of_le hlevel)]
 

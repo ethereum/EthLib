@@ -59,7 +59,7 @@ def nodeHash (publicParam : PublicParam) (layer : Layer) (p : Merkle.Position)
   -- `X_{lambda,j} = Th(P, A_node(l, lambda, j), X_{lambda-1,2j} | X_{lambda-1,2j+1})`.
   --
   -- The payload is the left child, then the right child.
-  th H publicParam (addrNode layer (Fin.ofNat _ p.level) (UInt32.ofNat p.index))
+  th H publicParam (.node layer (Fin.ofNat _ p.level) (UInt32.ofNat p.index))
     #[left.lo, left.hi, right.lo, right.hi]
 
 /-- `X_{0,j}`: the leaf of one-time key `j`. -/

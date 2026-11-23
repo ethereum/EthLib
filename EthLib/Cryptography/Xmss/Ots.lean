@@ -31,7 +31,7 @@ Chains `2j` and `2j + 1` start at the two halves of derivation `j`, whose suffix
 def chainStarts (publicParam : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32) :
     m (Vector Digest V) := do
   -- One derivation per pair of chains, so 29 derivations for 58 chains.
-  let pairs ← ofFnInOrder (V / 2) fun j => prf publicParam (addrPrf layer e j) #[]
+  let pairs ← ofFnInOrder (V / 2) fun j => prf publicParam (.prf layer e j) #[]
   -- `C_{i,0} = H_{i mod 2}(P | A_prf(l, e, floor(i / 2)) | S)`.
   --
   -- Chains `2j` and `2j + 1` start at the halves `H_0` and `H_1` of derivation `j`.
@@ -56,7 +56,7 @@ def chainStep (publicParam : PublicParam) (layer : Layer) (e : UInt32) (i : Fin 
   -- `Th(P, A, M)` is the first 16 bytes of `H(P | A | M)`, with `H` Keccak-256.
   th H publicParam
     -- `A_chain(l, e, mu)` names the key and the step, so the 58 chains share it.
-    (addrChain layer e mu)
+    (.chain layer e mu)
     -- `M`: the two lanes of `C_{i,mu}`, then the two lanes of `LE_128(i)`.
     #[value.lo, value.hi,
       -- `LE_128(i)`: `i` in the first lane, zero in the second.
@@ -81,7 +81,7 @@ def chain (publicParam : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
 def otsLeafHash (publicParam : PublicParam) (layer : Layer) (e : UInt32) (ends : Vector Digest V) :
     m Digest :=
   -- `X_{0,e} = Th(P, A_leaf(l, e), C_{0,3} | ... | C_{57,3})`.
-  th H publicParam (addrLeaf layer e) (digestLanes ends)
+  th H publicParam (.leaf layer e) (digestLanes ends)
 
 /-- `X_{0,e}`: the leaf of key `e`, computed from the derivations of the seed. -/
 def otsPublicLeaf (publicParam : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32) :
@@ -101,7 +101,7 @@ def otsPublicLeaf (publicParam : PublicParam) (prf : SeedPrf m) (layer : Layer) 
 def messageDigest (publicParam : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
     (rho : Randomizer) : m Digest :=
   -- `D_c = Th(P, A_msg(l, e), M | rho_c)`.
-  th H publicParam (addrMsg layer e) (msg ++ rho.toArray)
+  th H publicParam (.msg layer e) (msg ++ rho.toArray)
 
 /-- `R_0`: the base every randomizer trial adds to, derived at `A_rnd(l, e)` with suffix `M`.
 
@@ -111,7 +111,7 @@ Since `S` is in the input, the randomizers stay secret until signed. -/
 def randomizerBase (publicParam : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32)
     (msg : Array UInt64) : m Randomizer := do
   -- `R_0 = Th(P, A_rnd(l, e), S | M)`.
-  return halfOf 0 (← prf publicParam (addrRnd layer e) msg)
+  return halfOf 0 (← prf publicParam (.rnd layer e) msg)
 
 /-! ## Randomizers as words
 
@@ -197,7 +197,7 @@ def findCodeword (publicParam : PublicParam) (layer : Layer) (e : UInt32) (msg :
     (base : Randomizer) (c fuel : Nat) (trials : TrialSource m := hashTrials H) :
     m (Option (Randomizer × Vector (Fin CHAIN_LENGTH) V)) :=
   -- The input of every trial starts with `P | A_msg(l, e) | M`.
-  let t := trials (thInput publicParam (addrMsg layer e) msg)
+  let t := trials (thInput publicParam (.msg layer e) msg)
   Wots.findFirst (trialRandomizer base) t.codeword c fuel
 
 end Internal

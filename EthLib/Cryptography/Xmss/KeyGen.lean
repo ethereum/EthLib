@@ -35,7 +35,7 @@ The all-zero parameter stands in for the one being derived, and the suffix is em
 
 With the derivations from the scheme seed `S`, it is `Th(0^128, A_param, S)`. -/
 def publicParamOf (prf : SeedPrf m) : m PublicParam := do
-  return halfOf 0 (← prf ⟨0, 0⟩ addrParam #[])
+  return halfOf 0 (← prf ⟨0, 0⟩ .param #[])
 
 /-! ## Keys -/
 
