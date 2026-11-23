@@ -860,7 +860,7 @@ private theorem simulateBlock_valid_spec {chain chain' : BlockChain} {base : Rec
              logs := result.output.logs }, filled.map (·.2), result.output.results⟩ := by
   have hState : overrideState fork chain.state [] = chain.state := by
     simp [overrideState, applyOverrides]
-  have hMoves : movedPrecompiles (precompileMoves []) = some := by
+  have hMoves : simulatedPrecompiles [] = some := by
     funext a
     rfl
   simp only [simulateBlock] at h
@@ -1047,7 +1047,7 @@ private theorem simulateBlock_valid_header {chain chain' : BlockChain} {base : R
              logs := result.output.logs }, filled.map (·.2), result.output.results⟩ := by
   have hState : overrideState fork chain.state [] = chain.state := by
     simp [overrideState, applyOverrides]
-  have hMoves : movedPrecompiles (precompileMoves []) = some := by
+  have hMoves : simulatedPrecompiles [] = some := by
     funext a
     rfl
   simp only [simulateBlock] at h
