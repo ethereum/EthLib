@@ -26,16 +26,16 @@ variable {f : Array UInt64 → Lanes4}
 /-- What the one-time leaf recovery computes.
 
 Nothing unless the digest is a codeword, else the leaf of the walked chains. -/
-theorem otsLeaf_run {pp : PublicParam} {layer : Layer} {e : UInt32} {msg : Array UInt64}
+theorem otsLeaf_run {publicParam : PublicParam} {layer : Layer} {e : UInt32} {msg : Array UInt64}
     {rho : Randomizer} {y : Vector Digest V} :
-    (otsLeaf (pureHash f) pp layer e msg rho y).run
-      = (codeword? (messageDigest (pureHash f) pp layer e msg rho).run).map
+    (otsLeaf (pureHash f) publicParam layer e msg rho y).run
+      = (codeword? (messageDigest (pureHash f) publicParam layer e msg rho).run).map
         fun (x : Vector (Fin CHAIN_LENGTH) V) =>
-          (otsLeafHash (pureHash f) pp layer e (Vector.ofFn fun i =>
-            (chain (pureHash f) pp layer e i x[i] (CHAIN_LENGTH - 1 - x[i])
+          (otsLeafHash (pureHash f) publicParam layer e (Vector.ofFn fun i =>
+            (chain (pureHash f) publicParam layer e i x[i] (CHAIN_LENGTH - 1 - x[i])
               (by have := x[i].isLt; omega) y[i]).run)).run := by
   rw [otsLeaf, Id.run_bind]
-  cases codeword? (messageDigest (pureHash f) pp layer e msg rho).run with
+  cases codeword? (messageDigest (pureHash f) publicParam layer e msg rho).run with
   | none => rfl
   | some x =>
     -- The chains are walked in order, which is the vector of the walked chains.
@@ -43,13 +43,15 @@ theorem otsLeaf_run {pp : PublicParam} {layer : Layer} {e : UInt32} {msg : Array
     rfl
 
 /-- What a layer's root computes: the recovered leaf, folded up the path. -/
-theorem layerRoot_run {pp : PublicParam} {layer : Layer} {e : Nat} {msg : Array UInt64}
+theorem layerRoot_run {publicParam : PublicParam} {layer : Layer} {e : Nat} {msg : Array UInt64}
     {sig : LayerSignature} :
-    (layerRoot (pureHash f) pp layer e msg sig).run
-      = (otsLeaf (pureHash f) pp layer (UInt32.ofNat e) msg sig.randomizer sig.chainValues).run.map
-          fun leaf => (fold (pureHash f) pp layer e leaf sig.path).run := by
+    (layerRoot (pureHash f) publicParam layer e msg sig).run
+      = (otsLeaf (pureHash f) publicParam layer
+        (UInt32.ofNat e) msg sig.randomizer sig.chainValues).run.map
+          fun leaf => (fold (pureHash f) publicParam layer e leaf sig.path).run := by
   rw [layerRoot, Id.run_bind]
-  cases (otsLeaf (pureHash f) pp layer (UInt32.ofNat e) msg sig.randomizer sig.chainValues).run with
+  cases (otsLeaf (pureHash f) publicParam layer
+    (UInt32.ofNat e) msg sig.randomizer sig.chainValues).run with
   | none => rfl
   | some leaf => rfl
 
@@ -106,23 +108,26 @@ A known answer evaluates the verifier hash by hash.
 These lemmas let each piece be checked on its own, with its value stated. -/
 
 /-- Chain `i` walked from the position its digit names to position 3. -/
-def chainEnd (f : Array UInt64 → Lanes4) (pp : PublicParam) (layer : Layer) (e : UInt32)
+def chainEnd (f : Array UInt64 → Lanes4) (publicParam : PublicParam) (layer : Layer) (e : UInt32)
     (x : Vector (Fin CHAIN_LENGTH) V) (y : Vector Digest V) (i : Fin V) : Digest :=
-  (chain (pureHash f) pp layer e i x[i] (CHAIN_LENGTH - 1 - x[i]) (by have := x[i].isLt; omega)
+  (chain (pureHash f) publicParam layer e i x[i] (CHAIN_LENGTH - 1 - x[i])
+    (by have := x[i].isLt; omega)
     y[i]).run
 
 /-- A layer's root, from its codeword, its chain ends, its leaf and its path. -/
-theorem layerRoot_eq {pp : PublicParam} {layer : Layer} {e : Nat} {msg : Array UInt64}
+theorem layerRoot_eq {publicParam : PublicParam} {layer : Layer} {e : Nat} {msg : Array UInt64}
     {sig : LayerSignature} {x : Vector (Fin CHAIN_LENGTH) V} {ends : Vector Digest V}
     {leaf root : Digest}
-    (hx : codeword? (messageDigest (pureHash f) pp layer (UInt32.ofNat e) msg sig.randomizer).run
+    (hx : codeword? (messageDigest (pureHash f) publicParam layer
+      (UInt32.ofNat e) msg sig.randomizer).run
       = some x)
-    (hends : ∀ i : Fin V, chainEnd f pp layer (UInt32.ofNat e) x sig.chainValues i = ends[i])
-    (hleaf : (otsLeafHash (pureHash f) pp layer (UInt32.ofNat e) ends).run = leaf)
-    (hroot : (fold (pureHash f) pp layer e leaf sig.path).run = root) :
-    (layerRoot (pureHash f) pp layer e msg sig).run = some root := by
+    (hends : ∀ i : Fin V, chainEnd f publicParam layer
+      (UInt32.ofNat e) x sig.chainValues i = ends[i])
+    (hleaf : (otsLeafHash (pureHash f) publicParam layer (UInt32.ofNat e) ends).run = leaf)
+    (hroot : (fold (pureHash f) publicParam layer e leaf sig.path).run = root) :
+    (layerRoot (pureHash f) publicParam layer e msg sig).run = some root := by
   -- The recovered ends are the stated ones, chain by chain.
-  have hv : (Vector.ofFn fun i => (chain (pureHash f) pp layer (UInt32.ofNat e) i x[i]
+  have hv : (Vector.ofFn fun i => (chain (pureHash f) publicParam layer (UInt32.ofNat e) i x[i]
       (CHAIN_LENGTH - 1 - x[i]) (by have := x[i].isLt; omega) sig.chainValues[i]).run) = ends :=
     Vector.ext fun i hi => by simpa [chainEnd] using hends ⟨i, hi⟩
   rw [layerRoot_run, otsLeaf_run, hx, Option.map_some, hv, hleaf, Option.map_some, hroot]

@@ -164,10 +164,10 @@ theorem failGameOf_pure_seed (pass : QueryImpl OracleWorld (OracleComp spec)) (s
     failGameOf pass (pure s) (fun _ => prf) adversary =
       failGameOf pass (pure s') (fun _ => prf) adversary := by
   simp only [failGameOf, Internal.keyGenFrom, pure_bind, bind_assoc]
-  refine bind_congr fun pp => bind_congr fun top => ?_
+  refine bind_congr fun publicParam => bind_congr fun top => ?_
   have h := run_failSignerOf_withSeed pass prf
-    (adversary.main { root := top.value, publicParam := pp })
-    { schemeSeed := s, publicParam := pp, top, cache := [] } s'
+    (adversary.main { root := top.value, publicParam := publicParam })
+    { schemeSeed := s, publicParam := publicParam, top, cache := [] } s'
   simp only at h
   rw [h, bind_map_left]
 
@@ -185,7 +185,8 @@ theorem simulateQ_run_failSignerOf_apply (pass : QueryImpl OracleWorld (OracleCo
     (prf : SeedPrf (OracleComp spec)) (t : (OracleWorld + ReasonSigningSpec).Domain)
     (sk : SecretKey) :
     simulateQ so ((failSignerOf pass prf t).run sk).run =
-      ((failSignerOf (so ∘ₛ pass) (fun pp a suffix => simulateQ so (prf pp a suffix)) t).run
+      ((failSignerOf (so ∘ₛ pass) (fun publicParam a suffix => simulateQ so
+        (prf publicParam a suffix)) t).run
         sk).run := by
   rcases t with t | request
   · simp [failSignerOf, QueryImpl.apply_compose]
@@ -199,7 +200,8 @@ theorem simulateQ_run_failSignerOf (pass : QueryImpl OracleWorld (OracleComp spe
     (prf : SeedPrf (OracleComp spec)) {α : Type}
     (oa : OracleComp (OracleWorld + ReasonSigningSpec) α) (sk : SecretKey) :
     simulateQ so ((simulateQ (failSignerOf pass prf) oa).run sk).run =
-      ((simulateQ (failSignerOf (so ∘ₛ pass) (fun pp a suffix => simulateQ so (prf pp a suffix)))
+      ((simulateQ (failSignerOf (so ∘ₛ pass) (fun publicParam a suffix => simulateQ so
+        (prf publicParam a suffix)))
         oa).run sk).run := by
   induction oa using OracleComp.inductionOn generalizing sk with
   | pure x => simp
@@ -211,12 +213,13 @@ theorem simulateQ_run_failSignerOf (pass : QueryImpl OracleWorld (OracleComp spe
 theorem simulateQ_keyGenFrom (pass : QueryImpl OracleWorld (OracleComp spec)) (s : Seed)
     (prf : SeedPrf (OracleComp spec)) :
     simulateQ so (Internal.keyGenFrom (hashOf pass) prf s) =
-      Internal.keyGenFrom (hashOf (so ∘ₛ pass)) (fun pp a suffix => simulateQ so (prf pp a suffix))
+      Internal.keyGenFrom (hashOf (so ∘ₛ pass)) (fun publicParam a suffix => simulateQ so
+        (prf publicParam a suffix))
         s := by
   simp only [Internal.keyGenFrom, simulateQ_bind, simulateQ_pure]
   rw [publicParamOf_map_monad (simulateQ so) (fun b => simulateQ_pure so b)
     (fun x f => simulateQ_bind so x f)]
-  refine bind_congr fun pp => ?_
+  refine bind_congr fun publicParam => ?_
   rw [build_map_monad (simulateQ so) (fun b => simulateQ_pure so b)
     (fun x f => simulateQ_bind so x f)]
   simp only [simulateQ_hashOf]
@@ -230,7 +233,7 @@ theorem simulateQ_failGameOf {ι' : Type} {spec' : OracleSpec ι'}
     (adversary : ReasonAdversary) :
     simulateQ so (failGameOf pass seedSrc prfOf adversary) =
       failGameOf (so ∘ₛ pass) (simulateQ so seedSrc)
-        (fun s pp a suffix => simulateQ so (prfOf s pp a suffix)) adversary := by
+        (fun s publicParam a suffix => simulateQ so (prfOf s publicParam a suffix)) adversary := by
   simp only [failGameOf, simulateQ_bind, simulateQ_pure, simulateQ_keyGenFrom,
     simulateQ_run_failSignerOf]
   refine bind_congr fun s => bind_congr fun keys => bind_congr fun z => ?_
@@ -251,10 +254,10 @@ theorem liftM_H (x : Array UInt64) :
 
 /-- The derivations of the game, lifted, are those over the hash of the identity handler. -/
 theorem liftM_seedPrf (s : Seed) :
-    (fun pp a suffix =>
-        (liftM (seedPrf H s pp a suffix) : OracleComp OracleWorld Lanes4)) =
+    (fun publicParam a suffix =>
+        (liftM (seedPrf H s publicParam a suffix) : OracleComp OracleWorld Lanes4)) =
       seedPrf (hashOf (QueryImpl.id' OracleWorld)) s := by
-  funext pp a suffix
+  funext publicParam a suffix
   exact liftM_H _
 
 /-- Signing, lifted, is signing over the hash of the identity handler, from the key's seed. -/
@@ -326,7 +329,7 @@ theorem liftM_keyGenWith (seed : Seed) :
   rw [publicParamOf_map_monad (fun {β} (c : OracleComp HashSpec β) =>
     (liftM c : OracleComp OracleWorld β)) (fun b => liftM_pure b) (fun x f => liftM_bind x f),
     liftM_seedPrf]
-  refine bind_congr fun pp => ?_
+  refine bind_congr fun publicParam => ?_
   rw [build_map_monad (fun {β} (c : OracleComp HashSpec β) =>
     (liftM c : OracleComp OracleWorld β)) (fun b => liftM_pure b) (fun x f => liftM_bind x f),
     liftM_seedPrf, funext liftM_H]
@@ -344,7 +347,7 @@ theorem reasonRun_eq_failGameOf (adversary : ReasonAdversary) :
   simp only [failGameOf, liftM_keyGenWith, bind_assoc]
   refine bind_congr fun s => ?_
   simp only [Internal.keyGenFrom, bind_assoc, pure_bind]
-  refine bind_congr fun pp => bind_congr fun top => ?_
+  refine bind_congr fun publicParam => bind_congr fun top => ?_
   rw [run_reasonOracles_eq s _ _ rfl]
   refine bind_congr fun p => ?_
   rcases p with ⟨⟨forgery, sk'⟩, log⟩
@@ -427,10 +430,10 @@ theorem simulateQ_deriveImpl_seedGame (s0 : MasterSeed) (adversary : ReasonAdver
     unfold schemeSeed hashOf
     rw [hinput]
     rfl
-  have hprf : (fun (s : Seed) pp a suffix => simulateQ (seedEncoding.deriveImpl s0)
-      (seedPrf (hashOf (HashSpec.withDerivationsLift Unit HashOutput)) s pp a suffix)) =
+  have hprf : (fun (s : Seed) publicParam a suffix => simulateQ (seedEncoding.deriveImpl s0)
+      (seedPrf (hashOf (HashSpec.withDerivationsLift Unit HashOutput)) s publicParam a suffix)) =
         seedPrf (hashOf (QueryImpl.id' OracleWorld)) := by
-    funext s pp a suffix
+    funext s publicParam a suffix
     simp only [seedPrf, simulateQ_hashOf, SecretEncoding.deriveImpl_comp_withDerivationsLift]
   unfold seedGame
   erw [simulateQ_failGameOf, SecretEncoding.deriveImpl_comp_withDerivationsLift, hsrc, hprf]
@@ -464,8 +467,8 @@ abbrev PrfInput := PublicParam × Address × Array UInt64
 abbrev PrfSpec := HashSpec.withDerivations PrfInput HashOutput
 
 /-- The derivations as derivation queries, one per call. -/
-def prfD : SeedPrf (OracleComp PrfSpec) := fun pp a suffix =>
-  ofOutput <$> PrfSpec.query (.inr (pp, a, suffix))
+def prfD : SeedPrf (OracleComp PrfSpec) := fun publicParam a suffix =>
+  ofOutput <$> PrfSpec.query (.inr (publicParam, a, suffix))
 
 /-- The game with every derivation from the scheme seed as a derivation query.
 
@@ -482,8 +485,8 @@ def prfEncoding : SecretEncoding HashSpec (Unit → HashOutput) PrfInput HashOut
   enc f x := Hash.Keccak.lanesBytes (thInput x.1 x.2.1 ((ofOutput (f ())).toArray ++ x.2.2))
   range_eq _ _ := rfl
   injective f x y h := by
-    obtain ⟨pp, a, m⟩ := x
-    obtain ⟨pp', a', m'⟩ := y
+    obtain ⟨publicParam, a, m⟩ := x
+    obtain ⟨publicParam', a', m'⟩ := y
     obtain ⟨hpp, ha, hm⟩ := thInput_inj (Hash.Keccak.lanesBytes_injective h)
     obtain ⟨-, hm⟩ := Array.append_inj hm (by simp [Hash.Keccak.Lanes4.toArray])
     exact Prod.ext hpp (Prod.ext ha hm)
@@ -536,10 +539,10 @@ theorem simulateQ_fixDerivations_seedGame (f : Unit → HashOutput)
       (ofOutput <$> (SeedSpec.query (.inr ()) : OracleComp SeedSpec HashOutput)) =
       pure (ofOutput (f ())) := by
     simp [fixDerivations]
-  have hprf : (fun (s : Seed) pp a suffix => simulateQ (fixDerivations f)
-      (seedPrf (hashOf (HashSpec.withDerivationsLift Unit HashOutput)) s pp a suffix)) =
+  have hprf : (fun (s : Seed) publicParam a suffix => simulateQ (fixDerivations f)
+      (seedPrf (hashOf (HashSpec.withDerivationsLift Unit HashOutput)) s publicParam a suffix)) =
         seedPrf (hashOf (QueryImpl.id' OracleWorld)) := by
-    funext s pp a suffix
+    funext s publicParam a suffix
     simp only [seedPrf, simulateQ_hashOf, hlift]
   unfold seedGame
   erw [simulateQ_failGameOf, hlift, hsrc, hprf]
@@ -554,10 +557,10 @@ theorem simulateQ_deriveImpl_prfGame (f : Unit → HashOutput) (adversary : Reas
     simulateQ (prfEncoding.deriveImpl f) (prfGame adversary) =
       failGameOf (QueryImpl.id' OracleWorld) (pure (ofSeed (0 : MasterSeed)))
         (fun _ => seedPrf (hashOf (QueryImpl.id' OracleWorld)) (ofOutput (f ()))) adversary := by
-  have hprf : (fun (_ : Seed) pp a suffix => simulateQ (prfEncoding.deriveImpl f)
-      (prfD pp a suffix)) =
+  have hprf : (fun (_ : Seed) publicParam a suffix => simulateQ (prfEncoding.deriveImpl f)
+      (prfD publicParam a suffix)) =
         fun _ => seedPrf (hashOf (QueryImpl.id' OracleWorld)) (ofOutput (f ())) := by
-    funext u pp a suffix
+    funext u publicParam a suffix
     simp only [prfD, simulateQ_map, simulateQ_spec_query]
     rfl
   unfold prfGame
@@ -636,7 +639,8 @@ theorem isQueryBoundP_hashOf (hhash : ∀ x, IsQueryBoundP (pass (.inr x)) p 1) 
 
 /-- A request costs a signature: two searches, and the bottom tree when the key does not keep it. -/
 theorem isQueryBoundP_failSignerOf_inr (hhash : ∀ x, IsQueryBoundP (pass (.inr x)) p 1)
-    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1)
+    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ publicParam a suffix, IsQueryBoundP
+      (prf publicParam a suffix) p 1)
     (request : SignRequest) (sk : SecretKey) :
     IsQueryBoundP ((failSignerOf pass prf (.inr request)).run sk).run p requestQueries := by
   simp only [failSignerOf, StateT.run_mk, WriterT.run_mk]
@@ -686,7 +690,7 @@ theorem isQueryBoundP_run_keyed {R : Type}
 /-- Answering an adversary costs one call per hash query and a request's worst case per request. -/
 theorem isQueryBoundP_run_failSignerOf (hcoin : ∀ n, IsQueryBoundP (pass (.inl n)) p 0)
     (hhash : ∀ x, IsQueryBoundP (pass (.inr x)) p 1) {prf : SeedPrf (OracleComp spec)}
-    (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1) {α : Type}
+    (hprf : ∀ publicParam a suffix, IsQueryBoundP (prf publicParam a suffix) p 1) {α : Type}
     (oa : OracleComp (OracleWorld + ReasonSigningSpec) α) {qH r : ℕ}
     (hh : IsQueryBoundP oa IsAdversaryHash qH) (hr : IsQueryBoundP oa IsAdversaryRequest r)
     (sk : SecretKey) :
@@ -699,18 +703,20 @@ theorem isQueryBoundP_run_failSignerOf (hcoin : ∀ n, IsQueryBoundP (pass (.inl
 
 /-- Key generation from a scheme seed, over the game's hash: the parameter and the top tree. -/
 theorem isQueryBoundP_keyGenFrom (hhash : ∀ x, IsQueryBoundP (pass (.inr x)) p 1) (s : Seed)
-    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1) :
+    {prf : SeedPrf (OracleComp spec)} (hprf : ∀ publicParam a suffix, IsQueryBoundP
+      (prf publicParam a suffix) p 1) :
     IsQueryBoundP (Internal.keyGenFrom (hashOf pass) prf s) p
       (1 + (2 ^ LAYER_HEIGHT * 205 - 1)) := by
   unfold Internal.keyGenFrom
-  exact isQueryBoundP_bind (isQueryBoundP_publicParamOf hprf) fun pp _ =>
-    (isQueryBoundP_bind (m := 0) (isQueryBoundP_build (isQueryBoundP_hashOf hhash) hprf pp .top
+  exact isQueryBoundP_bind (isQueryBoundP_publicParamOf hprf) fun publicParam _ =>
+    (isQueryBoundP_bind (m := 0) (isQueryBoundP_build
+      (isQueryBoundP_hashOf hhash) hprf publicParam .top
       LAYER_HEIGHT 0) fun _ _ => isQueryBoundP_pure _ _ 0).mono (le_of_eq (Nat.add_zero _))
 
 /-- The game costs the scheme seed, key generation, the adversary's run and the verification. -/
 theorem isQueryBoundP_failGameOf (hcoin : ∀ n, IsQueryBoundP (pass (.inl n)) p 0)
     (hhash : ∀ x, IsQueryBoundP (pass (.inr x)) p 1) (hseed : IsQueryBoundP seedSrc p 1)
-    (hprf : ∀ s pp a suffix, IsQueryBoundP (prfOf s pp a suffix) p 1)
+    (hprf : ∀ s publicParam a suffix, IsQueryBoundP (prfOf s publicParam a suffix) p 1)
     (adversary : ReasonAdversary) {qH r : ℕ}
     (hh : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryHash qH)
     (hr : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r) :

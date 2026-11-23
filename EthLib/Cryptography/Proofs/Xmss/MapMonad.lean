@@ -36,29 +36,31 @@ include map_pure map_bind
 /-! ## Hashing and chains -/
 
 /-- A tweakable hash call, over the image of `H`. -/
-theorem th_map_monad (pp : PublicParam) (address : Address) (payload : Array UInt64) :
-    φ (th H pp address payload) = th (fun x => φ (H x)) pp address payload := by
+theorem th_map_monad (publicParam : PublicParam) (address : Address) (payload : Array UInt64) :
+    φ (th H publicParam address payload) = th (fun x => φ (H x)) publicParam address payload := by
   simp only [th, map_bind, map_pure]
 
 /-- The starts of a key's chains, over the image of the seed function. -/
-theorem chainStarts_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) :
-    φ (chainStarts pp prf layer e) =
-      chainStarts pp (fun pp a suffix => φ (prf pp a suffix)) layer e := by
+theorem chainStarts_map_monad (publicParam : PublicParam) (layer : Layer) (e : UInt32) :
+    φ (chainStarts publicParam prf layer e) =
+      chainStarts publicParam (fun publicParam a suffix => φ
+        (prf publicParam a suffix)) layer e := by
   simp only [chainStarts, map_bind, map_pure, HashSig.ofFnInOrder_map_monad φ map_pure map_bind]
 
 /-- A walk on one chain, over the image of `H`. -/
-theorem chain_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
+theorem chain_map_monad (publicParam : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
     (start steps : Nat) (h : start + steps < CHAIN_LENGTH) (value : Digest) :
-    φ (chain H pp layer e i start steps h value) =
-      chain (fun x => φ (H x)) pp layer e i start steps h value := by
+    φ (chain H publicParam layer e i start steps h value) =
+      chain (fun x => φ (H x)) publicParam layer e i start steps h value := by
   simp only [chain, Wots.chain_map_monad φ map_pure map_bind, chainStep,
     th_map_monad φ map_pure map_bind]
   rfl
 
 /-- The leaf of a key, over the images of `H` and of the seed function. -/
-theorem otsPublicLeaf_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) :
-    φ (otsPublicLeaf H pp prf layer e) =
-      otsPublicLeaf (fun x => φ (H x)) pp (fun pp a suffix => φ (prf pp a suffix)) layer e := by
+theorem otsPublicLeaf_map_monad (publicParam : PublicParam) (layer : Layer) (e : UInt32) :
+    φ (otsPublicLeaf H publicParam prf layer e) =
+      otsPublicLeaf (fun x => φ (H x)) publicParam (fun publicParam a suffix => φ
+        (prf publicParam a suffix)) layer e := by
   simp only [otsPublicLeaf, map_bind, chainStarts_map_monad φ map_pure map_bind,
     HashSig.ofFnInOrder_map_monad φ map_pure map_bind, chain_map_monad φ map_pure map_bind,
     otsLeafHash, th_map_monad φ map_pure map_bind]
@@ -66,33 +68,37 @@ theorem otsPublicLeaf_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) 
 /-! ## Trees -/
 
 /-- A node of a layer, over the images of `H` and of the seed function. -/
-theorem node_map_monad (pp : PublicParam) (layer : Layer) (level j : Nat) :
-    φ (node H pp prf layer level j) =
-      node (fun x => φ (H x)) pp (fun pp a suffix => φ (prf pp a suffix)) layer level j := by
+theorem node_map_monad (publicParam : PublicParam) (layer : Layer) (level j : Nat) :
+    φ (node H publicParam prf layer level j) =
+      node (fun x => φ (H x)) publicParam (fun publicParam a suffix => φ
+        (prf publicParam a suffix)) layer level j := by
   simp only [node, Merkle.node_map _ φ map_bind, nodeHash, leaves,
     th_map_monad φ map_pure map_bind, otsPublicLeaf_map_monad φ map_pure map_bind]
   rfl
 
 /-- A build of a layer, over the images of `H` and of the seed function. -/
-theorem build_map_monad (pp : PublicParam) (layer : Layer) (level j : Nat) :
-    φ (build H pp prf layer level j) =
-      build (fun x => φ (H x)) pp (fun pp a suffix => φ (prf pp a suffix)) layer level j := by
+theorem build_map_monad (publicParam : PublicParam) (layer : Layer) (level j : Nat) :
+    φ (build H publicParam prf layer level j) =
+      build (fun x => φ (H x)) publicParam (fun publicParam a suffix => φ
+        (prf publicParam a suffix)) layer level j := by
   simp only [build, Merkle.build_map _ φ map_pure map_bind, nodeHash, leaves,
     th_map_monad φ map_pure map_bind, otsPublicLeaf_map_monad φ map_pure map_bind]
   rfl
 
 /-- The path of a key, over the images of `H` and of the seed function. -/
-theorem path_map_monad (pp : PublicParam) (layer : Layer) (e : Nat) :
-    φ (path H pp prf layer e) =
-      path (fun x => φ (H x)) pp (fun pp a suffix => φ (prf pp a suffix)) layer e := by
+theorem path_map_monad (publicParam : PublicParam) (layer : Layer) (e : Nat) :
+    φ (path H publicParam prf layer e) =
+      path (fun x => φ (H x)) publicParam (fun publicParam a suffix => φ
+        (prf publicParam a suffix)) layer e := by
   simp only [path, Merkle.path_map _ φ map_pure map_bind, nodeHash, leaves,
     th_map_monad φ map_pure map_bind, otsPublicLeaf_map_monad φ map_pure map_bind]
   rfl
 
 /-- The root a path leads to, over the image of `H`. -/
-theorem fold_map_monad (pp : PublicParam) (layer : Layer) (e : Nat) (leaf : Digest)
+theorem fold_map_monad (publicParam : PublicParam) (layer : Layer) (e : Nat) (leaf : Digest)
     (pi : Vector Digest LAYER_HEIGHT) :
-    φ (fold H pp layer e leaf pi) = fold (fun x => φ (H x)) pp layer e leaf pi := by
+    φ (fold H publicParam layer e leaf pi) = fold (fun x => φ
+      (H x)) publicParam layer e leaf pi := by
   simp only [fold, Merkle.climb_map_monad _ φ map_pure map_bind, nodeHash,
     th_map_monad φ map_pure map_bind]
   rfl
@@ -100,9 +106,11 @@ theorem fold_map_monad (pp : PublicParam) (layer : Layer) (e : Nat) (leaf : Dige
 /-! ## Verification -/
 
 /-- The leaf a one-time signature leads to, over the image of `H`. -/
-theorem otsLeaf_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
+theorem otsLeaf_map_monad (publicParam : PublicParam) (layer : Layer) (e : UInt32)
+    (msg : Array UInt64)
     (rho : Randomizer) (y : Vector Digest V) :
-    φ (otsLeaf H pp layer e msg rho y) = otsLeaf (fun x => φ (H x)) pp layer e msg rho y := by
+    φ (otsLeaf H publicParam layer e msg rho y) = otsLeaf (fun x => φ
+      (H x)) publicParam layer e msg rho y := by
   simp only [otsLeaf, map_bind, messageDigest, th_map_monad φ map_pure map_bind]
   refine bind_congr fun d => ?_
   cases codeword? d with
@@ -112,9 +120,11 @@ theorem otsLeaf_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) (msg :
       chain_map_monad φ map_pure map_bind, otsLeafHash, th_map_monad φ map_pure map_bind]
 
 /-- The root one layer's signature leads to, over the image of `H`. -/
-theorem layerRoot_map_monad (pp : PublicParam) (layer : Layer) (e : Nat) (msg : Array UInt64)
+theorem layerRoot_map_monad (publicParam : PublicParam) (layer : Layer) (e : Nat)
+    (msg : Array UInt64)
     (sig : LayerSignature) :
-    φ (layerRoot H pp layer e msg sig) = layerRoot (fun x => φ (H x)) pp layer e msg sig := by
+    φ (layerRoot H publicParam layer e msg sig) = layerRoot (fun x => φ
+      (H x)) publicParam layer e msg sig := by
   simp only [layerRoot, map_bind, otsLeaf_map_monad φ map_pure map_bind]
   refine bind_congr fun r => ?_
   cases r with
@@ -130,26 +140,29 @@ From the codeword search on, the lemmas assume both monads lawful, so the map al
 section Sign
 
 /-- The base of the randomizer trials, over the image of the seed function. -/
-theorem randomizerBase_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32)
+theorem randomizerBase_map_monad (publicParam : PublicParam) (layer : Layer) (e : UInt32)
     (msg : Array UInt64) :
-    φ (randomizerBase pp prf layer e msg) =
-      randomizerBase pp (fun pp a suffix => φ (prf pp a suffix)) layer e msg :=
+    φ (randomizerBase publicParam prf layer e msg) =
+      randomizerBase publicParam (fun publicParam a suffix => φ
+        (prf publicParam a suffix)) layer e msg :=
   (map_bind _ _).trans (bind_congr fun _ => map_pure _)
 
 variable [LawfulMonad m] [LawfulMonad m']
 
 /-- The codeword search, over the image of `H`. -/
-theorem findCodeword_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32)
+theorem findCodeword_map_monad (publicParam : PublicParam) (layer : Layer) (e : UInt32)
     (msg : Array UInt64) (base : Randomizer) (c fuel : Nat) :
-    φ (Internal.findCodeword H pp layer e msg base c fuel) =
-      Internal.findCodeword (fun x => φ (H x)) pp layer e msg base c fuel := by
+    φ (Internal.findCodeword H publicParam layer e msg base c fuel) =
+      Internal.findCodeword (fun x => φ (H x)) publicParam layer e msg base c fuel := by
   simp only [Internal.findCodeword_eq, Wots.findFirst_map_monad φ map_pure map_bind,
     HashSig.map_monad_map φ map_pure map_bind, messageDigest, th_map_monad φ map_pure map_bind]
 
 /-- A one-time signature, over the images of `H` and of the seed function. -/
-theorem otsSign_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64) :
-    φ (otsSign H pp prf layer e msg) =
-      otsSign (fun x => φ (H x)) pp (fun pp a suffix => φ (prf pp a suffix)) layer e msg := by
+theorem otsSign_map_monad (publicParam : PublicParam) (layer : Layer) (e : UInt32)
+    (msg : Array UInt64) :
+    φ (otsSign H publicParam prf layer e msg) =
+      otsSign (fun x => φ (H x)) publicParam (fun publicParam a suffix => φ
+        (prf publicParam a suffix)) layer e msg := by
   simp only [otsSign, Internal.otsSignTrials, map_bind,
     randomizerBase_map_monad φ map_pure map_bind, findCodeword_map_monad φ map_pure map_bind H]
   refine bind_congr fun base => bind_congr fun r => ?_
@@ -162,7 +175,8 @@ theorem otsSign_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) (msg :
 /-- The top key's signature of a root, over the images of `H` and of the derivations. -/
 theorem signRootWith_map_monad (sk : SecretKey) (b : Nat) (root : Digest) :
     φ (Internal.signRootWith H prf sk b root) =
-      Internal.signRootWith (fun x => φ (H x)) (fun pp a suffix => φ (prf pp a suffix)) sk b
+      Internal.signRootWith (fun x => φ (H x)) (fun publicParam a suffix => φ
+        (prf publicParam a suffix)) sk b
         root := by
   simp only [Internal.signRootWith, Internal.otsSignTrials_hashTrials, map_bind,
     otsSign_map_monad φ map_pure map_bind H prf]
@@ -174,14 +188,16 @@ theorem signRootWith_map_monad (sk : SecretKey) (b : Nat) (root : Digest) :
 /-- A bottom tree with its top signature, over the images of `H` and of the derivations. -/
 theorem cacheTreeWith_map_monad (sk : SecretKey) (b : Nat) :
     φ (Internal.cacheTreeWith H prf sk b) =
-      Internal.cacheTreeWith (fun x => φ (H x)) (fun pp a suffix => φ (prf pp a suffix)) sk b := by
+      Internal.cacheTreeWith (fun x => φ (H x)) (fun publicParam a suffix => φ
+        (prf publicParam a suffix)) sk b := by
   simp only [Internal.cacheTreeWith, map_bind, map_pure, build_map_monad φ map_pure map_bind,
     signRootWith_map_monad φ map_pure map_bind H prf]
 
 /-- A fetched bottom tree and the updated key, over the images of `H` and of the derivations. -/
 theorem fetchTreeWith_map_monad (sk : SecretKey) (b : Nat) :
     φ (Internal.fetchTreeWith H prf sk b) =
-      Internal.fetchTreeWith (fun x => φ (H x)) (fun pp a suffix => φ (prf pp a suffix)) sk b := by
+      Internal.fetchTreeWith (fun x => φ (H x)) (fun publicParam a suffix => φ
+        (prf publicParam a suffix)) sk b := by
   unfold Internal.fetchTreeWith
   split
   · exact map_pure _
@@ -190,7 +206,8 @@ theorem fetchTreeWith_map_monad (sk : SecretKey) (b : Nat) :
 /-- A signature and the updated key, over the images of `H` and of the derivations. -/
 theorem signWithTrials_map_monad (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
     φ (Internal.signWithTrials H prf sk idx msg (hashTrials H)) =
-      Internal.signWithTrials (fun x => φ (H x)) (fun pp a suffix => φ (prf pp a suffix)) sk idx
+      Internal.signWithTrials (fun x => φ (H x)) (fun publicParam a suffix => φ
+        (prf publicParam a suffix)) sk idx
         msg (hashTrials fun x => φ (H x)) := by
   simp only [Internal.signWithTrials, Internal.otsSignTrials_hashTrials, map_bind,
     otsSign_map_monad φ map_pure map_bind H prf]
@@ -212,7 +229,8 @@ end Sign
 
 /-- The public parameter, over the image of the seed function. -/
 theorem publicParamOf_map_monad :
-    φ (publicParamOf prf) = publicParamOf fun pp a suffix => φ (prf pp a suffix) := by
+    φ (publicParamOf prf) = publicParamOf fun publicParam a suffix => φ
+      (prf publicParam a suffix) := by
   exact (map_bind _ _).trans (bind_congr fun _ => map_pure _)
 
 /-- Verification, over the image of `H`. -/

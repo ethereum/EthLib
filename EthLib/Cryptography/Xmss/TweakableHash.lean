@@ -66,15 +66,16 @@ They are its first two lanes or its last two lanes. -/
   if half.val = 0 then ⟨full.w0, full.w1⟩ else ⟨full.w2, full.w3⟩
 
 /-- The lanes one tweakable hash call hashes: `P | A | M`. -/
-def thInput (pp : PublicParam) (address : Address) (payload : Array UInt64) : Array UInt64 :=
+def thInput (publicParam : PublicParam) (address : Address)
+    (payload : Array UInt64) : Array UInt64 :=
   -- Fixed-length prefixes, so the input splits back into its three parts one way.
-  #[pp.lo, pp.hi, address.lo, address.hi] ++ payload
+  #[publicParam.lo, publicParam.hi, address.lo, address.hi] ++ payload
 
 /-- `Th(P, A, M)`: hash a payload under one address of one key, with one call of `H`. -/
-def th {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4) (pp : PublicParam)
+def th {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4) (publicParam : PublicParam)
     (address : Address) (payload : Array UInt64) : m Digest := do
   -- `Th(P, A, M) = H_0(P | A | M)`.
-  return halfOf 0 (← H (thInput pp address payload))
+  return halfOf 0 (← H (thInput publicParam address payload))
 
 /-! ## Derivations from the seed -/
 
@@ -94,6 +95,6 @@ abbrev SeedPrf (m : Type → Type) := PublicParam → Address → Array UInt64 �
 The seed comes right after the address, and the suffix comes last. -/
 def seedPrf {m : Type → Type} (H : Array UInt64 → m Lanes4) (s : Seed) : SeedPrf m :=
   -- `H(P | A | S | suffix)`: the chain starts, `R_0` and `P` are halves of it.
-  fun pp address suffix => H (thInput pp address (s.toArray ++ suffix))
+  fun publicParam address suffix => H (thInput publicParam address (s.toArray ++ suffix))
 
 end EthLib.Cryptography.Xmss

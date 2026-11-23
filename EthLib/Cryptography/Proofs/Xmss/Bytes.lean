@@ -74,23 +74,24 @@ theorem bytes_zero_lanes2 : (⟨0, 0⟩ : PublicParam).bytes = Vector.replicate 
 /-- `Th(P, A, M)` is the first 16 bytes of Keccak-256 of `P | A | M`.
 
 The payload `M` is the bytes of its lanes, each lane least significant byte first. -/
-theorem th_bytes (pp : PublicParam) (A : Address) (M : Array UInt64) :
-    (th hashId pp A M).run.bytes.toList =
-      (keccak256 (packBytes pp.bytes ++ packBytes A.bytes
+theorem th_bytes (publicParam : PublicParam) (A : Address) (M : Array UInt64) :
+    (th hashId publicParam A M).run.bytes.toList =
+      (keccak256 (packBytes publicParam.bytes ++ packBytes A.bytes
         ++ ⟨(lanesBytes M).toArray⟩)).toList.take 16 := by
-  show (halfOf 0 (hash (thInput pp A M))).bytes.toList = _
+  show (halfOf 0 (hash (thInput publicParam A M))).bytes.toList = _
   rw [toList_bytes_halfOf, hash_bytes, thInput_eq_append, Hash.Keccak.lanesBytes_append,
     Hash.Keccak.lanesBytes_append, Hash.Keccak.lanesBytes_lanes2, Hash.Keccak.lanesBytes_lanes2,
     mk_append, mk_append, ← packBytes_eq_mk, ← packBytes_eq_mk]
   rfl
 
 /-- A derivation from the scheme seed `S` is Keccak-256 of `P | A | S | suffix`, all 32 bytes. -/
-theorem seedPrf_bytes (s : Seed) (pp : PublicParam) (A : Address) (suffix : Array UInt64) :
-    (seedPrf hashId s pp A suffix).run.bytes =
-      keccak256 (packBytes pp.bytes ++ packBytes A.bytes ++ packBytes s.bytes
+theorem seedPrf_bytes (s : Seed) (publicParam : PublicParam) (A : Address) (suffix : Array UInt64) :
+    (seedPrf hashId s publicParam A suffix).run.bytes =
+      keccak256 (packBytes publicParam.bytes ++ packBytes A.bytes ++ packBytes s.bytes
         ++ ⟨(lanesBytes suffix).toArray⟩) := by
-  show (hash (thInput pp A (s.toArray ++ suffix))).bytes = _
-  rw [hash_bytes, show thInput pp A (s.toArray ++ suffix) = pp.toArray ++ A.toArray ++ s.toArray
+  show (hash (thInput publicParam A (s.toArray ++ suffix))).bytes = _
+  rw [hash_bytes, show thInput publicParam A
+    (s.toArray ++ suffix) = publicParam.toArray ++ A.toArray ++ s.toArray
       ++ suffix from by simp only [thInput, ← Array.append_assoc]; rfl,
     Hash.Keccak.lanesBytes_append, Hash.Keccak.lanesBytes_append, Hash.Keccak.lanesBytes_append,
     Hash.Keccak.lanesBytes_lanes2, Hash.Keccak.lanesBytes_lanes2, Hash.Keccak.lanesBytes_lanes4,
@@ -118,9 +119,10 @@ theorem publicParamOf_bytes (s : Seed) :
 /-- The start of chain `i` of key `e` is half `i mod 2` of `H(P | A_prf(l, e, floor(i / 2)) | S)`.
 
 Chain `2j` takes the first 16 bytes, and chain `2j + 1` the last 16. -/
-theorem chainStarts_bytes (pp : PublicParam) (s : Seed) (layer : Layer) (e : UInt32) (i : Fin V) :
-    ((chainStarts pp (seedPrf hashId s) layer e).run[i]).bytes.toList =
-      ((keccak256 (packBytes pp.bytes
+theorem chainStarts_bytes (publicParam : PublicParam) (s : Seed) (layer : Layer)
+    (e : UInt32) (i : Fin V) :
+    ((chainStarts publicParam (seedPrf hashId s) layer e).run[i]).bytes.toList =
+      ((keccak256 (packBytes publicParam.bytes
         ++ packBytes (addrPrf layer e
           ⟨i.val / 2, by have := i.isLt; simp only [V] at *; omega⟩).bytes
         ++ packBytes s.bytes)).toList.drop (16 * (i.val % 2))).take 16 := by
@@ -133,22 +135,24 @@ theorem chainStarts_bytes (pp : PublicParam) (s : Seed) (layer : Layer) (e : UIn
   rfl
 
 /-- The randomizer base `R_0` is the first 16 bytes of `H(P | A_rnd(l, e) | S | M)`. -/
-theorem randomizerBase_bytes (pp : PublicParam) (s : Seed) (layer : Layer) (e : UInt32)
+theorem randomizerBase_bytes (publicParam : PublicParam) (s : Seed) (layer : Layer) (e : UInt32)
     (msg : Array UInt64) :
-    (randomizerBase pp (seedPrf hashId s) layer e msg).run.bytes.toList =
-      (keccak256 (packBytes pp.bytes ++ packBytes (addrRnd layer e).bytes ++ packBytes s.bytes
+    (randomizerBase publicParam (seedPrf hashId s) layer e msg).run.bytes.toList =
+      (keccak256 (packBytes publicParam.bytes ++ packBytes
+        (addrRnd layer e).bytes ++ packBytes s.bytes
         ++ ⟨(lanesBytes msg).toArray⟩)).toList.take 16 := by
-  show (halfOf 0 (seedPrf hashId s pp (addrRnd layer e) msg).run).bytes.toList = _
+  show (halfOf 0 (seedPrf hashId s publicParam (addrRnd layer e) msg).run).bytes.toList = _
   rw [toList_bytes_halfOf, seedPrf_bytes]
   rfl
 
 /-! ## Chains -/
 
 /-- A chain step from position `mu` of chain `i` is `H_0(P | A_chain(l, e, mu) | v | LE_128(i))`. -/
-theorem chainStep_bytes (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
+theorem chainStep_bytes (publicParam : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
     (mu : Fin (CHAIN_LENGTH - 1)) (v : Digest) :
-    (chainStep hashId pp layer e i mu v).run.bytes.toList =
-      (keccak256 (packBytes pp.bytes ++ packBytes (addrChain layer e mu).bytes ++ packBytes v.bytes
+    (chainStep hashId publicParam layer e i mu v).run.bytes.toList =
+      (keccak256 (packBytes publicParam.bytes ++ packBytes
+        (addrChain layer e mu).bytes ++ packBytes v.bytes
         ++ packBytes (uintToBytes 16 i.val))).toList.take 16 := by
   rw [chainStep, th_bytes,
     show (#[v.lo, v.hi, i.val.toUInt64, 0] : Array UInt64) =
@@ -159,61 +163,67 @@ theorem chainStep_bytes (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin
   rfl
 
 /-- Step `s + 1` from `start` hashes the value after `s` steps, at position `start + s`. -/
-theorem chain_succ_bytes (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
+theorem chain_succ_bytes (publicParam : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
     (start s : Nat) (h : start + (s + 1) < CHAIN_LENGTH) (v : Digest) :
-    (chain hashId pp layer e i start (s + 1) h v).run.bytes.toList =
-      (keccak256 (packBytes pp.bytes
+    (chain hashId publicParam layer e i start (s + 1) h v).run.bytes.toList =
+      (keccak256 (packBytes publicParam.bytes
         ++ packBytes (addrChain layer e ⟨start + s, by simp only [CHAIN_LENGTH] at *; omega⟩).bytes
-        ++ packBytes (chain hashId pp layer e i start s (by omega) v).run.bytes
+        ++ packBytes (chain hashId publicParam layer e i start s (by omega) v).run.bytes
         ++ packBytes (uintToBytes 16 i.val))).toList.take 16 :=
-  chainStep_bytes pp layer e i _ _
+  chainStep_bytes publicParam layer e i _ _
 
 /-! ## Leaves -/
 
 /-- The leaf of one-time key `e` is `H_0(P | A_leaf(l, e) | y_0 | ... | y_57)`.
 
 The values `y_i` are the ends of its 58 chains. -/
-theorem otsLeafHash_bytes (pp : PublicParam) (layer : Layer) (e : UInt32) (ends : Vector Digest V) :
-    (otsLeafHash hashId pp layer e ends).run.bytes.toList =
-      (keccak256 (packBytes pp.bytes ++ packBytes (addrLeaf layer e).bytes
+theorem otsLeafHash_bytes (publicParam : PublicParam) (layer : Layer) (e : UInt32)
+    (ends : Vector Digest V) :
+    (otsLeafHash hashId publicParam layer e ends).run.bytes.toList =
+      (keccak256 (packBytes publicParam.bytes ++ packBytes (addrLeaf layer e).bytes
         ++ packDigests ends)).toList.take 16 := by
   rw [otsLeafHash, th_bytes, packDigests_eq_mk]
 
 /-- The leaf of key `e`: each chain walked from its derived start to position 3, then hashed.
 
 With the derivations from the scheme seed, the starts are the halves of the derivations above. -/
-theorem otsPublicLeaf_bytes (pp : PublicParam) (prf : SeedPrf Id) (layer : Layer) (e : UInt32) :
-    (otsPublicLeaf hashId pp prf layer e).run.bytes.toList =
-      (keccak256 (packBytes pp.bytes ++ packBytes (addrLeaf layer e).bytes
-        ++ packDigests (Vector.ofFn fun i => (chain hashId pp layer e i 0 (CHAIN_LENGTH - 1)
-          (by decide) (chainStarts pp prf layer e).run[i]).run))).toList.take 16 := by
+theorem otsPublicLeaf_bytes (publicParam : PublicParam) (prf : SeedPrf Id)
+    (layer : Layer) (e : UInt32) :
+    (otsPublicLeaf hashId publicParam prf layer e).run.bytes.toList =
+      (keccak256 (packBytes publicParam.bytes ++ packBytes (addrLeaf layer e).bytes
+        ++ packDigests (Vector.ofFn fun i =>
+          (chain hashId publicParam layer e i 0 (CHAIN_LENGTH - 1)
+          (by decide) (chainStarts publicParam prf layer e).run[i]).run))).toList.take 16 := by
   rw [otsPublicLeaf, Id.run_bind, Id.run_bind, HashSig.ofFnInOrder_run, otsLeafHash_bytes]
 
 /-! ## The digest a key signs -/
 
 /-- The digest of a trial is `H_0(P | A_msg(l, e) | M | rho)`, with `M` the bytes of its lanes. -/
-theorem messageDigest_bytes (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
+theorem messageDigest_bytes (publicParam : PublicParam) (layer : Layer) (e : UInt32)
+    (msg : Array UInt64)
     (rho : Randomizer) :
-    (messageDigest hashId pp layer e msg rho).run.bytes.toList =
-      (keccak256 (packBytes pp.bytes ++ packBytes (addrMsg layer e).bytes
+    (messageDigest hashId publicParam layer e msg rho).run.bytes.toList =
+      (keccak256 (packBytes publicParam.bytes ++ packBytes (addrMsg layer e).bytes
         ++ ⟨(lanesBytes msg).toArray⟩ ++ packBytes rho.bytes)).toList.take 16 := by
   rw [messageDigest, th_bytes, Hash.Keccak.lanesBytes_append, Hash.Keccak.lanesBytes_lanes2,
     mk_append, ← packBytes_eq_mk]
   rfl
 
 /-- On the bottom layer the signed bytes `M` are the 32 bytes of the message. -/
-theorem messageDigest_message_bytes (pp : PublicParam) (e : UInt32) (msg : Message)
+theorem messageDigest_message_bytes (publicParam : PublicParam) (e : UInt32) (msg : Message)
     (rho : Randomizer) :
-    (messageDigest hashId pp .bottom e msg.toArray rho).run.bytes.toList =
-      (keccak256 (packBytes pp.bytes ++ packBytes (addrMsg .bottom e).bytes ++ packBytes msg.bytes
+    (messageDigest hashId publicParam .bottom e msg.toArray rho).run.bytes.toList =
+      (keccak256 (packBytes publicParam.bytes ++ packBytes
+        (addrMsg .bottom e).bytes ++ packBytes msg.bytes
         ++ packBytes rho.bytes)).toList.take 16 := by
   rw [messageDigest_bytes, Hash.Keccak.lanesBytes_lanes4, ← packBytes_eq_mk]
 
 /-- On the top layer the signed bytes `M` are the 16 bytes of a bottom tree's root. -/
-theorem messageDigest_root_bytes (pp : PublicParam) (e : UInt32) (root : Digest)
+theorem messageDigest_root_bytes (publicParam : PublicParam) (e : UInt32) (root : Digest)
     (rho : Randomizer) :
-    (messageDigest hashId pp .top e root.toArray rho).run.bytes.toList =
-      (keccak256 (packBytes pp.bytes ++ packBytes (addrMsg .top e).bytes ++ packBytes root.bytes
+    (messageDigest hashId publicParam .top e root.toArray rho).run.bytes.toList =
+      (keccak256 (packBytes publicParam.bytes ++ packBytes
+        (addrMsg .top e).bytes ++ packBytes root.bytes
         ++ packBytes rho.bytes)).toList.take 16 := by
   rw [messageDigest_bytes, Hash.Keccak.lanesBytes_lanes2, ← packBytes_eq_mk]
 
@@ -225,10 +235,10 @@ theorem digit_val_bytes (d : Digest) (i : Fin DIGITS) :
 /-! ## Trees -/
 
 /-- A parent at a position is `H_0(P | A_node(l, level, j) | left | right)`. -/
-theorem nodeHash_bytes (pp : PublicParam) (layer : Layer) (p : Merkle.Position)
+theorem nodeHash_bytes (publicParam : PublicParam) (layer : Layer) (p : Merkle.Position)
     (left right : Digest) :
-    (nodeHash hashId pp layer p left right).run.bytes.toList =
-      (keccak256 (packBytes pp.bytes
+    (nodeHash hashId publicParam layer p left right).run.bytes.toList =
+      (keccak256 (packBytes publicParam.bytes
         ++ packBytes (addrNode layer (Fin.ofNat _ p.level) (UInt32.ofNat p.index)).bytes
         ++ packBytes left.bytes ++ packBytes right.bytes)).toList.take 16 := by
   rw [nodeHash, th_bytes,
@@ -239,23 +249,25 @@ theorem nodeHash_bytes (pp : PublicParam) (layer : Layer) (p : Merkle.Position)
   rfl
 
 /-- Node `j` on level 0 is the leaf of one-time key `j`. -/
-theorem node_zero_bytes (pp : PublicParam) (prf : SeedPrf Id) (layer : Layer) (j : Nat) :
-    (node hashId pp prf layer 0 j).run.bytes.toList =
-      (keccak256 (packBytes pp.bytes ++ packBytes (addrLeaf layer (UInt32.ofNat j)).bytes
-        ++ packDigests (Vector.ofFn fun i => (chain hashId pp layer (UInt32.ofNat j) i 0
+theorem node_zero_bytes (publicParam : PublicParam) (prf : SeedPrf Id) (layer : Layer) (j : Nat) :
+    (node hashId publicParam prf layer 0 j).run.bytes.toList =
+      (keccak256 (packBytes publicParam.bytes ++ packBytes (addrLeaf layer (UInt32.ofNat j)).bytes
+        ++ packDigests (Vector.ofFn fun i => (chain hashId publicParam layer (UInt32.ofNat j) i 0
           (CHAIN_LENGTH - 1) (by decide)
-          (chainStarts pp prf layer (UInt32.ofNat j)).run[i]).run))).toList.take 16 := by
+          (chainStarts publicParam prf layer (UInt32.ofNat j)).run[i]).run))).toList.take 16 := by
   rw [node_zero, otsPublicLeaf_bytes]
 
 /-- Node `j` one level up hashes its two children, nodes `2j` and `2j + 1` of the level below.
 
 The root of a tree is node 0 on level 16. -/
-theorem node_succ_bytes (pp : PublicParam) (prf : SeedPrf Id) (layer : Layer) (level j : Nat) :
-    (node hashId pp prf layer (level + 1) j).run.bytes.toList =
-      (keccak256 (packBytes pp.bytes
+theorem node_succ_bytes (publicParam : PublicParam) (prf : SeedPrf Id)
+    (layer : Layer) (level j : Nat) :
+    (node hashId publicParam prf layer (level + 1) j).run.bytes.toList =
+      (keccak256 (packBytes publicParam.bytes
         ++ packBytes (addrNode layer (Fin.ofNat _ (level + 1)) (UInt32.ofNat j)).bytes
-        ++ packBytes (node hashId pp prf layer level (2 * j)).run.bytes
-        ++ packBytes (node hashId pp prf layer level (2 * j + 1)).run.bytes)).toList.take 16 := by
+        ++ packBytes (node hashId publicParam prf layer level (2 * j)).run.bytes
+        ++ packBytes (node hashId publicParam prf layer level
+          (2 * j + 1)).run.bytes)).toList.take 16 := by
   rw [node_succ, Id.run_bind, Id.run_bind, nodeHash_bytes]
 
 /-! ## Keys and signatures -/

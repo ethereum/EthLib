@@ -57,12 +57,13 @@ theorem halfOf_zero_ofOutput_randomizer (y : HashOutput) :
 /-- The randomizer base is one query, its answer's first half read as a randomizer.
 
 Stated at the randomizer's type, so later binds associate with it. -/
-theorem randomizerBase_queryH (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.Layer)
+theorem randomizerBase_queryH (publicParam : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.Layer)
     (e : UInt32) (msg : Array UInt64) :
-    (Xmss.randomizerBase pp (Xmss.seedPrf queryH s) layer e msg :
+    (Xmss.randomizerBase publicParam (Xmss.seedPrf queryH s) layer e msg :
       OracleComp HashSpec Xmss.Randomizer)
       = liftM (HashSpec.query
-          (Hash.Keccak.lanesBytes (Xmss.thInput pp (Xmss.addrRnd layer e) (s.toArray ++ msg)))) >>=
+          (Hash.Keccak.lanesBytes (Xmss.thInput publicParam (Xmss.addrRnd layer e)
+            (s.toArray ++ msg)))) >>=
         fun y => pure (ofRandomizer (y.extractLsb' 0 randomnessBits)) := by
   rw [Xmss.randomizerBase_seedPrf]
   unfold Xmss.th
@@ -340,14 +341,17 @@ end Merkle
 attribute [local irreducible] LAYER_HEIGHT
 
 /-- A resolved top tree resolves the path of each top key, to the path the tree holds. -/
-theorem resolves_path_top {cache : QueryCache HashSpec} {pp : Xmss.PublicParam} {s : Xmss.Seed}
+theorem resolves_path_top {cache : QueryCache HashSpec}
+    {publicParam : Xmss.PublicParam} {s : Xmss.Seed}
     {T : Merkle.Built Xmss.Digest}
-    (hT : Resolves cache (Xmss.build queryH pp (Xmss.seedPrf queryH s) .top LAYER_HEIGHT 0 :
+    (hT : Resolves cache (Xmss.build queryH publicParam
+      (Xmss.seedPrf queryH s) .top LAYER_HEIGHT 0 :
       OracleComp HashSpec _) T) {b : Nat} (hb : b < 2 ^ LAYER_HEIGHT) :
-    Resolves cache (Xmss.path queryH pp (Xmss.seedPrf queryH s) .top b : OracleComp HashSpec _)
+    Resolves cache (Xmss.path queryH publicParam
+      (Xmss.seedPrf queryH s) .top b : OracleComp HashSpec _)
       (T.path LAYER_HEIGHT b) := by
   obtain ⟨v, hv⟩ := resolves_path_of_build _ _ hT hb
-  change Resolves cache (Xmss.path queryH pp (Xmss.seedPrf queryH s) .top b :
+  change Resolves cache (Xmss.path queryH publicParam (Xmss.seedPrf queryH s) .top b :
     OracleComp HashSpec _) v at hv
   convert hv using 1
   -- Answer every query from the cache: the build and the path then evaluate to their values.
@@ -356,13 +360,16 @@ theorem resolves_path_top {cache : QueryCache HashSpec} {pp : Xmss.PublicParam} 
   rw [← hT.eval f hf, ← hv.eval f hf]
   have hbuild := Xmss.build_map_monad (m := OracleComp HashSpec) (m' := Id)
     (fun {β} (c : OracleComp HashSpec β) => (evalWithAnswerFn f c : Id β)) (fun _ => rfl)
-    (fun x g => evalWithAnswerFn_bind f x g) queryH (Xmss.seedPrf queryH s) pp .top LAYER_HEIGHT 0
+    (fun x g => evalWithAnswerFn_bind f x g) queryH
+      (Xmss.seedPrf queryH s) publicParam .top LAYER_HEIGHT 0
   have hpath := Xmss.path_map_monad (m := OracleComp HashSpec) (m' := Id)
     (fun {β} (c : OracleComp HashSpec β) => (evalWithAnswerFn f c : Id β)) (fun _ => rfl)
-    (fun x g => evalWithAnswerFn_bind f x g) queryH (Xmss.seedPrf queryH s) pp .top b
+    (fun x g => evalWithAnswerFn_bind f x g) queryH (Xmss.seedPrf queryH s) publicParam .top b
   rw [hbuild, hpath]
-  have := Xmss.path_build_run (H := fun x => (evalWithAnswerFn f (queryH x) : Id _)) (pp := pp)
-    (prf := fun pp a suffix => (evalWithAnswerFn f (Xmss.seedPrf queryH s pp a suffix) : Id _))
+  have := Xmss.path_build_run (H := fun x => (evalWithAnswerFn f (queryH x) : Id _))
+    (publicParam := publicParam)
+    (prf := fun publicParam a suffix => (evalWithAnswerFn f
+      (Xmss.seedPrf queryH s publicParam a suffix) : Id _))
     (layer := .top) b
   rwa [Nat.div_eq_of_lt hb] at this
 

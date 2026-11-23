@@ -66,23 +66,27 @@ theorem QueryCount.ofFnInOrder {α : Type} {k n : Nat} {c : Fin k → OracleComp
   rw [HashSig.ofFnInOrder_eq_map_sequenceFin]
   exact (QueryCount.sequenceFin h).map _
 
-theorem queryCount_th (pp : Xmss.PublicParam) (A : Xmss.Address) (payload : Array UInt64) :
-    QueryCount (Xmss.th queryH pp A payload : OracleComp HashSpec Xmss.Digest) 1 := by
+theorem queryCount_th (publicParam : Xmss.PublicParam) (A : Xmss.Address) (payload : Array UInt64) :
+    QueryCount (Xmss.th queryH publicParam A payload : OracleComp HashSpec Xmss.Digest) 1 := by
   unfold Xmss.th
   exact (queryCount_queryH _).bind fun _ => .pure _
 
-theorem queryCount_chain (pp : Xmss.PublicParam) (layer : Xmss.Layer) (e : UInt32) (i : Fin V)
+theorem queryCount_chain (publicParam : Xmss.PublicParam) (layer : Xmss.Layer)
+    (e : UInt32) (i : Fin V)
     (start : Nat) : ∀ (steps : Nat) (h : start + steps < CHAIN_LENGTH) (v : Xmss.Digest),
-    QueryCount (Xmss.chain queryH pp layer e i start steps h v : OracleComp HashSpec Xmss.Digest)
+    QueryCount
+      (Xmss.chain queryH publicParam layer e i start steps h v : OracleComp HashSpec Xmss.Digest)
       steps
   | 0, _, _ => .pure _
   | s + 1, h, v => by
     rw [Xmss.chain]
-    exact (queryCount_chain pp layer e i start s (by omega) v).bind fun _ => queryCount_th _ _ _
+    exact (queryCount_chain publicParam layer e i start s
+      (by omega) v).bind fun _ => queryCount_th _ _ _
 
-theorem queryCount_chainStarts (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.Layer)
+theorem queryCount_chainStarts (publicParam : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.Layer)
     (e : UInt32) :
-    QueryCount (Xmss.chainStarts pp (Xmss.seedPrf queryH s) layer e : OracleComp HashSpec _)
+    QueryCount (Xmss.chainStarts publicParam
+      (Xmss.seedPrf queryH s) layer e : OracleComp HashSpec _)
       29 := by
   rw [Xmss.chainStarts_seedPrf]
   exact (QueryCount.ofFnInOrder fun _ => queryCount_queryH _).bind fun _ => .pure _
@@ -90,25 +94,27 @@ theorem queryCount_chainStarts (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer : 
 /-- The hash calls of a node at `level`, its subtree's one-time keys included. -/
 def nodeQueries (level : Nat) : Nat := 2 ^ level * (29 + 174 + 1) + 2 ^ level - 1
 
-theorem queryCount_otsPublicLeaf (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.Layer)
+theorem queryCount_otsPublicLeaf (publicParam : Xmss.PublicParam) (s : Xmss.Seed)
+    (layer : Xmss.Layer)
     (e : UInt32) :
-    QueryCount (Xmss.otsPublicLeaf queryH pp (Xmss.seedPrf queryH s) layer e :
+    QueryCount (Xmss.otsPublicLeaf queryH publicParam (Xmss.seedPrf queryH s) layer e :
       OracleComp HashSpec Xmss.Digest)
       (nodeQueries 0) := by
   unfold Xmss.otsPublicLeaf
   rw [show nodeQueries 0 = 29 + (V * 3 + 1) by decide]
-  refine (queryCount_chainStarts pp s layer e).bind fun starts => ?_
-  exact (QueryCount.ofFnInOrder fun i => queryCount_chain pp layer e i 0 3 (by decide) _).bind
+  refine (queryCount_chainStarts publicParam s layer e).bind fun starts => ?_
+  exact (QueryCount.ofFnInOrder fun i => queryCount_chain publicParam layer e i 0
+    3 (by decide) _).bind
     fun _ => queryCount_th _ _ _
 
-theorem queryCount_node (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.Layer) :
+theorem queryCount_node (publicParam : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.Layer) :
     ∀ (level : Nat) (j : Nat),
-      QueryCount (Xmss.node queryH pp (Xmss.seedPrf queryH s) layer level j :
+      QueryCount (Xmss.node queryH publicParam (Xmss.seedPrf queryH s) layer level j :
         OracleComp HashSpec Xmss.Digest)
         (nodeQueries level)
   | 0, j => by
     rw [Xmss.node_zero]
-    exact queryCount_otsPublicLeaf pp s layer _
+    exact queryCount_otsPublicLeaf publicParam s layer _
   | l + 1, j => by
     rw [Xmss.node_succ]
     have hcount : nodeQueries (l + 1) = nodeQueries l + (nodeQueries l + 1) := by
@@ -116,17 +122,17 @@ theorem queryCount_node (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.La
       have : 1 ≤ 2 ^ l := Nat.one_le_two_pow
       omega
     rw [hcount]
-    exact (queryCount_node pp s layer l _).bind fun _ =>
-      (queryCount_node pp s layer l _).bind fun _ => queryCount_th _ _ _
+    exact (queryCount_node publicParam s layer l _).bind fun _ =>
+      (queryCount_node publicParam s layer l _).bind fun _ => queryCount_th _ _ _
 
 /-- A build at `level` makes the calls of its node: each node of the subtree is computed once. -/
-theorem queryCount_build (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.Layer) :
+theorem queryCount_build (publicParam : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.Layer) :
     ∀ (level : Nat) (j : Nat),
-      QueryCount (Xmss.build queryH pp (Xmss.seedPrf queryH s) layer level j :
+      QueryCount (Xmss.build queryH publicParam (Xmss.seedPrf queryH s) layer level j :
         OracleComp HashSpec (Merkle.Built Xmss.Digest))
         (nodeQueries level)
   | 0, j => by
-    have h := (queryCount_otsPublicLeaf pp s layer (UInt32.ofNat j)).bind
+    have h := (queryCount_otsPublicLeaf publicParam s layer (UInt32.ofNat j)).bind
       (f := fun value => (pure (Merkle.Built.leaf value) :
         OracleComp HashSpec (Merkle.Built Xmss.Digest))) fun _ => .pure _
     rw [Nat.add_zero] at h
@@ -141,8 +147,8 @@ theorem queryCount_build (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.L
     rw [hcount]
     unfold Xmss.build
     rw [Merkle.build_succ]
-    exact (queryCount_build pp s layer l _).bind fun _ =>
-      (queryCount_build pp s layer l _).bind fun _ =>
+    exact (queryCount_build publicParam s layer l _).bind fun _ =>
+      (queryCount_build publicParam s layer l _).bind fun _ =>
         (queryCount_th _ _ _).bind fun _ => .pure _
 
 theorem queryCount_realKeygen (seed : MasterSeed) :

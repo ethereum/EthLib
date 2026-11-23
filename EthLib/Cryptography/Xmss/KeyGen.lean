@@ -86,14 +86,14 @@ namespace Internal
 Key generation passes the derivations of `S`. -/
 def keyGenFrom (prf : SeedPrf m) (s : Seed) : m (PublicKey × SecretKey) := do
   -- `P = Th(0^128, A_param, S)`.
-  let pp ← publicParamOf prf
+  let publicParam ← publicParamOf prf
   -- The top tree, whose root `X^1_{h,0}` is in the public key.
-  let top ← build H pp prf .top LAYER_HEIGHT 0
+  let top ← build H publicParam prf .top LAYER_HEIGHT 0
   -- The keys are `pk = (X^1_{h,0}, P)` and `sk = S_0`.
   --
   -- Here the secret key keeps `S`, `P` and the top tree.
-  return ({ root := top.value, publicParam := pp },
-    { schemeSeed := s, publicParam := pp, top, cache := [] })
+  return ({ root := top.value, publicParam := publicParam },
+    { schemeSeed := s, publicParam := publicParam, top, cache := [] })
 
 end Internal
 

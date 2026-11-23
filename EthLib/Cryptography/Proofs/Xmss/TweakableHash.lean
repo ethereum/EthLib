@@ -34,25 +34,26 @@ theorem hash_bytes (input : Array UInt64) :
   Hash.Keccak.keccak256Lanes_lanesBytes input
 
 /-- A hash input is the lanes of the parameter, then of the address, then the payload. -/
-theorem thInput_eq_append (pp : PublicParam) (address : Address) (payload : Array UInt64) :
-    thInput pp address payload = pp.toArray ++ address.toArray ++ payload :=
+theorem thInput_eq_append (publicParam : PublicParam) (address : Address) (payload : Array UInt64) :
+    thInput publicParam address payload = publicParam.toArray ++ address.toArray ++ payload :=
   rfl
 
 /-- `P | A | M` determines `P`, `A` and `M`. -/
-theorem thInput_inj {pp pp' : PublicParam} {a a' : Address} {m m' : Array UInt64}
-    (h : thInput pp a m = thInput pp' a' m') : pp = pp' ∧ a = a' ∧ m = m' := by
+theorem thInput_inj {publicParam publicParam' : PublicParam} {a a' : Address} {m m' : Array UInt64}
+    (h : thInput publicParam a m = thInput publicParam' a' m') : publicParam = publicParam'
+      ∧ a = a' ∧ m = m' := by
   -- The first four lanes are the two fixed-size prefixes, the rest is the payload.
   obtain ⟨hpre, hm⟩ := Array.append_inj h rfl
   simp only [List.toArray, Array.mk.injEq, List.cons.injEq, and_true] at hpre
   obtain ⟨h1, h2, h3, h4⟩ := hpre
-  exact ⟨by cases pp; cases pp'; simp_all, by cases a; cases a'; simp_all, hm⟩
+  exact ⟨by cases publicParam; cases publicParam'; simp_all, by cases a; cases a'; simp_all, hm⟩
 
 /-- A derivation with an empty suffix hashes `P | A | S`.
 
 The public parameter and the chain starts are halves of such derivations. -/
 theorem seedPrf_empty {m : Type → Type} (H : Array UInt64 → m Lanes4) (s : Seed)
-    (pp : PublicParam) (address : Address) :
-    seedPrf H s pp address #[] = H (thInput pp address s.toArray) := by
+    (publicParam : PublicParam) (address : Address) :
+    seedPrf H s publicParam address #[] = H (thInput publicParam address s.toArray) := by
   simp only [seedPrf, Array.append_empty]
 
 end EthLib.Cryptography.Xmss
