@@ -4395,6 +4395,11 @@ A status outside the three of the guide counts as invalidated, a choice of EthLi
 The export rejects such a status before any step runs.
 `Store.recordValidatedInclusionListSatisfaction_satisfied` shows that a payload that turns valid takes the answer that the execution layer gives with its verdict.
 `Store.recordValidatedInclusionListSatisfaction_eq` shows that nothing else in the store changes, and `Store.recordValidatedInclusionListSatisfaction_other` that every other answer stays, those of its ancestors among them.
+`Store.isAncestor_empty_getHead_of_not_satisfied` (`Consensus/Proofs/ForkChoice/PayloadReveal.lean`) covers a payload whose answer is `false`.
+In the slot after its block, a head that goes through the block goes through its empty node, and not through its full node.
+In that slot both nodes of the block weigh nothing, and the tiebreaker favours the empty node of a payload that is not extended.
+From two slots after the block the votes weigh both nodes, and the theorem says nothing there.
+It needs the empty node among the viable nodes, and each known block at a later slot than its known parent.
 The store of the fork choice does not keep the status of a payload, but the optimistic store does.
 `OptimisticStore.onValidatedPayload_ok` shows that the move to valid succeeds only for an optimistic payload, which then leaves the optimistic set as a valid payload does.
 The Python suite checks each rule on Bellatrix blocks built in the test, with roots from the SSZ export.
