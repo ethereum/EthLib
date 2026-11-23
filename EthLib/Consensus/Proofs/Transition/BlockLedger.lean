@@ -578,7 +578,7 @@ theorem lives_processParentExecutionPayload {gloas : .glamsterdam ≤ fork}
     ⟨-, settled, _, _, consolidated, _, _, _, settledOk, depositsOk, withdrawalsOk,
       consolidationsOk, buildersOk, exitsOk, -, rfl⟩
   · exact Lives.refl _
-  -- Settling the payment and the requests of builders keep the registry of validators.
+  -- Settling the payment and the requests of builders keeps the registry of validators.
   have builders := foldlM_ok_invariant
     (fun u : BeaconState preset fork => u.validators = consolidated.validators)
     (fun _ _ _ before ok => by
@@ -1523,6 +1523,8 @@ private theorem ledger_requests {electra : .pectra ≤ fork} {deposits : List De
 
 /-- The requests of the execution layer convert at most one validator per consolidation request.
 
+So they convert no more validators than a payload can carry consolidation requests.
+
 They move no other balance. -/
 theorem ledger_processExecutionRequests {body : BeaconBlockBody preset fork}
     {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
@@ -1539,7 +1541,7 @@ theorem ledger_processExecutionRequests {body : BeaconBlockBody preset fork}
 
 /-- From Gloas, the payload of the parent changes no balance outside a set of converted validators.
 
-The set has at most the preset's most consolidation requests per payload.
+The set has no more members than a payload can carry consolidation requests.
 
 No balance rises.
 
@@ -1555,7 +1557,7 @@ theorem ledger_processParentExecutionPayload {gloas : .glamsterdam ≤ fork}
     ⟨-, settled, _, _, _, _, _, _, settledOk, depositsOk, withdrawalsOk, consolidationsOk,
       buildersOk, exitsOk, -, rfl⟩
   · exact ⟨∅, Ledger.refl _, Nat.zero_le _⟩
-  -- Settling the payment and the requests of builders keep the balances and the validators.
+  -- Settling the payment and the requests of builders keeps the balances and the validators.
   have settledEq := settleParentPayment_eq settledOk
   have settle := Ledger.of_eq (s := s) (t := settled) (by rw [settledEq]) (by rw [settledEq])
   have builders := Ledger.foldlM (fun _ _ _ ok => by

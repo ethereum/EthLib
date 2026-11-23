@@ -387,8 +387,6 @@ theorem withdrawals_departureQueues {fork : Fork} {s t : BeaconState preset fork
 
 /-- From Electra, the execution part of a block keeps both departure queues.
 
-It removes the queued partial withdrawals that its withdrawals read.
-
 From Gloas a block whose parent has no payload pays no withdrawals.
 
 With a full parent, or before Gloas, the queue loses the prefix that its withdrawals read. -/

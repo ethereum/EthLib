@@ -2225,7 +2225,7 @@ theorem appendStep_processBlock {engine : ExecutionEngine preset f}
     exact AppendStep.of_data frame rfl fun _ => rfl
   exact head.trans <| (appendStep_processOperations delay operatedOk).trans sync
 
-/-- A block from Altair keeps the frame, the lifecycle and the queue. -/
+/-- A block from Altair keeps the frame and the lifecycle, and its queue only grows. -/
 theorem riseStep_processBlock {engine : ExecutionEngine preset f}
     {block : BeaconBlock preset f} (altair : .altair ≤ f)
     (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)

@@ -7,6 +7,7 @@ public import EthLib.Consensus.Proofs.Transition.PendingConsolidations
 public import EthLib.Consensus.Proofs.Transition.FfgStake
 import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
+import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
 import EthLib.Consensus.Proofs.Transition.BuilderPayments
 import EthLib.Consensus.Proofs.Transition.EpochDecomposition
 import EthLib.Consensus.Proofs.Transition.EpochJustification
@@ -511,34 +512,6 @@ private theorem partials_floor {f : Fork} {s : BeaconState preset f} {electra : 
   · rw [Array.extract_eq_self_of_le (Nat.le_refl _)] at holds
     exact holds
 
-/-- From Gloas, withdrawals keep the balance at an index that names a builder.
-
-A withdrawal for that index debits the builder, and any other withdrawal names another index. -/
-private theorem foldlM_applyWithdrawal_flagged {f : Fork} (gloas : .glamsterdam ≤ f)
-    {v : ValidatorIndex} (flagged : isBuilderIndex v = true) :
-    ∀ (withdrawals : List Withdrawal) (a b : BeaconState preset f),
-      withdrawals.foldlM applyWithdrawal a = .ok b →
-      actualBalanceAt ⟨f, b⟩ v.toNat = actualBalanceAt ⟨f, a⟩ v.toNat
-  | [], a, b, ok => by
-    cases ok
-    rfl
-  | w :: rest, a, b, ok => by
-    rw [List.foldlM_cons, bind_ok_iff] at ok
-    obtain ⟨m, step, restOk⟩ := ok
-    rw [foldlM_applyWithdrawal_flagged gloas flagged rest m b restOk]
-    unfold applyWithdrawal at step
-    split at step
-    · simp only [bind_ok_iff] at step
-      obtain ⟨_, _, set⟩ := step
-      obtain ⟨_, rfl⟩ := setBuilder_ok set
-      rfl
-    · rename_i notBuilder
-      rw [actualBalanceAt_decreaseBalance step]
-      have apart : w.validatorIndex.toNat ≠ v.toNat := fun same => by
-        rw [UInt64.toNat_inj.mp same] at notBuilder
-        exact notBuilder ⟨gloas, flagged⟩
-      simp [apart]
-
 /-- An index that names no builder is paid nothing by either builder list of a payload.
 
 Those are the queued builder withdrawals and the sweep of builders. -/
@@ -624,8 +597,9 @@ private theorem withdrawals_floor {f : Fork} {s t : BeaconState preset f}
     unfold applyWithdrawals at applyOk
     rw [← Array.foldlM_toList] at applyOk
     have same : actualBalanceAt ⟨f, t⟩ v.toNat = actualBalanceAt ⟨f, s⟩ v.toNat := by
-      rw [← foldlM_applyWithdrawal_flagged gloas flag _ _ _ applyOk]
-      simp only [actualBalanceAt, balances]
+      -- A withdrawal for that index debits the builder, and any other names another index.
+      simp only [actualBalanceAt, balances, applyWithdrawals_unnamed (index := v.toNat) _ _ _
+        applyOk fun _ _ named => ⟨gloas, UInt64.toNat_inj.mp named ▸ flag⟩]
     rw [same]
     exact (Nat.min_le_left _ _).trans (Nat.le_add_right _ _)
   have named : f < .glamsterdam ∨ isBuilderIndex v = false := by
@@ -841,6 +815,8 @@ The payload of the parent leaves it at least the smaller of its balance and its 
 A converted validator did not compound, so its effective balance is within the activation balance.
 
 Its record keeps its effective balance and stays within its own largest effective balance.
+
+The activation balance must be at most the largest effective balance of Electra.
 
 It still cannot withdraw in full when a later state of the epoch still has it exiting later. -/
 private theorem parent_floor {f : Fork} {s parented t : BeaconState preset f}

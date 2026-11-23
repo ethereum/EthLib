@@ -451,7 +451,9 @@ def HeldRegistriesWithinLimit (store : Store preset fork) : Prop :=
 
 Its state is at an epoch within the horizon.
 
-Its size is at most the anchor's, plus one epoch of pending deposits per epoch since the anchor. -/
+Its size is at most the anchor's plus a growth term.
+
+That term allows the preset's most pending deposits per epoch, for each epoch since the anchor. -/
 theorem registryWithinLimit_of_anchorRoom {anchor state : BeaconState preset fork}
     {horizon : Epoch}
     (size : state.validators.data.size ≤ anchor.validators.data.size +
@@ -473,7 +475,9 @@ theorem registryWithinLimit_of_anchorRoom {anchor state : BeaconState preset for
 
 A slot runs no upgrade, since the fork is kept.
 
-A block adds no validator, since from Gloas a block has no legacy validator deposits. -/
+A block adds no validator: from Gloas it has no legacy deposits, and its deposit requests queue.
+
+Builder deposits join the registry of builders, not that of validators. -/
 private theorem step_validators_size_le_of_gloas {checks : SignatureChecks}
     {m y : ForkedBeaconState preset}
     (step : Step config checks m y) (gloas : .glamsterdam ≤ m.fork) (same : y.fork ≤ m.fork) :
@@ -501,7 +505,7 @@ private theorem step_validators_size_le_of_gloas {checks : SignatureChecks}
     rw [sameEpoch]
     exact ⟨Nat.le_refl _, by omega⟩
 
-/-- From Gloas, a run that keeps its fork grows its registry by its epochs of pending deposits. -/
+/-- From Gloas, a run that keeps its fork adds at most one epoch of pending deposits per epoch. -/
 private theorem run_validators_size_le_of_gloas {checks : SignatureChecks}
     {x : ForkedBeaconState preset} (gloas : .glamsterdam ≤ x.fork) :
     ∀ {y : ForkedBeaconState preset}, Run config checks x y → y.fork ≤ x.fork →
@@ -522,6 +526,8 @@ private theorem run_validators_size_le_of_gloas {checks : SignatureChecks}
     exact ⟨first.trans second, growth_trans first second one two⟩
 
 /-- From Gloas, a run from the anchor that ends within the horizon ends within the limit.
+
+The run keeps the anchor's fork.
 
 The anchor's registry must leave room for the pending deposits of each epoch up to the horizon.
 

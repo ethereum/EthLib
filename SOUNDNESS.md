@@ -3811,7 +3811,8 @@ The theorem covers executions whose honest stores verify signatures with BLS (`c
 The specification's pulled-up head state processes slots with BLS checks, and a run under other checks can differ from it.
 The fork is Fulu or later.
 From Gloas it takes three premises, each saying nothing before Gloas.
-`room` says that the anchor's registry leaves room up to the horizon, and `weights` that the head weights of the configuration fit.
+`room` says that the anchor's registry leaves room up to the horizon.
+`weights` says that the head reads of the configuration fit 64 bits for an active stake up to 2·10^17 Gwei.
 `supply` is a `CheckpointHeadWeightCeiling`: each weight of the weak-head test at an honest justified state through the limit is at most 2·10^17 Gwei.
 A private step of the same file shows that each call keeps the call invariant, given the invariant at every earlier call.
 The call invariant and the walk of a call are in `ConfirmedCalls.lean`.

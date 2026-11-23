@@ -616,7 +616,7 @@ Up to the pending balances the steps keep the slot, the queue, the churn left an
 
 They also keep effective balances, credentials, slashes and assigned exits.
 
-The pending balances and the builder payments lead to the effective-balance update.
+The pending balances, and from Gloas the builder payments, lead to the effective-balance update.
 
 That update gives the registry. -/
 private theorem rise_epoch {f : Fork} {c t : BeaconState preset f} (altair : .altair ≤ f)

@@ -5700,9 +5700,9 @@ theorem CapStep.upgrade {s : ForkedBeaconState preset}
 
 /-- Along a run, each step is a cap step, and the invariant of the transition is kept.
 
-Before Gloas only, the queued partial withdrawals stay assigned.
+Proved only before Gloas: the queued partial withdrawals stay assigned.
 
-Before Gloas only, an unassigned validator keeps its eligible balance.
+Proved only before Gloas: an unassigned validator keeps its eligible balance.
 
 That needs a run from genesis, aligned caps and a finite epoch. -/
 theorem CapStep.run {s t : ForkedBeaconState preset}

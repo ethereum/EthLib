@@ -821,7 +821,7 @@ private theorem credited_operationsPrefix {body : BeaconBlockBody preset fork} {
 
 /-- From Fulu, the operations of a block credit like operations.
 
-Before Gloas they convert at most one validator for each consolidation request.
+Before Gloas they convert no more validators than a payload can carry consolidation requests.
 
 From Gloas they carry no request, and convert no validator. -/
 private theorem credited_processOperations {body : BeaconBlockBody preset fork} {parent : Slot}
@@ -1009,7 +1009,7 @@ private theorem kept_processSyncAggregate {altair : .altair ≤ fork}
 
 Withdrawals pay at most the preset's `MAX_WITHDRAWALS_PER_PAYLOAD` validators.
 
-Consolidation requests convert at most its `MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD` validators.
+Consolidation requests convert at most `MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD` validators.
 
 From Gloas those requests run in the payload of the parent, before the header.
 
@@ -1146,8 +1146,8 @@ theorem block_balances {engine : ExecutionEngine preset fork}
     if 0 < share then proposer' else proposer, credit, share,
     (toVoted.trans ops.ledger).trans syncLedger, by simpa [capella] using paidCount,
     ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · -- The conversions come from the payload of the parent from Gloas, and from the operations
-    -- before it.
+  · -- Before Gloas the conversions come from the operations.
+    -- From Gloas they come from the payload of the parent, which runs first.
     have union := Finset.card_union_le convPre conv
     rw [Finset.union_empty]
     split at convPreCount <;> split at convCount <;> omega

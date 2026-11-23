@@ -1280,9 +1280,9 @@ The fork is Fulu or later.
 
 From Gloas the head weights of the configuration fit (`weights`, a configuration fact).
 
-Also from Gloas, two assumptions on the run, each saying nothing before Gloas.
+Also from Gloas, two assumptions, each saying nothing before Gloas.
 
-The anchor's registry leaves room up to the horizon (`room`).
+The anchor's registry leaves room up to the horizon (`room`), an assumption on the anchor.
 
 Honest justified states through `limit` bound each weak-head weight by 2·10^17 Gwei (`supply`).
 

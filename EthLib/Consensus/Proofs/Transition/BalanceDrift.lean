@@ -1086,9 +1086,9 @@ theorem advanceSlotAcross_of_same_epoch {middle last : ForkedBeaconState preset}
 
 Inside one epoch no slot crosses an epoch boundary.
 
-So a slot step only runs `processSlot` and sets the slot.
+So a slot step only processes the slot and sets it.
 
-A block step is one `applySignedBlock` call. -/
+A block step applies one signed block. -/
 theorem Run.induction_of_same_epoch {x : ForkedBeaconState preset}
     (motive : (z : ForkedBeaconState preset) → Run config checks x z → Prop)
     (start : motive x .nil)

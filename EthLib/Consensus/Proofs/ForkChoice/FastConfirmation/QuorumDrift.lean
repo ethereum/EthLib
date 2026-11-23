@@ -800,11 +800,11 @@ An assumption on the run: its fork is Fulu or later.
 
 The bounds read the epoch transition from Fulu on.
 
-From Gloas, an assumption on the run: the anchor's registry leaves room up to the horizon (`room`).
+From Gloas, an assumption on the anchor and the horizon (`room`).
 
-The room covers the pending deposits of each epoch.
+The anchor's registry leaves room for one epoch of pending deposits per epoch up to the horizon.
 
-It is a real input; before Gloas it says nothing.
+Before Gloas it says nothing.
 
 The anchor store comes from a successful read of the fork-choice store of the anchor.
 

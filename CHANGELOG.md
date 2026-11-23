@@ -16,7 +16,7 @@ Not yet released.
 - `registryLifecycle_processOperations` (`Transition/RegistryLifecycle.lean`) says that the operations of a block keep the lifecycle of the registry.
   `registryLifecycle_processBlock` and the effective-balance fall read it.
 
-- `Run.registryWithinLimit_of_room` (`ForkChoice/BlockRuns.lean`) bounds the registry of a run from the anchor at every fork.
+- `Run.registryWithinLimit_of_room` (`ForkChoice/BlockRuns.lean`) bounds, at every fork, the registry at the end of a run that starts at the anchor and stays at the anchor's fork.
   From Gloas, a run that ends within the horizon keeps its registry within the limit, given the anchor's registry room.
   Before Gloas, the type bounds it.
   `Execution.quorumDriftWithin` reads it at the counting state.
@@ -25,7 +25,7 @@ Not yet released.
 
 - In Lean, the payload of the parent has a balance ledger from Gloas, and its old validators read at both ends are later.
   `BlockLedger.ledger_processParentExecutionPayload` changes no balance outside a set of converted validators.
-  That set has at most the preset's most consolidation requests per payload; no balance rises, and only a conversion lowers one.
+  That set has no more members than a payload can carry consolidation requests; no balance rises, and only a conversion lowers one.
   `BlockLedger.lives_processParentExecutionPayload` says that an old validator read at both ends is later at the end, and that a new validator is not activated.
   `BlockCredits.block_balances` reads them.
 
@@ -972,7 +972,7 @@ Not yet released.
   Committee membership alone puts each signer in the registry, by `getPendingAttestingIndices_lt`.
   Migration: delete the `within` argument ([#4253](https://github.com/ethereum/EthLib/pull/4253)).
 
-- In Lean, `Execution.blocks_of_partiallySynchronous` is removed; it has no reader.
+- In Lean, `Execution.blocks_of_partiallySynchronous` is removed; its one reader, the confirmed-root step, now reads `Execution.blocks_of_partiallySynchronous_of_anchorSlot`.
   Migration: use `Execution.blocks_of_partiallySynchronous_of_anchorSlot` (added earlier in 0.4.0), passing `fun gloas => absurd gloas (Nat.not_le_of_lt preGloas)` for `anchorSlot` and `start v honest` and `start u receiver` for the two starts.
 
 - In Lean, the confirmed root of a run of fast-confirmation calls covers honest heads from Gloas too, and keeps its Fulu floor.
@@ -999,7 +999,7 @@ Not yet released.
   `Run.currentSyncCommittee_eq_of_same_period`, `Run.currentSyncCommittee_eq_nextSyncCommittee_of_next_period`, `Run.currentSyncCommittee_eq_of_same_epoch` and `depositCarry_processBlock` drop their pre-Gloas binder.
   Migration: delete the argument.
 
-- In Lean, the block and ledger lemmas of the quorumReserve route extend through Gloas, and their existing lower fork bounds remain.
+- In Lean, the block and ledger lemmas behind the quorum reserve extend through Gloas, and their existing lower fork bounds remain.
   These drop their pre-Gloas binder (`DirectSafety.total_active_congr` drops two, `before` and `after`), with the same conclusion: `DirectSafety.total_active_congr`, `Run.effectiveKept_of_same_epoch`, `hysteresis_of_run_slot`, `balanceDrift_upgrades_upper`, `balanceDrift_upgrades_active`, `BlockLedger.ledger_processBlockExecution`, `BlockLedger.ledger_processProposerSlashing`, `BlockLedger.ledger_processAttesterSlashing`, `processOperations_floor`, `BlockCredits.block_balances`, `Run.withdrawableKept_of_same_epoch`, `Run.balanceCorrections_of_same_epoch`, `Run.effectiveBalance_capped`, `Run.pendingConsolidationsOrdered`, `Run.pendingConsolidation_invariant`, `ConsolidationQueueRise.appendStep_processBlock`, `ConsolidationQueueRise.riseStep_processBlock`, `SamePendingQueue.blockExecution`, `applyWithdrawals_departureQueues`, `attestation_departureQueues` and `slashValidator_departureQueues`.
   Migration: delete the arguments.
 
@@ -1013,8 +1013,8 @@ Not yet released.
   `Run.induction_of_same_period` drops `early` and the pre-Gloas hypotheses of both callbacks.
   Migration: delete `early`; a callback that used the hypothesis keeps it through the motive `fun z pre => z.fork < .glamsterdam → motive z pre`, and the caller applies the result to `early`.
 
-- In Lean, `Internal.CapStep.run` holds through Gloas, and keeps the invariant of the transition through Gloas.
-  It drops `early`; its `AssignedPartials` and `UnassignedEligibleBalance` conjuncts hold before Gloas only, and now take it as a hypothesis.
+- In Lean, `Internal.CapStep.run` holds through Gloas, and keeps the invariant of the transition.
+  It drops `early`; its `AssignedPartials` and `UnassignedEligibleBalance` conjuncts are proved before Gloas only, and now take it as a hypothesis.
   Migration: write `.2.1 early` for `.2.1` and `.2.2.2 early` for `.2.2.2`; `.1` and `.2.2.1` are unchanged.
 
 - In Lean, the withdrawal step and the execution part of a block state their departure queues by the payload of the parent.
