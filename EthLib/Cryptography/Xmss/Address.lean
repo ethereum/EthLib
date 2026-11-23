@@ -28,31 +28,50 @@ def layerHi (layer : Layer) (a : Fin (2 ^ 23)) : Fin (2 ^ 24) :=
     have := a.isLt
     cases layer <;> simp only [Layer.toNat] <;> omega⟩
 
-/-! ## Addresses
-
-- `e` is a one-time key's index on its layer.
-- `j` is the index of a pair of chains of a key, or of a node on its level.
--/
+/-! ## Addresses -/
 
 /-- An address of the specification: which hash call of a key it is.
 
 Each constructor is one kind of address, named as in the specification. -/
 inductive Address where
-  /-- `A_prf(l, e, j)`: the start of chains `2j` and `2j + 1` of key `e`. -/
+  /-- `A_prf(l, e, j)`: the derivation that starts chains `2j` and `2j + 1` of key `e`.
+
+  - `layer`: the layer `l`, bottom or top.
+  - `e`: the one-time key's index on its layer.
+  - `j`: the pair of chains, from 0 to 28, since 29 derivations start the 58 chains. -/
   | prf (layer : Layer) (e : UInt32) (j : Fin (V / 2))
-  /-- `A_chain(l, e, mu)`: the step from position `mu` of every chain of key `e`.
+  /-- `A_chain(l, e, mu)`: one step of every chain of key `e`, from position `mu` to `mu + 1`.
+
+  - `layer`: the layer `l`, bottom or top.
+  - `e`: the one-time key's index on its layer.
+  - `mu`: the position the step starts from, from 0 to 2.
 
   The chain index is not in the address: it follows the value in the hash input. -/
   | chain (layer : Layer) (e : UInt32) (mu : Fin (CHAIN_LENGTH - 1))
-  /-- `A_leaf(l, e)`: the Merkle leaf of key `e`, from its chain ends. -/
+  /-- `A_leaf(l, e)`: the Merkle leaf of key `e`, from its 58 chain ends.
+
+  - `layer`: the layer `l`, bottom or top.
+  - `e`: the one-time key's index on its layer. -/
   | leaf (layer : Layer) (e : UInt32)
-  /-- `A_node(l, lambda, j)`: node `j` on level `lambda` of a layer, from its two children. -/
+  /-- `A_node(l, lambda, j)`: node `j` on level `lambda` of a layer, from its two children.
+
+  - `layer`: the layer `l`, bottom or top.
+  - `level`: the level `lambda`, used from 1 to 16, since level 0 holds the leaves.
+  - `j`: the node's index on its level, counted across all the trees of the layer. -/
   | node (layer : Layer) (level : Fin (LAYER_HEIGHT + 1)) (j : UInt32)
-  /-- `A_param`: the public parameter, from the seed. -/
+  /-- `A_param`: the public parameter `P`, from the scheme seed.
+
+  It takes no argument: both layers share one parameter. -/
   | param
-  /-- `A_rnd(l, e)`: the base of the randomizers of key `e`. -/
+  /-- `A_rnd(l, e)`: the base of the randomizers that key `e` tries.
+
+  - `layer`: the layer `l`, bottom or top.
+  - `e`: the one-time key's index on its layer. -/
   | rnd (layer : Layer) (e : UInt32)
-  /-- `A_msg(l, e)`: the digest key `e` signs. -/
+  /-- `A_msg(l, e)`: the digest key `e` signs, one hash per randomizer trial.
+
+  - `layer`: the layer `l`, bottom or top.
+  - `e`: the one-time key's index on its layer. -/
   | msg (layer : Layer) (e : UInt32)
   deriving DecidableEq, Repr
 
