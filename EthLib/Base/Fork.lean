@@ -220,13 +220,15 @@ def name : Fork → String
 
 /-- The last fork, in the order of the cases.
 
-Enumerations and termination measures that run to the last fork read it.
+The lookup of a fork by its name and the termination measures of the fork upgrades read it.
 
 So they name no case, and a new fork at the end leaves them as they are.
 
 A new fork at the end moves this definition to it.
 
-Until it does, the fork upgrades have no proof that they stop, so the library does not build. -/
+Until it does, the proofs that every fork is at or before it and that each name reads back fail.
+
+So do the proofs that the fork upgrades stop, and the library does not build. -/
 def last : Fork := hegota
 
 /-- The fork with a name, if one has it. -/

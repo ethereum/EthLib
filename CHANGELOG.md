@@ -3003,8 +3003,8 @@ Not yet released.
 
 - In Lean, `Base.Fork.le_hegota` is removed: use `Base.Fork.le_last`.
   `Base.Fork.last` is the last fork, and `Base.Fork.le_last` states that every fork is at or before it.
-  The lookup of a fork by its name reads it, and so does the proof that the consensus fork upgrades stop.
-  So a fork added at the end changes neither of them.
+  The lookup of a fork by its name reads it, and so do the proofs that the consensus fork upgrades and their balance replay stop.
+  So a fork added at the end changes none of them; only `Base.Fork.last` must move to it.
 
 ## 0.3.0
 
