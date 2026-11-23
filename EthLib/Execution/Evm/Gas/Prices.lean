@@ -1,7 +1,9 @@
 module
 
+public import EthLib.Base.Denominations
 public import EthLib.Base.Fork
 public import EthLib.Base.U256
+public import EthLib.Execution.Evm.Gas.StateGas
 public import EthLib.Execution.Evm.Words
 
 /-!
@@ -9,7 +11,19 @@ public import EthLib.Execution.Evm.Words
 
 The gas prices of the EVM.
 
-A price that a fork changed is a function of the fork, and the other prices are constants.
+A value that a fork changed and that depends only on the fork is a field of the gas schedule.
+
+One function of the fork computes the schedule.
+
+A price that a fork changed and that also depends on an access or an input is its own function.
+
+The prices of SLOAD, BALANCE, EXTCODESIZE, EXTCODEHASH and CALL depend on the access.
+
+The other prices are constants.
+
+The schedule also holds the other values of the execution layer that change at forks.
+
+They are the limits of code, the reservoir of a system call, and the reward and the bomb of a block.
 
 Appendix G, Fee Schedule, of the Yellow Paper, Shanghai version, lists most prices.
 
@@ -60,7 +74,11 @@ A price that an EIP adds or changes names that EIP:
 
 The last six are in Last Call, so their prices may still change.
 
-The precompiles keep their prices, and the blob prices are with the blob fees.
+The prices of the addition and the scalar multiplication on the alt_bn128 curve are in the schedule.
+
+The other precompiles keep their prices with their own definitions.
+
+The blob prices are with the blob fees.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [yp-berlin]: https://github.com/ethereum/yellowpaper/blob/beacfbd29ccc04dfd790f2282d4c4b1c0afc9b5a/Paper.tex
@@ -341,10 +359,29 @@ def OPCODE_LOG_DATA_PER_BYTE : Nat := 8
 def OPCODE_LOG_TOPIC : Nat := 375
 end GasCosts
 
-open EthLib.Base (Fork U256)
+open EthLib.Base (Fork U256 WEI_PER_ETHER)
 open GasCosts
 
-/-- The gas prices that a fork changed, and that depend only on the fork. -/
+/-- The price of SLOAD.
+
+From Berlin, it is the price of a cold or a warm access to the slot.
+
+Before Berlin, it does not depend on the access. -/
+def sloadCost (fork : Fork) (cold : Bool) : Nat :=
+  if fork ≥ .berlin then
+    -- `G_coldsload` or `G_warmaccess`, which replace the price of 800, by EIP-2929.
+    if cold then COLD_STORAGE_ACCESS else WARM_ACCESS
+  else if fork ≥ .istanbul then
+    -- EIP-1884 raises the price from 200 to 800.
+    800
+  else if fork ≥ .tangerineWhistle then
+    -- EIP-150 raises the price from 50 to 200.
+    200
+  else 50
+
+/-- The parameters of the execution layer that a fork changed, and that depend only on the fork.
+
+They are gas prices and refunds, the limits of code, and the reward and the bomb of a block. -/
 structure GasSchedule where
   /-- The price per byte of the exponent of EXP. -/
   OPCODE_EXP_PER_BYTE : Nat
@@ -368,11 +405,39 @@ structure GasSchedule where
   REFUND_STORAGE_CLEAR : Nat
   /-- The refund for each account that SELFDESTRUCT destroys. -/
   REFUND_SELF_DESTRUCT : Nat
+  /-- The quotient of the gas used that caps the refund of a transaction. -/
+  MAX_REFUND_QUOTIENT : Nat
+  /-- The price of SSTORE when the write leaves the slot as it is, or the slot is already dirty.
+
+  It is read only from Istanbul on. -/
+  SSTORE_READ : Nat
+  /-- The price of SSTORE to change a slot whose original value is not zero.
+
+  It is read only from Istanbul on. -/
+  SSTORE_RESET : Nat
+  /-- The price of a creation, before memory, init code and the hash of CREATE2. -/
+  CREATE_BASE : Nat
+  /-- The price of each authorization of a transaction, from Pectra. -/
+  TX_AUTHORIZATION : Nat
+  /-- The price of the addition precompile of the alt_bn128 curve. -/
+  PRECOMPILE_ECADD : Nat
+  /-- The price of the scalar multiplication precompile of the alt_bn128 curve. -/
+  PRECOMPILE_ECMUL : Nat
+  /-- The reservoir of state gas of a system call. -/
+  SYSTEM_RESERVOIR : Nat
+  /-- The most bytes of code that a creation may deploy, or none for no bound. -/
+  MAX_CODE_SIZE : Option Nat
+  /-- The most bytes of init code, read only from Shapella on. -/
+  MAX_INIT_CODE_SIZE : Nat
+  /-- The block reward in wei, read only before Paris. -/
+  BLOCK_REWARD : Nat
+  /-- The blocks by which the difficulty bomb is delayed, read only before Paris. -/
+  BOMB_DELAY : Nat
   deriving DecidableEq, Repr
 
-/-- The gas prices of a fork that depend only on the fork.
+/-- The parameters of the execution layer at `fork` that depend only on the fork.
 
-Each price changes only at the forks that the comments name.
+Each value changes only at the forks that the comments name.
 
 From Glamsterdam, the prices of an access list and the refund to clear a slot derive from others.
 
@@ -423,19 +488,85 @@ def gasSchedule (fork : Fork) : GasSchedule :=
       if fork ≥ .glamsterdam then (STORAGE_WRITE + COLD_STORAGE_ACCESS) * 4800 / 5000
       else if fork ≥ .london then 4800 else 15000
     -- `R_selfdestruct`: 24000 in the Berlin paper, then 0 from London by EIP-3529.
-    REFUND_SELF_DESTRUCT := if fork ≥ .london then 0 else 24000 }
+    REFUND_SELF_DESTRUCT := if fork ≥ .london then 0 else 24000
+    -- The refund is at most the gas used over 2, then over 5 from London by EIP-3529.
+    MAX_REFUND_QUOTIENT := if fork ≥ .london then 5 else 2
+    -- EIP-2200's `SLOAD_GAS`, the price of SLOAD, which EIP-2929 sets to `WARM_STORAGE_READ_COST`.
+    SSTORE_READ := if fork ≥ .berlin then WARM_ACCESS else sloadCost fork false
+    -- EIP-2200's `SSTORE_RESET_GAS`, which EIP-2929 sets to `5000 - COLD_SLOAD_COST`.
+    --
+    -- From Berlin it leaves out the price of a cold access, which SSTORE adds on its own.
+    SSTORE_RESET :=
+      if fork ≥ .berlin then COLD_STORAGE_WRITE - COLD_STORAGE_ACCESS else COLD_STORAGE_WRITE
+    -- `G_create`: 32000 up to BPO5.
+    --
+    -- From Glamsterdam, the write and the cold access of the new account, 12000, by EIP-8038.
+    CREATE_BASE :=
+      if fork ≥ .glamsterdam then ACCOUNT_WRITE + coldAccountAccess else OPCODE_CREATE_BASE
+    -- `PER_EMPTY_ACCOUNT_COST`, 25000, by EIP-7702.
+    --
+    -- From Glamsterdam, EIP-8037 lowers it to 7816, and charges the rest at run time.
+    TX_AUTHORIZATION :=
+      if fork ≥ .glamsterdam then EXECUTION_PER_AUTH_BASE_COST else AUTH_PER_EMPTY_ACCOUNT
+    -- EIP-196, Gas costs: 500; EIP-1108, Specification: 150, here from Istanbul.
+    PRECOMPILE_ECADD := if fork ≥ .istanbul then 150 else 500
+    -- EIP-196, Gas costs: 40000; EIP-1108, Specification: 6000, here from Istanbul.
+    PRECOMPILE_ECMUL := if fork ≥ .istanbul then 6000 else 40000
+    -- From Glamsterdam, the state gas of 16 new storage slots, 1,566,720, by EIP-8037.
+    --
+    -- Before Glamsterdam, 0.
+    SYSTEM_RESERVOIR :=
+      if fork ≥ .glamsterdam then STORAGE_SET_STATE_GAS * SYSTEM_MAX_SSTORES_PER_CALL else 0
+    -- 24576 from Spurious Dragon by EIP-170, and 65536 from Glamsterdam by EIP-7954.
+    MAX_CODE_SIZE :=
+      if fork ≥ .glamsterdam then some 65536
+      else if fork ≥ .spuriousDragon then some 24576
+      else none
+    -- 49152 from Shapella by EIP-3860, and 131072 from Glamsterdam by EIP-7954.
+    --
+    -- Both are twice the code limit, but no code limit exists before Spurious Dragon.
+    --
+    -- So the value keeps its own numbers, and each rule that reads it checks the fork.
+    MAX_INIT_CODE_SIZE := if fork ≥ .glamsterdam then 131072 else 49152
+    -- `R_block` of §11.3 of the Berlin paper, in wei.
+    BLOCK_REWARD :=
+      -- `R_block = 10^18 × 5` before Byzantium.
+      if fork < .byzantium then 5 * WEI_PER_ETHER
+      -- `10^18 × 3` from Byzantium, by EIP-649.
+      else if fork < .constantinople then 3 * WEI_PER_ETHER
+      -- `10^18 × 2` from Constantinople, by EIP-1234.
+      else 2 * WEI_PER_ETHER
+    -- `kappa` of §4.3.4 of the Berlin paper, one case for each range of forks.
+    --
+    -- §4.3.4 leaves `kappa` undefined before Byzantium; there EIP-2 reads `H_i` itself, so 0.
+    BOMB_DELAY :=
+      if fork < .byzantium then 0
+      -- 3,000,000 from Byzantium, by EIP-649.
+      else if fork < .constantinople then 3000000
+      -- 5,000,000 from Constantinople, by EIP-1234.
+      else if fork < .muirGlacier then 5000000
+      -- 9,000,000 from Muir Glacier, by EIP-2384.
+      else if fork < .london then 9000000
+      -- 9,700,000 from London, by EIP-3554.
+      else if fork < .arrowGlacier then 9700000
+      -- 10,700,000 from Arrow Glacier, by EIP-4345.
+      else if fork < .grayGlacier then 10700000
+      -- 11,400,000 from Gray Glacier, by EIP-5133.
+      else 11400000 }
 
 namespace GasCosts
 
 /-- The price to access and write the account that a contract creation deploys, from EIP-8038.
 
-It is the write of an account plus a cold access to it at Glamsterdam, 9000 + 3000 = 12000.
+It is the price of a creation in the schedule of Glamsterdam.
+
+That price is the write of an account plus a cold access to it, 9000 + 3000 = 12000.
 
 The section Conversion to gas costs of [EIP-8038][eip-8038] gives this formula.
 
 [eip-8038]: https://eips.ethereum.org/EIPS/eip-8038#conversion-to-gas-costs
 -/
-def CREATE_ACCESS : Nat := ACCOUNT_WRITE + (gasSchedule .glamsterdam).COLD_ACCOUNT_ACCESS
+def CREATE_ACCESS : Nat := (gasSchedule .glamsterdam).CREATE_BASE
 
 end GasCosts
 
@@ -446,23 +577,6 @@ The first access to an account in a transaction is cold, and a later one is warm
 EIP-8038 raises the cold price from 2600 to 3000 at Glamsterdam. -/
 def accountAccessCost (fork : Fork) (cold : Bool) : Nat :=
   if cold then (gasSchedule fork).COLD_ACCOUNT_ACCESS else WARM_ACCESS
-
-/-- The price of SLOAD.
-
-From Berlin, it is the price of a cold or a warm access to the slot.
-
-Before Berlin, it does not depend on the access. -/
-def sloadCost (fork : Fork) (cold : Bool) : Nat :=
-  if fork ≥ .berlin then
-    -- `G_coldsload` or `G_warmaccess`, which replace the price of 800, by EIP-2929.
-    if cold then COLD_STORAGE_ACCESS else WARM_ACCESS
-  else if fork ≥ .istanbul then
-    -- EIP-1884 raises the price from 200 to 800.
-    800
-  else if fork ≥ .tangerineWhistle then
-    -- EIP-150 raises the price from 50 to 200.
-    200
-  else 50
 
 /-- The price of BALANCE.
 
@@ -553,9 +667,7 @@ def initCodeCost (initCodeLength : Nat) : Nat :=
 [eip-7954]: https://eips.ethereum.org/EIPS/eip-7954#specification
 -/
 def maxCodeSize (fork : Fork) : Option Nat :=
-  if fork ≥ .glamsterdam then some 65536
-  else if fork ≥ .spuriousDragon then some 24576
-  else none
+  (gasSchedule fork).MAX_CODE_SIZE
 
 /-- The most bytes of init code at `fork`, from Shapella on.
 
@@ -572,6 +684,6 @@ The definition keeps its own numbers, since no code limit exists before Spurious
 [eip-7954]: https://eips.ethereum.org/EIPS/eip-7954#specification
 -/
 def maxInitCodeSize (fork : Fork) : Nat :=
-  if fork ≥ .glamsterdam then 131072 else 49152
+  (gasSchedule fork).MAX_INIT_CODE_SIZE
 
 end EthLib.Execution.Evm

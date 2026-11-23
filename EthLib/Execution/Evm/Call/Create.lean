@@ -108,7 +108,7 @@ It is 32000 up to BPO5.
 
 From Glamsterdam, it is the access and the write of the new account, 12000, by EIP-8038. -/
 def createBaseCost (fork : Fork) : Nat :=
-  if fork ≥ .glamsterdam then CREATE_ACCESS else OPCODE_CREATE_BASE
+  (gasSchedule fork).CREATE_BASE
 
 /-- The state gas that a creation pays for the account at `address`, at fork `fork`.
 
@@ -423,7 +423,9 @@ theorem createStep_decreases [LawfulGasMeter Meter] {create2 : Bool} {evm : Evm 
   refine genericCreate_decreases paid ?_ running h
   have : 0 < createBaseCost fork := by
     unfold createBaseCost
-    split <;> decide
+    dsimp only [gasSchedule]
+    repeat' split
+    all_goals decide
   omega
 
 /-- Each creation instruction lowers the measure of a running frame. -/

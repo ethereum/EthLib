@@ -19,4 +19,7 @@ The withdrawals of [EIP-4895] convert their amounts by this factor.
 [EIP-4895]: https://eips.ethereum.org/EIPS/eip-4895#specification -/
 def GWEI_TO_WEI : Nat := 10 ^ 9
 
+/-- The Wei in one ether. -/
+def WEI_PER_ETHER : Nat := 10 ^ 18
+
 end EthLib.Base

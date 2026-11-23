@@ -55,12 +55,12 @@ theorem gas_systemMessage : (systemMessage env target data).gas = 30000000 := rf
 /-- Up to BPO5, a system call has no reservoir of state gas. -/
 theorem systemReservoir_of_lt_glamsterdam (h : fork < .glamsterdam) : systemReservoir fork = 0 := by
   have hpre : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt h
-  simp only [systemReservoir, hpre, ↓reduceIte]
+  simp only [systemReservoir, gasSchedule, hpre, ↓reduceIte]
 
 /-- From Glamsterdam, a system call has the state gas of 16 new slots: 1,566,720. -/
 theorem systemReservoir_of_glamsterdam (h : .glamsterdam ≤ fork) :
     systemReservoir fork = 1566720 := by
-  simp only [systemReservoir, h, ↓reduceIte]
+  simp only [systemReservoir, gasSchedule, h, ↓reduceIte]
   rfl
 
 /-- Up to BPO5, a system call runs its message with one counter of the gas left. -/

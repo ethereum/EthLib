@@ -56,8 +56,8 @@ theorem depositCode_of_ok (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
   refine ⟨state', hset, ?_⟩
   have hp : ¬(fork ≥ .london ∧ evm.output[0]? = some 0xef) := fun ⟨h1, h2⟩ => hprefix h1 h2
   simp [depositCode, herr, hp, hng, chargeCodeDeposit, GasMeter.charge, Nat.not_lt.mpr hgas,
-    maxCodeSize, hsd, Nat.not_lt.mpr hsize, hset, Except.mapError, bind, Except.bind, pure,
-    Except.pure]
+    maxCodeSize, gasSchedule, hsd, Nat.not_lt.mpr hsize, hset, Except.mapError, bind, Except.bind,
+    pure, Except.pure]
 
 /-- From London, an output that starts with `0xEF` fails to deposit.
 
@@ -94,8 +94,8 @@ theorem depositCode_of_outOfGas (hfork : .berlin ≤ fork) (hglam : fork < .glam
   · simp [depositCode, herr, hp, hng, chargeCodeDeposit, GasMeter.charge, hg, hby, hho,
       GasMeter.exhaust]
   · have hs : 24576 < evm.output.size := hbad.resolve_right hg
-    simp [depositCode, herr, hp, hng, chargeCodeDeposit, GasMeter.charge, hg, maxCodeSize, hsd,
-      hs, hby, GasMeter.exhaust]
+    simp [depositCode, herr, hp, hng, chargeCodeDeposit, GasMeter.charge, hg, maxCodeSize,
+      gasSchedule, hsd, hs, hby, GasMeter.exhaust]
 
 /-- A creation with no value and no precompile ends as its init code ends, then deposits.
 

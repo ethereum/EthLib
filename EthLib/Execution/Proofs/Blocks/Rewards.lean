@@ -51,7 +51,8 @@ theorem createEther_eq_ok {fork : Fork} {tx tx' : TransactionState} {address : A
 theorem minerReward_lt {fork : Fork} {n : Nat} (hn : n ≤ 2) :
     minerReward fork n < 2 ^ 256 := by
   have hR : blockReward fork ≤ 5 * WEI_PER_ETHER := by
-    unfold blockReward; split <;> (try split) <;> simp [WEI_PER_ETHER]
+    unfold blockReward; dsimp only [Evm.gasSchedule]
+    split <;> (try split) <;> simp [WEI_PER_ETHER]
   simp only [minerReward, WEI_PER_ETHER] at *
   have : n * (blockReward fork / 32) ≤ 2 * blockReward fork := by
     calc n * (blockReward fork / 32) ≤ 2 * (blockReward fork / 32) := Nat.mul_le_mul_right _ hn
@@ -61,7 +62,8 @@ theorem minerReward_lt {fork : Fork} {n : Nat} (hn : n ≤ 2) :
 /-- An ommer's reward is below `2^256`. -/
 theorem ommerReward_lt (fork : Fork) (age : Nat) : ommerReward fork age < 2 ^ 256 := by
   have hR : blockReward fork ≤ 5 * WEI_PER_ETHER := by
-    unfold blockReward; split <;> (try split) <;> simp [WEI_PER_ETHER]
+    unfold blockReward; dsimp only [Evm.gasSchedule]
+    split <;> (try split) <;> simp [WEI_PER_ETHER]
   have : (8 - age) * blockReward fork / 8 ≤ blockReward fork := by
     apply Nat.div_le_of_le_mul
     exact Nat.mul_le_mul_right _ (show 8 - age ≤ 8 by omega)

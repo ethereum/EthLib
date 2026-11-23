@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Fork
+public import EthLib.Execution.Evm.Gas.Prices
 
 /-!
 # `Blocks.Difficulty`
@@ -57,16 +58,7 @@ A fork keeps the delay of the last fork before it that set one.
 
 From Paris on there is no bomb, and the delay is not read. -/
 def bombDelay (fork : Fork) : Nat :=
-  -- `kappa` of §4.3.4, one case for each range of forks.
-  --
-  -- §4.3.4 leaves `kappa` undefined before Byzantium; there EIP-2 reads `H_i` itself, so 0.
-  if fork < .byzantium then 0
-  else if fork < .constantinople then 3000000
-  else if fork < .muirGlacier then 5000000
-  else if fork < .london then 9000000
-  else if fork < .arrowGlacier then 9700000
-  else if fork < .grayGlacier then 10700000
-  else 11400000
+  (Evm.gasSchedule fork).BOMB_DELAY
 
 /-- The bomb of a block: `ε = ⌊2^(⌊H'_i / 100000⌋ - 2)⌋` of the Yellow Paper, 4.3.4.
 

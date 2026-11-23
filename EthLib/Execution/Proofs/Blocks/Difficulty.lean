@@ -60,7 +60,7 @@ theorem blockDifficulty_of_paris_le {fork : Fork} (h : .paris ≤ fork)
 /-- A later fork delays the bomb at least as much as an earlier one. -/
 theorem bombDelay_mono {f g : Fork} (h : f ≤ g) : bombDelay f ≤ bombDelay g := by
   -- Each branch compares the fork's index with the index of a fork of the timeline.
-  simp only [bombDelay, lt_iff, le_iff, Fork.ctorIdx] at *
+  simp only [bombDelay, Evm.gasSchedule, lt_iff, le_iff, Fork.ctorIdx] at *
   repeat' split
   all_goals omega
 

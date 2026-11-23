@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Blocks.Header
+public import EthLib.Execution.Evm.Gas.Prices
 public import EthLib.Execution.State.Tracker
 
 /-!
@@ -32,17 +33,9 @@ namespace EthLib.Execution.Blocks
 open EthLib.Base
 open EthLib.Execution.State
 
-/-- Wei in one ether. -/
-def WEI_PER_ETHER : Nat := 10 ^ 18
-
 /-- The block reward at a fork before Paris: `R_block` of the Yellow Paper, 11.3, in wei. -/
 def blockReward (fork : Fork) : Nat :=
-  -- §11.3: `R_block = 10^18 × 5` before Byzantium.
-  if fork < .byzantium then 5 * WEI_PER_ETHER
-  -- `10^18 × 3` from Byzantium, by EIP-649.
-  else if fork < .constantinople then 3 * WEI_PER_ETHER
-  -- `10^18 × 2` from Constantinople, by EIP-1234.
-  else 2 * WEI_PER_ETHER
+  (Evm.gasSchedule fork).BLOCK_REWARD
 
 /-- The reward of the beneficiary of a block with `ommers` ommers: `(1 + n / 32) · R_block`.
 

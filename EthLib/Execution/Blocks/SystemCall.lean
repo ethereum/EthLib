@@ -84,9 +84,7 @@ From Glamsterdam, it is the state gas of 16 new storage slots, 1,566,720.
 
 Before Glamsterdam, it is 0. -/
 def systemReservoir (fork : Fork) : Nat :=
-  if fork ≥ .glamsterdam then
-    GasCosts.STORAGE_SET_STATE_GAS * GasCosts.SYSTEM_MAX_SSTORES_PER_CALL
-  else 0
+  (gasSchedule fork).SYSTEM_RESERVOIR
 
 /-- The beacon roots contract of EIP-4788. -/
 def BEACON_ROOTS_ADDRESS : Address :=

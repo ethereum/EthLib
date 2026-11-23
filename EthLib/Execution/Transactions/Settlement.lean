@@ -185,7 +185,7 @@ def allocateGas (fork : Fork) (tx : Transaction) (intrinsic : Nat) (lifted : Lif
 
 [EIP-3529](https://eips.ethereum.org/EIPS/eip-3529#specification) raises it. -/
 def maxRefundQuotient (fork : Fork) : Nat :=
-  if fork ≥ .london then 5 else 2
+  (Evm.gasSchedule fork).MAX_REFUND_QUOTIENT
 
 /-- The gas that comes back from the refund counter, for `used` gas used before the refund.
 

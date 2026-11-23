@@ -69,6 +69,7 @@ open EthLib.Execution.Fees.BlobBaseFee (calculateTotalBlobGas)
 theorem gasRefund_le_half (fork : Fork) (used refundCounter : Nat) :
     gasRefund fork used refundCounter ≤ used / 2 := by
   unfold gasRefund maxRefundQuotient
+  dsimp only [Evm.gasSchedule]
   split
   · exact Nat.le_trans (Nat.min_le_left _ _) (Nat.div_le_div_left (by omega) (by omega))
   · exact Nat.min_le_left _ _
@@ -76,7 +77,7 @@ theorem gasRefund_le_half (fork : Fork) (used refundCounter : Nat) :
 /-- From London, the refund is at most a fifth of the gas used before it. -/
 theorem gasRefund_le_fifth {fork : Fork} (hFork : fork ≥ .london) (used refundCounter : Nat) :
     gasRefund fork used refundCounter ≤ used / 5 := by
-  simp only [gasRefund, maxRefundQuotient, hFork, ↓reduceIte]
+  simp only [gasRefund, maxRefundQuotient, Evm.gasSchedule, hFork, ↓reduceIte]
   exact Nat.min_le_left _ _
 
 /-- The refund is at most the refund counter. -/
