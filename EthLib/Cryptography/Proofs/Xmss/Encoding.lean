@@ -25,11 +25,10 @@ variable {d d' : Digest} {x y : Vector (Fin CHAIN_LENGTH) V}
 
 /-! ## Unfolding a codeword -/
 
-/-- Two bits of a lane, at offset `k < 64`, are its integer's base-4 digit at that bit. -/
-private theorem toNat_shiftRight_and_three (x : UInt64) (k : Nat) (hk : k < 64) :
-    ((x >>> k.toUInt64) &&& 3).toNat = x.toNat / 2 ^ k % 4 := by
-  rw [UInt64.toNat_and, UInt64.toNat_shiftRight, show (3 : UInt64).toNat = 2 ^ 2 - 1 from rfl,
-    Nat.and_two_pow_sub_one_eq_mod, Nat.shiftRight_eq_div_pow]
+/-- A lane shifted by `k < 64` bits, modulo 4, is its integer's base-4 digit at bit `k`. -/
+private theorem toNat_shiftRight_mod_four (x : UInt64) (k : Nat) (hk : k < 64) :
+    ((x >>> k.toUInt64) % 4).toNat = x.toNat / 2 ^ k % 4 := by
+  rw [UInt64.toNat_mod, UInt64.toNat_shiftRight, Nat.shiftRight_eq_div_pow]
   congr 3
   simp only [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.reducePow]
   omega
@@ -62,8 +61,10 @@ theorem digit_val (d : Digest) (i : Fin DIGITS) :
   simp only [DIGITS] at hi
   simp only [Internal.digit, Hash.Keccak.Lanes2.toNat, digit_lanes _ _ _ d.lo.toNat_lt]
   split
-  · next h => rw [toNat_shiftRight_and_three _ _ (by omega), Nat.pow_mul]
-  · next h => rw [toNat_shiftRight_and_three _ _ (by omega), Nat.pow_mul]
+  · next h => rw [toNat_shiftRight_mod_four _ _ (by omega), Nat.pow_mul, Nat.mod_eq_of_lt h]
+  · next h =>
+    rw [toNat_shiftRight_mod_four _ _ (by omega), Nat.pow_mul,
+      Nat.mod_eq_sub_mod (Nat.le_of_not_lt h), Nat.mod_eq_of_lt (show i.val - 32 < 32 by omega)]
 
 /-- Digit `i` of a digest's vector of digits, as a number. -/
 @[simp] theorem digits_getElem_val (d : Digest) (i : Nat) (hi : i < DIGITS) :

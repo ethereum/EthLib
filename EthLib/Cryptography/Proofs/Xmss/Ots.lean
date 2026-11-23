@@ -62,6 +62,17 @@ theorem Internal.otsSignTrials_hashTrials {m : Type → Type} [Monad m]
     Internal.otsSignTrials H pp prf layer e msg (hashTrials H) = otsSign H pp prf layer e msg :=
   rfl
 
+/-! ## Chain starts -/
+
+/-- Chain `i` starts at half `i mod 2` of derivation `floor(i / 2)`. -/
+theorem getElem_cast_flatMap_halves (pairs : Vector Lanes4 (V / 2)) (h : V / 2 * 2 = V)
+    (i : Nat) (hi : i < V) :
+    ((pairs.flatMap fun p => #v[halfOf 0 p, halfOf 1 p]).cast h)[i] =
+      halfOf ⟨i % 2, Nat.mod_lt _ (by decide)⟩
+        (pairs[i / 2]'(by simp only [V] at *; omega)) := by
+  simp only [Vector.getElem_cast, Vector.getElem_flatMap]
+  rcases Nat.mod_two_eq_zero_or_one i with h2 | h2 <;> simp [h2]
+
 /-! ## Derivations from the seed -/
 
 section SeedPrf
@@ -72,9 +83,7 @@ variable {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4) (s : Seed
 theorem chainStarts_seedPrf (pp : PublicParam) (layer : Layer) (e : UInt32) :
     chainStarts pp (seedPrf H s) layer e = (do
       let pairs ← ofFnInOrder (V / 2) fun j => H (thInput pp (addrPrf layer e j) s.toArray)
-      return Vector.ofFn fun i =>
-        halfOf ⟨i.val % 2, Nat.mod_lt _ (by decide)⟩
-          (pairs[i.val / 2]'(by have := i.isLt; simp only [V] at *; omega))) := by
+      return (pairs.flatMap fun p => #v[halfOf 0 p, halfOf 1 p]).cast (by decide)) := by
   simp only [chainStarts, seedPrf_empty]
 
 /-- With the seed's derivations, the randomizer base is `Th(P, A_rnd(l, e), S | M)`. -/
