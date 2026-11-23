@@ -8,7 +8,7 @@ import Mathlib.Tactic.IntervalCases
 /-!
 # Proofs: leanXMSS addresses
 
-Distinct call sites have distinct addresses.
+Distinct addresses have distinct encodings.
 
 - The first lane of an address determines its four fields.
 - The type codes are distinct, so two kinds of call never share an address.
@@ -27,18 +27,19 @@ open EthLib.Cryptography.Xmss.Constants
 /-- The first lane of an address is the integer `lo + 2^32 hi + 2^56 (tau + 32 mu)`.
 
 The three fields fill disjoint bits, so the OR of the lane is their sum. -/
-theorem CallSite.toNat_encode_lo (site : CallSite) :
-    site.encode.lo.toNat =
-      site.lo.toNat + 2 ^ 32 * site.hi.val + 2 ^ 56 * (site.tau.val + 32 * site.mu.val) := by
-  have hlo : site.lo.toNat < 2 ^ 32 := site.lo.toNat_lt_size
-  have hhi := site.hi.isLt
-  have ht : site.tau.val + 32 * site.mu.val < 2 ^ 8 := by
-    have := site.tau.isLt; have := site.mu.isLt; omega
-  simp only [CallSite.encode, UInt64.toNat_or, UInt64.toNat_shiftLeft, UInt64.toNat_ofNat',
+theorem Address.toNat_encode_lo (address : Address) :
+    address.encode.lo.toNat =
+      address.lo.toNat + 2 ^ 32 * address.hi.val
+        + 2 ^ 56 * (address.tau.val + 32 * address.mu.val) := by
+  have hlo : address.lo.toNat < 2 ^ 32 := address.lo.toNat_lt_size
+  have hhi := address.hi.isLt
+  have ht : address.tau.val + 32 * address.mu.val < 2 ^ 8 := by
+    have := address.tau.isLt; have := address.mu.isLt; omega
+  simp only [Address.encode, UInt64.toNat_or, UInt64.toNat_shiftLeft, UInt64.toNat_ofNat',
     UInt32.toNat_toUInt64]
-  generalize site.lo.toNat = a at *
-  generalize site.hi.val = b at *
-  generalize site.tau.val + 32 * site.mu.val = c at *
+  generalize address.lo.toNat = a at *
+  generalize address.hi.val = b at *
+  generalize address.tau.val + 32 * address.mu.val = c at *
   -- Each field is below `2^64`, and so is each shifted field.
   rw [Nat.mod_eq_of_lt (by omega : b < 2 ^ 64), Nat.mod_eq_of_lt (by omega : c < 2 ^ 64)]
   simp only [show UInt64.toNat 32 = 32 from rfl, show UInt64.toNat 56 = 56 from rfl,
@@ -52,24 +53,25 @@ theorem CallSite.toNat_encode_lo (site : CallSite) :
   omega
 
 /-- The bytes of an address's lanes are its four fields, each in its own little-endian bytes. -/
-theorem CallSite.bytes_encode (site : CallSite) :
-    site.encode.bytes.toList =
-      (uintToBytes 4 site.lo.toNat).toList ++ (uintToBytes 3 site.hi.val).toList
-        ++ (uintToBytes 1 (site.tau.val + 32 * site.mu.val)).toList
+theorem Address.bytes_encode (address : Address) :
+    address.encode.bytes.toList =
+      (uintToBytes 4 address.lo.toNat).toList ++ (uintToBytes 3 address.hi.val).toList
+        ++ (uintToBytes 1 (address.tau.val + 32 * address.mu.val)).toList
         ++ (uintToBytes 8 0).toList := by
-  have hlo : site.lo.toNat < 2 ^ 32 := site.lo.toNat_lt_size
-  have hhi := site.hi.isLt
-  have ht : site.tau.val + 32 * site.mu.val < 2 ^ 8 := by
-    have := site.tau.isLt; have := site.mu.isLt; omega
+  have hlo : address.lo.toNat < 2 ^ 32 := address.lo.toNat_lt_size
+  have hhi := address.hi.isLt
+  have ht : address.tau.val + 32 * address.mu.val < 2 ^ 8 := by
+    have := address.tau.isLt; have := address.mu.isLt; omega
   -- Both are the bytes of `lo + 2^32 hi + 2^56 (tau + 32 mu)`, the high lane being zero.
-  have hn : Hash.Keccak.Lanes2.toNat site.encode =
-      site.lo.toNat + 2 ^ 32 * site.hi.val + 2 ^ 56 * (site.tau.val + 32 * site.mu.val) := by
-    rw [Hash.Keccak.Lanes2.toNat, CallSite.toNat_encode_lo]
-    simp [CallSite.encode]
+  have hn : Hash.Keccak.Lanes2.toNat address.encode =
+      address.lo.toNat + 2 ^ 32 * address.hi.val
+        + 2 ^ 56 * (address.tau.val + 32 * address.mu.val) := by
+    rw [Hash.Keccak.Lanes2.toNat, Address.toNat_encode_lo]
+    simp [Address.encode]
   rw [Hash.Keccak.Lanes2.bytes_eq_uintToBytes, hn]
-  generalize site.lo.toNat = a at *
-  generalize site.hi.val = b at *
-  generalize site.tau.val + 32 * site.mu.val = c at *
+  generalize address.lo.toNat = a at *
+  generalize address.hi.val = b at *
+  generalize address.tau.val + 32 * address.mu.val = c at *
   apply List.ext_getElem (by simp)
   intro j h1 h2
   simp only [Vector.length_toList] at h1
@@ -96,26 +98,26 @@ theorem layerHi_inj {layer layer' : Layer} {a a' : Fin (2 ^ 23)} :
   · rintro ⟨rfl, rfl⟩
     rfl
 
-/-- A call site whose `hi` carries one layer is not a message call site of the other layer. -/
-theorem CallSite.ne_msg_of_hi {layer layer' : Layer} {site : CallSite} {a : Fin (2 ^ 23)}
-    (hsite : site.hi = layerHi layer a) (hl : layer ≠ layer') (e' : UInt32) :
-    site ≠ .msg layer' e' := fun h =>
-  -- The message call site carries `hi_l'(0)`, and `hi` determines its layer.
-  hl (layerHi_inj.mp (hsite.symm.trans (congrArg CallSite.hi h))).1
+/-- An address whose `hi` carries one layer is not a message address of the other layer. -/
+theorem Address.ne_msg_of_hi {layer layer' : Layer} {address : Address} {a : Fin (2 ^ 23)}
+    (haddress : address.hi = layerHi layer a) (hl : layer ≠ layer') (e' : UInt32) :
+    address ≠ .msg layer' e' := fun h =>
+  -- The message address carries `hi_l'(0)`, and `hi` determines its layer.
+  hl (layerHi_inj.mp (haddress.symm.trans (congrArg Address.hi h))).1
 
-/-! ## Distinct call sites have distinct addresses -/
+/-! ## Distinct addresses have distinct encodings -/
 
-/-- Two call sites with the same address are the same call site.
+/-- Two addresses with the same encoding are the same address.
 
 - Bytes 0 to 3 hold `lo`, and bytes 4 to 6 hold `hi`.
 - Byte 7 holds `tau + 32 mu`, and bytes 8 to 15 are zero.
 - The type code `tau` tells the kinds of call apart, and the other fields hold the arguments.
 -/
-theorem CallSite.encode_injective : Function.Injective CallSite.encode := by
+theorem Address.encode_injective : Function.Injective Address.encode := by
   intro a b h
   -- The first lane is the integer of bytes 0 to 7, and each field is below its range.
   have h := congrArg (fun x => x.lo.toNat) h
-  simp only [CallSite.toNat_encode_lo] at h
+  simp only [Address.toNat_encode_lo] at h
   have := a.lo.toNat_lt_size
   have := b.lo.toNat_lt_size
   have := a.hi.isLt
@@ -133,7 +135,7 @@ theorem CallSite.encode_injective : Function.Injective CallSite.encode := by
   clear h
   -- Each field reads one argument of the call, or a constant.
   cases a <;> cases b <;>
-    simp only [CallSite.tau, CallSite.mu, CallSite.hi, CallSite.lo] at htau hmu hhi hlo <;>
+    simp only [Address.tau, Address.mu, Address.hi, Address.lo] at htau hmu hhi hlo <;>
     simp_all [Fin.castLE_inj] <;>
     -- Left: the same kind of call on both sides, and `hi` splits into the layer and the rest.
     · obtain ⟨hl, ha⟩ := layerHi_inj.mp hhi

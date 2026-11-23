@@ -40,11 +40,6 @@ abbrev Digest := Lanes2
 It makes one key's hash functions independent of another's. -/
 abbrev PublicParam := Lanes2
 
-/-- The address `A` hashed after the public parameter: 16 bytes, as two lanes.
-
-It names the call site of one hash inside one key. -/
-abbrev Address := Lanes2
-
 /-- The randomizer `rho` under which a one-time key's digest is a codeword: 16 bytes.
 
 It is part of the signature. -/

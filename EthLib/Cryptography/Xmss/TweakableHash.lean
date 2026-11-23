@@ -65,23 +65,23 @@ They are its first two lanes or its last two lanes. -/
 @[inline] def halfOf (half : Fin 2) (full : Lanes4) : Digest :=
   if half.val = 0 then ⟨full.w0, full.w1⟩ else ⟨full.w2, full.w3⟩
 
-/-- The lanes one tweakable hash call hashes: `P | A | M`, with `A` the address of the call site. -/
-@[inline] def thInput (publicParam : PublicParam) (site : CallSite) (payload : Array UInt64) :
+/-- The lanes one tweakable hash call hashes: `P | A | M`, with `A` the encoding of the address. -/
+@[inline] def thInput (publicParam : PublicParam) (address : Address) (payload : Array UInt64) :
     Array UInt64 :=
   -- `A = enc(tau, mu, hi, lo)`.
-  let address := site.encode
+  let address := address.encode
   -- Fixed-length prefixes, so the input splits back into its three parts one way.
   #[publicParam.lo, publicParam.hi, address.lo, address.hi] ++ payload
 
-/-- `Th(P, A, M)`: hash a payload at one call site, under its address `A`, with one call of `H`. -/
+/-- `Th(P, A, M)`: hash a payload at one address, encoded as `A`, with one call of `H`. -/
 @[inline] def th {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
-    (publicParam : PublicParam) (site : CallSite) (payload : Array UInt64) : m Digest := do
+    (publicParam : PublicParam) (address : Address) (payload : Array UInt64) : m Digest := do
   -- `Th(P, A, M) = H_0(P | A | M)`.
-  return halfOf 0 (← H (thInput publicParam site payload))
+  return halfOf 0 (← H (thInput publicParam address payload))
 
 /-! ## Derivations from the seed -/
 
-/-- A source of derived values: the derivation at a parameter, a call site and a suffix.
+/-- A source of derived values: the derivation at a parameter, an address and a suffix.
 
 The signer derives the public parameter and every secret through one such source.
 
@@ -90,13 +90,13 @@ So a proof can replace the derivations as a whole.
 It takes the parameter because the public parameter is itself a derivation.
 
 It returns all 32 bytes because a pair of chains starts at the two halves of one derivation. -/
-abbrev SeedPrf (m : Type → Type) := PublicParam → CallSite → Array UInt64 → m Lanes4
+abbrev SeedPrf (m : Type → Type) := PublicParam → Address → Array UInt64 → m Lanes4
 
 /-- `H(P | A | S | suffix)`: the derivations from the scheme seed `S`.
 
 The seed comes right after the address, and the suffix comes last. -/
 def seedPrf {m : Type → Type} (H : Array UInt64 → m Lanes4) (s : Seed) : SeedPrf m :=
   -- `H(P | A | S | suffix)`: the chain starts, `R_0` and `P` are halves of it.
-  fun publicParam site suffix => H (thInput publicParam site (s.toArray ++ suffix))
+  fun publicParam address suffix => H (thInput publicParam address (s.toArray ++ suffix))
 
 end EthLib.Cryptography.Xmss

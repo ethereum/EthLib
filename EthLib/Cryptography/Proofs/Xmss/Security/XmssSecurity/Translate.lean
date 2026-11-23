@@ -88,11 +88,11 @@ theorem fieldBytes_congr {a b c d a' b' c' d' : Nat} (ha : a = a') (hb : b = b')
 /-! ## The tweakable hash -/
 
 /-- EthLib's `Th` with `queryH` is the model's, at the same address and payload bytes. -/
-theorem th_queryH (P : XmssSecurity.PublicParameter) (site : CallSite) (payload : Array UInt64)
+theorem th_queryH (P : XmssSecurity.PublicParameter) (address : Address) (payload : Array UInt64)
     (domain : XmssSecurity.HashDomain) (msg : XmssSecurity.HashInput)
-    (hA : lanesBytes site.encode.toArray = XmssSecurity.tweakBytes domain)
+    (hA : lanesBytes address.encode.toArray = XmssSecurity.tweakBytes domain)
     (hpayload : lanesBytes payload = msg ++ XmssSecurity.domainSuffix domain) :
-    th (queryH (m := m)) (ofParam P) site payload
+    th (queryH (m := m)) (ofParam P) address payload
       = ofDigest <$> XmssSecurity.Concrete.tweakableHash (m := m) P domain msg := by
   simp only [th, queryH, HashSig.queryLanes, XmssSecurity.Concrete.tweakableHash,
     thInput_eq_append, Hash.Keccak.lanesBytes_append, toList_ofParam, hA, hpayload,

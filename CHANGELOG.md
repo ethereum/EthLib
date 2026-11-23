@@ -982,6 +982,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the leanXMSS addresses take the name the specification gives them: `Xmss.CallSite` is now `Xmss.Address` ([#4278](https://github.com/ethereum/EthLib/pull/4278)).
+  The old `Xmss.Address`, an abbreviation for the 16 bytes as `Lanes2`, is removed, and `Address.encode` now returns `Lanes2`.
+  `CallSite.tau`, `.mu`, `.hi`, `.lo`, `.encode`, `.encode_injective`, `.toNat_encode_lo`, `.bytes_encode` and `.ne_msg_of_hi` become `Address.tau` and so on, with the same statements.
+  Migration: replace `CallSite` with `Address`, and a type `Address` that meant the 16 bytes with `Lanes2`.
+
 - In Lean, the leanXMSS tweakable hash, its input and the derivations from the seed take a call site instead of a 16-byte address ([#4277](https://github.com/ethereum/EthLib/pull/4277)); [#4267](https://github.com/ethereum/EthLib/pull/4267) added the call sites.
   `Xmss.CallSite` has one constructor for each address of the specification, and `CallSite.encode` gives its address, as two lanes.
   `CallSite.encode_injective` says that two distinct call sites never share an address.

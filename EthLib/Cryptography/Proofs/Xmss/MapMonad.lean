@@ -36,8 +36,8 @@ include map_pure map_bind
 /-! ## Hashing and chains -/
 
 /-- A tweakable hash call, over the image of `H`. -/
-theorem th_map_monad (publicParam : PublicParam) (site : CallSite) (payload : Array UInt64) :
-    φ (th H publicParam site payload) = th (fun x => φ (H x)) publicParam site payload := by
+theorem th_map_monad (publicParam : PublicParam) (address : Address) (payload : Array UInt64) :
+    φ (th H publicParam address payload) = th (fun x => φ (H x)) publicParam address payload := by
   simp only [th, map_bind, map_pure]
 
 /-- The starts of a key's chains, over the image of the seed function. -/

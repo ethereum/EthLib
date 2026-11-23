@@ -85,7 +85,7 @@ variable {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4) (s : Seed
 theorem chainStarts_seedPrf (publicParam : PublicParam) (layer : Layer) (e : UInt32) :
     chainStarts publicParam (seedPrf H s) layer e = (do
       let pairs ← ofFnInOrder (V / 2) fun j =>
-        H (thInput publicParam (CallSite.prf layer e j) s.toArray)
+        H (thInput publicParam (Address.prf layer e j) s.toArray)
       return (pairs.flatMap fun p => #v[halfOf 0 p, halfOf 1 p]).cast (by decide)) := by
   simp only [chainStarts, seedPrf_empty]
 
@@ -93,7 +93,7 @@ theorem chainStarts_seedPrf (publicParam : PublicParam) (layer : Layer) (e : UIn
 theorem randomizerBase_seedPrf (publicParam : PublicParam) (layer : Layer) (e : UInt32)
     (msg : Array UInt64) :
     randomizerBase publicParam (seedPrf H s) layer e msg
-      = th H publicParam (CallSite.rnd layer e) (s.toArray ++ msg) :=
+      = th H publicParam (Address.rnd layer e) (s.toArray ++ msg) :=
   rfl
 
 end SeedPrf
