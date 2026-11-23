@@ -71,7 +71,7 @@ inductive Address where
 /-- `mu`: the position of a chain step, and zero at every other address. -/
 @[inline] def Address.mu : Address → Fin 8
   | .chain _ _ mu => mu.castLE (by decide)
-  | _ => 0
+  | .prf .. | .leaf .. | .node .. | .param | .rnd .. | .msg .. => 0
 
 /-- `hi`: the layer bit above the pair of chains or the level, and zero for the parameter. -/
 @[inline] def Address.hi : Address → Fin (2 ^ 24)
@@ -79,7 +79,7 @@ inductive Address where
   | .prf layer _ j => layerHi layer (j.castLE (by decide))
   -- `A_node`: `hi = hi_l(lambda)`.
   | .node layer level _ => layerHi layer (level.castLE (by decide))
-  -- `A_param`: `hi = 0`, since the two layers share the parameter.
+  -- `A_param = enc(5, 0, 0, 0)`: `hi = 0`, with no layer bit.
   | .param => 0
   -- `A_chain`, `A_leaf`, `A_rnd` and `A_msg`: `hi = hi_l(0)`.
   | .chain layer .. | .leaf layer _ | .rnd layer _ | .msg layer _ => layerHi layer 0
