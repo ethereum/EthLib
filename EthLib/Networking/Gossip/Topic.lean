@@ -68,7 +68,7 @@ def dropSuffix? (suf cs : List Char) : Option (List Char) :=
 
 /-- The value of a lowercase hex digit. -/
 def hexDigit? (c : Char) : Option Nat :=
-  ((List.finRange 16).find? (Base.hexDigitChar · == c)).map Fin.val
+  (Base.hexValue? c (upper := false)).map UInt8.toNat
 
 /-- The byte that two lowercase hex digits write, high digit first. -/
 def hexByte? (hi lo : Char) : Option UInt8 := do

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Hex
 public import EthLib.Networking.Gossip.Topic
 
 /-!
@@ -55,14 +56,25 @@ theorem eq_append_of_dropSuffix? {suf cs start : List Char}
 
 /-- The hex digit of a value below 16 reads back as that value. -/
 theorem hexDigit?_hexDigitChar : ∀ k : Fin 16, hexDigit? (Base.hexDigitChar k) = some k.val := by
-  decide
+  intro k
+  have := k.isLt
+  simp only [hexDigit?, Base.hexValue?_false_hexDigitChar, Option.map_some, Nat.toUInt8_eq,
+    UInt8.toNat_ofNat', Option.some.injEq]
+  omega
 
 /-- A character that reads as a value is the hex digit of that value, below 16. -/
 theorem hexDigit?_eq_some {c : Char} {k : Nat} (h : hexDigit? c = some k) :
     ∃ hk : k < 16, Base.hexDigitChar ⟨k, hk⟩ = c := by
   unfold hexDigit? at h
-  obtain ⟨i, hi, rfl⟩ := Option.map_eq_some_iff.mp h
-  exact ⟨i.isLt, by simpa using List.find?_some hi⟩
+  obtain ⟨v, hv, rfl⟩ := Option.map_eq_some_iff.mp h
+  -- Uppercase is not allowed, so the character is the lowercase digit of its value.
+  obtain ⟨digit, rfl, hc | ⟨hc, -⟩⟩ := Base.hexValue?_eq_some hv
+  · have hd : digit.val.toUInt8.toNat = digit.val := by
+      have := digit.isLt
+      simp only [Nat.toUInt8_eq, UInt8.toNat_ofNat']
+      omega
+    exact ⟨by omega, by simp only [hd, hc]⟩
+  · cases hc
 
 /-- The two hex digits of a byte read back as that byte. -/
 theorem hexByte?_hexDigitChar (byte : UInt8) :

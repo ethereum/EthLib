@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Base.Hex
+
 /-!
 # JSON fields of a JWT
 
@@ -46,11 +48,7 @@ def digitsValue (chars : List Char) : Nat :=
 def hex4 (chars : List Char) : Option (Nat × List Char) := do
   -- RFC 8259 §7: `4HEXDIG`, whose letters A to F may be uppercase or lowercase.
   let [a, b, c, d] := chars.take 4 | none
-  let read (c : Char) : Option Nat :=
-    if digit c then some (c.toNat - '0'.toNat)
-    else if 'a' ≤ c && c ≤ 'f' then some (c.toNat - 'a'.toNat + 10)
-    else if 'A' ≤ c && c ≤ 'F' then some (c.toNat - 'A'.toNat + 10)
-    else none
+  let read (c : Char) : Option Nat := (Base.hexValue? c).map UInt8.toNat
   -- The value of the four digits, `16^3 a + 16^2 b + 16 c + d`.
   return (4096 * (← read a) + 256 * (← read b) + 16 * (← read c) + (← read d), chars.drop 4)
 
