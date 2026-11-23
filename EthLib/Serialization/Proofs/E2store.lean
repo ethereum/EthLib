@@ -3,6 +3,8 @@ module
 public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.Bytes
 public import EthLib.Serialization.E2store
+public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalTable
+public import EthLib.Serialization.Proofs.Ssz.Codec.DecodeFits
 
 /-!
 # Proofs: the e2store records read back
@@ -376,5 +378,142 @@ theorem readIndex_size {data : ByteArray} {index : Index}
   obtain rfl := Except.ok.inj h
   simp only [List.length_map, List.length_range]
   exact Decidable.of_not_not hs
+
+/-- An offset read from 8 bytes lies from `-2^63` up to below `2^63`. -/
+private theorem readInt64_bounds (data : ByteArray) (pos : Nat) :
+    -2 ^ 63 ≤ readInt64 data pos ∧ readInt64 data pos < 2 ^ 63 :=
+  ⟨by simpa [readInt64] using BitVec.le_toInt (BitVec.ofNat 64 (Ssz.readUint data pos 8)),
+    by simpa [readInt64] using
+      BitVec.toInt_lt (x := BitVec.ofNat 64 (Ssz.readUint data pos 8))⟩
+
+/-- An offset read from 8 bytes, modulo `2^64`, is the same bytes read unsigned. -/
+private theorem readInt64_emod (data : ByteArray) (pos : Nat) :
+    (readInt64 data pos % 2 ^ 64).toNat = Ssz.readUint data pos 8 := by
+  have fits := Ssz.readUint_lt data pos 8
+  unfold readInt64
+  rw [BitVec.toInt_emod_two_pow, BitVec.toNat_ofNat, Nat.mod_eq_of_lt fits, Int.toNat_natCast]
+
+/-- An unsigned read of 8 bytes is below `2^64`. -/
+private theorem readUint_eight_lt (data : ByteArray) (pos : Nat) :
+    Ssz.readUint data pos 8 < 2 ^ 64 := by
+  simpa using Ssz.readUint_lt data pos 8
+
+/-- The bytes of `count` slots of 8 from `pos`, each written back from its unsigned read. -/
+private theorem extract_eq_flatMap (data : ByteArray) (pos : Nat) :
+    ∀ count, pos + 8 * count ≤ data.size →
+      (data.extract pos (pos + 8 * count)).data.toList =
+        (List.range count).flatMap fun i =>
+          (ByteOrder.toLE 8 (Ssz.readUint data (pos + 8 * i) 8)).toList
+  | 0, _ => by simp
+  | count + 1, h => by
+    have ih := extract_eq_flatMap data pos count (by omega)
+    have slice := Ssz.uintBytes_readUint_slice data (pos + 8 * count) 8 (by omega)
+    rw [List.range_succ, List.flatMap_append, ← ih, List.flatMap_singleton,
+      show pos + 8 * (count + 1) = pos + 8 * count + 8 by omega,
+      ← Ssz.extract_join data (middle := pos + 8 * count) (by omega) (by omega),
+      ByteArray.data_append, Array.toList_append, ← slice]
+    rfl
+
+/-- Data of `16 + 8 count` bytes is its first number, its offsets and its count, written back. -/
+private theorem toList_of_size {data : ByteArray} {count : Nat} (h : data.size = 16 + 8 * count) :
+    data.data.toList = (ByteOrder.toLE 8 (Ssz.readUint data 0 8)).toList ++
+      ((List.range count).map fun i => readInt64 data (8 + 8 * i)).flatMap
+        (fun offset => (ByteOrder.toLE 8 (offset % 2 ^ 64).toNat).toList) ++
+      (ByteOrder.toLE 8 (Ssz.readUint data (8 + 8 * count) 8)).toList := by
+  have first := Ssz.uintBytes_readUint_slice data 0 8 (by omega)
+  have last := Ssz.uintBytes_readUint_slice data (8 + 8 * count) 8 (by omega)
+  have middle := extract_eq_flatMap data 8 count (by omega)
+  simp only [List.flatMap_map, readInt64_emod]
+  rw [← middle]
+  have whole : data = data.extract 0 8 ++ data.extract 8 (8 + 8 * count) ++
+      data.extract (8 + 8 * count) (8 + 8 * count + 8) := by
+    rw [Ssz.extract_join data (by omega) (by omega),
+      Ssz.extract_join data (by omega) (by omega),
+      show 8 + 8 * count + 8 = data.size by omega, ByteArray.extract_zero_size]
+  conv => lhs; rw [whole]
+  rw [Nat.zero_add] at first
+  rw [ByteArray.data_append, ByteArray.data_append, Array.toList_append, Array.toList_append,
+    ← first, ← last]
+  rfl
+
+/-- Two lists of offsets in range, whose 8-byte writings agree, are the same list. -/
+private theorem offsets_inj : ∀ {xs ys : List Int}, xs.length = ys.length →
+    (∀ x ∈ xs, -2 ^ 63 ≤ x ∧ x < 2 ^ 63) → (∀ y ∈ ys, -2 ^ 63 ≤ y ∧ y < 2 ^ 63) →
+    xs.flatMap (fun offset => (ByteOrder.toLE 8 (offset % 2 ^ 64).toNat).toList) =
+      ys.flatMap (fun offset => (ByteOrder.toLE 8 (offset % 2 ^ 64).toNat).toList) → xs = ys
+  | [], [], _, _, _, _ => rfl
+  | x :: xs, y :: ys, hl, hx, hy, h => by
+    simp only [List.flatMap_cons] at h
+    obtain ⟨head, tail⟩ := List.append_inj h (by simp)
+    have bx := hx x (by simp)
+    have by' := hy y (by simp)
+    have := ByteOrder.toLE_inj (k := 8) (by simp; omega) (by simp; omega)
+      (Vector.toList_inj.mp head)
+    have hxy : x = y := by omega
+    rw [hxy, offsets_inj (by simpa using hl) (fun a ha => hx a (by simp [ha]))
+      (fun a ha => hy a (by simp [ha])) tail]
+
+/-- An index record reads exactly from the bytes of its index, each number in its 8 bytes.
+
+So the first number and the count are below `2^64`, and each offset lies in `[-2^63, 2^63)`. -/
+theorem readIndex_eq_ok_iff {data : ByteArray} {index : Index} :
+    readIndex data = .ok index ↔
+      index.start < 2 ^ 64 ∧ index.offsets.length < 2 ^ 64 ∧
+        (∀ offset ∈ index.offsets, -2 ^ 63 ≤ offset ∧ offset < 2 ^ 63) ∧
+        -- The first number comes first, little-endian, and the count of offsets comes last.
+        --
+        -- Each offset comes in between, in order, as its two's complement, modulo `2^64`.
+        data.data.toList = (ByteOrder.toLE 8 index.start).toList ++
+          index.offsets.flatMap (fun offset => (ByteOrder.toLE 8 (offset % 2 ^ 64).toNat).toList) ++
+          (ByteOrder.toLE 8 index.offsets.length).toList := by
+  constructor
+  · intro h
+    unfold readIndex at h
+    split at h
+    · cases h
+    dsimp only at h
+    split at h
+    · nomatch h
+    rename_i hs
+    obtain rfl := Except.ok.inj h
+    have hc : data.size = 16 + 8 * Ssz.readUint data (data.size - 8) 8 :=
+      Decidable.of_not_not hs
+    have hl := readUint_eight_lt data (data.size - 8)
+    dsimp only
+    refine ⟨readUint_eight_lt data 0, ?_, ?_, ?_⟩
+    · simp only [List.length_map, List.length_range]
+      exact hl
+    · intro offset ho
+      obtain ⟨i, -, rfl⟩ := List.mem_map.mp ho
+      exact readInt64_bounds data _
+    · rw [toList_of_size hc]
+      simp only [List.length_map, List.length_range]
+      rw [show 8 + 8 * Ssz.readUint data (data.size - 8) 8 = data.size - 8 by omega]
+  · rintro ⟨hstart, hlen, hrange, hbytes⟩
+    have hsize : data.size = 16 + 8 * index.offsets.length := by
+      have := congrArg List.length hbytes
+      simp only [Array.length_toList, List.length_append, Vector.length_toList,
+        List.length_flatMap] at this
+      simp [List.map_const'] at this
+      omega
+    have hread := toList_of_size hsize
+    rw [hbytes] at hread
+    obtain ⟨front, hlast⟩ := List.append_inj' hread (by simp)
+    obtain ⟨hfirst, hmiddle⟩ := List.append_inj front (by simp)
+    have hs := ByteOrder.toLE_inj (k := 8) (by simpa using hstart)
+      (by simpa using readUint_eight_lt data 0) (Vector.toList_inj.mp hfirst)
+    have hc := ByteOrder.toLE_inj (k := 8) (by simpa using hlen)
+      (by simpa using readUint_eight_lt data _) (Vector.toList_inj.mp hlast)
+    have ho := offsets_inj (by simp) hrange
+      (fun offset ho => by
+        obtain ⟨i, -, rfl⟩ := List.mem_map.mp ho
+        exact readInt64_bounds data _) hmiddle
+    have hcount : Ssz.readUint data (data.size - 8) 8 = index.offsets.length := by
+      rw [show data.size - 8 = 8 + 8 * index.offsets.length by omega]
+      exact hc.symm
+    have h16 : ¬data.size < 16 := by omega
+    have hfit : ¬data.size ≠ 16 + 8 * index.offsets.length := by omega
+    unfold readIndex
+    simp only [h16, hcount, hfit, ↓reduceIte, ← hs, ← ho]
 
 end EthLib.Serialization.E2store
