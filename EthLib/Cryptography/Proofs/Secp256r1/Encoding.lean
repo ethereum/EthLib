@@ -6,9 +6,15 @@ public import EthLib.Base.Proofs.BigEndian
 /-!
 # Proofs: the uncompressed encoding of secp256r1
 
-The decoder of SEC 1 v2 §2.3.4 accepts exactly the encodings of §2.3.3 of the points on the curve.
+The decoder follows the uncompressed case of SEC 1 v2 §2.3.4, and no other.
 
-So it refuses another prefix or length, a coordinate of `p` or more, and a pair off the curve.
+It accepts exactly the uncompressed encodings of §2.3.3.
+
+Those are the bytes `04 ‖ x ‖ y` of the affine points `(x, y)` on the curve.
+
+So the octet `00` of `O` is refused.
+
+It also refuses another prefix or length, a coordinate of `p` or more, and a pair off the curve.
 
 It reads back the point of every such encoding.
 -/
@@ -19,7 +25,7 @@ namespace EthLib.Cryptography.Secp256r1
 
 open Base
 
-/-- A coordinate is 32 bytes. -/
+/-- The encoding of a coordinate has 32 bytes. -/
 private theorem Fp.length_toBytes (x : Fp) : x.toBytes.length = 32 := natToBytes_length 32 x.val
 
 /-- The 32 bytes of a coordinate hold its value. -/
@@ -28,7 +34,9 @@ private theorem Fp.bytesToNat_toBytes (x : Fp) : bytesToNat x.toBytes = x.val :=
 
 /-- The decoder accepts exactly the uncompressed encodings of the affine points on the curve.
 
-The encoding is the prefix `04`, then `x`, then `y`, each as 32 big-endian bytes. -/
+The encoding is the prefix `04`, then `x`, then `y`.
+
+Each coordinate takes 32 big-endian bytes, by SEC 1 v2 §2.3.5. -/
 theorem decodeUncompressed_eq_some_iff {bytes : List UInt8} {point : Point} :
     decodeUncompressed bytes = some point ↔
       ∃ x y : Fp, point = .affine x y ∧ point.isOnCurve = true ∧
@@ -58,6 +66,7 @@ theorem decodeUncompressed_eq_some_iff {bytes : List UInt8} {point : Point} :
       · cases h
     · cases h
   · rintro ⟨x, y, rfl, hc, rfl⟩
+    -- The decoder splits the 64 bytes back into the two coordinates, each below `p`.
     have hlen : (x.toBytes ++ y.toBytes).length = 64 := by simp [Fp.length_toBytes]
     have htake : (x.toBytes ++ y.toBytes).take 32 = x.toBytes := by
       rw [List.take_append_of_le_length (Nat.le_of_eq (Fp.length_toBytes x).symm),
