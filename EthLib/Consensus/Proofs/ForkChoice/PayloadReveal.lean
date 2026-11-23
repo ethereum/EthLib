@@ -33,7 +33,11 @@ The parent of the anchor must also be unknown.
 
 From Heze the payload must also satisfy its inclusion lists.
 
+A payload that is not extended, such as one that fails them, leaves the next head on the empty node.
+
 The source is [EIP-7732](https://eips.ethereum.org/EIPS/eip-7732), fork choice.
+
+For the inclusion lists, it is [EIP-7805](https://eips.ethereum.org/EIPS/eip-7805), fork choice.
 -/
 
 @[expose] public section
@@ -85,16 +89,17 @@ theorem shouldExtendPayload_of_timely {gloas : .glamsterdam ≤ fork} {root : Ro
 
 The end of the walk must descend from that pending node.
 
-When the walk then steps to the full node, it ends where the walk from the full node ends. -/
-private theorem getHeadFrom_full (lower : store.ParentsBelow) (gloas : .glamsterdam ≤ fork)
-    {nodes : List ForkChoiceNode} {root : Root} {head : ForkChoiceNode}
-    (step : store.heaviestChild config tally nodes ⟨root, .pending⟩ = .ok (some ⟨root, .full⟩))
-    (rank : store.nodeRank ⟨root, .full⟩ < store.nodeRank ⟨root, .pending⟩)
+When the walk then steps to the full or the empty node, it ends where the walk from that node ends.
+-/
+private theorem getHeadFrom_decided (lower : store.ParentsBelow) (gloas : .glamsterdam ≤ fork)
+    {nodes : List ForkChoiceNode} {root : Root} {status : PayloadStatus} {head : ForkChoiceNode}
+    (step : store.heaviestChild config tally nodes ⟨root, .pending⟩ = .ok (some ⟨root, status⟩))
+    (rank : store.nodeRank ⟨root, status⟩ < store.nodeRank ⟨root, .pending⟩)
     (below : (nodeTree lower).Ancestor (ForkChoiceNode.toModel ⟨root, .pending⟩)
       head.toModel) :
     ∀ {start : ForkChoiceNode}, store.getHeadFrom config tally nodes start = .ok head →
       (nodeTree lower).Ancestor start.toModel (ForkChoiceNode.toModel ⟨root, .pending⟩) →
-      store.getHeadFrom config tally nodes ⟨root, .full⟩ = .ok head := by
+      store.getHeadFrom config tally nodes ⟨root, status⟩ = .ok head := by
   intro start walk above
   have walk := getHeadFrom_of_visited lower gloas below walk above
   rw [getHeadFrom, step] at walk
@@ -124,6 +129,37 @@ private theorem heaviestChild_full {gloas : .glamsterdam ≤ fork}
   rw [getNodeChildren_of_pending gloas rfl]
   simp [verified, emptyIn, fullIn, fullWeighed, bind, Except.bind, pure, Except.pure,
     chooseHeaviest]
+
+/-- From Gloas the walk takes the empty node of a block of the previous slot.
+
+The payload must not extend, and the empty node must be among the given nodes. -/
+private theorem heaviestChild_empty {gloas : .glamsterdam ≤ fork}
+    {nodes : List ForkChoiceNode} {root : Root} {block : BeaconBlock preset fork} {next : Slot}
+    (found : store.blocks[root]? = some block)
+    (nextOk : Uint64.addChecked block.slot 1 = .ok next)
+    (current : store.getCurrentSlot config = .ok next)
+    (extend : store.shouldExtendPayload config gloas root = .ok false)
+    (emptyIn : ⟨root, .empty⟩ ∈ nodes) :
+    store.heaviestChild config tally nodes ⟨root, .pending⟩ = .ok (some ⟨root, .empty⟩) := by
+  by_cases both : store.isPayloadVerified gloas root = true ∧ ⟨root, .full⟩ ∈ nodes
+  · simpa using heaviestChild_of_previousSlot found nextOk current both.1 emptyIn both.2 extend
+  -- Otherwise the empty node is the only child left to weigh.
+  have emptyDecision := isPreviousSlotPayloadDecision_of_previous (status := .empty) found nextOk
+    current (by decide)
+  have emptyWeighed : store.weighNode config tally ⟨root, .empty⟩ = .ok (⟨root, .empty⟩, 0, 1) :=
+    weighNode_ok_iff.mpr ⟨rfl, getWeight_of_payloadDecision gloas emptyDecision, by
+      simp [tiebreaker, gloas, getPayloadStatusTiebreaker, emptyDecision, bind, Except.bind,
+        pure, Except.pure]⟩
+  have alone : (⟨root, .empty⟩ :: if store.isPayloadVerified gloas root then
+      [(⟨root, .full⟩ : ForkChoiceNode)] else []).filter (· ∈ nodes) = [⟨root, .empty⟩] := by
+    by_cases verified : store.isPayloadVerified gloas root = true
+    · have fullOut : (⟨root, .full⟩ : ForkChoiceNode) ∉ nodes :=
+        fun fullIn => both ⟨verified, fullIn⟩
+      simp [verified, emptyIn, fullOut]
+    · simp [verified, emptyIn]
+  unfold heaviestChild
+  rw [getNodeChildren_of_pending gloas rfl]
+  simp [alone, emptyWeighed, bind, Except.bind, pure, Except.pure, chooseHeaviest]
 
 /-- A head that goes through a block of the previous slot goes through its full node.
 
@@ -162,9 +198,94 @@ theorem isAncestor_full_getHead_of_shouldExtendPayload (lower : store.ParentsBel
     · exact par
   have rank : store.nodeRank ⟨root, .full⟩ < store.nodeRank ⟨root, .pending⟩ := by
     simp [nodeRank, found]
-  have walk := getHeadFrom_full lower gloas
+  have walk := getHeadFrom_decided lower gloas
     (heaviestChild_full found nextOk current verified extend fullIn) rank below headOk above
   exact isAncestor_getHeadFrom_of_gloas gloas walk found
+
+/-- A head that goes through a block of the previous slot goes through its empty node.
+
+The payload of the block must not be extended.
+
+Its empty node must be among the viable nodes.
+
+Then the head does not go through the full node of the block.
+
+From two slots after the block, the votes weigh both nodes, and this no longer holds.
+
+Each known block must sit at a later slot than its known parent. -/
+theorem isAncestor_empty_getHead_of_not_shouldExtendPayload (lower : store.ParentsBelow)
+    {gloas : .glamsterdam ≤ fork} {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
+    {root : Root} {block : BeaconBlock preset fork} {next : Slot}
+    (found : store.blocks[root]? = some block)
+    (nextOk : Uint64.addChecked block.slot 1 = .ok next)
+    (current : store.getCurrentSlot config = .ok next)
+    (extend : store.shouldExtendPayload config gloas root = .ok false)
+    (tree : store.getFilteredNodeTree config = .ok nodes) (emptyIn : ⟨root, .empty⟩ ∈ nodes)
+    (headOk : store.getHead config = .ok head)
+    (through : store.isAncestor head ⟨root, .pending⟩ = .ok true) :
+    store.isAncestor head ⟨root, .empty⟩ = .ok true ∧
+      store.isAncestor head ⟨root, .full⟩ = .ok false := by
+  have known : store.block root = .ok block := block_ok_iff.mpr found
+  have empty : store.isAncestor head ⟨root, .empty⟩ = .ok true := by
+    unfold getHead at headOk
+    simp only [tree, bind, Except.bind] at headOk
+    have notEmpty : ¬(.glamsterdam ≤ fork ∧ nodes.isEmpty) :=
+      fun none => by simp [List.isEmpty_iff.mp none.2] at emptyIn
+    simp only [notEmpty, ↓reduceIte] at headOk
+    have below := (isAncestor_iff_of_gloas (lower := lower) (node := ⟨root, .pending⟩) gloas
+      found through).mp rfl
+    -- The justified block sits above the empty node, so above its pending node.
+    have closed := filterNodeTree_closed (T := nodeTree lower) (·.toModel) tree
+      (fun _ _ _ childrenOk _ nMem => isChild_of_mem_getNodeChildren gloas childrenOk nMem)
+    have above : (nodeTree lower).Ancestor
+        (ForkChoiceNode.toModel ⟨store.justifiedCheckpoint.root, .pending⟩)
+        (ForkChoiceNode.toModel ⟨root, .pending⟩) := by
+      rcases ((closed _ emptyIn).1).eq_or_parent with eq | par
+      · cases ForkChoiceNode.toModel_injective eq
+      · exact par
+    have rank : store.nodeRank ⟨root, .empty⟩ < store.nodeRank ⟨root, .pending⟩ := by
+      simp [nodeRank, found]
+    have walk := getHeadFrom_decided lower gloas
+      (heaviestChild_empty found nextOk current extend emptyIn) rank below headOk above
+    exact isAncestor_getHeadFrom_of_gloas gloas walk found
+  refine ⟨empty, ?_⟩
+  -- Both checks read the same ancestor of the head, which is the empty node.
+  simp only [isAncestor, known, gloas, ↓reduceIte, bind, Except.bind] at empty ⊢
+  cases walk : store.getAncestor head block.slot with
+  | error e => simp [walk] at empty
+  | ok ancestor =>
+    simp only [walk, pure, Except.pure, Except.ok.injEq] at empty ⊢
+    cases status : ancestor.payloadStatus <;> simp_all
+
+/-- From Heze, the next head never goes through the full node of a payload that fails its lists.
+
+Take a block of the previous slot whose payload the store does not count as satisfying its lists.
+
+A payload that the store has not verified counts as failing them.
+
+Its empty node is among the viable nodes, and the head goes through the block.
+
+Then the head goes through the empty node of the block, and not through its full node.
+
+From two slots after the block, the votes weigh both nodes, and this no longer holds.
+
+Each known block must sit at a later slot than its known parent. -/
+theorem isAncestor_empty_getHead_of_not_satisfied (lower : store.ParentsBelow)
+    (heze : .hegota ≤ fork) {nodes : List ForkChoiceNode} {head : ForkChoiceNode} {root : Root}
+    {block : BeaconBlock preset fork} {next : Slot}
+    (found : store.blocks[root]? = some block)
+    (nextOk : Uint64.addChecked block.slot 1 = .ok next)
+    (current : store.getCurrentSlot config = .ok next)
+    (unsatisfied : store.isPayloadInclusionListSatisfied heze root = .ok false)
+    (tree : store.getFilteredNodeTree config = .ok nodes) (emptyIn : ⟨root, .empty⟩ ∈ nodes)
+    (headOk : store.getHead config = .ok head)
+    (through : store.isAncestor head ⟨root, .pending⟩ = .ok true) :
+    store.isAncestor head ⟨root, .empty⟩ = .ok true ∧
+      store.isAncestor head ⟨root, .full⟩ = .ok false :=
+  isAncestor_empty_getHead_of_not_shouldExtendPayload (gloas := Nat.le_trans (by decide) heze)
+    lower found nextOk current
+    (shouldExtendPayload_of_not_satisfied heze found nextOk current unsatisfied)
+    tree emptyIn headOk through
 
 /-- A timely and available payload is extended by the next head.
 
