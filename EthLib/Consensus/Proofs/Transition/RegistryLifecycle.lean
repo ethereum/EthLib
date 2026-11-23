@@ -746,6 +746,27 @@ theorem registryLifecycle_processBlsToExecutionChange {signed : SignedBLSToExecu
 
 /-! ## Blocks -/
 
+/-- The operations of a block keep the lifecycle of the registry.
+
+They are its slashings, attestations, deposits, exits, credential changes and requests. -/
+theorem registryLifecycle_processOperations {body : BeaconBlockBody preset fork}
+    {parentSlot : Slot}
+    (computed : processOperations config checks state body parentSlot = .ok after) :
+    RegistryLifecycle state after := by
+  obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
+    processOperations_folds_of RegistryLifecycle .refl (fun one two => one.trans two)
+      (fun ok => registryLifecycle_processDeposit ok)
+      (fun ok => registryLifecycle_processVoluntaryExit ok)
+      (fun ok => registryLifecycle_processBlsToExecutionChange ok)
+      (fun ok => registryLifecycle_processExecutionRequests ok)
+      (fun ok => by rw [processPayloadAttestation_eq ok]; exact .refl _) computed
+  exact (RegistryLifecycle.foldlM (fun _ _ _ ok => registryLifecycle_processProposerSlashing ok)
+      proposersOk).trans <|
+    (RegistryLifecycle.foldlM (fun _ _ _ ok => registryLifecycle_processAttesterSlashing ok)
+      slashingsOk).trans <|
+    (RegistryLifecycle.foldlM (fun _ _ _ ok => registryLifecycle_processAttestation ok)
+      attestedOk).trans rest
+
 theorem registryLifecycle_processBlock {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
     RegistryLifecycle state after := by
@@ -760,26 +781,13 @@ theorem registryLifecycle_processBlock {block : BeaconBlock preset fork}
       registryLifecycle_processBlockHeader
       (fun _ ok => .of_data (congrArg (·.data) (processBlockExecution_validators ok)))
       registryLifecycle_processRandao (fun _ ok => registryLifecycle_processEth1Data ok) started
-  obtain ⟨_, _, _, proposersOk, slashingsOk, attestedOk, rest⟩ :=
-    processOperations_folds_of RegistryLifecycle .refl (fun one two => one.trans two)
-      (fun ok => registryLifecycle_processDeposit ok)
-      (fun ok => registryLifecycle_processVoluntaryExit ok)
-      (fun ok => registryLifecycle_processBlsToExecutionChange ok)
-      (fun ok => registryLifecycle_processExecutionRequests ok)
-      (fun ok => by rw [processPayloadAttestation_eq ok]; exact .refl _) operated
   have tail : RegistryLifecycle last after := by
     split at synced
     · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
       exact .of_data rfl
     · cases synced
       exact .refl _
-  exact head.trans <|
-    (RegistryLifecycle.foldlM (fun _ _ _ ok => registryLifecycle_processProposerSlashing ok)
-      proposersOk).trans <|
-    (RegistryLifecycle.foldlM (fun _ _ _ ok => registryLifecycle_processAttesterSlashing ok)
-      slashingsOk).trans <|
-    (RegistryLifecycle.foldlM (fun _ _ _ ok => registryLifecycle_processAttestation ok)
-      attestedOk).trans (rest.trans tail)
+  exact head.trans ((registryLifecycle_processOperations operated).trans tail)
 
 /-! ## The steps of an epoch -/
 

@@ -314,7 +314,7 @@ private theorem slashing_credits_le_newly_slashed {config : Config} {checks : Si
     | none => simp [effectiveAt, found]
     | some v =>
       have bounded := (shared.append pre).effectiveBalance_capped genesis activation compounding
-        aEarly v (Array.mem_of_getElem? found)
+        v (Array.mem_of_getElem? found)
       have largest : withdrawalMaxEffectiveBalance preset a.fork v ≤
           (if .pectra ≤ x.fork then preset.MAX_EFFECTIVE_BALANCE_ELECTRA
             else preset.MAX_EFFECTIVE_BALANCE) := by
@@ -541,7 +541,7 @@ private theorem step_weight {g u v : ForkedBeaconState preset}
 
 This holds when it is in the base after the step, or slashed after it. -/
 private theorem pooled_of_step {u v : ForkedBeaconState preset}
-    (step : Step config checks u v) (caps : CapOrder preset) (early : v.fork < .glamsterdam)
+    (step : Step config checks u v) (caps : CapOrder preset)
     (holds : Invariant u.state) (i : Nat) (w : Validator)
     (found : u.state.validators.data[i]? = some w) (unslashed : w.slashed = false)
     (later : pooled v i = true ∨ (v.state.validators.data[i]?.map (·.slashed)).getD false = true) :
@@ -550,7 +550,7 @@ private theorem pooled_of_step {u v : ForkedBeaconState preset}
     Bool.true_and, decide_eq_true_eq]
   by_contra withdrawn
   have kept := (EthLib.Consensus.Internal.CapStep.run (Run.nil.snoc step) caps.activation
-    caps.compounding early).1
+    caps.compounding).1
   obtain ⟨z, read, _⟩ := kept.monotone i w found
   have exited : w.exitEpoch ≤ getCurrentEpoch u.state :=
     UInt64.le_trans (holds.exitsOrdered w (Array.mem_of_getElem? found))
@@ -611,7 +611,7 @@ private theorem step_base_split {g u v : ForkedBeaconState preset}
           | true =>
             obtain ⟨z, read, marked⟩ := step.slashedPersistence i _ found flag
             simp [pooled, read, marked] at member
-        have before := pooled_of_step step caps early holds i _ found unslashed (.inl member)
+        have before := pooled_of_step step caps holds i _ found unslashed (.inl member)
         simpa [kept, before, member, present] using bound
       · rename_i absent
         simpa [absent] using bound
@@ -672,7 +672,7 @@ private theorem step_slashing_le {g u v : ForkedBeaconState preset}
           simp [present]
         have flag : u.state.validators.data[i].slashed = false := by
           simpa [found] using newly.1
-        have before := pooled_of_step step caps early holds i _ found flag (.inr newly.2)
+        have before := pooled_of_step step caps holds i _ found flag (.inr newly.2)
         have after : pooled v i = false := by
           cases read : v.state.validators.data[i]? with
           | none => simp [read] at newly
@@ -866,7 +866,7 @@ private theorem prefix_withdrawable {fork : Fork}
 /-- A key of the slashable base after a step, present before it, was in the base before it. -/
 private theorem pooled_before {g u v : ForkedBeaconState preset}
     (shared : Run config checks g u) (genesis : Genesis (config := config) (checks := checks) g)
-    (step : Step config checks u v) (caps : CapOrder preset) (early : v.fork < .glamsterdam)
+    (step : Step config checks u v) (caps : CapOrder preset)
     (i : Nat) (present : i < u.state.validators.data.size) (member : pooled v i = true) :
     pooled u i = true := by
   have found : u.state.validators.data[i]? = some u.state.validators.data[i] := by
@@ -877,7 +877,7 @@ private theorem pooled_before {g u v : ForkedBeaconState preset}
     | true =>
       obtain ⟨z, read, marked⟩ := step.slashedPersistence i _ found flag
       simp [pooled, read, marked] at member
-  exact pooled_of_step step caps early (run_justified_separated shared genesis).1 i _ found
+  exact pooled_of_step step caps (run_justified_separated shared genesis).1 i _ found
     unslashed (.inl member)
 
 /-- From Electra, the pending deposits credit the slashable base at most their funding credit.
@@ -925,7 +925,7 @@ private theorem deposit_le_funding {g u v : ForkedBeaconState preset}
           decide (w.withdrawableEpoch.toNat ≤ (getCurrentEpoch reset).toNat)).getD false =
             false := by
         by_cases present : i < u.state.validators.data.size
-        · have before := pooled_before shared genesis step caps early i present member
+        · have before := pooled_before shared genesis step caps i present member
           have found : u.state.validators.data[i]? = some u.state.validators.data[i] := by
             simp [present]
           simp only [pooled, found, Option.map_some, Option.getD_some, Bool.and_eq_true,
@@ -979,8 +979,8 @@ private theorem pass_le_freed {g u v : ForkedBeaconState preset}
       ∑ i ∈ Finset.range u.state.validators.data.size,
         if pooled u i && !pooled v i then weight u i else 0 := by
   have uEarly := Nat.lt_of_le_of_lt step.chainStep.fork_le early
-  have invariant := Run.pendingConsolidation_invariant shared genesis uEarly electra delay
-  have ordered := ((Run.pendingConsolidationsOrdered shared genesis uEarly delay).2 electra).2
+  have invariant := Run.pendingConsolidation_invariant shared genesis electra delay
+  have ordered := ((Run.pendingConsolidationsOrdered shared genesis delay).2 electra).2
   have sites := step.balanceEvents_sites early (run_justified_separated shared genesis).1
     compounding replayed
   obtain ⟨-, -, -, -, -, -, -, -, -, -, -, slashedInto, -⟩ := sites _ member

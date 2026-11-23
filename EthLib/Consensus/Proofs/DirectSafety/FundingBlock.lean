@@ -339,7 +339,7 @@ private theorem funding_block_replay {fork : Fork} {s : BeaconState preset fork}
         (fun _ _ ok => congrArg (·.data.size) (processBlockExecution_validators ok))
         (fun _ _ ok => effectiveKept_data
           (congrArg (·.data) (processBlockExecution_validators ok)))
-        (fun _ _ ok _ => SamePendingQueue.blockExecution early ok) headedBound executionOk
+        (fun _ _ ok _ => SamePendingQueue.blockExecution ok) headedBound executionOk
     · cases executionOk
       exact headedBound
   have randaoBound : FundingReplay extra s randao := by
@@ -512,7 +512,7 @@ theorem funding_block_extra {fork : Fork} {s t : BeaconState preset fork}
   have costs := funding_block_cost_le
     (blockBalanceReplay_bounded early engine block matched replayed)
   change (events.map funding_block_cost).sum ≤ (events.map fundingCredit).sum at costs
-  have carry := depositCarry_processBlock early ok
+  have carry := depositCarry_processBlock ok
   have same : fundingCarry ⟨fork, t⟩ = fundingCarry ⟨fork, s⟩ := by
     simp only [fundingCarry, carry]
   rw [same]

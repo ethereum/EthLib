@@ -20,9 +20,9 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks} {fork : 
 
 /-- A block keeps the deposit carry.
 
-This holds at every fork. -/
+From Gloas the parent's deposit requests join the pending deposits, and the carry stays. -/
 theorem depositCarry_processBlock {engine : ExecutionEngine preset fork}
-    {block : BeaconBlock preset fork} (_early : fork < .glamsterdam)
+    {block : BeaconBlock preset fork}
     (ok : processBlock config checks engine s block = .ok t) :
     t.depositBalanceToConsume = s.depositBalanceToConsume :=
   (processBlock_blockKept ok).depositCarry

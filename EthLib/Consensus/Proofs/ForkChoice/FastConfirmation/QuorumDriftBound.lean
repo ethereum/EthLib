@@ -79,9 +79,13 @@ private theorem blockDeposits_mono {c d : Prop} [Decidable c] [Decidable d] {k m
 
 /-- The quorum of a call drifts by at most the reserve from the call's state to a later state.
 
-An assumption on the run: its fork is Fulu or later, and before Gloas.
+An assumption on the run: its fork is Fulu or later.
 
-The bounds read the epoch transition of Fulu; earlier and later forks are not covered.
+The bounds read the epoch transition from Fulu on.
+
+The counting state's registry is within the limit.
+
+From Gloas the type of the registry does not give it.
 
 The call's state is in the epoch of a boundary state, which is right after its epoch transition.
 
@@ -112,7 +116,7 @@ theorem quorumDrift_le_quorumReserve
     (edge : Run config checks ⟨fork, boundary⟩ ⟨fork, middle⟩)
     (tailP : Run config checks ⟨fork, middle⟩ ⟨fork, pulled⟩)
     (tailS : Run config checks ⟨fork, middle⟩ ⟨fork, state⟩)
-    (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork)
+    (within : state.RegistryWithinLimit) (fulu : .fusaka ≤ fork)
     (bands : preset.IncrementWithinUpwardBand)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (caps : CapOrder preset) (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
@@ -133,8 +137,6 @@ theorem quorumDrift_le_quorumReserve
     2 * total.toNat + 3 * stake (fun v => balanceAt pulled v.toNat) voters ≤
       2 * pulledTotal.toNat + 3 * stake (fun v => balanceAt state v.toNat) voters +
         quorumReserve config pulled anc := by
-  have notGloas : ¬Fork.glamsterdam ≤ fork := fun late =>
-    Nat.lt_irrefl _ (Nat.lt_of_lt_of_le early late)
   -- The reserve reads the queue of the ancestor, which the middle state holds.
   have sameQueue : quorumReserve config pulled anc = quorumReserve config pulled middle := by
     unfold quorumReserve
@@ -143,9 +145,9 @@ theorem quorumDrift_le_quorumReserve
   -- Each voter is active in the epoch of the call.
   have voterActive : ∀ v ∈ voters, isActiveAt pulled (getCurrentEpoch pulled) v.toNat = true := by
     intro v voter
-    obtain ⟨validator, found, active⟩ :=
-      (mem_getActiveValidatorIndices (pulled.validators.bound early)).mp
-        (List.mem_toFinset.mp (voting v voter).1)
+    obtain ⟨indices, checked, -⟩ := bind_ok_iff.mp pulledOk
+    obtain ⟨validator, found, active⟩ := (mem_iff_of_getActiveValidatorIndicesChecked_ok checked).mp
+      ((getActiveValidatorIndicesChecked_ok checked) ▸ List.mem_toFinset.mp (voting v voter).1)
     exact isActiveAt_eq_true_iff.mpr ⟨validator, found, active⟩
   have fixed : getCurrentEpoch boundary ≤ activityFixedEpoch boundary :=
     getCurrentEpoch_le_activityFixedEpoch boundary
@@ -153,7 +155,7 @@ theorem quorumDrift_le_quorumReserve
       isActiveAt boundary (getCurrentEpoch boundary) i :=
     activeKept_of_chainSteps (edge.append tailP).chainSteps _ fixed
   have keptP : EffectiveKept boundary pulled :=
-    (edge.append tailP).effectiveKept_of_same_epoch early callEpoch
+    (edge.append tailP).effectiveKept_of_same_epoch callEpoch
   have insideR {i : ℕ} (active : isActiveAt boundary (getCurrentEpoch boundary) i = true) :
       i < boundary.validators.data.size := by
     obtain ⟨_, found, -⟩ := isActiveAt_eq_true_iff.mp active
@@ -168,7 +170,7 @@ theorem quorumDrift_le_quorumReserve
         isActiveAt boundary (getCurrentEpoch boundary) i :=
       activeKept_of_chainSteps (edge.append tailS).chainSteps _ fixed
     have keptS : EffectiveKept boundary state :=
-      (edge.append tailS).effectiveKept_of_same_epoch early sameEpoch
+      (edge.append tailS).effectiveKept_of_same_epoch sameEpoch
     have totals : total.toNat = pulledTotal.toNat := by
       rw [getTotalActiveBalance_toNat totalOk, getTotalActiveBalance_toNat pulledOk,
         activeBalanceTotal, activeBalanceTotal, sameEpoch, callEpoch]
@@ -192,10 +194,10 @@ theorem quorumDrift_le_quorumReserve
   have invM := Run.invariant invG (history.append edge)
   -- The branch corrections from the boundary state, and from the middle state.
   obtain ⟨debitedKeys, -, -, -, debitedCard, -, gainSide, -, -, -, -, -, -, -, capsKept, -, -⟩ :=
-    (edge.append tailP).balanceCorrections_of_same_epoch early fulu callEpoch invR.balancesMatch
+    (edge.append tailP).balanceCorrections_of_same_epoch fulu callEpoch invR.balancesMatch
       invR.exitsOrdered
   obtain ⟨-, creditedKeys, pc, deposit, -, creditedCard, -, lossSide, zeroOff, electraZero, budget,
-    -, -, -, -, -, -⟩ := tailP.balanceCorrections_of_same_epoch early fulu
+    -, -, -, -, -, -⟩ := tailP.balanceCorrections_of_same_epoch fulu
       (callEpoch.trans middleEpoch.symm) invM.balancesMatch invM.exitsOrdered
   have blocksLe : (edge.append tailP).blockCount ≤
       pulled.slot.toNat - currentEpochStart pulled + 1 := by
@@ -240,7 +242,7 @@ theorem quorumDrift_le_quorumReserve
       min headroom (crossing + (recipients + debited) * preset.upwardBand + debited * creditMax +
         transfers + depositGain) :=
     effectiveRise_le genesis history (edge.append tailP) (edge.append tailS) caps withdrawDelay
-      bands maxLookahead hysteresis early fulu callEpoch next
+      bands maxLookahead hysteresis within fulu callEpoch next
       (n := nP) debitedKeys
       (debitedCard.trans (Nat.mul_le_mul_left _ blocksLe))
       (fun v off => (gainSide v off).trans
@@ -272,7 +274,7 @@ theorem quorumDrift_le_quorumReserve
           (if pc v + deposit v = 0 then 0
            else inc + 2 * preset.downwardBand + syncP v.toNat +
              min (pc v + deposit v) (below v)) :=
-    effectiveFall_le genesis history edge tailP tailS caps bands withdrawDelay hysteresis early
+    effectiveFall_le genesis history edge tailP tailS caps bands withdrawDelay hysteresis within
       fulu
       middleEpoch callEpoch next single counted (fun v => pc v + deposit v)
       (fun v => (lossSide v).trans (by rw [Nat.add_assoc]; exact Nat.le_refl _))

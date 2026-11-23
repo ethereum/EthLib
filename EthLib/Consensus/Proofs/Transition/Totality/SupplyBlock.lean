@@ -1008,45 +1008,11 @@ end Kept
 
 section Totals
 
-/-- A step that keeps the slot, the activity and the earlier effective balances keeps the total.
-
-The registry must not shrink. -/
+/-- A step that keeps the slot, the activity and the earlier effective balances keeps the total. -/
 private theorem total_congr {s t : BeaconState preset fork} (step : ActiveStep s t)
-    (kept : EffectiveKept s t) (grows : s.validators.data.size ≤ t.validators.data.size) :
-    getTotalActiveBalance t = getTotalActiveBalance s := by
-  classical
-  have epoch : getCurrentEpoch t = getCurrentEpoch s := by
-    simp only [getCurrentEpoch, step.1]
-  have active := step.2.mono (getCurrentEpoch_le_activityFixedEpoch s)
-  have checked := active.getActiveValidatorIndicesChecked_eq (UInt64.le_refl _)
-  unfold getTotalActiveBalance
-  rw [epoch, checked]
-  cases found : getActiveValidatorIndicesChecked s (getCurrentEpoch s) with
-  | error e => rfl
-  | ok indices =>
-    simp only [bind, Except.bind]
-    have inside (i : ValidatorIndex) (member : i ∈ indices) :
-        i.toNat < s.validators.data.size := by
-      obtain ⟨_, there, _⟩ := (mem_iff_of_getActiveValidatorIndicesChecked_ok found).mp member
-      exact (Array.getElem?_eq_some_iff.mp there).1
-    have sum : Models.stake (fun i => balanceAt t i.toNat) indices.toFinset =
-        Models.stake (fun i => balanceAt s i.toNat) indices.toFinset := by
-      apply Finset.sum_congr rfl
-      intro i member
-      exact kept i.toNat (inside i (List.mem_toFinset.mp member))
-    have sourceNone : indices.find? (s.validators.data.size ≤ ·.toNat) = none := by
-      apply List.find?_eq_none.mpr
-      intro i member
-      have := inside i member
-      simp only [decide_eq_true_eq]
-      omega
-    have targetNone : indices.find? (t.validators.data.size ≤ ·.toNat) = none := by
-      apply List.find?_eq_none.mpr
-      intro i member
-      have := inside i member
-      simp only [decide_eq_true_eq]
-      omega
-    simp only [getTotalBalance, sourceNone, targetNone, sumMarked_markIndices_eq_stake, sum]
+    (kept : EffectiveKept s t) : getTotalActiveBalance t = getTotalActiveBalance s :=
+  DirectSafety.total_active_congr (step.2.mono (getCurrentEpoch_le_activityFixedEpoch s))
+    (by simp only [getCurrentEpoch, step.1]) kept
 
 /-- A step that keeps the slot, the activity, the effective balances and the size of the registry.
 -/
@@ -1084,7 +1050,7 @@ private theorem Steady.effectiveBalanceSum_eq {a b : BeaconState preset fork}
 
 private theorem Steady.total {a b : BeaconState preset fork} (steady : Steady a b) :
     getTotalActiveBalance b = getTotalActiveBalance a :=
-  total_congr steady.1 steady.2.1 (Nat.le_of_eq steady.2.2.symm)
+  total_congr steady.1 steady.2.1
 
 /-- The deposits of a block keep the total active balance, with its errors.
 
@@ -1101,7 +1067,7 @@ theorem foldlM_processDeposit_getTotalActiveBalance {before : fork < .hegota}
         effectiveKept_trans kept (effectiveKept_processDeposit ok) grows,
         Nat.le_trans grows (stepKeeps_processDeposit ok).1⟩)
     ⟨ActiveStep.refl a, effectiveKept_refl a, Nat.le_refl _⟩ computed
-  exact total_congr step kept grows
+  exact total_congr step kept
 
 end Totals
 
@@ -1869,7 +1835,7 @@ private theorem syncStart_same {engine : ExecutionEngine preset fork}
       .ok after) :
     getTotalActiveBalance last = getTotalActiveBalance state := by
   have whole := total_congr ⟨(frame_processBlock computed).slot, activeKept_processBlock computed⟩
-    (effectiveKept_processBlock computed) (frame_processBlock computed).registryGrows
+    (effectiveKept_processBlock computed)
   obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
   exact whole
 
@@ -2108,7 +2074,7 @@ theorem processBlock_getTotalActiveBalance {engine : ExecutionEngine preset fork
     (computed : processBlock config checks engine state block = .ok after) :
     getTotalActiveBalance after = getTotalActiveBalance state :=
   total_congr ⟨(frame_processBlock computed).slot, activeKept_processBlock computed⟩
-    (effectiveKept_processBlock computed) (frame_processBlock computed).registryGrows
+    (effectiveKept_processBlock computed)
 
 /-- A block keeps the base reward of one increment. -/
 theorem processBlock_blockPerIncrement {engine : ExecutionEngine preset fork}

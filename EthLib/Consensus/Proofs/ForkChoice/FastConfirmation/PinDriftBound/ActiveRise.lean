@@ -194,8 +194,7 @@ private theorem exited_credit_ceiling
     (kept.withdrawable i u vA' foundFin foundA unset).2.resolve_left (by simp [cleanA])
   have lateA : (getCurrentEpoch as).toNat < vA'.withdrawableEpoch.toNat :=
     Internal.newly_slashed_unwithdrawable h.genesis h.caps (shared.append (fromFin.append pre))
-      step (Nat.lt_of_le_of_lt
-        (fork_le_of_chainSteps post.chainSteps) h.early) foundA foundB cleanA slashedB
+      step foundA foundB cleanA slashedB
   have exitLt := Internal.exitEpoch_toNat_lt_of_ne_far unset
   have deposits := Internal.Run.exiting_deposit_credit_zero shared h.genesis (fromFin.append pre)
     h.fulu aEarly highC wholeR i u foundFin exitLt (by rw [← constant]; exact lateA)
@@ -1155,7 +1154,7 @@ private theorem voter_not_withdrawn (h : Setting config checks g split fin pulle
   have beyond : (getCurrentEpoch pulled).toNat + 1 < wP.withdrawableEpoch.toNat := by
     by_cases slashedP : wP.slashed = true
     · have newly := (tail.newly_slashed_withdrawableEpoch h.caps.activation h.caps.compounding
-        h.early (Internal.Setting.delay h) v.toNat uS wP foundS foundP cleanS slashedP).2
+        (Internal.Setting.delay h) v.toNat uS wP foundS foundP cleanS slashedP).2
       have newly' : (getCurrentEpoch split).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
           wP.withdrawableEpoch.toNat := newly
       omega
@@ -1455,7 +1454,6 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
     FloorTrace.effective_aligned (toFin.append (fromFin.append tailC)) h.genesis h.aligned v.toNat
   have atMax : balanceAt ending v.toNat ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat :=
     Internal.effectiveAt_le_capMax (toFin.append (fromFin.append tailC)) h.genesis h.caps
-      h.early
       v.toNat
   -- the cap that `capFor` reads is the largest one off the low rate, and otherwise `cappedY`'s
   have capped : ∀ S U : ℕ, ((preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ U + 1 ∧ Cr + Fl ≤ S ∧
@@ -1894,7 +1892,7 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
       balanceAt ending v.toNat ≤ (pinTerms config pulled anc fin).capFor v.toNat :=
     fun le => Nat.le_trans (Internal.effective_le_cap_at (toFin.append (toC.append (fromC.append
       tailC)))
-      h.genesis h.caps h.early v.toNat)
+      h.genesis h.caps v.toNat)
       (Nat.le_trans le
         (Internal.capAt_le_capFor config pulled anc fin v.toNat (Internal.capAt_le_capMax h.caps
           electra v.toNat)))
@@ -1959,7 +1957,7 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
     intro S ceiling
     exact start_le_round
       (FloorTrace.effective_aligned (toFin.append toC) h.genesis h.aligned v.toNat)
-      (Internal.effective_le_cap_at (toFin.append toC) h.genesis h.caps h.early v.toNat) (by omega)
+      (Internal.effective_le_cap_at (toFin.append toC) h.genesis h.caps v.toNat) (by omega)
       (start.imp_left And.right)
   -- on the headroom of C's cap, which R's cap may not reach, the cap adds to the rounded credits
   have cappedY : Df * ((11 * q + 9) / 10 + 3) < preset.EFFECTIVE_BALANCE_INCREMENT.toNat →
@@ -1990,13 +1988,13 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
       have aligned := Internal.capAt_aligned h.aligned (z := (⟨fork, pulled⟩ : ForkedBeaconState
         preset))
         electra foundP
-      have capSP := Internal.cap_le_cap_of_run h.caps tail h.early v.toNat
+      have capSP := Internal.cap_le_cap_of_run h.caps tail v.toNat
       have stay2 := Internal.key_stay_to h toC fromC tailC v.toNat inside
         (PinTerms.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
           (Cr + (gc + (D * q + D))))
         (fun z member => by
           rcases onSharedOrTail member with inR | later
-          · have := Internal.capCeil_path (fromC.append tail) h.caps h.early (Nat.le_refl _) v.toNat
+          · have := Internal.capCeil_path (fromC.append tail) h.caps (Nat.le_refl _) v.toNat
               z inR
             omega
           · have := bound0 z later
@@ -2011,11 +2009,11 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
           (Cr + (gc + (D * q + D)))) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat =
           (Cr + (gc + (D * q + D))) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
         rw [Nat.add_mod, aligned, Nat.zero_add, Nat.mod_mod]
-      have atC := Internal.effective_le_cap_at (toFin.append toC) h.genesis h.caps h.early v.toNat
+      have atC := Internal.effective_le_cap_at (toFin.append toC) h.genesis h.caps v.toNat
       have atPulled := Internal.effective_le_cap_at (toFin.append (toC.append (fromC.append tail)))
         h.genesis
-        h.caps h.early v.toNat
-      have capCP := Internal.cap_le_cap_of_run h.caps (fromC.append tail) h.early v.toNat
+        h.caps v.toNat
+      have capCP := Internal.cap_le_cap_of_run h.caps (fromC.append tail) v.toNat
       rw [capFor]
       rcases stay2 with ⟨-, same⟩ | ⟨-, -, atMost⟩
       · show effectiveAt (⟨fork, ending⟩ : ForkedBeaconState preset) v.toNat ≤ _
@@ -2162,9 +2160,9 @@ theorem registry_frozen (h : Setting config checks g split fin pulled anc counte
       rcases start with ⟨within, atFin⟩ | floorC
       · exact absurd ⟨⟨lt, le⟩, within, atFin⟩ leftShort
       · obtain ⟨toFin⟩ := h.toFin
-        have capped := Internal.effective_le_cap_at (toFin.append toC) h.genesis h.caps h.early
+        have capped := Internal.effective_le_cap_at (toFin.append toC) h.genesis h.caps
           v.toNat
-        have capsLater := Internal.cap_le_cap_of_run h.caps (fromC.append tail) h.early v.toNat
+        have capsLater := Internal.cap_le_cap_of_run h.caps (fromC.append tail) v.toNat
         have forOf := Internal.capAt_le_capFor config pulled anc fin v.toNat
           (Internal.capAt_le_capMax h.caps (Nat.le_trans (by decide) h.fulu) v.toNat)
         exact ⟨by omega, Internal.short_start_floor h.bands.1
@@ -2207,7 +2205,7 @@ theorem registry_headroom (h : Setting config checks g split fin pulled anc coun
   obtain ⟨pre, -, -, aEarly, -⟩ :=
     DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
   have capped := Internal.effectiveAt_le_capMax ((shared.append fromFin).append pre) h.genesis
-    h.caps aEarly i
+    h.caps i
   have headroom := Internal.rise_of_notKept h i notKept
   unfold Internal.whistleEnv
   split_ifs <;> omega
@@ -2228,7 +2226,7 @@ private theorem key_core_headroom (h : Setting config checks g split fin pulled 
     Internal.keyCeiling anc (fromFin.append tail) tailC highC eventsC events eventsF v.toNat := by
   obtain ⟨shared⟩ := h.toFin
   have capped := Internal.effectiveAt_le_capMax (shared.append (fromFin.append tailC))
-    h.genesis h.caps h.early v.toNat
+    h.genesis h.caps v.toNat
   have headroom := Internal.rise_of_notKept h v.toNat notKept
   have countedLe : balanceAt counted v.toNat ≤
       preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := capped

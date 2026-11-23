@@ -1116,7 +1116,6 @@ theorem effectiveWeight_le_cap {g x : ForkedBeaconState preset}
     (caps : CapOrder preset) (early : x.fork < .pectra) (key : Cryptography.Bls.BLSPubkey) :
     effectiveWeight x.state key ≤ preset.MAX_EFFECTIVE_BALANCE.toNat := by
   have capped := run.effectiveBalance_capped genesis caps.activation caps.compounding
-    (Nat.lt_trans early (by decide))
   unfold effectiveWeight
   cases found : x.state.validators.data.toList.find? (fun v => v.pubkey == key) with
   | none => simp
@@ -1380,7 +1379,7 @@ theorem joining_before_electra_split {g x y : ForkedBeaconState preset}
         (Finset.mem_sdiff.mpr ⟨(Finset.mem_inter.mp both).2, absent⟩)
     obtain ⟨v, current, vKey⟩ := validators_getElem?_of_validatorKeys_prefix
       (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 found
-    have bound := tail.effectiveAt_le_of_same_epoch early same i
+    have bound := tail.effectiveAt_le_of_same_epoch same i
       (Array.getElem?_eq_some_iff.mp found).1
     have oldWeight := effectiveWeight_of_member uniqueX
       (by simpa using Array.mem_of_getElem? found)

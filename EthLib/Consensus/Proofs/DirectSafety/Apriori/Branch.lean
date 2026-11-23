@@ -485,7 +485,7 @@ private theorem stepBalanceEvents_deposits {checks : SignatureChecks}
       have ordered : PendingConsolidationsOrdered config (getCurrentEpoch cached).toNat
           cached := by
         obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
-        exact shared.pendingConsolidationsOrdered genesis sourceEarly delay
+        exact shared.pendingConsolidationsOrdered genesis delay
       refine ⟨fun _ e mem deposit => ?_,
         fun across' same => ⟨fun e mem deposit => ?_, fun _ => ?_, ?_⟩⟩
       · rcases List.mem_append.mp mem with mem | mem
@@ -1278,7 +1278,7 @@ theorem pass_kept_of_effective {r s : ForkedBeaconState preset}
 
 /-- The Electra same-epoch run supplies the effective evidence for the pass frame. -/
 theorem pass_kept {r s : ForkedBeaconState preset} (inner : Run config checks r s)
-    (_electra : .pectra ≤ r.fork) (early : s.fork < .glamsterdam)
+    (_electra : .pectra ≤ r.fork)
     (same : getCurrentEpoch s.state = getCurrentEpoch r.state)
     {cached just pass : BeaconState preset s.fork} (cachedOk : processSlot s.state = .ok cached)
     (justified : EpochStage.Edge config checks .justification cached just)
@@ -1288,7 +1288,7 @@ theorem pass_kept {r s : ForkedBeaconState preset} (inner : Run config checks r 
         effectiveAt ⟨s.fork, pass⟩ i = effectiveAt r i) ∧
       getCurrentEpoch pass = getCurrentEpoch r.state := by
   obtain ⟨active, effective, epoch, _, _⟩ := pass_kept_of_effective inner
-    (run_same_epoch_effective inner early same) same cachedOk justified scored
+    (run_same_epoch_effective inner same) same cachedOk justified scored
   exact ⟨active, effective, epoch⟩
 
 /-- After an epoch boundary, the keys active at the previous epoch weigh at most the funding.
@@ -1370,7 +1370,7 @@ theorem previousStake_le_ceiling {g z w : ForkedBeaconState preset}
     ((frame_processSlot cachedZOk).exitsOrdered holds.exitsOrdered)
     (by rw [cachedZEq]; exact shared.activationExitOrder genesis)
     (by rw [cachedZEq]; exact fun witness =>
-      shared.pendingConsolidation_invariant genesis zEarly witness (by omega))
+      shared.pendingConsolidation_invariant genesis witness (by omega))
     epochOk epochEvents epochReplay
   obtain ⟨crossings, crossingOk, _⟩ := upgradeBalanceReplay_bounded upgrades
   have split := Step.balanceEvents_epoch_slot boundary cachedZOk nextOk last epochReplay
@@ -1402,7 +1402,7 @@ theorem participating_le_previous {r s : ForkedBeaconState preset}
         effectiveAt r i.toNat) := by
   have rEarly : r.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps inner.chainSteps) early
-  obtain ⟨activeKept, effectiveKept, passEpoch⟩ := pass_kept inner electra early same cachedOk
+  obtain ⟨activeKept, effectiveKept, passEpoch⟩ := pass_kept inner electra same cachedOk
     justified scored
   have previous : getPreviousEpoch pass = getPreviousEpoch r.state := by
     apply UInt64.toNat_inj.mp

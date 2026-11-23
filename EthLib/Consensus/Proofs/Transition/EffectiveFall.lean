@@ -7,6 +7,7 @@ public import EthLib.Consensus.Proofs.Transition.PendingConsolidations
 public import EthLib.Consensus.Proofs.Transition.FfgStake
 import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
+import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
 import EthLib.Consensus.Proofs.Transition.BuilderPayments
 import EthLib.Consensus.Proofs.Transition.EpochDecomposition
 import EthLib.Consensus.Proofs.Transition.EpochJustification
@@ -115,7 +116,7 @@ private theorem updatedEffectiveBalance_fall {largest balance effective result :
 
 /-! ## The epoch transition of a voter -/
 
-/-- From Altair and before Gloas, take an epoch transition.
+/-- From Altair, take an epoch transition from a registry within its limit.
 
 Take a validator active in its epoch and not slashed, with its effective balance within its largest.
 
@@ -123,7 +124,7 @@ Its effective balance falls by at most the fall allowed below its balance after 
 
 Every later step of the transition up to the update keeps or raises that balance. -/
 private theorem epoch_fall {f : Fork} {c t : BeaconState preset f} (altair : .altair ≤ f)
-    (early : f < .glamsterdam) (bands : preset.IncrementWithinUpwardBand)
+    (within : c.RegistryWithinLimit) (bands : preset.IncrementWithinUpwardBand)
     (ok : processEpoch config checks c = .ok t) (holds : PendingConsolidationInvariant config c)
     (matched : BalancesMatch c) (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     {i : ℕ} {old : Validator} (found : c.validators.data[i]? = some old)
@@ -172,7 +173,11 @@ private theorem epoch_fall {f : Fork} {c t : BeaconState preset f} (altair : .al
     registryKept i old foundRewarded
   have insideRegistered : i < registered.validators.data.size :=
     (Array.getElem?_eq_some_iff.mp foundRegistered).1
-  -- The slashings charge only slashed validators.
+  -- The slashings charge only slashed validators, and read a registry within its limit.
+  have withinRegistered : registered.RegistryWithinLimit := by
+    unfold BeaconState.RegistryWithinLimit at within ⊢
+    rw [(sameSizes_processRegistryUpdates registeredEq).1, rewardedValidators]
+    exact within
   have slashedFrame := processSlashings_frame slashedEq
   have slashedBalance : slashed.balances.data[i]? = registered.balances.data[i]? := by
     have notDue : ∀ epoch, ¬ SlashingPenaltyDue preset epoch atRegistered := fun _ due => by
@@ -181,7 +186,7 @@ private theorem epoch_fall {f : Fork} {c t : BeaconState preset f} (altair : .al
       exact Bool.false_ne_true charged
     by_cases electra : .pectra ≤ f
     · obtain ⟨_, _, _, _, each⟩ :=
-        processSlashings_balances_of_electra electra (registered.validators.bound early) slashedEq
+        processSlashings_balances_of_electra electra withinRegistered slashedEq
       obtain ⟨charged, atCharged, balanceEq⟩ := (each i).1 insideRegistered
       rw [foundRegistered, Option.some.injEq] at atCharged
       subst atCharged
@@ -225,11 +230,8 @@ private theorem epoch_fall {f : Fork} {c t : BeaconState preset f} (altair : .al
   have settledSame : settled.validators = consolidated.validators ∧
       settled.balances = consolidated.balances := by
     have edge := EpochStage.action_cases.mp settledOk
-    simp only [EpochStage.Edge] at edge
-    split at edge
-    · exact absurd ‹_› (Nat.not_le_of_lt early)
-    · subst edge
-      exact ⟨rfl, rfl⟩
+    exact ⟨edge.validators_eq ⟨nofun, nofun, nofun⟩,
+      edge.balances_eq ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩⟩
   have keptAll : ValidatorsKept rewarded deposited :=
     registryKept.trans <|
       (ValidatorsKept.of_eq (congrArg BeaconState.validators slashedFrame)).trans <|
@@ -349,7 +351,7 @@ private theorem epoch_fall {f : Fork} {c t : BeaconState preset f} (altair : .al
   rw [effectiveT]
   omega
 
-/-- From Altair and before Gloas, take a validator active in an epoch and not slashed.
+/-- From Altair, take a validator active in an epoch and not slashed, in a bounded registry.
 
 A slot that ends that epoch lowers its effective balance by at most one fall.
 
@@ -357,7 +359,7 @@ That fall is the one allowed below its balance after the rewards pass.
 
 The upgrades after the transition keep the effective balance of a validator that was activated. -/
 private theorem crossing_fall {z z' : ForkedBeaconState preset} (altair : .altair ≤ z.fork)
-    (ok : advanceSlotAcross config checks z = .ok z') (early : z'.fork < .glamsterdam)
+    (ok : advanceSlotAcross config checks z = .ok z') (within : z.state.RegistryWithinLimit)
     (next : (getCurrentEpoch z'.state).toNat = (getCurrentEpoch z.state).toNat + 1)
     (bands : preset.IncrementWithinUpwardBand)
     (holds : PendingConsolidationInvariant config z.state) (matched : BalancesMatch z.state)
@@ -375,8 +377,6 @@ private theorem crossing_fall {z z' : ForkedBeaconState preset} (altair : .altai
         fallGap preset.EFFECTIVE_BALANCE_INCREMENT.toNat preset.downwardBand
           old.effectiveBalance.toNat (actualBalanceAt ⟨z.fork, rewarded⟩ i) := by
   obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
-  have forkEarly : z.fork < .glamsterdam :=
-    Nat.lt_of_le_of_lt (processUpgrades_fork_le (forked := ⟨z.fork, advanced⟩) upgraded) early
   obtain ⟨nextSlot, cached, epoched, sum, cachedOk, epochedOk, advancedEq⟩ :=
     advanceSlot_ok advancedOk
   have slotAfter : z'.state.slot = nextSlot := by
@@ -402,8 +402,12 @@ private theorem crossing_fall {z z' : ForkedBeaconState preset} (altair : .altai
     rw [cachedSame.1]; exact found
   have cachedActive : isActiveAt cached (getCurrentEpoch cached) i = true := by
     subst cachedEq; exact active
+  have cachedWithin : cached.RegistryWithinLimit := by
+    unfold BeaconState.RegistryWithinLimit at within ⊢
+    rw [cachedSame.1]
+    exact within
   obtain ⟨justified, scored, rewarded, justifiedOk, scoredOk, rewardedOk, fall⟩ :=
-    epoch_fall altair forkEarly bands epochedOk cachedHolds cachedMatch delay cachedFound
+    epoch_fall altair cachedWithin bands epochedOk cachedHolds cachedMatch delay cachedFound
       cachedActive unslashed capped
   refine ⟨cached, justified, scored, rewarded, cachedOk, justifiedOk, scoredOk, rewardedOk, ?_⟩
   -- The upgrades keep the effective balance of a validator that was activated.
@@ -413,20 +417,57 @@ private theorem crossing_fall {z z' : ForkedBeaconState preset} (altair : .altai
     rw [found, Option.some.injEq] at read'
     subst old'
     exact Internal.assigned_of_active isActive
-  have upgradedSame := balanceDrift_upgrades_active upgraded early i a aRead
+  have upgradedSame := balanceDrift_upgrades_active upgraded i a aRead
     (by rwa [life.activationEpoch activated])
   rw [upgradedSame, advancedEq]
   exact fall
 
 /-! ## The floor of a balance under the withdrawals of a block -/
 
+/-- The state that the withdrawals of a block start from.
+
+From Gloas the payload of the parent runs first, then the header. -/
+private def withdrawalState {f : Fork} (before : BeaconState preset f)
+    (block : BeaconBlock preset f) : Except TransitionError (BeaconState preset f) := do
+  let parented ← (if gloas : .glamsterdam ≤ f then
+      processParentExecutionPayload config checks before gloas block.body else pure before)
+  processBlockHeader parented block
+
+/-- The read of the queued partial withdrawals of a payload, from Electra.
+
+It gives what they pay and how many entries of the queue they read.
+
+From Gloas they follow the queued builder withdrawals, and an empty parent reads nothing. -/
+private def queueRead {f : Fork} (s : BeaconState preset f) (electra : .pectra ≤ f) :
+    Except TransitionError (Array Withdrawal × ℕ) :=
+  if gloas : .glamsterdam ≤ f then
+    if isParentBlockFull s gloas then do
+      let (builders, index, _) ← getBuilderWithdrawals s gloas
+        (s.nextWithdrawalIndex (Nat.le_trans (by decide) electra)) #[]
+      let (partials, _, count) ← getPendingPartialWithdrawals s electra index builders
+      pure (partials, count)
+    else pure (#[], 0)
+  else do
+    let (partials, _, count) ← getPendingPartialWithdrawals s electra
+      (s.nextWithdrawalIndex (Nat.le_trans (by decide) electra)) #[]
+    pure (partials, count)
+
+/-- What the queued partial withdrawals of a payload pay a validator. -/
+private def queuePaidAt {f : Fork} (s : BeaconState preset f) (electra : .pectra ≤ f)
+    (v : ValidatorIndex) : ℕ :=
+  (((queueRead s electra).map fun read => withdrawnFrom read.1 v).toOption).getD 0
+
 /-- The queued partial withdrawals of a payload pay a validator only above the activation balance.
 
-They pay only a validator whose effective balance is at least that balance. -/
+They pay only a validator whose effective balance is at least that balance.
+
+The withdrawals before them must pay it nothing. -/
 private theorem partials_floor {f : Fork} {s : BeaconState preset f} {electra : .pectra ≤ f}
-    {start : WithdrawalIndex} {partials : Array Withdrawal} {next : WithdrawalIndex} {count : ℕ}
-    (computed : getPendingPartialWithdrawals s electra start #[] = .ok (partials, next, count))
-    {v : ValidatorIndex} {val : Validator} (found : s.validators.data[v.toNat]? = some val)
+    {start : WithdrawalIndex} {prior partials : Array Withdrawal} {next : WithdrawalIndex}
+    {count : ℕ}
+    (computed : getPendingPartialWithdrawals s electra start prior = .ok (partials, next, count))
+    {v : ValidatorIndex} {val : Validator} (clear : withdrawnFrom prior v = 0)
+    (found : s.validators.data[v.toNat]? = some val)
     {balance : Gwei} (read : s.balances.data[v.toNat]? = some balance)
     (paid : 0 < withdrawnFrom partials v) :
     withdrawnFrom partials v + preset.MIN_ACTIVATION_BALANCE.toNat ≤ balance.toNat ∧
@@ -440,7 +481,7 @@ private theorem partials_floor {f : Fork} {s : BeaconState preset f} {electra : 
     | zero => intro _; left; simp [withdrawnFrom]
     | succ j ih =>
       intro small
-      have prior := ih (by omega)
+      have earlier := ih (by omega)
       rw [Array.extract_succ_right (by omega) (by omega), withdrawnFrom_push]
       split
       · rename_i named
@@ -453,7 +494,7 @@ private theorem partials_floor {f : Fork} {s : BeaconState preset f} {electra : 
         obtain ⟨balance', read', sum⟩ := getBalanceAfterWithdrawals_ok leftOk
         rw [read, Option.some.injEq] at read'
         subst balance'
-        simp only [Array.empty_append] at sum
+        simp only [withdrawnFrom_append, clear, Nat.zero_add] at sum
         simp only [isEligibleForPartialWithdrawals, Bool.and_eq_true, beq_iff_eq,
           decide_eq_true_eq] at eligible
         have amountLe :
@@ -464,14 +505,36 @@ private theorem partials_floor {f : Fork} {s : BeaconState preset f} {electra : 
         have above := UInt64.lt_iff_toNat_lt.mp eligible.2
         right
         exact ⟨by omega, eligible.1.2⟩
-      · simpa using prior
+      · simpa using earlier
   rcases prefixes partials.size (Nat.le_refl _) with zero | holds
   · rw [Array.extract_eq_self_of_le (Nat.le_refl _)] at zero
     omega
   · rw [Array.extract_eq_self_of_le (Nat.le_refl _)] at holds
     exact holds
 
-/-- From Electra and before Gloas, take a validator that cannot withdraw in full.
+/-- An index that names no builder is paid nothing by either builder list of a payload.
+
+Those are the queued builder withdrawals and the sweep of builders. -/
+private theorem builders_unflagged_zero {f : Fork} {s : BeaconState preset f}
+    {gloas : .glamsterdam ≤ f} {start start' : WithdrawalIndex}
+    {prior prior' builders swept : Array Withdrawal} {next next' : WithdrawalIndex} {c c' : ℕ}
+    (buildersOk : getBuilderWithdrawals s gloas start prior = .ok (builders, next, c))
+    (sweptOk : getBuildersSweepWithdrawals s gloas start' prior' = .ok (swept, next', c'))
+    {v : ValidatorIndex} (unflagged : isBuilderIndex v = false) :
+    withdrawnFrom builders v = 0 ∧ withdrawnFrom swept v = 0 := by
+  refine ⟨withdrawnFrom_eq_zero fun w member same => ?_,
+    withdrawnFrom_eq_zero fun w member same => ?_⟩
+  · obtain ⟨pending, -, named, -, -⟩ := getBuilderWithdrawals_pays buildersOk w member
+    have flag := isBuilderIndex_convertBuilderIndexToValidatorIndex pending.builderIndex
+    rw [← named, same, unflagged] at flag
+    exact Bool.false_ne_true flag
+  · obtain ⟨k, inside, rfl⟩ := Array.getElem_of_mem (Array.mem_toList_iff.mp member)
+    obtain ⟨index, -, -, named, -⟩ := getBuildersSweepWithdrawals_pays sweptOk k inside
+    have flag := isBuilderIndex_convertBuilderIndexToValidatorIndex index
+    rw [← named, same, unflagged] at flag
+    exact Bool.false_ne_true flag
+
+/-- From Electra, take a validator that cannot withdraw in full, in a registry within its limit.
 
 The withdrawals of a payload leave it at least the smaller of its balance and its effective balance.
 
@@ -481,32 +544,80 @@ That amount is capped at its effective balance above the activation balance.
 
 The sweep pays it only its excess above its largest effective balance.
 
-Here, that largest effective balance is its effective balance. -/
+Here, that largest effective balance is its effective balance.
+
+From Gloas an empty parent pays nothing, and an index that names a builder debits the builder. -/
 private theorem withdrawals_floor {f : Fork} {s t : BeaconState preset f}
     {capella : .shapella ≤ f} {payload : Until .glamsterdam f (ExecutionPayload preset f)}
-    (early : f < .glamsterdam) (electra : .pectra ≤ f)
+    (electra : .pectra ≤ f) (within : s.RegistryWithinLimit)
     (computed : processWithdrawals s capella payload = .ok t)
     {v : ValidatorIndex} {val : Validator} (found : s.validators.data[v.toNat]? = some val)
     (later : getCurrentEpoch s < val.withdrawableEpoch) :
-    ∃ (partials : Array Withdrawal) (next : WithdrawalIndex) (count : ℕ),
-      getPendingPartialWithdrawals s electra (s.nextWithdrawalIndex capella) #[] =
-        .ok (partials, next, count) ∧
-      min (actualBalanceAt ⟨f, s⟩ v.toNat) val.effectiveBalance.toNat ≤
-        actualBalanceAt ⟨f, t⟩ v.toNat +
-          min (withdrawnFrom partials v)
-            (val.effectiveBalance.toNat - preset.MIN_ACTIVATION_BALANCE.toNat) := by
-  obtain ⟨expected, expectedOk, -, -⟩ := processWithdrawals_expected early computed
+    min (actualBalanceAt ⟨f, s⟩ v.toNat) val.effectiveBalance.toNat ≤
+      actualBalanceAt ⟨f, t⟩ v.toNat +
+        min (queuePaidAt s electra v)
+          (val.effectiveBalance.toNat - preset.MIN_ACTIVATION_BALANCE.toNat) := by
+  -- An empty parent pays no withdrawals.
+  by_cases skipped : ∃ gloas : .glamsterdam ≤ f, isParentBlockFull s gloas = false
+  · obtain ⟨gloas, empty⟩ := skipped
+    rw [processWithdrawals_of_parentEmpty payload gloas empty, Except.ok.injEq] at computed
+    subst computed
+    exact (Nat.min_le_left _ _).trans (Nat.le_add_right _ _)
+  have full : ∀ gloas : .glamsterdam ≤ f, isParentBlockFull s gloas = true := fun gloas => by
+    cases parent : isParentBlockFull s gloas
+    · exact absurd ⟨gloas, parent⟩ skipped
+    · rfl
+  obtain ⟨expected, expectedOk⟩ : ∃ expected, getExpectedWithdrawals s capella = .ok expected := by
+    by_cases gloas : .glamsterdam ≤ f
+    · obtain ⟨expected, expectedOk, -, -⟩ := processWithdrawals_recorded gloas (full gloas) computed
+      exact ⟨expected, expectedOk⟩
+    · obtain ⟨expected, expectedOk, -, -⟩ :=
+        processWithdrawals_expected (Nat.lt_of_not_le gloas) computed
+      exact ⟨expected, expectedOk⟩
   obtain ⟨builders, partials, buildersSweep, sweep, index1, index2, index3, index4, count1,
-    count2, count3, count4, split, -, -, buildersEmpty, partialsOk, -, -,
+    count2, count3, count4, split, -, buildersOk, buildersEmpty, partialsOk, -, buildersSweepOk,
     buildersSweepEmpty, sweepOk⟩ := getExpectedWithdrawals_parts expectedOk
-  obtain ⟨rfl, rfl⟩ := buildersEmpty early
-  obtain ⟨rfl, rfl⟩ := buildersSweepEmpty early
-  refine ⟨partials, _, _, partialsOk electra, ?_⟩
+  -- The read of the queue is the part of the expected withdrawals that follows the builders.
+  have paidEq : queuePaidAt s electra v = withdrawnFrom partials v := by
+    have readOk : queueRead s electra = .ok (partials, count2) := by
+      unfold queueRead
+      by_cases gloas : .glamsterdam ≤ f
+      · simp only [gloas, ↓reduceDIte, full gloas, ↓reduceIte, buildersOk gloas,
+          partialsOk electra, bind, Except.bind, pure, Except.pure]
+      · obtain ⟨rfl, rfl⟩ := buildersEmpty (Nat.lt_of_not_le gloas)
+        simp only [gloas, ↓reduceDIte, partialsOk electra, bind, Except.bind, pure, Except.pure]
+    simp only [queuePaidAt, readOk, Except.map, Except.toOption, Option.getD_some]
+  rw [paidEq]
+  -- From Gloas an index that names a builder keeps its balance.
+  by_cases flagged : .glamsterdam ≤ f ∧ isBuilderIndex v = true
+  · obtain ⟨gloas, flag⟩ := flagged
+    obtain ⟨found', foundOk, appliedOk, -⟩ :=
+      processWithdrawals_recorded gloas (full gloas) computed
+    obtain ⟨applied, applyOk, balances, -⟩ := applyExpectedWithdrawals_balances appliedOk
+    unfold applyWithdrawals at applyOk
+    rw [← Array.foldlM_toList] at applyOk
+    have same : actualBalanceAt ⟨f, t⟩ v.toNat = actualBalanceAt ⟨f, s⟩ v.toNat := by
+      -- A withdrawal for that index debits the builder, and any other names another index.
+      simp only [actualBalanceAt, balances, applyWithdrawals_unnamed (index := v.toNat) _ _ _
+        applyOk fun _ _ named => ⟨gloas, UInt64.toNat_inj.mp named ▸ flag⟩]
+    rw [same]
+    exact (Nat.min_le_left _ _).trans (Nat.le_add_right _ _)
+  have named : f < .glamsterdam ∨ isBuilderIndex v = false := by
+    by_cases gloas : .glamsterdam ≤ f
+    · exact .inr (by simpa [gloas] using flagged)
+    · exact .inl (Nat.lt_of_not_le gloas)
+  have zeros : withdrawnFrom builders v = 0 ∧ withdrawnFrom buildersSweep v = 0 := by
+    by_cases gloas : .glamsterdam ≤ f
+    · exact builders_unflagged_zero (buildersOk gloas) (buildersSweepOk gloas)
+        (by simpa [gloas] using flagged)
+    · obtain ⟨rfl, -⟩ := buildersEmpty (Nat.lt_of_not_le gloas)
+      obtain ⟨rfl, -⟩ := buildersSweepEmpty (Nat.lt_of_not_le gloas)
+      simp [withdrawnFrom]
   cases read : s.balances.data[v.toNat]? with
   | none => simp [actualBalanceAt, read]
   | some balance =>
-    obtain ⟨bounded, lowered⟩ := processWithdrawals_balance_of_notBuilder computed expectedOk
-      (fun gloas => absurd gloas (Nat.not_le_of_lt early)) (.inl early) read
+    obtain ⟨bounded, lowered⟩ :=
+      processWithdrawals_balance_of_notBuilder computed expectedOk full named read
     have after : actualBalanceAt ⟨f, t⟩ v.toNat =
         balance.toNat - withdrawnFrom expected.withdrawals v := by
       simp only [actualBalanceAt]
@@ -515,12 +626,11 @@ private theorem withdrawals_floor {f : Fork} {s t : BeaconState preset f}
       simp [actualBalanceAt, read]
     rw [after, before]
     rw [split] at bounded ⊢
-    simp only [Array.empty_append, Array.append_empty, withdrawnFrom_append] at bounded ⊢
+    simp only [withdrawnFrom_append, zeros.1, zeros.2, Nat.zero_add, Nat.add_zero] at bounded ⊢
     by_cases swept : ∃ k, ∃ inside : k < sweep.size, sweep[k].validatorIndex = v
     · -- The sweep pays the validator its excess, down to its largest effective balance.
       obtain ⟨k, inside, named⟩ := swept
-      obtain ⟨pays, distinct⟩ := getValidatorsSweepWithdrawals_pays (s.validators.bound early)
-        sweepOk
+      obtain ⟨pays, distinct⟩ := getValidatorsSweepWithdrawals_pays within sweepOk
       obtain ⟨validator, left, validatorOk, leftOk, kind⟩ := pays k inside
       have total := withdrawnFrom_split distinct inside
       rw [named] at validatorOk leftOk total
@@ -529,7 +639,7 @@ private theorem withdrawals_floor {f : Fork} {s t : BeaconState preset f}
       obtain ⟨balance', read', sum⟩ := getBalanceAfterWithdrawals_ok leftOk
       rw [read, Option.some.injEq] at read'
       subst balance'
-      simp only [Array.empty_append, withdrawnFrom_append] at sum
+      simp only [withdrawnFrom_append, zeros.1, zeros.2, Nat.zero_add, Nat.add_zero] at sum
       rcases kind with ⟨full, -⟩ | ⟨-, excess, amount⟩
       · simp only [isFullyWithdrawableValidator, Bool.and_eq_true, decide_eq_true_eq] at full
         exact absurd full.1.2 (UInt64.not_le.mpr later)
@@ -545,35 +655,36 @@ private theorem withdrawals_floor {f : Fork} {s t : BeaconState preset f}
         exact swept ⟨k, inside, same⟩
       rw [zero] at bounded ⊢
       by_cases positive : 0 < withdrawnFrom partials v
-      · obtain ⟨floor, effective⟩ := partials_floor (partialsOk electra) found read positive
+      · obtain ⟨floor, effective⟩ :=
+          partials_floor (partialsOk electra) zeros.1 found read positive
         have := UInt64.le_iff_toNat_le.mp effective
         omega
       · omega
 
-/-- From Electra and before Gloas, the execution part of a block keeps the withdrawals' floor. -/
+/-- From Electra, the execution part of a block keeps the withdrawals' floor.
+
+The registry it starts from must be within its limit. -/
 private theorem execution_floor {f : Fork} {s t : BeaconState preset f}
     {engine : ExecutionEngine preset f} {body : BeaconBlockBody preset f}
-    {bellatrix : .bellatrix ≤ f} (early : f < .glamsterdam) (electra : .pectra ≤ f)
+    {bellatrix : .bellatrix ≤ f} (electra : .pectra ≤ f) (within : s.RegistryWithinLimit)
     (computed : processBlockExecution config checks engine s body bellatrix = .ok t)
     {v : ValidatorIndex} {val : Validator} (found : s.validators.data[v.toNat]? = some val)
     (later : getCurrentEpoch s < val.withdrawableEpoch) :
-    ∃ (partials : Array Withdrawal) (next : WithdrawalIndex) (count : ℕ),
-      getPendingPartialWithdrawals s electra
-        (s.nextWithdrawalIndex (Nat.le_trans (by decide) electra)) #[] =
-          .ok (partials, next, count) ∧
-      min (actualBalanceAt ⟨f, s⟩ v.toNat) val.effectiveBalance.toNat ≤
-        actualBalanceAt ⟨f, t⟩ v.toNat +
-          min (withdrawnFrom partials v)
-            (val.effectiveBalance.toNat - preset.MIN_ACTIVATION_BALANCE.toNat) := by
-  unfold processBlockExecution at computed
-  have notGloas : ¬ .glamsterdam ≤ f := Nat.not_le_of_lt early
+    min (actualBalanceAt ⟨f, s⟩ v.toNat) val.effectiveBalance.toNat ≤
+      actualBalanceAt ⟨f, t⟩ v.toNat +
+        min (queuePaidAt s electra v)
+          (val.effectiveBalance.toNat - preset.MIN_ACTIVATION_BALANCE.toNat) := by
   have capella : .shapella ≤ f := Nat.le_trans (by decide) electra
-  simp only [notGloas, capella, ↓reduceDIte, bind_ok_iff] at computed
-  obtain ⟨middle, withdrawnOk, paidOk⟩ := computed
-  obtain ⟨-, header, -, rfl⟩ := processExecutionPayload_ok paidOk
-  obtain ⟨partials, next, count, partialsOk, floor⟩ :=
-    withdrawals_floor early electra withdrawnOk found later
-  exact ⟨partials, next, count, partialsOk, by simpa [actualBalanceAt] using floor⟩
+  unfold processBlockExecution at computed
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨middle, withdrawnOk, bidOk⟩ := computed
+    obtain ⟨_, rfl⟩ := processExecutionPayloadBid_eq bidOk
+    simpa [actualBalanceAt] using withdrawals_floor electra within withdrawnOk found later
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨middle, withdrawnOk, paidOk⟩ := computed
+    obtain ⟨-, header, -, rfl⟩ := processExecutionPayload_ok paidOk
+    simpa [actualBalanceAt] using withdrawals_floor electra within withdrawnOk found later
 
 /-! ## The sync aggregate of a block -/
 
@@ -681,22 +792,101 @@ private theorem syncAggregate_floor {f : Fork} {s t : BeaconState preset f}
 
 /-! ## The floor of a balance under a block -/
 
-/-- What the queued partial withdrawals of a block pay a validator, from Electra and before Gloas.
+/-- What the queued partial withdrawals of a block pay a validator, from Electra.
 
-They are read from the state after the header, as the execution part reads them. -/
+They are read at the state that the withdrawals start from, as the execution part reads them. -/
 private def blockQueuePaid {f : Fork} (before : BeaconState preset f)
     (block : BeaconBlock preset f) (v : ValidatorIndex) : ℕ :=
   if electra : .pectra ≤ f then
-    ((do
-      let headed ← processBlockHeader before block
-      let (partials, _) ← getPendingPartialWithdrawals headed electra
-        (headed.nextWithdrawalIndex (Nat.le_trans (by decide) electra)) #[]
-      pure (withdrawnFrom partials v) : Except TransitionError ℕ).toOption).getD 0
+    (((withdrawalState (config := config) (checks := checks) before block).map
+      fun headed => queuePaidAt headed electra v).toOption).getD 0
   else 0
 
-/-- From Electra and before Gloas, take a validator that cannot withdraw in full.
+/-- No epoch is later than the far future. -/
+private theorem le_farFuture (epoch : Epoch) : epoch ≤ FAR_FUTURE_EPOCH := by
+  have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  have small := epoch.toNat_lt
+  exact UInt64.le_iff_toNat_le.mpr (by omega)
 
-It stays unslashed, and its effective balance is within its largest.
+/-- From Gloas, take a validator within its largest effective balance that cannot withdraw in full.
+
+The payload of the parent leaves it at least the smaller of its balance and its effective balance.
+
+A converted validator did not compound, so its effective balance is within the activation balance.
+
+Its record keeps its effective balance and stays within its own largest effective balance.
+
+The activation balance must be at most the largest effective balance of Electra.
+
+It still cannot withdraw in full when a later state of the epoch still has it exiting later. -/
+private theorem parent_floor {f : Fork} {s parented t : BeaconState preset f}
+    {gloas : .glamsterdam ≤ f} {body : BeaconBlockBody preset f}
+    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (ordered : ExitsOrdered s)
+    (computed : processParentExecutionPayload config checks s gloas body = .ok parented)
+    (life : RegistryLifecycle parented t)
+    {v : ValidatorIndex} {val : Validator} (found : s.validators.data[v.toNat]? = some val)
+    (later : getCurrentEpoch s < val.withdrawableEpoch)
+    (capped : val.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset f val)
+    (exiting : ∀ w, t.validators.data[v.toNat]? = some w → getCurrentEpoch s < w.exitEpoch) :
+    ∃ wp, parented.validators.data[v.toNat]? = some wp ∧
+      wp.effectiveBalance = val.effectiveBalance ∧
+      getCurrentEpoch s < wp.withdrawableEpoch ∧
+      wp.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset f wp ∧
+      min (actualBalanceAt ⟨f, s⟩ v.toNat) val.effectiveBalance.toNat ≤
+        actualBalanceAt ⟨f, parented⟩ v.toNat := by
+  have electra : .pectra ≤ f := Nat.le_trans (by decide) gloas
+  obtain ⟨conv, ledger, -⟩ := BlockLedger.ledger_processParentExecutionPayload computed
+  obtain ⟨kept, size⟩ := effectiveKept_parentPayload computed
+  have inside := (Array.getElem?_eq_some_iff.mp found).1
+  obtain ⟨wp, foundP⟩ : ∃ wp, parented.validators.data[v.toNat]? = some wp :=
+    ⟨_, Array.getElem?_eq_getElem (by rw [size]; exact inside)⟩
+  have effP : wp.effectiveBalance = val.effectiveBalance := by
+    have same := kept v.toNat inside
+    simp only [effectiveAt, foundP, found, Option.map_some, Option.getD_some] at same
+    exact UInt64.toNat_inj.mp same
+  -- The record exits after the epoch, and withdraws no earlier than it exits.
+  have exitP : getCurrentEpoch s < wp.exitEpoch := by
+    by_cases far : wp.exitEpoch = FAR_FUTURE_EPOCH
+    · rw [far]
+      exact UInt64.lt_of_lt_of_le later (le_farFuture _)
+    · obtain ⟨wt, foundT, lifeT⟩ := life.validators v.toNat wp foundP
+      rw [← lifeT.exitEpoch far]
+      exact exiting wt foundT
+  have laterP := UInt64.lt_of_lt_of_le exitP
+    ((frame_processParentExecutionPayload computed).exitsOrdered ordered wp
+      (Array.mem_of_getElem? foundP))
+  by_cases converted : v ∈ conv
+  · -- A converted validator did not compound, so its cap was the activation balance.
+    have fresh := ledger.fresh v converted val found
+    obtain ⟨wp', foundP', switched⟩ := ledger.switched v converted
+    rw [foundP, Option.some.injEq] at foundP'
+    subst wp'
+    have lowered := ledger.lowered v converted (Finset.notMem_empty v)
+    have small : val.effectiveBalance ≤ preset.MIN_ACTIVATION_BALANCE := by
+      simpa [withdrawalMaxEffectiveBalance, electra, getMaxEffectiveBalance, fresh] using capped
+    refine ⟨wp, foundP, effP, laterP, ?_, ?_⟩
+    · simp only [withdrawalMaxEffectiveBalance, electra, ↓reduceIte, getMaxEffectiveBalance,
+        switched]
+      rw [effP]
+      exact UInt64.le_trans small compounding
+    · have := UInt64.le_iff_toNat_le.mp small
+      simp only [Pi.zero_apply, Nat.add_zero] at lowered
+      omega
+  · have down := ledger.down v (Finset.notMem_empty v) converted
+    obtain ⟨wp', foundP', sameCredential⟩ := ledger.kept v val converted found
+    rw [foundP, Option.some.injEq] at foundP'
+    subst wp'
+    refine ⟨wp, foundP, effP, laterP, ?_, ?_⟩
+    · simp only [withdrawalMaxEffectiveBalance, getMaxEffectiveBalance, sameCredential] at capped ⊢
+      rw [effP]
+      exact capped
+    · simp only [Pi.zero_apply, Nat.add_zero] at down
+      omega
+
+/-- From Fulu, take a validator that cannot withdraw in full.
+
+It stays unslashed, its effective balance is within its largest, and it exits after the epoch.
 
 A block leaves it at least the smaller of its balance and its effective balance, less two amounts.
 
@@ -704,73 +894,111 @@ The first is its seats times the sync participant reward, read after the block.
 
 The second is what the queued partial withdrawals pay it.
 
-That second amount is capped at its effective balance above the activation balance. -/
+That second amount is capped at its effective balance above the activation balance.
+
+The registry after the block must be within its limit.
+
+From Gloas the activation balance must be at most the largest effective balance of Electra. -/
 private theorem block_floor {f : Fork}
     {s t : BeaconState preset f} {engine : ExecutionEngine preset f}
-    {block : BeaconBlock preset f} (early : f < .glamsterdam) (fulu : .fusaka ≤ f)
-    (matched : BalancesMatch s) (computed : processBlock config checks engine s block = .ok t)
+    {block : BeaconBlock preset f} (fulu : .fusaka ≤ f)
+    (compounding : .glamsterdam ≤ f →
+      preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (within : t.RegistryWithinLimit) (matched : BalancesMatch s) (ordered : ExitsOrdered s)
+    (computed : processBlock config checks engine s block = .ok t)
     {v : ValidatorIndex} {val : Validator} (found : s.validators.data[v.toNat]? = some val)
     (later : getCurrentEpoch s < val.withdrawableEpoch)
     (capped : val.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset f val)
+    (exiting : ∀ w, t.validators.data[v.toNat]? = some w → getCurrentEpoch s < w.exitEpoch)
     (unslashed : ∀ w, t.validators.data[v.toNat]? = some w → w.slashed = false) :
     min (actualBalanceAt ⟨f, s⟩ v.toNat) val.effectiveBalance.toNat ≤
       actualBalanceAt ⟨f, t⟩ v.toNat +
         syncSeats t (Nat.le_trans (by decide) fulu) v.toNat *
           ((syncParticipantReward t).toOption.getD 0).toNat +
-        min (blockQueuePaid s block v)
+        min (blockQueuePaid (config := config) (checks := checks) s block v)
           (val.effectiveBalance.toNat - preset.MIN_ACTIVATION_BALANCE.toNat) := by
   have electra : .pectra ≤ f := Nat.le_trans (by decide) fulu
   have altair : .altair ≤ f := Nat.le_trans (by decide) electra
-  have notGloas : ¬ .glamsterdam ≤ f := Nat.not_le_of_lt early
   have bellatrix : .bellatrix ≤ f := Nat.le_trans (by decide) electra
-  have beforeHeze : f < .hegota := Nat.lt_trans early (by decide)
   obtain ⟨input, last, started, operatedOk, -, synced⟩ := processBlock_operationsInput computed
   have startedFrame := frame_operationsInput started
   obtain ⟨parented, headed, executed, revealed, paidOk, headedOk, executedOk, revealedOk,
     votedOk⟩ := started
-  simp only [notGloas, ↓reduceDIte, pure, Except.pure, Except.ok.injEq] at paidOk
-  subst paidOk
+  have stateOk : withdrawalState (config := config) (checks := checks) s block = .ok headed := by
+    simp only [withdrawalState, paidOk, bind, Except.bind, headedOk]
   simp only [bellatrix, ↓reduceDIte] at executedOk
-  simp only [beforeHeze, ↓reduceDIte] at votedOk
   simp only [altair, ↓reduceDIte] at synced
+  obtain ⟨_, syncedEq⟩ := processSyncAggregate_eq synced
   -- The header keeps the registry, the balances and the slot.
   obtain ⟨_, _, headedEq⟩ := processBlockHeader_eq headedOk
-  have headedFound : headed.validators.data[v.toNat]? = some val := by
-    rw [headedEq]; exact found
-  have headedLater : getCurrentEpoch headed < val.withdrawableEpoch := by
-    rw [headedEq]; exact later
-  have headedBalance :
-      actualBalanceAt ⟨f, headed⟩ v.toNat = actualBalanceAt ⟨f, s⟩ v.toNat := by
-    subst headedEq; rfl
-  -- The execution part pays the withdrawals.
-  obtain ⟨partials, next, count, partialsOk, executionFloor⟩ :=
-    execution_floor early electra executedOk headedFound headedLater
-  have queue : blockQueuePaid s block v = withdrawnFrom partials v := by
-    unfold blockQueuePaid
-    simp only [electra, ↓reduceDIte, headedOk, partialsOk, bind, Except.bind, pure,
-      Except.pure, Except.toOption, Option.getD_some]
   -- The RANDAO reveal and the vote keep the registry and the balances.
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, revealedEq⟩ := processRandao_eq revealedOk
-  obtain ⟨-, -, votedEq⟩ := processEth1Data_eq votedOk
-  have inputValidators : input.validators = executed.validators := by
-    exact (congrArg BeaconState.validators votedEq).trans (by rw [revealedEq])
-  have inputBalances : input.balances = executed.balances := by
-    exact (congrArg BeaconState.balances votedEq).trans (by rw [revealedEq])
-  have inputFound : input.validators.data[v.toNat]? = some val := by
-    rw [inputValidators, processBlockExecution_validators executedOk]
-    exact headedFound
+  have inputSame : input.validators = executed.validators ∧ input.balances = executed.balances := by
+    split at votedOk
+    · obtain ⟨-, -, votedEq⟩ := processEth1Data_eq votedOk
+      exact ⟨(congrArg BeaconState.validators votedEq).trans (by rw [revealedEq]),
+        (congrArg BeaconState.balances votedEq).trans (by rw [revealedEq])⟩
+    · simp only [pure, Except.pure, Except.ok.injEq] at votedOk
+      subst votedOk revealedEq
+      exact ⟨rfl, rfl⟩
+  have inputValidators : input.validators = parented.validators := by
+    rw [inputSame.1, processBlockExecution_validators executedOk, headedEq]
+  -- After the payload of the parent, the registry lives on to the end of the block.
+  have lifeTail : RegistryLifecycle parented t :=
+    (RegistryLifecycle.of_data (congrArg (·.data) inputValidators)).trans <|
+      (registryLifecycle_processOperations operatedOk).trans
+        (RegistryLifecycle.of_data (by rw [syncedEq]))
+  -- The payload of the parent keeps the floor and the record of the validator.
+  obtain ⟨wp, foundP, effP, laterP, cappedP, floorP, sizeP, slotP⟩ : ∃ wp,
+      parented.validators.data[v.toNat]? = some wp ∧
+      wp.effectiveBalance = val.effectiveBalance ∧
+      getCurrentEpoch s < wp.withdrawableEpoch ∧
+      wp.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset f wp ∧
+      min (actualBalanceAt ⟨f, s⟩ v.toNat) val.effectiveBalance.toNat ≤
+        actualBalanceAt ⟨f, parented⟩ v.toNat ∧
+      parented.validators.data.size = s.validators.data.size ∧ parented.slot = s.slot := by
+    split at paidOk
+    · rename_i gloas
+      obtain ⟨wp, rest⟩ := parent_floor (compounding gloas) ordered paidOk lifeTail found later
+        capped exiting
+      exact ⟨wp, rest.1, rest.2.1, rest.2.2.1, rest.2.2.2.1, rest.2.2.2.2,
+        (effectiveKept_parentPayload paidOk).2, (frame_processParentExecutionPayload paidOk).slot⟩
+    · simp only [pure, Except.pure, Except.ok.injEq] at paidOk
+      subst paidOk
+      exact ⟨val, found, rfl, later, capped, Nat.min_le_left _ _, rfl, rfl⟩
+  -- The withdrawals start from a registry within its limit.
+  have headedWithin : headed.RegistryWithinLimit := by
+    unfold BeaconState.RegistryWithinLimit at within ⊢
+    rw [headedEq]
+    exact (Nat.le_of_eq sizeP).trans
+      ((registryLifecycle_processBlock computed).size_le.trans within)
+  have headedFound : headed.validators.data[v.toNat]? = some wp := by
+    rw [headedEq]; exact foundP
+  have headedLater : getCurrentEpoch headed < wp.withdrawableEpoch := by
+    have same : getCurrentEpoch headed = getCurrentEpoch s := by
+      rw [headedEq]
+      simp only [getCurrentEpoch, slotP]
+    rw [same]; exact laterP
+  have headedBalance :
+      actualBalanceAt ⟨f, headed⟩ v.toNat = actualBalanceAt ⟨f, parented⟩ v.toNat := by
+    subst headedEq; rfl
+  -- The execution part pays the withdrawals.
+  have executionFloor := execution_floor electra headedWithin executedOk headedFound headedLater
+  have queue : blockQueuePaid (config := config) (checks := checks) s block v =
+      queuePaidAt headed electra v := by
+    simp only [blockQueuePaid, electra, ↓reduceDIte, stateOk, Except.map, Except.toOption,
+      Option.getD_some]
+  have inputFound : input.validators.data[v.toNat]? = some wp := by
+    rw [inputValidators]; exact foundP
   -- The operations keep the floor, and the sync aggregate takes at most the seats.
   have lastClear : ∀ w, last.validators.data[v.toNat]? = some w → w.slashed = false := by
-    obtain ⟨_, syncedEq⟩ := processSyncAggregate_eq synced
     intro w read
     exact unslashed w (by rw [syncedEq]; exact read)
-  have operationsFloor := processOperations_floor early fulu (startedFrame.balancesMatch matched)
-    operatedOk
-    inputFound capped lastClear
+  have operationsFloor := processOperations_floor fulu (startedFrame.balancesMatch matched)
+    operatedOk inputFound cappedP lastClear
   obtain ⟨w, lastFound, samePubkey⟩ := validators_getElem?_of_validatorKeys_prefix
     (frame_processOperations operatedOk).pubkeysPrefix inputFound
   obtain ⟨reward, rewardOk, syncFloor⟩ := syncAggregate_floor synced lastFound
-  obtain ⟨_, syncedEq⟩ := processSyncAggregate_eq synced
   have seats : syncSeats t altair v.toNat =
       ((last.currentSyncCommittee altair).value.pubkeys.toList.filter fun key =>
         w.pubkey == key).length := by
@@ -784,11 +1012,9 @@ private theorem block_floor {f : Fork}
   rw [seats, ← rewardValue, queue]
   have inputBalance : actualBalanceAt ⟨f, input⟩ v.toNat =
       actualBalanceAt ⟨f, executed⟩ v.toNat := by
-    simp only [actualBalanceAt, inputBalances]
-  rw [inputBalance] at operationsFloor
-  rw [headedBalance] at executionFloor
-  have := Nat.min_le_right (actualBalanceAt ⟨f, s⟩ v.toNat) val.effectiveBalance.toNat
-  have := Nat.min_le_left (actualBalanceAt ⟨f, s⟩ v.toNat) val.effectiveBalance.toNat
+    simp only [actualBalanceAt, inputSame.2]
+  rw [inputBalance, effP] at operationsFloor
+  rw [headedBalance, effP] at executionFloor
   omega
 
 /-! ## The queue of pending partial withdrawals inside one epoch
@@ -1084,22 +1310,22 @@ private theorem withdrawalRequest_queueAppend {fork : Fork} {s t : BeaconState p
   · exact partialWithdrawal_queueAppend withdrawn
 
 private theorem slashValidator_partialsSame {fork : Fork} {s t : BeaconState preset fork}
-    (early : fork < .glamsterdam) {index : ValidatorIndex} {whistleblower : Option ValidatorIndex}
+    {index : ValidatorIndex} {whistleblower : Option ValidatorIndex}
     (ok : slashValidator config s index whistleblower = .ok t) : PartialsSame s t := by
   intro electra
-  obtain ⟨exited, exitedOk, frame⟩ := slashValidator_departureQueues electra early ok
+  obtain ⟨exited, exitedOk, frame⟩ := slashValidator_departureQueues electra ok
   exact (pendingPartialWithdrawals_eq_of_queues (congrArg (·.2.2.2.2) frame)).trans
     (partialsSame_initiateValidatorExit exitedOk electra)
 
 private theorem proposerSlashing_partialsSame {fork : Fork} {s t : BeaconState preset fork}
-    (early : fork < .glamsterdam) {slashing : ProposerSlashing}
+    {slashing : ProposerSlashing}
     (ok : processProposerSlashing config checks s slashing = .ok t) : PartialsSame s t := by
   simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := ok
-  exact slashValidator_partialsSame early slashed
+  exact slashValidator_partialsSame slashed
 
 private theorem attesterSlashing_partialsSame {fork : Fork} {s t : BeaconState preset fork}
-    (early : fork < .glamsterdam) {slashing : AttesterSlashing preset fork}
+    {slashing : AttesterSlashing preset fork}
     (ok : processAttesterSlashing config checks s slashing = .ok t) : PartialsSame s t := by
   simp only [processAttesterSlashing, bind_ok_iff, ensure_ok_iff] at ok
   obtain ⟨_, _, _, _, _, _, _, _, _, _, ⟨folded, flag⟩, foldedOk, ok⟩ := ok
@@ -1113,7 +1339,7 @@ private theorem attesterSlashing_partialsSame {fork : Fork} {s t : BeaconState p
   split at stepped
   · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at stepped
     obtain ⟨_, slashed, rfl⟩ := stepped
-    exact kept.trans (slashValidator_partialsSame early slashed)
+    exact kept.trans (slashValidator_partialsSame slashed)
   · cases stepped; exact kept
 
 private theorem consolidationRequest_partialsSame {fork : Fork} {s t : BeaconState preset fork}
@@ -1150,7 +1376,6 @@ private theorem executionRequests_queueAppend {fork : Fork} {s t : BeaconState p
       simp only [getCurrentEpoch, withdrawnSlot, slot]; exact UInt64.le_refl _)
 
 private theorem operations_queueAppend {fork : Fork} {s t : BeaconState preset fork}
-    (early : fork < .glamsterdam)
     {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (ok : processOperations config checks s body parentSlot = .ok t) : QueueAppend s t := by
   let step := fun a b : BeaconState preset fork => QueueAppend a b ∧ b.slot = a.slot
@@ -1169,13 +1394,15 @@ private theorem operations_queueAppend {fork : Fork} {s t : BeaconState preset f
         (frame_processBlsToExecutionChange called).slot)
       (fun called => ⟨executionRequests_queueAppend called,
         (frame_processExecutionRequests called).slot⟩)
-      (fun {a b} gloas _ => False.elim ((Nat.not_le_of_lt early) gloas)) ok
+      (fun called => by
+        rw [processPayloadAttestation_eq called]
+        exact same (.refl _) rfl) ok
   have first := PartialsSame.foldlM
-    (fun _ _ _ called => proposerSlashing_partialsSame early called) proposers
+    (fun _ _ _ called => proposerSlashing_partialsSame called) proposers
   have second := PartialsSame.foldlM
-    (fun _ _ _ called => attesterSlashing_partialsSame early called) slashings
+    (fun _ _ _ called => attesterSlashing_partialsSame called) slashings
   have third := PartialsSame.foldlM
-    (fun _ _ _ called => .of_frame fun e => attestation_departureQueues e early called)
+    (fun _ _ _ called => .of_frame fun e => attestation_departureQueues e called)
     attestations
   exact (chain (same (first.trans (second.trans third))
     (((Frame.foldlM (fun _ _ _ called => frame_processAttestation called) attestations).slot).trans
@@ -1184,47 +1411,163 @@ private theorem operations_queueAppend {fork : Fork} {s t : BeaconState preset f
         (BlockFrame.foldlM (fun _ _ _ called => frame_processProposerSlashing called)
           proposers).slot))) rest).1
 
+/-- From Gloas, the payload of the parent appends to the queue only entries not yet withdrawable.
+
+Its withdrawal requests append them, and its other steps keep the queue. -/
+private theorem parent_queueAppend {fork : Fork} {s t : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {body : BeaconBlockBody preset fork}
+    (ok : processParentExecutionPayload config checks s gloas body = .ok t) :
+    QueueAppend s t := by
+  rcases processParentExecutionPayload_ok ok with ⟨-, -, rfl⟩ |
+    ⟨-, settled, deposited, withdrawn, consolidated, builderDeposited, exited, bits, settledOk,
+      depositsOk, withdrawalsOk, consolidationsOk, buildersOk, exitsOk, -, rfl⟩
+  · exact .of_same (PartialsSame.refl _)
+  have settledEq := settleParentPayment_eq settledOk
+  have settledSame : PartialsSame s settled := fun _ => by rw [settledEq]
+  have settledSlot : settled.slot = s.slot := by rw [settledEq]
+  have deposits := PartialsSame.foldlM (fun _ _ _ called =>
+    .of_frame fun e => depositRequest_departureQueues e called) depositsOk
+  have depositedSlot := (BlockFrame.foldlM
+    (fun _ _ _ called => frame_processDepositRequest called) depositsOk).slot
+  have withdrawals := QueueAppend.foldlM
+    (fun _ _ _ called => withdrawalRequest_queueAppend called)
+    (fun _ _ _ called => (frame_processWithdrawalRequest called).slot) withdrawalsOk
+  have consolidations := PartialsSame.foldlM
+    (fun _ _ _ called => consolidationRequest_partialsSame called) consolidationsOk
+  have builders : PartialsSame consolidated builderDeposited :=
+    PartialsSame.foldlM (fun _ _ _ called => by
+      obtain ⟨_, rfl⟩ := processBuilderDepositRequest_builders called
+      exact PartialsSame.refl _) buildersOk
+  have exits : PartialsSame builderDeposited exited :=
+    PartialsSame.foldlM (fun _ _ _ called => by
+      obtain ⟨_, rfl⟩ := processBuilderExitRequest_builders called
+      exact PartialsSame.refl _) exitsOk
+  have withdrawnSlot := (BlockFrame.foldlM
+    (fun _ _ _ called => frame_processWithdrawalRequest called) withdrawalsOk).slot
+  exact ((QueueAppend.of_same (settledSame.trans deposits)).trans withdrawals (by
+    simp only [getCurrentEpoch, depositedSlot, settledSlot]; exact UInt64.le_refl _)).trans
+    (.of_same (consolidations.trans (builders.trans (exits.trans fun _ => rfl)))) (by
+      simp only [getCurrentEpoch, withdrawnSlot, depositedSlot, settledSlot]
+      exact UInt64.le_refl _)
+
+/-- From Electra, the queue of a block over the state that its withdrawals start from.
+
+That state appends to the queue only entries not yet withdrawable.
+
+The read of the queue there takes its first entries, and the block then drops them.
+
+The operations append only entries not yet withdrawable. -/
 private theorem block_partialLedger {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (electra : .pectra ≤ fork)
     {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
     (ok : processBlock config checks engine s block = .ok t) :
-    ∃ (headed : BeaconState preset fork) (partials : Array Withdrawal) (next : WithdrawalIndex)
-      (count : ℕ) (new : List PendingPartialWithdrawal),
-      processBlockHeader s block = .ok headed ∧
-      getPendingPartialWithdrawals headed electra
-        (headed.nextWithdrawalIndex (Nat.le_trans (by decide) electra)) #[] =
-          .ok (partials, next, count) ∧
+    ∃ (headed : BeaconState preset fork) (partials : Array Withdrawal) (count : ℕ)
+      (parentNew new : List PendingPartialWithdrawal),
+      withdrawalState (config := config) (checks := checks) s block = .ok headed ∧
+      getCurrentEpoch headed = getCurrentEpoch s ∧
+      (headed.pendingPartialWithdrawals electra).data.toList =
+        (s.pendingPartialWithdrawals electra).data.toList ++ parentNew ∧
+      (∀ w ∈ parentNew, getCurrentEpoch s < w.withdrawableEpoch) ∧
+      queueRead headed electra = .ok (partials, count) ∧
       (t.pendingPartialWithdrawals electra).data.toList =
-        (s.pendingPartialWithdrawals electra).data.toList.drop count ++ new ∧
+        (headed.pendingPartialWithdrawals electra).data.toList.drop count ++ new ∧
       ∀ w ∈ new, getCurrentEpoch s < w.withdrawableEpoch := by
   have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
   have bellatrix : .bellatrix ≤ fork := Nat.le_trans (by decide) electra
-  have capella : .shapella ≤ fork := Nat.le_trans (by decide) electra
-  have before : fork < .hegota := Nat.lt_trans early (by decide)
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
   obtain ⟨voted, operated, started, operatedOk, -, synced⟩ := processBlock_operationsInput ok
   have slot := (frame_operationsInput started).slot
   obtain ⟨parented, headed, executed, revealed, paid, headedOk, executedOk, revealedOk,
     votedOk⟩ := started
-  simp only [notGloas, bellatrix, before, altair, ↓reduceDIte, pure, Except.pure,
-    Except.ok.injEq] at paid executedOk votedOk synced
-  subst paid
-  obtain ⟨expected, expectedOk, executedFrame⟩ :=
-    blockExecution_departureQueues electra early executedOk
-  obtain ⟨partials, next, partialsOk⟩ := getExpectedWithdrawals_partials electra early expectedOk
-  have headFrame := blockHead_departureQueues electra headedOk executedFrame revealedOk votedOk
-  have headQueue : (voted.pendingPartialWithdrawals electra).data.toList =
-      (s.pendingPartialWithdrawals electra).data.toList.drop
-        expected.processedPartialWithdrawalsCount.toNat := by
-    rw [← updatePendingPartialWithdrawals_toList s electra]
-    exact congrArg (·.2.2.2.2.toList) headFrame
-  obtain ⟨new, queue, late⟩ := operations_queueAppend early operatedOk electra
+  have stateOk : withdrawalState (config := config) (checks := checks) s block = .ok headed := by
+    simp only [withdrawalState, paid, bind, Except.bind, headedOk]
+  simp only [bellatrix, altair, ↓reduceDIte] at executedOk synced
+  -- The payload of the parent appends entries not yet withdrawable, and keeps the slot.
+  obtain ⟨parentAppend, parentSlot⟩ : QueueAppend s parented ∧ parented.slot = s.slot := by
+    split at paid
+    · exact ⟨parent_queueAppend paid, (frame_processParentExecutionPayload paid).slot⟩
+    · simp only [pure, Except.pure, Except.ok.injEq] at paid
+      subst paid
+      exact ⟨.of_same (PartialsSame.refl _), rfl⟩
+  obtain ⟨parentNew, parentQueue, parentLate⟩ := parentAppend electra
+  obtain ⟨_, _, headedEq⟩ := processBlockHeader_eq headedOk
+  have headedQueue : (headed.pendingPartialWithdrawals electra).data.toList =
+      (s.pendingPartialWithdrawals electra).data.toList ++ parentNew := by
+    rw [headedEq]
+    exact parentQueue
+  have headedEpoch : getCurrentEpoch headed = getCurrentEpoch s := by
+    rw [headedEq]
+    simp only [getCurrentEpoch, parentSlot]
+  -- The withdrawals read the queue by the fullness of the parent, and drop what they read.
+  obtain ⟨partials, count, readOk, executedQueue⟩ : ∃ partials count,
+      queueRead headed electra = .ok (partials, count) ∧
+      (executed.pendingPartialWithdrawals electra).data.toList =
+        (headed.pendingPartialWithdrawals electra).data.toList.drop count := by
+    rcases blockExecution_departureQueues electra executedOk with
+      ⟨full, expected, expectedOk, executedFrame⟩ | ⟨gloas, empty, executedFrame⟩
+    · obtain ⟨prior, partials, start, next, partialsOk, read⟩ :=
+        getExpectedWithdrawals_partials electra expectedOk
+      refine ⟨partials, expected.processedPartialWithdrawalsCount.toNat, ?_, ?_⟩
+      · unfold queueRead
+        rcases read with ⟨early, rfl, rfl⟩ | ⟨gloas, count, builtOk⟩
+        · simp only [show ¬ Fork.glamsterdam ≤ fork from Nat.not_le_of_lt early, ↓reduceDIte,
+            partialsOk, bind, Except.bind, pure, Except.pure]
+        · simp only [gloas, ↓reduceDIte, full gloas, ↓reduceIte, builtOk, partialsOk, bind,
+            Except.bind, pure, Except.pure]
+      · rw [← updatePendingPartialWithdrawals_toList headed electra]
+        exact congrArg (·.2.2.2.2.toList) executedFrame
+    · refine ⟨#[], 0, ?_, ?_⟩
+      · simp only [queueRead, gloas, ↓reduceDIte, empty, Bool.false_eq_true, ↓reduceIte, pure,
+          Except.pure]
+      · rw [List.drop_zero]
+        exact congrArg (·.2.2.2.2.toList) executedFrame
+  -- The RANDAO reveal and the vote keep the queue.
+  have votedQueue : voted.pendingPartialWithdrawals electra =
+      executed.pendingPartialWithdrawals electra := by
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, revealedEq⟩ := processRandao_eq revealedOk
+    split at votedOk
+    · obtain ⟨-, -, votedEq⟩ := processEth1Data_eq votedOk
+      exact (congrArg (fun u => u.pendingPartialWithdrawals electra) votedEq).trans
+        (by rw [revealedEq])
+    · simp only [pure, Except.pure, Except.ok.injEq] at votedOk
+      rw [← votedOk, revealedEq]
+  obtain ⟨new, queue, late⟩ := operations_queueAppend operatedOk electra
   obtain ⟨_, syncedEq⟩ := processSyncAggregate_eq synced
-  refine ⟨headed, partials, next, expected.processedPartialWithdrawalsCount.toNat, new, headedOk,
-    partialsOk, ?_, ?_⟩
-  · rw [syncedEq]
-    exact queue.trans (congrArg (· ++ new) headQueue)
+  refine ⟨headed, partials, count, parentNew, new, stateOk, headedEpoch, headedQueue,
+    parentLate, readOk, ?_, ?_⟩
+  · rw [syncedEq, ← executedQueue, ← votedQueue]
+    exact queue
   · simpa only [getCurrentEpoch, slot] using late
+
+/-- The read of the queue pays from its first entries.
+
+It pays each at most its amount, and only when it is withdrawable by the epoch. -/
+private theorem queueRead_ledger {fork : Fork} {state : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {partials : Array Withdrawal} {count : ℕ}
+    (computed : queueRead state electra = .ok (partials, count)) :
+    ∃ pay : ℕ → ℕ, count ≤ (state.pendingPartialWithdrawals electra).data.toList.length ∧
+      (∀ k, count ≤ k → pay k = 0) ∧
+      (∀ k < count, ∃ w, (state.pendingPartialWithdrawals electra).data.toList[k]? = some w ∧
+        pay k ≤ w.amount.toNat ∧ (0 < pay k → w.withdrawableEpoch ≤ getCurrentEpoch state)) ∧
+      ∀ v, withdrawnFrom partials v = ∑ k ∈ (Finset.range count).filter (fun k =>
+          (state.pendingPartialWithdrawals electra).data.toList[k]?.map (·.validatorIndex) =
+            some v), pay k := by
+  unfold queueRead at computed
+  split at computed
+  · split at computed
+    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+      obtain ⟨⟨builders, index, _⟩, -, ⟨partials', next, count'⟩, read, same⟩ := computed
+      simp only [Prod.mk.injEq] at same
+      obtain ⟨rfl, rfl⟩ := same
+      exact getPendingPartialWithdrawals_ledger read
+    · simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
+      obtain ⟨rfl, rfl⟩ := computed
+      exact ⟨fun _ => 0, Nat.zero_le _, fun _ _ => rfl,
+        fun _ small => absurd small (Nat.not_lt_zero _), fun v => by simp [withdrawnFrom]⟩
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨⟨partials', next, count'⟩, read, same⟩ := computed
+    simp only [Prod.mk.injEq] at same
+    obtain ⟨rfl, rfl⟩ := same
+    exact getPendingPartialWithdrawals_ledger read
 
 private theorem sum_filter_map_eq_sum_range {α : Type} (p : α → Bool) (f : α → ℕ) :
     ∀ l : List α, ((l.filter p).map f).sum =
@@ -1243,7 +1586,8 @@ private theorem sum_filter_map_eq_sum_range {α : Type} (p : α → Bool) (f : �
 /-- What the queued partial withdrawals of one step pay a validator. -/
 private def stepQueuePaid {x y : ForkedBeaconState preset} :
     Step config checks x y → ValidatorIndex → ℕ
-  | .block (before := before) _ signed _ _, v => blockQueuePaid before signed.message v
+  | .block (before := before) _ signed _ _, v =>
+    blockQueuePaid (config := config) (checks := checks) before signed.message v
   | .slot _, _ => 0
 
 /-- What the queued partial withdrawals of a run pay a validator. -/
@@ -1252,7 +1596,7 @@ private def runQueuePaid {x : ForkedBeaconState preset} :
   | _, .nil, _ => 0
   | _, .snoc pre step, v => runQueuePaid pre v + stepQueuePaid step v
 
-/-- Inside one epoch from Electra and before Gloas, take a run.
+/-- Inside one epoch from Electra, take a run.
 
 The queue of its last state is the queue of its first state, less a prefix.
 
@@ -1262,7 +1606,7 @@ The run pays each validator only from the consumed prefix.
 
 It pays at most the amount of each entry, and only from entries withdrawable by the epoch. -/
 private theorem run_partialLedger {x y : ForkedBeaconState preset}
-    (tail : Run config checks x y) (early : y.fork < .glamsterdam)
+    (tail : Run config checks x y)
     (same : getCurrentEpoch y.state = getCurrentEpoch x.state) (electra : .pectra ≤ x.fork) :
     ∀ electra' : .pectra ≤ y.fork,
     ∃ (appended : List PendingPartialWithdrawal) (consumed : ℕ) (paid : ℕ → ℕ),
@@ -1288,47 +1632,69 @@ private theorem run_partialLedger {x y : ForkedBeaconState preset}
           (0 < paid j → w.withdrawableEpoch ≤ getCurrentEpoch x.state)) ∧
         ∀ v, runQueuePaid r v = ∑ j ∈ (Finset.range consumed).filter
           (fun j => ledger[j]?.map (·.validatorIndex) = some v), paid j)
-    ?_ ?_ ?_ tail early same same
+    ?_ ?_ ?_ tail same same
   · intro _ _
     refine ⟨[], 0, fun _ => 0, ?_⟩
     simp [runQueuePaid]
-  · intro f s t engine signed due ok pre fEarly ih epochT electraT
+  · intro f s t engine signed due ok pre ih epochT electraT
     have processed := (applySignedBlock_ok ok).2.1
     have epochS : getCurrentEpoch s = getCurrentEpoch x.state := by
       rw [← epochT]
       simp only [getCurrentEpoch, processBlock_slot processed]
     obtain ⟨appended, consumed, paid, bounded, queue, charged, beyond, entries, sums⟩ :=
       ih epochS electraT
-    obtain ⟨headed, partials, next, count, new, headedOk, partialsOk, stepQueue, late⟩ :=
-      block_partialLedger electraT fEarly processed
-    obtain ⟨pay, counted, stepBeyond, stepEntries, stepSums⟩ :=
-      getPendingPartialWithdrawals_ledger partialsOk
+    obtain ⟨headed, partials, count, parentNew, new, stateOk, headedEpoch, extendedQueue,
+      parentLate, readOk, stepQueue, late⟩ := block_partialLedger electraT processed
+    obtain ⟨pay, counted, stepBeyond, stepEntries, stepSums⟩ := queueRead_ledger readOk
     have paidBlock : ∀ v, stepQueuePaid (Step.block engine signed due ok) v =
         withdrawnFrom partials v := by
       intro v
-      simp only [stepQueuePaid, blockQueuePaid, electraT, ↓reduceDIte, headedOk, partialsOk,
-        bind, Except.bind, pure, Except.pure, Except.toOption, Option.getD_some]
-    obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
-    simp only at stepEntries stepSums counted
+      simp only [stepQueuePaid, blockQueuePaid, electraT, ↓reduceDIte, stateOk, queuePaidAt,
+        readOk, Except.map, Except.toOption, Option.getD_some]
+    rw [headedEpoch] at stepEntries
     generalize ledgerDef : (x.state.pendingPartialWithdrawals electra).data.toList ++
       appended = ledger at bounded queue entries sums
-    have middleLength : (s.pendingPartialWithdrawals electraT).data.toList.length =
-        ledger.length - consumed := by rw [queue, List.length_drop]
-    have within : consumed + count ≤ ledger.length := by omega
-    refine ⟨appended ++ new, consumed + count,
-      fun j => if j < consumed then paid j else pay (j - consumed), ?_⟩
+    -- The entries that the parent appends extend the ledger, after the consumed prefix.
+    have queueL : (headed.pendingPartialWithdrawals electraT).data.toList =
+        (ledger ++ parentNew).drop consumed := by
+      rw [extendedQueue, queue, List.drop_append_of_le_length bounded]
+    have boundedL : consumed ≤ (ledger ++ parentNew).length := by
+      rw [List.length_append]
+      omega
+    have entriesL : ∀ j < consumed, ∃ w, (ledger ++ parentNew)[j]? = some w ∧
+        paid j ≤ w.amount.toNat ∧
+          (0 < paid j → w.withdrawableEpoch ≤ getCurrentEpoch x.state) := by
+      intro j small
+      obtain ⟨w, found, rest⟩ := entries j small
+      exact ⟨w, (List.getElem?_append_left (by omega)).trans found, rest⟩
+    have sumsL : ∀ v, runQueuePaid pre v = ∑ j ∈ Finset.range consumed,
+        if (ledger ++ parentNew)[j]?.map (·.validatorIndex) = some v then paid j else 0 := by
+      intro v
+      rw [sums v, Finset.sum_filter]
+      refine Finset.sum_congr rfl fun j member => ?_
+      rw [List.getElem?_append_left (by have := Finset.mem_range.mp member; omega)]
     have extended : (x.state.pendingPartialWithdrawals electra).data.toList ++
-        (appended ++ new) = ledger ++ new := by
-      rw [← ledgerDef, List.append_assoc]
-    have prefixAt : ∀ j < ledger.length, (ledger ++ new)[j]? = ledger[j]? :=
+        (appended ++ parentNew ++ new) = ledger ++ parentNew ++ new := by
+      rw [← ledgerDef]
+      simp only [List.append_assoc]
+    clear entries sums queue
+    generalize ledgerL : ledger ++ parentNew = L at queueL boundedL entriesL sumsL extended
+    have middleLength : (headed.pendingPartialWithdrawals electraT).data.toList.length =
+        L.length - consumed := by rw [queueL, List.length_drop]
+    have within : consumed + count ≤ L.length := by omega
+    refine ⟨appended ++ parentNew ++ new, consumed + count,
+      fun j => if j < consumed then paid j else pay (j - consumed), ?_⟩
+    have prefixAt : ∀ j < L.length, (L ++ new)[j]? = L[j]? :=
       fun j small => List.getElem?_append_left small
     intro ledger'
     simp only [ledger', extended]
     refine ⟨by simp only [List.length_append]; omega, ?_, ?_, ?_, ?_, ?_⟩
-    · rw [stepQueue, queue, List.drop_drop, List.drop_append_of_le_length within]
+    · rw [stepQueue, queueL, List.drop_drop, List.drop_append_of_le_length within]
     · intro a member
       rcases List.mem_append.mp member with member | member
-      · exact charged a member
+      · rcases List.mem_append.mp member with member | member
+        · exact charged a member
+        · exact epochS ▸ parentLate a member
       · exact epochS ▸ late a member
     · intro j large
       have notOld : ¬ j < consumed := by omega
@@ -1336,24 +1702,21 @@ private theorem run_partialLedger {x y : ForkedBeaconState preset}
       exact stepBeyond _ (by omega)
     · intro j small
       by_cases old : j < consumed
-      · obtain ⟨w, found, bound, due⟩ := entries j old
+      · obtain ⟨w, found, bound, due⟩ := entriesL j old
         refine ⟨w, (prefixAt j (by omega)).trans found, by simpa [old] using bound, ?_⟩
         intro positive
         simp only [old, ↓reduceIte] at positive
         exact due positive
       · obtain ⟨w, found, bound, due⟩ := stepEntries (j - consumed) (by omega)
         refine ⟨w, ?_, by simpa [old] using bound, ?_⟩
-        · rw [prefixAt j (by omega), ← found, queue, List.getElem?_drop]
+        · rw [prefixAt j (by omega), ← found, queueL, List.getElem?_drop]
           congr 1
           omega
         · intro positive
           simp only [old, ↓reduceIte] at positive
-          have := due positive
-          simp only [getCurrentEpoch] at this epochS ⊢
-          rw [← epochS]
-          exact this
+          exact epochS ▸ due positive
     · intro v
-      simp only [runQueuePaid, sums v, paidBlock v, stepSums v, Finset.sum_filter,
+      simp only [runQueuePaid, sumsL v, paidBlock v, stepSums v, Finset.sum_filter,
         Finset.sum_range_add]
       congr 1
       · refine Finset.sum_congr rfl fun j member => ?_
@@ -1361,7 +1724,7 @@ private theorem run_partialLedger {x y : ForkedBeaconState preset}
         simp [small, prefixAt j (by omega)]
       · refine Finset.sum_congr rfl fun k member => ?_
         have small := Finset.mem_range.mp member
-        rw [prefixAt (consumed + k) (by omega), queue, List.getElem?_drop]
+        rw [prefixAt (consumed + k) (by omega), queueL, List.getElem?_drop]
         simp
   · intro middle last cached next pre ok lastEq cachedOk epochNext ih epochLast electraLast
     subst lastEq
@@ -1375,13 +1738,13 @@ private theorem run_partialLedger {x y : ForkedBeaconState preset}
     · simp only [runQueuePaid, stepQueuePaid, Nat.add_zero]
       exact sums v
 
-/-- Inside one epoch from Electra and before Gloas, take a run and a validator.
+/-- Inside one epoch from Electra, take a run and a validator.
 
 The run pays the validator from the queue at most its entries in the run's first queue.
 
 Only the entries withdrawable by the epoch count. -/
 private theorem runQueuePaid_le {x y : ForkedBeaconState preset}
-    (tail : Run config checks x y) (early : y.fork < .glamsterdam)
+    (tail : Run config checks x y)
     (same : getCurrentEpoch y.state = getCurrentEpoch x.state) (electra : .pectra ≤ x.fork)
     (electra' : .pectra ≤ y.fork) (v : ValidatorIndex) :
     runQueuePaid tail v ≤
@@ -1389,7 +1752,7 @@ private theorem runQueuePaid_le {x y : ForkedBeaconState preset}
         w.validatorIndex.toNat = v.toNat ∧ w.withdrawableEpoch ≤ getCurrentEpoch x.state).map
           (·.amount.toNat)).sum := by
   obtain ⟨appended, consumed, paid, -, -, charged, -, entries, sums⟩ :=
-    run_partialLedger tail early same electra electra'
+    run_partialLedger tail same electra electra'
   generalize getCurrentEpoch x.state = epoch at *
   generalize queueDef : (x.state.pendingPartialWithdrawals electra).data.toList = queue at *
   let due (j : ℕ) := ((queue[j]?.filter fun w =>
@@ -1426,15 +1789,40 @@ private theorem runQueuePaid_le {x y : ForkedBeaconState preset}
 
 /-- From Electra, one block pays at most the partial withdrawals that one sweep may process. -/
 private theorem partials_size_le {f : Fork} {s : BeaconState preset f} {electra : .pectra ≤ f}
-    {start : WithdrawalIndex} {partials : Array Withdrawal} {next : WithdrawalIndex} {count : ℕ}
-    (computed : getPendingPartialWithdrawals s electra start #[] = .ok (partials, next, count)) :
+    {start : WithdrawalIndex} {prior partials : Array Withdrawal} {next : WithdrawalIndex}
+    {count : ℕ}
+    (computed : getPendingPartialWithdrawals s electra start prior = .ok (partials, next, count)) :
     partials.size ≤ preset.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP.toNat := by
   unfold getPendingPartialWithdrawals at computed
   simp only [bind_ok_iff, ensure_ok_iff] at computed
   obtain ⟨room, roomOk, _, fits, loopOk⟩ := computed
   have run := (getPendingPartialWithdrawals_loop_run _ _ _ _ (loopRun_start fits) loopOk).1
-  simp only [Array.size_empty, zero_add] at run
-  exact run.trans (Nat.min_le_left _ _)
+  have := Nat.min_le_left (prior.size + preset.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP.toNat)
+    room.toNat
+  dsimp only at run
+  omega
+
+/-- From Electra, the read of the queue pays at most the partial withdrawals of one sweep. -/
+private theorem queueRead_size {f : Fork} {s : BeaconState preset f} {electra : .pectra ≤ f}
+    {partials : Array Withdrawal} {count : ℕ}
+    (computed : queueRead s electra = .ok (partials, count)) :
+    partials.size ≤ preset.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP.toNat := by
+  unfold queueRead at computed
+  split at computed
+  · split at computed
+    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+      obtain ⟨⟨builders, index, _⟩, -, ⟨partials', next, count'⟩, read, same⟩ := computed
+      simp only [Prod.mk.injEq] at same
+      obtain ⟨rfl, rfl⟩ := same
+      exact partials_size_le read
+    · simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
+      obtain ⟨rfl, rfl⟩ := computed
+      exact Nat.zero_le _
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨⟨partials', next, count'⟩, read, same⟩ := computed
+    simp only [Prod.mk.injEq] at same
+    obtain ⟨rfl, rfl⟩ := same
+    exact partials_size_le read
 
 /-- The queued partial withdrawals of one block pay at most the validators that one sweep may pay.
 -/
@@ -1442,41 +1830,40 @@ private theorem blockQueuePaid_support {fork : Fork} (before : BeaconState prese
     (block : BeaconBlock preset fork) :
     ∃ indices : Finset ValidatorIndex,
       indices.card ≤ preset.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP.toNat ∧
-      ∀ v, blockQueuePaid before block v ≠ 0 → v ∈ indices := by
+      ∀ v, blockQueuePaid (config := config) (checks := checks) before block v ≠ 0 →
+        v ∈ indices := by
   by_cases electra : .pectra ≤ fork
-  · cases headedOk : processBlockHeader before block with
+  · cases stateOk : withdrawalState (config := config) (checks := checks) before block with
     | error =>
       exact ⟨∅, by simp, fun v paid => by
-        simp [blockQueuePaid, electra, headedOk, bind, Except.bind, Except.toOption] at paid⟩
+        simp [blockQueuePaid, electra, stateOk, Except.map, Except.toOption] at paid⟩
     | ok headed =>
-      cases partialsOk : getPendingPartialWithdrawals headed electra
-        (headed.nextWithdrawalIndex (Nat.le_trans (by decide) electra)) #[] with
+      cases readOk : queueRead headed electra with
       | error =>
         exact ⟨∅, by simp, fun v paid => by
-          simp [blockQueuePaid, electra, headedOk, partialsOk, bind, Except.bind,
+          simp [blockQueuePaid, electra, stateOk, queuePaidAt, readOk, Except.map,
             Except.toOption] at paid⟩
       | ok result =>
-        obtain ⟨partials, next, count⟩ := result
+        obtain ⟨partials, count⟩ := result
         refine ⟨(partials.toList.map (·.validatorIndex)).toFinset, ?_, fun v paid => ?_⟩
         · refine (List.toFinset_card_le _).trans ?_
           simp only [List.length_map, Array.length_toList]
-          exact partials_size_le partialsOk
-        · simp only [blockQueuePaid, electra, dite_true, headedOk, partialsOk, bind,
-            Except.bind, pure, Except.pure, Except.toOption, Option.getD_some,
-            withdrawnFrom] at paid
+          exact queueRead_size readOk
+        · simp only [blockQueuePaid, electra, dite_true, stateOk, queuePaidAt, readOk,
+            Except.map, Except.toOption, Option.getD_some, withdrawnFrom] at paid
           obtain ⟨amount, inside, positive⟩ := List.exists_mem_ne_zero_of_sum_ne_zero paid
           obtain ⟨w, kept, rfl⟩ := List.mem_map.mp inside
           obtain ⟨present, named⟩ := List.mem_filter.mp kept
           exact List.mem_toFinset.mpr (List.mem_map.mpr ⟨w, present, by simpa using named⟩)
   · exact ⟨∅, by simp, fun v paid => by simp [blockQueuePaid, electra] at paid⟩
 
-/-- Inside one epoch before Gloas, take a run with at most one block.
+/-- Inside one epoch, take a run with at most one block.
 
 From the queue, it pays at most as many validators as one sweep may pay.
 
 A run without blocks pays nothing from the queue. -/
 private theorem owed_card {x y : ForkedBeaconState preset} (run : Run config checks x y)
-    (early : y.fork < .glamsterdam) (same : getCurrentEpoch y.state = getCurrentEpoch x.state)
+    (same : getCurrentEpoch y.state = getCurrentEpoch x.state)
     (single : run.blockCount ≤ 1) :
     (∃ owed : Finset ValidatorIndex,
       owed.card ≤ preset.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP.toNat ∧
@@ -1488,10 +1875,10 @@ private theorem owed_card {x y : ForkedBeaconState preset} (run : Run config che
         owed.card ≤ preset.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP.toNat ∧
         ∀ v, runQueuePaid r v ≠ 0 → v ∈ owed) ∧
       (r.blockCount = 0 → ∀ v, runQueuePaid r v = 0))
-    ?_ ?_ ?_ run early same single
+    ?_ ?_ ?_ run same single
   · exact fun _ => ⟨⟨∅, by simp, fun v paid => by simp [runQueuePaid] at paid⟩,
       fun _ _ => rfl⟩
-  · intro f s t engine signed due ok pre _ ih count
+  · intro f s t engine signed due ok pre ih count
     have none : pre.blockCount = 0 := by simp [Run.blockCount] at count; omega
     have zero := (ih (by omega)).2 none
     obtain ⟨indices, card, covers⟩ := blockQueuePaid_support s signed.message
@@ -1518,7 +1905,7 @@ private theorem unslashed_before {x y : ForkedBeaconState preset}
     rw [clear w' read'] at marked
     cases marked
 
-/-- Take a run inside one epoch before Gloas.
+/-- Take a run inside one epoch, to a registry within its limit.
 
 Each of its blocks keeps the floor of a validator with a sync amount `S`.
 
@@ -1529,63 +1916,73 @@ The sum adds those sync amounts and the queued payments.
 With one block, the queued payments count only up to the reference above the activation balance.
 -/
 private theorem run_floor {x y : ForkedBeaconState preset} (tail : Run config checks x y)
-    (early : y.fork < .glamsterdam) (same : getCurrentEpoch y.state = getCurrentEpoch x.state)
+    (within : y.state.RegistryWithinLimit)
+    (same : getCurrentEpoch y.state = getCurrentEpoch x.state)
     {v : ValidatorIndex} {EB S : ℕ}
     (unslashed : ∀ w, y.state.validators.data[v.toNat]? = some w → w.slashed = false)
     (step : ∀ {f : Fork} {s t : BeaconState preset f} {engine : ExecutionEngine preset f}
       {signed : SignedBeaconBlock preset f},
       applySignedBlock config checks engine s signed true = .ok t →
-      Run config checks x ⟨f, s⟩ → Run config checks x ⟨f, t⟩ → f < .glamsterdam →
+      Run config checks x ⟨f, s⟩ → Run config checks x ⟨f, t⟩ → t.RegistryWithinLimit →
       getCurrentEpoch s = getCurrentEpoch x.state →
       (∀ w, t.validators.data[v.toNat]? = some w → w.slashed = false) →
       min (actualBalanceAt ⟨f, s⟩ v.toNat) EB ≤ actualBalanceAt ⟨f, t⟩ v.toNat + S +
-        min (blockQueuePaid s signed.message v) (EB - preset.MIN_ACTIVATION_BALANCE.toNat)) :
+        min (blockQueuePaid (config := config) (checks := checks) s signed.message v)
+          (EB - preset.MIN_ACTIVATION_BALANCE.toNat)) :
     ∃ extra : ℕ, min (actualBalanceAt x v.toNat) EB ≤
         actualBalanceAt y v.toNat + tail.blockCount * S + extra ∧
       extra ≤ runQueuePaid tail v ∧
       (tail.blockCount ≤ 1 →
         extra ≤ min (runQueuePaid tail v) (EB - preset.MIN_ACTIVATION_BALANCE.toNat)) := by
   refine Run.induction_of_same_epoch
-    (motive := fun w r => getCurrentEpoch w.state = getCurrentEpoch x.state →
+    (motive := fun w r => w.state.RegistryWithinLimit →
+      getCurrentEpoch w.state = getCurrentEpoch x.state →
       (∀ u, w.state.validators.data[v.toNat]? = some u → u.slashed = false) →
       ∃ extra : ℕ, min (actualBalanceAt x v.toNat) EB ≤
           actualBalanceAt w v.toNat + r.blockCount * S + extra ∧
         extra ≤ runQueuePaid r v ∧
         (r.blockCount ≤ 1 →
           extra ≤ min (runQueuePaid r v) (EB - preset.MIN_ACTIVATION_BALANCE.toNat)))
-    ?_ ?_ ?_ tail early same same unslashed
-  · intro _ _
+    ?_ ?_ ?_ tail same within same unslashed
+  · intro _ _ _
     exact ⟨0, by simp [Run.blockCount], Nat.zero_le _, fun _ => Nat.zero_le _⟩
-  · intro f s t engine signed due ok pre fEarly ih epochT clearT
+  · intro f s t engine signed due ok pre ih withinT epochT clearT
     have processed := (applySignedBlock_ok ok).2.1
     have epochS : getCurrentEpoch s = getCurrentEpoch x.state := by
       rw [← epochT]
       simp only [getCurrentEpoch, processBlock_slot processed]
     have clearS := unslashed_before (Step.block engine signed due ok).slashedPersistence clearT
-    obtain ⟨extra, floor, paid, single⟩ := ih epochS clearS
-    have blockFloor := step ok pre (pre.snoc (.block engine signed due ok)) fEarly epochS clearT
-    refine ⟨extra + min (blockQueuePaid s signed.message v)
+    have withinS : s.RegistryWithinLimit :=
+      Nat.le_trans (registryLifecycle_processBlock processed).size_le withinT
+    obtain ⟨extra, floor, paid, single⟩ := ih withinS epochS clearS
+    have blockFloor := step ok pre (pre.snoc (.block engine signed due ok)) withinT epochS clearT
+    refine ⟨extra + min (blockQueuePaid (config := config) (checks := checks) s signed.message v)
       (EB - preset.MIN_ACTIVATION_BALANCE.toNat), ?_, ?_, ?_⟩
     · simp only [Run.blockCount, Nat.add_mul, Nat.one_mul]
       omega
     · simp only [runQueuePaid, stepQueuePaid]
-      have := Nat.min_le_left (blockQueuePaid s signed.message v)
+      have := Nat.min_le_left
+        (blockQueuePaid (config := config) (checks := checks) s signed.message v)
         (EB - preset.MIN_ACTIVATION_BALANCE.toNat)
       omega
     · intro count
       simp only [Run.blockCount] at count
       have none : pre.blockCount = 0 := by omega
-      have zero := (owed_card pre fEarly epochS (by omega)).2 none v
+      have zero := (owed_card pre epochS (by omega)).2 none v
       have extraZero : extra = 0 := by
         have := single (by omega)
         rw [zero] at this
         omega
       simp only [runQueuePaid, stepQueuePaid, zero, Nat.zero_add, extraZero]
       exact Nat.le_refl _
-  · intro middle last cached next pre ok lastEq cachedOk epochNext ih epochLast clearLast
+  · intro middle last cached next pre ok lastEq cachedOk epochNext ih withinLast epochLast
+      clearLast
     have clearMiddle := unslashed_before (Step.slot ok).slashedPersistence clearLast
+    have withinMiddle : middle.state.RegistryWithinLimit :=
+      Nat.le_trans (Run.nil.snoc (.slot ok)).registryLifecycle.size_le withinLast
     subst lastEq
-    obtain ⟨extra, floor, paid, single⟩ := ih (epochNext.symm.trans epochLast) clearMiddle
+    obtain ⟨extra, floor, paid, single⟩ :=
+      ih withinMiddle (epochNext.symm.trans epochLast) clearMiddle
     obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
     refine ⟨extra, ?_, ?_, ?_⟩
     · simpa [Run.blockCount, actualBalanceAt, cachedEq] using floor
@@ -1611,9 +2008,9 @@ private theorem justification_same {f : Fork} {s t : BeaconState preset f}
   · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
     exact ⟨by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest]⟩
 
-/-- Inside one epoch before Gloas, a run keeps each inactivity score of its first state. -/
+/-- Inside one epoch, a run keeps each inactivity score of its first state. -/
 private theorem scores_of_same_epoch {x y : ForkedBeaconState preset}
-    (tail : Run config checks x y) (early : y.fork < .glamsterdam)
+    (tail : Run config checks x y)
     (same : getCurrentEpoch y.state = getCurrentEpoch x.state) {i : ℕ}
     (inside : i < x.state.validators.data.size) (ax : .altair ≤ x.fork) (ay : .altair ≤ y.fork) :
     (y.state.inactivityScores ay).data[i]? = (x.state.inactivityScores ax).data[i]? :=
@@ -1621,7 +2018,7 @@ private theorem scores_of_same_epoch {x y : ForkedBeaconState preset}
     (motive := fun w _ => ∀ aw : .altair ≤ w.fork,
       (w.state.inactivityScores aw).data[i]? = (x.state.inactivityScores ax).data[i]?)
     (fun _ => rfl)
-    (fun _ _ _ ok pre _ ih aw => by
+    (fun _ _ _ ok pre ih aw => by
       have grows := Nat.lt_of_lt_of_le inside pre.registryLifecycle.size_le
       rw [scoreKept_processBlock (applySignedBlock_ok ok).2.1 grows aw]
       exact ih aw)
@@ -1630,7 +2027,7 @@ private theorem scores_of_same_epoch {x y : ForkedBeaconState preset}
       obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
       subst cachedEq
       exact ih aw)
-    tail early same ay
+    tail same ay
 
 /-- The arithmetic that closes the fall of a credited voter. -/
 private theorem fall_credit_arith {EB after gRewarded gTrue gSub gLow c credit q down inc nS : ℕ}
@@ -1668,6 +2065,10 @@ That amount is what the boundary block's queued payments took from it.
 It is capped at its effective balance above the activation balance.
 
 Those queued amounts add up to at most what one sweep can pay below the largest effective balance.
+
+The fork at `P` is Fulu or later.
+
+The registry at `y` is within its limit.
 -/
 theorem effectiveFall_le
     {g R T P y : ForkedBeaconState preset}
@@ -1676,7 +2077,7 @@ theorem effectiveFall_le
     (tailS : Run config checks T y) (caps : CapOrder preset)
     (bands : preset.IncrementWithinUpwardBand)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (hysteresis : Hysteresis R.state) (early : y.fork < .glamsterdam)
+    (hysteresis : Hysteresis R.state) (within : y.state.RegistryWithinLimit)
     (fulu : .fusaka ≤ P.fork)
     (boundaryEpoch : getCurrentEpoch T.state = getCurrentEpoch R.state)
     (callEpoch : getCurrentEpoch P.state = getCurrentEpoch R.state)
@@ -1744,22 +2145,19 @@ theorem effectiveFall_le
     rw [boundaryEpoch]; exact next
   obtain ⟨z, z', toZ, edge, fromZ', zEpoch, z'Epoch⟩ := Run.split_next tailS nextT
   -- The forks inside the epoch.
-  have Tearly : T.fork < .glamsterdam :=
-    Nat.lt_of_le_of_lt (fork_le_of_chainSteps tailS.chainSteps) early
   have RT : T.fork = R.fork := Run.fork_eq_of_same_epoch boundary boundaryEpoch
   have PT : P.fork = T.fork :=
     Run.fork_eq_of_same_epoch tailP (callEpoch.trans boundaryEpoch.symm)
   have ZT : z.fork = T.fork := Run.fork_eq_of_same_epoch toZ zEpoch
-  have Rearly : R.fork < .glamsterdam := RT ▸ Tearly
-  have Pearly : P.fork < .glamsterdam := PT ▸ Tearly
-  have Zearly : z.fork < .glamsterdam := ZT ▸ Tearly
-  have z'Early : z'.fork < .glamsterdam :=
-    Nat.lt_of_le_of_lt (fork_le_of_chainSteps fromZ'.chainSteps) early
   have electraT : .pectra ≤ T.fork := PT ▸ electraP
-  have electraR : .pectra ≤ R.fork := RT ▸ electraT
+  -- The registries on the branch of `y` are within the limit.
+  have withinT : T.state.RegistryWithinLimit := Nat.le_trans tailS.registryLifecycle.size_le within
+  have withinZ : z.state.RegistryWithinLimit :=
+    Nat.le_trans (Run.nil.snoc (.slot edge)).registryLifecycle.size_le
+      (Nat.le_trans fromZ'.registryLifecycle.size_le within)
   -- What every state of the epoch reads like the state `R`.
   have readsAt : ∀ {w : ForkedBeaconState preset} (run : Run config checks R w),
-      w.fork < .glamsterdam → getCurrentEpoch w.state = getCurrentEpoch R.state →
+      getCurrentEpoch w.state = getCurrentEpoch R.state →
       (w.fork = R.fork ∧ validatorKeys R.state <+: validatorKeys w.state ∧
         ∀ (altair : .altair ≤ w.fork) (altair' : .altair ≤ R.fork),
           (w.state.currentSyncCommittee altair).value.pubkeys.toList =
@@ -1768,27 +2166,27 @@ theorem effectiveFall_le
       R.state.validators.data.size ≤ w.state.validators.data.size ∧
       ∀ i, isActiveAt w.state (getCurrentEpoch R.state) i =
         isActiveAt R.state (getCurrentEpoch R.state) i :=
-    fun run wEarly same => ⟨⟨Run.fork_eq_of_same_epoch run same,
+    fun run same => ⟨⟨Run.fork_eq_of_same_epoch run same,
         (validatorKeys_prefix_and_distinct_of_chainSteps run.chainSteps).1,
-        fun altair altair' => Run.currentSyncCommittee_eq_of_same_epoch run wEarly same altair
+        fun altair altair' => Run.currentSyncCommittee_eq_of_same_epoch run same altair
           altair'⟩,
-      run.effectiveKept_of_same_epoch wEarly same, run.registryLifecycle.size_le,
+      run.effectiveKept_of_same_epoch same, run.registryLifecycle.size_le,
       fun i => activeKept_of_chainSteps run.chainSteps _
         (getCurrentEpoch_le_activityFixedEpoch _) i⟩
   obtain ⟨⟨-, keysP, committeeP⟩, keptP, growsP, activeP⟩ :=
-    readsAt (boundary.append tailP) Pearly callEpoch
+    readsAt (boundary.append tailP) callEpoch
   -- Every state of the epoch reads the total of `R`, errors included.
   have totalAt : ∀ {w : ForkedBeaconState preset} (run : Run config checks R w),
-      w.fork < .glamsterdam → getCurrentEpoch w.state = getCurrentEpoch R.state →
+      getCurrentEpoch w.state = getCurrentEpoch R.state →
       getTotalActiveBalance w.state = getTotalActiveBalance R.state :=
-    fun run wEarly same => DirectSafety.total_active_congr Rearly wEarly
+    fun run same => DirectSafety.total_active_congr
       ((activeKept_of_chainSteps run.chainSteps).mono
         (getCurrentEpoch_le_activityFixedEpoch _)) same
-      (run.effectiveKept_of_same_epoch wEarly same)
+      (run.effectiveKept_of_same_epoch same)
   have totalP : getTotalActiveBalance state = getTotalActiveBalance R.state :=
-    totalAt (boundary.append tailP) Pearly callEpoch
+    totalAt (boundary.append tailP) callEpoch
   -- The validators that the boundary block pays from the queue.
-  obtain ⟨⟨owed, owedCard, covers⟩, -⟩ := owed_card boundary Tearly boundaryEpoch single
+  obtain ⟨⟨owed, owedCard, covers⟩, -⟩ := owed_card boundary boundaryEpoch single
   refine ⟨fun v => min (runQueuePaid boundary v)
     (effective v.toNat - preset.MIN_ACTIVATION_BALANCE.toNat), owed, ?_, ?_, ?_⟩
   · intro v absent
@@ -1805,7 +2203,7 @@ theorem effectiveFall_le
       | none => simp [effective, balanceAt, state, read]
       | some val =>
         have capped := ((history.append boundary).append tailP).effectiveBalance_capped genesis
-          caps.activation caps.compounding Pearly val (Array.mem_of_getElem? read)
+          caps.activation caps.compounding val (Array.mem_of_getElem? read)
         have top : withdrawalMaxEffectiveBalance preset P.fork val ≤
             preset.MAX_EFFECTIVE_BALANCE_ELECTRA := by
           simp only [withdrawalMaxEffectiveBalance, electraP, ↓reduceIte, getMaxEffectiveBalance]
@@ -1850,13 +2248,12 @@ theorem effectiveFall_le
     rw [hEB] at hysR
     -- The sync amount of the validator, read at any state of the epoch.
     have syncAt : ∀ {w : ForkedBeaconState preset} (toW : Run config checks R w)
-        (wEarly : w.fork < .glamsterdam)
         (wEpoch : getCurrentEpoch w.state = getCurrentEpoch R.state)
         (altairW : .altair ≤ w.fork),
         syncSeats w.state altairW v.toNat *
           ((syncParticipantReward w.state).toOption.getD 0).toNat = sync v.toNat := by
-      intro w toW wEarly wEpoch altairW
-      obtain ⟨⟨fEq, keysW, committeeW⟩, keptW, growsW, activeW⟩ := readsAt toW wEarly wEpoch
+      intro w toW wEpoch altairW
+      obtain ⟨⟨fEq, keysW, committeeW⟩, keptW, growsW, activeW⟩ := readsAt toW wEpoch
       have altairR : .altair ≤ R.fork := fEq ▸ altairW
       have seatsSame : syncSeats w.state altairW v.toNat = seats v.toNat := by
         simp only [seats, altairP, dite_true, syncSeats]
@@ -1868,7 +2265,7 @@ theorem effectiveFall_le
       have rewardSame : ((syncParticipantReward w.state).toOption.getD 0).toNat = seatReward := by
         have same : syncParticipantReward w.state = syncParticipantReward state := by
           unfold syncParticipantReward
-          rw [totalAt toW wEarly wEpoch, totalP]
+          rw [totalAt toW wEpoch, totalP]
         simp only [seatReward, altairP, ↓reduceIte, same]
       rw [seatsSame, rewardSame]
     -- Each block of the epoch keeps the floor of the balance.
@@ -1877,18 +2274,19 @@ theorem effectiveFall_le
         ∀ {f : Fork} {s t : BeaconState preset f} {engine : ExecutionEngine preset f}
           {signed : SignedBeaconBlock preset f},
           applySignedBlock config checks engine s signed true = .ok t →
-          Run config checks X ⟨f, s⟩ → Run config checks X ⟨f, t⟩ → f < .glamsterdam →
+          Run config checks X ⟨f, s⟩ → Run config checks X ⟨f, t⟩ → t.RegistryWithinLimit →
           getCurrentEpoch s = getCurrentEpoch X.state →
           (∀ w, t.validators.data[v.toNat]? = some w → w.slashed = false) →
           min (actualBalanceAt ⟨f, s⟩ v.toNat) EB ≤ actualBalanceAt ⟨f, t⟩ v.toNat +
-            sync v.toNat + min (blockQueuePaid s signed.message v)
+            sync v.toNat + min (blockQueuePaid (config := config) (checks := checks) s
+              signed.message v)
               (EB - preset.MIN_ACTIVATION_BALANCE.toNat) := by
-      intro X histX fromR XEpoch f s t engine signed ok pre post fEarly sEpoch clearAfter
+      intro X histX fromR XEpoch f s t engine signed ok pre post withinT sEpoch clearAfter
       have toS := fromR.append pre
       have sEpochR : getCurrentEpoch s = getCurrentEpoch R.state := sEpoch.trans XEpoch
       have fEq : f = R.fork := Run.fork_eq_of_same_epoch toS sEpochR
       have fuluF : .fusaka ≤ f := by rw [fEq, ← RT, ← PT]; exact fulu
-      obtain ⟨-, keptS, -, activeS⟩ := readsAt toS fEarly sEpochR
+      obtain ⟨-, keptS, -, activeS⟩ := readsAt toS sEpochR
       have activeAtS : isActiveAt s (getCurrentEpoch R.state) v.toNat = true := by
         rw [show isActiveAt s (getCurrentEpoch R.state) v.toNat =
           isActiveAt R.state (getCurrentEpoch R.state) v.toNat from activeS v.toNat]
@@ -1905,25 +2303,37 @@ theorem effectiveFall_le
         rw [sEpochR]
         exact UInt64.lt_of_lt_of_le isActiveS.2 ordered
       have capS := (histX.append pre).effectiveBalance_capped genesis caps.activation
-        caps.compounding fEarly valS (Array.mem_of_getElem? foundS)
-      have floor := block_floor fEarly fuluF invS.balancesMatch
-        (applySignedBlock_ok ok).2.1 foundS later capS clearAfter
+        caps.compounding valS (Array.mem_of_getElem? foundS)
       have tEpoch : getCurrentEpoch t = getCurrentEpoch R.state := by
         rw [← sEpochR]
         simp only [getCurrentEpoch, processBlock_slot (applySignedBlock_ok ok).2.1]
-      rw [syncAt (fromR.append post) fEarly tEpoch, effS] at floor
+      -- The validator stays active at the end of the block, so it exits after the epoch.
+      have exiting : ∀ w, t.validators.data[v.toNat]? = some w →
+          getCurrentEpoch s < w.exitEpoch := by
+        intro w read
+        obtain ⟨-, -, -, activeT⟩ := readsAt (fromR.append post) tEpoch
+        obtain ⟨w', read', isActiveT⟩ := isActiveAt_eq_true_iff.mp
+          ((activeT v.toNat).trans activeR)
+        rw [read, Option.some.injEq] at read'
+        subst w'
+        simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at isActiveT
+        rw [sEpochR]
+        exact isActiveT.2
+      have floor := block_floor fuluF (fun _ => caps.compounding) withinT invS.balancesMatch
+        invS.exitsOrdered (applySignedBlock_ok ok).2.1 foundS later capS exiting clearAfter
+      rw [syncAt (fromR.append post) tEpoch, effS] at floor
       exact floor
     -- The boundary run, with at most one block.
-    obtain ⟨extraRT, floorRT, -, belowRT⟩ := run_floor boundary Tearly boundaryEpoch clearT
+    obtain ⟨extraRT, floorRT, -, belowRT⟩ := run_floor boundary withinT boundaryEpoch clearT
       (stepFloor history .nil rfl)
     have belowBound := belowRT single
     -- The blocks of the branch of `y` inside the epoch.
     have histT := history.append boundary
-    obtain ⟨extraTZ, floorTZ, paidTZ, -⟩ := run_floor toZ Zearly zEpoch clearZ
+    obtain ⟨extraTZ, floorTZ, paidTZ, -⟩ := run_floor toZ withinZ zEpoch clearZ
       (stepFloor histT boundary boundaryEpoch)
     -- Those blocks pay at most the partial withdrawals queued at `T` and due by the epoch.
     have queueTZ : runQueuePaid toZ v ≤ partials v.toNat := by
-      have bound := runQueuePaid_le toZ Zearly zEpoch electraT (ZT ▸ electraT) v
+      have bound := runQueuePaid_le toZ zEpoch electraT (ZT ▸ electraT) v
       simp only [partials, electraT, dite_true, epoch, state, callEpoch, ← boundaryEpoch]
       exact bound
     -- The blocks of the epoch fit its slots.
@@ -1940,7 +2350,7 @@ theorem effectiveFall_le
         toZ.blockCount_le_epochs slotsPos
     -- The validator at the last state of the epoch on the branch of `y`.
     have zEpochR : getCurrentEpoch z.state = getCurrentEpoch R.state := zEpoch.trans boundaryEpoch
-    obtain ⟨-, keptZ, growsZ, activeZs⟩ := readsAt (boundary.append toZ) Zearly zEpochR
+    obtain ⟨-, keptZ, growsZ, activeZs⟩ := readsAt (boundary.append toZ) zEpochR
     have activeZ : isActiveAt z.state (getCurrentEpoch z.state) v.toNat = true := by
       rw [zEpochR, activeZs v.toNat]
       exact activeR
@@ -1952,22 +2362,22 @@ theorem effectiveFall_le
       rw [this, hEB]
     have histZ := histT.append toZ
     have invZ := reach_invariant genesis histZ
-    have capZ := histZ.effectiveBalance_capped genesis caps.activation caps.compounding Zearly valZ
+    have capZ := histZ.effectiveBalance_capped genesis caps.activation caps.compounding valZ
       (Array.mem_of_getElem? foundZ)
     have nextZ : (getCurrentEpoch z'.state).toNat = (getCurrentEpoch z.state).toNat + 1 := by
       rw [z'Epoch, zEpochR]; exact next
     have altairZ : .altair ≤ z.fork := by rw [ZT, ← PT]; exact altairP
     have holdsZ : PendingConsolidationInvariant config z.state :=
-      fun electra => Run.pendingConsolidation_invariant histZ genesis Zearly electra delayPos
+      fun electra => Run.pendingConsolidation_invariant histZ genesis electra delayPos
     obtain ⟨cached, justified, scored, rewarded, cachedOk, justifiedOk, scoredOk, rewardedOk,
-      fallZ⟩ := crossing_fall altairZ edge z'Early nextZ bands holdsZ invZ.balancesMatch delayPos
+      fallZ⟩ := crossing_fall altairZ edge withinZ nextZ bands holdsZ invZ.balancesMatch delayPos
         foundZ activeZ (clearZ valZ foundZ) capZ
     rw [effZ] at fallZ
     -- The effective balance stays through the next epoch.
     have insideZ' : v.toNat < z'.state.validators.data.size :=
       Nat.lt_of_lt_of_le insideZ (Run.nil.snoc (.slot edge)).registryLifecycle.size_le
     have yEff : effectiveAt y v.toNat = effectiveAt z' v.toNat :=
-      fromZ'.effectiveKept_of_same_epoch early z'Epoch.symm v.toNat insideZ'
+      fromZ'.effectiveKept_of_same_epoch z'Epoch.symm v.toNat insideZ'
     -- The state that the rewards read is the last state of the epoch, after justification.
     obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
     have justifiedSame := justification_same justifiedOk
@@ -1999,7 +2409,7 @@ theorem effectiveFall_le
           unfold getTotalActiveBalance getActiveValidatorIndicesChecked getTotalBalance
           rw [show getCurrentEpoch justified = getCurrentEpoch z.state by rw [JEpoch, zEpochR]]
           simp only [Jvalidators]
-        rw [same, totalAt (boundary.append toZ) Zearly zEpochR, totalP]
+        rw [same, totalAt (boundary.append toZ) zEpochR, totalP]
       have baseRead : ∀ t reward, getTotalActiveBalance justified = .ok t →
           getBaseReward justified t v.toNat.toUInt64 = .ok reward →
             reward.toNat ≤ base v.toNat := by
@@ -2021,8 +2431,12 @@ theorem effectiveFall_le
         rw [totalJ] at tOk
         simp only [base, totalGwei, tOk, read, Except.toOption, Option.getD_some, le_refl,
           UInt64.ofNat_toNat]
+      have withinJ : justified.RegistryWithinLimit := by
+        unfold BeaconState.RegistryWithinLimit
+        rw [Jvalidators]
+        exact withinZ
       have bound := (processRewardsAndPenalties_balance_le_of_inactivityUpdates altairZ
-        (justified.validators.bound Zearly) scoredOk rewardedOk v.toNat insideJ
+        withinJ scoredOk rewardedOk v.toNat insideJ
         (base := base v.toNat) baseRead).2
       dsimp only at bound
       rw [effJ, balJ] at bound
@@ -2030,8 +2444,8 @@ theorem effectiveFall_le
           (((justified.inactivityScores altairZ).data[v.toNat]?).map (·.toNat)).getD 0 =
             score v.toNat := by
         have insideT := Nat.lt_of_lt_of_le insideR boundary.registryLifecycle.size_le
-        have zScore := scores_of_same_epoch toZ Zearly zEpoch insideT altairT altairZ
-        have pScore := scores_of_same_epoch tailP Pearly (callEpoch.trans boundaryEpoch.symm)
+        have zScore := scores_of_same_epoch toZ zEpoch insideT altairT altairZ
+        have pScore := scores_of_same_epoch tailP (callEpoch.trans boundaryEpoch.symm)
           insideT altairT altairP
         simp only [score, altairP, dite_true, state]
         rw [justifiedSame.2.2.2, pScore, ← zScore, cachedEq]

@@ -1837,7 +1837,6 @@ theorem epochPrefix_slashedSpan {x outer : ForkedBeaconState preset}
     (run : Run config checks x outer)
     (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
     (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
-    (early : outer.fork < .glamsterdam)
     (cached : processSlot outer.state = .ok s)
     (justifiedOk : EpochStage.Edge config checks .justification s justified)
     (scoredOk : EpochStage.Edge config checks .inactivity justified scored)
@@ -1851,7 +1850,7 @@ theorem epochPrefix_slashedSpan {x outer : ForkedBeaconState preset}
       v.exitEpoch ≠ FAR_FUTURE_EPOCH →
         w.slashed = true ∧ w.exitEpoch ≠ FAR_FUTURE_EPOCH ∧
           v.withdrawableEpoch ≤ w.withdrawableEpoch :=
-  Run.slashed_withdrawableEpoch_mono_epoch run activation compounding early cached
+  Run.slashed_withdrawableEpoch_mono_epoch run activation compounding cached
     (epochDepositTrace justifiedOk scoredOk rewardsOk registry slashings resetOk depositsOk)
 
 /-- Support at the epoch after `c` is support at `c`, or an activation exactly at that epoch.

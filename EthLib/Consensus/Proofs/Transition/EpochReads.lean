@@ -537,16 +537,15 @@ theorem Run.fork_eq_of_same_epoch {x y : ForkedBeaconState preset}
       obtain ⟨cached, next, -, rfl⟩ := advanceSlotAcross_of_same_epoch ok (same.trans midEpoch.symm)
       exact prior
 
-/-- Inside one epoch before Gloas, the keys of the current sync committee stay.
+/-- Inside one epoch, from Altair, the keys of the current sync committee stay.
 
 Blocks keep the committee, and slots inside the epoch only cache the slot. -/
 theorem Run.currentSyncCommittee_eq_of_same_epoch {x y : ForkedBeaconState preset}
-    (tail : Run config checks x y)
-    (early : y.fork < .glamsterdam) (same : getCurrentEpoch y.state = getCurrentEpoch x.state)
+    (tail : Run config checks x y) (same : getCurrentEpoch y.state = getCurrentEpoch x.state)
     (altair : .altair ≤ y.fork) (altair' : .altair ≤ x.fork) :
     (y.state.currentSyncCommittee altair).value.pubkeys.toList =
       (x.state.currentSyncCommittee altair').value.pubkeys.toList :=
-  tail.currentSyncCommittee_eq_of_same_period early (by rw [same]) altair altair'
+  tail.currentSyncCommittee_eq_of_same_period (by rw [same]) altair altair'
 
 /-- The positions active in an epoch are the same in two registries when activity stays.
 

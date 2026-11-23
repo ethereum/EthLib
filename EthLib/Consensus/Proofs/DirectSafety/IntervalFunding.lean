@@ -3770,7 +3770,7 @@ theorem _root_.EthLib.Consensus.Run.unassigned_assignment_resources
   · intro f a b e before ok matched
     simpa only [actualBalanceAt] using funding_pending_capacity e before ok matched
   · intro f a b engine block before ok
-    exact depositCarry_processBlock before ok
+    exact depositCarry_processBlock ok
 
 /-- Unspent deposit capacity retained across post-Electra operations. -/
 def fundingCarry (x : ForkedBeaconState preset) : Nat :=
@@ -4211,7 +4211,7 @@ private theorem funding_step_capacity_rate {x y : ForkedBeaconState preset}
       bind, Except.bind, pure, Except.pure, Except.ok.injEq] at replayed
     subst events
     rw [zero]
-    have kept := depositCarry_processBlock before processed
+    have kept := depositCarry_processBlock processed
     simp only [fundingCarry, kept]
     omega
   | slot ok =>

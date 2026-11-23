@@ -1441,7 +1441,7 @@ theorem ReservedReplay.fresh_not_initial {g x y : ForkedBeaconState preset} {hig
     {allAllocations : List OwnedRelease} {calls : List (IndexedDepartureCall preset config)}
     {before after : Ownership}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
-    (electra : .pectra ≤ x.fork) (early : x.fork < .glamsterdam)
+    (electra : .pectra ≤ x.fork)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (history : ReservedReplay (config := config) (checks := checks) x high rounding
       x (getCurrentEpoch x.state) y (getCurrentEpoch y.state) 0 0 0
@@ -1451,7 +1451,7 @@ theorem ReservedReplay.fresh_not_initial {g x y : ForkedBeaconState preset} {hig
     ∀ pair ∈ allPayments, ((∃ n, pair.1.tag = .fresh n) ↔
       (x.state.pendingConsolidations electra).data.toList.any
         (fun c => c.sourceIndex.toNat == pair.2.source) = false) := by
-  have invariant := shared.pendingConsolidation_invariant genesis early electra delay
+  have invariant := shared.pendingConsolidation_invariant genesis electra delay
   have initialKnown :
       TagsKnown x (initialTags (x.state.pendingConsolidations electra).data.toList) := by
     intro tag member

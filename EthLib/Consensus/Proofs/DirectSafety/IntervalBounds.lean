@@ -64,8 +64,7 @@ theorem funding_step_of_run {g a b : ForkedBeaconState preset}
   | slot ok =>
     exact funding_slot before delay holds.balancesMatch holds.exitsOrdered
       (reachable.activationExitOrder genesis)
-      (fun witness => reachable.pendingConsolidation_invariant genesis
-        (Nat.lt_of_le_of_lt (Step.slot ok).chainStep.fork_le before) witness (by omega))
+      (fun witness => reachable.pendingConsolidation_invariant genesis witness (by omega))
       ok added addedOk
   | block engine signed due ok =>
     have processed := (applySignedBlock_ok ok).2.1
@@ -392,7 +391,7 @@ private theorem active_stake_le_window_of_prefix {g x a y : ForkedBeaconState pr
   · have unique := (validatorKeys_prefix_and_distinct_of_genesis_chainSteps initialized
       (shared.append pre).chainSteps).2
     have capped := (shared.append pre).effectiveBalance_capped genesis caps.activation
-      caps.compounding earlyA
+      caps.compounding
     have inside (i : ValidatorIndex)
         (member : i ∈ getActiveValidatorIndices a.state (getCurrentEpoch a.state)) :
         i.toNat < a.state.validators.data.size := by
@@ -4057,7 +4056,7 @@ private theorem intervalGain_active_path {g x y : ForkedBeaconState preset}
   have gloas : y.fork < .glamsterdam := Nat.lt_trans early (by decide)
   have earlyX := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) gloas
   have capped := (shared.append tail).effectiveBalance_capped genesis caps.activation
-    caps.compounding gloas
+    caps.compounding
   have allKeys : gaining x y ≤ ∑ k ∈ activeKeys x.state,
       (effectiveWeight y.state k - effectiveWeight x.state k) := by
     apply Finset.sum_le_sum_of_subset

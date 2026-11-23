@@ -271,8 +271,7 @@ private theorem effective_loss_le_of_routed_floor
   have value : reference.toNat = rounded := by
     dsimp [reference]
     rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
-  have capped := shared.effectiveBalance_capped genesis caps.activation caps.compounding
-    (Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early) v
+  have capped := shared.effectiveBalance_capped genesis caps.activation caps.compounding v
     (Array.mem_of_getElem? found)
   have bound := tail.effectiveAt_ge_of_balanceFloor caps early i v found activated reference
     (by
@@ -346,10 +345,10 @@ private theorem Stop.selected_local_replay
 /-- The effective balance of a key reached from genesis is at most its largest. -/
 theorem effectiveAt_le_withdrawalMax (shared : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
-    (early : x.fork < .glamsterdam) {i : Nat} {v : Validator}
+    {i : Nat} {v : Validator}
     (initial : x.state.validators.data[i]? = some v) :
     effectiveAt x i ≤ (withdrawalMaxEffectiveBalance preset x.fork v).toNat := by
-  have cap := shared.effectiveBalance_capped genesis caps.activation caps.compounding early v
+  have cap := shared.effectiveBalance_capped genesis caps.activation caps.compounding v
     (Array.mem_of_getElem? initial)
   simpa [effectiveAt, initial] using UInt64.le_iff_toNat_le.mp cap
 
@@ -887,15 +886,15 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
         (MaxEffectiveBalancesAligned preset → .fusaka ≤ x.fork →
           EffectiveOrigin tail i.toNat) := by
   have assignedStart : v.slashed = true → v.exitEpoch ≠ FAR_FUTURE_EPOCH := fun slashed =>
-    run_slashed_exit_assigned shared genesis caps.activation caps.compounding
-      (Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early) delay i.toNat v initial
+    run_slashed_exit_assigned shared genesis caps.activation caps.compounding delay i.toNat v
+      initial
       slashed
   induction tail generalizing events with
   | nil =>
     have empty : events = [] := Except.ok.inj replayed.symm
     subst events
     have cap := shared.effectiveBalance_capped genesis caps.activation caps.compounding
-      early v (Array.mem_of_getElem? initial)
+      v (Array.mem_of_getElem? initial)
     have capped : max low (effectiveAt x i.toNat) ≤
         (withdrawalMaxEffectiveBalance preset x.fork v).toNat := by
       have atStart : effectiveAt x i.toNat = v.effectiveBalance.toNat := by
@@ -1012,11 +1011,11 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
       have room : i.toNat < m.state.validators.data.size :=
         Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp initial).1 pre.registryLifecycle.size_le
       have ebCap : effectiveAt m i.toNat ≤ (withdrawalMaxEffectiveBalance preset m.fork u).toNat :=
-        effectiveAt_le_withdrawalMax (shared.append pre) genesis caps middleEarly middle
+        effectiveAt_le_withdrawalMax (shared.append pre) genesis caps middle
       have capMono : (withdrawalMaxEffectiveBalance preset x.fork v).toNat ≤
           (withdrawalMaxEffectiveBalance preset m.fork u).toNat := by
         obtain ⟨z, located', mono⟩ := pre.validatorCap_mono caps.activation caps.compounding
-          middleEarly i.toNat v initial
+          i.toNat v initial
         obtain rfl := Option.some.inj (located'.symm.trans middle)
         exact UInt64.le_iff_toNat_le.mp mono
       let fresh : FloorAccount := ⟨actualBalanceAt m i.toNat, 0, effectiveAt m i.toNat, none⟩
@@ -1612,7 +1611,7 @@ theorem FloorTrace.run
           (if c.slashedHigh.isSome then 1 else 0) ≤ (if w.slashed then 1 else 0) :=
   FloorTrace.run_of_le_cap shared tail genesis caps delay early high endEpoch i v initial unslashed
     activated low base quotient (low_le.trans (effectiveAt_le_withdrawalMax shared genesis caps
-      (Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early) initial)) positive
+      initial)) positive
     guards replayed
 
 theorem unslashed_floor_run
@@ -1941,7 +1940,7 @@ private theorem reachable_replay_middle_bounds
   have same : cached.validators = outer.state.validators := by
     obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
     rfl
-  have originalCaps := shared.effectiveBalance_capped genesis caps.activation caps.compounding early
+  have originalCaps := shared.effectiveBalance_capped genesis caps.activation caps.compounding
   have middleCaps := capped_epoch_replay_middle early epochOk replayed
     (by simpa only [same] using originalCaps)
   refine ⟨?_, middleCaps v (Array.mem_of_getElem? found)⟩

@@ -205,21 +205,25 @@ theorem depositRequest_departureQueues {fork : Fork} {s t : BeaconState preset f
   obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok ok
   rfl
 
-/-- Attestation processing preserves departure queues before Gloas. -/
+/-- From Electra, attestation processing preserves departure queues.
+
+From Gloas it also records payment weights, which are not among them. -/
 theorem attestation_departureQueues {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (electra : .pectra ≤ fork)
     {parentSlot : Slot} {attestation : Attestation preset fork}
     (ok : processAttestation config checks s parentSlot attestation = .ok t) :
     departureQueues electra t = departureQueues electra s := by
   have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
   simp only [processAttestation, altair, ↓reduceDIte] at ok
   unfold processAttestationAltair at ok
-  simp only [bind_ok_iff, liftAccessor_ok, notGloas, ↓reduceDIte,
-    pure, Except.pure, Except.ok.injEq] at ok
+  simp only [bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, _, raised, rfl⟩ := ok
-  rw [departureQueues_increase electra raised]
+    _, _, raised, raisedOk, final⟩ := ok
+  have last : departureQueues electra t = departureQueues electra raised := by
+    split at final
+    · rw [recordPaymentWeight_eq final]; rfl
+    · cases final; rfl
+  rw [last, departureQueues_increase electra raisedOk]
   unfold setEpochParticipation
   split <;> rfl
 
@@ -267,17 +271,16 @@ theorem pendingDeposits_departureQueues {fork : Fork} {s t : BeaconState preset 
 
 /-- Debiting withdrawals keeps both departure queues. -/
 theorem applyWithdrawals_departureQueues {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam) {withdrawals : Array Withdrawal}
+    (electra : .pectra ≤ fork) {withdrawals : Array Withdrawal}
     (ok : applyWithdrawals s withdrawals = .ok t) :
     departureQueues electra t = departureQueues electra s := by
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
   unfold applyWithdrawals at ok
   rw [← Array.foldlM_toList] at ok
   refine foldlM_ok_invariant (fun t => departureQueues electra t = departureQueues electra s)
     ?_ rfl ok
   intro a withdrawal b kept stepped
-  simp only [applyWithdrawal, notGloas, false_and, ↓reduceDIte] at stepped
-  exact (departureQueues_decrease electra stepped).trans kept
+  rw [applyWithdrawal_eq stepped]
+  exact kept
 
 /-- Moving the next withdrawal index keeps both departure queues. -/
 theorem withdrawalIndex_departureQueues {fork : Fork} {s t : BeaconState preset fork}
@@ -303,51 +306,121 @@ theorem withdrawalValidatorIndex_departureQueues {fork : Fork}
   · cases ok
   · cases ok; rfl
 
-/-- Paying withdrawals removes balances and the queued partial withdrawals that were read.
+/-- Moving the next builder of the sweep keeps both departure queues. -/
+private theorem withdrawalBuilderIndex_departureQueues {fork : Fork}
+    {s t : BeaconState preset fork} (electra : .pectra ≤ fork) {gloas : .glamsterdam ≤ fork}
+    {count : UInt64} (ok : updateNextWithdrawalBuilderIndex s gloas count = .ok t) :
+    departureQueues electra t = departureQueues electra s := by
+  unfold updateNextWithdrawalBuilderIndex at ok
+  dsimp only at ok
+  split at ok
+  · cases ok; rfl
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
+    obtain ⟨_, _, rfl⟩ := ok
+    rfl
 
-It resets neither departure queue. -/
-theorem withdrawals_departureQueues {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
-    {capella : .shapella ≤ fork} {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
-    (ok : processWithdrawals s capella payload = .ok t) :
-    ∃ expected, getExpectedWithdrawals s capella = .ok expected ∧
-      departureQueues electra t = departureQueues electra
-        (updatePendingPartialWithdrawals s electra expected.processedPartialWithdrawalsCount) := by
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
-  simp only [processWithdrawals, notGloas, ↓reduceDIte, bind_ok_iff, ensure_ok_iff,
-    liftAccessor_ok] at ok
-  obtain ⟨expected, expectedOk, _, _, applied⟩ := ok
-  simp only [applyExpectedWithdrawals, notGloas, electra, ↓reduceDIte, bind_ok_iff,
-    pure, Except.pure, Except.ok.injEq, exists_eq_left'] at applied
-  obtain ⟨withdrawn, paid, indexed, moved, swept⟩ := applied
-  refine ⟨expected, expectedOk, (withdrawalValidatorIndex_departureQueues electra swept).trans ?_⟩
-  have kept := (withdrawalIndex_departureQueues electra moved).trans
-    (applyWithdrawals_departureQueues electra early paid)
-  simp only [departureQueues, Prod.mk.injEq] at kept
-  obtain ⟨one, two, three, four, five⟩ := kept
+/-- Removing the same number of queued partial withdrawals keeps equal departure queues equal. -/
+private theorem departureQueues_updatePending {fork : Fork} {a b : BeaconState preset fork}
+    (electra : .pectra ≤ fork) (count : UInt64)
+    (same : departureQueues electra a = departureQueues electra b) :
+    departureQueues electra (updatePendingPartialWithdrawals a electra count) =
+      departureQueues electra (updatePendingPartialWithdrawals b electra count) := by
+  simp only [departureQueues, Prod.mk.injEq] at same
+  obtain ⟨one, two, three, four, five⟩ := same
   simp only [departureQueues, updatePendingPartialWithdrawals, Prod.mk.injEq]
   exact ⟨one, two, three, four, by rw [five]⟩
 
-/-- From Electra and before Gloas, the execution part of a block keeps both departure queues.
+/-- Applying the expected withdrawals removes the queued partial withdrawals that were read.
 
-It removes the queued partial withdrawals that its withdrawals read.
+It resets neither departure queue. -/
+private theorem applyExpected_departureQueues {fork : Fork} {s t : BeaconState preset fork}
+    (electra : .pectra ≤ fork) {capella : .shapella ≤ fork} {expected : ExpectedWithdrawals}
+    (ok : applyExpectedWithdrawals s capella expected = .ok t) :
+    departureQueues electra t = departureQueues electra
+      (updatePendingPartialWithdrawals s electra expected.processedPartialWithdrawalsCount) := by
+  by_cases gloas : .glamsterdam ≤ fork
+  · simp only [applyExpectedWithdrawals, gloas, electra, ↓reduceDIte, bind_ok_iff] at ok
+    obtain ⟨withdrawn, paid, indexed, moved, built, builtOk, swept⟩ := ok
+    rw [withdrawalValidatorIndex_departureQueues electra swept,
+      withdrawalBuilderIndex_departureQueues electra builtOk]
+    exact departureQueues_updatePending electra _
+      ((withdrawalIndex_departureQueues electra moved).trans
+        (applyWithdrawals_departureQueues electra paid))
+  · simp only [applyExpectedWithdrawals, gloas, electra, ↓reduceDIte, bind_ok_iff,
+      pure, Except.pure, Except.ok.injEq, exists_eq_left'] at ok
+    obtain ⟨withdrawn, paid, indexed, moved, swept⟩ := ok
+    rw [withdrawalValidatorIndex_departureQueues electra swept]
+    exact departureQueues_updatePending electra _
+      ((withdrawalIndex_departureQueues electra moved).trans
+        (applyWithdrawals_departureQueues electra paid))
 
-The payload step is read here: the shared block lemma gives only its frame and validators. -/
+/-- From Electra, paying withdrawals removes the queued partial withdrawals that were read.
+
+It resets neither departure queue.
+
+From Gloas a block whose parent has no payload pays no withdrawals, and keeps the state. -/
+theorem withdrawals_departureQueues {fork : Fork} {s t : BeaconState preset fork}
+    (electra : .pectra ≤ fork)
+    {capella : .shapella ≤ fork} {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
+    (ok : processWithdrawals s capella payload = .ok t) :
+    ((∀ gloas : .glamsterdam ≤ fork, isParentBlockFull s gloas = true) ∧
+        ∃ expected, getExpectedWithdrawals s capella = .ok expected ∧
+          departureQueues electra t = departureQueues electra
+            (updatePendingPartialWithdrawals s electra expected.processedPartialWithdrawalsCount)) ∨
+      ∃ gloas : .glamsterdam ≤ fork, isParentBlockFull s gloas = false ∧ t = s := by
+  unfold processWithdrawals at ok
+  split at ok
+  · rename_i gloas
+    split at ok
+    · rename_i full
+      simp only [bind_ok_iff, liftAccessor_ok] at ok
+      obtain ⟨expected, expectedOk, applied⟩ := ok
+      exact .inl ⟨fun _ => full, expected, expectedOk,
+        applyExpected_departureQueues electra applied⟩
+    · cases ok
+      exact .inr ⟨gloas, Bool.eq_false_iff.mpr ‹_›, rfl⟩
+  · rename_i notGloas
+    simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨expected, expectedOk, _, _, applied⟩ := ok
+    exact .inl ⟨fun gloas => absurd gloas notGloas, expected, expectedOk,
+      applyExpected_departureQueues electra applied⟩
+
+/-- From Electra, the execution part of a block keeps both departure queues.
+
+From Gloas a block whose parent has no payload pays no withdrawals.
+
+With a full parent, or before Gloas, the queue loses the prefix that its withdrawals read. -/
 theorem blockExecution_departureQueues {fork : Fork}
     {engine : ExecutionEngine preset fork} {s t : BeaconState preset fork}
     {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (electra : .pectra ≤ fork)
     (ok : processBlockExecution config checks engine s body bellatrix = .ok t) :
-    ∃ expected, getExpectedWithdrawals s (Nat.le_trans (by decide) electra) = .ok expected ∧
-      departureQueues electra t = departureQueues electra
-        (updatePendingPartialWithdrawals s electra expected.processedPartialWithdrawalsCount) := by
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
+    ((∀ gloas : .glamsterdam ≤ fork, isParentBlockFull s gloas = true) ∧
+        ∃ expected, getExpectedWithdrawals s (Nat.le_trans (by decide) electra) = .ok expected ∧
+          departureQueues electra t = departureQueues electra
+            (updatePendingPartialWithdrawals s electra expected.processedPartialWithdrawalsCount)) ∨
+      ∃ gloas : .glamsterdam ≤ fork, isParentBlockFull s gloas = false ∧
+        departureQueues electra t = departureQueues electra s := by
   have capella : .shapella ≤ fork := Nat.le_trans (by decide) electra
-  simp only [processBlockExecution, notGloas, capella, ↓reduceDIte, bind_ok_iff] at ok
-  obtain ⟨middle, withdrawn, payload⟩ := ok
-  obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok payload
-  obtain ⟨expected, expectedOk, frame⟩ := withdrawals_departureQueues electra early withdrawn
-  exact ⟨expected, expectedOk, frame⟩
+  unfold processBlockExecution at ok
+  split at ok
+  · simp only [bind_ok_iff] at ok
+    obtain ⟨middle, withdrawn, bid⟩ := ok
+    have offered : departureQueues electra t = departureQueues electra middle := by
+      obtain ⟨_, rfl⟩ := processExecutionPayloadBid_eq bid
+      rfl
+    rcases withdrawals_departureQueues electra withdrawn with ⟨full, expected, expectedOk, frame⟩ |
+      ⟨gloas, empty, rfl⟩
+    · exact .inl ⟨full, expected, expectedOk, offered.trans frame⟩
+    · exact .inr ⟨gloas, empty, offered⟩
+  · rename_i notGloas
+    simp only [bind_ok_iff] at ok
+    obtain ⟨middle, withdrawn, payload⟩ := ok
+    obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok payload
+    rcases withdrawals_departureQueues electra withdrawn with
+      ⟨full, expected, expectedOk, frame⟩ | ⟨gloas, _, _⟩
+    · exact .inl ⟨full, expected, expectedOk, frame⟩
+    · exact absurd gloas notGloas
 
 /-- The head of a block moves only the partial withdrawals among the departure queues. -/
 theorem blockHead_departureQueues {fork : Fork} (electra : .pectra ≤ fork)
@@ -371,18 +444,18 @@ theorem blockHead_departureQueues {fork : Fork} (electra : .pectra ≤ fork)
 
 /-- A slashing changes the departure queues only in its initial exit scheduling call. -/
 theorem slashValidator_departureQueues {fork : Fork} {s t : BeaconState preset fork}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (electra : .pectra ≤ fork)
     {index : ValidatorIndex} {whistleblower : Option ValidatorIndex}
     (ok : slashValidator config s index whistleblower = .ok t) :
     ∃ exited, initiateValidatorExit config s index = .ok exited ∧
       departureQueues electra t = departureQueues electra exited := by
-  obtain ⟨exited, _, _, _, _, _, _, _, _, _, _, _, exitedOk, _, _, markedOk, _, _, _,
+  obtain ⟨exited, _, _, _, _, _, _, _, _, _, _, last, exitedOk, _, _, markedOk, _, _, _,
     lowered, _, _, raised, final, done⟩ := slashValidator_ok ok
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
-  simp only [notGloas, ↓reduceDIte] at done
-  subst done
+  have cancelled : departureQueues electra t = departureQueues electra last := by
+    subst done
+    split <;> rfl
   refine ⟨exited, exitedOk, ?_⟩
-  rw [departureQueues_increase electra final, departureQueues_increase electra raised,
+  rw [cancelled, departureQueues_increase electra final, departureQueues_increase electra raised,
     departureQueues_decrease electra lowered]
   obtain ⟨_, rfl⟩ := setValidator_ok markedOk
   rfl
@@ -480,20 +553,33 @@ theorem updatePendingPartialWithdrawals_toList {fork : Fork} (state : BeaconStat
   simp only [updatePendingPartialWithdrawals, Array.toList_extract, List.extract_eq_take_drop]
   exact List.take_of_length_le (by simp)
 
-/-- The partials that the expected withdrawals read are the ones the plan counts. -/
+/-- The partials that the expected withdrawals read are the ones the plan counts.
+
+Before Gloas the read has no prior withdrawals and starts at the next withdrawal index.
+
+From Gloas it follows the queued builder withdrawals, and starts at the index after them. -/
 theorem getExpectedWithdrawals_partials {fork : Fork} {state : BeaconState preset fork}
     {capella : .shapella ≤ fork} {expected : ExpectedWithdrawals}
-    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (electra : .pectra ≤ fork)
     (ok : getExpectedWithdrawals state capella = .ok expected) :
-    ∃ (partials : Array Withdrawal) (next : WithdrawalIndex),
-      getPendingPartialWithdrawals state electra (state.nextWithdrawalIndex capella) #[] =
-        .ok (partials, next, expected.processedPartialWithdrawalsCount.toNat) := by
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
+    ∃ (prior partials : Array Withdrawal) (start next : WithdrawalIndex),
+      getPendingPartialWithdrawals state electra start prior =
+        .ok (partials, next, expected.processedPartialWithdrawalsCount.toNat) ∧
+      ((fork < .glamsterdam ∧ prior = #[] ∧ start = state.nextWithdrawalIndex capella) ∨
+        ∃ (gloas : .glamsterdam ≤ fork) (count : Nat),
+          getBuilderWithdrawals state gloas (state.nextWithdrawalIndex capella) #[] =
+            .ok (prior, start, count)) := by
   unfold getExpectedWithdrawals at ok
-  simp only [notGloas, electra, ↓reduceDIte, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq, liftCount_ok_iff] at ok
-  obtain ⟨_, rfl, ⟨partials, next, count⟩, partialsOk, _, rfl, _, _, _, -, _, ⟨-, rfl⟩, _, -, _, -,
-    rfl⟩ := ok
-  exact ⟨partials, next, partialsOk⟩
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, liftCount_ok_iff] at ok
+  obtain ⟨⟨builders, index1, count1⟩, buildersOk, ⟨partials, index2, count2⟩, partialsOk,
+    ⟨buildersSweep, index3, count3⟩, -, ⟨sweep, index4, count4⟩, -, _, -, _, ⟨-, rfl⟩, _, -,
+    _, -, rfl⟩ := ok
+  simp only [electra, ↓reduceDIte] at partialsOk
+  by_cases gloas : .glamsterdam ≤ fork
+  · simp only [gloas, ↓reduceDIte] at buildersOk
+    exact ⟨builders, partials, index1, index2, partialsOk, .inr ⟨gloas, count1, buildersOk⟩⟩
+  · simp only [gloas, ↓reduceDIte, Except.ok.injEq, Prod.mk.injEq] at buildersOk
+    obtain ⟨rfl, rfl, -⟩ := buildersOk
+    exact ⟨#[], partials, _, index2, partialsOk, .inl ⟨Nat.lt_of_not_le gloas, rfl, rfl⟩⟩
 
 end EthLib.Consensus

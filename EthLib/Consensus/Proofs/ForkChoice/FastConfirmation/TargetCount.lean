@@ -486,7 +486,7 @@ theorem Execution.honestTargetVotes_of_byzantineStakeAtMost [DecidablePred (· �
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (sound : Invariant anchorState) (maxAligned : MaxEffectiveBalancesAligned preset)
-    (slots : 0 < config.SLOT_DURATION_MS) (preGloas : fork < .glamsterdam)
+    (slots : 0 < config.SLOT_DURATION_MS)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 1 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -613,12 +613,17 @@ theorem Execution.honestTargetVotes_of_byzantineStakeAtMost [DecidablePred (· �
   have outsideActive : ∀ v ∈ outside,
       v ∈ (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset := by
     intro v member
-    obtain ⟨validator, found, active, -⟩ :=
-      (mem_unslashedActiveBalances_iff (BeaconState.registryWithinLimit_of_lt preGloas state)).mp
-        (List.mem_toFinset.mp (Finset.mem_filter.mp member).1)
+    -- An unslashed active index names an active validator at its own position.
+    have listed := List.mem_toFinset.mp (Finset.mem_filter.mp member).1
+    simp only [List.mem_map, unslashedActiveBalances, List.mem_filterMap,
+      Option.ite_none_right_eq_some, Option.some.injEq, Prod.exists] at listed
+    obtain ⟨_, _, ⟨validator, position, inZip, flags, same⟩, rfl⟩ := listed
+    cases same
+    simp only [Bool.and_eq_true] at flags
     apply List.mem_toFinset.mpr
-    apply mem_getActiveValidatorIndices_of_isActiveAt
-    exact isActiveAt_eq_true_iff.mpr ⟨validator, found, active⟩
+    simp only [getActiveValidatorIndices, List.mem_filterMap, Option.ite_none_right_eq_some,
+      Option.some.injEq, Prod.exists]
+    exact ⟨validator, position, inZip, flags.1, rfl⟩
   -- A scored voter is in the committees, so no honest scored voter is outside them.
   have disjoint : Disjoint honest outside := by
     apply Finset.disjoint_left.mpr

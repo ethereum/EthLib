@@ -29,7 +29,7 @@ import EthLib.Consensus.Proofs.Participation
 /-!
 # The balances along a branch inside one epoch
 
-A tally follows the blocks of a run inside one epoch, from Altair and before Gloas.
+A tally follows the blocks of a run inside one epoch, from Fulu.
 
 It reads every balance change of the run from its last state.
 
@@ -99,16 +99,16 @@ private theorem Within.activeBalanceTotal {a s : BeaconState preset fork} (w : W
   activeBalanceTotal_eq w.epoch w.active w.effective w.size
 
 /-- A state within the epoch reads the total of the start, with its errors. -/
-private theorem Within.total {a s : BeaconState preset fork} (w : Within a s)
-    (early : fork < .glamsterdam) : getTotalActiveBalance s = getTotalActiveBalance a :=
-  DirectSafety.total_active_congr early early
+private theorem Within.total {a s : BeaconState preset fork} (w : Within a s) :
+    getTotalActiveBalance s = getTotalActiveBalance a :=
+  DirectSafety.total_active_congr
     (w.active.mono (getCurrentEpoch_le_activityFixedEpoch a)) w.epoch w.effective
 
 /-- A state within the epoch reads the participant reward of the start. -/
-private theorem Within.read {a s : BeaconState preset fork} (w : Within a s)
-    (early : fork < .glamsterdam) : SyncRewardRead s ↔ SyncRewardRead a := by
+private theorem Within.read {a s : BeaconState preset fork} (w : Within a s) :
+    SyncRewardRead s ↔ SyncRewardRead a := by
   unfold SyncRewardRead
-  rw [syncParticipantReward_congr (w.total early)]
+  rw [syncParticipantReward_congr w.total]
 
 /-- A state within the epoch has the recent validators of the start. -/
 private theorem Within.recent {a s : BeaconState preset fork} (w : Within a s) (i : ℕ) :
@@ -184,43 +184,6 @@ private theorem slashBackAt_le {s t : BeaconState preset fork} (frame : Frame s 
       kept v.toNat (inside_of_slashedAt marked)]
   · rw [ite_eq_right marked]
     exact Nat.zero_le _
-
-/-- A block before Gloas keeps the current sync committee. -/
-private theorem committee_processBlock {s t : BeaconState preset fork}
-    {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
-    (early : fork < .glamsterdam) (altair : .altair ≤ fork)
-    (computed : processBlock config checks engine s block = .ok t) :
-    t.currentSyncCommittee altair = s.currentSyncCommittee altair := by
-  unfold processBlock at computed
-  split at computed
-  · unfold processBlockAltair at computed
-    simp only [stateBeforeOperations, bind_assoc, bind_ok_iff] at computed
-    obtain ⟨paid0, paidOk, headed, headedOk, executed, executedOk, revealed, revealedOk, voted,
-      votedOk, operated, operatedOk, synced⟩ := computed
-    have paidSame : paid0 = s := by
-      split at paidOk
-      · exact False.elim (Nat.not_le_of_lt early (by assumption))
-      · cases paidOk; rfl
-    subst paid0
-    have header : headed.currentSyncCommittee altair = s.currentSyncCommittee altair := by
-      obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
-      rfl
-    have execution : executed.currentSyncCommittee altair =
-        headed.currentSyncCommittee altair := by
-      split at executedOk
-      · exact processBlockExecution_currentSyncCommittee altair executedOk
-      · cases executedOk; rfl
-    have randao : revealed.currentSyncCommittee altair = executed.currentSyncCommittee altair := by
-      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealedOk
-      rfl
-    have vote : voted.currentSyncCommittee altair = revealed.currentSyncCommittee altair := by
-      split at votedOk
-      · obtain ⟨_, _, rest⟩ := processEth1Data_eq votedOk
-        rw [← rest]
-      · cases votedOk; rfl
-    rw [congrFun (processSyncAggregate_kept synced).2 altair,
-      processOperations_currentSyncCommittee altair operatedOk, vote, randao, execution, header]
-  · exact absurd altair (by assumption)
 
 /-- A frame that keeps the committee keeps the seats of every old validator. -/
 private theorem syncSeats_le {s t : BeaconState preset fork} (frame : Frame s t)
@@ -345,25 +308,25 @@ private theorem Tally.slot {a s cached : BeaconState preset fork} {next : Slot} 
     life := tally.life.trans (.of_data rfl)
     persists := tally.persists.trans (.of_data rfl) }
 
-/-- A block from Fulu and before Gloas extends the tally by one block. -/
+/-- A block from Fulu extends the tally by one block. -/
 private theorem Tally.block {a s t : BeaconState preset fork} {engine : ExecutionEngine preset fork}
     {block : BeaconBlock preset fork} {n : ℕ} {deb conv props sl : Finset ValidatorIndex}
     {pc : ValidatorIndex → ℕ} {credits shares : ℕ}
     (tally : Tally a s n deb conv props sl pc credits shares)
-    (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork)
+    (fulu : .fusaka ≤ fork)
     (computed : processBlock config checks engine s block = .ok t) :
     ∃ (deb' conv' props' sl' : Finset ValidatorIndex) (pc' : ValidatorIndex → ℕ)
       (credits' shares' : ℕ), Tally a t (n + 1) deb' conv' props' sl' pc' credits' shares' := by
   obtain ⟨paid, cv, slashed, sync, other, slash, proposer, credit, share, ledger,
     paidCard, convCard, credited, penalized, newly, rewards, syncRead, potential, livesB, lifeB,
-    eligibleB⟩ := block_balances early fulu tally.matched computed
+    eligibleB⟩ := block_balances fulu tally.matched computed
   have altair : .altair ≤ fork := Nat.le_trans (by decide) fulu
   have frame := frame_processBlock computed
-  have steady : Steady s t := ⟨stepKeeps_processBlock computed, effectiveKept_block early computed⟩
+  have steady : Steady s t := ⟨stepKeeps_processBlock computed, effectiveKept_processBlock computed⟩
   have within := tally.within.steady steady
   have committee : ∀ altair : .altair ≤ fork,
       t.currentSyncCommittee altair = s.currentSyncCommittee altair :=
-    fun altair => committee_processBlock early altair computed
+    fun altair => processBlock_currentSyncCommittee altair computed
   have syncMono : ∀ v, syncAt s (syncRewardAt a) v ≤ syncAt t (syncRewardAt a) v :=
     syncAt_le frame committee _
   have backMono : ∀ v, slashBackAt s v ≤ slashBackAt t v := slashBackAt_le frame steady.effective
@@ -423,7 +386,7 @@ private theorem Tally.block {a s t : BeaconState preset fork} {engine : Executio
       propsCard := ?_
       idle := fun h => absurd h (Nat.succ_ne_zero n)
       propsPos := ?_
-      syncRead := fun _ => (tally.within.read early).mp syncRead
+      syncRead := fun _ => tally.within.read.mp syncRead
       lives := tally.lives.trans livesB tally.life (.of_frame frame)
       life := tally.life.trans lifeB
       persists := tally.persists.trans (.of_frame frame)
@@ -573,9 +536,9 @@ private theorem recentFlagSum_le (s : BeaconState preset fork) (altair : .altair
 
 end Epoch
 
-/-- The tally of a run inside one epoch, from Fulu and before Gloas, read at its last state. -/
+/-- The tally of a run inside one epoch, from Fulu, read at its last state. -/
 private theorem Run.tally {F : Fork} {a : BeaconState preset F} {y : ForkedBeaconState preset}
-    (tail : Run config checks ⟨F, a⟩ y) (early : y.fork < .glamsterdam)
+    (tail : Run config checks ⟨F, a⟩ y)
     (same : getCurrentEpoch y.state = getCurrentEpoch a) (matched : BalancesMatch a) :
     ∃ b : BeaconState preset F, y = ⟨F, b⟩ ∧
       (.fusaka ≤ F → ∃ (deb conv props sl : Finset ValidatorIndex) (pc : ValidatorIndex → ℕ)
@@ -585,12 +548,12 @@ private theorem Run.tally {F : Fork} {a : BeaconState preset F} {y : ForkedBeaco
         (credits shares : ℕ), Tally a s pre.blockCount deb conv props sl pc credits shares))
       ⟨a, rfl, fun _ => ⟨_, _, _, _, _, _, _,
         by simpa [Run.blockCount] using Tally.start a matched⟩⟩
-      (fun engine signed due ok pre early prior => by
+      (fun engine signed due ok pre prior => by
         obtain ⟨_, eq, prior⟩ := prior
         cases eq
         refine ⟨_, rfl, fun fulu => ?_⟩
         obtain ⟨_, _, _, _, _, _, _, tally⟩ := prior fulu
-        exact tally.block early fulu (applySignedBlock_ok ok).2.1)
+        exact tally.block fulu (applySignedBlock_ok ok).2.1)
       (fun pre ok last computed epoch prior => by
         have count : (pre.snoc (.slot ok)).blockCount = pre.blockCount := rfl
         generalize pre.snoc (.slot ok) = run at count ⊢
@@ -601,23 +564,23 @@ private theorem Run.tally {F : Fork} {a : BeaconState preset F} {y : ForkedBeaco
         exact ⟨_, rfl, fun fulu => by
           obtain ⟨_, _, _, _, _, _, _, tally⟩ := prior fulu
           exact ⟨_, _, _, _, _, _, _, tally.slot computed epoch⟩⟩)
-      tail early same
+      tail same
 
-/-- Inside one epoch, from Fulu and before Gloas, take each validator with an exit set.
+/-- Inside one epoch, from Fulu, take each validator with an exit set.
 
 Its withdrawable epoch only rises, and moves only for a slashed validator. -/
 theorem Run.withdrawableKept_of_same_epoch {x y : ForkedBeaconState preset}
-    (tail : Run config checks x y) (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ y.fork)
+    (tail : Run config checks x y) (fulu : .fusaka ≤ y.fork)
     (same : getCurrentEpoch y.state = getCurrentEpoch x.state) (matched : BalancesMatch x.state) :
     WithdrawableKept x.state y.state := by
   obtain ⟨F, a⟩ := x
-  obtain ⟨b, rfl, tallied⟩ := Run.tally tail early same matched
+  obtain ⟨b, rfl, tallied⟩ := Run.tally tail same matched
   obtain ⟨_, _, _, _, _, _, _, tally⟩ := tallied fulu
   exact tally.lives.withdrawableKept
 
 /-! ## The branch corrections -/
 
-/-- Along a run inside one epoch, from Fulu and before Gloas, balances move by bounded amounts.
+/-- Along a run inside one epoch, from Fulu, balances move by bounded amounts.
 
 Read at the last state of the run:
 
@@ -637,7 +600,7 @@ Read at the last state of the run:
 - Effective balances stay. -/
 theorem Run.balanceCorrections_of_same_epoch {x y : ForkedBeaconState preset}
     (tail : Run config checks x y)
-    (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ y.fork)
+    (fulu : .fusaka ≤ y.fork)
     (same : getCurrentEpoch y.state = getCurrentEpoch x.state)
     (matched : BalancesMatch x.state) (exits : ExitsOrdered x.state) :
     let state := y.state
@@ -711,7 +674,7 @@ theorem Run.balanceCorrections_of_same_epoch {x y : ForkedBeaconState preset}
             withdrawalMaxEffectiveBalance preset x.fork validator) ∧
       x.fork = y.fork ∧ EffectiveKept x.state y.state := by
   obtain ⟨F, a⟩ := x
-  obtain ⟨b, rfl, tallied⟩ := Run.tally tail early same matched
+  obtain ⟨b, rfl, tallied⟩ := Run.tally tail same matched
   obtain ⟨deb, conv, props, sl, pc, credits, shares, tally⟩ := tallied fulu
   intro state slots p positions validator effective current before recent slashed totalGwei
     base seatReward seats sync syncProposer proposerCredit whistleblowerP slashBack
@@ -719,7 +682,6 @@ theorem Run.balanceCorrections_of_same_epoch {x y : ForkedBeaconState preset}
   have altair : .altair ≤ F := Nat.le_trans (by decide) fulu
   have capella : .shapella ≤ F := Nat.le_trans (by decide) fulu
   have electra : .pectra ≤ F := Nat.le_trans (by decide) fulu
-  have hegota : F < .hegota := Nat.lt_trans early (by decide)
   -- With a block, the sync step read the participant reward, its total and its proposer share.
   --
   -- So the last state reads them too.
@@ -729,7 +691,7 @@ theorem Run.balanceCorrections_of_same_epoch {x y : ForkedBeaconState preset}
       syncProposerReward reward = .ok share ∧ share.toNat = reward.toNat *
         PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat) := by
     intro positive
-    obtain ⟨reward, rewardOk⟩ := (tally.within.read early).mpr (tally.syncRead positive)
+    obtain ⟨reward, rewardOk⟩ := tally.within.read.mpr (tally.syncRead positive)
     obtain ⟨total, -, totalOk, -, -, -⟩ := syncParticipantReward_ok rewardOk
     obtain ⟨share, shareOk, shareValue⟩ := syncProposerReward_of_participant rewardOk
     refine ⟨reward, total, share, rewardOk, ?_, totalOk, getTotalActiveBalance_toNat totalOk,
@@ -774,20 +736,21 @@ theorem Run.balanceCorrections_of_same_epoch {x y : ForkedBeaconState preset}
         have := lt_size_of_isActiveAt_recent ((tally.within.recent i).mp recentB)
         omega
       · exact ite_eq_right isRecent
-    have bound := tally.potential altair weight (2 ^ 64) (Nat.le_refl _)
+    -- The potential counts every position of the registry, however large it is.
+    let count := max (2 ^ 64) b.validators.data.size
+    have bound := tally.potential altair weight count (Nat.le_max_left _ _)
       (tally.within.reads_back readsB) support
-    have upper := recentFlagSum_le b altair weight (2 ^ 64)
-    have sumEq : ∑ i ∈ Finset.range (2 ^ 64), weight i =
+    have upper := recentFlagSum_le b altair weight count
+    have sumEq : ∑ i ∈ Finset.range count, weight i =
         ∑ i ∈ positions with recent i, base i := by
-      rw [show ∑ i ∈ Finset.range (2 ^ 64), weight i =
-        ∑ i ∈ Finset.range (2 ^ 64), (if recent i = true then base i else 0) from rfl,
+      rw [show ∑ i ∈ Finset.range count, weight i =
+        ∑ i ∈ Finset.range count, (if recent i = true then base i else 0) from rfl,
         ← Finset.sum_filter]
       symm
       apply Finset.sum_subset
       · intro i member
         simp only [Finset.mem_filter, Finset.mem_range, positions] at member ⊢
-        exact ⟨Nat.lt_trans member.1 (BeaconState.validators_size_lt_of_lt_glamsterdam early b),
-          member.2⟩
+        exact ⟨Nat.lt_of_lt_of_le member.1 (Nat.le_max_right _ _), member.2⟩
       · intro i member notIn
         exfalso
         simp only [Finset.mem_filter, Finset.mem_range, positions, not_and] at member notIn

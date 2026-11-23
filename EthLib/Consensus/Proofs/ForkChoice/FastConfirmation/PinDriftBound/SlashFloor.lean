@@ -207,7 +207,7 @@ theorem epochFloor {g m n : ForkedBeaconState preset} (shared : Run config check
     intro a b pre' step post' split
     obtain ⟨epoch, -, bEarly⟩ := starts pre' step post' split
     have aEarly : a.fork < .glamsterdam := Nat.lt_of_le_of_lt step.chainStep.fork_le bEarly
-    exact run_same_epoch_effective pre' aEarly epoch iv.toNat inside
+    exact run_same_epoch_effective pre' epoch iv.toNat inside
   have positive' :
       0 < (EthLib.Consensus.parameters preset m.fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat := by
     rw [PinDrift.Internal.mspq_fusaka hm]; exact positive

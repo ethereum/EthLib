@@ -10,7 +10,7 @@ import EthLib.Consensus.Proofs.Transition.EpochPending
 /-!
 # Pending consolidation sources and lifecycle
 
-Every pending source remains in the validator registry along a run before Gloas.
+Every pending source remains in the validator registry along a run.
 
 Electra starts an empty queue, requests append existing indices, and processing drops a prefix.
 
@@ -294,11 +294,15 @@ private theorem withdrawals {capella : .shapella ≤ fork}
     all_goals exact fun _ _ => rfl) ok
 
 private theorem blockExecution {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork}
-    (early : fork < .glamsterdam)
     (ok : processBlockExecution config checks engine state body bellatrix = .ok after) :
     QueueKept state after := by
   unfold processBlockExecution at ok
-  rw [dite_eq_right (show ¬ .glamsterdam ≤ fork from Nat.not_le_of_lt early)] at ok
+  split at ok
+  · simp only [bind_ok_iff] at ok
+    obtain ⟨_, withdrawn, bid⟩ := ok
+    apply (withdrawals withdrawn).trans
+    obtain ⟨_, rfl⟩ := processExecutionPayloadBid_eq bid
+    rfl
   split at ok
   · simp only [bind_ok_iff] at ok
     obtain ⟨_, withdrawn, paid⟩ := ok
@@ -310,6 +314,47 @@ private theorem blockExecution {body : BeaconBlockBody preset fork} {bellatrix :
     · obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok ok
       rfl
     · cases ok; rfl
+
+/-- From Gloas, the payload of the parent is a step of a relation that each request is.
+
+Its other parts are block frames that keep the queue and the validators.
+
+So the relation must hold across those, and across the withdrawal and consolidation requests. -/
+private theorem parentPayload_of (step : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, step s s)
+    (trans : ∀ {a b c}, step a b → step b c → step a c)
+    (keep : ∀ {a b : BeaconState preset fork}, QueueKept a b → BlockFrame a b →
+      b.validators = a.validators → step a b)
+    (withdrawal : ∀ {a b} {electra : .pectra ≤ fork} {request : WithdrawalRequest},
+      processWithdrawalRequest config a electra request = .ok b → step a b)
+    (consolidation : ∀ {a b} {electra : .pectra ≤ fork} {request : ConsolidationRequest},
+      processConsolidationRequest config a electra request = .ok b → step a b)
+    {gloas : .glamsterdam ≤ fork} {body : BeaconBlockBody preset fork}
+    (ok : processParentExecutionPayload config checks state gloas body = .ok after) :
+    step state after := by
+  rcases processParentExecutionPayload_ok ok with ⟨-, -, rfl⟩ |
+    ⟨-, _, _, _, _, _, _, _, settledOk, depositsOk, withdrawalsOk, consolidationsOk, buildersOk,
+      exitsOk, -, rfl⟩
+  · exact refl _
+  have folds {α : Type} {f : BeaconState preset fork → α → Except TransitionError _}
+      (each : ∀ a x b, f a x = .ok b → step a b) {items : List α} {a b : BeaconState preset fork}
+      (ok : items.foldlM f a = .ok b) : step a b :=
+    (foldlM_ok_steps step refl trans each ok).1
+  have settled := settleParentPayment_eq settledOk
+  refine trans (keep (by rw [settled]; rfl) (frame_settleParentPayment settledOk)
+      (by rw [settled])) <|
+    trans (folds (fun _ _ _ ok => keep (depositRequest ok) (frame_processDepositRequest ok)
+      (processDepositRequest_ok ok).2.1) depositsOk) <|
+    trans (folds (fun _ _ _ ok => withdrawal ok) withdrawalsOk) <|
+    trans (folds (fun _ _ _ ok => consolidation ok) consolidationsOk) <|
+    trans (folds (fun _ _ _ ok => by
+      have frame := frame_processBuilderDepositRequest ok
+      obtain ⟨_, rfl⟩ := processBuilderDepositRequest_builders ok
+      exact keep rfl frame rfl) buildersOk) <|
+    trans (folds (fun _ _ _ ok => by
+      have frame := frame_processBuilderExitRequest ok
+      obtain ⟨_, rfl⟩ := processBuilderExitRequest_builders ok
+      exact keep rfl frame rfl) exitsOk) (keep rfl (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl)
 
 end QueueKept
 
@@ -360,28 +405,32 @@ theorem attestation {attestation : Attestation preset fork} {parentSlot : Slot}
   (QueueKept.attestation electra ok).queue
 
 theorem blockExecution {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork}
-    (early : fork < .glamsterdam)
     (ok : processBlockExecution config checks engine state body bellatrix = .ok after) :
     SamePendingQueue state after :=
-  (QueueKept.blockExecution early ok).queue
+  (QueueKept.blockExecution ok).queue
 
 end SamePendingQueue
 
-/-- A property of the pending consolidation queue crosses an upgrade before Gloas.
+/-- A property of the pending consolidation queue crosses an upgrade.
 
 It holds vacuously before Electra, and the Electra upgrade starts with an empty queue.
 
-The Fulu upgrade must carry it. -/
+The later upgrades carry the slot, the registry, the queue and the earliest consolidation epoch.
+
+The property must cross such a carry. -/
 private theorem upgradeNext_pending (P : ∀ {f : Fork}, BeaconState preset f → Prop)
     (vacuous : ∀ {f : Fork} (s : BeaconState preset f), f < .pectra → P s)
     (empty : ∀ t : BeaconState preset .pectra,
       (∀ electra, (t.pendingConsolidations electra).data.toList = []) → P t)
-    (fulu : ∀ {s : BeaconState preset .pectra} {t : BeaconState preset .fusaka},
-      upgradeToFulu config s = .ok t → P s → P t)
+    (carried : ∀ {f g : Fork} {s : BeaconState preset f} {t : BeaconState preset g}
+      (electra : .pectra ≤ f) (later : .pectra ≤ g), t.slot = s.slot →
+      t.validators.data = s.validators.data →
+      (t.pendingConsolidations later).data = (s.pendingConsolidations electra).data →
+      t.earliestConsolidationEpoch later = s.earliestConsolidationEpoch electra → P s → P t)
     {pre : ForkedBeaconState preset}
     {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
-    (holds : P pre.state) (ok : upgradeNext config checks pre = .ok post)
-    (early : post.val.fork < .glamsterdam) : P post.val.state := by
+    (holds : P pre.state) (ok : upgradeNext config checks pre = .ok post) :
+    P post.val.state := by
   obtain ⟨fork, state⟩ := pre
   cases fork <;>
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
@@ -422,11 +471,21 @@ private theorem upgradeNext_pending (P : ∀ {f : Fork}, BeaconState preset f �
     rw [queue]
     simp [carryFields, show ¬ Fork.pectra ≤ .dencun from by decide]
   · obtain ⟨_, upgraded, rfl⟩ := ok
-    exact fulu upgraded holds
-  · obtain ⟨_, _, rfl⟩ := ok
-    exact False.elim (Nat.lt_irrefl _ early)
-  · obtain ⟨_, _, rfl⟩ := ok
-    exact False.elim (Nat.not_le_of_lt early (show Fork.glamsterdam ≤ .hegota from by decide))
+    simp only [upgradeToFulu, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at upgraded
+    obtain ⟨_, _, rfl⟩ := upgraded
+    exact carried (s := state) (show Fork.pectra ≤ .pectra by decide)
+      (show Fork.pectra ≤ .fusaka by decide) rfl rfl rfl rfl holds
+  · obtain ⟨_, upgraded, rfl⟩ := ok
+    unfold upgradeToGloas at upgraded
+    obtain ⟨_, -, rest⟩ := bind_ok_iff.mp upgraded
+    obtain ⟨_, -, onboarded⟩ := bind_ok_iff.mp rest
+    obtain ⟨⟨_, _, rfl⟩, -⟩ := onboardBuildersFromPendingDeposits_spec onboarded
+    exact carried (s := state) (show Fork.pectra ≤ .fusaka by decide)
+      (show Fork.pectra ≤ .glamsterdam by decide) rfl rfl rfl rfl holds
+  · obtain ⟨_, upgraded, rfl⟩ := ok
+    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    exact carried (s := state) (show Fork.pectra ≤ .glamsterdam by decide)
+      (show Fork.pectra ≤ .hegota by decide) rfl rfl rfl rfl holds
 
 /-- Every pending consolidation names a source inside the registry. -/
 def PendingSources {f : Fork} (s : BeaconState preset f) : Prop :=
@@ -1548,7 +1607,7 @@ private theorem executionRequests {body : BeaconBlockBody preset fork}
 /-- A block keeps the invariant and keeps the queue apart, step by step of the block.
 
 A block frame does not carry the queue, so each step reads its own queue lemma. -/
-private theorem block (early : fork < .glamsterdam)
+private theorem block
     (holds : PendingConsolidationsOrdered config (getCurrentEpoch state).toNat state ∧
       PendingApart state)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
@@ -1560,7 +1619,6 @@ private theorem block (early : fork < .glamsterdam)
   case neg =>
     exact ⟨⟨fun witness => absurd witness electra, fun witness => absurd witness electra⟩,
       fun witness => absurd witness electra⟩
-  have noGloas : ¬ Fork.glamsterdam ≤ fork := Nat.not_le_of_lt early
   let Held (a : BeaconState preset fork) : Prop :=
     PendingConsolidationsOrdered config (getCurrentEpoch a).toNat a ∧ PendingApart a
   let Kept (a b : BeaconState preset fork) : Prop := Held a → Held b
@@ -1568,13 +1626,24 @@ private theorem block (early : fork < .glamsterdam)
     two ∘ one
   obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
   have head : Kept state input :=
-    OperationsInput.step_of Kept (fun _ => id) trans (fun gloas _ => absurd gloas noGloas)
+    OperationsInput.step_of Kept (fun _ => id) trans
+      (fun _ paid => QueueKept.parentPayload_of Kept (fun _ => id) trans
+        (fun queue frame validators h =>
+          ⟨h.1.framed queue (.of_data (congrArg (·.data) validators))
+            (WithdrawalKept.of_data (congrArg (·.data) validators)) frame.slot,
+          h.2.kept queue (.of_data (congrArg (·.data) validators))⟩)
+        (fun ok h => ⟨h.1.framed (QueueKept.withdrawalRequest ok)
+          (registryLifecycle_processWithdrawalRequest ok) (WithdrawalKept.withdrawalRequest ok)
+          (frame_processWithdrawalRequest ok).slot,
+          h.2.kept (QueueKept.withdrawalRequest ok)
+            (registryLifecycle_processWithdrawalRequest ok)⟩)
+        (fun ok h => request h delay ok) paid)
       (fun headed => by obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed; exact id)
-      (fun _ executed h => ⟨h.1.framed (QueueKept.blockExecution early executed)
+      (fun _ executed h => ⟨h.1.framed (QueueKept.blockExecution executed)
         (.of_data (congrArg (·.data) (processBlockExecution_validators executed)))
         (WithdrawalKept.blockExecution executed)
         (frame_processBlockExecution executed).slot,
-        h.2.kept (QueueKept.blockExecution early executed)
+        h.2.kept (QueueKept.blockExecution executed)
           (.of_data (congrArg (·.data) (processBlockExecution_validators executed)))⟩)
       (fun revealed => by
         obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
@@ -1601,7 +1670,7 @@ private theorem block (early : fork < .glamsterdam)
         (frame_processBlsToExecutionChange changed).slot,
         h.2.kept (QueueKept.bls changed) (registryLifecycle_processBlsToExecutionChange changed)⟩)
       (fun requested h => executionRequests h delay requested)
-      (fun {_ _ gloas} _ => absurd gloas noGloas) operated
+      (fun paid => by rw [processPayloadAttestation_eq paid]; exact id) operated
   have tail : Kept last after := by
     split at synced
     · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
@@ -1686,8 +1755,7 @@ private theorem advance
 private theorem upgrade {pre : ForkedBeaconState preset}
     {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
     (holds : PendingConsolidationsOrdered config bound pre.state ∧ PendingApart pre.state)
-    (ok : upgradeNext config checks pre = .ok post)
-    (early : post.val.fork < .glamsterdam) :
+    (ok : upgradeNext config checks pre = .ok post) :
     PendingConsolidationsOrdered config bound post.val.state ∧ PendingApart post.val.state :=
   upgradeNext_pending (P := fun s => PendingConsolidationsOrdered config bound s ∧ PendingApart s)
     (fun _ before => ⟨⟨fun electra => absurd electra (Nat.not_le_of_lt before),
@@ -1695,20 +1763,17 @@ private theorem upgrade {pre : ForkedBeaconState preset}
       fun electra => absurd electra (Nat.not_le_of_lt before)⟩)
     (fun _ empty => ⟨⟨fun electra => by simp [empty electra],
       fun electra => by simp [empty electra]⟩, fun electra => by simp [empty electra]⟩)
-    (fun upgraded holds => by
-      simp only [upgradeToFulu, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at upgraded
-      obtain ⟨_, _, rfl⟩ := upgraded
-      refine ⟨⟨fun electra => ?_, fun electra => ?_⟩, fun electra => ?_⟩
-      · simpa [carryFields, carryList, carryRooted, getCurrentEpoch] using
-          holds.1.1 (show Fork.pectra ≤ .pectra from Nat.le_refl _)
-      · simpa [carryFields, carryList, carryRooted] using
-          holds.1.2 (show Fork.pectra ≤ .pectra from Nat.le_refl _)
-      · simpa [carryFields, carryList, carryRooted] using
-          holds.2 (show Fork.pectra ≤ .pectra from Nat.le_refl _))
-    holds ok early
+    (fun {_ _ s t} electra later slot validators queue earliest holds => by
+      have epoch : getCurrentEpoch t = getCurrentEpoch s := by
+        simp only [getCurrentEpoch, slot]
+      refine ⟨⟨fun _ => ?_, fun _ => ?_⟩, fun _ => ?_⟩
+      · simpa only [queue, validators, epoch] using holds.1.1 electra
+      · simpa only [queue, validators, earliest] using holds.1.2 electra
+      · simpa only [queue, validators] using holds.2 electra)
+    holds ok
 
 private theorem step {x y : ForkedBeaconState preset}
-    (step : Step config checks x y) (early : y.fork < .glamsterdam)
+    (step : Step config checks x y)
     (holds : PendingConsolidationsOrdered config (getCurrentEpoch x.state).toNat x.state ∧
       PendingApart x.state)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) :
@@ -1719,15 +1784,14 @@ private theorem step {x y : ForkedBeaconState preset}
     obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp ok
     have initial := advance holds slotOk
     have rest := processUpgrades_induction
-      (property := fun post => post.fork < .glamsterdam →
+      (property := fun post =>
         PendingConsolidationsOrdered config (getCurrentEpoch advanced).toNat post.state ∧
           PendingApart post.state)
-      (fun {pre post} h ok early => upgrade (h (Nat.lt_trans post.property early)) ok early)
-      (fun _ => initial) upgrades
+      (fun h ok => upgrade h ok) initial upgrades
     rw [show getCurrentEpoch y.state = getCurrentEpoch advanced from
       congrArg (computeEpochAtSlot preset) (processUpgrades_slot upgrades)]
-    exact rest early
-  | block engine signed due ok => exact block early holds delay (applySignedBlock_ok ok).2.1
+    exact rest
+  | block engine signed due ok => exact block holds delay (applySignedBlock_ok ok).2.1
 
 end PendingConsolidationsOrdered
 
@@ -1750,13 +1814,12 @@ theorem EpochStage.Edge.pendingConsolidationsOrdered {stage : EpochStage}
   rw [show getCurrentEpoch t = getCurrentEpoch s from congrArg (computeEpochAtSlot preset) slot]
   exact holds.stage edge
 
-/-- From genesis and before Gloas, the pending consolidations of a run are ordered.
+/-- From genesis, the pending consolidations of a run are ordered.
 
 Each names two different validators, and its target is in the registry. -/
 private theorem Run.pendingConsolidationsOrdered_apart {g x : ForkedBeaconState preset}
     (run : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g)
-    (early : x.fork < .glamsterdam)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) :
     PendingConsolidationsOrdered config (getCurrentEpoch x.state).toNat x.state ∧
       PendingApart x.state := by
@@ -1768,21 +1831,19 @@ private theorem Run.pendingConsolidationsOrdered_apart {g x : ForkedBeaconState 
     exact ⟨⟨fun electra => absurd electra notElectra, fun electra => absurd electra notElectra⟩,
       fun electra => absurd electra notElectra⟩
   | snoc pre step ih =>
-    exact PendingConsolidationsOrdered.step step early
-      (ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early)) delay
+    exact PendingConsolidationsOrdered.step step ih delay
 
-/-- From genesis and before Gloas, the pending consolidations of a run are ordered.
+/-- From genesis, the pending consolidations of a run are ordered.
 
 So no pending source can withdraw at the current epoch, whether it is slashed or not. -/
 theorem Run.pendingConsolidationsOrdered {g x : ForkedBeaconState preset}
     (run : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g)
-    (early : x.fork < .glamsterdam)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) :
     PendingConsolidationsOrdered config (getCurrentEpoch x.state).toNat x.state :=
-  (run.pendingConsolidationsOrdered_apart genesis early delay).1
+  (run.pendingConsolidationsOrdered_apart genesis delay).1
 
-/-- From genesis and before Gloas, each pending consolidation of a run has two validators.
+/-- From genesis, each pending consolidation of a run has two validators.
 
 Its source is not its target.
 
@@ -1792,31 +1853,29 @@ Different keys name different indices. -/
 theorem Run.pendingConsolidations_apart {g x : ForkedBeaconState preset}
     (run : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g)
-    (early : x.fork < .glamsterdam)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) :
     ∀ electra : .pectra ≤ x.fork, ∀ c ∈ (x.state.pendingConsolidations electra).data.toList,
       c.sourceIndex ≠ c.targetIndex :=
-  fun electra c member => ((run.pendingConsolidationsOrdered_apart genesis early delay).2
+  fun electra c member => ((run.pendingConsolidationsOrdered_apart genesis delay).2
     electra c member).1
 
-/-- From genesis and before Gloas, each pending consolidation of a run has a target in the registry.
+/-- From genesis, each pending consolidation of a run has a target in the registry.
 
 A request finds its target by pubkey in the registry, which only grows. -/
 theorem Run.pendingConsolidation_targets {g x : ForkedBeaconState preset}
     (run : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g)
-    (early : x.fork < .glamsterdam)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) :
     ∀ electra : .pectra ≤ x.fork, ∀ c ∈ (x.state.pendingConsolidations electra).data.toList,
       c.targetIndex.toNat < x.state.validators.data.size :=
-  fun electra c member => ((run.pendingConsolidationsOrdered_apart genesis early delay).2
+  fun electra c member => ((run.pendingConsolidationsOrdered_apart genesis delay).2
     electra c member).2
 
 /-- Pending sources are distinct and retain their activation and withdrawal ordering. -/
 theorem Run.pendingConsolidation_invariant {g x : ForkedBeaconState preset}
     (run : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g)
-    (early : x.fork < .glamsterdam) (electra : .pectra ≤ x.fork)
+    (electra : .pectra ≤ x.fork)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) :
     ((x.state.pendingConsolidations electra).data.toList.map (·.sourceIndex)).Nodup ∧
     ∀ c ∈ (x.state.pendingConsolidations electra).data.toList,
@@ -1824,18 +1883,17 @@ theorem Run.pendingConsolidation_invariant {g x : ForkedBeaconState preset}
         v.activationEpoch ≤ getCurrentEpoch x.state ∧
         v.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat ≤
           v.withdrawableEpoch.toNat ∧ v.exitEpoch ≠ FAR_FUTURE_EPOCH :=
-  (run.pendingConsolidationsOrdered genesis early delay).1 electra
+  (run.pendingConsolidationsOrdered genesis delay).1 electra
 
 /-- Every pending consolidation of a state of a run names a source inside the registry. -/
 theorem Run.pendingConsolidation_sources {g x : ForkedBeaconState preset}
     (run : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g)
-    (early : x.fork < .glamsterdam)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) :
     PendingSources x.state := by
   intro electra c member
   obtain ⟨v, found, -⟩ :=
-    (run.pendingConsolidation_invariant genesis early electra delay).2 c member
+    (run.pendingConsolidation_invariant genesis electra delay).2 c member
   exact (Array.getElem?_eq_some_iff.mp found).1
 
 /-- From Electra, registry updates preserve the withdrawable epoch of an assigned exit. -/
@@ -2115,78 +2173,64 @@ variable {f : Fork} {s t : BeaconState preset f}
 
 /-- The operations of a block keep the frame, the lifecycle and the queue. -/
 private theorem appendStep_processOperations {body : BeaconBlockBody preset f} {parent : Slot}
-    (early : f < .glamsterdam) (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ok : processOperations config checks s body parent = .ok t) :
     AppendStep s t := by
-  unfold processOperations at ok
-  rw [dite_eq_right (show ¬ .glamsterdam ≤ f from Nat.not_le_of_lt early)] at ok
-  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at ok
-  obtain ⟨_, _, _, _, _, proposers, _, attesters, _, attested, _, deposits, exited,
-    exits, changed, changes, requests⟩ := ok
-  have c : AppendStep exited changed := by
-    unfold processBlsToExecutionChanges at changes
-    split at changes
-    · rw [← Array.foldlM_toList] at changes
-      exact AppendStep.fold (fun _ _ _ ok => appendStep_processBlsToExecutionChange ok) changes
-    · cases changes; exact AppendStep.refl _
-  have r : AppendStep changed t := by
-    split at requests
-    · exact appendStep_processExecutionRequests delay requests
-    · cases requests; exact AppendStep.refl _
+  obtain ⟨_, _, _, proposers, attesters, attested, rest⟩ :=
+    processOperations_folds_of AppendStep AppendStep.refl (fun one two => one.trans two)
+      (fun ok => appendStep_processDeposit ok) (fun ok => appendStep_processVoluntaryExit ok)
+      (fun ok => appendStep_processBlsToExecutionChange ok)
+      (fun ok => appendStep_processExecutionRequests delay ok)
+      (fun ok => by rw [processPayloadAttestation_eq ok]; exact AppendStep.refl _) ok
   exact (AppendStep.fold (fun _ _ _ ok => appendStep_processProposerSlashing ok) proposers).trans <|
     (AppendStep.fold (fun _ _ _ ok => appendStep_processAttesterSlashing ok) attesters).trans <|
-    (AppendStep.fold (fun _ _ _ ok => appendStep_processAttestation ok) attested).trans <|
-    (AppendStep.fold (fun _ _ _ ok => appendStep_processDeposit ok) deposits).trans <|
-    (AppendStep.fold (fun _ _ _ ok => appendStep_processVoluntaryExit ok) exits).trans <|
-    c.trans r
+    (AppendStep.fold (fun _ _ _ ok => appendStep_processAttestation ok) attested).trans rest
 
-/-- A block from Altair and before Gloas keeps the frame and the lifecycle.
+/-- A block from Altair keeps the frame and the lifecycle.
 
 It appends to the queue of pending consolidations. -/
 theorem appendStep_processBlock {engine : ExecutionEngine preset f}
-    {block : BeaconBlock preset f} (altair : .altair ≤ f) (early : f < .glamsterdam)
+    {block : BeaconBlock preset f} (altair : .altair ≤ f)
     (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ok : processBlock config checks engine s block = .ok t) :
     Frame s t ∧ RegistryLifecycle s t ∧ Appends s t := by
-  unfold processBlock at ok
-  simp only [altair, ↓reduceDIte] at ok
-  unfold processBlockAltair at ok
-  simp only [stateBeforeOperations, bind_assoc, bind_ok_iff] at ok
-  obtain ⟨paid, paidOk, headed, headedOk, executed, executedOk, revealed, revealedOk, voted,
-    votedOk, operated, operatedOk, synced⟩ := ok
-  rw [dite_eq_right (show ¬ .glamsterdam ≤ f from Nat.not_le_of_lt early)] at paidOk
-  cases paidOk
-  have header : AppendStep s headed := by
-    obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
-    exact AppendStep.of_data (frame_processBlockHeader headedOk).toFrame rfl fun _ => rfl
-  have e : AppendStep headed executed := by
-    split at executedOk
-    · exact AppendStep.of_data (frame_processBlockExecution executedOk).toFrame
-        (congrArg (·.data) (processBlockExecution_validators executedOk))
-        (fun _ => SamePendingQueue.blockExecution early executedOk)
-    · cases executedOk; exact AppendStep.refl _
-  have randao : AppendStep executed revealed := by
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealedOk
-    exact AppendStep.of_data (frame_processRandao revealedOk).toFrame rfl fun _ => rfl
-  have v : AppendStep revealed voted := by
-    split at votedOk
-    · obtain ⟨_, _, rest⟩ := processEth1Data_eq votedOk
-      exact AppendStep.of_data (frame_processEth1Data votedOk).toFrame (by rw [← rest])
-        (fun _ => by unfold SamePendingQueue; rw [← rest])
-    · cases votedOk; exact AppendStep.refl _
+  obtain ⟨input, operated, started, operatedOk, -, synced⟩ := processBlock_operationsInput ok
+  have head : AppendStep s input :=
+    started.step_of AppendStep AppendStep.refl (fun one two => one.trans two)
+      (fun _ paid => QueueKept.parentPayload_of AppendStep AppendStep.refl
+        (fun one two => one.trans two)
+        (fun queue frame validators =>
+          AppendStep.of_data frame.toFrame (congrArg (·.data) validators) fun _ => queue.queue)
+        (fun ok => appendStep_processWithdrawalRequest ok)
+        (fun ok => appendStep_processConsolidationRequest delay ok) paid)
+      (fun headed => by
+        have frame := (frame_processBlockHeader headed).toFrame
+        obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed
+        exact AppendStep.of_data frame rfl fun _ => rfl)
+      (fun _ executed => AppendStep.of_data (frame_processBlockExecution executed).toFrame
+        (congrArg (·.data) (processBlockExecution_validators executed))
+        (fun _ => SamePendingQueue.blockExecution executed))
+      (fun revealed => by
+        have frame := (frame_processRandao revealed).toFrame
+        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
+        exact AppendStep.of_data frame rfl fun _ => rfl)
+      (fun _ voted => by
+        obtain ⟨_, _, rest⟩ := processEth1Data_eq voted
+        exact AppendStep.of_data (frame_processEth1Data voted).toFrame (by rw [← rest])
+          (fun _ => by unfold SamePendingQueue; rw [← rest]))
   have sync : AppendStep operated t := by
+    simp only [altair, ↓reduceDIte] at synced
     have frame := (frame_processSyncAggregate synced).toFrame
     obtain ⟨balances, rfl⟩ := processSyncAggregate_eq synced
     exact AppendStep.of_data frame rfl fun _ => rfl
-  exact header.trans <| e.trans <| randao.trans <| v.trans <|
-    (appendStep_processOperations early delay operatedOk).trans sync
+  exact head.trans <| (appendStep_processOperations delay operatedOk).trans sync
 
-/-- A block from Altair and before Gloas keeps the frame, the lifecycle and the queue. -/
+/-- A block from Altair keeps the frame and the lifecycle, and its queue only grows. -/
 theorem riseStep_processBlock {engine : ExecutionEngine preset f}
-    {block : BeaconBlock preset f} (altair : .altair ≤ f) (early : f < .glamsterdam)
+    {block : BeaconBlock preset f} (altair : .altair ≤ f)
     (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ok : processBlock config checks engine s block = .ok t) : RiseStep s t :=
-  let ⟨frame, life, appends⟩ := appendStep_processBlock altair early delay ok
+  let ⟨frame, life, appends⟩ := appendStep_processBlock altair delay ok
   ⟨frame, life, appends.grows⟩
 
 end RiseBlock

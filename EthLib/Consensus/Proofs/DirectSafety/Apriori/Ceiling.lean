@@ -392,9 +392,9 @@ private theorem epoch_issuance_actual {r s w : ForkedBeaconState preset}
   obtain ⟨just, pass, ⟨rewardState, rewardEvents⟩, justified, scored, rewarded, rewardsSame,
     syncNone⟩ := epochReplay_rewards altair (epochBalanceReplay_trace epochReplay)
   -- The pass reads the total of `r`, and its participants weigh at most the ceiling.
-  obtain ⟨activeKept, effectiveKept, passEpoch⟩ := pass_kept inner electra sEarly same cachedOk
+  obtain ⟨activeKept, effectiveKept, passEpoch⟩ := pass_kept inner electra same cachedOk
     justified scored
-  have totalSame := total_active_congr rEarly sEarly
+  have totalSame := total_active_congr
     (activeKept.mono (getCurrentEpoch_le_activityFixedEpoch _)) passEpoch effectiveKept
   have cases : (∃ total perIncrement, getTotalActiveBalance r.state = .ok total ∧
       getBaseRewardPerIncrement preset total = .ok perIncrement) ∨
@@ -664,7 +664,7 @@ theorem activeStake_eq_of_same_epoch {r y : ForkedBeaconState preset}
     ∑ i ∈ (getActiveValidatorIndices y.state epoch).toFinset, effectiveAt y i.toNat =
       ∑ i ∈ (getActiveValidatorIndices r.state epoch).toFinset, effectiveAt r i.toNat := by
   have rEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps inner.chainSteps) early
-  have weights := run_same_epoch_effective inner early same
+  have weights := run_same_epoch_effective inner same
   rw [(activeKept_of_chainSteps inner.chainSteps).getActiveValidatorIndices_eq
     (UInt64.le_trans low (getCurrentEpoch_le_activityFixedEpoch _))]
   refine Finset.sum_congr rfl fun i member => weights i.toNat ?_
@@ -939,7 +939,7 @@ private theorem newly_slashed_initial_classification {g x y : ForkedBeaconState 
     by_cases exited : v.exitEpoch ≤ getCurrentEpoch x.state
     · exact .inr ⟨v, rfl, unslashed, exited,
         tail.newly_slashed_initial_exited_unwithdrawable caps.activation caps.compounding
-          early i v w before after unslashed slashed exited⟩
+          i v w before after unslashed slashed exited⟩
     · have live := UInt64.not_le.mp exited
       exact .inl (by simp [after, assigned, live])
 
@@ -1104,7 +1104,7 @@ theorem consolidationChurn_mono {low high : Nat} (le : low ≤ high) :
 
 The epoch prefix starts after slot processing, which keeps the validator registry. -/
 private theorem newly_slashed_epoch_prefix {x m : ForkedBeaconState preset}
-    (pre : Run config checks x m) (caps : CapOrder preset) (early : m.fork < .glamsterdam)
+    (pre : Run config checks x m) (caps : CapOrder preset)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     {s t : BeaconState preset m.fork}
     (same : s.validators = m.state.validators)
@@ -1118,7 +1118,7 @@ private theorem newly_slashed_epoch_prefix {x m : ForkedBeaconState preset}
     w.slashed = true ∧ w.exitEpoch = u.exitEpoch ∧
       (getCurrentEpoch x.state).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
         w.withdrawableEpoch.toNat := by
-  have lower := pre.newly_slashed_withdrawableEpoch caps.activation caps.compounding early
+  have lower := pre.newly_slashed_withdrawableEpoch caps.activation caps.compounding
     delay i v u initial middle unslashed slashed
   have located : s.validators.data[i]? = some u := by rwa [same]
   have kept := trace.slashed_withdrawableEpoch_mono i u w located site slashed lower.1
@@ -1271,15 +1271,14 @@ private theorem epoch_delayed_slashing_nondebit {x m n : ForkedBeaconState prese
   cases slashed : u.slashed with
   | true =>
     rcases start with ⟨unslashed, short⟩ | ⟨vslashed, wait⟩
-    · have kept := newly_slashed_epoch_prefix pre caps
-        (Nat.lt_of_le_of_lt step.chainStep.fork_le early) delay same fixed
+    · have kept := newly_slashed_epoch_prefix pre caps delay same fixed
         i.toNat v u w initial located found unslashed slashed
       exact sites.2.2.2.2.2.1 rfl i w found kept.1
         (newly_slashed_epoch_not_due (getCurrentEpoch x.state)
           (getCurrentEpoch registered) w kept.2.2 (by rwa [epoch]))
     · -- A key slashed at the start keeps its slash and its withdrawable epoch.
       obtain ⟨flag, -, lower⟩ := Run.slashed_withdrawableEpoch_mono_epoch pre caps.activation
-        caps.compounding (Nat.lt_of_le_of_lt step.chainStep.fork_le early) cachedOk fixed
+        caps.compounding cachedOk fixed
         i.toNat v w initial found vslashed (assigned vslashed)
       refine sites.2.2.2.2.2.1 rfl i w found flag ?_
       intro due
@@ -2143,18 +2142,18 @@ private theorem FloorTrace.slot_transport {g x y : ForkedBeaconState preset}
   obtain ⟨u, found, life⟩ := (registryLifecycle_advanceSlot advanceOk).validators i v initial
   have kept : effectiveAt y i = effectiveAt ⟨x.fork, advanced⟩ i := by
     rcases activated with activated | fulu
-    · exact balanceDrift_upgrades_active upgrades early i u found
+    · exact balanceDrift_upgrades_active upgrades i u found
         (by rwa [life.activationEpoch activated])
     · rw [processUpgrades_eq_of_window upgrades fulu early]
   obtain ⟨last, done, balance, debt, slashed, raised⟩ := trace.slot_update advanceOk i
     (Array.getElem?_eq_some_iff.mp initial).1 balance high
   have tail : Run config checks x y := Run.nil.snoc (.slot ok)
   obtain ⟨z, located, mono⟩ := tail.validatorCap_mono caps.activation caps.compounding
-    early i v initial
+    i v initial
   have equal := Option.some.inj (located.symm.trans final)
   subst z
   have endpoint := (shared.append tail).effectiveBalance_capped genesis caps.activation
-    caps.compounding early w (Array.mem_of_getElem? final)
+    caps.compounding w (Array.mem_of_getElem? final)
   have old := capped.trans (UInt64.le_iff_toNat_le.mp mono)
   have current : effectiveAt y i ≤ (withdrawalMaxEffectiveBalance preset y.fork w).toNat := by
     simpa [effectiveAt, final] using UInt64.le_iff_toNat_le.mp endpoint
@@ -2325,7 +2324,7 @@ theorem FloorTrace.step_general_or_fulu {g x m y : ForkedBeaconState preset}
         positive quotient_le
     have tail : Run config checks ⟨fork, s⟩ ⟨fork, t⟩ := .snoc .nil (.block engine signed due ok)
     obtain ⟨z, located, mono⟩ := tail.validatorCap_mono caps.activation caps.compounding
-      early i.toNat u middle
+      i.toNat u middle
     have same := Option.some.inj (located.symm.trans final)
     subst z
     refine ⟨last, done, balance', debt, ?_, ?_, by omega, ?_, ?_, marks, ?_⟩

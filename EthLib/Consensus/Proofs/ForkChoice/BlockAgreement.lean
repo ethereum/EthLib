@@ -728,37 +728,4 @@ theorem Execution.blocks_of_partiallySynchronous_of_anchorSlot {GST Δ last : �
   · -- A collision of bounded honest stores contradicts their agreement.
     exact absurd collision (e.not_honestCollision_of_agree agree)
 
-/-- Before Gloas, synchrony and compatible finality deliver a block or name a collision.
-
-Admission uses the separate handler-success hypothesis, not synchrony alone. -/
-theorem Execution.blocks_of_partiallySynchronous {GST Δ last : ℕ}
-    (sync : e.PartiallySynchronous GST Δ) (preGloas : fork < .glamsterdam)
-    (admitted : BlocksAdmitted e GST Δ last)
-    {anchor : Store preset fork}
-    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (start : ∀ u ∈ J, e.start u = anchor) {v u : ValidatorIndex} (honest : v ∈ J)
-    (receiver : u ∈ J) {n k : ℕ}
-    (late : max (e.world n).time GST + Δ ≤ (e.world k).time) (bounded : (e.world k).time ≤ last)
-    (upToDate : UpToDate config checks sources (e.world k).time ((e.world k).view u)
-      ((e.world k).state u))
-    (finalizedKnown : ∃ finalizedBlock,
-      ((e.world k).state u).blocks[((e.world k).state u).finalizedCheckpoint.root]? =
-        some finalizedBlock)
-    {root : Root} {block : BeaconBlock preset fork}
-    (found : ((e.world n).state v).blocks[root]? = some block)
-    (final : ((e.world n).state v).getCheckpointBlock root
-      ((e.world k).state u).finalizedCheckpoint.epoch =
-        .ok ((e.world k).state u).finalizedCheckpoint.root) :
-    (((e.world k).state u).blocks[root]? = some block ∧
-      ∀ epoch checkpointRoot,
-        ((e.world k).state u).finalizedCheckpoint.epoch ≤ epoch →
-        ((e.world n).state v).getCheckpointBlock root epoch = .ok checkpointRoot →
-        ((e.world k).state u).getCheckpointBlock root epoch = .ok checkpointRoot) ∨
-    ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ last ∧ (e.world m).time ≤ last ∧
-      ∃ root collision, Store.findBlockCollision ((e.world n).state u)
-        ((e.world m).state v) [root] = some collision :=
-  e.blocks_of_partiallySynchronous_of_anchorSlot sync
-    (fun gloas => absurd gloas (Nat.not_le_of_lt preGloas)) admitted anchored honest receiver
-    (start v honest) (start u receiver) late bounded upToDate finalizedKnown found final
-
 end EthLib.Consensus.Models.Network
