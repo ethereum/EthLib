@@ -966,6 +966,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- From Glamsterdam, a system call starts with the accessed addresses of a transaction from the system address to its contract, with no access list ([#4071](https://github.com/ethereum/EthLib/issues/4071)).
+  So the beneficiary, the precompiles, the system address and the contract start warm in that call; up to BPO5 it still starts with no access.
+  In Lean, the new `Blocks.systemSubstate` gives that start, and `systemSubstate_of_lt_glamsterdam` and `systemSubstate_of_glamsterdam` in `EthLib.Execution.Proofs.Blocks.SystemCall` state it.
+  `systemCall_of_glamsterdam` now runs the message from `systemSubstate env target` in place of `Substate.empty`; `systemCall_of_lt_glamsterdam` keeps its statement.
+  `SystemCallBurns` in `EthLib.Execution.Proofs.Blocks.Burn` reads the same start in place of the empty substate.
+  The new `Transactions.startAccessedAddressesOf` takes an access list, and `startAccessedAddresses` reads it with the access list of the transaction, with the same value.
+  `mem_systemSubstate_accessedAddresses` lists the addresses that start accessed from Glamsterdam.
+  Migration: rewrite with `systemSubstate_of_glamsterdam` where a proof read the empty substate from Glamsterdam, and with `systemSubstate_of_lt_glamsterdam` where it reads `SystemCallBurns` before Glamsterdam.
+
 - The signed-conflict slashing theorem of [#3431](https://github.com/ethereum/EthLib/issues/3431) now also states that the slashing leaves the validator slashed ([#4244](https://github.com/ethereum/EthLib/issues/4244)).
   In `DirectSafety.signedConflict_attesterSlashing_accepted_at` (`DirectSafety/Includable.lean`), the right disjunct also gives the validator at the index in the state right after the slashing.
   That validator still has the key and is slashed.

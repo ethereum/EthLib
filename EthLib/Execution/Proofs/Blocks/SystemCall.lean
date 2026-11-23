@@ -28,7 +28,11 @@ A system call has 30,000,000 gas at every fork.
 
 Up to BPO5 it has no reservoir and runs with one counter of the gas left.
 
+It also starts with no access.
+
 From Glamsterdam it has a reservoir of 1,566,720 state gas, and runs with the meter of EIP-8037.
+
+It also starts with the accesses of a transaction with no access list.
 
 Joining a call that only read its target keeps the block state.
 
@@ -63,24 +67,59 @@ theorem systemReservoir_of_glamsterdam (h : .glamsterdam ≤ fork) :
   simp only [systemReservoir, gasSchedule, h, ↓reduceIte]
   rfl
 
-/-- Up to BPO5, a system call runs its message with one counter of the gas left. -/
+/-- Up to BPO5, a system call starts with no access. -/
+theorem systemSubstate_of_lt_glamsterdam (h : fork < .glamsterdam) :
+    systemSubstate env target = Substate.empty := by
+  have hpre : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt h
+  simp only [systemSubstate, hpre, ↓reduceIte]
+  rfl
+
+/-- From Glamsterdam, a system call starts with the accessed addresses of a transaction.
+
+The transaction is from the system address to the contract, with no access list. -/
+theorem systemSubstate_of_glamsterdam (h : .glamsterdam ≤ fork) :
+    systemSubstate env target = { Substate.empty with
+      accessedAddresses :=
+        Transactions.startAccessedAddressesOf fork env.coinbase SYSTEM_ADDRESS target [] } := by
+  simp only [systemSubstate, h, ↓reduceIte]
+
+/-- From Glamsterdam, a system call starts with exactly these addresses accessed.
+
+They are the beneficiary, the system address, the contract and the precompiles of the fork. -/
+theorem mem_systemSubstate_accessedAddresses (h : .glamsterdam ≤ fork) {address : Address} :
+    address ∈ (systemSubstate env target).accessedAddresses ↔
+      address = env.coinbase ∨ address = SYSTEM_ADDRESS ∨ address = target ∨
+        address ∈ Transactions.precompileAddresses fork := by
+  have berlin : Fork.berlin ≤ fork := Nat.le_trans (by decide) h
+  have shapella : Fork.shapella ≤ fork := Nat.le_trans (by decide) h
+  simp only [systemSubstate, h, ↓reduceIte, Transactions.startAccessedAddressesOf, berlin,
+    shapella, Std.ExtTreeSet.mem_insert, Std.ExtTreeSet.mem_insertMany_list,
+    List.contains_iff_mem]
+  grind
+
+/-- Up to BPO5, a system call runs its message with one counter of the gas left.
+
+It starts with no access. -/
 theorem systemCall_of_lt_glamsterdam (h : fork < .glamsterdam) :
     systemCall env block target data =
       (processMessageCall (Meter := Nat) env.chainId.toNat (systemMessage env target data)
         (.ofBlock block) Substate.empty).map fun out => ⟨out.state, out.output, out.error⟩ := by
   have hpre : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt h
-  simp only [systemCall, hpre, ↓reduceIte]
+  simp only [systemCall, hpre, ↓reduceIte, systemSubstate_of_lt_glamsterdam h]
   cases processMessageCall (Meter := Nat) env.chainId.toNat (systemMessage env target data)
     (.ofBlock block) Substate.empty <;> rfl
 
-/-- From Glamsterdam, a system call runs its message with the meter of EIP-8037. -/
+/-- From Glamsterdam, a system call runs its message with the meter of EIP-8037.
+
+It starts with the accesses of a transaction from the system address, with no access list. -/
 theorem systemCall_of_glamsterdam (h : .glamsterdam ≤ fork) :
     systemCall env block target data =
       (processMessageCall (Meter := StateGasMeter) env.chainId.toNat (systemMessage env target data)
-        (.ofBlock block) Substate.empty).map fun out => ⟨out.state, out.output, out.error⟩ := by
+        (.ofBlock block) (systemSubstate env target)).map
+          fun out => ⟨out.state, out.output, out.error⟩ := by
   simp only [systemCall, h, ↓reduceIte]
   cases processMessageCall (Meter := StateGasMeter) env.chainId.toNat
-    (systemMessage env target data) (.ofBlock block) Substate.empty <;> rfl
+    (systemMessage env target data) (.ofBlock block) (systemSubstate env target) <;> rfl
 
 /-- A checked system call to a contract with no code makes the block invalid. -/
 theorem checkedSystemCall_of_size_eq_zero {code : ByteArray}

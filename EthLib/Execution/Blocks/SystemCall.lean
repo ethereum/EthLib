@@ -20,7 +20,11 @@ So it adds to neither gas count of the block.
 
 It runs the code of its contract as the message of a transaction does.
 
-It starts with no address accessed, and its price per gas is the base fee of the block.
+Up to BPO5, it starts with no address accessed.
+
+From Glamsterdam, it starts with the accesses of a transaction with no access list.
+
+Its price per gas is the base fee of the block.
 
 Its writes join the block.
 
@@ -71,7 +75,7 @@ namespace EthLib.Execution.Blocks
 open EthLib.Base
 open EthLib.Execution.Evm
 open EthLib.Execution.State (BlockState TransactionState)
-open EthLib.Execution.Transactions (processMessageCall)
+open EthLib.Execution.Transactions (processMessageCall startAccessedAddressesOf)
 
 /-! ## Addresses and gas -/
 
@@ -154,6 +158,24 @@ def systemMessage {fork : Fork} (env : BlockEnvironment fork) (target : Address)
   isStatic := false
   disablePrecompiles := false
 
+/-- The substate of a system call to `target` when its message starts, at `fork`.
+
+Up to BPO5, no address starts accessed.
+
+From Glamsterdam, the call starts as a transaction from the system address with no access list.
+
+So the beneficiary, the precompiles, the system address and `target` start accessed.
+
+No storage key starts accessed. -/
+def systemSubstate {fork : Fork} (env : BlockEnvironment fork) (target : Address) : Substate :=
+  -- No EIP states which addresses a system call starts with accessed.
+  --
+  -- From Glamsterdam, the call starts as the first frame of a transaction with no access list.
+  { Substate.empty with
+    accessedAddresses := if fork ≥ .glamsterdam then
+        startAccessedAddressesOf fork env.coinbase SYSTEM_ADDRESS target []
+      else ∅ }
+
 /-- Make a system call to `target` with the data `data`, on the block state `block` at `fork`.
 
 A call that fails leaves the block state as it was.
@@ -167,16 +189,15 @@ def systemCall {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
     (target : Address) (data : ByteArray) : Except EvmError SystemCallOutput := do
   let message := systemMessage env target data
   let state := TransactionState.ofBlock block
-  -- Up to BPO5, the call runs as the message of a transaction, from no accessed address.
+  -- The call runs as the message of a transaction, from the accesses of its start.
   --
-  -- From Glamsterdam too, though no EIP says whether some addresses should start accessed.
+  -- EIP-2935: the history storage account and its slots stay cold for every later transaction.
   --
-  -- Issue #4071 records the question for the beneficiary, precompiles, origin and target.
-  --
-  -- EIP-2935: the call does not warm the history storage account or its storage slots.
+  -- The accesses of the call end with it, since its output keeps no substate.
+  let substate := systemSubstate env target
   let out ← if fork ≥ .glamsterdam then
-      processMessageCall (Meter := StateGasMeter) env.chainId.toNat message state Substate.empty
-    else processMessageCall (Meter := Nat) env.chainId.toNat message state Substate.empty
+      processMessageCall (Meter := StateGasMeter) env.chainId.toNat message state substate
+    else processMessageCall (Meter := Nat) env.chainId.toNat message state substate
   return ⟨out.state, out.output, out.error⟩
 
 /-- The code of the account at `target`, in the block state `block`. -/

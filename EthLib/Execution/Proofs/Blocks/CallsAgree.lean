@@ -50,7 +50,7 @@ private theorem mem_accountReads_prepareFirstFrame_error {Meter : Type} [GasMete
     {env : BlockEnvironment fork} {state : TransactionState} {target : Address}
     {data : ByteArray} {e : EvmError} {read : TransactionState}
     (h : prepareFirstFrame (Meter := Meter) env.chainId.toNat (systemMessage env target data)
-      state Substate.empty [] ∅ = .error (e, read)) :
+      state (systemSubstate env target) [] ∅ = .error (e, read)) :
     target ∈ read.accountReads := by
   have htarget : (systemMessage env target data).target = some target := rfl
   have hvalue : (systemMessage env target data).value = 0 := rfl
@@ -78,7 +78,7 @@ private theorem mem_accountReads_processMessageCall {Meter : Type} [GasMeter Met
     [LawfulGasMeter Meter] {env : BlockEnvironment fork} {state : TransactionState}
     {target : Address} {data : ByteArray} {out : CallOutput}
     (h : processMessageCall (Meter := Meter) env.chainId.toNat (systemMessage env target data)
-      state Substate.empty = .ok out) :
+      state (systemSubstate env target) = .ok out) :
     target ∈ out.state.accountReads := by
   rw [processMessageCall_unfold] at h
   split at h
