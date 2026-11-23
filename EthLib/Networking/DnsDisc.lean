@@ -363,19 +363,29 @@ def nameOf (hash : Hash) (domain : String) : String :=
 
 /-- The walk of the subtrees of a list, with the hashes still to read and those already read.
 
+Each hash is tracked with its subtree, so a hash in both subtrees is read in each.
+
 The lookup is the DNS: any function from a name to the text of its TXT record.
 
 Each text must have the hash of its name, so a resolver cannot change it unseen. -/
 def walk (lookup : String → Option String) (domain : String) :
-    Nat → List (Subtree × Hash) → List Hash → Found → Except DnsError Found
+    Nat → List (Subtree × Hash) → List (Subtree × Hash) → Found → Except DnsError Found
   | _, [], _, found => return found
   -- Not in the source: a budget bounds the hashes taken, since a lookup can make an endless tree.
+  --
+  -- Every hash taken counts, even one already read and skipped.
+  --
+  -- So a hash under both roots counts at least once in each subtree.
   | 0, _ :: _, _, _ => throw .tooManyEntries
   | budget + 1, (tree, hash) :: pending, visited, found =>
     -- The client must track hashes and domains already resolved, to avoid an infinite loop.
     --
     -- EthLib follows no link, so it tracks only hashes.
-    if hash ∈ visited then walk lookup domain budget pending visited found
+    --
+    -- Not in the source: each hash is tracked with its subtree.
+    --
+    -- The source keeps the two subtrees apart so that clients can sync them independently.
+    if (tree, hash) ∈ visited then walk lookup domain budget pending visited found
     else do
       -- Step 3: resolve the TXT record of the hash subdomain, `<hash>.<domain>`.
       let name := nameOf hash domain
@@ -388,20 +398,24 @@ def walk (lookup : String → Option String) (domain : String) :
       --
       -- Not in the source: EthLib reads them in order, depth first, not in random order.
       | _, .branch hashes =>
-        walk lookup domain budget (hashes.map (tree, ·) ++ pending) (hash :: visited) found
+        walk lookup domain budget (hashes.map (tree, ·) ++ pending) ((tree, hash) :: visited) found
       -- For `enr`: decode, verify the node record and import it; only in the `enr-root` subtree.
       | .records, .enr record =>
         -- Not in the source: the record must verify under its own key of the scheme v4.
         unless Enr.verifyV4 record do throw (.badRecord name)
-        walk lookup domain budget pending (hash :: visited)
+        walk lookup domain budget pending ((tree, hash) :: visited)
           { found with records := found.records ++ [record] }
       -- A link may only appear in the subtree pointed to by `link-root`.
       --
       -- Step 4 does not name links: EthLib keeps them, and following them is left to the caller.
       | .links, .link url =>
-        walk lookup domain budget pending (hash :: visited)
+        walk lookup domain budget pending ((tree, hash) :: visited)
           { found with links := found.links ++ [url] }
       -- A leaf in the wrong subtree, or a root inside a subtree, is refused.
+      --
+      -- A record may only appear in the `enr-root` subtree.
+      --
+      -- So a leaf is refused in the wrong subtree even when the other subtree reaches it too.
       | _, _ => throw (.wrongSubtree name)
 
 /-- The node list at a domain, under a known key: its sequence number, records and links.
@@ -435,13 +449,15 @@ It follows the first lookup where they agree.
 
 It finds nothing when they never disagree, when a lookup has no text, or when the budget ends.
 
-It also finds nothing when the first two texts that differ have different hashes. -/
+It also finds nothing when the first two texts that differ have different hashes.
+
+It tracks each hash with its subtree, as the walk does. -/
 def walkCollision (lookup1 lookup2 : String → Option String) (domain : String) :
-    Nat → List (Subtree × Hash) → List Hash → Option (String × String)
+    Nat → List (Subtree × Hash) → List (Subtree × Hash) → Option (String × String)
   | _, [], _ => none
   | 0, _ :: _, _ => none
   | budget + 1, (tree, hash) :: pending, visited =>
-    if hash ∈ visited then walkCollision lookup1 lookup2 domain budget pending visited
+    if (tree, hash) ∈ visited then walkCollision lookup1 lookup2 domain budget pending visited
     else
       match lookup1 (nameOf hash domain), lookup2 (nameOf hash domain) with
       | some text1, some text2 =>
@@ -449,8 +465,8 @@ def walkCollision (lookup1 lookup2 : String → Option String) (domain : String)
           match Entry.parse text1 with
           | .ok (.branch hashes) =>
             walkCollision lookup1 lookup2 domain budget (hashes.map (tree, ·) ++ pending)
-              (hash :: visited)
-          | _ => walkCollision lookup1 lookup2 domain budget pending (hash :: visited)
+              ((tree, hash) :: visited)
+          | _ => walkCollision lookup1 lookup2 domain budget pending ((tree, hash) :: visited)
         else if hashOf text1 = hashOf text2 then some (text1, text2) else none
       | _, _ => none
 

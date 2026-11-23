@@ -2703,13 +2703,18 @@ It verifies the root under the key, refuses a sequence number below the last one
 Each entry must have the hash of its name.
 A link may sit only under the root of links, and a record only under the root of records.
 A record must verify under its own "v4" key, since the client must "decode, verify the node record".
-A hash met again is skipped, as the client "must track hashes and domains which are already resolved", and a budget bounds the number of hashes taken.
+A hash met again in the same subtree is skipped, as the client "must track hashes and domains which are already resolved", and a budget bounds the number of hashes taken.
+The source keeps the two subtrees apart so that clients can sync them independently, so each hash is tracked with its subtree, and a hash under both roots is read in each.
+Each hash taken counts against the budget, even one that was already read and is skipped.
+So a record that the root of links also reaches is refused, since a record "may only appear in the `enr-root` subtree".
 `resolve_binds` (`Networking/Proofs/DnsDisc.lean`) states that two lookups that serve one root and both resolve give one list, or `findCollision` returns two texts with one truncated hash.
 One root means the same subtree hashes and sequence number, so the statement covers a root whose signature text was swapped.
 `isCollision_of_findCollision` states that a pair that the search returns is a collision, with no other condition.
 `findCollision_self` states that the search finds nothing for a single lookup, so the statement is not trivial.
 `le_seq_of_resolve` and `verify_of_resolve` state that a list resolves only from a root whose signature verifies under the key.
 Its sequence number is at least the one seen last.
+`records_of_resolve` and `links_of_resolve` state that, in a resolved list, each entry that a subtree reaches through its branches is a branch or a leaf of that subtree.
+So no record sits under the root of links, and no link under the root of records.
 
 The security of a list thus rests on the 128 bits of the truncated Keccak-256.
 Whoever builds the tree chooses its texts, so a birthday collision, at about 2^64 hashes, helps only the key holder, who could sign two lists anyway.
