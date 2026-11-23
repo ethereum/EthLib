@@ -218,10 +218,23 @@ def name : Fork → String
   | glamsterdam => "glamsterdam"
   | hegota => "hegota"
 
+/-- The last fork, in the order of the cases.
+
+The lookup of a fork by its name and the termination measures of the fork upgrades read it.
+
+So they name no case, and a new fork at the end leaves them as they are.
+
+A new fork at the end moves this definition to it.
+
+Until it does, the proofs that every fork is at or before it and that each name reads back fail.
+
+So do the proofs that the fork upgrades stop, and the library does not build. -/
+def last : Fork := hegota
+
 /-- The fork with a name, if one has it. -/
 def ofName? (s : String) : Option Fork :=
-  -- Every fork from Frontier to Hegotá, in order, then the first whose name matches.
-  ((List.range (hegota.ctorIdx + 1)).map Fork.ofNat).find? (·.name == s)
+  -- Every fork from Frontier to the last one, in order, then the first whose name matches.
+  ((List.range (last.ctorIdx + 1)).map Fork.ofNat).find? (·.name == s)
 
 end Fork
 
