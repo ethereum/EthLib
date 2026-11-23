@@ -10,33 +10,94 @@ from ethlib.errors import TrieError
 from ethlib.execution import trie
 from ethlib.serialization import rlp
 from raising import raises
+from rpc.chain import FIXTURES, block_hash, read_fixture, replay_chain
 
 # `rpc/fixtures/README.md` gives the origin of the files and their licence.
 
-_DIRECTORY = Path(__file__).resolve().parents[1] / "rpc" / "fixtures" / "eth_getProof"
-_FILES = sorted(_DIRECTORY.glob("*.io"))
+_DIRECTORY = FIXTURES / "eth_getProof"
 
-# The state root of block 60 of `tests/chain.rlp`, from which every account proof starts.
+# The state root of block 60 of `chain.rlp`, the head of the chain, which `latest` names.
 STATE_ROOT = bytes.fromhex("a6bd32516beae9780a8c90563bb28c18f4299855f3f9d7c1de2db9a609ce63ec")
+
+# What each answer shows: None for an absent account, else whether each of its slots is set.
+# The two other files answer a malformed storage key with an error, which the RPC suite checks.
+EXPECTED = {
+    "get-account-proof-before-prague": [True],
+    "get-account-proof-block-hash-object": [],
+    "get-account-proof-blockhash": [],
+    "get-account-proof-default-block": [],
+    "get-account-proof-historical": [True],
+    "get-account-proof-latest": [],
+    "get-account-proof-missing-account": None,
+    "get-account-proof-with-storage": [True],
+    "get-storage-proof-duplicate-keys": [False, False, False],
+    "get-storage-proof-key-32-bytes": [False],
+    "get-storage-proof-key-63-digits": [False],
+    "get-storage-proof-key-empty": [True],
+    "get-storage-proof-key-short": [False],
+    "get-storage-proof-key-two-encodings": [False, False],
+}
+ERRORS = {"get-storage-proof-invalid-key", "get-storage-proof-invalid-key-too-long"}
+
+
+def _state_root(block: object) -> bytes:
+    """The state root of the block that a request names by number, hash, tag or default."""
+    chain = replay_chain()
+    # A header holds the state root at index 3 and the number at index 8.
+    headers = [rlp.decode(raw)[0] for _, raw in chain.blocks]
+    by_hash = {block_hash(b): header for b, header in zip(chain.blocks, headers, strict=True)}
+    match block:
+        # A request without a block, as with the tag latest, names the head of the forkchoice.
+        case None | "latest":
+            header = by_hash[chain.forkchoice[0]]
+        case {"blockHash": str(hash_)} | str(hash_) if len(hash_) == 66:
+            header = by_hash[bytes.fromhex(hash_[2:])]
+        case str(number):
+            (header,) = [h for h in headers if int.from_bytes(h[8], "big") == int(number, 16)]
+        case _:
+            raise AssertionError(block)
+    return header[3]
 
 
 def _answer(path: Path) -> dict:
-    # The response is the line after `<< `.
-    return next(
-        json.loads(line[3:])["result"]
-        for line in path.read_text().splitlines()
-        if line.startswith("<< ")
-    )
+    """The answer of the one exchange of a file."""
+    (exchange,) = read_fixture(path).exchanges
+    return exchange.response["result"]
 
 
 _WITH_STORAGE = _answer(_DIRECTORY / "get-account-proof-with-storage.io")
 
 
-@pytest.mark.parametrize("path", _FILES, ids=lambda path: path.stem)
-def test_answer_holds(path: Path) -> None:
-    """Each answer of the vectors holds, with its account present and each slot set."""
-    answer = _answer(path)
-    assert trie.verify_account_proof(STATE_ROOT, answer) == [True] * len(answer["storageProof"])
+def test_head_root() -> None:
+    """The head of the chain is block 60, whose state root the other tests start from."""
+    chain = replay_chain()
+    (number,) = [
+        int.from_bytes(rlp.decode(block[1])[0][8], "big")
+        for block in chain.blocks
+        if block_hash(block) == chain.forkchoice[0]
+    ]
+    assert number == 60
+    assert _state_root("latest") == STATE_ROOT
+
+
+def test_every_file() -> None:
+    """Each file is either an answer of the table or an error response."""
+    stems = {path.stem for path in _DIRECTORY.glob("*.io")}
+    assert stems == set(EXPECTED) | ERRORS
+    for stem in ERRORS:
+        (exchange,) = read_fixture(_DIRECTORY / f"{stem}.io").exchanges
+        assert "error" in exchange.response
+
+
+@pytest.mark.parametrize(
+    ("stem", "expected"), [pytest.param(stem, value, id=stem) for stem, value in EXPECTED.items()]
+)
+def test_answer_holds(stem: str, expected: list[bool] | None) -> None:
+    """Each answer holds against the state root of the block of its request."""
+    (exchange,) = read_fixture(_DIRECTORY / f"{stem}.io").exchanges
+    params = json.loads(exchange.request)["params"]
+    root = _state_root(params[2] if len(params) > 2 else None)
+    assert trie.verify_account_proof(root, exchange.response["result"]) == expected
 
 
 @pytest.mark.parametrize("key", ["0x" + "00" * 32, "0x0"], ids=len)
