@@ -26,7 +26,7 @@ def PUBLIC_PARAM_LEN : Nat := 16
 
 /-- The address length in bytes.
 
-An address separates the call sites of one key. -/
+An address separates the hash calls of one key. -/
 def ADDRESS_LEN : Nat := 16
 
 /-- The message length in bytes.

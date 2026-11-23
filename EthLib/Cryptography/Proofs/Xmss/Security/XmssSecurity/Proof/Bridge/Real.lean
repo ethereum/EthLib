@@ -66,9 +66,10 @@ theorem QueryCount.ofFnInOrder {α : Type} {k n : Nat} {c : Fin k → OracleComp
   rw [HashSig.ofFnInOrder_eq_map_sequenceFin]
   exact (QueryCount.sequenceFin h).map _
 
-theorem queryCount_th (publicParam : Xmss.PublicParam) (site : Xmss.CallSite)
+theorem queryCount_th (publicParam : Xmss.PublicParam) (address : Xmss.Address)
     (payload : Array UInt64) :
-    QueryCount (Xmss.th queryH publicParam site payload : OracleComp HashSpec Xmss.Digest) 1 := by
+    QueryCount
+      (Xmss.th queryH publicParam address payload : OracleComp HashSpec Xmss.Digest) 1 := by
   unfold Xmss.th
   exact (queryCount_queryH _).bind fun _ => .pure _
 
@@ -206,7 +207,7 @@ theorem Resolves.ofFnInOrder {α : Type} {cache : QueryCache HashSpec} {n : Nat}
 /-- The hash that starts chains `2j` and `2j + 1` of a bottom key is the bottom derivation's. -/
 theorem bottomPrfInput (seed : MasterSeed) (d : Derivations) (index : LeafIndex) (j : Fin (V / 2)) :
     Hash.Keccak.lanesBytes (Xmss.thInput (ofParam d.parameter)
-      (Xmss.CallSite.prf .bottom (ofLeafIndex index) j) (ofSeed seed).toArray)
+      (Xmss.Address.prf .bottom (ofLeafIndex index) j) (ofSeed seed).toArray)
       = bottomInput d.parameter seed (index, ⟨j.val, j.isLt⟩) := by
   rw [bottomInput_eq]
   simp only [Xmss.thInput_eq_append,
@@ -220,7 +221,7 @@ theorem bottomPrfInput (seed : MasterSeed) (d : Derivations) (index : LeafIndex)
 /-- The hash that starts chains `2j` and `2j + 1` of a top key is the top derivation's. -/
 theorem topPrfInput (seed : MasterSeed) (d : Derivations) (key : TopIndex) (j : Fin (V / 2)) :
     Hash.Keccak.lanesBytes
-      (Xmss.thInput (ofParam d.parameter) (Xmss.CallSite.prf .top (ofTopIndex key) j)
+      (Xmss.thInput (ofParam d.parameter) (Xmss.Address.prf .top (ofTopIndex key) j)
         ((ofSeed seed).toArray))
       = topInput d.parameter seed (key, ⟨j.val, j.isLt⟩) := by
   rw [topInput_eq]
@@ -432,7 +433,7 @@ theorem realParam (h : Prepared seed d result cache) :
     rfl
   -- The input is `0^128 | A_param | S`, the programmed parameter's.
   have hinput : Hash.Keccak.lanesBytes
-      (Xmss.thInput (ofParam (0 : PublicParameter)) Xmss.CallSite.param ((ofSeed seed).toArray))
+      (Xmss.thInput (ofParam (0 : PublicParameter)) Xmss.Address.param ((ofSeed seed).toArray))
       = paramInput seed := by
     rw [paramInput_eq]
     simp only [Xmss.thInput_eq_append,

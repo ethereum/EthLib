@@ -153,8 +153,8 @@ variable {ι : Type} {spec : OracleSpec ι} {p : ι → Prop} [DecidablePred p]
 
 /-- A tweakable hash call is one call of `H`. -/
 theorem isQueryBoundP_th (hH : ∀ x, IsQueryBoundP (H x) p 1) (publicParam : PublicParam)
-    (site : CallSite) (payload : Array UInt64) :
-    IsQueryBoundP (th H publicParam site payload) p 1 :=
+    (address : Address) (payload : Array UInt64) :
+    IsQueryBoundP (th H publicParam address payload) p 1 :=
   isQueryBoundP_bind (m := 0) (hH _) fun _ _ => isQueryBoundP_pure _ _ 0
 
 /-- The starts of a key's chains are `29` derivations. -/

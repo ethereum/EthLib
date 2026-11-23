@@ -8,7 +8,7 @@ import EthLib.Cryptography.Proofs.Xmss.Address
 /-!
 # Proofs: the leanXMSS tweakable hash
 
-A hash input determines its public parameter, its call site and its payload.
+A hash input determines its public parameter, its address and its payload.
 
 So two calls hash the same lanes only when they are the same call.
 
@@ -35,20 +35,22 @@ theorem hash_bytes (input : Array UInt64) :
   Hash.Keccak.keccak256Lanes_lanesBytes input
 
 /-- A hash input is the lanes of the parameter, then of the address, then the payload. -/
-theorem thInput_eq_append (publicParam : PublicParam) (site : CallSite) (payload : Array UInt64) :
-    thInput publicParam site payload = publicParam.toArray ++ site.encode.toArray ++ payload :=
+theorem thInput_eq_append (publicParam : PublicParam) (address : Address)
+    (payload : Array UInt64) :
+    thInput publicParam address payload
+      = publicParam.toArray ++ address.encode.toArray ++ payload :=
   rfl
 
-/-- `P | A | M` determines `P`, the call site whose address is `A`, and `M`. -/
-theorem thInput_inj {publicParam publicParam' : PublicParam} {a a' : CallSite} {m m' : Array UInt64}
+/-- `P | A | M` determines `P`, the address whose encoding is `A`, and `M`. -/
+theorem thInput_inj {publicParam publicParam' : PublicParam} {a a' : Address} {m m' : Array UInt64}
     (h : thInput publicParam a m = thInput publicParam' a' m') : publicParam = publicParam'
       ∧ a = a' ∧ m = m' := by
   -- The first four lanes are the two fixed-size prefixes, the rest is the payload.
   obtain ⟨hpre, hm⟩ := Array.append_inj h rfl
   simp only [List.toArray, Array.mk.injEq, List.cons.injEq, and_true] at hpre
   obtain ⟨h1, h2, h3, h4⟩ := hpre
-  -- Distinct call sites have distinct addresses.
-  refine ⟨by cases publicParam; cases publicParam'; simp_all, CallSite.encode_injective ?_, hm⟩
+  -- Distinct addresses have distinct encodings.
+  refine ⟨by cases publicParam; cases publicParam'; simp_all, Address.encode_injective ?_, hm⟩
   generalize a.encode = x at *
   generalize a'.encode = y at *
   cases x; cases y; simp_all
@@ -57,8 +59,8 @@ theorem thInput_inj {publicParam publicParam' : PublicParam} {a a' : CallSite} {
 
 The public parameter and the chain starts are halves of such derivations. -/
 theorem seedPrf_empty {m : Type → Type} (H : Array UInt64 → m Lanes4) (s : Seed)
-    (publicParam : PublicParam) (site : CallSite) :
-    seedPrf H s publicParam site #[] = H (thInput publicParam site s.toArray) := by
+    (publicParam : PublicParam) (address : Address) :
+    seedPrf H s publicParam address #[] = H (thInput publicParam address s.toArray) := by
   simp only [seedPrf, Array.append_empty]
 
 end EthLib.Cryptography.Xmss

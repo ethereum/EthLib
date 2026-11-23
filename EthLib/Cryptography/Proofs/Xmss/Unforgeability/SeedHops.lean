@@ -460,8 +460,8 @@ theorem signingFailure_le_seedGame (adversary : ReasonAdversary) {q : ℕ}
 
 /-! ## The second hop: the derivations from the scheme seed -/
 
-/-- What a derivation from the scheme seed reads: a parameter, a call site and a suffix. -/
-abbrev PrfInput := PublicParam × CallSite × Array UInt64
+/-- What a derivation from the scheme seed reads: a parameter, an address and a suffix. -/
+abbrev PrfInput := PublicParam × Address × Array UInt64
 
 /-- The oracles of a game whose derivations from the scheme seed are derivation queries. -/
 abbrev PrfSpec := HashSpec.withDerivations PrfInput HashOutput

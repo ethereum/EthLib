@@ -17,12 +17,12 @@ When the key does not keep the bottom tree, it builds it and runs the top layer'
 
 Until a request fails, every kept tree holds the top signature of a search that succeeded.
 
-A search reads its randomizer base from the table, at the parameter, its call site and the message.
+A search reads its randomizer base from the table, at the parameter, its address and the message.
 
 - A new search draws its base when it runs.
   A cached input is a trial input of at most `2^32` of the `2^128` bases.
   So with at most `Q` cached inputs, some trial is already cached with chance `<= Q / 2^96`.
-  The count takes the whole cache, not only the inputs at the key's message call site.
+  The count takes the whole cache, not only the inputs at the key's message address.
   Otherwise every trial is fresh, and all fail with probability at most `exp(-4000)`.
 - A repeated search reads the base of an earlier search.
   When that search succeeded, the cache holds a trial with a codeword digest.
@@ -57,30 +57,30 @@ def KeptOk (sk : SecretKey) : Prop :=
 def trialInput (publicParam : PublicParam) (layer : Layer) (e : UInt32) (msg : Array UInt64)
     (base : Randomizer) (j : ℕ) : HashInput :=
   Hash.Keccak.lanesBytes
-    (thInput publicParam (CallSite.msg layer e) (msg ++ (trialRandomizer base j).toArray))
+    (thInput publicParam (Address.msg layer e) (msg ++ (trialRandomizer base j).toArray))
 
 /-- Every search with a base in the table found a codeword.
 
 Some trial in its window is cached, and its digest is a codeword. -/
 def SearchesFound (st : IdealState) : Prop :=
-  ∀ publicParam layer e msg u, st.2 (publicParam, CallSite.rnd layer e, msg) = some u →
+  ∀ publicParam layer e msg u, st.2 (publicParam, Address.rnd layer e, msg) = some u →
     ∃ j < MAX_RANDOMIZER_TRIALS, ∃ y,
       st.1 (trialInput publicParam layer e msg (halfOf 0 (ofOutput u)) j) = some y ∧
         (codeword? (halfOf 0 (ofOutput y))).isSome
 
 /-! ## Steps that keep every search found -/
 
-/-- A derivation query at the call site of a randomizer base. -/
+/-- A derivation query at the address of a randomizer base. -/
 def IsRndQuery : PrfSpec.Domain → Prop
-  | .inr x => ∃ layer e, x.2.1 = CallSite.rnd layer e
+  | .inr x => ∃ layer e, x.2.1 = Address.rnd layer e
   | _ => False
 
 noncomputable instance : DecidablePred IsRndQuery := Classical.decPred _
 
 /-- A state whose cache grows and whose bases stay keeps every search found. -/
 theorem SearchesFound.mono {st st' : IdealState} (hst : SearchesFound st) (hC : st.1 ≤ st'.1)
-    (hT : ∀ publicParam layer e msg, st'.2 (publicParam, CallSite.rnd layer e, msg)
-      = st.2 (publicParam, CallSite.rnd layer e, msg)) :
+    (hT : ∀ publicParam layer e msg, st'.2 (publicParam, Address.rnd layer e, msg)
+      = st.2 (publicParam, Address.rnd layer e, msg)) :
     SearchesFound st' := by
   intro publicParam layer e msg u hu
   rw [hT] at hu
@@ -95,12 +95,12 @@ theorem SearchesFound.of_mem_support_idealImpl {t : PrfSpec.Domain} (ht : ¬IsRn
     SearchesFound w.2 := by
   obtain ⟨hC, hT⟩ := le_of_mem_support_idealImpl hw
   refine hst.mono hC fun publicParam layer e msg => ?_
-  cases h : st.2 (publicParam, CallSite.rnd layer e, msg) with
+  cases h : st.2 (publicParam, Address.rnd layer e, msg) with
   | some v => exact hT h
   | none =>
     have hiff :=
       SecretEncoding.isSome_snd_apply_iff_of_mem_support_idealImpl hw
-        (publicParam, CallSite.rnd layer e, msg)
+        (publicParam, Address.rnd layer e, msg)
     rw [h] at hiff
     refine Option.not_isSome_iff_eq_none.mp fun hs => ?_
     rcases hiff.mp hs with hs | rfl
@@ -223,7 +223,7 @@ theorem codeword_messageDigest_queryH (publicParam : PublicParam) (layer : Layer
     (codeword? <$> messageDigest queryH publicParam layer e msg rho : OracleComp OracleWorld _) =
       (fun u => codeword? (halfOf 0 (ofOutput u))) <$>
         liftM (HashSpec.query
-          (Hash.Keccak.lanesBytes (thInput publicParam (CallSite.msg layer e)
+          (Hash.Keccak.lanesBytes (thInput publicParam (Address.msg layer e)
             (msg ++ rho.toArray)))) := by
   simp only [messageDigest, th, queryH, HashSig.queryLanes,
     map_eq_bind_pure_comp, bind_assoc, pure_bind, Function.comp_apply]
@@ -314,7 +314,7 @@ theorem prEvent_trial_cached_le (C : HashSpec.QueryCache)
 /-! ## One search -/
 
 /-- A derivation already in the table is read from it. -/
-theorem run_prfD_of_some {publicParam : PublicParam} {a : CallSite}
+theorem run_prfD_of_some {publicParam : PublicParam} {a : Address}
     {s : Array UInt64} {st : IdealState}
     {u : HashOutput} (h : st.2 (publicParam, a, s) = some u) :
     (simulateQ (SecretEncoding.idealImpl HashSpec PrfInput HashOutput)
@@ -323,7 +323,7 @@ theorem run_prfD_of_some {publicParam : PublicParam} {a : CallSite}
   simp [prfD, SecretEncoding.idealImpl_run_derive_some h]
 
 /-- A derivation not yet in the table is drawn uniformly and stored. -/
-theorem run_prfD_of_none {publicParam : PublicParam} {a : CallSite}
+theorem run_prfD_of_none {publicParam : PublicParam} {a : Address}
     {s : Array UInt64} {st : IdealState}
     (h : st.2 (publicParam, a, s) = none) :
     (simulateQ (SecretEncoding.idealImpl HashSpec PrfInput HashOutput)
@@ -340,13 +340,13 @@ theorem run_search (publicParam : PublicParam) (layer : Layer) (e : UInt32) (msg
           Internal.findCodeword hashD publicParam layer e msg base 0
             MAX_RANDOMIZER_TRIALS)).run st =
       (simulateQ (SecretEncoding.idealImpl HashSpec PrfInput HashOutput)
-          (prfD publicParam (CallSite.rnd layer e) msg)).run st >>= fun w =>
+          (prfD publicParam (Address.rnd layer e) msg)).run st >>= fun w =>
         (simulateQ (SecretEncoding.idealImpl HashSpec PrfInput HashOutput)
           (Internal.findCodeword hashD publicParam layer e msg (id (halfOf 0 w.1)) 0
             MAX_RANDOMIZER_TRIALS)).run w.2 := by
   -- `id` types the digest as a randomizer, so the rewritten term stays well typed.
   have h : randomizerBase publicParam prfD layer e msg =
-      prfD publicParam (CallSite.rnd layer e) msg >>= fun u =>
+      prfD publicParam (Address.rnd layer e) msg >>= fun u =>
         pure (id (halfOf 0 u) : Randomizer) := rfl
   rw [h, bind_assoc]
   simp only [pure_bind, simulateQ_bind, StateT.run_bind]
@@ -371,7 +371,7 @@ theorem failsAtMost_search (Q : ℕ) (publicParam : PublicParam) (layer : Layer)
         Internal.findCodeword hashD publicParam layer e msg base 0 MAX_RANDOMIZER_TRIALS) := by
   rintro ⟨C, T⟩ hst
   rw [run_search]
-  cases hT : T (publicParam, CallSite.rnd layer e, msg) with
+  cases hT : T (publicParam, Address.rnd layer e, msg) with
   | some u =>
     rw [run_prfD_of_some hT, pure_bind]
     refine le_of_eq_of_le (prEvent_eq_zero_of_forall_mem_support _ _ fun z hz hE => ?_) zero_le
@@ -403,9 +403,9 @@ theorem failsAtMost_search (Q : ℕ) (publicParam : PublicParam) (layer : Layer)
             rcases hE.1 with hnone | hs
             · simp [hw1] at hnone
             refine hs fun publicParam' layer' e' msg' u' hu' => ?_
-            by_cases hx : (publicParam', CallSite.rnd layer' e', msg') = (publicParam,
-              CallSite.rnd layer e, msg)
-            · simp only [Prod.mk.injEq, CallSite.rnd.injEq] at hx
+            by_cases hx : (publicParam', Address.rnd layer' e', msg') = (publicParam,
+              Address.rnd layer e, msg)
+            · simp only [Prod.mk.injEq, Address.rnd.injEq] at hx
               obtain ⟨h1, ⟨h2, h3⟩, h4⟩ := hx
               subst h1 h2 h3 h4
               simp only [QueryCache.cacheQuery_self, Option.some_inj] at hu'
@@ -435,7 +435,7 @@ theorem failsAtMost_search (Q : ℕ) (publicParam : PublicParam) (layer : Layer)
 
 section NoBase
 
-/-- A run that makes no query at a base's call site draws no base. -/
+/-- A run that makes no query at a base's address draws no base. -/
 theorem allQueriesSatisfy_of_isQueryBoundP {α : Type} {oa : OracleComp PrfSpec α}
     (h : IsQueryBoundP oa IsRndQuery 0) : oa.AllQueriesSatisfy fun t => ¬IsRndQuery t :=
   (isQueryBoundP_zero_iff oa _).1 ((isQueryBoundP_congr_pred fun _ => not_not.symm).1 h)
@@ -444,16 +444,16 @@ theorem allQueriesSatisfy_of_isQueryBoundP {α : Type} {oa : OracleComp PrfSpec 
 theorem isQueryBoundP_hashD (x : Array UInt64) : IsQueryBoundP (hashD x) IsRndQuery 0 :=
   (isQueryBoundP_map_iff _ _ _).2 (by simp [IsRndQuery, OracleSpec.withDerivationsLift])
 
-/-- A derivation away from every base's call site draws no base. -/
-theorem isQueryBoundP_prfD {publicParam : PublicParam} {a : CallSite} {s : Array UInt64}
-    (ha : ∀ layer e, a ≠ CallSite.rnd layer e) :
+/-- A derivation away from every base's address draws no base. -/
+theorem isQueryBoundP_prfD {publicParam : PublicParam} {a : Address} {s : Array UInt64}
+    (ha : ∀ layer e, a ≠ Address.rnd layer e) :
     IsQueryBoundP (prfD publicParam a s) IsRndQuery 0 :=
   (isQueryBoundP_map_iff _ _ _).2 (by
     simp only [isQueryBoundP_query_iff, IsRndQuery]
     simp [ha])
 
 /-- A tweakable hash call draws no base. -/
-theorem isQueryBoundP_th (publicParam : PublicParam) (a : CallSite) (payload : Array UInt64) :
+theorem isQueryBoundP_th (publicParam : PublicParam) (a : Address) (payload : Array UInt64) :
     IsQueryBoundP (th hashD publicParam a payload) IsRndQuery 0 :=
   isQueryBoundP_bind_zero _ _ (isQueryBoundP_hashD _) fun _ => isQueryBoundP_pure _ _ _
 
