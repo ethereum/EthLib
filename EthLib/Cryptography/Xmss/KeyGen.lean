@@ -6,19 +6,7 @@ public import EthLib.Cryptography.Xmss.Verify
 /-!
 # leanXMSS key generation
 
-Key generation.
-
-Every secret derives from the scheme's seed `S = H("leanXMSS" | S_0)`, for a 32-byte seed `S_0`.
-
-In the note, the secret key is `S_0` alone, and signing rebuilds every tree it reads.
-
-Here the secret key also keeps the trees it has built.
-
-Key generation builds the top tree to compute the root, so the key keeps it at no extra cost.
-
-The key also keeps the bottom trees it signed in last, each with the top signature of its root.
-
-Signing is deterministic, so a kept tree gives the bytes a rebuilt one would give.
+The key pair grown from a 32-byte seed, and the secret key that signing updates.
 
 Source: the leanXMSS specification draft, sections "Hashing and parameters" and "The scheme".
 -/
@@ -67,9 +55,12 @@ structure CachedTree where
 
 /-- A secret key: the scheme seed `S`, the parameter `P`, and the trees built from them.
 
-`S` is secret for the key's whole life, and so is every one-time secret derived from it.
+In the note, the secret key is `S_0` alone, and signing rebuilds every tree it reads.
 
-The tree nodes are not secret: a signature reveals some of them.
+Signing is deterministic, so a kept tree gives the bytes a rebuilt one would give.
+
+- `S` is secret for the key's whole life, and so is every one-time secret derived from it.
+- The tree nodes are not secret: a signature reveals some of them.
 
 A key from key generation and signing holds exactly what the note's signer rebuilds from `S`.
 
@@ -79,9 +70,11 @@ structure SecretKey where
   schemeSeed : Seed
   /-- The public parameter `P`. -/
   publicParam : PublicParam
-  /-- Every node of the top tree. -/
+  /-- Every node of the top tree, which key generation builds anyway to compute the root. -/
   top : Merkle.Built Digest
-  /-- The bottom trees the key keeps, the one it signed in last first. -/
+  /-- The bottom trees the key signed in last, the latest first.
+
+  Each keeps the top signature of its root. -/
   cache : List CachedTree
 
 /-! ## Key generation -/
@@ -90,12 +83,7 @@ namespace Internal
 
 /-- The key pair grown from a scheme seed `S`, with its secrets from the given derivations.
 
-Key generation passes the derivations of `S`.
-
-1. The public parameter `P`, derived from `S`.
-2. The top tree, from the `2^16` one-time keys of the top layer.
-
-The secret key keeps `S`, `P` and the top tree. -/
+Key generation passes the derivations of `S`. -/
 def keyGenFrom (prf : SeedPrf m) (s : Seed) : m (PublicKey × SecretKey) := do
   -- `P = Th(0^128, A_param, S)`.
   let pp ← publicParamOf prf
@@ -111,16 +99,13 @@ end Internal
 
 /-- `Gen` over a hash `H`: the key pair grown from a seed.
 
-1. The scheme seed `S`, from the seed.
-2. The public parameter `P`, derived from `S`.
-3. The top tree, from the `2^16` one-time keys of the top layer.
-
 The public key is the top tree's root and `P`.
 
 The seed must be 32 uniform bytes, kept secret. -/
 def keyGenWith (seed : Seed) : m (PublicKey × SecretKey) := do
   -- `S = H("leanXMSS" | S_0)`.
   let s ← schemeSeed H seed
+  -- `P`, then the top tree from the `2^16` one-time keys of the top layer.
   Internal.keyGenFrom H (seedPrf H s) s
 
 /-- `Gen`, with Keccak-256. -/
