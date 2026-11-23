@@ -19,7 +19,7 @@ open EthLib.Cryptography.Xmss.Constants
 theorem publicParamOf_seedPrf {m : Type → Type} [Monad m] (H : Array UInt64 → m Lanes4)
     (s : Seed) :
     publicParamOf (seedPrf H s) =
-      th H ⟨0, 0⟩ addrParam s.toArray := by
+      th H ⟨0, 0⟩ CallSite.param s.toArray := by
   rw [publicParamOf, seedPrf_empty]
   rfl
 

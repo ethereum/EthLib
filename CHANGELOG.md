@@ -978,6 +978,20 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the leanXMSS tweakable hash, its input and the derivations from the seed take a call site instead of a 16-byte address ([#4277](https://github.com/ethereum/EthLib/pull/4277)); [#4267](https://github.com/ethereum/EthLib/pull/4267) added the call sites.
+  `Xmss.CallSite` has one constructor for each address of the specification, and `CallSite.encode` gives its address, as two lanes.
+  `CallSite.encode_injective` says that two distinct call sites never share an address.
+  `Xmss.th`, `Xmss.thInput` and `Xmss.seedPrf` take a `CallSite`, `Xmss.SeedPrf` reads one, and `Xmss.Unforgeability.PrfInput` holds one; every hash input keeps its bytes.
+  The definitions and lemmas that took an address now take a call site, and `thInput_inj` now concludes that the call sites are equal.
+  `th_isQueryBoundP_otherLayer` in `EthLib.Cryptography.Proofs.Xmss.SignatureFailure` takes a call site whose `hi` carries the layer, in place of the four raw fields.
+  The new `CallSite.ne_msg_of_hi` says that a call site whose `hi` carries one layer is not a message call site of the other layer.
+  `encodeAddress`, `AddressType`, `AddressType.code`, `addrPrf`, `addrChain`, `addrLeaf`, `addrNode`, `addrParam`, `addrRnd` and `addrMsg` are removed.
+  So are `encodeAddress_inj`, `encodeAddress_ne_of_type_ne`, `AddressType.code_injective`, `addrPrf_inj`, `addrChain_inj`, `addrLeaf_inj`, `addrNode_inj`, `addrRnd_inj`, `addrMsg_inj`, `encodeAddress_ne_addrMsg`, `addrPrf_ne_addrRnd`, `addrParam_ne_addrRnd` and `Unforgeability.toList_encodeAddress`.
+  `toNat_encodeAddress_lo` and `bytes_encodeAddress` become `CallSite.toNat_encode_lo` and `CallSite.bytes_encode`.
+  In `Xmss.Unforgeability`, `toList_addrChain`, `toList_addrLeaf`, `toList_addrMsg`, `toList_addrRnd`, `toList_addrNode`, `toList_addrPrf` and `toList_addrParam` become `toList_encode_chain`, `toList_encode_leaf`, `toList_encode_msg`, `toList_encode_rnd`, `toList_encode_node`, `toList_encode_prf` and `toList_encode_param`.
+  Migration: write `.chain layer e mu` where a call read `addrChain layer e mu`, and `(CallSite.chain layer e mu).encode` where it needs the bytes.
+  For `addrChain_inj` and the others, rewrite with `CallSite.encode_injective.eq_iff` and the constructor's `injEq`.
+
 - From Glamsterdam, a system call starts with the accessed addresses of a transaction from the system address to its contract, with no access list ([#4071](https://github.com/ethereum/EthLib/issues/4071)).
   So the beneficiary, the precompiles, the system address and the contract start warm in that call; up to BPO5 it still starts with no access.
   In Lean, the new `Blocks.systemSubstate` gives that start, and `systemSubstate_of_lt_glamsterdam` and `systemSubstate_of_glamsterdam` in `EthLib.Execution.Proofs.Blocks.SystemCall` state it.

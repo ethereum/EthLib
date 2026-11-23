@@ -65,9 +65,8 @@ theorem isQueryBoundP_schemeSeed (hH : ∀ x, IsQueryBoundP (H x) p 1) (seed : S
 
 /-- A derivation from the scheme seed is one call of `H`. -/
 theorem isQueryBoundP_seedPrf (hH : ∀ x, IsQueryBoundP (H x) p 1) (s : Seed)
-    (publicParam : PublicParam)
-    (address : Address) (suffix : Array UInt64) :
-    IsQueryBoundP (seedPrf H s publicParam address suffix) p 1 :=
+    (publicParam : PublicParam) (site : CallSite) (suffix : Array UInt64) :
+    IsQueryBoundP (seedPrf H s publicParam site suffix) p 1 :=
   hH _
 
 /-- Key generation is the scheme seed, the parameter and the top tree.
@@ -198,9 +197,9 @@ variable {ι : Type} {spec : OracleSpec ι} (f : QueryImpl spec Id)
 include hH
 
 /-- A tweakable hash call is one call of `H`. -/
-theorem length_queriesWith_th (publicParam : PublicParam) (address : Address)
+theorem length_queriesWith_th (publicParam : PublicParam) (site : CallSite)
     (payload : Array UInt64) :
-    (queriesWith f (th H publicParam address payload)).length = 1 := by
+    (queriesWith f (th H publicParam site payload)).length = 1 := by
   rw [th, queriesWith_bind, List.length_append, hH, queriesWith_pure, List.length_nil]
 
 /-- The starts of a key's chains are `29` derivations from the scheme seed. -/
@@ -239,7 +238,7 @@ theorem length_queriesWith_keyGenWith (seed : Seed) :
   have hseed : (queriesWith f (schemeSeed H seed)).length = 1 := hH _
   have hpp : ∀ s, (queriesWith f (publicParamOf (seedPrf H s))).length = 1 := fun s => by
     -- The parameter has the type of a digest, but under another name.
-    have h := queriesWith_bind f (seedPrf H s ⟨0, 0⟩ addrParam
+    have h := queriesWith_bind f (seedPrf H s ⟨0, 0⟩ .param
       #[]) fun h => (pure (halfOf 0 h) : OracleComp spec PublicParam)
     exact (congrArg List.length h).trans (by rw [List.length_append]; exact congrArg (· + 0) (hH _))
   rw [keyGenWith, queriesWith_bind, List.length_append, hseed, Internal.keyGenFrom,

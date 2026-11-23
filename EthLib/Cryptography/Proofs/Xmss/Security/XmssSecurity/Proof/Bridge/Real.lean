@@ -66,8 +66,9 @@ theorem QueryCount.ofFnInOrder {α : Type} {k n : Nat} {c : Fin k → OracleComp
   rw [HashSig.ofFnInOrder_eq_map_sequenceFin]
   exact (QueryCount.sequenceFin h).map _
 
-theorem queryCount_th (publicParam : Xmss.PublicParam) (A : Xmss.Address) (payload : Array UInt64) :
-    QueryCount (Xmss.th queryH publicParam A payload : OracleComp HashSpec Xmss.Digest) 1 := by
+theorem queryCount_th (publicParam : Xmss.PublicParam) (site : Xmss.CallSite)
+    (payload : Array UInt64) :
+    QueryCount (Xmss.th queryH publicParam site payload : OracleComp HashSpec Xmss.Digest) 1 := by
   unfold Xmss.th
   exact (queryCount_queryH _).bind fun _ => .pure _
 
@@ -205,12 +206,12 @@ theorem Resolves.ofFnInOrder {α : Type} {cache : QueryCache HashSpec} {n : Nat}
 /-- The hash that starts chains `2j` and `2j + 1` of a bottom key is the bottom derivation's. -/
 theorem bottomPrfInput (seed : MasterSeed) (d : Derivations) (index : LeafIndex) (j : Fin (V / 2)) :
     Hash.Keccak.lanesBytes (Xmss.thInput (ofParam d.parameter)
-      (Xmss.addrPrf .bottom (ofLeafIndex index) j) (ofSeed seed).toArray)
+      (Xmss.CallSite.prf .bottom (ofLeafIndex index) j) (ofSeed seed).toArray)
       = bottomInput d.parameter seed (index, ⟨j.val, j.isLt⟩) := by
   rw [bottomInput_eq]
   simp only [Xmss.thInput_eq_append,
     EthLib.Cryptography.Hash.Keccak.lanesBytes_append, Xmss.Unforgeability.toList_ofParam,
-    Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_addrPrf]
+    Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_encode_prf]
   rw [Xmss.Unforgeability.toNat_ofLeafIndex]
   -- The bottom layer adds no flag to `hi`.
   exact congrArg (fun x => bytesLE 16 d.parameter ++ fieldBytes (tweakFields 0 0 x index.val) ++
@@ -219,13 +220,13 @@ theorem bottomPrfInput (seed : MasterSeed) (d : Derivations) (index : LeafIndex)
 /-- The hash that starts chains `2j` and `2j + 1` of a top key is the top derivation's. -/
 theorem topPrfInput (seed : MasterSeed) (d : Derivations) (key : TopIndex) (j : Fin (V / 2)) :
     Hash.Keccak.lanesBytes
-      (Xmss.thInput (ofParam d.parameter) (Xmss.addrPrf .top (ofTopIndex key) j)
+      (Xmss.thInput (ofParam d.parameter) (Xmss.CallSite.prf .top (ofTopIndex key) j)
         ((ofSeed seed).toArray))
       = topInput d.parameter seed (key, ⟨j.val, j.isLt⟩) := by
   rw [topInput_eq]
   simp only [Xmss.thInput_eq_append,
     EthLib.Cryptography.Hash.Keccak.lanesBytes_append, Xmss.Unforgeability.toList_ofParam,
-    Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_addrPrf]
+    Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_encode_prf]
   rw [Xmss.Unforgeability.toNat_ofTopIndex]
   -- The top layer adds its flag to `hi`.
   exact congrArg (fun x => bytesLE 16 d.parameter ++ fieldBytes (tweakFields 0 0 x key.val) ++
@@ -430,13 +431,13 @@ theorem realParam (h : Prepared seed d result cache) :
     simp only [Xmss.Unforgeability.ofParam, HashSig.ofDigestLanes]
     rfl
   -- The input is `0^128 | A_param | S`, the programmed parameter's.
-  have hinput : Hash.Keccak.lanesBytes (Xmss.thInput (ofParam (0 : PublicParameter)) Xmss.addrParam
-      ((ofSeed seed).toArray))
+  have hinput : Hash.Keccak.lanesBytes
+      (Xmss.thInput (ofParam (0 : PublicParameter)) Xmss.CallSite.param ((ofSeed seed).toArray))
       = paramInput seed := by
     rw [paramInput_eq]
     simp only [Xmss.thInput_eq_append,
     EthLib.Cryptography.Hash.Keccak.lanesBytes_append, Xmss.Unforgeability.toList_ofParam,
-      Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_addrParam]
+      Xmss.Unforgeability.toList_ofSeed, Xmss.Unforgeability.toList_encode_param]
     rfl
   refine (resolves_queryH (y := d.param) ?_).bind ?_
   · rw [hzero, hinput]

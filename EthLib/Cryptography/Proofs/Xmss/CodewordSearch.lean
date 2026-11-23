@@ -127,7 +127,7 @@ theorem prEvent_findCodeword_none (publicParam : PublicParam) (layer : Layer) (e
     (msg : Array UInt64) (base : Randomizer) (cache : XmssSecurity.HashSpec.QueryCache)
     (hfresh : ∀ j < MAX_RANDOMIZER_TRIALS,
       cache (Hash.Keccak.lanesBytes
-        (thInput publicParam (addrMsg layer e) (msg ++ (trialRandomizer base j).toArray)))
+        (thInput publicParam (CallSite.msg layer e) (msg ++ (trialRandomizer base j).toArray)))
         = none) :
     Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl (Internal.findCodeword
         Unforgeability.queryH publicParam layer e msg base 0
@@ -135,7 +135,8 @@ theorem prEvent_findCodeword_none (publicParam : PublicParam) (layer : Layer) (e
       = (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ MAX_RANDOMIZER_TRIALS := by
   rw [← prEvent_not_codeword, Internal.findCodeword_eq]
   refine Wots.prEvent_findFirst_romImpl_none (trialRandomizer base)
-    (fun rho => Hash.Keccak.lanesBytes (thInput publicParam (addrMsg layer e) (msg ++ rho.toArray)))
+    (fun rho => Hash.Keccak.lanesBytes
+      (thInput publicParam (CallSite.msg layer e) (msg ++ rho.toArray)))
     (fun u => codeword? (halfOf 0 (Unforgeability.ofOutput u))) _ (fun rho => ?_) _ 0 cache
     (fun j j' _ hj _ hj' h => ?_) (fun j _ hj => hfresh j (by omega))
   · simp only [messageDigest, th, Unforgeability.queryH,
@@ -179,7 +180,7 @@ theorem prEvent_findCodeword_none_le (publicParam : PublicParam) (layer : Layer)
     (msg : Array UInt64) (base : Randomizer) (cache : XmssSecurity.HashSpec.QueryCache)
     (hfresh : ∀ j < MAX_RANDOMIZER_TRIALS,
       cache (Hash.Keccak.lanesBytes
-        (thInput publicParam (addrMsg layer e) (msg ++ (trialRandomizer base j).toArray)))
+        (thInput publicParam (CallSite.msg layer e) (msg ++ (trialRandomizer base j).toArray)))
         = none) :
     Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl (Internal.findCodeword
         Unforgeability.queryH publicParam layer e msg base 0
