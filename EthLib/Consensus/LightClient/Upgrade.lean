@@ -49,7 +49,7 @@ def normalizeMerkleBranch (branch : List Bytes32) (gindex : Nat) : List Bytes32 
   -- Let `d = floor(log2(g))` be the depth of the index `g`, and `n` the length of the branch.
   --
   -- The result is `max(d - n, 0)` zero nodes, then the branch.
-  List.replicate (Nat.log2 gindex - branch.length) zeroBytes32 ++ branch
+  List.replicate (Nat.log2 gindex - branch.length) ZERO_HASH ++ branch
 
 /-- A branch of a depth, with zero nodes in front up to the depth of a deeper index. -/
 def normalizeBranch {depth : Nat} (branch : Vector Bytes32 depth) (gindex : Nat)
@@ -74,7 +74,7 @@ def LightClientHeader.upgradeFields {pre : Fork} (post : Fork) (before : pre < .
     if capella : .shapella ≤ pre then (header.execution ⟨capella, before⟩).upgrade post
     else ExecutionPayloadHeader.empty preset post
   -- The block hash exists only from Gloas, and the later fork is before Gloas.
-  executionBlockHash := fun _ => zeroBytes32
+  executionBlockHash := fun _ => ZERO_HASH
   -- From Capella, the branch carries over, since the body keeps its depth up to Fulu.
   --
   -- Before Capella, it is all zeros.
@@ -84,7 +84,7 @@ def LightClientHeader.upgradeFields {pre : Fork} (post : Fork) (before : pre < .
         have early : ¬Fork.glamsterdam ≤ pre := Nat.not_le_of_lt before
         have postEarly : ¬Fork.glamsterdam ≤ post := Nat.not_le_of_lt postBefore
         simp [executionBranchGindex, early, postEarly])
-    else Vector.replicate _ zeroBytes32
+    else Vector.replicate _ ZERO_HASH
 
 /-- The Gloas header of an Electra header, whose execution header gives the block hash. -/
 def LightClientHeader.toGloas (config : Config) {post : Fork} (gloas : .glamsterdam ≤ post)
@@ -119,7 +119,7 @@ def LightClientHeader.toGloas (config : Config) {post : Fork} (gloas : .glamster
   else
     -- For `e < CAPELLA_FORK_EPOCH`, the block hash and every node of the branch are zero.
     return ⟨header.beacon, fun during => absurd gloas (Nat.not_le_of_lt during.2),
-      fun _ => zeroBytes32, fun _ => Vector.replicate _ zeroBytes32⟩
+      fun _ => ZERO_HASH, fun _ => Vector.replicate _ ZERO_HASH⟩
 
 /-- A light client header of a later fork, with the beacon header of an earlier one. -/
 def LightClientHeader.upgrade (config : Config) {pre : Fork} (post : Fork) (later : pre ≤ post)

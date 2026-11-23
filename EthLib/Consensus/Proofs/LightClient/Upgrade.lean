@@ -362,7 +362,7 @@ theorem ExecutionPayloadHeader.hashTreeRoot_upgrade {pre post : Fork}
 
 /-- A vector cast to an equal length is all zero exactly when the vector is. -/
 private theorem cast_beq_replicate {n m : Nat} (h : n = m) (v : Vector Bytes32 n) :
-    (v.cast h == Vector.replicate m zeroBytes32) = (v == Vector.replicate n zeroBytes32) := by
+    (v.cast h == Vector.replicate m ZERO_HASH) = (v == Vector.replicate n ZERO_HASH) := by
   subst h
   rfl
 
@@ -445,8 +445,8 @@ theorem LightClientHeader.isValidLightClientHeader_upgradeFields {config : Confi
       simp only [LightClientHeader.upgradeFields, capella, ↓reduceDIte]
       exact cast_toList _ _
     have same : ∀ h, ((header.upgradeFields post before postBefore).executionBranch h ==
-        Vector.replicate _ zeroBytes32) = (header.executionBranch capella ==
-        Vector.replicate _ zeroBytes32) := fun h => by
+        Vector.replicate _ ZERO_HASH) = (header.executionBranch capella ==
+        Vector.replicate _ ZERO_HASH) := fun h => by
       simp only [LightClientHeader.upgradeFields, capella, ↓reduceDIte]
       exact cast_beq_replicate _ _
     have root := root_upgradeFields (config := config) capella postCapella before postBefore
@@ -505,7 +505,7 @@ theorem LightClientHeader.isValidLightClientHeader_upgradeFields {config : Confi
         ExecutionPayloadHeader.empty preset post := fun h => by
       simp [LightClientHeader.upgradeFields, capella]
     have branch : ∀ h, (header.upgradeFields post before postBefore).executionBranch h =
-        Vector.replicate _ zeroBytes32 := fun h => by
+        Vector.replicate _ ZERO_HASH := fun h => by
       simp [LightClientHeader.upgradeFields, capella]
     have slot := capellaSlot.resolve_left capella
     unfold isValidLightClientHeader at valid ⊢

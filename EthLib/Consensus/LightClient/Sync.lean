@@ -233,9 +233,6 @@ open LightClientError (liftRoot requireFork)
 def sameSszValue {α : Type} [SszType α] (a b : α) : Bool :=
   SszType.toValue a == SszType.toValue b
 
-/-- The 32 zero bytes. -/
-def zeroBytes32 : Bytes32 := Vector.replicate 32 0
-
 /-- The execution payload header of Capella with the fields that a later header shares. -/
 def ExecutionPayloadHeader.toCapella {preset : Preset} {fork : Fork} (capella : .shapella ≤ fork)
     (header : ExecutionPayloadHeader preset fork) : ExecutionPayloadHeader preset .shapella where
@@ -259,10 +256,10 @@ def ExecutionPayloadHeader.toCapella {preset : Preset} {fork : Fork} (capella : 
 
 /-- The header whose fields are all zero, which stands for no header. -/
 def LightClientHeader.empty (preset : Preset) (fork : Fork) : LightClientHeader preset fork where
-  beacon := ⟨0, 0, zeroBytes32, zeroBytes32, zeroBytes32⟩
+  beacon := ⟨0, 0, ZERO_HASH, ZERO_HASH, ZERO_HASH⟩
   execution := fun _ => ExecutionPayloadHeader.empty preset fork
-  executionBlockHash := fun _ => zeroBytes32
-  executionBranch := fun _ => Vector.replicate _ zeroBytes32
+  executionBlockHash := fun _ => ZERO_HASH
+  executionBranch := fun _ => Vector.replicate _ ZERO_HASH
 
 variable {preset : Preset} {fork : Fork}
 
@@ -306,7 +303,7 @@ def getLcExecutionRoot (config : Config) (header : LightClientHeader preset fork
     else if config.CAPELLA_FORK_EPOCH ≤ epoch then
       rebuildLcExecutionRoot (preset := preset) header.beacon.slot blockHash branch .shapella
     -- For an earlier slot, the root is zero.
-    else return zeroBytes32
+    else return ZERO_HASH
   -- From Capella to Fulu, the header carries an execution payload header.
   else if capella : .shapella ≤ fork then
     let execution := header.execution ⟨capella, Nat.lt_of_not_le gloas⟩
@@ -319,9 +316,9 @@ def getLcExecutionRoot (config : Config) (header : LightClientHeader preset fork
     else if config.CAPELLA_FORK_EPOCH ≤ epoch then
       liftRoot (SszType.hashTreeRoot (execution.toCapella capella))
     -- For an earlier slot, the root is zero.
-    else return zeroBytes32
+    else return ZERO_HASH
   -- Before Capella, the root is zero.
-  else return zeroBytes32
+  else return ZERO_HASH
 
 /-- Whether a light client header is valid for the fork of its slot.
 
@@ -350,7 +347,7 @@ def isValidLightClientHeader (config : Config) (header : LightClientHeader prese
     -- For `CAPELLA_FORK_EPOCH ≤ e`, `g` is `EXECUTION_BLOCK_HASH_GINDEX`.
     else if config.CAPELLA_FORK_EPOCH ≤ epoch then climbs EXECUTION_BLOCK_HASH_GINDEX
     -- For an earlier slot, `h` and each node of the branch are zero.
-    else return blockHash == zeroBytes32 && branch.all (· == zeroBytes32)
+    else return blockHash == ZERO_HASH && branch.all (· == ZERO_HASH)
   -- From Capella to Fulu, the header carries an execution payload header and its branch.
   else if capella : .shapella ≤ fork then
     let execution := header.execution ⟨capella, Nat.lt_of_not_le gloas⟩
@@ -363,7 +360,7 @@ def isValidLightClientHeader (config : Config) (header : LightClientHeader prese
     -- For `e < CAPELLA_FORK_EPOCH`, the execution payload header is empty, and the branch zero.
     if epoch < config.CAPELLA_FORK_EPOCH then
       return sameSszValue execution (ExecutionPayloadHeader.empty preset fork) &&
-        branch == Vector.replicate _ zeroBytes32
+        branch == Vector.replicate _ ZERO_HASH
     -- Otherwise the execution root of the header climbs to the body root by the branch.
     --
     -- It climbs from generalized index `EXECUTION_PAYLOAD_GINDEX`.
@@ -404,11 +401,11 @@ def nextSyncCommitteeGindexAtSlot (config : Config) (slot : Slot) : Except Light
 
 /-- Whether an update proves the next sync committee: its committee branch is not all zero. -/
 def LightClientUpdate.isSyncCommitteeUpdate (update : LightClientUpdate preset fork) : Bool :=
-  update.nextSyncCommitteeBranch != Vector.replicate _ zeroBytes32
+  update.nextSyncCommitteeBranch != Vector.replicate _ ZERO_HASH
 
 /-- Whether an update proves a finalized header: its finality branch is not all zero. -/
 def LightClientUpdate.isFinalityUpdate (update : LightClientUpdate preset fork) : Bool :=
-  update.finalityBranch != Vector.replicate _ zeroBytes32
+  update.finalityBranch != Vector.replicate _ ZERO_HASH
 
 /-- The number of members of the sync committee that signed. -/
 def SyncAggregate.participants (aggregate : SyncAggregate preset) : Nat :=
@@ -521,7 +518,7 @@ def validateFinality (config : Config) (update : LightClientUpdate preset fork) 
     let finalizedRoot ← if update.finalizedHeader.beacon.slot = GENESIS_SLOT then do
         ensure (sameSszValue update.finalizedHeader (LightClientHeader.empty preset fork))
           (.unexpectedFinalizedHeader update.finalizedHeader.beacon.slot)
-        pure zeroBytes32
+        pure ZERO_HASH
       -- At another slot, the finalized header is valid for the fork of its slot.
       --
       -- Its root is that of its beacon header.
@@ -755,7 +752,7 @@ def LightClientFinalityUpdate.toUpdate (update : LightClientFinalityUpdate prese
     LightClientUpdate preset fork where
   attestedHeader := update.attestedHeader
   nextSyncCommittee := SyncCommittee.empty preset
-  nextSyncCommitteeBranch := Vector.replicate _ zeroBytes32
+  nextSyncCommitteeBranch := Vector.replicate _ ZERO_HASH
   finalizedHeader := update.finalizedHeader
   finalityBranch := update.finalityBranch
   syncAggregate := update.syncAggregate
@@ -766,9 +763,9 @@ def LightClientOptimisticUpdate.toUpdate (update : LightClientOptimisticUpdate p
     LightClientUpdate preset fork where
   attestedHeader := update.attestedHeader
   nextSyncCommittee := SyncCommittee.empty preset
-  nextSyncCommitteeBranch := Vector.replicate _ zeroBytes32
+  nextSyncCommitteeBranch := Vector.replicate _ ZERO_HASH
   finalizedHeader := LightClientHeader.empty preset fork
-  finalityBranch := Vector.replicate _ zeroBytes32
+  finalityBranch := Vector.replicate _ ZERO_HASH
   syncAggregate := update.syncAggregate
   signatureSlot := update.signatureSlot
 

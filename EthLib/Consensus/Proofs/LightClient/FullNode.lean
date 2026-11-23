@@ -71,16 +71,16 @@ theorem isValidNormalizedMerkleBranch_normalize {leaf root : Bytes32} {branch : 
     | error => rfl
     | ok index =>
       -- The added zeros join the front, and the rest of the branch stays the same.
-      have zeroed : ∀ node ∈ List.replicate (Nat.log2 target - branch.length) zeroBytes32,
-          node = zeroBytes32 := fun _ member => List.eq_of_mem_replicate member
-      generalize List.replicate (Nat.log2 target - branch.length) zeroBytes32 = zeros at zeroed
+      have zeroed : ∀ node ∈ List.replicate (Nat.log2 target - branch.length) ZERO_HASH,
+          node = ZERO_HASH := fun _ member => List.eq_of_mem_replicate member
+      generalize List.replicate (Nat.log2 target - branch.length) ZERO_HASH = zeros at zeroed
       have extra : (zeros ++ branch).length - Nat.log2 gindex =
           zeros.length + (branch.length - Nat.log2 gindex) := by
         simp only [List.length_append]
         omega
       rw [extra, List.take_length_add_append, List.drop_length_add_append, List.all_append]
       have front : (zeros.all fun node => node == Vector.replicate 32 0) = true :=
-        List.all_eq_true.mpr fun node member => by simp [zeroed node member, zeroBytes32]
+        List.all_eq_true.mpr fun node member => by simp [zeroed node member, ZERO_HASH]
       rw [front, Bool.true_and]
 
 variable {preset : Preset} {fork : Fork}

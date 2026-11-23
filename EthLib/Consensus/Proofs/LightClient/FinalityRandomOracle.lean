@@ -83,7 +83,7 @@ structure FinalityOutcome where
 It is zero bytes at the genesis slot, and the root of the header at any later slot. -/
 def finalizedLeafM {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray)
     (header : BeaconBlockHeader) : m (Except Err Bytes) :=
-  if header.slot = GENESIS_SLOT then pure (.ok zeroBytes32.toArray)
+  if header.slot = GENESIS_SLOT then pure (.ok ZERO_HASH.toArray)
   else (hashTreeRootM (Hasher.ofHash hash) (SszType.desc BeaconBlockHeader)
     (SszType.toValue header)).run
 
@@ -361,9 +361,9 @@ theorem prEvent_finalityWins_le_of_adversary (gindex : Nat)
 theorem extractFinality_sha256 (gindex : Nat) (claim : FinalityClaim) :
     (extractFinality (m := Id) Cryptography.Hash.Sha256.hash gindex claim).run =
       ⟨claim, match getSubtreeIndex gindex,
-          (if claim.first.slot = GENESIS_SLOT then .ok zeroBytes32
+          (if claim.first.slot = GENESIS_SLOT then .ok ZERO_HASH
             else SszType.hashTreeRoot claim.first),
-          (if claim.second.slot = GENESIS_SLOT then .ok zeroBytes32
+          (if claim.second.slot = GENESIS_SLOT then .ok ZERO_HASH
             else SszType.hashTreeRoot claim.second) with
         | .ok index, .ok firstLeaf, .ok secondLeaf =>
           some (extractBranches (m := Id) Cryptography.Hash.Sha256.hash (Nat.log2 gindex)
@@ -373,11 +373,11 @@ theorem extractFinality_sha256 (gindex : Nat) (claim : FinalityClaim) :
         | _, _, _ => none⟩ := by
   have read : ∀ header : BeaconBlockHeader,
       (finalizedLeafM (m := Id) Cryptography.Hash.Sha256.hash header).run >>= toChunk =
-        if header.slot = GENESIS_SLOT then .ok zeroBytes32 else SszType.hashTreeRoot header := by
+        if header.slot = GENESIS_SLOT then .ok ZERO_HASH else SszType.hashTreeRoot header := by
     intro header
     unfold finalizedLeafM
     split
-    · show toChunk zeroBytes32.toArray = .ok zeroBytes32
+    · show toChunk ZERO_HASH.toArray = .ok ZERO_HASH
       exact toChunk_ok_iff.mpr rfl
     · simp only [ofHash_sha256, SszType.hashTreeRoot_eq]
       rfl
@@ -395,9 +395,9 @@ theorem finalityWins_sha256_iff {gindex : Nat} {claim : FinalityClaim} :
     FinalityWins gindex
         (extractFinality (m := Id) Cryptography.Hash.Sha256.hash gindex claim).run ↔
       claim.first ≠ claim.second ∧ ∃ firstLeaf secondLeaf,
-        (if claim.first.slot = GENESIS_SLOT then .ok zeroBytes32
+        (if claim.first.slot = GENESIS_SLOT then .ok ZERO_HASH
           else SszType.hashTreeRoot claim.first) = .ok firstLeaf ∧
-        (if claim.second.slot = GENESIS_SLOT then .ok zeroBytes32
+        (if claim.second.slot = GENESIS_SLOT then .ok ZERO_HASH
           else SszType.hashTreeRoot claim.second) = .ok secondLeaf ∧
         (firstLeaf ≠ secondLeaf ∨
           claim.first.slot ≠ GENESIS_SLOT ∧ claim.second.slot ≠ GENESIS_SLOT) ∧
@@ -414,9 +414,9 @@ theorem finalityWins_sha256_iff {gindex : Nat} {claim : FinalityClaim} :
     fun _ => List.take_of_length_le (by simp only [List.length_drop]; omega)
   have long : ∀ length : Nat, length - (length - Nat.log2 gindex) = Nat.log2 gindex ↔
       Nat.log2 gindex ≤ length := fun _ => by omega
-  generalize (if claim.first.slot = GENESIS_SLOT then (.ok zeroBytes32 : Except Err Bytes32)
+  generalize (if claim.first.slot = GENESIS_SLOT then (.ok ZERO_HASH : Except Err Bytes32)
     else SszType.hashTreeRoot claim.first) = first
-  generalize (if claim.second.slot = GENESIS_SLOT then (.ok zeroBytes32 : Except Err Bytes32)
+  generalize (if claim.second.slot = GENESIS_SLOT then (.ok ZERO_HASH : Except Err Bytes32)
     else SszType.hashTreeRoot claim.second) = second
   by_cases zero : gindex = 0
   · subst zero
@@ -447,8 +447,8 @@ theorem finalityWins_of_validateFinality {fork : Fork} {config : Config}
     (sameRoot : first.attestedHeader.beacon.stateRoot = second.attestedHeader.beacon.stateRoot)
     (sameSlot : first.attestedHeader.beacon.slot = second.attestedHeader.beacon.slot)
     (differ : first.finalizedHeader.beacon ≠ second.finalizedHeader.beacon)
-    (firstNonzero : SszType.hashTreeRoot first.finalizedHeader.beacon ≠ .ok zeroBytes32)
-    (secondNonzero : SszType.hashTreeRoot second.finalizedHeader.beacon ≠ .ok zeroBytes32) :
+    (firstNonzero : SszType.hashTreeRoot first.finalizedHeader.beacon ≠ .ok ZERO_HASH)
+    (secondNonzero : SszType.hashTreeRoot second.finalizedHeader.beacon ≠ .ok ZERO_HASH) :
     ∃ gindex, finalizedRootGindexAtSlot (preset := preset) (fork := fork) config
         first.attestedHeader.beacon.slot = .ok gindex ∧
       FinalityWins gindex (extractFinality (m := Id) Cryptography.Hash.Sha256.hash gindex
