@@ -299,22 +299,6 @@ private theorem translateAttestation_exists_ok {state : BeaconState preset .alta
   rw [folded]
   exact ⟨_, rfl⟩
 
-/-- In Phase 0, each attester of a pending attestation is in the registry.
-
-It is a member of a committee, so an active validator. -/
-private theorem getPendingAttestingIndices_lt {pre : BeaconState preset .phase0}
-    {attestation : PendingAttestation preset} {attesters : List ValidatorIndex}
-    (ok : getPendingAttestingIndices pre attestation = .ok attesters) :
-    ∀ index ∈ attesters, index.toNat < pre.validators.data.size := by
-  intro index member
-  simp only [getPendingAttestingIndices, bind, Except.bind] at ok
-  split at ok
-  · cases ok
-  · rename_i committee committeeOk
-    have inCommittee := mem_of_committeeAttesters ok member
-    have active := mem_getActiveValidatorIndices_of_getBeaconCommittee committeeOk inCommittee
-    exact lt_size_of_mem_getActiveValidatorIndices active
-
 /-- The upgrade to Altair succeeds when the pending attestations read and the draw has its bounds.
 
 Each pending attestation of the previous epoch must give its flags and its attesters.

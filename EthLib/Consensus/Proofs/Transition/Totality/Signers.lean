@@ -115,7 +115,7 @@ theorem processEpoch_supply_le_of_signers {config : Config} {checks : SignatureC
       altair (Nat.le_trans (by decide) electra)
     have matching := getMatchingSourceAttestations_eq_ok (state := state) before
       (Or.inl rfl)
-    obtain ⟨attesters, listed, inside⟩ := getUnslashedAttestingIndices_exists_ok within
+    obtain ⟨attesters, listed, inside⟩ := getUnslashedAttestingIndices_exists_ok
       fun attestation member => resolved before attestation (mem_recent_of_mem_source member)
     obtain ⟨attestingBalance, weighed, _⟩ := getTotalBalance_exists_ok inside summed
     have raised := processEpoch_supply_le_of_lt_altair before within increment active matching

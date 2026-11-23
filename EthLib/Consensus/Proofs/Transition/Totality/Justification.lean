@@ -212,28 +212,12 @@ private theorem weighJustificationAndFinalization_exists_ok {total previous curr
   refine bind_exists_ok (finalizes_exists_ok (by simp; omega) _ _) fun _ => ?_
   exact ⟨_, rfl⟩
 
-/-- The signers of a pending attestation are validators of the registry.
-
-They come from a committee, whose members are active, and the active indices are in range. -/
-private theorem pendingSigners_lt (_within : state.RegistryWithinLimit)
-    {attestation : PendingAttestation preset} {signers : List ValidatorIndex}
-    (computed : getPendingAttestingIndices state attestation = .ok signers) :
-    ∀ index ∈ signers, index.toNat < state.validators.data.size := by
-  intro index member
-  simp only [getPendingAttestingIndices, bind_ok_iff] at computed
-  obtain ⟨committee, committeeOk, signersOk⟩ := computed
-  have active := mem_getActiveValidatorIndices_of_getBeaconCommittee committeeOk
-    (mem_of_committeeAttesters signersOk member)
-  exact lt_size_of_mem_getActiveValidatorIndices active
-
 /-- The unslashed signers of some pending attestations succeed.
 
 The signers of each attestation must succeed.
 
-The registry must stay within its limit.
-
 The unslashed signers are then validators of the registry. -/
-theorem getUnslashedAttestingIndices_exists_ok (within : state.RegistryWithinLimit)
+theorem getUnslashedAttestingIndices_exists_ok
     {attestations : Array (PendingAttestation preset)}
     (resolved : ∀ attestation ∈ attestations,
       ∃ signers, getPendingAttestingIndices state attestation = .ok signers) :
@@ -246,7 +230,7 @@ theorem getUnslashedAttestingIndices_exists_ok (within : state.RegistryWithinLim
     intro index member
     obtain ⟨list, listMember, indexMember⟩ := List.mem_flatten.mp member
     obtain ⟨attestation, attestationMember, computed⟩ := mapM_ok_mem listsOk list listMember
-    exact pendingSigners_lt within computed index indexMember
+    exact getPendingAttestingIndices_lt computed index indexMember
   obtain ⟨unslashed, unslashedOk⟩ := filterM_exists_ok (list := sortedSet lists.flatten)
     (test := fun index => do return !(← getValidator state index).slashed)
     fun index member => by
@@ -264,18 +248,16 @@ theorem getUnslashedAttestingIndices_exists_ok (within : state.RegistryWithinLim
 
 The signers of each attestation must succeed.
 
-The registry must stay within its limit.
-
 The sum of the effective balances must be below 2^64.
 
 The balance is then at most one increment or that sum, whichever is larger. -/
 private theorem getAttestingBalance_exists_ok (summed : effectiveBalanceSum state < 2 ^ 64)
-    (within : state.RegistryWithinLimit) {attestations : Array (PendingAttestation preset)}
+    {attestations : Array (PendingAttestation preset)}
     (resolved : ∀ attestation ∈ attestations,
       ∃ signers, getPendingAttestingIndices state attestation = .ok signers) :
     ∃ total, getAttestingBalance state attestations = .ok total ∧
       total.toNat ≤ max preset.EFFECTIVE_BALANCE_INCREMENT.toNat (effectiveBalanceSum state) := by
-  obtain ⟨attesters, attestersOk, inside⟩ := getUnslashedAttestingIndices_exists_ok within resolved
+  obtain ⟨attesters, attestersOk, inside⟩ := getUnslashedAttestingIndices_exists_ok resolved
   obtain ⟨total, totalOk, bounded⟩ := getTotalBalance_exists_ok inside summed
   refine ⟨total, ?_, bounded⟩
   unfold getAttestingBalance
@@ -410,10 +392,10 @@ theorem processJustificationAndFinalization_total (roots : preset.RootsReachPrev
     obtain ⟨current, currentOk, currentIn⟩ :=
       getMatchingTargetAttestations_exists_ok before (.inr rfl) currentRoot
     obtain ⟨previousBalance, previousBalanceOk, previousLe⟩ := getAttestingBalance_exists_ok
-      fitsSum within fun attestation member =>
+      fitsSum fun attestation member =>
         resolved before attestation (mem_recent_of_mem_source (previousIn _ member))
     obtain ⟨currentBalance, currentBalanceOk, currentLe⟩ := getAttestingBalance_exists_ok
-      fitsSum within fun attestation member =>
+      fitsSum fun attestation member =>
         resolved before attestation (mem_recent_of_mem_source (currentIn _ member))
     obtain ⟨after, weighOk⟩ := weighed previousBalance currentBalance (by omega) (by omega)
     exact ⟨after, bind_ok_iff.mpr ⟨_, previousOk,

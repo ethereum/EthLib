@@ -359,7 +359,7 @@ private theorem getAttestationComponentDeltas_exists_le {budget ceiling : Nat}
       ∀ j < state.validators.data.size,
         (rewards.getD j 0).toNat ≤ ceiling * preset.budgetIncrements budget ∧
           (penalties.getD j 0).toNat ≤ ceiling := by
-  obtain ⟨attesters, attestersOk, inside⟩ := getUnslashedAttestingIndices_exists_ok within resolved
+  obtain ⟨attesters, attestersOk, inside⟩ := getUnslashedAttestingIndices_exists_ok resolved
   obtain ⟨attestingBalance, balanceOk, balanceLe⟩ :=
     getTotalBalance_exists_ok inside (Nat.lt_of_le_of_lt summed budgetLt)
   have incrementsLe : (attestingBalance / preset.EFFECTIVE_BALANCE_INCREMENT).toNat ≤
@@ -533,7 +533,7 @@ The signers of each recent pending attestation must succeed, as inclusion in a b
 
 Each reward is then at most the bound at the budget. -/
 private theorem getInclusionDelayDeltas_exists_le {budget : Nat} (before : fork < .altair)
-    (genesis : getCurrentEpoch state ≠ GENESIS_EPOCH) (within : state.RegistryWithinLimit)
+    (genesis : getCurrentEpoch state ≠ GENESIS_EPOCH)
     (summed : effectiveBalanceSum state ≤ budget)
     (fits : preset.baseRewardBoundBeforeAltair budget < 2 ^ 64) {total : Gwei}
     (totalOk : getTotalActiveBalance state = .ok total)
@@ -550,7 +550,7 @@ private theorem getInclusionDelayDeltas_exists_le {budget : Nat} (before : fork 
     (xs := (state.previousEpochAttestations before).data.toList)
     (f := getPendingAttestingIndices state) fun attestation member =>
       resolved before attestation (.inl (Array.mem_toList_iff.mp member))
-  obtain ⟨attesters, attestersOk, inside⟩ := getUnslashedAttestingIndices_exists_ok within
+  obtain ⟨attesters, attestersOk, inside⟩ := getUnslashedAttestingIndices_exists_ok
     (attestations := (state.previousEpochAttestations before).data)
     fun attestation member => resolved before attestation (.inl member)
   have amongOk : unslashedAmong state signers = .ok attesters := by
@@ -724,7 +724,7 @@ private theorem getInactivityPenaltyDeltas_exists_le {config : Config} {ceiling 
     omega
   obtain ⟨target, targetOk, targetIn⟩ := getMatchingTargetAttestations_exists_ok before
     (.inl rfl) (getBlockRoot_exists_ok roots last room (.inl rfl))
-  obtain ⟨attesters, attestersOk, -⟩ := getUnslashedAttestingIndices_exists_ok within
+  obtain ⟨attesters, attestersOk, -⟩ := getUnslashedAttestingIndices_exists_ok
     fun attestation member =>
       resolved before attestation (mem_recent_of_mem_source (targetIn attestation member))
   obtain ⟨⟨rewards, penalties⟩, computed⟩ :
@@ -910,7 +910,7 @@ theorem processRewardsAndPenalties_total_of_lt_altair {config : Config} {budget 
     getAttestationComponentDeltas_exists_le within summed budgetLt finalized totalOk baseOk one
       productFits fun attestation member => previousResolved attestation (headIn _ member)
   obtain ⟨inclusionRewards, inclusionPenalties, inclusionOk, inclusionLe⟩ :=
-    getInclusionDelayDeltas_exists_le before genesis within summed (by omega) totalOk baseAt
+    getInclusionDelayDeltas_exists_le before genesis summed (by omega) totalOk baseAt
       resolved wellFormed
   obtain ⟨inactivityRewards, inactivityPenalties, inactivityOk, inactivityLe⟩ :=
     getInactivityPenaltyDeltas_exists_le (config := config) before roots last room horizon within
