@@ -204,9 +204,33 @@ private theorem foldl_escape_toList :
   | [], _ => by simp
   | c :: cs, acc => by simp [foldl_escape_toList cs, escape_toList]
 
+private theorem esc_of_plain {c : Char} (h : plain c = true) : esc c = [c] := by
+  simp only [plain, Bool.not_eq_true', Bool.or_eq_false_iff, decide_eq_false_iff_not] at h
+  obtain ⟨⟨h1, h2⟩, h3⟩ := h
+  have h4 : c ≠ '\n' := by rintro rfl; exact h3 (by decide)
+  have h5 : c ≠ '\r' := by rintro rfl; exact h3 (by decide)
+  simp [esc, escape, h1, h2, h3, h4, h5]
+
+/-- Characters that are all plain escape to themselves. -/
+private theorem flatMap_esc_of_plain :
+    ∀ cs : List Char, cs.dropWhile plain = [] → cs.flatMap esc = cs
+  | [], _ => by simp
+  | c :: cs, h => by
+    by_cases hc : plain c = true
+    · rw [List.dropWhile_cons_of_pos hc] at h
+      simp [esc_of_plain hc, flatMap_esc_of_plain cs h]
+    · simp [List.dropWhile_cons_of_neg hc] at h
+
 private theorem writeString_toList (s acc : String) :
     (writeString s acc).toList = acc.toList ++ '"' :: (s.toList.flatMap esc ++ ['"']) := by
-  simp [writeString, foldl_escape_toList, String.toList_push]
+  unfold writeString
+  split
+  · rename_i all
+    -- Every character is plain, so each one escapes to itself.
+    have plainAll : s.toList.dropWhile plain = [] := by
+      rw [← after_startPos, ← after_plainEnd, all, (after_eq_nil_iff).2 rfl]
+    simp [flatMap_esc_of_plain _ plainAll, String.toList_push, String.toList_append]
+  · simp [foldl_escape_toList, String.toList_push]
 
 /-- The text of a number. -/
 private def numText (n : JsonNumber) : List Char :=
@@ -331,13 +355,6 @@ private theorem append_of_isEmpty (acc piece : String) :
     rw [String.isEmpty_iff.1 h]
     simp
   · rfl
-
-private theorem esc_of_plain {c : Char} (h : plain c = true) : esc c = [c] := by
-  simp only [plain, Bool.not_eq_true', Bool.or_eq_false_iff, decide_eq_false_iff_not] at h
-  obtain ⟨⟨h1, h2⟩, h3⟩ := h
-  have h4 : c ≠ '\n' := by rintro rfl; exact h3 (by decide)
-  have h5 : c ≠ '\r' := by rintro rfl; exact h3 (by decide)
-  simp [esc, escape, h1, h2, h3, h4, h5]
 
 private theorem esc_of_not_plain {c : Char} (h : plain c = false) : ∃ t, esc c = '\\' :: t := by
   unfold esc escape

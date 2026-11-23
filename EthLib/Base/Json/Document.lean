@@ -111,7 +111,9 @@ def escape (acc : String) (c : Char) : String :=
 
 /-- A string as the text writes it, between quotation marks, after the text already written. -/
 def writeString (text : String) (acc : String) : String :=
-  (text.toList.foldl escape (acc.push '"')).push '"'
+  -- A string with no character to escape is copied at once.
+  if plainEnd text.startPos = text.endPos then ((acc.push '"') ++ text).push '"'
+  else (text.toList.foldl escape (acc.push '"')).push '"'
 
 /-- A number as the text writes it, after the text already written.
 
