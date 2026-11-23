@@ -3,6 +3,8 @@ module
 public import EthLib.Base.Proofs.Except
 public import EthLib.Networking.Libp2p.Tls
 public import EthLib.Networking.Proofs.Libp2p.PeerId
+public import EthLib.Serialization.Proofs.Der
+import EthLib.Cryptography.Proofs.Secp256r1.Encoding
 public import EthLib.Base.Except
 
 /-!
@@ -20,6 +22,7 @@ These theorems describe the concrete checks that a successful authentication pas
 - Its value counts 86400 seconds for each day from 1970-01-01 in a calendar model, plus the time.
 - A validity reads as two such times in order.
 - The endpoints of a parsed certificate are what its own validity field reads as.
+- An SPKI reads as a P-256 key exactly when it is 26 fixed octets, then an uncompressed point.
 -/
 
 @[expose] public section
@@ -613,5 +616,197 @@ theorem criticalOid_spec (es : List Extension)
   have q := List.find?_some he
   simp at q
   exact ⟨e, mem, q.1, by simpa using q.2, by simp [criticalOid, he]⟩
+
+/-! ## The P-256 key of a certificate -/
+
+open Proofs.Der (data_toList_eq_nil_of_isEmpty data_toList_eq_of_read_ok read_eq_ok_of_length_lt
+  exists_read_of_children_eq_ok_pair children_go_succ_eq_ok_of_read children_go_empty
+  size_eq_length)
+
+/-- A DER step lifted to the certificate boundary returns a value exactly when the step does. -/
+private theorem der_ok_iff {α : Type} {x : Except Der.Error α} {a : α} :
+    der x = .ok a ↔ x = .ok a :=
+  mapError_ok_iff
+
+/-- The fields of a value are its children, after a check of its tag. -/
+private theorem fields_ok_iff {tag : UInt8} {value : Der.Value} {values : List Der.Value} :
+    fields tag value = .ok values ↔ value.tag = tag ∧ Der.children value.content = .ok values := by
+  unfold fields
+  by_cases ht : value.tag = tag
+  · cases Der.children value.content <;>
+      simp [ensure, ht, der, Except.mapError, bind, Except.bind]
+  · simp only [ensure, ht, ite_false, bind, Except.bind, reduceCtorEq, false_and]
+
+/-- An input that the uncompressed decoder accepts is 65 octets. -/
+private theorem length_of_decodeUncompressed {key : List UInt8}
+    {point : Cryptography.Secp256r1.Point}
+    (h : Cryptography.Secp256r1.decodeUncompressed key = some point) : key.length = 65 := by
+  obtain ⟨x, y, -, -, rfl⟩ := Cryptography.Secp256r1.decodeUncompressed_eq_some_iff.mp h
+  simp [Cryptography.Secp256r1.encodeUncompressed, Cryptography.Secp256r1.Fp.toBytes,
+    natToBytes_length]
+
+/-- The content octets of the algorithm id-ecPublicKey with the curve secp256r1. -/
+private abbrev p256Algorithm : List UInt8 :=
+  [0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01,
+    0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07]
+
+/-- A P-256 key reads from an SPKI exactly when the SPKI is 26 fixed octets, then its encoding.
+
+They are a SEQUENCE header, the DER of id-ecPublicKey with secp256r1, then a BIT STRING header.
+
+The two OIDs are `1.2.840.10045.2.1` of RFC 5480 §2.1.1 and `1.2.840.10045.3.1.7` of §2.1.1.1.
+
+The BIT STRING has no unused bits and holds an uncompressed point (RFC 5480 §2.2).
+
+So every other key type, curve, parameter form and length form is rejected.
+
+So is an unused bit or a trailing octet. -/
+theorem readP256_eq_ok_iff {spki : ByteArray} {point : Cryptography.Secp256r1.Point} :
+    readP256 spki = .ok point ↔ ∃ key, Cryptography.Secp256r1.decodeUncompressed key = some point ∧
+      spki.data.toList = [0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02,
+        0x01, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00] ++
+          key := by
+  constructor
+  · intro h
+    unfold readP256 at h
+    obtain ⟨sequence, hseq, h1⟩ := bind_ok_iff.mp h
+    obtain ⟨values, hvalues, h2⟩ := bind_ok_iff.mp h1
+    rcases values with _ | ⟨algorithm, _ | ⟨key, _ | ⟨_, _⟩⟩⟩
+    · simp [throw, throwThe, MonadExceptOf.throw] at h2
+    · simp [throw, throwThe, MonadExceptOf.throw] at h2
+    rotate_left
+    · simp [throw, throwThe, MonadExceptOf.throw] at h2
+    obtain ⟨⟨oid, parameter⟩, halg, h3⟩ := bind_ok_iff.mp h2
+    obtain ⟨curve, hcurve, h4⟩ := bind_ok_iff.mp h3
+    obtain ⟨curveOid, hcurveOid, h5⟩ := bind_ok_iff.mp h4
+    obtain ⟨hensure, h6⟩ := bind_unit_ok_iff.mp h5
+    obtain ⟨bytes, hbytes, h7⟩ := bind_ok_iff.mp h6
+    clear h h1 h2 h3 h4 h5 h6
+    obtain ⟨rfl, rfl⟩ := ensure_ok_iff.mp hensure
+    cases hdec : Cryptography.Secp256r1.decodeUncompressed bytes.data.toList with
+    | none => simp [hdec, throw, throwThe, MonadExceptOf.throw] at h7
+    | some p =>
+    simp only [hdec, pure, Except.pure, Except.ok.injEq] at h7
+    subst h7
+    refine ⟨bytes.data.toList, hdec, ?_⟩
+    have hk := length_of_decodeUncompressed hdec
+    -- The algorithm holds the key type and one parameter, the curve.
+    unfold readAlgorithm at halg
+    obtain ⟨parts, hparts, halg⟩ := bind_ok_iff.mp halg
+    obtain ⟨atag, achildren⟩ := fields_ok_iff.mp hparts
+    rcases parts with _ | ⟨o, _ | ⟨q, _ | ⟨_, _⟩⟩⟩
+    · simp [throw, throwThe, MonadExceptOf.throw] at halg
+    · obtain ⟨b, -, halg⟩ := bind_ok_iff.mp halg
+      simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at halg
+      obtain ⟨-, rfl⟩ := halg
+      have empty : Der.exact 6 ByteArray.empty = .error (.truncated 2 0) := rfl
+      rw [der_ok_iff, empty] at hcurve
+      cases hcurve
+    rotate_left
+    · simp [throw, throwThe, MonadExceptOf.throw] at halg
+    obtain ⟨-, -, halg⟩ := bind_ok_iff.mp halg
+    obtain ⟨b, hb, halg⟩ := bind_ok_iff.mp halg
+    simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at halg
+    obtain ⟨rfl, rfl⟩ := halg
+    -- Each value is short, so its octets are its tag, its length and its content.
+    obtain ⟨otag, ocontent, -⟩ := Proofs.Der.oid_ok_iff.mp (der_ok_iff.mp hb)
+    obtain ⟨ctag, ccontent, -⟩ := Proofs.Der.oid_ok_iff.mp (der_ok_iff.mp hcurveOid)
+    obtain ⟨crest, hcread, cempty⟩ := Proofs.Der.exact_ok_iff.mp (der_ok_iff.mp hcurve)
+    obtain ⟨hcread, -⟩ := Proofs.Der.readTag_ok_iff.mp hcread
+    obtain ⟨ktag, kcontent⟩ := Proofs.Der.bitString_ok_iff.mp (der_ok_iff.mp hbytes)
+    obtain ⟨s1, s2, hoRead, hqRead, s2empty⟩ := exists_read_of_children_eq_ok_pair achildren
+    obtain ⟨r1, r2, haRead, hkRead, r2empty⟩ :=
+      exists_read_of_children_eq_ok_pair (fields_ok_iff.mp hvalues).2
+    obtain ⟨srest, hsread, sempty⟩ := Proofs.Der.exact_ok_iff.mp (der_ok_iff.mp hseq)
+    obtain ⟨hsread, stag⟩ := Proofs.Der.readTag_ok_iff.mp hsread
+    have hq : q.encoded.data.toList =
+        [0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07] := by
+      rw [data_toList_eq_of_read_ok hcread
+        (content := [0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07])
+        (by rw [← ccontent]; rfl) (by decide), ctag, data_toList_eq_nil_of_isEmpty cempty]
+      rfl
+    have hs1 : s1.data.toList = q.encoded.data.toList := by
+      obtain ⟨-, -, hin, -⟩ := Proofs.Der.read_ok_iff.mp hqRead
+      rw [hin, data_toList_eq_nil_of_isEmpty s2empty, List.append_nil]
+    have hacontent : algorithm.content.data.toList = p256Algorithm := by
+      rw [data_toList_eq_of_read_ok hoRead (content := [0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01])
+        (by rw [← ocontent]; rfl) (by decide), otag, hs1, hq]
+      rfl
+    have hr1 : r1.data.toList = [0x03, 0x42, 0x00] ++ bytes.data.toList := by
+      rw [data_toList_eq_of_read_ok hkRead kcontent (by simp [hk]), ktag,
+        data_toList_eq_nil_of_isEmpty r2empty]
+      simp [hk]
+    have hscontent : sequence.content.data.toList =
+        [0x30, 0x13] ++ p256Algorithm ++ [0x03, 0x42, 0x00] ++ bytes.data.toList := by
+      rw [data_toList_eq_of_read_ok haRead hacontent (by decide), atag, hr1]
+      rfl
+    rw [data_toList_eq_of_read_ok hsread hscontent (by simp [hk]), stag,
+      data_toList_eq_nil_of_isEmpty sempty]
+    simp [hk]
+  · rintro ⟨key, hdec, hspki⟩
+    have hk := length_of_decodeUncompressed hdec
+    obtain ⟨data⟩ := spki
+    have hdata : data = (0x30 :: UInt8.ofNat (0x30 :: UInt8.ofNat p256Algorithm.length ::
+        (p256Algorithm ++ (3 :: UInt8.ofNat (0 :: key).length :: ((0 :: key) ++ [])))).length ::
+        ((0x30 :: UInt8.ofNat p256Algorithm.length ::
+        (p256Algorithm ++ (3 :: UInt8.ofNat (0 :: key).length :: ((0 :: key) ++ [])))) ++
+          [])).toArray := by
+      apply Array.toList_inj.mp
+      rw [show data.toList = _ from hspki]
+      simp [hk]
+    subst hdata
+    have hkey := read_eq_ok_of_length_lt (tag := 3) (content := 0 :: key) (rest := [])
+      (by decide) (by decide)
+      (by simp [hk])
+    have halgorithm := read_eq_ok_of_length_lt (tag := 0x30) (content := p256Algorithm)
+      (rest := 3 :: UInt8.ofNat (0 :: key).length :: ((0 :: key) ++ [])) (by decide) (by decide)
+      (by decide)
+    have hsequence := read_eq_ok_of_length_lt (tag := 0x30) (rest := []) (by decide) (by decide)
+      (content := 0x30 :: UInt8.ofNat p256Algorithm.length ::
+        (p256Algorithm ++ (3 :: UInt8.ofNat (0 :: key).length :: ((0 :: key) ++ []))))
+      (by simp [hk])
+    have hexact := Proofs.Der.exact_ok_iff.mpr
+      ⟨_, Proofs.Der.readTag_ok_iff.mpr ⟨hsequence, rfl⟩, rfl⟩
+    have hchildren := children_go_succ_eq_ok_of_read halgorithm
+      (children_go_succ_eq_ok_of_read (fuel := 87) hkey (children_go_empty _))
+    have hsize : (⟨(0x30 :: UInt8.ofNat p256Algorithm.length :: (p256Algorithm ++
+        (3 :: UInt8.ofNat (0 :: key).length :: ((0 :: key) ++ [])))).toArray⟩ : ByteArray).size =
+        87 + 1 + 1 := by
+      rw [size_eq_length]
+      simp [hk]
+    have hcurve : Der.exact 6 ⟨#[0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07]⟩ =
+        .ok ⟨6, ⟨#[0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07]⟩,
+          ⟨#[0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07]⟩⟩ := by
+      rfl
+    have hparameters : readAlgorithm ⟨0x30, ⟨p256Algorithm.toArray⟩,
+        ⟨(0x30 :: UInt8.ofNat p256Algorithm.length :: p256Algorithm).toArray⟩⟩ =
+        .ok (ecPublicKeyOid, ⟨#[0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07]⟩) := by
+      rfl
+    have hbits : Der.bitString ⟨3, ⟨(0 :: key).toArray⟩,
+        ⟨(3 :: UInt8.ofNat (0 :: key).length :: (0 :: key)).toArray⟩⟩ = .ok ⟨key.toArray⟩ :=
+      Proofs.Der.bitString_ok_iff.mpr ⟨rfl, by simp⟩
+    have hoid : Der.oid ⟨6, ⟨#[0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07]⟩,
+        ⟨#[0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07]⟩⟩ = .ok p256Oid := by
+      rfl
+    unfold readP256
+    refine bind_ok_iff.mpr ⟨_, der_ok_iff.mpr hexact, ?_⟩
+    refine bind_ok_iff.mpr
+      ⟨_, fields_ok_iff.mpr ⟨rfl, by rw [Der.children, hsize]; exact hchildren⟩, ?_⟩
+    dsimp only
+    refine bind_ok_iff.mpr ⟨_, hparameters, ?_⟩
+    refine bind_ok_iff.mpr ⟨_, der_ok_iff.mpr hcurve, ?_⟩
+    refine bind_ok_iff.mpr ⟨_, der_ok_iff.mpr hoid, ?_⟩
+    refine bind_unit_ok_iff.mpr ⟨ensure_ok_iff.mpr ⟨rfl, rfl⟩, ?_⟩
+    refine bind_ok_iff.mpr ⟨_, der_ok_iff.mpr hbits, ?_⟩
+    simp [hdec, pure, Except.pure]
+
+/-- An SPKI that a P-256 key reads from is 91 octets.
+
+That is the length that the host key check of authentication requires of an ECDSA key. -/
+theorem size_of_readP256_eq_ok {spki : ByteArray} {point : Cryptography.Secp256r1.Point}
+    (h : readP256 spki = .ok point) : spki.size = 91 := by
+  obtain ⟨key, hdec, hspki⟩ := readP256_eq_ok_iff.mp h
+  rw [size_eq_length, hspki, List.length_append, length_of_decodeUncompressed hdec]
+  rfl
 
 end EthLib.Networking.Proofs.Libp2p.Tls
