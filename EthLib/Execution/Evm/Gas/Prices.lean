@@ -11,11 +11,17 @@ public import EthLib.Execution.Evm.Words
 
 The gas prices of the EVM.
 
-A value that a fork changed is a field of the gas schedule, which one function of the fork computes.
+A value that a fork changed and that depends only on the fork is a field of the gas schedule.
+
+One function of the fork computes the schedule.
+
+A price that a fork changed and that also depends on an access or an input is its own function.
+
+The prices of SLOAD, BALANCE, EXTCODESIZE, EXTCODEHASH and CALL depend on the access.
 
 The other prices are constants.
 
-The schedule also holds the other values of the execution layer that a fork changed.
+The schedule also holds the other values of the execution layer that change at forks.
 
 They are the limits of code, the reservoir of a system call, and the reward and the bomb of a block.
 
@@ -68,7 +74,9 @@ A price that an EIP adds or changes names that EIP:
 
 The last six are in Last Call, so their prices may still change.
 
-The precompiles keep their prices, except the two that a fork changed.
+The prices of the addition and the scalar multiplication on the alt_bn128 curve are in the schedule.
+
+The other precompiles keep their prices with their own definitions.
 
 The blob prices are with the blob fees.
 
@@ -399,9 +407,13 @@ structure GasSchedule where
   REFUND_SELF_DESTRUCT : Nat
   /-- The quotient of the gas used that caps the refund of a transaction. -/
   MAX_REFUND_QUOTIENT : Nat
-  /-- The price of SSTORE when the write leaves the slot as it is, or the slot is already dirty. -/
+  /-- The price of SSTORE when the write leaves the slot as it is, or the slot is already dirty.
+
+  It is read only from Istanbul on. -/
   SSTORE_READ : Nat
-  /-- The price of SSTORE to change a slot whose original value is not zero. -/
+  /-- The price of SSTORE to change a slot whose original value is not zero.
+
+  It is read only from Istanbul on. -/
   SSTORE_RESET : Nat
   /-- The price of a creation, before memory, init code and the hash of CREATE2. -/
   CREATE_BASE : Nat
@@ -546,13 +558,15 @@ namespace GasCosts
 
 /-- The price to access and write the account that a contract creation deploys, from EIP-8038.
 
-It is the write of an account plus a cold access to it at Glamsterdam, 9000 + 3000 = 12000.
+It is the price of a creation in the schedule of Glamsterdam.
+
+That price is the write of an account plus a cold access to it, 9000 + 3000 = 12000.
 
 The section Conversion to gas costs of [EIP-8038][eip-8038] gives this formula.
 
 [eip-8038]: https://eips.ethereum.org/EIPS/eip-8038#conversion-to-gas-costs
 -/
-def CREATE_ACCESS : Nat := ACCOUNT_WRITE + (gasSchedule .glamsterdam).COLD_ACCOUNT_ACCESS
+def CREATE_ACCESS : Nat := (gasSchedule .glamsterdam).CREATE_BASE
 
 end GasCosts
 
