@@ -164,7 +164,7 @@ theorem randomizerBase_isQueryBoundP (pp : PublicParam) (seed : Seed) (layer : L
     IsQueryBoundP (randomizerBase pp (seedPrf Hq seed) layer e msg)
       (IsTrialQuery (addrMsg layer e) k) 0 :=
   isQueryBoundP_bind_zero _ _ (isQueryBoundP_queryH_of_ne k pp _
-    (encodeAddress_ne_of_type_ne _ _ _ _ _ _ (by decide))) fun _ => isQueryBoundP_pure _ _ _
+    fun h => nomatch CallSite.encode_injective h) fun _ => isQueryBoundP_pure _ _ _
 
 /-- **A key's one-time signature finds no codeword with probability at most `exp(-4000)`.**
 

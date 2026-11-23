@@ -92,47 +92,100 @@ def layerHi (layer : Layer) (a : Fin (2 ^ 23)) : Fin (2 ^ 24) :=
     have := a.isLt
     cases layer <;> simp only [Layer.toNat] <;> omega⟩
 
-/-! ## The addresses of a key
+/-! ## Call sites
 
 - `e` is a one-time key's index on its layer.
-- `j` is a node's index on its level.
+- `j` is the index of a pair of chains of a key, or of a node on its level.
 -/
+
+/-- A hash call of the scheme, with the arguments its address holds.
+
+Each constructor is one kind of address of the specification. -/
+inductive CallSite where
+  /-- `A_prf(l, e, j)`: the start of chains `2j` and `2j + 1` of key `e`. -/
+  | prf (layer : Layer) (e : UInt32) (j : Fin (V / 2))
+  /-- `A_chain(l, e, mu)`: the step from position `mu` of every chain of key `e`.
+
+  The chain index is not in the address: it follows the value in the hash input. -/
+  | chain (layer : Layer) (e : UInt32) (mu : Fin (CHAIN_LENGTH - 1))
+  /-- `A_leaf(l, e)`: the Merkle leaf of key `e`, from its chain ends. -/
+  | leaf (layer : Layer) (e : UInt32)
+  /-- `A_node(l, lambda, j)`: node `j` on level `lambda` of a layer, from its two children. -/
+  | node (layer : Layer) (level : Fin (LAYER_HEIGHT + 1)) (j : UInt32)
+  /-- `A_param`: the public parameter, from the seed. -/
+  | param
+  /-- `A_rnd(l, e)`: the base of the randomizers of key `e`. -/
+  | rnd (layer : Layer) (e : UInt32)
+  /-- `A_msg(l, e)`: the digest key `e` signs. -/
+  | msg (layer : Layer) (e : UInt32)
+  deriving DecidableEq, Repr
+
+/-- `tau`: the type code the specification assigns to each kind of call. -/
+@[inline] def CallSite.tau : CallSite → Fin 32
+  | .prf .. => AddressType.prf.code
+  | .chain .. => AddressType.chain.code
+  | .leaf .. => AddressType.leaf.code
+  | .node .. => AddressType.node.code
+  | .param => AddressType.param.code
+  | .rnd .. => AddressType.rnd.code
+  | .msg .. => AddressType.msg.code
+
+/-- `mu`: the position of a chain step, and zero at every other call site. -/
+@[inline] def CallSite.mu : CallSite → Fin 8
+  | .chain _ _ mu => mu.castLE (by decide)
+  | _ => 0
+
+/-- `hi`: the layer bit above the pair of chains or the level, and zero for the parameter. -/
+@[inline] def CallSite.hi : CallSite → Fin (2 ^ 24)
+  -- `A_prf`: `hi = hi_l(j)`.
+  | .prf layer _ j => layerHi layer (j.castLE (by decide))
+  -- `A_node`: `hi = hi_l(lambda)`.
+  | .node layer level _ => layerHi layer (level.castLE (by decide))
+  -- `A_param`: `hi = 0`, since the two layers share the parameter.
+  | .param => 0
+  -- `A_chain`, `A_leaf`, `A_rnd` and `A_msg`: `hi = hi_l(0)`.
+  | .chain layer .. | .leaf layer _ | .rnd layer _ | .msg layer _ => layerHi layer 0
+
+/-- `lo`: the key, the index of a node, or zero for the parameter. -/
+@[inline] def CallSite.lo : CallSite → UInt32
+  | .prf _ e _ | .chain _ e _ | .leaf _ e | .rnd _ e | .msg _ e => e
+  | .node _ _ j => j
+  | .param => 0
+
+/-- `enc(tau, mu, hi, lo)`: the address of a call site, the 16 bytes its hash reads. -/
+@[inline] def CallSite.encode (site : CallSite) : Address :=
+  encodeAddress site.tau site.mu site.hi site.lo
+
+/-! ## The addresses of a key -/
 
 /-- `A_prf(l, e, j)`: the start of chains `2j` and `2j + 1` of key `e`. -/
 def addrPrf (layer : Layer) (e : UInt32) (j : Fin (V / 2)) : Address :=
-  -- The pair index `j` sits in `hi`, under the layer bit, and the key in `lo`.
-  encodeAddress AddressType.prf.code 0 (layerHi layer (j.castLE (by decide))) e
+  (CallSite.prf layer e j).encode
 
 /-- `A_chain(l, e, mu)`: the step from position `mu` of every chain of key `e`.
 
 The chain index is not in the address: it follows the value in the hash input. -/
 def addrChain (layer : Layer) (e : UInt32) (mu : Fin (CHAIN_LENGTH - 1)) : Address :=
-  -- The position goes in `mu`, and `hi` holds only the layer bit.
-  encodeAddress AddressType.chain.code (mu.castLE (by decide)) (layerHi layer 0) e
+  (CallSite.chain layer e mu).encode
 
 /-- `A_leaf(l, e)`: the Merkle leaf of key `e`. -/
 def addrLeaf (layer : Layer) (e : UInt32) : Address :=
-  -- Only the type, the layer and the key vary.
-  encodeAddress AddressType.leaf.code 0 (layerHi layer 0) e
+  (CallSite.leaf layer e).encode
 
 /-- `A_node(l, lambda, j)`: node `j` on level `lambda` of a layer. -/
 def addrNode (layer : Layer) (level : Fin (LAYER_HEIGHT + 1)) (j : UInt32) : Address :=
-  -- The level goes in `hi`, under the layer bit, and the node index in `lo`.
-  encodeAddress AddressType.node.code 0 (layerHi layer (level.castLE (by decide))) j
+  (CallSite.node layer level j).encode
 
 /-- `A_param`: the public parameter. -/
 def addrParam : Address :=
-  -- The two layers share the parameter, so every field but the type is zero.
-  encodeAddress AddressType.param.code 0 0 0
+  CallSite.param.encode
 
 /-- `A_rnd(l, e)`: the randomizer base of key `e`. -/
 def addrRnd (layer : Layer) (e : UInt32) : Address :=
-  -- Only the type, the layer and the key vary.
-  encodeAddress AddressType.rnd.code 0 (layerHi layer 0) e
+  (CallSite.rnd layer e).encode
 
 /-- `A_msg(l, e)`: the digest key `e` signs. -/
 def addrMsg (layer : Layer) (e : UInt32) : Address :=
-  -- Only the type, the layer and the key vary.
-  encodeAddress AddressType.msg.code 0 (layerHi layer 0) e
+  (CallSite.msg layer e).encode
 
 end EthLib.Cryptography.Xmss

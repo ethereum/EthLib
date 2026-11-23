@@ -133,70 +133,56 @@ theorem layerHi_inj {layer layer' : Layer} {a a' : Fin (2 ^ 23)} :
   · rintro ⟨rfl, rfl⟩
     rfl
 
+/-! ## Distinct call sites have distinct addresses -/
+
+/-- Two call sites with the same address are the same call site.
+
+The type code tells the kinds apart, and the other fields hold the arguments. -/
+theorem CallSite.encode_injective : Function.Injective CallSite.encode := by
+  intro a b h
+  -- The address determines its four fields.
+  obtain ⟨htau, hmu, hhi, hlo⟩ := encodeAddress_inj.mp h
+  -- Each field reads one argument of the call, or a constant.
+  cases a <;> cases b <;>
+    simp only [CallSite.tau, CallSite.mu, CallSite.hi, CallSite.lo, AddressType.code]
+      at htau hmu hhi hlo <;>
+    simp_all [Fin.castLE_inj] <;>
+    -- Left: the same kind of call on both sides, and `hi` splits into the layer and the rest.
+    · obtain ⟨hl, ha⟩ := layerHi_inj.mp hhi
+      simp_all [Fin.castLE_inj]
+
 /-! ## Each address determines its arguments -/
 
 /-- A chain-start address names its layer, key and pair of chains. -/
 theorem addrPrf_inj {layer layer' : Layer} {e e' : UInt32} {j j' : Fin (V / 2)} :
     addrPrf layer e j = addrPrf layer' e' j' ↔ layer = layer' ∧ e = e' ∧ j = j' := by
-  constructor
-  · intro h
-    obtain ⟨-, -, hhi, he⟩ := encodeAddress_inj.mp h
-    obtain ⟨hl, hj⟩ := layerHi_inj.mp hhi
-    exact ⟨hl, he, Fin.ext (by simpa using congrArg Fin.val hj)⟩
-  · rintro ⟨rfl, rfl, rfl⟩
-    rfl
+  simp only [addrPrf, CallSite.encode_injective.eq_iff, CallSite.prf.injEq]
 
 /-- A chain-step address names its layer, key and position. -/
 theorem addrChain_inj {layer layer' : Layer} {e e' : UInt32} {mu mu' : Fin (CHAIN_LENGTH - 1)} :
     addrChain layer e mu = addrChain layer' e' mu' ↔ layer = layer' ∧ e = e' ∧ mu = mu' := by
-  constructor
-  · intro h
-    obtain ⟨-, hmu, hhi, he⟩ := encodeAddress_inj.mp h
-    exact ⟨(layerHi_inj.mp hhi).1, he, Fin.ext (by simpa using congrArg Fin.val hmu)⟩
-  · rintro ⟨rfl, rfl, rfl⟩
-    rfl
+  simp only [addrChain, CallSite.encode_injective.eq_iff, CallSite.chain.injEq]
 
 /-- A leaf address names its layer and key. -/
 theorem addrLeaf_inj {layer layer' : Layer} {e e' : UInt32} :
     addrLeaf layer e = addrLeaf layer' e' ↔ layer = layer' ∧ e = e' := by
-  constructor
-  · intro h
-    obtain ⟨-, -, hhi, he⟩ := encodeAddress_inj.mp h
-    exact ⟨(layerHi_inj.mp hhi).1, he⟩
-  · rintro ⟨rfl, rfl⟩
-    rfl
+  simp only [addrLeaf, CallSite.encode_injective.eq_iff, CallSite.leaf.injEq]
 
 /-- A node address names its layer, level and index. -/
 theorem addrNode_inj {layer layer' : Layer} {level level' : Fin (LAYER_HEIGHT + 1)}
     {j j' : UInt32} :
     addrNode layer level j = addrNode layer' level' j' ↔
       layer = layer' ∧ level = level' ∧ j = j' := by
-  constructor
-  · intro h
-    obtain ⟨-, -, hhi, hj⟩ := encodeAddress_inj.mp h
-    obtain ⟨hl, hlevel⟩ := layerHi_inj.mp hhi
-    exact ⟨hl, Fin.ext (by simpa using congrArg Fin.val hlevel), hj⟩
-  · rintro ⟨rfl, rfl, rfl⟩
-    rfl
+  simp only [addrNode, CallSite.encode_injective.eq_iff, CallSite.node.injEq]
 
 /-- A randomizer-base address names its layer and key. -/
 theorem addrRnd_inj {layer layer' : Layer} {e e' : UInt32} :
     addrRnd layer e = addrRnd layer' e' ↔ layer = layer' ∧ e = e' := by
-  constructor
-  · intro h
-    obtain ⟨-, -, hhi, he⟩ := encodeAddress_inj.mp h
-    exact ⟨(layerHi_inj.mp hhi).1, he⟩
-  · rintro ⟨rfl, rfl⟩
-    rfl
+  simp only [addrRnd, CallSite.encode_injective.eq_iff, CallSite.rnd.injEq]
 
 /-- A digest address names its layer and key. -/
 theorem addrMsg_inj {layer layer' : Layer} {e e' : UInt32} :
     addrMsg layer e = addrMsg layer' e' ↔ layer = layer' ∧ e = e' := by
-  constructor
-  · intro h
-    obtain ⟨-, -, hhi, he⟩ := encodeAddress_inj.mp h
-    exact ⟨(layerHi_inj.mp hhi).1, he⟩
-  · rintro ⟨rfl, rfl⟩
-    rfl
+  simp only [addrMsg, CallSite.encode_injective.eq_iff, CallSite.msg.injEq]
 
 end EthLib.Cryptography.Xmss
