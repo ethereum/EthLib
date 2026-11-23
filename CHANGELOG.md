@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `Secp256r1.decodeUncompressed_eq_some_iff` in the new module `EthLib.Cryptography.Proofs.Secp256r1.Encoding` says that the uncompressed decoder of SEC 1 v2 §2.3.4 accepts exactly the bytes `04 ‖ x ‖ y` of the affine points `(x, y)` on the curve, and returns that point ([#4260](https://github.com/ethereum/EthLib/pull/4260)).
+  So it refuses the octet `00` of `O`, every prefix other than `04`, every length other than 65 bytes, a coordinate of `p` or more, and a pair off the curve.
+  No statement changes.
+
 - At every fork, the simulated logs that a message starts with change nothing else that it computes ([#3584](https://github.com/ethereum/EthLib/issues/3584)).
   The new module `EthLib.Execution.Proofs.Evm.Call.SimulatedLogsErase` defines `Evm.prependSimulatedLogs`, `Evm.eraseSimulatedLogs` and `StepResult.prependSimulatedLogs`.
   `step_prependSimulatedLogs` says that a step from any frame with logs in front of its simulated logs gives the same result with them in front, so no step reads them.

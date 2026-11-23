@@ -7,6 +7,7 @@ public import EthLib.Cryptography.Proofs.Secp256r1.Order
 public import EthLib.Cryptography.Proofs.Secp256r1.Ecdsa
 public import EthLib.Cryptography.Proofs.Secp256r1.Sign
 public import EthLib.Cryptography.Proofs.Secp256r1.Errors
+public import EthLib.Cryptography.Proofs.Secp256r1.Encoding
 
 /-!
 # `EthLib.Cryptography.Proofs.Secp256r1`

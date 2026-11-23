@@ -850,6 +850,9 @@ The secp256r1 theorems are correctness statements, like those of secp256k1.
 That proof needs one more fact than the proof for secp256k1: `x^3 - 3 x + b` has no root mod `p`.
 The kernel checks it by an inverse of `X^p - X` modulo the cubic.
 
+`decodeUncompressed_eq_some_iff` (`Proofs/Secp256r1/Encoding.lean`) proves that the decoder accepts exactly the uncompressed encodings of the points other than `O`.
+So it refuses the octet `00` of `O`, every prefix other than `04`, every length other than 65 bytes, a coordinate of `p` or more, and a pair off the curve.
+
 `verify_sign` (`Proofs/Secp256r1/Ecdsa.lean`) proves that a signature from the signing operation of SEC 1 verifies.
 `verify_eq_true_iff` states verification as the verifying operation of SEC 1 v2 §4.1.4, read in the group of the curve.
 By it, a signature is valid exactly when the conditions below all hold.
