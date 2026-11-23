@@ -1,10 +1,10 @@
 module
 
-public import EthLib.Engine.Jwt.Json
+public import EthLib.Base.Json
 public import EthLib.Base.Proofs.Hex
 
 /-!
-# Proofs: the Unicode escapes and control characters of a JWT string
+# Proofs: the Unicode escapes and control characters of a JSON string
 
 The Unicode escape of [RFC 8259 §7][json] reads four hexadecimal digits, in either letter case.
 
@@ -26,9 +26,7 @@ The reader refuses a character below `0x20` that comes next in a string unescape
 
 @[expose] public section
 
-namespace EthLib.Engine.Jwt.Json
-
-open EthLib.Base
+namespace EthLib.Base.Json
 
 /-! ## The four digits of an escape
 
@@ -181,4 +179,4 @@ theorem string_eq_none_of_control {fuel : Nat} {c : Char} {rest acc : List Char}
     · exact fun _ hc _ => hb hc
     · exact fun _ _ hc _ => hb hc
 
-end EthLib.Engine.Jwt.Json
+end EthLib.Base.Json
