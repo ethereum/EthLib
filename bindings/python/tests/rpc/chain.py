@@ -148,18 +148,15 @@ def _fork_of(config: dict[str, Any], header: list[Any]) -> str:
     return fork
 
 
-@cache
-def replay_chain() -> ReplayChain:
-    """The chain of the fixtures, from genesis to the head of its forkchoice update."""
+def genesis_block(config: dict[str, Any], coinbase: bytes | None = None) -> rpc.ChainBlock:
+    """The genesis block of the fixtures, with its own fee recipient unless `coinbase` is given."""
     genesis = json.loads((FIXTURES / "genesis.json").read_text())
-    config = chain_config(genesis["config"])
-    state = genesis_state(genesis["alloc"])
     fork = active_fork(config, int(genesis["number"], 16), int(genesis["timestamp"], 16))
     assert fork is not None
-    first = blocks.genesis_block(
+    block = blocks.genesis_block(
         fork,
-        state,
-        coinbase=_hex(genesis["coinbase"]),
+        genesis_state(genesis["alloc"]),
+        coinbase=_hex(genesis["coinbase"]) if coinbase is None else coinbase,
         difficulty=int(genesis["difficulty"], 16),
         gas_limit=int(genesis["gasLimit"], 16),
         timestamp=int(genesis["timestamp"], 16),
@@ -167,7 +164,16 @@ def replay_chain() -> ReplayChain:
         mix_hash=_hex(genesis["mixHash"]),
         nonce=int(genesis["nonce"], 16).to_bytes(8, "big"),
     )
-    chain: list[rpc.ChainBlock] = [(fork, first)]
+    return fork, block
+
+
+@cache
+def replay_chain() -> ReplayChain:
+    """The chain of the fixtures, from genesis to the head of its forkchoice update."""
+    genesis = json.loads((FIXTURES / "genesis.json").read_text())
+    config = chain_config(genesis["config"])
+    state = genesis_state(genesis["alloc"])
+    chain: list[rpc.ChainBlock] = [genesis_block(config)]
     for raw in rlp_items((FIXTURES / "chain.rlp").read_bytes()):
         chain.append((_fork_of(config, rlp.decode(raw)[0]), raw))
     # The forkchoice update of the fixtures names the head, safe and finalized blocks.

@@ -1,5 +1,6 @@
 """The simulated blocks of eth_simulateV1, its checks, and the overrides of its accounts."""
 
+import dataclasses
 import json
 from collections.abc import Mapping
 from pathlib import Path
@@ -11,7 +12,14 @@ from ethlib.execution import rpc
 from ethlib.state import state_root
 from raising import raises
 
-from .chain import FIXTURES, genesis_state, read_fixture, replay_chain
+from .chain import (
+    FIXTURES,
+    block_hash,
+    genesis_block,
+    genesis_state,
+    read_fixture,
+    replay_chain,
+)
 
 # The vendored fixtures of the method.
 SIMULATE: Final = sorted((FIXTURES / "eth_simulateV1").glob("*.io"))
@@ -191,6 +199,23 @@ def test_item_cap_with_validation() -> None:
         _request({"blockStateCalls": blocks, "validation": True}),
     ]
     assert _answer_codes(requests) == [RESULT, -32603]
+
+
+def test_fee_recipient_defaults() -> None:
+    """A block takes the fee recipient of the block before it, the base block for the first one."""
+    # The base block is the genesis block alone, with a fee recipient that is not zero.
+    chain = replay_chain()
+    genesis = genesis_block(chain.config, bytes.fromhex("c5" * 20))
+    head = block_hash(genesis)
+    base = dataclasses.replace(chain, blocks=(genesis,), forkchoice=(head, head, head))
+    override = "0x" + "c6" * 20
+    # Blocks 2 and 3 are gap blocks before block 4, which sets the fee recipient.
+    overrides = {"number": "0x4", "feeRecipient": override}
+    payload = {"blockStateCalls": [{}, {"blockOverrides": overrides}, {}]}
+    (text,) = base.serve([_request(payload)])
+    assert text is not None
+    miners = [block["miner"] for block in json.loads(text)["result"]]
+    assert miners == ["0x" + "c5" * 20] * 3 + [override] * 2
 
 
 def test_base_block_is_latest_by_default() -> None:
