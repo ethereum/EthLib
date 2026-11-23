@@ -18,9 +18,6 @@ SIMULATE: Final = sorted((FIXTURES / "eth_simulateV1").glob("*.io"))
 
 # The fixtures that EthLib answers otherwise, with the reason that SOUNDNESS.md gives.
 DIVERGENT: Final = {
-    "ethSimulate-override-all-in-BlockStateCalls": (
-        "a gas limit of 1004 leaves no room for the block access list of the system calls"
-    ),
     "ethSimulate-override-precompile-code-without-move": (
         "the precompile keeps its address, so the code override at that address never runs"
     ),
@@ -81,12 +78,6 @@ def _divergent_answer(stem: str) -> dict[str, Any]:
     (text,) = replay_chain().serve([exchange.request])
     assert text is not None
     return json.loads(text)
-
-
-def test_divergent_gas_limit() -> None:
-    """A block with a gas limit of 1004 is invalid, so the view answers an internal error."""
-    response = _divergent_answer("ethSimulate-override-all-in-BlockStateCalls")
-    assert response["error"]["code"] == -32603
 
 
 def test_divergent_precompile_code() -> None:
@@ -177,6 +168,16 @@ CHECKS = [
 def test_checks(payload: Mapping[str, Any], code: int | None) -> None:
     """A request on the head gets the code of the first check that it fails."""
     assert _answer_codes([_request(payload)]) == [code]
+
+
+def test_item_cap_with_validation() -> None:
+    """A gas limit of 1004 fits no item of the block access list, which only validation checks."""
+    blocks = [{"blockOverrides": {"gasLimit": hex(1004)}}]
+    requests = [
+        _request({"blockStateCalls": blocks}),
+        _request({"blockStateCalls": blocks, "validation": True}),
+    ]
+    assert _answer_codes(requests) == [RESULT, -32603]
 
 
 def test_base_block_is_latest_by_default() -> None:
