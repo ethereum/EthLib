@@ -164,7 +164,8 @@ Then the cache still holds none when each search starts, so each search fails wi
 **Domain separation.**
 Every hash call carries an address that says where in the key it happens, so that two calls never hash the same input by accident (`Address.lean`, `TweakableHash.lean`).
 An address determines its type, its position and both fields (`encodeAddress_inj`), and the two layers never share an address (`layerHi_inj`).
-Each address of a key determines its own arguments (`addrPrf_inj` and the five like it).
+Two different call sites never share an address, whatever their kinds (`CallSite.encode_injective`).
+So each address of a key determines its own arguments (`addrPrf_inj` and the five like it).
 Finally, a hash input determines its public parameter, address and payload (`thInput_inj`).
 
 **The scheme in bytes.**

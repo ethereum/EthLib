@@ -37,6 +37,13 @@ theorem toList_encodeAddress (tau : Fin 32) (mu : Fin 8) (hi : Fin (2 ^ 24)) (lo
     XmssSecurity.tweakFields, append_ofNat tau.val mu.val tau.isLt mu.isLt]
   rfl
 
+/-- The address of a call site has the model's bytes for its four fields. -/
+theorem toList_encode (site : CallSite) :
+    Hash.Keccak.lanesBytes site.encode.toArray
+      = XmssSecurity.fieldBytes
+          (XmssSecurity.tweakFields site.tau.val site.mu.val site.hi.val site.lo.toNat) :=
+  toList_encodeAddress _ _ _ _
+
 /-! ## The addresses of a key
 
 `2^23 l` is the flag of layer `l` in `hi`.
@@ -47,46 +54,52 @@ theorem toList_addrChain (layer : Layer) (e : UInt32) (mu : Fin (CHAIN_LENGTH - 
     Hash.Keccak.lanesBytes (addrChain layer e mu).toArray
       = XmssSecurity.fieldBytes
           (XmssSecurity.tweakFields 1 mu.val (2 ^ 23 * layer.toNat) e.toNat) := by
-  rw [addrChain, toList_encodeAddress]
-  simp [layerHi, AddressType.code]
+  rw [addrChain, toList_encode]
+  simp [CallSite.tau, CallSite.mu, CallSite.hi, CallSite.lo, layerHi,
+    AddressType.code]
 
 theorem toList_addrLeaf (layer : Layer) (e : UInt32) :
     Hash.Keccak.lanesBytes (addrLeaf layer e).toArray
       = XmssSecurity.fieldBytes (XmssSecurity.tweakFields 2 0 (2 ^ 23 * layer.toNat) e.toNat) := by
-  rw [addrLeaf, toList_encodeAddress]
-  simp [layerHi, AddressType.code]
+  rw [addrLeaf, toList_encode]
+  simp [CallSite.tau, CallSite.mu, CallSite.hi, CallSite.lo, layerHi,
+    AddressType.code]
 
 theorem toList_addrMsg (layer : Layer) (e : UInt32) :
     Hash.Keccak.lanesBytes (addrMsg layer e).toArray
       = XmssSecurity.fieldBytes (XmssSecurity.tweakFields 12 0 (2 ^ 23 * layer.toNat) e.toNat) := by
-  rw [addrMsg, toList_encodeAddress]
-  simp [layerHi, AddressType.code]
+  rw [addrMsg, toList_encode]
+  simp [CallSite.tau, CallSite.mu, CallSite.hi, CallSite.lo, layerHi,
+    AddressType.code]
 
 theorem toList_addrRnd (layer : Layer) (e : UInt32) :
     Hash.Keccak.lanesBytes (addrRnd layer e).toArray
       = XmssSecurity.fieldBytes (XmssSecurity.tweakFields 7 0 (2 ^ 23 * layer.toNat) e.toNat) := by
-  rw [addrRnd, toList_encodeAddress]
-  simp [layerHi, AddressType.code]
+  rw [addrRnd, toList_encode]
+  simp [CallSite.tau, CallSite.mu, CallSite.hi, CallSite.lo, layerHi,
+    AddressType.code]
 
 /-- The parent at level `level`, `level >= 1`, carries the level in `hi`. -/
 theorem toList_addrNode (layer : Layer) (level : Fin (LAYER_HEIGHT + 1)) (j : UInt32) :
     Hash.Keccak.lanesBytes (addrNode layer level j).toArray
       = XmssSecurity.fieldBytes
           (XmssSecurity.tweakFields 3 0 (2 ^ 23 * layer.toNat + level.val) j.toNat) := by
-  rw [addrNode, toList_encodeAddress]
-  simp [layerHi, AddressType.code, Nat.add_comm]
+  rw [addrNode, toList_encode]
+  simp [CallSite.tau, CallSite.mu, CallSite.hi, CallSite.lo, layerHi,
+    AddressType.code, Nat.add_comm]
 
 theorem toList_addrPrf (layer : Layer) (e : UInt32) (j : Fin (V / 2)) :
     Hash.Keccak.lanesBytes (addrPrf layer e j).toArray
       = XmssSecurity.fieldBytes
           (XmssSecurity.tweakFields 0 0 (2 ^ 23 * layer.toNat + j.val) e.toNat) := by
-  rw [addrPrf, toList_encodeAddress]
-  simp [layerHi, AddressType.code, Nat.add_comm]
+  rw [addrPrf, toList_encode]
+  simp [CallSite.tau, CallSite.mu, CallSite.hi, CallSite.lo, layerHi,
+    AddressType.code, Nat.add_comm]
 
 theorem toList_addrParam :
     Hash.Keccak.lanesBytes addrParam.toArray
       = XmssSecurity.fieldBytes (XmssSecurity.tweakFields 5 0 0 0) := by
-  rw [addrParam, toList_encodeAddress]
+  rw [addrParam, toList_encode]
   rfl
 
 end EthLib.Cryptography.Xmss.Unforgeability

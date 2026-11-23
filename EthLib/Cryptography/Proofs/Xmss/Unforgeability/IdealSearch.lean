@@ -434,11 +434,11 @@ theorem isQueryBoundP_prfD {pp : PublicParam} {a : Address} {s : Array UInt64}
 /-- A chain start's address is not a base's address. -/
 theorem addrPrf_ne_addrRnd (layer : Layer) (e : UInt32) (j : Fin (V / 2)) (layer' : Layer)
     (e' : UInt32) : addrPrf layer e j ≠ addrRnd layer' e' :=
-  encodeAddress_ne_of_type_ne _ _ _ _ _ _ (by decide)
+  fun h => nomatch CallSite.encode_injective h
 
 /-- The parameter's address is not a base's address. -/
 theorem addrParam_ne_addrRnd (layer : Layer) (e : UInt32) : addrParam ≠ addrRnd layer e :=
-  encodeAddress_ne_of_type_ne _ _ _ _ _ _ (by decide)
+  fun h => nomatch CallSite.encode_injective h
 
 /-- A tweakable hash call draws no base. -/
 theorem isQueryBoundP_th (pp : PublicParam) (a : Address) (payload : Array UInt64) :
