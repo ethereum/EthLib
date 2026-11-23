@@ -9,6 +9,13 @@ Not yet released.
 
 ### Proof additions
 
+- At every fork, the simulated logs that a message starts with change nothing else that it computes ([#3584](https://github.com/ethereum/EthLib/issues/3584)).
+  The new module `EthLib.Execution.Proofs.Evm.Call.SimulatedLogsErase` defines `Evm.prependSimulatedLogs`, `Evm.eraseSimulatedLogs` and `StepResult.prependSimulatedLogs`.
+  `step_prependSimulatedLogs` says that a step from any frame with logs in front of its simulated logs gives the same result with them in front, so no step reads them.
+  `processMessage_prependSimulatedLogs` and `processCreateMessage_prependSimulatedLogs` say that logs put in front of the simulated logs at the start stay in front at the end, and nothing else changes.
+  `processMessage_eraseSimulatedLogs`, `processCreateMessage_eraseSimulatedLogs` and `Transactions.processMessageCall_eraseSimulatedLogs` say that two runs that differ only in their starting simulated logs end alike but for them.
+  No statement changes.
+
 - `Xmss.chainStarts` builds the 58 chain starts with `Vector.flatMap` over the 29 derivations, and `Xmss.Internal.digit` reads a digit with one shift and `% 4` ([#4255](https://github.com/ethereum/EthLib/pull/4255)).
   The new lemma `Xmss.getElem_cast_flatMap_halves` in `EthLib.Cryptography.Proofs.Xmss.Ots` gives chain `i` as half `i mod 2` of derivation `floor(i / 2)`.
   The statements of `Xmss.chainStarts_seedPrf` and `XmssSecurity.Bridge.halves_eq` follow the new body of `chainStarts`.
