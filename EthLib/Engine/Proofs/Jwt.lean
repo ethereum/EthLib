@@ -142,11 +142,12 @@ private theorem number_toDigits (n : Nat) (tail : List Char) :
     decide_eq_true_eq, decide_eq_false_iff_not, not_lt] at hlead
   simpa [hval] using fun h => List.eq_nil_of_length_eq_zero (by have := hlead h; omega)
 
-private theorem value_string (fuel : Nat) (s rest : List Char) (hs : ∀ c ∈ s, Plain c) :
+private theorem value_string (fuel : Nat) (s rest : List Char) (hs : ∀ c ∈ s, Plain c)
+    (hl : s.length < fuel) :
     Json.value (fuel + 1) ('"' :: (s ++ '"' :: rest)) = some (.str (String.ofList s), rest) := by
   rw [Json.value]
   simp [Json.whitespace]
-  rw [string_plain rest s [] _ hs (by simp)]
+  rw [string_plain rest s [] _ hs hl]
   simp
 
 private theorem value_number (fuel n : Nat) (tail : List Char) :
@@ -163,59 +164,57 @@ private theorem value_number (fuel n : Nat) (tail : List Char) :
     rintro (((rfl | rfl) | rfl) | rfl) <;> revert hdig <;> decide)]
   split <;> simp_all
 
-private theorem object_close (fuel : Nat) (key rest tail : List Char) (item : Json.Value)
-    (acc : List (String × Json.Value)) (empty : Bool) (hk : ∀ c ∈ key, Plain c)
-    (h : Json.value fuel rest = some (item, '}' :: tail)) :
+private theorem object_close (fuel : Nat) (key rest tail : List Char) (item : Base.Json.Value)
+    (acc : List (String × Base.Json.Value)) (empty : Bool) (hk : ∀ c ∈ key, Plain c)
+    (hl : key.length < fuel) (h : Json.value fuel rest = some (item, '}' :: tail)) :
     Json.object (fuel + 1) ('"' :: (key ++ '"' :: ':' :: rest)) acc empty =
-      some ((String.ofList key, item) :: acc, tail) := by
+      some (((String.ofList key, item) :: acc).reverse, tail) := by
   rw [Json.object]
-  simp only [List.length_append, List.length_cons]
-  rw [string_plain _ key [] _ hk (by omega)]
+  rw [string_plain _ key [] _ hk hl]
   simp [Json.whitespace, h]
 
-private theorem object_comma (fuel : Nat) (key rest tail : List Char) (item : Json.Value)
-    (acc : List (String × Json.Value)) (empty : Bool) (hk : ∀ c ∈ key, Plain c)
-    (h : Json.value fuel rest = some (item, ',' :: tail)) :
+private theorem object_comma (fuel : Nat) (key rest tail : List Char) (item : Base.Json.Value)
+    (acc : List (String × Base.Json.Value)) (empty : Bool) (hk : ∀ c ∈ key, Plain c)
+    (hl : key.length < fuel) (h : Json.value fuel rest = some (item, ',' :: tail)) :
     Json.object (fuel + 1) ('"' :: (key ++ '"' :: ':' :: rest)) acc empty =
       Json.object fuel (tail.dropWhile Json.whitespace) ((String.ofList key, item) :: acc)
         false := by
   rw [Json.object]
-  simp only [List.length_append, List.length_cons]
-  rw [string_plain _ key [] _ hk (by omega)]
+  rw [string_plain _ key [] _ hk hl]
   simp [Json.whitespace, h]
 
 /-- The builder's header names HS256 and no critical extension. -/
 theorem algorithm_headerPart : algorithm headerPart = .ok "HS256" := by
-  have hobj : Json.object 55 ['"', 'a', 'l', 'g', '"', ':', '"', 'H', 'S', '2', '5', '6', '"', ',',
+  have hobj : Json.object 54 ['"', 'a', 'l', 'g', '"', ':', '"', 'H', 'S', '2', '5', '6', '"', ',',
       '"', 't', 'y', 'p', '"', ':', '"', 'J', 'W', 'T', '"', '}'] [] true =
-      some ([(String.ofList ['t', 'y', 'p'], .str (String.ofList ['J', 'W', 'T'])),
-        (String.ofList ['a', 'l', 'g'], .str (String.ofList ['H', 'S', '2', '5', '6']))], []) :=
-    (object_comma 54 ['a', 'l', 'g'] _ _ _ _ _ (by simp [Plain])
-      (value_string 53 ['H', 'S', '2', '5', '6'] _ (by simp [Plain]))).trans
-      (object_close 53 ['t', 'y', 'p'] _ _ _ _ _ (by simp [Plain])
-        (value_string 52 ['J', 'W', 'T'] _ (by simp [Plain])))
+      some ([(String.ofList ['a', 'l', 'g'], .str (String.ofList ['H', 'S', '2', '5', '6'])),
+        (String.ofList ['t', 'y', 'p'], .str (String.ofList ['J', 'W', 'T']))], []) :=
+    (object_comma 53 ['a', 'l', 'g'] _ _ _ _ _ (by simp [Plain]) (by simp)
+      (value_string 52 ['H', 'S', '2', '5', '6'] _ (by simp [Plain]) (by simp))).trans
+      (object_close 52 ['t', 'y', 'p'] _ _ _ _ _ (by simp [Plain]) (by simp)
+        (value_string 51 ['J', 'W', 'T'] _ (by simp [Plain]) (by simp)))
   rw [algorithm, headerPart, objectFields_encode]
-  simp only [Json.fields, String.reduceToList]
-  simp [Json.whitespace]
+  simp only [Json.fields, Json.read, String.reduceToList]
+  simp [Json.value, Json.whitespace]
   rw [hobj]
-  simp [List.lookup]
+  simp [List.lookup, Json.scalar]
   rfl
 
 /-- The builder's claims read back as its integral issued-at time. -/
 theorem issuedAt_claimsPart (time : Nat) :
     issuedAt headerPart (claimsPart time) = .ok ⟨time, 0⟩ := by
-  have hobj (m : Nat) : Json.object (m + 2) ('"' :: 'i' :: 'a' :: 't' :: '"' :: ':' ::
+  have hobj (m : Nat) : Json.object (m + 5) ('"' :: 'i' :: 'a' :: 't' :: '"' :: ':' ::
       (Nat.toDigits 10 time ++ ['}'])) [] true = some ([("iat", .num ⟨time, 0⟩)], []) := by
-    refine (object_close (m + 1) ['i', 'a', 't'] _ _ _ _ _ (by simp [Plain])
-      (value_number m time [])).trans ?_
+    refine (object_close (m + 4) ['i', 'a', 't'] _ _ _ _ _ (by simp [Plain]) (by simp)
+      (value_number (m + 3) time [])).trans ?_
     simp
   rw [issuedAt, algorithm_headerPart]
-  simp only [claimsPart, objectFields_encode, Json.fields, String.toList_append, Nat.toList_repr,
-    String.reduceToList]
-  simp [Json.whitespace]
-  rw [show ∀ k : Nat, 2 * (k + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1) + 1 = (2 * k + 15) + 2 from
+  simp only [claimsPart, objectFields_encode, Json.fields, Json.read, String.toList_append,
+    Nat.toList_repr, String.reduceToList]
+  simp [Json.value, Json.whitespace]
+  rw [show ∀ k : Nat, 2 * (k + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1) = (2 * k + 11) + 5 from
     fun k => by omega, hobj]
-  simp [List.lookup, bind, Except.bind]
+  simp [List.lookup, Json.scalar, bind, Except.bind]
   rfl
 
 /-- A 32-byte secret always builds the signed compact form of the builder's two parts. -/
