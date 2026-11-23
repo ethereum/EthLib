@@ -4,6 +4,7 @@ public import EthLib.Base.Exports
 public import EthLib.Base.Exports.PyValue
 public import Lean.Data.Json
 public import EthLib.Base.Hex
+public import EthLib.Base.Json.Document
 public import EthLib.Serialization.Ssz.Codec.Json
 public import EthLib.Consensus.BeaconApi.Config
 public import EthLib.Networking.ReqResp.Encoding
@@ -133,7 +134,7 @@ def configWith (name replacements : ByteArray) : Result Config := do
   let config ← configOf (← nameOf name)
   if replacements.isEmpty then return config
   let some text := String.fromUTF8? replacements | rejectArgument none "configuration is not UTF-8"
-  let replaced ← toResult none ((Json.parse text).mapError fun e =>
+  let replaced ← toResult none ((Base.Json.ofText text).mapError fun e =>
     UnreadArgument.mk s!"configuration: {e}")
   toResult none ((fromJson? ((toJson config).mergeObj replaced)).mapError fun e =>
     UnreadArgument.mk s!"configuration: {e}")

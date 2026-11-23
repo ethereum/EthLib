@@ -11,7 +11,9 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.JsonHexCase
 
 Each reader gives back the value that its writer writes.
 
-For a value held as text, this holds for its document; the text goes through the toolchain.
+Slashing protection data also reads back from its text, printed and read by this library.
+
+A keystore reads back from its text as its rebuilt document.
 
 An integer reads exactly from the strings of the source's pattern whose value is below 2^64.
 
@@ -258,6 +260,25 @@ theorem eq_str_of_readUint64 {path : String} {document : Json} {value : UInt64}
 theorem slashingProtectionOfDocument_toJson (interchange : Interchange) :
     slashingProtectionOfDocument interchange.toJson = .ok interchange := by
   simp [slashingProtectionOfDocument, Interchange.ofJson_toJson, Except.mapError]
+
+/-- Slashing protection data reads back from its text, printed and read by this library. -/
+theorem readSlashingProtection_slashingProtectionJson (path : String) (interchange : Interchange) :
+    readSlashingProtection jsonText path (slashingProtectionJson jsonText interchange) =
+        .ok interchange := by
+  simp [jsonText, readSlashingProtection, slashingProtectionJson, readEmbedded, embeddedJson,
+    Base.Json.ofText_toText (Interchange.distinct_toJson interchange),
+    slashingProtectionOfDocument, Interchange.ofJson_canonical, Except.mapError, readString,
+    Interchange.readString, ofProtection, bind, Except.bind]
+
+/-- A keystore reads back from its text as its rebuilt document, when no object repeats a name.
+
+The text is printed and read by this library. -/
+theorem readKeystore_embeddedJson (path : String) {document : Json}
+    (distinct : Base.Json.Distinct document) :
+    readKeystore jsonText path (embeddedJson jsonText document) =
+      .ok (Base.Json.canonical document) := by
+  simp [jsonText, readKeystore, readEmbedded, embeddedJson, Base.Json.ofText_toText distinct,
+    readString, Interchange.readString, ofProtection, bind, Except.bind]
 
 /-! ## Objects -/
 

@@ -32,9 +32,6 @@ instance : ExportError KeymanagerError where
   code := KeymanagerError.code
   message := oneLine
 
-/-- The JSON parser and printer of the Lean toolchain, which the exports supply to the API. -/
-def toolchainJsonText : JsonText := ⟨Json.parse, Json.compress⟩
-
 /-- A value of a schema of the Keymanager API, read from its JSON and written back. -/
 def keymanagerJsonOf (args : String × PyValue) : Result PyValue := do
   let (schema, document) := args
@@ -47,11 +44,11 @@ def keymanagerJsonOf (args : String × PyValue) : Result PyValue := do
     | "Signature" => toResult none do return Interchange.bytesJson (← readSignature "" document)
     | "Keystore" =>
       toResult none do
-        return embeddedJson toolchainJsonText (← readKeystore toolchainJsonText "" document)
+        return embeddedJson jsonText (← readKeystore jsonText "" document)
     | "SlashingProtectionData" =>
       toResult none do
-        return slashingProtectionJson toolchainJsonText
-          (← readSlashingProtection toolchainJsonText "" document)
+        return slashingProtectionJson jsonText
+          (← readSlashingProtection jsonText "" document)
     | "SignerDefinition" =>
       toResult none do return signerDefinitionJson (← readSignerDefinition "" document)
     | "ImportRemoteSignerDefinition" =>
@@ -79,7 +76,7 @@ def keymanagerJsonExport (args : PyValue) : Result PyValue := pyExport keymanage
 /-- The state of a client as the export gives it: its record as JSON text and its keys. -/
 def keyStateJson (state : KeyState) : Json :=
   Json.mkObj [
-    ("slashing_protection", slashingProtectionJson toolchainJsonText state.protection),
+    ("slashing_protection", slashingProtectionJson jsonText state.protection),
     ("local_keys", .arr (state.localKeys.map fun key =>
       Interchange.bytesJson key.pubkey).toArray)]
 
@@ -106,11 +103,11 @@ def keymanagerRunOf (args : Nat × Nat × ExecutionAddress × UInt64 × String �
     { limits := { memory, work }, defaultFeeRecipient := feeRecipient,
       defaultGasLimit := gasLimit, defaultGraffiti := graffiti, builder }
   let record ← toResult none
-    (readSlashingProtection toolchainJsonText "" (.str protection))
+    (readSlashingProtection jsonText "" (.str protection))
   let start : KeyState := { localKeys := [], remoteKeys := [], protection := record }
   let (responses, state) := calls.foldl (init := ([], start)) fun (responses, state) call =>
     let (method, path, body) := call
-    let (response, state) := handle toolchainJsonText config chain state method path body.toJson
+    let (response, state) := handle jsonText config chain state method path body.toJson
     ((response.status, PyValue.ofJson response.body) :: responses, state)
   return (responses.reverse, PyValue.ofJson (keyStateJson state))
 

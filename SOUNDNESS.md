@@ -1315,6 +1315,7 @@ They do not prove Unicode normalization correct for every input, or prove the cr
 The Python suite compares NFKD with Unicode 16.0.0's normalization tests and checks the two ERC-2335 vectors.
 JSON text parsing stays in the export boundary; the specification consumes a `Lean.Json` value.
 Before parsing, the export refuses deep nesting, long digit runs and large positive exponents, which could exhaust the parser's stack, time or memory.
+The parser is the total reader of Base, which refuses an unpaired surrogate escape and gives no offset in its error message.
 Decryption takes the caller's limits on memory and work, and refuses a key derivation whose modeled memory or work exceeds them.
 The model counts bytes of buffers and calls of 64-byte block functions; no theorem shows that it bounds the code.
 The Python binding sets default limits.
@@ -7383,7 +7384,7 @@ The points that the source leaves open are listed below, with the reading that E
 
 The values of the API are its keys, addresses, integers, signatures, strings, keystores and slashing protection data, and the objects built from them (`Consensus/KeymanagerApi/Types.lean`).
 Each reader refuses a document that the schema of the source does not allow, except the reader of a signed voluntary exit, as listed below.
-Each writer gives a document that its reader reads back, except for the two values held as text, described below.
+Each writer gives a document that its reader reads back; the two values held as text are described below.
 `readFeeRecipient_feeRecipientJson`, `readGasLimit_gasLimitJson`, `readSignerDefinition_signerDefinitionJson` and the other round-trip theorems (`Consensus/Proofs/KeymanagerApi/Types.lean`) show this for each other schema.
 `readUint64_str_ok_iff` shows that an integer reads from a string exactly when the string matches the pattern of the source, `^(0|[1-9][0-9]{0,19})$`, and its value is below `2^64`.
 `eq_str_of_readUint64` shows that it reads from nothing but a string.
@@ -7391,11 +7392,15 @@ Each writer gives a document that its reader reads back, except for the two valu
 
 A keystore and slashing protection data are JSON documents held as text in a string.
 Their readers and writers take a parser and a printer of JSON text as an operation boundary, whose card is in `Consensus/KeymanagerApi/Types.lean`.
-The exports supply the parser and the printer of the Lean toolchain.
-Both are `partial` definitions, so no theorem relates them, and none states that the parser reads back the printed text.
-The parser also builds an object as another tree than the writer of EthLib does.
+The exports supply the total reader and the printer of EthLib (`Base/Json/Document.lean`), as the one instance `jsonText` beside that card.
+The exports of EIP-3076 interchange files and of configuration replacements read their JSON text with the same reader, and the interchange export prints with the same printer.
+`Base.Json.ofText_toText` (`Base/Proofs/Json/Document.lean`) proves that the reader reads back the printed text of a document whose objects repeat no name, as its rebuilt document.
+The printer writes the names of each object in increasing order when its tree is well formed, and the reader inserts them in that order, which can give another tree than the writer of EthLib builds.
 So the two documents can differ as Lean values while they hold the same names and values.
-So the round trip of slashing protection data is proved for its document (`slashingProtectionOfDocument_toJson`), not for its text.
+`readSlashingProtection_slashingProtectionJson` proves the round trip of slashing protection data for its text, and `slashingProtectionOfDocument_toJson` for its document.
+`readKeystore_embeddedJson` proves that a keystore reads back from its text as its rebuilt document.
+The reader refuses a name that an object repeats and an unpaired surrogate escape, which RFC 8259 leaves unpredictable (§§4 and 8.2).
+It also refuses a number that scales its digits by a power of ten above 100000, as §9 allows.
 The Python suite reads the text of the source's examples and compares the documents that the writer prints.
 
 The source leaves six points about its values open:

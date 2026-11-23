@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Json.Document
 public import EthLib.Consensus.SlashingProtection
 public import EthLib.Base.Exports
 
@@ -32,12 +33,12 @@ instance : ExportError SlashingProtectionError where
 /-- An interchange file from its JSON text. -/
 def interchangeOf (text : ByteArray) : Result Interchange := do
   let some text := String.fromUTF8? text | rejectArgument none "the interchange is not UTF-8"
-  let .ok document := Json.parse text | rejectArgument none "the interchange is not JSON"
+  let .ok document := Base.Json.ofText text | rejectArgument none "the interchange is not JSON"
   toResult none (Interchange.ofJson document)
 
 /-- The JSON text of an interchange file. -/
 def interchangeText (interchange : Interchange) : ByteArray :=
-  interchange.toJson.compress.toUTF8
+  (Base.Json.toText interchange.toJson).toUTF8
 
 /-- Bytes of a fixed length, or code 0 with a message that names them. -/
 def fixedBytesOf (what : String) (size : Nat) (bytes : ByteArray) : Result (Vector UInt8 size) :=

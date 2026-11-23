@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Json.Document
 public import EthLib.Consensus.BeaconApi.Spelling
 public import EthLib.Consensus.SlashingProtection
 
@@ -18,27 +19,30 @@ The reader of a signed voluntary exit is the exception: it is that of the Beacon
 
 It also reads an integer from a bare JSON number, and it refuses names that the schema lacks.
 
-Each writer gives the document that its reader reads back, except for the two values held as text.
-
-For those, the round trip holds for the document that the text holds, not for the text.
+Each writer gives the document that its reader reads back, except a keystore, read back rebuilt.
 
 A key and an address are `0x` hex, read in either letter case and written in lowercase.
 
 Two values hold a JSON document as text: a keystore and the slashing protection data.
+
+The slashing protection data reads back from its text.
+
+A keystore reads back from its text as its rebuilt document.
 
 Their readers parse the text, and their writers print the document, with operations they take.
 
 Those operations form a boundary, whose card follows.
 
 - Boundary: these readers and writers use the two operations, and their callers supply them.
-  - The production instance is the JSON parser and printer of the Lean toolchain, in the exports.
+  - The production instance is the total JSON reader and the printer of this library, below.
 - Owns: the text is a `String`, and the document a `Json` of the Lean toolchain.
 - Operations: one parses text into a document, and the other prints a document as text.
-- Laws: none.
-  - No theorem relates the two, since the production instance is `partial` code.
+- Laws: none for an instance in general.
+  - For the production instance, the reader reads back the printed text of a document.
+  - That holds when no object of the document repeats a name, and gives each object rebuilt.
 - Failure: text that does not parse gives the error of a field that is not JSON.
 - Guarantees: the reader of a document receives exactly what the parser gives.
-- Assumes: the parser reads every text that the printer gives, as a document with its content.
+- Assumes: for another instance, the parser reads every text that the printer gives.
 - Readings: the source says that each value is JSON serialized, and fixes no form of the text.
   - The printer of the production instance writes compact JSON.
 
@@ -151,6 +155,9 @@ structure JsonText where
   parse : String → Except String Json
   /-- The text of a document. -/
   print : Json → String
+
+/-- The total JSON reader and the printer of this library, the instance that the exports use. -/
+def jsonText : JsonText := ⟨Base.Json.ofText, Base.Json.toText⟩
 
 /-- A JSON document held as text in a string, read by a reader of the document. -/
 def readEmbedded {α : Type} (text : JsonText) (path : String)
