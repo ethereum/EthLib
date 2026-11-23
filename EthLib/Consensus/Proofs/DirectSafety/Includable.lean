@@ -333,6 +333,27 @@ private theorem attesterSlashing_accepted_of_active {config : Config} {checks : 
     rfl
   · exact .inl rfl
 
+/-- A successful slashing of one validator leaves that validator slashed, with its key. -/
+private theorem slashed_processAttesterSlashing_single {config : Config}
+    {checks : SignatureChecks} {turn after : BeaconState preset fork}
+    {index : ValidatorIndex} {later : Validator}
+    {d1 d2 : AttestationData} {s1 s2 : BLSSignature}
+    {attesters : 1 ≤ maxAttesters preset fork}
+    (found : getValidator turn index = .ok later)
+    (accepted : processAttesterSlashing config checks turn
+      (singleAttesterSlashing index d1 d2 s1 s2 attesters) = .ok after) :
+    ∃ slashed, getValidator after index = .ok slashed ∧
+      slashed.pubkey = later.pubkey ∧ slashed.slashed = true := by
+  -- Both lists of the slashing are `[index]`, so the slashed validator is the one at `index`.
+  obtain ⟨named, member, -, flag⟩ := processAttesterSlashing_slashed accepted
+  obtain rfl : named = index := by simpa [singleAttesterSlashing] using member
+  -- The operation keeps the keys of the registry as a prefix, so that validator keeps its key.
+  obtain ⟨current, currentFound, currentKey⟩ :=
+    validators_getElem?_of_validatorKeys_prefix
+      (frame_processAttesterSlashing accepted).pubkeysPrefix (getValidator_eq_ok_iff.mp found)
+  have read : getValidator after named = .ok current := getValidator_eq_ok_iff.mpr currentFound
+  exact ⟨current, read, currentKey, by simpa [slashedFlag, read, Except.map] using flag⟩
+
 /-- A key active at `x` names a validator of `x`, chosen before the block.
 
 The state `x` lies on a run from a genesis of deposits.
@@ -348,6 +369,8 @@ The steps before its operations and the slashings before that position succeed, 
 There the validator still has the key.
 
 The slashing succeeds there, or the validator is already slashed there.
+
+After a slashing that succeeds, the validator at that index still has the key and is slashed.
 
 Both cases hold under that inclusion and that success; nothing is said when either fails.
 
@@ -405,8 +428,10 @@ theorem signedConflict_attesterSlashing_accepted_at {config : Config} {checks : 
         block.body.attesterSlashings.data.toList[j]? =
           some (singleAttesterSlashing index d1 d2 s1 s2 attesters) →
         ∃ later, getValidator turn index = .ok later ∧ later.pubkey = key ∧
-          (later.slashed = true ∨ ∃ after, processAttesterSlashing config checks turn
-            (singleAttesterSlashing index d1 d2 s1 s2 attesters) = .ok after) := by
+          (later.slashed = true ∨ ∃ after slashed, processAttesterSlashing config checks turn
+            (singleAttesterSlashing index d1 d2 s1 s2 attesters) = .ok after ∧
+              getValidator after index = .ok slashed ∧ slashed.pubkey = key ∧
+                slashed.slashed = true) := by
   -- The key names a validator of `x`, active at its epoch.
   have registry : x.state.RegistryWithinLimit :=
     (RunBounded.size_le holds.bounded).trans (holds.run conditions within).load.1
@@ -420,6 +445,11 @@ theorem signedConflict_attesterSlashing_accepted_at {config : Config} {checks : 
     shared genesis conditions fits covers withdrawable activationIncrement holds within found
     active pair sameFork1 sameFork2 s1 s2 verified1 verified2 attesters advancedOk later sameEpoch
     turned bounded atJ
-  exact ⟨current, getValidator_eq_ok_iff.mpr (by rwa [numeric]), currentKey, outcome⟩
+  have found : getValidator turn i.toUInt64 = .ok current :=
+    getValidator_eq_ok_iff.mpr (by rwa [numeric])
+  -- After a successful slashing, the validator at that index is slashed and keeps the key.
+  refine ⟨current, found, currentKey, outcome.imp id fun ⟨after, accepted⟩ => ?_⟩
+  obtain ⟨slashed, read, slashedKey, flag⟩ := slashed_processAttesterSlashing_single found accepted
+  exact ⟨after, slashed, accepted, read, slashedKey.trans currentKey, flag⟩
 
 end EthLib.Consensus.DirectSafety
