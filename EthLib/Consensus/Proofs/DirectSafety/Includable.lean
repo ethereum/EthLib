@@ -334,7 +334,7 @@ private theorem attesterSlashing_accepted_of_active {config : Config} {checks : 
   · exact .inl rfl
 
 /-- A successful slashing of one validator leaves that validator slashed, with its key. -/
-private theorem slashed_processAttesterSlashing_single {config : Config}
+private theorem processAttesterSlashing_single_slashed {config : Config}
     {checks : SignatureChecks} {turn after : BeaconState preset fork}
     {index : ValidatorIndex} {later : Validator}
     {d1 d2 : AttestationData} {s1 s2 : BLSSignature}
@@ -370,7 +370,11 @@ There the validator still has the key.
 
 The slashing succeeds there, or the validator is already slashed there.
 
-After a slashing that succeeds, the validator at that index still has the key and is slashed.
+After a slashing that succeeds, that validator still has the key and is slashed.
+
+This holds in the state right after that operation.
+
+The theorem says nothing about the state after the block.
 
 Both cases hold under that inclusion and that success; nothing is said when either fails.
 
@@ -449,7 +453,7 @@ theorem signedConflict_attesterSlashing_accepted_at {config : Config} {checks : 
     getValidator_eq_ok_iff.mpr (by rwa [numeric])
   -- After a successful slashing, the validator at that index is slashed and keeps the key.
   refine ⟨current, found, currentKey, outcome.imp id fun ⟨after, accepted⟩ => ?_⟩
-  obtain ⟨slashed, read, slashedKey, flag⟩ := slashed_processAttesterSlashing_single found accepted
+  obtain ⟨slashed, read, slashedKey, flag⟩ := processAttesterSlashing_single_slashed found accepted
   exact ⟨after, slashed, accepted, read, slashedKey.trans currentKey, flag⟩
 
 end EthLib.Consensus.DirectSafety
