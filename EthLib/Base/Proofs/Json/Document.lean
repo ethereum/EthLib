@@ -315,45 +315,141 @@ private theorem wm_cons (k : String) (v : Lean.Json) (r : List (String × Lean.J
 
 /-! ## Reading a string back -/
 
-private theorem string_step (c : Char) (Y acc : List Char) (n : Nat) :
-    string (n + 1) (esc c ++ Y) acc = string n Y (c :: acc) := by
+/-- The characters of a text that a list of characters ends with have a position. -/
+private theorem exists_after_of_append {s : String} :
+    ∀ (cs : List Char) {Y : List Char} {p : s.Pos}, after p = cs ++ Y →
+      ∃ r : s.Pos, after r = Y
+  | [], _, p, h => ⟨p, by simpa using h⟩
+  | c :: cs, _, _, h => by
+    obtain ⟨_, -, h'⟩ := after_eq_cons (by simpa using h)
+    exact exists_after_of_append cs h'
+
+private theorem append_of_isEmpty (acc piece : String) :
+    (if acc.isEmpty then piece else acc ++ piece) = acc ++ piece := by
+  split
+  · rename_i h
+    rw [String.isEmpty_iff.1 h]
+    simp
+  · rfl
+
+private theorem esc_of_plain {c : Char} (h : plain c = true) : esc c = [c] := by
+  simp only [plain, Bool.not_eq_true', Bool.or_eq_false_iff, decide_eq_false_iff_not] at h
+  obtain ⟨⟨h1, h2⟩, h3⟩ := h
+  have h4 : c ≠ '\n' := by rintro rfl; exact h3 (by decide)
+  have h5 : c ≠ '\r' := by rintro rfl; exact h3 (by decide)
+  simp [esc, escape, h1, h2, h3, h4, h5]
+
+private theorem esc_of_not_plain {c : Char} (h : plain c = false) : ∃ t, esc c = '\\' :: t := by
   unfold esc escape
+  repeat' split
+  all_goals simp_all [plain, String.toList_push]
+
+private theorem takeWhile_esc : ∀ (cs X : List Char),
+    (cs.flatMap esc ++ '"' :: X).takeWhile plain = cs.takeWhile plain
+  | [], X => by simp [plain]
+  | c :: cs, X => by
+    cases hc : plain c
+    · obtain ⟨t, ht⟩ := esc_of_not_plain hc
+      simp [ht, plain, List.takeWhile_cons_of_neg (by simp [hc] : ¬ plain c = true)]
+    · simp [esc_of_plain hc, hc, takeWhile_esc cs X]
+
+private theorem dropWhile_esc : ∀ (cs X : List Char),
+    (cs.flatMap esc ++ '"' :: X).dropWhile plain = (cs.dropWhile plain).flatMap esc ++ '"' :: X
+  | [], X => by simp [plain]
+  | c :: cs, X => by
+    cases hc : plain c
+    · obtain ⟨t, ht⟩ := esc_of_not_plain hc
+      simp [ht, plain, List.dropWhile_cons_of_neg (by simp [hc] : ¬ plain c = true)]
+    · simp [esc_of_plain hc, hc, dropWhile_esc cs X]
+
+/-- An escaped character that needs an escape is read back after the run before it. -/
+private theorem string_escape {s : String} (n : Nat) (p : s.Pos) (acc : String) {c : Char}
+    {Y : List Char} (hc : plain c = false) (h : after (plainEnd p) = esc c ++ Y) :
+    ∃ r : s.Pos, after r = Y ∧
+      string (n + 1) p acc = string n r ((acc ++ s.extract p (plainEnd p)).push c) := by
+  -- A reverse solidus and a letter other than `u` stand for the character of a short escape.
+  have short : ∀ {d : Char}, after (plainEnd p) = '\\' :: d :: Y → d ≠ 'u' →
+      shortEscape d = some c →
+      ∃ r : s.Pos, after r = Y ∧
+        string (n + 1) p acc = string n r ((acc ++ s.extract p (plainEnd p)).push c) := by
+    intro d e hu hd
+    obtain ⟨hq, g, e'⟩ := after_eq_cons e
+    obtain ⟨hq', g', e''⟩ := after_eq_cons e'
+    refine ⟨_, e'', ?_⟩
+    simp only [string, append_of_isEmpty]
+    simp [hq, g, hq', g', hu, hd]
+  unfold esc escape at h
   by_cases h1 : c = '"'
-  · subst h1; simp [string]
+  · subst h1
+    exact short (by simpa using h) (by decide) rfl
   by_cases h2 : c = '\\'
-  · subst h2; simp [string]
+  · subst h2
+    exact short (by simpa using h) (by decide) rfl
   by_cases h3 : c = '\n'
-  · subst h3; simp [string]
+  · subst h3
+    exact short (by simpa using h) (by decide) rfl
   by_cases h4 : c = '\r'
-  · subst h4; simp [string]
+  · subst h4
+    exact short (by simpa using h) (by decide) rfl
   by_cases h5 : c.toNat < 0x20
-  · simp only [h1, h2, h3, h4, h5, ite_false, dite_true]
+  · -- Any other control character is a Unicode escape of `00` and its two hex digits.
+    simp only [h1, h2, h3, h4, h5, ite_false, dite_true, String.toList_push,
+      String.toList_append] at h
     have ha := hexValue?_hexDigitChar ⟨c.toNat / 16, by omega⟩
     have hb := hexValue?_hexDigitChar ⟨c.toNat % 16, Nat.mod_lt _ (by decide)⟩
-    have hx : hex4 ('0' :: '0' :: hexDigitChar ⟨c.toNat / 16, by omega⟩ ::
-        hexDigitChar ⟨c.toNat % 16, Nat.mod_lt _ (by decide)⟩ :: Y) = some (c.toNat, Y) := by
-      refine hex4_cons_eq_some_iff.mpr ⟨rfl, 0, 0, _, _, by decide, by decide, ha, hb, ?_⟩
+    rw [show "\\u00".toList = ['\\', 'u', '0', '0'] from rfl] at h
+    simp only [String.toList_empty, List.nil_append, List.cons_append] at h
+    obtain ⟨hq, g, e⟩ := after_eq_cons h
+    obtain ⟨hq', g', e'⟩ := after_eq_cons e
+    obtain ⟨r, hr⟩ := exists_after_of_append ['0', '0', _, _] (by simpa using e')
+    have hx : hex4 (((plainEnd p).next hq).next hq') = some (c.toNat, r) := by
+      refine (hex4_eq_some_iff e').2 ⟨hr, 0, 0, _, _, by decide, by decide, ha, hb, ?_⟩
       have : (0 : UInt8).toNat = 0 := rfl
       simp only [Nat.toUInt8_eq, UInt8.toNat_ofNat']
       omega
     have hu := (unicodeEscape_eq_of_not_surrogate hx (Or.inl (by omega))).1
     rw [Char.ofNat_toNat] at hu
-    simp only [String.toList_push, String.toList_append, List.append_assoc]
-    simp [string, hu]
-  · simp only [h1, h2, h3, h4, h5, ite_false, dite_false, String.toList_push]
-    rw [String.toList_empty, List.nil_append, List.singleton_append, string.eq_def]
-    split <;> simp_all
-    intro h
-    omega
+    refine ⟨r, hr, ?_⟩
+    simp only [string, append_of_isEmpty]
+    simp [hq, g, hq', g', hu]
+  · simp [plain, h1, h2, h5] at hc
 
-private theorem string_esc : ∀ (cs X acc : List Char) (fuel : Nat), cs.length < fuel →
-    string fuel (cs.flatMap esc ++ '"' :: X) acc = some (String.ofList (acc.reverse ++ cs), X)
-  | [], X, acc, fuel + 1, _ => by simp [string]
-  | c :: cs, X, acc, fuel + 1, h => by
-    have ih := string_esc cs X (c :: acc) fuel (by simp at h; omega)
-    simp only [List.flatMap_cons, List.append_assoc]
-    rw [show acc.reverse ++ c :: cs = (c :: acc).reverse ++ cs by simp, ← ih]
-    exact string_step c _ acc fuel
+private theorem string_esc {s : String} : ∀ (fuel : Nat) (cs X : List Char) (p : s.Pos)
+    (acc : String), cs.length < fuel → after p = cs.flatMap esc ++ '"' :: X →
+    ∃ q, string fuel p acc = some (acc ++ String.ofList cs, q) ∧ after q = X
+  | 0, _, _, _, _, hl, _ => absurd hl (Nat.not_lt_zero _)
+  | n + 1, cs, X, p, acc, hl, h => by
+    have hd : after (plainEnd p) = (cs.dropWhile plain).flatMap esc ++ '"' :: X := by
+      rw [after_plainEnd, h, dropWhile_esc]
+    have ht : s.extract p (plainEnd p) = String.ofList (cs.takeWhile plain) := by
+      rw [extract_plainEnd, h, takeWhile_esc]
+    have split := (List.takeWhile_append_dropWhile (p := plain) (l := cs)).symm
+    cases e : cs.dropWhile plain with
+    | nil =>
+      rw [e] at hd split
+      obtain ⟨hq, g, h'⟩ := after_eq_cons (by simpa using hd)
+      refine ⟨_, ?_, h'⟩
+      simp only [string, hq, g, ht, append_of_isEmpty]
+      simp only [List.append_nil] at split
+      simp [← split]
+    | cons c ds =>
+      have hc : plain c = false := by
+        have := List.head_dropWhile_not plain (l := cs) (by simp [e])
+        simpa [e] using this
+      rw [e, List.flatMap_cons, List.append_assoc] at hd
+      rw [e] at split
+      obtain ⟨r, hr, eq⟩ := string_escape n p acc hc hd
+      have hlen : ds.length < n := by
+        have := congrArg List.length split
+        simp at this
+        omega
+      obtain ⟨q, hq, hX⟩ := string_esc n ds X r _ hlen hr
+      refine ⟨q, ?_, hX⟩
+      rw [eq, hq, ht]
+      refine congrArg (fun x => some (x, q)) ?_
+      rw [← String.toList_inj]
+      conv => rhs; rw [split]
+      simp
 
 /-! ## Reading a number back -/
 
@@ -366,12 +462,12 @@ private theorem good_digit {rest : List Char} (hr : Good rest) :
   rcases hr c hc with rfl | rfl | rfl <;> decide
 
 /-- The digits of a number, with or without a minus sign, then an exponent or none. -/
-private theorem number_digits (neg : Bool) (a : Nat) (hpos : neg = true → 0 < a)
+private theorem number_digits {s : String} (neg : Bool) (a : Nat) (hpos : neg = true → 0 < a)
     (X rest : List Char) (expo : Int) (hr : Good rest)
     (hX : (X = rest ∧ expo = 0) ∨
-      ∃ b, 0 < b ∧ X = 'e' :: '-' :: (Nat.toDigits 10 b ++ rest) ∧ expo = -(b : Int)) :
-    number ((if neg then ['-'] else []) ++ Nat.toDigits 10 a ++ X) =
-      some (⟨if neg then -(a : Int) else a, expo⟩, rest) := by
+      ∃ b, 0 < b ∧ X = 'e' :: '-' :: (Nat.toDigits 10 b ++ rest) ∧ expo = -(b : Int))
+    (p : s.Pos) (hp : after p = (if neg then ['-'] else []) ++ Nat.toDigits 10 a ++ X) :
+    ∃ q, number p = some (⟨if neg then -(a : Int) else a, expo⟩, q) ∧ after q = rest := by
   have hg := good_digit hr
   have hXh : ∀ c ∈ X.head?, digit c = false ∧ c ≠ '.' := by
     rcases hX with ⟨rfl, -⟩ | ⟨b, -, rfl, -⟩
@@ -380,48 +476,72 @@ private theorem number_digits (neg : Bool) (a : Nat) (hpos : neg = true → 0 < 
       simp only [List.head?_cons, Option.mem_def, Option.some.injEq] at hc
       subst hc
       decide
-  have hspan := span_toDigits a X (fun c hc => (hXh c hc).1)
-  have hval := digitsValue_toDigits a
   obtain ⟨d, ds, hd⟩ : ∃ d ds, Nat.toDigits 10 a = d :: ds :=
     List.exists_cons_of_ne_nil Nat.toDigits_ne_nil
   have hdig := digit_of_mem_toDigits (c := d) (n := a) (by simp [hd])
   have hminus : d ≠ '-' := by rintro rfl; revert hdig; decide
-  have hlead : ¬ ((d :: ds).head? = some '0' ∧ (d :: ds).length > 1) := by
-    rintro ⟨h0, hl⟩
+  -- The sign is read first, which leaves the digits.
+  obtain ⟨p₁, hp₁, hsign⟩ : ∃ p₁ : s.Pos, after p₁ = Nat.toDigits 10 a ++ X ∧
+      expect p '-' = (if neg then some p₁ else none) ∧ (neg = false → p₁ = p) := by
+    cases neg
+    · exact ⟨p, by simpa using hp, expect_eq_none (by simp [hp, hd, hminus]), fun _ => rfl⟩
+    · obtain ⟨q, e, hq⟩ := expect_of_after (by simpa using hp)
+      exact ⟨q, hq, e, by simp⟩
+  -- The digits of the integer part give its value, and a non-digit ends them.
+  obtain ⟨p₂, hdigits, hp₂⟩ := digits_eq p₁ 0 0
+  rw [hp₁, takeWhile_toDigits a X (fun c hc => (hXh c hc).1), foldl_digitStep_toDigits]
+    at hdigits
+  rw [hp₁, dropWhile_toDigits a X (fun c hc => (hXh c hc).1)] at hp₂
+  -- A leading zero comes only in the number zero.
+  have hlead : ((expect p₁ '0').isSome && decide ((Nat.toDigits 10 a).length > 1)) = false := by
     rcases Nat.eq_zero_or_pos a with rfl | ha
-    · simp only [Nat.toDigits_zero, List.cons.injEq] at hd
-      simp [← hd.2] at hl
-    · exact head_toDigits_ne_zero a ha (hd ▸ h0)
-  rw [hd] at hspan hval
-  rw [hd]
-  unfold number
-  split
-  rename_i minus rest' heq
-  have : (minus, rest') = (neg, d :: ds ++ X) := by
-    rw [← heq]
-    cases neg <;> split <;> simp_all
-  simp only [Prod.mk.injEq] at this
-  obtain ⟨rfl, rfl⟩ := this
-  simp only [hspan]
-  split
-  · simp_all
-  split
-  · exact absurd rfl (hXh '.' (by simp)).2
-  · simp only [bind, Option.bind, pure, hval, List.append_nil, List.length_nil]
-    rcases hX with ⟨h1, rfl⟩ | ⟨b, hb, rfl, rfl⟩
-    · rw [h1]
-      rcases rest with _ | ⟨c, tl⟩
+    · simp
+    · rw [expect_eq_none]
       · simp
-      · rcases hr c rfl with rfl | rfl | rfl <;> simp
-    · have hspan' := span_toDigits b rest (fun c hc => (hg c hc).1)
-      obtain ⟨d', ds', hd'⟩ : ∃ d ds, Nat.toDigits 10 b = d :: ds :=
-        List.exists_cons_of_ne_nil Nat.toDigits_ne_nil
-      have hval' := digitsValue_toDigits b
-      rw [hd', List.cons_append] at hspan'
-      rw [hd'] at hval'
-      simp [hd', hspan', hval']
-private theorem number_numText (n : JsonNumber) (rest : List Char) (hr : Good rest) :
-    number (numText n ++ rest) = some (⟨n.mantissa, -(n.exponent : Int)⟩, rest) := by
+      · rw [hp₁, hd]
+        have := head_toDigits_ne_zero a ha
+        rw [hd] at this
+        simpa using this
+  have hdot : expect p₂ '.' = none := expect_eq_none (by
+    intro e
+    obtain ⟨c, hc⟩ : ∃ c, X.head? = some c := by
+      cases X with
+      | nil => simp [hp₂] at e
+      | cons c _ => exact ⟨c, rfl⟩
+    rw [hp₂, hc] at e
+    exact (hXh c hc).2 (Option.some.inj e))
+  rw [Nat.zero_add] at hdigits
+  have hlen : decide ((Nat.toDigits 10 a).length = 0) = false := by simp [hd]
+  cases neg
+  all_goals first | obtain rfl := hsign.2 rfl | skip
+  all_goals
+    simp only [number, hsign.1, Bool.false_eq_true, ite_false, ite_true]
+    simp only [hdigits, hlead, hlen, hdot, Bool.or_false, Bool.false_eq_true, ite_false, bind,
+      Option.bind]
+    rcases hX with ⟨rfl, rfl⟩ | ⟨b, hb, rfl, rfl⟩
+    · -- No exponent follows.
+      have he : expect p₂ 'e' = none := expect_eq_none fun e => by
+        cases X with
+        | nil => simp [hp₂] at e
+        | cons c _ => exact (hg c (by simp)).2.2.1 (by simpa [hp₂] using e)
+      have hE : expect p₂ 'E' = none := expect_eq_none fun e => by
+        cases X with
+        | nil => simp [hp₂] at e
+        | cons c _ => exact (hg c (by simp)).2.2.2 (by simpa [hp₂] using e)
+      exact ⟨p₂, by simp [he, hE], hp₂⟩
+    · -- An exponent `e-` and its digits follow.
+      obtain ⟨p₃, e₃, h₃⟩ := expect_of_after hp₂
+      obtain ⟨p₄, e₄, h₄⟩ := expect_of_after h₃
+      obtain ⟨p₅, e₅, h₅⟩ := digits_eq p₄ 0 0
+      rw [h₄, takeWhile_toDigits b rest (fun c hc => (hg c hc).1), foldl_digitStep_toDigits,
+        Nat.zero_add] at e₅
+      rw [h₄, dropWhile_toDigits b rest (fun c hc => (hg c hc).1)] at h₅
+      have hlb : (Nat.toDigits 10 b).length ≠ 0 := by
+        simp [List.length_eq_zero_iff, Nat.toDigits_ne_nil]
+      exact ⟨p₅, by simp [e₃, e₄, e₅, hlb], h₅⟩
+private theorem number_numText {s : String} (n : JsonNumber) (rest : List Char) (hr : Good rest)
+    (p : s.Pos) (hp : after p = numText n ++ rest) :
+    ∃ q, number p = some (⟨n.mantissa, -(n.exponent : Int)⟩, q) ∧ after q = rest := by
   obtain ⟨m, e⟩ := n
   have hX : (((if e = 0 then [] else 'e' :: '-' :: Nat.toDigits 10 e) ++ rest) = rest ∧
       -(e : Int) = 0) ∨ ∃ b, 0 < b ∧
@@ -430,21 +550,19 @@ private theorem number_numText (n : JsonNumber) (rest : List Char) (hr : Good re
     by_cases he : e = 0
     · left; simp [he]
     · right; exact ⟨e, by omega, by simp [he], rfl⟩
-  simp only [numText, List.append_assoc, Nat.toList_repr]
-  rw [Int.repr_eq_ite]
+  simp only [numText, List.append_assoc, Nat.toList_repr] at hp
+  rw [Int.repr_eq_ite] at hp
   by_cases hm : 0 ≤ m
-  · have := number_digits false m.toNat (by simp) _ rest _ hr hX
-    simp only [Bool.false_eq_true, ite_false, List.nil_append] at this
-    simp only [hm, ite_true, Nat.toList_repr]
-    rw [this]
-    congr
-    omega
-  · have := number_digits true (-m).toNat (fun _ => by omega) _ rest _ hr hX
-    simp only [ite_true, List.cons_append, List.nil_append] at this
-    simp only [hm, ite_false, String.toList_append, Nat.toList_repr, List.append_assoc]
-    rw [show "-".toList = ['-'] from rfl, List.singleton_append, this]
-    congr
-    omega
+  · obtain ⟨q, eq, hq⟩ := number_digits false m.toNat (by simp) _ rest _ hr hX p
+      (by simpa [hm, Nat.toList_repr] using hp)
+    refine ⟨q, ?_, hq⟩
+    rw [eq]
+    simp [Int.toNat_of_nonneg hm]
+  · obtain ⟨q, eq, hq⟩ := number_digits true (-m).toNat (fun _ => by omega) _ rest _ hr hX p
+      (by simpa [hm, Nat.toList_repr] using hp)
+    refine ⟨q, ?_, hq⟩
+    rw [eq]
+    simp [Int.toNat_of_nonneg (by omega : 0 ≤ -m)]
 
 /-! ## Reading a document back -/
 
@@ -517,58 +635,63 @@ private theorem text_head (j : Lean.Json) :
     · simp only [hm, ite_false, String.toList_append]
       exact ⟨'-', _, rfl, by decide, by decide⟩
 
-private theorem dropWhile_text (j : Lean.Json) (X : List Char) :
-    (text j ++ X).dropWhile whitespace = text j ++ X := by
+/-- Whitespace is skipped up to a character that is not whitespace. -/
+private theorem skipWhitespace_of_head {s : String} {p : s.Pos} {c : Char} {t : List Char}
+    (h : after p = c :: t) (hc : whitespace c = false) : skipWhitespace p = p :=
+  eq_of_after_eq (by rw [after_skipWhitespace, h, List.dropWhile_cons_of_neg (by simp [hc])])
+
+/-- No whitespace starts the text of a document. -/
+private theorem skipWhitespace_text {s : String} {p : s.Pos} (j : Lean.Json) {X : List Char}
+    (h : after p = text j ++ X) : skipWhitespace p = p := by
   obtain ⟨c, tl, hc, hws, -⟩ := text_head j
-  rw [hc, List.cons_append, List.dropWhile_cons_of_neg (by simp [hws])]
+  exact skipWhitespace_of_head (by rw [h, hc, List.cons_append]) hws
 
 /-- The reader reads the text of a document followed by what may follow it. -/
-private def Reads (j : Lean.Json) : Prop :=
-  ∀ (f : Nat) (rest : List Char), 2 * (text j).length < f → Good rest →
-    value f (text j ++ rest) = some (toValue j, rest)
+private def Reads (s : String) (j : Lean.Json) : Prop :=
+  ∀ (p : s.Pos) (f : Nat) (rest : List Char), after p = text j ++ rest →
+    2 * (text j).length < f → Good rest →
+    ∃ q, value f p = some (toValue j, q) ∧ after q = rest
 
-private theorem array_read :
+private theorem array_read {s : String} :
     ∀ (xs : List Lean.Json) (x : Lean.Json) (acc : List Value) (empty : Bool) (f : Nat)
-      (rest : List Char), (∀ y ∈ x :: xs, Reads y) → Good rest →
+      (rest : List Char) (p : s.Pos), (∀ y ∈ x :: xs, Reads s y) → Good rest →
       2 * (text x ++ (writeItems xs "" false).toList).length + 2 < f →
-      array f (text x ++ ((writeItems xs "" false).toList ++ ']' :: rest)) acc empty =
-        some (acc.reverse ++ (x :: xs).map toValue, rest) := by
+      after p = text x ++ ((writeItems xs "" false).toList ++ ']' :: rest) →
+      ∃ q, array f p acc empty = some (acc.reverse ++ (x :: xs).map toValue, q) ∧
+        after q = rest := by
   intro xs
   induction xs with
   | nil =>
-    intro x acc empty f rest h hr hf
+    intro x acc empty f rest p h hr hf hp
     obtain ⟨n, rfl⟩ : ∃ n, f = n + 1 := ⟨f - 1, by omega⟩
     obtain ⟨c, tl, hc, -, hbr⟩ := text_head x
-    have hv := h x (by simp) n (']' :: rest) (by simp at hf; omega) (by simp [Good])
-    simp only [writeItems, String.toList_empty, List.nil_append] at hv ⊢
+    simp only [writeItems, String.toList_empty, List.nil_append] at hp hf
+    have hp' : after p = c :: (tl ++ ']' :: rest) := by rw [hp, hc, List.cons_append]
+    obtain ⟨hp₀, g₀, -⟩ := after_eq_cons hp'
+    obtain ⟨q, hv, hq⟩ := h x (by simp) p n (']' :: rest) hp (by simp at hf; omega)
+      (by simp [Good])
+    obtain ⟨hq₀, g₁, hq₁⟩ := after_eq_cons hq
+    refine ⟨_, ?_, hq₁⟩
     rw [array]
-    · rw [hv]
-      simp [whitespace]
-    · intro r e
-      rw [hc] at e
-      exact hbr (List.cons.inj e).1
+    simp [hp₀, g₀, hbr, hv, skipWhitespace_of_head hq (by decide), hq₀, g₁]
   | cons y ys ih =>
-    intro x acc empty f rest h hr hf
+    intro x acc empty f rest p h hr hf hp
     obtain ⟨n, rfl⟩ : ∃ n, f = n + 1 := ⟨f - 1, by omega⟩
     obtain ⟨c, tl, hc, -, hbr⟩ := text_head x
-    rw [writeItems_cons_false] at hf ⊢
+    rw [writeItems_cons_false] at hf hp
     simp only [List.length_append, List.length_cons] at hf
-    have hv := h x (by simp) n
-      (',' :: (text y ++ ((writeItems ys "" false).toList ++ ']' :: rest)))
-      (by omega) (by simp [Good])
-    have hi := ih y (toValue x :: acc) false n rest (fun z hz => h z (by simp_all)) hr
-      (by simp only [List.length_append]; omega)
-    simp only [List.cons_append, List.append_assoc] at hv ⊢
+    simp only [List.cons_append, List.append_assoc] at hp
+    have hp' : after p = c :: (tl ++ ',' :: (text y ++ ((writeItems ys "" false).toList ++
+        ']' :: rest))) := by rw [hp, hc, List.cons_append]
+    obtain ⟨hp₀, g₀, -⟩ := after_eq_cons hp'
+    obtain ⟨q, hv, hq⟩ := h x (by simp) p n _ hp (by omega) (by simp [Good])
+    obtain ⟨hq₀, g₁, hq₁⟩ := after_eq_cons hq
+    obtain ⟨r, hi, hr'⟩ := ih y (toValue x :: acc) false n rest (q.next hq₀)
+      (fun z hz => h z (by simp_all)) hr (by simp only [List.length_append]; omega) hq₁
+    refine ⟨r, ?_, hr'⟩
     rw [array]
-    · rw [hv]
-      simp only [bind, Option.bind]
-      rw [List.dropWhile_cons_of_neg (by decide)]
-      simp only
-      rw [dropWhile_text, hi]
-      simp
-    · intro r e
-      rw [hc] at e
-      exact hbr (List.cons.inj e).1
+    simp [hp₀, g₀, hbr, hv, skipWhitespace_of_head hq (by decide), hq₀, g₁,
+      skipWhitespace_text y hq₁, hi]
 
 private theorem length_esc (c : Char) : 1 ≤ (esc c).length := by
   unfold esc escape
@@ -583,36 +706,37 @@ private theorem length_flatMap_esc : ∀ cs : List Char, cs.length ≤ (cs.flatM
     simp only [List.flatMap_cons, List.length_append, List.length_cons]
     omega
 
-private theorem object_read :
+private theorem object_read {s : String} :
     ∀ (r : List (String × Lean.Json)) (k : String) (v : Lean.Json)
-      (acc : List (String × Value)) (empty : Bool) (f : Nat) (rest : List Char),
-      (∀ p ∈ (k, v) :: r, Reads p.2) → Good rest →
+      (acc : List (String × Value)) (empty : Bool) (f : Nat) (rest : List Char) (p : s.Pos),
+      (∀ p ∈ (k, v) :: r, Reads s p.2) → Good rest →
       2 * (wm ((k, v) :: r) "" true).toList.length + 2 < f →
-      object f ((wm ((k, v) :: r) "" true).toList ++ '}' :: rest) acc empty =
-        some (acc.reverse ++ ((k, v) :: r).map (fun p => (p.1, toValue p.2)), rest) := by
+      after p = (wm ((k, v) :: r) "" true).toList ++ '}' :: rest →
+      ∃ q, object f p acc empty =
+          some (acc.reverse ++ ((k, v) :: r).map (fun p => (p.1, toValue p.2)), q) ∧
+        after q = rest := by
   intro r
   induction r with
   | nil =>
-    intro k v acc empty f rest h hr hf
+    intro k v acc empty f rest p h hr hf hp
     obtain ⟨n, rfl⟩ : ∃ n, f = n + 1 := ⟨f - 1, by omega⟩
     have hk := length_flatMap_esc k.toList
-    rw [wm_cons] at hf ⊢
-    simp only [wm, String.toList_empty, List.append_nil, ite_true, List.nil_append,
-      List.length_cons, List.length_append] at hf ⊢
-    have hR : Reads v := h (k, v) (by simp)
-    have hv := hR n ('}' :: rest) (by omega) (by simp [Good])
-    have hs := string_esc k.toList (':' :: (text v ++ '}' :: rest)) [] n (by omega)
-    simp only [List.reverse_nil, List.nil_append, String.ofList_toList] at hs
-    simp only [List.cons_append, List.append_assoc]
+    rw [wm_cons] at hf hp
+    simp only [wm, String.toList_empty, List.append_nil, ↓reduceIte, List.nil_append,
+      List.length_cons, List.length_append, List.cons_append, List.append_assoc] at hf hp
+    obtain ⟨hp₀, g₀, hp₁⟩ := after_eq_cons hp
+    obtain ⟨q₁, hs, hq₁⟩ := string_esc n k.toList _ _ "" (by omega) hp₁
+    obtain ⟨q₂, he, hq₂⟩ := expect_of_after hq₁
+    obtain ⟨q₃, hv, hq₃⟩ := h (k, v) (by simp) q₂ n _ hq₂ (by dsimp only; omega)
+      (by simp [Good])
+    obtain ⟨hq₃', g₃, hq₄⟩ := after_eq_cons hq₃
+    refine ⟨_, ?_, hq₄⟩
     rw [object]
-    simp only [hs, bind, Option.bind]
-    rw [List.dropWhile_cons_of_neg (by decide)]
-    simp only [hv]
-    rw [List.dropWhile_cons_of_neg (by decide)]
-    simp
-  | cons p r ih =>
-    intro k v acc empty f rest h hr hf
-    obtain ⟨k', v'⟩ := p
+    simp [hp₀, g₀, hs, skipWhitespace_of_head hq₁ (by decide), he, hv,
+      skipWhitespace_of_head hq₃ (by decide), hq₃', g₃]
+  | cons pr r ih =>
+    intro k v acc empty f rest p h hr hf hp
+    obtain ⟨k', v'⟩ := pr
     obtain ⟨n, rfl⟩ : ∃ n, f = n + 1 := ⟨f - 1, by omega⟩
     have hk := length_flatMap_esc k.toList
     have hM : (wm ((k', v') :: r) "" false).toList =
@@ -621,27 +745,24 @@ private theorem object_read :
       simp
     obtain ⟨M, hM'⟩ : ∃ M, (wm ((k', v') :: r) "" true).toList = '"' :: M :=
       ⟨_, wm_cons k' v' r true⟩
-    have hi := ih k' v' ((k, toValue v) :: acc) false n rest (fun q hq => h q (by simp_all)) hr
-      (by rw [wm_cons k v, hM] at hf; simp only [List.length_append, List.length_cons] at hf ⊢
-          simp at hf; omega)
-    rw [wm_cons k v, hM] at hf ⊢
-    simp only [ite_true, List.nil_append, List.length_cons, List.length_append] at hf ⊢
-    have hR : Reads v := h (k, v) (by simp)
-    have hv := hR n (',' :: ((wm ((k', v') :: r) "" true).toList ++ '}' :: rest)) (by omega)
+    rw [wm_cons k v, hM] at hf hp
+    simp only [↓reduceIte, List.nil_append, List.length_cons, List.length_append,
+      List.cons_append, List.append_assoc] at hf hp
+    obtain ⟨hp₀, g₀, hp₁⟩ := after_eq_cons hp
+    obtain ⟨q₁, hs, hq₁⟩ := string_esc n k.toList _ _ "" (by omega) hp₁
+    obtain ⟨q₂, he, hq₂⟩ := expect_of_after hq₁
+    obtain ⟨q₃, hv, hq₃⟩ := h (k, v) (by simp) q₂ n _ hq₂ (by dsimp only; omega)
       (by simp [Good])
-    have hs := string_esc k.toList (':' :: (text v ++ ',' ::
-      ((wm ((k', v') :: r) "" true).toList ++ '}' :: rest))) [] n (by omega)
-    simp only [List.reverse_nil, List.nil_append, String.ofList_toList] at hs
-    simp only [List.cons_append, List.append_assoc]
+    obtain ⟨hq₃', g₃, hq₄⟩ := after_eq_cons hq₃
+    have hq₄' : after (q₃.next hq₃') = '"' :: (M ++ '}' :: rest) := by
+      rw [hq₄, hM', List.cons_append]
+    obtain ⟨q, ho, hq⟩ := ih k' v' ((k, toValue v) :: acc) false n rest (q₃.next hq₃')
+      (fun q hq => h q (by simp_all)) hr (by omega) hq₄
+    refine ⟨q, ?_, hq⟩
     rw [object]
-    simp only [hs, bind, Option.bind]
-    rw [List.dropWhile_cons_of_neg (by decide)]
-    simp only [hv]
-    rw [List.dropWhile_cons_of_neg (by decide)]
-    simp only
-    rw [hM', List.cons_append, List.dropWhile_cons_of_neg (by decide), ← List.cons_append, ← hM',
-      hi]
-    simp
+    simp [hp₀, g₀, hs, skipWhitespace_of_head hq₁ (by decide), he, hv,
+      skipWhitespace_of_head hq₃ (by decide), hq₃', g₃, skipWhitespace_of_head hq₄' (by decide),
+      ho]
 
 private theorem numText_head (n : JsonNumber) :
     ∃ c tl, numText n = c :: tl ∧ (c = '-' ∨ digit c = true) := by
@@ -658,79 +779,130 @@ private theorem numText_head (n : JsonNumber) :
     exact ⟨'-', _, rfl, Or.inl rfl⟩
 
 /-- The reader reads back the text of every document. -/
-private theorem reads (j : Lean.Json) : Reads j := by
-  refine induct Reads ?_ ?_ ?_ ?_ ?_ ?_ j
-  · intro f rest hf hr
+private theorem reads (s : String) (j : Lean.Json) : Reads s j := by
+  refine induct (Reads s) ?_ ?_ ?_ ?_ ?_ ?_ j
+  · intro p f rest hp hf hr
     obtain ⟨n, rfl⟩ : ∃ n, f = n + 1 := ⟨f - 1, by omega⟩
-    simp [text, write, value, whitespace, toValue]
-  · intro b f rest hf hr
+    simp only [text, write] at hp
+    rw [show ("" ++ "null").toList = ['n', 'u', 'l', 'l'] from rfl] at hp
+    simp only [List.cons_append, List.nil_append] at hp
+    obtain ⟨hp₀, g₀, h₁⟩ := after_eq_cons hp
+    obtain ⟨q₁, e₁, h₂⟩ := expect_of_after h₁
+    obtain ⟨q₂, e₂, h₃⟩ := expect_of_after h₂
+    obtain ⟨q₃, e₃, h₄⟩ := expect_of_after h₃
+    refine ⟨q₃, ?_, h₄⟩
+    rw [value]
+    simp [skipWhitespace_of_head hp (by decide), hp₀, g₀, e₁, e₂, e₃, toValue, bind,
+      Option.bind]
+  · intro b p f rest hp hf hr
     obtain ⟨n, rfl⟩ : ∃ n, f = n + 1 := ⟨f - 1, by omega⟩
-    cases b <;> simp [text, write, value, whitespace, toValue]
-  · intro num f rest hf hr
+    cases b
+    · simp only [text, write] at hp
+      rw [show ("" ++ "false").toList = ['f', 'a', 'l', 's', 'e'] from rfl] at hp
+      simp only [List.cons_append, List.nil_append] at hp
+      obtain ⟨hp₀, g₀, h₁⟩ := after_eq_cons hp
+      obtain ⟨q₁, e₁, h₂⟩ := expect_of_after h₁
+      obtain ⟨q₂, e₂, h₃⟩ := expect_of_after h₂
+      obtain ⟨q₃, e₃, h₄⟩ := expect_of_after h₃
+      obtain ⟨q₄, e₄, h₅⟩ := expect_of_after h₄
+      refine ⟨q₄, ?_, h₅⟩
+      rw [value]
+      simp [skipWhitespace_of_head hp (by decide), hp₀, g₀, e₁, e₂, e₃, e₄, toValue, bind,
+        Option.bind]
+    · simp only [text, write] at hp
+      rw [show ("" ++ "true").toList = ['t', 'r', 'u', 'e'] from rfl] at hp
+      simp only [List.cons_append, List.nil_append] at hp
+      obtain ⟨hp₀, g₀, h₁⟩ := after_eq_cons hp
+      obtain ⟨q₁, e₁, h₂⟩ := expect_of_after h₁
+      obtain ⟨q₂, e₂, h₃⟩ := expect_of_after h₂
+      obtain ⟨q₃, e₃, h₄⟩ := expect_of_after h₃
+      refine ⟨q₃, ?_, h₄⟩
+      rw [value]
+      simp [skipWhitespace_of_head hp (by decide), hp₀, g₀, e₁, e₂, e₃, toValue, bind,
+        Option.bind]
+  · intro num p f rest hp hf hr
     obtain ⟨n, rfl⟩ : ∃ n, f = n + 1 := ⟨f - 1, by omega⟩
-    obtain ⟨c, tl, hc, hcd⟩ := numText_head num
-    have hnum := number_numText num rest hr
+    have skip := skipWhitespace_text _ hp
     have ht : text (.num num) = numText num := by simp [text, write, writeNumber_toList]
-    rw [value, dropWhile_text, ht, hc]
-    rw [hc] at hnum
-    split <;> simp_all [digit, toValue]
-  · intro s f rest hf hr
+    rw [ht] at hp
+    obtain ⟨q, hnum, hq⟩ := number_numText num rest hr p hp
+    obtain ⟨c, tl, hc, hcd⟩ := numText_head num
+    rw [hc, List.cons_append] at hp
+    obtain ⟨hp₀, g₀, -⟩ := after_eq_cons hp
+    have hne : c ≠ '"' ∧ c ≠ '{' ∧ c ≠ '[' ∧ c ≠ 't' ∧ c ≠ 'f' ∧ c ≠ 'n' := by
+      rcases hcd with rfl | hcd
+      · decide
+      · refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ <;> rintro rfl <;> revert hcd <;> decide
+    refine ⟨q, ?_, hq⟩
+    rw [value]
+    simp [skip, hp₀, g₀, hne, hnum, toValue, bind, Option.bind]
+  · intro w p f rest hp hf hr
     obtain ⟨n, rfl⟩ : ∃ n, f = n + 1 := ⟨f - 1, by omega⟩
-    have hk := length_flatMap_esc s.toList
+    have hk := length_flatMap_esc w.toList
     simp only [text, write, writeString_toList, String.toList_empty, List.nil_append,
-      List.length_cons, List.length_append] at hf
-    have hs := string_esc s.toList rest [] n (by omega)
-    simp only [List.reverse_nil, List.nil_append, String.ofList_toList] at hs
-    simp only [text, write, writeString_toList, String.toList_empty, List.nil_append,
-      List.cons_append, List.append_assoc]
-    rw [value, List.dropWhile_cons_of_neg (by decide)]
-    simp [hs, toValue]
-  · intro items h f rest hf hr
+      List.length_cons, List.length_append, List.cons_append, List.append_assoc] at hf hp
+    obtain ⟨hp₀, g₀, hp₁⟩ := after_eq_cons hp
+    obtain ⟨q, hs, hq⟩ := string_esc n w.toList rest _ "" (by omega) hp₁
+    refine ⟨q, ?_, hq⟩
+    rw [value]
+    simp [skipWhitespace_of_head hp (by decide), hp₀, g₀, hs, toValue, bind, Option.bind]
+  · intro items h p f rest hp hf hr
     obtain ⟨n, rfl⟩ : ∃ n, f = n + 1 := ⟨f - 1, by omega⟩
-    rw [text_arr] at hf ⊢
-    simp only [List.cons_append, List.append_assoc]
-    rw [value, List.dropWhile_cons_of_neg (by decide)]
-    simp only [toValue, toValueItems_eq]
+    rw [text_arr] at hf hp
+    simp only [List.cons_append, List.append_assoc, List.nil_append] at hp
+    obtain ⟨hp₀, g₀, hp₁⟩ := after_eq_cons hp
     cases items with
     | nil =>
-      simp only [writeItems, String.toList_empty, List.nil_append]
-      rw [List.dropWhile_cons_of_neg (by decide)]
-      cases n with
-      | zero => simp at hf
-      | succ n => simp [array, bind, Option.bind]
+      simp only [writeItems, String.toList_empty, List.nil_append] at hp₁ hf
+      obtain ⟨m, rfl⟩ : ∃ m, n = m + 1 := ⟨n - 1, by simp at hf; omega⟩
+      obtain ⟨hq₀, g₁, hq₁⟩ := after_eq_cons hp₁
+      have ha : array (m + 1) (p.next hp₀) [] true = some ([], (p.next hp₀).next hq₀) := by
+        rw [array]
+        simp [hq₀, g₁]
+      refine ⟨_, ?_, hq₁⟩
+      rw [value]
+      simp [skipWhitespace_of_head hp (by decide), hp₀, g₀, skipWhitespace_of_head hp₁ (by decide),
+        ha, toValue, toValueItems_eq, bind, Option.bind]
     | cons x xs =>
-      rw [writeItems_cons_true] at hf ⊢
-      simp only [List.length_cons, List.length_append, List.append_assoc] at hf ⊢
-      rw [dropWhile_text]
-      have ha := array_read xs x [] true n rest h hr
-        (by simp only [List.length_append]; omega)
-      simp only [bind, Option.bind, List.nil_append]
-      rw [ha]
-      simp
-  · intro t h f rest hf hr
+      rw [writeItems_cons_true] at hf hp₁
+      simp only [List.length_cons, List.length_append, List.append_assoc] at hf hp₁
+      obtain ⟨q, ha, hq⟩ := array_read xs x [] true n rest _ h hr
+        (by simp only [List.length_append]; omega) hp₁
+      refine ⟨q, ?_, hq⟩
+      rw [value]
+      simp [skipWhitespace_of_head hp (by decide), hp₀, g₀, skipWhitespace_text x hp₁, ha,
+        toValue, toValueItems_eq, bind, Option.bind]
+  · intro t h p f rest hp hf hr
     obtain ⟨n, rfl⟩ : ∃ n, f = n + 1 := ⟨f - 1, by omega⟩
-    rw [text_obj] at hf ⊢
-    simp only [List.cons_append, List.append_assoc]
-    rw [value, List.dropWhile_cons_of_neg (by decide)]
-    simp only [toValue, toValueMembers_eq]
+    rw [text_obj] at hf hp
+    simp only [List.cons_append, List.append_assoc, List.nil_append] at hp
+    obtain ⟨hp₀, g₀, hp₁⟩ := after_eq_cons hp
     cases hi : inorder t with
     | nil =>
-      simp only [wm, String.toList_empty, List.nil_append]
-      rw [List.dropWhile_cons_of_neg (by decide)]
-      cases n with
-      | zero => simp [hi, wm] at hf
-      | succ n => simp [object, bind, Option.bind]
-    | cons p r =>
-      obtain ⟨k, v⟩ := p
-      rw [hi] at h hf
+      rw [hi] at hp₁ hf
+      simp only [wm, String.toList_empty, List.nil_append] at hp₁ hf
+      obtain ⟨m, rfl⟩ : ∃ m, n = m + 1 := ⟨n - 1, by simp at hf; omega⟩
+      obtain ⟨hq₀, g₁, hq₁⟩ := after_eq_cons hp₁
+      have ho : object (m + 1) (p.next hp₀) [] true = some ([], (p.next hp₀).next hq₀) := by
+        rw [object]
+        simp [hq₀, g₁]
+      refine ⟨_, ?_, hq₁⟩
+      rw [value]
+      simp [skipWhitespace_of_head hp (by decide), hp₀, g₀, skipWhitespace_of_head hp₁ (by decide),
+        ho, toValue, toValueMembers_eq, hi, bind, Option.bind]
+    | cons pr r =>
+      obtain ⟨k, v⟩ := pr
+      rw [hi] at h hf hp₁
       obtain ⟨M, hM⟩ : ∃ M, (wm ((k, v) :: r) "" true).toList = '"' :: M :=
         ⟨_, wm_cons k v r true⟩
-      have ho := object_read r k v [] true n rest h hr
-        (by simp only [List.length_cons, List.length_append] at hf; omega)
-      simp only [List.nil_append]
-      rw [hM, List.cons_append, List.dropWhile_cons_of_neg (by decide), ← List.cons_append,
-        ← hM, ho]
-      simp [bind, Option.bind]
+      obtain ⟨q, ho, hq⟩ := object_read r k v [] true n rest _ h hr
+        (by simp only [List.length_cons, List.length_append] at hf; omega) hp₁
+      have hp₁' : after (p.next hp₀) = '"' :: (M ++ '}' :: rest) := by
+        rw [hp₁, hM, List.cons_append]
+      refine ⟨q, ?_, hq⟩
+      rw [value]
+      simp [skipWhitespace_of_head hp (by decide), hp₀, g₀, skipWhitespace_of_head hp₁' (by decide),
+        ho, toValue, toValueMembers_eq, hi, bind, Option.bind]
 
 /-! ## The document of the value read back -/
 
@@ -805,12 +977,15 @@ private theorem builds (j : Lean.Json) : Builds j := by
 /-- A printed document whose objects repeat no name reads back as its rebuilt document. -/
 theorem ofText_toText {document : Lean.Json} (distinct : Distinct document) :
     ofText (toText document) = .ok (canonical document) := by
-  have hv := reads document (2 * (text document).length + 1) [] (by omega) (by simp [Good])
-  rw [List.append_nil] at hv
+  obtain ⟨q, hv, hq⟩ := reads (toText document) document (toText document).startPos
+    (2 * (text document).length + 1) [] (by rw [after_startPos, List.append_nil]; rfl)
+    (by omega) (by simp [Good])
   have hr : read (toText document) = some (toValue document) := by
-    simp only [read, toText]
-    rw [show (write document "").toList = text document from rfl, hv]
-    rfl
+    have hlen : (toText document).length = (text document).length := by
+      simp [text, toText, String.length_toList]
+    rw [(after_eq_nil_iff).1 hq] at hv
+    simp only [read, hlen, hv, bind, Option.bind]
+    simp [skipWhitespace]
   simp only [ofText, hr]
   exact builds document distinct
 
