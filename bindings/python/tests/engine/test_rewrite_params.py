@@ -18,14 +18,8 @@ _INVALID = "engine error: EthLib.Engine.EngineError.invalidParams "
 
 # The examples that the decoder rejects, by name, with the message of the rejection.
 REJECTED = {
-    # The payload ID of these examples has 15 hex digits, not the 16 of 8 bytes.
-    "engine_getPayloadV2 example": _INVALID + '"payloadId: odd number of hex digits"',
-    "engine_getPayloadV3 example": _INVALID + '"payloadId: odd number of hex digits"',
-    "engine_getPayloadV4 example": _INVALID + '"payloadId: odd number of hex digits"',
-    "engine_getPayloadV5 example": _INVALID + '"payloadId: odd number of hex digits"',
-    "engine_getPayloadV6 example": _INVALID + '"payloadId: odd number of hex digits"',
-    # The payload of this example has no `slotNumber`, which ExecutionPayloadV4 requires.
-    "engine_newPayloadV5 example": _INVALID + '"payload: not the fields of version 4"',
+    # The block access list of this example has 1091 hex digits, which no byte string has.
+    "engine_newPayloadV5 example": _INVALID + '"blockAccessList: odd number of hex digits"',
     # EthLib does not specify these two methods.
     "engine_exchangeCapabilities example": "no method engine_exchangeCapabilities",
     "engine_exchangeTransitionConfigurationV1 example": (

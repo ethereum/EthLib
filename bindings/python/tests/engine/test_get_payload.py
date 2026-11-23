@@ -1,7 +1,7 @@
 """The versions, fork checks and KZG bundle checks of engine_getPayload."""
 
 # Rules: ethereum/execution-apis, src/engine/{paris,shanghai,cancun,prague,osaka,amsterdam}.md.
-# Commit: 3284ee80c3da3e516c53782dde75157cccf1ebdc.
+# Commit: 1ca0818569467cff85b7f41372f22e728d5daa14.
 # Builds: the first block of the pinned blockchain test of each network, as test_build_payload.
 # Blob inputs: the pinned KZG fixtures of verify_blob_kzg_proof; no expected value calls EthLib.
 # Access list: the pinned Amsterdam payload of tests/engine/new_payload.json.

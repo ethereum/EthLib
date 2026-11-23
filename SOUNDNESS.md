@@ -5255,12 +5255,13 @@ The decoder of its parameters reads back the state, and the JSON of the attribut
 From version 4 this holds whatever custody columns follow, and the custody columns read back too (`custodyColumnsOfJson_json`).
 The theorems run the other way: a value that is written reads back.
 The Python tests check the converse on examples: a request that decodes is written back as the same JSON.
-They do it for the 239 requests of `tests/engine/new_payload.json` that decode, and for 17 request examples of the OpenRPC method files.
+They do it for the 239 requests of `tests/engine/new_payload.json` that decode, and for 22 request examples of the OpenRPC method files.
 They also do it for a forkchoice state with each payload of `tests/engine/forkchoice.json` as the head, and no attributes.
 The other 11 are among the 75 whose fixtures expect invalid parameters, and the decoder rejects them.
 The 64 others of those 75 decode, and a later check rejects them.
-Six of the OpenRPC request examples do not follow the specification, and the tests check that the decoder rejects them.
-The other two examples are of methods that EthLib does not specify, and the tests check that they fail as unknown methods.
+At the commit that `tests/sources.toml` pins, one OpenRPC request example does not follow the specification, and the tests check that the decoder rejects it.
+The block access list of the example of `engine_newPayloadV5` has an odd number of hex digits ([ethereum/execution-apis#1026](https://github.com/ethereum/execution-apis/pull/1026)).
+Two other examples are of methods that EthLib does not specify, and the tests check that they fail as unknown methods.
 
 The answers have a JSON form too, written and read back.
 The decoder of a payload status reads back what its writer writes, for every status and validation error (`payloadStatusOfJson_json`, `Proofs/Json.lean`).
@@ -5306,7 +5307,7 @@ The method returns no payload with more than 32 bytes of extra data, the bound o
 So `getPayloadResultOfJson_json` needs no hypothesis other than a successful call.
 Hence what the execution layer writes is what the consensus layer reads.
 The Python tests read back the result examples of versions 1 to 5 in the OpenRPC method files, and check each length rule.
-At the pinned commit, the example of version 6 has no slot number in its payload, so the decoder rejects it.
+At the commit that `tests/sources.toml` pins, the blob of the example of version 6 has 2914 bytes instead of 131072, so the decoder rejects it.
 The tests read back a result of version 6 built from the example of version 5 with an access list and a slot.
 
 The results of `engine_getPayloadBodies` and `engine_getBlobs` are written and read in the specification (`Engine/PayloadBodies.lean`, `Engine/GetBlobs.lean`).
@@ -5978,6 +5979,16 @@ Where the source is silent or conflicts with itself for the blocks, EthLib follo
 - with `traceTransfers`, a transfer of 0 wei or from an account to itself gets no `0xeeee…eeee` log, as [EIP-7708](https://eips.ethereum.org/EIPS/eip-7708#specification) rules, which the notes leave open; this covers CALLCODE with value and SELFDESTRUCT to itself;
 - no fixture of the pin covers the `0xeeee…eeee` logs, since every simulated block of the fixtures is from Glamsterdam, so hand-built tests check them;
 - a revert error has the message "execution reverted", without the decoded reason that the fixtures add.
+
+Two fixtures at the commit that `tests/sources.toml` pins disagree with EthLib, and the tests expect them to fail:
+
+- `ethSimulate-override-all-in-BlockStateCalls` sets the gas limit of a Glamsterdam block to 1004.
+  [EIP-7928](https://eips.ethereum.org/EIPS/eip-7928#specification) allows at most `gasLimit / 2000` items in the block access list, here none, and the system calls at the start of the block record accesses.
+  So EthLib finds the block invalid and answers `-32603`, while the fixture returns the block.
+  The notes do not say whether a simulation without validation keeps this bound.
+- `ethSimulate-override-precompile-code-without-move` gives code to the address of a precompile without moving the precompile.
+  The [state override schema](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/execute.yaml) at that commit says that such code replaces the precompile, as the fixture shows.
+  EthLib runs the precompile at its address, so the call returns its input instead of the result of the new code.
 
 Each simulated block holds the result of each call: the output of its message, its gas used before the refund, and its error.
 The body records them without changing anything else that it computes.
