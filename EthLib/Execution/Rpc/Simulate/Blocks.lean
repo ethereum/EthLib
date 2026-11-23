@@ -18,11 +18,13 @@ A simulated block runs through the body of a real block, with the changes of the
 - the cap at `2^32 - 1` on the gas limit never applies;
 - without validation, a call skips the nonce check and the caps at `2^24` of EIP-8037;
 - without validation, a call with a fee cap of 0 pays nothing for its gas;
-- without validation, the block access list need not fit the gas limit.
+- without validation, the block access list need not fit the gas limit;
+- code that the overrides set at a precompile address replaces it, by the [schema][schema].
 
 Its roots, its gas used, its hash and its size are computed as for a real block.
 
 [notes]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/docs-api/docs/ethsimulatev1-notes.mdx
+[schema]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/execute.yaml
 -/
 
 @[expose] public section
@@ -213,6 +215,26 @@ def movedPrecompiles (moves : List (Address × Address)) (a : Address) : Option 
   -- An address that a precompile left runs none; any other runs its own.
   | none => if moves.any (·.1 == a) then none else some a
 
+/-- The precompile that a call to each address runs, after the overrides of a block.
+
+The moves of precompiles in the overrides apply first.
+
+An address whose code the overrides set then runs that code and no precompile.
+
+The [state override schema][schema] says that such code replaces the precompile.
+
+It also says that a move comes before the code.
+
+So, by EthLib's reading, code at the address that a precompile moved to replaces it too.
+
+[schema]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/execute.yaml -/
+def simulatedPrecompiles (overrides : List (Address × AccountOverride)) (a : Address) :
+    Option Address :=
+  -- An address with overridden code runs its code.
+  if overrides.any fun (b, o) => b == a && o.code.isSome then none
+  -- Any other address runs the precompile that the moves leave at it, if any.
+  else movedPrecompiles (precompileMoves overrides) a
+
 /-- The rules that a simulation lifts.
 
 The cap at `2^32 - 1` on the gas limit never applies.
@@ -329,7 +351,7 @@ def simulateBlock (chain : BlockChain) (base : RecentBlock) (fork : Fork) (numbe
   -- The overrides of the accounts change the state before the block.
   let chain := { chain with state := overrideState fork chain.state request.stateOverrides }
   let blobGasPrice := simulatedBlobGasPrice o validation
-  let precompiles := movedPrecompiles (precompileMoves request.stateOverrides)
+  let precompiles := simulatedPrecompiles request.stateOverrides
   let hashes ← (recentHashes chain.recent).mapError simulateBlockError
   let env := blockEnvironment chain.config hashes header blobGasPrice
   let start ← (daoTransfer chain.config fork number ⟨chain.state, ∅, ∅, ∅, ∅⟩).mapError

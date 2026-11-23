@@ -5937,6 +5937,7 @@ A simulated block differs from a real one in these places:
 - without validation, the block access list need not fit the gas limit;
 - without validation, a call whose fee cap is 0 pays nothing for its gas, apart from its blob gas, even below a base fee that the request sets;
 - the overrides of the accounts change the state before the block, and are not in its access list;
+- code that the overrides set at the address of a precompile runs in place of the precompile, as the [state override schema](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/execute.yaml) says;
 - the default gas of a call follows the gas that its block has used, within a global budget of 50,000,000 that each call spends, and a call that overspends it gets `-38026`.
 
 Each simulated block follows the last block of its chain at the number that it is given (`simulateBlock_links`, `Proofs/Rpc/SimulateBlocks.lean`).
@@ -5974,6 +5975,8 @@ Where the source is silent or conflicts with itself for the blocks, EthLib follo
 - a nonzero fee cap below the base fee still gets `-38012`;
 - a blob fee cap below a base fee per blob gas that the request sets still fails, with `-32602`;
 - the base block must be canonical, so that the hashes before each block are those of its chain;
+- code at the address that a precompile moved to replaces that precompile too, since the schema applies the move before the code;
+- a move of a precompile holds in the block of its overrides only, as the fixture `ethSimulate-move-ecrecover-twice-and-call` shows, and so does code that replaces a precompile, on which the schema is silent; the code itself stays in the state of the later blocks;
 - from Fusaka to BPO5, the default gas of a call is at most `2^24`, the cap of EIP-7825;
 - before London, a call without a type or a fee cap is legacy, or type 1 with an access list from Berlin;
 - before Paris, the fee recipient gets the block reward, as in a real block;
@@ -5983,12 +5986,6 @@ Where the source is silent or conflicts with itself for the blocks, EthLib follo
 - with `traceTransfers`, a transfer of 0 wei or from an account to itself gets no `0xeeee…eeee` log, as [EIP-7708](https://eips.ethereum.org/EIPS/eip-7708#specification) rules, which the notes leave open; this covers CALLCODE with value and SELFDESTRUCT to itself;
 - no fixture of the pin covers the `0xeeee…eeee` logs, since every simulated block of the fixtures is from Glamsterdam, so hand-built tests check them;
 - a revert error has the message "execution reverted", without the decoded reason that the fixtures add.
-
-One fixture at the commit that `tests/sources.toml` pins disagrees with EthLib, and the tests expect it to fail:
-
-- `ethSimulate-override-precompile-code-without-move` gives code to the address of a precompile without moving the precompile.
-  The [state override schema](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/execute.yaml) at that commit says that such code replaces the precompile, as the fixture shows.
-  EthLib runs the precompile at its address, so the call returns its input instead of the result of the new code.
 
 Each simulated block holds the result of each call: the output of its message, its gas used before the refund, and its error.
 The body records them without changing anything else that it computes.

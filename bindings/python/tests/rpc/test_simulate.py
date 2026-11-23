@@ -16,13 +16,6 @@ from .chain import FIXTURES, genesis_state, read_fixture, replay_chain
 # The vendored fixtures of the method.
 SIMULATE: Final = sorted((FIXTURES / "eth_simulateV1").glob("*.io"))
 
-# The fixtures that EthLib answers otherwise, with the reason that SOUNDNESS.md gives.
-DIVERGENT: Final = {
-    "ethSimulate-override-precompile-code-without-move": (
-        "the precompile keeps its address, so the code override at that address never runs"
-    ),
-}
-
 # The answer of a request that passes every check and runs its blocks.
 RESULT: Final = None
 
@@ -67,35 +60,11 @@ def _request(payload: Mapping[str, Any], *block: str) -> str:
 
 
 def test_every_fixture_is_vendored() -> None:
-    """The suite holds every fixture of the method at the pinned commit, and each divergent one."""
+    """The suite holds every fixture of the method at the pinned commit."""
     assert len(SIMULATE) == 101
-    assert set(DIVERGENT) <= {path.stem for path in SIMULATE}
 
 
-def _divergent_answer(stem: str) -> dict[str, Any]:
-    """The answer of the view to the request of a divergent fixture."""
-    (exchange,) = read_fixture(FIXTURES / "eth_simulateV1" / f"{stem}.io").exchanges
-    (text,) = replay_chain().serve([exchange.request])
-    assert text is not None
-    return json.loads(text)
-
-
-def test_divergent_precompile_code() -> None:
-    """The identity precompile keeps its address, so the call returns its input."""
-    response = _divergent_answer("ethSimulate-override-precompile-code-without-move")
-    assert [call["returnData"] for call in response["result"][0]["calls"]] == ["0x1234"]
-
-
-def _fixture_param(path: Path) -> object:
-    """A fixture as a case, expected to fail when EthLib answers it otherwise."""
-    reason = DIVERGENT.get(path.stem)
-    if reason is None:
-        return pytest.param(path, id=path.stem)
-    xfail = pytest.mark.xfail(strict=True, raises=AssertionError, reason=reason)
-    return pytest.param(path, id=path.stem, marks=xfail)
-
-
-@pytest.mark.parametrize("path", [_fixture_param(path) for path in SIMULATE])
+@pytest.mark.parametrize("path", SIMULATE, ids=lambda path: path.stem)
 def test_fixture(path: Path) -> None:
     """The view answers the code or the blocks of the fixture; the source fixes no message."""
     (exchange,) = read_fixture(path).exchanges
@@ -107,6 +76,50 @@ def test_fixture(path: Path) -> None:
     else:
         assert "result" in response, response.get("error")
         assert _blocks(response) == _blocks(exchange.response)
+
+
+# The identity precompile, an address that it can move to, and code that returns the word 42.
+# The sender of the calls, which needs no balance without validation.
+CALLER: Final = f"0x{0xC0:040x}"
+IDENTITY: Final = f"0x{4:040x}"
+MOVED: Final = f"0x{0xC2:040x}"
+RETURN_42: Final = "0x602a60005260206000f3"
+WORD_42: Final = f"0x{42:064x}"
+
+
+def _return_data(overrides: Mapping[str, Any], targets: list[str]) -> list[str]:
+    """The data that a call with the input 0x1234 to each target returns, after the overrides."""
+    calls = [{"from": CALLER, "to": target, "input": "0x1234"} for target in targets]
+    payload = {"blockStateCalls": [{"stateOverrides": overrides, "calls": calls}]}
+    (text,) = replay_chain().serve([_request(payload)])
+    assert text is not None
+    return [call["returnData"] for call in json.loads(text)["result"][0]["calls"]]
+
+
+# The state override schema moves a precompile before it sets code, and code replaces it.
+PRECOMPILE_CODE = [
+    pytest.param({}, ["0x1234", "0x"], id="no-override"),
+    pytest.param({IDENTITY: {"code": RETURN_42}}, [WORD_42, "0x"], id="code"),
+    pytest.param({IDENTITY: {"code": "0x"}}, ["0x", "0x"], id="empty-code"),
+    pytest.param({IDENTITY: {"balance": "0x1"}}, ["0x1234", "0x"], id="balance-only"),
+    pytest.param({IDENTITY: {"movePrecompileToAddress": MOVED}}, ["0x", "0x1234"], id="move"),
+    pytest.param(
+        {IDENTITY: {"movePrecompileToAddress": MOVED, "code": RETURN_42}},
+        [WORD_42, "0x1234"],
+        id="move-then-code",
+    ),
+    pytest.param(
+        {IDENTITY: {"movePrecompileToAddress": MOVED}, MOVED: {"code": RETURN_42}},
+        ["0x", WORD_42],
+        id="code-at-destination",
+    ),
+]
+
+
+@pytest.mark.parametrize(("overrides", "data"), PRECOMPILE_CODE)
+def test_precompile_code(overrides: Mapping[str, Any], data: list[str]) -> None:
+    """Calls to the identity address and to its destination run the code or the precompile."""
+    assert _return_data(overrides, [IDENTITY, MOVED]) == data
 
 
 # Requests that pass every check before the execution, and requests that fail one.
