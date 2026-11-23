@@ -18,7 +18,9 @@ public import EthLib.Base.Proofs.Fork
 public import EthLib.Base.Proofs.GasLimit
 public import EthLib.Base.Proofs.Hex
 public import EthLib.Base.Proofs.Json
+public import EthLib.Base.Proofs.Json.Document
 public import EthLib.Base.Proofs.Json.Escape
+public import EthLib.Base.Proofs.Json.Number
 public import EthLib.Base.Proofs.LittleEndian
 public import EthLib.Base.Proofs.List
 public import EthLib.Base.Proofs.MapM

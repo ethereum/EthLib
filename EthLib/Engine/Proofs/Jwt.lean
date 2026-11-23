@@ -2,6 +2,7 @@ module
 
 public import EthLib.Engine.Jwt
 public import EthLib.Base.Proofs.Base64
+public import EthLib.Base.Proofs.Json.Number
 public import Mathlib.Tactic
 
 /-!
@@ -75,41 +76,13 @@ private theorem string_plain (rest : List Char) :
     rw [List.cons_append, Json.string.eq_def]
     split <;> simp_all
 
-private theorem digit_of_mem_toDigits {c : Char} {n : Nat} (h : c ∈ Nat.toDigits 10 n) :
-    Json.digit c = true := by
-  have := Nat.isDigit_of_mem_toDigits (by decide) (by decide) h
-  simp only [Char.isDigit, Json.digit, Bool.and_eq_true, decide_eq_true_eq] at this ⊢
-  exact this
-
-private theorem digitsValue_eq (l : List Char) (h : ∀ c ∈ l, Json.digit c = true) (init : Nat) :
-    l.foldl (fun acc c => 10 * acc + c.toNat - '0'.toNat) init = Nat.ofDigitChars 10 l init := by
-  induction l generalizing init with
-  | nil => simp
-  | cons c l ih =>
-    have hc := h c (by simp)
-    simp only [Json.digit, Bool.and_eq_true, decide_eq_true_eq] at hc
-    have : '0'.toNat ≤ c.toNat := hc.1
-    rw [List.foldl_cons, Nat.ofDigitChars_cons, Nat.add_sub_assoc this]
-    exact ih (fun d hd => h d (by simp [hd])) _
-
-private theorem head_toDigits_ne_zero (n : Nat) (hn : 0 < n) :
-    (Nat.toDigits 10 n).head? ≠ some '0' := by
-  induction n using Nat.strong_induction_on with
-  | _ n ih =>
-    rw [Nat.toDigits_eq_ite (by decide)]
-    split
-    · simp; omega
-    · rw [List.head?_append_of_ne_nil _ Nat.toDigits_ne_nil]
-      exact ih (n / 10) (by omega) (by omega)
-
 private theorem number_toDigits (n : Nat) (tail : List Char) :
     Json.number (Nat.toDigits 10 n ++ '}' :: tail) = some (⟨n, 0⟩, '}' :: tail) := by
-  have hdig : ∀ c ∈ Nat.toDigits 10 n, Json.digit c = true := fun c h => digit_of_mem_toDigits h
+  have hdig : ∀ c ∈ Nat.toDigits 10 n, Json.digit c = true :=
+    fun c h => Json.digit_of_mem_toDigits h
   have hspan : (Nat.toDigits 10 n ++ '}' :: tail).span Json.digit =
-      (Nat.toDigits 10 n, '}' :: tail) := by
-    rw [List.span_eq_takeWhile_dropWhile, List.takeWhile_append_of_pos hdig,
-      List.dropWhile_append_of_pos hdig]
-    simp [Json.digit]
+      (Nat.toDigits 10 n, '}' :: tail) :=
+    Json.span_toDigits n _ (by simp [Json.digit])
   obtain ⟨d, ds, hd⟩ : ∃ d ds, Nat.toDigits 10 n = d :: ds :=
     List.exists_cons_of_ne_nil Nat.toDigits_ne_nil
   have hminus : d ≠ '-' := by
@@ -120,11 +93,10 @@ private theorem number_toDigits (n : Nat) (tail : List Char) :
     rcases Nat.eq_zero_or_pos n with rfl | hn
     · simp [Nat.toDigits_zero] at hd
       simp [← hd.2]
-    · have := head_toDigits_ne_zero n hn
+    · have := Json.head_toDigits_ne_zero n hn
       simp_all
   have hval : Json.digitsValue (d :: ds ++ []) = n := by
-    rw [List.append_nil, ← hd, Json.digitsValue, digitsValue_eq _ hdig,
-      Nat.ofDigitChars_ten_toDigits]
+    rw [List.append_nil, ← hd, Json.digitsValue_toDigits]
   rw [hd] at hspan
   unfold Json.number
   rw [hd, List.cons_append]
@@ -155,7 +127,7 @@ private theorem value_number (fuel n : Nat) (tail : List Char) :
       some (.num ⟨n, 0⟩, '}' :: tail) := by
   obtain ⟨d, ds, hd⟩ : ∃ d ds, Nat.toDigits 10 n = d :: ds :=
     List.exists_cons_of_ne_nil Nat.toDigits_ne_nil
-  have hdig := digit_of_mem_toDigits (c := d) (n := n) (by simp [hd])
+  have hdig := Json.digit_of_mem_toDigits (c := d) (n := n) (by simp [hd])
   have hnum := number_toDigits n tail
   rw [hd] at hnum
   simp only [Json.digit, Bool.and_eq_true, decide_eq_true_eq] at hdig

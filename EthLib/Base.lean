@@ -13,6 +13,7 @@ public import EthLib.Base.GasLimit
 public import EthLib.Base.Hash32
 public import EthLib.Base.Hex
 public import EthLib.Base.Json
+public import EthLib.Base.Json.Document
 public import EthLib.Base.LittleEndian
 public import EthLib.Base.U256
 public import EthLib.Base.Uint64
