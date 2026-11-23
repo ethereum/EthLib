@@ -17,13 +17,13 @@ A simulated block runs through the body of a real block, with the changes of the
 - each call runs as a transaction from its given sender, with no signature;
 - the cap at `2^32 - 1` on the gas limit never applies;
 - without validation, a call skips the nonce check and the caps at `2^24` of EIP-8037;
-- without validation, a call with a fee cap of 0 pays nothing for its gas;
-- without validation, the block access list need not fit the gas limit;
+- without validation, a call with a fee cap of 0 pays nothing for its gas, as a fixture shows;
+- without validation, the block access list need not fit the gas limit, as a fixture shows;
 - code that the overrides set at a precompile address replaces it, by the [schema][schema].
 
 Its roots, its gas used, its hash and its size are computed as for a real block.
 
-[notes]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/docs-api/docs/ethsimulatev1-notes.mdx
+[notes]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/docs-api/docs/ethsimulatev1-notes.mdx
 [schema]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/execute.yaml
 -/
 
@@ -104,19 +104,15 @@ def simulateBlockError : BlockError → RpcError
 
 It follows the block `parent`, whose hash is `parentHash`, and takes the overrides `o`.
 
-The block before it gives the gas limit, as the fixtures show.
+The block before it gives the gas limit and the fee recipient, as the notes say.
 
-The notes name the base block instead.
-
-A block after another simulated block also keeps its fee recipient, as the fixtures show.
+So the first simulated block takes those of the base block.
 
 Before Paris, the base block gives the difficulty.
 
 The other fields take the default values of the notes, and those that the body gives are 0.
 
 With validation, the base fee follows the parent, and without it the base fee is 0.
-
-The notes give 32 zero bytes of extra data, but the fixtures show empty data, which EthLib takes.
 
 The notes give no root of the parent beacon block, and EthLib takes a zero root, as the fixtures do.
 
@@ -130,12 +126,8 @@ def simulatedHeader (config : ChainConfig) (fork : Fork) (base parent : RecentBl
     Header fork :=
   { parentHash
     ommersHash := EMPTY_OMMER_HASH
-    -- The fee recipient of the overrides, else zero after the base block, as the notes say.
-    --
-    -- After a simulated block, that of the parent, as the fixtures show.
-    coinbase := o.feeRecipient.getD
-      (if parent.header.number = base.header.number then Vector.replicate 20 0
-      else parent.header.coinbase)
+    -- The fee recipient of the overrides, else that of the block before, as the notes say.
+    coinbase := o.feeRecipient.getD parent.header.coinbase
     stateRoot := 0
     transactionsRoot := 0
     receiptRoot := 0
@@ -143,13 +135,11 @@ def simulatedHeader (config : ChainConfig) (fork : Fork) (base parent : RecentBl
     -- From Paris 0, before it the difficulty of the base block, as the notes say.
     difficulty := if fork ≥ .paris then 0 else base.header.difficulty
     number
-    -- The gas limit of the overrides, else that of the block before, as the fixtures show.
-    --
-    -- The notes name the base block instead.
+    -- The gas limit of the overrides, else that of the block before, as the notes say.
     gasLimit := o.gasLimit.getD parent.header.gasLimit
     gasUsed := 0
     timestamp := BitVec.ofNat 256 time
-    -- Empty, as the fixtures show; the notes give 32 zero bytes.
+    -- Empty, as the notes say.
     extraData := .empty
     prevRandao := o.prevRandao.getD 0
     nonce := Vector.replicate 8 0

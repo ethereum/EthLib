@@ -5962,9 +5962,7 @@ Before Paris, the simulated difficulty is that of the base block, which the diff
 
 Where the source is silent or conflicts with itself for the blocks, EthLib follows the fixtures, else decides:
 
-- a block keeps the gas limit of the block before it, where the notes name the base block;
-- after another simulated block, a block keeps its fee recipient, where the notes name the zero address;
-- the extra data is empty, as the fixtures show, where the notes give 32 zero bytes, and the root of the parent beacon block is zero;
+- the root of the parent beacon block is zero, as the fixtures show, where the notes give none;
 - after a block without a slot, the slot is 0, where the notes omit it;
 - an override creates no account that it leaves empty, as the fixtures show;
 - a blob fee cap on a call without blobs is ignored, as the fixtures show;
