@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Json
+public import EthLib.Base.Proofs.Json.Text
 
 /-!
 # Proofs: the decimal digits of a JSON number
@@ -24,9 +24,9 @@ theorem digit_of_mem_toDigits {c : Char} {n : Nat} (h : c ∈ Nat.toDigits 10 n)
   exact this
 
 /-- The decimal digits of a natural number have that number as their value. -/
-theorem digitsValue_toDigits (n : Nat) : digitsValue (Nat.toDigits 10 n) = n := by
+theorem foldl_digitStep_toDigits (n : Nat) : (Nat.toDigits 10 n).foldl digitStep 0 = n := by
   have key : ∀ (l : List Char), (∀ c ∈ l, digit c = true) → ∀ init,
-      l.foldl (fun acc c => 10 * acc + c.toNat - '0'.toNat) init = Nat.ofDigitChars 10 l init := by
+      l.foldl digitStep init = Nat.ofDigitChars 10 l init := by
     intro l
     induction l with
     | nil => simp
@@ -35,9 +35,9 @@ theorem digitsValue_toDigits (n : Nat) : digitsValue (Nat.toDigits 10 n) = n := 
       have hc := h c (by simp)
       simp only [digit, Bool.and_eq_true, decide_eq_true_eq] at hc
       have : '0'.toNat ≤ c.toNat := hc.1
-      rw [List.foldl_cons, Nat.ofDigitChars_cons, Nat.add_sub_assoc this]
+      rw [List.foldl_cons, Nat.ofDigitChars_cons, digitStep, Nat.add_sub_assoc this]
       exact ih (fun d hd => h d (by simp [hd])) _
-  rw [digitsValue, key _ (fun c h => digit_of_mem_toDigits h), Nat.ofDigitChars_ten_toDigits]
+  rw [key _ (fun c h => digit_of_mem_toDigits h), Nat.ofDigitChars_ten_toDigits]
 
 /-- A positive natural number has no leading zero among its decimal digits. -/
 theorem head_toDigits_ne_zero (n : Nat) (hn : 0 < n) :
@@ -54,20 +54,19 @@ theorem head_toDigits_ne_zero (n : Nat) (hn : 0 < n) :
       | cons d ds => simpa [hd] using h
 
 /-- The decimal digits of a natural number are the run of digits that a non-digit ends. -/
-theorem span_toDigits (n : Nat) (X : List Char) (hX : ∀ c ∈ X.head?, digit c = false) :
-    (Nat.toDigits 10 n ++ X).span digit = (Nat.toDigits 10 n, X) := by
-  have loop : ∀ (D acc : List Char), (∀ c ∈ D, digit c = true) →
-      List.span.loop digit (D ++ X) acc = (acc.reverse ++ D, X) := by
-    intro D
-    induction D with
-    | nil =>
-      intro acc _
-      rcases X with _ | ⟨c, X⟩
-      · simp [List.span.loop]
-      · simp [List.span.loop, hX c rfl]
-    | cons d D ih =>
-      intro acc h
-      simp [List.span.loop, h d (by simp), ih (d :: acc) (fun c hc => h c (by simp [hc]))]
-  simpa [List.span] using loop _ [] (fun c h => digit_of_mem_toDigits h)
+theorem takeWhile_toDigits (n : Nat) (X : List Char) (hX : ∀ c ∈ X.head?, digit c = false) :
+    (Nat.toDigits 10 n ++ X).takeWhile digit = Nat.toDigits 10 n := by
+  rw [List.takeWhile_append_of_pos (fun c h => digit_of_mem_toDigits h)]
+  rcases X with _ | ⟨c, X⟩
+  · simp
+  · simp [List.takeWhile_cons_of_neg (by simpa using hX c rfl)]
+
+/-- The characters left after the decimal digits of a natural number start at the non-digit. -/
+theorem dropWhile_toDigits (n : Nat) (X : List Char) (hX : ∀ c ∈ X.head?, digit c = false) :
+    (Nat.toDigits 10 n ++ X).dropWhile digit = X := by
+  rw [List.dropWhile_append_of_pos (fun c h => digit_of_mem_toDigits h)]
+  rcases X with _ | ⟨c, X⟩
+  · simp
+  · simp [List.dropWhile_cons_of_neg (by simpa using hX c rfl)]
 
 end EthLib.Base.Json

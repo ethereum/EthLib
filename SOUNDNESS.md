@@ -1297,14 +1297,14 @@ So the clock check accepts no other tag part for those parts.
 Keeping a party without the secret away from the reader also assumes HMAC unforgeability, and a captured token can be replayed within its 60 seconds.
 `Jwt.check_eq_false_of_algorithm_ne` proves rejection when the decoded algorithm differs from HS256.
 The JSON reader of the tokens is the one in Base, and the Unicode escape of [RFC 8259 §7](https://www.rfc-editor.org/rfc/rfc8259#section-7) has its own theorems (`Base/Proofs/Json/Escape.lean`).
-`Base.Json.hex4_cons_eq_some_iff` proves that four hex digits, in either letter case, name the number they write in base 16.
+`Base.Json.hex4_eq_some_iff` proves that four hex digits, in either letter case, name the number they write in base 16.
 `Base.Json.hex4_eq_none_of_length_lt` proves that fewer than four characters are no escape.
 `hexValue?_hexDigitChar` and `hexValue?_toUpper_hexDigitChar` prove that those hex digits are read in lowercase and in uppercase.
 `Base.Json.unicodeEscape_eq_none_of_hex4` proves that an escape without four hex digits is refused.
 `Base.Json.unicodeEscape_eq_of_not_surrogate` proves that a value outside the surrogate range is returned as the code point it names.
 `Base.Json.unicodeEscape_eq_of_pair` proves that a high surrogate followed by an escaped low surrogate is returned as the code point of the pair.
 `Base.Json.unicodeEscape_eq_none_of_surrogate` proves that every other surrogate is refused: the grammar admits a lone surrogate ([§8.2](https://www.rfc-editor.org/rfc/rfc8259#section-8.2)), but this reader refuses one.
-`Base.Json.string_eq_none_of_control` proves that a character below `0x20` is refused when it comes next in a string unescaped.
+`Base.Json.string_eq_none_of_control` proves that a string is refused when the first character in it that needs an escape is below `0x20` and unescaped.
 The total JSON reader has no theorem of full agreement with RFC 8259.
 These theorems do not establish HMAC unforgeability or constant-time execution.
 
