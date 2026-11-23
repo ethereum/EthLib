@@ -191,19 +191,22 @@ theorem popTopics_pays {evm after : Evm fork Meter} {n : Nat} {topics : List Byt
 
 /-- The price of BALANCE is at least 1 at every fork. -/
 theorem one_le_balanceCost (fork : Fork) (cold : Bool) : 1 ≤ balanceCost fork cold := by
-  unfold balanceCost accountAccessCost gasSchedule
+  unfold balanceCost accountAccessCost
+  dsimp only [gasSchedule]
   repeat' split
   all_goals decide
 
 /-- The price of EXTCODESIZE is at least 1 at every fork. -/
 theorem one_le_externalBaseCost (fork : Fork) (cold : Bool) : 1 ≤ externalBaseCost fork cold := by
-  unfold externalBaseCost accountAccessCost gasSchedule
+  unfold externalBaseCost accountAccessCost
+  dsimp only [gasSchedule]
   repeat' split
   all_goals decide
 
 /-- The price of EXTCODEHASH is at least 1 at every fork. -/
 theorem one_le_extcodehashCost (fork : Fork) (cold : Bool) : 1 ≤ extcodehashCost fork cold := by
-  unfold extcodehashCost accountAccessCost gasSchedule
+  unfold extcodehashCost accountAccessCost
+  dsimp only [gasSchedule]
   repeat' split
   all_goals decide
 
@@ -216,9 +219,11 @@ theorem one_le_sloadCost (fork : Fork) (cold : Bool) : 1 ≤ sloadCost fork cold
 /-- The price of SSTORE is at least 1 at every fork. -/
 theorem one_le_sstoreCost (fork : Fork) (original current new : U256) (cold : Bool) :
     1 ≤ sstoreCost fork original current new cold := by
-  unfold sstoreCost sstoreReadCost sstoreResetCost sloadCost
+  unfold sstoreCost sstoreReadCost sstoreResetCost
+  dsimp only [gasSchedule]
+  unfold sloadCost
   repeat' split
-  all_goals simp only [COLD_STORAGE_ACCESS, STORAGE_SET, COLD_STORAGE_WRITE, WARM_ACCESS,
+  all_goals try simp only [COLD_STORAGE_ACCESS, STORAGE_SET, COLD_STORAGE_WRITE, WARM_ACCESS,
     STORAGE_WRITE]
   all_goals omega
 

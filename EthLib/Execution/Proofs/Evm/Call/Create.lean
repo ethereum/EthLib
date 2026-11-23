@@ -40,13 +40,13 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- From Glamsterdam, a creation costs 12000 before memory, init code and hash. -/
 theorem createBaseCost_of_glamsterdam (h : fork ≥ .glamsterdam) : createBaseCost fork = 12000 := by
-  simp only [createBaseCost, h, ite_true]
+  simp only [createBaseCost, gasSchedule, h, ite_true]
   rfl
 
 /-- Before Glamsterdam, a creation costs 32000 before memory, init code and hash. -/
 theorem createBaseCost_of_lt (h : fork < .glamsterdam) : createBaseCost fork = 32000 := by
   have : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt h
-  simp only [createBaseCost, this, ite_false]
+  simp only [createBaseCost, gasSchedule, this, ite_false]
   rfl
 
 /-- Before Glamsterdam, a creation pays no state gas. -/
@@ -248,7 +248,7 @@ theorem stateGasUsed_chargeCodeDeposit (h : fork ≥ .glamsterdam) {meter after 
 theorem depositCode_size_le (h : fork ≥ .glamsterdam) {snapshot : TransactionState}
     {evm after : Evm fork Meter} (hd : depositCode fork snapshot evm = .ok after)
     (ok : after.error = none) : evm.output.size ≤ 65536 := by
-  have hm : maxCodeSize fork = some 65536 := by simp only [maxCodeSize, h, ite_true]
+  have hm : maxCodeSize fork = some 65536 := by simp only [maxCodeSize, gasSchedule, h, ite_true]
   unfold depositCode at hd
   dsimp only at hd
   split at hd

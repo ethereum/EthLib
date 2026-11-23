@@ -638,7 +638,8 @@ theorem processTransaction_gasUsed_of_lt_london {env : BlockEnvironment fork}
   have hUsed : out.gasUsed = gasUsed fork included.sender tx output.gasLeft output.refund :=
     settleGas_gasUsed hSettle
   refine ⟨target, bought, message, output, hTarget, hBought, hMessage, hOutput, ?_, ?_⟩
-  · simpa only [gasUsed, gasRefund, maxRefundQuotient, hLondon, hPectra, ↓reduceIte] using hUsed
+  · simpa only [gasUsed, gasRefund, maxRefundQuotient, gasSchedule, hLondon, hPectra, ↓reduceIte]
+      using hUsed
   · rw [hBlock, transactionBlockGas_of_lt hGlam, hUsed]
 
 /-- From London to Dencun, the gas used of a transaction that runs follows from its message.
@@ -681,8 +682,8 @@ theorem processTransaction_gasUsed_of_london_of_lt_pectra {env : BlockEnvironmen
   have hUsed : out.gasUsed = gasUsed fork included.sender tx output.gasLeft output.refund :=
     settleGas_gasUsed hSettle
   refine ⟨target, bought, message, output, hTarget, hBought, hMessage, hOutput, ?_, ?_⟩
-  · simpa only [gasUsed, gasRefund, maxRefundQuotient, hLondon, hPectra, ↓reduceIte, GE.ge]
-      using hUsed
+  · simpa only [gasUsed, gasRefund, maxRefundQuotient, gasSchedule, hLondon, hPectra, ↓reduceIte,
+      GE.ge] using hUsed
   · rw [hBlock, transactionBlockGas_of_lt hGlam, hUsed]
 
 /-- From Pectra to BPO5, the gas used of a transaction that runs follows from its message.
@@ -727,7 +728,8 @@ theorem processTransaction_gasUsed {env : BlockEnvironment fork} {block : State.
   have hUsed : out.gasUsed = gasUsed fork included.sender tx output.gasLeft output.refund :=
     settleGas_gasUsed hSettle
   refine ⟨target, bought, message, output, hTarget, hBought, hMessage, hOutput, ?_, ?_⟩
-  · simpa only [gasUsed, gasRefund, maxRefundQuotient, hLondon, hPectra, ↓reduceIte] using hUsed
+  · simpa only [gasUsed, gasRefund, maxRefundQuotient, gasSchedule, hLondon, hPectra, ↓reduceIte]
+      using hUsed
   · rw [hBlock, transactionBlockGas_of_lt hlt, hUsed]
 
 /-- At Glamsterdam, the gas used and the block gas of a run follow from its message.
@@ -784,8 +786,8 @@ theorem processTransaction_gasUsed_of_glamsterdam {env : BlockEnvironment fork}
   have hLondon : fork ≥ .london := Nat.le_trans (by decide) hGlam
   have hPectra : fork ≥ .pectra := Nat.le_trans (by decide) hGlam
   refine ⟨target, bought, message, output, hTarget, hBought, hMessage, hOutput, ?_, ?_⟩
-  · simp only [settleGas_gasUsed hSettle, gasUsed, gasRefund, maxRefundQuotient, hLondon, hPectra,
-      ↓reduceIte, GE.ge]
+  · simp only [settleGas_gasUsed hSettle, gasUsed, gasRefund, maxRefundQuotient, gasSchedule,
+      hLondon, hPectra, ↓reduceIte, GE.ge]
   · simp only [hBlock, transactionBlockGas, hGlam, ↓reduceIte, GE.ge]
 
 /-! ## The counts of the block -/

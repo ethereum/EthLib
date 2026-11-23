@@ -100,15 +100,13 @@ def accessStorageKey (evm : Evm fork Meter) (address : Address) (key : Bytes32) 
 
 It is the price of SLOAD up to Berlin, and of a warm access from Berlin. -/
 def sstoreReadCost (fork : Fork) : Nat :=
-  -- EIP-2200's `SLOAD_GAS`, which EIP-2929 sets to `WARM_STORAGE_READ_COST`.
-  if fork ≥ .berlin then WARM_ACCESS else sloadCost fork false
+  (gasSchedule fork).SSTORE_READ
 
 /-- The price of SSTORE to change a slot whose original value is not zero.
 
 From Berlin, it leaves out the price of a cold access, which SSTORE adds on its own. -/
 def sstoreResetCost (fork : Fork) : Nat :=
-  -- EIP-2200's `SSTORE_RESET_GAS`, which EIP-2929 sets to `5000 - COLD_SLOAD_COST`.
-  if fork ≥ .berlin then COLD_STORAGE_WRITE - COLD_STORAGE_ACCESS else COLD_STORAGE_WRITE
+  (gasSchedule fork).SSTORE_RESET
 
 /-- The price of SSTORE in execution gas, from the original, current and new values of the slot.
 

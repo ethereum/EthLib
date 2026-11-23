@@ -202,10 +202,7 @@ def baseCost (fork : Fork) (sender : Address) (tx : Transaction) : Nat :=
 
 [eip-8037]: https://eips.ethereum.org/EIPS/eip-8037#parameter-changes -/
 def authorizationCost (fork : Fork) : Nat :=
-  -- From Glamsterdam, EIP-2780 charges this base cost for each authorization of EIP-7702.
-  --
-  -- Before, EIP-7702 charges `PER_EMPTY_ACCOUNT_COST` for each authorization.
-  if fork ≥ .glamsterdam then EXECUTION_PER_AUTH_BASE_COST else AUTH_PER_EMPTY_ACCOUNT
+  (gasSchedule fork).TX_AUTHORIZATION
 
 /-- The price of a contract creation at `fork` beyond the base, for `size` bytes of init code.
 

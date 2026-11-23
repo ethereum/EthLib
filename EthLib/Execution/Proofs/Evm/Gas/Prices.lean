@@ -103,7 +103,8 @@ theorem gasSchedule_of_glamsterdam_le {fork : Fork} (h : fork ≥ .glamsterdam) 
       (gasSchedule fork).TX_ACCESS_LIST_STORAGE_KEY = 2000 ∧
       (gasSchedule fork).COLD_ACCOUNT_ACCESS = 3000 ∧
       (gasSchedule fork).REFUND_STORAGE_CLEAR = 11616 := by
-  simp [gasSchedule, h, WARM_ACCESS, COLD_STORAGE_ACCESS, STORAGE_WRITE]
+  dsimp only [gasSchedule]
+  simp [h, WARM_ACCESS, COLD_STORAGE_ACCESS, STORAGE_WRITE]
 
 /-- The price to access and write the account of a creation is 12000, as EIP-8038 lists it. -/
 theorem createAccess_eq : CREATE_ACCESS = 12000 := by
@@ -118,6 +119,7 @@ theorem maxInitCodeSize_eq_two_mul {fork : Fork} {n : Nat} (h : maxCodeSize fork
     maxInitCodeSize fork = 2 * n := by
   unfold maxCodeSize at h
   unfold maxInitCodeSize
+  dsimp only [gasSchedule] at h ⊢
   split at h
   · cases h
     simp [*]

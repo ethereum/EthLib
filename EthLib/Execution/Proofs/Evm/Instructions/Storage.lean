@@ -86,7 +86,7 @@ theorem sstore_restore (h : fork ≥ .istanbul) (hlt : fork < .glamsterdam) (ori
   have hne' : new ≠ original := Ne.symm hne
   have hg : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hlt
   unfold sstoreCost sstoreRefund sstoreResetCost sstoreReadCost
-  simp only [hg, ite_false]
+  simp only [gasSchedule, hg, ite_false]
   by_cases hb : fork ≥ .berlin <;> by_cases h0 : original = 0 <;> by_cases h1 : new = 0 <;>
     cases cold <;> simp [h, hb, h0, h1, hne, hne'] <;> simp_all <;> omega
 
@@ -97,7 +97,7 @@ theorem sstoreCost_le (h : fork ≥ .berlin) (hlt : fork < .glamsterdam)
   have hg : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hlt
   have hi : fork ≥ .istanbul := Nat.le_trans (by decide) h
   unfold sstoreCost sstoreResetCost sstoreReadCost
-  simp only [hg, hi, h, ite_false, ite_true]
+  simp only [gasSchedule, hg, hi, h, ite_false, ite_true]
   cases cold <;> simp only [ite_true, Bool.false_eq_true, ite_false, COLD_STORAGE_ACCESS,
     STORAGE_SET, COLD_STORAGE_WRITE, WARM_ACCESS] <;> split <;> (try split) <;> omega
 

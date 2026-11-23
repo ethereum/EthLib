@@ -4,6 +4,7 @@ public import EthLib.Execution.ErrorFormat
 public import EthLib.Base.BigEndian
 public import EthLib.Base.Fork
 public import EthLib.Cryptography.AltBn128.Pairing
+public import EthLib.Execution.Evm.Gas.Prices
 public import EthLib.Execution.Evm.Machine.Memory
 
 /-!
@@ -74,13 +75,11 @@ def AltBn128Error.code : AltBn128Error → UInt32
 
 /-- The price of an addition: 500 from EIP-196, and 150 from Istanbul by EIP-1108. -/
 def ecaddGas (fork : Fork) : Nat :=
-  -- EIP-196, Gas costs: `500`; EIP-1108, Specification: `150`, here from Istanbul.
-  if fork ≥ .istanbul then 150 else 500
+  (gasSchedule fork).PRECOMPILE_ECADD
 
 /-- The price of a multiplication: 40000 from EIP-196, and 6000 from Istanbul by EIP-1108. -/
 def ecmulGas (fork : Fork) : Nat :=
-  -- EIP-196, Gas costs: `40000`; EIP-1108, Specification: `6 000`, here from Istanbul.
-  if fork ≥ .istanbul then 6000 else 40000
+  (gasSchedule fork).PRECOMPILE_ECMUL
 
 /-- The price of a pairing check on `size` bytes, with one pair per whole 192 bytes.
 

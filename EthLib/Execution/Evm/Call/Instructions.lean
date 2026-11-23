@@ -550,7 +550,8 @@ theorem finishCall_decreases [LawfulGasMeter Meter] {kind : CallKind} {call : Ca
 
 /-- The price of the access of a call is at least 1 at every fork. -/
 theorem one_le_callBaseCost (fork : Fork) (cold : Bool) : 1 ≤ callBaseCost fork cold := by
-  unfold callBaseCost accountAccessCost gasSchedule
+  unfold callBaseCost accountAccessCost
+  dsimp only [gasSchedule]
   repeat' split
   all_goals decide
 
