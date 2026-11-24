@@ -1071,7 +1071,7 @@ theorem EpochStage.Edge.registryLifecycle {k : EpochStage}
   all_goals exact .of_data (congrArg (·.data) (edge.validators_eq ⟨nofun, nofun, nofun⟩))
 
 /-- The epoch step keeps the lifecycle, stage by stage of the epoch schedule. -/
-private theorem registryLifecycle_processEpoch
+theorem registryLifecycle_processEpoch
     (computed : processEpoch config checks state = .ok after) : RegistryLifecycle state after := by
   apply (processEpoch_trace computed).transport RegistryLifecycle .refl (fun a b => a.trans b)
   intro k _ a b ok

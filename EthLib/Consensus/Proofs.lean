@@ -10,6 +10,7 @@ public import EthLib.Consensus.Proofs.BeaconApi.Blocks
 public import EthLib.Consensus.Proofs.BeaconApi.Committees
 public import EthLib.Consensus.Proofs.BeaconApi.ChainEvents
 public import EthLib.Consensus.Proofs.BeaconApi.Duties
+public import EthLib.Consensus.Proofs.BeaconApi.DutiesReachable
 public import EthLib.Consensus.Proofs.BeaconApi.Config
 public import EthLib.Consensus.Proofs.BeaconApi.Debug
 public import EthLib.Consensus.Proofs.BeaconApi.BuilderConfig
@@ -214,6 +215,7 @@ public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
 public import EthLib.Consensus.Proofs.Transition.ActivationReserve
 public import EthLib.Consensus.Proofs.Transition.ActiveKept
+public import EthLib.Consensus.Proofs.Transition.AssignedProposers
 public import EthLib.Consensus.Proofs.Transition.AttestationAccepted
 public import EthLib.Consensus.Proofs.Transition.AttesterSlashingAccepted
 public import EthLib.Consensus.Proofs.Transition.BalanceCappedBlock

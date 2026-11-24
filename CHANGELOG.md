@@ -9,6 +9,18 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `BeaconApi.dutiesResponse_proposer_error_code_of_run` (`Consensus/Proofs/BeaconApi/DutiesReachable.lean`) classifies the failures of a proposer answer ([#3585](https://github.com/ethereum/EthLib/issues/3585)).
+  From Fulu, at a state that a run from the Phase 0 genesis state built from deposits reaches, such an answer that fails has code 400.
+  It takes the bounds of `dutiesResponse_proposer_error_code` on the slots of the epoch and on the slot of the state.
+  `Run.assignedProposers` (`Consensus/Proofs/Transition/AssignedProposers.lean`) says that along such a run, from Fulu, each entry of the lookahead names a validator with an assigned activation epoch.
+  `BeaconApi.dutiesResponse_proposer_error_code_of_run` reads this invariant.
+  `initializeProposerLookahead_drawn` (`Consensus/Proofs/Proposers.lean`) says that entry `k` of a lookahead drawn from a state is a proposer that the state draws for the epoch that is `k / SLOTS_PER_EPOCH` epochs after the current one.
+  `Internal.AssignedProposers` (`Consensus/Proofs/Transition/ValidatorStep.lean`) becomes `AssignedProposers` (`Consensus/Proofs/Transition/AssignedProposers.lean`), with the same body.
+  Four lemmas about it become public there: `getBeaconProposerIndices_assigned`, `initializeProposerLookahead_assigned`, `AssignedProposers.transfer` and `AssignedProposers.refresh`.
+  `AssignedProposers.transfer` relates states of two forks.
+  `upgradeNext_proposerLookahead` (`Consensus/Proofs/Transition/ProposerLookahead.lean`) and `registryLifecycle_processEpoch` (`Consensus/Proofs/Transition/RegistryLifecycle.lean`) become public.
+  No public statement changes.
+
 - In Lean, `syncCommitteesResponse_error_code_of_keys` (`Consensus/Proofs/BeaconApi/Committees.lean`) gives a condition under which every error of the sync committees answer has code 400 ([#3585](https://github.com/ethereum/EthLib/issues/3585)).
   From Altair, a validator of the registry holds each key of the current and the next sync committee.
   Before Altair the state holds no sync committee, and the answer gets code 400.

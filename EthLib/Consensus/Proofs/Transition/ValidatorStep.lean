@@ -16,6 +16,7 @@ import EthLib.Consensus.Proofs.Transition.ChainRoots
 import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
 import EthLib.Consensus.Proofs.Transition.RewardDeltas
 public import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
+public import EthLib.Consensus.Proofs.Transition.AssignedProposers
 import EthLib.Consensus.Proofs.Transition.InactivityLeakVoter
 import EthLib.Consensus.Proofs.Transition.ValidatorKeys
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
@@ -1027,11 +1028,6 @@ private theorem capped_setValidatorAt {f : Fork} {s t : BeaconState preset f}
   · exact capped w old
   · exact bound
 
-/-- Cached proposers retain their registry index and assigned activation epoch. -/
-def AssignedProposers {f : Fork} (s : BeaconState preset f) : Prop :=
-  ∀ fulu : .fusaka ≤ f, ∀ i ∈ (s.proposerLookahead fulu).toList,
-    ∃ v, s.validators.data[i.toNat]? = some v ∧ v.activationEpoch ≠ FAR_FUTURE_EPOCH
-
 /-- Each end of a queued consolidation has assigned activation at its stable index. -/
 def AssignedTargets {f : Fork} (s : BeaconState preset f) : Prop :=
   ∀ electra : .pectra ≤ f, ∀ entry ∈ (s.pendingConsolidations electra).data.toList,
@@ -1381,61 +1377,6 @@ private theorem assigned_of_slashable {v : Validator} {epoch : Epoch}
   change (2 ^ 64 - 1 : Nat) < v.withdrawableEpoch.toNat at less
   omega
 
-private theorem assigned_draw {f : Fork} {s : BeaconState preset f} {epoch : Epoch}
-    {proposers : Vector ValidatorIndex preset.SLOTS_PER_EPOCH.toNat}
-    (ok : getBeaconProposerIndices s epoch = .ok proposers) :
-    ∀ i ∈ proposers.toList,
-      ∃ v, s.validators.data[i.toNat]? = some v ∧ v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-  obtain ⟨active, checked, rest⟩ := bind_ok_iff.mp ok
-  obtain ⟨seed, _, drawn⟩ := bind_ok_iff.mp rest
-  intro i member
-  have selected := mem_of_computeProposerIndices drawn i member
-  have selected : i ∈ active := by
-    unfold proposerCandidates at selected
-    split at selected
-    · exact List.mem_toArray.mp (Array.mem_filter.mp selected).1
-    · exact List.mem_toArray.mp selected
-  obtain ⟨v, found, active⟩ := (mem_iff_of_getActiveValidatorIndicesChecked_ok checked).mp selected
-  exact ⟨v, found, assigned_of_active active⟩
-
-private theorem AssignedProposers.transfer {f : Fork} {s t : BeaconState preset f}
-    (held : AssignedProposers s) (life : RegistryLifecycle s t)
-    (same : t.proposerLookahead = s.proposerLookahead) : AssignedProposers t := by
-  intro fulu i member
-  rw [same] at member
-  obtain ⟨v, found, assigned⟩ := held fulu i member
-  obtain ⟨w, read, kept⟩ := life.validators i.toNat v found
-  exact ⟨w, read, (kept.activationEpoch assigned) ▸ assigned⟩
-
-private theorem initialized_proposers {f : Fork} {s : BeaconState preset f}
-    {lookahead : Vector ValidatorIndex
-      ((preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat)}
-    (ok : initializeProposerLookahead s = .ok lookahead) :
-    ∀ i ∈ lookahead.toList,
-      ∃ v, s.validators.data[i.toNat]? = some v ∧ v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-  obtain ⟨epochs, drawn, flattened⟩ := bind_ok_iff.mp ok
-  cases flattened
-  intro i member
-  obtain ⟨epoch, member, selected⟩ := Vector.mem_flatten.mp (by simpa using member)
-  obtain ⟨j, inside, rfl⟩ := List.getElem_of_mem
-    (show epoch ∈ epochs.toList by simpa using member)
-  have draw := vector_mapM_ok_getElem drawn j (by simpa using inside)
-  obtain ⟨e, _, computed⟩ := bind_ok_iff.mp draw
-  exact assigned_draw computed i (by simpa using selected)
-
-private theorem refreshed_proposers {f : Fork} {s t : BeaconState preset f}
-    {fulu : .fusaka ≤ f} (held : AssignedProposers s)
-    (ok : processProposerLookahead s fulu = .ok t) : AssignedProposers t := by
-  obtain ⟨epoch, _, rest⟩ := bind_ok_iff.mp ok
-  obtain ⟨last, drawn, final⟩ := bind_ok_iff.mp rest
-  cases final
-  intro _ i member
-  obtain ⟨j, inside, rfl⟩ := List.getElem_of_mem member
-  simp only [Vector.getElem_toList, Vector.getElem_ofFn]
-  split
-  · exact held fulu _ (by simp)
-  · exact assigned_draw drawn _ (by simp)
-
 structure CapStep (config : Config) {f h : Fork} (s : BeaconState preset f)
     (t : BeaconState preset h) : Prop where
   capped : (∀ v ∈ s.validators.data,
@@ -1562,7 +1503,7 @@ theorem CapStep.data {f : Fork} {s t : BeaconState preset f}
   · rw [getCurrentEpoch, getCurrentEpoch, slot]
     exact UInt64.le_refl _
   · exact Nat.le_refl _
-  · exact fun _ held => held.transfer (.of_data same) cache
+  · exact fun _ held => held.transfer (.of_data same) fun late => ⟨late, congrFun cache late⟩
   · exact fun _ => targets
   · intro i v w before after _ flag _
     rw [same, before, Option.some.injEq] at after
@@ -3180,8 +3121,8 @@ private theorem CapStep.requests {f : Fork} {s t : BeaconState preset f}
     (trans (fold (fun _ _ _ => CapStepR.withdrawalRequest) withdrawals)
       (fold (fun _ _ _ => CapStepR.consolidationRequest order) consolidations))
 
-private theorem AssignedProposers.selected {f : Fork} {s : BeaconState preset f}
-    (held : AssignedProposers s) {proposer : ValidatorIndex}
+private theorem _root_.EthLib.Consensus.AssignedProposers.selected {f : Fork}
+    {s : BeaconState preset f} (held : AssignedProposers s) {proposer : ValidatorIndex}
     (ok : getBeaconProposerIndex s = .ok proposer) :
     ∃ v, s.validators.data[proposer.toNat]? = some v ∧
       v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
@@ -3216,9 +3157,9 @@ private theorem preKeyCharge_slash {f : Fork} {s t : BeaconState preset f}
     (fun far assigned => (assigned far).elim)
   have exitedProposers := (CapStepR.exit exitOk).1.proposers early proposers
   have markedProposers : AssignedProposers marked := exitedProposers.transfer
-    (.setValidator found set ⟨fun _ => rfl, fun _ => rfl⟩) (by
+    (.setValidator found set ⟨fun _ => rfl, fun _ => rfl⟩) (fun late => ⟨late, by
       obtain ⟨_, rfl⟩ := setValidator_ok set
-      rfl)
+      rfl⟩)
   have loweredProposers : AssignedProposers lowered :=
     (CapStep.decrease (config := config) debit).proposers early markedProposers
   have assigned : ∀ v, lowered.validators.data[proposer.toNat]? = some v →
@@ -3533,7 +3474,8 @@ private theorem CapStepR.block {f : Fork} {s t : BeaconState preset f}
       forward := by rw [getCurrentEpoch, getCurrentEpoch, frame.slot]; exact UInt64.le_refl _
       forks := Nat.le_refl _
       proposers := fun early held =>
-        held.transfer (.of_data (congrArg (·.data) validators)) (cache early)
+        held.transfer (.of_data (congrArg (·.data) validators))
+          fun late => ⟨late, congrFun (cache early) late⟩
       targetsAt := fun early _ held => held.transfer (.of_data (congrArg (·.data) validators))
         (by rw [getCurrentEpoch, getCurrentEpoch, frame.slot]; exact UInt64.le_refl _)
         (fun _ _ member => queue early ▸ member)
@@ -4094,7 +4036,7 @@ private theorem CapStep.epochEdge {f : Fork} {a b : BeaconState preset f} {k : E
   case proposerLookahead =>
     simp only [EpochStage.Edge] at edge
     split at edge
-    · have assigned := fun held => refreshed_proposers held edge
+    · have assigned := fun held => AssignedProposers.refresh held edge
       simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
         Except.ok.injEq] at edge
       obtain ⟨_, _, _, _, rfl⟩ := edge
@@ -4800,7 +4742,7 @@ private theorem CapStepR.upgrade {s : ForkedBeaconState preset}
     · obtain ⟨lookahead, initialized, final⟩ := bind_ok_iff.mp upgraded
       cases final
       intro _ i member
-      exact initialized_proposers (liftAccessor_ok.mp initialized) i member
+      exact initializeProposerLookahead_assigned (liftAccessor_ok.mp initialized) i member
     · obtain ⟨lookahead, initialized, final⟩ := bind_ok_iff.mp upgraded
       cases final
       intro electra entry member index named
