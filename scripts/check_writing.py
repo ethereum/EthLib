@@ -21,6 +21,15 @@ EXCLUDED_FILES = {"EthLib.lean"}
 PROCEDURAL_LIMIT = 20
 DESCRIPTIVE_LIMIT = 25
 
+# Rule D1: the most lines of a module or section doc, and of a declaration doc, in Lean.
+# Blank lines, link reference definitions and fenced blocks with their fences do not count.
+MODULE_DOC_LIMIT = 6
+DECLARATION_DOC_LIMIT = 4
+# A Markdown link reference definition `[label]: target`.
+REFERENCE = re.compile(r"\s*\[[^\]\n]+\]:\s")
+# The opening or closing fence of a Markdown code block.
+DOC_FENCE = re.compile(r"\s*(?:```|~~~)")
+
 ABBREVIATIONS = {
     "e.g.",
     "i.e.",
@@ -323,8 +332,14 @@ def markdown_blocks(path: str, text: str, first_line: int = 1) -> list[Block]:
 CHAR_LITERAL = re.compile(r"'(?:\\(?:u\{[0-9A-Fa-f]+\}|x[0-9A-Fa-f]{2}|.)|[^\\'\n])'")
 
 
-def lean_blocks(path: str, text: str) -> list[Block]:
-    """Return the prose blocks of the doc comments, block comments, and line comments."""
+def lean_blocks(
+    path: str, text: str, docs: list[tuple[int, str, str]] | None = None
+) -> list[Block]:
+    """
+    Return the prose blocks of the doc comments, block comments, and line comments.
+
+    When a list is given, each doc comment is appended to it as its line, its opener and its body.
+    """
     blocks: list[Block] = []
     index = 0
     line = 1
@@ -386,6 +401,8 @@ def lean_blocks(path: str, text: str) -> list[Block]:
                 else:
                     cursor += 1
             body = text[body_start : cursor - 2 if depth == 0 else cursor]
+            if docs is not None and body_start == index + 3:
+                docs.append((line, text[index : index + 3], body))
             blocks.extend(markdown_blocks(path, body, line))
             line += text.count("\n", index, cursor)
             index = cursor
@@ -423,6 +440,41 @@ def file_blocks(path: str, text: str) -> list[Block]:
     }:
         return []
     return lean_blocks(path, text) if path.endswith(".lean") else markdown_blocks(path, text)
+
+
+def long_docs(path: str, text: str) -> list[Finding]:
+    """Return a suggestion for each doc comment of a Lean file that is longer than its limit."""
+    if not path.endswith(".lean"):
+        return []
+    docs: list[tuple[int, str, str]] = []
+    lean_blocks(path, text, docs)
+    found = []
+    for line, opener, body in docs:
+        count = 0
+        fenced = False
+        for part in body.split("\n"):
+            if DOC_FENCE.match(part):
+                fenced = not fenced
+            elif part.strip() and not fenced and not REFERENCE.match(part):
+                count += 1
+        module = opener == "/-!"
+        limit = MODULE_DOC_LIMIT if module else DECLARATION_DOC_LIMIT
+        if count <= limit:
+            continue
+        if module:
+            message = (
+                f"This module or section doc has {count} lines, more than {limit}. "
+                "Keep a title, what the module provides and its source."
+            )
+        else:
+            message = (
+                f"This declaration doc has {count} lines, more than {limit}. "
+                "Keep what it states or returns."
+            )
+        message += " Move each detail to a comment above its line in the body."
+        excerpt = next((part.strip() for part in body.split("\n") if part.strip()), "")[:80]
+        found.append(Finding(path, line, "D1", message, excerpt))
+    return found
 
 
 # ---------------------------------------------------------------------------------------------
@@ -670,14 +722,22 @@ def read_source(path: Path, label: str, diagnostics: list[Finding]) -> str | Non
     return None
 
 
-def changed_blocks(base: str, diagnostics: list[Finding] | None = None) -> list[Block]:
-    """Return the prose blocks that contain a line added since the merge base."""
+def changed_blocks(
+    base: str, diagnostics: list[Finding] | None = None, lengths: list[Finding] | None = None
+) -> list[Block]:
+    """
+    Return the prose blocks that contain a line added since the merge base.
+
+    When a list is given, the doc length suggestions of every changed Lean file are appended to it.
+    """
     blocks: list[Block] = []
     diagnostics = [] if diagnostics is None else diagnostics
     for path, lines in sorted(added_lines(base).items()):
         text = read_source(ROOT / path, path, diagnostics)
         if text is None:
             continue
+        if lengths is not None:
+            lengths.extend(long_docs(path, text))
         for block in file_blocks(path, text):
             if any(block.line <= number <= block.last_line for number in lines):
                 blocks.append(block)
@@ -738,7 +798,8 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__,
         epilog="Rules: S1 sentence length, W6 phrasal verbs, W7 Latin abbreviations, "
-        "S5 contractions, the words to avoid of the guide, and C3 history words in library text. "
+        "S5 contractions, the words to avoid of the guide, C3 history words in library text, "
+        "and D1 the length of a Lean doc comment, in each Lean file checked. "
         "Exit status: 1 on suggestions with --strict, 2 on a usage, git or configuration error, "
         "0 otherwise.",
     )
@@ -763,9 +824,10 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv[1:])
     label_is_file = True
     diagnostics: list[Finding] = []
+    lengths: list[Finding] = []
     try:
         if args.base:
-            blocks = changed_blocks(args.base, diagnostics)
+            blocks = changed_blocks(args.base, diagnostics, lengths)
         elif args.stdin is not None:
             try:
                 text = sys.stdin.read()
@@ -791,9 +853,10 @@ def main(argv: list[str]) -> int:
                 text = read_source(Path(name), name, diagnostics)
                 if text is not None:
                     blocks.extend(file_blocks(name, text))
+                    lengths.extend(long_docs(name, text))
         else:
             parser.error("give --base, --stdin, or at least one file")
-        found = diagnostics + check_blocks(blocks, args.vocabulary)
+        found = diagnostics + check_blocks(blocks, args.vocabulary) + lengths
     except subprocess.CalledProcessError as error:
         parser.error(f"git failed: {error.stderr.strip()}")
     except (OSError, ValueError) as error:

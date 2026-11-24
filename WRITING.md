@@ -152,6 +152,8 @@ A checker suggestion alone does not require an edit.
 - **P3.** Give information gradually.
   Define a term or a notation before an explanation uses it.
   (STE 6.1, 6.2)
+- **P4.** In Lean, a detail reads best next to the line of code that it describes, not in a header block.
+  [Doc comments in Lean](CONTRIBUTING.md#doc-comments-in-lean) gives the rule, and the checker reports a long doc comment as D1.
 - **L1.** Use a vertical list when it makes steps, cases or conditions easier to tell apart.
   A short series does not always need a list.
   (STE 4.3)
