@@ -869,28 +869,6 @@ theorem ledger_processBlockExecution {engine : ExecutionEngine preset fork}
     · cases computed
       exact Ledger.refl s
 
-/-- Before Gloas, the execution part of a block keeps the registry. -/
-theorem validators_processBlockExecution {engine : ExecutionEngine preset fork}
-    {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork}
-    (early : fork < .glamsterdam)
-    (computed : processBlockExecution config checks engine s body bellatrix = .ok t) :
-    t.validators = s.validators := by
-  unfold processBlockExecution at computed
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
-  simp only [notGloas, ↓reduceDIte] at computed
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨middle, withdrawnOk, paidOk⟩ := computed
-    obtain ⟨-, header, -, rfl⟩ := processExecutionPayload_ok paidOk
-    obtain ⟨expected, -, -, appliedOk⟩ := processWithdrawals_expected early withdrawnOk
-    have same := applyExpectedWithdrawals_validators appliedOk
-    exact same
-  · split at computed
-    · obtain ⟨-, header, -, rfl⟩ := processExecutionPayload_ok computed
-      rfl
-    · cases computed
-      rfl
-
 /-- Replace a validator by one with the same credentials.
 
 This keeps the credentials of every validator. -/

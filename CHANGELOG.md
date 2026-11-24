@@ -1010,6 +1010,12 @@ Not yet released.
   The chosen validator, if unslashed at `x`, has its withdrawable epoch recorded at `x` after the block's epoch.
   A caller with the old hypothesis `sameEpoch` can pass `sameEpoch.le.trans (Nat.le_succ _)` for the bound, and `fun crossing => absurd crossing (by omega)` for the guarded premise.
 
+- In Lean, two lemmas are removed that restated another lemma with an added `fork < .glamsterdam` argument ([#4297](https://github.com/ethereum/EthLib/pull/4297)).
+  `effectiveKept_block` restated `effectiveKept_processBlock`, which holds at every fork, and ignored the argument.
+  `BlockLedger.validators_processBlockExecution` restated `processBlockExecution_validators`, which holds from Bellatrix, where the execution part of a block exists, at every later fork.
+  Migration: call `effectiveKept_processBlock` and `processBlockExecution_validators` without the pre-Gloas argument.
+  The implicit states of `processBlockExecution_validators` are named `state` and `after`, so a call that wrote `(s := s) (t := t)` writes `(state := s) (after := t)` or omits them.
+
 - In Lean, the leanXMSS addresses take the name the specification gives them: `Xmss.CallSite` is now `Xmss.Address` ([#4278](https://github.com/ethereum/EthLib/pull/4278)).
   The old `Xmss.Address`, an abbreviation for the 16 bytes as `Lanes2`, is removed, and `Address.encode` now returns `Lanes2`.
   `CallSite.tau`, `.mu`, `.hi`, `.lo`, `.encode`, `.encode_injective`, `.toNat_encode_lo`, `.bytes_encode` and `.ne_msg_of_hi` become `Address.tau` and so on, with the same statements.

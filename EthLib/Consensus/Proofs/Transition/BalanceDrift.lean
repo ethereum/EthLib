@@ -819,15 +819,6 @@ theorem processEffectiveBalanceUpdates_max_le {fork : Fork} {s t : BeaconState p
     (fun _ _ _ previous step => Nat.le_trans (updateEffectiveBalance_funding step i) previous)
     (Nat.le_refl _) ok
 
-/-- A block keeps the effective balance of every existing validator.
-
-The fork bound is not needed. -/
-theorem effectiveKept_block {f : Fork} {s t : BeaconState preset f}
-    {engine : ExecutionEngine preset f} {block : BeaconBlock preset f}
-    (_early : f < .glamsterdam) (ok : processBlock config checks engine s block = .ok t) :
-    EffectiveKept s t :=
-  effectiveKept_processBlock ok
-
 private theorem effectiveKept_pendingDeposits {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f}
     (ok : processPendingDeposits config checks s electra = .ok t) : EffectiveKept s t := by
