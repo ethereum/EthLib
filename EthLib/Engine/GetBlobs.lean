@@ -11,18 +11,18 @@ The method `engine_getBlobs`, versions 1 to 4, which reads blobs from the blob p
 
 A step comment names the version of the method, as in version 3, step 4.
 
-Sources, at commit `3284ee8` of execution-apis: versions [1][v1], [2][v2], [3][v3] and [4][v4].
+Sources, at commit `1ca0818` of execution-apis: versions [1][v1], [2][v2], [3][v3] and [4][v4].
 
 Version 1 has an [update by Osaka][v1-osaka], and the pool [samples cells][sampling] from Amsterdam.
 
 Version 4 takes its bitarray from [EIP-8070][eip8070], section Engine API extensions.
 
-[v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#engine_getblobsv1
-[v1-osaka]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/osaka.md#cancun-api
-[v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/osaka.md#engine_getblobsv2
-[v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/osaka.md#engine_getblobsv3
-[v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_getblobsv4
-[sampling]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_forkchoiceupdatedv4
+[v1]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/cancun.md#engine_getblobsv1
+[v1-osaka]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/osaka.md#cancun-api
+[v2]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/osaka.md#engine_getblobsv2
+[v3]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/osaka.md#engine_getblobsv3
+[v4]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/amsterdam.md#engine_getblobsv4
+[sampling]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/amsterdam.md#engine_forkchoiceupdatedv4
 [eip8070]: https://github.com/ethereum/EIPs/blob/d27448e08f60513856bbe228ea7ce04f156209dc/EIPS/eip-8070.md#engine-api-extensions
 -/
 
@@ -329,9 +329,9 @@ def blobCellsOfJson (j : Json) : Read BlobCellsAndProofsV1 := do
   --
   -- Not in the source: EthLib rejects any other member.
   unless hasExactly fs ["blob_cells", "proofs"] do reject "blobCells: not the fields of version 1"
-  -- The Engine API calls a cell a byte array and gives it no size.
+  -- The structure gives each cell 64 field elements of 32 bytes, that is 2048 bytes.
   --
-  -- EthLib takes the size of the cells of its KZG cell proofs, which is 2048 bytes.
+  -- That is the size of the cells of the KZG cell proofs of EthLib.
   let cells ← array "blob_cells" (nullable (fixed "cell" BYTES_PER_CELL))
     (← field "blobCells" fs "blob_cells")
   -- Each proof is a `KZGProof` of 48 bytes, or `null`.

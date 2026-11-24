@@ -12,9 +12,9 @@ The method runs calls in a sequence of blocks on top of a base block, `latest` b
 
 The [schemas][schema], the [notes][notes] and the fixtures fix the request and its codes.
 
-[method]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/execute.yaml
-[schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/execute.yaml
-[notes]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/docs-api/docs/ethsimulatev1-notes.mdx
+[method]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/execute.yaml
+[schema]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/execute.yaml
+[notes]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/docs-api/docs/ethsimulatev1-notes.mdx
 -/
 
 @[expose] public section
@@ -191,46 +191,39 @@ def simulatePayload (j : Json) : Read SimulatePayload := do
 
 namespace GenericTransaction
 
-/-- The type of a call of a simulation: its own, else type 2, as the notes say.
-
-It replaces the kind that a call infers from its fields, which reads a blob fee cap as type 3.
-
-Blob hashes make type 3, as the fixtures show, and a blob fee cap alone does not.
-
-The source is silent on the other kinds, which type 2 cannot carry.
-
-So EthLib makes authorizations type 4, and a gas price type 0, or type 1 with an access list. -/
+/-- The type of a call of a simulation: its own, else type 2, as the notes say. -/
 def simulateType (tx : GenericTransaction) : UInt8 :=
   match tx.type with
   -- The type of the call, when it has one.
   | some t => t
+  -- Without one, this replaces the kind that a call infers from its fields.
+  --
+  -- That kind reads a blob fee cap as type 3.
   | none =>
+    -- The source is silent on the kinds that type 2 cannot carry.
+    --
     -- EthLib's choice: authorizations make type 4.
     if tx.authorizationList.any (!·.isEmpty) then 4
-    -- Blob hashes make type 3, as the fixtures show.
+    -- Blob hashes make type 3, as the fixtures show, and a blob fee cap alone does not.
     else if tx.blobVersionedHashes.any (!·.isEmpty) then 3
     -- EthLib's choice: a gas price makes type 0, or type 1 with an access list.
     else if tx.gasPrice.isSome then if tx.accessList.isSome then 1 else 0
     -- Else type 2, as the notes say.
     else 2
 
-/-- A call of a simulation with its defaults filled in.
-
-The nonce is that of the sender, its default included, after the earlier calls.
-
-The gas is what the block has left.
-
-The sender is the zero address, as the notes say.
-
-The other fields keep their defaults of a call: no value, no data and no fee. -/
+/-- A call of a simulation with its defaults filled in. -/
 def withDefaults (tx : GenericTransaction) (nonce gas : Nat) : GenericTransaction :=
-  -- Each field that the call omits: its type above, the nonce after the earlier calls, the gas.
+  -- Each field that the call omits takes its default.
   --
-  -- The sender is the zero address, as the notes say.
+  -- The other fields keep their defaults of a call: no value, no data and no fee.
   { tx with
+    -- The type of a call of a simulation.
     type := some tx.simulateType
+    -- The nonce of the sender, its default included, after the earlier calls.
     nonce := some (tx.nonce.getD nonce)
+    -- The gas that the block has left.
     gas := some (tx.gas.getD gas)
+    -- The zero address, as the notes say.
     sender := some (tx.sender.getD (Vector.replicate 20 0)) }
 
 end GenericTransaction
@@ -243,7 +236,7 @@ structure SimulateChoices where
 
   The [schema of the time][time] takes the block time of the network, 12 seconds on Mainnet.
 
-  [time]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/schemas/execute.yaml#L116-L119
+  [time]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/execute.yaml#L116-L119
   -/
   blockTime : Nat := 12
   /-- The block time is positive, so the gap blocks have increasing times. -/
@@ -366,7 +359,9 @@ def precompileMoves (overrides : List (Address × AccountOverride)) : List (Addr
 /-- Check the moves of precompiles of a block at a fork. -/
 def checkMoves (fork : Fork) (overrides : List (Address × AccountOverride)) :
     Except RpcError Unit :=
-  -- Two moves to one address give no error, as the fixtures show, though the method lists -38023.
+  -- Two moves to one address give no error, as the fixtures show.
+  --
+  -- The method lists no code for them.
   (precompileMoves overrides).forM fun (a, b) => do
     -- Only a precompile of the fork moves, else code -32000, as the fixtures show.
     ensure (a ∈ precompileAddresses fork)

@@ -12,62 +12,23 @@ public import EthLib.Execution.Blocks.Withdrawal
 
 The choice of the head in `engine_forkchoiceUpdated`, versions 1 to 5, without a payload build.
 
-The consensus layer names a head, a safe block and a finalized block.
+Sources, at commit `1ca0818` of execution-apis:
 
-The execution layer knows a tree of blocks, and the finalized block of an earlier update.
+- versions [1][v1], [2][v2], [3][v3], [4][v4] and [5][v5], and their [OpenRPC description][rpc]
+- the updates of earlier versions by [Cancun][v2-cancun], [Prague][v3-prague] and [Osaka][osaka]
+- the updates of version 3 by [Amsterdam][v3-amsterdam] and of version 4 by [Bogota][v4-bogota]
 
-A step comment without a version names a step of [`engine_forkchoiceUpdatedV1`][v1].
-
-Payload attributes that pass the checks of their version start a payload build.
-
-The response names that build by its ID.
-
-The consensus layer writes the forkchoice state, the payload attributes and the parameters as JSON.
-
-The method specifications state these rules, at commit `3284ee8` of execution-apis:
-
-- [`engine_forkchoiceUpdatedV1`][v1], steps 1 to 9, without the reorg limit of step 6
-- the structure [`ForkchoiceStateV1`][fcs], with its note on zero hashes
-- the [payload validation][validation] of Paris, with its terminal block check
-- the [definitions][eip3675] of EIP-3675, for a terminal block of proof of work
-- [`engine_forkchoiceUpdatedV2`][v2] and [`engine_forkchoiceUpdatedV3`][v3]
-- [`engine_forkchoiceUpdatedV4`][v4], and the custody columns of [EIP-8070][eip8070]
-- [`engine_forkchoiceUpdatedV5`][v5], and the update of version 4 by [Bogota][v4-bogota]
-- the updates of earlier versions by [Cancun][v2-cancun] and [Prague][v3-prague]
-- the update of earlier versions by [Osaka][osaka], which leaves version 3 unchanged
-- the update of version 3 by [Amsterdam][v3-amsterdam]
-- the [OpenRPC description][rpc] of the five versions, for the parameters that each requires
-- the [payload building][build] of Paris, whose step 5 gives each new build its own ID
-
-Each version has its payload attributes: [version 1][a1], [version 2][a2] and [version 3][a3].
-
-From Glamsterdam, [version 4][a4] adds the slot number of EIP-7843 and a target gas limit.
-
-From Hegotá, [version 5][a5] adds the transactions of the inclusion lists of EIP-7805.
-
-The Bogota links are at commit `68d76a5`, the first where an entry may be any byte string.
-
-[v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_forkchoiceupdatedv1
-[fcs]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#forkchoicestatev1
-[validation]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-validation
-[eip3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#definitions
-[v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#engine_forkchoiceupdatedv2
-[v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#engine_forkchoiceupdatedv3
-[v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_forkchoiceupdatedv4
-[v2-cancun]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#update-the-methods-of-previous-forks
-[v3-prague]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/prague.md#update-the-methods-of-previous-forks
-[osaka]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/osaka.md#update-the-methods-of-previous-forks
-[v3-amsterdam]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#update-the-methods-of-previous-forks
-[eip8070]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8070.md#engine-api-extensions
-[rpc]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/openrpc/methods/forkchoice.yaml
-[build]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-building
-[a1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payloadattributesv1
-[a2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#payloadattributesv2
-[a3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#payloadattributesv3
-[a4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#payloadattributesv4
-[a5]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#payloadattributesv5
-[v5]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_forkchoiceupdatedv5
-[v4-bogota]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#update-the-methods-of-previous-forks
+[v1]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#engine_forkchoiceupdatedv1
+[v2]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/shanghai.md#engine_forkchoiceupdatedv2
+[v3]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/cancun.md#engine_forkchoiceupdatedv3
+[v4]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/amsterdam.md#engine_forkchoiceupdatedv4
+[v2-cancun]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/cancun.md#update-the-methods-of-previous-forks
+[v3-prague]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/prague.md#update-the-methods-of-previous-forks
+[osaka]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/osaka.md#update-the-methods-of-previous-forks
+[v3-amsterdam]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/amsterdam.md#update-the-methods-of-previous-forks
+[rpc]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/openrpc/methods/forkchoice.yaml
+[v5]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/bogota.md#engine_forkchoiceupdatedv5
+[v4-bogota]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/bogota.md#update-the-methods-of-previous-forks
 -/
 
 @[expose] public section
@@ -93,11 +54,13 @@ structure PayloadAttributes (fork : Fork) : Type where
   withdrawals : Since .shapella fork (List Withdrawal)
   /-- The root of the parent beacon block, from Dencun. -/
   parentBeaconBlockRoot : Since .dencun fork Hash32
-  /-- The slot of the payload, from Glamsterdam. -/
+  /-- The slot of the payload, from Glamsterdam, by EIP-7843. -/
   slotNumber : Since .glamsterdam fork UInt64
   /-- The target of the gas limit of the payload, from Glamsterdam. -/
   targetGasLimit : Since .glamsterdam fork UInt64
   /-- The transactions of the inclusion lists that the payload must satisfy, from Hegotá.
+
+  They come from EIP-7805.
 
   Each is any byte string, and one that does not decode as a transaction is still taken. -/
   inclusionListTransactions : Since .hegota fork (List ByteArray)
@@ -147,7 +110,12 @@ def latestValid (tree : PayloadTree) (hash : Hash32) : Option Hash32 :=
   -- The chain runs from the block down, so its first valid block is that ancestor.
   (chainOf tree hash).find? fun h => (tree.lookup h).any (·.valid)
 
-/-- The latest valid hash of an invalid block: the latest valid block of its chain. -/
+/-- The latest valid hash of an invalid block: the latest valid block of its chain.
+
+It follows step 3 of the [payload validation][validation] of Paris.
+
+[validation]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#payload-validation
+-/
 def latestValidHash (tree : PayloadTree) (hash : Hash32) : Option Hash32 :=
   -- Payload validation, step 3: the latest valid hash is the block hash of that ancestor.
   --
@@ -158,12 +126,19 @@ def latestValidHash (tree : PayloadTree) (hash : Hash32) : Option Hash32 :=
 
 /-- The totals of the most recent block of proof of work on the chain of a block, if any. -/
 def latestPow (tree : PayloadTree) (hash : Hash32) : Option (Nat × Nat) :=
+  -- A step without a version is a step of version 1 of the method.
+  --
   -- Payload validation, step 2, reads the most recent PoW block among the ancestors of a payload.
   --
   -- Step 3 reads the head when it is a PoW block, so the block itself counts here.
   (chainOf tree hash).findSome? fun h => (tree.lookup h).bind (·.powTotalDifficulty)
 
-/-- Whether the chain of a block passes the terminal block check. -/
+/-- Whether the chain of a block passes the terminal block check.
+
+It reads the [definitions][eip3675] of EIP-3675, for a terminal block of proof of work.
+
+[eip3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#definitions
+-/
 def chainPassesTerminalCheck (transition : TransitionConfiguration) (tree : PayloadTree)
     (hash : Hash32) : Bool :=
   match latestPow tree hash with
@@ -211,14 +186,15 @@ def belowFinalized (tree : PayloadTree) (finalized : Option Hash32) (hash : Hash
   -- Step 2 needs a known finalized block.
   | none => false
 
-/-- The status of a forkchoice update, and the new head when it changes.
-
-The execution layer knows the blocks of the tree, and the finalized block of an earlier update.
-
-Its configuration of the transition gives the terminal total difficulty. -/
+/-- The status of a forkchoice update, and the new head when it changes. -/
 def forkchoiceUpdated (transition : TransitionConfiguration) (tree : PayloadTree)
     (finalized : Option Hash32) (state : ForkchoiceState) :
     Except EngineError (PayloadStatus × Option Hash32) :=
+  -- The consensus layer names a head, a safe block and a finalized block.
+  --
+  -- The execution layer knows the blocks of the tree, and the finalized block of an earlier update.
+  --
+  -- Its configuration of the transition gives the terminal total difficulty.
   match tree.lookup state.headBlockHash with
   -- Steps 1 and 9: an unknown head is `SYNCING`, with a `null` latest valid hash.
   --
@@ -280,7 +256,14 @@ def forkchoiceUpdated (transition : TransitionConfiguration) (tree : PayloadTree
     -- Step 5: otherwise `-38002`, invalid forkchoice state.
     else throw (.invalidForkchoiceState state.safeBlockHash state.finalizedBlockHash)
 
-/-- The forkchoice state, with exactly its three fields. -/
+/-- The forkchoice state, with exactly its three fields.
+
+Its structure is [`ForkchoiceStateV1`][fcs].
+
+Its note allows zero safe and finalized hashes until the transition block is finalized.
+
+[fcs]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#forkchoicestatev1
+-/
 def forkchoiceStateOfJson (j : Json) : Decode ForkchoiceState := do
   -- Version 3, step 1: the state matches `ForkchoiceStateV1`, or `-32602`.
   --
@@ -304,19 +287,34 @@ def forkchoiceStateJson (state : ForkchoiceState) : Json :=
     ("safeBlockHash", dataJson state.safeBlockHash.toList),
     ("finalizedBlockHash", dataJson state.finalizedBlockHash.toList)]
 
-/-- The fields of version 1 of the payload attributes. -/
+/-- The fields of [version 1][a1] of the payload attributes.
+
+[a1]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#payloadattributesv1
+-/
 def attributesFieldsV1 : List String := ["timestamp", "prevRandao", "suggestedFeeRecipient"]
 
-/-- The fields of version 2: those of version 1, and the withdrawals. -/
+/-- The fields of [version 2][a2]: those of version 1, and the withdrawals.
+
+[a2]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/shanghai.md#payloadattributesv2
+-/
 def attributesFieldsV2 : List String := attributesFieldsV1 ++ ["withdrawals"]
 
-/-- The fields of version 3: those of version 2, and the root of the parent beacon block. -/
+/-- The fields of [version 3][a3]: those of version 2, and the root of the parent beacon block.
+
+[a3]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/cancun.md#payloadattributesv3
+-/
 def attributesFieldsV3 : List String := attributesFieldsV2 ++ ["parentBeaconBlockRoot"]
 
-/-- The fields of version 4: those of version 3, the slot number and the target gas limit. -/
+/-- The fields of [version 4][a4]: those of version 3, the slot number and the target gas limit.
+
+[a4]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/amsterdam.md#payloadattributesv4
+-/
 def attributesFieldsV4 : List String := attributesFieldsV3 ++ ["slotNumber", "targetGasLimit"]
 
-/-- The fields of version 5: those of version 4, and the inclusion list transactions. -/
+/-- The fields of [version 5][a5]: those of version 4, and the inclusion list transactions.
+
+[a5]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/bogota.md#payloadattributesv5
+-/
 def attributesFieldsV5 : List String := attributesFieldsV4 ++ ["inclusionListTransactions"]
 
 /-- The fields of a version of the payload attributes, from 1 to 5.
@@ -331,10 +329,9 @@ def attributesFields : Nat → List String
 
 /-- The fork whose payload attributes have the fields of a version of their structure.
 
-Version 1 is that of Paris, 2 of Shapella, 3 of Dencun, 4 of Glamsterdam and 5 of Hegotá.
-
 Version 0 reads as 1, and a version above 5 reads as 5. -/
 def attributesFork : Nat → Fork
+  -- Version 1 is that of Paris, 2 of Shapella, 3 of Dencun, 4 of Glamsterdam and 5 of Hegotá.
   | 0 | 1 => .paris
   | 2 => .shapella
   | 3 => .dencun
@@ -428,7 +425,12 @@ def payloadAttributesOfVersion (version : Nat) (j : Json) :
   -- Version 1 names no code, and EthLib gives the `-38003` of step 9 for invalid attributes.
   | none => .error .invalidPayloadAttributes
 
-/-- The custody columns of version 4: 16 bytes, one bit for each column. -/
+/-- The custody columns of version 4: 16 bytes, one bit for each column.
+
+They come from [EIP-8070][eip8070].
+
+[eip8070]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8070.md#engine-api-extensions
+-/
 def custodyColumnsOfJson : Json → Decode (Option (Vector UInt8 16))
   -- Version 4, parameter 3: `null` when the consensus layer gives no custody set.
   | .null => pure none
@@ -473,6 +475,8 @@ def forkchoiceUpdatedParams (version : Nat) (params : Json) :
 The attributes have the structure of their fork, which the version must take. -/
 def forkchoiceUpdatedParamsJson {fork : Fork} (version : Nat) (state : ForkchoiceState)
     (attributes : Option (PayloadAttributes fork)) (custody : Option (Vector UInt8 16)) : Json :=
+  -- The consensus layer writes the forkchoice state, the attributes and the parameters as JSON.
+  --
   -- Parameters 1 and 2: the forkchoice state, then the payload attributes or `null`.
   .arr ([forkchoiceStateJson state, optionJson payloadAttributesJson attributes] ++
     -- Parameter 3, from version 4: the custody columns as 16 bytes or `null`; before, none.
@@ -484,15 +488,17 @@ Version 0 reads as 1, and a version above 5 reads as 5. -/
 def attributesTakeFork : Nat → Fork → Bool
   -- Version 1 states no rule of forks, and version 2, step 2 sends Shapella to version 2.
   --
-  -- So EthLib takes Paris only, as version 1 of `engine_newPayload` does.
+  -- So EthLib takes Paris only, as version 1 of the method that checks a payload does.
   | 0, fork | 1, fork => fork == .paris
   -- Version 2: Paris and Shapella, since the update by Cancun gives `-38005` from Dencun on.
   | 2, fork => fork == .paris || fork == .shapella
   -- Version 3, step 2.2: Cancun, here Dencun, and the update by Prague adds Prague, here Pectra.
   --
-  -- No update by Osaka names version 3, yet the update by Amsterdam ends it at Glamsterdam.
+  -- The update by Osaka adds Osaka, here Fusaka.
   --
-  -- So EthLib takes Fusaka and the BPO forks too, as `engine_newPayloadV4` does.
+  -- The update by Amsterdam ends it at Glamsterdam.
+  --
+  -- So EthLib takes the BPO forks too, as version 4 of the method that checks a payload does.
   | 3, fork => decide (.dencun ≤ fork) && decide (fork < .glamsterdam)
   -- Version 4, step 1.2: Amsterdam, here Glamsterdam, which the update by Bogota ends at Hegotá.
   | 4, fork => fork == .glamsterdam
@@ -554,12 +560,12 @@ def PayloadAttributes.atFork (a : Σ f, PayloadAttributes f) (fork : Fork) :
 
 /-- The checks of decoded payload attributes against the head that they build on.
 
-The number and the time of the head are unbounded, as its header holds them.
-
 The result is the attributes at their fork. -/
 def checkAttributes (config : ChainConfig) (version : Nat) (head : KnownPayload)
     (attributes : Σ f, PayloadAttributes f) :
     Except EngineError (Σ fork, PayloadAttributes fork) := do
+  -- The number and the time of the head are unbounded, as its header holds them.
+  --
   -- The fork of the attributes is the active fork at the number after the head and at their time.
   let timestamp := attributes.2.timestamp
   -- A timestamp in the time frame of no fork gives `-38005`.
@@ -581,15 +587,14 @@ def checkAttributes (config : ChainConfig) (version : Nat) (head : KnownPayload)
 
 /-- A version of the method: its status, the new head, and the payload attributes of a build.
 
-The versions of the method are 1 to 5; the C export passes no other.
-
-The configuration of the transition gives the terminal total difficulty.
-
 Version 0 reads as 1, and a version above 5 reads as 5. -/
 def forkchoiceUpdatedCall (config : ChainConfig) (transition : TransitionConfiguration)
     (version : Nat) (tree : PayloadTree) (finalized : Option Hash32) (params : Json) :
     Except EngineError
       (PayloadStatus × Option Hash32 × Option (Σ fork, PayloadAttributes fork)) := do
+  -- The versions of the method are 1 to 5; the C export passes no other.
+  --
+  -- The configuration of the transition gives the terminal total difficulty.
   let (state, attributes) ← forkchoiceUpdatedParams version params
   -- Steps 1 to 5 and 7: the status, and the head when the state is updated to it.
   let (status, head) ← forkchoiceUpdated transition tree finalized state
@@ -611,14 +616,13 @@ def forkchoiceUpdatedCall (config : ChainConfig) (transition : TransitionConfigu
   -- Without attributes or an applied head, no build begins, so the attributes change nothing.
   | _, _ => return (status, head, none)
 
-/-- The bytes of one inclusion list transaction in the input of a payload ID.
-
-Each byte of the transaction comes after a byte 1, and a byte 0 ends the transaction.
-
-So the bytes of a list of transactions give back the list, whatever the lengths.
-
-A byte 2 after them marks the end of the list. -/
+/-- The bytes of one inclusion list transaction in the input of a payload ID. -/
 def inclusionListEntryBytes (transaction : ByteArray) : List UInt8 :=
+  -- Each byte of the transaction comes after a byte 1, and a byte 0 ends the transaction.
+  --
+  -- So the bytes of a list of transactions give back the list, whatever the lengths.
+  --
+  -- A byte 2 after them marks the end of the list.
   transaction.data.toList.flatMap (fun b => [1, b]) ++ [0]
 
 /-- The bytes that the ID of a build hashes: the head, then the attributes of their fork.
@@ -654,19 +658,22 @@ def payloadIdInput (head : Hash32) (attributes : PayloadAttributes fork) : ByteA
 
 /-- The ID of the build that attributes start on a head: the first 8 bytes of a Keccak-256 hash.
 
-The same head and attributes give the same ID.
+Step 5 of the [payload building][build] of Paris gives each new build its own ID.
 
-In an update, the configuration, the tree, the head and the timestamp fix the fork.
-
-So within an update, other attributes or another head give other bytes to hash.
-
-So within an update, distinct builds get distinct IDs unless their hashes share the first 8 bytes.
-
-The hash is that of the head and then the attributes, each number in 8 big-endian bytes. -/
+[build]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#payload-building
+-/
 def payloadId (head : Hash32) (attributes : PayloadAttributes fork) : PayloadId :=
   -- Payload building, step 5: each new build has its own ID.
   --
-  -- EthLib hashes the head and the attributes.
+  -- EthLib hashes the head and then the attributes, each number in 8 big-endian bytes.
+  --
+  -- The same head and attributes give the same ID.
+  --
+  -- In an update, the configuration, the tree, the head and the timestamp fix the fork.
+  --
+  -- So within an update, other attributes or another head give other bytes to hash.
+  --
+  -- So distinct builds of an update get distinct IDs unless their hashes share the first 8 bytes.
   let digest := Cryptography.Hash.Keccak.keccak256 (payloadIdInput head attributes)
   Vector.ofFn fun i => digest[i.val]'(by
     have := i.isLt
@@ -679,7 +686,7 @@ def payloadId (head : Hash32) (attributes : PayloadAttributes fork) : PayloadId 
 
 These are the answers of step 9 of [`engine_forkchoiceUpdatedV1`][fcu] that are not errors.
 
-[fcu]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_forkchoiceupdatedv1 -/
+[fcu]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#engine_forkchoiceupdatedv1 -/
 def forkchoiceUpdatedResponse
     (result : PayloadStatus × Option Hash32 × Option (Σ fork, PayloadAttributes fork)) :
     PayloadStatus × Option PayloadId :=
@@ -692,8 +699,8 @@ def forkchoiceUpdatedResponse
 
 `RestrictedPayloadStatusV1` of [`payload.yaml`][schema] and [step 9][fcu] allow only these.
 
-[schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/openrpc/schemas/payload.yaml
-[fcu]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_forkchoiceupdatedv1 -/
+[schema]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/openrpc/schemas/payload.yaml
+[fcu]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#engine_forkchoiceupdatedv1 -/
 def Status.restricted : Status → Bool
   -- Response: the status is restricted to `VALID`, `INVALID` and `SYNCING`.
   | .valid | .invalid | .syncing => true
@@ -729,11 +736,11 @@ def forkchoiceUpdatedResponseOfJson (j : Json) :
 
 Step 2 of [`engine_forkchoiceUpdatedV5`][fcu5] gives the inclusion list verdict.
 
-The writer takes the verdict as given, and the function after it pairs it with the status.
-
-[fcu5]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_forkchoiceupdatedv5 -/
+[fcu5]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/bogota.md#engine_forkchoiceupdatedv5 -/
 def forkchoiceUpdatedResponseV2Json (status : PayloadStatus) (validationError : Option String)
     (inclusionListSatisfied : Option Bool) (id : Option PayloadId) : Json :=
+  -- The verdict comes as given, and the function after this one pairs it with the status.
+  --
   -- Version 5, response: `PayloadStatusV2` with `inclusionListSatisfied`, then `payloadId`.
   Json.mkObj [("payloadStatus", payloadStatusV2Json status validationError inclusionListSatisfied),
     ("payloadId", optionJson (dataJson ·.toList) id)]

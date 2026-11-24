@@ -8,35 +8,21 @@ public import EthLib.Engine.NewPayload
 
 The execution layer of the beacon chain, built from the checks of `engine_newPayload`.
 
-The beacon chain calls one version of the method at each of its forks.
+Sources, at commit `1ca0818` of execution-apis:
 
-The execution layer reads the payload at its own active fork, which that version must take.
+- versions [1][v1], [2][v2], [3][v3], [4][v4], [5][v5] and [6][v6] of the method
+- the [payload validation][validation] of Paris
+- the updates of version 4 by [Osaka][v4-osaka] and [Amsterdam][v4-amsterdam]
 
-The Engine API states the forks that each version takes, and EthLib picks the version from them.
-
-A step comment names the version of the method, as in version 3, step 3.
-
-The Engine API calls the execution side of Glamsterdam by the name Amsterdam.
-
-It calls that of Hegotá by the name Bogota.
-
-The method specifications state these rules, at commit `3284ee8` of execution-apis:
-
-- [`engine_newPayloadV1`][v1], and the [payload validation][validation] of Paris
-- [`engine_newPayloadV2`][v2]
-- [`engine_newPayloadV3`][v3]
-- [`engine_newPayloadV4`][v4], and its update by Amsterdam in [`amsterdam.md`][v4-amsterdam]
-- [`engine_newPayloadV5`][v5]
-- [`engine_newPayloadV6`][v6], at commit `68d76a5`, where a list entry may be any byte string
-
-[v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_newpayloadv1
-[validation]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-validation
-[v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#engine_newpayloadv2
-[v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#engine_newpayloadv3
-[v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/prague.md#engine_newpayloadv4
-[v4-amsterdam]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#update-the-methods-of-previous-forks
-[v5]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_newpayloadv5
-[v6]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_newpayloadv6
+[v1]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#engine_newpayloadv1
+[validation]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#payload-validation
+[v2]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/shanghai.md#engine_newpayloadv2
+[v3]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/cancun.md#engine_newpayloadv3
+[v4]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/prague.md#engine_newpayloadv4
+[v4-osaka]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/osaka.md#prague-api
+[v4-amsterdam]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/amsterdam.md#update-the-methods-of-previous-forks
+[v5]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/amsterdam.md#engine_newpayloadv5
+[v6]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/bogota.md#engine_newpayloadv6
 -/
 
 @[expose] public section
@@ -52,8 +38,18 @@ variable {preset : Consensus.Preset} {fork : Fork}
 
 /-- The version of the method that the beacon chain calls at a fork, or 0 for none. -/
 def newPayloadVersion (fork : Fork) : Nat :=
+  -- The beacon chain calls one version of the method at each of its forks.
+  --
+  -- The Engine API states the forks that each version takes.
+  --
+  -- EthLib picks the version from them.
+  --
+  -- The Engine API calls the execution side of Hegotá by the name Bogota.
+  --
   -- Heze calls version 6, which takes the payloads of Bogota and an inclusion list.
   if .hegota ≤ fork then 6
+  -- The Engine API calls the execution side of Glamsterdam by the name Amsterdam.
+  --
   -- Gloas calls version 5, which takes the payloads of Amsterdam.
   else if .glamsterdam ≤ fork then 5
   -- From Electra, Fulu included, up to Gloas: version 4, which takes Prague to Amsterdam, excluded.
@@ -103,26 +99,21 @@ def anyPayloadOf (p : Consensus.ExecutionPayload preset fork) : Option AnyPayloa
       excessBlobGas := sinceValue p.excessBlobGas }
   else none
 
-/-- The JSON parameters of a payload request, for the method the beacon chain calls at its fork.
-
-It has none when the logs Bloom filter of the preset does not have 256 bytes.
-
-It also has none when the request lists cannot be made.
-
-From Heze the caller gives the transactions of the inclusion list, from the slot before.
-
-It has none before Bellatrix, where the beacon chain calls no version. -/
+/-- The JSON parameters of a payload request, for the method the beacon chain calls at its fork. -/
 def newPayloadRequestJson (r : Consensus.NewPayloadRequest preset fork)
     (inclusionList : Since .hegota fork (List ByteArray)) : Option Lean.Json := do
-  -- Before Bellatrix there is no version to call, so no request.
+  -- Before Bellatrix the beacon chain calls no version, so there is no request.
   guard (newPayloadVersion fork ≠ 0)
   let p := r.executionPayload
+  -- None when the logs Bloom filter of the preset does not have 256 bytes.
   let any ← anyPayloadOf p
   -- Parameter 1: version 3 of the structure from Deneb, version 2 from Capella, else version 1.
   let shape : Fork := if .dencun ≤ fork then .dencun else if .shapella ≤ fork then .shapella
     else .paris
   let payload ← (any.atFork shape).toOption
   -- Parameter 4, from Electra: `executionRequests`, the request lists of EIP-7685.
+  --
+  -- None when the request lists cannot be made.
   let requests ← r.requestsList.toOption
   -- From Gloas, parameter 1 is `ExecutionPayloadV4`, which appends these two fields.
   --
@@ -137,6 +128,7 @@ def newPayloadRequestJson (r : Consensus.NewPayloadRequest preset fork)
   let hashes := ((sinceValue r.versionedHashes).map (·.data.toList)).getD []
   -- Parameter 3, from Deneb: `parentBeaconBlockRoot`, with the same unwritten default.
   let root := (sinceValue r.parentBeaconBlockRoot).getD 0
+  -- From Heze the caller gives the transactions of the inclusion list, from the slot before.
   match sinceValue inclusionList, amsterdam with
   -- Version 6, from Heze: parameter 5, `inclusionListTransactions`, follows the four others.
   | some list, some fields =>
@@ -154,8 +146,12 @@ def payloadBlock (config : ChainConfig) (p : Consensus.ExecutionPayload preset f
     (requests : Since .pectra fork (List ByteArray)) :
     Option ((f : Fork) × Block f Transaction) := do
   let any ← anyPayloadOf p
+  -- The execution layer reads the payload at its own active fork, which the version must take.
+  --
   -- The fork of the payload: the active fork at its number and its timestamp.
   let executionFork ← config.activeFork p.blockNumber.toNat p.timestamp.toNat
+  -- A step names the version of the method, as in version 3, step 3.
+  --
   -- The version takes the fork of the payload: version 3, step 2, and step 1 of versions 4 to 6.
   --
   -- Versions 1 and 2 take the forks that the check of the method gives them.
@@ -168,6 +164,8 @@ def payloadBlock (config : ChainConfig) (p : Consensus.ExecutionPayload preset f
     let beacon ← (Json.since (f := .dencun) "parentBeaconBlockRoot"
       (sinceValue parentBeaconBlockRoot)).toOption
     -- Version 4, parameter 4: `executionRequests` exactly from Prague, here Pectra.
+    --
+    -- Version 4, step 3: a `null` value is `-32602`.
     let lists ← (Json.since (f := .pectra) "executionRequests" (sinceValue requests)).toOption
     -- Version 5, step 2: a missing `blockAccessList` is `-32602`, from Amsterdam, here Glamsterdam.
     --
@@ -191,12 +189,12 @@ def payloadBlock (config : ChainConfig) (p : Consensus.ExecutionPayload preset f
     return ⟨executionFork, block⟩
   else none
 
-/-- The execution layer of the beacon chain, on a chain of the execution layer.
-
-Each of its checks reads the block of the payload at the active fork of the chain.
-
-The answer to a payload request is the default answer from its three checks. -/
+/-- The execution layer of the beacon chain, on a chain of the execution layer. -/
 def executionEngine (chain : BlockChain) : Consensus.ExecutionEngine preset fork where
+  -- Each check reads the block of the payload at the active fork of the chain.
+  --
+  -- The answer to a payload request is the default answer from these three checks.
+  --
   -- The block hash is valid when the payload passes the checks before the state transition.
   isValidBlockHash p root requests := (payloadBlock chain.config p root requests).isSome
   isValidVersionedHashes request :=
