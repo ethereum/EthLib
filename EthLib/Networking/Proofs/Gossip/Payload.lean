@@ -10,18 +10,6 @@ public import EthLib.Networking.Proofs.Snappy.CompressSize
 # `Networking.Proofs.Gossip.Payload`
 
 Properties of the size limits on gossip, and of the gossipsub parameters.
-
-- The worst-case compression of the payload cap is `32 + n + n / 6` bytes, with no overflow.
-- The largest gossip message is that compression plus 1024 bytes, above the floor of 1 MiB.
-- Take data within that length.
-  The decoder accepts it exactly when it decompresses to a payload within the cap and type bound.
-- It rejects data above either bound.
-- Data that it accepts leaves 1024 bytes of the largest gossip message for framing.
-- It accepts the block of the compressor for a payload within the cap and its type bound.
-- It rejects a payload length above the bounds from the preamble alone, before it decompresses.
-- The gossipsub parameters exist exactly when two epochs in milliseconds fit 64 bits.
-- Then a seen message ID lasts two epochs in whole seconds, never a wrapped value.
-- The mesh bounds and the message cache windows are ordered.
 -/
 
 @[expose] public section
@@ -45,7 +33,9 @@ theorem maxMessageSize_eq :
       .ok (UInt64.ofNat (32 + MAX_PAYLOAD_SIZE.toNat + MAX_PAYLOAD_SIZE.toNat / 6 + 1024)) := by
   rfl
 
-/-- The decoder accepts exactly the data within both bounds that decompresses. -/
+/-- The decoder accepts data exactly when it fits the worst-case compression of the payload cap.
+
+It must also decompress to a payload within the cap and the bound of its type. -/
 theorem decodePayload_eq_ok_iff {typeBound : UInt64} {data payload : ByteArray} :
     decodePayload typeBound data = .ok payload ↔
       data.size ≤ 32 + MAX_PAYLOAD_SIZE.toNat + MAX_PAYLOAD_SIZE.toNat / 6 ∧
@@ -173,7 +163,9 @@ theorem gossipsubParameters_isOk_iff (slotDurationMs slotsPerEpoch : UInt64) :
       simp only [UInt64.reduceToNat, he] at hlt
       simpa [pure, Except.pure] using hlt
 
-/-- When the parameters exist, a seen message ID lasts two epochs, in whole seconds. -/
+/-- When the parameters exist, a seen message ID lasts two epochs, in whole seconds.
+
+That lifetime is never a wrapped value. -/
 theorem gossipsubParameters_seen_ttl {slotDurationMs slotsPerEpoch : UInt64}
     {p : GossipsubParameters} (h : gossipsubParameters slotDurationMs slotsPerEpoch = .ok p) :
     p.seen_ttl = slotDurationMs.toNat * slotsPerEpoch.toNat * 2 / 1000 := by
@@ -199,7 +191,11 @@ theorem gossipsubParameters_mesh {slotDurationMs slotsPerEpoch : UInt64} {p : Go
   all_goals first | cases h | skip
   all_goals simp_all
 
-/-- A node tells peers only of messages that it still keeps whole. -/
+/-- The message cache windows are ordered.
+
+The gossip windows are at most the history windows.
+
+So a node tells peers only of messages that it still keeps whole. -/
 theorem gossipsubParameters_mcache {slotDurationMs slotsPerEpoch : UInt64}
     {p : GossipsubParameters} (h : gossipsubParameters slotDurationMs slotsPerEpoch = .ok p) :
     p.mcache_gossip ≤ p.mcache_len := by

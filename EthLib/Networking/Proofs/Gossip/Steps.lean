@@ -9,18 +9,6 @@ public import EthLib.Networking.Proofs.Gossip.Membership
 A run is a list of steps, each a received RPC, a join, a leave, a publish or a heartbeat.
 
 Each join, publish and heartbeat of the run uses a lawful choice.
-
-- Such a run keeps three properties of the state.
-  No mesh holds a peer twice, and no fanout holds a peer twice.
-  The topics of the peers list each peer at most once.
-- So in each state that a run reaches, the peers that announced each topic appear once each.
-- From a router with no mesh, no fanout and no topics of peers, every run keeps all three.
-- So a join with a lawful choice after such a run keeps every mesh free of a repeated peer.
-- Say no explicit peer is in a mesh at the start of a run.
-  Then the run keeps the explicit peers, and none of them is in a mesh along the run.
-- Say a run starts from a router with no mesh, no fanout and no topics of peers.
-  Then an RPC after the run forwards each message at most once to each peer.
-  That result needs a positive lifetime of the seen cache, and each explicit peer listed once.
 -/
 
 @[expose] public section
@@ -105,16 +93,13 @@ private theorem step_nodup {f : RouterState → RouterState} (hf : RouterStep f)
 
 The topics of the peers list each peer at most once.
 
-So the peers that announced each topic appear once each.
-
-Each step of the run must be a step of the router.
-
-The run needs a start where no mesh and no fanout holds a peer twice.
-
-The topics of the peers at the start must list each peer at most once. -/
+So the peers that announced each topic appear once each. -/
 theorem steps_nodup (steps : List (RouterState → RouterState))
+    -- Each step of the run must be a step of the router.
     (hsteps : ∀ f ∈ steps, RouterStep f) {s0 s : RouterState}
+    -- The run needs a start where no mesh and no fanout holds a peer twice.
     (hm : ∀ t, (peersOf s0.mesh t).Nodup) (hf : ∀ t, (peersOf s0.fanout t).Nodup)
+    -- The topics of the peers at the start must list each peer at most once.
     (hk : (s0.peerTopics.map (·.1)).Nodup) (hs : s = steps.foldl (fun r f => f r) s0) :
     (∀ t, (peersOf s.mesh t).Nodup) ∧ (∀ t, (peersOf s.fanout t).Nodup) ∧
       (s.peerTopics.map (·.1)).Nodup ∧ ∀ t, (topicPeers s t).Nodup := by

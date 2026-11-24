@@ -5,27 +5,9 @@ public import EthLib.Networking.Proofs.Gossip.Router
 /-!
 # Proofs: joining and leaving a topic, and publishing
 
-For every choice of peers, standing and message ID that a client passes:
+What a join, a leave and a publish send, and how they change the router state.
 
-- Joining a new topic sends one GRAFT per peer of its new mesh, and nothing else.
-- With a lawful choice, that mesh has at most the target number of peers, each one graftable.
-- Leaving a topic sends a PRUNE to each peer of its mesh, with the backoff of an unsubscribe.
-  The mesh is gone, and this node waits that backoff before it grafts the peer again.
-- If no mesh holds a peer twice before a leave, none does after it, and a publish keeps every mesh.
-- The same holds for a join with a lawful choice.
-  That result also needs the fanout of the topic to list each peer once.
-  It needs the same of the peers that announced the topic.
-- If no fanout holds a peer twice before a join or a publish, none does after it.
-  The publish needs a lawful choice, and the peers that announced its topic to appear once each.
-- A join, a leave and a publish keep the topics of the peers and the explicit peers.
-  A leave also keeps the fanout.
-- If no explicit peer is in a mesh before a leave, none is after it.
-  The same holds for a join with a lawful choice.
-- A published message goes only to explicit peers and to peers not below the publish threshold.
-- With flood publishing, a new message goes to every peer of the topic not below that threshold.
-- Once this node publishes a new message, no later RPC forwards or delivers its ID.
-  This holds within the lifetime of the seen cache, whatever received RPCs come between.
-  So within that lifetime, the router does not forward its own messages, as v1.0 asks.
+Each result holds for every choice of peers, standing and message ID that a client passes.
 -/
 
 @[expose] public section
@@ -86,7 +68,9 @@ theorem join_out (h : topic ∉ s.topics) :
           (·, graftOf topic) } := by
   simp only [join, h, ↓reduceIte, Router.peersOf_setPeers]
 
-/-- The mesh of a newly joined topic has at most the target number of peers. -/
+/-- The mesh of a newly joined topic has at most the target number of peers.
+
+It needs a lawful choice. -/
 theorem join_mesh_length (hsel : sel.Lawful) (h : topic ∉ s.topics) :
     (peersOf (join p sel standing now topic s).1.mesh topic).length ≤ p.D := by
   simp only [join, h, ↓reduceIte, Router.peersOf_setPeers]
@@ -98,7 +82,9 @@ theorem join_mesh_length (hsel : sel.Lawful) (h : topic ∉ s.topics) :
   rw [List.length_append]
   omega
 
-/-- Each peer of the mesh of a newly joined topic is one that the node could GRAFT before. -/
+/-- Each peer of the mesh of a newly joined topic is one that the node could GRAFT before.
+
+It needs a lawful choice. -/
 theorem join_graftable (hsel : sel.Lawful) (h : topic ∉ s.topics) {q : PeerId}
     (hq : q ∈ peersOf (join p sel standing now topic s).1.mesh topic) :
     graftable standing now s topic q = true := by
@@ -362,18 +348,16 @@ theorem publish_flood {m : Message} (hf : c.floodPublish = true)
 
 /-- Once this node publishes a new message, no later RPC forwards or delivers a message with its ID.
 
-Any RPCs may come between, with any sender, parameters, message ID and validation.
+This holds while the last RPC comes within the lifetime of the seen cache.
 
-Say the last RPC uses the same parameters and message ID function as the publish.
-
-Then it neither forwards nor delivers that ID, if it comes within the lifetime of the seen cache.
-
-So within that lifetime, this node does not forward its own message, as gossipsub v1.0 asks.
-
-The RPCs between are received RPCs; no other step of the router comes between. -/
+So within that lifetime, this node does not forward its own message, as gossipsub v1.0 asks. -/
 theorem publish_receiveRpc {m : Message}
     (hn : s.seen.contains now (p.seen_ttl * 1000) (msgId m) = false)
+    -- Any RPCs may come between, with any sender, parameters, message ID and validation.
     (steps : List (RouterState → RouterState))
+    -- The RPCs between are received RPCs.
+    --
+    -- No other step of the router comes between.
     (hsteps : ∀ f ∈ steps, ∃ (p' : GossipsubParameters) (backoffMs' pruneBackoffMs' : Nat)
       (standing' : PeerId → Standing) (msgId' : Message → MessageId)
       (validate' : Message → ValidationResult) (now' : Nat) (src' : PeerId) (rpc' : Rpc),
@@ -381,8 +365,12 @@ theorem publish_receiveRpc {m : Message}
         rpc' r).1)
     {s' : RouterState}
     (hs' : s' = steps.foldl (fun r f => f r) (publish p c sel standing msgId now m s).1)
+    -- The last RPC may take any other arguments.
+    --
+    -- It uses the same parameters and message ID function as the publish.
     (backoffMs pruneBackoffMs : Nat) (standing' : PeerId → Standing)
     (validate : Message → ValidationResult) (now' : Nat) (src : PeerId) (rpc : Rpc)
+    -- It comes within the lifetime of the seen cache.
     (ht : now' < now + p.seen_ttl * 1000) {q : PeerId} {m' : Message} (hid : msgId m' = msgId m) :
     (q, m') ∉ (receiveRpc p backoffMs pruneBackoffMs standing' msgId validate now' src rpc
         s').2.forward ∧

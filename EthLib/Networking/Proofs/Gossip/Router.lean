@@ -5,38 +5,9 @@ public import EthLib.Networking.Gossip.Router
 /-!
 # Proofs: the gossipsub router on a received RPC
 
-For every standing, message ID and validation that a client passes:
+What one received RPC forwards, delivers and answers, and how it changes the router state.
 
-- Only a message of the RPC, on a joined topic, unseen and accepted, is forwarded or delivered.
-- A peer joins the mesh of a topic only by a GRAFT for it, and only when every rule allows it.
-  The topic is joined, the peer is not explicit, its backoff is over, and the outbound quota holds.
-- So a peer within its backoff never joins a mesh.
-- Every IWANT goes to the sender, for unseen IDs that an IHAVE on a joined topic named.
-- A peer below the gossip threshold that is not explicit gets no IWANT and no IWANT answer.
-- A GRAFT from an explicit peer, or within the backoff for a joined topic, is answered with a PRUNE.
-  This needs an RPC that the graylist does not drop.
-- An RPC keeps the explicit peers.
-  If no explicit peer is in a mesh before the RPC, none is after it.
-- Every message sent in answer to an IWANT goes to the sender of the RPC.
-  The IWANT named it, and the message cache after the RPC holds it.
-- The RPC of a graylisted peer that is not explicit changes nothing and sends nothing.
-- A GRAFT within the backoff of its sender puts the sender out of the mesh of a joined topic.
-  This needs a sender that is neither explicit nor graylisted.
-- No RPC removes an entry of the seen cache.
-- A forwarded or delivered message has its ID in the seen cache, with the time of the RPC.
-- So after an RPC forwards or delivers a message, no later RPC forwards or delivers its ID.
-  This holds within the lifetime of the seen cache, whatever RPCs come between.
-  The later RPC uses the same parameters and the same message ID function.
-- An RPC forwards each message it delivers to the mesh of its topic and to the explicit peers.
-  The mesh is the one before the RPC, and nothing else is forwarded.
-- With a positive lifetime of the seen cache, an RPC delivers at most one message of each ID.
-- If no mesh holds a peer twice before the RPC, none does after it.
-- So an RPC sends each message it forwards at most once to each peer.
-  This needs a positive lifetime of the seen cache, and no mesh holding a peer twice before the RPC.
-  It also needs each explicit peer to be listed once and to be outside every mesh.
-- An RPC keeps the fanout.
-- If the topics of the peers list each peer at most once before the RPC, they do after it.
-  When they do, the peers that announced a topic appear once each.
+Each result holds for every standing, message ID and validation that a client passes.
 -/
 
 @[expose] public section
@@ -1011,23 +982,21 @@ private theorem receiveRpc_facts (hn : ¬ ((standing src).belowGraylist = true �
       simp at h
     · exact h
 
-/-- An RPC that the graylist does not drop keeps the seen entries.
-
-It records the ID of each message it forwards or delivers, with the time of the RPC.
-
-It forwards each message it delivers, and nothing else.
-
-Each goes to the mesh of its topic before the RPC and to the explicit peers.
-
-With a positive lifetime of the seen cache, it delivers at most one message of each ID. -/
+/-- What an RPC that the graylist does not drop does to the seen cache and to what it sends. -/
 private theorem receiveRpc_seen_facts
     (hn : ¬ ((standing src).belowGraylist = true ∧ src ∉ s.explicit)) (r : RouterState × Out)
     (hr : receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s = r) :
+    -- It keeps the seen entries.
     (∀ e ∈ s.seen.entries, e ∈ r.1.seen.entries) ∧
+    -- It records the ID of each message it forwards or delivers, with the time of the RPC.
     (∀ x ∈ r.2.forward, (msgId x.2, now) ∈ r.1.seen.entries) ∧
     (∀ y ∈ r.2.delivered, (msgId y, now) ∈ r.1.seen.entries) ∧
+    -- It forwards each message it delivers, and nothing else.
+    --
+    -- Each goes to the mesh of its topic before the RPC and to the explicit peers.
     r.2.forward =
       List.flatMap (fun m => (peersOf s.mesh m.topic ++ s.explicit).map (·, m)) r.2.delivered ∧
+    -- With a positive lifetime of the seen cache, it delivers at most one message of each ID.
     (0 < p.seen_ttl → (r.2.delivered.map msgId).Nodup) := by
   obtain ⟨pt, s1, a1, a2, s3, -, hs1, ha1, ha2, hs3, hr1, hr2⟩ :=
     receiveRpc_eq p backoffMs pruneBackoffMs standing msgId validate now src rpc s hn
@@ -1290,18 +1259,13 @@ theorem receiveRpc_seen_skip {id : MessageId} {t₀ : Nat} (he : (id, t₀) ∈ 
 
 /-- After an RPC forwards or delivers a message, no later RPC forwards or delivers its ID.
 
-Any RPCs may come between, with any sender, parameters, message ID and validation.
-
-Say the last RPC uses the same parameters and the same message ID function as the first.
-
-Then it neither forwards nor delivers a message with that ID.
-
 This holds while the last RPC comes less than the lifetime of the seen cache after the first. -/
 theorem receiveRpc_forward_once {q : PeerId} {m : Message}
     (h : (q, m) ∈
         (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).2.forward ∨
       m ∈
         (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).2.delivered)
+    -- Any RPCs may come between, with any sender, parameters, message ID and validation.
     (steps : List (RouterState → RouterState))
     (hsteps : ∀ f ∈ steps, ∃ (p' : GossipsubParameters) (backoffMs' pruneBackoffMs' : Nat)
       (standing' : PeerId → Standing) (msgId' : Message → MessageId)
@@ -1310,8 +1274,12 @@ theorem receiveRpc_forward_once {q : PeerId} {m : Message}
         rpc' r).1)
     {s' : RouterState} (hs' : s' = steps.foldl (fun r f => f r)
       (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).1)
+    -- The last RPC may take any other arguments.
+    --
+    -- It uses the same parameters and message ID function as the first.
     (backoffMs' pruneBackoffMs' : Nat) (standing' : PeerId → Standing)
     (validate' : Message → ValidationResult) (now' : Nat) (src' : PeerId) (rpc' : Rpc)
+    -- It comes less than the lifetime of the seen cache after the first.
     (ht : now' < now + p.seen_ttl * 1000) {q' : PeerId} {m' : Message}
     (hid : msgId m' = msgId m) :
     (q', m') ∉
