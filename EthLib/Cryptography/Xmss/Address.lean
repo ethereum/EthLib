@@ -44,9 +44,8 @@ inductive Address where
 
   - `layer`: the layer `l`, bottom or top.
   - `e`: the one-time key's index on its layer.
-  - `mu`: the position the step starts from, from 0 to 2.
-
-  The chain index is not in the address: it follows the value in the hash input. -/
+  - `mu`: the position the step starts from, from 0 to 2. -/
+  -- The chain index is not in the address: it follows the value in the hash input.
   | chain (layer : Layer) (e : UInt32) (mu : Fin (CHAIN_LENGTH - 1))
   /-- `A_leaf(l, e)`: the Merkle leaf of key `e`, from its 58 chain ends.
 
@@ -113,23 +112,7 @@ inductive Address where
 
 /-- `enc(tau, mu, hi, lo)`: the encoding of an address, the 16 bytes its hash reads, as two lanes.
 
-The bytes are `lo` (4), `hi` (3), `tau + 32 mu` (1), then 8 zero bytes.
-
-- `tau < 32` is the type of the call.
-- `mu < 8` is a chain position, zero outside chain steps.
-- `hi < 2^24` and `lo < 2^32` locate the call inside its type.
-- Every field is little-endian.
-
-The first lane holds bytes 0 to 7, least significant first, and the second lane is zero.
-
-So `lo` is bits 0 to 31 of the first lane, `hi` bits 32 to 55, and the type byte bits 56 to 63.
-
-Each hash call of a key gets its own address, so that the hash inputs of the key stay distinct:
-
-- Over its `2^32` leaf indices, a key makes `2^32 * 58 * 3`, about `2^40`, chain steps alone.
-- One address shared by every call would expose all of them as targets at once.
-- Finding one preimage among `M` targets costs `2^128 / M`.
-- Distinct addresses, with the chain index in the payload, remove that discount.
+Each hash call of a key gets its own address, so that the hash inputs of the key stay distinct.
 
 The address plays the part of the tweak of [ePrint 2025/055][hbms], §7.1, with its own layout.
 
@@ -138,9 +121,33 @@ The address plays the part of the tweak of [ePrint 2025/055][hbms], §7.1, with 
 @[inline] def Address.encode (address : Address) : Lanes2 :=
   -- `enc(tau, mu, hi, lo) = LE_32(lo) | LE_24(hi) | LE_8(tau + 32 mu) | 0^64`.
   --
-  -- Type and position share one byte: `tau` in bits 0 to 4, `mu` in bits 5 to 7.
+  -- The bytes are `lo` (4), `hi` (3), `tau + 32 mu` (1), then 8 zero bytes.
+  --
+  -- Every field is little-endian.
+  --
+  -- The first lane holds bytes 0 to 7, least significant first.
+  --
+  -- So `lo < 2^32` is bits 0 to 31 of the first lane, and `hi < 2^24` bits 32 to 55.
+  --
+  -- Together, `hi` and `lo` locate the call inside its type.
+  --
+  -- Over its `2^32` leaf indices, a key makes `2^32 * 58 * 3`, about `2^40`, chain steps alone.
+  --
+  -- One address shared by every call would expose all of them as targets at once.
+  --
+  -- Finding one preimage among `M` targets costs `2^128 / M`.
+  --
+  -- Distinct addresses, with the chain index in the payload, remove that discount.
   ⟨address.lo.toUInt64 ||| (UInt64.ofNat address.hi.val <<< 32)
+      -- The type byte is bits 56 to 63 of the first lane.
+      --
+      -- Type and position share it: `tau` in bits 0 to 4, `mu` in bits 5 to 7.
+      --
+      -- `tau < 32` is the type of the call.
+      --
+      -- `mu < 8` is a chain position, zero outside chain steps.
       ||| (UInt64.ofNat (address.tau.val + 32 * address.mu.val) <<< 56),
+    -- The second lane is zero.
     0⟩
 
 end EthLib.Cryptography.Xmss
