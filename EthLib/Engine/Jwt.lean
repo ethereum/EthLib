@@ -11,26 +11,17 @@ The Engine profile uses a 32-byte secret, HS256 and an `iat` within 60 seconds o
 
 The secret and tag comparison make no constant-time claim (SOUNDNESS.md A3).
 
-A step comment names its source and section, as in RFC 7515 §5.2, step 8.
+Source: [Engine authentication][engine], at commit `3284ee8` of execution-apis.
 
-The sources:
+A step comment names its section of RFC [7515][jws], [7518][hs256] or [7519][jwt].
 
-- [Engine authentication][engine], at commit `3284ee8` of execution-apis
-- the compact form and critical headers, [RFC 7515 §§3.1 and 4.1.11][jws]
-- making and validating a JWS, [RFC 7515 §5.1][jws-make] and [§5.2][jws-check]
-- the MAC, [RFC 7518 §3.2][hs256]
-- NumericDate and the issued-at claim, [RFC 7519 §§2 and 4.1.6][jwt]
-- making and validating a JWT, [RFC 7519 §7.1][jwt-make] and [§7.2][jwt-check]
-- [erratum 8225][eid8225] of RFC 7519, on step 9 of §7.2
+RFC 7519 is read with its verified erratum [8060][eid8060] and its reported erratum [8225][eid8225].
 
 [engine]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/authentication.md
-[jws]: https://www.rfc-editor.org/rfc/rfc7515#section-3.1
-[jws-make]: https://www.rfc-editor.org/rfc/rfc7515#section-5.1
-[jws-check]: https://www.rfc-editor.org/rfc/rfc7515#section-5.2
-[hs256]: https://www.rfc-editor.org/rfc/rfc7518#section-3.2
-[jwt]: https://www.rfc-editor.org/rfc/rfc7519#section-4.1.6
-[jwt-make]: https://www.rfc-editor.org/rfc/rfc7519#section-7.1
-[jwt-check]: https://www.rfc-editor.org/rfc/rfc7519#section-7.2
+[jws]: https://www.rfc-editor.org/rfc/rfc7515
+[hs256]: https://www.rfc-editor.org/rfc/rfc7518
+[jwt]: https://www.rfc-editor.org/rfc/rfc7519
+[eid8060]: https://www.rfc-editor.org/errata/eid8060
 [eid8225]: https://www.rfc-editor.org/errata/eid8225
 -/
 
@@ -136,7 +127,7 @@ def algorithm (header : String) : Except JwtError String := do
   if (fields.lookup "crit").isSome then throw .critical else do
   -- Step 8: the `alg` parameter is present, a string that names the algorithm.
   --
-  -- RFC 7519 §7.2, step 5 asks that every header parameter be understood or ignorable.
+  -- RFC 7519 §7.2, step 5, as erratum 8060 corrects it: check the JOSE Header by RFC 7515.
   --
   -- EthLib reads only `alg` and `crit`, and ignores the others, `typ` and `cty` included.
   --
@@ -161,7 +152,7 @@ def issuedAt (header claims : String) : Except JwtError Json.Number := do
   let some fields := objectFields claims | throw .claims
   -- Engine authentication, JWT claims: the `iat` claim is required.
   --
-  -- RFC 7519 §4.1.6: its value is a number containing a NumericDate.
+  -- RFC 7519 §4.1.6: its value is a number containing a NumericDate, defined in §2.
   --
   -- Unrecognized claims must be ignored, and EthLib ignores every other claim, `id` and `clv` too.
   let some (.num time) := fields.lookup "iat" | throw .claims
