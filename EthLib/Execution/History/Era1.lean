@@ -17,17 +17,7 @@ Era1 files: the execution blocks of up to 8192 numbers in a row, before the Merg
 
 The [era1 document][era1] defines them on top of e2store records.
 
-A file is a Version record, four records per block, other records, an Accumulator and an index.
-
-The four records of a block are its header, its body, its receipts and its total difficulty.
-
-The first three are RLP, each compressed with the Snappy framing format.
-
-The accumulator is the SSZ root of the list of each block's hash and total difficulty.
-
-The block index gives the first block number and where the header of each block starts.
-
-[era1]: https://github.com/eth-clients/e2store-format-specs/blob/31cf6b577123bf1703eb3713f0b242f65fea806a/formats/era1.md
+[era1]: https://github.com/eth-clients/e2store-format-specs/blob/923b1522f8970e9ebe939057d2a573aaf71b7f22/formats/era1.md
 -/
 
 @[expose] public section
@@ -258,13 +248,7 @@ def readBlock (start i : Nat) (records : Record × Record × Record × Record) :
 
 The block before is its hash and total difficulty, or none at the first block.
 
-The era1 document asks none of the checks below, which EthLib adds so that the blocks form a chain.
-
-Each block must name the hash of the block before as its parent.
-
-Its total difficulty must be the one before plus its difficulty.
-
-A first block numbered 0 is the genesis block, whose total difficulty is its difficulty. -/
+The blocks must form a chain. -/
 def readBlocks (start : Nat) :
     Nat → Option (Hash32 × Nat) → List (Record × Record × Record × Record) →
       Except Era1Error (List Era1Block)
@@ -272,6 +256,7 @@ def readBlocks (start : Nat) :
   | i, before, records :: rest => do
     let (block, difficulty, parent) ← readBlock start i records
     let td := block.totalDifficulty.toNat
+    -- The era1 document asks none of the checks below, which EthLib adds for the chain.
     match before with
     -- EthLib's check after a block: the parent hash is the hash of the block before.
     --
@@ -280,6 +265,8 @@ def readBlocks (start : Nat) :
       unless parent = hash do throw (.parentHash i hash parent)
       unless td = tdBefore + difficulty do throw (.totalDifficulty i (tdBefore + difficulty) td)
     -- EthLib's check at the genesis block: its total difficulty is its difficulty.
+    --
+    -- A first block numbered 0 is the genesis block.
     --
     -- A first block with another number has no block before it in the file, so it is not checked.
     | none =>
@@ -304,29 +291,13 @@ def accumulatorRoot (blocks : List Era1Block) : Except Era1Error Bytes32 := do
 
 /-- The era1 file that the bytes hold, or why they hold none.
 
-The records must follow the order of the era1 document.
-
-The block index must count the blocks and point at the header of each.
-
-Each offset counts from the start of the BlockIndex record.
-
-The era1 document gives the order of its fields, but not their width or sign.
-
-It gives where the offsets count from only loosely.
-
-EthLib takes the layout of a SlotIndex record: 8 bytes each, little-endian, offsets signed.
-
-The blocks must form a chain from the first number of the index, with their total difficulties.
-
-The era1 document gives no byte order for the TotalDifficulty record.
-
-EthLib takes that of SSZ, little-endian, which the accumulator also uses.
-
-The accumulator must be the root of the hashes and total difficulties of the blocks. -/
+The records must follow the order of the era1 document, and the blocks must form a chain. -/
 def decodeEra1 (bytes : ByteArray) : Except Era1Error Era1 := do
   let records ← (E2store.decodeFile bytes).mapError .e2store
   let starts := (E2store.recordStarts 0 records).toArray
   -- `era1 := Version | block-tuple* | other-entries* | Accumulator | BlockIndex`.
+  --
+  -- A file is a Version record, four records per block, other records, the Accumulator, the index.
   --
   -- The Version record comes first, as decoding the file checks.
   let (tuples, after) := takeBlocks (records.drop 1)
@@ -340,11 +311,17 @@ def decodeEra1 (bytes : ByteArray) : Except Era1Error Era1 := do
   unless tuples.length ≤ MAX_ERA1_BLOCKS do throw (.tooManyBlocks tuples.length)
   -- `block-index := starting-number | index | index | index ... | count`.
   --
-  -- EthLib's choice, as the document gives no width or sign: the layout of a SlotIndex record.
+  -- The block index gives the first block number and where the header of each block starts.
+  --
+  -- The era1 document gives the order of its fields, but not their width or sign.
+  --
+  -- EthLib takes the layout of a SlotIndex record: 8 bytes each, little-endian, offsets signed.
   let index ← (E2store.readIndex idx.data).mapError .e2store
   -- The count is the number of blocks.
   unless index.offsets.length = tuples.length do
     throw (.blockCount index.offsets.length tuples.length)
+  -- The era1 document gives where the offsets count from only loosely.
+  --
   -- EthLib's reading: each index counts from the start of the BlockIndex record, the last record.
   --
   -- Index `i` must point at the CompressedHeader record of block `i`, the record `1 + 4 i`.
@@ -354,8 +331,12 @@ def decodeEra1 (bytes : ByteArray) : Except Era1Error Era1 := do
     (indexStart : Int) + offsets.getD i 0 ≠ starts.getD (1 + 4 * i) 0
   if let some i := misplaced then throw (.blockOffset i)
   -- The blocks, numbered from `starting-number`, each checked against the one before by EthLib.
+  --
+  -- They must form a chain from the first number of the index, with their total difficulties.
   let blocks ← readBlocks index.start 0 none tuples
   -- The Accumulator record is the root of the header records of the blocks.
+  --
+  -- That is the SSZ root of the list of each block's hash and total difficulty.
   let accumulator ← bytes32Of acc
   let root ← accumulatorRoot blocks
   unless root = accumulator do throw (.accumulator root accumulator)

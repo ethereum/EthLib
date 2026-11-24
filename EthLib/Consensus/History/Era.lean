@@ -13,33 +13,11 @@ Era files: the beacon blocks and states of the chain, one group of records per e
 
 The [era document][era] defines them on top of e2store records.
 
-An era spans as many slots as a state holds block roots for, and is numbered by when it ends.
+The documents of the [block][block] and [state][state] types give the format of their records.
 
-Era 0 ends at genesis.
-
-The era `e` ends at the slot `e` times that span, and holds the blocks of the span before it.
-
-The section Structure of the era document gives the grammar of a file, with one group per era.
-
-In it, `|` separates records that follow one another, not alternatives.
-
-`era := group+`
-
-`group := Version | block* | era-state | other-entries* | slot-index(block)? | slot-index(state)`
-
-`block := CompressedSignedBeaconBlock`
-
-`era-state := CompressedBeaconState`
-
-Each block and the state are SSZ, compressed with the Snappy framing format.
-
-Their fork is the fork of their slot.
-
-The documents of the [block][block] and [state][state] types say so.
-
-[era]: https://github.com/eth-clients/e2store-format-specs/blob/31cf6b577123bf1703eb3713f0b242f65fea806a/formats/era.md
-[block]: https://github.com/eth-clients/e2store-format-specs/blob/31cf6b577123bf1703eb3713f0b242f65fea806a/types/0x0100.md
-[state]: https://github.com/eth-clients/e2store-format-specs/blob/31cf6b577123bf1703eb3713f0b242f65fea806a/types/0x0200.md
+[era]: https://github.com/eth-clients/e2store-format-specs/blob/923b1522f8970e9ebe939057d2a573aaf71b7f22/formats/era.md
+[block]: https://github.com/eth-clients/e2store-format-specs/blob/923b1522f8970e9ebe939057d2a573aaf71b7f22/types/0x0100.md
+[state]: https://github.com/eth-clients/e2store-format-specs/blob/923b1522f8970e9ebe939057d2a573aaf71b7f22/types/0x0200.md
 -/
 
 @[expose] public section
@@ -184,6 +162,10 @@ A group starts at a Version record, and runs until the next one. -/
 def groupsOf : List Located → List (List Located)
   | [] => []
   -- `era := group+`, and `group := Version | ...`: each Version record starts a group.
+  --
+  -- The section Structure of the era document gives this grammar, with one group per era.
+  --
+  -- In it, `|` separates records that follow one another, not alternatives.
   | _ :: rest =>
     rest.takeWhile (·.2.type != E2store.VERSION) ::
       groupsOf (rest.dropWhile (·.2.type != E2store.VERSION))
@@ -241,6 +223,8 @@ def forkAtSlot (preset : Preset) (config : Config) (slot : Nat) : Fork :=
 /-- The block of a record that the index gives the slot, checked against the state. -/
 def readBlock {fork : Fork} (preset : Preset) (config : Config) (state : BeaconState preset fork)
     (slot : Nat) (record : Record) : Except EraError (EraBlock preset) := do
+  -- `block := CompressedSignedBeaconBlock`, SSZ compressed with the Snappy framing format.
+  --
   -- CompressedSignedBeaconBlock: the fork, and so the format of the block, is that of its slot.
   let blockFork := forkAtSlot preset config slot
   -- CompressedSignedBeaconBlock: `data: snappyFramed(ssz(SignedBeaconBlock))`.
@@ -276,10 +260,14 @@ def checkEmptySlots {fork : Fork} {preset : Preset} (state : BeaconState preset 
 The signatures of the blocks are not checked, since they need the keys of the validators. -/
 def readGroup (preset : Preset) (config : Config) (group : List Located) :
     Except EraError (EraGroup preset) := do
-  -- The grammar of a group, in order: after the Version record, `block*`.
+  -- The grammar of a group, in order, starts with `group := Version | block* | era-state`.
+  --
+  -- It goes on with `other-entries* | slot-index(block)? | slot-index(state)`.
+  --
+  -- After the Version record, `block*`.
   let isBlock (record : Located) := record.2.type == COMPRESSED_SIGNED_BEACON_BLOCK
   let blockRecords := group.takeWhile isBlock
-  -- Then `era-state`.
+  -- Then `era-state := CompressedBeaconState`, SSZ compressed with the Snappy framing format.
   let stateAt :: tail := group.dropWhile isBlock | throw (.noState none)
   unless stateAt.2.type = COMPRESSED_BEACON_STATE do throw (.noState (some stateAt.2.type))
   -- Then `other-entries* | slot-index(block)? | slot-index(state)`, which ends the group.
@@ -312,9 +300,15 @@ def readGroup (preset : Preset) (config : Config) (group : List Located) :
   -- EthLib's reading: its current version is that of its fork, and no other field is checked.
   unless state.forkVersions.currentVersion = config.forkVersion fork do throw (.forkVersion slot)
   -- The era is identified by when it ends.
+  --
+  -- An era spans as many slots as a state holds block roots for.
+  --
+  -- The era `e` ends at the slot `e` times that span, and holds the blocks of the span before it.
   let era := slot / slotsPerEra
   let others := others.map (·.2)
   let stateIndex := (stateIndexAt.1, stateIndex)
+  -- Era 0 ends at genesis.
+  --
   -- The genesis group contains only the genesis state, and `slot-index(block)` is omitted.
   if era = 0 then
     unless blockRecords.isEmpty ∧ blockIndexAt.isNone do
@@ -366,9 +360,13 @@ def eraRoot {preset : Preset} {fork : Fork} (state : BeaconState preset fork) (e
   -- So a state of Capella whose historical roots run up to the era is named by the last of them.
   let roots := state.historicalRoots.data
   if h : era - 1 < roots.size then return roots[era - 1]
-  -- The document, from Capella: the last historical summary, at `era - 1` minus the root count.
+  -- The document, from Capella: the hash tree root of the last historical summary.
   --
-  -- EthLib takes its hash tree root, which is the root of the historical batch of the era.
+  -- That summary is at `era - 1` minus the root count.
+  --
+  -- Its root is the value that the historical roots would have held for the era.
+  --
+  -- It is also the root of the historical batch of the era.
   if capella : .shapella ≤ fork then
     let summaries := (state.historicalSummaries capella).data
     if h : era - 1 - roots.size < summaries.size then
