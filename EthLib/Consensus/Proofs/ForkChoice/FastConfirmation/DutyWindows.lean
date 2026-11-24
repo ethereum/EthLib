@@ -108,16 +108,6 @@ public theorem signerHead_of_duty {anchor : Store preset fork}
 
 /-- A store's justified checkpoint descends from a root, given an honest duty vote for it.
 
-The duty falls between the call and the store's time.
-
-The root's block is at or before the first slot of the checkpoint's epoch.
-
-The coverage at the duty puts the signer's head above the root.
-
-The checkpoint is that head's block at the first slot of its epoch, so it sits above the root.
-
-The store agrees with the signer on that walk, as honest stores agree on blocks.
-
 Otherwise two honest stores collide on a block. -/
 public theorem justified_descends_of_duty {anchor : Store preset fork} {time T : ℕ}
     {root : Root} {u : ValidatorIndex} {n : ℕ} {block : BeaconBlock preset fork}
@@ -131,12 +121,14 @@ public theorem justified_descends_of_duty {anchor : Store preset fork} {time T :
     {w : ValidatorIndex} (receiver : w ∈ J) {k : ℕ} (atTime : (e.world k).time = T)
     (justifiedKnown : ∃ b, ((e.world k).state w).blocks[
       ((e.world k).state w).justifiedCheckpoint.root]? = some b)
+    -- The root's block is at or before the first slot of the checkpoint's epoch.
     (blockLe : block.slot.toNat ≤
       ((e.world k).state w).justifiedCheckpoint.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat)
     {v : ValidatorIndex} (honest : v ∈ J) {k' : ℕ} {data : AttestationData}
     (duty : MaySign config checks sources anchorState anchorBlock assignment genesisTimeMs v
       (e.world k').time ((e.world k').view v) ((e.world k').state v) data)
     (target : data.target = ((e.world k).state w).justifiedCheckpoint)
+    -- The duty falls between the call and the store's time.
     (afterCall : (e.world n).time ≤ (e.world k').time)
     (beforeStore : (e.world k').time < (e.world k).time) :
     ((e.world k).state w).isAncestor
@@ -154,6 +146,11 @@ public theorem justified_descends_of_duty {anchor : Store preset fork} {time T :
   -- The store holds its justified block, which is the signer's target.
   obtain ⟨justifiedBlock, justifiedKnown⟩ := justifiedKnown
   rw [← target] at justifiedKnown blockLe ⊢
+  -- The coverage at the duty puts the signer's head above the root.
+  --
+  -- The checkpoint is that head's block at the first slot of its epoch, so it sits above the root.
+  --
+  -- The store agrees with the signer on that walk, as honest stores agree on blocks.
   obtain ⟨head, supports, targetRead⟩ := signerHead_of_duty anchored start anchorSlot
     anchorBoundary roots covers honest receiver duty afterCall (by omega) k'Bound
     justifiedKnown

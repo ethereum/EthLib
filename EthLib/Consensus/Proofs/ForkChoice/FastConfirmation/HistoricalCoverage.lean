@@ -17,19 +17,7 @@ It assumes that every honest head descends from the block at each earlier time s
 
 An induction on time removes that assumption, so the block stays on every honest head chain.
 
-Within two epochs after the parent, each step is the historical-anchor step.
-
-Later, each step is the step of an honest duty epoch.
-
-Both steps need only the finality within one store.
-
-Each step may instead name two honest stores that collide, or historical direct-safety evidence.
-
-A Byzantine bound derives the honest signer that the signed-justification form assumes.
-
-For a call of the fast confirmation rule, its checks replace the consistency and the leaf.
-
-Its confirmed root then stays viable up to the time, or accountable-safety evidence holds.
+A checked call's confirmed root stays viable up to the time, or accountable-safety evidence holds.
 -/
 
 namespace EthLib.Consensus.Models.Network
@@ -101,19 +89,12 @@ private theorem known_or_collision_of_viable {anchor : Store preset fork}
   · exact .inl held
   · exact .inr ⟨root, _, searched⟩
 
-/-- A receiver that keeps the root viable relates it to each earlier finalized checkpoint.
-
-The same-store family places each earlier finalized checkpoint below the justified block.
-
-When the root is below the justified block, the checkpoint is below the root or above it.
-
-Below the root, the root's walk reaches it; above the root, it descends from the root.
-
-When the root is in the filtered tree, the viable-leaf argument of the duty step applies. -/
+/-- A receiver that keeps the root viable relates it to each earlier finalized checkpoint. -/
 private theorem receiverFinality_of_viable {last : ℕ} {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (absent : AnchorParentAbsent (e := e) last)
+    -- This same-store family places each earlier finalized checkpoint below the justified block.
     (family : ∀ w ∈ J, ∀ i k, i ≤ k → (e.world k).time ≤ last →
       ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
         ((e.world i).state w).finalizedCheckpoint.epoch =
@@ -130,6 +111,9 @@ private theorem receiverFinality_of_viable {last : ℕ} {anchor : Store preset f
   have reached := e.reachable (fun a ha => (start a ha) ▸ Store.Reachable.anchor anchored) k w
     receiver
   have lower := reached.parentsBelow (UInt64.le_of_eq anchorSlot) (absent w receiver k bounded)
+  -- The root is below the justified block, or in the filtered tree.
+  --
+  -- When the root is in the filtered tree, the viable-leaf argument of the duty step applies.
   rcases rootFinal_or_justified_covers anchored start anchorSlot family receiver bounded
       lower known tree route with below | final
   swap
@@ -142,6 +126,11 @@ private theorem receiverFinality_of_viable {last : ℕ} {anchor : Store preset f
   have read := family w receiver k' k earlier bounded
   obtain ⟨boundary, reachedNode, boundaryOk, boundaryWalk, reachedRoot⟩ :=
     Store.getCheckpointBlock_walk_root read
+  -- When the root is below the justified block, the checkpoint is below the root or above it.
+  --
+  -- Below the root, the root's walk reaches it.
+  --
+  -- Above the root, it descends from the root.
   by_cases early : boundary ≤ block.slot
   · -- The boundary is at or below the root: the root reads the justified block's checkpoint.
     exact .inl ⟨boundary, boundaryOk, early,
@@ -220,14 +209,6 @@ private theorem signer_duty_window {anchor : Store preset fork} {Δ : ℕ}
 
 /-- A justified checkpoint after the call's epoch descends from the root, given an honest signer.
 
-The signer voted for the checkpoint at its duty, after the call and before the store's time.
-
-The coverage at that time puts the signer's head above the root.
-
-The checkpoint is that head's block at the start of a later epoch, so it sits above the root.
-
-The store agrees with the signer on that walk, as honest stores agree on blocks.
-
 Otherwise two honest stores collide on a block. -/
 private theorem justified_descends_of_signer {anchor : Store preset fork} {Δ time T : ℕ}
     {root : Root} {callEpoch : Epoch} {callSlot : Slot} {callStart : UInt64}
@@ -259,6 +240,7 @@ private theorem justified_descends_of_signer {anchor : Store preset fork} {Δ ti
       HonestCollision (e := e) time := by
   obtain ⟨v, honest, i, -, m, sent, data, member, target, before⟩ := signer
   have laterData : callEpoch < data.target.epoch := target ▸ later
+  -- The signer voted for the checkpoint at its duty, after the call and before the store's time.
   obtain ⟨k', low', high', duty⟩ := signer_duty_window start fits callStartOk callEpochEq
     receiver upToDate currentOk honest sent member laterData before
   -- The store holds its justified block, at the end of its head's walk.
@@ -278,6 +260,11 @@ private theorem justified_descends_of_signer {anchor : Store preset fork} {Δ ti
     have above := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat (Nat.succ_le_of_lt epochLt)
     rw [Nat.succ_mul] at above
     omega
+  -- The coverage at that time puts the signer's head above the root.
+  --
+  -- The checkpoint is that head's block at the start of a later epoch, so it sits above the root.
+  --
+  -- The store agrees with the signer on that walk, as honest stores agree on blocks.
   exact justified_descends_of_duty anchored start anchorSlot anchorBoundary roots
     caller callerHeld callerTime covers high receiver atTime justifiedKnown boundaryLe honest duty
     target (by omega) high'
@@ -420,13 +407,7 @@ public theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
 
 /-- The root is on every up-to-date honest head chain from the call up to the time.
 
-The viability of the root at a time may read its coverage at every earlier time.
-
-The window reserve and the receivers' exits read one reserve value.
-
-The alternatives are a block collision of honest stores and historical direct-safety evidence.
-
-From Gloas, the anchor's registry must leave room up to the horizon. -/
+The alternatives are a block collision of honest stores and historical direct-safety evidence. -/
 public theorem Execution.honestHeadsCover_of_viableAt [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
@@ -477,6 +458,7 @@ public theorem Execution.honestHeadsCover_of_viableAt [DecidablePred (· ∈ J)]
     (callerTime : (e.world n).time ≤ time) (sourceReads : SourceWindowReads (e := e) n time source)
     (drift : WindowMarginDrift (e := e) n time source shift)
     {finish : Slot} {exitAllowance : ℕ}
+    -- The window reserve and the receivers' exits read one reserve value.
     (reserve : SourceWindowReserveWith (J := J) (config := config) ((e.world n).state u) head
       source first finish exitAllowance)
     {x : ValidatorIndex} (reference : x ∈ J) {m : ℕ} (referenceTime : time ≤ (e.world m).time)
@@ -510,12 +492,14 @@ public theorem Execution.honestHeadsCover_of_viableAt [DecidablePred (· ∈ J)]
     (absent : AnchorParentAbsent (e := e) time)
     (parentCovers : HonestHeadsCover (e := e) block.parentRoot (e.world n).time (time + 1))
     (fit : config.CommitteeWindowsFit preset)
+    -- The viability of the root at a time may read its coverage at every earlier time.
     (viableAt : ∀ T, (e.world n).time ≤ T → T ≤ time →
       HonestHeadsCover (e := e) root (e.world n).time T → RootViableAt (e := e) root T)
     (exits : ReceiverWindowExitsNearWith (e := e) (computeEpochAtSlot preset parent.slot) source
       first (e.world n).time time exitAllowance)
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time)
+    -- From Gloas, the anchor's registry must leave room up to the horizon.
     (room : .glamsterdam ≤ fork → AnchorRegistryRoom preset anchorState horizon) :
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
       HonestCollision (e := e) time ∨
@@ -739,47 +723,7 @@ Every up-to-date honest head from the call to the horizon descends from the bloc
 
 Otherwise two honest stores hold different blocks at one root, or direct-safety evidence exists.
 
-That evidence is relative to the anchor, and its drift counts from the anchor.
-
-With enough churn since the anchor, it holds with no accountable key.
-
-The induction on time replaces the earlier coverage of the root that each step assumes.
-
-The parent's coverage over the same interval is still assumed.
-
-Until two epochs after the parent's epoch, each step is the historical-anchor step.
-
-After that, each step is the duty-epoch step, which needs a late duty majority at the receiver.
-
-Both steps read finality only within one store, so no finality across stores is assumed.
-
-The late duty majority is assumed.
-
-So are the exits of each receiver within two epochs of the parent.
-
-The receivers' reads are derived: the justified state from the head walk, the windows from `fit`.
-
-Mainnet and minimal satisfy `fit`.
-
-The root's viability is assumed too.
-
-It says that no honest justified checkpoint over the interval conflicts with the root.
-
-That is the checkpoint-consistency half of the safety of the confirmation, not derived here.
-
-A companion theorem derives its late half from an honest signer.
-
-The stake ceiling is `2 * 10^8` ETH, above mainnet's active stake.
-
-The proposer score at each receiver follows from the stake ceiling and `scoreFits`.
-
-The reserve is read up to `finish`, the slot before the current slot of an honest reference store.
-
-That store is at the horizon or later.
-
-A safety threshold that subtracts the exit reserve would make `reserve` and `exits` fixed bounds.
-
-A voter activated at its vote's target, two epochs after the parent, is assumed in the window. -/
+A safety threshold subtracting the exit reserve would make the reserve and exits fixed bounds. -/
 public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
@@ -790,6 +734,7 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
     (votes : ValidatedDutyVotes (e := e) time) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e time) (windows : AssignmentWindowAgreement (e := e) time)
     {n : ℕ} {block : BeaconBlock preset fork}
+    -- A voter activated at its vote's target two epochs after the parent is assumed in the window.
     (newVoters : NewlyActiveVotersInHeadWindow (e := e) block.parentRoot (e.world n).time time)
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -830,6 +775,9 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
     (callerTime : (e.world n).time ≤ time) (sourceReads : SourceWindowReads (e := e) n time source)
     (drift : WindowMarginDrift (e := e) n time source shift)
     {finish : Slot}
+    -- The reserve is read up to the slot before the current slot of an honest reference store.
+    --
+    -- That store is at the horizon or later.
     (reserve : SourceWindowReserve (J := J) (config := config) ((e.world n).state u) head source
       first finish)
     {x : ValidatorIndex} (reference : x ∈ J) {m : ℕ} (referenceTime : time ≤ (e.world m).time)
@@ -842,7 +790,9 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
     (unslashed : HonestCountedStatesUnslashed (e := e) time)
+    -- The stake ceiling is `2 * 10^8` ETH, above mainnet's active stake.
     (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) time)
+    -- Each receiver's proposer score follows from the stake ceiling and the proposer-score fit.
     (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17))
     (parameters : DirectSafety.Parameters preset) {g : ForkedBeaconState preset}
     (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
@@ -861,16 +811,41 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
     (epochStartTimeOk : computeTimeAtSlotMs config genesisTimeMs epochStart = .ok epochStartTime)
     (historyCovers : HonestHeadsCover (e := e) historical epochStartTime.toNat (e.world n).time)
     (absent : AnchorParentAbsent (e := e) time)
+    -- The parent's coverage over the same interval is still assumed.
     (parentCovers : HonestHeadsCover (e := e) block.parentRoot (e.world n).time (time + 1))
+    -- The receivers' reads are derived.
+    --
+    -- The justified state comes from the head walk, and the windows come from this fit.
+    --
+    -- Mainnet and minimal satisfy this fit.
     (fit : config.CommitteeWindowsFit preset)
+    -- The root's viability is assumed too.
+    --
+    -- It says that no honest justified checkpoint over the interval conflicts with the root.
+    --
+    -- That is the checkpoint-consistency half of the safety of the confirmation, not derived here.
+    --
+    -- A companion theorem derives its late half from an honest signer.
     (viable : RootViable (e := e) root (e.world n).time time)
+    -- The exits of each receiver within two epochs of the parent are assumed.
     (exits : ReceiverWindowExitsNear (e := e) (computeEpochAtSlot preset parent.slot) source first
       (e.world n).time time)
+    -- The late duty majority is assumed.
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time) :
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
       HonestCollision (e := e) time ∨
+      -- That evidence is relative to the anchor, and its drift counts from the anchor.
+      --
+      -- With enough churn since the anchor, it holds with no accountable key.
       HistoricalDirectSafetyEvidence (e := e) pre time :=
+  -- The induction on time replaces the earlier coverage of the root that each step assumes.
+  --
+  -- Until two epochs after the parent's epoch, each step is the historical-anchor step.
+  --
+  -- After that, each step is the duty-epoch step, which needs a late duty majority at the receiver.
+  --
+  -- Both steps read finality only within one store, so no finality across stores is assumed.
   Execution.honestHeadsCover_of_viableAt
     (room := fun gloas => absurd gloas (Nat.not_le_of_lt preGloas)) sync slots minLookahead
     maxLookahead ring
@@ -890,25 +865,9 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
 
 /-- A guarded historical margin keeps the block on every honest head chain until the horizon.
 
-It is the historical-anchor headline with the root's viability replaced by narrower premises.
+It is the historical-anchor headline with the root's viability replaced by three narrower premises.
 
-A justified checkpoint after the call's epoch is derived to descend from the root.
-
-An honest validator signed a vote for it, after the call, from a head that the induction covers.
-
-So three premises replace the root's viability:
-
-- `consistent`: justified checkpoints of the call's epoch or before are comparable with the root;
-- `leaf`: the root keeps a viable leaf when it strictly descends from the justified block;
-- `signed`: each later justified checkpoint has an honest signer.
-
-The other premises and the conclusion are those of the historical-anchor headline.
-
-That evidence is relative to the anchor, and its drift counts from the anchor.
-
-With enough churn since the anchor, it holds with no accountable key.
-
-A voter activated at its vote's target, two epochs after the parent, is assumed in the window. -/
+The other premises and the conclusion are those of the historical-anchor headline. -/
 public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
@@ -919,6 +878,7 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
     (votes : ValidatedDutyVotes (e := e) time) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e time) (windows : AssignmentWindowAgreement (e := e) time)
     {n : ℕ} {block : BeaconBlock preset fork}
+    -- A voter activated at its vote's target two epochs after the parent is assumed in the window.
     (newVoters : NewlyActiveVotersInHeadWindow (e := e) block.parentRoot (e.world n).time time)
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -992,8 +952,11 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
     (absent : AnchorParentAbsent (e := e) time)
     (parentCovers : HonestHeadsCover (e := e) block.parentRoot (e.world n).time (time + 1))
     (fit : config.CommitteeWindowsFit preset)
+    -- Justified checkpoints of the call's epoch or before are comparable with the root.
     (consistent : EarlyJustifiedConsistent (e := e) root callerEpoch (e.world n).time time)
+    -- The root keeps a viable leaf when it strictly descends from the justified block.
     (leaf : RootKeepsViableLeaf (e := e) root (e.world n).time time)
+    -- Each later justified checkpoint has an honest signer.
     (signed : JustifiedHonestlySigned (e := e) callerEpoch (e.world n).time time)
     (exits : ReceiverWindowExitsNear (e := e) (computeEpochAtSlot preset parent.slot) source first
       (e.world n).time time)
@@ -1001,6 +964,9 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
       (e.world n).time time) :
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
       HonestCollision (e := e) time ∨
+      -- That evidence is relative to the anchor, and its drift counts from the anchor.
+      --
+      -- With enough churn since the anchor, it holds with no accountable key.
       HistoricalDirectSafetyEvidence (e := e) pre time := by
   have positive := fit.positive
   classical
@@ -1041,6 +1007,8 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
       have highK : (e.world k).time ≤ time := atTime ▸ high
       by_cases later : callerEpoch < ((e.world k).state w).justifiedCheckpoint.epoch
       · -- A later justified checkpoint descends from the root, through its honest signer.
+        --
+        -- That validator signed its vote after the call, from a head that the induction covers.
         obtain ⟨current, currentOk, _, _⟩ :=
           (forward k w receiver).slots_le_current slots (UInt64.le_of_eq anchorSlot)
         exact .inl ((justified_descends_of_signer anchored start anchorSlot anchorBoundary
@@ -1058,13 +1026,9 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
 
 It is the signed-justification headline with its honest signer derived.
 
-The signer follows from Byzantine stake below two thirds in each state that counts later votes.
-
 So the late half of the root's viability needs no honest signer as a premise.
 
-It rests on that bound, the stake floors, the inclusion delay and conditions on the anchor.
-
-The anchor's latest header must be the anchor block's, with a zero state root. -/
+It rests on the Byzantine bound, the stake floors, the inclusion delay and anchor conditions. -/
 public theorem Execution.honestHeadsCover_of_byzantine_bound [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
@@ -1150,12 +1114,14 @@ public theorem Execution.honestHeadsCover_of_byzantine_bound [DecidablePred (· 
     (fit : config.CommitteeWindowsFit preset)
     (consistent : EarlyJustifiedConsistent (e := e) root callerEpoch (e.world n).time time)
     (leaf : RootKeepsViableLeaf (e := e) root (e.world n).time time)
+    -- The anchor's latest header must be the anchor block's, with a zero state root.
     (anchorHeader : anchorState.latestBlockHeader.slot = anchorBlock.slot ∧
       anchorState.latestBlockHeader.proposerIndex = anchorBlock.proposerIndex ∧
       anchorState.latestBlockHeader.parentRoot = anchorBlock.parentRoot ∧
       SszType.hashTreeRoot anchorBlock.body = .ok anchorState.latestBlockHeader.bodyRoot)
     (anchorZero : anchorState.latestBlockHeader.stateRoot = Vector.replicate 32 0)
     (delay : preset.InclusionDelayPositive)
+    -- The signer follows from Byzantine stake below two thirds in each state counting later votes.
     (byzantine : ByzantineCountedStake (e := e) callerEpoch (e.world n).time time)
     (exits : ReceiverWindowExitsNear (e := e) (computeEpochAtSlot preset parent.slot) source first
       (e.world n).time time)
@@ -1376,11 +1342,7 @@ private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J
 
 Otherwise two honest stores collide, or historical, cross-store or held-state evidence holds.
 
-From Gloas, the anchor's registry must leave room up to the horizon.
-
-From Gloas, the head-weight bundle must fit.
-
-From Gloas, each honest justified state must bound each weak-head weight by `2 * 10^17` Gwei. -/
+The checks of the call replace the consistency and the leaf premises. -/
 public theorem Execution.honestHeadsCover_of_checked_call [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
@@ -1491,8 +1453,11 @@ public theorem Execution.honestHeadsCover_of_checked_call [DecidablePred (· ∈
       (e.world n).time time)
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time)
+    -- From Gloas, the anchor's registry must leave room up to the horizon.
     (room : .glamsterdam ≤ fork → AnchorRegistryRoom preset anchorState horizon)
+    -- From Gloas, the head-weight bundle must fit.
     (weights : .glamsterdam ≤ fork → config.HeadWeightsFit preset (2 * 10 ^ 17))
+    -- From Gloas, each honest justified state must bound weak-head weights by `2 * 10^17` Gwei.
     (supply : .glamsterdam ≤ fork → CheckpointHeadWeightCeiling (e := e) (2 * 10 ^ 17) time) :
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
       HonestCollision (e := e) time ∨
@@ -1535,11 +1500,7 @@ public theorem Execution.honestHeadsCover_of_checked_call [DecidablePred (· ∈
 
 Otherwise two honest stores collide, or historical, cross-store or held-state evidence holds.
 
-From Gloas, the anchor's registry must leave room up to the horizon.
-
-From Gloas, the head-weight bundle must fit.
-
-From Gloas, each honest justified state must bound each weak-head weight by `2 * 10^17` Gwei. -/
+The checks of the call replace the consistency and the leaf premises. -/
 public theorem Execution.rootViable_of_checked_call [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
@@ -1650,8 +1611,11 @@ public theorem Execution.rootViable_of_checked_call [DecidablePred (· ∈ J)] {
       (e.world n).time time)
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time)
+    -- From Gloas, the anchor's registry must leave room up to the horizon.
     (room : .glamsterdam ≤ fork → AnchorRegistryRoom preset anchorState horizon)
+    -- From Gloas, the head-weight bundle must fit.
     (weights : .glamsterdam ≤ fork → config.HeadWeightsFit preset (2 * 10 ^ 17))
+    -- From Gloas, each honest justified state must bound weak-head weights by `2 * 10^17` Gwei.
     (supply : .glamsterdam ≤ fork → CheckpointHeadWeightCeiling (e := e) (2 * 10 ^ 17) time) :
     RootViable (e := e) root (e.world n).time time ∨
       HonestCollision (e := e) time ∨

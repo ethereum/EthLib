@@ -18,18 +18,6 @@ That is the first step towards placing each supporter in those committees.
 
 Another file shows that the state of the target and the state of the head agree on them.
 
-A supporter of a block votes for a node that descends from it.
-
-That node is a known block, from the slot of the block or later.
-
-In a store where each latest vote has its origin, that vote comes from an attestation.
-
-Its slot is at or after the slot of the voted block, and before the current slot.
-
-So the slot of the vote lies in the range of the adversary of the block.
-
-In particular, no vote counts for a block at the current slot, which is never one-confirmed.
-
 [fcr]: https://arxiv.org/abs/2405.00549v4
 -/
 
@@ -55,21 +43,24 @@ theorem VotesHaveOrigins.exists_attestation_of_mem_supportersOf
     (supporter : v ∈ store.supportersOf state node) :
     ∃ attestation, store.latestMessages[v]? = some (LatestMessage.ofAttestation attestation) ∧
       store.VoteOrigin config v attestation ∧ block.slot ≤ attestation.data.slot :=
+  -- A supporter of a block votes for a node that descends from it.
+  --
+  -- That node is a known block, from the slot of the block or later.
+  --
+  -- In a store where each latest vote has its origin, that vote comes from an attestation.
   holds.exists_attestation_of_voteCountsFor found
     (store.voteCountsFor_of_mem_supportersOf supporter)
 
 /-- The vote of each supporter of a known block is from a slot of a range of slots.
 
-The range starts at or before the slot of the block.
-
-It ends at the last slot before the current one.
-
 Each latest vote of the store must come from an attestation, with the facts behind it. -/
 theorem VotesHaveOrigins.slot_mem_range_of_mem_supportersOf (holds : store.VotesHaveOrigins config)
     {state : BeaconState preset fork} {root : Root} {block : BeaconBlock preset fork}
     {currentSlot startSlot lastSlot : Slot} {v : ValidatorIndex}
+    -- The range starts at or before the slot of the block.
     (blockOk : store.block root = .ok block) (startLe : startSlot ≤ block.slot)
     (slotOk : store.getCurrentSlot config = .ok currentSlot)
+    -- It ends at the last slot before the current one.
     (lastOk : subChecked currentSlot 1 = .ok lastSlot)
     (supporter : v ∈ store.supportersOf state ⟨root, .pending⟩) :
     ∃ attestation, store.latestMessages[v]? = some (LatestMessage.ofAttestation attestation) ∧
@@ -78,6 +69,9 @@ theorem VotesHaveOrigins.slot_mem_range_of_mem_supportersOf (holds : store.Votes
   have found : store.blocks[root]? = some block := block_ok_iff.mp blockOk
   obtain ⟨attestation, latest, origin, slotLe⟩ :=
     holds.exists_attestation_of_mem_supportersOf (node := ⟨root, .pending⟩) found supporter
+  -- Its slot is at or after the slot of the voted block, and before the current slot.
+  --
+  -- So the slot of the vote lies in the range of the adversary of the block.
   refine ⟨attestation, latest, origin, UInt64.le_trans startLe slotLe, ?_⟩
   obtain ⟨current, currentOk, past⟩ := origin.past
   rw [slotOk] at currentOk
@@ -325,6 +319,8 @@ theorem not_isOneConfirmed_of_slot_eq_current
   obtain ⟨support, threshold, supportOk, thresholdOk, -⟩ :=
     isOneConfirmed_eq_ok_true_iff.mp confirmed
   have above := threshold_lt_of_isOneConfirmed supportOk thresholdOk confirmed
+  -- No vote counts for a block at the current slot, as each vote is from an earlier slot.
+  --
   -- The support is the sum of the balances whose vote counts, and none counts.
   have zero : support.toNat = 0 := by
     rw [store.getAttestationScore_toNat_eq_sum supportOk]

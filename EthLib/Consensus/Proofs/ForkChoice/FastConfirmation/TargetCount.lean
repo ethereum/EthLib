@@ -16,23 +16,7 @@ It takes the votes so far for the target, less the adversary.
 
 It adds the honest share of the slots still to come.
 
-The first lemma reads the votes so far as the stake of a list of voters.
-
-The second reads the count as those votes less the adversary, plus the honest share.
-
-A signed vote shows that its voter signed the target.
-
-A voter for the target of the head is in the committees that the rule reads.
-
-This holds when the block of the target is near, or when the head is in the current epoch.
-
-The theorem derives the honest count `HonestTargetVotes` from a bound on the Byzantine stake.
-
-The bound is on the committees of the epoch so far.
-
-The honest stake of the slots still to come is bounded below.
-
-A head with an old block needs the premise `StaleHeadVotersInWindow`.
+This file derives that honest count from a bound on the Byzantine stake.
 -/
 
 @[expose] public section
@@ -176,16 +160,6 @@ variable {config : Config} {checks : SignatureChecks} {sources : BlockSources pr
 
 This is the premise for a head with an old block.
 
-The block of such a head is before the start of the current epoch.
-
-It is also at least two epochs before the current epoch.
-
-The rule reads the committees of the current epoch from the state of the head.
-
-That state has not processed the epochs in between.
-
-An assumption on the run: the committees that this state gives still hold the voter.
-
 It buys the honest target count for such a head; for any other head the fact is proved.
 
 Limitation: runs where those committees miss a voter for the head's target are not covered.
@@ -201,41 +175,32 @@ def StaleHeadVotersInWindow (last : ℕ) : Prop :=
     ((e.world k).state w).blocks[head.root]? = some headBlock →
     ((e.world k).state w).getCurrentSlot config = .ok slot →
     computeStartSlotAtEpoch preset (computeEpochAtSlot preset slot) = .ok first →
+    -- The block of such a head is before the start of the current epoch.
     headBlock.slot < first →
+    -- It is also at least two epochs before the current epoch.
     (computeEpochAtSlot preset headBlock.slot).toNat + 1 <
       (computeEpochAtSlot preset slot).toNat →
     subChecked slot 1 = .ok lastSlot →
+    -- The rule reads the committees of the current epoch from the state of the head.
+    --
+    -- That state has not processed the epochs in between.
     ((e.world k).state w).getCommitteesBetweenSlots head.root first lastSlot = .ok participants →
     ((e.world k).state w).getCurrentTarget config head.root = .ok attestation.data.target →
     ((e.world k).state w).VoteOrigin config v attestation →
+    -- An assumption on the run: the committees that this state gives still hold the voter.
     v ∈ participants
 
 /-- The Byzantine stake that the count of a call assumes, for the reads of one head at one event.
 
-The state is the pulled-up state of the head.
-
-The Byzantine validators hold at most the threshold share of the stake of the active members.
-
-Those members are in the committees of the epoch so far.
-
-This is Assumption 2 of the paper.
-
-The honest validators of the slots still to come hold what the rule counts for them.
-
-They hold a third of the margin on top of it.
-
 An assumption on the run: the rule checks neither bound.
 
 It buys the honest target count of a call.
-
-Limitation: runs whose adversary holds more than the threshold share so far are not covered.
-
-Nor are runs whose honest validators of the slots to come hold less than the rule counts.
 -/
 def TargetCountBounds [DecidablePred (· ∈ J)] (margin : ℕ) (u : ValidatorIndex) (n : ℕ)
     (head : Root) : Prop :=
   ∀ (state : BeaconState preset fork) (total soFar : Gwei) (slot epochStart lastSlot : Slot)
     (participants : Std.TreeSet ValidatorIndex),
+    -- The state is the pulled-up state of the head.
     ((e.world n).state u).getPulledUpHeadState config head = .ok state →
     getTotalActiveBalance state = .ok total →
     ((e.world n).state u).getCurrentSlot config = .ok slot →
@@ -244,9 +209,21 @@ def TargetCountBounds [DecidablePred (· ∈ J)] (margin : ℕ) (u : ValidatorIn
     ((e.world n).state u).computeCommitteeWeightBetweenSlots head state epochStart lastSlot =
       .ok soFar →
     ((e.world n).state u).getCommitteesBetweenSlots head epochStart lastSlot = .ok participants →
+    -- The Byzantine validators hold at most the threshold share of the stake of the active members.
+    --
+    -- Those members are in the committees of the epoch so far.
+    --
+    -- This is Assumption 2 of the paper.
+    --
+    -- Limitation: runs whose adversary holds more than the threshold share so far are not covered.
     ByzantineStakeAtMost (fun v => balanceAt state v.toNat)
       (Store.activeMembers state participants) J
       config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat 100 ∧
+    -- The honest validators of the slots still to come hold what the rule counts for them.
+    --
+    -- They hold a third of the margin on top of it.
+    --
+    -- Limitation: runs where they hold less than the rule counts are not covered.
     3 * ((total.toNat - soFar.toNat) / 100 *
         (100 - config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat)) + margin ≤
       3 * stake (fun v => balanceAt state v.toNat)
@@ -284,29 +261,14 @@ private theorem Execution.exists_attestation_of_latestMessages {anchor : Store p
 
 /-- A voter for the target of the head is in the committees that the rule reads.
 
-The target is the one of the current epoch, in the chain of the head.
-
-The rule reads the committees of the current epoch so far, in the state of the head.
-
-The target state and the state of the head must agree on the committees of the epoch of the vote.
-
-That holds in two cases.
-
-The block of the target is at most one epoch before the current epoch.
-
-Then the vote and the head descend from that block, so the store's committee agreement applies.
-
-Or the block of the head is in the current epoch.
-
-Then the state of the target checkpoint runs on to the state of the head.
-
-The head state must be before the mix that the seed of the epoch reads is written again.
+This holds when the block of the target is near, or when the head is in the current epoch.
 -/
 private theorem Execution.mem_window_of_target {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
+    -- The head state must be before the mix that the seed of the epoch reads is written again.
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 1 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {w : ValidatorIndex} (honest : w ∈ J) {k : ℕ} {head : ForkChoiceNode}
     {slot first lastSlot : Slot} {participants : Std.TreeSet ValidatorIndex}
@@ -314,15 +276,31 @@ private theorem Execution.mem_window_of_target {anchor : Store preset fork}
     (slotOk : ((e.world k).state w).getCurrentSlot config = .ok slot)
     (firstOk : computeStartSlotAtEpoch preset (computeEpochAtSlot preset slot) = .ok first)
     (lastOk : subChecked slot 1 = .ok lastSlot)
+    -- The rule reads the committees of the current epoch so far, in the state of the head.
     (windowOk : ((e.world k).state w).getCommitteesBetweenSlots head.root first lastSlot =
       .ok participants)
+    -- The target is the one of the current epoch, in the chain of the head.
     (targetOk : ((e.world k).state w).getCurrentTarget config head.root =
       .ok attestation.data.target)
     (origin : ((e.world k).state w).VoteOrigin config v attestation)
+    -- The target state and the state of the head must agree on the committees.
+    --
+    -- Those are the committees of the epoch of the vote.
+    --
+    -- That holds in two cases.
+    --
+    -- The block of the target is at most one epoch before the current epoch.
+    --
+    -- Then the vote and the head descend from that block.
+    --
+    -- So the store's committee agreement applies.
     (inReach : (∀ rootBlock : BeaconBlock preset fork,
       ((e.world k).state w).blocks[attestation.data.target.root]? = some rootBlock →
       (computeEpochAtSlot preset slot).toNat ≤
         (computeEpochAtSlot preset rootBlock.slot).toNat + 1) ∨
+      -- Or the block of the head is in the current epoch.
+      --
+      -- Then the state of the target checkpoint runs on to the state of the head.
       ∀ headBlock : BeaconBlock preset fork,
         ((e.world k).state w).blocks[head.root]? = some headBlock → first ≤ headBlock.slot) :
     v ∈ participants := by
@@ -468,33 +446,34 @@ private theorem Execution.mem_window_of_target_or_stale {anchor : Store preset f
 
 /-- Honest validators hold the count that the rule makes for the target, with a margin.
 
-The Byzantine validators hold at most the threshold share of the committees of the epoch so far.
-
-The honest validators of the slots still to come hold the share that the rule counts for them.
-
-They hold a third of the margin on top of it.
-
-The stake is read in the pulled-up state of the head.
-
-The anchor's invariant and the preset's aligned maximum balances give that state aligned balances.
-
-The second is a preset fact, proved for mainnet and minimal.
-
-Heads with a block at least two epochs before the current epoch have the premise on stale heads. -/
+The count follows from a bound on the Byzantine stake. -/
 theorem Execution.honestTargetVotes_of_byzantineStakeAtMost [DecidablePred (· ∈ J)]
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    -- The anchor's invariant and the preset's aligned maximum balances give aligned balances.
+    --
+    -- Those are the balances of the pulled-up state of the head.
+    --
+    -- The second is a preset fact, proved for mainnet and minimal.
     (sound : Invariant anchorState) (maxAligned : MaxEffectiveBalancesAligned preset)
     (slots : 0 < config.SLOT_DURATION_MS)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 1 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    -- Heads whose block is at least two epochs before the current epoch get this premise.
     {limit : ℕ} (stale : StaleHeadVotersInWindow (e := e) limit)
     (increment : preset.EFFECTIVE_BALANCE_INCREMENT.toNat % 100 = 0)
     {margin : ℕ} {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ} (bounded : (e.world n).time ≤ limit)
     {head : Root}
     (headOk : ∃ node, ((e.world n).state u).getHead config = .ok node ∧ node.root = head)
+    -- The Byzantine validators hold at most the threshold share of the epoch's committees so far.
+    --
+    -- The honest validators of the slots to come hold the share that the rule counts for them.
+    --
+    -- They hold a third of the margin on top of it.
+    --
+    -- The stake is read in the pulled-up state of the head.
     (bounds : TargetCountBounds (e := e) margin u n head) :
     HonestTargetVotes e margin u n head := by
   classical

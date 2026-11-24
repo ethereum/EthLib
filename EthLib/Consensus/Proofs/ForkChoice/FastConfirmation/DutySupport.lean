@@ -334,15 +334,7 @@ theorem VoteAt.signed_sent {anchor : Store preset fork}
 
 /-- An honest vote whose head supports a root is recorded by an up-to-date receiver.
 
-The receiver is observed at an endpoint at or after the boundary of the next slot.
-
-It then holds a latest vote that ranks at least as high as the vote.
-
-Otherwise its justified checkpoint descends from the root, or bounded honest stores collide.
-
-The root must fit each finalized checkpoint that the receiver holds from the deadline on.
-
-Otherwise the voter's head must fit it in the voter's store. -/
+Otherwise its justified checkpoint descends from the root, or bounded honest stores collide. -/
 theorem Execution.latest_rank_of_voteAt {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS)
     {time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
@@ -374,6 +366,7 @@ theorem Execution.latest_rank_of_voteAt {Δ : ℕ} (sync : e.Synchronous Δ)
     (followingTimeOk : computeTimeAtSlotMs config genesisTimeMs followingSlot = .ok followingTime)
     (deadlineOk : IsAttestationDeadline fork config genesisTimeMs slot deadline)
     (started : e.startTime ≤ deadline)
+    -- The receiver is observed at an endpoint at or after the boundary of the next slot.
     {k : ℕ} (boundaryLe : followingTime.toNat ≤ (e.world k).time)
     (atTime : (e.world k).time = time)
     (upToDate : UpToDate config checks sources (e.world k).time ((e.world k).view w)
@@ -381,6 +374,7 @@ theorem Execution.latest_rank_of_voteAt {Δ : ℕ} (sync : e.Synchronous Δ)
     (known : ((e.world k).state w).blocks[root]? = some rootBlock)
     (supports : ∀ head, ((e.world n).state v).getHead config = .ok head →
       ((e.world n).state v).isAncestor head ⟨root, .pending⟩ = .ok true)
+    -- The root must fit each finalized checkpoint that the receiver holds from the deadline on.
     (rootFinal : ∀ k' ≤ k, deadline ≤ (e.world k').time →
       UpToDate config checks sources (e.world k').time ((e.world k').view w)
         ((e.world k').state w) →
@@ -390,6 +384,7 @@ theorem Execution.latest_rank_of_voteAt {Δ : ℕ} (sync : e.Synchronous Δ)
         ((e.world k).state w).getCheckpointBlock root
           ((e.world k').state w).finalizedCheckpoint.epoch =
             .ok ((e.world k').state w).finalizedCheckpoint.root) ∨
+        -- Otherwise the voter's head must fit it in the voter's store.
         ∀ head, ((e.world n).state v).getHead config = .ok head →
           ((e.world n).state v).getCheckpointBlock head.root
             ((e.world k').state w).finalizedCheckpoint.epoch =
@@ -397,6 +392,7 @@ theorem Execution.latest_rank_of_voteAt {Δ : ℕ} (sync : e.Synchronous Δ)
       ((e.world k).state w).isAncestor
         ⟨((e.world k').state w).finalizedCheckpoint.root, .pending⟩
         ⟨root, .pending⟩ = .ok true) :
+    -- The receiver then holds a latest vote that ranks at least as high as the vote.
     ((∃ message, ((e.world k).state w).latestMessages[v]? = some message ∧
       (LatestMessage.ofAttestation attestation).rank ≤ message.rank) ∨
       ((e.world k).state w).isAncestor
@@ -512,17 +508,9 @@ theorem Execution.latest_rank_of_voteAt {Δ : ℕ} (sync : e.Synchronous Δ)
 
 /-- An interval of honest votes gives support, justification coverage, or a store collision.
 
-The interval runs over the slots from `begin`, included, to `next`, excluded.
-
-Each honest vote it assumes also passes the committee check in its target state.
-
 A compatible finalized checkpoint gives the finality check of block validation.
 
-The hypothesis on delayed blocks gives the rest of the block handler.
-
-The root is assumed to fit each finalized checkpoint seen since the safe interval starts.
-
-Finalized-prefix compatibility and nonzero state roots of held blocks are assumed. -/
+The hypothesis on delayed blocks gives the rest of the block handler. -/
 theorem Execution.mem_supportersOf_of_duty_interval_core {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
@@ -532,14 +520,19 @@ theorem Execution.mem_supportersOf_of_duty_interval_core {Δ : ℕ} (sync : e.Sy
     (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
     (start : ∀ w ∈ J, e.start w = anchor) (started : e.startTime ≤ first)
+    -- Finalized-prefix compatibility is assumed.
     (chain : ∀ w ∈ J, ∀ i k, i ≤ k → (e.world k).time ≤ time →
       ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
         ((e.world i).state w).finalizedCheckpoint.epoch =
           .ok ((e.world i).state w).finalizedCheckpoint.root)
+    -- Nonzero state roots of held blocks are assumed.
     (nonzero : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
       ∀ (r : Root) (b : BeaconBlock preset fork),
         ((e.world k).state w).blocks[r]? = some b → b.stateRoot ≠ Vector.replicate 32 0)
     {begin next : Slot} {beginTime endTime : UInt64}
+    -- The interval runs over the slots from `begin`, included, to `next`, excluded.
+    --
+    -- Each honest vote it assumes also passes the committee check in its target state.
     (votes : VotesInSlots e begin next)
     (beginTimeOk : computeTimeAtSlotMs config genesisTimeMs begin = .ok beginTime)
     (endTimeOk : computeTimeAtSlotMs config genesisTimeMs next = .ok endTime)
@@ -554,6 +547,7 @@ theorem Execution.mem_supportersOf_of_duty_interval_core {Δ : ℕ} (sync : e.Sy
     (upToDate : UpToDate config checks sources (e.world k).time ((e.world k).view w)
       ((e.world k).state w)) {rootBlock : BeaconBlock preset fork}
     (known : ((e.world k).state w).blocks[root]? = some rootBlock)
+    -- The root is assumed to fit each finalized checkpoint seen since the safe interval starts.
     (rootFinal : ∀ k' ≤ k, first ≤ (e.world k').time →
       UpToDate config checks sources (e.world k').time ((e.world k').view w)
         ((e.world k').state w) →
@@ -646,15 +640,9 @@ theorem Execution.mem_supportersOf_of_duty_interval_core {Δ : ℕ} (sync : e.Sy
 
 /-- An epoch of honest votes gives support, justification coverage, or a store collision.
 
-Each honest vote it assumes also passes the committee check in its target state.
-
 A compatible finalized checkpoint gives the finality check of block validation.
 
-The hypothesis on delayed blocks gives the rest of the block handler.
-
-The root is assumed to fit each finalized checkpoint seen since the safe interval starts.
-
-Finalized-prefix compatibility and nonzero state roots of held blocks are assumed. -/
+The hypothesis on delayed blocks gives the rest of the block handler. -/
 private theorem Execution.mem_supportersOf_of_duty_epoch_core {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
@@ -664,14 +652,17 @@ private theorem Execution.mem_supportersOf_of_duty_epoch_core {Δ : ℕ} (sync :
     (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
     (start : ∀ w ∈ J, e.start w = anchor) (started : e.startTime ≤ first)
+    -- Finalized-prefix compatibility is assumed.
     (chain : ∀ w ∈ J, ∀ i k, i ≤ k → (e.world k).time ≤ time →
       ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
         ((e.world i).state w).finalizedCheckpoint.epoch =
           .ok ((e.world i).state w).finalizedCheckpoint.root)
+    -- Nonzero state roots of held blocks are assumed.
     (nonzero : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
       ∀ (r : Root) (b : BeaconBlock preset fork),
         ((e.world k).state w).blocks[r]? = some b → b.stateRoot ≠ Vector.replicate 32 0)
     {epoch : Epoch} {begin next : Slot} {beginTime endTime : UInt64}
+    -- Each honest vote it assumes also passes the committee check in its target state.
     (votes : VotesInSlots e begin next)
     (_beginOk : computeStartSlotAtEpoch preset epoch = .ok begin)
     (_nextOk : addChecked begin preset.SLOTS_PER_EPOCH = .ok next)
@@ -688,6 +679,7 @@ private theorem Execution.mem_supportersOf_of_duty_epoch_core {Δ : ℕ} (sync :
     (upToDate : UpToDate config checks sources (e.world k).time ((e.world k).view w)
       ((e.world k).state w)) {rootBlock : BeaconBlock preset fork}
     (known : ((e.world k).state w).blocks[root]? = some rootBlock)
+    -- The root is assumed to fit each finalized checkpoint seen since the safe interval starts.
     (rootFinal : ∀ k' ≤ k, first ≤ (e.world k').time →
       UpToDate config checks sources (e.world k').time ((e.world k').view w)
         ((e.world k').state w) →
@@ -805,15 +797,9 @@ private theorem finalized_prefix_of_chain {anchor : Store preset fork} {time : �
 
 /-- An epoch of honest votes gives support, justification coverage, or a store collision.
 
-Each honest vote it assumes also passes the committee check in its target state.
-
 A compatible finalized checkpoint gives the finality check of block validation.
 
-The hypothesis on delayed blocks gives the rest of the block handler.
-
-The root is assumed to fit each finalized checkpoint seen since the safe interval starts.
-
-Finalized-prefix compatibility and nonzero state roots of held blocks are assumed. -/
+The hypothesis on delayed blocks gives the rest of the block handler. -/
 theorem Execution.mem_supportersOf_of_duty_epoch {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
@@ -824,6 +810,7 @@ theorem Execution.mem_supportersOf_of_duty_epoch {Δ : ℕ} (sync : e.Synchronou
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
     (start : ∀ w ∈ J, e.start w = anchor) (started : e.startTime ≤ first)
     {horizon : Epoch}
+    -- Finalized-prefix compatibility is assumed.
     (chain : ∀ u ∈ J, ∀ w ∈ J, ∀ n k, (e.world n).time ≤ time → (e.world k).time ≤ time →
       ∀ checkpoint : Checkpoint,
       (checkpoint = ((e.world k).state w).justifiedCheckpoint ∨
@@ -835,10 +822,12 @@ theorem Execution.mem_supportersOf_of_duty_epoch {Δ : ℕ} (sync : e.Synchronou
           .ok ((e.world n).state u).finalizedCheckpoint.root)
     (inHorizon : ∀ w ∈ J, ∀ k epoch, (e.world k).time ≤ time →
       ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch → epoch ≤ horizon)
+    -- Nonzero state roots of held blocks are assumed.
     (nonzero : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
       ∀ (r : Root) (b : BeaconBlock preset fork),
         ((e.world k).state w).blocks[r]? = some b → b.stateRoot ≠ Vector.replicate 32 0)
     {epoch : Epoch} {begin next : Slot} {beginTime endTime : UInt64}
+    -- Each honest vote it assumes also passes the committee check in its target state.
     (votes : VotesInSlots e begin next)
     (beginOk : computeStartSlotAtEpoch preset epoch = .ok begin)
     (nextOk : addChecked begin preset.SLOTS_PER_EPOCH = .ok next)
@@ -855,6 +844,7 @@ theorem Execution.mem_supportersOf_of_duty_epoch {Δ : ℕ} (sync : e.Synchronou
     (upToDate : UpToDate config checks sources (e.world k).time ((e.world k).view w)
       ((e.world k).state w)) {rootBlock : BeaconBlock preset fork}
     (known : ((e.world k).state w).blocks[root]? = some rootBlock)
+    -- The root is assumed to fit each finalized checkpoint seen since the safe interval starts.
     (rootFinal : ∀ k' ≤ k, first ≤ (e.world k').time →
       UpToDate config checks sources (e.world k').time ((e.world k').view w)
         ((e.world k').state w) →
@@ -1089,11 +1079,7 @@ open scoped Classical in
 
 A compatible finalized checkpoint gives the finality check of block validation.
 
-The hypothesis on delayed blocks gives the rest of the block handler.
-
-Finalized-prefix compatibility, nonzero state roots and the absent anchor parent are assumed.
-
-The registry of the justified state must be within the limit. -/
+The hypothesis on delayed blocks gives the rest of the block handler. -/
 private theorem Execution.isAncestor_getHead_of_duty_epoch_core {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
@@ -1103,13 +1089,16 @@ private theorem Execution.isAncestor_getHead_of_duty_epoch_core {Δ : ℕ} (sync
     (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
     (start : ∀ w ∈ J, e.start w = anchor) (started : e.startTime ≤ first)
+    -- Finalized-prefix compatibility is assumed.
     (chain : ∀ w ∈ J, ∀ i k, i ≤ k → (e.world k).time ≤ time →
       ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
         ((e.world i).state w).finalizedCheckpoint.epoch =
           .ok ((e.world i).state w).finalizedCheckpoint.root)
+    -- Nonzero state roots of held blocks are assumed.
     (nonzero : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
       ∀ (r : Root) (b : BeaconBlock preset fork),
         ((e.world k).state w).blocks[r]? = some b → b.stateRoot ≠ Vector.replicate 32 0)
+    -- The anchor parent is assumed absent.
     (anchorParent : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
       ((e.world k).state w).blocks[anchorBlock.parentRoot]? = none)
     {root : Root}
@@ -1130,6 +1119,7 @@ private theorem Execution.isAncestor_getHead_of_duty_epoch_core {Δ : ℕ} (sync
       ((e.world k).state w))
     (known : ((e.world k).state w).blocks[root]? = some block)
     {state : BeaconState preset fork} {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
+    -- The registry of the justified state must be within the limit.
     (stateOk : ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint =
       .ok state) (within : state.RegistryWithinLimit)
     (tree : ((e.world k).state w).getFilteredNodeTree config = .ok nodes)
@@ -1217,13 +1207,7 @@ open scoped Classical in
 
 A compatible finalized checkpoint gives the finality check of block validation.
 
-The hypothesis on delayed blocks gives the rest of the block handler.
-
-Finalized-prefix compatibility, nonzero state roots and the absent anchor parent are assumed.
-
-From Gloas, the anchor's registry must leave room for pending deposits.
-
-The room covers the deposits of each epoch from the anchor's epoch to the horizon. -/
+The hypothesis on delayed blocks gives the rest of the block handler. -/
 theorem Execution.isAncestor_getHead_of_duty_epoch {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
@@ -1234,6 +1218,7 @@ theorem Execution.isAncestor_getHead_of_duty_epoch {Δ : ℕ} (sync : e.Synchron
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
     (start : ∀ w ∈ J, e.start w = anchor) (started : e.startTime ≤ first)
     {horizon : Epoch}
+    -- Finalized-prefix compatibility is assumed.
     (chain : ∀ u ∈ J, ∀ w ∈ J, ∀ n k, (e.world n).time ≤ time → (e.world k).time ≤ time →
       ∀ checkpoint : Checkpoint,
       (checkpoint = ((e.world k).state w).justifiedCheckpoint ∨
@@ -1245,10 +1230,15 @@ theorem Execution.isAncestor_getHead_of_duty_epoch {Δ : ℕ} (sync : e.Synchron
           .ok ((e.world n).state u).finalizedCheckpoint.root)
     (inHorizon : ∀ w ∈ J, ∀ k epoch, (e.world k).time ≤ time →
       ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch → epoch ≤ horizon)
+    -- From Gloas, the anchor's registry must leave room for pending deposits.
+    --
+    -- The room covers the deposits of each epoch from the anchor's epoch to the horizon.
     (room : .glamsterdam ≤ fork → AnchorRegistryRoom preset anchorState horizon)
+    -- Nonzero state roots of held blocks are assumed.
     (nonzero : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
       ∀ (r : Root) (b : BeaconBlock preset fork),
         ((e.world k).state w).blocks[r]? = some b → b.stateRoot ≠ Vector.replicate 32 0)
+    -- The anchor parent is assumed absent.
     (anchorParent : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
       ((e.world k).state w).blocks[anchorBlock.parentRoot]? = none)
     {root : Root}
@@ -1326,13 +1316,7 @@ private theorem duty_prefix_bounds {anchor : Store preset fork} {time : ℕ} {ho
 
 /-- Honest duties give support or coverage, a store collision, or accountable safety evidence.
 
-The evidence is relative to the anchor.
-
-Three times the accountable stake plus twice the drift covers the unslashed reference stake.
-
-The drift counts from the anchor.
-
-With enough churn since the anchor, the evidence holds with no accountable key. -/
+The evidence is relative to the anchor. -/
 theorem Execution.mem_supportersOf_of_duty_epoch_or_accountable {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
@@ -1424,6 +1408,11 @@ theorem Execution.mem_supportersOf_of_duty_epoch_or_accountable {Δ : ℕ} (sync
         (∃ rootB : Root, ((e.world k).state w).blockStates[rootB]? = some stateB) ∧
         va.state.finalizedCheckpoint = ((e.world i).state w).finalizedCheckpoint ∧
         vb.state.currentJustifiedCheckpoint = ((e.world k).state w).justifiedCheckpoint ∧
+        -- 3 times the accountable stake plus twice the drift covers the unslashed reference stake.
+        --
+        -- The drift counts from the anchor.
+        --
+        -- With enough churn since the anchor, the evidence holds with no accountable key.
         DirectSafety.AccountableOrHashEvidence pre left right
           ((e.world k).state w).justifiedCheckpoint.epoch.toNat := by
   obtain ⟨anchorNonzero, bounded⟩ := duty_prefix_bounds anchored start sound slots anchorSlot
@@ -1440,17 +1429,7 @@ theorem Execution.mem_supportersOf_of_duty_epoch_or_accountable {Δ : ℕ} (sync
 open scoped Classical in
 /-- An honest-duty margin gives head ancestry, a store collision, or accountable safety evidence.
 
-The evidence is relative to the anchor.
-
-Three times the accountable stake plus twice the drift covers the unslashed reference stake.
-
-The drift counts from the anchor.
-
-With enough churn since the anchor, the evidence holds with no accountable key.
-
-From Gloas, the anchor's registry must leave room for pending deposits.
-
-The room covers the deposits of each epoch from the anchor's epoch to the horizon. -/
+The evidence is relative to the anchor. -/
 theorem Execution.isAncestor_getHead_of_duty_epoch_or_accountable {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS)
     {first time : ℕ} (admitted : BlocksAdmitted e 0 Δ time)
@@ -1482,6 +1461,9 @@ theorem Execution.isAncestor_getHead_of_duty_epoch_or_accountable {Δ : ℕ} (sy
         2 * Models.stake (DirectSafety.effectiveWeight state) (DirectSafety.activeKeys state))
     (inHorizon : ∀ w ∈ J, ∀ k epoch, (e.world k).time ≤ time →
       ((e.world k).state w).getCurrentStoreEpoch config = .ok epoch → epoch ≤ horizon)
+    -- From Gloas, the anchor's registry must leave room for pending deposits.
+    --
+    -- The room covers the deposits of each epoch from the anchor's epoch to the horizon.
     (room : .glamsterdam ≤ fork → AnchorRegistryRoom preset anchorState horizon)
     (nonzero : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
       ∀ (r : Root) (b : BeaconBlock preset fork),
@@ -1547,6 +1529,11 @@ theorem Execution.isAncestor_getHead_of_duty_epoch_or_accountable {Δ : ℕ} (sy
         (∃ rootB : Root, ((e.world k).state w).blockStates[rootB]? = some stateB) ∧
         va.state.finalizedCheckpoint = ((e.world i).state w).finalizedCheckpoint ∧
         vb.state.currentJustifiedCheckpoint = ((e.world k).state w).justifiedCheckpoint ∧
+        -- 3 times the accountable stake plus twice the drift covers the unslashed reference stake.
+        --
+        -- The drift counts from the anchor.
+        --
+        -- With enough churn since the anchor, the evidence holds with no accountable key.
         DirectSafety.AccountableOrHashEvidence pre left right
           ((e.world k).state w).justifiedCheckpoint.epoch.toNat := by
   classical

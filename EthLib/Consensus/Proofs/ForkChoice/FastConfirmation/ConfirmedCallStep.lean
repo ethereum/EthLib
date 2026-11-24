@@ -27,14 +27,6 @@ After consecutive calls of the rule by one honest validator, its last confirmed 
 It is on every up-to-date honest head from the slot after the last call to a horizon.
 
 Otherwise two honest stores collide, or accountable-safety evidence holds.
-
-Each call keeps the call invariant, given the invariant at every earlier call.
-
-Its start is the root of the call before, the finalized root or the observed justified root.
-
-Each start keeps the invariant, and the walk from the head to the start then keeps it too.
-
-The cover of the last root reads that step at every call of the run.
 -/
 
 @[expose] public section
@@ -103,13 +95,7 @@ private theorem carrier_delivered {Δ : ℕ} {anchor : Store preset fork} {last 
 
 /-- A delay after an event of an honest store, each up-to-date honest store has justified its epoch.
 
-That epoch is the one of the finalized checkpoint of the sender at the event.
-
-The finalized checkpoint of each receiver must be read at the justified root of each sender.
-
-The sender's justified checkpoint comes from the anchor, from a held state, or from its pull-up.
-
-The block of that state reaches the receiver, whose justified epoch is then at least as late. -/
+That epoch is the one of the finalized checkpoint of the sender at the event. -/
 private theorem finalizedOrder {Δ : ℕ} {anchor : Store preset fork} {last : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
@@ -122,6 +108,7 @@ private theorem finalizedOrder {Δ : ℕ} {anchor : Store preset fork} {last : �
       ∀ (r : Root) (left right : BeaconBlock preset fork),
       ((e.world i).state a).blocks[r]? = some left →
       ((e.world j).state b).blocks[r]? = some right → left = right)
+    -- The finalized checkpoint of each receiver must be read at the justified root of each sender.
     (crossFinal : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
       ((e.world i).state a).finalizedCheckpoint.epoch ≤
         ((e.world j).state b).justifiedCheckpoint.epoch →
@@ -168,6 +155,9 @@ private theorem finalizedOrder {Δ : ℕ} {anchor : Store preset fork} {last : �
       (UInt64.le_of_lt (UInt64.lt_of_lt_of_le below finalLe))]
     exact crossRead
   obtain ⟨currentU, currentUOk⟩ := (forward u sender n).exists_getCurrentSlot slots
+  -- The sender's justified checkpoint comes from the anchor, a held state, or its pull-up.
+  --
+  -- The block of that state reaches the receiver, whose justified epoch is then at least as late.
   rcases (forward u sender n).justified_origins_epoch positive slots currentUOk with
     ⟨root, _, same⟩ | ⟨root, state, stored, same⟩ |
       ⟨root, block, state, pulled, known, stored, run, same, earlier⟩
@@ -196,17 +186,7 @@ private theorem finalizedOrder {Δ : ℕ} {anchor : Store preset fork} {last : �
 
 /-- A delay after an earlier call, each up-to-date honest store has justified the observed epoch.
 
-That epoch is the one of the caller's unrealized justified checkpoint at the earlier call.
-
-A later call must hold that checkpoint as the caller's justified checkpoint.
-
-Each receiver must be in a later epoch than the earlier call.
-
-The finalized checkpoint of each receiver must be read at the justified root of each sender.
-
-That read at the later call moves to the block that gives the observed checkpoint.
-
-It then moves back to the earlier call, which holds the block, and which delivers it. -/
+That epoch is the one of the caller's unrealized justified checkpoint at the earlier call. -/
 private theorem observedOrder {Δ : ℕ} {anchor : Store preset fork} {last : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
@@ -222,6 +202,7 @@ private theorem observedOrder {Δ : ℕ} {anchor : Store preset fork} {last : �
       ∀ (r : Root) (left right : BeaconBlock preset fork),
       ((e.world i).state a).blocks[r]? = some left →
       ((e.world j).state b).blocks[r]? = some right → left = right)
+    -- The finalized checkpoint of each receiver must be read at the justified root of each sender.
     (crossFinal : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
       ((e.world i).state a).finalizedCheckpoint.epoch ≤
         ((e.world j).state b).justifiedCheckpoint.epoch →
@@ -233,8 +214,10 @@ private theorem observedOrder {Δ : ℕ} {anchor : Store preset fork} {last : �
     (late : (e.world m).time + Δ ≤ (e.world k).time) (bounded : (e.world k).time ≤ last)
     (upToDate : UpToDate config checks sources (e.world k).time ((e.world k).view w)
       ((e.world k).state w))
+    -- A later call must hold that checkpoint as the caller's justified checkpoint.
     (realized : ((e.world n).state u).justifiedCheckpoint =
       ((e.world m).state u).unrealizedJustifiedCheckpoint)
+    -- Each receiver must be in a later epoch than the earlier call.
     (laterEpoch : ∀ current currentW, ((e.world m).state u).getCurrentSlot config = .ok current →
       ((e.world k).state w).getCurrentSlot config = .ok currentW →
       computeEpochAtSlot preset current < computeEpochAtSlot preset currentW) :
@@ -282,6 +265,7 @@ private theorem observedOrder {Δ : ℕ} {anchor : Store preset fork} {last : �
     subst post
     have readN := (reachedN.getCheckpointBlock_of_blockState sound aligned positive window
       storedN member later).resolve_right notZero
+    -- That read at the later call moves to the block that gives the observed checkpoint.
     have finalN : ((e.world n).state u).getCheckpointBlock root
         ((e.world k).state w).finalizedCheckpoint.epoch =
           .ok ((e.world k).state w).finalizedCheckpoint.root := by
@@ -293,6 +277,7 @@ private theorem observedOrder {Δ : ℕ} {anchor : Store preset fork} {last : �
     simp only [bind_ok_iff] at boundaryOf
     obtain ⟨boundary, boundaryOk, -⟩ := boundaryOf
     have boundaryOk := mapError_ok_iff.mp boundaryOk
+    -- The read then moves back to the earlier call, which holds the block and delivers it.
     exact carrier_delivered sync positive window admitted anchored sound anchorSlot start
       nonzero agree sender receiver mBound late bounded upToDate known stored
       (Store.getCheckpointBlock_of_same_blocks reachedM
@@ -338,17 +323,7 @@ private theorem anchor_le_epochStart (anchorSlot : anchorBlock.slot = anchorStat
   rw [Nat.mul_comm] at modNat
   omega
 
-/-- At an epoch's first slot, a call after the first one starts from the earlier call's view.
-
-The call replaces its base by the observed checkpoint, so its slot starts an epoch.
-
-The observed checkpoint is the caller's unrealized justified checkpoint at the call before.
-
-That checkpoint is of the epoch before the call's, and within the horizon.
-
-Unless two honest stores collide or cross-store evidence holds, the call has justified it.
-
-Each up-to-date honest store from the call to the limit has then justified its epoch. -/
+/-- At an epoch's first slot, a call after the first one starts from the earlier call's view. -/
 private theorem observedStart {Δ : ℕ} {anchor : Store preset fork} {limit : ℕ}
     {horizon : Epoch} {g : ForkedBeaconState preset} (pre : Run config checks g ⟨fork, anchorState⟩)
     {u : ValidatorIndex} {events : List ℕ} {firstSlot : Slot}
@@ -370,15 +345,20 @@ private theorem observedStart {Δ : ℕ} {anchor : Store preset fork} {limit : �
     (callBound : (e.world n).time ≤ limit)
     {head base : Root} {slot : Slot}
     (slotOk : ((e.world n).state u).getCurrentSlot config = .ok slot)
+    -- The call replaces its base by the observed checkpoint, so its slot starts an epoch.
     (replaces : ((e.world n).state u).ReplacesBase config after head base slot) :
     ∃ m, m ∈ events ∧ (e.world m).time + Δ < (e.world n).time ∧
+      -- The observed checkpoint is the caller's unrealized justified checkpoint at the call before.
       after.currentEpochObservedJustifiedCheckpoint =
         ((e.world m).state u).unrealizedJustifiedCheckpoint ∧
+      -- That checkpoint is of the epoch before the call's, and within the horizon.
       ((e.world m).state u).unrealizedJustifiedCheckpoint.epoch.toNat + 1 =
         (computeEpochAtSlot preset slot).toNat ∧
       ((e.world m).state u).unrealizedJustifiedCheckpoint.epoch ≤ horizon ∧
+      -- Unless two honest stores collide or cross-store evidence holds, the call has justified it.
       ((((e.world n).state u).justifiedCheckpoint =
           ((e.world m).state u).unrealizedJustifiedCheckpoint ∧
+        -- Each up-to-date honest store from the call to the limit has then justified its epoch.
         ∀ w ∈ J, ∀ k, (e.world n).time ≤ (e.world k).time → (e.world k).time ≤ limit →
           UpToDate config checks sources (e.world k).time ((e.world k).view w)
             ((e.world k).state w) →
@@ -857,23 +837,14 @@ private theorem finalized_start_anchor {Δ : ℕ}
 
 /-- At a call that replaces its base, the observed justified checkpoint covers honest heads.
 
-Its block is on every up-to-date honest head from the call to `limit`.
-
-It keeps the call invariant, or one of the evidence alternatives holds.
-
-The first call observes the anchor's finalized checkpoint, whose facts are given.
-
-A later call observes an earlier call's unrealized justified checkpoint, of the epoch before.
-
-A receiver's justified checkpoint of that epoch is the observed one.
-
-A later one has an honest signer, which puts it above the observed block. -/
+It keeps the call invariant, or one of the evidence alternatives holds. -/
 private theorem observed_facts [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store preset fork}
     {limit : ℕ} {horizon anchorEpoch : Epoch} {g : ForkedBeaconState preset}
     {pre : Run config checks g ⟨fork, anchorState⟩} {u : ValidatorIndex} {events : List ℕ}
     {firstSlot : Slot}
     (ctx : StepCtx (e := e) pre Δ anchor limit horizon anchorEpoch u events firstSlot)
     (good : Good (e := e) horizon limit)
+    -- The first call observes the anchor's finalized checkpoint, whose facts are given.
     (anchorFacts : ∀ n ∈ events, (e.world n).time ≤ limit →
       CallInvariant (e := e) 0 limit anchor.finalizedCheckpoint.root u n
           anchor.finalizedCheckpoint.root ∧
@@ -886,6 +857,7 @@ private theorem observed_facts [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : S
     (replaces : ((e.world n).state u).ReplacesBase config after head base slot) :
     (CallInvariant (e := e) 0 limit anchor.finalizedCheckpoint.root u n
         after.currentEpochObservedJustifiedCheckpoint.root ∧
+      -- Its block is on every up-to-date honest head from the call to the limit.
       HonestHeadsCover (e := e) after.currentEpochObservedJustifiedCheckpoint.root
         (e.world n).time (limit + 1)) ∨
     Bad (e := e) pre limit := by
@@ -896,6 +868,7 @@ private theorem observed_facts [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : S
     rw [(call_zero ctx.long calls).2]
     exact anchorFacts n (List.mem_of_getElem? calls.1) nBound
   | succ j =>
+    -- A later call observes an earlier call's unrealized justified checkpoint, of the epoch before.
     obtain ⟨m, -, mBefore, observed, epochSucc, horizonLe, rest⟩ := observedStart pre
       ctx.toCallsCtx ctx.sync ctx.admitted ctx.fits ctx.bounded (.inl good.agree)
       (.inl good.finality) calls nBound slotOk replaces
@@ -973,12 +946,14 @@ private theorem observed_facts [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : S
         have lower := later w receiver k kLow kHigh upToDate
         by_cases sameEpoch : after.currentEpochObservedJustifiedCheckpoint.epoch =
             ((e.world k).state w).justifiedCheckpoint.epoch
-        · -- The same epoch: the justified checkpoint is the observed one.
+        · -- The same epoch: a receiver's justified checkpoint of that epoch is the observed one.
           have eq := good.agree u ctx.caller w receiver m k mTime kHigh _ _ (.inr observed)
             (.inl rfl) sameEpoch horizonLe
           rw [eq]
           exact headAbove
         -- A later epoch: the justified block descends from the observed one, by its signer.
+        --
+        -- A later justified checkpoint has an honest signer, putting it above the observed block.
         have laterEpoch : (computeEpochAtSlot preset slot).toNat ≤
             ((e.world k).state w).justifiedCheckpoint.epoch.toNat := by
           have le := UInt64.le_iff_toNat_le.mp lower
@@ -1058,18 +1033,11 @@ A call keeps the call invariant, given the invariant at every earlier call.
 
 /-- One call of one honest validator keeps the call invariant, given it at every earlier call.
 
-The call's stored root is its start, or a root on the walk from its head to that start.
-
-The start is the stored root of the call before, the finalized root or the observed justified one.
-
-Each walked member is covered from the call to the horizon, from the coverage of its parent.
-
-The alternatives are a collision of two honest stores and four kinds of accountable-safety evidence.
-
-The execution verifies signatures with BLS, as the pulled-up head state of the rule does. -/
+The alternatives are an honest-store collision and four kinds of accountable-safety evidence. -/
 private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : ℕ}
     {anchor : Store preset fork} {limit : ℕ} {horizon anchorEpoch : Epoch}
     {g : ForkedBeaconState preset} (pre : Run config checks g ⟨fork, anchorState⟩)
+    -- The execution verifies signatures with BLS, as the pulled-up head state of the rule does.
     (bls : checks = .bls)
     (anchorGenesis : secondsToMilliseconds anchorState.genesisTime = genesisTimeMs)
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
@@ -1181,6 +1149,10 @@ private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : �
   have member : n ∈ events := List.mem_of_getElem? calls.1
   obtain ⟨head, slot, start0, headOk, slotOk, selects, result⟩ :=
     Store.onFastConfirmation_checked calls.2.2
+  -- The start is the previous call's stored root, the finalized root or the observed justified one.
+  --
+  -- Each start keeps the invariant, and the walk from the head to the start then keeps it too.
+  --
   -- The selected start keeps the invariant and, for a walk, covers from the call on.
   have startFacts : (CallInvariant (e := e) 0 limit anchor.finalizedCheckpoint.root u n start0 ∧
       HonestHeadsCover (e := e) start0 (e.world n).time (limit + 1)) ∨
@@ -1200,6 +1172,7 @@ private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : �
     · rcases observed_facts ctx good anchorFacts calls nBound slotOk replaces with facts | bad
       · exact .inl facts
       · exact .inr (.inl bad)
+  -- The call's stored root is its start, or a root on the walk from its head to that start.
   rcases result with same | ⟨-, checked, source, chain, later, sourceOk, walked,
     confirmedAll⟩
   · -- No walk: the stored root is the selected start.
@@ -1228,6 +1201,7 @@ private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : �
   have onChainAll := sourceOnParentChain_of_walk anchored sound anchorSlot anchorBoundary start
     slots positive long window roots absent caller anchorEpochBefore atSlots calls nBound
     headOk slotOk selects checked walked
+  -- Each walked member is covered from the call to the horizon, from the coverage of its parent.
   rcases walkMembers_cover ctx good calls nBound headOk slotOk selects checked sourceOk walked
       confirmedAll obligations startInv startCovers inputs holds onChainAll with covers | bad
   swap
@@ -1271,48 +1245,30 @@ Every up-to-date honest head descends from it, from the slot after the last call
 The alternatives are a collision of two honest stores and four kinds of accountable-safety evidence.
 
 The evidence is historical, cross-store direct-safety, cross-store justified or held-state finality.
-
-Each call assumes its obligations, and the calls are at consecutive slots from the first slot.
-
-An assumption on the run: the first slot's epoch is at least two and after the anchor state's.
-
-The fork is Fulu or later.
-
-From Gloas the head weights of the configuration fit (`weights`, a configuration fact).
-
-Also from Gloas, two assumptions, each saying nothing before Gloas.
-
-The anchor's registry leaves room up to the horizon (`room`), an assumption on the anchor.
-
-Honest justified states through `limit` bound each weak-head weight by 2·10^17 Gwei (`supply`).
-
-The execution verifies signatures with BLS, as the pulled-up head state of the rule does.
-
-An assumption on the run: the Byzantine stake is below two thirds in each state that counts votes.
-
-It holds after the anchor's justified epoch, and buys the honest signer of each later justification.
-
-An assumption on the run: the anchor's latest header is the anchor block's, with a zero state root.
-
-The anchor store checks neither condition; the inclusion delay is positive on mainnet and minimal.
-
-The maximum effective balances of the preset are aligned, as they are on mainnet and minimal.
-
-An assumption on the run: the justification of each call's epoch is pinned. -/
+-/
 theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store preset fork}
     {limit : ℕ} {horizon anchorEpoch : Epoch} {g : ForkedBeaconState preset}
+    -- The execution verifies signatures with BLS, as the pulled-up head state of the rule does.
     (pre : Run config checks g ⟨fork, anchorState⟩) (bls : checks = .bls)
     (anchorGenesis : secondsToMilliseconds anchorState.genesisTime = genesisTimeMs)
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (exitWindow : preset.SeedLookaheadAtLeastThree)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 3 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    -- From Gloas, the anchor's registry leaves room up to the horizon, an assumption on the anchor.
+    --
+    -- Like the weak-head bound below, it says nothing before Gloas.
     (room : .glamsterdam ≤ fork → AnchorRegistryRoom preset anchorState horizon)
+    -- From Gloas the head weights of the configuration fit, a configuration fact.
     (weights : .glamsterdam ≤ fork → config.HeadWeightsFit preset (2 * 10 ^ 17))
+    -- From Gloas, honest justified states through the limit bound each weak-head weight.
+    --
+    -- The bound is 2·10^17 Gwei, and this assumption says nothing before Gloas.
     (supply : .glamsterdam ≤ fork → CheckpointHeadWeightCeiling (e := e) (2 * 10 ^ 17) limit)
     (admitted : BlocksAdmitted e 0 Δ limit)
     (half : 2 * config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat ≤ 100)
     (long : 1 < preset.SLOTS_PER_EPOCH)
+    -- The maximum effective balances of the preset are aligned, as they are on mainnet and minimal.
     (maxAligned : MaxEffectiveBalancesAligned preset)
     (votes : ValidatedDutyVotes (e := e) limit) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e limit) (windows : AssignmentWindowAgreement (e := e) limit)
@@ -1332,14 +1288,27 @@ theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {an
     (enough : HeldRunStakeFloor (e := e) pre horizon limit)
     (terminal : HeldTerminalStakeFloor (e := e) horizon limit)
     (absent : AnchorParentAbsent (e := e) limit)
+    -- An assumption on the run: the justification of each call's epoch is pinned.
     (pinned : JustifiedPinned (e := e) anchorEpoch 0 0 limit)
+    -- An assumption on the run: the anchor's latest header is the anchor block's.
+    --
+    -- Its state root is zero.
+    --
+    -- The anchor store checks neither condition.
     (anchorHeader : anchorState.latestBlockHeader.slot = anchorBlock.slot ∧
       anchorState.latestBlockHeader.proposerIndex = anchorBlock.proposerIndex ∧
       anchorState.latestBlockHeader.parentRoot = anchorBlock.parentRoot ∧
       SszType.hashTreeRoot anchorBlock.body = .ok anchorState.latestBlockHeader.bodyRoot)
     (anchorZero : anchorState.latestBlockHeader.stateRoot = Vector.replicate 32 0)
+    -- The inclusion delay is positive on mainnet and minimal.
     (delay : preset.InclusionDelayPositive)
+    -- An assumption on the run: Byzantine stake is under two thirds in each vote-counting state.
+    --
+    -- It holds after the anchor's justified epoch.
+    --
+    -- It buys the honest signer of each later justification.
     (byzantine : ByzantineCountedStake (e := e) anchorEpoch 0 limit)
+    -- The fork is Fulu or later.
     (fusaka : .fusaka ≤ fork) (band : preset.IncrementWithinUpwardBand)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
@@ -1351,10 +1320,14 @@ theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {an
       ((e.world m).state x).getCurrentSlot config = .ok referenceSlot ∧
       subChecked referenceSlot 1 = .ok finish)
     {u : ValidatorIndex} (caller : u ∈ J) {events : List ℕ} {firstSlot : Slot}
+    -- An assumption on the run: the first slot's epoch is at least two.
+    --
+    -- It is also after the epoch of the anchor state.
     (confirmationEpoch : 2 ≤ computeEpochAtSlot preset firstSlot)
     (anchorEpochBefore : getCurrentEpoch anchorState < computeEpochAtSlot preset firstSlot)
     (upToDate : ∀ n ∈ events, UpToDate config checks sources (e.world n).time
       ((e.world n).view u) ((e.world n).state u))
+    -- The calls are at consecutive slots from the first slot.
     (atSlots : ∀ i n, events[i]? = some n → ∃ slot begin,
       ((e.world n).state u).getCurrentSlot config = .ok slot ∧
       slot.toNat = firstSlot.toNat + i ∧
@@ -1364,6 +1337,7 @@ theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {an
     (folded : (events.map fun n => (e.world n).state u).foldlM
       (fun fcr store => store.onFastConfirmation config fcr) (getFastConfirmationStore anchor) =
         .ok last)
+    -- Each call assumes its obligations.
     (obligations : ∀ i n fcr after,
       CallAt (e := e) u events (getFastConfirmationStore anchor) i n fcr after →
       CallObligations (e := e) 0 limit u n fcr after)
@@ -1394,6 +1368,8 @@ theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {an
   have timeLe : ∀ i m, events[i]? = some m → (e.world m).time ≤ limit := fun i m event =>
     Nat.le_trans (time_le_following atSlots lastEvent slotOk nextOk followingOk event)
       followingLe
+  -- The cover of the last root reads the call-invariant step at every call of the run.
+  --
   -- The call invariant holds at every call, by strong induction on the call's index.
   have invariant : ∀ i n fcr after,
       CallAt (e := e) u events (getFastConfirmationStore anchor) i n fcr after →

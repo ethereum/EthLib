@@ -161,18 +161,6 @@ public theorem Execution.isAncestor_getHead_of_historical_anchor_with [Decidable
 
 /-- A guarded historical margin gives head ancestry, a block collision or direct-safety evidence.
 
-The receiver's head descends from the block at the receiver's time.
-
-The voters below the parent lie in the head's window by the window-membership premise.
-
-This extends the coverage of earlier honest heads, assumed from the call up to that time.
-
-The direct-safety evidence is relative to the anchor, and its drift counts from the anchor.
-
-With enough churn since the anchor, it holds with no accountable key.
-
-The stake ceiling of `2 * 10^17` Gwei is `2 * 10^8` ETH, above mainnet's active stake.
-
 The proof needs only a ceiling below `2^64` Gwei, so that the checked total cannot overflow. -/
 public theorem Execution.isAncestor_getHead_of_historical_anchor [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
@@ -185,6 +173,7 @@ public theorem Execution.isAncestor_getHead_of_historical_anchor [DecidablePred 
     (votes : ValidatedDutyVotes (e := e) time) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e time) (windows : AssignmentWindowAgreement (e := e) time)
     {n : ℕ} {block : BeaconBlock preset fork}
+    -- The voters below the parent lie in the head's window by the window-membership premise.
     (membership : VotersInHeadWindow (e := e) block.parentRoot (e.world n).time time)
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -230,12 +219,14 @@ public theorem Execution.isAncestor_getHead_of_historical_anchor [DecidablePred 
     (bounded : HonestStoreEpochsBounded (e := e) horizon time)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
     (unslashed : HonestCountedStatesUnslashed (e := e) time)
+    -- The stake ceiling of `2 * 10^17` Gwei is `2 * 10^8` ETH, above mainnet's active stake.
     (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) time)
     (parameters : DirectSafety.Parameters preset) {g : ForkedBeaconState preset}
     (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
     (heldEarly : HeldStatesBeforeUpgrade (e := e) time)
     (enough : HeldRunStakeFloor (e := e) pre horizon time)
     (terminal : HeldTerminalStakeFloor (e := e) horizon time)
+    -- The result extends the coverage of earlier honest heads, assumed from the call to that time.
     (rootCovers : HonestHeadsCover (e := e) root (e.world n).time time)
     (headDescends : ((e.world n).state u).isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true)
     {historical : Root} {callerEpoch historicalEpoch : Epoch} {epochStart : Slot}
@@ -277,6 +268,11 @@ public theorem Execution.isAncestor_getHead_of_historical_anchor [DecidablePred 
     (route : ((e.world k).state w).isAncestor
         ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
       (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes) :
+    -- The receiver's head descends from the block at the receiver's time.
+    --
+    -- The direct-safety evidence is relative to the anchor, and its drift counts from the anchor.
+    --
+    -- With enough churn since the anchor, it holds with no accountable key.
     (((e.world k).state w).isAncestor receiverHead ⟨root, .pending⟩ = .ok true ∨
       ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
         ∃ r evidence, Store.findBlockCollision ((e.world i).state a) ((e.world j).state b) [r] =
