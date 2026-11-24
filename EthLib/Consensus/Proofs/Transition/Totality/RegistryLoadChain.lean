@@ -10,7 +10,21 @@ public import EthLib.Consensus.Proofs.Transition.Trace
 
 The count of a state is its validators plus its pending deposits, which bound its registry.
 
-Along a run, the weighted count grows by at most the block bounds, each weighted by its fork.
+A slot never raises that count within a fork.
+
+The upgrade to Electra adds at most the size of the registry, which before Electra is the count.
+
+So the count weighted by two before Electra, and by one from Electra, never rises across a slot.
+
+A block adds at most its bound to the count: its deposits, twice from Electra, plus its requests.
+
+So along a run, the weighted count at the end is at most the weighted count at the start.
+
+The bounds of the blocks of the run, each weighted by the factor of its fork, add to it.
+
+When that sum is within the limit of the registry, the registry at the end is within it too.
+
+The limit is weighted by the fork at the end, as the count is.
 
 A run here is checked: each block has its state root checked, and no upgrade is due at it.
 -/

@@ -13,9 +13,18 @@ public import Mathlib.Algebra.Order.Group.Nat
 
 The steps of a run of slots divide by constants of the preset and of the configuration.
 
-It names the presets and configurations with every divisor positive, mainnet and minimal among them.
+This file names, among others:
 
-It names the sums of a state that the bounds use, and the bounds that a run of slots needs.
+- The presets and the configurations whose divisors are all positive, as mainnet and minimal are.
+- The presets whose buffer of block roots reaches the epoch before.
+- The sum of the effective balances, and the sum of the slashed balances of the recent epochs.
+- The sum of the larger of each balance and its effective balance.
+- The sum of the amounts of the pending deposits.
+- The shape of a state: lists that match the registry, capped effective balances, consolidations.
+- A count: the validators plus the pending deposits, which bounds the registry.
+- The bounds on the amounts of a state that a run of slots needs.
+
+It also shows that a checked sum of a list and the total active balance succeed under such bounds.
 -/
 
 @[expose] public section
@@ -26,11 +35,15 @@ open Base Uint64
 
 /-- Each constant of a preset that a run of slots divides by is positive.
 
-The specification fails on a division or a remainder by zero; Lean returns zero or the dividend.
+The specification raises an error on a division by zero and on a remainder by zero.
+
+In Lean a division of 64-bit integers by zero returns zero, and a remainder returns the dividend.
 
 So with a zero divisor a step can succeed in Lean where the specification fails.
 
-The circular buffer lengths are separate hypotheses: a read or a write fails on a zero length. -/
+The lengths of the circular buffers are not listed here.
+
+A read or a write fails on a zero length, so the proofs take them as separate hypotheses. -/
 structure Preset.DivisorsPositive (preset : Preset) : Prop where
   -- The run computes epochs from slots, and effective balances in increments.
   slotsPerEpoch : preset.SLOTS_PER_EPOCH ≠ 0
@@ -265,13 +278,22 @@ def registryLoad (state : BeaconState preset fork) : Nat :=
   state.validators.data.size +
     if electra : .pectra ≤ fork then (state.pendingDeposits electra).data.size else 0
 
-/-- The bounds on the amounts of a state that a run of slots needs: a budget of Gwei, a score bound.
+/-- The bounds on the amounts of a state that a run of slots needs.
 
-A run also needs the budget below a ceiling, its epochs within a horizon and its indices in range.
+They hold a budget of Gwei, and a bound on the inactivity scores.
 
-It also needs the inactivity scores and the participation lists to match the registry.
+They are not enough alone.
 
-They leave out builder balances and consolidation churn, on which a run does no checked sum. -/
+A run also needs these facts:
+
+- The budget is below a ceiling.
+- The epochs of the run are within a horizon.
+- The indices of the run are in range.
+- The inactivity scores and the participation lists match the registry.
+
+They leave out the balances of the builders and the churn of the consolidations.
+
+A run of slots does no checked sum on them. -/
 structure WithinBudget (budget scoreBound : Nat) (state : BeaconState preset fork) : Prop where
   -- The registry stays within its limit, and has one balance for each validator.
   within : state.RegistryWithinLimit
@@ -279,7 +301,9 @@ structure WithinBudget (budget scoreBound : Nat) (state : BeaconState preset for
   -- Each effective balance is at most the largest one of its validator.
   capped : ∀ validator ∈ state.validators.data,
     validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset fork validator
-  -- The budget covers the pending deposits and the larger of each balance and effective balance.
+  -- The budget covers the pending deposits.
+  --
+  -- It also covers the larger of each balance and its effective balance.
   --
   -- The budget is an assumption about the ether at stake, not a fact that a state keeps forever.
   funded : stakeSum state + pendingDepositSum state ≤ budget

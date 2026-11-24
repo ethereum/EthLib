@@ -8,9 +8,13 @@ public import EthLib.Consensus.Proofs.Transition.Totality.UpgradeNext
 
 Only a block brings attestations, so a run of slots alone never records a new signer.
 
-After two epochs both records of signers are empty, and the upgrades keep them empty.
+Each epoch moves the record of the current epoch to the previous one, and starts an empty record.
 
-Such a state meets the condition on the signers of the supply bound.
+So after one epoch the current record is empty, and after two epochs both records are empty.
+
+The upgrades keep both records empty.
+
+A state whose records are both empty meets the condition on the signers of the supply bound.
 -/
 
 @[expose] public section

@@ -11,7 +11,9 @@ import EthLib.Consensus.Proofs.Transition.BuilderPayments
 
 The settlement of [EIP-7732] can fail when it computes the payment quorum.
 
-It succeeds under bounds on the registry and the slots, and keeps the bounds of a run of slots.
+It succeeds under bounds on the registry and on the slots.
+
+It keeps the bounds of a run of slots.
 
 [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#beacon-chain-changes
 -/

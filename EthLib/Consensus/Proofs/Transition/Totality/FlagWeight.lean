@@ -41,7 +41,9 @@ def FlagsWithinActive (state : BeaconState preset fork) : Prop :=
   --
   -- That base reward shrinks as the total active balance grows.
   --
-  -- So the weight needs a bound by active balances, not by effective balances of the registry.
+  -- So the weight needs a bound by the active balances.
+  --
+  -- A bound by the effective balances of the registry is not enough.
   --
   -- The active balance of the previous epoch still needs its own bound by the run.
   --

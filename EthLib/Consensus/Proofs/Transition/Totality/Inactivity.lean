@@ -8,7 +8,11 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Justification
 
 From Altair, the update succeeds when each score plus the score bias fits in 64 bits.
 
-It also needs the registry within its limit, and the finalized epoch at most the previous epoch.
+The registry must stay within its limit, so that each position is a validator index.
+
+The lists of scores and of flags must have one entry for each validator.
+
+The finalized epoch must be at most the previous epoch, so that the test for a leak succeeds.
 -/
 
 @[expose] public section
@@ -177,7 +181,9 @@ theorem isInInactivityLeak_eq_ok (finalized : FinalizedSettled state) :
 
 /-- From Altair, the update of the inactivity scores succeeds under bounds.
 
-The registry must be within its limit, and the finalized epoch at most the previous epoch.
+The registry must be within its limit.
+
+The finalized epoch must be at most the previous epoch.
 
 The lists of scores and of flags must have one entry for each validator.
 

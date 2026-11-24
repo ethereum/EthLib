@@ -75,7 +75,9 @@ def Preset.rewardsCeiling (preset : Preset) (budget : Nat) : Nat :=
   --
   -- So the first can exceed the second, and the bound does not use the square root of the total.
   --
-  -- Each flag earns at most the base reward bound, times its weight and the budget increments.
+  -- Each flag earns at most the base reward bound, times its weight.
+  --
+  -- That product is multiplied by the increments of the budget.
   --
   -- The sum of these products over the three flags is then divided by the weight denominator, 64.
   budget + preset.baseRewardCeiling * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum *
@@ -92,7 +94,7 @@ structure RewardsFit (preset : Preset) (config : Config) (budget scoreBound : Na
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64
   -- So must the increments of the budget times the weight denominator, 64.
   activeIncrements : preset.budgetIncrements budget * WEIGHT_DENOMINATOR.toNat < 2 ^ 64
-  -- The base reward bound times the weight of a flag times the budget increments must fit.
+  -- The base reward bound times the weight of a flag times the increments of the budget must fit.
   flagNumerator : ∀ weight ∈ PARTICIPATION_FLAG_WEIGHTS,
     preset.baseRewardCeiling * weight.toNat * preset.budgetIncrements budget < 2 ^ 64
   -- A balance of the budget plus the rewards of the three flags must fit.

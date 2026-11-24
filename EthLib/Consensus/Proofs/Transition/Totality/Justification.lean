@@ -9,7 +9,12 @@ import EthLib.Base.Proofs.FilterM
 
 The step runs at the last slot of an epoch.
 
-It sums balances, multiplies them, reads block roots and adds epochs, and each of these can fail.
+It does four things that can fail:
+
+- It sums the active balance and the balances that vote for the previous and current targets.
+- It triples each target balance and doubles the active balance, with checked products.
+- It reads the root of the first block of a recent epoch, to match targets or to justify it.
+- It adds a gap to a checkpoint epoch.
 
 So it succeeds only under bounds on the preset and the state.
 -/

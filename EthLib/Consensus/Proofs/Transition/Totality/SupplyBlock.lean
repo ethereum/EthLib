@@ -29,7 +29,15 @@ import Mathlib.Data.Nat.Sqrt
 
 The supply is the balances plus, from Electra, the pending deposits.
 
-A block raises it by its deposits, a share of the new slashed balances, and its rewards.
+A block raises it in four ways:
+
+- It brings in the amounts of its deposits and of its deposit requests.
+- A slashing moves at most the whistleblower reward into the balances, beyond its penalty.
+- From Altair, the proposer earns at most the rise of the weight of the flags, over 448.
+  - Each flag of each validator is newly set at most once in the previous and the current epoch.
+- The sync committee members that sign earn a fixed reward, and the proposer a share of it.
+
+Every other step of a block moves balances out of the supply, or within it.
 
 With the effective balances within a budget, the cap on the rewards reads only the budget.
 -/
@@ -132,7 +140,9 @@ def syncRewardCap (preset : Preset) (state : BeaconState preset fork) : Nat :=
 def blockRewardCap (preset : Preset) (state : BeaconState preset fork) : Nat :=
   -- The attestations set each flag of each validator at most once in each of two epochs.
   --
-  -- So they pay the proposer at most twice the base rewards of all validators, times 54 over 448.
+  -- So they pay the proposer at most twice the base rewards of all the validators.
+  --
+  -- That amount is then multiplied by 54/448.
   --
   -- The weights of the three flags add up to 54.
   --

@@ -8,9 +8,17 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Registry
 
 From Electra, one pass over the registry queues, ejects or activates each validator in turn.
 
-An ejection starts an exit, which takes its place in a queue of balance under a ceiling.
+An ejection starts an exit, which takes its place in a queue of balance.
 
-Room above that ceiling, with a positive churn, excludes every checked error.
+The queue opens no earlier than the first epoch an exit may take, which a ceiling bounds.
+
+Each exit raises that ceiling by at most its effective balance in increments, plus one.
+
+Only a validator that has not started to exit can start, and its cost then leaves the total.
+
+So the end of the queue plus the cost still owed does not grow.
+
+Room above the ceiling, with a positive churn, excludes every checked error.
 -/
 
 @[expose] public section

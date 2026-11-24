@@ -155,7 +155,9 @@ private theorem getPendingAttestingIndices_eq_of_eq {other : BeaconState preset 
 
 /-- Before Altair, the epoch transition succeeds under bounds.
 
-The preset buffers of slashed balances and of RANDAO mixes must have a positive length. -/
+The preset has circular buffers of slashed balances and of RANDAO mixes.
+
+Both must have a positive length. -/
 theorem processEpoch_total_of_lt_altair {config : Config} {checks : SignatureChecks}
     {budget epochBound ceiling : Nat}
     [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat]
@@ -204,14 +206,18 @@ theorem processEpoch_total_of_lt_altair {config : Config} {checks : SignatureChe
     -- That epoch plus the registry size plus the withdrawability delay must be below 2^64.
     (exitRoom : ceiling + state.validators.data.size +
       config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64)
-    -- The slashed balance sum must be below 2^64, and so must that sum times the multiplier.
+    -- The sum of the slashed balances must be below 2^64.
+    --
+    -- So must that sum times the multiplier.
     (slashedFits : slashedBalanceSum state < 2 ^ 64)
     (slashedProduct : slashedBalanceSum state *
       (parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER.toNat < 2 ^ 64)
     -- The current epoch plus half the length of the slashings vector must be below 2^64.
     (halfway : (getCurrentEpoch state).toNat + (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat <
       2 ^ 64)
-    -- Each effective balance in increments, times the effective balance sum, must be below 2^64.
+    -- Count each effective balance in increments.
+    --
+    -- That count times the sum of the effective balances must be below 2^64.
     (product : ∀ validator ∈ state.validators.data,
       (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT).toNat *
         effectiveBalanceSum state < 2 ^ 64)

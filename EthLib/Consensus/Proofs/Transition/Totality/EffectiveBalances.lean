@@ -5,9 +5,13 @@ public import EthLib.Consensus.Proofs.Transition.EpochUpdates
 /-!
 # Proofs: the update of the effective balances succeeds
 
-The update succeeds when each balance, each effective balance and each band is below 2^63 Gwei.
+The update succeeds when each balance and each effective balance is below 2^63 Gwei.
 
-It leaves the balances unchanged, and each validator keeps every field but its effective balance.
+The two bands of the preset must also be below 2^63 Gwei, as they are on mainnet and minimal.
+
+The update leaves the balances unchanged.
+
+Each validator keeps every field except its effective balance.
 -/
 
 @[expose] public section

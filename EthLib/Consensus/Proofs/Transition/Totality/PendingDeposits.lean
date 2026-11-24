@@ -425,7 +425,9 @@ private theorem applyPendingDeposit_capped {config : Config} {checks : Signature
 
 Afterwards the validators plus the pending deposits stay within the limit of the registry.
 
-There is still one balance for each validator, and the balances plus the queue do not grow. -/
+There is still one balance for each validator.
+
+The sum of the balances plus the amounts in the queue does not grow. -/
 theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (electra : .pectra ≤ fork)
     -- The validators plus the pending deposits must be within the limit of the registry.
@@ -551,7 +553,9 @@ theorem processPendingDeposits_total (config : Config) (checks : SignatureChecks
 
 /-- From Electra, the pending deposits and then the pending consolidations succeed under bounds.
 
-The bounds are those of the pending deposits, with both indices of each consolidation in range.
+The bounds are those of the pending deposits.
+
+Both indices of every queued consolidation must also be in the registry.
 
 Before Electra the step returns the state unchanged.
 

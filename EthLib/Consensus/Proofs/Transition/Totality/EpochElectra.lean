@@ -16,6 +16,8 @@ From Fulu it moves the lookahead of proposers.
 
 From Gloas it pays builders and moves the window of payload timeliness committees.
 
+From Heze it skips the reset of the deposit votes.
+
 The supply and the size of the registry stay bounded from the start, so the draws can succeed.
 -/
 
@@ -165,7 +167,9 @@ theorem processEpoch_total_of_electra {config : Config} {checks : SignatureCheck
     -- It also bounds every finite exit epoch.
     (exits : ∀ validator ∈ state.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
       validator.exitEpoch.toNat ≤ ceiling)
-    -- That epoch plus the unstarted exit cost and withdrawability delay is below `2^64 - 1`.
+    -- Add to that epoch the cost of the exits not yet started and the withdrawability delay.
+    --
+    -- The sum is below `2^64 - 1`.
     (exitRoom : ceiling + exitCost preset state +
       config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64 - 1)
     -- The least churn and the largest shared churn are each at least one increment.

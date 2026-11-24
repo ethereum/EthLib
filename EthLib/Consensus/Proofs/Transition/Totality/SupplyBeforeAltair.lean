@@ -605,7 +605,7 @@ private theorem getUnslashedAttestingIndices_congr {other : BeaconState preset f
 
 The bound reads the active balance of the state before the epoch.
 
-It assumes the unslashed source signers of the previous epoch hold at most the active balance. -/
+Assume the unslashed signers of the source in the previous epoch hold at most the active balance. -/
 theorem processEpoch_supply_le_of_lt_altair {config : Config} {checks : SignatureChecks}
     -- The registry must be within its limit.
     (before : fork < .altair) (within : state.RegistryWithinLimit)

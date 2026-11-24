@@ -11,9 +11,16 @@ public import EthLib.Consensus.Proofs.Transition.Upgrade
 /-!
 # Proofs: the upgrades of the beacon state succeed under bounds
 
-Each upgrade succeeds under bounds on the state before it.
+Four upgrades do work that can fail, so each succeeds under bounds on the state before it:
 
-Where it draws, it also needs assumptions on its draws.
+- The upgrade to Altair turns the pending attestations into flags and draws the sync committee.
+- The upgrade to Electra starts the churns of exits and consolidations, and the queue of deposits.
+- The upgrade to Fulu computes the first lookahead of proposers.
+- The upgrade to Gloas computes the first window of payload timeliness committees.
+
+The upgrade to Gloas then moves the pending deposits of builders to a new registry of builders.
+
+Where an upgrade draws, it also needs assumptions on its draws.
 
 [EIP-7917] specifies the first lookahead of proposers at Fulu.
 

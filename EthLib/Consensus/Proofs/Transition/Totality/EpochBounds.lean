@@ -16,9 +16,16 @@ import EthLib.Consensus.Proofs.Transition.SlashingsHistory
 
 A run of slots carries bounds on the state from one epoch to the next.
 
-One epoch keeps bounds on the scores, the slashed balances, the history and the deposit churn.
+One epoch keeps four bounds:
+
+- From Altair, every inactivity score stays within a bound plus the score bias.
+- The sum of the slashed balances never rises, since one epoch only resets one entry.
+- One epoch adds at most one historical root, and from Capella at most one historical summary.
+- From Electra, the churn carried for deposits grows by at most the cap of the deposit churn.
 
 After one epoch, the effective balances sum to at most 4/3 of the balances on mainnet.
+
+That needs a state that keeps the invariant.
 
 Only the pending deposits grow the registry, by at most their cap at each epoch start.
 -/

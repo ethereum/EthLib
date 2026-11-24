@@ -6,11 +6,35 @@ import EthLib.Consensus.Proofs.Transition.BalanceDrift
 /-!
 # Proofs: a block raises the validators plus the pending deposits by a bounded amount
 
-A block adds validators and pending deposits through three kinds of operations only.
+A block adds validators and pending deposits through three kinds of operations only:
 
-They are the deposits of the deposit contract, the deposit requests and the consolidation requests.
+- Before Heze, a block carries deposits of the deposit contract.
+- From Electra, a block runs the deposit requests of [EIP-6110].
+- From Electra, a block runs consolidation requests.
+
+Before Electra each such deposit adds a validator or tops one up, so it adds at most one.
+
+From Electra a deposit with a new key adds a validator and a pending deposit, so at most two.
+
+A deposit with a known key only adds a pending deposit.
+
+From Fulu a block must carry no such deposit, and from Gloas it applies none.
+
+Each deposit request adds at most one pending deposit.
+
+A consolidation request adds at most one, when it switches a validator to compounding credentials.
+
+In Electra and Fulu the requests come from the payload of the block itself.
+
+From Gloas they come from the payload of its parent.
+
+A withdrawal request and every other operation of a block add no validator and no pending deposit.
 
 So a block raises the count by at most its deposits, twice from Electra, plus those requests.
+
+The registry alone grows by at most one validator for each deposit of the deposit contract.
+
+[EIP-6110]: https://eips.ethereum.org/EIPS/eip-6110#consensus-layer
 -/
 
 @[expose] public section

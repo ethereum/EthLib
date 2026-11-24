@@ -17,9 +17,13 @@ A chain keeps bounds that each block may raise by a fixed step.
 
 The protocol does not cap every amount that a block brings in, such as the Gwei of its deposits.
 
-So a block must stay within stated limits on its body, and then it keeps the facts of the chain.
+So a block must stay within stated limits on its body.
+
+A block that the transition accepts, within the limits, keeps the facts of the chain.
 
 Within the same limits, slashing a validator succeeds at the turn of an attester slashing.
+
+That attester slashing must name at least one validator.
 -/
 
 @[expose] public section
@@ -615,9 +619,14 @@ private theorem slashingTurn_proposer
 
 /-- Take the state a block reaches after its proposer slashings and first `j` attester slashings.
 
-Then three bounds hold for a validator in the registry at the turn, and one for `advanced`.
+The conditions of the chain hold, and one more block fits its count.
 
-The conditions of the chain hold, and one more block fits its count. -/
+Then three bounds hold for a validator in the registry at the turn, and one for `advanced`:
+
+- The slashed balance of the current epoch, if read, plus the effective balance is below `2^64`.
+- From Altair, the whistleblower reward times the proposer weight is below `2^64`.
+- Each balance at the turn plus the effective balance of the validator is below `2^64`.
+- The sum of the balances at `advanced` is within the budget. -/
 private theorem slashingTurn_balanceRoom {start : RunStart} {step : BlockStep}
     {limits : BlockLimits} {budget epochs lastEpoch startEpoch blocks : Nat}
     (conditions : ChainConditions preset config start step budget epochs lastEpoch)
@@ -644,17 +653,17 @@ private theorem slashingTurn_balanceRoom {start : RunStart} {step : BlockStep}
     (named : 1 ≤ slashing.attestation1.attestingIndices.data.size)
     {index : ValidatorIndex} {validator : Validator}
     (found : turn.validators.data[index.toNat]? = some validator) :
-    -- The current epoch's slashed balance, if read, plus its effective balance is below `2^64`.
+    -- The slashed balance of the epoch has room for the effective balance of the validator.
     (∀ amount, readCircular turn.slashings.elements (getCurrentEpoch turn) = .ok amount →
       amount.toNat + validator.effectiveBalance.toNat < 2 ^ 64) ∧
-    -- From Altair, its whistleblower reward times the proposer weight is below `2^64`.
+    -- From Altair, the whistleblower reward fits with the proposer weight.
     (.altair ≤ fork → (validator.effectiveBalance /
       (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT).toNat * PROPOSER_WEIGHT.toNat <
         2 ^ 64) ∧
-    -- Each balance at the turn plus that effective balance is below `2^64`.
+    -- Each balance at the turn has room for it.
     (∀ (position : Nat) (balance : Gwei), turn.balances.data[position]? = some balance →
       balance.toNat + validator.effectiveBalance.toNat < 2 ^ 64) ∧
-    -- The sum of the balances at `advanced` is within the budget.
+    -- The balances at `advanced` fit the budget.
     balanceSum advanced ≤ budget := by
   have baseRun := conditions.at (Nat.le_of_succ_le raised)
   have raisedRun := conditions.at raised
@@ -769,9 +778,9 @@ private theorem slashingTurn_balanceRoom {start : RunStart} {step : BlockStep}
 
 When the block has at most `j` attester slashings, that is the state after all of them.
 
-Then starting the exit of a validator in the registry at the turn succeeds.
+The conditions of the chain hold, and one more block fits its count.
 
-The conditions of the chain hold, and one more block fits its count. -/
+Then starting the exit of a validator in the registry at the turn succeeds. -/
 private theorem slashingTurn_exitRoom {start : RunStart} {step : BlockStep}
     {limits : BlockLimits} {budget epochs lastEpoch startEpoch blocks : Nat}
     (conditions : ChainConditions preset config start step budget epochs lastEpoch)
