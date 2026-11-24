@@ -32,7 +32,7 @@ def topicString (digest : Vector UInt8 4) (name : String) : String :=
   --
   -- `N` is the name of the topic, and it contains no `/`.
   --
-  -- `ssz_snappy` names the encoding of the messages, and it is the only encoding.
+  -- The last part names the encoding of the messages, SSZ compressed with Snappy, the only one.
   "/eth2/" ++ String.ofList (forkDigestChars digest) ++ "/" ++ name ++ "/ssz_snappy"
 
 /-- The name of the topic of one subnet.
