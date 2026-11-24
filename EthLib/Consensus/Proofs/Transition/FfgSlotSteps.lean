@@ -9,7 +9,9 @@ import EthLib.Consensus.Proofs.Transition.TargetUpgrades
 /-!
 # Proofs: the slot steps of a run that end two epochs of honest target votes finalize the first
 
-Two slot steps that end two epochs, each with two thirds of the stake honest, finalize.
+Two slot steps that each end an epoch finalize.
+
+In each of those epochs, honest validators hold two thirds of the stake.
 
 They finalize the checkpoint of the first epoch, as two epoch steps do.
 
@@ -28,7 +30,11 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 Justification runs on the state with the roots of the slot cached.
 
-That state has the epoch, the stake and the target votes of the state before the step. -/
+That state has the epoch, the stake and the target votes of the state before the step.
+
+It also has its current justified checkpoint and its bits of justification.
+
+The state after the step keeps the checkpoints and the bits that justification left. -/
 private theorem advanceSlotAcross_justification {forked after : ForkedBeaconState preset}
     (altair : .altair ≤ forked.fork) (advanced : advanceSlotAcross config checks forked = .ok after)
     -- A run of the chain ends an epoch with the slot step of its last slot.
@@ -80,6 +86,8 @@ Honest validators with two thirds of the active stake must count for the target.
 
 The newest bit of justification is then set, after the upgrades now due.
 
+The active stake is that of the current epoch, with effective balances, before the step.
+
 The epoch must be past the first two, so that justification runs. -/
 theorem advanceSlotAcross_justifiesCurrent {forked after : ForkedBeaconState preset}
     (altair : .altair ≤ forked.fork) (advanced : advanceSlotAcross config checks forked = .ok after)
@@ -109,9 +117,17 @@ theorem advanceSlotAcross_justifiesCurrent {forked after : ForkedBeaconState pre
 
 The first step is at the last slot of an epoch, and the second at the last slot of the next one.
 
+A fork may start between them, so the two states before the steps may be at different forks.
+
+Between the two steps the current justified checkpoint and the bits of justification stay.
+
 At each step, honest validators with two thirds of the active stake count for the target.
 
-The finalized checkpoint after the second step is the justified checkpoint of the first epoch. -/
+The first epoch must be past the first two, so that justification runs.
+
+The finalized checkpoint after the second step is the justified checkpoint of the first epoch.
+
+The current justified checkpoint after the second step is that of the second epoch. -/
 theorem advanceSlotAcross_finalizesTwoEpochs
     {first firstAfter second secondAfter : ForkedBeaconState preset}
     {firstHonest secondHonest : Finset ValidatorIndex}

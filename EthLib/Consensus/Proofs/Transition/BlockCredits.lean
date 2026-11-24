@@ -447,7 +447,12 @@ abbrev proposerDenominator : ℕ :=
   (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat) * WEIGHT_DENOMINATOR.toNat /
     PROPOSER_WEIGHT.toNat
 
-/-- What some operations of a block do to the balances. -/
+/-- What some operations of a block do to the balances.
+
+- The credits other than sync go to the proposer of the slot, from attestations and slashings.
+- Before Electra, they also go to the recipients of deposits.
+- The slashed validators were not slashed before, and pay their initial penalty.
+- The proposer reward of the attestations is bounded by the flags they set. -/
 structure Credited {fork : Fork} (o t : BeaconState preset fork)
     (proposer : ValidatorIndex) (credit : ℕ) (slashed conv : Finset ValidatorIndex)
     (other slash : ValidatorIndex → ℕ) : Prop where
@@ -997,6 +1002,17 @@ private theorem kept_processSyncAggregate {altair : .altair ≤ fork}
     Lives.of_data (by rw [(processSyncAggregate_kept computed).1])⟩
 
 /-- The balances of a block from Fulu, read at each validator.
+
+- Withdrawals pay at most the preset's `MAX_WITHDRAWALS_PER_PAYLOAD` validators.
+- Consolidation requests convert at most `MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD` validators.
+- The sync committee pays and charges each member at most its seats times the participant reward.
+- The other credits go to the proposer of the slot.
+- Deposits credit no balance in the block.
+- The slashed validators were not slashed before, and pay their initial penalty.
+
+The other credits are the proposer rewards of attestations and the whistleblower rewards.
+
+They also include the proposer share of the sync aggregate, which no participant amount counts.
 
 From Gloas the consolidation requests run in the payload of the parent, before the header. -/
 theorem block_balances {engine : ExecutionEngine preset fork}

@@ -8,7 +8,16 @@ public import EthLib.Consensus.Proofs.Transition.FfgSlackChain
 
 The theorem on chains takes the sets, weights and votes of the model as parameters.
 
-Here they come from the chain itself.
+Here they come from the chain itself:
+
+- The validator set of a checkpoint is the active set of its epoch, in the last state of the run.
+- Its second set is the active set of the next epoch, in the last state.
+- Its weights are the effective balances of each state at the end of its epoch or the next one.
+- The votes are those that the block steps between the first and the last state cast.
+
+From the step that justifies a checkpoint of an epoch on, the active set of that epoch stays fixed.
+
+The blocks of the model can also be the roots themselves, ordered by the links of reached states.
 
 The slack is the stake of the set `E(V t, U t)` of Gasper §8.6, Definition 8.1.
 
@@ -192,7 +201,11 @@ theorem SlackStepBounds.of_toChainRoot {first last : ForkedBeaconState preset}
 
 The sets of a checkpoint are the active sets of its epoch and the next one, in the last state.
 
-Each step on any run from genesis to the last state must meet the bounds on the stake and blocks.
+Its weights are the effective balances of each state at the end of its epoch or the next one.
+
+The votes are those that the block steps between genesis and the last state cast.
+
+Each step on any run between them must meet the bounds on the stake and the blocks.
 
 The genesis block of the model is the block of the zero root. -/
 theorem slackJustifiedCheckpoints_activeSetAt_of_chainSteps

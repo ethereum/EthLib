@@ -7,6 +7,10 @@ public import EthLib.Consensus.Proofs.Transition.FfgJustification
 
 The bound that the epoch step gives for a link, up to churn, is a slack link of the model.
 
+So the step keeps the two justified checkpoints of a state slack-justified in the model.
+
+One slot keeps them slack-justified too, under hypotheses on the state before it.
+
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
 The slack is the stake of the set `E(V t, U t)` of Gasper §8.6, Definition 8.1.
@@ -39,7 +43,15 @@ def SlackJustifiedCheckpoints (V U : Models.Ffg.Checkpoint β → Finset Validat
 
 /-- The sets of the model match the state for the checkpoint of an epoch.
 
-That checkpoint has the block of the root that the state records for the start of the epoch. -/
+That checkpoint has the block of the root that the state records for the start of the epoch.
+
+- Its validator set is the active set of the epoch.
+- Its set of weights holds the effective balances of the state.
+- Each of its validators in its second set is active in the current epoch.
+
+For the current epoch the last part always holds.
+
+As the second set, the active set of the next epoch meets it for both recent epochs. -/
 def TargetSetsMatch (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
     (W : Models.Ffg.Checkpoint β → Set (ValidatorIndex → ℕ)) (block : Root → β)
     (state : BeaconState preset fork) (epoch : Epoch) : Prop :=
@@ -242,7 +254,11 @@ theorem advanceSlot_getBlockRoot_currentJustified_of_ne
 
 /-- One slot keeps the two justified checkpoints slack-justified in the model.
 
-The hypotheses of justification are asked of the state before the slot.
+When the slot ends an epoch, justification runs at the state after the caching of the slot.
+
+That caching keeps the roots of the recent epochs, the flags, the checkpoints and the stakes.
+
+So the hypotheses of justification are asked of the state before the slot.
 
 The bound on the active stake and the chain are asked only when the slot ends an epoch.
 

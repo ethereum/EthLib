@@ -6,7 +6,17 @@ public import Mathlib.Data.Set.Image
 /-!
 # Proofs: honest votes with a fresh source add no slashable pair
 
-Fresh votes of a validator whose votes hold no slashable pair add none.
+A validator becomes slashable when it signs two attestation data that a slashing punishes.
+
+That is a double vote, two different data for one target epoch, or a surround vote.
+
+Take a validator whose votes so far hold no such pair.
+
+Let it cast new votes, at most one for each target epoch, with sources that never go back.
+
+Let each new vote also have a source at least, and a target after, those of every old vote.
+
+Then the old and the new votes together still hold no such pair.
 
 This is the last step of plausible liveness, Theorem 2 of Casper FFG §2.1.
 
@@ -26,7 +36,15 @@ def SlashableIn (votes : Set (ValidatorIndex × AttestationData)) (validator : V
     -- That pair is a double vote, two different data for one target epoch, or a surround vote.
     isSlashableAttestationData data1 data2 = true
 
-/-- New votes add no slashable pair to old ones that hold no slashable pair of the validator. -/
+/-- New votes add no slashable pair to old ones.
+
+The old votes hold no slashable pair of the validator.
+
+Each new vote has a source at least, and a target after, those of each old vote.
+
+The new votes have at most one data for each target epoch.
+
+Among them, a later target never has an earlier source. -/
 theorem not_slashableIn_union {old new : Set (ValidatorIndex × AttestationData)}
     {validator : ValidatorIndex} (safe : ¬SlashableIn old validator)
     -- Each new vote has a source at least, and a target after, those of each old vote.
@@ -55,7 +73,15 @@ theorem not_slashableIn_union {old new : Set (ValidatorIndex × AttestationData)
 
 /-- New votes with a fresh source add no slashable pair to old ones that hold none.
 
-The bounds are a source epoch and a target epoch. -/
+The bounds are a source epoch and a target epoch.
+
+They may be the highest justified epoch, and an epoch after every earlier target.
+
+Each old vote of the validator has a source at most the first bound and a target below the second.
+
+That is an assumption of honesty: an honest validator votes only from a justified source.
+
+Each new vote has a source at least the first bound and a target at least the second. -/
 theorem not_slashableIn_union_of_fresh {old new : Set (ValidatorIndex × AttestationData)}
     {validator : ValidatorIndex} {source target : Epoch} (safe : ¬SlashableIn old validator)
     -- The bounds may be the highest justified epoch, and an epoch after every earlier target.

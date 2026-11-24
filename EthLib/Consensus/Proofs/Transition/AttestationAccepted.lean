@@ -9,9 +9,26 @@ import EthLib.Consensus.Proofs.Transition.BlockRewards
 
 From Altair, an attestation in a block passes checks, then sets flags and pays the proposer.
 
-Each attester then holds the timely target flag when the target root is the root of its epoch.
+The checks are these:
 
-So honest votes count: the step of plausible liveness, which [Casper FFG] states as Theorem 2.
+- Its target is the epoch of its slot, and the current or the previous epoch of the state.
+- It comes at least the least inclusion delay after its slot, and before Deneb within one epoch.
+- Its bits fit its committees.
+- Its source is the current justified checkpoint when its target is the current epoch.
+- Otherwise its source is the previous justified checkpoint.
+- Its indexed form passes the signature check.
+
+The rest of the step reads the state and adds rewards with checked arithmetic.
+
+Under a budget on the balances with room for the rewards, none of it fails.
+
+Each attester then holds the timely target flag, when the target root is the root of its epoch.
+
+That is the root that the state holds for the first slot of the target epoch.
+
+This is the step of plausible liveness that makes honest votes count.
+
+[Casper FFG] states that property as its Theorem 2.
 
 From Gloas the step also weighs a payment of the builder, which these theorems leave out.
 

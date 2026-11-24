@@ -11,7 +11,19 @@ The trace bound of an inactivity leak reads one validator before each epoch tran
 
 Between two epoch transitions, the chain runs blocks and slots that end no epoch.
 
-The module follows the validator through any sequence of such steps, within one fork.
+- A slot that runs no epoch keeps every balance, every score and the registry.
+- A block keeps each score and each effective balance of the registry before it.
+- A block raises no balance of a validator that it does not credit.
+
+The module follows the validator through any sequence of such steps.
+
+After them the validator keeps its position, its key, its effective balance and its score.
+
+It still has a balance, and that balance is no higher.
+
+The steps stay within one fork.
+
+The slot that runs an epoch transition, and an upgrade, are not among them.
 -/
 
 @[expose] public section
@@ -25,7 +37,15 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 
 /-- One step between two epoch transitions that credits nothing to one validator.
 
-The validator is named by its position and by its key, given separately. -/
+The validator is named by its position and by its key, given separately.
+
+- A slot step is one slot that does not end an epoch, so it runs no epoch transition.
+- A block step is a successful block that meets these conditions:
+  - Its proposer sits at another position.
+  - From Altair, no member that signs its sync aggregate has the key.
+  - Before Heze, no deposit of the block carries the key.
+
+A block has no deposits from Heze. -/
 inductive QuietStep (config : Config) (checks : SignatureChecks) (index : Nat)
     (key : Cryptography.Bls.BLSPubkey) :
     BeaconState preset fork → BeaconState preset fork → Prop where
@@ -46,7 +66,9 @@ inductive QuietStep (config : Config) (checks : SignatureChecks) (index : Nat)
         ∀ member ∈ ((state.currentSyncCommittee altair).value.pubkeys.toArray.zip
           (block.body.syncAggregate altair).syncCommitteeBits.bits.toArray).toList,
           member.2 = true → member.1 ≠ key)
-      -- No deposit of the block carries the key; there are none from Heze.
+      -- No deposit of the block carries the key.
+      --
+      -- A block has no deposits from Heze.
       (undeposited : ∀ before : fork < .hegota, ∀ deposit ∈ (block.body.deposits before).data,
         deposit.data.pubkey ≠ key) :
       QuietStep config checks index key state after
@@ -74,7 +96,9 @@ The validator has a balance and the given key before the steps.
 
 After them it keeps its position, its key, its effective balance and its score.
 
-It still has a balance, and that balance is no higher. -/
+It still has a balance, and that balance is no higher.
+
+The mixes must span more than the seed lookahead plus two epochs. -/
 theorem quietSteps_kept
     -- The mixes must span more than the seed lookahead plus two epochs.
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)

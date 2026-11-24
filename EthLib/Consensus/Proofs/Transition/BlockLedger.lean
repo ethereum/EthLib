@@ -47,7 +47,15 @@ namespace BlockLedger
 
 /-! ## The balance ledger of a block -/
 
-/-- How the balances move from one state to another, read at each validator. -/
+/-- How the balances move from one state to another, read at each validator.
+
+- A balance rises by at most its participant sync amount and its other credits.
+- Off the paid and converted validators, a balance falls by at most the sum of two amounts.
+- A converted validator falls only to the activation balance, and then rises by its credits.
+- Off the converted validators, whether the credentials compound stays.
+- A converted validator did not compound before, and compounds after.
+
+The two amounts of a fall are the participant sync amount and the slashing penalty. -/
 structure Ledger {fork : Fork} (s t : BeaconState preset fork)
     (paid conv : Finset ValidatorIndex) (sync other slash : ValidatorIndex → ℕ) : Prop where
   -- A balance rises by at most its participant sync amount and its other credits.

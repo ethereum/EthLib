@@ -582,7 +582,22 @@ theorem Run.withdrawableKept_of_same_epoch {x y : ForkedBeaconState preset}
 
 /-- Along a run inside one epoch, from Fulu, balances move by bounded amounts.
 
-The bounds are read at the last state of the run. -/
+Read at the last state of the run:
+
+- Off the debited validators, a balance falls by at most its slashing and sync penalties.
+- Withdrawals and conversions debit validators, at most the payload limits in each block.
+- Off the debited validators, the largest effective balance stays.
+- A balance rises by at most the sync rewards of the blocks and its other credits.
+- The other credits go only to the proposers and the recipients of deposits.
+- From Electra, a block credits no deposit to a balance.
+- The credits apart from deposits sum to at most the proposer credit and whistleblower rewards.
+- The proposer credit covers attestation rewards and the proposer share of sync aggregates.
+- The whistleblower rewards are those of the validators slashed at the last state.
+- The bound also holds with only the validators slashed within the run.
+- Those validators were slashable at the first state, whose exits must be ordered.
+- A validator whose largest effective balance changed was converted.
+- A converted balance ends within the activation balance above its later credits.
+- Effective balances stay. -/
 theorem Run.balanceCorrections_of_same_epoch {x y : ForkedBeaconState preset}
     (tail : Run config checks x y)
     (fulu : .fusaka ≤ y.fork)

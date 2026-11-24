@@ -6,11 +6,23 @@ public import EthLib.Consensus.Proofs.Transition.StateTransition
 /-!
 # Proofs: the slots keep the root of the latest block
 
-After the slots up to a later slot, the root at the slot before it is the root of the header.
+Each slot step writes the root of the latest block header into the buffer of block roots.
+
+It fills the state root of the header when that root is zero.
+
+So it writes the root of the new header.
+
+The epoch transition changes neither the buffer of block roots nor the latest block header.
+
+So after the slots up to a later slot, the root at the slot before it is the root of the header.
 
 The block handler uses this to show which parent a block it accepts names.
 
 The block, and from Gloas its bid, names that root as its parent.
+
+From Gloas the slots and the epoch transition also keep the latest block hash and the latest bid.
+
+The slots and the transition keep the genesis time.
 -/
 
 @[expose] public section

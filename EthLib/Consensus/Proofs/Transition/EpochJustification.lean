@@ -6,9 +6,23 @@ public import EthLib.Consensus.Transition.EpochJustification
 /-!
 # Proofs: justification and finalization
 
-What weighing the votes justifies and finalizes, and how the step keeps the checkpoints in order.
-
 The step finalizes only a checkpoint that was justified before it, or keeps the finalized one.
+
+The old current justified checkpoint becomes the previous one.
+
+The new current justified checkpoint is the old one, or that of the previous or the current epoch.
+
+It is that of an epoch only when the test of that epoch passes.
+
+Its root is then the block root that the state records for the first slot of that epoch.
+
+The checkpoints of a state are in order when their epochs do not decrease.
+
+That order is the finalized, then the previous justified, then the current justified checkpoint.
+
+The step keeps them in order when the current justified epoch is at most the previous epoch.
+
+The finalized epoch then never decreases.
 -/
 
 @[expose] public section
@@ -113,7 +127,13 @@ theorem weighJustificationAndFinalization_currentJustified
     subst weightOk
     exact UInt64.not_le.mp (of_decide_eq_false failedCurrent)
 
-/-- The checkpoints that weighing the votes sets; nothing else changes but the bits. -/
+/-- The checkpoints that weighing the votes sets.
+
+- The old current justified checkpoint becomes the previous one.
+- The new current justified checkpoint is the old one, or that of the previous or current epoch.
+- The new finalized checkpoint is the old one, or one of the two old justified checkpoints.
+
+Nothing else changes but the bits of justification. -/
 theorem weighJustificationAndFinalization_checkpoints {total previous current : Gwei}
     (computed : weighJustificationAndFinalization state total previous current = .ok after) :
     -- The old current justified checkpoint becomes the previous one.
@@ -178,7 +198,9 @@ def FinalizationStepRule (state after : BeaconState preset fork) (checkpoint : C
     ((bits[0] = true ∧ bits[1] = true ∧ bits[2] = true ∧ checkpoint.epoch.toNat + 2 = e) ∨
       (bits[0] = true ∧ bits[1] = true ∧ checkpoint.epoch.toNat + 1 = e)))
 
-/-- Weighing votes keeps the finalized checkpoint, or finalizes an old justified one by a rule. -/
+/-- Weighing the votes keeps the finalized checkpoint.
+
+Or it finalizes an old justified checkpoint by a rule. -/
 theorem weighJustificationAndFinalization_finalized {total previousBalance currentBalance : Gwei}
     (computed : weighJustificationAndFinalization state total previousBalance currentBalance =
       .ok after) :
@@ -216,7 +238,16 @@ theorem weighJustificationAndFinalization_finalized {total previousBalance curre
         exact .inr ⟨rule.1.1, rule.1.2, rule.2⟩
     · exact .inl rfl
 
-/-- What weighing the votes does to the four bits and to the finalized checkpoint. -/
+/-- What weighing the votes does to the four bits and to the finalized checkpoint.
+
+- A set bit 0 means that the test of the current epoch passed.
+- A set bit 1 means that the test of the previous epoch passed, or that the old bit 0 was set.
+- Bits 2 and 3 are the old bits 1 and 2.
+
+The new finalized checkpoint is the old one, or an old justified one by one of these rules:
+
+- The old current justified checkpoint needs at least bit 0, and also bit 1 when two back.
+- The old previous justified checkpoint needs at least bit 1, and also bit 2 when three back. -/
 theorem weighJustificationAndFinalization_bits {total previousBalance currentBalance : Gwei}
     (computed : weighJustificationAndFinalization state total previousBalance currentBalance =
       .ok after) :

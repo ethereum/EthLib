@@ -7,13 +7,15 @@ public import EthLib.Consensus.Proofs.Transition.PayloadInputs
 /-!
 # Proofs: activity up to the current epoch plus `MAX_SEED_LOOKAHEAD` stays fixed along a chain
 
-The current epoch plus `MAX_SEED_LOOKAHEAD` is a bound.
+The state transition sets an activation or an exit epoch only after a bound.
 
-The state transition sets an activation or an exit epoch only after it.
+That bound is the current epoch plus `MAX_SEED_LOOKAHEAD`.
 
 So each step of a chain keeps which validators are active in each epoch up to that bound.
 
 That holds at every fork, for slots, epochs, blocks and upgrades.
+
+So along a run of steps, the active sets stay fixed in each epoch up to the bound of its start.
 -/
 
 @[expose] public section
@@ -1438,7 +1440,9 @@ private theorem chainSteps_kept {first last : ForkedBeaconState preset}
   | refl => exact ⟨Nat.le_refl _, ActiveKept.refl _ _⟩
   | head step _ more =>
     obtain ⟨grows, active, later⟩ := chainStep_kept step
-    -- The current epoch never decreases along a chain, so neither does the bound.
+    -- The current epoch never decreases along a chain.
+    --
+    -- So the bound never decreases either.
     exact ⟨Nat.le_trans grows more.1,
       active.trans (more.2.mono (activityFixedEpoch_mono later))⟩
 

@@ -8,9 +8,17 @@ public import EthLib.Consensus.Proofs.Models.Stake
 
 The stake of a validator is its effective balance, and a total balance is the stake of a set.
 
+With aligned effective balances, each stake is a multiple of each divisor of the increment.
+
+The total is never below one increment, which matters only for small totals.
+
+Above one and a half increments of active stake, the test of justification compares stakes.
+
 A supermajority link of the model follows Gasper Definition 4.5.
 
-Gasper asks for more than two thirds of the stake; the beacon chain and the model accept two thirds.
+Gasper asks for more than two thirds of the stake.
+
+The beacon chain and the model accept two thirds.
 
 The paper is [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
 -/

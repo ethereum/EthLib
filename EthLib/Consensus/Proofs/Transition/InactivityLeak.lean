@@ -5,11 +5,52 @@ public import EthLib.Consensus.Proofs.Transition.EpochParticipation
 /-!
 # Proofs: one epoch of an inactivity leak, from Altair
 
-In a leak, the update of the inactivity scores runs, and then the rewards and penalties.
+The chain leaks when the finalized epoch is over four epochs behind the previous one, on mainnet.
+
+Then the update of the inactivity scores runs, and then the rewards and penalties.
 
 These proofs state what the two steps do to each validator in such an epoch.
 
+Each step changes one field: the scores, then the balances.
+
+In a leak no flag earns a reward, so no balance rises in these two steps.
+
+Proposers and sync committees still earn rewards in the blocks.
+
+A validator pays the weight of each of the source and target flags that it did not set.
+
+That weight is a share of its base reward, 14/64 for the source and 26/64 for the target.
+
+A validator that did not set the target flag also pays an inactivity penalty.
+
+That penalty is its effective balance times its new score, over the score bias times a quotient.
+
+The quotient is `3 * 2^24` at Altair and `2^24` from Bellatrix, on mainnet.
+
+So the divisor is `3 * 2^26` at Altair and `2^26` from Bellatrix.
+
+A validator that set the source and target flags thus keeps its balance.
+
 This is the discrete rule behind the model of [Pavloff et al.][pat].
+
+Its Section 4.1, Equation 1, gives the score, and its Section 4.2, Equation 2, the penalty.
+
+That model differs from the rule in several ways:
+
+- It ignores the penalties of the flags, and the rounding of each quotient.
+- It uses the stake where the rule uses the effective balance.
+- Its Equation 2 charges every validator with a score, where the rule spares those with the target.
+- Its divisor `2^26` is that from Bellatrix.
+- Its leak starts after four epochs without finality, where the rule asks for a delay above four.
+- Its active validator votes for the right target.
+
+The rule asks for the timely target flag, from an unslashed active validator.
+
+So a slashed validator that is still eligible always counts as absent.
+
+The update at the end of an epoch reads the flags of the epoch before it.
+
+In the rule the penalty uses the score already raised in the same epoch.
 
 [pat]: https://arxiv.org/abs/2404.16363v2
 -/
@@ -78,6 +119,22 @@ This holds when both steps succeed, for a registry within its limit.
 
 The leak test is that of the state before the score update, after justification and finalization.
 
+- A validator that is not eligible keeps its balance and its score.
+- An eligible validator that set the target flag loses one point of score, stopping at zero.
+- Any other eligible validator gains the score bias.
+
+No eligible validator earns a reward.
+
+It pays the weight of the source flag in its base reward if it did not set that flag.
+
+It pays the weight of the target flag in its base reward if it did not set that flag.
+
+In that case it also pays its effective balance times its new score.
+
+That product is divided by the score bias times the penalty quotient of the fork.
+
+Each quotient rounds down, and the balance stops at zero.
+
 The flags are those of the previous epoch, set by an unslashed active validator. -/
 theorem processRewardsAndPenalties_of_leak {config : Config} (altair : .altair â‰¤ fork)
     -- On mainnet the chain leaks when the finalized epoch is over four behind the previous epoch.
@@ -126,32 +183,6 @@ theorem processRewardsAndPenalties_of_leak {config : Config} (altair : .altair â
                     (config.INACTIVITY_SCORE_BIAS.toNat *
                       (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat)))) := by
   -- Each step of the rule changes one field: the scores, then the balances.
-  --
-  -- The model of Pavloff et al. differs from this rule in several ways.
-  --
-  -- Its Section 4.1, Equation 1, gives the score, and its Section 4.2, Equation 2, the penalty.
-  --
-  -- It ignores the penalties of the flags, and the rounding of each quotient.
-  --
-  -- It uses the stake where the rule uses the effective balance.
-  --
-  -- Its Equation 2 charges every validator with a score.
-  --
-  -- The rule spares those with the target.
-  --
-  -- Its divisor `2^26` is that from Bellatrix.
-  --
-  -- Its leak starts after four epochs without finality, where the rule asks for a delay above four.
-  --
-  -- Its active validator votes for the right target.
-  --
-  -- The rule asks for the timely target flag, from an unslashed active validator.
-  --
-  -- So a slashed validator that is still eligible always counts as absent.
-  --
-  -- The update at the end of an epoch reads the flags of the epoch before it.
-  --
-  -- In the rule the penalty uses the score already raised in the same epoch.
   have later := getCurrentEpoch_ne_genesis_of_leak leak
   have scoresOf := processInactivityUpdates_scores later updated
   unfold processInactivityUpdates at updated

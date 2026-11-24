@@ -8,7 +8,15 @@ public import EthLib.Consensus.Transition.Genesis
 
 A candidate genesis state exists only before Altair.
 
-It satisfies the invariant that each valid block keeps.
+It satisfies the invariant that each valid block keeps:
+
+- Its registry and balances have one entry for each validator.
+- Each of its validators may withdraw no earlier than it exits.
+- Its finalized, previous justified and current justified epochs are in increasing order.
+- Its current justified epoch is at most its previous epoch.
+- Its effective balances are whole increments, when the largest values of the preset are.
+
+The three checkpoints all have the genesis epoch, so the two parts on epochs hold.
 
 A candidate state launches the chain exactly when it is late enough.
 
@@ -85,7 +93,11 @@ private theorem Invariant.withGenesisValidatorsRoot {root : Root} (holds : Invar
 
 Its fork is before Altair.
 
-It starts from an empty genesis state with the block hash and the deposit count. -/
+It starts from an empty genesis state with the block hash and the deposit count.
+
+It adds each deposit, then activates the validators.
+
+The result then takes some genesis validators root. -/
 theorem initializeBeaconStateFromEth1_ok {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit} {after : BeaconState preset fork}
     (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
@@ -116,7 +128,11 @@ theorem initializeBeaconStateFromEth1_ok {eth1BlockHash : Hash32} {eth1Timestamp
 
 Its fork is before Altair.
 
-The empty state has the block hash and the deposit count. -/
+The empty state has the block hash and the deposit count.
+
+The deposits and the activations keep the frame.
+
+The result then takes some genesis validators root. -/
 theorem initializeBeaconStateFromEth1_frame {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit} {after : BeaconState preset fork}
     (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =

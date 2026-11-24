@@ -8,11 +8,32 @@ public import EthLib.Consensus.Transition.Block
 
 An attestation carries a Casper FFG vote: the link from its source checkpoint to its target.
 
+A map from roots to blocks turns each checkpoint into a checkpoint of the model.
+
 Each pair of votes that breaks a slashing condition of the model is slashable in the beacon chain.
+
+The beacon chain slashes two more kinds of pairs, so the converse fails:
+
+- Two different attestations with one source and one target.
+- A surround whose inner vote does not go forward in epochs.
+
+The first kind differs in its slot, its committee or its head, and makes one vote of the model.
+
+The model counts a surround only when the inner link goes forward.
+
+Casper FFG §2 states its second slashing condition with that order of the four epochs.
+
+The paper is [arXiv 1710.09437v4](https://arxiv.org/abs/1710.09437v4).
+
+With these two kinds added, and an injective map, the two rules agree exactly.
 
 Accountable safety then holds for signed attestations.
 
-The paper is [arXiv 1710.09437v4](https://arxiv.org/abs/1710.09437v4).
+Two conflicting finalized checkpoints make some validators slashable.
+
+Together they hold at least one third of the stake.
+
+Each of them signed two attestations that an attester slashing can hold.
 -/
 
 @[expose] public section
@@ -184,9 +205,13 @@ theorem exists_isSlashableAttestationData_of_slashable {block : Root → β}
 open scoped Classical in
 /-- Accountable safety for signed attestations.
 
+Take the votes of the model that the signed attestation data cast.
+
 Take two finalized checkpoints of the model whose blocks conflict.
 
-Then validators with at least a third of the stake of `V` each signed two data that are slashable.
+Then some validators of `V` each signed two attestation data that the beacon chain slashes.
+
+Together they hold at least one third of the stake of `V`.
 
 The theorem takes one validator set and one stake for every vote, a special case of the model. -/
 theorem accountable_safety_isSlashableAttestationData [Preorder β] {V : Finset ν} {w : ν → ℕ}

@@ -6,7 +6,21 @@ public import EthLib.Consensus.Transition.EpochParticipation
 /-!
 # Proofs: the Altair epoch steps of flags, scores and sync committees
 
-The rotation of the flags, the sync committee update and the update of the inactivity scores.
+The rotation of the flags moves the current flags to the previous epoch.
+
+It then gives each validator an empty set of flags for the current epoch.
+
+The sync committee update moves the next committee to the current one, only at a period's end.
+
+There it stores as the next committee a draw from the state with that new current committee.
+
+The inactivity scores change nothing in the first epoch, and keep one score per entry.
+
+After the first epoch, each eligible validator gets its next score, and the other scores stay.
+
+- An unslashed validator with the previous target flag loses one point, stopping at zero.
+- The other eligible validators gain the score bias.
+- Outside a leak each of those scores then loses the recovery rate, stopping at zero.
 
 None of these steps changes the size of the registry or of the balances.
 -/
@@ -239,7 +253,13 @@ private theorem getD_markIndices_iff {flagIndex : UInt64} {epoch : Epoch}
 
 /-- From Altair and after the first epoch, take an update of the inactivity scores that succeeds.
 
-Each eligible validator gets its next score, and the other scores stay. -/
+Each eligible validator gets its next score, and the other scores stay.
+
+A validator with the target flag loses one point, stopping at zero.
+
+Any other eligible validator gains the score bias.
+
+Outside a leak the score then loses the recovery rate, stopping at zero. -/
 theorem processInactivityUpdates_scores {config : Config} {altair : .altair ≤ fork}
     (later : getCurrentEpoch state ≠ GENESIS_EPOCH)
     (computed : processInactivityUpdates config state altair = .ok after) :
@@ -256,7 +276,9 @@ theorem processInactivityUpdates_scores {config : Config} {altair : .altair ≤ 
           isInInactivityLeak state = .ok leak ∧
           (state.inactivityScores altair).data[index.toNat]? = some score ∧
           (after.inactivityScores altair).data[index.toNat]? = some score' ∧
-          -- A hit loses one point, and a miss gains the score bias.
+          -- A validator with the target flag loses one point, stopping at zero.
+          --
+          -- Any other eligible validator gains the score bias.
           --
           -- Outside a leak the score then loses the recovery rate, stopping at zero.
           score'.toNat = (if index ∈ hitters then score.toNat - 1

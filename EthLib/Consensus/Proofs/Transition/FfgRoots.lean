@@ -9,6 +9,8 @@ public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
 
 Each step of a chain keeps each justified checkpoint below the roots recorded from its epoch on.
 
+The parent root of a block is the root recorded at the slot before it, by the check of its header.
+
 Casper FFG §2 ignores a vote whose source is not an ancestor of its target.
 
 The paper is [arXiv 1710.09437v4](https://arxiv.org/abs/1710.09437v4).
@@ -48,8 +50,13 @@ def rootLinks {fork : Fork} (state : BeaconState preset fork) : Set (Root × Roo
 
 /-- The roots, ordered by the links that each state reachable from a first state records.
 
-It is ancestry only up to collisions of header roots, so it serves no safety theorem for two chains.
--/
+The order holds the links of every branch from that state, so two branches share it.
+
+So it also holds every collision of header roots among reachable headers, which exist by counting.
+
+It is ancestry only up to those collisions, so it does not serve a safety theorem for two chains.
+
+Such a theorem needs the order of the states of the given runs, with a named collision search. -/
 def ChainRoot (_config : Config) (_checks : SignatureChecks) (_first : ForkedBeaconState preset) :
     Type :=
   -- The order holds the links of every branch from the first state, so two branches share it.

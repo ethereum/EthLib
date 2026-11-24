@@ -7,9 +7,15 @@ public import EthLib.Consensus.Proofs.Transition.FfgRoots
 
 The genesis checkpoint is slack-justified, and each step of a chain keeps both justified ones so.
 
-The genesis state built from deposits exists only before Altair.
+So along a chain from the genesis state built from deposits, both are slack-justified in the model.
 
-So a chain whose genesis is later is out of scope.
+That genesis state exists only before Altair, so a chain whose genesis is later is out of scope.
+
+Each step needs hypotheses on the states before and after it.
+
+The theorem takes the sets and weights of the model as parameters, matched where a step may justify.
+
+One choice of them can serve a whole chain, as a set of weights holds the balances of many states.
 
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
@@ -164,9 +170,15 @@ private theorem processAttestation_window {fork : Fork}
 
 The check runs on a state inside the block, after the operations start.
 
-Its target is the current or the previous epoch of the state before the block, and that of its slot.
+It checks the indexed form that the state before the block reads, since the attesters agree.
 
-It holds for any signature checks, with more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
+Its target is the current or the previous epoch of that state, and the epoch of its slot.
+
+The attestation was included at least the least inclusion delay after its slot.
+
+It holds for any signature checks.
+
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
 theorem processBlock_attestation_checked
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {fork : Fork} {engine : ExecutionEngine preset fork} {state after : BeaconState preset fork}
@@ -238,9 +250,13 @@ theorem processBlock_attestation_checked
 
 The voter is among its attesters, and its data is the data of the vote.
 
+The check ran on a state inside the block, and it accepted.
+
 The result also says where in the block the check ran: at an attestation or an attester slashing.
 
-It holds for any signature checks, with more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
+It holds for any signature checks.
+
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
 theorem blockVotes_verified
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {fork : Fork} {engine : ExecutionEngine preset fork} {state after : BeaconState preset fork}
@@ -273,7 +289,9 @@ The step applies a signed block, and the check ran inside that block and accepte
 
 The voter is among its attesters, and its data is the data of the vote.
 
-It holds for any signature checks, with more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
+It holds for any signature checks.
+
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
 theorem blockStepVotes_verified
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {forked after : ForkedBeaconState preset} {vote : ValidatorIndex × AttestationData}
@@ -296,7 +314,14 @@ theorem blockStepVotes_verified
   exact ⟨engine, signed, validateResult, state, input, checked, indexed, afterEq, applied,
     started, site, signs, dataEq, valid⟩
 
-/-- The properties of a state that the steps of a chain keep. -/
+/-- The properties of a state that the steps of a chain keep.
+
+- The state keeps the invariant of valid blocks.
+- In the first two epochs, its two justified checkpoints are equal.
+- Once justification runs, its previous justified epoch is below its previous epoch.
+- Its target flags and pending attestations come from votes of a set for their links.
+- Its justified checkpoints are below the roots it records from their epochs on.
+- Its two justified checkpoints are slack-justified in the model, for the votes of that set. -/
 structure SlackChainInvariant (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
     (W : Models.Ffg.Checkpoint β → Set (ValidatorIndex → ℕ)) (genesis : β)
     (attested : Set (ValidatorIndex × AttestationData)) (block : Root → β)
@@ -322,7 +347,9 @@ The order of the blocks of the model is an assumption on the map from roots to b
 
 The meaningful choice orders the roots by the links that the states of the chains record. -/
 structure SlackStepBounds (block : Root → β) (forked after : ForkedBeaconState preset) : Prop where
-  /-- At the end of an epoch, the active stake of the current epoch is more than 1.5 increments.
+  /-- At the end of an epoch, the active stake is more than one and a half increments.
+
+  That stake is the active stake of the current epoch.
 
   It is asked only of a step that moves the slot, when that slot ends an epoch. -/
   large : after.state.slot ≠ forked.state.slot →
@@ -539,7 +566,13 @@ Each step must meet its hypotheses.
 
 The genesis block of the model is the block of the zero root.
 
-The sets and weights are bounded from one side only. -/
+The sets and weights are bounded from one side only.
+
+So the result is meaningful for the active sets and the effective balances.
+
+Each block step must cast only votes of the set, and this set holds every one of them.
+
+The meaningful set holds the votes that the block steps of the chain cast, and no others. -/
 theorem slackJustifiedCheckpoints_of_chain (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -560,7 +593,9 @@ theorem slackJustifiedCheckpoints_of_chain (positive : 0 < preset.SLOTS_PER_EPOC
   --
   -- The set of all votes meets these hypotheses.
   --
-  -- So the theorem bounds who voted only for a set as small as the votes of the run.
+  -- The smaller the set, the more the theorem says.
+  --
+  -- The votes of the run are the smallest choice.
   --
   -- The meaningful set holds the votes that the block steps of the chain cast, and no others.
   --
