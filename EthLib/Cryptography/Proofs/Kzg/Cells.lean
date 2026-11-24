@@ -14,6 +14,8 @@ The coset of a cell has a full cell of points.
 The batch challenge is a canonical field element.
 
 Each cell operation rejects each malformed input with its own error, before any other work.
+
+A buffer of indices decodes to a list exactly when it holds their 8-byte encodings, in order.
 -/
 
 @[expose] public section
@@ -312,5 +314,56 @@ theorem unpackIndicesBE_bad_size {b : ByteArray} (h : b.size % 8 ≠ 0) :
   unfold unpackIndicesBE
   simp [hsz]
   rfl
+
+/-- A buffer of a multiple of 8 bytes decodes to one index per 8 bytes, in order. -/
+private theorem unpackIndicesBE_eq_ok_of_mod_eq_zero {b : ByteArray} (h : b.size % 8 = 0) :
+    unpackIndicesBE b = .ok ((List.range (b.size / 8)).map fun i =>
+      Base.bytesToNat ((b.data.toList.drop (i * 8)).take 8)).toArray := by
+  unfold unpackIndicesBE
+  simp only [h, bne_self_eq_false, Bool.false_eq_true, ite_false]
+  rw [Std.Legacy.Range.forIn_eq_forIn_range']
+  simp only [List.forIn_pure_yield_eq_foldl, Std.Legacy.Range.size, ByteArray.data_extract,
+    Array.toList_extract, List.extract_eq_take_drop, Array.mkEmpty_eq, pure_bind]
+  have hsteps : (b.size / 8 - 0 + 1 - 1) / 1 = b.size / 8 := by omega
+  have hwidth : ∀ a : Nat, (a + 1) * 8 - a * 8 = 8 := fun a => by omega
+  -- The loop pushes one index per step, so it appends the list of the indices.
+  simp only [hsteps, hwidth, ← List.range_eq_range', List.foldl_push_eq_append]
+  simp
+  rfl
+
+/-- A buffer decodes to a list of indices exactly when it is their encodings, in order.
+
+Each index is below `2^64`, and its encoding is 8 bytes, the most significant first.
+
+So the decoding reads all 8 bytes of each index, and drops or adds no byte of the buffer. -/
+theorem unpackIndicesBE_eq_ok_iff (b : ByteArray) (xs : Array Nat) :
+    unpackIndicesBE b = .ok xs ↔
+      (∀ x ∈ xs, x < 2 ^ 64) ∧ b.data.toList = xs.toList.flatMap (Base.natToBytes 8) := by
+  have h64 : (2 : Nat) ^ 64 = 256 ^ 8 := rfl
+  constructor
+  · intro hok
+    by_cases h : b.size % 8 = 0
+    · rw [unpackIndicesBE_eq_ok_of_mod_eq_zero h] at hok
+      obtain rfl := (Except.ok.inj hok).symm
+      refine ⟨fun x hx => ?_, ?_⟩
+      · obtain ⟨i, -, rfl⟩ := List.mem_map.mp (List.mem_toArray.mp hx)
+        have hlt := Base.bytesToNat_lt ((b.data.toList.drop (i * 8)).take 8)
+        have hle : 256 ^ ((b.data.toList.drop (i * 8)).take 8).length ≤ 2 ^ 64 :=
+          h64 ▸ Nat.pow_le_pow_right (by decide) (List.length_take_le _ _)
+        omega
+      · have hlen : b.data.toList.length = 8 * (b.size / 8) := by
+          rw [Array.length_toList]
+          exact (Nat.mul_div_cancel' (Nat.dvd_of_mod_eq_zero h)).symm
+        rw [List.toList_toArray, Base.flatMap_natToBytes_map_range_bytesToNat hlen]
+    · rw [unpackIndicesBE_bad_size h] at hok
+      cases hok
+  · rintro ⟨hlt, heq⟩
+    have hlen : b.size = 8 * xs.size := by
+      have hsize : b.data.toList.length = b.size := Array.length_toList
+      rw [← hsize, heq, Base.length_flatMap_natToBytes, Array.length_toList]
+    rw [unpackIndicesBE_eq_ok_of_mod_eq_zero (by omega), show b.size / 8 = xs.toList.length by
+      rw [Array.length_toList]; omega, heq,
+      Base.map_range_bytesToNat_flatMap_natToBytes
+        fun x hx => h64 ▸ hlt x (Array.mem_toList_iff.mp hx)]
 
 end EthLib.Cryptography.Kzg
