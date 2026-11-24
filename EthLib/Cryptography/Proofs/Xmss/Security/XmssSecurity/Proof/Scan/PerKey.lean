@@ -5,17 +5,11 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.P
 /-!
 # One key: the cached-selection collision against the encoding queries
 
-Start from a key cache with no encoding input.
+The event has probability at most `(Q + E) / 2^128`.
 
-Run the adversary phase, then a final computation (the verification).
+Here `Q` bounds the adversary's hash queries, and `E` is the verification's expected count.
 
-The event is a first entry of one of two kinds.
-
-In the first, its selected cached input is partnered.
-
-In the second, a later query repeats its selected digest.
-
-The event has probability at most the source game's expected encoding queries over `2^128`.
+A first form charges the whole run's expected encoding queries instead.
 -/
 
 @[expose] public section
@@ -29,6 +23,7 @@ open Partner
 local notation "N" => ((2 ^ digestBits : ℕ) : ℝ≥0∞)
 
 variable (publicKey : PublicKey) (secretKey : SecretKey) {cache0 : QueryCache HashSpec}
+  -- The run starts from a key cache with no encoding input.
   (hc0 : ∀ e y, cache0 (input secretKey.parameter e y) = none)
 
 section Initial
@@ -99,13 +94,16 @@ noncomputable def signedCost : (OracleWorld + SigningSpec).Domain → State → 
   onHash fun x s => signedInd secretKey.parameter x s.1.2
 
 include hc0 in
-/-- Before signing. -/
-theorem preBad_le (Q : ℕ) (hQ : Q ≤ 2 ^ 127) (computation : OracleComp (OracleWorld + SigningSpec) α)
-    (hbound : HashQueryBound (simulateQ (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey)
-      computation) cache0 Q) :
-    N * N * Pr{let r ← (simulateQ (impl publicKey secretKey) computation).run ((cache0, []), 0)}[PreBad secretKey r.2.1.2] ≤
+/-- Before signing, when no adversary hash query is made with the budget spent. -/
+theorem preBad_le_of_overBudget (Q : ℕ) (hQ : Q ≤ 2 ^ 127)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (hover : expectedSimulatedCost (impl publicKey secretKey) (overBudget Q) computation
+      ((cache0, []), 0) = 0) :
+    N * N * Pr{let r ← ((simulateQ (impl publicKey secretKey) computation).run
+        ((cache0, []), 0))}[PreBad secretKey r.2.1.2] ≤
       ENNReal.ofReal (momentA pReal Q) *
-        expectedSimulatedCost (impl publicKey secretKey) (openCost secretKey) computation ((cache0, []), 0) := by
+        expectedSimulatedCost (impl publicKey secretKey) (openCost secretKey) computation
+          ((cache0, []), 0) := by
   classical
   set s0 : State := ((cache0, []), 0)
   set I := impl publicKey secretKey
@@ -136,9 +134,7 @@ theorem preBad_le (Q : ℕ) (hQ : Q ≤ 2 ^ 127) (computation : OracleComp (Orac
       (inv_initial secretKey hc0)).trans (le_of_eq ?_)
     rw [f3_initial secretKey hc0, zero_add]
     unfold cost3
-    rw [expectedSimulatedCost_add, expectedSimulatedCost_const_mul,
-      expectedSimulatedCost_overBudget_eq_zero publicKey secretKey Q computation cache0 [] 0
-        (by simpa using hbound) (Nat.zero_le _), zero_add]
+    rw [expectedSimulatedCost_add, expectedSimulatedCost_const_mul, hover, zero_add]
     rfl
   have hl0 : landing ^ 2 ≠ 0 := pow_ne_zero 2 landing_ne_zero
   have hlt : landing ^ 2 ≠ ⊤ := pow_ne_top landing_ne_top
@@ -149,6 +145,22 @@ theorem preBad_le (Q : ℕ) (hQ : Q ≤ 2 ^ 127) (computation : OracleComp (Orac
       _ ≤ landing * expectedFinal I (f2 secretKey) computation s0 := mul_le_mul' le_rfl h2
       _ ≤ _ := h23.trans (mul_le_mul' le_rfl h3)
   exact hpre.trans hcost
+
+include hc0 in
+/-- Before signing. -/
+theorem preBad_le (Q : ℕ) (hQ : Q ≤ 2 ^ 127)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (hbound : HashQueryBound
+      (simulateQ (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey) computation)
+      cache0 Q) :
+    N * N * Pr{let r ← ((simulateQ (impl publicKey secretKey) computation).run
+        ((cache0, []), 0))}[PreBad secretKey r.2.1.2] ≤
+      ENNReal.ofReal (momentA pReal Q) *
+        expectedSimulatedCost (impl publicKey secretKey) (openCost secretKey) computation
+          ((cache0, []), 0) :=
+  preBad_le_of_overBudget publicKey secretKey hc0 Q hQ computation
+    (expectedSimulatedCost_overBudget_eq_zero publicKey secretKey Q computation cache0 [] 0
+      (by simpa using hbound) (Nat.zero_le _))
 
 /-- After signing.
 
@@ -220,98 +232,164 @@ theorem openCost_add_signedCost_le (input : (OracleWorld + SigningSpec).Domain) 
   · rw [openCost, signedCost, onHash_sign, onHash_sign, add_zero]; exact zero_le
 
 include hc0 in
-/-- One key. -/
-theorem collision_le (Q : ℕ) (hQ : Q < 2 ^ 127) (computation : OracleComp (OracleWorld + SigningSpec) α)
-    (cont : α → OracleComp OracleWorld β)
-    (hbound : HashQueryBound (simulateQ (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey)
-      computation >>= cont) cache0 Q) :
-    N * N * Pr{let y ← ((simulateQ (impl publicKey secretKey) computation).run ((cache0, []), 0) >>= fun r =>
-        (fun v => (r, v)) <$> (simulateQ romImpl (cont r.1)).run r.2.1.1)}[y.1.2.1.2.leafIndices.Nodup ∧
+/-- One key, given a bound on the adversary phase's expected charged queries. -/
+theorem collision_le_of_charged (Q : ℕ) (hQ : Q < 2 ^ 127)
+    -- The adversary phase runs, then a final computation, the verification.
+    (computation : OracleComp (OracleWorld + SigningSpec) α) (cont : α → OracleComp OracleWorld β)
+    (hover : expectedSimulatedCost (impl publicKey secretKey) (overBudget Q) computation
+      ((cache0, []), 0) = 0) (X : ℝ≥0∞)
+    (hX : expectedSimulatedCost (impl publicKey secretKey) (openCost secretKey) computation
+        ((cache0, []), 0) +
+      expectedSimulatedCost (impl publicKey secretKey) (signedCost secretKey) computation
+        ((cache0, []), 0) ≤ X) :
+    N * N * Pr{let y ← ((simulateQ (impl publicKey secretKey) computation).run ((cache0, []), 0)
+        >>= fun r => (fun v => (r, v)) <$> (simulateQ romImpl (cont r.1)).run r.2.1.1)}[
+        -- The run signs each leaf index at most once.
+        y.1.2.1.2.leafIndices.Nodup ∧
+        -- A first entry: its selected cached input is partnered, or a later query repeats it.
         (PreBad secretKey y.1.2.1.2 ∨ PostBad secretKey.parameter y.1.2.1.2 y.2.2)] ≤
-      N * expectedSimulatedQueryCount romImpl (CappedEncodingMonitor.IsEncodingHashQuery secretKey.parameter)
-        (simulateQ (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey) computation >>= cont)
-        cache0 := by
+      N * (X + ∑' y, Pr{let x ← ((simulateQ romImpl (simulateQ
+          (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey) computation)).run
+          cache0)}[x = y] *
+        expectedSimulatedQueryCount romImpl
+          (CappedEncodingMonitor.IsEncodingHashQuery secretKey.parameter) (cont y.1) y.2) := by
   classical
   set s0 : State := ((cache0, []), 0)
   set I := impl publicKey secretKey
   set run := (simulateQ I computation).run s0
   set P := secretKey.parameter
   set Ecount := fun (r : α × State) =>
-    expectedSimulatedQueryCount romImpl (CappedEncodingMonitor.IsEncodingHashQuery P) (cont r.1) r.2.1.1
-  have hhead := hashQueryBound_left hbound
+    expectedSimulatedQueryCount romImpl (CappedEncodingMonitor.IsEncodingHashQuery P) (cont r.1)
+      r.2.1.1
+  set Cont := fun (r : α × State) => (simulateQ romImpl (cont r.1)).run r.2.1.1
+  set Ind := fun (r : α × State) => if PreBad secretKey r.2.1.2 then (1 : ℝ≥0∞) else 0
   -- Bound the event by the two potentials.
-  have hsplit : N * N * Pr{let y ← run >>= fun r => (fun v => (r, v)) <$> (simulateQ romImpl (cont r.1)).run r.2.1.1}[y.1.2.1.2.leafIndices.Nodup ∧
-        (PreBad secretKey y.1.2.1.2 ∨ PostBad P y.1.2.1.2 y.2.2)] ≤
-      ∑' r, Pr{let x ← run}[x = r] * (N * N * (if PreBad secretKey r.2.1.2 then 1 else 0) +
-        (f4 secretKey r.2 + N * Ecount r)) := by
+  have hsplit : N * N * Pr{let y ← run >>= fun r => (fun v => (r, v)) <$> Cont r}[
+        y.1.2.1.2.leafIndices.Nodup ∧ (PreBad secretKey y.1.2.1.2 ∨ PostBad P y.1.2.1.2 y.2.2)] ≤
+      ∑' r, Pr{let x ← run}[x = r] * (N * N * Ind r + (f4 secretKey r.2 + N * Ecount r)) := by
     rw [OracleComp.prEvent_bind_eq_tsum, ← ENNReal.tsum_mul_left]
     refine tsum_le_tsum fun r => ?_
     rw [mul_left_comm]
     refine mul_le_mul' le_rfl ?_
     rw [prEvent_map, OracleComp.prEvent_eq_tsum_ite, ← ENNReal.tsum_mul_left]
-    calc ∑' v, N * N * (if (fun y : (α × State) × (β × QueryCache HashSpec) => y.1.2.1.2.leafIndices.Nodup ∧
+    calc ∑' v, N * N * (if (fun y : (α × State) × (β × QueryCache HashSpec) =>
+        y.1.2.1.2.leafIndices.Nodup ∧
             (PreBad secretKey y.1.2.1.2 ∨ PostBad P y.1.2.1.2 y.2.2)) ((fun v => (r, v)) v) then
-            Pr{let x ← (simulateQ romImpl (cont r.1)).run r.2.1.1}[x = v] else 0) ≤
-          ∑' v, Pr{let x ← (simulateQ romImpl (cont r.1)).run r.2.1.1}[x = v] *
-            (N * N * (if PreBad secretKey r.2.1.2 then 1 else 0) + N * N * postPot P r.2.1.2 v.2) := by
+            Pr{let x ← Cont r}[x = v] else 0) ≤
+          ∑' v, Pr{let x ← Cont r}[x = v] * (N * N * Ind r + N * N * postPot P r.2.1.2 v.2) := by
           refine tsum_le_tsum fun v => ?_
           dsimp only
-          by_cases h1 : r.2.1.2.leafIndices.Nodup ∧ (PreBad secretKey r.2.1.2 ∨ PostBad P r.2.1.2 v.2)
+          by_cases h1 : r.2.1.2.leafIndices.Nodup ∧
+              (PreBad secretKey r.2.1.2 ∨ PostBad P r.2.1.2 v.2)
           · rw [ite_eq_left h1, mul_comm]
             refine mul_le_mul' le_rfl ?_
             by_cases h2 : PreBad secretKey r.2.1.2
-            · rw [ite_eq_left h2, mul_one]; exact le_self_add
-            · rw [ite_eq_right h2, mul_zero, zero_add]
+            · rw [show Ind r = 1 from ite_eq_left h2, mul_one]; exact le_self_add
+            · rw [show Ind r = 0 from ite_eq_right h2, mul_zero, zero_add]
               unfold postPot
               rw [ite_eq_left ⟨h1.1, h1.2.resolve_left h2⟩, mul_one]
           · rw [ite_eq_right h1, mul_zero]; exact zero_le
-      _ = (∑' v, Pr{let x ← (simulateQ romImpl (cont r.1)).run r.2.1.1}[x = v]) *
-              (N * N * (if PreBad secretKey r.2.1.2 then 1 else 0)) +
-            ∑' v, Pr{let x ← (simulateQ romImpl (cont r.1)).run r.2.1.1}[x = v] * (N * N * postPot P r.2.1.2 v.2) := by
+      _ = (∑' v, Pr{let x ← Cont r}[x = v]) * (N * N * Ind r) +
+            ∑' v, Pr{let x ← Cont r}[x = v] * (N * N * postPot P r.2.1.2 v.2) := by
           simp_rw [mul_add]
           rw [tsum_add, ENNReal.tsum_mul_right]
-      _ ≤ 1 * (N * N * (if PreBad secretKey r.2.1.2 then 1 else 0)) +
-            (N * N * postPot P r.2.1.2 r.2.1.1 + N * Ecount r) :=
+      _ ≤ 1 * (N * N * Ind r) + (N * N * postPot P r.2.1.2 r.2.1.1 + N * Ecount r) :=
           add_le_add (mul_le_mul' (OracleComp.tsum_prEvent_le_one _) le_rfl)
             (postPot_final_le secretKey r.2.1.2 (cont r.1) r.2.1.1)
       _ = _ := by rw [one_mul]; rfl
-  have hpre := preBad_le publicKey secretKey hc0 Q hQ.le computation hhead
+  have hpre := preBad_le_of_overBudget publicKey secretKey hc0 Q hQ.le computation hover
   have hf4 : expectedFinal I (f4 secretKey) computation s0 ≤
       N * expectedSimulatedCost I (signedCost secretKey) computation s0 := by
-    refine (expectedFinal_le I (Inv := fun _ => True) (fun _ _ _ _ _ => trivial) (f4 secretKey) (cost4 secretKey)
-      (fun input s _ => f4_step publicKey secretKey input s) computation s0 trivial).trans (le_of_eq ?_)
-    rw [show f4 secretKey s0 = 0 by rw [f4, postPot_nil, mul_zero], zero_add, ← expectedSimulatedCost_const_mul]
+    refine (expectedFinal_le I (Inv := fun _ => True) (fun _ _ _ _ _ => trivial) (f4 secretKey)
+      (cost4 secretKey) (fun input s _ => f4_step publicKey secretKey input s) computation s0
+      trivial).trans (le_of_eq ?_)
+    rw [show f4 secretKey s0 = 0 by rw [f4, postPot_nil, mul_zero], zero_add,
+      ← expectedSimulatedCost_const_mul]
     rfl
-  have hadv : expectedSimulatedCost I (openCost secretKey) computation s0 +
-      expectedSimulatedCost I (signedCost secretKey) computation s0 ≤
-      expectedSimulatedQueryCount romImpl (CappedEncodingMonitor.IsEncodingHashQuery P)
-        (simulateQ (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey) computation) cache0 := by
-    rw [← expectedSimulatedCost_add]
-    exact (expectedSimulatedCost_mono I (openCost_add_signedCost_le secretKey) computation s0).trans
-      (expectedSimulatedCost_advEncoding_le publicKey secretKey P computation cache0 [] 0)
   have hcont : ∑' r, Pr{let x ← run}[x = r] * Ecount r =
-      ∑' y, Pr{let x ← ((simulateQ romImpl (simulateQ (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey)
-        computation)).run cache0)}[x = y] *
-        expectedSimulatedQueryCount romImpl (CappedEncodingMonitor.IsEncodingHashQuery P) (cont y.1) y.2 := by
+      ∑' y, Pr{let x ← ((simulateQ romImpl (simulateQ
+          (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey) computation)).run
+          cache0)}[x = y] *
+        expectedSimulatedQueryCount romImpl (CappedEncodingMonitor.IsEncodingHashQuery P) (cont y.1)
+          y.2 := by
     rw [← impl_run_proj, OracleComp.tsum_prEvent_map_mul]
   refine hsplit.trans ?_
-  calc ∑' r, Pr{let x ← run}[x = r] * (N * N * (if PreBad secretKey r.2.1.2 then 1 else 0) +
-        (f4 secretKey r.2 + N * Ecount r)) =
-      N * N * Pr{let r ← run}[PreBad secretKey r.2.1.2] + expectedFinal I (f4 secretKey) computation s0 +
+  calc ∑' r, Pr{let x ← run}[x = r] * (N * N * Ind r + (f4 secretKey r.2 + N * Ecount r)) =
+      N * N * Pr{let r ← run}[PreBad secretKey r.2.1.2] +
+        expectedFinal I (f4 secretKey) computation s0 +
         N * ∑' r, Pr{let x ← run}[x = r] * Ecount r := by
         simp_rw [mul_add]
         rw [tsum_add, tsum_add, add_assoc, expectedFinal, ← ENNReal.tsum_mul_left,
           OracleComp.prEvent_eq_tsum_ite, ← ENNReal.tsum_mul_left]
         congr 1
         · refine tsum_congr fun r => ?_
+          simp only [Ind]
           split_ifs <;> ring
         · congr 1
           exact tsum_congr fun r => mul_left_comm _ _ _
     _ ≤ N * expectedSimulatedCost I (openCost secretKey) computation s0 +
-          N * expectedSimulatedCost I (signedCost secretKey) computation s0 + N * ∑' r, Pr{let x ← run}[x = r] * Ecount r :=
+          N * expectedSimulatedCost I (signedCost secretKey) computation s0 +
+          N * ∑' r, Pr{let x ← run}[x = r] * Ecount r :=
         add_le_add (add_le_add (hpre.trans (mul_le_mul' (momentA_le_N hQ) le_rfl)) hf4) le_rfl
     _ ≤ _ := by
-        rw [← mul_add, ← mul_add, expectedSimulatedQueryCount_bind, hcont]
-        exact mul_le_mul' le_rfl (add_le_add hadv le_rfl)
+        rw [← mul_add, ← mul_add, hcont]
+        exact mul_le_mul' le_rfl (add_le_add hX le_rfl)
+
+include hc0 in
+/-- One key. -/
+theorem collision_le (Q : ℕ) (hQ : Q < 2 ^ 127)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (cont : α → OracleComp OracleWorld β)
+    (hbound : HashQueryBound
+      (simulateQ (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey) computation >>= cont)
+      cache0 Q) :
+    N * N * Pr{let y ← ((simulateQ (impl publicKey secretKey) computation).run ((cache0, []), 0)
+        >>= fun r => (fun v => (r, v)) <$> (simulateQ romImpl (cont r.1)).run r.2.1.1)}[
+        -- The run signs each leaf index at most once.
+        y.1.2.1.2.leafIndices.Nodup ∧
+        -- A first entry: its selected cached input is partnered, or a later query repeats it.
+        (PreBad secretKey y.1.2.1.2 ∨ PostBad secretKey.parameter y.1.2.1.2 y.2.2)] ≤
+      N * expectedSimulatedQueryCount romImpl
+        (CappedEncodingMonitor.IsEncodingHashQuery secretKey.parameter)
+        (simulateQ (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey) computation
+          >>= cont) cache0 := by
+  -- The whole run's bound keeps the adversary's ghost count under the budget.
+  have hover := expectedSimulatedCost_overBudget_eq_zero publicKey secretKey Q computation cache0
+    [] 0 (by simpa using hashQueryBound_left hbound) (Nat.zero_le _)
+  -- The source game counts each charged query.
+  have hX := (expectedSimulatedCost_add (impl publicKey secretKey) _ _ computation _).symm.trans_le
+    ((expectedSimulatedCost_mono _ (openCost_add_signedCost_le secretKey) computation _).trans
+      (expectedSimulatedCost_advEncoding_le publicKey secretKey secretKey.parameter computation
+        cache0 [] 0))
+  rw [expectedSimulatedQueryCount_bind]
+  exact collision_le_of_charged publicKey secretKey hc0 Q hQ computation cont hover _ hX
+
+include hc0 in
+/-- One key, charging the adversary's own hash queries and the continuation's encoding queries. -/
+theorem collision_le_of_adversaryBound (Q : ℕ) (hQ : Q < 2 ^ 127)
+    (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (cont : α → OracleComp OracleWorld β) (hadv : IsQueryBoundP computation IsAdvHash Q) :
+    N * N * Pr{let y ← ((simulateQ (impl publicKey secretKey) computation).run ((cache0, []), 0)
+        >>= fun r => (fun v => (r, v)) <$> (simulateQ romImpl (cont r.1)).run r.2.1.1)}[
+        -- The run signs each leaf index at most once.
+        y.1.2.1.2.leafIndices.Nodup ∧
+        -- A first entry: its selected cached input is partnered, or a later query repeats it.
+        (PreBad secretKey y.1.2.1.2 ∨ PostBad secretKey.parameter y.1.2.1.2 y.2.2)] ≤
+      N * (Q + ∑' y, Pr{let x ← ((simulateQ romImpl (simulateQ
+          (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey) computation)).run
+          cache0)}[x = y] *
+        expectedSimulatedQueryCount romImpl
+          (CappedEncodingMonitor.IsEncodingHashQuery secretKey.parameter) (cont y.1) y.2) := by
+  -- The adversary's ghost count stays under the budget, so the over-budget cost vanishes.
+  have hover := expectedSimulatedCost_overBudget_eq_zero_of_isQueryBoundP publicKey secretKey Q
+    computation Q ((cache0, []), 0) hadv (zero_add Q).le
+  refine collision_le_of_charged publicKey secretKey hc0 Q hQ computation cont hover _ ?_
+  -- Each charged query is an adversary hash query, of which there are at most the budget.
+  rw [← expectedSimulatedCost_add]
+  refine (expectedSimulatedCost_mono _ (openCost_add_signedCost_le secretKey) computation
+    _).trans (expectedSimulatedCost_le_of_isQueryBoundP _ (fun input _ => ?_) computation Q _ hadv)
+  by_cases h : IsAdvEncoding secretKey.parameter input
+  · rw [ite_eq_left h, ite_eq_left (isAdvHash_of_isAdvEncoding h)]
+  · rw [ite_eq_right h]; exact zero_le
 
 end XmssSecurity.Ghost
