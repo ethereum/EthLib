@@ -100,7 +100,7 @@ def depositContractOfJson (j : Json) : Result Address := do
     rejectArgument none "config: depositContractAddress is not forty hex digits"
   let some bytes := hexBytes? digits
     | rejectArgument none "config: depositContractAddress is not hex"
-  -- The 20 bytes come from the hex text, which Python `bytes` become.
+  -- Python `bytes` become `0x` and forty hex digits, which read back as these 20 bytes.
   toResult none (Base.exactBytes 20 bytes fun _ =>
     UnreadArgument.mk "config: depositContractAddress is not 20 bytes")
 

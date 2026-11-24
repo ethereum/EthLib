@@ -11,11 +11,15 @@ Reading back the Python value of a value gives that value, for each type that cr
 
 So an export never sends two different results as one value of this type.
 
-Pairs, options, lists and arrays of these types inherit the law.
+Pairs, lists and arrays of these types inherit the law, and so do options, with one condition.
 
-An option of an option does not: an inner value can become `None`.
+An option inherits it only when no value inside becomes `None`.
 
-A large `int` crosses as lower-case hex digits, written alike by Lean and Python, passed on by C.
+So an option of an option does not.
+
+Lean writes a large `int` as lower-case digits in base 16, and reading them back gives the number.
+
+Python writes the same digits for the same number, and the C layer passes them on.
 -/
 
 public section

@@ -8,6 +8,15 @@ Writes the value of each fork-indexed rule at each fork, so that a change at an 
 `tests/execution/history/README.md` says why the file exists and how a pull request changes it.
 
 A rule is a definition of the execution layer or of `Base` whose value depends only on the fork.
+
+- `lake exe rule-history` writes `tests/execution/history/rules.tsv`.
+- `lake exe rule-history --check` fails if that file differs, and prints the changed lines.
+
+It exits with 1 when the file differs, 2 on an unknown argument, and 3 when it finds no rule.
+
+It also exits with 3 when it finds no fork type.
+
+It exits with 4 on any other error.
 -/
 
 open Lean Meta
@@ -95,9 +104,9 @@ def isBoolToNat : Expr → Bool
 
 The rules are found by their type, so a new rule is listed without editing this file.
 
-Every other type, and a rule that takes another argument, gives no shape.
+A type with none of the shapes below, such as a list of addresses or an opcode table, is skipped.
 
-Examples: a list of addresses, an opcode table, a rule that takes a preset or a chain config. -/
+So is a rule that takes another argument, such as a preset or a chain configuration. -/
 def shapesOf (c : Config) (env : Environment) (ty : Expr) : List Shape :=
   -- A constant of type `Nat` gives one value for every fork.
   if ty == natE then [.const] else
@@ -293,7 +302,6 @@ unsafe def run (args : List String) : IO UInt32 := do
     return (r, ← values fs r)
   let (vals, _) ← (act.run' {} |>.toIO ctx { env })
   let text := snapshotText fs vals
-  -- `lake exe rule-history --check` fails with 1 if the file differs, and prints the changed lines.
   if c.check then
     -- A missing file is not an error: the check exits with 1 and lists every line with text as new.
     --
@@ -335,7 +343,6 @@ unsafe def run (args : List String) : IO UInt32 := do
     IO.eprintln "If the change is intended, run `lake exe rule-history` to rewrite the file."
     IO.eprintln "Then name the source of each changed line in the pull request."
     return 1
-  -- `lake exe rule-history` writes `tests/execution/history/rules.tsv`.
   if let some d := c.file.parent then IO.FS.createDirAll d
   IO.FS.writeFile c.file text
   IO.println s!"rule-history: wrote {vals.size} rules at {fs.length} forks to {c.file}"

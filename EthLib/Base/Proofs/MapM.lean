@@ -93,7 +93,9 @@ theorem forIn_unit_ok_iff {xs : List α} {body : α → PUnit → Except ε (For
 
 The invariant `P` relates the items read so far to the state of the loop.
 
-A step that goes on keeps `P`, with its item added; a step that stops from `P` gives `Q`.
+A step that goes on keeps `P`, with its item added to the items read.
+
+A step that stops from a state with `P` gives `Q`.
 
 So does `P` once the loop has read every item. -/
 theorem forIn_ok_invariant {σ : Type} {xs : List α} {body : α → σ → Except ε (ForInStep σ)}
@@ -130,7 +132,9 @@ Each successful step either stops and leaves the state as it was, or goes on wit
 
 An item that the loop goes on with has the property `kept`.
 
-So the loop ends at its start, or at an item that has the property, as has every item before it. -/
+So the loop ends at its start, or at an item of the list.
+
+That item and every item before it have the property. -/
 theorem forIn_ok_last_kept {xs : List α} {body : α → α → Except ε (ForInStep α)}
     {init out : α} {kept : α → Prop}
     (step : ∀ x s r, body x s = .ok r → r = .done s ∨ r = .yield x ∧ kept x)
@@ -591,7 +595,7 @@ theorem foldlM_ok_of_mem {g : β → α → Except ε β} {xs : List α} {x : α
 
 /-- A successful fold over inputs with distinct keys changes a view only at the key `k`.
 
-Suppose each step keeps an invariant, and changes the view only when its input has the key `k`. -/
+Each step must keep an invariant, and change the view only when its input has the key `k`. -/
 theorem foldlM_ok_pointwise {γ κ : Type} {g : β → α → Except ε β} (P : β → Prop)
     (view : β → γ) (key : α → κ) (k : κ) (H : α → γ → γ) :
     ∀ {xs : List α}, (xs.map key).Nodup →

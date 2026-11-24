@@ -5,11 +5,24 @@ import Lean
 
 Lists every defaulting accessor that the specification's elaborated declarations use.
 
-A defaulting accessor returns a value instead of failing, on a bad index or an empty collection.
+A defaulting accessor returns a value instead of failing.
+
+It does so on an index out of range, or on an empty collection.
+
+- `xs[i]!` and `xs.get! i` return the `Inhabited` default when the index is out of range.
+- `xs.set! i v` returns `xs` unchanged when the index is out of range.
+- `xs.back!` returns the `Inhabited` default on an empty collection.
+- `panic! msg` always returns the `Inhabited` default.
 
 The exact list in `scripts/check_accessors_baseline.txt` may only shrink.
 
-Some ways to fall back to a default escape the check; each is covered elsewhere or out of scope.
+The check does not see some ways to fall back to a default.
+
+Each one is covered elsewhere or outside the scope of this check:
+
+- The body of a `partial def`, which another check rejects in the specification.
+- The callers of a wrapper whose name has no `!`: the wrapper is counted once, in its own body.
+- The explicit defaults, such as `getD`, which have no `!` in their names.
 -/
 
 open Lean
@@ -22,13 +35,6 @@ def panicFamily : NameSet :=
 
 /-- Whether calling `n` can return a default in place of failing. -/
 def isDefaulting (env : Environment) (n : Name) : Bool :=
-  -- The accessors and what they return:
-  --
-  -- - `xs[i]!` and `xs.get! i` return the `Inhabited` default when the index is out of range.
-  -- - `xs.set! i v` returns `xs` unchanged when the index is out of range.
-  -- - `xs.back!` returns the `Inhabited` default on an empty collection.
-  -- - `panic! msg` always returns the `Inhabited` default.
-  --
   -- The kernel and the compiled code give the same value.
   --
   -- Compiled code also prints a message to stderr, which nothing checks.
@@ -236,16 +242,20 @@ def readBaseline (path : System.FilePath) : IO (List (Name × Name × Nat)) := d
 
 /-- Entry point: `check-accessors [--list | --print] [--baseline FILE] [--root DIR]`.
 
+- `--list` prints every site as `module part accessor declaration count first-line last-line`.
+- `--print` prints the sites in the format of the baseline, to create it once.
+- Otherwise the sites, summed over each declaration, must match the baseline exactly.
+- `--root` reads the modules under `DIR` in place of `EthLib`.
+- `--baseline` reads `FILE` in place of `scripts/check_accessors_baseline.txt`.
+
 It is `unsafe` because loading the environment extensions runs their initializers. -/
 unsafe def run (args : List String) : IO UInt32 := do
   let baselinePath : System.FilePath := match args.dropWhile (· != "--baseline") with
     | _ :: p :: _ => p
     | _ => "scripts/check_accessors_baseline.txt"
-  -- `--root` reads the modules under `DIR` in place of `EthLib`.
+  -- The last part of the root directory is the prefix of the names of its modules.
   --
-  -- The last part of `DIR` is the prefix of their names.
-  --
-  -- `scripts/test_check_accessors.sh` points it at the fixtures in `scripts/CheckAccessorsTest`.
+  -- `scripts/test_check_accessors.sh` points the root at fixtures in `scripts/CheckAccessorsTest`.
   let root : System.FilePath := match args.dropWhile (· != "--root") with
     | _ :: p :: _ => p
     | _ => "EthLib"
@@ -269,7 +279,6 @@ unsafe def run (args : List String) : IO UInt32 := do
     IO.eprintln "check-accessors: no definition of the specification was loaded"
     return 3
   let found := sites env scope
-  -- `--list` prints every site as `module part accessor declaration count first-line last-line`.
   if args.contains "--list" then
     for (m, s) in found do
       let (a, b) := (lines? env s.decl).getD (0, 0)
@@ -288,13 +297,10 @@ unsafe def run (args : List String) : IO UInt32 := do
     totals := totals.insert key (totals.getD key 0 + s.count)
   let entries := totals.toArray.qsort fun ((a, d), _) ((a', d'), _) =>
     d.toString < d'.toString || (d == d' && a.toString < a'.toString)
-  -- `--print` prints the sites in the format of the baseline, to create it once.
   if args.contains "--print" then
     for ((a, d), k) in entries do
       IO.println s!"{a} {d} {k}"
     return 0
-  -- Otherwise the sites, summed over each declaration, must match the baseline exactly.
-  --
   -- A new site fails the check, and so does an entry that does not match.
   let baseline ← readBaseline baselinePath
   let mut failed := false

@@ -10,9 +10,13 @@ The network upgrades of both layers of Ethereum, and the fields that a fork adds
 
 namespace EthLib.Base
 
-/-- A network upgrade of either layer or both, the cases in the order they activate on mainnet.
+/-- A network upgrade of the execution layer, the consensus layer or both.
 
-Before the Merge the layers forked apart: [EIP-7568][eip-7568] interleaves them by date to Shapella.
+The cases run in the order in which the forks activate on mainnet.
+
+Before the Merge the two layers forked apart, so their forks interleave by date.
+
+[EIP-7568][eip-7568] orders them up to Shapella.
 
 From Shapella on, one upgrade changes both layers, and it is one fork.
 
@@ -50,11 +54,13 @@ inductive Fork where
 
   They are EIP-100, EIP-140, EIP-196 to EIP-198, EIP-211, EIP-214, EIP-649 and EIP-658. -/
   | byzantium
-  /-- Constantinople changes the execution layer, with the EIPs that [EIP-1013][eip-1013] lists.
+  /-- Constantinople changes the execution layer.
+
+  [EIP-1013][eip-1013] lists its EIPs.
 
   They are EIP-145, EIP-1014, EIP-1052, EIP-1234 and EIP-1283.
 
-  Petersburg removed EIP-1283 at the same block, so mainnet never ran it.
+  Mainnet never ran EIP-1283, because Petersburg removed it at the same block.
 
   So EthLib gives Constantinople the rules of Petersburg, without EIP-1283.
 
@@ -148,7 +154,9 @@ inductive Fork where
   | bpo5
   /-- Glamsterdam, Gloas with Amsterdam, changes both layers.
 
-  [EIP-7773][eip-7773] lists its EIPs, which include EIP-7732 and EIP-7928.
+  [EIP-7773][eip-7773] lists its EIPs.
+
+  They include EIP-7732 and EIP-7928.
 
   EthLib does not hold all its rules yet.
 
@@ -156,13 +164,19 @@ inductive Fork where
 
   [eip-7773]: https://eips.ethereum.org/EIPS/eip-7773 -/
   | glamsterdam
-  /-- Hegotá, Heze with Bogotá, changes both layers: [EIP-8081][8081] schedules EIP-7805, EIP-8141.
+  /-- Hegotá, Heze with Bogotá, changes both layers.
+
+  [EIP-8081][8081] lists its EIPs.
+
+  It schedules EIP-7805 and EIP-8141.
 
   Heze also holds EIP-8015 and EIP-8365, which EIP-8081 only considers or proposes.
 
   On 2026-11-03 all of these EIPs are Drafts, and so is EIP-8081.
 
-  EthLib holds only some of its rules, and an export missing them rejects it as not yet specified.
+  EthLib holds only some of its rules.
+
+  An export whose rules at this fork are missing rejects it as not yet specified.
 
   [8081]: https://eips.ethereum.org/EIPS/eip-8081 -/
   | hegota
@@ -214,9 +228,9 @@ def name : Fork → String
 
 /-- The last fork, in the order of the cases.
 
-The lookup by name and the termination measures of the fork upgrades read it, so they name no case.
+The lookup of a fork by its name and the termination measures of the fork upgrades read it.
 
-So a new fork at the end leaves them as they are. -/
+So they name no case, and a new fork at the end leaves them as they are. -/
 def last : Fork :=
   -- A new fork at the end moves this definition to it.
   --

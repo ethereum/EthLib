@@ -8,7 +8,12 @@ public import EthLib.Base.Proofs.Fork
 
 The active fork is the greatest fork whose activation a block has reached.
 
-Also the blob schedule that a chain sets at a block, the order check of EIP-6122, and blob bounds.
+It also proves:
+
+- that a later block has an active fork no earlier;
+- which blob schedule a chain sets at a block, and the bounds of a schedule;
+- when the order check of EIP-6122 passes;
+- the active forks and blob schedules of mainnet and Hoodi.
 -/
 
 @[expose] public section

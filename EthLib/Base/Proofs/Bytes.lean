@@ -5,9 +5,11 @@ public import EthLib.Base.Bytes
 /-!
 # Proofs: `Bytes`
 
-The bytes of a fixed-size object: their length, the reads that return the object, and equality.
+The bytes of a fixed-size object have its length, and reading them returns the object.
 
-Also the exclusive or of byte strings, the bytes of joins and slices, loops over bytes, and writes.
+The module also covers the exclusive or of byte strings, and the bytes of joins and slices.
+
+It covers loops over the bytes of a string too, and reads and writes of one byte.
 -/
 
 @[expose] public section
