@@ -17,37 +17,7 @@ import EthLib.Consensus.Proofs.ForkChoice.Supporters
 /-!
 # Proofs: the head of the fork choice can be computed
 
-The head of a store that the handlers build can be computed.
-
-The store must hold the state of its justified checkpoint, and the viable nodes must be computed.
-
-Before Gloas, its active stake must be at most `2 * 10^17` Gwei, so that no weight overflows.
-
-The proposer boost must fit the same cap.
-
-The walk weighs only children among the viable nodes, and each of them is a held block.
-
-The votes for a held block can be read: each latest vote names a held block, whose walk succeeds.
-
-Their sum is at most the active stake, so it stays below `2^64`.
-
-The boosted root is zero or a held block, so its walk succeeds too.
-
-A held child sits at a later slot than its held parent, so the walk descends and ends.
-
-From Gloas, the boost also asks whether the parent of the boosted block is weak.
-
-It asks only when that parent is from the slot just before the boosted block.
-
-That test adds the equivocators of the parent's committees to its votes.
-
-So the justified state must bound by the cap each set of validators active or known to equivocate.
-
-It must also hold each equivocator that is active in a held block's state, at that block's epoch.
-
-Each held state must have its registry within the limit, so that its committees can be read.
-
-An empty tree of viable nodes gives the empty node of the justified block.
+The head of a store that the handlers build can be computed, before and from Gloas.
 
 This is part of [#2060][issue].
 
@@ -208,7 +178,8 @@ private theorem computeProposerScore_le {config : Config} {state : BeaconState p
 
 /-! ## The boosted root is zero or a held block -/
 
-private theorem updateCheckpoints_boost (j f : Checkpoint) :
+/-- Updating the checkpoints keeps the boost. -/
+theorem updateCheckpoints_boost (j f : Checkpoint) :
     (store.updateCheckpoints j f).proposerBoostRoot = store.proposerBoostRoot := by
   unfold updateCheckpoints
   by_cases a : store.justifiedCheckpoint.epoch < j.epoch <;>
@@ -244,7 +215,8 @@ private theorem storeTargetCheckpointState_boost {checks : SignatureChecks} {tar
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at stored
     obtain ⟨_, _, rfl⟩ := stored; rfl
 
-private theorem onAttestation_boost {checks : SignatureChecks}
+/-- An attestation keeps the boost. -/
+theorem onAttestation_boost {checks : SignatureChecks}
     {attestation : Attestation preset fork}
     {isFromBlock : Bool} {after : Store preset fork}
     (attested : store.onAttestation config checks attestation isFromBlock = .ok after) :
@@ -259,7 +231,8 @@ private theorem onAttestation_boost {checks : SignatureChecks}
     exact this
   · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at attested
 
-private theorem onAttesterSlashing_boost {checks : SignatureChecks}
+/-- An attester slashing keeps the boost. -/
+theorem onAttesterSlashing_boost {checks : SignatureChecks}
     {slashing : AttesterSlashing preset fork} {after : Store preset fork}
     (slashed : store.onAttesterSlashing config checks slashing = .ok after) :
     after.proposerBoostRoot = store.proposerBoostRoot := by
@@ -269,7 +242,8 @@ private theorem onAttesterSlashing_boost {checks : SignatureChecks}
   subst slashed
   rfl
 
-private theorem recordBlockTimeliness_boost {root : Root} {after : Store preset fork}
+/-- Recording the timeliness of a block keeps the boost. -/
+theorem recordBlockTimeliness_boost {root : Root} {after : Store preset fork}
     (recorded : store.recordBlockTimeliness config root = .ok after) :
     after.proposerBoostRoot = store.proposerBoostRoot := by
   unfold recordBlockTimeliness at recorded
@@ -294,7 +268,8 @@ private theorem updateProposerBoostRoot_boost {head root : Root} {after : Store 
   split at updated <;> simp only [pure, Except.pure, Except.ok.injEq] at updated <;>
     subst updated <;> simp
 
-private theorem computePulledUpTip_boost {root : Root} {after : Store preset fork}
+/-- Pulling up the checkpoints of a block keeps the boost. -/
+theorem computePulledUpTip_boost {root : Root} {after : Store preset fork}
     (pulled : store.computePulledUpTip config root = .ok after) :
     after.proposerBoostRoot = store.proposerBoostRoot := by
   unfold computePulledUpTip at pulled
@@ -440,6 +415,11 @@ private theorem getWeight_exists (before : fork < .glamsterdam)
     (found : store.blocks[node.root]? = some block) :
     ∃ weight, store.getWeight config store.justifiedTally node = .ok weight := by
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  -- The votes for a held block can be read.
+  --
+  -- Each latest vote names a held block, whose walk succeeds.
+  --
+  -- Their sum is at most the active stake, so it stays below `2^64`.
   obtain ⟨votes, votesOk, votesLe, -⟩ := getAttestationScore_exists (config := config) forward
     anchorSlot unknown found (BeaconState.registryWithinLimit_of_lt before state) (by omega)
   have scoreOk : store.scoreFromTally (store.tallyVotes state) node = .ok votes := votesOk
@@ -447,6 +427,7 @@ private theorem getWeight_exists (before : fork < .glamsterdam)
   by_cases zero : store.proposerBoostRoot = Vector.replicate 32 0
   · exact ⟨votes, by simp [getWeight, notGloas, zero, scoreOk, bind, Except.bind, pure,
       Except.pure]⟩
+  -- The boosted root is zero or a held block, so its walk succeeds too.
   obtain ⟨boostBlock, -, boostFound, -⟩ := boostHeld.resolve_left zero
   obtain ⟨d, dOk⟩ := isAncestor_ok_of_orphans_le
     (forward.reachable.parentsBelow anchorSlot unknown) found
@@ -483,7 +464,11 @@ private theorem getHead_exists_of_boostHeld (before : fork < .glamsterdam)
       (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset ≤ 2 * 10 ^ 17) :
     ∃ head, store.getHead config = .ok head := by
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  -- An empty tree of viable nodes gives the empty node of the justified block.
   obtain ⟨justified, justifiedFound⟩ := filterNodeTree_known tree
+  -- The walk weighs only children among the viable nodes, and each of them is a held block.
+  --
+  -- A held child sits at a later slot than its held parent, so the walk descends and ends.
   obtain ⟨head, headOk⟩ := getHeadFrom_exists (config := config) (nodes := nodes)
     (forward.reachable.parentsBelow anchorSlot unknown)
     (fun n b f => getWeight_exists before forward anchorSlot unknown boostHeld positive fits
@@ -859,8 +844,18 @@ private theorem shouldApplyProposerBoost_exists {anchorState : BeaconState prese
     obtain ⟨-, -, -, nextOk⟩ := nextSlot_of_held forward anchorSlot weights.slots otherFound
     exact (Uint64.addChecked_ok_iff.mp nextOk).1
   have fits := nextFits _ parent parentFound
+  -- The boost asks whether the parent of the boosted block is weak.
+  --
+  -- It asks only when that parent is from the slot just before the boosted block.
   by_cases old : parent.slot.toNat + 1 < block.slot.toNat
   · exact ⟨true, shouldApplyProposerBoost_of_old_parent gloas zero found parentFound old⟩
+  -- That test adds the equivocators of the parent's committees to its votes.
+  --
+  -- So the justified state must cap each set of validators active or known to equivocate.
+  --
+  -- It must also hold each equivocator active in a held block's state, at that block's epoch.
+  --
+  -- Each held state must have its registry within the limit, so that its committees can be read.
   obtain ⟨weak, weakOk⟩ := isHeadWeak_exists forward anchorSlot unknown fit weights stateOk within
     held bounded heads registered parentFound
   cases weak
