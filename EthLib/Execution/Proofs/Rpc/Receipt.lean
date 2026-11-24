@@ -519,9 +519,7 @@ theorem Valid.baseFee_le_maxFeePerGas {v : ChainView} {checkSeal : Bool}
   obtain ⟨inc, -, hinc, -⟩ := Blocks.applyTransaction_eq_ok hnext
   have h1 := checkInclusion_baseFee_le hinc
   have h2 := checkInclusion_gasPrice_le hinc
-  have hbf : v.canonical[i + 1].baseFee = baseFeeOf (blockEnvironment v.config hashes
-      v.canonical[i + 1].block.header) := by
-    simp [baseFeeOf, BlockRecord.baseFee, blockEnvironment]
+  have hbf := BlockRecord.baseFee_eq_baseFeeOf v.canonical[i + 1] v.config hashes
   rw [hbf]
   exact Nat.le_trans h1 h2
 
@@ -622,9 +620,7 @@ theorem Valid.buyGas_receiptInfos {v : ChainView} {checkSeal : Bool}
   rw [hincs] at hbought
   rw [hsender]
   refine ⟨hashes, state, body, before, bought, hrec, hdao, hstart, hbefore, hbought, ?_⟩
-  have hbase : v.canonical[i + 1].baseFee = baseFeeOf (blockEnvironment v.config hashes
-      v.canonical[i + 1].block.header) := by
-    simp [baseFeeOf, BlockRecord.baseFee, blockEnvironment]
+  have hbase := BlockRecord.baseFee_eq_baseFeeOf v.canonical[i + 1] v.config hashes
   have hfee : tx.gas.toNat * info.effectiveGasPrice +
       (info.blob.map fun (used, price) => used * price).getD 0 =
       tx.gas.toNat * effectiveGasPrice (baseFeeOf (blockEnvironment v.config hashes
