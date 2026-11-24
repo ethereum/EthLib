@@ -7,14 +7,6 @@ import EthLib.Consensus.Proofs.Models.Ffg.PlausibleLiveness
 /-!
 # Proofs: adding votes and allowed weights preserves Casper FFG finality
 
-A slack link needs one allowed weight function under which its voters meet the bound.
-
-Adding allowed weights keeps that witness, and adding votes can only increase its voting stake.
-
-The links then keep their justification and finalization derivations.
-
-Two such derivations with the same validator sets and genesis fit their unions of votes and weights.
-
 The definitions of justification and finalization follow Gasper §4.4 and Definition 4.9.
 
 The paper is [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
@@ -33,8 +25,11 @@ variable [Preorder β] {genesis : β}
 theorem SlackLink.mono {s t : Checkpoint β}
     (linked : SlackLink V U W votes s t)
     (weights : ∀ c, W c ⊆ W' c) (more : votes ⊆ votes') : SlackLink V U W' votes' s t := by
+  -- A slack link needs one allowed weight function under which its voters meet the bound.
   obtain ⟨epochs, chain, w, allowed, bound⟩ := linked
+  -- Adding allowed weights keeps that witness.
   refine ⟨epochs, chain, w, weights t allowed, bound.trans ?_⟩
+  -- Adding votes can only increase its voting stake.
   exact Nat.add_le_add_right
     (Nat.mul_le_mul_left 3 (stake_mono (signers_mono (U := V t) more s t))) _
 
@@ -43,6 +38,7 @@ theorem SlackJustified.mono {c : Checkpoint β}
     (justified : SlackJustified V U W genesis votes c)
     (weights : ∀ c, W c ⊆ W' c) (more : votes ⊆ votes') :
     SlackJustified V U W' genesis votes' c :=
+  -- The links keep their justification derivation.
   justified.imp fun linked => linked.mono weights more
 
 /-- Adding votes and allowed weights keeps a slack-finalized checkpoint. -/
@@ -50,6 +46,7 @@ theorem SlackFinalized.mono {c : Checkpoint β}
     (finalized : SlackFinalized V U W genesis votes c)
     (weights : ∀ c, W c ⊆ W' c) (more : votes ⊆ votes') :
     SlackFinalized V U W' genesis votes' c :=
+  -- The links keep their finalization derivation.
   finalized.imp fun linked => linked.mono weights more
 
 /-- Two slack-finalized checkpoints remain so under the unions of their votes and allowed weights.

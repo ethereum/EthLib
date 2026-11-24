@@ -8,37 +8,28 @@ public import Mathlib.Tactic.Ring
 /-!
 # Honest support of a block, after the fast confirmation rule
 
-The bounds are Lemmas 1, 3 and 4 of Appendix A of the fast confirmation paper.
-
-The paper is [arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4).
-
-Its indicators of support are Definitions 2 and 3, in §3.2.
-
-Sets of validators are weighed by their stake.
-
-The committees of a range of slots form a set `W`, and the honest validators form a set `J`.
-
-The validators of `W` that support a block form a set `S`.
-
-The validators of `W` known to have equivocated form a set `I`.
-
-The Byzantine validators hold at most the fraction `β = num / den` of the stake of `W`.
-
-That bound is Assumption 2 of the paper, taken as a hypothesis.
-
-One more bound serves the discount for empty slots of the specification.
-
-The support of a block, less an adversary that covers `β W - I`, is at most its honest support.
+Lemmas 1, 3 and 4 of Appendix A of the fast confirmation paper, as bounds on stakes only.
 
 Every bound is stated with its fractions multiplied out, in natural numbers.
 
-Views, checkpoints and Assumption 1 are left out: the statements bound stakes only.
+Views, checkpoints and Assumption 1 are left out.
+
+The paper is [arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4).
 -/
 
 @[expose] public section
 
 namespace EthLib.Consensus.Models.ForkChoice
 
+-- Sets of validators are weighed by their stake, and the honest validators form a set `J`.
+--
+-- The committees of a range of slots form a set `W`.
+--
+-- The Byzantine validators hold at most the fraction `β = num / den` of the stake of `W`.
+--
+-- The validators of `W` that support a block form a set `S`.
+--
+-- The validators of `W` known to have equivocated form a set `I`.
 variable {ν : Type*} {w : ν → ℕ} {J : Set ν} [DecidablePred (· ∈ J)]
 
 /-- Lemma 3: an honest ratio above `Φ / (2 (1 - β) W)` gives honest support `H` above `Φ / 2`.
@@ -60,15 +51,13 @@ theorem lt_two_mul_of_honest_ratio {Φ H K W num den : ℕ} (honest : (den - num
 
 /-- The counting step of Lemma 1: new honest votes for a block do not lower its honest ratio.
 
-The honest supporters `H` lie in the honest committee set `K`.
-
-The honest validators `N` of the later committees all support the block.
-
-So the later honest supporters `H'` hold both `H` and `N`.
-
-The ratio of `H` to `K` is then at most that of `H'` to the union of `K` and `N`. -/
+The honest supporters `H` lie in the honest committee set `K`. -/
 theorem honest_ratio_le_of_new_votes [DecidableEq ν] {H K N H' : Finset ν} (supportIn : H ⊆ K)
+    -- The honest validators `N` of the later committees all support the block.
+    --
+    -- So the later honest supporters `H'` hold both `H` and `N`.
     (later : H ∪ N ⊆ H') :
+    -- The ratio of `H` to `K` is then at most that of `H'` to the union of `K` and `N`.
     stake w H * stake w (K ∪ N) ≤ stake w H' * stake w K := by
   -- The votes that join the honest set also join the honest support.
   have joined : stake w (K ∪ N) = stake w K + stake w (N \ K) := by
@@ -133,18 +122,25 @@ theorem byzantine_support_add_le {W S I : Finset ν} (supportIn : S ⊆ W) (equi
 
 /-- The support of a block, less an adversary, is at most its honest support.
 
-The supporters `S` and the equivocators `I` are disjoint parts of `W`.
-
-No equivocator is honest.
-
-The adversary and the equivocators must cover the Byzantine share `β W`.
-
 Each set stands for its stake, and the difference is zero when the adversary is larger.
 
 This is the honest lower bound of arXiv 2405.00549v4, Definition 5, under Assumption 2. -/
 theorem sub_le_honest_support {W S I : Finset ν} {adversary num den : ℕ}
+    -- The committees of a range of slots form a set `W`.
+    --
+    -- The Byzantine validators hold at most the fraction `β = num / den` of the stake of `W`.
+    --
+    -- That bound is Assumption 2 of the paper, taken as a hypothesis.
+    --
+    -- The validators of `W` that support a block form a set `S`.
+    --
+    -- The validators of `W` known to have equivocated form a set `I`.
     (bound : ByzantineStakeAtMost w W J num den) (supportIn : S ⊆ W) (equivocatorsIn : I ⊆ W)
+    -- The supporters `S` and the equivocators `I` are disjoint, and no equivocator is honest.
     (apart : Disjoint S I) (dishonest : ∀ v ∈ I, v ∉ J)
+    -- The adversary and the equivocators must cover the Byzantine share `β W`.
+    --
+    -- So the adversary covers `β W - I`.
     (covered : num * stake w W ≤ den * (adversary + stake w I)) :
     stake w S - adversary ≤ stake w {v ∈ S | v ∈ J} := by
   obtain ⟨positiveDen, byzantineBound⟩ := bound
@@ -159,19 +155,17 @@ theorem sub_le_honest_support {W S I : Finset ν} {adversary num den : ℕ}
 
 /-- Lemma 4: the observed support of a block bounds its honest ratio from below.
 
-The supporters `S` and the equivocators `I` are disjoint parts of `W`.
-
-No equivocator is honest.
-
-The observed condition is `S > Φ / 2 + β W - I`.
-
-The conclusion is `H / (W ∩ J) > Φ / (2 (1 - β) W)`, with `H` the honest part of `S`.
-
 Each set stands for its stake. -/
 theorem honest_ratio_of_support {W S I : Finset ν} {Φ num den : ℕ}
+    -- The supporters `S` and the equivocators `I` are disjoint parts of `W`.
     (bound : ByzantineStakeAtMost w W J num den) (supportIn : S ⊆ W) (equivocatorsIn : I ⊆ W)
+    -- No equivocator is honest.
     (apart : Disjoint S I) (dishonest : ∀ v ∈ I, v ∉ J)
+    -- The observed condition is `S > Φ / 2 + β W - I`.
+    --
+    -- The indicators of support of the paper are its Definitions 2 and 3, in §3.2.
     (observed : den * Φ + 2 * num * stake w W < 2 * den * (stake w S + stake w I)) :
+    -- The conclusion is `H / (W ∩ J) > Φ / (2 (1 - β) W)`, with `H` the honest part of `S`.
     den * Φ * stake w {v ∈ W | v ∈ J} <
       2 * (den - num) * stake w W * stake w {v ∈ S | v ∈ J} := by
   classical
@@ -254,29 +248,26 @@ theorem honest_support_hypotheses :
 
 /-- Lemmas 1 and 3 after Lemma 4: an honest ratio at one slot gives honest support at a later one.
 
-At the first slot the honest committee set `K` holds the honest supporters `H`.
-
-The honest ratio there is that of Lemma 4, for the committees `W` and the threshold `Φ`.
-
-Later, each honest validator of the committees `W'` is in `K` or in `N`.
-
-The honest validators `N` that join the committees all support the block.
-
-The later honest supporters `H'` hold both `H` and `N`: no honest supporter changes its vote.
-
-The Byzantine validators hold at most the fraction `num / den` of the stake of `W'`.
-
-The later threshold `Φ'` grows at most as the committees do: `Φ' / W' ≤ Φ / W`.
-
-Both slots weigh validators by the same stake.
-
-Then the honest support `H'` is above `Φ' / 2`. -/
+Both slots weigh validators by the same stake. -/
 theorem lt_two_mul_honest_support_later [DecidableEq ν] {W W' H K N H' : Finset ν}
     {Φ Φ' num den : ℕ}
+    -- The honest ratio at the first slot is that of Lemma 4.
+    --
+    -- It is for the committees `W` and the threshold `Φ`.
     (ratio : den * Φ * stake w K < 2 * (den - num) * stake w W * stake w H)
+    -- At the first slot the honest committee set `K` holds the honest supporters `H`.
+    --
+    -- The honest validators `N` that join the committees all support the block.
+    --
+    -- The later honest supporters `H'` hold both `H` and `N`: no honest supporter changes its vote.
+    --
+    -- Later, each honest validator of the committees `W'` is in `K` or in `N`.
     (supportIn : H ⊆ K) (later : H ∪ N ⊆ H') (honestLater : {v ∈ W' | v ∈ J} ⊆ K ∪ N)
+    -- The Byzantine validators hold at most the fraction `num / den` of the stake of `W'`.
     (bound : ByzantineStakeAtMost w W' J num den)
+    -- The later threshold `Φ'` grows at most as the committees do: `Φ' / W' ≤ Φ / W`.
     (thresholds : Φ' * stake w W ≤ Φ * stake w W') :
+    -- Then the honest support `H'` is above `Φ' / 2`.
     Φ' < 2 * stake w H' := by
   -- Lemma 1 carries the ratio to the later honest sets, with the first threshold.
   have carried := honest_ratio_of_new_votes (w := w) supportIn later ratio
@@ -306,18 +297,21 @@ theorem lt_two_mul_honest_support_later [DecidableEq ν] {W W' H K N H' : Finset
 
 /-- The same, for thresholds that add an amount to the stake of the committees.
 
-The thresholds are `W + c` and `W' + c'`, the committees only grow, and the amount never grows.
-
-For the rule, the amount is the proposer boost less the discount for empty slots.
+It serves the specification's discount for empty slots: the amount is the boost less the discount.
 
 So this form does not apply when the discount exceeds the boost.
 
 The rule does not ensure that the amount never grows between the two slots. -/
 theorem lt_two_mul_honest_support_later_of_add [DecidableEq ν] {W W' H K N H' : Finset ν}
     {c c' num den : ℕ}
+    -- The thresholds are `W + c` and `W' + c'`.
+    --
+    -- For the rule, the amount is the proposer boost less the discount for empty slots.
     (ratio : den * (stake w W + c) * stake w K < 2 * (den - num) * stake w W * stake w H)
     (supportIn : H ⊆ K) (later : H ∪ N ⊆ H') (honestLater : {v ∈ W' | v ∈ J} ⊆ K ∪ N)
+    -- The committees only grow.
     (bound : ByzantineStakeAtMost w W' J num den) (grows : stake w W ≤ stake w W')
+    -- The amount never grows.
     (shrinks : c' ≤ c) :
     stake w W' + c' < 2 * stake w H' := by
   refine lt_two_mul_honest_support_later ratio supportIn later honestLater bound ?_
@@ -328,30 +322,27 @@ theorem lt_two_mul_honest_support_later_of_add [DecidableEq ν] {W W' H K N H' :
         Nat.add_le_add_left (Nat.mul_le_mul_left c grows) _
     _ = (stake w W + c) * stake w W' := by ring
 
-/-- The hypotheses of both bounds at a later slot hold together, so neither is vacuous.
-
-Twelve validators have stake one, and the last two are Byzantine.
-
-The fraction is `1 / 4`.
-
-At the first slot the committees hold the first six validators and the two Byzantine ones.
-
-Five honest ones support the block, with the amount `1` and so the threshold `9`.
-
-Later every validator sits in the committees, and the four new honest ones support the block.
-
-The amount stays `1`, so the threshold is then `13`. -/
+/-- The hypotheses of both bounds at a later slot hold together, so neither is vacuous. -/
 theorem honest_support_later_hypotheses :
+    -- Twelve validators have stake one.
     let w := fun _ : Fin 12 => 1
+    -- At the first slot the committees hold the first six validators and the two Byzantine ones.
     let W : Finset (Fin 12) := {0, 1, 2, 3, 4, 5, 10, 11}
     let K : Finset (Fin 12) := {0, 1, 2, 3, 4, 5}
+    -- Five honest ones support the block.
     let H : Finset (Fin 12) := {0, 1, 2, 3, 4}
+    -- Later every validator sits in the committees, and the four new honest ones support the block.
     let N : Finset (Fin 12) := {6, 7, 8, 9}
     let H' : Finset (Fin 12) := {0, 1, 2, 3, 4, 6, 7, 8, 9}
+    -- The last two validators are Byzantine.
     let J : Set (Fin 12) := {v | v.val < 10}
+    -- The fraction is `1 / 4`.
+    --
+    -- At the first slot the amount is `1`, and so the threshold is `9`.
     4 * (stake w W + 1) * stake w K < 2 * (4 - 1) * stake w W * stake w H ∧ H ⊆ K ∧
       H ∪ N ⊆ H' ∧ {v ∈ (Finset.univ : Finset (Fin 12)) | v ∈ J} ⊆ K ∪ N ∧
       ByzantineStakeAtMost w Finset.univ J 1 4 ∧ stake w W ≤ stake w Finset.univ ∧
+      -- The amount stays `1`, so the threshold is then `13`.
       13 * stake w W ≤ 9 * stake w Finset.univ := by
   simp only [ByzantineStakeAtMost, stake]
   decide

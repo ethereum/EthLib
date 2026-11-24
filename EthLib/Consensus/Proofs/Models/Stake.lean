@@ -102,15 +102,13 @@ theorem weightChange_self (S : Finset ν) : weightChange w w S = 0 :=
 
 /-- A quorum under weights `w` is a quorum under weights `w₀`, up to the change of the weights.
 
-The quorum `A` of `L` holds two thirds of the stake of `L` under `w`, up to a slack `a`.
-
-Under `w₀` the slack grows by the change from `w₀` to `w` on `L`.
-
-A gain counts once and a loss twice, as for a validator that joins or leaves the set.
-
 The bound overcounts: it also charges the loss of a member of the quorum. -/
 theorem two_mul_stake_le_add_weightChange {w₀ : ν → ℕ} {L A : Finset ν} {a : ℕ} (hA : A ⊆ L)
+    -- The quorum `A` of `L` holds two thirds of the stake of `L` under `w`, up to a slack `a`.
     (h : 2 * stake w L ≤ 3 * stake w A + a) :
+    -- Under `w₀` the slack grows by the change from `w₀` to `w` on `L`.
+    --
+    -- A gain counts once and a loss twice, as for a validator that joins or leaves the set.
     2 * stake w₀ L ≤ 3 * stake w₀ A + weightChange w₀ w L + a := by
   -- Pointwise, `w + (w₀ - w) = w₀ + (w - w₀)` and `w ≤ w₀ + (w - w₀)`.
   have hL : stake w L + stake (fun v => w₀ v - w v) L =
@@ -126,19 +124,16 @@ theorem two_mul_stake_le_add_weightChange {w₀ : ν → ℕ} {L A : Finset ν} 
 
 /-- Two quorums up to slacks of two validator sets share stake, up to the change between the sets.
 
-The quorum `A` holds two thirds of the stake of `L`, up to a slack `a`.
-
-The quorum `B` holds the same share of the stake of `R`, up to a slack `b`.
-
-The stake of `L \ V₀` and `V₀ \ R` measures that change against any reference set `V₀`.
-
-The bound loses each slack once.
-
 With no slack, this is the bound in the proof of Gasper Theorem 8.3, times three. -/
 theorem two_mul_stake_le_stake_inter_add_slack [DecidableEq ν] {L R A B : Finset ν}
+    -- The stake of `L \ V₀` and `V₀ \ R` measures that change against any reference set `V₀`.
     (V₀ : Finset ν) {a b : ℕ} (hA : A ⊆ L) (hB : B ⊆ R)
+    -- The quorum `A` holds two thirds of the stake of `L`, up to a slack `a`.
+    --
+    -- The quorum `B` holds the same share of the stake of `R`, up to a slack `b`.
     (hA' : 2 * stake w L ≤ 3 * stake w A + a) (hB' : 2 * stake w R ≤ 3 * stake w B + b) :
     2 * stake w L ≤ 3 * stake w (A ∩ B) + stake w R +
+      -- The bound loses each slack once.
       3 * (stake w (L \ V₀) + stake w (V₀ \ R)) + (a + b) := by
   have hsum : stake w (A ∪ B) + stake w (A ∩ B) = stake w A + stake w B :=
     Finset.sum_union_inter
@@ -280,10 +275,6 @@ theorem stake_le_accountable_add_change [DecidableEq ν]
 
 /-- The Byzantine validators of `V` hold at most the fraction `num / den` of its stake.
 
-The validators outside `J` are the Byzantine ones.
-
-The denominator is positive.
-
 The bound is not strict, as in Assumption 2 of the fast confirmation paper.
 
 That assumption is in §3.2 of [arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4).
@@ -291,6 +282,9 @@ That assumption is in §3.2 of [arXiv 2405.00549v4](https://arxiv.org/abs/2405.0
 It says nothing when the fraction is at least one, or when `V` has no stake. -/
 def ByzantineStakeAtMost (w : ν → ℕ) (V : Finset ν) (J : Set ν) [DecidablePred (· ∈ J)]
     (num den : ℕ) : Prop :=
+  -- The denominator is positive.
+  --
+  -- The validators outside `J` are the Byzantine ones.
   0 < den ∧ den * stake w {v ∈ V | v ∉ J} ≤ num * stake w V
 
 namespace ByzantineStakeAtMost

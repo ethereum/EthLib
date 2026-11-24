@@ -5,49 +5,13 @@ public import EthLib.Consensus.Proofs.Models.Ffg.Model
 /-!
 # Casper FFG: accountable safety
 
-Two conflicting finalized checkpoints make validators slashable.
+Two conflicting finalized checkpoints make validators slashable, with a bound on their stake.
 
-When each checkpoint has its own validator set, the slashable stake is bounded below.
+It holds for `k`-finalization with every `k ≥ 1`, for supermajority links and for slack links.
 
-The bound loses the stake that activated and exited since a reference set.
+The main result is Theorem 8.3 of Gasper §8.6, [arXiv 2003.03052v3][gasper].
 
-That result is Theorem 8.3 of Gasper §8.6, [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
-
-Against one reference set, such as the set of a trusted checkpoint, the bound has a simple form.
-
-The slashable stake is at least a third of the reference stake.
-
-It loses a third of the change of both sets since the reference set.
-
-There an exit counts twice and an activation once.
-
-When the sets change by at most `d` in each of `n` steps, the loss is at most `2 n d / 3`.
-
-With one validator set for all votes, the slashable validators hold one third of its stake.
-
-That result is Theorem 1 of Casper FFG §2.1 and Theorem 5.2 of Gasper.
-
-Accountable safety holds for `k`-finalization with every `k ≥ 1`.
-
-The proof follows Gasper Lemma 4.11, Lemma 5.1 and Lemma 8.2.
-
-Those lemmas use only the order of each link.
-
-So they hold for every kind of link that raises the epoch and follows the chain.
-
-With slack links, each stake bound also loses twice the slack of two links.
-
-Each checkpoint then has a set of weights, and its links hold under some weights of that set.
-
-The bounds measure every stake but the slack under reference weights.
-
-They lose the change from the reference weights to the weights of each of the two links.
-
-In the reference form, a gain of weight counts like an activation, and a loss like an exit.
-
-With one stake function in each set and as reference weights, that change is zero.
-
-With no slack, a slack link is a supermajority link, which gives the bounds without slack.
+[gasper]: https://arxiv.org/abs/2003.03052v3
 -/
 
 @[expose] public section
@@ -59,19 +23,16 @@ variable {ν β : Type*} [Preorder β] {V U : Checkpoint β → Finset ν} {w : 
 
 /-- Two links that break a slashing condition.
 
-Each link starts from a justified checkpoint, so its target is justified too.
-
-Their target epochs lie from `lo` to `hi`.
-
-For each validator, its votes for the two links make a double vote or a surround vote.
-
-So each validator that votes for both links is slashable.
-
 Gasper Lemma 8.2 finds such links when two finalized checkpoints conflict. -/
 def SlashableLinksBy (link : Checkpoint β → Checkpoint β → Prop) (genesis : β) (lo hi : ℕ) :
     Prop :=
+  -- Their target epochs lie from `lo` to `hi`.
   ∃ s₁ t₁ s₂ t₂ : Checkpoint β, lo ≤ t₁.epoch ∧ t₁.epoch ≤ hi ∧ lo ≤ t₂.epoch ∧ t₂.epoch ≤ hi ∧
+    -- Each link starts from a justified checkpoint, so its target is justified too.
     JustifiedBy link genesis s₁ ∧ JustifiedBy link genesis s₂ ∧ link s₁ t₁ ∧ link s₂ t₂ ∧
+    -- For each validator, its votes for the two links make a double vote or a surround vote.
+    --
+    -- So each validator that votes for both links is slashable.
     ∀ v : ν, DoubleVote ⟨v, s₁, t₁⟩ ⟨v, s₂, t₂⟩ ∨ SurroundVote ⟨v, s₁, t₁⟩ ⟨v, s₂, t₂⟩
 
 omit [Preorder β] in
@@ -140,11 +101,7 @@ theorem le_of_chain {b : ℕ → β} {k : ℕ} (h : ∀ i < k, b i ≤ b (i + 1)
   | 0, _ => le_rfl
   | i + 1, hi => (le_of_chain h i (by omega)).trans (h i (by omega))
 
-/-- Gasper Lemma 5.1.
-
-Take a finalized checkpoint, and a justified checkpoint with a later epoch.
-
-Then the finalized block is in the chain of the justified block.
+/-- Gasper Lemma 5.1: a finalized block is in the chain of a justified block of a later epoch.
 
 Otherwise two links break a slashing condition.
 
@@ -210,35 +167,31 @@ open scoped Classical in
 omit [Preorder β] in
 /-- The slashable stake of two links up to slack, as in the proof of Gasper Theorem 8.3.
 
-Each validator that votes for both links is slashable.
-
-The links have the validator sets `L` and `R` of their targets.
-
-Under `w₁`, twice the stake of `L` is at most three times that of its voters plus twice its slack.
-
-The same holds for `R` under weights `w₂`.
-
-`V₀` is any reference set, and the stake of `L \ V₀` and `V₀ \ R` counts the change since it.
-
-Every other stake is measured under any reference weights `w₀`.
-
-The slashable validators of both sets then hold stake `x` with the bound below.
-
-The bound: `2 * w₀(L) ≤ 3 * x + w₀(R) + 3 * (w₀(L \ V₀) + w₀(V₀ \ R)) + δL + δR`.
-
-There `δL` is the change from `w₀` to `w₁` on `L`, plus twice the slack of `L` under `w₁`.
-
-`δR` is the same for `R` and `w₂`. -/
+Each validator that votes for both links is slashable. -/
 theorem two_mul_stake_le_of_slashable {s₁ t₁ s₂ t₂ : Checkpoint β} {w₁ w₂ : ν → ℕ}
+    -- The links have the validator sets `L` and `R` of their targets.
+    --
+    -- Under `w₁`, twice the stake of `L` is at most three times that of its voters.
+    --
+    -- Twice its slack is added to that bound.
     (h₁ : 2 * stake w₁ (V t₁) ≤
       3 * stake w₁ (signers (V t₁) votes s₁ t₁) + 2 * stake w₁ (V t₁ \ U t₁))
+    -- The same holds for `R` under weights `w₂`.
     (h₂ : 2 * stake w₂ (V t₂) ≤
       3 * stake w₂ (signers (V t₂) votes s₂ t₂) + 2 * stake w₂ (V t₂ \ U t₂))
     (h : ∀ v : ν, ⟨v, s₁, t₁⟩ ∈ votes → ⟨v, s₂, t₂⟩ ∈ votes → Slashable votes v)
+    -- `V₀` is any reference set, and the stake of `L \ V₀` and `V₀ \ R` counts the change since it.
+    --
+    -- Every other stake is measured under any reference weights `w₀`.
     (V₀ : Finset ν) (w₀ : ν → ℕ) :
+    -- The slashable validators of both sets then hold stake `x` with the bound below.
+    --
+    -- The bound: `2 * w₀(L) ≤ 3 * x + w₀(R) + 3 * (w₀(L \ V₀) + w₀(V₀ \ R)) + δL + δR`.
     2 * stake w₀ (V t₁) ≤ 3 * stake w₀ {v ∈ V t₁ ∩ V t₂ | Slashable votes v} +
       stake w₀ (V t₂) + 3 * (stake w₀ (V t₁ \ V₀) + stake w₀ (V₀ \ V t₂)) +
+      -- There `δL` is the change from `w₀` to `w₁` on `L`, plus twice the slack of `L` under `w₁`.
       ((weightChange w₀ w₁ (V t₁) + 2 * stake w₁ (V t₁ \ U t₁)) +
+        -- `δR` is the same for `R` and `w₂`.
         (weightChange w₀ w₂ (V t₂) + 2 * stake w₂ (V t₂ \ U t₂))) := by
   classical
   refine (two_mul_stake_le_stake_inter_add_slack V₀ (Finset.filter_subset _ _)
@@ -257,54 +210,62 @@ theorem two_mul_stake_le_of_slashable {s₁ t₁ s₂ t₂ : Checkpoint β} {w�
 open scoped Classical in
 /-- Accountable safety with slack links, and a validator set and a set of weights per checkpoint.
 
-This extends Gasper Theorem 8.3, which has no slack and one stake for each validator.
-
-Take two slack-finalized checkpoints whose blocks conflict.
-
-Then two slack-justified checkpoints `l` and `r` have the property below.
-
-Their epochs lie between the epochs of the two finalized checkpoints.
-
-They come with weights `wl` from the set of `l` and `wr` from the set of `r`.
-
-The change and slack terms below are measured under those weights.
-
-Take the validator sets `L` and `R` of `l` and `r`, a reference set `V₀` and reference weights `w₀`.
-
-Under `w₀`, the sets `L \ V₀` and `R \ V₀`, of stake `aL` and `aR`, activated since `V₀`.
-
-Under `w₀`, the sets `V₀ \ L` and `V₀ \ R`, of stake `eL` and `eR`, exited since `V₀`.
-
-The term `δL` is the change from `w₀` to `wl` on `L`.
-
-It adds twice the slack of `l`: the stake of `L` outside the second set of `l`, under `wl`.
-
-The term `δR` is the same for `r` and `wr`.
-
-The slashable validators of both sets hold stake `x` under `w₀`, with two bounds.
-
-The first bound: `2 * w₀(L) ≤ 3 * x + w₀(R) + 3 * (aL + eR) + δL + δR`.
-
-The second bound is the first with the two sides swapped.
-
-The bounds have content only when `w₀` stays close to `wl` on `L` and to `wr` on `R`.
-
-The two checkpoints and their weights do not depend on the reference set or weights. -/
+This extends Gasper Theorem 8.3, which has no slack and one stake for each validator. -/
 theorem accountable_safety_dynamic_slack {W : Checkpoint β → Set (ν → ℕ)} {c₁ c₂ : Checkpoint β}
+    -- Take two slack-finalized checkpoints whose blocks conflict.
     (h₁ : SlackFinalized V U W genesis votes c₁) (h₂ : SlackFinalized V U W genesis votes c₂)
     (hc : Conflicting c₁.block c₂.block) :
+    -- Then two slack-justified checkpoints `l` and `r` have the property below.
+    --
+    -- Their epochs lie between the epochs of the two finalized checkpoints.
     ∃ l r : Checkpoint β, min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
       min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
       SlackJustified V U W genesis votes l ∧ SlackJustified V U W genesis votes r ∧
+      -- Each checkpoint has a set of weights, and its links hold under some weights of that set.
+      --
+      -- So `l` and `r` come with weights `wl` from the set of `l` and `wr` from the set of `r`.
+      --
+      -- The two checkpoints and their weights do not depend on the reference set or weights.
+      --
+      -- Take the validator sets `L` and `R` of `l` and `r`.
+      --
+      -- Take a reference set `V₀` and reference weights `w₀`.
       ∃ wl ∈ W l, ∃ wr ∈ W r, ∀ (V₀ : Finset ν) (w₀ : ν → ℕ),
+        -- Under `w₀`, the sets `L \ V₀` and `R \ V₀`, of stake `aL` and `aR`, activated since `V₀`.
+        --
+        -- Under `w₀`, the sets `V₀ \ L` and `V₀ \ R`, of stake `eL` and `eR`, exited since `V₀`.
+        --
+        -- The slashable validators of both sets hold stake `x` under `w₀`, with two bounds.
+        --
+        -- The bounds measure every stake but the slack under the reference weights.
+        --
+        -- The first bound: `2 * w₀(L) ≤ 3 * x + w₀(R) + 3 * (aL + eR) + δL + δR`.
         2 * stake w₀ (V l) ≤ 3 * stake w₀ {v ∈ V l ∩ V r | Slashable votes v} +
           stake w₀ (V r) + 3 * (stake w₀ (V l \ V₀) + stake w₀ (V₀ \ V r)) +
+          -- The term `δL` is the change from `w₀` to `wl` on `L`.
+          --
+          -- It adds twice the slack of `l`: the stake of `L` outside the second set of `l`.
+          --
+          -- The change and slack terms are measured under `wl`.
+          --
+          -- So each bound loses the change from the reference weights to those of the two links.
+          --
+          -- It also loses twice the slack of each of the two links.
           ((weightChange w₀ wl (V l) + 2 * stake wl (V l \ U l)) +
+            -- The term `δR` is the same for `r` and `wr`.
+            --
+            -- The bounds have content only when `w₀` stays close to `wl` on `L` and to `wr` on `R`.
             (weightChange w₀ wr (V r) + 2 * stake wr (V r \ U r))) ∧
+        -- The second bound is the first with the two sides swapped.
         2 * stake w₀ (V r) ≤ 3 * stake w₀ {v ∈ V l ∩ V r | Slashable votes v} +
           stake w₀ (V l) + 3 * (stake w₀ (V r \ V₀) + stake w₀ (V₀ \ V l)) +
           ((weightChange w₀ wr (V r) + 2 * stake wr (V r \ U r)) +
             (weightChange w₀ wl (V l) + 2 * stake wl (V l \ U l))) := by
+  -- The proof follows Gasper Lemma 4.11, Lemma 5.1 and Lemma 8.2.
+  --
+  -- Those lemmas use only the order of each link.
+  --
+  -- So they hold for every kind of link that raises the epoch and follows the chain.
   obtain ⟨s₁, t₁, s₂, t₂, lo₁, hi₁, lo₂, hi₂, hs₁, hs₂, hl₁, hl₂, h⟩ :=
     h₁.slashableLinksBy (ν := ν) SlackLink.ordered h₂ hc
   -- A validator that votes for both links signs the two votes that break a condition.
@@ -320,97 +281,92 @@ theorem accountable_safety_dynamic_slack {W : Checkpoint β → Set (ν → ℕ)
 open scoped Classical in
 /-- Accountable safety with a validator set for each checkpoint: Gasper Theorem 8.3.
 
-Take two finalized checkpoints whose blocks conflict.
+The bound loses the stake that activated and exited since a reference set.
 
-Then two justified checkpoints `l` and `r` have the property below.
-
-Their epochs lie between the epochs of the two finalized checkpoints.
-
-Take the validator sets `L` and `R` of `l` and `r`, and any reference set `V₀`.
-
-The sets `L \ V₀` and `R \ V₀`, of stake `aL` and `aR`, activated since `V₀`.
-
-The sets `V₀ \ L` and `V₀ \ R`, of stake `eL` and `eR`, exited since `V₀`.
-
-The slashable validators of both sets hold stake `x` with two bounds, one for each side.
-
-The first bound: `2 * w(L) ≤ 3 * x + w(R) + 3 * (aL + eR)`.
-
-The second bound is the first with the two sides swapped.
-
-Gasper states the bound `max(w(L) - aL - eR, w(R) - aR - eL) - w(L)/3 - w(R)/3`.
-
-Each bound here is that bound with one term of the maximum, times three.
-
-That form needs neither division nor subtraction.
-
-The two checkpoints do not depend on the reference set.
-
-If `L` or `R` has no stake, both bounds hold with no slashable validator.
-
-So the theorem has content only when each justified checkpoint in the window has positive stake. -/
+The theorem has content only when each justified checkpoint in the window has positive stake. -/
 theorem accountable_safety_dynamic {c₁ c₂ : Checkpoint β}
+    -- Take two finalized checkpoints whose blocks conflict.
     (h₁ : Finalized V w genesis votes c₁) (h₂ : Finalized V w genesis votes c₂)
     (hc : Conflicting c₁.block c₂.block) :
+    -- Then two justified checkpoints `l` and `r` have the property below.
+    --
+    -- Their epochs lie between the epochs of the two finalized checkpoints.
     ∃ l r : Checkpoint β, min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
       min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
+      -- Take the validator sets `L` and `R` of `l` and `r`, and any reference set `V₀`.
+      --
+      -- The two checkpoints do not depend on the reference set.
       Justified V w genesis votes l ∧ Justified V w genesis votes r ∧ ∀ V₀ : Finset ν,
+        -- The sets `L \ V₀` and `R \ V₀`, of stake `aL` and `aR`, activated since `V₀`.
+        --
+        -- The sets `V₀ \ L` and `V₀ \ R`, of stake `eL` and `eR`, exited since `V₀`.
+        --
+        -- The slashable validators of both sets hold stake `x` with two bounds, one for each side.
+        --
+        -- The first bound: `2 * w(L) ≤ 3 * x + w(R) + 3 * (aL + eR)`.
+        --
+        -- Gasper states the bound `max(w(L) - aL - eR, w(R) - aR - eL) - w(L)/3 - w(R)/3`.
+        --
+        -- Each bound here is that bound with one term of the maximum, times three.
+        --
+        -- That form needs neither division nor subtraction.
+        --
+        -- If `L` or `R` has no stake, both bounds hold with no slashable validator.
         2 * stake w (V l) ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
           stake w (V r) + 3 * (stake w (V l \ V₀) + stake w (V₀ \ V r)) ∧
+        -- The second bound is the first with the two sides swapped.
         2 * stake w (V r) ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
           stake w (V l) + 3 * (stake w (V r \ V₀) + stake w (V₀ \ V l)) := by
+  -- With no slack, a slack link is a supermajority link, which gives the bounds without slack.
   obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, wl, hwl, wr, hwr, h⟩ :=
     accountable_safety_dynamic_slack (U := V) (h₁.slackFinalized V) (h₂.slackFinalized V) hc
   rw [Set.mem_singleton_iff] at hwl hwr
   subst wl wr
   rw [slackJustified_self] at hl hr
+  -- With one stake function in each set and as reference weights, the weight change is zero.
   exact ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, fun V₀ => by simpa using h V₀ w⟩
 
 open scoped Classical in
 /-- Accountable safety with slack links against a reference set `V₀` and reference weights `w₀`.
 
-Take two slack-finalized checkpoints whose blocks conflict.
-
-Then two slack-justified checkpoints `l` and `r` have the property below.
-
-Their epochs lie between the epochs of the two finalized checkpoints.
-
-They come with weights `wl` from the set of `l` and `wr` from the set of `r`.
-
-The change and slack terms below are measured under those weights.
-
-Take the validator sets `L` and `R` of `l` and `r`.
-
-Under `w₀`, measure the change of `L` since `V₀` as the stake that joined plus twice what left.
-
-Add the change from `w₀` to `wl` on `L`, where a gain counts once and a loss twice.
-
-Add twice the slack of `l`, the stake of `L` outside the second set of `l`, under `wl`.
-
-Do the same for `R` and `wr`.
-
-The slashable validators of both sets hold stake `x` under `w₀`.
-
-It is at least a third of `w₀(V₀)`, less a third of the two sums.
-
-So a validator that counts in the slack weighs as much as one that left.
-
-It stays slashable, but it weakens the quorum of its link.
-
-The bound has content only when the reference weights stay close to the weights of both links.
-
-The two checkpoints and their weights do not depend on the reference set or weights. -/
+The bound has content only when the reference weights stay close to the weights of both links. -/
 theorem accountable_safety_reference_slack [DecidableEq ν] {W : Checkpoint β → Set (ν → ℕ)}
     {c₁ c₂ : Checkpoint β}
+    -- Take two slack-finalized checkpoints whose blocks conflict.
     (h₁ : SlackFinalized V U W genesis votes c₁) (h₂ : SlackFinalized V U W genesis votes c₂)
     (hc : Conflicting c₁.block c₂.block) :
+    -- Then two slack-justified checkpoints `l` and `r` have the property below.
+    --
+    -- Their epochs lie between the epochs of the two finalized checkpoints.
     ∃ l r : Checkpoint β, min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
       min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
       SlackJustified V U W genesis votes l ∧ SlackJustified V U W genesis votes r ∧
+      -- They come with weights `wl` from the set of `l` and `wr` from the set of `r`.
+      --
+      -- The change and slack terms below are measured under those weights.
+      --
+      -- The two checkpoints and their weights do not depend on the reference set or weights.
+      --
+      -- Take the validator sets `L` and `R` of `l` and `r`.
       ∃ wl ∈ W l, ∃ wr ∈ W r, ∀ (V₀ : Finset ν) (w₀ : ν → ℕ),
+      -- The slashable validators of both sets hold stake `x` under `w₀`.
+      --
+      -- It is at least a third of `w₀(V₀)`, less a third of the two sums below.
       stake w₀ V₀ ≤ 3 * stake w₀ {v ∈ V l ∩ V r | Slashable votes v} +
+        -- Under `w₀`, the change of `L` since `V₀` is the stake that joined plus twice what left.
+        --
+        -- Add the change from `w₀` to `wl` on `L`, where a gain counts once and a loss twice.
+        --
+        -- So a gain of weight counts like an activation, and a loss like an exit.
+        --
+        -- Add twice the slack of `l`, the stake of `L` outside the second set of `l`, under `wl`.
+        --
+        -- So a validator that counts in the slack weighs as much as one that left.
+        --
+        -- It stays slashable, but it weakens the quorum of its link.
         (stake w₀ (V l \ V₀) + 2 * stake w₀ (V₀ \ V l) + weightChange w₀ wl (V l) +
           2 * stake wl (V l \ U l)) +
+        -- Do the same for `R` and `wr`.
         (stake w₀ (V r \ V₀) + 2 * stake w₀ (V₀ \ V r) + weightChange w₀ wr (V r) +
           2 * stake wr (V r \ U r)) := by
   obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, wl, hwl, wr, hwr, h⟩ :=
@@ -430,34 +386,31 @@ theorem accountable_safety_reference_slack [DecidableEq ν] {W : Checkpoint β �
 open scoped Classical in
 /-- Accountable safety against a fixed reference set `V₀`, such as the set of a trusted checkpoint.
 
-Take two finalized checkpoints whose blocks conflict.
+The bound follows from the first bound of Gasper Theorem 8.3.
 
-Then two justified checkpoints `l` and `r` have the property below.
-
-Their epochs lie between the epochs of the two finalized checkpoints.
-
-Take the validator sets `L` and `R` of `l` and `r`.
-
-Measure the change of `L` since `V₀` as the stake that joined plus twice the stake that left.
-
-The slashable validators of both sets hold stake `x` with the bound below.
-
-The bound: `w(V₀) ≤ 3 * x + (w(L \ V₀) + 2 * w(V₀ \ L)) + (w(R \ V₀) + 2 * w(V₀ \ R))`.
-
-So `x` is at least a third of the stake of `V₀`, less a third of the two changes.
-
-An exit lowers the stake of its set, which the bound counts twice, so an exit counts twice.
-
-The two checkpoints do not depend on the reference set.
-
-The bound follows from the first bound of Gasper Theorem 8.3. -/
+An exit counts twice and an activation once. -/
 theorem accountable_safety_reference [DecidableEq ν] {c₁ c₂ : Checkpoint β}
+    -- Take two finalized checkpoints whose blocks conflict.
     (h₁ : Finalized V w genesis votes c₁) (h₂ : Finalized V w genesis votes c₂)
     (hc : Conflicting c₁.block c₂.block) :
+    -- Then two justified checkpoints `l` and `r` have the property below.
+    --
+    -- Their epochs lie between the epochs of the two finalized checkpoints.
     ∃ l r : Checkpoint β, min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
       min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
+      -- Take the validator sets `L` and `R` of `l` and `r`.
+      --
+      -- The two checkpoints do not depend on the reference set.
       Justified V w genesis votes l ∧ Justified V w genesis votes r ∧ ∀ V₀ : Finset ν,
+      -- The slashable validators of both sets hold stake `x` with the bound below.
+      --
+      -- So `x` is at least a third of the stake of `V₀`, less a third of the two changes.
       stake w V₀ ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} +
+        -- The change of `L` since `V₀` is the stake that joined plus twice the stake that left.
+        --
+        -- An exit lowers the stake of its set, which the bound counts twice.
+        --
+        -- So an exit counts twice.
         (stake w (V l \ V₀) + 2 * stake w (V₀ \ V l)) +
         (stake w (V r \ V₀) + 2 * stake w (V₀ \ V r)) := by
   obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, wl, hwl, wr, hwr, h⟩ :=
@@ -472,34 +425,31 @@ open scoped Classical in
 
 The reference is a set `V₀` with weights `w₀`.
 
-Take two slack-finalized checkpoints whose blocks conflict.
-
-Take each slack-justified checkpoint whose epoch lies between theirs, and each of its weights.
-
-Under `w₀`, take the stake that joined its set since `V₀`, plus twice the stake that left.
-
-Add the change from `w₀` to those weights on its set, where a gain counts once and a loss twice.
-
-Add twice its slack, the stake of its set outside its second set, under those weights.
-
-Assume that sum is at most `b`.
-
-Then two such slack-justified checkpoints `l` and `r` have slashable validators of both sets.
-
-Their stake `x` under `w₀` satisfies `w₀(V₀) ≤ 3 * x + 2 * b`.
-
 The bound has content only when `w₀` stays close to the weights of each such checkpoint. -/
 theorem accountable_safety_of_change_slack [DecidableEq ν] {W : Checkpoint β → Set (ν → ℕ)}
     {c₁ c₂ : Checkpoint β}
+    -- Take two slack-finalized checkpoints whose blocks conflict.
     (h₁ : SlackFinalized V U W genesis votes c₁) (h₂ : SlackFinalized V U W genesis votes c₂)
     (hc : Conflicting c₁.block c₂.block) (V₀ : Finset ν) (w₀ : ν → ℕ) (b : ℕ)
+    -- Take each slack-justified checkpoint whose epoch lies between theirs.
+    --
+    -- Take each of its weights.
     (change : ∀ c : Checkpoint β, min c₁.epoch c₂.epoch ≤ c.epoch →
       c.epoch ≤ max c₁.epoch c₂.epoch → SlackJustified V U W genesis votes c → ∀ w ∈ W c,
+      -- Under `w₀`, take the stake that joined its set since `V₀`, plus twice the stake that left.
+      --
+      -- Add the change from `w₀` to those weights on its set: a gain counts once, a loss twice.
+      --
+      -- Add twice its slack, the stake of its set outside its second set, under those weights.
+      --
+      -- Assume that sum is at most `b`.
       stake w₀ (V c \ V₀) + 2 * stake w₀ (V₀ \ V c) + weightChange w₀ w (V c) +
         2 * stake w (V c \ U c) ≤ b) :
+    -- Then two such slack-justified checkpoints `l` and `r` have slashable validators of both sets.
     ∃ l r : Checkpoint β, min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
       min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
       SlackJustified V U W genesis votes l ∧ SlackJustified V U W genesis votes r ∧
+      -- Their stake `x` under `w₀` satisfies `w₀(V₀) ≤ 3 * x + 2 * b`.
       stake w₀ V₀ ≤ 3 * stake w₀ {v ∈ V l ∩ V r | Slashable votes v} + 2 * b := by
   obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, wl, hwl, wr, hwr, h⟩ :=
     accountable_safety_reference_slack h₁ h₂ hc
@@ -510,26 +460,21 @@ theorem accountable_safety_of_change_slack [DecidableEq ν] {W : Checkpoint β �
   omega
 
 open scoped Classical in
-/-- Accountable safety when the validator sets change little since a reference set `V₀`.
-
-Take two finalized checkpoints whose blocks conflict.
-
-Take each justified checkpoint whose epoch lies between theirs.
-
-Assume the stake that joined its set since `V₀`, plus twice the stake that left, is at most `b`.
-
-Then two such justified checkpoints `l` and `r` have slashable validators of both sets.
-
-Their stake `x` satisfies `w(V₀) ≤ 3 * x + 2 * b`. -/
+/-- Accountable safety when the validator sets change little since a reference set `V₀`. -/
 theorem accountable_safety_of_change [DecidableEq ν] {c₁ c₂ : Checkpoint β}
+    -- Take two finalized checkpoints whose blocks conflict.
     (h₁ : Finalized V w genesis votes c₁) (h₂ : Finalized V w genesis votes c₂)
     (hc : Conflicting c₁.block c₂.block) (V₀ : Finset ν) (b : ℕ)
+    -- Take each justified checkpoint whose epoch lies between theirs.
     (change : ∀ c : Checkpoint β, min c₁.epoch c₂.epoch ≤ c.epoch →
       c.epoch ≤ max c₁.epoch c₂.epoch → Justified V w genesis votes c →
+      -- Assume the stake that joined its set since `V₀`, plus twice what left, is at most `b`.
       stake w (V c \ V₀) + 2 * stake w (V₀ \ V c) ≤ b) :
+    -- Then two such justified checkpoints `l` and `r` have slashable validators of both sets.
     ∃ l r : Checkpoint β, min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
       min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
       Justified V w genesis votes l ∧ Justified V w genesis votes r ∧
+      -- Their stake `x` satisfies `w(V₀) ≤ 3 * x + 2 * b`.
       stake w V₀ ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} + 2 * b := by
   obtain ⟨l, r, lo₁, hi₁, lo₂, hi₂, hl, hr, h⟩ := accountable_safety_of_change_slack (U := V)
     (h₁.slackFinalized V) (h₂.slackFinalized V) hc V₀ w b
@@ -544,35 +489,32 @@ theorem accountable_safety_of_change [DecidableEq ν] {c₁ c₂ : Checkpoint β
 open scoped Classical in
 /-- Accountable safety when the validator sets change slowly after a reference set `V₀`.
 
-Take two finalized checkpoints whose blocks conflict.
-
-Take each justified checkpoint whose epoch lies between theirs.
-
-Assume its set is reached from `V₀` in at most `n` steps of sets.
-
-At each step, the stake that joins plus twice the stake that leaves is at most `d`.
-
-Then two such justified checkpoints `l` and `r` have slashable validators of both sets.
-
-Their stake `x` satisfies `w(V₀) ≤ 3 * x + 2 * n * d`.
-
-So `x` is at least a third of the stake of `V₀`, less two thirds of `n * d`.
-
-A step can stand for one epoch.
-
-Then `d` bounds the stake that activates plus twice the stake that exits in an epoch.
-
-The sequence of steps may depend on the checkpoint, as each branch has its own sets. -/
+When the sets change by at most `d` in each of `n` steps, the loss is at most `2 n d / 3`. -/
 theorem accountable_safety_of_steps [DecidableEq ν] {c₁ c₂ : Checkpoint β}
+    -- Take two finalized checkpoints whose blocks conflict.
     (h₁ : Finalized V w genesis votes c₁) (h₂ : Finalized V w genesis votes c₂)
     (hc : Conflicting c₁.block c₂.block) (V₀ : Finset ν) (n d : ℕ)
+    -- Take each justified checkpoint whose epoch lies between theirs.
+    --
+    -- Assume its set is reached from `V₀` in at most `n` steps of sets.
+    --
+    -- The sequence of steps may depend on the checkpoint, as each branch has its own sets.
     (steps : ∀ c : Checkpoint β, min c₁.epoch c₂.epoch ≤ c.epoch →
       c.epoch ≤ max c₁.epoch c₂.epoch → Justified V w genesis votes c →
       ∃ S : ℕ → Finset ν, ∃ m ≤ n, S 0 = V₀ ∧ S m = V c ∧
+        -- At each step, the stake that joins plus twice the stake that leaves is at most `d`.
+        --
+        -- A step can stand for one epoch.
+        --
+        -- Then `d` bounds the stake that activates plus twice the stake that exits in an epoch.
         ∀ i < m, stake w (S (i + 1) \ S i) + 2 * stake w (S i \ S (i + 1)) ≤ d) :
+    -- Then two such justified checkpoints `l` and `r` have slashable validators of both sets.
     ∃ l r : Checkpoint β, min c₁.epoch c₂.epoch ≤ l.epoch ∧ l.epoch ≤ max c₁.epoch c₂.epoch ∧
       min c₁.epoch c₂.epoch ≤ r.epoch ∧ r.epoch ≤ max c₁.epoch c₂.epoch ∧
       Justified V w genesis votes l ∧ Justified V w genesis votes r ∧
+      -- Their stake `x` satisfies `w(V₀) ≤ 3 * x + 2 * n * d`.
+      --
+      -- So `x` is at least a third of the stake of `V₀`, less two thirds of `n * d`.
       stake w V₀ ≤ 3 * stake w {v ∈ V l ∩ V r | Slashable votes v} + 2 * (n * d) := by
   -- The change of each set since `V₀` is at most the changes of its steps, so at most `n * d`.
   refine accountable_safety_of_change h₁ h₂ hc V₀ (n * d) fun c lo hi hj => ?_
@@ -582,17 +524,18 @@ theorem accountable_safety_of_steps [DecidableEq ν] {c₁ c₂ : Checkpoint β}
 
 /-- Accountable safety with one validator set `V` for every vote.
 
-Take two finalized checkpoints whose blocks conflict.
-
-Then validators of `V` with at least one third of its stake are slashable.
+It is Theorem 1 of Casper FFG §2.1 and Theorem 5.2 of Gasper.
 
 With zero total stake the conclusion holds for every set of votes.
 
 So the theorem has content only for positive stake. -/
 theorem accountable_safety {V : Finset ν} {c₁ c₂ : Checkpoint β}
+    -- Take two finalized checkpoints whose blocks conflict.
     (h₁ : Finalized (fun _ => V) w genesis votes c₁)
     (h₂ : Finalized (fun _ => V) w genesis votes c₂)
-    (hc : Conflicting c₁.block c₂.block) : OneThirdSlashable V w votes := by
+    (hc : Conflicting c₁.block c₂.block) :
+    -- Then validators of `V` with at least one third of its stake are slashable.
+    OneThirdSlashable V w votes := by
   classical
   obtain ⟨l, r, -, -, -, -, -, -, h⟩ := accountable_safety_dynamic h₁ h₂ hc
   have h := (h V).1
