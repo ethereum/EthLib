@@ -8,7 +8,7 @@ from hypothesis import given, strategies as st
 from ethlib.networking.gossip import rpc
 from raising import raises
 
-# The schemas are in libp2p/specs at commit 4facaf9876da1eb7d6e066982010c81495ebb965.
+# The schemas are in libp2p/specs at commit 1a084b699d9d424ca7027edf350cf4184cd6f5bd.
 # RPC and Message are in pubsub/README.md, sections "The RPC" and "The Message".
 # The control messages are in "Protobuf" of pubsub/gossipsub/gossipsub-v1.0.md and v1.1.md.
 # The IDONTWANT message is in "Protobuf Extension" of pubsub/gossipsub/gossipsub-v1.2.md.

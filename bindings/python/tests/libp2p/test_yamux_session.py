@@ -7,7 +7,7 @@ from raising import raises
 
 # The rules come from "Message Flow" and "Flag Field" of yamux/README.md.
 # Repository: libp2p/specs.
-# Commit: 4facaf9876da1eb7d6e066982010c81495ebb965.
+# Commit: 1a084b699d9d424ca7027edf350cf4184cd6f5bd.
 # The source publishes no vector.
 #
 # A header is version 0, type, flags, stream ID and length, big-endian on 1, 1, 2, 4 and 4 bytes.
