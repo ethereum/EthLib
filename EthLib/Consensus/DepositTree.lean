@@ -467,7 +467,7 @@ def getProof (tree : DepositTree) (index : Nat) :
   if index < finalized then throw (.proofOfFinalized index finalized)
   if tree.mixInLength ≤ index then throw (.proofBeyondCount index tree.mixInLength)
   match tree.tree.generateProof index DEPOSIT_CONTRACT_TREE_DEPTH.toNat with
-  | some (leaf, branch) => return (leaf, branch.push (uintToBytes 32 tree.mixInLength))
+  | some (leaf, branch) => return (leaf, branch.push (ByteOrder.toLE 32 tree.mixInLength))
   -- A tree that the operations build always holds a leaf at an index below its count.
   | none => throw (.proofBeyondCount index tree.mixInLength)
 

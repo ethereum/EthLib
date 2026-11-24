@@ -20,7 +20,7 @@ The stream that compresses decodes back to its data, against `framing_format.txt
 
 namespace EthLib.Networking.Proofs.Snappy.FrameEncode
 
-open EthLib.Base (uintToBytes)
+open EthLib.Base (ByteOrder.toLE)
 open EthLib.Networking.Snappy
 open EthLib.Networking.Proofs.Snappy.Frame
 
@@ -30,13 +30,13 @@ open EthLib.Networking.Proofs.Snappy.Frame
 -/
 theorem dataChunk_spec {data : List UInt8} (h : data.length ≤ maxChunkLength) :
     ∃ (type : UInt8) (body : List UInt8), body.length < 2 ^ 24 ∧
-      dataChunk data = type :: (uintToBytes 3 body.length).toList ++ body ∧
+      dataChunk data = type :: (ByteOrder.toLE 3 body.length).toList ++ body ∧
       decodeChunk type body = .ok data := by
   unfold dataChunk
   split
   · rename_i hlt
     refine ⟨compressedType,
-      (uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++
+      (ByteOrder.toLE 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++
         (compress ⟨data.toArray⟩).data.toList, ?_, ?_, decodeChunk_compressed_compress h⟩
     · simp only [compressedChunk, uncompressedChunk, List.length_append, List.length_cons,
         Vector.length_toList, maxChunkLength] at hlt h ⊢

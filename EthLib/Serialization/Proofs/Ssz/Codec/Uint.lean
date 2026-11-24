@@ -22,6 +22,6 @@ theorem readUint_zero (data : Bytes) (start : Nat) : readUint data start 0 = 0 :
 theorem readUint_succ (data : Bytes) (start width : Nat) :
     readUint data start (width + 1)
       = (data[start]?.getD 0).toNat + 256 * readUint data (start + 1) width := by
-  simp [readUint, Base.bytesToUint_ofFn_succ, Nat.add_assoc, Nat.add_comm 1]
+  simp [readUint, Base.ByteOrder.ofLE_ofFn_succ, Nat.add_assoc, Nat.add_comm 1]
 
 end EthLib.Serialization.Ssz

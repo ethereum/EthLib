@@ -21,15 +21,15 @@ open EthLib.Cryptography.Sphincs.Constants
 
 /-- EthLib's bytes as a model digest: their little-endian number, on 128 bits. -/
 def toDigest {k : Nat} (d : Vector UInt8 k) : SphincsSecurity.Digest :=
-  BitVec.ofNat _ (Base.bytesToUint d)
+  BitVec.ofNat _ (Base.ByteOrder.ofLE d)
 
 /-- A digest read as a number and written back is itself. -/
 theorem ofDigest_toDigest (d : Digest) : ofDigest (toDigest d) = d :=
-  HashSig.ofBV_ofNat_bytesToUint d (by decide)
+  HashSig.ofBV_ofNat_ofLE d (by decide)
 
 /-- A randomizer read as a number and written back is itself. -/
 theorem ofRandomizer_toDigest (r : Randomizer) : ofRandomizer (toDigest r) = r :=
-  HashSig.ofBV_ofNat_bytesToUint r (by decide)
+  HashSig.ofBV_ofNat_ofLE r (by decide)
 
 /-- EthLib's opening as the model's. -/
 def toOpening (o : TreeOpening) : SphincsSecurity.TreeOpening :=

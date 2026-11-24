@@ -251,7 +251,7 @@ def readBlock (start i : Nat) (records : Record × Record × Record × Record) :
   -- The document gives the total difficulty as an unsigned 256-bit integer, with no byte order.
   --
   -- EthLib reads it little-endian, as SSZ and the accumulator do.
-  let td := BitVec.ofNat 256 (Base.bytesToUint (← bytes32Of t))
+  let td := BitVec.ofNat 256 (Base.ByteOrder.ofLE (← bytes32Of t))
   return (⟨header, body, receipts, td⟩, difficulty, parent)
 
 /-- The blocks of a file, from the block `i` on, after the block before them.

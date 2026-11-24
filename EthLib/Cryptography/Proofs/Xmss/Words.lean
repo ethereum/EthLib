@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Xmss.Ots
-public import EthLib.Base.Proofs.LittleEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.Bytes
 public import EthLib.Cryptography.Proofs.Hash.Keccak.Lanes
 
@@ -41,8 +41,8 @@ theorem bytesOfLane_seedTagLane : Hash.Keccak.Internal.bytesOfLane SEED_TAG_LANE
 
 /-- A number below `2^64` in the first of two lanes is its 16 little-endian bytes. -/
 theorem lanesBytes_index (n : Nat) (h : n < 2 ^ 64) :
-    lanesBytes (⟨n.toUInt64, 0⟩ : Lanes2).toArray = (uintToBytes 16 n).toList := by
-  rw [Hash.Keccak.lanesBytes_lanes2, Hash.Keccak.Lanes2.bytes_eq_uintToBytes]
+    lanesBytes (⟨n.toUInt64, 0⟩ : Lanes2).toArray = (Base.ByteOrder.toLE 16 n).toList := by
+  rw [Hash.Keccak.lanesBytes_lanes2, Hash.Keccak.Lanes2.bytes_eq_toLE]
   congr 2
   simp only [Hash.Keccak.Lanes2.toNat, Nat.toUInt64_eq, UInt64.toNat_ofNat', UInt64.toNat_zero]
   omega

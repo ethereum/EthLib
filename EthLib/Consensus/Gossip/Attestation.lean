@@ -164,7 +164,7 @@ def isAggregator (committeeSize : Nat) (selectionProof : BLSSignature) : Bool :=
   -- Let `h` be the SHA-256 hash of the proof.
   let hash := Cryptography.Hash.Sha256.hash32 (packBytes selectionProof)
   -- The integer of the first 8 bytes of `h`, read little-endian, is a multiple of the modulus.
-  bytesToUint64 (Vector.ofFn fun i : Fin 8 => hash[i.val]) % modulo == 0
+  UInt64.ofNat (ByteOrder.ofLE (Vector.ofFn fun i : Fin 8 => hash[i.val])) % modulo == 0
 
 /-! ## Attestations -/
 

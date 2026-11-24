@@ -45,7 +45,7 @@ The read takes `width` bytes from `start`.
 A byte past the end of the data reads as zero.
 -/
 def readUint (data : Bytes) (start width : Nat) : Nat :=
-  Base.bytesToUint (Vector.ofFn fun i : Fin width => data[start + i.val]?.getD 0)
+  Base.ByteOrder.ofLE (Vector.ofFn fun i : Fin width => data[start + i.val]?.getD 0)
 
 /-- The offset table at the front of an encoding, one entry per variable-size part. -/
 def readOffsets (data : Bytes) (count : Nat) : List Nat :=

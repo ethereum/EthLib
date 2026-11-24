@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Bytes
-public import EthLib.Base.Proofs.LittleEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Cryptography.Proofs.HashSig.Oracle
 
 /-!
@@ -25,7 +25,7 @@ Those 16 bytes are uniform when the answer is.
 namespace EthLib.Cryptography.HashSig
 
 open OracleSpec OracleComp ENNReal
-open EthLib.Base (bytesToUint uintToBytes)
+open EthLib.Base (ByteOrder.ofLE ByteOrder.toLE)
 
 /-! ## Bit vectors as bytes -/
 
@@ -63,10 +63,10 @@ private theorem mod_div_mod (z a b c : Nat) (h : a + c ≤ b) :
   · simp [hj]
 
 /-- The bytes of the `8 n`-bit vector of an integer are its `n` low little-endian bytes. -/
-theorem ofBV_ofNat (n z : Nat) : ofBV n (BitVec.ofNat (8 * n) z) = uintToBytes n z := by
+theorem ofBV_ofNat (n z : Nat) : ofBV n (BitVec.ofNat (8 * n) z) = ByteOrder.toLE n z := by
   apply Vector.ext
   intro i hi
-  simp only [getElem_ofBV, Base.uintToBytes_eq_div, Vector.getElem_ofFn]
+  simp only [getElem_ofBV, Base.ByteOrder.toLE_eq_div, Vector.getElem_ofFn]
   apply UInt8.toNat.inj
   simp only [UInt8.toNat_ofBitVec, BitVec.extractLsb'_toNat, BitVec.toNat_ofNat,
     Nat.shiftRight_eq_div_pow]
@@ -76,25 +76,25 @@ theorem ofBV_ofNat (n z : Nat) : ofBV n (BitVec.ofNat (8 * n) z) = uintToBytes n
   simp
 
 /-- The bytes of a bit vector of any width are the little-endian bytes of its integer. -/
-theorem ofBV_eq_uintToBytes (n : Nat) {w : Nat} (y : BitVec w) :
-    ofBV n y = uintToBytes n y.toNat := by
+theorem ofBV_eq_toLE (n : Nat) {w : Nat} (y : BitVec w) :
+    ofBV n y = ByteOrder.toLE n y.toNat := by
   apply Vector.ext
   intro i hi
-  simp only [getElem_ofBV, Base.uintToBytes_eq_div, Vector.getElem_ofFn]
+  simp only [getElem_ofBV, Base.ByteOrder.toLE_eq_div, Vector.getElem_ofFn]
   apply UInt8.toNat.inj
   simp only [UInt8.toNat_ofBitVec, BitVec.extractLsb'_toNat, Nat.shiftRight_eq_div_pow]
   rw [show (256 : Nat) ^ i = 2 ^ (8 * i) by rw [pow_mul]; norm_num]
   simp
 
 /-- `LE_{8k}(z)`, listed, is `bytesLE k` of `z` as an `8 k`-bit vector. -/
-theorem toList_uintToBytes (k z : Nat) :
-    (uintToBytes k z).toList = bytesLE k (BitVec.ofNat (8 * k) z) := by
+theorem toList_toLE (k z : Nat) :
+    (ByteOrder.toLE k z).toList = bytesLE k (BitVec.ofNat (8 * k) z) := by
   rw [← ofBV_ofNat, toList_ofBV]
 
 /-- The integer that the bytes of a bit vector encode is the bit vector's. -/
-theorem bytesToUint_ofBV (n : Nat) (x : BitVec (8 * n)) :
-    bytesToUint (ofBV n x) = x.toNat := by
-  rw [ofBV_eq_uintToBytes, Base.bytesToUint_uintToBytes]
+theorem ofLE_ofBV (n : Nat) (x : BitVec (8 * n)) :
+    ByteOrder.ofLE (ofBV n x) = x.toNat := by
+  rw [ofBV_eq_toLE, Base.ByteOrder.ofLE_toLE]
   -- The integer is below `2^(8n) = 256^n`, so the modulus does nothing.
   exact Nat.mod_eq_of_lt (by simpa [pow_mul] using x.isLt)
 
@@ -131,19 +131,19 @@ That works at any width, so it needs no cast between byte counts and bit widths.
 /-- Put the integer of `n` bytes in a bit vector at least `8 n` bits wide.
 
 Then its bytes are the bytes we started from. -/
-theorem ofBV_ofNat_bytesToUint {n w : Nat} (v : Vector UInt8 n) (hw : 8 * n ≤ w) :
-    ofBV n (BitVec.ofNat w (bytesToUint v)) = v := by
-  rw [ofBV_eq_uintToBytes, BitVec.toNat_ofNat, Nat.mod_eq_of_lt, Base.uintToBytes_bytesToUint]
-  calc bytesToUint v < 256 ^ n := Base.bytesToUint_lt v
+theorem ofBV_ofNat_ofLE {n w : Nat} (v : Vector UInt8 n) (hw : 8 * n ≤ w) :
+    ofBV n (BitVec.ofNat w (ByteOrder.ofLE v)) = v := by
+  rw [ofBV_eq_toLE, BitVec.toNat_ofNat, Nat.mod_eq_of_lt, Base.ByteOrder.toLE_ofLE]
+  calc ByteOrder.ofLE v < 256 ^ n := Base.ByteOrder.ofLE_lt v
     _ = 2 ^ (8 * n) := by rw [pow_mul]; norm_num
     _ ≤ 2 ^ w := Nat.pow_le_pow_right (by decide) hw
 
 /-- Two bit vectors of at most `8 n` bits with the same `n` bytes are equal. -/
 theorem ofBV_inj {n w : Nat} {x y : BitVec w} (hw : w ≤ 8 * n) (h : ofBV n x = ofBV n y) :
     x = y := by
-  rw [ofBV_eq_uintToBytes, ofBV_eq_uintToBytes] at h
-  have := congrArg bytesToUint h
-  rw [Base.bytesToUint_uintToBytes, Base.bytesToUint_uintToBytes] at this
+  rw [ofBV_eq_toLE, ofBV_eq_toLE] at h
+  have := congrArg ByteOrder.ofLE h
+  rw [Base.ByteOrder.ofLE_toLE, Base.ByteOrder.ofLE_toLE] at this
   -- Both integers are below `2^w <= 256^n`, so the modulus does nothing.
   have hpow : 2 ^ w ≤ 256 ^ n := by
     calc 2 ^ w ≤ 2 ^ (8 * n) := Nat.pow_le_pow_right (by decide) hw
@@ -198,13 +198,13 @@ theorem prEvent_ofBV_truncateHash (P : Vector UInt8 16 → Prop) :
       Nat.card {d : Vector UInt8 16 // P d} :=
     Nat.card_congr
       { toFun := fun b => ⟨ofBV 16 b.1, b.2⟩
-        invFun := fun d => ⟨BitVec.ofNat _ (bytesToUint d.1), by
-          rw [ofBV_ofNat_bytesToUint d.1 (w := digestBits) (by simp [digestBits])]
+        invFun := fun d => ⟨BitVec.ofNat _ (ByteOrder.ofLE d.1), by
+          rw [ofBV_ofNat_ofLE d.1 (w := digestBits) (by simp [digestBits])]
           exact d.2⟩
         left_inv := fun b => Subtype.ext
           (ofBV_inj (n := 16) (by simp [digestBits])
-            (ofBV_ofNat_bytesToUint _ (by simp [digestBits])))
-        right_inv := fun d => Subtype.ext (ofBV_ofNat_bytesToUint _ (by simp [digestBits])) }
+            (ofBV_ofNat_ofLE _ (by simp [digestBits])))
+        right_inv := fun d => Subtype.ext (ofBV_ofNat_ofLE _ (by simp [digestBits])) }
   rw [hc]
   congr 1
   norm_num [digestBits]

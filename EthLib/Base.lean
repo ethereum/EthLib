@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Address
 public import EthLib.Base.Base64
 public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Base.Bytes
 public import EthLib.Base.Denominations
 public import EthLib.Base.ChainConfig
@@ -14,9 +15,9 @@ public import EthLib.Base.Hash32
 public import EthLib.Base.Hex
 public import EthLib.Base.Json
 public import EthLib.Base.Json.Document
-public import EthLib.Base.LittleEndian
 public import EthLib.Base.U256
 public import EthLib.Base.Uint64
+public import EthLib.Base.Word32
 
 /-!
 # `EthLib.Base`

@@ -2,7 +2,7 @@ module
 
 public import EthLib.Base.Bytes
 public import EthLib.Base.BigEndian
-public import EthLib.Base.LittleEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Cryptography.X25519
 public import EthLib.Cryptography.ChaCha20Poly1305
 public import EthLib.Cryptography.Hash.Hmac
@@ -119,7 +119,7 @@ def protocolName : ByteArray :=
 /-- Four zero bytes and the little-endian 64-bit nonce, Noise §12.3. -/
 def cipherNonce (n : UInt64) : ChaCha20Poly1305.Nonce :=
   -- §12.3: the little-endian encoding of `n`, in 8 bytes.
-  let low := uintToBytes 8 n.toNat
+  let low := ByteOrder.toLE 8 n.toNat
   -- §12.3: the 96-bit nonce is 32 bits of zeros, then those 8 bytes.
   Vector.ofFn fun i : Fin 12 => if h : i.val < 4 then 0 else low[i.val - 4]'(by omega)
 

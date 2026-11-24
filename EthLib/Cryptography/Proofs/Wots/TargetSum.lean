@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Proofs.LittleEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import Mathlib.Tactic
 public import VCVio.OracleComp.Constructions.SampleableType.Basic
 
@@ -23,7 +23,7 @@ The facts here hold for every length, digit range and target.
 
 namespace EthLib.Cryptography.Wots
 
-open EthLib.Base (bytesToUint)
+open EthLib.Base (ByteOrder.ofLE)
 
 /-! ## Base-`b` digits -/
 
@@ -40,7 +40,7 @@ theorem sum_base_digits_eq_mod (b n : Nat) : ∀ k : Nat,
 
 /-- The 64 base-4 digits of a 16-byte digest, read as one little-endian number. -/
 def digits4 (d : Vector UInt8 16) : Vector (Fin 4) 64 :=
-  Vector.ofFn fun i => ⟨bytesToUint d / 4 ^ i.val % 4, Nat.mod_lt _ (by decide)⟩
+  Vector.ofFn fun i => ⟨ByteOrder.ofLE d / 4 ^ i.val % 4, Nat.mod_lt _ (by decide)⟩
 
 /-- There are `2^128` digests of 16 bytes. -/
 theorem card_bytes16 : Fintype.card (Vector UInt8 16) = 2 ^ 128 := by
@@ -49,22 +49,22 @@ theorem card_bytes16 : Fintype.card (Vector UInt8 16) = 2 ^ 128 := by
   norm_num
 
 /-- A digest is the base-4 number its 64 digits spell. -/
-theorem bytesToUint_eq_sum_digits4 (d : Vector UInt8 16) :
-    bytesToUint d = ∑ i : Fin 64, ((digits4 d)[i] : ℕ) * 4 ^ i.val := by
-  have hlt : bytesToUint d < 4 ^ 64 := by
-    have := Base.bytesToUint_lt d
+theorem ofLE_eq_sum_digits4 (d : Vector UInt8 16) :
+    ByteOrder.ofLE d = ∑ i : Fin 64, ((digits4 d)[i] : ℕ) * 4 ^ i.val := by
+  have hlt : ByteOrder.ofLE d < 4 ^ 64 := by
+    have := Base.ByteOrder.ofLE_lt d
     simpa using this
-  have hall := sum_base_digits_eq_mod 4 (bytesToUint d) 64
+  have hall := sum_base_digits_eq_mod 4 (ByteOrder.ofLE d) 64
   rw [Nat.mod_eq_of_lt hlt] at hall
-  rw [← hall, ← Fin.sum_univ_eq_sum_range (fun r => bytesToUint d / 4 ^ r % 4 * 4 ^ r)]
+  rw [← hall, ← Fin.sum_univ_eq_sum_range (fun r => ByteOrder.ofLE d / 4 ^ r % 4 * 4 ^ r)]
   exact Finset.sum_congr rfl fun i _ => by simp [digits4]
 
 /-- Every string of 64 base-4 digits is the digits of exactly one 16-byte digest. -/
 theorem digits4_bijective : Function.Bijective digits4 := by
   refine (Fintype.bijective_iff_injective_and_card _).mpr ⟨fun d d' h => ?_, ?_⟩
-  · have : bytesToUint d = bytesToUint d' := by
-      rw [bytesToUint_eq_sum_digits4 d, bytesToUint_eq_sum_digits4 d', h]
-    rw [← Base.uintToBytes_bytesToUint d, ← Base.uintToBytes_bytesToUint d', this]
+  · have : ByteOrder.ofLE d = ByteOrder.ofLE d' := by
+      rw [ofLE_eq_sum_digits4 d, ofLE_eq_sum_digits4 d', h]
+    rw [← Base.ByteOrder.toLE_ofLE d, ← Base.ByteOrder.toLE_ofLE d', this]
   · rw [card_bytes16, Fintype.card_congr (arrayVectorEquivFin _ _), Fintype.card_fun,
       Fintype.card_fin, Fintype.card_fin]
     norm_num

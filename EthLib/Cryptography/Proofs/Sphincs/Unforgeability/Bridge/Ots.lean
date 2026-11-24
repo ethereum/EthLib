@@ -21,7 +21,7 @@ open EthLib.Cryptography.Sphincs
 open EthLib.Cryptography.Sphincs.Constants
 open SphincsSecurity.Concrete (tweakableHash)
 open EthLib.Cryptography.HashSig
-  (toList_data_append toList_data_packBytes bytesToUint_ofBV ofFnInOrder_eq_sequenceFin)
+  (toList_data_append toList_data_packBytes ofLE_ofBV ofFnInOrder_eq_sequenceFin)
 
 /-! ## Codewords -/
 
@@ -30,9 +30,9 @@ def ofEncoding (e : SphincsSecurity.Encoding) : Codeword :=
   Vector.ofFn fun i : Fin V => ⟨(e ⟨i.val, i.isLt⟩).val, (e ⟨i.val, i.isLt⟩).isLt⟩
 
 /-- A digest's bytes read back as a little-endian number are the digest's number. -/
-theorem bytesToUint_ofDigest (d : SphincsSecurity.Digest) :
-    Base.bytesToUint (ofDigest d) = d.toNat :=
-  bytesToUint_ofBV 16 d
+theorem ofLE_ofDigest (d : SphincsSecurity.Digest) :
+    Base.ByteOrder.ofLE (ofDigest d) = d.toNat :=
+  ofLE_ofBV 16 d
 
 /-- EthLib's digits of a digest are the model's. -/
 theorem digits_ofDigest (d : SphincsSecurity.Digest) :
@@ -40,7 +40,7 @@ theorem digits_ofDigest (d : SphincsSecurity.Digest) :
   apply Vector.ext
   intro i hi
   apply Fin.ext
-  rw [digits_getElem_val_bytesToUint, bytesToUint_ofDigest]
+  rw [digits_getElem_val_ofLE, ofLE_ofDigest]
   -- Both read the two bits at offset `8 floor(i / 4) + 6 - 2 (i mod 4)`.
   simp only [ofEncoding, Vector.getElem_ofFn, SphincsSecurity.TargetSum.digestEncoding,
     SphincsSecurity.TargetSum.digitOffset, SphincsSecurity.winternitzBits]

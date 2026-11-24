@@ -1377,7 +1377,7 @@ theorem getProof_ok {tree : DepositTree} {index : Nat} {leaf : Root}
     tree.mixInLength < 2 ^ DEPOSIT_CONTRACT_TREE_DEPTH.toNat
       ∧ tree.tree.getFinalized.2 ≤ index ∧ index < tree.mixInLength
       ∧ ∃ branch, tree.tree.generateProof index DEPOSIT_CONTRACT_TREE_DEPTH.toNat
-          = some (leaf, branch) ∧ proof = branch.push (uintToBytes 32 tree.mixInLength) := by
+          = some (leaf, branch) ∧ proof = branch.push (ByteOrder.toLE 32 tree.mixInLength) := by
   simp only [getProof, bind, Except.bind, throw, throwThe, MonadExceptOf.throw, pure,
     Except.pure] at proved
   split at proved

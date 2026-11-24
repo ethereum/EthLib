@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.Bytes
-public import EthLib.Base.Proofs.LittleEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Cryptography.Vrf.Hash
 
 /-!
@@ -121,7 +121,7 @@ theorem outputInput_inj {i i' : UInt32} {s s' : Digest} :
     -- The index starts at byte 13 on both sides.
     obtain ⟨-, hi⟩ := Array.append_inj hpi (by simp)
     -- Both indices are below `2^32 = 256^4`, so their four little-endian bytes are exact.
-    exact ⟨UInt32.toNat_inj.mp (Base.uintToBytes_inj
+    exact ⟨UInt32.toNat_inj.mp (Base.ByteOrder.toLE_inj
       (lt_of_lt_of_eq i.toNat_lt (by decide)) (lt_of_lt_of_eq i'.toNat_lt (by decide))
       (Vector.toArray_inj.mp hi)), Vector.toArray_inj.mp hs⟩
   · rintro ⟨rfl, rfl⟩

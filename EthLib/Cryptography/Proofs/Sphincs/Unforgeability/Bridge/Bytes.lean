@@ -29,8 +29,8 @@ namespace EthLib.Cryptography.Sphincs.Unforgeability.Bridge
 open EthLib.Cryptography.Sphincs
 open EthLib.Cryptography.Sphincs.Constants
 
-export EthLib.Cryptography.HashSig (ofBV getElem_ofBV toList_ofBV ofBV_ofNat ofBV_eq_uintToBytes
-  ofBV_ofNat_bytesToUint ofBV_inj ofOutput queryH)
+export EthLib.Cryptography.HashSig (ofBV getElem_ofBV toList_ofBV ofBV_ofNat ofBV_eq_toLE
+  ofBV_ofNat_ofLE ofBV_inj ofOutput queryH)
 
 /-! ## The parameters -/
 

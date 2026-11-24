@@ -63,11 +63,11 @@ theorem evalWithAnswerFn_eq_of_mem_support_run {α : Type} (oa : OracleComp Hash
 
 /-- EthLib's message as the model's: its little-endian number, on 256 bits. -/
 def toMessage (m : Message) : SphincsSecurity.Message :=
-  BitVec.ofNat _ (Base.bytesToUint m)
+  BitVec.ofNat _ (Base.ByteOrder.ofLE m)
 
 /-- A message read as a number and written back is itself. -/
 theorem ofMessage_toMessage (m : Message) : ofMessage (toMessage m) = m :=
-  HashSig.ofBV_ofNat_bytesToUint m (by decide)
+  HashSig.ofBV_ofNat_ofLE m (by decide)
 
 /-- EthLib's forgery as the model's. -/
 def toForgery (forgery : Forgery) : SphincsSecurity.Forgery :=

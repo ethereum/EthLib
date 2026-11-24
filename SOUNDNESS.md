@@ -1353,7 +1353,7 @@ The scrypt proofs state the length each step returns, the inputs each step accep
 `salsa208_ok_iff`, `blockMix_ok_iff`, `romix_ok_iff` and `scrypt_ok_iff` state which inputs each step accepts.
 `scrypt_ok_iff` also carries the bounds that PBKDF2 needs on the password and the salt.
 `salsa208_size`, `blockMix_size`, `romix_size` and `scrypt_size` state the length each step returns.
-`integerify_eq` states Integerify of RFC 7914 §5, whose remainder mod `N` is the index, as the last 64 bytes of the value read little-endian through `Base.bytesToUint`.
+`integerify_eq` states Integerify of RFC 7914 §5, whose remainder mod `N` is the index, as the last 64 bytes of the value read little-endian through `Base.ByteOrder.ofLE`.
 `romixFill_replicate_fst_get` states that entry `j` of the table that ROMix fills is BlockMix applied `j` times to the input.
 It holds for every `j` below `N`, and `romixFill_fst_get` holds for a fill that starts from any index.
 `romixFill_fst_get_lt` states that the fill leaves the entries below its starting index unchanged.

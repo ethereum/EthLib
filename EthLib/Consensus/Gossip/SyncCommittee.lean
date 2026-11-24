@@ -95,7 +95,7 @@ def isSyncCommitteeAggregator (preset : Preset) (signature : BLSSignature) : Boo
   -- Let `h` be the SHA-256 hash of the proof.
   let hash := Cryptography.Hash.Sha256.hash32 (packBytes signature)
   -- The integer of the first 8 bytes of `h`, read little-endian, is a multiple of the modulus.
-  bytesToUint64 (Vector.ofFn fun i : Fin 8 => hash[i.val]) % modulo == 0
+  UInt64.ofNat (ByteOrder.ofLE (Vector.ofFn fun i : Fin 8 => hash[i.val])) % modulo == 0
 
 /-- From Altair: the bits of the valid contributions seen for a slot, a root and a subcommittee. -/
 def Seen.contributionBits (seen : Seen) (key : Slot × Root × UInt64) : List (List Bool) :=

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Bytes
-public import EthLib.Base.LittleEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Cryptography.Vrf.Constants
 
 /-!
@@ -32,6 +32,6 @@ structure Opening where
 
 /-! ## Bytes -/
 
-export EthLib.Base (packBytes readBytes uintToBytes)
+export EthLib.Base (packBytes readBytes)
 
 end EthLib.Cryptography.Vrf

@@ -38,7 +38,9 @@ def encodeLayerSignature (sig : LayerSignature) : ByteArray :=
 /-- Encode a signature as 2404 bytes. -/
 def encodeSignature (sig : Signature) : ByteArray :=
   -- The leaf index, as a little-endian 32-bit word: 4 bytes.
-  packBytes (uintToBytes LEAF_INDEX_SIZE sig.leafIndex.toNat)
+  --
+  -- `LE_{8k}` of the paper is the little-endian writer of the base library.
+  packBytes (Base.ByteOrder.toLE LEAF_INDEX_SIZE sig.leafIndex.toNat)
     -- The bottom layer's signature: 1200 bytes.
     ++ encodeLayerSignature sig.bottom
     -- The top layer's signature: 1200 bytes.
@@ -71,7 +73,9 @@ def decodeLayerSignature (bytes : ByteArray) (offset : Nat)
 /-- Read the leaf index from the first 4 bytes of a buffer, as a little-endian word. -/
 def decodeLeafIndex (bytes : ByteArray) (h : LEAF_INDEX_SIZE ≤ bytes.size) : LeafIndex :=
   -- Four bytes hold at most `2^32 - 1`, so the conversion drops nothing.
-  UInt32.ofNat (bytesToUint (readBytes bytes 0 LEAF_INDEX_SIZE (by omega)))
+  --
+  -- `LE^-1` of the paper is the little-endian reader of the base library.
+  UInt32.ofNat (Base.ByteOrder.ofLE (readBytes bytes 0 LEAF_INDEX_SIZE (by omega)))
 
 /-- Decode a signature from 2404 bytes, without verifying it. -/
 def decodeSignature (bytes : ByteArray) : Except XmssError Signature :=

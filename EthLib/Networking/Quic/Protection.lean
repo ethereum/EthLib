@@ -6,6 +6,7 @@ public import EthLib.Cryptography.Aes.Gcm
 public import EthLib.Cryptography.ChaCha20Poly1305
 public import EthLib.Base.Except
 public import EthLib.Base.BigEndian
+public import EthLib.Base.Word32
 
 /-!
 # QUIC v1 packet protection

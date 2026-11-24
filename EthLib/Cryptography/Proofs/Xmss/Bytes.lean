@@ -154,7 +154,7 @@ theorem chainStep_bytes (publicParam : PublicParam) (layer : Layer) (e : UInt32)
     (chainStep hashId publicParam layer e i mu v).run.bytes.toList =
       (keccak256 (packBytes publicParam.bytes ++ packBytes
         (Address.chain layer e mu).encode.bytes ++ packBytes v.bytes
-        ++ packBytes (uintToBytes 16 i.val))).toList.take 16 := by
+        ++ packBytes (Base.ByteOrder.toLE 16 i.val))).toList.take 16 := by
   rw [chainStep, th_bytes,
     show (#[v.lo, v.hi, i.val.toUInt64, 0] : Array UInt64) =
       v.toArray ++ (⟨i.val.toUInt64, 0⟩ : Lanes2).toArray from rfl,
@@ -171,7 +171,7 @@ theorem chain_succ_bytes (publicParam : PublicParam) (layer : Layer) (e : UInt32
         ++ packBytes
           (Address.chain layer e ⟨start + s, by simp only [CHAIN_LENGTH] at *; omega⟩).encode.bytes
         ++ packBytes (chain hashId publicParam layer e i start s (by omega) v).run.bytes
-        ++ packBytes (uintToBytes 16 i.val))).toList.take 16 :=
+        ++ packBytes (Base.ByteOrder.toLE 16 i.val))).toList.take 16 :=
   chainStep_bytes publicParam layer e i _ _
 
 /-! ## Leaves -/
@@ -231,8 +231,8 @@ theorem messageDigest_root_bytes (publicParam : PublicParam) (e : UInt32) (root 
 
 /-- Digit `i` of a digest is the base-4 digit of weight `4^i` of its 16 bytes, little-endian. -/
 theorem digit_val_bytes (d : Digest) (i : Fin DIGITS) :
-    (Internal.digit d i).val = bytesToUint d.bytes / 4 ^ i.val % 4 := by
-  rw [digit_val, Hash.Keccak.Lanes2.bytesToUint_bytes]
+    (Internal.digit d i).val = Base.ByteOrder.ofLE d.bytes / 4 ^ i.val % 4 := by
+  rw [digit_val, Hash.Keccak.Lanes2.ofLE_bytes]
 
 /-! ## Trees -/
 
@@ -294,7 +294,7 @@ The leaf index is 4 bytes, little-endian.
 Each layer is 1200 bytes: its randomizer, 58 chain values and 16 path nodes, 16 bytes each. -/
 theorem toList_encodeSignature (sig : Signature) :
     (encodeSignature sig).data.toList =
-      (uintToBytes LEAF_INDEX_SIZE sig.leafIndex.toNat).toList
+      (Base.ByteOrder.toLE LEAF_INDEX_SIZE sig.leafIndex.toNat).toList
         ++ sig.bottom.randomizer.bytes.toList
         ++ (sig.bottom.chainValues.toList.map fun d => d.bytes.toList).flatten
         ++ (sig.bottom.path.toList.map fun d => d.bytes.toList).flatten

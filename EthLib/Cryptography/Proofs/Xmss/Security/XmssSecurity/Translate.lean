@@ -40,7 +40,7 @@ namespace EthLib.Cryptography.Xmss.Unforgeability
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
 open EthLib.Cryptography.Hash.Keccak (lanesBytes)
-open EthLib.Cryptography.HashSig (toList_uintToBytes
+open EthLib.Cryptography.HashSig (toList_toLE
   ofFnInOrder_eq_sequenceFin)
 
 variable {m : Type → Type} [Monad m] [LawfulMonad m] [HasQuery XmssSecurity.HashSpec m]
@@ -127,7 +127,7 @@ theorem chainStep_bottom_tweakable (P : XmssSecurity.PublicParameter)
   · rw [show (#[(ofDigest v).lo, (ofDigest v).hi, i.val.toUInt64, 0] : Array UInt64)
         = (ofDigest v).toArray ++ (⟨i.val.toUInt64, 0⟩ : Lanes2).toArray from rfl,
       Hash.Keccak.lanesBytes_append, toList_ofDigest,
-      lanesBytes_index _ (by have := i.isLt; simp only [V] at this; omega), toList_uintToBytes]
+      lanesBytes_index _ (by have := i.isLt; simp only [V] at this; omega), toList_toLE]
     rfl
 
 /-- One step of a bottom chain. -/
@@ -155,7 +155,7 @@ theorem chainStep_top_tweakable (P : XmssSecurity.PublicParameter) (key : XmssSe
   · rw [show (#[(ofDigest v).lo, (ofDigest v).hi, i.val.toUInt64, 0] : Array UInt64)
         = (ofDigest v).toArray ++ (⟨i.val.toUInt64, 0⟩ : Lanes2).toArray from rfl,
       Hash.Keccak.lanesBytes_append, toList_ofDigest,
-      lanesBytes_index _ (by have := i.isLt; simp only [V] at this; omega), toList_uintToBytes]
+      lanesBytes_index _ (by have := i.isLt; simp only [V] at this; omega), toList_toLE]
     rfl
 
 /-- One step of a top chain. -/

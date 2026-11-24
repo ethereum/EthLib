@@ -86,14 +86,14 @@ theorem digits_getElem_val_toInt (d : Digest) (i : Nat) (hi : i < V) :
 /-- Digit `i` of a digest is two bits of its little-endian number.
 
 They are bit `8 floor(i / 4) + 6 - 2 (i mod 4)` and the bit above it. -/
-theorem digits_getElem_val_bytesToUint (d : Digest) (i : Nat) (hi : i < V) :
+theorem digits_getElem_val_ofLE (d : Digest) (i : Nat) (hi : i < V) :
     ((Internal.digits d)[i]'hi).val
-      = Base.bytesToUint d / 2 ^ (8 * (i / 4) + 6 - 2 * (i % 4)) % 4 := by
+      = Base.ByteOrder.ofLE d / 2 ^ (8 * (i / 4) + 6 - 2 * (i % 4)) % 4 := by
   have hj : i / 4 < N := by simp only [V, N] at *; omega
   -- Byte `j` of a little-endian number is its digit `j` in base 256.
-  have hbyte : Base.bytesToUint d / 256 ^ (i / 4) % 256 = (d[i / 4]'hj).toNat := by
-    have h := congrArg (fun v : Digest => (v[i / 4]'hj).toNat) (Base.uintToBytes_bytesToUint d)
-    simp only [Base.uintToBytes_eq_div, Vector.getElem_ofFn] at h
+  have hbyte : Base.ByteOrder.ofLE d / 256 ^ (i / 4) % 256 = (d[i / 4]'hj).toNat := by
+    have h := congrArg (fun v : Digest => (v[i / 4]'hj).toNat) (Base.ByteOrder.toLE_ofLE d)
+    simp only [Base.ByteOrder.toLE_eq_div, Vector.getElem_ofFn] at h
     exact h
   have hpow : (2 : Nat) ^ (8 * (i / 4) + 6 - 2 * (i % 4))
       = 256 ^ (i / 4) * 2 ^ (6 - 2 * (i % 4)) := by
