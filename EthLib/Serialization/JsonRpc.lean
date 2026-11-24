@@ -7,28 +7,19 @@ public import EthLib.Base.Hex
 /-!
 # `Serialization.JsonRpc`
 
-The JSON form of the base types that the Ethereum JSON-RPC APIs exchange.
+The JSON form of the base types that the Engine API and the execution JSON-RPC API share.
 
-The Engine API and the execution JSON-RPC API share these types.
+Sources:
 
-The step comments quote the patterns of the base types in [`base-types.yaml`][types].
+- [`base-types.yaml`][types], at commit `1ca0818` of execution-apis: the patterns the steps quote
+- step 1 of [`engine_newPayloadV3`][v3], at the same commit: the rules of the object readers
+- section 4.2 of [JSON-RPC 2.0][params]: the parameters of a request
+- section 5.1 of [JSON-RPC 2.0][rpc]: the error object of a failed request
 
-The object readers follow step 1 of [`engine_newPayloadV3`][v3].
-
-The parameters of a request follow section 4.2 of [JSON-RPC 2.0][params].
-
-A reader that rejects its input gives the reason as a string.
-
-A caller turns that reason into its own error, such as an invalid parameter of the Engine API.
-
-A failed request answers with the error object of section 5.1 of [JSON-RPC 2.0][rpc].
-
-JSON-RPC 2.0 reserves the codes from `-32768` to `-32000`; each API keeps its own table of the rest.
-
-[v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#specification
+[v3]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/cancun.md#specification
 [params]: https://www.jsonrpc.org/specification#parameter_structures
 [rpc]: https://www.jsonrpc.org/specification#error_object
-[types]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/base-types.yaml
+[types]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/base-types.yaml
 -/
 
 @[expose] public section
@@ -38,7 +29,9 @@ namespace EthLib.Serialization.JsonRpc
 open Lean (Json)
 open EthLib.Base
 
-/-- A reading that fails with a reason. -/
+/-- A reading that fails with a reason, given as a string.
+
+A caller turns that reason into its own error, such as an invalid parameter of the Engine API. -/
 abbrev Read := Except String
 
 /-- Reject the input, for a reason. -/
@@ -216,6 +209,9 @@ Section 5.1 of [JSON-RPC 2.0][rpc] defines it.
 
 [rpc]: https://www.jsonrpc.org/specification#error_object -/
 structure RpcError where
+  -- JSON-RPC 2.0 reserves the codes from `-32768` to `-32000`.
+  --
+  -- Each API keeps its own table of the rest.
   /-- The code: the kind of the error. -/
   code : Int
   /-- A short description of the error. -/
