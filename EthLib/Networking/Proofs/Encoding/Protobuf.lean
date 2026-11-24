@@ -3,6 +3,7 @@ module
 public import EthLib.Networking.Encoding.Protobuf
 public import EthLib.Networking.Proofs.Encoding.Varint
 public import EthLib.Networking.Proofs.Encoding.ByteReader
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the protobuf wire format
@@ -382,7 +383,6 @@ theorem lenValues_singleton_of_ne {f n : Nat} (v : Value) (h : f ≠ n) :
 theorem _root_.EthLib.Networking.Encoding.Protobuf.ProtobufError.code_injective
     (e₁ e₂ : ProtobufError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [ProtobufError.code] at h; exact absurd h (by decide))
+  code_injective ProtobufError.code
 
 end EthLib.Networking.Proofs.Encoding.Protobuf

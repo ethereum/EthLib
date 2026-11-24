@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Proofs.List
 public import EthLib.Networking.Libp2p.MplexSession
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the streams of an mplex connection
@@ -130,7 +131,6 @@ theorem run_receive_writeAfterClose {streams after : Streams} {pre mid : List (B
 /-- Two errors with one code come from one constructor. -/
 theorem _root_.EthLib.Networking.Libp2p.Mplex.MplexSessionError.code_injective
     (e₁ e₂ : MplexSessionError) (h : e₁.code = e₂.code) : e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [MplexSessionError.code] at h; exact absurd h (by decide))
+  code_injective MplexSessionError.code
 
 end EthLib.Networking.Proofs.Libp2p.MplexSession

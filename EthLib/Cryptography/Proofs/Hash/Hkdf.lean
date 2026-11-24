@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Hash.Hmac
 public import EthLib.Cryptography.Hash.Hkdf
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: HKDF-SHA-256
@@ -178,8 +179,6 @@ theorem hkdf_hashLen_mul {salt ikm info : ByteArray} {n : Nat} (hn : n ≤ 255) 
 /-- Two errors with one code come from one constructor. -/
 theorem HkdfError.code_injective (e₁ e₂ : HkdfError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [HkdfError.code] at h; exact absurd h (by decide))
+  code_injective HkdfError.code
 
 end EthLib.Cryptography.Hash.Hkdf

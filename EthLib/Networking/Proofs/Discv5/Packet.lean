@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Proofs.Aes.Ctr
 public import EthLib.Cryptography.Proofs.Aes.Gcm
 public import EthLib.Networking.Discv5.Packet
 import EthLib.Base.Proofs.Bytes
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # `Networking.Proofs.Discv5.Packet`
@@ -713,9 +714,7 @@ open EthLib.Networking.Discv5
 theorem _root_.EthLib.Networking.Discv5.PacketError.code_injective
     (e₁ e₂ : PacketError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [PacketError.code] at h; exact absurd h (by decide))
+  code_injective PacketError.code
 
 end
 

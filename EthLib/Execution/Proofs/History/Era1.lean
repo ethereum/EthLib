@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.History.Era1
 public import EthLib.Serialization.Proofs.E2store
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the block index and the chain of an era1 file
@@ -29,8 +30,7 @@ open EthLib.Serialization
 /-- Two errors with one code come from one constructor. -/
 theorem Era1Error.code_injective (e₁ e₂ : Era1Error) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [Era1Error.code] at h; exact absurd h (by decide))
+  code_injective Era1Error.code
 
 /-- The front records split into the four records of each block, then the records after them. -/
 private theorem takeBlocks_spec (rs : List E2store.Record) :

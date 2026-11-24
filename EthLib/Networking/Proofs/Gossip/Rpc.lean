@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Networking.Gossip.Rpc
 public import EthLib.Networking.Proofs.Encoding.Protobuf
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the gossip RPC
@@ -423,7 +424,6 @@ theorem decodeRpc_signedRecords (m : Message) {n : Nat} (hn : n ∈ signedFields
 theorem _root_.EthLib.Networking.Gossip.RpcError.code_injective
     (e₁ e₂ : RpcError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [RpcError.code] at h; exact absurd h (by decide))
+  code_injective RpcError.code
 
 end EthLib.Networking.Proofs.Gossip.Rpc

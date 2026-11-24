@@ -5,6 +5,7 @@ public import EthLib.Networking.Proofs.Encoding.Varint
 public import EthLib.Networking.Proofs.Snappy.Frame
 public import EthLib.Networking.Proofs.Snappy.FrameEncode
 public import EthLib.Networking.Proofs.Snappy.Read
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # `Networking.Proofs.ReqResp.Encoding`
@@ -488,9 +489,7 @@ theorem decodeResponseChunk_eq_ok_iff {contextBytes : Nat} {typeMin typeBound : 
 /-- Two errors with one code come from one constructor. -/
 theorem code_injective (e₁ e₂ : ReqRespError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [ReqRespError.code] at h; exact absurd h (by decide))
+  code_injective ReqRespError.code
 
 /-- No error has code 0, which the bindings keep for a failure with no error code. -/
 theorem code_ne_zero (e : ReqRespError) : e.code ≠ 0 := by

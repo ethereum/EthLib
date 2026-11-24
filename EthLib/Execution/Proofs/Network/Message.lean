@@ -7,6 +7,7 @@ public import EthLib.Execution.Proofs.Network.Receipts
 public import EthLib.Execution.Proofs.Network.Snap
 public import EthLib.Execution.Proofs.Network.Status
 public import EthLib.Execution.Proofs.Network.Transactions
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the messages of the eth capability
@@ -616,7 +617,6 @@ end Message
 /-- Two errors with one code come from one constructor. -/
 theorem EthError.code_injective (e₁ e₂ : EthError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [EthError.code] at h; exact absurd h (by decide))
+  code_injective EthError.code
 
 end EthLib.Execution.Network

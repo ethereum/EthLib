@@ -4,6 +4,7 @@ public import EthLib.Networking.Discv5.Message
 public import EthLib.Networking.Discv5.Packet
 public import EthLib.Serialization.Proofs.Rlp.Codec
 public import EthLib.Serialization.Proofs.Rlp.RoundTrip
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # `Networking.Proofs.Discv5.Message`
@@ -151,9 +152,7 @@ theorem decode_eq_ok_iff (bytes : ByteArray) (m : Message) :
 theorem _root_.EthLib.Networking.Discv5.MessageError.code_injective
     (e₁ e₂ : MessageError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [MessageError.code] at h; exact absurd h (by decide))
+  code_injective MessageError.code
 
 /-- A message error never has the code of a packet error, so one Python class carries both. -/
 theorem _root_.EthLib.Networking.Discv5.MessageError.code_ne_packet

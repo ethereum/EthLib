@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Trie.Range
 public import EthLib.Execution.Proofs.Trie.Proof
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the range check of a trie
@@ -21,8 +22,7 @@ open EthLib.Serialization.Rlp
 /-- Two errors with one code come from one constructor. -/
 theorem RangeError.code_injective (e₁ e₂ : RangeError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [RangeError.code] at h; exact absurd h (by decide))
+  code_injective RangeError.code
 
 /-- Every code of the range check is at least 201. -/
 theorem RangeError.le_code (e : RangeError) : 201 ≤ e.code.toNat := by

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Evm.Precompiles.PointEvaluation
 import EthLib.Base.Proofs.Bytes
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: `Evm.Precompiles.PointEvaluation`
@@ -94,8 +95,6 @@ theorem output_eq :
 /-- Two errors with one code come from one constructor. -/
 theorem PointEvaluationError.code_injective (e₁ e₂ : PointEvaluationError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [PointEvaluationError.code] at h; exact absurd h (by decide))
+  code_injective PointEvaluationError.code
 
 end EthLib.Execution.Evm.Precompiles.PointEvaluation

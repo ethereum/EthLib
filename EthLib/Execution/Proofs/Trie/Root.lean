@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Proofs.ExceptT
 public import EthLib.Execution.Trie.Root
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: `Trie.Root`
@@ -458,8 +459,6 @@ theorem secured_foldl_trieSet (pairs : List (ByteArray × ByteArray)) (trie : Tr
 /-- Two errors with one code come from one constructor. -/
 theorem TrieError.code_injective (e₁ e₂ : TrieError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [TrieError.code] at h; exact absurd h (by decide))
+  code_injective TrieError.code
 
 end EthLib.Execution.Trie

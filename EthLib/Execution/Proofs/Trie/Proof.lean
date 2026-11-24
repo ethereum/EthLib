@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Trie.Proof
 public import EthLib.Execution.Proofs.Trie.Order
 public import EthLib.Serialization.Proofs.Rlp.Canonical
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: `Trie.Proof`
@@ -862,9 +863,7 @@ theorem valueAt_secured (hash : ByteArray → Hash32) {data : List (ByteArray ×
 /-- Two errors with one code come from one constructor. -/
 theorem ProofError.code_injective (e₁ e₂ : ProofError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [ProofError.code] at h; exact absurd h (by decide))
+  code_injective ProofError.code
 
 /-- A proof error never has the code of a trie error, so one Python class carries both. -/
 theorem ProofError.code_ne_trie (e : ProofError) (r : TrieError) : e.code ≠ r.code := by

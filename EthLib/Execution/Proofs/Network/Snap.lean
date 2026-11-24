@@ -5,6 +5,7 @@ public import EthLib.Execution.Proofs.Network.Protocol
 public import EthLib.Execution.Proofs.Network.Status
 public import EthLib.Execution.Proofs.Trie.HexPrefix
 public import EthLib.Serialization.Proofs.Rlp.Encodings
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the snap capability
@@ -275,8 +276,7 @@ end SnapMessage
 /-- Two errors with one code come from one constructor. -/
 theorem SnapError.code_injective (e₁ e₂ : SnapError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [SnapError.code] at h; exact absurd h (by decide))
+  code_injective SnapError.code
 
 /-- The codes of a checked answer hash to requested hashes, in the order of the request. -/
 theorem sublist_of_codesAnswer {requested : List Hash32} {codes : List ByteArray}

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.Table
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: `Evm.Precompiles.Table`
@@ -133,9 +134,7 @@ Each precompile has its own error code, and no code is 0. -/
 /-- Two errors with one code come from one constructor. -/
 theorem PrecompileError.code_injective (e₁ e₂ : PrecompileError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [PrecompileError.code] at h; exact absurd h (by decide))
+  code_injective PrecompileError.code
 
 /-- No error has code 0, which a caller can keep for an address with no precompile. -/
 theorem PrecompileError.code_ne_zero (e : PrecompileError) : e.code ≠ 0 := by

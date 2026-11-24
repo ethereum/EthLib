@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Hash.Sha256
 public import EthLib.Cryptography.Hash.ConcatKdf
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the Concatenation KDF
@@ -126,8 +127,6 @@ theorem concatKdf_prefix {z fixedInfo key key' : ByteArray} {length length' : Na
 /-- Two errors with one code come from one constructor. -/
 theorem ConcatKdfError.code_injective (e₁ e₂ : ConcatKdfError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [ConcatKdfError.code] at h; exact absurd h (by decide))
+  code_injective ConcatKdfError.code
 
 end EthLib.Cryptography.Hash.ConcatKdf

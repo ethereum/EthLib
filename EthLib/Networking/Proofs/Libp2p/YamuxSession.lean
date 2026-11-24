@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Proofs.List
 public import EthLib.Networking.Libp2p.YamuxSession
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the streams of a yamux session
@@ -655,7 +656,6 @@ theorem closed_iff {isClient : Bool} {events : List (Bool × Frame)} {after : Se
 /-- Two errors with one code come from one constructor. -/
 theorem _root_.EthLib.Networking.Libp2p.Yamux.YamuxSessionError.code_injective
     (e₁ e₂ : YamuxSessionError) (h : e₁.code = e₂.code) : e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [YamuxSessionError.code] at h; exact absurd h (by decide))
+  code_injective YamuxSessionError.code
 
 end EthLib.Networking.Proofs.Libp2p.YamuxSession

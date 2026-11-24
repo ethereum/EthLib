@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Blocks.Receipt
 public import EthLib.Execution.Proofs.Blocks.Bloom
 public import EthLib.Execution.Proofs.Transactions.Envelope
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: logs and receipts
@@ -219,9 +220,7 @@ open EthLib.Serialization.Rlp
 theorem _root_.EthLib.Execution.Blocks.ReceiptError.code_injective
     (e₁ e₂ : ReceiptError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [ReceiptError.code] at h; exact absurd h (by decide))
+  code_injective ReceiptError.code
 
 /-- A receipt error never has the code of an RLP error, so one Python class carries both. -/
 theorem _root_.EthLib.Execution.Blocks.ReceiptError.code_ne_rlp

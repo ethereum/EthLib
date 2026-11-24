@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Network.Cells
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the cells of eth/72
@@ -169,7 +170,6 @@ theorem of_checkCells {requested : List Hash32} {requestMask : CellMask} {blobs 
 /-- Two errors with one code come from one constructor. -/
 theorem CellsError.code_injective (e₁ e₂ : CellsError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [CellsError.code] at h; exact absurd h (by decide))
+  code_injective CellsError.code
 
 end EthLib.Execution.Network

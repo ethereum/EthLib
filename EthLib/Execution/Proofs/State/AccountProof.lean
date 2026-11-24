@@ -4,6 +4,7 @@ public import EthLib.Execution.State.AccountProof
 public import EthLib.Execution.Proofs.State.Root
 public import EthLib.Execution.Proofs.Trie.Binding
 public import EthLib.Execution.Trie.Range
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the check of an answer of `eth_getProof`
@@ -457,9 +458,7 @@ end AccountProof
 /-- Two errors with one code come from one constructor. -/
 theorem AccountProofError.code_injective (e₁ e₂ : AccountProofError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [AccountProofError.code] at h; exact absurd h (by decide))
+  code_injective AccountProofError.code
 
 /-- An account proof error never has the code of a proof error, so one Python class carries both.
 -/

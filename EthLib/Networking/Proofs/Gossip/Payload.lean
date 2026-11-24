@@ -5,6 +5,7 @@ public import EthLib.Networking.Gossip.Parameters
 public import EthLib.Networking.Gossip.Payload
 public import EthLib.Networking.Proofs.Snappy.Block
 public import EthLib.Networking.Proofs.Snappy.CompressSize
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # `Networking.Proofs.Gossip.Payload`
@@ -131,9 +132,7 @@ theorem decodePayload_declared_too_long {typeBound : UInt64} {data : ByteArray} 
 theorem _root_.EthLib.Networking.Gossip.PayloadError.code_injective
     (e₁ e₂ : PayloadError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [PayloadError.code] at h; exact absurd h (by decide))
+  code_injective PayloadError.code
 
 /-- The gossipsub parameters exist exactly when two epochs in milliseconds are below 2^64. -/
 theorem gossipsubParameters_isOk_iff (slotDurationMs slotsPerEpoch : UInt64) :

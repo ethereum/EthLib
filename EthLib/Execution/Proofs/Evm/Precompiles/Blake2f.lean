@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Evm.Precompiles.Blake2f
 import EthLib.Base.Proofs.Bytes
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: `Precompiles.Blake2f`
@@ -317,8 +318,6 @@ theorem blake2f_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
 /-- Two errors with one code come from one constructor. -/
 theorem Blake2fError.code_injective (e₁ e₂ : Blake2fError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [Blake2fError.code] at h; exact absurd h (by decide))
+  code_injective Blake2fError.code
 
 end EthLib.Execution.Evm.Precompiles.Blake2f

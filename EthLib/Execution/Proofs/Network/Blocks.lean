@@ -4,6 +4,7 @@ public import EthLib.Execution.Network.Blocks
 public import EthLib.Execution.Proofs.Blocks.Header
 public import EthLib.Serialization.Proofs.Rlp.Codec
 public import EthLib.Serialization.Proofs.Rlp.Item
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the block exchange
@@ -100,8 +101,7 @@ instance : LawfulCodec BlockAnnouncement where
 /-- Two errors with one code come from one constructor. -/
 theorem HeadersError.code_injective (e₁ e₂ : HeadersError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [HeadersError.code] at h; exact absurd h (by decide))
+  code_injective HeadersError.code
 
 /-- A header follows another exactly when two conditions hold.
 

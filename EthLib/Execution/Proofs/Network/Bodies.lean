@@ -13,6 +13,7 @@ public import EthLib.Execution.Proofs.Transactions.Envelope
 public import EthLib.Serialization.Proofs.Rlp.Codec
 public import EthLib.Serialization.Proofs.Rlp.Encodings
 public import EthLib.Serialization.Proofs.Rlp.RoundTrip
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the check of a block body
@@ -39,8 +40,7 @@ variable {fork : Fork}
 /-- Two errors with one code come from one constructor. -/
 theorem BodyError.code_injective (e₁ e₂ : BodyError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [BodyError.code] at h; exact absurd h (by decide))
+  code_injective BodyError.code
 
 /-- An ommers list of more than `MAX_OMMERS` items is rejected, whatever its items and bytes. -/
 theorem checkOmmers_tooMany {header : Header fork} {items : List Item} {bytes : ByteArray}

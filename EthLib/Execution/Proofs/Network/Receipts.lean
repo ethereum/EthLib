@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Network.Receipts
 public import EthLib.Execution.Proofs.Blocks.Receipt
 public import EthLib.Serialization.Proofs.Rlp.Encodings
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the receipts of the eth protocol
@@ -282,7 +283,6 @@ theorem receiptSizes_eq_ok_iff {data : ByteArray} {sizes : List Nat} :
 /-- Two errors with one code come from one constructor. -/
 theorem PartialReceiptsError.code_injective (e₁ e₂ : PartialReceiptsError)
     (h : e₁.code = e₂.code) : e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [PartialReceiptsError.code] at h; exact absurd h (by decide))
+  code_injective PartialReceiptsError.code
 
 end EthLib.Execution.Network

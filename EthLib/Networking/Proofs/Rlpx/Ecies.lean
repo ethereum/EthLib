@@ -6,6 +6,7 @@ public import EthLib.Cryptography.Proofs.Hash.ConcatKdf
 public import EthLib.Cryptography.Proofs.Hash.Hmac
 public import EthLib.Cryptography.Proofs.Secp256k1.Ecdh
 public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: ECIES encryption
@@ -255,9 +256,7 @@ open EthLib.Networking.Rlpx.Ecies
 theorem _root_.EthLib.Networking.Rlpx.Ecies.EciesError.code_injective
     (e₁ e₂ : EciesError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [EciesError.code] at h; exact absurd h (by decide))
+  code_injective EciesError.code
 
 /-- Every code of an ECIES error is from 1 to 5. -/
 theorem _root_.EthLib.Networking.Rlpx.Ecies.EciesError.code_le (e : EciesError) :

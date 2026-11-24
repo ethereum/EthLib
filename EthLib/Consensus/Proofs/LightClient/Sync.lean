@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.LightClient.Sync
 import EthLib.Serialization.Proofs.Ssz.Type.ValueEquality
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the light client sync protocol
@@ -25,9 +26,7 @@ open Base Serialization.Ssz
 /-- Two errors with one code come from one constructor. -/
 theorem LightClientError.code_injective (e₁ e₂ : LightClientError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [LightClientError.code] at h; exact absurd h (by decide))
+  code_injective LightClientError.code
 
 /-- A root lifted into the errors of the light client is the root it was. -/
 theorem LightClientError.liftRoot_ok {α : Type} {result : Except Err α} {value : α} :

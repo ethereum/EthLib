@@ -2,6 +2,7 @@ module
 
 public import EthLib.Networking.Libp2p.Multistream
 public import EthLib.Networking.Proofs.Encoding.Uvarint
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: multistream-select messages
@@ -253,7 +254,6 @@ theorem negotiate_eq_none_iff {proposals supported : List ByteArray}
 /-- Two errors with one code come from one constructor. -/
 theorem _root_.EthLib.Networking.Libp2p.Multistream.MultistreamError.code_injective
     (e₁ e₂ : MultistreamError) (h : e₁.code = e₂.code) : e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [MultistreamError.code] at h; exact absurd h (by decide))
+  code_injective MultistreamError.code
 
 end EthLib.Networking.Proofs.Libp2p.Multistream

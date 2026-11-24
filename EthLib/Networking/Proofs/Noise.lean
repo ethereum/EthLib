@@ -4,6 +4,7 @@ public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Cryptography.Proofs.Hash.Hkdf
 public import EthLib.Networking.Noise
 public import EthLib.Cryptography.Proofs.ChaCha20Poly1305
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: Noise XX
@@ -59,9 +60,7 @@ theorem hkdf_eq_hkdf2 (chainingKey : ChainingKey) (input : ByteArray) :
 /-- Two errors with one code are of the same kind. -/
 theorem NoiseError.code_injective (e₁ e₂ : NoiseError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [NoiseError.code] at h; exact absurd h (by decide))
+  code_injective NoiseError.code
 
 /-- Writing keeps the role and the remote static key, and advances the step by one.
 

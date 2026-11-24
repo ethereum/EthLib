@@ -6,6 +6,7 @@ public import EthLib.Serialization.Proofs.Rlp.Codec
 public import EthLib.Serialization.Proofs.Ssz.Typed.Basic
 public import EthLib.Serialization.Proofs.Ssz.Typed.Collections
 public import EthLib.Serialization.Proofs.Ssz.Typed.Container
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # `Networking.Proofs.Enr.Consensus`
@@ -238,9 +239,7 @@ theorem readEntries_before_fulu {count : UInt64} {fork : Fork} {r : Enr}
 /-- Two entry errors with one code come from one constructor. -/
 theorem EntryError.code_injective (e₁ e₂ : EntryError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [EntryError.code] at h; exact absurd h (by decide))
+  code_injective EntryError.code
 
 /-- An entry error never has the code of a record error, so one Python class carries both. -/
 theorem EntryError.code_ne_record (e : EntryError) (r : EnrError) : e.code ≠ r.code := by

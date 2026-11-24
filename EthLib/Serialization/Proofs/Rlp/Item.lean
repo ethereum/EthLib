@@ -2,6 +2,7 @@ module
 
 public import EthLib.Serialization.Rlp.Item
 public import EthLib.Base.Proofs.ByteOrder
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: `BE` of the Yellow Paper
@@ -60,8 +61,6 @@ theorem bigEndian_unique (bytes : List UInt8) (h : ∀ b ∈ bytes.head?, b ≠ 
 /-- Two errors with one code come from one constructor. -/
 theorem RlpError.code_injective (e₁ e₂ : RlpError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [RlpError.code] at h; exact absurd h (by decide))
+  code_injective RlpError.code
 
 end EthLib.Serialization.Rlp
