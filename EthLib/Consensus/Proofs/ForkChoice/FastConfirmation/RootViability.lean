@@ -83,19 +83,7 @@ This is the adapter of Assumption 3 of arXiv 2405.00549v4 §4.2 to counted votes
 
 It is a premise on the network, and it differs from that assumption in four ways.
 
-The quorum is honest voters with two thirds of the active balance of the pulled-up head state.
-
-Each of them sent a vote for the target, with any source.
-
-The target stays canonical from the confirming call to the receiver, not through epoch E + 1.
-
-The conclusion is a held seed above the block, of epoch E or E + 1, that reads the target.
-
-The seed has a realized justification at E or later, or holds the voters' target votes.
-
-So the votes for the target of E count by the end of E + 1, and receivers of E + 2 see them.
-
-The seed reads the call's block at the target root, so two honest stores may collide instead. -/
+Each difference is noted above the line that states it. -/
 def TargetIncluded (limit : ℕ) : Prop :=
   ∀ u ∈ J, ∀ q n, q ≤ n → (e.world n).time ≤ limit →
     ∀ (head : ForkChoiceNode) state total target, ∀ voters : Finset ValidatorIndex,
@@ -105,10 +93,14 @@ def TargetIncluded (limit : ℕ) : Prop :=
     getTotalActiveBalance state = .ok total →
     ((e.world q).state u).getCurrentStoreEpoch config = .ok target.epoch →
     ((e.world n).state u).getCurrentStoreEpoch config = .ok target.epoch →
+    -- First difference: the quorum is honest voters with two thirds of the active balance.
+    --
+    -- That balance is the one of the pulled-up head state.
     2 * total.toNat ≤ 3 * stake (fun v => balanceAt state v.toNat) voters →
     ∀ next first begin, addChecked target.epoch 1 = .ok next →
     computeStartSlotAtEpoch preset next = .ok first →
     computeTimeAtSlotMs config genesisTimeMs first = .ok begin →
+    -- Second difference: each of them sent a vote for the target, with any source.
     (∀ v ∈ voters, v ∈ J ∧ SignsTarget e v target (begin.toNat - 1)) →
     ∀ w ∈ J, ∀ k current, (e.world k).time ≤ limit → (e.world n).time ≤ (e.world k).time →
       UpToDate config checks sources (e.world k).time ((e.world k).view w)
@@ -118,7 +110,13 @@ def TargetIncluded (limit : ℕ) : Prop :=
       ∀ root rootEpoch, ((e.world k).state w).getBlockEpoch root = .ok rootEpoch →
       rootEpoch ≤ target.epoch →
       ((e.world k).state w).getCheckpointBlock root target.epoch = .ok target.root →
+      -- Third difference: the target stays canonical from the confirming call to the receiver.
+      --
+      -- It stays canonical only over that span, not through epoch E + 1.
       HonestHeadsCover (e := e) root (e.world n).time (e.world k).time →
+      -- Fourth difference: the conclusion is a held seed above the block, of epoch E or E + 1.
+      --
+      -- The seed reads the target.
       (∃ (seed : Root) (seedBlock : BeaconBlock preset fork) (seedState : BeaconState preset fork),
         ((e.world k).state w).blocks[seed]? = some seedBlock ∧
         ((e.world k).state w).blockStates[seed]? = some seedState ∧
@@ -126,6 +124,11 @@ def TargetIncluded (limit : ℕ) : Prop :=
         target.epoch ≤ computeEpochAtSlot preset seedBlock.slot ∧
         (computeEpochAtSlot preset seedBlock.slot).toNat < target.epoch.toNat + 2 ∧
         getBlockRoot seedState target.epoch = .ok target.root ∧
+        -- The seed has a realized justification at E or later, or holds the voters' target votes.
+        --
+        -- So the votes for the target of E count by the end of E + 1.
+        --
+        -- Receivers of E + 2 see them.
         (target.epoch ≤ seedState.currentJustifiedCheckpoint.epoch ∨
           (∃ altair : .altair ≤ fork, ∀ v ∈ voters,
             TargetFlagAt (recentParticipation seedState altair
@@ -136,6 +139,9 @@ def TargetIncluded (limit : ℕ) : Prop :=
               pending.data.target = target ∧
               ∃ indices, getPendingAttestingIndices seedState pending = .ok indices ∧
                 v ∈ indices)) ∨
+        -- The seed reads the call's block at the target root.
+        --
+        -- So two honest stores may collide instead.
         HonestCollision (e := e) limit
 
 /-- Two honest stores agree on an epoch's active validators below a common origin of the epoch.
@@ -687,13 +693,7 @@ private theorem call_epoch_le_root_add_one {store : Store preset fork}
 
 /-- A late receiver's justified checkpoint is not after the root's epoch and at most the call's.
 
-Its honest signer votes in the call's epoch.
-
-A vote from the call's slot on is cast on a head above the root, against the strict descent.
-
-Before that slot, the no-conflict test gives an honest third that pins the checkpoint.
-
-It pins it to the call's target, or a voter unseen by the call signs it from the call's slot on. -/
+Its honest signer votes in the call's epoch. -/
 private theorem late_justified_not_in_call_epoch {anchor : Store preset fork} {Δ time : ℕ}
     {T : ℕ} {anchorEpoch horizon : Epoch} {margin : ℕ}
     (slots : 0 < config.SLOT_DURATION_MS) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
@@ -818,6 +818,8 @@ private theorem late_justified_not_in_call_epoch {anchor : Store preset fork} {�
       (reachedU.anchorSlot_le (UInt64.le_of_eq anchorSlot) callerFound)
       ⟨_, justifiedFound⟩ up)
   -- An honest vote for it from the call's slot on is cast on a head above the root.
+  --
+  -- That contradicts the strict descent.
   have viaDuty := fun {v} (honest : v ∈ J) {k' data} duty target after before =>
     let window := duty_window_of_slot_le (k' := k') (data := data) anchored fits callBeginOk
       receiver ready currentOk honest duty after before
@@ -847,6 +849,12 @@ private theorem late_justified_not_in_call_epoch {anchor : Store preset fork} {�
     have slotDiv := Nat.mod_add_div callSlot'.toNat preset.SLOTS_PER_EPOCH.toNat
     rw [Nat.mul_comm] at boundaryNat
     exact callAtStart (UInt64.le_iff_toNat_le.mpr (by omega))
+  -- Before the call's slot, the no-conflict test gives an honest third that pins the checkpoint.
+  --
+  -- It pins it to the call's target.
+  --
+  -- Or a voter unseen by the call signs it from the call's slot on.
+  --
   -- Off the first slot, the no-conflict test passes with an honest count.
   have reservedN := inputs.2.2.1 callSlot' callSlotOk offStart
   have rootNe : computeEpochAtSlot preset callerBlock.slot ≠ computeEpochAtSlot preset callSlot' :=
@@ -1981,11 +1989,7 @@ private theorem root_mem_filtered_of_reads {anchor : Store preset fork} {Δ time
 
 The store is up to date, and the root strictly descends from its justified block.
 
-Otherwise two honest stores collide, or accountable-safety evidence holds.
-
-From Gloas, the anchor's registry must leave room for pending deposits.
-
-The room covers the deposits of each epoch from the anchor's to the horizon. -/
+Otherwise two honest stores collide, or accountable-safety evidence holds. -/
 theorem Execution.rootInFilteredTree_of_checked [DecidablePred (· ∈ J)]
     {anchor : Store preset fork} {Δ time T : ℕ} {anchorEpoch horizon : Epoch} {margin : ℕ}
     {g : ForkedBeaconState preset} (pre : Run config checks g ⟨fork, anchorState⟩)
@@ -2001,6 +2005,9 @@ theorem Execution.rootInFilteredTree_of_checked [DecidablePred (· ∈ J)]
     (anchored : ∀ w ∈ J, e.start w = anchor)
     (anchorOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
     (inHorizon : HonestStoreEpochsBounded (e := e) horizon time)
+    -- From Gloas, the anchor's registry must leave room for pending deposits.
+    --
+    -- The room covers the deposits of each epoch from the anchor's to the horizon.
     (room : .glamsterdam ≤ fork → AnchorRegistryRoom preset anchorState horizon)
     (roots : HeldBlockStateRootsNonzero (e := e) time)
     (anchorParent : AnchorParentAbsent (e := e) time)

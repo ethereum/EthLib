@@ -78,15 +78,7 @@ public theorem Execution.finalizedFamily_or_historical_evidence {anchor : Store 
     (e.justified_epoch_le_horizon anchorStore anchored sound anchorSlot slots bounded) early enough
     terminal
 
-/-- Honest justified checkpoints agree at each epoch up to the horizon, or evidence holds.
-
-Otherwise two honest stores hold different justified checkpoints of one epoch.
-
-Runs from the anchor to held states of both have views that hold the two checkpoints.
-
-That evidence is relative to the anchor, and its drift counts from the anchor.
-
-With enough churn since the anchor, it holds with no accountable key. -/
+/-- Honest justified checkpoints agree at each epoch up to the horizon, or evidence holds. -/
 public theorem Execution.selectedCheckpointsAgree_or_evidence {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
@@ -100,6 +92,13 @@ public theorem Execution.selectedCheckpointsAgree_or_evidence {anchor : Store pr
     (enough : HeldRunStakeFloor (e := e) pre horizon last)
     (terminal : HeldTerminalStakeFloor (e := e) horizon last) :
     SelectedCheckpointsAgree (e := e) horizon last ∨
+      -- Otherwise two honest stores hold different justified checkpoints of one epoch.
+      --
+      -- Runs from the anchor to held states of both have views that hold the two checkpoints.
+      --
+      -- That evidence is relative to the anchor, and its drift counts from the anchor.
+      --
+      -- With enough churn since the anchor, it holds with no accountable key.
       CrossStoreJustifiedEvidence (e := e) pre last := by
   classical
   by_cases agree : SelectedCheckpointsAgree (e := e) horizon last
@@ -115,19 +114,7 @@ public theorem Execution.selectedCheckpointsAgree_or_evidence {anchor : Store pr
   · exact .inr ⟨a, honestA, b, honestB, i, j, timeA, timeB, first, second, selectedFirst,
       selectedSecond, epoch, different, evidence⟩
 
-/-- A held state's justified checkpoint reads every honest finalized checkpoint up to its epoch.
-
-The held state is held by an honest store at an event by the time.
-
-Its realized justified checkpoint is after the anchor epoch.
-
-The finalized checkpoint is that of an honest store at an event by the time, the same or another.
-
-Otherwise runs from the anchor to held states of the two stores give direct-safety evidence.
-
-That evidence is relative to the anchor, and its drift counts from the anchor.
-
-With enough churn since the anchor, it holds with no accountable key. -/
+/-- A held state's justified checkpoint reads every honest finalized checkpoint up to its epoch. -/
 public theorem Execution.heldFinality_or_evidence {anchor : Store preset fork}
     {horizon : Epoch} {last : Nat} {g : ForkedBeaconState preset}
     (pre : Run config checks g ⟨fork, anchorState⟩)
@@ -143,14 +130,25 @@ public theorem Execution.heldFinality_or_evidence {anchor : Store preset fork}
     (early : HeldStatesBeforeUpgrade (e := e) last)
     (enough : HeldRunStakeFloor (e := e) pre horizon last)
     (terminal : HeldTerminalStakeFloor (e := e) horizon last) :
+    -- The held state is held by an honest store at an event by the time.
+    --
+    -- The finalized checkpoint is that of an honest store at an event by the time.
+    --
+    -- That store is the same one or another.
     (∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
       ∀ (r : Root) (st : BeaconState preset fork),
       ((e.world j).state b).blockStates[r]? = some st →
+      -- The held state's realized justified checkpoint is after the anchor epoch.
       getCurrentEpoch anchorState < st.currentJustifiedCheckpoint.epoch →
       ((e.world i).state a).finalizedCheckpoint.epoch ≤ st.currentJustifiedCheckpoint.epoch →
       ((e.world j).state b).getCheckpointBlock st.currentJustifiedCheckpoint.root
         ((e.world i).state a).finalizedCheckpoint.epoch =
           .ok ((e.world i).state a).finalizedCheckpoint.root) ∨
+    -- Otherwise runs from the anchor to held states of the two stores give direct-safety evidence.
+    --
+    -- That evidence is relative to the anchor, and its drift counts from the anchor.
+    --
+    -- With enough churn since the anchor, it holds with no accountable key.
     HeldStateFinalityEvidence (e := e) pre last := by
   classical
   by_cases family : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last →
@@ -186,15 +184,7 @@ public theorem Execution.heldFinality_or_evidence {anchor : Store preset fork}
     absent early enough terminal honestA honestB timeA timeB held after ordered inHorizon
   exact .inr ⟨a, honestA, b, honestB, i, j, timeA, timeB, result.resolve_left failed⟩
 
-/-- Each honest finalized checkpoint is on every honest justified chain at its epoch or later.
-
-The two stores may be the same or different, at any events by the time.
-
-Otherwise two runs from the anchor, to held states of the two stores, give direct-safety evidence.
-
-That evidence is relative to the anchor, and its drift counts from the anchor.
-
-With enough churn since the anchor, it holds with no accountable key. -/
+/-- Each honest finalized checkpoint is on every honest justified chain at its epoch or later. -/
 public theorem Execution.crossStoreFinality_or_evidence {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
@@ -210,12 +200,20 @@ public theorem Execution.crossStoreFinality_or_evidence {anchor : Store preset f
     (early : HeldStatesBeforeUpgrade (e := e) last)
     (enough : HeldRunStakeFloor (e := e) pre horizon last)
     (terminal : HeldTerminalStakeFloor (e := e) horizon last) :
+    -- The two stores may be the same or different, at any events by the time.
     (∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
       ((e.world i).state a).finalizedCheckpoint.epoch ≤
         ((e.world j).state b).justifiedCheckpoint.epoch →
       ((e.world j).state b).getCheckpointBlock ((e.world j).state b).justifiedCheckpoint.root
         ((e.world i).state a).finalizedCheckpoint.epoch =
           .ok ((e.world i).state a).finalizedCheckpoint.root) ∨
+    -- Otherwise two runs from the anchor give direct-safety evidence.
+    --
+    -- The runs end at held states of the two stores.
+    --
+    -- That evidence is relative to the anchor, and its drift counts from the anchor.
+    --
+    -- With enough churn since the anchor, it holds with no accountable key.
     CrossStoreDirectSafetyEvidence (e := e) pre last := by
   classical
   by_cases family : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last →

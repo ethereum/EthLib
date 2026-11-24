@@ -13,50 +13,6 @@ The rule confirms a block when its support from the store exceeds its safety thr
 
 That check is Definition 4 of the fast confirmation paper, [arXiv 2405.00549v4][fcr].
 
-The paper writes it, in its equation (5), as `S > Φ / 2 + β W - I`.
-
-Here `S` is the support of the block, and `I` the stake of the known equivocators.
-
-`W` is the weight of the committees from the slot of the block to the last slot.
-
-`Φ` is the largest weight that could still vote for a sibling, plus the boost, less a discount.
-
-The store computes each term in Gwei, with its own roundings.
-
-It weighs the committees of a range exactly, from the effective balances of their active members.
-
-A range with a whole epoch weighs the total active balance instead, which is no smaller.
-
-Its `Φ` is the committee weight since the parent, plus the boost.
-
-A discount is then taken off.
-
-It comes from the votes for the parent from the committees of the empty slots before the block.
-
-A discount above the committee weight since the parent is an error of the store.
-
-For a block at or before the current slot, those empty slots lie in that range.
-
-Their votes then weigh no more than the range, so that error never occurs.
-
-The effective balance that the store reads for a validator is its weight as a stake.
-
-The votes of a range for some nodes are the stake of the voters that the store counts.
-
-The store's share of the adversary is the committee weight of `W`, divided by 100 and rounded down.
-
-That share is then multiplied by the threshold in percent, and the equivocators are taken off.
-
-So the weight covers the stake of `W`, and the share covers β of it for balances in 100 Gwei.
-
-An average weight per slot in place of the exact one would not cover it.
-
-With that cover, Lemmas 4 and 3 of the paper give the honest support of a confirmed block.
-
-Twice that support, plus the discount, exceeds the committee weight and the boost.
-
-The range of slots of the adversary starts at the block, or at its epoch when its parent is older.
-
 The file also states the two FFG tests of the rule on the target of the current epoch.
 
 [fcr]: https://arxiv.org/abs/2405.00549v4
@@ -130,6 +86,8 @@ theorem computeAdversarialWeight_steps {head : Root} {balanceSource : BeaconStat
 
 The share is the weight of the committees divided by 100, rounded down, times the threshold.
 
+The threshold is in percent.
+
 The share is then at most the adversary plus the stake of the equivocators. -/
 theorem computeAdversarialWeight_share {head : Root} {balanceSource : BeaconState preset fork}
     {startSlot endSlot : Slot} {weight equivocation adversary : Gwei}
@@ -186,15 +144,7 @@ theorem getAdversarialWeight_of_not_lt {head root : Root} {balanceSource : Beaco
   simp [getAdversarialWeight, slotOk, blockOk, epochOk, parentEpochOk, notLater, lastOk,
     bind, Except.bind, pure, Except.pure, Except.mapError]
 
-/-- The store's safety threshold from its terms, each from its own step.
-
-A discount above the committee weight since the parent is an error.
-
-Otherwise the threshold adds the weight, the boost and twice the adversary, less the discount.
-
-It then halves that sum, rounding down.
-
-Each addition and the doubling can still fail, by leaving 64 bits. -/
+/-- The store's safety threshold from its terms, each from its own step. -/
 theorem computeSafetyThreshold_of_steps {head root : Root}
     {balanceSource : BeaconState preset fork} {currentSlot firstSlot lastSlot : Slot}
     {block parentBlock : BeaconBlock preset fork}
@@ -210,11 +160,23 @@ theorem computeSafetyThreshold_of_steps {head root : Root}
     (discountOk :
       store.computeEmptySlotSupportDiscount config head balanceSource root = .ok discount)
     (adversaryOk : store.getAdversarialWeight config head balanceSource root = .ok adversary) :
+    -- The store's `Φ` is the committee weight since the parent, plus the boost.
+    --
+    -- A discount is then taken off.
+    --
+    -- The discount comes from the votes for the parent.
+    --
+    -- Those votes come from the committees of the empty slots before the block.
     store.computeSafetyThreshold config head root balanceSource =
+      -- A discount above the committee weight since the parent is an error of the store.
       if discount > maximumSupport then .error (.supportDiscountAboveMaximum root) else do
+        -- Otherwise the threshold adds the weight, the boost and twice the adversary.
+        --
+        -- Each addition and the doubling can still fail, by leaving 64 bits.
         let withBoost ← (addChecked maximumSupport proposerScore).mapError .arith
         let doubled ← (mulChecked 2 adversary).mapError .arith
         let bound ← (addChecked withBoost doubled).mapError .arith
+        -- It takes off the discount, then halves that sum, rounding down.
         return (bound - discount) / 2 := by
   simp only [computeSafetyThreshold, slotOk, blockOk, parentOk, boostOk, firstOk, lastOk,
     weightOk, discountOk, adversaryOk, Except.mapError, bind, Except.bind]
@@ -370,6 +332,17 @@ theorem threshold_lt_of_isOneConfirmed {head root : Root} {balanceSource : Beaco
     (supportOk : store.scoreFromTally tally ⟨root, .pending⟩ = .ok support)
     (thresholdOk : store.computeSafetyThreshold config head root balanceSource = .ok threshold)
     (confirmed : store.isOneConfirmed config head balanceSource tally root = .ok true) :
+    -- The paper writes this check, in its equation (5), as `S > Φ / 2 + β W - I`.
+    --
+    -- Here `S` is the support of the block, and `I` the stake of the known equivocators.
+    --
+    -- `W` is the weight of the committees from the slot of the block to the last slot.
+    --
+    -- `Φ` is the largest weight that could still vote for a sibling, plus the boost.
+    --
+    -- A discount is taken off `Φ`.
+    --
+    -- The store computes each term in Gwei, with its own roundings.
     threshold.toNat < support.toNat := by
   simp only [isOneConfirmed, supportOk, thresholdOk, bind, Except.bind, pure, Except.pure,
     Except.ok.injEq, decide_eq_true_eq] at confirmed
@@ -394,6 +367,9 @@ theorem stake_le_computeCommitteeWeightBetweenSlots_of_covered {head : Root}
     (covered : isFullValidatorSetCovered preset startSlot endSlot = .ok true)
     (weightOk : store.computeCommitteeWeightBetweenSlots head balanceSource startSlot endSlot =
       .ok weight) :
+    -- The store weighs such a range by the total active balance, not by its committees.
+    --
+    -- That balance is no smaller than the weight of the committees.
     stake (fun v => balanceAt balanceSource v.toNat)
         (getActiveValidatorIndices balanceSource (getCurrentEpoch balanceSource)).toFinset ≤
       weight.toNat := by
@@ -465,6 +441,9 @@ theorem stake_le_computeCommitteeWeightBetweenSlots {head : Root}
     (inside : ∀ v ∈ W, v ∈ participants ∧ ∃ validator,
       balanceSource.validators.data[v.toNat]? = some validator ∧
         isActiveValidator validator (getCurrentEpoch balanceSource) = true) :
+    -- The store weighs the committees of a range exactly.
+    --
+    -- It reads the effective balances of their active members.
     stake (fun v => balanceAt balanceSource v.toNat) W ≤ weight.toNat := by
   refine stake_le_computeCommitteeWeightBetweenSlots_of_reads weightOk fun v member => ?_
   refine ⟨fun read readOk => ?_, (inside v member).2⟩
@@ -473,31 +452,28 @@ theorem stake_le_computeCommitteeWeightBetweenSlots {head : Root}
 
 /-- The store's votes for any of a list of nodes from the committees of a range are a stake.
 
-It is the stake of the voters: the members of those committees whose votes the store counts.
-
-The source of balances holds a voter, not slashed and active in the epoch of that source.
-
-The store does not know a voter to equivocate.
-
-The latest message of a voter supports one of the nodes, not a descendant of one.
-
-A validator weighs its effective balance in the source of balances.
-
 With the nodes of the parent, this is the observed weight of arXiv 2405.00549v4, Definition 5. -/
 theorem exists_stake_of_getNodeSupportBetweenSlots {head : Root}
     {balanceSource : BeaconState preset fork} {nodes : List ForkChoiceNode}
     {startSlot endSlot : Slot} {support : Gwei}
     (supportOk :
       store.getNodeSupportBetweenSlots head balanceSource nodes startSlot endSlot = .ok support) :
+    -- The votes are the stake of the voters.
+    --
+    -- The voters are the members of those committees whose votes the store counts.
     ∃ (participants : Std.TreeSet ValidatorIndex) (voters : Finset ValidatorIndex),
       store.getCommitteesBetweenSlots head startSlot endSlot = .ok participants ∧
       (∀ v, v ∈ voters ↔ v ∈ participants ∧
+        -- The source of balances holds a voter, not slashed and active in the epoch of that source.
         (∃ validator, balanceSource.validators.data[v.toNat]? = some validator ∧
           validator.slashed = false ∧
           isActiveValidator validator (getCurrentEpoch balanceSource) = true) ∧
+        -- The store does not know a voter to equivocate.
         v ∉ store.equivocatingIndices ∧
+        -- The latest message of a voter supports one of the nodes, not a descendant of one.
         ∃ message supported, store.latestMessages[v]? = some message ∧
           store.getSupportedNode message = .ok supported ∧ supported ∈ nodes) ∧
+      -- A validator weighs its effective balance in the source of balances.
       stake (fun v => balanceAt balanceSource v.toNat) voters = support.toNat := by
   classical
   simp only [getNodeSupportBetweenSlots, bind_ok_iff] at supportOk
@@ -581,20 +557,6 @@ theorem getNodeSupportBetweenSlots_le {head : Root} {balanceSource : BeaconState
 
 /-- The steps of a discount that the store computes, given the block and its parent.
 
-When the block is at the slot after its parent, the discount is zero.
-
-Otherwise the store makes a list of nodes.
-
-From Gloas the list holds the pending node and the ancestor of the block at the parent's slot.
-
-Before Gloas it holds the pending node only.
-
-The discount is then the votes for those nodes, less the adversarial weight.
-
-It is zero when the adversary is larger.
-
-Both are over the slots from the one after the parent to the one before the block.
-
 This is the store's form of the discount of arXiv 2405.00549v4, Definition 5. -/
 theorem computeEmptySlotSupportDiscount_steps {head root : Root}
     {balanceSource : BeaconState preset fork} {firstSlot : Slot}
@@ -604,17 +566,27 @@ theorem computeEmptySlotSupportDiscount_steps {head root : Root}
     (firstOk : addChecked parentBlock.slot 1 = .ok firstSlot)
     (discountOk :
       store.computeEmptySlotSupportDiscount config head balanceSource root = .ok discount) :
+    -- When the block is at the slot after its parent, the discount is zero.
     (firstSlot = block.slot ∧ discount = 0) ∨
+      -- Otherwise the store makes a list of nodes.
       ∃ parentNodes lastSlot parentSupport adversary,
+        -- From Gloas the list holds the pending node and the block's ancestor at the parent's slot.
         (.glamsterdam ≤ fork → ∃ parentNode,
           store.getAncestor ⟨root, .pending⟩ parentBlock.slot = .ok parentNode ∧
             parentNodes = [⟨block.parentRoot, .pending⟩, parentNode]) ∧
+        -- Before Gloas the list holds the pending node only.
         (¬.glamsterdam ≤ fork → parentNodes = [⟨block.parentRoot, .pending⟩]) ∧
+        -- The votes and the adversary below are both over one range of slots.
+        --
+        -- It runs from the slot after the parent to the slot before the block.
         subChecked block.slot 1 = .ok lastSlot ∧
         store.getNodeSupportBetweenSlots head balanceSource parentNodes firstSlot lastSlot =
           .ok parentSupport ∧
         store.computeAdversarialWeight config head balanceSource firstSlot lastSlot =
           .ok adversary ∧
+        -- The discount is then the votes for those nodes, less the adversarial weight.
+        --
+        -- It is zero when the adversary is larger.
         discount = saturatingSub parentSupport adversary := by
   simp only [computeEmptySlotSupportDiscount, bind_ok_iff, mapError_ok_iff] at discountOk
   obtain ⟨b, bOk, pb, pbOk, f, fOk, discountOk⟩ := discountOk
@@ -677,15 +649,7 @@ theorem computeEmptySlotSupportDiscount_le {head root : Root}
   rw [UInt64.le_iff_toNat_le, toNat_saturatingSub]
   omega
 
-/-- The store's check on the discount of a block passes when the block is not in the future.
-
-The block must be at or before the current slot, as the handler of blocks requires.
-
-The threshold then adds the weight since the parent, the boost and twice the adversary.
-
-It takes off the discount and halves the result, rounding down.
-
-Only an addition or the doubling can still fail, by leaving 64 bits. -/
+/-- The store's check on the discount of a block passes when the block is not in the future. -/
 theorem computeSafetyThreshold_of_le_currentSlot {head root : Root}
     {balanceSource : BeaconState preset fork} {currentSlot firstSlot lastSlot : Slot}
     {block parentBlock : BeaconBlock preset fork}
@@ -701,12 +665,22 @@ theorem computeSafetyThreshold_of_le_currentSlot {head root : Root}
     (discountOk :
       store.computeEmptySlotSupportDiscount config head balanceSource root = .ok discount)
     (adversaryOk : store.getAdversarialWeight config head balanceSource root = .ok adversary)
+    -- The block must be at or before the current slot, as the handler of blocks requires.
     (notFuture : block.slot ≤ currentSlot) :
     store.computeSafetyThreshold config head root balanceSource = (do
+      -- The threshold then adds the weight since the parent, the boost and twice the adversary.
+      --
+      -- Only an addition or the doubling can still fail, by leaving 64 bits.
       let withBoost ← (addChecked maximumSupport proposerScore).mapError .arith
       let doubled ← (mulChecked 2 adversary).mapError .arith
       let bound ← (addChecked withBoost doubled).mapError .arith
+      -- It takes off the discount and halves the result, rounding down.
       return (bound - discount) / 2) := by
+  -- For a block at or before the current slot, the empty slots before it lie in the range.
+  --
+  -- Their votes then weigh no more than the range.
+  --
+  -- So a discount above the committee weight, an error of the store, never occurs.
   have le := computeEmptySlotSupportDiscount_le blockOk parentOk firstOk lastOk weightOk
     discountOk notFuture
   rw [computeSafetyThreshold_of_steps slotOk blockOk parentOk boostOk firstOk lastOk weightOk
@@ -715,17 +689,7 @@ theorem computeSafetyThreshold_of_le_currentSlot {head root : Root}
 
 /-- The Byzantine share of a set of validators is at most the store's adversary and equivocators.
 
-The store's weight of a range of slots must cover the stake of the set.
-
-The adversary and the equivocation score are those of that range.
-
 Here the share is β of the stake, with β the threshold of the configuration, in percent.
-
-Each effective balance in the set must be a whole number of 100 Gwei.
-
-The store rounds the weight down to 100 Gwei for its adversary.
-
-The rounded weight then still covers the stake of the set.
 
 This supplies the Byzantine share in arXiv 2405.00549v4, Assumption 2 and Definition 5. -/
 theorem threshold_mul_stake_le_of_computeAdversarialWeight {W : Finset ValidatorIndex}
@@ -733,11 +697,14 @@ theorem threshold_mul_stake_le_of_computeAdversarialWeight {W : Finset Validator
     {weight equivocation adversary : Gwei}
     (weightOk : store.computeCommitteeWeightBetweenSlots head balanceSource startSlot endSlot =
       .ok weight)
+    -- The adversary and the equivocation score are those of that range.
     (equivocationOk :
       store.getEquivocationScore head balanceSource startSlot endSlot = .ok equivocation)
     (rangeOk : store.computeAdversarialWeight config head balanceSource startSlot endSlot =
       .ok adversary)
+    -- The store's weight of the range of slots must cover the stake of the set.
     (weighed : stake (fun v => balanceAt balanceSource v.toNat) W ≤ weight.toNat)
+    -- Each effective balance in the set must be a whole number of 100 Gwei.
     (aligned : ∀ v ∈ W, balanceAt balanceSource v.toNat % 100 = 0) :
     config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat *
         stake (fun v => balanceAt balanceSource v.toNat) W ≤
@@ -747,6 +714,11 @@ theorem threshold_mul_stake_le_of_computeAdversarialWeight {W : Finset Validator
   -- The weight covers the stake of `W`, and that stake is a whole number of 100 Gwei.
   have whole : 100 ∣ stake w W := Finset.dvd_sum fun v member => Nat.dvd_of_mod_eq_zero
     (aligned v member)
+  -- The store rounds the weight down to 100 Gwei for its adversary.
+  --
+  -- The rounded weight then still covers the stake of the set.
+  --
+  -- An average weight per slot in place of the exact one would not cover it.
   have cover : stake w W ≤ weight.toNat / 100 * 100 := by
     obtain ⟨k, hk⟩ := whole
     rw [hk] at weighed ⊢
@@ -764,37 +736,7 @@ theorem threshold_mul_stake_le_of_computeAdversarialWeight {W : Finset Validator
 
 Here `Φ` is the store's: the committee weight since the parent, plus the boost.
 
-The discount is taken off it, and is added to the other side so that nothing truncates.
-
-A validator weighs its effective balance in the source of balances.
-
-The supporters are validators whose stake is the support of the block in the store.
-
-The equivocators are validators whose stake is that of the known equivocators in the store.
-
-Both lie in a set `W` of validators, whose stake the store's weight of a range of slots covers.
-
-The supporters and the equivocators are apart.
-
-The store's adversary over that range must be its adversary for the block.
-
-The range that the store uses for the block is one such range.
-
-Assume that the Byzantine validators hold at most β of the stake of `W`.
-
-That is Assumption 2 when `W` is the set of active members of the committees of the range.
-
-A range with a whole epoch may take as `W` every validator active in the source of balances.
-
-Here β is the threshold of the configuration, in percent, and no equivocator is honest.
-
-Assume also that each effective balance in `W` is a whole number of 100 Gwei.
-
-The store rounds the weight down to 100 Gwei for its adversary, and this keeps β of `W` below it.
-
-Effective balances are whole increments, and an increment is 10^9 Gwei in the presets.
-
-The discount is at most the committee weight, since the store checks it. -/
+The discount is taken off it, and is added to the other side so that nothing truncates. -/
 theorem lt_two_mul_honest_support_of_isOneConfirmed {J : Set ValidatorIndex}
     [DecidablePred (· ∈ J)] {W supporters equivocators : Finset ValidatorIndex} {head root : Root}
     {balanceSource : BeaconState preset fork} {tally : VoteTally}
@@ -811,6 +753,9 @@ theorem lt_two_mul_honest_support_of_isOneConfirmed {J : Set ValidatorIndex}
     (discountOk :
       store.computeEmptySlotSupportDiscount config head balanceSource root = .ok discount)
     (adversaryOk : store.getAdversarialWeight config head balanceSource root = .ok adversary)
+    -- The store's adversary over a range of slots must be its adversary for the block.
+    --
+    -- The range that the store uses for the block is one such range.
     (rangeOk : store.computeAdversarialWeight config head balanceSource startSlot lastSlot =
       .ok adversary)
     (weightOk : store.computeCommitteeWeightBetweenSlots head balanceSource startSlot lastSlot =
@@ -820,15 +765,39 @@ theorem lt_two_mul_honest_support_of_isOneConfirmed {J : Set ValidatorIndex}
     (thresholdOk : store.computeSafetyThreshold config head root balanceSource = .ok threshold)
     (supportOk : store.scoreFromTally tally ⟨root, .pending⟩ = .ok support)
     (confirmed : store.isOneConfirmed config head balanceSource tally root = .ok true)
+    -- A validator weighs its effective balance in the source of balances.
+    --
+    -- The supporters are validators whose stake is the support of the block in the store.
     (supportStake : stake (fun v => balanceAt balanceSource v.toNat) supporters = support.toNat)
+    -- The equivocators are validators whose stake is that of the known equivocators in the store.
     (equivocationStake :
       stake (fun v => balanceAt balanceSource v.toNat) equivocators = equivocation.toNat)
+    -- Both lie in a set `W` of validators.
     (supportersIn : supporters ⊆ W) (equivocatorsIn : equivocators ⊆ W)
+    -- The store's weight of the range of slots covers the stake of `W`.
     (weighed : stake (fun v => balanceAt balanceSource v.toNat) W ≤ weight.toNat)
+    -- Each effective balance in `W` is a whole number of 100 Gwei.
+    --
+    -- The store rounds the weight down to 100 Gwei for its adversary.
+    --
+    -- With such balances, β of the stake of `W` is at most the adversary plus the equivocators.
+    --
+    -- Effective balances are whole increments, and an increment is 10^9 Gwei in the presets.
     (aligned : ∀ v ∈ W, balanceAt balanceSource v.toNat % 100 = 0)
+    -- The supporters and the equivocators are apart.
+    --
+    -- No equivocator is honest.
     (apart : Disjoint supporters equivocators) (dishonest : ∀ v ∈ equivocators, v ∉ J)
+    -- The Byzantine validators hold at most β of the stake of `W`.
+    --
+    -- Here β is the threshold of the configuration, in percent.
+    --
+    -- That is Assumption 2 when `W` is the set of active members of the committees of the range.
+    --
+    -- A range with a whole epoch may take as `W` every validator active in the source of balances.
     (byzantine : ByzantineStakeAtMost (fun v => balanceAt balanceSource v.toNat) W J
       config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat 100) :
+    -- Twice the honest support, plus the discount, exceeds the committee weight and the boost.
     maximumSupport.toNat + proposerScore.toNat <
       discount.toNat + 2 * stake (fun v => balanceAt balanceSource v.toNat)
         {v ∈ supporters | v ∈ J} := by
@@ -839,7 +808,9 @@ theorem lt_two_mul_honest_support_of_isOneConfirmed {J : Set ValidatorIndex}
   -- The store's adversary and equivocators cover the Byzantine share of `W`.
   have cover := threshold_mul_stake_le_of_computeAdversarialWeight weightOk equivocationOk rangeOk
     weighed aligned
-  -- The discount is at most the committee weight, so nothing truncates.
+  -- The discount is at most the committee weight, since the store checks it.
+  --
+  -- So nothing truncates.
   have small := UInt64.le_iff_toNat_le.mp (discount_le_of_computeSafetyThreshold slotOk blockOk
     parentOk boostOk firstOk lastOk maximumOk discountOk adversaryOk thresholdOk)
   have phi := Nat.sub_add_cancel (show discount.toNat ≤
@@ -857,18 +828,6 @@ theorem lt_two_mul_honest_support_of_isOneConfirmed {J : Set ValidatorIndex}
 The theorems above state the LMD-GHOST indicator of the rule, Definition 4 of the paper.
 
 The rule also has two FFG indicators, which weigh the honest support against the active balance.
-
-One stands for no checkpoint in conflict with the current target becoming justified.
-
-It asks for more than a third of the balance.
-
-It accepts at once when the target is the unrealized justified checkpoint of the store.
-
-The other stands for the current target becoming justified, and asks for two thirds of it.
-
-Here both are only tests of the support against the balance.
-
-So reaching two thirds implies the weaker test, for a nonzero balance increment.
 -/
 
 /-- The checkpoint of an epoch in a chain carries that epoch and its checkpoint block. -/
@@ -904,6 +863,8 @@ theorem epoch_eq_of_getCurrentTarget {head : Root} {epoch : Epoch} {checkpoint :
   exact (Except.ok.inj epochOk').symm
 
 /-- The two-thirds test accepts exactly when three times the support reaches twice the balance.
+
+It stands for the current target becoming justified, and asks for two thirds of the balance.
 
 Both products must fit in 64 bits.
 
@@ -947,6 +908,8 @@ theorem two_mul_le_three_mul_of_willCurrentTargetBeJustified {head : Root}
 The current target is the unrealized justified checkpoint.
 
 Or three times the support exceeds the balance, and that product fits in 64 bits.
+
+The test stands for no checkpoint in conflict with the current target becoming justified.
 -/
 theorem willNoConflictingCheckpointBeJustified_eq_ok_true_iff {head : Root} {target : Checkpoint}
     (targetOk : store.getCurrentTarget config head = .ok target) :
@@ -989,6 +952,9 @@ theorem willNoConflictingCheckpointBeJustified_of_willCurrentTargetBeJustified {
   obtain ⟨target, targetOk⟩ := exists_getCurrentTarget_of_support supportOk
   refine (willNoConflictingCheckpointBeJustified_eq_ok_true_iff targetOk).mpr
     (.inr ⟨state, total, support, thrice, stateOk, totalOk, supportOk, thriceOk, ?_⟩)
+  -- Both indicators are only tests of the support against the balance.
+  --
+  -- So reaching two thirds implies the weaker test, for a nonzero balance increment.
   have above := two_mul_le_three_mul_of_willCurrentTargetBeJustified stateOk totalOk supportOk
     justified
   have least := UInt64.le_iff_toNat_le.mp (le_getTotalBalance (getTotalActiveBalance_ok totalOk))
