@@ -13,12 +13,6 @@ Each container has distinct field names at every fork, and converts to and from 
 
 So its bytes decode back to it, at every fork.
 
-Before Electra an attestation covers one committee, as it did at Phase 0.
-
-The bit vector of committees needs at least one committee in a slot.
-
-From Gloas both progressive layouts hold every field, so they are lawful too.
-
 The upgrade of each container to Gloas keeps all its contents, so it loses nothing.
 -/
 
@@ -30,7 +24,7 @@ open Base Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork}
 
-/-- Before Electra, an attestation covers at most the validators of one committee. -/
+/-- Before Electra, an attestation covers at most the validators of one committee, as at Phase 0. -/
 theorem maxAttesters_of_lt (before : fork < .pectra) :
     maxAttesters preset fork = preset.MAX_VALIDATORS_PER_COMMITTEE.toNat := by
   simp [maxAttesters, show ¬Fork.pectra ≤ fork from Nat.not_le.mpr before]
@@ -47,6 +41,9 @@ theorem Attestation.names_nodup : (Attestation.names fork).Nodup := by
     by decide
   exact all.sublist ((List.Sublist.refl _).append (sinceNames_sublist _))
 
+-- The bit vector of committees needs at least one committee in a slot.
+--
+-- From Gloas the progressive layout holds every field, so it is lawful too.
 instance [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] :
     LawfulSszType (Attestation preset fork) :=
   .forkContainer
@@ -60,6 +57,7 @@ instance [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] :
      firstDuplicate_of_nodup _ Attestation.names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
 
+-- From Gloas the progressive layout holds every field, so it is lawful too.
 instance : LawfulSszType (IndexedAttestation preset fork) :=
   .forkContainer (fun _ => ⟨rfl, by decide, rfl⟩) ⟨rfl, by simp, by decide⟩ (fun _ => rfl)
     (fun _ => rfl)

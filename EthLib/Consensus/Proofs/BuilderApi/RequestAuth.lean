@@ -5,17 +5,9 @@ public import EthLib.Consensus.BuilderApi.RequestAuth
 /-!
 # Proofs: the checks of a Gloas request to a builder
 
-Without data agreed out of band, the agreed data is the default data from the builder's URL.
-
 A request for a bid fails no check exactly when its header, data, slot and signature all hold.
 
-A request whose only failed check is the signature gets 401, and no other status.
-
 A submission of preferences for a slot that has passed always fails, and leaves the store as it was.
-
-The checks do not read the preferences, which the signature does not cover.
-
-An accepted submission keeps its preferences for its key and slot, and changes no other entry.
 -/
 
 @[expose] public section
@@ -76,7 +68,9 @@ theorem preferencesFailures_of_passed {config : Config} {checks : SignatureCheck
   · simp [h, Functor.map, Except.map] at checked
   · cases b <;> simp [h, passed, Functor.map, Except.map] at checked <;> simp [← checked]
 
-/-- The checks of a request that submits preferences do not read the preferences. -/
+/-- The checks of a request that submits preferences do not read the preferences.
+
+The signature does not cover the preferences. -/
 theorem preferencesFailures_preferences (config : Config) (checks : SignatureChecks)
     (agreed : ByteArray) (currentSlot : Slot) (pubkey : BLSPubkey) (versionHeader : Option String)
     (request : BuilderPreferencesRequest) (preferences : BuilderPreferences) :

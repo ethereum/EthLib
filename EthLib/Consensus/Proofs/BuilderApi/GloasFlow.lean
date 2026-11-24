@@ -8,15 +8,9 @@ public import EthLib.Consensus.Proofs.Transition.Payload
 
 From Gloas a proposer validates a builder's bid against the fee recipient that it expects.
 
-When the block then carries that bid, the bid's processing records a pending payment.
-
-That payment pays the bid's value to the fee recipient that the proposer checked.
+When a block carries that bid, the bid records a pending payment of its value to that fee recipient.
 
 A bid of no value records no payment.
-
-No hypothesis relates the state of the validation to the state of the block.
-
-The fee recipient comes from the bid, which both steps read.
 -/
 
 @[expose] public section
@@ -32,15 +26,9 @@ variable {preset : Preset} {fork : Base.Fork} {config config' : Config}
 
 /-- A validated bid of positive value, once processed in a block, records its pending payment.
 
-The payment sits at the position of the bid's slot in the second half of the list.
-
-That half holds the payments of the current epoch.
-
 It pays the bid's value from the bid's builder to the fee recipient that the proposer expected.
 
-It names the proposer of the slot of the block, and no weight yet.
-
-The proposer's check gives only that the bid names the expected fee recipient. -/
+No hypothesis relates the state of the validation to the state of the block. -/
 theorem pendingPayment_of_validateBid
     (valid : validateBid config checks state gloas preferences parentGasLimit signed feeRecipient =
       .ok true)
@@ -51,16 +39,24 @@ theorem pendingPayment_of_validateBid
       (post.builderPendingPayments gloas)[position] =
         ⟨0, ⟨feeRecipient, signed.message.value, signed.message.builderIndex⟩, proposer⟩ := by
   obtain ⟨-, recorded, record, rfl⟩ := processExecutionPayloadBid_ok processed
+  -- The proposer's check gives only that the bid names the expected fee recipient.
+  --
+  -- The fee recipient comes from the bid, which both steps read.
   have recipient := (validateBid_ok_true_iff.mp valid).2.2.1
   unfold recordBidPayment at record
   simp only [positive, ↓reduceIte] at record
+  -- The payment names the proposer of the slot of the block.
   obtain ⟨proposer, hp, rest⟩ := bind_ok_iff.mp record
+  -- The payment sits at the position of the bid's slot in the second half of the list.
+  --
+  -- That half holds the payments of the current epoch.
   obtain ⟨position, hpos, kept⟩ := bind_ok_iff.mp rest
   have hp' : getBeaconProposerIndex state' = .ok proposer := by
     unfold liftAccessor at hp
     cases h : getBeaconProposerIndex state' <;> simp_all [Except.mapError]
   refine ⟨position, proposer, hpos, hp', ?_⟩
   rw [← Except.ok.inj kept]
+  -- The payment has no weight yet.
   simp [bidPayment, recipient]
 
 /-- A bid of no value, once processed in a block, leaves the pending payments as they were. -/

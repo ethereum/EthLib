@@ -8,38 +8,6 @@ import Mathlib.Data.List.SplitBy
 # `Consensus.Proofs.ReqResp.Validity`
 
 What the validity of a response says about its blocks or sidecars.
-
-- A valid response to a request for blocks by range has at most the count of blocks.
-- Its blocks lie in the requested slots, with slots that increase along the whole list.
-- When the step is 1, each block names the one before it as its parent, so the blocks form a chain.
-- A valid response to a request for blocks by root has at most as many blocks as requested roots.
-- The root of each of its blocks is a requested root.
-- A valid response to a request for blocks by head has at most the count of blocks.
-- Its first block has the requested root, and each block is the parent of the one before it.
-- Its slots decrease along the whole list.
-- A valid response to a request for light client updates by range has at most 128 updates.
-- Their periods lie in the requested periods, and each is the period after the one before it.
-- So the period of each update is that of the first update plus its index.
-- The digest of each update is the fork digest of the epoch of its attested header, from Altair.
-- On a chain whose digests name their forks, that digest names the fork of that epoch.
-- A valid response to a request for a light client bootstrap has at most one bootstrap.
-- Its root is the requested root, and its digest is the fork digest of the epoch of its header.
-- That epoch is from Altair.
-- On a chain whose digests name their forks, that digest names the fork of that epoch.
-- A valid response to a request for sidecars by range lies in the requested slots.
-- Along the whole list, its sidecars increase in slot, then in index within one block.
-- Two of its sidecars at the same slot name the same block.
-- For blobs, the indices of the sidecars of one block are 0, 1, 2 and so on.
-- For columns, each index is a requested column.
-- For columns, each block it serves has every requested column.
-- A valid response to a request for sidecars by root has at most as many sidecars as requested.
-- Each of its sidecars is one that the request names.
-- A valid response to a request for payload envelopes by range has increasing slots.
-- A valid response for payload envelopes by root has at most as many envelopes as requested roots.
-- The block root of each of its envelopes is a requested root.
-- Each of its payloads names the one before it as its parent.
-- A valid response to a request for inclusion lists has the requested slot and dependent root.
-- The validator of each list holds a requested seat of the committee.
 -/
 
 @[expose] public section
@@ -107,7 +75,12 @@ theorem pairwise_of_slotsAscending {blocks : List ResponseBlock}
   exact pairwise_of_allAdjacent (s := fun (a b : ResponseBlock) => a.slot < b.slot)
     (fun _ _ h => of_decide_eq_true h) (fun _ _ _ => UInt64.lt_trans) ascending
 
-/-- The rules that a valid response to a request for blocks by range meets, and no others. -/
+/-- The rules that a valid response to a request for blocks by range meets, and no others.
+
+It has at most the count of blocks, and they lie in the requested slots.
+
+When the step is 1, each block names the one before it as its parent, so the blocks form a chain.
+-/
 theorem isValidBlocksByRangeResponse_iff (config : Config) (fork : Base.Fork)
     (request : BeaconBlocksByRangeRequest) (blocks : List ResponseBlock) :
     isValidBlocksByRangeResponse config fork request blocks = true ↔
@@ -140,14 +113,22 @@ theorem chain_of_isValidBlocksByRangeResponse {config : Config} {fork : Base.For
   exact ⟨count, slots, pairwise_of_slotsAscending ((slotsAscending_iff blocks).mpr ascending),
     linked step⟩
 
-/-- The rules that a valid response to a request for blocks by root meets, and no others. -/
+/-- The rules that a valid response to a request for blocks by root meets, and no others.
+
+It has at most as many blocks as requested roots.
+
+The root of each of its blocks is a requested root. -/
 theorem isValidBlocksByRootResponse_iff {config : Config} {fork : Base.Fork}
     (request : BeaconBlocksByRootRequest config fork) (blocks : List ResponseBlock) :
     isValidBlocksByRootResponse request blocks = true ↔
       blocks.length ≤ request.data.size ∧ ∀ block ∈ blocks, block.root ∈ request.data := by
   simp [isValidBlocksByRootResponse, List.all_eq_true]
 
-/-- The rules that a valid response to a request for blocks by head meets, and no others. -/
+/-- The rules that a valid response to a request for blocks by head meets, and no others.
+
+It has at most the count of blocks.
+
+Its first block has the requested root, and each block is the parent of the one before it. -/
 theorem isValidBlocksByHeadResponse_iff (config : Config) (request : BeaconBlocksByHeadRequest)
     (blocks : List ResponseBlock) :
     isValidBlocksByHeadResponse config request blocks = true ↔
@@ -179,7 +160,13 @@ private theorem toOption_eq_some_iff {digest : ForkDigest} (computed : Except Er
     computed.toOption = some digest ↔ computed = .ok digest := by
   cases computed <;> simp [Except.toOption]
 
-/-- The rules that a valid response for light client updates by range meets, and no others. -/
+/-- The rules that a valid response for light client updates by range meets, and no others.
+
+It has at most 128 updates.
+
+Their periods lie in the requested periods, and each is the period after the one before it.
+
+The digest of each update is the fork digest of the epoch of its attested header, from Altair. -/
 theorem isValidLightClientUpdatesByRangeResponse_iff (preset : Preset) (config : Config)
     (genesisValidatorsRoot : Root) (request : LightClientUpdatesByRangeRequest)
     (updates : List ResponseUpdate) :
@@ -303,7 +290,13 @@ theorem forkOfDigest_of_isValidLightClientUpdatesByRangeResponse {preset : Prese
     (((isValidLightClientUpdatesByRangeResponse_iff preset config genesisValidatorsRoot request
       updates).mp valid).2.2.1 update member).2.2
 
-/-- The rules that a valid response for a light client bootstrap meets, and no others. -/
+/-- The rules that a valid response for a light client bootstrap meets, and no others.
+
+It has at most one bootstrap.
+
+Its root is the requested root, and its digest is the fork digest of the epoch of its header.
+
+That epoch is from Altair. -/
 theorem isValidLightClientBootstrapResponse_iff (preset : Preset) (config : Config)
     (genesisValidatorsRoot : Root) (request : Root) (bootstraps : List ResponseBootstrap) :
     isValidLightClientBootstrapResponse preset config genesisValidatorsRoot request bootstraps =
@@ -391,7 +384,11 @@ private theorem blockRoot_eq_of_mem {sidecars : List ResponseSidecar}
   · rfl
   · exact (blockRoot_eq_of_pairwise_before ordered gt hi slot.symm).1.symm
 
-/-- The rules that a valid response to a request for blob sidecars by range meets, and no others. -/
+/-- The rules that a valid response to a request for blob sidecars by range meets, and no others.
+
+Its sidecars lie in the requested slots.
+
+The indices of the sidecars of one block are 0, 1, 2 and so on. -/
 theorem isValidBlobSidecarsByRangeResponse_iff (config : Config) (fork : Base.Fork)
     (request : BlobSidecarsByRangeRequest) (sidecars : List ResponseSidecar) :
     isValidBlobSidecarsByRangeResponse config fork request sidecars = true ↔
@@ -415,7 +412,8 @@ theorem isValidBlobSidecarsByRangeResponse_iff (config : Config) (fork : Base.Fo
   | cons first rest => simp
 
 /-- In a valid response to a request for blob sidecars by range, each sidecar precedes later ones.
--/
+
+So along the whole list, its sidecars increase in slot, then in index within one block. -/
 theorem pairwise_of_isValidBlobSidecarsByRangeResponse {config : Config} {fork : Base.Fork}
     {request : BlobSidecarsByRangeRequest} {sidecars : List ResponseSidecar}
     (valid : isValidBlobSidecarsByRangeResponse config fork request sidecars = true) :
@@ -429,6 +427,8 @@ theorem pairwise_of_isValidBlobSidecarsByRangeResponse {config : Config} {fork :
   · exact Or.inl slot
 
 /-- The rules that a valid response to a request for column sidecars by range meets, and no others.
+
+Its sidecars lie in the requested slots, and each index is a requested column.
 
 The last rule asks each run of sidecars at one slot to hold every requested column. -/
 theorem isValidDataColumnSidecarsByRangeResponse_iff (preset : Preset) (config : Config)
@@ -452,7 +452,8 @@ theorem isValidDataColumnSidecarsByRangeResponse_iff (preset : Preset) (config :
   simp only [InCountRange, and_assoc]
 
 /-- In a valid response to a request for column sidecars by range, each sidecar precedes later ones.
--/
+
+So along the whole list, its sidecars increase in slot, then in index within one block. -/
 theorem pairwise_of_isValidDataColumnSidecarsByRangeResponse {preset : Preset} {config : Config}
     {request : DataColumnSidecarsByRangeRequest preset} {sidecars : List ResponseSidecar}
     (valid : isValidDataColumnSidecarsByRangeResponse preset config request sidecars = true) :
@@ -501,7 +502,11 @@ theorem exists_column_of_isValidDataColumnSidecarsByRangeResponse {preset : Pres
   exact ⟨sidecar, member, slot, blockRoot_eq_of_mem
     (pairwise_of_isValidDataColumnSidecarsByRangeResponse valid) member mem slot, index⟩
 
-/-- The rules that a valid response to a request for blob sidecars by root meets, and no others. -/
+/-- The rules that a valid response to a request for blob sidecars by root meets, and no others.
+
+It has at most as many sidecars as requested.
+
+Each of its sidecars is one that the request names. -/
 theorem isValidBlobSidecarsByRootResponse_iff {config : Config} {fork : Base.Fork}
     (request : BlobSidecarsByRootRequest config fork) (sidecars : List ResponseSidecar) :
     isValidBlobSidecarsByRootResponse request sidecars = true ↔
@@ -516,7 +521,10 @@ theorem columnCount_eq {preset : Preset} {config : Config}
   simp [DataColumnSidecarsByRootRequest.columnCount, ← Array.sum_toList]
 
 /-- The rules that a valid response to a request for column sidecars by root meets, and no others.
--/
+
+It has at most as many sidecars as requested.
+
+Each of its sidecars is one that the request names. -/
 theorem isValidDataColumnSidecarsByRootResponse_iff {preset : Preset} {config : Config}
     (request : DataColumnSidecarsByRootRequest preset config) (sidecars : List ResponseSidecar) :
     isValidDataColumnSidecarsByRootResponse request sidecars = true ↔
@@ -533,7 +541,9 @@ theorem nextEnvelope_iff (a b : ResponseEnvelope) :
     ResponseEnvelope.next a b = true ↔ a.slot < b.slot ∧ b.parentHash = a.blockHash := by
   simp [ResponseEnvelope.next]
 
-/-- The rules that a valid response for payload envelopes by range meets, and no others. -/
+/-- The rules that a valid response for payload envelopes by range meets, and no others.
+
+Its slots increase, and each of its payloads names the one before it as its parent. -/
 theorem isValidExecutionPayloadEnvelopesByRangeResponse_iff (config : Config) (fork : Base.Fork)
     (request : ExecutionPayloadEnvelopesByRangeRequest) (envelopes : List ResponseEnvelope) :
     isValidExecutionPayloadEnvelopesByRangeResponse config fork request envelopes = true ↔
@@ -559,7 +569,11 @@ theorem pairwise_of_isValidExecutionPayloadEnvelopesByRangeResponse {config : Co
     (fun a b next => ((nextEnvelope_iff a b).mp next).1)
     (fun _ _ _ => UInt64.lt_trans) valid.2
 
-/-- The rules that a valid response for payload envelopes by root meets, and no others. -/
+/-- The rules that a valid response for payload envelopes by root meets, and no others.
+
+It has at most as many envelopes as requested roots.
+
+The block root of each of its envelopes is a requested root. -/
 theorem isValidExecutionPayloadEnvelopesByRootResponse_iff {config : Config}
     (request : ExecutionPayloadEnvelopesByRootRequest config) (envelopes : List ResponseEnvelope) :
     isValidExecutionPayloadEnvelopesByRootResponse request envelopes = true ↔
@@ -576,7 +590,11 @@ theorem asksFor_iff {preset : Preset}
         request.indices.bits[seat] = true ∧ committee[seat] = validator := by
   simp [InclusionListsByIndicesRequest.asksFor, Vector.any_eq_true]
 
-/-- The rules that a valid response for inclusion lists by indices meets, and no others. -/
+/-- The rules that a valid response for inclusion lists by indices meets, and no others.
+
+Each list has the requested slot and dependent root.
+
+The validator of each list holds a requested seat of the committee. -/
 theorem isValidInclusionListsByIndicesResponse_iff {preset : Preset} (config : Config)
     (request : InclusionListsByIndicesRequest preset) (committee : InclusionListCommittee preset)
     (lists : List InclusionList) :

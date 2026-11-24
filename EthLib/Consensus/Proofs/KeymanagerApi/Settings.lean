@@ -10,14 +10,6 @@ The statements hold for the fee recipient, the gas limit and the graffiti alike.
 A set then a get of the key gives the value set.
 
 A delete then a get of the key gives the default.
-
-A set or a delete on one key leaves the value of every other key unchanged.
-
-A delete on a key that the client does not manage gets HTTP 404, and changes nothing.
-
-A delete on a key that the client manages succeeds.
-
-A fee recipient of zero is refused with HTTP 400, and changes nothing.
 -/
 
 @[expose] public section
@@ -106,7 +98,7 @@ theorem delete_of_isManaged_eq_false (unmanaged : state.isManaged pubkey = false
     setting.delete state pubkey = .error notManaged := by
   simp [delete, unmanaged]
 
-/-- A delete on a key that the client manages removes its mappings. -/
+/-- A delete on a key that the client manages succeeds, and removes its mappings. -/
 theorem delete_of_isManaged (managed : state.isManaged pubkey = true) :
     setting.delete state pubkey =
       .ok (setting.withMappings state ((setting.mappings state).filter (·.1 != pubkey))) := by

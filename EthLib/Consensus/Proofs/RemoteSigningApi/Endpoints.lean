@@ -8,12 +8,6 @@ public import EthLib.Consensus.Transition.Block
 /-!
 # Proofs: the endpoints of a remote signer
 
-The sign endpoint answers 404 exactly when the request reads and its key is not held.
-
-A signature that it returns verifies under the key of the path, for the signer's own root.
-
-A call that does not sign leaves the state as it was.
-
 With the rule of EIP-3076, each signed block or vote passed its check, and enters the record.
 
 No call removes a record.

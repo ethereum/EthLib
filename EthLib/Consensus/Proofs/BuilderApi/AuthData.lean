@@ -6,17 +6,9 @@ public import EthLib.Base.Proofs.Bytes
 /-!
 # Proofs: the default data of a builder from its URL
 
-The compressed text of an IPv6 address reads back as that address.
-
-So two addresses with the same compressed text are equal.
-
 Two URLs whose hosts are IPv6 literals give the same data exactly when they name the same address.
 
-So every spelling of an address signs the same bytes, and two different addresses never do.
-
 More generally, two URLs that give the same data have the same host.
-
-The default data is never empty, and each of its bytes is ASCII.
 -/
 
 @[expose] public section
@@ -452,7 +444,9 @@ theorem defaultAuthData_spec {url : String} {data : ByteArray}
   | name t => exact (urlHost_name_spec hu).1
   | ipv6 a => simp [hostText]
 
-/-- Two URLs whose hosts are IPv6 literals give the same data exactly when the addresses match. -/
+/-- Two URLs whose hosts are IPv6 literals give the same data exactly when the addresses match.
+
+So every spelling of an address signs the same bytes, and two different addresses never do. -/
 theorem defaultAuthData_eq_iff_of_ipv6 {url url' : String} {address address' : Vector UInt16 8}
     (host : urlHost url = .ok (.ipv6 address)) (host' : urlHost url' = .ok (.ipv6 address')) :
     defaultAuthData url = defaultAuthData url' ↔ address = address' := by

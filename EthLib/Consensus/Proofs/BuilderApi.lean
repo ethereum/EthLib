@@ -9,27 +9,9 @@ public import EthLib.Consensus.Transition.Block
 /-!
 # Proofs: the Builder API
 
-The two domain types of the Builder API set the bit of the application mask.
+No domain of a fork equals a domain of the Builder API, at any fork version or validators root.
 
-No domain type of a fork sets it, so none of them equals either type.
-
-So no domain of a fork equals a domain of the Builder API, at any fork version or validators root.
-
-The two domains of the Builder API also differ from each other.
-
-From Bellatrix to Fulu, blinding a body or a block always succeeds and keeps its root.
-
-So a signature over a blinded block is a signature over the full block.
-
-When the block names the proposer of the state, the two checks of a signature agree.
-
-Unblinding with a payload of the same header undoes blinding, and blinding undoes unblinding.
-
-So the signature of the proposer checks the same on the full block as on the blinded block.
-
-From Gloas, a bid's execution payment adds at most the proposer's cap to its value.
-
-A payment at or above the cap adds the cap, and a payment at or below it adds itself.
+From Bellatrix to Fulu, a signature over a blinded block is a signature over the full block.
 -/
 
 @[expose] public section
@@ -111,7 +93,7 @@ theorem builderDomain_requestAuth_ne_builderDomain {config : Config} {version : 
     auth ≠ domain :=
   computeDomain_ne DOMAIN_BUILDER_REQUEST_AUTH_ne_DOMAIN_APPLICATION_BUILDER built computed
 
-/-- The execution payment adds at most the cap to the value of a bid. -/
+/-- From Gloas, the execution payment adds at most the proposer's cap to the value of a bid. -/
 theorem builderBidValue_le (value executionPayment : Gwei) (preferences : BuilderPreferences) :
     builderBidValue value executionPayment preferences ≤
       value.toNat + preferences.maxExecutionPayment.toNat :=

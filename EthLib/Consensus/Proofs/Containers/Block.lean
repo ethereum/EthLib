@@ -21,13 +21,7 @@ At Fulu the body has the thirteen fields of Electra, and at Gloas the thirteen f
 
 At Heze the body has eleven of the thirteen places of Gloas, and two gaps.
 
-Each field that Heze keeps sits at the place it has at Gloas.
-
 The vectors whose length comes from the preset need that length to be positive.
-
-The genesis block holds the state root, and the defaults of every other field.
-
-A block has the root of its header, whose last field is the root of the body of the block.
 -/
 
 @[expose] public section

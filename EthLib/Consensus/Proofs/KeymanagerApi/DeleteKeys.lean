@@ -6,19 +6,9 @@ public import EthLib.Consensus.Proofs.SlashingProtection
 /-!
 # Proofs: listing and deleting keys through the Keymanager API
 
-The list gives the keys that the client holds, in order.
-
 A delete gives one status for each key of the request, in order, and keeps the record.
 
 Afterwards the client holds no key of the request, unless it holds that key read-only.
-
-A key named twice in a request is deleted at most once.
-
-The data returned names only keys whose status is deleted or not active.
-
-For each such key it holds all the blocks and votes that the record holds.
-
-A delete sent again returns the same data.
 -/
 
 @[expose] public section

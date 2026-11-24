@@ -8,17 +8,7 @@ public import EthLib.Consensus.Proofs.Containers.Execution
 
 A builder serves a request exactly when its four rules hold.
 
-So it serves only the key of the proposer of the slot of its state.
-
-A request that it does not serve gets 400.
-
-Every payload has a bid, and that bid carries the header of the payload.
-
 A proposer accepts a bid exactly when its three rules hold.
-
-So a bid whose signature verifies is accepted when its payload extends the state.
-
-The payload must also pay the fee recipient that the proposer registered.
 -/
 
 @[expose] public section
@@ -108,7 +98,7 @@ theorem processBid_ok_iff {config : Config} {checks : SignatureChecks}
   (try rename_i b; cases b) <;>
   simp [*, bind, Except.bind, throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
 
-/-- A bid on a payload that extends the state and pays the fee recipient is accepted.
+/-- A bid on a payload that extends the state and pays the registered fee recipient is accepted.
 
 This holds when the signature of the bid verifies. -/
 theorem processBid_getBid {config : Config} {checks : SignatureChecks}
