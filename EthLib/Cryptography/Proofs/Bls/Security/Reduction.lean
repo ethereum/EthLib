@@ -11,18 +11,6 @@ The reduction follows [Boneh, Lynn, Shacham](https://hovav.net/ucsd/dist/sigs.pd
 
 It takes the simple form: it guesses which hash entry the forgery uses.
 
-The reduction gets `X1 = a • g1`, `X2 = a • g2` and `Y = c • g2`.
-
-It gives the adversary the public key `X1`, guesses a position `j`, and answers the oracles itself.
-
-The `j`-th new message hashes to `Y + s • g2`, any other to `s • g2`, with `s` fresh.
-
-It signs a message with hash `s • g2` as `s • X2`, which is `a • (s • g2)`.
-
-A forgery `σ` on the `j`-th message is `a • (Y + s • g2)`, so `σ - s • X2` is `(a * c) • g2`.
-
-A run of at most `q` hash calls fills at most `q` positions, and the guess is uniform among them.
-
 So a forger that wins with probability `ε` gives a solver that wins with at least `ε / q`.
 
 The source's theorem has the factor `e * (qS + 1)` instead, for `qS` signing requests.
@@ -133,6 +121,7 @@ def embedHash (g₂ Y : G₂) (j : ℕ) (m : M) : StateT (State F M) ProbComp G�
   match lookup m st.table with
   | some (k, s) => pure (embed g₂ Y j k s, { st with calls := st.calls + 1 })
   | none =>
+    -- The `j`-th new message hashes to `Y + s • g2`, any other to `s • g2`, with `s` fresh.
     (fun s => (embed g₂ Y j st.table.length s,
       { st with table := st.table ++ [(m, s)], calls := st.calls + 1 })) <$> ($ᵗ F)
 
@@ -143,6 +132,7 @@ At an entry other than `j` it is `s • X2`.
 At `j` the reduction cannot sign, and returns 0. -/
 def embedSignature (X₂ : G₂) (j : ℕ) (m : M) (st : State F M) : G₂ :=
   match lookup m st.table with
+  -- The reduction signs a message with hash `s • g2` as `s • X2`, which is `a • (s • g2)`.
   | some (k, s) => if k = j then 0 else s • X₂
   | none => 0
 
@@ -160,13 +150,18 @@ def embedImpl (g₂ X₂ Y : G₂) (j : ℕ) : QueryImpl (Spec M G₂) (StateT (
 /-- The reduction's answer: `σ - s • X2` when the forged message is the entry at `j`. -/
 def extract (X₂ : G₂) (j : ℕ) (m : M) (σ : G₂) (st : State F M) : G₂ :=
   match lookup m st.table with
+  -- A forgery `σ` on the `j`-th message is `a • (Y + s • g2)`.
+  --
+  -- So `σ - s • X2` is `(a * c) • g2`.
   | some (k, s) => if k = j then σ - s • X₂ else 0
   | none => 0
 
 /-- The co-CDH solver built from a forger, for a budget of `q` hash calls. -/
 def reduction (g₂ : G₂) (adversary : Adversary G₁ G₂ M) (q : ℕ) : CoCdhAdversary G₁ G₂ :=
   fun X₁ X₂ Y => do
+    -- The reduction gets `X1 = a • g1`, `X2 = a • g2` and `Y = c • g2`, and guesses a position `j`.
     let j ← $[0..q - 1]
+    -- It gives the adversary the public key `X1`, and answers the oracles itself.
     let ((m, σ, _), st) ←
       (simulateQ (embedImpl (F := F) g₂ X₂ Y j) (run adversary X₁)).run State.init
     return extract X₂ j m σ st
@@ -483,7 +478,9 @@ theorem forgeAdvantage_le [DecidableEq G₂] (scheme : Scheme G₁ G₂) (hsound
       q * coCdhAdvantage F scheme.g₁ scheme.g₂ (reduction (F := F) scheme.g₂ adversary q) := by
   obtain ⟨n, rfl⟩ : ∃ n, q = n + 1 := ⟨q - 1, by omega⟩
   let : MeasurableSpace F := ⊤
-  -- The table of every run has at most `n + 1` entries.
+  -- A run of at most `q` hash calls fills at most `q` positions.
+  --
+  -- So the table of every run has at most `n + 1` entries.
   have hlen : ∀ a : F, ∀ z ∈ support (gameRun scheme.g₂ adversary (a • scheme.g₁) a),
       z.2.table.length ≤ n + 1 := by
     intro a z hz
@@ -501,6 +498,7 @@ theorem forgeAdvantage_le [DecidableEq G₂] (scheme : Scheme G₁ G₂) (hsound
         (n + 1 : ℕ) * Pr{let g ← reduction (F := F) scheme.g₂ adversary (n + 1) (a • scheme.g₁)
                             (a • scheme.g₂) (c • scheme.g₂)}[g = (a * c) • scheme.g₂] := by
     intro a c
+    -- The guess is uniform among those positions.
     rw [prEvent_reduction, Nat.cast_add, Nat.cast_one,
       ENNReal.mul_div_cancel (by positivity) (by simp)]
     exact (prEvent_wins_le_sum scheme adversary a (hlen a)).trans

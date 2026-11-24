@@ -11,17 +11,7 @@ A key whose hash has the scalar 0 hashes to 0, so its proof 0 verifies for any s
 
 The reduction for aggregates needs every key other than the honest one to have a nonzero scalar.
 
-Each new key gets a fresh uniform scalar, which is 0 with probability `1 / |F|`.
-
-The honest key is the first entry of the key table.
-
-In a game within `qK` key hash calls, the key table has at most `qK` entries.
-
-So some other key gets the scalar 0 with probability at most `(qK - 1) / |F|`.
-
-The bound is the union bound over the new entries of a table, proved for any stateful oracle.
-
-It also bounds the message table and the hash calls of a run after the honest key hash.
+The module also bounds the message table, and the hash calls of a run after the honest key hash.
 -/
 
 @[expose] public section
@@ -116,6 +106,7 @@ theorem badOnGrowth_impl (g₂ : G₂) (a : F) (pk : G₁) :
       · simp only [support_map, Set.mem_image] at hz
         obtain ⟨_, -, rfl⟩ := hz
         simp
+      -- Each new key gets a fresh uniform scalar, which is 0 with probability `1 / |F|`.
       · rw [prEvent_map]
         refine (prEvent_mono _ _ (· = 0) fun u hu => ?_).trans
           (SampleableType.prEvent_uniformSample_eq_singleton_natCard 0).le
@@ -190,12 +181,18 @@ theorem prEvent_zeroKey_le (scheme : Scheme G₁ G₂) (adversary : Adversary G�
         (run adversary (a • scheme.g₁) (a • (t • scheme.g₂)))).run
           (State.withKey (a • scheme.g₁) t)}[ZeroKey (a • scheme.g₁) w.2] ≤
       ((qK - 1 : ℕ) : ℝ≥0∞) * (Nat.card F : ℝ≥0∞)⁻¹ := by
+  -- In a game within `qK` key hash calls, the key table has at most `qK` entries.
   have hsz : ∀ z ∈ support ((simulateQ (impl scheme.g₂ a)
       (run adversary (a • scheme.g₁) (a • (t • scheme.g₂)))).run
         (State.withKey (a • scheme.g₁) t)), z.2.keyTable.length ≤ qK := by
     intro z hz
     exact (simulateQ_run_preservesInv _ _ (impl_preservesInv_keyLength scheme.g₂ a) _ _
       (by simp [State.withKey]) z hz).trans (hq.calls_le_of_mem_support hz).2
+  -- The bound is the union bound over the new entries of a table, proved for any stateful oracle.
+  --
+  -- The honest key is the first entry of the key table.
+  --
+  -- So some other key gets the scalar 0 with probability at most `(qK - 1) / |F|`.
   have h := (badOnGrowth_impl (M := M) scheme.g₂ a (a • scheme.g₁)).prEvent_bad_le _
     (State.withKey (a • scheme.g₁) t) (fun ⟨e, he, hne, _⟩ => hne (by
       simp only [State.withKey, List.mem_singleton] at he

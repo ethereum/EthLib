@@ -9,37 +9,13 @@ import EthLib.Base.Proofs.Forall2
 
 This carries the bound of the aggregate game to the bytes that EthLib reads.
 
-The forger sees compressed keys, hashes, signatures and proofs.
-
-It returns bytes: keys with their proofs, a message, and an aggregate signature.
-
-It wins if every proof passes proof verification, §3.3.3 of the BLS draft.
+The forger wins if every proof passes proof verification, §3.3.3 of the BLS draft.
 
 The honest key must be among the keys, and the message never signed.
 
 The aggregate must pass fast aggregate verification, §3.3.4, on the message.
 
 <https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04#section-3.3>
-
-The two hashes to `G2`, under the message tag and the key tag, are independent random oracles.
-
-Their distinct tags separate their domains, and the model assumes them independent.
-
-The key hash of bytes that decode to a multiple of `g1` is the game's key hash of that element.
-
-Distinct such bytes decode to distinct elements, so this is a random oracle on them.
-
-Other bytes get their own lazily drawn uniform answers, from the coins of the game.
-
-Verification never hashes them, since key validation rejects them first.
-
-The run of the game accepts a forger with any output that it reads as an aggregate forgery.
-
-A game that wins only when the byte game wins on that reading is won at most as often.
-
-Decoding the output gives a forger of the group game that wins at least as often.
-
-So the group bound applies, over the scalars modulo `r`, with `qK` at most `r`.
 -/
 
 @[expose] public section
@@ -56,7 +32,11 @@ abbrev GroupSpec := Spec ByteArray G1Sub G2Sub
 
 /-- A forger on bytes.
 
-It receives the encoded honest key and proof, and its oracles answer with bytes. -/
+It receives the encoded honest key and proof, and its oracles answer with bytes.
+
+It sees compressed keys, hashes, signatures and proofs.
+
+It returns bytes: keys with their proofs, a message, and an aggregate signature. -/
 abbrev ByteAdversary := Adversary ByteArray ByteArray ByteArray
 
 /-- The forger's oracles, answered through the group oracles.
@@ -76,8 +56,14 @@ noncomputable def encodingImpl :
       (query (spec := GroupSpec) (.inr (.inl (.inr m))) : OracleComp GroupSpec G2Sub))
   | .inr (.inr x) => fun cache =>
     match decodeKey x with
+    -- Bytes that decode to a multiple of `g1` get the game's key hash of that element.
+    --
+    -- Distinct such bytes decode to distinct elements, so this is a random oracle on them.
     | some P => (fun σ => (G2Sub.encode σ, cache)) <$>
         (query (spec := GroupSpec) (.inr (.inr P)) : OracleComp GroupSpec G2Sub)
+    -- Other bytes get their own lazily drawn uniform answers, from the coins of the game.
+    --
+    -- Verification never hashes them, since key validation rejects them first.
     | none =>
       match cache.lookup x with
       | some t => pure (G2Sub.encode (t • g2), cache)
@@ -340,6 +326,10 @@ end Read
 
 This holds in the random oracle model, for the hashes under the message and key tags.
 
+The two hashes to `G2`, under the message tag and the key tag, are independent random oracles.
+
+Their distinct tags separate their domains, and the model assumes them independent.
+
 Each run makes at most `q` message hash calls and `qK` key hash calls, with `qK` at most `r`.
 
 The counts include signing, the honest proof and verification.
@@ -356,6 +346,13 @@ theorem byteForgeAdvantage_le_coCdhAdvantage (adversary : ByteAdversary) {q qK :
     byteForgeAdvantage adversary ≤
       q * coCdhAdvantage Scalar g1 g2 (reduction (F := Scalar) g2 adversary.toGroup q) +
         ((q + qK - 1 : ℕ) : ℝ≥0∞) * (Fr.modulus : ℝ≥0∞)⁻¹ := by
+  -- The run of the game accepts a forger with any output that it reads as an aggregate forgery.
+  --
+  -- A game that wins only when the byte game wins on that reading is won at most as often.
+  --
+  -- Decoding the output gives a forger of the group game that wins at least as often.
+  --
+  -- So the group bound applies, over the scalars modulo `r`, with `qK` at most `r`.
   have hb := forgeAdvantage_le blsScheme blsScheme_sound G1Sub.exists_eq_smul_g1
     adversary.toGroup hq0 (by rwa [ZMod.ringChar_zmod_n])
     ((byteHashCallBound_iff adversary q qK).mp hq)

@@ -12,17 +12,6 @@ The reduction for aggregates programs the key hashes with the hash of the forged
 So it must know that hash before the run, while the game samples it at the first call.
 
 This file shows that the two orders give the same distribution.
-
-A variant of the message hash fixes to `z` the scalar of its new message at position `j`.
-
-Positions count from 0, as in the reduction for one key.
-
-Running the game with a uniform `z` sampled first is then the game itself.
-
-The argument is the usual one for lazy sampling, for one sample.
-
-- Before the message at position `j`, a step either ignores `z` or uses it as its fresh sample.
-- After it, the two oracles agree.
 -/
 
 @[expose] public section
@@ -75,6 +64,7 @@ theorem EagerAt.evalDist_run {impl : QueryImpl spec (StateT σ ProbComp)}
     {implAt : F → QueryImpl spec (StateT σ ProbComp)} {used : σ → Prop}
     (h : EagerAt impl implAt used) {α : Type} (oa : OracleComp spec α) (st : σ) :
     (simulateQ impl oa).run st =ᵈ (($ᵗ F) >>= fun z => (simulateQ (implAt z) oa).run st) := by
+  -- The argument is the usual one for lazy sampling, for one sample.
   induction oa using OracleComp.inductionOn generalizing st with
   | pure a => exact (EvalDistEq.bind_const _ _).symm
   | query_bind t k ih =>
@@ -101,7 +91,9 @@ variable {F G₁ G₂ M : Type} [DecidableEq M] [CommRing F] [SampleableType F]
 
 /-- The random oracle `H` with the scalar of its new message at position `j` fixed to `z`.
 
-The new message at position `j` hashes to `z • g2`; every other call is as in `H`. -/
+The new message at position `j` hashes to `z • g2`; every other call is as in `H`.
+
+Positions count from 0, as in the reduction for one key. -/
 def hashAt (g₂ : G₂) (j : ℕ) (z : F) (m : M) : StateT (State F M) ProbComp G₂ := fun st =>
   match lookup m st.table with
   | some _ => hash g₂ m st
@@ -203,6 +195,7 @@ theorem eagerAt_implAt (g₂ : G₂) (a : F) (j : ℕ) :
     EagerAt (impl (M := M) (G₁ := G₁) g₂ a) (implAt g₂ a j)
       fun st => j < st.msg.table.length := by
   refine ⟨?_, ?_, ?_⟩
+  -- After the message at position `j`, the two oracles agree.
   · intro z t st hst
     rcases t with n | (m | m) | x
     · rfl
@@ -235,6 +228,7 @@ theorem eagerAt_implAt (g₂ : G₂) (a : F) (j : ℕ) :
       · simp only [support_map, Set.mem_image] at hx
         obtain ⟨_, -, rfl⟩ := hx
         exact hst
+  -- Before the message at position `j`, a step either ignores `z` or uses it as its fresh sample.
   · intro t st hst
     rcases t with n | (m | m) | y
     · exact Or.inl fun _ => rfl

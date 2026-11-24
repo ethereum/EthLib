@@ -13,18 +13,6 @@ Keys lie in `G1` and signatures in `G2`.
 
 The co-CDH problem also gives `a • g2`, which signs on the honest key hash.
 
-The reduction programs the hash of the forged message to an element `Z`.
-
-It programs the key hash of every key `x` other than the honest key to `r x • Z`, with `r x` known.
-
-A valid proof `π` on `x = sk • g1` is then `sk • (r x • Z)`, so `(r x)⁻¹ • π` is `sk • Z`.
-
-A valid aggregate `σ` is the sum of the secrets of all keys, times `Z`.
-
-Subtracting the share of the other keys leaves `n • (a • Z)`, for `n` copies of `pk = a • g1`.
-
-Dividing by `n` gives `a • Z`; when `Z` is the challenge `c • g2`, this is `(a * c) • g2`.
-
 The step needs three facts that the game does not give.
 
 - Every key is a multiple of `g1`, so that it has a secret.
@@ -34,10 +22,6 @@ The step needs three facts that the game does not give.
 The count is nonzero when the honest key is a key and the characteristic exceeds the key count.
 
 The characteristic zero also suffices.
-
-The game checks each proof against the key hash at its position in a list.
-
-The reduction will read `r x` from its table of key hashes, so a function of the key suffices here.
 
 The bound of the game, in its own module, pays three terms around this step.
 
@@ -61,7 +45,12 @@ def otherShare (pk : G₁) (r : G₁ → F) (keys : List (G₁ × G₂)) : G₂ 
 
 /-- The reduction's answer from an aggregate `σ`.
 
-It removes the share of the other keys and divides by the number of copies of `pk`. -/
+It removes the share of the other keys and divides by the number of copies of `pk`.
+
+The game checks each proof against the key hash at its position in a list.
+
+The reduction will read `r x` from its table of key hashes, so a function of the key suffices here.
+-/
 def extractAggregate (pk : G₁) (r : G₁ → F) (keys : List (G₁ × G₂)) (σ : G₂) : G₂ :=
   ((keys.map Prod.fst).count pk : F)⁻¹ • (σ - otherShare pk r keys)
 
@@ -100,7 +89,9 @@ theorem sum_smul_eq_count_add_otherShare {scheme : Scheme G₁ G₂} (hsound : s
       simp [add_smul]
       abel
     · obtain ⟨hr, hdh⟩ := hproofs k List.mem_cons_self hk
-      -- A valid proof on `r x • Z` is `s x • (r x • Z)`, so `(r x)⁻¹` times it is `s x • Z`.
+      -- A valid proof `π` on `x = s x • g1` is `s x • (r x • Z)`.
+      --
+      -- So `(r x)⁻¹ • π` is `s x • Z`.
       have hπ : k.2 = s k.1 • (r k.1 • Z) := (hsound _ _ _).mp (by rwa [← hs k List.mem_cons_self])
       have hshare : (r k.1)⁻¹ • k.2 = s k.1 • Z := by
         rw [hπ, smul_smul, smul_smul]
@@ -129,6 +120,11 @@ theorem extractAggregate_eq {scheme : Scheme G₁ G₂} (hsound : scheme.Sound F
     (hcount : ((keys.map Prod.fst).count (a • scheme.g₁) : F) ≠ 0)
     (hagg : scheme.isDh (keys.map Prod.fst).sum Z σ = true) :
     extractAggregate (a • scheme.g₁) r keys σ = a • Z := by
+  -- The reduction programs the hash of the forged message to an element `Z`.
+  --
+  -- It programs the key hash of every key `x` other than the honest key to `r x • Z`.
+  --
+  -- It knows each `r x`.
   classical
   -- The secret of the honest key is `a`; any other key in the list gets a secret it has.
   let s : G₁ → F := fun x =>
@@ -140,9 +136,15 @@ theorem extractAggregate_eq {scheme : Scheme G₁ G₂} (hsound : scheme.Sound F
     · simp only [s, hx, ite_false, hkeys k hk, dite_true]
       exact (hkeys k hk).choose_spec
   have ha : s (a • scheme.g₁) = a := by simp [s]
+  -- A valid aggregate `σ` is the sum of the secrets of all keys, times `Z`.
   have hσ : σ = (keys.map fun k => s k.1).sum • Z := by
     rw [sum_map_fst_eq_sum_smul scheme.g₁ s hs] at hagg
     exact (hsound _ _ _).mp hagg
+  -- Subtracting the share of the other keys leaves `n • (a • Z)`, for `n` copies of `pk = a • g1`.
+  --
+  -- Dividing by `n` gives `a • Z`.
+  --
+  -- When `Z` is the challenge `c • g2`, this is `(a * c) • g2`.
   rw [extractAggregate, hσ, sum_smul_eq_count_add_otherShare hsound hs ha hproofs,
     add_sub_cancel_right, smul_smul, inv_mul_cancel₀ hcount, one_smul]
 

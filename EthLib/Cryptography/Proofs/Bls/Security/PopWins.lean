@@ -8,25 +8,6 @@ public import EthLib.Cryptography.Proofs.Bls.Security.PopReduction
 
 The game here fixes the scalar `z` of the message hash at position `j`.
 
-Take a run that wins with its forged message at position `j`.
-
-The message hash is then `z • g2`, and each key hash is its table scalar times `g2`.
-
-Through the projection, a key other than the honest one with table scalar `s` gets `s * z⁻¹`.
-
-Its hash `s • g2` is then that scalar times `z • g2`, as the extraction step needs.
-
-So the reduction's answer is `(a * z) • g2`, under these assumptions.
-
-- The scheme is sound: it accepts exactly the co-Diffie-Hellman tuples.
-- Every element of `G1` is a multiple of `g1`.
-- `z ≠ 0`, and no key other than the honest one has the scalar 0.
-- The number of copies of the honest key is not zero in the scalars.
-
-A winning run never signed its message, so it is before the bad event of the coupling.
-
-So such a winning run at `j` is at most as likely as a success of the reduction with the guess `j`.
-
 The bound of the game pays for the zero scalars, and bounds the honest count by the key hash calls.
 -/
 
@@ -151,13 +132,15 @@ theorem keyCalls_of_mem_support {g₂ : G₂} {a : F} {j : ℕ} {z : F}
 
 /-- A winning run whose forged message sits at position `j` gives the reduction `(a * z) • g2`.
 
-Assume the scheme is sound and every element of `G1` is a multiple of `g1`, and let `z ≠ 0`.
+Assume the scheme is sound: it accepts exactly the co-Diffie-Hellman tuples.
+
+Assume every element of `G1` is a multiple of `g1`, and let `z ≠ 0`.
 
 Assume also that no key other than the honest one has the scalar 0.
 
 Assume the number of copies of the honest key is not zero in the scalars.
 
-The run never signed the message at `j`, so it is before the bad event. -/
+The run never signed the message at `j`, so it is before the bad event of the coupling. -/
 theorem extract_of_wins {scheme : Scheme G₁ G₂} (hsound : scheme.Sound F)
     (hgen : ∀ x : G₁, ∃ sk : F, x = sk • scheme.g₁) {adversary : Adversary G₁ G₂ M}
     {a z t : F} (hz : z ≠ 0) {j : ℕ} {p : Output G₁ G₂ M × State F G₁ M}
@@ -169,6 +152,9 @@ theorem extract_of_wins {scheme : Scheme G₁ G₂} (hsound : scheme.Sound F)
     (hcount : (honestCount (a • scheme.g₁) p : F) ≠ 0) :
     extract (a • scheme.g₁) j p.1 (projectState (a • scheme.g₁) j z p.2) =
         (a * z) • scheme.g₂ ∧ ¬Bad j p.2.msg := by
+  -- Take a run that wins with its forged message at position `j`.
+  --
+  -- The message hash is then `z • g2`.
   obtain ⟨k, s, hk, hh⟩ := msgHash_of_mem_support hp
   obtain ⟨s', hj'⟩ := hj
   rw [hk] at hj'
@@ -178,6 +164,7 @@ theorem extract_of_wins {scheme : Scheme G₁ G₂} (hsound : scheme.Sound F)
     (implAt_preservesInv_scalarAt scheme.g₂ a k z) _ _
     (by simp [State.withKey, Security.State.init]) p hp _ hentry
   subst hsz
+  -- Each key hash is its table scalar times `g2`.
   obtain ⟨hhs, hlk⟩ := keyHashes_of_mem_support hp
   simp only [wins, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true] at hwin
   obtain ⟨⟨⟨⟨-, hm⟩, -⟩, hproofs⟩, hagg⟩ := hwin
@@ -186,6 +173,7 @@ theorem extract_of_wins {scheme : Scheme G₁ G₂} (hsound : scheme.Sound F)
         extractAggregate (a • scheme.g₁)
           (fun x => keyScalar x (projectState (a • scheme.g₁) k s p.2)) p.1.1.1 p.1.1.2.2 := by
       simp [extract, projectState, shiftState, lookup_shift, hk]
+    -- So the reduction's answer is `(a * z) • g2`, under the assumptions of the theorem.
     rw [hext, extractAggregate_eq hsound (Z := s • scheme.g₂) (fun x _ => hgen x.1) ?_ hcount
       (hh ▸ hagg), smul_smul]
     intro x hx hne
@@ -194,12 +182,16 @@ theorem extract_of_wins {scheme : Scheme G₁ G₂} (hsound : scheme.Sound F)
       rw [keyScalar, hu]
       rintro rfl
       exact hzero ⟨(x.1, 0), List.mem_of_getElem? (getElem?_of_lookup hu), hne, rfl⟩
+    -- Through the projection, a key other than the honest one with table scalar `s` gets `s * z⁻¹`.
+    --
+    -- Its hash `s • g2` is then that scalar times `z • g2`, as the extraction step needs.
     rw [keyScalar_projectState]
     simp only [hne, ↓reduceIte]
     rw [smul_smul, mul_assoc, inv_mul_cancel₀ hz, mul_one]
     refine ⟨mul_ne_zero hu0 (inv_ne_zero hz), hproofs (x, keyScalar x.1 p.2 • scheme.g₂) ?_⟩
     rw [hhs, ← List.map_prod_left_eq_zip]
     exact List.mem_map_of_mem hx
+  -- A winning run never signed its message, so it is before the bad event of the coupling.
   · rw [hentry] at he
     cases he
     exact hs

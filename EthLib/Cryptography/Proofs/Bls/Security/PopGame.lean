@@ -9,24 +9,6 @@ This is the proof-of-possession scheme of the BLS draft, §3.3.
 
 <https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04#section-3.3>
 
-A proof of possession of the key `a • g1` is `a • H'(a • g1)`, with `H'` a second hash into `G2`.
-
-The draft requires `H'` to be domain separated from the message hash `H`, §3.3.1.
-
-Fast aggregate verification sums the keys, then verifies one signature on one message, §3.3.4.
-
-The draft requires a valid proof for every key it sums; otherwise a rogue key forges.
-
-In the game one key is honest, and the adversary chooses all the others.
-
-It receives the honest key and its proof, and asks for signatures under the honest key.
-
-It wins with keys that all carry valid proofs, the honest key among them, and a fresh message.
-
-Its aggregate signature on that message must verify under the sum of the keys.
-
-Both hashes are random oracles.
-
 Unlike the draft, the game does not reject the identity key or an identity sum.
 
 Accepting more outputs only makes the adversary's task easier.
@@ -53,12 +35,16 @@ open OracleComp OracleSpec ENNReal
 
 variable {F G₁ G₂ M : Type}
 
-/-- The oracles: uniform coins, the message hash `H`, signing, and the key hash `H'`. -/
+/-- The oracles: uniform coins, the message hash `H`, signing, and the key hash `H'`.
+
+Both hashes are random oracles. -/
 abbrev Spec (M G₁ G₂ : Type) := unifSpec + (((M →ₒ G₂) + (M →ₒ G₂)) + (G₁ →ₒ G₂))
 
 /-- An adversary against aggregates with proofs of possession.
 
-It receives the honest key and its proof.
+In the game one key is honest, and the adversary chooses all the others.
+
+It receives the honest key and its proof, and asks for signatures under the honest key.
 
 It returns pairs of a key and a proof, a message, and an aggregate signature. -/
 structure Adversary (G₁ G₂ M : Type) where
@@ -86,6 +72,8 @@ variable [DecidableEq M] [DecidableEq G₁] [CommRing F] [SampleableType F]
   [AddCommGroup G₁] [Module F G₁] [AddCommGroup G₂] [Module F G₂]
 
 /-- The random oracle `H'` on keys.
+
+The draft requires `H'` to be domain separated from the message hash `H`, §3.3.1.
 
 A new key gets `t • g2` for a fresh uniform scalar `t`, and a repeated one its first answer. -/
 def keyHash (g₂ : G₂) (x : G₁) : StateT (State F G₁ M) ProbComp G₂ := fun st =>
@@ -147,7 +135,11 @@ def wins (scheme : Scheme G₁ G₂) (pk : G₁) (signed : List M)
     (z : (List (G₁ × G₂) × M × G₂) × G₂ × List G₂) : Bool :=
   let ((keys, m, σ), h, hs) := z
   decide (pk ∈ keys.map Prod.fst) && decide (m ∉ signed) && decide (hs.length = keys.length) &&
+    -- The draft requires a valid proof for every key it sums.
+    --
+    -- Otherwise a rogue key forges.
     (keys.zip hs).all (fun (k, h') => scheme.isDh k.1 h' k.2) &&
+    -- Fast aggregate verification sums the keys, then checks one signature on one message, §3.3.4.
     scheme.isDh (keys.map Prod.fst).sum h σ
 
 /-- The game: sample the secret key, give the adversary the key and its proof, run it, check.
@@ -160,6 +152,9 @@ def experiment (scheme : Scheme G₁ G₂) (adversary : Adversary G₁ G₂ M) :
   let a ← $ᵗ F
   let pk := a • scheme.g₁
   let (z, st) ← (do
+    -- A proof of possession of the key `a • g1` is `a • H'(a • g1)`.
+    --
+    -- Here `H'` is a second hash into `G2`.
     let hpk ← keyHash scheme.g₂ pk
     simulateQ (impl scheme.g₂ a) (run adversary pk (a • hpk))).run State.init
   return (wins scheme pk st.msg.signed z, st)
