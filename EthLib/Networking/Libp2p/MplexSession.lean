@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.List
 public import EthLib.Networking.Libp2p.Mplex
 
 /-!
@@ -71,12 +72,11 @@ abbrev Streams := List (StreamKey × StreamState)
 
 /-- The state of a stream, if the table has it. -/
 def Streams.find? (streams : Streams) (key : StreamKey) : Option StreamState :=
-  (List.find? (·.1 = key) streams).map (·.2)
+  streams.lookup key
 
 /-- The table with the state of a stream set, in place if the table has it, else at the end. -/
 def Streams.set (streams : Streams) (key : StreamKey) (state : StreamState) : Streams :=
-  if streams.any (·.1 = key) then streams.map fun e => if e.1 = key then (key, state) else e
-  else streams ++ [(key, state)]
+  Base.replaceKey streams key state
 
 /-- The table after one frame, written by the other side or by this side.
 

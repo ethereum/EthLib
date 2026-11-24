@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.List
 public import EthLib.Networking.Libp2p.MplexSession
 
 /-!
@@ -17,50 +18,13 @@ open EthLib.Networking.Libp2p.Mplex
 
 /-- Setting a stream makes the table report that state for it. -/
 theorem find?_set_self (streams : Streams) (key : StreamKey) (s : StreamState) :
-    (streams.set key s).find? key = some s := by
-  unfold Streams.set
-  by_cases h : streams.any (·.1 = key) = true
-  · simp only [h, ↓reduceIte]
-    induction streams with
-    | nil => simp at h
-    | cons e t ih =>
-      by_cases he : e.1 = key
-      · simp [Streams.find?, he]
-      · simp only [List.any_cons, he, decide_false, Bool.false_or] at h
-        simpa [Streams.find?, List.find?_cons, he] using ih h
-  · simp only [h]
-    induction streams with
-    | nil => simp [Streams.find?]
-    | cons e t ih =>
-      by_cases he : e.1 = key
-      · simp [List.any_cons, he] at h
-      · simp only [List.any_cons, he, decide_false, Bool.false_or] at h
-        simpa [Streams.find?, List.find?_cons, he] using ih h
+    (streams.set key s).find? key = some s :=
+  Base.lookup_replaceKey_self streams key s
 
 /-- Setting a stream leaves every other stream as it was. -/
 theorem find?_set_of_ne (streams : Streams) {key key' : StreamKey} (s : StreamState)
-    (h : key' ≠ key) : (streams.set key s).find? key' = streams.find? key' := by
-  unfold Streams.set
-  by_cases hc : streams.any (·.1 = key) = true
-  · simp only [hc]
-    clear hc
-    induction streams with
-    | nil => simp
-    | cons e t ih =>
-      by_cases he : e.1 = key'
-      · have : e.1 ≠ key := fun h' => h (he ▸ h' ▸ rfl)
-        simp [Streams.find?, he, h]
-      · by_cases hk : e.1 = key
-        · simpa [Streams.find?, List.find?_cons, he, hk, Ne.symm h] using ih
-        · simpa [Streams.find?, List.find?_cons, he, hk] using ih
-  · simp only [hc]
-    clear hc
-    induction streams with
-    | nil => simp [Streams.find?, Ne.symm h]
-    | cons e t ih =>
-      by_cases he : e.1 = key'
-      · simp [Streams.find?, he]
-      · simpa [Streams.find?, List.find?_cons, he] using ih
+    (h : key' ≠ key) : (streams.set key s).find? key' = streams.find? key' :=
+  Base.lookup_replaceKey_of_ne streams s h
 
 /-- An accepted frame leaves the state of every other stream unchanged.
 

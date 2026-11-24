@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.List
 public import EthLib.Networking.Libp2p.Yamux
 
 /-!
@@ -95,11 +96,7 @@ def Session.find? (session : Session) (id : UInt32) : Option Stream :=
 
 /-- The session with the stream of an ID set, in place if the table has it, else at the end. -/
 def Session.set (session : Session) (id : UInt32) (s : Stream) : Session :=
-  { session with
-    streams :=
-      if session.streams.any (·.1 = id) then
-        session.streams.map fun e => if e.1 = id then (id, s) else e
-      else session.streams ++ [(id, s)] }
+  { session with streams := Base.replaceKey session.streams id s }
 
 /-- Whether this side opens the streams of an ID: odd IDs for the client, even for the server. -/
 def Session.ownsId (session : Session) (id : UInt32) : Bool :=
