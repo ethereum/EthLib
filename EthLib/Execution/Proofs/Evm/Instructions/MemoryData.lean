@@ -46,7 +46,7 @@ Each instruction keeps the size of memory a multiple of 32.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork U256 bytesToNat natToBytes byteAt byteAt_append_zeros byteAt_eq_getD
+open EthLib.Base (Fork U256 bytesToNat natToBytes byteAtOrZero byteAtOrZero_append_zeros byteAtOrZero_eq_getD
   natToBytes_add)
 open GasCosts
 
@@ -67,13 +67,13 @@ theorem wordBytes_eq_append (w : U256) {a b : Nat} (h : a + b = 32) :
   simp
 
 /-- Byte `i` of a word is the word over `256 ^ (31 - i)`, modulo 256. -/
-theorem byteAt_wordBytes (w : U256) {i : Nat} (hi : i < 32) :
-    EthLib.Base.byteAt (wordBytes w) i = UInt8.ofNat (w.toNat / 256 ^ (31 - i)) := by
-  rw [wordBytes_eq_append w (a := i + 1) (b := 31 - i) (by omega), EthLib.Base.byteAt_append]
+theorem byteAtOrZero_wordBytes (w : U256) {i : Nat} (hi : i < 32) :
+    EthLib.Base.byteAtOrZero (wordBytes w) i = UInt8.ofNat (w.toNat / 256 ^ (31 - i)) := by
+  rw [wordBytes_eq_append w (a := i + 1) (b := 31 - i) (by omega), EthLib.Base.byteAtOrZero_append]
   generalize w.toNat / 256 ^ (31 - i) = n
   have hs : (⟨(EthLib.Base.natToBytes (i + 1) n).toArray⟩ : ByteArray).size = i + 1 := by
     simp [ByteArray.size, EthLib.Base.natToBytes_length]
-  rw [hs, ite_eq_left (by omega), EthLib.Base.byteAt_eq_getD, EthLib.Base.natToBytes_succ]
+  rw [hs, ite_eq_left (by omega), EthLib.Base.byteAtOrZero_eq_getD, EthLib.Base.natToBytes_succ]
   simp [EthLib.Base.natToBytes_length]
   exact UInt8.ofNat_mod_size
 
@@ -109,7 +109,7 @@ theorem memoryReadBytes_memoryWrite_memoryReadBytes {memory : ByteArray}
 theorem loadWord_append_zeros (data : ByteArray) (start size k : Nat) :
     loadWord (data ++ ByteArray.mk (Array.replicate k 0)) start size =
       loadWord data start size := by
-  simp only [loadWord, bufferRead_eq, byteAt_append_zeros]
+  simp only [loadWord, bufferRead_eq, byteAtOrZero_append_zeros]
 
 /-- RETURNDATACOPY that pays fails exactly when its range ends past the return data. -/
 theorem returndatacopyStep_eq_error_iff {evm : Evm fork Meter} {start offset size : U256}
@@ -185,12 +185,12 @@ theorem memoryDataStep_sameContext {op : Op}
 /-- MSTORE sets the 32 bytes from its start to the bytes of the word, and keeps every other byte.
 
 Memory must start at a size that is a multiple of 32. -/
-theorem byteAt_mstoreStep {evm after : Evm fork Meter} {start value : U256} {rest : List U256}
+theorem byteAtOrZero_mstoreStep {evm after : Evm fork Meter} {start value : U256} {rest : List U256}
     (hstack : evm.stack.val = start :: value :: rest) (hmod : evm.memory.size % 32 = 0)
     (h : mstoreStep evm = .ok after) (i : Nat) :
-    byteAt after.memory i =
-      if start.toNat ≤ i ∧ i < start.toNat + 32 then byteAt (wordBytes value) (i - start.toNat)
-      else byteAt evm.memory i := by
+    byteAtOrZero after.memory i =
+      if start.toNat ≤ i ∧ i < start.toNat + 32 then byteAtOrZero (wordBytes value) (i - start.toNat)
+      else byteAtOrZero evm.memory i := by
   unfold mstoreStep at h
   obtain ⟨⟨x, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨y, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
@@ -202,19 +202,19 @@ theorem byteAt_mstoreStep {evm after : Evm fork Meter} {start value : U256} {res
   have hmod2 : e2.memory.size % 32 = 0 := by rw [m2, m1]; exact hmod
   have fit := le_size_chargeGasAndMemory hmod2 h3 (start, 32) (List.mem_singleton_self _) (by simp)
   simp only [advance]
-  rw [byteAt_memoryWrite (by rw [size_wordBytes]; exact fit), size_wordBytes]
+  rw [byteAtOrZero_memoryWrite (by rw [size_wordBytes]; exact fit), size_wordBytes]
   split
   · rfl
-  · rw [byteAt_chargeGasAndMemory h3, m2, m1]
+  · rw [byteAtOrZero_chargeGasAndMemory h3, m2, m1]
 
 /-- MSTORE8 sets the byte at its start to the lowest byte of the word, and keeps every other byte.
 
 Memory must start at a size that is a multiple of 32. -/
-theorem byteAt_mstore8Step {evm after : Evm fork Meter} {start value : U256} {rest : List U256}
+theorem byteAtOrZero_mstore8Step {evm after : Evm fork Meter} {start value : U256} {rest : List U256}
     (hstack : evm.stack.val = start :: value :: rest) (hmod : evm.memory.size % 32 = 0)
     (h : mstore8Step evm = .ok after) (i : Nat) :
-    byteAt after.memory i =
-      if i = start.toNat then UInt8.ofNat value.toNat else byteAt evm.memory i := by
+    byteAtOrZero after.memory i =
+      if i = start.toNat then UInt8.ofNat value.toNat else byteAtOrZero evm.memory i := by
   unfold mstore8Step at h
   obtain ⟨⟨x, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨y, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
@@ -227,12 +227,12 @@ theorem byteAt_mstore8Step {evm after : Evm fork Meter} {start value : U256} {re
   have fit := le_size_chargeGasAndMemory hmod2 h3 (start, 1) (List.mem_singleton_self _) (by simp)
   have hone : ({ data := #[UInt8.ofNat value.toNat] } : ByteArray).size = 1 := rfl
   simp only [advance]
-  rw [byteAt_memoryWrite (by rw [hone]; exact fit), hone]
+  rw [byteAtOrZero_memoryWrite (by rw [hone]; exact fit), hone]
   by_cases hi : i = start.toNat
   · subst hi
-    simp [byteAt, hone, ByteArray.getElem_eq_getElem_data]
+    simp [byteAtOrZero, hone, ByteArray.getElem_eq_getElem_data]
   · rw [ite_eq_right_iff.mpr (fun hc => absurd (by omega) hi),
-      ite_eq_right_iff.mpr (fun hc => absurd hc hi), byteAt_chargeGasAndMemory h3, m2, m1]
+      ite_eq_right_iff.mpr (fun hc => absurd hc hi), byteAtOrZero_chargeGasAndMemory h3, m2, m1]
 
 /-- MCOPY sets each byte of its destination range to the byte of the source range before the copy.
 
@@ -241,13 +241,13 @@ It keeps every other byte.
 So an overlap of the two ranges copies the old bytes.
 
 Memory must start at a size that is a multiple of 32. -/
-theorem byteAt_mcopyStep {evm after : Evm fork Meter} {destination source length : U256}
+theorem byteAtOrZero_mcopyStep {evm after : Evm fork Meter} {destination source length : U256}
     {rest : List U256} (hstack : evm.stack.val = destination :: source :: length :: rest)
     (hmod : evm.memory.size % 32 = 0) (h : mcopyStep evm = .ok after) (i : Nat) :
-    byteAt after.memory i =
+    byteAtOrZero after.memory i =
       if destination.toNat ≤ i ∧ i < destination.toNat + length.toNat then
-        byteAt evm.memory (source.toNat + (i - destination.toNat))
-      else byteAt evm.memory i := by
+        byteAtOrZero evm.memory (source.toNat + (i - destination.toNat))
+      else byteAtOrZero evm.memory i := by
   unfold mcopyStep at h
   obtain ⟨⟨x, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨y, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
@@ -258,8 +258,8 @@ theorem byteAt_mcopyStep {evm after : Evm fork Meter} {destination source length
   obtain ⟨rfl, s1, m1, -⟩ := popWord_of_stack hstack h1
   obtain ⟨rfl, s2, m2, -⟩ := popWord_of_stack s1 h2
   obtain ⟨rfl, -, m3, -⟩ := popWord_of_stack s2 h3
-  have hmem : ∀ j, byteAt e4.memory j = byteAt evm.memory j := fun j => by
-    rw [byteAt_chargeGasAndMemory h4, m3, m2, m1]
+  have hmem : ∀ j, byteAtOrZero e4.memory j = byteAtOrZero evm.memory j := fun j => by
+    rw [byteAtOrZero_chargeGasAndMemory h4, m3, m2, m1]
   simp only [advance]
   by_cases hz : length = 0
   · subst hz
@@ -271,9 +271,9 @@ theorem byteAt_mcopyStep {evm after : Evm fork Meter} {destination source length
     have fitDest := le_size_chargeGasAndMemory hmod3 h4 (destination, length) (by simp) hz
     simp only at fitSource fitDest
     have hsize := size_memoryReadBytes fitSource
-    rw [byteAt_memoryWrite (by rw [hsize]; exact fitDest), hsize]
+    rw [byteAtOrZero_memoryWrite (by rw [hsize]; exact fitDest), hsize]
     split
-    · rw [byteAt_memoryReadBytes fitSource, ite_eq_left_iff.mpr (fun hc => absurd (by omega) hc),
+    · rw [byteAtOrZero_memoryReadBytes fitSource, ite_eq_left_iff.mpr (fun hc => absurd (by omega) hc),
         hmem]
     · exact hmem i
 
@@ -286,14 +286,14 @@ The copy keeps every other byte.
 CALLDATACOPY and CODECOPY run this copy.
 
 Memory must start at a size that is a multiple of 32. -/
-theorem byteAt_copyToMemory {base : Nat} {data : ByteArray} {evm after : Evm fork Meter}
+theorem byteAtOrZero_copyToMemory {base : Nat} {data : ByteArray} {evm after : Evm fork Meter}
     {start offset size : U256} {rest : List U256}
     (hstack : evm.stack.val = start :: offset :: size :: rest) (hmod : evm.memory.size % 32 = 0)
     (h : copyToMemory base data evm = .ok after) (i : Nat) :
-    byteAt after.memory i =
+    byteAtOrZero after.memory i =
       if start.toNat ≤ i ∧ i < start.toNat + size.toNat then
-        byteAt data (offset.toNat + (i - start.toNat))
-      else byteAt evm.memory i := by
+        byteAtOrZero data (offset.toNat + (i - start.toNat))
+      else byteAtOrZero evm.memory i := by
   unfold copyToMemory at h
   obtain ⟨⟨x, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨y, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
@@ -304,8 +304,8 @@ theorem byteAt_copyToMemory {base : Nat} {data : ByteArray} {evm after : Evm for
   obtain ⟨rfl, s1, m1, -⟩ := popWord_of_stack hstack h1
   obtain ⟨rfl, s2, m2, -⟩ := popWord_of_stack s1 h2
   obtain ⟨rfl, -, m3, -⟩ := popWord_of_stack s2 h3
-  have hmem : ∀ j, byteAt e4.memory j = byteAt evm.memory j := fun j => by
-    rw [byteAt_chargeGasAndMemory h4, m3, m2, m1]
+  have hmem : ∀ j, byteAtOrZero e4.memory j = byteAtOrZero evm.memory j := fun j => by
+    rw [byteAtOrZero_chargeGasAndMemory h4, m3, m2, m1]
   have hlen : ({ data := (bufferRead data offset.toNat size.toNat).toArray } : ByteArray).size =
       size.toNat := by simp [ByteArray.size, bufferRead_length]
   simp only [advance, bufferBytes_eq]
@@ -319,9 +319,9 @@ theorem byteAt_copyToMemory {base : Nat} {data : ByteArray} {evm after : Evm for
   · have hmod3 : e3.memory.size % 32 = 0 := by rw [m3, m2, m1]; exact hmod
     have fit := le_size_chargeGasAndMemory hmod3 h4 (start, size) (by simp) hz
     simp only at fit
-    rw [byteAt_memoryWrite (by rw [hlen]; exact fit), hlen]
+    rw [byteAtOrZero_memoryWrite (by rw [hlen]; exact fit), hlen]
     split
-    · rw [byteAt_bufferRead, ite_eq_left_iff.mpr (fun hc => absurd (by omega) hc)]
+    · rw [byteAtOrZero_bufferRead, ite_eq_left_iff.mpr (fun hc => absurd (by omega) hc)]
     · exact hmem i
 
 /-- RETURNDATACOPY sets each byte of its range to the byte of the return data from the offset.
@@ -331,13 +331,13 @@ It keeps every other byte.
 The range of the return data must fit, or the copy fails.
 
 Memory must start at a size that is a multiple of 32. -/
-theorem byteAt_returndatacopyStep {evm after : Evm fork Meter} {start offset size : U256}
+theorem byteAtOrZero_returndatacopyStep {evm after : Evm fork Meter} {start offset size : U256}
     {rest : List U256} (hstack : evm.stack.val = start :: offset :: size :: rest)
     (hmod : evm.memory.size % 32 = 0) (h : returndatacopyStep evm = .ok after) (i : Nat) :
-    byteAt after.memory i =
+    byteAtOrZero after.memory i =
       if start.toNat ≤ i ∧ i < start.toNat + size.toNat then
-        byteAt evm.returnData (offset.toNat + (i - start.toNat))
-      else byteAt evm.memory i := by
+        byteAtOrZero evm.returnData (offset.toNat + (i - start.toNat))
+      else byteAtOrZero evm.memory i := by
   unfold returndatacopyStep at h
   obtain ⟨⟨x, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨y, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
@@ -362,18 +362,18 @@ theorem byteAt_returndatacopyStep {evm after : Evm fork Meter} {start offset siz
           simp [memoryReadBytes],
         show ∀ m : ByteArray, memoryWrite m start.toNat .empty = m from
           fun m => by simp [memoryWrite]]
-      rw [byteAt_memoryExtend, hmem,
+      rw [byteAtOrZero_memoryExtend, hmem,
         ite_eq_right_iff.mpr (fun hc => absurd hc.2 (by have := hc.1; omega))]
     · have hcover := le_ceil32_add_expandBy e3.memory.size [(start, size)] (start, size)
         (List.mem_singleton_self _) hz
       rw [hmem, ceil32_of_mod hmod] at hcover
       have fitData : offset.toNat + size.toNat ≤ e3.returnData.size := Nat.le_of_not_gt inside
       have hsize := size_memoryReadBytes fitData
-      rw [byteAt_memoryWrite (by rw [hsize, size_memoryExtend, hmem]; exact hcover), hsize]
+      rw [byteAtOrZero_memoryWrite (by rw [hsize, size_memoryExtend, hmem]; exact hcover), hsize]
       split
-      · rw [byteAt_memoryReadBytes fitData, ite_eq_left_iff.mpr (fun hc => absurd (by omega) hc),
+      · rw [byteAtOrZero_memoryReadBytes fitData, ite_eq_left_iff.mpr (fun hc => absurd (by omega) hc),
           hdata]
-      · rw [byteAt_memoryExtend, hmem]
+      · rw [byteAtOrZero_memoryExtend, hmem]
 
 /-! ## The size of memory -/
 

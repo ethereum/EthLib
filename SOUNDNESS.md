@@ -967,7 +967,7 @@ Byte `j` is byte `j` of the input XOR byte `j % 64` of the block whose counter i
 So a keystream shorter than the input, which leaves its last bytes in plaintext, or a counter that repeats, would fail it.
 `encrypt_eq_ok_iff` gives the AEAD ciphertext in the same terms, with the counter starting at 1.
 It gives the tag too: the Poly1305 tag of the MAC input of RFC 8439 §2.8, written out, under the first 32 bytes of block 0.
-`byteAt_keyStream` and `size_keyStream` give the keystream itself.
+`byteAtOrZero_keyStream` and `size_keyStream` give the keystream itself.
 `pad16_eq_iff` proves that the padding of the MAC input is the fewest zero bytes that complete a multiple of 16, so aligned input gets none.
 `getElem_serializeState` gives each byte of the serialized state, the least significant byte of each word first.
 `stateOfBytes_serializeState` and `serializeState_stateOfBytes` prove that reading 64 bytes as a state undoes the serialization.

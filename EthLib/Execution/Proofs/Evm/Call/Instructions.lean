@@ -49,7 +49,7 @@ A call keeps the size of memory a multiple of 32, and so does the caller once th
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork U256 byteAt byteAt_eq_getD)
+open EthLib.Base (Fork U256 byteAtOrZero byteAtOrZero_eq_getD)
 open EthLib.Execution.State (TransactionState)
 open GasCosts
 
@@ -197,15 +197,15 @@ The copy has the smaller of `outputSize` and the size of the output as its size.
 The caller keeps every other byte.
 
 The output range must fit in the caller's memory when `outputSize` is not zero. -/
-theorem byteAt_resumeCall [GasMeter Meter] {caller child after : Evm fork Meter} {newAccount : Nat}
+theorem byteAtOrZero_resumeCall [GasMeter Meter] {caller child after : Evm fork Meter} {newAccount : Nat}
     {outputStart outputSize : U256}
     (fit : outputSize ≠ 0 → outputStart.toNat + outputSize.toNat ≤ caller.memory.size)
     (h : resumeCall fork caller newAccount outputStart outputSize child = .ok after) (i : Nat) :
-    byteAt after.memory i =
+    byteAtOrZero after.memory i =
       if outputStart.toNat ≤ i ∧
           i < outputStart.toNat + min outputSize.toNat child.output.size then
-        byteAt child.output (i - outputStart.toNat)
-      else byteAt caller.memory i := by
+        byteAtOrZero child.output (i - outputStart.toNat)
+      else byteAtOrZero caller.memory i := by
   obtain ⟨e, h1, h⟩ := Base.bind_ok_iff.mp h
   cases h
   obtain ⟨_, -, h1⟩ := Base.bind_ok_iff.mp h1
@@ -233,10 +233,10 @@ theorem byteAt_resumeCall [GasMeter Meter] {caller child after : Evm fork Meter}
       rintro rfl
       exact hz (by simp)
     have := fit hnz
-    rw [byteAt_memoryWrite (by rw [hsize]; omega), hsize]
+    rw [byteAtOrZero_memoryWrite (by rw [hsize]; omega), hsize]
     split
     · rename_i hin
-      simp only [byteAt_eq_getD, ByteArray.data_extract, Array.getD_eq_getD_getElem?,
+      simp only [byteAtOrZero_eq_getD, ByteArray.data_extract, Array.getD_eq_getD_getElem?,
         Array.getElem?_extract]
       simp
       rw [ite_eq_left_of_eq_true _ _ (eq_true (by omega))]

@@ -30,7 +30,7 @@ So a specification can track only the size of memory and the ranges it cares abo
 
 namespace EthLib.Execution.Evm.Logic
 
-open EthLib.Base (U256 byteAt byteAt_of_size_le eq_of_byteAt)
+open EthLib.Base (U256 byteAtOrZero byteAtOrZero_of_size_le eq_of_byteAtOrZero)
 
 /-- Memory covers the range of `bytes` from `start`, and the range reads as `bytes`. -/
 def Holds (memory : ByteArray) (start : Nat) (bytes : ByteArray) : Prop :=
@@ -63,38 +63,38 @@ theorem memoryWrite_of_disjoint (h : Holds memory start bytes) {value : ByteArra
     rw [memoryReadBytes_memoryWrite_of_disjoint hw hd]; exact h.2⟩
 
 /-- Each byte of the range is the byte of `bytes`. -/
-theorem byteAt_eq (h : Holds memory start bytes) {i : Nat} (hi : i < bytes.size) :
-    byteAt memory (start + i) = byteAt bytes i := by
-  have := byteAt_memoryReadBytes h.1 i
+theorem byteAtOrZero_eq (h : Holds memory start bytes) {i : Nat} (hi : i < bytes.size) :
+    byteAtOrZero memory (start + i) = byteAtOrZero bytes i := by
+  have := byteAtOrZero_memoryReadBytes h.1 i
   rw [h.2, ite_eq_left hi] at this
   exact this.symm
 
 /-- A range holds bytes when each of its bytes in memory is the byte of `bytes`. -/
-theorem of_byteAt (fit : start + bytes.size ≤ memory.size)
-    (h : ∀ i < bytes.size, byteAt memory (start + i) = byteAt bytes i) :
+theorem of_byteAtOrZero (fit : start + bytes.size ≤ memory.size)
+    (h : ∀ i < bytes.size, byteAtOrZero memory (start + i) = byteAtOrZero bytes i) :
     Holds memory start bytes := by
-  refine ⟨fit, eq_of_byteAt (size_memoryReadBytes fit) fun i => ?_⟩
-  rw [byteAt_memoryReadBytes fit]
+  refine ⟨fit, eq_of_byteAtOrZero (size_memoryReadBytes fit) fun i => ?_⟩
+  rw [byteAtOrZero_memoryReadBytes fit]
   split
   · exact h i ‹_›
-  · exact (byteAt_of_size_le (by omega)).symm
+  · exact (byteAtOrZero_of_size_le (by omega)).symm
 
 /-- Growth keeps every range. -/
 theorem memoryExtend (h : Holds memory start bytes) (n : Nat) :
     Holds (memoryExtend memory n) start bytes :=
-  of_byteAt (by rw [size_memoryExtend]; have := h.1; omega) fun i hi => by
-    rw [byteAt_memoryExtend]
-    exact h.byteAt_eq hi
+  of_byteAtOrZero (by rw [size_memoryExtend]; have := h.1; omega) fun i hi => by
+    rw [byteAtOrZero_memoryExtend]
+    exact h.byteAtOrZero_eq hi
 
 /-- Two adjacent ranges hold their bytes in order. -/
 theorem append (h₁ : Holds memory start bytes) {more : ByteArray}
     (h₂ : Holds memory (start + bytes.size) more) : Holds memory start (bytes ++ more) := by
-  refine of_byteAt (by rw [ByteArray.size_append]; have := h₂.1; omega) fun i hi => ?_
-  rw [EthLib.Base.byteAt_append]
+  refine of_byteAtOrZero (by rw [ByteArray.size_append]; have := h₂.1; omega) fun i hi => ?_
+  rw [EthLib.Base.byteAtOrZero_append]
   split
-  · exact h₁.byteAt_eq ‹_›
+  · exact h₁.byteAtOrZero_eq ‹_›
   · rw [ByteArray.size_append] at hi
-    have := h₂.byteAt_eq (i := i - bytes.size) (by omega)
+    have := h₂.byteAtOrZero_eq (i := i - bytes.size) (by omega)
     rwa [show start + bytes.size + (i - bytes.size) = start + i by omega] at this
 
 /-- A range that holds two blocks of bytes holds the first one from its start. -/
@@ -102,17 +102,17 @@ theorem left {more : ByteArray} (h : Holds memory start (bytes ++ more)) :
     Holds memory start bytes := by
   have fit := h.1
   rw [ByteArray.size_append] at fit
-  refine of_byteAt (by omega) fun i hi => ?_
-  rw [h.byteAt_eq (by rw [ByteArray.size_append]; omega), EthLib.Base.byteAt_append, ite_eq_left hi]
+  refine of_byteAtOrZero (by omega) fun i hi => ?_
+  rw [h.byteAtOrZero_eq (by rw [ByteArray.size_append]; omega), EthLib.Base.byteAtOrZero_append, ite_eq_left hi]
 
 /-- A range that holds two blocks of bytes holds the second one after the first. -/
 theorem right {more : ByteArray} (h : Holds memory start (bytes ++ more)) :
     Holds memory (start + bytes.size) more := by
   have fit := h.1
   rw [ByteArray.size_append] at fit
-  refine of_byteAt (by omega) fun i hi => ?_
-  have := h.byteAt_eq (i := bytes.size + i) (by rw [ByteArray.size_append]; omega)
-  rw [EthLib.Base.byteAt_append, ite_eq_right (by omega), Nat.add_sub_cancel_left] at this
+  refine of_byteAtOrZero (by omega) fun i hi => ?_
+  have := h.byteAtOrZero_eq (i := bytes.size + i) (by rw [ByteArray.size_append]; omega)
+  rw [EthLib.Base.byteAtOrZero_append, ite_eq_right (by omega), Nat.add_sub_cancel_left] at this
   rwa [Nat.add_assoc]
 
 /-- A range that holds the bytes of a word reads as that word. -/

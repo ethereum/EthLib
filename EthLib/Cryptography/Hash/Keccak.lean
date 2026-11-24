@@ -573,7 +573,7 @@ Past the end of the array the lane is zero, as the sponge reads the bytes past a
 @[inline] def laneOfArray (lanes : Array UInt64) (p : Nat) : UInt64 :=
   lanes.getD (p / 8) 0
 
-open EthLib.Base (byteAt)
+open EthLib.Base (byteAtOrZero)
 
 /-- The lane read from the 8 bytes at index `i`, least significant byte first:
 
@@ -585,14 +585,14 @@ Bytes past the end of the string read as zero. -/
 @[inline] def laneAt (bytes : ByteArray) (i : Nat) : UInt64 :=
   -- Byte i + j goes to bits 8j to 8j + 7, so it is shifted by 8j.
   -- The bit ranges are disjoint, so OR adds them without carries.
-  (byteAt bytes i).toUInt64 |||                -- bits  0 to  7
-  (byteAt bytes (i + 1)).toUInt64 <<< 8 |||    -- bits  8 to 15
-  (byteAt bytes (i + 2)).toUInt64 <<< 16 |||   -- bits 16 to 23
-  (byteAt bytes (i + 3)).toUInt64 <<< 24 |||   -- bits 24 to 31
-  (byteAt bytes (i + 4)).toUInt64 <<< 32 |||   -- bits 32 to 39
-  (byteAt bytes (i + 5)).toUInt64 <<< 40 |||   -- bits 40 to 47
-  (byteAt bytes (i + 6)).toUInt64 <<< 48 |||   -- bits 48 to 55
-  (byteAt bytes (i + 7)).toUInt64 <<< 56       -- bits 56 to 63
+  (byteAtOrZero bytes i).toUInt64 |||                -- bits  0 to  7
+  (byteAtOrZero bytes (i + 1)).toUInt64 <<< 8 |||    -- bits  8 to 15
+  (byteAtOrZero bytes (i + 2)).toUInt64 <<< 16 |||   -- bits 16 to 23
+  (byteAtOrZero bytes (i + 3)).toUInt64 <<< 24 |||   -- bits 24 to 31
+  (byteAtOrZero bytes (i + 4)).toUInt64 <<< 32 |||   -- bits 32 to 39
+  (byteAtOrZero bytes (i + 5)).toUInt64 <<< 40 |||   -- bits 40 to 47
+  (byteAtOrZero bytes (i + 6)).toUInt64 <<< 48 |||   -- bits 48 to 55
+  (byteAtOrZero bytes (i + 7)).toUInt64 <<< 56       -- bits 56 to 63
 
 /-- The 8 bytes of a lane, least significant byte first, the inverse of reading a lane:
 

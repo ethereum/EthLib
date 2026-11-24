@@ -303,25 +303,25 @@ theorem size_keyStream (key : Key) (counter : UInt32) (nonce : Nonce) (blocks : 
 /-- Byte `j` of the keystream is byte `j % 64` of the block at counter plus `j / 64`, RFC 8439 §2.4.
 
 Every byte past the requested blocks reads as zero. -/
-theorem byteAt_keyStream (key : Key) (counter : UInt32) (nonce : Nonce) (blocks j : Nat) :
-    Base.byteAt (keyStream key counter nonce blocks) j
+theorem byteAtOrZero_keyStream (key : Key) (counter : UInt32) (nonce : Nonce) (blocks j : Nat) :
+    Base.byteAtOrZero (keyStream key counter nonce blocks) j
       = if j < 64 * blocks then
           (block key (counter + UInt32.ofNat (j / 64)) nonce)[j % 64]'(Nat.mod_lt _ (by decide))
         else 0 := by
   induction blocks with
-  | zero => simp [keyStream, Base.byteAt_of_size_le]
+  | zero => simp [keyStream, Base.byteAtOrZero_of_size_le]
   | succ n ih =>
-    rw [keyStream_succ, Base.byteAt_append, size_keyStream, ih]
+    rw [keyStream_succ, Base.byteAtOrZero_append, size_keyStream, ih]
     by_cases hj : j < 64 * n
     · simp [hj, show j < 64 * (n + 1) by omega]
     · rcases (by omega : j / 64 = n ∨ 64 * (n + 1) ≤ j) with hq | hq
       · -- Byte `j` falls in the appended block, at offset `j % 64`.
         have hlt : j < 64 * (n + 1) := by omega
         have hm : j - 64 * n = j % 64 := by omega
-        simp [hj, hlt, hq, Base.byteAt, hm, Base.packBytes, ByteArray.getElem_eq_getElem_data]
+        simp [hj, hlt, hq, Base.byteAtOrZero, hm, Base.packBytes, ByteArray.getElem_eq_getElem_data]
         exact dite_eq_left (by simp [ByteArray.size]; omega)
       · simp [hj, show ¬j < 64 * (n + 1) by omega]
-        exact Base.byteAt_of_size_le (by simp; omega)
+        exact Base.byteAtOrZero_of_size_le (by simp; omega)
 
 /-- The cipher accepts exactly when the counter does not wrap.
 
@@ -336,13 +336,13 @@ theorem crypt_eq_ok_iff (key : Key) (counter : UInt32) (nonce : Nonce)
     (input output : ByteArray) :
     crypt key counter nonce input = .ok output ↔
       counter.toNat + (input.size + 63) / 64 ≤ 2 ^ 32 ∧ output.size = input.size ∧
-        ∀ j < input.size, Base.byteAt output j = Base.byteAt input j ^^^
+        ∀ j < input.size, Base.byteAtOrZero output j = Base.byteAtOrZero input j ^^^
         (block key (counter + UInt32.ofNat (j / 64)) nonce)[j % 64]'(Nat.mod_lt _ (by decide)) := by
   -- The keystream covers every byte of the input.
   have hks : ∀ j < input.size,
-      Base.byteAt (keyStream key counter nonce ((input.size + 63) / 64)) j
+      Base.byteAtOrZero (keyStream key counter nonce ((input.size + 63) / 64)) j
         = (block key (counter + UInt32.ofNat (j / 64)) nonce)[j % 64]'(Nat.mod_lt _ (by decide)) :=
-    fun j hj => by rw [byteAt_keyStream, ite_eq_left (by omega)]
+    fun j hj => by rw [byteAtOrZero_keyStream, ite_eq_left (by omega)]
   unfold crypt
   constructor
   · intro h
@@ -350,16 +350,16 @@ theorem crypt_eq_ok_iff (key : Key) (counter : UInt32) (nonce : Nonce)
     · contradiction
     · cases h
       refine ⟨by omega, Base.xorByteArray_size _ _, fun j hj => ?_⟩
-      rw [Base.byteAt_xorByteArray, ite_eq_left hj, hks j hj]
+      rw [Base.byteAtOrZero_xorByteArray, ite_eq_left hj, hks j hj]
   · rintro ⟨hc, hs, hb⟩
     rw [ite_eq_right (by omega)]
     congr 1
-    apply Base.eq_of_byteAt (by rw [Base.xorByteArray_size, hs])
+    apply Base.eq_of_byteAtOrZero (by rw [Base.xorByteArray_size, hs])
     intro j
-    rw [Base.byteAt_xorByteArray]
+    rw [Base.byteAtOrZero_xorByteArray]
     by_cases hj : j < input.size
     · rw [ite_eq_left hj, hb j hj, hks j hj]
-    · rw [ite_eq_right hj, Base.byteAt_of_size_le (by omega)]
+    · rw [ite_eq_right hj, Base.byteAtOrZero_of_size_le (by omega)]
 
 /-- The AEAD accepts exactly when the AAD length fits in 64 bits and the counter does not wrap.
 
@@ -381,7 +381,7 @@ theorem encrypt_eq_ok_iff (key : Key) (nonce : Nonce) (aad plaintext ciphertext 
     encrypt key nonce aad plaintext = .ok (ciphertext, tag) ↔
       aad.size < 2 ^ 64 ∧ plaintext.size ≤ (2 ^ 32 - 1) * 64 ∧
         ciphertext.size = plaintext.size ∧
-        (∀ j < plaintext.size, Base.byteAt ciphertext j = Base.byteAt plaintext j ^^^
+        (∀ j < plaintext.size, Base.byteAtOrZero ciphertext j = Base.byteAtOrZero plaintext j ^^^
           (block key (1 + UInt32.ofNat (j / 64)) nonce)[j % 64]'(Nat.mod_lt _ (by decide))) ∧
         tag = poly1305 (Vector.ofFn fun i : Fin 32 => (block key 0 nonce)[i.val]'(by omega))
           (aad ++ pad16 aad ++ ciphertext ++ pad16 ciphertext ++
@@ -411,11 +411,11 @@ theorem encrypt_eq_ok_iff (key : Key) (nonce : Nonce) (aad plaintext ciphertext 
     · rintro ⟨-, -, hs', hb', rfl⟩
       -- Two strings of the plaintext's length that agree on every byte are one string.
       have heq : c = ciphertext := by
-        apply Base.eq_of_byteAt (by rw [hs, hs'])
+        apply Base.eq_of_byteAtOrZero (by rw [hs, hs'])
         intro j
         by_cases hj : j < plaintext.size
         · rw [hb j hj, hb' j hj]
-        · rw [Base.byteAt_of_size_le (by omega), Base.byteAt_of_size_le (by omega)]
+        · rw [Base.byteAtOrZero_of_size_le (by omega), Base.byteAtOrZero_of_size_le (by omega)]
       subst heq
       exact ⟨rfl, rfl⟩
 

@@ -41,7 +41,7 @@ None of them changes memory either.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork U256 byteAt)
+open EthLib.Base (Fork U256 byteAtOrZero)
 open GasCosts
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
@@ -167,7 +167,7 @@ theorem jumpStep_eq_error_iff_of_code {evm : Evm fork Meter} {destination : U256
     (paid : GasMeter.charge evm.gas OPCODE_JUMP = .ok gas) :
     jumpStep evm = .error (.invalidJumpDest destination.toNat) ↔
       ¬(destination.toNat ∈ opcodePositions evm.code ∧
-        byteAt evm.code destination.toNat = JUMPDEST) := by
+        byteAtOrZero evm.code destination.toNat = JUMPDEST) := by
   rw [jumpStep_eq_error_iff h paid, flags, ← isValidJumpDest_iff, Bool.not_eq_true]
 
 /-- Each instruction of control flow keeps the message, the state, the substate and the code. -/

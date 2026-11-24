@@ -1007,6 +1007,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Base.byteAt` is renamed `Base.byteAtOrZero`, so that its zero past the end of the buffer is visible at each call ([#4347](https://github.com/ethereum/EthLib/pull/4347)).
+  Every lemma about it follows: `byteAt_X` is now `byteAtOrZero_X`, and `eq_of_byteAt` and `Holds.of_byteAt` are now `eq_of_byteAtOrZero` and `Holds.of_byteAtOrZero`.
+  The statements are unchanged.
+  Migration: replace `byteAt` with `byteAtOrZero` in each name.
+
 - In Lean, `Ssz.readUintBytes` and its lemma `readUintBytes_eq` are removed ([#4303](https://github.com/ethereum/EthLib/issues/4303)).
   The function had the body of `Ssz.readUint`, and the lemma proved the two equal.
   Migration: call `readUint data.data start width` in place of `readUintBytes data start width`.

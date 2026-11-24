@@ -35,7 +35,7 @@ An instruction that keeps its reads keeps that size when the rest of it keeps it
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork U256 byteAt)
+open EthLib.Base (Fork U256 byteAtOrZero)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
@@ -380,10 +380,10 @@ theorem le_size_chargeGasAndMemory {evm after : Evm fork Meter} {cost : Nat}
   rwa [ceil32_of_mod hmod] at this
 
 /-- A charge for gas and memory keeps every byte of memory. -/
-theorem byteAt_chargeGasAndMemory {evm after : Evm fork Meter} {cost : Nat}
+theorem byteAtOrZero_chargeGasAndMemory {evm after : Evm fork Meter} {cost : Nat}
     {ranges : List (U256 × U256)} (h : chargeGasAndMemory evm cost ranges = .ok after) (i : Nat) :
-    byteAt after.memory i = byteAt evm.memory i := by
-  rw [memory_chargeGasAndMemory h, byteAt_memoryExtend]
+    byteAtOrZero after.memory i = byteAtOrZero evm.memory i := by
+  rw [memory_chargeGasAndMemory h, byteAtOrZero_memoryExtend]
 
 /-- A charge for gas and memory keeps the size of memory a multiple of 32. -/
 theorem size_chargeGasAndMemory_mod {evm after : Evm fork Meter} {cost : Nat}

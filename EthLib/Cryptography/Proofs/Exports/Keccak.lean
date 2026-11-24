@@ -84,7 +84,7 @@ private theorem ofLanes_laneAt {state : ByteArray} (h : state.size = 200) :
   have bit : z.val % 8 = index x y z % 8 := by
     simp only [index]
     omega
-  rw [byte, bit, EthLib.Base.byteAt, dite_eq_left hb]
+  rw [byte, bit, EthLib.Base.byteAtOrZero, dite_eq_left hb]
   rfl
 
 /-- The bytes of the 25 lanes, in order, are the 200 output bytes of the bit state. -/

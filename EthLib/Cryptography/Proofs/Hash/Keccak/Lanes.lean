@@ -54,7 +54,7 @@ theorem testBit_getD_bytesOfLane (v : UInt64) (k t : Nat) (hk : k < 8) (ht : t <
 
 /-- The bytes of the lane read at byte `s` of a buffer are the buffer's bytes `s` to `s + 7`. -/
 theorem getD_bytesOfLane_laneAt (b : ByteArray) (s k : Nat) (hk : k < 8) :
-    (bytesOfLane (laneAt b s)).getD k 0 = EthLib.Base.byteAt b (s + k) := by
+    (bytesOfLane (laneAt b s)).getD k 0 = EthLib.Base.byteAtOrZero b (s + k) := by
   apply UInt8.toNat_inj.mp
   apply Nat.eq_of_testBit_eq
   intro t
@@ -65,7 +65,7 @@ theorem getD_bytesOfLane_laneAt (b : ByteArray) (s k : Nat) (hk : k < 8) :
       show (8 * k + t) % 8 = t by omega]
   · have h1 : ((bytesOfLane (laneAt b s)).getD k 0).toNat < 2 ^ t :=
       lt_of_lt_of_le (UInt8.toNat_lt _) (Nat.pow_le_pow_right (by decide) (by omega))
-    have h2 : (EthLib.Base.byteAt b (s + k)).toNat < 2 ^ t :=
+    have h2 : (EthLib.Base.byteAtOrZero b (s + k)).toNat < 2 ^ t :=
       lt_of_lt_of_le (UInt8.toNat_lt _) (Nat.pow_le_pow_right (by decide) (by omega))
     rw [Nat.testBit_lt_two_pow h1, Nat.testBit_lt_two_pow h2]
 
@@ -127,10 +127,10 @@ theorem getD_flatMap_bytesOfLane (l : List UInt64) (j k : Nat) (hk : k < 8) :
       simpa using ih j
 
 /-- A byte that a list holds, read by index, is the byte of the byte array. -/
-private theorem byteAt_mk (l : List UInt8) (i : Nat) :
-    EthLib.Base.byteAt ⟨l.toArray⟩ i = l.getD i 0 := by
+private theorem byteAtOrZero_mk (l : List UInt8) (i : Nat) :
+    EthLib.Base.byteAtOrZero ⟨l.toArray⟩ i = l.getD i 0 := by
   have hsize : (ByteArray.mk l.toArray).size = l.length := by simp [ByteArray.size]
-  unfold EthLib.Base.byteAt
+  unfold EthLib.Base.byteAtOrZero
   split
   · next h =>
     rw [hsize] at h
@@ -146,7 +146,7 @@ theorem laneAt_lanesBytes (a : Array UInt64) (j : Nat) :
   apply UInt64.toBitVec_inj.mp
   apply BitVec.eq_of_getLsbD_eq
   intro i hi
-  rw [laneAt_testBit _ _ _ hi, byteAt_mk, laneOfArray, lanesBytes,
+  rw [laneAt_testBit _ _ _ hi, byteAtOrZero_mk, laneOfArray, lanesBytes,
     getD_flatMap_bytesOfLane _ _ _ (by omega),
     testBit_getD_bytesOfLane _ _ _ (by omega) (by omega), Nat.mul_div_cancel_left _ (by omega),
     ← testBit_toNat_lane, Array.getD_eq_getD_getElem?, ← Array.getElem?_toList]
@@ -180,7 +180,7 @@ theorem exists_lanesBytes_eq {l : List UInt8} (h : 8 ∣ l.length) : ∃ a, lane
   simp only [Array.toList_map, List.getD_eq_getElem?_getD,
     List.getElem?_map, List.getElem?_range hj, Option.map_some, Option.getD_some]
   have := getD_bytesOfLane_laneAt ⟨l.toArray⟩ (8 * (i / 8)) (i % 8) (by omega)
-  rw [byteAt_mk] at this
+  rw [byteAtOrZero_mk] at this
   simpa [List.getD_eq_getElem?_getD] using this
 
 /-- The strings of lanes are in bijection with the byte strings whose length is a multiple of 8.
@@ -266,8 +266,8 @@ theorem Lanes2.bytes_read (b : ByteArray) (offset : Nat) (h : offset + 16 ≤ b.
     (Lanes2.read b offset).bytes = Base.readBytes b offset 16 h := by
   apply Vector.ext
   intro j hj
-  have hread : (Base.readBytes b offset 16 h)[j] = Base.byteAt b (offset + j) := by
-    simp only [Base.readBytes_eq_ofFn_data, Vector.getElem_ofFn, Base.byteAt,
+  have hread : (Base.readBytes b offset 16 h)[j] = Base.byteAtOrZero b (offset + j) := by
+    simp only [Base.readBytes_eq_ofFn_data, Vector.getElem_ofFn, Base.byteAtOrZero,
       dite_eq_left_of_eq_true (eq_true (show offset + j < b.size by omega))]
     rfl
   -- Byte `j` is byte `j mod 8` of the lane that holds it, read from the buffer.
@@ -291,15 +291,15 @@ theorem Lanes4.bytes_read (b : ByteArray) (offset : Nat) (h : offset + 32 ≤ b.
     (Lanes4.read b offset).bytes = Base.readBytes b offset 32 h := by
   apply Vector.ext
   intro j hj
-  have hread : (Base.readBytes b offset 32 h)[j] = Base.byteAt b (offset + j) := by
-    simp only [Base.readBytes_eq_ofFn_data, Vector.getElem_ofFn, Base.byteAt,
+  have hread : (Base.readBytes b offset 32 h)[j] = Base.byteAtOrZero b (offset + j) := by
+    simp only [Base.readBytes_eq_ofFn_data, Vector.getElem_ofFn, Base.byteAtOrZero,
       dite_eq_left_of_eq_true (eq_true (show offset + j < b.size by omega))]
     rfl
   -- Byte `j` is byte `j mod 8` of the lane that holds it, read from the buffer.
   rw [hread, getElem_lanes4_bytes _ _ hj]
   simp only [Lanes4.read]
   split_ifs <;> rw [getD_bytesOfLane_laneAt _ _ _ (by omega)] <;>
-    exact congrArg (Base.byteAt b) (by omega)
+    exact congrArg (Base.byteAtOrZero b) (by omega)
 
 /-- Four lanes with the same bytes are the same lanes.
 

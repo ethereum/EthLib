@@ -23,7 +23,7 @@ A rejected signature gives empty output, and the call still succeeds.
 namespace EthLib.Execution.Evm.Precompiles.Ecrecover
 
 open EthLib.Cryptography.Secp256k1
-open EthLib.Base (byteAt)
+open EthLib.Base (byteAtOrZero)
 
 /-- Why an ECRECOVER call fails: only a lack of gas, which consumes all the gas given. -/
 inductive EcrecoverError where
@@ -56,7 +56,7 @@ def GAS_ECRECOVER : Nat := 3000
 /-- 32 bytes of the call data from `start`, zero-padded on the right. -/
 def word (data : ByteArray) (start : Nat) : Vector UInt8 32 :=
   -- `d[0..(||I_d|| - 1)] = I_d` and `d[||I_d||..] = (0, 0, ...)`.
-  Vector.ofFn fun i => byteAt data (start + i.val)
+  Vector.ofFn fun i => byteAtOrZero data (start + i.val)
 
 /-- The output for a hash and the integers `v`, `r` and `s`. -/
 def output (hash : Vector UInt8 32) (v r s : Nat) : ByteArray :=

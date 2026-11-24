@@ -27,14 +27,14 @@ Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (byteAt)
+open EthLib.Base (byteAtOrZero)
 
 /-- The byte of JUMPDEST. -/
 def JUMPDEST : UInt8 := 0x5b
 
 /-- The position of the opcode after the one at `pc`, past the data of a PUSH. -/
 def nextOpcode (code : ByteArray) (pc : Nat) : Nat :=
-  match Op.decode (byteAt code pc) with
+  match Op.decode (byteAtOrZero code pc) with
   -- §9.4.3: `N(i, w) = i + w - PUSH1 + 2` for `w` in `[PUSH1, PUSH32]`.
   --
   -- PUSH0 has no data, so it gets `i + 1` here, as in the other case of `N`.
@@ -72,7 +72,7 @@ def markJumpDestsFrom (code : ByteArray) :
     if h : pc < code.size then
       -- `{i} ∪ D_J(c, N(i, c[i]))` if `c[i] = JUMPDEST`, else `D_J(c, N(i, c[i]))`.
       markJumpDestsFrom code fuel (nextOpcode code pc)
-        (if byteAt code pc = JUMPDEST then flags.set pc true h else flags)
+        (if code[pc] = JUMPDEST then flags.set pc true h else flags)
     else flags
 
 /-- The valid jump destinations of the code, as one flag for each position.

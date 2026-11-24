@@ -24,7 +24,7 @@ The price of an authorization of EIP-8037 is the sum of its parts, ECRECOVER amo
 
 namespace EthLib.Execution.Evm.Precompiles.Ecrecover
 
-open EthLib.Base (byteAt byteAt_eq_getD bytesToNat_natToBytes natToBytes natToBytes_length)
+open EthLib.Base (byteAtOrZero byteAtOrZero_eq_getD bytesToNat_natToBytes natToBytes natToBytes_length)
 open EthLib.Cryptography.Secp256k1
 open EthLib.Cryptography.Secp256k1.Ecdsa
 
@@ -39,7 +39,7 @@ private theorem word_toList (l : List UInt8) (start : Nat) (h : start + 32 ≤ l
   · simp
     omega
   · intro i h1 h2
-    simp [word, byteAt_eq_getD]
+    simp [word, byteAtOrZero_eq_getD]
     rw [List.getElem?_eq_getElem (by simp at h1; omega)]
     rfl
 
@@ -164,7 +164,7 @@ theorem output_neg_s (hash : Vector UInt8 32) {v r s : Nat} (hv : v = 27 ∨ v =
 /-- Only the first 128 bytes count: two inputs that read the same there give the same output.
 
 So data past 128 bytes is ignored, and a short input is read as if padded with zeros. -/
-theorem compute_congr {d1 d2 : ByteArray} (h : ∀ i < 128, byteAt d1 i = byteAt d2 i) :
+theorem compute_congr {d1 d2 : ByteArray} (h : ∀ i < 128, byteAtOrZero d1 i = byteAtOrZero d2 i) :
     compute d1 = compute d2 := by
   have hw : ∀ k, k ≤ 96 → word d1 k = word d2 k := fun k hk =>
     Vector.ext fun i hi => by simp only [word, Vector.getElem_ofFn]; exact h _ (by omega)

@@ -23,7 +23,7 @@ The step past a PUSH1 to PUSH32 skips its data, by the byte alone.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (byteAt)
+open EthLib.Base (byteAtOrZero)
 
 /-- The next opcode starts after the current one. -/
 theorem lt_nextOpcode (code : ByteArray) (pc : Nat) : pc < nextOpcode code pc := by
@@ -71,7 +71,7 @@ theorem getD_markJumpDestsFrom {code : ByteArray} (fuel pc : Nat) (flags : Vecto
     (i : Nat) :
     (markJumpDestsFrom code fuel pc flags).toArray.getD i false = true ↔
       flags.toArray.getD i false = true ∨
-        (i ∈ opcodePositionsFrom code fuel pc ∧ byteAt code i = JUMPDEST) := by
+        (i ∈ opcodePositionsFrom code fuel pc ∧ byteAtOrZero code i = JUMPDEST) := by
   induction fuel generalizing pc flags with
   | zero => simp [markJumpDestsFrom, opcodePositionsFrom]
   | succ fuel ih =>
@@ -83,19 +83,19 @@ theorem getD_markJumpDestsFrom {code : ByteArray} (fuel pc : Nat) (flags : Vecto
       next hj =>
         by_cases hi : i = pc
         · subst hi
-          simp [Array.getD_eq_getD_getElem?, hj, hpc]
+          simp [Array.getD_eq_getD_getElem?, byteAtOrZero, hj, hpc]
         · simp [Array.getD_eq_getD_getElem?, Ne.symm hi, hi]
       next hj =>
         by_cases hi : i = pc
         · subst hi
-          simp [hj]
+          simp [byteAtOrZero, hpc, hj]
         · simp [hi]
     · simp
 
 /-- A position is a valid destination exactly when an opcode starts there with the byte JUMPDEST. -/
 theorem isValidJumpDest_iff {code : ByteArray} {i : Nat} :
     isValidJumpDest (validJumpDestinations code) i = true ↔
-      i ∈ opcodePositions code ∧ byteAt code i = JUMPDEST := by
+      i ∈ opcodePositions code ∧ byteAtOrZero code i = JUMPDEST := by
   unfold isValidJumpDest validJumpDestinations opcodePositions
   rw [getD_markJumpDestsFrom]
   -- No flag is set before the scan.
@@ -105,8 +105,8 @@ theorem isValidJumpDest_iff {code : ByteArray} {i : Nat} :
   rw [unset, Bool.false_eq_true, false_or]
 
 /-- Each valid jump destination holds the byte `0x5b`. -/
-theorem byteAt_of_isValidJumpDest {code : ByteArray} {i : Nat}
-    (h : isValidJumpDest (validJumpDestinations code) i = true) : byteAt code i = 0x5b :=
+theorem byteAtOrZero_of_isValidJumpDest {code : ByteArray} {i : Nat}
+    (h : isValidJumpDest (validJumpDestinations code) i = true) : byteAtOrZero code i = 0x5b :=
   (isValidJumpDest_iff.mp h).2
 
 /-- No position in the data of a PUSH, or between two opcodes, is a valid jump destination. -/
@@ -180,7 +180,7 @@ theorem mem_opcodePositions_iff {code : ByteArray} {pc : Nat} :
 The boundaries start at position 0. -/
 theorem isValidJumpDest_iff_boundaryFrom {code : ByteArray} {i : Nat} :
     isValidJumpDest (validJumpDestinations code) i = true ↔
-      BoundaryFrom code 0 i ∧ byteAt code i = JUMPDEST := by
+      BoundaryFrom code 0 i ∧ byteAtOrZero code i = JUMPDEST := by
   rw [isValidJumpDest_iff, mem_opcodePositions_iff]
 
 /-- The next opcode follows the byte at `pc`, and the data of a PUSH1 to PUSH32.
@@ -190,10 +190,10 @@ The bytes `0x60` to `0x7f` are PUSH1 to PUSH32, with 1 to 32 bytes of data.
 So the rule needs no decoder. -/
 theorem nextOpcode_eq (code : ByteArray) (pc : Nat) :
     nextOpcode code pc =
-      pc + 1 + if 0x60 ≤ (byteAt code pc).toNat ∧ (byteAt code pc).toNat ≤ 0x7f then
-        (byteAt code pc).toNat - 0x5f else 0 := by
+      pc + 1 + if 0x60 ≤ (byteAtOrZero code pc).toNat ∧ (byteAtOrZero code pc).toNat ≤ 0x7f then
+        (byteAtOrZero code pc).toNat - 0x5f else 0 := by
   unfold nextOpcode
-  generalize byteAt code pc = b
+  generalize byteAtOrZero code pc = b
   split
   next n hd =>
     -- A PUSH decodes only from its own byte.

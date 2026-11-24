@@ -246,7 +246,7 @@ private theorem bufferRead_of_le {bytes : List UInt8} {start size : Nat}
   · intro j hj _
     rw [bufferRead_length] at hj
     have hlt : start + j < bytes.length := by omega
-    simp [bufferRead_eq, EthLib.Base.byteAt_eq_getD, Array.getD_eq_getD_getElem?,
+    simp [bufferRead_eq, EthLib.Base.byteAtOrZero_eq_getD, Array.getD_eq_getD_getElem?,
       List.getElem?_eq_getElem hlt]
 
 /-- Dropping `size * i` bytes from blocks of `size` bytes leaves the blocks from `i` on. -/
