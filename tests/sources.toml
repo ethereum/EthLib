@@ -136,7 +136,7 @@ commit = "1f581b8ccdc4c63acf5f2c5c1b155c690c32a8eb"
 directories = ["tests/execution/legacytests"]
 
 [repositories."ethereum/ethereum-org-website"]
-commit = "0899bcb4dcb12040ccf46bea0053a422812bf913"
+commit = "3979915ac0eaa74eb0ae9c9eb6605868ae603bac"
 directories = ["bindings/python/tests/ethash/spec"]
 
 [repositories."ethereum/execution-apis"]

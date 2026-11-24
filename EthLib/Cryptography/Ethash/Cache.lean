@@ -8,26 +8,16 @@ public import EthLib.Cryptography.Ethash.Sizes
 
 The seed, the cache and the dataset items of Ethash.
 
-The seed of an epoch is Keccak-256 applied to 32 zero bytes once per epoch.
-
-The cache is a chain of Keccak-512 digests of the seed, mixed by three rounds of RandMemoHash.
-
-A dataset item hashes 256 cache items, chosen from its index, with the FNV function.
-
-So a verifier computes any dataset item from the cache alone.
-
-Appendix J.3 of the Yellow Paper, Berlin version, defines them: [`Paper.tex`][yp].
+Source: Appendix J.3 of the Yellow Paper, Berlin version: [`Paper.tex`][yp].
 
 In three places the appendix reads differently from every client and from the tests.
 
 There the definitions follow the Ethash specification of the Ethereum Foundation: [Ethash][ethash].
 
-Each of those places says so.
-
-An item is 64 bytes, read as 16 words of 32 bits, the first byte least significant.
+Each definition there says so.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/beacfbd29ccc04dfd790f2282d4c4b1c0afc9b5a/Paper.tex
-[ethash]: https://github.com/ethereum/ethereum-org-website/blob/0899bcb4dcb12040ccf46bea0053a422812bf913/public/content/developers/docs/consensus-mechanisms/pow/mining/mining-algorithms/ethash/index.md
+[ethash]: https://github.com/ethereum/ethereum-org-website/blob/3979915ac0eaa74eb0ae9c9eb6605868ae603bac/public/content/developers/docs/consensus-mechanisms/pow/mining/mining-algorithms/ethash/index.md
 -/
 
 @[expose] public section
@@ -57,19 +47,18 @@ def hashItem (bytes : ByteArray) : Item :=
 
 /-! ## The seed -/
 
-/-- The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1.
-
-It is 32 zero bytes at epoch 0, and the Keccak-256 digest of the previous seed after. -/
+/-- The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1. -/
 def seed (number : Nat) : ByteArray :=
   -- `C_seedhash`: `0_32` at epoch 0, else `KEC` of the seed of the epoch before.
+  --
+  -- So the seed is Keccak-256 applied to 32 zero bytes once per epoch.
   Nat.repeat (fun s => ⟨(keccak256 s).toArray⟩) (epoch number) ⟨Array.replicate 32 0⟩
 
 /-! ## The cache -/
 
-/-- The cache before the rounds: `c'` of the Yellow Paper, J.3.2.
-
-Item 0 is the Keccak-512 digest of the seed, and each next item the digest of the one before. -/
+/-- The cache before the rounds: `c'` of the Yellow Paper, J.3.2. -/
 def initialCache (n : Nat) (s : ByteArray) : Array Item :=
+  -- A chain of Keccak-512 digests: item 0 of the seed, each next item of the one before.
   (List.range n).foldl
     (fun c _ =>
       c.push (match c.back? with
@@ -79,17 +68,7 @@ def initialCache (n : Nat) (s : ByteArray) : Array Item :=
         | some previous => hashItem (bytesOfWords previous)))
     #[]
 
-/-- One round of RandMemoHash over the cache: `E_RMH` of the Yellow Paper, J.3.2.
-
-Item `i` becomes the Keccak-512 digest of the XOR of two items, taken as they are at that step.
-
-The first is item `i - 1`, which is already new for `i ≥ 1`.
-
-The second is the item that the first word of item `i` names.
-
-The appendix names that item by the first byte, and the specification by the first word.
-
-The definition follows the specification. -/
+/-- One round of RandMemoHash over the cache: `E_RMH` of the Yellow Paper, J.3.2. -/
 def cacheRound (cache : Array Item) : Array Item :=
   let n := cache.size
   -- Item `i` for `i` from 0 to `n - 1`, in order.
@@ -97,23 +76,23 @@ def cacheRound (cache : Array Item) : Array Item :=
     (fun c i =>
       -- Each index is below the size, which the round keeps, so no default is read.
       let current := c.getD i (Vector.replicate 16 0)
-      -- The item before, cyclically: item `(i - 1) mod n`.
+      -- The item before, cyclically: item `(i - 1) mod n`, which is already new for `i ≥ 1`.
       let previous := c.getD ((i + n - 1) % n) (Vector.replicate 16 0)
       -- The second item is item `v`, with `v` the first word of item `i`, mod `n`.
       --
-      -- J.3.2 reads the first byte instead.
+      -- J.3.2 reads the first byte instead; this follows the specification, by the first word.
       let other := c.getD (current[0].toNat % n) (Vector.replicate 16 0)
       -- Item `i` becomes the Keccak-512 digest of the XOR of the item before and item `v`.
+      --
+      -- Both are taken as they are at that step.
       c.setIfInBounds i (hashItem (bytesOfWords (Vector.zipWith (· ^^^ ·) previous other))))
     cache
 
-/-- The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2.
-
-It has one item per 64 bytes of the cache size, after three rounds over the initial cache. -/
+/-- The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2. -/
 def cache (number : Nat) : Array Item :=
   -- `c = E_cacherounds(c', J_cacherounds)`, over `n = floor(c_size / J_hashbytes)` items.
   --
-  -- `J_cacherounds = 3` rounds of RandMemoHash.
+  -- So one item per 64 bytes of the cache size, and `J_cacherounds = 3` rounds of RandMemoHash.
   Nat.repeat cacheRound CACHE_ROUNDS (initialCache (cacheSize number / HASH_BYTES) (seed number))
 
 /-! ## The dataset items -/
@@ -121,38 +100,31 @@ def cache (number : Nat) : Array Item :=
 /-- The prime of the FNV function. -/
 def FNV_PRIME : UInt32 := 0x01000193
 
-/-- The FNV function of Ethash: `(a · p) ⊕ b`, mod `2^32`.
-
-The appendix writes `a · (p ⊕ b)`, and the specification and every client `(a · p) ⊕ b`.
-
-The definition follows the specification. -/
+/-- The FNV function of Ethash: `(a · p) ⊕ b`, mod `2^32`. -/
 def fnv (a b : UInt32) : UInt32 :=
   -- `(a · p) ⊕ b mod 2^32`, with `p` the FNV prime.
+  --
+  -- The appendix writes `a · (p ⊕ b)`; this follows the specification and every client.
   a * FNV_PRIME ^^^ b
 
-/-- The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3.
-
-The mix starts as the Keccak-512 digest of a cache item whose first word is XORed with the index.
-
-Each of 256 parents is a cache item that the index and the mix choose, and FNV folds it in.
-
-The item is the Keccak-512 digest of the last mix.
-
-The appendix reads the cache by its size in bytes, and the specification by its count of items.
-
-The definition follows the specification.
-
-The index is below `2^32` while the dataset has fewer than `2^32` items. -/
+/-- The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3. -/
 def datasetItem (cache : Array Item) (i : Nat) : Item :=
+  -- Only the cache is read, so a verifier computes any dataset item from the cache alone.
   let n := cache.size
   -- The mix starts as cache item `i mod n`.
+  --
+  -- The appendix reduces by the cache size in bytes; this follows the specification, by items.
   let first := cache.getD (i % n) (Vector.replicate 16 0)
   -- Its first word is XORed with `i`, then the mix becomes its Keccak-512 digest.
+  --
+  -- The index is below `2^32` while the dataset has fewer than `2^32` items.
   let mix := hashItem (bytesOfWords (first.set 0 (first[0] ^^^ i.toUInt32)))
   -- The 256 parents, for `j < 256`.
   let mix := (List.range DATASET_PARENTS).foldl
     (fun mix j =>
-      -- Parent `j` is cache item `FNV(i ⊕ j, mix_(j mod 16)) mod n`.
+      -- Parent `j` is cache item `FNV(i ⊕ j, mix_(j mod 16)) mod n`: the index and mix choose it.
+      --
+      -- The appendix again reduces by the cache size in bytes; this follows the specification.
       let parent := cache.getD ((fnv (i ^^^ j).toUInt32 mix[j % 16]).toNat % n)
         (Vector.replicate 16 0)
       -- Word `w` of the mix becomes `FNV(mix_w, parent_w)`.
