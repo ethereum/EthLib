@@ -8,47 +8,11 @@ public import EthLib.Cryptography.Proofs.IndependentAnswers
 
 A key-only forger gets the public key, coins, and `Π` in both directions, but no signatures.
 
-It wins when it returns a valid signature on some message.
+Swapping `Π` for independent answers costs at most `q (q + 1) / 2` over `|A|`, for `q` queries.
 
-This is the chosen-message game with no signing query, as a lemma below proves.
+Source: [Fersch, Kiltz, Poettering, CCS 2016][fkp], Definition 4, Theorem 2, Figures 1 and 7.
 
-The game draws `Π` up front.
-
-Read the game as a program of the permutation oracle.
-
-Then its final check asks for `Π` at most once more than the forger.
-
-With `Π` sampled one answer at a time, it has the same law.
-
-Then answer each new query of `Π` with an independent uniform value instead.
-
-A flag rises when that value is already in the cache, in the direction of the query.
-
-Take a forger that asks for `Π` or its inverse at most `q` times.
-
-Compare its chance to win the game with its chance to win with independent answers and no flag.
-
-The first exceeds the second by at most `q (q + 1) / 2` over `|A|`.
-
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
-
-The key-only game is the variant of their Figure 1 named in their Definition 4.
-
-Their key generation avoids the scalar `0`, and the key here may be `0`, which never verifies.
-
-So the advantage here is theirs times `(n - 1) / n`, where `n` is the number of scalars.
-
-No theorem states it.
-
-The swap is the step from Game G0 to Game G1 of their §4.2, in the proof of their Theorem 2.
-
-Their Game G1 is in their Figure 7, and stops with `0` where the flag rises here.
-
-Their `Q` bounds the forger's queries, and their forger asks the check's query first.
-
-Here the check may ask once more, hence `q + 1`.
-
-Their bound `Q^2 / 2^L` is still at least the one here.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -142,10 +106,17 @@ The key is uniform over all scalars, as in the chosen-message game.
 The source's key generation avoids `0`; the key `0` gives the point `0`, which never verifies. -/
 def keyOnlyExperiment (scheme : Scheme F G A M) (adversary : KeyOnlyAdversary F G A M) :
     ProbComp Bool := do
+  -- The key-only game is the variant of their Figure 1 named in their Definition 4.
+  --
+  -- The game draws `Π` up front.
   let π ← $ᵗ (Equiv.Perm A)
+  -- So the advantage here is theirs times `(n - 1) / n`, where `n` is the number of scalars.
+  --
+  -- No theorem states it.
   let x ← $ᵗ F
   let X := x • scheme.g
   let (m, t, s) ← simulateQ (permImpl π) (adversary.main X)
+  -- The forger wins when it returns a valid signature on some message.
   return verify scheme π X m t s
 
 /-- The probability that the key-only forger forges. -/
@@ -185,6 +156,7 @@ theorem keyOnlyAdvantage_eq_lazy (scheme : Scheme F G A M)
       Pr{let b ←
         (simulateQ lazyPermImpl (keyOnlyExperimentQ scheme adversary)).run' []}[b = true] := by
   rw [keyOnlyAdvantage, keyOnlyExperiment_eq_permImpl]
+  -- With `Π` sampled one answer at a time, the game has the same law.
   exact (uniformSample_bind_simulateQ_permImpl_evalDistEq _).prEvent_eq _
 
 /-- The key-only game with independent answers, as their Game G1.
@@ -193,6 +165,11 @@ It runs the program from the empty cache, and wins when the check passes and no 
 def keyOnlyIndepExperiment (scheme : Scheme F G A M) (adversary : KeyOnlyAdversary F G A M) :
     ProbComp Bool :=
   (fun z => z.1 && !z.2.2) <$>
+    -- Each new query of `Π` gets an independent uniform value instead.
+    --
+    -- A flag rises when that value is already in the cache, in the direction of the query.
+    --
+    -- Their Game G1 is in their Figure 7, and stops with `0` where the flag rises here.
     (simulateQ indepPermImpl (keyOnlyExperimentQ scheme adversary)).run ([], false)
 
 /-- The probability that the key-only forger wins with independent answers. -/
@@ -212,7 +189,15 @@ theorem keyOnlyAdvantage_le_indep (scheme : Scheme F G A M)
     (hq : ∀ X, IsQueryBoundP (adversary.main X) (·.isRight = true) q) :
     keyOnlyAdvantage scheme adversary ≤
       keyOnlyIndepAdvantage scheme adversary + ((q + 1).choose 2 : ℝ≥0∞) / FinEnum.card A := by
+  -- The swap is the step from Game G0 to Game G1 of their §4.2, in the proof of their Theorem 2.
   rw [keyOnlyAdvantage_eq_lazy, keyOnlyIndepAdvantage, keyOnlyIndepExperiment, prEvent_map]
+  -- Read as a program of the permutation oracle, the game asks at most once more than the forger.
+  --
+  -- Their `Q` bounds the forger's queries, and their forger asks the check's query first.
+  --
+  -- Here the check may ask once more, hence `q + 1`.
+  --
+  -- Their bound `Q^2 / 2^L` is still at least the one here.
   refine (prEvent_lazyPermImpl_le_indepPermImpl _
     (isQueryBoundP_keyOnlyExperimentQ scheme adversary hq) (· = true)).trans (le_of_eq ?_)
   congr 1

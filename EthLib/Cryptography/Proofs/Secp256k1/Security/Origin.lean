@@ -6,51 +6,15 @@ public import EthLib.Cryptography.Proofs.TaggedLazyPermutation
 /-!
 # Proofs: where the pair of a forgery entered the cache of `Π`
 
-The joint game runs the adversary, the signer and the final check against one cache of `Π`.
+In the joint game, each pair of the cache of `Π` carries its origin.
 
-Here each pair of that cache carries its origin.
+A forgery that wins has its pair in the final cache, tagged `forward` if the check asked it first.
 
-The adversary's forward queries tag theirs `forward`, and its inverse queries `inverse`.
+Otherwise the pair keeps the tag it had before the check.
 
-The final check asks `Π` as the adversary does, so a new pair of the check is tagged `forward`.
+Source: [Fersch, Kiltz, Poettering, CCS 2016][fkp], §4.1, §4.2, Theorems 1 and 2, Figures 5 to 7.
 
-The signer's queries tag theirs `signing`.
-
-Erase the tags, and the game is the joint lazy game.
-
-A forgery that wins has its pair in the final cache.
-
-That pair is `(φ(R), β)`, with `R` the point of the forgery and `ψ(β)` its `t`.
-
-If the final check is the first to ask for `φ(R)`, the pair is tagged `forward`.
-
-Otherwise it keeps the tag it had before the check.
-
-No theorem yet ties that earlier tag to the call that set it.
-
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
-
-The proof of their Theorem 1, §4.1, splits on whether that pair is in the list `Π_S`.
-
-That is line 27 of their Figure 6.
-
-The proof of their Theorem 2, §4.2, splits on a forward or an inverse query, line 12 of Figure 7.
-
-Their Definition 4 assumes that the forger asked every query its verification needs.
-
-Their §4.2 reads this as a forward query at `φ(R)`, or an inverse query that returned `φ(R)`.
-
-Here the check asks for `φ(R)` instead, and that query would count as one more forward query.
-
-The tag `signing` is coarser than `Π_S`.
-
-The real signer asks `Π` once per nonzero nonce it tries.
-
-A failed nonce leaves a pair with no signature.
-
-The simulated signer of their Game G3, Figure 5, sets only the pairs of its signatures.
-
-So the step to that signer needs an argument for those other pairs.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -63,10 +27,32 @@ variable {F G A M τ : Type}
 
 /-- How a pair of the cache of `Π` entered it. -/
 inductive Origin where
+  -- The proof of their Theorem 2, §4.2, splits on a forward or an inverse query.
+  --
+  -- That is line 12 of their Figure 7.
+  --
+  -- Their Definition 4 assumes that the forger asked every query its verification needs.
+  --
+  -- Their §4.2 reads this as a forward query at `φ(R)`, or an inverse query that returned `φ(R)`.
+  --
+  -- Here the check asks for `φ(R)` instead, and that query would count as one more forward query.
   /-- A new pair from a forward query of the adversary, or from the query of the final check. -/
   | forward
   /-- A new pair from an inverse query of the adversary. -/
   | inverse
+  -- The proof of their Theorem 1, §4.1, splits on whether the pair is in the list `Π_S`.
+  --
+  -- That is line 27 of their Figure 6.
+  --
+  -- The tag `signing` is coarser than `Π_S`.
+  --
+  -- The real signer asks `Π` once per nonzero nonce it tries.
+  --
+  -- A failed nonce leaves a pair with no signature.
+  --
+  -- The simulated signer of their Game G3, Figure 5, sets only the pairs of its signatures.
+  --
+  -- So the step to that signer needs an argument for those other pairs.
   /-- A new pair from a query of the signing oracle, for any nonce it tries. -/
   | signing
   deriving DecidableEq
@@ -76,6 +62,7 @@ variable [DecidableEq M] [FinEnum A]
 variable [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G]
 
 /-- Erase the tags of the joint run over tagged caches.
+
 The result is the joint run over the lazy permutation.
 
 The tags of the adversary and of the signer may differ. -/
@@ -137,6 +124,7 @@ theorem lookup_of_mem_support_jointRun_taggedLazyPermOracle (scheme : Scheme F G
       c.lookupTagged (scheme.encode (s⁻¹ • (scheme.hash m • scheme.g + t • X))) =
         some (β, ((c₀.lookupTagged (scheme.encode (s⁻¹ • (scheme.hash m • scheme.g + t • X)))).map
           Prod.snd).getD fA) ∧ scheme.reduce β = t := by
+  -- No theorem yet ties that earlier tag to the call that set it.
   simp only [jointRun, support_bind, Set.mem_iUnion] at h
   obtain ⟨⟨⟨m', t', s'⟩, cache', c₁⟩, hrun, h⟩ := h
   by_cases hs : signed cache' m'
@@ -158,6 +146,9 @@ The signer tags its pairs `signing`. -/
 def taggedJointExperiment (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary F G A M) :
     ProbComp (((M × F × F) × Bool × Cache F M) × TaggedCache A Origin) := do
   let x ← $ᵗ F
+  -- The joint game runs the adversary, the signer and the final check against one cache of `Π`.
+  --
+  -- The final check asks `Π` as the adversary does, so a new pair of the check is tagged `forward`.
   jointRun scheme adversary (x • scheme.g) (taggedLazyPermOracle .forward .inverse) []
     (liftFresh (taggedLazyPermOracle .signing .signing) fun m => signFreshQ scheme x m fuel)
 

@@ -6,35 +6,15 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Sign
 /-!
 # Proofs: EthLib's ECDSA verification is the verification of the game
 
-The group is the group of the curve, of prime order `n`, and the scalars are the integers mod `n`.
+EthLib's ECDSA is a GenDSA scheme.
 
-The encoding `φ` of a point is its `x` coordinate as a 256-bit string, and `ψ` reduces it mod `n`.
+With `Π` the identity, its verification is the game's, for `r` and `s` below `n`.
 
-The bijection `Π` permutes all `2^256` strings, as in the source with `L = 256`.
+Applying a bound on the game to EthLib assumes the identity is a bijective random oracle.
 
-A message is hashed to 32 bytes, which are read big-endian as an integer mod `n`.
+Source: [Fersch, Kiltz, Poettering][fkp], §1, §3.1 (ECDSA as GenDSA), Definition 2 (b), Lemma 2.
 
-The source is [Fersch, Kiltz, Poettering](https://doi.org/10.1145/2976749.2978413).
-
-That is ECDSA as GenDSA, by their §3.1.
-
-The normal form of `s` is the low-s rule of [EIP-2](https://eips.ethereum.org/EIPS/eip-2).
-
-GenDSA does not have it.
-
-It is harmless: anyone can negate `s`, and the negation keeps a signature valid.
-
-With `Π` the identity, the game's verification is EthLib's, for `r` and `s` below `n`.
-
-The game draws `Π` uniformly, so a bound on it says nothing provable about `Π` the identity.
-
-Applying it to EthLib assumes that the identity behaves as a bijective random oracle.
-
-That is the heuristic of the source, which notes in §1 that it fails at the bit level.
-
-The `x` coordinate meets part (b) of Definition 2 of the source, which their Lemma 2 proves.
-
-Opposite points share their `x` coordinate, so negating `s` keeps a signature valid in the game too.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -43,7 +23,7 @@ namespace EthLib.Cryptography.Secp256k1.Security
 
 open Ecdsa Point
 
-/-- The scalars: the integers mod `n`. -/
+/-- The scalars: the integers mod `n`, the prime order of the group of the curve. -/
 abbrev Scalar := ZMod Fn.modulus
 
 /-- The coordinates of the points: the integers mod `p`. -/
@@ -54,6 +34,7 @@ def xCoord : curve.Point → Coord
   | 0 => 0
   | .some x _ _ => x
 
+-- The bijection `Π` permutes all `2^256` strings, as in the source with `L = 256`.
 /-- The 256-bit strings, read as integers below `2^256`: the set that the bijection permutes. -/
 abbrev Bits256 := Fin (2 ^ 256)
 
@@ -74,9 +55,21 @@ Pick `a` and `b`, and let `t` be the conversion of `a g + b X`.
 If `b`, `t` and `a g + b X` are nonzero, `(t, t / b)` is valid on each digest read as `a t / b`. -/
 noncomputable def ecdsaScheme (H : M → Vector UInt8 32) : Scheme Scalar curve.Point Bits256 M where
   g := toPoint generator
+  -- The encoding `φ` of a point is its `x` coordinate as a 256-bit string.
   encode := encodeX
+  -- The map `ψ` reduces it mod `n`.
   reduce a := (a.val : Scalar)
+  -- A message is hashed to 32 bytes, which are read big-endian as an integer mod `n`.
   hash m := (hashToInt (H m) : Scalar)
+  -- The normal form of `s` is the low-s rule of [EIP-2](https://eips.ethereum.org/EIPS/eip-2).
+  --
+  -- GenDSA does not have it.
+  --
+  -- It is harmless: anyone can negate `s`, and the negation keeps a signature valid.
+  --
+  -- Opposite points share their `x` coordinate.
+  --
+  -- So negating `s` keeps a signature valid in the game too.
   normalize s := if isLowS s.val then s else -s
 
 variable (H : M → Vector UInt8 32)
@@ -146,6 +139,11 @@ The key is any pair: one off the curve maps to the identity, which both reject. 
 theorem ecdsa_verify_eq_verify_ecdsaScheme (q : Point) (m : M) (r s : Nat) :
     Ecdsa.verify q (H m) r s = (decide (r < Fn.modulus ∧ s < Fn.modulus) &&
       verify (ecdsaScheme H) (Equiv.refl Bits256) (toPoint q) m r s) := by
+  -- The game draws `Π` uniformly, so a bound on it says nothing provable about `Π` the identity.
+  --
+  -- Applying it to EthLib assumes that the identity behaves as a bijective random oracle.
+  --
+  -- That is the heuristic of the source, which notes in §1 that it fails at the bit level.
   cases hq : q.isOnCurve with
   | false =>
     rw [verify_of_not_isOnCurve hq, toPoint_eq_zero_of_isOnCurve_eq_false hq]

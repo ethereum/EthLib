@@ -6,21 +6,13 @@ public import EthLib.Cryptography.Proofs.LazyPermutation
 /-!
 # Proofs: the ECDSA game with the bijection sampled one answer at a time
 
-The game draws the bijection `Π` up front, and its oracles and its final check read it.
-
-Here they ask a permutation oracle for `Π` instead.
-
-The game becomes a program of that oracle.
-
-With `Π` drawn up front, that program is the game.
-
-With `Π` sampled lazily, the program has the same distribution.
+Here the game asks a permutation oracle for `Π`, and the oracle may sample `Π` lazily.
 
 So the advantage of every adversary is the same in the lazy game.
 
-The source is [Fersch, Kiltz, Poettering](https://doi.org/10.1145/2976749.2978413).
+Source: [Fersch, Kiltz, Poettering][fkp], §4, where the bijection is their bijective random oracle.
 
-The bijection is their bijective random oracle, §4.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -159,6 +151,9 @@ def runCacheQ (scheme : Scheme F G A M) (adversary : Adversary F G A M) (X : G)
 It draws the key, runs, and checks the forgery. -/
 def experimentViewQ (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary F G A M) :
     PermComp A ((M × F × F) × Bool × Cache F M) := do
+  -- The game draws the bijection `Π` up front, and its oracles and its final check read it.
+  --
+  -- Here they ask a permutation oracle for `Π` instead.
   let x ← ($ᵗ F : ProbComp F)
   runCacheQ scheme adversary (x • scheme.g) (signQ scheme fuel x)
 

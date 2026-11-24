@@ -5,63 +5,11 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Security.Programmed
 /-!
 # Proofs: the ECDSA game with a signer that has no key
 
-In the game with `Π` programmed, the signer draws a nonce `k`, then the answer `β` at `φ(k g)`.
+A signer that reads only the public key gives the game with `Π` programmed the same law.
 
-It returns `t = ψ(β)` and `s = (h + x t) / k`, so it reads the key `x`.
+Source: [Fersch, Kiltz, Poettering, CCS 2016][fkp], Figure 5, the step from Game G2 to Game G3.
 
-The signer here reads only the public key `X = x g`.
-
-It draws a scalar `c`, and fails with no pair when `c` is `0`.
-
-It draws `β` uniformly, sets `t = ψ(β)` and `U = h g + t X`.
-
-It programs `Π` at `φ(R)` with the answer `β`, where `R` is `U / c`, or `c g` when `U` is `0`.
-
-It returns `(t, c)`, in normal form, when `t` and `U` are nonzero, and fails otherwise.
-
-It records the pair also when `t` or `U` is `0`.
-
-With `X = x g`, the point `U` is `u g` for `u = h + x t`.
-
-When `u` is nonzero, the nonce `k = u / c` gives `R = k g` and `s = c`.
-
-The map from `c` to `u / c` is a bijection of the nonzero scalars, and it keeps `0`.
-
-When `u` is `0`, the nonce `k = c` gives the same pair and the same failure.
-
-So both signers have one law, and the two games have one law.
-
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
-
-This is the step from Game G2 to Game G3 of their Figure 5.
-
-Their Game G3 records a pair only on success, at line 40, after the checks of lines 31, 34 and 36.
-
-Their Game G2 records a pair at line 14, before the checks of lines 16 and 19.
-
-So their claim that the forger wins as often in both games does not follow as written.
-
-The pairs of failed nonces change the later answers of `Π`, and the later conflicts.
-
-Their Game G3 also tests its query for a conflict at line 39, only after a success.
-
-Their Game G2 tests it at line 11, before the test of `t`.
-
-The signer here records the pairs of failed nonces too, and the two games have one law.
-
-It draws `c` before `β`, and draws no `β` when `c` is `0`, as the signer with the key does.
-
-The point `c g` for `U = 0` is not in the source, which forms no point then.
-
-Both choices match the signer with the key, nonce for nonce.
-
-The game here inherits the departures of the game with `Π` programmed from their Game G2.
-
-Its signer tries up to `fuel` nonces, and its key is drawn from all scalars.
-
-Their aborts at lines 29 and 39 are conflicts here, which do not stop the game.
-
-It always checks the forgery.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -76,23 +24,31 @@ variable [Field F] [DecidableEq F] [AddCommGroup G] [Module F G] [DecidableEq G]
 
 variable [SampleableType F]
 
-/-- One nonce of the signer with no key, under the public key `X`.
+/-- One nonce of the signer with no key, which reads only the public key `X = x g`.
 
-It draws `c`, and fails with no pair when `c` is `0`.
-
-Otherwise it draws `β` uniformly, and sets `t = ψ(β)` and `U = H(m) g + t X`.
-
-It programs `Π` at `φ(R)` with `β`, where `R` is `U / c`, or `c g` when `U` is `0`.
+It draws `c`, then `β`, and sets `t = ψ(β)` and `U = H(m) g + t X`.
 
 It returns `(t, c)`, with `c` in normal form, when `t` and `U` are nonzero, and fails otherwise. -/
 def keylessNonce (scheme : Scheme F G A M) (X : G) (m : M) :
     StateT (ProgrammedCache A) ProbComp (Option (F × F)) := fun cache => do
+  -- Draw a scalar `c`, and fail with no pair when `c` is `0`.
+  --
+  -- It draws `c` before `β`, and draws no `β` when `c` is `0`, as the signer with the key does.
   let c ← $ᵗ F
   if c = 0 then pure (none, cache) else do
+    -- Draw `β` uniformly, and set `t = ψ(β)` and `U = H(m) g + t X`.
     let β ← uniformOutside [] (scheme.encode scheme.g)
     let t := scheme.reduce β
     let U := scheme.hash m • scheme.g + t • X
+    -- Program `Π` at `φ(R)` with the answer `β`, where `R` is `U / c`, or `c g` when `U` is `0`.
+    --
+    -- The point `c g` for `U = 0` is not in the source, which forms no point then.
+    --
+    -- Both choices match the signer with the key, nonce for nonce.
     let R := if U = 0 then c • scheme.g else c⁻¹ • U
+    -- Return `(t, c)` when `t` and `U` are nonzero, and fail otherwise.
+    --
+    -- The pair is recorded also when `t` or `U` is `0`.
     pure (if t = 0 ∨ U = 0 then none else some (t, scheme.normalize c),
       ((scheme.encode R, β), true) :: cache)
 
@@ -126,6 +82,25 @@ Its key is drawn from all scalars, and its signer records the pairs of failed no
 def keylessExperiment (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary F G A M) :
     ProbComp (((M × F × F) × Bool) × JointState F M (ProgrammedCache A × PermCache A)) := do
   let x ← $ᵗ F
+  -- It inherits the departures of the game with `Π` programmed from their Game G2.
+  --
+  -- Their Game G3 records a pair only on success, at line 40.
+  --
+  -- That is after the checks of lines 31, 34 and 36.
+  --
+  -- Their Game G2 records a pair at line 14, before the checks of lines 16 and 19.
+  --
+  -- So their claim that the forger wins as often in both games does not follow as written.
+  --
+  -- The pairs of failed nonces change the later answers of `Π`, and the later conflicts.
+  --
+  -- Their Game G3 also tests its query for a conflict at line 39, only after a success.
+  --
+  -- Their Game G2 tests it at line 11, before the test of `t`.
+  --
+  -- Recording the pairs of failed nonces too gives the two games one law.
+  --
+  -- Their aborts at lines 29 and 39 are conflicts here, which do not stop the game.
   (simulateQ (jointImpl overlayLazyOracle (keylessFresh scheme (x • scheme.g) fuel))
     (runWithCheck scheme adversary (x • scheme.g))).run ([], ([], []))
 
@@ -138,6 +113,9 @@ private theorem keylessNonce_evalDistEq {scheme : Scheme F G A M} (hg : scheme.g
     (fun z => (z.1, (z.2, l))) <$> (keylessNonce scheme (x • scheme.g) m).run c =ᵈ
       (($ᵗ F : ProbComp F) >>= fun k =>
         (simulateQ programPermImpl (signNonceQ scheme x m k)).run (c, l)) := by
+  -- In the game with `Π` programmed, the signer draws a nonce `k`, then the answer `β` at `φ(k g)`.
+  --
+  -- It returns `t = ψ(β)` and `s = (h + x t) / k`, so it reads the key `x`.
   let b₀ : ProbComp A := uniformOutside [] (scheme.encode scheme.g)
   let outR : F → A → Option (F × F) × (ProgrammedCache A × PermCache A) := fun k b =>
     if k = 0 then (none, (c, l)) else
@@ -177,10 +155,16 @@ private theorem keylessNonce_evalDistEq {scheme : Scheme F G A M} (hg : scheme.g
   have hb : ∀ b, (($ᵗ F : ProbComp F) >>= fun k => pure (outR k b)) =ᵈ
       (($ᵗ F : ProbComp F) >>= fun k => pure (outL k b)) := by
     intro b
+    -- With `X = x g`, the point `U` is `u g` for `u = h + x t`.
     set u := scheme.hash m + x * scheme.reduce b with hu
     have hU : scheme.hash m • scheme.g + scheme.reduce b • x • scheme.g = u • scheme.g := by
       rw [smul_smul, hu, add_smul, mul_comm]
     have hU0 : u • scheme.g = 0 ↔ u = 0 := by simp [hg]
+    -- When `u` is nonzero, the nonce `k = u / c` gives `R = k g` and `s = c`.
+    --
+    -- The map from `c` to `u / c` is a bijection of the nonzero scalars, and it keeps `0`.
+    --
+    -- When `u` is `0`, the nonce `k = c` gives the same pair and the same failure.
     let φ : F → F := fun k => if u = 0 then k else u / k
     have hφ : Function.Bijective φ := by
       refine Function.Involutive.bijective fun k => ?_
@@ -202,6 +186,7 @@ private theorem keylessNonce_evalDistEq {scheme : Scheme F G A M} (hg : scheme.g
       simp only [bind_pure_comp, Functor.map_map, hkey]
     rw [h1, bind_pure_comp]
     exact (SampleableType.map_uniformSample_evalDistEq_of_bijective hφ).map _
+  -- So both signers have one law, and the two games have one law.
   refine hL.trans ((OracleComp.EvalDistEq.bind_bind_swap _ _ _).trans
     ((EvalDistEq.bind_right _ fun b => (hb b).symm).trans
     (((OracleComp.EvalDistEq.bind_bind_swap _ _ _).trans hR.symm))))

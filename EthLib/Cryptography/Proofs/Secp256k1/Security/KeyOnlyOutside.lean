@@ -8,73 +8,17 @@ import VCVio.EvalDist.Inequalities
 /-!
 # Proofs: the key-only game with new forward answers asked of one oracle
 
-Run the key-only forger on a fixed key, with independent answers to `Π`.
+This runs the key-only game with independent answers.
 
-Ask each new forward answer of one outside oracle with no input, and log it with its query.
+It asks each new forward answer of one outside oracle.
 
-The run then ends with the forgery, the result of the check, the cache, the flag and the log.
+A replay fork can then rewind the run at the query of the forgery's point.
 
-With the key drawn uniformly, it wins with the chance of the game with independent answers.
+The forking lemma bounds the chance that the fork succeeds.
 
-The run logs at most one more pair than the forger asks for `Π` or its inverse.
+Source: [Fersch, Kiltz, Poettering, CCS 2016][fkp], Theorem 2, Lemma 1, Figures 2, 7 and 8.
 
-When the outside oracle answered the conversion of a forgery, a replay fork can rewind there.
-
-Stop a path of the run just before a query to the outside oracle with `s` earlier ones.
-
-Every completion of that query logs at least `s + 1` pairs.
-
-Its pair at position `s` has the same point for every completion.
-
-The answer of that pair is the answer that completed the query.
-
-The fork index is the position of the forgery's point in the log of new forward pairs.
-
-The new forward queries of both runs at that index then share the point and differ in answer.
-
-The forking lemma bounds the chance of such a fork from below.
-
-On the key `x g`, the forgery's point is the encoding of `((H(m) + t x) / s) g`.
-
-Say two forgeries `(m, t, s)` and `(m', t', s')` have these scalars equal up to a sign `η`.
-
-Then they give the key, when `H(m) / t ≠ H(m') / t'`.
-
-A forger with at most `q` queries to `Π` or its inverse logs at most `q + 1` pairs.
-
-So a win with no flag raised has a fork index, or its point is not in the log.
-
-With a uniform key, the chance to win with independent answers is then at most a sum.
-
-It is the chance of a fork index plus the chance that the check passes on a point not in the log.
-
-This is the split of their Game G3, which stops with `0` in line 12 on an inverse pair.
-
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
-
-The run is their Game G1 of Figure 7, in the proof of their Theorem 2.
-
-It takes the forward change of their Game G2, lines 01 and 19: the values `β_1, …, β_Q`.
-
-Here each is asked of the outside oracle when needed.
-
-Their Game G2 also changes the inverse answers, in lines 26 to 28, which this run leaves out.
-
-Their `Q` counts the query of the conversion, which their forger asks first.
-
-Here the check may ask it, hence one more pair.
-
-The fork is the forking algorithm of their Figure 2, on an analogue of their Figure 8.
-
-In that analogue, a forgery on an inverse pair gives no fork index.
-
-Their Lemma 1 is the general forking lemma of Bellare and Neven.
-
-The fork here reruns the run from the selected query on, with fresh answers and fresh coins.
-
-Its bound has the form of their Lemma 1 for one fixed key, with `q + 1` for `Q` and `|A|` for `|B|`.
-
-With the key drawn uniformly, the bound also holds, as in their Lemma 1.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -105,7 +49,23 @@ variable [FinEnum A]
 /-- The run on the key `X`, with new forward answers asked outside, from the empty state. -/
 def keyOnlyOutsideRun (scheme : Scheme F G A M) (adversary : KeyOnlyAdversary F G A M) (X : G) :
     OracleComp (OutsideSpec A) (KeyOnlyTrace F A M) :=
+  -- The run ends with the forgery, the result of the check, the cache, the flag and the log.
   (fun r => ⟨r.1.1, r.1.2, r.2.1.1, r.2.1.2, r.2.2⟩) <$>
+    -- Run the key-only forger on a fixed key, with independent answers to `Π`.
+    --
+    -- Ask each new forward answer of one outside oracle with no input, and log it with its query.
+    --
+    -- The run is their Game G1 of Figure 7, in the proof of their Theorem 2.
+    --
+    -- It takes the forward change of their Game G2, lines 01 and 19: the values `β_1, …, β_Q`.
+    --
+    -- Here each is asked of the outside oracle when needed.
+    --
+    -- Their Game G2 also changes the inverse answers, in lines 26 to 28, which this run leaves out.
+    --
+    -- Their `Q` counts the query of the conversion, which their forger asks first.
+    --
+    -- Here the check may ask it, hence one more pair.
     (simulateQ outsideImpl (keyOnlyRunQ scheme adversary X)).run (([], false), [])
 
 /-- The run logs at most `q + 1` pairs.
@@ -188,6 +148,11 @@ It is `none` unless the check passed with no flag raised.
 It is also `none` when the point is not in the log, or not among its first `q + 1` pairs. -/
 def forkIndex (scheme : Scheme F G A M) (X : G) (q : ℕ) (tr : KeyOnlyTrace F A M) :
     Option (Fin (forkBound q (.inr ()) + 1)) :=
+  -- When the outside oracle answered the conversion of a forgery, a replay fork can rewind there.
+  --
+  -- The fork is the forking algorithm of their Figure 2, on an analogue of their Figure 8.
+  --
+  -- In that analogue, a forgery on an inverse pair gives no fork index.
   if tr.verified && !tr.bad then
     match tr.forward.findIdx? fun p => decide (p.1 = forgeryPoint scheme X tr.forgery) with
     | some j => if h : j < q + 1 then some ⟨j, h⟩ else none
@@ -342,6 +307,13 @@ theorem le_prEvent_isSome_contextFork_keyOnlyOutsideRun
      acc * (acc / (q + 1 : ℝ≥0∞) - (FinEnum.card A : ℝ≥0∞)⁻¹)) ≤
       Pr{let r ← (contextFork (keyOnlyOutsideRun scheme adversary X) (forkBound q) (.inr ())
         (forkIndex scheme X q))}[r.isSome] := by
+  -- Their Lemma 1 is the general forking lemma of Bellare and Neven.
+  --
+  -- The fork here reruns the run from the selected query on, with fresh answers and fresh coins.
+  --
+  -- Its bound has the form of their Lemma 1 for one fixed key.
+  --
+  -- It has `q + 1` for `Q` and `|A|` for `|B|`.
   have h := le_prEvent_isSome_contextFork (keyOnlyOutsideRun scheme adversary X) (forkBound q)
     (.inr ()) (forkIndex scheme X q)
     (CfReachable.toPathCfReachable (cfReachable_forkIndex scheme adversary X q))
@@ -355,11 +327,7 @@ theorem le_prEvent_isSome_contextFork_keyOnlyOutsideRun
 
 Draw the key uniformly, and let `acc` be the chance that the run has a fork index.
 
-Then the fork on the same key succeeds with chance at least `acc (acc / (q + 1) - 1 / |A|)`.
-
-The mean of the bounds of the forking lemma on each key is at least this bound.
-
-The reason is that the mean of a square is at least the square of the mean. -/
+Then the fork on the same key succeeds with chance at least `acc (acc / (q + 1) - 1 / |A|)`. -/
 theorem le_prEvent_isSome_contextFork_keyOnlyOutsideRun_uniform [SampleableType F]
     [UniformAnswerMeasure (Unit →ₒ A)] (scheme : Scheme F G A M)
     (adversary : KeyOnlyAdversary F G A M) (q : ℕ) :
@@ -373,6 +341,11 @@ theorem le_prEvent_isSome_contextFork_keyOnlyOutsideRun_uniform [SampleableType 
   let : MeasurableSpace F := ⊤
   dsimp only
   rw [prEvent_bind_of_discrete, prEvent_bind_of_discrete]
+  -- With the key drawn uniformly, the bound also holds, as in their Lemma 1.
+  --
+  -- The mean of the bounds of the forking lemma on each key is at least this bound.
+  --
+  -- The reason is that the mean of a square is at least the square of the mean.
   exact OracleComp.EvalDist.marginalized_jensen_forking_bound_of_discrete _ _ _ _ _
     (fun _ => prEvent_le_one _)
     (fun x => le_prEvent_isSome_contextFork_keyOnlyOutsideRun scheme adversary _ q)
@@ -506,6 +479,7 @@ theorem keyOnlyIndepAdvantage_le_forkIndex_add_notMem (scheme : Scheme F G A M)
          let tr ← keyOnlyOutsideRun scheme adversary (x • scheme.g)}[
         tr.verified = true ∧
           forgeryPoint scheme (x • scheme.g) tr.forgery ∉ tr.forward.map Prod.fst] := by
+  -- This is the split of their Game G3, which stops with `0` in line 12 on an inverse pair.
   rw [keyOnlyIndepAdvantage_eq_outside]
   simp only [prEvent_bind_eq_tsum_prEvent, ← tsum_add, ← mul_add]
   refine tsum_le_tsum fun x => mul_le_mul_right ?_ _

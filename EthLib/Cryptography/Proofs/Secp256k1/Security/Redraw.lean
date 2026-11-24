@@ -6,31 +6,15 @@ public import EthLib.Cryptography.Proofs.LazyPermutation
 /-!
 # Proofs: inverse answers of `Π` redrawn with a known discrete logarithm
 
-A new inverse query of `Π` gets a uniform value `α` of `A`.
+A new inverse answer that encodes a nonzero multiple of `g` is redrawn as the encoding of `a g`.
 
-If `α` encodes a nonzero multiple of the base point, draw a nonzero scalar `a` instead.
+There `a` is a uniform nonzero scalar, so the discrete logarithm of the answer is known.
 
-Answer the encoding of `a g`.
+The redrawn answer is still uniform on `A` when the encoding is 2-to-1 on nonzero multiples of `g`.
 
-Then `a` is a discrete logarithm of a point with encoding `α`.
+Source: [Fersch, Kiltz, Poettering, CCS 2016][fkp], Theorem 2, Figure 7, lines 25 to 28.
 
-The test of whether `α` encodes a nonzero multiple of the base point is an argument.
-
-A search over all scalars defines what the test must decide.
-
-Part (a) of Definition 2 of the source asks that this test be efficient.
-
-The answer keeps its law when the encoding is exactly 2-to-1 on the nonzero multiples of `g`.
-
-That holds when the base point is nonzero, and `2` is nonzero.
-
-It also needs that opposite points, and only they, share an encoding.
-
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
-
-The redraw is lines 25 to 28 of their Figure 7, in Game G2 of the proof of their Theorem 2.
-
-Their proof says the change keeps the law because the encoding is semi-injective.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -55,19 +39,28 @@ def encodesPoint (scheme : Scheme F G A M) (α : A) : Bool :=
 
 /-- A new inverse answer, redrawn with its discrete logarithm when the test passes.
 
-Draw `α` uniformly from `A`.
-
-If the test says it encodes a nonzero multiple of the base point, draw a uniform nonzero scalar `a`.
-
-Then answer the encoding of `a g`, with `a`; otherwise answer `α`, with nothing.
+It returns the answer, with its discrete logarithm when it was redrawn.
 
 The argument `d` is only the default value of the draw from `A`. -/
 def redrawInverse (scheme : Scheme F G A M) (inImage : A → Bool) (d : A) :
     ProbComp (A × Option F) := do
+  -- The redraw is lines 25 to 28 of their Figure 7, in Game G2 of the proof of their Theorem 2.
+  --
+  -- Draw `α` uniformly from `A`, as a new inverse query of `Π` gets.
   let α ← uniformOutside [] d
+  -- The test of whether `α` encodes a nonzero multiple of the base point is an argument.
+  --
+  -- A search over all scalars defines what the test must decide.
+  --
+  -- Part (a) of Definition 2 of the source asks that this test be efficient.
   if inImage α then
+    -- If the test says it encodes a nonzero multiple of the base point, draw a nonzero scalar `a`.
     let a ← (uniformOutside [0] 1 : ProbComp F)
+    -- Answer the encoding of `a g`, with `a`.
+    --
+    -- Then `a` is a discrete logarithm of `a g`, whose encoding is the answer.
     pure (scheme.encode (a • scheme.g), some a)
+  -- Otherwise answer `α`, with nothing.
   else pure (α, none)
 
 /-- A redrawn answer with a scalar `a` is the encoding of `a g`, and `a` is nonzero. -/
@@ -149,12 +142,21 @@ The encoding must be semi-injective, and opposite points must share their encodi
 
 The test must agree with the search over all scalars.
 
-`2 ≠ 0` serves only the count; the source does not need it. -/
+The hypothesis `2 ≠ 0` serves only the count.
+
+The source does not need it. -/
 theorem redrawInverse_fst_evalDistEq {scheme : Scheme F G A M} {inImage : A → Bool}
     (hImage : ∀ α, inImage α = encodesPoint scheme α)
     (hg : scheme.g ≠ 0) (h2 : (2 : F) ≠ 0)
     (hsemi : scheme.SemiInjective) (hneg : scheme.EncodeNeg) (d : A) :
     Prod.fst <$> redrawInverse scheme inImage d =ᵈ uniformOutside [] d := by
+  -- The answer keeps its law when the encoding is exactly 2-to-1 on the nonzero multiples of `g`.
+  --
+  -- That holds when the base point is nonzero, and `2` is nonzero.
+  --
+  -- It also needs that opposite points, and only they, share an encoding.
+  --
+  -- Their proof says the change keeps the law because the encoding is semi-injective.
   obtain rfl : inImage = encodesPoint scheme := funext hImage
   refine evalDistEq_of_forall_prEvent_eq_output fun α₀ => ?_
   have hnil : ((FinEnum.toList A).filter fun b => b ∉ []) = FinEnum.toList A := by simp
