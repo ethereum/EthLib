@@ -6331,7 +6331,10 @@ It needs at least one slot in an epoch, and the last epoch of the lookahead and 
 `statePtc_error_code` shows that each such error has code 400.
 `ptcResponse_eq_error_iff` shows that the JSON answer refuses exactly when the answer does, with the same error, under a preset whose PTC is not empty.
 `ptcResponse_error_code` shows that each error of the JSON answer has code 400, so it never gets code 500.
-Writing the answer in SSZ can still give code 500, and no theorem excludes it.
+`ptcSsz_eq_error_iff` shows the same for the SSZ answer, under a preset whose answer of 8 bytes plus 8 for each member stays below `2^32` bytes.
+That answer has 4104 bytes on mainnet and 136 on minimal.
+`ptcSsz_error_code` gives each of its errors code 400, so the SSZ answer never gets code 500 either.
+It rests on `SszType.serialize_exists_ok_of_maxSize` (`Serialization/Proofs/Ssz/Typed/Bounds.lean`): a value of a lawful type whose largest encoding stays below `2^32` bytes always encodes.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_committees.py`) checks the three answers on the base states of the pinned fork vectors of the minimal preset.
 It reads the active validators, the keys of the sync committees and the window of the PTC from the JSON of the state.
 It checks each committee against the assignment that the honest validator guide gives each active validator.
@@ -6650,7 +6653,10 @@ In SSZ, `SszType.serialize_ok_or_overflow` (`Serialization/Proofs/Ssz/Typed/Clas
 The keys of a sync committee reach that size when it holds more than `2^32 / 48` keys.
 The SSZ answer of the bootstrap (`Consensus/Exports/BeaconApiLightClient.lean`) writes it with a check of that size for each composite part.
 So under a preset with such a sync committee, the SSZ answer of a served bootstrap gets code 500.
-No theorem states that, nor that a bootstrap of the mainnet or the minimal preset stays below that size.
+No theorem states that case.
+`lightClientBootstrap_maxSize_lt` shows that on the mainnet and minimal presets every encoding of a bootstrap stays below that size, at every fork.
+On mainnet the bound is 25680 bytes at Electra and Fulu.
+`apiSszOr500_bootstrapFor_eq_error_iff` then shows that on those presets the SSZ answer refuses exactly when the bootstrap does, so a served bootstrap never gets code 500 in SSZ.
 
 `bootstrapFor_error_iff_of_reachable` (`Consensus/Proofs/BeaconApi/LightClientBootstrapReachable.lean`) is about a store that the handlers reach from an anchor that the fork choice accepts.
 It covers each root whose block and post state such a store holds, with that state from the Altair fork epoch on.

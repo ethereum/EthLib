@@ -9,39 +9,16 @@ public import EthLib.Consensus.Proofs.LightClient.FullNode
 public import EthLib.Consensus.Proofs.BeaconApi.Responses
 public import EthLib.Consensus.Proofs.LightClient.Upgrade
 import EthLib.Consensus.Proofs.BeaconApi.Encoding
+import EthLib.Serialization.Proofs.Ssz.Typed.Bounds
 
 /-!
 # Proofs: the bootstrap answer of the Beacon API
 
-A bootstrap that the node serves for a block starts a light client that trusts that block.
+A bootstrap that the node serves starts a light client that trusts its block.
 
-The store must hold the block under its root, and the state that the block names by its root.
+It refuses a block whose slot is of another fork than the store's, and refuses only with code 404.
 
-The schedule must put the forks in order.
-
-The sizes of the preset that the block and the state hold must be nonzero.
-
-The state type must be lawful.
-
-A block of a fork from Altair has a light client header.
-
-A state gives the bootstrap of a block when it passes the checks of the bootstrap on that block.
-
-The index of the current sync committee at its slot must also be that of the fork.
-
-The answer itself refuses a block of another fork than the fork of its slot.
-
-It refuses a root whose block or post state the store lacks.
-
-It refuses a root whose post state is before the Altair fork epoch.
-
-Each refusal has code 404, and the JSON answer passes it on unchanged.
-
-The JSON answer refuses only when the bootstrap does.
-
-So in JSON a bootstrap that the node serves never gets code 500.
-
-That result needs a preset with a nonempty logs bloom and sync committee.
+On the mainnet and minimal presets, its JSON and SSZ forms add no refusal of their own.
 -/
 
 @[expose] public section
@@ -474,5 +451,25 @@ theorem bootstrapFor_of_lt_altair {config : Config} {store : Store preset fork}
       · simp [bootstrapFor, held, heldState, scheduled, createLightClientBootstrap,
           LightClientError.specifiedFork, altair, bind, Except.bind, Except.mapError]
     · simp [bootstrapFor, held, heldState, scheduled]
+
+/-- On the mainnet and minimal presets, every encoding of a bootstrap stays below `2^32` bytes. -/
+theorem lightClientBootstrap_maxSize_lt (presets : preset = .mainnet ∨ preset = .minimal) :
+    ∃ bound, (SszType.desc (LightClientBootstrap preset fork)).maxSize = some bound ∧
+      bound < 2 ^ 32 := by
+  -- Each fork of each preset has its own bound, near 25 kilobytes.
+  rcases presets with rfl | rfl <;> cases fork <;> exact ⟨_, rfl, by decide⟩
+
+/-- On the mainnet and minimal presets, the SSZ bootstrap refuses exactly when the bootstrap does.
+
+It refuses with the same error. -/
+theorem apiSszOr500_bootstrapFor_eq_error_iff (presets : preset = .mainnet ∨ preset = .minimal)
+    {config : Config} {store : Store preset fork} {root : Root} {error : ErrorMessage} :
+    (bootstrapFor config store root >>= apiSszOr500) = .error error ↔
+      bootstrapFor config store root = .error error := by
+  obtain ⟨bound, largest, small⟩ := lightClientBootstrap_maxSize_lt (fork := fork) presets
+  -- The two presets have nonempty sizes, so the bootstrap type is lawful under each.
+  rcases presets with rfl | rfl <;>
+    exact apiSszOr500_bind_eq_error_iff fun bootstrap _ =>
+      Serialization.Ssz.SszType.serialize_exists_ok_of_maxSize bootstrap largest small
 
 end EthLib.Consensus.BeaconApi

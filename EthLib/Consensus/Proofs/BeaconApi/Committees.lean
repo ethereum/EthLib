@@ -10,6 +10,7 @@ public import EthLib.Consensus.Proofs.BeaconApi.Responses
 public import EthLib.Serialization.Proofs.Ssz.Typed.Collections
 public import EthLib.Serialization.Proofs.Ssz.Typed.Container
 import EthLib.Consensus.Proofs.BeaconApi.Encoding
+import EthLib.Serialization.Proofs.Ssz.Typed.Bounds
 
 /-!
 # Proofs: the committee answers of the Beacon API
@@ -464,5 +465,27 @@ theorem ptcResponse_error_code [NeZero preset.PTC_SIZE.toNat] {config : Config}
     {state : BeaconState preset fork} {slot : Option Slot} {error : ErrorMessage}
     (failed : ptcResponse config state slot = .error error) : error.code = 400 :=
   statePtc_error_code (ptcResponse_eq_error_iff.mp failed)
+
+/-- The PTC answer in SSZ refuses exactly when the answer does, with the same error.
+
+It needs a preset whose PTC is not empty, and whose answer stays below `2^32` bytes. -/
+theorem ptcSsz_eq_error_iff [NeZero preset.PTC_SIZE.toNat]
+    -- The answer has 8 bytes for the slot and 8 bytes for each member.
+    (small : 8 + preset.PTC_SIZE.toNat * 8 < 2 ^ 32) {config : Config}
+    {state : BeaconState preset fork} {slot : Option Slot} {error : ErrorMessage} :
+    ptcSsz config state slot = .error error ↔ statePtc config state slot = .error error := by
+  unfold ptcSsz
+  -- Every part of the answer has a fixed size, so its largest encoding is its only one.
+  exact apiSszOr500_bind_eq_error_iff fun answer _ =>
+    Serialization.Ssz.SszType.serialize_exists_ok_of_maxSize answer rfl small
+
+/-- Every error of the PTC answer in SSZ has code 400.
+
+It needs a preset whose PTC is not empty, and whose answer stays below `2^32` bytes. -/
+theorem ptcSsz_error_code [NeZero preset.PTC_SIZE.toNat]
+    (small : 8 + preset.PTC_SIZE.toNat * 8 < 2 ^ 32) {config : Config}
+    {state : BeaconState preset fork} {slot : Option Slot} {error : ErrorMessage}
+    (failed : ptcSsz config state slot = .error error) : error.code = 400 :=
+  statePtc_error_code ((ptcSsz_eq_error_iff small).mp failed)
 
 end EthLib.Consensus.BeaconApi

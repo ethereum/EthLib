@@ -7,13 +7,9 @@ public import EthLib.Base.Proofs.List
 /-!
 # `Serialization.Proofs.Ssz.Codec.Bounds`
 
-The size of every encoding lies within the bounds of its type.
+The size of every encoding lies within the bounds of its type, which need not be attained.
 
-- A value that fits its type and encodes has at least `minSize` and at most `maxSize` bytes.
-- So does every encoding under a well-formed type.
-- A static type has both bounds equal to its fixed size.
-
-The theorems do not say that a bound is attained.
+A value that fits a type whose largest encoding stays below `2^32` bytes always encodes.
 -/
 
 @[expose] public section
@@ -280,5 +276,142 @@ theorem withinBounds_of_serialize_of_wellFormed {shape : Desc} {value : Value} {
     (formed : shape.wellFormed = .ok ()) (wrote : serialize shape value = .ok bytes) :
     shape.minSize ≤ bytes.size ∧ ∀ bound, shape.maxSize = some bound → bytes.size ≤ bound :=
   withinBounds_of_serialize (fits_of_serialize shape value formed ⟨bytes, wrote⟩) wrote
+
+/-! ## Encodings that fit the offset range -/
+
+/-- Members of a list that each have some size have them all under one size function. -/
+private theorem choose_sizes {α : Type} {P : α → Nat → Prop} {xs : List α}
+    (each : ∀ x ∈ xs, ∃ size, P x size) : ∃ sizes : α → Nat, ∀ x ∈ xs, P x (sizes x) := by
+  classical
+  -- Pick the chosen size where one exists, and zero elsewhere.
+  refine ⟨fun x => if h : ∃ size, P x size then h.choose else 0, fun x hx => ?_⟩
+  simp only [each x hx, ↓reduceDIte]
+  exact (each x hx).choose_spec
+
+/-- Elements within a count, whose most bytes in all stay below `2^32`, have sizes below it.
+
+The sum of their bytes, offsets included, stays below `2^32` too. -/
+private theorem sequence_witness {element : Desc} {values : List Value} {high count : Nat}
+    (largest : element.maxSize = some high) (fitsEach : ∀ v ∈ values, Fits element v)
+    (ih : ∀ v ∈ values, ∀ bound, element.maxSize = some bound → bound < 2 ^ 32 →
+      ∃ size, Representable element v size)
+    (within : values.length ≤ count) (small : count * (high + offsetWidth element) < 2 ^ 32) :
+    ∃ sizes : Value → Nat, (∀ v ∈ values, Representable element v (sizes v)) ∧
+      (values.map fun v => fieldSize element (sizes v)).sum < 2 ^ 32 := by
+  -- A present element makes the count positive, so the element bound is below the total.
+  have each : ∀ v ∈ values, ∃ size, Representable element v size := fun v hv => by
+    have positive : 0 < count := Nat.lt_of_lt_of_le (List.length_pos_of_mem hv) within
+    have : high ≤ count * (high + offsetWidth element) :=
+      Nat.le_trans (Nat.le_add_right _ _) (Nat.le_mul_of_pos_left _ positive)
+    exact ih v hv high largest (by omega)
+  obtain ⟨sizes, represented⟩ := choose_sizes each
+  refine ⟨sizes, represented, ?_⟩
+  -- Each element has at most the element bound, so the sum has at most the total.
+  have := Base.sum_map_le (f := fun v => fieldSize element (sizes v))
+    (high := high + offsetWidth element) fun v hv => by
+      have := (withinBounds_of_representable (represented v hv) (fitsEach v hv)).2 high largest
+      simp only [fieldSize_eq]
+      omega
+  have := Nat.mul_le_mul_right (high + offsetWidth element) within
+  omega
+
+/-- A field of a struct has at most the most bytes of the fields. -/
+private theorem le_fieldsMaxSize {field : Desc} :
+    ∀ {fields : List Desc} {bound : Nat}, field ∈ fields →
+      Desc.fieldsMaxSize fields = some bound → ∃ size, field.maxSize = some size ∧ size ≤ bound
+  | [], _, h, _ => by cases h
+  | f :: rest, bound, h, hb => by
+    simp only [Desc.fieldsMaxSize, Option.bind_eq_bind, Option.bind_eq_some_iff,
+      Option.pure_def, Option.some.injEq] at hb
+    obtain ⟨size, hs, remaining, hr, rfl⟩ := hb
+    rcases List.mem_cons.mp h with rfl | h
+    · exact ⟨size, hs, by omega⟩
+    · obtain ⟨s, hs', hle⟩ := le_fieldsMaxSize h hr
+      exact ⟨s, hs', by omega⟩
+
+/-- Fields under a bound below `2^32` have sizes whose sum stays below `2^32`. -/
+private theorem fields_witness {fields : List Desc} {values : List Value} {bound : Nat}
+    (paired : fields.length = values.length)
+    (fitsEach : ∀ pair ∈ fields.zip values, Fits pair.1 pair.2)
+    (ih : ∀ pair ∈ fields.zip values, ∀ bound, pair.1.maxSize = some bound → bound < 2 ^ 32 →
+      ∃ size, Representable pair.1 pair.2 size)
+    (largest : Desc.fieldsMaxSize fields = some bound) (small : bound < 2 ^ 32) :
+    ∃ sizes : Desc → Value → Nat,
+      (∀ pair ∈ fields.zip values, Representable pair.1 pair.2 (sizes pair.1 pair.2)) ∧
+      ((fields.zip values).map fun (field, value) => fieldSize field (sizes field value)).sum
+        < 2 ^ 32 := by
+  -- Each field's bound is at most the struct's, so the induction hypothesis applies.
+  have each : ∀ pair ∈ fields.zip values, ∃ size, Representable pair.1 pair.2 size :=
+    fun pair hp => by
+      obtain ⟨size, hs, hle⟩ := le_fieldsMaxSize (List.of_mem_zip hp).1 largest
+      exact ih pair hp size hs (by omega)
+  obtain ⟨sizes, represented⟩ := choose_sizes each
+  refine ⟨fun field value => sizes (field, value), represented, ?_⟩
+  -- The fields within their bounds sum to at most the struct's bound.
+  have := (fields_withinBounds (g := fun field value => sizes (field, value)) paired
+    fun pair hp => withinBounds_of_representable (represented pair hp) (fitsEach pair hp)).2
+      bound largest
+  exact Nat.lt_of_le_of_lt this small
+
+/-- A value that fits a type whose encodings stay below `2^32` bytes has a size witness. -/
+theorem representable_of_maxSize {shape : Desc} {value : Value} (fits : Fits shape value)
+    {bound : Nat} (largest : shape.maxSize = some bound) (small : bound < 2 ^ 32) :
+    ∃ size, Representable shape value size := by
+  induction fits generalizing bound with
+  | bool b => exact ⟨_, .bool b⟩
+  | @uint width n _ => exact ⟨_, .uint width n⟩
+  | @byteVector length data exact =>
+    simp only [Desc.maxSize, Option.some.injEq] at largest
+    exact ⟨_, .byteVector length data (by omega)⟩
+  | @byteList limit data within =>
+    simp only [Desc.maxSize, Option.some.injEq] at largest
+    exact ⟨_, .byteList limit data (by omega)⟩
+  | @bitVector length data _ => exact ⟨_, .bitVector length data⟩
+  | @bitList limit data _ => exact ⟨_, .bitList limit data⟩
+  | @progressiveBitList limit data _ => exact ⟨_, .progressiveBitList limit data⟩
+  | vector count fitsEach ih =>
+    simp only [Desc.maxSize, Option.map_eq_some_iff] at largest
+    obtain ⟨high, hm, rfl⟩ := largest
+    obtain ⟨sizes, each, bounded⟩ :=
+      sequence_witness hm fitsEach ih (Nat.le_of_eq count) small
+    exact ⟨_, .vector each bounded⟩
+  | list within fitsEach ih =>
+    simp only [Desc.maxSize, Option.map_eq_some_iff] at largest
+    obtain ⟨high, hm, rfl⟩ := largest
+    obtain ⟨sizes, each, bounded⟩ := sequence_witness hm fitsEach ih within small
+    exact ⟨_, .list each bounded⟩
+  | @progressiveList element limit elements within fitsEach ih =>
+    cases limit with
+    | none => simp [Desc.maxSize] at largest
+    | some l =>
+      simp only [Desc.maxSize, Option.bind_eq_bind, Option.bind_eq_some_iff,
+        Option.pure_def, Option.some.injEq] at largest
+      obtain ⟨_, hl, high, hm, rfl⟩ := largest
+      cases hl
+      simp only [withinBound, decide_eq_true_eq] at within
+      obtain ⟨sizes, each, bounded⟩ := sequence_witness hm fitsEach ih within small
+      exact ⟨_, .progressiveList each bounded⟩
+  | container paired fitsEach ih =>
+    obtain ⟨sizes, each, bounded⟩ := fields_witness paired fitsEach ih largest small
+    exact ⟨_, .container each bounded⟩
+  | progressiveContainer paired fitsEach ih =>
+    obtain ⟨sizes, each, bounded⟩ := fields_witness paired fitsEach ih largest small
+    exact ⟨_, .progressiveContainer each bounded⟩
+  | compatibleUnion ranged named inner ih =>
+    -- The named option has at most the union's bound less the selector byte.
+    simp only [Desc.maxSize, Option.map_eq_some_iff] at largest
+    obtain ⟨high, hm, rfl⟩ := largest
+    obtain ⟨size, hs, hle⟩ := le_optionsMaxSize (lookupOption_mem _ _ _ _ named) hm
+    obtain ⟨inside, represented⟩ := ih hs (by omega)
+    exact ⟨_, .compatibleUnion named represented⟩
+
+/-- A value that fits a type whose encodings stay below `2^32` bytes encodes. -/
+theorem serialize_fits_exists_ok_of_maxSize {shape : Desc} {value : Value}
+    (fits : Fits shape value) {bound : Nat} (largest : shape.maxSize = some bound)
+    (small : bound < 2 ^ 32) :
+    ∃ bytes, serialize shape value = .ok bytes := by
+  obtain ⟨size, represented⟩ := representable_of_maxSize fits largest small
+  obtain ⟨bytes, wrote, -⟩ := represented.serialize fits
+  exact ⟨bytes, wrote⟩
 
 end EthLib.Serialization.Ssz
