@@ -6801,19 +6801,22 @@ It checks the selection of named members once each, by index or key, and code 40
 The [response types](https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/rewards.yaml) give each signed amount of the attestation and sync committee rewards the type `Int64`.
 The [schema of `Int64`](https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/primitive.yaml) is a decimal string with no stated range, and EthLib reads its name as the signed 64-bit range, from `-2^63` to `2^63 - 1`.
 EthLib computes these amounts as unbounded integers.
-An attestation amount is the difference of two 64-bit unsigned amounts, so it can fall outside that range.
+Before Altair, the reward of a matched vote can fall outside that range.
+No theorem yet bounds the attestation amounts from Altair.
 Rather than a 64-bit signed field, which would wrap or need a check at each part, the response checks every amount once, before it writes the answer.
 An answer with an amount outside `-2^63` to `2^63 - 1` fails with code 500, since the response types cannot hold it.
 `attestationRewardsResponse_ok` and `syncCommitteeRewardsResponse_ok` show that every amount of an answer fits.
 `attestationRewardsResponse_eq_rewardOutOfRange_iff` shows the converse for the attestation rewards, with the error of that check.
-Once the checks of the epoch and the slot pass and both lists compute, the answer gets it exactly when an amount does not fit.
+Suppose the checks of the epoch and the slot pass, and the state before the rewards and both lists compute.
+The answer then gets that error exactly when an amount does not fit.
 Before Altair the reward of a matched vote is the base reward times the attesting increments, divided by the active increments of the current epoch.
-An attester that has left the active set counts only in the first.
-So outside an inactivity leak, that reward can pass `2^63 - 1`.
-That also needs an effective balance far above 32 ETH, since at 32 ETH or less the product stays under about `3 * 10^17`.
+An attester that has left the active set counts in the attesting increments, but not in the active increments.
+So outside an inactivity leak, that reward can pass `2^63 - 1` only with an effective balance far above 32 ETH.
+At 32 ETH or less, the base reward times the attesting increments stays under about `3 * 10^17`.
+Before Altair the transition caps each effective balance at `MAX_EFFECTIVE_BALANCE`, 32 ETH, so that case needs a state built by hand.
 No theorem states which states reach that case, and no Python vector reaches it.
 A sync committee reward never leaves the range, and `syncCommitteeRewards_reward_lt` shows that each lies strictly between `-2^58` and `2^58`.
-So `syncCommitteeRewardsResponse_of_syncCommitteeRewards` shows that the answer serves every list of sync committee rewards that computes.
+So `syncCommitteeRewardsResponse_of_syncCommitteeRewards` shows that, from Altair, the answer serves every list of sync committee rewards that computes.
 `syncCommitteeRewardsResponse_ne_rewardOutOfRange` shows that it never gets the error of that check.
 
 The block rewards are in the same module, read from the state at the slot of the block, before it.

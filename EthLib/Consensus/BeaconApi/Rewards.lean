@@ -86,7 +86,7 @@ The response [types] give each signed amount the type [`Int64`][int64].
 
 Its name reads as a signed 64-bit integer, from `-2^63` to `2^63 - 1`; the schema states no range.
 
-An attestation amount is the difference of two 64-bit unsigned amounts, so it can fall outside.
+Before Altair, the reward of a matched vote can fall outside.
 
 A sync committee reward stays inside, since it is below `2^58` in absolute value.
 
@@ -430,7 +430,7 @@ def syncCommitteeRewardsResponse (state : BeaconState preset fork)
       fun _ => internalError "no sync committee rewards"
     -- The response types give each reward 64 bits.
     --
-    -- Each reward lies inside that range, and the check stays as a guard.
+    -- No reward leaves that range, so this check never fails.
     ensure (entries.all (·.fits)) rewardOutOfRange
     return { data := .arr (entries.map (·.toJson)).toArray }
   -- A state before Altair, whose block has no sync aggregate: code 400 with the source's example.

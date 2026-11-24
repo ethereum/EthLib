@@ -1556,7 +1556,7 @@ theorem syncCommitteeRewardsResponse_of_lt_altair (before : fork < .altair)
   simp [syncCommitteeRewardsResponse, not]
   rfl
 
-/-- The seats of the sync committee are at most the committee size. -/
+/-- The sync committee has at most as many seats as the committee size. -/
 private theorem syncRewardSeats_length_le {altair : .altair ≤ fork}
     {aggregate : SyncAggregate preset} {seats : List (ValidatorIndex × Bool)}
     (seated : syncRewardSeats state altair aggregate = .ok seats) :
@@ -1568,7 +1568,7 @@ private theorem syncRewardSeats_length_le {altair : .altair ≤ fork}
   simp only [Array.length_toList, Array.size_zip, Vector.size_toArray]
   exact Nat.min_le_right _ _
 
-/-- The net reward of a validator is at most the participant reward times the seats, either way. -/
+/-- In absolute value, a net reward is at most the participant reward times the number of seats. -/
 private theorem seatsReward_le (reward : Gwei) (seats : List (ValidatorIndex × Bool))
     (index : ValidatorIndex) :
     -((seats.length * reward.toNat : Nat) : Int) ≤ seatsReward reward seats index ∧
@@ -1588,7 +1588,7 @@ private theorem seatsReward_le (reward : Gwei) (seats : List (ValidatorIndex × 
     · simp only [same, ↓reduceIte]
       omega
 
-/-- Each reward of the answer lies strictly between `-2^58` and `2^58`. -/
+/-- Each computed sync committee reward lies strictly between `-2^58` and `2^58`. -/
 theorem syncCommitteeRewards_reward_lt {altair : .altair ≤ fork}
     {aggregate : SyncAggregate preset} {ids : List ValidatorId}
     {entries : List SyncCommitteeReward}
@@ -1608,7 +1608,7 @@ theorem syncCommitteeRewards_reward_lt {altair : .altair ≤ fork}
   omega
 
 /-- When the sync committee rewards of a state from Altair compute, the answer is their JSON. -/
-theorem syncCommitteeRewardsResponse_of_syncCommitteeRewards (altair : .altair ≤ fork)
+theorem syncCommitteeRewardsResponse_of_syncCommitteeRewards {altair : .altair ≤ fork}
     {aggregate : SyncAggregate preset} {ids : List ValidatorId}
     {entries : List SyncCommitteeReward}
     (computed : syncCommitteeRewards state altair aggregate ids = .ok entries) :
@@ -1628,7 +1628,7 @@ theorem syncCommitteeRewardsResponse_ne_rewardOutOfRange (aggregate : SyncAggreg
     syncCommitteeRewardsResponse state aggregate ids ≠ .error rewardOutOfRange := by
   by_cases altair : .altair ≤ fork
   · cases computed : syncCommitteeRewards state altair aggregate ids with
-    | ok entries => simp [syncCommitteeRewardsResponse_of_syncCommitteeRewards altair computed]
+    | ok entries => simp [syncCommitteeRewardsResponse_of_syncCommitteeRewards computed]
     -- A failed computation gets the error that names no sync committee rewards.
     | error fault =>
       simp [syncCommitteeRewardsResponse, altair, computed, Except.mapError, bind, Except.bind,
