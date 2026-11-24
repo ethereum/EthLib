@@ -9,29 +9,7 @@ public import EthLib.Execution.Proofs.State.Frame
 
 The supply of a state is the sum of the balances of all its accounts, in wei.
 
-An address with no account counts as the empty account, whose balance is 0.
-
-So the sum can run over any list of distinct addresses that holds every nonzero balance.
-
-A write that changes one balance changes the supply by the same amount.
-
-A move of ether keeps the supply, and a creation of ether adds its amount.
-
-The deletion of an account removes its balance from the supply.
-
-A write of a nonce, a code or a word of storage keeps the supply.
-
-So do a record of a read or of a created account, a write of transient storage and a touch.
-
-So do a wipe of storage, and taking the reads of another state.
-
-So do the clear of an account that keeps its balance, and the deletion of empty touched accounts.
-
-A rollback gives back the supply of its snapshot, and the end of a transaction keeps the supply.
-
-The supply of the state after a block is the sum of the balances of its accounts.
-
-It is the supply of the block state, read as a transaction.
+How each write of the state, a rollback, the end of a transaction and a block change it.
 -/
 
 @[expose] public section

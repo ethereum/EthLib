@@ -9,25 +9,9 @@ Each write of a transaction's state names the addresses it changes.
 
 It leaves the account, the storage and the transient storage of every other address as they were.
 
-Two runs of writes compose, so a run changes nothing outside the union of the addresses it names.
-
-A move of ether from an account that holds code to itself changes no account and no storage.
-
-A rollback to a snapshot of the same block gives back the snapshot's accounts and storage.
-
-Every write within a transaction keeps the block of the state.
-
-So a snapshot taken before a run of writes has the block of the state after them.
-
-The other statements cover the account, the storage and the transient storage only.
-
-They say nothing about the original words of storage, the created accounts or the records of reads.
-
 The end of a transaction clears the transient storage of every address, so it is left out.
 
 Code is kept under its hash and not under an address, so the statements leave it out.
-
-A touch of an account keeps every code, and the account at every other address.
 -/
 
 @[expose] public section
@@ -38,7 +22,9 @@ open EthLib.Base
 
 /-- The state `tx'` reads as `tx` at every address outside `touched`.
 
-That holds for the account, every word of storage and every word of transient storage. -/
+That holds for the account, every word of storage and every word of transient storage.
+
+It says nothing of the original words of storage, the created accounts or the records of reads. -/
 def SameOutside (touched : List Address) (tx tx' : TransactionState) : Prop :=
   ∀ address, address ∉ touched →
     tx'.getAccountOptional address = tx.getAccountOptional address ∧
@@ -477,6 +463,7 @@ theorem parent_restoreTxState (tx snapshot : TransactionState) :
 
 That holds for the account, the storage and the transient storage at every address. -/
 theorem sameOutside_restoreTxState {tx snapshot : TransactionState}
+    -- A snapshot taken before a run of writes has the block of the state after them.
     (hparent : tx.parent = snapshot.parent) :
     SameOutside [] snapshot (tx.restoreTxState snapshot) :=
   fun address _ =>

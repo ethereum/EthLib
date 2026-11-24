@@ -6,12 +6,7 @@ public import EthLib.Execution.Trie.Root
 /-!
 # Proofs: `Trie.Root`
 
-- The budget of the node composition never runs out.
-  Any budget above the longest path, counted from the level, gives the same node.
-- The root of the empty map is the hash of `0x80`, secured or not.
-- A map with an empty value has no root.
-- The keys and values of every other map reach the composition unchanged, in order.
-- A key that is set takes the new value, and every other key keeps its value.
+The budget of the node composition, the root of each map, and how setting a key changes it.
 -/
 
 @[expose] public section

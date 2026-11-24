@@ -10,21 +10,7 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.CachePartial
 
 The hash of the trie is modelled as one random oracle, shared by every node and every key.
 
-An adversary that makes queries outputs two tries and a key.
-
-Then the experiment computes both roots and both proofs of the key with the same oracle.
-
-It also queries the key, every key of both tries, and every node of both proofs.
-
-The adversary wins when two tries of one kind, each with distinct keys, have one root.
-
-They must also give the key different values.
-
-Each win exposes two different queried inputs with one answer, found by the binding searches.
-
-So the birthday bound of the oracle bounds the probability of a win.
-
-The bound counts every query of the experiment, the adversary's and the extraction's.
+The birthday bound of the oracle bounds the probability that an adversary wins.
 
 Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2.
 
@@ -72,7 +58,9 @@ def witnesses (first second : Trie) (key : ByteArray)
 
 /-- The part of the experiment after the adversary, which only calls the hash oracle.
 
-It computes both roots and both proofs, then queries every input of the binding searches. -/
+It computes both roots and both proofs, then queries every input of the binding searches.
+
+These are the key, every key of both tries, and every node of both proofs. -/
 def extract (first second : Trie) (key : ByteArray) : OracleComp HashOracle Outcome := do
   let firstRoot ← (rootM queryHash first).run
   let secondRoot ← (rootM queryHash second).run
@@ -406,20 +394,23 @@ theorem collision_of_extract {cache : HashOracle.QueryCache} {first second : Tri
         hvalid
     · cases hfind
 
-/-! ## The bound -/
+/-! ## The bound
+
+Each win exposes two different queried inputs with one answer, so the birthday bound applies.
+-/
 
 /-- Two tries of one kind, each with distinct keys and one root, that give a key different values.
 
-The probability is at most `Q^2 / N`, where `N` is the number of digests.
-
-`Q` bounds the oracle calls of the whole experiment, repeats included.
-
-The extraction makes many of them, since each proof level rebuilds its subtree.
-
-The oracle cache starts empty, and the adversary's private sampling is not counted. -/
+The probability is at most `Q^2 / N`, where `N` is the number of digests. -/
 theorem prEvent_wins_le [SampleableType Hash32]
     (adversary : OracleComp (unifSpec + HashOracle) (Trie × Trie × ByteArray)) {Q : Nat}
+    -- `Q` bounds the oracle calls of the whole experiment, repeats included.
+    --
+    -- It counts every query of the experiment, the adversary's and the extraction's.
+    --
+    -- The extraction makes many of them, since each proof level rebuilds its subtree.
     (hQ : IsQueryBoundP (experiment adversary) (fun t => t.isRight = true) Q) :
+    -- The oracle cache starts empty, and the adversary's private sampling is not counted.
     Pr{let z ← (simulateQ HashOracle.romImpl (experiment adversary)).run ∅}[Wins z.1] ≤
       Q * ((Q : ℝ≥0∞) / Nat.card Hash32) :=
   prEvent_experimentWith_le

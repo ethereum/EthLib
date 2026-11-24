@@ -9,39 +9,11 @@ public import EthLib.Execution.Proofs.Trie.Range
 
 A range that passes the range check gives each key between its two ends the trie's value.
 
-Otherwise a search finds two different nodes with one hash.
-
-So the range holds every 32-byte key of the trie there, and no other such key.
-
-When the check shows no key after the range, this holds for every key from the start on.
-
-When it shows a key after the range, the theorem does not say that the trie holds one.
-
-The trie is any plain trie with the requested root and distinct keys.
-
-Its keys are not hashed again: each is a 32-byte hash, as in the range.
-
-A last section carries the result to a secured trie, such as a state or storage trie.
-
-Such a trie has the root of the plain trie of its hashed keys.
+A hash of any input to 32 bytes has collisions, so the theorem names a search that returns one.
 
 The source is [`caps/snap.md`][snap], sections "AccountRange (0x01)" and "StorageRanges (0x03)".
 
 [snap]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md
-
-A hash of any input to 32 bytes has collisions, so the theorem names a search that returns one.
-
-For each key, the range gives a proof of that key alone.
-
-It takes the nodes on the two paths from the range proof, and builds the rest from the entries.
-
-The single-key check accepts that proof, with the value that the entries give the key.
-
-The search compares that proof with the trie's own proof of the key, node by node.
-
-When it finds nothing, the two proofs are one, and so are the two values.
-
-A range with no proof is the whole trie, and its single-key proofs are those of its entries.
 -/
 
 @[expose] public section
@@ -66,21 +38,15 @@ def referencedNodes (nodes : List (Hash32 × ByteArray)) : Item → List ByteArr
       []
   | .list _ => []
 
-/-- The proof of the rest of the path of one key, below the subtree that a reference holds.
-
-The arguments follow the range check: the entries are those below the subtree.
-
-On the path of an end, it takes the nodes of the range proof.
-
-In a subtree between the two ends, it takes the proof of the node that the entries build there.
-
-Elsewhere it takes no node. -/
+/-- The proof of the rest of the path of one key, below the subtree that a reference holds. -/
 def rangeProofBelow (hash : ByteArray → Hash32) (nodes : List (Hash32 × ByteArray))
     (left : List Nibble) (right : Option (List Nibble)) :
     Nat → Item → List Nibble → List (List Nibble × ByteArray) → List Nibble → List ByteArray
   | 0, _, _, _, _ => []
+  -- The arguments follow the range check: the entries are those below the subtree.
   | fuel + 1, reference, pre, entries, path =>
     match rangePlace left right pre with
+    -- In a subtree between the ends, it takes the proof of the node that the entries build there.
     | .inside =>
       let built : Except RlpError (List ByteArray) := do
         let node ← patricialize hash entries pre.length
@@ -90,6 +56,7 @@ def rangeProofBelow (hash : ByteArray → Hash32) (nodes : List (Hash32 × ByteA
       match built with
       | .ok single => single
       | .error _ => []
+    -- On the path of an end, it takes the nodes of the range proof.
     | .boundary =>
       referencedNodes nodes reference ++
         match (lookupNode nodes reference).bind decodeNode with
@@ -106,6 +73,7 @@ def rangeProofBelow (hash : ByteArray → Hash32) (nodes : List (Hash32 × ByteA
             rangeProofBelow hash nodes left right fuel subnodes[nibble] (pre ++ [nibble])
               (entries.filter fun (entryKey, _) => entryKey[pre.length]? = some nibble) restOfPath
         | _ => []
+    -- Elsewhere it takes no node.
     | _ => []
 
 /-- The proof of one key alone that a range of the trie of the requested root gives.
@@ -128,7 +96,10 @@ def rangeKeyProof (hash : ByteArray → Hash32) (root start : Hash32)
       (obj.getLast?.map Prod.fst) (left.length + 2) (.bytes ⟨root.toArray⟩) [] obj
       (bytesToNibbleList ⟨key.toArray⟩)
 
-/-! ## The search -/
+/-! ## The search
+
+When the search finds nothing, the two proofs are one, and so are the two values.
+-/
 
 /-- The search compares the range's proof of a key with the trie's own proof of it.
 
@@ -600,21 +571,24 @@ theorem verifyProof_rangeKeyProof (hash : ByteArray → Hash32) {root' start : H
 
 So the range holds every 32-byte key of the trie there, and no other such key.
 
-When the range check shows no key after the range, each key need only follow the start.
-
-The trie is any plain trie with the root, with distinct keys.
-
 Otherwise the search returns a collision between the two proofs of the key. -/
 theorem verifyRange_sound (hash : ByteArray → Hash32) {data : List (ByteArray × ByteArray)}
     {root' start : Hash32} {entries : List (Hash32 × ByteArray)} {proof : List ByteArray}
     {more : Bool}
+    -- The trie is any plain trie with the root, with distinct keys.
+    --
+    -- Its keys are not hashed again: each is a 32-byte hash, as in the range.
     (hroot : root hash ⟨false, data⟩ = .ok root') (hkeys : (data.map Prod.fst).Nodup)
     (hverify : verifyRange hash root' start entries proof = .ok more) (key : Hash32)
     (hstart : bytesToNibbleList ⟨start.toArray⟩ ≤ bytesToNibbleList ⟨key.toArray⟩)
+    -- When the range check shows no key after the range, each key need only follow the start.
+    --
+    -- When it shows a key after the range, the theorem does not say that the trie holds one.
     (hlast : more = false ∨ entries.getLast?.all fun last =>
       bytesToNibbleList ⟨key.toArray⟩ ≤ bytesToNibbleList ⟨last.1.toArray⟩) :
     valueAt hash ⟨false, data⟩ ⟨key.toArray⟩ =
         (entries.find? fun entry => entry.1 = key).map Prod.snd ∨
+      -- Otherwise the search returns a collision between the two proofs of the key.
       ∃ pair, findRangeCollision hash ⟨false, data⟩ root' start entries proof key = some pair ∧
         IsCollision hash pair := by
   obtain ⟨honest, hhonest⟩ := getProof_ok hash hroot ⟨key.toArray⟩
@@ -634,26 +608,24 @@ The keys of the range are hashes, since the trie stores each key under its hash.
 
 An accepted range gives each hash between its ends the value of the trie's key with that hash.
 
-When the range check shows no key after the range, each hash need only follow the start.
-
-The keys of the trie must be distinct.
-
-Otherwise the range search returns a collision in the plain trie of the hashed keys.
-
-Or the trie has two keys with one hash, which the key search returns. -/
+Otherwise a search returns a collision, in the proofs or among the keys. -/
 theorem verifyRange_sound_secured (hash : ByteArray → Hash32) {data : List (ByteArray × ByteArray)}
     {root' start : Hash32} {entries : List (Hash32 × ByteArray)} {proof : List ByteArray}
     {more : Bool}
+    -- The keys of the trie must be distinct.
     (hroot : root hash ⟨true, data⟩ = .ok root') (hkeys : (data.map Prod.fst).Nodup)
     (hverify : verifyRange hash root' start entries proof = .ok more) (key : Hash32)
     (hstart : bytesToNibbleList ⟨start.toArray⟩ ≤ bytesToNibbleList ⟨key.toArray⟩)
+    -- When the range check shows no key after the range, each hash need only follow the start.
     (hlast : more = false ∨ entries.getLast?.all fun last =>
       bytesToNibbleList ⟨key.toArray⟩ ≤ bytesToNibbleList ⟨last.1.toArray⟩) :
     (data.find? fun entry => hash entry.1 = key).map Prod.snd =
         (entries.find? fun entry => entry.1 = key).map Prod.snd ∨
+      -- Otherwise the range search returns a collision in the plain trie of the hashed keys.
       (∃ pair, findRangeCollision hash
         ⟨false, data.map fun entry => (⟨(hash entry.1).toArray⟩, entry.2)⟩
         root' start entries proof key = some pair ∧ IsCollision hash pair) ∨
+      -- Or the trie has two keys with one hash, which the key search returns.
       ∃ pair, findPathCollision hash ⟨true, data⟩ = some pair ∧ IsCollision hash pair := by
   cases hcollision : findPathCollision hash ⟨true, data⟩ with
   | some pair => exact .inr (.inr ⟨pair, rfl, findPathCollision_valid hash hcollision⟩)
@@ -665,6 +637,7 @@ theorem verifyRange_sound_secured (hash : ByteArray → Hash32) {data : List (By
         entry.2)).map Prod.fst).Nodup := by
       simpa [List.map_map, Function.comp_def] using
         nodup_map_of_injective hashBytes_injective hhashes
+    -- A secured trie has the root of the plain trie of its hashed keys.
     rw [root_secured_eq_plain] at hroot
     rcases verifyRange_sound hash hroot hnodup hverify key hstart hlast with hvalue | hfound
     · refine .inl ?_

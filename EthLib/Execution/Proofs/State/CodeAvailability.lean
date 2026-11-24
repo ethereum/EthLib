@@ -7,19 +7,7 @@ public import EthLib.Execution.Proofs.State.Frame
 
 Code is available when lookup succeeds at the code hash of every current account.
 
-Pre-transaction availability asks the same of each account in the parent block view.
-
-Any account change keeps pre-transaction availability.
-
-It keeps current availability when it keeps or clears the account's code hash.
-
-Writing code keeps them too, since it stores code under the hash that the account receives.
-
-Storage writes, touches and moves of ether keep every code hash, so they keep both.
-
-A rollback to a snapshot of the same parent restores the snapshot's availability.
-
-Incorporation starts a new transaction, whose pre-transaction accounts are the old current ones.
+Which changes of state keep it available, now and before the transaction.
 -/
 
 @[expose] public section
@@ -34,7 +22,9 @@ open EthLib.Execution.State.TransactionState
 def HasCodes (state : TransactionState) : Prop :=
   ∀ address, ∃ code, state.getCode (state.getAccount address).codeHash = .ok code
 
-/-- Whether the state holds the code of every account before the transaction. -/
+/-- Whether the state holds the code of every account before the transaction.
+
+It asks this of each account in the parent block view. -/
 def HasPreCodes (state : TransactionState) : Prop :=
   ∀ address, ∃ code, state.getCode (state.getPreStateAccount address).codeHash = .ok code
 
@@ -93,6 +83,7 @@ theorem hasPreCodes_destroyAccount {state : TransactionState} (address : Address
 /-- A touch of an account keeps the code of every current account available. -/
 theorem hasCodes_touchAccount {state : TransactionState} (address : Address)
     (available : HasCodes state) : HasCodes (state.touchAccount address) := by
+  -- A touch keeps every code hash.
   refine hasCodes_of_getCode (getCode_touchAccount state address) (fun other => .inl ?_) available
   by_cases here : other = address
   · rw [here, getAccount_touchAccount_self]
@@ -108,6 +99,7 @@ theorem hasPreCodes_touchAccount {state : TransactionState} (address : Address)
 theorem hasCodes_setStorage {state state' : TransactionState} {address : Address}
     {key : Bytes32} {value : U256} (h : state.setStorage address key value = .ok state')
     (available : HasCodes state) : HasCodes state' :=
+  -- A storage write keeps every code hash.
   hasCodes_of_getCode (getCode_setStorage h)
     (fun _ => .inl (by unfold getAccount; rw [getAccountOptional_setStorage h])) available
 
@@ -185,6 +177,7 @@ theorem hasCodes_moveEther {fork : Fork} {state state' : TransactionState}
   | error e => simp [debited, bind, Except.bind] at h
   | ok mid =>
   simp only [debited, bind, Except.bind] at h
+  -- The debit and the credit keep every code hash.
   exact hasCodes_modifyState h
     (hasCodes_modifyState debited available fun _ hf => .inl (codeHash_debit hf))
     fun _ hf => .inl (codeHash_credit hf)
@@ -235,6 +228,7 @@ theorem hasCodes_setCode {fork : Fork} {state state' : TransactionState} {addres
     (available : HasCodes state) : HasCodes state' := by
   intro other
   by_cases here : other = address
+  -- The code is stored under the hash that the account receives.
   · subst other
     rw [(getAccount_setCode h).1]
     by_cases empty : Cryptography.Hash.Keccak.keccak256 code = EMPTY_CODE_HASH
@@ -289,6 +283,7 @@ theorem hasCodes_incorporateTxIntoBlock {state : TransactionState} (available : 
 theorem hasPreCodes_incorporateTxIntoBlock {state : TransactionState}
     (available : HasCodes state) : HasPreCodes state.incorporateTxIntoBlock := by
   intro address
+  -- Incorporation starts a transaction whose pre-transaction accounts are the old current ones.
   have account : state.incorporateTxIntoBlock.getPreStateAccount address =
       state.incorporateTxIntoBlock.getAccount address := by
     simp only [incorporateTxIntoBlock, ofBlock, getPreStateAccount, getPreStateAccountOptional,

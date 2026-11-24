@@ -9,29 +9,13 @@ public import EthLib.Execution.Proofs.Trie.Range
 
 A peer that holds the trie answers with the keys from the start on, in order, and a proof.
 
-The proof holds the proof of the start and the proof of the last key it sends.
-
 The range check accepts that answer, and it shows whether the trie holds a key after it.
+
+The entries are values of the trie, so an account is in its full encoding, not the slim one.
 
 The source is [`caps/snap.md`][snap], sections "AccountRange (0x01)" and "StorageRanges (0x03)".
 
 [snap]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md
-
-The check finds a node of the proof by its hash.
-
-So a node of the proof that shares its hash with a different honest node could mislead it.
-
-When that happens, a search returns the two nodes.
-
-A peer may also send the whole trie from the start with no proof, which the check accepts.
-
-It then shows no key after it.
-
-The entries are values of the trie, so an account is in its full encoding, not the slim one.
-
-A peer must send at least one key when the trie holds one from the start on.
-
-So an empty answer is honest only when the trie holds no key from the start on.
 -/
 
 @[expose] public section
@@ -41,7 +25,12 @@ namespace EthLib.Execution.Trie
 open EthLib.Base
 open EthLib.Serialization.Rlp
 
-/-! ## The search -/
+/-! ## The search
+
+The check finds a node of the proof by its hash.
+
+So a node of the proof that shares its hash with a different honest node could mislead it.
+-/
 
 /-- A node of the sent proof and a different node of the honest proofs, with one hash.
 
@@ -231,16 +220,9 @@ private theorem length_lt_of_patricialize_branch {hash : ByteArray → Hash32}
 
 /-- The check accepts the honest range below one subtree of the trie.
 
-The entries are those of the trie below the subtree that lie in the range.
-
-The reference holds the node of the trie there, as its parent holds it, or by hash at the root.
-
-On the path of an end, the honest nodes hold the nodes that the proof of that end holds below.
-
-Each honest node is in the proof, and no other node of the proof shares its hash.
-
 The check then shows whether the trie holds a key after the range below the subtree. -/
 private theorem checkSubtree_honest (hash : ByteArray → Hash32) {honest proof : List ByteArray}
+    -- Each honest node is in the proof, and no other node of the proof shares its hash.
     (hhonest : ∀ y ∈ honest, y ∈ proof)
     (hcoll : ∀ y ∈ honest, ∀ x ∈ proof, hash x = hash y → x = y)
     {trie : List (List Nibble × ByteArray)} {left : List Nibble} {right : Option (List Nibble)}
@@ -251,15 +233,20 @@ private theorem checkSubtree_honest (hash : ByteArray → Hash32) {honest proof 
     (fuel : Nat) → {reference : Item} → {pre : List Nibble} → {node : Option InternalNode} →
       left.length + 1 < fuel + pre.length → pre.length ≤ left.length + 1 →
       patricialize hash (trie.filter fun entry => pre.isPrefixOf entry.1) pre.length = .ok node →
+      -- The reference holds the node of the trie there, as its parent holds it.
+      --
+      -- At the root, it may hold it by hash instead.
       (encodeInternalNode hash node = .ok reference ∨ (pre = [] ∧ ∃ encoded,
         encode (unencoded node) = .ok encoded ∧ encoded ∈ honest ∧
         reference = .bytes ⟨(hash encoded).toArray⟩)) →
+      -- On the path of an end, the honest nodes hold what the proof of that end holds below.
       (∀ path, (path = left ∨ right = some path) → pre.isPrefixOf path = true →
         (∀ encoded, encode (unencoded node) = .ok encoded → 32 ≤ encoded.size →
           encoded ∈ honest) ∧
         ∃ fuel' below, (path.drop pre.length).length < fuel' ∧
           proofBelow hash fuel' (trie.filter fun entry => pre.isPrefixOf entry.1) pre.length
             (path.drop pre.length) = .ok below ∧ ∀ x ∈ below, x ∈ honest) →
+      -- The entries are those of the trie below the subtree that lie in the range.
       checkSubtree hash (proof.map fun encoded => (hash encoded, encoded)) left right fuel
           reference pre
           ((trie.filter fun entry => pre.isPrefixOf entry.1).filter (inRange left right)) =
@@ -652,25 +639,19 @@ private theorem checkSubtree_root (hash : ByteArray → Hash32) {data : List (Ha
 
 /-- Completeness of a range: the first keys of the trie from the start pass the range check.
 
-The keys of the trie are 32-byte hashes, listed in increasing order.
-
-Any trie of distinct keys can be listed so, with the same root.
-
-The proof holds the proof of the start and the proof of the last key, in any order.
-
-The check shows a key after the range exactly when the trie holds one.
-
-Otherwise a node of the proof shares its hash with a different honest node.
-
-The search returns the two. -/
+Otherwise a node of the proof shares its hash with a different honest node. -/
 theorem verifyRange_complete (hash : ByteArray → Hash32) {data : List (Hash32 × ByteArray)}
     {root' : Hash32} (start : Hash32) (count : Nat) {last : Hash32 × ByteArray}
     {first second proof : List ByteArray}
+    -- The keys of the trie are 32-byte hashes, listed in increasing order.
+    --
+    -- Any trie of distinct keys can be listed so, with the same root.
     (hroot : root hash ⟨false, data.map fun entry => (⟨entry.1.toArray⟩, entry.2)⟩ = .ok root')
     (hsorted : strictlyIncreasing
       (data.map fun entry => bytesToNibbleList ⟨entry.1.toArray⟩) = true)
     (hlast : ((data.filter fun entry => bytesToNibbleList ⟨start.toArray⟩ ≤
       bytesToNibbleList ⟨entry.1.toArray⟩).take count).getLast? = some last)
+    -- The proof holds the proof of the start and the proof of the last key, in any order.
     (hfirst : getProof hash ⟨false, data.map fun entry => (⟨entry.1.toArray⟩, entry.2)⟩
       ⟨start.toArray⟩ = .ok first)
     (hsecond : getProof hash ⟨false, data.map fun entry => (⟨entry.1.toArray⟩, entry.2)⟩
@@ -678,8 +659,12 @@ theorem verifyRange_complete (hash : ByteArray → Hash32) {data : List (Hash32 
     verifyRange hash root' start
         ((data.filter fun entry => bytesToNibbleList ⟨start.toArray⟩ ≤
           bytesToNibbleList ⟨entry.1.toArray⟩).take count) proof =
+        -- The check shows a key after the range exactly when the trie holds one.
         .ok (data.any fun entry =>
           bytesToNibbleList ⟨last.1.toArray⟩ < bytesToNibbleList ⟨entry.1.toArray⟩) ∨
+      -- Otherwise a node of the proof shares its hash with a different honest node.
+      --
+      -- The search returns the two.
       ∃ pair, findCrossCollision hash (first ++ second) proof = some pair ∧
         IsCollision hash pair := by
   cases hfind : findCrossCollision hash (first ++ second) proof with
@@ -750,23 +735,25 @@ theorem verifyRange_complete (hash : ByteArray → Hash32) {data : List (Hash32 
 
 /-- Completeness of an empty range: with no key from the start on, the proof of the start passes.
 
-The proof may hold other nodes too.
-
-The check then shows no key after the range.
-
-Otherwise a node of the proof shares its hash with a different honest node.
-
-The search returns the two. -/
+Otherwise a node of the proof shares its hash with a different honest node. -/
 theorem verifyRange_complete_nil (hash : ByteArray → Hash32) {data : List (Hash32 × ByteArray)}
     {root' : Hash32} (start : Hash32) {first proof : List ByteArray}
     (hroot : root hash ⟨false, data.map fun entry => (⟨entry.1.toArray⟩, entry.2)⟩ = .ok root')
     (hsorted : strictlyIncreasing
       (data.map fun entry => bytesToNibbleList ⟨entry.1.toArray⟩) = true)
+    -- A peer must send at least one key when the trie holds one from the start on.
+    --
+    -- So an empty answer is honest only when the trie holds no key from the start on.
     (hnone : ∀ entry ∈ data,
       bytesToNibbleList ⟨entry.1.toArray⟩ < bytesToNibbleList ⟨start.toArray⟩)
+    -- The proof holds the proof of the start, and may hold other nodes too.
     (hfirst : getProof hash ⟨false, data.map fun entry => (⟨entry.1.toArray⟩, entry.2)⟩
       ⟨start.toArray⟩ = .ok first) (hproof : ∀ x ∈ first, x ∈ proof) :
+    -- The check then shows no key after the range.
     verifyRange hash root' start [] proof = .ok false ∨
+      -- Otherwise a node of the proof shares its hash with a different honest node.
+      --
+      -- The search returns the two.
       ∃ pair, findCrossCollision hash first proof = some pair ∧ IsCollision hash pair := by
   cases hfind : findCrossCollision hash first proof with
   | some pair => exact .inr ⟨pair, rfl, findCrossCollision_valid hash hfind⟩

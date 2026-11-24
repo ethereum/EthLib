@@ -8,41 +8,7 @@ public import EthLib.Execution.Trie.Range
 /-!
 # Proofs: the check of an answer of `eth_getProof`
 
-Soundness: take a secured trie with distinct keys and the root that the answer is checked against.
-
-If the account check passes, the trie gives the address the account of the answer.
-
-When the check reports the account absent, the trie gives the address no value.
-
-The fields of the answer then fit an address with no account.
-
-Otherwise a search finds a collision between the account proof, as read, and the trie's own proof.
-
-Or it finds two keys of the trie with one hash.
-
-The same holds for each slot, against the storage trie.
-
-A slot that the check reports absent also has the word `0` in the answer.
-
-Completeness: the proof that the trie builds for the address passes the check.
-
-It passes with the fields of the account that the trie holds.
-
-It reports an address without a value as absent, when the fields fit an address with no account.
-
-The same holds for each slot, when the answer gives the word `0` to a slot without a value.
-
-The state and storage tries of a state have distinct keys, so soundness holds for them as stated.
-
-Completeness needs distinct paths, which in a secured trie means keys with distinct hashes.
-
-Each of the two checks passes exactly when the proof gives no value, or a value matching the answer.
-
-An address without a value also needs fields that fit an address with no account.
-
-A slot without a value also needs the word `0` in the answer.
-
-The slot checks of a whole answer pass exactly when each slot passes at its own index.
+The soundness and the completeness of the account and slot checks of an answer.
 -/
 
 @[expose] public section
@@ -90,21 +56,19 @@ theorem verifyAccount_eq_ok {stateRoot : Hash32} {p : AccountProof} {present : B
           exact ⟨hd, h.symm⟩
         · simp [hm, throw, throwThe, MonadExceptOf.throw] at h
 
-/-- The account check passes exactly when the proof gives no value, or a matching value.
-
-A value must decode to the account and the storage root of the answer.
-
-The check then reports the account present.
-
-No value means the account is absent.
-
-The fields of the answer must then fit an address with no account. -/
+/-- The account check passes exactly when the proof gives no value, or a matching value. -/
 theorem verifyAccount_eq_ok_iff {stateRoot : Hash32} {p : AccountProof} {present : Bool} :
     p.verifyAccount hash stateRoot = .ok present ↔
       ∃ value,
         verifyProof hash stateRoot true ⟨p.address.toArray⟩ p.accountProof = .ok value ∧
         match value with
+        -- A value must decode to the account and the storage root of the answer.
+        --
+        -- The check then reports the account present.
         | some bytes => decodeAccount bytes = .ok (p.account, p.storageHash) ∧ present = true
+        -- No value means the account is absent.
+        --
+        -- The fields of the answer must then fit an address with no account.
         | none =>
           p.absentFields = true ∧ present = false := by
   refine ⟨verifyAccount_eq_ok, fun ⟨value, hv, hmatch⟩ => ?_⟩
@@ -329,15 +293,14 @@ theorem verify_eq_ok_absent_iff {stateRoot : Hash32} {p : AccountProof} :
       cases verifySlots hash p.storageHash 0 p.storageProof <;>
         simp [bind, Except.bind, pure, Except.pure]
 
-/-! ## Soundness -/
+/-! ## Soundness
+
+The state and storage tries of a state have distinct keys, so soundness holds for them as stated.
+-/
 
 /-- Soundness of the account check against a secured trie with distinct keys and its root.
 
-When the check passes, the trie gives the address the account of the answer.
-
-When it reports the account absent, the trie gives the address no value.
-
-The fields of the answer then fit an address with no account.
+When the check passes, the trie gives the address what the answer reports.
 
 Otherwise a search finds a collision with the trie's own proof, or two keys with one hash. -/
 theorem verifyAccount_sound {trie : Trie} {stateRoot : Hash32} {honest : List ByteArray}
@@ -347,12 +310,18 @@ theorem verifyAccount_sound {trie : Trie} {stateRoot : Hash32} {honest : List By
     (hkeys : (trie.data.map Prod.fst).Nodup)
     (h : p.verifyAccount hash stateRoot = .ok present) :
     (match valueAt hash trie ⟨p.address.toArray⟩ with
+      -- When the check passes, the trie gives the address the account of the answer.
       | some bytes => decodeAccount bytes = .ok (p.account, p.storageHash) ∧ present = true
+      -- When it reports the account absent, the trie gives the address no value.
+      --
+      -- The fields of the answer then fit an address with no account.
       | none =>
         p.absentFields = true ∧ present = false) ∨
+      -- Or a search finds a collision between the account proof, as read, and the trie's own proof.
       (∃ pair,
         findProofCollision hash (readNodes hash stateRoot p.accountProof) honest = some pair ∧
           IsCollision hash pair) ∨
+      -- Or it finds two keys of the trie with one hash.
       ∃ pair, findPathCollision hash trie = some pair ∧ IsCollision hash pair := by
   obtain ⟨value, hverify, hvalue⟩ := verifyAccount_eq_ok h
   rw [← hsecured] at hverify
@@ -426,12 +395,11 @@ theorem verifySlot_sound_storage {storage : Std.ExtTreeMap Bytes32 U256}
 
 It passes when the answer has the fields of the account that the trie holds.
 
-It reports an address without a value as absent, when the fields fit an address with no account.
-
-The keys of the trie must have distinct paths. -/
+It reports an address without a value as absent, when the fields fit an address with no account. -/
 theorem verifyAccount_getProof {trie : Trie} {stateRoot : Hash32} {p : AccountProof}
     (hroot : root hash trie = .ok stateRoot) (hsecured : trie.secured = true)
     (hhonest : getProof hash trie ⟨p.address.toArray⟩ = .ok p.accountProof)
+    -- The keys of the trie must have distinct paths: in a secured trie, distinct hashes.
     (hpaths : (trie.data.map fun entry => keyPath hash trie.secured entry.1).Nodup) :
     match valueAt hash trie ⟨p.address.toArray⟩ with
     | some bytes =>
@@ -454,12 +422,11 @@ theorem verifyAccount_getProof {trie : Trie} {stateRoot : Hash32} {p : AccountPr
 
 It passes when the answer has the word that the trie holds.
 
-It reports a slot without a value as absent, when the answer gives it the word `0`.
-
-The keys of the trie must have distinct paths. -/
+It reports a slot without a value as absent, when the answer gives it the word `0`. -/
 theorem verifySlot_getProof {trie : Trie} {storageRoot : Hash32} {index : Nat} {s : StorageProof}
     (hroot : root hash trie = .ok storageRoot) (hsecured : trie.secured = true)
     (hhonest : getProof hash trie ⟨s.key.slot.toArray⟩ = .ok s.proof)
+    -- The keys of the trie must have distinct paths: in a secured trie, distinct hashes.
     (hpaths : (trie.data.map fun entry => keyPath hash trie.secured entry.1).Nodup) :
     match valueAt hash trie ⟨s.key.slot.toArray⟩ with
     | some bytes =>

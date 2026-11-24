@@ -10,28 +10,6 @@ Every 32-byte hash of byte strings has collisions.
 So "two tries with one root agree, or the hash collides" would say nothing.
 
 Instead, each theorem names a search that returns the collision.
-
-The search reads the proofs of one key in the two tries, node by node from the root.
-
-It returns the first two nodes at one place that differ but have one hash.
-
-Two proofs that verify against one root follow one path while their nodes agree.
-
-So when the search finds nothing, the two proofs are one proof, and give the key one value.
-
-The search reads each proof as the check reads it.
-
-The empty trie has no node, so against its root the proof of no nodes reads as the encoding `0x80`.
-
-Soundness follows: a proof that verifies against a trie's root is the trie's own proof.
-
-Otherwise the search finds a collision between the two.
-
-A secured trie gives one root for any order of its entries.
-
-Otherwise a search over its keys returns two keys with one hash.
-
-The same search covers two keys that share a path in soundness and in binding.
 -/
 
 @[expose] public section
@@ -50,6 +28,9 @@ def IsCollision (hash : ByteArray → Hash32) (pair : ByteArray × ByteArray) : 
 /-- The first place where two proofs hold different nodes with one hash. -/
 def findProofCollision (hash : ByteArray → Hash32) :
     List ByteArray → List ByteArray → Option (ByteArray × ByteArray)
+  -- The search reads the two proofs node by node from the root.
+  --
+  -- It returns the first two nodes at one place that differ but have one hash.
   | a :: p, b :: q => if a ≠ b ∧ hash a = hash b then some (a, b) else findProofCollision hash p q
   | _, _ => none
 
@@ -92,7 +73,12 @@ theorem mem_of_findProofCollision (hash : ByteArray → Hash32) :
     · obtain ⟨hp, hq⟩ := mem_of_findProofCollision hash p q h
       exact ⟨List.mem_cons_of_mem a hp, List.mem_cons_of_mem b hq⟩
 
-/-! ## Two proofs of one key -/
+/-! ## Two proofs of one key
+
+Two proofs that verify against one root follow one path while their nodes agree.
+
+So when the search finds nothing, the two proofs are one proof, and give the key one value.
+-/
 
 /-- Two proofs with no collision follow one reference to one item.
 
@@ -232,7 +218,9 @@ theorem verifyProof_binding (hash : ByteArray → Hash32) {root : Hash32} {secur
     {key : ByteArray} {p q : List ByteArray} {v w : Option ByteArray}
     (hp : verifyProof hash root secured key p = .ok v)
     (hq : verifyProof hash root secured key q = .ok w) :
+    -- The empty trie has no node, so against its root the proof of no nodes reads as `0x80`.
     (readNodes hash root p = readNodes hash root q ∧ v = w) ∨
+      -- The search reads each proof as the check reads it.
       ∃ pair,
         findProofCollision hash (readNodes hash root p) (readNodes hash root q) = some pair ∧
           IsCollision hash pair := by
@@ -276,7 +264,10 @@ theorem verifyProof_binding (hash : ByteArray → Hash32) {root : Hash32} {secur
               · cases hq
             · cases hp
 
-/-! ## Keys with one hash -/
+/-! ## Keys with one hash
+
+The same search covers two keys that share a path in soundness and in binding.
+-/
 
 /-- The first two different keys of the list with one hash, if any. -/
 def findKeyCollision (hash : ByteArray → Hash32) : List ByteArray → Option (ByteArray × ByteArray)
@@ -400,24 +391,20 @@ theorem keyPath_nodup (hash : ByteArray → Hash32) {trie : Trie}
 
 /-- Soundness: a proof that verifies against the trie's root reads as the trie's own proof.
 
-So it gives the trie's value of the key.
-
-Otherwise the search finds a collision between the nodes that the proof reads as and the honest one.
-
-A proof reads as itself, except the proof of no nodes against the root of the empty trie.
-
-Or a secured trie has two keys with one hash, which the key search finds.
-
-The keys of the trie must be distinct. -/
+So it gives the trie's value of the key, or a search finds a collision of the hash. -/
 theorem verifyProof_sound (hash : ByteArray → Hash32) {trie : Trie} {key : ByteArray}
     {root' : Hash32}
     {honestProof proof : List ByteArray} {result : Option ByteArray}
     (hroot : root hash trie = .ok root') (hhonest : getProof hash trie key = .ok honestProof)
+    -- The keys of the trie must be distinct.
     (hkeys : (trie.data.map Prod.fst).Nodup)
     (hverify : verifyProof hash root' trie.secured key proof = .ok result) :
+    -- A proof reads as itself, except the proof of no nodes against the root of the empty trie.
     (readNodes hash root' proof = honestProof ∧ result = valueAt hash trie key) ∨
+      -- Otherwise the search finds a collision between this proof, as read, and the honest one.
       (∃ pair, findProofCollision hash (readNodes hash root' proof) honestProof = some pair ∧
         IsCollision hash pair) ∨
+      -- Or a secured trie has two keys with one hash, which the key search finds.
       ∃ pair, findPathCollision hash trie = some pair ∧ IsCollision hash pair := by
   cases hsearch : findPathCollision hash trie with
   | some pair => exact .inr (.inr ⟨pair, rfl, findPathCollision_valid hash hsearch⟩)

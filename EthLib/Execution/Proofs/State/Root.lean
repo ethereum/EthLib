@@ -8,19 +8,7 @@ import EthLib.Execution.Proofs.State.Account
 /-!
 # Proofs: the state and storage roots
 
-A zero word changes no storage root, because the trie leaves it out.
-
-The empty state has the root of the empty trie.
-
-A client may hold the entries of a trie in any order, such as the order it set them in.
-
-Every such order gives the same root.
-
-Otherwise a search over the keys returns two keys with one hash.
-
-One storage root binds every word, and one state root binds every account and its storage.
-
-Otherwise a search over the tries returns a collision of the hash.
+Zero words, the empty state, any order of the entries, and the binding of each root.
 
 A 32-byte hash of byte strings has collisions, so no theorem can rule one out.
 
@@ -41,7 +29,7 @@ open EthLib.Serialization.Rlp
 theorem storageRoot_insert_zero (hash : ByteArray → Hash32)
     (storage : Std.ExtTreeMap Bytes32 U256) (key : Bytes32) :
     storageRoot hash (storage.insert key 0) = storageRoot hash (storage.erase key) := by
-  -- The two storages hold the same nonzero words.
+  -- The trie leaves a zero word out, and the two storages hold the same nonzero words.
   have hfilter : (storage.insert key 0).filter (fun _ value => value != 0) =
       (storage.erase key).filter (fun _ value => value != 0) := by
     apply Std.ExtTreeMap.ext_getElem?
@@ -66,7 +54,10 @@ theorem stateRoot_empty (hash : ByteArray → Hash32)
   simp [stateRoot, stateEntries, bind, Except.bind, pure, Except.pure]
   rfl
 
-/-! ## Any order of the entries -/
+/-! ## Any order of the entries
+
+A client may hold the entries of a trie in any order, such as the order it set them in.
+-/
 
 /-- The bytes of a fixed-length byte string determine it. -/
 theorem bytes_injective {n : Nat} :
