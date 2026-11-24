@@ -8,7 +8,13 @@ public import EthLib.Execution.Proofs.Evm.Gas.CallGas
 /-!
 # Proofs: the route of a call to the code that it runs
 
-A call runs the code at its address, or, from Pectra, the code of a delegate of EIP-7702.
+A call runs the code of the account at its address.
+
+From Pectra, that code may be a delegation indicator of EIP-7702, to a delegate.
+
+The call then runs the code of the delegate instead.
+
+A route names the code that the call runs.
 
 The rule here covers a call that sends no value of its own, of every kind, along either route.
 
@@ -120,14 +126,18 @@ theorem callStep_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
         state := routeState read.state route, substate := routeSub read.substate route }
       let callGas := messageCallGas fork 0 g.toNat evm.gas growth.cost (cb + dc)
       callStep kind evm =
-        -- From Glamsterdam, the step fails when the gas misses the access and the memory growth.
+        -- From Glamsterdam, the step first checks the gas for the access and the growth of memory.
+        --
+        -- It fails when the gas does not cover them.
         if fork ≥ .glamsterdam ∧ evm.gas < cb + growth.cost then .error .outOfGas
-        -- From Glamsterdam, the frame halts with only the address read if the gas misses the route.
+        -- From Glamsterdam, the frame then checks the gas for the route.
+        --
+        -- When the gas does not cover it, the frame halts with only the read of the address.
         else if fork ≥ .glamsterdam ∧ evm.gas < cb + growth.cost + dc then
           .ok (.next (exceptionalHalt read .outOfGas))
-        -- The frame halts with the reads of the route when the gas misses the charge of the call.
+        -- The frame halts with the reads of the route when the gas is below the charge of the call.
         --
-        -- That charge is the gas that the call passes on, the access, the route and the growth.
+        -- That charge is the gas passed on, the access, the route and the growth of memory.
         else if evm.gas < callGas.cost + growth.cost then
           .ok (.next (exceptionalHalt pre .outOfGas))
         -- Otherwise the frame pays the charge, and the step finishes the call along the route.
@@ -308,7 +318,9 @@ def CallSends (kind : CallKind) (message : Message fork) (memory : ByteArray) (g
 
 /-- The step of a call that sends no value of its own sends a message along a route.
 
-The calling frame and the message are those that every call builds from the frame after payment. -/
+The calling frame and the message are those that every call builds.
+
+It builds them from the frame after the payment. -/
 theorem callStep_child_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
     {evm : Evm fork Nat} {g a i isz o osz : U256} {rest : List U256} {calleeCode : ByteArray}
     {route : Route}
@@ -416,7 +428,7 @@ theorem callKindRoute (hfork : .berlin ≤ fork) {kind : CallKind} {byte : UInt8
     -- The rules for calls with no delegation are the cases along the code of the address.
     (hroute : Routes fork state calleeCode route)
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
-    -- The gas of the frame covers the access to `to`, the price of the route, and the growth.
+    -- The gas covers the access to `to`, the price of the route, and the growth of memory.
     --
     -- From Glamsterdam a cold access costs 3000 instead of 2600, by EIP-8038, and the rule pays it.
     (hgas : callBaseCost fork (decide (toAddressMasked to ∉ substate.accessedAddresses)) +
@@ -424,7 +436,9 @@ theorem callKindRoute (hfork : .berlin ≤ fork) {kind : CallKind} {byte : UInt8
       (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost ≤
         gas) :
     HoareOn fork callee
-      -- The call sends one message, and the caller and message are those of a call along the route.
+      -- The call sends one message.
+      --
+      -- The caller and the message are those of a call along the route.
       --
       -- The runner may fail only on that message, with any error, and then the run ends there.
       (CallSends kind message memory gas state substate asked to inputStart inputSize outputStart
@@ -433,9 +447,7 @@ theorem callKindRoute (hfork : .berlin ≤ fork) {kind : CallKind} {byte : UInt8
       (At code message pc (asked :: to :: ((if kind.sendsValue then [0] else []) ++
           inputStart :: inputSize :: outputStart :: outputSize :: rest))
         memory gas state substate returnData)
-      -- Unless the runner fails, the rule holds for every frame that ends the message.
-      --
-      -- Such a frame meets the assumption.
+      -- Otherwise the rule holds for every frame that ends the message and meets the assumption.
       fun after => ∃ caller msg child,
         CallSends kind message memory gas state substate asked to inputStart inputSize outputStart
           outputSize calleeCode route caller msg ∧
@@ -444,7 +456,9 @@ theorem callKindRoute (hfork : .berlin ≤ fork) {kind : CallKind} {byte : UInt8
         At code message (pc + 1) ((if child.error.isNone then 1 else 0) :: rest)
           -- It writes the start of the output of the callee at the start of the output range.
           --
-          -- It writes as many bytes as both the output and the range hold, and leaves the rest.
+          -- It writes as many bytes as both the output and the range hold.
+          --
+          -- It leaves the rest of memory.
           (memoryWrite (memoryExtend memory
             (extendMemory memory.size
               [(inputStart, inputSize), (outputStart, outputSize)]).expandBy)
@@ -454,7 +468,7 @@ theorem callKindRoute (hfork : .berlin ≤ fork) {kind : CallKind} {byte : UInt8
             (callBaseCost fork (decide (toAddressMasked to ∉ substate.accessedAddresses)) +
               routeCost fork (substate.accessedAddresses.insert (toAddressMasked to)) route)).cost +
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
-            -- It gets back the gas that the callee leaves.
+            -- The caller gets back the gas that the callee leaves.
             child.gas)
           -- Its state and substate come from the callee.
           --

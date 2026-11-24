@@ -5,9 +5,17 @@ public import EthLib.Execution.Proofs.Evm.Logic.RunMono
 /-!
 # Proofs: runs with less gas that never abort
 
-Take a specification over the steps that never abort with less gas, with every gas from a bound on.
+The loop of the interpreter returns an error only for an error that aborts the whole run.
 
-Then a run of the frame never aborts, with any gas.
+The steps here come from frames that are monotone in gas.
+
+The steps here also ask that no step from such a frame with less gas aborts.
+
+Take a specification over these steps from a frame, with every gas from some bound on.
+
+Then a run of the frame never aborts.
+
+With any gas, also below the bound, the loop of the interpreter returns a frame, never an error.
 
 The facts here are for the meter of one counter of gas, the meter of every fork before Glamsterdam.
 
@@ -28,11 +36,15 @@ variable {fork : Fork}
 Every instruction of `Logic/RunMono.lean` never aborts, except SSTORE, whose write may fail.
 -/
 
-/-- The result `r` is no error that aborts the whole run, the only error that the loop returns.
+/-- The result `r` is no error that aborts the whole run.
 
-An error of the state aborts, as do an opcode with no instruction and an encoding error.
+The loop of the interpreter returns only such an error.
 
-So do a fork with no specification, and an environment number to push that no word holds. -/
+An error of the state aborts, and so does an opcode with no instruction.
+
+An encoding error aborts too, and so does a fork with no specification.
+
+So does a number from the environment that no word holds, which an instruction would push. -/
 def NoAbort {α : Type} (r : Except EvmError α) : Prop := ∀ e, r = .error e → e.aborts = false
 
 /-- A success does not abort. -/
@@ -175,7 +187,9 @@ theorem noAbort_stop (evm : Evm fork Nat) : NoAbort (stopStep evm) := NoAbort.ok
 
 /-- An error that halts only its frame is no error that aborts.
 
-Running out of gas or stack, a jump to an invalid destination and a write in a static frame halt.
+An instruction that runs out of gas or of stack halts its frame instead.
+
+So do a jump to an invalid destination and a write in a static frame.
 
 That halt is no error of the loop. -/
 theorem NoAbort.error {α : Type} {e : EvmError} (h : e.aborts = false) :

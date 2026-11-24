@@ -9,9 +9,11 @@ public import EthLib.Execution.Proofs.Evm.Instructions.StackOnly
 
 A proof about bytecode runs it one opcode at a time.
 
-The lemmas here turn each kind of step into one equation, on a frame with its fields named.
+The lemmas here turn each kind of step into one equation.
 
-So a proof never unfolds a whole frame, and the terms of a long run stay small.
+They take the frame as it is, with its fields named, so a proof never unfolds a whole frame.
+
+This keeps the terms of a long run small: each step rewrites a few fields of the last frame.
 -/
 
 @[expose] public section

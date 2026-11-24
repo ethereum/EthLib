@@ -5,15 +5,27 @@ public import EthLib.Execution.Proofs.Evm.Logic.Rules
 /-!
 # Proofs: rules for the opcodes that read and write only the stack
 
-Each rule goes from one running frame of a code to the next, with one counter of gas, at every fork.
+Each rule here goes from one running frame of a code to the next.
 
-The opcodes that the fork gives an instruction of one, two or three operands run by its rule.
+The rules work out the charge of one counter of gas, at every fork.
 
-Each rule is first proved over the steps that also never abort with less gas.
+- An opcode of one, two or three operands puts its result in place of its operands.
+- POP drops the top word, for 2 gas.
+- From Shapella, PUSH0 pushes the word 0, for 2 gas.
+- SWAP1 to SWAP16 exchange the top word with the word at their depth, for 3 gas.
+- EXP pays its base price and the price per byte of its exponent that the fork sets.
 
-That form gives the rule over steps monotone in gas, which gives the plain rule.
+The opcodes that the fork gives an instruction of one, two or three operands run by those rules.
 
-DUP1 to DUP16 sit with the other rules, and DUPN, SWAPN and EXCHANGE of Glamsterdam have none yet.
+Each rule here is first proved over the steps that also never abort with less gas.
+
+That form gives the rule over the steps from frames that are monotone in gas.
+
+That rule gives the rule over the steps of the logic.
+
+The rule for DUP1 to DUP16 sits with the other rules.
+
+DUPN, SWAPN and EXCHANGE of Glamsterdam have no rule yet.
 -/
 
 @[expose] public section

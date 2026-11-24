@@ -46,7 +46,9 @@ theorem callStep_child (hfork : .berlin ≤ fork) {kind : CallKind}
       let caller := callerFrame
         { evm with
           stack
-          -- It pays the access, the growth of memory for both ranges, and the gas it passes on.
+          -- The frame pays the access and the growth of memory for both ranges.
+          --
+          -- It also pays the gas that it passes on.
           gas := evm.gas - (callGas.cost + growth.cost)
           -- It accesses the address and records its read.
           state := evm.state.recordAccountRead (toAddressMasked a)
@@ -80,7 +82,9 @@ theorem callStep_call (hfork : .berlin ≤ fork)
       let caller := callerFrame
         { evm with
           stack
-          -- It pays the access, the growth of memory for both ranges, and the gas it passes on.
+          -- The frame pays the access and the growth of memory for both ranges.
+          --
+          -- It also pays the gas that it passes on.
           gas := evm.gas - (callGas.cost + growth.cost)
           -- It accesses the address and records its read.
           state := evm.state.recordAccountRead (toAddressMasked a)
@@ -112,7 +116,9 @@ theorem callStep_staticcall (hfork : .berlin ≤ fork)
       let caller := callerFrame
         { evm with
           stack
-          -- It pays the access, the growth of memory for both ranges, and the gas it passes on.
+          -- The frame pays the access and the growth of memory for both ranges.
+          --
+          -- It also pays the gas that it passes on.
           gas := evm.gas - (callGas.cost + growth.cost)
           -- It accesses the address and records its read.
           state := evm.state.recordAccountRead (toAddressMasked a)
@@ -154,7 +160,9 @@ theorem callStep_value (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       let caller := callerFrame
         { evm with
           stack
-          -- It pays the extra price, memory growth for both ranges, and the gas it passes on.
+          -- The frame pays the extra price and the growth of memory for both ranges.
+          --
+          -- It also pays the gas that it passes on.
           gas := evm.gas - (callGas.cost + growth.cost)
           -- It accesses the address and records its read.
           state := evm.state.recordAccountRead (toAddressMasked a)
@@ -296,7 +304,9 @@ variable {code : ByteArray} {message : Message fork} {pc : Nat} {memory : ByteAr
 
 Its cases are CALL and CALLCODE with no value, STATICCALL and DELEGATECALL.
 
-The callee runs arbitrary code, so the rule takes an assumption on the frame that ends it. -/
+The callee runs arbitrary code.
+
+So the rule takes an assumption on the frame that ends the message. -/
 theorem callKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {kind : CallKind}
     {byte : UInt8} {op : Op} {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
@@ -329,7 +339,9 @@ theorem callKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {k
           message.currentTarget ∧
         caller.substate = { substate with
           accessedAddresses := substate.accessedAddresses.insert (toAddressMasked to) } ∧
-        -- It passes on the gas it asks for, at most all but one 64th of the gas left, by EIP-150.
+        -- The call passes on the gas it asks for.
+        --
+        -- That is at most all but one 64th of the gas left, by EIP-150.
         --
         -- The gas left is counted after the access and the growth of memory.
         msg.gas = (messageCallGas fork 0 asked.toNat gas
@@ -337,7 +349,9 @@ theorem callKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {k
           (if cold then 2600 else 100)).subCall ∧
         -- DELEGATECALL keeps the sender and the value of the current message.
         msg.caller = (if kind = .delegatecall then message.caller else message.currentTarget) ∧
-        -- CALL and STATICCALL run it on `to`, and CALLCODE and DELEGATECALL on the current account.
+        -- CALL and STATICCALL run the code on `to`.
+        --
+        -- CALLCODE and DELEGATECALL run it on the current account.
         msg.currentTarget = (if kind = .call ∨ kind = .staticcall then toAddressMasked to
           else message.currentTarget) ∧
         msg.target = some (if kind = .call ∨ kind = .staticcall then toAddressMasked to
@@ -369,7 +383,9 @@ theorem callKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {k
             (if cold then 2600 else 100)).cost +
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
             child.gas)
-          -- It gets back the gas that the callee leaves, and its state and substate come from it.
+          -- The caller gets back the gas that the callee leaves.
+          --
+          -- Its state and substate come from the callee.
           --
           -- The callee may even call the caller again.
           --
@@ -442,7 +458,9 @@ theorem callWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
             (if cold then 2600 else 100)).cost +
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
             child.gas)
-          -- It gets back the gas that the callee leaves, and its state and substate come from it.
+          -- The caller gets back the gas that the callee leaves.
+          --
+          -- Its state and substate come from the callee.
           --
           -- The rule says nothing more of them, since the callee is arbitrary.
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
@@ -500,7 +518,9 @@ theorem callRoute (hfork : .berlin ≤ fork)
               routeCost fork (substate.accessedAddresses.insert (toAddressMasked to)) route)).cost +
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
             child.gas)
-          -- It gets back the gas that the callee leaves, and its state and substate come from it.
+          -- The caller gets back the gas that the callee leaves.
+          --
+          -- Its state and substate come from the callee.
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
           child.output after :=
   callKindRoute (kind := .call) hfork hlt hbyte
@@ -540,7 +560,9 @@ theorem call (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
         At code message (pc + 1) ((if child.error.isNone then 1 else 0) :: rest) memory
           (gas - (messageCallGas fork 0 asked.toNat gas 0 (if cold then 2600 else 100)).cost +
             child.gas)
-          -- It gets back the gas that the callee leaves, and its state and substate come from it.
+          -- The caller gets back the gas that the callee leaves.
+          --
+          -- Its state and substate come from the callee.
           --
           -- The rule says nothing more of them, since the callee is arbitrary.
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
@@ -625,7 +647,9 @@ theorem staticcallWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
             (if cold then 2600 else 100)).cost +
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
             child.gas)
-          -- It gets back the gas that the callee leaves, and its state and substate come from it.
+          -- The caller gets back the gas that the callee leaves.
+          --
+          -- Its state and substate come from the callee.
           --
           -- The rule says nothing more of them, since the callee is arbitrary.
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
@@ -666,7 +690,9 @@ theorem staticcall (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
         At code message (pc + 1) ((if child.error.isNone then 1 else 0) :: rest) memory
           (gas - (messageCallGas fork 0 asked.toNat gas 0 (if cold then 2600 else 100)).cost +
             child.gas)
-          -- It gets back the gas that the callee leaves, and its state and substate come from it.
+          -- The caller gets back the gas that the callee leaves.
+          --
+          -- Its state and substate come from the callee.
           --
           -- The rule says nothing more of them, since the callee is arbitrary.
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
@@ -755,7 +781,9 @@ theorem delegatecallWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
             (if cold then 2600 else 100)).cost +
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
             child.gas)
-          -- It gets back the gas that the callee leaves, and its state and substate come from it.
+          -- The caller gets back the gas that the callee leaves.
+          --
+          -- Its state and substate come from the callee.
           --
           -- The rule says nothing more of them, since the callee is arbitrary.
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
@@ -815,7 +843,7 @@ theorem callcodeWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
         msg.data = memoryReadBytes (memoryExtend memory
           (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).expandBy)
           inputStart.toNat inputSize.toNat ∧
-        -- It carries no value.
+        -- The message carries no value.
         msg.value = 0 ∧
         -- The message is static when the frame is.
         msg.depth = message.depth + 1 ∧ msg.isStatic = message.isStatic ∧
@@ -835,7 +863,9 @@ theorem callcodeWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
             (if cold then 2600 else 100)).cost +
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
             child.gas)
-          -- It gets back the gas that the callee leaves, and its state and substate come from it.
+          -- The caller gets back the gas that the callee leaves.
+          --
+          -- Its state and substate come from the callee.
           --
           -- The rule says nothing more of them, since the callee is arbitrary.
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
@@ -878,7 +908,9 @@ theorem callValue (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
           message.currentTarget ∧
         caller.substate = { substate with
           accessedAddresses := substate.accessedAddresses.insert (toAddressMasked to) } ∧
-        -- It passes on the gas it asks for, at most all but one 64th of the gas left, by EIP-150.
+        -- The call passes on the gas it asks for.
+        --
+        -- That is at most all but one 64th of the gas left, by EIP-150.
         --
         -- The message gets that gas and the stipend of 2300, and carries the value.
         msg.gas = (messageCallGas fork v asked.toNat gas
@@ -905,7 +937,9 @@ theorem callValue (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
               callValueCost fork v)).cost +
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
             child.gas)
-          -- It says nothing of the state beyond what that frame gives, as for CALL with no value.
+          -- The rule says nothing of the state beyond what that frame gives.
+          --
+          -- The rule for CALL with no value says no more either.
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
           child.output after := by
   apply HoareUnder.of_child
@@ -950,7 +984,7 @@ theorem callValueLow (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
         (asked :: to :: v :: inputStart :: inputSize :: outputStart :: outputSize :: rest)
         memory gas state substate returnData)
       (At code message (pc + 1) (0 :: rest)
-        -- Its memory has grown for both ranges.
+        -- The memory of the frame has grown for both ranges.
         (memoryExtend memory
           (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).expandBy)
         (gas - ((messageCallGas fork v asked.toNat gas
@@ -958,7 +992,7 @@ theorem callValueLow (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
             (callBaseCost fork cold + callNewAccountCost fork state (toAddressMasked to) v +
               callValueCost fork v)).cost +
           (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost) +
-          -- It gets back the gas that it would pass on, with the stipend of 2300.
+          -- The frame gets back the gas that it would pass on, with the stipend of 2300.
           (messageCallGas fork v asked.toNat gas
             (extendMemory memory.size [(inputStart, inputSize), (outputStart, outputSize)]).cost
             (callBaseCost fork cold + callNewAccountCost fork state (toAddressMasked to) v +
@@ -966,7 +1000,7 @@ theorem callValueLow (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
         ((state.recordAccountRead (toAddressMasked to)).recordAccountRead message.currentTarget)
         { substate with
           accessedAddresses := substate.accessedAddresses.insert (toAddressMasked to) }
-        -- Its return data is empty.
+        -- The return data of the frame is empty.
         .empty) := by
   apply Triple.of_step
   rintro evm ⟨hc, hj, hm, hpc, hst, hmem, hg, hrun, herr, hout, hs, hss, -⟩

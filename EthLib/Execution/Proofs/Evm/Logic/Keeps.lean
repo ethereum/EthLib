@@ -30,7 +30,9 @@ It has the account, the current storage and the transient storage of `S` at ever
 
 It has the code of `S` at every code hash. -/
 def ReadsAs (tx S : TransactionState) : Prop :=
-  -- The two may differ in the reads that they record, and in the block before the transaction.
+  -- The two may differ in the reads that they record.
+  --
+  -- They may also differ in the block before the transaction.
   --
   -- They may differ in the accounts that the transaction created and the storage that it wiped.
   --
@@ -77,7 +79,9 @@ theorem Routes.of_readsAs {tx S : TransactionState} {c : ByteArray} {route : Rou
 
 /-- `msg` is a CALL with no value to `to`, along the route that `S` gives, from the frame `caller`.
 
-Its data, its gas, its reservoir and the frame `caller`, apart from its state, may be any. -/
+Its data, its gas and its reservoir may be any.
+
+So may the frame `caller`, apart from its state. -/
 def SentVia (message : Message fork) (S : TransactionState) (to : Address)
     (caller : Evm fork Meter) (msg : Message fork) : Prop :=
   -- The message runs the code that `to` holds in `S`, along its route.

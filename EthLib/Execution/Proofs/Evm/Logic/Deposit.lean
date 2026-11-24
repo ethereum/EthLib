@@ -75,7 +75,9 @@ The frame then has the state from before the creation, no gas, no output and out
 theorem depositCode_of_outOfGas (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {snapshot : TransactionState} {evm : Evm fork Nat} (herr : evm.error = none)
     (hprefix : .london ≤ fork → evm.output[0]? ≠ some 0xef)
-    -- The limit of 24576 bytes is from EIP-170, and the price of 200 gas a byte from Frontier.
+    -- The limit of 24576 bytes is from EIP-170.
+    --
+    -- The price of 200 gas a byte is from Frontier.
     (hbad : 24576 < evm.output.size ∨ evm.gas < evm.output.size * CODE_DEPOSIT_PER_BYTE) :
     depositCode fork snapshot evm = .ok { evm with
       state := evm.state.restoreTxState snapshot, gas := 0, output := .empty,

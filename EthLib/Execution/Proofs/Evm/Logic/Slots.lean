@@ -9,7 +9,13 @@ public import EthLib.Execution.Proofs.State.Tracker
 
 A specification often cares about a few slots of storage, not about the rest.
 
-So a frame here knows the facts of a few slots, and agrees with a base state at every other slot.
+A fact of a slot gives its account, its key, its word before the transaction, and its word now.
+
+It also says whether the slot is warm.
+
+A frame of this kind knows ranges of memory, the facts of some slots, and the refund counter.
+
+It agrees with a base state and a base set of accessed keys at every slot that no fact names.
 -/
 
 @[expose] public section
@@ -54,7 +60,9 @@ def nonceAndCode (account : Account) : Nat × Hash32 := (account.nonce, account.
 
 /-- A state and its accessed keys agree with a base state and base keys outside some slots.
 
-The accounts of `moved` may differ in their balances, and those of `remade` in every way. -/
+The accounts of `moved` may differ in their balances.
+
+Those of `remade` may differ in every way. -/
 structure Agrees (touched : List (Address × U256)) (moved remade : List Address)
     (base : TransactionState) (accessed : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32))
     (state : TransactionState) (keys : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32)) :
@@ -167,7 +175,7 @@ def Stored (code : ByteArray) (message : Message fork) (pc : Nat) (stack : List 
   Known code message pc stack size facts gas evm.state evm.substate returnData evm ∧
     (∀ fact ∈ slots, fact.Holds evm.state evm.substate) ∧
     evm.substate.refundCounter = refund ∧
-    -- It also has the words before the transaction, the accounts, codes and block of the base.
+    -- It also has the base's words before the transaction, and its accounts, codes and block.
     Agrees (slots.map SlotFact.slot) [] [] base accessed evm.state
       evm.substate.accessedStorageKeys
 
@@ -358,7 +366,7 @@ theorem sstore_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {
     (hbase : (base.getAccountOptional message.currentTarget).isSome = true)
     -- The frame holds more than the stipend of 2300 gas, by EIP-2200.
     (hstipend : CALL_STIPEND < gas)
-    -- It pays the price of the write from the facts of the slot.
+    -- The frame pays the price of the write from the facts of the slot.
     --
     -- That price is that of EIP-2200, with the prices of EIP-2929.
     (hgas : sstoreCost fork fact.original fact.current new (!fact.warm) ≤ gas) :

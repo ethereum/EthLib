@@ -11,9 +11,11 @@ A run that reverts fails too, so these facts say nothing of its gas.
 
 The facts here are for the meter of one counter of gas, the meter of every fork before Glamsterdam.
 
-No fact here covers GAS, which is not monotone in gas, nor calls and creations.
+GAS is not monotone in gas, since it pushes the gas left.
 
 A step that sends a message is no step of the logic.
+
+So no fact here covers GAS, the calls and the creations.
 -/
 
 @[expose] public section

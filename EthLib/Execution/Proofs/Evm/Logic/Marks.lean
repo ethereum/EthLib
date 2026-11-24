@@ -8,7 +8,13 @@ public import EthLib.Execution.Proofs.Evm.Logic.Message
 
 A run of a frame keeps its marks for deletion, under the runner of the messages of code.
 
-So a frame that no revert undoes loses no mark, up to the end of the run.
+This runner runs each message that a step sends, by its call or creation.
+
+So the frames that a run goes through, inside messages that end without an error, lose no mark.
+
+Such a frame is one that no revert undoes.
+
+Each account it marks is marked by the frame that ends the run, when that frame has no error.
 
 These facts hold at every fork.
 

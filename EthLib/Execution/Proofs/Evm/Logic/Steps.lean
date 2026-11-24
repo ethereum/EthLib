@@ -6,7 +6,11 @@ public import EthLib.Execution.Proofs.Evm.Logic.NatCode
 /-!
 # Proofs: a tactic that steps through the opcodes of a code
 
-A proof about a code applies one rule per opcode, and each rule needs facts about the code.
+A proof about a code applies one rule per opcode.
+
+Each rule needs facts about the code.
+
+These are that the program counter lies inside the code, the byte there, and the data of a PUSH.
 
 The tactic here applies the rule of the opcode at the program counter, and proves those facts.
 -/
@@ -240,19 +244,24 @@ macro_rules
          case op => evm_code [$ls,*]
          case gas => evm_gas
          case room => evm_room)
-      -- It fails on any other opcode, and on a step whose gas, fork or stack room it cannot prove.
+      -- The tactic fails on any other opcode.
+      --
+      -- It also fails on a step whose gas, fork or room on the stack it cannot prove.
       | fail "no rule of a step applies to the opcode at the program counter") <;> evm_tidy))
 
 /-- Runs the opcode at the program counter of the first frame of the goal, by its rule.
 
-The goal is a triple over steps monotone in gas, from a frame of a code at a known program counter.
+The goal is a triple over the steps from frames that are monotone in gas.
+
+It starts from a frame of a code at a known program counter.
 
 The rewrite rules `ls` turn the facts about the code into facts about numbers.
 
-It steps over the same opcodes as the tactic above, except GAS, which is not monotone in gas. -/
+It steps over the same opcodes as the tactic above, except GAS, which is not monotone in gas.
+
+The goal that is left starts from the frame after the step. -/
 syntax "evm_stepG" " [" simpLemma,* "]" : tactic
 
--- The goal that is left starts from the frame after the step.
 macro_rules
   | `(tactic| evm_stepG [$ls,*]) => `(tactic| ((try unfold SpecG) <;> (first
       | (refine' Triple.seq (push_of_decodeG ?lt ?op ?dec ?n ?word ?gas ?room) ?next

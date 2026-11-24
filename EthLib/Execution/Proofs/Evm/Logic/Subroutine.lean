@@ -7,6 +7,10 @@ public import EthLib.Execution.Proofs.Evm.Logic.Known
 
 Bytecode often reuses a block of its own code, as a subroutine, with JUMP.
 
+The caller pushes an address to come back to, then the arguments, then the address of the block.
+
+It jumps there, and the block jumps back to the return address once it has its results.
+
 The EVM has no instruction for this: the convention lives only in the code.
 
 A specification of the block holds for every return address and every stack under the arguments.
@@ -38,17 +42,21 @@ def Subroutine (code : ByteArray) (message : Message fork) (entry : Nat)
   ∀ (ret : U256) (rest : List U256) (gas : Nat),
     -- The return address must be a JUMPDEST of the code, since the block jumps back to it.
     isValidJumpDest (validJumpDestinations code) ret.toNat = true →
-    -- The stack under it must leave room for the `room` words that the block pushes, up to 1024.
+    -- The stack under the return address must leave room for the `room` words the block pushes.
+    --
+    -- The limit is 1024 words.
     --
     -- The frame must hold at least the gas `cost` of the block, and the block keeps the rest.
     args.length + 1 + rest.length + room ≤ STACK_LIMIT → cost ≤ gas →
-    -- The caller pushes a return address, then the arguments, then the address of the block.
+    -- The caller has pushed a return address, then the arguments, then the address of the block.
     --
-    -- It jumps there.
+    -- It has jumped to the block.
     Hoare fork (At code message entry (args ++ ret :: rest) memory gas state substate returnData)
       -- The block jumps back to the return address once it has its results.
       --
-      -- There its stack holds `results` on top of the same stack, and it has paid `cost`.
+      -- There its stack holds `results` on top of the same stack.
+      --
+      -- The frame has paid `cost`.
       (At code message ret.toNat (results ++ rest) memory' (gas - cost) state' substate'
         returnData')
 
@@ -90,7 +98,9 @@ theorem callSubroutine {n : Fin 33} {entry ret : U256} {args results rest : List
   have h3 := h ret rest (gas - 3 - 8) vret hroom (by omega)
   have hg : gas - 3 - 8 - cost = gas - (11 + cost) := by omega
   rw [hg] at h3
-  -- The rule for a call composes the push of the address of the block and the JUMP with its proof.
+  -- The rule for a call composes the push of the address of the block and the JUMP.
+  --
+  -- It then composes them with the proof of the block.
   exact (h1.seq h2).seq h3
 
 /-! ## Subroutines over frames that know ranges of memory -/

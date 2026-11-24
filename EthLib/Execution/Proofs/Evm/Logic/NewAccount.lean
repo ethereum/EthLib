@@ -54,7 +54,9 @@ def CreateMessage (message : Message fork) (address : Address) (init : ByteArray
 
 /-- A frame of a creation that paid `cost`, after its message, with a gas, its facts and a base.
 
-The creator had the nonce `nonce` in the old base, and memory keeps every fact. -/
+The creator had the nonce `nonce` in the old base.
+
+Memory keeps every fact. -/
 def AfterCreate (code : ByteArray) (message : Message fork) (pc : Nat) (rest : List U256)
     (size : Nat) (facts : List (Nat × ByteArray)) (gas cost : Nat) (address : Address)
     (failed : ByteArray → Prop) (nonce : Nat) (slots : List SlotFact) (refund : Int)
@@ -66,10 +68,12 @@ def AfterCreate (code : ByteArray) (message : Message fork) (pc : Nat) (rest : L
     -- It also agrees outside the addresses that the change moves or remakes, and the creator.
     Agrees (change.touched ++ slots.map SlotFact.slot) change.moved
       (change.remade ++ [message.currentTarget]) base accessed base' accessed' ∧
-    -- The creation succeeded, and the new base holds the balances and the accounts of the change.
+    -- The creation succeeded.
+    --
+    -- The new base then holds the balances and the accounts of the change.
     (((∀ fund ∈ change.funds, (base'.getAccount fund.1).balance = fund.2) ∧
       (∀ fact ∈ change.accounts, fact.Holds base') ∧
-      -- It gives the creator the grown nonce, unless the change remakes the creator.
+      -- The new base gives the creator the grown nonce, unless the change remakes the creator.
       (message.currentTarget ∉ change.remade →
         (base'.getAccount message.currentTarget).nonce = nonce + 1) ∧
       -- The frame pushes `address`, knows the facts of the change, and adds its refund.
@@ -79,7 +83,9 @@ def AfterCreate (code : ByteArray) (message : Message fork) (pc : Nat) (rest : L
         (gas - cost - createMessageGas fork (gas - cost) + left)
         (change.after ++ keptFacts change.touched slots) (refund + change.gain) base' accessed'
         .empty evm) ∨
-      -- Or it failed, `sure` is false, and the new base gives the creator the grown nonce.
+      -- Or the creation failed, and `sure` is false.
+      --
+      -- The new base then gives the creator the grown nonce.
       sure = false ∧ (base'.getAccount message.currentTarget).nonce = nonce + 1 ∧
         -- The frame pushes 0 and keeps its facts of slots and its refund counter.
         --
@@ -190,7 +196,9 @@ private theorem afterCreate_of_at {evm caller child final : Evm fork Nat} {rest 
 
 The byte at `pc` runs the creation, which sends a message.
 
-The frame after it is then that of a creation after its message, with the gas the callee leaves. -/
+The frame after the creation is then a frame of a creation after its message.
+
+It has the gas that the callee leaves. -/
 theorem createKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {create2 : Bool} {byte : UInt8} {op : Op}
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
@@ -205,7 +213,7 @@ theorem createKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
     --
     -- So the creation grows no memory.
     (hinput : (start.toNat, init) ∈ facts) (hlen : init.size = len.toNat)
-    -- From Shanghai, it is at most the greatest size, by EIP-3860.
+    -- From Shanghai, the init code is at most the greatest size, by EIP-3860.
     (hinit : .shapella ≤ fork → len.toNat ≤ maxInitCodeSize fork)
     -- The account of the frame holds the value in the base state.
     (hbal : value ≤ (base.getAccount message.currentTarget).balance)
@@ -213,12 +221,12 @@ theorem createKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
     --
     -- That nonce grows by one, whatever the creation does.
     (hnonce : (base.getAccount message.currentTarget).nonce ≠ MAX_NONCE)
-    -- Its depth leaves room for one more frame.
+    -- The depth of the frame leaves room for one more frame.
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
     -- The new address is the one that the specification derives from the base state.
     (haddr : creationAddress message.currentTarget (base.getAccount message.currentTarget).nonce
       (if create2 then some salt else none) init = .ok address)
-    -- It holds no code and a nonce of 0 in the base state, as EIP-684 asks.
+    -- The new address holds no code and a nonce of 0 in the base state, as EIP-684 asks.
     --
     -- Its storage is empty there, as EIP-7610 asks.
     (hdeploy : base.accountDeployable address = true)
@@ -228,7 +236,7 @@ theorem createKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
     (hgas : createBaseCost fork +
         -- CREATE2 also pays 6 gas per word to hash the init code, by EIP-1014.
         (if create2 then OPCODE_KECCAK256_PER_WORD * wordCount len.toNat else 0) +
-        -- From Shanghai, it adds 2 gas per word of init code, by EIP-3860.
+        -- From Shanghai, the price adds 2 gas per word of init code, by EIP-3860.
         (if fork ≥ .shapella then initCodeCost len.toNat else 0) ≤ gas)
     -- The init code is arbitrary, so each frame that ends the message has an assumed effect.
     --
@@ -239,11 +247,13 @@ theorem createKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
         (createBaseCost fork +
           (if create2 then OPCODE_KECCAK256_PER_WORD * wordCount len.toNat else 0) +
           (if fork ≥ .shapella then initCodeCost len.toNat else 0)))) msg →
-      -- The assumption may use the facts of the slots, and the creator's agreement with the base.
+      -- The assumption may use the facts of the slots.
+      --
+      -- It may use the agreement of the creator with the base.
       (∀ fact ∈ slots, fact.Holds caller.state caller.substate) →
       Agrees (slots.map SlotFact.slot) [] [message.currentTarget] base accessed caller.state
         caller.substate.accessedStorageKeys →
-      -- It may also use the account of the creator, that of the base with the grown nonce.
+      -- It may also use the account of the creator, which is that of the base with the grown nonce.
       caller.state.getAccountOptional message.currentTarget =
         some { base.getAccount message.currentTarget with
           nonce := (base.getAccount message.currentTarget).nonce + 1 } →
