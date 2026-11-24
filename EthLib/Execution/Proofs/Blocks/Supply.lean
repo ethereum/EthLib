@@ -5,25 +5,12 @@ public import EthLib.Execution.Proofs.Blocks.Burn
 /-!
 # Proofs: the supply bound of a block and the Glamsterdam equality
 
-The exact block supply equation counts created wei, burned fees and other losses.
+A block leaves at most the supply before it, plus its created wei, minus its burned fees.
 
-Those losses are the surviving burns of SELFDESTRUCT and the balances that transactions delete.
+Sources:
 
-Those losses are never negative, so dropping them gives a bound at every fork.
-
-So a block leaves at most the supply before it, plus its created wei, minus its burned fees.
-
-From Glamsterdam, every surviving burn and every deleted balance is 0, by [EIP-8246][e8246].
-
-So the supply after the block plus its burned fees equals the supply before plus its created wei.
-
-The burned fees are the base fee per gas times the gas used after the refunds.
-
-They add the base fee per blob gas times the blob gas, by [EIP-1559][e1559] and [EIP-4844][e4844].
-
-Before London the base fee per gas is 0, and before Dencun the base fee per blob gas is 0.
-
-Before Glamsterdam, the header gives both: its gas used and its blob gas used.
+- [EIP-1559][e1559] and [EIP-4844][e4844], for the burned fees.
+- [EIP-8246][e8246], for the Glamsterdam equality.
 
 [e1559]: https://eips.ethereum.org/EIPS/eip-1559#specification
 [e4844]: https://eips.ethereum.org/EIPS/eip-4844#gas-accounting
@@ -49,7 +36,9 @@ It is the gas used at the base fee per gas, plus the blob gas used at the base f
 
 Before Dencun the header has no blob gas used, which counts as 0. -/
 def headerBurnedWei (env : BlockEnvironment fork) (header : Header fork) : Nat :=
+  -- Before London the base fee per gas is 0.
   header.gasUsed * baseFeeOf env +
+    -- Before Dencun the base fee per blob gas is 0.
     (if h : .dencun ≤ fork then (header.blobGasUsed h).toNat else 0) * blobGasPriceOf env
 
 /-! ## The body -/
@@ -70,9 +59,14 @@ theorem applyBody_supply {config : ChainConfig} {env : BlockEnvironment fork}
       (.glamsterdam ≤ fork → (TransactionState.ofBlock output.block).supply +
         burnedWei env output.toBodyOutput = (TransactionState.ofBlock start).supply +
           createdWei block) := by
+  -- The exact supply equation counts created wei, burned fees and other losses.
+  --
+  -- Those losses are the surviving burns of SELFDESTRUCT and the balances that transactions delete.
   obtain ⟨losses, certificate⟩ := applyBody_bodyBurns h
   have hSupply := certificate.supply_eq hOmmers
+  -- Those losses are never negative, so dropping them gives a bound at every fork.
   refine ⟨by omega, fun hFork => ?_⟩
+  -- From Glamsterdam, every surviving burn and every deleted balance is 0, by EIP-8246.
   have hZero := certificate.total_eq_zero_of_glamsterdam hFork
   omega
 
@@ -170,6 +164,9 @@ theorem stateTransition_supply_le_of_lt_glamsterdam {chain : BlockChain}
   have hUsed : output.cumulativeGasUsed = block.header.gasUsed := by
     rw [← (of_outputChecks hChecks).1, BlockGas.gasUsed, hGas, hState, hExecution, hCumulative]
     exact (Nat.max_eq_left (Nat.zero_le _)).symm
+  -- The burned fees are the base fee per gas times the gas used after the refunds.
+  --
+  -- They add the base fee per blob gas times the blob gas, by EIP-1559 and EIP-4844.
   unfold burnedWei headerBurnedWei
   rw [hUsed]
   split

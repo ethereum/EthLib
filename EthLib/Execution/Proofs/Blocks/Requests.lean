@@ -7,17 +7,7 @@ public import EthLib.Execution.Blocks.Requests
 /-!
 # Proofs: the requests of a block
 
-A list of requests with no data, only its type byte, leaves the requests hash unchanged.
-
-A deposit log in the layout of the Solidity ABI gives back its five fields, in order.
-
-The parser accepts a log exactly when it has 576 bytes and the ten words of the layout.
-
-So an accepted log gives a request of 192 bytes.
-
-The deposit requests of a block succeed exactly when the parser accepts every deposit log.
-
-They then hold 192 bytes for each deposit log.
+The requests hash, the parser of deposit logs, and the deposit requests of a block.
 -/
 
 @[expose] public section
@@ -35,7 +25,7 @@ theorem DepositError.code_injective (e₁ e₂ : DepositError) (h : e₁.code = 
 
 /-! ## The requests hash -/
 
-/-- A list with no data does not enter the requests hash. -/
+/-- A list with no data, only its type byte, does not enter the requests hash. -/
 theorem requestsHash_cons_of_size_le {r : ByteArray} (h : r.size ≤ 1) (requests : List ByteArray) :
     requestsHash (r :: requests) = requestsHash requests := by
   simp [requestsHash, Nat.not_lt.mpr h]
@@ -78,16 +68,16 @@ private theorem check_eq_ok {ε : Type} (c : Prop) [Decidable c] (e : ε) :
     (if c then (Except.ok () : Except ε Unit) else throw e) = .ok () ↔ c := by
   split <;> simp_all [throw, throwThe, MonadExceptOf.throw]
 
-/-- The parser accepts the data of a log exactly when it has 576 bytes and the words of the layout.
-
-The head gives each field its offset, and each field starts with its size.
-
-The request is then the five fields, one after the other. -/
+/-- The parser accepts a log exactly when it has 576 bytes and the words of the layout. -/
 theorem depositRequestOfEvent_eq_ok_iff (data request : ByteArray) :
     depositRequestOfEvent data = .ok request ↔
       data.size = DEPOSIT_EVENT_LENGTH ∧
+      -- The parser checks ten words of the layout: five offsets in the head and five sizes.
+      --
+      -- The head gives each field its offset, and each field starts with its size.
       (∀ p ∈ DEPOSIT_EVENT_FIELDS.zipIdx,
         wordAt data.data.toList (32 * p.2) = p.1.1 ∧ wordAt data.data.toList p.1.1 = p.1.2) ∧
+      -- The request is then the five fields, one after the other.
       request = ⟨(DEPOSIT_EVENT_FIELDS.flatMap fun (offset, size) =>
         fieldAt data.data.toList offset size).toArray⟩ := by
   have hsize : data.data.toList.length = data.size := rfl

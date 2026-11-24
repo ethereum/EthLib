@@ -9,11 +9,7 @@ public import EthLib.Execution.Proofs.Transactions.NoncesFit
 
 EIP-2681 limits every nonce to `2^64 - 1`.
 
-Each transaction and each system call of a block keeps that bound.
-
-The withdrawals, the rewards and the DAO transfer change only balances.
-
-So a block that passes its transition on a state within the bound leaves a state within it.
+A block that passes its transition on a state within the bound leaves a state within it.
 
 From Glamsterdam, the block access list holds each nonce in 64 bits.
 
@@ -149,6 +145,7 @@ theorem applyBody_noncesFit {config : ChainConfig} {env : BlockEnvironment fork}
     output.block.NoncesFit := by
   obtain ⟨_, body, txs, withdrawn, requested, hdao, hsys, htxs, hWithdrawn, hStays, hreq, hrew,
     -⟩ := applyBody_eq_ok h
+  -- The DAO transfer changes only balances, and each system call and transaction keeps the bound.
   have fitTxs := applyTransactions_noncesFit
     (startSystemCalls_noncesFit (daoTransfer_noncesFit hfit hdao) hsys) htxs
   -- The withdrawals change only balances.
@@ -161,6 +158,7 @@ theorem applyBody_noncesFit {config : ChainConfig} {env : BlockEnvironment fork}
       exact fitTxs address
     · rw [hStays hShapella]
       exact fitTxs
+  -- The rewards change only balances.
   exact onBlock_noncesFit (fun _ hp address => (payRewards_nonce_codeHash hp address).1)
     (blockRequests_noncesFit (result := (requested, _)) fitWithdrawn hreq) hrew
 

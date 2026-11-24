@@ -7,25 +7,9 @@ public import EthLib.Execution.Proofs.Transactions.Overflow
 /-!
 # Proofs: no block overflows a balance when the supply leaves room
 
-The DAO transfer and the system calls keep or lower the supply.
-
-Each transaction keeps or lowers it, and runs only once it passes its checks.
-
-The withdrawals and the rewards create ether, and the block creates no other.
-
-So each state of the body has at most the supply before the block plus the ether still to create.
-
-Each credit then raises one balance to at most the supply before the block plus all it creates.
-
-So the transition never overflows a balance when that sum leaves room for the credits of a message.
+The supply before a block plus the ether it creates must leave room for the credits of a message.
 
 Before Cancun, twice that sum must be below `2^256`.
-
-A SELFDESTRUCT to its own account may double a balance before it clears it.
-
-That bound is simple rather than sharp: only the supply before the block needs the factor two.
-
-Every call that may double a balance runs before the block creates ether.
 -/
 
 @[expose] public section
@@ -281,16 +265,19 @@ private theorem supply_applyTransaction_le {env : BlockEnvironment fork} {index 
 
 /-- The leaves of a block body never overflow a balance when its supply plus all it creates fits.
 
-Before the withdrawals, each state has at most the supply of the start state.
+Each state of the body has at most the supply before the block plus the ether still to create.
 
-After them, each state plus the rewards still to come has at most that supply plus all it creates.
-
-The sum must leave room for the credits of a message. -/
+Each credit then raises one balance to at most the supply before the block plus all it creates. -/
 private theorem leaves (config : ChainConfig) (env : BlockEnvironment fork)
     (block : Block fork Transaction) (start : BlockState)
+    -- The withdrawals and the rewards create ether, and the block creates no other.
+    --
+    -- The sum must leave room for the credits of a message.
     (room : SupplyRoom fork ((TransactionState.ofBlock start).supply + createdWei block)) :
     BodyLeaves config env block (¬Overflows ·)
+      -- Before the withdrawals, each state has at most the supply of the start state.
       (fun s => (TransactionState.ofBlock s).supply ≤ (TransactionState.ofBlock start).supply)
+      -- After them, a state plus the rewards to come has at most that supply plus all it creates.
       (fun s => (TransactionState.ofBlock s).supply + rewardWei fork block.header.number
         (block.ommers.map fun ommer => (ommer.2.coinbase, ommer.2.number)) ≤
           (TransactionState.ofBlock start).supply + createdWei block)
@@ -298,18 +285,22 @@ private theorem leaves (config : ChainConfig) (env : BlockEnvironment fork)
   plain _ ha hs _ _ := notOverflows_plain ha hs
   dao _ low := notOverflows_state fun a =>
     applyDaoFork_ne_balanceOverflow (by have := room.lt; omega) a
+  -- The DAO transfer keeps or lowers the supply.
   dao_inv _ _ low h := by
     rw [supply_daoTransfer h]
     exact low
   start _ low := notOverflows_aborted fun a =>
     startSystemCalls_ne_balanceOverflow (room.mono (by omega)) a
+  -- The system calls that start the block keep or lower the supply.
   start_inv _ _ low h := by
     obtain ⟨log, burns⟩ := startSystemCalls_startSystemCallsBurns h
     have := burns.supply_eq
     omega
   inclusion _ _ _ _ _ _ := fun ⟨_, h⟩ => by rcases h with h | h <;> cases h
+  -- A transaction runs only once it passes its checks.
   process _ _ _ low included := notOverflows_aborted
     (Transactions.processTransaction_ne_balanceOverflow included (room.mono (by omega)))
+  -- Each transaction keeps or lowers the supply.
   transaction_inv _ _ _ _ low h := Nat.le_trans (supply_applyTransaction_le h) low
   join body tx _ := notOverflows_state (join_ne_balanceOverflow body tx)
   withdraw hS _ low := notOverflows_state fun a => withdrawalState_ne_balanceOverflow (by
@@ -336,6 +327,7 @@ private theorem leaves (config : ChainConfig) (env : BlockEnvironment fork)
     exact Transactions.getCode_ne_balanceOverflow _ _ _ h
   call _ _ _ high := notOverflows_aborted (systemCall_ne_balanceOverflow (room.mono (by omega)))
   call_failed _ _ _ _ _ _ _ _ := fun ⟨_, h⟩ => by rcases h with h | h <;> cases h
+  -- A call to a request contract keeps or lowers the supply.
   call_inv _ _ _ _ _ high called joined := by
     rw [BodyState.supply_join joined]
     have := supply_systemCall_le called
@@ -365,6 +357,13 @@ The supply of the chain state plus the ether that the block creates must leave r
 
 That holds in a call and outside one. -/
 theorem stateTransition_ne_balanceOverflow (chain : BlockChain) (block : Block fork Transaction)
+    -- Before Cancun, a SELFDESTRUCT to its own account may double a balance before it clears it.
+    --
+    -- So the bound then doubles the sum, which is simple rather than sharp.
+    --
+    -- Only the supply before the block needs the factor two.
+    --
+    -- Every call that may double a balance runs before the block creates ether.
     (checkSeal : Bool) (room : SupplyRoom fork (chain.state.supply + createdWei block))
     (address : Address) :
     stateTransition chain block checkSeal ≠

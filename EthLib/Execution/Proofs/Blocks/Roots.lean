@@ -11,17 +11,9 @@ public import EthLib.Serialization.Proofs.Rlp.Codec
 /-!
 # Proofs: the roots of a block body
 
-An empty list has the root of the empty trie, the Keccak-256 hash of `0x80`.
+The roots of the empty lists, and the binding of the root of each list of a block body.
 
-So a block with no transactions, receipts or withdrawals has that root for each list.
-
-The key of each item is the RLP encoding of its index, so the keys of a list's trie are distinct.
-
-Two lists with one root then give every key one value, or the search finds a Keccak-256 collision.
-
-So two lists with one root are equal, or a search over their indices finds such a collision.
-
-The same holds for transactions, withdrawals, and receipts of type 0 or of a type the fork has.
+Two lists with one root are equal, or a search over their indices finds a Keccak-256 collision.
 -/
 
 @[expose] public section
@@ -34,7 +26,7 @@ open EthLib.Execution.Trie
 open EthLib.Serialization.Rlp
 open EthLib.Cryptography.Hash.Keccak (keccak256)
 
-/-- The root of the empty list is the root of the empty trie. -/
+/-- The root of the empty list is the root of the empty trie, the Keccak-256 hash of `0x80`. -/
 theorem indexedRoot_nil : indexedRoot [] = .ok (keccak256 ⟨#[0x80]⟩) :=
   root_empty keccak256 false
 
@@ -82,6 +74,7 @@ theorem getElem_of_indexedEntries {values : List ByteArray}
 Two indices with one encoding are one index, because the decoder reads each index back. -/
 theorem indexedEntries_nodup {values : List ByteArray}
     {entries : List (ByteArray × ByteArray)} (h : indexedEntries values = .ok entries) :
+    -- The key of each item is the RLP encoding of its index.
     (entries.map Prod.fst).Nodup := by
   refine List.pairwise_iff_getElem.mpr fun i j hi hj hij heq => Nat.ne_of_lt hij ?_
   simp only [List.length_map] at hi hj

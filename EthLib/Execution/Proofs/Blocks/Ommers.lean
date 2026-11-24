@@ -6,15 +6,7 @@ public import EthLib.Execution.Blocks.Ommers
 /-!
 # Proofs: the ommers of a block
 
-A block whose ommers pass the check commits to them by its ommers hash.
-
-It holds at most two ommers, none twice.
-
-Each ommer is one to six blocks older than the block, and is not a sibling of the block.
-
-In the first ten blocks of the DAO Fork, each ommer carries the extra data of that fork.
-
-The ommers pass the check exactly when they meet these rules and the rest of the check.
+What ommers that pass the check give a block, and exactly when they pass it.
 
 The Python suite shows that valid ommers pass.
 -/
@@ -31,12 +23,17 @@ open EthLib.Cryptography.Hash.Keccak (keccak256)
 theorem validateOmmers_spec {fork : Fork} {config : ChainConfig} {checkSeal : Bool}
     {recent : List RecentBlock} {header : Header fork} {ommers : List ((f : Fork) × Header f)}
     (h : validateOmmers config checkSeal recent header ommers = .ok ()) :
+    -- The block commits to its ommers by its ommers hash.
     (∃ encoded, encode (ommersItem ommers) = .ok encoded ∧
       keccak256 encoded = header.ommersHash) ∧
+    -- It holds at most two ommers.
     ommers.length ≤ MAX_OMMERS ∧
+    -- It holds no ommer twice.
     (∃ hashes, ommers.mapM (headerHash ·.2) = .ok hashes ∧ hashes.Nodup) ∧
     ∀ ommer ∈ ommers, 1 ≤ ommer.2.number ∧ ommer.2.number < header.number ∧
+      -- Each ommer is one to six blocks older than the block.
       1 ≤ header.number - ommer.2.number ∧ header.number - ommer.2.number ≤ MAX_OMMER_DEPTH ∧
+      -- No ommer is a sibling of the block.
       ommer.2.parentHash ≠ header.parentHash := by
   unfold validateOmmers at h
   obtain ⟨encoded, henc, h⟩ := bind_ok_iff.mp h
@@ -107,35 +104,33 @@ theorem OmmerError.code_injective (e₁ e₂ : OmmerError) (h : e₁.code = e₂
 private theorem exists_unit {P : Unit → Prop} : (∃ u, P u) ↔ P () :=
   ⟨fun ⟨(), h⟩ => h, fun h => ⟨(), h⟩⟩
 
-/-- The ommers of a block pass the check exactly when every rule of the check holds.
-
-The block commits to them by its ommers hash, and each ommer header passes its own checks.
-
-The number of each ommer is at least 1 and below the number of the block.
-
-There are at most two ommers, and no two have one hash.
-
-No ommer is the block, a block of the recent chain, or an ommer that the recent chain holds.
-
-Each ommer is one to six blocks older than the block, and its parent is in the recent chain.
-
-No ommer is a sibling of the block. -/
+/-- The ommers of a block pass the check exactly when every rule of the check holds. -/
 theorem validateOmmers_eq_ok_iff {fork : Fork} {config : ChainConfig} {checkSeal : Bool}
     {recent : List RecentBlock} {header : Header fork} {ommers : List ((f : Fork) × Header f)} :
     validateOmmers config checkSeal recent header ommers = .ok () ↔
+      -- The block commits to them by its ommers hash.
       ∃ encoded, Serialization.Rlp.encode (ommersItem ommers) = .ok encoded ∧
         keccak256 encoded = header.ommersHash ∧
+        -- The number of each ommer is at least 1 and below the number of the block.
         (∀ ommer ∈ ommers, (1 ≤ ommer.2.number ∧ ommer.2.number < header.number) ∧
+          -- Each ommer header passes its own checks.
           checkOmmerHeader config checkSeal recent ommer = .ok ()) ∧
+        -- There are at most two ommers.
         ommers.length ≤ MAX_OMMERS ∧
+        -- No two ommers have one hash.
         ∃ hashes, ommers.mapM (headerHash ·.2) = .ok hashes ∧ hashes.Nodup ∧
         ∃ blockHash, headerHash header = .ok blockHash ∧
         ∃ recentHashes, recent.mapM (fun b => headerHash b.header) = .ok recentHashes ∧
         ∃ recentOmmerHashes,
           (recent.flatMap fun b => b.ommers.map (headerHash ·.2)).mapM id = .ok recentOmmerHashes ∧
+        -- No ommer is the block, a recent block, or an ommer that the recent chain holds.
         ∀ p ∈ ommers.zip hashes, p.2 ≠ blockHash ∧ p.2 ∉ recentHashes ∧
           p.2 ∉ recentOmmerHashes ∧
+          -- Each ommer is one to six blocks older than the block.
           (1 ≤ header.number - p.1.2.number ∧ header.number - p.1.2.number ≤ MAX_OMMER_DEPTH) ∧
+          -- The parent of each ommer is in the recent chain.
+          --
+          -- No ommer is a sibling of the block.
           p.1.2.parentHash ∈ recentHashes ∧ p.1.2.parentHash ≠ header.parentHash := by
   unfold validateOmmers
   simp only [bind_ok_iff, exists_unit, ensure_ok_iff, forM_ok_iff, mapError_ok_iff,

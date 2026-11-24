@@ -15,31 +15,9 @@ A signed transaction is public, so anyone can put it in a block again.
 
 The nonce check stops the second copy.
 
-It asks that the nonce of the transaction equals the nonce of its sender.
-
-After the first copy runs, the nonce of its sender is above the nonce of the copy.
-
-That nonce never drops again, through the rest of the block and through every later block.
-
-The other transactions never lower a nonce that is above 0.
-
-Before Cancun, that needs an account without code, and the sender keeps none.
-
-The system calls run code, but only from Cancun, where no nonce above 0 drops.
-
-The withdrawals, the rewards and the DAO transfer change only balances.
-
-So two transactions of one sender in a chain have distinct nonces, the later one higher.
-
-Two positions of a chain then never hold one transaction.
-
-The fork of a block is never below the fork of its parent.
-
-So the blocks before a block that comes before Cancun also come before Cancun.
-
 Replay across chains is out of scope: EIP-155 binds a transaction to its chain.
 
-Section 6 of the [Yellow Paper][yp], Shanghai version, gives the nonce check.
+Source: the [Yellow Paper][yp], Shanghai version, Section 6, for the nonce check.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
@@ -90,7 +68,9 @@ theorem processTransaction_nonceAbove {env : BlockEnvironment fork} {block : Blo
     {n : Nat} (hfork : tx.fork ≤ fork) (h : processTransaction env block included tx = .ok out)
     (above : NonceAbove fork n ((TransactionState.ofBlock block).getAccount address)) :
     NonceAbove fork n (out.state.getAccount address) :=
+  -- The other transactions never lower a nonce that is above 0.
   ⟨Nat.lt_of_lt_of_le above.1 (processTransaction_nonce_le hfork h above.2),
+    -- Before Cancun, that needs an account without code, and the sender keeps none.
     fun hd => processTransaction_codeHash_of_lt_dencun hd hfork h (.inl (by have := above.1; omega))
       (above.2 hd)⟩
 
@@ -100,6 +80,7 @@ The transaction passes the inclusion check on the state of the block it runs on.
 theorem processTransaction_sender_nonceAbove {env : BlockEnvironment fork} {block : BlockState}
     {chainId : UInt64} {used : BlockGas} {tx : Transaction} {included : Included}
     {out : TransactionOutput}
+    -- The nonce check asks that the nonce of the transaction equals the nonce of its sender.
     (hcheck : checkInclusion chainId env used (.ofBlock block) tx = .ok included)
     (h : processTransaction env block included tx = .ok out) :
     NonceAbove fork tx.nonce.toNat (out.state.getAccount included.sender) := by
@@ -197,6 +178,7 @@ theorem applyTransactions_nonce_lt {env : BlockEnvironment fork} {body : BodySta
 /-- From Cancun, a system call keeps every account above a nonce. -/
 theorem systemCall_nonceAbove {env : BlockEnvironment fork} {block : BlockState}
     {target : Address} {data : ByteArray} {out : SystemCallOutput} {address : Address} {n : Nat}
+    -- The system calls run code, but only from Cancun, where no nonce above 0 drops.
     (hd : .dencun ≤ fork) (h : systemCall env block target data = .ok out)
     (above : NonceAbove fork n ((TransactionState.ofBlock block).getAccount address)) :
     NonceAbove fork n (out.state.getAccount address) := by
@@ -316,6 +298,7 @@ private theorem applyBody_split {config : ChainConfig} {env : BlockEnvironment f
       KeepsNonces fork txs.block output.block := by
   obtain ⟨_, body, txs, withdrawn, requested, hdao, hsys, htxs, hWithdrawn, hStays, hreq, hrew,
     -⟩ := applyBody_eq_ok h
+  -- The DAO transfer changes only balances.
   refine ⟨body, txs, (daoTransfer_keepsNonces hdao).trans (startSystemCalls_keepsNonces hsys),
     htxs, ?_⟩
   -- The withdrawals change only balances.
@@ -328,6 +311,7 @@ private theorem applyBody_split {config : ChainConfig} {env : BlockEnvironment f
       exact ⟨hn ▸ above.1, fun hd => hc.trans (above.2 hd)⟩
     · rw [hStays hShapella]
       exact KeepsNonces.refl _ _
+  -- The rewards change only balances.
   exact withdrawals.trans ((blockRequests_keepsNonces (result := (requested, _)) hreq).trans
     (onBlock_payRewards_keepsNonces hrew))
 
@@ -402,15 +386,7 @@ theorem stateTransition_body {chain : BlockChain} {block : Block fork Transactio
 
 /-- A run of blocks from a chain.
 
-Each block passes its transition on the chain after the blocks before it.
-
-That next chain is the chain after the block.
-
-It holds the state after the block, and the block as its last recent block.
-
-Its configuration is that of the chain before.
-
-Its older recent blocks are the last 254 of the chain before. -/
+Each block passes its transition on the chain after the blocks before it. -/
 inductive ChainRun : BlockChain → List ((fork : Fork) × Block fork Transaction) → Prop
   /-- No block. -/
   | nil (chain : BlockChain) : ChainRun chain []
@@ -418,6 +394,13 @@ inductive ChainRun : BlockChain → List ((fork : Fork) × Block fork Transactio
   | cons {chain : BlockChain} {fork : Fork} {block : Block fork Transaction}
       {post : State} {rest : List ((fork : Fork) × Block fork Transaction)} (checkSeal : Bool)
       (transition : stateTransition chain block checkSeal = .ok post)
+      -- The next chain is the chain after the block.
+      --
+      -- It holds the state after the block, and the block as its last recent block.
+      --
+      -- Its configuration is that of the chain before.
+      --
+      -- Its older recent blocks are the last 254 of the chain before.
       (tail : ChainRun (chain.addBlock block post) rest) :
       ChainRun chain (⟨fork, block⟩ :: rest)
 
@@ -452,8 +435,10 @@ private theorem ChainRun.nonce_gt {chain : BlockChain}
   induction run generalizing parent i with
   | nil => simp [transactionAt] at at₁
   | cons checkSeal transition tail ih =>
+    -- The fork of a block is never below the fork of its parent.
     obtain ⟨p, hp, hle⟩ := stateTransition_parent transition
     obtain rfl : p = parent := Option.some.inj (hp.symm.trans hlast)
+    -- So the blocks before a block that comes before Cancun also come before Cancun.
     have above' := above.mono hle
     obtain ⟨env, output, hbody, hread⟩ := stateTransition_body transition
     cases i with
@@ -504,6 +489,9 @@ theorem ChainRun.nonce_lt {chain : BlockChain}
         have lt : j < j' := by omega
         exact applyBody_nonce_lt hbody lt hj' hs hs'
       | succ i' =>
+        -- After the first copy runs, the nonce of its sender is above the nonce of the copy.
+        --
+        -- That nonce never drops again, through the rest of the block and every later block.
         refine ChainRun.nonce_gt tail BlockChain.addBlock_getLast? ?_ at₂ hs'
         unfold BlockChain.account
         rw [BlockChain.addBlock_state, hread]
