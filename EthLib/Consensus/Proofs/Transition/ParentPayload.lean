@@ -7,19 +7,7 @@ public import EthLib.Consensus.Transition.ParentPayload
 /-!
 # Proofs: the parent payload
 
-An empty parent leaves the state as it is when the block carries no request.
-
-It rejects a block that carries a request.
-
-A parent payload step succeeds only when four lists of requests fit their limits.
-
-A step that succeeds finds the parent empty, or settles and runs the requests of a full parent.
-
-A full parent records its block hash, and marks its slot as having a payload.
-
-The payment of its builder changes only the queues of builder payments and withdrawals.
-
-It empties at most one pending payment, and keeps the builders.
+What the step on the payload of the parent checks and changes, for an empty and a full parent.
 -/
 
 @[expose] public section
@@ -79,17 +67,12 @@ theorem processParentExecutionPayload_counts {body : BeaconBlockBody preset fork
 
 /-- A full parent settles the payment of its builder, then runs each list of its requests in order.
 
-The deposits run first, then the withdrawals, the consolidations, and the requests of builders.
-
-It then marks the slot of the parent as having a payload.
-
-The hash of the parent bid becomes the latest block hash.
-
 The checks of the counts of the requests come before, and are left out here. -/
 theorem applyParentExecutionPayload_ok {requests : ExecutionRequests preset fork}
     (computed : applyParentExecutionPayload config checks state gloas requests = .ok after) :
     ∃ settled deposited withdrawn consolidated builderDeposited exited bits,
       settleParentPayment state gloas = .ok settled ∧
+      -- The deposits run first, then the withdrawals and the consolidations.
       requests.deposits.data.toList.foldlM
         (processDepositRequest · (Nat.le_trans (by decide) gloas) ·) settled = .ok deposited ∧
       requests.withdrawals.data.toList.foldlM
@@ -98,13 +81,16 @@ theorem applyParentExecutionPayload_ok {requests : ExecutionRequests preset fork
       requests.consolidations.data.toList.foldlM
         (processConsolidationRequest config · (Nat.le_trans (by decide) gloas) ·) withdrawn =
         .ok consolidated ∧
+      -- The requests of builders run last.
       (requests.builderDeposits gloas).data.toList.foldlM
         (processBuilderDepositRequest config checks · gloas ·) consolidated =
         .ok builderDeposited ∧
       (requests.builderExits gloas).data.toList.foldlM
         (processBuilderExitRequest config · gloas ·) builderDeposited = .ok exited ∧
+      -- It then marks the slot of the parent as having a payload.
       writeCircular (exited.executionPayloadAvailability gloas).bits
         state.latestBlockHeader.slot true = .ok bits ∧
+      -- The hash of the parent bid becomes the latest block hash.
       after = { exited with
         executionPayloadAvailability := fun _ => ⟨bits⟩
         latestBlockHash := fun _ => (state.latestExecutionPayloadBid gloas).blockHash } := by
@@ -123,12 +109,6 @@ An empty parent takes no request and leaves the state as it is.
 
 A full parent settles the payment of its builder, then runs each list of its requests in order.
 
-The deposits run first, then the withdrawals, the consolidations, and the requests of builders.
-
-It then marks the slot of the parent as having a payload.
-
-The hash of the parent bid becomes the latest block hash.
-
 The checks of the root and the counts of the requests come before, and are left out here. -/
 theorem processParentExecutionPayload_ok {body : BeaconBlockBody preset fork}
     (computed : processParentExecutionPayload config checks state gloas body = .ok after) :
@@ -139,6 +119,7 @@ theorem processParentExecutionPayload_ok {body : BeaconBlockBody preset fork}
         (state.latestExecutionPayloadBid gloas).blockHash ∧
       ∃ settled deposited withdrawn consolidated builderDeposited exited bits,
         settleParentPayment state gloas = .ok settled ∧
+        -- The deposits run first, then the withdrawals and the consolidations.
         (body.parentExecutionRequests gloas).deposits.data.toList.foldlM
           (processDepositRequest · (Nat.le_trans (by decide) gloas) ·) settled = .ok deposited ∧
         (body.parentExecutionRequests gloas).withdrawals.data.toList.foldlM
@@ -147,13 +128,16 @@ theorem processParentExecutionPayload_ok {body : BeaconBlockBody preset fork}
         (body.parentExecutionRequests gloas).consolidations.data.toList.foldlM
           (processConsolidationRequest config · (Nat.le_trans (by decide) gloas) ·) withdrawn =
           .ok consolidated ∧
+        -- The requests of builders run last.
         ((body.parentExecutionRequests gloas).builderDeposits gloas).data.toList.foldlM
           (processBuilderDepositRequest config checks · gloas ·) consolidated =
           .ok builderDeposited ∧
         ((body.parentExecutionRequests gloas).builderExits gloas).data.toList.foldlM
           (processBuilderExitRequest config · gloas ·) builderDeposited = .ok exited ∧
+        -- It then marks the slot of the parent as having a payload.
         writeCircular (exited.executionPayloadAvailability gloas).bits
           state.latestBlockHeader.slot true = .ok bits ∧
+        -- The hash of the parent bid becomes the latest block hash.
         after = { exited with
           executionPayloadAvailability := fun _ => ⟨bits⟩
           latestBlockHash := fun _ => (state.latestExecutionPayloadBid gloas).blockHash }) := by

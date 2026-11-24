@@ -8,45 +8,11 @@ public import EthLib.Consensus.Proofs.Transition.Payload
 /-!
 # Proofs: the steps that pay the bid of a block
 
-From Gloas the builder of a block pays its proposer through a pending payment.
+From Gloas the builder of a block pays its proposer through a pending payment, by three paths.
 
-A bid is named by the slot of its block, since the slots of the blocks of a chain increase.
-
-The payment of a bid is open while it may still be paid, as the state shows.
-
-It is open while the window holds its payment with a positive amount.
-
-It is also open when its block is the latest one, the late path may pay it, and it has a value.
-
-The latest bid must then be the bid of that block.
-
-Three paths queue the withdrawal of an open payment.
-
-* A child that builds on the full parent settles the payment of the parent.
+* The payment of the parent settles it, when a child builds on the full parent.
+* The payment of the parent queues the value of the parent bid, when that payment left the window.
 * The epoch step pays each payment of the previous epoch that reaches the quorum.
-* A child of a parent whose payment left the window queues the value of the parent bid.
-
-The first and the third are the payment of the parent, and the second is the epoch step.
-
-Each step lemma here has the same shape, which a structure names.
-
-The queue gains the withdrawals of a list of open payments, with no slot twice.
-
-A payment closed before the step opens only at the slot of the state or later.
-
-So a payment of an earlier slot that is closed before the step stays closed after it.
-
-The epoch step also closes each payment that it pays.
-
-It pays each payment of the previous epoch that reaches the quorum.
-
-The payment of the parent closes the payment in the window.
-
-The parent slot may stay open through the late path, until the header moves to the new block.
-
-The header step closes it, since the latest block then has the slot of the state.
-
-The header and the bid of a block release no payment.
 
 [EIP-7732] adds the builders, their bids and their payments.
 
@@ -62,7 +28,9 @@ open Base
 variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
   {state after : BeaconState preset fork}
 
-/-- Whether the window holds the payment of the block at a slot, with a positive amount. -/
+/-- Whether the window holds the payment of the block at a slot, with a positive amount.
+
+A bid is named by the slot of its block, since the slots of the blocks of a chain increase. -/
 def PaymentInWindow (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (slot : Slot) : Prop :=
   ∃ position, slotPaymentPosition state slot = some position ∧
@@ -116,27 +84,28 @@ def openWithdrawal (state : BeaconState preset fork) (gloas : .glamsterdam ≤ f
 
 /-- A step that queues the withdrawals of a list of open payments, with no slot twice.
 
-The withdrawals follow the queue before the step, in the order of the list.
-
-Each slot of the list is before the slot of the state.
-
-A payment open after the step was open before it, or is at the slot of the state or later.
-
-A payment open before and after the step is paid by the same withdrawal.
-
-The slot of the state does not go back. -/
+Each step lemma of this module has this shape. -/
 structure PaymentRelease (state after : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (released : List Slot) : Prop where
   nodup : released.Nodup
+  -- The withdrawals follow the queue before the step, in the order of the list.
   queue : (after.builderPendingWithdrawals gloas).data.toList =
     (state.builderPendingWithdrawals gloas).data.toList ++
       released.map (openWithdrawal state gloas)
   opened : ∀ slot ∈ released, PaymentOpen state gloas slot
+  -- Each slot of the list is before the slot of the state.
   past : ∀ slot ∈ released, slot < state.slot
+  -- A payment open after the step was open before it, or is at the slot of the state or later.
+  --
+  -- So a payment closed before the step opens only at the slot of the state or later.
+  --
+  -- So a payment of an earlier slot that is closed before the step stays closed after it.
   noReopen : ∀ slot, PaymentOpen after gloas slot →
     PaymentOpen state gloas slot ∨ state.slot ≤ slot
+  -- A payment open before and after the step is paid by the same withdrawal.
   stable : ∀ slot, PaymentOpen after gloas slot → PaymentOpen state gloas slot →
     openWithdrawal after gloas slot = openWithdrawal state gloas slot
+  -- The slot of the state does not go back.
   forward : state.slot ≤ after.slot
 
 /-- The withdrawal of the latest bid reads only the latest bid. -/
@@ -350,32 +319,31 @@ theorem paymentOpen_latestBlock {gloas : .glamsterdam ≤ fork}
 
 /-- The payment of the parent queues at most the withdrawal of the parent's slot, if it is open.
 
-The parent must be older than the slot of the state, as it is when the parent payload runs.
-
-A latest bid with a value must be at the slot of the parent, as it is then too.
-
-Those two hypotheses are assumptions, which a later step proves.
-
-The parent payment must also have no weight, and pay the latest bid or have no amount.
-
-That one is part of the builder debt invariant.
-
-It queues it when the window holds it with a positive amount, or has left it with the bid open.
-
-After the step, the window does not hold the payment of the parent with a positive amount.
-
 The parent slot may stay open through the late path, until the header moves. -/
 theorem settleParentPayment_release {gloas : .glamsterdam ≤ fork}
+    -- The parent must be older than the slot of the state, as it is when the parent payload runs.
+    --
+    -- This hypothesis is an assumption, which a later step proves.
     (older : state.latestBlockHeader.slot < state.slot)
+    -- The parent payment must also have no weight, and pay the latest bid or have no amount.
+    --
+    -- This hypothesis is part of the builder debt invariant.
     (fresh : ParentPaymentFresh state gloas)
+    -- A latest bid with a value must be at the slot of the parent, as it is when the payload runs.
+    --
+    -- This hypothesis is an assumption, which a later step proves.
     (bidMatches : ValuedBidAtLatestBlock state gloas)
     (computed : settleParentPayment state gloas = .ok after) :
     ∃ released : List Slot, PaymentRelease state after gloas released ∧
       released.Sublist [state.latestBlockHeader.slot] ∧
+      -- The step queues the payment of the parent when the window holds it with a positive amount.
+      --
+      -- It also queues it when the window has left it with the bid open.
       (PaymentInWindow state gloas state.latestBlockHeader.slot ∨
           (slotPaymentPosition state state.latestBlockHeader.slot = none ∧
             PaymentOpen state gloas state.latestBlockHeader.slot) →
         released = [state.latestBlockHeader.slot]) ∧
+      -- After the step, the window does not hold the payment of the parent with a positive amount.
       ¬ PaymentInWindow after gloas state.latestBlockHeader.slot := by
   have same := settleParentPayment_eq computed
   have headerEq : after.latestBlockHeader = state.latestBlockHeader := by rw [same]
@@ -480,31 +448,25 @@ theorem settleParentPayment_release {gloas : .glamsterdam ≤ fork}
 
 /-- With a positive quorum, the epoch step of the payments queues the withdrawals of open payments.
 
-The positive quorum is an assumption on the preset, which both presets meet.
-
-The state after the step is read at the next slot, the first of the next epoch.
-
-The slots it pays are distinct, and each payment it pays is closed after it.
-
-It pays each payment of the previous epoch whose weight is at least the quorum that it computes.
-
-It pays no other payment.
-
-The hypothesis on the parent payment is part of the builder debt invariant.
-
-The hypotheses on the weights and the genesis epoch hold along a chain from the upgrade to Gloas.
--/
+The positive quorum is an assumption on the preset, which both presets meet. -/
 theorem processBuilderPendingPayments_release (positive : preset.PaymentQuorumPositive)
+    -- The hypothesis on the parent payment is part of the builder debt invariant.
     {gloas : .glamsterdam ≤ fork} (fresh : ParentPaymentFresh state gloas)
+    -- The weight and genesis epoch hypotheses hold along a chain from the upgrade to Gloas.
     (paid : WeightedPaymentsFunded state gloas) (genesis : GenesisFirstHalfEmpty state gloas)
     (computed : processBuilderPendingPayments state gloas = .ok after) {next : Slot}
+    -- The state after the step is read at the next slot, the first of the next epoch.
     (advance : next.toNat = state.slot.toNat + 1) (first : next % preset.SLOTS_PER_EPOCH = 0) :
     ∃ quorum, ∃ released : List Slot, getBuilderPaymentQuorumThreshold state = .ok quorum ∧
+      -- The slots it pays are distinct.
       PaymentRelease state { after with slot := next } gloas released ∧
+      -- Each payment it pays is closed after it.
       (∀ slot ∈ released, ¬ PaymentOpen { after with slot := next } gloas slot) ∧
+      -- It pays each payment of the previous epoch whose weight is at least the quorum it computes.
       (∀ slot position, slotPaymentPosition state slot = some position →
         position.toNat < preset.SLOTS_PER_EPOCH.toNat →
         quorum ≤ (paymentAt state gloas position.toNat).weight → slot ∈ released) ∧
+      -- It pays no other payment.
       (∀ slot ∈ released, ∃ position, slotPaymentPosition state slot = some position ∧
         position.toNat < preset.SLOTS_PER_EPOCH.toNat ∧
         quorum ≤ (paymentAt state gloas position.toNat).weight) := by
@@ -763,13 +725,12 @@ theorem processBlockHeader_release {gloas : .glamsterdam ≤ fork} {block : Beac
 
 The positive quorum is an assumption on the preset, which both presets meet.
 
-The bid step reads it only for the bounds on the slots of an epoch that it gives.
-
-The payment of the slot of the state must not be open before the step.
-
-That hypothesis is an assumption, which a later step proves for the bid inside a block. -/
+The bid step reads it only for the bounds on the slots of an epoch that it gives. -/
 theorem processExecutionPayloadBid_release (positive : preset.PaymentQuorumPositive)
     {gloas : .glamsterdam ≤ fork} {signed : SignedExecutionPayloadBid preset fork}
+    -- The payment of the slot of the state must not be open before the step.
+    --
+    -- That hypothesis is an assumption, which a later step proves for the bid inside a block.
     (fresh : ¬ PaymentOpen state gloas state.slot)
     (computed : processExecutionPayloadBid config checks state gloas signed = .ok after) :
     PaymentRelease state after gloas [] := by

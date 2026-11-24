@@ -10,18 +10,6 @@ From Gloas the builder of a block pays its proposer through a pending payment.
 
 A block may pay one bid, that of its parent, through the payload of the parent.
 
-The payload of the parent and the header of the block form one step.
-
-That step releases at most the payment of the parent, and a payment it releases is closed after it.
-
-The header moves the latest block to the slot of the state, which closes the late path.
-
-No later step of the block releases a payment.
-
-The bid opens only the payment of its own slot, which is closed before the bid.
-
-So a block as a whole releases at most the payment of its parent.
-
 [EIP-7732] adds the builders, their bids and their payments.
 
 [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#beacon-chain-changes
@@ -141,53 +129,56 @@ private theorem parentPayload_release {gloas : .glamsterdam ≤ fork}
 
 /-- From Gloas, the parent payload and the header of a block release at most the parent payment.
 
-They release the payment of the parent's slot or nothing, and each released payment is closed.
+They release the payment of the parent's slot or nothing.
 
-The parent payment, while it is in the window, must have no weight.
-
-It must pay the latest bid or have no amount.
-
-A latest bid with a value must be at the slot of the parent.
-
-Those hypotheses are assumptions, which the builder debt invariant and a later step provide. -/
+Each released payment is closed. -/
 theorem processParentExecutionPayload_processBlockHeader_paymentStep
     {gloas : .glamsterdam ≤ fork} {block : BeaconBlock preset fork}
+    -- The parent payment, while it is in the window, must have no weight.
+    --
+    -- It must pay the latest bid or have no amount.
+    --
+    -- This hypothesis is an assumption, which the builder debt invariant provides.
     {parented : BeaconState preset fork} (fresh : ParentPaymentFresh state gloas)
+    -- A latest bid with a value must be at the slot of the parent.
+    --
+    -- This hypothesis is an assumption, which a later step provides.
     (bidAt : ValuedBidAtLatestBlock state gloas)
     (parentOk : Consensus.processParentExecutionPayload config checks state gloas block.body =
       .ok parented)
     (headedOk : processBlockHeader parented block = .ok after) :
     ∃ released : List Slot, PaymentStep state after gloas released ∧
       released.Sublist [state.latestBlockHeader.slot] := by
+  -- The payload of the parent and the header of the block form one step.
+  --
+  -- The header moves the latest block to the slot of the state, which closes the late path.
   obtain ⟨released, release, closes, sub⟩ := parentPayload_release fresh bidAt parentOk headedOk
   exact ⟨released, .of_release_trans release
     (.of_release (processBlockHeader_release headedOk) nofun) closes, sub⟩
 
 /-- From Gloas, a block releases at most the payment of its parent, at the payload of its parent.
 
-That step queues the withdrawal of the released payment, and nothing else adds to the queue.
-
-The rest of the block releases nothing, and may drop a prefix of the queue.
-
-The released payment is closed after the block.
-
-The preset needs a positive payment quorum and at least two slots in an epoch.
-
-Each registry must hold at most 2^40 entries after the block.
-
-The builder debt invariant must hold before the block.
-
-A latest bid with a value must be at the slot of the latest block. -/
+The preset needs a positive payment quorum and at least two slots in an epoch. -/
 theorem processBlock_paymentRelease (positive : preset.PaymentQuorumPositive)
     (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) {gloas : .glamsterdam ≤ fork}
+    -- The builder debt invariant must hold before the block.
     {block : BeaconBlock preset fork} (holds : BuilderDebtCovered state gloas)
+    -- A latest bid with a value must be at the slot of the latest block.
     (bidAt : ValuedBidAtLatestBlock state gloas)
+    -- The registry of validators must hold at most 2^40 entries after the block.
     (validatorsFit : after.validators.data.size ≤ 2 ^ 40)
+    -- The registry of builders must hold at most 2^40 entries after the block.
     (buildersFit : (after.builders gloas).data.size ≤ 2 ^ 40)
     (computed : Consensus.processBlock config checks engine state block = .ok after) :
     ∃ (parented : BeaconState preset fork) (released : List Slot),
       Consensus.processParentExecutionPayload config checks state gloas block.body = .ok parented ∧
+      -- That step queues the withdrawal of the released payment.
+      --
+      -- Nothing else adds to the queue.
+      --
+      -- The rest of the block releases nothing, and may drop a prefix of the queue.
       PaymentRelease state parented gloas released ∧ PaymentStep parented after gloas [] ∧
+      -- The released payment is closed after the block.
       (∀ slot ∈ released, ¬ PaymentOpen after gloas slot) ∧
       released.Sublist [state.latestBlockHeader.slot] := by
   obtain ⟨parented, headed, withdrawn, bidded, voted, operated, _, parentOk, headedOk,
@@ -211,6 +202,8 @@ theorem processBlock_paymentRelease (positive : preset.PaymentQuorumPositive)
   have withdrawnSlot : withdrawn.slot = state.slot := withdrawnInputs.slot.trans headedSlot
   have withdrawnBid : withdrawn.latestExecutionPayloadBid = state.latestExecutionPayloadBid :=
     withdrawnInputs.latestExecutionPayloadBid.trans headedBid
+  -- The bid opens only the payment of its own slot.
+  --
   -- The slot of the state is not open before the bid.
   have fresh : ¬ PaymentOpen withdrawn gloas withdrawn.slot := by
     rintro (⟨position, found, amount⟩ | ⟨-, bidSlot, -, value⟩)
@@ -242,18 +235,16 @@ theorem processBlock_paymentRelease (positive : preset.PaymentQuorumPositive)
 
 /-- From Gloas, a block releases at most the payment of its parent, and drops a prefix of the queue.
 
-The preset needs a positive payment quorum and at least two slots in an epoch.
-
-Each registry must hold at most 2^40 entries after the block.
-
-The builder debt invariant must hold before the block.
-
-A latest bid with a value must be at the slot of the latest block. -/
+The preset needs a positive payment quorum and at least two slots in an epoch. -/
 theorem processBlock_paymentStep (positive : preset.PaymentQuorumPositive)
     (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) {gloas : .glamsterdam ≤ fork}
+    -- The builder debt invariant must hold before the block.
     {block : BeaconBlock preset fork} (holds : BuilderDebtCovered state gloas)
+    -- A latest bid with a value must be at the slot of the latest block.
     (bidAt : ValuedBidAtLatestBlock state gloas)
+    -- The registry of validators must hold at most 2^40 entries after the block.
     (validatorsFit : after.validators.data.size ≤ 2 ^ 40)
+    -- The registry of builders must hold at most 2^40 entries after the block.
     (buildersFit : (after.builders gloas).data.size ≤ 2 ^ 40)
     (computed : Consensus.processBlock config checks engine state block = .ok after) :
     ∃ released : List Slot, PaymentStep state after gloas released ∧

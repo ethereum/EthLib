@@ -16,47 +16,9 @@ public import EthLib.Consensus.Proofs.Transition.StateTransition
 /-!
 # Proofs: invariants of the state transition
 
-A valid block keeps five properties of a state, at every fork.
+A valid block keeps five properties of a state, at every fork, and never lowers the finalized epoch.
 
-The registry and the balances keep one entry for each validator.
-
-Each validator may withdraw no earlier than it exits.
-
-The finalized, previous justified and current justified epochs stay in increasing order.
-
-The current justified epoch is at most the previous epoch.
-
-So the next epoch transition cannot lower the finalized epoch.
-
-The finalized epoch then never decreases.
-
-Let the largest effective balances of the preset be whole numbers of increments.
-
-Each effective balance of the registry is then a whole number of increments too.
-
-Most steps change neither the slot, nor the checkpoints, nor the justification bits.
-
-They also keep the genesis time, and they keep the first two properties.
-
-They keep the fork versions and the genesis validators root, and they never shrink the registry.
-
-They never clear a slashed flag: a validator that is slashed before a step is slashed after it.
-
-Let the largest effective balances of the preset be whole numbers of increments.
-
-These steps then keep each effective balance of the registry a whole number of increments.
-
-Each step of a block other than an attestation also keeps the buffer of block roots.
-
-From Altair, each byte of flags after it is the byte at its position before, or zero.
-
-The steps of an epoch after justification also keep the buffer of block roots.
-
-They keep the latest block header, and from Gloas the latest block hash and the latest bid.
-
-Each of them other than the rotation of the flags also keeps each byte of flags, or zeroes it.
-
-Justification and finalization change the checkpoints, and the slot step moves the epoch on.
+Most steps form a frame: they keep the slot and the checkpoints, and never shrink the registry.
 -/
 
 @[expose] public section
@@ -77,21 +39,9 @@ def ExitsOrdered (state : BeaconState preset fork) : Prop :=
 
 It also keeps the genesis time, the fork versions and the genesis validators root.
 
-The registry never shrinks.
+Justification and finalization change the checkpoints, so they are not frames.
 
-The public keys of the validators before it are a prefix of the public keys after it.
-
-When no two validators share a key before it, none share a key after it.
-
-A validator that is slashed before it is still slashed after it, at the same position.
-
-When each validator has one balance before it, each has one after it.
-
-It then also keeps each exit no later than its withdrawal.
-
-Let the largest effective balances of the preset be whole numbers of increments.
-
-When each effective balance is a whole number of increments before it, the same holds after it. -/
+The slot step moves the epoch on, so it is not one either. -/
 structure Frame (state after : BeaconState preset fork) : Prop where
   slot : after.slot = state.slot
   finalized : after.finalizedCheckpoint = state.finalizedCheckpoint
@@ -101,15 +51,24 @@ structure Frame (state after : BeaconState preset fork) : Prop where
   genesisTime : after.genesisTime = state.genesisTime
   forkVersions : after.forkVersions = state.forkVersions
   genesisValidatorsRoot : after.genesisValidatorsRoot = state.genesisValidatorsRoot
+  -- The registry never shrinks.
   registryGrows : state.validators.data.size ≤ after.validators.data.size
+  -- The public keys of the validators before it are a prefix of the public keys after it.
   pubkeysPrefix : validatorKeys state <+: validatorKeys after
+  -- When no two validators share a key before it, none share a key after it.
   pubkeysDistinct : PubkeysDistinct state → PubkeysDistinct after
+  -- A validator that is slashed before it is still slashed after it, at the same position.
   slashed : ∀ (position : Nat) (old validator : Validator),
     state.validators.data[position]? = some old →
     after.validators.data[position]? = some validator →
     old.slashed = true → validator.slashed = true
+  -- When each validator has one balance before it, each has one after it.
   balancesMatch : BalancesMatch state → BalancesMatch after
+  -- It also keeps each exit no later than its withdrawal.
   exitsOrdered : ExitsOrdered state → ExitsOrdered after
+  -- Let the largest effective balances of the preset be whole numbers of increments.
+  --
+  -- When each effective balance is a whole number of increments before it, the same holds after it.
   aligned : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
     EffectiveBalancesAligned after
 
@@ -304,11 +263,7 @@ So it is also a block frame.
 
 The mutators of a balance and of the exit queue form one.
 
-So does a write to a validator that keeps its public key.
-
-So do the steps that add a validator to the registry with a key that no validator has.
-
-So does each step of an epoch after justification, other than the rotation of the flags. -/
+So does a write to a validator that keeps its public key. -/
 structure MutatorFrame (state after : BeaconState preset fork) : Prop extends EpochFrame state after
     where
   flags : FlagsKeptOrZero state after
@@ -353,23 +308,19 @@ theorem ExitsOrdered.putValidator {index : Nat} {validator : Validator}
   · exact ordered other old
   · exact le
 
-/-- Replacing a validator at a plain position forms a mutator frame.
-
-The new one must keep the public key of the old one.
-
-It must be slashed when the old one is.
-
-It must exit no later than it withdraws.
-
-Let the largest values of the preset and the effective balances before be aligned.
-
-Then the new one must have an aligned effective balance. -/
+/-- Replacing a validator at a plain position forms a mutator frame, under four conditions on it. -/
 theorem frame_setValidatorAt_of_whole {position : Nat} {validator old : Validator}
     (set : state.setValidatorAt position validator = .ok after)
     (found : getValidatorAt state position = .ok old)
+    -- The new one must keep the public key of the old one.
     (key : validator.pubkey = old.pubkey)
+    -- It must be slashed when the old one is.
     (slashed : old.slashed = true → validator.slashed = true)
+    -- It must exit no later than it withdraws.
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
+    -- Let the largest values of the preset and the effective balances before be aligned.
+    --
+    -- Then the new one must have an aligned effective balance.
     (whole : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
       validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) :
     MutatorFrame state after := by
@@ -407,21 +358,18 @@ theorem frame_setValidatorAt_of_whole {position : Nat} {validator old : Validato
   · cases before.symm.trans after
     exact marked
 
-/-- Replacing a validator forms a mutator frame, if the new one exits no later than it withdraws.
-
-The new one must keep the public key of the old one.
-
-It must be slashed when the old one is.
-
-Let the largest values of the preset and the effective balances before be aligned.
-
-Then the new one must have an aligned effective balance. -/
+/-- Replacing a validator forms a mutator frame if the new one exits no later than it withdraws. -/
 theorem frame_setValidator_of_whole {index : ValidatorIndex} {validator old : Validator}
     (set : state.setValidator index validator = .ok after)
     (found : getValidator state index = .ok old)
+    -- The new one must keep the public key of the old one.
     (key : validator.pubkey = old.pubkey)
+    -- It must be slashed when the old one is.
     (slashed : old.slashed = true → validator.slashed = true)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
+    -- Let the largest values of the preset and the effective balances before be aligned.
+    --
+    -- Then the new one must have an aligned effective balance.
     (whole : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
       validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) :
     MutatorFrame state after :=
@@ -640,26 +588,23 @@ private theorem getValidatorFromDeposit_aligned (maxAligned : MaxEffectiveBalanc
       preset.EFFECTIVE_BALANCE_INCREMENT = 0 := by
   exact min_sub_mod_mod_self _ (withdrawalMaxEffectiveBalance_aligned maxAligned _)
 
-/-- A new validator exits and withdraws at the far future epoch.
+/-- Adding a validator with a key that no validator has forms a mutator frame.
 
-The key must be one that no validator has.
-
-It goes at the end of the registry, so the keys before stay a prefix.
-
-Distinct keys stay distinct.
-
-Each validator before stays where it was, and so stays slashed. -/
+The new validator exits and withdraws at the far future epoch. -/
 theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
+    -- The key must be one that no validator has.
     (fresh : pubkey ∉ validatorKeys state) :
     MutatorFrame state after := by
   have keys : validatorKeys after = validatorKeys state ++ [pubkey] := by
     simp [validatorKeys, addValidatorToRegistry_validators_eq_push computed,
       getValidatorFromDeposit]
+  -- It goes at the end of the registry, so the keys before stay a prefix.
   have kept : validatorKeys state <+: validatorKeys after := by
     rw [keys]
     exact List.prefix_append _ _
+  -- Distinct keys stay distinct.
   have distinct : PubkeysDistinct state → PubkeysDistinct after := by
     unfold PubkeysDistinct
     intro unique
@@ -672,6 +617,7 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
       state.validators.data[position]? = some old →
       after.validators.data[position]? = some validator →
       old.slashed = true → validator.slashed = true := by
+    -- Each validator before stays where it was, and so stays slashed.
     intro position old validator found next marked
     have inside := (Array.getElem?_eq_some_iff.mp found).1
     rw [addValidatorToRegistry_validators_eq_push computed, Array.getElem?_push_lt inside] at next
@@ -724,33 +670,25 @@ They leave out justification, the builder payments and the rotation of the flags
 
 They also leave out a write of the RANDAO mixes or of the lookahead of proposers.
 
-The step laws add those two.
-
-A validator write at a plain position must relate its states when it meets four conditions.
-
-It keeps the public key of the old validator.
-
-It keeps the slashed flag of the old validator.
-
-Its exit comes no later than its withdrawal, when the exits of the state are ordered.
-
-Its effective balance is a whole number of increments, when the preset and the state are aligned.
-
-The other laws cover balance changes, exits and record updates.
-
 They leave out new validators and the queue of pending deposits, which the frame base laws add. -/
 structure EpochBaseLaws (R : BeaconState preset fork → BeaconState preset fork → Prop) : Prop where
   refl : ∀ state, R state state
   trans : ∀ {first second third}, R first second → R second third → R first third
+  -- A validator write at a plain position must relate its states when it meets four conditions.
   setValidatorAt : ∀ {state after : BeaconState preset fork} {position : Nat}
     {validator old : Validator},
     state.setValidatorAt position validator = .ok after →
     getValidatorAt state position = .ok old →
+    -- It keeps the public key of the old validator.
     validator.pubkey = old.pubkey →
+    -- It keeps the slashed flag of the old validator.
     validator.slashed = old.slashed →
+    -- Its exit comes no later than its withdrawal, when the exits of the state are ordered.
     (ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch) →
+    -- Its effective balance is a whole number of increments, when the preset and state are aligned.
     (MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
       validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) → R state after
+  -- The other laws cover balance changes, exits and record updates.
   increaseBalance : ∀ {state after index delta},
     increaseBalance state index delta = .ok after → R state after
   decreaseBalance : ∀ {state after index delta},
@@ -798,7 +736,9 @@ They leave out justification, the builder payments and the rotation of the flags
 structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset fork → Prop) : Prop
     extends EpochStepLaws R, EpochFrameBaseLaws R
 
-/-- The mutator frame satisfies the frame laws of the epoch steps. -/
+/-- The mutator frame satisfies the frame laws of the epoch steps.
+
+So each step of an epoch after justification, other than the rotation of the flags, forms one. -/
 theorem mutatorEpochFrameLaws : EpochFrameLaws (@MutatorFrame preset fork) where
   refl := MutatorFrame.refl
   trans := MutatorFrame.trans
@@ -864,20 +804,17 @@ theorem foldlM {α ε : Type} {step : BeaconState preset fork → α → Except 
   foldlM_ok_invariant (R state) (fun _ _ _ before ok => laws.trans before (frame _ _ _ ok))
     (laws.refl state) computed
 
-/-- A validator write follows the relation when it meets the four conditions of a write.
-
-It keeps the public key of the old validator.
-
-It keeps the slashed flag of the old validator.
-
-Its exit comes no later than its withdrawal, when the exits of the state are ordered.
-
-Its effective balance is a whole number of increments, when the preset and the state are aligned. -/
+/-- A validator write follows the relation when it meets the four conditions of a write. -/
 theorem setValidator {index : ValidatorIndex} {validator old : Validator}
     (set : state.setValidator index validator = .ok after)
     (found : getValidator state index = .ok old)
+    -- It keeps the public key of the old validator.
+    --
+    -- It keeps the slashed flag of the old validator.
     (key : validator.pubkey = old.pubkey) (flag : validator.slashed = old.slashed)
+    -- Its exit comes no later than its withdrawal, when the exits of the state are ordered.
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
+    -- Its effective balance is a whole number of increments, when the preset and state are aligned.
     (whole : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
       validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) : R state after :=
   laws.setValidatorAt (by rwa [← setValidator_eq_setValidatorAt])
@@ -1253,11 +1190,9 @@ end EpochFrameLaws
 
 /-- A reflexive, transitive relation holds across the expected withdrawals.
 
-It must hold across each single withdrawal.
+It must hold across each single withdrawal, and each write of a withdrawal index.
 
-It must also hold across each write of a withdrawal index or a builder withdrawal queue.
-
-For partial withdrawals, it need only hold when the processed prefix leaves the queue.
+It must also hold across each write of a builder withdrawal queue.
 
 It must also hold across each write of the expected withdrawals of the payload. -/
 theorem applyExpectedWithdrawals_of_updates
@@ -1275,6 +1210,7 @@ theorem applyExpectedWithdrawals_of_updates
       R s { s with payloadExpectedWithdrawals := value })
     (setBuilders : ∀ (s : BeaconState preset fork) value,
       R s { s with builderPendingWithdrawals := value })
+    -- For partial withdrawals, it need only hold when the processed prefix leaves the queue.
     (dropPartials : ∀ (s : BeaconState preset fork) (electra : .pectra ≤ fork) count,
       R s (updatePendingPartialWithdrawals s electra count))
     {capella : .shapella ≤ fork}
@@ -1507,19 +1443,17 @@ theorem frame_settleParentPayment {gloas : .glamsterdam ≤ fork}
 
 /-- A relation holds across the payload of the parent when it holds across each validator request.
 
-The validator requests are the withdrawal requests and the consolidation requests.
-
-The relation must hold of each state to itself, and chain.
-
-It must hold across each step that keeps the registry and forms a block frame.
-
-The other steps of the payload are such steps.
-
-They pay the builder, queue the deposits, serve the builders and record the payload. -/
+The validator requests are the withdrawal requests and the consolidation requests. -/
 theorem processParentExecutionPayload_step_of
     (step : BeaconState preset fork → BeaconState preset fork → Prop)
+    -- The relation must hold of each state to itself, and chain.
     (refl : ∀ state, step state state)
     (trans : ∀ {first second third}, step first second → step second third → step first third)
+    -- It must hold across each step that keeps the registry and forms a block frame.
+    --
+    -- The other steps of the payload are such steps.
+    --
+    -- They pay the builder, queue the deposits, serve the builders and record the payload.
     (keep : ∀ {state after}, BlockFrame state after → after.validators = state.validators →
       step state after)
     (withdrawal : ∀ {state after} {electra : .pectra ≤ fork} {request : WithdrawalRequest},
@@ -1644,25 +1578,21 @@ theorem frame_processSyncAggregate {altair : .altair ≤ fork} {aggregate : Sync
 
 The folds are its proposer slashings, its attester slashings and its attestations.
 
-They name the states that the computation passes through.
-
-The attestations read `parentSlot`, the slot of the parent block.
-
-The steps after them are a step of the relation.
-
-The relation must hold of each kind of operation after the attestations.
-
-It must hold of each state to itself, and chain.
-
-Before Gloas those are the deposits, the exits, the changes of credentials and the requests.
-
-The changes of credentials run from Capella, and the requests from Electra.
-
-From Gloas they are the exits, the changes of credentials and the payload attestations. -/
+The steps after them are a step of the relation. -/
 theorem processOperations_folds_of
     (step : BeaconState preset fork → BeaconState preset fork → Prop)
+    -- The relation must hold of each state to itself, and chain.
     (refl : ∀ state, step state state)
     (trans : ∀ {first second third}, step first second → step second third → step first third)
+    -- The relation must hold of each kind of operation after the attestations.
+    --
+    -- Before Gloas those are the deposits, the exits, the changes of credentials and the requests.
+    --
+    -- The changes of credentials run from Capella.
+    --
+    -- The requests run from Electra.
+    --
+    -- From Gloas they are the exits, the changes of credentials and the payload attestations.
     (deposit : ∀ {state after} {before : fork < .hegota} {deposit : Deposit},
       processDeposit config checks before state deposit = .ok after → step state after)
     (exit : ∀ {state after} {signed : SignedVoluntaryExit},
@@ -1678,11 +1608,13 @@ theorem processOperations_folds_of
         step state after)
     {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (computed : processOperations config checks state body parentSlot = .ok after) :
+    -- The folds name the states that the computation passes through.
     ∃ proposersDone slashingsDone attested,
       body.proposerSlashings.data.toList.foldlM (processProposerSlashing config checks) state =
         .ok proposersDone ∧
       body.attesterSlashings.data.toList.foldlM (processAttesterSlashing config checks)
         proposersDone = .ok slashingsDone ∧
+      -- The attestations read the slot of the parent block.
       body.attestations.data.toList.foldlM (processAttestation config checks · parentSlot ·)
         slashingsDone = .ok attested ∧
       step attested after := by
@@ -1780,29 +1712,24 @@ theorem processOperations_split {body : BeaconBlockBody preset fork} {parentSlot
 
 /-- The state at which a block starts its operations, from the state before the block.
 
-The equations are the steps that the block runs before its operations, at every fork.
-
-From Gloas the payload of the parent comes first.
-
-At every fork the header follows.
-
-From Bellatrix the execution part comes next.
-
-At every fork the RANDAO reveal follows.
-
-The vote on the deposit contract comes last, before Heze. -/
+The equations are the steps that the block runs before its operations, at every fork. -/
 def OperationsInput (config : Config) (checks : SignatureChecks) {fork : Fork}
     (engine : ExecutionEngine preset fork) (before : BeaconState preset fork)
     (block : BeaconBlock preset fork) (input : BeaconState preset fork) : Prop :=
   ∃ parented headed executed revealed : BeaconState preset fork,
+    -- From Gloas the payload of the parent comes first.
     (if gloas : .glamsterdam ≤ fork then
         processParentExecutionPayload config checks before gloas block.body
       else pure before) = .ok parented ∧
+    -- At every fork the header follows.
     processBlockHeader parented block = .ok headed ∧
+    -- From Bellatrix the execution part comes next.
     (if bellatrix : .bellatrix ≤ fork then
         processBlockExecution config checks engine headed block.body bellatrix
       else pure headed) = .ok executed ∧
+    -- At every fork the RANDAO reveal follows.
     processRandao config checks executed block.body = .ok revealed ∧
+    -- The vote on the deposit contract comes last, before Heze.
     (if early : fork < .hegota then processEth1Data early revealed block.body
       else pure revealed) = .ok input
 
@@ -1812,15 +1739,14 @@ Those steps are the ones before its operations, its proposer slashings and earli
 
 It holds only when those steps succeed, and it does not read the count checks of the operations.
 
-The block need not have an attester slashing at the position.
-
-When it has at most that many attester slashings, that fold runs all of them. -/
+The block need not have an attester slashing at the position. -/
 def SlashingTurn (config : Config) (checks : SignatureChecks) {fork : Fork}
     (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
     (block : BeaconBlock preset fork) (j : Nat) (turn : BeaconState preset fork) : Prop :=
   ∃ input proposed, OperationsInput config checks engine state block input ∧
     block.body.proposerSlashings.data.foldlM (processProposerSlashing config checks) input =
       .ok proposed ∧
+    -- When the block has at most `j` attester slashings, that fold runs all of them.
     (block.body.attesterSlashings.data.toList.take j).foldlM
       (processAttesterSlashing config checks) proposed = .ok turn
 
@@ -1830,11 +1756,10 @@ The step holds of each part of the block that runs before its operations.
 
 Those are the payload of the parent from Gloas, the header and the execution part from Bellatrix.
 
-They also include the RANDAO reveal and, before Heze, the vote on the deposit contract.
-
-It must hold of each state to itself, and chain. -/
+They also include the RANDAO reveal and, before Heze, the vote on the deposit contract. -/
 theorem OperationsInput.step_of
     (step : BeaconState preset fork → BeaconState preset fork → Prop)
+    -- The step must hold of each state to itself, and chain.
     (refl : ∀ state, step state state)
     (trans : ∀ {first second third}, step first second → step second third → step first third)
     {engine : ExecutionEngine preset fork} {state input : BeaconState preset fork}
@@ -2655,9 +2580,15 @@ The last one says that each effective balance is a whole number of increments.
 
 It holds when the largest effective balances of the preset are whole numbers of increments. -/
 structure Invariant (state : BeaconState preset fork) : Prop where
+  -- The registry and the balances keep one entry for each validator.
   balancesMatch : BalancesMatch state
+  -- Each validator may withdraw no earlier than it exits.
   exitsOrdered : ExitsOrdered state
+  -- The finalized, previous justified and current justified epochs stay in increasing order.
   ordered : CheckpointsOrdered state
+  -- The current justified epoch is at most the previous epoch.
+  --
+  -- So the next epoch transition cannot lower the finalized epoch.
   settled : JustifiedSettled state
   aligned : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state
 
@@ -2860,12 +2791,6 @@ theorem processSlots_invariant {slot : Slot} (holds : Invariant state)
   exact advanceSlots_invariant holds advanced
 
 /-- Each valid block keeps the invariant, and the finalized epoch never decreases.
-
-The registry and the balances keep one entry for each validator.
-
-Each validator may withdraw no earlier than it exits.
-
-The checkpoints stay in order, and the current justified epoch stays at most the previous epoch.
 
 This holds for every signature check and with or without validating the result. -/
 theorem stateTransition_invariant
