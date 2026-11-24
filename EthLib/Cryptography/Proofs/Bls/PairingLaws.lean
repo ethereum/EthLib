@@ -18,12 +18,6 @@ The check of [EIP-2537](https://eips.ethereum.org/EIPS/eip-2537) tests `prod_i e
 This module states the law that verification needs as one structure.
 
 `PairingAte.lean` proves the law, and the lemmas here derive its consequences.
-
-Let `P_i` represent `a_i * g_1` and `Q_i` represent `b_i * g_2`.
-
-Then `prod_i e(P_i, Q_i) = e(g_1, g_2)^(sum_i a_i * b_i)`, and `e(g_1, g_2)` has prime order `r`.
-
-So the check passes exactly when `sum_i a_i * b_i = 0` in `Fr`.
 -/
 
 @[expose] public section
@@ -40,6 +34,9 @@ def G1.Represents (P : G1) (a : Fr) : Prop :=
 def G2.Represents (Q : G2) (b : Fr) : Prop :=
   G2.Valid Q ∧ G2.toPoint Q = G2.toPoint (G2.mul G2.generator b)
 
+-- The product of the pairings is `e(g_1, g_2)^(sum_i a_i * b_i)`.
+--
+-- The pairing `e(g_1, g_2)` has prime order `r`.
 /-- The law of the concrete pairing check, on points of the prime-order subgroups.
 
 Let `P_i` represent `a_i • g1` and `Q_i` represent `b_i • g2`.

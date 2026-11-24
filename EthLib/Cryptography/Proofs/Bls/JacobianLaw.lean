@@ -18,19 +18,9 @@ The curve is `y^2 = x^3 + b`, for any `b`, since the formulas never read `b`.
 
 Mathlib's Jacobian points form a commutative group.
 
-A triple is valid when its image is a nonsingular point, and then it denotes a point of the group.
-
 Zero, negation and doubling keep validity, and they are the group law.
 
 Addition and scalar multiplication do too when `2 ≠ 0` in the field, as for every odd prime.
-
-Doubling agrees with Mathlib's doubling exactly.
-
-Addition agrees with Mathlib's addition up to the scaling `u = -(2 z_1 z_2)`.
-
-That agreement holds modulo the two curve equations.
-
-The mixed addition gives the coordinates of the general addition when `z_2 = 1`.
 
 The formulas are `dbl-2009-l`, `add-2007-bl` and `madd-2007-bl` of the explicit-formulas database.
 <https://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html>
@@ -58,6 +48,8 @@ def repOf (e : FieldOps.Embedding F K) (P : G1 F) : Fin 3 → K :=
   ![e.toFun P.x, e.toFun P.y, e.toFun P.z]
 
 /-- A triple is valid when its image is a nonsingular point of the curve.
+
+A valid triple denotes a point of the group.
 
 The code keeps validity, in a field where `2 ≠ 0`. -/
 def Valid (e : FieldOps.Embedding F K) (b : K) (P : G1 F) : Prop :=
@@ -147,7 +139,7 @@ theorem toPoint_neg [DecidableEq K] {P : G1 F} (h : Valid e b P) :
 
 /-! ## Doubling
 
-The `dbl-2009-l` formulas are Mathlib's doubling, as polynomial identities.
+The `dbl-2009-l` formulas are Mathlib's doubling exactly, as polynomial identities.
 
 No curve equation is needed. -/
 

@@ -21,16 +21,6 @@ Each step of the loop and of the algorithm differ by three factors.
 - The loop omits the vertical, whose value at `P` is a nonzero element of `Fp6`.
 
 The final exponentiation sends each of these factors to 1.
-
-The steps need `T` finite, `Y ≠ 0` to double and an `x` other than that of `Q` to add.
-
-The loop keeps `T = k Q`, where `k` is the part of `|x|` read so far, so `0 < k ≤ |x|`.
-
-`Q` has the prime order `r`, and `|x| < r`, so no step meets the point at infinity.
-
-The vertical is nonzero because no point of the twist has `x = 0`.
-
-That holds because `4 (1 + i)` is not a square in `Fp2`: its norm is 32, and 2 is not a square.
 -/
 
 @[expose] public section
@@ -69,8 +59,10 @@ theorem vertical_ne_zero {b : Fp2} (hb : b ≠ 0) (a : Fp) :
   simp at h0
   exact hb h0.symm
 
+-- The vertical is nonzero because no point of the twist has `x = 0`.
 /-- No point of the twist has `x = 0`, because `4 (1 + i)` is not a square in `Fp2`. -/
 theorem twist_x_ne_zero {x y : Fp2} (h : G2.curve.toAffine.Nonsingular x y) : x ≠ 0 := by
+  -- The norm of `4 (1 + i)` is 32, and 2 is not a square.
   rintro rfl
   have he : y * y = 2 * 2 * Fp2.xi := by
     have h1 := h.1
@@ -323,6 +315,7 @@ theorem finalExponentiation_millerSteps {s : ℕ} (hs : s < Fr.modulus) {xq yq :
     set k := s >>> (n + 1)
     have hsplit := Miller.shiftRight_split s n
     have hle : s >>> n ≤ s := Nat.shiftRight_le s n
+    -- The steps need `T` finite, `Y ≠ 0` to double and an `x` other than that of `Q` to add.
     have hne : ∀ j, 0 < j → j ≤ s → j • G2.toPoint Q1 ≠ 0 :=
       fun j hj0 hjs => nsmul_ne_zero_of_lt hord hj0 (by omega)
     have hz : T.z ≠ 0 := z_ne_zero_of_toPoint (hk ▸ hne k hpos (by omega))
@@ -406,6 +399,9 @@ theorem pairing_eq_finalExponentiation_loop {P : G1} {Q : G2} (hQ : G2.Valid Q)
     exact addOrderOf_eq_prime ((G2.inSubgroup_iff_modulus_smul_eq_zero hQ).mp hQr)
       (fun h0 => hQi ((G2.isInfinity_eq_true_iff_toPoint_eq_zero hQ).mpr h0))
   have hlog : blsX >>> blsX.log2 = 1 := Miller.shiftRight_log2 (by decide)
+  -- The loop keeps `T = k Q`, where `k` is the part of `|x|` read so far, so `0 < k ≤ |x|`.
+  --
+  -- `Q` has the prime order `r`, and `|x| < r`, so no step meets the point at infinity.
   have hmain := finalExponentiation_millerSteps (s := blsX) (by decide) hQ1 hord P.toAffine.1
     P.toAffine.2 blsX.log2 Q1 1 1 hQ1 (by rw [hlog, one_nsmul]) (by rw [hlog]; omega) rfl
   rw [← he1]
