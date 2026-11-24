@@ -203,7 +203,9 @@ The body of a block meets a property when each of its leaves does, on states tha
 
 An invariant that always holds needs no proof that the steps keep it. -/
 structure BodyLeaves (config : ChainConfig) (env : BlockEnvironment fork)
-    -- A first invariant holds on the block state before the withdrawals, and a second one after.
+    -- A first invariant holds on the block state before the withdrawals.
+    --
+    -- A second one holds on the block state after them.
     (block : Block fork Transaction) (P : BlockError → Prop) (Inv Inv' : BlockState → Prop)
     -- A third one holds on the state that each call, transaction and withdrawal ends on.
     --

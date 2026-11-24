@@ -9,7 +9,13 @@ public import EthLib.Execution.Proofs.Transactions.NoninterferenceRun
 
 From Glamsterdam, a block that passes the transition commits to a block access list.
 
-Each transaction and other call of it runs alike on a state that agrees on what the list names.
+Run one of its transactions, or one of its other calls, on another block state instead.
+
+When that state agrees with the one the call ran on, at what the list names, the call runs alike.
+
+A transaction also needs both states to agree on code, and on each named empty account's storage.
+
+The other state must also hold the code of every account.
 
 Source: [EIP-7928, Scope and Inclusion][bal].
 
@@ -183,7 +189,7 @@ theorem stateTransition_transaction_agrees {fork : Fork} {chain : BlockChain}
 
 They are the two system calls at the start, the withdrawals and each call to a request contract.
 
-None of them needs the other block state to hold the code of every account.
+Unlike a transaction, none of them needs another block state to hold the code of every account.
 
 From Hegotá the transition is not yet specified, so this holds from Glamsterdam up to Hegotá. -/
 theorem stateTransition_calls_agree {fork : Fork} {chain : BlockChain}
@@ -203,7 +209,7 @@ theorem stateTransition_calls_agree {fork : Fork} {chain : BlockChain}
         (BodyState.init ⟨chain.state, ∅, ∅, ∅, ∅⟩).join out.state = .ok mid ∧
         systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨block.header.parentHash.toArray⟩ =
           .ok out' ∧
-        -- Run on another block state that agrees with its own on what the list names.
+        -- Take a block state that agrees with that of each system call on what the list names.
         --
         -- A system call gives the same output there.
         --

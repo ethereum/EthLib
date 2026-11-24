@@ -7,7 +7,9 @@ public import EthLib.Serialization.Proofs.Rlp.Encodings
 /-!
 # Proofs: the receipts of the eth protocol
 
-A receipt reads back from its RLP item, and the receipts of a block match a root in consensus form.
+A receipt reads back from its RLP item.
+
+The receipts of a block match a root exactly when their consensus forms, in order, have that root.
 
 From eth/70, a partial list of receipts passes the EIP-7975 checks exactly when three bounds hold.
 
@@ -216,7 +218,9 @@ theorem of_checkPartialReceipts {gasLimits : List Nat} {blockGasLimit : Nat} {si
 
 Before eth/70, a peer sends every receipt of a block, and these checks do not apply.
 
-The conditions read only the sizes, not the receipts root, nor whether the list is complete. -/
+The conditions read only the sizes of the receipts.
+
+They do not check the receipts against the receipts root, nor that the list is complete. -/
 theorem checkPartialReceipts_eq_ok_iff {gasLimits : List Nat} {blockGasLimit : Nat}
     {sizes : List Nat} :
     checkPartialReceipts gasLimits blockGasLimit sizes = .ok () ↔

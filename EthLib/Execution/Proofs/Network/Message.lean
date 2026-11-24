@@ -124,7 +124,9 @@ def FitsVersion (version : EthVersion) : Message → Prop
   | .status (.eth69 ..) => version ≠ .eth68
   -- BlockRangeUpdate exists from eth/69 on.
   | .blockRangeUpdate _ => EthVersion.eth69 ≤ version
-  -- An announcement has the form of its version, and as many types and sizes as hashes.
+  -- An announcement has the form of its version.
+  --
+  -- It has as many types and sizes as hashes.
   | .newPooledTransactionHashes a@(.eth68 ..) => version < .eth72 ∧ a.lengthsAgree
   | .newPooledTransactionHashes a@(.eth72 ..) => version = .eth72 ∧ a.lengthsAgree
   -- The receipt messages carry their part from eth/70 on.
@@ -586,7 +588,9 @@ theorem accessListsResponse_eq_true_iff {expected : List Hash32} {request respon
     accessListsResponse expected request response = true ↔
       -- The request is GetBlockAccessLists.
       ∃ i hashes lists, request = getBlockAccessLists i hashes ∧
-        -- The response is BlockAccessLists with its request ID, with one entry per expected hash.
+        -- The response is BlockAccessLists with its request ID.
+        --
+        -- It has one entry for each expected hash.
         response = blockAccessLists i lists ∧ lists.length = expected.length ∧
           -- Each entry is the empty string, or its bytes hash to the expected hash there.
           ∀ (k : Nat) (hk : k < lists.length) (he : k < expected.length),

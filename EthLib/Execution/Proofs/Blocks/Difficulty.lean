@@ -9,7 +9,9 @@ Before Paris, the difficulty is never below the minimum, and from Paris on it is
 
 From Byzantium to Paris, a fork changes the difficulty only through its delay of the bomb.
 
-The difficulty is bounded around the parent's, and a later timestamp never raises it.
+Before Paris, the difficulty of a block has a lower and an upper bound in terms of the parent's.
+
+A later timestamp never raises the difficulty.
 
 The official difficulty vectors are in the Python suite, through the bindings.
 -/

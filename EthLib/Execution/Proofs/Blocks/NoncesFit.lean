@@ -145,7 +145,9 @@ theorem applyBody_noncesFit {config : ChainConfig} {env : BlockEnvironment fork}
     output.block.NoncesFit := by
   obtain ⟨_, body, txs, withdrawn, requested, hdao, hsys, htxs, hWithdrawn, hStays, hreq, hrew,
     -⟩ := applyBody_eq_ok h
-  -- The DAO transfer changes only balances, and each system call and transaction keeps the bound.
+  -- The DAO transfer changes only balances.
+  --
+  -- Each system call and each transaction keeps the bound.
   have fitTxs := applyTransactions_noncesFit
     (startSystemCalls_noncesFit (daoTransfer_noncesFit hfit hdao) hsys) htxs
   -- The withdrawals change only balances.

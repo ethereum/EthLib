@@ -32,7 +32,9 @@ variable {fork : Fork} {message : Message fork} {gas : Nat} {state : Transaction
 
 /-- A call from another address, with any gas, that ends with no error gets its root.
 
-It holds from Shapella up to BPO5, whose frames count gas as one number, as the proof steps do. -/
+It holds from Shapella up to BPO5.
+
+Up to BPO5 a frame counts its gas as one number, as the steps of the proof do. -/
 theorem BeaconRoots.get_of_runFrame (hfork : .shapella ≤ fork) (_hglam : fork < .glamsterdam)
     -- The input has fewer than `2^256` bytes.
     (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hsize : message.data.size < 2 ^ 256)
@@ -53,7 +55,9 @@ theorem BeaconRoots.get_of_runFrame (hfork : .shapella ≤ fork) (_hglam : fork 
 
 /-- A call from another address, with any gas, that ends with no error gets its hash.
 
-It holds from Shapella up to BPO5, whose frames count gas as one number, as the proof steps do. -/
+It holds from Shapella up to BPO5.
+
+Up to BPO5 a frame counts its gas as one number, as the steps of the proof do. -/
 theorem HistoryStorage.get_of_runFrame (hfork : .shapella ≤ fork) (_hglam : fork < .glamsterdam)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS)
     -- The block number is at least 1 and less than `2^256`.

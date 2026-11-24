@@ -6,7 +6,9 @@ public import EthLib.Execution.Blocks.Ommers
 /-!
 # Proofs: the ommers of a block
 
-What ommers that pass the check give a block, and exactly when they pass it.
+A block whose ommers pass the check commits to them by its ommers hash.
+
+The ommers pass the check exactly when they meet every rule of the check.
 
 The Python suite shows that valid ommers pass.
 -/

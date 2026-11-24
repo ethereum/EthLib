@@ -8,7 +8,11 @@ public import EthLib.Execution.Blocks.Transition
 /-!
 # Proofs: the system calls of a block
 
-The gas and accesses of a system call, when a checked call succeeds or fails, and the requests.
+The proofs state three things about the system calls of a block:
+
+- the gas and the accesses that a system call starts with, at each fork;
+- when a checked system call succeeds, and how it fails;
+- the order and the form of the requests of a block.
 
 The calls at the start of a block, and the requests of a block, are stated call by call.
 -/

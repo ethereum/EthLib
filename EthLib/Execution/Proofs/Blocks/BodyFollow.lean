@@ -13,7 +13,9 @@ From Glamsterdam, the list that the header commits to rebuilds the state after t
 
 It needs only a rebuildable state before the block, and fewer than 2^32 - 1 transactions.
 
-Each call of the body keeps that property, and the access-list builder follows each of them.
+Each system call, each transaction that enters the block, and the withdrawals keep that property.
+
+The access-list builder follows each of them.
 
 Source: [EIP-7928, Recording Semantics by Change Type][eip7928].
 

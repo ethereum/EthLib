@@ -8,7 +8,9 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall.RequestQueue
 
 The contract keeps a queue of consolidation requests, and a fee that rises with its use.
 
-Each operation of the EIP is a function here, and a theorem runs the code to show it computes it.
+Each operation of the EIP is a function here.
+
+A theorem runs the code and shows that it computes that function.
 
 The code is the 414 bytes of [EIP-7251][eip-7251-deployment], which its deployment installs.
 
@@ -1094,7 +1096,7 @@ theorem spec_dequeue (hfork : .shapella ≤ fork)
     (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
     -- The counters of the storage meet the bounds under which the code computes as the EIP.
     (hbounded : Bounded (storageOf state message.currentTarget))
-    -- The conservative one-counter budget: 200,000 gas before Glamsterdam, 1,000,000 from it.
+    -- The conservative one-counter budget is 200,000 gas before Glamsterdam and 1,000,000 from it.
     (hgas : 200000 * storageGasScale fork ≤ gas) :
     -- From Glamsterdam, this one-counter frame is a model for the proof, not the meter of EIP-8037.
     Spec fork (At CODE message 0 [] .empty gas state substate returnData) fun evm =>

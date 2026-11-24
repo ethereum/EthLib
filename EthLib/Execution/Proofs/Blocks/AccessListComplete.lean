@@ -7,15 +7,23 @@ public import EthLib.Execution.Proofs.Blocks.Transition
 /-!
 # Proofs: the block access list covers every call of the body
 
-The builder at the end of a body covers each of its calls.
+The body of a block runs system calls, transactions, withdrawals and calls to request contracts.
 
-It records each account and storage key that a call read or wrote, a key as a change or a read.
+The builder at the end of the body covers every one of them.
 
-The DAO transfer and the block rewards write without a call, so the builder leaves them out.
+That is, it records each account that one of them read or wrote.
+
+It also names each storage key that one of them read or wrote, as a change or as a read.
+
+The DAO transfer and the block rewards write the state without a call.
+
+The builder leaves them out.
 
 Both run only before Paris, before any block commits to a list.
 
-Source: [EIP-7928, Scope and Inclusion][eip7928]: every account accessed, system contracts included.
+Source: [EIP-7928, Scope and Inclusion][eip7928].
+
+It asks the list to hold every account that the block accessed, system contracts included.
 
 [eip7928]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion
 -/

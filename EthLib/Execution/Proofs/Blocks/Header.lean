@@ -8,7 +8,9 @@ public import EthLib.Serialization.Proofs.Rlp.Codec
 /-!
 # Proofs: the header of a block
 
-The RLP codec of a header at every fork, and the binding of its Keccak-256 hash.
+At every fork, the RLP codec of a header is lawful.
+
+Two headers at one fork with one hash are equal, or a search returns a Keccak-256 collision.
 -/
 
 @[expose] public section
@@ -50,7 +52,9 @@ end Header
 
 -- At every fork, the RLP codec of a header is lawful.
 --
--- So a header decodes from exactly one byte string, its encoding, and the decoder accepts no other.
+-- So a header decodes from exactly one byte string, its encoding.
+--
+-- The decoder accepts no other byte string as that header.
 instance : LawfulCodec (Header fork) where
   ofItem_toItem h := by
     show Header.ofItem (Header.toItem h) = _

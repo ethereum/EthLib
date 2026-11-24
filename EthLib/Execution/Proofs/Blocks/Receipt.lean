@@ -7,7 +7,9 @@ public import EthLib.Execution.Proofs.Transactions.Envelope
 /-!
 # Proofs: logs and receipts
 
-The RLP codecs of logs, outcomes and receipts, the bytes of a receipt, and the receipts of a block.
+The RLP codecs of a log, of an outcome and of a receipt are lawful at every fork.
+
+The bytes of a receipt decode back to its transaction type and the receipt.
 
 The receipts of a block count the gas cumulatively, so the counts never decrease.
 -/

@@ -7,7 +7,9 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 
 The contract keeps one root per timestamp modulo 8191, in two rings of 8191 storage slots.
 
-Each operation of the EIP is a function here, and a theorem runs the code to show it computes it.
+Each operation of the EIP is a function here.
+
+A theorem runs the code and shows that it computes that function.
 
 The code is the 97 bytes of [EIP-4788][eip-4788-bytecode], which its deployment installs.
 
@@ -145,7 +147,7 @@ theorem spec_set (hfork : .shapella ≤ fork)
     (hcaller : message.caller = SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
     -- The account of the contract exists.
     (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
-    -- The conservative one-counter budget: 50,000 gas before Glamsterdam, 250,000 from it.
+    -- The conservative one-counter budget is 50,000 gas before Glamsterdam and 250,000 from it.
     (hgas : 50000 * storageGasScale fork ≤ gas) :
     -- From Glamsterdam, this one-counter frame is a model for the proof, not the meter of EIP-8037.
     Spec fork (At CODE message 0 [] .empty gas state substate returnData) fun evm =>

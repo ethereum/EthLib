@@ -9,7 +9,9 @@ public import EthLib.Execution.Proofs.Trie.RangeComplete
 
 As for the range check of a trie, honest answers pass unless the node search returns a collision.
 
-The keys are listed by increasing hash, the order of a secured trie, so their hashes are distinct.
+An honest answer lists the keys by increasing hash, the order of a secured trie.
+
+So the keys of each trie have distinct hashes.
 
 The requests are [GetAccountRange (0x00)][get-account] and [GetStorageRanges (0x02)][get-storage].
 
@@ -326,9 +328,9 @@ private theorem verifyStorageRanges_of_secured_last
 
 /-- Honest StorageRanges pass for one account or several, or a node collision is found. -/
 theorem verifyStorageRanges_complete
-    -- The whole tries that the answer sends before its last, possibly partial, range.
+    -- These are the whole tries that the answer sends before its last range, which may be partial.
     (whole : List (Hash32 × List (ByteArray × ByteArray)))
-    -- The requested accounts after the last range.
+    -- The list of remaining accounts holds the requested accounts after the last range.
     (root' start first : Hash32) (remaining : List Hash32)
     {data sent : List (ByteArray × ByteArray)} (count : Nat)
     {last : ByteArray × ByteArray} {left right proof : List ByteArray}
