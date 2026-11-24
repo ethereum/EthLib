@@ -19,19 +19,7 @@ Each account is the list of its address, nonce, balance, code and storage.
 
 The storage is a list of pairs of a 32-byte key and a word.
 
-The code hash of an account is the Keccak-256 hash of its code.
-
-A malformed input, or an address given twice, comes back as the code and the message of its error.
-
-A failed change to the state has a code from 101.
-
 A fork name crosses the boundary as the name of its case in Lean, such as `shapella`.
-
-An unknown fork, a fork before Shapella, or a block that does not decode, has code 0.
-
-So do forks of a chain that do not decode, or that break the order of the timeline.
-
-So does Hegotá, which is not yet specified.
 -/
 
 public section
@@ -46,11 +34,13 @@ open EthLib.Serialization.Rlp
 
 /-- A state that does not read reaches Python with its code, and its message names the fault. -/
 instance : ExportError StateInputError where
+  -- A malformed input, or an address given twice, has the code and the message of its error.
   code := StateInputError.code
   message := StateInputError.message
 
 /-- A failed change to the state reaches Python with its code, and its message names the error. -/
 instance : ExportError StateError where
+  -- A failed change to the state has a code from 101.
   code := StateError.code
   message := reprStr
 
@@ -86,6 +76,7 @@ def ofEntries (entries : List Entry) : Except StateInputError State :=
   entries.foldlM (init := ⟨∅, ∅, ∅⟩) fun state entry => do
     if entry.address ∈ state.accounts then
       throw (.repeatedAddress entry.address)
+    -- The code hash of an account is the Keccak-256 hash of its code.
     let codeHash := Cryptography.Hash.Keccak.keccak256 entry.code
     return {
       accounts := state.accounts.insert entry.address ⟨entry.nonce, entry.balance, codeHash⟩
@@ -114,8 +105,12 @@ def stateRootExport (input : ByteArray) : Result ByteArray := do
 The block is decoded at the fork, which must be Shapella or later. -/
 @[export eth_state_withdrawals_root]
 def withdrawalsRootExport (fork input block : ByteArray) : Result ByteArray := do
+  -- An unknown fork has code 0.
+  --
+  -- So does Hegotá, which is not yet specified.
   let fork ← forkUpTo .glamsterdam fork
   let pre ← toResult none (ofInput input)
+  -- A block that does not decode has code 0.
   let b : Blocks.Block fork Item ← toResult none
     ((Blocks.Block.decode (fun _ => fork) block).mapError
       fun e => UnreadArgument.mk s!"block rejected: {reprStr e}")
@@ -123,6 +118,7 @@ def withdrawalsRootExport (fork input block : ByteArray) : Result ByteArray := d
     let post ← toResult "withdrawals failed"
       (Blocks.processWithdrawals fork ⟨pre, ∅, ∅, ∅, ∅⟩ (b.withdrawals h))
     rootOf post.applyChanges
+  -- A fork before Shapella has code 0.
   else rejectArgument none "the fork is before Shapella"
 
 /-- The state root after the DAO Fork moves the ether of its accounts, from the state of `input`. -/
@@ -142,9 +138,13 @@ The block and each of its ommers decode at the fork of their own number.
 From Paris on, a block pays no reward. -/
 @[export eth_state_rewards_root]
 def rewardsRootExport (forks input block : ByteArray) : Result ByteArray := do
+  -- Forks of a chain that do not decode, or that break the order of the timeline, have code 0.
+  --
+  -- So do an unknown fork and Hegotá.
   let config ← toResult none
     ((Blocks.Exports.chainOfForks forks).mapError fun (_, m) => UnreadArgument.mk m)
   let pre ← toResult none (ofInput input)
+  -- A block that does not decode has code 0.
   let item ← toResult none ((Serialization.Rlp.decode block).mapError
     fun e => UnreadArgument.mk s!"block rejected: {reprStr e}")
   let ⟨fork, b⟩ ← toResult none

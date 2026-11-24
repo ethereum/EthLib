@@ -23,25 +23,9 @@ The checks, the settlement and the run take and return typed Python values.
 
 A number among them crosses as an `int`, and an argument that Lean cannot read fails with code 0.
 
-Each operation decodes the transaction at the fork first.
-
 A rejection comes back as the code and the message of its error.
 
 The message of an error names the rule that failed, so a test can match it.
-
-The network form of a blob transaction keeps the codes of transaction errors.
-
-Its own errors about the blobs take codes from 101.
-
-The type, the hash and the sender hold up to Glamsterdam, which keeps the transaction forms.
-
-The intrinsic gas and the checks hold up to Glamsterdam.
-
-The settlement, the checks against the block, the run and the network form hold up to BPO5.
-
-The settlement of Glamsterdam, by EIP-7778 and EIP-8037, has no export yet.
-
-Hegotá is not yet specified.
 -/
 
 public section
@@ -61,23 +45,28 @@ def gasToUInt64 (gas : Nat) : Result UInt64 :=
 
 /-- The transaction that `bytes` encodes at the named fork, if it comes no later than `last`. -/
 def decodeAt (last : Fork) (fork bytes : ByteArray) : Result (Fork × Transaction) := do
+  -- Hegotá is not yet specified, so no operation reaches it.
   let fork ← forkUpTo last fork
+  -- Each operation decodes the transaction at the fork first.
   return (fork, ← toResult none (decodeTransaction fork bytes))
 
 /-- The type of a transaction: 0 for a legacy transaction. -/
 @[export eth_tx_type]
 def typeExport (fork bytes : ByteArray) : Result UInt64 := do
+  -- The type holds up to Glamsterdam, which keeps the transaction forms.
   return (← decodeAt .glamsterdam fork bytes).2.type.toUInt64
 
 /-- The 32-byte hash of a transaction. -/
 @[export eth_tx_hash]
 def hashExport (fork bytes : ByteArray) : Result ByteArray := do
+  -- The hash holds up to Glamsterdam, which keeps the transaction forms.
   let (_, tx) ← decodeAt .glamsterdam fork bytes
   return ⟨(← toResult none ((transactionHash tx).mapError TransactionError.encoding)).toArray⟩
 
 /-- The 20-byte address of the sender of a transaction. -/
 @[export eth_tx_recover_sender]
 def recoverSenderExport (fork bytes : ByteArray) : Result ByteArray := do
+  -- The sender holds up to Glamsterdam, which keeps the transaction forms.
   let (fork, tx) ← decodeAt .glamsterdam fork bytes
   return ⟨(← toResult none (recoverSender fork tx)).toArray⟩
 
@@ -88,6 +77,7 @@ From Glamsterdam it reads the sender, so the signature must name one.
 Before Glamsterdam the sender changes nothing, so any address stands in for it. -/
 @[export eth_tx_intrinsic_gas]
 def intrinsicGasExport (fork bytes : ByteArray) : Result UInt64 := do
+  -- The intrinsic gas holds up to Glamsterdam.
   let (fork, tx) ← decodeAt .glamsterdam fork bytes
   let sender ← if fork ≥ .glamsterdam then toResult none (recoverSender fork tx) else pure default
   gasToUInt64 (intrinsicGas fork sender tx)
@@ -97,6 +87,7 @@ def intrinsicGasExport (fork bytes : ByteArray) : Result UInt64 := do
 The intrinsic gas must be below 2^64. -/
 def checkOf (args : String × UInt64 × ByteArray) : Result (Address × UInt64) := do
   let (fork, chainId, bytes) := args
+  -- The check holds up to Glamsterdam.
   let (fork, tx) ← decodeAt .glamsterdam fork.toUTF8 bytes
   let (sender, gas) ← toResult none (checkTransaction fork chainId tx)
   return (sender, ← gasToUInt64 gas)
@@ -114,24 +105,28 @@ def checkExport (args : PyValue) : Result PyValue :=
 
 It reads the base fee per gas of the block, the gas left and the refund counter.
 
-The base fee must be below 2^256, and 0 before London, which has none.
-
-The price per gas must cover the base fee, and the gas left must be at most the gas limit.
-
 It returns the gas used, the refund of the sender, the priority fee and the burned fee. -/
 def settleOf (args : String × ByteArray × Nat × Nat × Nat) : Result (Nat × Nat × Nat × Nat) := do
   let (fork, tx, baseFee, gasLeft, refundCounter) := args
+  -- The settlement holds up to BPO5.
+  --
+  -- The settlement of Glamsterdam, by EIP-7778 and EIP-8037, has no export yet.
   let (fork, tx) ← decodeAt .bpo5 fork.toUTF8 tx
   -- Before Glamsterdam the sender changes nothing, so any address stands in for it.
   let sender : Address := default
   let _ ← toResult none (validateTransaction fork sender tx)
   -- No error type covers these inputs of the binding, so their code is 0.
+  --
+  -- The base fee must be 0 before London, which has none.
   if fork < .london ∧ baseFee ≠ 0 then
     rejectArgument none "a fork before london has no base fee"
+  -- The base fee must be below 2^256.
   if 2 ^ 256 ≤ baseFee then
     rejectArgument none "base fee is 2^256 or more"
+  -- The price per gas must cover the base fee.
   if tx.maxFeePerGas < baseFee then
     rejectArgument none "the price per gas is below the base fee"
+  -- The gas left must be at most the gas limit.
   if tx.gas.toNat < gasLeft then
     rejectArgument none "the gas left is above the gas limit"
   let s := settlement fork baseFee sender tx gasLeft refundCounter
@@ -170,6 +165,7 @@ The base fee must be 0 before London, and the excess blob gas below 2^64.
 It returns the sender, the price per gas and the blob gas of the transaction. -/
 def checkInBlockOf (args : InBlockArgs) : Result (Address × Nat × UInt64) := do
   let (fork, chainId, tx, state, gasLimit, gasUsed, blobGasUsed, baseFee, excess) := args
+  -- The checks against the block hold up to BPO5.
   let (fork, tx) ← decodeAt .bpo5 fork.toUTF8 tx
   let pre ← toResult none (State.Exports.ofInput state)
   -- No error type covers these inputs of the binding, so their code is 0.
@@ -276,22 +272,19 @@ abbrev RunResult := ByteArray × Hash32 × Nat × Bool × List StateEntry
 
 /-- Run one transaction on a state, in a block with no transaction before.
 
-The state takes the form of the state root export, and the block is a list of ten items.
-
-A transaction that may not enter the block fails with the code of its inclusion error.
-
-An error that aborts the run has the code of its state error, or 0.
-
-The state after it has no beneficiary reward, since a block pays that. -/
+The state takes the form of the state root export, and the block is a list of ten items. -/
 def runOf (args : String × UInt64 × ByteArray × ByteArray × ByteArray) : Result RunResult := do
   let (fork, chainId, tx, state, env) := args
+  -- The run holds up to Glamsterdam.
   let (fork, tx) ← decodeAt .glamsterdam fork.toUTF8 tx
   let pre ← toResult none (State.Exports.ofInput state)
   let env ← toResult none ((decode env >>= ofEnvironmentItem fork chainId).mapError
     fun e => UnreadArgument.mk s!"block environment rejected: {rlpMessage e}")
   let block : State.BlockState := ⟨pre, ∅, ∅, ∅, ∅⟩
+  -- A transaction that may not enter the block fails with the code of its inclusion error.
   let inc ← toResult none
     (checkInclusion chainId env ⟨0, 0, 0⟩ (.ofBlock block) tx)
+  -- An error that aborts the run has the code of its state error, or 0.
   let out ← toResult none (processTransaction env block inc tx)
   let post := out.block.applyChanges
   let root ← State.Exports.rootOf post
@@ -367,6 +360,9 @@ def networkMessage : NetworkError → String
 
 /-- A rejection of the network form reaches Python with its code, and its message names it. -/
 instance : ExportError NetworkError where
+  -- The network form of a blob transaction keeps the codes of transaction errors.
+  --
+  -- Its own errors about the blobs take codes from 101.
   code := NetworkError.code
   message := networkMessage
 
@@ -377,6 +373,7 @@ It returns the bytes of the transaction alone, as a block holds it.
 -/
 @[export eth_tx_network_check]
 def networkCheckExport (fork bytes : ByteArray) : Result ByteArray := do
+  -- The network form holds up to BPO5.
   let fork ← forkUpTo .bpo5 fork
   let w ← toResult none (decodeNetwork fork bytes)
   let setup ← toResult none ((Cryptography.Kzg.Exports.embeddedSetup ()).mapError NetworkError.kzg)

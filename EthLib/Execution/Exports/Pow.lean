@@ -15,13 +15,7 @@ The difficulty, the forks of a chain, the seal hash and the proof-of-work check 
 
 A number crosses as an `int`, and a fork as its name, a `str`.
 
-The ommer check takes its forks and its blocks in RLP form.
-
 An unknown name fails with code 0.
-
-A header crosses as its RLP bytes, and a header that the decoder rejects fails with its RLP code.
-
-The proof-of-work check takes a fork before Paris, and fails with code 0 at a later one.
 
 Hegotá fails with code 0 too, since it is not yet specified.
 -/
@@ -66,6 +60,9 @@ def chainForksExport (args : PyValue) : Result PyValue :=
 /-- The header at a named fork that RLP bytes hold. -/
 def headerOf (fork header : ByteArray) : Result (Σ fork : Base.Fork, Header fork) := do
   let fork ← forkUpTo .glamsterdam fork
+  -- A header crosses as its RLP bytes.
+  --
+  -- A header that the decoder rejects fails with its RLP code.
   let header : Header fork ← toResult "header rejected" (Serialization.Rlp.Codec.decode header)
   pure ⟨fork, header⟩
 
@@ -90,6 +87,7 @@ instance : ExportError PowError where
 /-- Check the proof of work of a header in RLP form, at a named fork before Paris. -/
 def checkOf (args : String × ByteArray) : Result Bool := do
   let ⟨fork, header⟩ ← headerOf args.1.toUTF8 args.2
+  -- The proof-of-work check takes a fork before Paris, and fails with code 0 at a later one.
   if .paris ≤ fork then rejectArgument none "a header from Paris on has no proof of work"
   toResult "proof of work invalid" ((checkProofOfWork header).map fun () => true)
 
@@ -117,6 +115,7 @@ A check seal of 0 leaves out the proof of work of the ommers, as for test chains
 @[export eth_pow_validate_ommers]
 def validateOmmersExport (forks recent block : ByteArray) (checkSeal : UInt8) :
     Result UInt8 := do
+  -- The ommer check takes its forks and its blocks in RLP form.
   let config ← chainOfForks forks
   let items ← match (← toResult "recent rejected" (Serialization.Rlp.decode recent)) with
     | .list items => pure items

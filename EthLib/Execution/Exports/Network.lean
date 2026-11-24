@@ -14,13 +14,7 @@ A version crosses the boundary as its number, such as 69.
 
 A message crosses it as its ID within the capability, and the RLP encoding of its data.
 
-A schedule crosses it as the fork identifier exports read it.
-
-Message errors have codes from 1, and Status errors from 101.
-
-Header errors have codes from 201, and transaction errors from 302.
-
-Cell errors have codes from 401, partial receipts errors from 501, and body errors from 601.
+Cell errors have codes from 401.
 
 A bad argument has code 0.
 -/
@@ -39,6 +33,7 @@ def ethMessage : EthError → String
 
 /-- A rejected message reaches Python with its code, and its message names the fault. -/
 instance : ExportError EthError where
+  -- Message errors have codes from 1.
   code := EthError.code
   message := ethMessage
 
@@ -50,6 +45,7 @@ def statusMessage : StatusError → String
 
 /-- A refused Status reaches Python with its code, and its message names the fault. -/
 instance : ExportError StatusError where
+  -- Status errors have codes from 101.
   code := StatusError.code
   message := statusMessage
 
@@ -64,6 +60,7 @@ def headersMessage : HeadersError → String
 
 /-- A refused answer of headers reaches Python with its code, and its message names the fault. -/
 instance : ExportError HeadersError where
+  -- Header errors have codes from 201.
   code := HeadersError.code
   message := headersMessage
 
@@ -74,6 +71,7 @@ def poolMessage : PoolError → String
 
 /-- A refused answer of transactions reaches Python with its code, and its message names it. -/
 instance : ExportError PoolError where
+  -- Transaction errors have codes from 302.
   code := PoolError.code
   message := poolMessage
 
@@ -101,6 +99,7 @@ It returns true on acceptance, and raises the code of the refusal otherwise. -/
 def checkStatusExport (version : UInt64) (schedule : ByteArray) (number timestamp : UInt64)
     (data : ByteArray) : Result Bool := do
   let v ← readVersion version
+  -- A schedule crosses the boundary as the fork identifier exports read it.
   let s ← Networking.Devp2p.Exports.readSchedule schedule
   match Message.decode v STATUS_ID data with
   | .error e => toResult none (.error e : Except EthError Bool)
@@ -172,6 +171,7 @@ def partialMessage : PartialReceiptsError → String
 
 /-- A refused partial list reaches Python with its code, and its message names the fault. -/
 instance : ExportError PartialReceiptsError where
+  -- Partial receipts errors have codes from 501.
   code := PartialReceiptsError.code
   message := partialMessage
 
@@ -216,6 +216,7 @@ def bodyMessage : BodyError → String
 
 /-- A refused body reaches Python with its code, and its message names the fault. -/
 instance : ExportError BodyError where
+  -- Body errors have codes from 601.
   code := BodyError.code
   message := bodyMessage
 
