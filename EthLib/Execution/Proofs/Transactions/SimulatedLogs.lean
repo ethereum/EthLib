@@ -100,10 +100,6 @@ private theorem erase_bind_output {bound : Nat}
   · show Except.ok _ = Except.ok _
     rw [reads, h, ← reads]
 
-/-- A successful value maps to the success of its image. -/
-private theorem map_ok {ε α β : Type} (f : α → β) (a : α) :
-    f <$> (Except.ok a : Except ε α) = .ok (f a) := rfl
-
 /-- Two messages that differ only in the simulated logs they start with differ only in them.
 
 Both fail with the same error, or both give the same output but for its simulated logs. -/
@@ -119,7 +115,7 @@ theorem processMessageCall_eraseSimulatedLogs [LawfulGasMeter Meter] (logs : Arr
   rcases prepareFirstFrame (Meter := Meter) chainId message state substate auths paid with
     ⟨e, read⟩ | first
   · rfl
-  simp only [map_ok]
+  simp only [Base.map_ok]
   cases message.target with
   | none =>
     dsimp only

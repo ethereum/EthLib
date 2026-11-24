@@ -199,10 +199,6 @@ private theorem fields_present {fork : Fork} (p : ExecutionPayload fork) :
   by_cases h1 : Fork.shapella ≤ fork <;> by_cases h2 : Fork.dencun ≤ fork <;>
     simp [h1, h2, dataJson, quantityJson, listJson]
 
-/-- Mapping a function over a computation that has succeeded maps its value. -/
-private theorem map_ok {α β : Type} (f : α → β) (a : α) :
-    (f <$> (Except.ok a : Decode α) : Decode β) = .ok (f a) := rfl
-
 /-- The common part of a payload: the fields that every fork has, as the payload of Paris. -/
 private abbrev commonOf {fork : Fork} (p : ExecutionPayload fork) : ExecutionPayload .paris where
   parentHash := p.parentHash

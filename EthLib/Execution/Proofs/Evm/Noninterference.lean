@@ -790,10 +790,6 @@ private def sstoreRest (word new : U256) (evm : Evm fork Meter) :
   keepReads evm id (sstoreWrite address key original current new cold evm)
 
 omit [GasMeter Meter] in
-private theorem map_ok {α β : Type} (f : α → β) (x : α) :
-    (f <$> (Except.ok x : Except EvmError α)) = Except.ok (f x) := rfl
-
-omit [GasMeter Meter] in
 private theorem popWord_cons {evm : Evm fork Meter} {x : U256} {rest : List U256}
     (h : evm.stack.val = x :: rest) :
     ∃ after, popWord evm = .ok (x, after) ∧ after.stack.val = rest ∧ after.gas = evm.gas := by
@@ -956,7 +952,7 @@ private theorem sstoreStep_keeps :
     simp only [static, ↓reduceIte, hp1, hp2, stipend', Base.ok_bind]
   have k2 : sstoreStep { e1 with state := s } = sstoreRest word new { f2 with state := s } := by
     rw [sstoreStep_eq]
-    simp only [static, ↓reduceIte, popWord_withState, hp1, hp2, map_ok, stipend', Base.ok_bind]
+    simp only [static, ↓reduceIte, popWord_withState, hp1, hp2, Base.map_ok, stipend', Base.ok_bind]
   refine ⟨fun err h nab => ?_, fun a1 h reads => ?_⟩
   · rw [k1] at h
     rw [sstoreRest_error h] at nab
@@ -1101,7 +1097,7 @@ private theorem selfdestructStep_keeps :
       have hcheck2 : checkGas { g with state := s' } (selfdestructCost fork cold false) =
           .error e := hcheck
       rw [selfdestructStep_eq]
-      simp only [static, ↓reduceIte, popWord_withState, hp1, map_ok, Base.ok_bind,
+      simp only [static, ↓reduceIte, popWord_withState, hp1, Base.map_ok, Base.ok_bind,
         accessAddress_withState, hacc, hcheck2]
       rfl
   have hcheck2 : checkGas { g with state := s } (selfdestructCost fork cold false) = .ok () :=
@@ -1118,7 +1114,7 @@ private theorem selfdestructStep_keeps :
           { recordAccountRead g (toAddressMasked word) with
             state := s.recordAccountRead (toAddressMasked word) }) := by
     rw [selfdestructStep_eq]
-    simp only [static, ↓reduceIte, popWord_withState, hp1, map_ok, Base.ok_bind,
+    simp only [static, ↓reduceIte, popWord_withState, hp1, Base.map_ok, Base.ok_bind,
       accessAddress_withState, hacc, hcheck2]
     rfl
   refine ⟨fun err h nab => ?_, fun a1 h reads => ?_⟩

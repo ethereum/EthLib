@@ -39,6 +39,11 @@ theorem bind_unit_ok_iff {ε β : Type} {x : Except ε Unit} {g : Unit → Excep
     x >>= g = .ok y ↔ x = .ok () ∧ g () = .ok y := by
   cases x <;> simp [bind, Except.bind]
 
+/-- A map over a success applies the function to its value. -/
+theorem map_ok {ε α β : Type} (f : α → β) (a : α) :
+    f <$> (Except.ok a : Except ε α) = .ok (f a) :=
+  rfl
+
 /-- A map succeeds exactly when the step under it succeeds with some value.
 
 The map then sends that value to the result. -/
