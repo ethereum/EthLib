@@ -7,23 +7,7 @@ public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
 /-!
 # Proofs: the justified roots of a chain come before the roots it records later
 
-A state records the root of the latest block at each recent slot.
-
-At two consecutive slots it records the same root, or a block and its child.
-
-The parent root of a block is the root recorded at the slot before it, by the check of its header.
-
-The proofs of root links show that for a run of a chain.
-
-Without a collision of header roots, these pairs order the roots by ancestry.
-
 Each step of a chain keeps each justified checkpoint below the roots recorded from its epoch on.
-
-The order is that of any map from roots to blocks that keeps each such pair in order.
-
-The genesis checkpoints have the zero root, which comes before the root recorded at slot zero.
-
-Justification then compares the block of each justified checkpoint with the block of a recent epoch.
 
 Casper FFG §2 ignores a vote whose source is not an ancestor of its target.
 
@@ -48,21 +32,35 @@ def recentJustified {fork : Fork} (state : BeaconState preset fork) (current : B
 
 The zero root also comes before the root that the state records at slot zero. -/
 def rootLinks {fork : Fork} (state : BeaconState preset fork) : Set (Root × Root) :=
+  -- A state records the root of the latest block at each recent slot.
+  --
+  -- At two consecutive slots it records the same root, or a block and its child.
+  --
+  -- The check of a header makes its parent root the root recorded at the slot before it.
+  --
+  -- The proofs of root links show that for a run of a chain.
+  --
+  -- Without a collision of header roots, these pairs order the roots by ancestry.
   {link | (∃ slot : Slot, getBlockRootAtSlot state slot = .ok link.1 ∧
       getBlockRootAtSlot state (slot + 1) = .ok link.2) ∨
+    -- The genesis checkpoints have the zero root, which comes before the root at slot zero.
     (link.1 = Vector.replicate 32 0 ∧ getBlockRootAtSlot state 0 = .ok link.2)}
 
 /-- The roots, ordered by the links that each state reachable from a first state records.
 
-The order holds the links of every branch from that state, so two branches share it.
-
-So it also holds every collision of header roots among reachable headers, which exist by counting.
-
-It is ancestry only up to those collisions, so it does not serve a safety theorem for two chains.
-
-Such a theorem needs the order of the states of the given runs, with a named collision search. -/
+It is ancestry only up to collisions of header roots, so it serves no safety theorem for two chains.
+-/
 def ChainRoot (_config : Config) (_checks : SignatureChecks) (_first : ForkedBeaconState preset) :
     Type :=
+  -- The order holds the links of every branch from the first state, so two branches share it.
+  --
+  -- So it also holds every collision of header roots among reachable headers.
+  --
+  -- Such collisions exist, by counting.
+  --
+  -- A safety theorem for two chains needs the order of the states of the given runs.
+  --
+  -- It also needs a named collision search.
   Root
 
 /-- Two roots are in order when links of reached states lead from the older to the newer one. -/
@@ -81,18 +79,14 @@ def toChainRoot (config : Config) (checks : SignatureChecks) (first : ForkedBeac
 
 /-- Each justified checkpoint is below the roots the state records from the first slot of its epoch.
 
-The order is that of the blocks of a map from roots.
-
-The recent epoch of the current justified checkpoint is the current epoch.
-
-That of the previous justified checkpoint is the previous epoch.
-
-The epoch of the checkpoint is at most its recent epoch.
-
-Its first slot is below the slot of the state, unless it is the genesis checkpoint. -/
+The order is that of the blocks of a map from roots. -/
 structure RootsAbove {fork : Fork} (block : Root → β) (state : BeaconState preset fork) :
     Prop where
-  /-- The epoch of each justified checkpoint is at most its recent epoch. -/
+  /-- The epoch of each justified checkpoint is at most its recent epoch.
+
+  The recent epoch of the current justified checkpoint is the current epoch.
+
+  That of the previous justified checkpoint is the previous epoch. -/
   epoch : ∀ current : Bool, (recentJustified state current).epoch ≤
     (if current then getCurrentEpoch state else getPreviousEpoch state)
   /-- The first slot of each justified checkpoint is below the slot of the state.
@@ -165,6 +159,7 @@ theorem RootsAbove.le_of_getBlockRoot {fork : Fork} {state : BeaconState preset 
       (if current then getCurrentEpoch state else getPreviousEpoch state) = .ok root) :
     block (if current then state.currentJustifiedCheckpoint
       else state.previousJustifiedCheckpoint).root ≤ block root :=
+  -- Justification compares the block of each justified checkpoint with that of a recent epoch.
   holds.le_of_epoch_le current (holds.epoch current) read
 
 /-- The genesis state built from deposits records no root, as no slot comes before its own. -/

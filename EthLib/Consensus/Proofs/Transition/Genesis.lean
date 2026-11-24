@@ -10,12 +10,6 @@ A candidate genesis state exists only before Altair.
 
 It satisfies the invariant that each valid block keeps.
 
-Its registry and balances have one entry for each validator.
-
-Each of its validators may withdraw no earlier than it exits.
-
-Its checkpoints all have the genesis epoch, so they are in order and settled.
-
 A candidate state launches the chain exactly when it is late enough.
 
 It must also have enough active validators.
@@ -91,23 +85,21 @@ private theorem Invariant.withGenesisValidatorsRoot {root : Root} (holds : Invar
 
 Its fork is before Altair.
 
-It starts from an empty genesis state with the block hash and the deposit count.
-
-It adds each deposit, then activates the validators.
-
-The result then takes some genesis validators root. -/
+It starts from an empty genesis state with the block hash and the deposit count. -/
 theorem initializeBeaconStateFromEth1_ok {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit} {after : BeaconState preset fork}
     (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
       .ok after) :
     ∃ (before : fork < .altair) (genesisTime : UInt64) (bodyRoot : Root)
       (deposited activated : BeaconState preset fork) (root : Root),
+      -- It adds each deposit, then activates the validators.
       deposits.toList.zipIdx.foldlM
           (genesisDeposit config checks (Nat.lt_trans before (by decide)) (deposits.map (·.data)))
           (emptyGenesisState config before genesisTime eth1BlockHash deposits.size.toUInt64
             bodyRoot) = .ok deposited ∧
         (List.range deposited.validators.data.size).foldlM activateAtGenesis deposited =
           .ok activated ∧
+        -- The result then takes some genesis validators root.
         after = { activated with genesisValidatorsRoot := root } := by
   unfold initializeBeaconStateFromEth1 at computed
   split at computed
@@ -124,19 +116,17 @@ theorem initializeBeaconStateFromEth1_ok {eth1BlockHash : Hash32} {eth1Timestamp
 
 Its fork is before Altair.
 
-The empty state has the block hash and the deposit count.
-
-The deposits and the activations keep the frame.
-
-The result then takes some genesis validators root. -/
+The empty state has the block hash and the deposit count. -/
 theorem initializeBeaconStateFromEth1_frame {eth1BlockHash : Hash32} {eth1Timestamp : UInt64}
     {deposits : Array Deposit} {after : BeaconState preset fork}
     (computed : initializeBeaconStateFromEth1 config checks eth1BlockHash eth1Timestamp deposits =
       .ok after) :
     ∃ (before : fork < .altair) (genesisTime : UInt64) (bodyRoot : Root)
       (activated : BeaconState preset fork) (root : Root),
+      -- The deposits and the activations keep the frame.
       Frame (emptyGenesisState config before genesisTime eth1BlockHash deposits.size.toUInt64
           bodyRoot) activated ∧
+        -- The result then takes some genesis validators root.
         after = { activated with genesisValidatorsRoot := root } := by
   obtain ⟨before, genesisTime, bodyRoot, _, activated, root, depositedOk, activatedOk, rfl⟩ :=
     initializeBeaconStateFromEth1_ok computed
@@ -180,6 +170,11 @@ theorem initializeBeaconStateFromEth1_invariant {eth1BlockHash : Hash32} {eth1Ti
       .ok after) :
     fork < .altair ∧ Invariant after := by
   obtain ⟨before, _, _, _, _, frame, rfl⟩ := initializeBeaconStateFromEth1_frame computed
+  -- Its registry and balances have one entry for each validator.
+  --
+  -- Each of its validators may withdraw no earlier than it exits.
+  --
+  -- Its checkpoints all have the genesis epoch, so they are in order and settled.
   exact ⟨before,
     (frame.invariant (emptyGenesisState_invariant before _ _ _ _)).withGenesisValidatorsRoot⟩
 

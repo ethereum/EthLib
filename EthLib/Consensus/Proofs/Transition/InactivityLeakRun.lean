@@ -8,37 +8,9 @@ public import EthLib.Consensus.Proofs.Transition.InactivityLeakTrace
 /-!
 # Proofs: a run of a leak brings the absent validators to a threshold
 
-The trace bound of an inactivity leak takes four sequences of one validator as hypotheses.
+This module builds the four sequences of the trace bound from a run of the chain, from Altair.
 
-They are its balance, its effective balance and its score before each epoch transition.
-
-The fourth is its balance at the update of the effective balances.
-
-This module builds them from a run of the chain, from Altair, and discharges those hypotheses.
-
-The run visits one state before each epoch transition.
-
-From each such state, the slot that ends the epoch runs the epoch transition.
-
-Then slots that end no epoch, and blocks that credit nothing to the validator, lead to the next one.
-
-Each epoch leaks and does not raise the finalized epoch.
-
-The bound for one validator assumes this over the whole run.
-
-While the effective balance of the validator is above the threshold, it is eligible.
-
-Its flags then lack the timely target.
-
-Once its effective balance is at most the threshold, its eligibility does not matter.
-
-The bound then only needs its balance not to rise.
-
-The run assumes that the largest effective balance of the validator stays fixed.
-
-A consolidation request can switch its credentials to compounding and raise that cap.
-
-The module then applies the run to every absent validator.
+It then applies the run to every absent validator.
 
 Either the leak stops or finality advances during the run.
 
@@ -55,71 +27,63 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 
 /-- A run of a leak brings the effective balance of an absent validator to a threshold.
 
-This holds from Altair.
-
-The run visits a state before each of its epoch transitions.
-
-The slot that leaves each such state ends an epoch, and leads to a second state.
-
-Steps that credit nothing to the validator lead from that second state to the next visited one.
-
-Each epoch transition starts in a leak and does not raise the finalized epoch.
-
-The registry stays within its limit.
-
-The key is that of the validator at the start of the run.
-
-No pending deposit carries the key, and no pending consolidation targets the validator.
-
-The largest effective balance of the validator stays the same over the run.
-
-While its effective balance is above the threshold, it is eligible and its flags lack the target.
-
-At the start its effective balance and that cap are whole numbers of increments.
-
-Its balance is then at most its effective balance plus the upward band.
-
-Otherwise its effective balance is at least the cap.
-
-The threshold is a whole number of increments, and with an increment it exceeds the downward band.
-
-The run lasts at least the number of epochs of the trace bound, from the starting balance.
-
-The score bias and the penalty quotient must be positive.
-
-The increment must be positive and at most the upward band, as on mainnet.
-
-The mixes must span more than the seed lookahead plus two epochs.
-
-The run stays within one fork.
+This holds from Altair, and the run stays within one fork.
 
 On mainnet a validator that exits is no longer eligible.
 
-So the threshold must be at least the effective balance of an absent validator when it exits.
-
-Then the effective balance of the validator at the end of the run is at most the threshold. -/
+So the threshold must be at least the effective balance of an absent validator when it exits. -/
 theorem effectiveBalance_le_of_leakRun (altair : .altair ≤ fork)
+    -- The mixes must span more than the seed lookahead plus two epochs.
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    -- The increment must be positive and at most the upward band, as on mainnet.
     (bands : preset.IncrementWithinUpwardBand)
+    -- The score bias and the penalty quotient must be positive.
     (biasPos : 0 < config.INACTIVITY_SCORE_BIAS.toNat)
     (quotientPos : 0 < (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat)
     {states slotted : Nat → BeaconState preset fork} {epochs threshold index : Nat}
     {key : Cryptography.Bls.BLSPubkey} {largest : Gwei}
+    -- The run visits a state before each of its epoch transitions.
+    --
+    -- The slot that leaves each such state ends an epoch, and leads to a second state.
+    --
+    -- That slot runs the epoch transition.
     (ends : ∀ t < epochs, ((states t).slot + 1) % preset.SLOTS_PER_EPOCH = 0)
     (epochSlot : ∀ t < epochs, advanceSlot config checks (states t) = .ok (slotted t))
+    -- Steps that credit nothing to the validator lead from that second state to the next one.
+    --
+    -- They are slots that end no epoch, and blocks.
     (quiet : ∀ t < epochs,
       Relation.ReflTransGen (QuietStep config checks index key) (slotted t) (states (t + 1)))
+    -- The registry stays within its limit.
     (within : ∀ t < epochs, (states t).RegistryWithinLimit)
+    -- Each epoch transition starts in a leak and does not raise the finalized epoch.
+    --
+    -- The bound for one validator assumes this over the whole run.
     (leak : ∀ t < epochs, isInInactivityLeak (states t) = .ok true)
     (stalled : ∀ t < epochs,
       (slotted t).finalizedCheckpoint.epoch ≤ (states t).finalizedCheckpoint.epoch)
+    -- The key is that of the validator at the start of the run.
+    --
+    -- No pending deposit carries the key, and no pending consolidation targets the validator.
     (unnamed : ∀ t < epochs, ∀ electra : .pectra ≤ fork,
       ∀ deposit ∈ ((states t).pendingDeposits electra).data, deposit.pubkey ≠ key)
     (untargeted : ∀ t < epochs, ∀ electra : .pectra ≤ fork,
       ∀ consolidation ∈ ((states t).pendingConsolidations electra).data,
         consolidation.targetIndex.toNat ≠ index)
+    -- The largest effective balance of the validator stays the same over the run.
+    --
+    -- This is an assumption of the run.
+    --
+    -- A consolidation request can switch its credentials to compounding and raise that cap.
     (capped : ∀ t < epochs, ∀ validator, (states t).validators.data[index]? = some validator →
       withdrawalMaxEffectiveBalance preset fork validator = largest)
+    -- While its effective balance is above the threshold, it is eligible.
+    --
+    -- Its flags then lack the timely target.
+    --
+    -- Once its effective balance is at most the threshold, its eligibility does not matter.
+    --
+    -- The bound then only needs its balance not to rise.
     (absent : ∀ t < epochs, ∀ validator,
       (states t).validators.data[index]? = some validator →
         threshold < validator.effectiveBalance.toNat →
@@ -129,18 +93,26 @@ theorem effectiveBalance_le_of_leakRun (altair : .altair ≤ fork)
     {validator : Validator} (found : (states 0).validators.data[index]? = some validator)
     (keyed : validator.pubkey = key)
     {balance : Gwei} (held : (states 0).balances.data[index]? = some balance)
+    -- At the start its effective balance and that cap are whole numbers of increments.
     (startAligned : validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
     (largestAligned : largest % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
+    -- The threshold is a whole number of increments.
     (thresholdAligned : threshold % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
+    -- Its balance is then at most its effective balance plus the upward band.
+    --
+    -- Otherwise its effective balance is at least the cap.
     (startAbove : balance.toNat ≤ validator.effectiveBalance.toNat + preset.upwardBand ∨
       largest ≤ validator.effectiveBalance)
+    -- With an increment, the threshold exceeds the downward band.
     (wide : preset.downwardBand < threshold + preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    -- The run lasts at least the number of epochs of the trace bound, from the starting balance.
     (long : leakEpochs (threshold + preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
       config.INACTIVITY_SCORE_BIAS.toNat
       (config.INACTIVITY_SCORE_BIAS.toNat *
         (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat)
       (balance.toNat + preset.downwardBand + 1 -
         (threshold + preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ epochs) :
+    -- Then the effective balance of the validator at the end of the run is at most the threshold.
     ∃ now, (states epochs).validators.data[index]? = some now ∧
       now.effectiveBalance.toNat ≤ threshold := by
   -- Along the run the validator keeps its position, its key and a balance.
@@ -160,6 +132,12 @@ theorem effectiveBalance_le_of_leakRun (altair : .altair ≤ fork)
         quietSteps_kept apart (quiet t (by omega)) atNow (nowKey.trans currentKey)
           (Array.getElem?_eq_some_iff.mp atSettled).1
       exact ⟨later, atLater, laterKey, laterHeld⟩
+  -- The trace bound takes four sequences of one validator as hypotheses.
+  --
+  -- They are its balance, its effective balance and its score before each epoch transition.
+  --
+  -- The fourth is its balance at the update of the effective balances.
+  --
   -- The four sequences of the trace bound, read at the visited states and after each epoch slot.
   let balanceAt : Nat → Gwei := fun t => ((states t).balances.data[index]?).getD 0
   let settledAt : Nat → Gwei := fun t => ((slotted t).balances.data[index]?).getD 0
@@ -231,86 +209,58 @@ theorem effectiveBalance_le_of_leakRun (altair : .altair ≤ fork)
 
 /-- A run of a leak stops leaking, advances finality, or ends with two thirds for the voters.
 
-This holds from Altair.
-
-The run visits a state before each of its epoch transitions.
-
-The slot that leaves each such state ends an epoch, and leads to a second state.
-
-Steps that credit nothing to any absent validator then lead to the next visited state.
-
-Each absent validator keeps its own key and its own largest effective balance over the run.
-
-Each one is in the registry at the start, with its key and a balance at most a common limit.
-
-At the start its effective balance is a whole number of increments, and so is its cap.
-
-At the start its balance is at most its effective balance plus the upward band.
-
-Otherwise its effective balance is at least its cap.
-
-No pending deposit carries the key of one, and no pending consolidation targets one.
-
-While the effective balance of one is above the threshold, it is eligible and misses the target.
-
-In the final state, each active validator is a voter or an absent validator.
-
-The voters are meant to be the unslashed attesters of the target, but any list works.
-
-The voters need not be active, so their balance may count inactive validators.
-
-Twice the number of absent validators times the threshold is at most the balance of the voters.
-
-That balance is read in the final state.
-
-The threshold is a whole number of increments, and with an increment it exceeds the downward band.
-
-The run lasts at least the number of epochs of the trace bound, from that common limit.
-
-The score bias and the penalty quotient must be positive.
-
-The increment must be positive and at most the upward band, as on mainnet.
-
-The mixes must span more than the seed lookahead plus two epochs.
-
-The registry stays within its limit, up to the final state.
-
-The run stays within one fork.
-
-Then some visited state does not leak, or the finalized epoch rises in the slot that leaves it.
-
-Otherwise, in the final state, twice the active balance is at most three times that of the voters.
+This holds from Altair, and the run stays within one fork.
 
 On mainnet a validator that exits is no longer eligible.
 
 So the threshold must be at least the effective balance of an absent validator when it exits. -/
 theorem twoThirds_of_leakRun (altair : .altair ≤ fork)
+    -- The mixes must span more than the seed lookahead plus two epochs.
     (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    -- The increment must be positive and at most the upward band, as on mainnet.
     (bands : preset.IncrementWithinUpwardBand)
+    -- The score bias and the penalty quotient must be positive.
     (biasPos : 0 < config.INACTIVITY_SCORE_BIAS.toNat)
     (quotientPos : 0 < (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat)
     {states slotted : Nat → BeaconState preset fork} {epochs threshold start : Nat}
     {voters : List ValidatorIndex} {absents : List Nat}
     {keys : Nat → Cryptography.Bls.BLSPubkey} {largest : Nat → Gwei} {total voterTotal : Gwei}
+    -- The run visits a state before each of its epoch transitions.
+    --
+    -- The slot that leaves each such state ends an epoch, and leads to a second state.
     (ends : ∀ t < epochs, ((states t).slot + 1) % preset.SLOTS_PER_EPOCH = 0)
     (epochSlot : ∀ t < epochs, advanceSlot config checks (states t) = .ok (slotted t))
+    -- Steps that credit nothing to any absent validator then lead to the next visited state.
     (quiet : ∀ j ∈ absents, ∀ t < epochs,
       Relation.ReflTransGen (QuietStep config checks j (keys j)) (slotted t) (states (t + 1)))
+    -- The registry stays within its limit, up to the final state.
     (within : ∀ t ≤ epochs, (states t).RegistryWithinLimit)
+    -- No pending deposit carries the key of one, and no pending consolidation targets one.
     (unnamed : ∀ j ∈ absents, ∀ t < epochs, ∀ electra : .pectra ≤ fork,
       ∀ deposit ∈ ((states t).pendingDeposits electra).data, deposit.pubkey ≠ keys j)
     (untargeted : ∀ t < epochs, ∀ electra : .pectra ≤ fork,
       ∀ consolidation ∈ ((states t).pendingConsolidations electra).data,
         consolidation.targetIndex.toNat ∉ absents)
+    -- Each absent validator keeps its own key and its own largest effective balance over the run.
     (capped : ∀ j ∈ absents, ∀ t < epochs, ∀ validator,
       (states t).validators.data[j]? = some validator →
         withdrawalMaxEffectiveBalance preset fork validator = largest j)
+    -- While the effective balance of one is above the threshold, it is eligible.
+    --
+    -- It then misses the target.
     (absent : ∀ j ∈ absents, ∀ t < epochs, ∀ validator,
       (states t).validators.data[j]? = some validator →
         threshold < validator.effectiveBalance.toNat →
         isEligibleValidator (getPreviousEpoch (states t)) validator = .ok true ∧
           ∀ flags, ((states t).previousEpochParticipation altair).data[j]? = some flags →
             hasFlag flags TIMELY_TARGET_FLAG_INDEX = false)
+    -- Each one is in the registry at the start, with its key and a balance at most a common limit.
+    --
+    -- At the start its effective balance is a whole number of increments, and so is its cap.
+    --
+    -- At the start its balance is at most its effective balance plus the upward band.
+    --
+    -- Otherwise its effective balance is at least its cap.
     (started : ∀ j ∈ absents, ∃ validator balance,
       (states 0).validators.data[j]? = some validator ∧ validator.pubkey = keys j ∧
       (states 0).balances.data[j]? = some balance ∧
@@ -319,20 +269,34 @@ theorem twoThirds_of_leakRun (altair : .altair ≤ fork)
         largest j ≤ validator.effectiveBalance) ∧
       balance.toNat ≤ start)
     (largestAligned : ∀ j ∈ absents, largest j % preset.EFFECTIVE_BALANCE_INCREMENT = 0)
+    -- The threshold is a whole number of increments.
+    --
+    -- With an increment, the threshold exceeds the downward band.
     (thresholdAligned : threshold % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
     (wide : preset.downwardBand < threshold + preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (active : getTotalActiveBalance (states epochs) = .ok total)
+    -- The voters are meant to be the unslashed attesters of the target, but any list works.
+    --
+    -- The voters need not be active, so their balance may count inactive validators.
     (voting : getTotalBalance (states epochs) voters = .ok voterTotal)
+    -- In the final state, each active validator is a voter or an absent validator.
     (covered : ∀ j (inside : j < (states epochs).validators.data.size),
       isActiveValidator (states epochs).validators.data[j] (getCurrentEpoch (states epochs)) =
         true → j.toUInt64 ∈ voters ∨ j ∈ absents)
+    -- Twice the number of absent validators times the threshold is at most the voters' balance.
+    --
+    -- That balance is read in the final state.
     (strong : 2 * absents.length * threshold ≤ voterTotal.toNat)
+    -- The run lasts at least the number of epochs of the trace bound, from that common limit.
     (long : leakEpochs (threshold + preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
       config.INACTIVITY_SCORE_BIAS.toNat
       (config.INACTIVITY_SCORE_BIAS.toNat *
         (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat)
       (start + preset.downwardBand + 1 -
         (threshold + preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ epochs) :
+    -- Then some visited state does not leak, or the finalized epoch rises in the slot leaving it.
+    --
+    -- Otherwise, in the final state, twice the active balance is at most thrice that of the voters.
     (∃ t < epochs, isInInactivityLeak (states t) ≠ .ok true ∨
       (states t).finalizedCheckpoint.epoch < (slotted t).finalizedCheckpoint.epoch) ∨
       2 * total.toNat ≤ 3 * voterTotal.toNat := by
