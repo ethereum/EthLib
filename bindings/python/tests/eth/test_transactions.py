@@ -126,10 +126,21 @@ def test_announcement_eth68(version: int) -> None:
     assert info.value.code == 2
 
 
-@pytest.mark.parametrize("cells", [b"", b"\xff" * 16])
+# EIP-8070: the mask is 16 bytes, also when no blob transaction is announced.
+@pytest.mark.parametrize("cells", [b"\x00" * 16, b"\xff" * 16])
 def test_announcement_eth72(cells: bytes) -> None:
     data = _announcement(b"\x00\x02\x03", [100, 120, 300], HASHES, cells)
     assert decode_message(72, NEW_POOLED_TRANSACTION_HASHES, data) == data
+
+
+def test_announcement_eth72_no_blob() -> None:
+    """With no blob transaction announced, the mask is 16 bytes, and an empty one is refused."""
+    data = _announcement(b"\x00\x02", [100, 120], HASHES[:2], b"\x00" * 16)
+    assert decode_message(72, NEW_POOLED_TRANSACTION_HASHES, data) == data
+    empty = _announcement(b"\x00\x02", [100, 120], HASHES[:2], b"")
+    with raises(EthWireError, "message data is not RLP of the expected shape") as info:
+        decode_message(72, NEW_POOLED_TRANSACTION_HASHES, empty)
+    assert info.value.code == 2
 
 
 @pytest.mark.parametrize(
@@ -151,9 +162,16 @@ def test_announcement_eth72(cells: bytes) -> None:
         ),
         (
             72,
-            _announcement(b"\x00\x02\x03", [100, 120], HASHES, b""),
+            _announcement(b"\x00\x02\x03", [100, 120], HASHES, b"\x00" * 16),
             3,
             "announcement has 3 types and 2 sizes for 3 hashes",
+        ),
+        # An empty mask, which EIP-8070 no longer allows.
+        (
+            72,
+            _announcement(b"\x00\x02\x03", [100, 120, 300], HASHES, b""),
+            2,
+            "message data is not RLP of the expected shape",
         ),
         # Cells of 15 bytes.
         (

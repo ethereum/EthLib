@@ -12,27 +12,6 @@ public import EthLib.Serialization.Rlp.Codec
 The transaction exchange of the eth capability, from Protocol Messages in [`caps/eth.md`][eth].
 
 [eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#protocol-messages
-
-- Transactions (0x02) sends whole transactions.
-- NewPooledTransactionHashes (0x08) announces transactions by type, size and hash.
-- GetPooledTransactions (0x09) asks for transactions by hash.
-- PooledTransactions (0x0a) answers it.
-
-A legacy transaction crosses the wire as an RLP list.
-
-A typed one crosses it as the byte string `tx-type || tx-data`, as [EIP-2976][eip-2976] says.
-
-The messages carry each transaction as its RLP item, next to the bytes it was read from.
-
-From eth/68 on, an announcement has three lists, by [EIP-5793][eip-5793], of equal length.
-
-From eth/72 on, it also has a 16-byte bitmap of the cells that the peer holds.
-
-The bitmap is empty when no blob transaction is announced, as [EIP-8070][eip-8070] says.
-
-[eip-2976]: https://eips.ethereum.org/EIPS/eip-2976#specification
-[eip-5793]: https://eips.ethereum.org/EIPS/eip-5793#specification
-[eip-8070]: https://eips.ethereum.org/EIPS/eip-8070#specification
 -/
 
 @[expose] public section
@@ -42,30 +21,33 @@ namespace EthLib.Execution.Network
 open EthLib.Base
 open EthLib.Serialization.Rlp
 
-/-- The message ID of Transactions. -/
+/-- The message ID of Transactions, which sends whole transactions. -/
 def TRANSACTIONS_ID : Nat := 0x02
 
-/-- The message ID of NewPooledTransactionHashes. -/
+/-- The message ID of NewPooledTransactionHashes, which announces transactions. -/
 def NEW_POOLED_TRANSACTION_HASHES_ID : Nat := 0x08
 
-/-- The message ID of GetPooledTransactions. -/
+/-- The message ID of GetPooledTransactions, which asks for transactions by hash. -/
 def GET_POOLED_TRANSACTIONS_ID : Nat := 0x09
 
-/-- The message ID of PooledTransactions. -/
+/-- The message ID of PooledTransactions, which answers GetPooledTransactions. -/
 def POOLED_TRANSACTIONS_ID : Nat := 0x0a
 
 /-- An announcement of transactions: one type, one size and one hash for each transaction. -/
 inductive Announcement where
-  /-- eth/68 to eth/71: `[txtypes, [txsize, ...], [txhash, ...]]`. -/
+  /-- eth/68 to eth/71: `[txtypes, [txsize, ...], [txhash, ...]]`, three lists of equal length.
+
+  [EIP-5793](https://eips.ethereum.org/EIPS/eip-5793#specification) sets the three lists. -/
   | eth68 (types : ByteArray) (sizes : List Nat) (hashes : List Hash32)
-  /-- eth/72: `[txtypes, [txsize, ...], [txhash, ...], cells]`.
+  /-- eth/72: the three lists, then a 16-byte bitmap of the cells that the peer holds.
 
-  The cells are 16 bytes, or none when no blob transaction is announced.
+  The bitmap is 16 bytes even when no blob transaction is announced, by [EIP-8070][eip-8070].
 
-  The reader accepts either form whatever the types, so it does not check that rule of EIP-8070.
-  -/
+  The recipient may then ignore it.
+
+  [eip-8070]: https://eips.ethereum.org/EIPS/eip-8070#specification -/
   | eth72 (types : ByteArray) (sizes : List Nat) (hashes : List Hash32)
-      (cells : Option (Vector UInt8 16))
+      (cells : Vector UInt8 16)
   deriving DecidableEq
 
 namespace Announcement
@@ -87,11 +69,9 @@ def lengthsAgree (a : Announcement) : Bool :=
   let (t, s, h) := a.lists
   t.size == h.length && s.length == h.length
 
-/-- The announcement of a version in an RLP list.
+/-- The announcement of a version in an RLP list, without the check of the list lengths.
 
-eth/68 to eth/71 read three fields, and eth/72 reads four.
-
-The reader of messages also checks that the three lists have equal lengths. -/
+The reader of messages checks that the three lists have equal lengths. -/
 def ofItem (version : EthVersion) (item : Item) : Except RlpError Announcement := do
   -- Before eth/72, the three lists of EIP-5793.
   if version < .eth72 then
@@ -131,22 +111,33 @@ Each encoding hashed is a slice of the bytes read, so nothing is encoded again.
 [eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#networking
 -/
 def wireHash (tx : Encoded) : Hash32 :=
+  -- Each encoding hashed is a slice of the bytes read, so nothing is encoded again.
   match tx.item with
-  -- EIP-2976: a legacy transaction hashes as `keccak256(rlp(LegacyTransaction))`.
+  -- EIP-2976: a legacy transaction crosses as an RLP list.
+  --
+  -- It hashes as `keccak256(rlp(LegacyTransaction))`.
   | .list _ => Cryptography.Hash.Keccak.keccak256 tx.bytes
   | .bytes b =>
-    -- EIP-2976: a typed transaction hashes as `keccak256(TypedTransaction)`.
+    -- EIP-2976: a typed transaction crosses as the byte string `tx-type || tx-data`.
+    --
+    -- It hashes as `keccak256(TypedTransaction)`.
     --
     -- That is the bytes `TransactionType || TransactionPayload`.
     let canonical := Cryptography.Hash.Keccak.keccak256 b
     match b.data.toList with
     | type :: rest =>
-      -- EIP-4844: the network form wraps the payload body with the blobs, commitments and proofs.
+      -- EIP-4844: in PooledTransactions, a blob transaction can come in its network form.
       --
-      -- So the hash is over the type `0x03` and the RLP of the payload body.
+      -- That form is the type 3, then an RLP list: payload body, blobs, commitments, proofs.
+      --
+      -- So the hash is over the type `0x03` and the RLP of the payload body, without the blobs.
       if type = BLOB_TX_TYPE then
         let form : ByteArray := ⟨rest.toArray⟩
         -- The body is the first item of the network form, and its bytes are the first encoding.
+        --
+        -- A canonical payload starts with the chain ID, a scalar.
+        --
+        -- The network form starts with the body, a list, so the first item tells the two apart.
         match Serialization.Rlp.decode form, listEncodings form with
         | .ok (.list (.list _ :: _)), .ok (body :: _) =>
           Cryptography.Hash.Keccak.keccak256 (⟨#[BLOB_TX_TYPE]⟩ ++ body)
