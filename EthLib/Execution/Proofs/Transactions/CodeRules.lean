@@ -10,19 +10,9 @@ public import EthLib.Execution.Proofs.Transactions.Unfold
 /-!
 # Proofs: a transaction writes only code that meets the rules of its fork
 
-A transaction writes code in two ways.
-
-Its message deploys code, which meets the rules of a deployed code at its fork.
+A transaction writes code in two ways, through its message and through its authorizations.
 
 From Pectra, its authorizations write delegation indicators of [EIP-7702][eip7702].
-
-A delegation to the null address writes the empty code, which meets the rules.
-
-Its other steps change balances, nonces and accounts, and write no code.
-
-A transaction starts with no written code.
-
-So every code that it writes meets the rules of its fork, or is a delegation indicator from Pectra.
 
 [eip7702]: https://eips.ethereum.org/EIPS/eip-7702#behavior
 -/
@@ -54,6 +44,7 @@ private theorem txCodeRules_delegationCode (hp : .pectra ≤ fork) (auth : Autho
     TxCodeRules fork (delegationCode auth) := by
   unfold delegationCode
   split
+  -- A delegation to the null address writes the empty code, which meets the rules.
   · exact .inl ⟨fun _ _ => by simp, fun _ => by simp⟩
   · exact .inr ⟨hp, isValidDelegation_delegationIndicator _⟩
 
@@ -153,7 +144,9 @@ private theorem keepsCodeRules_prepareFirstFrame {chainId : Nat} {message : Mess
           cases h
           exact v2.trans (.of_codeWrites rfl)
 
-/-- The message of a transaction keeps the rules. -/
+/-- The message of a transaction keeps the rules.
+
+It deploys code, which meets the rules of a deployed code at its fork. -/
 theorem keepsCodeRules_processMessageCall [LawfulGasMeter Meter] {chainId : Nat}
     {message : Message fork} {state : TransactionState} {substate : Substate}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address} {output : CallOutput}
@@ -290,6 +283,8 @@ private theorem keepsCodeRules_runTransaction [LawfulGasMeter Meter]
   obtain ⟨deleted, hDeleted, h⟩ := Base.bind_ok_iff.mp h
   cases h
   -- Only the message writes code: the purchase, settlement and deletions keep the writes.
+  --
+  -- They change balances, nonces and accounts, and write no code.
   have hbuy := codeWrites_buyGas (Base.mapError_ok_iff.mp hBought)
   have hend := (codeWrites_deleteAccounts (Base.mapError_ok_iff.mp hDeleted)).trans
     (codeWrites_settleGas (Base.mapError_ok_iff.mp hSettle))

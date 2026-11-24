@@ -10,19 +10,7 @@ public import EthLib.Execution.Transactions.Inclusion
 
 A transaction that may enter its block passes the rules that need no state.
 
-Its gas limit fits in the gas that the block has left, and its nonce is the nonce of the sender.
-
-From Glamsterdam, its gas limit fits in the state gas that the block has left too.
-
-Its price per gas covers the base fee of the block, and is at most its maximum fee per gas.
-
-The sender holds what the purchase of the gas, the blobs and the value take, so it cannot overdraw.
-
-A transaction may enter its block exactly when it passes every rule of the check.
-
-Among them, the code of its sender is empty, or from Pectra a delegation indicator.
-
-The codes of the errors tell their constructors apart.
+It also fits in the gas that its block has left, and its sender can pay for it.
 -/
 
 @[expose] public section
@@ -87,7 +75,9 @@ theorem checkBlockGas_ok_iff {fork : Fork} {env : BlockEnvironment fork} {used :
 
 /-- A sender may send a transaction exactly when it passes the nonce, balance and code rules.
 
-The nonce is the sender's, and the balance covers the most cost and the value.
+The nonce is the sender's.
+
+The balance covers the most that its gas and blobs can cost, and the value.
 
 The code of the sender exists, and it is empty or, from Pectra, a delegation indicator. -/
 theorem checkSender_ok_iff {fork : Fork} {state : TransactionState} {sender : Address}
@@ -118,40 +108,38 @@ theorem checkSender_ok_iff {fork : Fork} {state : TransactionState} {sender : Ad
 
 /-- A transaction may enter its block exactly when it passes every rule of the check.
 
-It signs no chain or the chain of the network, and its signature names the sender.
-
-It passes the gas, nonce and fee rules, and its blobs and authorizations pass the rules.
-
-Its gas, capped at 2^24 from Glamsterdam, fits in the gas left of the block.
-
-Its blob gas fits in the blob gas left.
-
-From Glamsterdam, the gas left of the block is execution gas.
-
-From Glamsterdam, its gas limit also fits in the state gas left.
-
-Its maximum fees cover the base fees, its nonce is the sender's, and the sender holds its cost.
-
-The code of the sender exists, and it is empty or, from Pectra, a delegation indicator.
-
 The result then holds the sender, the intrinsic gas, the price per gas and the blob gas. -/
 theorem checkInclusion_eq_ok_iff {fork : Fork} {chainId : UInt64}
     {env : BlockEnvironment fork} {used : BlockGas} {state : TransactionState}
     {tx : Transaction} {inc : Included} :
     checkInclusion chainId env used state tx = .ok inc ↔
+      -- It signs no chain or the chain of the network.
       checkChainId fork chainId tx = .ok () ∧
+      -- Its signature names the sender.
       recoverSender fork tx = .ok inc.sender ∧
+      -- It passes the gas, nonce and fee rules.
       validateTransaction fork inc.sender tx = .ok inc.intrinsicGas ∧
+      -- Its gas, capped at 2^24 from Glamsterdam, fits in the gas left of the block.
+      --
+      -- From Glamsterdam, the gas left of the block is execution gas.
       executionCapacity fork tx ≤ env.gasLimit - used.execution ∧
+      -- From Glamsterdam, its gas limit also fits in the state gas left.
       (fork ≥ .glamsterdam → tx.gas.toNat ≤ env.gasLimit - used.state) ∧
       inc.blobGasUsed = calculateTotalBlobGas tx ∧
+      -- Its blob gas fits in the blob gas left.
       inc.blobGasUsed ≤ maxBlobGasPerBlock env - used.blob ∧
+      -- Its maximum fee per gas covers the base fee.
       baseFeeOf env ≤ tx.maxFeePerGas ∧
+      -- Its blobs and authorizations pass the rules.
       checkContents fork tx = .ok () ∧
+      -- When it uses blob gas, its maximum fee per blob gas covers the price per blob gas.
       (0 < inc.blobGasUsed → blobGasPriceOf env ≤ tx.maxFeePerBlobGas) ∧
       inc.gasPrice = effectiveGasPrice (baseFeeOf env) tx ∧
+      -- Its nonce is the sender's.
       tx.nonce.toNat = (state.getAccount inc.sender).nonce ∧
+      -- The sender holds its cost.
       tx.maxGasFee + tx.value.toNat ≤ (state.getAccount inc.sender).balance.toNat ∧
+      -- The code of the sender exists, and it is empty or, from Pectra, a delegation indicator.
       ∃ code, state.getCode (state.getAccount inc.sender).codeHash = .ok code ∧
         ((state.getAccount inc.sender).codeHash = State.EMPTY_CODE_HASH ∨
           (fork ≥ .pectra ∧ Evm.isValidDelegation code = true)) := by
@@ -187,34 +175,30 @@ theorem checkInclusion_eq_ok_iff {fork : Fork} {chainId : UInt64}
 
 /-- What a transaction that may enter its block satisfies, in terms of its block and the state.
 
-It passes the rules that need no state, and its signature names the sender.
-
-Its gas, capped at 2^24 from Glamsterdam, fits in the gas left of the block.
-
-Its blob gas fits in the blob gas left.
-
-From Glamsterdam, the gas left of the block is execution gas.
-
-From Glamsterdam, the gas limit also fits in the state gas left.
-
-Its maximum fee per gas covers the base fee.
-
-From Dencun, its maximum fee per blob gas covers the base fee per blob gas.
-
-Its nonce is the nonce of the sender, and the sender holds its most cost and its value. -/
+It passes the rules that need no state. -/
 theorem checkInclusion_ok {fork : Fork} {chainId : UInt64} {env : BlockEnvironment fork}
     {used : BlockGas} {state : TransactionState} {tx : Transaction} {inc : Included}
     (h : checkInclusion chainId env used state tx = .ok inc) :
+    -- Its signature names the sender.
     recoverSender fork tx = .ok inc.sender ∧
       validateTransaction fork inc.sender tx = .ok inc.intrinsicGas ∧
+      -- Its gas, capped at 2^24 from Glamsterdam, fits in the gas left of the block.
+      --
+      -- From Glamsterdam, the gas left of the block is execution gas.
       executionCapacity fork tx ≤ env.gasLimit - used.execution ∧
       inc.blobGasUsed = calculateTotalBlobGas tx ∧
+      -- Its blob gas fits in the blob gas left.
       inc.blobGasUsed ≤ maxBlobGasPerBlock env - used.blob ∧
+      -- Its maximum fee per gas covers the base fee.
       baseFeeOf env ≤ tx.maxFeePerGas ∧
+      -- When it uses blob gas, its maximum fee per blob gas covers the price per blob gas.
       (0 < inc.blobGasUsed → blobGasPriceOf env ≤ tx.maxFeePerBlobGas) ∧
       inc.gasPrice = effectiveGasPrice (baseFeeOf env) tx ∧
+      -- Its nonce is the nonce of the sender.
       tx.nonce.toNat = (state.getAccount inc.sender).nonce ∧
+      -- The sender holds the most that its gas and blobs can cost, and its value.
       tx.maxGasFee + tx.value.toNat ≤ (state.getAccount inc.sender).balance.toNat ∧
+      -- From Glamsterdam, the gas limit also fits in the state gas left.
       (fork ≥ .glamsterdam → tx.gas.toNat ≤ env.gasLimit - used.state) := by
   obtain ⟨-, hs, hv, hGas, hState, hBlobEq, hBlob, hFee, -, hBlobFee, hPrice, hNonce, hBal, -⟩ :=
     checkInclusion_eq_ok_iff.mp h

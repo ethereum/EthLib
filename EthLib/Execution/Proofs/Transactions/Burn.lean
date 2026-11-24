@@ -9,19 +9,7 @@ public import EthLib.Execution.Proofs.Transactions.Supply
 
 A transaction lowers the supply by its burned fees, the burns of its message and its deletions.
 
-The burns of the message come from a certificate of its run, whose log drops each rollback.
-
-The deletions remove the balance of each account to delete, read after the gas is settled.
-
-From Glamsterdam, both are 0.
-
-Each successful run of a transaction has a certificate.
-
-The deleted balances are a function of the run.
-
-The certificate follows the interpreter, so the total of its burns is a function of the run too.
-
-The log splits that total into burns, each from a step of SELFDESTRUCT with its burn.
+From Glamsterdam, the burns of the message and the deletions are 0.
 -/
 
 @[expose] public section
@@ -34,7 +22,9 @@ open State (TransactionState)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
-/-! ## The message call -/
+/-! ## The message call
+
+The burns of the message come from a certificate of its run, whose log drops each rollback. -/
 
 /-- A certificate of the run of the message call of a transaction, with the state it ends in.
 
@@ -193,6 +183,9 @@ theorem TransactionBurnsWith.unique [LawfulGasMeter Meter] {env : BlockEnvironme
   obtain ⟨t', b', m', o', st', run', trace', hdel'⟩ := h'
   obtain ⟨rt, rb, rm, ro, rs⟩ := TransactionRun.unique run run'
   subst rt rb rm ro rs
+  -- The certificate follows the interpreter, so the total of its burns is a function of the run.
+  --
+  -- The deleted balances are a function of the run too.
   exact ⟨MessageCallBurns.total_eq trace trace', hdel'.trans hdel.symm⟩
 
 /-- A certificate of a run of a transaction with the gas meter that it runs with at its fork. -/
@@ -259,25 +252,23 @@ theorem TransactionBurns.eq_zero_of_glamsterdam {env : BlockEnvironment fork}
 
 /-- A transaction that runs lowers the supply by exactly its losses, at every fork.
 
-The losses are its burned fees, its burns of SELFDESTRUCT and its deleted balances.
-
-A burn of SELFDESTRUCT counts only when no rollback drops it.
-
-The last two come from a certificate of the run.
-
-Every certificate of the run gives the same two values, as a separate theorem proves.
-
-So the bound by the burned fees alone is an equality exactly when both are 0.
-
-The gas limit must cover the least gas, and the price must cover the base fee.
-
-The checks of the block ensure both. -/
+The losses are its burned fees, its burns of SELFDESTRUCT and its deleted balances. -/
 theorem processTransaction_supply_eq {env : BlockEnvironment fork} {block : State.BlockState}
     {included : Included} {tx : Transaction} {out : TransactionOutput}
+    -- The gas limit must cover the least gas, and the checks of the block make sure of it.
     (hMin : minimumGas fork included.sender tx ≤ tx.gas.toNat)
+    -- The price must cover the base fee, and the checks of the block make sure of it.
     (hPrice : baseFeeOf env ≤ effectiveGasPrice (baseFeeOf env) tx)
     (h : processTransaction env block included tx = .ok out) :
+    -- The burns of SELFDESTRUCT and the deleted balances come from a certificate of the run.
+    --
+    -- Every certificate of the run gives the same two values, as a separate theorem proves.
+    --
+    -- A burn of SELFDESTRUCT counts only when no rollback drops it.
+    --
+    -- The log splits the total of the burns into burns, each from a step of SELFDESTRUCT.
     ∃ log deleted, TransactionBurns env block included tx out log deleted ∧
+      -- So the bound by the burned fees alone is an equality exactly when both are 0.
       out.state.supply + burnedFees env tx out.gasUsed + log.total + deleted =
         (TransactionState.ofBlock block).supply := by
   obtain ⟨log, deleted, burns⟩ := processTransaction_transactionBurns h

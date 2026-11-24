@@ -7,17 +7,9 @@ public import EthLib.Execution.Proofs.Transactions.Process
 /-!
 # Proofs: no transaction writes storage at an address with no account
 
-The first message of a call runs the code of its target, or of the delegate of its target.
+The first message never fails for a write of storage at an address with no account.
 
-When that code is not empty, the target holds code: its own, or a delegation indicator.
-
-So the target is settled.
-
-A creation needs nothing: its new address gets an account when the creation starts.
-
-So the first message never fails for a write of storage at an address with no account.
-
-The purchase of gas, the authorizations, the settlement and the deletions write no storage.
+The other steps of a transaction write no storage.
 -/
 
 @[expose] public section
@@ -249,7 +241,11 @@ private theorem hosts_prepareFirstFrame {chainId : Nat} {message : Message fork}
   · obtain ⟨m, -, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨code, hcode, h⟩ := Base.bind_ok_iff.mp h
     have hcode := Base.mapError_ok_iff.mp hcode
+    -- The first message of a call runs the code of its target, or of the delegate of its target.
     generalize hd : (if fork ≥ .pectra then delegatedAddress code else none) = delegate at h
+    -- When that code is not empty, the target holds code: its own, or a delegation indicator.
+    --
+    -- So the target is settled.
     rcases delegate with _ | delegate
     · cases h
       exact fun size => settled_of_getAccount (.inr (codeHash_ne_of_getCode hcode size))
@@ -287,6 +283,7 @@ theorem processMessageCall_ne_noAccount [LawfulGasMeter Meter]
   · rw [hprep] at h
     dsimp only at h
     split at h
+    -- A creation needs nothing: its new address gets an account when the creation starts.
     · rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
       · exact processCreateMessage_ne_noAccount address h
       · cases h
@@ -309,6 +306,7 @@ private theorem runTransaction_ne_noAccount [LawfulGasMeter Meter]
     · cases h
     · obtain ⟨e, -, he⟩ := Base.mapError_eq_error h
       cases he
+  -- The purchase of gas, the authorizations, the settlement and the deletions write no storage.
   rcases Base.bind_eq_error h with h | ⟨bought, -, h⟩
   · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee

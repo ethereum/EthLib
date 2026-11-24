@@ -12,14 +12,6 @@ A block holds its codes when the code of each of its accounts is in it.
 
 A transaction then keeps the code of each account available, from its block to its end.
 
-Its authorizations store each delegation under the hash that the account receives.
-
-Its message keeps the codes.
-
-The purchase of gas raises a nonce and takes a fee, and the refunds change only balances.
-
-Deletions leave the empty code.
-
 Every lookup of code then succeeds, so such a transaction never aborts for a missing code.
 
 The same holds for a call that runs on a block outside any transaction.
@@ -84,7 +76,9 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-! ## The authorizations -/
 
-/-- One authorization keeps every code. -/
+/-- One authorization keeps every code.
+
+It stores each delegation under the hash that the account receives. -/
 private theorem allCodes_applyAuthorization {chainId : Nat} {done done' : Delegations Meter}
     {auth : Authorization} (h : applyAuthorization fork chainId done auth = .ok done')
     (available : AllCodes done.state) : AllCodes done'.state :=
@@ -217,7 +211,7 @@ private theorem allCodes_creditEther {tx tx' : TransactionState} {address : Addr
     rfl
   · cases h
 
-/-- Settling gas keeps every code. -/
+/-- Settling gas keeps every code: it credits ether, and it may delete an empty beneficiary. -/
 private theorem allCodes_settleGas {env : BlockEnvironment fork}
     {state state' : TransactionState} {sender : Address} {tx : Transaction}
     {gasLeft refundCounter used : Nat} (available : AllCodes state)
@@ -250,7 +244,7 @@ private theorem allCodes_foldl_destroy :
     · exact available.destroyAccount address
     · exact available
 
-/-- The deletions at the end of a transaction keep every code. -/
+/-- The deletions at the end of a transaction keep every code, since they leave the empty code. -/
 private theorem allCodes_deleteAccounts {state state' : TransactionState} {output : CallOutput}
     (available : AllCodes state) (h : deleteAccounts fork state output = .ok state') :
     AllCodes state' := by

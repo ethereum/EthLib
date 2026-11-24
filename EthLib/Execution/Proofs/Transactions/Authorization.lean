@@ -12,65 +12,9 @@ public import EthLib.Execution.Transactions.Authorization
 /-!
 # Proofs: the authorizations of a set code transaction
 
-A valid authorization gives its authority the code it names and one more nonce.
+What each authorization does to its authority, the other accounts, the meter and the refund.
 
-That code delegates to the address of the authorization.
-
-An authorization to the zero address clears the code of its authority instead.
-
-Every other address keeps its account, or its absence of one.
-
-An authorization for another chain, or with a nonce of `2^64 - 1`, changes nothing.
-
-An authority that refuses an authorization, such as for a wrong nonce, is only marked accessed.
-
-An authorization with no valid signature changes nothing.
-
-A parity of `y` above 1, `r` outside `[1, n - 1]` or `s` outside `[1, n / 2]` names no authority.
-
-Here `n` is the order of the secp256k1 group.
-
-Such an authorization changes nothing.
-
-The hash that an authority signs ignores the signature of the authorization.
-
-Up to BPO5, a valid authorization gives back 12500 exactly when its authority has an account.
-
-From Glamsterdam, an authority pays for its first write and its new indicator at most once.
-
-An authorization that succeeds is skipped, refused, or accepted after it pays and delegates.
-
-An authority whose code is neither empty nor a delegation indicator refuses every authorization.
-
-The authorizations keep the account, storage and transient storage of an address with such code.
-
-They keep that code under its hash.
-
-This needs one hypothesis: no authorization sets a code whose hash is the code hash of the address.
-
-Up to BPO5, the authorizations keep the meter.
-
-The authorizations succeed when the state holds the code of every account.
-
-From Glamsterdam, the state must also hold the code of every account before the transaction.
-
-From Glamsterdam, the meter must also hold 227790 execution gas for each authorization.
-
-From Glamsterdam, each charge of at most the gas left must also succeed and take at most its amount.
-
-That holds for the meter up to BPO5 and for the meter of EIP-8037.
-
-Each authorization then takes at most 227790 execution gas.
-
-The theorems that the authorizations succeed hold for any recovery of an authority.
-
-Up to BPO5, the authorizations fail only when a code is missing, which aborts the whole run.
-
-Take an authority whose code is empty or a delegation indicator.
-
-After the list, it has one more nonce per authorization it accepts.
-
-It has the code that the last one sets, and the rest of its account stays.
+When the authorizations of a list succeed, and what one authority holds after them.
 -/
 
 @[expose] public section
@@ -360,7 +304,9 @@ theorem refund_applyAuthorization_of_accepts (hfork : fork < .glamsterdam)
     simp only [hfork, true_and]
     rfl
 
-/-! ## The ranges of the parity of `y`, `r` and `s` -/
+/-! ## The ranges of the parity of `y`, `r` and `s`
+
+Here `n` is the order of the secp256k1 group. -/
 
 /-- A parity of `y` above 1 names no authority. -/
 theorem recoverAuthority_yParity_gt (h : 1 < auth.yParity.toNat) :
@@ -406,7 +352,7 @@ theorem recoverAuthority_high_s (h : Fn.modulus / 2 < auth.s.toNat) :
 
 /-! ## A skipped authorization -/
 
-/-- An authorization out of scope changes nothing. -/
+/-- An authorization out of scope, such as one with a nonce of `2^64 - 1`, changes nothing. -/
 theorem applyAuthorization_of_not_inScope (h : authorizationInScope chainId auth = false) :
     applyAuthorization fork chainId done auth = .ok done := by
   simp only [applyAuthorization, h, Bool.false_eq_true, ↓reduceIte]
@@ -572,13 +518,7 @@ theorem applyAuthorization_cases (h : applyAuthorization fork chainId done auth 
 
 Real code is neither empty nor a delegation indicator.
 
-An address with real code refuses every authorization, so the authorizations keep it.
-
-It needs one hypothesis: no authorization sets a code whose hash is the code hash of the address.
-
-If each code is stored under its own hash, only a collision of Keccak-256 breaks this hypothesis.
-
-A code that an authorization sets is stored under its hash, over any code with that hash. -/
+An address with real code refuses every authorization, so the authorizations keep it. -/
 
 /-- An authorization keeps the account, storage and transient storage of an address with real code.
 
@@ -589,6 +529,9 @@ theorem applyAuthorization_keeps {address : Address} {code : ByteArray}
     (h : applyAuthorization fork chainId done auth = .ok done')
     (hcode : done.state.getCode (done.state.getAccount address).codeHash = .ok code)
     (hsize : code.size ≠ 0) (hindicator : isValidDelegation code = false)
+    -- A code that an authorization sets is stored under its hash, over any code with that hash.
+    --
+    -- If each code is stored under its own hash, only a collision of Keccak-256 breaks this.
     (hhash : Cryptography.Hash.Keccak.keccak256 (delegationCode auth) ≠
       (done.state.getAccount address).codeHash) :
     done'.state.getAccountOptional address = done.state.getAccountOptional address ∧
@@ -744,9 +687,7 @@ end Meter
 
 No statement here assumes anything of the recovery of an authority.
 
-The state must hold the code of every account.
-
-From Glamsterdam, it must also hold the code of every account before the transaction. -/
+The state must hold the code of every account, now and, from Glamsterdam, before the transaction. -/
 
 /-- Taking an authorization keeps every code that the state holds. -/
 theorem exists_getCode_delegate {state state' : TransactionState} {refund : Nat}
@@ -872,17 +813,13 @@ theorem chargesWithin_stateGasMeter : ChargesWithin Evm.StateGasMeter := by
 
 /-- The charge of an accepted authorization succeeds with at least 227790 execution gas left.
 
-It takes at most 227790 execution gas.
-
-That is 183600 of state gas for a new account, 9000 for the first write, and 35190 of state gas.
-
-The last part pays for a new delegation indicator.
-
-The meter must charge within the gas left.
-
-The code of the authority before the transaction must be readable. -/
+It takes at most 227790 execution gas, with a meter that charges within the gas left. -/
 theorem chargeAuthorization_isOk (hcharges : ChargesWithin Meter) {code : ByteArray}
+    -- The code of the authority before the transaction is readable.
     (hcode : done.state.getCode (done.state.getPreStateAccount authority).codeHash = .ok code)
+    -- 227790 is 183600 of state gas for a new account, 9000 for the first write, and 35190.
+    --
+    -- The last part is state gas, and it pays for a new delegation indicator.
     (hgas : NEW_ACCOUNT_STATE_GAS + ACCOUNT_WRITE + AUTH_BASE_STATE_GAS ≤
       GasMeter.gasLeft done.meter) :
     ∃ meter, chargeAuthorization done authority auth = .ok meter ∧
@@ -955,17 +892,15 @@ theorem applyAuthorization_isOk (hcharges : .glamsterdam ≤ fork → ChargesWit
 
 From Glamsterdam, they take at most 227790 execution gas times the length of the list.
 
-From Glamsterdam, the meter must charge within the gas left.
-
-It must then hold at least 227790 times the length of the list.
-
-The state must hold the code of every account.
-
-From Glamsterdam, it must also hold the code of every account before the transaction. -/
+From Glamsterdam, the meter must charge within the gas left. -/
 theorem foldlM_applyAuthorization_isOk (hcharges : .glamsterdam ≤ fork → ChargesWithin Meter) :
     ∀ (auths : List Authorization) {start : Delegations Meter},
+      -- From Glamsterdam, the meter holds at least 227790 times the length of the list.
       (.glamsterdam ≤ fork → (NEW_ACCOUNT_STATE_GAS + ACCOUNT_WRITE + AUTH_BASE_STATE_GAS) *
         auths.length ≤ GasMeter.gasLeft start.meter) →
+      -- The state holds the code of every account.
+      --
+      -- From Glamsterdam, it also holds the code of every account before the transaction.
       HasCodes start.state → (.glamsterdam ≤ fork → HasPreCodes start.state) →
       ∃ done, auths.foldlM (applyAuthorization fork chainId) start = .ok done ∧
         GasMeter.gasLeft start.meter - (NEW_ACCOUNT_STATE_GAS + ACCOUNT_WRITE +
@@ -1056,29 +991,23 @@ theorem aborts_of_foldlM_applyAuthorization_of_lt_glamsterdam (hfork : fork < .g
 
 An authority whose code is empty or a delegation indicator keeps code of that kind.
 
-Each authorization sets code of that kind, so the code under its hash always reads back so.
+Its account after the list then depends only on its own account at the start. -/
 
-The account of the authority after the list then depends only on its own account at the start. -/
+/-- The authorizations of a list that an authority accepts, in order, from a starting nonce.
 
-/-- The authorizations of a list that the authority `authority` accepts, in order.
+It is the accepted list when the code of the authority is empty or a delegation indicator.
 
-The authority starts with the nonce `nonce`.
-
-That list holds when its code is empty or a delegation indicator.
-
-No code is read here.
-
-An authorization counts when it is in scope on the chain `chainId` and is signed by the authority.
-
-Its nonce must also be the nonce of the authority at that point.
-
-Each one that counts adds one to that nonce. -/
+No code is read here. -/
 def acceptedBy (chainId : Nat) (authority : Address) : Nat → List Authorization →
     List Authorization
   | _, [] => []
   | nonce, auth :: rest =>
+    -- An authorization counts when it is in scope on the chain and is signed by the authority.
+    --
+    -- Its nonce must also be the nonce of the authority at that point.
     if authorizationInScope chainId auth = true ∧ recoverAuthority auth = some authority ∧
         nonce = auth.nonce.toNat then
+      -- Each one that counts adds one to that nonce.
       auth :: acceptedBy chainId authority (nonce + 1) rest
     else acceptedBy chainId authority nonce rest
 
@@ -1288,21 +1217,19 @@ private theorem foldlM_applyAuthorization_account :
 
 /-- Authorizations that succeed leave an authority with one more nonce per accepted one.
 
-The code of the authority must be empty or a delegation indicator at the start.
-
-Its code hash is then the hash of the code that the last accepted one sets.
-
-It stays when the authority accepts none.
-
-The rest of its account stays. -/
+The rest of its account stays, except its code hash. -/
 theorem foldlM_applyAuthorization_authority {code : ByteArray} {auths : List Authorization}
     {start done : Delegations Meter}
     (h : auths.foldlM (applyAuthorization fork chainId) start = .ok done)
     (hcode : start.state.getCode (start.state.getAccount authority).codeHash = .ok code)
+    -- The code of the authority is empty or a delegation indicator at the start.
     (hdelegable : (code.size = 0 || isValidDelegation code) = true) :
     done.state.getAccount authority = { start.state.getAccount authority with
       nonce := (start.state.getAccount authority).nonce +
         (acceptedBy chainId authority (start.state.getAccount authority).nonce auths).length
+      -- Its code hash becomes the hash of the code that the last accepted one sets.
+      --
+      -- It stays when the authority accepts none.
       codeHash := delegatedCodeHash
         (acceptedBy chainId authority (start.state.getAccount authority).nonce auths)
         (start.state.getAccount authority).codeHash } :=
@@ -1355,27 +1282,24 @@ private theorem foldlM_applyAuthorization_storage_of_readsDelegable :
 
 /-- Authorizations that succeed keep the storage of an authority, unless the first one deletes it.
 
-The code of the authority must be empty or a delegation indicator at the start.
-
-From Paris, a write that leaves an account empty deletes it, with its storage.
-
-Only the first authorization that the authority accepts can do that, as each adds one to its nonce.
-
-It does so when the nonce and the balance are 0, and the code it sets has the empty code hash.
-
-An authorization to the zero address sets the empty code.
-
-Another address gets a delegation indicator, whose hash differs unless Keccak-256 collides.
-
-That is not proved here, so the hypothesis names the hash. -/
+The code of the authority must be empty or a delegation indicator at the start. -/
 theorem foldlM_applyAuthorization_storage {code : ByteArray} {auths : List Authorization}
     {start done : Delegations Meter}
     (h : auths.foldlM (applyAuthorization fork chainId) start = .ok done)
     (hcode : start.state.getCode (start.state.getAccount authority).codeHash = .ok code)
     (hdelegable : (code.size = 0 || isValidDelegation code) = true)
+    -- From Paris, a write that leaves an account empty deletes it, with its storage.
     (hkeep : fork < .paris ∨ (start.state.getAccount authority).nonce ≠ 0 ∨
       (start.state.getAccount authority).balance ≠ 0 ∨
+      -- Only the first accepted authorization can do that, as each adds one to the nonce.
+      --
+      -- It does so with a nonce and a balance of 0, if the code it sets has the empty code hash.
       ∀ first ∈ (acceptedBy chainId authority (start.state.getAccount authority).nonce auths).head?,
+        -- An authorization to the zero address sets the empty code.
+        --
+        -- Another address gets an indicator, whose hash differs unless Keccak-256 collides.
+        --
+        -- That is not proved here, so the hypothesis names the hash.
         Cryptography.Hash.Keccak.keccak256 (delegationCode first) ≠ EMPTY_CODE_HASH)
     (key : Bytes32) : done.state.getStorage authority key = start.state.getStorage authority key :=
   foldlM_applyAuthorization_storage_of_readsDelegable h ⟨code, hcode, hdelegable⟩ hkeep key

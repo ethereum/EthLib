@@ -9,15 +9,7 @@ public import EthLib.Execution.Proofs.Transactions.Replay
 
 EIP-2681 limits every nonce to `2^64 - 1`.
 
-The inclusion check asks that the nonce of a transaction is below that bound.
-
-It also asks that the nonce equals the nonce of the sender, so the purchase of gas keeps the bound.
-
-An EIP-7702 authorization raises its authority's nonce from the nonce it names, below the bound.
-
-A creation transaction runs only at an address with nonce 0, by EIP-684.
-
-The messages keep the bound; the end of a transaction only changes balances and deletes accounts.
+A transaction that passes the inclusion check keeps every nonce within that bound.
 -/
 
 @[expose] public section
@@ -75,7 +67,9 @@ section Meter
 
 variable {Meter : Type} [GasMeter Meter]
 
-/-- An authorization keeps every nonce within the bound, since it names a nonce below it. -/
+/-- An authorization keeps every nonce within the bound, since it names a nonce below it.
+
+An EIP-7702 authorization raises the nonce of its authority from the nonce it names. -/
 private theorem noncesFit_applyAuthorization {chainId : Nat} {done done' : Delegations Meter}
     {auth : Authorization} (h : applyAuthorization fork chainId done auth = .ok done')
     (hfit : done.state.NoncesFit) : done'.state.NoncesFit := by
@@ -132,7 +126,7 @@ theorem noncesFit_prepareFirstFrame {chainId : Nat} {message : Message fork}
       (fun address => (same address List.not_mem_nil).1)
       (noncesFit_foldlM_applyAuthorization hdone hfit)
 
-/-- The first frame of a creation runs at an address with nonce 0. -/
+/-- The first frame of a creation runs at an address with nonce 0, by EIP-684. -/
 theorem prepareFirstFrame_create_nonce {chainId : Nat} {message : Message fork}
     {state : TransactionState} {substate : Substate} {auths : List Authorization}
     {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
@@ -274,6 +268,7 @@ private theorem noncesFit_runTransaction {Meter : Type} [GasMeter Meter] [Lawful
       rw [(sameOutside_buyGas hbought address (by simpa using hs)).1]
       exact hfit address
   have fitOut := noncesFit_processMessageCall fitBought houtput
+  -- The end of a transaction only changes balances and deletes accounts.
   have fitSettled : settled.NoncesFit := fun address => by
     rw [(settleGas_accounts hsettle address).2.1]
     exact fitOut address
@@ -290,11 +285,13 @@ theorem noncesFit_processTransaction {env : BlockEnvironment fork} {block : Stat
     (hcheck : checkInclusion chainId env used (.ofBlock block) tx = .ok included)
     (h : processTransaction env block included tx = .ok out) :
     out.state.NoncesFit := by
+  -- The inclusion check asks that the nonce equals the nonce of the sender.
   obtain ⟨hvalid, hnonce⟩ : validateTransaction fork included.sender tx =
       .ok included.intrinsicGas ∧
       tx.nonce.toNat = ((TransactionState.ofBlock block).getAccount included.sender).nonce := by
     obtain ⟨-, hv, -, -, -, -, -, -, hn, -⟩ := checkInclusion_ok hcheck
     exact ⟨hv, hn⟩
+  -- It also asks that the nonce is below the bound, so the purchase of gas keeps the bound.
   have hsender : ((TransactionState.ofBlock block).getAccount included.sender).nonce <
       MAX_NONCE := by
     rw [← hnonce]
