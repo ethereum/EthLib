@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Transactions.Types
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the codes of the transaction errors
@@ -15,8 +16,6 @@ namespace EthLib.Execution.Transactions
 /-- Two errors with one code come from one constructor. -/
 theorem TransactionError.code_injective (e₁ e₂ : TransactionError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [TransactionError.code] at h; exact absurd h (by decide))
+  code_injective TransactionError.code
 
 end EthLib.Execution.Transactions

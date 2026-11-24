@@ -2,6 +2,7 @@ module
 
 public import EthLib.Networking.Devp2p.Session
 public import EthLib.Networking.Proofs.Devp2p.P2p
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the session of an RLPx connection
@@ -145,7 +146,6 @@ theorem SessionError.code_injective (e₁ e₂ : SessionError) (h : e₁.code = 
 theorem SessionError.code_message {e₁ e₂ : P2pError}
     (h : (SessionError.message e₁).code = (SessionError.message e₂).code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [SessionError.code, P2pError.code] at h; exact absurd h (by decide))
+  code_injective SessionError.code, P2pError.code
 
 end EthLib.Networking.Devp2p

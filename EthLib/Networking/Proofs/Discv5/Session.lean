@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Networking.Discv5.Session
 public import EthLib.Networking.Proofs.Discv5.Packet
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # `Networking.Proofs.Discv5.Session`
@@ -127,8 +128,6 @@ theorem sealMessage_of_openMessage {keyOf : NodeId → Option (Aes.Key .aes128)}
 /-- Two errors with one code come from one constructor. -/
 theorem _root_.EthLib.Networking.Discv5.SessionError.code_injective
     (e₁ e₂ : SessionError) (h : e₁.code = e₂.code) : e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [SessionError.code] at h; exact absurd h (by decide))
+  code_injective SessionError.code
 
 end EthLib.Networking.Proofs.Discv5.Session

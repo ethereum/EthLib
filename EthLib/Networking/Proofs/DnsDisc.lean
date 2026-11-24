@@ -8,6 +8,7 @@ public import EthLib.Base.Proofs.List
 public import EthLib.Networking.Proofs.Enr.Record
 public import EthLib.Networking.Proofs.Rlpx.Handshake
 public import Std.Data.String.ToNat
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the entries of a node list
@@ -466,9 +467,7 @@ theorem Root.verify_sign {sk : Fn} {enrRoot linkRoot : Hash} {seq : Nat} {r : Ro
 /-- Two errors with one code come from one constructor. -/
 theorem DnsError.code_injective (e₁ e₂ : DnsError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [DnsError.code] at h; exact absurd h (by decide))
+  code_injective DnsError.code
 
 /-! ## Resolving a list
 

@@ -6,6 +6,7 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
 public import EthLib.Networking.Discv5.Handshake
 public import EthLib.Networking.Proofs.Discv5.Identity
 public import EthLib.Networking.Proofs.Discv5.Packet
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # `Networking.Proofs.Discv5.Handshake`
@@ -249,8 +250,6 @@ theorem openHandshake_sealHandshake {e a b : Fn} {challengeData : ByteArray}
 /-- Two errors with one code come from one constructor. -/
 theorem _root_.EthLib.Networking.Discv5.HandshakeError.code_injective
     (e₁ e₂ : HandshakeError) (h : e₁.code = e₂.code) : e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [HandshakeError.code] at h; exact absurd h (by decide))
+  code_injective HandshakeError.code
 
 end EthLib.Networking.Proofs.Discv5.Handshake

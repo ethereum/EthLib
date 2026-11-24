@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Network.Status
 public import EthLib.Networking.Proofs.Devp2p.ForkId
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: Status and BlockRangeUpdate
@@ -115,8 +116,7 @@ end Status
 /-- Two errors with one code come from one constructor. -/
 theorem StatusError.code_injective (e₁ e₂ : StatusError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [StatusError.code] at h; exact absurd h (by decide))
+  code_injective StatusError.code
 
 /--
 A node accepts a Status from eth/69 on that carries three things.

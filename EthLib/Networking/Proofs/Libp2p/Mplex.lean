@@ -2,6 +2,7 @@ module
 
 public import EthLib.Networking.Libp2p.Mplex
 public import EthLib.Networking.Proofs.Encoding.Uvarint
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: mplex frames
@@ -128,7 +129,6 @@ theorem decode_eq_ok_iff {bytes rest : List UInt8} {frame : Frame} :
 /-- Two errors with one code come from one constructor. -/
 theorem _root_.EthLib.Networking.Libp2p.Mplex.MplexError.code_injective
     (e₁ e₂ : MplexError) (h : e₁.code = e₂.code) : e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [MplexError.code] at h; exact absurd h (by decide))
+  code_injective MplexError.code
 
 end EthLib.Networking.Proofs.Libp2p.Mplex

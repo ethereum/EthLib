@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Blocks.ProofOfWork
 public import EthLib.Execution.Proofs.Blocks.Header
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the proof of work of a header
@@ -90,8 +91,7 @@ theorem checkProofOfWork_wrongMixDigest {fork : Fork} {h : Header fork} {out : P
 /-- Each error has its own code. -/
 theorem PowError.code_injective (e₁ e₂ : PowError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [PowError.code] at h; exact absurd h (by decide))
+  code_injective PowError.code
 
 /-- A higher positive difficulty has a target no higher. -/
 theorem powTarget_antitone {d d' : Nat} (hd : 0 < d) (h : d ≤ d') :

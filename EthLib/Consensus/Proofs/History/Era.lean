@@ -5,6 +5,7 @@ public import EthLib.Consensus.History.Era
 public import EthLib.Consensus.Proofs.Containers.Misc
 public import EthLib.Serialization.Proofs.E2store
 public import EthLib.Serialization.Proofs.Ssz.Typed.Root
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the indices and the name of an era file
@@ -48,8 +49,7 @@ open EthLib.Serialization
 /-- Two errors with one code come from one constructor. -/
 theorem EraError.code_injective (e₁ e₂ : EraError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [EraError.code] at h; exact absurd h (by decide))
+  code_injective EraError.code
 
 /-- Each record of a group is a record of the file. -/
 private theorem mem_of_mem_groupsOf {records : List Located} {g : List Located}

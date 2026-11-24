@@ -2,6 +2,7 @@ module
 
 public import EthLib.Networking.Encoding.Uvarint
 public import EthLib.Networking.Proofs.Encoding.Varint
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: multiformats unsigned varints
@@ -70,7 +71,6 @@ theorem decode_eq_ok_iff {bytes rest : List UInt8} {n : Nat} :
 /-- Two errors with one code come from one constructor. -/
 theorem _root_.EthLib.Networking.Encoding.Uvarint.UvarintError.code_injective
     (e₁ e₂ : UvarintError) (h : e₁.code = e₂.code) : e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [UvarintError.code] at h; exact absurd h (by decide))
+  code_injective UvarintError.code
 
 end EthLib.Networking.Proofs.Encoding.Uvarint

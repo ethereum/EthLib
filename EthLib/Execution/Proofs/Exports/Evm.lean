@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.Bytes
 public import EthLib.Execution.Exports.Evm
 import all EthLib.Base.Exports.Result
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: `Execution.Exports.Evm`
@@ -29,9 +30,7 @@ open EthLib.Serialization.Rlp (RlpError)
 /-- Two errors with one code come from one constructor. -/
 theorem ArgumentError.code_injective (e₁ e₂ : ArgumentError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [ArgumentError.code] at h; exact absurd h (by decide))
+  code_injective ArgumentError.code
 
 /-- An argument error never has the code of an RLP error. -/
 theorem ArgumentError.code_ne_rlp (e : ArgumentError) (r : RlpError) : e.code ≠ r.code := by

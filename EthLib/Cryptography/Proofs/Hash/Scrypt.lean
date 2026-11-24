@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Hash.Scrypt
 public import EthLib.Cryptography.Proofs.Hash.Pbkdf2
 public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.Nat
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: scrypt
@@ -280,8 +281,6 @@ theorem mixBlocks_eq_append (input : ByteArray) (n r count offset : Nat) (out mi
 /-- Two errors with one code come from one constructor. -/
 theorem ScryptError.code_injective (e₁ e₂ : ScryptError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [ScryptError.code] at h; exact absurd h (by decide))
+  code_injective ScryptError.code
 
 end EthLib.Cryptography.Hash.Scrypt

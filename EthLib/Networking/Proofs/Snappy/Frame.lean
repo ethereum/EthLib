@@ -2,6 +2,7 @@ module
 
 public import EthLib.Networking.Snappy.Frame
 public import EthLib.Networking.Proofs.Snappy.Compress
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # `Networking.Proofs.Snappy.Frame`
@@ -503,9 +504,7 @@ open EthLib.Networking.Snappy
 theorem _root_.EthLib.Networking.Snappy.FrameError.code_injective
     (e₁ e₂ : FrameError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [FrameError.code] at h; exact absurd h (by decide))
+  code_injective FrameError.code
 
 /-- A frame error never has the code of a block error, so one Python class carries both. -/
 theorem _root_.EthLib.Networking.Snappy.FrameError.code_ne_block

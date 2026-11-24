@@ -4,6 +4,7 @@ public import EthLib.Execution.Evm.Precompiles.Sha256
 public import EthLib.Base.Proofs.Except
 public import EthLib.Execution.Proofs.Evm.Words
 public import EthLib.Cryptography.Proofs.Hash.Sha256
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: `Sha256`
@@ -109,8 +110,6 @@ theorem sha256_ok_eq_spec_of_gas {data : ByteArray} {gas : Nat} {out : ByteArray
 /-- Two errors with one code come from one constructor. -/
 theorem Sha256Error.code_injective (e₁ e₂ : Sha256Error) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [Sha256Error.code] at h; exact absurd h (by decide))
+  code_injective Sha256Error.code
 
 end EthLib.Execution.Evm.Precompiles.Sha256

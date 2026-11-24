@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Blocks.Validate
 public import EthLib.Execution.Proofs.Blocks.Receipt
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the checks of a header
@@ -248,8 +249,7 @@ theorem validateBlockSize_eq_ok_iff {fork : Fork} {Tx : Type} [Serialization.Rlp
 /-- Two errors with one code come from one constructor. -/
 theorem BlockError.code_injective (e₁ e₂ : BlockError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [BlockError.code] at h; exact absurd h (by decide))
+  code_injective BlockError.code
 
 /-- A block error never has the code of an RLP error. -/
 theorem BlockError.code_ne_rlp (e : BlockError) (r : Serialization.Rlp.RlpError) :

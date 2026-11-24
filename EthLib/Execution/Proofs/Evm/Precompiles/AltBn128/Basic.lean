@@ -4,6 +4,7 @@ public import EthLib.Execution.Evm.Precompiles.AltBn128
 public import EthLib.Execution.Proofs.Evm.Machine.Memory
 public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.MapM
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: `Evm.Precompiles.AltBn128`
@@ -198,8 +199,6 @@ theorem ecpairing_eq_ok_iff (fork : Fork) (data : ByteArray) (gas : Nat) (out : 
 /-- Two errors with one code come from one constructor. -/
 theorem AltBn128Error.code_injective (e₁ e₂ : AltBn128Error) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [AltBn128Error.code] at h; exact absurd h (by decide))
+  code_injective AltBn128Error.code
 
 end EthLib.Execution.Evm.Precompiles.AltBn128

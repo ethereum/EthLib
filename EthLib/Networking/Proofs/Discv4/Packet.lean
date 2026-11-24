@@ -3,6 +3,7 @@ module
 public import EthLib.Networking.Discv4.Packet
 public import EthLib.Networking.Proofs.Rlpx.Handshake
 public import EthLib.Serialization.Proofs.Rlp.RoundTrip
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the packets of discv4
@@ -394,8 +395,6 @@ theorem recordSignedBy_iff (sender : Point) (record : Item) :
 /-- Two errors with the same code come from the same constructor. -/
 theorem Discv4Error.code_injective (e₁ e₂ : Discv4Error) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [Discv4Error.code] at h; exact absurd h (by decide))
+  code_injective Discv4Error.code
 
 end EthLib.Networking.Discv4

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Networking.Encoding.Varint
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # `Networking.Proofs.Encoding.Varint`
@@ -464,9 +465,7 @@ open EthLib.Networking.Encoding.Varint
 theorem _root_.EthLib.Networking.Encoding.Varint.VarintError.code_injective
     (e₁ e₂ : VarintError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [VarintError.code] at h; exact absurd h (by decide))
+  code_injective VarintError.code
 
 end
 

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Bls.Errors
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the codes of the BLS errors
@@ -17,9 +18,7 @@ namespace EthLib.Cryptography.Bls
 /-- Two errors with one code come from one constructor. -/
 theorem BlsError.code_injective (e₁ e₂ : BlsError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [BlsError.code] at h; exact absurd h (by decide))
+  code_injective BlsError.code
 
 /-- BLS error codes lie below 101, the first code of a path error. -/
 theorem BlsError.code_lt (e : BlsError) : e.code < 101 := by

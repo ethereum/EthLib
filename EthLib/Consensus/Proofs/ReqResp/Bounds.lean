@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.ReqResp.Bounds
 public import EthLib.Networking.Proofs.ReqResp.Bounds
 public import EthLib.Serialization.Proofs.Ssz.Typed.Class
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # `Consensus.Proofs.ReqResp.Bounds`
@@ -63,9 +64,7 @@ theorem decodePayload_request {α : Type} [SszType α] [LawfulSszType α] {a : �
 /-- Two errors with one code come from one constructor. -/
 theorem _root_.EthLib.Consensus.BoundsError.code_injective (e₁ e₂ : BoundsError)
     (h : e₁.code = e₂.code) : e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [BoundsError.code] at h; exact absurd h (by decide))
+  code_injective BoundsError.code
 
 /-- Every code is above 300, past the codes of custody, subnet and shuffle errors. -/
 theorem _root_.EthLib.Consensus.BoundsError.code_gt (e : BoundsError) : 300 < e.code := by

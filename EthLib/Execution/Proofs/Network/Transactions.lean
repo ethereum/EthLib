@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Network.Transactions
 public import EthLib.Serialization.Proofs.Rlp.Codec
 public import EthLib.Serialization.Proofs.Rlp.Encodings
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the transaction exchange
@@ -138,7 +139,6 @@ theorem checkPooled_nil (requested : List Hash32) : checkPooled requested [] = .
 /-- Two errors with one code come from one constructor. -/
 theorem PoolError.code_injective (e₁ e₂ : PoolError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [PoolError.code] at h; exact absurd h (by decide))
+  code_injective PoolError.code
 
 end EthLib.Execution.Network

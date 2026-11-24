@@ -4,6 +4,7 @@ public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Networking.Gossip.Subnet
 public import Mathlib.Data.Nat.ModEq
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # `Networking.Proofs.Gossip.Subnet`
@@ -26,9 +27,7 @@ variable {ε : Type} {config : SubnetParameters}
 theorem _root_.EthLib.Networking.Gossip.SubnetError.code_injective
     (e₁ e₂ : SubnetError ε) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [SubnetError.code] at h; exact absurd h (by decide))
+  code_injective SubnetError.code
 
 /-- Every subnet is below the number of subnets. -/
 theorem computeSubscribedSubnet_lt {index : UInt64} {subnet : SubnetID}

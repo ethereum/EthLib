@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Blocks.Ommers
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the ommers of a block
@@ -99,8 +100,7 @@ theorem validateOmmers_daoExtraData {fork : Fork} {config : ChainConfig} {checkS
 /-- Two errors with one code come from one constructor. -/
 theorem OmmerError.code_injective (e₁ e₂ : OmmerError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [OmmerError.code] at h; exact absurd h (by decide))
+  code_injective OmmerError.code
 
 /-- A statement about the one value of `Unit` holds for some value exactly when it holds. -/
 private theorem exists_unit {P : Unit → Prop} : (∃ u, P u) ↔ P () :=

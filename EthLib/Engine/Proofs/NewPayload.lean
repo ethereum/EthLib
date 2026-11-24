@@ -5,6 +5,7 @@ public import EthLib.Engine.Proofs.Block
 public import EthLib.Engine.Proofs.Json
 import EthLib.Base.Proofs.Toolchain.JsonBasic
 import EthLib.Execution.Proofs.Blocks.Transition
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the checks of `engine_newPayload`
@@ -29,14 +30,12 @@ open EthLib.Serialization.JsonRpc (fields hasExactly)
 /-- Two errors with one code come from one constructor. -/
 theorem EngineError.code_injective (e₁ e₂ : EngineError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [EngineError.code] at h; exact absurd h (by decide))
+  code_injective EngineError.code
 
 /-- Two reasons with one code come from one constructor. -/
 theorem PayloadError.code_injective (e₁ e₂ : PayloadError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [PayloadError.code] at h; exact absurd h (by decide))
+  code_injective PayloadError.code
 
 /-- Some version of the method takes a fork exactly when the fork is from Paris on. -/
 theorem exists_acceptsFork_iff (fork : Fork) :

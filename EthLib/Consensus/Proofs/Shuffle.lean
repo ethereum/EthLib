@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.DataAvailability.Custody
 public import EthLib.Consensus.Shuffle
 public import EthLib.Networking.Gossip.Subnet
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the shuffle moves each index on its own
@@ -25,9 +26,7 @@ open Base
 /-- Two errors with one code come from one constructor. -/
 theorem ShuffleError.code_injective (e₁ e₂ : ShuffleError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [ShuffleError.code] at h; exact absurd h (by decide))
+  code_injective ShuffleError.code
 
 /-- A shuffle error never has the code of a custody error, which shares its Python class. -/
 theorem ShuffleError.code_ne_custody (e : ShuffleError)

@@ -4,6 +4,7 @@ public import EthLib.Base.Proofs.List
 public import EthLib.Networking.Devp2p.P2p
 public import EthLib.Networking.Proofs.Rlpx.Handshake
 public import EthLib.Networking.Proofs.Snappy.Compress
+import EthLib.Base.Proofs.CodeInjective
 
 /-!
 # Proofs: the messages of the "p2p" capability
@@ -473,8 +474,6 @@ theorem negotiate_comm (length : Capability → Nat) (ours theirs : List Capabil
 /-- Two errors with one code come from one constructor. -/
 theorem P2pError.code_injective (e₁ e₂ : P2pError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [P2pError.code] at h; exact absurd h (by decide))
+  code_injective P2pError.code
 
 end EthLib.Networking.Devp2p
