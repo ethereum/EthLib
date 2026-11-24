@@ -108,7 +108,7 @@
   "`Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key."
 
 #define DOC_xmss_signature_index \
-  "The leaf index a 2404-byte signature carries."
+  "The leaf index that a 2404-byte signature claims, read without verifying the signature."
 
 #define DOC_sphincs_key_gen \
   "The public key `PK.seed | PK.root` of `SK.seed`."

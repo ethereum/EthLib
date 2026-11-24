@@ -975,7 +975,8 @@
    "error_class": "XmssError",
    "docstring":
    "`Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key.\n\nA yes or a no, never a reason.\n\nWhich step rejected a well-formed signature carries no consensus meaning."},
-  {"summary": "The leaf index a 2404-byte signature carries.",
+  {"summary":
+   "The leaf index that a 2404-byte signature claims, read without verifying the signature.",
    "signature": "(signature: bytes) -> int",
    "operation": "EthLib.Cryptography.Xmss.signatureIndex",
    "method": "xmss_signature_index",
@@ -989,7 +990,7 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "XmssError",
    "docstring":
-   "The leaf index a 2404-byte signature carries.\n\nIt reads only the first 4 bytes.\n\nIt does not verify the signature, so the index is only what the signer claims.\n\nA caller can use it to require a given leaf before verifying.\n\nFor example, a proof of possession requires leaf 0."},
+   "The leaf index that a 2404-byte signature claims, read without verifying the signature.\n\nA caller can require a given leaf before verifying; a proof of possession requires leaf 0."},
   {"summary": "The public key `PK.seed | PK.root` of `SK.seed`.",
    "signature": "(seed: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Sphincs.Exports.keyGenExport",
