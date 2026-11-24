@@ -8,22 +8,6 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.SeedHops
 The theorem's budget `q` counts every hash call of the game.
 
 Here the budget is the adversary's own: at most `qH` calls of `H` and `r` signing requests.
-
-Key generation, each request and the final verification make at most a fixed number of calls.
-
-The bounds are `205 * 2^16 + 1`, `2^33 + 205 * 2^16 + 407` and `384`.
-
-So the game makes at most `Q = 205 * 2^16 + 1 + qH + r (2^33 + 205 * 2^16 + 407) + 384` calls.
-
-The theorem then bounds a forgery by `Q / 2^127`.
-
-A key has `2^32` leaf indices.
-
-With at most `2^32` requests, `Q <= qH + 2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385`.
-
-A request's bound includes two searches of `2^32` trials each, and the theorem charges all of it.
-
-So the bound is above `2^-62` for an adversary that requests every leaf.
 -/
 
 @[expose] public section
@@ -50,7 +34,12 @@ def HasAdversaryBudget (adversary : Adversary) (qH r : Nat) : Prop :=
   ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryHash qH ∧
     IsQueryBoundP (adversary.main pk) IsAdversaryRequest r
 
-/-! ## The calls of the game -/
+/-! ## The calls of the game
+
+Key generation, each request and the final verification make at most a fixed number of calls.
+
+The bounds are `205 * 2^16 + 1`, `2^33 + 205 * 2^16 + 407` and `384`.
+-/
 
 /-- Coins make no hash call. -/
 theorem isQueryBoundP_liftM_prob {α : Type} (oa : ProbComp α) :
@@ -192,7 +181,13 @@ def lifetimeQueries : Nat := gameQueries 0 (2 ^ LOG_LIFETIME)
 
 `C = 2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385`.
 
-It covers key generation, the signer and the verifier. -/
+It covers key generation, the signer and the verifier.
+
+A key has `2^32` leaf indices, so it signs at most `2^32` requests.
+
+A request's bound includes two searches of `2^32` trials each, and the theorem charges all of it.
+
+So the bound is above `2^-62` for an adversary that requests every leaf. -/
 theorem forgeAdvantage_le_lifetime (adversary : Adversary) {qH r : Nat}
     (hbudget : HasAdversaryBudget adversary qH r) (hr : r ≤ 2 ^ LOG_LIFETIME) :
     forgeAdvantage adversary ≤

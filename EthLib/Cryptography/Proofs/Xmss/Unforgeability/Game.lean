@@ -16,8 +16,6 @@ The real game of the security proof samples `S_0`, queries that hash, then plays
 From `S`, it runs the rest of key generation and the same signer.
 
 So the two games are one computation, and the bound of the real game is the theorem's.
-
-The budget counts the hash calls of that one game.
 -/
 
 @[expose] public section
@@ -66,8 +64,11 @@ theorem gameCore_eq_realGame (adversary : Adversary) :
     gameCore adversary = realGame adversary := by
   unfold gameCore realGame realAfterSeed sampleSeed
   rw [liftM_map, bind_map_left]
+  -- The real game of the security proof samples `S_0`, queries that hash, then plays from `S`.
   refine bind_congr fun S0 => ?_
+  -- Key generation hashes `S_0` into the scheme seed `S` first.
   rw [liftM_keyGenWith_bind]
+  -- From `S`, it runs the rest of key generation and the same signer.
   refine bind_congr fun S => bind_congr fun keys => ?_
   rcases keys with ⟨pk, sk⟩
   rfl

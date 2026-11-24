@@ -11,17 +11,9 @@ public import EthLib.Cryptography.Proofs.Xmss.Verify
 /-!
 # Proofs: leanXMSS in bytes
 
-The scheme holds its values as Keccak lanes, and a value is the bytes of its lanes.
-
 These theorems state each hash of the scheme in bytes, as the specification writes it.
 
-Each one lists the bytes that Keccak-256 hashes, in order, and the bytes the scheme keeps.
-
-A 16-byte value is the first 16 bytes of a digest, or the last 16 for the second chain of a pair.
-
 So a reader can check the scheme against the specification without reading a lane.
-
-Every theorem that hashes is about the hash that runs, Keccak-256, in the identity monad.
 
 Source: the leanXMSS specification draft.
 
@@ -58,7 +50,12 @@ private theorem packDigests_eq_mk {n : Nat} (ds : Vector Digest n) :
   rcases ds with ⟨a, h⟩
   simp [Vector.flatten, Vector.map, Vector.toList, Array.toList_flatten, Function.comp_def]
 
-/-! ## Values -/
+/-! ## Values
+
+The scheme holds its values as Keccak lanes, and a value is the bytes of its lanes.
+
+A 16-byte value is the first 16 bytes of a digest, or the last 16 for the second chain of a pair.
+-/
 
 /-- Half `h` of a 32-byte value is its 16 bytes from byte `16 h` on. -/
 theorem toList_bytes_halfOf (h : Fin 2) (w : Lanes4) :
@@ -69,7 +66,12 @@ theorem toList_bytes_halfOf (h : Fin 2) (w : Lanes4) :
 theorem bytes_zero_lanes2 : (⟨0, 0⟩ : PublicParam).bytes = Vector.replicate 16 0 := by
   decide
 
-/-! ## The tweakable hash -/
+/-! ## The tweakable hash
+
+Each theorem lists the bytes that Keccak-256 hashes, in order, and the bytes the scheme keeps.
+
+Every theorem that hashes is about the hash that runs, Keccak-256, in the identity monad.
+-/
 
 /-- `Th(P, A, M)` is the first 16 bytes of Keccak-256 of `P | A | M`.
 

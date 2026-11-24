@@ -17,8 +17,6 @@ Keccak-256 is one such function, so the theorems cover the specification as it r
 A variable `f` also keeps every proof from unfolding the hash on a concrete input.
 
 The theorems also hold for every source of derived values.
-
-With the derivations from `S`, chain starts and randomizer bases are the note's hashes of `S`.
 -/
 
 @[expose] public section
@@ -75,7 +73,10 @@ theorem getElem_cast_flatMap_halves (pairs : Vector Lanes4 (V / 2)) (h : V / 2 *
   simp only [Vector.getElem_cast, Vector.getElem_flatMap]
   rcases Nat.mod_two_eq_zero_or_one i with h2 | h2 <;> simp [h2]
 
-/-! ## Derivations from the seed -/
+/-! ## Derivations from the seed
+
+With the derivations from `S`, chain starts and randomizer bases are the note's hashes of `S`.
+-/
 
 section SeedPrf
 
