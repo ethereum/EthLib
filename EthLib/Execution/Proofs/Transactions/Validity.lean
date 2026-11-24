@@ -140,6 +140,41 @@ theorem accessListCost_le_append (fork : Fork) (a b : List Access) :
   rw [accessListCost_append]
   omega
 
+/-- The bytes of access lists add up over concatenation. -/
+theorem accessListBytes_append (a b : List Access) :
+    accessListBytes (a ++ b) = accessListBytes a + accessListBytes b := by
+  simp [accessListBytes, List.map_append, List.sum_append]
+
+/-- An access list has at least 20 bytes per address. -/
+theorem twenty_mul_length_le_accessListBytes (accessList : List Access) :
+    20 * accessList.length ≤ accessListBytes accessList := by
+  induction accessList with
+  | nil => simp [accessListBytes]
+  | cons a rest ih =>
+    simp only [accessListBytes, List.map_cons, List.sum_cons, List.length_cons] at ih ⊢
+    omega
+
+/-- The data price of access lists adds up over concatenation, at every fork. -/
+theorem accessListDataCost_append (fork : Fork) (a b : List Access) :
+    accessListDataCost fork (a ++ b) = accessListDataCost fork a + accessListDataCost fork b := by
+  unfold accessListDataCost
+  split <;> simp [accessListBytes_append, Nat.mul_add]
+
+/-- Before Glamsterdam, an access list has no data price. -/
+theorem accessListDataCost_of_lt_glamsterdam {fork : Fork} (h : fork < .glamsterdam)
+    (accessList : List Access) : accessListDataCost fork accessList = 0 := by
+  have hn : ¬ fork ≥ Fork.glamsterdam := Nat.not_le.mpr h
+  simp [accessListDataCost, hn]
+
+/-- From Glamsterdam, an access list costs 64 gas per byte of data.
+
+EIP-7981 counts four tokens per byte, and EIP-7976 prices a token at 16 gas. -/
+theorem accessListDataCost_of_glamsterdam_le {fork : Fork} (h : fork ≥ .glamsterdam)
+    (accessList : List Access) :
+    accessListDataCost fork accessList = 64 * accessListBytes accessList := by
+  -- Four floor tokens per byte, at the floor price of 16 gas from Glamsterdam.
+  simp [accessListDataCost, h, gasSchedule, TX_DATA_TOKEN_STANDARD]
+
 /-- The least gas limit covers the intrinsic gas. -/
 theorem intrinsicGas_le_minimumGas (fork : Fork) (sender : Address) (tx : Transaction) :
     intrinsicGas fork sender tx ≤ minimumGas fork sender tx := by

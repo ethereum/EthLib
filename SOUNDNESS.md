@@ -2368,6 +2368,8 @@ From Hegotá a run fails as not yet specified, so there is no gas used to state.
 `dataCost_eq_tokens` (`Execution/Proofs/Transactions/Validity.lean`) proves that from Istanbul the intrinsic price of call data is 4 gas per token of EIP-7623.
 From Pectra to BPO5 the floor counts the same tokens, at 10 gas each, by the definition of `floorTokens`.
 `tokens_append` and `floorTokens_append` state that the counts add over concatenation, and `size_le_tokens` and `tokens_le_four_mul_size` bound them by one and four per byte.
+`accessListDataCost_of_glamsterdam_le` proves that from Glamsterdam the data price of an access list is 64 gas per byte, by EIP-7981 and EIP-7976, and `accessListDataCost_of_lt_glamsterdam` that it is 0 before.
+`accessListBytes_append` and `accessListDataCost_append` state that the bytes and the price add over concatenation, and `twenty_mul_length_le_accessListBytes` gives at least 20 bytes per address.
 
 `prepareFirstFrame_of_applyAuthorizations` gives the first frame of a call that moves no ether, after its authorizations.
 `prepareFirstFrame_of_applyAuthorizations_error` proves that an error of the authorizations is the error of the first frame.
