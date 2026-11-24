@@ -153,8 +153,8 @@ The version is written in decimal with no leading zero, and is positive.
 -/
 def ProtocolId.parse? (text : String) : Option ProtocolId := do
   -- The text is `/eth2/beacon_chain/req/`, then a body, then `/ssz_snappy`.
-  let rest ← Networking.Gossip.dropPrefix? "/eth2/beacon_chain/req/".toList text.toList
-  let body ← Networking.Gossip.dropSuffix? "/ssz_snappy".toList rest
+  let rest ← Base.dropPrefix? "/eth2/beacon_chain/req/".toList text.toList
+  let body ← Base.dropSuffix? "/ssz_snappy".toList rest
   -- The body starts with the name of a protocol, then `/`.
   --
   -- No name holds `/`, so at most one protocol matches.

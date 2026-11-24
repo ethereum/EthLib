@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.List
 public import EthLib.Networking.Encoding.Base32
 public import EthLib.Networking.Enr.V4
 public import EthLib.Networking.Rlpx.Handshake
@@ -102,12 +103,6 @@ def DnsError.code : DnsError → UInt32
 /-- The hash that names an entry: the first 16 bytes of a Keccak-256 hash. -/
 abbrev Hash := Vector UInt8 HASH_SIZE
 
-/-- The rest of a list of characters after a prefix, if it starts with the prefix. -/
-def dropPrefix : List Char → List Char → Option (List Char)
-  | [], cs => some cs
-  | p :: ps, c :: cs => if p = c then dropPrefix ps cs else none
-  | _ :: _, [] => none
-
 /-- The base32 name of a hash. -/
 def Hash.toText (h : Hash) : List Char :=
   -- The base32 of RFC 4648 §6, and no padding is used, so 16 bytes give 26 characters.
@@ -190,13 +185,13 @@ The hashes have 26 characters and the signature 87, so the sequence number is wh
 def Root.parseFields (rest : List Char) : Except DnsError Root := do
   -- `e=<enr-root>`, the hash of the root of the subtree of node records.
   let enrRoot ← Hash.ofText (rest.take HASH_TEXT_SIZE)
-  let some rest := dropPrefix " l=".toList (rest.drop HASH_TEXT_SIZE) | throw .rootFields
+  let some rest := dropPrefix? " l=".toList (rest.drop HASH_TEXT_SIZE) | throw .rootFields
   -- `l=<link-root>`, the hash of the root of the subtree of links.
   let linkRoot ← Hash.ofText (rest.take HASH_TEXT_SIZE)
-  let some rest := dropPrefix " seq=".toList (rest.drop HASH_TEXT_SIZE) | throw .rootFields
+  let some rest := dropPrefix? " seq=".toList (rest.drop HASH_TEXT_SIZE) | throw .rootFields
   -- The text ends with the 5 characters of ` sig=`, then the 87 of the signature.
   let tail := rest.length - (5 + SIGNATURE_TEXT_SIZE)
-  let some sig := dropPrefix " sig=".toList (rest.drop tail) | throw .rootFields
+  let some sig := dropPrefix? " sig=".toList (rest.drop tail) | throw .rootFields
   -- `seq=<sequence-number>` is what lies between.
   return ⟨enrRoot, linkRoot, ← seqOf (rest.take tail), ← signatureOf sig⟩
 
@@ -317,26 +312,26 @@ def Entry.toText : Entry → Except DnsError String
 /-- The entry of a text, by its prefix. -/
 def Entry.parse (text : String) : Except DnsError Entry :=
   -- The root: `enrtree-root:v1 e=<enr-root> l=<link-root> seq=<sequence-number> sig=<signature>`.
-  match dropPrefix ROOT_PREFIX text.toList with
+  match dropPrefix? ROOT_PREFIX text.toList with
   | some rest => .root <$> Root.parseFields rest
   | none =>
     -- An intermediate tree entry: `enrtree-branch:<h_1>,<h_2>,...,<h_n>`.
-    match dropPrefix BRANCH_PREFIX text.toList with
+    match dropPrefix? BRANCH_PREFIX text.toList with
     | some rest => .branch <$> branchOf rest
     | none =>
       -- A leaf pointing to a different list: `enrtree://<key>@<fqdn>`.
-      match dropPrefix URL_PREFIX text.toList with
+      match dropPrefix? URL_PREFIX text.toList with
       | some rest => .link <$> Url.parseFields rest
       | none =>
         -- A leaf containing a node record: `enr:<node-record>`, in the text form of EIP-778.
-        match dropPrefix Enr.TEXT_PREFIX text.toList with
+        match dropPrefix? Enr.TEXT_PREFIX text.toList with
         | some _ => .enr <$> (Enr.fromText text).mapError .enr
         -- The source defines no other entry type.
         | none => throw .unknownEntry
 
 /-- The URL of a text. -/
 def Url.parse (text : String) : Except DnsError Url :=
-  match dropPrefix URL_PREFIX text.toList with
+  match dropPrefix? URL_PREFIX text.toList with
   | some rest => Url.parseFields rest
   | none => throw .unknownEntry
 

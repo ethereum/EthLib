@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Hex
+public import EthLib.Base.List
 
 /-!
 # `Networking.Gossip.Topic`
@@ -56,14 +57,6 @@ inductive TopicError where
   | name (name : String)
   deriving Repr, DecidableEq
 
-/-- The rest of a list after a prefix, if the list starts with it. -/
-def dropPrefix? (pre cs : List Char) : Option (List Char) :=
-  if pre.isPrefixOf cs then some (cs.drop pre.length) else none
-
-/-- The start of a list before a suffix, if the list ends with it. -/
-def dropSuffix? (suf cs : List Char) : Option (List Char) :=
-  if suf.isSuffixOf cs then some (cs.take (cs.length - suf.length)) else none
-
 /-- The value of a lowercase hex digit. -/
 def hexDigit? (c : Char) : Option Nat :=
   (Base.hexValue? c (upper := false)).map UInt8.toNat
@@ -81,13 +74,13 @@ def parseForkDigest : List Char → Option (Vector UInt8 4)
 /-- The fork digest and the name of a topic string. -/
 def parseTopic (topic : String) : Except TopicError (Vector UInt8 4 × String) := do
   -- The topic starts with `/eth2/`.
-  let some rest := dropPrefix? "/eth2/".toList topic.toList | throw .notEth2
+  let some rest := Base.dropPrefix? "/eth2/".toList topic.toList | throw .notEth2
   let digestText := String.ofList (rest.take 9)
   -- `D` is eight lowercase hex digits, then `/`.
   let some digest := parseForkDigest (rest.take 8) | throw (.forkDigest digestText)
-  let some body := dropPrefix? ['/'] (rest.drop 8) | throw (.forkDigest digestText)
+  let some body := Base.dropPrefix? ['/'] (rest.drop 8) | throw (.forkDigest digestText)
   -- The topic ends with `/ssz_snappy`, the only encoding.
-  let some name := dropSuffix? "/ssz_snappy".toList body | throw .encoding
+  let some name := Base.dropSuffix? "/ssz_snappy".toList body | throw .encoding
   -- What is left is `N`; no topic name contains `/`, so EthLib rejects one, for a unique split.
   if '/' ∈ name then throw (.name (String.ofList name))
   return (digest, String.ofList name)
@@ -108,6 +101,6 @@ def parseSubnetId (digits : List Char) : Option SubnetID :=
 /-- The subnet ID in the name of a subnet topic, given the base name the caller expects. -/
 def parseSubnetTopicName (base name : String) : Option SubnetID :=
   -- The name is the base name, then `_`, then the subnet ID in decimal.
-  (dropPrefix? (base ++ "_").toList name.toList).bind parseSubnetId
+  (Base.dropPrefix? (base ++ "_").toList name.toList).bind parseSubnetId
 
 end EthLib.Networking.Gossip

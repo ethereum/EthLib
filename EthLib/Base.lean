@@ -14,6 +14,7 @@ public import EthLib.Base.Hash32
 public import EthLib.Base.Hex
 public import EthLib.Base.Json
 public import EthLib.Base.Json.Document
+public import EthLib.Base.List
 public import EthLib.Base.U256
 public import EthLib.Base.Uint64
 public import EthLib.Base.Word32

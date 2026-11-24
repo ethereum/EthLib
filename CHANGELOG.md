@@ -1028,6 +1028,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the prefix and suffix readers of DNS discovery and the gossip topics are one generic pair in `EthLib/Base/List.lean` ([#4446](https://github.com/ethereum/EthLib/pull/4446)).
+  - `DnsDisc.dropPrefix` and `Gossip.dropPrefix?` are `Base.dropPrefix?`, and `Gossip.dropSuffix?` is `Base.dropSuffix?`, for any element type with decidable equality.
+  - `DnsDisc.dropPrefix_append` and the topic lemma `dropPrefix?_append` are `Base.dropPrefix?_append`, and `dropSuffix?_append` is `Base.dropSuffix?_append`.
+  - `DnsDisc.eq_append_of_dropPrefix` and the topic lemma `eq_append_of_dropPrefix?` are `Base.eq_append_of_dropPrefix?`, which takes its three lists implicitly: write `eq_append_of_dropPrefix? h`.
+    `eq_append_of_dropSuffix?` is `Base.eq_append_of_dropSuffix?`.
+  - `Base.dropPrefix?_eq` is new: it gives the prefix reader as a test of the prefix then a drop, the form that `simp [dropPrefix?]` used to unfold in the topics.
+  - `DnsDisc.dropPrefix_root_branch`, `dropPrefix_root_url`, `dropPrefix_branch_url`, `dropPrefix_root_enr`, `dropPrefix_branch_enr`, `dropPrefix_url_enr` and `Root.dropPrefix_toText` keep their names and now state `Base.dropPrefix?`.
 - In Lean, the copies of the big-endian functions in RLP, DER, the Montgomery fields and the SPHINCS+ security model are removed, so they write and read through `EthLib.Base.ByteOrder` ([#4412](https://github.com/ethereum/EthLib/pull/4412)).
   - `ByteOrder.byteLength x` is new: the number of bytes of `x` with no leading zero byte, and none for zero.
     The minimal big-endian form of `x` is `ByteOrder.toBE (byteLength x) x`, and the new lemmas `ByteOrder.lt_byteLength`, `ByteOrder.pow_byteLength_sub_one_le`, `ByteOrder.byteLength_eq_of_bounds`, `ByteOrder.byteLength_ofBE` and `ByteOrder.ofBE_toBE_byteLength` state its bounds and round trip.
