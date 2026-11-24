@@ -251,56 +251,6 @@ private theorem down_processWithdrawals {capella : .shapella ≤ fork}
   exact processWithdrawals_of (BalanceDown index) (BalanceDown.refl _ _) (fun _ => applied)
     computed
 
-/-! ## The proposer along a block -/
-
-/-- The proposer search reads only the effective balances of the indices it draws from. -/
-private theorem proposerSearch_validators {old new : Array Validator}
-    {indices : Array ValidatorIndex} {order : Nat → Nat} {seed : Bytes32}
-    (agree : ∀ candidate ∈ indices, (new[candidate.toNat]?).map (·.effectiveBalance) =
-      (old[candidate.toNat]?).map (·.effectiveBalance))
-    (nonempty : 0 < indices.size) (positions : ∀ place < indices.size, order place < indices.size) :
-    ∀ {i : Nat}, proposerSearch preset fork new indices order seed i =
-      proposerSearch preset fork old indices order seed i := by
-  intro i
-  obtain ⟨left, leftEq⟩ : ∃ left, left = 2 ^ 64 - i := ⟨_, rfl⟩
-  induction left using Nat.strongRecOn generalizing i with
-  | _ left ih =>
-    have member : indices.getD (order (i % indices.size)) 0 ∈ indices := by
-      have lt := positions _ (Nat.mod_lt i nonempty)
-      rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem lt, Option.getD_some]
-      exact Array.getElem_mem lt
-    have same := agree _ member
-    unfold proposerSearch
-    dsimp only
-    generalize new[(indices.getD (order (i % indices.size)) 0).toNat]? = atNew at same
-    generalize old[(indices.getD (order (i % indices.size)) 0).toNat]? = atOld at same
-    cases atNew <;> cases atOld <;>
-      simp only [Option.map_none, Option.map_some, reduceCtorEq, Option.some.injEq] at same
-    · rfl
-    · simp only [bind, Except.bind, same]
-      repeat' split
-      all_goals first | rfl | exact ih _ (by omega) rfl
-
-
-/-- The proposer draw reads only the effective balances of the indices it draws from. -/
-private theorem computeProposerIndex_validators {other : BeaconState preset fork}
-    {indices : Array ValidatorIndex} {seed : Bytes32}
-    (agree : ∀ candidate ∈ indices,
-      (other.validators.data[candidate.toNat]?).map (·.effectiveBalance) =
-        (state.validators.data[candidate.toNat]?).map (·.effectiveBalance)) :
-    computeProposerIndex other indices seed = computeProposerIndex state indices seed := by
-  unfold computeProposerIndex
-  by_cases empty : indices.size = 0
-  · simp [empty, bind, Except.bind, throw, throwThe, MonadExcept.throw, MonadExceptOf.throw]
-  by_cases fits : indices.size < 2 ^ 64
-  · by_cases large : 2 ^ 40 < indices.size
-    · simp [empty, fits, large, bind, Except.bind, throw, throwThe, MonadExcept.throw,
-        MonadExceptOf.throw]
-    simp only [empty, fits, large, ↓reduceIte]
-    exact proposerSearch_validators agree (Nat.pos_of_ne_zero empty)
-      (fun _ lt => Shuffle.shuffledIndex_lt lt)
-  · simp [empty, fits, bind, Except.bind, throw, throwThe, MonadExcept.throw, MonadExceptOf.throw]
-
 /-! ## Fields that a block keeps -/
 
 /-- The registry does not shrink, and each of its earlier positions keeps its inactivity score. -/
@@ -694,36 +644,23 @@ private theorem Steady.proposer
     (steady : Steady state after) :
     getBeaconProposerIndex after = getBeaconProposerIndex state := by
   obtain ⟨⟨slot, lookahead, -⟩, early⟩ := steady
-  by_cases fulu : Fork.fusaka ≤ fork
-  · simp only [getBeaconProposerIndex, fulu, ↓reduceDIte, slot, lookahead]
-  obtain ⟨active, mixes, effective, grows⟩ := early (Nat.lt_of_not_le fulu)
-  have epoch : getCurrentEpoch after = getCurrentEpoch state := by
-    simp only [getCurrentEpoch, slot]
-  -- The seed reads the mix one epoch beyond the seed lookahead, never that of the write.
-  have seed : getSeed after (getCurrentEpoch state) DOMAIN_BEACON_PROPOSER =
-      getSeed state (getCurrentEpoch state) DOMAIN_BEACON_PROPOSER := by
+  refine getBeaconProposerIndex_congr_of_seed slot (fun _ => by rw [lookahead]) (fun before => ?_)
+    (fun before => (early before).1.getActiveValidatorIndicesChecked_eq (UInt64.le_refl _))
+    (fun before j inside => ?_)
+  · -- The seed reads the mix one epoch beyond the seed lookahead, never that of the write.
+    obtain ⟨-, mixes, -, -⟩ := early before
     refine getSeed_eq_of_mix _ fun shifted shiftedEq => mixes shifted fun same => ?_
     have same := congrArg UInt64.toNat same
     rw [UInt64.toNat_mod, UInt64.toNat_mod] at same
     exact Nat.mod_ne_of_sub_lt (low := (getCurrentEpoch state).toNat) (high := shifted.toNat)
       (length := preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) (by omega) (by omega) same
-  have checked := active.getActiveValidatorIndicesChecked_eq (UInt64.le_refl _)
-  simp only [getBeaconProposerIndex, fulu, ↓reduceDIte, epoch, slot, seed, checked]
-  cases getSeed state (getCurrentEpoch state) DOMAIN_BEACON_PROPOSER with
-  | error => simp only [bind, Except.bind]
-  | ok epochSeed =>
-    cases listed : getActiveValidatorIndicesChecked state (getCurrentEpoch state) with
-    | error => simp only [bind, Except.bind]
-    | ok indices =>
-      refine computeProposerIndex_validators fun candidate member => ?_
-      -- Each candidate names a validator of the state, whose effective balance stays.
-      obtain ⟨old, found, -⟩ :=
-        (mem_iff_of_getActiveValidatorIndicesChecked_ok listed).mp (by simpa using member)
-      have inside := (Array.getElem?_eq_some_iff.mp found).1
-      have same := effective _ inside
-      simp only [effectiveAt, found, Array.getElem?_eq_getElem (Nat.lt_of_lt_of_le inside grows),
-        Option.map_some, Option.getD_some] at same ⊢
-      rw [UInt64.toNat_inj.mp same]
+  · -- Each validator of the state keeps its effective balance.
+    obtain ⟨-, -, effective, grows⟩ := early before
+    have same := effective j inside
+    simp only [effectiveAt, Array.getElem?_eq_getElem inside,
+      Array.getElem?_eq_getElem (Nat.lt_of_lt_of_le inside grows), Option.map_some,
+      Option.getD_some] at same ⊢
+    rw [UInt64.toNat_inj.mp same]
 
 /-! ## The operations of a block -/
 

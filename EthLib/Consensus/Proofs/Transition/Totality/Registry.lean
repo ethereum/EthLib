@@ -117,7 +117,8 @@ The ceiling plus one plus the withdrawal delay is below `2^64`.
 The state after keeps the slot and the size of the registry.
 
 Each exit epoch that is set in it is at most the ceiling plus one. -/
-theorem initiateValidatorExit_exists_ok {config : Config} {state : BeaconState preset fork}
+theorem initiateValidatorExit_total_of_lt_electra {config : Config}
+    {state : BeaconState preset fork}
     {index : ValidatorIndex} {ceiling : Nat} (before : fork < .pectra)
     (inside : index.toNat < state.validators.data.size)
     (first : (getCurrentEpoch state).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ ceiling)
@@ -192,7 +193,7 @@ private theorem updateRegistryEntry_exists_ok {config : Config} {state : BeaconS
     have indexValue : index.toUInt64.toNat = index := by
       simp only [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt indexFits]
     obtain ⟨after, exited, slot, size, bounds⟩ :=
-      initiateValidatorExit_exists_ok (config := config) before
+      initiateValidatorExit_total_of_lt_electra (config := config) before
         (state := updated) (index := index.toUInt64)
         (by simpa [updated, BeaconState.putValidator, indexValue] using inside)
         first updatedExits room

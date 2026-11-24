@@ -5068,15 +5068,15 @@ Then `processAttesterSlashing` returns what slashing the validator returns, so i
 This is about the operation; it does not show that a whole block with it is valid.
 The fork windows cannot hold when a state of the chain reads neither version at that epoch, for example when the two versions are more than one fork apart; no theorem states this.
 Slashing can fail on checked arithmetic (exit queue, withdrawable epoch, slashings sum, balances) or on the proposer lookup.
-`slashValidator_ok_of_room` (`Consensus/Proofs/Transition/Totality/SlashValidator.lean`) shows that it succeeds on a state with room for each of those steps (`SlashRoom`), with the proposer as whistleblower; the room is sufficient, not necessary.
-`slashValidator_ok_of_block` (`Consensus/Proofs/Transition/Totality/ChainBlock.lean`) derives that room inside a block and returns the success of slashing.
+`slashValidator_total_of_room` (`Consensus/Proofs/Transition/Totality/SlashValidator.lean`) shows that it succeeds on a state with room for each of those steps (`SlashRoom`), with the proposer as whistleblower; the room is sufficient, not necessary.
+`slashValidator_total_of_block` (`Consensus/Proofs/Transition/Totality/ChainBlock.lean`) derives that room inside a block and returns the success of slashing.
 The facts of a chain hold before the slots that lead to the block, and the block is within limits that a block step covers.
 The steps before an attester slashing of the block that names at least one validator succeed (`SlashingTurn`).
 That attester slashing then supplies the budget of one name; the theorem says nothing about the rest of the block, and does not record the count checks of the operations.
 It takes the hypotheses of `ChainHolds.of_stateTransitionAcross` except the inclusion delay.
 The success of the slots and of the steps before the slashing replaces the success of the whole block.
 It also takes a nonzero length of the slashings vector, which no fact of a chain gives.
-`signedConflict_attesterSlashing_accepted_at` (`DirectSafety/Includable.lean`) puts the two together at a state `x` of a run from a genesis of deposits.
+`processAttesterSlashing_single_slashed_or_accepted_at` (`DirectSafety/Includable.lean`) puts the two together at a state `x` of a run from a genesis of deposits.
 The facts of a chain hold at `x`.
 It takes a key whose validator is activated and not yet withdrawable at the epoch of `x`.
 Take a pair of votes (`VotePairAt`), each read at a state of a run from the genesis at the fork of `x`, with a signature on each signing root that verifies for the key alone.
