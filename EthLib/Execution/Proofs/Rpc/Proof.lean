@@ -14,7 +14,9 @@ import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 The answer agrees with the account queries at the same block.
 
-At a canonical block of a valid view, the answer passes the check against the header's state root.
+At a canonical block of a valid view, the answer passes the check.
+
+The check is against the state root of the header.
 
 The reader of answers reads back what the writer writes, for a nonce below `2^64`.
 -/

@@ -9,11 +9,15 @@ public import EthLib.Execution.Proofs.Blocks.Bloom
 
 The logs that a filter returns are exactly the matching logs of the blocks that it reads.
 
-A range reads the canonical blocks between its bounds, from the lowest held block to the head.
+A range reads the canonical blocks between its bounds.
+
+It lies between the lowest block that the node holds and the head.
 
 In a valid view, take a canonical block after the lowest.
 
-If its Bloom filter excludes a filter, it has no log that the filter selects.
+Suppose that its Bloom filter excludes the addresses or a topic position of a filter.
+
+Then the block has no log that the filter selects.
 -/
 
 public section

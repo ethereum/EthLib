@@ -18,7 +18,9 @@ In a valid view from Glamsterdam, take a canonical block after the lowest.
 
 Its retained list hashes to its header field.
 
-No transition checks the lists of the lowest, side and pending blocks, which are inputs.
+The lowest block, side blocks and the pending block are inputs.
+
+No transition checks their retained lists.
 -/
 
 public section

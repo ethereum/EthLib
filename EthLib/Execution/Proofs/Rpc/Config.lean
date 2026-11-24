@@ -192,7 +192,7 @@ theorem ChainView.configReport_eq_ok {v : ChainView} {r : ConfigReport}
       -- The next and last ones are both absent when no supported fork time follows the head.
       ((configFutureTimes s v.head.block.header.number v.head.block.header.timestamp.toNat = [] ∧
           r.next = none ∧ r.last = none) ∨
-        -- Else they are at the first and last supported fork times after the head.
+        -- Otherwise, they are at the first and last supported fork times after the head.
         ∃ first rest c c',
           configFutureTimes s v.head.block.header.number v.head.block.header.timestamp.toNat =
             first :: rest ∧

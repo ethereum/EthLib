@@ -391,7 +391,9 @@ theorem keyPath_nodup (hash : ByteArray → Hash32) {trie : Trie}
 
 /-- Soundness: a proof that verifies against the trie's root reads as the trie's own proof.
 
-So it gives the trie's value of the key, or a search finds a collision of the hash. -/
+So it gives the trie's value of the key.
+
+Otherwise a search finds a collision of the hash. -/
 theorem verifyProof_sound (hash : ByteArray → Hash32) {trie : Trie} {key : ByteArray}
     {root' : Hash32}
     {honestProof proof : List ByteArray} {result : Option ByteArray}

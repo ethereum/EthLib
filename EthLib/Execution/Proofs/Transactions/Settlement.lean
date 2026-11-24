@@ -7,9 +7,9 @@ public import EthLib.Execution.Transactions.Settlement
 /-!
 # Proofs: the settlement of the gas of a transaction
 
-The refund, the gas used, the price per gas and the payments of a transaction.
+The theorems bound the refund, the gas used and the price per gas of a transaction.
 
-The gas that a block counts for it, and the purchase of its gas.
+They also describe its payments, the gas that a block counts for it, and the purchase of its gas.
 -/
 
 @[expose] public section

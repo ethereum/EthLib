@@ -13,7 +13,10 @@ The supply of a state is the sum of its balances, and a transaction changes it i
 
 Before London the base fee is 0, and before Cancun there are no blobs.
 
-Other sources: [EIP-6780][e6780] and [EIP-8246][e8246].
+Other sources:
+
+- [EIP-6780][e6780]: from Cancun, ether is burned only at an account created in the transaction.
+- [EIP-8246][e8246]: from Glamsterdam, SELFDESTRUCT and the deletion keep the balance.
 
 [e1559]: https://eips.ethereum.org/EIPS/eip-1559#specification
 [e4844]: https://eips.ethereum.org/EIPS/eip-4844#gas-accounting

@@ -10,7 +10,9 @@ A fee history lists the base fees, gas ratios and rewards of its blocks.
 
 `eth_baseFee` gives the last base fee of the history of the head alone.
 
-In a valid view from London on, the last base fee is that of the next canonical block's header.
+In a valid view from London on, the last base fee of a history is the next block's.
+
+That is the base fee in the header of the next canonical block.
 -/
 
 public section

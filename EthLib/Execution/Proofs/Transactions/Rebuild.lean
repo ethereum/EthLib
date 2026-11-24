@@ -12,7 +12,10 @@ A transaction buys its gas, applies its authorizations, runs its message and set
 
 Each of these keeps the rebuild property of the state on its block.
 
-Sources: [EIP-7702][eip7702] and [EIP-6780][eip6780].
+Sources:
+
+- [EIP-7702][eip7702]: an authorization sets the code of its authority, then raises its nonce.
+- [EIP-6780][eip6780]: the accounts that a transaction deletes at its end are ones it created.
 
 [eip7702]: https://eips.ethereum.org/EIPS/eip-7702#behavior
 [eip6780]: https://eips.ethereum.org/EIPS/eip-6780#specification
@@ -566,9 +569,11 @@ theorem deleteAccounts_rebuildEnd {block : BlockState}
     (hcreated : ∀ address ∈ output.accountsToDelete, address ∈ state.createdAccounts)
     (htouched : ∀ address, address ∉ output.touchedAccounts)
     (h : deleteAccounts fork state output = .ok state') :
-    -- This is less than the rebuild property, since an account it deletes may lose its balance.
+    -- The deletion keeps less than the rebuild property.
     --
-    -- It keeps the block and each code under its hash.
+    -- An account that it deletes may lose its balance.
+    --
+    -- The deletion keeps the block and each code under its hash.
     --
     -- An empty or wiped account still holds no nonzero word.
     --

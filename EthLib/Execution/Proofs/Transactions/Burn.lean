@@ -255,9 +255,13 @@ theorem TransactionBurns.eq_zero_of_glamsterdam {env : BlockEnvironment fork}
 The losses are its burned fees, its burns of SELFDESTRUCT and its deleted balances. -/
 theorem processTransaction_supply_eq {env : BlockEnvironment fork} {block : State.BlockState}
     {included : Included} {tx : Transaction} {out : TransactionOutput}
-    -- The gas limit must cover the least gas, and the checks of the block make sure of it.
+    -- The gas limit must cover the least gas.
+    --
+    -- The checks of the block make sure of it.
     (hMin : minimumGas fork included.sender tx ≤ tx.gas.toNat)
-    -- The price must cover the base fee, and the checks of the block make sure of it.
+    -- The price must cover the base fee.
+    --
+    -- The checks of the block make sure of it.
     (hPrice : baseFeeOf env ≤ effectiveGasPrice (baseFeeOf env) tx)
     (h : processTransaction env block included tx = .ok out) :
     -- The burns of SELFDESTRUCT and the deleted balances come from a certificate of the run.
@@ -268,7 +272,9 @@ theorem processTransaction_supply_eq {env : BlockEnvironment fork} {block : Stat
     --
     -- The log splits the total of the burns into burns, each from a step of SELFDESTRUCT.
     ∃ log deleted, TransactionBurns env block included tx out log deleted ∧
-      -- So the bound by the burned fees alone is an equality exactly when both are 0.
+      -- The bound by the burned fees alone is an equality exactly when two amounts are 0.
+      --
+      -- They are the total of the log and the deleted balances.
       out.state.supply + burnedFees env tx out.gasUsed + log.total + deleted =
         (TransactionState.ofBlock block).supply := by
   obtain ⟨log, deleted, burns⟩ := processTransaction_transactionBurns h

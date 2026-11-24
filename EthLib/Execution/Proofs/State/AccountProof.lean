@@ -8,7 +8,9 @@ public import EthLib.Execution.Trie.Range
 /-!
 # Proofs: the check of an answer of `eth_getProof`
 
-The soundness and the completeness of the account and slot checks of an answer.
+The theorems prove that the account and slot checks of an answer are sound.
+
+They also prove that the checks are complete.
 -/
 
 @[expose] public section
@@ -399,7 +401,9 @@ It reports an address without a value as absent, when the fields fit an address 
 theorem verifyAccount_getProof {trie : Trie} {stateRoot : Hash32} {p : AccountProof}
     (hroot : root hash trie = .ok stateRoot) (hsecured : trie.secured = true)
     (hhonest : getProof hash trie ⟨p.address.toArray⟩ = .ok p.accountProof)
-    -- The keys of the trie must have distinct paths: in a secured trie, distinct hashes.
+    -- The keys of the trie must have distinct paths.
+    --
+    -- In a secured trie, that means keys with distinct hashes.
     (hpaths : (trie.data.map fun entry => keyPath hash trie.secured entry.1).Nodup) :
     match valueAt hash trie ⟨p.address.toArray⟩ with
     | some bytes =>
@@ -426,7 +430,9 @@ It reports a slot without a value as absent, when the answer gives it the word `
 theorem verifySlot_getProof {trie : Trie} {storageRoot : Hash32} {index : Nat} {s : StorageProof}
     (hroot : root hash trie = .ok storageRoot) (hsecured : trie.secured = true)
     (hhonest : getProof hash trie ⟨s.key.slot.toArray⟩ = .ok s.proof)
-    -- The keys of the trie must have distinct paths: in a secured trie, distinct hashes.
+    -- The keys of the trie must have distinct paths.
+    --
+    -- In a secured trie, that means keys with distinct hashes.
     (hpaths : (trie.data.map fun entry => keyPath hash trie.secured entry.1).Nodup) :
     match valueAt hash trie ⟨s.key.slot.toArray⟩ with
     | some bytes =>

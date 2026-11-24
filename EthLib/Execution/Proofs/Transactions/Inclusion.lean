@@ -10,7 +10,9 @@ public import EthLib.Execution.Transactions.Inclusion
 
 A transaction that may enter its block passes the rules that need no state.
 
-It also fits in the gas that its block has left, and its sender can pay for it.
+It also fits in the gas that its block has left.
+
+Its sender can pay for it.
 -/
 
 @[expose] public section

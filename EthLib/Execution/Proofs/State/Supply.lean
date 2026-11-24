@@ -9,7 +9,9 @@ public import EthLib.Execution.Proofs.State.Frame
 
 The supply of a state is the sum of the balances of all its accounts, in wei.
 
-How each write of the state, a rollback, the end of a transaction and a block change it.
+The theorems say how each write of the state changes the supply.
+
+They also cover a rollback, the end of a transaction and a block.
 -/
 
 @[expose] public section

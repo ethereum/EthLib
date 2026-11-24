@@ -12,7 +12,9 @@ The blocks of a simulation, with their headers, do not depend on traced transfer
 
 Only the logs of the call results read that choice.
 
-A simulation whose blocks are from Glamsterdam or without transactions answers alike either way.
+Take a simulation whose blocks are each from Glamsterdam or without transactions.
+
+It gives the same answer with transfers traced or not.
 -/
 
 @[expose] public section

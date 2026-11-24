@@ -16,6 +16,8 @@ A response reads back with its result, even `null`, or with its error object.
 A request reads only from a JSON object of up to four members.
 
 A response reads only from a JSON object of three members.
+
+They are the version `2.0`, the identifier, and either the result or an error object.
 -/
 
 public section

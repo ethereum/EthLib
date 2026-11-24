@@ -6,7 +6,9 @@ public import EthLib.Execution.Proofs.State.Tracker
 /-!
 # Proofs: transaction states that agree on accessed accounts, slots and code
 
-When two transaction states agree, and which lookups and updates keep them in agreement.
+The theorems say when two transaction states agree.
+
+They also say which lookups and updates keep them in agreement.
 -/
 
 @[expose] public section
@@ -635,10 +637,10 @@ abbrev _root_.EthLib.Execution.State.BlockState.AgreesOnTracker (endState : Tran
     (block other : BlockState) : Prop :=
   BlockState.AgreesOn
     (TransactionState.accessedAccount endState)
-    -- They also agree on the whole storage of each accessed deployment candidate.
+    -- The block states also agree on the whole storage of each accessed deployment candidate.
     (TransactionState.candidateStorage block endState)
     (TransactionState.accessedSlot endState)
-    -- They also agree on the code under the code hash of each accessed address.
+    -- The block states also agree on the code under the code hash of each accessed address.
     (TransactionState.accessedCode block endState)
     -- The first block state decides which addresses are candidates and which code hashes count.
     block other

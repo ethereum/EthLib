@@ -9,9 +9,16 @@ public import EthLib.Execution.Transactions.Process
 /-!
 # Proofs: the start of a transaction, and its gas used
 
-What a transaction starts with, its first frame, and the gas its run uses and adds to its block.
+The theorems say what a transaction starts with and what its first frame is.
 
-Sources: [EIP-3529][e3529], [EIP-7623][e7623], [EIP-7778][e7778] and [EIP-8037][e8037].
+They also give the gas that its run uses and the gas that it adds to its block.
+
+Sources:
+
+- [EIP-3529][e3529]: the cap of a fifth on the refund, from London.
+- [EIP-7623][e7623]: the call data floor of the gas used, from Pectra.
+- [EIP-7778][e7778]: the block counts the gas used before the refund, from Glamsterdam.
+- [EIP-8037][e8037]: the meter of state gas, and the state gas that the block counts.
 
 [e3529]: https://eips.ethereum.org/EIPS/eip-3529#specification
 [e7623]: https://eips.ethereum.org/EIPS/eip-7623#specification
@@ -588,7 +595,7 @@ theorem processTransaction_gasUsed_of_lt_london {env : BlockEnvironment fork}
 
 /-- From London to Dencun, the gas used of a transaction that runs follows from its message.
 
-[EIP-3529][e3529] sets at London the cap of a fifth on the refund.
+From London, [EIP-3529][e3529] caps the refund at a fifth of the gas used before it.
 
 [e3529]: https://eips.ethereum.org/EIPS/eip-3529#specification -/
 theorem processTransaction_gasUsed_of_london_of_lt_pectra {env : BlockEnvironment fork}
@@ -629,9 +636,9 @@ theorem processTransaction_gasUsed_of_london_of_lt_pectra {env : BlockEnvironmen
 
 /-- From Pectra to BPO5, the gas used of a transaction that runs follows from its message.
 
-[EIP-7623][e7623] sets the call data floor from Pectra.
+From Pectra, [EIP-7623][e7623] keeps the gas used at least the call data floor.
 
-[EIP-3529][e3529] sets the cap of a fifth on the refund from London.
+From London, [EIP-3529][e3529] caps the refund at a fifth of the gas used before it.
 
 [e3529]: https://eips.ethereum.org/EIPS/eip-3529#specification
 [e7623]: https://eips.ethereum.org/EIPS/eip-7623#specification -/
@@ -674,9 +681,11 @@ theorem processTransaction_gasUsed {env : BlockEnvironment fork} {block : State.
 
 /-- At Glamsterdam, the gas used and the block gas of a run follow from its message.
 
-The reservoir is that of [EIP-8037][e8037].
+Sources:
 
-The block gas follows [EIP-8037][e8037b] and [EIP-7778][e7778].
+- [EIP-8037][e8037]: the reservoir, which holds the gas past the execution gas.
+- [EIP-8037][e8037b]: the block counts the state gas used of the message.
+- [EIP-7778][e7778]: the block counts as execution gas the gas used before the refund.
 
 [e7778]: https://eips.ethereum.org/EIPS/eip-7778#specification
 [e8037]: https://eips.ethereum.org/EIPS/eip-8037#transaction-level-gas-accounting-reservoir-model
@@ -711,7 +720,9 @@ theorem processTransaction_gasUsed_of_glamsterdam {env : BlockEnvironment fork}
       out.blockGas =
         -- By EIP-7778, the block counts as execution gas the gas used before the refund.
         --
-        -- It subtracts the state gas, and is never below the call data floor.
+        -- That execution gas leaves out the state gas used.
+        --
+        -- It is never below the call data floor.
         ⟨max (tx.gas.toNat - gasLeft - output.stateGasUsed.toNat)
             (calldataFloor fork included.sender tx),
           -- The block counts the state gas used of the message, by EIP-8037.

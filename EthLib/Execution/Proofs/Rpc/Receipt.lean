@@ -15,9 +15,14 @@ The receipt objects of a block follow its receipts, one for each transaction, in
 
 Their logs are numbered from 0 across the block, and the lookup of one receipt keeps that number.
 
-They are built exactly when there is one receipt per transaction, each with a hash and a sender.
+The receipt objects of a block are built exactly when two conditions hold.
 
-In a valid view, those of a canonical block after the lowest are built and agree with its run.
+- The block has as many receipts as transactions.
+- Each transaction has a hash, and a signature that names a sender at the fork of the block.
+
+In a valid view, the receipt objects of a canonical block after the lowest are built.
+
+They agree with the run of that block.
 -/
 
 public section
@@ -426,7 +431,9 @@ theorem effectiveGasPrice_description {baseFee : Nat} {tx : Transaction}
       | .legacy t | .accessList t => t.gasPrice.toNat
       -- Any other transaction pays the base fee plus a priority part.
       | .feeMarket t | .blob t | .setCode t =>
-        -- The part is the least of: the maximum fee minus the base fee, the maximum priority fee.
+        -- The priority part is the least of two amounts.
+        --
+        -- They are the maximum fee minus the base fee, and the maximum priority fee.
         baseFee + min ((t.maxFeePerGas.toNat : Int) - baseFee) t.maxPriorityFeePerGas.toNat := by
   rcases tx with t | t | t | t | t <;>
     simp only [Transaction.maxFeePerGas] at h <;>

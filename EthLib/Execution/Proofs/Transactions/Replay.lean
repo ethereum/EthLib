@@ -14,7 +14,11 @@ Section 6 of the [Yellow Paper][yp], Shanghai version, gives the nonce check.
 
 Its Section 6.2 gives the gas purchase, which adds one to the nonce of the sender.
 
-Other sources: [EIP-161][e161], [EIP-3607][e3607] and [EIP-6780][e6780].
+Other sources:
+
+- [EIP-161][e161]: from Spurious Dragon, the empty touched accounts go at the end.
+- [EIP-3607][e3607]: the sender of a transaction has no deployed code.
+- [EIP-6780][e6780]: from Cancun, SELFDESTRUCT marks only accounts created in the transaction.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [e3607]: https://eips.ethereum.org/EIPS/eip-3607#specification
