@@ -7,13 +7,11 @@ import EthLib.Cryptography.Proofs.Secp256r1.Ecdsa
 /-!
 # Proofs: `Evm.Precompiles.P256Verify`
 
-- The call fails exactly when the gas is below 6900.
-- With enough gas, a wrong length gives empty output, and every output is the word 1 or empty.
-- With enough gas, the call returns the word 1 on 160 valid bytes, and empty output otherwise.
-- On the 160-byte call data of EIP-7951, the input check gives the result of ECDSA verification.
-- A valid signature under an affine public key returns the word 1, and so does a SEC 1 signature.
-- `(r, s)` and `(r, n - s)` give the same result at every gas limit.
-- A signature component outside `(0, n)` never verifies.
+The call fails exactly when the gas is below 6900.
+
+With enough gas, it returns the word 1 on 160 valid bytes, and empty output otherwise.
+
+On the call data of EIP-7951, the input check gives the result of ECDSA verification.
 -/
 
 @[expose] public section
@@ -24,7 +22,7 @@ open EthLib.Base (bytesToNat bytesToNat_natToBytes bytesToNat_natToBytes_of_lt n
   natToBytes_length)
 open EthLib.Cryptography.Secp256r1
 
-/-- The call fails exactly when the gas is below the price. -/
+/-- The call fails exactly when the gas is below the price, 6900. -/
 theorem p256Verify_eq_error_iff (data : ByteArray) (gas : Nat) (e : P256VerifyError) :
     p256Verify data gas = .error e ↔ gas < GAS_P256VERIFY ∧ e = .outOfGas GAS_P256VERIFY gas := by
   unfold p256Verify
@@ -196,18 +194,15 @@ theorem isValid_callData {e r s : Nat} (he : e < 2 ^ 256) (hr : r < 2 ^ 256) (hs
 
 /-- A call on five words returns the word 1 exactly when three conditions hold.
 
-The call has at least 6900 gas.
-
-Both coordinates of the key lie below `p`.
-
-The signature verifies under that key.
-
 The hash, `r`, `s` and the two coordinates each fit in 32 bytes, from EIP-7951, Input. -/
 theorem p256Verify_callData_eq_ok_valid_iff {e r s qx qy : Nat} (he : e < 2 ^ 256)
     (hr : r < 2 ^ 256) (hs : s < 2 ^ 256) (hqx : qx < 2 ^ 256) (hqy : qy < 2 ^ 256) (gas : Nat) :
     p256Verify (callData e r s qx qy) gas = .ok VALID ↔
+      -- The call has at least 6900 gas.
       GAS_P256VERIFY ≤ gas ∧
+        -- Both coordinates of the key lie below `p`.
         ∃ (hx : qx < Fp.modulus) (hy : qy < Fp.modulus),
+          -- The signature verifies under that key.
           verify (.affine ⟨qx, hx⟩ ⟨qy, hy⟩) e r s = true := by
   rw [p256Verify_eq_ok_valid_iff, callData_size, isValid_callData_mod, Nat.mod_eq_of_lt he,
     Nat.mod_eq_of_lt hr, Nat.mod_eq_of_lt hs, Nat.mod_eq_of_lt hqx, Nat.mod_eq_of_lt hqy]
@@ -244,17 +239,15 @@ theorem p256Verify_callData_of_verify {qx qy : Fp} {e r s gas : Nat} (he : e < 2
 
 /-- A signature from SEC 1 v2 §4.1.3 returns the word 1 under its public key.
 
-`d` is nonzero, and `k G` is an affine point with x-coordinate `rx`, so `k` is nonzero.
-
-The hash `e` fits in 32 bytes, `r = rx mod n`, and `s = k^(-1) (e + r d)`.
-
-Neither `r` nor `s` is zero, and `Q = d G` is the affine key `(qx, qy)`.
-
-The call has at least 6900 gas. -/
+The private key `d` is nonzero, and the hash `e` fits in 32 bytes. -/
 theorem p256Verify_callData_sign (d k : Fn) {e : Nat} (he : e < 2 ^ 256) (hd : d ≠ 0)
+    -- `k G` is an affine point with x-coordinate `rx`, so `k` is nonzero.
     {rx ry qx qy : Fp} (hR : Point.mul k Point.generator = .affine rx ry)
+    -- `r = rx mod n` is not zero.
     (hr : rx.val % Fn.modulus ≠ 0)
+    -- `s = k^(-1) (e + r d)` is not zero.
     (hs : Fn.inv k * (Fin.ofNat _ e + Fin.ofNat _ (rx.val % Fn.modulus) * d) ≠ 0)
+    -- `Q = d G` is the affine key `(qx, qy)`, and the call has at least 6900 gas.
     (hQ : Point.mul d Point.generator = .affine qx qy) {gas : Nat} (hgas : GAS_P256VERIFY ≤ gas) :
     p256Verify (callData e (rx.val % Fn.modulus)
       (Fn.inv k * (Fin.ofNat _ e + Fin.ofNat _ (rx.val % Fn.modulus) * d)).val

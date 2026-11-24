@@ -7,12 +7,11 @@ public import EthLib.Execution.Evm.Precompiles.Modexp.Gas
 
 What the gas formula guarantees.
 
-- The iteration count is at least 1, at every fork.
-- It follows the case split of EIP-198 for the exponent, at every fork.
-- That includes the case where the literal EIP-7883 pseudocode reads differently.
-- From Fusaka, the price is never below the minimum, 500.
-- From Fusaka, the price does not fall when an operand grows longer.
-- From Fusaka, for lengths in bounds, the price is at most 528449536.
+At every fork, the iteration count follows the case split of EIP-198 for the exponent.
+
+From Fusaka, the price has a minimum, and a maximum for lengths in bounds.
+
+From Fusaka, the price does not fall when an operand grows longer.
 -/
 
 @[expose] public section
@@ -21,7 +20,7 @@ namespace EthLib.Execution.Evm.Precompiles.Modexp
 
 open EthLib.Base (Fork)
 
-/-- The iteration count is at least 1. -/
+/-- The iteration count is at least 1, at every fork. -/
 theorem one_le_iterations (fork : Fork) (expLen expHead : Nat) :
     1 ≤ iterations fork expLen expHead := by
   exact Nat.le_max_right _ _
@@ -61,18 +60,21 @@ theorem iterations_long {fork : Fork} (hfork : fork ≥ .fusaka) {expLen : Nat} 
 /-- From Fusaka, a long exponent with a zero head is charged exactly 16 per byte beyond 32.
 
 EIP-198 says to return exactly `8 * (length_of_EXPONENT - 32)` here.
-EIP-7883 scales that 8 to 16.
-Read literally, the EIP-7883 pseudocode would charge one iteration less.
 
-It adds `(0).bit_length() - 1 = -1` for the zero head. -/
+EIP-7883 scales that 8 to 16.
+
+Read literally, the EIP-7883 pseudocode would charge one iteration less. -/
 theorem iterations_long_zero_head {fork : Fork} (hfork : fork ≥ .fusaka) {expLen : Nat}
     (h : EXPONENT_HEAD_BYTES < expLen) :
     iterations fork expLen 0
       = ITERATIONS_PER_EXTRA_EXPONENT_BYTE * (expLen - EXPONENT_HEAD_BYTES) := by
   rw [iterations_long hfork 0 h]
+  -- The zero head adds `log2 0 = 0`.
+  --
+  -- The literal EIP-7883 pseudocode adds the bit length of 0 minus 1, which is `-1`.
   simp
 
-/-- From Fusaka, the price is never below the minimum. -/
+/-- From Fusaka, the price is never below the minimum, 500. -/
 theorem min_gas_le_gasCost {fork : Fork} (hfork : fork ≥ .fusaka)
     (baseLen modLen expLen expHead : Nat) :
     MIN_GAS ≤ gasCost fork baseLen modLen expLen expHead := by
@@ -93,6 +95,7 @@ theorem complexity_mono_base {fork : Fork} (hfork : fork ≥ .fusaka) {b b' : Na
     omega
   · rw [ite_eq_right h1, ite_eq_left h2]
     -- The short side is 16.
+    --
     -- A long operand has at least 5 words, so its complexity is at least 50.
     have : 5 ≤ (max b' m + 8 - 1) / 8 := by omega
     have : 5 ^ 2 ≤ ((max b' m + 8 - 1) / 8) ^ 2 := Nat.pow_le_pow_left this 2

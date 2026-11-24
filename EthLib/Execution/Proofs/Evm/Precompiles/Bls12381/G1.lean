@@ -6,13 +6,11 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Encoding
 /-!
 # Proofs: `Evm.Precompiles.Bls12381.G1`
 
-- G1ADD rejects any length other than 256 bytes before it charges gas, and then runs out of gas below its price.
-- With enough gas, G1ADD succeeds exactly when both halves decode, and returns the encoded sum.
-- Every encoded G1 point, and so every output of G1ADD and G1MSM, has 128 bytes.
-- G1MSM rejects an empty input or a length that is not a whole number of 160-byte pairs.
-- Its discount never raises the price above that of `k` separate products.
-- MAP_FP_TO_G1 rejects any length other than 64 bytes before it charges gas, and every output has 128 bytes.
-- With enough gas, it succeeds exactly when the field element decodes and its map succeeds.
+It proves when G1ADD, G1MSM and MAP_FP_TO_G1 fail or succeed, and that each output has 128 bytes.
+
+Each one rejects a wrong input length before it charges gas.
+
+The discount of G1MSM never raises the price above that of `k` separate products.
 -/
 
 @[expose] public section

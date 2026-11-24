@@ -9,17 +9,7 @@ EIP-196 encodes a point as its two coordinates, each a 32-byte big-endian number
 
 The point at infinity is `(0, 0)`.
 
-The point `(0, 0)` is not on the curve, so no affine point on the curve has the bytes of infinity.
-
-The decoder reads back every point on the curve from its 64 bytes.
-
-Each 64 bytes that it accepts are the encoding of the point that it returns.
-
-So the decoder accepts 64 bytes exactly when they encode a point on the curve.
-
-The decoder splits its input at byte 32 and reads an input of any length.
-
-So the theorems take 64 bytes, the length that each precompile reads.
+The decoder accepts 64 bytes exactly when they encode a point on the curve.
 
 Source: [EIP-196][eip196], sections Encoding and Exact semantics.
 
@@ -34,7 +24,9 @@ open EthLib.Cryptography.AltBn128
 open EthLib.Base (bytesToNat natToBytes natToBytes_length bytesToNat_natToBytes
   bytesToNat_natToBytes_of_lt natToBytes_bytesToNat natToBytes_zero_right)
 
-/-- The point `(0, 0)` is not on the curve, since `0 ≠ 3` in `Fp`. -/
+/-- The point `(0, 0)` is not on the curve, since `0 ≠ 3` in `Fp`.
+
+So no affine point on the curve has the bytes of infinity. -/
 theorem isOnCurve_affine_zero : (Point.affine 0 0).isOnCurve = false := by decide
 
 /-- A coordinate fits in 32 bytes, since `p < 2^256`. -/
@@ -70,7 +62,11 @@ theorem bytesToG1_g1ToBytes {p : Point} (hp : p.isOnCurve = true) :
       bytesToNat_natToBytes_of_lt (val_lt_two_pow y), x.isLt, y.isLt, hzero, hp, dite_true,
       ite_false, ite_true, pure, Except.pure]
 
-/-- Each 64 bytes that the decoder accepts are the encoding of the point that it returns. -/
+/-- Each 64 bytes that the decoder accepts are the encoding of the point that it returns.
+
+The decoder splits its input at byte 32 and reads an input of any length.
+
+So the theorem takes 64 bytes, the length that each precompile reads. -/
 theorem g1ToBytes_bytesToG1 {raw : List UInt8} {p : Point} (hlen : raw.length = 64)
     (h : bytesToG1 raw = .ok p) : g1ToBytes p = raw := by
   -- Each half has 32 bytes, so it is its value written on 32 bytes.
@@ -99,7 +95,9 @@ theorem g1ToBytes_bytesToG1 {raw : List UInt8} {p : Point} (hlen : raw.length = 
     · cases h
   · cases h
 
-/-- 64 bytes decode to a point exactly when the point is on the curve and the bytes encode it. -/
+/-- 64 bytes decode to a point exactly when the point is on the curve and the bytes encode it.
+
+The decoder reads any length, so the theorem takes the 64 bytes that each precompile reads. -/
 theorem bytesToG1_eq_ok_iff {raw : List UInt8} (hlen : raw.length = 64) (p : Point) :
     bytesToG1 raw = .ok p ↔ p.isOnCurve = true ∧ g1ToBytes p = raw :=
   ⟨fun h => ⟨bytesToG1_isOnCurve h, g1ToBytes_bytesToG1 hlen h⟩,

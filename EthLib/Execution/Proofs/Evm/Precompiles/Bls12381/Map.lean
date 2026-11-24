@@ -8,12 +8,11 @@ public import EthLib.Cryptography.Proofs.Bls.MapToCurve
 /-!
 # Proofs: MAP_FP_TO_G1 and MAP_FP2_TO_G2 of EIP-2537 land in the subgroup
 
-- The maps of RFC 9380 succeed on every field element.
-- So take the right length and enough gas.
-  Each precompile then succeeds exactly when its padded field element decodes.
-- Every output encodes a valid point of the subgroup of order `r`.
-- That output passes the point decoder of EIP-2537 with the subgroup check.
-- The padded encoding of every field element is accepted.
+With the right length and gas, each succeeds exactly when its padded field element decodes.
+
+Every output encodes a valid point of the subgroup of order `r`.
+
+It passes the point decoder with the subgroup check.
 -/
 
 @[expose] public section
@@ -37,10 +36,13 @@ theorem bls12MapFpToG1_isOk_iff (data : ByteArray) (gas : Nat) :
     obtain ⟨hsize, hgas, raw, u, -, hr, hu, -⟩ := (bls12MapFpToG1_eq_ok_iff data gas out).mp h
     exact ⟨hsize, hgas, raw, u, hr, hu⟩
   · rintro ⟨hsize, hgas, raw, u, hr, hu⟩
+    -- The map of RFC 9380 succeeds on every field element.
     obtain ⟨P, hP⟩ := Cryptography.Bls.MapToCurve.mapToG1_ok u
     exact ⟨_, (bls12MapFpToG1_eq_ok_iff data gas _).mpr ⟨hsize, hgas, raw, u, P, hr, hu, hP, rfl⟩⟩
 
-/-- Every output of MAP_FP_TO_G1 is the padded encoding of a valid point of the subgroup. -/
+/-- Every output of MAP_FP_TO_G1 is the padded encoding of a valid point of the subgroup.
+
+The subgroup has order `r`. -/
 theorem inSubgroup_of_bls12MapFpToG1_eq_ok {data : ByteArray} {gas : Nat} {out : ByteArray}
     (h : bls12MapFpToG1 data gas = .ok out) :
     ∃ P, G1.Valid P ∧ G1.inSubgroup P = true ∧ out = ⟨(padG1 (g1ToBytes P)).toArray⟩ := by
@@ -48,7 +50,9 @@ theorem inSubgroup_of_bls12MapFpToG1_eq_ok {data : ByteArray} {gas : Nat} {out :
   obtain ⟨hvalid, hsub⟩ := Cryptography.Bls.MapToCurve.mapToG1_inSubgroup hP
   exact ⟨P, hvalid, hsub, rfl⟩
 
-/-- Every output of MAP_FP_TO_G1 decodes, with the subgroup check, to the point it encodes. -/
+/-- Every output of MAP_FP_TO_G1 passes the point decoder of EIP-2537 with the subgroup check.
+
+It decodes to the point it encodes. -/
 theorem bytesToG1_of_bls12MapFpToG1_eq_ok {data : ByteArray} {gas : Nat} {out : ByteArray}
     (h : bls12MapFpToG1 data gas = .ok out) :
     ∃ P raw q, out = ⟨(padG1 (g1ToBytes P)).toArray⟩ ∧ unpadG1 out.data.toList = .ok raw ∧
@@ -58,7 +62,7 @@ theorem bytesToG1_of_bls12MapFpToG1_eq_ok {data : ByteArray} {gas : Nat} {out : 
   have hlength : (g1ToBytes P).length = 96 := by simp [g1ToBytes, natToBytes_length]
   exact ⟨P, _, q, rfl, by rw [List.toList_toArray, unpadG1_padG1 hlength], hq, hqP⟩
 
-/-- MAP_FP_TO_G1 maps the padded encoding of every field element `u`, with enough gas. -/
+/-- With enough gas, MAP_FP_TO_G1 accepts and maps the padded encoding of every `u` in `Fp`. -/
 theorem bls12MapFpToG1_pad (u : Fp) {gas : Nat} (hgas : GAS_G1MAP ≤ gas) :
     ∃ P, Cryptography.Bls.MapToCurve.mapToG1 u = .ok P ∧
       bls12MapFpToG1 ⟨(zeroPad ++ natToBytes 48 u.val).toArray⟩ gas =
@@ -84,11 +88,14 @@ theorem bls12MapFp2ToG2_isOk_iff (data : ByteArray) (gas : Nat) :
       (bls12MapFp2ToG2_eq_ok_iff data gas out).mp h
     exact ⟨hsize, hgas, c0, c1, u, h0, h1, hu⟩
   · rintro ⟨hsize, hgas, c0, c1, u, h0, h1, hu⟩
+    -- The map of RFC 9380 succeeds on every element of `Fp2`.
     obtain ⟨P, hP⟩ := Cryptography.Bls.MapToCurve.mapToG2_ok u
     exact ⟨_, (bls12MapFp2ToG2_eq_ok_iff data gas _).mpr
       ⟨hsize, hgas, c0, c1, u, P, h0, h1, hu, hP, rfl⟩⟩
 
-/-- Every output of MAP_FP2_TO_G2 is the padded encoding of a valid point of the subgroup. -/
+/-- Every output of MAP_FP2_TO_G2 is the padded encoding of a valid point of the subgroup.
+
+The subgroup has order `r`. -/
 theorem inSubgroup_of_bls12MapFp2ToG2_eq_ok {data : ByteArray} {gas : Nat} {out : ByteArray}
     (h : bls12MapFp2ToG2 data gas = .ok out) :
     ∃ P, G2.Valid P ∧ G2.inSubgroup P = true ∧ out = ⟨(padG2 (g2ToBytes P)).toArray⟩ := by
@@ -96,7 +103,9 @@ theorem inSubgroup_of_bls12MapFp2ToG2_eq_ok {data : ByteArray} {gas : Nat} {out 
   obtain ⟨hvalid, hsub⟩ := Cryptography.Bls.MapToCurve.mapToG2_inSubgroup hP
   exact ⟨P, hvalid, hsub, rfl⟩
 
-/-- Every output of MAP_FP2_TO_G2 decodes, with the subgroup check, to the point it encodes. -/
+/-- Every output of MAP_FP2_TO_G2 passes the point decoder of EIP-2537 with the subgroup check.
+
+It decodes to the point it encodes. -/
 theorem bytesToG2_of_bls12MapFp2ToG2_eq_ok {data : ByteArray} {gas : Nat} {out : ByteArray}
     (h : bls12MapFp2ToG2 data gas = .ok out) :
     ∃ P raw q, out = ⟨(padG2 (g2ToBytes P)).toArray⟩ ∧ unpadG2 out.data.toList = .ok raw ∧
@@ -106,7 +115,7 @@ theorem bytesToG2_of_bls12MapFp2ToG2_eq_ok {data : ByteArray} {gas : Nat} {out :
   have hlength : (g2ToBytes P).length = 192 := by simp [g2ToBytes, natToBytes_length]
   exact ⟨P, _, q, rfl, by rw [List.toList_toArray, unpadG2_padG2 hlength], hq, hqP⟩
 
-/-- MAP_FP2_TO_G2 maps the padded encoding of every element `u` of `Fp2`, with enough gas.
+/-- With enough gas, MAP_FP2_TO_G2 accepts and maps the padded encoding of every `u` in `Fp2`.
 
 The encoding puts `c0` first. -/
 theorem bls12MapFp2ToG2_pad (u : Fp2) {gas : Nat} (hgas : GAS_G2MAP ≤ gas) :

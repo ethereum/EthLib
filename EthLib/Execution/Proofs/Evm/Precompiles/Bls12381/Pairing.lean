@@ -6,13 +6,11 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Encoding
 /-!
 # Proofs: `Evm.Precompiles.Bls12381.Pairing`
 
-- Before it charges gas, the pairing check rejects two kinds of input.
-  They are an empty input, and a length that is not a whole number of 384-byte pairs.
-- Take a whole number of pairs and enough gas.
-  The check then succeeds exactly when every padding is zero and every point decodes.
-- Each point is decoded with the subgroup check.
-- It then returns the word of the pairing check of the decoded pairs.
-- Every output is the 32-byte word 0 or 1.
+It proves when the pairing check fails or succeeds, and that every output is the word 0 or 1.
+
+Each output has 32 bytes.
+
+Before it charges gas, it rejects an empty input or a length not a multiple of 384 bytes.
 -/
 
 @[expose] public section

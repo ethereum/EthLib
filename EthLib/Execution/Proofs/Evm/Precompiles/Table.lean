@@ -5,13 +5,9 @@ public import EthLib.Execution.Evm.Precompiles.Table
 /-!
 # Proofs: `Evm.Precompiles.Table`
 
-- The table lists 18 distinct addresses, and each one has the fork that adds it.
-- At a fork, a call runs a precompile exactly when the fork has a precompile at its address.
-- Before the fork that adds it, an address runs no precompile.
-- A call that succeeds had at least its price in gas.
-- A call with less gas than its price fails.
-- Gas above the price changes nothing, so a call that succeeds uses exactly its price.
-- Each precompile has its own error code, and no code is 0.
+The table lists 18 distinct addresses, and each one has the fork that adds it.
+
+A call runs a precompile only from that fork, fails below its price, and is unchanged above it.
 -/
 
 @[expose] public section
@@ -86,7 +82,9 @@ local macro "unfold_calls" : tactic => `(tactic| simp only [run, Option.some.inj
   Bls12381.bls12G2Add, Bls12381.bls12G2Msm, Bls12381.bls12Pairing, Bls12381.bls12MapFpToG1,
   Bls12381.bls12MapFp2ToG2, P256Verify.p256Verify] at *)
 
-/-- Gas above the price changes nothing: the call gives what it gives with exactly its price. -/
+/-- Gas above the price changes nothing: the call gives what it gives with exactly its price.
+
+So a call that succeeds uses exactly its price. -/
 theorem run_of_price_le {fork : Fork} {address : Nat} {data : ByteArray} {cost gas : Nat}
     (hprice : price fork address data = some cost) (enough : cost ≤ gas) :
     run fork address data gas = run fork address data cost := by
@@ -124,7 +122,9 @@ theorem run_ok_price {fork : Fork} {address : Nat} {data : ByteArray} {gas : Nat
   obtain ⟨e, he⟩ := run_outOfGas hcost short
   simp [hrun] at he
 
-/-! ## Error codes -/
+/-! ## Error codes
+
+Each precompile has its own error code, and no code is 0. -/
 
 /-- Two errors with one code come from one constructor. -/
 theorem PrecompileError.code_injective (e₁ e₂ : PrecompileError) (h : e₁.code = e₂.code) :

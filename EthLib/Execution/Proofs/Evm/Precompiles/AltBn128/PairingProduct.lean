@@ -8,13 +8,9 @@ import EthLib.Cryptography.Proofs.AltBn128.PairingAte
 /-!
 # Proofs: ECPAIRING checks a product of pairings
 
-Let `P_i = a_i P1` and `Q_i = b_i P2`, for scalars `a_i` and `b_i` in `ZMod q`.
+ECPAIRING returns the word 1 exactly when `sum_i a_i * b_i = 0`.
 
-Then `prod_i e(P_i, Q_i) = e(P1, P2)^(sum_i a_i * b_i)`, and `e(P1, P2)` has prime order `q`.
-
-So the product is 1, and ECPAIRING returns the word 1, exactly when `sum_i a_i * b_i = 0`.
-
-Every pair that ECPAIRING decodes holds such multiples of `P1` and `P2`.
+Here `P_i = a_i P1` and `Q_i = b_i P2`, for scalars `a_i` and `b_i` in `ZMod q`.
 
 The pairing law is proved in `PairingAte.lean`, so no theorem here assumes it.
 
@@ -111,6 +107,9 @@ theorem ecpairing_eq_one_iff {fork : Fork} {data : ByteArray} {gas : Nat} {out :
   obtain ⟨-, -, pairs', hdec', rfl⟩ := (ecpairing_eq_ok_iff fork data gas out).mp h
   rw [hdec] at hdec'
   cases hdec'
+  -- `prod_i e(P_i, Q_i) = e(P1, P2)^(sum_i a_i * b_i)`, and `e(P1, P2)` has prime order `q`.
+  --
+  -- So the product is 1 exactly when `sum_i a_i * b_i = 0`.
   rw [← pairingLaws.pairingCheck_iff pairs a b ha hb hrep]
   constructor
   · intro hout

@@ -6,13 +6,11 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Encoding
 /-!
 # Proofs: `Evm.Precompiles.Bls12381.G2`
 
-- G2ADD rejects any length other than 512 bytes before it charges gas, and then runs out of gas below its price.
-- With enough gas, G2ADD succeeds exactly when both halves decode, and returns the encoded sum.
-- Every encoded G2 point, and so every output of G2ADD and G2MSM, has 256 bytes.
-- G2MSM rejects an empty input or a length that is not a whole number of 288-byte pairs.
-- Its discount never raises the price above that of `k` separate products.
-- MAP_FP2_TO_G2 rejects any length other than 128 bytes before it charges gas, and every output has 256 bytes.
-- With enough gas, it succeeds exactly when the element of `Fp2` decodes and its map succeeds.
+It proves when G2ADD, G2MSM and MAP_FP2_TO_G2 fail or succeed, and that each output has 256 bytes.
+
+Each one rejects a wrong input length before it charges gas.
+
+The discount of G2MSM never raises the price above that of `k` separate products.
 -/
 
 @[expose] public section
