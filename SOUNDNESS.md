@@ -675,6 +675,17 @@ Against that key, a forger wins exactly `r / (r - 1)` times its byte advantage.
 `byteForgeAdvantage_le_coCdhAdvantage_of_byteHashCallBound` states the bound with the hash-call bound on the byte forger itself.
 `byteHashCallBound_iff` proves that the two bounds are equivalent, because the encoding forwards each query once.
 
+`multiForgeAdvantage_le_coCdhAdvantage` (`Proofs/Bls/Security/MultiKey.lean`) extends the group bound to `n` honest keys.
+Each key signs on request, and the forger wins with a valid signature by one key on a message that this key never signed.
+Another honest key may have signed that message.
+Within `q` hash calls, the forger wins at most `n * q` times as often as a named co-CDH solver.
+The reduction guesses the key of the forgery, draws the other secret keys itself, and signs for them from the hash (`multiForgeAdvantage_le`).
+Its one-key forger makes the same hash calls as the game against `n` keys (`hashCallBound_guess`).
+The keys are honest from the start, and the game has no corruption oracle.
+A forgery under one key may be on a message that another key signed.
+A reduction that derives every key from one co-CDH challenge cannot sign that message, so this proof guesses the key and loses the factor `n`.
+This game covers single signatures only; no theorem yet bounds the forgeries among the accepted calls of two runs, nor aggregates registered by deposit signatures.
+
 ### secp256k1
 
 The secp256k1 theorems are correctness statements.
