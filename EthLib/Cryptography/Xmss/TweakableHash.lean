@@ -9,26 +9,11 @@ public import EthLib.Cryptography.Xmss.Address
 
 The hash every other definition is built from: `Th(P, A, M)` is the first half of `H(P | A | M)`.
 
-- `H` is Keccak-256, Ethereum's hash: FIPS 202's 256-bit hash with Keccak's original padding.
-- `H_0` and `H_1` are the first and last 16 bytes of its output.
-- `P` and `A` are 16 bytes each, so the payload `M` always starts at byte 32.
+Every definition that hashes takes `H` as an argument, in a monad:
 
-Every part of every input is 16 or 32 bytes, except the 8-byte name hashed before a seed.
-
-So `H` takes its input as Keccak lanes, and returns its output as lanes.
-
-These are the lanes Keccak-256 absorbs and squeezes, so no byte is moved on the way.
-
-Every definition that hashes takes the hash `H` as an argument, in a monad `m`.
-
-- The hash that EthLib computes is Keccak-256, in the identity monad.
-- A proof in the random oracle model passes a query to the oracle instead.
-
-So the definitions that run are the definitions that the security proof is about.
-
-A derivation from the scheme seed `S` is a hash of `P | A | S | suffix`.
-
-Definitions that derive a value from the seed take the derivations as one function argument.
+- EthLib computes Keccak-256, in the identity monad;
+- a proof in the random oracle model passes a query to the oracle;
+- so the definitions that run are the ones the security proof is about.
 
 Source: the leanXMSS specification draft, sections "Hashing and parameters" and "Security".
 
@@ -45,10 +30,11 @@ namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
-/-- Keccak-256 of a string of lanes, the scheme's hash: 32 bytes, as four lanes.
-
-The input has 8 bytes per lane. -/
+/-- Keccak-256 of a string of lanes, the scheme's hash: 32 bytes, as four lanes. -/
 def hash (input : Array UInt64) : Lanes4 :=
+  -- FIPS 202's 256-bit hash with Keccak's original padding, as Ethereum uses it.
+  -- Every input part is 16 or 32 bytes, or the 8-byte name before a seed: whole lanes of 8 bytes.
+  -- Keccak absorbs and squeezes these lanes, so no byte is moved on the way.
   Hash.Keccak.keccak256Lanes input
 
 export EthLib.Cryptography.HashSig (pureHash)
@@ -59,10 +45,9 @@ An abbreviation, so a theorem about `pureHash f` applies to it with `f = hash`. 
 abbrev hashId : Array UInt64 → Id Lanes4 :=
   pureHash hash
 
-/-- `H_0` or `H_1`: the first or the last 16 bytes of a 32-byte hash value.
-
-They are its first two lanes or its last two lanes. -/
+/-- `H_0` or `H_1`: the first or the last 16 bytes of a 32-byte hash value. -/
 @[inline] def halfOf (half : Fin 2) (full : Lanes4) : Digest :=
+  -- The first two lanes, or the last two.
   if half.val = 0 then ⟨full.w0, full.w1⟩ else ⟨full.w2, full.w3⟩
 
 /-- The lanes one tweakable hash call hashes: `P | A | M`, with `A` the encoding of the address. -/
@@ -70,6 +55,7 @@ They are its first two lanes or its last two lanes. -/
     Array UInt64 :=
   -- `A = enc(tau, mu, hi, lo)`.
   let address := address.encode
+  -- `P` and `A` are 16 bytes each, so the payload `M` always starts at byte 32.
   -- Fixed-length prefixes, so the input splits back into its three parts one way.
   #[publicParam.lo, publicParam.hi, address.lo, address.hi] ++ payload
 
@@ -83,20 +69,17 @@ They are its first two lanes or its last two lanes. -/
 
 /-- A source of derived values: the derivation at a parameter, an address and a suffix.
 
-The signer derives the public parameter and every secret through one such source.
+The signer derives the public parameter and every secret through one source.
 
-So a proof can replace the derivations as a whole.
-
-It takes the parameter because the public parameter is itself a derivation.
-
-It returns all 32 bytes because a pair of chains starts at the two halves of one derivation. -/
+- So a proof can replace the derivations as a whole.
+- It takes the parameter, because the public parameter is itself a derivation.
+- It returns 32 bytes, because two chains start at the two halves of one derivation. -/
 abbrev SeedPrf (m : Type → Type) := PublicParam → Address → Array UInt64 → m Lanes4
 
-/-- `H(P | A | S | suffix)`: the derivations from the scheme seed `S`.
-
-The seed comes right after the address, and the suffix comes last. -/
+/-- `H(P | A | S | suffix)`: the derivations from the scheme seed `S`. -/
 def seedPrf {m : Type → Type} (H : Array UInt64 → m Lanes4) (s : Seed) : SeedPrf m :=
-  -- `H(P | A | S | suffix)`: the chain starts, `R_0` and `P` are halves of it.
+  -- The seed right after the address, then the suffix.
+  -- The chain starts, `R_0` and `P` are halves of the result.
   fun publicParam address suffix => H (thInput publicParam address (s.toArray ++ suffix))
 
 end EthLib.Cryptography.Xmss
