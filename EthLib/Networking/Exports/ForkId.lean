@@ -39,17 +39,19 @@ def readActivation (item : Item) : Result (Fork × Activation) := do
   let .ok [name, kind, value] := item.fields 3 |
     rejectArgument none "a fork is not [name, kind, value]"
   let .ok name := name.toBytes | rejectArgument none "a fork name is not a byte string"
-  -- A fork name is written as its case is, such as `homestead`.
   let fork ← forkOfName name
   let .ok (value : Nat) := Codec.ofItem value | rejectArgument none "a fork value is not a scalar"
   unless value < ACTIVATION_BOUND do rejectArgument none "a fork value is not below 2^64"
-  -- The kind is 0 for a block and 1 for a time.
   match (Codec.ofItem kind : Except RlpError Nat) with
   | .ok 0 => return (fork, .block value)
   | .ok 1 => return (fork, .time value)
   | _ => rejectArgument none "a fork kind is not 0 or 1"
 
 /-- The schedule in the RLP list `[genesis-hash, genesis-time, merge-fork, forks]`.
+
+- `merge-fork` is an empty list, or a list of the one block of `FORK_NEXT_VALUE`.
+- `forks` holds `[name, kind, value]` for each fork, with kind 0 for a block and 1 for a time.
+- A fork name is written as its case is, such as `homestead`.
 
 The chain ID does not enter the fork identifier, so the configuration has chain ID 0. -/
 def readSchedule (bytes : ByteArray) : Result Schedule := do
@@ -59,7 +61,6 @@ def readSchedule (bytes : ByteArray) : Result Schedule := do
     rejectArgument none "schedule is not [genesis-hash, genesis-time, merge-fork, forks]"
   let .ok (hash : Hash32) := Codec.ofItem hash | rejectArgument none "genesis hash is not 32 bytes"
   let .ok (time : Nat) := Codec.ofItem time | rejectArgument none "genesis time is not a scalar"
-  -- `merge-fork` is an empty list, or a list of the one block of `FORK_NEXT_VALUE`.
   let mergeForkBlock ← match (Codec.ofItem merge : Except RlpError (List Nat)) with
     | .ok [] => pure none
     | .ok [n] =>
@@ -67,7 +68,6 @@ def readSchedule (bytes : ByteArray) : Result Schedule := do
       unless n < ACTIVATION_BOUND do rejectArgument none "merge fork is not below 2^64"
       pure (some n)
     | _ => rejectArgument none "merge fork is not a list of at most one block"
-  -- `forks` holds `[name, kind, value]` for each fork.
   let .ok forks := forks.toItems | rejectArgument none "forks are not a list"
   let activations ← forks.mapM readActivation
   -- The chain ID and the deposit contract play no part in a fork ID.

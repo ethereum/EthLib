@@ -5,7 +5,7 @@ public import EthLib.Consensus.Proofs.Models.Stake
 /-!
 # Casper FFG: the model
 
-Checkpoints, votes, slashing conditions, links, justification and finalization.
+This module defines checkpoints, votes, slashing conditions, links, justification and finalization.
 
 The model follows Casper FFG §2, [arXiv 1710.09437v4](https://arxiv.org/abs/1710.09437v4).
 
@@ -147,6 +147,10 @@ def SlackLink (V U : Checkpoint β → Finset ν) (W : Checkpoint β → Set (ν
     -- So the safety bounds say something only when the slack is bounded.
     --
     -- The exit churn bounds it.
+    --
+    -- Take `U = V`, and the single stake function `w` in each set.
+    --
+    -- Then a slack link is a supermajority link.
     2 * stake w (V t) ≤ 3 * stake w (signers (V t) votes s t) + 2 * stake w (V t \ U t)
 
 /-- The checkpoints justified by a kind of link, such as supermajority links or slack links.
@@ -163,7 +167,9 @@ inductive JustifiedBy (link : Checkpoint β → Checkpoint β → Prop) (genesis
 
 /-- The checkpoint `c` is `k`-finalized by a kind of link, as in Gasper Definition 4.9.
 
-Gasper also asks that its checkpoints are epoch boundary pairs; the model drops that condition.
+Gasper also asks that these checkpoints are epoch boundary pairs.
+
+The model drops that condition.
 
 It then finalizes more checkpoints, so its safety theorem is stronger. -/
 def KFinalizedBy (link : Checkpoint β → Checkpoint β → Prop) (genesis : β) (k : ℕ)

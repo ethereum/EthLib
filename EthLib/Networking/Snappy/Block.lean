@@ -305,7 +305,9 @@ def literalHeader (n : Nat) : List UInt8 :=
 
 /-- One literal element that holds `data`, of 1 to 2^32 bytes (§2.1).
 
-It is here for the proofs and the compressor, which writes literals and copies in its own module. -/
+The bytes of one literal element are here, for the compressor and the proofs.
+
+The compressor, which writes literals and copies, is in its own module. -/
 def literal (data : List UInt8) : List UInt8 :=
   -- §2.1: the tag and the length, then the literal itself.
   literalHeader data.length ++ data

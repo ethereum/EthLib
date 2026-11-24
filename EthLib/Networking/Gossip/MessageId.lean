@@ -9,7 +9,9 @@ public import EthLib.Serialization.Ssz.Codec.Serialize
 /-!
 # `Networking.Gossip.MessageId`
 
-The message ID of gossip on the consensus layer, which computes it from the content.
+The message ID of gossip on the consensus layer.
+
+The consensus layer computes it from the content.
 
 The pubsub interface of libp2p lets the application choose the function that computes that ID:
 <https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/README.md#message-identification>

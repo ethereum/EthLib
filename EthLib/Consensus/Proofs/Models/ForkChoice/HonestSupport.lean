@@ -8,11 +8,11 @@ public import Mathlib.Tactic.Ring
 /-!
 # Honest support of a block, after the fast confirmation rule
 
-Lemmas 1, 3 and 4 of Appendix A of the fast confirmation paper, as bounds on stakes only.
+The bounds are Lemmas 1, 3 and 4 of Appendix A of the fast confirmation paper.
 
 Every bound is stated with its fractions multiplied out, in natural numbers.
 
-Views, checkpoints and Assumption 1 are left out.
+Views, checkpoints and Assumption 1 are left out: the statements bound stakes only.
 
 The paper is [arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4).
 -/
@@ -21,9 +21,9 @@ The paper is [arXiv 2405.00549v4](https://arxiv.org/abs/2405.00549v4).
 
 namespace EthLib.Consensus.Models.ForkChoice
 
--- Sets of validators are weighed by their stake, and the honest validators form a set `J`.
+-- Sets of validators are weighed by their stake.
 --
--- The committees of a range of slots form a set `W`.
+-- The committees of a range of slots form a set `W`, and the honest validators form a set `J`.
 --
 -- The Byzantine validators hold at most the fraction `β = num / den` of the stake of `W`.
 --
@@ -136,7 +136,9 @@ theorem sub_le_honest_support {W S I : Finset ν} {adversary num den : ℕ}
     --
     -- The validators of `W` known to have equivocated form a set `I`.
     (bound : ByzantineStakeAtMost w W J num den) (supportIn : S ⊆ W) (equivocatorsIn : I ⊆ W)
-    -- The supporters `S` and the equivocators `I` are disjoint, and no equivocator is honest.
+    -- The supporters `S` and the equivocators `I` are disjoint parts of `W`.
+    --
+    -- No equivocator is honest.
     (apart : Disjoint S I) (dishonest : ∀ v ∈ I, v ∉ J)
     -- The adversary and the equivocators must cover the Byzantine share `β W`.
     --
@@ -297,7 +299,7 @@ theorem lt_two_mul_honest_support_later [DecidableEq ν] {W W' H K N H' : Finset
 
 /-- The same, for thresholds that add an amount to the stake of the committees.
 
-It serves the specification's discount for empty slots: the amount is the boost less the discount.
+It serves the discount for empty slots of the specification.
 
 So this form does not apply when the discount exceeds the boost.
 
