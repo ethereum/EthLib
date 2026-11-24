@@ -958,7 +958,7 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "XmssError",
    "docstring":
-   "`Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.\n\nIt returns the signature and the updated key.\n\n1. The bottom key `idx` signs the message.\n2. Bottom tree `b = floor(idx / 2^16)` gives the key's path, and its top signature.\n   The tree comes from the key, or is built and kept.\n\nWhen the bottom search succeeds, the updated key keeps tree `b`.\n\nA failed bottom search returns the key unchanged.\n\nA key that key generation and signing give signs as the note's signer does, by a theorem.\n\n# Warning\n\nNever sign two different messages at one leaf index with one secret key.\n\nThe top key `b` signs only the root of bottom tree `b`.\n\nSo it signs one message, however many leaf indices of that tree are used.\n\nEach trial of a randomizer search hashes its input with `H`.\n\n# Errors\n\n- Either layer's one-time signature finds no codeword."},
+   "`Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.\n\nIt returns the signature and the updated key.\n\nA key that key generation and signing give signs as the note's signer does, by a theorem.\n\n# Warning\n\nNever sign two different messages at one leaf index with one secret key.\n\nTheir two codewords would reveal every chain at the smaller of their two positions.\n\nThe top key `b` signs only the root of bottom tree `b`.\n\nSo it signs one message, however many leaf indices of that tree are used.\n\n# Errors\n\n- Either layer's one-time signature finds no codeword."},
   {"summary":
    "`Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key.",
    "signature": "(public_key: bytes, message: bytes, signature: bytes) -> bool",
@@ -974,7 +974,7 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "XmssError",
    "docstring":
-   "`Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key.\n\nA yes or a no, never a reason.\n\nWhich step rejected a well-formed signature carries no consensus meaning."},
+   "`Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key.\n\nA yes or a no, never a reason.\n\nWhich step rejected a well-formed signature carries no consensus meaning.\n\nIt costs 186 permutations of Keccak-f[1600], whatever the message.\n\nThat fixed count keeps the aggregation circuit a fixed size."},
   {"summary":
    "The leaf index that a 2404-byte signature claims, read without verifying the signature.",
    "signature": "(signature: bytes) -> int",
