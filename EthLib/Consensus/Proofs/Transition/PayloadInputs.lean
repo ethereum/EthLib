@@ -9,41 +9,7 @@ import EthLib.Consensus.Proofs.Transition.Operations
 
 The checks of a payload and of a bid read a few fields of the state.
 
-They read the slot, the genesis time, the RANDAO mixes and the block roots.
-
-They also read the latest payload header and the latest block header.
-
-From Gloas they read the latest block hash and the latest bid.
-
-From Fulu the header step also reads the proposer lookahead, so these fields include it.
-
 Most steps of a block keep all of these fields, when they succeed.
-
-The stages of an epoch before the RANDAO reset keep them, and so does a pending deposit.
-
-The withdrawals keep them, and from Gloas so do the requests of a parent payload.
-
-The operations keep them at every fork.
-
-The sync aggregate from Altair and the vote on the deposit contract before Heze keep them too.
-
-A full parent changes only the latest block hash among them, and the header step only the header.
-
-So from Gloas the parent step keeps the proposer that the header step reads.
-
-The RANDAO step changes only the mixes, and the bid step only the latest bid.
-
-So from Gloas a block leaves its own bid as the latest bid.
-
-The latest block hash after the block is then the parent hash of that bid.
-
-At every fork a block leaves its own header as the latest header, and names the header before it.
-
-From Gloas a block that succeeds also runs an operations step that succeeds.
-
-From Capella to Fulu a block that succeeds runs header, withdrawal and payload steps that succeed.
-
-Before Gloas a block that succeeds first runs a header step that succeeds, on the state before it.
 -/
 
 @[expose] public section
@@ -56,25 +22,26 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
   {engine : ExecutionEngine preset fork} {state after : BeaconState preset fork}
   {gloas : .glamsterdam ≤ fork}
 
-/-- Two states that agree on what the checks of a payload and of a bid read of them.
-
-They have one slot, one genesis time, one buffer of RANDAO mixes and one buffer of block roots.
-
-They also have one latest payload header and one latest block header.
-
-From Gloas they have one latest block hash and one latest bid.
-
-From Fulu they have one proposer lookahead, which the header step reads. -/
+/-- Two states that agree on what the checks of a payload and of a bid read of them. -/
 structure PayloadInputs (state after : BeaconState preset fork) : Prop where
+  -- They have one slot.
   slot : after.slot = state.slot
+  -- They have one genesis time.
   genesisTime : after.genesisTime = state.genesisTime
+  -- They have one buffer of RANDAO mixes.
   randaoMixes : after.randaoMixes = state.randaoMixes
+  -- They have one buffer of block roots.
   blockRoots : after.blockRoots = state.blockRoots
+  -- They also have one latest payload header.
   latestExecutionPayloadHeader :
     after.latestExecutionPayloadHeader = state.latestExecutionPayloadHeader
+  -- They also have one latest block header.
   latestBlockHeader : after.latestBlockHeader = state.latestBlockHeader
+  -- From Gloas they have one latest block hash.
   latestBlockHash : after.latestBlockHash = state.latestBlockHash
+  -- From Gloas they have one latest bid.
   latestExecutionPayloadBid : after.latestExecutionPayloadBid = state.latestExecutionPayloadBid
+  -- From Fulu they have one proposer lookahead, which the header step reads.
   proposerLookahead : after.proposerLookahead = state.proposerLookahead
 
 theorem PayloadInputs.refl (state : BeaconState preset fork) : PayloadInputs state state :=
@@ -680,11 +647,7 @@ theorem randaoMixes_processBlockExecution {body : BeaconBlockBody preset fork}
 
 The parent payload runs first, then the header, the withdrawals, the bid and the RANDAO reveal.
 
-Before Heze the vote on the deposit contract follows, and from Heze no step runs in its place.
-
-The operations and the sync aggregate come last.
-
-The operations read the slot of the parent from the latest block header before the block. -/
+The operations and the sync aggregate come last. -/
 theorem processBlock_gloas_ok (gloas : .glamsterdam ≤ fork) {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
     ∃ parented headed withdrawn bidded revealed voted operated, ∃ payload,
@@ -694,8 +657,11 @@ theorem processBlock_gloas_ok (gloas : .glamsterdam ≤ fork) {block : BeaconBlo
       processExecutionPayloadBid config checks withdrawn gloas
         (block.body.signedExecutionPayloadBid gloas) = .ok bidded ∧
       processRandao config checks bidded block.body = .ok revealed ∧
+      -- Before Heze the vote on the deposit contract follows.
       (∀ before : fork < .hegota, processEth1Data before revealed block.body = .ok voted) ∧
+      -- From Heze no step runs in its place.
       (.hegota ≤ fork → voted = revealed) ∧
+      -- The operations read the slot of the parent from the latest block header before the block.
       processOperations config checks voted block.body state.latestBlockHeader.slot =
         .ok operated ∧
       processSyncAggregate config checks operated (Nat.le_trans (by decide) gloas)
@@ -737,6 +703,7 @@ theorem processBlock_steps (gloas : .glamsterdam ≤ fork) {block : BeaconBlock 
     · rw [kept (Nat.le_of_not_lt before)]
       exact PayloadInputs.refl _
   have rest := voting.trans <| (payloadInputs_processOperations operatedOk).trans <|
+    -- The sync aggregate from Altair keeps the inputs too.
     payloadInputsLaws.processSyncAggregate synced
   exact ⟨parented, headed, withdrawn, bidded, _, parentOk, headedOk, withdrawnOk, biddedOk,
     rest.slot.trans randao.slot, rest.latestBlockHeader.trans randao.latestBlockHeader,

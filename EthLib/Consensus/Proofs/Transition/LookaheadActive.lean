@@ -10,21 +10,7 @@ public import EthLib.Consensus.Proofs.Transition.SyncCommitteeProvenance
 
 From Fulu the state keeps the proposers of the current epoch and of the epochs after it.
 
-The proposer at position `k` is active in the epoch `k / SLOTS_PER_EPOCH` after the current one.
-
-The upgrade to Fulu draws the lookahead from the registry of the upgrade.
-
-The epoch step shifts the lookahead by one epoch and draws the new last epoch from the registry.
-
-Every other step keeps the lookahead.
-
-The steps keep activity up to the current epoch plus `MAX_SEED_LOOKAHEAD`.
-
-That bound covers the whole lookahead.
-
-So along a run from genesis each entry of the lookahead is active in its epoch.
-
-The proposer of a block is read from the lookahead, so it is active in the epoch of its slot.
+Along a run from genesis, each of them is active in its epoch.
 -/
 
 @[expose] public section
@@ -53,6 +39,9 @@ private theorem lookahead_le_fixed (covers : preset.MIN_SEED_LOOKAHEAD.toNat + 1
     {epoch : Epoch} (shift : Nat)
     (he : epoch.toNat = (getCurrentEpoch state).toNat + shift + k / preset.SLOTS_PER_EPOCH.toNat)
     (small : shift ≤ 1) : epoch ≤ activityFixedEpoch state := by
+  -- The steps keep activity up to the current epoch plus `MAX_SEED_LOOKAHEAD`.
+  --
+  -- That bound covers the whole lookahead.
   rw [UInt64.le_iff_toNat_le, activityFixedEpoch_toNat]
   have div : k / preset.SLOTS_PER_EPOCH.toNat < preset.MIN_SEED_LOOKAHEAD.toNat + 1 :=
     Nat.div_lt_of_lt_mul (by rw [Nat.mul_comm]; exact inside)
@@ -78,6 +67,7 @@ private theorem LookaheadActive.processBlock
     {block : BeaconBlock preset fork} (h : LookaheadActive state)
     (ok : Consensus.processBlock config checks engine state block = .ok after) :
     LookaheadActive after :=
+  -- Every step other than the upgrade to Fulu and the epoch step keeps the lookahead.
   h.keep covers (by simp only [getCurrentEpoch, (frame_processBlock ok).slot])
     (processBlock_proposerLookahead ok) (activeKept_processBlock ok)
 
@@ -126,6 +116,9 @@ private theorem LookaheadActive.advanceSlot
     intro fulu k inside e he
     obtain ⟨m, looked, mSlot, mLook, draw, validators, lookEq, -⟩ :=
       processEpoch_lookahead_cut fulu epochedOk
+    -- The epoch step shifts the lookahead by one epoch.
+    --
+    -- It draws the new last epoch from the registry.
     obtain ⟨ahead, last, aheadEq, drawn, spec⟩ := processProposerLookahead_spec draw
     have positive : 0 < preset.SLOTS_PER_EPOCH.toNat :=
       Nat.pos_of_ne_zero fun zero => by simp [zero] at inside
@@ -223,6 +216,7 @@ theorem LookaheadActive.proposer_active {state : BeaconState preset fork}
     (fulu : .fusaka ≤ fork) (h : LookaheadActive state) {proposer : ValidatorIndex}
     (ok : getBeaconProposerIndex state = .ok proposer) :
     isActiveAt state (getCurrentEpoch state) proposer.toNat = true := by
+  -- The proposer of a block is read from the lookahead, so it is active in the epoch of its slot.
   unfold getBeaconProposerIndex at ok
   simp only [fulu, ↓reduceDIte] at ok
   split at ok

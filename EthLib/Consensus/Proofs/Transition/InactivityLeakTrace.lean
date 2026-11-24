@@ -10,21 +10,7 @@ import EthLib.Consensus.Proofs.Transition.ValidatorKeys
 
 The trace bound of an inactivity leak follows one validator from epoch to epoch.
 
-It reads its balance and its score before each epoch transition.
-
-It reads its effective balance there too, and its balance at the update of the effective balances.
-
-This module derives one step of those traces from one epoch transition, from Altair.
-
-The step is the state after the epoch: its balance, its effective balance and its score.
-
-In a leak the balance does not rise, and the effective balance follows it, for any validator.
-
-The validator must also be eligible and lack the timely target flag.
-
-Then its balance falls by at least the inactivity penalty, and its score gains the score bias.
-
-The slot that ends an epoch runs the epoch transition, and its other steps keep these facts.
+This module derives one step of that trace from one epoch transition, from Altair.
 
 The blocks and slots before the next epoch are not covered here.
 -/
@@ -71,56 +57,67 @@ theorem withdrawalMaxEffectiveBalance_of_credentials {old new : Validator}
   unfold withdrawalMaxEffectiveBalance getMaxEffectiveBalance hasCompoundingWithdrawalCredential
   rw [same]
 
-/-- One leak epoch of a validator, from Altair.
+/-- One leak epoch of a validator, from Altair: its balance does not rise.
 
-The epoch transition succeeds, from a state that leaks, and does not raise the finalized epoch.
+The epoch must not raise the finalized epoch.
 
-The registry is within its limit.
+No pending deposit or consolidation may name the validator.
 
-No pending deposit carries the key of the validator, and no pending consolidation targets it.
-
-After the epoch its balance is no higher.
-
-Its new effective balance is the update of the old one from that balance.
-
-The update uses the largest effective balance of the validator before the epoch.
-
-It keeps its key and its withdrawal credentials.
-
-Suppose also that it is eligible, and that its flags of the previous epoch lack the timely target.
-
-Then its score gains the score bias.
-
-Its balance falls by at least its old effective balance times the new score.
-
-That product is divided by the score bias times the penalty quotient of the fork, and rounds down.
-
-The subtraction stops at zero. -/
+If it is eligible and lacks the timely target, it also loses at least the inactivity penalty. -/
 theorem leakEpoch_processEpoch (altair : .altair ≤ fork)
+    -- The epoch transition succeeds.
     (computed : processEpoch config checks state = .ok after)
+    -- The registry is within its limit.
+    --
+    -- The state before the epoch leaks.
     (within : state.RegistryWithinLimit) (leak : isInInactivityLeak state = .ok true)
+    -- The epoch transition does not raise the finalized epoch.
     (stalled : after.finalizedCheckpoint.epoch ≤ state.finalizedCheckpoint.epoch)
     {index : Nat} {validator : Validator} (found : state.validators.data[index]? = some validator)
+    -- No pending deposit carries the key of the validator.
     (unnamed : ∀ electra : .pectra ≤ fork, ∀ deposit ∈ (state.pendingDeposits electra).data,
       deposit.pubkey ≠ validator.pubkey)
+    -- No pending consolidation targets it.
     (untargeted : ∀ electra : .pectra ≤ fork,
       ∀ consolidation ∈ (state.pendingConsolidations electra).data,
         consolidation.targetIndex.toNat ≠ index) :
+    -- The trace bound reads the balance and the score before each epoch transition.
+    --
+    -- It reads the effective balance there too.
+    --
+    -- It also reads the balance at the update of the effective balances.
+    --
+    -- The step is the state after the epoch: its balance, its effective balance and its score.
     ∃ balance settled effective now,
       state.balances.data[index]? = some balance ∧
+      -- In a leak the balance does not rise, for any validator: after the epoch it is no higher.
       after.balances.data[index]? = some settled ∧ settled ≤ balance ∧
+      -- Its new effective balance is the update of the old one from that balance.
+      --
+      -- The update uses the largest effective balance of the validator before the epoch.
       updatedEffectiveBalance preset (withdrawalMaxEffectiveBalance preset fork validator) settled
         validator.effectiveBalance = .ok effective ∧
       after.validators.data[index]? = some now ∧ now.effectiveBalance = effective ∧
+      -- It keeps its key and its withdrawal credentials.
       now.pubkey = validator.pubkey ∧
       now.withdrawalCredentials = validator.withdrawalCredentials ∧
+      -- Suppose also that it is eligible.
       (isEligibleValidator (getPreviousEpoch state) validator = .ok true →
+        -- Suppose also that its flags of the previous epoch lack the timely target.
         (∀ flags, (state.previousEpochParticipation altair).data[index]? = some flags →
           hasFlag flags TIMELY_TARGET_FLAG_INDEX = false) →
         ∃ score score',
           (state.inactivityScores altair).data[index]? = some score ∧
           (after.inactivityScores altair).data[index]? = some score' ∧
+          -- Then its score gains the score bias.
           score'.toNat = score.toNat + config.INACTIVITY_SCORE_BIAS.toNat ∧
+          -- Its balance falls by at least its old effective balance times the new score.
+          --
+          -- That product is divided by the score bias times the penalty quotient of the fork.
+          --
+          -- The quotient rounds down.
+          --
+          -- The subtraction stops at zero.
           settled.toNat ≤ balance.toNat - validator.effectiveBalance.toNat * score'.toNat /
             (config.INACTIVITY_SCORE_BIAS.toNat *
               (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat)) := by
@@ -293,6 +290,7 @@ theorem leakEpoch_advanceSlot (altair : .altair ≤ fork)
     omega
   unfold epochIfLast at epochedOk
   simp only [same, ends, ↓reduceIte] at epochedOk
+  -- The other steps of the slot keep these facts.
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
   exact leakEpoch_processEpoch altair epochedOk within leak stalled found unnamed untargeted
 

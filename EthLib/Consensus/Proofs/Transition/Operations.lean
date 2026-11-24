@@ -10,31 +10,11 @@ public import EthLib.Consensus.Transition.Operations
 /-!
 # Proofs: the operations of a block
 
-An attestation is included in its window, with the justified source of its target epoch.
-
-It then joins the pending attestations of its target epoch, and nothing else changes.
-
-From Electra, the committees of an attestation, cut from one shuffle, are checked each in turn.
-
-A deposit lies in the deposit tree, and moves the next deposit index on by one.
-
-A deposit to a known key adds its amount to the sum of the balances.
-
-A valid deposit to a new key adds one validator and its balance.
-
-An invalid deposit to a new key changes nothing.
-
-A deposit to a known key raises the balance at the index of that key, and no other.
-
-From Electra a deposit request joins the end of the pending deposits.
-
-A voluntary exit is signed by an active validator, which then has an exit epoch.
+Each operation of a block: what a valid one checks, and what it changes in the state.
 
 The operations of a block hold every outstanding deposit, up to the most per block.
 
 They keep one balance for each validator.
-
-From Gloas, an attestation weighs the payment of its slot by the balances of its new attesters.
 -/
 
 @[expose] public section
@@ -154,27 +134,25 @@ theorem sameSizes_recordPendingAttestation {before : fork < .altair} {current : 
     simp only [recordPendingAttestation, Bool.false_eq_true, ↓reduceIte] at computed <;>
     split at computed <;> cases computed <;> exact SameSizes.refl _
 
-/-- Before Altair, what a valid attestation satisfies.
-
-Its target is the current or the previous epoch, and the epoch of its slot.
-
-It is included at least the least inclusion delay after its slot, and at most one epoch after.
-
-It names a committee of its slot, with one bit for each member.
-
-Its source is the justified checkpoint that the state holds for its target epoch. -/
+/-- Before Altair, what a valid attestation satisfies. -/
 theorem processAttestation_checks {attestation : Attestation preset fork}
     (before : fork < .altair)
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
+      -- Its target is the current or the previous epoch.
       (attestation.data.target.epoch = getPreviousEpoch state ∨
         attestation.data.target.epoch = getCurrentEpoch state) ∧
+      -- Its target is the epoch of its slot.
       attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot ∧
+      -- It is included at least the least inclusion delay after its slot.
       attestation.data.slot.toNat + preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat ≤
         state.slot.toNat ∧
+      -- It is included at most one epoch after its slot.
       state.slot.toNat ≤ attestation.data.slot.toNat + preset.SLOTS_PER_EPOCH.toNat ∧
+      -- It names a committee of its slot, with one bit for each member.
       attestation.data.index < getCommitteeCountPerSlot state attestation.data.target.epoch ∧
       (∃ committee, getBeaconCommittee state attestation.data.slot attestation.data.index =
           .ok committee ∧ attestation.aggregationBits.bits.size = committee.size) ∧
+      -- Its source is the justified checkpoint that the state holds for its target epoch.
       attestation.data.source =
         if attestation.data.target.epoch = getCurrentEpoch state then
           state.currentJustifiedCheckpoint
@@ -269,7 +247,9 @@ theorem checkInclusionDeadline_of_dencun {slot : Slot} (dencun : .dencun ≤ for
 
 Each index is checked against the count of committees per slot of the target epoch.
 
-Each committee is cut with the count of committees per slot of the epoch of the slot. -/
+Each committee is cut with the count of committees per slot of the epoch of the slot.
+
+The committees of an attestation, cut from one shuffle, are checked each in turn. -/
 theorem attestationCommitteesSize_of_attesterShuffle {data : AttestationData}
     {active : Array ValidatorIndex} {shuffled : Array UInt64}
     (shuffleOk :
@@ -492,23 +472,23 @@ theorem recordPaymentWeight_of_noWeight {gloas : .glamsterdam ≤ fork} {data : 
     · exact Vector.getElem_set_ne _ _ (Ne.symm same)
   simp only [kept]
 
-/-- From Gloas, the weight of a payment after one attester.
-
-The attester must have an entry in both participation lists, else the index is out of range.
-
-It adds its effective balance exactly when it had no flag before and has one after.
-
-It must then be in the registry, and the sum must be below `2^64`, else it is an overflow.
-
-An attester that had a flag before, or has none after, leaves the weight as it was. -/
+/-- From Gloas, the weight of a payment after one attester. -/
 theorem addPaymentWeight_eq_ok_iff {before updated : EpochParticipation preset fork}
     {weight result : Gwei} {index : ValidatorIndex} :
     addPaymentWeight state before updated weight index = .ok result ↔
+      -- The attester must have an entry in both participation lists.
+      --
+      -- Without either entry, the index is out of range.
       ∃ old new, before.data[index.toNat]? = some old ∧ updated.data[index.toNat]? = some new ∧
+        -- It adds its effective balance exactly when it had no flag before and has one after.
         if old = 0 ∧ new ≠ 0 then
+          -- It must then be in the registry.
+          --
+          -- The sum must be below `2^64`, else it is an overflow.
           ∃ validator, state.validators.data[index.toNat]? = some validator ∧
             weight.toNat + validator.effectiveBalance.toNat < 2 ^ 64 ∧
             result.toNat = weight.toNat + validator.effectiveBalance.toNat
+        -- An attester that had a flag before, or has none after, leaves the weight as it was.
         else result = weight := by
   unfold addPaymentWeight
   rcases oldAt : before.data[index.toNat]? with _ | old
@@ -1140,19 +1120,18 @@ theorem applyPendingDeposit_new_valid {deposit : PendingDeposit}
   simp only [applyPendingDeposit, new, notBls, ↓reduceIte, bind, Except.bind, valid] at computed
   exact addValidatorToRegistry_push computed holds
 
-/-- A pending deposit changes nothing, raises a balance, or adds a fresh key.
-
-The first case covers a deposit to a new key with an invalid signature.
-
-From Heze it also covers a new key with BLS withdrawal credentials.
-
-The second case is a deposit to a known key.
-
-The third case adds a validator at the end of the registry, and no other validator has its key. -/
+/-- A pending deposit changes nothing, raises a balance, or adds a fresh key. -/
 theorem applyPendingDeposit_cases {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after) :
+    -- The first case covers a deposit to a new key with an invalid signature.
+    --
+    -- From Heze it also covers a new key with BLS withdrawal credentials.
     after = state ∨
+    -- The second case is a deposit to a known key.
     (∃ index : ValidatorIndex, increaseBalance state index deposit.amount = .ok after) ∨
+    -- The third case adds a validator at the end of the registry.
+    --
+    -- No other validator has its key.
     (deposit.pubkey ∉ validatorKeys state ∧
       addValidatorToRegistry state deposit.pubkey deposit.withdrawalCredentials deposit.amount =
         .ok after) := by

@@ -10,35 +10,11 @@ public import EthLib.Consensus.Proofs.Transition.PaymentReleaseInvariants
 
 From Gloas the builder of a block pays its proposer through a pending payment.
 
-Each step of a chain queues the withdrawals of a list of open payments.
+A run of slots and blocks inside one fork, from Gloas on, releases each payment at most once.
 
-Those steps follow each other as a run, whose lists are the lists of its steps, in order.
-
-A run releases each payment at most once.
-
-A payment that a step releases is closed after it and older than its slot.
-
-A later step reopens only a payment at its own slot or later, so it cannot release it again.
-
-The steps assume a few facts on the payments.
-
-The upgrade to Gloas starts with them, and the upgrade to Heze and each slot keep them.
-
-A block keeps them under conditions on the preset and on the size of the registries.
-
-A run of slots and blocks inside one fork, from Gloas on, is such a run of steps.
-
-That run releases each payment at most once.
-
-Its withdrawals are those of the computed states, and its payments are fixed up to their order.
-
-The epoch step pays each payment of the previous epoch that reaches its quorum.
-
-So along a chain through that step, such a payment is paid exactly once.
+A run across the upgrade to Heze is not covered.
 
 A payment is paid here when its withdrawal joins the queue of the withdrawals of the builders.
-
-A chain across the upgrade to Heze is not covered, since a run of steps stays in one fork.
 
 [EIP-7732] adds the builders, their bids and their payments.
 
@@ -56,20 +32,16 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 
 /-! ## The facts on the payments -/
 
-/-- From Gloas, the facts on the payments that the steps of a chain assume.
-
-The builder debt invariant holds, so the balance of each builder covers its debt.
-
-A payment with weight has an amount.
-
-In the genesis epoch, the first half of the window is empty.
-
-A latest bid with a value is at the slot of the latest block. -/
+/-- From Gloas, the facts on the payments that the steps of a chain assume. -/
 structure PaymentFacts (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
     Prop where
+  -- The builder debt invariant holds, so the balance of each builder covers its debt.
   covered : BuilderDebtCovered state gloas
+  -- A payment with weight has an amount.
   funded : WeightedPaymentsFunded state gloas
+  -- In the genesis epoch, the first half of the window is empty.
   genesis : GenesisFirstHalfEmpty state gloas
+  -- A latest bid with a value is at the slot of the latest block.
   bidAt : ValuedBidAtLatestBlock state gloas
 
 /-- The upgrade to Gloas starts with the facts on the payments. -/
@@ -204,6 +176,7 @@ theorem PaymentRun.nodup {gloas : .glamsterdam ≤ fork} {released : List Slot}
   | step run step ih =>
     refine List.nodup_append.mpr ⟨ih, step.nodup, fun slot old slot' new same => ?_⟩
     subst same
+    -- A later step reopens only a payment at its own slot or later, so it cannot release it again.
     exact run.closed slot old (step.opened slot new)
 
 /-! ## Chains -/
@@ -221,25 +194,9 @@ theorem PaymentRelease.map_eq {gloas : .glamsterdam ≤ fork} {released other : 
 
 A run carries the slots of the payments it releases, and the withdrawals it queues for them.
 
-A slot releases the payments of a release from the state before it to the state after it.
+The withdrawals that each step queues are fixed by the states that the step computes.
 
-Each of them reaches the quorum that the epoch transition computes after that slot.
-
-A block releases those of a release up to the state that the payload of its parent computes.
-
-It releases at most the payment of its parent.
-
-The rest of the block releases nothing, and may pay out a prefix of the queue.
-
-Each released payment is closed after its step.
-
-So the withdrawals that each step queues are fixed by the states that the step computes.
-
-Its payments are fixed too, up to their order.
-
-A slot lists only payments that reach the quorum.
-
-A block lists only the payment of its parent. -/
+Its payments are fixed too, up to their order. -/
 inductive PaymentChain (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
     BeaconState preset fork → List Slot → List BuilderPendingWithdrawal → Prop
@@ -249,8 +206,13 @@ inductive PaymentChain (config : Config) (checks : SignatureChecks)
   | slot {second third : BeaconState preset fork} {released more : List Slot}
     {queued : List BuilderPendingWithdrawal} :
     PaymentChain config checks state gloas second released queued →
+    -- A slot releases the payments of a release from the state before it to the state after it.
     advanceSlot config checks second = .ok third → PaymentRelease second third gloas more →
+    -- Each of them reaches the quorum that the epoch transition computes after that slot.
+    --
+    -- So a slot lists only payments that reach the quorum.
     (∀ slot ∈ more, ReachesQuorum config checks second gloas slot) →
+    -- Each released payment is closed after its step.
     (∀ slot ∈ more, ¬ PaymentOpen third gloas slot) →
     PaymentChain config checks state gloas third (released ++ more)
       (queued ++ more.map (openWithdrawal second gloas))
@@ -261,8 +223,13 @@ inductive PaymentChain (config : Config) (checks : SignatureChecks)
     PaymentChain config checks state gloas second released queued →
     Consensus.processBlock config checks engine second block = .ok third →
     Consensus.processParentExecutionPayload config checks second gloas block.body = .ok parented →
+    -- A block releases those of a release up to the state that the payload of its parent computes.
     PaymentRelease second parented gloas more →
+    -- It releases at most the payment of its parent, so a block lists only that payment.
+    --
+    -- The rest of the block releases nothing, and may pay out a prefix of the queue.
     more.Sublist [second.latestBlockHeader.slot] → PaymentStep parented third gloas [] →
+    -- Each released payment is closed after its step.
     (∀ slot ∈ more, ¬ PaymentOpen third gloas slot) →
     PaymentChain config checks state gloas third (released ++ more)
       (queued ++ more.map (openWithdrawal second gloas))
@@ -363,17 +330,16 @@ theorem PaymentChain.nodup {gloas : .glamsterdam ≤ fork} {released : List Slot
 
 The preset needs a positive payment quorum and at least two slots in an epoch.
 
-The facts must hold at the first state.
-
-Each registry must hold at most 2^40 entries at the last state.
-
 A run across the upgrade to Heze is not covered. -/
 theorem PaymentFacts.chainSteps (positive : preset.PaymentQuorumPositive)
     (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) {gloas : .glamsterdam ≤ fork}
     {first last : BeaconState preset fork}
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, first⟩ ⟨fork, last⟩)
+    -- The facts on the payments must hold at the first state.
     (holds : PaymentFacts first gloas)
+    -- The registry of validators must hold at most 2^40 entries at the last state.
     (validatorsFit : last.validators.data.size ≤ 2 ^ 40)
+    -- The registry of builders must hold at most 2^40 entries at the last state.
     (buildersFit : (last.builders gloas).data.size ≤ 2 ^ 40) : PaymentFacts last gloas := by
   obtain ⟨_, _, -, facts⟩ :=
     PaymentChain.extend positive twoSlots .refl holds steps rfl validatorsFit buildersFit
@@ -383,17 +349,16 @@ theorem PaymentFacts.chainSteps (positive : preset.PaymentQuorumPositive)
 
 The preset needs a positive payment quorum and at least two slots in an epoch.
 
-The facts on the payments must hold at the first state.
-
-Each registry must hold at most 2^40 entries at the last state.
-
 A run across the upgrade to Heze is not covered, since a run of payment steps stays in one fork. -/
 theorem paymentChain_of_chainSteps (positive : preset.PaymentQuorumPositive)
     (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) {gloas : .glamsterdam ≤ fork}
     {first last : BeaconState preset fork}
     (steps : Relation.ReflTransGen (ChainStep config checks) ⟨fork, first⟩ ⟨fork, last⟩)
+    -- The facts on the payments must hold at the first state.
     (holds : PaymentFacts first gloas)
+    -- The registry of validators must hold at most 2^40 entries at the last state.
     (validatorsFit : last.validators.data.size ≤ 2 ^ 40)
+    -- The registry of builders must hold at most 2^40 entries at the last state.
     (buildersFit : (last.builders gloas).data.size ≤ 2 ^ 40) :
     ∃ released queued, PaymentChain config checks first gloas last released queued := by
   obtain ⟨_, _, chain, -⟩ :=
@@ -402,19 +367,7 @@ theorem paymentChain_of_chainSteps (positive : preset.PaymentQuorumPositive)
 
 /-- From Gloas, along a chain through one slot that ends an epoch, that slot pays the quorum once.
 
-It queues the withdrawals of exactly the payments of the previous epoch that reach its quorum.
-
-That quorum is read on the state that the epoch transition reaches before its payments step.
-
-A run of slots and blocks from the first state to the last one releases each such payment.
-
-That run releases no payment twice.
-
 The preset needs a positive payment quorum and at least two slots in an epoch.
-
-The facts on the payments must hold at the first state.
-
-Each registry must hold at most 2^40 entries at the last state.
 
 The chain runs inside one fork, so a chain across the upgrade to Heze is not covered. -/
 theorem chainSteps_paysQuorum (positive : preset.PaymentQuorumPositive)
@@ -423,13 +376,21 @@ theorem chainSteps_paysQuorum (positive : preset.PaymentQuorumPositive)
     (before : Relation.ReflTransGen (ChainStep config checks) ⟨fork, first⟩ ⟨fork, middle⟩)
     (computed : advanceSlot config checks middle = .ok next)
     (behind : Relation.ReflTransGen (ChainStep config checks) ⟨fork, next⟩ ⟨fork, last⟩)
+    -- The slot ends an epoch, with the facts on the payments holding at the first state.
     (boundary : next.slot % preset.SLOTS_PER_EPOCH = 0) (holds : PaymentFacts first gloas)
+    -- The registry of validators must hold at most 2^40 entries at the last state.
     (validatorsFit : last.validators.data.size ≤ 2 ^ 40)
+    -- The registry of builders must hold at most 2^40 entries at the last state.
     (buildersFit : (last.builders gloas).data.size ≤ 2 ^ 40) :
+    -- It queues the withdrawals of exactly the previous epoch payments that reach its quorum.
     ∃ more : List Slot, (next.builderPendingWithdrawals gloas).data.toList =
         (middle.builderPendingWithdrawals gloas).data.toList ++
           more.map (openWithdrawal middle gloas) ∧
+      -- That quorum is read on the state that the epoch transition reaches before its payment step.
       (∀ slot, slot ∈ more ↔ ReachesQuorum config checks middle gloas slot) ∧
+      -- A run of slots and blocks from the first state to the last one releases each such payment.
+      --
+      -- That run releases no payment twice.
       ∃ released queued, PaymentChain config checks first gloas last released queued ∧
         released.Nodup ∧ ∀ slot ∈ more, slot ∈ released := by
   -- The registries at the state after the slot are at most those at the last state.

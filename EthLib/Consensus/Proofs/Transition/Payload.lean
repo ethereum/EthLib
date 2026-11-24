@@ -6,19 +6,9 @@ public import EthLib.Consensus.Transition.Payload
 /-!
 # Proofs: the bid of a block
 
-A bid passes its checks exactly when each check of the specification holds.
+A bid or an envelope passes its checks exactly when each check of the specification holds.
 
 After a valid bid, the state keeps the bid.
-
-A self-built bid has no value, and a bid with no value records no payment.
-
-A bid with a value records one payment, in the current epoch's half of the pending payments.
-
-That payment pays the bid's value from its builder to the proposer of the slot.
-
-An envelope passes its checks exactly when each check of the specification holds.
-
-An execution layer that rejects every payload rejects every envelope.
 -/
 
 @[expose] public section
@@ -48,25 +38,24 @@ theorem latestExecutionPayloadBid_processExecutionPayloadBid
   obtain ⟨_, _, _, rfl⟩ := processExecutionPayloadBid_ok computed
   rfl
 
-/-- A bid passes its checks exactly when each of them holds.
-
-Its builder passes its checks, and it commits to at most the blobs of a block.
-
-It is for the slot of the state, after genesis.
-
-It builds on the latest block hash, and its block hash differs from that parent hash.
-
-It builds on the root of the block at the slot before, and on the RANDAO mix of the current epoch.
--/
+/-- A bid passes its checks exactly when each of them holds. -/
 theorem checkExecutionPayloadBid_ok_iff {signed : SignedExecutionPayloadBid preset fork} :
     checkExecutionPayloadBid config checks state gloas signed = .ok () ↔
       let bid := signed.message
+      -- Its builder passes its checks.
       checkBidBuilder config checks state gloas signed = .ok () ∧
+      -- It commits to at most the blobs of a block.
       bid.blobKzgCommitments.data.size ≤
         (config.getBlobParameters (getCurrentEpoch state)).maxBlobsPerBlock.toNat ∧
+      -- It is for the slot of the state, after genesis.
       bid.slot = state.slot ∧ GENESIS_SLOT < state.slot ∧
+      -- It builds on the latest block hash.
+      --
+      -- Its block hash differs from that parent hash.
       bid.parentBlockHash = state.latestBlockHash gloas ∧ bid.blockHash ≠ bid.parentBlockHash ∧
+      -- It builds on the root of the block at the slot before.
       getBlockRootAtSlot state (state.slot - 1) = .ok bid.parentBlockRoot ∧
+      -- It builds on the RANDAO mix of the current epoch.
       getRandaoMix state (getCurrentEpoch state) = .ok bid.prevRandao := by
   unfold checkExecutionPayloadBid
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, exists_const]
@@ -107,18 +96,18 @@ theorem builderPendingPayments_processExecutionPayloadBid_selfBuild
   subst record
   rfl
 
-/-- A bid with a value records one payment to the proposer of the slot.
-
-The payment sits at the position of the bid's slot in the second epoch of the list.
-
-Every other field of the state is unchanged. -/
+/-- A bid with a value records one payment to the proposer of the slot. -/
 theorem recordBidPayment_of_pos {bid : ExecutionPayloadBid preset fork}
     {recorded : BeaconState preset fork} (paid : 0 < bid.value)
     (record : recordBidPayment state gloas bid = .ok recorded) :
     ∃ proposer, ∃ position : Fin (2 * preset.SLOTS_PER_EPOCH.toNat),
       getBeaconProposerIndex state = .ok proposer ∧
+      -- The payment sits at the position of the bid's slot in the second epoch of the list.
+      --
+      -- That second epoch is the current epoch's half of the pending payments.
       position.val = preset.SLOTS_PER_EPOCH.toNat +
         (bid.slot % preset.SLOTS_PER_EPOCH).toNat ∧
+      -- Every other field of the state is unchanged.
       recorded = { state with builderPendingPayments := fun _ =>
         (state.builderPendingPayments gloas).set position (bidPayment bid proposer) } := by
   unfold recordBidPayment at record
@@ -153,40 +142,40 @@ theorem bidPayment_withdrawal (bid : ExecutionPayloadBid preset fork) (proposer 
       (bidPayment bid proposer).weight = 0 ∧ (bidPayment bid proposer).proposerIndex = proposer :=
   ⟨rfl, rfl, rfl⟩
 
-/-- An envelope passes its checks exactly when each of them holds.
-
-Its signer signed it, and it names the latest block of the state and that block's parent.
-
-It agrees with the bid of that block on the builder, the RANDAO mix and the gas limit.
-
-It also agrees on the block hash and the root of its requests.
-
-Its payload is for the slot of the state, extends the latest block hash and has the slot's time.
-
-Its withdrawals have the root of those that the state expects.
-
-The bid commits to a bounded number of blobs, and the execution layer accepts the request. -/
+/-- An envelope passes its checks exactly when each of them holds. -/
 theorem verifyExecutionPayloadEnvelope_ok_iff {engine : ExecutionEngine preset fork}
     {signed : SignedExecutionPayloadEnvelope preset fork} :
     verifyExecutionPayloadEnvelope config checks engine state gloas signed = .ok () ↔
       let envelope := signed.message
       let payload := envelope.payload
       let bid := state.latestExecutionPayloadBid gloas
+      -- Its signer signed it.
       verifyExecutionPayloadEnvelopeSignature config checks state gloas signed = .ok true ∧
+      -- It names the latest block of the state.
       (∃ stateRoot, Serialization.Ssz.SszType.hashTreeRoot state = .ok stateRoot ∧
         Serialization.Ssz.SszType.hashTreeRoot { state.latestBlockHeader with stateRoot } =
           .ok envelope.beaconBlockRoot) ∧
+      -- It names that block's parent.
       envelope.parentBeaconBlockRoot = state.latestBlockHeader.parentRoot ∧
+      -- It agrees with the bid of that block on the builder and the RANDAO mix.
       envelope.builderIndex = bid.builderIndex ∧ payload.prevRandao = bid.prevRandao ∧
+      -- It also agrees on the gas limit and the block hash.
       payload.gasLimit = bid.gasLimit ∧ payload.blockHash = bid.blockHash ∧
+      -- It also agrees on the root of its requests.
       Serialization.Ssz.SszType.hashTreeRoot envelope.executionRequests =
         .ok bid.executionRequestsRoot ∧
+      -- Its payload is for the slot of the state and extends the latest block hash.
       payload.slotNumber gloas = state.slot ∧ payload.parentHash = state.latestBlockHash gloas ∧
+      -- Its payload has the slot's time.
       computeTimeAtSlot config state.genesisTime state.slot = .ok payload.timestamp ∧
+      -- Its withdrawals have the root of those that the state expects.
       (∃ root, Serialization.Ssz.SszType.hashTreeRoot
           (payload.withdrawals (Nat.le_trans (by decide) gloas)) = .ok root ∧
         Serialization.Ssz.SszType.hashTreeRoot (state.payloadExpectedWithdrawals gloas) =
           .ok root) ∧
+      -- The bid commits to a bounded number of blobs.
+      --
+      -- The execution layer accepts the request.
       ∃ bound, engine.verifyAndNotifyNewPayload
         (envelope.newPayloadRequest bid.blobKzgCommitments.data bound) = .ok true := by
   unfold verifyExecutionPayloadEnvelope

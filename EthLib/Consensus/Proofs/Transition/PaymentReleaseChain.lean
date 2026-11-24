@@ -12,14 +12,6 @@ The step lemmas of the payments give the shape of each step that may pay a bid.
 
 Here the steps of a slot are put together.
 
-A slot inside an epoch pays no bid.
-
-The last slot of an epoch runs the epoch step of the payments, between steps that keep them.
-
-So it pays each payment of the previous epoch that reaches the quorum of that step.
-
-Each payment it pays is closed after the slot.
-
 [EIP-7732] adds the builders, their bids and their payments.
 
 [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#beacon-chain-changes
@@ -52,29 +44,27 @@ def ReachesQuorum (config : Config) (checks : SignatureChecks) (state : BeaconSt
 
 /-- With a positive quorum, one slot queues the withdrawals of open payments, each closed after it.
 
-The positive quorum is an assumption on the preset, which both presets meet.
-
-A slot inside an epoch releases no payment.
-
-At the last slot of an epoch, the epoch transition runs, and its step of the payments reads a state.
-
-That state is the one the epoch transition reaches before that step, after the slot is cached.
-
-The slot then pays each payment of the previous epoch whose weight is at least the quorum there.
-
-It pays no other payment.
-
-The hypothesis on the parent payment is part of the builder debt invariant.
-
-The hypotheses on the weights and the genesis epoch hold along a chain from the upgrade to Gloas.
--/
+The positive quorum is an assumption on the preset, which both presets meet. -/
 theorem advanceSlot_release (positive : preset.PaymentQuorumPositive)
+    -- The hypothesis on the parent payment is part of the builder debt invariant.
     {gloas : .glamsterdam ≤ fork} (fresh : ParentPaymentFresh state gloas)
+    -- The weight and genesis epoch hypotheses hold along a chain from the upgrade to Gloas.
     (paid : WeightedPaymentsFunded state gloas) (genesis : GenesisFirstHalfEmpty state gloas)
     (computed : advanceSlot config checks state = .ok after) :
     ∃ released : List Slot, PaymentRelease state after gloas released ∧
+      -- Each payment it pays is closed after the slot.
       (∀ slot ∈ released, ¬ PaymentOpen after gloas slot) ∧
+      -- A slot inside an epoch releases no payment.
       (after.slot % preset.SLOTS_PER_EPOCH ≠ 0 → released = []) ∧
+      -- At the last slot of an epoch, the epoch transition runs.
+      --
+      -- Its step of the payments reads the state that it reaches before that step.
+      --
+      -- That state comes after the slot is cached.
+      --
+      -- The slot pays each payment of the previous epoch whose weight is at least the quorum there.
+      --
+      -- It pays no other payment.
       (after.slot % preset.SLOTS_PER_EPOCH = 0 →
         ∀ slot, slot ∈ released ↔ ReachesQuorum config checks state gloas slot) := by
   obtain ⟨next, cached, sum, cachedOk, cachedFrame, ⟨inside, rfl⟩ |
@@ -89,6 +79,7 @@ theorem advanceSlot_release (positive : preset.PaymentQuorumPositive)
       (fun position => congrArg _ (cachedFrame.paymentAt gloas position))
       (congrFun cachedFrame.withdrawals gloas), nofun, fun _ => rfl,
       fun boundary => absurd boundary inside⟩
+  -- The last slot of an epoch runs the epoch step of the payments, between steps that keep them.
   · have pendingFrame := cachedFrame.trans before
     obtain ⟨quorum, released, quorumOk, release, closes, reaches, reached⟩ :=
       processBuilderPendingPayments_release positive (fresh.of_frame pendingFrame)

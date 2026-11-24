@@ -8,27 +8,9 @@ import EthLib.Consensus.Proofs.Transition.Totality.EpochBeforeAltair
 
 In a leak the voters keep their stake, so their share can grow to two thirds of the active stake.
 
-From Altair, an epoch lowers a balance in three ways.
+From Altair, one epoch of a leak lowers no balance of an unslashed voter.
 
-The rewards and penalties charge a validator that misses the timely source or target flag.
-
-In a leak an unslashed validator with the timely source and target flags pays nothing.
-
-So does one that is not eligible.
-
-The slashings charge a slashed validator.
-
-From Electra, a pending consolidation moves the balance of its source.
-
-The registry updates and the eth1 vote reset keep the balances.
-
-The pending deposits and the consolidations into a validator only raise them.
-
-The builder payments and the steps after the effective balances keep them.
-
-So the balance of an unslashed voter that is the source of no pending consolidation does not fall.
-
-Its effective balance then follows the update from that balance.
+That voter must be the source of no pending consolidation.
 -/
 
 @[expose] public section
@@ -326,50 +308,50 @@ theorem processPendingConsolidations_balanceNotLowered {electra : .pectra ≤ fo
     (fun c member => unsourced c (by simpa using member)) earlier found
   exact ⟨later, by rw [balances]; exact atLater, low⟩
 
-/-- One leak epoch of a voter, from Altair.
+/-- One leak epoch of a voter, from Altair: its balance does not fall.
 
-The epoch transition succeeds, from a state that leaks, and does not raise the finalized epoch.
-
-The registry is within its limit.
-
-The validator is unslashed, and no pending consolidation has it as its source.
-
-If it is eligible, its flags of the previous epoch have the timely source and the timely target.
-
-After the epoch its balance is no lower.
-
-Its new effective balance is the update of the old one from that balance.
-
-The update uses the largest effective balance of the validator before the epoch.
-
-It keeps its key and its withdrawal credentials.
+The voter is unslashed, votes when eligible, and is the source of no pending consolidation.
 
 The epoch that advances finality is not covered. -/
 theorem voterEpoch_processEpoch (altair : .altair ≤ fork)
+    -- The epoch transition succeeds.
     (computed : processEpoch config checks state = .ok after)
+    -- The registry is within its limit.
+    --
+    -- The state before the epoch leaks.
     (within : state.RegistryWithinLimit) (leak : isInInactivityLeak state = .ok true)
+    -- The epoch transition does not raise the finalized epoch.
     (stalled : after.finalizedCheckpoint.epoch ≤ state.finalizedCheckpoint.epoch)
     {index : Nat} {validator : Validator} (found : state.validators.data[index]? = some validator)
+    -- The validator is unslashed.
     (unslashed : validator.slashed = false)
+    -- If it is eligible, its flags of the previous epoch have the timely source and target.
     (voted : isEligibleValidator (getPreviousEpoch state) validator = .ok true →
       ∃ flags, (state.previousEpochParticipation altair).data[index]? = some flags ∧
         hasFlag flags TIMELY_SOURCE_FLAG_INDEX = true ∧
         hasFlag flags TIMELY_TARGET_FLAG_INDEX = true)
+    -- No pending consolidation has it as its source.
     (unsourced : ∀ electra : .pectra ≤ fork,
       ∀ consolidation ∈ (state.pendingConsolidations electra).data,
         consolidation.sourceIndex.toNat ≠ index) :
     ∃ balance settled effective now,
       state.balances.data[index]? = some balance ∧
+      -- After the epoch its balance is no lower.
       after.balances.data[index]? = some settled ∧ balance ≤ settled ∧
+      -- Its new effective balance is the update of the old one from that balance.
+      --
+      -- The update uses the largest effective balance of the validator before the epoch.
       updatedEffectiveBalance preset (withdrawalMaxEffectiveBalance preset fork validator) settled
         validator.effectiveBalance = .ok effective ∧
       after.validators.data[index]? = some now ∧ now.effectiveBalance = effective ∧
+      -- It keeps its key and its withdrawal credentials.
       now.pubkey = validator.pubkey ∧
       now.withdrawalCredentials = validator.withdrawalCredentials := by
   have altairRun : processEpochAltair config checks state altair = .ok after := by
     unfold processEpoch at computed
     simpa only [altair, ↓reduceDIte] using computed
   rw [processEpochAltair_eq_run] at altairRun
+  -- From Altair, an epoch lowers a balance in three ways: rewards, slashings and consolidations.
   obtain ⟨justified, scored, rewarded, registered, slashed, reset, deposited, consolidated, settled,
     updated, justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk, depositedOk,
     consolidatedOk, settledOk, updatedOk, trace⟩ :=
@@ -440,7 +422,11 @@ theorem voterEpoch_processEpoch (altair : .altair ≤ fork)
   have atBalance : state.balances.data[index]? = some balance := by
     rw [← justifiedSame.1, ← congrArg BeaconState.balances scoredFrame]
     exact atScored
-  -- In a leak the rewards keep the balance of a voter, and of a validator that is not eligible.
+  -- The rewards and penalties charge a validator that misses the timely source or target flag.
+  --
+  -- In a leak an unslashed validator with the timely source and target flags pays nothing.
+  --
+  -- So does one that is not eligible.
   obtain ⟨total, source, target, -, sourceOk, targetOk, facts⟩ :=
     processRewardsAndPenalties_of_leak altair withinJustified leaking scoredEq rewardedEq
   obtain ⟨isEligible, eligibleOk, notEligible, -⟩ := facts index insideJustified
@@ -512,7 +498,7 @@ theorem voterEpoch_processEpoch (altair : .altair ≤ fork)
       subst atCharged
       rw [balanceEq]
       simp [notDue]
-  -- The reset of the votes keeps the registry, the balances and the consolidations.
+  -- The eth1 vote reset keeps the registry, the balances and the consolidations.
   have resetSame : reset.validators = slashed.validators ∧ reset.balances = slashed.balances ∧
       reset.pendingConsolidations = slashed.pendingConsolidations := by
     have edge := EpochStage.action_cases.mp resetOk
@@ -534,7 +520,11 @@ theorem voterEpoch_processEpoch (altair : .altair ≤ fork)
     · exact processPendingDeposits_balanceNotLowered edge insideReset
     · subst edge
       exact ⟨ValidatorsKept.refl _, BalanceNotLowered.refl index _, rfl⟩
+  -- From Electra, a pending consolidation moves the balance of its source.
+  --
   -- The consolidations lower only their sources.
+  --
+  -- The consolidations into a validator only raise its balance.
   have consolidatedStep : consolidated.validators = deposited.validators ∧
       BalanceNotLowered index deposited consolidated := by
     have edge := EpochStage.action_cases.mp consolidatedOk
@@ -578,6 +568,7 @@ theorem voterEpoch_processEpoch (altair : .altair ≤ fork)
   obtain ⟨effective, atUpdated, effectiveOk⟩ :=
     processEffectiveBalanceUpdates_effectiveBalance_eq updatedEq atKept owned
   rw [sameKept.2.1, withdrawalMaxEffectiveBalance_of_credentials sameKept.2.2.1] at effectiveOk
+  -- The steps after the effective balances keep the balances.
   have tail := sameBalancesRegistryScores_tail altair trace
   refine ⟨balance, settledBalance, effective, { kept with effectiveBalance := effective },
     atBalance, ?_, low, effectiveOk, ?_, rfl, sameKept.1, sameKept.2.2.1⟩
