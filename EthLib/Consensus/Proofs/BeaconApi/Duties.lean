@@ -8,79 +8,9 @@ public import EthLib.Consensus.Proofs.Transition.Totality.ProposerLookahead
 /-!
 # Proofs: the duty answers of the Beacon API
 
-Each attester duty names a committee of its slot, and the validator's place in it.
+This file proves what the attester, proposer, sync and PTC duty answers return.
 
-A requested validator in a committee of the epoch has exactly one duty.
-
-A request for an epoch after the next one is refused.
-
-An attester, sync or PTC request with no index is refused.
-
-So is an attester epoch whose seed is gone.
-
-An attester epoch whose dependent root has left the block roots is refused as well.
-
-That refusal needs each requested index to name a validator whose committee assignment succeeds.
-
-From Gloas, a PTC request is refused outside the previous epoch to the next one.
-
-It is also refused before the Gloas fork epoch.
-
-An attester, sync or PTC index that names no validator is refused.
-
-That refusal needs an epoch the answer serves, and the duty lookup of each earlier index to succeed.
-
-A sync epoch outside the current and next periods is refused.
-
-So is a proposer epoch that the state cannot answer for.
-
-A sync request before Altair is refused, and so is a PTC request before Gloas.
-
-In the current epoch, each proposer duty from the slot of the state on names its proposer.
-
-Each seat of a sync duty holds the key of the validator.
-
-Each refusal of the sync answer is one of four errors, all with code 400.
-
-Under bounds on the slots, the dependent root fails only with the error of an invalid epoch.
-
-Before Fulu, both proposer answers give code 500 to a current epoch with no active validator.
-
-From Fulu, under the same bounds, a proposer answer gets code 500 exactly at a lookahead entry.
-
-That entry lies at a slot of the requested epoch, and names no validator.
-
-Under those bounds, if each lookahead entry names a validator, the answer fails only with code 400.
-
-Before Fulu, a proposer answer at the current epoch gets code 500 exactly when its draw fails.
-
-That statement needs the dependent root's bound on the slot.
-
-Under bounds, if the draws of the current epoch end, the answer fails only with code 400.
-
-Those bounds are on the current epoch, the seed lookahead, the registry and the slot of the state.
-
-On mainnet and minimal, the bounds on the current epoch hold for every state.
-
-An attester answer gets code 500 exactly when a requested committee assignment fails.
-
-The epoch must also pass the check of the answer.
-
-That statement needs each index to name a validator, and the dependent root's bound on the slot.
-
-Under bounds, an attester answer fails only with code 400.
-
-Those bounds are on the epoch, the registry and the slot of the state.
-
-From Gloas, a PTC answer gets code 500 exactly when a requested PTC assignment fails.
-
-The epoch must also lie in the window of the answer and the seed lookahead, with no repeated index.
-
-That statement needs the same two conditions as the attester one.
-
-Under bounds, a PTC answer fails only with code 400, even past the seed lookahead.
-
-Those bounds are on the epoch, the lookahead, the window and the slot of the state.
+It also proves the code of each refusal.
 -/
 
 @[expose] public section
@@ -265,35 +195,32 @@ theorem ptcDuties_epoch_bound {config : Config} {state : BeaconState preset fork
     ptcDuties config state gloas epoch (index :: rest) = .error (invalidEpoch epoch) := by
   simp [ptcDuties, checkDutyEpoch_far far, bind, Except.bind]
 
-/-- From Gloas, the PTC duties of a request, against the current epoch of the state.
-
-An empty request gets the error of an empty request, code 400.
-
-The epoch must be from the previous epoch to the next one, and not before the Gloas fork epoch.
-
-The mixes of the state must also still hold the seed of the epoch.
-
-In that window it holds whenever the mixes outlast the seed lookahead by more than two epochs.
-
-Any other epoch gets the error of an invalid epoch, code 400.
-
-For an epoch in that range, a repeated index gets code 400 too.
-
-Else the answer runs the duty of each requested validator in turn, in request order.
-
-It keeps the validators in the PTC; the first index that fails ends the answer. -/
+/-- From Gloas, the PTC duties of a request, against the current epoch of the state. -/
 theorem ptcDuties_eq {config : Config} {state : BeaconState preset fork}
     {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {indices : List ValidatorIndex} :
     ptcDuties config state gloas epoch indices =
+      -- An empty request gets the error of an empty request, code 400.
       if indices = [] then .error emptyIndices
+      -- The epoch must be from the previous epoch to the next one.
       else if (getCurrentEpoch state).toNat ≤ epoch.toNat + 1 ∧
           epoch.toNat ≤ (getCurrentEpoch state).toNat + 1 ∧
+          -- It must not be before the Gloas fork epoch.
           config.GLOAS_FORK_EPOCH.toNat ≤ epoch.toNat ∧
+          -- The mixes of the state must also still hold the seed of the epoch.
+          --
+          -- In that window, the mixes hold it whenever they outlast the seed lookahead.
+          --
+          -- They must outlast it by more than two epochs.
           (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
             epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat then
         if indices.Nodup then
+          -- The answer runs the duty of each requested validator in turn, in request order.
+          --
+          -- It keeps the validators in the PTC; the first index that fails ends the answer.
           (·.filterMap id) <$> indices.mapM (ptcDuty config state gloas epoch)
+        -- For an epoch in that range, a repeated index gets code 400 too.
         else .error { code := 400, message := "Repeated validator index" }
+      -- Any other epoch gets the error of an invalid epoch, code 400.
       else .error (invalidEpoch epoch) := by
   unfold ptcDuties checkDutyEpoch
   by_cases empty : indices = []
@@ -618,13 +545,11 @@ private theorem dependentRoot_start_exists {lag : Nat} {epoch : Epoch} (late : l
 
 The error has code 400.
 
-Its slot is the one before the start of the epoch a lag before the given one.
-
-It needs that start to be after slot 0.
-
-It needs the slot of the state to be at least that start plus the length of the buffer of roots. -/
+Its slot is the one before the start of the epoch a lag before the given one. -/
 theorem dependentRoot_too_old {state : BeaconState preset fork} {lag : Nat} {epoch : Epoch}
+    -- That start is after slot 0.
     {genesisRoot : Root} (started : 0 < (epoch.toNat - lag) * preset.SLOTS_PER_EPOCH.toNat)
+    -- The slot of the state is at least that start plus the length of the buffer of roots.
     (old : (epoch.toNat - lag) * preset.SLOTS_PER_EPOCH.toNat +
       preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ state.slot.toNat) :
     dependentRoot state lag epoch genesisRoot = .error (invalidEpoch epoch) := by
@@ -753,21 +678,17 @@ private theorem attesterDuty_exists {state : BeaconState preset fork} {epoch : E
 
 /-- An attester epoch whose dependent root has left the block roots gets an invalid epoch error.
 
-The error has code 400.
-
-It needs at least one index, each naming a validator of the state.
-
-It needs the committee assignment of each requested validator to succeed.
-
-It needs the epoch before the requested one to start after slot 0.
-
-It needs the slot of the state to be at least that start plus the length of the buffer of roots. -/
+The error has code 400. -/
 theorem dutiesResponse_attester_too_old {config : Config} {state : BeaconState preset fork}
     {epoch : Epoch} {index : ValidatorIndex} {rest : List ValidatorIndex} {genesisRoot : Root}
+    -- It needs at least one index, each naming a validator of the state.
     (known : ∀ member ∈ index :: rest, ∃ validator, getValidator state member = .ok validator)
+    -- The committee assignment of each requested validator succeeds.
     (assigned : ∀ member ∈ index :: rest, ∃ assignment,
       getCommitteeAssignment state epoch member = .ok assignment)
+    -- The epoch before the requested one starts after slot 0.
     (started : 0 < (epoch.toNat - 1) * preset.SLOTS_PER_EPOCH.toNat)
+    -- The slot of the state is at least that start plus the length of the buffer of roots.
     (old : (epoch.toNat - 1) * preset.SLOTS_PER_EPOCH.toNat +
       preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ state.slot.toNat) :
     dutiesResponse config state .attester epoch (index :: rest) genesisRoot =
@@ -947,24 +868,21 @@ private theorem ptcDuty_exists {config : Config} {state : BeaconState preset for
     simp [ptcDuty, requestedValidator, validatorOk, slotOk, Except.mapError, bind, Except.bind,
       pure, Except.pure]
 
-/-- A PTC index that names no validator gets the error of an invalid index, code 400.
-
-It needs a fork from Gloas, and no repeated index.
-
-The epoch must lie from the previous one to the next, and not before the Gloas fork epoch.
-
-The mixes of the state must still hold its seed.
-
-It needs each earlier index to name a validator whose PTC assignment succeeds. -/
+/-- A PTC index that names no validator gets the error of an invalid index, code 400. -/
 theorem dutiesResponse_ptc_unknown {config : Config} {state : BeaconState preset fork}
     {epoch : Epoch} {before after : List ValidatorIndex} {index : ValidatorIndex}
+    -- It needs a fork from Gloas.
     {genesisRoot : Root} (gloas : .glamsterdam ≤ fork)
+    -- The epoch lies from the previous one to the next, and not before the Gloas fork epoch.
     (window : (getCurrentEpoch state).toNat ≤ epoch.toNat + 1 ∧
       epoch.toNat ≤ (getCurrentEpoch state).toNat + 1 ∧
       config.GLOAS_FORK_EPOCH.toNat ≤ epoch.toNat ∧
+      -- The mixes of the state still hold its seed.
       (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
         epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    -- It needs no repeated index.
     (distinct : (before ++ index :: after).Nodup)
+    -- Each earlier index names a validator whose PTC assignment succeeds.
     (known : ∀ member ∈ before, ∃ validator, getValidator state member = .ok validator)
     (assigned : ∀ member ∈ before, ∃ slot,
       getPtcAssignment config state gloas epoch member = .ok slot)
@@ -1150,18 +1068,15 @@ private theorem proposerDuties_drawn_exists {state : BeaconState preset fork}
 
 /-- After a draw that succeeds, a proposer answer fails only with the error of an invalid epoch.
 
-The draw and the answer are those of the current epoch.
-
-It needs a fork before Fulu, where the answers draw the proposers.
-
-It needs one of the two proposer answers.
-
-It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`. -/
+The draw and the answer are those of the current epoch. -/
 private theorem dutiesResponse_proposer_drawn_error {config : Config}
     {state : BeaconState preset fork} {kind : DutyKind} {indices : List ValidatorIndex}
     {genesisRoot : Root} {proposers : Vector ValidatorIndex preset.SLOTS_PER_EPOCH.toNat}
+    -- It needs one of the two proposer answers.
     {error : ErrorMessage} (version : kind = .proposerV1 ∨ kind = .proposerV2)
+    -- It needs a fork before Fulu, where the answers draw the proposers.
     (early : fork < .fusaka)
+    -- The slot of the state plus the length of the buffer of roots is at most `2^64`.
     (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
     (drawn : getBeaconProposerIndices state (getCurrentEpoch state) = .ok proposers)
     (failed : dutiesResponse config state kind (getCurrentEpoch state) indices genesisRoot =
@@ -1185,17 +1100,14 @@ private theorem dutiesResponse_proposer_drawn_error {config : Config}
 
 /-- A proposer answer at the current epoch gets code 500 exactly when the draw of that epoch fails.
 
-A draw that succeeds names active validators, and has computed the slot of each one.
-
-It needs a fork before Fulu, where the answers draw the proposers.
-
-It needs one of the two proposer answers.
-
-It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`. -/
+A draw that succeeds names active validators, and has computed the slot of each one. -/
 theorem dutiesResponse_proposer_internal_iff_of_lt_fulu {config : Config}
     {state : BeaconState preset fork} {kind : DutyKind} {indices : List ValidatorIndex}
+    -- It needs one of the two proposer answers.
     {genesisRoot : Root} (version : kind = .proposerV1 ∨ kind = .proposerV2)
+    -- It needs a fork before Fulu, where the answers draw the proposers.
     (early : fork < .fusaka)
+    -- The slot of the state plus the length of the buffer of roots is at most `2^64`.
     (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64) :
     (∃ error, dutiesResponse config state kind (getCurrentEpoch state) indices genesisRoot =
         .error error ∧ error.code = 500) ↔
@@ -1233,30 +1145,24 @@ theorem currentEpochRoom_presets (named : preset = .mainnet ∨ preset = .minima
 
 /-- A proposer answer fails only with the error of an invalid epoch, code 400.
 
-It needs a fork before Fulu, where the answers draw the proposers of the current epoch.
-
-It needs one of the two proposer answers.
-
-It needs the current epoch plus the length of the history of mixes to stay below `2^64`.
-
-It needs the seed lookahead to be shorter than that history.
-
-It needs the first slot after the current epoch to be at most `2^64`.
-
-It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`.
-
-It needs at most `2^40` validators, and the draws of the current epoch to end.
-
 It covers every epoch, since the answers refuse any other epoch with that error. -/
 theorem dutiesResponse_proposer_error_of_lt_fulu {config : Config}
     {state : BeaconState preset fork} {kind : DutyKind} {epoch : Epoch}
     {indices : List ValidatorIndex} {genesisRoot : Root} {error : ErrorMessage}
+    -- It needs one of the two proposer answers.
+    --
+    -- It needs a fork before Fulu, where the answers draw the proposers of the current epoch.
     (version : kind = .proposerV1 ∨ kind = .proposerV2) (early : fork < .fusaka)
+    -- The current epoch plus the length of the history of mixes stays below `2^64`.
     (seedRoom :
       (getCurrentEpoch state).toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    -- The seed lookahead is shorter than that history.
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    -- The first slot after the current epoch is at most `2^64`.
     (slotsFit : ((getCurrentEpoch state).toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
+    -- The slot of the state plus the length of the buffer of roots is at most `2^64`.
     (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
+    -- It needs at most `2^40` validators, and the draws of the current epoch to end.
     (drawable : ProposersDrawable state (getCurrentEpoch state))
     (failed : dutiesResponse config state kind epoch indices genesisRoot = .error error) :
     error = invalidEpoch epoch := by
@@ -1268,30 +1174,24 @@ theorem dutiesResponse_proposer_error_of_lt_fulu {config : Config}
     cases failed
     rfl
 
-/-- A proposer answer fails only with code 400.
-
-It needs a fork before Fulu, where the answers draw the proposers of the current epoch.
-
-It needs one of the two proposer answers.
-
-It needs the current epoch plus the length of the history of mixes to stay below `2^64`.
-
-It needs the seed lookahead to be shorter than that history.
-
-It needs the first slot after the current epoch to be at most `2^64`.
-
-It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`.
-
-It needs at most `2^40` validators, and the draws of the current epoch to end. -/
+/-- A proposer answer fails only with code 400. -/
 theorem dutiesResponse_proposer_error_code_of_lt_fulu {config : Config}
     {state : BeaconState preset fork} {kind : DutyKind} {epoch : Epoch}
     {indices : List ValidatorIndex} {genesisRoot : Root} {error : ErrorMessage}
+    -- It needs one of the two proposer answers.
+    --
+    -- It needs a fork before Fulu, where the answers draw the proposers of the current epoch.
     (version : kind = .proposerV1 ∨ kind = .proposerV2) (early : fork < .fusaka)
+    -- The current epoch plus the length of the history of mixes stays below `2^64`.
     (seedRoom :
       (getCurrentEpoch state).toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    -- The seed lookahead is shorter than that history.
     (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    -- The first slot after the current epoch is at most `2^64`.
     (slotsFit : ((getCurrentEpoch state).toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
+    -- The slot of the state plus the length of the buffer of roots is at most `2^64`.
     (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
+    -- It needs at most `2^40` validators, and the draws of the current epoch to end.
     (drawable : ProposersDrawable state (getCurrentEpoch state))
     (failed : dutiesResponse config state kind epoch indices genesisRoot = .error error) :
     error.code = 400 := by
@@ -1337,19 +1237,16 @@ private theorem proposerDuties_error_code {state : BeaconState preset fork} {epo
 
 /-- A proposer answer reads the duties of its epoch, then a dependent root.
 
-The duties read the lookahead at the slots of that epoch, whose start fits in 64 bits.
-
-It needs a fork from Fulu, where the answers read the proposers from the lookahead.
-
-It needs the first answer at the current epoch, or the second at an epoch of the lookahead.
-
-It needs the slots of the epoch to fit in 64 bits. -/
+The duties read the lookahead at the slots of that epoch, whose start fits in 64 bits. -/
 private theorem dutiesResponse_proposer_lag_exists {config : Config}
     {state : BeaconState preset fork} {kind : DutyKind} {epoch : Epoch}
+    -- It needs a fork from Fulu, where the answers read the proposers from the lookahead.
     {indices : List ValidatorIndex} {genesisRoot : Root} (fulu : .fusaka ≤ fork)
+    -- It needs the first answer at the current epoch, or the second at an epoch of the lookahead.
     (served : kind = .proposerV1 ∧ epoch = getCurrentEpoch state ∨
       kind = .proposerV2 ∧ (getCurrentEpoch state).toNat ≤ epoch.toNat ∧
         epoch.toNat ≤ (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat)
+    -- The slots of the epoch fit in 64 bits.
     (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64) :
     ∃ lag, dutiesResponse config state kind epoch indices genesisRoot =
         (do
@@ -1377,22 +1274,18 @@ private theorem dutiesResponse_proposer_lag_exists {config : Config}
 
 /-- A proposer answer gets code 500 exactly when the lookahead names an index past the registry.
 
-That index is the entry of the lookahead at a slot of the requested epoch.
-
-It needs a fork from Fulu, where the answers read the proposers from the lookahead.
-
-It needs the first answer at the current epoch, or the second at an epoch of the lookahead.
-
-It needs the slots of the epoch to fit in 64 bits.
-
-It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`. -/
+That index is the entry of the lookahead at a slot of the requested epoch. -/
 theorem dutiesResponse_proposer_internal_iff {config : Config} {state : BeaconState preset fork}
     {kind : DutyKind} {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root}
+    -- It needs a fork from Fulu, where the answers read the proposers from the lookahead.
     (fulu : .fusaka ≤ fork)
+    -- It needs the first answer at the current epoch, or the second at an epoch of the lookahead.
     (served : kind = .proposerV1 ∧ epoch = getCurrentEpoch state ∨
       kind = .proposerV2 ∧ (getCurrentEpoch state).toNat ≤ epoch.toNat ∧
         epoch.toNat ≤ (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat)
+    -- The slots of the epoch fit in 64 bits.
     (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
+    -- The slot of the state plus the length of the buffer of roots is at most `2^64`.
     (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64) :
     (∃ error, dutiesResponse config state kind epoch indices genesisRoot = .error error ∧
         error.code = 500) ↔
@@ -1487,23 +1380,19 @@ theorem dutiesResponse_proposer_internal_iff {config : Config} {state : BeaconSt
 
 /-- A proposer answer fails only with the error of an invalid epoch, code 400.
 
-It needs a fork from Fulu, where the answers read the proposers from the lookahead.
-
-It needs one of the two proposer answers.
-
-It needs the slots of the epoch to fit in 64 bits.
-
-It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`.
-
-It needs the lookahead to name only validators of the state.
-
 It holds even with no active validator, unlike an answer before Fulu. -/
 theorem dutiesResponse_proposer_error {config : Config}
     {state : BeaconState preset fork} {kind : DutyKind} {epoch : Epoch}
     {indices : List ValidatorIndex} {genesisRoot : Root} {error : ErrorMessage}
+    -- It needs a fork from Fulu, where the answers read the proposers from the lookahead.
+    --
+    -- It needs one of the two proposer answers.
     (fulu : .fusaka ≤ fork) (version : kind = .proposerV1 ∨ kind = .proposerV2)
+    -- The slots of the epoch fit in 64 bits.
     (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
+    -- The slot of the state plus the length of the buffer of roots is at most `2^64`.
     (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
+    -- The lookahead names only validators of the state.
     (known : ∀ proposer ∈ state.proposerLookahead fulu,
       proposer.toNat < state.validators.data.size)
     (failed : dutiesResponse config state kind epoch indices genesisRoot = .error error) :
@@ -1541,23 +1430,19 @@ theorem dutiesResponse_proposer_error {config : Config}
     cases failed
     rfl
 
-/-- A proposer answer fails only with code 400.
-
-It needs a fork from Fulu, where the answers read the proposers from the lookahead.
-
-It needs one of the two proposer answers.
-
-It needs the slots of the epoch to fit in 64 bits.
-
-It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`.
-
-It needs the lookahead to name only validators of the state. -/
+/-- A proposer answer fails only with code 400. -/
 theorem dutiesResponse_proposer_error_code {config : Config}
     {state : BeaconState preset fork} {kind : DutyKind} {epoch : Epoch}
     {indices : List ValidatorIndex} {genesisRoot : Root} {error : ErrorMessage}
+    -- It needs a fork from Fulu, where the answers read the proposers from the lookahead.
+    --
+    -- It needs one of the two proposer answers.
     (fulu : .fusaka ≤ fork) (version : kind = .proposerV1 ∨ kind = .proposerV2)
+    -- The slots of the epoch fit in 64 bits.
     (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat ≤ 2 ^ 64)
+    -- The slot of the state plus the length of the buffer of roots is at most `2^64`.
     (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
+    -- The lookahead names only validators of the state.
     (known : ∀ proposer ∈ state.proposerLookahead fulu,
       proposer.toNat < state.validators.data.size)
     (failed : dutiesResponse config state kind epoch indices genesisRoot = .error error) :
@@ -1698,25 +1583,20 @@ theorem dutiesResponse_attester_internal_iff {config : Config} {state : BeaconSt
 
 /-- Each refusal of the attester answer is one of three errors, all with code 400.
 
-They are the errors of an empty request, of an invalid epoch and of an invalid index.
-
-It needs the first slot after the epoch to fit in 64 bits.
-
-It needs the epoch plus the length of the history of mixes to fit as well.
-
-It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`.
-
-It needs at most `2^40` validators in the registry.
-
-It needs their number times a bound on the committees of an epoch to be below `2^64`.
-
-The bound is one more than the most committees of a slot, times the slots of an epoch. -/
+They are the errors of an empty request, of an invalid epoch and of an invalid index. -/
 theorem dutiesResponse_attester_error {config : Config} {state : BeaconState preset fork}
     {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root} {error : ErrorMessage}
+    -- The first slot after the epoch fits in 64 bits.
     (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    -- The epoch plus the length of the history of mixes fits as well.
     (seedRoom : epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    -- The slot of the state plus the length of the buffer of roots is at most `2^64`.
     (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
+    -- It needs at most `2^40` validators in the registry.
     (few : state.validators.data.size ≤ 2 ^ 40)
+    -- Their number times a bound on the committees of an epoch is below `2^64`.
+    --
+    -- The bound is one more than the most committees of a slot, times the slots of an epoch.
     (committeeRoom : state.validators.data.size * (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) *
       preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
     (failed : dutiesResponse config state .attester epoch indices genesisRoot = .error error) :
@@ -1740,25 +1620,20 @@ theorem dutiesResponse_attester_error {config : Config} {state : BeaconState pre
     exact .inr (.inl (dependentRoot_next_error (checkDutyEpoch_bounds passed).1 room refused))
   · cases failed
 
-/-- An attester answer fails only with code 400.
-
-It needs the first slot after the epoch to fit in 64 bits.
-
-It needs the epoch plus the length of the history of mixes to fit as well.
-
-It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`.
-
-It needs at most `2^40` validators in the registry.
-
-It needs their number times a bound on the committees of an epoch to be below `2^64`.
-
-The bound is one more than the most committees of a slot, times the slots of an epoch. -/
+/-- An attester answer fails only with code 400. -/
 theorem dutiesResponse_attester_error_code {config : Config} {state : BeaconState preset fork}
     {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root} {error : ErrorMessage}
+    -- The first slot after the epoch fits in 64 bits.
     (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    -- The epoch plus the length of the history of mixes fits as well.
     (seedRoom : epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    -- The slot of the state plus the length of the buffer of roots is at most `2^64`.
     (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
+    -- It needs at most `2^40` validators in the registry.
     (few : state.validators.data.size ≤ 2 ^ 40)
+    -- Their number times a bound on the committees of an epoch is below `2^64`.
+    --
+    -- The bound is one more than the most committees of a slot, times the slots of an epoch.
     (committeeRoom : state.validators.data.size * (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) *
       preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
     (failed : dutiesResponse config state .attester epoch indices genesisRoot = .error error) :
@@ -1882,15 +1757,14 @@ The epoch must also lie from the previous epoch to the next, from the Gloas fork
 
 Its seed must still be in the mixes of the state, and the request must repeat no index.
 
-The epoch must also be at most the last epoch of the seed lookahead.
-
-It needs a fork from Gloas, and each requested index to name a validator of the state.
-
-It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`. -/
+The epoch must also be at most the last epoch of the seed lookahead. -/
 theorem dutiesResponse_ptc_internal_iff {config : Config} {state : BeaconState preset fork}
     {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root}
+    -- It needs a fork from Gloas.
     (gloas : .glamsterdam ≤ fork)
+    -- Each requested index names a validator of the state.
     (known : ∀ index ∈ indices, ∃ validator, getValidator state index = .ok validator)
+    -- The slot of the state plus the length of the buffer of roots is at most `2^64`.
     (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64) :
     (∃ error, dutiesResponse config state .ptc epoch indices genesisRoot = .error error ∧
         error.code = 500) ↔
@@ -1956,19 +1830,17 @@ Two are the errors of a state before Gloas and of an empty request.
 
 The others are the errors of an invalid epoch, of a repeated index and of an invalid index.
 
-It needs the last epoch of the seed lookahead and the length of the window to fit in 64 bits.
-
-It needs the first slot after the epoch to fit as well.
-
-It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`.
-
 It holds past the seed lookahead too, where the answer gets the error of an invalid epoch. -/
 theorem dutiesResponse_ptc_error {config : Config} {state : BeaconState preset fork}
     {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root} {error : ErrorMessage}
+    -- The last epoch of the seed lookahead fits in 64 bits.
     (fits : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat < 2 ^ 64)
+    -- The length of the window fits in 64 bits.
     (windowFits :
       (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    -- The first slot after the epoch fits as well.
     (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    -- The slot of the state plus the length of the buffer of roots is at most `2^64`.
     (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
     (failed : dutiesResponse config state .ptc epoch indices genesisRoot = .error error) :
     error = beforeFork "PTC duties" .glamsterdam ∨ error = emptyIndices ∨
@@ -2002,19 +1874,17 @@ theorem dutiesResponse_ptc_error {config : Config} {state : BeaconState preset f
   · exact .inr (.inr (.inl (dependentRoot_ptc_error dutiesOk room refused)))
   · cases failed
 
-/-- A PTC answer fails only with code 400.
-
-It needs the last epoch of the seed lookahead and the length of the window to fit in 64 bits.
-
-It needs the first slot after the epoch to fit as well.
-
-It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`. -/
+/-- A PTC answer fails only with code 400. -/
 theorem dutiesResponse_ptc_error_code {config : Config} {state : BeaconState preset fork}
     {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root} {error : ErrorMessage}
+    -- The last epoch of the seed lookahead fits in 64 bits.
     (fits : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat < 2 ^ 64)
+    -- The length of the window fits in 64 bits.
     (windowFits :
       (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    -- The first slot after the epoch fits as well.
     (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    -- The slot of the state plus the length of the buffer of roots is at most `2^64`.
     (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
     (failed : dutiesResponse config state .ptc epoch indices genesisRoot = .error error) :
     error.code = 400 := by
