@@ -6,26 +6,13 @@ public import EthLib.Serialization.Rlp.Codec
 /-!
 # `Execution.Network.Cells`
 
-The cell exchange of eth/72, from three sections of [`caps/eth.md`][eth].
+The cell exchange of eth/72, GetCells (0x14) and Cells (0x15), which [EIP-8070][eip-8070] adds.
 
-They are Blob Transaction and Cell Exchange, GetCells (0x14) and Cells (0x15).
+EIP-8070 is in Last Call.
+
+Source: [`caps/eth.md`][eth], three sections: Blob Transaction and Cell Exchange, GetCells, Cells.
 
 [eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#getcells-0x14
-
-[EIP-8070][eip-8070], status Last Call, adds them.
-
-A cell index refers to the cell at that index in every blob of a transaction.
-
-A bitmap of 16 bytes marks the cell indices that a request asks for, or that a response holds.
-
-The checks here compare two bitmaps bit by bit and count their bits.
-
-So they need no order of the bits.
-
-The `eth.md` text differs from EIP-8070 here: it adds a request ID to GetCells and to Cells.
-
-EthLib follows `eth.md`, the protocol text.
-
 [eip-8070]: https://eips.ethereum.org/EIPS/eip-8070#specification
 -/
 
@@ -46,16 +33,18 @@ def CELLS_ID : Nat := 0x15
 def BYTES_PER_CELL : Nat := 2048
 
 /-- The number of cell indices of a bitmap, 128. -/
-def CELL_INDICES : Nat := 128
+def CELL_INDICES : Nat :=
+  -- A cell index refers to the cell at that index in every blob of a transaction.
+  128
 
-/-- A bitmap of cell indices: 16 bytes. -/
+/-- A bitmap of 16 bytes: the cell indices that a request asks for, or that a response holds. -/
 abbrev CellMask := Vector UInt8 16
 
-/-- Whether bit `i` of a bitmap is set: bit `i % 8` of byte `i / 8`.
-
-The checks here do not depend on this order. -/
+/-- Whether bit `i` of a bitmap is set: bit `i % 8` of byte `i / 8`. -/
 def CellMask.has (mask : CellMask) (i : Nat) : Bool :=
   -- EthLib's own bit order: neither eth.md nor EIP-8070 fixes one, and the checks need none.
+  --
+  -- They compare two bitmaps bit by bit and count their bits, so no check depends on this order.
   if h : i / 8 < 16 then (mask[i / 8] >>> (i % 8).toUInt8) &&& 1 == 1 else false
 
 /-- The number of cell indices that a bitmap marks. -/
@@ -84,12 +73,11 @@ inductive CellsError where
   | notAnswer
   deriving DecidableEq, Repr
 
-/-- The stable code of an error, one per constructor, for the C exports.
-
-The codes start at 401, above every code of the other eth errors.
-
-A new constructor takes a new code, so that each code keeps its meaning. -/
+/-- The stable code of an error, one per constructor, for the C exports. -/
 def CellsError.code : CellsError → UInt32
+  -- The codes start at 401, above every code of the other eth errors.
+  --
+  -- A new constructor takes a new code, so that each code keeps its meaning.
   | .maskNotSubset => 401
   | .notRequested => 402
   | .groupCount .. => 403
@@ -98,22 +86,11 @@ def CellsError.code : CellsError → UInt32
   | .notAnswer => 406
   | .blobCount .. => 407
 
-/--
-Whether a response of cells answers a request of the hashes `requested`.
-
-The request has the bitmap `requestMask`.
-
-`blobs` gives the number of blobs of each transaction of the response.
-
-- The response bitmap is a subset of the request bitmap.
-- The transactions are requested ones, in order; the peer may leave some out.
-- Each transaction has one group of cells, with one cell for each blob and each marked index.
-- Each cell has 2048 bytes.
--/
+/-- Whether a response of cells answers a request of the hashes `requested`. -/
 def checkCells (requested : List Hash32) (requestMask : CellMask) (blobs : List Nat)
     (hashes : List Hash32) (groups : List (List ByteArray)) (mask : CellMask) :
     Except CellsError Unit := do
-  -- The response bitmap is a subset of the request bitmap.
+  -- The request has the bitmap `requestMask`; the response bitmap is a subset of it.
   if !mask.subset requestMask then throw .maskNotSubset
   -- The transactions are requested ones, and the peer may omit some.
   --
@@ -121,12 +98,14 @@ def checkCells (requested : List Hash32) (requestMask : CellMask) (blobs : List 
   if !hashes.isSublist requested then throw .notRequested
   -- One group of cells for each transaction.
   if groups.length ≠ hashes.length then throw (.groupCount hashes.length groups.length)
+  -- `blobs` gives the number of blobs of each transaction of the response.
+  --
   -- Not in the source: the caller gives one blob count for each transaction.
   if blobs.length ≠ hashes.length then throw (.blobCount hashes.length blobs.length)
   -- The group holds one cell for each blob and each marked index.
   for (i, group, n) in (List.range groups.length).zip (groups.zip blobs) do
     if group.length ≠ n * mask.count then throw (.cellCount i (n * mask.count) group.length)
-    -- Each cell is `B_2048`.
+    -- Each cell is `B_2048`: it has 2048 bytes.
     for cell in group do
       if cell.size ≠ BYTES_PER_CELL then throw (.cellSize cell.size)
 
