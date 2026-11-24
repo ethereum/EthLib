@@ -9,41 +9,21 @@ public import VCVio.OracleComp.Constructions.SampleableType.Measure
 /-!
 # Proofs: an output is unpredictable to anyone without its secret
 
-Here the hash is a random oracle.
+The bound holds in the random oracle model, at an index fixed in advance.
 
-The holder's secret at index `c` is uniform, and independent of its other secrets.
+The property is the residual unpredictability of [Micali, Rabin and Vadhan][mrv99], §3.2.
 
-The adversary gets the root, queries the hash, and asks for openings at any index but `c`.
-
-It then guesses the output at `c`.
-
-It wins with probability at most `(1 + 2 Q) / 2^256`, where `Q = q_H + (q_O + 1) 2^33`.
-
-Here `q_H` counts its hash queries and `q_O` its requests for an opening.
-
-The term `1 / 2^256` is the blind guess of a 32-byte output.
-
-The term `2 Q / 2^256` covers a hash query at an input that holds the challenge secret.
-
-It counts every hash call of the game, so it also covers another secret equal to the challenge one.
-
-The other secrets are arbitrary, so the adversary may even know them.
-
-The property is the residual unpredictability of Micali, Rabin and Vadhan, §3.2.
-
-Source: "Verifiable Random Functions", [FOCS 1999](https://doi.org/10.1109/SFFCS.1999.814584).
-
-There the adversary chooses the index after its queries; here the index is fixed in advance.
+There the adversary chooses the index after its queries.
 
 A separate theorem covers an adaptive index, with uniform secrets, at the cost of a factor `2^32`.
 
-A challenge secret derived from a seed is not covered.
+A challenge secret derived from a seed is not covered here.
 
 A separate theorem covers secrets derived from a seed, but only at an adaptive index.
 
-The theorem does not cover a holder who chooses its secrets.
+Source: "Verifiable Random Functions", FOCS 1999.
 
-Such a holder can bias its own outputs, because verification accepts any tree.
+[mrv99]: https://doi.org/10.1109/SFFCS.1999.814584
 -/
 
 @[expose] public section
@@ -496,7 +476,13 @@ Then its guess equals the output at `c` with probability at most `(1 + 2 Q) / 2^
 
 Here `Q = q_H + (q_O + 1) 2^33`.
 
-With `q_H = 2^64` and `q_O = 2^32`, the bound is below `2^-189`. -/
+With `q_H = 2^64` and `q_O = 2^32`, the bound is below `2^-189`.
+
+The other secrets are arbitrary, so the adversary may even know them.
+
+The theorem does not cover a holder who chooses its secrets.
+
+Such a holder can bias its own outputs, because verification accepts any tree. -/
 theorem prEvent_guess_le (others : UInt32 → Digest) (c : UInt32) (adversary : Adversary)
     {qh qo : ℕ} (hh : ∀ r, IsQueryBoundP (adversary r) IsHashQuery qh)
     (ho : ∀ r, IsQueryBoundP (adversary r) IsOpenQuery qo) :
@@ -511,12 +497,16 @@ theorem prEvent_guess_le (others : UInt32 → Digest) (c : UInt32) (adversary : 
   have hideal : Pr{let s ← $ᵗ Digest; let z ← (simulateQ
       (SecretEncoding.idealImpl HashSpec Bool Digest) (gameD others c adversary)).run (∅, ∅)}[
         z.1.1 = z.1.2] ≤ (2 ^ 256 : ℝ≥0∞)⁻¹ := by
+    -- The term `1 / 2^256` is the blind guess of a 32-byte output.
     rw [OracleComp.prEvent_bind_const]
     exact prEvent_idealImpl_gameD_le others c adversary
   calc _ = Pr{let s ← $ᵗ Digest; let z ← (simulateQ ((encoding c).realImpl s)
           (gameD others c adversary)).run ∅}[z.1.1 = z.1.2] := by
         simp only [hreal, map_eq_bind_pure_comp, bind_assoc, pure_bind, Function.comp_apply]
         rfl
+    -- The term `2 Q / 2^256` covers a hash query at an input that holds the challenge secret.
+    --
+    -- It counts every hash call of the game, so it also covers another secret equal to that one.
     _ ≤ _ := ((encoding c).prEvent_realImpl_le_add_mul (ms := $ᵗ Digest)
         (prEvent_mem_range_enc_le c) (p := IsHashD) (fun _ _ => trivial)
         (isQueryBoundP_gameD others c adversary hh ho) fun _ z => z.1.1 = z.1.2).trans

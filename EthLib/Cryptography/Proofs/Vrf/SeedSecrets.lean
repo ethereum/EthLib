@@ -9,19 +9,9 @@ public import EthLib.Cryptography.Proofs.DerivationTable
 
 Key generation derives secret `i` as the hash of a prefix, a uniform seed and `i`.
 
-Here the hash is a random oracle, and the adversary chooses the index, as for uniform secrets.
+In the random oracle model, the bound for uniform secrets at an index the adversary chooses holds.
 
-It wins with probability at most `2^32 (1 + 2 Q) / 2^256 + Q / 2^256`.
-
-Here `Q = q_H + (q_O + 1) 2^33`, as for uniform secrets.
-
-The last term is one hidden-seed step.
-
-The secrets act as independent uniform values until a hash query hits a secret input of the seed.
-
-A hash input fixes the seed it encodes, so each query hits with probability at most `2^-256`.
-
-The game then has uniform secrets, and the bound for uniform secrets applies.
+It gains one term `Q / 2^256`, for a hash query that hits a secret input of the seed.
 
 The tree, the openings and the output are written once, over a source of secrets.
 
@@ -334,6 +324,13 @@ theorem prEvent_seedGame_le (adversary : AdaptiveAdversary) {qh qo : ℕ}
     simp only [simulateQ_fixDerivations_seedGameD]
     refine le_of_eq_of_le ?_ (prEvent_adaptiveGame_le adversary hh ho)
     simp [StateT.run'_eq]
+  -- The last term `Q / 2^256` is one hidden-seed step.
+  --
+  -- The secrets act as uniform, independent values until a query hits a secret input of the seed.
+  --
+  -- A hash input fixes the seed it encodes, so each query hits with probability at most `2^-256`.
+  --
+  -- The game then has uniform secrets, and the bound for uniform secrets applies.
   refine le_of_eq_of_le ?_ (hop.trans (add_le_add hideal le_rfl))
   simp [StateT.run'_eq, simulateQ_deriveImpl_seedGameD]
 

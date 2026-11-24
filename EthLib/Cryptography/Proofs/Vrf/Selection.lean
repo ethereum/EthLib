@@ -13,26 +13,6 @@ The mix hashes the output with randomness that becomes known after the holder re
 
 Here the holder chooses every secret of its tree, so it chooses every output.
 
-It may query the mix before the randomness is drawn, then open any index of a set fixed in advance.
-
-The mix is a random oracle, and the tree hash is Keccak-256 itself.
-
-A mixed value of the registered tree lands in the target set with a probability bounded by a sum.
-
-- The number of allowed indices times the size of the target set, over `2^256`.
-- The number of mix queries before the randomness, over `2^256`.
-- The chance that the opening and the honest opening at its index expose a Keccak-256 collision.
-
-The collision is the one the search of the uniqueness theorem returns.
-
-The theorem covers a holder that registers a tree whose secrets it chose.
-
-It does not cover a holder that registers a root without knowing a tree under it.
-
-The randomness is uniform and independent of the holder.
-
-So the theorem does not cover randomness that the holder knows at registration, or can bias.
-
 The game is EthLib's own: it bounds what a selection needs, for a holder that chose its key.
 -/
 
@@ -267,11 +247,15 @@ The holder chooses all its secrets, and makes at most `q` mix queries before the
 
 The randomness is uniform, and the holder then opens one index of `I`.
 
+It does not cover a holder that registers a root without knowing a tree under it.
+
+It does not cover randomness that the holder knows at registration, or can bias.
+
 The mixed value of its output lands in `S` with probability at most the sum of three terms.
 
 - `|I| |S| / 2^256`: one fresh uniform value per allowed index.
 - `q / 2^256`: a mix query that already used the randomness.
-- The chance that the search returns a collision, with the opening and the honest opening.
+- The chance that the search of the uniqueness theorem returns a collision, with both openings.
 
 No theorem bounds the last term: it is the chance that the holder finds a Keccak-256 collision.
 
