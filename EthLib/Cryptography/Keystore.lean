@@ -412,12 +412,12 @@ The salt is part of the key derivation, and the IV and the UUID are inputs.
 
 So writing is a function, and every random value comes from the caller.
 
+It runs the key derivation at any cost, so the caller chooses its parameters.
+
 ERC-2335 requires the public key when the secret is a private key, and the caller supplies it.
 -/
 def encrypt (kdf : Kdf) (iv : Aes.Block) (metadata : Metadata) (password : String)
     (secret : ByteArray) : Except KeystoreError Json := do
-  -- The key derivation runs at any cost, so the caller chooses its parameters.
-  --
   -- Decryption key: the KDF of the prepared password.
   let key ← deriveKey (passwordBytes password) kdf
   if h : 32 ≤ key.size then

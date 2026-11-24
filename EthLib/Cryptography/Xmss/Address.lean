@@ -44,8 +44,9 @@ inductive Address where
 
   - `layer`: the layer `l`, bottom or top.
   - `e`: the one-time key's index on its layer.
-  - `mu`: the position the step starts from, from 0 to 2. -/
-  -- The chain index is not in the address: it follows the value in the hash input.
+  - `mu`: the position the step starts from, from 0 to 2.
+
+  The chain index is not in the address: it follows the value in the hash input. -/
   | chain (layer : Layer) (e : UInt32) (mu : Fin (CHAIN_LENGTH - 1))
   /-- `A_leaf(l, e)`: the Merkle leaf of key `e`, from its 58 chain ends.
 
@@ -112,7 +113,12 @@ inductive Address where
 
 /-- `enc(tau, mu, hi, lo)`: the encoding of an address, the 16 bytes its hash reads, as two lanes.
 
-Each hash call of a key gets its own address, so that the hash inputs of the key stay distinct.
+Each hash call of a key gets its own address, so that the hash inputs of the key stay distinct:
+
+- Over its `2^32` leaf indices, a key makes `2^32 * 58 * 3`, about `2^40`, chain steps alone.
+- One address shared by every call would expose all of them as targets at once.
+- Finding one preimage among `M` targets costs `2^128 / M`.
+- Distinct addresses, with the chain index in the payload, remove that discount.
 
 The address plays the part of the tweak of [ePrint 2025/055][hbms], §7.1, with its own layout.
 
@@ -130,14 +136,6 @@ The address plays the part of the tweak of [ePrint 2025/055][hbms], §7.1, with 
   -- So `lo < 2^32` is bits 0 to 31 of the first lane, and `hi < 2^24` bits 32 to 55.
   --
   -- Together, `hi` and `lo` locate the call inside its type.
-  --
-  -- Over its `2^32` leaf indices, a key makes `2^32 * 58 * 3`, about `2^40`, chain steps alone.
-  --
-  -- One address shared by every call would expose all of them as targets at once.
-  --
-  -- Finding one preimage among `M` targets costs `2^128 / M`.
-  --
-  -- Distinct addresses, with the chain index in the payload, remove that discount.
   ⟨address.lo.toUInt64 ||| (UInt64.ofNat address.hi.val <<< 32)
       -- The type byte is bits 56 to 63 of the first lane.
       --

@@ -10,6 +10,11 @@ Every definition runs in a monad `m`, so the hash may be an oracle.
 A pure tree runs in `Id`.
 
 The order of the hash calls is fixed, so a proof in the random oracle model can count them.
+
+- A node computes its left subtree, then its right subtree, then its own hash.
+- A build makes the calls of the node at its position, in the same order.
+- A path computes its siblings from the leaf up.
+- A climb hashes from the leaf up.
 -/
 
 @[expose] public section
@@ -97,7 +102,6 @@ It recurses on the level, so it unfolds by definition. -/
 def node.go (leaves : Nat → m α) : (level j : Nat) → m α
   | 0, j => leaves j
   | level + 1, j => do
-    -- A node computes its left subtree, then its right subtree, then its own hash.
     let left ← node.go leaves level (2 * j)
     let right ← node.go leaves level (2 * j + 1)
     -- A tree that tweaks every hash by its position reads it here, as hash-based signatures do.
@@ -168,7 +172,6 @@ The path of a leaf holds the sibling of each of its ancestors, from the leaf up.
 def siblings (leaves : Nat → m α) : (p : Position) → (n : Nat) → m (Vector α n)
   | _, 0 => pure #v[]
   | p, n + 1 => do
-    -- A path computes its siblings from the leaf up.
     let sibling ← node hash leaves p.sibling
     let rest ← siblings leaves p.parent n
     return (#v[sibling] ++ rest).cast (Nat.add_comm 1 n)
@@ -191,7 +194,6 @@ def ordered (p : Position) (current sibling : α) : α × α :=
 def climb : (p : Position) → (current : α) → (siblings : List α) → m α
   | _, current, [] => pure current
   | p, current, sibling :: rest => do
-    -- A climb hashes from the leaf up.
     let children := ordered p current sibling
     let parent ← hash p.parent children.1 children.2
     climb p.parent parent rest

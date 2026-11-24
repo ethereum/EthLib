@@ -102,7 +102,7 @@
   "The public key grown from a seed."
 
 #define DOC_xmss_sign \
-  "`Sig(sk, idx, m)` over a hash `H`: a message's signature at a leaf index, and the updated key."
+  "`Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index."
 
 #define DOC_xmss_verify \
   "`Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key."

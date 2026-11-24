@@ -27,10 +27,7 @@ class Params (F : Type) where
   /-- The multiplicative inverse of the field. -/
   inv : F → F
 
--- A point is the point at infinity `O`, or a pair `(x, y)` that satisfies the equation.
---
--- `O` is the zero of the group, and `-(x, y) = (x, -y)`.
-/-- A point of the curve: the point at infinity, or a pair of coordinates.
+/-- A point of the curve: the point at infinity `O`, or a pair `(x, y)`.
 
 A pair is a point of the curve only when it satisfies the equation. -/
 inductive Point (F : Type) where
@@ -107,9 +104,6 @@ end Affine
 
 section Jacobian
 
--- Scalar multiplication runs in Jacobian coordinates, not affine ones, over any such field.
---
--- It takes one inverse, at the end.
 /-- The Jacobian form of a point: `(x, y, 1)`, or `(1, 1, 0)` at infinity. -/
 def toCoords {F : Type} [OfNat F 0] [OfNat F 1] : Point F → Jacobian.Coords F
   | infinity => .infinity
@@ -136,13 +130,13 @@ def ofJacobian (p : Jacobian m) : Point (Fin m) := ofCoords Fin.inverse id p.toC
 
 The steps run in Jacobian coordinates, in a representation of the field.
 
+Only the conversion back to a point takes an inverse, once, at the end.
+
 It takes the maps into and out of that representation, its inverse, and the curve's `a` in it. -/
 @[specialize] def mulBits {F G : Type} [OfNat F 0] [OfNat F 1] [OfNat G 0] [OfNat G 1]
     [Add G] [Sub G] [Mul G] [DecidableEq G] (encode : F → G) (inverse : G → G) (read : G → F)
     (a : G) (fuel k : Nat) (p : Point F) : Point F :=
   -- The representation can be the field itself, with the identity for both maps.
-  --
-  -- Only the conversion back takes an inverse.
   ofCoords inverse read (Jacobian.Coords.mulBits a fuel k (p.toCoords.map encode))
 
 end Jacobian

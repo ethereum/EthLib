@@ -30,8 +30,8 @@ EthLib/Cryptography/Hash/Keccak.lean | C7 | FIPS 202 §4 and §5.1 write the len
 EthLib/Cryptography/Hash/Keccak.lean | C7 | FIPS 202 §4 and §5.1 write the length of a string as `len(N)` | There are n - 1 = len(N) / r blocks before the last one, since n = len(N) / r + 1.
 EthLib/Cryptography/Hash/Keccak.lean | C7 | FIPS 202 §4 and §5.1 write the length of a string as `len(N)` | Steps 1 and 2: the k = n - 1 blocks of P = N || pad(r, len(N)) before the last are in N.
 EthLib/Cryptography/Hash/Keccak.lean | C7 | FIPS 202 §4 and §5.1 write the length of a string as `len(N)` | The first 1 bit of the padding is bit 0 of byte len(N) mod r of the last block.
-EthLib/Cryptography/Hash/Keccak.lean | C7 | FIPS 202 §4 and §5.1 write the length of a string as `len(N)` | Step 1: let P = N || pad(r, len(N)).
-EthLib/Cryptography/Hash/Keccak.lean | C7 | FIPS 202 §4 and §5.1 write the length of a string as `len(N)` | Step 2: let n = len(P) / r.
+EthLib/Cryptography/Hash/Keccak.lean | C7 | FIPS 202 §4 and §5.1 write the length of a string as `len(N)` | 1. Let `P = N || pad(r, len(N))`.
+EthLib/Cryptography/Hash/Keccak.lean | C7 | FIPS 202 §4 and §5.1 write the length of a string as `len(N)` | 2. Let `n = len(P) / r`.
 EthLib/Cryptography/Hash/Keccak.lean | C7 | FIPS 202 §4 and §5.1 write the length of a string as `len(N)` | pad(r, len(N)) reads len(N) only mod r, which is the pending length.
 EthLib/Cryptography/Proofs/Hash/Keccak/Basic.lean | C7 | FIPS 202 §4 writes the length of a string as `len(N)` | FIPS 202 §4 cuts the padded message `P` into `n = len(P) / r` blocks of `r` bits.
 EthLib/Cryptography/Proofs/Hash/Keccak/Basic.lean | C7 | FIPS 202 §4 writes the length of a string as `len(N)` | The byte at index `len(b)` exists in both padded strings, which have one length.

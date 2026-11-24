@@ -145,7 +145,7 @@ def xmss_key_gen(seed: bytes) -> bytes:
     ...
 
 def xmss_sign(seed: bytes, leaf_index: int, message: bytes) -> bytes:
-    """`Sig(sk, idx, m)` over a hash `H`: a message's signature at a leaf index, and the updated key."""
+    """`Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index."""
     ...
 
 def xmss_verify(public_key: bytes, message: bytes, signature: bytes) -> bool:

@@ -67,7 +67,9 @@ variable {F : Type} [OfNat F 0] [OfNat F 1]
 
 /-- The point `(x, y)` of a form, or nothing at infinity.
 
-It inverts once, and addition and doubling need no inverse. -/
+It inverts once.
+
+Addition and doubling need no inverse. -/
 def toAffine (inverse : F → F) (p : Coords F) : Option (F × F) :=
   if p.z = 0 then none
   else
@@ -172,14 +174,14 @@ It recurses on `fuel`, so the kernel can run it. -/
 
 /-- `k P + l Q`, for `k, l < 2^fuel`, by simultaneous multiple point multiplication.
 
+The two products share their doublings: `fuel` doublings in total, instead of `2 fuel`.
+
 The method is Algorithm 3.48, in §3.3.3 of "Guide to Elliptic Curve Cryptography".
 
 That book is by Hankerson, Menezes and Vanstone (Springer, 2004). -/
 @[specialize] def mulAdd (a : F) (fuel k : Nat) (p : Coords F) (l : Nat)
     (q : Coords F) : Coords F :=
   -- The windows of the method have one bit here.
-  --
-  -- The two products share their doublings: `fuel` doublings in total, instead of `2 fuel`.
   mulAddAux a p q (add a p q) fuel k l
 
 end Coords

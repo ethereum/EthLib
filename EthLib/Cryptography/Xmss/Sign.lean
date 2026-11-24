@@ -25,14 +25,14 @@ namespace Internal
 
 /-- The top key `b`'s signature of a root: the one-time signature and the key's path.
 
+Its secrets come from the given derivations, which signing takes from the key's seed `S`.
+
 # Errors
 
 - No randomizer trial gives a codeword.
   In the random oracle model, from an empty cache, that has probability below `exp(-4000)`. -/
 def signRootWith (prf : SeedPrf m) (sk : SecretKey) (b : Nat) (root : Digest)
     (trials : TrialSource m := hashTrials H) : m (Except XmssError LayerSignature) := do
-  -- The secrets come from the given derivations, which signing takes from the key's seed `S`.
-  --
   -- No codeword is an error, which every leaf index of the tree then returns.
   let some (randomizer, chainValues) ← otsSignTrials H sk.publicParam prf .top (UInt32.ofNat b)
       root.toArray trials
@@ -46,10 +46,6 @@ def cacheTreeWith (prf : SeedPrf m) (sk : SecretKey) (b : Nat)
   -- Every node of the tree, from its `2^16` one-time keys.
   let tree ← build H sk.publicParam prf .bottom LAYER_HEIGHT b
   -- The top key `b` signs this one root for all `2^16` leaf indices, so it signs once here.
-  --
-  -- The top key `b` signs only the root of bottom tree `b`.
-  --
-  -- So it signs one message, however many leaf indices of that tree are used.
   --
   -- An error is kept with the tree, and every leaf index of the tree returns it.
   let top ← signRootWith H prf sk b tree.value trials
@@ -89,17 +85,27 @@ def signWithTrials (prf : SeedPrf m) (sk : SecretKey) (idx : LeafIndex) (msg : M
 
 end Internal
 
-/-- `Sig(sk, idx, m)` over a hash `H`: a message's signature at a leaf index, and the updated key.
+/-- `Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.
 
-Warning: never sign two different messages at one leaf index with one secret key.
+It returns the signature and the updated key.
+
+A key that key generation and signing give signs as the note's signer does, by a theorem.
+
+# Warning
+
+Never sign two different messages at one leaf index with one secret key.
 
 Their two codewords would reveal every chain at the smaller of their two positions.
 
-It fails when either layer's one-time signature finds no codeword. -/
+The top key `b` signs only the root of bottom tree `b`.
+
+So it signs one message, however many leaf indices of that tree are used.
+
+# Errors
+
+- Either layer's one-time signature finds no codeword. -/
 def signWith (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
     m (Except XmssError Signature × SecretKey) :=
-  -- A key that key generation and signing give signs as the note's signer does, by a theorem.
-  --
   -- The derivations of the key's seed `S`, and each randomizer trial hashed with `H`.
   Internal.signWithTrials H (seedPrf H sk.schemeSeed) sk idx msg (hashTrials H)
 

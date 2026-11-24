@@ -106,16 +106,17 @@ It returns `none` when the square root of the base field finds no root of the no
 
 Which of the two roots it returns is not fixed, since every caller chooses the sign afterwards.
 
+When the base-field candidate and square root are one exponentiation each, as over BLS12-381:
+
+- a real input needs one exponentiation;
+- any other input needs at most two.
+
 [source]: https://eprint.iacr.org/2012/685
 -/
 def sqrt (a : Fp2 F) : Option (Fp2 F) :=
   -- The steps are those of Algorithm 8 of the source.
   --
   -- The base-field candidate squares to its input or to the negation of its input.
-  --
-  -- Suppose the base-field candidate and root are one exponentiation each, as over BLS12-381.
-  --
-  -- Then a real input needs one exponentiation, and any other input needs at most two.
   --
   -- Step 1: the case `a1 = 0`.
   if BaseField.isZero a.c1 then
