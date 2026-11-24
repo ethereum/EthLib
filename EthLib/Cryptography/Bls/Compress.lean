@@ -18,14 +18,6 @@ Key validation follows its §2.5:
 
 The step comments of the encodings follow Appendix C of the pairing-friendly curves draft:
 <https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-11#appendix-C>
-
-The top three bits of the first byte are the flags `C_bit`, `I_bit` and `S_bit`.
-
-They mark the compressed form, the point at infinity, and the larger square root `y` of `x^3 + b`.
-
-Only the compressed form is read or written here, so `C_bit` is always set.
-
-KZG accepts the point at infinity, so it tests for that encoding before key validation.
 -/
 
 @[expose] public section
@@ -89,6 +81,12 @@ def compress (p : G1) : Vector UInt8 48 := Id.run do
 It fails on a malformed input and on a point off the curve. -/
 def uncompress (bytes : Vector UInt8 48) : Except BlsError G1 :=
   -- C.2 step 1: `C_bit`, `I_bit` and `S_bit` are the top three bits of `s_string[0]`.
+  --
+  -- They mark the compressed form, the point at infinity, and the sign of `y`.
+  --
+  -- `S_bit` marks the larger square root `y` of `x^3 + b`.
+  --
+  -- Only the compressed form is read or written here, so `C_bit` is always set.
   let head := bytes[0]
   let isCompressed := (head &&& 0x80) ≠ 0
   let isInfinity   := (head &&& 0x40) ≠ 0
@@ -192,6 +190,12 @@ def compress (p : G2) : Vector UInt8 96 := Id.run do
 It fails on a malformed input and on a point off the curve. -/
 def uncompress (bytes : Vector UInt8 96) : Except BlsError G2 :=
   -- C.2 step 1: `C_bit`, `I_bit` and `S_bit` are the top three bits of `s_string[0]`.
+  --
+  -- They mark the compressed form, the point at infinity, and the sign of `y`.
+  --
+  -- `S_bit` marks the larger square root `y` of `x^3 + b`.
+  --
+  -- Only the compressed form is read or written here, so `C_bit` is always set.
   let head := bytes[0]
   let isCompressed := (head &&& 0x80) ≠ 0
   let isInfinity   := (head &&& 0x40) ≠ 0

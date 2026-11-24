@@ -14,14 +14,6 @@ Each map has two steps, from [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380):
 - The isogeny of §6.6.3 sends that point to the target curve.
 
 Clearing the cofactor of §7 then multiplies the point into the subgroup of prime order.
-
-G1 uses the 11-isogeny of Appendix E.2 and the cofactor `h_eff` of §8.8.1.
-
-G2 reuses the SSWU map, the 3-isogeny and the cofactor clearing of the hash to G2.
-
-An input that sends a denominator of the isogeny to zero maps to the identity point.
-
-§6.6.3 requires that.
 -/
 
 @[expose] public section
@@ -250,6 +242,10 @@ def mapToG1 (u : F) : Except BlsError (G1 F) := do
 /-! ## G2 -/
 
 /-- The map to the curve, then the cofactor clearing, for G2: a point of the subgroup for `u`.
+
+It reuses the SSWU map, the 3-isogeny and the cofactor clearing of the hash to G2.
+
+So a zero denominator of that isogeny also gives the identity point.
 
 The error is the case where the SSWU map finds no square root, which the RFC excludes. -/
 def mapToG2 (u : Fp2 F) : Except BlsError (G2 F) := do
