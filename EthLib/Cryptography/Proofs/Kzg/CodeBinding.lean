@@ -16,34 +16,9 @@ A cell holds its values on one of 128 cosets of 64 points.
 
 Code-binding asks that no valid openings of one commitment disagree with every such polynomial.
 
-Take exactly 64 cells `J` and one more cell `jx`.
-
-Let each of them satisfy the scalar equation of a valid cell for the commitment `c`.
-
-That is `c - I_j(τ) = w_j (τ^64 - h_j^64)`, not the acceptance of the verifier.
-
-Let `I` interpolate the cells of `J`, on their 4096 points.
-
-If `I` also takes the values of cell `jx`, the cells agree with a polynomial of degree below 4096.
-
-Otherwise there are two cases.
-
-- If `I(τ) = c`, the honest opening of cell `jx` from `I` is valid and has other values.
-  The search of the cell binding then returns a bilinear strong Diffie–Hellman solution.
-- If `I(τ) ≠ c`, Lemma 2 joins the openings of `J` into `c - I(τ) = φ V(τ)`.
-  The commitment minus the commitment to `I`, with the joined proof, is an ARSDH solution.
-
-Both searches read only the setup, the commitment, the cells and the proofs, not `τ`.
-
-The paper calls them the reductions `B1` and `B2`.
-
 The bound of Lemma 4 on the advantages is proved for games in another file.
 
 The running times of the reductions are not formalized.
-
-The first search uses the sign of the extended KZG paper.
-
-`isBsdhSolution_iff_sub` relates it to the sign of ePrint 2025/1683.
 -/
 
 @[expose] public section
@@ -135,7 +110,16 @@ theorem vanishingAt_cells {J : Finset Nat} (hJ : ∀ j ∈ J, j < CELLS_PER_EXT_
   refine Finset.prod_congr rfl fun j hj => ?_
   rw [nodal_cellNodes (hJ j hj), eval_sub, eval_pow, eval_X, eval_C]
 
-/-! ## The searches of the reductions -/
+/-! ## The searches of the reductions
+
+The paper calls them the reductions `B1` and `B2`.
+
+Both searches read only the setup, the commitment, the cells and the proofs, not `τ`.
+
+The first search uses the sign of the extended KZG paper.
+
+The module of the PeerDAS assumptions relates it to the sign of ePrint 2025/1683.
+-/
 
 /-- The vanishing polynomial `X^64 - h^64` of the coset of a cell. -/
 noncomputable def cellVanishing (cellIndex : Nat) : Fr[X] :=
@@ -216,6 +200,8 @@ Let the commitment `C` represent `c`, and the proof `P j` of cell `j` represent 
 
 Let every cell of `J` and the cell `jx` satisfy the scalar equation of a valid cell for `c`.
 
+That is `c - I_j(τ) = w_j (τ^64 - h_j^64)`, not the acceptance of the verifier.
+
 The values of a cell `j` are read as `(ev j)[m]!`.
 
 So a cell of `J` with fewer than 64 values is read with zeros.
@@ -241,7 +227,11 @@ theorem code_binding {GT : Type} [CommMonoid GT] (M : TargetGroup GT) {s : Trust
       (∃ sol, findBsdh M s jx (ev jx) (honestEvals J ev jx) (P jx) (honestProof s J ev jx) =
         some sol ∧ IsBsdhSolution M τ sol) ∨
       IsArsdhSolution (FIELD_ELEMENTS_PER_BLOB - 1) τ (arsdhCandidate s J ev C P) := by
+  -- Let `I` interpolate the cells of `J`, on their 4096 points.
   have hdeg := natDegree_cellsInterpolant_lt hJ hJcard.le ev
+  -- If `I` also takes the values of cell `jx`, the cells agree with one polynomial.
+  --
+  -- That polynomial has degree below 4096.
   by_cases hcons : ∀ m < FIELD_ELEMENTS_PER_CELL,
       (cellsInterpolant J ev).eval (cellPoint jx m) = (ev jx)[m]!
   · refine Or.inl ⟨hdeg, fun j hj m hm => ?_⟩
@@ -250,8 +240,11 @@ theorem code_binding {GT : Type} [CommMonoid GT] (M : TargetGroup GT) {s : Trust
     · exact eval_cellsInterpolant hJ ev hj hm
   refine Or.inr ?_
   have hJne : J.Nonempty := Finset.card_pos.mp (by rw [hJcard]; decide)
+  -- Otherwise there are two cases.
   by_cases hc : (cellsInterpolant J ev).eval τ = c
-  · -- The honest opening of cell `jx` is valid and has other values.
+  · -- If `I(τ) = c`, the honest opening of cell `jx` from `I` is valid and has other values.
+    --
+    -- The search of the cell binding then returns a bilinear strong Diffie–Hellman solution.
     refine Or.inl (findBsdh_valid M hs hjx hev (by simp [honestEvals]) ?_
       (hP jx (Finset.mem_insert_self _ _)) (represents_commitPoly hs ?_)
       (hv jx (Finset.mem_insert_self _ _)) ?_)
@@ -266,7 +259,9 @@ theorem code_binding {GT : Type} [CommMonoid GT] (M : TargetGroup GT) {s : Trust
       rw [cellInterpolant_honestEvals ev hjx]
       rw [cellVanishing, eval_sub, eval_pow, eval_X, eval_C] at h
       exact honest_fr h
-  · -- The batched opening of the cells of `J` is an ARSDH solution.
+  · -- If `I(τ) ≠ c`, Lemma 2 joins the openings of `J` into `c - I(τ) = φ V(τ)`.
+    --
+    -- The commitment minus the commitment to `I`, with the joined proof, is an ARSDH solution.
     refine Or.inr ?_
     have hφ := represents_weightedSum (J := J) (P := P) (w := w)
       (fun j hj => hP j (Finset.mem_insert_of_mem hj)) fun j => (cellWeight J j)⁻¹

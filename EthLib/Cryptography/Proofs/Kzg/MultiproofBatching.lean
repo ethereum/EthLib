@@ -10,23 +10,7 @@ This is Lemma 2 of Wagner and Zapico, ePrint 2025/1683, §2.3, over any field.
 
 <https://eprint.iacr.org/2025/1683>
 
-Let a set `S` of distinct nodes be the disjoint union of nonempty parts `S_j`.
-
-Let the vanishing polynomial of `S - S_j` take one value `δ_j` on all of `S_j`.
-
-Claim 1: the interpolation on `S` is the sum of `V_{S - S_j} I_j / δ_j`.
-
-Here `I_j` is the interpolation on `S_j`, and `V_T` vanishes on `T`.
-
-Claim 2: the sum of `V_{S - S_j} / δ_j` is 1.
-
-The paper states it as `1 / V_S = sum_j 1 / (δ_j V_{S_j})`; here both sides are multiplied by `V_S`.
-
-Then from `c - I_j(τ) = φ_j V_{S_j}(τ)` for every part, it follows that `c - I(τ) = φ V_S(τ)`.
-
-Here `I` is the interpolation on `S`, and `φ = sum_j φ_j / δ_j`.
-
-The proof of Claim 1 checks the values on the nodes, and Claim 2 is Claim 1 for the values 1.
+It joins the openings of the parts of a disjoint union of nodes into one opening of the union.
 -/
 
 @[expose] public section
@@ -48,7 +32,11 @@ theorem nodal_sdiff_ne_zero {T : Finset κ} {part : κ → Finset ι} {v : ι �
 
 /-- Claim 1 of Lemma 2.
 
-The interpolation on a union is a weighted sum of the interpolations on its parts. -/
+The interpolation on a union `S` is a weighted sum of the interpolations on its parts.
+
+It is the sum of `V_{S - S_j} I_j / δ_j`.
+
+Here `I_j` is the interpolation on `S_j`, and `V_T` vanishes on `T`. -/
 theorem interpolate_biUnion {T : Finset κ} {part : κ → Finset ι}
     (hdisj : (T : Set κ).PairwiseDisjoint part) {v : ι → F}
     (hv : Set.InjOn v (T.biUnion part)) {δ : κ → F}
@@ -56,6 +44,7 @@ theorem interpolate_biUnion {T : Finset κ} {part : κ → Finset ι}
     (r : ι → F) :
     interpolate (T.biUnion part) v r =
       ∑ j ∈ T, C (δ j)⁻¹ * nodal (T.biUnion part \ part j) v * interpolate (part j) v r := by
+  -- The proof checks the values on the nodes.
   symm
   refine eq_interpolate_of_eval_eq _ hv ?_ fun i hi => ?_
   · refine (degree_sum_le _ _).trans_lt ((Finset.sup_lt_iff (WithBot.bot_lt_coe _)).mpr
@@ -90,13 +79,18 @@ theorem interpolate_biUnion {T : Finset κ} {part : κ → Finset ι}
       rw [eval_mul, eval_mul, eval_nodal_at_node hij, mul_zero, zero_mul]
     · exact fun h => absurd hj₀ h
 
-/-- Claim 2 of Lemma 2, cleared of denominators: the weighted vanishing polynomials sum to 1. -/
+/-- Claim 2 of Lemma 2, cleared of denominators: the weighted vanishing polynomials sum to 1.
+
+The paper states it as `1 / V_S = sum_j 1 / (δ_j V_{S_j})`.
+
+Here both sides are multiplied by `V_S`. -/
 theorem sum_nodal_sdiff {T : Finset κ} {part : κ → Finset ι}
     (hdisj : (T : Set κ).PairwiseDisjoint part) {v : ι → F}
     (hv : Set.InjOn v (T.biUnion part)) {δ : κ → F}
     (hδ : ∀ j ∈ T, ∀ i ∈ part j, (nodal (T.biUnion part \ part j) v).eval (v i) = δ j)
     (hne : ∀ j ∈ T, (part j).Nonempty) (hT : T.Nonempty) :
     ∑ j ∈ T, C (δ j)⁻¹ * nodal (T.biUnion part \ part j) v = 1 := by
+  -- Claim 2 is Claim 1 for the values 1.
   have h := interpolate_biUnion hdisj hv hδ 1
   obtain ⟨j, hj⟩ := hT
   rw [interpolate_one hv ⟨_, Finset.mem_biUnion.mpr ⟨j, hj, (hne j hj).choose_spec⟩⟩] at h

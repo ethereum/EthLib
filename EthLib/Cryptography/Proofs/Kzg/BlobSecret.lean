@@ -10,17 +10,7 @@ A nonzero polynomial that vanishes at the setup secret contains it among its roo
 
 The public first monomial point identifies which root is the secret.
 
-The search receives only the setup powers and a finite list of polynomials, never the secret.
-
-The candidate count is at most the sum of the polynomial degrees.
-
-Root finding uses Mathlib's mathematical root operation.
-
 The running time of factoring and of the search is not formalized.
-
-The advantage below concerns recovery from the whole setup, including its higher powers.
-
-No equivalence to discrete logarithm from a single group element is asserted.
 -/
 
 @[expose] public section
@@ -31,12 +21,16 @@ open EthLib.Cryptography.Bls (Fr G1)
 open Polynomial OracleComp ENNReal
 open scoped EthLib.Cryptography.Bls.Fr
 
-/-- The roots of the candidate polynomials, with multiplicity. -/
+/-- The roots of the candidate polynomials, with multiplicity.
+
+Root finding uses Mathlib's mathematical root operation. -/
 noncomputable def setupSecretCandidates (polys : List Fr[X]) : List Fr :=
   polys.flatMap fun p => p.roots.toList
 
 open Classical in
-/-- Find a candidate whose generator multiple is the public first monomial point. -/
+/-- Find a candidate whose generator multiple is the public first monomial point.
+
+The search receives only the setup powers and a finite list of polynomials, never the secret. -/
 noncomputable def setupSecretRootSearch (pw : SetupPowers) (polys : List Fr[X]) : Option Fr :=
   (setupSecretCandidates polys).find? fun candidate => decide (G1.Represents pw.1[1] candidate)
 
@@ -91,7 +85,11 @@ theorem length_setupSecretCandidates_le (polys : List Fr[X]) :
 
 /-- The probability of recovering a uniform secret from its public setup powers.
 
-`none` is a failure even when the secret is zero. -/
+`none` is a failure even when the secret is zero.
+
+This advantage concerns recovery from the whole setup, including its higher powers.
+
+No equivalence to discrete logarithm from a single group element is asserted. -/
 noncomputable def setupSecretAdvantage
     (adversary : SetupPowers → ProbComp (Option Fr)) : ℝ≥0∞ :=
   Pr{let τ ← $ᵗ Fr; let candidate ← adversary (setupPowers τ)}[candidate = some τ]

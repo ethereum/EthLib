@@ -9,19 +9,7 @@ public import Mathlib.LinearAlgebra.Lagrange
 
 Take a polynomial `p` of 4096 values on the bit-reversed roots of unity.
 
-Its evaluation at `z` is the Lagrange interpolant of the pairs `(D[i], p[i])`, evaluated at `z`.
-
-So if `p[i] = f(D[i])` for a polynomial `f` of degree below 4096, evaluation returns `f(z)`.
-
-The proof splits on whether `z` is in the domain.
-
-In the domain, the interpolant takes the value of its node.
-
-Outside it, the interpolant is a barycentric sum with the nodal polynomial `X^4096 - 1`.
-
-The nodal weights are `D[i] / 4096`, from the derivative `4096 X^4095` and `D[i]^4096 = 1`.
-
-That is the formula of the specification.
+If `p[i] = f(D[i])` for a polynomial `f` of degree below 4096, evaluation at `z` returns `f(z)`.
 
 It uses the scoped field instance on `Fr` of the BLS proofs.
 -/
@@ -126,7 +114,7 @@ theorem ne_evalDomain_of_idxOf?_eq_none {z : Fr}
   rw [← heq] at hmem
   exact Array.idxOf?_eq_none_iff.mp h hmem
 
-/-- **Correctness of `evaluatePolynomialInEvaluationForm`** (Lagrange form).
+/-- **Correctness of evaluation in evaluation form** (Lagrange form).
 
 Take a full-width polynomial in evaluation form.
 
@@ -136,13 +124,13 @@ Here `D` is the bit-reversed roots-of-unity domain.
 
 Together with interpolation uniqueness this pins the function down completely.
 
-See `evaluatePolynomialInEvaluationForm_eq_eval` for the statement with an interpolated polynomial.
--/
+The next theorem states it with an interpolated polynomial. -/
 theorem evaluatePolynomialInEvaluationForm_eq_interpolate
     (p : Polynomial) (z : Fr) (hsize : p.size = FIELD_ELEMENTS_PER_BLOB) :
     evaluatePolynomialInEvaluationForm p z
       = .ok (Polynomial.eval z ((Lagrange.interpolate Finset.univ evalDomain)
           fun i => p[i.val]!)) := by
+  -- The proof splits on whether `z` is in the domain.
   cases hidx : (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB).idxOf? z with
   | some i =>
     -- Fast path: `z = D[i]`, and the interpolant evaluates to `p[i]` at its `i`-th node.
@@ -154,12 +142,19 @@ theorem evaluatePolynomialInEvaluationForm_eq_interpolate
       evalDomain_injective.injOn (Finset.mem_univ ⟨i, hi⟩)]
   | none =>
     -- Slow path: barycentric formula on both sides.
+    --
+    -- Outside the domain, the interpolant is a barycentric sum.
+    --
+    -- Its nodal polynomial is `X^4096 - 1`.
     rw [evaluatePolynomialInEvaluationForm_slowPath_sum p z hsize hidx,
         Lagrange.eval_interpolate_not_at_node _
           (fun j _ => ne_evalDomain_of_idxOf?_eq_none hidx j)]
     have hnodal : Polynomial.eval z (Lagrange.nodal Finset.univ evalDomain)
         = z ^ FIELD_ELEMENTS_PER_BLOB - 1 := by
       rw [nodal_evalDomain, eval_sub, eval_pow, eval_X, eval_one]
+    -- The nodal weights are `D[i] / 4096`, from the derivative `4096 X^4095` and `D[i]^4096 = 1`.
+    --
+    -- That is the formula of the specification.
     have hsum : ∑ j : Fin FIELD_ELEMENTS_PER_BLOB,
           Lagrange.nodalWeight Finset.univ evalDomain j
             * (z - evalDomain j)⁻¹ * p[j.val]!
@@ -190,7 +185,7 @@ theorem evaluatePolynomialInEvaluationForm_eq_interpolate
                   * (z - evalDomain j)⁻¹ * p[j.val]! :=
           (congrArg₂ (· * ·) hnodal hsum).symm
 
-/-- **Correctness of `evaluatePolynomialInEvaluationForm`** (spec voice).
+/-- **Correctness of evaluation in evaluation form** (spec voice).
 
 Let the blob's field elements be the evaluations of a polynomial `f` of degree `< 4096`.
 

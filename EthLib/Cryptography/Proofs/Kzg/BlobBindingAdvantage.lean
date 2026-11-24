@@ -17,21 +17,11 @@ The oracle has two typed input domains and uniform answers in `Fr`.
 
 The experiment rejects final batches above `n` blobs before verification.
 
-The adversary makes at most `qBlob` individual queries.
-
-It makes at most `qBatch` batch queries.
-
-The root bound is `(qBlob + n) 4095 / r + (qBatch + 1) (n - 1) / r`, where `r` is the order of `Fr`.
-
-Add the success probability of a named reduction that recovers the setup secret.
-
-Recovery is measured from the full public setup powers.
-
-The reduction searches roots of explicit polynomials; its running time is not formalized.
-
 A separate equivalence connects the equation to the concrete verifier.
 
-That equivalence uses concrete challenges; the probability bound uses the idealized oracle.
+That equivalence uses concrete challenges.
+
+The probability bound uses the idealized oracle.
 -/
 
 @[expose] public section
@@ -61,15 +51,31 @@ noncomputable def blobBindingAdvantage (n : Nat)
 
 /-- Blob-batch binding reduces to fresh challenge roots or recovery of the setup secret.
 
+The root bound is `(qBlob + n) 4095 / r + (qBatch + 1) (n - 1) / r`, where `r` is the order of `Fr`.
+
+The advantage is at most that bound plus the success probability of a named reduction.
+
+That reduction recovers the setup secret.
+
+Recovery is measured from the full public setup powers.
+
 The adversary is algebraic: each point that decodes carries a representation correct at the secret.
 
 This hypothesis stands for the algebraic group model, an assumption.
 
 Nothing restricts how the adversary computes its representations.
 
+The adversary makes at most `qBlob` individual queries.
+
+It makes at most `qBatch` batch queries.
+
 The individual and batch budgets count the adversary's queries, including repeated inputs.
 
-The verifier adds at most `n` individual queries and one batch query. -/
+The verifier adds at most `n` individual queries and one batch query.
+
+The reduction searches roots of explicit polynomials.
+
+Its running time is not formalized. -/
 theorem blobBindingAdvantage_le (n qBlob qBatch : Nat)
     (adversary : SetupPowers → OracleComp Spec (List BlobOpening))
     (halgebraic : AlgebraicAdversary n adversary)

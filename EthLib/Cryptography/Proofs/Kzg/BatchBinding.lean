@@ -8,23 +8,11 @@ import EthLib.Cryptography.Proofs.Bls.PairingAte
 
 The batch check combines `n` openings with the powers of a challenge `r`.
 
-Opening `i` claims `p_i(z_i) = y_i`, with commitment `c_i` and proof `w_i`.
+An accepted batch has every opening valid, or `r` is a root of a nonzero error polynomial.
 
-Its error is `c_i - y_i - w_i (τ - z_i)`, which is zero exactly when the single check accepts it.
+The challenge is a hash of the openings, so that polynomial is fixed before `r` is drawn.
 
-For a well-formed setup, the batch check accepts exactly when `r` is a root of the error polynomial.
-
-That polynomial is `P(X) = sum_i e_i X^i`, with `e_i` the error of opening `i`.
-
-So an accepted batch has every opening valid, or `r` is a root of a nonzero `P`.
-
-Take two valid openings of one commitment at one point, to two values.
-
-The search of the single check then returns a strong Diffie–Hellman solution.
-
-The challenge is a hash of the openings, so `P` is fixed before `r` is drawn.
-
-A nonzero `P` has at most `n - 1` roots.
+A nonzero error polynomial has at most `n - 1` roots.
 
 Let the hash be a random oracle, which the adversary queries `q` times.
 
@@ -98,10 +86,15 @@ theorem errorPoly_succ' (e : Nat → R) (n : Nat) :
 
 end ErrorPoly
 
-/-- The error of an opening: zero exactly when `c - y = w (τ - z)`. -/
+/-- The error `c - y - w (τ - z)` of an opening of the commitment `c` at `z` to `y`, with proof `w`.
+
+It is zero exactly when `c - y = w (τ - z)`, that is when the single check accepts the opening.
+-/
 def openingError (τ c y w z : Fr) : Fr := c - y - w * (τ - z)
 
-/-- The error polynomial of a batch: `P(X) = sum_{i < n} X^i (c_i - y_i - w_i (τ - z_i))`. -/
+/-- The error polynomial of a batch: `P(X) = sum_{i < n} X^i (c_i - y_i - w_i (τ - z_i))`.
+
+Opening `i` claims `p_i(z_i) = y_i`, with commitment `c_i` and proof `w_i`. -/
 noncomputable def batchErrorPoly (τ : Fr) (c y w z : Nat → Fr) (n : Nat) : Fr[X] :=
   errorPoly (fun i => openingError τ (c i) (y i) (w i) (z i)) n
 
@@ -286,7 +279,12 @@ theorem verifyKzgProofBatch_valid_or_root {s : TrustedSetup} {τ : Fr}
   · exact Or.inl ((batchErrorPoly_eq_zero_iff τ c _ w _ _).mp hzero)
   · exact Or.inr ⟨hzero, verifyKzgProofBatch_root hs hC hP h⟩
 
-/-! ## Binding -/
+/-! ## Binding
+
+Take two valid openings of one commitment at one point, to two values.
+
+The search of the single check then returns a strong Diffie–Hellman solution.
+-/
 
 /-- **Binding inside one batch.**
 

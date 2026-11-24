@@ -11,21 +11,9 @@ Cell `j` holds the values of a polynomial on the coset `h_j μ_64`.
 
 Here `μ_64` is the group of 64th roots of unity.
 
-Its point `m` is `h_j ω^(rev m)`, for a primitive 64th root `ω` and the 6-bit reversal `rev`.
-
-The vanishing polynomial of the coset is `X^64 - h_j^64`, the first step of the proof of Lemma 1.
-
-Lemma 1 says that, on another cell `i`, it takes the one value `h_i^64 - h_j^64`.
+Lemma 1 says that the vanishing polynomial of a cell takes one value on each other cell.
 
 Lemma 2, the multiproof batching lemma, joins the openings of several cells into one.
-
-Take a set `J` of cells, and let each cell satisfy `c - I_j(τ) = φ_j (τ^64 - h_j^64)`.
-
-Then the interpolation `I` of all their values satisfies `c - I(τ) = φ V(τ)`.
-
-The polynomial `V` vanishes on all their points, and `φ = sum_j φ_j / δ_j`.
-
-The weight `δ_j` is the product of `h_j^64 - h_{j'}^64` over the other cells `j'`.
 
 The paper is Wagner and Zapico, "Proving the Security of PeerDAS without the AGM", §2.3.
 
@@ -81,7 +69,11 @@ theorem mem_cellNodes {cellIndex i : Nat} :
       FIELD_ELEMENTS_PER_CELL * cellIndex + m = i := by
   simp [cellNodes]
 
-/-- The node of offset `m` in a cell is point `m` of the cell. -/
+/-- The node of offset `m` in a cell is point `m` of the cell.
+
+Point `m` of cell `j` is `h_j ω^(rev m)`, for a primitive 64th root `ω`.
+
+Here `rev` is the 6-bit reversal. -/
 theorem domainPoint_cellNode (cellIndex m : Nat) :
     domainPoint (FIELD_ELEMENTS_PER_CELL * cellIndex + m) = cellPoint cellIndex m := rfl
 
@@ -141,7 +133,7 @@ theorem eval_nodal_cellNodes {j j' i : Nat} (hj : j < CELLS_PER_EXT_BLOB)
   rw [nodal_cellNodes hj', eval_sub, eval_pow, eval_X, eval_C, domainPoint_cellNode,
     cellPoint_pow hj hm]
 
-/-- The weight of cell `j` in a set `J` of cells.
+/-- The weight `δ_j` of cell `j` in a set `J` of cells.
 
 It is the product of `h_j^64 - h_{j'}^64` over the other cells `j'`.
 
@@ -242,6 +234,9 @@ theorem cell_multiproof_batching {J : Finset Nat} (hJ : ∀ j ∈ J, j < CELLS_P
   have hv : Set.InjOn domainPoint (J.biUnion cellNodes) := domainPoint_injOn.mono fun i hi => by
     obtain ⟨j, hj, hij⟩ := Finset.mem_biUnion.mp hi
     exact cellNodes_subset_range (hJ j hj) hij
+  -- Lemma 2 gives `c - I(τ) = φ V(τ)`, where `V` vanishes on all the points of the cells.
+  --
+  -- Its factor is `φ = sum_j φ_j / δ_j`.
   have hb := multiproof_batching (cellNodes_pairwiseDisjoint J) hv
     (fun j hj i hi => eval_nodal_sdiff_cellNodes hJ hj hi)
     (fun j _ => ⟨FIELD_ELEMENTS_PER_CELL * j, mem_cellNodes.mpr ⟨0, by decide, rfl⟩⟩) hJne
