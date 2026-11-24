@@ -27,17 +27,17 @@ variable {preset : Preset} {fork : Base.Fork} {state after : BeaconState preset 
 
 A validator that exits at the epoch boundary still signs but is no longer active.
 
-So this condition can fail, and a run of slots takes it as an assumption.
+So this condition can fail.
 
-Before Altair they are the unslashed signers of the pending attestations that match the source.
-
-From Altair they are, for each participation flag, the unslashed validators that set it. -/
+A run of slots takes it as an assumption. -/
 def SignersWithinActive (state : BeaconState preset fork) : Prop :=
   ∀ total, getTotalActiveBalance state = .ok total →
+    -- Before Altair, they are the unslashed signers of pending attestations that match the source.
     (∀ before : fork < .altair, ∀ attestations attesters attestingBalance,
       getMatchingSourceAttestations state before (getPreviousEpoch state) = .ok attestations →
       getUnslashedAttestingIndices state attestations = .ok attesters →
       getTotalBalance state attesters = .ok attestingBalance → attestingBalance ≤ total) ∧
+    -- From Altair, they are, for each participation flag, the unslashed validators that set it.
     ∀ altair : .altair ≤ fork, ∀ flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length,
       ∀ indices participatingBalance,
       getUnslashedParticipatingIndices state altair flagIndex.val.toUInt64
@@ -68,25 +68,24 @@ theorem SignersWithinActive.of_quiet
 
 The bound is that of the rewards before Altair, which is the larger one.
 
-The registry must be within its limit, and the increment must be positive.
-
-One increment times the base reward factor, and the sum of the effective balances, fit in 64 bits.
-
-The budget must be at least one increment and at least the sum of the effective balances.
-
-The participation lists must match the registry, and the pending attestations must resolve.
-
-The signers of the previous epoch must hold at most the total active balance.
-
-That is an assumption, which holds when no one has signed. -/
+It assumes the signers of the previous epoch hold at most the total active balance. -/
 theorem processEpoch_supply_le_of_signers {config : Config} {checks : SignatureChecks}
+    -- The registry must be within its limit.
     {budget : Nat} (within : state.RegistryWithinLimit)
+    -- The increment must be positive.
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    -- One increment times the base reward factor fits in 64 bits.
     (perIncrement :
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64)
+    -- The sum of the effective balances fits in 64 bits.
     (summed : effectiveBalanceSum state < 2 ^ 64)
+    -- The budget must be at least one increment and at least the sum of the effective balances.
     (budgeted : max preset.EFFECTIVE_BALANCE_INCREMENT.toNat (effectiveBalanceSum state) ≤ budget)
+    -- The participation lists must match the registry.
+    --
+    -- The pending attestations must resolve.
     (sized : ParticipationMatches state) (resolved : PendingResolved state)
+    -- That assumption holds when no one has signed.
     (signers : SignersWithinActive state)
     (computed : processEpoch config checks state = .ok after) :
     balanceSum after + pendingDepositSum after ≤

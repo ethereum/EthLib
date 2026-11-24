@@ -29,21 +29,7 @@ import Mathlib.Data.Nat.Sqrt
 
 The supply is the balances plus, from Electra, the pending deposits.
 
-A block brings in the amounts of its deposits and of its deposit requests.
-
-A slashing moves at most the whistleblower reward into the balances, beyond the penalty it takes.
-
-From Altair, the proposer earns a share of the base rewards of each flag newly set.
-
-Each flag of each validator is newly set at most once in the previous and the current epoch.
-
-So the proposer earns at most the rise of the weight of the flags, over 448.
-
-That weight reads the effective balances, which the steps before the attestations keep.
-
-The sync committee members that sign earn a fixed reward, and the proposer a share of it.
-
-Every other step of a block moves balances out of the supply, or within it.
+A block raises it by its deposits, a share of the new slashed balances, and its rewards.
 
 With the effective balances within a budget, the cap on the rewards reads only the budget.
 -/
@@ -103,19 +89,19 @@ def flagSumOf (base : Nat → Nat) (count : Nat) (participation : EpochParticipa
 
 /-- From Altair, the weight of the participation flags of a state, at a base reward per increment.
 
-It sums over the positions of the registry, in the previous and the current epoch.
-
-Each flag set counts the base reward of its validator times the weight of the flag.
-
-That base reward is the number of whole increments of the effective balance, times the given one.
-
 It is zero before Altair. -/
 def flagRewardWeight (preset : Preset) (perIncrement : Nat) (state : BeaconState preset fork) :
     Nat :=
   if altair : .altair ≤ fork then
+    -- Count the whole increments of the effective balance of a validator.
+    --
+    -- Its base reward is that count times the given base reward per increment.
     let base (j : Nat) : Nat :=
       ((state.validators.data[j]?).map (·.effectiveBalance.toNat)).getD 0 /
         preset.EFFECTIVE_BALANCE_INCREMENT.toNat * perIncrement
+    -- The weight sums over the positions of the registry, in the previous and the current epoch.
+    --
+    -- Each flag set counts the base reward of its validator times the weight of the flag.
     flagSumOf base state.validators.data.size (state.previousEpochParticipation altair) +
       flagSumOf base state.validators.data.size (state.currentEpochParticipation altair)
   else 0
@@ -142,18 +128,18 @@ def syncRewardCap (preset : Preset) (state : BeaconState preset fork) : Nat :=
     | .error _ => 0
   else 0
 
-/-- From Altair, a bound on the rewards that a block pays to its proposer and its sync committee.
-
-The attestations set each flag of each validator at most once in each of two epochs.
-
-So they pay the proposer at most twice the base rewards of all the validators, times 54 over 448.
-
-The weights of the three flags add up to 54, and the proposer share divides their sum by 448.
-
-The sync aggregate adds its own bound. -/
+/-- From Altair, a bound on the rewards that a block pays to its proposer and its sync committee. -/
 def blockRewardCap (preset : Preset) (state : BeaconState preset fork) : Nat :=
+  -- The attestations set each flag of each validator at most once in each of two epochs.
+  --
+  -- So they pay the proposer at most twice the base rewards of all validators, times 54 over 448.
+  --
+  -- The weights of the three flags add up to 54.
+  --
+  -- The proposer share divides their sum by 448.
   2 * (effectiveBalanceSum state / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) *
       blockPerIncrement preset state * 54 / 448 +
+    -- The sync aggregate adds its own bound.
     syncRewardCap preset state
 
 /-! ## The supply and its rise -/
@@ -1905,31 +1891,33 @@ theorem flagRewardWeight_le (perIncrement : Nat) (state : BeaconState preset for
     exact potential_le altair state perIncrement state
   · simp [flagRewardWeight, altair]
 
-/-- A block raises the supply by its deposits, a share of the slashed balances and its rewards.
-
-The rewards of the attestations are below the rise of the weight of the flags over 448.
-
-The weight reads the base reward of one increment of the state before the block.
-
-The weight does not fall in the block.
-
-The rewards are also below twice 54 base rewards per increment of the registry, over 448. -/
+/-- A block raises the supply by its deposits, a share of the slashed balances and its rewards. -/
 private theorem processBlock_rise {engine : ExecutionEngine preset fork}
     {state after : BeaconState preset fork} {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
+    -- The weight reads the base reward of one increment of the state before the block.
     ∃ low high, flagRewardWeight preset (blockPerIncrement preset state) state ≤ low ∧
+      -- The weight does not fall in the block.
       low ≤ high ∧ high ≤ flagRewardWeight preset (blockPerIncrement preset state) after ∧
+      -- The rewards are below twice 54 base rewards per increment of the registry, over 448.
       high ≤ 2 * (effectiveBalanceSum state / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) *
         blockPerIncrement preset state * 54 ∧
+      -- The rewards of the attestations are below the rise of the weight of the flags over 448.
       Rise (blockDepositAmount block.body + (high - low) / 448 + syncRewardCap preset state)
         state after := by
   obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput computed
+  -- A slashing moves at most the whistleblower reward into the balances, beyond its penalty.
   obtain ⟨proposersDone, first, attested, proposersOk, slashingsOk, attestedOk, slashed, tail,
     tailKept⟩ := rise_operations operated
+  -- Every other step of a block moves balances out of the supply, or within it.
   have head := rise_operationsInput started
+  -- A block brings in the amounts of its deposits and of its deposit requests.
   rw [blockDepositAmount_eq]
   by_cases altair : .altair ≤ fork
   · simp only [altair, ↓reduceDIte] at synced
+    -- The sync committee members that sign earn a fixed reward.
+    --
+    -- The proposer earns a share of it.
     obtain ⟨total, perIncrement, totalOk, perIncrementOk, syncRise⟩ := rise_syncAggregate synced
     have totalState := (syncStart_same computed altair synced).symm.trans totalOk
     have reads : blockPerIncrement preset state = perIncrement.toNat := by
@@ -1940,7 +1928,13 @@ private theorem processBlock_rise {engine : ExecutionEngine preset fork}
             (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat)) := by
       simp only [syncRewardCap, altair, ↓reduceIte, totalState, perIncrementOk,
         participantReward]
+    -- The weight reads the effective balances, which the steps before the attestations keep.
     obtain ⟨steady, flags⟩ := attestationsStart_same started proposersOk slashingsOk
+    -- From Altair, the proposer earns a share of the base rewards of each flag newly set.
+    --
+    -- Each flag of each validator is newly set at most once in the previous and the current epoch.
+    --
+    -- So the proposer earns at most the rise of the weight of the flags, over 448.
     obtain ⟨validators, grown, votes⟩ := rise_attestations altair
       (steady.total.trans totalState) perIncrementOk attestedOk
     rw [reads, sync]
@@ -1979,30 +1973,26 @@ private theorem processBlock_rise {engine : ExecutionEngine preset fork}
       refine whole.mono (Nat.le_of_eq ?_)
       simp [syncRewardCap, altair]
 
-/-- A block raises the balances plus the pending deposits by a bounded amount.
-
-The bound is the Gwei of its deposits and deposit requests.
-
-It adds the rise of the slashed balances over the whistleblower quotient.
-
-A slashing pays at most the whistleblower reward beyond the penalty it takes first.
-
-The slashed balances count the effective balance of each validator slashed in the block.
-
-From Altair, the attestations pay at most the rise of the weight of the flags, over 448.
-
-That weight reads the base reward of one increment of the state before the block.
-
-The sync aggregate pays at most its own bound. -/
+/-- A block raises the balances plus the pending deposits by a bounded amount. -/
 theorem processBlock_supply_le {engine : ExecutionEngine preset fork}
     {state after : BeaconState preset fork} {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
     balanceSum after + pendingDepositSum after ≤
+      -- The bound is the Gwei of its deposits and deposit requests.
       balanceSum state + pendingDepositSum state + blockDepositAmount block.body +
+        -- It adds the rise of the slashed balances over the whistleblower quotient.
+        --
+        -- A slashing pays at most the whistleblower reward beyond the penalty it takes first.
+        --
+        -- The slashed balances count the effective balance of each validator slashed in the block.
         (slashedBalanceSum after - slashedBalanceSum state) /
           (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
+        -- From Altair, the attestations pay at most the rise of the weight of the flags, over 448.
+        --
+        -- That weight reads the base reward of one increment of the state before the block.
         (flagRewardWeight preset (blockPerIncrement preset state) after -
           flagRewardWeight preset (blockPerIncrement preset state) state) / 448 +
+        -- The sync aggregate pays at most its own bound.
         syncRewardCap preset state := by
   obtain ⟨low, high, lowLe, -, highLe, -, rise⟩ := processBlock_rise computed
   have share := Nat.div_le_div_right (c := 448) (show high - low ≤
@@ -2034,20 +2024,17 @@ theorem processBlock_supply_le_cap {engine : ExecutionEngine preset fork}
 
 /-- At the turn of an attester slashing of a block, the supply is bounded.
 
-The turn is the state that the steps before that attester slashing reach.
-
-The supply is the balances plus the pending deposits.
-
-It is at most one sum of three terms.
-
-They are the supply before the block, the Gwei of the deposits of the block, and a reward.
-
-The reward is the rise of the slashed balances over the whistleblower quotient. -/
+The turn is the state that the steps before that attester slashing reach. -/
 theorem slashingTurn_supply_le {engine : ExecutionEngine preset fork}
     {state turn : BeaconState preset fork} {block : BeaconBlock preset fork} {j : Nat}
     (turned : SlashingTurn config checks engine state block j turn) :
+    -- The supply is the balances plus the pending deposits.
+    --
+    -- It is at most one sum of three terms.
     balanceSum turn + pendingDepositSum turn ≤
+      -- They are the supply before the block, the Gwei of the deposits of the block, and a reward.
       balanceSum state + pendingDepositSum state + blockDepositAmount block.body +
+        -- The reward is the rise of the slashed balances over the whistleblower quotient.
         (slashedBalanceSum turn - slashedBalanceSum state) /
           (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat := by
   obtain ⟨input, proposed, started, proposersOk, attestersOk⟩ := turned

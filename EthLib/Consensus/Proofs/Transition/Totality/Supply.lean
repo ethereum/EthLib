@@ -20,31 +20,7 @@ So it cannot bound the next epoch.
 
 The supply grows slowly: the sum of the balances and of the amounts of the pending deposits.
 
-From Altair, only the rewards of the three flags raise it in the epoch transition.
-
-The pending deposits move amounts from the queue to the balances, or drop them.
-
-The other steps keep or lower the balances.
-
-When no flag was set by more balance than is active, the rise is small.
-
-It is at most 54/64 of one base reward for each active increment.
-
-That is at most the base reward factor times two more than the root of the active balance.
-
-The weights of the flags then take 54/64 of it.
-
-The effective balances follow the balances within the hysteresis band.
-
-If each positive effective balance is a whole number of increments, the band is a fraction of it.
-
-So their sum stays at most a fixed multiple of the sum of the balances, 4/3 on mainnet.
-
-From Electra, the pending deposits do not raise the effective balances plus the pending amounts.
-
-A new validator takes at most the amount of its deposit as effective balance.
-
-The pending consolidations keep both sums.
+When no flag was set by more balance than is active, the rise over one epoch is small.
 -/
 
 @[expose] public section
@@ -132,17 +108,20 @@ The multiple is the hysteresis quotient over that quotient less the downward mul
 
 It says something only when the downward multiplier is below the quotient.
 
-On mainnet it is 4/3.
-
-Each effective balance before the update must be a whole number of increments.
-
 The balances and the registry must have the same size. -/
 theorem processEffectiveBalanceUpdates_effectiveBalanceSum_le (matched : BalancesMatch state)
+    -- Each effective balance before the update must be a whole number of increments.
     (aligned : EffectiveBalancesAligned state)
     (computed : processEffectiveBalanceUpdates state = .ok after) :
+    -- On mainnet the multiple is 4/3.
     effectiveBalanceSum after *
         (preset.HYSTERESIS_QUOTIENT.toNat - preset.HYSTERESIS_DOWNWARD_MULTIPLIER.toNat) ≤
       balanceSum after * preset.HYSTERESIS_QUOTIENT.toNat := by
+  -- The effective balances follow the balances within the hysteresis band.
+  --
+  -- Each positive effective balance is a whole number of increments.
+  --
+  -- So the band is a fraction of it.
   have sizes := sameSizes_processEffectiveBalanceUpdates computed
   rw [effectiveBalanceSum_eq_sum_range, balanceSum_eq_sum_range,
     processEffectiveBalanceUpdates_balances computed, sizes.1, matched,
@@ -348,14 +327,13 @@ private theorem supply_le_of_tail {config : Config} {checks : SignatureChecks}
 
 They are justification and finalization, the update of the inactivity scores, and the rewards.
 
-The bound reads the active balance of the state before the epoch.
-
-No flag of the previous epoch may have been set by more balance than is active.
-
-The registry must be within its limit, the increment positive, and the base reward fit. -/
+The bound reads the active balance of the state before the epoch. -/
 theorem supply_le_of_head {config : Config} {checks : SignatureChecks}
+    -- The registry must be within its limit.
     (altair : .altair ≤ fork) (within : state.RegistryWithinLimit)
+    -- The increment must be positive.
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    -- The base reward must fit.
     (perIncrement :
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64)
     {total : Gwei} (active : getTotalActiveBalance state = .ok total)
@@ -364,6 +342,7 @@ theorem supply_le_of_head {config : Config} {checks : SignatureChecks}
       getUnslashedParticipatingIndices state altair flagIndex.val.toUInt64
           (getPreviousEpoch state) = .ok indices ∧
         getTotalBalance state indices = .ok (participatingBalance flagIndex))
+    -- No flag of the previous epoch may have been set by more balance than is active.
     (kept : ∀ flagIndex, participatingBalance flagIndex ≤ total)
     (trace : EpochTrace (action config checks) [.justification, .inactivity, .rewards]
       state after) :
@@ -507,14 +486,13 @@ theorem processPendingConsolidations_effectiveSupply_eq {electra : .pectra ≤ f
 
 The supply is the sum of the balances and of the amounts of the pending deposits.
 
-The bound reads the active balance of the state before the epoch.
-
-No flag of the previous epoch may have been set by more balance than is active.
-
-The registry must be within its limit, the increment positive, and the base reward fit. -/
+The bound reads the active balance of the state before the epoch. -/
 theorem processEpoch_supply_le {config : Config} {checks : SignatureChecks}
+    -- The registry must be within its limit.
     (altair : .altair ≤ fork) (within : state.RegistryWithinLimit)
+    -- The increment must be positive.
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    -- The base reward must fit.
     (perIncrement :
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64)
     {total : Gwei} (active : getTotalActiveBalance state = .ok total)
@@ -523,6 +501,7 @@ theorem processEpoch_supply_le {config : Config} {checks : SignatureChecks}
       getUnslashedParticipatingIndices state altair flagIndex.val.toUInt64
           (getPreviousEpoch state) = .ok indices ∧
         getTotalBalance state indices = .ok (participatingBalance flagIndex))
+    -- No flag of the previous epoch may have been set by more balance than is active.
     (kept : ∀ flagIndex, participatingBalance flagIndex ≤ total)
     (computed : processEpoch config checks state = .ok after) :
     balanceSum after + pendingDepositSum after ≤
@@ -533,20 +512,19 @@ theorem processEpoch_supply_le {config : Config} {checks : SignatureChecks}
     .slashingsReset, .randaoReset, .history, .participation, .syncCommittees,
     .proposerLookahead, .ptcWindow]) _ _ at trace
   obtain ⟨middle, head, tail⟩ := append_iff.mp trace
+  -- From Altair, only the rewards of the three flags raise the supply in the epoch transition.
   have raised := supply_le_of_head altair within increment perIncrement active weighed kept head
+  -- The pending deposits move amounts from the queue to the balances, or drop them.
+  --
+  -- The other steps keep or lower the balances.
   have lowered := supply_le_of_tail altair tail
   omega
 
 /-- From Altair, when no flag is set, no flag has more participating balance than is active.
 
-Without a flag set, no validator participates, so the total is the floor of one increment.
-
-The active balance has the same floor, so the hypothesis on the flags of the supply bound holds.
-
-A run of slots without blocks sets no flag, so these hypotheses hold from its third epoch on.
-
-Both lists of flags are read, since in the first epoch the previous epoch is the current one. -/
+A run of slots without blocks sets no flag, so these hypotheses hold from its third epoch on. -/
 theorem participatingBalance_le_of_unset (altair : .altair ≤ fork) {flagIndex : UInt64}
+    -- Both lists of flags are read, since in the first epoch the previous epoch is the current one.
     (previousUnset : ∀ flags ∈ (state.previousEpochParticipation altair).data, flags = 0)
     (currentUnset : ∀ flags ∈ (state.currentEpochParticipation altair).data, flags = 0)
     {indices : List ValidatorIndex} {participatingBalance total : Gwei}
@@ -555,6 +533,7 @@ theorem participatingBalance_le_of_unset (altair : .altair ≤ fork) {flagIndex 
     (weighed : getTotalBalance state indices = .ok participatingBalance)
     (active : getTotalActiveBalance state = .ok total) :
     participatingBalance ≤ total := by
+  -- Without a flag set, no validator participates.
   have empty : indices = [] := by
     unfold getUnslashedParticipatingIndices at listed
     have bits : hasFlag 0 flagIndex = false := by
@@ -624,6 +603,7 @@ theorem participatingBalance_le_of_unset (altair : .altair ≤ fork) {flagIndex 
         have := (List.mem_filter.mp hx).2
         simp_all
   subst empty
+  -- So the total is the floor of one increment.
   obtain ⟨-, -, rfl⟩ := getTotalBalance_ok_iff.mp weighed
   have zero : sumMarked state.validators.data
       (markIndices state.validators.data.size []) = 0 := by
@@ -634,6 +614,9 @@ theorem participatingBalance_le_of_unset (altair : .altair ≤ fork) {flagIndex 
     simp only [getElem?_markIndices]
     split_ifs <;> simp_all
   rw [zero]
+  -- The active balance has the same floor.
+  --
+  -- So the hypothesis on the flags of the supply bound holds.
   have := le_getTotalBalance (getTotalActiveBalance_ok active)
   rw [UInt64.max_def]
   split

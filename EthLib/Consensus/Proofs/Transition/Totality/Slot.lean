@@ -15,20 +15,6 @@ This file shows that its steps, and then the whole advance, succeed under small 
 Each hypothesis is one that a run of slots can carry from one step to the next.
 
 So each step assumes that a next slot exists, even where a next epoch would be enough.
-
-The caching of a slot succeeds when a next slot exists.
-
-The SSZ type of the state is assumed lawful, and its buffers of roots have a positive length.
-
-The resets of an epoch succeed when a next slot exists.
-
-Those that write a circular buffer also need it to have a positive length.
-
-The update of the history succeeds while its list has room for one more entry.
-
-One slot then succeeds when a next slot exists and, at the end of an epoch, the epoch succeeds.
-
-A run of slots succeeds when each state it reaches allows the next step.
 -/
 
 @[expose] public section
@@ -55,14 +41,13 @@ theorem unsetNextPayloadAvailability_total [NeZero preset.SLOTS_PER_HISTORICAL_R
 
 /-- The caching of a slot succeeds when a next slot exists.
 
-The SSZ type of the state is assumed lawful, which holds when its fixed lengths are positive.
-
-The circular buffers of roots must have a positive length.
-
 Before Gloas the step succeeds without a next slot.
 
-The hypothesis is kept at every fork, so that a run of slots can supply it. -/
+The hypothesis is kept at every fork, so that a run of slots can supply it.
+
+The SSZ type of the state is assumed lawful, which holds when its fixed lengths are positive. -/
 theorem processSlot_total [LawfulSszType (BeaconState preset fork)]
+    -- The circular buffers of roots must have a positive length.
     [NeZero preset.SLOTS_PER_HISTORICAL_ROOT.toNat] (fits : state.slot.toNat + 1 < 2 ^ 64) :
     ∃ after, processSlot state = .ok after := by
   obtain ⟨root, hr⟩ := hashTreeRoot_total state

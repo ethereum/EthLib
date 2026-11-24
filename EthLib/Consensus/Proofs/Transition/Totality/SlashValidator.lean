@@ -12,11 +12,7 @@ It then debits the validator a first penalty and credits the whistleblower rewar
 
 Each of those steps can fail on checked arithmetic or on a read outside the registry.
 
-The room here excludes each failure, with the proposer as whistleblower.
-
-It is enough for slashing to succeed; it is not the least room that slashing needs.
-
-The slashings of a block before an attester slashing keep the frame, activity and the proposer.
+A room on the state excludes each failure, with the proposer as whistleblower.
 -/
 
 @[expose] public section
@@ -29,19 +25,9 @@ variable {preset : Preset} {fork : Fork}
 
 /-- The room a state has for slashing one validator, with the proposer as whistleblower.
 
-Starting the validator's exit succeeds.
+It is enough for slashing to succeed.
 
-The epoch has room for the slashings vector, whose length is nonzero.
-
-The slashed balance of the epoch has room for the effective balance of the validator.
-
-From Altair, the whistleblower reward times the proposer weight fits in 64 bits.
-
-The proposer lookup succeeds.
-
-The balance of the proposer has room for that effective balance.
-
-The validator has a balance. -/
+It is not the least room that slashing needs. -/
 structure SlashRoom (config : Config) (state : BeaconState preset fork) (validator : Validator)
     (index : ValidatorIndex) : Prop where
   /-- Starting the validator's exit succeeds. -/
@@ -53,7 +39,7 @@ structure SlashRoom (config : Config) (state : BeaconState preset fork) (validat
   /-- The slashed balance of the epoch has room for the effective balance. -/
   slashed : ∀ amount, readCircular state.slashings.elements (getCurrentEpoch state) = .ok amount →
     amount.toNat + validator.effectiveBalance.toNat < 2 ^ 64
-  /-- From Altair, the reward times the proposer weight fits in 64 bits. -/
+  /-- From Altair, the whistleblower reward times the proposer weight fits in 64 bits. -/
   reward : .altair ≤ fork → (validator.effectiveBalance /
       (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT).toNat * PROPOSER_WEIGHT.toNat < 2 ^ 64
   /-- The proposer lookup succeeds, and its balance has room for the effective balance. -/
