@@ -13,21 +13,19 @@ Each step answers with the rule of its method, on a view of the node.
 
 A step comment names the method or the routine whose step it follows.
 
-The sources are at commit `3284ee8` of execution-apis.
+Sources, at commit `1ca0818` of execution-apis:
 
-They are the [payload validation][validation] of Paris, and three of its methods:
+- the [payload validation][validation] of Paris
+- the method [`engine_newPayloadV1`][new] of Paris
+- the method [`engine_forkchoiceUpdatedV1`][fcu] of Paris
+- the method [`engine_getPayloadV1`][get] of Paris
+- the [payload building][building] of Paris, which the builds follow
 
-- [`engine_newPayloadV1`][new]
-- [`engine_forkchoiceUpdatedV1`][fcu]
-- [`engine_getPayloadV1`][get]
-
-The builds follow the [payload building][building] of Paris.
-
-[validation]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-validation
-[new]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_newpayloadv1
-[fcu]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_forkchoiceupdatedv1
-[get]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_getpayloadv1
-[building]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-building
+[validation]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#payload-validation
+[new]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#engine_newpayloadv1
+[fcu]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#engine_forkchoiceupdatedv1
+[get]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#engine_getpayloadv1
+[building]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#payload-building
 -/
 
 @[expose] public section

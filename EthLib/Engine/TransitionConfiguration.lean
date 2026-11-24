@@ -7,41 +7,21 @@ public import EthLib.Engine.Json
 
 The method `engine_exchangeTransitionConfigurationV1` of Paris.
 
-Both layers must agree on where proof of work ends.
-
-The method exchanges three of the four values that EIP-3675 makes part of a client's configuration.
-
-They are the terminal total difficulty, the terminal block hash and the terminal block number.
-
-With this method a consensus node sends its own values, and reads those of its execution node.
+A consensus node sends its settings of the transition, and reads those of its execution node.
 
 A step comment names the step of the method, as in step 6.
 
-The source leaves steps 2 to 5 to clients, so no definition models them:
-
-- each side should report a mismatch to its user, the execution node ignoring the block number;
-- the consensus node should poll the method every 60 seconds;
-- the execution node should report a request missing for 120 seconds.
-
-From Cancun, the consensus layer must not call the method, and either layer may drop it.
-
-Whether the method still answers after Cancun is a client choice, so the method takes no fork.
-
-EIP-3675 fixes the terminal total difficulty of mainnet, but not its block hash or number.
-
-So EthLib gives no mainnet value of the whole configuration.
-
-The sources, at commit `3284ee8` of execution-apis and `46976b2` of EIPs:
+Sources, at commit `1ca0818` of execution-apis and `46976b2` of EIPs:
 
 - the structure [`TransitionConfigurationV1`][tc] and the method [itself][method]
 - its deprecation in [`cancun.md`][deprecate]
 - the [configuration][config] and the [definitions][defs] of EIP-3675
 - the table of [errors][errors] in `common.md`
 
-[tc]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#transitionconfigurationv1
-[method]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_exchangetransitionconfigurationv1
-[deprecate]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#deprecate-engine_exchangetransitionconfigurationv1
-[errors]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/common.md#errors
+[tc]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#transitionconfigurationv1
+[method]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#engine_exchangetransitionconfigurationv1
+[deprecate]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/cancun.md#deprecate-engine_exchangetransitionconfigurationv1
+[errors]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/common.md#errors
 [config]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#client-software-configuration
 [defs]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#definitions
 -/
@@ -55,7 +35,15 @@ open EthLib.Base
 open EthLib.Engine.Json
 open EthLib.Serialization.JsonRpc
 
-/-- The settings of the transition to proof of stake, as the method exchanges them. -/
+/-- The settings of the transition to proof of stake, as the method exchanges them.
+
+Both layers must agree on where proof of work ends.
+
+Its three fields are three of the four values that EIP-3675 makes part of a client's configuration.
+
+EIP-3675 fixes the terminal total difficulty of mainnet, but not its block hash or number.
+
+So EthLib gives no mainnet value of the whole configuration. -/
 structure TransitionConfiguration where
   /-- The total difficulty at which proof of work ends. -/
   terminalTotalDifficulty : U256
@@ -130,6 +118,15 @@ def exchangeTransitionConfigurationParamsJson (c : TransitionConfiguration) : Js
 /-- The method at an execution node with a configuration: decode the request, answer its own. -/
 def exchangeTransitionConfiguration (own : TransitionConfiguration) (params : Json) :
     Except EngineError TransitionConfiguration := do
+  -- From Cancun, the consensus layer must not call the method, and either layer may drop it.
+  --
+  -- Whether the method still answers after Cancun is a client choice, so the method takes no fork.
+  --
+  -- The source leaves steps 2 to 5 to clients, so no definition models them:
+  --
+  -- - each side should report a mismatch to its user, the execution node ignoring the block number
+  -- - the consensus node should poll the method every 60 seconds
+  -- - the execution node should report a request missing for 120 seconds
   let params ← paramsArray params
   match params with
   -- Request: one parameter, `transitionConfiguration`, a `TransitionConfigurationV1` object.

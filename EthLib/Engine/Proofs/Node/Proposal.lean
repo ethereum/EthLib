@@ -7,28 +7,19 @@ public import EthLib.Engine.Proofs.Node
 /-!
 # Proofs: a proposal on an execution node
 
-A proposer's execution layer builds a block in three calls.
+A proposer's execution layer builds a block in three calls, and the block is then valid.
 
-An update with payload attributes answers a payload ID and builds on its head.
+An update with payload attributes answers a payload ID, and a request for that ID gives the payload.
 
-A request for that ID returns the payload of the build.
+The payload sent back for validation is valid with its own hash, on a consistent node.
 
-The same payload sent back for validation is then valid, with its own hash.
+Sources, at commit `1ca0818` of execution-apis:
 
-It goes back with the fields of the response and the parent beacon block root.
+- the [payload building][building] of Paris
+- the method [`engine_getPayloadV1`][get] of Paris
 
-The checks before execution then give the block of the build.
-
-The payload sits on the head of the update and carries the values of its attributes.
-
-The node must be consistent: each known block is under its own hash, with sound totals.
-
-Every node that the steps reach from a consistent node is consistent.
-
-The sources are the [payload building][building] of Paris and [`engine_getPayloadV1`][get].
-
-[building]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-building
-[get]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_getpayloadv1
+[building]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#payload-building
+[get]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#engine_getpayloadv1
 -/
 
 public section
@@ -437,6 +428,7 @@ theorem newPayloadStep_of_getPayloadStep {builder : Builder} {status : PayloadSt
     simp only [payloadOfBlock, hParis, dite_true] at hPay
     exact (Option.filter_eq_some_iff.mp hPay).1
   have hRound := toBlock_of_buildPayload hBuilt hParis hOf
+  -- The checks before execution then give the block of the build.
   have hCheck := checkNewPayload_of_getPayload hGet' hRound accepts
   have hHash := (ExecutionPayload.toBlock_shape hRound).1
   -- The head passes the terminal block check, with its total difficulty.

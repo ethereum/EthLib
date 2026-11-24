@@ -7,35 +7,23 @@ public import EthLib.Engine.Json
 
 The two methods by which the layers learn about each other.
 
-`engine_exchangeCapabilities` exchanges the names of the methods that each layer supports.
-
-The section on capabilities says that every execution node must support it.
-
-`engine_getClientVersionV1` exchanges a version object of four fields.
-
-This module also lists the methods that EthLib defines, with every version of each.
-
-A real node answers its own list; this one states what the definitions of EthLib cover.
-
-Step 1 of each method lets the layers call it at will, so no definition models when they do.
-
 A step comment names its section or method, as in capabilities, step 2, or client version, step 3.
 
-The sources, at commit `3284ee8` of execution-apis:
+Sources, at commit `1ca0818` of execution-apis:
 
-- the section [Capabilities][caps] and the method [`engine_exchangeCapabilities`][xc]
-- the method [`engine_getClientVersionV1`][cv]
+- the section [Capabilities][caps] and [`engine_exchangeCapabilities`][xc]: the supported methods
+- the method [`engine_getClientVersionV1`][cv]: a version object of four fields
 - the structures [`ClientCode`][code] and [`ClientVersionV1`][cvs]
 - the [deprecation][deprecate] of `engine_exchangeTransitionConfigurationV1` in Cancun
 - the table of [errors][errors] in `common.md`
 
-[caps]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/common.md#capabilities
-[xc]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/common.md#engine_exchangecapabilities
-[cv]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/identification.md#engine_getclientversionv1
-[code]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/identification.md#clientcode
-[cvs]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/identification.md#clientversionv1
-[deprecate]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#deprecate-engine_exchangetransitionconfigurationv1
-[errors]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/common.md#errors
+[caps]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/common.md#capabilities
+[xc]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/common.md#engine_exchangecapabilities
+[cv]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/identification.md#engine_getclientversionv1
+[code]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/identification.md#clientcode
+[cvs]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/identification.md#clientversionv1
+[deprecate]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/cancun.md#deprecate-engine_exchangetransitionconfigurationv1
+[errors]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/common.md#errors
 -/
 
 @[expose] public section
@@ -86,7 +74,11 @@ instance : DecidablePred IsVersionedMethod := fun name =>
 
 /-- The methods that EthLib defines, each with the last version that it defines.
 
-Each method has every version from 1 to that last one. -/
+Each method has every version from 1 to that last one.
+
+A real node answers its own list.
+
+This one states what the definitions of EthLib cover. -/
 def methodVersions : List (String × Nat) := [
   ("newPayload", 6), ("forkchoiceUpdated", 5), ("getPayload", 6),
   ("getPayloadBodiesByHash", 2), ("getPayloadBodiesByRange", 2), ("getBlobs", 4),
@@ -140,6 +132,12 @@ The list given must hold each name with its version, and never this method.
 The list of the methods that EthLib defines does. -/
 def exchangeCapabilities (supported : List String) (params : Json) :
     Except EngineError (List String) := do
+  -- The section on capabilities: every execution node must support this method.
+  --
+  -- It exchanges the names of the methods that each layer supports.
+  --
+  -- Step 1 lets the layers call it at will, so no definition models when they do.
+  --
   -- Request: the list of the consensus node must decode, though the answer does not read it.
   let _ ← exchangeCapabilitiesParams params
   -- Step 2: the response lists the methods that the execution node supports.
@@ -231,6 +229,9 @@ def clientVersionsJson (vs : List ClientVersion) : Json :=
 The object of the node must have a code of two letters, as the decoder asks of the request. -/
 def getClientVersion (own : ClientVersion) (params : Json) :
     Except EngineError (List ClientVersion) := do
+  -- The method exchanges a version object of four fields.
+  --
+  -- Step 1 lets the layers call it at will, so no definition models when they do.
   match ← paramsArray params with
   -- Request: one parameter, the `ClientVersionV1` of the consensus node.
   | [v] =>
