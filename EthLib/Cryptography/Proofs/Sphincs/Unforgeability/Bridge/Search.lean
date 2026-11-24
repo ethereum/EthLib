@@ -11,17 +11,11 @@ Each of the three one-time signatures of a request searches its counter from 0.
 
 Counter `c` hashes `PK.seed | ADRS_enc(K) | M | BE_32(c)`, and passes when its digest is a codeword.
 
-Take a bound `T <= 2^32` on the searches.
-
 Fix one answer function.
 
-A request whose three counters are below `T` then makes at most `470595 + 3 T` calls.
+A request whose three counters are below a bound `T` then makes at most `470595 + 3 T` calls.
 
-The other answers are nothing, or a signature with a counter of at least `T`.
-
-In the random-oracle model, such an answer leaves a failed search of `T` trials in the cache.
-
-That is a key, a message and the address of the key, whose first `T` counters all miss the code.
+In the random-oracle model, any other answer leaves a failed search of `T` trials in the cache.
 -/
 
 @[expose] public section

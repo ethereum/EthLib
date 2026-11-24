@@ -11,19 +11,11 @@ A wrapped adversary runs the adversary and forwards its queries.
 
 It stops forwarding once a signing answer is nothing or has a counter of at least `T`.
 
-From then on it still forwards coins.
-
-It answers a hash call with 0 and a signing request with nothing, without querying.
-
-It returns the adversary's forgery.
-
 Up to that answer, the two runs are the same.
 
 So the adversary forges at most as often as the wrapped one, plus one more chance.
 
 That is the chance that some answer of its own run has a long search.
-
-Such an answer leaves a failed search of `T` trials in the cache, which is unlikely.
 -/
 
 @[expose] public section
@@ -86,6 +78,8 @@ theorem forgeAdvantage_le_capSearches (T : Nat) (hT₁ : 1 ≤ T) (hT : T ≤ MA
       (fun x => propInd (x.1 = true)) := fun B =>
     prEvent_eq_wp_of_eq_withAddCost (gameCore B) (experiment B) (experiment_eq B)
   -- A long search somewhere in the honest game leaves a failed search in its final cache.
+  --
+  -- Such a failed search of `T` trials is unlikely.
   have hFS : wp ((simulateQ HashSpec.romImpl (gameCore adversary)).run ∅)
       (fun x => propInd (HashSig.FailedSearch searchPoint SearchMiss T x.2)) ≤
       ((q + schemeCalls r : Nat) : ℝ≥0∞) *
@@ -96,6 +90,14 @@ theorem forgeAdvantage_le_capSearches (T : Nat) (hT₁ : 1 ≤ T) (hT : T ≤ MA
   refine le_trans ?_ (add_le_add le_rfl hFS)
   rw [wp_run_gameCore, wp_run_gameCore, wp_run_gameCore, ← ExpectationWP.Lower.wp_add_of_oracle]
   -- After key generation, compare the two runs with the same check.
+  --
+  -- Up to the first answer with a long search, the two runs are the same.
+  --
+  -- From then on the wrapped adversary still forwards coins.
+  --
+  -- It answers a hash call with 0 and a signing request with nothing, without querying.
+  --
+  -- It returns the adversary's forgery.
   exact wp_mono _ fun w => wp_run_le_wp_capSearches T hT adversary w.1.1 w.1.2 w.2
     fun run => liftM (verifierOf w.1.2 run.1) >>= fun verified =>
       pure (verdictOf run.1 run.2 verified)

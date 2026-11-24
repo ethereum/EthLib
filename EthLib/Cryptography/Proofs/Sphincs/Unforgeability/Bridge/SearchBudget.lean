@@ -10,12 +10,6 @@ The wrapped adversary forwards the adversary's queries until an answer has a lon
 Up to there its run is a run of the adversary.
 
 So it makes at most the adversary's own hash calls and requests.
-
-Every request before the last one was answered with short searches.
-
-So each of them cost at most `470595 + 3 T` calls.
-
-The last request cost at most `470595 + 3 * 2^32` calls, and after it the wrapper sends nothing.
 -/
 
 @[expose] public section
@@ -349,7 +343,13 @@ theorem hasHashQueryBound_capSearches (T : Nat) (adversary : Adversary) (q r : N
   obtain ⟨run', hrun', hle⟩ := calls_capGame f sampleSeed (keyGenWith H) signerOf verifierOf
     verdictOf adversary.main T keyGenCalls (470595 + 3 * T) (3 * MAX_COUNTER_TRIALS) verifyCalls
     (fun seed => (Cost.hashCalls_keyGenWith_eq f H (hashCalls_queryH f) seed).le)
+    -- Every request before the last one was answered with short searches.
+    --
+    -- So each of them cost at most `470595 + 3 T` calls.
     (fun sk msg => hashCalls_signerOf_le_of_searchesBelow f T sk msg _ rfl)
+    -- The last request cost at most `470595 + 3 * 2^32` calls.
+    --
+    -- After it the wrapper sends nothing.
     (hashCalls_signerOf_le_add f T)
     (fun _ _ => Cost.hashCalls_verifyWith_le f H isTotalQueryBound_H _ _ _) run hrun
   rw [← adversaryGameCore_eq_runOf] at hrun'

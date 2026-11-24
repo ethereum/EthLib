@@ -9,31 +9,6 @@ public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Reduct
 
 Under one answer function, a signing request costs the model at most what it costs EthLib.
 
-Only the counter searches depend on the answers, and both signers search the same counters.
-
-Before the layers, EthLib makes 337925 calls and the model 73709.
-
-- EthLib derives `PK.seed` and `SK.prf` again and builds the top tree: `2 + 264191` calls.
-- Both make `PRF_msg` and `H_msg`, 3 calls, and the model tests its randomizer with one more.
-- EthLib's FORS signer builds each tree once, with each opened secret: 73729 calls.
-  The model's openings make 73440, then 265 to recover the FORS public key.
-
-Both signers then sign the layers from the bottom up, and stop at the first failed search.
-
-Below the top, a layer of EthLib builds its tree, 66047 calls, then makes its one-time signature.
-
-The top layer of EthLib reads its path from the top tree, so it makes only its one-time signature.
-
-A layer of the model makes the calls of its one-time signature and of its path.
-
-Below the top it then recovers the root of its tree, 74 calls.
-
-The one-time signatures sign the same message, so they make the same calls and both succeed or fail.
-
-Below the top, EthLib's build covers the model's path of 65782 calls and its recovery.
-
-The model's top path, 263924 calls, is within EthLib's lead of 264216 before the layers.
-
 So a budget of hash calls against EthLib is a budget against the model.
 -/
 
@@ -1303,13 +1278,7 @@ theorem hashCalls_sign_three (sk : Seeded.SecretKey) (message : Message) (bottom
 include hH hd hl hk ha in
 /-- A request whose three layers are found, with one-time signatures of `c + 1 + 192` calls each.
 
-That count holds when `c` is the least counter that encodes, here `c_b`, `c_m` and `c_t`.
-
-Before the layers, the request makes `4 + 73705` calls.
-
-A lower layer then makes `c + 1 + 192 + 65782 + 74` calls, and the top layer `c + 1 + 192 + 263924`.
-
-The sum is `469924 + c_b + c_m + c_t`. -/
+That count holds when `c` is the least counter that encodes, here `c_b`, `c_m` and `c_t`. -/
 theorem hashCalls_sign_of_found (sk : Seeded.SecretKey) (message : Message) (bottom middle : Layer)
     (hb : bottom.val = 2) (hm : middle.val = 1) (cb cm ct : Nat)
     (hcb : hashCalls f (signLayerOts f sk (signIndex f sk message) bottom) = cb + 1 + 192)
@@ -1320,6 +1289,13 @@ theorem hashCalls_sign_of_found (sk : Seeded.SecretKey) (message : Message) (bot
     (hft : signLayerFound f sk (signIndex f sk message) topLayer = true) :
     hashCalls f (Seeded.sign sk message : OracleComp HashSpec (Option Signature)) =
       469924 + cb + cm + ct := by
+  -- Before the layers, the request makes `4 + 73705` calls.
+  --
+  -- A lower layer then makes `c + 1 + 192 + 65782 + 74` calls.
+  --
+  -- The top layer makes `c + 1 + 192 + 263924` calls.
+  --
+  -- The sum is `469924 + c_b + c_m + c_t`.
   rw [hashCalls_sign_three f hH hd hl hk ha sk message bottom middle hb hm,
     signLayerCost_of_ne_top f hl _ _ bottom (by omega),
     signLayerCost_of_ne_top f hl _ _ middle (by omega), signLayerCost_top f hH hd hl,
@@ -1419,22 +1395,30 @@ theorem signLayerCost_le_layerCalls (sk : SphincsSecurity.Seeded.SecretKey)
     signLayerCost f sk index lay
       ≤ layerCalls f queryH (secretsOf sk.seed sk.parameter) (ofParam sk.parameter) index.val
           (layerOf lay) + if layerOf lay = .top then 263924 else 0 := by
+  -- A layer of the model makes the calls of its one-time signature and of its path.
+  --
+  -- Below the top it then recovers the root of its tree, 74 calls.
+  --
+  -- Below the top, a layer of EthLib builds its tree, 66047 calls.
+  --
+  -- It then makes its one-time signature.
+  --
+  -- That build covers the model's path of 65782 calls and its recovery.
   have hle := treePathCost_add_le lay
+  -- The one-time signatures sign the same message, so they make the same calls.
+  --
+  -- So both succeed or both fail.
+  --
+  -- The top layer of EthLib reads its path from the top tree.
+  --
+  -- So it makes only its one-time signature.
   rw [layerCalls, layerMessage_answers, hashCalls_otsSign_queryH, toList_belowValue, signLayerCost,
     signLayerFound, signLayerOts]
   by_cases hl : layerOf lay = .top <;> simp only [hl, ↓reduceIte] at hle ⊢ <;> split <;> omega
 
 /-- One signing request costs the model at most what it costs EthLib, under every answer function.
 
-The model signs with the secret key that its key generation returns under the same answers.
-
-- Before the layers, EthLib makes 337925 calls and the model 73709.
-- Below the top, each layer costs EthLib at least what it costs the model.
-- The model's top layer also computes its path, 263924 calls, within EthLib's lead of 264216.
-
-Both signers fail at the same layer, so they reach the same layers.
-
-So the model's cost is at most EthLib's on success and on a failure at any of the three layers. -/
+The model signs with the secret key that its key generation returns under the same answers. -/
 theorem hashCalls_sign_le (S0 : SphincsSecurity.MasterSeed) (m : Message) :
     hashCalls f (SphincsSecurity.Seeded.sign
       (evalWithAnswerFn f (SphincsSecurity.Seeded.keygen S0 : OracleComp HashSpec _)).2
@@ -1483,17 +1467,30 @@ theorem hashCalls_sign_le (S0 : SphincsSecurity.MasterSeed) (m : Message) :
       hindex, SphincsSecurity.Security.SignCost.signIndex, digestValue,
       SphincsSecurity.Concrete.messageDigest, evalWithAnswerFn_bind, eval_sequenceFin,
       evalWithAnswerFn_pure]
+  -- Only the counter searches depend on the answers, and both signers search the same counters.
+  --
+  -- Before the layers, EthLib makes 337925 calls and the model 73709:
+  --
+  -- - EthLib derives `PK.seed` and `SK.prf` again and builds the top tree: `2 + 264191` calls.
+  -- - Both make `PRF_msg` and `H_msg`, 3 calls, and the model tests its randomizer with one more.
+  -- - EthLib's FORS signer builds each tree once, with each opened secret: 73729 calls.
+  --   The model's openings make 73440, then 265 to recover the FORS public key.
+  --
+  -- Both signers then sign the layers from the bottom up, and stop at the first failed search.
   rw [hashCalls_signWith_layers f queryH (hashCalls_queryH f) ⟨ofSeed S0⟩ (ofMessage msg)
     (ofExpanded P skPrf) _ _ index.val hkey rfl hrho hidx, signPrefixCalls_eq,
     SphincsSecurity.Security.SignCost.hashCalls_sign_three f rfl rfl rfl rfl rfl sk msg
       bottomLayer middleLayer rfl rfl, ← hindex]
   -- Layer by layer, the flags agree and the model's costs are at most EthLib's.
+  --
+  -- Both signers fail at the same layer, so they reach the same layers.
   have hb : layerSigns f queryH (prf queryH (ofExpanded P skPrf).pkSeed (ofSeed S0))
       (ofExpanded P skPrf).pkSeed index.val .bottom = signLayerFound f sk index bottomLayer :=
     layerSigns_queryH f sk index bottomLayer
   have hm : layerSigns f queryH (prf queryH (ofExpanded P skPrf).pkSeed (ofSeed S0))
       (ofExpanded P skPrf).pkSeed index.val .middle = signLayerFound f sk index middleLayer :=
     layerSigns_queryH f sk index middleLayer
+  -- Below the top, each layer costs EthLib at least what it costs the model.
   have cb : signLayerCost f sk index bottomLayer ≤ layerCalls f queryH
       (prf queryH (ofExpanded P skPrf).pkSeed (ofSeed S0)) (ofExpanded P skPrf).pkSeed index.val
       .bottom := by
@@ -1508,6 +1505,9 @@ theorem hashCalls_sign_le (S0 : SphincsSecurity.MasterSeed) (m : Message) :
     simp only [show layerOf middleLayer = .middle from rfl, reduceCtorEq, ↓reduceIte,
       Nat.add_zero] at h
     exact h
+  -- The model's top layer also computes its path, 263924 calls.
+  --
+  -- That path is within EthLib's lead of 264216 before the layers.
   have ct : signLayerCost f sk index SphincsSecurity.topLayer ≤ layerCalls f queryH
       (prf queryH (ofExpanded P skPrf).pkSeed (ofSeed S0)) (ofExpanded P skPrf).pkSeed index.val
       .top + 263924 := by
@@ -1515,6 +1515,7 @@ theorem hashCalls_sign_le (S0 : SphincsSecurity.MasterSeed) (m : Message) :
     simp only [show layerOf SphincsSecurity.topLayer = .top from rfl, ↓reduceIte] at h
     exact h
   rw [layersCost, hb, hm]
+  -- So the model's cost is at most EthLib's on success and on a failure at any of the three layers.
   cases signLayerFound f sk index bottomLayer <;> cases signLayerFound f sk index middleLayer <;>
     simp only [Bool.false_eq_true, ↓reduceIte] <;> omega
 

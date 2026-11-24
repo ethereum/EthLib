@@ -16,10 +16,6 @@ The model's byte encoding lists those bytes, so EthLib hashes the bytes the mode
 The address words and the counters are big-endian in both.
 
 EthLib writes them with `toByte`, and the model with its big-endian bytes of a bit vector.
-
-The model is generic over its parameters.
-
-EthLib's configuration has layers of heights 10, 8 and 8, and 24 FORS trees of height 10.
 -/
 
 @[expose] public section
@@ -32,7 +28,11 @@ open EthLib.Cryptography.Sphincs.Constants
 export EthLib.Cryptography.HashSig (ofBV getElem_ofBV toList_ofBV ofBV_ofNat ofBV_eq_toLE
   ofBV_ofNat_ofLE ofBV_inj ofOutput queryH)
 
-/-! ## The parameters -/
+/-! ## The parameters
+
+The model is generic over its parameters.
+
+EthLib's configuration has layers of heights 10, 8 and 8, and 24 FORS trees of height 10. -/
 
 /-- EthLib's configuration in the model: 26 index bits in three layers, the lower two of height 8.
 

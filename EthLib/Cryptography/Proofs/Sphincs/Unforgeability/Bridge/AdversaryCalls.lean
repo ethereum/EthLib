@@ -8,15 +8,13 @@ public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Count
 
 Under one answer function, a run of the game makes the calls of the adversary and of the scheme.
 
-Key generation makes 264193 calls.
-
-A signing request makes at most `470595 + 3 * 2^32` calls, each counter search at most `2^32`.
-
-A verification makes at most 491 calls.
-
 With `q` calls of the adversary and `r` requests, a run makes at most `q + 264193 + r * S + 491`.
 
 Here `S` is `470595 + 3 * 2^32`.
+
+Key generation makes 264193 calls.
+
+A verification makes at most 491 calls.
 -/
 
 @[expose] public section
@@ -185,7 +183,9 @@ def verifierOf (pk : PublicKey) (forgery : Forgery) : OracleComp HashSpec Bool :
 def verdictOf (forgery : Forgery) (log : QueryLog SigningSpec) (verified : Bool) : Bool :=
   decide (Valid log ∧ ¬Contains log forgery) && verified
 
-/-- A signing request makes at most `470595 + 3 * 2^32` calls. -/
+/-- A signing request makes at most `470595 + 3 * 2^32` calls.
+
+Each counter search makes at most `2^32` of them. -/
 theorem hashCalls_signerOf_le (sk : SecretKey) (msg : Message) :
     hashCalls f (signerOf sk msg) ≤ signCalls :=
   (hashCalls_map f _ _).trans_le (Cost.hashCalls_signWith_le f H (hashCalls_queryH f) sk msg)
@@ -260,8 +260,10 @@ theorem calls_adversaryGameCore (adversary : Adversary) :
   rw [adversaryGameCore_eq]
   refine calls_game f sampleSeed (keyGenWith H) signerOf verifierOf verdictOf adversary.main
     keyGenCalls signCalls verifyCalls
+    -- Key generation makes 264193 calls.
     (fun seed => (Cost.hashCalls_keyGenWith_eq f H (hashCalls_queryH f) seed).le)
     (hashCalls_signerOf_le f)
+    -- A verification makes at most 491 calls.
     (fun _ _ _ => Cost.hashCalls_verifyWith_le f H isTotalQueryBound_H _ _ _)
 
 /-! ## The budget transfers -/
