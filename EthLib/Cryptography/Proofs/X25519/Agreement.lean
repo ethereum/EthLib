@@ -9,24 +9,11 @@ public import Mathlib.Tactic.NormNum.Prime
 
 Two parties that exchange X25519 public keys derive the same secret, [RFC 7748 §6.1][rfc6].
 
-The public key of a scalar `a` is the u-coordinate of `[a] B`, for the base point `B` with `u = 9`.
-
-The shared secret of `a` with the public key of `b` is then the u-coordinate of `[a] [b] B`.
-
-Scalar multiplication commutes, so both parties compute the u-coordinate of `[a b] B`.
-
-The ladder theorem needs an input point whose u-coordinate is not `0`, for each of the two runs.
-
-`B` has the prime order `ℓ` of [RFC 7748 §4.1][rfc4].
-
-A clamped scalar `k` is a multiple of `8` with `2^254 ≤ k < 2^255 < 8 ℓ`, so `ℓ` does not divide it.
-
-Since `ℓ` is odd, `ℓ` does not divide `2 k` either.
-
-So `[b] B` is neither the point at infinity nor the point `(0, 0)` of order 2.
+The base point is that of [RFC 7748 §4.1][rfc4], as its [erratum 4730][e4730] corrects it.
 
 [rfc4]: https://www.rfc-editor.org/rfc/rfc7748#section-4.1
 [rfc6]: https://www.rfc-editor.org/rfc/rfc7748#section-6.1
+[e4730]: https://www.rfc-editor.org/errata/eid4730
 -/
 
 @[expose] public section
@@ -37,7 +24,8 @@ open MontgomeryCurve
 
 /-- The v-coordinate of the base point, RFC 7748 §4.1. -/
 def baseV : ZMod modulus :=
-  14781619447589544791020593568409986887264606134616475288964881837755586237401
+  -- Erratum 4730 negates the printed value, so that the point maps to the base of edwards25519.
+  43114425171068552920764898935933967039370386198203806730763910166200978582548
 
 /-- The coordinates of the base point satisfy the curve equation, by evaluation. -/
 private theorem baseV_mul_baseV :
@@ -336,12 +324,14 @@ theorem order_smul_basePoint : order • basePoint = 0 := by
 
 /-- The base point has order `ℓ`. -/
 theorem addOrderOf_basePoint : addOrderOf basePoint = order := by
+  -- `[ℓ] B` is the point at infinity, `B` is not, and `ℓ` is prime.
   have := Fact.mk order_prime
   exact addOrderOf_eq_prime order_smul_basePoint (by rintro ⟨⟩)
 
 /-- The public key encodes the u-coordinate of `[k] B`, for the clamped scalar `k`. -/
 theorem publicKey_eq (key : Key) :
     publicKey key = encodeUCoordinate (toZMod.symm (uCoord (decodeScalar key • basePoint))) := by
+  -- The public key is X25519 on the u-coordinate `9` of `B`, which is not `0`.
   rw [← x25519_encodeUCoordinate key basePoint uCoord_basePoint_ne_zero,
     toZMod_symm_uCoord_basePoint]
   rfl
@@ -360,6 +350,7 @@ So `[k] B` is neither the point at infinity nor the point `(0, 0)`. -/
 theorem uCoord_decodeScalar_smul_ne_zero (key : Key) :
     uCoord (decodeScalar key • basePoint) ≠ 0 := by
   intro h0
+  -- A point with u-coordinate `0` is the point at infinity or `(0, 0)`, of order 2.
   have h2 : (2 * decodeScalar key) • basePoint = 0 := by
     rw [mul_smul]
     generalize decodeScalar key • basePoint = Q at h0
@@ -375,13 +366,17 @@ theorem uCoord_decodeScalar_smul_ne_zero (key : Key) :
       rw [two_smul]
       exact WeierstrassCurve.Affine.Point.add_self_of_Y_eq
         (by simp [WeierstrassCurve.Affine.negY, curve])
+  -- So the prime order `ℓ` of `B` divides `2 k`.
   have hdvd := addOrderOf_dvd_of_nsmul_eq_zero h2
   rw [addOrderOf_basePoint] at hdvd
+  -- `ℓ` is odd, so it divides `k`.
   have hk : order ∣ decodeScalar key :=
     Nat.Coprime.dvd_of_dvd_mul_left coprime_order_two hdvd
+  -- A clamped scalar is a multiple of `8`, and `8` is coprime to `ℓ`, so `8 ℓ` divides `k`.
   have h8 : 8 * order ∣ decodeScalar key :=
     Nat.Coprime.mul_dvd_of_dvd_of_dvd coprime_eight_order
       (Nat.dvd_of_mod_eq_zero (decodeScalar_mod_eight key)) hk
+  -- But `2^254 ≤ k < 2^255 < 8 ℓ`, so no multiple of `8 ℓ` is `k`.
   have hlt := decodeScalar_lt key
   have hle := le_decodeScalar key
   have := Nat.le_of_dvd (by omega) h8
@@ -394,10 +389,12 @@ Here `a` and `b` stand for the clamped scalars. -/
 theorem x25519_publicKey (a b : Key) :
     x25519 a (publicKey b) =
       encodeUCoordinate (toZMod.symm (uCoord ((decodeScalar a * decodeScalar b) • basePoint))) := by
+  -- The ladder theorem needs an input whose u-coordinate is not `0`: here `[b] B`.
   rw [publicKey_eq, x25519_encodeUCoordinate a _ (uCoord_decodeScalar_smul_ne_zero b), mul_smul]
 
 /-- X25519 key agreement: both parties derive the same shared secret, RFC 7748 §6.1. -/
 theorem x25519_agree (a b : Key) : x25519 a (publicKey b) = x25519 b (publicKey a) := by
+  -- Both parties compute the u-coordinate of `[a b] B`, since scalar multiplication commutes.
   rw [x25519_publicKey, x25519_publicKey, Nat.mul_comm]
 
 end EthLib.Cryptography.X25519
