@@ -17,10 +17,10 @@ set_option maxRecDepth 100000
 theorem CappedSuffix.keygenChainTargetInput_encodingInput_eq_self
     (secretKey : SecretKey) (cache : QueryCache HashSpec)
     (leafIndex : LeafIndex) (payload : Message × Randomness) :
-    CappedSuffix.keygenChainTargetInput secretKey cache
+    XmssSecurity.keygenChainTargetInput secretKey cache
       (Concrete.CacheView.encodingInput secretKey.parameter leafIndex payload) =
     Concrete.CacheView.encodingInput secretKey.parameter leafIndex payload := by
-  unfold CappedSuffix.keygenChainTargetInput
+  unfold XmssSecurity.keygenChainTargetInput
   split
   · rename_i h
     obtain ⟨value, hinput⟩ := h.choose_spec
@@ -31,10 +31,10 @@ theorem CappedSuffix.keygenChainTargetInput_encodingInput_eq_self
 theorem CappedLeaf.keygenLeafTargetInput_encodingInput_eq_self
     (secretKey : SecretKey) (cache : QueryCache HashSpec)
     (leafIndex : LeafIndex) (payload : Message × Randomness) :
-    CappedLeaf.keygenLeafTargetInput secretKey cache
+    XmssSecurity.keygenLeafTargetInput secretKey cache
       (Concrete.CacheView.encodingInput secretKey.parameter leafIndex payload) =
     Concrete.CacheView.encodingInput secretKey.parameter leafIndex payload := by
-  unfold CappedLeaf.keygenLeafTargetInput
+  unfold XmssSecurity.keygenLeafTargetInput
   split
   · rename_i h
     obtain ⟨endpoints, hinput⟩ := h.choose_spec

@@ -18,16 +18,16 @@ noncomputable def keygenStructuralTargetInput
     (input : HashInput) : HashInput :=
   CappedTop.keygenTopTargetInput secretKey cache
     (CappedMerkle.keygenMerkleTargetInput secretKey cache
-      (CappedLeaf.keygenLeafTargetInput secretKey cache
-        (CappedSuffix.keygenChainTargetInput secretKey cache input)))
+      (XmssSecurity.keygenLeafTargetInput secretKey cache
+        (XmssSecurity.keygenChainTargetInput secretKey cache input)))
 
 theorem CappedSuffix.keygenChainTargetInput_leafInput_eq_self
     (secretKey : SecretKey) (cache : QueryCache HashSpec)
     (leafIndex : LeafIndex) (endpoints : ChainIndex → Digest) :
-    CappedSuffix.keygenChainTargetInput secretKey cache
+    XmssSecurity.keygenChainTargetInput secretKey cache
       (Concrete.CacheView.leafInput secretKey.parameter leafIndex endpoints) =
     Concrete.CacheView.leafInput secretKey.parameter leafIndex endpoints := by
-  unfold CappedSuffix.keygenChainTargetInput
+  unfold XmssSecurity.keygenChainTargetInput
   split
   · rename_i h
     obtain ⟨value, hinput⟩ := h.choose_spec
@@ -39,10 +39,10 @@ theorem CappedSuffix.keygenChainTargetInput_leafInput_eq_self
 theorem CappedSuffix.keygenChainTargetInput_merkleInput_eq_self
     (secretKey : SecretKey) (cache : QueryCache HashSpec)
     (level : MerkleLevel) (node : MerkleNode) (left right : Digest) :
-    CappedSuffix.keygenChainTargetInput secretKey cache
+    XmssSecurity.keygenChainTargetInput secretKey cache
       (Concrete.CacheView.merkleInput secretKey.parameter level node left right) =
     Concrete.CacheView.merkleInput secretKey.parameter level node left right := by
-  unfold CappedSuffix.keygenChainTargetInput
+  unfold XmssSecurity.keygenChainTargetInput
   split
   · rename_i h
     obtain ⟨value, hinput⟩ := h.choose_spec
@@ -55,10 +55,10 @@ theorem CappedLeaf.keygenLeafTargetInput_chainInput_eq_self
     (secretKey : SecretKey) (cache : QueryCache HashSpec)
     (leafIndex : LeafIndex) (chain : ChainIndex) (step : ChainStep)
     (value : Digest) :
-    CappedLeaf.keygenLeafTargetInput secretKey cache
+    XmssSecurity.keygenLeafTargetInput secretKey cache
       (Concrete.CacheView.chainInput secretKey.parameter leafIndex chain step value) =
     Concrete.CacheView.chainInput secretKey.parameter leafIndex chain step value := by
-  unfold CappedLeaf.keygenLeafTargetInput
+  unfold XmssSecurity.keygenLeafTargetInput
   split
   · rename_i h
     obtain ⟨endpoints, hinput⟩ := h.choose_spec
@@ -70,10 +70,10 @@ theorem CappedLeaf.keygenLeafTargetInput_chainInput_eq_self
 theorem CappedLeaf.keygenLeafTargetInput_merkleInput_eq_self
     (secretKey : SecretKey) (cache : QueryCache HashSpec)
     (level : MerkleLevel) (node : MerkleNode) (left right : Digest) :
-    CappedLeaf.keygenLeafTargetInput secretKey cache
+    XmssSecurity.keygenLeafTargetInput secretKey cache
       (Concrete.CacheView.merkleInput secretKey.parameter level node left right) =
     Concrete.CacheView.merkleInput secretKey.parameter level node left right := by
-  unfold CappedLeaf.keygenLeafTargetInput
+  unfold XmssSecurity.keygenLeafTargetInput
   split
   · rename_i h
     obtain ⟨endpoints, hinput⟩ := h.choose_spec
@@ -120,10 +120,10 @@ theorem keygenStructuralTargetInput_chainInput
     (value : Digest) :
     keygenStructuralTargetInput secretKey cache
       (Concrete.CacheView.chainInput secretKey.parameter leafIndex chain step value) =
-    CappedSuffix.keygenChainTargetInput secretKey cache
+    XmssSecurity.keygenChainTargetInput secretKey cache
       (Concrete.CacheView.chainInput secretKey.parameter leafIndex chain step value) := by
   unfold keygenStructuralTargetInput
-  rw [CappedSuffix.keygenChainTargetInput_chainInput,
+  rw [XmssSecurity.keygenChainTargetInput_chainInput,
     CappedLeaf.keygenLeafTargetInput_chainInput_eq_self,
     CappedMerkle.keygenMerkleTargetInput_chainInput_eq_self,
     CappedTop.keygenTopTargetInput_chainInput]
@@ -133,11 +133,11 @@ theorem keygenStructuralTargetInput_leafInput
     (leafIndex : LeafIndex) (endpoints : ChainIndex → Digest) :
     keygenStructuralTargetInput secretKey cache
       (Concrete.CacheView.leafInput secretKey.parameter leafIndex endpoints) =
-    CappedLeaf.keygenLeafTargetInput secretKey cache
+    XmssSecurity.keygenLeafTargetInput secretKey cache
       (Concrete.CacheView.leafInput secretKey.parameter leafIndex endpoints) := by
   unfold keygenStructuralTargetInput
   rw [CappedSuffix.keygenChainTargetInput_leafInput_eq_self,
-    CappedLeaf.keygenLeafTargetInput_leafInput,
+    XmssSecurity.keygenLeafTargetInput_leafInput,
     CappedMerkle.keygenMerkleTargetInput_leafInput_eq_self,
     CappedTop.keygenTopTargetInput_leafInput]
 @[simp]
@@ -155,21 +155,21 @@ theorem keygenStructuralTargetInput_merkleInput
 
 theorem chainInput_exists_of_keygenChainTargetInput_ne
     (secretKey : SecretKey) (cache : QueryCache HashSpec) (input : HashInput)
-    (hne : CappedSuffix.keygenChainTargetInput secretKey cache input ≠ input) :
+    (hne : XmssSecurity.keygenChainTargetInput secretKey cache input ≠ input) :
     ∃ address : LeafIndex × ChainIndex × ChainStep, ∃ value,
       input = Concrete.CacheView.chainInput secretKey.parameter address.1
         address.2.1 address.2.2 value := by
-  unfold CappedSuffix.keygenChainTargetInput at hne
+  unfold XmssSecurity.keygenChainTargetInput at hne
   split at hne
   · assumption
   · exact (hne rfl).elim
 
 theorem leafInput_exists_of_keygenLeafTargetInput_ne
     (secretKey : SecretKey) (cache : QueryCache HashSpec) (input : HashInput)
-    (hne : CappedLeaf.keygenLeafTargetInput secretKey cache input ≠ input) :
+    (hne : XmssSecurity.keygenLeafTargetInput secretKey cache input ≠ input) :
     ∃ leafIndex endpoints,
       input = Concrete.CacheView.leafInput secretKey.parameter leafIndex endpoints := by
-  unfold CappedLeaf.keygenLeafTargetInput at hne
+  unfold XmssSecurity.keygenLeafTargetInput at hne
   split at hne
   · assumption
   · exact (hne rfl).elim
@@ -209,11 +209,11 @@ theorem adaptiveFreshChainCollision_implies_structural
     (initialCache finalCache : QueryCache HashSpec)
     (secretKey : SecretKey)
     (hcollision : Rom.AdaptiveFreshDigestCollisionWith initialCache finalCache
-      (CappedSuffix.keygenChainTargetInput secretKey initialCache)) :
+      (XmssSecurity.keygenChainTargetInput secretKey initialCache)) :
     Rom.AdaptiveFreshDigestCollisionWith initialCache finalCache
       (keygenStructuralTargetInput secretKey initialCache) := by
   apply adaptiveFreshDigestCollisionWith_of_target_eq initialCache finalCache
-    (CappedSuffix.keygenChainTargetInput secretKey initialCache)
+    (XmssSecurity.keygenChainTargetInput secretKey initialCache)
     (keygenStructuralTargetInput secretKey initialCache) _ hcollision
   intro input hne
   obtain ⟨address, value, rfl⟩ :=
@@ -226,11 +226,11 @@ theorem adaptiveFreshLeafCollision_implies_structural
     (initialCache finalCache : QueryCache HashSpec)
     (secretKey : SecretKey)
     (hcollision : Rom.AdaptiveFreshDigestCollisionWith initialCache finalCache
-      (CappedLeaf.keygenLeafTargetInput secretKey initialCache)) :
+      (XmssSecurity.keygenLeafTargetInput secretKey initialCache)) :
     Rom.AdaptiveFreshDigestCollisionWith initialCache finalCache
       (keygenStructuralTargetInput secretKey initialCache) := by
   apply adaptiveFreshDigestCollisionWith_of_target_eq initialCache finalCache
-    (CappedLeaf.keygenLeafTargetInput secretKey initialCache)
+    (XmssSecurity.keygenLeafTargetInput secretKey initialCache)
     (keygenStructuralTargetInput secretKey initialCache) _ hcollision
   intro input hne
   obtain ⟨leafIndex, endpoints, rfl⟩ :=
@@ -256,9 +256,10 @@ theorem adaptiveFreshMerkleCollision_implies_structural
 
 theorem CappedSuffix.keygenChainTargetInput_top (secretKey : SecretKey) (cache : QueryCache HashSpec)
     (domain : HashDomain) (message : HashInput) (hdomain : domain.isTop = true) :
-    CappedSuffix.keygenChainTargetInput secretKey cache (tweakableHashInput secretKey.parameter domain message) =
+    XmssSecurity.keygenChainTargetInput secretKey cache
+        (tweakableHashInput secretKey.parameter domain message) =
       tweakableHashInput secretKey.parameter domain message := by
-  unfold CappedSuffix.keygenChainTargetInput
+  unfold XmssSecurity.keygenChainTargetInput
   split
   · rename_i h
     obtain ⟨_, _, h⟩ := h
@@ -267,9 +268,10 @@ theorem CappedSuffix.keygenChainTargetInput_top (secretKey : SecretKey) (cache :
 
 theorem CappedLeaf.keygenLeafTargetInput_top (secretKey : SecretKey) (cache : QueryCache HashSpec)
     (domain : HashDomain) (message : HashInput) (hdomain : domain.isTop = true) :
-    CappedLeaf.keygenLeafTargetInput secretKey cache (tweakableHashInput secretKey.parameter domain message) =
+    XmssSecurity.keygenLeafTargetInput secretKey cache
+        (tweakableHashInput secretKey.parameter domain message) =
       tweakableHashInput secretKey.parameter domain message := by
-  unfold CappedLeaf.keygenLeafTargetInput
+  unfold XmssSecurity.keygenLeafTargetInput
   split
   · rename_i h
     obtain ⟨_, _, h⟩ := h
@@ -334,8 +336,7 @@ theorem winningStructuralCollision_afterKeygen_orientation
       hrevealed | hcollision
     · exact (hnotRevealed ⟨chain, ⟨hwin, hchainEvent⟩, hrevealed⟩).elim
     · apply adaptiveFreshChainCollision_implies_structural
-      simpa only [CappedChain.keygenChainTargetInput_eq_capped] using
-        hcollision
+      exact hcollision
   · apply adaptiveFreshChainCollision_implies_structural
     exact globalSuffixCollision_event_afterKeygen_orientation adversary
       keyResult hkeygen execution hafter hsuffix.2
