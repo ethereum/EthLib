@@ -9,10 +9,6 @@ public import EthLib.Cryptography.Proofs.Vrf.Verify
 
 The encoding is a bijection between openings and 1056-byte strings.
 
-- Decoding an encoding returns the opening.
-- Every 1056-byte string is an encoding.
-- Every string of another length is rejected.
-
 Verification over bytes rejects malformed input.
 
 On the rest, it agrees with typed verification.

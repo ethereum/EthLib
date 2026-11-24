@@ -15,16 +15,16 @@ namespace EthLib.Cryptography.Vrf.Constants
 One leaf per index, so the indices are `[0, 2^32)`. -/
 def VRF_TREE_HEIGHT : Nat := 32
 
-/-- The size in bytes of a root, a node, a leaf secret, an output and a mixed value.
-
-Uniqueness must hold against the validator that built the tree.
-
-That validator only needs a collision, which costs about `2^(4n)` hashes for `n` bytes.
-
-So 32 bytes give `2^128`, where 16 bytes would give only `2^64`.
-
-These costs are classical: a quantum search for collisions needs about `2^(8n/3)` queries. -/
-def VRF_HASH_SIZE : Nat := 32
+/-- The size in bytes of a root, a node, a leaf secret, an output and a mixed value. -/
+def VRF_HASH_SIZE : Nat :=
+  -- Uniqueness must hold against the validator that built the tree.
+  --
+  -- That validator only needs a collision, which costs about `2^(4n)` hashes for `n` bytes.
+  --
+  -- So 32 bytes give `2^128`, where 16 bytes would give only `2^64`.
+  --
+  -- These costs are classical: a quantum search for collisions needs about `2^(8n/3)` queries.
+  32
 
 /-- The size in bytes of an opening: the secret, then one sibling per level.
 

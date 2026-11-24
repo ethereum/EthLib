@@ -7,29 +7,19 @@ public import EthLib.Cryptography.Proofs.LogKeys
 /-!
 # Proofs: an output is unpredictable at an index the adversary chooses
 
-Here the hash is a random oracle, and the `2^32` secrets are uniform and independent.
+The bound holds in the random oracle model, with `2^32` uniform and independent secrets.
 
-The adversary gets the root, queries the hash, and asks for openings at any indices.
+Secrets derived from a seed are not covered here.
 
-It then names an index and guesses its output.
+A separate theorem covers them.
 
-It wins if the guess is right and it never asked for the opening at that index.
-
-It wins with probability at most `2^32 (1 + 2 Q) / 2^256`, where `Q = q_H + (q_O + 1) 2^33`.
-
-Here `q_H` counts its hash queries and `q_O` its requests for an opening.
-
-The proof splits a win by the index the adversary names, which costs the factor `2^32`.
-
-For each index, the game agrees with the game of that fixed index until the adversary opens it.
-
-Secrets derived from a seed are not covered here; a separate theorem covers them.
-
-The property is the residual unpredictability of Micali, Rabin and Vadhan, §3.2.
+The property is the residual unpredictability of [Micali, Rabin and Vadhan][mrv99], §3.2.
 
 It is part of their definition of a verifiable unpredictable function.
 
-Source: "Verifiable Random Functions", [FOCS 1999](https://doi.org/10.1109/SFFCS.1999.814584).
+Source: "Verifiable Random Functions", FOCS 1999.
+
+[mrv99]: https://doi.org/10.1109/SFFCS.1999.814584
 -/
 
 @[expose] public section
@@ -243,6 +233,9 @@ theorem prEvent_adaptiveGame_le (adversary : AdaptiveAdversary) {qh qo : ℕ}
        let win ← (simulateQ HashSpec.romImpl (adaptiveGame secrets adversary)).run' ∅}[win]
       ≤ 2 ^ 32 * ((2 ^ 256 : ℝ≥0∞)⁻¹ +
         ((qh + (qo + 1) * 2 ^ 33 : ℕ) : ℝ≥0∞) * (2 * (2 ^ 256 : ℝ≥0∞)⁻¹)) := by
+  -- Split a win by the index the adversary names, which costs the factor `2^32`.
+  --
+  -- For each index, the game agrees with the game of that fixed index until the adversary opens it.
   have h := prEvent_exists_le_card_mul (m := ProbComp)
     ($ᵗ (UInt32 → Digest) >>= fun secrets => adaptiveRun secrets adversary)
     (fun c z => (z.1.1.1 ∉ z.2 ∧ z.1.1.2 = z.1.2) ∧ z.1.1.1 = c)

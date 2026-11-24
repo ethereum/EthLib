@@ -8,16 +8,6 @@ public import EthLib.Cryptography.Vrf.Serialization
 # Exports: the VRF tree
 
 The C exports of the VRF tree, for the Python bindings.
-
-Verification takes the root, the index and the opening as bytes, and never fails.
-
-It returns the 32-byte output, or no bytes when it rejects.
-
-The secret and the output of an index read a 32-byte seed, and fail on any other length.
-
-The mixed value reads a 32-byte output and 32 bytes of randomness, and fails on any other length.
-
-Each failure has code 0, since no error type of the specification covers it.
 -/
 
 public section
@@ -36,12 +26,14 @@ A root of another length than 32 rejects.
 So do an opening of another length than 1056 and an index from `2^32` on. -/
 @[export eth_vrf_verify]
 def verify (root : ByteArray) (index : UInt64) (opening : ByteArray) : ByteArray :=
+  -- Verification never fails: it returns the 32-byte output, or no bytes when it rejects.
   match verifyBytes root index.toNat opening with
   | some output => packBytes output
   | none => ByteArray.empty
 
 /-- A 32-byte seed, or an error for any other length. -/
 def readSeed (bytes : ByteArray) : Result Seed :=
+  -- The failure has code 0, since no error type of the specification covers it.
   toResult none (Base.exactBytes VRF_SEED_SIZE bytes fun size =>
     UnreadArgument.mk s!"bad seed size: {size}, expected {VRF_SEED_SIZE}")
 
@@ -61,6 +53,7 @@ def evaluate (seed : ByteArray) (index : UInt32) : Result ByteArray := do
 
 /-- 32 bytes, or an error that names the argument for any other length. -/
 def readDigest (name : String) (bytes : ByteArray) : Result Digest :=
+  -- The failure has code 0, since no error type of the specification covers it.
   toResult none (Base.exactBytes VRF_HASH_SIZE bytes fun size =>
     UnreadArgument.mk s!"bad {name} size: {size}, expected {VRF_HASH_SIZE}")
 

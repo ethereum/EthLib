@@ -8,25 +8,7 @@ public import EthLib.Cryptography.Merkle.Tree
 
 The tree over the `2^32` leaf secrets, and the secrets from one 32-byte seed.
 
-Leaf `j` is the leaf hash of secret `s_j`, and every node is a node hash.
-
-```text
-    s_i = keccak256(PQ_VRF_SECRET | seed | LE32(i))
-```
-
-The holder stores the seed, not the `2^32` secrets.
-
-It recomputes a secret, or a subtree, when it opens an index.
-
-Verification never sees the seed, so this derivation is not consensus-critical.
-
-So a verifier cannot tell whether the secrets came from a seed, or were chosen by the holder.
-
-It is specified so that any implementation rebuilds the same tree from the same seed.
-
-Keccak-256 acts as a pseudorandom function of the index.
-
-The seed is its key, and the prefix separates it from the other hashes.
+Verification never sees the seed, so the derivation of the secrets is not consensus-critical.
 -/
 
 @[expose] public section
@@ -43,6 +25,7 @@ def leaves (secrets : UInt32 → Digest) (j : Nat) : Digest :=
 
 /-- The root of the tree over the secrets. -/
 def root (secrets : UInt32 → Digest) : Digest :=
+  -- Every node is a node hash.
   (Merkle.root treeHash (m := Id) (leaves secrets) VRF_TREE_HEIGHT).run
 
 /-- The opening at index `i`: its secret and its path. -/
@@ -60,16 +43,27 @@ def secretInput (seed : Seed) (i : UInt32) : ByteArray :=
 
 /-- `s_i`: the secret of leaf `i`. -/
 def secret (seed : Seed) (i : UInt32) : Digest :=
+  -- `s_i = keccak256(PQ_VRF_SECRET | seed | LE32(i))`.
+  --
+  -- Keccak-256 acts as a pseudorandom function of the index.
+  --
+  -- The seed is its key, and the prefix separates it from the other hashes.
   hash (secretInput seed i)
 
 /-- The root of the tree of a seed: what the holder publishes.
 
 The seed must be 32 uniformly random bytes, kept secret. -/
 def keyGen (seed : Seed) : Digest :=
+  -- So a verifier cannot tell whether the secrets came from a seed, or were chosen by the holder.
+  --
+  -- The derivation is specified so that any implementation rebuilds the same tree from one seed.
   root (secret seed)
 
 /-- The opening at index `i` of the tree of a seed. -/
 def prove (seed : Seed) (i : UInt32) : Opening :=
+  -- The holder stores the seed, not the `2^32` secrets.
+  --
+  -- It recomputes a secret, or a subtree, when it opens an index.
   opening (secret seed) i
 
 /-- The output at index `i` of the tree of a seed. -/
