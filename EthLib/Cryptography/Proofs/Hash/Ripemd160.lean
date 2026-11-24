@@ -414,7 +414,8 @@ theorem little32_toBitVec (block : ByteArray) (start : Nat) (within : start + 4 
       block[start + 3].toBitVec ++ block[start + 2].toBitVec ++ block[start + 1].toBitVec ++
         block[start].toBitVec := by
   refine BitVec.eq_of_getLsbD_eq fun i hi => ?_
-  simp only [little32, UInt32.toBitVec_or, UInt32.toBitVec_shiftLeft, BitVec.getLsbD_or]
+  simp only [little32, Base.uint32OfBytes, UInt32.toBitVec_or, UInt32.toBitVec_shiftLeft,
+    BitVec.getLsbD_or]
   simp only [BitVec.getLsbD_append]
   -- Bit `i` comes from byte `i / 8`, and every other byte is zero there.
   by_cases h8 : i < 8
@@ -542,7 +543,7 @@ theorem digest_eq_spec (state : Vector UInt32 5) :
   intro i _
   apply UInt8.toNat_inj.mp
   -- Each byte is one base-256 digit of its word.
-  simp [digest, Spec.digest, UInt32.toNat_shiftRight, Nat.shiftRight_eq_div_pow,
+  simp [digest, Base.uint32Byte, Spec.digest, UInt32.toNat_shiftRight, Nat.shiftRight_eq_div_pow,
     UInt32.toNat_mul, UInt32.toNat_ofNat]
   rw [Nat.mod_eq_of_lt (show 8 * (i % 4) < 32 by omega)]
 

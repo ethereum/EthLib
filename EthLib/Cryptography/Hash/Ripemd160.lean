@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Word32
 public import EthLib.Cryptography.Hash.Padding
 
 /-!
@@ -141,8 +142,7 @@ The section "pseudo-code" gives the eighty steps of a line and the compression o
   -- Words are little-endian, unlike SHA-256.
   --
   -- The message words, the length and the digest all put the least significant byte first.
-  block[start].toUInt32 ||| block[start + 1].toUInt32 <<< 8 |||
-    block[start + 2].toUInt32 <<< 16 ||| block[start + 3].toUInt32 <<< 24
+  Base.uint32OfBytes block[start] block[start + 1] block[start + 2] block[start + 3]
 
 /--
 The five variables (A, B, C, D, E) of a line.
@@ -210,7 +210,8 @@ def compress (h : Vector UInt32 5) (block : ByteArray) (start : Nat)
 /-- The final chaining variable as twenty bytes, each word little-endian. -/
 def digest (state : Vector UInt32 5) : Vector UInt8 20 :=
   Vector.ofFn fun i : Fin 20 =>
-    (state[i.val / 4]'(by omega) >>> (8 * UInt32.ofNat (i.val % 4))).toUInt8
+    -- Byte `i` is byte `i % 4` of word `i / 4`, the least significant byte first.
+    Base.uint32Byte (state[i.val / 4]'(by omega)) (i.val % 4)
 
 /-- RIPEMD-160 of a message: every block of the padded message, in order, from the initial value.
 

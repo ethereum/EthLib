@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Word32
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Cryptography.Ethash.Sizes
 
@@ -33,13 +34,14 @@ abbrev Item := Vector UInt32 16
 def itemOfBytes (bytes : Vector UInt8 64) : Item :=
   Vector.ofFn fun k : Fin 16 =>
     -- Word `k` is bytes `4k` to `4k + 3`.
-    bytes[4 * k.val].toUInt32 ||| bytes[4 * k.val + 1].toUInt32 <<< 8 |||
-      bytes[4 * k.val + 2].toUInt32 <<< 16 ||| bytes[4 * k.val + 3].toUInt32 <<< 24
+    Base.uint32OfBytes bytes[4 * k.val] bytes[4 * k.val + 1] bytes[4 * k.val + 2]
+      bytes[4 * k.val + 3]
 
 /-- The bytes of some words, 4 per word, the least significant first. -/
 def bytesOfWords {n : Nat} (words : Vector UInt32 n) : ByteArray :=
   ⟨words.toArray.flatMap fun w : UInt32 =>
-    (#[w.toUInt8, (w >>> 8).toUInt8, (w >>> 16).toUInt8, (w >>> 24).toUInt8] : Array UInt8)⟩
+    (#[Base.uint32Byte w 0, Base.uint32Byte w 1, Base.uint32Byte w 2, Base.uint32Byte w 3] :
+      Array UInt8)⟩
 
 /-- The Keccak-512 digest of some bytes, as an item. -/
 def hashItem (bytes : ByteArray) : Item :=
