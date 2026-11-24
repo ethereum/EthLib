@@ -9,15 +9,17 @@ public import EthLib.Engine.Jwt.Json
 
 The Engine profile uses a 32-byte secret, HS256 and an `iat` within 60 seconds of the clock.
 
-The secret and tag comparison make no constant-time claim (SOUNDNESS.md A3).
+A step comment names its section of an RFC.
 
-Source: [Engine authentication][engine], at commit `3284ee8` of execution-apis.
+No comparison of the secret or the tag claims constant time (SOUNDNESS.md A3).
 
-A step comment names its section of RFC [7515][jws], [7518][hs256] or [7519][jwt].
+Sources:
 
-RFC 7519 is read with its verified erratum [8060][eid8060] and its reported erratum [8225][eid8225].
+- [Engine authentication][engine], at commit `1ca0818` of execution-apis: the Engine profile
+- RFC [7515][jws], [7518][hs256] and [7519][jwt]: the compact form, HS256 and the claims
+- RFC 7519 with its verified erratum [8060][eid8060] and its reported erratum [8225][eid8225]
 
-[engine]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/authentication.md
+[engine]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/authentication.md
 [jws]: https://www.rfc-editor.org/rfc/rfc7515
 [hs256]: https://www.rfc-editor.org/rfc/rfc7518
 [jwt]: https://www.rfc-editor.org/rfc/rfc7519

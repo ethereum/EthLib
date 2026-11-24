@@ -12,26 +12,23 @@ public import EthLib.Execution.Transactions.Envelope
 
 The execution block of a payload, and the payload of a block.
 
-The block hash of a payload is checked by step 2 of [`engine_newPayloadV1`][v1].
-
-Step 2 of [`engine_newPayloadV4`][v4] adds the commitment to the requests to it.
-
-Step 3 of [`engine_newPayloadV5`][v5] requires the RLP encoding of a block access list.
-
-The blob hashes follow step 3 of [`engine_newPayloadV3`][v3].
-
 A step comment names the version of the method, as in version 3, step 3.
 
-The header takes the constants of [EIP-3675][eip-3675] and the mix digest of [EIP-4399][eip-4399].
+Sources, at commit `1ca0818` of execution-apis and `46976b2` of EIPs:
 
-From Glamsterdam, it takes the fields of [EIP-7928][eip-7928] and [EIP-7843][eip-7843].
+- step 2 of [`engine_newPayloadV1`][v1]: the check of the block hash of a payload
+- step 3 of [`engine_newPayloadV3`][v3]: the blob hashes
+- step 2 of [`engine_newPayloadV4`][v4]: the commitment to the requests in the block hash
+- step 3 of [`engine_newPayloadV5`][v5]: the RLP encoding of a block access list
+- [EIP-3675][eip-3675] and [EIP-4399][eip-4399]: the constants and the mix digest of the header
+- [EIP-7928][eip-7928] and [EIP-7843][eip-7843]: the fields of the header from Glamsterdam
 
 [eip-3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#block-structure
 [eip-4399]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-4399.md#block-structure
-[v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#specification
-[v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#specification
-[v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/prague.md#specification
-[v5]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#specification
+[v1]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#specification
+[v3]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/cancun.md#specification
+[v4]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/prague.md#specification
+[v5]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/amsterdam.md#specification
 [eip-7928]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7928.md#engine-api
 [eip-7843]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7843.md#header-extension
 -/

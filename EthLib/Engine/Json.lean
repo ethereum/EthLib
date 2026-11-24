@@ -13,9 +13,9 @@ The JSON form of the parameters of the Engine API, and of its payloads and paylo
 
 The Engine API is a JSON-RPC interface, with the encodings of the Ethereum JSON-RPC API.
 
-This module reads the base types with readers that the execution JSON-RPC API shares.
+The module reads the base types with the readers that the execution JSON-RPC API shares.
 
-The sources are at commit `3284ee8` of execution-apis:
+Sources, at commit `1ca0818` of execution-apis:
 
 - the [encoding][encoding] and the table of [errors][errors] in `common.md`
 - the patterns of the base types in [`base-types.yaml`][types]
@@ -23,13 +23,13 @@ The sources are at commit `3284ee8` of execution-apis:
 - the request of [`engine_newPayloadV2`][v2], in Shanghai
 - [`ExecutionPayloadV4`][v4] and step 2 of [`engine_newPayloadV5`][v5], in Amsterdam
 
-[encoding]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/common.md#encoding
-[errors]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/common.md#errors
-[types]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/base-types.yaml
-[v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#engine_newpayloadv2
-[v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#specification
-[v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#executionpayloadv4
-[v5]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_newpayloadv5
+[encoding]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/common.md#encoding
+[errors]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/common.md#errors
+[types]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/base-types.yaml
+[v2]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/shanghai.md#engine_newpayloadv2
+[v3]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/cancun.md#specification
+[v4]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/amsterdam.md#executionpayloadv4
+[v5]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/amsterdam.md#engine_newpayloadv5
 -/
 
 @[expose] public section
@@ -89,7 +89,7 @@ def anyPayload (j : Json) : Decode AnyPayload := do
   let fs ← fields "payload" j
   -- Step 1: the fields match one structure exactly, else `-32602`, invalid params.
   --
-  -- EthLib reads the version from the fields; the fork of the payload checks it after.
+  -- EthLib reads the version from the fields, and the fork of the payload checks it after.
   let version ←
     if hasExactly fs payloadFieldsV1 then pure 1
     else if hasExactly fs payloadFieldsV2 then pure 2
@@ -233,14 +233,12 @@ def payloadStatusPairs (s : PayloadStatus) (validationError : Option String) :
 
 /-- A payload status as JSON, with its three fields: `PayloadStatusV1` of [`paris.md`][status].
 
-The latest valid hash and the validation error are `null` when absent.
-
 By step 5 of [payload validation][validation], a client may give the text of the validation error.
 
-That step gives it for an invalid payload; the writer leaves the pairing to its caller.
+That step gives it for an invalid payload, and the writer leaves the pairing to its caller.
 
-[status]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payloadstatusv1
-[validation]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-validation -/
+[status]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#payloadstatusv1
+[validation]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#payload-validation -/
 def payloadStatusJson (s : PayloadStatus) (validationError : Option String) : Json :=
   Json.mkObj (payloadStatusPairs s validationError)
 
@@ -253,8 +251,8 @@ The OpenRPC schema `PayloadStatusV1` in [`payload.yaml`][schema] requires only t
 
 The decoder checks the form only, not which hash or error goes with which status.
 
-[status]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payloadstatusv1
-[schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/openrpc/schemas/payload.yaml -/
+[status]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#payloadstatusv1
+[schema]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/openrpc/schemas/payload.yaml -/
 def payloadStatusOfJson (j : Json) : Decode (PayloadStatus × Option String) := do
   -- A status that does not decode is `-32602`, invalid params, as for a request.
   --
@@ -285,7 +283,7 @@ Its status is never an invalid block hash.
 
 The writer leaves both rules to its caller.
 
-[status]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#payloadstatusv2 -/
+[status]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/bogota.md#payloadstatusv2 -/
 def payloadStatusV2Json (s : PayloadStatus) (validationError : Option String)
     (inclusionListSatisfied : Option Bool) : Json :=
   Json.mkObj (payloadStatusPairs s validationError ++
@@ -315,7 +313,7 @@ def inclusionListJson (transactions : List ByteArray) : Json :=
 
 Each entry may be any byte string, by [`bogota.md`][bogota].
 
-[bogota]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_newpayloadv6 -/
+[bogota]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/bogota.md#engine_newpayloadv6 -/
 def inclusionListOfJson (j : Json) : Read (List ByteArray) :=
   -- `engine_newPayloadV6`, parameter 5: an `Array of DATA`, each entry a byte list.
   --
@@ -343,7 +341,7 @@ def checkRequestSize (maxRequest count : Nat) : Except EngineError Unit :=
 
 The execution API gives `-32000` another message, so each API keeps its own table.
 
-[errors]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/common.md#errors -/
+[errors]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/common.md#errors -/
 def EngineError.message : EngineError → String
   -- `-32602`: invalid method parameters.
   | .invalidParams _ => "Invalid params"
@@ -364,7 +362,9 @@ def EngineError.message : EngineError → String
 def EngineError.toRpcError (e : EngineError) : Serialization.JsonRpc.RpcError :=
   -- Errors: each error returns a `null` data value, except `-32000`, which no Engine error has.
   --
-  -- So the reason of invalid parameters is dropped; the shared JSON-RPC error keeps it as data.
+  -- So the reason of invalid parameters is dropped.
+  --
+  -- The shared JSON-RPC error keeps it as data.
   { code := -(e.code.toNat : Int), message := e.message, data := some .null }
 
 end EthLib.Engine

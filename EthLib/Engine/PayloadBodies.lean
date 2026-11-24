@@ -5,13 +5,9 @@ public import EthLib.Engine.Json
 /-!
 # `Engine.PayloadBodies`
 
-The methods `engine_getPayloadBodiesByHash` and `engine_getPayloadBodiesByRange`.
+The methods `engine_getPayloadBodiesByHash` and `engine_getPayloadBodiesByRange`, versions 1 and 2.
 
-Each has versions 1 and 2, and returns the bodies of past payloads.
-
-A body holds the transactions and the withdrawals of a block.
-
-Version 2 adds the block access list of EIP-7928.
+Each returns the bodies of past payloads, at every fork, since the source sets no fork rule.
 
 A step comment names the method and its version, as in by range, version 1, step 3.
 
@@ -19,32 +15,20 @@ Version 2 follows version 1 with two numbered additions, as in version 2, additi
 
 The Engine API calls the execution side of Glamsterdam by the name Amsterdam.
 
-The store of the execution layer is an input, with the body of each block that it holds.
-
-The consensus layer also writes the parameters of both requests as JSON.
-
-The source orders no two checks.
-
-EthLib decodes the parameters first, then checks `start` and `count`, then the request size.
-
-The source sets no fork rule for these methods, so EthLib answers both versions at every fork.
-
-The answer is also written as JSON, and read back as a consensus node reads it.
-
-The method specifications state these rules, at commit `3284ee8` of execution-apis:
+Sources, at commit `1ca0818` of execution-apis:
 
 - [`ExecutionPayloadBodyV1`][body-v1] and [`ExecutionPayloadBodyV2`][body-v2]
 - [`engine_getPayloadBodiesByHashV1`][hash-v1] and [`engine_getPayloadBodiesByRangeV1`][range-v1]
 - [`engine_getPayloadBodiesByHashV2`][hash-v2] and [`engine_getPayloadBodiesByRangeV2`][range-v2]
 - the table of [errors][errors] in `common.md`
 
-[body-v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#executionpayloadbodyv1
-[body-v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#executionpayloadbodyv2
-[hash-v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#engine_getpayloadbodiesbyhashv1
-[range-v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#engine_getpayloadbodiesbyrangev1
-[hash-v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_getpayloadbodiesbyhashv2
-[range-v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_getpayloadbodiesbyrangev2
-[errors]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/common.md#errors
+[body-v1]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/shanghai.md#executionpayloadbodyv1
+[body-v2]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/amsterdam.md#executionpayloadbodyv2
+[hash-v1]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/shanghai.md#engine_getpayloadbodiesbyhashv1
+[range-v1]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/shanghai.md#engine_getpayloadbodiesbyrangev1
+[hash-v2]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/amsterdam.md#engine_getpayloadbodiesbyhashv2
+[range-v2]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/amsterdam.md#engine_getpayloadbodiesbyrangev2
+[errors]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/common.md#errors
 -/
 
 @[expose] public section
@@ -73,7 +57,9 @@ structure StoredBody where
   /-- The RLP form of the block access list from Glamsterdam, or `none` if the node pruned it. -/
   blockAccessList : Since .glamsterdam fork (Option ByteArray)
 
-/-- The bodies that an execution layer holds, as the methods read them. -/
+/-- The bodies that an execution layer holds, as the methods read them.
+
+The store is an input of the methods, with the body of each block that it holds. -/
 structure BodyStore where
   -- By hash, version 1, step 4: a node may decline to serve finalized blocks by hash.
   --
@@ -104,14 +90,14 @@ structure BodyStore where
   /-- The source requires that a node take every request of up to 32 bodies. -/
   le_maxRequest : MIN_BODIES_REQUEST_LIMIT ≤ maxRequest
 
-/-- The body of a payload, as version 1 answers it. -/
+/-- The body of a payload, as version 1 answers it: the transactions and the withdrawals. -/
 structure ExecutionPayloadBodyV1 where
   /-- The bytes of each transaction, in the order that they run. -/
   transactions : List ByteArray
   /-- The withdrawals, or `none` for a block before Shapella. -/
   withdrawals : Option (List Withdrawal)
 
-/-- The body of a payload, as version 2 answers it. -/
+/-- The body of a payload, as version 2 answers it: version 1 and the access list of EIP-7928. -/
 structure ExecutionPayloadBodyV2 extends ExecutionPayloadBodyV1 where
   /-- The RLP form of the block access list.
 
@@ -157,6 +143,10 @@ def rangeLength (store : BodyStore) (start count : Nat) : Nat :=
 The answer stops at the latest known block. -/
 def bodiesByRange (store : BodyStore) (start count : UInt64) :
     Except EngineError (List (Option StoredBody)) := do
+  -- The source orders no two checks.
+  --
+  -- EthLib checks `start` and `count` once the parameters decode, then the request size.
+  --
   -- By range, version 1, step 3: `start` or `count` below `1` is `-32602`, invalid params.
   if start = 0 then throw (.invalidParams "start: below 1")
   if count = 0 then throw (.invalidParams "count: below 1")
@@ -199,7 +189,9 @@ def bodiesByHashParams (params : Json) : Decode (List Hash32) := do
   -- Any other parameters are `-32602`, invalid params, by the table of errors.
   | _ => invalid s!"params: got {params.length}, expected 1"
 
-/-- The parameters of a request by hash as JSON: one array of block hashes. -/
+/-- The parameters of a request by hash as JSON, as the consensus layer writes them.
+
+They are one array of block hashes. -/
 def bodiesByHashParamsJson (hashes : List Hash32) : Json :=
   -- By hash, request: the array of block hashes as its one parameter.
   .arr #[listJson (dataJson ·.toList) hashes]
@@ -213,12 +205,16 @@ def bodiesByRangeParams (params : Json) : Decode (UInt64 × UInt64) := do
   -- Any other parameters are `-32602`, invalid params, by the table of errors.
   | _ => invalid s!"params: got {params.length}, expected 2"
 
-/-- The parameters of a request by range as JSON: `start` and `count`, as quantities. -/
+/-- The parameters of a request by range as JSON, as the consensus layer writes them.
+
+They are `start` and `count`, as quantities. -/
 def bodiesByRangeParamsJson (start count : UInt64) : Json :=
   -- By range, request: `start`, then `count`.
   .arr #[quantityJson start.toNat, quantityJson count.toNat]
 
-/-! ## The answer as JSON -/
+/-! ## The answer as JSON
+
+The answer is written as JSON, and read back as a consensus node reads it. -/
 
 /-- A body of version 1 as JSON, with `null` for absent withdrawals. -/
 def bodyV1Json (b : ExecutionPayloadBodyV1) : Json :=

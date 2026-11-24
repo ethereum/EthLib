@@ -9,21 +9,9 @@ public import EthLib.Execution.Transactions.Types
 
 The structures that the Engine API passes between the consensus and the execution layers.
 
-An execution payload carries the fields of an execution block that the consensus layer keeps.
-
-Its version follows the fork: 1 at Paris, 2 at Shapella, 3 from Dencun to BPO5, 4 at Glamsterdam.
-
 The Engine API calls the execution side of Glamsterdam Amsterdam.
 
-Version 4 appends the block access list of EIP-7928 and the slot number of EIP-7843.
-
-The header holds the hash of the list and the slot number, and the body holds neither.
-
-So the type keeps these two fields apart, and the method passes them beside the payload.
-
-A withdrawal of the Engine API has the four fields of a withdrawal of the execution layer.
-
-The Engine API specification defines each structure, at commit `3284ee8` of execution-apis:
+Sources, at commit `1ca0818` of execution-apis:
 
 - [`ExecutionPayloadV1`][v1], [`ForkchoiceStateV1`][fcs] and [`PayloadStatusV1`][status]
 - [`WithdrawalV1`][withdrawal] and [`ExecutionPayloadV2`][v2]
@@ -31,14 +19,14 @@ The Engine API specification defines each structure, at commit `3284ee8` of exec
 - [`ExecutionPayloadV4`][v4]
 - the error codes, in [Errors][errors]
 
-[v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#executionpayloadv1
-[fcs]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#forkchoicestatev1
-[status]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payloadstatusv1
-[withdrawal]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#withdrawalv1
-[v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#executionpayloadv2
-[v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#executionpayloadv3
-[v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#executionpayloadv4
-[errors]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/common.md#errors
+[v1]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#executionpayloadv1
+[fcs]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#forkchoicestatev1
+[status]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#payloadstatusv1
+[withdrawal]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/shanghai.md#withdrawalv1
+[v2]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/shanghai.md#executionpayloadv2
+[v3]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/cancun.md#executionpayloadv3
+[v4]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/amsterdam.md#executionpayloadv4
+[errors]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/common.md#errors
 -/
 
 @[expose] public section
@@ -49,7 +37,12 @@ open EthLib.Base
 open EthLib.Execution.Blocks (Withdrawal)
 open EthLib.Execution.Transactions (TransactionError)
 
-/-- An execution payload at fork `fork`, from Paris on. -/
+/-- An execution payload at fork `fork`, from Paris on.
+
+It carries the fields of an execution block that the consensus layer keeps.
+
+Its version follows the fork: 1 at Paris, 2 at Shapella, 3 from Dencun to BPO5, 4 at Glamsterdam.
+-/
 structure ExecutionPayload (fork : Fork) : Type where
   -- `ExecutionPayloadV1`, in its order: `DATA` of 32, 20, 32, 32, 256 and 32 bytes.
   /-- The hash of the parent block. -/
@@ -88,6 +81,8 @@ structure ExecutionPayload (fork : Fork) : Type where
   transactions : List ByteArray
   -- `ExecutionPayloadV2` appends `withdrawals`, an array of `WithdrawalV1`.
   --
+  -- A `WithdrawalV1` has the four fields of a withdrawal of the execution layer.
+  --
   -- Versions 2 and 3 append fields to the one before, so one type with fields by fork holds 1 to 3.
   /-- The withdrawals, from Shapella. -/
   withdrawals : Since .shapella fork (List Withdrawal)
@@ -96,6 +91,13 @@ structure ExecutionPayload (fork : Fork) : Type where
   blobGasUsed : Since .dencun fork UInt64
   /-- The blob gas above the target before the block, from Dencun. -/
   excessBlobGas : Since .dencun fork UInt64
+  -- No field follows for `ExecutionPayloadV4`.
+  --
+  -- That version appends the block access list of EIP-7928 and the slot number of EIP-7843.
+  --
+  -- The header holds the hash of the list and the slot number, and the body holds neither.
+  --
+  -- So the type keeps these two fields apart, and the method passes them beside the payload.
 
 /-- The eight-byte identifier of a payload build process. -/
 abbrev PayloadId := Bytes8

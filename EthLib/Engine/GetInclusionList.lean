@@ -11,11 +11,12 @@ A member of the inclusion list committee asks its execution layer for transactio
 
 A step comment names a step of the specification of the method.
 
-[`bogota.md`][bogota] states the method and the bound, at commit `68d76a5` of execution-apis.
+Sources, at commit `1ca0818` of execution-apis and `46976b2` of EIPs:
 
-[EIP-7805][eip-7805] sets the same bound of 8 KiB for an inclusion list, in IL Building.
+- [`bogota.md`][bogota]: the method and the bound
+- [EIP-7805][eip-7805], in IL Building: the same bound of 8 KiB for an inclusion list
 
-[bogota]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_getinclusionlistv1
+[bogota]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/bogota.md#engine_getinclusionlistv1
 [eip-7805]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7805.md#il-building
 -/
 

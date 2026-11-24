@@ -5318,7 +5318,7 @@ The extra data must then hold at most 32 bytes.
 The decoder of version 4 does the same from Dencun on, with the block access list and the slot number (`payloadV4_executionPayloadV4Json`).
 Version 6 of `engine_newPayload`, from Bogota, takes the four parameters of version 5 and then the transactions of an inclusion list.
 Its decoder reads back what its writer writes from Dencun on, and the list reads back entry for entry (`newPayloadV6Params_json`, `Proofs/NewPayload.lean`; `inclusionListOfJson_json`, `Proofs/Json.lean`).
-Each entry is any byte string, as [`bogota.md`](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_newpayloadv6) asks after [execution-apis PR #956](https://github.com/ethereum/execution-apis/pull/956), so an entry that does not decode as a transaction still reads.
+Each entry is any byte string, as [`bogota.md`](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/bogota.md#engine_newpayloadv6) asks after [execution-apis PR #956](https://github.com/ethereum/execution-apis/pull/956), so an entry that does not decode as a transaction still reads.
 The decoder of the forkchoice state reads back the JSON of every state (`forkchoiceStateOfJson_json`, `Proofs/ForkchoiceUpdated.lean`).
 A version of `engine_forkchoiceUpdated` reads back payload attributes whose structure it takes, and they are the attributes at their fork (`payloadAttributesOfVersion_json`).
 The decoder of its parameters reads back the state, and the JSON of the attributes or their absence (`forkchoiceUpdatedParams_json`).
@@ -5346,12 +5346,12 @@ A name reads as a status exactly when it is the name of that status (`statusOfNa
 A JSON value reads as a forkchoice response exactly when it is an object of this form (`forkchoiceUpdatedResponseOfJson_eq_ok_iff`, `Proofs/ForkchoiceUpdated.lean`).
 Its members that are not `null` are `payloadStatus` and, if present, `payloadId`.
 Its `payloadStatus` reads as a status that is valid, invalid or syncing, and its `payloadId` is 8 bytes or absent.
-The bytes of the hash and of the ID are in lowercase hex, as the patterns of [`base-types.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/base-types.yaml) ask, so the readers refuse uppercase digits.
+The bytes of the hash and of the ID are in lowercase hex, as the patterns of [`base-types.yaml`](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/base-types.yaml) ask, so the readers refuse uppercase digits.
 Every answer of that method is `VALID`, `INVALID` or `SYNCING`, the restriction of step 9 of the method (`forkchoiceUpdatedCall_status`).
 So the decoder reads back the response of every call (`forkchoiceUpdatedResponseOfJson_call`).
 Its response names a build exactly when the update applies a head and the attributes pass their checks (`forkchoiceUpdatedResponse_payloadId`).
 The ID is then that of the head and the attributes.
-Step 5 of [payload building](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-building) asks that each new build has its own ID.
+Step 5 of [payload building](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#payload-building) asks that each new build has its own ID.
 The bytes that the ID hashes determine the head and the attributes, at one fork (`payloadIdInput_inj`).
 From Hegotá they hold the inclusion list right after the fee recipient, ended by a byte 2.
 Each transaction has a byte 1 before each of its bytes and a byte 0 after it, so the list comes back whatever the lengths.

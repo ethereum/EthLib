@@ -12,21 +12,17 @@ The payload that the execution layer builds from payload attributes, on the last
 
 The build gives the block, the state after it, its requests and its value to the fee recipient.
 
-The source states the build in [Payload building][build], at commit `3284ee8` of execution-apis.
+A step comment without a method names a step of [Payload building][build].
 
-A step comment without a method names a step of that section.
+Sources, at commit `1ca0818` of execution-apis:
 
-Step 5, an ID for each new build, is the ID of the forkchoice update.
+- [Payload building][build]: the build
+- [`engine_forkchoiceUpdatedV4`][v4]: the target gas limit
+- [`engine_getPayloadV2`][v2]: the value
 
-Step 6 does not apply here, since EthLib keeps no build between calls.
-
-[`engine_forkchoiceUpdatedV4`][v4] adds the target gas limit.
-
-[`engine_getPayloadV2`][v2] adds the value.
-
-[build]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-building
-[v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#engine_getpayloadv2
-[v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_forkchoiceupdatedv4
+[build]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/paris.md#payload-building
+[v2]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/shanghai.md#engine_getpayloadv2
+[v4]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/engine/amsterdam.md#engine_forkchoiceupdatedv4
 -/
 
 @[expose] public section
@@ -44,7 +40,7 @@ variable {fork : Fork}
 structure BuildChoices where
   /-- The account that receives the fees of the block. -/
   feeRecipient : Address
-  /-- The extra data of the block; the build fails on more than 32 bytes. -/
+  /-- The extra data of the block, which fails the build past 32 bytes. -/
   extraData : ByteArray
   /-- The target gas limit, which counts only before Glamsterdam. -/
   targetGasLimit : UInt64
@@ -138,7 +134,7 @@ structure BuiltPayload (fork : Fork) where
   block : Block fork Transaction
   /-- The state after the block. -/
   state : Execution.State.State
-  /-- The requests of the block, each list with its type byte first; none before Pectra. -/
+  /-- The requests of the block, none before Pectra, each list with its type byte first. -/
   requests : List ByteArray
   /-- The value of the block, in wei.
 
@@ -164,6 +160,10 @@ From Fusaka that covers the block size limit of [EIP-7934][eip-7934].
 def buildPayload (chain : BlockChain) (attributes : PayloadAttributes fork)
     (choices : BuildChoices) (transactions : List Transaction) :
     Except BlockError (BuiltPayload fork) := do
+  -- Step 5, an ID for each new build, is the ID of the forkchoice update.
+  --
+  -- Step 6 does not apply here, since EthLib keeps no build between calls.
+
   -- From Hegotá the build fails, since the rules of that fork are not here yet.
   if .hegota ≤ fork then throw (.aborted (.forkNotYetSpecified fork))
   -- The parent is the last block of the chain.
