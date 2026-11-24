@@ -13,12 +13,6 @@ That works while the group of the message keeps mass on the identity.
 The heavy message spent more than half of the total budget on its digests.
 
 The law of its signed view treats that message instead, and needs no coin.
-
-Under that law, a digest query keeps the mean exactly.
-
-The law consumes one fresh slot.
-
-Every term carries a spare slot while no live message is heavy, and that slot supplies it.
 -/
 
 @[expose] public section
@@ -1081,6 +1075,8 @@ theorem valH_heavy_withPair (s : State) (p : Pair) (u : DigestCall → HashOutpu
   exact sgnM_congr _ excl p.1 (fun e => grpAll_withPair_other s p u excl _ rest hnot e) d
 
 /-- The law of the signed view consumes the spare slot.
+
+Every term carries such a spare slot while no live message is heavy.
 
 Treat a message by the law of its signed view over the one-coin future.
 

@@ -8,19 +8,7 @@ public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Base.V
 
 For the scan loop `R = R0 + i δ`, the cached digests of one unsigned message act as one operator.
 
-This group operator is the mean, over the start `R0`, of the walk payoffs.
-
-A cached hit discloses its view, and a fresh landing discloses nothing to a fresh start.
-
-A fresh landing discloses a fresh uniform view to a cached start.
-
-The group is an average of translations of the base function.
-
-So it commutes with the other operators of the virtual future.
-
 One future coin of probability `w` on a uniform view pays for a digest query at a fresh position.
-
-This needs `(2 - p) / card <= p * w * m`, with `m` the mass on the identity.
 -/
 
 @[expose] public section
@@ -36,7 +24,11 @@ open SphincsSecurity.Base.Domination SphincsSecurity.Security.Domination
 variable {α V : Type} [Fintype α] [DecidableEq α] (σ : Equiv.Perm α) (p : ℝ≥0∞)
     (A : ℕ) (U : Finset V)
 
-/-- The group operator of one message. -/
+/-- The group operator of one message: the mean, over the start `R0`, of the walk payoffs.
+
+A cached hit discloses its view, and a fresh landing discloses nothing to a fresh start.
+
+A fresh landing discloses a fresh uniform view to a cached start. -/
 noncomputable def grp (st : α → St) (ext : α → Multiset V) (F : Multiset V → ℝ≥0∞)
     (d : Multiset V) : ℝ≥0∞ :=
   (Fintype.card α : ℝ≥0∞)⁻¹ *
@@ -231,7 +223,12 @@ theorem idMass_ge [Nonempty α] (hp : p ≤ 1) (st : α → St)
   unfold idMass
   ring
 
-/-! ### The group as a mix of translations -/
+/-! ### The group as a mix of translations
+
+The group is an average of translations of the base function.
+
+So it commutes with the other operators of the virtual future.
+-/
 
 /-- A weighted family of translations applied to a base function. -/
 noncomputable def mixAp (M : List (ℝ≥0∞ × Multiset V)) (F : Multiset V → ℝ≥0∞)

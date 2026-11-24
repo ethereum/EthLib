@@ -14,16 +14,6 @@ The bound adds `2 q / 2^256` for a hash call that names a hidden key value.
 That value is the secret seed in a derivation input or in a key-seed input.
 
 It can also be the PRF key in a randomizer derivation.
-
-The statement keeps `3 q / 2^256`, the slack that its consumers use.
-
-The eager table splits off an independent uniform table at the PRF key's randomizer derivations.
-
-The two runs agree until a query names such an input.
-
-Memoizing and then averaging that table gives the cost game with fresh randomizers.
-
-That table holds one base `R0` per message, and the run reads each base at most once.
 -/
 
 @[expose] public section
@@ -161,7 +151,12 @@ theorem marked_hit_le {S Ω γ : Type} (secret : ProbComp S) (Bad : S → HashIn
         simp
     _ ≤ q * ε := tsum_prob_mul_le _ _
 
-/-! ### Splitting the eager table at the randomizer-derivation inputs of the PRF key -/
+/-! ### Splitting the eager table at the randomizer-derivation inputs of the PRF key
+
+The eager table splits off an independent uniform table at the PRF key's randomizer derivations.
+
+The two runs agree until a query names such an input.
+-/
 
 /-- The short input that derives the randomizer base of a message. -/
 def randIn (prf : HashOutput) (parameter : PublicParameter) (message : Message) : ShortIn :=
@@ -266,7 +261,12 @@ theorem evalDist_table_split {β : Type} (prf : HashOutput) (parameter : PublicP
       hpair.symm.bind_left _
     _ =ᵈ _ := by simp only [bind_assoc, pure_bind, EvalDistEq.refl]
 
-/-! ### Splitting the randomizer table into base randomizers and step halves -/
+/-! ### Splitting the randomizer table into base randomizers and step halves
+
+Memoizing and then averaging the randomizer table gives the cost game with fresh randomizers.
+
+That table holds one base `R0` per message, and the run reads each base at most once.
+-/
 
 /-- The step halves of a randomizer table. -/
 def highsOf (rnd : RTable) : LTable := fun message => upperHash (rnd message)
@@ -461,9 +461,7 @@ The bound holds in the graph-view game with fresh randomizers, for every table o
 
 Start the internalized game from a uniform `SK.seed`.
 
-Then its capped win is at most `B` plus `2 q / 2^256`, for naming `SK.seed` or `SK.prf`.
-
-The proof fixes the step halves and averages the base randomizers. -/
+Then its capped win is at most `B` plus `2 q / 2^256`, for naming `SK.seed` or `SK.prf`. -/
 theorem budgetedWinMaster_le_seedFree (adversary : Adversary) (q : Nat) (B : ℝ≥0∞)
     (hB : ∀ steps, Pr{let x ← seedFreeExperiment
                         (internalize (Memo.memoAdv adversary)) q steps}[Win x] ≤ B) :
@@ -518,6 +516,7 @@ theorem budgetedWinMaster_le_seedFree (adversary : Adversary) (q : Nat) (B : ℝ
       exact per_sampleDet (internalize adversary) q material seed answers table rnd
     _ ≤ B + (q / (2 : ℝ≥0∞) ^ 256 + q / (2 : ℝ≥0∞) ^ 256) := by
       refine add_le_add ?_ ?_
+      -- The proof fixes the step halves and averages the base randomizers.
       · have hsteps : ∀ steps : LTable, Pr{let x ← (do
             let material ← sampleMaterial
             let _seed ← sampleMasterSeed
