@@ -16,16 +16,6 @@ public import EthLib.Execution.Proofs.Transactions.Process
 A system contract tells a call from the system address apart from any other call.
 
 It reads a word of its input, and its storage, slot by slot.
-
-A call that reads returns one word of 32 bytes, or reverts with no output.
-
-The code of such a return, and of such a revert, is the same in each contract.
-
-A system call to a contract with code runs that code with the gas of a system call.
-
-So a run of the code to a stop with no error gives a system call that succeeds.
-
-From Paris, an unchecked call to empty code outside the precompiles only records its target.
 -/
 
 @[expose] public section
@@ -101,7 +91,12 @@ theorem sloadPrice_le (cold : Bool) : (if cold then 2100 else 100) ≤ 2100 := b
 /-- The growth of empty memory to one word costs 3 and adds 32 bytes. -/
 theorem extendMemory_word : extendMemory 0 [(0, 32)] = ⟨3, 32⟩ := by decide
 
-/-! ## The end of a call that reads -/
+/-! ## The end of a call that reads
+
+A call that reads returns one word of 32 bytes, or reverts with no output.
+
+The code of such a return, and of such a revert, is the same in each contract.
+-/
 
 /-- What a stopped frame holds when a call gets the answer `result`, from the state `state`.
 
@@ -223,13 +218,7 @@ theorem isSome_of_getCode {address : Address} (hsize : code.size ≠ 0)
 
 /-- From Paris, a system message succeeds when its first frame stops with no error.
 
-It holds with any lawful gas meter.
-
-The first frame comes from the system address, to the contract, with the block and the data.
-
-It runs the code of the contract, with the fresh meter of a system call and the gas it holds.
-
-It starts from the state of the block, with the read of the contract recorded. -/
+It holds with any lawful gas meter. -/
 private theorem processSystemMessage_of_run (Meter : Type) [GasMeter Meter]
     [LawfulGasMeter Meter] {env : BlockEnvironment fork} {block : State.BlockState}
     {target : Address} {data : ByteArray}
@@ -239,9 +228,15 @@ private theorem processSystemMessage_of_run (Meter : Type) [GasMeter Meter]
     (hdelegate : delegatedAddress code = none)
     (hrun : ∀ (message : Message fork) (state : TransactionState) (substate : Substate)
       (meter : Meter) (held : GasMeter.gasHeld meter ≤ message.gas),
+      -- The first frame comes from the system address, to the contract.
       message.caller = SYSTEM_ADDRESS → message.currentTarget = target →
+      -- It may change the state, and it carries the block and the data.
       message.isStatic = false → message.blockEnv = env → message.data = data →
+      -- It runs the code of the contract.
+      --
+      -- It starts from the state of the block, with the read of the contract recorded.
       message.code = code → state = (TransactionState.ofBlock block).recordAccountRead target →
+      -- It has the fresh meter of a system call, and the gas it holds.
       meter = GasMeter.commit (GasMeter.start SYSTEM_TRANSACTION_GAS (systemReservoir fork)) →
       message.gas = GasMeter.gasHeld meter →
       ∃ stopped, runFrame (step fork) (step_decreases fork) message.gas
@@ -292,42 +287,33 @@ private theorem processSystemMessage_of_run (Meter : Type) [GasMeter Meter]
 
 /-- From Paris, a system call to a contract with code runs that code to its end.
 
-It runs with the gas meter of each fork.
-
-From Glamsterdam, the code passes the opcode check.
-
-The address is not a precompile, and the code is not a delegation indicator.
-
-The code must stop with no error, from every frame that a system call starts.
-
-Such a frame counts its gas with one counter, at every fork.
-
-Its state and output must meet `Q`, with the state that the frame starts from.
-
-Such a frame comes from the system address, to the contract, with the block and the data.
-
-It may change the state, it has the gas of a system call, and the account of the contract exists.
-
-It starts from the state of the block, with the read of the contract recorded.
-
-The system call then succeeds, and its state and output meet `Q`.
-
-In the conclusion, `Q` gets that start state. -/
+It runs with the gas meter of each fork. -/
 theorem systemCall_of_spec {env : BlockEnvironment fork} {block : State.BlockState}
     {target : Address} {data : ByteArray}
     {Q : TransactionState → TransactionState → ByteArray → Prop}
+    -- From Glamsterdam, the code passes the opcode check.
     (hparis : .paris ≤ fork) (supported : .glamsterdam ≤ fork → SupportedCode code = true)
     (hcode : codeAt block target = .ok code) (hsize : code.size ≠ 0)
+    -- The address is not a precompile, and the code is not a delegation indicator.
     (hpre : Precompiles.addedAt target.toU256.toNat = none)
     (hdelegate : delegatedAddress code = none)
+    -- The code must stop with no error, from every frame that a system call starts.
     (hspec : ∀ (message : Message fork) (state : TransactionState) (substate : Substate),
+      -- Such a frame comes from the system address, to the contract, with the block and the data.
       message.caller = SYSTEM_ADDRESS → message.currentTarget = target →
+      -- It may change the state.
       message.isStatic = false → message.blockEnv = env → message.data = data →
+      -- It has the gas of a system call, and the account of the contract exists.
       message.gas = SYSTEM_TRANSACTION_GAS → (state.getAccountOptional target).isSome = true →
+      -- It starts from the state of the block, with the read of the contract recorded.
       state = (TransactionState.ofBlock block).recordAccountRead target →
+      -- Such a frame counts its gas with one counter, at every fork.
       Spec fork (At code message 0 [] .empty message.gas state substate .empty)
+        -- Its state and output must meet `Q`, with the state that the frame starts from.
         fun evm => evm.error = none ∧ Q state evm.state evm.output) :
+    -- The system call then succeeds, and its state and output meet `Q`.
     ∃ out, systemCall env block target data = .ok out ∧ out.error = none ∧
+      -- In the conclusion, `Q` gets that start state.
       Q ((TransactionState.ofBlock block).recordAccountRead target) out.state out.output := by
   have hacc : ∀ state : TransactionState,
       state = (TransactionState.ofBlock block).recordAccountRead target →
@@ -367,43 +353,36 @@ theorem systemCall_of_spec {env : BlockEnvironment fork} {block : State.BlockSta
 
 /-- From Paris, a system call to a contract whose code writes its storage.
 
-It runs with the gas meter of each fork.
-
-The contract has code at an address that is not a precompile, and its code is not a delegation.
-
-From Glamsterdam, the code passes the opcode check.
-
-The storage of the contract in the block meets `P`.
-
-From every frame that a system call starts on a storage that meets `P`, the code stops.
-
-Such a frame counts its gas with one counter, at every fork.
-
-It stops with no error, and returns `output` of that storage.
-
-Its state holds `store` of that storage at the contract, and keeps the rest.
-
-The system call then succeeds and returns `output` of the storage in the block.
-
-Its state holds `store` of the storage in the block at the contract, and keeps the rest. -/
+It runs with the gas meter of each fork. -/
 theorem systemCall_of_writesStorage {env : BlockEnvironment fork} {block : State.BlockState}
     {target : Address} {data : ByteArray} {P : (U256 → U256) → Prop}
     (output : (U256 → U256) → ByteArray) (store : (U256 → U256) → U256 → U256)
+    -- From Glamsterdam, the code passes the opcode check.
     (hparis : .paris ≤ fork) (supported : .glamsterdam ≤ fork → SupportedCode code = true)
+    -- The contract has code at an address that is not a precompile.
+    --
+    -- The code is not a delegation indicator.
     (hcode : codeAt block target = .ok code) (hsize : code.size ≠ 0)
     (hpre : Precompiles.addedAt target.toU256.toNat = none)
     (hdelegate : delegatedAddress code = none)
+    -- The storage of the contract in the block meets `P`.
     (hread : P (storageOf (.ofBlock block) target))
+    -- From every frame that a system call starts on a storage that meets `P`, the code stops.
     (hspec : ∀ (message : Message fork) (state : TransactionState) (substate : Substate),
       message.caller = SYSTEM_ADDRESS → message.currentTarget = target →
       message.isStatic = false → message.blockEnv = env → message.data = data →
       message.gas = SYSTEM_TRANSACTION_GAS → (state.getAccountOptional target).isSome = true →
       P (storageOf state target) →
+      -- Such a frame counts its gas with one counter, at every fork.
       Spec fork (At code message 0 [] .empty message.gas state substate .empty) fun evm =>
+        -- It stops with no error, and returns `output` of that storage.
         evm.error = none ∧ evm.output = output (storageOf state target) ∧
+        -- Its state holds `store` of that storage at the contract, and keeps the rest.
         WritesStorage target (store (storageOf state target)) state evm.state) :
+    -- The system call then succeeds and returns `output` of the storage in the block.
     ∃ out, systemCall env block target data = .ok out ∧ out.error = none ∧
       out.output = output (storageOf (.ofBlock block) target) ∧
+      -- Its state holds `store` of the storage in the block at the contract, and keeps the rest.
       WritesStorage target (store (storageOf (.ofBlock block) target)) (.ofBlock block)
         out.state :=
   systemCall_of_spec (Q := fun S post out => out = output (storageOf S target) ∧

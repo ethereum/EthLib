@@ -8,43 +8,11 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall.WithdrawalRequests.Recor
 
 The contract keeps a queue of withdrawal requests, and a fee that rises with its use.
 
-Its code is the 504 bytes of [EIP-7002][eip-7002-deployment], which its deployment installs.
+Each operation of the EIP is a function here, and a theorem runs the code to show it computes it.
 
-A call from any other address with no input and no value gets the fee.
+The code is the 504 bytes of [EIP-7002][eip-7002-deployment], which its deployment installs.
 
-A call with 56 bytes of input adds a request, when its value pays the fee.
-
-The input is the public key of the validator, then the amount as 8 bytes, big-endian.
-
-The request holds the caller and the input, in three slots, and the call logs them.
-
-A call from the system address takes at most 16 requests from the head of the queue.
-
-It returns their records of 76 bytes each, and updates the excess for a target of 2 per block.
-
-A record ends with the amount as 8 bytes, little-endian, as the EIP encodes it.
-
-The code keeps the amount big-endian in storage, and reverses its bytes when it reads a request.
-
-The pseudocode of the EIP stores it little-endian, and reads it as it is.
-
-So the third slot of a request differs from the pseudocode, but the records are the same.
-
-Each operation of [the EIP][eip-7002-contract] is a function here.
-
-A theorem runs the code and shows that it computes that function.
-
-The fee and addition specifications use a one-counter frame from Shapella up to BPO5.
-
-The dequeue specification uses a conservative one-counter budget from Shapella.
-
-From Glamsterdam, that one-counter frame is a model for the proof, not the meter of EIP-8037.
-
-From Pectra, a system call to the contract succeeds with the gas meter of its fork.
-
-It returns the requests and leaves the storage that the EIP describes.
-
-At every fork from Pectra, the request phase of a block fails if this contract has no code.
+Source: [EIP-7002][eip-7002-contract].
 
 [eip-7002-deployment]: https://eips.ethereum.org/EIPS/eip-7002#deployment
 [eip-7002-contract]: https://eips.ethereum.org/EIPS/eip-7002#withdrawal-request-contract
@@ -143,19 +111,26 @@ def logData (caller : Address) (input : ByteArray) : ByteArray :=
 
 /-- The record of 76 bytes of the request at the index `index`, counted from the start of the queue.
 
-It is the source address, the public key of the validator, then the amount, little-endian.
-
-The address is the last 20 bytes of the first slot, since the code stores the caller as a word.
-
-The pseudocode of the EIP slices bytes 0 to 20 instead.
-
-The key is the 32 bytes of the second slot, then the first 16 bytes of the third.
-
-The amount is the next 8 bytes of the third slot, in reverse order. -/
+It is the source address, the public key of the validator, then the amount, little-endian. -/
 def record (read : U256 → U256) (index : U256) : ByteArray :=
   let slot := 4 + 3 * index
+  -- The address is the last 20 bytes of the first slot, since the code stores the caller as a word.
+  --
+  -- The pseudocode of the EIP slices bytes 0 to 20 instead.
+  --
+  -- The key starts with the 32 bytes of the second slot.
   (wordBytes (read slot)).extract 12 32 ++ wordBytes (read (slot + 1)) ++
+    -- The key ends with the first 16 bytes of the third slot.
     (wordBytes (read (slot + 2))).extract 0 16 ++
+    -- The amount is the next 8 bytes of the third slot, in reverse order.
+    --
+    -- A record ends with the amount as 8 bytes, little-endian, as the EIP encodes it.
+    --
+    -- The code keeps the amount big-endian in storage, and reverses its bytes to read a request.
+    --
+    -- The pseudocode of the EIP stores it little-endian, and reads it as it is.
+    --
+    -- So the third slot of a request differs from the pseudocode, but the records are the same.
     ⟨((wordBytes (read (slot + 2))).extract 16 24).data.reverse⟩
 
 /-! ## The loop of the fee -/
@@ -282,25 +257,21 @@ private theorem user_fee {m : Nat} {Q : Evm fork Nat → Prop} (hfork : .shapell
 
 /-- A call from another address, whose input is not 56 bytes, gets the fee or reverts.
 
-It holds from Shapella up to BPO5, with the one-counter meter.
-
-The loop of the fee stops within `m` steps with no overflow, unless the inhibitor holds.
-
-The frame has at least 100,000 gas, and 100 more for each of these steps.
-
-It assumes fewer than `2^256` bytes of input, which the size word of the EVM can hold.
-
-The frame returns the fee as a word, or reverts with no output, as the code of the EIP does.
-
-Its state reads as the state it starts from. -/
+It holds from Shapella up to BPO5, with the one-counter meter. -/
 theorem spec_getFee {m : Nat} (hfork : .shapella ≤ fork) (_hglam : fork < .glamsterdam)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hsize : message.data.size ≠ 56)
+    -- It assumes fewer than `2^256` bytes of input, which the size word of the EVM can hold.
     (hbound : message.data.size < 2 ^ 256)
+    -- The loop of the fee stops within `m` steps with no overflow, unless the inhibitor holds.
     (hfits : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR →
       FeeFits MIN_WITHDRAWAL_REQUEST_FEE WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION
         (storageOf state message.currentTarget 0).toNat m)
+    -- The frame has at least 100,000 gas, and 100 more for each of these steps.
     (hgas : 100000 + 100 * m ≤ gas) :
     Spec fork (At CODE message 0 [] .empty gas state substate returnData)
+      -- The frame returns the fee as a word or reverts with no output, as the code of the EIP does.
+      --
+      -- Its state reads as the state it starts from.
       (Answer state (getFeeResult (storageOf state message.currentTarget) message.data
         message.value)) := by
   have hs : equal 56#256 (BitVec.ofNat 256 message.data.size) = 0 := by
@@ -504,31 +475,26 @@ private theorem add_tail {S : TransactionState} {ss : Substate} {g : Nat}
 
 It stores the amount big-endian, where the pseudocode of the EIP stores it little-endian.
 
-It holds from Shapella up to BPO5, on a frame that may change the state.
-
-The account of the contract exists.
-
-The loop of the fee stops within `m` steps with no overflow, unless the inhibitor holds.
-
-The frame has at least 200,000 gas, and 100 more for each of these steps.
-
-When the value pays the fee, the frame adds the request of the caller and the input.
-
-It stores the words of the request at the tail of the queue, and logs the caller and the input.
-
-Otherwise it reverts with no output, and its state reads as the state it starts from. -/
+It holds from Shapella up to BPO5, on a frame that may change the state. -/
 theorem spec_add {m : Nat} (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
+    -- The account of the contract exists.
     (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
+    -- The input is the public key of the validator, then the amount as 8 bytes, big-endian.
     (hsize : message.data.size = 56)
+    -- The loop of the fee stops within `m` steps with no overflow, unless the inhibitor holds.
     (hfits : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR →
       FeeFits MIN_WITHDRAWAL_REQUEST_FEE WITHDRAWAL_REQUEST_FEE_UPDATE_FRACTION
         (storageOf state message.currentTarget 0).toNat m)
+    -- The frame has at least 200,000 gas, and 100 more for each of these steps.
     (hgas : 200000 + 100 * m ≤ gas) :
     Spec fork (At CODE message 0 [] .empty gas state substate returnData) fun evm =>
+      -- When the value pays the fee, the frame adds the request of the caller and the input.
       if pays (storageOf state message.currentTarget) message.value then
+        -- It stores the request words at the tail of the queue, and logs the caller and the input.
         Added SLOTS_PER_REQUEST message.currentTarget (requestWords message.caller message.data)
           (logData message.caller message.data) state substate evm
+      -- Otherwise it reverts with no output, and its state reads as the state it starts from.
       else Answer state none evm := by
   have hz : equal 56#256 (BitVec.ofNat 256 message.data.size) ≠ 0 := by
     rw [hsize]
@@ -1185,28 +1151,27 @@ private theorem deq_rest {S : TransactionState} {ss : Substate} {g : Nat} {r : U
 
 /-- A call from the system address takes requests from the queue, as EIP-7002 describes.
 
-It holds from Shapella, on a frame that may change the state.
-
-The account of the contract exists.
-
-The one-counter budget is 300,000 gas before Glamsterdam and 1,500,000 from Glamsterdam.
-
-The counters of the storage meet the bounds under which the code computes as the EIP.
-
-The frame stops with no error, and returns the records of at most 16 requests from the head.
-
-The state holds the storage after the requests are taken, the excess updated and the count reset.
-
-It keeps the storage of every other account, the accounts and the codes. -/
+It holds from Shapella, on a frame that may change the state. -/
 theorem spec_dequeue (hfork : .shapella ≤ fork)
     (hcaller : message.caller = SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
+    -- The account of the contract exists.
     (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
+    -- The counters of the storage meet the bounds under which the code computes as the EIP.
     (hbounded : Bounded (storageOf state message.currentTarget))
+    -- The conservative one-counter budget: 300,000 gas before Glamsterdam, 1,500,000 from it.
     (hgas : 300000 * storageGasScale fork ≤ gas) :
+    -- From Glamsterdam, this one-counter frame is a model for the proof, not the meter of EIP-8037.
     Spec fork (At CODE message 0 [] .empty gas state substate returnData) fun evm =>
+      -- The frame stops with no error.
       evm.error = none ∧
+      -- It returns the records, of 76 bytes each, of at most 16 requests from the head.
       evm.output = dequeued MAX_WITHDRAWAL_REQUESTS_PER_BLOCK record
         (storageOf state message.currentTarget) ∧
+      -- The state holds the storage after the requests are taken and the count reset.
+      --
+      -- The excess is updated for a target of 2 requests per block.
+      --
+      -- It keeps the storage of every other account, the accounts and the codes.
       WritesStorage message.currentTarget
         (afterDequeue MAX_WITHDRAWAL_REQUESTS_PER_BLOCK TARGET_WITHDRAWAL_REQUESTS_PER_BLOCK
           (storageOf state message.currentTarget))
@@ -1316,23 +1281,21 @@ theorem delegatedAddress_CODE : delegatedAddress CODE = none := by
 
 /-- From Pectra, the system call of a block to the contract takes its requests.
 
-The account at the withdrawal request address must hold the code of EIP-7002.
-
-The counters of its storage meet the bounds under which the code computes as the EIP.
-
-The call succeeds, whatever its data, and returns the records of at most 16 requests.
-
-The storage of the contract is then the storage after the requests are taken.
-
-The call keeps the storage of every other account, the accounts and the codes. -/
+It runs with the gas meter of its fork. -/
 theorem systemCall_dequeue {env : BlockEnvironment fork} {block : State.BlockState}
     {data : ByteArray} (hfork : .pectra ≤ fork)
+    -- The account at the withdrawal request address must hold the code of EIP-7002.
     (hcode : codeAt block WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS = .ok CODE)
+    -- The counters of its storage meet the bounds under which the code computes as the EIP.
     (hbounded : Bounded (storageOf (.ofBlock block) WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS)) :
+    -- The call succeeds, whatever its data, and returns the records of at most 16 requests.
     ∃ out, systemCall env block WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS data = .ok out ∧
       out.error = none ∧
       out.output = dequeued MAX_WITHDRAWAL_REQUESTS_PER_BLOCK record
         (storageOf (.ofBlock block) WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS) ∧
+      -- The storage of the contract is then the storage after the requests are taken.
+      --
+      -- The call keeps the storage of every other account, the accounts and the codes.
       WritesStorage WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS
         (afterDequeue MAX_WITHDRAWAL_REQUESTS_PER_BLOCK TARGET_WITHDRAWAL_REQUESTS_PER_BLOCK
           (storageOf (.ofBlock block) WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS))

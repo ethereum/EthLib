@@ -8,37 +8,11 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall.RequestQueue
 
 The contract keeps a queue of consolidation requests, and a fee that rises with its use.
 
-Its code is the 414 bytes of [EIP-7251][eip-7251-deployment], which its deployment installs.
+Each operation of the EIP is a function here, and a theorem runs the code to show it computes it.
 
-A call from any other address with no input and no value gets the fee.
+The code is the 414 bytes of [EIP-7251][eip-7251-deployment], which its deployment installs.
 
-A call with 96 bytes of input adds a request, when its value pays the fee.
-
-The input is the public key of the source validator, then that of the target validator.
-
-The request holds the caller and the input, in four slots, and the call logs them.
-
-A call from the system address takes at most 2 requests from the head of the queue.
-
-It returns their records of 116 bytes each, and updates the excess for a target of 1 per block.
-
-Each operation of [the EIP][eip-7251-contract] is a function here.
-
-A theorem runs the code and shows that it computes that function.
-
-The fee and addition specifications use a one-counter frame from Shapella up to BPO5.
-
-The dequeue specification uses a conservative one-counter budget from Shapella.
-
-From Glamsterdam, that one-counter frame is a model for the proof, not the meter of EIP-8037.
-
-From Pectra, a system call to the contract succeeds with the gas meter of its fork.
-
-It returns the requests and leaves the storage that the EIP describes.
-
-At every fork from Pectra, the request phase of a block fails if this contract has no code.
-
-This holds once the withdrawal request call before it succeeds.
+Source: [EIP-7251][eip-7251-contract].
 
 [eip-7251-deployment]: https://eips.ethereum.org/EIPS/eip-7251#deployment
 [eip-7251-contract]: https://eips.ethereum.org/EIPS/eip-7251#consolidation-request-contract
@@ -253,25 +227,21 @@ private theorem user_fee {m : Nat} {Q : Evm fork Nat → Prop} (hfork : .shapell
 
 /-- A call from another address, whose input is not 96 bytes, gets the fee or reverts.
 
-It holds from Shapella up to BPO5, with the one-counter meter.
-
-The loop of the fee stops within `m` steps with no overflow, unless the inhibitor holds.
-
-The frame has at least 100,000 gas, and 100 more for each of these steps.
-
-It assumes fewer than `2^256` bytes of input, which the size word of the EVM can hold.
-
-The frame returns the fee as a word, or reverts with no output, as the code of the EIP does.
-
-Its state reads as the state it starts from. -/
+It holds from Shapella up to BPO5, with the one-counter meter. -/
 theorem spec_getFee {m : Nat} (hfork : .shapella ≤ fork) (_hglam : fork < .glamsterdam)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hsize : message.data.size ≠ 96)
+    -- It assumes fewer than `2^256` bytes of input, which the size word of the EVM can hold.
     (hbound : message.data.size < 2 ^ 256)
+    -- The loop of the fee stops within `m` steps with no overflow, unless the inhibitor holds.
     (hfits : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR →
       FeeFits MIN_CONSOLIDATION_REQUEST_FEE CONSOLIDATION_REQUEST_FEE_UPDATE_FRACTION
         (storageOf state message.currentTarget 0).toNat m)
+    -- The frame has at least 100,000 gas, and 100 more for each of these steps.
     (hgas : 100000 + 100 * m ≤ gas) :
     Spec fork (At CODE message 0 [] .empty gas state substate returnData)
+      -- The frame returns the fee as a word or reverts with no output, as the code of the EIP does.
+      --
+      -- Its state reads as the state it starts from.
       (Answer state (getFeeResult (storageOf state message.currentTarget) message.data
         message.value)) := by
   have hs : equal 96#256 (BitVec.ofNat 256 message.data.size) = 0 := by
@@ -483,31 +453,26 @@ private theorem add_tail {S : TransactionState} {ss : Substate} {g : Nat}
 
 /-- A call from another address with 96 bytes of input adds a request, as EIP-7251 describes.
 
-It holds from Shapella up to BPO5, on a frame that may change the state.
-
-The account of the contract exists.
-
-The loop of the fee stops within `m` steps with no overflow, unless the inhibitor holds.
-
-The frame has at least 200,000 gas, and 100 more for each of these steps.
-
-When the value pays the fee, the frame adds the request of the caller and the input.
-
-It stores the words of the request at the tail of the queue, and logs the caller and the input.
-
-Otherwise it reverts with no output, and its state reads as the state it starts from. -/
+It holds from Shapella up to BPO5, on a frame that may change the state. -/
 theorem spec_add {m : Nat} (hfork : .shapella ≤ fork) (hglam : fork < .glamsterdam)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
+    -- The account of the contract exists.
     (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
+    -- The input is the public key of the source validator, then that of the target validator.
     (hsize : message.data.size = 96)
+    -- The loop of the fee stops within `m` steps with no overflow, unless the inhibitor holds.
     (hfits : storageOf state message.currentTarget 0 ≠ EXCESS_INHIBITOR →
       FeeFits MIN_CONSOLIDATION_REQUEST_FEE CONSOLIDATION_REQUEST_FEE_UPDATE_FRACTION
         (storageOf state message.currentTarget 0).toNat m)
+    -- The frame has at least 200,000 gas, and 100 more for each of these steps.
     (hgas : 200000 + 100 * m ≤ gas) :
     Spec fork (At CODE message 0 [] .empty gas state substate returnData) fun evm =>
+      -- When the value pays the fee, the frame adds the request of the caller and the input.
       if pays (storageOf state message.currentTarget) message.value then
+        -- It stores the request words at the tail of the queue, and logs the caller and the input.
         Added SLOTS_PER_REQUEST message.currentTarget (requestWords message.caller message.data)
           (logData message.caller message.data) state substate evm
+      -- Otherwise it reverts with no output, and its state reads as the state it starts from.
       else Answer state none evm := by
   have hz : equal 96#256 (BitVec.ofNat 256 message.data.size) ≠ 0 := by
     rw [hsize]
@@ -1122,28 +1087,27 @@ private theorem deq_rest {S : TransactionState} {ss : Substate} {g : Nat} {r : U
 
 /-- A call from the system address takes requests from the queue, as EIP-7251 describes.
 
-It holds from Shapella, on a frame that may change the state.
-
-The account of the contract exists.
-
-The one-counter budget is 200,000 gas before Glamsterdam and 1,000,000 from Glamsterdam.
-
-The counters of the storage meet the bounds under which the code computes as the EIP.
-
-The frame stops with no error, and returns the records of at most 2 requests from the head.
-
-The state holds the storage after the requests are taken, the excess updated and the count reset.
-
-It keeps the storage of every other account, the accounts and the codes. -/
+It holds from Shapella, on a frame that may change the state. -/
 theorem spec_dequeue (hfork : .shapella ≤ fork)
     (hcaller : message.caller = SYSTEM_ADDRESS) (hstatic : message.isStatic = false)
+    -- The account of the contract exists.
     (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
+    -- The counters of the storage meet the bounds under which the code computes as the EIP.
     (hbounded : Bounded (storageOf state message.currentTarget))
+    -- The conservative one-counter budget: 200,000 gas before Glamsterdam, 1,000,000 from it.
     (hgas : 200000 * storageGasScale fork ≤ gas) :
+    -- From Glamsterdam, this one-counter frame is a model for the proof, not the meter of EIP-8037.
     Spec fork (At CODE message 0 [] .empty gas state substate returnData) fun evm =>
+      -- The frame stops with no error.
       evm.error = none ∧
+      -- It returns the records, of 116 bytes each, of at most 2 requests from the head.
       evm.output = dequeued MAX_CONSOLIDATION_REQUESTS_PER_BLOCK record
         (storageOf state message.currentTarget) ∧
+      -- The state holds the storage after the requests are taken and the count reset.
+      --
+      -- The excess is updated for a target of 1 request per block.
+      --
+      -- It keeps the storage of every other account, the accounts and the codes.
       WritesStorage message.currentTarget
         (afterDequeue MAX_CONSOLIDATION_REQUESTS_PER_BLOCK TARGET_CONSOLIDATION_REQUESTS_PER_BLOCK
           (storageOf state message.currentTarget))
@@ -1253,23 +1217,21 @@ theorem delegatedAddress_CODE : delegatedAddress CODE = none := by
 
 /-- From Pectra, the system call of a block to the contract takes its requests.
 
-The account at the consolidation request address must hold the code of EIP-7251.
-
-The counters of its storage meet the bounds under which the code computes as the EIP.
-
-The call succeeds, whatever its data, and returns the records of at most 2 requests.
-
-The storage of the contract is then the storage after the requests are taken.
-
-The call keeps the storage of every other account, the accounts and the codes. -/
+It runs with the gas meter of its fork. -/
 theorem systemCall_dequeue {env : BlockEnvironment fork} {block : State.BlockState}
     {data : ByteArray} (hfork : .pectra ≤ fork)
+    -- The account at the consolidation request address must hold the code of EIP-7251.
     (hcode : codeAt block CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS = .ok CODE)
+    -- The counters of its storage meet the bounds under which the code computes as the EIP.
     (hbounded : Bounded (storageOf (.ofBlock block) CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS)) :
+    -- The call succeeds, whatever its data, and returns the records of at most 2 requests.
     ∃ out, systemCall env block CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS data = .ok out ∧
       out.error = none ∧
       out.output = dequeued MAX_CONSOLIDATION_REQUESTS_PER_BLOCK record
         (storageOf (.ofBlock block) CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS) ∧
+      -- The storage of the contract is then the storage after the requests are taken.
+      --
+      -- The call keeps the storage of every other account, the accounts and the codes.
       WritesStorage CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS
         (afterDequeue MAX_CONSOLIDATION_REQUESTS_PER_BLOCK TARGET_CONSOLIDATION_REQUESTS_PER_BLOCK
           (storageOf (.ofBlock block) CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS))

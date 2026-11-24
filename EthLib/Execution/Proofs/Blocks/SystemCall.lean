@@ -8,35 +8,9 @@ public import EthLib.Execution.Blocks.Transition
 /-!
 # Proofs: the system calls of a block
 
-A checked system call succeeds exactly when its contract has code and the call stops with no error.
-
-It fails as an empty contract exactly when the contract has no code.
-
-It fails with the error of its call exactly when the contract has code and the call stops with it.
-
-The requests of a block come in the order of their types, withdrawals before consolidations.
-
-From Glamsterdam, the builder deposits and exits follow, by EIP-8282.
-
-Each list holds its type byte and at least one byte of data.
-
-Before Pectra a block reads no request.
+The gas and accesses of a system call, when a checked call succeeds or fails, and the requests.
 
 The calls at the start of a block, and the requests of a block, are stated call by call.
-
-A system call has 30,000,000 gas at every fork.
-
-Up to BPO5 it has no reservoir and runs with one counter of the gas left.
-
-It also starts with no access.
-
-From Glamsterdam it has a reservoir of 1,566,720 state gas, and runs with the meter of EIP-8037.
-
-It also starts with the accesses of a transaction with no access list.
-
-Joining a call that only read its target keeps the block state.
-
-It adds that address to the block access list builder.
 -/
 
 @[expose] public section
@@ -230,26 +204,26 @@ theorem BodyState.join_recordAccountRead (body : BodyState) (target : Address) :
 
 /-! ## The calls at the start of a block -/
 
-/-- The system calls at the start of a block pass through one body between the two calls.
-
-From Dencun, the beacon roots contract runs on the body, and its call joins it to give that body.
-
-Before Dencun, that body is the body at the start.
-
-From Pectra, the history storage contract runs on that body, and its call joins it to give the end.
-
-Before Pectra, the body at the end is that body. -/
+/-- The system calls at the start of a block pass through one body between the two calls. -/
 theorem startSystemCalls_eq_ok {parentHash : Hash32} {body body' : BodyState}
     (h : startSystemCalls env parentHash body = .ok body') :
     ∃ mid : BodyState,
+      -- From Dencun, the beacon roots contract runs on the body.
+      --
+      -- Its call joins the body to give the body between.
       (∀ hDencun : .dencun ≤ fork, ∃ out,
         systemCall env body.block BEACON_ROOTS_ADDRESS
           ⟨(env.parentBeaconBlockRoot hDencun).toArray⟩ = .ok out ∧
         body.join out.state = .ok mid) ∧
+      -- Before Dencun, the body between is the body at the start.
       (¬.dencun ≤ fork → mid = body) ∧
+      -- From Pectra, the history storage contract runs on the body between.
+      --
+      -- Its call joins that body to give the body at the end.
       (.pectra ≤ fork → ∃ out,
         systemCall env mid.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩ = .ok out ∧
         mid.join out.state = .ok body') ∧
+      -- Before Pectra, the body at the end is the body between.
       (¬.pectra ≤ fork → body' = mid) := by
   -- The second call, from the body after the first.
   have second : ∀ mid : BodyState,
@@ -361,17 +335,16 @@ theorem readRequests_of_pectra {body : BodyState} (h : .pectra ≤ fork) :
     readRequests env body = (requestContracts fork).foldlM (readRequest env) (body, []) := by
   simp only [readRequests, h, ↓reduceIte]
 
-/-- The requests of a block have data, and come in the order of their types.
+/-- The requests of a block have data, and come in the order of their types, each at most once.
 
-Withdrawals, of type 1, come before consolidations, of type 2.
-
-From Glamsterdam, builder deposits, of type 3, then builder exits, of type 4, follow.
-
-Each type comes at most once, and before Glamsterdam no builder type comes.
--/
+Withdrawals, of type 1, come before consolidations, of type 2. -/
 theorem readRequests_requests {body : BodyState} {result : BodyState × List ByteArray}
     (h : readRequests env body = .ok result) :
+    -- Each list holds its type byte and at least one byte of data.
     (∀ r ∈ result.2, 1 < r.size) ∧
+      -- From Glamsterdam, by EIP-8282, builder deposits (type 3) then exits (type 4) follow.
+      --
+      -- Before Glamsterdam no builder type comes.
       (result.2.map (·.data[0]?)).Sublist (((requestContracts fork).map Prod.fst).map some) := by
   by_cases hPectra : .pectra ≤ fork
   · rw [readRequests_of_pectra hPectra] at h
@@ -397,20 +370,17 @@ theorem requestContracts_types_of_glamsterdam (h : .glamsterdam ≤ fork) :
   simp only [requestContracts, h, ↓reduceIte]
   rfl
 
-/-- The requests of a block, after its transactions and withdrawals.
-
-Before Pectra, the body stays as it was and there is no request.
-
-From Pectra, the deposits come from the logs, and each request contract is called in turn.
-
-The deposits come first, then the requests of the contracts. -/
+/-- The requests of a block, after its transactions and withdrawals. -/
 theorem blockRequests_eq_ok {depositContract : Address} {body : BodyState} {logs : List Log}
     {result : BodyState × List ByteArray}
     (h : blockRequests depositContract env body logs = .ok result) :
+    -- Before Pectra, the body stays as it was and there is no request.
     (¬.pectra ≤ fork → result = (body, [])) ∧
+      -- From Pectra, the deposits come from the logs, and each request contract is called in turn.
       (.pectra ≤ fork → ∃ deposits read,
         depositRequests depositContract logs = .ok deposits ∧
         (requestContracts fork).foldlM (readRequest env) (body, []) = .ok read ∧
+        -- The deposits come first, then the requests of the contracts.
         result = (read.1, requestList DEPOSIT_REQUEST_TYPE deposits ++ read.2)) := by
   unfold blockRequests at h
   refine ⟨fun hPectra => ?_, fun hPectra => ?_⟩
