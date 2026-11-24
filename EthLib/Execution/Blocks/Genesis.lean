@@ -11,36 +11,7 @@ The genesis block of a chain: block 0, with no parent and an empty body.
 
 Its header commits to the state that the chain starts with, its allocation.
 
-The chain chooses the beneficiary, the difficulty, the gas limit and the time.
-
-It also chooses the extra data, the mix hash and the nonce.
-
-From London it also chooses the base fee, and from Dencun the excess blob gas.
-
-From Glamsterdam it also chooses the slot number.
-
-Every other field holds the value of a block with no parent and an empty body:
-
-- the parent hash, the Bloom filter, the number and the gas used are zero
-- the ommers hash and the roots of the transactions and the receipts are those of empty lists
-- from Shapella, the withdrawals root is that of an empty list
-- from Dencun, the blob gas used and the parent beacon block root are zero
-- from Pectra, the requests hash is that of no request
-- from Glamsterdam, the block access list hash is that of an empty list
-
 Appendix I of the [Yellow Paper][yp], Berlin version, gives the genesis block of its first chain.
-
-There the parent hash, the beneficiary, the Bloom filter, the number and the gas used are zero.
-
-The ommers hash is that of an empty list, and the body is empty.
-
-Its other values, such as the gas limit and the nonce, are those of that chain only.
-
-The appendix sets the roots of the transactions and the receipts to 0.
-
-Here they are the roots of empty tries, as its section 4.3.2 gives for an empty body.
-
-The mainnet genesis block holds these roots too.
 
 The EIPs add the fields of later forks:
 
@@ -96,10 +67,29 @@ structure GenesisParams where
   /-- The slot number, from Glamsterdam. -/
   slotNumber : UInt64 := 0
 
-/-- The genesis header at `fork` whose state has the root `root`. -/
+/-- The genesis header at `fork` whose state has the root `root`.
+
+The chain chooses the beneficiary, the difficulty, the gas limit and the time.
+
+It also chooses the extra data, the mix hash and the nonce.
+
+From London it also chooses the base fee, and from Dencun the excess blob gas.
+
+From Glamsterdam it also chooses the slot number.
+
+Every other field holds the value of a block with no parent and an empty body:
+
+- the parent hash, the Bloom filter, the number and the gas used are zero
+- the ommers hash and the roots of the transactions and the receipts are those of empty lists
+- from Shapella, the withdrawals root is that of an empty list
+- from Dencun, the blob gas used and the parent beacon block root are zero
+- from Pectra, the requests hash is that of no request
+- from Glamsterdam, the block access list hash is that of an empty list -/
 def genesisHeader (fork : Fork) (params : GenesisParams) (root : Hash32) :
     Except BlockError (Header fork) := do
   -- `TRIE(∅)` of an empty body, as §4.3.2 gives, where Appendix I writes 0.
+  --
+  -- The mainnet genesis block holds these two roots too.
   --
   -- The withdrawals root is `TRIE(∅)` too, by EIP-4895.
   let emptyRoot ← (transactionsRoot []).mapError .trie
@@ -119,6 +109,8 @@ def genesisHeader (fork : Fork) (params : GenesisParams) (root : Hash32) :
     -- `H_b = 0`, `H_i = 0` and `H_g = 0`.
     --
     -- The chain chooses `H_d`, `H_l`, `H_s`, `H_x`, `H_m` and `H_n`.
+    --
+    -- The values of Appendix I, such as the gas limit and the nonce, are those of its chain only.
     bloom := 0
     difficulty := params.difficulty
     number := 0

@@ -28,17 +28,14 @@ Before Paris, the difficulty and the proof of work also count.
 
 Section 4.3.4 of the Berlin version states them: [`Paper.tex`][yp-berlin].
 
-[EIP-1559][eip-1559] adds the base fee at London, and sets it at the first London block.
+The EIPs that change the checks:
 
-[EIP-3675][eip-3675] fixes the difficulty, the nonce and the ommers hash from Paris.
-
-[EIP-4844][eip-4844] adds the excess blob gas at Dencun.
-
-[EIP-7934][eip-7934] bounds the RLP size of a block from Fusaka.
+- [EIP-1559][eip-1559] adds the base fee at London, and sets it at the first London block
+- [EIP-3675][eip-3675] fixes the difficulty, the nonce and the ommers hash from Paris
+- [EIP-4844][eip-4844] adds the excess blob gas at Dencun
+- [EIP-7934][eip-7934] bounds the RLP size of a block from Fusaka
 
 The step comments write the relations of `V(H)` in ASCII.
-
-The checks run in a fixed order, and the first that fails gives the error of the header.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [yp-berlin]: https://github.com/ethereum/yellowpaper/blob/beacfbd29ccc04dfd790f2282d4c4b1c0afc9b5a/Paper.tex
@@ -339,12 +336,9 @@ instance instReprOmmerError : Repr OmmerError := ⟨instReprOmmerError.reprPrec�
 
 The code ignores the arguments of the constructor, which the message carries.
 
-The codes start at 201, above the codes of RLP and receipt errors, so that none of them meet.
-
-Proof-of-work errors hold the codes 221 to 223, and ommer errors the codes 231 to 243.
-
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def BlockError.code : BlockError → UInt32
+  -- The codes start at 201, above the codes of RLP and receipt errors, so that none of them meet.
   | .genesisNumber => 201
   | .wrongExcessBlobGas _ _ => 202
   | .gasUsedAboveLimit .. => 203
@@ -365,6 +359,7 @@ def BlockError.code : BlockError → UInt32
   | .systemContractEmpty _ => 218
   | .systemCallFailed .. => 219
   | .aborted _ => 220
+  -- Proof-of-work errors hold the codes 221 to 223.
   | .invalidTransaction .. => 224
   | .wrongFork .. => 225
   | .noParent => 226
@@ -372,6 +367,7 @@ def BlockError.code : BlockError → UInt32
   | .wrongDaoExtraData .. => 228
   | .deposit _ => 229
   | .trie _ => 230
+  -- Ommer errors hold the codes 231 to 243.
   | .wrongGasUsed .. => 244
   | .wrongTransactionsRoot .. => 245
   | .wrongStateRoot .. => 246
@@ -564,6 +560,7 @@ def checkHeader {parentFork fork : Fork} (hFork : parentFork ≤ fork)
     (parent : Header parentFork) (header : Header fork)
     (schedule : Since .dencun fork BlobSchedule := BlobBaseFee.blobSchedule fork) :
     Except BlockError Unit :=
+  -- The header checks run in a fixed order, and the first that fails gives the error of the header.
   firstFailure (headerChecks hFork parent header schedule)
 
 /-- Check a header at `fork` against its parent at `parentFork`, at every fork.

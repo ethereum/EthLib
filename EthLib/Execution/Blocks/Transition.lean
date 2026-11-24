@@ -11,31 +11,9 @@ public import EthLib.Execution.Blocks.SystemCall
 
 The state transition of a block: from the chain before it, the state after it, or why it fails.
 
-The block is first checked alone and against its parent.
-
-Then its body runs on the state after the parent.
-
-From Glamsterdam, the body also builds its block access list, which must fit the gas limit.
-
-The body records its calls for that list at every fork, and only from Glamsterdam builds it.
-
-The system calls at the start run at position 0 of that list, transaction `i` at `i + 1`.
-
-The withdrawals and the requests run at position `n + 1`, after the last of `n` transactions.
-
-From Glamsterdam, the gas used of the block is the larger of its execution and state gas.
-
-The receipts still add up the gas that each transaction used after its refund.
-
-Last, the block must agree with what the body gave.
-
 Each failure has its own error.
 
 An error that aborts the run, such as missing code, makes the block neither valid nor invalid.
-
-Before Byzantium, the receipt of a transaction holds the state root after it.
-
-From Dencun, the blob schedule of a block is the chain's own, as EIP-7892 lets a chain set it.
 
 Sections 4.4.4 and 12 of the Yellow Paper, Shanghai version, define it: [`Paper.tex`][yp].
 
@@ -44,10 +22,6 @@ Section 11 of the Berlin version defines it before Paris: [`Paper.tex`][yp-berli
 No EIP or version of the Yellow Paper orders all the steps of a block together.
 
 The step comments cite an EIP or the paper for each step that one writes out.
-
-The body runs the system calls, the transactions, the withdrawals and the requests, in that order.
-
-Before Paris, the rewards of the beneficiary and the ommers come after the transactions.
 
 The EIPs that change it:
 
@@ -138,6 +112,7 @@ def blockEnvironment {fork : Fork} (config : ChainConfig) (hashes : List Hash32)
   excessBlobGas := header.excessBlobGas
   parentBeaconBlockRoot := header.parentBeaconBlockRoot
   slotNumber := header.slotNumber
+  -- From Dencun, the blob schedule of a block is the chain's own, as EIP-7892 lets a chain set it.
   blobSchedule :=
     Fees.BlobBaseFee.chainBlobSchedule config fork header.number header.timestamp.toNat
   blobGasPrice
@@ -193,28 +168,23 @@ structure BodyOverrides where
 
 /-- Run the transaction `tx`, the `index`-th of its block, after the transactions before it.
 
-It fails when the transaction cannot enter the block.
-
-It runs at position `index + 1` of the block access list.
-
-The block counts the gas of the transaction by its counts of gas.
-
-Its receipt adds up the gas used after the refunds, as EIP-8037 keeps it.
-
-Before Byzantium, its receipt holds the state root after it.
-
-It also records the result of the transaction. -/
+It fails when the transaction cannot enter the block. -/
 def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
     (before : BodyOutput fork) (tx : Transaction) (overrides : BodyOverrides := {}) :
     Except BlockError (BodyOutput fork) := do
+  -- The transaction must be able to enter the block.
   let included ← (checkInclusion env.chainId env before.gas
     (.ofBlock before.block) tx (overrides.senders index) overrides.lifted).mapError
     (.invalidTransaction index)
   let out ← (processTransaction env before.block included tx overrides.precompiles
     overrides.lifted).mapError .aborted
+  -- The transaction runs at position `index + 1` of the block access list.
   let body ← ((before.body.beginIndex (index + 1)).join out.state).mapError .state
+  -- The block counts the gas of the transaction by its counts of gas.
   let gas := before.gas.add out.blockGas
+  -- The receipts add up the gas used after the refunds, as EIP-8037 keeps it.
   let cumulativeGasUsed := before.cumulativeGasUsed + out.gasUsed
+  -- Before Byzantium, the receipt holds the state root after the transaction.
   let outcome : Outcome fork ← if h : .byzantium ≤ fork then pure (.status h out.error.isNone)
     else .postState (Nat.lt_of_not_le h) <$>
       (stateRoot keccak256 body.block.applyChanges).mapError .trie
@@ -222,6 +192,7 @@ def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
            receipts :=
              before.receipts ++ [(tx.type, makeReceipt outcome cumulativeGasUsed out.logs.toList)]
            logs := before.logs ++ out.logs.toList
+           -- The result of the transaction is also recorded.
            results := before.results ++
              [⟨out.messageOutput, out.gasBeforeRefund, out.error, out.simulatedLogs.toList⟩] }
 
@@ -246,16 +217,18 @@ The transfer runs at the first block of the DAO Fork on the chain `config`, and 
 
 [EIP-779][eip-779] activates that fork at block 1,920,000 of Mainnet.
 
-The gate at Paris is a choice of this specification, so that no later block can run the transfer.
-
-The extra data rule of the fork has the same gate.
-
 [eip-779]: https://eips.ethereum.org/EIPS/eip-779#specification -/
 def daoTransfer (config : ChainConfig) (fork : Fork) (number : Nat) (start : BlockState) :
     Except BlockError BlockState :=
   -- EIP-779: at the beginning of block 1920000, all ether of the accounts in `L` moves.
   --
   -- Here it moves at the chain's DAO Fork block, before Paris, as the body starts.
+  --
+  -- The gate at Paris is a choice of this specification.
+  --
+  -- That gate keeps every later block from running the transfer.
+  --
+  -- The extra data rule of the fork has the same gate.
   if fork < .paris ∧ daoForkBlock config = some number then onBlock start (applyDaoFork fork)
   else pure start
 
@@ -306,26 +279,23 @@ def accessListHashOf (fork : Fork) (body : BodyState) (gasLimit : Nat) (itemCap 
 
 /-- Run the body of the block `block` on the block state `start`, at `fork`.
 
-Before Paris, at the first block of the DAO Fork on the chain `config`, the DAO ether moves first.
-
-The system calls at the start run at position 0 of the block access list.
-
-The withdrawals and the requests run at position `n + 1`, after the last of `n` transactions.
-
-From Glamsterdam, the body then builds its block access list.
-
-The list must fit the gas limit, unless a simulation lifts that cap.
+The body runs the system calls, the transactions, the withdrawals and the requests, in that order.
 
 A simulation runs the transactions with its overrides. -/
 def applyBody {fork : Fork} (config : ChainConfig) (env : BlockEnvironment fork)
     (block : Block fork Transaction) (start : BlockState) (overrides : BodyOverrides := {}) :
     Except BlockError (BlockOutput fork) := do
+  -- Before Paris, at the first block of the DAO Fork of the chain, the DAO ether moves first.
   let state ← daoTransfer config fork block.header.number start
   -- EIP-4788, from Dencun, then EIP-2935, from Pectra: a system call each.
   --
   -- Each runs at the start of the block, before any transaction.
+  --
+  -- The system calls at the start run at position 0 of the block access list.
   let body ← (startSystemCalls env block.header.parentHash (.init state)).mapError .aborted
   -- Each transaction in order, with its index `i` in the block.
+  --
+  -- Transaction `i` runs at position `i + 1` of the block access list.
   let output ← applyTransactions env body block.transactions overrides
   -- EIP-7928: the operations after the `N` transactions use index `N + 1`.
   --
@@ -341,6 +311,8 @@ def applyBody {fork : Fork} (config : ChainConfig) (env : BlockEnvironment fork)
   -- The requests of EIP-7685, from Pectra; the builder requests join at Glamsterdam.
   let (body, requests) ← blockRequests config.depositContractAddress env body output.logs
   -- Before Paris, the Berlin paper's stage that applies the rewards, after the transactions.
+  --
+  -- The beneficiary and the ommers get their rewards here.
   let ommers := block.ommers.map fun ommer => (ommer.2.coinbase, ommer.2.number)
   let state ← onBlock body.block fun tx =>
     payRewards fork tx block.header.coinbase block.header.number ommers
@@ -425,6 +397,8 @@ def outputChecks {fork : Fork} (header : Header fork) (output : BlockOutput fork
   -- EIP-8037, from Glamsterdam: the gas used is the larger of the execution gas and the state gas.
   --
   -- Before, it is the gas that the transactions used.
+  --
+  -- The receipts still add up the gas that each transaction used after its refund.
   let gasUsed := output.gas.gasUsed
   -- The gas used equals that of the header.
   [(decide (gasUsed = header.gasUsed), .wrongGasUsed header.gasUsed gasUsed),
@@ -473,20 +447,19 @@ def BodyResult.post {fork : Fork} (result : BodyResult fork) : State :=
 
 /-- Run the body of `block` on the state of the chain `chain`, and compute the roots it gives.
 
-The body runs in the environment of its header and of the recent hashes of the chain.
-
 The body reads none of the header fields that it gives: the roots, the gas counts, the logs Bloom.
 
 Nor does it read the requests hash and the block access list hash.
 
-So a builder can run it before it fills those fields.
-
-A simulation runs it with its overrides and its base fee per blob gas. -/
+So a builder can run it before it fills those fields. -/
 def runBody (chain : BlockChain) {fork : Fork} (block : Block fork Transaction)
     (overrides : BodyOverrides := {}) (blobGasPrice : Option Nat := none) :
     Except BlockError (BodyResult fork) := do
+  -- The body runs in the environment of its header and of the recent hashes of the chain.
   let hashes ← recentHashes chain.recent
+  -- A simulation sets its base fee per blob gas here.
   let env := blockEnvironment chain.config hashes block.header blobGasPrice
+  -- A simulation runs the body with its overrides.
   let output ← applyBody chain.config env block ⟨chain.state, ∅, ∅, ∅, ∅⟩ overrides
   let roots ← outputRoots block.transactions block.withdrawals output output.block.applyChanges
   return ⟨output, roots⟩
@@ -521,10 +494,14 @@ def stateTransition (chain : BlockChain) {fork : Fork} (block : Block fork Trans
   -- The fork of the block is the one that the chain activates at it.
   let active := chain.config.activeFork block.header.number block.header.timestamp.toNat
   unless active = some fork do throw (.wrongFork active fork)
+  -- The block is first checked alone and against its parent.
+  --
   -- The checks of the block: the size, the header and the ommers.
   checkBlock chain.config checkSeal chain.recent block
-  -- The body, then the roots.
+  -- Then its body runs on the state after the parent, and gives the roots.
   let result ← runBody chain block
+  -- Last, the block must agree with what the body gave.
+  --
   -- The checks of the header against the output, in order.
   firstFailure (outputChecks block.header result.output result.roots)
   -- The changes of the block apply to the state of the chain.

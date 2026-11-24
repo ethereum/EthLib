@@ -9,14 +9,6 @@ public import EthLib.Execution.State.Tracker
 
 The mining rewards of a block before Paris.
 
-The beneficiary of a block gains the block reward, and a 32nd of it for each ommer.
-
-The beneficiary of each ommer gains the block reward, less an 8th of it per block of its age.
-
-The block reward is 5 ether before Byzantium, 3 ether from Byzantium, and 2 from Constantinople.
-
-From Paris on, no block pays a reward.
-
 Section 11.3 of the Yellow Paper, Berlin version, defines the rewards: [`Paper.tex`][yp].
 
 [EIP-649][eip-649] and [EIP-1234][eip-1234] lower the block reward.
@@ -33,11 +25,15 @@ namespace EthLib.Execution.Blocks
 open EthLib.Base
 open EthLib.Execution.State
 
-/-- The block reward at a fork before Paris: `R_block` of the Yellow Paper, 11.3, in wei. -/
+/-- The block reward at a fork before Paris: `R_block` of the Yellow Paper, 11.3, in wei.
+
+It is 5 ether before Byzantium, 3 ether from Byzantium, and 2 from Constantinople. -/
 def blockReward (fork : Fork) : Nat :=
   (Evm.gasSchedule fork).BLOCK_REWARD
 
 /-- The reward of the beneficiary of a block with `ommers` ommers: `(1 + n / 32) · R_block`.
+
+The beneficiary gains the block reward, and a 32nd of it for each ommer.
 
 The 32nd of the block reward is rounded down, which leaves it exact for every fork. -/
 def minerReward (fork : Fork) (ommers : Nat) : Nat :=
@@ -47,6 +43,8 @@ def minerReward (fork : Fork) (ommers : Nat) : Nat :=
   blockReward fork + ommers * (blockReward fork / 32)
 
 /-- The reward of the beneficiary of an ommer `age` blocks older than the block.
+
+It is the block reward, less an 8th of it per block of its age.
 
 It is `(1 + (U_i - H_i) / 8) · R_block = (8 - age) · R_block / 8` of the Yellow Paper, 11.3. -/
 def ommerReward (fork : Fork) (age : Nat) : Nat :=

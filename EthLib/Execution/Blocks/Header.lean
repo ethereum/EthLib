@@ -12,16 +12,6 @@ public import EthLib.Serialization.Rlp.Codec
 
 The header of a block, at each fork.
 
-Frontier has 15 fields, and later forks append fields after them.
-
-A field that appears at a fork holds a value only from that fork on.
-
-The RLP form of a header is the list of the fields it holds, in order.
-
-So a London header is a list of 16 items, and a Pectra header a list of 21.
-
-The hash of a header is the Keccak-256 hash of its RLP form.
-
 Sections 4.4 and 4.4.3 of the Yellow Paper, Shanghai version, define the header: [`Paper.tex`][yp].
 
 Each later field names the EIP that adds it:
@@ -53,7 +43,11 @@ namespace EthLib.Execution.Blocks
 open EthLib.Base
 open EthLib.Serialization.Rlp
 
-/-- The header of a block at fork `fork`. -/
+/-- The header of a block at fork `fork`.
+
+Frontier has 15 fields, and later forks append fields after them.
+
+A field that appears at a fork holds a value only from that fork on. -/
 structure Header (fork : Fork) : Type where
   /-- The hash of the parent's header. -/
   parentHash : Hash32
@@ -123,6 +117,8 @@ def fieldCount (fork : Fork) : Nat :=
   -- Then `H_f` from London and `H_w` from Shapella.
   --
   -- Then three fields from Dencun, one from Pectra and two from Glamsterdam.
+  --
+  -- So a London header is a list of 16 items, and a Pectra header a list of 21.
   15 + Item.sinceCount .london fork + Item.sinceCount .shapella fork
     + 3 * Item.sinceCount .dencun fork + Item.sinceCount .pectra fork
     + 2 * Item.sinceCount .glamsterdam fork

@@ -12,15 +12,9 @@ The DAO Fork, which moves ether between accounts outside any transaction.
 
 At the start of its first block, the ether of 116 accounts moves to one recovery contract.
 
-The accounts are the DAO and its extra balance account.
-
-They also include the children of the DAO's creator, and the extra balance account of each child.
-
 The first ten blocks of the fork carry the extra data `dao-hard-fork`.
 
 The fork changes no other rule.
-
-Both rules apply only before Paris, a choice of this specification.
 
 [EIP-779](https://eips.ethereum.org/EIPS/eip-779#specification) lists the accounts and both rules.
 -/
@@ -36,7 +30,11 @@ open EthLib.Execution.State
 def addressOfNat (n : Nat) : Address :=
   ByteOrder.toBE 20 n
 
-/-- The 116 accounts whose ether the DAO Fork moves: the list `L` of EIP-779, in its order. -/
+/-- The 116 accounts whose ether the DAO Fork moves: the list `L` of EIP-779, in its order.
+
+The accounts are the DAO and its extra balance account.
+
+They also include the children of the DAO's creator, and the extra balance account of each child. -/
 def DAO_ACCOUNTS : List Address := [
   addressOfNat 0xd4fe7bc31cedb7bfb8a345f31e668033056b2728,
   addressOfNat 0xb3fb0e5aba0e20e5c49d252dfd30e102b171a425,

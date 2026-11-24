@@ -16,22 +16,6 @@ It names every account that the block touches, and each change that the block ma
 [EIP-7928](https://eips.ethereum.org/EIPS/eip-7928#rlp-encoding) defines it.
 
 The EIP is in Last Call, so its rules may still change.
-
-The list is not part of the block body.
-
-The header holds the Keccak-256 hash of its RLP form instead.
-
-A change records the position in the block at which the value holds:
-
-- 0 before the transactions;
-- `i + 1` after the transaction `i`;
-- `n + 1` after the last of `n` transactions.
-
-Each number in the RLP form is a scalar with no leading zero byte, as in a header.
-
-The checks here read the list alone: its order, its uniqueness and its size.
-
-Whether the list matches the execution of the block is a rule of the block.
 -/
 
 @[expose] public section
@@ -97,12 +81,22 @@ structure AccountChanges where
   codeChanges : List CodeChange
   deriving DecidableEq
 
-/-- The block access list: one entry for each account that the block touches. -/
+/-- The block access list: one entry for each account that the block touches.
+
+The list is not part of the block body.
+
+A change records the position in the block at which the value holds:
+
+- 0 before the transactions;
+- `i + 1` after the transaction `i`;
+- `n + 1` after the last of `n` transactions. -/
 abbrev BlockAccessList := List AccountChanges
 
 /-! ## The RLP form
 
 Each change is the list of its position and its value, and an account is the list of its six fields.
+
+Each number in the RLP form is a scalar with no leading zero byte, as in a header.
 -/
 
 namespace StorageChange
@@ -213,7 +207,7 @@ open EthLib.Cryptography.Hash.Keccak (keccak256)
 
 /-- The hash of a block access list: the Keccak-256 hash of its RLP form.
 
-The header holds it from Glamsterdam on.
+The header holds it from Glamsterdam on, in place of the list.
 
 The empty list has the RLP form `0xc0`.
 
@@ -222,7 +216,12 @@ def hash (bal : BlockAccessList) : Except RlpError Hash32 := do
   -- EIP-7928: the hash is `keccak256(rlp(L))` of the list `L`.
   return keccak256 (← Codec.encode bal)
 
-/-! ## The checks of the list alone -/
+/-! ## The checks of the list alone
+
+The checks here read the list alone: its order, its uniqueness and its size.
+
+Whether the list matches the execution of the block is a rule of the block.
+-/
 
 /-- Whether each number of a list is below the next one. -/
 def ascending : List Nat → Bool

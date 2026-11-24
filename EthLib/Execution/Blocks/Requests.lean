@@ -11,25 +11,11 @@ The requests that a block sends to the consensus layer, and the hash that commit
 
 From Pectra, [EIP-7685][eip-7685] gives each request list a type byte, then opaque data.
 
-The header commits to the lists by the requests hash.
-
-It is the SHA-256 hash of the SHA-256 hashes of the lists, in the order of their types.
-
-A list with no data, only its type byte, does not enter the hash.
-
 [EIP-6110][eip-6110] makes deposits the requests of type 0.
 
 From Glamsterdam, [EIP-8282][eip-8282] adds the builder deposits, of type 3, and exits, of type 4.
 
 That EIP is in Last Call, so its rules may still change.
-
-The block finds them in the logs of the deposit contract, in the order of the logs.
-
-Each deposit log carries its fields in the layout of the Solidity ABI.
-
-The request keeps only the fields, without the offsets, sizes and padding of that layout.
-
-A deposit log with any other layout makes the block invalid.
 
 [eip-7685]: https://eips.ethereum.org/EIPS/eip-7685#specification
 [eip-6110]: https://eips.ethereum.org/EIPS/eip-6110#block-validity
@@ -105,7 +91,9 @@ def wordAt (data : List UInt8) (position : Nat) : Nat :=
 def fieldAt (data : List UInt8) (offset size : Nat) : List UInt8 :=
   (data.drop (offset + 32)).take size
 
-/-- The deposit request of the data of a deposit log: its five fields, one after the other. -/
+/-- The deposit request of the data of a deposit log: its five fields, one after the other.
+
+Each deposit log carries its fields in the layout of the Solidity ABI. -/
 def depositRequestOfEvent (data : ByteArray) : Except DepositError ByteArray := do
   let bytes := data.data.toList
   -- EIP-6110: the data of a deposit log has 576 bytes.
@@ -126,7 +114,7 @@ def depositRequestOfEvent (data : ByteArray) : Except DepositError ByteArray := 
   DEPOSIT_EVENT_FIELDS.zipIdx.forM fun ((offset, size), field) =>
     if wordAt bytes offset = size then pure () else
       throw (.wrongSize field (wordAt bytes offset))
-  -- The request is the five fields in that order, without their sizes and padding.
+  -- The request is the five fields in order, without the offsets, sizes and padding of the layout.
   return ⟨(DEPOSIT_EVENT_FIELDS.flatMap fun (offset, size) => fieldAt bytes offset size).toArray⟩
 
 /-- Whether a log is a deposit: it comes from the deposit contract, with the deposit topic first.
@@ -147,7 +135,7 @@ The deposit contract of the chain is at `depositContract`.
 The logs are those of the receipts of the block, in order. -/
 def depositRequests (depositContract : Address) (logs : List Log) :
     Except DepositError ByteArray := do
-  -- EIP-6110: each deposit log of the block, in order, gives one request.
+  -- EIP-6110: each deposit log of the block, in the order of the logs, gives one request.
   --
   -- A deposit log whose data has another layout makes the block invalid.
   let requests ← (logs.filter (isDepositLog depositContract)).mapM fun log =>
@@ -159,7 +147,11 @@ def depositRequests (depositContract : Address) (logs : List Log) :
 
 /-- The requests hash: the SHA-256 hash of the SHA-256 hash of each list with data, in order.
 
-Each list is its type byte, then its data, and the lists come in the order of their types. -/
+Each list is its type byte, then its data, and the lists come in the order of their types.
+
+The header commits to the lists by this hash.
+
+A list with no data, only its type byte, does not enter the hash. -/
 def requestsHash (requests : List ByteArray) : Hash32 :=
   -- EIP-7685: `sha256(sha256(r_1) || ... || sha256(r_k))` over the lists `r_i` in order.
   Cryptography.Hash.Sha256.hash32

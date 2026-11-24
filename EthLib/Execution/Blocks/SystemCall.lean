@@ -10,44 +10,6 @@ public import EthLib.Execution.Transactions.Process
 
 The calls that a block makes to system contracts, outside any transaction.
 
-A system call comes from the system address, with 30,000,000 gas and no value.
-
-From Glamsterdam, it also gets a reservoir of state gas for 16 new storage slots, by EIP-8037.
-
-Its gas does not count against the gas limit of the block, and nobody pays for it.
-
-So it adds to neither gas count of the block.
-
-It runs the code of its contract as the message of a transaction does.
-
-Up to BPO5, it starts with no address accessed.
-
-From Glamsterdam, it starts with the accesses of a transaction with no access list.
-
-Its price per gas is the base fee of the block.
-
-Its writes join the block.
-
-It has no receipt, so its logs enter no receipt.
-
-From Dencun, a block starts with a call to the beacon roots contract.
-
-Its data is the root of the parent beacon block, and the contract stores it.
-
-From Pectra, a second call follows, to the history storage contract.
-
-Its data is the hash of the parent block, and the contract stores it.
-
-These two calls are unchecked: the block goes on when the contract has no code or the call fails.
-
-From Pectra, a block ends with calls to the withdrawal and consolidation request contracts.
-
-Each has no data, and returns the requests of its type, in the order of its queue.
-
-From Glamsterdam, calls to the builder deposit and builder exit contracts follow.
-
-These calls are checked: the block is invalid when the contract has no code or the call fails.
-
 Each EIP states its call in its section on block processing or on the system call:
 
 - [EIP-4788][eip-4788], the beacon roots contract
@@ -57,13 +19,10 @@ Each EIP states its call in its section on block processing or on the system cal
 - [EIP-8282][eip-8282], the builder deposit and exit contracts, in Last Call
 - [EIP-8037][eip-8037], the reservoir of state gas, in Last Call
 
-A list of requests with no data is left out, as [EIP-7685][eip-7685] leaves it out of its hash.
-
 [eip-4788]: https://eips.ethereum.org/EIPS/eip-4788#block-processing
 [eip-2935]: https://eips.ethereum.org/EIPS/eip-2935#block-processing
 [eip-7002]: https://eips.ethereum.org/EIPS/eip-7002#system-call
 [eip-7251]: https://eips.ethereum.org/EIPS/eip-7251#system-call
-[eip-7685]: https://eips.ethereum.org/EIPS/eip-7685#block-header
 [eip-8037]: https://eips.ethereum.org/EIPS/eip-8037#system-contracts-and-system-transactions
 [eip-8282]: https://eips.ethereum.org/EIPS/eip-8282#request-queue-and-system-call
 -/
@@ -131,6 +90,8 @@ def SystemCallOutput.block (output : SystemCallOutput) : BlockState :=
 
 /-- The message of a system call to `target` with the data `data`, at `fork`.
 
+It comes from the system address, with 30,000,000 gas and no value.
+
 Its code is empty until the call reads the code of `target`. -/
 def systemMessage {fork : Fork} (env : BlockEnvironment fork) (target : Address)
     (data : ByteArray) : Message fork where
@@ -145,8 +106,14 @@ def systemMessage {fork : Fork} (env : BlockEnvironment fork) (target : Address)
   target := some target
   currentTarget := target
   -- EIP-4788: a gas limit of 30000000; EIP-2935, EIP-7002, EIP-7251 and EIP-8282 agree.
+  --
+  -- This gas does not count against the gas limit of the block, and nobody pays for it.
+  --
+  -- So the call adds to neither gas count of the block.
   gas := SYSTEM_TRANSACTION_GAS
   -- EIP-8037: from Glamsterdam, the extra state gas goes to the state gas reservoir.
+  --
+  -- That reservoir holds the state gas of 16 new storage slots.
   reservoir := systemReservoir fork
   -- EIP-4788: a value of 0.
   value := 0
@@ -162,18 +129,18 @@ def systemMessage {fork : Fork} (env : BlockEnvironment fork) (target : Address)
 
 Up to BPO5, no address starts accessed.
 
-From Glamsterdam, the call starts as a transaction from the system address with no access list.
-
-So the beneficiary, the precompiles, the system address and `target` start accessed.
-
-No storage key starts accessed. -/
+From Glamsterdam, the call starts as a transaction from the system address with no access list. -/
 def systemSubstate {fork : Fork} (env : BlockEnvironment fork) (target : Address) : Substate :=
   -- No EIP states which addresses a system call starts with accessed.
   --
   -- From Glamsterdam, the call starts as the first frame of a transaction with no access list.
+  --
+  -- No storage key starts accessed.
   { Substate.empty with
     accessedAddresses := if fork ≥ .glamsterdam then
+        -- The beneficiary, the precompiles, the system address and `target` start accessed.
         startAccessedAddressesOf fork env.coinbase SYSTEM_ADDRESS target []
+      -- Up to BPO5, no address starts accessed.
       else ∅ }
 
 /-- Make a system call to `target` with the data `data`, on the block state `block` at `fork`.
@@ -182,9 +149,7 @@ A call that fails leaves the block state as it was.
 
 It fails only with an error that aborts the whole execution, such as missing code.
 
-Up to BPO5, the gas meter is one counter of the gas left.
-
-From Glamsterdam, the meter of EIP-8037 also meters state gas. -/
+It has no receipt, so its logs enter no receipt. -/
 def systemCall {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
     (target : Address) (data : ByteArray) : Except EvmError SystemCallOutput := do
   let message := systemMessage env target data
@@ -195,6 +160,9 @@ def systemCall {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
   --
   -- The accesses of the call end with it, since its output keeps no substate.
   let substate := systemSubstate env target
+  -- Up to BPO5, the gas meter is one counter of the gas left.
+  --
+  -- From Glamsterdam, the meter of EIP-8037 also meters state gas.
   let out ← if fork ≥ .glamsterdam then
       processMessageCall (Meter := StateGasMeter) env.chainId.toNat message state substate
     else processMessageCall (Meter := Nat) env.chainId.toNat message state substate
@@ -205,7 +173,9 @@ def codeAt (block : BlockState) (target : Address) : Except EvmError ByteArray :
   let state := TransactionState.ofBlock block
   (state.getCode (state.getAccount target).codeHash).mapError .state
 
-/-- Make a system call that must succeed, to `target` with the data `data`. -/
+/-- Make a system call that must succeed, to `target` with the data `data`.
+
+The block is invalid when the contract has no code or the call fails. -/
 def checkedSystemCall {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
     (target : Address) (data : ByteArray) : Except BlockError SystemCallOutput := do
   let code ← (codeAt block target).mapError .aborted
@@ -254,9 +224,11 @@ From Dencun, the beacon roots contract stores the root of the parent beacon bloc
 
 From Pectra, the history storage contract then stores `parentHash`, the hash of the parent.
 
-Each call joins the body at the current position. -/
+These two calls are unchecked: the block goes on when the contract has no code or the call fails. -/
 def startSystemCalls {fork : Fork} (env : BlockEnvironment fork) (parentHash : Hash32)
     (body : BodyState) : Except EvmError BodyState := do
+  -- Each call joins the body at the current position.
+  --
   -- EIP-4788, from Dencun: a call to `BEACON_ROOTS_ADDRESS` as `SYSTEM_ADDRESS`.
   --
   -- Its input is the 32 bytes of the root of the parent beacon block.
@@ -294,7 +266,11 @@ def requestContracts (fork : Fork) : List (UInt8 × Address) :=
   if fork ≥ .glamsterdam then REQUEST_CONTRACTS ++ BUILDER_REQUEST_CONTRACTS
   else REQUEST_CONTRACTS
 
-/-- The request list of type `type` with the data `data`, or none when the data is empty. -/
+/-- The request list of type `type` with the data `data`, or none when the data is empty.
+
+A list with no data is left out, as [EIP-7685][eip-7685] leaves it out of its hash.
+
+[eip-7685]: https://eips.ethereum.org/EIPS/eip-7685#block-header -/
 def requestList (type : UInt8) (data : ByteArray) : List ByteArray :=
   -- EIP-7685: a request list is its type byte, then its data.
   --
@@ -319,25 +295,23 @@ def readRequest {fork : Fork} (env : BlockEnvironment fork)
   -- EIP-7002: the requests come in the exact order in which the contract dequeues them.
   --
   -- EIP-7251 and EIP-8282 say the same of their queues.
+  --
+  -- From Pectra, each contract returns the data of its requests, which follow its type byte.
   return (body, state.2 ++ requestList contract.1 out.output)
 
 /-- The withdrawal and consolidation requests of a block at `fork`, after its withdrawals.
 
 From Glamsterdam, the builder deposit and exit requests follow them.
 
-From Pectra, each contract returns the data of its requests, which follow its type byte.
-
-A list with no data is left out.
-
-Before Pectra, there is no request.
-
-Each call joins the body at the current position. -/
+Before Pectra, there is no request. -/
 def readRequests {fork : Fork} (env : BlockEnvironment fork) (body : BodyState) :
     Except BlockError (BodyState × List ByteArray) :=
   if .pectra ≤ fork then
     -- EIP-7002 and EIP-7251: at the end of each execution block, one call per contract.
     --
     -- EIP-7685: the lists come by ascending request type.
+    --
+    -- Each call joins the body at the current position.
     (requestContracts fork).foldlM (readRequest env) (body, [])
   else .ok (body, [])
 
