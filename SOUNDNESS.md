@@ -6317,7 +6317,10 @@ That is an epoch whose sum with the length of the buffer of mixes is at most the
 The state is before Gloas, or the epoch of the slot is before the Gloas fork epoch.
 Or that epoch is before the epoch of the state minus one, or after the epoch of the state plus the lookahead of seeds.
 It needs at least one slot in an epoch, and the last epoch of the lookahead and the length of the window must fit in 64 bits.
-`statePtc_error_code` shows that each such error has code 400; writing the answer in JSON or SSZ can still give code 500.
+`statePtc_error_code` shows that each such error has code 400.
+`ptcResponse_eq_error_iff` shows that the JSON answer refuses exactly when the answer does, with the same error, under a preset whose PTC is not empty.
+`ptcResponse_error_code` shows that each error of the JSON answer has code 400, so it never gets code 500.
+Writing the answer in SSZ can still give code 500, and no theorem excludes it.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_committees.py`) checks the three answers on the base states of the pinned fork vectors of the minimal preset.
 It reads the active validators, the keys of the sync committees and the window of the PTC from the JSON of the state.
 It checks each committee against the assignment that the honest validator guide gives each active validator.
@@ -6587,8 +6590,14 @@ So the last step never gives code 400.
 `getHead_exists`, `getHead_exists_of_gloas`, `ForwardReachable.exists_getCurrentSlot` and `processSlots_exists_ok` give conditions under which the other steps succeed.
 No theorem states exactly when `getHead`, `getCurrentSlot` or `processSlots` fail.
 So no theorem states exactly which stores make the two answers refuse with code 500.
-No theorem states when the aggregate and contribution responses refuse with code 500, which they also do when writing the value as JSON fails.
-`toApiJson_total` excludes that failure for a lawful type.
+Each response of the attestation data, payload attestation data, aggregate and contribution answers writes its value with `apiJsonOr500`, which gives code 500 when the JSON writer fails.
+`apiJsonOr500_bind_eq_error_iff` (`Consensus/Proofs/BeaconApi/Responses.lean`) shows that such a response refuses exactly when its answer does, with the same error, once the writer succeeds on the value.
+`toApiJson_total` gives that success for a lawful type.
+`attestationDataResponse_eq_error_iff` applies it to the attestation data answer.
+`payloadAttestationDataResponse_eq_error_iff` proves the same for the payload attestation data answer, whose response has no body when the slot has no block.
+`aggregateAttestationResponse_eq_error_iff` applies it through `versioned_eq_error_iff`, under a preset with at least one committee per slot.
+`syncCommitteeContributionResponse_eq_error_iff` applies it from Altair to the contribution, under a preset whose sync subcommittees are not empty.
+So each response refuses with code 500 exactly when its answer does, and the theorems above on the answers state when.
 The issue's single matching and validity theorems are split by fork; from Electra the union of bits is stated as the set of attesters.
 
 The light client answers are in `Consensus/BeaconApi/LightClient.lean`: the bootstrap of a block, the updates of a range of periods, and the latest finality and optimistic updates.
@@ -6670,7 +6679,8 @@ The files `finality_update.yaml` and `optimistic_update.yaml` of that release li
 `finalityUpdateResponse_eq_error_iff` and `optimisticUpdateResponse_eq_error_iff` show that each latest update answer refuses exactly when the node knows no update of its kind.
 Its error is then the one with code 404, so a known update never gets code 500.
 Both apply `versioned_eq_error_iff` (`Consensus/Proofs/BeaconApi/Responses.lean`) with `toApiJson_total` (`Consensus/Proofs/BeaconApi/Encoding.lean`), and assume a preset with a nonempty logs bloom and sync committee.
-The JSON answer for a range of updates writes each update with the same writer, and no theorem states that it never gets code 500.
+The JSON answer for a range of updates writes each update with the same writer.
+`updatesJson_exists_ok` shows that it never fails, so it never gets code 500, under the same assumption on the preset.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_light_client.py`) reads the pinned data collection cases of the light client.
 It checks that the chunks of the best updates of each case carry the digests and the bytes that the case serves, and decode back to them.
 It checks the start, the count and the limit of 128 of a range, the versions of the JSON answer, and the refusal of an update of another fork than its epoch.

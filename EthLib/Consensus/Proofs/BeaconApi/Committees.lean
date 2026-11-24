@@ -6,25 +6,15 @@ public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.PayloadTimeliness
 public import EthLib.Consensus.Proofs.ShufflePermutation
 public import EthLib.Consensus.Proofs.Time
+public import EthLib.Consensus.Proofs.BeaconApi.Responses
+public import EthLib.Serialization.Proofs.Ssz.Typed.Collections
+public import EthLib.Serialization.Proofs.Ssz.Typed.Container
+import EthLib.Consensus.Proofs.BeaconApi.Encoding
 
 /-!
 # Proofs: the committee answers of the Beacon API
 
-A committee is in the committees answer exactly when it is a beacon committee of the epoch.
-
-Its slot is in the epoch, and its index is below the count of committees of a slot.
-
-It must also match the filters, and its members must be those of the beacon committee.
-
-Without a filter, the committees of an epoch hold each active validator exactly once.
-
-The sync committee answer gives, for each seat, the first validator that holds its key.
-
-Its slices, put end to end, give back that list.
-
-The PTC answer is an error exactly when one of three conditions holds.
-
-The state is before Gloas, the slot is before the Gloas fork epoch, or it is outside the window.
+The beacon, sync and payload timeliness committee answers: what each holds, and when each refuses.
 -/
 
 @[expose] public section
@@ -119,19 +109,16 @@ theorem epochCommittees_mem {state : BeaconState preset fork} {epoch : Epoch}
     rw [committeeOk] at foundMem
     exact foundMem
 
-/-- Without a filter, the committees of an epoch hold each active validator exactly once.
-
-Their members, put end to end, are a permutation of the active validators of the epoch.
-
-An epoch must have at least one slot.
-
-The number of active validators times the number of committees of the epoch must fit in 64 bits. -/
+/-- Without a filter, the committees of an epoch hold each active validator exactly once. -/
 theorem epochCommittees_partition {state : BeaconState preset fork} {epoch : Epoch}
     {committees : List Committee}
     (computed : epochCommittees state epoch none none = .ok committees)
+    -- An epoch must have at least one slot.
     (positive : preset.SLOTS_PER_EPOCH ≠ 0)
+    -- The number of active validators times the number of committees of the epoch fits in 64 bits.
     (fits : (getActiveValidatorIndices state epoch).length *
       ((getCommitteeCountPerSlot state epoch).toNat * preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64) :
+    -- The members of the committees, put end to end, are a permutation of the active validators.
     (committees.flatMap (·.validators.toList)).Perm (getActiveValidatorIndices state epoch) := by
   simp only [epochCommittees, bind_ok_iff, liftArith, mapError_ok_iff] at computed
   obtain ⟨slots, slotsOk, ⟨active, shuffled⟩, shuffleOk, mapped⟩ := computed
@@ -398,23 +385,20 @@ theorem statePtc_ok_iff {config : Config} {state : BeaconState preset fork}
     rw [← slotEq, committeeOk]
     rfl
 
-/-- The PTC answer is an error exactly when one of four conditions holds.
-
-The state is before Gloas, or the epoch of the slot is before the Gloas fork epoch.
-
-Or the epoch of the slot is before the epoch of the state minus one, or after its lookahead.
-
-An epoch must have at least one slot.
-
-The last epoch of the lookahead, and the length of the window, must fit in 64 bits. -/
-theorem statePtc_error_iff {config : Config} {state : BeaconState preset fork}
-    {slot : Option Slot} (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+/-- The PTC answer is an error exactly when one of four conditions holds. -/
+theorem statePtc_error_iff {config : Config} {state : BeaconState preset fork} {slot : Option Slot}
+    -- An epoch must have at least one slot.
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    -- The last epoch of the lookahead must fit in 64 bits.
     (fits : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat < 2 ^ 64)
+    -- The length of the window must fit in 64 bits.
     (windowFits :
       (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64) :
     (∃ error, statePtc config state slot = .error error) ↔
+      -- The state is before Gloas, or the epoch of the slot is before the Gloas fork epoch.
       ¬.glamsterdam ≤ fork ∨
       computeEpochAtSlot preset (slot.getD state.slot) < config.GLOAS_FORK_EPOCH ∨
+      -- Or the epoch of the slot is before the current epoch minus one, or past the lookahead.
       (computeEpochAtSlot preset (slot.getD state.slot)).toNat + 1 <
         (getCurrentEpoch state).toNat ∨
       (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat <
@@ -457,5 +441,28 @@ theorem statePtc_error_code {config : Config} {state : BeaconState preset fork}
       rfl
   · cases failed
     rfl
+
+/-! ## The PTC response -/
+
+-- The two field names differ, and the vector of members is lawful once the PTC is not empty.
+instance [NeZero preset.PTC_SIZE.toNat] : Serialization.Ssz.LawfulSszType (PtcResponse preset) :=
+  .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)
+
+/-- The PTC response in JSON refuses exactly when the answer does, with the same error.
+
+It needs a preset whose PTC is not empty. -/
+theorem ptcResponse_eq_error_iff [NeZero preset.PTC_SIZE.toNat] {config : Config}
+    {state : BeaconState preset fork} {slot : Option Slot} {error : ErrorMessage} :
+    ptcResponse config state slot = .error error ↔ statePtc config state slot = .error error := by
+  unfold ptcResponse
+  exact apiJsonOr500_bind_eq_error_iff fun answer _ => toApiJson_total answer
+
+/-- Every error of the PTC response in JSON has code 400.
+
+It needs a preset whose PTC is not empty. -/
+theorem ptcResponse_error_code [NeZero preset.PTC_SIZE.toNat] {config : Config}
+    {state : BeaconState preset fork} {slot : Option Slot} {error : ErrorMessage}
+    (failed : ptcResponse config state slot = .error error) : error.code = 400 :=
+  statePtc_error_code (ptcResponse_eq_error_iff.mp failed)
 
 end EthLib.Consensus.BeaconApi

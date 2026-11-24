@@ -5,13 +5,9 @@ public import EthLib.Consensus.BeaconApi.StateQueries
 /-!
 # Proofs: the codes of answers written as JSON
 
-Writing the value of an answer as JSON fails only with code 500.
+Writing an answer as JSON fails only with code 500, and passes each refusal of the answer on.
 
-So a versioned answer refuses with any other code exactly when its value does.
-
-A versioned answer passes each refusal of its value on unchanged.
-
-When the JSON writer succeeds on the value, a versioned answer refuses exactly when the value does.
+When the writer succeeds on the value, the answer in JSON refuses exactly when the value does.
 -/
 
 @[expose] public section
@@ -64,6 +60,19 @@ theorem versioned_of_error {α : Type} [SszType α] [ApiSpelling α] {fork : For
   rw [versioned, refused]
   rfl
 
+/-- An answer written as JSON refuses exactly when the answer does, with the same error.
+
+It needs the JSON writer to succeed on the value of the answer, when there is one. -/
+theorem apiJsonOr500_bind_eq_error_iff {α β : Type} [SszType α] [ApiSpelling α]
+    {answer : Except ErrorMessage α} {wrap : Lean.Json → β} {error : ErrorMessage}
+    (written : ∀ value, answer = .ok value → ∃ document, toApiJson value = .ok document) :
+    (do return wrap (← apiJsonOr500 (← answer))) = .error error ↔ answer = .error error := by
+  cases answer with
+  | error fault => simp [bind, Except.bind]
+  | ok value =>
+    obtain ⟨document, wrote⟩ := written value rfl
+    simp [apiJsonOr500, wrote, Except.mapError, bind, Except.bind, pure, Except.pure]
+
 /-- A versioned answer refuses exactly when its value does, with the same error.
 
 It needs the JSON writer to succeed on that value, when there is one. -/
@@ -71,10 +80,7 @@ theorem versioned_eq_error_iff {α : Type} [SszType α] [ApiSpelling α] {fork :
     {field : Except ErrorMessage α} {error : ErrorMessage}
     (written : ∀ value, field = .ok value → ∃ document, toApiJson value = .ok document) :
     versioned fork field = .error error ↔ field = .error error := by
-  cases field with
-  | error fault => simp [versioned, bind, Except.bind]
-  | ok value =>
-    obtain ⟨document, wrote⟩ := written value rfl
-    simp [versioned, apiJsonOr500, wrote, Except.mapError, bind, Except.bind, pure, Except.pure]
+  unfold versioned
+  exact apiJsonOr500_bind_eq_error_iff written
 
 end EthLib.Consensus.BeaconApi
