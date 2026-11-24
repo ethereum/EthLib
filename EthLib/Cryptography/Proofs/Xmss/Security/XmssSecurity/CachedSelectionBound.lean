@@ -4,6 +4,7 @@ public import
   EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingExpectedBound
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LossDecomposition
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Scan.PerKey
+public import EthLib.Cryptography.Proofs.Xmss.QueryBound
 
 @[expose] public section
 
@@ -140,6 +141,50 @@ noncomputable def verifyCont (publicKey : PublicKey) (forgery : Forgery) :
     fun verified =>
       pure (forgery, verified)
 
+/-- A computation of the hash, lifted to the game, keeps its bound on a class of queries. -/
+theorem isQueryBoundP_liftM_hashSpec {p : OracleWorld.Domain → Prop} [DecidablePred p] {n : ℕ} :
+    ∀ (oa : OracleComp HashSpec α), IsQueryBoundP oa (fun x => p (.inr x)) n →
+      IsQueryBoundP (liftM oa : OracleComp OracleWorld α) p n := by
+  intro oa h
+  induction oa using OracleComp.inductionOn generalizing n with
+  | pure a => exact isQueryBoundP_pure _ _ _
+  | query_bind t k ih =>
+    rw [isQueryBoundP_query_bind_iff] at h
+    simp only [liftM_bind]
+    -- The lifted query costs one exactly in the class, and the rest is bounded by the induction.
+    refine (isQueryBoundP_bind (n := if p (.inr t) then 1 else 0) ?_
+      fun u _ => ih u (h.2 u)).mono ?_
+    · exact (isQueryBoundP_query_iff (spec := OracleWorld) _ (.inr t) _).2 fun hp => by simp [hp]
+    · split_ifs with hp
+      · have := h.1.resolve_left (not_not_intro hp)
+        omega
+      · omega
+
+/-- The verification makes at most `384` queries of the game in any class. -/
+theorem verifyCont_isQueryBoundP (p : OracleWorld.Domain → Prop) [DecidablePred p]
+    (publicKey : PublicKey) (forgery : Forgery) :
+    IsQueryBoundP (verifyCont publicKey forgery) p 384 :=
+  isQueryBoundP_bind (m := 0)
+    (isQueryBoundP_liftM_hashSpec _ (EthLib.Cryptography.Xmss.isQueryBoundP_verifyWith
+      (fun _ => (isQueryBoundP_map_iff _ _ _).2
+        ((isQueryBoundP_query_iff (spec := HashSpec) _ _ 1).2 fun _ => Nat.one_pos)) _ _ _))
+    fun _ _ => isQueryBoundP_pure _ _ 0
+
+/-- After any run, the verification makes at most `384` queries of a class in expectation. -/
+theorem tsum_expectedVerifyQueries_le (R : OracleWorld.Domain → Prop) [DecidablePred R]
+    (publicKey : PublicKey) (run : ProbComp (Forgery × QueryCache HashSpec)) :
+    ∑' y, Pr{let x ← run}[x = y] *
+      expectedSimulatedQueryCount romImpl R (verifyCont publicKey y.1) y.2 ≤ 384 := by
+  -- Each run's count is at most the verification's query bound.
+  calc _ ≤ ∑' y, Pr{let x ← run}[x = y] * (384 : ℝ≥0∞) := tsum_le_tsum fun y => by
+        refine mul_le_mul' le_rfl ?_
+        rw [← expectedSimulatedCost_indicator]
+        exact_mod_cast Ghost.expectedSimulatedCost_le_of_isQueryBoundP romImpl
+          (fun _ _ => le_rfl) _ 384 y.2 (verifyCont_isQueryBoundP R publicKey y.1)
+    _ ≤ 384 := by
+        rw [ENNReal.tsum_mul_right]
+        exact mul_le_of_le_one_left' (OracleComp.tsum_prEvent_le_one _)
+
 open Ghost in
 theorem cappedDetailedGameAfterKeygenWithSigningTrace_eq_map (adversary : Adversary)
     (publicKey : PublicKey) (secretKey : SecretKey) (initialCache : QueryCache HashSpec) :
@@ -160,13 +205,24 @@ theorem cappedDetailedGameAfterKeygenWithSigningTrace_eq_map (adversary : Advers
   rw [h]
   simp [verifyCont, map_bind, bind_map_left, Functor.map_map]
 
-/-- Lane 2's digest term: a cached selection with a colliding input. -/
-theorem capped_cachedSelection_probability_le_expectedDigest
-    (q : Nat) (adversary : Adversary)
-    (hbound : HasAfterKeygenHashQueryBound Concrete.scheme adversary q) (hq : q < 2 ^ 127) :
-    Pr{let x ← cappedDetailedGameWithEncodingTrace adversary}[WinningCachedSelectionOccurs x] ≤
-      CappedEncodingMonitor.expectedPostKeygenEncodingQueries adversary /
-        ((2 ^ digestBits : Nat) : ENNReal) := by
+/-- Key generation leaves the partner inputs of the secret key's parameter uncached. -/
+theorem keygen_cache_partner_none {publicKey : PublicKey} {secretKey : SecretKey}
+    {cache0 : QueryCache HashSpec}
+    (hkey : ((publicKey, secretKey), cache0) ∈
+      support ((simulateQ romImpl Concrete.scheme.keygen).run ∅)) :
+    ∀ e y, cache0 (Partner.input secretKey.parameter e y) = none := by
+  -- Rewrite key generation by its equation: the kernel would run it to match two forms.
+  rw [Concrete.scheme_keygen] at hkey
+  exact fun e y => Concrete.precomputedKeygen_cache_none_encodingInput _ hkey e y
+
+/-- Lane 2's digest term, as a sum over the results of key generation. -/
+theorem prEvent_winningCachedSelection_eq_tsum (adversary : Adversary) :
+    Pr{let x ← cappedDetailedGameWithEncodingTrace adversary}[WinningCachedSelectionOccurs x] =
+      ∑' keyResult, Pr{let x ← (simulateQ romImpl Concrete.scheme.keygen).run ∅}[x = keyResult] *
+        Pr{let x ← cappedDetailedGameAfterKeygenWithSigningTrace adversary keyResult.1.1
+            keyResult.1.2 keyResult.2}[
+          WinningOutcomeBadEventOccurs x.2.1 x.1 .encoding ∧
+            ∃ entry ∈ x.2.2, entry.CachedSelectionCollision x.1.secretKey x.2.1] := by
   have hproj : Pr{let x ← cappedDetailedGameWithEncodingTrace adversary}[
         WinningCachedSelectionOccurs x] =
       Pr{let x ← cappedDetailedGameWithSigningTrace adversary}[
@@ -174,7 +230,36 @@ theorem capped_cachedSelection_probability_le_expectedDigest
             ∃ entry ∈ x.2.2, entry.CachedSelectionCollision x.1.secretKey x.2.1] := by
     rw [← cappedDetailedGameWithEncodingTrace_projection, prEvent_map]
     rfl
-  rw [hproj, cappedDetailedGameWithSigningTrace, OracleComp.prEvent_bind_eq_tsum,
+  rw [hproj, cappedDetailedGameWithSigningTrace, OracleComp.prEvent_bind_eq_tsum]
+
+open Ghost in
+/-- After key generation, a winning cached selection is the scan's event on the same run. -/
+theorem prEvent_cachedSelection_le_scan (adversary : Adversary) (publicKey : PublicKey)
+    (secretKey : SecretKey) (cache0 : QueryCache HashSpec) :
+    Pr{let x ← cappedDetailedGameAfterKeygenWithSigningTrace adversary publicKey secretKey
+        cache0}[
+      WinningOutcomeBadEventOccurs x.2.1 x.1 .encoding ∧
+        ∃ entry ∈ x.2.2, entry.CachedSelectionCollision x.1.secretKey x.2.1] ≤
+      Pr{let y ← ((simulateQ (impl publicKey secretKey) (adversary.main publicKey)).run
+          ((cache0, []), 0) >>= fun r =>
+            (fun v => (r, v)) <$> (simulateQ romImpl (verifyCont publicKey r.1)).run r.2.1.1)}[
+        y.1.2.1.2.leafIndices.Nodup ∧
+          (PreBad secretKey y.1.2.1.2 ∨ PostBad secretKey.parameter y.1.2.1.2 y.2.2)] := by
+  rw [cappedDetailedGameAfterKeygenWithSigningTrace_eq_map, prEvent_map]
+  refine prEvent_mono_of_support _ _ _ fun y hy hev => ?_
+  refine cachedSelection_event_le adversary publicKey secretKey cache0 _ ?_ hev
+  -- Map through a lemma for any computation: the kernel would run the game to match two forms.
+  rw [cappedDetailedGameAfterKeygenWithSigningTrace_eq_map]
+  exact mem_support_map_of_eq _ _ hy rfl
+
+/-- Lane 2's digest term: a cached selection with a colliding input. -/
+theorem capped_cachedSelection_probability_le_expectedDigest
+    (q : Nat) (adversary : Adversary)
+    (hbound : HasAfterKeygenHashQueryBound Concrete.scheme adversary q) (hq : q < 2 ^ 127) :
+    Pr{let x ← cappedDetailedGameWithEncodingTrace adversary}[WinningCachedSelectionOccurs x] ≤
+      CappedEncodingMonitor.expectedPostKeygenEncodingQueries adversary /
+        ((2 ^ digestBits : Nat) : ENNReal) := by
+  rw [prEvent_winningCachedSelection_eq_tsum,
     CappedEncodingMonitor.expectedPostKeygenEncodingQueries, div_eq_mul_inv,
     ← ENNReal.tsum_mul_right]
   refine tsum_le_tsum fun keyResult => ?_
@@ -182,28 +267,50 @@ theorem capped_cachedSelection_probability_le_expectedDigest
   · rw [mul_assoc]
     refine mul_le_mul' le_rfl ?_
     obtain ⟨⟨publicKey, secretKey⟩, cache0⟩ := keyResult
-    -- Rewrite key generation by its equation: the kernel would run it to match two forms.
-    have hkey' := hkey
-    rw [Concrete.scheme_keygen] at hkey'
-    have hc0 : ∀ e y, cache0 (Partner.input secretKey.parameter e y) = none := fun e y =>
-      Concrete.precomputedKeygen_cache_none_encodingInput _ hkey' e y
-    have hcore := Ghost.collision_le publicKey secretKey hc0 _ hq (adversary.main publicKey)
-      (verifyCont publicKey)
+    have hcore := Ghost.collision_le publicKey secretKey (keygen_cache_partner_none hkey) _ hq
+      (adversary.main publicKey) (verifyCont publicKey)
       (cappedSourceUnloggedDetailedGameAfterKeygen_hashQueryBound_sub_keygen
         q adversary hbound _ hkey)
     rw [← div_eq_mul_inv,
       ENNReal.le_div_iff_mul_le (Or.inl Ghost.N_ne_zero) (Or.inl Ghost.N_ne_top)]
     rw [mul_assoc, ENNReal.mul_le_mul_iff_right Ghost.N_ne_zero Ghost.N_ne_top] at hcore
-    refine le_trans ?_ hcore
     rw [mul_comm]
-    refine mul_le_mul' le_rfl ?_
-    rw [cappedDetailedGameAfterKeygenWithSigningTrace_eq_map, prEvent_map]
-    refine prEvent_mono_of_support _ _ _ fun y hy hev => ?_
-    refine cachedSelection_event_le adversary publicKey secretKey cache0 _ ?_ hev
-    -- Map through a lemma for any computation: the kernel would run the game to match two forms.
-    rw [cappedDetailedGameAfterKeygenWithSigningTrace_eq_map]
-    exact mem_support_map_of_eq _ _ hy rfl
+    exact (mul_le_mul' le_rfl
+      (prEvent_cachedSelection_le_scan adversary publicKey secretKey cache0)).trans hcore
   · rw [(prEvent_eq_zero_of_not_mem_support _) hkey, zero_mul]
     exact zero_le
+
+open Ghost in
+/-- Lane 2's digest term after key generation, charging the adversary's own encoding queries.
+
+The adversary makes at most `q` hash queries, and the verification at most `384`. -/
+theorem cachedSelection_afterKeygen_le_adversaryDigest (q : Nat) (adversary : Adversary)
+    (hadv : ∀ publicKey, IsQueryBoundP (adversary.main publicKey) IsAdvHash q)
+    (hq : q < 2 ^ 127) {publicKey : PublicKey} {secretKey : SecretKey}
+    {cache0 : QueryCache HashSpec}
+    (hkey : ((publicKey, secretKey), cache0) ∈
+      support ((simulateQ romImpl Concrete.scheme.keygen).run ∅)) :
+    Pr{let x ← cappedDetailedGameAfterKeygenWithSigningTrace adversary publicKey secretKey
+        cache0}[
+      WinningOutcomeBadEventOccurs x.2.1 x.1 .encoding ∧
+        ∃ entry ∈ x.2.2, entry.CachedSelectionCollision x.1.secretKey x.2.1] ≤
+      (expectedSimulatedCost (impl publicKey secretKey)
+          (fun input _ => if IsAdvEncoding secretKey.parameter input then 1 else 0)
+          (adversary.main publicKey) ((cache0, []), 0) + 384) /
+        ((2 ^ digestBits : Nat) : ENNReal) := by
+  -- The adversary's ghost count stays under the budget, so the over-budget cost vanishes.
+  have hover := expectedSimulatedCost_overBudget_eq_zero_of_isQueryBoundP publicKey secretKey q
+    (adversary.main publicKey) q ((cache0, []), 0) (hadv publicKey) (zero_add q).le
+  -- Each charged query is an adversary encoding query.
+  have hcore := collision_le_of_charged publicKey secretKey (keygen_cache_partner_none hkey) q hq
+    (adversary.main publicKey) (verifyCont publicKey) hover _
+    ((expectedSimulatedCost_add _ _ _ _ _).symm.trans_le
+      (expectedSimulatedCost_mono _ (openCost_add_signedCost_le secretKey) _ _))
+  rw [ENNReal.le_div_iff_mul_le (Or.inl N_ne_zero) (Or.inl N_ne_top)]
+  rw [mul_assoc, ENNReal.mul_le_mul_iff_right N_ne_zero N_ne_top] at hcore
+  rw [mul_comm]
+  exact (mul_le_mul' le_rfl
+    (prEvent_cachedSelection_le_scan adversary publicKey secretKey cache0)).trans
+    (hcore.trans (add_le_add le_rfl (tsum_expectedVerifyQueries_le _ publicKey _)))
 
 end XmssSecurity

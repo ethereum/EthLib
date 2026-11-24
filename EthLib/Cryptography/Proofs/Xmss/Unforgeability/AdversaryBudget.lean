@@ -49,18 +49,11 @@ theorem isQueryBoundP_liftM_prob {α : Type} (oa : ProbComp α) :
 /-- A computation of at most `n` hash queries makes at most `n` hash calls among the game's. -/
 theorem isQueryBoundP_liftM_hash {α : Type} {n : Nat} :
     ∀ (oa : OracleComp HashSpec α), IsQueryBoundP oa (fun _ => True) n →
-      IsQueryBoundP (liftM oa : OracleComp OracleWorld α) IsHashCall n := by
-  intro oa h
-  induction oa using OracleComp.inductionOn generalizing n with
-  | pure a => exact isQueryBoundP_pure _ _ _
-  | query_bind t k ih =>
-    rw [isQueryBoundP_query_bind_iff] at h
-    simp only [liftM_bind]
-    refine (isQueryBoundP_bind (n := 1) ?_ fun u _ => ih u (h.2 u)).mono ?_
-    · exact (isQueryBoundP_query_iff (spec := OracleWorld) _ (.inr t) 1).2 fun _ => Nat.one_pos
-    · have := h.1.resolve_left (not_not_intro trivial)
-      simp only [ite_true]
-      omega
+      IsQueryBoundP (liftM oa : OracleComp OracleWorld α) IsHashCall n :=
+  fun oa h => XmssSecurity.isQueryBoundP_liftM_hashSpec oa
+    -- Every hash query is a hash call of the game.
+    ((isQueryBoundP_iff_isChargeBound _ _ _).2
+      (((isQueryBoundP_iff_isChargeBound _ _ _).1 h).mono_charge fun _ => by simp [IsHashCall]))
 
 /-- `H` is one hash query. -/
 theorem isQueryBoundP_H (x : Array UInt64) : IsQueryBoundP (H x) (fun _ => True) 1 :=
@@ -115,6 +108,7 @@ theorem isQueryBoundP_gameCore (adversary : Adversary) {qH r : Nat}
         isQueryBoundP_bind (m := 0) (isQueryBoundP_liftM_hash _
           (isQueryBoundP_verifyWith isQueryBoundP_H _ _ _)) fun _ _ =>
           isQueryBoundP_pure _ _ 0).mono ?_
+  -- Sum the bounds of key generation, the requests and the verification.
   simp only [gameQueries, verifyQueries]
   omega
 
@@ -181,13 +175,7 @@ def lifetimeQueries : Nat := gameQueries 0 (2 ^ LOG_LIFETIME)
 
 `C = 2^65 + 205 * 2^48 + 407 * 2^32 + 205 * 2^16 + 385`.
 
-It covers key generation, the signer and the verifier.
-
-A key has `2^32` leaf indices, so it signs at most `2^32` requests.
-
-A request's bound includes two searches of `2^32` trials each, and the theorem charges all of it.
-
-So the bound is above `2^-62` for an adversary that requests every leaf. -/
+It covers key generation, the signer and the verifier. -/
 theorem forgeAdvantage_le_lifetime (adversary : Adversary) {qH r : Nat}
     (hbudget : HasAdversaryBudget adversary qH r) (hr : r ≤ 2 ^ LOG_LIFETIME) :
     forgeAdvantage adversary ≤
@@ -195,6 +183,11 @@ theorem forgeAdvantage_le_lifetime (adversary : Adversary) {qH r : Nat}
   refine (forgeAdvantage_le_adversaryBudget adversary hbudget).trans
     (ENNReal.div_le_div (Nat.cast_le.2 ?_) le_rfl)
   simp only [lifetimeQueries, gameQueries]
+  -- A key has `2^32` leaf indices, so it signs at most `2^32` requests.
+  --
+  -- A request's bound has two searches of `2^32` trials each, and the theorem charges all of it.
+  --
+  -- So the bound is above `2^-62` for every adversary.
   have := Nat.mul_le_mul_right requestQueries hr
   omega
 
