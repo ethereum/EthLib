@@ -1096,7 +1096,7 @@ private theorem reservedReplay_run {g x y : ForkedBeaconState preset}
         erasure', by simpa only [List.length_append, List.length_nil, Nat.add_zero] using
           counted', retired', cover', future', fresh', ?_, ?_, ?_, fun electraY => ?_, ?_,
         originalDown_block pre (Step.block engine signed due ok) down
-          (effectiveKept_block middleEarly (applySignedBlock_ok ok).2.1)
+          (effectiveKept_processBlock (applySignedBlock_ok ok).2.1)
           replay.counters_original.2.2.1⟩
       · intro pair member
         rw [List.append_nil] at member

@@ -1801,8 +1801,7 @@ theorem step_decrease_of_regime
       Option.some.injEq] at two
     subst before
     subst after
-    have kept := effectiveKept_block early (applySignedBlock_ok ok).2.1 i inside
-    dsimp only at kept
+    have kept := effectiveKept_processBlock (applySignedBlock_ok ok).2.1 i inside
     omega
   | slot ok =>
     obtain ⟨advanced, advanceOk, upgraded⟩ := bind_ok_iff.mp ok
