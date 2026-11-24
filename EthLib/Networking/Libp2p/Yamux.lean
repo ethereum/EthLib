@@ -9,7 +9,7 @@ yamux carries many streams over one connection, with flow control for each strea
 
 The source is the section Framing of [yamux][yamux].
 
-[yamux]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/yamux/README.md#framing
+[yamux]: https://github.com/libp2p/specs/blob/1a084b699d9d424ca7027edf350cf4184cd6f5bd/yamux/README.md#framing
 -/
 
 @[expose] public section
@@ -28,7 +28,7 @@ def headerSize : Nat :=
 
 /-- The window of a new stream in bytes: 256 KiB, from the section Flow Control. -/
 def initialWindow : Nat :=
-  -- The section writes 256KiB, then 256KB; EthLib reads both as 256 KiB, that is `2^18` bytes.
+  -- Flow Control: each stream starts with a window of 256KiB, that is `2^18` bytes.
   262144
 
 /-- The flag that starts a stream, from the section Flag Field. -/
