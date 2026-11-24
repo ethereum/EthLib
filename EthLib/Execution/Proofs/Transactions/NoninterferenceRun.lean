@@ -16,14 +16,6 @@ The sets name accounts, whole storages, slots and code hashes.
 
 When the first run ends with its reads in the sets, the second gives the same gas, logs and error.
 
-The state it leaves agrees with the first on the sets.
-
-The sets must cover the first block, and the tracker sets of the first run do.
-
-The second block must hold the code of every account.
-
-Only the code of the recipient needs it: a call fetches it before it records the recipient.
-
 The theorems hold from Paris, from which a message touches no account.
 
 The sets play the part of a block access list in [EIP-7928, Scope and Inclusion][bal].
@@ -291,6 +283,9 @@ private theorem exists_transactionMessage {env : BlockEnvironment fork}
   unfold transactionMessage
   split
   · rename_i to _
+    -- Only the code of the recipient must be held.
+    --
+    -- A call fetches it before it records the recipient.
     obtain ⟨c, hc⟩ := hcodes to
     rw [hc]
     exact ⟨_, rfl⟩
@@ -504,6 +499,7 @@ theorem processTransaction_agrees (hfork : .paris ≤ fork) {env : BlockEnvironm
     (hreads : ReadsIn account slot output.state) :
     ∃ output', processTransaction env other included tx = .ok output' ∧
       output' = { output with state := output'.state } ∧
+      -- The state that the second run leaves agrees with the first on the sets.
       AgreesOn account allStorage slot code output.state output'.state := by
   rw [processTransaction_unfold] at h ⊢
   split at h
@@ -561,6 +557,7 @@ theorem processTransaction_agrees_of_tracker (hfork : .paris ≤ fork)
       AgreesOn (accessedAccount output.state) (candidateStorage block output.state)
         (accessedSlot output.state) (accessedCode block output.state)
         output.state output'.state :=
+  -- The tracker sets of the first run cover the first block.
   processTransaction_agrees hfork (CoversBlock.ofTracker block output.state) hagree hcodes h
     ⟨fun _ h => .inl h, fun _ _ h => .inl h⟩
 

@@ -10,17 +10,7 @@ import EthLib.Execution.Proofs.Transactions.Inclusion
 
 A transaction takes its fee from the sender, then moves its value to the target.
 
-The checks of the transaction ask the sender to hold its most costly fee and its value.
-
-The fee it pays is at most that: the price per gas and per blob gas are at most their maxima.
-
-So the sender holds the fee, and after it the value.
-
-The authorizations keep every balance, so the first message is funded.
-
-No funded message fails for a balance below an amount.
-
-The settlement only credits, and the deletions never check a balance.
+The checks of the transaction make the sender hold both, and no later step fails for a balance.
 -/
 
 @[expose] public section
@@ -350,6 +340,7 @@ private theorem runTransaction_ne_insufficientBalance [LawfulGasMeter Meter]
     · cases h
     · obtain ⟨e, -, he⟩ := Base.mapError_eq_error h
       cases he
+  -- The sender holds the fee, and after it the value.
   obtain ⟨bought, hBought, kept⟩ := buyGas_ok funds
   rw [hBought] at h
   dsimp only [Except.mapError, bind, Except.bind] at h
@@ -380,7 +371,11 @@ private theorem runTransaction_ne_insufficientBalance [LawfulGasMeter Meter]
     rw [key.1, key.2.1, BitVec.le_def]
     omega
   rcases Base.bind_eq_error h with h | ⟨output, -, h⟩
+  -- The authorizations keep every balance, so the first message is funded.
+  --
+  -- No funded message fails for a balance below an amount.
   · exact processMessageCall_ne_insufficientBalance funded address h
+  -- The settlement only credits.
   rcases Base.bind_eq_error h with h | ⟨⟨settled, used⟩, -, h⟩
   · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
@@ -394,6 +389,7 @@ private theorem runTransaction_ne_insufficientBalance [LawfulGasMeter Meter]
       · cases he
       · exact creditEther_ne_insufficientBalance _ _ _ _ he
     · cases he
+  -- The deletions never check a balance.
   rcases Base.bind_eq_error h with h | ⟨deleted, -, h⟩
   · obtain ⟨e, he, hee⟩ := Base.mapError_eq_error h
     cases hee
@@ -411,8 +407,10 @@ theorem processTransaction_ne_insufficientBalance {fork : Fork} {env : BlockEnvi
     (checked : checkInclusion chainId env used (.ofBlock block) tx = .ok included)
     (address : Address) :
     processTransaction env block included tx ≠ .error (.state (.insufficientBalance address)) := by
+  -- The checks ask the sender to hold its most costly fee and its value.
   have funds := checkInclusion_no_overdraw checked
   obtain ⟨-, -, -, hBlob, -, -, -, hPrice, -⟩ := checkInclusion_ok checked
+  -- The fee it pays is at most that: the price per gas and per blob gas are at most their maxima.
   rw [hPrice, hBlob] at funds
   rw [processTransaction_unfold]
   split

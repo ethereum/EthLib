@@ -14,26 +14,6 @@ From Cancun, SELFDESTRUCT marks its account for deletion only when the transacti
 
 [EIP-6780][e6780] sets this rule.
 
-The first frame starts with no account to delete and no touched account.
-
-A message that fails passes on no account to delete.
-
-From Paris, a message touches no account beyond those of its substate.
-
-A transaction starts with no touched account.
-
-The settlement of gas keeps the created accounts.
-
-So the deletions leave every other account, its storage and its transient storage as they were.
-
-Before Glamsterdam, the deletions remove each account to delete.
-
-A frame that no revert undoes passes its marks to the frame that ends the message.
-
-So each account it marks is absent after a transaction whose message ends without an error.
-
-Before Cancun, SELFDESTRUCT marks the account that runs it, so that account is absent too.
-
 [e6780]: https://eips.ethereum.org/EIPS/eip-6780#specification
 -/
 
@@ -137,6 +117,7 @@ theorem accountsToDelete_processMessageCall [LawfulGasMeter Meter] (hfork : .den
   split at h
   · obtain ⟨⟨evm, used⟩, hrun, h⟩ := bind_ok_iff.mp h
     cases h
+    -- A message that fails passes on no account to delete.
     by_cases herr : evm.error.isSome = true
     · simp [CallOutput.ofFrame, herr] at mem
     · simp only [CallOutput.ofFrame, herr] at mem ⊢
@@ -326,27 +307,25 @@ theorem getAccount_deleteAccounts {state state' : State.TransactionState} {outpu
 @[simp] theorem touchedAccounts_startSubstate (coinbase sender target : Address) :
     (startSubstate fork coinbase sender target tx).touchedAccounts = ∅ := rfl
 
-/-- From Cancun, the deletions at the end of a transaction change only created accounts.
-
-Those are the created accounts of the settled state.
-
-The message starts from the substate of a transaction, then the gas is settled.
-
-The deletions run on the settled state.
-
-Every other address keeps its account, its storage and its transient storage. -/
+/-- From Cancun, the deletions at the end of a transaction change only created accounts. -/
 theorem sameOutside_deleteAccounts_of_dencun {Meter : Type} [GasMeter Meter]
     [LawfulGasMeter Meter] (hfork : .dencun ≤ fork) {env : BlockEnvironment fork}
     {chainId : Nat} {message : Message fork} {state settled final : State.TransactionState}
     {coinbase sender target : Address} {auths : List Authorization}
     {paid : Std.ExtTreeSet Address} {output : CallOutput} {gasLeft refund used : Nat}
+    -- The message starts from the substate of a transaction, then the gas is settled.
     (hcall : processMessageCall (Meter := Meter) chainId message state
       (startSubstate fork coinbase sender target tx) auths paid = .ok output)
     (hsettle : settleGas env output.state sender tx gasLeft refund = .ok (settled, used))
+    -- The deletions run on the settled state.
     (hdelete : deleteAccounts fork settled output = .ok final) :
+    -- Outside the created accounts of the settled state, every address keeps its account.
+    --
+    -- It also keeps its storage and its transient storage.
     SameOutside settled.createdAccounts.toList settled final := by
   refine (sameOutside_deleteAccounts hdelete).mono fun address mem => ?_
   rw [Std.ExtTreeSet.mem_toList, createdAccounts_settleGas hsettle]
+  -- The first frame starts with no account to delete and no touched account.
   rcases List.mem_append.mp mem with mem | mem
   · exact accountsToDelete_processMessageCall hfork hcall (by simp) address
       (Std.ExtTreeSet.mem_toList.mp mem)
@@ -440,19 +419,15 @@ theorem accountExists_deleteAccounts (hfork : fork < .glamsterdam)
 
 /-- Before Glamsterdam, a frame that no revert undoes has each account it marks removed.
 
-The frame is one that the run of the message of a transaction goes through.
-
-Its run names the target, the state after the purchase of gas, the message and its first frame.
-
-The message must end without an error, and the code it runs starts from the frame `start`.
-
-Each account that the frame `inner` marks for deletion is then absent after the transaction. -/
+Each account that the frame marks for deletion is then absent after the transaction. -/
 theorem runTransaction_removes_marked {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
     (hfork : fork < .glamsterdam) {env : BlockEnvironment fork} {block : State.BlockState}
     {included : Included} {out : TransactionOutput}
+    -- The message must end without an error.
     (h : runTransaction Meter env block included tx = .ok out) (ok : out.error = none)
     {target : Address} {bought : State.TransactionState} {message : Message fork}
     {first : FirstFrame fork Meter} {start inner : Evm fork Meter}
+    -- The run names the target, the state after buying gas, the message and its first frame.
     (htarget : messageTarget included.sender
         ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx = .ok target)
     (hbought : buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought)
@@ -465,7 +440,9 @@ theorem runTransaction_removes_marked {Meter : Type} [GasMeter Meter] [LawfulGas
         { message with reservoir := (allocateGas fork tx included.intrinsicGas).reservoir } bought
         (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
         (paidWrites included.sender target tx) = .ok first)
+    -- The code that the message runs starts from a frame.
     (starts : CodeStarts fork first.message first.state first.substate first.meter start)
+    -- From there, the run of the message goes through the frame that marks the accounts.
     (visits : Visits fork first.message.gas start inner) :
     ∀ address ∈ inner.substate.accountsToDelete, out.state.accountExists address = false := by
   rw [runTransaction_unfold] at h
@@ -487,19 +464,12 @@ theorem runTransaction_removes_marked {Meter : Type} [GasMeter Meter] [LawfulGas
   intro address mem
   refine accountExists_deleteAccounts hfork (mapError_ok_iff.mp hdeleted) ?_
   rw [toDelete]
+  -- A frame that no revert undoes passes its marks to the frame that ends the message.
   exact toDeleteLe_of_codeStarts hended starts visits err address mem
 
 /-- Before Cancun, an account whose SELFDESTRUCT no revert undoes is absent after the transaction.
 
-The frame `after` is the result of SELFDESTRUCT on a frame `evm`, so both run one message.
-
-The frame `after` is one that the run of the message of the transaction goes through.
-
-Its run names the target, the state after the purchase of gas, the message and its first frame.
-
-The message must end without an error, and the code it runs starts from the frame `start`.
-
-The account that runs the SELFDESTRUCT is then absent after the transaction. -/
+The message must end without an error. -/
 theorem runTransaction_removes_selfdestructed {Meter : Type} [GasMeter Meter]
     [LawfulGasMeter Meter] (hfork : fork < .dencun) {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} {out : TransactionOutput}
@@ -507,6 +477,7 @@ theorem runTransaction_removes_selfdestructed {Meter : Type} [GasMeter Meter]
     {target : Address} {bought : State.TransactionState} {message : Message fork}
     {first : FirstFrame fork Meter} {start evm after : Evm fork Meter} {beneficiary : Address}
     {refund : Nat}
+    -- The run names the target, the state after buying gas, the message and its first frame.
     (htarget : messageTarget included.sender
         ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx = .ok target)
     (hbought : buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought)
@@ -519,10 +490,15 @@ theorem runTransaction_removes_selfdestructed {Meter : Type} [GasMeter Meter]
         { message with reservoir := (allocateGas fork tx included.intrinsicGas).reservoir } bought
         (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
         (paidWrites included.sender target tx) = .ok first)
+    -- The code that the message runs starts from a frame.
     (starts : CodeStarts fork first.message first.state first.substate first.meter start)
+    -- From there, the run of the message goes through the frame after a SELFDESTRUCT.
     (visits : Visits fork first.message.gas start after)
+    -- That frame is the result of SELFDESTRUCT on a frame, so both run one message.
     (destructs : finishSelfdestruct fork beneficiary refund evm = .ok after) :
+    -- The account that runs the SELFDESTRUCT is then absent after the transaction.
     out.state.accountExists evm.message.currentTarget = false :=
+  -- Before Cancun, SELFDESTRUCT marks the account that runs it.
   runTransaction_removes_marked (Nat.lt_of_lt_of_le hfork (by decide)) h ok htarget hbought
     hmessage hfirst starts visits _ (finishSelfdestruct_deletes hfork destructs)
 

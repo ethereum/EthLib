@@ -12,16 +12,6 @@ A deployment candidate is an address with nonce 0 and no code, where a creation 
 
 A transaction makes none, except at an address whose storage it wiped.
 
-Buying gas raises the nonce of the sender.
-
-Settling gas moves ether, or deletes an empty beneficiary and so wipes its storage.
-
-An authorization sets the code of its authority, then raises its nonce.
-
-Clearing the code of an authority with nonce 0 leaves a candidate only until the nonce rises.
-
-The message makes no new candidate, and the deletions at the end wipe the storage they delete.
-
 Source: [EIP-7702, Behavior][eip7702].
 
 [eip7702]: https://eips.ethereum.org/EIPS/eip-7702#behavior
@@ -84,7 +74,9 @@ private theorem noNewCandidate_creditEther {block : BlockState} {tx tx' : Transa
 
 /-- An authorization that sets the code of its authority keeps the condition on candidates.
 
-The authority ends with a nonce above 0, so it is no candidate. -/
+It sets the code, then raises the nonce, so the authority ends with a nonce above 0.
+
+So it is no candidate. -/
 private theorem noNewCandidate_delegate {block : BlockState} {state state' : TransactionState}
     {authority : Address} {auth : Authorization} {refund : Nat}
     (hinv : NoNewCandidate block state)
@@ -104,6 +96,7 @@ private theorem noNewCandidate_delegate {block : BlockState} {state state' : Tra
   intro x hn hc
   by_cases hx : x = authority
   · subst hx
+    -- Clearing the code of an authority with nonce 0 leaves a candidate only until the nonce rises.
     rw [hself] at hn
     exact absurd hn (Nat.succ_ne_zero _)
   · have hacc : state'.getAccount x = state.getAccount x := by
@@ -260,7 +253,7 @@ theorem noNewCandidate_buyGas {env : BlockEnvironment fork} {block : BlockState}
 
 /-- Settling gas keeps the condition on candidates.
 
-It moves ether, or deletes an empty beneficiary. -/
+It moves ether, or deletes an empty beneficiary and so wipes its storage. -/
 private theorem noNewCandidate_settleGas {env : BlockEnvironment fork} {block : BlockState}
     {state state' : TransactionState} {sender : Address} {tx : Transaction}
     {gasLeft refundCounter used : Nat} (hinv : NoNewCandidate block state)
@@ -293,7 +286,9 @@ private theorem noNewCandidate_foldl_destroy {block : BlockState} :
     · exact hinv.destroyAccount address
     · exact hinv
 
-/-- The deletions at the end of a transaction keep the condition on candidates. -/
+/-- The deletions at the end of a transaction keep the condition on candidates.
+
+They wipe the storage of each account that they delete. -/
 private theorem noNewCandidate_deleteAccounts {block : BlockState}
     {state state' : TransactionState} {output : CallOutput} (hinv : NoNewCandidate block state)
     (h : deleteAccounts fork state output = .ok state') : NoNewCandidate block state' := by

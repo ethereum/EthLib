@@ -15,24 +15,6 @@ The sets name accounts, whole storages, slots and code hashes.
 
 When the first run ends with every read in the sets, the second gives the same output.
 
-Only the states of the two outputs differ, and they agree.
-
-The preparation of the first frame reads each authority before it looks at its account.
-
-It reads the recipient, then its delegate, each before it fetches its code.
-
-A creation reads its address before it checks that a contract may be deployed there.
-
-So each lookup of the preparation is at an account in the sets.
-
-Both runs then prepare the same frame.
-
-The run of a message depends only on what it records, so the two outputs agree.
-
-A preparation that halts returns its state so far, and both runs halt with the same error.
-
-The code that the message carries into the preparation of a call is replaced there.
-
 The sets play the part of a block access list in [EIP-7928, Scope and Inclusion][bal].
 
 [bal]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion
@@ -123,7 +105,9 @@ private theorem getCode_getPreStateAccount_eq {block : BlockState}
   rw [this]
   exact covers.code address ha
 
-/-! ## The authorizations -/
+/-! ## The authorizations
+
+The preparation reads each authority before it looks at its account. -/
 
 /-- The state that a result ends with: that of its value, or that of its error. -/
 private def outState {α : Type} (getState : α → TransactionState) :
@@ -368,7 +352,11 @@ private theorem foldlM_applyAuthorization_agrees {block : BlockState}
         exact foldlM_applyAuthorization_agrees covers rest next next'.state hagree'
           (hkeeps.1.trans hparent) (horigin.of_keepsCodeOrigin hkeeps) hreads
 
-/-! ## The preparation -/
+/-! ## The preparation
+
+Each lookup of the preparation is at an account in the sets.
+
+Both runs then prepare the same frame. -/
 
 /-- Two results of the preparation are the same, up to their states, which agree. -/
 private def FramesAgree (account allStorage : Address → Prop)
@@ -383,7 +371,7 @@ private def FramesAgree (account allStorage : Address → Prop)
 
 /-- The end of the preparation of a call, from the state before the read of its recipient.
 
-It reads the recipient, then the delegate, and fetches their code. -/
+It reads the recipient, then its delegate, each before it fetches its code. -/
 private def callRest (message : Message fork) (target : Address) (substate : Substate)
     (accessed : Std.ExtTreeSet Address) (refund : Nat) (state : TransactionState)
     (meter : Meter) : Except (EvmError × TransactionState) (FirstFrame fork Meter) := do
@@ -592,6 +580,7 @@ private theorem prepareFirstFrame_framesAgree {block : BlockState}
     have hrecord := hagree.recordAccountRead message.currentTarget
     generalize GasMeter.chargeState (GasMeter.start (Meter := Meter) message.gas message.reservoir)
       GasCosts.NEW_ACCOUNT_STATE_GAS = charged at hreads ⊢
+    -- A creation reads its address before it checks that a contract may be deployed there.
     have ha : account message.currentTarget := by
       refine hreads.account _ ?_
       by_cases hd : (state.recordAccountRead message.currentTarget).accountDeployable
@@ -689,19 +678,16 @@ end Helpers
 
 /-- A preparation that ends with its reads in the sets gives the same frame on an agreeing state.
 
-The two frames differ only in their states, which agree.
-
-The sets must cover the block, which the first state must have as its parent.
-
-The code hashes of the first state must come from the block or from writes.
-
-The first state must have no new deployment candidate. -/
+The two frames differ only in their states, which agree. -/
 theorem prepareFirstFrame_agrees {block : BlockState} {account allStorage : Address → Prop}
     {slot : Address → Bytes32 → Prop} {code : Hash32 → Prop}
+    -- The sets must cover the block, which the first state must have as its parent.
     (covers : CoversBlock block account allStorage code) {chainId : Nat} {message : Message fork}
     {state other : TransactionState} {substate : Substate} {auths : List Authorization}
     {paid : Std.ExtTreeSet Address} (hagree : AgreesOn account allStorage slot code state other)
+    -- The code hashes of the first state must come from the block or from writes.
     (hparent : state.parent = block) (horigin : CodeOrigin block state)
+    -- The first state must have no new deployment candidate.
     (hcandidates : NoNewCandidate block state) {first : FirstFrame fork Meter}
     (h : prepareFirstFrame chainId message state substate auths paid = .ok first)
     (hreads : ReadsIn account slot first.state) :
@@ -722,20 +708,17 @@ theorem prepareFirstFrame_agrees {block : BlockState} {account allStorage : Addr
 
 /-- A preparation that stops with its reads in the sets stops alike on an agreeing state.
 
-The error is the same, and the states it keeps agree.
-
-The sets must cover the block, which the first state must have as its parent.
-
-The code hashes of the first state must come from the block or from writes.
-
-The first state must have no new deployment candidate. -/
+The error is the same, and the states it keeps agree. -/
 theorem prepareFirstFrame_agrees_error {block : BlockState}
     {account allStorage : Address → Prop} {slot : Address → Bytes32 → Prop}
+    -- The sets must cover the block, which the first state must have as its parent.
     {code : Hash32 → Prop} (covers : CoversBlock block account allStorage code) {chainId : Nat}
     {message : Message fork} {state other : TransactionState} {substate : Substate}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address}
     (hagree : AgreesOn account allStorage slot code state other)
+    -- The code hashes of the first state must come from the block or from writes.
     (hparent : state.parent = block) (horigin : CodeOrigin block state)
+    -- The first state must have no new deployment candidate.
     (hcandidates : NoNewCandidate block state) {e : EvmError} {read : TransactionState}
     (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
       .error (e, read))
@@ -757,27 +740,25 @@ theorem prepareFirstFrame_agrees_error {block : BlockState}
     rw [h2] at hfa
     exact hfa.elim
 
-/-! ## The message -/
+/-! ## The message
+
+The run of a message depends only on what it records, so the two outputs agree. -/
 
 /-- A message of a transaction with its reads in the sets gives the same output on agreeing states.
 
-The two outputs differ only in their states, which agree.
-
-The sets must cover the block, which the first state must have as its parent.
-
-The code hashes of the first state must come from the block or from writes.
-
-The first state must have no new deployment candidate.
-
-A call must run at its recipient. -/
+The two outputs differ only in their states, which agree. -/
 theorem processMessageCall_agrees [LawfulGasMeter Meter] {block : BlockState}
     {account allStorage : Address → Prop} {slot : Address → Bytes32 → Prop}
+    -- The sets must cover the block, which the first state must have as its parent.
     {code : Hash32 → Prop} (covers : CoversBlock block account allStorage code) {chainId : Nat}
     {message : Message fork} {state other : TransactionState} {substate : Substate}
     {auths : List Authorization} {paid : Std.ExtTreeSet Address}
     (hagree : AgreesOn account allStorage slot code state other)
+    -- The code hashes of the first state must come from the block or from writes.
     (hparent : state.parent = block) (horigin : CodeOrigin block state)
+    -- The first state must have no new deployment candidate.
     (hcandidates : NoNewCandidate block state)
+    -- A call must run at its recipient.
     (recipient : ∀ target, message.target = some target → target = message.currentTarget)
     {output : CallOutput}
     (h : processMessageCall (Meter := Meter) chainId message state substate auths paid =
@@ -796,6 +777,7 @@ theorem processMessageCall_agrees [LawfulGasMeter Meter] {block : BlockState}
     · cases h
     · rename_i halts
       cases h
+      -- A preparation that halts returns its state so far, and both runs halt with the same error.
       obtain ⟨read', h2, hread⟩ := prepareFirstFrame_agrees_error covers hagree hparent horigin
         hcandidates hprep ⟨hreads.account, hreads.slot⟩
       rw [h2]

@@ -10,12 +10,6 @@ public import EthLib.Execution.Transactions.Process
 
 Each account of the state has no code, a written code, or its code hash in the block.
 
-Buying gas raises the nonce of the sender and takes its fee, so it changes no code hash.
-
-An authorization sets the code of its authority to a delegation, which it writes first.
-
-A delegation to the null address clears the code instead.
-
 Each step of the preparation of the first frame keeps it, and so does every message.
 
 Source: [EIP-7702, Behavior][eip7702].
@@ -60,6 +54,9 @@ theorem keepsCodeOrigin_delegate {state state' : TransactionState}
   obtain ⟨coded, hcode, h⟩ := bind_ok_iff.mp h
   obtain ⟨bumped, hnonce, h⟩ := bind_ok_iff.mp h
   cases h
+  -- The code is a delegation, which the authorization writes first.
+  --
+  -- A delegation to the null address clears the code instead.
   exact (KeepsCodeOrigin.setCode hcode).trans (KeepsCodeOrigin.incrementNonce hnonce)
 
 /-- One authorization keeps the origin of the code hashes. -/
