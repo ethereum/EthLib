@@ -1432,9 +1432,12 @@ Blobs, cells, commitments, proofs and field elements are byte vectors with their
 `Proofs/Kzg/Core.lean` proves that parsing rejects bytes of any other length.
 It and `Proofs/Kzg/Cells.lean` prove that the operations reject other malformed inputs.
 An example is two lists of different lengths.
-The cell indices reach the cell operations through the C exports as one buffer, 8 big-endian bytes per index.
+The cell and commitment indices reach the operations through the C exports as one buffer each, 8 big-endian bytes per index.
 `unpackIndicesBE_eq_ok_iff` (`Proofs/Kzg/Cells.lean`) states that a buffer decodes to a list of indices exactly when it is their encodings in order.
-So an index of 2^32 or more is read in full, and is rejected as out of bounds rather than read as a smaller index.
+So each index below `2^64` decodes to its own value, never to a smaller one.
+`verifyCellKzgProofBatch_cellIndexOutOfBounds` (`Proofs/Kzg/Cells.lean`) and `recoverCellsAndKzgProofs_cellIndexOutOfBounds` (`Proofs/Kzg/Recovery.lean`) state that those operations reject an index of `CELLS_PER_EXT_BLOB` or more in the decoded list, once their earlier checks pass.
+No theorem joins the decoding and this check at the C export.
+The batch challenge export checks the bounds of its indices itself, and no theorem states that check yet.
 
 Each operation takes the trusted setup as an argument and returns `Except KzgError`, so the kernel can unfold it.
 `computeCellsAndKzgProofs_blob_spec` and `recoverCellsAndKzgProofs_spec` (`Proofs/Kzg/Fk20Proofs.lean`) state the cells and proofs that two operations return.

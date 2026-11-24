@@ -13,6 +13,8 @@ Reading and writing big-endian bytes undo each other.
 - Zero on `len` bytes is `len` zero bytes.
 - Reading `k` bytes and writing the value back on `k` bytes gives the same bytes.
 - Two numbers below `256 ^ len` that write the same `len` bytes are equal.
+- Numbers below `256 ^ w` written on `w` bytes each read back from their blocks of `w` bytes.
+- Bytes of length `w * n`, cut into `n` blocks of `w` bytes, read and written back, are unchanged.
 -/
 
 @[expose] public section
@@ -160,5 +162,59 @@ theorem compare_eq_compare_bytesToNat {a b : List UInt8} (h : a.length = b.lengt
         omega
       rw [Nat.compare_eq_gt.mpr hxy, Nat.compare_eq_gt.mpr this]
       rfl
+
+/-- Numbers written on `w` bytes each, one after the other, take `w` bytes each. -/
+theorem length_flatMap_natToBytes (w : Nat) (xs : List Nat) :
+    (xs.flatMap (natToBytes w)).length = w * xs.length := by
+  induction xs with
+  | nil => simp
+  | cons x xs ih =>
+    rw [List.flatMap_cons, List.length_append, natToBytes_length, ih, List.length_cons,
+      Nat.mul_succ, Nat.add_comm]
+
+/-- Numbers below `256 ^ w`, written on `w` bytes each, read back from their blocks of `w` bytes.
+
+Block `i` is the `w` bytes after the first `i * w`. -/
+theorem map_range_bytesToNat_flatMap_natToBytes {w : Nat} {xs : List Nat}
+    (hlt : ∀ x ∈ xs, x < 256 ^ w) :
+    (List.range xs.length).map
+      (fun i => bytesToNat (((xs.flatMap (natToBytes w)).drop (i * w)).take w)) = xs := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih =>
+    have hx : (natToBytes w x).length = w := natToBytes_length w x
+    -- Past the first block, block `i + 1` of the list is block `i` of the rest.
+    have hshift : ∀ i, ((natToBytes w x ++ xs.flatMap (natToBytes w)).drop ((i + 1) * w)).take w =
+        ((xs.flatMap (natToBytes w)).drop (i * w)).take w := fun i => by
+      rw [Nat.add_one_mul, Nat.add_comm (i * w) w, ← List.drop_drop, List.drop_left' hx]
+    rw [List.length_cons, List.range_succ_eq_map, List.map_cons, List.map_map, List.flatMap_cons]
+    simp only [Function.comp_def, hshift, Nat.zero_mul, List.drop_zero]
+    rw [ih fun y hy => hlt y (List.mem_cons_of_mem x hy), List.take_left' hx,
+      bytesToNat_natToBytes_of_lt (hlt x List.mem_cons_self)]
+
+/-- Bytes of length `w * n`, read as `n` blocks of `w` bytes and written back, are unchanged. -/
+theorem flatMap_natToBytes_map_range_bytesToNat {w n : Nat} {bytes : List UInt8}
+    (hlen : bytes.length = w * n) :
+    ((List.range n).map fun i => bytesToNat ((bytes.drop (i * w)).take w)).flatMap
+      (natToBytes w) = bytes := by
+  induction n generalizing bytes with
+  | zero =>
+    rw [Nat.mul_zero, List.length_eq_zero_iff] at hlen
+    simp [hlen]
+  | succ n ih =>
+    have htake : (bytes.take w).length = w := by
+      rw [List.length_take, hlen, Nat.mul_succ]
+      omega
+    have hdrop : (bytes.drop w).length = w * n := by
+      rw [List.length_drop, hlen, Nat.mul_succ]
+      omega
+    -- Past the first block, block `i + 1` of the bytes is block `i` of the rest.
+    have hshift : ∀ i, (bytes.drop ((i + 1) * w)).take w = ((bytes.drop w).drop (i * w)).take w :=
+      fun i => by rw [List.drop_drop, Nat.add_one_mul, Nat.add_comm (i * w) w]
+    rw [List.range_succ_eq_map, List.map_cons, List.map_map, List.flatMap_cons]
+    simp only [Function.comp_def, hshift, Nat.zero_mul, List.drop_zero]
+    have hfirst := natToBytes_bytesToNat (bytes.take w)
+    rw [htake] at hfirst
+    rw [ih hdrop, hfirst, List.take_append_drop]
 
 end EthLib.Base
