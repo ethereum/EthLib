@@ -11,17 +11,7 @@ On the small-budget route, the linear potential also pays every FORS leaf query.
 
 A FORS leaf query is the hash of a FORS secret.
 
-A fresh FORS leaf query costs the potential at most `(1 + Y + K_F) 2^-128`.
-
-The parts are a guess, a recorded contact weight at the remaining budget `Y`, and `K_F`.
-
-Here `K_F` counts its pairs with the weighted recorded contacts.
-
-The rate of the potential then falls by at least `(ρ + K_F) 2^-128`.
-
-Any other answer to a FORS leaf query costs at most `(1 + Y) 2^-128`.
-
-So each FORS leaf query leaves `(ρ - 1 - x) 2^-128`, with `x = total / 2^128`.
+Each FORS leaf query leaves `(ρ - 1 - x) 2^-128`, with `x = total / 2^128`.
 
 The potential pays that amount out.
 -/
@@ -105,7 +95,10 @@ theorem arithFF (s : St) {f : FIn} {g : ℝ≥0∞} (hg : g ≤ 1) (hrec : g = 0
 
 end Arith
 
-/-! ### FORS leaf queries leave the slack -/
+/-! ### FORS leaf queries leave the slack
+
+Any other answer to a FORS leaf query costs at most `(1 + Y) 2^-128`.
+-/
 
 section Fresh
 
@@ -122,7 +115,13 @@ theorem fresh_fleafF {s : St} (hinv : K.Inv s) {x : HashInput} (hx : s.cache x =
         (K.ρ - 1 - xr) ≤
       K.pot (y' + 1) s := by
   have hi := initial_none_of_fresh K.initial s hinv.prepared x hx
+  -- A fresh FORS leaf query costs the potential at most `(1 + Y + K_F) 2^-128`.
+  --
+  -- The parts are a guess, a recorded contact weight at the remaining budget `Y`, and `K_F`.
+  --
+  -- Here `K_F` counts its pairs with the weighted recorded contacts.
   have h := K.step_fleaf y' hx hi hxF hk
+  -- The rate of the potential then falls by at least `(ρ + K_F) 2^-128`.
   have ha := K.arithFF hN hxr hY s hg hrec
   rw [K.pot_succ]
   calc ∑' r, Pr{let y ← readOutside x s}[y = r] * K.pot y' r.2 + ν * g + ν * ENNReal.ofReal

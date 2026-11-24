@@ -17,12 +17,6 @@ A correct guess, or the refined bad event of a valid finished run, is one of thr
 - a payoff event of the linear potential;
 - the contact event against the completed table;
 - a cover.
-
-The linear potential leaves `(ρ - 1 - x) 2^-128` unused per FORS leaf query.
-
-The contact bound takes `2^-128 (N rate + 1 - κ)` of it.
-
-That fits once `κ ≥ 2 - ρ + x + N rate`.
 -/
 
 @[expose] public section
@@ -243,6 +237,10 @@ theorem arm_splitF (κ : ℝ) : ν ≤ ν * ENNReal.ofReal (1 - κ) + ENNReal.of
     _ = _ := by ring
 
 /-- The payments of the contact bound per FORS leaf query fit in the slack of the linear potential.
+
+The linear potential leaves `(ρ - 1 - x) 2^-128` unused per FORS leaf query.
+
+The contact bound takes `2^-128 (N rate + 1 - κ)` of it.
 
 This needs `2 - ρ + x + N rate ≤ κ ≤ 1`. -/
 theorem arm_paysF (ρ x κ : ℝ) (hκ1 : κ ≤ 1)

@@ -12,20 +12,6 @@ The hash is a random oracle.
 
 The game samples a uniform 32-byte seed `SK.seed`, the secret key, and generates the key from it.
 
-Key generation derives `PK.seed` and `SK.prf` as the hashes of `leanSPHINCS || SK.seed || d`.
-
-Here `d` is 0 for `PK.seed` and 1 for `SK.prf`.
-
-It derives every other secret with one `PRF` call.
-
-The signer is deterministic: it derives each randomizer from `SK.prf`, `PK.seed` and the message.
-
-So a repeated request returns the same signature.
-
-Every hash call counts toward the query bound, repeated calls included.
-
-The calls of key generation, signing and verification count too.
-
 The file ends with the forgery advantage and the target of `bits` bits of classical security.
 -/
 
@@ -86,6 +72,10 @@ noncomputable def countedOracle :=
 
 /-- The signing oracle: the deterministic signer with the secret key.
 
+The signer derives each randomizer from `SK.prf`, `PK.seed` and the message.
+
+So a repeated request returns the same signature.
+
 It logs every request and its answer. -/
 noncomputable def signingOracle (sk : Seeded.SecretKey) :
     QueryImpl SigningSpec (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) :=
@@ -99,6 +89,11 @@ The adversary wins when its forgery verifies and it made at most `N` signing req
 The win also needs that no signing answer was the forgery. -/
 noncomputable def gameCore (adversary : Adversary) : OracleComp OracleWorld Bool := do
   let seed ← liftM sampleMasterSeed
+  -- Key generation derives `PK.seed` and `SK.prf` as the hashes of `leanSPHINCS || SK.seed || d`.
+  --
+  -- Here `d` is 0 for `PK.seed` and 1 for `SK.prf`.
+  --
+  -- It derives every other secret with one `PRF` call.
   let (pk, sk) ← liftM (Seeded.keygen seed)
   let ((forgery, log) : Forgery × QueryLog SigningSpec) ←
     (simulateQ (QueryImpl.ofLift OracleWorld
