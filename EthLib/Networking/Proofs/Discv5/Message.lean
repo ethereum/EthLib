@@ -10,11 +10,9 @@ public import EthLib.Serialization.Proofs.Rlp.RoundTrip
 
 Properties of the discv5 messages.
 
-- The fields of each message read back as the message.
-- A valid message decodes back from its plaintext.
-- A message that decodes is valid.
-- A plaintext that decodes is the encoding of its message.
-- So a message has at most one plaintext that decodes to it.
+A valid message decodes back from its plaintext.
+
+A message that decodes is valid.
 -/
 
 @[expose] public section
@@ -128,7 +126,9 @@ theorem encode_of_decodeFields {bytes : ByteArray} {m : Message}
             simp [ByteArray.data_append, hbytes]
   · simp [throw, throwThe, MonadExceptOf.throw] at h
 
-/-- A plaintext that decodes is the encoding of its message. -/
+/-- A plaintext that decodes is the encoding of its message.
+
+So a message has at most one plaintext that decodes to it. -/
 theorem encode_of_decode {bytes : ByteArray} {m : Message} (h : Message.decode bytes = .ok m) :
     m.encode = .ok bytes := by
   unfold Message.decode at h

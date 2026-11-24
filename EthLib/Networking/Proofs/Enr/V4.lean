@@ -13,19 +13,9 @@ The "v4" identity scheme of EIP-778, from its section of that name.
 
 A record verifies exactly when ECDSA accepts its 64-byte signature, read as `r` then `s`.
 
-So any ECDSA signature of the hash of its content, under the key of its pair, makes it verify.
+These are correctness statements.
 
-The deterministic signer, with the nonce of RFC 6979 and the low-s rule of EIP-2, is one case.
-
-The node ID exists exactly when the public key can be read, and it is the hash of that key.
-
-It depends only on the `id` and `secp256k1` pairs.
-
-A record that the signer signs verifies, keeps its pairs, and reads back from its bytes.
-
-A record that the builder makes reads back from its bytes, verifies, and has its key pairs.
-
-These are correctness statements; a separate module states forgery and malleability.
+A separate module states forgery and malleability.
 -/
 
 @[expose] public section
@@ -90,7 +80,9 @@ The signature is `r` then `s`, each in 32 big-endian bytes, as the "v4" scheme o
 
 ECDSA signs the Keccak-256 hash of the RLP encoding of the content.
 
-Any nonce and either sign of `s` will do. -/
+Any nonce and either sign of `s` will do.
+
+So any ECDSA signature of that hash, under the key of its pair, makes the record verify. -/
 theorem verifyV4_of_verify {r : Enr} {q : Point} {rr ss : Fn} {content : ByteArray}
     (hid : r.get KEY_ID = some (.bytes SCHEME_V4))
     (hkey : r.get KEY_SECP256K1 = some (.bytes q.encodeCompressed))
@@ -140,6 +132,7 @@ theorem verifyV4_of_sign {r : Enr} {sk rr ss : Fn} {odd : Bool} {content : ByteA
       = ⟨((Base.ByteOrder.toBE 32 rr.val).toList
         ++ (Base.ByteOrder.toBE 32 ss.val).toList).toArray⟩) :
     verifyV4 r = true :=
+  -- The deterministic signer is one case of an ECDSA signature that the verifier accepts.
   verifyV4_of_verify hid hkey hc hsig (Ecdsa.verify_sign_rfc6979 hsign)
 
 /-! ## Node ID -/

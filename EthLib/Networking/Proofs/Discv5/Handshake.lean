@@ -12,19 +12,7 @@ public import EthLib.Networking.Proofs.Discv5.Packet
 
 Node B accepts what node A sends in a handshake, and both sides derive the same session keys.
 
-- The ECDH of the discv5 handshake is symmetric between two multiples of `G`.
-- When step 3 succeeds for node A, step 4 succeeds for node B with the keys of node A.
-- Step 4 succeeds exactly when the ID signature, the compressed key and the ECDH pass.
-- The session keys convert to AES keys byte for byte.
-- Node B reads node A's handshake message packet back: the ID, the record, the message, the keys.
-- Node B reads a handshake packet exactly when it decodes, step 4 succeeds and the message opens.
-- Two errors with one code come from one constructor.
-
-The theorem that step 4 follows step 3 assumes only that step 3 succeeded.
-
-That success already holds the key agreement, the key derivation and the ID signature.
-
-The sealing fails on a packet of more than 1280 bytes, which the decoder rejects.
+The ECDH of the discv5 handshake is symmetric between two multiples of `G`.
 -/
 
 @[expose] public section
@@ -73,12 +61,17 @@ theorem ecdh_mul_generator_symm {e b : Fn} {secret : ByteArray}
 
 Node A has the static key `a`, and node B the static key `b`.
 
-Each side knows the public key of the other, `a G` or `b G`. -/
+Each side knows the public key of the other, `a G` or `b G`.
+
+The only hypothesis is that step 3 succeeded. -/
 theorem acceptHandshake_initiateHandshake {e a b : Fn} {challengeData : ByteArray}
     {nodeIdA nodeIdB : NodeId} {init : HandshakeInit}
     (h : initiateHandshake e a challengeData nodeIdA nodeIdB (mul b generator) = .ok init) :
     acceptHandshake b challengeData nodeIdA nodeIdB (mul a generator) init.ephemeralPubkey
       init.idSignature = .ok init.keys := by
+  -- Step 3 succeeded, so it already holds the key agreement and the key derivation.
+  --
+  -- It also holds the ID signature.
   unfold initiateHandshake at h
   cases hs : Discv5.ecdh e (mul b generator) with
   | error err => simp [hs, Except.mapError, bind, Except.bind] at h
@@ -243,6 +236,8 @@ theorem openHandshake_sealHandshake {e a b : Fn} {challengeData : ByteArray}
     | ok packetBytes =>
       simp only [hs, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
       obtain ⟨rfl, rfl⟩ := h
+      -- The sealing succeeded, so the packet has at most 1280 bytes, as the decoder requires.
+      --
       -- The packet decodes back, since its flag is 2 and not that of WHOAREYOU.
       obtain ⟨message, hdec, hopen⟩ := openPacket_sealPacket
         (decryptionError := HandshakeError.decryption) hs (by simp [Authdata.flag])

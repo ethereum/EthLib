@@ -10,17 +10,7 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Container
 /-!
 # `Networking.Proofs.Enr.Consensus`
 
-Properties of the consensus entries of a node record.
-
-- The `eth2` value is a lawful SSZ container, so it round-trips and has 16 bytes.
-- A key that exists at a fork exists at every later fork.
-- A node accepts a record exactly when each of its entries reads, and the `eth2` entry is present.
-- A node before Altair reads no sync committee subnets.
-- A node from Fulu on reads a custody group count and a next fork digest, or rejects the record.
-- From Fulu on, the custody group count is the number whose RLP scalar its entry holds.
-- From Fulu on, the next fork digest is the four bytes of its entry.
-- A node before Fulu reads neither.
-- Each entry error has its own code, and no record error has that code.
+Properties of the consensus entries of a node record, at each fork.
 -/
 
 @[expose] public section
@@ -32,6 +22,7 @@ open EthLib.Networking.Enr
 open EthLib.Serialization
 open EthLib.Serialization.Ssz
 
+/-- The `eth2` value is a lawful SSZ container, so it round-trips. -/
 instance : LawfulSszType EnrForkId :=
   .container (by decide) (fun _ => rfl) (fun _ => rfl)
 
@@ -111,7 +102,9 @@ theorem readEntries_syncnets {count : UInt64} {fork : Fork} {r : Enr}
     (h : readEntries count fork r = .ok e) (hf : fork < .altair) : e.syncnets = none :=
   readAt_before (readEntries_ok h).1 hf
 
-/-- From Fulu on, a record that a node accepts has a custody group count and a next fork digest. -/
+/-- From Fulu on, a record that a node accepts has a custody group count and a next fork digest.
+
+A record without them is rejected. -/
 theorem readEntries_fulu {count : UInt64} {fork : Fork} {r : Enr}
     {e : ConsensusEntries count}
     (h : readEntries count fork r = .ok e) (hf : .fusaka ≤ fork) : e.cgc.isSome ∧ e.nfd.isSome :=

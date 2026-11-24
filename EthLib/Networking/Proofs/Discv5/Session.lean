@@ -9,12 +9,6 @@ public import EthLib.Networking.Proofs.Discv5.Packet
 
 The WHOAREYOU challenge and the ordinary message packet read back.
 
-- A WHOAREYOU packet has 63 bytes, the smallest packet.
-- Node A reads the challenge of node B back, with the challenge data that node B keeps.
-- Node B reads an ordinary message packet of node A back, under its key.
-- An ordinary message packet that opens under a key is the sealing of its plaintext under that key.
-- Two errors with one code come from one constructor.
-
 The theorems say nothing about the freshness of a nonce, an ID nonce or an `enr-seq`.
 
 They give no bound on forging an AES-GCM tag.
@@ -32,7 +26,7 @@ open EthLib.Cryptography
 
 /-- Node A reads node B's WHOAREYOU packet back, with the challenge data that node B keeps.
 
-A WHOAREYOU packet has exactly 63 bytes, within the size limits of a packet. -/
+A WHOAREYOU packet has exactly 63 bytes, the smallest size that the limits of a packet allow. -/
 theorem readWhoareyou_makeWhoareyou {nodeIdA : NodeId} {maskingIv : Vector UInt8 16}
     {nonce : Vector UInt8 12} {idNonce : Vector UInt8 16} {enrSeq : UInt64}
     {bytes challengeData : ByteArray}

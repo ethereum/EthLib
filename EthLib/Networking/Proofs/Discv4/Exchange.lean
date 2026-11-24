@@ -8,13 +8,7 @@ public import Mathlib.Data.List.Induction
 
 Properties of the exchange rules of discv4.
 
-- A node sends Neighbors or an ENRResponse only to an address that is proven at that time.
-- A proof comes only from a Pong with the hash of the node's most recent Ping to that address.
-- So along any run, such an answer follows a matching Pong from the address in the last 12 hours.
-- An expired packet changes nothing and gets no answer.
-- A Pong with another hash changes nothing.
-- The Pong for a Ping carries its hash, so it proves the endpoint to the node that sent the Ping.
-- Receiving a packet changes only what the node remembers of its sender.
+Along a run, a node answers with Neighbors or an ENRResponse only after a matching Pong.
 -/
 
 @[expose] public section

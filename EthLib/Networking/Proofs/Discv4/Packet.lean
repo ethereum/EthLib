@@ -8,22 +8,6 @@ public import EthLib.Serialization.Proofs.Rlp.RoundTrip
 # Proofs: the packets of discv4
 
 Each packet reads back from its bytes, with the signer's public key as its sender.
-
-A packet with its full field list reads back with any list items after it, as EIP-8 asks.
-
-For Ping and Pong the full list ends with the sequence number of EIP-868.
-
-Without that number, the items after the first extra item are ignored.
-
-A packet reads only from its own type and its fields, followed by any items.
-
-A Ping or a Pong reads without a sequence number only when no item follows its fields.
-
-A packet whose hash does not match the bytes after it is rejected.
-
-Every packet that the reader accepts has at most 1280 bytes.
-
-Two errors with one code come from one constructor.
 -/
 
 @[expose] public section

@@ -6,23 +6,9 @@ public import EthLib.Networking.Proofs.Devp2p.P2p
 /-!
 # Proofs: the session of an RLPx connection
 
-Before the peer's Hello, every frame other than Hello and Disconnect is rejected.
-
 The peer's Hello opens the session.
 
-The session then holds the shared capabilities and the Snappy flag of both Hello messages.
-
-Each ID that a shared capability holds routes to that capability, at its relative ID.
-
-Two IDs never route to one place, and both peers route every ID the same way.
-
-No ID below `0x10` routes to a capability.
-
-In an active session, a Ping asks for exactly one Pong and leaves the session as it was.
-
-After a Disconnect, every frame is rejected.
-
-The reasons of Disconnect read back from their numbers.
+Each ID that a shared capability holds then routes to that capability, at its relative ID.
 -/
 
 @[expose] public section
@@ -53,7 +39,7 @@ theorem receive_beforeHello {length : Capability → Nat} {ours : Hello} {frameD
 
 /-- Before the peer's Hello, the peer's Hello opens the session.
 
-The session then holds the Snappy flag of both versions and the IDs of the shared capabilities. -/
+The session holds the shared capabilities with their IDs, and the Snappy flag of both versions. -/
 theorem receive_hello_active {length : Capability → Nat} {ours theirs : Hello}
     {data frame : ByteArray} (encoded : encode (Message.hello theirs).toItem = .ok data)
     (framed : encodeMessage false (.hello theirs) = .ok frame) :

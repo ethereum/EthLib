@@ -8,21 +8,11 @@ public import EthLib.Serialization.Proofs.Rlp.Codec
 /-!
 # Proofs: the fork identifier
 
-An identifier reads back from its RLP item.
-
-Each fork continues the CRC from the hash before it, as a node updates its hash fork by fork.
-
 A node accepts its own identifier.
 
 It accepts the identifier of a peer at an earlier or a later head of its chain.
 
 It refuses a peer at its fork that announces a fork it has passed, and a hash it never had.
-
-A head has passed a next fork exactly when the fork is not 0 and the head has reached it.
-
-The head reaches it when the fork is at most the head's block number.
-
-The head also reaches a fork above the timestamp threshold and at most its timestamp.
 -/
 
 @[expose] public section
@@ -33,6 +23,7 @@ open EthLib.Base
 open EthLib.Cryptography.Hash
 open EthLib.Serialization.Rlp
 
+/-- An identifier reads back from its RLP item. -/
 instance : LawfulCodec ForkId where
   ofItem_toItem id := by
     show ForkId.ofItem (ForkId.toItem id) = _
@@ -53,7 +44,9 @@ theorem ForkIdError.code_injective : Function.Injective ForkIdError.code := by
   intro a b h
   cases a <;> cases b <;> first | rfl | (simp [ForkIdError.code] at h)
 
-/-- One more fork continues the CRC of the hash before it with the 8 bytes of the fork. -/
+/-- One more fork continues the CRC of the hash before it with the 8 bytes of the fork.
+
+So a node updates its hash fork by fork. -/
 theorem Schedule.remainder_checksumInput_append (g : Hash32) (forks : List Activation)
     (a : Activation) :
     Crc.remainder Crc32.generator (Schedule.checksumInput g (forks ++ [a]))

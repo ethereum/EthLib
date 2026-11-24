@@ -9,19 +9,7 @@ import EthLib.Base.Proofs.Bytes
 /-!
 # `Networking.Proofs.Discv5.Packet`
 
-Properties of the discv5 packet encoding.
-
-- Masking twice under one key and IV gives the data back.
-- The mask of a prefix is the prefix of the mask.
-- The authdata of each flag decodes back from its bytes.
-- A packet that the encoder writes decodes back.
-- Bytes decode to authdata or a packet exactly when they encode it and pass the decoder's checks.
-- The additional data of a message is the masking IV and the unmasked bytes up to the message.
-- A destination reads that additional data from the packet bytes and their masking IV.
-- A message that the encryption writes decrypts back, also after encoding and decoding.
-- A message that decrypts is the encryption of its plaintext.
-- A sealed message packet decodes back and opens to its plaintext.
-- A decoded packet that opens under a key seals to its packet bytes under that key.
+Properties of the discv5 packet encoding, of its masking and of the encryption of its messages.
 -/
 
 @[expose] public section
@@ -80,7 +68,7 @@ theorem length_mask (destId : NodeId) (iv : Vector UInt8 16) (data : List UInt8)
   simp only [mask, Array.length_toList]
   exact this
 
-/-- Masking twice gives the data back. -/
+/-- Masking twice under one key and IV gives the data back. -/
 theorem mask_mask (destId : NodeId) (iv : Vector UInt8 16) (data : List UInt8) :
     mask destId iv (mask destId iv data) = data := by
   have := Aes.ctr_ctr (Aes.ciph .aes128 (maskingKey destId)) 128 iv ⟨data.toArray⟩
