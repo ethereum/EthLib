@@ -6515,6 +6515,8 @@ These cases of code 500 remain without a theorem:
   Under its other bounds, a draw of an epoch with active validators fails only for a product past 64 bits, or at `2^64` steps.
   On mainnet and minimal, `drawFits_presets` and `Run.effectiveBalance_capped` exclude the first along a run from genesis.
   `ProposersDrawEnd.of_atCap` gives the end when an active validator is at the cap of the draw, which no theorem shows along a chain.
+  `Genesis` does not require a state valid for launch, and `initializeBeaconStateFromEth1` has no check that refuses an empty list of deposits.
+  So no theorem excludes a reachable state with no active validator, where, before Fulu and with epochs of at least one slot, both proposer answers get code 500 by `dutiesResponse_proposer_no_active`.
 - No theorem excludes code 500 from the attester and PTC answers where a bound of their error theorems fails.
   On mainnet and minimal, code 500 from a PTC assignment needs a slot of the state within two epochs of `2^64`.
   Code 500 from an attester assignment needs such a slot, or a registry of more than `2^40` validators.
@@ -6757,6 +6759,12 @@ Each of these three parts is the rise of the proposer's balance over its step; f
 `blockRewards_balance` shows that the operations and the sync aggregate raise the proposer's balance by exactly the total.
 It assumes that the proposer has a balance, and that the block does not slash it, holds no deposit to its key before Electra and, from Electra to Fulu, no consolidation request from its key; the last three change the balance by other amounts.
 It also assumes that the proposer holds no seat in the sync committee, whose reward or penalty its balance would add, and that the mixes span more than the seed lookahead plus two epochs, so that every step reads the same proposer.
+`blockRewards_error_of_processBlock` shows that, on a state where the block applies, the block rewards fail only with the overflow error.
+The steps that they rerun succeed there, so their code 500 comes only from the product of the sync part or a sum of the total past 64 bits, which needs amounts that add up to `2^64` Gwei, about `1.8 * 10^10` ether.
+No theorem bounds the balances of the states that a reachable store holds, so that case stays without a theorem.
+`blockRewards_error_of_fromParents` applies it to each block that a store took, other than the anchor, from the state of its parent advanced to the slot of the block.
+It holds with the checks and the execution engine of the transition that gave the state of the block, which it names; `blockRewards_error_of_reachable` and `blockRewards_error_of_forwardReachableWith` are its forms for a reachable store and for a store built with one setting of the checks.
+The export checks no signature and accepts every payload, and no theorem carries the result to that setting.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_block_rewards.py`) runs the blocks of the pinned random, finality and sanity vectors.
 It checks the total, the sync part against a share computed from the active balance, and, up to Fulu, the change of the proposer's balance less its withdrawals under the hypotheses above.
 
@@ -6975,7 +6983,7 @@ Points that remain open:
 - The source does not say what the attestations of a block before Altair pay; their proposer earns its share at the end of the epoch, so EthLib reports zero for them.
 - A slashing part is the rise of the proposer's balance; for a block that slashes its own proposer that rise can be less than the whistleblower reward, or zero.
 - The proposer is the whistleblower of the slashings of its block, so a slashing part holds the whole whistleblower reward, not only the share that the transition calls the proposer reward.
-- The source lists codes 400, 404 and 500 for the block rewards; EthLib answers a block that fails its steps with code 500, since the block was imported.
+- The source lists codes 400, 404 and 500 for the block rewards; EthLib answers a block that fails its steps with code 500, since the block was imported, and `blockRewards_error_of_fromParents` shows that such a block fails only by an overflow, under the checks of its import.
 - The block rewards run the block only up to its attestations, and from Altair its other operations; they do not run the sync aggregate step, so an aggregate that the step would refuse still gets a sync part.
 - From Gloas the block also records a payment to a builder; the source does not say whether the total includes it, and EthLib leaves it out, since it does not change the proposer's balance in the block.
 - The reward of a member that is also the proposer leaves out the proposer share of each signature, which the block rewards count.
