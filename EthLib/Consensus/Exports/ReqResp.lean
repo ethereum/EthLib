@@ -3,9 +3,11 @@ module
 public import EthLib.Base.Exports
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Consensus.Exports.Ssz
+public import EthLib.Consensus.ReqResp.Chunk
 public import EthLib.Consensus.ReqResp.Messages
 public import EthLib.Consensus.ReqResp.ResponseBounds
 public import EthLib.Consensus.ReqResp.Validity
+public import EthLib.Networking.Exports.ReqResp
 
 /-!
 # `Exports.ReqResp`
@@ -30,7 +32,7 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result PyValue UnreadArgument pyExport forkUpTo rejectArgument
+open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport forkUpTo rejectArgument
   toResult)
 
 /-- The protocol IDs of a fork. -/
@@ -174,6 +176,39 @@ That fork is the one that the context bytes of the chunk name, and it must defin
 @[export eth_consensus_reqresp_response_bounds]
 def reqRespResponseBoundsExport (args : PyValue) : Result PyValue :=
   pyExport reqRespResponseBoundsOf args
+
+/-- The code and the message of an error of a chunk.
+
+An error of bounds keeps its code, from 301, and an error of the chunk its own, below 301. -/
+instance : ExportError ChunkError where
+  code
+    | .bounds error => error.code
+    | .chunk error => ExportError.code error
+  message
+    | .bounds error => toString error
+    | .chunk error => ExportError.message error
+
+/-- One response chunk at the bounds of its fork, with that fork, the code, context and payload. -/
+def reqRespDecodeChunkOf (args : String × Option PyValue × Root × String × String × ByteArray) :
+    Result (String × UInt8 × ByteArray × ByteArray) := do
+  -- The name of the preset and the configuration, its replacements and the genesis validators root.
+  --
+  -- Then the fork of the exchange, the protocol ID and the chunk.
+  let (name, replacements, genesisValidatorsRoot, fork, protocol, bs) := args
+  let preset ← presetOf name
+  let config ← configWithValue name replacements
+  let fork ← forkUpTo .hegota fork.toUTF8
+  let some id := ProtocolId.parse? protocol | rejectArgument none s!"{protocol} names no protocol"
+  let (chunkFork, chunk) ←
+    toResult none (decodeChunkAtFork preset config genesisValidatorsRoot fork id bs)
+  return (chunkFork.name, chunk.code.toByte, chunk.context, chunk.payload)
+
+/-- One response chunk at the bounds of its fork, with that fork, the code, context and payload.
+
+The configuration of the name holds, with the replacements that a `dict` gives. -/
+@[export eth_consensus_reqresp_decode_chunk]
+def reqRespDecodeChunkExport (args : PyValue) : Result PyValue :=
+  pyExport reqRespDecodeChunkOf args
 
 /-- Decode the SSZ bytes of a request, or fail with the code of its SSZ error. -/
 def decodeRequest (α : Type) [SszType α] (data : ByteArray) : Result α :=

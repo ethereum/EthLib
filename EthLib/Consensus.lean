@@ -116,6 +116,7 @@ public import EthLib.Consensus.RemoteSigningApi.Response
 public import EthLib.Consensus.RemoteSigningApi.Endpoints
 public import EthLib.Consensus.RemoteSigningApi.SigningRoot
 public import EthLib.Consensus.ReqResp.Bounds
+public import EthLib.Consensus.ReqResp.Chunk
 public import EthLib.Consensus.ReqResp.Messages
 public import EthLib.Consensus.ReqResp.ResponseBounds
 public import EthLib.Consensus.ReqResp.Validity

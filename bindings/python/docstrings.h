@@ -1028,6 +1028,9 @@
 #define DOC_consensus_reqresp_response_bounds \
   "The smallest and the largest length of the payload of a successful response chunk, as a pair."
 
+#define DOC_consensus_reqresp_decode_chunk \
+  "One response chunk at the bounds of its fork, with that fork, the code, context and payload."
+
 #define DOC_consensus_reqresp_response_valid \
   "Whether a response is valid for its request, as a Boolean."
 

@@ -536,6 +536,11 @@ eth_consensus_reqresp_response_bounds(
 );
 
 extern lean_object*
+eth_consensus_reqresp_decode_chunk(
+  lean_object* args
+);
+
+extern lean_object*
 eth_consensus_reqresp_response_valid(
   lean_object* args
 );
@@ -2633,6 +2638,14 @@ py_consensus_reqresp_response_bounds(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_reqresp_response_bounds, args, 3, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_reqresp_decode_chunk(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_reqresp_decode_chunk, args, 6, CONSENSUS_ERROR);
 }
 
 PyObject*

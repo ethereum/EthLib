@@ -11325,7 +11325,8 @@
      "codes":
      [{"constructor": "notAtFork", "code": 301},
       {"constructor": "noRequest", "code": 302},
-      {"constructor": "topicNotAtFork", "code": 303}]}],
+      {"constructor": "topicNotAtFork", "code": 303},
+      {"constructor": "unknownDigest", "code": 305}]}],
    "error_class": "ConsensusError",
    "docstring":
    "The smallest and the largest length of a request payload, as a pair.\n\nThe arguments are the name of the preset and the configuration, the fork and the protocol ID."},
@@ -11340,10 +11341,39 @@
      "codes":
      [{"constructor": "notAtFork", "code": 301},
       {"constructor": "noRequest", "code": 302},
-      {"constructor": "topicNotAtFork", "code": 303}]}],
+      {"constructor": "topicNotAtFork", "code": 303},
+      {"constructor": "unknownDigest", "code": 305}]}],
    "error_class": "ConsensusError",
    "docstring":
    "The smallest and the largest length of the payload of a successful response chunk, as a pair.\n\nThe arguments are the name of the preset and the configuration, the fork of the chunk and the ID.\n\nThat fork is the one that the context bytes of the chunk name, and it must define the protocol."},
+  {"summary":
+   "One response chunk at the bounds of its fork, with that fork, the code, context and payload.",
+   "signature":
+   "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, fork: str, protocol: str, data: bytes) -> tuple[str, int, bytes, bytes]",
+   "operation": "EthLib.Consensus.Exports.reqRespDecodeChunkExport",
+   "method": "consensus_reqresp_decode_chunk",
+   "errors":
+   [{"type": "EthLib.Consensus.BoundsError",
+     "codes":
+     [{"constructor": "notAtFork", "code": 301},
+      {"constructor": "noRequest", "code": 302},
+      {"constructor": "topicNotAtFork", "code": 303},
+      {"constructor": "unknownDigest", "code": 305}]},
+    {"type": "EthLib.Networking.ReqResp.ReqRespError",
+     "codes":
+     [{"constructor": "varint", "code": 1},
+      {"constructor": "lengthOutOfBounds", "code": 2},
+      {"constructor": "lengthBelowMinimum", "code": 9},
+      {"constructor": "arith", "code": 3},
+      {"constructor": "compressedTooLong", "code": 4},
+      {"constructor": "frame", "code": 5},
+      {"constructor": "lengthMismatch", "code": 6},
+      {"constructor": "missingCode", "code": 7},
+      {"constructor": "contextTruncated", "code": 8},
+      {"constructor": "trailingBytes", "code": 10}]}],
+   "error_class": "ConsensusError",
+   "docstring":
+   "One response chunk at the bounds of its fork, with that fork, the code, context and payload.\n\nThe configuration of the name holds, with the replacements that a `dict` gives."},
   {"summary": "Whether a response is valid for its request, as a Boolean.",
    "signature":
    "(name: str, fork: str, protocol: str, request: bytes, items: list[tuple[int | bytes, ...]], committee: list[int], genesis_validators_root: bytes | None) -> bool",
@@ -11354,7 +11384,8 @@
      "codes":
      [{"constructor": "notAtFork", "code": 301},
       {"constructor": "noRequest", "code": 302},
-      {"constructor": "topicNotAtFork", "code": 303}]},
+      {"constructor": "topicNotAtFork", "code": 303},
+      {"constructor": "unknownDigest", "code": 305}]},
     {"type": "EthLib.Serialization.Ssz.Err",
      "codes":
      [{"constructor": "typeMismatch", "code": 1},
@@ -11445,7 +11476,8 @@
      "codes":
      [{"constructor": "notAtFork", "code": 301},
       {"constructor": "noRequest", "code": 302},
-      {"constructor": "topicNotAtFork", "code": 303}]}],
+      {"constructor": "topicNotAtFork", "code": 303},
+      {"constructor": "unknownDigest", "code": 305}]}],
    "error_class": "ConsensusError",
    "docstring":
    "The largest length of the payload of a gossip topic at a fork."},

@@ -3674,6 +3674,26 @@ Not yet released.
   The C and Python function signatures stay the same.
   Migration: wrap 32 bytes with `VersionedHash.mk`, and read them back with `.bytes`.
 
+- A response chunk of a request and response protocol now decodes at the bounds of its own fork.
+  Its context bytes name that fork, so the caller passes no bounds.
+  The new `reqresp_decode_chunk` of `ethlib.consensus` takes the fork of the exchange, the protocol ID, the genesis validators root and the chunk.
+  It also takes the configuration with its replacements, and returns the name of the fork of the chunk with the chunk.
+  A successful chunk of a protocol that sends a fork digest has the fork of the first epoch with that digest.
+  The other chunks have the fork of the exchange.
+  Blocks by range and by root send a digest from version 2, and so do blocks by head and the four light client protocols.
+  So do the blob and data column sidecar protocols, the payload envelope protocols and inclusion lists by indices.
+  A digest that no epoch of the chain has raises `ConsensusError` with the new code 305.
+  A digest of a fork before the first type of the protocol raises it with code 301.
+  The Phase 0 digest on a light client protocol is such a digest.
+  A chunk that does not decode raises it with the code of `ReqRespError`.
+  In Lean, `Consensus.decodeChunkAtFork` in the new module `EthLib.Consensus.ReqResp.Chunk` decodes, and `Consensus.BoundsError` has the new constructor `unknownDigest`, so a match over it needs that case.
+  `EthLib.Consensus.Proofs.ReqResp.Chunk` states that a decoded chunk is one that `decodeResponseChunk` accepts at the bounds of the fork returned (`decodeChunkAtFork_eq_ok`).
+  Take a chain where `digestsIdentify` holds.
+  A successful chunk with the digest of an epoch has the fork of that epoch (`decodeChunkAtFork_fork_of_digest`).
+  A value that a server serializes at that fork decodes and reads back (`decodeChunkAtFork_response`).
+  The fork of a decoded chunk is at or after `ReqRespProtocol.firstChunkFork`, the first fork at which the payload of the protocol has a type.
+  `responseDesc_isSome` states that each protocol version of a fork has a response type at the fork of every chunk.
+
 ## 0.3.0
 
 Released on 2026-11-06.

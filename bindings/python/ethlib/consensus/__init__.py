@@ -19,6 +19,7 @@ from ethlib.errors import (
     ValidatorDutyError,
     WeakSubjectivityError,
 )
+from ethlib.networking.reqresp import ResponseChunk
 
 
 def preset(name: str) -> dict[str, int]:
@@ -412,6 +413,26 @@ def reqresp_response_bounds(
 ) -> tuple[int, int]:
     """The smallest and the largest length of a successful response chunk at its fork."""
     return _native.consensus_reqresp_response_bounds(name, chunk_fork, protocol)
+
+
+def reqresp_decode_chunk(
+    fork: str,
+    protocol: str,
+    genesis_validators_root: bytes,
+    data: bytes,
+    name: str = "mainnet",
+    config: dict[str, Any] | None = None,
+) -> tuple[str, ResponseChunk]:
+    """
+    One response chunk at the bounds of its fork, with the name of that fork.
+
+    A successful chunk of a protocol that sends a fork digest has the fork of the digest.
+    Any other chunk has the fork of the exchange, which must define the protocol.
+    """
+    chunk_fork, code, context, payload = _native.consensus_reqresp_decode_chunk(
+        name, config, genesis_validators_root, fork, protocol, data
+    )
+    return chunk_fork, ResponseChunk(code, context, payload)
 
 
 # What a response check reads from each item, field by field.
@@ -2456,6 +2477,7 @@ __all__ = [
     "gossip_topic_bound",
     "reqresp_request_bounds",
     "reqresp_response_bounds",
+    "reqresp_decode_chunk",
     "ResponseBlock",
     "ResponseSidecar",
     "ResponseEnvelope",
