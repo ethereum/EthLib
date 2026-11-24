@@ -9,23 +9,7 @@ This module holds the numeric certificates of the security proof.
 
 The kernel checks each one with `decide +kernel`, in exact rational arithmetic.
 
-The small route has a Poisson table, an option at baseline `ρ / 2^128` and a near certificate.
-
-A rational check ties them together at the end of the small budgets.
-
-A cover reaches every larger budget at the survival-weighted baseline.
-
-Most tables and options are rebuilt from their scalars and pass their checkers by construction.
-
-An option of the split by big indices stores its scalars and its bound.
-
-The kernel checks that option directly.
-
 The certificates are those of the full key of height 26.
-
-The layered key reuses them.
-
-It checks again only the cover chain, where its key generation cost enters.
 -/
 
 @[expose] public section
@@ -59,6 +43,7 @@ theorem near_h26_b26_ok : checkOptN 26 24 10 tab_h26_b26 near_h26_b26 = true :=
 /-- The plain rate `ρ`. -/
 def rho_h26_b26 : ℚ := 2043559331309 / 1099511627776
 
+/-- A rational check ties the small route together at the end of the small budgets. -/
 theorem check_h26_b26_ok : ForsPotential.checkSmallF 26 26 10 1182000000
     512487451133699472151040029945233408 rho_h26_b26 small_h26_b26.cthr small_h26_b26.B
     ((2 ^ 26 * near_h26_b26.En : ℚ) / 2) = true := by decide +kernel
@@ -69,7 +54,9 @@ def tabc_h26_b26_0 : PoisT := poisOf 324905686282685906945 220 136 150
 
 theorem tabc_h26_b26_0_ok : checkPT tabc_h26_b26_0 = true := checkPT_poisOf (by decide +kernel)
 
-/-- Option 0 of cover 0. -/
+/-- Option 0 of cover 0.
+
+Most tables and options are rebuilt from their scalars and pass their checkers by construction. -/
 def large_h26_b26_0_0 : Opt := .F (buildOpt 26 26 24 10 tabc_h26_b26_0
     (20096601 / 11417981541647679048466287755595961091061972992)
         3237329753696580902842956956394460282880 15
@@ -144,7 +131,11 @@ theorem large_h26_b26_0_4_ok : checkOptB 26 26 24 10 tabc_h26_b26_0 large_h26_b2
     large_h26_b26_0_4_cB = true :=
     checkOptB_build (by decide +kernel)
 
-/-- Option 5 of cover 0. -/
+/-- Option 5 of cover 0.
+
+From here on, each option is a split by big indices: it stores its scalars and its bound.
+
+The kernel checks each such option directly. -/
 def large_h26_b26_0_5 : Opt := .J ⟨16436759 / 2854495385411919762116571938898990272765493248,
     [3176334868943711307410428866547050086400, 364588705177906607041080873636673355776,
         169343501643769616098501488256869203968],
@@ -280,7 +271,9 @@ theorem large_h26_b26_0_12_ok : checkOptB 26 26 24 10 tabc_h26_b26_0 large_h26_b
     large_h26_b26_0_12_cB = true :=
     by decide +kernel
 
-/-- Cover 0 reaches every budget from the end of the small budgets up to `2^127`. -/
+/-- Cover 0 reaches every budget from the end of the small budgets up to `2^127`.
+
+It works at the survival-weighted baseline. -/
 def cover_h26_b26_0 : CoverW where
   qtop := 170141183460469231731687303715884105728
   tab := tabc_h26_b26_0

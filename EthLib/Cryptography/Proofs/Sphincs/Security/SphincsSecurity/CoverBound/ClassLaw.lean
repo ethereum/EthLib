@@ -9,23 +9,11 @@ Consider an index with `n` views, and a FORS tree with `A` leaves.
 
 The tree has `n`, `n - 1` or at most `n - 2` distinct disclosed leaves.
 
-With `A^(n)` the falling factorial, the exact occupancy probabilities are:
+A monotone function of the cover probability averages to at most a sum over its classes.
 
-- `q0 = A^(n) / A^n` for all leaves distinct;
-- `q1 = C(n, 2) A^(n-1) / A^n` for one repeat;
-- `q2 = 1 - q0 - q1` for more than one repeat.
+Here `w` counts the trees with a repeat.
 
-Let `w` count the trees with a repeat, and `v ≤ w` those with more than one repeat.
-
-The trees are independent, so `(w, v)` has the law `C(k, w) C(w, v) q0^(k-w) q1^(w-v) q2^v`.
-
-The cover probability is at most the representative of its class:
-
-`κ n^(k-w) (n-1)^(w-v) (n-2)^v / A^k`.
-
-Once `w ≥ T`, it is also at most the representative of `(T, 0)`.
-
-So a monotone function of it averages to at most a sum over the classes `w < T` and the overflow.
+The sum runs over the classes `w < T` and the overflow.
 -/
 
 @[expose] public section
@@ -54,7 +42,11 @@ def lawW2 (a n : ℕ) : ℕ := (2 ^ a) ^ n - lawW0 a n - lawW1 a n
 /-- The binomial coefficient `C(n, r)`, computed through factorials. -/
 def chooseF (n r : ℕ) : ℕ := n.factorial / (r.factorial * (n - r).factorial)
 
-/-- The numerator over `A^(n k)` of the weight of the class `(w, v)`. -/
+/-- The numerator over `A^(n k)` of the weight of the class `(w, v)`.
+
+In that class, `w` trees have a repeat, and `v ≤ w` of them have more than one repeat.
+
+The trees are independent, so the weight is `C(k, w) C(w, v) q0^(k-w) q1^(w-v) q2^v`. -/
 def lawWt (k a n w v : ℕ) : ℕ :=
   chooseF k w * chooseF w v * lawW0 a n ^ (k - w) * lawW1 a n ^ (w - v) * lawW2 a n ^ v
 
@@ -381,7 +373,13 @@ It selects more than one repeat on `t2`, one repeat on `t \ t2` and no repeat of
 noncomputable def clsPsi (n : ℕ) (t t2 : Finset FTree) (κ : FTree) : Multiset FLeaf → ℝ≥0∞ :=
   if κ ∈ t2 then clsI2 n else if κ ∈ t then clsI1 n else clsI0 n
 
-/-- The representative of the class `(w, v)`, replaced by that of `(T, 0)` once `w ≥ T`. -/
+/-- The representative of the class `(w, v)`, replaced by that of `(T, 0)` once `w ≥ T`.
+
+The cover probability is at most the representative of its class.
+
+That representative is `κ n^(k-w) (n-1)^(w-v) (n-2)^v / A^k`.
+
+Once `w ≥ T`, the cover probability is also at most the representative of `(T, 0)`. -/
 noncomputable def clsRep (n T w v : ℕ) : ℝ :=
   κE.toReal * ((if w < T then lawY forsTrees n w v else lawY forsTrees n T 0 : ℕ) : ℝ) / leavesR ^
       forsTrees

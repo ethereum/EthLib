@@ -8,25 +8,7 @@ public import Mathlib.Algebra.Order.Antidiag.Prod
 /-!
 # Poisson domination of the one-coin H-term
 
-A count function `F : (ι → ℕ) → ℝ≥0∞` maps a count per index to a value.
-
-It is good when it is monotone and grows at most exponentially.
-
-A good function also has increasing differences across coordinates and along each coordinate.
-
-Good functions stay good when a Poisson count or a Bernoulli coin is added at a coordinate.
-
-A Bernoulli coin is below a Poisson count of the same mean.
-
-There are `L` indices.
-
-A slot adds one count at a uniform index with probability `L a`.
-
-Such a slot is below iid `Poisson(a)` counts.
-
-Let `L α = 1` and `L γ = λ w`.
-
-So the one-coin H-term of a good function of the counts is below its iid Poisson mean.
+The one-coin H-term of a good function of the counts is below its iid Poisson mean.
 
 That mean is at rate `N α + q γ`.
 -/
@@ -272,7 +254,12 @@ theorem poisIID_mono_rate {G : (ι → ℕ) → ℝ≥0∞} (hG : Monotone G) {a
   rw [← poisIID_poisIID]
   exact poisList_mono a _ (le_poisList_of_le c _ hG fun _ => le_rfl) k
 
-/-! ### Good count functions -/
+/-! ### Good count functions
+
+A count function `F : (ι → ℕ) → ℝ≥0∞` maps a count per index to a value.
+
+Good functions stay good when a Poisson count or a Bernoulli coin is added at a coordinate.
+-/
 
 /-- A good count function is monotone and grows at most exponentially.
 
@@ -420,7 +407,12 @@ theorem good_cross {G : (ι → ℕ) → ℝ≥0∞} (hG : CountGood G) (a : ℝ
   simp only [mul_add, tsum_add, ENNReal.tsum_mul_right, poisW_tsum, one_mul] at h
   exact h
 
-/-! ### Uniform-or-nothing slots against iid Poisson coordinates -/
+/-! ### Uniform-or-nothing slots against iid Poisson coordinates
+
+A slot adds one count at a uniform index of the `L` indices, with probability `L a`.
+
+Such a slot is below iid `Poisson(a)` counts.
+-/
 
 theorem list_cross_sum {ι' : Type} (f g : ι' → ℝ≥0∞) (c d : ℝ≥0∞) :
     ∀ ls : List ι', (∀ j ∈ ls, d + g j ≤ f j + c) →

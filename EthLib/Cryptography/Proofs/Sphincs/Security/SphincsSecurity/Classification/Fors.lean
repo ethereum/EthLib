@@ -5,19 +5,9 @@ public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classi
 /-!
 # Extraction from a FORS opening
 
-The FORS public key of an opening is the hash `T_k` of the roots that the opening recovers.
-
 Take an opening whose FORS public key is the canonical one.
 
 Then every tree opens at its canonical secret and path, or a verifier query hits a canonical value.
-
-The hit is from an input other than the canonical one.
-
-It is at a leaf, at a node of a level from `1` to `a`, or at the input of `T_k`.
-
-The root of a tree is at level `a`.
-
-In the last case, roots other than the canonical ones compress to the canonical key.
 
 No collision resistance or other assumption on the hash function is used.
 -/
@@ -170,7 +160,13 @@ def RootsMatch (roots : ForsKey) : Prop :=
     evalWithAnswerFn f (forsPublicKey parameter index
       (fun κ => Completeness.rootValue f parameter index seed κ) : OracleComp HashSpec Digest)
 
-/-- A leaf match or a node match at a hashed level in some tree, or a roots match. -/
+/-- A leaf match or a node match at a hashed level in some tree, or a roots match.
+
+The hit is from an input other than the canonical one.
+
+It is at a leaf, at a node of a level from `1` to `a`, or at the input of `T_k`.
+
+The root of a tree is at level `a`. -/
 def Exception (leaves : FTree → FLeaf) (opening : FTree → TreeOpening) : Prop :=
   (∃ κ, LeafMatch f parameter index κ seed (leaves κ) (opening κ).secret) ∨
   (∃ κ level, level < forsHeight ∧
