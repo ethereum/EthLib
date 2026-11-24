@@ -43,17 +43,11 @@ def headerHash {fork : Fork} (h : Header fork) : Except OmmerError Hash32 :=
 
 /-- Check one ommer as a header at its own fork, against its parent, the recent block one below it.
 
-The fork of the ommer is that of its own number, which can be a fork before the block's.
-
-With the seal check off, the proof of work is left out, as for chains that run without one.
-
 An ommer in the first ten blocks of the DAO Fork also carries the extra data of that fork.
 
 [EIP-779][eip-779] states that rule for every block header.
 
 It cites the [specification][dao] of the fork.
-
-So clients with headers only can tell the chains apart, and an ommer is such a header.
 
 [eip-779]: https://eips.ethereum.org/EIPS/eip-779#specification
 [dao]: https://web.archive.org/web/20180310140717/https://blog.slock.it/hard-fork-specification-24b889e70703
@@ -63,29 +57,31 @@ def checkOmmerHeader (config : ChainConfig) (checkSeal : Bool) (recent : List Re
   -- The parent is the recent block one below the ommer's number.
   let some parent := recent.find? (·.header.number + 1 = ommer.2.number)
     | .error (.parentMissing ommer.2.number)
+  -- The fork of the ommer is that of its own number, which can be a fork before the block's.
   if hFork : parent.fork ≤ ommer.1 then
     -- The header rules of the ommer's fork, with or without the proof of work.
+    --
+    -- With the seal check off, the proof of work is left out, as for chains that run without one.
     let check := if checkSeal then validateHeader hFork parent.header ommer.2
       else checkHeader hFork parent.header ommer.2
     check.mapError .invalidHeader
   -- A parent at a later fork than the ommer cannot be its parent.
   else .error (.invalidHeader
     (.wrongParentHash parent.header.hash.toOption ommer.2.parentHash))
+  -- The chain configuration gives the block of the DAO Fork.
+  --
+  -- The extra data rule of the DAO Fork holds for every block header.
+  --
+  -- So clients with headers only can tell the chains apart, and an ommer is such a header.
   ensure (daoExtraDataValid config ommer.2) (.wrongDaoExtraData ommer.2.extraData)
 
 /-- Check the ommers of a block, as section 11.1 of the Yellow Paper asks.
 
-The chain configuration gives the block of the DAO Fork.
+The checks run in a fixed order, and the first that fails gives the error.
 
 The recent chain ends with the parent of the block, oldest first, and the checks read all of it.
 
-The checks run in a fixed order, and the first that fails gives the error.
-
-They are stricter than the Yellow Paper, as clients are.
-
-No ommer may be an ommer of any recent block.
-
-The Yellow Paper excludes only the ommers of the block whose sibling the ommer is. -/
+They are stricter than the Yellow Paper, as clients are. -/
 def validateOmmers {fork : Fork} (config : ChainConfig) (checkSeal : Bool)
     (recent : List RecentBlock) (header : Header fork) (ommers : List ((f : Fork) × Header f)) :
     Except OmmerError Unit := do
@@ -111,6 +107,8 @@ def validateOmmers {fork : Fork} (config : ChainConfig) (checkSeal : Bool)
     -- `H ≠ U` of `s(U, H)`: no ommer is the block or a block of the recent chain.
     ensure (hash != blockHash && !recentHashes.contains hash) (.ommerInChain hash)
     -- No ommer is an ommer of a recent block, which is stricter than the Yellow Paper.
+    --
+    -- The Yellow Paper excludes only the ommers of the block whose sibling the ommer is.
     ensure (!recentOmmerHashes.contains hash) (.ommerAlreadyIncluded hash)
     -- §11.1: `k(U, P(B_H)_H, 6)` makes `U` a sibling of one of the block's six nearest ancestors.
     --

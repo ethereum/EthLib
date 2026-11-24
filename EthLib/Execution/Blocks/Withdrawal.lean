@@ -12,13 +12,7 @@ A withdrawal moves ether from the consensus layer to an account of the execution
 
 [EIP-4895](https://eips.ethereum.org/EIPS/eip-4895#specification) adds withdrawals at Shapella.
 
-Its RLP form is the list of its four fields, in order.
-
 After the transactions of a block, each withdrawal adds its amount to the balance of its account.
-
-The amount is in Gwei, so the balance grows by the amount times `10^9` wei.
-
-A withdrawal costs no gas.
 -/
 
 @[expose] public section
@@ -67,6 +61,8 @@ open EthLib.Execution.State
 
 The withdrawals run together as one transaction on the block state `block`.
 
+A withdrawal costs no gas.
+
 It fails only when a balance would reach `2^256`, which EIP-4895 leaves out. -/
 def withdrawalState (fork : Fork) (block : BlockState) (withdrawals : List Withdrawal) :
     Except StateError TransactionState :=
@@ -75,6 +71,8 @@ def withdrawalState (fork : Fork) (block : BlockState) (withdrawals : List Withd
   -- The withdrawals share one transaction state, a choice that EIP-4895 leaves open.
   withdrawals.foldlM
     -- It increases the balance of its address by its amount, converted from Gwei to wei.
+    --
+    -- The amount is in Gwei, so the balance grows by the amount times `10^9` wei.
     --
     -- EIP-4895 says that the change must not fail; here a balance of `2^256` fails.
     (fun tx w => tx.createEther fork w.address (BitVec.ofNat 256 (w.amount.toNat * GWEI_TO_WEI)))

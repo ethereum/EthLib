@@ -8,32 +8,6 @@ public import EthLib.Execution.State.Tracker
 
 The builder of the block access list of a block, from Glamsterdam on.
 
-The body of a block runs in positions.
-
-Position 0 holds the system calls before the transactions.
-
-Position `i + 1` holds the transaction `i`.
-
-After the last of `n` transactions, position `n + 1` holds the withdrawals and the system calls.
-
-The builder starts each position from the block state before it.
-
-When a transaction or a system call ends, the builder compares its writes with that state.
-
-A write that changes a value records the new value at the position.
-
-A write that leaves the value as the position found it records nothing.
-
-It also drops a change that an earlier call at the same position recorded, since the two cancel.
-
-The builder also records the accounts and the storage keys that the transaction read.
-
-A written slot whose value stays the same counts as read.
-
-Once the body has run, the builder gives the list, sorted as the EIP orders it.
-
-A written account joins the list, even when none of its fields changed.
-
 Source: [EIP-7928][eip7928], in three sections:
 
 - "Recording Semantics by Change Type";
@@ -67,7 +41,13 @@ structure AccountRecord where
 
 /-- The builder of a block access list, while the body of the block runs. -/
 structure AccessListBuilder where
-  /-- The current position in the block. -/
+  /-- The current position in the body of the block.
+
+  Position 0 holds the system calls before the transactions.
+
+  Position `i + 1` holds the transaction `i`.
+
+  After the `n` transactions, position `n + 1` holds the withdrawals and the system calls. -/
   index : UInt32
   /-- The block state when the current position began. -/
   start : BlockState
@@ -154,7 +134,7 @@ None stands for a deleted account, which has the fields of the empty account.
 The new code comes from the transaction `tx`. -/
 def recordAccountWrite (b : AccessListBuilder) (tx : TransactionState) (address : Address)
     (written : Option Account) : Except StateError AccessListBuilder := do
-  -- Each written account was accessed.
+  -- Each written account was accessed, so it joins the list even when none of its fields changed.
   --
   -- An address with no change of state must still be present, with empty lists of changes.
   let b := b.record address id

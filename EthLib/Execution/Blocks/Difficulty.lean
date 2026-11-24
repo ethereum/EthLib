@@ -10,19 +10,11 @@ The difficulty of a block before Paris, from its parent's difficulty and the tim
 
 A block that comes soon after its parent raises the difficulty, and a late one lowers it.
 
-The difficulty bomb adds a term that doubles every 100,000 blocks.
-
-From Byzantium, the bomb reads a block number lowered by a delay, and later forks raise the delay.
-
-From Paris on, the difficulty is 0.
-
 Section 4.3.4 of the Yellow Paper, Berlin version, gives the rule from Byzantium: [`Paper.tex`][yp].
 
 [EIP-2][eip-2] gives the Frontier rule and replaces it at Homestead.
 
 [EIP-100][eip-100] counts the parent's ommers from Byzantium.
-
-Section 4.3.4 also requires a block to be later than its parent, and the rule is for such blocks.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/beacfbd29ccc04dfd790f2282d4c4b1c0afc9b5a/Paper.tex
 [eip-2]: https://eips.ethereum.org/EIPS/eip-2#specification
@@ -84,7 +76,9 @@ The last form is `ς_2` of the Yellow Paper, 4.3.4, and [EIP-100][eip-100] gives
 [eip-2]: https://eips.ethereum.org/EIPS/eip-2#specification
 [eip-100]: https://eips.ethereum.org/EIPS/eip-100#specification -/
 def timeFactor (fork : Fork) (timestamp parentTimestamp : Nat) (parentHasOmmers : Bool) : Int :=
-  -- A valid block is later than its parent, so `Δ` is positive.
+  -- Section 4.3.4 of the Yellow Paper requires a block to be later than its parent.
+  --
+  -- The rule is for such blocks, so `Δ` is positive.
   let elapsed : Int := timestamp - parentTimestamp
   -- Frontier, EIP-2 item 4: 1 if `H_s - P(H)_H_s < 13`, else -1.
   if fork < .homestead then

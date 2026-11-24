@@ -13,33 +13,12 @@ The receipt of a transaction, at each fork.
 
 A receipt records the outcome of a transaction, the gas used so far, and the logs.
 
-Its RLP form is `L_R(R) = (R_z, R_u, R_b, R_l)`.
-
-Those are the outcome, the gas used so far, the Bloom filter of the logs and the logs.
-
-Before Byzantium, the outcome is the state root after the transaction.
-
-From Byzantium, [EIP-658][eip-658] makes it a status: 1 for success, 0 for failure.
-
 From Berlin, [EIP-2718][eip-2718] puts the type of a typed transaction before its receipt.
-
-The receipt of a legacy transaction stays the RLP form, whose first byte is at least `0xc0`.
-
-The receipts of a block count the gas cumulatively, so each holds the gas of the block so far.
-
-From Glamsterdam, that gas is the gas that the senders pay, after the refunds and the floor.
-
-The block counts its own gas apart, before the refunds.
-
-[EIP-7778][eip-7778] and [EIP-8037][eip-8037] make this change.
 
 Section 4.4.1 of the Yellow Paper, Shanghai version, defines the receipt: [`Paper.tex`][yp].
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
-[eip-658]: https://eips.ethereum.org/EIPS/eip-658#specification
 [eip-2718]: https://eips.ethereum.org/EIPS/eip-2718#receipts
-[eip-7778]: https://eips.ethereum.org/EIPS/eip-7778#specification
-[eip-8037]: https://eips.ethereum.org/EIPS/eip-8037#receipt-semantics
 -/
 
 @[expose] public section
@@ -52,7 +31,11 @@ open EthLib.Execution.Transactions
 
 /-- The outcome of a transaction at fork `fork`: a state root before Byzantium, a status from it.
 
-Each case holds a proof of its range of forks, so a receipt has the outcome of its fork. -/
+Each case holds a proof of its range of forks, so a receipt has the outcome of its fork.
+
+From Byzantium, [EIP-658][eip-658] makes it a status: 1 for success, 0 for failure.
+
+[eip-658]: https://eips.ethereum.org/EIPS/eip-658#specification -/
 inductive Outcome : Fork → Type where
   /-- The state root after the transaction, before Byzantium. -/
   | postState {fork : Fork} (before : fork < .byzantium) (root : Hash32) : Outcome fork
@@ -86,7 +69,16 @@ structure Receipt (fork : Fork) : Type where
   outcome : Outcome fork
   /-- The gas that the block used up to and with the transaction.
 
-  From Glamsterdam, it is the gas that the senders paid up to and with the transaction. -/
+  From Glamsterdam, it is the gas that the senders paid up to and with the transaction.
+
+  That gas is after the refunds and the floor.
+
+  The block counts its gas apart, before the refunds.
+
+  [EIP-7778][eip-7778] and [EIP-8037][eip-8037] make this change.
+
+  [eip-7778]: https://eips.ethereum.org/EIPS/eip-7778#specification
+  [eip-8037]: https://eips.ethereum.org/EIPS/eip-8037#receipt-semantics -/
   cumulativeGasUsed : Nat
   /-- The Bloom filter of the logs. -/
   bloom : Bytes256
@@ -96,6 +88,8 @@ structure Receipt (fork : Fork) : Type where
 /-- A receipt is the list of its four fields, in order. -/
 instance {fork : Fork} : Codec (Receipt fork) where
   -- Yellow Paper §4.4.1: `L_R(R) = (R_z, R_u, R_b, R_l)`.
+  --
+  -- Those are the outcome, the gas used so far, the Bloom filter of the logs and the logs.
   toItem r := .list [Codec.toItem r.outcome, Codec.toItem r.cumulativeGasUsed,
     Codec.toItem r.bloom, Codec.toItem r.logs]
   ofItem item := do
@@ -202,6 +196,8 @@ def decodeReceipt (fork : Fork) (bytes : ByteArray) :
   if h : 0 < bytes.size then
     let first := bytes[0]
     -- EIP-2718: a legacy receipt is an RLP list, whose first byte is at least `0xc0`.
+    --
+    -- The receipt of a legacy transaction stays the RLP form.
     if 0xc0 ≤ first then
       ((0, ·) <$> Codec.decode bytes).mapError .decoding
     else
