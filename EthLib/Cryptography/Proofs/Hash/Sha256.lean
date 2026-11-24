@@ -367,29 +367,6 @@ theorem compress_toState (s : State) (block : ByteArray) (start : Nat)
 @[simp] theorem lengthBytes_size (size : Nat) : (lengthBytes size).size = 8 := by
   simp only [lengthBytes, ByteArray.size, Array.size_ofFn]
 
-/-- Padding adds the `0b10000000` byte, the zeros, and the eight length bytes. -/
-theorem pad_size (message : ByteArray) :
-    (pad message).size = message.size + 1 + paddingZeros message.size + 8 := by
-  simp only [pad, ByteArray.size_append, lengthBytes_size]
-  -- The `0b10000000` byte is one byte, and the zeros are as many as they count.
-  show message.size + 1 + (Array.replicate (paddingZeros message.size) (0 : UInt8)).size + 8 = _
-  rw [Array.size_replicate]
-
-/-- Padding adds fewer than a block of zeros. -/
-theorem paddingZeros_lt (size : Nat) : paddingZeros size < 64 := Nat.mod_lt _ (by decide)
-
-/-- A padded message is whole blocks. -/
-theorem pad_size_mod (message : ByteArray) : (pad message).size % 64 = 0 := by
-  rw [pad_size]
-  unfold paddingZeros BLOCK_SIZE_BYTES LENGTH_SIZE_BYTES
-  omega
-
-/-- No fewer zeros would fill whole blocks. -/
-theorem paddingZeros_minimal (size zeros : Nat) (complete : (size + 1 + zeros + 8) % 64 = 0) :
-    paddingZeros size ≤ zeros := by
-  unfold paddingZeros BLOCK_SIZE_BYTES LENGTH_SIZE_BYTES
-  omega
-
 private theorem bits_toNat (size : Nat) (admitted : size < 2 ^ 61) :
     (UInt64.ofNat size * 8).toNat = size * 8 := by
   -- Below 2^61 bytes, the bit count does not wrap.
@@ -419,8 +396,8 @@ theorem lengthBytes_digit (size : Nat) (admitted : size < 2 ^ 61) (i : Fin 8) :
 /-- The padding is the one of FIPS 180-4 §5.1.1, below 2^61 bytes. -/
 theorem pad_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
     pad message = Spec.padded message := by
-  have zeros : paddingZeros message.size = Spec.zeroCount message.size := by
-    unfold paddingZeros BLOCK_SIZE_BYTES LENGTH_SIZE_BYTES Spec.zeroCount
+  have zeros : Padding.paddingZeros message.size = Spec.zeroCount message.size := by
+    unfold Padding.paddingZeros Spec.zeroCount
     omega
   have length : (lengthBytes message.size).data =
       Array.ofFn fun i : Fin 8 =>
@@ -433,7 +410,7 @@ theorem pad_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
         lengthBytes_digit message.size admitted ⟨p, by simpa using left⟩
   -- The message, the `0b10000000` byte, the zeros and the length agree region by region.
   apply ByteArray.ext
-  simp [pad, Spec.padded, zeros, length, ByteArray.data_append]
+  simp [pad, Padding.pad, Spec.padded, zeros, length, ByteArray.data_append, ByteArray.push]
 
 /-! ## The hash -/
 

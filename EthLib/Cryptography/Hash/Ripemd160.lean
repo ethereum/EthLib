@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Cryptography.Hash.Padding
+
 /-!
 # RIPEMD-160
 
@@ -106,13 +108,6 @@ def IV : Vector UInt32 5 := #v[0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0
 
 /-! ## Padding -/
 
-/-- The zero bytes between the `0x80` byte and the length, so that the blocks are whole. -/
-def paddingZeros (size : Nat) : Nat :=
-  -- RFC 1320 §3.1: 0 bits until the length is congruent to 448 modulo 512.
-  --
-  -- In bytes: the message, the byte `0x80` and the zeros fill all but 8 bytes of a 64-byte block.
-  (64 - (size + 9) % 64) % 64
-
 /--
 The length of a message in bits, as eight little-endian bytes.
 
@@ -134,7 +129,7 @@ The message is whole bytes, so the set bit and the seven zero bits after it are 
 -/
 def pad (message : ByteArray) : ByteArray :=
   -- RFC 1320 §3.1: a single 1 bit, then 0 bits; §3.2: then the 64-bit length.
-  message.push 0x80 ++ ⟨Array.replicate (paddingZeros message.size) 0⟩ ++ lengthBytes message.size
+  Padding.pad lengthBytes message
 
 /-! ## One block
 
