@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.List
 public import EthLib.Networking.Libp2p.YamuxSession
 
 /-!
@@ -17,71 +18,15 @@ namespace EthLib.Networking.Proofs.Libp2p.YamuxSession
 
 open EthLib.Networking.Libp2p.Yamux
 
-/-- Looking up an ID in a table with a first entry. -/
-private theorem lookup_cons' (a : UInt32) (e : UInt32 × Stream) (t : List (UInt32 × Stream)) :
-    List.lookup a (e :: t) = if a = e.1 then some e.2 else List.lookup a t := by
-  by_cases h : a = e.1
-  · have : (a == e.1) = true := by simpa using h
-    simp [List.lookup, h]
-  · have : (a == e.1) = false := by simpa using h
-    simp [List.lookup, this, h]
-
 /-- Setting a stream makes the table report that stream for its ID. -/
 theorem find?_set_self (session : Session) (id : UInt32) (s : Stream) :
-    (session.set id s).find? id = some s := by
-  unfold Session.set Session.find?
-  by_cases h : session.streams.any (·.1 = id) = true
-  · simp only [h, ↓reduceIte]
-    generalize session.streams = l at h
-    induction l with
-    | nil => simp at h
-    | cons e t ih =>
-      by_cases he : e.1 = id
-      · rw [List.map_cons, lookup_cons']
-        simp [he]
-      · have he' : ¬ id = e.1 := fun h => he h.symm
-        simp only [List.any_cons, he, decide_false, Bool.false_or] at h
-        rw [List.map_cons, lookup_cons']
-        simp only [he, he', ite_false]
-        exact ih h
-  · simp only [h, Bool.false_eq_true, ↓reduceIte]
-    generalize session.streams = l at h
-    induction l with
-    | nil => simp
-    | cons e t ih =>
-      by_cases he : e.1 = id
-      · simp [List.any_cons, he] at h
-      · have he' : ¬ id = e.1 := fun h => he h.symm
-        simp only [List.any_cons, he, decide_false, Bool.false_or] at h
-        rw [List.cons_append, lookup_cons']
-        simp only [he', ite_false]
-        exact ih h
+    (session.set id s).find? id = some s :=
+  Base.lookup_replaceKey_self session.streams id s
 
 /-- Setting a stream leaves the table as it was for every other ID. -/
 theorem find?_set_of_ne (session : Session) {id id' : UInt32} (s : Stream)
-    (h : id' ≠ id) : (session.set id s).find? id' = session.find? id' := by
-  unfold Session.set Session.find?
-  by_cases hc : session.streams.any (·.1 = id) = true
-  · simp only [hc, ↓reduceIte]
-    clear hc
-    generalize session.streams = l
-    induction l with
-    | nil => simp [List.lookup]
-    | cons e t ih =>
-      rw [List.map_cons, lookup_cons', lookup_cons']
-      by_cases he : e.1 = id
-      · have : ¬ id' = e.1 := fun h' => h (h'.trans he)
-        simp [he, h, ih]
-      · simp only [he, ite_false]
-        rw [← ih]
-  · simp only [hc, Bool.false_eq_true, ↓reduceIte]
-    clear hc
-    generalize session.streams = l
-    induction l with
-    | nil => simp [lookup_cons', List.lookup, h]
-    | cons e t ih =>
-      rw [List.cons_append, lookup_cons', lookup_cons']
-      by_cases hk : id' = e.1 <;> simp [hk, ih]
+    (h : id' ≠ id) : (session.set id s).find? id' = session.find? id' :=
+  Base.lookup_replaceKey_of_ne session.streams s h
 
 /-- Setting a stream keeps the side of the session. -/
 theorem isClient_set (session : Session) (id : UInt32) (s : Stream) :

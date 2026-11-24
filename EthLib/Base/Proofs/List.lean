@@ -12,11 +12,67 @@ They cover duplicates, sums and their bounds, the front of a list, searches in a
 They also invert the readers of a prefix and of a suffix.
 
 The prefix reader is also a test of the prefix, then a drop of its length.
+
+A table with a key set reads that value at the key, and the old values at the other keys.
 -/
 
 @[expose] public section
 
 namespace EthLib.Base
+
+/-- A table with a key set reads the value it was set to at that key. -/
+theorem lookup_replaceKey_self {κ α : Type} [BEq κ] [LawfulBEq κ] (pairs : List (κ × α))
+    (key : κ) (value : α) : (replaceKey pairs key value).lookup key = some value := by
+  unfold replaceKey
+  by_cases h : pairs.any (·.1 == key) = true
+  · simp only [h, ↓reduceIte]
+    induction pairs with
+    | nil => simp at h
+    | cons e t ih =>
+      by_cases he : e.1 = key
+      · simp [he]
+      · have hb : (e.1 == key) = false := by simpa using he
+        simp only [List.any_cons, hb, Bool.false_or] at h
+        have he' : (key == e.1) = false := by simpa using Ne.symm he
+        simp [List.lookup, he, he', ih h]
+  · simp only [h, Bool.false_eq_true, ↓reduceIte]
+    induction pairs with
+    | nil => simp
+    | cons e t ih =>
+      by_cases he : e.1 = key
+      · simp [he] at h
+      · have hb : (e.1 == key) = false := by simpa using he
+        simp only [List.any_cons, hb, Bool.false_or] at h
+        have he' : (key == e.1) = false := by simpa using Ne.symm he
+        simp [List.lookup, he', ih h]
+
+/-- A table with a key set reads as before at every other key. -/
+theorem lookup_replaceKey_of_ne {κ α : Type} [BEq κ] [LawfulBEq κ] (pairs : List (κ × α))
+    {key other : κ} (value : α) (ne : other ≠ key) :
+    (replaceKey pairs key value).lookup other = pairs.lookup other := by
+  unfold replaceKey
+  have hk : (other == key) = false := by simpa using ne
+  by_cases hc : pairs.any (·.1 == key) = true
+  · simp only [hc, ↓reduceIte]
+    clear hc
+    induction pairs with
+    | nil => simp
+    | cons e t ih =>
+      by_cases he : e.1 = key
+      · simp [List.lookup, he, hk, ih]
+      · by_cases ho : other = e.1
+        · simp [List.lookup, he, ho]
+        · have ho' : (other == e.1) = false := by simpa using ho
+          simp [List.lookup, he, ho', ih]
+  · simp only [hc, Bool.false_eq_true, ↓reduceIte]
+    clear hc
+    induction pairs with
+    | nil => simp [List.lookup, hk]
+    | cons e t ih =>
+      by_cases ho : other = e.1
+      · simp [List.lookup, ho]
+      · have ho' : (other == e.1) = false := by simpa using ho
+        simp [List.lookup, ho', ih]
 
 /-- A list that starts with a prefix leaves what follows the prefix. -/
 theorem dropPrefix?_append {α : Type} [DecidableEq α] :
