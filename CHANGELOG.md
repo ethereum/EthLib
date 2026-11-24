@@ -1647,7 +1647,7 @@ Not yet released.
   That replacement needs `import EthLib.Consensus.Proofs.Transition.PayloadInputs`, which `Committees` does not import.
 
 - In Lean, an XMSS secret key holds the trees it signs with, and signing returns the updated key ([#3404](https://github.com/ethereum/EthLib/pull/3404)).
-  `Xmss.SecretKey` keeps the scheme seed, the public parameter, the top tree and up to `Xmss.MAX_CACHED_BOTTOM_TREES = 8` bottom trees, each with the top signature of its root.
+  `Xmss.SecretKey` keeps the scheme seed, the public parameter, the top tree and up to `Xmss.MAX_CACHED_BOTTOM_TREES = 4` bottom trees, each with the top signature of its root.
   `Xmss.keyGen seed` returns the public key first, then the secret key, and the secret key keeps the top tree that key generation builds.
   `Xmss.sign sk idx m` returns the signature with the updated key; in a kept bottom tree it makes one one-time signature and never rebuilds a tree.
   The stateless signer of the note moves to the proofs as `Xmss.statelessSignWith`, with `signDerived`, `signLayer` and `publicKeyOf`; nothing exports it.

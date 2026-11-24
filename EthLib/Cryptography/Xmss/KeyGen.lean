@@ -42,7 +42,7 @@ def publicParamOf (prf : SeedPrf m) : m PublicParam := do
 /-- How many bottom trees a secret key keeps: the ones it signed in last.
 
 A kept tree holds `2^17 - 1` digests, and its `2^16` leaf indices sign without rebuilding it. -/
-def MAX_CACHED_BOTTOM_TREES : Nat := 8
+def MAX_CACHED_BOTTOM_TREES : Nat := 4
 
 /-- A bottom tree, built, with the top layer's signature of its root. -/
 structure CachedTree where
