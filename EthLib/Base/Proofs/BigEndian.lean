@@ -7,14 +7,7 @@ public import EthLib.Base.BigEndian
 
 Reading and writing big-endian bytes undo each other.
 
-- Writing `n` on `len` bytes gives bytes that read back as `n % 256 ^ len`.
-- On `a + b` bytes, `n` is `n / 256 ^ b` on the first `a` bytes, then `n` on the last `b`.
-- Byte `i` of `n` on `len` bytes is the digit of `n` worth `256 ^ (len - 1 - i)`.
-- Zero on `len` bytes is `len` zero bytes.
-- Reading `k` bytes and writing the value back on `k` bytes gives the same bytes.
-- Two numbers below `256 ^ len` that write the same `len` bytes are equal.
-- Numbers below `256 ^ w` written on `w` bytes each read back from their blocks of `w` bytes.
-- Bytes of length `w * n`, cut into `n` blocks of `w` bytes, read and written back, are unchanged.
+Also the digits of each byte, the split of a number over two widths, and blocks of `w` bytes.
 -/
 
 @[expose] public section

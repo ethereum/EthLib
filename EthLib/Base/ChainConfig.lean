@@ -24,29 +24,24 @@ def GAS_PER_BLOB : Nat := 2 ^ 17
 
 Source: [EIP-7892](https://eips.ethereum.org/EIPS/eip-7892#blob-base-fee-computations).
 
-[EIP-7892][eip-7892] makes them chain configuration.
-
-So a chain can change them at an activation of its own.
+[EIP-7892][eip-7892] makes them chain configuration, which a chain can change at its own activation.
 
 [EIP-7840][eip-7840] names them in the configuration file of a client.
-
-EIP-7892 types the target and the maximum as 64-bit integers, and the fraction as unbounded.
-
-The bounds exclude the schedules that would divide by 0 or subtract below 0.
-
-They also keep the blob gas of a full block below `2^64`.
-
-For a schedule written in numbers, `decide` proves them.
 
 [eip-7840]: https://eips.ethereum.org/EIPS/eip-7840#specification
 [eip-7892]: https://eips.ethereum.org/EIPS/eip-7892#blob-schedule-configuration -/
 structure BlobSchedule where
-  /-- The blobs per block that the fee aims for. -/
+  /-- The blobs per block that the fee aims for, a 64-bit integer as EIP-7892 types it. -/
   target : UInt64
-  /-- The most blobs a block may carry. -/
+  /-- The most blobs a block may carry, a 64-bit integer as EIP-7892 types it. -/
   max : UInt64
-  /-- The excess that multiplies the fee by about e. -/
+  /-- The excess that multiplies the fee by about e, unbounded as EIP-7892 types it. -/
   baseFeeUpdateFraction : Nat
+  -- The bounds below exclude the schedules that would divide by 0 or subtract below 0.
+  --
+  -- They also keep the blob gas of a full block below `2^64`.
+  --
+  -- For a schedule written in numbers, `decide` proves them.
   /-- The target is at most the maximum, so the subtraction `max - target` never truncates. -/
   target_le_max : target ≤ max := by decide
   /-- The maximum is positive, so the reserve price rule never divides by 0. -/
@@ -67,12 +62,11 @@ structure BlobSchedule where
 
 /-- The blob schedule with a target, a maximum and an update fraction, if they meet its bounds.
 
-The target must be at most the maximum, and the maximum and the fraction must be positive.
-
-The blob gas of the maximum must be below `2^64`, so neither number reaches `2^64`.
-
 Every reader of a blob schedule builds it with this function. -/
 def BlobSchedule.ofNat? (target max baseFeeUpdateFraction : Nat) : Option BlobSchedule :=
+  -- The target must be at most the maximum, and the maximum and the fraction must be positive.
+  --
+  -- The blob gas of the maximum must be below `2^64`, so neither number reaches `2^64`.
   if h : target ≤ max ∧ 0 < max ∧ GAS_PER_BLOB * max < 2 ^ 64 ∧ 0 < baseFeeUpdateFraction then
     -- The blob gas bound keeps the maximum, and so the target, below `2^64`.
     have hmax : max < 2 ^ 64 := Nat.lt_of_le_of_lt (Nat.le_mul_of_pos_left max (by decide)) h.2.2.1
@@ -154,15 +148,9 @@ structure ChainConfig where
   activations : List (Fork × Activation)
   /-- The blob schedules that the chain sets itself, each with its fork and activation, in order.
 
-  [EIP-7892][eip-7892] lets a chain set its own blob parameters from an activation.
+  Each holds from its activation to the next, by [EIP-7892][eip-7892]; before, a fork's EIPs hold.
 
-  A schedule holds from its activation until the activation of the next one.
-
-  Before the first one, each fork keeps the schedule that its EIPs give.
-
-  A configuration file keys each schedule by the name of its fork, as [EIP-7840][eip-7840] does.
-
-  So two forks that activate at one time keep their schedules apart.
+  Each is keyed by its fork's name, as in [EIP-7840][eip-7840], so two forks at one time stay apart.
 
   A schedule that a chain sets at an activation of no fork of the timeline has no fork.
 
@@ -175,18 +163,16 @@ namespace ChainConfig
 
 /-- The configuration lists its forks in the order of the timeline.
 
-Each fork activates no earlier than the forks before it.
-
 [EIP-6122][eip-6122] puts forks by timestamp after forks by block.
-
-So Petersburg never activates before Constantinople, a case that EIP-1716 sets apart.
-
-Each blob schedule also activates no earlier than the schedules before it.
 
 [eip-6122]: https://eips.ethereum.org/EIPS/eip-6122#additional-rules
 -/
 def Ordered (config : ChainConfig) : Prop :=
+  -- Each fork activates no earlier than the forks before it.
+  --
+  -- So Petersburg never activates before Constantinople, a case that EIP-1716 sets apart.
   config.activations.Pairwise (fun x y => x.1 < y.1 ∧ x.2 ≤ y.2) ∧
+    -- Each blob schedule also activates no earlier than the schedules before it.
     config.blobSchedules.Pairwise fun x y => x.2.1 ≤ y.2.1
 
 instance (config : ChainConfig) : Decidable config.Ordered :=
@@ -217,15 +203,13 @@ def activeFork (config : ChainConfig) (number timestamp : Nat) : Option Fork :=
       | none => some fork
     else later
 
-/-- The blob schedule that a chain sets itself at a block.
-
-It is the last one in the list whose activation the block has reached.
-
-Two schedules can activate at one block, and then the later one in the list holds.
+/-- The blob schedule that a chain sets itself at a block: the last one in the list it has reached.
 
 None holds at a block that has reached no activation of a blob schedule. -/
 def blobScheduleAt (config : ChainConfig) (number timestamp : Nat) : Option BlobSchedule :=
   -- Search from the end, so the last reached schedule in the list wins.
+  --
+  -- Two schedules can activate at one block, and then the later one in the list holds.
   (config.blobSchedules.reverse.find? fun entry => entry.2.1.reached number timestamp).map
     (·.2.2)
 
@@ -233,14 +217,9 @@ def blobScheduleAt (config : ChainConfig) (number timestamp : Nat) : Option Blob
 
 Mainnet sets no blob schedule of its own: each fork keeps the schedule of its EIPs.
 
-Sources:
+Sources: [EIP-155][eip-155], [EIP-6110][eip-6110], [EIP-6953][eip-6953-pow], [EIP-3675][eip-3675].
 
-- [EIP-155][eip-155]: the chain ID.
-- [EIP-6110][eip-6110]: the deposit contract.
-- [EIP-6953][eip-6953-pow]: the blocks from Homestead to Gray Glacier.
-- [EIP-3675][eip-3675] and [EIP-7643][eip-7643]: the block of Paris.
-- [EIP-6953][eip-6953-pos]: the time of Shapella.
-- The meta EIP of each later fork: EIP-7569, EIP-7600, EIP-7607, EIP-8134 and EIP-8135.
+Also [EIP-7643][eip-7643], [EIP-6953][eip-6953-pos], and the meta EIP of each later fork.
 
 [eip-155]: https://eips.ethereum.org/EIPS/eip-155#list-of-chain-ids
 [eip-6110]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-6110.md#configuration
@@ -274,10 +253,14 @@ def mainnet : ChainConfig where
     (.arrowGlacier, .block 13773000),
     (.grayGlacier, .block 15050000),
     -- The first block whose parent reaches the terminal total difficulty of EIP-3675.
+    --
+    -- EIP-7643 gives this block of Paris too.
     (.paris, .block 15537394),
     -- Shapella activates at the time of EIP-6953.
     (.shapella, .time 1681338455),
     -- Each later fork activates at the time of its meta EIP.
+    --
+    -- They are EIP-7569, EIP-7600, EIP-7607, EIP-8134 and EIP-8135.
     (.dencun, .time 1710338135),
     (.pectra, .time 1746612311),
     (.fusaka, .time 1764798551),
@@ -288,13 +271,9 @@ def mainnet : ChainConfig where
 
 The [genesis file][hoodi] gives every value.
 
-The meta EIPs EIP-7600 and EIP-7607 give the same times to the later forks, BPO1 and BPO2 included.
+No fork follows BPO2: neither it nor the Hoodi row of [EIP-7773][eip-7773] gives one.
 
-No fork follows BPO2: neither the genesis file nor the Hoodi row of [EIP-7773][eip-7773] gives one.
-
-Hoodi sets no blob schedule of its own.
-
-Fusaka keeps the schedule of Pectra, and each other fork that of its EIPs.
+Hoodi sets no blob schedule: Fusaka keeps the schedule of Pectra, each other fork that of its EIPs.
 
 [hoodi]: https://github.com/eth-clients/hoodi/blob/2a7efb3c530cce7c71702cc98d0f965df2411c11/metadata/genesis.json
 [eip-7773]: https://github.com/ethereum/EIPs/blob/b055feec322fbc37e9d77a393a50b3ff56b31c92/EIPS/eip-7773.md#activation
@@ -322,6 +301,9 @@ def hoodi : ChainConfig where
     -- Shapella and Dencun activate at time 0, so Hoodi starts with the rules of Dencun.
     (.shapella, .time 0),
     (.dencun, .time 0),
+    -- The meta EIPs EIP-7600 and EIP-7607 give the same times to the later forks.
+    --
+    -- They give those of BPO1 and BPO2 too.
     (.pectra, .time 1742999832),
     (.fusaka, .time 1761677592),
     (.bpo1, .time 1762365720),

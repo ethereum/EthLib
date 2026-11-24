@@ -27,15 +27,15 @@ open Lean
 
 [RFC 8259 §9][limits] lets a reader limit the range of numbers.
 
-The power counts after the digits of the fraction, so `0.5e100001` scales by `10^100000`.
-
-So a number has at most 100000 more digits than its text writes.
-
 A negative power costs nothing to hold, so it has no bound.
 
 [limits]: https://www.rfc-editor.org/rfc/rfc8259#section-9
 -/
-def maxExponent : Nat := 100000
+def maxExponent : Nat :=
+  -- The power counts after the digits of the fraction, so `0.5e100001` scales by `10^100000`.
+  --
+  -- So a number has at most 100000 more digits than its text writes.
+  100000
 
 /-- A number as a Lean JSON number, `mantissa * 10^-exponent`.
 

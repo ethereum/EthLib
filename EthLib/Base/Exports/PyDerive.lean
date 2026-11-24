@@ -8,18 +8,6 @@ public meta import Lean.Elab.Command
 
 A command that writes the conversions of a type to Python values and back.
 
-A structure becomes a `dict` whose keys are its field names in snake case.
-
-Every field has its key, and an option that holds nothing is `None`.
-
-A constructor with no field becomes its name in snake case, as a `str`.
-
-Another constructor becomes a `tuple` of its name in snake case, then its fields.
-
-The type must take no parameter and must not contain itself.
-
-A type is derived once, and other modules import its conversions.
-
 A second command proves the law of these conversions, and that no value becomes `None` or an error.
 -/
 
@@ -53,6 +41,9 @@ meta def pyNames (name : Name) : Ident × Ident :=
 meta def deriveStructure (t : Ident) (name : Name) : CommandElabM Unit := do
   let (toF, ofF) := pyNames name
   let fields := getStructureFieldsFlattened (← getEnv) name (includeSubobjectFields := false)
+  -- A structure becomes a `dict` whose keys are its field names in snake case.
+  --
+  -- Every field has its key, and an option that holds nothing is `None`.
   let keys := fields.map fun f => Syntax.mkStrLit (snakeCase f.toString)
   let ids := fields.map mkIdent
   -- A quotation splices each array under one name only, so the values take a second name.
@@ -79,9 +70,11 @@ meta def deriveInductive (t : Ident) (name : Name) : CommandElabM Unit := do
     let tag := Syntax.mkStrLit (snakeCase ctor.getString!)
     let args := (Array.range cinfo.numFields).map fun i => mkIdent (.mkSimple s!"a{i}")
     let c := mkIdent ctor
+    -- A constructor with no field becomes its name in snake case, as a `str`.
     if args.isEmpty then
       toAlts := toAlts.push (← `(Lean.Parser.Term.matchAltExpr| | $c:ident => .str $tag))
       nullary ← `(if tag = $tag then .ok $c:ident else $nullary)
+    -- Another constructor becomes a `tuple` of its name in snake case, then its fields.
     else
       let types ← liftTermElabM <| Meta.forallTelescopeReducing cinfo.type fun xs _ =>
         xs.mapM fun x => do PrettyPrinter.delab (← Meta.inferType x)
@@ -102,7 +95,11 @@ meta def deriveInductive (t : Ident) (name : Name) : CommandElabM Unit := do
       | _ => .error "expected the name of a constructor first"
     | _ => .error "expected a str or a tuple"))
 
-/-- Write the conversions of a type to Python values and back. -/
+/-- Write the conversions of a type to Python values and back.
+
+The type must take no parameter and must not contain itself.
+
+A type is derived once, and other modules import its conversions. -/
 elab "derive_py " t:ident : command => do
   let name ← liftCoreM <| realizeGlobalConstNoOverloadWithInfo t
   if isStructure (← getEnv) name then deriveStructure t name

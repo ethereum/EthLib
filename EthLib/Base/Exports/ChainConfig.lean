@@ -12,24 +12,6 @@ public import Lean.Data.Json
 The C exports of the active fork of a chain, for the Python bindings.
 
 Mainnet and Hoodi have an export each, and any other chain passes its configuration.
-
-A block number and a timestamp cross the boundary as 64-bit integers, as EIP-6122 reads them.
-
-A fork crosses it as its name, a `str` such as `bellatrix`.
-
-A chain configuration crosses it as the typed value of its JSON, a `dict`.
-
-Its keys are its chain ID, its deposit contract, its activations and its blob schedules.
-
-The deposit contract is its address: `0x` and forty hex digits, which Python `bytes` become.
-
-An activation is a fork name, `block` or `time`, and a number.
-
-A blob schedule is `block` or `time`, a number, the target, the maximum and the update fraction.
-
-A blob schedule can start with the name of its fork.
-
-A client configuration file crosses as the `dict` of its JSON, as EIP-7840 and EIP-7892 shape it.
 -/
 
 public section
@@ -41,7 +23,9 @@ open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport forkOfNa
 
 /-- The name of the active fork of mainnet at a block, if a fork is active. -/
 def mainnetActiveForkOf (args : UInt64 × UInt64) : Result (Option String) :=
+  -- A block number and a timestamp cross the boundary as 64-bit integers, as EIP-6122 reads them.
   let (number, timestamp) := args
+  -- A fork crosses it as its name, a `str` such as `bellatrix`.
   pure ((mainnet.activeFork number.toNat timestamp.toNat).map (·.name))
 
 /-- The name of the active fork of mainnet at a block, or `None` when none is active.
@@ -84,7 +68,7 @@ def activationOfJson (j : Json) : Result (Fork × Activation) := do
     | rejectArgument none "an activation is not [fork, kind, n]"
   return (← forkOfName name.toUTF8, ← activationOf kind n)
 
-/-- One blob schedule of a configuration: its activation, target, maximum and update fraction.
+/-- One blob schedule: `block` or `time`, a number, the target, the maximum and the update fraction.
 
 A fork name in front gives the fork that the schedule belongs to.
 
@@ -116,6 +100,7 @@ def depositContractOfJson (j : Json) : Result Address := do
     rejectArgument none "config: depositContractAddress is not forty hex digits"
   let some bytes := hexBytes? digits
     | rejectArgument none "config: depositContractAddress is not hex"
+  -- The 20 bytes come from the hex text, which Python `bytes` become.
   toResult none (Base.exactBytes 20 bytes fun _ =>
     UnreadArgument.mk "config: depositContractAddress is not 20 bytes")
 
@@ -127,6 +112,7 @@ No fork by block number may come after a fork by timestamp in the timeline, as E
 
 The chain ID is a 64-bit number, so a larger one is rejected rather than reduced. -/
 def configOfJson (j : Json) : Result ChainConfig := do
+  -- The keys of the JSON are the chain ID, the deposit contract, the activations and the schedules.
   let some chainId := (j.getObjValAs? Nat "chainId").toOption
     | rejectArgument none "config: no chainId"
   unless chainId < 2 ^ 64 do rejectArgument none "config: chainId is not below 2^64"
@@ -149,6 +135,7 @@ def configOfJson (j : Json) : Result ChainConfig := do
 The configuration is a `dict` with the keys and values of the JSON that other exports read. -/
 def activeForkOf (args : PyValue × UInt64 × UInt64) : Result (Option String) := do
   let (config, number, timestamp) := args
+  -- A chain configuration crosses the boundary as the typed value of its JSON, a `dict`.
   let config ← configOfJson config.toJson
   return (config.activeFork number.toNat timestamp.toNat).map (·.name)
 
@@ -168,6 +155,9 @@ instance : ExportError ExecutionConfig.ConfigError where
 A file that the reader refuses gives the code of its error. -/
 def executionConfigOf (base file : PyValue) : Result ChainConfig := do
   let base ← configOfJson base.toJson
+  -- A client configuration file crosses as the `dict` of its JSON.
+  --
+  -- EIP-7840 and EIP-7892 shape that JSON.
   toResult "execution config" (ExecutionConfig.readExecutionConfig base file.toJson)
 
 /-- The blob schedule of a chain at a block, from a base configuration and a configuration file.

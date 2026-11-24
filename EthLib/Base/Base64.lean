@@ -29,20 +29,15 @@ inductive Base64Error where
 /-- The character of a six-bit value, from Table 2 of RFC 4648 §5.
 
 The alphabet is `ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_`, value 0 first.
-
-- `0` to `25` are `A` to `Z`.
-- `26` to `51` are `a` to `z`.
-- `52` to `61` are `0` to `9`.
-- `62` is `-` and `63` is `_`.
 -/
 def encodeSextet (v : Nat) : Char :=
-  -- The 26 uppercase letters.
+  -- The 26 uppercase letters: `0` to `25` are `A` to `Z`.
   if v < 26 then Char.ofNat ('A'.toNat + v)
-  -- The 26 lowercase letters.
+  -- The 26 lowercase letters: `26` to `51` are `a` to `z`.
   else if v < 52 then Char.ofNat ('a'.toNat + (v - 26))
-  -- The 10 digits.
+  -- The 10 digits: `52` to `61` are `0` to `9`.
   else if v < 62 then Char.ofNat ('0'.toNat + (v - 52))
-  -- The two URL-safe symbols.
+  -- The two URL-safe symbols: `62` is `-` and `63` is `_`.
   else if v = 62 then '-'
   else '_'
 

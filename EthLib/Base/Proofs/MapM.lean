@@ -6,47 +6,11 @@ public import EthLib.Base.Except
 /-!
 # `Base.Proofs.MapM`
 
-What a successful map over a list in `Except` returns.
+What a successful map, loop or fold over a list in `Except` returns, and when it succeeds.
 
 Lean core proves no such facts for `Except`, and every layer needs them.
 
-- The map has one output for each input.
-- Two lists that map to one list are equal, when the function is injective on their items.
-- A run of checks passes exactly when each check passes.
-- A loop that never stops early passes exactly when each step passes.
-- A loop that may stop early ends in a state with a property that its steps establish.
-- A loop that keeps the last item it accepted ends at its start or at an accepted item.
-- The function succeeds on every input.
-- Each output is the image of an input.
-- The map succeeds, and returns no error, when the function succeeds on every input.
-- A function that returns a known value on every input maps to the list of those values.
-- A part of each output that its input fixes comes out in the order of the inputs.
-- When each output is at most a bound of its input, the outputs sum to at most the bounds.
-- Output `i` is the image of input `i`, for a list, an array or a vector.
-- A map returns a list exactly when it has one output per input, each the image of its input.
-- Two functions that agree on every entry of a vector map it to one result.
-- A failed map fails on some input, and succeeds on every input before it.
-- A property that each step keeps holds after a successful fold.
-- A property of the state and a bound holds after a fold whose steps add a weight to the bound.
-- Two folds whose steps agree on every item of the list read the same result.
-- A fold whose steps fail only with errors of a property fails only with them.
-- A fold succeeds when each step succeeds and keeps an invariant that holds at the start.
-- A fold over inputs with distinct keys succeeds when each step keeps the other keys ready.
-- A successful fold reads only inputs that its steps accept.
-- A fold over distinct keys changes the view of a key only in the step of that key.
-- A fold of steps that each succeed with a pure step is the pure fold.
-- A fold whose steps all succeed returns no error.
-- A fold that appends each output returns its start, then the outputs of the map, flattened.
-
-A mapped error leaves a success unchanged.
-
-A mapped computation fails exactly when the computation fails, with the map of its error.
-
-A map in `Option` that succeeds has one output per input, each the image of its input.
-
-It succeeds exactly when the function succeeds on every input.
-
-In a lawful monad, two continuations agree after a map when they agree on results of its length.
+It also covers maps in `Option` and continuations in a lawful monad.
 -/
 
 @[expose] public section
@@ -129,9 +93,7 @@ theorem forIn_unit_ok_iff {xs : List α} {body : α → PUnit → Except ε (For
 
 The invariant `P` relates the items read so far to the state of the loop.
 
-A step that goes on keeps `P`, with its item added to the items read.
-
-A step that stops from a state with `P` gives `Q`.
+A step that goes on keeps `P`, with its item added; a step that stops from `P` gives `Q`.
 
 So does `P` once the loop has read every item. -/
 theorem forIn_ok_invariant {σ : Type} {xs : List α} {body : α → σ → Except ε (ForInStep σ)}
@@ -168,9 +130,7 @@ Each successful step either stops and leaves the state as it was, or goes on wit
 
 An item that the loop goes on with has the property `kept`.
 
-So the loop ends at its start, or at an item of the list.
-
-That item and every item before it have the property. -/
+So the loop ends at its start, or at an item that has the property, as has every item before it. -/
 theorem forIn_ok_last_kept {xs : List α} {body : α → α → Except ε (ForInStep α)}
     {init out : α} {kept : α → Prop}
     (step : ∀ x s r, body x s = .ok r → r = .done s ∨ r = .yield x ∧ kept x)
@@ -585,17 +545,16 @@ theorem foldlM_exists_ok_of_distinct {α σ ε : Type} {step : σ → α → Exc
 
 /-- A successful fold reaches each of its steps, and the result of each step relates to the end.
 
-The relation must be reflexive and transitive, and each successful step must meet it.
-
-Then the start relates to the end.
-
-For the step at index `i`, from 0, the fold of the first `i` inputs succeeds.
-
-That step succeeds, and its result relates to the end. -/
+The relation must be reflexive and transitive, and each successful step must meet it. -/
 theorem foldlM_ok_steps {g : β → α → Except ε β} (R : β → β → Prop)
     (refl : ∀ b, R b b) (trans : ∀ {a b c}, R a b → R b c → R a c)
     (step : ∀ b x b', g b x = .ok b' → R b b') :
     ∀ {xs : List α} {b b' : β}, xs.foldlM g b = .ok b' →
+      -- The start relates to the end.
+      --
+      -- For the step at index `i`, from 0, the fold of the first `i` inputs succeeds.
+      --
+      -- That step succeeds, and its result relates to the end.
       R b b' ∧ ∀ i (hi : i < xs.length), ∃ mid next,
         (xs.take i).foldlM g b = .ok mid ∧ g mid xs[i] = .ok next ∧ R next b'
   | [], b, _, computed => by
@@ -632,13 +591,7 @@ theorem foldlM_ok_of_mem {g : β → α → Except ε β} {xs : List α} {x : α
 
 /-- A successful fold over inputs with distinct keys changes a view only at the key `k`.
 
-Suppose each step keeps an invariant, and changes the view only when its input has the key `k`.
-
-Then the end keeps the invariant.
-
-With no input of key `k`, the end has the view of the start.
-
-With one, the end has the view that its step makes from the view of the start. -/
+Suppose each step keeps an invariant, and changes the view only when its input has the key `k`. -/
 theorem foldlM_ok_pointwise {γ κ : Type} {g : β → α → Except ε β} (P : β → Prop)
     (view : β → γ) (key : α → κ) (k : κ) (H : α → γ → γ) :
     ∀ {xs : List α}, (xs.map key).Nodup →
@@ -646,7 +599,11 @@ theorem foldlM_ok_pointwise {γ κ : Type} {g : β → α → Except ε β} (P :
     (∀ x ∈ xs, ∀ b b', P b → g b x = .ok b' → key x ≠ k → view b' = view b) →
     (∀ x ∈ xs, ∀ b b', P b → g b x = .ok b' → key x = k → view b' = H x (view b)) →
     ∀ {b b' : β}, P b → xs.foldlM g b = .ok b' →
+      -- The end keeps the invariant.
+      --
+      -- With no input of key `k`, the end has the view of the start.
       P b' ∧ ((∀ x ∈ xs, key x ≠ k) → view b' = view b) ∧
+        -- With one, the end has the view that its step makes from the view of the start.
         (∀ x ∈ xs, key x = k → view b' = H x (view b))
   | [], _, _, _, _, b, b', holds, computed => by
     simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed

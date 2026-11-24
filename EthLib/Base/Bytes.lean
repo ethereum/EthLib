@@ -48,8 +48,6 @@ def exactArray? {α : Type} (n : Nat) (a : Array α) : Option (Vector α n) :=
 
 /-- The elements of an array as a vector of `n` elements, or an error built from its length.
 
-The error is built only for an array of another length: no padding, no truncation.
-
 Examples:
 * `exactArray 2 #[10, 20] id = .ok #v[10, 20]`
 * `exactArray 3 #[10, 20] id = .error 2`
@@ -57,6 +55,7 @@ Examples:
 def exactArray {α ε : Type} (n : Nat) (a : Array α) (bad : Nat → ε) : Except ε (Vector α n) :=
   match exactArray? n a with
   | some v => .ok v
+  -- The error is built only for an array of another length: no padding, no truncation.
   | none => .error (bad a.size)
 
 /-- The bytes of a buffer as an object of `n` bytes, if the buffer has exactly `n` bytes.
@@ -70,14 +69,13 @@ def exactBytes? (n : Nat) (bytes : ByteArray) : Option (Vector UInt8 n) :=
 
 /-- The bytes of a buffer as an object of `n` bytes, or an error built from the buffer's length.
 
-The error is built only for a buffer of another length: no padding, no truncation.
-
 Examples:
 * `exactBytes 2 (ByteArray.mk #[10, 20]) id = .ok #v[10, 20]`
 * `exactBytes 3 (ByteArray.mk #[10, 20]) id = .error 2`
 -/
 def exactBytes {ε : Type} (n : Nat) (bytes : ByteArray) (bad : Nat → ε) :
     Except ε (Vector UInt8 n) :=
+  -- The error is built only for a buffer of another length: no padding, no truncation.
   exactArray n bytes.data bad
 
 /-- Read the `n` bytes of a buffer that start at an offset.
