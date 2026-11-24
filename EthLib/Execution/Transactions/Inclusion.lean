@@ -223,17 +223,15 @@ def checkBlockGas {fork : Fork} (env : BlockEnvironment fork) (used : BlockGas)
 - The sender has no code, and from Pectra it may have a delegation indicator.
 
 A sender that no signature names, as in a simulation, may have code, which is then not read.
-
-A simulation can also skip the check of the nonce.
-
-The nonce of the sender must then still be below `2^64 - 1`, as EIP-2681 asks.
 -/
 def checkSender (fork : Fork) (state : TransactionState) (sender : Address) (tx : Transaction)
     (signed : Bool := true) (skipNonce : Bool := false) : Except InclusionError Unit := do
   -- The account of the sender, `sigma[S(T)]`.
   let account := state.getAccount sender
   if skipNonce then
-    -- A simulation's own rule: the sender's nonce must still be below `2^64 - 1`.
+    -- A simulation can skip the check of the nonce.
+    --
+    -- The nonce of the sender must then still be below `2^64 - 1`, as EIP-2681 asks.
     failIf (2 ^ 64 - 1 ≤ account.nonce) (.transaction (.nonceOverflow account.nonce))
   else
     -- `T_n = sigma[S(T)]_n`, with one error for each side of the inequality.

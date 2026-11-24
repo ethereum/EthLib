@@ -8,33 +8,13 @@ public import EthLib.Execution.Transactions.Validity
 /-!
 # `Transactions.Settlement`
 
-What a transaction pays for its gas, before it runs and after.
+What a transaction pays for its gas, before it runs and after, and what its block counts.
 
-Before it runs, the sender buys the whole gas limit at the price per gas of the transaction.
-
-From Dencun, the sender also pays the fee of its blobs.
-
-After it runs, a part of the gas used comes back through the refund counter.
-
-The refund is at most half of the gas used, and from London at most a fifth.
-
-From Pectra, the gas used is never below the call data floor.
-
-The sender gets back the gas left at the same price.
-
-The beneficiary of the block gets the gas used times the priority fee per gas.
-
-The base fee per gas of each unit used is burned.
-
-Before London, there is no base fee, so the beneficiary gets the whole price.
-
-Section 6.2 of the Yellow Paper, Berlin version, defines the refund and the payments.
-
-Source: [`Paper.tex` at `beacfbd`][yp-berlin].
-
-The step comments write the equations of the paper in ASCII.
+Source: section 6.2 of the Yellow Paper, Berlin version, in [`Paper.tex` at `beacfbd`][yp-berlin].
 
 The prices `p` and `f` and the cap of a fifth are in the [Shanghai version][yp-shanghai].
+
+The step comments write the equations of the paper in ASCII.
 
 The EIPs that change them:
 
@@ -42,20 +22,6 @@ The EIPs that change them:
 - [EIP-3529][eip3529], the refund of at most a fifth
 - [EIP-4844][eip4844], the fee of the blobs
 - [EIP-7623][eip7623], the call data floor
-
-From Glamsterdam, the gas past the intrinsic gas splits into execution gas and state gas.
-
-The execution gas and the intrinsic gas together stay within `2^24`.
-
-The rest of the gas fills a reservoir of state gas, which comes back to the sender unused.
-
-A block then counts two kinds of gas: execution gas and state gas.
-
-It counts the execution gas before the refund, and never below the call data floor.
-
-The gas used in the header of the block is the larger of the two counts.
-
-The sender still pays the gas used after the refund, and the receipts count that gas.
 
 The EIPs of Glamsterdam that change them:
 
@@ -105,20 +71,16 @@ def Transaction.maxFeePerGas : Transaction → Nat
 
 /-- The price per gas that a transaction pays, at a base fee per gas of `baseFee`.
 
-A transaction with a gas price pays that price.
-
-A transaction with a maximum fee pays the base fee plus its priority fee.
-
-That priority fee is capped, so that the price stays within a maximum fee that covers the base fee.
-
-A maximum fee below the base fee gives the base fee, and the checks of the block reject it.
-
 [EIP-1559](https://eips.ethereum.org/EIPS/eip-1559#specification) defines it. -/
 def effectiveGasPrice (baseFee : Nat) : Transaction → Nat
-  -- `p = T_p` if `T_x` is 0 or 1.
+  -- `p = T_p` if `T_x` is 0 or 1: a transaction with a gas price pays that price.
   | .legacy tx => tx.gasPrice.toNat
   | .accessList tx => tx.gasPrice.toNat
   -- `p = f + H_f` if `T_x = 2`.
+  --
+  -- A transaction with a maximum fee pays the base fee plus its priority fee.
+  --
+  -- That priority fee is capped, so the price stays within a maximum fee that covers the base fee.
   --
   -- Blob and set code transactions, of EIP-4844 and EIP-7702, price like `T_x = 2`.
   | .feeMarket tx => feeMarket tx.maxPriorityFeePerGas.toNat tx.maxFeePerGas.toNat
@@ -130,6 +92,8 @@ where
     -- `p = f + H_f`, with `f = min(T_f, T_m - H_f)`.
     --
     -- A maximum fee below the base fee makes `T_m - H_f` stop at 0 here.
+    --
+    -- The price is then the base fee, and the checks of the block reject the transaction.
     min maxPriorityFee (maxFee - baseFee) + baseFee
 
 /-- The base fee per gas at which a transaction pays for its gas, in a block at `fork`.
@@ -153,14 +117,6 @@ structure GasAllocation where
 
 /-- Split the gas of a transaction past its intrinsic gas `intrinsic`, at `fork`.
 
-Before Glamsterdam, all of it is execution gas.
-
-From Glamsterdam, the execution gas is at most `2^24` minus the intrinsic gas.
-
-The rest of the gas goes to the state gas reservoir.
-
-A simulation can lift that cap, so that all the gas past the intrinsic gas is execution gas.
-
 [EIP-8037][eip8037] defines the split.
 
 [eip8037]: https://eips.ethereum.org/EIPS/eip-8037#transaction-level-gas-accounting-reservoir-model -/
@@ -173,8 +129,10 @@ def allocateGas (fork : Fork) (tx : Transaction) (intrinsic : Nat) (lifted : Lif
     if lifted.gasCap then ⟨evmGas, 0⟩
     else
       -- The execution gas is the least of `g` and `2^24` minus the intrinsic gas.
+      --
+      -- So the execution gas and the intrinsic gas together stay within `2^24`.
       let execution := min (TX_MAX_GAS_LIMIT - intrinsic) evmGas
-      -- The rest of `g` fills the state gas reservoir.
+      -- The rest of `g` fills the state gas reservoir, which comes back to the sender unused.
       ⟨execution, evmGas - execution⟩
   -- Before Glamsterdam, all of `g` is execution gas, with no reservoir.
   else ⟨evmGas, 0⟩
@@ -196,9 +154,11 @@ def gasRefund (fork : Fork) (used refundCounter : Nat) : Nat :=
 
 /-- The gas that a transaction uses at `fork`, from the gas left and the refund counter.
 
-From Pectra, it is at least the call data floor.
+From Pectra, it is at least the call data floor of [EIP-7623][eip7623].
 
-From Glamsterdam, the gas left holds the execution gas left and the state gas reservoir left. -/
+From Glamsterdam, the gas left holds the execution gas left and the state gas reservoir left.
+
+[eip7623]: https://eips.ethereum.org/EIPS/eip-7623#specification -/
 def gasUsed (fork : Fork) (sender : Address) (tx : Transaction) (gasLeft refundCounter : Nat) :
     Nat :=
   -- The gas used before the refund, the Yellow Paper's `T_g - g'`.
@@ -251,7 +211,12 @@ def settlement (fork : Fork) (baseFee : Nat) (sender : Address) (tx : Transactio
 
 /-! ## The gas of the block -/
 
-/-- The gas that a block counts, for some of its transactions or for one. -/
+/-- The gas that a block counts, for some of its transactions or for one.
+
+From Glamsterdam, it counts execution gas and state gas apart, by [EIP-8037][eip8037].
+
+[eip8037]: https://eips.ethereum.org/EIPS/eip-8037#multidimensional-metering-for-state-creation-costs
+-/
 structure BlockGas where
   /-- The gas of the transactions, which from Glamsterdam is their execution gas. -/
   execution : Nat
@@ -291,16 +256,6 @@ end BlockGas
 
 The run hands back the gas left `gasLeft`, the refund counter and the net state gas used.
 
-From Glamsterdam the gas left includes the state gas reservoir left.
-
-Before Glamsterdam, the block counts the gas that the transaction uses.
-
-From Glamsterdam, the block counts the state gas used, and a negative amount counts as 0.
-
-It counts as execution gas the gas used before the refund, minus that state gas.
-
-That execution gas is never below the call data floor.
-
 [EIP-7778][eip7778] stops the refund from lowering the gas of a block.
 
 [EIP-8037][eip8037] splits that gas into the two counts.
@@ -314,11 +269,15 @@ def transactionBlockGas (fork : Fork) (sender : Address) (tx : Transaction)
     let state := stateGasUsed.toNat
     -- The gas used before the refund minus that state gas, at least the call data floor.
     --
+    -- The block counts the execution gas before the refund.
+    --
     -- The gas left here already holds the state gas left in the reservoir.
     ⟨max (tx.gas.toNat - gasLeft - state) (calldataFloor fork sender tx), state,
       -- The blob gas of the transaction.
       calculateTotalBlobGas tx⟩
-  -- Before Glamsterdam, the gas used after the refund, then the blob gas.
+  -- Before Glamsterdam, the block counts the gas that the transaction uses, then the blob gas.
+  --
+  -- That is the gas used after the refund.
   else ⟨gasUsed fork sender tx gasLeft refundCounter, 0, calculateTotalBlobGas tx⟩
 
 /-! ## The changes to the state -/
@@ -331,17 +290,15 @@ def creditEther (fork : Fork) (state : TransactionState) (address : Address) (am
 
 /-- Buy the gas of a transaction at `fork`: add one to the nonce of the sender, and take the fee.
 
-The fee is the gas limit times the price per gas, plus the fee of the blobs.
-
-It fails if the sender does not hold the fee.
-
 This is only the deduction: the checks of the block ask for the balance at the maximum fees.
 
-A simulation can charge a transaction with a maximum fee per gas of 0 at a base fee of 0. -/
+From Dencun, the fee includes the fee of the blobs of [EIP-4844][eip4844].
+
+[eip4844]: https://eips.ethereum.org/EIPS/eip-4844#gas-accounting -/
 def buyGas {fork : Fork} (env : BlockEnvironment fork) (state : TransactionState)
     (sender : Address) (tx : Transaction) (lifted : LiftedRules := {}) :
     Except StateError TransactionState := do
-  -- The fee is the gas limit times the price per gas, plus the fee of the blobs.
+  -- The fee is the whole gas limit times the price per gas, plus the fee of the blobs.
   --
   -- The fee of the blobs is their blob gas times the base fee per blob gas, 0 without blobs.
   --
@@ -353,6 +310,8 @@ def buyGas {fork : Fork} (env : BlockEnvironment fork) (state : TransactionState
   -- The balance of the sender loses the fee.
   --
   -- The checks of the block make this hold; a short balance is an error here.
+  --
+  -- So it fails if the sender does not hold the fee.
   state.modifyState fork sender fun account =>
     if fee ≤ account.balance.toNat then
       .ok { account with balance := BitVec.ofNat 256 (account.balance.toNat - fee) }
@@ -360,9 +319,7 @@ def buyGas {fork : Fork} (env : BlockEnvironment fork) (state : TransactionState
 
 /-- Pay the priority fee `fee` to the beneficiary `coinbase` at `fork`.
 
-From Spurious Dragon to Paris, a fee of 0 to a beneficiary with balance 0 creates no account.
-
-That fee still touches the beneficiary, so an empty beneficiary is deleted.
+From Spurious Dragon to Paris, a fee of 0 to a beneficiary with balance 0 still touches it.
 
 [EIP-161](https://eips.ethereum.org/EIPS/eip-161#specification) gives this example of a touch.
 
@@ -371,7 +328,11 @@ def payBeneficiary (fork : Fork) (state : TransactionState) (coinbase : Address)
     Except StateError TransactionState :=
   -- From Spurious Dragon until Paris, a balance of 0 after the fee credits nothing.
   --
-  -- The beneficiary is then deleted if its account exists and is empty.
+  -- So a fee of 0 to a beneficiary with balance 0 creates no account.
+  --
+  -- That fee still touches the beneficiary.
+  --
+  -- So the beneficiary is then deleted if its account exists and is empty.
   --
   -- Otherwise, the beneficiary gets the fee.
   if fork ≥ .spuriousDragon ∧ fork < .paris ∧ (state.getAccount coinbase).balance.toNat + fee = 0
@@ -381,22 +342,21 @@ def payBeneficiary (fork : Fork) (state : TransactionState) (coinbase : Address)
 
 /-- Settle the gas of a transaction at `fork`, once it has run.
 
-The sender gets back its refund, then the beneficiary gets the priority fee.
-
-From Glamsterdam the gas left includes the state gas reservoir left, so the sender gets it back.
-
-A simulation can charge a transaction with a maximum fee per gas of 0 at a base fee of 0.
-
 It returns the state and the gas used. -/
 def settleGas {fork : Fork} (env : BlockEnvironment fork) (state : TransactionState)
     (sender : Address) (tx : Transaction) (gasLeft refundCounter : Nat)
     (lifted : LiftedRules := {}) : Except StateError (TransactionState × Nat) := do
   -- A simulation can charge a maximum fee per gas of 0 at a base fee of 0.
   let s := settlement fork (paidBaseFee env tx lifted) sender tx gasLeft refundCounter
-  -- The sender gets back the wei of its refund.
+  -- First, the sender gets back the wei of its refund.
+  --
+  -- From Glamsterdam the gas left includes the state gas reservoir left.
+  --
+  -- So the sender gets that reservoir back.
   let state ← creditEther fork state sender s.senderRefund
-  -- The beneficiary gets the priority fee.
+  -- Then the beneficiary gets the priority fee.
   let state ← payBeneficiary fork state env.coinbase s.priorityFee
+  -- The result is the gas used after the refund, which the sender pays and the receipts count.
   return (state, s.gasUsed)
 
 end EthLib.Execution.Transactions
