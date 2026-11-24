@@ -10,13 +10,7 @@ A signing root is also the root of the signing data whose first field holds the 
 
 So a collision of the signing root is two different such values with one root.
 
-The two objects have one type, and their two domains may differ.
-
 With the node hash a random oracle, finding one has probability at most `Q^2 / 2^256`.
-
-A win also needs every variable-size count in both objects to fit its 256-bit word.
-
-`Q` counts every call to the node hash in the experiment, the adversary's and the extraction's.
 
 Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2.
 
@@ -55,23 +49,23 @@ theorem wins_signingValue_iff {shape : Desc} {first second : Value}
 The adversary outputs two objects of one type, each with a domain, and the domains may differ.
 
 It wins when the two pairs differ, both objects fit the type, and their signing values share a root.
-
-That root is computed with the oracle as the node hash.
-
-Every variable-size count in them must fit its 256-bit word.
-
-`Q` bounds the calls to the node hash in the whole experiment, repeats included.
-
-The extraction hashes every node of the padded tree of each value.
-
-So for a type with a list, `Q` grows with the capacity of the list. -/
+-/
 theorem prEvent_signingRoot_le_two_pow (shape : Desc)
     (adversary : OracleComp (unifSpec + HashOracle) ((Value × Domain) × (Value × Domain)))
     {Q : Nat}
+    -- `Q` bounds the calls to the node hash in the whole experiment, repeats included.
+    --
+    -- It counts the calls of the adversary and those of the extraction.
+    --
+    -- The extraction hashes every node of the padded tree of each value.
+    --
+    -- So for a type with a list, `Q` grows with the capacity of the list.
     (budget : IsQueryBoundP (experiment (signingShape shape) (signingValues <$> adversary))
       (fun t => t.isRight = true) Q) :
+    -- The root is computed with the oracle as the node hash.
     Pr{let z ← (simulateQ HashOracle.romImpl
         (experiment (signingShape shape) (signingValues <$> adversary))).run ∅}[
+      -- A win also needs every variable-size count in the two objects to fit its 256-bit word.
       Wins (signingShape shape) z.1] ≤ Q * ((Q : ℝ≥0∞) / 2 ^ 256) :=
   prEvent_wins_le_two_pow _ _ budget
 
@@ -81,13 +75,13 @@ The roots of the outcome are computed with SHA-256, not with the oracle.
 
 The step from SHA-256 to the oracle is the idealisation of the model, not a theorem.
 
-It needs the type of the messages to be lawful, and the two pairs to differ.
-
-It also needs every variable-size count in both messages to fit its 256-bit word. -/
+It needs the type of the messages to be lawful. -/
 theorem wins_of_computeSigningRoot_eq {α : Type} [SszType α] [LawfulSszType α]
     {first second : α} {firstDomain secondDomain : Domain} {root : Root}
+    -- Every variable-size count in both messages must fit its 256-bit word.
     (firstSized : CommitmentSized (desc α) (toValue first))
     (secondSized : CommitmentSized (desc α) (toValue second))
+    -- The two pairs must differ.
     (differ : (first, firstDomain) ≠ (second, secondDomain))
     (firstSigned : computeSigningRoot first firstDomain = .ok root)
     (secondSigned : computeSigningRoot second secondDomain = .ok root) :

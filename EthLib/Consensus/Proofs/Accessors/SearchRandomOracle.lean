@@ -7,29 +7,15 @@ public import EthLib.Consensus.Proofs.Accessors.DrawBounds
 /-!
 # Proofs: a balance-weighted search ends with high probability in the random oracle model
 
-The search of a balance-weighted selection draws candidates until it has its members.
-
-Its draw counter has 64 bits, so it fails when it runs out of draw numbers first.
-
 A validator at the cap is always accepted, so with one the search ends within a pass per member.
 
 Without one, whether the search ends depends on the hash of its draws.
 
-Here a random oracle answers that hash, and the cache holds no draw input of the seed.
+Here a random oracle answers that hash.
 
-A draw then accepts any balance at most the cap with probability at least `2^-b`.
+The bounds on the failure of the search hold for the oracle only.
 
-Here `b` is the number of random bits that a draw reads: 8 before Electra, 16 from Electra.
-
-So for `n` members, the search fails with probability at most `n * (1 - 2^-b)^⌊(2^64 - 1) / n⌋`.
-
-For at most `2^32` members, that is at most `2^-128`.
-
-The bounds hold for the oracle only; no theorem bounds the search when SHA-256 answers.
-
-The seed, the candidates, their balances and their order are fixed before the draws are answered.
-
-The bound holds for every order, so the shuffle that gives it is not modelled.
+No theorem bounds the search when SHA-256 answers.
 -/
 
 @[expose] public section
@@ -53,6 +39,7 @@ def searchOfVerdicts (verdict : Nat → Except AccessorError Bool) (indices : Ar
     (order : Nat → Nat) (size : Nat) (selected : Array ValidatorIndex)
     (bound : selected.size ≤ size) (i : Nat) :
     Except AccessorError (Vector ValidatorIndex size) :=
+  -- The search draws candidates until it has its members.
   if full : selected.size = size then .ok ⟨selected, full⟩
   else do
     let position := order (i % indices.size)
@@ -102,18 +89,16 @@ theorem balanceWeightedSearch_eq_searchOfVerdicts (preset : Preset) (fork : Base
 
 /-- The search of a balance-weighted selection, with its hash calls exposed to a shared oracle.
 
-It makes the `2^64` draws of the seed up front, then searches on their verdicts.
-
-The search reads only the draws it needs, so its outcome does not depend on the others.
-
-The cache afterwards holds them all.
-
-Draw `i` weighs the balance at position `order (i mod n)`, among `n` candidates. -/
+It makes the `2^64` draws of the seed up front, then searches on their verdicts. -/
 def querySearch (preset : Preset) (fork : Base.Fork) (indices : Array ValidatorIndex)
     (balances : Array Gwei) (order : Nat → Nat) (seed : Bytes32) (size : Nat) :
     OracleComp (ByteArray →ₒ Bytes32) (Except AccessorError (Vector ValidatorIndex size)) :=
+  -- The search reads only the draws it needs, so its outcome does not depend on the others.
   (fun draws => searchOfVerdicts (fun i => draws.getD i (.ok false)) indices order size #[]
       (Nat.zero_le _) 0) <$>
+    -- The cache afterwards holds all the draws.
+    --
+    -- Draw `i` weighs the balance at position `order (i mod n)`, among `n` candidates.
     queryDraws preset fork seed (fun i => balances.getD (order (i % indices.size)) 0) (2 ^ 64)
 
 /-- The search reads only the verdicts from its current draw number up to `2^64`. -/
@@ -244,25 +229,19 @@ private theorem le_prEvent_drawAccepts {preset : Preset} {fork : Base.Fork}
 
 Here `b` is the number of random bits that a draw reads.
 
-The last draw number cannot complete the search, so `2^64 - 1` draws count.
+The seed, the candidates, their balances and their order are fixed before the draws are answered.
 
-Split them into `n` windows of `⌊(2^64 - 1) / n⌋` draws.
-
-Each draw accepts with probability at least `2^-b`, whatever the balance up to the cap.
-
-The search ends when each window accepts once.
-
-It needs a positive cap and at least one candidate.
-
-Every balance read must be at most the cap, and the products of a draw must fit in 64 bits.
-
-It also needs the cache to hold no draw input of the seed. -/
+The bound holds for every order, so the shuffle that gives it is not modelled. -/
 theorem prEvent_querySearch_fails_le (preset : Preset) (fork : Base.Fork)
+    -- The products of a draw must fit in 64 bits, and the cap must be positive.
     (fits : DrawFits preset fork) (positive : 0 < drawCap preset fork)
     (indices : Array ValidatorIndex) (balances : Array Gwei) (order : Nat → Nat)
     (seed : Bytes32) (size : Nat) (cache : (ByteArray →ₒ Bytes32).QueryCache)
+    -- There must be at least one candidate.
     (nonempty : 0 < indices.size)
+    -- Every balance read must be at most the cap.
     (capped : ∀ j < indices.size, (balances.getD (order j) 0).toNat ≤ drawCap preset fork)
+    -- The cache must hold no draw input of the seed.
     (fresh : ∀ i < 2 ^ 64, cache (drawInput seed (i / drawsPerHash fork)) = none) :
     Pr{let z ← (simulateQ (ByteArray →ₒ Bytes32).randomOracle
       (querySearch preset fork indices balances order seed size)).run' cache}[z.isOk = false] ≤
@@ -271,8 +250,13 @@ theorem prEvent_querySearch_fails_le (preset : Preset) (fork : Base.Fork)
     (run_queryDraws_evalDistEq preset fork seed _ (2 ^ 64) cache le_rfl fresh).prEvent_eq]
   have bounded : ∀ i, (balances.getD (order (i % indices.size)) 0).toNat ≤ drawCap preset fork :=
     fun i => capped _ (Nat.mod_lt i nonempty)
+  -- The last draw number cannot complete the search, so `2^64 - 1` draws count.
+  --
+  -- Split them into `n` windows of `⌊(2^64 - 1) / n⌋` draws.
   have room : size * ((2 ^ 64 - 1) / size) < 2 ^ 64 :=
     lt_of_le_of_lt (Nat.mul_div_le _ _) (Nat.sub_lt (Nat.two_pow_pos 64) Nat.one_pos)
+  -- The search ends when each window accepts once.
+  --
   -- A failed search either meets a failed draw or a window of draws that all reject.
   refine le_trans (prEvent_mono _ _ (fun z =>
     ¬ List.Forall₂ (fun _ y => ∃ b, y = Except.ok b) (List.range (2 ^ 64)) z ∨
@@ -304,6 +288,8 @@ theorem prEvent_querySearch_fails_le (preset : Preset) (fork : Base.Fork)
           (1 - (2 ^ drawBits fork : ℝ≥0∞)⁻¹) ^ ((2 ^ 64 - 1) / size) :=
           Finset.sum_le_sum fun w small => ?_
       _ = _ := by rw [Finset.sum_const, Finset.card_range, nsmul_eq_mul]
+    -- Each draw accepts with probability at least `2^-b`, whatever the balance up to the cap.
+    --
     -- Inside its window a draw rejects with chance at most `1 - 2^-b`, elsewhere at most one.
     rw [prEvent_mapM_forall₂, ← List.prod_toFinset _ List.nodup_range, List.toFinset_range]
     refine le_trans (Finset.prod_le_prod (g := fun j =>

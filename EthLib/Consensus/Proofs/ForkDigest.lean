@@ -9,22 +9,6 @@ public import Mathlib.Data.List.Find
 # Proofs: the fork that a fork digest names
 
 The fork digest can change only at a short list of epochs.
-
-The fork and the digest at an epoch are those at the latest epoch of the list at or before it.
-
-So the digest of every epoch is the digest of an epoch of the list.
-
-An epoch that the search finds is in the list, and it has the digest.
-
-A finite check of the configuration asks that the search read the right fork from each such digest.
-
-On a chain that passes it, the search reads from a digest the fork at which it was computed.
-
-The check is needed.
-
-On mainnet with Altair given the version of genesis, Phase 0 and Altair share a digest.
-
-There the check fails, and the search reads Phase 0 from the digest of Altair.
 -/
 
 @[expose] public section
@@ -232,7 +216,9 @@ theorem computeForkDigest_eq_of_sameSide {first second : Epoch}
       (by simpa [UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt] using early)]
     simp only [early, late', ↓reduceIte]
 
-/-- The fork digest at an epoch is the one at the latest epoch of the list at or before it. -/
+/-- The fork digest at an epoch is the one at the latest epoch of the list at or before it.
+
+So the digest of every epoch is the digest of an epoch of the list. -/
 theorem computeForkDigest_digestStart (epoch : Epoch) :
     computeForkDigest config genesisValidatorsRoot (config.digestStart epoch) =
       computeForkDigest config genesisValidatorsRoot epoch := by
@@ -260,6 +246,9 @@ theorem forkOfDigest_isSome {epoch : Epoch} {digest : ForkDigest}
 
 This holds at every epoch, not only at those of the list. -/
 theorem forkOfDigest_recovers {epoch : Epoch} {digest : ForkDigest}
+    -- A finite check of the configuration must pass.
+    --
+    -- It asks that the search read the right fork from each digest of an epoch of the list.
     (identify : digestsIdentify config genesisValidatorsRoot = true)
     (computed : computeForkDigest config genesisValidatorsRoot epoch = .ok digest) :
     (forkOfDigest config genesisValidatorsRoot digest).map config.forkAtEpoch =
@@ -290,7 +279,9 @@ theorem computeForkDigest_sharedVersion_altair :
   rw [version]
   simp only [altair, zero, ↓reduceIte]
 
-/-- With Altair given the version of genesis, the search reads Phase 0 from the digest of Altair. -/
+/-- With Altair given the version of genesis, the search reads Phase 0 from the digest of Altair.
+
+So the theorem that reads back the fork needs the check of the configuration. -/
 theorem forkOfDigest_sharedVersion_altair {digest : ForkDigest}
     (computed : computeForkDigest sharedVersionConfig genesisValidatorsRoot
       sharedVersionConfig.ALTAIR_FORK_EPOCH = .ok digest) :

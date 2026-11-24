@@ -15,16 +15,6 @@ It accepts a balance `e` when `M * value ≤ e * (2^b - 1)`.
 
 Here `M` is the largest effective balance of the preset.
 
-The digest is uniform among the 32-byte values.
-
-The checked draw then accepts with probability `(⌊e * (2^b - 1) / M⌋ + 1) / 2^b`.
-
-This needs `0 < M`, `e ≤ M`, and `M * (2^b - 1) < 2^64`.
-
-Two draws whose numbers differ modulo the draws per digest read disjoint bytes.
-
-So the two draws are independent.
-
 The model samples one digest; it makes no claim about SHA-256 or a sequence of proposer draws.
 -/
 

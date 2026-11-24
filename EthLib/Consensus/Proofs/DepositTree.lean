@@ -14,14 +14,6 @@ import EthLib.Serialization.Proofs.Ssz.Merkle.Branch
 Pushing deposits one at a time builds the tree that holds them all from the left.
 
 Its root is the SSZ root of the list of their data, which the chain votes on.
-
-Finalization keeps the root, and a snapshot rebuilds a tree with the same later roots.
-
-A proof that the tree gives is at an index past its finalized deposits and below its count.
-
-It passes the Merkle check of a deposit against the deposit root, for at most `2^32` deposits.
-
-Its root and its proofs are the generic Merkle root and path of the deposits it holds.
 -/
 
 @[expose] public section
@@ -1393,7 +1385,9 @@ theorem getProof_ok {tree : DepositTree} {index : Nat} {leaf : Root}
     exact ⟨by omega, by omega, by omega, branch, walked, rfl⟩
   · cases proved
 
-/-- A proof that the tree gives passes the Merkle check of a deposit against its deposit root. -/
+/-- A proof that the tree gives passes the Merkle check of a deposit against its deposit root.
+
+The tree gives a proof only while it holds fewer than `2^32` deposits. -/
 theorem isValidMerkleBranch_getProof {tree : DepositTree} {index : Nat} {leaf : Root}
     {proof : Vector Root (DEPOSIT_CONTRACT_TREE_DEPTH.toNat + 1)}
     (proved : tree.getProof index = .ok (leaf, proof)) :

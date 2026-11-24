@@ -14,20 +14,6 @@ These probabilities hold for the oracle only; no theorem bounds the draw when SH
 
 The seed is fixed.
 
-A draw is fresh when the input its block of draws hashes has no answer in the cache yet.
-
-With fresh inputs and bounded balances, the first draws of one seed have independent outcomes.
-
-The same draw serves the proposer, the sync committee and the payload timeliness committee.
-
-The balance of each draw is given: the shuffle that picks the candidates is not modelled.
-
-The cache may hold other answers, such as those of shuffle inputs.
-
-The draws are made whether or not an earlier one accepts.
-
-A search that stops at its first acceptance reads a prefix of them.
-
 No theorem here covers seed derivation.
 -/
 
@@ -37,7 +23,9 @@ namespace EthLib.Consensus
 
 open Base OracleComp OracleSpec ENNReal
 
-/-- The proposer draw with its hash call exposed to a shared oracle. -/
+/-- The proposer draw with its hash call exposed to a shared oracle.
+
+The same draw serves the proposer, the sync committee and the payload timeliness committee. -/
 def queryProposerDraw (preset : Preset) (fork : Base.Fork) (seed : Bytes32) (i : Nat)
     (balance : Gwei) : OracleComp (ByteArray →ₒ Bytes32) (Except AccessorError Bool) :=
   (fun random => drawAccepts preset fork random i balance) <$>
@@ -135,9 +123,14 @@ theorem prEvent_queryProposerDraw_pair_of_fresh (preset : Preset) (fork : Base.F
 
 /-- The first `n` draws of one seed, each with its hash call exposed to a shared oracle.
 
-Draw `i` weighs a candidate whose effective balance is the `i`-th given balance. -/
+Draw `i` weighs a candidate whose effective balance is the `i`-th given balance.
+
+The balance of each draw is given: the shuffle that picks the candidates is not modelled. -/
 def queryDraws (preset : Preset) (fork : Base.Fork) (seed : Bytes32) (balance : Nat → Gwei)
     (n : Nat) : OracleComp (ByteArray →ₒ Bytes32) (List (Except AccessorError Bool)) :=
+  -- The draws are made whether or not an earlier one accepts.
+  --
+  -- A search that stops at its first acceptance reads a prefix of them.
   (List.range n).mapM fun i => queryProposerDraw preset fork seed i (balance i)
 
 /-- Answering the exposed hash calls with SHA-256 gives the specified draws. -/
@@ -240,6 +233,9 @@ The draws of one block read one answer at disjoint bytes, so they stay independe
 theorem run_queryDraws_evalDistEq (preset : Preset) (fork : Base.Fork) (seed : Bytes32)
     (balance : Nat → Gwei) (n : Nat) (cache : (ByteArray →ₒ Bytes32).QueryCache)
     (bounded : n ≤ 2 ^ 64)
+    -- A draw is fresh when the input its block of draws hashes has no answer in the cache yet.
+    --
+    -- The cache may hold other answers, such as those of shuffle inputs.
     (fresh : ∀ i < n, cache (drawInput seed (i / drawsPerHash fork)) = none) :
     ((simulateQ (ByteArray →ₒ Bytes32).randomOracle
       (queryDraws preset fork seed balance n)).run' cache) =ᵈ
@@ -311,26 +307,27 @@ private theorem prEvent_queryDraws_of_chance (preset : Preset) (fork : Base.Fork
 
 /-- Before Electra, the first `n` draws of one seed have independent outcomes.
 
-Here `e_i` is the balance of draw `i` and `M` the largest effective balance.
-
-Draw `i` accepts with chance `(⌊e_i * (2^8 - 1) / M⌋ + 1) / 2^8`, whatever earlier draws gave.
-
-So each pattern of outcomes has the product chance.
-
-It needs `0 < M`, each `e_i ≤ M` and `M * (2^8 - 1) < 2^64`.
-
-It also needs at most `2^64` draws, and no draw input of the seed in the shared cache. -/
+Here `e_i` is the balance of draw `i` and `M` the largest effective balance. -/
 theorem prEvent_queryDraws_of_before_pectra (preset : Preset) (fork : Base.Fork)
     (before : ¬ .pectra ≤ fork) (seed : Bytes32) (balance : Nat → Gwei) (n : Nat)
+    -- It needs at most `2^64` draws.
     (cache : (ByteArray →ₒ Bytes32).QueryCache) (bounded : n ≤ 2 ^ 64)
+    -- It needs no draw input of the seed in the shared cache.
     (fresh : ∀ i < n, cache (drawInput seed (i / drawsPerHash fork)) = none)
+    -- It needs `0 < M`.
     (positive : 0 < preset.MAX_EFFECTIVE_BALANCE.toNat)
+    -- It needs each `e_i ≤ M`.
     (balances : ∀ i < n, (balance i).toNat ≤ preset.MAX_EFFECTIVE_BALANCE.toNat)
+    -- It needs `M * (2^8 - 1) < 2^64`.
     (fits : preset.MAX_EFFECTIVE_BALANCE.toNat * (2 ^ 8 - 1) < 2 ^ 64) (outcome : Nat → Bool) :
     Pr{let z ← (simulateQ (ByteArray →ₒ Bytes32).randomOracle
       (queryDraws preset fork seed balance n)).run' cache}[
         z = (List.range n).map fun i => .ok (outcome i)] =
+      -- Each pattern of outcomes has the product chance.
       ∏ i ∈ Finset.range n,
+        -- Draw `i` accepts with chance `(⌊e_i * (2^8 - 1) / M⌋ + 1) / 2^8`.
+        --
+        -- That chance holds whatever earlier draws gave.
         let chance : ℝ≥0∞ := ((balance i).toNat * (2 ^ 8 - 1) /
           preset.MAX_EFFECTIVE_BALANCE.toNat + 1 : Nat) / 2 ^ 8
         if outcome i then chance else 1 - chance :=
@@ -342,27 +339,28 @@ theorem prEvent_queryDraws_of_before_pectra (preset : Preset) (fork : Base.Fork)
 
 /-- From Electra, the first `n` draws of one seed have independent outcomes.
 
-Here `e_i` is the balance of draw `i` and `M` the largest effective balance.
-
-Draw `i` accepts with chance `(⌊e_i * (2^16 - 1) / M⌋ + 1) / 2^16`, whatever earlier draws gave.
-
-So each pattern of outcomes has the product chance.
-
-It needs `0 < M`, each `e_i ≤ M` and `M * (2^16 - 1) < 2^64`.
-
-It also needs at most `2^64` draws, and no draw input of the seed in the shared cache. -/
+Here `e_i` is the balance of draw `i` and `M` the largest effective balance. -/
 theorem prEvent_queryDraws_of_pectra (preset : Preset) (fork : Base.Fork)
     (electra : .pectra ≤ fork) (seed : Bytes32) (balance : Nat → Gwei) (n : Nat)
+    -- It needs at most `2^64` draws.
     (cache : (ByteArray →ₒ Bytes32).QueryCache) (bounded : n ≤ 2 ^ 64)
+    -- It needs no draw input of the seed in the shared cache.
     (fresh : ∀ i < n, cache (drawInput seed (i / drawsPerHash fork)) = none)
+    -- It needs `0 < M`.
     (positive : 0 < preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)
+    -- It needs each `e_i ≤ M`.
     (balances : ∀ i < n, (balance i).toNat ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)
+    -- It needs `M * (2^16 - 1) < 2^64`.
     (fits : preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat * (2 ^ 16 - 1) < 2 ^ 64)
     (outcome : Nat → Bool) :
     Pr{let z ← (simulateQ (ByteArray →ₒ Bytes32).randomOracle
       (queryDraws preset fork seed balance n)).run' cache}[
         z = (List.range n).map fun i => .ok (outcome i)] =
+      -- Each pattern of outcomes has the product chance.
       ∏ i ∈ Finset.range n,
+        -- Draw `i` accepts with chance `(⌊e_i * (2^16 - 1) / M⌋ + 1) / 2^16`.
+        --
+        -- That chance holds whatever earlier draws gave.
         let chance : ℝ≥0∞ := ((balance i).toNat * (2 ^ 16 - 1) /
           preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat + 1 : Nat) / 2 ^ 16
         if outcome i then chance else 1 - chance :=

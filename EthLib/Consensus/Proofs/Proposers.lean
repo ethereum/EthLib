@@ -10,14 +10,6 @@ public import EthLib.Consensus.Proposers
 The proposer of a slot is one of the candidates it is drawn from.
 
 Each candidate is active, so each proposer of an epoch names a validator active in it.
-
-From Gloas each candidate is also unslashed, so each proposer is too.
-
-A balance-weighted selection of one proposer draws the same proposer as the proposer search.
-
-So from Electra, the Gloas selection of a proposer agrees with the earlier draw.
-
-Moving the lookahead shifts every proposer back by one epoch, and fills the last epoch anew.
 -/
 
 @[expose] public section

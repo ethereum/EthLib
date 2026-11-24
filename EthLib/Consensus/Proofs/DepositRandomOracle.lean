@@ -7,21 +7,11 @@ import EthLib.Consensus.Proofs.Containers.Misc
 /-!
 # Proofs: two deposits of one index and one deposit root in the random oracle model
 
-An adversary outputs one index, one deposit root and two deposits.
-
-It wins with different deposit data, if both proofs reach that root at that index.
-
-The experiment roots the data of both deposits and climbs both proofs as the deposit check does.
+An adversary wins with two deposits of different data whose proofs reach one root at one index.
 
 Every hash of the experiment is an oracle call.
 
 A win exposes two different queried messages with one answer, so the birthday bound applies.
-
-A win has probability at most `Q^2 / N`, where `Q` bounds all oracle calls and `N` counts digests.
-
-At the check depth of 33, an adversary of `q` calls gives a bound of `(q + 80)^2 / 2^256`.
-
-With SHA-256 as the node hash, a win is two such deposits that the deposit check accepts.
 
 Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2, "Oracles".
 
@@ -88,22 +78,22 @@ def DepositWins (outcome : DepositOutcome) : Prop :=
 
 /-- The root of deposit data is seven hashes.
 
-The public key takes one hash, and the signature takes three.
-
-The withdrawal credentials are their own node, and the amount is its 8 bytes and 24 zero bytes.
-
-Three more hashes join the four field roots.
-
 It holds for a hash in any lawful monad. -/
 theorem hashTreeRootM_depositData {m : Type → Type} [Monad m] [LawfulMonad m]
     (hash : ByteArray → m ByteArray) (data : DepositData) :
     (hashTreeRootM (Hasher.ofHash hash) (SszType.desc DepositData)
       (SszType.toValue data)).run = (do
+      -- The public key takes one hash.
       let pubkey ← hash ⟨data.pubkey.toArray ++ Array.replicate 16 0⟩
+      -- The signature takes three.
       let low ← hash ⟨data.signature.toArray.extract 0 64⟩
       let high ← hash ⟨data.signature.toArray.extract 64 96 ++ Array.replicate 32 0⟩
       let signature ← hash ⟨low.data ++ high.data⟩
+      -- Three more hashes join the four field roots.
+      --
+      -- The withdrawal credentials are their own node.
       let left ← hash ⟨pubkey.data ++ data.withdrawalCredentials.toArray⟩
+      -- The amount is its 8 bytes and 24 zero bytes.
       let right ← hash ⟨uintBytes 8 data.amount.toNat ++ Array.replicate 24 0 ++ signature.data⟩
       let root ← hash ⟨left.data ++ right.data⟩
       return .ok root.data) := by

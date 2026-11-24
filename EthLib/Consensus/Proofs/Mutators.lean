@@ -10,33 +10,11 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.RootedList
 /-!
 # Proofs: state mutators
 
+It proves what the mutators of the beacon state change and what they keep.
+
 Every mutator keeps the number of validators and the number of balances.
 
 So a state whose registry and balances have one length keeps that property.
-
-Raising a balance succeeds exactly when the balance exists and the sum stays below `2^64`.
-
-Lowering an existing balance always succeeds, and the result is zero when the amount is larger.
-
-A validator that starts to exit may withdraw a fixed delay after its exit epoch, with no overflow.
-
-Before Electra, an exit epoch other than the far future held fewer exits than the churn limit.
-
-Slashing a validator sets its slashed flag and changes no flag of another validator.
-
-From Gloas, slashing a validator cancels exactly the builder payments of the blocks it proposed.
-
-From Altair the proposer takes one eighth of the whistleblower reward of a slashing.
-
-A slashing changes no balance except those of the validator, the whistleblower and one index.
-
-From Fulu that index is the proposer of the slot.
-
-From Electra, the balance of a validator above the activation balance moves to the pending deposits.
-
-The balance and the amounts added to the queue keep their sum.
-
-A validator that switches to compounding credentials then has compounding credentials.
 -/
 
 @[expose] public section
@@ -323,38 +301,31 @@ theorem slashValidator_last {last after : BeaconState preset fork} {index : Vali
   subst done
   split <;> exact ⟨rfl, rfl⟩
 
-/-- The steps of a successful slashing, in order.
-
-The validator exits, and its record in the exited state is read.
-
-Its withdrawal is delayed and it is marked slashed.
-
-Its effective balance is added to the slashed balance of the epoch, in the slashings vector.
-
-Its balance pays the first penalty, and the proposer of the slot is read.
-
-The proposer and the whistleblower are paid.
-
-From Gloas the pending builder payments of its blocks are cancelled. -/
+/-- The steps of a successful slashing, in order. -/
 theorem slashValidator_ok {config : Config} {state after : BeaconState preset fork}
     {slashedIndex : ValidatorIndex} {whistleblowerIndex : Option ValidatorIndex}
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
     ∃ exited validator withdrawable marked slashed total slashings lowered proposer reward raised
       last,
+      -- The validator exits, and its record in the exited state is read.
       initiateValidatorExit config state slashedIndex = .ok exited ∧
       getValidator exited slashedIndex = .ok validator ∧
+      -- Its withdrawal is delayed and it is marked slashed.
       addChecked (getCurrentEpoch state) preset.EPOCHS_PER_SLASHINGS_VECTOR = .ok withdrawable ∧
       exited.setValidator slashedIndex
         { validator with
           slashed := true
           withdrawableEpoch := max validator.withdrawableEpoch withdrawable } = .ok marked ∧
+      -- Its effective balance is added to the slashed balance of the epoch in the slashings vector.
       readCircular marked.slashings.elements (getCurrentEpoch state) = .ok slashed ∧
       addChecked slashed validator.effectiveBalance = .ok total ∧
       writeCircularRooted marked.slashings (getCurrentEpoch state) total = .ok slashings ∧
+      -- Its balance pays the first penalty, and the proposer of the slot is read.
       decreaseBalance { marked with slashings } slashedIndex
         (validator.effectiveBalance / (parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT) =
           .ok lowered ∧
       getBeaconProposerIndex lowered = .ok proposer ∧
+      -- The proposer and the whistleblower are paid.
       proposerShare preset fork
         (validator.effectiveBalance / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT) =
           .ok reward ∧
@@ -362,6 +333,7 @@ theorem slashValidator_ok {config : Config} {state after : BeaconState preset fo
       increaseBalance raised (whistleblowerIndex.getD proposer)
         (validator.effectiveBalance / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT -
           reward) = .ok last ∧
+      -- From Gloas the pending builder payments of its blocks are cancelled.
       after = if gloas : .glamsterdam ≤ fork then cancelProposerPayments last gloas slashedIndex
         else last := by
   simp only [slashValidator, bind_ok_iff, liftArith, mapError_ok_iff] at computed
@@ -936,15 +908,9 @@ theorem effectiveBalance_initiateValidatorExit {config : Config}
 
 /-- The balances after a slashing, with a whistleblower that is by default the proposer.
 
-The reward is the effective balance of the validator over the whistleblower reward quotient.
+From Fulu the index that gains the proposer's share is the proposer of the slot.
 
-The validator first loses its effective balance over the slashing penalty quotient, down to zero.
-
-One index then gains the proposer's share of the reward, and the whistleblower gains the rest.
-
-Every other balance stays.
-
-From Fulu that index is the proposer of the slot in the state before the slashing.
+That proposer is read in the state before the slashing.
 
 Before Fulu this theorem does not say which index it is. -/
 theorem balance_slashValidator {config : Config} {state after : BeaconState preset fork}
@@ -953,17 +919,24 @@ theorem balance_slashValidator {config : Config} {state after : BeaconState pres
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
     ∃ proposer share,
       (.fusaka ≤ fork → getBeaconProposerIndex state = .ok proposer) ∧
+      -- The reward is the validator's effective balance over the whistleblower reward quotient.
       proposerShare preset fork
         (validator.effectiveBalance / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT) =
           .ok share ∧
       ∀ j balance, state.balances.data[j]? = some balance →
         ∃ paid, after.balances.data[j]? = some paid ∧
           paid.toNat =
+            -- The validator first loses its effective balance over the slashing penalty quotient.
+            --
+            -- Its balance stops at zero.
             (if slashedIndex.toNat = j then balance.toNat -
               (validator.effectiveBalance /
                 (parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT).toNat
+            -- Every other balance stays.
             else balance.toNat) +
+            -- One index then gains the proposer's share of the reward.
             (if proposer.toNat = j then share.toNat else 0) +
+            -- The whistleblower gains the rest.
             (if (whistleblowerIndex.getD proposer).toNat = j then
               (validator.effectiveBalance /
                 (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT).toNat - share.toNat

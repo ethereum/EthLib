@@ -6,23 +6,9 @@ public import EthLib.Consensus.Time
 /-!
 # Proofs: slots, epochs and times
 
-The first slot of an epoch lies in that epoch, and every slot lies after its epoch's first slot.
-
-A later slot is in the same epoch or a later one.
-
-The slots of an epoch exist exactly when its first slot plus its length fits in 64 bits.
-
-The slot at the start time of a slot is that slot, in milliseconds and in seconds.
-
-A genesis offset below one slot duration keeps the slot read at every slot start.
+It proves how slots, epochs and times convert into each other.
 
 Each conversion fails exactly when its result leaves the 64-bit range.
-
-A part of a slot grows with its basis points and stays below the slot.
-
-From Gloas, the attestation, the payload and the payload attestation fall due in that order.
-
-The slot after a slot is in the next epoch at a boundary, and in the same epoch otherwise.
 -/
 
 @[expose] public section
@@ -337,17 +323,15 @@ theorem toNat_secondsToMilliseconds {seconds : UInt64} (fits : seconds ≤ UINT6
   rw [UInt64.toNat_mul, thousand]
   exact Nat.mod_eq_of_lt (by omega)
 
-/-- The start time of a slot, in seconds, maps back to the slot.
-
-A slot lasts a positive whole number of seconds.
-
-A shorter slot can share its second with the next one.
-
-For example, with slots of 500 milliseconds, slots 2 and 3 start in the same second.
-
-The time of genesis must also fit in milliseconds, since a time that does not fit saturates. -/
+/-- The start time of a slot, in seconds, maps back to the slot. -/
 theorem computeSlotAtTime_computeTimeAtSlot {genesisTime time : UInt64} {slot : Slot}
+    -- A slot lasts a positive whole number of seconds.
+    --
+    -- A shorter slot can share its second with the next one.
+    --
+    -- For example, with slots of 500 milliseconds, slots 2 and 3 start in the same second.
     (positive : 0 < config.SLOT_DURATION_MS) (whole : config.SLOT_DURATION_MS % 1000 = 0)
+    -- The time of genesis must also fit in milliseconds, since a time that does not fit saturates.
     (genesis : genesisTime ≤ UINT64_MAX / 1000)
     (start : computeTimeAtSlot config genesisTime slot = .ok time) :
     computeSlotAtTime config genesisTime time = .ok slot := by

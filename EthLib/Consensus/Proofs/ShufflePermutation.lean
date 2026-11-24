@@ -10,17 +10,7 @@ Each round of swap-or-not undoes itself on the indices below the count.
 
 So running the rounds again in reverse order gives each index back.
 
-Hence the shuffled list holds each index below the count exactly once.
-
 The committees cut from a list of indices then hold each of its entries exactly once.
-
-So each entry of the list is in one of the committees.
-
-When the list has no repeat, no entry is in two committees.
-
-Each member of any committee that has a value is one of the indices.
-
-A committee whose position is below the count is cut, when the list times one past it fits.
 -/
 
 @[expose] public section

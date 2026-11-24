@@ -15,21 +15,9 @@ import EthLib.Base.Proofs.Bytes
 /-!
 # Proofs: the blob sidecars
 
-Each container has distinct field names, and converts to and from its fields.
-
-So its bytes decode back to it.
-
 Two sidecars whose branches verify for one blob of one block carry one commitment root.
 
-Otherwise the two climbs to the body root hash two different messages to one SHA-256 output.
-
-The depth of the inclusion proof, 17 for both presets, is the depth that the body type gives.
-
-The signed header of a block carries the root of its body.
-
 Every sidecar built from a block passes the inclusion check.
-
-For both presets, a block gives one sidecar per blob.
 -/
 
 @[expose] public section
@@ -38,6 +26,9 @@ namespace EthLib.Consensus
 
 open Base Serialization.Ssz
 
+-- Each container has distinct field names, and converts to and from its fields.
+--
+-- So its bytes decode back to it.
 instance {preset : Preset} [NeZero preset.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH.toNat] :
     LawfulSszType (BlobSidecar preset) :=
   .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)
@@ -467,28 +458,26 @@ theorem blobKzgCommitments_branch (deneb : .dencun ≤ fork ∧ fork < .glamster
 
 /-- A sidecar whose inclusion check passes carries the root of the commitment at its index.
 
-Take a body whose root is the body root of the header, with a commitment at the sidecar's index.
-
-Take the branch that the full node builds for that commitment.
-
-That commitment has the root of the sidecar's commitment.
-
-Otherwise the search over the two climbs names two different 64-byte messages with one hash.
-
 This holds from Deneb to the forks before Gloas; the full node builds the branch at both presets. -/
 theorem verifyBlobSidecarInclusionProof_body (deneb : .dencun ≤ fork ∧ fork < .glamsterdam)
     {sidecar : BlobSidecar preset}
     (valid : verifyBlobSidecarInclusionProof preset fork sidecar = true)
     {body : BeaconBlockBody preset fork}
+    -- Take a body whose root is the body root of the header.
     (rooted : SszType.hashTreeRoot body = .ok sidecar.signedBlockHeader.message.bodyRoot)
+    -- It has a commitment at the sidecar's index.
     {commitment : KZGCommitment}
     (chosen : (body.blobKzgCommitments deneb).data[sidecar.index.toNat]? = some commitment)
+    -- Take the branch that the full node builds for that commitment.
     {branch : Vector Bytes32 preset.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH.toNat}
     (built : blobKzgCommitmentInclusionProof body sidecar.index.toNat = .ok branch) :
     ∃ (gindex : Nat) (leaf other : Bytes32),
       blobKzgCommitmentGindex preset fork sidecar.index.toNat = .ok gindex ∧
       SszType.hashTreeRoot sidecar.kzgCommitment = .ok leaf ∧
       SszType.hashTreeRoot commitment = .ok other ∧
+      -- That commitment has the root of the sidecar's commitment.
+      --
+      -- Otherwise the search over both climbs names two different 64-byte messages with one hash.
       (leaf = other ∨ ∃ a b, findBranchCollision gindex 0 leaf.toArray other.toArray
           (sidecar.kzgCommitmentInclusionProof.toList.map Vector.toArray)
           (branch.toList.map Vector.toArray) = some (a, b) ∧
