@@ -14,14 +14,6 @@ The real experiment is at most the sum of three terms:
 * the model's game against the translated, memoized adversary;
 * one guess of the key's seed `S_0` per hash call after the seed hash;
 * one guess of the scheme's seed `S` per hash call after key generation.
-
-The model's budget after key generation is the real budget less `K`.
-
-`K` is the number of calls of real key generation.
-
-The model's bound, two units per call plus the slack, then fits in `q / 2^127`.
-
-The two guess terms cost a unit each.
 -/
 
 @[expose] public section
@@ -60,11 +52,13 @@ theorem final_arithmetic (q : Nat) (hK : keygenQueries ≤ q) (hq : q < 2 ^ 127)
     rw [show (2 ^ 128 : Nat) = 2 * 2 ^ 127 by norm_num, Nat.cast_mul, Nat.cast_mul]
     exact ENNReal.mul_div_mul_left _ _ (by norm_num) (by norm_num)
   calc
+    -- The two guess terms cost a unit each.
     _ ≤ ((2 * (q - keygenQueries) + lowerOrderSlack : Nat) : ℝ≥0∞) / ((2 ^ 128 : Nat) : ℝ≥0∞) +
         1 / ((2 ^ 128 : Nat) : ℝ≥0∞) + 1 / ((2 ^ 128 : Nat) : ℝ≥0∞) :=
       add_le_add (add_le_add le_rfl (guesses_le (by omega))) (guesses_le (by omega))
     _ = ((2 * (q - keygenQueries) + lowerOrderSlack + 1 + 1 : Nat) : ℝ≥0∞) / ((2 ^ 128 : Nat) : ℝ≥0∞) := by
       rw [← ENNReal.add_div, ← ENNReal.add_div, Nat.cast_succ, Nat.cast_succ]
+    -- The model's bound, two units per call plus the slack, then fits in `q / 2^127`.
     _ ≤ ((2 * q : Nat) : ℝ≥0∞) / ((2 ^ 128 : Nat) : ℝ≥0∞) := by
       apply ENNReal.div_le_div _ le_rfl
       have hK' := keygenQueries_eq
@@ -81,6 +75,9 @@ theorem realGame_security (q : Nat) (hq : 1 ≤ q)
   by_cases hsmall : q < 2 ^ 127
   · have hseeded := seededBudget adversary q (by omega) hbound
     have hK := keygenQueries_le adversary q hseeded
+    -- The model's budget after key generation is the real budget less `K`.
+    --
+    -- `K` is the number of calls of real key generation.
     have hlanes := Proof.concreteScheme_afterKeygenSecurity (q - keygenQueries) (by omega)
       (modelAdversary adversary) (afterKeygenBudget adversary q (by omega) hseeded)
     calc Pr{let x ← (simulateQ romImpl (realGame adversary)).run' ∅}[x = true]

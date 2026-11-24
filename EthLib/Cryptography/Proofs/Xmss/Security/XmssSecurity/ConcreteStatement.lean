@@ -21,21 +21,9 @@ Source: the leanXMSS specification draft, section "Security".
     every hash call is answered by one random oracle
 ```
 
-The algorithms are EthLib's own: `keyGenWith`, `signWith` and `verifyWith`.
+The algorithms are EthLib's own key generation, signing and verification.
 
-Their `H` is a query to the oracle (`queryH`).
-
-The signer keeps its key across requests, as a real signer does.
-
-Each request signs with the key the request before it returned.
-
-The budget `q` counts the hash calls of this game, on every run.
-
-It counts key generation, signing, the adversary's queries and the final verification.
-
-It counts repeated inputs too, and a hash call is one call of `H`, whatever its input's length.
-
-The oracle is lazily sampled, from an empty cache, and counts every call (`countedOracle`).
+Their `H` is a query to the oracle.
 -/
 @[expose] public section
 
@@ -85,6 +73,8 @@ instance (log : QueryLog SigningSpec) (forgery : Forgery) : Decidable (Contains 
   inferInstanceAs (Decidable (∃ entry ∈ log, _ ∧ _))
 
 /-- `Sig(sk, idx, m)` on each request, recorded with its answer.
+
+The signer keeps its key across requests, as a real signer does.
 
 Each request signs with the key the request before it returned, and the oracle keeps the new key. -/
 def signingOracle : QueryImpl SigningSpec
@@ -140,7 +130,11 @@ noncomputable def forgeAdvantage (adversary : Adversary) : ℝ≥0∞ :=
 
 /-! ## The statement -/
 
-/-- Every run of the game makes at most `q` hash calls. -/
+/-- Every run of the game makes at most `q` hash calls.
+
+It counts key generation, signing, the adversary's queries and the final verification.
+
+It counts repeated inputs too, and a hash call is one call of `H`, whatever its input's length. -/
 def HasHashQueryBound (adversary : Adversary) (q : Nat) : Prop :=
   ∀ result ∈ support (experiment adversary), result.2 ≤ q
 

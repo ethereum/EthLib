@@ -16,12 +16,6 @@ Consider the scan `base, base + 1, ...` of the bounded precomputed signer.
 It returns a cached hit `y` with exactly the probability that the scan-loop walk gives.
 
 That probability is `reach nextRand landing (scanStatus ...) y A base`.
-
-A fresh position lands with probability `landing`.
-
-The cache grows only at positions the walk has left.
-
-Within `2^128` attempts, the walk never revisits those positions.
 -/
 
 @[expose] public section
@@ -221,6 +215,7 @@ theorem selection_eq_reach (secretKey : SecretKey) (leafIndex : LeafIndex) (mess
             rw [← hstr] at hfresh
             cases hfresh
           rw [randomOracle_run_none_eq_uniformHashOutput _ _ hc, Functor.map_map, bind_map_left]
+          -- A fresh position lands with probability `landing`.
           rw [OracleComp.prEvent_bind_eq_tsum, reach_succ_fresh A hry hfresh, hnext,
             ← probEvent_not_landing, OracleComp.prEvent_eq_tsum_ite, ← ENNReal.tsum_mul_right]
           refine tsum_congr fun output => ?_
@@ -233,6 +228,9 @@ theorem selection_eq_reach (secretKey : SecretKey) (leafIndex : LeafIndex) (mess
             exact hry (hrand.symm.trans hsy)
           · rw [attemptResult_of_not_valid secretKey leafIndex r hv, continuation_none, ite_eq_left hv,
               uniformHashOutput, ih _ (by omega)]
+            -- The cache grows only at positions the walk has left.
+            --
+            -- Within `2^128` attempts, the walk never revisits those positions.
             · rw [scanStatus_cacheQuery_of_ne _ _ _ _ (Ne.symm hry)]
               exact hy
             · intro j hj

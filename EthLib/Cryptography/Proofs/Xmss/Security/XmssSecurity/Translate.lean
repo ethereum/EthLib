@@ -20,17 +20,11 @@ Passed `queryH`, a query to the model's oracle, each hashing routine is the mode
 
 The model keeps the two layers apart.
 
-Bottom keys are leaf indices below `2^32`, and top keys are indices below `2^16`.
-
 So each routine has one statement per layer.
-
-The equalities hold in every lawful monad with a query to the oracle.
 
 The model defines its hashes as EthLib's.
 
 So the hash lemmas also name the oracle input each hash makes.
-
-Those are `Concrete.encodingHash_eq` and the others.
 -/
 
 @[expose] public section
@@ -43,6 +37,7 @@ open EthLib.Cryptography.Hash.Keccak (lanesBytes)
 open EthLib.Cryptography.HashSig (toList_toLE
   ofFnInOrder_eq_sequenceFin)
 
+-- The equalities hold in every lawful monad with a query to the oracle.
 variable {m : Type → Type} [Monad m] [LawfulMonad m] [HasQuery XmssSecurity.HashSpec m]
 
 /-! ## Bytes of hash inputs -/
@@ -109,7 +104,10 @@ omit [HasQuery XmssSecurity.HashSpec m] in
 theorem map_ofDigest_toDigest (x : m Digest) : ofDigest <$> (toDigest <$> x) = x := by
   simp [Functor.map_map]
 
-/-! ## Chains -/
+/-! ## Chains
+
+Bottom keys are leaf indices below `2^32`, and top keys are indices below `2^16`.
+-/
 
 /-- One step of a bottom chain.
 

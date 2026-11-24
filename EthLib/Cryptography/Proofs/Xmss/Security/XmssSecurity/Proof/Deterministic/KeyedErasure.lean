@@ -12,13 +12,9 @@ Erasing keeps the answers and the final cache, and can only lower the number of 
 
 This file runs an adversary twice: with oracles that keep a state, and with oracles that keep none.
 
-Take an invariant of the state.
+Under an invariant of the state, the two runs agree in distribution.
 
-From a state that keeps it, each query of the first erases to the same query of the second.
-
-After each query of the first, the new state keeps the invariant.
-
-Then the two runs agree in distribution, and the second makes at most the first's hash calls.
+The second run makes at most the first's hash calls.
 
 The calls are counted by a counter in the oracle's state, as the query bounds do.
 -/
@@ -176,9 +172,13 @@ theorem run_simulateQ_query_bind {α : Type} (q : spec.Domain)
   simp only [simulateQ_bind, simulateQ_spec_query, WriterT.run_bind']
   rfl
 
+-- Take an invariant of the state.
+--
+-- From a state that keeps it, each query of the first erases to the same query of the second.
 variable (hstep : ∀ q s, Inv s →
     Erases (worldKnown known) (forgetState <$> ((implL q).run s).run)
       (translateLog g <$> (implR q).run))
+  -- After each query of the first, the new state keeps the invariant.
   (hinv : ∀ q s cache, Inv s → known ≤ cache →
     ∀ x ∈ support ((simulateQ romImpl ((implL q).run s).run).run cache), Inv x.1.1.2)
 
