@@ -63,15 +63,13 @@ theorem split_real (y : ι → ℝ) (c c1 θ : ℝ) (hθ : 0 < θ) :
 
 It is a sum over the sets `T` of `j` indices.
 
-Each set contributes a product over all indices.
-
-An index in `T` gives `e^{θ min(y_l, c1)}` if it is big, and `0` if not.
-
-An index outside `T` gives `e^{θ min(y_l, cap)}`. -/
+Each set contributes a product over all indices. -/
 noncomputable def splitTerm (y : ι → ℝ) (big : ι → Prop) [DecidablePred big] (c1 cap θ : ℝ)
     (j : ℕ) : ℝ :=
   ∑ T ∈ Finset.powersetCard j Finset.univ,
+    -- An index in `T` gives `e^{θ min(y_l, c1)}` if it is big, and `0` if not.
     ∏ l, if l ∈ T then (if big l then Real.exp (θ * min (y l) c1) else 0)
+    -- An index outside `T` gives `e^{θ min(y_l, cap)}`.
     else Real.exp (θ * min (y l) cap)
 
 theorem splitTerm_nonneg (y : ι → ℝ) (big : ι → Prop) [DecidablePred big] (c1 cap θ : ℝ) (j : ℕ) :
@@ -104,11 +102,7 @@ Then `Σ y - c` is at most `Σ (y - c1)^+` plus a sum over `j ≤ m`.
 
 Each summand is `e^{-θ_j c} / (e θ_j)` times the `j`-th term.
 
-That term has the cap `c2` for `j < m`, and the cap `c1` for `j = m`.
-
-If there are `j < m` big indices, the `j`-th summand bounds `Σ min(y, c1) - c`.
-
-Otherwise the last summand bounds it, with any `m` of the big indices. -/
+That term has the cap `c2` for `j < m`, and the cap `c1` for `j = m`. -/
 theorem split_J (y : ι → ℝ) (big : ι → Prop) [DecidablePred big] (c c1 c2 : ℝ) (hc2 : c2 ≤ c1)
     (hsmall : ∀ l, ¬ big l → y l ≤ c2) (m : ℕ) (θ : ℕ → ℝ) (hθ : ∀ j ≤ m, 0 < θ j) :
     ∑ l, y l - c ≤ ∑ l, max (y l - c1) 0 +
@@ -131,6 +125,7 @@ theorem split_J (y : ι → ℝ) (big : ι → Prop) [DecidablePred big] (c c1 c
     set J := Finset.univ.filter big with hJ
     have hJbig : ∀ l ∈ J, big l := fun l hl => (Finset.mem_filter.1 hl).2
     rcases lt_or_ge J.card m with hlt | hge
+    -- If there are `j < m` big indices, the `j`-th summand bounds `Σ min(y, c1) - c`.
     · refine ⟨J.card, Finset.mem_range.2 (by omega), ?_⟩
       have hge := splitTerm_ge y big c1 (if J.card < m then c2 else c1) (θ J.card) J hJbig
         (fun l hl => by
@@ -141,6 +136,7 @@ theorem split_J (y : ι → ℝ) (big : ι → Prop) [DecidablePred big] (c c1 c
       exact le_trans (chernoff_real M c (θ J.card) (hθ _ hlt.le))
         (mul_le_mul_of_nonneg_left hge
           (div_nonneg (Real.exp_pos _).le (mul_pos (Real.exp_pos 1) (hθ _ hlt.le)).le))
+    -- Otherwise the last summand bounds it, with any `m` of the big indices.
     · obtain ⟨T, hTJ, hTc⟩ := Finset.exists_subset_card_eq hge
       refine ⟨m, Finset.mem_range.2 (by omega), ?_⟩
       have hge' := splitTerm_ge y big c1 (if m < m then c2 else c1) (θ m) T

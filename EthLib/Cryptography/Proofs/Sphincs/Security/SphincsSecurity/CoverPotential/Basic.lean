@@ -8,16 +8,6 @@ public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Forger
 /-!
 # Ingredients of the FORS potential of the lazy run
 
-A pair is a message with a randomizer.
-
-Every cached landed pair is an item, and the unsigned items are candidates.
-
-A pair owns one digest block per digest call.
-
-The block of the first call carries the index and alone decides landing.
-
-The kept view of the pair needs every block.
-
 The module states the item and disclosure invariants and the final value, a FORS cover.
 
 It proves the facts about fresh pairs, ordinary queries and signing calls that the potentials need.
@@ -132,7 +122,9 @@ theorem pview_congr {s s' : State} {p : Pair}
   unfold pview
   rw [pcache_congr parameter data h]
 
-/-- The block of the first call of the pair is cached and lands. -/
+/-- The block of the first call of the pair is cached and lands.
+
+That block carries the index and alone decides landing. -/
 def LandedIn (s : State) (p : Pair) : Prop :=
   ∃ u0, s.cache (pblk parameter data p firstCall) = some u0 ∧ Landed parameter (blockIndex u0)
 
@@ -164,7 +156,9 @@ Some disclosed view at its local index selects its leaf in its tree. -/
 def DInv (R : List Coordinate) (d : Multiset View) : Prop :=
   ∀ i κ l q, Coordinate.fors i κ l q ∈ R → ∃ v ∈ d, v.1 = localIdx i ∧ v.2 κ = l
 
-/-- The pair was never signed in the log. -/
+/-- The pair was never signed in the log.
+
+Every cached landed pair is an item, and the unsigned items are the candidates. -/
 def Unsigned (L : QueryLog SigningSpec) (p : Pair) : Prop :=
   ∀ entry ∈ L, ∀ sig, entry.2 = some sig → ¬(entry.1 = p.1 ∧ sig.randomness = p.2)
 

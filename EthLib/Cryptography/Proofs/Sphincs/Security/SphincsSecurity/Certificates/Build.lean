@@ -127,19 +127,9 @@ section
 /-!
 ## Certificates checked by construction
 
-The construction computes the leaf tables in integers, as numerators over `2^P`.
-
-They are the rounded-up bounds from the numerators of the moment tables, made convex.
-
-The Poisson mean of a table is one integer sum.
-
-The leaf tables are convex majorants of the bounds, and the means and the bound are rounded up.
-
-So a rebuilt option and a rebuilt near certificate pass their checkers.
+A rebuilt option and a rebuilt near certificate pass their checkers.
 
 A rebuilt Poisson table passes the steps of its checker.
-
-The lower bound from the exponential series is evaluated in integers.
 -/
 
 namespace SphincsSecurity.Security.H0
@@ -217,14 +207,22 @@ theorem nZ_bound {H k a n1 n : ℕ} (hn1 : n1 ≤ 150) (hn : n < n1 + 1) :
 def buildOpt (H b k a : ℕ) (t : PoisT) (c1 θ : ℚ) (s : ℕ) (cthr : ℚ) : OptF :=
   let eC := expUp (θ * c1) s t.P
   let A2 := rup ((eC - 1 - θ * c1) / c1 ^ 2) (2 * 127 + 64)
+  -- The construction computes the leaf tables in integers, as numerators over `2^P`.
+  --
+  -- They are the rounded-up bounds from the numerators of the moment tables, made convex.
   let gk := convexZ (gZ H k a t.n1 c1)
   let hk := convexZ (hZ H k a t.n1 θ A2 ⌈(eC - 1) * 2 ^ 128⌉)
   let gt := overP 191 gk
   let ht := overP 128 hk
+  -- The leaf tables are convex majorants of the bounds.
   let Jg := leafJ t.n1 gt (κQ H)
   let Jh := leafJ t.n1 ht (eC - 1)
+  -- The Poisson mean of a table is one integer sum.
+  --
+  -- The means and the bound are rounded up.
   let Eg := rup (meanZ t 191 gk Jg) (64 + 127 + 2 * b)
   let Ee := rup (meanZ t 128 hk Jh) (64 + 2 * b)
+  -- The lower bound from the exponential series is evaluated in integers.
   let L := (expLowN (θ * cthr).num.toNat (θ * cthr).den t.P t.J 0 (2 ^ t.P) 0 : ℚ) / 2 ^ t.P
   let B := rup (2 ^ b * Eg + sqUp t.P b (1 + Ee) / (L * eLowQ * θ)) (64 + 127)
   ⟨c1, θ, cthr, s, eC, A2, gt, Jg, ht, Jh, Eg, Ee, B⟩

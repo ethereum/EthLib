@@ -116,15 +116,14 @@ noncomputable def compTable (table : HiddenGraph.Table)
 
 /-- The targets of the sample, without the message-digest inputs.
 
-A message-digest input has no address.
-
-If its randomizer is the sample's `PK.seed`, its bytes can still parse as an address.
-
-The payload of that parse has 36 bytes.
-
 The hits that a win yields are never message-digest inputs. -/
 noncomputable def digestFreeTargets (table : HiddenGraph.Table)
     (results : OtsKey → Option (Counter × Encoding)) (input : HashInput) : Finset Digest :=
+  -- A message-digest input has no address.
+  --
+  -- If its randomizer is the sample's `PK.seed`, its bytes can still parse as an address.
+  --
+  -- The payload of that parse has 36 bytes.
   if ForsSigner.IsMsgInput input then ∅
   else targets (truncateHash parameterOutput)
     (compTable parameterOutput fixed highs remaining table results) input

@@ -7,31 +7,11 @@ public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverB
 /-!
 # Proofs: the FORS H-term option with a split by big indices
 
-An option fixes a cap `c1`, Chernoff parameters `θ_0, …, θ_m`, a threshold `cthr` and a bound `B`.
-
 Here `y` is the value of an index scaled by `κ`, and `n` is its number of views.
 
-An index is big when it has more than `nb` views.
+The option bounds three conditional means, given `n`, by tables.
 
-At the other indices, `y ≤ c2 = κ (nb / A)^k`, and `c2 ≤ c1`.
-
-The option bounds three conditional means by tables:
-
-- `ḡ ≥ E[(y - c1)^+ | n]`;
-- `ā_j ≥ E[[n > nb] e^{θ_j min(y, c1)} | n]`;
-- `h̄_j - 1 ≥ E[e^{θ_j min(y, cap_j)} | n] - 1`.
-
-The cap `cap_j` is `c2` for `j < m` and `c1` for `j = m`.
-
-The support bound `y ≤ κ (n / A)^k` gives an entry where it suffices.
-
-The class law gives the entries at the counts `nx`, and the moment tables give the rest.
-
-The entries are integers over powers of two, made convex and averaged against the Poisson table.
-
-The bound is `B ≥ L E[ḡ] + Σ_j C(L, j) E[ā_j]^j E[h̄_j]^L e^{-θ_j cthr} / (e θ_j)`.
-
-Here `L = 2^b`, with `b` the subtree height.
+Its bound `B` then bounds the H-term.
 
 With `m = 0` and no class law, it is the option with one Chernoff factor and a support bound.
 -/
@@ -189,7 +169,11 @@ def θ (o : OptJ) (j : ℕ) : ℚ := o.ths.getD j 0
 
 end OptJ
 
-/-- `c2 = κ (nb / A)^k = nb^k / 2^(H + a k)`. -/
+/-- `c2 = κ (nb / A)^k = nb^k / 2^(H + a k)`.
+
+An index is big when it has more than `nb` views.
+
+At the other indices, `y ≤ c2`, and `c2 ≤ c1`. -/
 def c2Q (H k a nb : ℕ) : ℚ := ((nb ^ k : ℕ) : ℚ) / 2 ^ (H + a * k)
 
 /-- The cap of the `j`-th term off the big set: `c2` for `j < m`, `c1` for `j = m`. -/
@@ -218,7 +202,7 @@ def lawEN (H k a n T s P : ℕ) (θ cap : ℚ) : ℕ :=
 
 /-- The numerator over `2^191` of `ḡ(n)`.
 
-The support bound gives zero where it applies.
+The support bound `y ≤ κ (n / A)^k` gives zero where it applies.
 
 The class law gives the counts `nx`, and the moment tables give the rest. -/
 def gEntryJ (H k a : ℕ) (o : OptJ) (n : ℕ) : ℤ :=
@@ -250,13 +234,17 @@ def A2Jn (H k a : ℕ) (o : OptJ) (P j n : ℕ) : ℚ :=
       zQ H k a o j n ^ 2)
     (2 * 127 + 64)
 
-/-- The numerator over `2^128` of `ā_j(n)`. -/
+/-- The numerator over `2^128` of `ā_j(n)`.
+
+The class law gives the entries at the counts `nx`. -/
 def aEntryJ (H k a : ℕ) (o : OptJ) (P j n : ℕ) : ℤ :=
   if n ≤ o.nb then 0
   else if n ∈ o.nx then (lawEN H k a n o.T o.s P (o.θ j) o.c1 : ℤ)
   else (cdiv (2 ^ 128 * eAN o P j) (2 ^ P) : ℤ)
 
-/-- The numerator over `2^128` of `h̄_j(n) - 1`. -/
+/-- The numerator over `2^128` of `h̄_j(n) - 1`.
+
+The class law gives the entries at the counts `nx`. -/
 def hEntryJ (H k a : ℕ) (o : OptJ) (P j n : ℕ) : ℤ :=
   if j < o.m ∧ o.nb < n then (eH1N H k a o P j : ℤ)
   else if n ∈ o.nx then ((lawEN H k a n o.T o.s P (o.θ j) (capQ H k a o j) - 2 ^ 128 : ℕ) : ℤ)
@@ -265,17 +253,19 @@ def hEntryJ (H k a : ℕ) (o : OptJ) (P j n : ℕ) : ℤ :=
       (A2Jn H k a o P j n).num * (o.θ j).den * ((p2N a n ^ k : ℕ) : ℤ)) * 2 ^ 128)
       ((o.θ j).den * (A2Jn H k a o P j n).den * p2 (2 * H + 128 * k)))
 
-/-- A table of numerators over `n ≤ n1`, made convex. -/
+/-- A table of numerators over `n ≤ n1`, made convex.
+
+The entries are integers over powers of two, made convex and averaged against the Poisson table. -/
 def tabJ (n1 : ℕ) (f : ℕ → ℤ) : List ℤ := convexZ ((List.range (n1 + 1)).map f)
 
-/-- `ḡ` (numerators over `2^191`). -/
+/-- `ḡ` (numerators over `2^191`), with `ḡ ≥ E[(y - c1)^+ | n]`. -/
 def gkJ (H k a : ℕ) (t : PoisT) (o : OptJ) : List ℤ := tabJ t.n1 (gEntryJ H k a o)
 def gtJ (H k a : ℕ) (t : PoisT) (o : OptJ) : List ℚ := overP 191 (gkJ H k a t o)
 def JgJ (H k a : ℕ) (t : PoisT) (o : OptJ) : ℚ := leafJ t.n1 (gtJ H k a t o) (κQ H)
 def EgJ (H b k a : ℕ) (t : PoisT) (o : OptJ) : ℚ :=
   rup (meanZ t 191 (gkJ H k a t o) (JgJ H k a t o)) (64 + 127 + 2 * b)
 
-/-- `ā_j` (numerators over `2^128`). -/
+/-- `ā_j` (numerators over `2^128`), with `ā_j ≥ E[[n > nb] e^{θ_j min(y, c1)} | n]`. -/
 def akJ (H k a : ℕ) (t : PoisT) (o : OptJ) (j : ℕ) : List ℤ := tabJ t.n1 (aEntryJ H k a o t.P j)
 def atJ (H k a : ℕ) (t : PoisT) (o : OptJ) (j : ℕ) : List ℚ := overP 128 (akJ H k a t o j)
 def JaJ (H k a : ℕ) (t : PoisT) (o : OptJ) (j : ℕ) : ℚ :=
@@ -283,7 +273,7 @@ def JaJ (H k a : ℕ) (t : PoisT) (o : OptJ) (j : ℕ) : ℚ :=
 def EaJ (H b k a : ℕ) (t : PoisT) (o : OptJ) (j : ℕ) : ℚ :=
   rup (meanZ t 128 (akJ H k a t o j) (JaJ H k a t o j)) (64 + 2 * b)
 
-/-- `h̄_j - 1` (numerators over `2^128`). -/
+/-- `h̄_j - 1` (numerators over `2^128`), with `h̄_j - 1 ≥ E[e^{θ_j min(y, cap_j)} | n] - 1`. -/
 def hkJ (H k a : ℕ) (t : PoisT) (o : OptJ) (j : ℕ) : List ℤ := tabJ t.n1 (hEntryJ H k a o t.P j)
 def htJ (H k a : ℕ) (t : PoisT) (o : OptJ) (j : ℕ) : List ℚ := overP 128 (hkJ H k a t o j)
 def JhJ (H k a : ℕ) (t : PoisT) (o : OptJ) (j : ℕ) : ℚ :=
@@ -317,7 +307,11 @@ def okJ (H b k a : ℕ) (t : PoisT) (o : OptJ) : Bool :=
     decide (0 ≤ EgJ H b k a t o) && decide
         (∀ j < o.m + 1, 0 ≤ EaJ H b k a t o j ∧ 0 ≤ EhJ H b k a t o j)
 
-/-- The check of an option against a Poisson table, for subtree height `b`. -/
+/-- The check of an option against a Poisson table, for subtree height `b`.
+
+The bound is `B ≥ L E[ḡ] + Σ_j C(L, j) E[ā_j]^j E[h̄_j]^L e^{-θ_j cthr} / (e θ_j)`.
+
+Here `L = 2^b`. -/
 def checkOptJ (H b k a : ℕ) (t : PoisT) (o : OptJ) : Bool :=
   okJ H b k a t o && decide (BJ H b k a t o ≤ o.B)
 

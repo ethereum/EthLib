@@ -6,14 +6,6 @@ public import Mathlib.Algebra.Order.BigOperators.Group.Multiset
 /-!
 # The virtual future of the forecast potentials
 
-A slot is one future signature.
-
-It discloses a fresh uniform view and keeps it as an item.
-
-It also flips an independent coin of probability `wbar` for each earlier item.
-
-A coin that lands discloses the view of its item again.
-
 A potential is the expected value of a base function of the final multiset of disclosures.
 
 This module also models the future pairs that the remaining budget creates.
@@ -101,6 +93,13 @@ variable (U : Finset V) (wbar : ℝ≥0∞) (f : Multiset V → ℝ≥0∞)
 /-- The expected base value after `m` slots, from the given items and disclosures. -/
 noncomputable def virtual : ℕ → List V → Multiset V → ℝ≥0∞
   | 0, _, d => f d
+  -- A slot is one future signature.
+  --
+  -- It discloses a fresh uniform view and keeps it as an item.
+  --
+  -- It also flips an independent coin of probability `wbar` for each earlier item.
+  --
+  -- A coin that lands discloses the view of its item again.
   | m + 1, items, d =>
       freshAvg U fun u => slotValue (virtual m (u :: items)) (d + {u}) (itemCoins wbar items)
 
