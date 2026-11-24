@@ -8,61 +8,9 @@ public import EthLib.Consensus.Transition.EpochUpdates
 /-!
 # Proofs: the other steps of the epoch transition
 
-An updated effective balance is the old one, or the balance rounded down to an increment and capped.
+The update of the effective balances, the registry updates and the slashings.
 
-It is at most the balance plus the downward band of hysteresis.
-
-It does not rise while the balance stays within the upward band of it.
-
-Unless it is the old one, it is at most the balance and at most the largest.
-
-So when the old effective balance is at most the largest, the updated one is too.
-
-It is also at most the greater of the old effective balance and the balance.
-
-The effective balances are aligned when each is a whole number of increments.
-
-When the largest values of the preset are aligned too, the update keeps them aligned.
-
-The registry updates, the slashings and the update of the effective balances keep the sizes.
-
-When the slashings succeed, each balance of the registry loses its penalty if it is due.
-
-That balance stops at zero.
-
-From Electra this holds for a registry within its limit.
-
-The same holds in natural numbers, with no reduction modulo `2^64`.
-
-On success the scaled sum of slashings fits, and so does each checked product of a due penalty.
-
-When the slashings succeed, the balances past the registry stay.
-
-The slashings reset clears the slashed balance of the next epoch.
-
-The RANDAO reset copies the mix of the current epoch to the next.
-
-The rotation of the pending attestations moves those of the current epoch to the previous one.
-
-The slashings change only the balances.
-
-The update of the effective balances changes only the registry.
-
-Before Heze, the reset of the deposit votes changes only those votes.
-
-From Altair, the update of the inactivity scores changes only those scores.
-
-A root joins the historical roots exactly when their list has room, and it joins at the end.
-
-Before Capella, a successful update at the start of a span adds the root of the batch of roots.
-
-From Capella, it adds one summary: the root of the block roots, then the root of the state roots.
-
-Away from the start of a span, a successful update leaves the state unchanged.
-
-In its own forks, with a next epoch, each update fails exactly at a span start with a full list.
-
-Right after the update of the effective balances, each lies within the bands of its balance.
+The resets, the rotation of the attestations and the update of the historical roots.
 -/
 
 @[expose] public section
@@ -73,7 +21,10 @@ open Base Uint64 Serialization.Ssz
 
 variable {preset : Preset} {fork : Base.Fork} {state after : BeaconState preset fork}
 
-/-! ## Effective balances -/
+/-! ## Effective balances
+
+The effective balances are aligned when each is a whole number of increments.
+-/
 
 /-- An updated effective balance is the old one, or the balance rounded down and capped. -/
 theorem updatedEffectiveBalance_cases {largest balance effectiveBalance result : Gwei}
@@ -531,13 +482,7 @@ theorem foldlM_activateValidator_activationEpochs {indices : List ValidatorIndex
 
 The queue and the limit are read after the first pass, as the step reads them.
 
-The queue sorts by eligibility epoch, then by validator index.
-
 Before Deneb the limit is the validator churn limit; from Deneb it is capped, as [EIP-7514] says.
-
-Each selected validator had the far-future activation epoch, 2^64 - 1, before the step.
-
-With an empty prefix, the step does not compute an activation epoch at all.
 
 [EIP-7514]: https://eips.ethereum.org/EIPS/eip-7514#specification
 -/
@@ -549,15 +494,18 @@ theorem processRegistryUpdates_activationEpochs {config : Config}
         .ok updated ∧
       let limit := if .dencun ≤ fork then getValidatorActivationChurnLimit config updated
         else getValidatorChurnLimit config updated
+      -- The queue sorts by eligibility epoch, then by validator index.
       let selected := (activationQueue updated).take limit.toNat
       selected.length ≤ limit.toNat ∧
       limit ≤ getValidatorChurnLimit config updated ∧
       (.dencun ≤ fork → limit ≤ config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT) ∧
       (∀ index, index ∉ selected →
         activationEpochAt after index = activationEpochAt state index) ∧
+      -- With an empty prefix, the step does not compute an activation epoch at all.
       (∀ index, index ∈ selected → ∃ epoch,
         computeActivationExitEpoch preset (getCurrentEpoch state) = .ok epoch ∧
           activationEpochAt after index = .ok epoch) ∧
+      -- Each selected validator had the far-future activation epoch, 2^64 - 1, before the step.
       (∀ index, index ∈ selected → activationEpochAt state index = .ok FAR_FUTURE_EPOCH) := by
   have notElectra : ¬Fork.pectra ≤ fork := Nat.not_le_of_lt before
   simp only [processRegistryUpdates, notElectra, ↓reduceIte, bind_ok_iff] at computed
@@ -794,24 +742,20 @@ private theorem slashingPenaltyDue_iff {state : BeaconState preset fork} {valida
 
 /-- A successful penalty step used before Electra finds the validator at its position.
 
-When the penalty is due, both checked products are below `2^64`.
-
-The first is the effective balance in increments, times the given adjusted slashed balance.
-
-The second divides it by the given active balance, then multiplies by the increment.
-
-The step then lowers the balance at a position below `2^64` by that penalty.
-
 When the penalty is not due, the step keeps the state. -/
 private theorem applySlashingPenalty_cases {total adjusted : Gwei}
     {last next : BeaconState preset fork} {j : Nat}
     (computed : applySlashingPenalty last total adjusted j = .ok next) :
     ∃ validator, getValidatorAt last j = .ok validator ∧
+      -- When the penalty is due, both checked products are below `2^64`.
       ((SlashingPenaltyDue preset (getCurrentEpoch last) validator ∧
+          -- The first is the effective balance in increments times the adjusted slashed balance.
           validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
             adjusted.toNat < 2 ^ 64 ∧
+          -- The second divides it by the given active balance, then multiplies by the increment.
           validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
             adjusted.toNat / total.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat < 2 ^ 64 ∧
+          -- The step then lowers the balance at a position below `2^64` by that penalty.
           (j < 2 ^ 64 → decreaseBalance last j.toUInt64
             (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT * adjusted / total *
               preset.EFFECTIVE_BALANCE_INCREMENT) = .ok next)) ∨
@@ -848,21 +792,19 @@ private theorem applySlashingPenalty_cases {total adjusted : Gwei}
 
 /-- A successful penalty step used from Electra finds the validator at its position.
 
-When the penalty is due, its checked product is below `2^64`.
-
-That product is the given penalty per increment, times the effective balance in increments.
-
-The step then lowers the balance at a position below `2^64` by that product.
-
 When the penalty is not due, the step keeps the state. -/
 private theorem applySlashingPenaltyElectra_cases {perIncrement : Gwei}
     {last next : BeaconState preset fork} {j : Nat}
     (computed : applySlashingPenaltyElectra last perIncrement j = .ok next) :
     ∃ validator, getValidatorAt last j = .ok validator ∧
+      -- When the penalty is due, its checked product is below `2^64`.
+      --
+      -- That product is the given penalty per increment, times the effective balance in increments.
       ((SlashingPenaltyDue preset (getCurrentEpoch last) validator ∧
           perIncrement.toNat *
             (validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) <
               2 ^ 64 ∧
+          -- The step then lowers the balance at a position below `2^64` by that product.
           (j < 2 ^ 64 → decreaseBalance last j.toUInt64
             (perIncrement * (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT)) =
               .ok next)) ∨
@@ -931,29 +873,25 @@ theorem applySlashingPenaltyElectra_no_overflow {perIncrement : Gwei} {j : Nat}
 
 /-- The penalty step used before Electra lowers the balance of one validator when it is due.
 
-This holds when the step succeeds at a position below `2^64`.
-
-The registry and the slot stay.
-
-The validator at that position exists.
-
-Its balance loses the penalty if it is due, stopping at zero.
-
-The penalty is its effective balance in increments, times the given adjusted slashed balance.
-
-That product is divided by the given active balance, then counted back in increments.
-
-The other balances stay. -/
+This holds when the step succeeds at a position below `2^64`. -/
 theorem applySlashingPenalty_balances {total adjusted : Gwei} {last next : BeaconState preset fork}
     {j : Nat} (small : j < 2 ^ 64)
     (computed : applySlashingPenalty last total adjusted j = .ok next) :
+    -- The registry and the slot stay.
     next.validators = last.validators ∧ next.slot = last.slot ∧
+      -- The validator at that position exists.
       (∃ validator, last.validators.data[j]? = some validator ∧
+        -- Its balance loses the penalty if it is due, stopping at zero.
+        --
+        -- The penalty is its effective balance in increments times the adjusted slashed balance.
+        --
+        -- That product is divided by the given active balance, then counted back in increments.
         next.balances.data[j]? = last.balances.data[j]?.map fun balance =>
           if SlashingPenaltyDue preset (getCurrentEpoch last) validator then
             saturatingSub balance (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT *
               adjusted / total * preset.EFFECTIVE_BALANCE_INCREMENT)
           else balance) ∧
+      -- The other balances stay.
       ∀ k, k ≠ j → next.balances.data[k]? = last.balances.data[k]? := by
   obtain ⟨validator, found, cases⟩ := applySlashingPenalty_cases computed
   obtain ⟨kept, slot, ⟨registered, entry⟩, others⟩ := slashingStep_balances small found
@@ -962,27 +900,23 @@ theorem applySlashingPenalty_balances {total adjusted : Gwei} {last next : Beaco
 
 /-- The penalty step used from Electra lowers the balance of one validator when it is due.
 
-This holds when the step succeeds at a position below `2^64`.
-
-The registry and the slot stay.
-
-The validator at that position exists.
-
-Its balance loses the penalty if it is due, stopping at zero.
-
-The penalty is the given penalty per increment, times its effective balance in increments.
-
-The other balances stay. -/
+This holds when the step succeeds at a position below `2^64`. -/
 theorem applySlashingPenaltyElectra_balances {perIncrement : Gwei}
     {last next : BeaconState preset fork} {j : Nat} (small : j < 2 ^ 64)
     (computed : applySlashingPenaltyElectra last perIncrement j = .ok next) :
+    -- The registry and the slot stay.
     next.validators = last.validators ∧ next.slot = last.slot ∧
+      -- The validator at that position exists.
       (∃ validator, last.validators.data[j]? = some validator ∧
+        -- Its balance loses the penalty if it is due, stopping at zero.
+        --
+        -- The penalty is the given penalty per increment times its effective balance in increments.
         next.balances.data[j]? = last.balances.data[j]?.map fun balance =>
           if SlashingPenaltyDue preset (getCurrentEpoch last) validator then
             saturatingSub balance
               (perIncrement * (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT))
           else balance) ∧
+      -- The other balances stay.
       ∀ k, k ≠ j → next.balances.data[k]? = last.balances.data[k]? := by
   obtain ⟨validator, found, cases⟩ := applySlashingPenaltyElectra_cases computed
   obtain ⟨kept, slot, ⟨registered, entry⟩, others⟩ := slashingStep_balances small found
@@ -991,29 +925,25 @@ theorem applySlashingPenaltyElectra_balances {perIncrement : Gwei}
 
 /-- The penalty step used before Electra lowers one balance by its penalty in natural numbers.
 
-This holds when the step succeeds at a position below `2^64`.
-
-The registry and the slot stay.
-
-The validator at that position exists.
-
-Its balance loses the penalty if it is due, stopping at zero.
-
-The penalty is its effective balance in increments, times the given adjusted slashed balance.
-
-That product is divided by the given active balance, then multiplied by the increment.
-
-The other balances stay. -/
+This holds when the step succeeds at a position below `2^64`. -/
 theorem applySlashingPenalty_balances_toNat {total adjusted : Gwei}
     {last next : BeaconState preset fork} {j : Nat} (small : j < 2 ^ 64)
     (computed : applySlashingPenalty last total adjusted j = .ok next) :
+    -- The registry and the slot stay.
     next.validators = last.validators ∧ next.slot = last.slot ∧
+      -- The validator at that position exists.
       (∃ validator, last.validators.data[j]? = some validator ∧
+        -- Its balance loses the penalty if it is due, stopping at zero.
+        --
+        -- The penalty is its effective balance in increments times the adjusted slashed balance.
+        --
+        -- That product is divided by the given active balance, then multiplied by the increment.
         next.balances.data[j]?.map UInt64.toNat = last.balances.data[j]?.map fun balance =>
           balance.toNat - if SlashingPenaltyDue preset (getCurrentEpoch last) validator then
             validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
               adjusted.toNat / total.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat
           else 0) ∧
+      -- The other balances stay.
       ∀ k, k ≠ j → next.balances.data[k]? = last.balances.data[k]? := by
   obtain ⟨kept, slot, ⟨validator, registered, entry⟩, others⟩ :=
     applySlashingPenalty_balances small computed
@@ -1031,27 +961,23 @@ theorem applySlashingPenalty_balances_toNat {total adjusted : Gwei}
 
 /-- The penalty step used from Electra lowers one balance by its penalty in natural numbers.
 
-This holds when the step succeeds at a position below `2^64`.
-
-The registry and the slot stay.
-
-The validator at that position exists.
-
-Its balance loses the penalty if it is due, stopping at zero.
-
-The penalty is the given penalty per increment, times its effective balance in increments.
-
-The other balances stay. -/
+This holds when the step succeeds at a position below `2^64`. -/
 theorem applySlashingPenaltyElectra_balances_toNat {perIncrement : Gwei}
     {last next : BeaconState preset fork} {j : Nat} (small : j < 2 ^ 64)
     (computed : applySlashingPenaltyElectra last perIncrement j = .ok next) :
+    -- The registry and the slot stay.
     next.validators = last.validators ∧ next.slot = last.slot ∧
+      -- The validator at that position exists.
       (∃ validator, last.validators.data[j]? = some validator ∧
+        -- Its balance loses the penalty if it is due, stopping at zero.
+        --
+        -- The penalty is the given penalty per increment times its effective balance in increments.
         next.balances.data[j]?.map UInt64.toNat = last.balances.data[j]?.map fun balance =>
           balance.toNat - if SlashingPenaltyDue preset (getCurrentEpoch last) validator then
             perIncrement.toNat *
               (validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
           else 0) ∧
+      -- The other balances stay.
       ∀ k, k ≠ j → next.balances.data[k]? = last.balances.data[k]? := by
   obtain ⟨kept, slot, ⟨validator, registered, entry⟩, others⟩ :=
     applySlashingPenaltyElectra_balances small computed
@@ -1082,19 +1008,16 @@ private abbrev LosesPenaltyToNat (preset : Preset) (penalty : Validator → Nat)
 
 /-- A fold of slashing steps over the registry relates each balance to its old value.
 
-Each step relates the balance at its position below `2^64` to its old value.
-
-The relation depends on the epoch of the step and on the validator at that position.
-
-Each step keeps the registry, the slot and the other balances.
-
-The validators are those of the first state.
-
-The relation holds at the epoch of the first state. -/
+The validators are those of the first state, and the relation holds at its epoch. -/
 private theorem foldlM_slashingSteps_balances {ε : Type}
     {step : BeaconState preset fork → Nat → Except ε (BeaconState preset fork)}
     (Entry : Epoch → Validator → Option Gwei → Option Gwei → Prop)
     (within : state.RegistryWithinLimit)
+    -- Each step relates the balance at its position below `2^64` to its old value.
+    --
+    -- The relation depends on the epoch of the step and on the validator at that position.
+    --
+    -- Each step keeps the registry, the slot and the other balances.
     (stepped : ∀ {last next : BeaconState preset fork} {j : Nat}, j < 2 ^ 64 →
       step last j = .ok next → next.validators = last.validators ∧ next.slot = last.slot ∧
         (∃ validator, last.validators.data[j]? = some validator ∧
@@ -1121,22 +1044,18 @@ private theorem foldlM_slashingSteps_balances {ε : Type}
 
 /-- Before Electra, the slashings lower the balance of each validator by its penalty when it is due.
 
-This holds when the step succeeds.
-
-The penalty uses the active balance and the sum of the recent slashed balances.
-
-The sum is scaled by the multiplier of the fork, then capped by the active balance.
-
-The penalty is the effective balance in increments, times that adjusted balance.
-
-That product is divided by the active balance, then counted back in increments.
-
-The balance stops at zero when the penalty is larger.
-
-The balances past the registry stay. -/
+This holds when the step succeeds. -/
 theorem processSlashings_balances_of_lt_electra (before : fork < .pectra)
     (computed : processSlashings state = .ok after) :
+    -- The penalty uses the active balance and the sum of the recent slashed balances.
     ∃ total sum, getTotalActiveBalance state = .ok total ∧ slashingsSum state = .ok sum ∧
+      -- The sum is scaled by the multiplier of the fork, then capped by the active balance.
+      --
+      -- The penalty is the effective balance in increments, times that adjusted balance.
+      --
+      -- That product is divided by the active balance, then counted back in increments.
+      --
+      -- The balance stops at zero when the penalty is larger.
       ∀ i, (i < state.validators.data.size → ∃ validator,
         state.validators.data[i]? = some validator ∧
         after.balances.data[i]? = state.balances.data[i]?.map fun balance =>
@@ -1145,6 +1064,7 @@ theorem processSlashings_balances_of_lt_electra (before : fork < .pectra)
               min (sum * (parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER) total / total *
               preset.EFFECTIVE_BALANCE_INCREMENT)
           else balance) ∧
+      -- The balances past the registry stay.
       (state.validators.data.size ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
   have notElectra : ¬ .pectra ≤ fork := Nat.not_le_of_lt before
   simp only [processSlashings, notElectra, ↓reduceIte, bind_ok_iff, liftAccessor_ok, liftArith,
@@ -1161,22 +1081,18 @@ theorem processSlashings_balances_of_lt_electra (before : fork < .pectra)
 
 /-- From Electra, the slashings lower the balance of each validator by its penalty when it is due.
 
-This holds when the step succeeds on a registry within its limit.
-
-The penalty uses the active balance and the sum of the recent slashed balances.
-
-The sum is scaled by the multiplier of the fork, then capped by the active balance.
-
-The penalty per increment divides that adjusted balance by the active balance in increments.
-
-The penalty is the penalty per increment, times the effective balance in increments.
-
-The balance stops at zero when the penalty is larger.
-
-The balances past the registry stay. -/
+This holds when the step succeeds on a registry within its limit. -/
 theorem processSlashings_balances_of_electra (electra : .pectra ≤ fork)
     (within : state.RegistryWithinLimit) (computed : processSlashings state = .ok after) :
+    -- The penalty uses the active balance and the sum of the recent slashed balances.
     ∃ total sum, getTotalActiveBalance state = .ok total ∧ slashingsSum state = .ok sum ∧
+      -- The sum is scaled by the multiplier of the fork, then capped by the active balance.
+      --
+      -- The penalty per increment is that adjusted balance over the active balance in increments.
+      --
+      -- The penalty is the penalty per increment, times the effective balance in increments.
+      --
+      -- The balance stops at zero when the penalty is larger.
       ∀ i, (i < state.validators.data.size → ∃ validator,
         state.validators.data[i]? = some validator ∧
         after.balances.data[i]? = state.balances.data[i]?.map fun balance =>
@@ -1186,6 +1102,7 @@ theorem processSlashings_balances_of_electra (electra : .pectra ≤ fork)
                 (total / preset.EFFECTIVE_BALANCE_INCREMENT) *
                 (validator.effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT))
           else balance) ∧
+      -- The balances past the registry stay.
       (state.validators.data.size ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
   simp only [processSlashings, electra, ↓reduceIte, bind_ok_iff, liftAccessor_ok, liftArith,
     mapError_ok_iff] at computed
@@ -1205,27 +1122,23 @@ theorem processSlashings_balances_of_electra (electra : .pectra ≤ fork)
 
 /-- Before Electra, the slashings lower each balance by its penalty in natural numbers.
 
-This holds when the step succeeds.
-
-The sum of the recent slashed balances, scaled by the multiplier of the fork, is below `2^64`.
-
-This holds even when no penalty is due.
-
-The adjusted balance is that scaled sum, capped by the active balance.
-
-The penalty is the effective balance in increments, times the adjusted balance.
-
-That product is divided by the active balance, then multiplied by the increment.
-
-A penalty that is not due is zero.
-
-The balance stops at zero when the penalty is larger.
-
-The balances past the registry stay. -/
+This holds when the step succeeds. -/
 theorem processSlashings_balances_toNat_of_lt_electra (before : fork < .pectra)
     (computed : processSlashings state = .ok after) :
     ∃ total sum, getTotalActiveBalance state = .ok total ∧ slashingsSum state = .ok sum ∧
+      -- The sum of the recent slashed balances times the multiplier of the fork is below `2^64`.
+      --
+      -- This holds even when no penalty is due.
       sum.toNat * (parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER.toNat < 2 ^ 64 ∧
+      -- The adjusted balance is that scaled sum, capped by the active balance.
+      --
+      -- The penalty is the effective balance in increments, times the adjusted balance.
+      --
+      -- That product is divided by the active balance, then multiplied by the increment.
+      --
+      -- A penalty that is not due is zero.
+      --
+      -- The balance stops at zero when the penalty is larger.
       ∀ i, (i < state.validators.data.size → ∃ validator,
         state.validators.data[i]? = some validator ∧
         after.balances.data[i]?.map UInt64.toNat = state.balances.data[i]?.map fun balance =>
@@ -1234,6 +1147,7 @@ theorem processSlashings_balances_toNat_of_lt_electra (before : fork < .pectra)
               min (sum.toNat * (parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER.toNat)
                 total.toNat / total.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat
           else 0) ∧
+      -- The balances past the registry stay.
       (state.validators.data.size ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
   have notElectra : ¬ .pectra ≤ fork := Nat.not_le_of_lt before
   simp only [processSlashings, notElectra, ↓reduceIte, bind_ok_iff, liftAccessor_ok, liftArith,
@@ -1251,27 +1165,23 @@ theorem processSlashings_balances_toNat_of_lt_electra (before : fork < .pectra)
 
 /-- From Electra, the slashings lower each balance by its penalty in natural numbers.
 
-This holds when the step succeeds on a registry within its limit.
-
-The sum of the recent slashed balances, scaled by the multiplier of the fork, is below `2^64`.
-
-This holds even when no penalty is due.
-
-The adjusted balance is that scaled sum, capped by the active balance.
-
-The penalty per increment divides the adjusted balance by the active balance in increments.
-
-The penalty is the penalty per increment, times the effective balance in increments.
-
-A penalty that is not due is zero.
-
-The balance stops at zero when the penalty is larger.
-
-The balances past the registry stay. -/
+This holds when the step succeeds on a registry within its limit. -/
 theorem processSlashings_balances_toNat_of_electra (electra : .pectra ≤ fork)
     (within : state.RegistryWithinLimit) (computed : processSlashings state = .ok after) :
     ∃ total sum, getTotalActiveBalance state = .ok total ∧ slashingsSum state = .ok sum ∧
+      -- The sum of the recent slashed balances times the multiplier of the fork is below `2^64`.
+      --
+      -- This holds even when no penalty is due.
       sum.toNat * (parameters preset fork).PROPORTIONAL_SLASHING_MULTIPLIER.toNat < 2 ^ 64 ∧
+      -- The adjusted balance is that scaled sum, capped by the active balance.
+      --
+      -- The penalty per increment is the adjusted balance over the active balance in increments.
+      --
+      -- The penalty is the penalty per increment, times the effective balance in increments.
+      --
+      -- A penalty that is not due is zero.
+      --
+      -- The balance stops at zero when the penalty is larger.
       ∀ i, (i < state.validators.data.size → ∃ validator,
         state.validators.data[i]? = some validator ∧
         after.balances.data[i]?.map UInt64.toNat = state.balances.data[i]?.map fun balance =>
@@ -1280,6 +1190,7 @@ theorem processSlashings_balances_toNat_of_electra (electra : .pectra ≤ fork)
                 total.toNat / (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) *
               (validator.effectiveBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
           else 0) ∧
+      -- The balances past the registry stay.
       (state.validators.data.size ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
   simp only [processSlashings, electra, ↓reduceIte, bind_ok_iff, liftAccessor_ok, liftArith,
     mapError_ok_iff] at computed
@@ -1594,16 +1505,13 @@ theorem processHistoricalRootsUpdate_eq_error_iff (before : fork < .shapella)
 
 The next epoch fits in 64 bits.
 
-When it starts a span of slots, one summary joins the list.
-
-It holds the root of the block roots, then the root of the state roots.
-
-Otherwise the state is unchanged. -/
+When it starts a span of slots, one summary joins the list; otherwise the state is unchanged. -/
 theorem processHistoricalSummariesUpdate_eq {capella : .shapella ≤ fork}
     (computed : processHistoricalSummariesUpdate state capella = .ok after) :
     (getCurrentEpoch state).toNat + 1 < 2 ^ 64 ∧
       if ((getCurrentEpoch state).toNat + 1) %
           (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH).toNat = 0 then
+        -- The summary holds the root of the block roots, then the root of the state roots.
         ∃ blocks states, SszType.hashTreeRoot state.blockRoots = .ok blocks ∧
           SszType.hashTreeRoot state.stateRoots = .ok states ∧
           (after.historicalSummaries capella).data =

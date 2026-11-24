@@ -9,75 +9,9 @@ public import EthLib.Consensus.Transition.EpochRewards
 /-!
 # Proofs: rewards and penalties
 
-Adding a delta changes the entry at its index only.
+What the deltas of rewards and penalties hold, and how the step applies them to the balances.
 
-It adds its amount there.
-
-A validator whose vote does not match earns nothing for that kind of vote.
-
-It pays the base reward instead.
-
-So a validator absent from the unslashed signers earns no reward for that kind of vote.
-
-From Altair, a validator that did not set a flag earns no reward for it.
-
-A validator that set it pays no penalty for it, and nobody pays one for the head flag.
-
-An unslashed validator that set a flag in the previous epoch earns nothing for it in a leak.
-
-Otherwise it earns the weight of the flag in its base reward, scaled by the share that set it.
-
-That needs a registry within its limit.
-
-In such a registry, the eligible indices increase strictly.
-
-A validator is eligible for an epoch when it is active in it.
-
-It is also eligible when it is slashed and not yet withdrawable in the epoch that follows.
-
-That check fails only for an inactive slashed validator in the epoch `2^64 - 1`.
-
-The previous epoch is never that epoch, so the check never fails there.
-
-So the eligible indices are the positions of the validators eligible for the previous epoch.
-
-The inactivity deltas hold no reward.
-
-From Altair, a validator with a timely target pays no inactivity penalty.
-
-The first epoch has no rewards, and the step keeps one balance for each validator.
-
-The step changes no field but the balances.
-
-The finality delay is the distance from the finalized epoch, and the leak is a delay above a limit.
-
-The earliest inclusions have one entry for each validator, and each comes from a signed attestation.
-
-A fold whose steps each act on the balance at their own position acts on each of those balances.
-
-Deltas that apply add each reward to its balance below `2^64`.
-
-They then subtract each penalty, stopping at zero.
-
-After the first epoch, the step applies the attestation deltas once before Altair.
-
-From Altair it applies the deltas of each flag, then those of inactivity.
-
-Take a step that succeeds.
-
-Then each addition of a reward to a balance stays below `2^64`.
-
-The balances past the registry stay.
-
-From Altair, the rewards of one flag have a bound in the increments that set it.
-
-So the step raises the sum of the balances by at most the sum of those bounds.
-
-Take a step where no flag of the previous epoch was set by more balance than is active.
-
-Then that sum rises by at most 54/64 of the base reward per increment for each active increment.
-
-These bounds need a registry within its limit, and the last also needs an increment above zero.
+From Altair, a bound on how much the step raises the sum of the balances.
 -/
 
 @[expose] public section
@@ -572,10 +506,6 @@ theorem mem_getEligibleValidatorIndices_of_active {eligible : List ValidatorInde
 
 It earns nothing for the flag in a leak.
 
-Otherwise it earns the weight of the flag in its base reward, scaled by the share that set it.
-
-That share is the balance that set the flag over the active balance, both in whole increments.
-
 That needs a registry within its limit. -/
 theorem getFlagIndexDeltas_reward {altair : .altair ≤ fork}
     {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length} {rewards penalties : Array Gwei}
@@ -590,6 +520,9 @@ theorem getFlagIndexDeltas_reward {altair : .altair ≤ fork}
     {index : ValidatorIndex} (present : index ∈ participating) :
     ∃ base leak, getBaseReward state total index = .ok base ∧
       isInInactivityLeak state = .ok leak ∧
+      -- Otherwise it earns the flag's weight in its base reward, scaled by the share that set it.
+      --
+      -- The share is the balance that set the flag over the active balance, in whole increments.
       (rewards.getD index.toNat 0).toNat = if leak then 0 else
         base.toNat * PARTICIPATION_FLAG_WEIGHTS[flagIndex].toNat *
           (participatingBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) /
@@ -804,19 +737,16 @@ theorem earliestInclusions_size_and_mem {size : Nat}
 
 /-- The deltas of one validator apply exactly when three conditions hold.
 
-Its position is below `2^64`.
-
-It names a balance.
-
-That balance plus the reward stays below `2^64`.
-
-The new balance is the old one plus the reward, minus the penalty, or zero if the penalty is larger.
-
 A reward or penalty past the end of its array counts as zero. -/
 theorem applyDeltas_eq_ok_iff {rewards penalties : Array Gwei} {position : Nat} :
     applyDeltas rewards penalties state position = .ok after ↔
+      -- Its position is below `2^64`, and it names a balance.
       position < 2 ^ 64 ∧ ∃ inside : position < state.balances.data.size,
+        -- That balance plus the reward stays below `2^64`.
         state.balances.data[position].toNat + (rewards.getD position 0).toNat < 2 ^ 64 ∧
+          -- The new balance is the old one plus the reward, minus the penalty.
+          --
+          -- It is zero if the penalty is larger.
           after = state.putBalance position inside
             (saturatingSub (state.balances.data[position] + rewards.getD position 0)
               (penalties.getD position 0)) := by
@@ -872,23 +802,25 @@ theorem processRewardsAndPenalties_frame {config : Config}
 
 /-- A fold over the first positions whose step acts on the balance at its own position.
 
-Each step from a state with a kept property gives a state with that property.
-
-It relates the old and new entries at its position, and keeps the other entries.
-
-The fold then gives a state with that property.
-
-It relates the old and new entries at each of those positions, and keeps the entries past them. -/
+The fold keeps a property and relates the entries at those positions, as each step does. -/
 theorem foldlM_range_balances {ε : Type}
     {step : BeaconState preset fork → Nat → Except ε (BeaconState preset fork)}
     (Keep : BeaconState preset fork → Prop) (Relates : Nat → Option Gwei → Option Gwei → Prop)
     {count : Nat}
+    -- Each step from a state with a kept property gives a state with that property.
+    --
+    -- It relates the old and new entries at its position, and keeps the other entries.
     (stepped : ∀ {last next : BeaconState preset fork} {j : Nat}, j < count → Keep last →
       step last j = .ok next → Keep next ∧
         Relates j last.balances.data[j]? next.balances.data[j]? ∧
         ∀ k, k ≠ j → next.balances.data[k]? = last.balances.data[k]?)
     (kept : Keep state)
     (computed : (List.range count).foldlM step state = .ok after) :
+    -- The fold then gives a state with that property.
+    --
+    -- It relates the old and new entries at each of those positions.
+    --
+    -- It keeps the entries past them.
     Keep after ∧ ∀ i, (i < count → Relates i state.balances.data[i]? after.balances.data[i]?) ∧
       (count ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
   induction count generalizing after with
@@ -935,41 +867,38 @@ private theorem foldlM_applyDeltas_balances {rewards penalties : Array Gwei} {co
 
 /-- Applying some deltas changes the balance of each validator.
 
-It becomes the old balance plus the reward, minus the penalty, or zero if the penalty is larger.
-
-That old balance exists, and adding the reward to it stays below `2^64`.
-
-The balances past the registry stay.
-
 A reward or penalty past the end of its array counts as zero. -/
 theorem applyAllDeltas_balances {rewards penalties : Array Gwei}
     (computed : applyAllDeltas state (rewards, penalties) = .ok after) (i : Nat) :
+    -- It becomes the old balance plus the reward, minus the penalty.
+    --
+    -- It is zero if the penalty is larger.
+    --
+    -- That old balance exists, and adding the reward to it stays below `2^64`.
     (i < state.validators.data.size → ∃ balance, state.balances.data[i]? = some balance ∧
       balance.toNat + (rewards.getD i 0).toNat < 2 ^ 64 ∧
       after.balances.data[i]? =
         some (saturatingSub (balance + rewards.getD i 0) (penalties.getD i 0))) ∧
+    -- The balances past the registry stay.
     (state.validators.data.size ≤ i → after.balances.data[i]? = state.balances.data[i]?) :=
   foldlM_applyDeltas_balances computed i
 
 /-- A list of deltas acts on each balance in the order of the list.
 
-This holds when the deltas apply.
-
-Each one adds the reward of the validator, then subtracts its penalty, stopping at zero.
-
-Each of those sums stays below `2^64`, so a checked addition of each reward succeeds.
-
-The balances past the registry stay. -/
+This holds when the deltas apply. -/
 theorem foldlM_applyAllDeltas_balances {deltas : List (Array Gwei × Array Gwei)}
     (computed : deltas.foldlM applyAllDeltas state = .ok after) (i : Nat) :
+    -- Each one adds the reward of the validator, then subtracts its penalty, stopping at zero.
     (i < state.validators.data.size → after.balances.data[i]? =
       state.balances.data[i]?.map fun balance => deltas.foldl (fun balance delta =>
         saturatingSub (balance + delta.1.getD i 0) (delta.2.getD i 0)) balance) ∧
+    -- Each of those sums stays below `2^64`, so a checked addition of each reward succeeds.
     (i < state.validators.data.size → ∀ balance, state.balances.data[i]? = some balance →
       deltas.foldlM (fun balance delta => (addChecked balance (delta.1.getD i 0)).map
           fun raised => saturatingSub raised (delta.2.getD i 0)) balance =
         .ok (deltas.foldl (fun balance delta =>
           saturatingSub (balance + delta.1.getD i 0) (delta.2.getD i 0)) balance)) ∧
+    -- The balances past the registry stay.
     (state.validators.data.size ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
   induction deltas generalizing state with
   | nil =>
@@ -996,23 +925,21 @@ theorem foldlM_applyAllDeltas_balances {deltas : List (Array Gwei × Array Gwei)
 
 /-- Before Altair and after the first epoch, rewards and penalties apply the attestation deltas.
 
-This holds when the step succeeds.
-
-The balance of each validator becomes the old balance plus the reward, minus the penalty.
-
-It stops at zero when the penalty is larger.
-
-That old balance exists, and adding the reward to it stays below `2^64`.
-
-The balances past the registry stay. -/
+This holds when the step succeeds. -/
 theorem processRewardsAndPenalties_balances_of_lt_altair {config : Config}
     (before : fork < .altair) (later : getCurrentEpoch state ≠ GENESIS_EPOCH)
     (computed : processRewardsAndPenalties config state = .ok after) :
     ∃ rewards penalties, getAttestationDeltas config state before = .ok (rewards, penalties) ∧
+      -- The balance of each validator becomes the old balance plus the reward, minus the penalty.
+      --
+      -- It stops at zero when the penalty is larger.
+      --
+      -- That old balance exists, and adding the reward to it stays below `2^64`.
       ∀ i, (i < state.validators.data.size → ∃ balance, state.balances.data[i]? = some balance ∧
         balance.toNat + (rewards.getD i 0).toNat < 2 ^ 64 ∧
         after.balances.data[i]? =
           some (saturatingSub (balance + rewards.getD i 0) (penalties.getD i 0))) ∧
+      -- The balances past the registry stay.
       (state.validators.data.size ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
   have notAltair : ¬ .altair ≤ fork := Nat.not_le_of_lt before
   simp only [processRewardsAndPenalties, later, notAltair, ↓reduceIte, ↓reduceDIte,
@@ -1024,15 +951,7 @@ theorem processRewardsAndPenalties_balances_of_lt_altair {config : Config}
 
 They then apply the inactivity deltas.
 
-This holds when the step succeeds.
-
-Each set of deltas adds the reward of a validator to its balance, then subtracts its penalty.
-
-The balance stops at zero when the penalty is larger.
-
-Each of those sums stays below `2^64`, so a checked addition of each reward succeeds.
-
-The balances past the registry stay. -/
+This holds when the step succeeds. -/
 theorem processRewardsAndPenalties_balances_of_altair {config : Config}
     (altair : .altair ≤ fork) (later : getCurrentEpoch state ≠ GENESIS_EPOCH)
     (computed : processRewardsAndPenalties config state = .ok after) :
@@ -1040,16 +959,21 @@ theorem processRewardsAndPenalties_balances_of_altair {config : Config}
       (List.finRange PARTICIPATION_FLAG_WEIGHTS.length).mapM (getFlagIndexDeltas state altair) =
         .ok flagDeltas ∧
       getInactivityPenaltyDeltas config state = .ok inactivityDeltas ∧
+      -- Each set of deltas adds a validator's reward to its balance, then subtracts its penalty.
+      --
+      -- The balance stops at zero when the penalty is larger.
       ∀ i, (i < state.validators.data.size → after.balances.data[i]? =
         state.balances.data[i]?.map fun balance =>
           (flagDeltas ++ [inactivityDeltas]).foldl (fun balance delta =>
             saturatingSub (balance + delta.1.getD i 0) (delta.2.getD i 0)) balance) ∧
+      -- Each of those sums stays below `2^64`, so a checked addition of each reward succeeds.
       (i < state.validators.data.size → ∀ balance, state.balances.data[i]? = some balance →
         (flagDeltas ++ [inactivityDeltas]).foldlM (fun balance delta =>
             (addChecked balance (delta.1.getD i 0)).map
               fun raised => saturatingSub raised (delta.2.getD i 0)) balance =
           .ok ((flagDeltas ++ [inactivityDeltas]).foldl (fun balance delta =>
             saturatingSub (balance + delta.1.getD i 0) (delta.2.getD i 0)) balance)) ∧
+      -- The balances past the registry stay.
       (state.validators.data.size ≤ i → after.balances.data[i]? = state.balances.data[i]?) := by
   simp only [processRewardsAndPenalties, later, altair, ↓reduceIte, ↓reduceDIte,
     bind_ok_iff] at computed
@@ -1072,12 +996,6 @@ private theorem sum_map_mul_le {n scale factor divisor : Nat} {f g : Nat → Nat
 
 In all they are at most the weight of the flag in the base reward per increment.
 
-It counts once for each increment that set the flag in the previous epoch.
-
-It is scaled by those increments over the active ones, a ratio that can exceed one.
-
-Both sides are multiplied by 64 for each active increment, so with none the bound says nothing.
-
 That needs a registry within its limit. -/
 theorem getFlagIndexDeltas_rewards_le {altair : .altair ≤ fork}
     {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length} {rewards penalties : Array Gwei}
@@ -1090,9 +1008,13 @@ theorem getFlagIndexDeltas_rewards_le {altair : .altair ≤ fork}
     (weighed : getTotalBalance state participating = .ok participatingBalance)
     (active : getTotalActiveBalance state = .ok total)
     (per : getBaseRewardPerIncrement preset total = .ok perIncrement) :
+    -- Both sides are multiplied by 64 per active increment, so with none the bound says nothing.
     ((List.range state.validators.data.size).map fun index =>
         (rewards.getD index 0).toNat).sum *
         (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * WEIGHT_DENOMINATOR.toNat) ≤
+      -- The weight counts once for each increment that set the flag in the previous epoch.
+      --
+      -- It is scaled by those increments over the active ones, a ratio that can exceed one.
       PARTICIPATION_FLAG_WEIGHTS[flagIndex].toNat * perIncrement.toNat *
         (participatingBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ^ 2 := by
   obtain ⟨named, small, balance⟩ := getTotalBalance_ok_iff.mp weighed
@@ -1208,12 +1130,6 @@ private theorem balanceSum_foldlM_applyAllDeltas_le :
 
 Each bound is the weight of its flag in the base reward per increment.
 
-It counts once for each increment that set the flag in the previous epoch.
-
-It is scaled by those increments over the active ones, a ratio that can exceed one.
-
-Both sides are multiplied by 64 for each active increment, so with none the bound says nothing.
-
 That needs a registry within its limit. -/
 theorem processRewardsAndPenalties_balanceSum_le {config : Config}
     (altair : .altair ≤ fork) (within : state.RegistryWithinLimit)
@@ -1225,11 +1141,15 @@ theorem processRewardsAndPenalties_balanceSum_le {config : Config}
       getUnslashedParticipatingIndices state altair flagIndex.val.toUInt64
           (getPreviousEpoch state) = .ok indices ∧
         getTotalBalance state indices = .ok (participatingBalance flagIndex)) :
+    -- Both sides are multiplied by 64 per active increment, so with none the bound says nothing.
     balanceSum after *
         (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * WEIGHT_DENOMINATOR.toNat) ≤
       balanceSum state *
           (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * WEIGHT_DENOMINATOR.toNat) +
         ((List.finRange PARTICIPATION_FLAG_WEIGHTS.length).map fun flagIndex =>
+          -- Each bound counts once for each increment that set the flag in the previous epoch.
+          --
+          -- It is scaled by those increments over the active ones, a ratio that can exceed one.
           PARTICIPATION_FLAG_WEIGHTS[flagIndex].toNat * perIncrement.toNat *
             ((participatingBalance flagIndex).toNat /
               preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ^ 2).sum := by
@@ -1273,9 +1193,7 @@ private theorem sum_flag_weights :
 
 The flags are those of the previous epoch, and the active balance is that of the current one.
 
-Then the step raises the sum of the balances by at most 54/64 of the base reward per increment.
-
-It counts once for each active increment.
+Then the step raises the balance sum by at most 54/64 of the base reward per active increment.
 
 That needs a registry within its limit, and an increment above zero. -/
 theorem processRewardsAndPenalties_balanceSum_le_of_participating_le {config : Config}

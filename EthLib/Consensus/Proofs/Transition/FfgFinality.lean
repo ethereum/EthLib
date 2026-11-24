@@ -7,41 +7,7 @@ public import EthLib.Consensus.Proofs.Transition.FfgRoots
 
 The epoch step finalizes by four rules on the bits of justification.
 
-Between two slots, bit `i` of a state stands for the epoch `i + 1` before the current one.
-
-Within the step, after the shift, bit `i` stands for the epoch `i` before the current one.
-
-Each rule finalizes an old justified checkpoint one, two or three epochs back.
-
 In the model, each rule is `k`-finalization with `k = 1` or `k = 2`, as in Gasper Definition 4.9.
-
-- The rule on bits 0 and 1 finalizes the old current justified checkpoint with `k = 1`.
-- The rule on bits 0 to 2 finalizes it with `k = 2`.
-- The rule on bits 1 and 2 finalizes the old previous justified checkpoint with `k = 1`.
-- The rule on bits 1 to 3 finalizes it with `k = 2`.
-
-The links come from the votes that justify the newer epochs.
-
-The rule on bits 0 to 2 reads the previous epoch as justified.
-
-When the step justifies the current epoch too, the checkpoint of the previous epoch is in no field.
-
-So the step needs the sets and weights of the model to match for both recent epochs.
-
-The rule on bits 1 to 3 reads the epoch two back as justified.
-
-So the bits carry facts of the model from one step to the next.
-
-- A set bit 0 means a slack link from the previous to the current justified checkpoint.
-- A set bit 1 means that the checkpoint of its epoch is slack-justified.
-
-Bits 2 and 3 need no fact: the rule on bits 1 to 3 finalizes a checkpoint already justified.
-
-The proof names the middle checkpoint of the rule on bits 1 to 3 by the root of the epoch two back.
-
-So the buffer of roots must cover three epochs, while the step itself needs two.
-
-Both presets meet that.
 
 The paper is [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
 -/
@@ -59,17 +25,16 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
   {W : Models.Ffg.Checkpoint β → Set (ValidatorIndex → ℕ)} {genesis : β}
   {votes : Set (Vote ValidatorIndex β)}
 
-/-- The two newest bits of justification of a state carry facts of the model.
+/-- The two newest bits of justification carry facts of the model from one step to the next.
 
 Bit `i` stands for the epoch `i + 1` before a given epoch.
 
 Between two slots, the given epoch is the current epoch of the state.
 
-Right after the epoch step, it is the epoch after the one of the step.
-
-Each root maps to a block of the model. -/
+Right after the epoch step, it is the epoch after the one of the step. -/
 structure SlackBits (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
     (W : Models.Ffg.Checkpoint β → Set (ValidatorIndex → ℕ)) (genesis : β)
+    -- Each root maps to a block of the model.
     (votes : Set (Vote ValidatorIndex β)) (block : Root → β) (epoch : ℕ)
     (state : BeaconState preset fork) : Prop where
   /-- Up to epoch 2, justification has changed nothing, and the two newest bits are clear. -/
@@ -88,7 +53,9 @@ structure SlackBits (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
         (state.currentJustifiedCheckpoint.toFfg block)
   /-- A set bit 1 makes the checkpoint two epochs before the given one slack-justified.
 
-  Its root is the root that the state records for the start of its epoch. -/
+  Its root is the root that the state records for the start of its epoch.
+
+  Bits 2 and 3 need no fact: the rule on bits 1 to 3 finalizes a checkpoint already justified. -/
   previous : state.justificationBits.bits[1] = true → ∀ (older : Epoch) (root : Root),
     older.toNat + 2 = epoch → getBlockRoot state older = .ok root →
       SlackJustified V U W genesis votes ⟨block root, older.toNat⟩
@@ -124,31 +91,7 @@ private theorem toNat_sub_two {epoch : Epoch} (late : GENESIS_EPOCH + 1 < epoch)
 
 /-- Justification keeps the facts of the bits and the finalized checkpoint slack-finalized.
 
-The hypotheses on the votes and the stake are those of the bound of a link up to churn.
-
-The current justified epoch must be at most the previous epoch.
-
-Once justification runs, the previous justified epoch must be below the previous epoch.
-
-The sets and weights of the model must match the state for both recent epochs.
-
-Take a justified checkpoint and an epoch, from its own epoch on and at most two back.
-
-The block of the checkpoint must be below that of the root the state records for that epoch.
-
-The blocks of the roots that the state records for epochs at most two back must be in order.
-
-Once justification runs, a root recorded for the previous epoch needs one for the epoch two back.
-
-The two justified checkpoints must be slack-justified.
-
-The bits must carry their facts for the current epoch.
-
-The finalized checkpoint must be slack-finalized.
-
-Then the bits carry their facts for the next epoch after the step.
-
-The finalized checkpoint after the step is slack-finalized. -/
+The hypotheses on the votes and the stake are those of the bound of a link up to churn. -/
 theorem processJustificationAndFinalization_slackBits
     (flagsVoted : TargetFlagsVoted attested state)
     (pendingVoted : PendingVoted attested state)
@@ -157,27 +100,40 @@ theorem processJustificationAndFinalization_slackBits
         (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
     (block : Root → β)
     (contains : ffgVotes block attested ⊆ votes)
+    -- The current justified epoch must be at most the previous epoch.
     (settled : JustifiedSettled state)
+    -- Once justification runs, the previous justified epoch must be below the previous epoch.
     (separated : JustifiedSeparated state)
+    -- The sets and weights of the model must match the state for both recent epochs.
     (sets : ∀ current : Bool, TargetSetsMatch V U W block state
       (if current then getCurrentEpoch state else getPreviousEpoch state))
+    -- Take a justified checkpoint and an epoch, from its own epoch on and at most two back.
+    --
+    -- The block of the checkpoint must be below that of the root the state records for that epoch.
     (chain : ∀ (current : Bool) (epoch : Epoch) (root : Root),
       (recentJustified state current).epoch ≤ epoch →
       (getCurrentEpoch state).toNat ≤ epoch.toNat + 2 →
       getBlockRoot state epoch = .ok root →
         block (recentJustified state current).root ≤ block root)
+    -- The blocks of the roots that the state records for epochs at most two back must be in order.
     (ordered : ∀ (older newer : Epoch) (olderRoot newerRoot : Root), older ≤ newer →
       (getCurrentEpoch state).toNat ≤ older.toNat + 2 →
       getBlockRoot state older = .ok olderRoot → getBlockRoot state newer = .ok newerRoot →
         block olderRoot ≤ block newerRoot)
+    -- Once justification runs, a root recorded for the previous epoch needs one two epochs back.
     (recorded : GENESIS_EPOCH + 1 < getCurrentEpoch state →
       (∃ root, getBlockRoot state (getPreviousEpoch state) = .ok root) →
       ∃ root, getBlockRoot state (getCurrentEpoch state - 2) = .ok root)
+    -- The two justified checkpoints must be slack-justified.
     (holds : SlackJustifiedCheckpoints V U W genesis votes block state)
+    -- The bits must carry their facts for the current epoch.
     (bits : SlackBits V U W genesis votes block (getCurrentEpoch state).toNat state)
+    -- The finalized checkpoint must be slack-finalized.
     (finalized : SlackFinalized V U W genesis votes (state.finalizedCheckpoint.toFfg block))
     (computed : processJustificationAndFinalization state = .ok after) :
+    -- Then the bits carry their facts for the next epoch after the step.
     SlackBits V U W genesis votes block ((getCurrentEpoch state).toNat + 1) after ∧
+      -- The finalized checkpoint after the step is slack-finalized.
       SlackFinalized V U W genesis votes (after.finalizedCheckpoint.toFfg block) := by
   rcases processJustificationAndFinalization_weighed (votes := votes) flagsVoted pendingVoted
     large block contains computed with ⟨early, rfl⟩ | ⟨late, total, previousBalance,
@@ -194,6 +150,7 @@ theorem processJustificationAndFinalization_slackBits
   have two := toNat_sub_two late
   have late' := UInt64.lt_iff_toNat_lt.mp late
   rw [toNat_genesisEpoch_add_one] at late'
+  -- Within the step, after the shift, bit `i` stands for the epoch `i` before the current one.
   obtain ⟨threshold, previousWeight, currentWeight, thresholdOk, previousOk, currentOk, newCurrent,
     newPrevious, newOlder, -, finalizedCases⟩ := weighJustificationAndFinalization_bits weighed
   obtain ⟨previousJustified, -, -, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
@@ -264,6 +221,9 @@ theorem processJustificationAndFinalization_slackBits
     rw [same]
     exact .link holds.1 slack
   have previousLe := UInt64.le_iff_toNat_le.mp (getPreviousEpoch_le state)
+  -- Each rule finalizes an old justified checkpoint one, two or three epochs back.
+  --
+  -- The links come from the votes that justify the newer epochs.
   rcases finalizedCases with same | ⟨same, set0, rule⟩ | ⟨same, set1, rule⟩
   · rw [same]
     exact finalized
@@ -272,7 +232,13 @@ theorem processJustificationAndFinalization_slackBits
     obtain ⟨passed, rootE, rootEOk, -⟩ := newCurrent set0
     have linkE := currentLink rootE passed rootEOk
     rcases rule with sum | ⟨set1, sum⟩
+    -- The rule on bits 0 and 1 finalizes it with `k = 1`.
     · exact FinalizedBy.of_one holds.2 linkE.2.1 (by simp only [Checkpoint.toFfg]; omega) linkE
+    -- The rule on bits 0 to 2 finalizes it with `k = 2`, and reads the previous epoch as justified.
+    --
+    -- If the step justifies the current epoch too, no field holds the previous epoch's checkpoint.
+    --
+    -- So the step needs the sets and weights of the model to match for both recent epochs.
     obtain ⟨rootP, rootPOk, linkP⟩ := newPreviousLink set1
     exact FinalizedBy.of_two holds.2 (.link holds.1 linkP)
       (chain true (getPreviousEpoch state) rootP settled (by omega) rootPOk)
@@ -282,8 +248,13 @@ theorem processJustificationAndFinalization_slackBits
     rw [same]
     obtain ⟨rootP, rootPOk, linkP⟩ := newPreviousLink set1
     rcases rule with sum | ⟨set2, sum⟩
+    -- The rule on bits 1 and 2 finalizes it with `k = 1`.
     · exact FinalizedBy.of_one holds.1 linkP.2.1 (by simp only [Checkpoint.toFfg]; omega) linkP
+    -- The rule on bits 1 to 3 finalizes it with `k = 2`, and reads the epoch two back as justified.
+    --
     -- The checkpoint two epochs back is justified by the old bit 1.
+    --
+    -- Its root, that of the epoch two back, names the middle checkpoint of the rule.
     obtain ⟨rootO, rootOOk⟩ := recorded late ⟨rootP, rootPOk⟩
     have justifiedO := bits.previous (newOlder ▸ set2) _ rootO (by omega) rootOOk
     exact FinalizedBy.of_two holds.1 justifiedO
@@ -295,48 +266,45 @@ theorem processJustificationAndFinalization_slackBits
 
 /-- One slot keeps the facts of the bits and the finalized checkpoint slack-finalized.
 
-When the slot ends an epoch, justification runs at the state after the caching of the slot.
-
-That caching keeps the roots of the three latest epochs, the flags, the checkpoints and the stakes.
-
-So the hypotheses of justification are asked of the state before the slot.
-
-The bound on the active stake and the sets are asked only when the slot ends an epoch.
-
-The buffer of roots must cover three epochs, as both presets do, so that the caching keeps them.
-
-The current justified epoch must be at most the previous epoch.
-
-The previous justified epoch must be below the previous epoch once justification runs.
-
-Each justified checkpoint must be below the roots that the state records from its epoch on.
-
-The map from roots to blocks must keep in order the roots recorded at consecutive slots.
-
-Then the bits carry their facts for the current epoch after the slot.
-
-The finalized checkpoint after the slot is slack-finalized. -/
+The hypotheses of justification are asked of the state before the slot. -/
 theorem advanceSlot_slackBits
+    -- The buffer of roots must cover three epochs, as both presets do.
+    --
+    -- Then the caching keeps the roots of the three latest epochs.
+    --
+    -- The rule on bits 1 to 3 has a middle checkpoint.
+    --
+    -- The proof names it by the root of the epoch two back.
+    --
+    -- So the buffer must cover three epochs, while the step itself needs two.
     (window : 3 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     (flagsVoted : TargetFlagsVoted attested state)
     (pendingVoted : PendingVoted attested state)
+    -- The bound on the active stake and the sets are asked only when the slot ends an epoch.
     (large : (state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 →
       3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
         2 * stake (fun index => balanceAt state index.toNat)
           (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
     (block : Root → β)
     (contains : ffgVotes block attested ⊆ votes)
+    -- The current justified epoch must be at most the previous epoch.
+    --
+    -- The previous justified epoch must be below the previous epoch once justification runs.
     (settled : JustifiedSettled state) (separated : JustifiedSeparated state)
     (sets : (state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 → ∀ current : Bool,
       TargetSetsMatch V U W block state
         (if current then getCurrentEpoch state else getPreviousEpoch state))
+    -- Each justified checkpoint must be below the roots that the state records from its epoch on.
     (roots : RootsAbove block state)
+    -- The map from roots to blocks must keep in order the roots recorded at consecutive slots.
     (links : ∀ link ∈ rootLinks state, block link.1 ≤ block link.2)
     (holds : SlackJustifiedCheckpoints V U W genesis votes block state)
     (bits : SlackBits V U W genesis votes block (getCurrentEpoch state).toNat state)
     (finalized : SlackFinalized V U W genesis votes (state.finalizedCheckpoint.toFfg block))
     (computed : advanceSlot config checks state = .ok after) :
+    -- Then the bits carry their facts for the current epoch after the slot.
     SlackBits V U W genesis votes block (getCurrentEpoch after).toNat after ∧
+      -- The finalized checkpoint after the slot is slack-finalized.
       SlackFinalized V U W genesis votes (after.finalizedCheckpoint.toFfg block) := by
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, afterEq⟩ := advanceSlot_ok computed
   have cachedFrame := frame_processSlot cachedOk
@@ -371,6 +339,11 @@ theorem advanceSlot_slackBits
       exact before
     · rw [cachedFrame.slot]
       exact slot_lt_epoch_add_historical_of_le positive 2 window near
+  -- When the slot ends an epoch, justification runs at the state after the caching of the slot.
+  --
+  -- That caching keeps the roots of the three latest epochs, the flags and the checkpoints.
+  --
+  -- It also keeps the stakes.
   obtain ⟨boundary, epochedOk⟩ | ⟨inside, rfl⟩ := epochIfLast_cases epochedOk
   · have positive := slotsPerEpoch_pos_of_mod sum boundary
     have window' : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by

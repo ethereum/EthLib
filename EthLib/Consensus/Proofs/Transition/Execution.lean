@@ -6,17 +6,9 @@ public import EthLib.Consensus.Transition.Execution
 /-!
 # Proofs: the execution payload of a block
 
-By default, the execution layer rejects a payload with a transaction of no bytes.
+What the execution layer accepts, and what a successful payload step checks and changes.
 
-A block passes the payload step only when the execution layer accepts its payload request.
-
-The step also bounds the number of blob commitments of the block by the limit of the state.
-
-Once the merge is complete, and always from Capella, the payload extends the latest payload.
-
-The state after the step differs from the state before only in the header of the latest payload.
-
-That header is the header of the payload of the block.
+The state after differs from the state before only in the header of the latest payload.
 -/
 
 @[expose] public section
