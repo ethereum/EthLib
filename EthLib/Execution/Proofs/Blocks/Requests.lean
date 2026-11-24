@@ -7,7 +7,11 @@ public import EthLib.Execution.Blocks.Requests
 /-!
 # Proofs: the requests of a block
 
-The requests hash, the parser of deposit logs, and the deposit requests of a block.
+A list of requests with no data, only its type byte, leaves the requests hash unchanged.
+
+The parser accepts a deposit log exactly when it has 576 bytes and the ten words of the layout.
+
+The deposit requests of a block succeed exactly when the parser accepts every deposit log.
 -/
 
 @[expose] public section

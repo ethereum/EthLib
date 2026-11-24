@@ -12,7 +12,7 @@ The filter of two lists of logs, one after the other, is the OR of their filters
 
 The filter has no false negative: it has every bit of the address and of each topic of each log.
 
-Its 256 bytes read back, most significant byte first, as its number.
+The 256 bytes of a filter read back, most significant byte first, as the number of the filter.
 
 So two filters with the same bytes are the same filter.
 -/

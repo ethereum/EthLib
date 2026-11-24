@@ -12,7 +12,9 @@ The last change of each field in a built list, or its value before the body, is 
 
 This holds for every call that meets three conditions, which the builder cannot check itself.
 
-The list keeps a nonce in 64 bits, which loses nothing: it is below 2^64 by [EIP-2681][eip2681].
+The list keeps a nonce in 64 bits, so the nonce is compared in 64 bits.
+
+A nonce is below 2^64 by [EIP-2681][eip2681], so this loses nothing.
 
 Source: [EIP-7928, Recording Semantics by Change Type][eip7928].
 
@@ -754,7 +756,9 @@ theorem Tracks.nonce_build {b : AccessListBuilder} {base now : BlockState}
 
 /-- The list of a builder that follows the block gives each code hash as it is now.
 
-It is the Keccak-256 hash of the last code in the list, which keeps code, not code hashes.
+The list keeps code, not code hashes.
+
+So the code hash is the Keccak-256 hash of the last code in the list.
 
 An account with no code change in the list keeps its code hash from `base`. -/
 theorem Tracks.codeHash_build {b : AccessListBuilder} {base now : BlockState}

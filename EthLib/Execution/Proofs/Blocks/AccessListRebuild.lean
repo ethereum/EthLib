@@ -10,9 +10,17 @@ public import EthLib.Execution.Proofs.Blocks.Transition
 
 From Glamsterdam, a header commits to the block access list of its body.
 
-On the state before, the last change of each balance, nonce, code and word gives the state after.
+For each account in the list, take its last change of balance, nonce and code.
 
-So a client that holds a list of the header's hash needs no run, barring a known hash collision.
+For each key of its storage, take its last change of word.
+
+Applied to the state before the block, these give the state after the block.
+
+A field with no change in the list keeps its value from before the block.
+
+So a client that holds a list with the hash in the header can apply it to the state before.
+
+That needs no run of the transactions, as long as the hash has no known collision.
 
 This holds when the calls of the body keep a property of block states that makes each one fit.
 
@@ -52,7 +60,11 @@ private theorem BodyState.tracks_beginIndex {body : BodyState} {base : BlockStat
 
 /-- The calls of a body at `fork` keep a property `P` of block states, and the builder follows each.
 
-On a block state with `P`, each call is one that the builder follows, and the state after has `P`.
+Take a block state with `P`.
+
+Each call on it is one that the builder follows.
+
+The block state after the call has `P` too.
 
 These are assumptions on the calls, which this file does not prove. -/
 structure KeepsFollowable (env : BlockEnvironment fork) (P : BlockState → Prop) : Prop where
@@ -233,7 +245,9 @@ theorem stateTransition_rebuild {chain : BlockChain} {block : Block fork Transac
     {checkSeal : Bool} {post : State} {P : BlockState → Prop} (hFork : .glamsterdam ≤ fork)
     -- The calls of the body keep a property of block states.
     --
-    -- That excludes storage at an account that is empty or missing: deleting it wipes its storage.
+    -- That excludes storage at an account that is empty or missing.
+    --
+    -- Deleting such an account wipes its storage.
     --
     -- Storage at an account with a balance alone needs no exclusion.
     --
@@ -265,9 +279,7 @@ theorem stateTransition_rebuild {chain : BlockChain} {block : Block fork Transac
         --
         -- A state whose nonces are at most 2^64 - 1 keeps that bound through the block.
         --
-        -- So on such a state the 64-bit nonces equal the nonces after the block.
-        --
-        -- A corollary shows it.
+        -- A corollary shows that there, the 64-bit nonces equal the nonces after the block.
         UInt64.ofNat ((post.getAccountOptional address).getD EMPTY_ACCOUNT).nonce =
           output.body.builder.build.nonceAfter address
             (UInt64.ofNat ((chain.state.getAccountOptional address).getD EMPTY_ACCOUNT).nonce) ∧

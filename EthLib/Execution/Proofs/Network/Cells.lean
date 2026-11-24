@@ -8,7 +8,9 @@ public import EthLib.Execution.Network.Cells
 
 A response of cells passes the check exactly when it keeps the rules of a Cells answer.
 
-The bitmap of cell indices is read bit by bit, compared and counted.
+A bitmap of cell indices marks each index by one bit of its 16 bytes.
+
+A subset of a bitmap counts no more indices than the bitmap that holds it.
 -/
 
 @[expose] public section

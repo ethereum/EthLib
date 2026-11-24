@@ -7,7 +7,9 @@ public import EthLib.Execution.Proofs.Blocks.SystemCall.Contract
 
 The contract keeps the hashes of the last 8191 blocks, in a ring of 8191 storage slots.
 
-Each operation of the EIP is a function here, and a theorem runs the code to show it computes it.
+Each operation of the EIP is a function here.
+
+A theorem runs the code and shows that it computes that function.
 
 The code is the 83 bytes of [EIP-2935][eip-2935-bytecode], which its deployment installs.
 
@@ -95,7 +97,7 @@ theorem spec_set (hfork : .shapella ≤ fork)
     (hacc : (state.getAccountOptional message.currentTarget).isSome = true)
     -- The block number is at least 1 and less than `2^256`, as the code computes on words.
     (hnumber : 1 ≤ message.blockEnv.number) (hbound : message.blockEnv.number < 2 ^ 256)
-    -- The conservative one-counter budget: 30,000 gas before Glamsterdam, 150,000 from it.
+    -- The conservative one-counter budget is 30,000 gas before Glamsterdam and 150,000 from it.
     (hgas : 30000 * storageGasScale fork ≤ gas) :
     -- From Glamsterdam, this one-counter frame is a model for the proof, not the meter of EIP-8037.
     Spec fork (At CODE message 0 [] .empty gas state substate returnData) fun evm =>
@@ -209,7 +211,9 @@ theorem specG_get (hfork : .shapella ≤ fork)
     (hcaller : message.caller ≠ SYSTEM_ADDRESS)
     -- The block number is at least 1 and less than `2^256`.
     (hnumber : 1 ≤ message.blockEnv.number) (hbound : message.blockEnv.number < 2 ^ 256)
-    -- The input has fewer than `2^256` bytes, and the frame has at least 5,000 gas.
+    -- The input has fewer than `2^256` bytes.
+    --
+    -- The frame has at least 5,000 gas.
     (hsize : message.data.size < 2 ^ 256) (hgas : 5000 ≤ gas) :
     SpecG fork (At CODE message 0 [] .empty gas state substate returnData)
       -- The frame returns the hash that the storage holds for the input, or reverts with no output.

@@ -6,7 +6,9 @@ public import EthLib.Execution.Proofs.Blocks.Header
 /-!
 # Proofs: the proof of work of a header
 
-The seal item of a header before Shapella, and the Ethash check of its proof of work.
+Before Shapella, the seal item is the item of the header without the mix digest and the nonce.
+
+A header passes the check exactly when Ethash gives its mix digest and a result within the target.
 
 The official proof-of-work vectors are in the Python suite, through the bindings.
 -/

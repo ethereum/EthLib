@@ -16,7 +16,7 @@ An error of the state is a missing account, a missing code, a short balance or a
 
 Five hypotheses exclude every abort and every error of the state.
 
-Source: [EIP-2681][e2681], for the bound on every nonce.
+One of them bounds every nonce by `2^64 - 1`, as [EIP-2681][e2681] does.
 
 [e2681]: https://eips.ethereum.org/EIPS/eip-2681#specification
 -/
@@ -32,8 +32,6 @@ open EthLib.Execution.Transactions (Transaction)
 variable {fork : Fork}
 
 /-- Before Hegotá, the transition of a block fails only with an error that makes it invalid.
-
-It needs bounded nonces, every code, room in the supply and header numbers that fit words.
 
 A root or a parent with a field of `2^64` bytes or more also counts as an invalid block. -/
 theorem stateTransition_eq_error_invalid {chain : BlockChain} {block : Block fork Transaction}

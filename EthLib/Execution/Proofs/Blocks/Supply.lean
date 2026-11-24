@@ -7,7 +7,9 @@ public import EthLib.Execution.Proofs.Blocks.Burn
 
 A block leaves at most the supply before it, plus its created wei, minus its burned fees.
 
-Sources:
+From Glamsterdam, that bound is an equality.
+
+The sources are these:
 
 - [EIP-1559][e1559] and [EIP-4844][e4844], for the burned fees.
 - [EIP-8246][e8246], for the Glamsterdam equality.
@@ -61,7 +63,9 @@ theorem applyBody_supply {config : ChainConfig} {env : BlockEnvironment fork}
           createdWei block) := by
   -- The exact supply equation counts created wei, burned fees and other losses.
   --
-  -- Those losses are the surviving burns of SELFDESTRUCT and the balances that transactions delete.
+  -- Those losses are the surviving burns of SELFDESTRUCT.
+  --
+  -- They also count the balances that transactions delete.
   obtain ⟨losses, certificate⟩ := applyBody_bodyBurns h
   have hSupply := certificate.supply_eq hOmmers
   -- Those losses are never negative, so dropping them gives a bound at every fork.

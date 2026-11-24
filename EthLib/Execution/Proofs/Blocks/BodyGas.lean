@@ -12,7 +12,9 @@ Before it runs a transaction, a block checks that the transaction fits in what t
 
 So at every fork, each gas count of the body is within its bound.
 
-A passing block records its gas in 64 bits for a parent gas limit below `2^62` (`2^63` to BPO5).
+A block that passes its transition records its gas in 64 bits.
+
+That needs the gas limit of the parent below `2^62`, or below `2^63` up to BPO5.
 
 [EIP-4844][e4844] asks for the bound on the blob gas.
 

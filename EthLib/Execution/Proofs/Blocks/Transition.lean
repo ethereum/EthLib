@@ -11,9 +11,11 @@ public import EthLib.Execution.Proofs.State.Tracker
 /-!
 # Proofs: the state transition of a block
 
-What a block that passes the transition gives at each step, and the hashes of the recent blocks.
-
 A block that passes the transition commits to the state after it.
+
+The proofs follow such a block through each step of the transition.
+
+They also state when the recent blocks give hashes, and which hashes they give.
 -/
 
 @[expose] public section
@@ -36,7 +38,9 @@ theorem recentHashes_eq_ok_iff {recent : List RecentBlock} {hashes : List Hash32
     recentHashes recent = .ok hashes ↔ (recent = [] ∧ hashes = []) ∨
       -- Otherwise the hash of the header of the last block must succeed.
       ∃ last hash, recent.getLast? = some last ∧ last.header.hash = .ok hash ∧
-        -- The hashes are then the parent hashes of the last 255 blocks, or of all if fewer.
+        -- The hashes are then the parent hashes of the last 255 blocks.
+        --
+        -- With fewer blocks, they are the parent hashes of all of them.
         --
         -- The hash of the last block comes after them.
         hashes = (recent.drop (recent.length - 255)).map (·.header.parentHash) ++ [hash] := by

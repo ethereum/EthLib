@@ -17,7 +17,7 @@ The nonce check stops the second copy.
 
 Replay across chains is out of scope: EIP-155 binds a transaction to its chain.
 
-Source: the [Yellow Paper][yp], Shanghai version, Section 6, for the nonce check.
+Section 6 of the [Yellow Paper][yp], Shanghai version, gives the nonce check.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/

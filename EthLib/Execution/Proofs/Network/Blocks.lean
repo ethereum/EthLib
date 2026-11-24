@@ -10,7 +10,9 @@ public import EthLib.Serialization.Proofs.Rlp.Item
 
 Each request reads back from its RLP item.
 
-Headers that pass the check of a request are linked by number, and by hash when no block is skipped.
+In an answer that passes the check, each header is `skip + 1` blocks from the one before it.
+
+When the request skips no block, each later block names the earlier one by its hash.
 -/
 
 @[expose] public section
@@ -218,7 +220,9 @@ theorem numbers_of_checkHeaders {r : HeaderRequest} {headers : List Encoded}
 They read only the number, the hash and the parent hash of each header, not whether it is valid. -/
 theorem checkHeaders_eq_ok_iff {r : HeaderRequest} {headers : List Encoded} :
     checkHeaders r headers = .ok () ↔
-      -- It holds at most as many headers as asked, and its first one, if any, is the start block.
+      -- It holds at most as many headers as asked.
+      --
+      -- Its first header, if any, is the start block.
       --
       -- It may hold fewer headers than asked, since a peer may send fewer.
       headers.length ≤ r.limit ∧ (∀ first ∈ headers.head?, isStart r.start first = .ok true) ∧

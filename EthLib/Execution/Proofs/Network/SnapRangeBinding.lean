@@ -16,7 +16,7 @@ The source is [`caps/snap.md`][snap], sections "AccountRange (0x01)" and "Storag
 
 The tries are secured: each key is the hash of an address or of a slot key.
 
-Otherwise a search returns a collision of Keccak-256, as for a range of any trie.
+When an answer and its trie differ, a search returns a collision of Keccak-256, as for any trie.
 -/
 
 @[expose] public section
@@ -166,7 +166,9 @@ theorem verifyStorageRanges_sound {roots : List Hash32} {start : Hash32}
     (key : Hash32)
     -- Each range but the last is a whole trie, so this holds for every hash.
     (hkey : index + 1 < ranges.length ∨
-      -- The last range starts at the starting hash for one account, at the zero hash for several.
+      -- For one account, the last range starts at the starting hash.
+      --
+      -- For several accounts, it starts at the zero hash.
       (bytesToNibbleList ⟨(if roots.length = 1 then start else Vector.replicate 32 0).toArray⟩ ≤
           bytesToNibbleList ⟨key.toArray⟩ ∧
         -- It holds for each hash from there to its last slot, or to the end if the answer says so.

@@ -11,9 +11,11 @@ public import EthLib.Execution.Proofs.Evm.Logic.Log
 
 The withdrawal request contract of [EIP-7002][eip-7002] keeps a queue of requests in its storage.
 
-The consolidation request contract of [EIP-7251][eip-7251] keeps one with the same counters.
+The consolidation request contract of [EIP-7251][eip-7251] keeps one as well.
 
-The EIPs compute on integers, and the code on words of 256 bits.
+Both keep the same four counters in the first four slots of their storage.
+
+The EIPs compute on integers, and the code computes on words of 256 bits.
 
 The two agree while no value reaches `2^256`.
 
@@ -56,9 +58,13 @@ def FeeFits (factor fraction excess m : Nat) : Prop :=
 
 /-! ## The storage
 
-Slot 0 holds the excess of requests, and slot 1 the number of requests added in the block.
+The first four slots hold the counters of the queue:
 
-Slots 2 and 3 hold the indices of the head and the tail, and the requests follow from slot 4.
+- slot 0 holds the excess of requests;
+- slot 1 holds the number of requests added in the block;
+- slots 2 and 3 hold the indices of the head and the tail of the queue.
+
+The requests follow from slot 4, each in a fixed number of slots.
 -/
 
 /-- The storage `read` with the word `value` at the slot `key`.
@@ -87,7 +93,7 @@ def numDequeued (max : Nat) (read : U256 → U256) : Nat :=
 
 /-- The storage after a request of the words `words` is added, from the storage `read`.
 
-A call adds a request when its input is one and its value is at least the fee.
+A call adds a request when its input is a request and its value is at least the fee.
 
 The writes come in this order, as in the EIP. -/
 def afterAdd (size : Nat) (words : List U256) (read : U256 → U256) : U256 → U256 :=
@@ -461,7 +467,9 @@ theorem sstore_writes (hfork : .berlin ≤ fork) {pc : Nat}
     ∃ S', WritesStorage message.currentTarget
         (setSlot (storageOf S message.currentTarget) key new) S S' ∧
       Hoare fork (At code message pc (key :: new :: rest) memory gas S substate returnData)
-        -- It pays at most 22,100 gas before Glamsterdam and 110,500 from it, and keeps the logs.
+        -- It pays at most 22,100 gas before Glamsterdam and 110,500 from it.
+        --
+        -- It keeps the logs.
         fun evm => ∃ g ss, gas ≤ g + 22100 * storageGasScale fork ∧ ss.logs = substate.logs ∧
           At code message (pc + 1) rest memory g S' ss returnData evm := by
   have hscale := one_le_storageGasScale fork

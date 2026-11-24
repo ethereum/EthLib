@@ -11,7 +11,9 @@ public import EthLib.Serialization.Proofs.Rlp.Codec
 /-!
 # Proofs: the roots of a block body
 
-The roots of the empty lists, and the binding of the root of each list of a block body.
+An empty list has the root of the empty trie.
+
+So a block with no transactions, receipts or withdrawals has that root for each list.
 
 Two lists with one root are equal, or a search over their indices finds a Keccak-256 collision.
 -/

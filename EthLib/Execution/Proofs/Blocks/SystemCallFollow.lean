@@ -8,7 +8,9 @@ public import EthLib.Execution.Proofs.Evm.Call.Rebuild
 /-!
 # Proofs: the access-list builder follows the system calls
 
-The access-list builder follows a system call, and the block state afterward can still be rebuilt.
+The access-list builder follows a system call.
+
+The block state after the call can still be rebuilt.
 
 This needs the block state before the call to be rebuildable.
 

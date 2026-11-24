@@ -7,9 +7,9 @@ public import EthLib.Execution.Proofs.Blocks.AccessListBuilder
 
 When a transaction or a system call ends, the builder records each account and key that it touched.
 
-A later call never drops them.
+A later call never drops a record or a named key.
 
-The list that the builder gives holds each record with each named key.
+The list that the builder gives holds an entry for each record, with each named key.
 
 Source: [EIP-7928, Scope and Inclusion][scope], which asks the list to hold every accessed account.
 

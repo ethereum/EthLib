@@ -6,11 +6,13 @@ public import EthLib.Execution.Network.Session
 /-!
 # Proofs: the eth session
 
-Before the peer's Status, a session takes nothing but Status, and before both, sends nothing else.
+Before the peer's Status, a session rejects every message other than Status.
+
+Before both Status messages, this node sends nothing but Status.
 
 After the peer's Status, a response must answer a pending request.
 
-Along a run, a Transactions message sends no transaction that went out before.
+Along any run of a session, a Transactions message sends no transaction that went out before.
 
 Nor does it send one back to the peer it came from.
 -/

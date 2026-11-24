@@ -17,9 +17,13 @@ The other losses are the surviving burns of SELFDESTRUCT and the balances that t
 
 From Glamsterdam, every surviving burn and every deleted balance is 0, by [EIP-8246][e8246].
 
-Rewards: Yellow Paper, Berlin version, section 11.3 ([`Paper.tex`][yp]), until [EIP-3675][e3675].
+The other sources are these:
 
-Sources: [EIP-1559][e1559] and [EIP-4844][e4844] for the fees, [EIP-4895][e4895] for withdrawals.
+- [EIP-4895][e4895] creates the amount of each withdrawal, in Gwei times `10^9`;
+- section 11.3 of the Yellow Paper, Berlin version, sets the rewards: [`Paper.tex`][yp];
+- [EIP-3675][e3675] removes the rewards from Paris;
+- [EIP-1559][e1559] burns the base fee per gas times the gas used after the refunds;
+- [EIP-4844][e4844] burns the base fee per blob gas times the blob gas.
 
 [e1559]: https://eips.ethereum.org/EIPS/eip-1559#specification
 [e3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#specification

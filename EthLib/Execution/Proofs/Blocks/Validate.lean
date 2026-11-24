@@ -8,7 +8,12 @@ public import EthLib.Execution.Proofs.Blocks.Receipt
 
 A header passes exactly when every one of its checks holds.
 
-So a valid header meets the rules of its fork on gas, fees, blob gas, difficulty and proof of work.
+So a valid header meets these rules:
+
+- it uses at most its gas limit, and the gas limit rule accepts its gas limit;
+- from London, it has the base fee that its parent gives, or the initial one at the first block;
+- from Dencun, it has the excess blob gas that its parent gives under its blob schedule;
+- before Paris, it has the difficulty that its parent gives, and a valid proof of work.
 
 From Fusaka, a block passes the size check exactly when its RLP form fits in the limit.
 -/

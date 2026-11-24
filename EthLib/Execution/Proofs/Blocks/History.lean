@@ -8,9 +8,9 @@ public import EthLib.Execution.Proofs.Evm.Instructions.EnvironmentData
 
 The hashes that BLOCKHASH reads come from the recent blocks of the chain.
 
-They agree with a walk up the parent hashes when the recent blocks are linked and reach far enough.
+The Yellow Paper ([`Paper.tex`][yp], Appendix H.2) defines BLOCKHASH by a walk up the parent hashes.
 
-Source: the Yellow Paper ([`Paper.tex`][yp], Appendix H.2), which defines BLOCKHASH by that walk.
+The two agree when the recent blocks are linked and reach back far enough.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
