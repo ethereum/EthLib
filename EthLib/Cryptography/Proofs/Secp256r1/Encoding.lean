@@ -15,8 +15,6 @@ Those are the bytes `04 ‖ x ‖ y` of the affine points `(x, y)` on the curve.
 So the octet `00` of `O` is refused.
 
 It also refuses another prefix or length, a coordinate of `p` or more, and a pair off the curve.
-
-It reads back the point of every such encoding.
 -/
 
 @[expose] public section
@@ -36,7 +34,9 @@ private theorem Fp.bytesToNat_toBytes (x : Fp) : bytesToNat x.toBytes = x.val :=
 
 The encoding is the prefix `04`, then `x`, then `y`.
 
-Each coordinate takes 32 big-endian bytes, by SEC 1 v2 §2.3.5. -/
+Each coordinate takes 32 big-endian bytes, by SEC 1 v2 §2.3.5.
+
+It returns the point `(x, y)` of every such encoding. -/
 theorem decodeUncompressed_eq_some_iff {bytes : List UInt8} {point : Point} :
     decodeUncompressed bytes = some point ↔
       ∃ x y : Fp, point = .affine x y ∧ point.isOnCurve = true ∧

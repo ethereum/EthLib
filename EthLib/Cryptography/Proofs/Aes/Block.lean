@@ -20,10 +20,6 @@ AES-128 and AES-256 equal a model of FIPS 197, for every key and every block.
 The model has its own multiplication in GF(2^8), its own S-box and its own key schedule.
 
 EthLib has no AES-192, so no theorem here covers it.
-
-No theorem compares the inverse cipher with a model of Algorithm 3 of §5.3.
-
-The inverse cipher undoes the cipher, so it also undoes the model's cipher.
 -/
 
 @[expose] public section
@@ -695,9 +691,12 @@ theorem ciph_eq_spec (k : KeySize) (key : Key k) (x : Block) :
   · exact cipher_eq_spec _ _ _ (toWord_keyExpansion 4 10 (by decide) key) x
   · exact cipher_eq_spec _ _ _ (toWord_keyExpansion 8 14 (by decide) key) x
 
-/-- The inverse cipher undoes the model's cipher, for AES-128 and AES-256. -/
+/-- The inverse cipher undoes the model's cipher, for AES-128 and AES-256.
+
+No theorem compares the inverse cipher with a model of FIPS 197 §5.3, Algorithm 3. -/
 theorem ciphInv_spec_ciph (k : KeySize) (key : Key k) (x : Block) :
     ciphInv k key (Spec.ciph k key x) = x := by
+  -- The inverse cipher undoes the cipher, so it also undoes the model's cipher.
   rw [← ciph_eq_spec, ciphInv_ciph]
 
 end EthLib.Cryptography.Aes

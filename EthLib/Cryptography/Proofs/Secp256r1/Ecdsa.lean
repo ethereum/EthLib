@@ -16,8 +16,6 @@ When `p <= r + n`, they are the only valid signatures with that `r`, key and mes
 
 The verifier rebuilds the point `R = (e / s) G + (r / s) Q`, and checks that `x_R mod n = r`.
 
-Below that bound, `R` may also have `x = r + n`, and up to four values of `s` may verify.
-
 Verification is exactly the range checks, the key checks and that check of `R`, in the group.
 -/
 
@@ -272,7 +270,11 @@ theorem verify_s_eq_or_neg {q : Point} {e r s s' : Nat}
 
 /-- Let `(r, s)` be a valid signature under a key and a message, with `p <= r + n`.
 
-Then `(r, s')` is valid under the same key and message exactly when `s'` is `s` or `n - s`. -/
+Then `(r, s')` is valid under the same key and message exactly when `s'` is `s` or `n - s`.
+
+Below that bound, the rebuilt point `R` may also have `x = r + n`.
+
+Then up to four values of `s` may verify. -/
 theorem verify_iff_s_eq_or_neg {q : Point} {e r s s' : Nat} (hv : verify q e r s = true)
     (hp : Fp.modulus ≤ r + Fn.modulus) :
     verify q e r s' = true ↔ s' = s ∨ s' = Fn.modulus - s := by
