@@ -226,7 +226,9 @@ def mplexFrames (data : List UInt8) : Except Mplex.MplexError (List Mplex.Frame)
 
 /-- The streams of one side after the frames it receives and sends, from an empty table.
 
-A frame that does not decode, or that the side refuses, raises an error naming its event. -/
+A frame that does not decode, or that the side refuses, raises its error.
+
+The error names the index of the event. -/
 @[export eth_mplex_session]
 def mplexSessionExport (args : PyValue) : Result PyValue :=
   pyExport (fun (events : List (Bool × ByteArray)) => do
@@ -297,7 +299,9 @@ def yamuxFrames (data : List UInt8) : Except Yamux.YamuxError (List Yamux.Frame)
 
 /-- One side of a yamux session after the frames it receives and sends, from no stream.
 
-A frame that does not decode, or that the side refuses, raises an error naming its event. -/
+A frame that does not decode, or that the side refuses, raises its error.
+
+The error names the index of the event. -/
 @[export eth_yamux_session]
 def yamuxSessionExport (args : PyValue) : Result PyValue :=
   -- The first argument says whether this side is the client.

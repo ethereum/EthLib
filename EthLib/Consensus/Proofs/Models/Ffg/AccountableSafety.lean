@@ -5,9 +5,15 @@ public import EthLib.Consensus.Proofs.Models.Ffg.Model
 /-!
 # Casper FFG: accountable safety
 
-Two conflicting finalized checkpoints make validators slashable, with a bound on their stake.
+Two conflicting finalized checkpoints make validators slashable.
 
-It holds for `k`-finalization with every `k ≥ 1`, for supermajority links and for slack links.
+When each checkpoint has its own validator set, the slashable stake is bounded below.
+
+Accountable safety holds for `k`-finalization with every `k ≥ 1`.
+
+It holds for supermajority links and for slack links.
+
+With slack links, each stake bound also loses twice the slack of two links.
 
 The main result is Theorem 8.3 of Gasper §8.6, [arXiv 2003.03052v3][gasper].
 
@@ -101,7 +107,11 @@ theorem le_of_chain {b : ℕ → β} {k : ℕ} (h : ∀ i < k, b i ≤ b (i + 1)
   | 0, _ => le_rfl
   | i + 1, hi => (le_of_chain h i (by omega)).trans (h i (by omega))
 
-/-- Gasper Lemma 5.1: a finalized block is in the chain of a justified block of a later epoch.
+/-- Gasper Lemma 5.1.
+
+Take a finalized checkpoint, and a justified checkpoint with a later epoch.
+
+Then the finalized block is in the chain of the justified block.
 
 Otherwise two links break a slashing condition.
 
@@ -438,7 +448,9 @@ theorem accountable_safety_of_change_slack [DecidableEq ν] {W : Checkpoint β �
       c.epoch ≤ max c₁.epoch c₂.epoch → SlackJustified V U W genesis votes c → ∀ w ∈ W c,
       -- Under `w₀`, take the stake that joined its set since `V₀`, plus twice the stake that left.
       --
-      -- Add the change from `w₀` to those weights on its set: a gain counts once, a loss twice.
+      -- Add the change from `w₀` to those weights on its set.
+      --
+      -- There a gain counts once and a loss twice.
       --
       -- Add twice its slack, the stake of its set outside its second set, under those weights.
       --

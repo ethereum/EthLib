@@ -5,7 +5,7 @@ public import EthLib.Consensus.Proofs.Models.Stake
 /-!
 # A partially synchronous network of honest and Byzantine validators
 
-Validators with views, executions of a protocol among them, and partial synchrony.
+The model has validators with views, executions of a protocol among them, and partial synchrony.
 
 The model follows the system model of the fast confirmation rule.
 

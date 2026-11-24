@@ -316,7 +316,9 @@ theorem height_lt_of_mem_children {b c : β} (hc : c ∈ children G b) :
   have h2 : T.height c ≤ G.blocks.sup T.height := Finset.le_sup hc.1
   omega
 
--- Each block has a root, and the order on roots is a parameter.
+-- Each block has a root.
+--
+-- The order on roots is a parameter.
 --
 -- The beacon chain compares roots as byte strings, lexicographically.
 variable {ρ : Type*} [LinearOrder ρ] (root : β → ρ) (V w G)
@@ -501,17 +503,21 @@ Step 3 sets the weight of the boost to `W / 4`, and its section "Analysis" names
 
 [mitigation]: https://notes.ethereum.org/@vbuterin/lmd_ghost_mitigation -/
 def boostStake (w : ν → ℕ) (score : ℕ) : Option ν → ℕ
-  -- The boost is one more voter, `none`, and its stake is the score of the boost.
+  -- The boost is one more voter, `none`.
+  --
+  -- Its stake is the score of the boost.
   | none => score
   | some v => w v
 
 /-- The view with the boost: the same blocks, and the boosted block as the message of `none`.
 
-A [post on balancing and reorging attacks][post] adds the boost to the votes, as the model does.
+A [post on balancing and reorging attacks][post] gives the limits of the boost.
 
-That is its section "Boosting does not mitigate all ex ante reorgs".
+Its section "Boosting does not mitigate all ex ante reorgs" adds the boost to the votes.
 
 There the boost counts in the chain of the boosted block.
+
+The model follows that rule.
 
 [post]: https://ethresear.ch/t/change-fork-choice-rule-to-mitigate-balancing-and-reorging-attacks/11127
 -/

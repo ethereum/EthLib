@@ -8,6 +8,10 @@ public import EthLib.Networking.Snappy.Block
 The elements that a Snappy compressor writes, from `format_description.txt` of `google/snappy`:
 <https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt>.
 
+- A copy with a one-byte offset holds a length of 4 to 11 and an offset of 1 to 2047 (§2.2.1).
+- A copy with a two-byte offset holds a length of 1 to 64 and an offset of 1 to 65535 (§2.2.2).
+- A literal of 1 to 2^32 bytes holds its data unchanged (§2.1).
+
 This file only writes elements, and it never decides which bytes to copy.
 -/
 

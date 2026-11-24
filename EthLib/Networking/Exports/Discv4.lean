@@ -62,7 +62,7 @@ def readContent (plain : ByteArray) : Result Packet :=
 @[export eth_discv4_decode]
 def decodeExport (packet : ByteArray) : Result ByteArray := do
   let r ← toResult none (decode packet)
-  -- The sender's key as the 64 bytes `x || y`.
+  -- The sender's key crosses as the 64 bytes `x || y`.
   let sender := Rlpx.encodePublicKey r.sender
   -- A read packet comes back as its hash, the sender's key, then its content.
   return ⟨r.hash.toArray⟩ ++ ⟨sender.toArray⟩ ++ (← content r.packet)
