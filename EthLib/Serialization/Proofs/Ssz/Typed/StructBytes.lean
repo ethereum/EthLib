@@ -44,7 +44,7 @@ theorem readByteSlots_eq (fields : List Desc) (data : ByteArray) (position : Nat
         simp only [h, h2, ite_false]
         have := ih (position + bytesPerOffset)
         cases hr : readByteSlots fields data (position + bytesPerOffset) <;>
-          rw [hr] at this <;> simp [← this, ByteSlot.toSlot, readUintBytes_eq]
+          rw [hr] at this <;> simp [← this, ByteSlot.toSlot]
     · by_cases h : position + width > data.size
       · have h2 : position + width > data.data.size := h
         simp only [h, h2, ite_true]
