@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `Run.getBeaconProposerIndex_ok` in `EthLib.Consensus.Proofs.Transition.LookaheadActive` says that, from Fulu, each state that a run reaches from genesis has a proposer for its slot.
+  That proposer is a validator of the registry.
+  It needs a preset with at least one slot in an epoch, and with `MAX_SEED_LOOKAHEAD` above `MIN_SEED_LOOKAHEAD`.
+
 - In Lean, `DirectSafety.twoRunsForgeAdvantage_le_coCdhAdvantage` (`Consensus/Proofs/DirectSafety/SignedForgery.lean`) bounds a forged header call of two runs against `n` honest keys by `n * q` times a co-CDH solver ([#3433](https://github.com/ethereum/EthLib/issues/3433)).
   `Security.multiByteForgeAdvantage_le_coCdhAdvantage` (`Cryptography/Proofs/Bls/Security/MultiKeyBytes.lean`) carries the BLS bound against `n` keys to EthLib's bytes.
   `DirectSafety.exists_wins_of_not_bls_verifySoundOn` shows that a failure of the assumption on the header calls of signed direct safety is a winning call.
@@ -898,7 +902,7 @@ Not yet released.
 
 - `LookaheadActive` says that, from Fulu, each entry of the proposer lookahead of a state is active in its epoch.
   Position `k` is `k / SLOTS_PER_EPOCH` epochs after the current epoch.
-  `Run.lookaheadActive` states it along every run from genesis that ends before Gloas, when `MAX_SEED_LOOKAHEAD` is above `MIN_SEED_LOOKAHEAD`.
+  `Run.lookaheadActive` states it along every run from genesis, when `MAX_SEED_LOOKAHEAD` is above `MIN_SEED_LOOKAHEAD`.
   `LookaheadActive.proposer_active` states that a proposer read from a state that holds it is active in the epoch of the state.
   The pin's whistleblower and sync bounds read it to show that a validator that exited before the finalized epoch proposes no block.
 
@@ -1039,6 +1043,10 @@ Not yet released.
     `ByteOrder.ofBE_eq_foldl` states the old fold; rewrite with it where a proof unfolded `ofBE`.
   - `ofBE.horner`, `ofBE.go`, `ofBE.horner_eq` and `ofBE.go_eq_horner` are new.
     `foldl_ofBE` and `ofBE_lt` keep their statements.
+- In Lean, `Run.lookaheadActive` in `EthLib.Consensus.Proofs.Transition.LookaheadActive` drops its premise that the run ends before Gloas.
+  The upgrades to Gloas and to Heze copy the registry, the slot and the lookahead.
+  So each entry of the lookahead stays active in its epoch.
+  Migration: delete the `early` argument.
 - In Lean, SHA-256 and RIPEMD-160 pad through one shared Merkle-Damgård padding in `EthLib/Cryptography/Hash/Padding.lean`, which takes each hash's length bytes ([#4447](https://github.com/ethereum/EthLib/pull/4447)).
   - `Sha256.paddingZeros` and `Ripemd160.paddingZeros` are `Padding.paddingZeros`, and `Sha256.LENGTH_SIZE_BYTES` is removed.
     `Sha256.pad` and `Ripemd160.pad` are now `Padding.pad lengthBytes` of their own length bytes, and compute the same bytes.
