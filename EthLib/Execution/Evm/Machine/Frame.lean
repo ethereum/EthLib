@@ -11,30 +11,6 @@ public import EthLib.Execution.State.Tracker
 
 The state of one execution of code by the EVM, and the message that starts it.
 
-The gas meter is a parameter, because a fork can change how an instruction pays.
-
-Up to BPO5, the meter is one counter of the gas left.
-
-From Glamsterdam, it also meters state gas, with a reservoir, by EIP-8037.
-
-A charge of state gas that the reservoir cannot cover takes execution gas, as a spill.
-
-A rollback credits the spill back to the execution gas.
-
-So a frame holds its execution gas left plus its spill, and the laws of a meter bound that sum.
-
-A charge of execution gas lowers it by at least its amount.
-
-No other operation inside a frame raises it, and an exceptional halt leaves none.
-
-A frame starts with the execution gas it is given.
-
-A message gives back exactly the gas that its frame holds at its end.
-
-A frame also holds the writes of its transaction so far, and the accrued substate.
-
-The substate gathers what the transaction acts on after its code runs.
-
 The subsections Machine State and Substate of the Yellow Paper, Shanghai version, define them.
 
 [EIP-2929](https://eips.ethereum.org/EIPS/eip-2929#specification) adds the accessed sets.
@@ -53,6 +29,8 @@ open EthLib.Execution.Blocks (Log)
 open EthLib.Execution.State (TransactionState)
 
 /-- A gas meter: how an instruction pays its gas, and the gas left.
+
+The gas meter is a parameter, because a fork can change how an instruction pays.
 
 From Glamsterdam, a meter also holds a reservoir of state gas, which a call passes on. -/
 class GasMeter (Meter : Type) where
@@ -90,6 +68,10 @@ class GasMeter (Meter : Type) where
 /-- The laws of a gas meter.
 
 They bound the execution gas that a frame holds, which makes the execution end.
+
+No other operation inside a frame raises it.
+
+A message gives back exactly the gas that its frame holds at its end.
 
 They also say that a charge fails only with the out-of-gas error. -/
 class LawfulGasMeter (Meter : Type) [GasMeter Meter] : Prop where
@@ -187,25 +169,28 @@ instance : LawfulGasMeter Nat where
 
 /-- The meter of every fork from Glamsterdam: execution gas and state gas, by EIP-8037.
 
-The meter of a message starts with the reservoir of its caller, which the caller gives up.
-
-A message that never ran gives the caller back its execution gas and its reservoir.
-
-A message that ran gives back its execution gas, its reservoir and its spill.
-
-A revert rolls the state gas back to the baseline. -/
+Besides the execution gas left, it holds a reservoir of state gas. -/
 instance : GasMeter StateGasMeter where
   charge := StateGasMeter.charge
+  -- A charge of state gas that the reservoir cannot cover takes execution gas, as a spill.
   chargeState := StateGasMeter.chargeState
   refill := StateGasMeter.refill
   gasLeft meter := meter.gasLeft
+  -- A frame holds its execution gas left plus its spill, and the laws of a meter bound that sum.
   gasHeld := StateGasMeter.gasHeld
   reservoir meter := meter.reservoir
   exhaust := StateGasMeter.halt
+  -- A revert rolls the state gas back to the baseline.
+  --
+  -- It credits the spill back to the execution gas.
   rollback := StateGasMeter.restore
+  -- The meter of a message starts with the reservoir of its caller.
   start := StateGasMeter.start
+  -- The caller gives up its reservoir to the message.
   drain := StateGasMeter.drain
+  -- A message that never ran gives the caller back its execution gas and its reservoir.
   credit meter gas reservoir := StateGasMeter.cancel meter (StateGasMeter.start gas reservoir)
+  -- A message that ran gives back its execution gas, its reservoir and its spill.
   absorb := StateGasMeter.absorb
   commit := StateGasMeter.commit
   stateGasUsed := StateGasMeter.stateGasUsed

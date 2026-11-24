@@ -8,42 +8,6 @@ public import EthLib.Execution.Evm.Step
 
 SLOAD and SSTORE: read and write a word of the storage of the account whose code runs.
 
-Up to Petersburg, SSTORE costs 20000 to set a zero slot and 5000 otherwise.
-
-It refunds 15000 when it clears a slot.
-
-From Istanbul, net gas metering prices a write by the original, current and new value.
-
-The original value is the value before the transaction.
-
-A write to a slot that the transaction already changed costs as much as a read.
-
-Refunds give back the price of writes that a later write undoes.
-
-From Istanbul, SSTORE also fails when the frame has 2300 gas or less.
-
-From Berlin, the first access to a slot in a transaction is cold, and costs 2100 more.
-
-From London, clearing a slot refunds 4800.
-
-From Glamsterdam, the price of a write has three parts, by EIP-8038.
-
-The access costs 2100 when cold and 100 when warm.
-
-A write that moves the slot away from its original value costs 10000 more.
-
-A write that sets a zero slot also costs the state gas of 64 bytes, by EIP-8037.
-
-A write that puts such a slot back to zero refills that state gas first.
-
-Clearing a slot refunds 11616, and restoring the original value refunds the 10000.
-
-EIP-1283 never ran on mainnet, so Constantinople keeps the rule of Petersburg.
-
-SSTORE fails in a static frame.
-
-From Glamsterdam, it checks the frame before any other step.
-
 Appendix H.2 of the Yellow Paper, Berlin version, defines the rule up to Berlin.
 
 Source: [`Paper.tex` at `beacfbd`][yp-berlin] of the Yellow Paper.
@@ -112,14 +76,24 @@ def sstoreResetCost (fork : Fork) : Nat :=
 
 The flag says whether the access to the slot is cold. -/
 def sstoreCost (fork : Fork) (original current new : U256) (cold : Bool) : Nat :=
+  -- From Glamsterdam, the price of a write has three parts, by EIP-8038.
+  --
+  -- The third part is the state gas of a new slot, which SSTORE charges apart.
   if fork ≥ .glamsterdam then
-    -- EIP-8038: the access, cold or warm.
+    -- EIP-8038: the access, 2100 when cold and 100 when warm.
     --
     -- Then it additionally charges `STORAGE_WRITE` when the write moves the slot from its original.
+    --
+    -- That write costs 10000 more.
     (if cold then COLD_STORAGE_ACCESS else WARM_ACCESS) +
       if original = current ∧ current ≠ new then STORAGE_WRITE else 0
+  -- From Istanbul, net gas metering prices a write by the original, current and new value.
+  --
+  -- The original value is the value before the transaction.
   else if fork ≥ .istanbul then
-    -- EIP-2929, from Berlin: a cold pair costs an additional `COLD_SLOAD_COST` gas.
+    -- EIP-2929, from Berlin: a cold pair costs an additional `COLD_SLOAD_COST` gas, 2100.
+    --
+    -- The access is cold when it is the first access to the slot in the transaction.
     let surcharge := if cold then COLD_STORAGE_ACCESS else 0
     surcharge +
       -- EIP-2200: when the original value equals the current value, and the new value differs:
@@ -129,18 +103,28 @@ def sstoreCost (fork : Fork) (original current new : U256) (cold : Bool) : Nat :
       -- The no-op and the dirty slot, which EIP-2200 tests first and last.
       --
       -- Both cost `SLOAD_GAS`.
+      --
+      -- So a write to a slot that the transaction already changed costs as much as a read.
       else sstoreReadCost fork
   -- Before Istanbul, the rule before EIP-2200: the set price when a zero slot becomes nonzero.
   --
   -- Otherwise the reset price.
+  --
+  -- Up to Petersburg, these are 20000 and 5000.
+  --
+  -- EIP-1283 never ran on mainnet, so Constantinople keeps the rule of Petersburg, by EIP-1716.
   else if new ≠ 0 ∧ current = 0 then STORAGE_SET
   else COLD_STORAGE_WRITE
 
 /-- The change of the refund counter by SSTORE, from the original, current and new values. -/
 def sstoreRefund (fork : Fork) (original current new : U256) : Int :=
   -- EIP-2200's `SSTORE_CLEARS_SCHEDULE`, which EIP-3529 and EIP-8038 change.
+  --
+  -- It is 15000 before London, 4800 from London, and 11616 from Glamsterdam.
   let clear : Int := (gasSchedule fork).REFUND_STORAGE_CLEAR
   if fork ≥ .istanbul then
+    -- From Istanbul, refunds give back the price of writes that a later write undoes.
+    --
     -- EIP-2200: a current value equal to the new value is a no-op, with no refund.
     if current = new then 0 else
       -- With a nonzero original and current, a new value of 0 adds `SSTORE_CLEARS_SCHEDULE` gas.
@@ -151,7 +135,7 @@ def sstoreRefund (fork : Fork) (original current new : U256) : Int :=
       (if original ≠ 0 ∧ current = 0 then clear else 0) +
       -- An original value equal to the new value resets the slot.
       (if original = new then
-        -- From Glamsterdam, EIP-8038 rule 3: `STORAGE_WRITE` is refunded.
+        -- From Glamsterdam, EIP-8038 rule 3: `STORAGE_WRITE` is refunded, the 10000.
         if fork ≥ .glamsterdam then (STORAGE_WRITE : Int)
         -- An original value of 0 adds `SSTORE_SET_GAS - SLOAD_GAS` to the refund counter.
         else if original = 0 then (STORAGE_SET : Int) - sstoreReadCost fork
@@ -165,6 +149,8 @@ def sstoreRefund (fork : Fork) (original current new : U256) : Int :=
 /-- The state gas that SSTORE charges at fork `fork`: from Glamsterdam, that of a new slot. -/
 def sstoreStateGas (fork : Fork) (original current new : U256) : Nat :=
   -- EIP-8037: a new slot charges `STATE_BYTES_PER_STORAGE_SET * CPSB` of state gas.
+  --
+  -- That is the state gas of 64 bytes.
   --
   -- A new slot has original 0, current 0 and new `x > 0`.
   if fork ≥ .glamsterdam ∧ original = 0 ∧ current = 0 ∧ new ≠ 0 then STORAGE_SET_STATE_GAS else 0
@@ -197,22 +183,18 @@ def sloadStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
 
 /-- SSTORE: write a word at a key of the storage of the current account.
 
-It pays and changes the refund counter by the original, current and new values of the slot.
-
-From Glamsterdam, it first refills state gas, then pays execution gas, then state gas.
-
-Once the check of the 2300 gas passes, it reads the slot.
-
-That read stays even when the write then lacks gas, by EIP-7928. -/
+It pays and changes the refund counter by the original, current and new values of the slot. -/
 def sstoreStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
-  -- From Glamsterdam, the static check comes first.
+  -- SSTORE fails in a static frame.
+  --
+  -- From Glamsterdam, the static check comes first, before any other step.
   --
   -- So a static frame records no read for EIP-7928.
   if fork ≥ .glamsterdam ∧ evm.message.isStatic then throw .writeInStaticContext
   -- `0x55` SSTORE: the key `mu_s[0]`, then the new value `mu_s[1]`.
   let (word, evm) ← popWord evm
   let (new, evm) ← popWord evm
-  -- EIP-2200: the frame fails when its gas left is at most the gas stipend, 2300.
+  -- EIP-2200: from Istanbul, the frame fails when its gas left is at most the gas stipend, 2300.
   if fork ≥ .istanbul ∧ GasMeter.gasLeft evm.gas ≤ CALL_STIPEND then
     throw .outOfGas
   else
@@ -224,9 +206,13 @@ def sstoreStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
     -- EIP-2929: the pair joins the accessed storage keys, before the charge.
     let (cold, evm) := accessStorageKey evm address key
     -- The read of the slot, which EIP-7928 records once the stipend check passes.
+    --
+    -- That read stays even when the write then lacks gas.
     let evm := recordStorageRead evm address key
     keepReads evm id do
       -- From Glamsterdam: the refill, then execution gas, then state gas, in that order.
+      --
+      -- A write that puts a new slot back to zero first refills the state gas that the slot paid.
       --
       -- EIP-8037 meters state gas at the end of the execution of the opcode.
       --

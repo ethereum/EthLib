@@ -8,12 +8,6 @@ public import EthLib.Execution.Evm.Step
 
 RETURN and REVERT: stop the frame and give back a range of memory as its output.
 
-Each pays only for the growth of memory.
-
-RETURN ends the frame normally.
-
-REVERT ends it with the revert error, so its changes roll back but it keeps its gas left.
-
 [EIP-140][eip140] adds REVERT at Byzantium.
 
 Appendix H.2 of the Yellow Paper, Shanghai version, defines both.
@@ -37,6 +31,8 @@ def haltWithOutput (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := 
   let (start, evm) ← popWord evm
   let (size, evm) ← popWord evm
   -- `G_zero`, and `mu'_i = M(mu_i, mu_s[0], mu_s[1])` with its cost.
+  --
+  -- So each of RETURN and REVERT pays only for the growth of memory.
   let evm ← chargeGasAndMemory evm 0 [(start, size)]
   -- Appendix H.2: `H_RETURN(mu) = mu_m[mu_s[0] ... (mu_s[0] + mu_s[1] - 1)]`.
   --
@@ -47,6 +43,7 @@ def haltWithOutput (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := 
 
 /-- RETURN: stop the frame, with a range of memory as its output. -/
 def returnStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) :=
+  -- RETURN ends the frame normally.
   haltWithOutput evm
 
 /-- REVERT: stop the frame with the revert error, with a range of memory as its output.
@@ -56,6 +53,8 @@ def revertStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   -- EIP-140: the memory, its cost and the output of REVERT are those of RETURN.
   let evm ← haltWithOutput evm
   -- §9.4: `X` gives `(∅, mu', A, I, o)`, so the state reverts and the gas left stays.
+  --
+  -- REVERT ends the frame with the revert error, so its changes roll back.
   return { evm with error := some .revert }
 
 /-- The instruction of RETURN or REVERT, at fork `fork`.

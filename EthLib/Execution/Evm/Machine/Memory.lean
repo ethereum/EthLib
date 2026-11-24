@@ -22,20 +22,20 @@ namespace EthLib.Execution.Evm
 
 /-- `size` bytes of the buffer from `start`, padded with zeros on the right, as a byte array.
 
-Appendix H.2 of the Yellow Paper reads call data this way, as zero past its end.
-
-The bytes inside the buffer are copied as one block, then the zeros follow.
-
-The start can be any word, far past any index that a compiled byte array holds.
-
-So the block is cut to the buffer first, and a start past its end copies nothing.
-
-A read that ends inside the buffer needs no zeros, so it appends none. -/
+Appendix H.2 of the Yellow Paper reads call data this way, as zero past its end. -/
 def bufferBytes (data : ByteArray) (start size : Nat) : ByteArray :=
+  -- The bytes inside the buffer are copied as one block, then the zeros follow.
+  --
+  -- The start can be any word, far past any index that a compiled byte array holds.
+  --
+  -- So the block is cut to the buffer first, and a start past its end copies nothing.
+  --
   -- The bytes `d[x]` of the buffer `d` for `start ≤ x < min(start + size, ||d||)`, as one block.
   let inside := if start < data.size then data.extract start (min (start + size) data.size)
     else .empty
   -- Then `d[x] = 0` for each `x ≥ ||d||`, up to `size` bytes, as Appendix H.2 reads `I_d`.
+  --
+  -- A read that ends inside the buffer needs no zeros, so it appends none.
   if inside.size = size then inside
   else inside ++ ByteArray.mk (Array.replicate (size - inside.size) 0)
 
@@ -45,17 +45,15 @@ def bufferRead (data : ByteArray) (start size : Nat) : List UInt8 :=
 
 /-- The memory with `value` written from `start`.
 
-The memory must hold the whole range, so the size does not change.
-
-An empty value changes nothing, whatever its start.
-
-That start can reach 2^256, which no compiled index of a byte array holds, so it is never read.
-
-The bytes of the value replace those of the range, in place when nothing else holds the memory. -/
+The memory must hold the whole range, so the size does not change. -/
 def memoryWrite (memory : ByteArray) (start : Nat) (value : ByteArray) : ByteArray :=
-  -- An empty value writes nothing.
+  -- An empty value writes nothing, whatever its start.
+  --
+  -- That start can reach 2^256, which no compiled index of a byte array holds, so it is never read.
   if value.size = 0 then memory
   -- `mu'_m[start + i] = value[i]` for each `i < ||value||`.
+  --
+  -- The bytes of the value replace those of the range, in place when nothing else holds the memory.
   else value.copySlice 0 memory start value.size
 
 /-- The `size` bytes of memory from `start`.

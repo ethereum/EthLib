@@ -9,13 +9,7 @@ The opcodes of the EVM, from Frontier to Glamsterdam.
 
 Each opcode is one byte of code, and a fork can add opcodes.
 
-So a byte decodes to an opcode only from the fork that adds that opcode.
-
-No fork up to Glamsterdam removes an opcode or gives a byte to another opcode.
-
 Appendix H.2 of the Yellow Paper, Shanghai version, lists the opcodes up to Shanghai.
-
-The EIP that adds a later opcode gives its byte.
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
@@ -132,7 +126,9 @@ namespace Op
 
 /-- The byte of an opcode. -/
 def toByte : Op → UInt8
-  -- The bytes of Appendix H.2, and for a later opcode the byte that its EIP gives.
+  -- The bytes of Appendix H.2.
+  --
+  -- The EIP that adds a later opcode gives its byte.
   | .stop => 0x00
   | .add => 0x01
   | .mul => 0x02
@@ -356,6 +352,8 @@ def ofByte (fork : Fork) (byte : UInt8) : Option Op :=
   -- A byte names an opcode only from the fork that adds that opcode.
   --
   -- Before that fork, the byte is no instruction.
+  --
+  -- No fork up to Glamsterdam removes an opcode or gives a byte to another opcode.
   (decode byte).filter fun op => op.since ≤ fork
 
 end Op

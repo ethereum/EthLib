@@ -8,38 +8,6 @@ public import EthLib.Execution.Evm.TransferLog
 
 SELFDESTRUCT: send the whole balance of the current account to a beneficiary, then stop.
 
-It pays 5000 from Tangerine Whistle, and nothing before.
-
-From Berlin, a cold beneficiary costs the price of a cold access more.
-
-From Tangerine Whistle, a beneficiary with no account costs 25000 more.
-
-From Spurious Dragon, that price applies only to a dead beneficiary, and only when ether moves.
-
-Before London, the first deletion of an account in the transaction refunds 24000.
-
-From Byzantium, SELFDESTRUCT fails in a frame that must not change the state.
-
-Before Cancun, the account is deleted at the end of the transaction, and its ether is gone.
-
-From Cancun, only an account created in the same transaction is deleted.
-
-Any other account just sends its balance, and keeps its code and storage.
-
-From Glamsterdam, no ether is gone, by EIP-8246.
-
-An account created in the transaction that names itself as beneficiary keeps its balance.
-
-At the end of the transaction, such an account loses its nonce, code and storage, not its balance.
-
-From Glamsterdam, a move of ether to another beneficiary writes a transfer log, by EIP-7708.
-
-From Glamsterdam, SELFDESTRUCT also checks for a static frame before it pops the beneficiary.
-
-A new account for the beneficiary then costs 9000, the write of an account, by EIP-8038.
-
-It also costs the state gas of a new account, by EIP-8037, after the execution gas.
-
 Appendix H.2 of the Yellow Paper, Shanghai version, defines the instruction.
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
@@ -84,7 +52,13 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 `createsAccount` says whether the beneficiary gets an account it lacks. -/
 def selfdestructCost (fork : Fork) (cold createsAccount : Bool) : Nat :=
   let schedule := gasSchedule fork
+  -- The base, 5000 from Tangerine Whistle and nothing before.
+  --
+  -- From Berlin, a cold beneficiary costs the price of a cold access more.
   schedule.OPCODE_SELFDESTRUCT_BASE + (if cold then schedule.COLD_ACCOUNT_ACCESS else 0) +
+    -- From Tangerine Whistle, a beneficiary that gets an account costs 25000 more.
+    --
+    -- From Glamsterdam, it costs 9000, the write of an account, by EIP-8038.
     (if createsAccount then schedule.OPCODE_SELFDESTRUCT_NEW_ACCOUNT else 0)
 
 /-- The state gas of SELFDESTRUCT at fork `fork`.
@@ -106,15 +80,7 @@ def selfdestructCreatesAccount (fork : Fork) (state : TransactionState)
   -- EIP-150: before, a beneficiary with no account.
   else !state.accountExists beneficiary
 
-/-- The state after `originator` sends its balance to `beneficiary` by SELFDESTRUCT.
-
-Before Cancun, the beneficiary gains the balance, then the originator's balance becomes 0.
-
-So the ether is gone when the two are the same account.
-
-From Cancun, the balance moves, and then only an account created in the transaction drops to 0.
-
-From Glamsterdam, the balance moves, and nothing drops to 0. -/
+/-- The state after `originator` sends its balance to `beneficiary` by SELFDESTRUCT. -/
 def selfdestructTransfer (fork : Fork) (state : TransactionState)
     (originator beneficiary : Address) : Except State.StateError TransactionState := do
   let balance := (state.getAccount originator).balance
@@ -126,36 +92,46 @@ def selfdestructTransfer (fork : Fork) (state : TransactionState)
     -- So the ether is gone when the target is that contract itself.
     --
     -- From Glamsterdam, EIP-8246 drops that step, and no ether is gone.
+    --
+    -- An account created in the transaction that names itself as beneficiary keeps its balance.
+    --
+    -- That holds from Glamsterdam.
+    --
+    -- At the end of the transaction, such an account then loses its nonce, code and storage.
+    --
+    -- It does not lose its balance.
     if fork < .glamsterdam ∧ originator ∈ state.createdAccounts then
       state.setAccountBalance fork originator 0
     else return state
   else
-    -- Before Cancun, `sigma'[r]_b = sigma[r]_b + sigma[I_a]_b` for the beneficiary `r`.
+    -- Before Cancun, the beneficiary gains the balance.
+    --
+    -- `sigma'[r]_b = sigma[r]_b + sigma[I_a]_b` for the beneficiary `r`.
     let state ← state.createEther fork beneficiary balance
-    -- Then `sigma'[I_a]_b = 0`, so the ether is gone when `r = I_a`.
+    -- Then the balance of the originator becomes 0: `sigma'[I_a]_b = 0`.
+    --
+    -- So the ether is gone when the two are the same account, `r = I_a`.
     state.setAccountBalance fork originator 0
 
 /-- The frame after SELFDESTRUCT has paid: it moves the balance and stops.
 
-It fails in a static frame.
-
-It records the account to delete: before Cancun always, and from Cancun when created here.
-
-From Glamsterdam, it writes a transfer log when ether goes to another account.
-
-From Spurious Dragon to Paris, an empty beneficiary counts as touched. -/
+It fails in a static frame. -/
 def finishSelfdestruct (fork : Fork) (beneficiary : Address) (refund : Nat)
     (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) :=
-  -- EIP-214: in a static frame, SELFDESTRUCT fails before ether moves.
+  -- EIP-214: from Byzantium, in a static frame, SELFDESTRUCT fails before ether moves.
   if evm.message.isStatic then .error .writeInStaticContext
   else do
     let originator := evm.message.currentTarget
     let balance := (evm.state.getAccount originator).balance
     -- The move of the balance to the beneficiary.
     let state ← (selfdestructTransfer fork evm.state originator beneficiary).mapError .state
-    -- `A'_s = A_s union {I_a}` before Cancun.
+    -- The account to delete at the end of the transaction: `A'_s = A_s union {I_a}` before Cancun.
+    --
+    -- Before Cancun, the ether of the deleted account is gone.
     --
     -- From Cancun, EIP-6780 deletes only a contract created in the same transaction.
+    --
+    -- Any other account just sends its balance, and keeps its code and storage.
     let deletes := fork < .dencun ∨ originator ∈ state.createdAccounts
     let touched := evm.substate.touchedAccounts
     -- From Spurious Dragon, before Paris, an empty beneficiary joins `A_t`, for EIP-161's deletion.
@@ -169,7 +145,7 @@ def finishSelfdestruct (fork : Fork) (beneficiary : Address) (refund : Nat)
         accountsToDelete :=
           if deletes then evm.substate.accountsToDelete.insert originator
           else evm.substate.accountsToDelete
-        -- EIP-7708, from Glamsterdam: a nonzero move to a different account issues a log.
+        -- EIP-7708, from Glamsterdam: a nonzero move to a different account writes a transfer log.
         logs := pushTransferLog fork evm.substate.logs originator beneficiary balance
         simulatedLogs :=
           pushSimulatedTransferLog fork evm.substate.simulatedLogs originator beneficiary balance
@@ -177,17 +153,7 @@ def finishSelfdestruct (fork : Fork) (beneficiary : Address) (refund : Nat)
         refundCounter := evm.substate.refundCounter + refund
         touchedAccounts := if touchesBeneficiary then touched.insert beneficiary else touched } }
 
-/-- SELFDESTRUCT at fork `fork`: pop the beneficiary, pay, move the balance and stop.
-
-The refund before London is for an account that this frame and its callers do not yet delete.
-
-From Glamsterdam, it fails in a static frame before the pop, and pays state gas last.
-
-From Glamsterdam, the frame must hold the price of a beneficiary with an account first.
-
-Only then does it read the beneficiary, and that read stays even when it then halts.
-
-EIP-7928 asks for both. -/
+/-- SELFDESTRUCT at fork `fork`: pop the beneficiary, pay, move the balance and stop. -/
 def selfdestructStep (fork : Fork) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   -- From Glamsterdam, a static frame fails first, before the pop.
   --
@@ -200,7 +166,11 @@ def selfdestructStep (fork : Fork) (evm : Evm fork Meter) : Except EvmError (Evm
   --
   -- It joins before the gas check, whether or not ether moves; a halt discards the set either way.
   let (cold, evm) := accessAddress evm beneficiary
-  -- From Glamsterdam, the frame must hold the price for a beneficiary with an account, by EIP-7928.
+  -- From Glamsterdam, the frame must first hold the price for a beneficiary with an account.
+  --
+  -- Only then does it read the beneficiary.
+  --
+  -- EIP-7928 asks for both.
   checkGas evm (selfdestructCost fork cold false)
   -- The read of the beneficiary, which EIP-7928 records, and which stays even on a halt.
   let evm := recordAccountRead evm beneficiary
@@ -208,7 +178,13 @@ def selfdestructStep (fork : Fork) (evm : Evm fork Meter) : Except EvmError (Evm
     let originator := evm.message.currentTarget
     -- Whether the beneficiary gets a new account, by EIP-150 and EIP-161.
     let createsAccount := selfdestructCreatesAccount fork evm.state originator beneficiary
-    -- `R_selfdestruct` only when `I_a` is not yet in `A_s`, the accounts to delete.
+    -- `R_selfdestruct`, 24000 before London and 0 from London by EIP-3529.
+    --
+    -- It is paid only when `I_a` is not yet in `A_s`, the accounts to delete.
+    --
+    -- That is the first deletion of the account in the transaction.
+    --
+    -- So the refund is for an account that this frame and its callers do not yet delete.
     let refund :=
       if originator ∈ evm.substate.accountsToDelete then 0
       else (gasSchedule fork).REFUND_SELF_DESTRUCT

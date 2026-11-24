@@ -13,9 +13,9 @@ Source: Appendix H.2 of the Yellow Paper, Shanghai version, in `Paper.tex`:
 
 Every fork since Frontier computes the same result.
 
-The instruction hashes a region of memory and pushes the digest, read as a big-endian word.
+The instruction hashes a region of memory and pushes the digest.
 
-Only that last step is here, as a function of the bytes read.
+Only the word that it pushes is here, as a function of the bytes read.
 -/
 
 @[expose] public section

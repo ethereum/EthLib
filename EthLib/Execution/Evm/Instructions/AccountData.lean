@@ -10,16 +10,6 @@ The instructions that read the balance, the code or the code hash of an account.
 
 An address with no account reads as the empty account: balance 0 and no code.
 
-From Berlin, the first access to an address in a transaction is cold and costs more.
-
-That access adds the address to the accessed addresses, so later accesses are warm.
-
-Before Berlin, the price does not depend on earlier accesses.
-
-From Pectra, the code of a delegated account is its delegation indicator, and these read it.
-
-Each records its read of the account once it has paid, for the block access list of EIP-7928.
-
 Appendix H.2 of the Yellow Paper, Shanghai version, defines these instructions.
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
@@ -52,9 +42,13 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 From Berlin, the access is cold when the transaction has not yet accessed the address.
 
-It then adds the address to the accessed addresses.
+A cold access costs more.
 
-Before Berlin, no access is cold, and the frame stays as it is. -/
+It then adds the address to the accessed addresses, so later accesses are warm.
+
+Before Berlin, no access is cold, and the frame stays as it is.
+
+So before Berlin, the price does not depend on earlier accesses. -/
 def accessAddress (evm : Evm fork Meter) (address : Address) : Bool × Evm fork Meter :=
   if fork ≥ .berlin then
     let accessed := evm.substate.accessedAddresses
@@ -64,6 +58,9 @@ def accessAddress (evm : Evm fork Meter) (address : Address) : Bool × Evm fork 
 
 /-- The code of the account at an address, or empty for an address with no account. -/
 def accountCode (evm : Evm fork Meter) (address : Address) : Except EvmError ByteArray :=
+  -- From Pectra, the code of a delegated account is its delegation indicator, by EIP-7702.
+  --
+  -- The instructions read that indicator as the code.
   (evm.state.getCode (evm.state.getAccount address).codeHash).mapError .state
 
 /-- BALANCE: replace an address with the balance of its account. -/
@@ -77,7 +74,7 @@ def balanceStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let (cold, evm) := accessAddress evm address
   -- From Berlin, the price of a cold or warm access; before, a price set by the fork alone.
   let evm ← chargeGas evm (balanceCost fork cold)
-  -- The read of the account, which EIP-7928 records.
+  -- The read of the account, which the block access list of EIP-7928 records once paid.
   let evm := recordAccountRead evm address
   -- `mu'_s[0] = sigma[mu_s[0] mod 2^160]_b`, or 0 for an address with no account.
   let evm ← pushWord evm (evm.state.getAccount address).balance
@@ -94,7 +91,7 @@ def extcodesizeStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) :=
   let (cold, evm) := accessAddress evm address
   -- The price of the access, and from Glamsterdam a warm access more for the code, by EIP-8038.
   let evm ← chargeGas evm (externalBaseCost fork cold)
-  -- The read of the account, which EIP-7928 records.
+  -- The read of the account, which the block access list of EIP-7928 records once paid.
   let evm := recordAccountRead evm address
   -- `mu'_s[0] = ||b||`, the size of the code `b` of the account.
   let code ← accountCode evm address
@@ -118,7 +115,7 @@ def extcodecopyStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) :=
   -- The price of the access, plus `G_copy` per word copied, plus the growth of memory.
   let cost := externalBaseCost fork cold + OPCODE_COPY_PER_WORD * wordCount size.toNat
   let evm ← chargeGasAndMemory evm cost [(start, size)]
-  -- The read of the account, which EIP-7928 records.
+  -- The read of the account, which the block access list of EIP-7928 records once paid.
   let evm := recordAccountRead evm address
   -- `mu'_m[mu_s[1] ... mu_s[1] + mu_s[3] - 1] = b[mu_s[2] ... mu_s[2] + mu_s[3] - 1]`.
   --
@@ -144,7 +141,7 @@ def extcodehashStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) :=
   let (cold, evm) := accessAddress evm address
   -- From Berlin, the price of a cold or warm access; before, a price set by the fork alone.
   let evm ← chargeGas evm (extcodehashCost fork cold)
-  -- The read of the account, which EIP-7928 records.
+  -- The read of the account, which the block access list of EIP-7928 records once paid.
   let evm := recordAccountRead evm address
   -- EIP-1052: the Keccak-256 hash of the code of the account.
   --

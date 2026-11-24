@@ -8,33 +8,7 @@ public import EthLib.Execution.Evm.Instructions.SelfDestruct
 
 The execution of one frame: a step for each opcode, and a loop of steps until the frame stops.
 
-An opcode with no instruction aborts the whole run, since nothing here gives its result.
-
-A step gives the next frame, or a message to run first, for a call or a creation.
-
-Such a step also says how the frame goes on from the frame that ends the message.
-
-The loop runs that message through a parameter, so the recursion of messages is not here.
-
-The loop runs in any monad, and it lets an observer see each step.
-
-An exceptional halt consumes all the gas of the frame and drops its output.
-
-REVERT keeps both.
-
-A state that lacks data, such as the code of a code hash, also aborts the whole run.
-
-So does a number of the environment that no word holds, which an instruction would push.
-
-Each step lowers the measure of the frame, so the loop ends with no bound on its number of steps.
-
-A message gets less gas than its caller had, so the recursion of messages can end too.
-
-The instructions are those of the forks up to Glamsterdam, and Hegotá is not specified.
-
 The Yellow Paper, Shanghai version, defines the loop in its section Execution Model.
-
-Its section Message Call says that an exceptional halt leaves no gas.
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
@@ -51,7 +25,9 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- The instruction of an opcode at fork `fork` that gives the next frame, or none.
 
-The calls and the creations may give a message to run first, so they are not here. -/
+The calls and the creations may give a message to run first, so they are not here.
+
+The instructions are those of the forks up to Glamsterdam, and Hegotá is not specified. -/
 def instruction (fork : Fork) (op : Op) :
     Option (Evm fork Meter → Except EvmError (Evm fork Meter)) :=
   stackOnlyStep fork op <|> controlFlowStep op <|> memoryDataStep op <|> returnOpStep fork op <|>
@@ -76,9 +52,13 @@ def step (fork : Fork) (evm : Evm fork Meter) : Except EvmError (StepResult fork
       | some run => .next <$> run evm
       | none =>
         -- A call or a creation runs a message first, so its step gives that message.
+        --
+        -- Such a step also says how the frame goes on from the frame that ends the message.
         match messageInstruction fork op with
         | some run => run evm
-        -- An opcode with no instruction yet aborts the run; the source has no such case.
+        -- An opcode with no instruction yet aborts the whole run.
+        --
+        -- Nothing here gives its result, and the source has no such case.
         | none => throw (.unspecifiedOpcode byte)
   -- `w = STOP` otherwise.
   else .next <$> stopStep evm
@@ -146,7 +126,7 @@ theorem gasHeld_le_of_measure_lt {a b : Evm fork Meter} (h : measure b < measure
   have := Bool.toNat_le a.running
   omega
 
-/-- An exceptional halt leaves no gas. -/
+/-- An exceptional halt leaves no gas, as the section Message Call of the Yellow Paper says. -/
 theorem gasHeld_exceptionalHalt [LawfulGasMeter Meter] (evm : Evm fork Meter) (e : EvmError) :
     GasMeter.gasHeld (exceptionalHalt evm e).gas = 0 :=
   LawfulGasMeter.gasHeld_exhaust _
@@ -183,10 +163,6 @@ The observer sees each step, before the loop acts on it.
 
 A message gets the gas below `bound`, which is at least the gas of the frame.
 
-A runner of messages runs each message that a step asks for.
-
-A step that fails halts the frame exceptionally, unless its error aborts the whole run.
-
 The frame that ends the run has at most the gas `bound`. -/
 @[specialize]
 def runFrameWith [LawfulGasMeter Meter] {M : Type → Type} [Monad M] [MonadExceptOf EvmError M]
@@ -202,14 +178,27 @@ def runFrameWith [LawfulGasMeter Meter] {M : Type → Type} [Monad M] [MonadExce
   if running : evm.running then
     match result : step evm with
     -- `Z` holds, or a check that a later EIP adds fails: no output, and §8 gives `g' = 0`.
+    --
+    -- A step that fails halts the frame exceptionally.
+    --
+    -- An exceptional halt consumes all the gas of the frame and drops its output.
     | .error e => do
       observe evm (.error e)
-      -- An error that aborts the whole run is no halt of the frame; the source has no such case.
+      -- An error that aborts the whole run is no halt of the frame.
+      --
+      -- The source has no such case.
+      --
+      -- An opcode with no instruction aborts the run.
+      --
+      -- So does a state that lacks data, such as the code of a code hash.
+      --
+      -- So does a number from the environment that no word holds, which an instruction would push.
       if e.aborts then throw e
       else pure ⟨exceptionalHalt evm e, by rw [gasHeld_exceptionalHalt]; exact Nat.zero_le _⟩
     -- `X(O(sigma, mu, A, I))`: the next cycle, from the frame after the step.
     | .ok (.next after) => do
       observe evm (.ok (.next after))
+      -- Each step lowers the measure of the frame.
       have lower : measure after < measure evm := decreases running result
       runFrameWith observe step decreases bound runChild after
         (Nat.le_trans (gasHeld_le_of_measure_lt lower) within)
@@ -217,6 +206,11 @@ def runFrameWith [LawfulGasMeter Meter] {M : Type → Type} [Monad M] [MonadExce
     | .ok (.child caller message resume) => do
       observe evm (.ok (.child caller message resume))
       have lower := decreases running result
+      -- The runner of messages, a parameter, runs the message that the step asks for.
+      --
+      -- So the recursion of messages is not here.
+      --
+      -- A message gets less gas than its caller had, so the recursion of messages can end too.
       let ⟨child, used⟩ ← runChild caller message (Nat.lt_of_lt_of_le lower.1 within)
       match resumed : resume child with
       -- The rest of the step can still halt the frame, or abort the run, as above.
@@ -228,7 +222,10 @@ def runFrameWith [LawfulGasMeter Meter] {M : Type → Type} [Monad M] [MonadExce
         runFrameWith observe step decreases bound runChild after
           (Nat.le_trans (gasHeld_le_of_measure_lt lower) within)
   -- `H(mu, I) ≠ ∅`: the frame halted, normally or by REVERT, and is the result.
+  --
+  -- REVERT keeps both the gas left and the output.
   else pure ⟨evm, within⟩
+-- Each step lowers the measure, so the loop ends with no bound on its number of steps.
 termination_by measure evm
 
 /-- Run the frame `evm` until it stops, with the steps of `step`, which lower its measure.

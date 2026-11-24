@@ -17,10 +17,6 @@ Each one pops its operands, pays a price, pushes one word and moves to the next 
 
 The word it pushes is the pure function of the instruction.
 
-KECCAK256 also reads memory, and it pays for each word it hashes and for the growth of memory.
-
-DUPN, SWAPN and EXCHANGE, from Glamsterdam, read an immediate byte, so they move two bytes on.
-
 Appendix H.2 of the Yellow Paper, Shanghai version, defines these instructions up to Shanghai.
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
@@ -117,6 +113,8 @@ def keccak256Cost (size : U256) : Nat :=
 def keccak256Step (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let (start, evm) ← popWord evm
   let (size, evm) ← popWord evm
+  -- KECCAK256 also reads memory, and it pays for each word it hashes and for the growth of memory.
+  --
   -- The price, plus `C_mem(mu'_i) - C_mem(mu_i)` with `mu'_i = M(mu_i, mu_s[0], mu_s[1])`.
   let evm ← chargeGasAndMemory evm (keccak256Cost size) [(start, size)]
   -- `mu_m[mu_s[0] ... (mu_s[0] + mu_s[1] - 1)]`.
@@ -162,6 +160,7 @@ def stackOnlyStep (fork : Fork) : Op → Option (Evm fork Meter → Except EvmEr
   | .push n => some (pushN n)
   | .dup n => some (dupN n)
   | .swap n => some (swapN n)
+  -- DUPN, SWAPN and EXCHANGE, from Glamsterdam, read an immediate byte, so they move two bytes on.
   | .dupn => if .glamsterdam ≤ fork then some dupnStep else none
   | .swapn => if .glamsterdam ≤ fork then some swapnStep else none
   | .exchange => if .glamsterdam ≤ fork then some exchangeStep else none
