@@ -803,17 +803,17 @@ theorem getExpectedWithdrawals_parts {capella : .shapella ≤ fork}
       expected.processedBuilderWithdrawalsCount.toNat = count1 ∧
       (∀ gloas : .glamsterdam ≤ fork, getBuilderWithdrawals state gloas
         (state.nextWithdrawalIndex capella) #[] = .ok (builders, index1, count1)) ∧
-      -- Before its fork, Gloas, this part is empty and keeps the withdrawal index.
+      -- Before Gloas this part is empty and keeps the withdrawal index.
       (fork < .glamsterdam → builders = #[] ∧ index1 = state.nextWithdrawalIndex capella) ∧
       -- From Electra, the queued partial withdrawals follow.
       (∀ electra : .pectra ≤ fork, getPendingPartialWithdrawals state electra index1 builders =
         .ok (partials, index2, count2)) ∧
-      -- Before its fork, Electra, this part is empty and keeps the withdrawal index.
+      -- Before Electra this part is empty and keeps the withdrawal index.
       (fork < .pectra → partials = #[] ∧ index2 = index1) ∧
       -- From Gloas, the sweep of builders follows.
       (∀ gloas : .glamsterdam ≤ fork, getBuildersSweepWithdrawals state gloas index2
         (builders ++ partials) = .ok (buildersSweep, index3, count3)) ∧
-      -- Before its fork, Gloas, this part is empty and keeps the withdrawal index.
+      -- Before Gloas this part is empty and keeps the withdrawal index.
       (fork < .glamsterdam → buildersSweep = #[] ∧ index3 = index2) ∧
       -- The sweep of validators comes last.
       getValidatorsSweepWithdrawals state capella index3 (builders ++ partials ++ buildersSweep) =

@@ -242,9 +242,11 @@ theorem getFlagIndexDeltas_getD {altair : .altair ≤ fork}
           (j.toUInt64 ∈ participating → ∃ leak, isInInactivityLeak state = .ok leak ∧
             -- In a leak it earns nothing.
             --
-            -- Otherwise it earns base reward times flag weight times participating increments.
+            -- Otherwise multiply its base reward by the weight of the flag.
             --
-            -- That product is divided by the active increments times the weight denominator.
+            -- Multiply that product by the participating increments.
+            --
+            -- It earns that product divided by the active increments times the weight denominator.
             --
             -- The quotient rounds down.
             (rewards.getD j 0).toNat = (if leak then 0 else
@@ -632,9 +634,9 @@ theorem getInactivityPenaltyDeltas_getD_of_lt_altair {config : Config} (before :
             --
             -- If it is not among the unslashed signers of the target, it also pays more.
             --
-            -- Its effective balance times the finality delay gives a product.
+            -- Divide its effective balance times the finality delay by the penalty quotient.
             --
-            -- That amount is that product over the penalty quotient.
+            -- The result is that extra amount.
             (penalties.getD j 0).toNat = BASE_REWARDS_PER_EPOCH.toNat * base.toNat -
               base.toNat / preset.PROPOSER_REWARD_QUOTIENT.toNat +
               (if j.toUInt64 ∈ attesters then 0 else
@@ -1171,7 +1173,9 @@ theorem toNat_getBaseReward_le (altair : .altair ≤ fork) {base : Gwei}
 
 They are its entries in the deltas of the source, target and head flags and of inactivity.
 
-Either they are zero, or their sum is at most a bound from its base reward and inactivity score. -/
+Either they are all zero, or their sum is at most a bound.
+
+That bound comes from its base reward and its inactivity score. -/
 theorem penaltyEntries_le (altair : .altair ≤ fork) (within : state.RegistryWithinLimit)
     (active : getTotalActiveBalance state = .ok total)
     {source target head inactivity : Array Gwei × Array Gwei}

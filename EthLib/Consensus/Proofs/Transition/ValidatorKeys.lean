@@ -45,7 +45,9 @@ The check reads only the keys of the signers, the fork versions and the genesis 
 
 So it is enough that both registries are prefixes of the keys of a common state.
 
-The signers must be in the other registry, whose state agrees on those versions and that root. -/
+The signers must be in the other registry.
+
+The two states must agree on the fork versions and the genesis validators root. -/
 theorem isValidIndexedAttestation_of_keys {post : Fork} {one other : BeaconState preset fork}
     {common : BeaconState preset post}
     {indexed : IndexedAttestation preset fork}

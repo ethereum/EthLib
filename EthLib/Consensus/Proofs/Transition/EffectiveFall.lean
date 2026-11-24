@@ -2085,7 +2085,9 @@ theorem effectiveFall_le
     let fall (i : ℕ) :=
       -- From the call's state to that pass, the balance falls by at most the sum of three amounts.
       --
-      -- They are the sync penalties, the due queued partial withdrawals and the pass's penalties.
+      -- The first two are the sync penalties and the queued partial withdrawals that are due.
+      --
+      -- The third is the penalties of that pass.
       --
       -- The withdrawal sweep pays only the excess above the largest effective balance.
       --

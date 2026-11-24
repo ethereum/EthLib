@@ -1091,9 +1091,9 @@ theorem effectiveRise_le
     --
     -- Each recipient adds at most the upward band.
     let transfers := depositCredit + dueStake + proposerCredit + whistleblower
-    -- From Electra a block deposit only queues, so it does at `P`, which is Fulu or later.
+    -- From Electra a block deposit only queues.
     --
-    -- So no block deposit credits a balance inside the epoch.
+    -- The fork at `P` is Fulu or later, so no block deposit credits a balance inside the epoch.
     let depositGain := if .pectra ≤ P.fork then 0 else depositRecipients * capMax
     let slashBack (i : ℕ) :=
       if slashed i then effective i / p.MIN_SLASHING_PENALTY_QUOTIENT.toNat else 0

@@ -7,7 +7,9 @@ public import EthLib.Consensus.Transition.ParentPayload
 /-!
 # Proofs: the parent payload
 
-What the step on the payload of the parent checks and changes, for an empty and a full parent.
+These proofs state what the step on the payload of the parent checks and changes.
+
+They cover an empty parent and a full parent.
 -/
 
 @[expose] public section

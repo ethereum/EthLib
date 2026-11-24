@@ -10,7 +10,9 @@ public import EthLib.Consensus.Proofs.Transition.TargetSlots
 
 The balance of each builder covers its debt, from the upgrade to Gloas on.
 
-A block keeps it as a whole, and so do the slots and the fork upgrades.
+A block keeps it as a whole.
+
+The slots and the fork upgrades keep it too.
 
 [EIP-7732] adds the builders, their bids, their payments and their withdrawals.
 

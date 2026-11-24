@@ -658,11 +658,12 @@ private theorem Run.chainSteps_of_mem {first last : ForkedBeaconState preset}
 
 /-- Along a run, one of two cases holds.
 
-A state between the first and the last hashes to the zero root.
+- A state between the first and the last hashes to the zero root.
+- The finalized block is at or before the current justified one.
 
-Or the finalized block is at or before the current justified one.
+The first state needs the invariant of valid blocks.
 
-The first state needs the invariant of valid blocks, and the buffer must cover two epochs. -/
+The buffer of roots must cover two epochs. -/
 theorem Run.zeroPreimage_or_finalized_le_currentJustified {β : Type*} [Preorder β]
     {block : Root → β}
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)

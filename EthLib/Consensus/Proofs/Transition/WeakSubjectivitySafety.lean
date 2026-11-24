@@ -9,9 +9,19 @@ public import EthLib.Consensus.Proofs.WeakSubjectivity
 
 A node that starts from a weak subjectivity checkpoint trusts the active validators of its state.
 
-They form `V₀`, weighed by their effective balances, the stake of the Casper FFG model.
+Their effective balances are the stake of the Casper FFG model.
 
-Under a bounded change, slashable validators hold at least `1/3 - SAFETY_DECAY/100` of `V₀`.
+The trusted set is `V₀`.
+
+Take two conflicting finalized checkpoints, and the justified sets between their epochs.
+
+Measure the change of a set since `V₀` as the stake that joined plus twice the stake that left.
+
+Assume each change is at most three times the churn times the epochs of churn of the period.
+
+The epochs of churn are those of the period, less the delay before a validator can withdraw.
+
+Then validators with at least `1/3 - SAFETY_DECAY/100` of the stake of `V₀` are slashable.
 
 No theorem yet derives that bound on the change from the state transition, so it is an assumption.
 
@@ -31,14 +41,19 @@ open scoped Classical in
 
 The trusted set is the active validators of the state at the checkpoint, weighed by its balances.
 
-Each justified set between conflicting finalized ones must change by at most `3 c` per churn epoch.
+Take two finalized checkpoints whose blocks conflict.
 
-Two of those have slashable validators with at least `1/3 - SAFETY_DECAY/100` of the trusted stake.
--/
+The set of each justified checkpoint between them must change by at most `3 c` per epoch of churn.
+
+Then two justified checkpoints in that range have slashable validators of both sets.
+
+They hold at least `1/3 - SAFETY_DECAY/100` of the trusted stake. -/
 theorem accountable_safety_of_weakSubjectivityPeriod {config : Config}
     {state : BeaconState preset fork} (electra : .pectra ≤ fork) {period churn : UInt64}
     (periodOk : computeWeakSubjectivityPeriod config state = .ok period)
-    -- The churn `c` is the one the period uses: weighted from Gloas, the balance churn before.
+    -- The churn `c` is the one the period uses.
+    --
+    -- It is the weighted churn from Gloas, and the balance churn before.
     --
     -- From Gloas, [EIP-8061] weighs exits two thirds, activations one third and consolidations one.
     --
@@ -63,28 +78,27 @@ theorem accountable_safety_of_weakSubjectivityPeriod {config : Config}
     --
     -- Its set changes since the trusted set by at most three times the churn per epoch of churn.
     --
-    -- From Gloas, rounding can add 4 Gwei to that when the churn of consolidations is zero.
-    --
-    -- No epoch of the model is tied to the checkpoint's epoch.
-    --
-    -- The assumed change carries the window.
-    --
     -- The change counts the stake that joined plus twice the stake that left.
     --
-    -- The epochs of churn are the period's epochs less the delay before a validator can withdraw.
+    -- The epochs of churn are those of the period, less the delay before a validator can withdraw.
     --
-    -- Why `3 c` for each epoch, from Electra, with [EIP-7251] and its balance churn `c`.
+    -- From Electra, [EIP-7251] sets the balance churn `c`.
+    --
+    -- Each epoch then changes a set by at most `3 c`.
     --
     -- - Deposits and exits each take at most the churn `a ≤ c` of activations and exits.
-    -- - Consolidations take the rest of `c`.
-    --   Their sources leave the set.
+    -- - Consolidations take the rest of `c`, and their sources leave the set.
     -- - So an epoch adds at most `a` and removes at most `c`, a change of at most `a + 2 c ≤ 3 c`.
+    --
+    -- From Gloas, rounding can add 4 Gwei to that when the churn of consolidations is zero.
     --
     -- The queues carry unused churn to later epochs.
     --
     -- So the bound can hold over a window, not each epoch.
     --
-    -- No theorem yet derives that bound from the state transition, so it is an assumption here.
+    -- No epoch of the model is tied to the epoch of the checkpoint.
+    --
+    -- The assumed change carries the window.
     --
     -- The rule spends the delay on keeping exits slashable.
     --
@@ -144,7 +158,17 @@ The trusted set is the active validators of the state at the checkpoint, weighed
 
 It assumes large balances, and top-ups that fit within the period.
 
-Otherwise the theorem gives nothing. -/
+Without them, the theorem gives nothing.
+
+Take two finalized checkpoints whose blocks conflict, and each justified checkpoint between them.
+
+Since the trusted set, at most the churn of validators per epoch of churn joins its set.
+
+At most as many leave it.
+
+Then two justified checkpoints in that range have slashable validators of both sets.
+
+They hold at least `1/3 - SAFETY_DECAY/100` of the trusted stake. -/
 theorem accountable_safety_of_weakSubjectivityPeriod_of_lt_electra {config : Config}
     {state : BeaconState preset fork} (before : fork < .pectra) {period total : UInt64} (periodOk : computeWeakSubjectivityPeriod config state = .ok period)
     (totalOk : getTotalActiveBalance state = .ok total)
@@ -164,7 +188,7 @@ theorem accountable_safety_of_weakSubjectivityPeriod_of_lt_electra {config : Con
     (hT : T = preset.MAX_EFFECTIVE_BALANCE.toNat / ETH_TO_GWEI.toNat)
     -- Assume large balances, `230 T < 320 t`, so that the rule weighs churn against top-ups.
     --
-    -- With large balances, the rule's epochs for churn always fit the decayed margin.
+    -- With large balances, the epochs that the rule gives for churn always fit the decayed margin.
     (largeBalances : 230 * T < 320 * t)
     -- The rule takes the churn of `delta` validators in an epoch, and `Delta` top-ups in an epoch.
     --

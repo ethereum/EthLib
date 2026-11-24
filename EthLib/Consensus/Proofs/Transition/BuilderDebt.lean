@@ -9,9 +9,18 @@ public import EthLib.Consensus.Transition.Payload
 /-!
 # Proofs: the debt of each builder stays within its balance
 
-The invariant that, from Gloas, the balance of each builder covers its debt.
+From Gloas a builder owes its queued withdrawals and the payments of its bids.
 
-Most steps keep the builder fields: the builders, their payments, withdrawals and latest bid.
+The invariant here says that the balance of each builder always covers that debt.
+
+The invariant has four parts.
+
+* For each builder, the debt plus the reserved value is at most the balance.
+* In the window, the parent payment has no weight, and it pays the latest bid or has no amount.
+* A builder that has started to exit owes nothing and has no reserved value.
+* Each position of the window after that of the parent holds the payment of no bid.
+
+Most steps keep the builders, their payments, their withdrawals and the latest bid.
 
 Such a step keeps the invariant if it also keeps the slot and the slot of the latest block.
 
@@ -126,8 +135,6 @@ Inside a block, the settled parent payment and the reserve both count the same v
 structure BuilderDebtCovered (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
     Prop where
   -- For each builder, the debt plus the reserved value is at most the balance.
-  --
-  -- From Gloas a builder owes its queued withdrawals and the payments of its bids.
   --
   -- A bid passes only if the balance of its builder covers the bid, that debt and a minimum.
   --

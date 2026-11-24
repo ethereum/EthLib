@@ -7,11 +7,17 @@ public import EthLib.Consensus.Transition.BuilderRequests
 /-!
 # Proofs: the deposits and exits of builders
 
-What a builder deposit and a builder exit request do to the registry of builders.
+These proofs state what a builder deposit and a builder exit request do to the registry of builders.
 
 A deposit adds its amount to the sum of the builder balances, or changes nothing.
 
+It adds the amount only when its credentials carry the builder prefix.
+
+It then adds it when its key is known, or when its key is new and its signature is valid.
+
 An exit request either changes nothing, or starts the exit of one builder.
+
+It starts the exit only when that builder is active, the address is its own and it owes nothing.
 -/
 
 @[expose] public section

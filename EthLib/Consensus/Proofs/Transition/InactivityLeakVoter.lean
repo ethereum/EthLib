@@ -351,7 +351,11 @@ theorem voterEpoch_processEpoch (altair : .altair ≤ fork)
     unfold processEpoch at computed
     simpa only [altair, ↓reduceDIte] using computed
   rw [processEpochAltair_eq_run] at altairRun
-  -- From Altair, an epoch lowers a balance in three ways: rewards, slashings and consolidations.
+  -- From Altair, an epoch lowers a balance in three ways.
+  --
+  -- - The rewards and penalties charge a validator that misses the timely source or target flag.
+  -- - The slashings charge a slashed validator.
+  -- - From Electra, a pending consolidation moves the balance of its source.
   obtain ⟨justified, scored, rewarded, registered, slashed, reset, deposited, consolidated, settled,
     updated, justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk, depositedOk,
     consolidatedOk, settledOk, updatedOk, trace⟩ :=
