@@ -16,23 +16,11 @@ import EthLib.Consensus.Proofs.Transition.EpochPending
 /-!
 # Effective-balance changes from the actual balance path
 
-A block operation keeps the effective balance of every validator that existed before it.
-
-A whole block keeps them, at every fork.
-
-Registry updates keep them as well.
-
-Only rewards, slashings and the two pending stages can change the balances.
+A block and each of its operations keep the effective balance of every existing validator.
 
 An effective-balance update never raises the larger of the effective and the actual balance.
 
 Loss uses initial slack, balance debits and rounding; gain uses initial excess and credits.
-
-An epoch's effective-balance update reads its intermediate balance, before later upgrades.
-
-For this reason a slot's balance path includes that intermediate state, not just its endpoints.
-
-A validator admitted along a run starts with an effective balance funded by its own balance.
 -/
 
 @[expose] public section
@@ -105,6 +93,9 @@ def _root_.EthLib.Consensus.Step.balancePath {x y : ForkedBeaconState preset}
   | .block _ _ _ _ => [x, y]
   | .slot _ => match (advanceSlot config checks x.state).toOption with
     | none => [x, y]
+    -- The effective-balance update of an epoch reads its intermediate balance, before upgrades.
+    --
+    -- So the path of a slot holds that intermediate state, not just its endpoints.
     | some s => [x, ⟨x.fork, s⟩, y]
 
 /-- The balance path of a run joins the paths of its steps. -/
@@ -872,7 +863,9 @@ theorem effectiveKept_epochBeforePayments
 
 /-- An epoch stage keeps the balances, unless it is one of six stages.
 
-Those are rewards, registry updates, slashings, the two pending stages and effective balances. -/
+Those are rewards, registry updates, slashings, the two pending stages and effective balances.
+
+Of those, only rewards, slashings and the two pending stages can change the balances. -/
 theorem EpochStage.Edge.balances_eq {f : Fork} {stage : EpochStage}
     {s t : BeaconState preset f} (edge : EpochStage.Edge config checks stage s t)
     (other : stage ≠ .rewards ∧ stage ≠ .registry ∧ stage ≠ .slashings ∧
@@ -1421,21 +1414,20 @@ private theorem balanceDrift_le_add_pathDebits (i : Nat) :
 
 /-- An effective balance stays at or above a reference while the balance does, before Gloas.
 
-The reference is a whole number of increments, and at most the effective balance at `x`.
-
-It is also at most the cap of the validator at `x`, which has an activation epoch.
-
-The balance must be at least the reference at every state of the balance path of the run.
-
-That path holds every state where an update of the effective balances reads the balance. -/
+The balance path holds every state where an update of the effective balances reads the balance. -/
 theorem _root_.EthLib.Consensus.Run.effectiveAt_ge_of_balanceFloor
     {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (caps : CapOrder preset) (early : y.fork < .glamsterdam)
     (i : Nat) (v : Validator) (found : x.state.validators.data[i]? = some v)
+    -- The validator at `x` has an activation epoch.
     (activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH) (reference : Gwei)
+    -- The reference is a whole number of increments.
     (aligned : reference.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
+    -- The balance is at least the reference at every state of the balance path of the run.
     (floor : ∀ p ∈ tail.balancePath, reference.toNat ≤ actualBalanceAt p i)
+    -- The reference is at most the effective balance at `x`.
     (previous : reference.toNat ≤ effectiveAt x i)
+    -- The reference is also at most the cap of the validator at `x`.
     (cap : reference ≤ withdrawalMaxEffectiveBalance preset x.fork v) :
     reference.toNat ≤ effectiveAt y i := by
   induction tail with
@@ -2200,6 +2192,7 @@ theorem joining_growth_from_admission {g x y : ForkedBeaconState preset}
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (i : Nat) (newKey : x.state.validators.data.size ≤ i) :
     effectiveAt y i ≤ pathCredits i tail.balancePath :=
+  -- A validator admitted along a run starts with an effective balance funded by its own balance.
   balanceDrift_join_of_sources shared tail genesis early
     (fun run _ => run.pendingConsolidation_sources genesis delay) i newKey
 
@@ -2228,19 +2221,17 @@ theorem getBeaconProposerIndex_of_kept {r w : BeaconState preset fork}
 
 /-- The proposer read after the first steps of a slashing equals that of an earlier state.
 
-Those steps are the exit, the slashed mark, the slashings write and the debit.
-
-The two reads are equal whether they succeed or fail.
-
-The state before the slashing keeps the slot, the payload inputs and activity of the earlier state.
-
-It also keeps its effective balances. -/
+The two reads are equal whether they succeed or fail. -/
 theorem getBeaconProposerIndex_slashDebit
     {r u exited marked lowered : BeaconState preset fork} {index : ValidatorIndex}
     {current : Validator} {withdrawableEpoch : Epoch}
     {slashings : Serialization.Ssz.RootedVector Gwei preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat}
     {penalty : Gwei}
+    -- The state before the slashing keeps the slot, payload inputs and activity of the earlier one.
+    --
+    -- It also keeps the effective balances of the earlier state.
     (keeps : StepKeeps r u) (inputs : PayloadInputs r u) (effective : EffectiveKept r u)
+    -- The first steps of the slashing are its exit, slashed mark, slashings write and debit.
     (exitOk : initiateValidatorExit config u index = .ok exited)
     (currentOk : getValidator exited index = .ok current)
     (markedOk : exited.setValidator index { current with slashed := true, withdrawableEpoch } =

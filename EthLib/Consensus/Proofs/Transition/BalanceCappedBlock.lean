@@ -16,29 +16,7 @@ import EthLib.Consensus.Proofs.Transition.Withdrawals
 
 The capped balance of a validator is the lesser of its balance and its largest effective balance.
 
-A block lowers a balance in a few ways.
-
-A proposer or attester slashing charges the validator it slashes.
-
-From Altair the sync aggregate charges each member of the committee whose bit is not set.
-
-From Capella a withdrawal lowers the balance that it names.
-
-From Electra a withdrawal request queues a partial withdrawal.
-
-From Electra a request to switch to compounding moves the balance above the activation balance.
-
-Every other step of a block raises a balance or keeps it.
-
-The withdrawal sweep takes only the part of a balance above the largest effective balance.
-
-So it keeps the capped balance, unless the validator may withdraw all of it.
-
-A queued partial withdrawal can take more.
-
-The conditions exclude it and the other ways, each an act of the validator or a fault of it.
-
-A slot that ends no epoch keeps every balance and the registry.
+The conditions exclude each way a block lowers it, each an act of the validator or a fault of it.
 
 The module follows a validator through any sequence of such slots and blocks.
 -/
@@ -649,6 +627,7 @@ private theorem capped_processBlockExecution {body : BeaconBlockBody preset fork
       {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
       (ok : processWithdrawals state capella payload = .ok t) :
       CappedNotLowered index (withdrawalMaxEffectiveBalance preset fork validator) state t :=
+    -- The sweep takes only the part of a balance above the largest effective balance.
     processWithdrawals_capped ok found unwithdrawable unqueued
   have payload {s t : BeaconState preset fork}
       {execution : .bellatrix ≤ fork ∧ fork < .glamsterdam}
@@ -796,39 +775,46 @@ private theorem rise_processSyncAggregate {altair : .altair ≤ fork}
   · obtain ⟨_, rfl⟩ := processSyncAggregate_eq computed
     exact ⟨old, atOld, rfl, rfl⟩
 
-/-- A block keeps the capped balance of a validator that does not act against it.
+/-- A successful block keeps the capped balance of a validator that does not act against it.
 
-This holds when the block succeeds, at every fork.
+That holds at every fork.
 
 The cap is the largest effective balance of the validator before the block.
-
-No proposer or attester slashing of the block names the validator.
-
-From Altair, each member of the sync committee with its key has its bit set.
-
-From Electra, no withdrawal or consolidation request that the block applies comes from its key.
-
-The validator may not yet withdraw in the epoch of the state.
-
-From Electra, no queued partial withdrawal names it.
 
 After the block it keeps its key, its effective balance and its largest effective balance. -/
 theorem cappedNotLowered_processBlock {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) {index : Nat}
     {validator : Validator} (found : state.validators.data[index]? = some validator)
+    -- A proposer slashing charges the validator it slashes, so none names it.
     (unproposed : ∀ slashing ∈ block.body.proposerSlashings.data,
       slashing.signedHeader1.message.proposerIndex.toNat ≠ index)
+    -- An attester slashing charges the validators it slashes, so none names it.
     (unattested : ∀ slashing ∈ block.body.attesterSlashings.data,
       ∀ slashed ∈ slashingIndices slashing, slashed.toNat ≠ index)
+    -- From Altair the sync aggregate charges each member of the committee whose bit is not set.
+    --
+    -- So each member of the sync committee with its key has its bit set.
     (signed : ∀ altair : .altair ≤ fork,
       ∀ member ∈ ((state.currentSyncCommittee altair).value.pubkeys.toArray.zip
         (block.body.syncAggregate altair).syncCommitteeBits.bits.toArray).toList,
         member.1 = validator.pubkey → member.2 = true)
+    -- From Electra a withdrawal request queues a partial withdrawal.
+    --
+    -- From Electra a compounding switch request moves the balance above the activation balance.
+    --
+    -- So no withdrawal or consolidation request of the block comes from its key, until Gloas.
     (unrequested : ∀ electra : .pectra ≤ fork ∧ fork < .glamsterdam,
       (block.body.executionRequests electra).NoneFrom validator.pubkey)
+    -- From Gloas the block applies the requests of the parent payload, and none comes from its key.
     (unrequestedParent : ∀ gloas : .glamsterdam ≤ fork,
       (block.body.parentExecutionRequests gloas).NoneFrom validator.pubkey)
+    -- From Capella a withdrawal lowers the balance that it names.
+    --
+    -- The sweep keeps the capped balance, unless the validator may withdraw all of it.
+    --
+    -- So the validator may not yet withdraw in the epoch of the state.
     (unwithdrawable : getCurrentEpoch state < validator.withdrawableEpoch)
+    -- A queued partial withdrawal can take more, so from Electra none names the validator.
     (unqueued : ∀ electra : .pectra ≤ fork,
       ∀ pending ∈ (state.pendingPartialWithdrawals electra).data,
         pending.validatorIndex.toNat ≠ index) :
@@ -897,6 +883,7 @@ theorem cappedNotLowered_processBlock {block : BeaconBlock preset fork}
       exact signed altair
     · cases synced
       exact Rise.refl _ _
+  -- Every other step of a block raises a balance or keeps it.
   have whole : Rise index executed after :=
     (Rise.of_eq late.1 late.2.1 index).trans (operations.trans sync)
   refine ⟨(early.rise.capped _).trans (execution.1.trans (whole.capped _)), ?_⟩
@@ -908,26 +895,18 @@ theorem cappedNotLowered_processBlock {block : BeaconBlock preset fork}
 
 /-- One step between two epoch transitions, under which a validator keeps its capped balance.
 
-The validator is named by its position and by its key, given separately.
-
-A slot step is one slot that does not end an epoch, so it runs no epoch transition.
-
-A block step is a successful block whose slashings name another validator.
-
-From Altair each member of the current sync committee with the key has its bit set.
-
-From Electra no withdrawal or consolidation request that it applies comes from the key.
-
-The validator at the position may not yet withdraw in the epoch of the state before.
-
-From Electra no queued partial withdrawal of that state names the position. -/
+The validator is named by its position and by its key, given separately. -/
 inductive VoterStep (config : Config) (checks : SignatureChecks) (index : Nat)
     (key : Cryptography.Bls.BLSPubkey) :
     BeaconState preset fork → BeaconState preset fork → Prop where
+  -- One slot that does not end an epoch, so it runs no epoch transition.
+  --
+  -- Such a slot keeps every balance and the registry.
   | slot {state after : BeaconState preset fork}
       (ok : advanceSlot config checks state = .ok after)
       (inside : (state.slot + 1) % preset.SLOTS_PER_EPOCH ≠ 0) :
       VoterStep config checks index key state after
+  -- A successful block whose slashings name another validator.
   | block {state after : BeaconState preset fork} (engine : ExecutionEngine preset fork)
       (block : BeaconBlock preset fork)
       (ok : processBlock config checks engine state block = .ok after)
@@ -935,16 +914,21 @@ inductive VoterStep (config : Config) (checks : SignatureChecks) (index : Nat)
         slashing.signedHeader1.message.proposerIndex.toNat ≠ index)
       (unattested : ∀ slashing ∈ block.body.attesterSlashings.data,
         ∀ slashed ∈ slashingIndices slashing, slashed.toNat ≠ index)
+      -- From Altair each member of the current sync committee with the key has its bit set.
       (signed : ∀ altair : .altair ≤ fork,
         ∀ member ∈ ((state.currentSyncCommittee altair).value.pubkeys.toArray.zip
           (block.body.syncAggregate altair).syncCommitteeBits.bits.toArray).toList,
           member.1 = key → member.2 = true)
+      -- From Electra until Gloas, no withdrawal or consolidation request of it comes from the key.
       (unrequested : ∀ electra : .pectra ≤ fork ∧ fork < .glamsterdam,
         (block.body.executionRequests electra).NoneFrom key)
+      -- From Gloas, no request of the parent payload that it applies comes from the key.
       (unrequestedParent : ∀ gloas : .glamsterdam ≤ fork,
         (block.body.parentExecutionRequests gloas).NoneFrom key)
+      -- The validator at the position may not yet withdraw in the epoch of the state before.
       (unwithdrawable : ∀ validator, state.validators.data[index]? = some validator →
         getCurrentEpoch state < validator.withdrawableEpoch)
+      -- From Electra no queued partial withdrawal of that state names the position.
       (unqueued : ∀ electra : .pectra ≤ fork,
         ∀ pending ∈ (state.pendingPartialWithdrawals electra).data,
           pending.validatorIndex.toNat ≠ index) :

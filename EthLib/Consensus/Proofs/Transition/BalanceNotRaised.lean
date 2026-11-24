@@ -9,27 +9,11 @@ public import EthLib.Consensus.Proofs.Transition.Totality.EffectiveBalances
 
 From Altair, the rewards and penalties of an epoch come after justification.
 
-They also come after the update of the inactivity scores.
+From the rewards up to the effective-balance update, only two kinds of step credit a balance.
 
-The steps that follow them run up to the update of the effective balances.
-
-Those steps credit a balance in two ways.
-
-A pending deposit adds to the balance of the validator with its key, from Electra.
-
-A pending consolidation adds to the balance of its target, from Electra.
-
-The registry updates, the slashings, the eth1 vote reset and the builder payments raise none.
-
-So the balance of a validator that no pending deposit or consolidation credits does not rise.
-
-The update of the effective balances reads the balance reached at that point.
-
-The later steps keep the balances and the registry.
+They are the pending deposits and the pending consolidations, which exist from Electra.
 
 The same steps keep the inactivity score of each validator already in the registry.
-
-Only a pending deposit writes a score, and it writes it at the end of the registry.
 
 The trace bounds of an inactivity leak assume these facts; this module proves them per epoch.
 -/
@@ -812,52 +796,47 @@ private theorem scoresKeptOrZero_processPendingDeposits {electra : .pectra ≤ f
   exact each i v found
 
 /-- From Altair, the steps of a successful epoch, and their effect at the position of a validator.
-
-Justification comes first, then the update of the inactivity scores, then the rewards.
-
-Justification keeps the balances and the registry.
-
-Every score after the epoch was there after the update of the scores, or is zero.
-
-Only the pending deposits write a score, and each such score is zero.
-
-At the position of a validator of the registry before the epoch, the rest follows.
-
-Up to the update of the effective balances, the validator keeps its effective balance.
-
-It also keeps its withdrawal credentials up to that update.
-
-That update then runs, and the later steps keep the balances and the registry.
-
-Every step after the rewards keeps the inactivity score at the position.
-
-The balance there does not rise from the rewards up to that update if the validator is uncredited.
-
-Uncredited means that no pending deposit carries its key, and no pending consolidation targets it.
 -/
 private theorem processEpochAltair_walk {altair : .altair ≤ fork}
     (computed : processEpochAltair config checks state altair = .ok after) :
     ∃ justified scored rewarded settled updated,
+      -- Justification comes first.
       processJustificationAndFinalization state = .ok justified ∧
+      -- Justification keeps the balances and the registry.
       justified.balances = state.balances ∧ justified.validators = state.validators ∧
+      -- The update of the inactivity scores comes next.
       processInactivityUpdates config justified altair = .ok scored ∧
+      -- Then come the rewards.
       processRewardsAndPenalties config scored = .ok rewarded ∧
+      -- The update of the effective balances then runs.
       processEffectiveBalanceUpdates settled = .ok updated ∧
+      -- The later steps keep the balances and the registry.
       after.balances = updated.balances ∧ after.validators = updated.validators ∧
+      -- Every score after the epoch was there after the update of the scores, or is zero.
+      --
+      -- Only the pending deposits write a score, and each such score is zero.
       (∀ (i : Nat) (v : UInt64), (after.inactivityScores altair).data[i]? = some v →
         (scored.inactivityScores altair).data[i]? = some v ∨ v = 0) ∧
+      -- At the position of a validator of the registry before the epoch, the rest follows.
       ∀ {index : Nat} {validator : Validator},
         state.validators.data[index]? = some validator →
         ∃ kept,
+          -- Uncredited: no pending deposit has its key, and no pending consolidation targets it.
+          --
+          -- Its balance then does not rise from the rewards up to the effective-balance update.
           ((∀ electra : .pectra ≤ fork, ∀ deposit ∈ (state.pendingDeposits electra).data,
               deposit.pubkey ≠ validator.pubkey) →
             (∀ electra : .pectra ≤ fork,
               ∀ consolidation ∈ (state.pendingConsolidations electra).data,
                 consolidation.targetIndex.toNat ≠ index) →
             BalanceNotRaised index rewarded settled) ∧
+          -- It keeps its effective balance up to the effective-balance update.
+          --
+          -- It also keeps its withdrawal credentials up to the same update.
           settled.validators.data[index]? = some kept ∧
           kept.effectiveBalance = validator.effectiveBalance ∧
           kept.withdrawalCredentials = validator.withdrawalCredentials ∧
+          -- Every step after the rewards keeps the inactivity score at the position.
           ScoreKept index rewarded after := by
   rw [processEpochAltair_eq_run] at computed
   obtain ⟨justified, scored, rewarded, registered, slashed, reset, deposited, consolidated, settled,
@@ -912,6 +891,8 @@ private theorem processEpochAltair_walk {altair : .altair ≤ fork}
     (Lowered.of_kept (kept_processRegistryUpdates (EpochStage.action_cases.mp registeredOk))).trans
       ((lowered_processSlashings (EpochStage.action_cases.mp slashedOk)).trans
         (Lowered.of_kept resetKept))
+  -- From Electra a pending deposit adds to the balance of the validator with its key.
+  --
   -- The deposits carry other keys, and only they write a score, as a zero.
   have depositedStep : (∀ (i : Nat) (v : UInt64), (deposited.inactivityScores altair).data[i]? =
         some v → (reset.inactivityScores altair).data[i]? = some v ∨ v = 0) ∧
@@ -927,6 +908,8 @@ private theorem processEpochAltair_walk {altair : .altair ≤ fork}
         (credited_processPendingDeposits edge atResetEq).mono fun unnamed => unnamed electra⟩
     · subst edge
       exact ⟨fun _ _ found => .inl found, fun index _ _ => Credited.refl index _⟩
+  -- From Electra a pending consolidation adds to the balance of its target.
+  --
   -- The consolidations name other targets.
   have consolidatedStep (index : Nat) : consolidated.validators = deposited.validators ∧
       ((∀ electra : .pectra ≤ fork,
@@ -953,6 +936,7 @@ private theorem processEpochAltair_walk {altair : .altair ≤ fork}
       exact ⟨by rw [frame], by rw [frame], by rw [frame]⟩
     · subst edge
       exact ⟨rfl, rfl, rfl⟩
+  -- The update of the effective balances reads the balance reached at that point.
   have tail := sameBalancesRegistryScores_tail altair trace
   refine ⟨justified, scored, rewarded, settled, updated, justifiedEq, justifiedSame.1,
     justifiedSame.2.1, scoredEq, rewardedEq, updatedEq, tail.1, tail.2.1, ?_, ?_⟩
@@ -1008,19 +992,7 @@ This holds when the epoch succeeds.
 
 Uncredited means that no pending deposit carries its key, and no pending consolidation targets it.
 
-The queues are those of the state before the epoch; there are none before Electra.
-
-Justification comes first, then the update of the inactivity scores, then the rewards.
-
-Justification keeps the balances and the registry.
-
-From the rewards up to the update of the effective balances, the balance does not rise.
-
-At that point the validator keeps its effective balance and its withdrawal credentials.
-
-That update then runs, and the later steps keep the balances and the registry.
-
-Every step after the rewards keeps the inactivity score of the validator. -/
+The queues are those of the state before the epoch; there are none before Electra. -/
 theorem balanceNotRaised_processEpochAltair {altair : .altair ≤ fork}
     (computed : processEpochAltair config checks state altair = .ok after) {index : Nat}
     {validator : Validator} (found : state.validators.data[index]? = some validator)
@@ -1030,16 +1002,25 @@ theorem balanceNotRaised_processEpochAltair {altair : .altair ≤ fork}
       ∀ consolidation ∈ (state.pendingConsolidations electra).data,
         consolidation.targetIndex.toNat ≠ index) :
     ∃ justified scored rewarded settled updated kept,
+      -- Justification comes first.
       processJustificationAndFinalization state = .ok justified ∧
+      -- Justification keeps the balances and the registry.
       justified.balances = state.balances ∧ justified.validators = state.validators ∧
+      -- The update of the inactivity scores comes next.
       processInactivityUpdates config justified altair = .ok scored ∧
+      -- Then come the rewards.
       processRewardsAndPenalties config scored = .ok rewarded ∧
+      -- From the rewards up to the update of the effective balances, the balance does not rise.
       BalanceNotRaised index rewarded settled ∧
+      -- At that point the validator keeps its effective balance and its withdrawal credentials.
       settled.validators.data[index]? = some kept ∧
       kept.effectiveBalance = validator.effectiveBalance ∧
       kept.withdrawalCredentials = validator.withdrawalCredentials ∧
+      -- That update then runs.
       processEffectiveBalanceUpdates settled = .ok updated ∧
+      -- The later steps keep the balances and the registry.
       after.balances = updated.balances ∧ after.validators = updated.validators ∧
+      -- Every step after the rewards keeps the inactivity score of the validator.
       ScoreKept index rewarded after := by
   obtain ⟨justified, scored, rewarded, settled, updated, justifiedOk, balances, validators,
     scoredOk, rewardedOk, updatedOk, afterBalances, afterValidators, -, atIndex⟩ :=
@@ -1067,20 +1048,17 @@ theorem processEpochAltair_credentials {altair : .altair ≤ fork}
 
 This holds when the epoch succeeds, at each position of the registry before the epoch.
 
-It needs no premise on the deposits or the consolidations.
-
-At every position, also past that registry, a later score is the score after the update, or zero.
-
-Only the pending deposits write a score, and each such score is zero.
-
-The update of the scores follows justification, as in the epoch itself. -/
+It needs no premise on the deposits or the consolidations. -/
 theorem scoresKept_processEpochAltair {altair : .altair ≤ fork}
     (computed : processEpochAltair config checks state altair = .ok after) :
     ∃ justified scored, processJustificationAndFinalization state = .ok justified ∧
+      -- The update of the scores follows justification, as in the epoch itself.
       processInactivityUpdates config justified altair = .ok scored ∧
       (∀ index, index < state.validators.data.size → ScoreKept index scored after) ∧
+      -- At every position, also past that registry, a later score is the updated one, or zero.
       ∀ (i : Nat) (v : UInt64), (after.inactivityScores altair).data[i]? = some v →
         (scored.inactivityScores altair).data[i]? = some v ∨ v = 0 := by
+  -- Only the pending deposits write a score, and each such score is zero.
   obtain ⟨justified, scored, rewarded, _, _, justifiedOk, -, -, scoredOk, rewardedOk, -, -, -,
     zero, atIndex⟩ := processEpochAltair_walk computed
   refine ⟨justified, scored, justifiedOk, scoredOk, fun index inside => ?_, zero⟩

@@ -8,13 +8,7 @@ public import EthLib.Consensus.Transition.Block
 
 An attester slashing carries two indexed attestations.
 
-Here each names one validator only, by the same index, so each carries the signature of that key.
-
-A state checks that the two data are slashable votes and that both signatures verify there.
-
-The validator must also be slashable at the epoch of the state.
-
-Each signature verifies in the attester domain that the state reads at the target epoch of its data.
+Here each names one validator only, by the same index.
 
 Then the state accepts the slashing exactly when it can slash the validator.
 
@@ -73,30 +67,30 @@ private theorem isValidIndexedAttestation_single {config : Config} {checks : Sig
 
 /-- An attester slashing of one validator by its two signatures does what slashing it does.
 
-Each attestation names the validator alone, and the two data are a double or surround vote.
-
-Each signature verifies in the attester domain that the state reads at its target epoch.
-
-The validator is slashable at the epoch of the state: not slashed, activated, not yet withdrawable.
-
-From Gloas, the limit of attesters of an indexed attestation is at least one.
-
-Then the state accepts the slashing exactly when it can slash the validator, with the same result.
--/
+The state accepts the slashing exactly when it can slash the validator, with the same result. -/
 theorem processAttesterSlashing_eq_slashValidator_of_single {config : Config}
     {checks : SignatureChecks}
     {state : BeaconState preset fork} {slashing : AttesterSlashing preset fork}
     {index : ValidatorIndex} {validator : Validator}
+    -- The first attestation names the validator alone, so it carries the signature of that key.
     (first : slashing.attestation1.attestingIndices.data.toList = [index])
+    -- The second attestation names the validator alone too.
     (second : slashing.attestation2.attestingIndices.data.toList = [index])
+    -- The two data are a double or surround vote.
     (conflict :
       isSlashableAttestationData slashing.attestation1.data slashing.attestation2.data = true)
     (found : getValidator state index = .ok validator)
+    -- The validator is slashable at the epoch of the state.
+    --
+    -- So it is not slashed, it is activated, and it is not yet withdrawable.
     (slashable : isSlashableValidator validator (getCurrentEpoch state) = true)
+    -- The first signature verifies in the attester domain that the state reads at its target epoch.
     (signedFirst : SignsAttestationAt config checks state validator.pubkey
       slashing.attestation1.data slashing.attestation1.signature)
+    -- The second signature verifies in the same way, at the target epoch of its own data.
     (signedSecond : SignsAttestationAt config checks state validator.pubkey
       slashing.attestation2.data slashing.attestation2.signature)
+    -- From Gloas, the limit of attesters of an indexed attestation is at least one.
     (bounded : .glamsterdam ≤ fork → 1 ≤ maxAttesters preset fork) :
     processAttesterSlashing config checks state slashing =
       liftAccessor (slashValidator config state index) := by

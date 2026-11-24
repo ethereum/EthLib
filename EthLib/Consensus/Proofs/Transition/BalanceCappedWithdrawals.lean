@@ -9,17 +9,7 @@ The capped balance of a validator is the lesser of its balance and its largest e
 
 The sweep of a block pays a validator that may not yet withdraw only the part above that cap.
 
-It reads the balance left after the withdrawals before it, so a second visit takes nothing more.
-
-A queued partial withdrawal can take more, so none may name the validator.
-
-From Gloas the withdrawals of builders lower no balance of a validator.
-
 So the withdrawals of a block keep the capped balance of such a validator.
-
-Before Gloas, the sweep leaves it at least its cap or its balance less the queued payments.
-
-The queue pays a validator at most the amounts of the entries that it reads.
 -/
 
 @[expose] public section
@@ -195,6 +185,9 @@ private theorem getValidatorsSweepWithdrawals_loop_floor {state : BeaconState pr
         subst named
         have above := excess.2
         rw [same rfl] at above ⊢
+        -- The sweep reads the balance left after the withdrawals before it.
+        --
+        -- So a second visit takes nothing more.
         obtain ⟨read, readAt, sum⟩ := getBalanceAfterWithdrawals_ok leftOk
         rw [held, Option.some.injEq] at readAt
         subst readAt
@@ -278,6 +271,7 @@ theorem getExpectedWithdrawals_capped {state : BeaconState preset fork}
     {validator : Validator} (found : state.validators.data[index.toNat]? = some validator)
     {balance : Gwei} (held : state.balances.data[index.toNat]? = some balance)
     (unwithdrawable : getCurrentEpoch state < validator.withdrawableEpoch)
+    -- A queued partial withdrawal can take more than the part above the cap.
     (unqueued : ∀ electra : .pectra ≤ fork,
       ∀ pending ∈ (state.pendingPartialWithdrawals electra).data,
         pending.validatorIndex ≠ index) :

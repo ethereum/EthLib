@@ -47,34 +47,31 @@ namespace BlockLedger
 
 /-! ## The balance ledger of a block -/
 
-/-- How the balances move from one state to another, read at each validator.
-
-A balance rises by at most its participant sync amount and its other credits.
-
-Off the paid and converted validators, a balance falls by at most the sum of two amounts.
-
-These are its participant sync amount and its slashing penalty.
-
-A converted validator falls only to the activation balance, and then rises by its credits.
-
-Off the converted validators, whether the credentials compound stays.
-
-A converted validator did not compound before, and compounds after. -/
+/-- How the balances move from one state to another, read at each validator. -/
 structure Ledger {fork : Fork} (s t : BeaconState preset fork)
     (paid conv : Finset ValidatorIndex) (sync other slash : ValidatorIndex → ℕ) : Prop where
+  -- A balance rises by at most its participant sync amount and its other credits.
   up : ∀ v, actualBalanceAt ⟨fork, t⟩ v.toNat ≤
     actualBalanceAt ⟨fork, s⟩ v.toNat + sync v + other v
+  -- Off the paid and converted validators, a balance falls by at most the sum of two amounts.
+  --
+  -- These are its participant sync amount and its slashing penalty.
   down : ∀ v, v ∉ paid → v ∉ conv →
     actualBalanceAt ⟨fork, s⟩ v.toNat ≤ actualBalanceAt ⟨fork, t⟩ v.toNat + sync v + slash v
+  -- A converted validator rises from the activation balance by its credits.
   converted : ∀ v ∈ conv, actualBalanceAt ⟨fork, t⟩ v.toNat ≤
     preset.MIN_ACTIVATION_BALANCE.toNat + sync v + other v
+  -- A converted validator falls only to the activation balance.
   lowered : ∀ v ∈ conv, v ∉ paid → min (actualBalanceAt ⟨fork, s⟩ v.toNat)
       preset.MIN_ACTIVATION_BALANCE.toNat ≤ actualBalanceAt ⟨fork, t⟩ v.toNat + sync v + slash v
+  -- Off the converted validators, whether the credentials compound stays.
   kept : ∀ (v : ValidatorIndex) validator, v ∉ conv → s.validators.data[v.toNat]? = some validator →
     ∃ later, t.validators.data[v.toNat]? = some later ∧
       hasCompoundingWithdrawalCredential later = hasCompoundingWithdrawalCredential validator
+  -- A converted validator did not compound before.
   fresh : ∀ v ∈ conv, ∀ validator, s.validators.data[v.toNat]? = some validator →
     hasCompoundingWithdrawalCredential validator = false
+  -- A converted validator compounds after.
   switched : ∀ v ∈ conv, ∃ later, t.validators.data[v.toNat]? = some later ∧
     hasCompoundingWithdrawalCredential later = true
 

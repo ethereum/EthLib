@@ -9,34 +9,9 @@ import EthLib.Consensus.Proofs.Participation
 
 From Altair, a block pays its proposer for slashings, attestations and the sync aggregate.
 
-This module covers the attestations and the sync aggregate.
+This module covers the attestations and the sync aggregate, at every fork from Altair.
 
-An attestation pays the proposer of the slot one reward.
-
-That reward sums the weighted base reward of each flag newly set, over the attesters.
-
-The sum is divided by `(64 - 8) * 64 / 8 = 448`, rounding down.
-
-Each sync committee member that signed earns the participant reward, and the proposer a share.
-
-Each member that did not sign pays the participant reward, stopping at zero.
-
-The participant reward is the total base reward of a slot, weighted and split among the members.
-
-The proposer share is the participant reward times 8, over 64 - 8 = 56, rounding down.
-
-These rules hold at every fork from Altair.
-
-From Electra the attesters may come from several committees, as [EIP-7549] specifies.
-
-From Gloas an attestation also weighs a builder payment, as [EIP-7732] specifies.
-
-Neither changes how the rewards are computed.
-
-No EIP specifies the Altair rewards themselves, so this comment states them.
-
-[EIP-7549]: https://eips.ethereum.org/EIPS/eip-7549#consensus-layer
-[EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#beacon-chain-changes
+No EIP specifies the Altair rewards themselves, so the comments here state them.
 -/
 
 @[expose] public section
@@ -51,10 +26,6 @@ variable {preset : Preset} {fork : Base.Fork} {state after : BeaconState preset 
 
 /-- The steps of the sync rewards, in committee order, read at one balance.
 
-A member that signed adds the reward to its balance, and the proposer adds its share to its own.
-
-A member that did not sign subtracts the reward from its balance, stopping at zero.
-
 No addition overflows.
 
 The proposer is read only when a member signed. -/
@@ -64,6 +35,11 @@ theorem foldlM_applySyncReward_balance {reward proposerReward : Gwei}
     ∀ {members : List (ValidatorIndex × Bool)} {state after : BeaconState preset fork},
       members.foldlM (applySyncReward reward proposerReward proposer) state = .ok after →
       ((∃ member ∈ members, member.2 = true) → proposer = .ok chosen) ∧
+      -- A member that signed adds the reward to its balance.
+      --
+      -- The proposer then adds its share to its own balance.
+      --
+      -- A member that did not sign subtracts the reward from its balance, stopping at zero.
       ∀ j balance, state.balances.data[j]? = some balance → ∃ final,
         after.balances.data[j]? = some final ∧ final.toNat = members.foldl (fun balance member =>
           if member.2 then balance + (if member.1.toNat = j then reward.toNat else 0) +
@@ -138,32 +114,33 @@ theorem syncParticipantReward_ok {reward : Gwei}
 
 /-- The sync aggregate step, from Altair, at each balance.
 
-The members are the first validators that hold the keys of the committee, in committee order.
-
-Each member that signed earns the participant reward, and the proposer earns its share.
-
-That share is the reward times the proposer weight, over the denominator less that weight.
-
-It rounds down.
-
-Each member that did not sign pays the participant reward, stopping at zero.
-
-The steps run in committee order, so a member listed twice is paid twice.
-
-No addition overflows.
-
-The proposer is the one of the state before the step, read only when a member signed. -/
+No addition overflows. -/
 theorem processSyncAggregate_balance {config : Config} {checks : SignatureChecks}
     {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
     (computed : processSyncAggregate config checks state altair aggregate = .ok after) :
     ∃ (reward proposerReward : Gwei) (members : Array ValidatorIndex) (chosen : ValidatorIndex),
+      -- The participant reward is the total base reward of a slot, weighted.
+      --
+      -- It is split among the members.
       syncParticipantReward state = .ok reward ∧
+      -- The proposer share is the reward times its weight, over the denominator less that weight.
+      --
+      -- It rounds down.
+      --
+      -- That is the reward times 8, over 64 - 8 = 56.
       proposerReward.toNat =
         reward.toNat * PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat) ∧
+      -- The members are the first validators that hold the keys of the committee, in its order.
       (state.currentSyncCommittee altair).value.pubkeys.toArray.mapM
         (validatorIndexOfPubkey state) = .ok members ∧
+      -- The proposer is the one of the state before the step, read only when a member signed.
       ((∃ member ∈ (members.zip aggregate.syncCommitteeBits.bits.toArray).toList,
         member.2 = true) → getBeaconProposerIndex state = .ok chosen) ∧
+      -- Each member that signed earns the participant reward, and the proposer earns its share.
+      --
+      -- Each member that did not sign pays the participant reward, stopping at zero.
+      --
+      -- The steps run in committee order, so a member listed twice is paid twice.
       ∀ j balance, state.balances.data[j]? = some balance → ∃ final,
         after.balances.data[j]? = some final ∧
         final.toNat = (members.zip aggregate.syncCommitteeBits.bits.toArray).toList.foldl
@@ -353,11 +330,7 @@ private theorem foldlM_addFlagReward {total : Gwei} {earned : List UInt64}
 
 The flags of the other validators stay.
 
-Each attester holds its flags before the attestation, and every earned flag.
-
-The numerator gains, for each attester, the weighted base reward of each flag newly set.
-
-Whether a flag is newly set is read from the attester's flags before the attestation. -/
+Each attester holds its flags before the attestation, and every earned flag. -/
 private theorem foldlM_addAttesterFlags_full {total : Gwei} {earned : List UInt64} :
     ∀ {attesters : List ValidatorIndex} {participation : EpochParticipation preset fork}
       {numerator : Gwei} {result : EpochParticipation preset fork × Gwei},
@@ -366,6 +339,9 @@ private theorem foldlM_addAttesterFlags_full {total : Gwei} {earned : List UInt6
         .ok result →
       (∀ i, (∀ attester ∈ attesters, attester.toNat ≠ i) →
         result.1.data[i]? = participation.data[i]?) ∧
+      -- The numerator gains, for each attester, the weighted base reward of each flag newly set.
+      --
+      -- Whether a flag is newly set is read from the attester's flags before the attestation.
       ∃ shares : List (ValidatorIndex × ParticipationFlags × Gwei),
         shares.map (·.1) = attesters ∧
         (∀ share ∈ shares, participation.data[share.1.toNat]? = some share.2.1 ∧
@@ -494,19 +470,7 @@ theorem getBeaconProposerIndex_setEpochParticipation (current : Bool)
 
 The proposer of the slot earns one reward, and every other balance stays.
 
-That reward is the numerator over `(64 - 8) * 64 / 8 = 448`, rounding down.
-
-The numerator sums, over the attesters, the weighted base reward of each flag newly set.
-
-A flag is newly set when the attestation earns it and the attester's flags did not have it.
-
-Those flags are the attester's flags in the epoch of the target, before the attestation.
-
-No addition overflows.
-
-From Electra the attesters may come from several committees.
-
-From Gloas the attestation also weighs a builder payment, which changes no balance. -/
+No addition overflows. -/
 theorem processAttestationAltair_balance {config : Config} {checks : SignatureChecks}
     {attestation : Attestation preset fork} {altair : .altair ≤ fork} {parentSlot : Slot}
     (computed : processAttestationAltair config checks state attestation altair parentSlot =
@@ -514,8 +478,14 @@ theorem processAttestationAltair_balance {config : Config} {checks : SignatureCh
     ∃ earned total attesters proposer, getAttestationParticipationFlagIndices state
         attestation.data (state.slot - attestation.data.slot) parentSlot = .ok earned ∧
       getTotalActiveBalance state = .ok total ∧
+      -- From Electra the attesters may come from several committees, as [EIP-7549] specifies.
+      --
+      -- [EIP-7549]: https://eips.ethereum.org/EIPS/eip-7549#consensus-layer
       getAttestingIndices state attestation = .ok attesters ∧
       getBeaconProposerIndex state = .ok proposer ∧
+      -- A flag is newly set when the attestation earns it and the attester's flags did not have it.
+      --
+      -- Those flags are the attester's flags in the epoch of the target, before the attestation.
       ∃ shares : List (ValidatorIndex × ParticipationFlags × Gwei),
         shares.map (·.1) = attesters ∧
         (∀ share ∈ shares, (if attestation.data.target.epoch == getCurrentEpoch state then
@@ -524,6 +494,9 @@ theorem processAttestationAltair_balance {config : Config} {checks : SignatureCh
           ∀ flag : Fin PARTICIPATION_FLAG_WEIGHTS.length, flag.val.toUInt64 ∈ earned →
             hasFlag share.2.1 flag.val.toUInt64 = false →
               getBaseReward state total share.1 = .ok share.2.2) ∧
+        -- The reward sums, over the attesters, the weighted base reward of each flag newly set.
+        --
+        -- The sum is divided by `(64 - 8) * 64 / 8 = 448`, rounding down.
         ∀ j balance, state.balances.data[j]? = some balance → ∃ final,
           after.balances.data[j]? = some final ∧
           final.toNat = balance.toNat + if proposer.toNat = j then
@@ -542,6 +515,12 @@ theorem processAttestationAltair_balance {config : Config} {checks : SignatureCh
   refine ⟨earned, total, attesters, proposer, earnedOk, totalOk, attestersOk, proposerOk, shares,
     named, facts, fun j balance found => ?_⟩
   -- Writing the flags keeps the balances, and from Gloas so does weighing the payment.
+  --
+  -- From Gloas an attestation weighs a builder payment, as [EIP-7732] specifies.
+  --
+  -- Neither that nor the committees of Electra change how the rewards are computed.
+  --
+  -- [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#beacon-chain-changes
   have balances : after.balances = raised.balances := by
     split at computed
     · rw [recordPaymentWeight_eq computed]

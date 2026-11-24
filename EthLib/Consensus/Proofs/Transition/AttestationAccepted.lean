@@ -7,31 +7,15 @@ import EthLib.Consensus.Proofs.Transition.BlockRewards
 /-!
 # Proofs: an attestation that meets its checks is accepted, and flags its attesters
 
-From Altair an attestation in a block passes checks, then sets flags and pays the proposer.
+From Altair, an attestation in a block passes checks, then sets flags and pays the proposer.
 
-Its target must be the epoch of its slot, and the current or the previous epoch of the state.
+Each attester then holds the timely target flag when the target root is the root of its epoch.
 
-It must come at least the least inclusion delay after its slot, and before Deneb within one epoch.
-
-Its bits must fit its committees, and its source must be the justified checkpoint of its target.
-
-Its indexed form must pass the signature check.
-
-The rest of the step reads the state and adds rewards with checked arithmetic.
-
-Under a budget on the balances with room for the rewards, none of it fails.
-
-Each attester then holds the timely target flag, when the target root is the root of its epoch.
-
-That is the root that the state holds for the first slot of the target epoch.
-
-This is the step of plausible liveness that makes honest votes count.
-
-Casper FFG states that property as its Theorem 2.
-
-The paper is [arXiv 1710.09437v4](https://arxiv.org/abs/1710.09437v4).
+So honest votes count: the step of plausible liveness, which [Casper FFG] states as Theorem 2.
 
 From Gloas the step also weighs a payment of the builder, which these theorems leave out.
+
+[Casper FFG]: https://arxiv.org/abs/1710.09437v4
 -/
 
 @[expose] public section
@@ -238,60 +222,57 @@ private theorem recentParticipation_putBalance_setEpochParticipation (altair : .
 
 /-- From Altair until Gloas, an attestation that meets the checks of its step is accepted.
 
-Its target is the epoch of its slot, and the current or the previous epoch of the state.
+The state is within a budget with room for the rewards, and the preset fits its bounds.
 
-It comes after its slot, and at least the least inclusion delay after it.
+Each attester then holds the timely target flag in the epoch of the target, when the root matches.
 
-Before Deneb it also comes within one epoch of its slot.
-
-Its bits fit its committees, and its source is the justified checkpoint of its target epoch.
-
-Its indexed form passes the signature check.
-
-The committee check and the signature check are hypotheses here.
-
-The state is within a budget, and the proposer of its slot is a validator of the registry.
-
-Each list of participation flags has one entry for each validator.
-
-The buffer of block roots must reach the previous epoch, and the slot plus its length must fit.
-
-The increment of effective balance is positive, and its product with the reward factor fits.
-
-The budget plus 64 times the base reward ceiling for each validator must fit in 64 bits.
-
-Then each attester holds the timely target flag in the epoch of the target, when the root matches.
-
-That root is the root of the block at the first slot of the target epoch. -/
+From Gloas the step also weighs a payment of the builder, which this theorem leaves out. -/
 theorem processAttestation_exists_ok {budget scoreBound : Nat}
     (altair : .altair ≤ fork) (beforeGloas : fork < .glamsterdam)
     {attestation : Attestation preset fork} (parentSlot : Slot)
+    -- The buffer of block roots must reach the previous epoch.
     (roots : preset.RootsReachPreviousEpoch)
+    -- The slot plus the length of that buffer must fit.
     (slotRoom : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64)
+    -- The increment of effective balance is positive.
     (increment : preset.EFFECTIVE_BALANCE_INCREMENT ≠ 0)
+    -- The product of that increment with the reward factor fits.
     (scaled : preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64)
+    -- The state is within a budget.
     (holds : WithinBudget budget scoreBound state)
+    -- Each list of participation flags has one entry for each validator.
     (participation : ParticipationMatches state)
+    -- The budget plus 64 times the base reward ceiling for each validator must fit in 64 bits.
     (room : budget + state.validators.data.size * (64 * preset.baseRewardCeiling) < 2 ^ 64)
+    -- The target is the current or the previous epoch of the state.
     (recent : attestation.data.target.epoch = getPreviousEpoch state ∨
       attestation.data.target.epoch = getCurrentEpoch state)
+    -- The target is the epoch of the slot of the attestation.
     (slotEpoch : attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot)
+    -- The attestation comes after its slot.
     (past : attestation.data.slot.toNat < state.slot.toNat)
+    -- It comes at least the least inclusion delay after its slot.
     (early : attestation.data.slot.toNat + preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat ≤
       state.slot.toNat)
+    -- Before Deneb it also comes within one epoch of its slot.
     (deadline : fork < .dencun →
       state.slot.toNat ≤ attestation.data.slot.toNat + preset.SLOTS_PER_EPOCH.toNat)
+    -- The committee check is a hypothesis here: the bits fit the committees.
     (committees : checkAttestationCommittees state attestation = .ok ())
+    -- The source is the justified checkpoint of the target epoch.
     (source : attestation.data.source =
       if attestation.data.target.epoch = getCurrentEpoch state then
         state.currentJustifiedCheckpoint
       else state.previousJustifiedCheckpoint)
+    -- The signature check is a hypothesis here: the indexed form passes it.
     (valid : ∃ indexed, getIndexedAttestation state attestation = .ok indexed ∧
       isValidIndexedAttestation config checks state indexed = .ok true)
+    -- The proposer of the slot is a validator of the registry.
     (proposer : ∃ index, getBeaconProposerIndex state = .ok index ∧
       index.toNat < state.validators.data.size) :
     ∃ after, processAttestation config checks state parentSlot attestation = .ok after ∧
       ∀ attesters, getAttestingIndices state attestation = .ok attesters →
+        -- The target root is the root that the state holds for the first slot of the target epoch.
         getBlockRoot state attestation.data.target.epoch = .ok attestation.data.target.root →
         ∀ attester ∈ attesters, TargetFlagAt (recentParticipation after altair
           (attestation.data.target.epoch == getCurrentEpoch state)) attester.toNat := by
@@ -398,6 +379,7 @@ theorem processAttestation_exists_ok {budget scoreBound : Nat}
     · exact checkInclusionDeadline_of_dencun (Nat.le_of_not_lt before)
   have notGloas : ¬.glamsterdam ≤ fork := Nat.not_le.mpr beforeGloas
   refine ⟨raised, ?_, ?_⟩
+  -- The rest of the step reads the state and adds rewards with checked arithmetic.
   · simp only [processAttestationAltair, ← dataEq, ensure, eq_true recent, eq_true slotEpoch,
       liftAccessor, liftArith, earliestOk, eq_true earliestLe, deadlineOk, committees, earnedOk,
       indexedOk, validOk, totalOk, attestersOk, folded,
