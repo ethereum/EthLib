@@ -5,43 +5,11 @@ public import EthLib.Execution.Rpc.Transaction
 /-!
 # `Execution.Rpc.GenericTransaction`
 
-The transaction of a call request, from the schema `GenericTransaction` of [the source][tx].
+The transaction of a call request.
 
-The methods of `execute.yaml` take it, as do the methods that sign, fill or send a transaction.
+Source: [`transaction.yaml`][tx], at commit `1ca0818` of execution-apis: the fields and their types.
 
-Every field is optional, and the schema allows no field that it does not name.
-
-Only `to` may be `null` in the schema.
-
-Here any field of the schema whose value is `null` counts as absent, as for the other readers.
-
-That is a leniency beyond the schema.
-
-So a recipient that is absent or `null` makes the request a creation.
-
-The field `from` names the sender, which a request need not sign.
-
-Every number but the type is a `uint`, with no bound, and a call that runs it checks its bounds.
-
-The numbers of an authorization are read with the bounds of a signed authorization.
-
-The kind of the transaction is its field `type` when it has one.
-
-The source fixes no kind for a request without a type, and EthLib infers one.
-
-Otherwise it is the latest kind whose own fields it has, from type 4 down to type 1, else legacy.
-
-An authorization list makes type 4, and blob hashes or a blob fee cap make type 3.
-
-A fee cap or a priority fee makes type 2, and an access list type 1.
-
-A simulation fixes type 2 by default instead, and reads a blob fee cap alone as no kind.
-
-The schema also names the blobs, their commitments and their proofs, which a call does not read.
-
-A call does not read the nonce of the request either.
-
-[tx]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/transaction.yaml
+[tx]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/transaction.yaml
 -/
 
 @[expose] public section
@@ -53,15 +21,17 @@ open EthLib.Base
 open EthLib.Serialization.JsonRpc
 open EthLib.Execution.Transactions (Access Authorization)
 
-/-- The transaction of a call request, each field none when the request leaves it out. -/
+/-- The transaction of a call request, each field none when the request leaves it out.
+
+The methods of `execute.yaml` take it, as do the methods that sign, fill or send a transaction. -/
 structure GenericTransaction where
   /-- The type of the transaction. -/
   type : Option UInt8 := none
-  /-- The nonce of the sender. -/
+  /-- The nonce of the sender, which a call does not read. -/
   nonce : Option Nat := none
-  /-- The recipient, none for a creation. -/
+  /-- The recipient: none, from an absent or `null` field, for a creation. -/
   to : Option Address := none
-  /-- The sender, the field `from`. -/
+  /-- The sender, the field `from`, which a request need not sign. -/
   sender : Option Address := none
   /-- The gas limit. -/
   gas : Option Nat := none
@@ -81,11 +51,11 @@ structure GenericTransaction where
   accessList : Option (List Access) := none
   /-- The versioned hashes of the blobs of EIP-4844. -/
   blobVersionedHashes : Option (List Hash32) := none
-  /-- The blobs. -/
+  /-- The blobs, which a call does not read. -/
   blobs : Option (List ByteArray) := none
-  /-- The commitments of the blobs. -/
+  /-- The commitments of the blobs, which a call does not read. -/
   commitments : Option (List ByteArray) := none
-  /-- The proofs of the blobs. -/
+  /-- The proofs of the blobs, which a call does not read. -/
   proofs : Option (List ByteArray) := none
   /-- The chain that the transaction is valid on. -/
   chainId : Option Nat := none
@@ -106,11 +76,19 @@ def genericTransaction (j : Json) : Read GenericTransaction := do
   if let .obj kvs := j then
     unless hasOnly kvs.toList genericTransactionFields do
       reject "transaction: a field outside the schema"
-  -- Each field is optional; a field of value null counts as absent, a leniency beyond the schema.
+  -- Every field is optional, and only `to` may be `null` in the schema.
+  --
+  -- Here any field of the schema whose value is `null` counts as absent, as for the other readers.
+  --
+  -- That is a leniency beyond the schema.
   let fs ← fields "transaction" j
   let opt {α : Type} (name : String) (f : String → Json → Read α) : Read (Option α) :=
     (fs.lookup name).mapM (f name)
-  -- The type is a byte, each other number an unsigned integer with no bound, but authorizations.
+  -- The type is a byte, and every other number a `uint` with no bound.
+  --
+  -- A call that runs the request checks the bounds.
+  --
+  -- The numbers of an authorization are read with the bounds of a signed authorization.
   return {
     type := ← opt "type" byte
     nonce := ← opt "nonce" uint
@@ -137,10 +115,12 @@ namespace GenericTransaction
 
 A blob fee cap alone names no fee. -/
 def namesFee (tx : GenericTransaction) : Bool :=
-  -- A gas price, a fee cap or a priority fee; the blob fee cap is not one of them.
+  -- A gas price, a fee cap or a priority fee, and not the blob fee cap.
   tx.gasPrice.isSome || tx.maxFeePerGas.isSome || tx.maxPriorityFeePerGas.isSome
 
-/-- The kind of the transaction: its type, else the latest kind whose own fields it has. -/
+/-- The kind of the transaction: its type, else the latest kind whose own fields it has.
+
+A simulation fixes type 2 by default instead, and reads a blob fee cap alone as no kind. -/
 def kind (tx : GenericTransaction) : UInt8 :=
   match tx.type with
   -- The type of the request, when it names one.

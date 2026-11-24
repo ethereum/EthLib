@@ -6,37 +6,14 @@ public import EthLib.Execution.Transactions.Settlement
 /-!
 # `Execution.Rpc.Transaction`
 
-The JSON form of a signed transaction, as the schemas of [`transaction.yaml`][tx] give it.
+The JSON form of a signed transaction.
 
-Every kind has its type, its nonce, its gas, its value, its input and the two integers `r` and `s`.
+Sources:
 
-A legacy transaction also has its recipient, its gas price and `v`.
+- the schemas of [`transaction.yaml`][tx], at commit `1ca0818` of execution-apis: the fields
+- [EIP-155][eip155]: the chain of a legacy transaction, carried in `v`
 
-Its chain is written when `v` carries one, as [EIP-155][eip155] puts it in `v`.
-
-A typed transaction also has its recipient, its chain, its access list and the signature parity.
-
-It repeats the parity as `v`, a field that the schemas keep as optional and deprecated.
-
-Outside a block, a transaction of type 2, 3 or 4 also has a gas price: its maximum fee per gas.
-
-The schemas ask for that value outside a block, and keep the field as deprecated.
-
-A creation has the recipient `null`.
-
-The reader reads the fields of the kind that the type names, and ignores any other field.
-
-So it also reads the object of a transaction of a block, which has more fields.
-
-It reads the chain of a legacy transaction from `v`, and the parity of a typed one from its field.
-
-A transaction of type 2, 3 or 4 stores no gas price, so the reader drops that field.
-
-Only type 2 still needs the field, which its schema requires.
-
-An entry of an access list has exactly its address and its storage keys, as its schema says.
-
-[tx]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/transaction.yaml
+[tx]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/transaction.yaml
 [eip155]: https://eips.ethereum.org/EIPS/eip-155#specification
 -/
 
@@ -54,7 +31,7 @@ def accessJson (a : Access) : Json :=
   Json.mkObj [("address", dataJson a.account.toList),
     ("storageKeys", listJson (fun (k : Bytes32) => dataJson k.toList) a.slots)]
 
-/-- An entry of an access list, with exactly its address and its storage keys. -/
+/-- An entry of an access list: exactly its address and its storage keys, as its schema says. -/
 def access (j : Json) : Read Access := do
   let fs ← fields "access list entry" j
   unless hasExactly fs ["address", "storageKeys"] do reject "access list entry: wrong fields"
@@ -86,7 +63,11 @@ def accessListJson (l : List Access) : Json := listJson accessJson l
 /-- A number below `2^256` as JSON. -/
 def u256Json (x : U256) : Json := quantityJson x.toNat
 
-/-- The fields of a typed transaction that every type has, before its type-specific fields. -/
+/-- The fields of a typed transaction that every type has, before its type-specific fields.
+
+A typed transaction has its chain, its access list and the signature parity.
+
+It repeats the parity as `v`, a field that the schemas keep as optional and deprecated. -/
 def typedFields (type : UInt8) (chainId : UInt64) (nonce : Nat) (gas value : U256)
     (data : ByteArray) (accessList : List Access) (yParity r s : U256) : List (String × Json) :=
   [("type", byteJson type), ("chainId", quantityJson chainId.toNat), ("nonce", quantityJson nonce),
@@ -94,14 +75,20 @@ def typedFields (type : UInt8) (chainId : UInt64) (nonce : Nat) (gas value : U25
     ("accessList", accessListJson accessList), ("yParity", u256Json yParity),
     ("v", u256Json yParity), ("r", u256Json r), ("s", u256Json s)]
 
-/-- The fields of a signed transaction, with the price per gas that it pays as its gas price. -/
+/-- The fields of a signed transaction, with the price per gas that it pays as its gas price.
+
+Every kind has its type, its nonce, its gas, its value, its input and the two integers `r` and `s`.
+
+Every kind also has its recipient, and a creation has the recipient `null`. -/
 def transactionFields (gasPrice : Nat) : Transaction → List (String × Json)
+  -- A legacy transaction also has its gas price and `v`.
   | .legacy tx =>
     [("type", byteJson 0), ("nonce", u256Json tx.nonce), ("gas", u256Json tx.gas),
       ("value", u256Json tx.value), ("input", dataJson tx.data.data.toList),
       ("to", optionJson (fun (a : Address) => dataJson a.toList) tx.to),
       ("gasPrice", quantityJson gasPrice), ("v", u256Json tx.v), ("r", u256Json tx.r),
       ("s", u256Json tx.s)] ++
+    -- Its chain is written when `v` carries one, as EIP-155 puts it in `v`.
     if 35 ≤ tx.v.toNat then [("chainId", quantityJson ((tx.v.toNat - 35) / 2))] else []
   | .accessList tx =>
     typedFields 1 tx.chainId tx.nonce.toNat tx.gas tx.value tx.data tx.accessList tx.yParity
@@ -134,7 +121,9 @@ def transactionFields (gasPrice : Nat) : Transaction → List (String × Json)
 
 /-- A signed transaction as JSON, outside a block.
 
-Its gas price is its maximum fee per gas. -/
+Its gas price is its maximum fee per gas, so a transaction of type 2, 3 or 4 has one here too.
+
+The schemas ask for that value outside a block, and keep the field as deprecated. -/
 def transactionJson (tx : Transaction) : Json :=
   Json.mkObj (transactionFields tx.maxFeePerGas tx)
 
@@ -146,7 +135,12 @@ def recipient (fs : List (String × Json)) : Read (Option Address) :=
 
 /-- A signed transaction, read by the kind that its type names.
 
-Any other field is ignored, but type 2 still needs a gas price, which its schema requires. -/
+The reader reads the fields of the kind that the type names, and ignores any other field.
+
+So it also reads the object of a transaction of a block, which has more fields.
+
+It reads the chain of a legacy transaction from `v`, and the parity of a typed one from its field.
+-/
 def transactionOfJson (j : Json) : Read Transaction := do
   let fs ← fields "transaction" j
   let get := field "transaction" fs
@@ -173,6 +167,9 @@ def transactionOfJson (j : Json) : Read Transaction := do
   let maxPriorityFeePerGas ← uint256 "maxPriorityFeePerGas" (← get "maxPriorityFeePerGas")
   let maxFeePerGas ← uint256 "maxFeePerGas" (← get "maxFeePerGas")
   if type = 2 then
+    -- A transaction of type 2, 3 or 4 stores no gas price, so the reader drops that field.
+    --
+    -- Only type 2 still needs the field, which its schema requires.
     let _ ← uint "gasPrice" (← get "gasPrice")
     return .feeMarket { chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gas, value, data,
                         accessList, yParity, r, s

@@ -9,26 +9,19 @@ public import EthLib.Execution.Evm.Call.ContractAddress
 
 The receipt of a transaction of a block, as the receipt methods return it.
 
-It is the object `ReceiptInfo` of [`receipt.yaml`][receipt], with its logs as objects `Log`.
+The object adds to the receipt of the block the values that the node computes from the block.
 
-It adds to the receipt of the block the values that the node computes from the block.
+Sources, at commit `1ca0818` of execution-apis:
 
-From Glamsterdam, [EIP-7778][eip-7778] counts the gas of a block before the refunds.
+- [`receipt.yaml`][receipt]: the object `ReceiptInfo`, with its logs as objects `Log`
+- [EIP-7778][eip-7778]: the gas of a block before the refunds, from Glamsterdam
+- [EIP-8037][eip-8037]: the gas that the senders paid, which the receipts count apart
+- the notes of [`eth_simulateV1`][simulate]: the position of a log in its block
 
-The receipts count apart the gas that the senders paid, by [EIP-8037][eip-8037].
-
-So the gas of a transaction is then the gas that its sender paid.
-
-The schema still describes both gas fields as the gas used.
-
-The position of a log in its block is defined only by the notes of [`eth_simulateV1`][simulate].
-
-Their section on the log index adds that receipts use the same numbering.
-
-[receipt]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/receipt.yaml
+[receipt]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/receipt.yaml
 [eip-7778]: https://eips.ethereum.org/EIPS/eip-7778#specification
 [eip-8037]: https://eips.ethereum.org/EIPS/eip-8037#receipt-semantics
-[simulate]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/docs-api/docs/ethsimulatev1-notes.mdx
+[simulate]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/docs-api/docs/ethsimulatev1-notes.mdx
 -/
 
 @[expose] public section
@@ -45,7 +38,11 @@ open EthLib.Execution.Transactions
 structure LogInfo where
   /-- The log. -/
   log : Log
-  /-- The position of the log among all the logs of its block, from 0. -/
+  /-- The position of the log among all the logs of its block, from 0.
+
+  Only the notes of `eth_simulateV1` define it.
+
+  Their section on the log index adds that receipts use the same numbering. -/
   logIndex : Nat
   /-- The index of the transaction that wrote it. -/
   transactionIndex : Nat
@@ -177,6 +174,14 @@ def receiptInfo (r : BlockRecord) (config : ChainConfig) (index before firstLog 
   -- The schema: the cumulative gas sums the gas of this and the earlier transactions.
   --
   -- So the gas of the transaction is its cumulative gas minus that of the receipt before.
+  --
+  -- From Glamsterdam, EIP-7778 counts the gas of a block before the refunds.
+  --
+  -- The receipts count apart the gas that the senders paid, by EIP-8037.
+  --
+  -- So the gas of a transaction is then the gas that its sender paid.
+  --
+  -- The schema still describes both gas fields as the gas used.
   --
   -- The effective gas price is what the sender pays per gas, at the base fee of the block.
   return { type := tx.type, transactionHash := info.hash, transactionIndex := index

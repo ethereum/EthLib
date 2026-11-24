@@ -7,17 +7,12 @@ public import EthLib.Execution.Rpc.TransactionInfo
 
 The consensus encodings of the objects of a chain, which the raw getters return.
 
-The getters are those of [`getters.yaml`][getters].
+Sources:
 
-A transaction is its bytes of [EIP-2718][eip2718]: a legacy one is its RLP form.
+- [`getters.yaml`][getters], at commit `1ca0818` of execution-apis: the getters
+- [EIP-2718][eip2718]: a transaction as its bytes, and a legacy one as its RLP form
 
-No result schema of the getters allows null.
-
-Only the getter of a block access list names the error of an unknown block: -32001.
-
-Every getter also lists 4444 for pruned history, which the view never answers.
-
-[getters]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/debug/getters.yaml
+[getters]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/debug/getters.yaml
 [eip2718]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-2718.md
 -/
 
@@ -50,7 +45,9 @@ def rawBlock (r : BlockRecord) : Except RpcError ByteArray := do
 
 /-- The bytes of the receipts of a block, in order, each at the type of its transaction. -/
 def rawReceipts (r : BlockRecord) : Except RpcError (List ByteArray) :=
-  -- EIP-2718: a typed receipt is its type byte, then its payload; a legacy one is its RLP.
+  -- EIP-2718: a typed receipt is its type byte, then its payload.
+  --
+  -- A legacy receipt is its RLP form.
   r.receipts.mapM fun (type, receipt) =>
     (encodeReceipt type receipt).mapError fun _ => encodingError "receipt"
 
@@ -68,11 +65,17 @@ def ofBlock {α : Type} (v : ChainView) (p : BlockParam) (f : BlockRecord → Ex
   match ← v.resolve p with
   -- An unknown block, a block below the lowest one, or no pending block: code -32001.
   --
-  -- The source requires that code of the getter of a block access list.
+  -- Of the getters, only that of a block access list names this error, and requires its code.
   --
   -- EIP-1898 recommends it for a block not found, and EthLib gives it for every getter.
   | none => throw (unknown "block")
   | some r => f r
+
+-- No result schema of the raw getters allows null.
+--
+-- Every raw getter but that of bad blocks lists 4444 for pruned history.
+--
+-- The view never gives that error.
 
 /-- The RLP form of the header of the block that a parameter names. -/
 def rawHeader (v : ChainView) (p : BlockParam) : Except RpcError ByteArray :=

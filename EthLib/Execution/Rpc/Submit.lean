@@ -7,27 +7,11 @@ public import EthLib.Execution.Transactions.Network
 /-!
 # `Execution.Rpc.Submit`
 
-The method `eth_sendRawTransaction` of [`submit.yaml`][submit]: it submits a signed transaction.
+The method `eth_sendRawTransaction`, which submits a signed transaction.
 
-Its parameter is the raw form of the transaction, and its result is the hash of the transaction.
+Source: [`submit.yaml`][submit], at commit `1ca0818` of execution-apis: the method and its errors.
 
-The raw form of a blob transaction is its network form, with its blobs, commitments and proofs.
-
-The source asks for proofs per blob by EIP-4844, and for cell proofs from Fusaka by EIP-7594.
-
-From Fusaka, the source lets a node still accept proofs per blob and convert them, at a cost.
-
-EthLib takes the stricter choice and rejects that form from Fusaka.
-
-Which transactions a pool keeps is the choice of the node, and the source does not fix it.
-
-EthLib keeps each transaction that the next block could include, a future nonce allowed.
-
-The next block is EthLib's choice: one second after the head, as in the fee history.
-
-So in the last slot before a fork by time, a transaction is decoded at the fork before it.
-
-[submit]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/submit.yaml
+[submit]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/submit.yaml
 -/
 
 @[expose] public section
@@ -42,7 +26,9 @@ open EthLib.Execution.State (TransactionState)
 open EthLib.Execution.Transactions
 open EthLib.Serialization.JsonRpc (RpcError)
 
-/-- A transaction in its raw form: a transaction, or the network form of a blob transaction. -/
+/-- A transaction in its raw form: a transaction, or the network form of a blob transaction.
+
+The raw form of a blob transaction is its network form, with its blobs, commitments and proofs. -/
 inductive RawTransaction where
   /-- A transaction that is not a blob transaction, in the form of a block. -/
   | plain (tx : Transaction)
@@ -198,15 +184,27 @@ def nextEnvironment (v : ChainView) (fits : v.nextExcessBlobGas < 2 ^ 64) :
 
 /-- The hash of a submitted transaction, or the error of the check that it fails.
 
+The parameter is the raw form of the transaction, and the result is the hash of the transaction.
+
 When the next block's excess blob gas is `2^64` or more, the result is an internal error.
 
 No header holds such an excess. -/
 def sendRawTransaction (v : ChainView) (bytes : ByteArray) : Except RpcError Hash32 := do
-  -- The fork of the next block, one second after the head.
+  -- The fork of the next block.
+  --
+  -- The next block is EthLib's choice: one second after the head, as in the fee history.
+  --
+  -- So in the last slot before a fork by time, a transaction is decoded at the fork before it.
   let fork := v.head.nextFork v.config
   let invalid := fun (e : NetworkError) =>
     invalidInput.toRpcError (some (.str (networkErrorText e)))
   -- The raw form decodes at that fork, else code -32000, EthLib's choice.
+  --
+  -- The source asks for proofs per blob by EIP-4844, and for cell proofs from Fusaka by EIP-7594.
+  --
+  -- From Fusaka, the source lets a node still accept proofs per blob and convert them, at a cost.
+  --
+  -- EthLib takes the stricter choice and rejects that form from Fusaka.
   --
   -- Before Fusaka, a form with cell proofs fails here, as the source asks.
   --
@@ -219,6 +217,10 @@ def sendRawTransaction (v : ChainView) (bytes : ByteArray) : Except RpcError Has
     (validateNetwork v.setup fork w).mapError invalid
   -- The state of the head, with no transaction before this one.
   let head := TransactionState.ofBlock ⟨v.head.state, ∅, ∅, ∅, ∅⟩
+  -- Which transactions a pool keeps is the choice of the node, and the source does not fix it.
+  --
+  -- EthLib keeps each transaction that the next block could include, a future nonce allowed.
+  --
   -- A signature that names no sender fails in the inclusion checks, with its own code.
   let state := match recoverSender fork raw.tx with
     | .ok sender => withFutureNonce head sender raw.tx

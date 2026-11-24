@@ -7,15 +7,11 @@ public import EthLib.Execution.Rpc.Raw
 /-!
 # `Execution.Rpc.Block`
 
-A block that the node holds as JSON: the object `Block` of [`block.yaml`][schema].
+A block that the node holds, as a JSON block object.
 
-The object holds the fields of the header object and the fields of the block.
+Source: [`block.yaml`][schema], at commit `1ca0818` of execution-apis: the object `Block`.
 
-Only the header methods say that a field from a fork MUST be omitted before it.
-
-The block object follows the same rule, as the fixtures of the block methods do.
-
-[schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/block.yaml
+[schema]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/block.yaml
 -/
 
 @[expose] public section
@@ -30,7 +26,11 @@ open EthLib.Execution.Transactions
 
 /-- The fields of a block object after those of its header.
 
-They are its size, the hashes of its ommers, its transactions, and its withdrawals from Shapella. -/
+They are its size, the hashes of its ommers, its transactions, and its withdrawals from Shapella.
+
+Only the header methods say that a field from a fork MUST be omitted before it.
+
+The block object follows the same rule, as the fixtures of the block methods do. -/
 def blockFields {fork : Fork} (size : Nat) (uncles : List Hash32) (transactions : Json)
     (withdrawals : Since .shapella fork (List Withdrawal)) : List (String × Json) :=
   -- The size, the hashes of the ommers, the transactions, then the withdrawals from Shapella.
@@ -60,7 +60,9 @@ def size (r : BlockRecord) : Except RpcError Nat :=
 
 /-- The block object of a block, with the objects of its transactions when they are hydrated.
 
-It fails when the node cannot compute the RLP form of the block, a hash or a sender in it. -/
+The object holds the fields of the header object and the fields of the block.
+
+Writing it fails when the node cannot compute the RLP form of the block, a hash or a sender. -/
 def blockJson (r : BlockRecord) (full : Bool) : Except RpcError Json := do
   let size ← r.size
   -- The hash of the header of each ommer.

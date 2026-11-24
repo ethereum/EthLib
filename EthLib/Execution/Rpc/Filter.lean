@@ -7,25 +7,17 @@ public import EthLib.Execution.Rpc.Receipt
 
 The log filters of the execution JSON-RPC API, and the method `eth_getLogs`.
 
-A filter is the object `Filter` of [`filter.yaml`][filter].
-
-It names one block by its hash, or a range of canonical blocks by two bounds.
-
-It then takes logs by their address and by their topic at each position.
-
 The source leaves several cases open, and EthLib follows the fixtures where they decide.
 
-The [method][method] resolves the bounds against the head, and MUST NOT clamp the range.
+Sources, at commit `1ca0818` of execution-apis:
 
-It MUST NOT return part of the logs either.
+- the object `Filter` of [`filter.yaml`][filter]: the fields of a filter
+- the [method][method]: bounds resolved against the head, with no clamping and no partial answer
+- [`block.yaml`][block]: the answer for a tag that names no block
 
-A `safe` or `finalized` tag that names no block takes the answer for an unknown block.
-
-That is what [`block.yaml`][block] says, and the method defines no such answer.
-
-[filter]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/filter.yaml
-[method]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/filter.yaml
-[block]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/block.yaml
+[filter]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/filter.yaml
+[method]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/filter.yaml
+[block]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/block.yaml
 -/
 
 @[expose] public section
@@ -45,7 +37,11 @@ inductive FilterBlocks where
   | range (fromBlock toBlock : Option BlockParam)
   deriving DecidableEq, Repr
 
-/-- A log filter. -/
+/-- A log filter.
+
+It names one block by its hash, or a range of canonical blocks by two bounds.
+
+Then it takes logs by their address and by their topic at each position. -/
 structure Filter where
   /-- The blocks that the filter reads. -/
   blocks : FilterBlocks
@@ -150,6 +146,10 @@ def boundNumber (v : ChainView) : Option BlockParam → Except RpcError Nat
   | some p => do
     match ← v.resolve p with
     | some r => return r.block.header.number
+    -- A `safe` or `finalized` tag that names no block takes the answer for an unknown block.
+    --
+    -- That is what `block.yaml` says, and the method defines no such answer.
+    --
     -- A tag that names no block is an unknown block: code -32001, EthLib's choice.
     | none => throw (unknown "block")
 
@@ -185,7 +185,9 @@ def matchingLogs (v : ChainView) (f : Filter) (blocks : List BlockRecord) :
   let infos ← blocks.mapM (·.receiptInfos v.config)
   return (infos.flatten.flatMap (·.logs)).filter (f.selects ·.log)
 
-/-- The logs that a filter selects, as `eth_getLogs` returns them. -/
+/-- The logs that a filter selects, as `eth_getLogs` returns them.
+
+The method MUST NOT clamp the range, and MUST NOT return part of the logs either. -/
 def getLogs (v : ChainView) (f : Filter) : Except RpcError (List LogInfo) := do
   v.matchingLogs f (← v.filterBlocks f.blocks)
 

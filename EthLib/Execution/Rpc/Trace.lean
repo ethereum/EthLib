@@ -7,19 +7,13 @@ public import EthLib.Execution.Blocks.Transition
 
 The opcode trace of a transaction, as the opcode logger of the debug methods returns it.
 
-It holds one entry for each step of a frame with code, up to a bound.
+Where the source leaves a choice open, the docs of each field say what this specification picks.
 
-A step past the end of the code runs STOP, and it has an entry too.
+Source: [`opcode-tracer.yaml`][schema], at commit `1ca0818` of execution-apis.
 
-A frame with no code has none, so a plain transfer gives no entry.
+That schema gives the entries, the configuration and the trace.
 
-The trace is an observer of the one interpreter, so it changes nothing in the run.
-
-[`opcode-tracer.yaml`][schema] defines the entries, the configuration and the trace.
-
-Where it leaves a choice open, the docs of each field say what this specification picks.
-
-[schema]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/schemas/opcode-tracer.yaml
+[schema]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/opcode-tracer.yaml
 -/
 
 @[expose] public section
@@ -267,7 +261,9 @@ def stepOp {fork : Fork} {Meter : Type} [GasMeter Meter] (evm : Evm fork Meter) 
 
 A frame with no code adds no entry, so a plain transfer has none.
 
-A frame with code adds one for each step, the STOP past the end of its code included.
+A frame with code adds one for each step.
+
+A step past the end of its code runs STOP, and adds one too.
 
 A step past the bound adds no entry. -/
 def Tracer.record (config : TraceConfig) {fork : Fork} {Meter : Type} [GasMeter Meter]
@@ -326,7 +322,9 @@ structure TransactionTrace where
   gas : Nat
   /-- Whether its message failed: a revert or an exceptional halt.
 
-  The source names a revert and a lack of gas; this specification counts every halt. -/
+  The source names a revert and a lack of gas.
+
+  This specification counts every halt. -/
   failed : Bool
   /-- The output of its message. -/
   returnValue : ByteArray
@@ -345,7 +343,9 @@ def TransactionTrace.ofRun (output : TransactionOutput) (tracer : Tracer) : Tran
 
 /-- Run a transaction on the block state `block` at `fork`, with the opcode logger.
 
-It gives what the run gives, and the logger at its end. -/
+It gives what the run gives, and the logger at its end.
+
+The logger is an observer of the one interpreter, so it changes nothing in the run. -/
 def traceRun {fork : Fork} (config : TraceConfig) (env : BlockEnvironment fork)
     (block : BlockState) (included : Included) (tx : Transaction)
     (precompiles : Address → Option Address := some) (lifted : LiftedRules := {}) :

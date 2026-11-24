@@ -2609,7 +2609,7 @@ Otherwise a search returns a collision with the trie's own proof, or two keys wi
 `verifyAccount_getProof` and `verifySlot_getProof` prove that the trie's own proofs pass, with the fields that the trie holds.
 A proof can show that the address has no account, or that a slot is not set.
 The storage value of a slot that is not set is 0, so the answer must give that word.
-The [text of the method](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/eth/state.yaml#L161-L200) fixes the answer for an address without an account.
+The [text of the method](https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/state.yaml#L161-L200) fixes the answer for an address without an account.
 Its code hash and storage root are zero, and each slot has the word 0 and an empty proof.
 The check accepts only that answer, with a nonce and a balance of 0.
 

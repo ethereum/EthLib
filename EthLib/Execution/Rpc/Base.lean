@@ -10,11 +10,11 @@ public import EthLib.Base.U256
 
 The base types of the execution JSON-RPC API that the shared JSON-RPC readers do not define.
 
-They are those of [`base-types.yaml`][types].
-
 A fixed byte string, such as `bytes4` or `hash32`, has exactly two lowercase digits per byte.
 
-[types]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/base-types.yaml
+Source: [`base-types.yaml`][types], at commit `1ca0818` of execution-apis: the type patterns.
+
+[types]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/base-types.yaml
 -/
 
 @[expose] public section

@@ -9,14 +9,12 @@ The block parameter of the execution JSON-RPC API: the block whose state or cont
 
 A query names the block by its number, by a tag, or by its hash.
 
-The schemas are those of [`block.yaml`][block].
+Sources:
 
-A hash or a number may also come in an object of [EIP-1898][eip1898].
+- [`block.yaml`][block], at commit `1ca0818` of execution-apis: the schemas of the parameter
+- [EIP-1898][eip1898], at commit `46976b2` of EIPs: the objects that hold a hash or a number
 
-A string of 64 hex digits that may be a number reads as a hash, as [a fixture][fixture] shows.
-
-[block]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/block.yaml
-[fixture]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/tests/eth_getBalance/get-balance-blockhash.io
+[block]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/block.yaml
 [eip1898]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-1898.md#specification
 -/
 
@@ -102,7 +100,14 @@ def requireCanonical (what : String) : Option Json → Read Bool
 
 A string reads as a hash if it can, else as a number, else as a tag.
 
-An object is one of the two objects of EIP-1898, with no other member. -/
+A string of 64 hex digits that may be a number reads as a hash, as [a fixture][fixture] shows.
+
+A hash or a number may also come in an object of EIP-1898.
+
+An object is one of the two objects of EIP-1898, with no other member.
+
+[fixture]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/tests/eth_getBalance/get-balance-blockhash.io
+-/
 def blockNumberOrTagOrHash (what : String) (j : Json) : Read BlockParam :=
   match j with
   -- The schema is a union, so a string may match it in two ways.

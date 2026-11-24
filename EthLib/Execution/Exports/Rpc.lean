@@ -17,10 +17,13 @@ The C exports of the execution JSON-RPC API: its parameter readers and its error
 
 A chain view, built from its blocks, answers a list of requests at once.
 
-Source: the schema names of [`base-types.yaml`][types] and [`block.yaml`][block].
+Sources, at commit `1ca0818` of execution-apis:
 
-[types]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/base-types.yaml
-[block]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/block.yaml
+- [`base-types.yaml`][types]: the schema names of the base types
+- [`block.yaml`][block]: the schema names of a block
+
+[types]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/base-types.yaml
+[block]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/block.yaml
 -/
 
 @[expose] public section

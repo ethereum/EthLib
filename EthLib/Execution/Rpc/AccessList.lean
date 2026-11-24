@@ -9,16 +9,16 @@ public import EthLib.Execution.Rpc.Base
 
 The block access list of [EIP-7928][eip7928], in the JSON and RLP forms of the execution API.
 
-The JSON schema is [`block-access-list.yaml`][schema].
+Sources, at commit `1ca0818` of execution-apis:
 
-The methods follow `eth_getBlockAccessList` in [`block.yaml`][eth] and the [raw getter][debug].
-
-The source leaves the pending block open for the raw getter, and EthLib reads it from the view.
+- [`block-access-list.yaml`][schema]: the JSON schema
+- `eth_getBlockAccessList` in [`block.yaml`][eth]: the JSON method
+- the [raw getter][debug] in `getters.yaml`: the RLP method
 
 [eip7928]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7928.md#rlp-encoding
-[schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/block-access-list.yaml
-[eth]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/block.yaml
-[debug]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/debug/getters.yaml
+[schema]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/block-access-list.yaml
+[eth]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/block.yaml
+[debug]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/debug/getters.yaml
 -/
 
 @[expose] public section
@@ -198,6 +198,8 @@ def blockAccessList (v : ChainView) : BlockParam → Except RpcError Json
 /-- The RLP list of the requested block, with an error for an unknown block. -/
 def rawBlockAccessList (v : ChainView) (p : BlockParam) : Except RpcError ByteArray :=
   -- The method: an unknown block gets code -32001.
+  --
+  -- The source leaves the pending block open for the raw getter, and EthLib reads it from the view.
   v.ofBlock p BlockRecord.rawBlockAccessList
 
 /-- Forget retained access lists at the named block numbers, while keeping their blocks. -/
