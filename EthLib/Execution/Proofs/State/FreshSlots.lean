@@ -12,14 +12,6 @@ From Glamsterdam, a write that makes a slot fresh pays the state gas of a new sl
 
 A write that clears a fresh slot refills that state gas, by [EIP-8037][eip8037].
 
-The fresh slots of a state form a finite set, read from the keys that its layers hold.
-
-A transaction with no write has no fresh slot.
-
-A storage write adds its slot to the fresh slots, or removes it, and changes no other slot.
-
-A change of an account, new code and a record of a read add no fresh slot.
-
 [eip8037]: https://eips.ethereum.org/EIPS/eip-8037#specification
 -/
 

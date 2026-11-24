@@ -7,26 +7,16 @@ public import EthLib.Base.Proofs.GasLimit
 /-!
 # Proofs: the gas limit rule
 
-The rule holds exactly when the gas limit is within a 1024th of the parent's, and at least 5000.
-
-Each block then multiplies the gas limit by less than `1025 / 1024`, and by more than `1023 / 1024`.
-
-So `k` blocks multiply it by at most `(1025 / 1024)^k`.
-
-At the first London block, the rule reads twice the parent's gas limit.
-
-So that block may double the gas limit, which no other block may do.
-
-After a parent of at least 5000, a gas limit toward a target of at least 5000 follows the rule.
-
-A target that the rule allows is the gas limit itself.
+How far the rule lets blocks move the gas limit, and the gas limit toward a target.
 -/
 
 @[expose] public section
 
 namespace EthLib.Execution.Fees.GasLimit
 
-/-- The rule, in plain inequalities. -/
+/-- The rule, in plain inequalities.
+
+It holds exactly when the gas limit is within a 1024th of the parent's, and at least 5000. -/
 theorem checkGasLimit_iff (gasLimit parentGasLimit : Nat) :
     checkGasLimit gasLimit parentGasLimit = true ↔
       gasLimit < parentGasLimit + parentGasLimit / 1024 ∧
@@ -68,7 +58,12 @@ theorem pow_mul_le_of_checkGasLimit (limit : Nat → Nat) :
       _ ≤ 1025 * (1025 ^ k * limit 0) := Nat.mul_le_mul_left _ ih
       _ = 1025 ^ (k + 1) * limit 0 := by rw [Nat.pow_succ, ← Nat.mul_assoc, Nat.mul_comm 1025]
 
-/-! ## The first London block -/
+/-! ## The first London block
+
+The first London block may double a parent's gas limit of at least 2500.
+
+No block after a London parent may double a positive gas limit.
+-/
 
 open EthLib.Base
 

@@ -5,21 +5,9 @@ public import EthLib.Execution.Fees.BaseFee
 /-!
 # Proofs: `BaseFee`
 
-How far the base fee can move in one block.
+How far the base fee can move in one block, and where the bounds are reached.
 
 The scaled distance is `base_fee * |used - target| / target`, and the fee moves by one eighth of it.
-
-- At the target the fee stays.
-- At or below the target it does not rise.
-- Whatever the parent used, the fee falls by at most `base_fee / 8`.
-- Above the target it rises, by at least 1.
-- If the parent used at most twice its target, the fee rises by at most `max (base_fee / 8) 1`.
-- An odd gas limit lets the parent use `2 * target + 1`, one more than twice its target.
-  Up to the gas limit, the fee then rises by at most `max ((base_fee + base_fee / target) / 8) 1`.
-- For a positive target, an empty parent, a parent at twice its target and a full parent with an odd gas limit reach these three upper bounds.
-- With the same gas limit and base fee, a parent that used more gas never gives a lower fee.
-- With the same gas limit and gas used, a parent with a higher base fee never gives a lower fee.
-- A positive fee stays positive.
 -/
 
 @[expose] public section
@@ -34,7 +22,7 @@ theorem calculateBaseFeePerGas_of_eq {parentGasLimit parentGasUsed : Nat} (paren
     calculateBaseFeePerGas parentGasLimit parentGasUsed parentBaseFeePerGas = parentBaseFeePerGas := by
   simp [calculateBaseFeePerGas, h]
 
-/-- Above the target, the base fee rises by the larger of one eighth of the scaled distance and 1. -/
+/-- Above the target, the base fee rises by the larger of 1 and an eighth of the scaled distance. -/
 theorem calculateBaseFeePerGas_of_gt {parentGasLimit parentGasUsed : Nat} (parentBaseFeePerGas : Nat)
     (h : parentGasLimit / ELASTICITY_MULTIPLIER < parentGasUsed) :
     calculateBaseFeePerGas parentGasLimit parentGasUsed parentBaseFeePerGas
@@ -84,7 +72,9 @@ theorem sub_calculateBaseFeePerGas_le (parentGasLimit parentGasUsed parentBaseFe
       ≤ parentBaseFeePerGas / BASE_FEE_MAX_CHANGE_DENOMINATOR := by
   rcases Nat.lt_or_ge parentGasUsed (parentGasLimit / ELASTICITY_MULTIPLIER) with hlt | hge
   · rw [calculateBaseFeePerGas_of_lt _ hlt]
-    -- The distance below the target is at most the target, so the fall is at most one eighth of the fee.
+    -- The distance below the target is at most the target.
+    --
+    -- So the fall is at most one eighth of the fee.
     have hfall := Nat.div_le_div_right (c := BASE_FEE_MAX_CHANGE_DENOMINATOR)
       (mul_div_le_of_le (fee := parentBaseFeePerGas) (Nat.sub_le (parentGasLimit / ELASTICITY_MULTIPLIER) parentGasUsed))
     rw [Nat.sub_sub_self (Nat.le_trans hfall (Nat.div_le_self _ _))]
@@ -102,7 +92,7 @@ theorem lt_calculateBaseFeePerGas {parentGasLimit parentGasUsed : Nat} (parentBa
   rw [calculateBaseFeePerGas_of_gt _ h]
   exact Nat.lt_add_of_pos_right (Nat.lt_of_lt_of_le Nat.zero_lt_one (Nat.le_max_right _ _))
 
-/-- If the parent used at most twice its target, the base fee rises by at most `max (base_fee / 8) 1`. -/
+/-- If the parent used at most twice its target, the fee rises by at most `max (base_fee / 8) 1`. -/
 theorem calculateBaseFeePerGas_le_of_le_two_mul {parentGasLimit parentGasUsed : Nat} (parentBaseFeePerGas : Nat)
     (h : parentGasUsed ≤ 2 * (parentGasLimit / ELASTICITY_MULTIPLIER)) :
     calculateBaseFeePerGas parentGasLimit parentGasUsed parentBaseFeePerGas
@@ -116,7 +106,9 @@ theorem calculateBaseFeePerGas_le_of_le_two_mul {parentGasLimit parentGasUsed : 
     exact Nat.add_le_add_left (max_one_le_max_one hrise) _
   · exact Nat.le_trans (calculateBaseFeePerGas_le_self _ hle) (Nat.le_add_right _ _)
 
-/-- For a positive target, the distance `target + 1` of a parent that used `2 * target + 1` gives the scaled distance `fee + fee / target`. -/
+/-- For a positive target, the distance `target + 1` gives the scaled distance `fee + fee / target`.
+
+That is the distance of a parent that used `2 * target + 1`. -/
 private theorem mul_succ_div {fee target : Nat} (h : 0 < target) : fee * (target + 1) / target = fee + fee / target := by
   rw [Nat.mul_succ, Nat.add_comm, Nat.add_mul_div_right _ _ h, Nat.add_comm]
 
@@ -126,7 +118,7 @@ An odd gas limit `2 * target + 1` lets the parent use one more than twice its ta
 
 That extra unit of gas can add `base_fee / target` to the scaled distance.
 
-For an even gas limit, `calculateBaseFeePerGas_le_of_le_two_mul` gives the tighter `max (base_fee / 8) 1`. -/
+For an even gas limit, the bound at twice the target gives the tighter `max (base_fee / 8) 1`. -/
 theorem calculateBaseFeePerGas_le_of_le_gasLimit {parentGasLimit parentGasUsed : Nat} (parentBaseFeePerGas : Nat)
     (h : parentGasUsed ≤ parentGasLimit) :
     calculateBaseFeePerGas parentGasLimit parentGasUsed parentBaseFeePerGas
@@ -155,7 +147,12 @@ theorem calculateBaseFeePerGas_le_of_le_gasLimit {parentGasLimit parentGasUsed :
             mul_succ_div hpos
   · exact Nat.le_trans (calculateBaseFeePerGas_le_self _ hle) (Nat.le_add_right _ _)
 
-/-! ## The bounds are reached -/
+/-! ## The bounds are reached
+
+For a positive target, three parents reach the three upper bounds above.
+
+They are an empty parent, a parent at twice its target and a full parent with an odd gas limit.
+-/
 
 /-- For a positive target, an empty parent lowers the base fee by exactly `base_fee / 8`. -/
 theorem calculateBaseFeePerGas_empty {parentGasLimit : Nat} (parentBaseFeePerGas : Nat)
@@ -164,7 +161,7 @@ theorem calculateBaseFeePerGas_empty {parentGasLimit : Nat} (parentBaseFeePerGas
       = parentBaseFeePerGas - parentBaseFeePerGas / BASE_FEE_MAX_CHANGE_DENOMINATOR := by
   rw [calculateBaseFeePerGas_of_lt _ h, Nat.sub_zero, Nat.mul_div_cancel _ h]
 
-/-- For a positive target, a parent at twice its target raises the base fee by exactly `max (base_fee / 8) 1`. -/
+/-- At twice its target, with a positive target, the fee rises by exactly `max (base_fee / 8) 1`. -/
 theorem calculateBaseFeePerGas_two_mul {parentGasLimit : Nat} (parentBaseFeePerGas : Nat)
     (h : 0 < parentGasLimit / ELASTICITY_MULTIPLIER) :
     calculateBaseFeePerGas parentGasLimit (2 * (parentGasLimit / ELASTICITY_MULTIPLIER)) parentBaseFeePerGas
@@ -173,7 +170,9 @@ theorem calculateBaseFeePerGas_two_mul {parentGasLimit : Nat} (parentBaseFeePerG
   rw [show 2 * (parentGasLimit / ELASTICITY_MULTIPLIER) - parentGasLimit / ELASTICITY_MULTIPLIER
       = parentGasLimit / ELASTICITY_MULTIPLIER by omega, Nat.mul_div_cancel _ h]
 
-/-- For a positive target, a full parent with an odd gas limit raises the base fee by exactly `max ((base_fee + base_fee / target) / 8) 1`. -/
+/-- Take a full parent with an odd gas limit and a positive target.
+
+The base fee then rises by exactly `max ((base_fee + base_fee / target) / 8) 1`. -/
 theorem calculateBaseFeePerGas_odd_full {parentGasLimit : Nat} (parentBaseFeePerGas : Nat)
     (hodd : parentGasLimit % 2 = 1) (h : 0 < parentGasLimit / ELASTICITY_MULTIPLIER) :
     calculateBaseFeePerGas parentGasLimit parentGasLimit parentBaseFeePerGas
@@ -189,7 +188,7 @@ theorem calculateBaseFeePerGas_odd_full {parentGasLimit : Nat} (parentBaseFeePer
 
 /-! ## Monotonicity and positivity -/
 
-/-- With the same gas limit and base fee, a parent that used more gas never gives a lower base fee. -/
+/-- With the same gas limit and base fee, a parent that used more gas never gives a lower fee. -/
 theorem calculateBaseFeePerGas_mono (parentGasLimit : Nat) {parentGasUsed parentGasUsed' : Nat}
     (parentBaseFeePerGas : Nat) (h : parentGasUsed ≤ parentGasUsed') :
     calculateBaseFeePerGas parentGasLimit parentGasUsed parentBaseFeePerGas
@@ -217,9 +216,11 @@ theorem calculateBaseFeePerGas_mono (parentGasLimit : Nat) {parentGasUsed parent
       rw [calculateBaseFeePerGas_of_eq _ heq']
       exact calculateBaseFeePerGas_le_self _ (by omega)
 
-/-- With the same gas limit and gas used, a parent with a higher base fee never gives a lower base fee.
+/-- With the same gas limit and gas used, a higher base fee of the parent never gives a lower one.
 
-Below the target, each extra unit of the parent's fee adds at most 1 to the scaled distance, so at most 1 to the fall. -/
+Below the target, each extra unit of the parent's fee adds at most 1 to the scaled distance.
+
+So it adds at most 1 to the fall. -/
 theorem calculateBaseFeePerGas_mono_baseFee (parentGasLimit parentGasUsed : Nat)
     {parentBaseFeePerGas parentBaseFeePerGas' : Nat} (h : parentBaseFeePerGas ≤ parentBaseFeePerGas') :
     calculateBaseFeePerGas parentGasLimit parentGasUsed parentBaseFeePerGas
@@ -229,7 +230,7 @@ theorem calculateBaseFeePerGas_mono_baseFee (parentGasLimit parentGasUsed : Nat)
     have hpos : 0 < parentGasLimit / ELASTICITY_MULTIPLIER := by omega
     generalize parentGasLimit / ELASTICITY_MULTIPLIER = target at hlt hpos ⊢
     have hdist : target - parentGasUsed ≤ target := Nat.sub_le _ _
-    -- The scaled distance of the higher fee exceeds the other by at most the difference of the fees.
+    -- The scaled distance of the higher fee exceeds the other by at most the difference of fees.
     have hstep : parentBaseFeePerGas' * (target - parentGasUsed) / target
         ≤ parentBaseFeePerGas * (target - parentGasUsed) / target + (parentBaseFeePerGas' - parentBaseFeePerGas) := by
       calc parentBaseFeePerGas' * (target - parentGasUsed) / target

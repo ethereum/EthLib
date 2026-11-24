@@ -5,51 +5,7 @@ public import EthLib.Execution.State.Tracker
 /-!
 # Proofs: the transaction state
 
-A read after a write returns the written value, and a write leaves every other place alone.
-
-A storage write leaves the words before the transaction unchanged.
-
-Restoring a snapshot restores every read of the snapshot.
-
-A move of ether keeps the sum of the two balances, and fails when the sender lacks the amount.
-
-A move of ether between two addresses fails exactly in two cases.
-
-The sender lacks the amount, or the recipient's balance would reach 2^256.
-
-Otherwise it moves the amount exactly.
-
-A change of an account keeps every code.
-
-It keeps the storage too, unless it deletes the account.
-
-An account that the transaction created has zero words before the transaction.
-
-Each new transaction starts with an empty transient storage.
-
-The end of a transaction keeps every read of the transaction.
-
-A record of a read changes no read, and a rollback keeps the record.
-
-A wipe of the storage records the keys it drops as reads.
-
-A storage write and a change to an account record a read of the account.
-
-A move of ether records a read of the sender and of the recipient.
-
-A write of an account, a touch, a write of transient storage and a record of creation read nothing.
-
-A change of the nonce never deletes the account, so it keeps every storage read.
-
-The deletion of the touched empty accounts reads no account and keeps every storage read.
-
-From Paris, a change that deletes an account clears its written keys and reads them.
-
-The next transaction starts with an empty record of reads.
-
-Clearing an account keeps its balance, and zeroes its nonce, its code and its storage.
-
-Setting the code or the nonce of an account changes no other field and no other account.
+What each read, write and rollback of the transaction state gives, and what each records as read.
 
 The state after a block reads as the block does at the start of its next transaction.
 -/

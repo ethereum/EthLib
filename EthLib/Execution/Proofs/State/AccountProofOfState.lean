@@ -7,17 +7,7 @@ import EthLib.Serialization.Proofs.Rlp.Codec
 /-!
 # Proofs: the answer of `eth_getProof` that a state gives passes the check
 
-Take a state with a state root, and the answer that the state gives for an address and some slots.
-
-The answer passes the check against that root.
-
-It reports the account present exactly when the state has it.
-
-Each slot of a present account is set exactly when the state holds a word other than zero there.
-
-When the answer does not pass the check, a search finds two keys with one hash.
-
-It looks among the address, the state's addresses, the slots asked for and the address's storage.
+The answer that a state gives passes the check against its root, unless the hash collides.
 -/
 
 @[expose] public section

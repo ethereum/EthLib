@@ -8,22 +8,10 @@ public import EthLib.Execution.Proofs.Trie.HexPrefix
 
 Two clients that hold the same map must compute the same root, whatever order they set its keys in.
 
-The node composition picks the first key in two places, and neither pick matters:
-
-- The run that an extension consumes is the shortest common prefix of the first path with every path.
-  Common prefixes satisfy `min(cpl(a, b), cpl(b, c)) <= cpl(a, c)`.
-  So every path gives the same shortest one.
-- The value of a branch is the value of the last key whose path ends there.
-  When the paths are distinct, at most one ends there.
-
-So the composition gives the same node for any reordering of keys with distinct paths.
-
-A secured trie also has the root of the plain trie keyed by the hashes of its keys.
-
-The root then depends only on the map:
+The root depends only on the map:
 
 - A plain trie needs distinct keys.
-- A secured trie needs distinct hashes of its keys, since two keys with one hash would share one path.
+- A secured trie needs distinct hashes of its keys.
 -/
 
 @[expose] public section
@@ -215,6 +203,7 @@ theorem Distinct.length_filter_le_one {obj : List (List Nibble × ByteArray)} {l
 /-- With distinct paths, the value of a branch does not depend on the order of the keys. -/
 theorem branchValue_perm {obj obj' : List (List Nibble × ByteArray)} {level : Nat} (hperm : obj.Perm obj')
     (hdistinct : Distinct obj level) :
+    -- The value of a branch is the value of the last key whose path ends there.
     obj.foldl (fun value (key, keyValue) => if key.length = level then keyValue else value) ByteArray.empty
       = obj'.foldl (fun value (key, keyValue) => if key.length = level then keyValue else value) ByteArray.empty := by
   have h := foldl_last (fun entry : List Nibble × ByteArray => decide (entry.1.length = level)) Prod.snd
@@ -228,16 +217,22 @@ theorem branchValue_perm {obj obj' : List (List Nibble × ByteArray)} {level : N
         = l.foldl (fun acc entry => if entry.1.length = level then entry.2 else acc) ByteArray.empty := fun _ => rfl
   rw [hfold, hfold, h₁, h₂, hsame]
 
-/-! ## `patricialize` ignores the order -/
+/-! ## `patricialize` ignores the order
+
+The node composition picks the first key in two places, and neither pick matters.
+-/
 
 /-- The run that an extension consumes is the same from any key of the call. -/
 theorem run_eq {obj : List (List Nibble × ByteArray)} {level : Nat} {a b : List Nibble × ByteArray}
     (ha : a ∈ obj) (hb : b ∈ obj) :
+    -- The run is the shortest common prefix of the first path with every path.
     obj.foldl (fun length entry => min length (commonPrefixLength (a.1.drop level) (entry.1.drop level)))
         (a.1.drop level).length
       = obj.foldl (fun length entry => min length (commonPrefixLength (b.1.drop level) (entry.1.drop level)))
         (b.1.drop level).length := by
-  -- Each run is below the other, by the inequality on common prefixes through the other key.
+  -- Common prefixes satisfy `min(cpl(a, b), cpl(b, c)) <= cpl(a, c)`.
+  --
+  -- Each run is below the other, by that inequality through the other key.
   have below : ∀ a b, a ∈ obj → b ∈ obj →
       obj.foldl (fun length entry => min length (commonPrefixLength (a.1.drop level) (entry.1.drop level)))
           (a.1.drop level).length
@@ -374,6 +369,7 @@ theorem root_plain_eq (hash : ByteArray → Hash32) {data data' : List (ByteArra
 
 /-- A secured trie: two lists whose keys have distinct hashes and that hold the same entries have the same root. -/
 theorem root_secured_eq (hash : ByteArray → Hash32) {data data' : List (ByteArray × ByteArray)}
+    -- Two keys with one hash would share one path.
     (hhashes : (data.map fun entry => hash entry.1).Nodup) (hhashes' : (data'.map fun entry => hash entry.1).Nodup)
     (hentries : ∀ entry, entry ∈ data ↔ entry ∈ data') :
     root hash ⟨true, data⟩ = root hash ⟨true, data'⟩ := by

@@ -9,10 +9,9 @@ public import Mathlib.Analysis.Complex.ExponentialBounds
 
 Write `c` for `⌈numerator / denominator⌉`, which is `(numerator + denominator - 1) / denominator`.
 
-- From step `⌈2 * numerator / denominator⌉` on, each step at least halves the accumulator.
-- The result is at most `factor * 3^c`, since the Taylor series of `e^x` stays below `3^⌈x⌉`.
-- The loop stops after a number of steps linear in `c` and in the bits of `factor * denominator`.
-- Under any blob schedule, an excess of at most 161 update fractions gives a fee below `2^256`.
+From step `⌈2 * numerator / denominator⌉` on, each step at least halves the accumulator.
+
+The result is at most `factor * 3^c`, since the Taylor series of `e^x` stays below `3^⌈x⌉`.
 
 The bounds read the integer loop through the real exponential, so this file imports Mathlib.
 -/

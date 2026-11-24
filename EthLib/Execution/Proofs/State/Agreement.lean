@@ -6,27 +6,7 @@ public import EthLib.Execution.Proofs.State.Tracker
 /-!
 # Proofs: transaction states that agree on accessed accounts, slots and code
 
-Two block states agree on a set of addresses when they hold the same account at each.
-
-They agree likewise on sets of slots and code hashes, and on every key at some addresses.
-
-Two transaction states agree when their blocks agree and they carry the same tracker.
-
-That means the same writes, wipes, created accounts, transient storage and reads.
-
-Lookups inside those sets, or at what the tracker wrote, give the same value in both.
-
-Tracker writes, recorded reads, rollback and the end of a transaction keep that agreement.
-
-A transaction that makes no new deployment candidate keeps deployability in agreement.
-
-The sets that matter are those a transaction read and wrote.
-
-[EIP-7928, Scope and Inclusion][eip7928] asks a block access list to name them.
-
-Agreement on whole storages and on code goes beyond that list, so it stays a hypothesis.
-
-[eip7928]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion
+When two transaction states agree, and which lookups and updates keep them in agreement.
 -/
 
 @[expose] public section
@@ -37,19 +17,7 @@ open EthLib.Base
 
 /-! ## Agreement of two block states -/
 
-/-- Two block states agree on four sets: of addresses, of whole storages, of slots, of code hashes.
-
-At each address of the first set, they read the same optional account.
-
-At each address of the second set, they read the same word at every key of storage.
-
-At each slot of the third set, they read the same word of storage.
-
-At each code hash of the fourth set, they fetch the same code.
-
-A contract creation checks every storage key at a candidate address, by [EIP-7610][eip7610].
-
-[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification -/
+/-- Two block states agree on four sets: of addresses, whole storages, slots and code hashes. -/
 structure BlockState.AgreesOn (account allStorage : Address → Prop)
     (slot : Address → Bytes32 → Prop) (code : Hash32 → Prop) (block other : BlockState) :
     Prop where
@@ -57,7 +25,11 @@ structure BlockState.AgreesOn (account allStorage : Address → Prop)
   account : ∀ address, account address →
     (TransactionState.ofBlock other).getAccountOptional address =
       (TransactionState.ofBlock block).getAccountOptional address
-  /-- Each address of the second set has the same word at every key in both block states. -/
+  /-- Each address of the second set has the same word at every key in both block states.
+
+  A contract creation checks every storage key at a candidate address, by [EIP-7610][eip7610].
+
+  [eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification -/
   allStorage : ∀ address key, allStorage address →
     (TransactionState.ofBlock other).getStorage address key =
       (TransactionState.ofBlock block).getStorage address key
@@ -214,7 +186,10 @@ theorem ofBlock {block block' : BlockState}
     AgreesOn account allStorage slot code (.ofBlock block) (.ofBlock block') :=
   ⟨h, .ofBlock block block'⟩
 
-/-! ## Lookups on agreeing states -/
+/-! ## Lookups on agreeing states
+
+Lookups inside the agreed sets, or at what the tracker wrote, give the same value in both.
+-/
 
 /-- At an agreed address, both states read the same optional account before the transaction. -/
 theorem getPreStateAccountOptional_eq (h : AgreesOn account allStorage slot code tx other)
@@ -360,7 +335,10 @@ theorem accountDeployable_eq (h : AgreesOn account allStorage slot code tx other
     · simp [hnonce, hcode]
   · simp [hnonce]
 
-/-! ## Preservation under tracker updates -/
+/-! ## Preservation under tracker updates
+
+Tracker writes, recorded reads, rollback and the end of a transaction keep that agreement.
+-/
 
 /-- Recording an account read preserves agreement. -/
 theorem recordAccountRead (h : AgreesOn account allStorage slot code tx other)
@@ -614,7 +592,14 @@ theorem incorporateTxIntoBlock (h : AgreesOn account allStorage slot code tx oth
 
 end AgreesOn
 
-/-! ## Agreement on the reads and writes of a tracker -/
+/-! ## Agreement on the reads and writes of a tracker
+
+The sets that matter are those a transaction read and wrote.
+
+[EIP-7928, Scope and Inclusion][eip7928] asks a block access list to name them.
+
+[eip7928]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion
+-/
 
 /-- The addresses that a transaction state read or wrote. -/
 def accessedAccount (endState : TransactionState) (address : Address) : Prop :=
@@ -639,24 +624,23 @@ def accessedCode (block : BlockState) (endState : TransactionState) (codeHash : 
 
 /-- Two block states agree on the accounts and slots that a transaction read or wrote.
 
-They also agree on the whole storage of each accessed deployment candidate.
+[EIP-7610][eip7610] reads the storage of a candidate, and the tracker does not record it.
 
-[EIP-7610][eip7610] reads that storage, and the tracker does not record it.
+A block access list names neither that storage nor the code of the accessed addresses.
 
-They also agree on the code under the code hash of each accessed address.
-
-A block access list names neither, so they are assumptions beyond it.
-
-The first block state decides which addresses are candidates and which code hashes count.
+So both are assumptions beyond it.
 
 [eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification -/
 abbrev _root_.EthLib.Execution.State.BlockState.AgreesOnTracker (endState : TransactionState)
     (block other : BlockState) : Prop :=
   BlockState.AgreesOn
     (TransactionState.accessedAccount endState)
+    -- They also agree on the whole storage of each accessed deployment candidate.
     (TransactionState.candidateStorage block endState)
     (TransactionState.accessedSlot endState)
+    -- They also agree on the code under the code hash of each accessed address.
     (TransactionState.accessedCode block endState)
+    -- The first block state decides which addresses are candidates and which code hashes count.
     block other
 
 /-- Two block states that agree on a transaction's accesses give agreeing fresh states. -/
@@ -670,7 +654,10 @@ theorem AgreesOn.ofTracker {block other : BlockState} {endState : TransactionSta
       (.ofBlock block) (.ofBlock other) :=
   .ofBlock h
 
-/-! ## Deployment candidates -/
+/-! ## Deployment candidates
+
+A transaction that makes no new deployment candidate keeps deployability in agreement.
+-/
 
 /-- Every address with nonce 0 and no code had both in the block, or was wiped.
 
