@@ -8,14 +8,6 @@ public import EthLib.Base.Proofs.Hex
 
 The Unicode escape of [RFC 8259 §7][json] reads four hexadecimal digits, in either letter case.
 
-Their value is the one that the hex digits of the library give.
-
-A value outside the surrogate range is returned as the code point it names.
-
-A high surrogate followed by an escaped low surrogate is returned as the code point of the pair.
-
-Every other surrogate is refused, from either half of the range.
-
 The grammar admits a lone surrogate ([§8.2][lone]), but this reader refuses one.
 
 The reader refuses a string whose first character that needs an escape is below `0x20`.

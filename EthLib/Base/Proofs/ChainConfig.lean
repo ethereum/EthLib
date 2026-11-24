@@ -8,27 +8,7 @@ public import EthLib.Base.Proofs.Fork
 
 The active fork is the greatest fork whose activation a block has reached.
 
-A later block, with a number and a timestamp no smaller, has an active fork no earlier.
-
-A fork that always activates with a later fork is never active.
-
-On mainnet, some fork is always active.
-
-It is never Constantinople, and never a fork of the consensus layer alone.
-
-A chain sets no blob schedule at a block exactly when the block reaches none of their activations.
-
-The schedule that it sets is one of its schedules, and the block has reached its activation.
-
-The order check of EIP-6122 passes exactly when no fork by block follows a fork by timestamp.
-
-A chain whose forks are in the order of the timeline passes it.
-
-Mainnet and Hoodi set none.
-
-Three numbers build a blob schedule exactly when they meet its bounds, and it holds them.
-
-The numbers of a schedule build it back.
+Also the blob schedule that a chain sets at a block, the order check of EIP-6122, and blob bounds.
 -/
 
 @[expose] public section

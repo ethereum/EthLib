@@ -5,27 +5,9 @@ public import EthLib.Base.Bytes
 /-!
 # Proofs: `Bytes`
 
-The bytes of a fixed-size object have its length.
+The bytes of a fixed-size object: their length, the reads that return the object, and equality.
 
-A read of a buffer gives the entries of its array of bytes.
-
-A read of those bytes returns the object.
-
-So two objects with the same bytes are the same object.
-
-The exclusive or of byte strings is commutative, and applying one string twice undoes it.
-
-Applying an untyped string twice undoes it too: a byte past its end reads as zero.
-
-A byte of a join or a slice is a byte of a part, or zero past its end.
-
-Two strings of one size are equal when they agree on every byte.
-
-A loop over the bytes of a string runs as a loop over the list of those bytes, in order.
-
-Inside the array, a bounded read of a byte agrees with the defaulting one.
-
-A defaulting write changes the byte it writes and no other.
+Also the exclusive or of byte strings, the bytes of joins and slices, loops over bytes, and writes.
 -/
 
 @[expose] public section

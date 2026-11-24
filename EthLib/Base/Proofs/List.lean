@@ -5,33 +5,7 @@ module
 
 Facts about lists that Lean core does not prove and that several layers use.
 
-Removing the duplicates of a list leaves each element once.
-
-A bound on each term of a sum bounds the sum by the count times that bound.
-
-Bounds on each term of a sum bound it by the sum of those bounds.
-
-A factor of every term comes out of the sum.
-
-The quotients of the terms sum to at most the quotient of the sum.
-
-Two lists of distinct elements that each hold every element with a nonzero term give the same sum.
-
-A change of one term of a sum over distinct elements changes the sum by the same amount.
-
-A sum of a value where a test holds, and zero elsewhere, is its sum over the passing entries.
-
-Dropping the front where a test holds keeps each member that fails the test.
-
-Numbering the front of a list gives the front of the numbered list.
-
-An array holds an element that passes a test whenever a search for one finds it.
-
-A first match of a longer array that lies in a prefix is the first match there.
-
-The largest of a list of numbers bounds each of them.
-
-If pieces of one nonzero length determine their values, so do the joined pieces.
+They cover duplicates, sums and their bounds, the front of a list, searches in arrays and maxima.
 -/
 
 @[expose] public section

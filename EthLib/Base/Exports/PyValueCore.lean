@@ -13,10 +13,6 @@ Each constructor stands for one kind of Python value.
 One generic converter in the C layer turns these values into Python objects and back.
 
 So no export writes or reads a byte format of its own.
-
-A type crosses the boundary through a conversion to these values and a conversion back.
-
-Its law says that reading back what a value writes gives that value.
 -/
 
 @[expose] public section
@@ -67,7 +63,9 @@ def isFailure : PyValue → Bool
 
 end PyValue
 
-/-- A type whose values Python can receive. -/
+/-- A type whose values Python can receive.
+
+A type crosses the boundary through a conversion to these values, and one back. -/
 class ToPy (α : Type) where
   /-- The Python value of a value. -/
   toPy : α → PyValue

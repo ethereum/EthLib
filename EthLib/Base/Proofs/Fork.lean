@@ -7,15 +7,11 @@ public import EthLib.Base.Fork
 
 Forks are ordered by their position in the type, and the order is linear.
 
-The comparison agrees with that order, as an ordered map needs.
-
 The timeline pins each position, so a fork moved in the type fails the build.
 
-Each fork reads back from its name, and no two forks share a name.
+Each fork reads back from its name.
 
-A field that appears at a fork holds nothing before it, and one value from it on.
-
-A field that a fork removes holds one value before it, and nothing from it on.
+A field holds values from the fork that adds it to the fork that removes it.
 -/
 
 @[expose] public section
@@ -38,6 +34,7 @@ instance : IsLinearOrder Fork := by
 instance : LawfulOrderLT Fork where
   lt_iff a b := Nat.lt_iff_le_and_not_ge (m := a.ctorIdx) (n := b.ctorIdx)
 
+-- The comparison agrees with the order, as an ordered map needs.
 instance : LawfulOrderOrd Fork where
   isLE_compare a b := LawfulOrderOrd.isLE_compare a.ctorIdx b.ctorIdx
   isGE_compare a b := LawfulOrderOrd.isGE_compare a.ctorIdx b.ctorIdx
