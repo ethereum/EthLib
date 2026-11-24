@@ -6625,6 +6625,21 @@ So the last step never gives code 400.
 `getHead_exists`, `getHead_exists_of_gloas`, `ForwardReachable.exists_getCurrentSlot` and `processSlots_exists_ok` give conditions under which the other steps succeed.
 No theorem states exactly when `getHead`, `getCurrentSlot` or `processSlots` fail.
 So no theorem states exactly which stores make the two answers refuse with code 500.
+`produceAttestationData_ne_internal_of_forwardReachable` (`Consensus/Proofs/BeaconApi/ValidatorDataReachable.lean`) excludes code 500 from the attestation data answer on a store that the handlers build with a forward clock.
+It holds for every request.
+It takes two hypotheses on the store: its head, and the success of the empty slots from the state of the head up to the requested slot.
+It also asks three things of the preset and the configuration:
+- a slot lasts a positive time;
+- an epoch has a slot, and at most as many as the recorded block roots;
+- every slot that a clock reaches, plus the number of recorded block roots, fits in 64 bits.
+
+Mainnet meets all three.
+`Store.getHead_known` shows that the root of the head of any store names a block that the store holds.
+`Store.Reachable.blockState_of_getHead` shows that a reachable store holds the state after that block.
+`producePayloadAttestationData_ne_internal_of_getHead` excludes code 500 from the payload attestation data answer on a store with a head.
+No theorem carries the success of the empty slots to the states of a store.
+The theorems of `Proofs/Transition/Totality/` take hypotheses on each state, and no theorem shows them for those states.
+So the head and those empty slots remain hypotheses.
 Each response of the attestation data, payload attestation data, aggregate and contribution answers writes its value with `apiJsonOr500`, which gives code 500 when the JSON writer fails.
 `apiJsonOr500_bind_eq_error_iff` (`Consensus/Proofs/BeaconApi/Responses.lean`) shows that such a response refuses exactly when its answer does, with the same error, once the writer succeeds on the value.
 `toApiJson_total` gives that success for a lawful type.
