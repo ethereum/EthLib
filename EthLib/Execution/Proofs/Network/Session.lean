@@ -6,23 +6,13 @@ public import EthLib.Execution.Network.Session
 /-!
 # Proofs: the eth session
 
-Before the peer's Status, every other message is rejected.
+Before the peer's Status, a session takes nothing but Status, and before both, sends nothing else.
 
-A Status is accepted then exactly when it passes the checks of a Status.
+After the peer's Status, a response must answer a pending request.
 
-An accepted response removes the oldest pending request that it answers, and only that one.
-
-A response that answers no pending request is rejected.
-
-Receiving never changes the hashes sent, and only appends the hashes it receives.
-
-Before both Status messages, this node sends nothing but Status.
-
-Along any run of a session, a Transactions message sends no transaction that went out before.
+Along a run, a Transactions message sends no transaction that went out before.
 
 Nor does it send one back to the peer it came from.
-
-The eth requirement of snap holds exactly when some version of eth is a shared capability.
 -/
 
 @[expose] public section

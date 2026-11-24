@@ -9,35 +9,11 @@ public import EthLib.Serialization.Proofs.Rlp.Encodings
 /-!
 # Proofs: the snap capability
 
-A snap version and its number determine each other.
-
-The count of message IDs for snap and eth is nonzero exactly on the capabilities of their versions.
-
-An account reads back from its slim form.
-
-The slim form of an account converts to its full encoding, and a byte string is never a body.
-
 Each message reads back from its ID and its RLP item on the versions that use its ID.
 
 The decoder reads no other ID or item, so it takes no field more or less than the writer writes.
 
-Each access list that the decoder reads keeps the bytes of its own encoding.
-
-snap/2 rejects the trie node messages of snap/1, and snap/1 the access list messages of snap/2.
-
-A version rejects every ID from its count of IDs on as unknown, but not the ID just below it.
-
 The codes and the access lists of a checked answer are the requested ones.
-
-A full trie node path reads as its 64 nibbles.
-
-A compact path of fewer than 32 bytes reads as the nibbles it encodes.
-
-The lists of paths read as one group each, in order.
-
-A group of paths asks for one node per path after the first, and for one node if it has one path.
-
-Every prefix of an accepted TrieNodes answer is accepted.
 -/
 
 @[expose] public section

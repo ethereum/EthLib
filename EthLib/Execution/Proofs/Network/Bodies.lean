@@ -19,17 +19,9 @@ public import EthLib.Serialization.Proofs.Rlp.RoundTrip
 
 The body of every block that passes the state transition passes the check against its header.
 
-Each transaction of a body that passes decodes at the fork, with a gas limit at most the block's.
-
 Two bodies that keep their encodings and pass for one header are equal in each part.
 
 Otherwise a Keccak-256 collision is named.
-
-A body with three ommers is rejected once the checks before the ommers pass.
-
-A body without withdrawals from Shapella, or with them before, is rejected for that reason.
-
-Two errors with one code come from one constructor.
 -/
 
 @[expose] public section
@@ -401,21 +393,19 @@ theorem checkOmmers_binding {header : Header fork} {o₁ o₂ : Encoded}
   · exact .inl (encode_injective _ _ o₁.bytes he₁ (heq ▸ he₂))
   · exact .inr ⟨heq, (checkOmmers_hash h₁).trans (checkOmmers_hash h₂).symm⟩
 
-/-- Binding of a body to its header.
+/-- Binding of a body to its header, up to a Keccak-256 collision.
 
-Two bodies that keep their own encodings and pass for one header have the same parts.
-
-That holds up to a Keccak-256 collision.
-
-- Their transactions are equal, or the bytes of the transactions give a collision.
-- From Shapella, their withdrawals are equal, or the bytes of the withdrawals give a collision.
-- Their ommers lists are equal, or their encodings are a collision. -/
+Two bodies that keep their own encodings and pass for one header have the same parts. -/
 theorem checkBody_binding {header : Header fork} {x₁ x₂ : Encoded}
     (he₁ : encode x₁.item = .ok x₁.bytes) (he₂ : encode x₂.item = .ok x₂.bytes)
     (h₁ : checkBody header x₁ = .ok ()) (h₂ : checkBody header x₂ = .ok ()) :
+    -- Their transactions are equal, or the bytes of the transactions give a collision.
+    --
+    -- Their ommers lists are equal, or their encodings are a collision.
     ∃ t₁ o₁ t₂ o₂ : Encoded, TransactionsBound t₁ t₂ ∧ OmmersBound o₁ o₂ ∧
       (¬ .shapella ≤ fork →
         x₁.item = .list [t₁.item, o₁.item] ∧ x₂.item = .list [t₂.item, o₂.item]) ∧
+      -- From Shapella, their withdrawals are equal, or the withdrawal bytes give a collision.
       (.shapella ≤ fork → ∃ w₁ w₂, WithdrawalsBound w₁ w₂ ∧
         x₁.item = .list [t₁.item, o₁.item, w₁] ∧ x₂.item = .list [t₂.item, o₂.item, w₂]) := by
   obtain ⟨t₁, o₁, ht₁, ho₁, hk₁, hn₁, hs₁⟩ := checkBody_eq_ok h₁

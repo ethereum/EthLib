@@ -7,19 +7,9 @@ public import EthLib.Execution.Proofs.Trie.RangeComplete
 /-!
 # Proofs: honest snap ranges pass the checks
 
-An honest AccountRange answer sends the slim forms of accounts of a secured state trie.
+As for the range check of a trie, honest answers pass unless the node search returns a collision.
 
-The check converts them to their full encodings before checking the range.
-
-An honest StorageRanges answer sends whole tries before its last, possibly partial, range.
-
-The keys are listed by increasing hash, the order of a secured trie.
-
-So the keys of each trie have distinct hashes.
-
-As for the range check of a trie, acceptance fails only when the node search returns a collision.
-
-Whole tries need no proof and pass without that qualification.
+The keys are listed by increasing hash, the order of a secured trie, so their hashes are distinct.
 
 The requests are [GetAccountRange (0x00)][get-account] and [GetStorageRanges (0x02)][get-storage].
 
@@ -123,6 +113,7 @@ theorem verifyAccountRange_complete {data sent : List AccountRangeWitness} {root
       ⟨false, data.map fun a => (⟨(keccak256 a.key).toArray⟩, a.full)⟩
       ⟨(keccak256 last.key).toArray⟩ = .ok second)
     (hproof : ∀ x ∈ first ++ second, x ∈ proof) :
+    -- The answer sends the slim forms, which the check converts to full encodings first.
     verifyAccountRange root' start (sent.map AccountRangeWitness.rangeEntry) proof =
         .ok (.ofMore (data.any fun a => bytesToNibbleList ⟨(keccak256 last.key).toArray⟩ <
           bytesToNibbleList ⟨(keccak256 a.key).toArray⟩)) ∨
@@ -211,6 +202,7 @@ theorem verifyAccountRange_whole {data : List AccountRangeWitness} {root' : Hash
       bytesToNibbleList ⟨(keccak256 a.key).toArray⟩) = true)
     (hstart : ∀ a ∈ data,
       bytesToNibbleList ⟨start.toArray⟩ ≤ bytesToNibbleList ⟨(keccak256 a.key).toArray⟩) :
+    -- The answer sends the slim forms, which the check converts to full encodings first.
     verifyAccountRange root' start (data.map AccountRangeWitness.rangeEntry) [] =
       .ok (if data.isEmpty then .noState else .toEnd) := by
   by_cases hnil : data = []
@@ -332,22 +324,17 @@ private theorem verifyStorageRanges_of_secured_last
     rw [hfirst, ite_eq_right hmany]
     exact zeroHash_path_le _
 
-/-- Honest StorageRanges pass for one account or several, or a node collision is found.
-
-`whole` lists the whole tries before the last range.
-
-The last range sends the first `count` slots of `data` from `first`, in increasing hash order.
-
-The proof contains the proofs of `first` and of the last slot.
-
-`remaining` lists requested accounts after the last range.
-
-For one requested account, `first` is `start`; for several, it is the zero hash. -/
+/-- Honest StorageRanges pass for one account or several, or a node collision is found. -/
 theorem verifyStorageRanges_complete
+    -- The whole tries that the answer sends before its last, possibly partial, range.
     (whole : List (Hash32 × List (ByteArray × ByteArray)))
+    -- The requested accounts after the last range.
     (root' start first : Hash32) (remaining : List Hash32)
     {data sent : List (ByteArray × ByteArray)} (count : Nat)
     {last : ByteArray × ByteArray} {left right proof : List ByteArray}
+    -- For one requested account, the last range starts at the requested start.
+    --
+    -- For several, it starts at the zero hash.
     (hfirst : first = if (whole.map Prod.fst ++ root' :: remaining).length = 1 then start
       else Vector.replicate 32 0)
     (hwhole : ∀ entry ∈ whole, root keccak256 ⟨true, entry.2⟩ = .ok entry.1 ∧
@@ -356,6 +343,7 @@ theorem verifyStorageRanges_complete
     (hroot : root keccak256 ⟨true, data⟩ = .ok root')
     (hsorted : strictlyIncreasing (data.map fun slot =>
       bytesToNibbleList ⟨(keccak256 slot.1).toArray⟩) = true)
+    -- The last range sends the first `count` slots of its trie from its start, by increasing hash.
     (hsent : sent = (data.filter fun slot => bytesToNibbleList ⟨first.toArray⟩ ≤
       bytesToNibbleList ⟨(keccak256 slot.1).toArray⟩).take count)
     (hlast : sent.getLast? = some last)
@@ -365,6 +353,7 @@ theorem verifyStorageRanges_complete
     (hright : getProof keccak256
       ⟨false, data.map fun slot => (⟨(keccak256 slot.1).toArray⟩, slot.2)⟩
       ⟨(keccak256 last.1).toArray⟩ = .ok right)
+    -- The proof contains the proofs of the start of the last range and of its last slot.
     (hproof : ∀ x ∈ left ++ right, x ∈ proof) :
     verifyStorageRanges (whole.map Prod.fst ++ root' :: remaining) start
         (whole.map (fun entry => storageRangeEntries entry.2) ++ [storageRangeEntries sent])

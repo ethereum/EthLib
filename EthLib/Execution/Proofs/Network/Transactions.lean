@@ -9,13 +9,7 @@ public import EthLib.Serialization.Proofs.Rlp.Encodings
 
 An announcement reads back from its RLP item on the versions that use its form.
 
-It reads from no other item.
-
-Take an answer that passes the check.
-
-Its transactions have hashes that are requested hashes, in the order of the request.
-
-An answer passes exactly when its transactions hash to a sublist of the requested hashes, in order.
+An answer passes the check exactly when its transactions hash to requested hashes, in order.
 
 A blob transaction in its network form hashes the encoding of its body, cut from its own bytes.
 -/

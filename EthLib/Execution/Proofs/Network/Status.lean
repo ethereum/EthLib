@@ -10,15 +10,9 @@ Each message reads back from its RLP item on the versions that use its form.
 
 A Status reads from no other item.
 
-The decoder of eth/68 rejects the Status of eth/69.
+A node accepts a Status exactly when the version matches and the fork identifier passes.
 
-The decoder of each later version rejects the Status of eth/68.
-
-A node accepts a Status that carries its own version and fork identifier and a range in order.
-
-It accepts a Status exactly when the version matches and the fork identifier passes.
-
-From eth/69 the range must also not start after it ends, so a range of one block passes.
+From eth/69, the range must also not start after it ends.
 
 At every version, the network ID and the genesis hash play no part.
 -/

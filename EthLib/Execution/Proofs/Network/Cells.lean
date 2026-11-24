@@ -6,25 +6,9 @@ public import EthLib.Execution.Network.Cells
 /-!
 # Proofs: the cells of eth/72
 
-A response of cells that passes the check holds only requested cell indices.
+A response of cells passes the check exactly when it keeps the rules of a Cells answer.
 
-It holds only requested transactions, in order, with one group of cells for each transaction.
-
-Each group has one cell of 2048 bytes for each blob of its transaction and each marked index.
-
-A response passes the check exactly when it keeps these rules.
-
-A bitmap marks index `i` exactly when `i < 128` and bit `i % 8` of byte `i / 8` is set.
-
-Bits count from the least significant bit.
-
-The source fixes no bit order.
-
-A bitmap is a subset of another exactly when the other marks each index that it marks.
-
-The count of a bitmap is the number of set bits of its 16 bytes.
-
-A subset counts no more indices than the bitmap that holds it.
+The bitmap of cell indices is read bit by bit, compared and counted.
 -/
 
 @[expose] public section
@@ -45,6 +29,9 @@ private theorem shift_and_one (x : UInt8) {j : Nat} (hj : j < 8) :
 
 /-- A bitmap marks index `i` exactly when `i < 128` and bit `i % 8` of byte `i / 8` is set. -/
 theorem CellMask.has_eq_true_iff {mask : CellMask} {i : Nat} :
+    -- Bits count from the least significant bit.
+    --
+    -- The source fixes no bit order.
     mask.has i = true ↔ ∃ h : i < 128, (mask[i / 8]'(by omega)).toNat.testBit (i % 8) = true := by
   unfold CellMask.has
   by_cases h : i < 128
@@ -111,20 +98,22 @@ theorem CellMask.count_le_count_of_subset {a b : CellMask} (h : a.subset b = tru
   rw [← List.countP_eq_length_filter, ← List.countP_eq_length_filter]
   exact List.countP_mono_left fun i _ hi => CellMask.subset_eq_true_iff.mp h i hi
 
-/-- A response passes the check exactly when it keeps every rule of a Cells answer.
-
-- It marks only indices that the request asks for.
-- It holds requested transactions, in the order of the request.
-- It has one group of cells and one blob count for each transaction.
-- Each group has one cell for each blob of its transaction and each marked index.
-- Each cell has 2048 bytes. -/
+/-- A response passes the check exactly when it keeps every rule of a Cells answer. -/
 theorem checkCells_eq_ok_iff {requested : List Hash32} {requestMask : CellMask}
     {blobs : List Nat} {hashes : List Hash32} {groups : List (List ByteArray)} {mask : CellMask} :
     checkCells requested requestMask blobs hashes groups mask = .ok () ↔
+      -- It marks only indices that the request asks for.
+      --
+      -- It holds requested transactions, in the order of the request.
+      --
+      -- It has one group of cells for each transaction.
       mask.subset requestMask ∧ hashes.Sublist requested ∧ groups.length = hashes.length ∧
+        -- It has one blob count for each transaction.
         blobs.length = hashes.length ∧
         ∀ (i : Nat) (hg : i < groups.length) (hb : i < blobs.length),
+          -- Each group has one cell for each blob of its transaction and each marked index.
           groups[i].length = blobs[i] * mask.count ∧
+            -- Each cell has 2048 bytes.
             ∀ cell ∈ groups[i], cell.size = BYTES_PER_CELL := by
   unfold checkCells
   by_cases hm : mask.subset requestMask
