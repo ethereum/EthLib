@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Base.Bytes
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Execution.Evm.Log
@@ -65,7 +65,7 @@ def ofLogs (logs : List Log) : BitVec 2048 :=
 /-- The 256 bytes of a filter, the most significant byte first. -/
 def toBytes (bloom : BitVec 2048) : Bytes256 :=
   -- `B_j` reads the bytes big-endian, so the bit of weight `2^k` is bit `2047 - k`.
-  ⟨(natToBytes 256 bloom.toNat).toArray, by simp [natToBytes_length]⟩
+  ByteOrder.toBE 256 bloom.toNat
 
 /-- Whether a filter has every bit of an entry.
 

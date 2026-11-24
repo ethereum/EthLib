@@ -127,7 +127,7 @@ theorem removeHeaderProtection_applyMask (suite : CipherSuite)
       ⟨bytes.extract 0 (offset + width.val + 1),
         bytes.extract (offset + width.val + 1) (bytes.size - 16),
         bytes.extract (bytes.size - 16) bytes.size,
-        bytesToNat (bytes.extract offset (offset + width.val + 1)).data.toList, width⟩ := by
+        ByteOrder.ofBE (bytes.extract offset (offset + width.val + 1)).data.toList, width⟩ := by
   dsimp only
   let first := bytes[0]'(by omega)
   let width := Packet.widthOfFirst first
@@ -245,7 +245,7 @@ theorem unprotect_protect (suite : CipherSuite) (keys : PacketKeys suite)
     | ok u =>
       rw [ho] at hprotect
       have ho' : 0 < offset ∧ header.size = offset + width.val + 1 := ensure_ok_iff.mp ho
-      cases hn : ensure (bytesToNat (header.extract offset header.size).data.toList =
+      cases hn : ensure (ByteOrder.ofBE (header.extract offset header.size).data.toList =
           number.val % 256 ^ (width.val + 1)) Error.packetNumber with
       | error e => rw [hn] at hprotect; cases hprotect
       | ok u =>

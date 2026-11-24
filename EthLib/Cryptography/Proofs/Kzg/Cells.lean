@@ -318,7 +318,7 @@ theorem unpackIndicesBE_bad_size {b : ByteArray} (h : b.size % 8 ≠ 0) :
 /-- A buffer of a multiple of 8 bytes decodes to one index per 8 bytes, in order. -/
 private theorem unpackIndicesBE_eq_ok_of_mod_eq_zero {b : ByteArray} (h : b.size % 8 = 0) :
     unpackIndicesBE b = .ok ((List.range (b.size / 8)).map fun i =>
-      Base.bytesToNat ((b.data.toList.drop (i * 8)).take 8)).toArray := by
+      Base.ByteOrder.ofBE ((b.data.toList.drop (i * 8)).take 8)).toArray := by
   unfold unpackIndicesBE
   simp only [h, bne_self_eq_false, Bool.false_eq_true, ite_false]
   rw [Std.Legacy.Range.forIn_eq_forIn_range']
@@ -338,7 +338,8 @@ Each index is below `2^64`, and its encoding is 8 bytes, the most significant fi
 So the decoding reads all 8 bytes of each index, and drops or adds no byte of the buffer. -/
 theorem unpackIndicesBE_eq_ok_iff (b : ByteArray) (xs : Array Nat) :
     unpackIndicesBE b = .ok xs ↔
-      (∀ x ∈ xs, x < 2 ^ 64) ∧ b.data.toList = xs.toList.flatMap (Base.natToBytes 8) := by
+      (∀ x ∈ xs, x < 2 ^ 64) ∧ b.data.toList
+        = xs.toList.flatMap (fun x => (Base.ByteOrder.toBE 8 x).toList) := by
   have h64 : (2 : Nat) ^ 64 = 256 ^ 8 := rfl
   constructor
   · intro hok
@@ -347,23 +348,23 @@ theorem unpackIndicesBE_eq_ok_iff (b : ByteArray) (xs : Array Nat) :
       obtain rfl := (Except.ok.inj hok).symm
       refine ⟨fun x hx => ?_, ?_⟩
       · obtain ⟨i, -, rfl⟩ := List.mem_map.mp (List.mem_toArray.mp hx)
-        have hlt := Base.bytesToNat_lt ((b.data.toList.drop (i * 8)).take 8)
+        have hlt := Base.ByteOrder.ofBE_lt ((b.data.toList.drop (i * 8)).take 8)
         have hle : 256 ^ ((b.data.toList.drop (i * 8)).take 8).length ≤ 2 ^ 64 :=
           h64 ▸ Nat.pow_le_pow_right (by decide) (List.length_take_le _ _)
         omega
       · have hlen : b.data.toList.length = 8 * (b.size / 8) := by
           rw [Array.length_toList]
           exact (Nat.mul_div_cancel' (Nat.dvd_of_mod_eq_zero h)).symm
-        rw [List.toList_toArray, Base.flatMap_natToBytes_map_range_bytesToNat hlen]
+        rw [List.toList_toArray, Base.ByteOrder.flatMap_toBE_map_range_ofBE hlen]
     · rw [unpackIndicesBE_bad_size h] at hok
       cases hok
   · rintro ⟨hlt, heq⟩
     have hlen : b.size = 8 * xs.size := by
       have hsize : b.data.toList.length = b.size := Array.length_toList
-      rw [← hsize, heq, Base.length_flatMap_natToBytes, Array.length_toList]
+      rw [← hsize, heq, Base.ByteOrder.length_flatMap_toBE, Array.length_toList]
     rw [unpackIndicesBE_eq_ok_of_mod_eq_zero (by omega), show b.size / 8 = xs.toList.length by
       rw [Array.length_toList]; omega, heq,
-      Base.map_range_bytesToNat_flatMap_natToBytes
+      Base.ByteOrder.map_range_ofBE_flatMap_toBE
         fun x hx => h64 ▸ hlt x (Array.mem_toList_iff.mp hx)]
 
 end EthLib.Cryptography.Kzg

@@ -82,7 +82,7 @@ def sign (d : Fn) (hash : Vector UInt8 32) : Option (Fn × Fn) :=
     -- With SHA-256 no truncation is needed.
     --
     -- `e` is taken mod `n`, which leaves `s` of step 6 unchanged.
-    signWith d (Fin.ofNat _ (Base.bytesToNat hash.toList)) MAX_NONCES
+    signWith d (Fin.ofNat _ (Base.ByteOrder.ofBE hash.toList)) MAX_NONCES
       -- The nonce generator is HMAC-SHA-256, keyed by the private key and the 32-byte hash.
       (nonceSeed Fn.modulus d.val hash)
 

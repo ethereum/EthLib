@@ -17,7 +17,7 @@ Every fork from Pectra accepts the same inputs at the same prices.
 
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
-open EthLib.Base (bytesToNat)
+open EthLib.Base (ByteOrder.ofBE)
 open EthLib.Cryptography.Bls (G1)
 
 /-- The price of G1ADD, from EIP-2537, Gas schedule. -/
@@ -86,7 +86,7 @@ def g1Msm (pairs : List (List UInt8 × List UInt8)) : Except Bls12381Error G1 :=
     -- Error case: an input is on the curve but not in the correct subgroup.
     let point ← bytesToG1 raw true
     -- The scalar is not required to be less than or equal to the subgroup order `q`.
-    return G1.add sum (G1.mulNat point (bytesToNat scalar))
+    return G1.add sum (G1.mulNat point (ByteOrder.ofBE scalar))
 
 /-- The multi-scalar multiplication of the pairs in the call data. -/
 def bls12G1Msm (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray := do

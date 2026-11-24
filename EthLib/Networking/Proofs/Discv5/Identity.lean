@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Cryptography.Proofs.Hash.Hkdf
 public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
 public import EthLib.Cryptography.Proofs.Secp256k1.Sign
@@ -32,18 +32,15 @@ theorem distance_comm (a b : NodeId) : distance a b = distance b a :=
   Nat.xor_comm _ _
 
 /-- Two IDs of 32 bytes with one big-endian value are equal. -/
-theorem eq_of_bytesToNat_eq {a b : NodeId}
-    (h : Base.bytesToNat a.toList = Base.bytesToNat b.toList) : a = b := by
-  have ha := Base.natToBytes_bytesToNat a.toList
-  have hb := Base.natToBytes_bytesToNat b.toList
-  simp only [Vector.length_toList] at ha hb
-  exact Vector.toList_inj.mp (ha.symm.trans (h ▸ hb))
+theorem eq_of_ofBE_eq {a b : NodeId}
+    (h : Base.ByteOrder.ofBE a.toList = Base.ByteOrder.ofBE b.toList) : a = b := by
+  rw [← Base.ByteOrder.toBE_ofBE a, ← Base.ByteOrder.toBE_ofBE b, h]
 
 /-- The distance is 0 exactly between equal IDs. -/
 theorem distance_eq_zero_iff {a b : NodeId} : distance a b = 0 ↔ a = b := by
   constructor
   · intro h
-    apply eq_of_bytesToNat_eq
+    apply eq_of_ofBE_eq
     apply Nat.eq_of_testBit_eq
     intro i
     have := congrArg (·.testBit i) h
@@ -55,8 +52,8 @@ theorem distance_eq_zero_iff {a b : NodeId} : distance a b = 0 ↔ a = b := by
 
 /-- The distance is below 2^256. -/
 theorem distance_lt (a b : NodeId) : distance a b < 2 ^ 256 := by
-  have ha := Base.bytesToNat_lt a.toList
-  have hb := Base.bytesToNat_lt b.toList
+  have ha := Base.ByteOrder.ofBE_lt a.toList
+  have hb := Base.ByteOrder.ofBE_lt b.toList
   simp only [Vector.length_toList] at ha hb
   exact Nat.xor_lt_two_pow (by simpa [Nat.pow_mul] using ha) (by simpa [Nat.pow_mul] using hb)
 

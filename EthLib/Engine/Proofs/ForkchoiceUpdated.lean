@@ -4,7 +4,7 @@ public import EthLib.Engine.ForkchoiceUpdated
 public import EthLib.Base.Except
 public import EthLib.Engine.Proofs.Json
 import EthLib.Base.Proofs.Toolchain.JsonBasic
-import EthLib.Base.Proofs.BigEndian
+import EthLib.Base.Proofs.ByteOrder
 import EthLib.Base.Proofs.List
 public import EthLib.Base.Proofs.Except
 
@@ -1655,25 +1655,27 @@ theorem forkchoiceUpdatedCall_payloadAttributesJson_of_heze {fork : Fork}
 /-! ## The ID of a build -/
 
 /-- Two 64-bit numbers with the same 8 big-endian bytes are equal. -/
-private theorem natToBytes_eight_inj {a b : UInt64}
-    (h : natToBytes 8 a.toNat = natToBytes 8 b.toNat) : a = b := by
+private theorem toBE_eight_inj {a b : UInt64}
+    (h : (ByteOrder.toBE 8 a.toNat).toList = (ByteOrder.toBE 8 b.toNat).toList) : a = b := by
   exact UInt64.toNat_inj.mp
-    (natToBytes_inj (by simpa using a.toNat_lt) (by simpa using b.toNat_lt) h)
+    (ByteOrder.toBE_inj (n := 8) a.toNat_lt b.toNat_lt (Vector.toList_inj.mp h))
 
 /-- The bytes that the ID of a build hashes for a withdrawal determine the withdrawal. -/
 private theorem withdrawalBytes_inj (w w' : Execution.Blocks.Withdrawal)
-    (h : natToBytes 8 w.index.toNat ++ (natToBytes 8 w.validatorIndex.toNat ++
-        (w.address.toList ++ natToBytes 8 w.amount.toNat)) =
-      natToBytes 8 w'.index.toNat ++ (natToBytes 8 w'.validatorIndex.toNat ++
-        (w'.address.toList ++ natToBytes 8 w'.amount.toNat))) : w = w' := by
-  obtain ⟨h1, h⟩ := List.append_inj h (by simp [natToBytes_length])
-  obtain ⟨h2, h⟩ := List.append_inj h (by simp [natToBytes_length])
+    (h : (ByteOrder.toBE 8 w.index.toNat).toList
+      ++ ((ByteOrder.toBE 8 w.validatorIndex.toNat).toList ++
+        (w.address.toList ++ (ByteOrder.toBE 8 w.amount.toNat).toList)) =
+      (ByteOrder.toBE 8 w'.index.toNat).toList
+        ++ ((ByteOrder.toBE 8 w'.validatorIndex.toNat).toList ++
+        (w'.address.toList ++ (ByteOrder.toBE 8 w'.amount.toNat).toList))) : w = w' := by
+  obtain ⟨h1, h⟩ := List.append_inj h (by simp)
+  obtain ⟨h2, h⟩ := List.append_inj h (by simp)
   obtain ⟨h3, h4⟩ := List.append_inj h (by simp)
   cases w
   cases w'
   simp only [Execution.Blocks.Withdrawal.mk.injEq]
-  exact ⟨natToBytes_eight_inj h1, natToBytes_eight_inj h2, Vector.toList_inj.mp h3,
-    natToBytes_eight_inj h4⟩
+  exact ⟨toBE_eight_inj h1, toBE_eight_inj h2, Vector.toList_inj.mp h3,
+    toBE_eight_inj h4⟩
 
 /-- Bytes each after a byte 1, then a byte 0, split one way only from what follows. -/
 private theorem markedBytes_inj {x x' r r' : List UInt8}
@@ -1743,7 +1745,7 @@ theorem payloadIdInput_inj {fork : Fork} {head head' : Hash32} {a a' : PayloadAt
   have e := congrArg (fun b : ByteArray => b.data.toList) h
   simp only [payloadIdInput, List.append_assoc] at e
   obtain ⟨hHead, e⟩ := List.append_inj e (by simp)
-  obtain ⟨hTime, e⟩ := List.append_inj e (by simp [natToBytes_length])
+  obtain ⟨hTime, e⟩ := List.append_inj e (by simp)
   obtain ⟨hRandao, e⟩ := List.append_inj e (by simp)
   obtain ⟨hFee, e⟩ := List.append_inj e (by simp)
   -- The inclusion list ends with the byte 2, which no entry starts with.
@@ -1751,17 +1753,17 @@ theorem payloadIdInput_inj {fork : Fork} {head head' : Hash32} {a a' : PayloadAt
   -- The withdrawals vary in length, so this split counts the fixed bytes after them.
   obtain ⟨hW, e⟩ := List.append_inj' e (by
     by_cases hd : .dencun ≤ fork <;> by_cases hg : .glamsterdam ≤ fork <;>
-      simp [hd, hg, natToBytes_length])
+      simp [hd, hg])
   obtain ⟨hB, hG⟩ := List.append_inj e (by by_cases hd : .dencun ≤ fork <;> simp [hd])
   refine ⟨Vector.toList_inj.mp hHead, ?_⟩
   obtain ⟨t, r, s, w, b, n, g, l⟩ := a
   obtain ⟨t', r', s', w', b', n', g', l'⟩ := a'
   simp only [PayloadAttributes.mk.injEq]
-  refine ⟨natToBytes_eight_inj hTime, Vector.toList_inj.mp hRandao, Vector.toList_inj.mp hFee,
+  refine ⟨toBE_eight_inj hTime, Vector.toList_inj.mp hRandao, Vector.toList_inj.mp hFee,
     ?_, ?_, ?_⟩
   · by_cases hs : .shapella ≤ fork
     · simp only [hs, dite_true] at hW
-      have := flatMap_inj_of_length (n := 44) (by decide) (fun x => by simp [natToBytes_length])
+      have := flatMap_inj_of_length (n := 44) (by decide) (fun x => by simp)
         withdrawalBytes_inj hW
       exact funext fun _ => this
     · exact Since.eq_of_not_le hs _ _
@@ -1771,8 +1773,8 @@ theorem payloadIdInput_inj {fork : Fork} {head head' : Hash32} {a a' : PayloadAt
     · exact Since.eq_of_not_le hd _ _
   · by_cases hg : .glamsterdam ≤ fork
     · simp only [hg, dite_true] at hG
-      obtain ⟨hn, hg'⟩ := List.append_inj hG (by simp [natToBytes_length])
-      exact ⟨funext fun _ => natToBytes_eight_inj hn, funext fun _ => natToBytes_eight_inj hg',
+      obtain ⟨hn, hg'⟩ := List.append_inj hG (by simp)
+      exact ⟨funext fun _ => toBE_eight_inj hn, funext fun _ => toBE_eight_inj hg',
         funext hL⟩
     · exact ⟨Since.eq_of_not_le hg _ _, Since.eq_of_not_le hg _ _, funext hL⟩
 
@@ -1784,8 +1786,8 @@ private theorem payloadIdInput_head_timestamp {fork fork' : Fork} {head head' : 
   have e := congrArg (fun b : ByteArray => b.data.toList) h
   simp only [payloadIdInput, List.append_assoc] at e
   obtain ⟨hHead, e⟩ := List.append_inj e (by simp)
-  obtain ⟨hTime, -⟩ := List.append_inj e (by simp [natToBytes_length])
-  exact ⟨Vector.toList_inj.mp hHead, natToBytes_eight_inj hTime⟩
+  obtain ⟨hTime, -⟩ := List.append_inj e (by simp)
+  exact ⟨Vector.toList_inj.mp hHead, toBE_eight_inj hTime⟩
 
 /-- Two calls that start builds with the same bytes to hash start the same build.
 

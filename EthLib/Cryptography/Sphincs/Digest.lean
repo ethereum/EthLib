@@ -122,7 +122,7 @@ def digestTree (d : MessageDigest) : Nat :=
   -- Algorithm 19, lines 7 and 9: `idx_tree <- toInt(tmp_idx_tree, ...) mod 2^(h - h/d)`.
   --
   -- Here the bottom height `h_0` stands for `h/d`, since the layers differ in height.
-  EthLib.Base.bytesToNat ((d.toList.drop MD_BYTES).take TREE_INDEX_BYTES)
+  EthLib.Base.ByteOrder.ofBE ((d.toList.drop MD_BYTES).take TREE_INDEX_BYTES)
     % 2 ^ (HEIGHT - LOWER_HEIGHT)
 
 /-- The bottom leaf index: byte 33 of the digest, cut to 8 bits. -/
@@ -130,7 +130,7 @@ def digestLeaf (d : MessageDigest) : Nat :=
   -- Algorithm 19, lines 8 and 10: `idx_leaf <- toInt(tmp_idx_leaf, ...) mod 2^(h/d)`.
   --
   -- Here `h_0` stands for `h/d`.
-  EthLib.Base.bytesToNat ((d.toList.drop (MD_BYTES + TREE_INDEX_BYTES)).take LEAF_INDEX_BYTES)
+  EthLib.Base.ByteOrder.ofBE ((d.toList.drop (MD_BYTES + TREE_INDEX_BYTES)).take LEAF_INDEX_BYTES)
     % 2 ^ LOWER_HEIGHT
 
 /-- `idx = tree * 2^h_0 + leaf`: the bottom leaf the digest names, below `2^26`. -/

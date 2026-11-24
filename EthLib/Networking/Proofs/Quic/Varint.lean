@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Networking.Quic.Varint
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.Bytes
 
 /-!
@@ -21,7 +21,7 @@ open EthLib.Base
 /-- A chosen width writes exactly the byte count selected by its two-bit prefix. -/
 theorem length_encodeWithList (w : Width) (v : Varint) (h : v.val < capacity w) :
     (encodeWithList w v h).length = 2 ^ w.val := by
-  simp only [encodeWithList, List.length_cons, natToBytes_length, tailLength]
+  simp only [encodeWithList, List.length_cons, ByteOrder.length_toList_toBE, tailLength]
   have : 0 < 2 ^ w.val := Nat.two_pow_pos _
   omega
 
@@ -47,10 +47,10 @@ theorem decodeList_encodeWithList (w : Width) (v : Varint) (h : v.val < capacity
   obtain ⟨hdiv, hmod⟩ := head_parts w v h
   have hselector : selector (UInt8.ofNat (w.val * 64 + v.val / 256 ^ tailLength w)) = w :=
     Fin.ext hdiv
-  have hlen := natToBytes_length (tailLength w) v.val
+  have hlen := ByteOrder.length_toList_toBE (tailLength w) v.val
   have hvalue : v.val / 256 ^ tailLength w * 256 ^ tailLength w +
-      bytesToNat (natToBytes (tailLength w) v.val) = v.val := by
-    rw [bytesToNat_natToBytes]
+      ByteOrder.ofBE ((ByteOrder.toBE (tailLength w) v.val).toList) = v.val := by
+    rw [ByteOrder.ofBE_toBE]
     exact Nat.div_add_mod' _ _
   simp only [encodeWithList, List.cons_append, decodeList, valueOf, hselector, List.take_left' hlen,
     List.drop_left' hlen, hlen, hmod, hvalue, ↓reduceDIte]
@@ -64,9 +64,9 @@ theorem decodeList_encodeList (v : Varint) (rest : List UInt8) :
 private theorem valueOf_div_mod (head : UInt8) (tail : List UInt8)
     (hlen : tail.length = tailLength (selector head)) :
     valueOf head tail / 256 ^ tailLength (selector head) = head.toNat % 64 ∧
-      valueOf head tail % 256 ^ tailLength (selector head) = bytesToNat tail := by
+      valueOf head tail % 256 ^ tailLength (selector head) = ByteOrder.ofBE tail := by
   unfold valueOf
-  have hlt := bytesToNat_lt tail
+  have hlt := ByteOrder.ofBE_lt tail
   rw [hlen] at hlt
   generalize tailLength (selector head) = c at hlt ⊢
   have hpos : 0 < 256 ^ c := Nat.pow_pos (by decide)
@@ -95,7 +95,7 @@ private theorem encodeWithList_valueOf (head : UInt8) (tail : List UInt8)
     rw [Nat.mul_comm, Nat.div_add_mod]
     exact UInt8.ofNat_toNat
   simp only [encodeWithList, hdiv, hhead, List.cons.injEq, true_and]
-  rw [← natToBytes_mod, hmod, ← hlen, natToBytes_bytesToNat]
+  rw [← ByteOrder.toBE_mod, hmod, ← hlen, ByteOrder.toList_toBE_ofBE]
 
 /-- Every input that decodes is the writing of its value at the selected width, then the rest.
 

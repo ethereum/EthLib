@@ -8,7 +8,7 @@ public import EthLib.Cryptography.Kzg.Fft
 public import EthLib.Cryptography.Kzg.Core
 public import EthLib.Cryptography.Kzg.TrustedSetup
 public import EthLib.Cryptography.Kzg.Errors
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 
 /-!
 # `Cells`
@@ -244,10 +244,10 @@ def computeVerifyCellKzgProofBatchChallenge
   --
   -- Then 8 big-endian bytes each of the number of commitments and the number of cells.
   let h := RANDOM_CHALLENGE_KZG_CELL_BATCH_DOMAIN
-    ++ ⟨(Base.natToBytes 8 FIELD_ELEMENTS_PER_BLOB).toArray⟩
-    ++ ⟨(Base.natToBytes 8 FIELD_ELEMENTS_PER_CELL).toArray⟩
-    ++ ⟨(Base.natToBytes 8 commitments.size).toArray⟩
-    ++ ⟨(Base.natToBytes 8 cellIndices.size).toArray⟩
+    ++ ⟨(Base.ByteOrder.toBE 8 FIELD_ELEMENTS_PER_BLOB).toArray⟩
+    ++ ⟨(Base.ByteOrder.toBE 8 FIELD_ELEMENTS_PER_CELL).toArray⟩
+    ++ ⟨(Base.ByteOrder.toBE 8 commitments.size).toArray⟩
+    ++ ⟨(Base.ByteOrder.toBE 8 cellIndices.size).toArray⟩
   -- Then each commitment, in order.
   let h := commitments.foldl (init := h) fun h c => h ++ ⟨c.toArray⟩
   -- One entry per cell, from four arrays of one length, which the callers check.
@@ -256,8 +256,8 @@ def computeVerifyCellKzgProofBatchChallenge
   --
   -- Then its 64 values, as 32 big-endian bytes each, and its 48-byte proof.
   let h := cells.foldl (init := h) fun h ((commitmentIndex, cellIndex), (evals, proof)) =>
-    let h := h ++ ⟨(Base.natToBytes 8 commitmentIndex).toArray⟩
-    let h := h ++ ⟨(Base.natToBytes 8 cellIndex).toArray⟩
+    let h := h ++ ⟨(Base.ByteOrder.toBE 8 commitmentIndex).toArray⟩
+    let h := h ++ ⟨(Base.ByteOrder.toBE 8 cellIndex).toArray⟩
     let h := evals.foldl (init := h) fun h ce =>
       h ++ ⟨(blsFieldToBytes ce).toArray⟩
     h ++ ⟨proof.toArray⟩
@@ -450,7 +450,7 @@ def unpackIndicesBE (b : ByteArray) : Except KzgError (Array Nat) := do
   let n := b.size / 8
   let mut out : Array Nat := Array.mkEmpty n
   for i in [:n] do
-    out := out.push (Base.bytesToNat (b.extract (i*8) ((i+1)*8)).data.toList)
+    out := out.push (Base.ByteOrder.ofBE (b.extract (i*8) ((i+1)*8)).data.toList)
   return out
 
 end EthLib.Cryptography.Kzg

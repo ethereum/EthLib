@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Serialization.Der
 public import EthLib.Cryptography.Hash.Sha256
 public import EthLib.Cryptography.Secp256k1.Sign

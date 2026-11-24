@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Base.Except
 public import EthLib.Networking.Encoding.ByteReader
 public import EthLib.Base.Bytes
@@ -104,7 +104,7 @@ def encodeBlob (width minimum maximum : Nat) (data : List UInt8) :
   -- §3.4: the length lies in `floor..ceiling`, and it fits in its length field.
   if minimum ≤ data.length ∧ data.length ≤ maximum ∧ data.length < 256 ^ width then
     -- The actual length, big-endian (§3.3), then the contents.
-    .ok (Base.natToBytes width data.length ++ data)
+    .ok ((Base.ByteOrder.toBE width data.length).toList ++ data)
   else .error .length
 
 /-- Parse an isolated field and reject any bytes its reader leaves. -/

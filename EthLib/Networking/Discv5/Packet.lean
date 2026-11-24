@@ -120,7 +120,7 @@ def encode : Authdata → List UInt8
   -- Flag 1: `authdata = id-nonce || enr-seq`, with `enr-seq` a `uint64` in 8 bytes.
   --
   -- The source gives no byte order for `enr-seq`; EthLib writes it big-endian.
-  | .whoareyou idNonce enrSeq => idNonce.toList ++ Base.natToBytes 8 enrSeq.toNat
+  | .whoareyou idNonce enrSeq => idNonce.toList ++ (Base.ByteOrder.toBE 8 enrSeq.toNat).toList
   -- Flag 2: `authdata = authdata-head || id-signature || eph-pubkey || record`.
   --
   -- And `authdata-head = src-id || sig-size || eph-key-size`, each size a `uint8`.
@@ -153,7 +153,7 @@ def decode (flag : UInt8) (bytes : List UInt8) : Except PacketError Authdata :=
     match vectorOf 16 (bytes.take 16) with
     | some idNonce =>
       if bytes.length = 24 then
-        .ok (.whoareyou idNonce (UInt64.ofNat (Base.bytesToNat (bytes.drop 16))))
+        .ok (.whoareyou idNonce (UInt64.ofNat (Base.ByteOrder.ofBE (bytes.drop 16))))
       else .error (.authdata flag bytes.length)
     | none => .error (.authdata flag bytes.length)
   -- Flag 2: `authdata-head = src-id || sig-size || eph-key-size`, 34 bytes.
@@ -187,7 +187,7 @@ def Header.encode (h : Header) : Except PacketError (List UInt8) :=
     --
     -- `static-header = protocol-id || version || flag || nonce || authdata-size`.
     .ok (PROTOCOL_ID ++ VERSION ++ [h.authdata.flag] ++ h.nonce.toList ++
-      Base.natToBytes 2 authdata.length ++ authdata)
+      (Base.ByteOrder.toBE 2 authdata.length).toList ++ authdata)
   else .error .fieldTooLong
 
 /-- The masking key: the first 16 bytes of the destination node ID. -/
@@ -245,7 +245,7 @@ def Packet.decode (destId : NodeId) (bytes : ByteArray) : Except PacketError Pac
   let some nonce := Authdata.vectorOf 12 ((plain.drop 9).take 12)
     | throw (.headerTruncated STATIC_HEADER_SIZE rest.length)
   -- `authdata-size`, a `uint16`; the source gives no byte order, and EthLib reads it big-endian.
-  let authdataSize := Base.bytesToNat ((plain.drop 21).take 2)
+  let authdataSize := Base.ByteOrder.ofBE ((plain.drop 21).take 2)
   -- `header = static-header || authdata`, so the header has `23 + authdata-size` bytes.
   if rest.length < STATIC_HEADER_SIZE + authdataSize then
     throw (.headerTruncated (STATIC_HEADER_SIZE + authdataSize) rest.length)

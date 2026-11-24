@@ -18,15 +18,15 @@ open Wire
 open EthLib.Networking.Encoding.ByteReader (bytes_append uint_encode require_true)
 
 /-- The truncated packet number is the original number modulo the selected window. -/
-theorem bytesToNat_encodePacketNumberList (width : PacketNumberLength) (number : Varint) :
-    Base.bytesToNat (encodePacketNumberList width number) =
+theorem ofBE_encodePacketNumberList (width : PacketNumberLength) (number : Varint) :
+    Base.ByteOrder.ofBE (encodePacketNumberList width number) =
       number.val % 256 ^ numberLength width :=
-  Base.bytesToNat_natToBytes _ _
+  Base.ByteOrder.ofBE_toBE _ _
 
 /-- Packet-number encoding uses exactly the byte count selected by its two-bit length. -/
 theorem length_encodePacketNumberList (width : PacketNumberLength) (number : Varint) :
     (encodePacketNumberList width number).length = numberLength width :=
-  Base.natToBytes_length _ _
+  Base.ByteOrder.length_toList_toBE _ _
 
 /-- A width's range holds the full number before any acknowledgement, or exceeds twice the gap. -/
 def WidthSufficient (number : Varint) (largestAcked : Option Varint)
@@ -94,10 +94,10 @@ theorem packetNumberWidth_error_of_le (number ack : Varint) (order : number.val 
   rfl
 
 /-- Before any acknowledgement, the selected bytes retain the whole packet number. -/
-theorem bytesToNat_encodePacketNumberList_of_packetNumberWidth_none (number : Varint)
+theorem ofBE_encodePacketNumberList_of_packetNumberWidth_none (number : Varint)
     (width : PacketNumberLength) (selected : packetNumberWidth number none = .ok width) :
-    Base.bytesToNat (encodePacketNumberList width number) = number.val := by
-  rw [bytesToNat_encodePacketNumberList,
+    Base.ByteOrder.ofBE (encodePacketNumberList width number) = number.val := by
+  rw [ofBE_encodePacketNumberList,
     Nat.mod_eq_of_lt (packetNumberWidth_sufficient number none width selected)]
 
 /-- Unsigned distance between packet numbers. -/
@@ -119,7 +119,8 @@ theorem lengthAndNumber_encode (width : PacketNumberLength) (length : Varint)
     (number : Nat) (rest : List UInt8) (hl : numberLength width ≤ length.val)
     (hn : number < 256 ^ numberLength width) :
     lengthAndNumber width
-      (Varint.encodeList length ++ (Base.natToBytes (numberLength width) number ++ rest)) =
+      (Varint.encodeList length
+        ++ ((Base.ByteOrder.toBE (numberLength width) number).toList ++ rest)) =
       .ok ((length, number), rest) := by
   simp only [bind, pure, lengthAndNumber, StateT.bind, StateT.pure, Except.bind, Except.pure,
     varint_encode, require, Encoding.ByteReader.require, hl, uint_encode, Nat.mod_eq_of_lt hn,
@@ -132,7 +133,7 @@ theorem decodeList_initial (d s t : ByteArray) (rest : List UInt8) (w : PacketNu
     (hn : n < 256 ^ numberLength w) (shortLength : Nat) :
     decodeList shortLength (longPrefixList (UInt8.ofNat (192 + w.val)) 1 d s ++
       Varint.encodeList ⟨t.size, ht⟩ ++ t.data.toList ++ Varint.encodeList l ++
-        Base.natToBytes (numberLength w) n ++ rest) =
+        (Base.ByteOrder.toBE (numberLength w) n).toList ++ rest) =
       .ok (.initial d s t w l n, rest) := by
   have hw := w.isLt
   have hf : (UInt8.ofNat (192 + w.val)).toNat = 192 + w.val :=
@@ -158,7 +159,7 @@ theorem decodeList_zeroRtt (d s : ByteArray) (rest : List UInt8) (w : PacketNumb
     (hn : n < 256 ^ numberLength w) (shortLength : Nat) :
     decodeList shortLength (longPrefixList (UInt8.ofNat (208 + w.val)) 1 d s ++
       Varint.encodeList l ++
-        Base.natToBytes (numberLength w) n ++ rest) =
+        (Base.ByteOrder.toBE (numberLength w) n).toList ++ rest) =
       .ok (.zeroRtt d s w l n, rest) := by
   have hw := w.isLt
   have hf : (UInt8.ofNat (208 + w.val)).toNat = 208 + w.val :=
@@ -183,7 +184,7 @@ theorem decodeList_handshake (d s : ByteArray) (rest : List UInt8) (w : PacketNu
     (hn : n < 256 ^ numberLength w) (shortLength : Nat) :
     decodeList shortLength (longPrefixList (UInt8.ofNat (224 + w.val)) 1 d s ++
       Varint.encodeList l ++
-        Base.natToBytes (numberLength w) n ++ rest) =
+        (Base.ByteOrder.toBE (numberLength w) n).toList ++ rest) =
       .ok (.handshake d s w l n, rest) := by
   have hw := w.isLt
   have hf : (UInt8.ofNat (224 + w.val)).toNat = 224 + w.val :=
@@ -208,7 +209,7 @@ theorem decodeList_oneRtt (d : ByteArray) (rest : List UInt8) (spin keyPhase : B
     (hn : n < 256 ^ numberLength w) :
     decodeList d.size ([UInt8.ofNat (64 + (if spin then 32 else 0) +
       (if keyPhase then 4 else 0) + w.val)] ++ d.data.toList ++
-      Base.natToBytes (numberLength w) n ++ rest) =
+      (Base.ByteOrder.toBE (numberLength w) n).toList ++ rest) =
       .ok (.oneRtt d spin keyPhase w n, rest) := by
   let first := 64 + (if spin then 32 else 0) + (if keyPhase then 4 else 0) + w.val
   have hw := w.isLt
@@ -244,7 +245,7 @@ theorem decodeList_oneRtt (d : ByteArray) (rest : List UInt8) (spin keyPhase : B
       simp only [decide_eq_true_eq, Bool.false_eq_true, iff_false, iff_true]
       omega
   change decodeList d.size ([UInt8.ofNat first] ++ d.data.toList ++
-    Base.natToBytes (numberLength w) n ++ rest) = _
+    (Base.ByteOrder.toBE (numberLength w) n).toList ++ rest) = _
   simp only [decodeList, widthOfFirst, List.append_assoc, List.cons_append, List.nil_append,
     bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure, byte,
     hfirst, hm, hf128, ↓reduceIte, Fin.eta, require, Encoding.ByteReader.require, hf64, hf8, hd,
@@ -289,23 +290,31 @@ theorem decodeList_retry (d s t : ByteArray) (tag : Vector UInt8 16) (unused : F
 
 /-- Reading four version bytes recovers a version and then reads the remaining versions. -/
 private theorem versions_word (version : UInt32) (rest : List UInt8) :
-    versions (Base.natToBytes 4 version.toNat ++ rest) =
+    versions ((Base.ByteOrder.toBE 4 version.toNat).toList ++ rest) =
       (versions rest).map (version :: ·) := by
-  have hword : UInt32.ofNat (Base.bytesToNat (Base.natToBytes 4 version.toNat)) = version := by
-    rw [Base.bytesToNat_natToBytes, Nat.mod_eq_of_lt version.toNat_lt]
+  have hword :
+      UInt32.ofNat (Base.ByteOrder.ofBE (Base.ByteOrder.toBE 4 version.toNat).toList)
+        = version := by
+    rw [Base.ByteOrder.ofBE_toBE, Nat.mod_eq_of_lt version.toNat_lt]
     exact UInt32.ofNat_toNat
-  simp only [Base.natToBytes, Base.natToBytes.go, List.cons_append, List.nil_append,
-    versions]
+  -- Name the four bytes of the version, since the reader matches a list of exactly four.
+  obtain ⟨a, b, c, d, h4⟩ :
+      ∃ a b c d, (Base.ByteOrder.toBE 4 version.toNat).toList = [a, b, c, d] := by
+    match (Base.ByteOrder.toBE 4 version.toNat).toList,
+      Base.ByteOrder.length_toList_toBE 4 version.toNat with
+    | [a, b, c, d], _ => exact ⟨a, b, c, d, rfl⟩
+  rw [h4] at hword ⊢
+  simp only [List.cons_append, List.nil_append, versions]
   cases result : versions rest with
   | error error => rfl
   | ok tail =>
-    change Except.ok (UInt32.ofNat (Base.bytesToNat (Base.natToBytes 4 version.toNat)) :: tail) =
+    change Except.ok (UInt32.ofNat (Base.ByteOrder.ofBE [a, b, c, d]) :: tail) =
       Except.ok (version :: tail)
     rw [hword]
 
 /-- A sequence of supported versions round trips (§17.2.1). -/
 theorem versions_encode (values : List UInt32) :
-    versions (values.flatMap fun v => Base.natToBytes 4 v.toNat) = .ok values := by
+    versions (values.flatMap fun v => (Base.ByteOrder.toBE 4 v.toNat).toList) = .ok values := by
   induction values with
   | nil => rfl
   | cons value tail ih =>
@@ -315,7 +324,7 @@ theorem versions_encode (values : List UInt32) :
 theorem decodeList_versionNegotiation (d s : ByteArray) (unused : Fin 128)
     (vs : List UInt32) (hd : d.size ≤ 255) (hs : s.size ≤ 255) (shortLength : Nat) :
     decodeList shortLength (longPrefixList (UInt8.ofNat (128 + unused.val)) 0 d s ++
-      vs.flatMap (fun v => Base.natToBytes 4 v.toNat)) =
+      vs.flatMap (fun v => (Base.ByteOrder.toBE 4 v.toNat).toList)) =
       .ok (.versionNegotiation d s unused vs, []) := by
   have hu := unused.isLt
   have hf : (UInt8.ofNat (128 + unused.val)).toNat = 128 + unused.val :=
@@ -388,10 +397,10 @@ theorem decodeList_encodeList (header : Header) (encoded rest : List UInt8)
       decodeList_versionNegotiation d s unused vs hd hs 0
 
 /-- The packet-number bytes retain exactly the low bytes of the original number. -/
-theorem bytesToNat_encodePacketNumber (width : PacketNumberLength) (number : Varint) :
-    Base.bytesToNat (encodePacketNumber width number).data.toList =
+theorem ofBE_encodePacketNumber (width : PacketNumberLength) (number : Varint) :
+    Base.ByteOrder.ofBE (encodePacketNumber width number).data.toList =
       number.val % 256 ^ numberLength width := by
-  simpa [encodePacketNumber] using bytesToNat_encodePacketNumberList width number
+  simpa [encodePacketNumber] using ofBE_encodePacketNumberList width number
 
 /-- Packet-number encoding uses exactly the selected byte count. -/
 theorem size_encodePacketNumber (width : PacketNumberLength) (number : Varint) :
@@ -491,9 +500,9 @@ theorem decodePacketNumber_encodePacketNumberList_of_sufficient (number : Varint
     (sufficient : WidthSufficient number largestAcked width) (expected : Nat)
     (afterAcknowledged : largestAcked.elim 0 (fun ack => ack.val + 1) ≤ expected)
     (atMost : expected ≤ number.val) :
-    decodePacketNumber width (Base.bytesToNat (encodePacketNumberList width number)) expected =
+    decodePacketNumber width (Base.ByteOrder.ofBE (encodePacketNumberList width number)) expected =
       .ok number.val := by
-  rw [bytesToNat_encodePacketNumberList]
+  rw [ofBE_encodePacketNumberList]
   have bounded := number.isLt
   rcases width with ⟨w, hw⟩
   have casesWidth : w = 0 ∨ w = 1 ∨ w = 2 ∨ w = 3 := by omega
@@ -514,7 +523,7 @@ theorem decodePacketNumber_encodePacketNumberList_of_packetNumberWidth (number :
     (selected : packetNumberWidth number largestAcked = .ok width) (expected : Nat)
     (afterAcknowledged : largestAcked.elim 0 (fun ack => ack.val + 1) ≤ expected)
     (atMost : expected ≤ number.val) :
-    decodePacketNumber width (Base.bytesToNat (encodePacketNumberList width number)) expected =
+    decodePacketNumber width (Base.ByteOrder.ofBE (encodePacketNumberList width number)) expected =
       .ok number.val :=
   decodePacketNumber_encodePacketNumberList_of_sufficient number largestAcked width
     (packetNumberWidth_sufficient number largestAcked width selected) expected
@@ -526,7 +535,7 @@ theorem decodePacketNumber_encodePacketNumber_of_packetNumberWidth (number : Var
     (selected : packetNumberWidth number largestAcked = .ok width) (expected : Nat)
     (afterAcknowledged : largestAcked.elim 0 (fun ack => ack.val + 1) ≤ expected)
     (atMost : expected ≤ number.val) :
-    decodePacketNumber width (Base.bytesToNat (encodePacketNumber width number).data.toList)
+    decodePacketNumber width (Base.ByteOrder.ofBE (encodePacketNumber width number).data.toList)
       expected = .ok number.val := by
   simpa [encodePacketNumber] using
     decodePacketNumber_encodePacketNumberList_of_packetNumberWidth number largestAcked width

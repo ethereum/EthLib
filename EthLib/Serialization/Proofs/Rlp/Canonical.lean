@@ -48,14 +48,14 @@ theorem readLongLength_ok {input : ByteArray} {pos stop : Nat} {kind kind' : Pay
       · rename_i hHead
         have hEnd : pos + k ≤ input.size := by omega
         rw [readBigEndian_zero input pos k hEnd] at h
-        by_cases hSmall : ofBigEndian (input.extract pos (pos + k)).data.toList < 56
+        by_cases hSmall : Base.ByteOrder.ofBE (input.extract pos (pos + k)).data.toList < 56
         · rw [ite_eq_left hSmall] at h
           cases h
         · rw [ite_eq_right hSmall, Except.ok.injEq, Prod.mk.injEq, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl, rfl⟩ := h
           have hLen := length_extract_toList input pos (pos + k) hEnd
           refine ⟨rfl, rfl, by omega, by omega, ?_, ?_⟩
-          · have := Base.bytesToNat_lt (input.extract pos (pos + k)).data.toList
+          · have := Base.ByteOrder.ofBE_lt (input.extract pos (pos + k)).data.toList
             rwa [hLen, show pos + k - pos = k by omega] at this
           · -- The length bytes have no leading zero, so they are `BE` of the length.
             apply bigEndian_unique

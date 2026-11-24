@@ -149,11 +149,11 @@ private theorem chunks_flatten {size : Nat} :
 
 /-- The raw bytes of a G1 point have 96 bytes. -/
 private theorem length_g1ToBytes (point : G1) : (g1ToBytes point).length = 96 := by
-  simp [g1ToBytes, EthLib.Base.natToBytes_length]
+  simp [g1ToBytes]
 
 /-- The raw bytes of a G2 point have 192 bytes. -/
 private theorem length_g2ToBytes (point : G2) : (g2ToBytes point).length = 192 := by
-  simp [g2ToBytes, EthLib.Base.natToBytes_length]
+  simp [g2ToBytes]
 
 /-- The padding of every encoded pair is removed, leaving the raw bytes of its two points. -/
 private theorem unpad_encodePairs :

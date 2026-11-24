@@ -207,7 +207,7 @@ theorem fromBytesBE_toBytesBE (a : Fr) :
 The value is the big-endian decoding, and the value is canonical. -/
 theorem fromBytesBE_ok {b : Vector UInt8 32} {f : Fr}
     (h : fromBytesBE b = .ok f) :
-    f.val = Base.bytesToNat b.toList ∧ f.val < modulus := by
+    f.val = Base.ByteOrder.ofBE b.toList ∧ f.val < modulus := by
   unfold fromBytesBE at h
   simp only [Base.size_packBytes, ne_eq, not_true_eq_false, ↓reduceIte] at h
   -- The 32 bytes that the limbs read, one by one, are the bytes of the vector.
@@ -218,7 +218,7 @@ theorem fromBytesBE_ok {b : Vector UInt8 32} {f : Fr}
     rw [getElem!_pos (Base.packBytes b) i (by rw [Base.size_packBytes]; simpa using h1)]
     rfl
   rw [Montgomery.ofBytesBE_eq, hl] at h
-  by_cases hlt : Base.bytesToNat b.toList < params.p
+  by_cases hlt : Base.ByteOrder.ofBE b.toList < params.p
   · simp only [hlt, ↓reduceIte] at h
     cases h
     refine ⟨?_, val_lt _⟩

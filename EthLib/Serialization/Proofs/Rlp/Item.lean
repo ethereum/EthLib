@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Serialization.Rlp.Item
+public import EthLib.Base.Proofs.ByteOrder
 
 /-!
 # `Serialization.Proofs.Rlp.Item`
@@ -22,14 +23,6 @@ A bound on the number of bytes keeps the first byte of a prefix below 256.
 @[expose] public section
 
 namespace EthLib.Serialization.Rlp
-
-/-- No bytes read as zero. -/
-theorem ofBigEndian_nil : ofBigEndian [] = 0 := rfl
-
-/-- A byte appended at the end is the lowest digit, below the earlier bytes shifted by one byte. -/
-theorem ofBigEndian_append_singleton (init : List UInt8) (last : UInt8) :
-    ofBigEndian (init ++ [last]) = 256 * ofBigEndian init + last.toNat := by
-  simp [ofBigEndian, Base.bytesToNat, Nat.mul_comm]
 
 /-- Zero has no digits, whatever the budget. -/
 theorem bigEndianAux_zero (fuel : Nat) : bigEndianAux 0 fuel = .empty := by
@@ -60,25 +53,25 @@ theorem bigEndianAux_fuel (n fuel fuel' : Nat) (h : n ≤ fuel) (h' : n ≤ fuel
       rw [ih (n / 256) g (by omega) (by omega)]
 
 /-- With a budget of at least `n` bytes, the digits of `n` read back as `n`. -/
-theorem ofBigEndian_bigEndianAux (fuel n : Nat) (h : n ≤ fuel) :
-    ofBigEndian (bigEndianAux n fuel).data.toList = n := by
+theorem ofBE_bigEndianAux (fuel n : Nat) (h : n ≤ fuel) :
+    Base.ByteOrder.ofBE (bigEndianAux n fuel).data.toList = n := by
   induction fuel generalizing n with
-  | zero => simp_all [bigEndianAux, ofBigEndian_nil]
+  | zero => simp_all [bigEndianAux, Base.ByteOrder.ofBE_nil]
   | succ fuel ih =>
     by_cases hn : n = 0
     · subst hn
-      simp [bigEndianAux_zero, ofBigEndian_nil]
+      simp [bigEndianAux_zero, Base.ByteOrder.ofBE_nil]
     · rw [bigEndianAux_succ n fuel hn]
       -- The higher digits read back as `n / 256`.
       have hq := ih (n / 256) (by omega)
-      rw [ofBigEndian_append_singleton]
+      rw [Base.ByteOrder.ofBE_append_singleton]
       -- Then `256 * (n / 256) + n % 256 = n`.
       rw [hq, UInt8.toNat_ofNat']
       omega
 
 /-- `BE(n)` read back in base 256 is `n`. -/
-theorem bigEndian_value (n : Nat) : ofBigEndian (bigEndian n).data.toList = n :=
-  ofBigEndian_bigEndianAux n n (Nat.le_refl n)
+theorem bigEndian_value (n : Nat) : Base.ByteOrder.ofBE (bigEndian n).data.toList = n :=
+  ofBE_bigEndianAux n n (Nat.le_refl n)
 
 /-- `BE(n)` has no leading zero byte. -/
 theorem bigEndian_head_ne_zero (n : Nat) : ∀ b ∈ (bigEndian n).data.toList.head?, b ≠ 0 := by
@@ -107,8 +100,8 @@ theorem bigEndian_head_ne_zero (n : Nat) : ∀ b ∈ (bigEndian n).data.toList.h
       · -- More digits: the first one is the first of `n / 256`, which reads back as nonzero.
         have hne : (bigEndianAux (n / 256) fuel).data.toList ≠ [] := by
           intro hnil
-          have := ofBigEndian_bigEndianAux fuel (n / 256) (by omega)
-          rw [hnil, ofBigEndian_nil] at this
+          have := ofBE_bigEndianAux fuel (n / 256) (by omega)
+          rw [hnil, Base.ByteOrder.ofBE_nil] at this
           omega
         intro b hb
         obtain ⟨x, xs, hx⟩ := List.exists_cons_of_ne_nil hne
@@ -151,14 +144,14 @@ private theorem snocInduction {motive : List UInt8 → Prop} (nil : motive [])
   | cons last rest ih => simpa using append_singleton _ last ih
 
 /-- Bytes that read back as 0 are all zero. -/
-theorem ofBigEndian_eq_zero (bytes : List UInt8) (h : ofBigEndian bytes = 0) :
+theorem eq_zero_of_ofBE_eq_zero (bytes : List UInt8) (h : Base.ByteOrder.ofBE bytes = 0) :
     ∀ b ∈ bytes, b = 0 := by
   induction bytes using snocInduction with
   | nil => simp
   | append_singleton init last ih =>
-    rw [ofBigEndian_append_singleton] at h
+    rw [Base.ByteOrder.ofBE_append_singleton] at h
     -- `256 * v + last = 0` makes both `v` and `last` zero.
-    have hInit : ofBigEndian init = 0 := by omega
+    have hInit : Base.ByteOrder.ofBE init = 0 := by omega
     have hLast : last.toNat = 0 := by omega
     intro b hb
     rcases List.mem_append.mp hb with hb | hb
@@ -171,12 +164,12 @@ theorem ofBigEndian_eq_zero (bytes : List UInt8) (h : ofBigEndian bytes = 0) :
 
 So `BE(x)` is the only byte string with the two properties the Yellow Paper asks for. -/
 theorem bigEndian_unique (bytes : List UInt8) (h : ∀ b ∈ bytes.head?, b ≠ 0) :
-    (bigEndian (ofBigEndian bytes)).data.toList = bytes := by
+    (bigEndian (Base.ByteOrder.ofBE bytes)).data.toList = bytes := by
   induction bytes using snocInduction with
-  | nil => simp [ofBigEndian_nil, bigEndian, bigEndianAux]
+  | nil => simp [bigEndian, bigEndianAux]
   | append_singleton init last ih =>
     -- The bytes write `m = 256 * v + last`, where `v` is the number `init` writes.
-    have hm := ofBigEndian_append_singleton init last
+    have hm := Base.ByteOrder.ofBE_append_singleton init last
     by_cases hInit : init = []
     · -- One byte, nonzero, so `m` is that byte.
       subst hInit
@@ -184,7 +177,8 @@ theorem bigEndian_unique (bytes : List UInt8) (h : ∀ b ∈ bytes.head?, b ≠ 
       have hPos : last.toNat ≠ 0 := fun h0 => hLast (UInt8.toNat_inj.mp h0)
       rw [hm]
       simp only [bigEndian]
-      have hval : 256 * ofBigEndian [] + last.toNat = last.toNat := by simp [ofBigEndian_nil]
+      have hval : 256 * Base.ByteOrder.ofBE [] + last.toNat
+          = last.toNat := by simp [Base.ByteOrder.ofBE_nil]
       rw [hval]
       obtain ⟨g, hg⟩ : ∃ g, last.toNat = g + 1 := ⟨last.toNat - 1, by omega⟩
       rw [hg, bigEndianAux_succ _ _ (by omega), ← hg, show last.toNat / 256 = 0 by
@@ -196,21 +190,23 @@ theorem bigEndian_unique (bytes : List UInt8) (h : ∀ b ∈ bytes.head?, b ≠ 
         obtain ⟨x, xs, hx⟩ := List.exists_cons_of_ne_nil hInit
         subst hx
         exact h b (by simpa using hb)
-      have hv : ofBigEndian init ≠ 0 := by
+      have hv : Base.ByteOrder.ofBE init ≠ 0 := by
         intro h0
         obtain ⟨x, xs, hx⟩ := List.exists_cons_of_ne_nil hInit
-        have hx0 := ofBigEndian_eq_zero init h0 x (by simp [hx])
+        have hx0 := eq_zero_of_ofBE_eq_zero init h0 x (by simp [hx])
         exact hInitHead x (by simp [hx]) hx0
       -- Split off the lowest digit of `m`, which is `last`, and recurse on `v`.
       rw [hm]
       simp only [bigEndian]
-      obtain ⟨g, hg⟩ : ∃ g, 256 * ofBigEndian init + last.toNat = g + 1 :=
-        ⟨256 * ofBigEndian init + last.toNat - 1, by omega⟩
+      obtain ⟨g, hg⟩ : ∃ g, 256 * Base.ByteOrder.ofBE init + last.toNat = g + 1 :=
+        ⟨256 * Base.ByteOrder.ofBE init + last.toNat - 1, by omega⟩
       have hlt := last.toNat_lt
       rw [hg, bigEndianAux_succ _ _ (by omega), ← hg,
-        show (256 * ofBigEndian init + last.toNat) / 256 = ofBigEndian init by omega,
-        show (256 * ofBigEndian init + last.toNat) % 256 = last.toNat by omega,
-        bigEndianAux_fuel (ofBigEndian init) g (ofBigEndian init) (by omega) (Nat.le_refl _)]
+        show (256 * Base.ByteOrder.ofBE init + last.toNat) / 256
+          = Base.ByteOrder.ofBE init by omega,
+        show (256 * Base.ByteOrder.ofBE init + last.toNat) % 256 = last.toNat by omega,
+        bigEndianAux_fuel (Base.ByteOrder.ofBE init) g (Base.ByteOrder.ofBE init) (by omega)
+          (Nat.le_refl _)]
       have := ih hInitHead
       simp only [bigEndian] at this
       rw [this]

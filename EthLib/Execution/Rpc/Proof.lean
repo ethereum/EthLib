@@ -61,7 +61,7 @@ def answerKey (what : String) (j : Json) : Read StorageKey := do
 
 /-- The JSON of a storage key, in the form in which the request gave it. -/
 def storageKeyJson (key : StorageKey) : Json :=
-  if key.asBytes then dataJson key.slot.toList else quantityJson (bytesToNat key.slot.toList)
+  if key.asBytes then dataJson key.slot.toList else quantityJson (ByteOrder.ofBE key.slot.toList)
 
 /-- The nodes of a proof, each a byte string. -/
 def proofNodes (what : String) (j : Json) : Read (List ByteArray) :=

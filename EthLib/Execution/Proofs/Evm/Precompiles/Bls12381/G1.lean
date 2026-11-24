@@ -19,12 +19,12 @@ The discount of G1MSM never raises the price above that of `k` separate products
 
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
-open EthLib.Base (bind_ok_iff mapError_ok_iff natToBytes_length)
+open EthLib.Base (bind_ok_iff mapError_ok_iff ByteOrder.length_toList_toBE)
 open EthLib.Cryptography.Bls (G1)
 
 /-- The raw bytes of a G1 point have 96 bytes, and its padded encoding 128. -/
 theorem length_padG1_g1ToBytes (point : G1) : (padG1 (g1ToBytes point)).length = 128 := by
-  simp [padG1, g1ToBytes, zeroPad, PAD_BYTES, natToBytes_length]
+  simp [padG1, g1ToBytes, zeroPad, PAD_BYTES]
 
 /-- G1ADD rejects any length other than 256 bytes, whatever the gas. -/
 theorem bls12G1Add_invalidInputLength {data : ByteArray} (hsize : data.size ≠ 256) (gas : Nat) :

@@ -62,7 +62,7 @@ theorem throw_bind {ε α β : Type} (e : ε) (f : α → Except ε β) :
 That value is below the modulus. -/
 theorem bytesToBlsField_ok {b : Bytes32} {f : Fr}
     (h : bytesToBlsField b = .ok f) :
-    f.val = Base.bytesToNat b.toList ∧ f.val < Fr.modulus := by
+    f.val = Base.ByteOrder.ofBE b.toList ∧ f.val < Fr.modulus := by
   rw [bytesToBlsField] at h
   split at h
   · rename_i g hg
@@ -315,7 +315,7 @@ This holds since out-of-bounds accesses default to `Fr.zero`. -/
   rw [addPolynomialcoeff]
   by_cases hab : a.size ≥ b.size
   · rw [ite_eq_left hab]
-    dsimp only []
+    dsimp only
     by_cases hi : i < a.size
     · rw [getElem!_pos _ i (by simp [hi]), Array.getElem_ofFn]
       simp only [Fin.getElem_fin]
@@ -325,7 +325,7 @@ This holds since out-of-bounds accesses default to `Fr.zero`. -/
           getElem!_of_ge_size a hi, getElem!_of_ge_size b hib]
       exact (Fr.add_zero _).symm
   · rw [ite_eq_right hab]
-    dsimp only []
+    dsimp only
     by_cases hi : i < b.size
     · rw [getElem!_pos _ i (by simp [hi]), Array.getElem_ofFn]
       simp only [Fin.getElem_fin]

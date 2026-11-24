@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Blocks.BlockAccessList
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Serialization.Proofs.Rlp.Codec
 
 /-!
@@ -192,11 +192,7 @@ theorem nodup_of_ascending {l : List Nat} (h : ascending l = true) : l.Nodup :=
 /-- Two addresses with one number are equal. -/
 theorem addressKey_injective : Function.Injective addressKey := by
   intro a b h
-  apply Vector.toList_inj.mp
-  have ha := natToBytes_bytesToNat a.toList
-  have hb := natToBytes_bytesToNat b.toList
-  simp only [Vector.length_toList] at ha hb
-  rw [← ha, ← hb]
+  rw [← ByteOrder.toBE_ofBE a, ← ByteOrder.toBE_ofBE b]
   exact congrArg _ h
 
 /-- The address test passes exactly when the numbers of the addresses ascend. -/

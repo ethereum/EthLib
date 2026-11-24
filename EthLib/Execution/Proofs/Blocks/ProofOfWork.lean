@@ -48,7 +48,7 @@ end Header
 theorem checkPowOutput_eq_ok_iff {fork : Fork} (h : Header fork) (out : PowOutput) :
     checkPowOutput h out = .ok () ↔
       out.mixDigest = ⟨h.prevRandao.toArray⟩ ∧
-        bytesToNat out.result.toList ≤ powTarget h.difficulty := by
+        ByteOrder.ofBE out.result.toList ≤ powTarget h.difficulty := by
   unfold checkPowOutput
   split
   · rename_i hm
@@ -65,7 +65,7 @@ theorem checkProofOfWork_eq_ok_iff {fork : Fork} (h : Header fork) :
     checkProofOfWork h = .ok () ↔
       ∃ out : PowOutput, powOutput h = .ok out ∧
         out.mixDigest = ⟨h.prevRandao.toArray⟩ ∧
-        bytesToNat out.result.toList ≤ powTarget h.difficulty := by
+        ByteOrder.ofBE out.result.toList ≤ powTarget h.difficulty := by
   unfold checkProofOfWork
   -- The output stays opaque: only its shape matters.
   generalize powOutput h = r

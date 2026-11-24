@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.U256
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 
 /-!
 # Proofs: `U256`
@@ -34,38 +34,39 @@ theorem toSigned_fromSigned {v : Int} (hlo : -2 ^ 255 ≤ v) (hhi : v < 2 ^ 255)
 
 /-- The word of 32 bytes is their big-endian value, with no reduction modulo 2^256. -/
 theorem toNat_fromBeBytes (bytes : Vector UInt8 32) :
-    (fromBeBytes bytes).toNat = bytesToNat bytes.toList := by
-  have h := bytesToNat_lt bytes.toList
+    (fromBeBytes bytes).toNat = ByteOrder.ofBE bytes.toList := by
+  have h := ByteOrder.ofBE_lt bytes.toList
   rw [Vector.length_toList] at h
   exact Nat.mod_eq_of_lt h
 
 /-- The 32 big-endian bytes of the word are the bytes it was read from. -/
-theorem natToBytes_toNat_fromBeBytes (bytes : Vector UInt8 32) :
-    natToBytes 32 (fromBeBytes bytes).toNat = bytes.toList := by
-  have h := natToBytes_bytesToNat bytes.toList
+theorem toBE_toNat_fromBeBytes (bytes : Vector UInt8 32) :
+    (ByteOrder.toBE 32 (fromBeBytes bytes).toNat).toList = bytes.toList := by
+  have h := ByteOrder.toList_toBE_ofBE bytes.toList
   rwa [Vector.length_toList, ← toNat_fromBeBytes] at h
 
 /-- Two buffers of 32 bytes read as the same word only if they are equal. -/
 theorem fromBeBytes_injective : Function.Injective fromBeBytes := by
   intro a b h
   apply Vector.toList_inj.mp
-  rw [← natToBytes_toNat_fromBeBytes a, ← natToBytes_toNat_fromBeBytes b, h]
+  rw [← toBE_toNat_fromBeBytes a, ← toBE_toNat_fromBeBytes b, h]
 
 /-- The 32 bytes of a word are its big-endian value. -/
-theorem toList_toBeBytes (w : U256) : (toBeBytes w).toList = natToBytes 32 w.toNat := by
+theorem toList_toBeBytes (w : U256) : (toBeBytes w).toList
+    = (ByteOrder.toBE 32 w.toNat).toList := by
   simp [toBeBytes]
 
 /-- Reading back the 32 bytes of a word gives the word. -/
 theorem fromBeBytes_toBeBytes (w : U256) : fromBeBytes (toBeBytes w) = w := by
   apply BitVec.eq_of_toNat_eq
   rw [toNat_fromBeBytes, toList_toBeBytes]
-  exact bytesToNat_natToBytes_of_lt w.isLt
+  exact ByteOrder.ofBE_toBE_of_lt w.isLt
 
 /-- Writing back the word of 32 bytes gives the same bytes. -/
 theorem toBeBytes_fromBeBytes (bytes : Vector UInt8 32) :
     toBeBytes (fromBeBytes bytes) = bytes := by
   apply Vector.toList_inj.mp
-  rw [toList_toBeBytes, natToBytes_toNat_fromBeBytes]
+  rw [toList_toBeBytes, toBE_toNat_fromBeBytes]
 
 /-- Two words with the same bytes are the same word. -/
 theorem toBeBytes_inj {a b : U256} (h : toBeBytes a = toBeBytes b) : a = b := by

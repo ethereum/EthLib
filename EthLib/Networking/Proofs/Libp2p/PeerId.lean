@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Serialization.Proofs.Der
 public import EthLib.Networking.Libp2p.PeerId
 public import EthLib.Cryptography.Proofs.Secp256k1.Encoding

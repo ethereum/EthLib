@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Bls.Errors
 public import EthLib.Cryptography.Montgomery
 public import EthLib.Cryptography.Hash.Sha256
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Base.Bytes
 
 /-!
@@ -164,7 +164,7 @@ def hashToBlsField (data : ByteArray) : Fr :=
   -- The digest `d = SHA-256(data)`.
   let hashedData := Hash.sha256 data
   -- The element is `d mod r`, with the 32 bytes of `d` read as a big-endian integer.
-  Fr.ofNat (Base.bytesToNat hashedData.data.toList)
+  Fr.ofNat (Base.ByteOrder.ofBE hashedData.data.toList)
 
 end Fr
 

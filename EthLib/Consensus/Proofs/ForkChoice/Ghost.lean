@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Consensus.Proofs.ForkChoice.AttestationScores
 public import EthLib.Consensus.Proofs.ForkChoice.Head
 public import EthLib.Consensus.Proofs.Models.ForkChoice.LmdGhost
@@ -921,23 +921,20 @@ theorem isViableLeaf_finalized {config : Config} {node : ForkChoiceNode}
 /-- A root read as a big-endian number, and the common root of the tree as 0. -/
 def rootValue : Option Root → ℕ
   | none => 0
-  | some root => bytesToNat root.toList
+  | some root => ByteOrder.ofBE root.toList
 
 /-- Two roots compare, as strings of bytes, as their big-endian numbers. -/
 theorem compare_eq_compare_rootValue (a b : Root) :
     compare a b = compare (rootValue (some a)) (rootValue (some b)) := by
   show Vector.compareLex compare a b = _
   rw [Vector.compareLex_eq_compareLex_toList]
-  exact compare_eq_compare_bytesToNat (by simp)
+  exact ByteOrder.compare_eq_compare_ofBE (by simp)
 
 /-- Two roots with one number are equal. -/
 theorem rootValue_some_injective {a b : Root} (h : rootValue (some a) = rootValue (some b)) :
     a = b := by
-  have ha := natToBytes_bytesToNat a.toList
-  have hb := natToBytes_bytesToNat b.toList
-  simp only [Vector.length_toList] at ha hb
   simp only [rootValue] at h
-  exact Vector.toList_inj.mp (by rw [← ha, ← hb, h])
+  rw [← ByteOrder.toBE_ofBE a, ← ByteOrder.toBE_ofBE b, h]
 
 private theorem _root_.UInt64.compare_eq_compare_toNat (a b : UInt64) :
     compare a b = compare a.toNat b.toNat := by

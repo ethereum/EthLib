@@ -103,7 +103,7 @@ def encodePacketNumberList (width : PacketNumberLength) (number : Varint) : List
   -- §17.1: only the least significant bytes of the packet number, in network byte order.
   --
   -- Appendix A.2: `encode(full_pn, num_bytes)`, truncated to its least significant bytes.
-  Base.natToBytes (numberLength width) number.val
+  (Base.ByteOrder.toBE (numberLength width) number.val).toList
 
 /-- Reconstruct a packet number using RFC 9000 Appendix A.3.
 
@@ -189,7 +189,7 @@ instance (header : Header) : Decidable header.Valid := by
 def longPrefixList (first : UInt8) (version : Nat) (destination source : ByteArray) :
     List UInt8 :=
   -- Figure 13: byte 0, Version (32), Destination Connection ID Length (8).
-  [first] ++ Base.natToBytes 4 version ++ [UInt8.ofNat destination.size] ++
+  [first] ++ (Base.ByteOrder.toBE 4 version).toList ++ [UInt8.ofNat destination.size] ++
     -- Destination Connection ID, Source Connection ID Length (8), Source Connection ID.
     destination.data.toList ++ [UInt8.ofNat source.size] ++ source.data.toList
 
@@ -209,23 +209,24 @@ def encodeList (header : Header) : Except Error (List UInt8) := do
     return longPrefixList (UInt8.ofNat (192 + w.val)) 1 d s ++
       -- Token Length (i), Token (..), Length (i), Packet Number (8..32).
       Varint.encodeList tlen ++ t.data.toList ++ Varint.encodeList l ++
-        Base.natToBytes (numberLength w) n
+        (Base.ByteOrder.toBE (numberLength w) n).toList
   | .zeroRtt d s w l n =>
     -- Figure 16: Long Packet Type 1, so byte 0 is 0xd0 plus the Packet Number Length.
     return longPrefixList (UInt8.ofNat (208 + w.val)) 1 d s ++
       -- Length (i), Packet Number (8..32).
-      Varint.encodeList l ++ Base.natToBytes (numberLength w) n
+      Varint.encodeList l ++ (Base.ByteOrder.toBE (numberLength w) n).toList
   | .handshake d s w l n =>
     -- Figure 17: Long Packet Type 2, so byte 0 is 0xe0 plus the Packet Number Length.
     return longPrefixList (UInt8.ofNat (224 + w.val)) 1 d s ++
       -- Length (i), Packet Number (8..32).
-      Varint.encodeList l ++ Base.natToBytes (numberLength w) n
+      Varint.encodeList l ++ (Base.ByteOrder.toBE (numberLength w) n).toList
   | .oneRtt d spin keyPhase w n =>
     -- Figure 19: Header Form 0, Fixed Bit 1 (0x40), Spin Bit (0x20) and Reserved Bits 0.
     --
     -- Then Key Phase (0x04), Packet Number Length (0x03), the connection ID and Packet Number.
     return [UInt8.ofNat (64 + (if spin then 32 else 0) +
-      (if keyPhase then 4 else 0) + w.val)] ++ d.data.toList ++ Base.natToBytes (numberLength w) n
+      (if keyPhase then 4 else 0) + w.val)] ++ d.data.toList
+        ++ (Base.ByteOrder.toBE (numberLength w) n).toList
   | .retry d s t tag unused =>
     -- Figure 18: Long Packet Type 3, so byte 0 is 0xf0 plus Unused (4).
     --
@@ -237,7 +238,7 @@ def encodeList (header : Header) : Except Error (List UInt8) := do
     -- The caller may set the bit 0x40, which servers SHOULD set where QUIC might be multiplexed.
     return longPrefixList (UInt8.ofNat (128 + unused.val)) 0 d s ++
       -- Supported Version (32) ..., each in network byte order.
-      versions.flatMap fun v => Base.natToBytes 4 v.toNat
+      versions.flatMap fun v => (Base.ByteOrder.toBE 4 v.toNat).toList
 
 /-- Read a connection ID with its one-byte length (§17.2). -/
 def connectionId (maximum : Nat) : Reader ByteArray := do
@@ -265,7 +266,7 @@ def versions : List UInt8 → Except Error (List UInt32)
   -- Supported Version (32): four bytes in network byte order, then the rest of the list.
   | a :: b :: c :: d :: rest => do
     let next ← versions rest
-    return (UInt32.ofNat (Base.bytesToNat [a, b, c, d])) :: next
+    return (UInt32.ofNat (Base.ByteOrder.ofBE [a, b, c, d])) :: next
   -- Fewer than four bytes left are not a version.
   | rest => .error (.truncated 4 rest.length)
 

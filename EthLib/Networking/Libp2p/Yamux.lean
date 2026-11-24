@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 
 /-!
 # yamux frames
@@ -136,8 +136,9 @@ def encode (frame : Frame) : List UInt8 :=
   -- All fields are big endian, and the version is always 0, the initial version.
   --
   -- The data of a data frame follows the header.
-  [0, frame.kind.toUInt8] ++ Base.natToBytes 2 frame.flags.toNat ++
-    Base.natToBytes 4 frame.streamId.toNat ++ Base.natToBytes 4 frame.length.toNat ++
+  [0, frame.kind.toUInt8] ++ (Base.ByteOrder.toBE 2 frame.flags.toNat).toList ++
+    (Base.ByteOrder.toBE 4 frame.streamId.toNat).toList
+      ++ (Base.ByteOrder.toBE 4 frame.length.toNat).toList ++
     frame.data.data.toList
 
 /-- The frame at the start of the input, and the bytes after it. -/
@@ -153,11 +154,11 @@ def decode (bytes : List UInt8) : Except YamuxError (Frame × List UInt8) := do
   let kindByte := header.getD 1 0
   let some kind := Kind.ofUInt8? kindByte | throw (.unknownKind kindByte)
   -- Flags (16 bits), big endian; bits other than SYN, ACK, FIN and RST are kept, not checked.
-  let flags := (Base.bytesToNat ((header.drop 2).take 2)).toUInt16
+  let flags := (Base.ByteOrder.ofBE ((header.drop 2).take 2)).toUInt16
   -- StreamID (32 bits), big endian.
-  let streamId := (Base.bytesToNat ((header.drop 4).take 4)).toUInt32
+  let streamId := (Base.ByteOrder.ofBE ((header.drop 4).take 4)).toUInt32
   -- Length (32 bits), big endian.
-  let length := (Base.bytesToNat (header.drop 8)).toUInt32
+  let length := (Base.ByteOrder.ofBE (header.drop 8)).toUInt32
   -- Length Field: a Data frame has that many bytes after the header, and other types none.
   let size := if kind = .data then length.toNat else 0
   let body := rest.take size

@@ -130,11 +130,12 @@ theorem fromBytesBE_eq {l : List Nat} {x : Fp}
   | cons a t =>
     simp [ByteArray.set!, ByteArray.get!, xOf]
     -- Both sides fold over the same bytes: a byte `u` maps `acc` to `256 acc + (u mod 256)`.
-    rw [Base.bytesToNat, List.foldl_cons, List.foldl_map]
+    rw [Base.ByteOrder.ofBE, List.foldl_cons, List.foldl_map]
     refine congrArg₂ (fun f i => List.foldl f i t) ?_ ?_
     · funext acc u
       rw [← Nat.shiftLeft_add_eq_or_of_lt (Nat.mod_lt u (by decide) : u % 256 < 2 ^ 8),
         Nat.shiftLeft_eq, UInt8.toNat_ofNat']
+      omega
     · simp [UInt8.toNat_and]
 
 /-! ## The check is sound -/

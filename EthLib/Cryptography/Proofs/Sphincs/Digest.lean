@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Sphincs.Constants
 public import EthLib.Cryptography.Sphincs.Digest
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 
 /-!
 # Proofs: the leanSPHINCS message digest
@@ -118,15 +118,15 @@ theorem msbField_byte {k : Nat} (x : Vector UInt8 k) (j : Nat) :
   exact byte_msb_bits _ (UInt8.toNat_lt _)
 
 /-- The first `8n` bits of a byte string are its first `n` bytes, read big-endian. -/
-theorem msbField_eq_bytesToNat {k : Nat} (x : Vector UInt8 k) :
-    ∀ n, n ≤ k → msbField x 0 (8 * n) = EthLib.Base.bytesToNat (x.toList.take n)
+theorem msbField_eq_ofBE {k : Nat} (x : Vector UInt8 k) :
+    ∀ n, n ≤ k → msbField x 0 (8 * n) = EthLib.Base.ByteOrder.ofBE (x.toList.take n)
   | 0, _ => rfl
   | n + 1, hn => by
     -- One more byte shifts the bytes read by 8 bits and adds itself.
-    rw [Nat.mul_succ, msbField_add, msbField_eq_bytesToNat x n (by omega), Nat.zero_add,
-      msbField_byte, List.take_add_one, EthLib.Base.bytesToNat_append, Vector.getElem?_toList,
+    rw [Nat.mul_succ, msbField_add, msbField_eq_ofBE x n (by omega), Nat.zero_add,
+      msbField_byte, List.take_add_one, EthLib.Base.ByteOrder.ofBE_append, Vector.getElem?_toList,
       Vector.getElem?_eq_getElem (by omega)]
-    simp [EthLib.Base.bytesToNat]
+    simp [EthLib.Base.ByteOrder.ofBE]
 
 /-- A sum scaled by `c` is the sum of its terms scaled by `c`. -/
 private theorem sum_map_mul_right (l : List Nat) (g : Nat → Nat) (c : Nat) :
@@ -155,20 +155,20 @@ theorem msbField_mul {k : Nat} (x : Vector UInt8 k) (offset a : Nat) : ∀ n,
 
 /-- The 24 leaves fill `md`: its 30 bytes, read big-endian, are the leaves, leaf 0 on top. -/
 theorem digestLeaves_fill_md (d : MessageDigest) :
-    EthLib.Base.bytesToNat (d.toList.take MD_BYTES)
+    EthLib.Base.ByteOrder.ofBE (d.toList.take MD_BYTES)
       = ((List.finRange FORS_TREES).map fun kappa : Fin FORS_TREES =>
           ((digestLeaves d)[kappa] : Nat)
             * 2 ^ (FORS_HEIGHT * (FORS_TREES - 1 - kappa.val))).sum := by
-  rw [← msbField_eq_bytesToNat d MD_BYTES (by decide), ← fors_leaves_fill_md,
+  rw [← msbField_eq_ofBE d MD_BYTES (by decide), ← fors_leaves_fill_md,
     Nat.mul_comm FORS_TREES, msbField_mul]
   refine congrArg List.sum (List.ext_getElem (by simp) fun i _ _ => ?_)
   simp [digestLeaves]
 
 /-- The digest read big-endian: `md` on top of the 4 bytes of the tree and leaf fields. -/
 theorem toInt_digest (d : MessageDigest) :
-    toInt d = EthLib.Base.bytesToNat (d.toList.take MD_BYTES) * 2 ^ 32
-      + EthLib.Base.bytesToNat ((d.toList.drop MD_BYTES).take TREE_INDEX_BYTES) * 2 ^ 8
-      + EthLib.Base.bytesToNat
+    toInt d = EthLib.Base.ByteOrder.ofBE (d.toList.take MD_BYTES) * 2 ^ 32
+      + EthLib.Base.ByteOrder.ofBE ((d.toList.drop MD_BYTES).take TREE_INDEX_BYTES) * 2 ^ 8
+      + EthLib.Base.ByteOrder.ofBE
           ((d.toList.drop (MD_BYTES + TREE_INDEX_BYTES)).take LEAF_INDEX_BYTES) := by
   have hlength : d.toList.length = 34 := by
     rw [Vector.length_toList]
@@ -186,8 +186,8 @@ theorem toInt_digest (d : MessageDigest) :
     simp [hlength]
   have hlast : ((l.drop (30 + 3)).take 1).length = 1 := by
     simp [hlength]
-  rw [congrArg EthLib.Base.bytesToNat hsplit, EthLib.Base.bytesToNat_append,
-    EthLib.Base.bytesToNat_append, hrest, hlast]
+  rw [congrArg EthLib.Base.ByteOrder.ofBE hsplit, EthLib.Base.ByteOrder.ofBE_append,
+    EthLib.Base.ByteOrder.ofBE_append, hrest, hlast]
   omega
 
 /-- The tree field has 3 bytes. -/
@@ -219,14 +219,15 @@ theorem digest_fields (d : MessageDigest) :
       toInt d % 2 ^ HEIGHT = digestIndex d := by
   rw [← digestLeaves_fill_md, toInt_digest, digestIndex, digestTree, digestLeaf]
   -- The tree field is below `2^24`, and the leaf field below `2^8`.
-  have htree := EthLib.Base.bytesToNat_lt ((d.toList.drop MD_BYTES).take TREE_INDEX_BYTES)
-  have hleaf := EthLib.Base.bytesToNat_lt
+  have htree := EthLib.Base.ByteOrder.ofBE_lt ((d.toList.drop MD_BYTES).take TREE_INDEX_BYTES)
+  have hleaf := EthLib.Base.ByteOrder.ofBE_lt
     ((d.toList.drop (MD_BYTES + TREE_INDEX_BYTES)).take LEAF_INDEX_BYTES)
   rw [length_treeBytes] at htree
   rw [length_leafBytes] at hleaf
-  generalize EthLib.Base.bytesToNat (d.toList.take MD_BYTES) = a
-  generalize EthLib.Base.bytesToNat ((d.toList.drop MD_BYTES).take TREE_INDEX_BYTES) = b at htree ⊢
-  generalize EthLib.Base.bytesToNat
+  generalize EthLib.Base.ByteOrder.ofBE (d.toList.take MD_BYTES) = a
+  generalize EthLib.Base.ByteOrder.ofBE ((d.toList.drop MD_BYTES).take TREE_INDEX_BYTES)
+    = b at htree ⊢
+  generalize EthLib.Base.ByteOrder.ofBE
     ((d.toList.drop (MD_BYTES + TREE_INDEX_BYTES)).take LEAF_INDEX_BYTES) = c at hleaf ⊢
   simp only [TREE_INDEX_BYTES, LEAF_INDEX_BYTES, HEIGHT, TOP_HEIGHT, LOWER_HEIGHT] at htree hleaf ⊢
   omega

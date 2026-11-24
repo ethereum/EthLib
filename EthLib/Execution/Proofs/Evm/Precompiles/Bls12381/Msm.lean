@@ -19,7 +19,7 @@ EIP-2537 does not require a scalar to be below the subgroup order.
 
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
-open EthLib.Base (bytesToNat mapM_cons_ok mapM_ok_mem)
+open EthLib.Base (ByteOrder.ofBE mapM_cons_ok mapM_ok_mem)
 open EthLib.Cryptography.Bls (G1 G2 G2.add G2.zero)
 
 /-! ## G1 -/
@@ -30,9 +30,9 @@ Its result adds each product to the start, in order. -/
 private theorem foldlM_g1Msm_eq_ok_iff (pairs : List (List UInt8 × List UInt8)) (acc q : G1) :
     pairs.foldlM (init := acc) (fun sum (raw, scalar) => do
         let point ← bytesToG1 raw true
-        return G1.add sum (G1.mulNat point (bytesToNat scalar))) = .ok q ↔
+        return G1.add sum (G1.mulNat point (ByteOrder.ofBE scalar))) = .ok q ↔
       ∃ points, pairs.mapM (fun pair => bytesToG1 pair.1 true) = .ok points ∧
-        q = (List.zipWith (fun P pair => G1.mulNat P (bytesToNat pair.2)) points pairs).foldl
+        q = (List.zipWith (fun P pair => G1.mulNat P (ByteOrder.ofBE pair.2)) points pairs).foldl
           G1.add acc := by
   induction pairs generalizing acc with
   | nil => simp [pure, Except.pure, eq_comm]
@@ -43,7 +43,7 @@ private theorem foldlM_g1Msm_eq_ok_iff (pairs : List (List UInt8 × List UInt8))
     cases hp : bytesToG1 raw true with
     | error e => simp [bind, Except.bind]
     | ok P =>
-      change List.foldlM _ (acc.add (P.mulNat (bytesToNat scalar))) pairs = _ ↔ _
+      change List.foldlM _ (acc.add (P.mulNat (ByteOrder.ofBE scalar))) pairs = _ ↔ _
       rw [ih]
       constructor
       · rintro ⟨points, hm, rfl⟩
@@ -58,7 +58,7 @@ Its result adds `m_i • P_i` in order, from the point at infinity. -/
 theorem g1Msm_eq_ok_iff {pairs : List (List UInt8 × List UInt8)} {q : G1} :
     g1Msm pairs = .ok q ↔
       ∃ points, pairs.mapM (fun pair => bytesToG1 pair.1 true) = .ok points ∧
-        q = (List.zipWith (fun P pair => G1.mulNat P (bytesToNat pair.2)) points pairs).foldl
+        q = (List.zipWith (fun P pair => G1.mulNat P (ByteOrder.ofBE pair.2)) points pairs).foldl
           G1.add G1.zero :=
   foldlM_g1Msm_eq_ok_iff pairs G1.zero q
 
@@ -88,7 +88,7 @@ theorem toPoint_of_g1Msm_eq_ok {pairs : List (List UInt8 × List UInt8)} {points
     {q : G1} (hdec : pairs.mapM (fun pair => bytesToG1 pair.1 true) = .ok points)
     (h : g1Msm pairs = .ok q) :
     G1.toPoint q =
-      (List.zipWith (fun P pair => bytesToNat pair.2 • G1.toPoint P) points pairs).sum := by
+      (List.zipWith (fun P pair => ByteOrder.ofBE pair.2 • G1.toPoint P) points pairs).sum := by
   obtain ⟨points', hdec', rfl⟩ := g1Msm_eq_ok_iff.mp h
   rw [hdec] at hdec'
   cases hdec'
@@ -109,7 +109,7 @@ theorem inSubgroup_of_mem_g1Msm {pairs : List (List UInt8 × List UInt8)} {point
 The scalar is not reduced, so a scalar above the subgroup order still gives its multiple. -/
 theorem toPoint_g1Msm_generator (scalar : List UInt8) :
     ∃ q, g1Msm [(g1ToBytes G1.generator, scalar)] = .ok q ∧
-      G1.toPoint q = bytesToNat scalar • G1.toPoint G1.generator := by
+      G1.toPoint q = ByteOrder.ofBE scalar • G1.toPoint G1.generator := by
   obtain ⟨g, hg, hgt⟩ := bytesToG1_g1ToBytes G1.valid_generator (subgroupCheck := true)
     fun _ => (G1.inSubgroup_iff_modulus_smul_eq_zero G1.valid_generator).mpr
       G1.modulus_smul_generator
@@ -130,9 +130,9 @@ Its result adds each product to the start, in order. -/
 private theorem foldlM_g2Msm_eq_ok_iff (pairs : List (List UInt8 × List UInt8)) (acc q : G2) :
     pairs.foldlM (init := acc) (fun sum (raw, scalar) => do
         let point ← bytesToG2 raw true
-        return G2.add sum (point.mulNat (bytesToNat scalar))) = .ok q ↔
+        return G2.add sum (point.mulNat (ByteOrder.ofBE scalar))) = .ok q ↔
       ∃ points, pairs.mapM (fun pair => bytesToG2 pair.1 true) = .ok points ∧
-        q = (List.zipWith (fun P pair => P.mulNat (bytesToNat pair.2)) points pairs).foldl
+        q = (List.zipWith (fun P pair => P.mulNat (ByteOrder.ofBE pair.2)) points pairs).foldl
           G2.add acc := by
   induction pairs generalizing acc with
   | nil => simp [pure, Except.pure, eq_comm]
@@ -143,7 +143,7 @@ private theorem foldlM_g2Msm_eq_ok_iff (pairs : List (List UInt8 × List UInt8))
     cases hp : bytesToG2 raw true with
     | error e => simp [bind, Except.bind]
     | ok P =>
-      change List.foldlM _ (G2.add acc (P.mulNat (bytesToNat scalar))) pairs = _ ↔ _
+      change List.foldlM _ (G2.add acc (P.mulNat (ByteOrder.ofBE scalar))) pairs = _ ↔ _
       rw [ih]
       constructor
       · rintro ⟨points, hm, rfl⟩
@@ -158,7 +158,7 @@ Its result adds `m_i • P_i` in order, from the point at infinity. -/
 theorem g2Msm_eq_ok_iff {pairs : List (List UInt8 × List UInt8)} {q : G2} :
     g2Msm pairs = .ok q ↔
       ∃ points, pairs.mapM (fun pair => bytesToG2 pair.1 true) = .ok points ∧
-        q = (List.zipWith (fun P pair => P.mulNat (bytesToNat pair.2)) points pairs).foldl
+        q = (List.zipWith (fun P pair => P.mulNat (ByteOrder.ofBE pair.2)) points pairs).foldl
           G2.add G2.zero :=
   foldlM_g2Msm_eq_ok_iff pairs G2.zero q
 
@@ -188,7 +188,7 @@ theorem toPoint_of_g2Msm_eq_ok {pairs : List (List UInt8 × List UInt8)} {points
     {q : G2} (hdec : pairs.mapM (fun pair => bytesToG2 pair.1 true) = .ok points)
     (h : g2Msm pairs = .ok q) :
     G2.toPoint q =
-      (List.zipWith (fun P pair => bytesToNat pair.2 • G2.toPoint P) points pairs).sum := by
+      (List.zipWith (fun P pair => ByteOrder.ofBE pair.2 • G2.toPoint P) points pairs).sum := by
   obtain ⟨points', hdec', rfl⟩ := g2Msm_eq_ok_iff.mp h
   rw [hdec] at hdec'
   cases hdec'
@@ -209,7 +209,7 @@ theorem inSubgroup_of_mem_g2Msm {pairs : List (List UInt8 × List UInt8)} {point
 The scalar is not reduced, so a scalar above the subgroup order still gives its multiple. -/
 theorem toPoint_g2Msm_generator (scalar : List UInt8) :
     ∃ q, g2Msm [(g2ToBytes G2.generator, scalar)] = .ok q ∧
-      G2.toPoint q = bytesToNat scalar • G2.toPoint G2.generator := by
+      G2.toPoint q = ByteOrder.ofBE scalar • G2.toPoint G2.generator := by
   obtain ⟨g, hg, hgt⟩ := bytesToG2_g2ToBytes G2.valid_generator (subgroupCheck := true)
     fun _ => G2.inSubgroup_generator
   have hdec : [(g2ToBytes G2.generator, scalar)].mapM (fun pair => bytesToG2 pair.1 true) =

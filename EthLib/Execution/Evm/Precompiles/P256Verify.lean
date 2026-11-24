@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.ErrorFormat
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Cryptography.Secp256r1.Curve
 
 /-!
@@ -18,7 +18,7 @@ An invalid input gives empty output, and the call fails only when the gas is bel
 
 namespace EthLib.Execution.Evm.Precompiles.P256Verify
 
-open EthLib.Base (bytesToNat)
+open EthLib.Base (ByteOrder.ofBE)
 open EthLib.Cryptography.Secp256r1
 
 /-- The size of the call data: the hash, the signature and the public key, 32 bytes each. -/
@@ -59,11 +59,11 @@ def VALID : ByteArray := ⟨(List.replicate 31 (0 : UInt8) ++ [1]).toArray⟩
 /-- Whether the call data holds a valid signature, by the checks and the algorithm of EIP-7951. -/
 def isValid (bytes : List UInt8) : Bool :=
   -- The input: `h`, `r`, `s`, `qx` and `qy`, 32 bytes each.
-  let e := bytesToNat (bytes.take 32)
-  let r := bytesToNat ((bytes.drop 32).take 32)
-  let s := bytesToNat ((bytes.drop 64).take 32)
-  let qx := bytesToNat ((bytes.drop 96).take 32)
-  let qy := bytesToNat (bytes.drop 128)
+  let e := ByteOrder.ofBE (bytes.take 32)
+  let r := ByteOrder.ofBE ((bytes.drop 32).take 32)
+  let s := ByteOrder.ofBE ((bytes.drop 64).take 32)
+  let qx := ByteOrder.ofBE ((bytes.drop 96).take 32)
+  let qy := ByteOrder.ofBE (bytes.drop 128)
   -- Check 3: `0 <= qx < p` and `0 <= qy < p`.
   if hx : qx < Fp.modulus then
     if hy : qy < Fp.modulus then

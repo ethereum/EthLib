@@ -410,7 +410,7 @@ def verifyP256 (spki message signature : ByteArray) : Bool :=
   -- ECDSA verification of `(r, s)` over the SHA-256 hash of the message, read big-endian.
   | .ok point, some (r, s) =>
     EthLib.Cryptography.Secp256r1.verify point
-      (EthLib.Base.bytesToNat (EthLib.Cryptography.Hash.Sha256.hash32 message).toList) r s
+      (EthLib.Base.ByteOrder.ofBE (EthLib.Cryptography.Hash.Sha256.hash32 message).toList) r s
   -- A malformed key or signature verifies nothing.
   | _, _ => false
 

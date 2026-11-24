@@ -2,7 +2,7 @@ module
 
 public import EthLib.Execution.Evm.Precompiles.AltBn128
 public import EthLib.Execution.Proofs.Evm.Machine.Memory
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.MapM
 
 /-!
@@ -42,7 +42,7 @@ theorem ecmul_outOfGas (fork : Fork) (data : ByteArray) {gas : Nat}
 /-- The 64 bytes of a point. -/
 theorem length_g1ToBytes : (point : Point) → (g1ToBytes point).length = 64
   | .infinity => by simp [g1ToBytes]
-  | .affine _ _ => by simp [g1ToBytes, EthLib.Base.natToBytes_length]
+  | .affine _ _ => by simp [g1ToBytes]
 
 /-- Every output of ECADD has 64 bytes. -/
 theorem ecadd_size {fork : Fork} {data : ByteArray} {gas : Nat} {out : ByteArray}
@@ -69,8 +69,8 @@ theorem ecmul_size {fork : Fork} {data : ByteArray} {gas : Nat} {out : ByteArray
 
 /-- A first coordinate at or above `p` is rejected, and the error holds it. -/
 theorem bytesToG1_invalidFieldElement {raw : List UInt8}
-    (hx : Fp.modulus ≤ EthLib.Base.bytesToNat (raw.take 32)) :
-    bytesToG1 raw = .error (.invalidFieldElement (EthLib.Base.bytesToNat (raw.take 32))) := by
+    (hx : Fp.modulus ≤ EthLib.Base.ByteOrder.ofBE (raw.take 32)) :
+    bytesToG1 raw = .error (.invalidFieldElement (EthLib.Base.ByteOrder.ofBE (raw.take 32))) := by
   simp [bytesToG1, Nat.not_lt.mpr hx, throw, throwThe, MonadExceptOf.throw]
 
 /-! ## Success -/
@@ -128,7 +128,7 @@ theorem ecmul_eq_ok_iff (fork : Fork) (data : ByteArray) (gas : Nat) (out : Byte
     ecmul fork data gas = .ok out ↔ ecmulGas fork ≤ gas ∧ ∃ p0,
       bytesToG1 (bufferRead data 0 64) = .ok p0 ∧
       out = ⟨(g1ToBytes
-        (Point.mulBits 256 (Base.bytesToNat (bufferRead data 64 32)) p0)).toArray⟩ := by
+        (Point.mulBits 256 (Base.ByteOrder.ofBE (bufferRead data 64 32)) p0)).toArray⟩ := by
   by_cases hgas : gas < ecmulGas fork
   · simp [ecmul_outOfGas fork data hgas, Nat.not_le.mpr hgas]
   · simp only [ecmul, hgas, bind, Except.bind, pure, Except.pure, throw, throwThe,

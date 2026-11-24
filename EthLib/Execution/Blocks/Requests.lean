@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Cryptography.Hash.Sha256
 public import EthLib.Execution.Evm.Log
 
@@ -99,7 +99,7 @@ def DepositError.code : DepositError → UInt32
 
 /-- The 32-byte big-endian word at a position of the data, as a number. -/
 def wordAt (data : List UInt8) (position : Nat) : Nat :=
-  bytesToNat ((data.drop position).take 32)
+  ByteOrder.ofBE ((data.drop position).take 32)
 
 /-- The bytes of a field whose 32-byte size starts at `offset`. -/
 def fieldAt (data : List UInt8) (offset size : Nat) : List UInt8 :=

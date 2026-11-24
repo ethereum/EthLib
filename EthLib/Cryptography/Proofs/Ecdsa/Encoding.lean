@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Ecdsa.Encoding
-import EthLib.Base.Proofs.BigEndian
+import EthLib.Base.Proofs.ByteOrder
 import EthLib.Base.Proofs.Bytes
 
 /-!
@@ -23,7 +23,8 @@ namespace EthLib.Cryptography.Ecdsa
 Its first 32 bytes then give `r`, and the rest give `s`. -/
 theorem read?_eq (b : ByteArray) :
     read? b = if b.size = SIGNATURE_LEN then
-      some (Base.bytesToNat (b.data.toList.take 32), Base.bytesToNat (b.data.toList.drop 32))
+      some (Base.ByteOrder.ofBE (b.data.toList.take 32),
+        Base.ByteOrder.ofBE (b.data.toList.drop 32))
     else none := by
   by_cases h : b.size = SIGNATURE_LEN
   · simp [read?, Base.exactBytes?_of_size_eq h, toNats, h]
@@ -32,9 +33,8 @@ theorem read?_eq (b : ByteArray) :
 /-- The bytes of `r` and `s` read back as `r` and `s`, each modulo `2^256`. -/
 @[simp] theorem toNats_toBytes (r s : Nat) :
     toNats (toBytes r s) = (r % 256 ^ 32, s % 256 ^ 32) := by
-  have hr := Base.natToBytes_length 32 r
-  simp only [toNats, toBytes, Vector.toList_mk, List.take_left' hr,
-    List.drop_left' hr, Base.bytesToNat_natToBytes]
+  have hr := Base.ByteOrder.length_toList_toBE 32 r
+  simp [toNats, toBytes, List.take_left' hr, List.drop_left' hr]
 
 /-- The bytes of a signature, as a buffer, read as its two integers. -/
 @[simp] theorem read?_packBytes (sig : Vector UInt8 SIGNATURE_LEN) :

@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Cryptography.Proofs.Hash.Crc.Basic
 public import EthLib.Networking.Devp2p.ForkId
 public import EthLib.Serialization.Proofs.Rlp.Codec
@@ -57,12 +57,13 @@ theorem ForkIdError.code_injective : Function.Injective ForkIdError.code := by
 theorem Schedule.remainder_checksumInput_append (g : Hash32) (forks : List Activation)
     (a : Activation) :
     Crc.remainder Crc32.generator (Schedule.checksumInput g (forks ++ [a]))
-      = (natToBytes 8 (activationValue a)).foldl (Crc.shiftByte Crc32.generator)
+      = ((ByteOrder.toBE 8 (activationValue a)).toList).foldl (Crc.shiftByte Crc32.generator)
           (Crc.remainder Crc32.generator (Schedule.checksumInput g forks)) := by
   have : Schedule.checksumInput g (forks ++ [a])
-      = Schedule.checksumInput g forks ++ ⟨(natToBytes 8 (activationValue a)).toArray⟩ := by
-    simp [Schedule.checksumInput, ByteArray.ext_iff, ByteArray.data_append]
+      = Schedule.checksumInput g forks ++ ⟨(ByteOrder.toBE 8 (activationValue a)).toArray⟩ := by
+    simp [Schedule.checksumInput, ByteArray.ext_iff, ByteArray.data_append] <;> rfl
   rw [this, Crc.remainder_append]
+  rfl
 
 /-! ## The passed forks -/
 
@@ -98,22 +99,24 @@ theorem _root_.List.findIdx?_eq_of_nodup {α : Type} [DecidableEq α] {l : List 
   omega
 
 /-- Values below 2^64 that give the same 8-byte big-endian bytes, one after the other, are equal. -/
-theorem flatMap_natToBytes_inj :
+theorem flatMap_toBE_inj :
     ∀ {l l' : List Nat}, (∀ v ∈ l, v < 2 ^ 64) → (∀ v ∈ l', v < 2 ^ 64) →
-      l.flatMap (natToBytes 8) = l'.flatMap (natToBytes 8) → l = l'
+      l.flatMap (fun x => (ByteOrder.toBE 8 x).toList)
+        = l'.flatMap (fun x => (ByteOrder.toBE 8 x).toList) → l = l'
   | [], [], _, _, _ => rfl
   | [], v :: _, _, _, h => by
     have := congrArg List.length h
-    simp [natToBytes_length] at this <;> omega
+    simp at this <;> omega
   | v :: _, [], _, _, h => by
     have := congrArg List.length h
-    simp [natToBytes_length] at this <;> omega
+    simp at this <;> omega
   | v :: l, v' :: l', hl, hl', h => by
     simp only [List.flatMap_cons] at h
-    obtain ⟨hv, hrest⟩ := List.append_inj h (by simp [natToBytes_length])
+    obtain ⟨hv, hrest⟩ := List.append_inj h (by simp)
     have h64 : (2 : Nat) ^ 64 = 256 ^ 8 := rfl
-    rw [natToBytes_inj (h64 ▸ hl v (by simp)) (h64 ▸ hl' v' (by simp)) hv,
-      flatMap_natToBytes_inj (fun x hx => hl x (by simp [hx])) (fun x hx => hl' x (by simp [hx]))
+    rw [ByteOrder.toBE_inj (h64 ▸ hl v (by simp)) (h64 ▸ hl' v' (by simp))
+        (Vector.toList_inj.mp hv),
+      flatMap_toBE_inj (fun x hx => hl x (by simp [hx])) (fun x hx => hl' x (by simp [hx]))
         hrest]
 
 namespace Schedule
@@ -199,15 +202,16 @@ theorem checksumInput_eq_iff {g : Hash32} {forks forks' : List Activation}
     (h' : ∀ a ∈ forks', activationValue a < ACTIVATION_BOUND) :
     checksumInput g forks = checksumInput g forks' ↔
       forks.map activationValue = forks'.map activationValue := by
-  have hflat (l : List Activation) : l.flatMap (fun a => natToBytes 8 (activationValue a)) =
-      (l.map activationValue).flatMap (natToBytes 8) := by
+  have hflat (l : List Activation) :
+      l.flatMap (fun a => (ByteOrder.toBE 8 (activationValue a)).toList) =
+      (l.map activationValue).flatMap (fun x => (ByteOrder.toBE 8 x).toList) := by
     simp [List.flatMap_map]
   simp only [checksumInput, ByteArray.mk.injEq, hflat]
   constructor
   · intro he
     have := congrArg Array.toList he
     simp only [List.append_cancel_left_eq] at this
-    exact flatMap_natToBytes_inj (by simpa using h) (by simpa using h') this
+    exact flatMap_toBE_inj (by simpa using h) (by simpa using h') this
   · intro he
     rw [he]
 

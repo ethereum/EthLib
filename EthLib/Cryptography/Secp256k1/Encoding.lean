@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Secp256k1.Curve
 public import EthLib.Cryptography.Secp256k1.Errors
 public import EthLib.Cryptography.Secp256k1.Sqrt
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 
 /-!
 # `Secp256k1.Encoding`
@@ -22,22 +22,23 @@ namespace EthLib.Cryptography.Secp256k1
 /-- A coordinate as 32 bytes, by SEC 1 v2 §2.3.5. -/
 def Fp.toBytes (x : Fp) : List UInt8 :=
   -- Step 1: `q = p` is an odd prime, so `M` is the integer `a` as `mlen = 32` octets, by §2.3.7.
-  Base.natToBytes 32 x.val
+  (Base.ByteOrder.toBE 32 x.val).toList
 
 /-- A coordinate is 32 bytes long. -/
-theorem Fp.length_toBytes (x : Fp) : x.toBytes.length = 32 := Base.natToBytes_length 32 x.val
+theorem Fp.length_toBytes (x : Fp) : x.toBytes.length = 32 := by
+  simp [Fp.toBytes]
 
 /-- 32 bytes as a coordinate, by SEC 1 v2 §2.3.6: the integer must be below `p`. -/
 def Fp.ofBytes (bytes : List UInt8) : Except Secp256k1Error Fp :=
   -- Step 1: `a` is the integer of `M`, by §2.3.8, and "invalid" unless `a` lies in `[0, p-1]`.
-  if h : Base.bytesToNat bytes < Fp.modulus then .ok ⟨_, h⟩
-  else .error (.coordinateTooLarge (Base.bytesToNat bytes))
+  if h : Base.ByteOrder.ofBE bytes < Fp.modulus then .ok ⟨_, h⟩
+  else .error (.coordinateTooLarge (Base.ByteOrder.ofBE bytes))
 
 /-- Big-endian bytes as a scalar, if their integer is below `n`.
 
 A larger value is rejected rather than reduced, so each scalar has one encoding. -/
 def Fn.ofBytes? (bytes : List UInt8) : Option Fn :=
-  if h : Base.bytesToNat bytes < Fn.modulus then some ⟨_, h⟩ else none
+  if h : Base.ByteOrder.ofBE bytes < Fn.modulus then some ⟨_, h⟩ else none
 
 namespace Point
 

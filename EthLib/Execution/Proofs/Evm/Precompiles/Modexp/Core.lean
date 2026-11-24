@@ -27,23 +27,23 @@ open Nat (powMod)
 
 /-- The big-endian integer held by the output bytes. -/
 def outputNat (bytes : ByteArray) : Nat :=
-  bytesToNat bytes.data.toList
+  ByteOrder.ofBE bytes.data.toList
 
 /-- The output bytes are the fixed-width encoding of the result. -/
 theorem compute_data (data : ByteArray) (l : Lengths) :
     (compute data l).data.toList
-      = natToBytes l.modulus
+      = (ByteOrder.toBE l.modulus
           (if readNat data l.modulusStart l.modulus = 0 then 0
            else powMod (readNat data BASE_OFFSET l.base) (readNat data l.exponentStart l.exponent)
-                  (readNat data l.modulusStart l.modulus)) := by
-  simp [compute]
+                  (readNat data l.modulusStart l.modulus))).toList := by
+  simp [compute] <;> rfl
 
 /-- The output has exactly `len_mod` bytes.
 
 EIP-198: "returns an output ... as a byte array with the same length as the modulus". -/
 theorem compute_size (data : ByteArray) (l : Lengths) : (compute data l).size = l.modulus := by
   have h := congrArg List.length (compute_data data l)
-  rw [natToBytes_length, Array.length_toList] at h
+  rw [ByteOrder.length_toList_toBE, Array.length_toList] at h
   exact h
 
 /-- The output is the mathematical `base ^ exponent mod modulus`.
@@ -62,10 +62,10 @@ theorem compute_eq_pow_mod (data : ByteArray) (l : Lengths) :
   rw [compute_data]
   split
   · -- A zero modulus gives the number 0 (written as zero bytes).
-    rw [bytesToNat_natToBytes, Nat.zero_mod]
+    rw [ByteOrder.ofBE_toBE, Nat.zero_mod]
   · next h =>
     -- No truncation: the remainder is below the modulus, which fits in `length_of_MODULUS` bytes.
-    rw [bytesToNat_natToBytes_of_lt, Nat.powMod_def]
+    rw [ByteOrder.ofBE_toBE_of_lt, Nat.powMod_def]
     -- The side goal is that bound, stated on the loop.
     rw [Nat.powMod_def]
     exact Nat.lt_trans (Nat.mod_lt _ (Nat.pos_of_ne_zero h)) (readNat_lt _ _ _)
@@ -75,7 +75,7 @@ theorem compute_modulus_zero (data : ByteArray) (l : Lengths)
     (h : readNat data l.modulusStart l.modulus = 0) :
     (compute data l).data = Array.replicate l.modulus 0 := by
   have := compute_data data l
-  rw [ite_eq_left h, natToBytes_zero_right] at this
+  rw [ite_eq_left h, ByteOrder.toList_toBE_zero_right] at this
   exact Array.toList_inj.mp (by simpa using this)
 
 /-- An empty modulus gives an empty output, even with an empty base.

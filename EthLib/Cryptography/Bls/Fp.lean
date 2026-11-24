@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Bls.Errors
 public import EthLib.Cryptography.Inverse
 public import EthLib.Cryptography.BaseField
 public import EthLib.Cryptography.Montgomery
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 
 /-!
 # `Fp`

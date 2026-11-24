@@ -19,7 +19,7 @@ open EthLib.Cryptography.Hash.Keccak (keccak256)
 
 /-- The word is the integer the digest writes, the first byte the most significant. -/
 theorem toNat_keccak (data : ByteArray) :
-    (keccak data).toNat = bytesToNat (keccak256 data).toList :=
+    (keccak data).toNat = ByteOrder.ofBE (keccak256 data).toList :=
   U256.toNat_fromBeBytes _
 
 /-- The word determines the digest. -/

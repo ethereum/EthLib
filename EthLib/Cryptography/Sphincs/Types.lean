@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Sphincs.Constants
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Cryptography.HashSig
 
 /-!
@@ -31,7 +31,7 @@ export EthLib.Cryptography.HashSig (unpackBytes? ofFnInOrder)
 
 For example, `[0x12, 0x34]` reads as `0x1234`. -/
 def toInt {k : Nat} (x : Vector UInt8 k) : Nat :=
-  EthLib.Base.bytesToNat x.toList
+  EthLib.Base.ByteOrder.ofBE x.toList
 
 /-- `toByte(x, k)` (FIPS 205 Algorithm 3): the `k` low bytes of `x`, most significant first.
 
@@ -39,7 +39,7 @@ A larger `x` keeps only `x % 256^k`.
 
 For example, `toByte 2 0x1234` is `[0x12, 0x34]`. -/
 def toByte (k x : Nat) : Vector UInt8 k :=
-  ⟨(EthLib.Base.natToBytes k x).toArray, by simp [EthLib.Base.natToBytes_length]⟩
+  EthLib.Base.ByteOrder.toBE k x
 
 /-! ## Objects -/
 

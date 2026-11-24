@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Cryptography.Aes.Block
 
 /-!
@@ -28,11 +28,11 @@ namespace EthLib.Cryptography.Aes
 SP 800-38A §4.1 reads a bit string as an integer with the first bit most significant. -/
 def blockToNat (T : Block) : Nat :=
   -- The inverse of `[x]_m` of §5.4, with `m = 128`: the first bit is the most significant.
-  Base.bytesToNat T.toList
+  Base.ByteOrder.ofBE T.toList
 
 /-- The block that spells `x mod 2^128`, first byte most significant. -/
 def blockOfNat (x : Nat) : Block :=
-  ⟨(Base.natToBytes 16 x).toArray, by simp [Base.natToBytes_length]⟩
+  Base.ByteOrder.toBE 16 x
 
 /-- The standard incrementing function of SP 800-38A Appendix B.1.
 

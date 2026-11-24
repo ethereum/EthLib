@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Execution.Evm.Precompiles.Modexp.Encoding
 public import EthLib.Execution.Proofs.Evm.Machine.Memory
 
@@ -23,12 +23,12 @@ open EthLib.Execution.Evm
 /-- A read of `size` bytes is worth less than `256 ^ size`. -/
 theorem readNat_lt (data : ByteArray) (start size : Nat) :
     readNat data start size < 256 ^ size := by
-  have := bytesToNat_lt (bufferRead data start size)
+  have := ByteOrder.ofBE_lt (bufferRead data start size)
   rwa [bufferRead_length] at this
 
 /-- A read of no bytes is `0`. -/
 theorem readNat_zero_size (data : ByteArray) (start : Nat) : readNat data start 0 = 0 := by
-  simp [readNat, bufferRead_eq, bytesToNat]
+  simp [readNat, bufferRead_eq, ByteOrder.ofBE]
 
 /-- A read depends only on the bytes it covers. -/
 theorem readNat_congr {d₁ d₂ : ByteArray} {start size : Nat}

@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 public import EthLib.Base.Bytes
 
 /-!
@@ -33,7 +33,7 @@ def vector {ε : Type} (truncated : ε) (n : Nat) : Reader ε (Vector UInt8 n) :
 
 /-- Read a big-endian integer of the given byte width. -/
 def uint {ε : Type} (truncated : ε) (n : Nat) : Reader ε Nat := do
-  return bytesToNat (← bytes truncated n)
+  return ByteOrder.ofBE (← bytes truncated n)
 
 /-- Reject a field that does not meet its format constraint, without consuming input. -/
 def require {ε : Type} (condition : Prop) [Decidable condition] (error : ε) : Reader ε Unit :=

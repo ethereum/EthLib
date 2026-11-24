@@ -1016,6 +1016,33 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the big-endian integers move to `EthLib.Base.ByteOrder`, beside the little-endian ones, and `EthLib.Base.BigEndian` and its proof module are removed ([#4382](https://github.com/ethereum/EthLib/pull/4382)).
+  The functions take new names:
+  - `Base.bytesToNat bytes` is `Base.ByteOrder.ofBE bytes`, with the same `List UInt8` argument; it reads the same number, now with the fold `256 * acc + b.toNat`.
+  - `Base.natToBytes len n` is `(Base.ByteOrder.toBE len n).toList`: `toBE` returns a `Vector UInt8 len`.
+  - `Base.natToBytes4 n` is removed: write `⟨(Base.ByteOrder.toBE 4 n).toArray⟩`.
+  - `Rlp.ofBigEndian` is removed, since it was `Base.bytesToNat`: write `Base.ByteOrder.ofBE`.
+  The lemmas take these names, in `EthLib.Base.ByteOrder` and `EthLib.Base.Proofs.ByteOrder`:
+  - `foldl_bytesToNat` is `ByteOrder.foldl_ofBE`, now stated for the fold `256 * acc + b` as `256 ^ bytes.length * acc + ofBE bytes`.
+  - `bytesToNat_lt` is `ByteOrder.ofBE_lt`, `bytesToNat_append` is `ByteOrder.ofBE_append`, and `bytesToNat_cons` is `ByteOrder.ofBE_cons`.
+  - `bytesToNat_inj` is `ByteOrder.ofBE_inj`, and `compare_eq_compare_bytesToNat` is `ByteOrder.compare_eq_compare_ofBE`.
+  - `bytesToNat_natToBytes` is `ByteOrder.ofBE_toBE`, and `bytesToNat_natToBytes_of_lt` is `ByteOrder.ofBE_toBE_of_lt`.
+  - `natToBytes_bytesToNat` is `ByteOrder.toList_toBE_ofBE`.
+  - `natToBytes_length` is `ByteOrder.length_toList_toBE`, `natToBytes_succ` is `ByteOrder.toList_toBE_succ`, and `natToBytes_add` is `ByteOrder.toList_toBE_add`.
+  - `natToBytes_zero` is `ByteOrder.toList_toBE_zero`, and `natToBytes_zero_right` is `ByteOrder.toList_toBE_zero_right`.
+  - `natToBytes_mod` is `ByteOrder.toBE_mod`, and `getElem_natToBytes` is `ByteOrder.getElem_toBE`; both now state the vector.
+  - `natToBytes_inj` is `ByteOrder.toBE_inj`, which takes equal vectors.
+  - `length_flatMap_natToBytes`, `map_range_bytesToNat_flatMap_natToBytes` and `flatMap_natToBytes_map_range_bytesToNat` are `ByteOrder.length_flatMap_toBE`, `ByteOrder.map_range_ofBE_flatMap_toBE` and `ByteOrder.flatMap_toBE_map_range_ofBE`.
+  - `natToBytes.go` is `ByteOrder.toBE.go`, and `natToBytes.go_append` is `ByteOrder.toBE.go_append`, whose right side is now `toBE.go n x [] ++ written`.
+  - `natToBytes4_size` is removed.
+  - `Rlp.ofBigEndian_nil` and `Rlp.ofBigEndian_append_singleton` are `ByteOrder.ofBE_nil` and `ByteOrder.ofBE_append_singleton`.
+  - `Rlp.ofBigEndian_bigEndianAux` and `Rlp.ofBigEndian_eq_zero` are `Rlp.ofBE_bigEndianAux` and `Rlp.eq_zero_of_ofBE_eq_zero`.
+  The lemmas named after the old functions take the new names, `bytesToNat` becoming `ofBE` and `natToBytes` becoming `toBE`.
+  They are `U256.natToBytes_toNat_fromBeBytes`, `Montgomery.bytesToNat_bytesBE`, `Montgomery.bytesToNat_limbBytes`, `Sphincs.msbField_eq_bytesToNat`, `beInt_eq_bytesToNat`, `natToBytes_eq_bytesBE`, `Bloom.bytesToNat_toBytes`, `bytesToFp_natToBytes`, `bytesToFieldElement_natToBytes`, `bytesToFq2_natToBytes`, `natToBytes_bytesToFieldElement`, `natToBytes_bytesToFq2`, `flatMap_natToBytes_inj`, `Discv5.eq_of_bytesToNat_eq`, `bytesToNat_encodePacketNumber`, `bytesToNat_encodePacketNumberList`, `bytesToNat_encodePacketNumberList_of_packetNumberWidth_none` and `eq_natToBytes_of_codePoint`.
+  Each statement that wrote `natToBytes len n` now writes `(toBE len n).toList`, `(toBE len n).toArray` where it built an array, or `toBE len n` where it built a vector, and states the same bytes.
+  Among the new lemmas, `ByteOrder.toBE_eq_reverse_toLE`, `ByteOrder.toList_toBE` and `ByteOrder.ofBE_toList_eq_ofLE_reverse` relate the two orders, `ByteOrder.toBE_ofBE` and `ByteOrder.toList_toBE_ofBE_of_length` give the round trip at a fixed width, and `ByteOrder.ofLE_eq_ofDigits` and `ByteOrder.ofBE_eq_ofDigits`, in `EthLib.Base.Proofs.ByteOrder.Digits`, state both readings through Mathlib's `Nat.ofDigits 256`.
+  Migration: replace the names above; a caller that needs a list writes `.toList` after `toBE`.
+
 - In Lean, the little-endian integers move to the new module `EthLib.Base.ByteOrder`, and their names say the byte order ([#4368](https://github.com/ethereum/EthLib/pull/4368)).
   `EthLib.Base.LittleEndian` and `EthLib.Base.Proofs.LittleEndian` become `EthLib.Base.ByteOrder` and `EthLib.Base.Proofs.ByteOrder`.
   `rotl32`, `uint32OfBytes` and `uint32Byte` move to `EthLib.Base.Word32`, with unchanged names and bodies.

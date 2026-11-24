@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Networking.Encoding.ByteReader
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.Bytes
 
 /-!
@@ -31,8 +31,8 @@ open EthLib.Base
 
 /-- Reading a written integer returns it modulo the field width, and the bytes after it. -/
 @[simp] theorem uint_encode {ε : Type} (truncated : ε) (n value : Nat) (rest : List UInt8) :
-    uint truncated n (natToBytes n value ++ rest) = .ok (value % 256 ^ n, rest) := by
-  simp [uint, bytes, natToBytes_length, bytesToNat_natToBytes,
+    uint truncated n ((ByteOrder.toBE n value).toList ++ rest) = .ok (value % 256 ^ n, rest) := by
+  simp [uint, bytes, ByteOrder.ofBE_toBE,
     StateT.bind, StateT.pure, bind, Except.bind, pure, Except.pure]
 
 /-- A condition that holds consumes nothing. -/
@@ -80,7 +80,7 @@ theorem vector_ok_iff {ε : Type} (truncated : ε) {n : Nat} (input rest : List 
 theorem uint_ok_iff {ε : Type} (truncated : ε) (n value : Nat)
     (input rest : List UInt8) :
     uint truncated n input = .ok (value, rest) ↔
-      value < 256 ^ n ∧ input = natToBytes n value ++ rest := by
+      value < 256 ^ n ∧ input = (ByteOrder.toBE n value).toList ++ rest := by
   constructor
   · intro accepted
     unfold uint at accepted
@@ -92,8 +92,8 @@ theorem uint_ok_iff {ε : Type} (truncated : ε) (n value : Nat)
       rcases accepted with ⟨rfl, rfl⟩
       obtain ⟨length, split⟩ := (bytes_ok_iff truncated n input field trailing).mp read
       constructor
-      · simpa [← length] using bytesToNat_lt field
-      · simpa [← length, natToBytes_bytesToNat] using split
+      · simpa [← length] using ByteOrder.ofBE_lt field
+      · rwa [ByteOrder.toList_toBE_ofBE_of_length length]
   · rintro ⟨bound, rfl⟩
     simp [uint_encode, Nat.mod_eq_of_lt bound]
 

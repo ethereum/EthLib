@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Bls.Signatures
 public import EthLib.Cryptography.Hash.Hkdf
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 
 /-!
 # BLS key generation
@@ -52,7 +52,7 @@ def keyGenLoop (ikm keyInfo : ByteArray) : (salt : ByteArray) → (attempts : Na
     let okm ← (Hkdf.expand prk (keyInfo ++ HashToCurve.i2osp KEYGEN_L 2) KEYGEN_L).mapError
       fun _ => .keyGenHkdf
     -- Step 7: `SK = OS2IP(OKM) mod r`.
-    let sk := Fr.ofNat (Base.bytesToNat okm.data.toList)
+    let sk := Fr.ofNat (Base.ByteOrder.ofBE okm.data.toList)
     -- Steps 3 and 8: repeat while `SK = 0`; otherwise the key is `SK`.
     if h : sk = 0 then keyGenLoop ikm keyInfo salt attempts else return ⟨sk, h⟩
 

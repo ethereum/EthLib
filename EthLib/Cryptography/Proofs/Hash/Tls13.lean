@@ -47,7 +47,7 @@ theorem hkdfLabel_eq (label context : ByteArray) (length : Nat)
     (hlabel : 0 < label.size ∧ label.size ≤ 249) (hcontext : context.size ≤ 255)
     (hlength : length ≤ 65535) :
     hkdfLabel label context length =
-      .ok (⟨(natToBytes 2 length).toArray⟩ ++
+      .ok (⟨(ByteOrder.toBE 2 length).toArray⟩ ++
         ⟨#[UInt8.ofNat (6 + label.size)]⟩ ++ "tls13 ".toUTF8 ++ label ++
         ⟨#[UInt8.ofNat context.size]⟩ ++ context) := by
   simp only [hkdfLabel, show ¬ (label.size = 0 ∨ 249 < label.size) by omega,

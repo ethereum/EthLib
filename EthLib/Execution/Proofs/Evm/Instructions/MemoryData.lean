@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Base.Proofs.U256
 public import EthLib.Execution.Evm.Instructions.MemoryData
 public import EthLib.Execution.Proofs.Evm.Machine.Memory
@@ -24,8 +24,8 @@ They keep every other byte of memory.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork U256 bytesToNat natToBytes byteAtOrZero byteAtOrZero_append_zeros byteAtOrZero_eq_getD
-  natToBytes_add)
+open EthLib.Base (Fork U256 ByteOrder.ofBE ByteOrder.toBE byteAtOrZero byteAtOrZero_append_zeros
+  byteAtOrZero_eq_getD ByteOrder.toList_toBE_add)
 open GasCosts
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
@@ -36,23 +36,29 @@ theorem size_wordBytes (word : U256) : (wordBytes word).size = 32 := by
 
 /-- The 32 bytes of a word: its high part on `a` bytes, then its low part on `b` bytes. -/
 theorem wordBytes_eq_append (w : U256) {a b : Nat} (h : a + b = 32) :
-    wordBytes w = ⟨(natToBytes a (w.toNat / 256 ^ b)).toArray⟩ ++
-      ⟨(natToBytes b w.toNat).toArray⟩ := by
+    wordBytes w = ⟨(ByteOrder.toBE a (w.toNat / 256 ^ b)).toArray⟩ ++
+      ⟨(ByteOrder.toBE b w.toNat).toArray⟩ := by
   apply ByteArray.ext
   rw [ByteArray.data_append]
-  show (natToBytes 32 w.toNat).toArray = _
-  rw [← h, natToBytes_add]
-  simp
+  show (ByteOrder.toBE 32 w.toNat).toArray = _
+  rw [← h]
+  apply Array.toList_inj.mp
+  rw [Array.toList_append]
+  exact ByteOrder.toList_toBE_add a b w.toNat
 
 /-- Byte `i` of a word is the word over `256 ^ (31 - i)`, modulo 256. -/
 theorem byteAtOrZero_wordBytes (w : U256) {i : Nat} (hi : i < 32) :
     EthLib.Base.byteAtOrZero (wordBytes w) i = UInt8.ofNat (w.toNat / 256 ^ (31 - i)) := by
   rw [wordBytes_eq_append w (a := i + 1) (b := 31 - i) (by omega), EthLib.Base.byteAtOrZero_append]
   generalize w.toNat / 256 ^ (31 - i) = n
-  have hs : (⟨(EthLib.Base.natToBytes (i + 1) n).toArray⟩ : ByteArray).size = i + 1 := by
-    simp [ByteArray.size, EthLib.Base.natToBytes_length]
-  rw [hs, ite_eq_left (by omega), EthLib.Base.byteAtOrZero_eq_getD, EthLib.Base.natToBytes_succ]
-  simp [EthLib.Base.natToBytes_length]
+  have hs : (⟨(EthLib.Base.ByteOrder.toBE (i + 1) n).toArray⟩ : ByteArray).size = i + 1 := by
+    simp [ByteArray.size]
+  rw [hs, ite_eq_left (by omega), EthLib.Base.byteAtOrZero_eq_getD]
+  -- The last of the `i + 1` bytes is the low byte of `n`.
+  show (EthLib.Base.ByteOrder.toBE (i + 1) n).toArray.getD i 0 = _
+  rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem (by simp), Option.getD_some,
+    Vector.getElem_toArray, EthLib.Base.ByteOrder.getElem_toBE (by omega)]
+  simp only [Nat.add_sub_cancel, Nat.sub_self, Nat.pow_zero, Nat.div_one]
   exact UInt8.ofNat_mod_size
 
 /-- The word of 32 bytes that a write of a word puts in memory is that word.
@@ -64,12 +70,12 @@ theorem loadWord_memoryWrite_wordBytes {memory : ByteArray} {start : Nat} (word 
       word := by
   have hsize := size_wordBytes word
   rw [← hsize, memoryReadBytes_memoryWrite (by omega), loadWord, bufferRead_zero_size]
-  have bytes : (wordBytes word).data.toList = natToBytes 32 word.toNat :=
+  have bytes : (wordBytes word).data.toList = (ByteOrder.toBE 32 word.toNat).toList :=
     EthLib.Base.U256.toList_toBeBytes word
   have small : word.toNat < 256 ^ 32 := by
     have := word.isLt
     rwa [show (2 : Nat) ^ 256 = 256 ^ 32 by decide] at this
-  rw [bytes, EthLib.Base.bytesToNat_natToBytes_of_lt small]
+  rw [bytes, EthLib.Base.ByteOrder.ofBE_toBE_of_lt small]
   apply BitVec.eq_of_toNat_eq
   simp
 

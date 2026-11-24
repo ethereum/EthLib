@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Secp256r1.Curve
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 
 /-!
 # `Secp256r1.Encoding`
@@ -22,7 +22,7 @@ namespace EthLib.Cryptography.Secp256r1
 /-- A coordinate as 32 big-endian bytes, by SEC 1 v2 §2.3.5. -/
 def Fp.toBytes (x : Fp) : List UInt8 :=
   -- Step 1: `q = p` is an odd prime, so `M` is the integer `a` as `mlen = 32` octets, by §2.3.7.
-  Base.natToBytes 32 x.val
+  (Base.ByteOrder.toBE 32 x.val).toList
 
 /-- The uncompressed encoding `04 ‖ x ‖ y` of an affine point, by SEC 1 v2 §2.3.3. -/
 def encodeUncompressed (x y : Fp) : List UInt8 :=
@@ -42,8 +42,8 @@ def decodeUncompressed (bytes : List UInt8) : Option Point :=
   | 4 :: coords =>
     -- Step 3 applies only when `M` has `2 * 32 + 1` octets.
     if coords.length = 64 then
-      let x := Base.bytesToNat (coords.take 32)
-      let y := Base.bytesToNat (coords.drop 32)
+      let x := Base.ByteOrder.ofBE (coords.take 32)
+      let y := Base.ByteOrder.ofBE (coords.drop 32)
       -- Steps 3.3 and 3.4: `x_P` and `y_P` by §2.3.6, "invalid" unless in `[0, p-1]`.
       if hx : x < Fp.modulus then
         if hy : y < Fp.modulus then

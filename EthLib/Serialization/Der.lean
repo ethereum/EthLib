@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.BigEndian
+public import EthLib.Base.ByteOrder
 
 /-!
 # Distinguished Encoding Rules reader
@@ -78,7 +78,7 @@ def read (input : ByteArray) : Except Error (Value × ByteArray) := do
         | head :: _ =>
           -- §10.1: the length takes the minimum number of octets, so no leading zero octet.
           if head = 0 then throw (.length first)
-          let length := EthLib.Base.bytesToNat bytes
+          let length := EthLib.Base.ByteOrder.ofBE bytes
           -- §10.1 again: a length below 128 takes the short form.
           if length < 128 then throw (.length first)
           pure (length, 2 + count)
@@ -131,7 +131,7 @@ def integer (value : Value) : Except Error Int := do
     -- §8.3.3: two's complement, so the unsigned value minus `256^k` for `k` octets.
     --
     -- That holds when bit 8 of the first octet is 1.
-    let n := EthLib.Base.bytesToNat value.content.data.toList
+    let n := EthLib.Base.ByteOrder.ofBE value.content.data.toList
     return if first.toNat < 128 then Int.ofNat n
       else Int.ofNat n - Int.ofNat (256 ^ value.content.size)
 
@@ -281,7 +281,7 @@ An ECDSA signature value is the SEQUENCE of the INTEGERs r and s ([RFC 3279 §2.
 /-- The DER INTEGER of a number below `2 ^ 256`, on the fewest content bytes (X.690 §8.3.2). -/
 def ecdsaInteger (n : Nat) : List UInt8 :=
   -- §8.3.2: the fewest octets, so the leading zero octets of the 32-octet form go.
-  let bytes := (EthLib.Base.natToBytes 32 n).dropWhile (· == 0)
+  let bytes := ((EthLib.Base.ByteOrder.toBE 32 n).toList).dropWhile (· == 0)
   let bytes := match bytes with
     -- §8.3.1: zero is one contents octet, 0x00.
     | [] => [0]
@@ -315,8 +315,8 @@ def decodeEcdsaScalars (signature : ByteArray) : Option (Nat × Nat) :=
         if sLength.toNat != sBytes.length then none
         else
           -- The contents read as unsigned numbers; the encoding below rejects any other reading.
-          let r := EthLib.Base.bytesToNat (rest.take rLength.toNat)
-          let s := EthLib.Base.bytesToNat sBytes
+          let r := EthLib.Base.ByteOrder.ofBE (rest.take rLength.toNat)
+          let s := EthLib.Base.ByteOrder.ofBE sBytes
           -- EthLib's checks: `0 < r, s < 2^256`, as no ECDSA scalar is zero.
           --
           -- The input must be the DER encoding of `(r, s)`.

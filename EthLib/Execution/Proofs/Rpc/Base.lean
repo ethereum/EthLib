@@ -2,7 +2,7 @@ module
 
 public import EthLib.Execution.Rpc.Base
 public import EthLib.Serialization.Proofs.JsonRpc
-import EthLib.Base.Proofs.BigEndian
+import EthLib.Base.Proofs.ByteOrder
 import EthLib.Base.Proofs.Nat
 
 /-!
@@ -207,7 +207,7 @@ theorem uintDecimal_uintDecimalJson (what : String) (n : Nat) :
 private theorem foldl_byteHexDigits (data : List UInt8) (acc : Nat) :
     ((data.flatMap byteHexDigits).map fun c => c.val.toUInt8).foldl
         (fun a c => 16 * a + ((hexValue false c).getD 0).toNat) acc =
-      data.foldl (fun a b => a * 256 + b.toNat) acc := by
+      data.foldl (fun a b => 256 * a + b.toNat) acc := by
   induction data generalizing acc with
   | nil => rfl
   | cons b data ih =>
@@ -249,9 +249,7 @@ theorem bytesMax32_dataJson (what : String) (v : Bytes32) :
   rw [hdata, forIn_hex, foldl_byteHexDigits]
   · simp only [pure, Except.pure, Except.ok.injEq]
     -- The bytes of `v`, read as a number and written back on 32 bytes, are `v`.
-    have hv := natToBytes_bytesToNat v.toList
-    rw [Vector.length_toList] at hv
-    exact Vector.toList_inj.mp hv
+    exact ByteOrder.toBE_ofBE v
   · intro c hc s
     simp only [List.mem_map, List.mem_flatMap, byteHexDigits, List.mem_cons, List.not_mem_nil,
       or_false] at hc

@@ -99,7 +99,7 @@ def bytesToKzgProof (b : Bytes48) : Except KzgError KZGProof :=
 /-- Fiat-Shamir challenge for a (blob, commitment) pair. -/
 def computeChallenge (blob : Blob) (commitment : KZGCommitment) : Fr :=
   -- The degree bound 4096, as 16 big-endian bytes.
-  let degreePoly : ByteArray := ⟨(Base.natToBytes 16 FIELD_ELEMENTS_PER_BLOB).toArray⟩
+  let degreePoly : ByteArray := ⟨(Base.ByteOrder.toBE 16 FIELD_ELEMENTS_PER_BLOB).toArray⟩
   -- The hash input is the 16 ASCII bytes `FSBLOBVERIFY_V1_`, then the degree bound.
   --
   -- Then come the blob and the commitment.
@@ -270,9 +270,9 @@ It hashes the domain, the degree bound, the number of openings, and each opening
 def computeVerifyKzgProofBatchChallenge (commitments : Array KZGCommitment) (zs ys : Array Fr)
     (proofs : Array KZGProof) : Fr :=
   -- The degree bound 4096, as 8 big-endian bytes.
-  let degreePoly : ByteArray := ⟨(Base.natToBytes 8 FIELD_ELEMENTS_PER_BLOB).toArray⟩
+  let degreePoly : ByteArray := ⟨(Base.ByteOrder.toBE 8 FIELD_ELEMENTS_PER_BLOB).toArray⟩
   -- The number of openings, as 8 big-endian bytes.
-  let numCommitments : ByteArray := ⟨(Base.natToBytes 8 commitments.size).toArray⟩
+  let numCommitments : ByteArray := ⟨(Base.ByteOrder.toBE 8 commitments.size).toArray⟩
   -- The hash input is the 16 ASCII bytes `RCKZGBATCH___V1_`, the bound and the number.
   --
   -- Then, per opening: the commitment, `z` and `y` as 32 big-endian bytes each, and the proof.

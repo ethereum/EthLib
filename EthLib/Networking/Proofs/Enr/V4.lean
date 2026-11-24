@@ -59,8 +59,8 @@ theorem verifyV4_eq_true_iff {r : Enr} :
     verifyV4 r = true ↔ ∃ q content, r.publicKeyV4 = .ok q ∧
       Serialization.Rlp.encode r.content = .ok content ∧ r.signature.size = 64 ∧
       Ecdsa.verify q (Hash.Keccak.keccak256 content)
-        (Base.bytesToNat (r.signature.data.toList.take 32))
-        (Base.bytesToNat (r.signature.data.toList.drop 32)) = true := by
+        (Base.ByteOrder.ofBE (r.signature.data.toList.take 32))
+        (Base.ByteOrder.ofBE (r.signature.data.toList.drop 32)) = true := by
   unfold verifyV4
   rw [Cryptography.Ecdsa.read?_eq, Cryptography.Ecdsa.SIGNATURE_LEN]
   constructor
@@ -95,7 +95,9 @@ theorem verifyV4_of_verify {r : Enr} {q : Point} {rr ss : Fn} {content : ByteArr
     (hid : r.get KEY_ID = some (.bytes SCHEME_V4))
     (hkey : r.get KEY_SECP256K1 = some (.bytes q.encodeCompressed))
     (hc : Serialization.Rlp.encode r.content = .ok content)
-    (hsig : r.signature = ⟨(Base.natToBytes 32 rr.val ++ Base.natToBytes 32 ss.val).toArray⟩)
+    (hsig : r.signature
+      = ⟨((Base.ByteOrder.toBE 32 rr.val).toList
+        ++ (Base.ByteOrder.toBE 32 ss.val).toList).toArray⟩)
     (hv : Ecdsa.verify q (Hash.Keccak.keccak256 content) rr.val ss.val = true) :
     verifyV4 r = true := by
   -- ECDSA rejects the point at infinity and points off the curve, so the key decodes.
@@ -134,7 +136,9 @@ theorem verifyV4_of_sign {r : Enr} {sk rr ss : Fn} {odd : Bool} {content : ByteA
     (hkey : r.get KEY_SECP256K1 = some (.bytes (Point.mul sk Point.generator).encodeCompressed))
     (hc : Serialization.Rlp.encode r.content = .ok content)
     (hsign : Ecdsa.sign sk (Hash.Keccak.keccak256 content) = .ok (rr, ss, odd))
-    (hsig : r.signature = ⟨(Base.natToBytes 32 rr.val ++ Base.natToBytes 32 ss.val).toArray⟩) :
+    (hsig : r.signature
+      = ⟨((Base.ByteOrder.toBE 32 rr.val).toList
+        ++ (Base.ByteOrder.toBE 32 ss.val).toList).toArray⟩) :
     verifyV4 r = true :=
   verifyV4_of_verify hid hkey hc hsig (Ecdsa.verify_sign_rfc6979 hsign)
 
@@ -246,7 +250,8 @@ theorem signV4_eq_ok {sk : Fn} {r r' : Enr} (h : signV4 sk r = .ok r') :
     ∃ content rr ss odd, Serialization.Rlp.encode r.content = .ok content ∧
       Ecdsa.sign sk (Hash.Keccak.keccak256 content) = .ok (rr, ss, odd) ∧
       r' = { r with signature :=
-        ⟨(Base.natToBytes 32 rr.val ++ Base.natToBytes 32 ss.val).toArray⟩ } := by
+        ⟨((Base.ByteOrder.toBE 32 rr.val).toList
+          ++ (Base.ByteOrder.toBE 32 ss.val).toList).toArray⟩ } := by
   unfold signV4 at h
   cases hc : Serialization.Rlp.encode r.content with
   | error e => simp [hc, Except.mapError, bind, Except.bind] at h

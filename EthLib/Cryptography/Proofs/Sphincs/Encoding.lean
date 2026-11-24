@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Sphincs.Encoding
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Cryptography.Proofs.Wots.TargetSum
 
 /-!
@@ -37,13 +37,13 @@ theorem toInt_div_pow_mod {k : Nat} (v : Vector UInt8 k) (j : Nat) (hj : j < k) 
   have hrest : (v.toList.drop (j + 1)).length = k - 1 - j := by
     rw [List.length_drop, hlen]
     omega
-  have hlow := Base.bytesToNat_lt (v.toList.drop (j + 1))
+  have hlow := Base.ByteOrder.ofBE_lt (v.toList.drop (j + 1))
   rw [hrest] at hlow
-  have hval : toInt v = (Base.bytesToNat (v.toList.take j) * 256 + (v[j]'hj).toNat)
-      * 256 ^ (k - 1 - j) + Base.bytesToNat (v.toList.drop (j + 1)) := by
+  have hval : toInt v = (Base.ByteOrder.ofBE (v.toList.take j) * 256 + (v[j]'hj).toNat)
+      * 256 ^ (k - 1 - j) + Base.ByteOrder.ofBE (v.toList.drop (j + 1)) := by
     rw [toInt]
     conv_lhs => rw [hsplit]
-    rw [Base.bytesToNat_append, Base.bytesToNat_cons, List.length_cons, hrest]
+    rw [Base.ByteOrder.ofBE_append, Base.ByteOrder.ofBE_cons, List.length_cons, hrest]
     ring
   -- The bytes after byte `j` are worth less than one unit of it.
   rw [hval, Nat.add_comm, Nat.add_mul_div_right _ _ (Nat.pos_of_ne_zero (by positivity)),
@@ -115,7 +115,7 @@ theorem toInt_eq_sum_digits (d : Digest) :
     toInt d = ∑ i : Fin V, ((Internal.digits d)[i] : Nat) * 4 ^ (V - 1 - i.val) := by
   -- A 16-byte number is below `256^16 = 4^64`, so its 64 digits spell it.
   have hlt : toInt d < 4 ^ V := by
-    have h := Base.bytesToNat_lt d.toList
+    have h := Base.ByteOrder.ofBE_lt d.toList
     rw [Vector.length_toList] at h
     exact lt_of_lt_of_eq h (by norm_num [N, V])
   have hall := Wots.sum_base_digits_eq_mod 4 (toInt d) V
@@ -133,7 +133,7 @@ theorem digits_injective : Function.Injective Internal.digits := by
   -- Both digests write the same number on 16 bytes.
   have hval : toInt d = toInt d' := by rw [toInt_eq_sum_digits d, toInt_eq_sum_digits d', h]
   exact Vector.toList_inj.mp
-    (Base.bytesToNat_inj (by simp only [Vector.length_toList]) hval)
+    (Base.ByteOrder.ofBE_inj (by simp only [Vector.length_toList]) hval)
 
 /-- Every string of 64 digits from 0 to 3 is the digits of exactly one digest. -/
 theorem digits_bijective : Function.Bijective Internal.digits := by

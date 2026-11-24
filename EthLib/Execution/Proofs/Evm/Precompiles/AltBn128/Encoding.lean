@@ -21,8 +21,8 @@ Source: [EIP-196][eip196], sections Encoding and Exact semantics.
 namespace EthLib.Execution.Evm.Precompiles.AltBn128
 
 open EthLib.Cryptography.AltBn128
-open EthLib.Base (bytesToNat natToBytes natToBytes_length bytesToNat_natToBytes
-  bytesToNat_natToBytes_of_lt natToBytes_bytesToNat natToBytes_zero_right)
+open EthLib.Base (ByteOrder.ofBE ByteOrder.toBE ByteOrder.length_toList_toBE ByteOrder.ofBE_toBE
+  ByteOrder.ofBE_toBE_of_lt ByteOrder.toList_toBE_ofBE ByteOrder.toList_toBE_zero_right)
 
 /-- The point `(0, 0)` is not on the curve, since `0 ≠ 3` in `Fp`.
 
@@ -39,27 +39,30 @@ theorem bytesToG1_g1ToBytes {p : Point} (hp : p.isOnCurve = true) :
   cases p with
   | infinity =>
     -- Both halves are 32 zero bytes, which read as `(0, 0)`.
-    have hhalf : bytesToNat (natToBytes 32 0) = 0 := bytesToNat_natToBytes_of_lt (by decide)
-    have hbytes : g1ToBytes .infinity = natToBytes 32 0 ++ natToBytes 32 0 := by
-      rw [natToBytes_zero_right, List.replicate_append_replicate]
+    have hhalf : ByteOrder.ofBE ((ByteOrder.toBE 32 0).toList)
+        = 0 := ByteOrder.ofBE_toBE_of_lt (by decide)
+    have hbytes : g1ToBytes .infinity = (ByteOrder.toBE 32 0).toList
+        ++ (ByteOrder.toBE 32 0).toList := by
+      rw [ByteOrder.toList_toBE_zero_right, List.replicate_append_replicate]
       rfl
     have hpos : 0 < Fp.modulus := by decide
-    simp only [bytesToG1, hbytes, List.take_left' (natToBytes_length 32 0),
-      List.drop_left' (natToBytes_length 32 0), hhalf, hpos, and_self, dite_true, ite_true,
+    simp only [bytesToG1, hbytes, List.take_left' (ByteOrder.length_toList_toBE 32 0),
+      List.drop_left' (ByteOrder.length_toList_toBE 32 0), hhalf, hpos, and_self, dite_true,
+        ite_true,
       pure, Except.pure]
   | affine x y =>
-    have hx : (g1ToBytes (.affine x y)).take 32 = natToBytes 32 x.val := by
-      simp [g1ToBytes, natToBytes_length]
-    have hy : (g1ToBytes (.affine x y)).drop 32 = natToBytes 32 y.val := by
-      simp [g1ToBytes, natToBytes_length]
+    have hx : (g1ToBytes (.affine x y)).take 32 = (ByteOrder.toBE 32 x.val).toList := by
+      simp [g1ToBytes]
+    have hy : (g1ToBytes (.affine x y)).drop 32 = (ByteOrder.toBE 32 y.val).toList := by
+      simp [g1ToBytes]
     -- The point is on the curve, so it is not `(0, 0)`.
     have hzero : ¬(x.val = 0 ∧ y.val = 0) := by
       rintro ⟨h0, h1⟩
       have : x = 0 ∧ y = 0 := ⟨Fin.ext h0, Fin.ext h1⟩
       rw [this.1, this.2, isOnCurve_affine_zero] at hp
       cases hp
-    simp only [bytesToG1, hx, hy, bytesToNat_natToBytes_of_lt (val_lt_two_pow x),
-      bytesToNat_natToBytes_of_lt (val_lt_two_pow y), x.isLt, y.isLt, hzero, hp, dite_true,
+    simp only [bytesToG1, hx, hy, ByteOrder.ofBE_toBE_of_lt (val_lt_two_pow x),
+      ByteOrder.ofBE_toBE_of_lt (val_lt_two_pow y), x.isLt, y.isLt, hzero, hp, dite_true,
       ite_false, ite_true, pure, Except.pure]
 
 /-- Each 64 bytes that the decoder accepts are the encoding of the point that it returns.
@@ -70,11 +73,11 @@ So the theorem takes 64 bytes, the length that each precompile reads. -/
 theorem g1ToBytes_bytesToG1 {raw : List UInt8} {p : Point} (hlen : raw.length = 64)
     (h : bytesToG1 raw = .ok p) : g1ToBytes p = raw := by
   -- Each half has 32 bytes, so it is its value written on 32 bytes.
-  have htake : natToBytes 32 (bytesToNat (raw.take 32)) = raw.take 32 := by
-    have := natToBytes_bytesToNat (raw.take 32)
+  have htake : (ByteOrder.toBE 32 (ByteOrder.ofBE (raw.take 32))).toList = raw.take 32 := by
+    have := ByteOrder.toList_toBE_ofBE (raw.take 32)
     rwa [List.length_take, hlen] at this
-  have hdrop : natToBytes 32 (bytesToNat (raw.drop 32)) = raw.drop 32 := by
-    have := natToBytes_bytesToNat (raw.drop 32)
+  have hdrop : (ByteOrder.toBE 32 (ByteOrder.ofBE (raw.drop 32))).toList = raw.drop 32 := by
+    have := ByteOrder.toList_toBE_ofBE (raw.drop 32)
     rwa [List.length_drop, hlen] at this
   have hsplit := List.take_append_drop 32 raw
   simp only [bytesToG1, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at h
@@ -85,11 +88,12 @@ theorem g1ToBytes_bytesToG1 {raw : List UInt8} {p : Point} (hlen : raw.length = 
         cases h
         rw [hzero.1] at htake
         rw [hzero.2] at hdrop
-        rw [← hsplit, ← htake, ← hdrop, natToBytes_zero_right, List.replicate_append_replicate]
+        rw [← hsplit, ← htake, ← hdrop, ByteOrder.toList_toBE_zero_right,
+          List.replicate_append_replicate]
         rfl
       · split at h
         · cases h
-          show natToBytes 32 _ ++ natToBytes 32 _ = raw
+          show (ByteOrder.toBE 32 _).toList ++ (ByteOrder.toBE 32 _).toList = raw
           rw [htake, hdrop, hsplit]
         · cases h
     · cases h

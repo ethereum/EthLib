@@ -32,7 +32,7 @@ Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork U256 bytesToNat)
+open EthLib.Base (Fork U256 ByteOrder.ofBE)
 open GasCosts
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
@@ -50,7 +50,7 @@ def popStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
 The code reads as zeros past its end. -/
 def pushData (code : ByteArray) (pc n : Nat) : U256 :=
   -- `c(mu_{pc} + 1 ... mu_{pc} + n)`, with `c(x) = 0` past the end of the code, Appendix H.2.
-  BitVec.ofNat 256 (bytesToNat (bufferRead code (pc + 1) n))
+  BitVec.ofNat 256 (ByteOrder.ofBE (bufferRead code (pc + 1) n))
 
 /-- PUSHn: push the next `n` bytes of code, then skip them.
 

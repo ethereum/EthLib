@@ -23,14 +23,14 @@ Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork U256 bytesToNat)
+open EthLib.Base (Fork U256 ByteOrder.ofBE)
 open GasCosts
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- The word of `size` bytes of a buffer from `start`, big-endian, with zeros past its end. -/
 def loadWord (data : ByteArray) (start size : Nat) : U256 :=
-  BitVec.ofNat 256 (bytesToNat (bufferRead data start size))
+  BitVec.ofNat 256 (ByteOrder.ofBE (bufferRead data start size))
 
 /-- The 32 bytes of a word, most significant first. -/
 def wordBytes (word : U256) : ByteArray :=
