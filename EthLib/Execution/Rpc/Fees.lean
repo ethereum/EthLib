@@ -72,29 +72,29 @@ def tipAt (p : Percentile) (total : Nat) : Nat → List (Nat × Nat) → Nat
     if p.num * total ≤ (before + gas) * 100 * 10 ^ p.exponent then tip
     else tipAt p total (before + gas) rest
 
-/-- The fee history of a range of blocks, before it is written as JSON.
-
-The fee history of a range of blocks that ends at a newest block gives, for each block:
-
-- its base fee per gas, or 0 before London
-- its base fee per blob gas, or 0 before Dencun
-- the ratio of its gas used to its gas limit
-- the ratio of its blob gas used to the most blob gas of a block, or 0 before Dencun
-- the effective tip per gas at each requested percentile of its transactions
+/-- The fee history of a range of blocks that ends at a newest block, before it is written as JSON.
 
 Each ratio is a numerator and a denominator. -/
 structure FeeHistory where
   /-- The number of the lowest block of the range. -/
   oldestBlock : Nat
-  /-- The base fee per gas of each block, then that of the block after the newest. -/
+  /-- The base fee per gas of each block, or 0 before London.
+
+  The list ends with the base fee of the block after the newest. -/
   baseFeePerGas : List Nat
-  /-- The base fee per blob gas of each block, then that of the block after the newest. -/
+  /-- The base fee per blob gas of each block, or 0 before Dencun.
+
+  The list ends with the base fee per blob gas of the block after the newest. -/
   baseFeePerBlobGas : List Nat
-  /-- The gas used and the gas limit of each block. -/
+  /-- The gas used and the gas limit of each block, for the ratio of the two. -/
   gasUsedRatio : List (Nat × Nat)
-  /-- The blob gas used and the most blob gas of each block. -/
+  /-- The blob gas used and the most blob gas of each block, for their ratio.
+
+  Before Dencun, both are 0. -/
   blobGasUsedRatio : List (Nat × Nat)
-  /-- The tips of each block at the requested percentiles, or none when none is requested. -/
+  /-- The effective tip per gas of each block at each requested percentile of its transactions.
+
+  It is none when no percentile is requested. -/
   reward : Option (List (List Nat))
   deriving DecidableEq, Repr
 
@@ -131,17 +131,15 @@ def rewards (r : BlockRecord) (ps : List Percentile) : List Nat :=
 
 /-- The fork of the block after a block, at the next number and one second after the block.
 
-The fork is never before the fork of the block itself.
-
-The time of the next block is unknown, but it is at least one second after this one.
-
-So the fork of the next block, and its blob schedule, are taken at that earliest time.
-
-That is exact for a fork that activates at a block number, as London does.
-
-A fork or a blob schedule that activates later than that earliest time is not seen. -/
+The fork is never before the fork of the block itself. -/
 def nextFork (r : BlockRecord) (config : ChainConfig) : Fork :=
   -- The child has the next number and comes a second later at least: EthLib takes that time.
+  --
+  -- The time of the next block is unknown, so its fork is taken at that earliest time.
+  --
+  -- That is exact for a fork that activates at a block number, as London does.
+  --
+  -- A fork that activates later than that earliest time is not seen.
   match config.activeFork (r.block.header.number + 1) (r.block.header.timestamp.toNat + 1) with
   | some fork => if r.fork ≤ fork then fork else r.fork
   | none => r.fork
@@ -160,6 +158,9 @@ It is that of the excess blob gas that the header rule gives to that block.
 The blob schedule is that of the chain at the next number and one second after the block. -/
 def nextBlobBaseFee (r : BlockRecord) (config : ChainConfig) : Nat :=
   let fork := r.nextFork config
+  -- The blob schedule at the earliest time of the next block, as for its fork.
+  --
+  -- A blob schedule that activates later than that earliest time is not seen.
   let schedule := chainBlobSchedule config fork (r.block.header.number + 1)
     (r.block.header.timestamp.toNat + 1)
   if h : .dencun ≤ fork then
@@ -183,13 +184,13 @@ The numbers end at the number of that block.
 
 The blocks are canonical blocks and the pending block, in order.
 
-The range is shorter when the node holds fewer blocks, as the source allows.
-
 A block off the canonical chain is never in the range, so it should not be the newest block.
 
 The request names the newest block by number or by tag, so it is canonical or pending. -/
 def feeHistoryBlocks (v : ChainView) (count : Nat) (newest : BlockRecord) : List BlockRecord :=
   -- The blocks numbered from `newest - count + 1` to `newest` that the node holds.
+  --
+  -- The range is shorter when the node holds fewer blocks, as the source allows.
   (v.canonical ++ v.pending.toList).filter fun r =>
     r.block.header.number ≤ newest.block.header.number &&
       newest.block.header.number < r.block.header.number + count

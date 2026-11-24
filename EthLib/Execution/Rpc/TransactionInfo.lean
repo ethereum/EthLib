@@ -100,18 +100,17 @@ def findTransaction (v : ChainView) (hash : Hash32) : Option (BlockRecord × Tra
 
 /-- The object of the transaction with a hash, or none when no canonical block holds one.
 
-So a transaction that only a block off the canonical chain holds, as after a reorg, is not found.
-
-The method text does not say which blocks to read.
-
-The upstream report execution-apis#1008 proposes to state this rule there.
-
 The lookup does not read the transactions that wait in the pool.
 
 The result schema requires a block hash, which such a transaction lacks. -/
 def transactionByHash (v : ChainView) (hash : Hash32) :
     Except RpcError (Option TransactionInfo) :=
   match v.findTransaction hash with
+  -- A transaction that only a block off the canonical chain holds, as after a reorg, is not found.
+  --
+  -- The method text does not say which blocks to read.
+  --
+  -- The upstream report execution-apis#1008 proposes to state this rule there.
   | none => .ok none
   | some (r, tx, index) => some <$> r.transactionInfo index tx
 

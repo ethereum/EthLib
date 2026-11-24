@@ -145,11 +145,7 @@ structure StructLog where
 
   A call that starts no message gets that gas back in the same step, so it counts only its price.
 
-  The source asks for the price that the step would charge if it succeeded.
-
-  A step that fails does not give that price.
-
-  So it counts all the gas left, which its halt burns. -/
+  A step that fails counts all the gas left, which its halt burns. -/
   gasCost : Nat
   /-- The depth of the frame, 1 for the frame of the transaction. -/
   depth : Nat
@@ -212,6 +208,10 @@ def setSlot (slots : List (Bytes32 × U256)) (key : Bytes32) (value : U256) :
 def stepCost {fork : Fork} {Meter : Type} [GasMeter Meter] (evm : Evm fork Meter) :
     Except EvmError (StepResult fork Meter) → Nat
   -- The gas that the step charges, memory growth and cold access included.
+  --
+  -- A call that starts no message gets its passed gas back in the same step.
+  --
+  -- So it counts only its price.
   | .ok (.next after) => GasMeter.gasLeft evm.gas - GasMeter.gasLeft after.gas
   -- A call or a creation: the gas taken before its message runs, the gas it passes included.
   --
@@ -219,7 +219,9 @@ def stepCost {fork : Fork} {Meter : Type} [GasMeter Meter] (evm : Evm fork Meter
   | .ok (.child caller _ _) => GasMeter.gasLeft evm.gas - GasMeter.gasLeft caller.gas
   -- A failed step: all the gas that the frame holds, which its halt burns.
   --
-  -- The source asks for the cost on success, which a failed step does not have.
+  -- The source asks for the price that the step would charge if it succeeded.
+  --
+  -- A step that fails does not give that price.
   | .error _ => GasMeter.gasLeft evm.gas
 
 /-- The slot that an SLOAD or SSTORE step reads or writes, with its value after the step.
@@ -261,11 +263,7 @@ def stepOp {fork : Fork} {Meter : Type} [GasMeter Meter] (evm : Evm fork Meter) 
 
 A frame with no code adds no entry, so a plain transfer has none.
 
-A frame with code adds one for each step.
-
-A step past the end of its code runs STOP, and adds one too.
-
-A step past the bound adds no entry. -/
+A frame with code adds one for each step. -/
 def Tracer.record (config : TraceConfig) {fork : Fork} {Meter : Type} [GasMeter Meter]
     (evm : Evm fork Meter) (result : Except EvmError (StepResult fork Meter))
     (tracer : Tracer) : Tracer :=
@@ -274,6 +272,7 @@ def Tracer.record (config : TraceConfig) {fork : Fork} {Meter : Type} [GasMeter 
   -- Past the step limit no entry is added, and a limit of 0 sets no bound.
   if evm.code.size = 0 ∨ (config.limit ≠ 0 ∧ config.limit ≤ tracer.logs.size) then tracer
   else
+    -- A step past the end of its code runs STOP, and adds an entry too.
     let op := stepOp evm
     let account := evm.message.currentTarget
     let storageOp := op = some .sload ∨ op = some .sstore

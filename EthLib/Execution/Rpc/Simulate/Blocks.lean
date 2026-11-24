@@ -69,15 +69,7 @@ def initCodeTooLarge : ErrorCode := ⟨-38025, "Max init code size exceeded"⟩
 
 end SimulateCode
 
-/-- The error of a call that cannot enter its simulated block.
-
-A nonce at the limit of EIP-2681 gives an internal error, as the fixtures show.
-
-A simulation gives the sender of each call, so the rule on the code of the sender never runs.
-
-That error cannot occur, and EthLib maps it to an internal error.
-
-The source gives no code to the other rules, so EthLib reads them as invalid parameters. -/
+/-- The error of a call that cannot enter its simulated block. -/
 def simulateInclusionError (e : InclusionError) : RpcError :=
   let data := some (.str (inclusionErrorText e))
   match e with
@@ -89,8 +81,14 @@ def simulateInclusionError (e : InclusionError) : RpcError :=
   | .gasAllowanceExceeded .. | .blobGasLimitExceeded .. =>
     SimulateCode.blockGasLimit.toRpcError data
   | .transaction (.initCodeTooLarge _) => SimulateCode.initCodeTooLarge.toRpcError data
+  -- A nonce at the limit of EIP-2681 gives an internal error, as the fixtures show.
+  --
+  -- A simulation gives the sender of each call, so the rule on the code of the sender never runs.
+  --
+  -- That error cannot occur, and EthLib maps it to an internal error.
   | .transaction (.nonceOverflow _) | .missingCode _ | .senderNotEoa _ =>
     internalError.toRpcError data
+  -- The source gives no code to the other rules, so EthLib reads them as invalid parameters.
   | _ => RpcError.invalidParams (inclusionErrorText e)
 
 /-- The error of a simulated block whose body fails: that of its call, else an internal error. -/
@@ -104,29 +102,15 @@ def simulateBlockError : BlockError → RpcError
 
 It follows the block `parent`, whose hash is `parentHash`, and takes the overrides `o`.
 
-The block before it gives the gas limit and the fee recipient, as the notes say.
-
-So the first simulated block takes those of the base block.
-
-Before Paris, the base block gives the difficulty.
-
-The other fields take the default values of the notes, and those that the body gives are 0.
-
-With validation, the base fee follows the parent, and without it the base fee is 0.
-
-The notes give no root of the parent beacon block, and EthLib takes a zero root, as the fixtures do.
-
-After a block without a slot, the notes omit the slot, and EthLib takes 0.
-
-The excess blob gas follows the parent by EIP-4844, and the simulation checks it first.
-
-So it is below `2^64`, and the header holds it exactly. -/
+The other fields take the default values of the notes, and those that the body gives are 0. -/
 def simulatedHeader (config : ChainConfig) (fork : Fork) (base parent : RecentBlock)
     (parentHash : Hash32) (number time : Nat) (o : BlockOverrides) (validation : Bool) :
     Header fork :=
   { parentHash
     ommersHash := EMPTY_OMMER_HASH
     -- The fee recipient of the overrides, else that of the block before, as the notes say.
+    --
+    -- So the first simulated block takes the fee recipient of the base block.
     coinbase := o.feeRecipient.getD parent.header.coinbase
     stateRoot := 0
     transactionsRoot := 0
@@ -136,6 +120,8 @@ def simulatedHeader (config : ChainConfig) (fork : Fork) (base parent : RecentBl
     difficulty := if fork ≥ .paris then 0 else base.header.difficulty
     number
     -- The gas limit of the overrides, else that of the block before, as the notes say.
+    --
+    -- So the first simulated block takes the gas limit of the base block.
     gasLimit := o.gasLimit.getD parent.header.gasLimit
     gasUsed := 0
     timestamp := BitVec.ofNat 256 time
@@ -144,6 +130,8 @@ def simulatedHeader (config : ChainConfig) (fork : Fork) (base parent : RecentBl
     prevRandao := o.prevRandao.getD 0
     nonce := Vector.replicate 8 0
     -- The base fee of the overrides, else the one of EIP-1559 with validation, else 0.
+    --
+    -- With validation, the base fee follows the parent.
     baseFeePerGas := fun _ =>
       match o.baseFeePerGas with
       | some fee => fee.toNat
@@ -152,10 +140,12 @@ def simulatedHeader (config : ChainConfig) (fork : Fork) (base parent : RecentBl
     blobGasUsed := fun _ => 0
     -- The excess blob gas of EIP-4844 after the parent, on which the notes are silent.
     --
-    -- The caller has checked that it is below `2^64`.
+    -- The caller has checked that it is below `2^64`, so the header holds it exactly.
     excessBlobGas := fun _ =>
       UInt64.ofNat (childExcessBlobGas config fork parent.header number time)
-    -- 0, as the fixtures show; the notes give none.
+    -- The notes give no root of the parent beacon block.
+    --
+    -- EthLib takes a zero root, as the fixtures do.
     parentBeaconBlockRoot := fun _ => 0
     requestsHash := fun _ => 0
     blockAccessListHash := fun _ => 0
@@ -207,10 +197,6 @@ def movedPrecompiles (moves : List (Address × Address)) (a : Address) : Option 
 
 /-- The precompile that a call to each address runs, after the overrides of a block.
 
-The moves of precompiles in the overrides apply first.
-
-An address whose code the overrides set then runs that code and no precompile.
-
 The [state override schema][schema] says that such code replaces the precompile.
 
 It also says that a move comes before the code.
@@ -220,7 +206,9 @@ So, by EthLib's reading, code at the address that a precompile moved to replaces
 [schema]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/schemas/execute.yaml -/
 def simulatedPrecompiles (overrides : List (Address × AccountOverride)) (a : Address) :
     Option Address :=
-  -- An address with overridden code runs its code.
+  -- The moves of precompiles in the overrides apply first.
+  --
+  -- Then an address whose code the overrides set runs that code and no precompile.
   if overrides.any fun (b, o) => b == a && o.code.isSome then none
   -- Any other address runs the precompile that the moves leave at it, if any.
   else movedPrecompiles (precompileMoves overrides) a
@@ -239,16 +227,7 @@ def simulateLifted (validation : Bool) : LiftedRules :=
 
 /-- The gas limit of a call that names none, after the gas `used` of the earlier calls of its block.
 
-It is at most the gas `budget` that the simulation has left.
-
-From Glamsterdam with validation, it is the largest gas limit that the block can still include:
-
-- the state gas left, when the execution gas left is at least `2^24`;
-- else the smaller of the two.
-
-Otherwise it is the gas limit of the block minus the gas that the block has used.
-
-From Fusaka to BPO5 it is at most `2^24`, the cap of EIP-7825, on which the notes are silent. -/
+It is at most the gas `budget` that the simulation has left. -/
 def defaultCallGas (fork : Fork) (validation : Bool) (gasLimit : Nat) (used : BlockGas)
     (budget : Nat) : Nat :=
   let left :=
@@ -256,23 +235,23 @@ def defaultCallGas (fork : Fork) (validation : Bool) (gasLimit : Nat) (used : Bl
     if fork ≥ .glamsterdam ∧ validation then
       let execution := gasLimit - used.execution
       let state := gasLimit - used.state
+      -- That gas limit is:
+      --
+      -- - the state gas left, when the execution gas left is at least `2^24`;
+      -- - else the smaller of the two.
       if TX_MAX_GAS_LIMIT ≤ execution then state else min execution state
     -- From Fusaka to BPO5, EthLib's choice: at most `2^24`, the cap of EIP-7825, in both modes.
     --
     -- The notes are silent on it.
     else if fork ≥ .fusaka ∧ fork < .glamsterdam then min TX_MAX_GAS_LIMIT (gasLimit - used.gasUsed)
-    -- Else the gas that the block has left.
+    -- Else the gas limit of the block minus the gas that the block has used.
     else gasLimit - used.gasUsed
   -- Never above the budget that the simulation has left.
   min left budget
 
 /-- The calls of a block filled with their defaults, as unsigned transactions with their senders.
 
-Each call takes the nonce of its sender and a gas that follows what the block has used.
-
 The gas that each call uses comes off the `budget` of the simulation, which is returned.
-
-A call that uses more than the budget left fails with `-38026`.
 
 `body` is the block after its first system calls. -/
 def fillCalls {fork : Fork} (env : BlockEnvironment fork) (validation : Bool)
@@ -298,9 +277,12 @@ def fillCalls {fork : Fork} (env : BlockEnvironment fork) (validation : Bool)
     let call := if call.simulateType = 3 then call else { call with maxFeePerBlobGas := none }
     let tx ← call.toTransaction env.chainId (call.nonce.getD nonce) (call.gas.getD gas)
       (call.maxFeePerGas.getD 0)
+    -- The call runs as a transaction from its given sender, with no signature.
     let after ← (applyTransaction env index before tx
       { senders := fun _ => some sender, precompiles, lifted }).mapError simulateBlockError
-    -- The gas that the call used comes off the global budget, as the notes say, else code -38026.
+    -- The gas that the call used comes off the global budget, as the notes say.
+    --
+    -- A call that uses more than the budget left fails with code -38026.
     let used := after.cumulativeGasUsed - before.cumulativeGasUsed
     ensure (used ≤ budget) (clientLimitExceeded.toRpcError (some (.str "gas budget exceeded")))
     return (after, filled ++ [(tx, sender)], budget - used)
@@ -322,10 +304,6 @@ structure SimulatedBlock where
 
 The block `base` is the base block of the simulation, and `budget` the gas that it has left.
 
-The overrides of the accounts change the state before the block, and are not in its access list.
-
-The calls are filled, then run through the body of a real block with the overrides of the request.
-
 It returns the chain after the block, the gas left, and the block. -/
 def simulateBlock (chain : BlockChain) (base : RecentBlock) (fork : Fork) (number time : Nat)
     (request : BlockStateCall) (validation : Bool) (budget : Nat) :
@@ -339,6 +317,8 @@ def simulateBlock (chain : BlockChain) (base : RecentBlock) (fork : Fork) (numbe
   let header : Header fork :=
     simulatedHeader chain.config fork base parent parentHash number time o validation
   -- The overrides of the accounts change the state before the block.
+  --
+  -- So they are not in its access list.
   let chain := { chain with state := overrideState fork chain.state request.stateOverrides }
   let blobGasPrice := simulatedBlobGasPrice o validation
   let precompiles := simulatedPrecompiles request.stateOverrides
@@ -439,22 +419,18 @@ def callResultError (e : Evm.EvmError) (output : ByteArray) : RpcError :=
   | .revert => revertError output
   | _ => SimulateCode.callFailed.toRpcError
 
-/-- The result of a call as JSON, from its result, its gas used and its logs.
-
-A call that succeeds has the status `0x1` and returns the output of its message.
-
-A call that fails has the status `0x0`, no return data, no logs, and its error.
-
-The status follows the error, at every fork.
-
-The gas before the refund is the `maxUsedGas` of the source. -/
+/-- The result of a call as JSON, from its result, its gas used and its logs. -/
 def callResultJson (result : TransactionResult) (gasUsed : Nat) (logs : List LogInfo) : Json :=
+  -- The gas before the refund is the `maxUsedGas` of the source.
   let common := [("logs", listJson logInfoJson logs), ("gasUsed", quantityJson gasUsed),
     ("maxUsedGas", quantityJson result.gasBeforeRefund)]
+  -- The status follows the error, at every fork.
   match result.error with
+  -- A call that succeeds has the status `0x1` and returns the output of its message.
   | none =>
     Json.mkObj ([("returnData", dataJson result.output.toList)] ++ common ++
       [("status", quantityJson 1)])
+  -- A call that fails has the status `0x0`, no return data, no logs, and its error.
   | some e =>
     Json.mkObj ([("returnData", dataJson [])] ++ common ++
       [("status", quantityJson 0), ("error", rpcErrorJson (callResultError e result.output))])
@@ -463,13 +439,12 @@ def callResultJson (result : TransactionResult) (gasUsed : Nat) (logs : List Log
 
 With transfers traced, they are the logs that a simulation reports.
 
-Before Glamsterdam, these add a log from `0xee…ee` for each move of ether.
-
-A move of 0 wei, or from an account to itself, adds none.
-
 Without traced transfers, they are the logs of the receipt. -/
 def callLogs {fork : Fork} (trace : Bool) (receipt : Receipt fork) (result : TransactionResult) :
     List Log :=
+  -- Before Glamsterdam, traced transfers add a log from `0xee…ee` for each move of ether.
+  --
+  -- A move of 0 wei, or from an account to itself, adds none.
   if trace then result.simulatedLogs else receipt.logs
 
 /-- The number of logs that the calls before `index` report, with transfers traced or not. -/

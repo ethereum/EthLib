@@ -74,14 +74,13 @@ def notFound : Json := .null
 
 A numerator above the denominator counts as the denominator, so the number lies from 0 to 1.
 
-A denominator of 0 gives 0.
-
-A value of 0 is written `0`.
-
-At 18 places, the writer of numbers would print `0.e-8`, which is not JSON. -/
+A denominator of 0 gives 0. -/
 def ratioJson (places num den : Nat) : Json :=
   -- The schema: a number from 0 to 1, with no count of digits, so the count is a parameter.
   let digits := min num den * 10 ^ places / den
+  -- A value of 0 is written `0`.
+  --
+  -- At 18 places, the writer of numbers would print `0.e-8`, which is not JSON.
   if digits = 0 then .num 0 else .num ⟨(digits : Nat), places⟩
 
 /-- Four bytes. -/

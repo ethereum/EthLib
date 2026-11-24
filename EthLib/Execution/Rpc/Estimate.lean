@@ -69,19 +69,18 @@ The source asks for an estimate of the gas that lets the transaction complete, a
 
 If the limits that complete form an interval, the answer is the least positive one.
 
-Code that reads the gas left can break that property, and the answer may then not be the least.
-
-The estimate has no cap from EIP-7825, as the call has none.
-
-When the request names a fee, the first call buys its whole gas limit.
-
-The sender must then hold that fee. -/
+Code that reads the gas left can break that property, and the answer may then not be the least. -/
 def estimateGas (v : ChainView) (tx : GenericTransaction) (p : BlockParam) (c : CallChoices) :
     Except RpcError Nat := do
   -- The call prepared as for a call: a rejection fails the method, and the gas limit is set.
   let s ← v.prepareCall tx p c
+  -- The estimate has no cap from EIP-7825, as the call has none.
   let hi := s.transaction.gas.toNat
   -- The call at that limit; a failure is the error of a call, the revert of code 3 included.
+  --
+  -- When the request names a fee, this first call buys its whole gas limit.
+  --
+  -- The sender must then hold that fee.
   let (_, o) ← v.runCall { tx with gas := some hi } p c
   let _ ← callAnswer o
   -- Then a binary search between 0 and that limit, EthLib's choice, as the source asks an estimate.
@@ -115,21 +114,7 @@ Its text asks the server to return the accessed slots regardless of failure.
 
 An address without a storage key is left out when the transaction accesses it from the start.
 
-Those are the sender, the recipient or the created contract, and the precompiles of the fork.
-
-From Shapella, the beneficiary is one of them, as [EIP-3651][eip-3651] makes it warm.
-
-The [text of the method][rules] names only the first three, and asks to keep every other address.
-
-Whether it means to keep the beneficiary is an open question of the source.
-
-The authorities and the delegate of EIP-7702 stay in.
-
-So do the contracts that the code of the call creates.
-
 [abi-revert]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/tests/eth_createAccessList/create-al-abi-revert.io
-[eip-3651]: https://eips.ethereum.org/EIPS/eip-3651
-[rules]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/execute.yaml#L122-L142
 -/
 def accessedList (s : CallSetup) (o : CallOutput) : List Access :=
   let state := o.state
@@ -140,12 +125,24 @@ def accessedList (s : CallSetup) (o : CallOutput) : List Access :=
   let addresses := (state.accountReads.insertMany state.accountWrites.keys).insertMany keys.keys
   -- Warm from the start by EIP-2929: the sender, the recipient or created contract, precompiles.
   --
-  -- From Shapella the beneficiary too, by EIP-3651, which the text of the method does not name.
+  -- From Shapella, EIP-3651 makes the beneficiary warm too:
+  --
+  -- https://eips.ethereum.org/EIPS/eip-3651
+  --
+  -- The text of the method names only the first three, and asks to keep every other address:
+  --
+  -- https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/execute.yaml#L122-L142
+  --
+  -- Whether it means to keep the beneficiary is an open question of the source.
   let anyway := fun address =>
     address == s.sender || address == s.message.currentTarget ||
       (precompileAddresses s.fork).contains address ||
       (s.fork ≥ .shapella && address == s.env.coinbase)
   -- Such an address is left out unless it has a storage key.
+  --
+  -- The authorities and the delegate of EIP-7702 stay in.
+  --
+  -- So do the contracts that the code of the call creates.
   addresses.toList.filterMap fun address =>
     let slots := (keys.getD address ∅).toList
     if slots.isEmpty && anyway address then none else some ⟨address, slots⟩
@@ -167,29 +164,27 @@ namespace ChainView
 
 It runs the call, then runs it again with the addresses and keys it accessed.
 
-The request then has an access list, so it runs again with type 1 or above.
-
 Before Berlin no transaction has an access list, so the [text of the method][rules] rejects it.
-
-The rejection has code -32000, the code of invalid input.
-
-The gas used and the error are those of the last call.
-
-When the call rejects the request before its message runs, the method fails with that rejection.
-
-It also fails when the second call is rejected, such as when the gas no longer covers the list.
 
 [rules]: https://github.com/ethereum/execution-apis/blob/1ca0818569467cff85b7f41372f22e728d5daa14/src/eth/execute.yaml#L122-L142
 -/
 def createAccessList (v : ChainView) (tx : GenericTransaction) (p : BlockParam)
     (c : CallChoices) : Except RpcError AccessListResult := do
   -- The call as requested.
+  --
+  -- When it rejects the request before its message runs, the method fails with that rejection.
   let (s, o) ← v.runCall tx p c
-  -- No access list before Berlin, by the text of the method: code -32000.
+  -- No access list before Berlin, by the text of the method, with code -32000 of invalid input.
   ensure (.berlin ≤ s.fork) (callRuleError "no access list before Berlin")
   -- The addresses and keys it accessed.
   let accessList := accessedList s o
-  -- The call again with that list; its gas used and its error are the answer.
+  -- The call again with that list.
+  --
+  -- The request then has an access list, so it runs again with type 1 or above.
+  --
+  -- The gas used and the error of this last call are the answer.
+  --
+  -- The method fails when this second call is rejected, as when the gas no longer covers the list.
   let (s, o) ← v.runCall { tx with accessList := some accessList } p c
   return { accessList, gasUsed := callGasUsed s o, error := callErrorMessage o }
 
