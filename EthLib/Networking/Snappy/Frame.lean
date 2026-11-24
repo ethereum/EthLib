@@ -157,6 +157,9 @@ def decodeChunk (type : UInt8) (body : List UInt8) : Except FrameError (List UIn
   else
     .ok []
 
+-- Each check of a length against a bound reads only as many elements as the bound.
+attribute [local instance high] decideLeLength decideLengthLt
+
 /-- Read the chunk at the front of a stream, and return its decoded bytes and the bytes after it. -/
 def readChunk : List UInt8 → Except FrameError (List UInt8 × List UInt8)
   -- §1: a chunk is first a single byte of chunk identifier, then a three-byte length.
