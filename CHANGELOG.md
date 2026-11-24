@@ -1010,7 +1010,7 @@ Not yet released.
   The chosen validator, if unslashed at `x`, has its withdrawable epoch recorded at `x` after the block's epoch.
   A caller with the old hypothesis `sameEpoch` can pass `sameEpoch.le.trans (Nat.le_succ _)` for the bound, and `fun crossing => absurd crossing (by omega)` for the guarded premise.
 
-- In Lean, two lemmas are removed that restated another lemma with an added `fork < .glamsterdam` argument.
+- In Lean, two lemmas are removed that restated another lemma with an added `fork < .glamsterdam` argument ([#4297](https://github.com/ethereum/EthLib/pull/4297)).
   `effectiveKept_block` restated `effectiveKept_processBlock`, which holds at every fork, and ignored the argument.
   `BlockLedger.validators_processBlockExecution` restated `processBlockExecution_validators`, which holds from Bellatrix, where the execution part of a block exists, at every later fork.
   Migration: call `effectiveKept_processBlock` and `processBlockExecution_validators` without the pre-Gloas argument.
