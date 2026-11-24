@@ -57,6 +57,17 @@ Proofs then compute its bytes as a list one step at a time, as they do for the e
 def toBE (n x : Nat) : Vector UInt8 n :=
   ⟨(toBE.go n x []).toArray, by simp [toBE.length_go]⟩
 
+/-- The number of bytes of `x` in base 256 with no leading zero byte; zero has none.
+
+The highest set bit of `x` is bit `x.log2`, and it lies in byte `x.log2 / 8`.
+
+The bytes are counted from 0, from the least significant one.
+
+So the bytes of `x` with no leading zero are the `x.log2 / 8 + 1` low ones.
+
+For example, `0xff` takes one byte, and `0x100` takes two. -/
+def byteLength (x : Nat) : Nat := if x = 0 then 0 else x.log2 / 8 + 1
+
 /-- The number whose `n` bytes these are, the least significant first.
 
 It is below `256 ^ n`.

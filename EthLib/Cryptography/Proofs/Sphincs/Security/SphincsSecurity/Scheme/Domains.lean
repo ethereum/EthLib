@@ -20,6 +20,8 @@ The inputs without an address differ from the addressed ones in length.
 
 @[expose] public section
 
+open EthLib.Base
+
 namespace SphincsSecurity.Security
 
 variable [Params]
@@ -33,7 +35,7 @@ theorem fieldInput_injective {fields fields' : TweakFields}
     (h : bytesLE 16 parameter ++ fieldBytes fields ++ payload =
       bytesLE 16 parameter' ++ fieldBytes fields' ++ payload') :
     fields = fields' ∧ parameter = parameter' ∧ payload = payload' := by
-  obtain ⟨hprefix, hpayload⟩ := List.append_inj h (by simp [fieldBytes, bytesBE_length])
+  obtain ⟨hprefix, hpayload⟩ := List.append_inj h (by simp [fieldBytes])
   obtain ⟨hparameter, hfields⟩ := List.append_inj hprefix (by simp)
   exact ⟨fieldBytes_injective hfields, bytesLE_injective hparameter, hpayload⟩
 
@@ -231,7 +233,7 @@ theorem messageDigestInput_length (parameter : PublicParameter) (root : Digest) 
     (randomness : Randomness) (call : DigestCall) :
     (messageDigestInput parameter root message randomness call).length = 84 := by
   simp only [messageDigestInput, List.length_append, bytesLE_length_digest,
-    bytesLE_length_parameter, bytesLE_length_message, bytesBE_length_4]
+    bytesLE_length_parameter, bytesLE_length_message, ByteOrder.length_toList_toBE]
 
 theorem keySeedInput_ne_tweakableHashInput (seed : MasterSeed) (index : Nat)
     (parameter : PublicParameter) (domain : HashDomain) (payload : HashInput) :
@@ -335,13 +337,13 @@ theorem messageDigestInput_injective {parameter parameter' : PublicParameter} {r
     parameter = parameter' ∧ root = root' ∧ message = message' ∧ randomness = randomness' ∧
       call = call' := by
   unfold messageDigestInput at h
-  obtain ⟨h, hcall⟩ := List.append_inj' h (by simp [bytesBE_length])
+  obtain ⟨h, hcall⟩ := List.append_inj' h (by simp)
   obtain ⟨h, hmessage⟩ := List.append_inj' h (by simp)
   obtain ⟨h, hroot⟩ := List.append_inj' h (by simp)
   obtain ⟨hrandomness, hparameter⟩ := List.append_inj' h (by simp)
   refine ⟨bytesLE_injective hparameter, bytesLE_injective hroot, bytesLE_injective hmessage,
     bytesLE_injective hrandomness,
     Fin.ext (ofNat_inj_of_lt (digestCall_lt call) (digestCall_lt call') ?_)⟩
-  exact bytesBE_injective hcall
+  exact toList_toBE_injective hcall
 
 end SphincsSecurity.Security

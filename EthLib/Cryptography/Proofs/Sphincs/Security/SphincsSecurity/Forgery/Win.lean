@@ -16,6 +16,8 @@ Otherwise it yields a FORS digest whose openings the run revealed.
 
 open OracleComp OracleSpec
 
+open EthLib.Base
+
 namespace SphincsSecurity.Security.HiddenBridge
 
 variable [Params]
@@ -478,8 +480,9 @@ theorem firstEncoding_congr (f g : QueryImpl HashSpec Id) (parameter : PublicPar
     intro counter
     simp only [encode, evalWithAnswerFn_bind, eval_tweakableHash, evalWithAnswerFn_pure]
     rw [show f (tweakableHashInput parameter (.encoding lay tree leaf)
-        (message ++ bytesBE 4 counter)) =
-      g (tweakableHashInput parameter (.encoding lay tree leaf) (message ++ bytesBE 4 counter)) from
+        (message ++ (ByteOrder.toBE 4 counter.toNat).toList)) =
+      g (tweakableHashInput parameter (.encoding lay tree leaf)
+        (message ++ (ByteOrder.toBE 4 counter.toNat).toList)) from
       h counter]
   intro attempts
   induction attempts with
@@ -1125,7 +1128,7 @@ theorem encodingInput_short (parameter : PublicParameter) (lay : Layer) (tree : 
     Short.IsShort (Wots.encodingInput parameter lay tree leaf message counter) := by
   unfold Short.ShortMessage at hmessage
   simp only [Wots.encodingInput, Short.IsShort, Short.bound, tweakableHashInput_length,
-    List.length_append, bytesBE_length]
+    List.length_append, ByteOrder.length_toList_toBE]
   omega
 
 /-- Encoding inputs read the same value through the prepared cache. -/

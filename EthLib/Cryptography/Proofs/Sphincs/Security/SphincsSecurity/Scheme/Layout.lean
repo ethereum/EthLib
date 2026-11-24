@@ -19,6 +19,8 @@ Every signature, malformed or not, serializes to `16 + 16 k (a + 1) + 1028 d + 1
 -- The byte-length lemmas must see the digest and counter widths as `8 * n` to match.
 set_option backward.isDefEq.respectTransparency false
 
+open EthLib.Base
+
 namespace SphincsSecurity
 
 variable [Params]
@@ -29,7 +31,8 @@ def serializeTree (opening : TreeOpening) : List UInt8 :=
 
 /-- The bytes of one layer: the big-endian counter, the 64 chain values, then the path. -/
 def serializeLayer {lay : Layer} (part : LayerSignature lay) : List UInt8 :=
-  bytesBE 4 part.counter ++ (List.ofFn part.chainValues).flatMap (bytesLE 16) ++
+  (ByteOrder.toBE 4 part.counter.toNat).toList ++
+    (List.ofFn part.chainValues).flatMap (bytesLE 16) ++
     (List.ofFn part.path).flatMap (bytesLE 16)
 
 /-- The bytes of a signature: the randomizer, the FORS openings, then the layers from the bottom. -/
@@ -45,7 +48,8 @@ theorem serializeTree_length (opening : TreeOpening) :
 
 theorem serializeLayer_length {lay : Layer} (part : LayerSignature lay) :
     (serializeLayer part).length = 1028 + 16 * layerHeight lay := by
-  simp only [serializeLayer, List.length_append, bytesBE_length, ofFn_flatMap_bytesLE_length]
+  simp only [serializeLayer, List.length_append, ByteOrder.length_toList_toBE,
+    ofFn_flatMap_bytesLE_length]
   change 4 + 16 * 64 + 16 * layerHeight lay = _
   omega
 

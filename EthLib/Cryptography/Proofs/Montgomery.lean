@@ -333,56 +333,55 @@ theorem toZMod_inv [Fact M.p.Prime] (a : Montgomery M) : toZMod a⁻¹ = (toZMod
 
 open EthLib.Base
 
-/-- The four bytes of a limb read back as the limb. -/
-theorem ofBE_limbBytes (x : UInt32) : ByteOrder.ofBE (limbBytes x) = x.toNat := by
+/-- The four bytes of a limb are its integer written on four bytes, big-endian. -/
+theorem toList_toBE_four (x : UInt32) :
+    (ByteOrder.toBE 4 x.toNat).toList =
+      [(x >>> 24).toUInt8, (x >>> 16).toUInt8, (x >>> 8).toUInt8, x.toUInt8] := by
   have := x.toNat_lt
-  simp only [limbBytes, ByteOrder.ofBE, List.foldl, UInt32.toNat_toUInt8, UInt32.toNat_shiftRight,
-    UInt32.reduceToNat, Nat.reduceMod, Nat.shiftRight_eq_div_pow, Nat.reducePow]
-  omega
+  rw [show (4 : ℕ) = 0 + 1 + 1 + 1 + 1 from rfl]
+  simp only [ByteOrder.toList_toBE_succ, ByteOrder.toList_toBE_zero, List.nil_append,
+    List.cons_append, List.cons.injEq, and_true]
+  refine ⟨?_, ?_, ?_, ?_⟩ <;> apply UInt8.toNat_inj.mp <;>
+    simp [UInt32.toNat_shiftRight, Nat.shiftRight_eq_div_pow] <;> omega
 
-/-- A limb has four bytes. -/
-theorem limbBytes_length (x : UInt32) : (limbBytes x).length = 4 := rfl
-
-/-- The bytes of `k` limbs number `4 k`. -/
-theorem bytesBE_length (k : ℕ) (f : ℕ → UInt64) : (bytesBE k f).length = 4 * k := by
-  induction k with
-  | zero => rfl
-  | succ k ih =>
-    rw [bytesBE, List.length_append, limbBytes_length, ih]
-    omega
-
-/-- The bytes of fitting limbs read back as their integer. -/
-theorem ofBE_bytesBE {k : ℕ} {f : ℕ → UInt64} (h : Fits k f 0) :
-    ByteOrder.ofBE (bytesBE k f) = num k f 0 := by
-  induction k with
-  | zero => rfl
+/-- Pushing fitting limbs appends their integer written on `4 k` bytes, big-endian. -/
+theorem pushLimbs_toList (f : ℕ → UInt64) (k : ℕ) (acc : ByteArray) (h : Fits k f 0) :
+    (pushLimbs f k acc).data.toList =
+      acc.data.toList ++ (ByteOrder.toBE (4 * k) (num k f 0)).toList := by
+  induction k generalizing acc with
+  | zero => simp [pushLimbs]
   | succ k ih =>
     have hk := lt_of_fits h k (by omega)
     rw [Nat.zero_add] at hk
-    rw [bytesBE, ByteOrder.ofBE_append, ofBE_limbBytes, bytesBE_length, ih (fits_snoc.mp h).1,
-      num_snoc, Nat.zero_add, UInt64.toNat_toUInt32, Nat.mod_eq_of_lt hk,
-      show (256 : ℕ) ^ (4 * k) = 2 ^ (32 * k) by rw [Nat.pow_mul, Nat.pow_mul]]
-    ring
-
-/-- Pushing the limbs appends their bytes. -/
-theorem pushLimbs_toList (f : ℕ → UInt64) (k : ℕ) (acc : ByteArray) :
-    (pushLimbs f k acc).data.toList = acc.data.toList ++ bytesBE k f := by
-  induction k generalizing acc with
-  | zero => simp [pushLimbs, bytesBE]
-  | succ k ih =>
-    rw [pushLimbs, ih, bytesBE]
-    simp [pushLimb, limbBytes, ByteArray.push]
+    have hf := fits_snoc.mp h
+    rw [pushLimbs, ih _ hf.1, num_snoc, Nat.zero_add, Nat.mul_succ, Nat.add_comm (4 * k) 4,
+      ByteOrder.toList_toBE_add]
+    -- Step `256 ^ (4 k) = 2 ^ (32 k)`.
+    have hp : (256 : ℕ) ^ (4 * k) = 2 ^ (32 * k) := by rw [Nat.pow_mul, Nat.pow_mul]
+    have hn := num_lt hf.1
+    -- With `N` the integer of the low `k` limbs and `x` limb `k`:
+    --
+    -- Step `(N + 2 ^ (32 k) x) / 2 ^ (32 k) = x` and `(N + 2 ^ (32 k) x) % 2 ^ (32 k) = N`.
+    have hd : (num k f 0 + 2 ^ (32 * k) * (f k).toNat) / 256 ^ (4 * k) = (f k).toNat := by
+      rw [hp, Nat.add_mul_div_left _ _ (Nat.two_pow_pos _), Nat.div_eq_of_lt hn, Nat.zero_add]
+    have hm : (num k f 0 + 2 ^ (32 * k) * (f k).toNat) % 256 ^ (4 * k) = num k f 0 := by
+      rw [hp, Nat.add_mul_mod_self_left, Nat.mod_eq_of_lt hn]
+    rw [hd, ← ByteOrder.toBE_mod (4 * k) (num k f 0 + 2 ^ (32 * k) * (f k).toNat), hm,
+      ← List.append_assoc]
+    have hx : ((f k).toUInt32).toNat = (f k).toNat := by
+      rw [UInt64.toNat_toUInt32, Nat.mod_eq_of_lt hk]
+    rw [← hx, toList_toBE_four]
+    simp [pushLimb, ByteArray.push]
 
 /-- An element as `4 n` bytes is its integer, big-endian. -/
 theorem toBytesBE_eq (a : Montgomery M) :
     (toBytesBE a).data.toList = (ByteOrder.toBE (4 * n) a.toNat).toList := by
   unfold toBytesBE
-  rw [pushLimbs_toList]
+  rw [pushLimbs_toList _ _ _ (Limbs.fits _ 0)]
   have he : (ByteArray.emptyWithCapacity (4 * n)).data.toList = [] := by
     rfl
   rw [he, List.nil_append]
-  conv_lhs => rw [← ByteOrder.toList_toBE_ofBE (bytesBE _ _)]
-  rw [bytesBE_length, ofBE_bytesBE (Limbs.fits _ 0), toNat_eq_val]
+  rw [toNat_eq_val]
   rfl
 
 /-- Reading a byte past the end with `!` gives the default `0`, as `getD` does. -/

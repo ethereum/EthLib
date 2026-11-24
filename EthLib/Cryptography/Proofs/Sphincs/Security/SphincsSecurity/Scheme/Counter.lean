@@ -19,6 +19,8 @@ open OracleComp OracleSpec ENNReal
 
 set_option maxRecDepth 10000
 
+open EthLib.Base
+
 namespace SphincsSecurity.Completeness
 
 variable [Params]
@@ -31,14 +33,14 @@ The message comes first, then `BE_32(c)`, the four big-endian bytes of `c`. -/
 def encodeInput (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
     (message : HashInput) (c : Nat) : HashInput :=
   tweakableHashInput parameter (.encoding lay tree leaf)
-    (message ++ bytesBE 4 (BitVec.ofNat counterBits c))
+    (message ++ (ByteOrder.toBE 4 (BitVec.ofNat counterBits c).toNat).toList)
 
 omit [Params] in
 /-- Two counters below `2^32` with the same four big-endian bytes are equal. -/
-theorem counter_bytesBE_inj {c c' : Nat} (hc : c < 2 ^ 32) (hc' : c' < 2 ^ 32)
-    (h : (bytesBE 4 (BitVec.ofNat counterBits c) : HashInput)
-        = bytesBE 4 (BitVec.ofNat counterBits c')) : c = c' :=
-  ofNat_inj_of_lt hc hc' (bytesBE_injective h)
+theorem counter_toList_toBE_inj {c c' : Nat} (hc : c < 2 ^ 32) (hc' : c' < 2 ^ 32)
+    (h : ((ByteOrder.toBE 4 (BitVec.ofNat counterBits c).toNat).toList : HashInput)
+        = (ByteOrder.toBE 4 (BitVec.ofNat counterBits c').toNat).toList) : c = c' :=
+  ofNat_inj_of_lt hc hc' (toList_toBE_injective h)
 
 /-- Two counters below `2^32` with the same input are equal. -/
 theorem encodeInput_inj (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
@@ -49,6 +51,6 @@ theorem encodeInput_inj (parameter : PublicParameter) (lay : Layer) (tree : Tree
   simp only [encodeInput, tweakableHashInput, List.append_assoc] at h
   have hpayload := List.append_cancel_left h
   have hpayload' := List.append_cancel_left hpayload
-  exact counter_bytesBE_inj hc hc' (List.append_cancel_left hpayload')
+  exact counter_toList_toBE_inj hc hc' (List.append_cancel_left hpayload')
 
 end SphincsSecurity.Completeness

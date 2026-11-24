@@ -44,7 +44,7 @@ theorem toList_encodeAdrs_fieldBytes (layer : UInt32) (tree : UInt64)
   show (toByte 4 layer.toNat ++ toByte 12 tree.toNat ++ toByte 4 type.toNat
     ++ toByte 4 keyPair.toNat ++ toByte 4 word2.toNat ++ toByte 4 word3.toNat :
       Vector UInt8 (4 + 12 + 4 + 4 + 4 + 4)).toList = _
-  simp only [Vector.toList_append, toList_toByte_bytesBE, fieldBytes, tweakFields,
+  simp only [Vector.toList_append, toList_toByte_toBE, fieldBytes, tweakFields,
     List.append_assoc]
 
 /-- The address of a call of a key, for any type and words, is the model's. -/

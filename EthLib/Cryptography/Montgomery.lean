@@ -1399,15 +1399,6 @@ It is `none` when they write an integer of at least `p`. -/
     some (mulLimbs M M.r2 M.r2_lt (Limbs.pack t))
   else none
 
-/-- The four bytes of a limb, the most significant first. -/
-def limbBytes (x : UInt32) : List UInt8 :=
-  [(x >>> 24).toUInt8, (x >>> 16).toUInt8, (x >>> 8).toUInt8, x.toUInt8]
-
-/-- The bytes of the low `k` limbs of `f`, big-endian. -/
-def bytesBE : Nat → (Nat → UInt64) → List UInt8
-  | 0, _ => []
-  | k + 1, f => limbBytes (f k).toUInt32 ++ bytesBE k f
-
 /-- The bytes of `acc`, then the four bytes of a limb, the most significant first. -/
 @[inline] def pushLimb (acc : ByteArray) (x : UInt32) : ByteArray :=
   (((acc.push (x >>> 24).toUInt8).push (x >>> 16).toUInt8).push (x >>> 8).toUInt8).push x.toUInt8

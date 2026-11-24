@@ -1016,6 +1016,19 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the copies of the big-endian functions in RLP, DER, the Montgomery fields and the SPHINCS+ security model are removed, so they write and read through `EthLib.Base.ByteOrder` ([#4412](https://github.com/ethereum/EthLib/pull/4412)).
+  - `ByteOrder.byteLength x` is new: the number of bytes of `x` with no leading zero byte, and none for zero.
+    The minimal big-endian form of `x` is `ByteOrder.toBE (byteLength x) x`, and the new lemmas `ByteOrder.lt_byteLength`, `ByteOrder.pow_byteLength_sub_one_le`, `ByteOrder.byteLength_eq_of_bounds`, `ByteOrder.byteLength_ofBE` and `ByteOrder.ofBE_toBE_byteLength` state its bounds and round trip.
+  - `Rlp.bigEndian` is now that form as a byte array, and `Rlp.bigEndianAux` is removed with its lemmas `Rlp.bigEndianAux_zero`, `Rlp.bigEndianAux_succ`, `Rlp.bigEndianAux_fuel` and `Rlp.ofBE_bigEndianAux`; `Rlp.bigEndian_data_toList` and `Rlp.size_bigEndian` are new.
+    `Rlp.eq_zero_of_ofBE_eq_zero` is removed, and the statements about `Rlp.bigEndian` are unchanged.
+  - `Der.ecdsaInteger` writes the minimal form of `n % 256 ^ 32`, the same bytes as before for every `n`.
+  - `Montgomery.limbBytes` and `Montgomery.bytesBE` are removed, with `ofBE_limbBytes`, `limbBytes_length`, `bytesBE_length` and `ofBE_bytesBE`.
+    `Montgomery.pushLimbs_toList` now takes `Fits k f 0` and states the bytes as `(ByteOrder.toBE (4 * k) (num k f 0)).toList`; `toBytesBE_eq` keeps its statement.
+  - In the SPHINCS+ security model, `SphincsSecurity.beInt` is removed for `ByteOrder.ofBE`, and `SphincsSecurity.bytesBE n x` for `(ByteOrder.toBE n x.toNat).toList`.
+    `beInt_append`, `beInt_eq_ofBE`, `bytesBE_length`, `bytesBE_length_4`, `bytesBE_length_12`, `bytesBE_length_counter` and `toBE_eq_bytesBE` are removed.
+    `testBit_beInt` is `testBit_ofBE`, `bytesBE_injective` is `toList_toBE_injective`, `counter_bytesBE_inj` is `counter_toList_toBE_inj`, and `toList_toByte_bytesBE` is `toList_toByte_toBE`, each stated on `toBE` or `ofBE`.
+  Migration: replace the names above.
+
 - In Lean, the big-endian integers move to `EthLib.Base.ByteOrder`, beside the little-endian ones, and `EthLib.Base.BigEndian` and its proof module are removed ([#4382](https://github.com/ethereum/EthLib/pull/4382)).
   The functions take new names:
   - `Base.bytesToNat bytes` is `Base.ByteOrder.ofBE bytes`, with the same `List UInt8` argument; it reads the same number, now with the fold `256 * acc + b.toNat`.

@@ -25,6 +25,8 @@ set_option backward.isDefEq.respectTransparency false
 
 open OracleComp OracleSpec Finset
 
+open EthLib.Base
+
 namespace SphincsSecurity.Cost
 
 variable [Params]
@@ -161,7 +163,7 @@ theorem compressions_chainWalk (f : QueryImpl HashSpec Id) (parameter : PublicPa
     compressions H f (encode parameter lay tree leaf message counter) =
       H.cost (48 + (message.length + 4)) := by
   simp only [encode, compressions_bind, compressions_tweakableHash, List.length_append,
-    bytesBE_length, compressions_pure, Nat.add_zero]
+    ByteOrder.length_toList_toBE, compressions_pure, Nat.add_zero]
 
 theorem compressions_treeFold (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex) (path : Nat → Digest)
@@ -224,7 +226,7 @@ end Tree
       digestCalls * H.cost 84 := by
   simp only [messageDigest, compressions_bind, compressions_sequenceFin, messageDigestCall,
     compressions_oracleHash, messageDigestInput, List.length_append,
-    bytesLE_length, bytesBE_length, compressions_pure, Nat.add_zero,
+    bytesLE_length, ByteOrder.length_toList_toBE, compressions_pure, Nat.add_zero,
     Finset.sum_const, Finset.card_univ, Fintype.card_fin, smul_eq_mul]
 
 theorem encode_valid (f : QueryImpl HashSpec Id) (parameter : PublicParameter)

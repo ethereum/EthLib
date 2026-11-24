@@ -15,7 +15,7 @@ The model's byte encoding lists those bytes, so EthLib hashes the bytes the mode
 
 The address words and the counters are big-endian in both.
 
-EthLib writes them with `toByte`, and the model with its big-endian bytes of a bit vector.
+EthLib writes them with `toByte`, and the model writes the integer of a bit vector.
 -/
 
 @[expose] public section
@@ -114,52 +114,12 @@ theorem trunc_ofOutput_truncateHash (x : HashSig.HashOutput) :
 
 /-! ## Big-endian words -/
 
-/-- Byte `i` of the big-endian bytes of `n`, as a number, from the integer. -/
-private theorem toNat_byte_ofNat (w a n : Nat) :
-    (UInt8.ofBitVec ((BitVec.ofNat w n).extractLsb' a 8)).toNat = n % 2 ^ w / 2 ^ a % 2 ^ 8 := by
-  simp only [UInt8.toNat_ofBitVec, BitVec.extractLsb'_toNat, BitVec.toNat_ofNat,
-    Nat.shiftRight_eq_div_pow]
+/-- `toByte k n`, as a list, is the big-endian writing of `n` as a bit vector of `8 k` bits.
 
-/-- EthLib's `len` big-endian bytes of `n` are the model's, of `n` as a `8 len`-bit vector. -/
-theorem toBE_eq_bytesBE (len n : Nat) :
-    (Base.ByteOrder.toBE len n).toList
-      = SphincsSecurity.bytesBE len (BitVec.ofNat (8 * len) n) := by
-  induction len generalizing n with
-  | zero => rfl
-  | succ len ih =>
-    rw [Base.ByteOrder.toList_toBE_succ, ih, SphincsSecurity.bytesBE, SphincsSecurity.bytesBE,
-      List.ofFn_succ', List.concat_eq_append]
-    congr 1
-    · -- A higher byte of `n` is the byte one place lower of `n / 256`.
-      refine congrArg List.ofFn (funext fun i => UInt8.toNat.inj ?_)
-      rw [toNat_byte_ofNat, toNat_byte_ofNat]
-      apply Nat.eq_of_testBit_eq
-      intro j
-      have hi := i.isLt
-      simp only [Fin.val_castSucc, Nat.testBit_mod_two_pow, Nat.testBit_div_two_pow,
-        show (256 : Nat) = 2 ^ 8 from rfl]
-      rw [show j + 8 * (len + 1 - 1 - i.val) = j + 8 * (len - 1 - i.val) + 8 by omega]
-      by_cases hj : j < 8
-      · simp only [hj, decide_true, Bool.true_and,
-          show j + 8 * (len - 1 - i.val) + 8 < 8 * (len + 1) by omega,
-          show j + 8 * (len - 1 - i.val) < 8 * len by omega]
-      · simp [hj]
-    · -- The last byte is `n mod 256`.
-      congr 1
-      apply UInt8.toNat.inj
-      rw [toNat_byte_ofNat, Fin.val_last, show len + 1 - 1 - len = 0 by omega, Nat.mul_zero,
-        pow_zero, Nat.div_one, Nat.mod_mod_of_dvd _ (pow_dvd_pow 2 (by omega))]
-      simp
-
-/-- `toByte k n`, as a list, is the model's big-endian bytes of `n` on `8 k` bits. -/
-@[simp] theorem toList_toByte_bytesBE (k n : Nat) :
-    (toByte k n).toList = SphincsSecurity.bytesBE k (BitVec.ofNat (8 * k) n) := by
-  rw [← toBE_eq_bytesBE]
+The model writes its values as bit vectors, so the right side goes through one to match it. -/
+@[simp] theorem toList_toByte_toBE (k n : Nat) :
+    (toByte k n).toList = (Base.ByteOrder.toBE k (BitVec.ofNat (8 * k) n).toNat).toList := by
+  rw [BitVec.toNat_ofNat, Nat.pow_mul, show (2 : Nat) ^ 8 = 256 from rfl, Base.ByteOrder.toBE_mod]
   rfl
-
-/-- The model's big-endian integer of a byte string is EthLib's. -/
-theorem beInt_eq_ofBE (bytes : List UInt8) :
-    SphincsSecurity.beInt bytes = Base.ByteOrder.ofBE bytes := by
-  simp only [SphincsSecurity.beInt, Base.ByteOrder.ofBE, Nat.mul_comm 256]
 
 end EthLib.Cryptography.Sphincs.Unforgeability.Bridge

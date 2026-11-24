@@ -69,8 +69,8 @@ variable {m : Type → Type} [Monad m] [LawfulMonad m] [HasQuery HashSig.HashSpe
 /-- The bytes of a counter, as the model's big-endian counter. -/
 theorem toList_data_packBytes_counter (counter : UInt32) :
     (packBytes (toByte COUNTER_LEN counter.toNat)).data.toList
-      = SphincsSecurity.bytesBE 4 (BitVec.ofNat 32 counter.toNat) := by
-  rw [toList_data_packBytes, toList_toByte_bytesBE]
+      = (Base.ByteOrder.toBE 4 (BitVec.ofNat 32 counter.toNat).toNat).toList := by
+  rw [toList_data_packBytes, toList_toByte_toBE]
   rfl
 
 /-- EthLib's encoding of a message under a counter is the model's, with the same codeword. -/
@@ -81,11 +81,13 @@ theorem encode_queryH (P : SphincsSecurity.PublicParameter) (lay : SphincsSecuri
       = Option.map ofEncoding <$> SphincsSecurity.Concrete.encode (m := m) P lay tree leaf
           msg.toList (BitVec.ofNat 32 counter.toNat) := by
   rw [encode, th_queryH P _ _ (.encoding lay tree leaf)
-    (msg.toList ++ SphincsSecurity.bytesBE 4 (BitVec.ofNat 32 counter.toNat))
+    (msg.toList ++
+      (Base.ByteOrder.toBE 4 (BitVec.ofNat 32 counter.toNat).toNat).toList)
     (toList_adrsEnc lay tree leaf)
     (by rw [toList_data_append, toList_data_packBytes, toList_data_packBytes_counter])]
   simp only [SphincsSecurity.Concrete.encode, map_eq_bind_pure_comp, bind_assoc, pure_bind,
     Function.comp_apply, codeword?_ofDigest]
+  rfl
 
 /-- The model's chain values as EthLib's vector. -/
 def ofChains (f : SphincsSecurity.ChainIndex → SphincsSecurity.Digest) : Vector Digest V :=

@@ -278,10 +278,13 @@ An ECDSA signature value is the SEQUENCE of the INTEGERs r and s ([RFC 3279 §2.
 [rfc3279]: https://www.rfc-editor.org/rfc/rfc3279#section-2.2.3
 -/
 
-/-- The DER INTEGER of a number below `2 ^ 256`, on the fewest content bytes (X.690 §8.3.2). -/
+/-- The DER INTEGER of a number below `2 ^ 256`, on the fewest content bytes (X.690 §8.3.2).
+
+A larger number is first reduced modulo `2 ^ 256`. -/
 def ecdsaInteger (n : Nat) : List UInt8 :=
-  -- §8.3.2: the fewest octets, so the leading zero octets of the 32-octet form go.
-  let bytes := ((EthLib.Base.ByteOrder.toBE 32 n).toList).dropWhile (· == 0)
+  -- §8.3.2: the fewest octets, so `n mod 2 ^ 256` is written with no leading zero octet.
+  let low := n % 256 ^ 32
+  let bytes := (EthLib.Base.ByteOrder.toBE (EthLib.Base.ByteOrder.byteLength low) low).toList
   let bytes := match bytes with
     -- §8.3.1: zero is one contents octet, 0x00.
     | [] => [0]

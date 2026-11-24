@@ -142,35 +142,14 @@ def RlpError.code : RlpError → UInt32
   | .wrongFieldCount .. => 13
   | .inField .. => 14
 
-/-- `n` in base 256, most significant byte first, using at most `fuel` bytes.
-
-The recursion counts down a byte budget instead of dividing `n`.
-
-The kernel unfolds such a definition directly, so it can evaluate the known answers.
--/
-def bigEndianAux : Nat → Nat → ByteArray
-  -- Out of budget: write nothing.
-  --
-  -- A budget of `n` bytes never runs out, since `n` has at most `n` digits in base 256.
-  | _, 0 => .empty
-  | n, fuel + 1 =>
-      -- `BE(0) = ()`: no digit is left, and a zero byte here would break `b_0 ≠ 0`.
-      if n = 0 then
-        .empty
-      -- For `n > 0`, `BE(n) = BE(floor(n / 256)) · (n mod 256)`.
-      --
-      -- This recursion is equivalent to the sum that defines `BE` in Appendix B.
-      else
-        (bigEndianAux (n / 256) fuel).push (UInt8.ofNat (n % 256))
-
 /-- `BE` of the Yellow Paper: `n` in base 256, most significant byte first, with no leading zero.
 
 For example, `BE(127)` is the byte `7f`, and `BE(1024)` is the bytes `04 00`.
 
 `BE(0)` is empty, since the Yellow Paper asks for the shortest such byte string. -/
 def bigEndian (n : Nat) : ByteArray :=
-  -- `BE(n)` of Appendix B, with a budget of `n` bytes.
-  bigEndianAux n n
+  -- `BE(n)` of Appendix B: the `k` bytes of `n` in base 256, where `b_0 ≠ 0` fixes `k`.
+  ⟨(Base.ByteOrder.toBE (Base.ByteOrder.byteLength n) n).toArray⟩
 
 /-- The item of a scalar `n`: the byte string `BE(n)`, so 0 is the empty byte string. -/
 def Item.scalar (n : Nat) : Item :=

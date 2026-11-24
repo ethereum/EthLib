@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.ByteOrder
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme.Lemmas
 
 /-!
@@ -13,6 +14,8 @@ The 32 address bytes of a hash call determine every word of the address.
 -/
 
 @[expose] public section
+
+open EthLib.Base
 
 namespace SphincsSecurity
 
@@ -83,39 +86,14 @@ theorem ofNat_inj_of_lt {w a b : Nat} (ha : a < 2 ^ w) (hb : b < 2 ^ w)
   rwa [BitVec.toNat_ofNat, BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha, Nat.mod_eq_of_lt hb] at htoNat
 
 omit [Params] in
-theorem bytesBE_length (n : Nat) (x : BitVec (8 * n)) : (bytesBE n x).length = n := by
-  simp [bytesBE]
-
-omit [Params] in
-@[simp] theorem bytesBE_length_4 (x : BitVec 32) : (bytesBE 4 x).length = 4 :=
-  bytesBE_length 4 x
-
-omit [Params] in
-@[simp] theorem bytesBE_length_12 (x : BitVec 96) : (bytesBE 12 x).length = 12 :=
-  bytesBE_length 12 x
-
-omit [Params] in
-@[simp] theorem bytesBE_length_counter (x : Counter) : (bytesBE 4 x).length = 4 :=
-  bytesBE_length 4 x
-
-omit [Params] in
 /-- Two bit vectors with the same big-endian bytes are equal. -/
-theorem bytesBE_injective {n : Nat} {x y : BitVec (8 * n)} (h : bytesBE n x = bytesBE n y) :
+theorem toList_toBE_injective {n : Nat} {x y : BitVec (8 * n)}
+    (h : (ByteOrder.toBE n x.toNat).toList = (ByteOrder.toBE n y.toNat).toList) :
     x = y := by
-  have hfun := List.ofFn_inj.mp h
-  apply BitVec.eq_of_getLsbD_eq
-  intro i hi
-  have hj : n - 1 - i / 8 < n := by omega
-  have hbyte := congrFun hfun ⟨n - 1 - i / 8, hj⟩
-  have hidx : n - 1 - (n - 1 - i / 8) = i / 8 := by omega
-  simp only [hidx] at hbyte
-  have hbits : (x.extractLsb' (8 * (i / 8)) 8) = (y.extractLsb' (8 * (i / 8)) 8) := by
-    simpa using congrArg UInt8.toBitVec hbyte
-  have hlsb := congrArg (fun b : BitVec 8 => b.getLsbD (i % 8)) hbits
-  simp only [BitVec.getLsbD_extractLsb'] at hlsb
-  have hmod : i % 8 < 8 := by omega
-  have hsum : 8 * (i / 8) + i % 8 = i := by omega
-  simpa [hmod, hsum] using hlsb
+  have hbound (z : BitVec (8 * n)) : z.toNat < 256 ^ n := by
+    simpa [Nat.pow_mul] using z.isLt
+  exact BitVec.eq_of_toNat_eq
+    (ByteOrder.toBE_inj (hbound x) (hbound y) (Vector.toList_inj.mp h))
 
 omit [Params] in
 theorem flatMap_bytesLE_length' (values : List (BitVec (8 * 16))) :
@@ -172,12 +150,12 @@ theorem fieldBytes_injective {t1 t2 : TweakFields} (h : fieldBytes t1 = fieldByt
   obtain ⟨layer1, tree1, tag1, key1, height1, index1⟩ := t1
   obtain ⟨layer2, tree2, tag2, key2, height2, index2⟩ := t2
   simp only [fieldBytes] at h
-  obtain ⟨h, hindex⟩ := List.append_inj' h (by simp [bytesBE_length])
-  obtain ⟨h, hheight⟩ := List.append_inj' h (by simp [bytesBE_length])
-  obtain ⟨h, hkey⟩ := List.append_inj' h (by simp [bytesBE_length])
-  obtain ⟨h, htag⟩ := List.append_inj' h (by simp [bytesBE_length])
-  obtain ⟨hlayer, htree⟩ := List.append_inj' h (by simp [bytesBE_length])
-  simp only [bytesBE_injective hlayer, bytesBE_injective htree, bytesBE_injective htag,
-    bytesBE_injective hkey, bytesBE_injective hheight, bytesBE_injective hindex]
+  obtain ⟨h, hindex⟩ := List.append_inj' h (by simp)
+  obtain ⟨h, hheight⟩ := List.append_inj' h (by simp)
+  obtain ⟨h, hkey⟩ := List.append_inj' h (by simp)
+  obtain ⟨h, htag⟩ := List.append_inj' h (by simp)
+  obtain ⟨hlayer, htree⟩ := List.append_inj' h (by simp)
+  simp only [toList_toBE_injective hlayer, toList_toBE_injective htree, toList_toBE_injective htag,
+    toList_toBE_injective hkey, toList_toBE_injective hheight, toList_toBE_injective hindex]
 
 end SphincsSecurity

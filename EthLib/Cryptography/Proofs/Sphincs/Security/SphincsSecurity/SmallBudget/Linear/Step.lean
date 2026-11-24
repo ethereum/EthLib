@@ -16,6 +16,8 @@ Reveals, draws and ticks are kinds of steps too.
 
 open OracleComp OracleSpec ENNReal
 
+open EthLib.Base
+
 namespace SphincsSecurity.Security.PotentialA
 
 variable [Params]
@@ -58,7 +60,7 @@ theorem msg_ne_enc {x : HashInput} (hx : ForsSigner.IsMsgInput x) {p : PublicPar
     x ≠ Wots.encodingInput p l.1 l.2.1 l.2.2 m c := by
   obtain ⟨p', root, message, randomness, call, rfl⟩ := hx
   exact messageDigestInput_ne_tweakableHashInput p' p root message randomness call _
-    (by simp only [List.length_append, bytesBE_length_counter]; omega)
+    (by simp only [List.length_append, ByteOrder.length_toList_toBE]; omega)
 
 theorem msg_ne_fleaf {x : HashInput} (hx : ForsSigner.IsMsgInput x) {p : PublicParameter}
     {f : FIn} :

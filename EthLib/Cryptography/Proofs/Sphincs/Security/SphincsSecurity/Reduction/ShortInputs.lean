@@ -152,7 +152,7 @@ theorem Only.encode (parameter : PublicParameter) (lay : Layer) (tree : TreeInde
       OracleComp HashSpec (Option Encoding)) := by
   unfold Concrete.encode
   unfold ShortMessage at hmsg
-  exact Only.bind (Only.tweakableHash _ _ _ (by simp [bytesBE_length]; omega))
+  exact Only.bind (Only.tweakableHash _ _ _ (by simp; omega))
     (fun _ => Only.pure' _)
 
 theorem Only.otsLeaf (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)
