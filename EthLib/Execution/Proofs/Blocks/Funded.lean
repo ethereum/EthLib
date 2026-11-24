@@ -6,15 +6,7 @@ public import EthLib.Execution.Proofs.Transactions.Funded
 /-!
 # Proofs: no block fails with the state error for a balance below an amount
 
-The DAO transfer moves the whole balance of each account it drains.
-
-A system call moves no value.
-
-Each transaction runs only once it passes its checks on the state it runs on.
-
-Withdrawals and rewards create ether, and take none.
-
-So the transition of a block never fails with the state error for a short balance, on any state.
+The transition of a block never fails with the state error for a short balance, on any state.
 
 A sender short of its most costly fee makes the block invalid at its inclusion check instead.
 -/
@@ -227,18 +219,23 @@ private theorem leaves (config : ChainConfig) (env : BlockEnvironment fork)
     (block : Block fork Transaction) :
     BodyLeaves config env block (¬Short ·) (fun _ => True) (fun _ => True) (fun _ => True) where
   plain _ ha hs _ _ := notShort_plain ha hs
+  -- The DAO transfer moves the whole balance of each account it drains.
   dao _ _ := notShort_state (applyDaoFork_ne_insufficientBalance _)
+  -- A system call moves no value.
   start body _ := notShort_aborted fun a => startSystemCalls_ne_insufficientBalance (body := body) a
   inclusion _ _ _ _ _ _ := fun ⟨_, h⟩ => by rcases h with h | h <;> cases h
+  -- Each transaction runs only once it passes its checks on the state it runs on.
   process _ _ _ _ included :=
     notShort_aborted (Transactions.processTransaction_ne_insufficientBalance included)
   join body tx _ := notShort_state (join_ne_insufficientBalance body tx)
+  -- The withdrawals create ether, and take none.
   withdraw _ _ _ := notShort_state (withdrawalState_ne_insufficientBalance _ _)
   code _ _ _ := notShort_aborted fun a h => by
     obtain ⟨_, h, ⟨⟩⟩ := mapError_eq_error h
     exact getCode_ne_insufficientBalance _ _ _ h
   call s target data _ := notShort_aborted (systemCall_ne_insufficientBalance env s target data)
   call_failed _ _ _ _ _ _ _ _ := fun ⟨_, h⟩ => by rcases h with h | h <;> cases h
+  -- The rewards create ether, and take none.
   rewards _ _ := notShort_state fun a => payRewards_ne_insufficientBalance _ _ _ _ a
 
 /-- The body of a block never fails with the state error for a short balance.

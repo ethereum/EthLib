@@ -7,15 +7,13 @@ public import EthLib.Execution.Proofs.Blocks.Roots
 /-!
 # Proofs: the genesis block
 
-The genesis header of a state root holds that root.
+The genesis block of an allocation is block 0, with no parent and an empty body.
 
-The genesis block of an allocation commits to the root of that allocation.
+Its header holds the state root of the allocation and the roots of empty lists.
 
-It is block 0, with no parent and an empty body.
+It also holds the fields that the chain chooses.
 
-Its header holds the fields that the chain chooses.
-
-The genesis header of every state root exists, and it holds the roots of empty lists.
+The genesis header of every state root exists.
 
 So the genesis block of an allocation exists exactly when the state root of the allocation does.
 -/

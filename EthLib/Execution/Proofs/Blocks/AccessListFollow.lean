@@ -12,11 +12,7 @@ The last change of each field in a built list, or its value before the body, is 
 
 This holds for every call that meets three conditions, which the builder cannot check itself.
 
-The list keeps code, not code hashes, so the code hash is the Keccak-256 hash of the last code.
-
-The list keeps a nonce in 64 bits, so the nonce is compared in 64 bits.
-
-A nonce is below 2^64 by [EIP-2681][eip2681], so this loses nothing.
+The list keeps a nonce in 64 bits, which loses nothing: it is below 2^64 by [EIP-2681][eip2681].
 
 Source: [EIP-7928, Recording Semantics by Change Type][eip7928].
 
@@ -73,28 +69,22 @@ end BlockAccessList
 
 /-- The builder follows a call that ran on the block state `block` and ends with the state `tx`.
 
-These are assumptions on the call, which the builder cannot check itself.
-
-The call ran on `block`.
-
-A key that the call did not write reads as it did in `block`, so a wipe hides no word.
-
-This excludes a change that deletes an empty account with storage, which wipes that storage.
+These are three assumptions on the call, which the builder cannot check itself.
 
 A creation wipes no word, since [EIP-7610][eip7610] makes it fail at an address with storage.
-
-The code that the call reads for an account it wrote has the code hash of that account.
-
-A code map is a plain map, so nothing else ties the code that it gives to its hash.
 
 [eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification -/
 structure Followable (block : BlockState) (tx : TransactionState) : Prop where
   /-- The call ran on the block state. -/
   parent : tx.parent = block
-  /-- A key that the call did not write keeps its word. -/
+  /-- A key that the call did not write keeps its word, so a wipe hides no word.
+
+  This excludes a change that deletes an empty account with storage, which wipes that storage. -/
   storage : ∀ address key, tx.storageWrites.slot address key = none →
     tx.getStorage address key = (TransactionState.ofBlock block).getStorage address key
-  /-- The code of each account that the call wrote has the code hash of that account. -/
+  /-- The code of each account that the call wrote has the code hash of that account.
+
+  A code map is a plain map, so nothing else ties the code that it gives to its hash. -/
   code : ∀ (address : Address) (written : Option Account) code,
     tx.accountWrites[address]? = some written →
     tx.getCode (written.getD EMPTY_ACCOUNT).codeHash = .ok code →
@@ -127,13 +117,7 @@ def slotChanges (b : AccessListBuilder) (address : Address) (key : Bytes32) :
 
 /-- The changes of a field follow it, read through `view`, up to the position `index`.
 
-The field is `base` before the body, `start` when the position began, and `now` at present.
-
-No change is past the position.
-
-The last change before the position, or `base`, is `start`.
-
-The position holds a change exactly when the field differs from `start`, and it is `now`. -/
+The field is `base` before the body, `start` when the position began, and `now` at present. -/
 structure FieldTracks {α β : Type} (view : α → β) (changes : Std.ExtTreeMap UInt32 α)
     (index : UInt32) (base start now : β) : Prop where
   /-- No change is past the position. -/
@@ -770,7 +754,7 @@ theorem Tracks.nonce_build {b : AccessListBuilder} {base now : BlockState}
 
 /-- The list of a builder that follows the block gives each code hash as it is now.
 
-It is the hash of the last code in the list.
+It is the Keccak-256 hash of the last code in the list, which keeps code, not code hashes.
 
 An account with no code change in the list keeps its code hash from `base`. -/
 theorem Tracks.codeHash_build {b : AccessListBuilder} {base now : BlockState}

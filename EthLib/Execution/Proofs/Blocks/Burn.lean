@@ -13,37 +13,13 @@ public import EthLib.Execution.Proofs.Transactions.Burn
 
 A block changes the supply by its created wei, its burned fees and its other losses.
 
-From Shapella, each withdrawal creates its amount in Gwei times `10^9`, by [EIP-4895][e4895].
-
-Before Paris, the rewards of the beneficiary and of the ommers create ether.
-
-Section 11.3 of the Yellow Paper, Berlin version, sets them: [`Paper.tex`][yp].
-
-[EIP-3675][e3675] removes them from Paris.
-
-Before Paris, the DAO transfer at the first block of the DAO Fork moves ether, and keeps the supply.
-
-The burned fees are the base fee per gas times the gas used after the refunds.
-
-They add the base fee per blob gas times the blob gas, by [EIP-1559][e1559] and [EIP-4844][e4844].
-
-Before London the base fee per gas is 0, and before Dencun the base fee per blob gas is 0.
-
 The other losses are the surviving burns of SELFDESTRUCT and the balances that transactions delete.
-
-A surviving burn is a burn of SELFDESTRUCT that no rollback of its frame drops.
 
 From Glamsterdam, every surviving burn and every deleted balance is 0, by [EIP-8246][e8246].
 
-Two certificates of the same run give the same total of those losses.
+Rewards: Yellow Paper, Berlin version, section 11.3 ([`Paper.tex`][yp]), until [EIP-3675][e3675].
 
-That needs at most two ommers before Paris, which the checks of the block enforce.
-
-System calls also have surviving burn logs, since their stored code is arbitrary.
-
-They pay no fees and perform no transaction-end deletion.
-
-The certificates below keep those calls and each transaction in their execution order.
+Sources: [EIP-1559][e1559] and [EIP-4844][e4844] for the fees, [EIP-4895][e4895] for withdrawals.
 
 [e1559]: https://eips.ethereum.org/EIPS/eip-1559#specification
 [e3675]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-3675.md#specification
@@ -66,7 +42,7 @@ variable {fork : Fork}
 
 /-! ## What a block creates and burns -/
 
-/-- The wei that withdrawals create: the sum of their amounts in Gwei, times `10^9`. -/
+/-- The wei that withdrawals create: the sum of their amounts in Gwei, times `10^9`, by EIP-4895. -/
 def withdrawnWei (withdrawals : List Withdrawal) : Nat :=
   (withdrawals.map fun w => w.amount.toNat * GWEI_TO_WEI).sum
 
@@ -76,7 +52,7 @@ Each ommer comes with its beneficiary and its number.
 
 Before Paris, it is the reward of the beneficiary plus the reward of each ommer.
 
-From Paris, it is 0. -/
+From Paris, it is 0, by EIP-3675. -/
 def rewardWei (fork : Fork) (number : Nat) (ommers : List (Address × Nat)) : Nat :=
   if .paris ≤ fork then 0
   else minerReward fork ommers.length + (ommers.map fun o => ommerReward fork (number - o.2)).sum
@@ -89,9 +65,11 @@ def createdWei (block : Block fork Transaction) : Nat :=
 
 /-- The fees that the transactions of a body burn, in wei, from the gas counts of its output.
 
-It is the base fee per gas times their gas used after the refunds.
+It is the base fee per gas times their gas used after the refunds, by EIP-1559.
 
-It adds the base fee per blob gas times their blob gas. -/
+It adds the base fee per blob gas times their blob gas, by EIP-4844.
+
+Before London the base fee per gas is 0, and before Dencun the base fee per blob gas is 0. -/
 def burnedWei (env : BlockEnvironment fork) (output : BodyOutput fork) : Nat :=
   output.cumulativeGasUsed * baseFeeOf env + output.gas.blob * blobGasPriceOf env
 
@@ -118,7 +96,9 @@ theorem supply_applyDaoFork {tx tx' : TransactionState} (h : applyDaoFork fork t
   foldlM_ok_invariant (fun mid : TransactionState => mid.supply = tx.supply)
     (fun _ _ _ hmid hstep => (TransactionState.supply_moveEther hstep).trans hmid) rfl h
 
-/-- The DAO transfer of a block keeps the supply, whether it runs or not. -/
+/-- The DAO transfer of a block keeps the supply, whether it runs or not.
+
+It runs before Paris, at the first block of the DAO Fork. -/
 theorem supply_daoTransfer {config : ChainConfig} {number : Nat} {start state : BlockState}
     (h : daoTransfer config fork number start = .ok state) :
     (TransactionState.ofBlock state).supply = (TransactionState.ofBlock start).supply := by
@@ -181,7 +161,12 @@ theorem supply_payRewards {tx tx' : TransactionState} {coinbase : Address} {numb
       Nat.mod_eq_of_lt (minerReward_lt (hn (Nat.lt_of_not_le hparis)))]
     simp only [toNat_ommerReward, Nat.add_assoc]
 
-/-! ## System calls -/
+/-! ## System calls
+
+System calls also have surviving burn logs, since their stored code is arbitrary.
+
+They pay no fees and perform no transaction-end deletion.
+-/
 
 /-- A certificate of the message of a system call, with the gas meter of its fork. -/
 def SystemCallBurns (env : BlockEnvironment fork) (block : BlockState) (target : Address)
@@ -493,7 +478,9 @@ theorem BlockRequestsBurns.total_eq_zero_of_glamsterdam {env : BlockEnvironment 
 
 /-! ## The block -/
 
-/-- The losses beyond fees of the three phases that run messages in a block. -/
+/-- The losses beyond fees of the three phases that run messages in a block.
+
+A surviving burn is a burn of SELFDESTRUCT that no rollback of its frame drops. -/
 structure BlockLosses where
   /-- Surviving burns of the system calls before the transactions. -/
   start : BurnLog
@@ -506,7 +493,9 @@ structure BlockLosses where
 def BlockLosses.total (losses : BlockLosses) : Nat :=
   losses.start.total + losses.transactions.total + losses.requests.total
 
-/-- The phases of a block body that change the supply, with certificates of its losses. -/
+/-- The phases of a block body that change the supply, with certificates of its losses.
+
+The certificates keep the system calls and each transaction in their execution order. -/
 def BodyBurns (config : ChainConfig) (env : BlockEnvironment fork)
     (block : Block fork Transaction) (start : BlockState) (output : BlockOutput fork)
     (losses : BlockLosses) : Prop :=
@@ -602,12 +591,6 @@ theorem BodyBurns.total_eq_zero_of_glamsterdam {config : ChainConfig} {env : Blo
 
 /-- A block that the transition accepts changes the supply exactly as its run gives.
 
-The created wei includes withdrawals from Shapella and block and ommer rewards before Paris.
-
-The losses are the surviving burns of every system call and every transaction.
-
-They also count the balances that each transaction deletes.
-
 The fees come from the gas counts of the body, so the form also holds from Glamsterdam. -/
 theorem stateTransition_supply_eq {chain : BlockChain} {block : Block fork Transaction}
     {checkSeal : Bool} {post : State} (h : stateTransition chain block checkSeal = .ok post) :
@@ -615,8 +598,12 @@ theorem stateTransition_supply_eq {chain : BlockChain} {block : Block fork Trans
       recentHashes chain.recent = .ok hashes ∧
       applyBody chain.config (blockEnvironment chain.config hashes block.header) block
         ⟨chain.state, ∅, ∅, ∅, ∅⟩ = .ok output ∧
+      -- The losses are the surviving burns of every system call and every transaction.
+      --
+      -- They also count the balances that each transaction deletes.
       BodyBurns chain.config (blockEnvironment chain.config hashes block.header) block
         ⟨chain.state, ∅, ∅, ∅, ∅⟩ output losses ∧
+      -- The created wei counts withdrawals from Shapella, and block and ommer rewards before Paris.
       post.supply + burnedWei (blockEnvironment chain.config hashes block.header)
           output.toBodyOutput + losses.total = chain.state.supply + createdWei block := by
   obtain ⟨-, -, hcheck, hashes, output, _, hhashes, houtput, -, -, hpost⟩ :=
