@@ -145,7 +145,7 @@ def xmss_key_gen(seed: bytes) -> bytes:
     ...
 
 def xmss_sign(seed: bytes, leaf_index: int, message: bytes) -> bytes:
-    """`Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index."""
+    """`Sig(sk, idx, m)` over a hash `H`: a message's signature at a leaf index, and the updated key."""
     ...
 
 def xmss_verify(public_key: bytes, message: bytes, signature: bytes) -> bool:
@@ -1721,7 +1721,7 @@ def snappy_encode_frames(data: bytes) -> bytes:
     ...
 
 def snappy_masked_crc(data: bytes) -> int:
-    """The masked CRC-32C that a data chunk stores (§3)."""
+    """The masked CRC-32C that a data chunk stores (§3), at its start."""
     ...
 
 def varint_encode(value: int) -> bytes:
