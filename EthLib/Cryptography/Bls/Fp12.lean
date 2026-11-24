@@ -66,13 +66,7 @@ instance : Neg (Fp12 F) := ⟨neg⟩
 
 Over `Fp`, it equals `a * a` when `a^(p^4 - p^2 + 1) = 1`, and also at zero.
 
-Here `p` is the modulus of `Fp`, and `z_k` in `Fp2` is the coefficient of `w^k`.
-
-It is the form of §3.2 as a cubic extension over a quadratic one, with `x = w` and `y = w^3`.
-
-So the element is `a + b x + c x^2`, with `a = z0 + z3 y`, `b = z1 + z4 y`, `c = z2 + z5 y`.
-
-These lie in `Fp4 = Fp2[y] / (y^2 - (1 + i))`.
+Here `p` is the modulus of `Fp`.
 
 [source]: https://eprint.iacr.org/2009/565
 -/
@@ -89,6 +83,14 @@ def cyclotomicSquare (a : Fp12 F) : Fp12 F :=
   let tripleAddDouble (x y : Fp2 F) :=
     let d := x + y
     d + d + x
+  -- Use the form of §3.2 as a cubic extension over a quadratic one, with `x = w` and `y = w^3`.
+  --
+  -- With `z_k` in `Fp2` the coefficient of `w^k`, the element is `a + b x + c x^2`.
+  --
+  -- There `a = z0 + z3 y`, `b = z1 + z4 y` and `c = z2 + z5 y`.
+  --
+  -- These lie in `Fp4 = Fp2[y] / (y^2 - (1 + i))`.
+  --
   -- The squares `a^2`, `b^2` and `c^2` in `Fp4`.
   let sa := squareFp4 a.c0.c0 a.c1.c1
   let sb := squareFp4 a.c1.c0 a.c0.c2
@@ -126,19 +128,18 @@ Since `w^6 = ξ`, the `p`-th power of `w` is `γ w`.
 The exponent uses `p`, so this holds only when the base field models the integers mod `p`. -/
 def frobeniusCoeff : Fp2 F := Fp2.powNat ⟨BaseField.one, BaseField.one⟩ ((Fp.modulus - 1) / 6)
 
-/-- The Frobenius map `a ↦ a^p`.
-
-Write `a` as the sum of `a_k w^k` for `k < 6`, with each `a_k` in `Fp2`.
-
-The `p`-th power is a ring map, the `p`-th power of `a_k` is its conjugate, and `w^p = γ w`.
-
-So the `p`-th power of `a` is the sum of `conj(a_k) γ^k w^k`.
-
-In `c0 + c1 w`, the coefficient `a_k` sits in `c0` for even `k` and in `c1` for odd `k`. -/
+/-- The Frobenius map `a ↦ a^p`. -/
 def frobenius (a : Fp12 F) : Fp12 F :=
   let g1 := frobeniusCoeff
   let g2 := g1 * g1
   let g3 := g2 * g1
+  -- Write `a` as the sum of `a_k w^k` for `k < 6`, with each `a_k` in `Fp2`.
+  --
+  -- The `p`-th power is a ring map, the `p`-th power of `a_k` is its conjugate, and `w^p = γ w`.
+  --
+  -- So the `p`-th power of `a` is the sum of `conj(a_k) γ^k w^k`.
+  --
+  -- In `c0 + c1 w`, the coefficient `a_k` sits in `c0` for even `k` and in `c1` for odd `k`.
   ⟨⟨a.c0.c0.conjugate, a.c0.c1.conjugate * g2, a.c0.c2.conjugate * (g2 * g2)⟩,
    ⟨a.c1.c0.conjugate * g1, a.c1.c1.conjugate * g3, a.c1.c2.conjugate * (g3 * g2)⟩⟩
 

@@ -10,28 +10,19 @@ public import EthLib.Base.BigEndian
 # `Fp`
 
 The base field of BLS12-381, the integers mod the prime `p`.
-
-In hexadecimal, `p` is the 96 digits of these two lines, joined:
-
-- `1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f624`
-- `1eabfffeb153ffffb9feffffffffaaab`
-
-An element is held in Montgomery form, as twelve limbs of 32 bits.
-
-The limbs hold `a R mod p` for the element `a`, with `R = 2 ^ 384`.
-
-So a product needs no division by `p`, and an element reads and writes its bytes directly.
-
-The inverse comes from the extended Euclidean algorithm, on the integer of the element.
-
-Since `p = 3 mod 4`, a square root of a square `x` is `x^((p + 1) / 4)`.
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.Bls
 
-/-- BLS12-381 base field modulus. -/
+/-- BLS12-381 base field modulus.
+
+In hexadecimal, `p` is the 96 digits of these two lines, joined:
+
+- `1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f624`
+- `1eabfffeb153ffffb9feffffffffaaab`
+-/
 def Fp.modulus : Nat :=
   0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab
 
@@ -98,7 +89,13 @@ That holds because `2 p < 2 ^ 384`: the rows keep the state below `2 p`, so no w
     exact mulHigh_mulLow (n := 12) (k := 6) (m := 6) rfl (Limbs.fits _ 0) (by decide)
       (by decide +kernel) (Limbs.fits a 0) (Fp.val_pLimbs.symm ▸ ha :) (Limbs.fits b 0) _
 
-/-- An element of the BLS12-381 base field. -/
+/-- An element of the BLS12-381 base field.
+
+An element is held in Montgomery form, as twelve limbs of 32 bits.
+
+The limbs hold `a R mod p` for the element `a`, with `R = 2 ^ 384`.
+
+So a product needs no division by `p`, and an element reads and writes its bytes directly. -/
 abbrev Fp := Montgomery Fp.params
 
 namespace Fp
