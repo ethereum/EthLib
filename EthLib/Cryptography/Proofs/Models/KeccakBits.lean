@@ -3,21 +3,17 @@ module
 /-!
 # Keccak on bits
 
-The source is [FIPS 202](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf).
+The source is [FIPS 202][fips202]:
 
-FIPS 202 sections 3.1 to 3.4 define the state and permutation.
-
-Section 4, Algorithm 8, defines the sponge.
-
-Section 5.1, Algorithm 9, defines pad10*1.
-
-Section 5.2 defines KECCAK[c].
+- sections 3.1 to 3.4 define the state and permutation;
+- section 4, Algorithm 8, defines the sponge;
+- section 5.1, Algorithm 9, defines pad10*1;
+- section 5.2 defines KECCAK[c];
+- Appendix B.1 orders bits within each byte from least significant to most significant.
 
 Keccak-256 is KECCAK[512] with a 256-bit output.
 
 Keccak-512 is KECCAK[1024] with a 512-bit output.
-
-Appendix B.1 orders bits within each byte from least significant to most significant.
 
 Keccak-256 and Keccak-512 pad the message bits with pad10*1 directly.
 
@@ -28,6 +24,8 @@ The model imports nothing from the lane implementation, and it does not reuse it
 It is a model, so it lives in the proof library and no specification imports it.
 
 The sponge proofs show that the lane implementation equals this model on every message.
+
+[fips202]: https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf
 -/
 
 @[expose] public section

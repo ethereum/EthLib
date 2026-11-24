@@ -15,33 +15,17 @@ SP 800-38D §6.4 reads GHASH of blocks `X_1 ... X_m` as `X_1 H^m + ... + X_m H`.
 
 Take two different lists of `m` blocks, and a target block `c`.
 
-Consider the keys `H` where the XOR of their two GHASH values is `c`.
+A uniform key gives XOR `c` on their GHASH values with probability at most `m / 2^128`.
 
-Their residues are the roots of one polynomial.
+The same bound holds for the padded input of GCM, with `m` the length of the longer list.
 
-That polynomial is not zero, and its degree is at most `m`.
-
-In a field it has at most `m` roots, so a uniform key hits one with probability at most `m / 2^128`.
-
-A list of zero blocks in front does not change GHASH, so `[X]` and `[0, X]` agree for every key.
-
-GCM avoids that.
-
-It hashes the padded data, the padded ciphertext, and one block of both bit lengths (§7.1).
-
-When both bit lengths are below `2^64`, that block records both lengths.
-
-So two different pairs still give two different lists after the shorter one grows by zero blocks.
-
-The same bound then applies, with `m` the length of the longer list.
-
-This is Lemma 2 in Appendix A of McGrew and Viega, IACR ePrint 2004/193 (full version):
-
-<https://eprint.iacr.org/2004/193>
+This is Lemma 2 in Appendix A of McGrew and Viega, [IACR ePrint 2004/193][mv] (full version).
 
 The bound is a uniform count over the hash subkey.
 
 It is not a bound on tag forgery, and it says nothing about the cipher.
+
+[mv]: https://eprint.iacr.org/2004/193
 -/
 
 @[expose] public section
@@ -75,7 +59,15 @@ theorem ghash_pair_zeroBlock_eq (H x : Block) :
     ghash H [zeroBlock, x] = ghash H [x] :=
   ghash_zeroBlock_cons H [x]
 
-/-! ## The difference polynomial -/
+/-! ## The difference polynomial
+
+Take two different lists of `m` blocks, and a target block `c`.
+
+Consider the keys `H` where the XOR of their two GHASH values is `c`.
+
+Their residues are the roots of one polynomial.
+
+That polynomial is not zero, and its degree is at most `m`. -/
 
 section
 open Polynomial
@@ -290,9 +282,7 @@ So GHASH alone does not separate lists of different lengths.
 
 The length block can.
 
-When both bit lengths are below `2^64`, that block records both lengths.
-
-So two different pairs stay different after the shorter list grows by zero blocks. -/
+When both bit lengths are below `2^64`, that block records both lengths. -/
 
 /-- Zero blocks in front do not change GHASH, for any hash subkey `H`. -/
 theorem ghash_replicate_zeroBlock_append (H : Block) (k : Nat) (xs : List Block) :

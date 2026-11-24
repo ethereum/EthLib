@@ -12,25 +12,6 @@ SP 800-38D §6.3 calls the ring of block residues the field of `2^128` elements.
 The ring is GF(2)[u] modulo `1 + u + u^2 + u^7 + u^128`.
 
 It is a field because this modulus is irreducible over GF(2).
-
-## A test of irreducibility
-
-The binary field proofs hold a test for a monic polynomial over GF(2) of degree `2^(k+1)`.
-
-The modulus has degree `2^7`, so the test needs two conditions.
-
-- The modulus divides `u^(2^128) - u`.
-- The modulus is coprime to `u^(2^64) - u`.
-
-## The certificate
-
-The kernel checks both conditions for the modulus with the multiplication of Algorithm 1.
-
-The module before this one proves that this multiplication is the product of residues.
-
-- 128 squarings take the block of `u` back to itself, so `u^(2^128) = u` in the ring.
-- 64 squarings give the block of `u^(2^64)`, and a block below inverts `u^(2^64) - u`.
-- So the modulus is coprime to `u^(2^64) - u`.
 -/
 
 @[expose] public section
@@ -39,7 +20,18 @@ namespace EthLib.Cryptography.Aes.Gcm
 
 open Polynomial
 
-/-! ## The certificate -/
+/-! ## The certificate
+
+The binary field proofs hold a test for a monic polynomial over GF(2) of degree `2^(k+1)`.
+
+The modulus has degree `2^7`, so the test needs two conditions.
+
+- The modulus divides `u^(2^128) - u`.
+- The modulus is coprime to `u^(2^64) - u`.
+
+The kernel checks both conditions with the multiplication of Algorithm 1.
+
+The module before this one proves that this multiplication is the product of residues. -/
 
 /-- The block of `u`: bit `x_1` is set, so it is bit 126 of its integer. -/
 def uBlock : Block := blockOfNat (2 ^ 126)
@@ -102,6 +94,7 @@ theorem natDegree_modulus : modulus.natDegree = 128 :=
 
 /-- The modulus divides `u^(2^128) - u`. -/
 theorem modulus_dvd : modulus ∣ X ^ 2 ^ 2 ^ 7 - X := by
+  -- 128 squarings take the block of `u` back to itself, so `u^(2^128) = u` in the ring.
   have h := residue_square_iterate 128 uBlock
   rw [square_iterate_uBlock, residue_uBlock, show (2 : ℕ) ^ 128 = 2 ^ 2 ^ 7 by norm_num] at h
   rw [← AdjoinRoot.mk_eq_zero, map_sub, map_pow, AdjoinRoot.mk_X, ← h, sub_self]
@@ -110,6 +103,7 @@ theorem modulus_dvd : modulus ∣ X ^ 2 ^ 2 ^ 7 - X := by
 theorem residue_inverseWitness :
     (AdjoinRoot.root modulus ^ 2 ^ 2 ^ 6 + AdjoinRoot.root modulus) * residue inverseWitness
       = 1 := by
+  -- 64 squarings give the block of `u^(2^64)`, and the witness inverts `u^(2^64) - u`.
   have h := congrArg residue mul_inverseWitness
   rwa [residue_mul, residue_xorBlock, residue_square_iterate, residue_uBlock,
     residue_oneBlock] at h
@@ -136,6 +130,8 @@ theorem isCoprime_modulus : IsCoprime modulus (X ^ 2 ^ 2 ^ 6 - X) :=
 
 /-- The modulus `1 + u + u^2 + u^7 + u^128` is irreducible over GF(2). -/
 theorem irreducible_modulus : Irreducible modulus :=
+  -- The test of the binary field proofs, with `k = 6`, takes the two conditions above.
+  --
   -- The exponent `6 + 1` becomes `7` by a rewrite, not by unfolding the power.
   BinaryField.irreducible_of_dvd_of_isCoprime (k := 6) monic_modulus natDegree_modulus
     (by rw [show (6 : ℕ) + 1 = 7 from rfl]; exact modulus_dvd) isCoprime_modulus
