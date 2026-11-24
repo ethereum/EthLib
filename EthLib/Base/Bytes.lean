@@ -105,7 +105,7 @@ It reads the byte in place, since the array of all the bytes would cost a copy o
 /-! ## Bitwise operations -/
 
 /-- The exclusive or of two byte strings of one length, byte by byte. -/
-def xorBytes {n : Nat} (a b : Vector UInt8 n) : Vector UInt8 n :=
+@[inline] def xorBytes {n : Nat} (a b : Vector UInt8 n) : Vector UInt8 n :=
   Vector.zipWith (· ^^^ ·) a b
 
 /-- The exclusive or of two untyped byte strings, byte by byte, over the length of the first.

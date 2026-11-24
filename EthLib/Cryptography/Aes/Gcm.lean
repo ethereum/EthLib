@@ -35,7 +35,7 @@ def zeroBlock : Block :=
 
 /-- The XOR of two blocks. -/
 def xorBlock (X Y : Block) : Block :=
-  Vector.zipWith (· ^^^ ·) X Y
+  Base.xorBytes X Y
 
 /-- The integer of `R = 11100001 || 0^120`, SP 800-38D §6.3. -/
 def R : Nat :=
