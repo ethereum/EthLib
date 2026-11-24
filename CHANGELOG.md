@@ -12,12 +12,9 @@ Not yet released.
 - In Lean, `getBeaconProposerIndex_congr_of_seed` (`Consensus/Proofs/Accessors.lean`) says that two states of one fork get the same result from `getBeaconProposerIndex`, an error included ([#4245](https://github.com/ethereum/EthLib/issues/4245)).
   It takes an equal slot and, from Fusaka, equal proposer lookahead vectors.
   Before Fusaka, it also takes an equal seed of the current epoch with the proposer domain and equal checked active indices of that epoch.
-  Before Fusaka, it also takes an equal effective balance at every position of the registry of the first state.
+  Before Fusaka, it also takes an equal effective balance at every position of the registry of the state on the right of its equation.
   `getBeaconProposerIndex_congr` follows from it, with an unchanged statement.
   `RunStart.afterBlocks_succ` (`Totality/ChainHolds.lean`) says that one more block adds the step to the supply, effective, load, ceiling and slashed bounds of a run start.
-  `Steady.proposer` (`Transition/BalanceNotRaisedBlock.lean`) reads `getBeaconProposerIndex_congr_of_seed`.
-  In `Totality/ChainBlock.lean`, `reached_le_ceilingAt`, `RunBounded.of_processBlock` and `slashingTurn_balanceRoom` read `RunStart.afterBlocks_succ`.
-  `Kept.proposer` (`Transition/BlockCredits.lean`) reads the existing `getBeaconProposerIndex_of_kept`.
 
 - In Lean, `readP256_eq_ok_iff` in `EthLib.Networking.Proofs.Libp2p.Tls` says that the libp2p TLS reader of a P-256 key accepts exactly a SubjectPublicKeyInfo of 26 fixed octets (RFC 5480 §§2.1.1, 2.1.1.1, 2.2), then octets that the uncompressed decoder accepts, and returns their point ([#4261](https://github.com/ethereum/EthLib/pull/4261)).
   So it refuses another key type or curve, another parameter form, a long length form, an unused bit and a trailing octet.

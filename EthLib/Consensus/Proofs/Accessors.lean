@@ -2287,7 +2287,7 @@ theorem proposerSearch_congr_validators {fork : Fork} {first second : Array Vali
       · have far : ¬ i + 1 < 18446744073709551616 := by omega
         simp only [far, dite_false]
 
-/-- Two states of one fork get the same result from `getBeaconProposerIndex`, an error included.
+/-- Two states of one fork read the same proposer of the slot, or fail with the same error.
 
 The theorem takes an equal slot.
 

@@ -641,9 +641,9 @@ The facts of the chain hold at `advanced`, after advancing the slots and before 
 
 The slashing count and the deposits of the block are within the limits, which the step covers.
 
-Then four bounds hold for a validator in the registry at the turn.
+Then three bounds hold for a validator in the registry at the turn, and one for `advanced`.
 
-A successful read of the slashed balance of its epoch plus its effective balance is below `2^64`.
+The slashed balance of the current epoch, if read, plus its effective balance is below `2^64`.
 
 From Altair, its whistleblower reward times the proposer weight is below `2^64`.
 
@@ -789,7 +789,7 @@ private theorem slashingTurn_balanceRoom {start : RunStart} {step : BlockStep}
 
 /-- Take the state a block reaches after its proposer slashings and first `j` attester slashings.
 
-When the block has fewer than `j` attester slashings, that is the state after all of them.
+When the block has at most `j` attester slashings, that is the state after all of them.
 
 The conditions of the chain hold, and one more block fits its count.
 
