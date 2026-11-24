@@ -8,21 +8,7 @@ public import EthLib.Execution.Proofs.Evm.Interpreter
 
 A step changes the state only through a few writes, and each write fails in its own way.
 
-A lawful meter fails a charge only for lack of gas.
-
-A lookup of code fails when the state lacks the code of a code hash.
-
-SSTORE fails when the address it runs at has no account in the state.
-
-SELFDESTRUCT credits its beneficiary, which fails when that balance would reach `2^256`.
-
-It moves the whole balance of its account, so it never lacks the amount.
-
 So a step fails with an error of the state only for missing code, an absent account or an overflow.
-
-An overflow comes only from that credit, at the account of the frame.
-
-It runs from a state that reads as the state of the frame.
 
 In particular no step fails for a balance below the amount it takes.
 -/
@@ -127,6 +113,7 @@ private theorem cls_pushWord (evm : Evm fork Meter) (x : Base.U256) :
 private theorem cls_chargeGas [LawfulGasMeter Meter] (evm : Evm fork Meter) (amount : Nat) :
     Cls t o v (chargeGas evm amount) := by
   refine Cls.bind (fun e h => ?_) fun _ _ => Cls.pure _
+  -- A lawful meter fails a charge only for lack of gas.
   cases LawfulGasMeter.charge_error h
 
 /-- A charge of state gas is allowed. -/
@@ -162,6 +149,7 @@ omit [GasMeter Meter] in
 /-- A read of code fails only for a missing code. -/
 private theorem cls_accountCode (evm : Evm fork Meter) (address : Address) :
     Cls t o v (accountCode evm address) := by
+  -- A lookup of code fails when the state lacks the code of a code hash.
   refine Cls.mapError_state fun s h => .inl ?_
   unfold State.TransactionState.getCode at h
   split at h
@@ -193,6 +181,7 @@ private theorem selfdestructTransfer_eq_error (tx : TransactionState)
     (originator beneficiary : Address) {s : StateError}
     (h : selfdestructTransfer fork tx originator beneficiary = .error s) :
     ∃ address, s = .balanceOverflow address := by
+  -- SELFDESTRUCT credits its beneficiary, which fails when that balance would reach `2^256`.
   unfold selfdestructTransfer at h
   split at h
   · rcases Base.bind_eq_error h with h | ⟨a, -, h⟩
@@ -305,6 +294,7 @@ private theorem cls_sstoreStep [LawfulGasMeter Meter] (evm : Evm fork Meter) :
     | error e' =>
       rw [hx] at h
       cases h
+      -- SSTORE fails when the address it runs at has no account in the state.
       obtain ⟨hnone, rfl⟩ :=
         (State.TransactionState.setStorage_eq_error_iff _ _ _ _ _).mp hx
       have hmsg : e2.message = evm.message := c2.message

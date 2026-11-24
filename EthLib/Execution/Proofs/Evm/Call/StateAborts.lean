@@ -9,23 +9,7 @@ import EthLib.Execution.Proofs.Evm.Call.ContractAddress
 
 Five kinds of error abort a run: an error of the state, an encoding, an opcode, a fork, a word.
 
-The last is a number of the environment that no word holds.
-
-Every opcode of a fork has an instruction there, so no step fails for an unspecified opcode.
-
 No step fails for a fork whose rules are not yet specified.
-
-Only CREATE encodes, to find the address of its new account from the sender and its nonce.
-
-That encoding succeeds for every nonce below `2^256`.
-
-EIP-2681 bounds every nonce by `2^64 - 1`, and every call keeps that bound.
-
-So does every creation whose address starts with a nonce below `2^64 - 1`.
-
-An instruction aborts on a number of its environment that no word holds.
-
-A message and every message that it sends share one environment, so a bound on it holds for all.
 
 So a run from a state whose nonces fit aborts only with an error of the state.
 
@@ -317,6 +301,7 @@ private theorem fine_instruction [LawfulGasMeter Meter] {op : Op}
   rcases orElse_eq_some hrun with hf | hrun
   · exact fine_returnOpStep hf evm
   rcases orElse_eq_some hrun with hf | hrun
+  -- An instruction aborts on a number from its environment that no word holds.
   · exact fine_environmentStep hf hwords
   rcases orElse_eq_some hrun with hf | hrun
   · exact fine_accountStep hf evm
@@ -350,9 +335,11 @@ private theorem fine_launchCreate [LawfulGasMeter Meter] {evm : Evm fork Meter}
   split
   · fine
   refine Fine.bind ?_ fun _ _ => ?_
+  -- Only CREATE encodes, to find the address of its new account from the sender and its nonce.
   · unfold creationAddress
     split
     · exact Fine.ok _
+    -- That encoding succeeds for every nonce below `2^256`.
     · obtain ⟨address, ha⟩ := createAddress_ok evm.message.currentTarget
         (Nat.lt_of_le_of_lt (read evm.message.currentTarget) (by decide))
       rw [ha]
@@ -428,6 +415,9 @@ private theorem fine_step [LawfulGasMeter Meter] {evm : Evm fork Meter}
         split
         · exact fine_messageInstruction (by assumption) hfit
         · rename_i hm
+          -- Every opcode of a fork has an instruction there.
+          --
+          -- So no step fails for an unspecified opcode.
           rcases instruction_or_messageInstruction_isSome (Meter := Meter)
             (since_le_of_ofByte_eq_some decoded) with h | h
           · rw [hi] at h
@@ -459,23 +449,20 @@ private theorem fine_resume [LawfulGasMeter Meter] {evm caller child : Evm fork 
 
 /-- A run of a frame whose nonces fit fails only with an error of the state.
 
-Each message that the runner runs from such a state must fail only with an error of the state.
-
-Each message that the runner completes must keep every nonce within the bound.
-
-For a creation, both are needed only when its address starts with a nonce of at most 1.
-
-The numbers that the environment of the frame pushes as words must fit them.
-
-The first condition needs the same of the environment of each message. -/
+The numbers that the environment of the frame pushes as words must fit them. -/
 private theorem runFrame_state [LawfulGasMeter Meter] {bound : Nat}
     {runChild : MessageRunner fork Meter bound}
+    -- From such a state, each message that the runner runs must fail only with a state error.
     (never : ∀ caller message lt e, caller.state.NoncesFit →
+      -- This needs the same of the environment of each message.
       WordsFit message.blockEnv message.txEnv →
+      -- For a creation, this is needed only when its address starts with a nonce of at most 1.
       (message.target = none → (caller.state.getAccount message.currentTarget).nonce ≤ 1) →
       runChild caller message lt = .error e → ∃ error, e = .state error)
+    -- Each message that the runner completes must keep every nonce within the bound.
     (keeps : ∀ caller message lt ended, runChild caller message lt = .ok ended →
       caller.state.NoncesFit →
+      -- For a creation, this is needed only when its address starts with a nonce of at most 1.
       (message.target = none → (caller.state.getAccount message.currentTarget).nonce ≤ 1) →
       ended.val.state.NoncesFit)
     {evm : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound}
@@ -499,7 +486,9 @@ private theorem runFrame_state [LawfulGasMeter Meter] {bound : Nat}
     exact hwords
   case case4 hstep _ _ ran =>
     cases h
-    -- The message that the step sends has the environment of the frame.
+    -- A message and every message that it sends share one environment.
+    --
+    -- So the message that the step sends has the environment of the frame, and a bound on it.
     obtain ⟨hblock, htx⟩ := env_of_step_eq_child hstep
     exact never _ _ _ _ ((stepRules_noncesFit.step hstep).1 hfit) (hblock ▸ htx ▸ hwords)
       (step_eq_child_create_nonce_le hstep) ran
@@ -582,6 +571,9 @@ private theorem processMessage_state_of_gas [LawfulGasMeter Meter] (n : Nat) :
       · rename_i hnone
         exact (ih child.gas lt).2 child _ _ _ _ rfl hfit hwords
           (Nat.lt_of_le_of_lt (hnonce hnone) (by decide)) e h
+    -- EIP-2681 bounds every nonce by `2^64 - 1`, and every call keeps that bound.
+    --
+    -- So does every creation whose address starts with a nonce below `2^64 - 1`.
     have keeps : ∀ (caller : Evm fork Meter) (child : Message fork) ended, (match child.target with
           | some _ => processMessage (Meter := Meter) fork child caller.state caller.substate.child
           | none => processCreateMessage (Meter := Meter) fork child caller.state

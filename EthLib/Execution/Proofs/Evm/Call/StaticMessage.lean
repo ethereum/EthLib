@@ -10,29 +10,13 @@ public import EthLib.Execution.Proofs.Evm.Call.StaticStep
 
 A message that is static and is a call changes no storage and no transient storage.
 
-Before Paris, a call touches its target, which gives an absent target the empty account.
-
 From Byzantium, [EIP-214][e214] adds STATICCALL, and a static call changes the state by touches.
-
-Each touched address goes from no account to the empty account.
 
 [EIP-161][e161] deletes the touched empty accounts.
 
 The only change left is the deletion of accounts that were empty before.
 
-The storage of each deleted account reads zero.
-
 From Paris, [EIP-7523][e7523] allows no empty account, so a call drops the touch.
-
-Every address then stays as it was, up to the records of reads.
-
-Each statement holds whatever the code of the message does, however deep its calls.
-
-The message runs code at an account that holds code, when it has code.
-
-A value that it sends goes to its own sender, whose account holds code.
-
-A message that fails rolls back to its start, so the statements hold for it too.
 
 [e161]: https://eips.ethereum.org/EIPS/eip-161#specification
 [e214]: https://eips.ethereum.org/EIPS/eip-214#specification
@@ -178,6 +162,7 @@ theorem touchesOnly_startState (message : Message fork) (state : TransactionStat
   unfold startState
   split
   · rename_i hlt
+    -- Before Paris, a call touches its target, which gives an absent target the empty account.
     refine ⟨_, touchesOnly_touchAccount state message.currentTarget,
       TransactionState.parent_touchAccount state message.currentTarget, ?_⟩
     intro address hmem
@@ -669,6 +654,7 @@ theorem processMessage_touchesOnly_static [LawfulGasMeter Meter] :
           ((.spuriousDragon ≤ fork → address ∈ ended.val.substate.touchedAccounts) ∨
             address = message.currentTarget) := by
   intro n
+  -- Each statement holds whatever the code of the message does, however deep its calls.
   induction n using Nat.strongRecOn with
   | _ n ih =>
     intro message state substate meter held hn hmsg ended h
@@ -759,6 +745,7 @@ theorem processMessage_touchesOnly_static [LawfulGasMeter Meter] :
     simp only at hval
     rw [← hval]
     obtain ⟨t, ht, hpar, hmeq, hrec⟩ := core
+    -- A message that fails rolls back to its start, so the statements hold for it too.
     unfold rollbackOnError
     split
     · exact ⟨[], TouchesOnly.of_sameOutside (TransactionState.sameOutside_restoreTxState hpar),
@@ -787,44 +774,38 @@ theorem processMessage_static [LawfulGasMeter Meter] (hfork : .paris ≤ fork) :
 
 /-- A static message that is a call changes no address of the state, up to the records of reads.
 
-From Paris, the account, storage and transient storage of every address read as before.
-
-That holds whatever its code does, however deep its calls.
-
-The message must be static and be a call, not a creation.
-
-Its code, when it has any, runs at an account that holds code.
-
-A value that it sends goes to its own sender, whose account holds code.
-
-A message with no value, as STATICCALL sends, satisfies the last condition without a premise.
-
 Before Paris a call touches the account that it calls, so the statement does not cover it. -/
 theorem processMessage_sameOutside_static [LawfulGasMeter Meter] (hfork : .paris ≤ fork)
     {message : Message fork} {state : State.TransactionState} {substate : Substate}
     {meter : Meter} {held : GasMeter.gasHeld meter ≤ message.gas}
+    -- The message must be static and be a call, not a creation.
+    --
+    -- Its code, when it has any, runs at an account that holds code.
+    --
+    -- A value that it sends goes to its own sender, whose account holds code.
+    --
+    -- A message with no value, as STATICCALL sends, meets the last condition without a premise.
     (hmsg : StaticMessage state message) {ended}
     (h : processMessage fork message state substate meter held = .ok ended) :
+    -- From Paris, the account, storage and transient storage of every address read as before.
     State.TransactionState.SameOutside [] state ended.val.state :=
+  -- That holds whatever its code does, however deep its calls.
   (processMessage_static hfork message.gas message state substate meter held rfl hmsg ended h).1
 
 /-- From Byzantium, a static message changes the state by touches of absent accounts.
 
-The storage and the transient storage of every address stay as they were.
-
-Each touched address had no account, and holds the empty account after.
-
-When the message fails, or from Paris, no address is touched.
-
-Otherwise, each touched address is in the touched accounts of the substate, or is the target. -/
+The storage and the transient storage of every address stay as they were. -/
 theorem processMessage_touches_static [LawfulGasMeter Meter] (hfork : .byzantium ≤ fork)
     {message : Message fork} {state : TransactionState} {substate : Substate}
     {meter : Meter} {held : GasMeter.gasHeld meter ≤ message.gas}
     (hmsg : StaticMessage state message) {ended}
     (h : processMessage fork message state substate meter held = .ok ended) :
+    -- Each touched address had no account, and holds the empty account after.
     ∃ touched, TouchesOnly touched state ended.val.state ∧
       ended.val.state.parent = state.parent ∧
+      -- When the message fails, or from Paris, no address is touched.
       ∀ address ∈ touched, ended.val.error = none ∧ fork < .paris ∧
+        -- Each touched address is in the touched accounts of the substate, or is the target.
         (address ∈ ended.val.substate.touchedAccounts ∨ address = message.currentTarget) := by
   obtain ⟨touched, hto, hpar, -, hrec⟩ :=
     processMessage_touchesOnly_static message.gas message state substate meter held rfl hmsg ended h
@@ -902,43 +883,38 @@ theorem destroyTouchedEmptyAccounts_at (hfork : .spuriousDragon ≤ fork)
 
 STATICCALL comes from [EIP-214](https://eips.ethereum.org/EIPS/eip-214#specification), at Byzantium.
 
-The deletion is that of [EIP-161](https://eips.ethereum.org/EIPS/eip-161#specification).
-
-When the message succeeds before Paris, the list must hold the touched accounts of the substate.
-
-It must also hold the target when that account is empty.
-
-Every address outside the list keeps its account, its storage and its transient storage.
-
-Each listed address that held the empty account before is deleted.
-
-Every other address keeps its account, or its absence, even one that the call touched.
-
-All transient storage stays as it was, and so does the block.
-
-The storage of a listed address that is empty when the message ends is zero.
-
-All other storage is unchanged. -/
+The deletion is that of [EIP-161](https://eips.ethereum.org/EIPS/eip-161#specification). -/
 theorem destroyTouchedEmptyAccounts_processMessage_static [LawfulGasMeter Meter]
     (hfork : .byzantium ≤ fork) {message : Message fork} {state : TransactionState}
     {substate : Substate} {meter : Meter} {held : GasMeter.gasHeld meter ≤ message.gas}
     (hmsg : StaticMessage state message) {ended}
     (h : processMessage fork message state substate meter held = .ok ended)
     {toDelete : List Address}
+    -- If the message succeeds before Paris, the list must hold the substate's touched accounts.
     (hcover : ended.val.error = none → fork < .paris →
       (∀ address ∈ ended.val.substate.touchedAccounts, address ∈ toDelete) ∧
+        -- It must also hold the target when that account is empty.
         (ended.val.state.accountExistsAndIsEmpty message.currentTarget = true →
           message.currentTarget ∈ toDelete)) :
+    -- Every address outside the list keeps its account, its storage and its transient storage.
     TransactionState.SameOutside toDelete state
       (ended.val.state.destroyTouchedEmptyAccounts fork toDelete) ∧
+      -- The block stays as it was.
       (ended.val.state.destroyTouchedEmptyAccounts fork toDelete).parent = state.parent ∧
+      -- All transient storage stays as it was.
       (∀ address key,
         (ended.val.state.destroyTouchedEmptyAccounts fork toDelete).getTransientStorage
           address key = state.getTransientStorage address key) ∧
+      -- Each listed address that held the empty account before is deleted.
+      --
+      -- Every other address keeps its account, or its absence, even one that the call touched.
       (∀ address,
         (ended.val.state.destroyTouchedEmptyAccounts fork toDelete).getAccountOptional address =
           if address ∈ toDelete ∧ state.getAccountOptional address = some EMPTY_ACCOUNT then none
           else state.getAccountOptional address) ∧
+      -- The storage of a listed address that is empty when the message ends is zero.
+      --
+      -- All other storage is unchanged.
       ∀ address key,
         (ended.val.state.destroyTouchedEmptyAccounts fork toDelete).getStorage address key =
           if address ∈ toDelete ∧

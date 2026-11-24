@@ -9,29 +9,11 @@ public import EthLib.Execution.Proofs.State.Supply
 
 Every successful step of every frame keeps or lowers the supply of ether, at every fork.
 
-A transfer of value moves ether, and so keeps the supply.
-
-A creation, a new code, a write of storage and the rise of a nonce keep it too.
-
 Only SELFDESTRUCT can lower it, when the account it runs in is its own beneficiary.
-
-Before Cancun, SELFDESTRUCT credits the beneficiary, then sets the balance of its account to 0.
-
-So an account that is its own beneficiary loses its balance.
 
 From Cancun, it does so only for an account created in the same transaction, by [EIP-6780][e6780].
 
 From Glamsterdam, it never does: the account keeps its balance, by [EIP-8246][e8246].
-
-So from Glamsterdam no step burns ether.
-
-From Cancun, a message keeps the supply when its transaction has created no account by its end.
-
-A frame that fails rolls back to its snapshot, which gives back the supply of its start.
-
-So a call or creation that returns a frame ends with at most the supply it started with.
-
-That holds whether or not the frame ends with an error.
 
 The deletions at the end of a transaction are not part of a message, so they are not covered here.
 
@@ -52,7 +34,7 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- Whether `fork` is Glamsterdam or later, or Cancun or later with no account created in `tx`.
 
-Then a message that ends in `tx` keeps the supply. -/
+Then a message that ends in `tx` keeps the supply, and from Glamsterdam no step burns ether. -/
 def BurnsNone (fork : Fork) (tx : TransactionState) : Prop :=
   .glamsterdam ≤ fork ∨ (.dencun ≤ fork ∧ ∀ address, address ∉ tx.createdAccounts)
 
@@ -91,16 +73,15 @@ theorem SupplyLe.of_eq {tx tx' : TransactionState} (supply : tx'.supply = tx.sup
 
 /-- The wei that the move of the balance of SELFDESTRUCT burns, in the state `tx`.
 
-It burns the balance of the account it runs in, when that account is its own beneficiary.
-
-Before Cancun, it burns it for every such account.
-
-From Cancun, it burns it only for an account created in the same transaction.
-
-From Glamsterdam, it never burns it. -/
+It burns the balance of the account it runs in, when that account is its own beneficiary. -/
 def selfdestructBurn (fork : Fork) (tx : TransactionState) (originator beneficiary : Address) :
     Nat :=
   if originator = beneficiary ∧
+      -- Before Cancun, it burns it for every such account.
+      --
+      -- From Cancun, it burns it only for an account created in the same transaction.
+      --
+      -- From Glamsterdam, it never burns it.
       (fork < .dencun ∨ (fork < .glamsterdam ∧ originator ∈ tx.createdAccounts)) then
     tx.balanceOf originator
   else 0
@@ -146,6 +127,8 @@ theorem supply_selfdestructTransfer {tx tx' : TransactionState}
       simp only [selfdestructBurn, notBurn, ↓reduceIte, Nat.add_zero]
       exact moved
   · -- Before Cancun, the balance goes to the beneficiary, then the account is set to 0.
+    --
+    -- So an account that is its own beneficiary loses its balance.
     rename_i hdencun
     obtain ⟨mid, hm, h⟩ := Base.bind_ok_iff.mp h
     have added := TransactionState.supply_createEther hm
@@ -290,6 +273,7 @@ theorem supply_entered {message : Message fork} {state entry : TransactionState}
     entry.supply = state.supply := by
   rcases h with ⟨-, rfl, -⟩ | ⟨-, moved, -⟩
   · exact supply_startState _ _
+  -- A transfer of value moves ether, and so keeps the supply.
   · exact (TransactionState.supply_moveEther moved).trans (supply_startState _ _)
 
 /-- A successful deposit of code ends with the supply of the snapshot, or of the init code's end.
@@ -303,6 +287,7 @@ theorem supply_depositCode {snapshot : TransactionState} {evm after : Evm fork M
     exact .inl (TransactionState.supply_restoreTxState hp)
   · rw [hs]
     exact .inr rfl
+  -- A new code keeps the supply.
   · exact .inr (TransactionState.supply_setCode hs)
 
 /-- A successful deposit of code keeps or lowers the supply of the state before the creation.
@@ -325,12 +310,15 @@ theorem stepRules_supplyLe :
     StepRules fork (fun a b : Evm fork Meter => SupplyLe fork a.state b.state) where
   trans := SupplyLe.trans
   static h := SupplyLe.of_eq (TransactionState.supply_eq_of_sameOutside h.state) h.created
+  -- A write of storage keeps the supply.
   sstore _ _ _ _ _ _ h :=
     SupplyLe.of_eq (TransactionState.supply_setStorage h)
       (TransactionState.createdAccounts_setStorage h)
   tstore _ _ _ _ := SupplyLe.of_eq rfl rfl
   log _ hs _ _ _ := by rw [hs]; exact SupplyLe.refl _
+  -- Only SELFDESTRUCT can lower the supply.
   selfdestruct _ _ h := supplyLe_finishSelfdestruct h
+  -- The rise of a nonce keeps the supply.
   incrementNonce _ _ _ _ h :=
     SupplyLe.of_eq (TransactionState.supply_incrementNonce h)
       (TransactionState.createdAccounts_modifyState h)
@@ -376,12 +364,14 @@ theorem processMessage_supplyLe [LawfulGasMeter Meter] (n : Nat) :
       obtain ⟨hle, hpar⟩ := hrun
       have hp : ended.state.parent = state.parent := hpar.trans h1.2
       refine ⟨?_, (parent_rollbackOnError state ended).trans hp⟩
+      -- A frame that fails rolls back to its snapshot, which gives back the supply of its start.
       unfold rollbackOnError
       split
       · exact SupplyLe.of_supply_eq (TransactionState.supply_restoreTxState hp)
           fun x hx => (h1.1.trans hle).2.1 x hx
       · exact h1.1.trans hle)
     (fun hp hm hd =>
+      -- Preparing a creation keeps the supply, and the deposit of code keeps or lowers it.
       ⟨supplyLe_depositCode ((supplyLe_prepareCreation hp).trans hm.1)
           (hm.2.trans (parent_prepareCreation hp)) hd,
         (parent_depositCode hd).trans (hm.2.trans (parent_prepareCreation hp))⟩)

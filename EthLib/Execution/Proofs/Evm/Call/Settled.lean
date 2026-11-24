@@ -7,15 +7,7 @@ public import EthLib.Execution.Proofs.Evm.Call.Nonce
 
 An account is settled when it exists, and from Paris also holds a nonce or code.
 
-Within a run, a change deletes an account only when it leaves it empty, and only from Paris.
-
-No step lowers a nonce, and only the deposit of code changes a code hash.
-
-That deposit goes to a new account, which from Spurious Dragon holds a nonce of at least 1.
-
-A frame that fails rolls back to its snapshot, where every settled account of its start is settled.
-
-So every settled account stays settled through every call and creation.
+Every settled account stays settled through every call and creation.
 -/
 
 @[expose] public section
@@ -90,6 +82,7 @@ theorem settledLe_modifyState {tx tx' : TransactionState} {address : Address}
   by_cases hne : other = address
   · subst hne
     obtain ⟨account', hfa, hself, -⟩ := TransactionState.modifyState_eq_ok h
+    -- A change deletes an account only when it leaves it empty, and only from Paris.
     rcases Nat.lt_or_ge fork.ctorIdx Fork.paris.ctorIdx with hlt | hge
     · exact ⟨account', TransactionState.getAccountOptional_modifyState hlt hfa h, .inl hlt⟩
     · apply settled_of_getAccount
@@ -302,6 +295,7 @@ private theorem processMessage_settled_induction [LawfulGasMeter Meter] (n : Nat
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
         CreateSettled message state substate meter ended.val) := by
+  -- No step lowers a nonce, and only the deposit of code changes a code hash.
   have T := (stepRules_settledStep (fork := fork) (Meter := Meter)).and stepRules_messageCode
   refine processMessage_rel_byKind
     (R := fun a b => SettledStep a b ∧ b.message = a.message ∧ b.code = a.code)
@@ -340,6 +334,9 @@ private theorem processMessage_settled_induction [LawfulGasMeter Meter] (n : Nat
     have hpar : ended.state.parent = state.parent := hp.trans hp0
     refine ⟨⟨⟨?_, ?_⟩, (parent_rollbackOnError state ended).trans hpar⟩,
       (message_rollbackOnError state ended).trans hm⟩
+    -- A frame that fails rolls back to its snapshot.
+    --
+    -- There, every settled account of its start is settled.
     · unfold rollbackOnError
       split
       · exact settledLe_restoreTxState hpar
@@ -360,6 +357,9 @@ private theorem processMessage_settled_induction [LawfulGasMeter Meter] (n : Nat
       exact (settledLe_prepareCreation hprep).trans hs
     · refine ((settledLe_prepareCreation hprep).trans hs).trans (settledLe_setCode ?_ hst)
       intro hfork
+      -- The deposit of code goes to a new account.
+      --
+      -- From Spurious Dragon, that account holds a nonce of at least 1.
       have h1 := nonce_ne_zero_prepareCreation hprep (Nat.le_trans (by decide) hfork)
       have h2 := hn message.currentTarget
       rw [hm]

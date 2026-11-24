@@ -9,21 +9,7 @@ From Cancun, SELFDESTRUCT marks its account for deletion only when its transacti
 
 [EIP-6780][e6780] sets this rule.
 
-The created accounts of a transaction only grow.
-
-A creation adds its address, and a rollback keeps them.
-
-So an account counts as created here even when the frame that created it failed.
-
-A child that succeeds passes its accounts to delete to its caller.
-
-A child that fails passes none, and its caller keeps its own.
-
-Take a call or creation that returns a frame, with or without an error.
-
-Each account that frame marks for deletion was marked before the message started.
-
-Otherwise the transaction has created it by the end of the message.
+So each account that a message marks was marked before it, or created in the transaction.
 
 The deletions at the end of a transaction are not part of a message, so they are not covered here.
 
@@ -105,6 +91,7 @@ theorem deletesCreated_incorporateChild {caller child : Evm fork Meter}
     DeletesCreated caller (incorporateChild fork caller child) := by
   rw [DeletesCreated, state_incorporateChild]
   refine ⟨h.1, fun x hx => ?_⟩
+  -- The caller keeps its own accounts to delete, whether or not the child fails.
   rcases mem_accountsToDelete_incorporateChild.mp hx with hx | ⟨-, hx⟩
   · exact .inl hx
   · exact h.2 x hx
@@ -161,6 +148,7 @@ theorem deletesCreated_step (hfork : .dencun ≤ fork) {evm : Evm fork Meter}
 theorem createdLe_prepareCreation {tx tx' : TransactionState} {address : Address}
     (h : prepareCreation fork tx address = .ok tx') : CreatedLe tx tx' := by
   unfold prepareCreation at h
+  -- A creation adds its address.
   have h0 : CreatedLe tx ((tx.destroyStorage address).markAccountCreated address) :=
     fun _ hx => Std.ExtTreeSet.mem_insert.mpr (.inr hx)
   split at h
@@ -238,6 +226,9 @@ theorem deletesCreated_processMessage_induction [LawfulGasMeter Meter] (hfork : 
           substate1.accountsToDelete = substate.accountsToDelete := by
         refine ⟨createdAccounts_entered hentry, ?_⟩
         rcases hentry with ⟨-, -, rfl⟩ | ⟨-, -, rfl⟩ <;> rfl
+      -- A rollback keeps the created accounts.
+      --
+      -- So an account counts as created here even when the frame that created it failed.
       obtain ⟨hc, hs⟩ := createdAccounts_rollbackOnError state ended
       refine ⟨fun x hx => ?_, fun x hx => ?_⟩
       · rw [hc]

@@ -5,21 +5,9 @@ public import EthLib.Execution.Proofs.Evm.Call.Fresh
 /-!
 # Proofs: a message never marks for deletion an account with a nonce above 0 and no code
 
-SELFDESTRUCT marks for deletion at most the account that runs it.
+Only a frame that runs code at an account can mark it for deletion.
 
-So only a frame that runs code at an account can mark it.
-
-Take an account with a nonce above 0, no code, and not created in its transaction.
-
-A message never creates it, so it keeps no code.
-
-A call to it runs its code, which is empty, so that frame stops at once.
-
-CALLCODE and DELEGATECALL run at the account of their sender, and no code there sends them.
-
-A creation never goes to it, since it has a nonce.
-
-So no frame that runs code has it as its current target, and no message marks it.
+No frame runs code at an account with a nonce above 0 and no code, not created in its transaction.
 
 These facts hold at every fork, whether or not the message ends with an error.
 
@@ -49,6 +37,7 @@ theorem PlainAccount.of_createsFresh {allowed : Address → Prop} {address : Add
   obtain ⟨hn, hc, hcode⟩ := plain
   have hc' : address ∉ tx'.createdAccounts := fun hx =>
     (h.fresh address hx hc).elim (fun h0 => by omega) hallowed
+  -- A message never creates the account, so it keeps no code.
   exact ⟨Nat.le_trans hn (h.nonce address), hc', h.code address hc' hcode⟩
 
 /-- A caller that takes in a child marks `address` only if the caller or the child marks it. -/
@@ -71,6 +60,7 @@ theorem stepRules_unmarked (address : Address) :
   sstore _ _ _ _ _ _ _ := ⟨id, fun _ hx => hx⟩
   tstore _ _ _ _ := ⟨id, fun _ hx => hx⟩
   log _ _ hsub hm _ := ⟨fun hne => hm ▸ hne, fun _ hx => by rw [hsub]; exact hx⟩
+  -- SELFDESTRUCT marks for deletion at most the account that runs it.
   selfdestruct _ _ h := by
     refine ⟨fun hne => message_finishSelfdestruct h ▸ hne, fun hne hx => ?_⟩
     unfold finishSelfdestruct at h
@@ -91,27 +81,22 @@ theorem stepRules_unmarked (address : Address) :
 
 /-- Every message that returns a frame keeps a plain account unmarked, unless it runs code there.
 
-A call must run no code when its current target is that account.
-
-A creation must not go to that account.
-
-The account must be plain in the state that the message starts from.
-
-If it is not marked at the start, it is not marked at the end.
-
-That holds at every fork, whether or not the message ends with an error.
-
-The proof is by strong induction on the gas of the message, for calls and creations together. -/
+That holds at every fork, whether or not the message ends with an error. -/
 theorem unmarked_processMessage_induction [LawfulGasMeter Meter] (address : Address) (n : Nat) :
     (∀ (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processMessage fork message state substate meter held = .ok ended →
+        -- A call must run no code when its current target is that account.
+        --
+        -- The account must be plain in the state that the message starts from.
         (message.currentTarget = address → message.code.size = 0) → PlainAccount address state →
+          -- If it is not marked at the start, it is not marked at the end.
           address ∉ substate.accountsToDelete →
             address ∉ ended.val.substate.accountsToDelete) ∧
     (∀ (message : Message fork) (state : TransactionState) (substate : Substate) (meter : Meter)
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
+        -- A creation must not go to that account.
         message.currentTarget ≠ address → PlainAccount address state →
           address ∉ substate.accountsToDelete →
             address ∉ ended.val.substate.accountsToDelete) := by
@@ -144,6 +129,7 @@ theorem unmarked_processMessage_induction [LawfulGasMeter Meter] (address : Addr
       step fork evm = .ok result →
         StepResult.Keeps R (ChildRelByKind Mcall Mcreate) evm result := by
     intro evm result _ h
+    -- A call to the account runs its code, which is empty, so that frame stops at once.
     by_cases hstop : evm.message.currentTarget = address ∧ evm.code.size = 0
     · have h' := h
       unfold step at h'
@@ -168,6 +154,7 @@ theorem unmarked_processMessage_induction [LawfulGasMeter Meter] (address : Addr
       rcases ht : message.target with _ | target
       · simp only [ht] at hc
         refine hc.2 (fun heq => ?_) pcaller hcaller
+        -- A creation never goes to the account, since it has a nonce.
         have hd := TransactionState.nonce_eq_zero_of_accountDeployable
           (step_eq_child_deployable h ht)
         rw [heq] at hd
@@ -175,11 +162,15 @@ theorem unmarked_processMessage_induction [LawfulGasMeter Meter] (address : Addr
         omega
       · simp only [ht] at hc
         refine hc.2.2 (fun heq => ?_) pcaller hcaller
+        -- CALLCODE and DELEGATECALL run at the account of their sender.
+        --
+        -- No code there sends them.
         rcases step_eq_child_staticCode h (by simp [ht]) with he | sc
         · exact absurd (he ▸ heq) hne
         · apply Classical.byContradiction
           intro hsize
           exact sc hsize (heq ▸ plain.2.2)
+  -- The proof is by strong induction on the gas of the message, for calls and creations together.
   have both := processMessage_rel_byKind (fork := fork) (Meter := Meter) (R := R)
     (Inv := fun _ => True) (Mcall := Mcall) (Mcreate := Mcreate)
     (fun evm => ofStatic (.refl evm))

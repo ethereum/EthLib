@@ -9,19 +9,9 @@ Many facts about a message are relations between two frames, such as a block tha
 
 Most steps keep the state and the substate up to the records of their reads.
 
-So a relation that looks only at the state and the substate holds of them.
-
 Only a few writes change more: storage, transient storage, a log, SELFDESTRUCT and a nonce.
 
-A caller also takes in the frame that ends its child.
-
 A relation that holds of each of these holds of every step, every run and every message.
-
-One that holds of each of them but SELFDESTRUCT holds of every step that runs another opcode.
-
-The relation sees no gas, memory or stack, since steps that keep the state change them freely.
-
-For messages, each relation must still handle the start of a call and the deposit of code.
 -/
 
 @[expose] public section
@@ -35,21 +25,18 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- The rules for a relation `R` of two frames to hold of every step other than SELFDESTRUCT.
 
-It must be transitive, and hold of each step that keeps the state up to the records of reads.
-
-So it can only look at the state and the substate, apart from the logs and the refund counter.
-
-It must hold of each write of storage, of transient storage and of a log.
-
-It must hold of the rise of a nonce that is not the greatest.
-
-It must hold of a caller that takes in a child related to it.
-
 It also relates a caller to the frame that ends each message the caller sends. -/
 structure OrdinaryStepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter → Prop) : Prop where
   /-- The relation is transitive. -/
   trans : ∀ {a b c}, R a b → R b c → R a c
-  /-- A step that only adds reads keeps the relation. -/
+  -- The relation cannot see what the steps that keep the state change freely.
+  /-- A step that only adds reads keeps the relation.
+
+  So the relation sees only the state up to its reads, the message, the code and the substate.
+
+  Of the substate, it sees only the touched accounts, the accounts to delete and the logs.
+
+  It cannot see the refund counter, the accesses, the gas, the memory or the stack. -/
   static : ∀ {a b}, StaticStep a b → R a b
   /-- A write of storage that changes the refund counter keeps the relation. -/
   sstore : ∀ (evm : Evm fork Meter) (address : Address) (key : Bytes32) (value : U256)
@@ -71,7 +58,9 @@ structure OrdinaryStepRules (fork : Fork) (R : Evm fork Meter → Evm fork Meter
   incrementNonce : ∀ (evm : Evm fork Meter) (address : Address) (state : TransactionState),
     (evm.state.getAccount address).nonce ≠ MAX_NONCE →
     evm.state.incrementNonce fork address = .ok state → R evm { evm with state }
-  /-- A caller that takes in a child related to it is related to its frame before. -/
+  /-- A caller that takes in a child related to it is related to its frame before.
+
+  A caller takes in the frame that ends its child. -/
   incorporate : ∀ {caller child : Evm fork Meter}, R caller child →
     R caller (incorporateChild fork caller child)
 
@@ -493,28 +482,23 @@ theorem runFrame [LawfulGasMeter Meter] (rules : StepRules fork R) {bound : Nat}
 
 /-- Every successful call and creation satisfies a relation `M` of messages.
 
-A call must satisfy `M` after its rollback, when its frame ends related to its start frame.
-
-That frame starts from the state and the substate that the message enters.
-
-A creation must satisfy `M` when the call of its init code does, after its deposit of code.
-
-A message that satisfies `M` must end in a frame related to the frame that sends it.
-
-It instantiates the strong induction on the gas of the message, for calls and creations together.
--/
+Each relation must still handle the start of a call and the deposit of code. -/
 theorem processMessage [LawfulGasMeter Meter] (rules : StepRules fork R)
     {M : Message fork → TransactionState → Substate → Meter → Evm fork Meter → Prop}
+    -- A call must satisfy `M` after its rollback, when its frame ends related to its start frame.
     (call : ∀ {message : Message fork} {state entry : TransactionState}
       {substate entrySubstate : Substate} {meter : Meter} {ended : Evm fork Meter},
+      -- That frame starts from the state and the substate that the message enters.
       Entered fork message state substate entry entrySubstate →
       R (startFrame message entry entrySubstate meter) ended →
       M message state substate meter (rollbackOnError state ended))
+    -- A creation must satisfy `M` when the call of its init code does, after its deposit of code.
     (create : ∀ {message : Message fork} {state prepared : TransactionState}
       {substate : Substate} {meter : Meter} {evm after : Evm fork Meter},
       prepareCreation fork state message.currentTarget = .ok prepared →
       M message prepared substate meter evm → depositCode fork state evm = .ok after →
       M message state substate meter after)
+    -- A message that satisfies `M` must end in a frame related to the frame that sends it.
     (ends : ∀ {caller : Evm fork Meter} {message : Message fork} {ended : Evm fork Meter},
       ChildRel M caller message ended → R caller ended)
     (n : Nat) :
@@ -526,6 +510,9 @@ theorem processMessage [LawfulGasMeter Meter] (rules : StepRules fork R)
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
         M message state substate meter ended.val) :=
+  -- The proof instantiates the strong induction on the gas of the message.
+  --
+  -- That induction treats calls and creations together.
   processMessage_rel (Inv := fun _ => True) rules.refl rules.trans (fun _ _ => trivial)
     (fun _ _ _ => rules.static (staticStep_exceptionalHalt _ _))
     (fun _ h => (rules.step h).of_child ends)
@@ -537,27 +524,22 @@ end StepRules
 
 /-! ## The messages that a step sends -/
 
-/-- What a result of a step from `evm` says of the message it sends, if it sends one.
-
-The caller resumes as a call or as a creation.
-
-A creation goes to an address where a contract may be deployed in the state of `evm`.
-
-A call runs at the current target of `evm`, or runs code only at an account that holds code.
-
-The state that the message starts from has read the account that the message runs at.
-
-The message has the block and the transaction of `evm`. -/
+/-- What a result of a step from `evm` says of the message it sends, if it sends one. -/
 private def Sends (evm : Evm fork Meter) : StepResult fork Meter → Prop
   | .next _ => True
   | .child caller message resume =>
+    -- The caller resumes as a call or as a creation.
     ((∃ newAccount outputStart outputSize,
       resume = resumeCall fork caller newAccount outputStart outputSize) ∨
       ∃ newAccount address, resume = resumeCreate fork caller newAccount address) ∧
+    -- A creation goes to an address where a contract may be deployed in the state of `evm`.
     (message.target = none → evm.state.accountDeployable message.currentTarget = true) ∧
+    -- A call runs at the current target of `evm`, or runs code only at an account that holds code.
     (message.target ≠ none → message.currentTarget = evm.message.currentTarget ∨
       StaticCode evm.state message) ∧
+    -- The state that the message starts from has read the account that the message runs at.
     message.currentTarget ∈ caller.state.accountReads ∧
+    -- The message has the block and the transaction of `evm`.
     message.blockEnv = evm.message.blockEnv ∧ message.txEnv = evm.message.txEnv
 
 /-- A result that says what it sends from a frame says it from a frame with the same accounts.
