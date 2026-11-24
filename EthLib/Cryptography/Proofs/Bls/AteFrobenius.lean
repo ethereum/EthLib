@@ -19,22 +19,6 @@ This file proves them for the pairing of BLS12-381.
 - In the group, `pi` fixes only `O`, because `r` does not divide `|x| + 1`.
 - On the group, `pi^7` acts as `|x|`, because `r` divides `|x|^7 + |x|`.
 
-Take a point `Q` of the group.
-
-Miller's function of `|x|` and `Q` has the divisor `|x| (Q) - (|x| Q) - (|x| - 1) (O)`.
-
-Since `|x| Q = pi^7 Q`, this divisor is `|x| ((Q) - (O)) - ((pi^7 Q) - (O))`.
-
-That is the ate divisor with the coefficient `|x|` at `pi^0` and `-1` at `pi^7`.
-
-Its exponent is `n = |x| - p^7`.
-
-Let `N = (p^12 - 1) / r` be the exponent of the final exponentiation.
-
-Then `z^(N n) = 1` for every nonzero `z` in `Fp12`, because `r` divides `p^7 - |x|`.
-
-`N` is even.
-
 The kernel checks the four facts about numbers: the gcd, the two divisibilities and the parity.
 
 See [Vercauteren](https://eprint.iacr.org/2008/096), "Optimal pairings", Section 2.2.
@@ -134,6 +118,11 @@ def ateCoeffs : List (ℕ × ℤ) := [(0, blsX), (7, -1)]
 The divisor is `|x| ((Q) - (O)) - ((pi^7 Q) - (O))`. -/
 theorem ratioDivisor_lines {Q : ambientCurve.Point} (hQ : Q ∈ g2Subgroup) :
     ratioDivisor (lines ambientCurve blsX Q) = ateDivisor frobenius Q ateCoeffs := by
+  -- Miller's function of `|x|` and `Q` has the divisor `|x| (Q) - (|x| Q) - (|x| - 1) (O)`.
+  --
+  -- Since `|x| Q = pi^7 Q`, this divisor is `|x| ((Q) - (O)) - ((pi^7 Q) - (O))`.
+  --
+  -- That is the ate divisor with the coefficient `|x|` at `pi^0` and `-1` at `pi^7`.
   rw [ratioDivisor, linesDivisor_lines, millerDivisor, ateDivisor, ateCoeffs]
   simp only [List.map_cons, List.map_nil, List.sum_cons, List.sum_nil, Function.iterate_zero,
     id_eq, frobenius_iterate_seven hQ, add_zero]
@@ -144,6 +133,9 @@ theorem ratioDivisor_lines {Q : ambientCurve.Point} (hQ : Q ∈ g2Subgroup) :
 `r` divides `p^7 - |x|`, so `p^12 - 1` divides `N n`. -/
 theorem pow_ateExponent {z : Fp12} (hz : z ≠ 0) :
     z ^ ((finalExpExponent : ℤ) * ateExponent Fp.modulus ateCoeffs) = 1 := by
+  -- The exponent of the ate divisor is `n = |x| - p^7`.
+  --
+  -- `N = (p^12 - 1) / r` is the exponent of the final exponentiation.
   have he : (finalExpExponent : ℤ) * ateExponent Fp.modulus ateCoeffs =
       ((Fp.modulus ^ 12 - 1 : ℕ) : ℤ) * -(((Fp.modulus ^ 7 - blsX) / Fr.modulus : ℕ) : ℤ) := by
     decide +kernel

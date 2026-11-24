@@ -18,47 +18,21 @@ This file maps `Fr` to Mathlib's `ZMod r`.
 An element of `Fr` holds its Montgomery form, and the map sends it to the integer it stands for.
 
 The map is a ring isomorphism, so `Fr` is a field as `ZMod r` is.
-
-## Primality of the modulus
-
-The prime `r` has a Lucas certificate: `7` has order `r - 1` in the units of `ZMod r`.
-
-The certificate uses the full factorization of `r - 1`, which is the product of:
-
-- `2^32 * 3 * 11 * 19 * 10177 * 125527 * 859267`.
-- `906349^2 * 2508409 * 2529403 * 52437899 * 254760293^2`.
-
-It checks `7^(r - 1) = 1`, and `7^((r - 1) / q) ≠ 1` for each prime factor `q`.
-
-The kernel computes those powers by square and multiply on natural numbers, in seconds.
-
-The same two facts give the order of `7` exactly.
-
-So `7` is a primitive `(r - 1)`-th root of unity.
-
-And `7^((r - 1) / n)` is a primitive `n`-th root of unity for every `n` that divides `r - 1`.
-
-Those roots are the domains of the FFT and of barycentric evaluation.
-
-## The bridge to Mathlib
-
-The last section carries the field structure of `ZMod r` to `Fr` through the isomorphism.
-
-Its operations are those of `Fr`: the sum, the product, the power, the inverse and the division.
-
-So each operation of the specification is the operation of the field, by definition.
-
-The inverse is `a ^ (r - 2)`, which equals the field inverse because `r` is prime.
-
-Later proofs open the field structure with `open scoped EthLib.Cryptography.Bls.Fr`.
-
-It is scoped, as Mathlib scopes the ring instance of `Fin`, to avoid coercion loops.
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.Bls.Fr
 
+-- The prime `r` has a Lucas certificate: `7` has order `r - 1` in the units of `ZMod r`.
+--
+-- The certificate uses the full factorization of `r - 1`, which is the product of:
+-- - `2^32 * 3 * 11 * 19 * 10177 * 125527 * 859267`.
+-- - `906349^2 * 2508409 * 2529403 * 52437899 * 254760293^2`.
+--
+-- It checks `7^(r - 1) = 1`, and `7^((r - 1) / q) ≠ 1` for each prime factor `q`.
+--
+-- The kernel computes those powers by square and multiply on natural numbers, in seconds.
 /-- First half of the Lucas certificate: `7 ^ (r - 1) = 1` in `ZMod r`. -/
 theorem seven_pow_card_sub_one : ((7 : ℕ) : ZMod modulus) ^ (modulus - 1) = 1 := by
   rw [PowMod.natCast_pow_eq_one_iff modulus 7 (modulus - 1)]
@@ -131,7 +105,7 @@ example : Field (ZMod modulus) := inferInstance
 
 So it is a generator of the multiplicative group.
 
-Reuses the two halves of the Lucas certificate. -/
+Reuses the two halves of the Lucas certificate, which give that order exactly. -/
 theorem orderOf_seven : orderOf ((7 : ℕ) : ZMod modulus) = modulus - 1 :=
   orderOf_eq_of_pow_and_pow_div_prime seven_pow_card_sub_one seven_pow_div_prime_ne_one
 
@@ -141,6 +115,8 @@ theorem isPrimitiveRoot_seven :
   orderOf_seven ▸ IsPrimitiveRoot.orderOf _
 
 /-- `7 ^ ((r-1)/n)` is a primitive `n`-th root of unity for every `n ∣ r - 1`.
+
+Those roots are the domains of the FFT and of barycentric evaluation.
 
 This is the root the KZG spec's `computeRootsOfUnity` builds its evaluation domains from. -/
 theorem isPrimitiveRoot_seven_pow {n : Nat} (hn : n ∣ modulus - 1) :
@@ -155,14 +131,13 @@ The operations are those of the specification: the sum, the product, the power a
 
 So `a / b` in the specification is the division of the field, by definition.
 
-The scalar actions and the casts from the integers and the rationals go through `ZMod r`.
-
-Proofs alone use them.
-
 It is scoped, as Mathlib scopes the ring instance of `Fin`, to avoid coercion loops.
 
 Activate with `open scoped EthLib.Cryptography.Bls.Fr`. -/
 scoped instance instField : Field Fr :=
+  -- The scalar actions and the casts from the integers and the rationals go through `ZMod r`.
+  --
+  -- Proofs alone use them.
   letI : SMul ℕ Fr := ⟨fun n a => ofZMod (n • Montgomery.toZMod a)⟩
   letI : SMul ℤ Fr := ⟨fun n a => ofZMod (n • Montgomery.toZMod a)⟩
   letI : SMul ℚ≥0 Fr := ⟨fun q a => ofZMod (q • Montgomery.toZMod a)⟩
@@ -203,7 +178,9 @@ theorem hpow_ofNat_eq_pow (a : Fr) {w : Nat} (hw : w < modulus) :
     a ^ Fr.ofNat w = a ^ w := by
   rw [hpow_eq_pow, val_ofNat_of_lt hw]
 
-/-- The inverse of the specification is the field inverse, and both send `0` to `0`. -/
+/-- The inverse of the specification is the field inverse, and both send `0` to `0`.
+
+The inverse is `a ^ (r - 2)`, which equals the field inverse because `r` is prime. -/
 theorem inverse_eq_inv (a : Fr) : a.inverse = a⁻¹ := rfl
 
 /-- The spec's division, a product by the inverse, is field division. -/

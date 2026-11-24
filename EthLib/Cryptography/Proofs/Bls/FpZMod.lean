@@ -17,23 +17,6 @@ This file maps `Fp`, held in Montgomery form, to Mathlib's `ZMod p`, as the scal
 
 The notes of the scalar field proofs on the scoped field instance apply here too.
 
-## Primality of the modulus
-
-The factors of `p - 1` reach 234 bits, beyond the range of `norm_num`.
-
-So the primality of `p` is a chain of Lucas certificates, a Pratt tree.
-
-The factorization is `p - 1 = 2 * 3^2 * 11 * 23 * 47 * 10177 * 859267 * 52437899 * q1 * q2`.
-
-The two large primes are these:
-
-- `q1 = 2584487767265781317813`.
-- `q2 = 15778400344354997994418419698270088123916926905054652752758194827714659`.
-
-Each of the two large factors carries its own certificate, with ten auxiliary primes in total.
-
-The kernel checks every modular power, so the whole tree needs no compiled code.
-
 The square root is not treated here, but with the decompression proofs that need it.
 -/
 
@@ -45,6 +28,20 @@ namespace EthLib.Cryptography.Bls.Fp
 set_option maxRecDepth 8000
 
 /-! ## The Lucas certificate chain (Pratt tree) for `p` -/
+
+-- The factors of `p - 1` reach 234 bits, beyond the range of `norm_num`.
+--
+-- So the primality of `p` is a chain of Lucas certificates, a Pratt tree.
+--
+-- The factorization is `p - 1 = 2 * 3^2 * 11 * 23 * 47 * 10177 * 859267 * 52437899 * q1 * q2`.
+--
+-- The two large primes are these:
+-- - `q1 = 2584487767265781317813`.
+-- - `q2 = 15778400344354997994418419698270088123916926905054652752758194827714659`.
+--
+-- Each of the two large factors carries its own certificate, with ten auxiliary primes in total.
+--
+-- The kernel checks every modular power, so the whole tree needs no compiled code.
 
 /-- Pratt-tree node: `9272813673901` is prime (Lucas certificate, witness `2`). -/
 private theorem prime_9272813673901 : Nat.Prime 9272813673901 :=
@@ -433,14 +430,13 @@ The operations are those of the specification: the sum, the product, the power a
 
 The inverse is the one of the Montgomery form, equal to the inverse of the specification.
 
-The scalar actions and the casts from the integers and the rationals go through `ZMod p`.
-
-Proofs alone use them.
-
 It is scoped, as for the scalar field, to avoid coercion loops.
 
 Activate it with `open scoped EthLib.Cryptography.Bls.Fp`. -/
 scoped instance instField : Field Fp :=
+  -- The scalar actions and the casts from the integers and the rationals go through `ZMod p`.
+  --
+  -- Proofs alone use them.
   letI : SMul ℕ Fp := ⟨fun n a => ofZMod (n • Montgomery.toZMod a)⟩
   letI : SMul ℤ Fp := ⟨fun n a => ofZMod (n • Montgomery.toZMod a)⟩
   letI : SMul ℚ≥0 Fp := ⟨fun q a => ofZMod (q • Montgomery.toZMod a)⟩

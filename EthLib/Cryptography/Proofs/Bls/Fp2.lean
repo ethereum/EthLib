@@ -17,17 +17,9 @@ public import Mathlib.Tactic.LinearCombination
 
 This file proves that it is a field, with the library's own operations.
 
-Every element `a = c0 + c1*i` has a norm `N(a) = c0^2 + c1^2` in `Fp`.
+It also proves that the library's exponentiation is the field power.
 
-The norm is zero only at zero, because `-1` is not a square in `Fp`.
-
-That holds since `p = 3 mod 4`, and it makes every nonzero element invertible.
-
-It also proves that the library's exponentiation is the field power, and that a square root it returns squares back to its input.
-
-The last section decides equations of closed terms in the model of `Fp`.
-
-There the kernel computes on natural numbers.
+A square root that it returns squares back to its input.
 -/
 
 @[expose] public section
@@ -220,6 +212,11 @@ theorem sq_ne_neg_one (y : Fp) : y * y ≠ -1 := fun h =>
 
 /-- The norm is zero only at zero. -/
 theorem norm_eq_zero_iff (a : Fp2) : norm a = 0 ↔ a = 0 := by
+  -- Every element `a = c0 + c1*i` has a norm `N(a) = c0^2 + c1^2` in `Fp`.
+  --
+  -- The norm is zero only at zero, because `-1` is not a square in `Fp`.
+  --
+  -- That holds since `p = 3 mod 4`.
   constructor
   · intro h
     have h' := congrArg Fp.toZMod h
@@ -238,6 +235,7 @@ private theorem fp_mul_inverse {x : Fp} (hx : x ≠ 0) :
   exact mul_inv_cancel₀ fun h => hx (Fp.toZMod_inj.mp (h.trans Fp.toZMod_zero.symm))
 
 theorem mul_inverse_cancel {a : Fp2} (h : a ≠ 0) : a * a.inverse = 1 :=
+  -- The norm is zero only at zero, so every nonzero element is invertible.
   Cryptography.Fp2.mul_inverse_cancel Fp.embedding sq_ne_neg_one_zmod h
 
 theorem mul_inverse_of_norm_ne_zero {a : Fp2} (h : norm a ≠ 0) :
@@ -495,7 +493,11 @@ theorem sqrt_eq_none_iff {a : Fp2} : Fp2.sqrt a = none ↔ ∀ b : Fp2, b * b �
     | none => rfl
     | some c => exact absurd (sqrt_mul_self hc) (h c)
 
-/-! ## Equations decided in the model -/
+/-! ## Equations decided in the model
+
+This section decides equations of closed terms in the model of `Fp`.
+
+There the kernel computes on natural numbers. -/
 
 /-- Two elements are equal when their images in the model are. -/
 theorem eq_of_model {a b : Fp2} (h : (a.map Fp.toModel).beq (b.map Fp.toModel) = true) :
