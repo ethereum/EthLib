@@ -160,14 +160,19 @@ theorem isQueryBoundP_liftM_hashSpec {p : OracleWorld.Domain → Prop} [Decidabl
         omega
       · omega
 
+/-- The scheme's verifier makes at most `384` queries of the game in any class. -/
+theorem verify_isQueryBoundP (p : OracleWorld.Domain → Prop) [DecidablePred p]
+    (publicKey : PublicKey) (leafIndex : LeafIndex) (message : Message) (signature : Signature) :
+    IsQueryBoundP (Concrete.scheme.verify publicKey leafIndex message signature) p 384 :=
+  isQueryBoundP_liftM_hashSpec _ (EthLib.Cryptography.Xmss.isQueryBoundP_verifyWith
+    (fun _ => (isQueryBoundP_map_iff _ _ _).2
+      ((isQueryBoundP_query_iff (spec := HashSpec) _ _ 1).2 fun _ => Nat.one_pos)) _ _ _)
+
 /-- The verification makes at most `384` queries of the game in any class. -/
 theorem verifyCont_isQueryBoundP (p : OracleWorld.Domain → Prop) [DecidablePred p]
     (publicKey : PublicKey) (forgery : Forgery) :
     IsQueryBoundP (verifyCont publicKey forgery) p 384 :=
-  isQueryBoundP_bind (m := 0)
-    (isQueryBoundP_liftM_hashSpec _ (EthLib.Cryptography.Xmss.isQueryBoundP_verifyWith
-      (fun _ => (isQueryBoundP_map_iff _ _ _).2
-        ((isQueryBoundP_query_iff (spec := HashSpec) _ _ 1).2 fun _ => Nat.one_pos)) _ _ _))
+  isQueryBoundP_bind (m := 0) (verify_isQueryBoundP p publicKey _ _ _)
     fun _ _ => isQueryBoundP_pure _ _ 0
 
 /-- After any run, the verification makes at most `384` queries of a class in expectation. -/

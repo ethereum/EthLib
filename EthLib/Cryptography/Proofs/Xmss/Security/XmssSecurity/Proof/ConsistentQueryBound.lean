@@ -168,4 +168,33 @@ theorem hashQueryBound_query_bind {α : Type} (input : OracleWorld.Domain)
     simulateQ_map, simulateQ_spec_query, StateT.run_map, support_map]
   exact ⟨result, hr, by cases input <;> rfl⟩
 
+/-- A computation of at most `n` hash queries makes at most `n` counted ones, from any cache. -/
+theorem hashQueryBound_of_isQueryBoundP {α : Type} {n : Nat} :
+    ∀ (oa : OracleComp OracleWorld α), IsQueryBoundP oa (fun t => t.isRight = true) n →
+      ∀ cache, HashQueryBound oa cache n := by
+  intro oa h
+  induction oa using OracleComp.inductionOn generalizing n with
+  | pure a =>
+    intro cache result hresult
+    simp [countHashQueries_pure] at hresult
+    simp [hresult]
+  | query_bind t k ih =>
+    intro cache result hresult
+    rw [isQueryBoundP_query_bind_iff] at h
+    rw [countHashQueries_query_bind] at hresult
+    simp only [simulateQ_bind, simulateQ_spec_query, simulateQ_pure, StateT.run'_eq,
+      StateT.run_bind, support_map, support_bind, Set.mem_image, Set.mem_iUnion] at hresult
+    obtain ⟨w, ⟨u, hu, v, hv, hw⟩, rfl⟩ := hresult
+    simp only [StateT.run_pure, support_pure, Set.mem_singleton_iff] at hw
+    subst hw
+    have hk := ih u.1 (h.2 u.1) u.2 (v.1) (by
+      simp only [StateT.run'_eq, support_map]
+      exact ⟨v, hv, rfl⟩)
+    rcases t with n' | x
+    · simp only [Sum.isRight_inl, Bool.false_eq_true, ite_false] at h hk ⊢
+      simpa using hk
+    · simp only [Sum.isRight_inr, ite_true] at h hk ⊢
+      have := h.1.resolve_left (not_not_intro trivial)
+      omega
+
 end XmssSecurity
