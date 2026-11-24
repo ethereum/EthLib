@@ -6,30 +6,6 @@ public import EthLib.Consensus.Proofs.Transition.WithdrawalAmounts
 /-!
 # Proofs: the withdrawals of a block keep each builder's debt covered
 
-From Gloas, after a full parent, a block pays the withdrawals that the state expects.
-
-The queued builder withdrawals come first.
-
-Together they pay what each builder owes in the queued entries that are read.
-
-The queued partial withdrawals and the sweep of validators pay validators, never a builder.
-
-The sweep of builders pays only withdrawable builders, which have started to exit and owe nothing.
-
-A withdrawal names a builder by its index with a flag at bit 40.
-
-So an index must stay below 2^40 to name one builder alone, for builders and for validators.
-
-Nothing in the state transition bounds the registries.
-
-So the theorems on the debt assume both bounds.
-
-The theorem that the debt stays covered also assumes an epoch before the far future epoch.
-
-That holds when an epoch has at least two slots.
-
-A builder that has not started to exit is then not yet withdrawable.
-
 [EIP-7732] adds the withdrawals of builders.
 
 [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#beacon-chain-changes
@@ -97,6 +73,9 @@ private theorem BuilderDebtSettled.alias {gloas : .glamsterdam ≤ fork}
         convertBuilderIndexToValidatorIndex index →
         pending.builderIndex = index ∨ pending.amount = 0 := by
   intro pending member same
+  -- A withdrawal names a builder by its index with a flag at bit 40.
+  --
+  -- So an index must stay below 2^40 to name one builder alone, for builders and for validators.
   by_cases inside : pending.builderIndex.toNat < 2 ^ 40
   · exact .inl ((convertBuilderIndexToValidatorIndex_inj inside small).mp same)
   · right
@@ -227,6 +206,9 @@ private theorem getBuildersSweepWithdrawals_withdrawnFrom_zero {gloas : .glamste
     (far : builder.withdrawableEpoch = FAR_FUTURE_EPOCH)
     (early : getCurrentEpoch state ≠ FAR_FUTURE_EPOCH) :
     withdrawnFrom swept (convertBuilderIndexToValidatorIndex index) = 0 := by
+  -- The sweep of builders pays only withdrawable builders, which have started to exit.
+  --
+  -- Such builders owe nothing.
   refine withdrawnFrom_eq_zero fun withdrawal member same => ?_
   obtain ⟨k, inside, rfl⟩ := Array.getElem_of_mem (Array.mem_toList_iff.mp member)
   obtain ⟨other, paid, _, named, paidOk, -, ready, -⟩ :=
@@ -315,7 +297,9 @@ private theorem getExpectedWithdrawals_builder (gloas : .glamsterdam ≤ fork)
   replace partialsOk := partialsOk electra
   replace sweptOk := sweptOk gloas
   refine ⟨builders ++ partials, swept, index2, index3, sweptCount, sweptOk, ?_, ?_⟩
-  · -- The queued builder withdrawals pay what the builder owes in those that are read.
+  · -- The queued builder withdrawals come first.
+    --
+    -- They pay what the builder owes in those that are read.
     unfold getBuilderWithdrawals at buildersOk
     simp only [bind_ok_iff, ensure_ok_iff] at buildersOk
     obtain ⟨_, _, _, _, loopOk⟩ := buildersOk
@@ -323,7 +307,7 @@ private theorem getExpectedWithdrawals_builder (gloas : .glamsterdam ≤ fork)
     simp only at count paid
     subst count
     rw [counted]
-    -- The queued partial withdrawals pay validators of the registry.
+    -- The queued partial withdrawals pay validators of the registry, never a builder.
     have none : withdrawnFrom partials (convertBuilderIndexToValidatorIndex index) = 0 := by
       refine withdrawnFrom_eq_zero fun withdrawal listed => ?_
       obtain ⟨k, inside, rfl⟩ := Array.getElem_of_mem (Array.mem_toList_iff.mp listed)
@@ -339,7 +323,7 @@ private theorem getExpectedWithdrawals_builder (gloas : .glamsterdam ≤ fork)
     have small : index.toNat < 2 ^ 40 := by omega
     refine paidUnder_eq_owedBy fun pending listed => ?_
     exact holds.alias buildersFit small pending (List.mem_of_mem_take listed)
-  · -- The sweep of validators pays validators of the registry.
+  · -- The sweep of validators pays validators of the registry, never a builder.
     unfold getValidatorsSweepWithdrawals at sweepOk
     simp only [bind_ok_iff, ensure_ok_iff] at sweepOk
     obtain ⟨_, _, loopOk⟩ := sweepOk
@@ -410,8 +394,14 @@ It also assumes that the epoch is before the far future one. -/
 theorem BuilderDebtSettled.processWithdrawals {gloas : .glamsterdam ≤ fork}
     {capella : .shapella ≤ fork} {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (holds : BuilderDebtSettled state gloas)
+    -- Nothing in the state transition bounds the registries.
+    --
+    -- So the theorems on the debt assume both bounds.
     (validatorsFit : state.validators.data.size ≤ 2 ^ 40)
     (buildersFit : (state.builders gloas).data.size ≤ 2 ^ 40)
+    -- The epoch is before the far future one.
+    --
+    -- It holds when an epoch has two slots or more.
     (early : getCurrentEpoch state ≠ FAR_FUTURE_EPOCH)
     (computed : processWithdrawals state capella payload = .ok after) :
     BuilderDebtSettled after gloas := by
@@ -419,6 +409,7 @@ theorem BuilderDebtSettled.processWithdrawals {gloas : .glamsterdam ≤ fork}
   · rw [processWithdrawals_of_parentEmpty payload gloas full, Except.ok.injEq] at computed
     rw [← computed]
     exact holds
+  -- From Gloas, after a full parent, a block pays the withdrawals that the state expects.
   obtain ⟨expected, expectedOk, appliedOk, -⟩ := processWithdrawals_recorded gloas full computed
   obtain ⟨size, epochs⟩ := applyExpectedWithdrawals_kept gloas appliedOk
   have payments := processWithdrawals_payments gloas computed
@@ -467,6 +458,7 @@ theorem BuilderDebtSettled.processWithdrawals {gloas : .glamsterdam ≤ fork}
         have found : getBuilder state gloas index = .ok builder := by simp [getBuilder, read]
         obtain ⟨prior, swept, _, _, _, sweptOk, owed, whole⟩ :=
           getExpectedWithdrawals_builder gloas holds validatorsFit buildersFit expectedOk member
+        -- A builder that has not started to exit is then not yet withdrawable.
         have none := getBuildersSweepWithdrawals_withdrawnFrom_zero sweptOk buildersFit found far
           early
         rw [whole, withdrawnFrom_append, none, owed]

@@ -30,20 +30,6 @@ import EthLib.Consensus.Proofs.Transition.Withdrawals
 # The rise of the effective balances over the end of an epoch
 
 The effective balances of the validators active in the next epoch rise by at most a gain.
-
-A validator below its largest effective balance rises only past the upward band.
-
-It then rises by at most its balance, which the branch and the epoch transition bound.
-
-A validator at its largest effective balance rises only after a change of credentials.
-
-The epoch also moves balance to other validators.
-
-Those transfers are deposits within the churn and due consolidations.
-
-They are also proposer and whistleblower rewards.
-
-Each goes to a bounded number of recipients, and each recipient adds at most the upward band.
 -/
 
 @[expose] public section
@@ -608,25 +594,24 @@ private theorem isActiveAt_eq_of_others {f g : Fork} {a : BeaconState preset f}
 
 /-- From Electra, the steps of an epoch transition up to the pending balances.
 
-The rewards read the state after the inactivity update, which follows justification.
-
-The registry updates, the slashings and the reset after the rewards only lower balances.
-
 Up to the pending balances the steps keep the slot, the queue, the churn left and activity.
 
-They also keep effective balances, credentials, slashes and assigned exits.
-
-The pending balances, and from Gloas the builder payments, lead to the effective-balance update.
-
-That update gives the registry. -/
+They also keep effective balances, credentials, slashes and assigned exits. -/
 private theorem rise_epoch {f : Fork} {c t : BeaconState preset f} (altair : .altair ≤ f)
     (electra : .pectra ≤ f) (ok : processEpoch config checks c = .ok t) :
     ∃ justified scored rewarded reset before after : BeaconState preset f,
       processJustificationAndFinalization c = .ok justified ∧
       processInactivityUpdates config justified altair = .ok scored ∧
+      -- The rewards read the state after the inactivity update, which follows justification.
       processRewardsAndPenalties config scored = .ok rewarded ∧
+      -- The registry updates, the slashings and the reset after the rewards only lower balances.
       (∀ i, actualBalanceAt ⟨f, reset⟩ i ≤ actualBalanceAt ⟨f, rewarded⟩ i) ∧
       processPendingBalances config checks reset = .ok before ∧
+      -- The pending balances lead to the effective-balance update.
+      --
+      -- From Gloas, the builder payments also lead to it.
+      --
+      -- That update gives the registry.
       (∃ paid, EpochStage.Edge config checks .payments before paid ∧
         processEffectiveBalanceUpdates paid = .ok after) ∧ t.validators = after.validators ∧
       reset.slot = c.slot ∧ c.validators.data.size ≤ reset.validators.data.size ∧
@@ -800,15 +785,7 @@ private theorem rise_epoch {f : Fork} {c t : BeaconState preset f} (altair : .al
   · rw [eE.depositCarry nofun, lE.depositCarry nofun, gE.depositCarry nofun,
       rE.depositCarry nofun, sE.depositCarry nofun, jE.depositCarry nofun]
 
-/-- From Electra, the slot that ends an epoch, read from its last state.
-
-The rewards read the state after the inactivity update, which follows justification.
-
-The steps after them up to the pending balances only lower balances, and keep the reads.
-
-An effective balance after the slot rises only past the upward band.
-
-It rises to at most the balance after the pending balances and the largest value before. -/
+/-- From Electra, the slot that ends an epoch, read from its last state. -/
 private theorem rise_edge {z z' : ForkedBeaconState preset}
     (ok : advanceSlotAcross config checks z = .ok z')
     (altair : .altair ≤ z.fork) (electra : .pectra ≤ z.fork)
@@ -817,7 +794,9 @@ private theorem rise_edge {z z' : ForkedBeaconState preset}
       processSlot z.state = .ok cached ∧
       processJustificationAndFinalization cached = .ok justified ∧
       processInactivityUpdates config justified altair = .ok scored ∧
+      -- The rewards read the state after the inactivity update, which follows justification.
       processRewardsAndPenalties config scored = .ok rewarded ∧
+      -- The steps after them up to the pending balances only lower balances, and keep the reads.
       (∀ i, actualBalanceAt ⟨z.fork, reset⟩ i ≤ actualBalanceAt ⟨z.fork, rewarded⟩ i) ∧
       processPendingBalances config checks reset = .ok before ∧
       reset.slot = z.state.slot ∧ z.state.validators.data.size ≤ reset.validators.data.size ∧
@@ -833,6 +812,9 @@ private theorem rise_edge {z z' : ForkedBeaconState preset}
         PendingConsolidationInvariant config reset) ∧
       reset.pendingConsolidations = z.state.pendingConsolidations ∧
       reset.depositBalanceToConsume = z.state.depositBalanceToConsume ∧
+      -- An effective balance after the slot rises only past the upward band.
+      --
+      -- It rises to at most the balance after the pending balances and the largest value before.
       ∀ (i : ℕ) (v : Validator), z.state.validators.data[i]? = some v →
         effectiveAt z' i ≤ v.effectiveBalance.toNat ∨
           (v.effectiveBalance.toNat + preset.upwardBand < actualBalanceAt ⟨z.fork, before⟩ i ∧
@@ -1020,49 +1002,30 @@ private theorem gain_sum_le {list due : List PendingConsolidation}
     exact Finset.card_le_card sub
 
 
-/-- The effective balances of the validators active in the next epoch rise by at most the gain.
-
-The epoch starts at `R`, right after its epoch transition, where the hysteresis holds.
-
-One branch leads from `R` to the call's state `P`, inside the epoch.
-
-Another leads from `R` to `y` in the next epoch.
-
-Every read is at `P`.
-
-The premises read a block count `n` through the debited set and the sync amounts.
-
-Take a set of debited validators, at most the payload limits per block.
-
-Off that set, a balance at `R` exceeds the one at `P` by at most the slashing and sync amounts.
-
-Off that set, the largest effective balance stays.
-
-A validator below its cap rises only past the upward band, and by at most its balance.
-
-A validator at its cap rises only after a conversion, and then by at most its credits.
-
-The epoch also transfers balance to other validators, to a bounded number of recipients.
-
-They are churn-limited deposits, due consolidations, proposer credits and whistleblower rewards.
-
-From Fulu a block deposit only queues, so no block deposit credits a balance inside the epoch.
-
-The fork at `P` is Fulu or later.
-
-The registry at `y` is within its limit. -/
+/-- The effective balances of the validators active in the next epoch rise by at most the gain. -/
 theorem effectiveRise_le
+  -- The epoch starts at `R`, right after its epoch transition.
+  --
+  -- One branch leads from `R` to the call's state `P`, inside the epoch.
+  --
+  -- Another leads from `R` to `y` in the next epoch.
   {g R P y : ForkedBeaconState preset}
     (genesis : Genesis (config := config) (checks := checks) g) (history : Run config checks g R)
     (tailP : Run config checks R P) (tailS : Run config checks R y) (caps : CapOrder preset)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (bands : preset.IncrementWithinUpwardBand)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
+    -- The hysteresis holds at `R`.
+    --
+    -- The registry at `y` is within its limit.
     (hysteresis : Hysteresis R.state) (within : y.state.RegistryWithinLimit)
+    -- The fork at `P` is Fulu or later.
     (fulu : .fusaka ≤ P.fork)
     (callEpoch : getCurrentEpoch P.state = getCurrentEpoch R.state)
     (next : (getCurrentEpoch y.state).toNat = (getCurrentEpoch R.state).toNat + 1)
+    -- The premises read a block count `n` through the debited set and the sync amounts.
     {n : ℕ} (debitedKeys : Finset ValidatorIndex) :
+    -- Every read is at `P`.
     let state := P.state
     let epoch := getCurrentEpoch state
     let inc := preset.EFFECTIVE_BALANCE_INCREMENT.toNat
@@ -1120,21 +1083,40 @@ theorem effectiveRise_le
     let recipients := (if .pectra ≤ P.fork then depositRecipients else 0) + due.length + proposers
     let debited := ((if .shapella ≤ P.fork then preset.MAX_WITHDRAWALS_PER_PAYLOAD.toNat else 0) +
       (if .pectra ≤ P.fork then preset.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD.toNat else 0)) * n
+    -- The epoch also transfers balance to other validators, to a bounded number of recipients.
+    --
+    -- They are churn-limited deposits and due consolidations.
+    --
+    -- They are also proposer credits and whistleblower rewards.
+    --
+    -- Each recipient adds at most the upward band.
     let transfers := depositCredit + dueStake + proposerCredit + whistleblower
+    -- From Electra a block deposit only queues, so it does at `P`, which is Fulu or later.
+    --
+    -- So no block deposit credits a balance inside the epoch.
     let depositGain := if .pectra ≤ P.fork then 0 else depositRecipients * capMax
     let slashBack (i : ℕ) :=
       if slashed i then effective i / p.MIN_SLASHING_PENALTY_QUOTIENT.toNat else 0
     let syncP (i : ℕ) := n * sync i
     let creditMax := positions.sup fun i => if upcoming i then credit i else 0
+    -- A validator below its cap rises only past the upward band, and by at most its balance.
+    --
+    -- The branch and the epoch transition bound that balance.
     let crossing := ∑ i ∈ positions with upcoming i,
       if effective i < cap i then
         (let top := actual i + slashBack i + syncP i + credit i
          if effective i + preset.upwardBand < top then top - effective i else 0)
+      -- A validator at its cap rises only after a conversion, and then by at most its credits.
+      --
+      -- A conversion is a change of credentials.
       else (if preset.upwardBand < credit i then credit i else 0)
     let headroom := ∑ i ∈ positions with upcoming i, (capMax - effective i)
+    -- Take a set of debited validators, at most the payload limits per block.
     debitedKeys.card ≤ debited →
+    -- Off that set, a balance at `R` exceeds that at `P` by at most the slashing and sync amounts.
     (∀ v, v ∉ debitedKeys → actualBalanceAt R v.toNat ≤
       actualBalanceAt P v.toNat + slashBack v.toNat + syncP v.toNat) →
+    -- Off that set, the largest effective balance stays.
     (∀ v validator, v ∉ debitedKeys → R.state.validators.data[v.toNat]? = some validator →
       ∃ later, P.state.validators.data[v.toNat]? = some later ∧
         withdrawalMaxEffectiveBalance preset P.fork later =

@@ -7,27 +7,9 @@ public import EthLib.Consensus.Proofs.Transition.PayloadInputs
 /-!
 # Proofs: from the parent payload to the bid, a block keeps each builder's debt covered
 
-A block of Gloas first applies the payload of its parent, then runs its header.
-
-Its withdrawals follow, then its bid.
+A block of Gloas applies the payload of its parent, then its header, its withdrawals and its bid.
 
 Between the payment of the parent and the bid, the invariant of the builder debt has a weaker form.
-
-* For each builder, the debt is at most the balance.
-* A builder that has started to exit owes nothing.
-* From the position of the slot of the state, each position of the window is empty.
-
-The reserve of the late path is no longer needed in that form.
-
-On a full parent, the late path has queued the value of the parent bid, or the payment has settled.
-
-On an empty parent, the payload of the parent never pays, and its bid is about to be replaced.
-
-The bid then restores the invariant.
-
-Its builder can cover its value, its debt and a minimum, and the position of its slot was empty.
-
-So the bid becomes the payment of the latest block, with no weight.
 
 [EIP-7732] adds the payload of the parent and the bid of a block.
 
@@ -50,6 +32,7 @@ A builder that has started to exit owes nothing.
 Each position from that of the slot of the state, in the second half of the window, is empty. -/
 structure BuilderDebtSettled (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
     Prop where
+  -- The reserve of the late path is not needed in this form.
   covered : ∀ index, pendingBuilderTotal state gloas index ≤ builderBalance state gloas index
   exitedClear : ∀ index builder, (state.builders gloas).data[index.toNat]? = some builder →
     builder.withdrawableEpoch ≠ FAR_FUTURE_EPOCH → pendingBuilderTotal state gloas index = 0
@@ -471,7 +454,13 @@ theorem BuilderDebtCovered.processParentExecutionPayload {gloas : .glamsterdam �
     ⟨-, settled, _, _, _, _, requested, _, settledOk, depositsOk, withdrawalsOk,
       consolidationsOk, buildersOk, exitsOk, -, rfl⟩
   · -- An empty parent leaves the state as it is.
+    --
+    -- Its payload never pays.
+    --
+    -- The bid of the parent is about to be replaced.
     exact holds.toSettled newer rfl rfl (fun _ => Nat.le_add_right _ _) fun _ _ empty => empty
+  -- On a full parent, the payment has settled, or the late path has queued the parent bid value.
+  --
   -- The requests of validators keep the builder fields.
   have frame := builderFrame_validatorRequests depositsOk withdrawalsOk consolidationsOk
   have paid := holds.settleParentPayment newer settledOk
@@ -595,6 +584,11 @@ theorem BuilderDebtSettled.processExecutionPayloadBid (positive : preset.Payment
     (header : state.latestBlockHeader.slot = state.slot)
     (computed : processExecutionPayloadBid config checks state gloas signed = .ok after) :
     BuilderDebtCovered after gloas := by
+  -- The builder of the bid can cover its value, its debt and a minimum.
+  --
+  -- The position of its slot was empty.
+  --
+  -- So the bid becomes the payment of the latest block, with no weight.
   obtain ⟨checked, recorded, recordOk, rfl⟩ := processExecutionPayloadBid_ok computed
   obtain ⟨builderOk, -, slotEq, -⟩ := checkExecutionPayloadBid_ok_iff.mp checked
   obtain ⟨one, fits⟩ := positive.slotsPerEpoch_bounds

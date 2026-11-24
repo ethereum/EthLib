@@ -7,24 +7,6 @@ public import EthLib.Consensus.Proofs.Transition.BuilderDebt
 /-!
 # Proofs: the epoch step of the builder payments keeps the builder debt invariant
 
-The step pays the payments of the previous epoch that reach the quorum, and drops the others.
-
-The payments of the current epoch then move to the first half of the window.
-
-A paid payment moves from the pending payments to the queued withdrawals, so no debt changes.
-
-A dropped payment lowers the debt of its builder.
-
-The next slot is in the next epoch, so the parent payment moves with the window.
-
-A parent of the current epoch keeps its payment, now in the first half.
-
-A parent of the previous epoch leaves the window.
-
-With a positive quorum its payment, which has no weight, is dropped and not paid.
-
-Its value then moves from the debt of its builder to the value that the late path may queue.
-
 [EIP-7732] adds the builder payments and their epoch step.
 
 [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#beacon-chain-changes
@@ -95,6 +77,9 @@ private theorem processBuilderPendingPayments_of_noWrap (positive : preset.Payme
     (noWrap : getCurrentEpoch state + 1 ≠ 0) :
     BuilderDebtCovered { after with slot := next } gloas := by
   obtain ⟨one, small⟩ := positive.slotsPerEpoch_bounds
+  -- The step pays the payments of the previous epoch that reach the quorum, and drops the others.
+  --
+  -- The payments of the current epoch then move to the first half of the window.
   obtain ⟨quorum, found, queue, shifted⟩ := processBuilderPendingPayments_spec computed
   have least := getBuilderPaymentQuorumThreshold_pos positive found
   have same := processBuilderPendingPayments_eq computed
@@ -151,6 +136,9 @@ private theorem processBuilderPendingPayments_of_noWrap (positive : preset.Payme
         (state.builderPendingPayments gloas).elements.toList)
     simp only [List.map_append, owedBy_append] at split
     omega
+  -- A paid payment moves from the pending payments to the queued withdrawals, so no debt changes.
+  --
+  -- A dropped payment lowers the debt of its builder.
   have releasedLe : ∀ index, owedBy index (releasedPayments
       (state.builderPendingPayments gloas).elements.toList preset.SLOTS_PER_EPOCH.toNat quorum) ≤
       owedBy index (((state.builderPendingPayments gloas).elements.toList.take
@@ -183,6 +171,7 @@ private theorem processBuilderPendingPayments_of_noWrap (positive : preset.Payme
           Uint64.saturatingSub (getCurrentEpoch state) 1 then
         some (state.latestBlockHeader.slot % preset.SLOTS_PER_EPOCH)
       else none := rfl
+  -- The next slot is in the next epoch, so the parent payment moves with the window.
   have positionAfter : parentPaymentPosition moved =
       if computeEpochAtSlot preset state.latestBlockHeader.slot = getCurrentEpoch state + 1 then
         some (preset.SLOTS_PER_EPOCH + state.latestBlockHeader.slot % preset.SLOTS_PER_EPOCH)
@@ -212,6 +201,8 @@ private theorem processBuilderPendingPayments_of_noWrap (positive : preset.Payme
   generalize getCurrentEpoch state = epoch at positionBefore positionAfter noWrap
   by_cases current : parent = epoch
   · -- The parent payment moves from the second half to the first.
+    --
+    -- So a parent of the current epoch keeps its payment, now in the first half.
     have ahead : parent ≠ epoch + 1 := current ▸ ne_add_one epoch
     rw [ite_eq_left current] at positionBefore
     rw [ite_eq_right ahead, ite_eq_left current] at positionAfter
@@ -234,7 +225,11 @@ private theorem processBuilderPendingPayments_of_noWrap (positive : preset.Payme
         cases found
         omega
   by_cases previous : parent = Uint64.saturatingSub epoch 1
-  · -- The parent payment leaves the window, and the step drops it.
+  · -- A parent of the previous epoch leaves the window.
+    --
+    -- With a positive quorum its payment, which has no weight, is dropped and not paid.
+    --
+    -- Its value then moves from the debt of its builder to the value that the late path may queue.
     have ahead : parent ≠ epoch + 1 :=
       previous ▸ saturatingSub_ne_succ noWrap (previous ▸ current)
     rw [ite_eq_right current, ite_eq_left previous] at positionBefore

@@ -9,19 +9,9 @@ public import Mathlib.Logic.Relation
 
 A chain of beacon states runs one step at a time.
 
-A step is a slot with the upgrades due at the slot it reaches, or a block at the slot of the state.
-
-Slots that advance a state across forks are a run of slot steps.
-
 A block that the state transition accepts is a run of slot steps, then one block step.
 
 So an invariant that each step keeps, under hypotheses on that step, holds along every such block.
-
-The hypotheses need hold only for the steps between its first and its last state.
-
-A run of steps never moves the fork back, so a run between two states of one fork stays in it.
-
-Inside one fork, a step is one slot or one block.
 -/
 
 @[expose] public section
@@ -34,13 +24,7 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 /-- One step of a chain of beacon states.
 
-It is a slot with the upgrades due at the slot it reaches.
-
-Or it is a block that runs on the state of its fork, at the slot of the state.
-
-A block step takes any execution engine.
-
-It may skip the check of the proposer signature and of the state root.
+A block step may skip the check of the proposer signature and of the state root.
 
 So a chain may hold more states than the specification computes.
 
@@ -52,6 +36,7 @@ inductive ChainStep (config : Config) (checks : SignatureChecks) :
     advanceSlotAcross config checks forked = .ok after → ChainStep config checks forked after
   /-- A block at the slot of the state, on the state of its fork. -/
   | block {fork : Fork} {state after : BeaconState preset fork}
+    -- A block step takes any execution engine.
     (engine : ExecutionEngine preset fork) (signed : SignedBeaconBlock preset fork)
     (validateResult : Bool) :
     applySignedBlock config checks engine state signed validateResult = .ok after →
@@ -130,6 +115,7 @@ theorem fork_eq_of_chainSteps {fork : Fork} {first last : BeaconState preset for
     (step : ChainStep config checks forked ⟨fork, last⟩) :
     ∃ middle : BeaconState preset fork, forked = ⟨fork, middle⟩ := by
   obtain ⟨middleFork, middle⟩ := forked
+  -- A run of steps never moves the fork back, so a run between two states of one fork stays in it.
   obtain rfl : middleFork = fork :=
     Fork.ctorIdx_injective (Nat.le_antisymm step.fork_le (fork_le_of_chainSteps steps))
   exact ⟨middle, rfl⟩

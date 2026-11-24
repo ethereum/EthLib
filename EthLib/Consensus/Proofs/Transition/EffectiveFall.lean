@@ -36,18 +36,6 @@ import EthLib.Base.Proofs.Nat
 # The fall of an effective balance over the end of an epoch
 
 A voter that is never slashed loses effective balance only at the end of an epoch.
-
-There, the update of the effective balances lowers it only when it crosses the downward band.
-
-That update reads the balance after the rewards pass.
-
-From the call's state to that pass, the balance falls by at most the sum of three amounts.
-
-They are the sync penalties, the queued partial withdrawals that are due, and the pass's penalties.
-
-The withdrawal sweep pays only the excess above the largest effective balance.
-
-So the bound reads the smaller of the balance and the effective balance.
 -/
 
 @[expose] public section
@@ -538,15 +526,7 @@ private theorem builders_unflagged_zero {f : Fork} {s : BeaconState preset f}
 
 The withdrawals of a payload leave it at least the smaller of its balance and its effective balance.
 
-From that, subtract what the queued partial withdrawals pay it.
-
-That amount is capped at its effective balance above the activation balance.
-
-The sweep pays it only its excess above its largest effective balance.
-
-Here, that largest effective balance is its effective balance.
-
-From Gloas an empty parent pays nothing, and an index that names a builder debits the builder. -/
+From that, subtract what the queued partial withdrawals pay it. -/
 private theorem withdrawals_floor {f : Fork} {s t : BeaconState preset f}
     {capella : .shapella ≤ f} {payload : Until .glamsterdam f (ExecutionPayload preset f)}
     (electra : .pectra ≤ f) (within : s.RegistryWithinLimit)
@@ -556,8 +536,9 @@ private theorem withdrawals_floor {f : Fork} {s t : BeaconState preset f}
     min (actualBalanceAt ⟨f, s⟩ v.toNat) val.effectiveBalance.toNat ≤
       actualBalanceAt ⟨f, t⟩ v.toNat +
         min (queuePaidAt s electra v)
+          -- That amount is capped at its effective balance above the activation balance.
           (val.effectiveBalance.toNat - preset.MIN_ACTIVATION_BALANCE.toNat) := by
-  -- An empty parent pays no withdrawals.
+  -- From Gloas an empty parent pays no withdrawals.
   by_cases skipped : ∃ gloas : .glamsterdam ≤ f, isParentBlockFull s gloas = false
   · obtain ⟨gloas, empty⟩ := skipped
     rw [processWithdrawals_of_parentEmpty payload gloas empty, Except.ok.injEq] at computed
@@ -629,6 +610,8 @@ private theorem withdrawals_floor {f : Fork} {s t : BeaconState preset f}
     simp only [withdrawnFrom_append, zeros.1, zeros.2, Nat.zero_add, Nat.add_zero] at bounded ⊢
     by_cases swept : ∃ k, ∃ inside : k < sweep.size, sweep[k].validatorIndex = v
     · -- The sweep pays the validator its excess, down to its largest effective balance.
+      --
+      -- Here, that largest effective balance is its effective balance.
       obtain ⟨k, inside, named⟩ := swept
       obtain ⟨pays, distinct⟩ := getValidatorsSweepWithdrawals_pays within sweepOk
       obtain ⟨validator, left, validatorOk, leftOk, kind⟩ := pays k inside
@@ -811,16 +794,10 @@ private theorem le_farFuture (epoch : Epoch) : epoch ≤ FAR_FUTURE_EPOCH := by
 /-- From Gloas, take a validator within its largest effective balance that cannot withdraw in full.
 
 The payload of the parent leaves it at least the smaller of its balance and its effective balance.
-
-A converted validator did not compound, so its effective balance is within the activation balance.
-
-Its record keeps its effective balance and stays within its own largest effective balance.
-
-The activation balance must be at most the largest effective balance of Electra.
-
-It still cannot withdraw in full when a later state of the epoch still has it exiting later. -/
+-/
 private theorem parent_floor {f : Fork} {s parented t : BeaconState preset f}
     {gloas : .glamsterdam ≤ f} {body : BeaconBlockBody preset f}
+    -- The activation balance must be at most the largest effective balance of Electra.
     (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
     (ordered : ExitsOrdered s)
     (computed : processParentExecutionPayload config checks s gloas body = .ok parented)
@@ -830,8 +807,11 @@ private theorem parent_floor {f : Fork} {s parented t : BeaconState preset f}
     (capped : val.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset f val)
     (exiting : ∀ w, t.validators.data[v.toNat]? = some w → getCurrentEpoch s < w.exitEpoch) :
     ∃ wp, parented.validators.data[v.toNat]? = some wp ∧
+      -- Its record keeps its effective balance.
       wp.effectiveBalance = val.effectiveBalance ∧
+      -- It still cannot withdraw in full when a later state of the epoch has it exiting later.
       getCurrentEpoch s < wp.withdrawableEpoch ∧
+      -- Its record stays within its own largest effective balance.
       wp.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset f wp ∧
       min (actualBalanceAt ⟨f, s⟩ v.toNat) val.effectiveBalance.toNat ≤
         actualBalanceAt ⟨f, parented⟩ v.toNat := by
@@ -858,6 +838,8 @@ private theorem parent_floor {f : Fork} {s parented t : BeaconState preset f}
       (Array.mem_of_getElem? foundP))
   by_cases converted : v ∈ conv
   · -- A converted validator did not compound, so its cap was the activation balance.
+    --
+    -- So its effective balance is within the activation balance.
     have fresh := ledger.fresh v converted val found
     obtain ⟨wp', foundP', switched⟩ := ledger.switched v converted
     rw [foundP, Option.some.injEq] at foundP'
@@ -886,36 +868,33 @@ private theorem parent_floor {f : Fork} {s parented t : BeaconState preset f}
 
 /-- From Fulu, take a validator that cannot withdraw in full.
 
-It stays unslashed, its effective balance is within its largest, and it exits after the epoch.
-
 A block leaves it at least the smaller of its balance and its effective balance, less two amounts.
-
-The first is its seats times the sync participant reward, read after the block.
-
-The second is what the queued partial withdrawals pay it.
-
-That second amount is capped at its effective balance above the activation balance.
-
-The registry after the block must be within its limit.
-
-From Gloas the activation balance must be at most the largest effective balance of Electra. -/
+-/
 private theorem block_floor {f : Fork}
     {s t : BeaconState preset f} {engine : ExecutionEngine preset f}
     {block : BeaconBlock preset f} (fulu : .fusaka ≤ f)
+    -- From Gloas the activation balance must be at most the largest effective balance of Electra.
     (compounding : .glamsterdam ≤ f →
       preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    -- The registry after the block must be within its limit.
     (within : t.RegistryWithinLimit) (matched : BalancesMatch s) (ordered : ExitsOrdered s)
     (computed : processBlock config checks engine s block = .ok t)
     {v : ValidatorIndex} {val : Validator} (found : s.validators.data[v.toNat]? = some val)
     (later : getCurrentEpoch s < val.withdrawableEpoch)
+    -- Its effective balance is within its largest.
     (capped : val.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset f val)
+    -- It exits after the epoch.
     (exiting : ∀ w, t.validators.data[v.toNat]? = some w → getCurrentEpoch s < w.exitEpoch)
+    -- It stays unslashed.
     (unslashed : ∀ w, t.validators.data[v.toNat]? = some w → w.slashed = false) :
     min (actualBalanceAt ⟨f, s⟩ v.toNat) val.effectiveBalance.toNat ≤
       actualBalanceAt ⟨f, t⟩ v.toNat +
+        -- The first amount is its seats times the sync participant reward, read after the block.
         syncSeats t (Nat.le_trans (by decide) fulu) v.toNat *
           ((syncParticipantReward t).toOption.getD 0).toNat +
+        -- The second is what the queued partial withdrawals pay it.
         min (blockQueuePaid (config := config) (checks := checks) s block v)
+          -- That second amount is capped at its effective balance above the activation balance.
           (val.effectiveBalance.toNat - preset.MIN_ACTIVATION_BALANCE.toNat) := by
   have electra : .pectra ≤ f := Nat.le_trans (by decide) fulu
   have altair : .altair ≤ f := Nat.le_trans (by decide) electra
@@ -1598,13 +1577,7 @@ private def runQueuePaid {x : ForkedBeaconState preset} :
 
 /-- Inside one epoch from Electra, take a run.
 
-The queue of its last state is the queue of its first state, less a prefix.
-
-Entries that are not yet withdrawable may be appended to it.
-
-The run pays each validator only from the consumed prefix.
-
-It pays at most the amount of each entry, and only from entries withdrawable by the epoch. -/
+The queue of its last state is the queue of its first state, less a prefix. -/
 private theorem run_partialLedger {x y : ForkedBeaconState preset}
     (tail : Run config checks x y)
     (same : getCurrentEpoch y.state = getCurrentEpoch x.state) (electra : .pectra ≤ x.fork) :
@@ -1613,8 +1586,13 @@ private theorem run_partialLedger {x y : ForkedBeaconState preset}
       let ledger := (x.state.pendingPartialWithdrawals electra).data.toList ++ appended
       consumed ≤ ledger.length ∧
       (y.state.pendingPartialWithdrawals electra').data.toList = ledger.drop consumed ∧
+      -- Entries that are not yet withdrawable may be appended to it.
       (∀ a ∈ appended, getCurrentEpoch x.state < a.withdrawableEpoch) ∧
+      -- The run pays each validator only from the consumed prefix.
       (∀ j, consumed ≤ j → paid j = 0) ∧
+      -- The run pays at most the amount of each entry.
+      --
+      -- It pays only from entries withdrawable by the epoch.
       (∀ j < consumed, ∃ w, ledger[j]? = some w ∧ paid j ≤ w.amount.toNat ∧
         (0 < paid j → w.withdrawableEpoch ≤ getCurrentEpoch x.state)) ∧
       ∀ v, runQueuePaid tail v = ∑ j ∈ (Finset.range consumed).filter
@@ -1909,12 +1887,7 @@ private theorem unslashed_before {x y : ForkedBeaconState preset}
 
 Each of its blocks keeps the floor of a validator with a sync amount `S`.
 
-Then the balance falls below the smaller of its start and a reference by at most a sum.
-
-The sum adds those sync amounts and the queued payments.
-
-With one block, the queued payments count only up to the reference above the activation balance.
--/
+Then the balance falls below the smaller of its start and a reference by at most a sum. -/
 private theorem run_floor {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (within : y.state.RegistryWithinLimit)
     (same : getCurrentEpoch y.state = getCurrentEpoch x.state)
@@ -1929,9 +1902,13 @@ private theorem run_floor {x y : ForkedBeaconState preset} (tail : Run config ch
       min (actualBalanceAt ⟨f, s⟩ v.toNat) EB ≤ actualBalanceAt ⟨f, t⟩ v.toNat + S +
         min (blockQueuePaid (config := config) (checks := checks) s signed.message v)
           (EB - preset.MIN_ACTIVATION_BALANCE.toNat)) :
+    -- The sum adds those sync amounts and the queued payments.
     ∃ extra : ℕ, min (actualBalanceAt x v.toNat) EB ≤
         actualBalanceAt y v.toNat + tail.blockCount * S + extra ∧
       extra ≤ runQueuePaid tail v ∧
+      -- With one block, the queued payments count only up to a cap.
+      --
+      -- That cap is the reference above the activation balance.
       (tail.blockCount ≤ 1 →
         extra ≤ min (runQueuePaid tail v) (EB - preset.MIN_ACTIVATION_BALANCE.toNat)) := by
   refine Run.induction_of_same_epoch
@@ -2040,43 +2017,26 @@ private theorem fall_credit_arith {EB after gRewarded gTrue gSub gLow c credit q
 
 /-- The fall of the effective balance of a voter that is never slashed, over the end of an epoch.
 
-The epoch starts at `R`, right after its epoch transition, where the hysteresis holds.
+Such a voter falls by at most a computed bound, plus a term when it was credited more.
 
-A boundary run of at most one block leads to `T`, the block state of the target.
-
-One branch leads from `T` to the call's state `P`, inside the epoch.
-
-Another branch leads from `T` to `y` in the next epoch.
-
-Every read is at `P`, except the queue of partial withdrawals, which is read at `T`.
-
-Take a voter whose balance on the branch of `P` rose by at most its sync rewards.
-
-That voter falls by at most the computed fall.
-
-Take a voter credited more on that branch.
-
-It falls by at most one increment, two downward bands, its sync amount and one more term.
-
-That term is the smaller of its credit and a queued amount.
-
-That amount is what the boundary block's queued payments took from it.
-
-It is capped at its effective balance above the activation balance.
-
-Those queued amounts add up to at most what one sweep can pay below the largest effective balance.
-
-The fork at `P` is Fulu or later.
-
-The registry at `y` is within its limit.
--/
+The fork at `P` must be Fulu or later. -/
 theorem effectiveFall_le
+    -- The epoch starts at `R`, right after its epoch transition.
+    --
+    -- A boundary run of at most one block leads to `T`, the block state of the target.
+    --
+    -- One branch leads from `T` to the call's state `P`, inside the epoch.
+    --
+    -- Another branch leads from `T` to `y` in the next epoch.
     {g R T P y : ForkedBeaconState preset}
     (genesis : Genesis (config := config) (checks := checks) g) (history : Run config checks g R)
     (boundary : Run config checks R T) (tailP : Run config checks T P)
     (tailS : Run config checks T y) (caps : CapOrder preset)
     (bands : preset.IncrementWithinUpwardBand)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    -- The hysteresis holds at `R`.
+    --
+    -- The registry at `y` is within its limit.
     (hysteresis : Hysteresis R.state) (within : y.state.RegistryWithinLimit)
     (fulu : .fusaka ≤ P.fork)
     (boundaryEpoch : getCurrentEpoch T.state = getCurrentEpoch R.state)
@@ -2084,6 +2044,7 @@ theorem effectiveFall_le
     (next : (getCurrentEpoch y.state).toNat = (getCurrentEpoch R.state).toNat + 1)
     (single : boundary.blockCount ≤ 1) {m n : ℕ} (counted : boundary.blockCount + m ≤ n)
     (credit : ValidatorIndex → ℕ) :
+    -- Every read is at `P`, except the queue of partial withdrawals, which is read at `T`.
     let state := P.state
     let epoch := getCurrentEpoch state
     let inc := preset.EFFECTIVE_BALANCE_INCREMENT.toNat
@@ -2118,7 +2079,17 @@ theorem effectiveFall_le
         (((T.state.pendingPartialWithdrawals electra).data.toList.filter fun w =>
           w.validatorIndex.toNat = i ∧ w.withdrawableEpoch ≤ epoch).map (·.amount.toNat)).sum
       else 0
+    -- The update of an effective balance lowers it only when it crosses the downward band.
+    --
+    -- That update reads the balance after the rewards pass.
     let fall (i : ℕ) :=
+      -- From the call's state to that pass, the balance falls by at most the sum of three amounts.
+      --
+      -- They are the sync penalties, the due queued partial withdrawals and the pass's penalties.
+      --
+      -- The withdrawal sweep pays only the excess above the largest effective balance.
+      --
+      -- So the bound reads the smaller of the balance and the effective balance.
       let low := min (actual i - syncP i) (effective i) - (partials i + penalty i)
       if effective i ≤ low + preset.downwardBand then 0 else effective i - (low - low % inc)
     let maskCap := if .pectra ≤ P.fork then
@@ -2127,11 +2098,23 @@ theorem effectiveFall_le
       else 0
     (∀ v : ValidatorIndex,
       actualBalanceAt P v.toNat ≤ actualBalanceAt T v.toNat + m * sync v.toNat + credit v) →
+    -- A queued amount is what the boundary block's queued payments took from a voter.
+    --
+    -- It is capped at its effective balance above the activation balance.
     ∃ (below : ValidatorIndex → ℕ) (owed : Finset ValidatorIndex),
+      -- Those amounts add up to at most what one sweep can pay below the largest effective balance.
       (∀ v, v ∉ owed → below v = 0) ∧ ∑ v ∈ owed, below v ≤ maskCap ∧
       ∀ v : ValidatorIndex, current v.toNat = true →
         ((y.state.validators.data[v.toNat]?).map (·.slashed)).getD false = false →
+        -- Take a voter whose balance on the branch of `P` rose by at most its sync rewards.
+        --
+        -- That voter falls by at most the computed fall.
         effective v.toNat - effectiveAt y v.toNat ≤ fall v.toNat +
+          -- Take a voter credited more on that branch.
+          --
+          -- It falls by at most one increment, two downward bands, its sync amount and a term.
+          --
+          -- That term is the smaller of its credit and a queued amount.
           (if credit v = 0 then 0
            else inc + 2 * preset.downwardBand + syncP v.toNat + min (credit v) (below v)) := by
   intro state epoch inc slots p validator effective actual current totalGwei

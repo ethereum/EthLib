@@ -9,58 +9,11 @@ public import EthLib.Consensus.Transition.Payload
 /-!
 # Proofs: the debt of each builder stays within its balance
 
-From Gloas a builder owes its queued withdrawals and the payments of its bids.
+The invariant that, from Gloas, the balance of each builder covers its debt.
 
-A bid passes only if the balance of its builder covers the bid, that debt and a minimum.
-
-The invariant here says that the balance always covers the debt.
-
-With it, no withdrawal of a builder falls short.
-
-The payment of the parent block can leave the pending payments with no block between.
-
-That happens when the parent is older than the previous epoch.
-
-The child then queues the value of the parent bid, by the late path of the parent payload.
-
-So the invariant also reserves that value, from when the payment leaves until the child comes.
-
-It reserves it too when the slashing of the proposer cancelled the payment.
-
-The late path reads the bid, and not the payment.
-
-The invariant has four parts.
-
-* For each builder, the debt plus the reserved value is at most the balance.
-* In the window, the parent payment has no weight, and it pays the latest bid or has no amount.
-* A builder that has started to exit owes nothing and has no reserved value.
-* Each position of the window after that of the parent holds the payment of no bid.
-
-The second part makes the first one last across an epoch.
-
-With a positive quorum, the epoch step drops a payment with no weight instead of paying it.
-
-The value of that payment then moves from the debt to the reserve.
-
-The third part covers the sweep of builders, which pays a withdrawable builder its whole balance.
-
-The fourth part keeps the second one true after a block whose bid has no value.
-
-Such a bid records no payment, so the position of the block keeps what it held.
-
-The proofs that follow show that blocks and slots keep it, not each step inside them.
-
-Inside a block, the settled parent payment and the reserve both count the same value until the bid.
-
-Most steps keep the builders, their payments, their withdrawals and the latest bid.
+Most steps keep the builder fields: the builders, their payments, withdrawals and latest bid.
 
 Such a step keeps the invariant if it also keeps the slot and the slot of the latest block.
-
-Other lemmas read the window after a write or a shift, and place a slot in it on natural numbers.
-
-Two more facts on the window are stated here for the payment of each bid, and proved later.
-
-A payment with weight has an amount, and the genesis epoch has an empty first half.
 
 [EIP-7732] adds the builders, their bids and their payments.
 
@@ -100,7 +53,19 @@ theorem paymentAt_of_replicate {gloas : .glamsterdam ≤ fork}
 It does when the payment of the parent has left the window, or when that payment has no amount. -/
 def latePaymentOpen (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) : Bool :=
   match parentPaymentPosition state with
+  -- The payment of the parent block can leave the pending payments with no block between.
+  --
+  -- That happens when the parent is older than the previous epoch.
+  --
+  -- The child then queues the value of the parent bid, by the late path of the parent payload.
+  --
+  -- So the invariant also reserves that value.
+  --
+  -- It does so from when the payment leaves until the child comes.
   | none => true
+  -- The invariant also reserves the value when the slashing of the proposer cancelled the payment.
+  --
+  -- The late path reads the bid, and not the payment.
   | some position => (paymentAt state gloas position.toNat).withdrawal.amount == 0
 
 /-- The value that the invariant reserves for a builder, for the late path.
@@ -127,7 +92,9 @@ def ParentPaymentFresh (state : BeaconState preset fork) (gloas : .glamsterdam �
       ((paymentAt state gloas position.toNat).withdrawal.amount = 0 ∨
         (paymentAt state gloas position.toNat).withdrawal = latestBidWithdrawal state gloas)
 
-/-- Each pending payment with a positive weight has a positive amount. -/
+/-- Each pending payment with a positive weight has a positive amount.
+
+It is stated here and proved with the release of the payments. -/
 def WeightedPaymentsFunded (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
     Prop :=
   ∀ position, 0 < (paymentAt state gloas position).weight →
@@ -135,7 +102,9 @@ def WeightedPaymentsFunded (state : BeaconState preset fork) (gloas : .glamsterd
 
 /-- In the genesis epoch, the first half of the window holds the payment of no bid.
 
-That epoch is also the previous one, so the first half names no slot. -/
+That epoch is also the previous one, so the first half names no slot.
+
+It is stated here and proved with the release of the payments. -/
 def GenesisFirstHalfEmpty (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
     Prop :=
   getCurrentEpoch state = GENESIS_EPOCH →
@@ -150,22 +119,43 @@ def LaterPaymentsEmpty (state : BeaconState preset fork) (gloas : .glamsterdam �
 
 /-- From Gloas: the balance of each builder covers what it owes and what the late path may add.
 
-A builder that has started to exit owes nothing, and the late path adds nothing for it.
+Blocks and slots keep it, but not each step inside them.
 
-While the payment of the parent is in the window, it has no weight.
-
-It then pays the latest bid or has no amount.
-
-Each position after it holds the payment of no bid. -/
+Inside a block, the settled parent payment and the reserve both count the same value until the bid.
+-/
 structure BuilderDebtCovered (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
     Prop where
+  -- For each builder, the debt plus the reserved value is at most the balance.
+  --
+  -- From Gloas a builder owes its queued withdrawals and the payments of its bids.
+  --
+  -- A bid passes only if the balance of its builder covers the bid, that debt and a minimum.
+  --
+  -- With this part, no withdrawal of a builder falls short.
   covered : ∀ index,
     pendingBuilderTotal state gloas index + lateBidValue state gloas index ≤
       builderBalance state gloas index
+  -- A builder that has started to exit owes nothing, and the late path adds nothing for it.
+  --
+  -- This part covers the sweep of builders, which pays a withdrawable builder its whole balance.
   exitedClear : ∀ index builder, (state.builders gloas).data[index.toNat]? = some builder →
     builder.withdrawableEpoch ≠ FAR_FUTURE_EPOCH →
       pendingBuilderTotal state gloas index + lateBidValue state gloas index = 0
+  -- While the payment of the parent is in the window, it has no weight.
+  --
+  -- It then pays the latest bid or has no amount.
+  --
+  -- This part makes the first one last across an epoch.
+  --
+  -- With a positive quorum, the epoch step drops a payment with no weight instead of paying it.
+  --
+  -- The value of that payment then moves from the debt to the reserve.
   parentFresh : ParentPaymentFresh state gloas
+  -- Each position after that of the parent holds the payment of no bid.
+  --
+  -- This part keeps the previous one true after a block whose bid has no value.
+  --
+  -- Such a bid records no payment, so the position of the block keeps what it held.
   laterEmpty : LaterPaymentsEmpty state gloas
 
 /-- A step that keeps the builders, their payments, their withdrawals and the latest bid.
@@ -357,23 +347,20 @@ theorem GenesisFirstHalfEmpty.of_frame {gloas : .glamsterdam ≤ fork}
 
 /-- The position of the payment of a slot on natural numbers.
 
-The epoch must have one slot or more, and the window must fit in 64 bits.
-
-A slot of the epoch of the state is in the second half.
-
-A slot of the epoch before is in the first half.
-
-Any other slot has no position. -/
+The epoch must have one slot or more, and the window must fit in 64 bits. -/
 theorem slotPaymentPosition_map_toNat
     (bounds : 1 ≤ preset.SLOTS_PER_EPOCH.toNat ∧ 2 * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
     (state : BeaconState preset fork) (slot : Slot) :
     (slotPaymentPosition state slot).map UInt64.toNat =
+      -- A slot of the epoch of the state is in the second half.
       if slot.toNat / preset.SLOTS_PER_EPOCH.toNat =
           state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat then
         some (preset.SLOTS_PER_EPOCH.toNat + slot.toNat % preset.SLOTS_PER_EPOCH.toNat)
+      -- A slot of the epoch before is in the first half.
       else if slot.toNat / preset.SLOTS_PER_EPOCH.toNat =
           state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat - 1 then
         some (slot.toNat % preset.SLOTS_PER_EPOCH.toNat)
+      -- Any other slot has no position.
       else none := by
   obtain ⟨one, small⟩ := bounds
   have current : computeEpochAtSlot preset slot = getCurrentEpoch state ↔
