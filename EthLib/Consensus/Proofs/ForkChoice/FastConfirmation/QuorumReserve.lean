@@ -41,22 +41,15 @@ def joiningStake (state : BeaconState preset fork) : ℕ :=
 
 /-- The stake by which the quorum of a call can drift from its state to a later state of its chain.
 
-The state is the call's pulled-up head state, and the ancestor is the state of its target block.
-
-Every term reads the state, except the queue of partial withdrawals, which the ancestor holds.
-
-It takes the total, the base and sync rewards, the churn and the finality delay from their reads.
-
-It bounds the drift, before Gloas from Fulu.
-
-The reserve is twice the gain of the total plus three times the loss of the voters' stake.
-
-The gain counts validators that join the active set, and the band-crossing rises of the others.
-
-The loss counts each active validator's penalties and due partial withdrawals, rounded to bands.
-
-The rewards and penalties of an epoch enter as upper bounds on those of its end. -/
+It bounds the drift, before Gloas from Fulu. -/
 def quorumReserve (config : Config) (state ancestor : BeaconState preset fork) : ℕ :=
+  -- The state is the call's pulled-up head state.
+  --
+  -- The ancestor is the state of the call's target block.
+  --
+  -- Every term reads the state, except the queue of partial withdrawals, which the ancestor holds.
+  --
+  -- The total, the base and sync rewards, the churn and the finality delay come from their reads.
   let epoch := getCurrentEpoch state
   let inc := preset.EFFECTIVE_BALANCE_INCREMENT.toNat
   let slots := preset.SLOTS_PER_EPOCH.toNat
@@ -97,6 +90,7 @@ def quorumReserve (config : Config) (state ancestor : BeaconState preset fork) :
     else if preset.MIN_EPOCHS_TO_INACTIVITY_PENALTY.toNat < delay then
       4 * base i + effective i * delay / p.INACTIVITY_PENALTY_QUOTIENT.toNat
     else 0
+  -- The rewards and penalties of an epoch enter as upper bounds on those of its end.
   let credit (i : ℕ) :=
     (if .altair ≤ fork then base i * flagWeight * num / (WEIGHT_DENOMINATOR.toNat * den)
      else 3 * (base i * max num den / den) + base i) + slots * sync i
@@ -146,6 +140,7 @@ def quorumReserve (config : Config) (state ancestor : BeaconState preset fork) :
        if effective i + preset.upwardBand < top then top - effective i else 0)
     else (if preset.upwardBand < credit i then credit i else 0)
   let headroom := ∑ i ∈ positions with upcoming i, (capMax - effective i)
+  -- The gain counts validators that join the active set, and the band-crossing rises of the others.
   let gain := joining + min headroom (crossing + (recipients + debited) * preset.upwardBand +
     debited * creditMax + transfers + depositGain)
   let partials (i : ℕ) := if electra : .pectra ≤ fork then
@@ -163,8 +158,12 @@ def quorumReserve (config : Config) (state ancestor : BeaconState preset fork) :
         (preset.MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP.toNat *
           (capMax - preset.MIN_ACTIVATION_BALANCE.toNat))
     else 0
+  -- The loss counts each active validator's penalties and due partial withdrawals.
+  --
+  -- It rounds them to bands.
   let loss := (∑ i ∈ positions with current i, fall i) +
     creditedP * (inc + 2 * preset.downwardBand + syncPMax) + maskBudget
+  -- The reserve is twice the gain of the total plus three times the loss of the voters' stake.
   2 * gain + 3 * loss
 
 /-- A key's cap at a state, `0` past the registry. -/
@@ -918,17 +917,19 @@ It bounds drift in the quorum inequality at the target's epoch or the next.
 
 The proof covers only `fusaka ≤ fork < glamsterdam` under the pin's drift assumptions.
 
-The reserve's other fork branches are not proved to bound the drift.
-
-The branches can differ in both active stake and validator balances after their last shared state.
-
-The reserve accounts for these differences without reading the other branch's state.
-
-Within the partial window, the rise uses the kept branch even at equality in the gain test.
-
-Past that window, measured from the finalized state, the fall charges the call's effective balance.
--/
+The reserve's other fork branches are not proved to bound the drift. -/
 def pinReserve (config : Config) (state ancestor finalizedState : BeaconState preset fork) : ℕ :=
+  -- The branches can differ in both active stake and validator balances.
+  --
+  -- They differ only after their last shared state.
+  --
+  -- The reserve accounts for these differences without reading the other branch's state.
+  --
+  -- Within the partial window, the rise uses the kept branch even at equality in the gain test.
+  --
+  -- Past that window, the fall charges the call's effective balance.
+  --
+  -- That window is measured from the finalized state.
   (pinTerms config state ancestor finalizedState).total
 
 /-- The pin reserve contains the quorum reserve. -/
@@ -943,34 +944,34 @@ variable {e : Execution (honestForkChoice config checks sources anchorState anch
   genesisTimeMs) J}
 
 /-- An honest voter set of a call keeps its stake in each counting state, up to the quorum reserve.
-
-The call reads the pulled-up head state and the current target of an honest store.
-
-The counting state belongs to an honest store whose chain reads that target.
-
-It is the state of that chain's block or a later slot of it, in the target's epoch or the next.
-
-Then the stake of unslashed active voters of the call drifts by at most the call's reserve.
-
-The reserve reads the call's block at the target root, so two honest stores may collide instead. -/
+-/
 def QuorumDriftWithin (horizon : Epoch) (last : ℕ) : Prop :=
   ∀ u ∈ J, ∀ n (head : Root) (pulled anc : BeaconState preset fork) (target : Checkpoint),
     (e.world n).time ≤ last →
+    -- The call reads the pulled-up head state and the current target of an honest store.
     ((e.world n).state u).getPulledUpHeadState config head = .ok pulled →
     ((e.world n).state u).getCurrentTarget config head = .ok target →
     ((e.world n).state u).blockStates[target.root]? = some anc →
     ∀ w ∈ J, ∀ k (root : Root) (rootState state : BeaconState preset fork),
     (e.world k).time ≤ last → ((e.world k).state w).blockStates[root]? = some rootState →
+    -- The counting state belongs to an honest store whose chain reads that target.
     ((e.world k).state w).getCheckpointBlock root target.epoch = .ok target.root →
+    -- It is the state of that chain's block or a later slot of it.
+    --
+    -- Its epoch is the target's epoch or the next.
     (state = rootState ∨ ∃ slot, processSlots config checks rootState slot = .ok state) →
     target.epoch ≤ getCurrentEpoch state →
     (getCurrentEpoch state).toNat ≤ target.epoch.toNat + 1 → getCurrentEpoch state ≤ horizon →
     ∀ (voters : Finset ValidatorIndex) (total pulledTotal : Gwei),
     (∀ v ∈ voters, v ∈ activeVoters pulled ∧ (slashedFlagAt state v.toNat).getD false = false) →
     getTotalActiveBalance state = .ok total → getTotalActiveBalance pulled = .ok pulledTotal →
+    -- Then the stake of unslashed active voters of the call drifts by at most the call's reserve.
     2 * total.toNat + 3 * stake (fun v => balanceAt pulled v.toNat) voters ≤
         2 * pulledTotal.toNat + 3 * stake (fun v => balanceAt state v.toNat) voters +
           quorumReserve config pulled anc ∨
+      -- The reserve reads the call's block at the target root.
+      --
+      -- So two honest stores may collide instead.
       HonestCollision (e := e) last
 
 end EthLib.Consensus.Models.Network

@@ -41,16 +41,7 @@ variable {sources : BlockSources preset fork} {anchorState : BeaconState preset 
     genesisTimeMs) J}
 
 /-- The finalized checkpoint of the call's target state is on the justified chain of another store.
-
-The caller's store holds the target block's state, and its head leads to that block.
-
-The head reads the store's finalized block, since it is a viable leaf, or the justified block.
-
-So the target block reads that finalized block, and it reads the target state's finalized block.
-
-The other store's justified chain reads the caller's finalized block, as the finality fact gives.
-
-The two stores agree on their blocks, so the earlier read passes to the other store. -/
+-/
 private theorem pin_finRead {A B : Store preset fork}
     (reachedA : Store.Reachable config anchorState anchorBlock A)
     (reachedB : Store.Reachable config anchorState anchorBlock B)
@@ -60,11 +51,13 @@ private theorem pin_finRead {A B : Store preset fork}
       A.blocks[r]? = some b → B.blocks[r]? = some c → b = c)
     (chain : A.getCheckpointBlock A.justifiedCheckpoint.root A.finalizedCheckpoint.epoch =
       .ok A.finalizedCheckpoint.root)
+    -- Per the finality fact, the other store's justified chain reads the caller's finalized block.
     (justifiedRead : B.getCheckpointBlock B.justifiedCheckpoint.root A.finalizedCheckpoint.epoch =
       .ok A.finalizedCheckpoint.root)
     {head : ForkChoiceNode} (headOk : A.getHead config = .ok head)
     {epoch : Epoch} {target : Checkpoint}
     (epochOk : A.getCurrentStoreEpoch config = .ok epoch)
+    -- The caller's store holds the target block's state, and its head leads to that block.
     (targetOk : A.getCurrentTarget config head.root = .ok target)
     {anc : BeaconState preset fork}
     (ancLe : anc.finalizedCheckpoint.epoch ≤ A.finalizedCheckpoint.epoch)
@@ -99,6 +92,7 @@ private theorem pin_finRead {A B : Store preset fork}
   have aboveAnchor : anchorBlock.slot ≤ boundary :=
     UInt64.le_trans (reachedA.anchorSlot_le (UInt64.le_of_eq anchorSlot) checkpointHeld)
       checkpointLe
+  -- The two stores agree on their blocks, so the earlier read passes to the other store.
   have received := Store.getCheckpointBlock_of_same_blocks reachedB same boundaryOk aboveAnchor
     ⟨finalizedBlock, finalizedHeld⟩ middle
   rw [Store.getCheckpointBlock_trans justifiedRead ancLe]
@@ -153,21 +147,7 @@ private theorem voterStake_le_deepReserve {pulled anc fin : BeaconState preset f
   change 3 * (∑ v ∈ voters, balanceAt pulled v.toNat) ≤ t.total
   omega
 
-/-- The voters of a call pin the justified checkpoints of the call's epoch.
-
-The theorem covers only `fusaka ≤ fork < glamsterdam`.
-
-Assume the a priori guard at the selected head's finalized state.
-
-Assume the receiver's justified chain agrees with the caller's finalized checkpoint at its epoch.
-
-This agreement is required only if the receiver's justified epoch reaches that epoch.
-
-Take honest voters whose stake exceeds a third of the sum of the total, margin and pin reserve.
-
-A justified checkpoint of the call's epoch then has a signer among them.
-
-Otherwise two honest stores collide. -/
+/-- The voters of a call pin the justified checkpoints of the call's epoch. -/
 theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store preset fork}
     {g : ForkedBeaconState preset} {horizon anchorEpoch : Epoch} {margin first last : ℕ}
     (bls : checks = .bls)
@@ -187,13 +167,18 @@ theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store pr
     (enough : HeldRunStakeFloor (e := e) pre horizon last)
     (terminal : HeldTerminalStakeFloor (e := e) horizon last)
     (unslashed : HonestCountedStatesUnslashed (e := e) last)
+    -- The receiver's justified chain agrees with the caller's finalized checkpoint at its epoch.
+    --
+    -- This agreement is required only if the receiver's justified epoch reaches that epoch.
     (finality : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
       ((e.world i).state a).finalizedCheckpoint.epoch ≤
         ((e.world j).state b).justifiedCheckpoint.epoch →
       ((e.world j).state b).getCheckpointBlock ((e.world j).state b).justifiedCheckpoint.root
         ((e.world i).state a).finalizedCheckpoint.epoch =
           .ok ((e.world i).state a).finalizedCheckpoint.root)
+    -- The a priori guard holds at the selected head's finalized state.
     (guarded : PinGuarded (e := e) last)
+    -- The theorem covers only `fusaka ≤ fork < glamsterdam`.
     (preGloas : fork < .glamsterdam) (fusaka : .fusaka ≤ fork)
     (forkWindow : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
     (bands : preset.IncrementWithinUpwardBand) (caps : CapOrder preset)
@@ -201,6 +186,11 @@ theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store pr
     (maxAligned : MaxEffectiveBalancesAligned preset)
     (long : 1 < preset.SLOTS_PER_EPOCH)
     (facts : PinPresetFacts preset) :
+    -- Take honest voters with more than a third of the sum of the total, margin and pin reserve.
+    --
+    -- A justified checkpoint of the call's epoch then has a signer among them.
+    --
+    -- Otherwise two honest stores collide.
     JustifiedPinned (e := e) anchorEpoch margin first last := by
   subst bls
   obtain ⟨sound, -, -⟩ := DirectSafety.run_justified_separated pre genesis

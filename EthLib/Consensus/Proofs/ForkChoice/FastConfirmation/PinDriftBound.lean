@@ -158,19 +158,16 @@ private theorem stake_le_total {state : BeaconState preset fork} {total : Gwei}
 
 /-- The quorum drifts from a call's pulled-up state to a counting state by at most the pin reserve.
 
-The quorum at the counting state and `V` at the pulled-up state weigh three each.
-
-Their sum is at most twice the counting total plus the pulled-up total and the pin reserve.
-
-It also adds three times the counting stake of the quorum voters that are in `V`.
-
 The bound holds under the drift setting, which requires `fusaka ≤ fork < glamsterdam`. -/
 theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted V)
     {total pulledTotal : Gwei} (totalOk : getTotalActiveBalance counted = .ok total)
     (pulledOk : getTotalActiveBalance pulled = .ok pulledTotal) :
+    -- The quorum at the counting state and `V` at the pulled-up state weigh three each.
     3 * stake (fun v => balanceAt counted v.toNat) (quorumVoters counted) +
         3 * stake (fun v => balanceAt pulled v.toNat) V ≤
+      -- Their sum is at most twice the counting total plus the pulled-up total and the pin reserve.
       2 * total.toNat + pulledTotal.toNat + pinReserve config pulled anc fin +
+        -- It also adds three times the counting stake of the quorum voters that are in `V`.
         3 * stake (fun v => balanceAt counted v.toNat) {v ∈ quorumVoters counted | v ∈ V} := by
   have nn {ι : Type} (S : Finset ι) (f : ι → ℕ) : (0 : ℤ) ≤ ∑ x ∈ S, (f x : ℤ) :=
     Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
