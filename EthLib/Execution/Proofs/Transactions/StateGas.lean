@@ -213,9 +213,11 @@ theorem processTransaction_stateGas_le_of_glamsterdam {env : BlockEnvironment fo
           (paidWrites included.sender target tx) = .ok output ∧
       -- A net state gas below zero counts as 0, so the bound holds for it too.
       out.blockGas.state = output.stateGasUsed.toNat ∧
-      -- Before the refund, the gas used is the gas limit less the execution gas and reservoir left.
+      -- The gas used before the refund is the gas limit minus the gas left and the reservoir left.
       --
-      -- So the execution gas of the block, that gas used minus the state gas, never floors at zero.
+      -- The execution gas of the block is that gas used minus the state gas.
+      --
+      -- So it never floors at zero.
       --
       -- Another theorem proves that the gas left and the reservoir left never exceed the gas limit.
       out.blockGas.state ≤ tx.gas.toNat - (output.gasLeft + output.reservoir) := by

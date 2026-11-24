@@ -211,7 +211,9 @@ private theorem allCodes_creditEther {tx tx' : TransactionState} {address : Addr
     rfl
   · cases h
 
-/-- Settling gas keeps every code: it credits ether, and it may delete an empty beneficiary. -/
+/-- Settling gas keeps every code.
+
+It credits ether, and it may delete an empty beneficiary. -/
 private theorem allCodes_settleGas {env : BlockEnvironment fork}
     {state state' : TransactionState} {sender : Address} {tx : Transaction}
     {gasLeft refundCounter used : Nat} (available : AllCodes state)

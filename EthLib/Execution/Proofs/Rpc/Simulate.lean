@@ -9,7 +9,9 @@ The reader rejects an unknown key, or an account override that gives both `state
 
 Such a rejection rejects the whole request.
 
-Each block keeps the number and time that the request gives it, and the order check follows them.
+Each block keeps the number and the time that the request gives it.
+
+The order check passes exactly when the numbers and the times strictly increase.
 
 An override sets each field that it gives, and keeps the others and the other accounts.
 

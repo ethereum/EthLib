@@ -7,7 +7,9 @@ public import EthLib.Base.Proofs.GasLimit
 /-!
 # Proofs: the gas limit rule
 
-How far the rule lets blocks move the gas limit, and the gas limit toward a target.
+The theorems bound how far the rule lets blocks move the gas limit.
+
+They also show that a gas limit toward a target follows the rule.
 -/
 
 @[expose] public section

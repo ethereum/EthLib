@@ -11,11 +11,15 @@ public import EthLib.Execution.Proofs.Rpc.Raw
 
 A call answers from the message that it prepares, on the state after the block that it names.
 
-A request makes a transaction only when it passes checks, and the transaction keeps its fields.
+A request makes a transaction exactly when it passes the checks of its fields.
+
+That transaction keeps the fields of the request.
 
 The blobs, the commitments, the proofs and the type of a request change no answer of the call.
 
 A request without a fee, from a sender that holds its value, never gets code 809.
+
+That code means insufficient funds.
 
 Before Hegotá, an empty list of blob hashes, or a blob fee cap without them, fails with code -32000.
 -/
@@ -109,8 +113,9 @@ theorem exists_toTransaction_eq_ok_iff {tx : GenericTransaction} {chainId : UInt
     (∃ t, tx.toTransaction chainId nonce gas maxFee = .ok t) ↔
       -- Its kind is at most 4.
       tx.kind ≤ 4 ∧
-      -- A fee cap or a priority fee needs type 2 or more, and a gas price type 1 or less.
+      -- A fee cap or a priority fee needs type 2 or more.
       (tx.kind ≤ 1 → tx.maxFeePerGas = none ∧ tx.maxPriorityFeePerGas = none) ∧
+      -- A gas price needs type 1 or less.
       (2 ≤ tx.kind → tx.gasPrice = none) ∧
       -- An access list needs type 1 or more.
       (tx.kind = 0 → tx.accessList = none) ∧
@@ -124,7 +129,7 @@ theorem exists_toTransaction_eq_ok_iff {tx : GenericTransaction} {chainId : UInt
       (3 ≤ tx.kind → tx.to.isSome) ∧
       -- The nonce, the gas limit and the fee cap that the call gives are below `2 ^ 256`.
       --
-      -- So is each number of the request that the transaction carries.
+      -- Each number of the request that the transaction carries is below `2 ^ 256` too.
       nonce < 2 ^ 256 ∧ gas < 2 ^ 256 ∧ tx.value.getD 0 < 2 ^ 256 ∧
       tx.maxPriorityFeePerGas.getD 0 < 2 ^ 256 ∧ maxFee < 2 ^ 256 ∧
       tx.gasPrice.getD 0 < 2 ^ 256 ∧ tx.maxFeePerBlobGas.getD 0 < 2 ^ 256 ∧
@@ -724,7 +729,7 @@ theorem ethCall_ne_insufficientFunds {v : ChainView} {tx : GenericTransaction} {
     {c : CallChoices} {r : BlockRecord} {e : RpcError} (hfee : tx.namesFee = false)
     (hr : v.resolve p = .ok (some r))
     (hvalue : tx.value.getD 0 ≤ (r.account (tx.sender.getD c.sender)).balance.toNat) :
-    -- It never fails with code 809, insufficient funds.
+    -- The call never fails with code 809, insufficient funds.
     v.ethCall tx p c = .error e → e.code ≠ insufficientFunds.code := by
   rw [ethCall_eq]
   rcases hp : v.prepareCall tx p c with e' | s

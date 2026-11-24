@@ -8,7 +8,9 @@ import EthLib.Execution.Proofs.State.Account
 /-!
 # Proofs: the state and storage roots
 
-Zero words, the empty state, any order of the entries, and the binding of each root.
+The theorems cover zero words, the empty state and any order of the entries.
+
+They also show that each root binds the words or the accounts under it.
 
 A 32-byte hash of byte strings has collisions, so no theorem can rule one out.
 

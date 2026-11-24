@@ -419,7 +419,9 @@ theorem accountExists_deleteAccounts (hfork : fork < .glamsterdam)
 
 /-- Before Glamsterdam, a frame that no revert undoes has each account it marks removed.
 
-Each account that the frame marks for deletion is then absent after the transaction. -/
+The frame is one that the run of the message of a transaction goes through.
+
+Each account that it marks for deletion is absent after the transaction. -/
 theorem runTransaction_removes_marked {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter]
     (hfork : fork < .glamsterdam) {env : BlockEnvironment fork} {block : State.BlockState}
     {included : Included} {out : TransactionOutput}

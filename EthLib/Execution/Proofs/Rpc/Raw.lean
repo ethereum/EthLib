@@ -17,7 +17,9 @@ The bytes of a transaction hash to the hash that names it in the request.
 
 In a valid view, a raw header hashes to the hash that the block objects report.
 
-A raw block decodes back to the block, when each ommer is at the fork the decoder gives it.
+A raw block decodes back to the block.
+
+This holds when each ommer is at the fork that the decoder gives its own number.
 
 In a valid view, the raw receipts of a canonical block after the lowest have its receipts root.
 -/

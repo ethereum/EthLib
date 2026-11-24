@@ -6,7 +6,9 @@ public import EthLib.Execution.Transactions.Validity
 /-!
 # Proofs: the intrinsic gas and the rules of a transaction
 
-Bounds on the intrinsic gas, and exact conditions for a transaction to pass each of its rules.
+The theorems bound the intrinsic gas.
+
+They also give the exact condition for a transaction to pass each of its rules.
 -/
 
 @[expose] public section
@@ -140,7 +142,9 @@ theorem validateTransaction_eq_ok_iff {fork : Fork} {sender : Address} {tx : Tra
           tx.gas.toNat ≤ TX_MAX_TOTAL_GAS_LIMIT ∧ minimumGas fork sender tx ≤ TX_MAX_GAS_LIMIT ∧
             -- From Glamsterdam its blobs and its authorizations pass their rules.
             checkContents fork tx = .ok ()) ∧
-        -- Its fees are not inverted: its priority fee per gas is at most its maximum fee per gas.
+        -- Its fees are not inverted.
+        --
+        -- Its priority fee per gas is at most its maximum fee per gas.
         --
         -- Its type exists at the fork.
         validateTransaction.feesInverted tx = false ∧ tx.fork ≤ fork := by
@@ -175,7 +179,9 @@ theorem validateTransaction_sender_of_lt_glamsterdam {fork : Fork} (h : fork < .
 /-- What a transaction that passes the gas, nonce and fee rules satisfies. -/
 theorem validateTransaction_ok {fork : Fork} {sender : Address} {tx : Transaction} {gas : Nat}
     (h : validateTransaction fork sender tx = .ok gas) :
-    -- It returns its intrinsic gas, and its gas limit covers the least gas limit of the fork.
+    -- It returns its intrinsic gas.
+    --
+    -- Its gas limit covers the least gas limit of the fork.
     gas = intrinsicGas fork sender tx ∧ minimumGas fork sender tx ≤ tx.gas.toNat ∧
       -- Its nonce is below `2^64 - 1`.
       tx.nonce.toNat < 2 ^ 64 - 1 ∧

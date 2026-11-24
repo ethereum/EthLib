@@ -6,7 +6,9 @@ public import EthLib.Execution.Trie.Root
 /-!
 # Proofs: `Trie.Root`
 
-The budget of the node composition, the root of each map, and how setting a key changes it.
+The theorems cover the budget of the node composition and the root of each map.
+
+They also say how setting a key changes the map.
 -/
 
 @[expose] public section

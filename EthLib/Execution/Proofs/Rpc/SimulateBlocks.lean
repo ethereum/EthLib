@@ -22,7 +22,9 @@ Without validation, a block whose base fee is not overridden has a base fee of 0
 
 With validation, no overrides and signed calls, a block from Paris on passes the checks of a block.
 
-It then agrees with the state transition, which may still fail at a sender with code.
+It then agrees with the state transition.
+
+That transition may still fail at a sender with code.
 -/
 
 @[expose] public section
@@ -1078,7 +1080,7 @@ theorem checkBlock_simulateBlock {chain chain' : BlockChain} {base parent : Rece
     (hGasLimit : Fees.GasLimit.LIMIT_MINIMUM ≤ parent.header.gasLimit)
     -- Each transaction that the block takes is the signed form of a call.
     (hUnsigned : txs.map Transaction.unsigned = b.record.block.transactions)
-    -- Each has a gas limit of at most `2^32 - 1`.
+    -- Each transaction has a gas limit of at most `2^32 - 1`.
     (hGas : ∀ tx ∈ txs, tx.gas.toNat ≤ Evm.GasCosts.TX_MAX_TOTAL_GAS_LIMIT)
     -- The block, with any transactions root, must fit the size limit.
     (hSize : (do validateBlockSize (← bodyItems (b.withTransactions txs root))) = .ok ()) :

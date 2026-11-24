@@ -12,7 +12,9 @@ When the message of a transaction fails, every write of the message is undone.
 
 The transaction still leaves the writes that come before and after its message.
 
-The first theorems say only where those writes land, and the later ones say their values.
+The first theorems say only where those writes land.
+
+The later ones say their values.
 
 A halt before the first frame undoes the authorizations, as [EIP-8037][e8037] asks.
 
@@ -348,11 +350,11 @@ The authorities are the addresses that the signatures of its authorizations name
 The state after it reads as the state before it at every other address. -/
 theorem processTransaction_sameOutside_of_error {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} {out : TransactionOutput}
-    -- It holds at every fork up to Glamsterdam.
+    -- The theorem holds at every fork up to Glamsterdam.
     --
     -- The message may fail in its first frame or before that frame starts.
     (h : processTransaction env block included tx = .ok out) (failed : out.error.isSome) :
-    -- That holds for the account, every word of storage and every word of transient storage.
+    -- Each other address keeps its account and every word of its storage and transient storage.
     State.TransactionState.SameOutside
       (included.sender :: env.coinbase :: tx.authorizations.filterMap recoverAuthority)
       (State.TransactionState.ofBlock block) out.state := by
@@ -427,10 +429,13 @@ private theorem creditEther_values {state state' : State.TransactionState} {targ
     · exact absurd rfl hne
     · exact absurd hnone hlive
 
-/-- Paying the beneficiary adds the priority fee to its balance, and no other balance changes.
+/-- Paying the beneficiary adds the priority fee to its balance.
 
-From Spurious Dragon, a fee of 0 paid to an empty beneficiary deletes it, and its balance stays 0.
--/
+No other balance changes.
+
+From Spurious Dragon, a fee of 0 paid to an empty beneficiary deletes it.
+
+Its balance then stays 0. -/
 private theorem payBeneficiary_values {state state' : State.TransactionState}
     {coinbase : Address} {fee : Nat} (h : payBeneficiary fork state coinbase fee = .ok state')
     (address : Address) :
@@ -844,9 +849,13 @@ abbrev FailedRun (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter] (tx : Tr
           transactionFirstFrame Meter tx env included bought target message = .error (e, read)) ∧
         -- The state before settlement then reads as the state after the gas purchase.
         SameOutside [] bought base ∧
-        -- Its codes read as after the purchase, and the refund is 0.
+        -- Its codes read as after the purchase.
+        --
+        -- The refund is 0.
         (∀ codeHash, base.getCode codeHash = bought.getCode codeHash) ∧ refund = 0) ∨
-      -- When a call's first frame starts and fails, that state reads as the authorizations left it.
+      -- When the first frame of a call starts and fails, no authorization is undone.
+      --
+      -- The state before settlement then reads as the authorizations left it.
       ∃ first, ∃ done : Delegations Meter, tx.to = some target ∧
         transactionFirstFrame Meter tx env included bought target message = .ok first ∧
         KeptAuthorizations tx env included bought base target done refund)
@@ -1184,14 +1193,18 @@ theorem processTransaction_authority_of_error {block : State.BlockState}
       ((State.TransactionState.ofBlock block).getAccount authority).codeHash = .ok code)
     (hdelegable : (code.size = 0 || isValidDelegation code) = true) :
     let pre := State.TransactionState.ofBlock block
-    -- Its nonce starts at its nonce before the transaction, plus one for the sender, who buys gas.
+    -- Its nonce starts at its nonce before the transaction.
+    --
+    -- When the authority is the sender, who buys the gas, its nonce starts one higher.
     let start := (pre.getAccount authority).nonce + if authority = included.sender then 1 else 0
     let accepted := acceptedBy env.chainId.toNat authority start tx.authorizations
     -- From Pectra, each authorization that the authority accepts adds one to its nonce.
     (out.state.getAccount authority).nonce = start + accepted.length ∧
-      -- Its code hash is that of the code the last one sets: a delegation indicator, or no code.
+      -- Its code hash is that of the code that the last accepted authorization sets.
       --
-      -- It stays when the authority accepts none.
+      -- That code is a delegation indicator, or no code.
+      --
+      -- The code hash stays when the authority accepts no authorization.
       (out.state.getAccount authority).codeHash =
         delegatedCodeHash accepted (pre.getAccount authority).codeHash ∧
       -- Its balance stays unless it is the sender or the beneficiary.
@@ -1231,8 +1244,9 @@ theorem processTransaction_authority_of_firstFrameHalts {block : State.BlockStat
 
 /-- Before Hegotá, a transaction whose message fails keeps an authority with real code.
 
-Real code is neither empty nor a delegation indicator, so the authority refuses every authorization.
--/
+Real code is neither empty nor a delegation indicator.
+
+So the authority refuses every authorization. -/
 theorem processTransaction_authority_keeps_of_error {block : State.BlockState}
     (h : processTransaction env block included tx = .ok out) (failed : out.error.isSome = true)
     {authority : Address} {code : ByteArray}
@@ -1241,7 +1255,9 @@ theorem processTransaction_authority_keeps_of_error {block : State.BlockState}
     (hsize : code.size ≠ 0) (hindicator : isValidDelegation code = false)
     -- No authorization may set a code whose hash is the code hash of the authority.
     --
-    -- That is an assumption; when each code sits under its own hash, only a collision breaks it.
+    -- That is an assumption.
+    --
+    -- When each code sits under its own hash, only a collision of Keccak-256 breaks it.
     (hhash : ∀ auth ∈ tx.authorizations, Cryptography.Hash.Keccak.keccak256 (delegationCode auth) ≠
       ((State.TransactionState.ofBlock block).getAccount authority).codeHash) :
     let pre := State.TransactionState.ofBlock block
@@ -1269,9 +1285,13 @@ private theorem failedRun_authority_storage {Meter : Type} [GasMeter Meter]
     (hcode : (State.TransactionState.ofBlock block).getCode
       ((State.TransactionState.ofBlock block).getAccount authority).codeHash = .ok code)
     (hdelegable : (code.size = 0 || isValidDelegation code) = true)
-    -- From Paris, the first authorization that it accepts deletes it if it leaves it empty.
+    -- From Paris, the first authorization that the authority accepts can delete it.
+    --
+    -- It does so when it leaves the account empty.
     (hkeep : fork < .paris ∨
-      -- The deletion needs an authority other than the sender, with nonce 0 and balance 0 before.
+      -- The deletion needs an authority other than the sender.
+      --
+      -- It also needs a nonce of 0 and a balance of 0 before the transaction.
       ((State.TransactionState.ofBlock block).getAccount authority).nonce +
         (if authority = included.sender then 1 else 0) ≠ 0 ∨
       ((State.TransactionState.ofBlock block).getAccount authority).balance ≠ 0 ∨
@@ -1322,7 +1342,9 @@ theorem processTransaction_authority_storage_of_error {block : State.BlockState}
     (hkeep : fork < .paris ∨
       -- So the first authorization the authority accepts deletes its storage if it leaves it empty.
       --
-      -- The deletion needs an authority other than the sender, with nonce 0 and balance 0 before.
+      -- The deletion needs an authority other than the sender.
+      --
+      -- It also needs a nonce of 0 and a balance of 0 before the transaction.
       ((State.TransactionState.ofBlock block).getAccount authority).nonce +
         (if authority = included.sender then 1 else 0) ≠ 0 ∨
       ((State.TransactionState.ofBlock block).getAccount authority).balance ≠ 0 ∨
@@ -1385,9 +1407,9 @@ The block after it reads as the block before it at every other address. -/
 theorem processTransaction_block_sameOutside_of_error {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} {out : TransactionOutput}
     (h : processTransaction env block included tx = .ok out) (failed : out.error.isSome = true) :
-    -- That holds for the account, every word of storage and every word of transient storage.
+    -- Each other address keeps its account and every word of its storage and transient storage.
     State.TransactionState.SameOutside
-      -- They are its sender, its beneficiary and its authorities.
+      -- The few addresses are its sender, its beneficiary and its authorities.
       --
       -- The authorities are the addresses that the signatures of its authorizations name.
       (included.sender :: env.coinbase :: tx.authorizations.filterMap recoverAuthority)

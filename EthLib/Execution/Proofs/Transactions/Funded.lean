@@ -10,7 +10,9 @@ import EthLib.Execution.Proofs.Transactions.Inclusion
 
 A transaction takes its fee from the sender, then moves its value to the target.
 
-The checks of the transaction make the sender hold both, and no later step fails for a balance.
+The checks of the transaction make the sender hold both the fee and the value.
+
+No later step fails for a balance that is too low.
 -/
 
 @[expose] public section

@@ -5,7 +5,9 @@ public import EthLib.Execution.Fees.BaseFee
 /-!
 # Proofs: `BaseFee`
 
-How far the base fee can move in one block, and where the bounds are reached.
+The theorems bound how far the base fee can move in one block.
+
+They also show which parents reach those bounds.
 
 The scaled distance is `base_fee * |used - target| / target`, and the fee moves by one eighth of it.
 -/
@@ -161,7 +163,7 @@ theorem calculateBaseFeePerGas_empty {parentGasLimit : Nat} (parentBaseFeePerGas
       = parentBaseFeePerGas - parentBaseFeePerGas / BASE_FEE_MAX_CHANGE_DENOMINATOR := by
   rw [calculateBaseFeePerGas_of_lt _ h, Nat.sub_zero, Nat.mul_div_cancel _ h]
 
-/-- At twice its target, with a positive target, the fee rises by exactly `max (base_fee / 8) 1`. -/
+/-- A parent at twice a positive target raises the base fee by exactly `max (base_fee / 8) 1`. -/
 theorem calculateBaseFeePerGas_two_mul {parentGasLimit : Nat} (parentBaseFeePerGas : Nat)
     (h : 0 < parentGasLimit / ELASTICITY_MULTIPLIER) :
     calculateBaseFeePerGas parentGasLimit (2 * (parentGasLimit / ELASTICITY_MULTIPLIER)) parentBaseFeePerGas
@@ -216,7 +218,7 @@ theorem calculateBaseFeePerGas_mono (parentGasLimit : Nat) {parentGasUsed parent
       rw [calculateBaseFeePerGas_of_eq _ heq']
       exact calculateBaseFeePerGas_le_self _ (by omega)
 
-/-- With the same gas limit and gas used, a higher base fee of the parent never gives a lower one.
+/-- With the same gas limit and gas used, a parent with a higher base fee never gives a lower fee.
 
 Below the target, each extra unit of the parent's fee adds at most 1 to the scaled distance.
 

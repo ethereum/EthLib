@@ -9,7 +9,9 @@ import EthLib.Base.Proofs.Toolchain.JsonBasic
 /-!
 # Proofs: the JSON form of a block
 
-The block object agrees with the header object, and lists the transactions, ommers and size.
+The block object agrees with the header object of the same block.
+
+It also lists the transactions and the ommers of the block, and gives its size.
 
 Each property holds whenever the writer gives an object.
 

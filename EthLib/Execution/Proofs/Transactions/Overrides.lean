@@ -6,7 +6,9 @@ public import EthLib.Execution.Evm.Call.MessageCall
 /-!
 # Proofs: what the simulation overrides change
 
-What the checks and the run of a transaction give with each override of a simulation, and without.
+Each theorem says what one override of a simulation changes in a check or in a run.
+
+Some also say what holds without the override.
 -/
 
 @[expose] public section
@@ -32,7 +34,9 @@ theorem precompileAddress_of_default {fork : Fork} {message : Message fork}
 -/
 theorem checkSender_unsigned {fork : Fork} {state : TransactionState} {sender : Address}
     {tx : Transaction}
-    -- The rule on its code: the sender has no code, or from Pectra only a delegation indicator.
+    -- The sender passes the rule on its code.
+    --
+    -- It has no code, or from Pectra only a delegation indicator.
     (hCode : ∃ code, state.getCode (state.getAccount sender).codeHash = .ok code ∧
       ((state.getAccount sender).codeHash = State.EMPTY_CODE_HASH ∨
         (fork ≥ .pectra ∧ Evm.isValidDelegation code = true))) :
@@ -58,7 +62,9 @@ theorem checkInclusion_of_knownSender {fork : Fork} {chainId : UInt64}
     {env : BlockEnvironment fork} {used : BlockGas} {state : TransactionState}
     {tx : Transaction} {sender : Address} (hChain : checkChainId fork chainId tx = .ok ())
     (hSender : recoverSender fork tx = .ok sender)
-    -- The rule on its code: the sender has no code, or from Pectra only a delegation indicator.
+    -- The sender passes the rule on its code.
+    --
+    -- It has no code, or from Pectra only a delegation indicator.
     (hCode : ∃ code, state.getCode (state.getAccount sender).codeHash = .ok code ∧
       ((state.getAccount sender).codeHash = State.EMPTY_CODE_HASH ∨
         (fork ≥ .pectra ∧ Evm.isValidDelegation code = true))) :

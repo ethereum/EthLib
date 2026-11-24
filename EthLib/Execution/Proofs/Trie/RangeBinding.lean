@@ -43,7 +43,9 @@ def rangeProofBelow (hash : ByteArray → Hash32) (nodes : List (Hash32 × ByteA
     (left : List Nibble) (right : Option (List Nibble)) :
     Nat → Item → List Nibble → List (List Nibble × ByteArray) → List Nibble → List ByteArray
   | 0, _, _, _, _ => []
-  -- The arguments follow the range check: the entries are those below the subtree.
+  -- The arguments follow the range check.
+  --
+  -- The entries are those below the subtree.
   | fuel + 1, reference, pre, entries, path =>
     match rangePlace left right pre with
     -- In a subtree between the ends, it takes the proof of the node that the entries build there.
@@ -577,7 +579,9 @@ theorem verifyRange_sound (hash : ByteArray → Hash32) {data : List (ByteArray 
     {more : Bool}
     -- The trie is any plain trie with the root, with distinct keys.
     --
-    -- Its keys are not hashed again: each is a 32-byte hash, as in the range.
+    -- Its keys are not hashed again.
+    --
+    -- Each is a 32-byte hash, as in the range.
     (hroot : root hash ⟨false, data⟩ = .ok root') (hkeys : (data.map Prod.fst).Nodup)
     (hverify : verifyRange hash root' start entries proof = .ok more) (key : Hash32)
     (hstart : bytesToNibbleList ⟨start.toArray⟩ ≤ bytesToNibbleList ⟨key.toArray⟩)

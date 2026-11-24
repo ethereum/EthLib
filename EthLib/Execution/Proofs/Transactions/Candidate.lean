@@ -74,9 +74,9 @@ private theorem noNewCandidate_creditEther {block : BlockState} {tx tx' : Transa
 
 /-- An authorization that sets the code of its authority keeps the condition on candidates.
 
-It sets the code, then raises the nonce, so the authority ends with a nonce above 0.
+It sets the code, then raises the nonce.
 
-So it is no candidate. -/
+The authority ends with a nonce above 0, so it is no candidate. -/
 private theorem noNewCandidate_delegate {block : BlockState} {state state' : TransactionState}
     {authority : Address} {auth : Authorization} {refund : Nat}
     (hinv : NoNewCandidate block state)

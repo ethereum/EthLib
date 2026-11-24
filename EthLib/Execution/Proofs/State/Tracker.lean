@@ -5,7 +5,9 @@ public import EthLib.Execution.State.Tracker
 /-!
 # Proofs: the transaction state
 
-What each read, write and rollback of the transaction state gives, and what each records as read.
+The theorems say what each read, write and rollback of the transaction state gives.
+
+They also say what each of them records as read.
 
 The state after a block reads as the block does at the start of its next transaction.
 -/

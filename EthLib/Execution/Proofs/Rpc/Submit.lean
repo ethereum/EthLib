@@ -13,9 +13,15 @@ The hash that a submission returns is the hash of the transaction that its raw f
 
 A network form is accepted only when its blobs pass their checks, KZG proofs included.
 
-The checks of a transaction see the next base fee and the future nonce.
+The next block in which a transaction is checked has the next base fee of the fee history.
 
-A failed check has a code in a group that the method lists.
+A future nonce never fails the checks of the nonce.
+
+The code of a failed check is in a group that the method lists.
+
+It lies in the range of that group.
+
+Two failed checks get the same code only when they are of the same kind.
 -/
 
 public section

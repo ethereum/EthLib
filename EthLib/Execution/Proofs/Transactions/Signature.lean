@@ -8,7 +8,9 @@ public import EthLib.Serialization.Proofs.Rlp.Scalar
 /-!
 # Proofs: the sender of a transaction
 
-When a signature names a sender, which sender it names, and what each signing hash covers.
+The theorems say when a signature names a sender, and which sender it names.
+
+They also say what each signing hash covers.
 -/
 
 @[expose] public section

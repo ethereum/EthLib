@@ -10,6 +10,10 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.CachePartial
 
 The hash of the trie is modelled as one random oracle, shared by every node and every key.
 
+An adversary wins when it outputs two tries of one kind, each with distinct keys, with one root.
+
+The two tries must also give a key different values.
+
 The birthday bound of the oracle bounds the probability that an adversary wins.
 
 Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2.

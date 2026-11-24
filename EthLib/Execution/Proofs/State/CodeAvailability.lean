@@ -7,7 +7,9 @@ public import EthLib.Execution.Proofs.State.Frame
 
 Code is available when lookup succeeds at the code hash of every current account.
 
-Which changes of state keep it available, now and before the transaction.
+The theorems say which changes of state keep the code available.
+
+They cover the current accounts and the accounts before the transaction.
 -/
 
 @[expose] public section
