@@ -10,19 +10,9 @@ An honest validator keeps the store of the fork choice and the store of the rule
 
 It runs the rule at the start of a slot, at most once in each slot.
 
-Its store of the fork choice must then be up to date with its view.
-
 The paper proves safety for the block that the rule stores at the start of a slot.
 
 That is Theorem 2 of Appendix A.2 of [arXiv 2405.00549v4][fcr].
-
-Each execution of this protocol gives an execution of the fork choice alone, with the same views.
-
-Its synchrony carries over, so the duty to vote and the theorems on the fork choice apply to it.
-
-The duty to run the rule takes its set of slots as a parameter.
-
-The duty to vote takes its slots from the assignment in the same way.
 
 [fcr]: https://arxiv.org/abs/2405.00549v4
 -/
@@ -61,31 +51,28 @@ def IsSlotStart (config : Config) (genesisTimeMs : UInt64) (slot : Slot) (time :
 variable (config : Config) (checks : SignatureChecks) (sources : BlockSources preset fork)
   (genesisTimeMs : UInt64)
 
-/-- The moves of an honest validator that runs the rule, at a time and with a view.
-
-A move of its store of the fork choice keeps the store of the rule.
-
-A run of the rule keeps the store of the fork choice.
-
-A run happens at the start of a slot later than the slot of the last run.
-
-The store of the fork choice then has the time of genesis of the protocol, and is up to date.
-
-Its clock is then in that slot, so the slot it records is the slot of the store.
-
-A later slot than the last run makes the run the only one of its slot. -/
+/-- The moves of an honest validator that runs the rule, at a time and with a view. -/
 inductive ConfirmingMoves (time : ℕ) (view : Set (Message preset fork))
     (s : ConfirmingState preset fork) : ConfirmingState preset fork → Prop
   /-- A move of the store of the fork choice. -/
   | handles {after : Store preset fork} :
     Handles config checks sources time view s.store after →
+      -- A move of the store of the fork choice keeps the store of the rule.
       ConfirmingMoves time view s ⟨after, s.fcr, s.lastSlot⟩
   /-- A run of the rule at the start of a slot. -/
   | confirms {slot : Slot} {fcr : FastConfirmationStore} :
+    -- A run happens at the start of a slot later than the slot of the last run.
+    --
+    -- A later slot than the last run makes the run the only one of its slot.
     IsSlotStart config genesisTimeMs slot time → (∀ last, s.lastSlot = some last → last < slot) →
+      -- The store of the fork choice then has the time of genesis of the protocol.
+      --
+      -- It is up to date with the view.
       s.store.genesisTimeMs = genesisTimeMs → UpToDate config checks sources time view s.store →
+      -- The clock of that store is then in the slot, so the run records the slot of the store.
       s.store.getCurrentSlot config = .ok slot →
       s.store.onFastConfirmation config s.fcr = .ok fcr →
+      -- A run of the rule keeps the store of the fork choice.
       ConfirmingMoves time view s ⟨s.store, fcr, some slot⟩
 
 variable (anchorState : BeaconState preset fork) (anchorBlock : BeaconBlock preset fork)
@@ -127,19 +114,16 @@ theorem ConfirmingMoves.fcr_eq_or {time : ℕ} {view : Set (Message preset fork)
 
 /-- A property of the state of each honest validator holds along an execution of the protocol.
 
-It holds at the start.
-
-Every move of a store of the fork choice keeps it.
-
-Every run of the rule keeps it, given the conditions of an honest run.
-
 Its case of a run gives the result of the run, which another theorem splits into four cases. -/
 theorem Execution.confirmingInduction {J : Set ValidatorIndex}
     (e : Execution (honestConfirming config checks sources genesisTimeMs anchorState anchorBlock
       assignment) J) {I : ValidatorIndex → ConfirmingState preset fork → Prop}
+    -- The property holds at the start.
     (start : ∀ v ∈ J, I v (e.start v))
+    -- Every move of a store of the fork choice keeps it.
     (handles : ∀ v ∈ J, ∀ time view s after, I v s →
       Handles config checks sources time view s.store after → I v ⟨after, s.fcr, s.lastSlot⟩)
+    -- Every run of the rule keeps it, given the conditions of an honest run.
     (confirms : ∀ v ∈ J, ∀ time view s slot fcr, I v s →
       IsSlotStart config genesisTimeMs slot time → (∀ last, s.lastSlot = some last → last < slot) →
       s.store.genesisTimeMs = genesisTimeMs → UpToDate config checks sources time view s.store →
@@ -153,7 +137,12 @@ theorem Execution.confirmingInduction {J : Set ValidatorIndex}
       exact confirms v honest time view s _ _ holds slotStart fresh genesis upToDate current
         confirmed) n
 
-/-! ## The execution of the fork choice inside an execution of the rule -/
+/-! ## The execution of the fork choice inside an execution of the rule
+
+Each execution of this protocol gives an execution of the fork choice alone, with the same views.
+
+Its synchrony carries over, so the duty to vote and the theorems on the fork choice apply to it.
+-/
 
 section Project
 
@@ -268,44 +257,40 @@ theorem toForkChoice_synchronous {Δ : ℕ} (sync : e.Synchronous Δ) :
 
 end Execution
 
-/-! ## The duty to run the rule -/
+/-! ## The duty to run the rule
+
+The duty to run the rule takes its set of slots as a parameter.
+
+The duty to vote takes its slots from the assignment in the same way.
+-/
 
 variable {J : Set ValidatorIndex}
 
-/-- A run of the rule by an honest validator, at the `n`-th event of an execution.
-
-The event is the move of the validator to the store of the rule that the run returns.
-
-It happens at the start of the slot, after the slot of the last run, and records that slot.
-
-The store of the fork choice of the validator then has the time of genesis of the protocol.
-
-That store is up to date, and its clock is in the slot.
-
-The run succeeds from the store of the rule before it. -/
+/-- A run of the rule by an honest validator, at the `n`-th event of an execution. -/
 structure ConfirmAt
     (e : Execution (honestConfirming config checks sources genesisTimeMs anchorState anchorBlock
       assignment) J) (v : ValidatorIndex) (slot : Slot) (n : ℕ) (fcr : FastConfirmationStore) :
     Prop where
+  -- The event is the move of the validator to the store of the rule that the run returns.
+  --
+  -- The move records the slot.
   moves : e.events n = .move v ⟨((e.world n).state v).store, fcr, some slot⟩
+  -- The run happens at the start of the slot.
   atTime : IsSlotStart config genesisTimeMs slot (e.world n).time
+  -- The slot is after the slot of the last run.
   fresh : ∀ last, ((e.world n).state v).lastSlot = some last → last < slot
+  -- The store of the fork choice of the validator then has the time of genesis of the protocol.
   genesis : ((e.world n).state v).store.genesisTimeMs = genesisTimeMs
+  -- That store is up to date.
   upToDate : UpToDate config checks sources (e.world n).time ((e.world n).view v)
     ((e.world n).state v).store
+  -- The clock of that store is in the slot.
   current : ((e.world n).state v).store.getCurrentSlot config = .ok slot
+  -- The run succeeds from the store of the rule before it.
   confirmed : ((e.world n).state v).store.onFastConfirmation config ((e.world n).state v).fcr =
     .ok fcr
 
 /-- The duty to run the rule, for a set of slots, from a time `stable` on.
-
-Take an honest validator, a slot of the set, and the start of that slot.
-
-When the execution starts by then, and `stable` is past, the validator runs the rule then.
-
-The duty includes that the run succeeds.
-
-A slot whose start does not fit in 64 bits has no start, so the duty asks nothing there.
 
 A theorem that needs a run at every slot takes a set that holds each slot from `stable` on.
 
@@ -313,7 +298,13 @@ It then covers only executions where the rule never fails at those slots. -/
 def Confirms (slots : Set Slot) (stable : ℕ)
     (e : Execution (honestConfirming config checks sources genesisTimeMs anchorState anchorBlock
       assignment) J) : Prop :=
+  -- Take an honest validator, a slot of the set, and the start of that slot.
+  --
+  -- A slot whose start does not fit in 64 bits has no start, so the duty asks nothing there.
   ∀ v ∈ J, ∀ slot ∈ slots, ∀ time, IsSlotStart config genesisTimeMs slot time →
+    -- When the execution starts by then, and `stable` is past, the validator runs the rule then.
+    --
+    -- The duty includes that the run succeeds.
     e.startTime ≤ time → stable ≤ time → ∃ n fcr, ConfirmAt e v slot n fcr
 
 /-! ## An execution where an honest validator votes and runs the rule -/
@@ -515,17 +506,7 @@ private theorem VoteAt.transfer
 
 /-- Honest validators that vote and run the rule have an execution, with one honest validator.
 
-The hypotheses are those of the execution where the validator only votes.
-
-The validator runs the rule at the start of slot zero, then votes at the deadline of that slot.
-
-Its store of the rule starts from the finalized checkpoint of its store of the fork choice.
-
-The execution is synchronous for every positive delay.
-
-The validator does its duty to vote, and its duty to run the rule for the set of only slot zero.
-
-Its store of the fork choice stays reachable from the anchor. -/
+The hypotheses are those of the execution where the validator only votes. -/
 theorem exists_votes_and_confirmations_execution {store : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok store)
     (stateZero : anchorState.slot = 0) (blockZero : anchorBlock.slot = 0)
@@ -541,8 +522,17 @@ theorem exists_votes_and_confirmations_execution {store : Store preset fork}
         anchorBlock (Assignment.single v 0 0)) {v},
       e.startTime = store.timeMs.toNat ∧
       e.start = (fun _ => ⟨store, getFastConfirmationStore store, none⟩) ∧
+      -- The store of the rule of the validator starts from the finalized checkpoint.
+      --
+      -- That checkpoint is the one of its store of the fork choice.
       (∀ u, (e.start u).Initial) ∧
+      -- The validator does its duty to vote.
+      --
+      -- It does its duty to run the rule for the set of only slot zero.
+      --
+      -- The execution is synchronous for every positive delay.
       Votes 0 e.toForkChoice ∧ Confirms {0} 0 e ∧ e.Synchronous Δ ∧
+      -- The store of the fork choice of the validator stays reachable from the anchor.
       ∀ n, Store.Reachable config anchorState anchorBlock ((e.world n).state v).store := by
   obtain ⟨e₀, startTime₀, start₀, -, votes₀, ⟨-, unbounded₀, deliver₀⟩, reachable₀⟩ :=
     exists_votes_execution (sources := sources) anchored stateZero blockZero before parent
@@ -569,7 +559,9 @@ theorem exists_votes_and_confirmations_execution {store : Store preset fork}
       rw [Nat.toUInt64_eq, UInt64.ofNat_toNat, onTick_timeMs startSlot] at ticks
       exact (Except.ok.inj ticks).symm
     | _ => simp_all
-  -- The validator runs the rule first, then follows the execution where it only votes.
+  -- The validator runs the rule at the start of slot zero, then votes at the deadline of that slot.
+  --
+  -- So it runs the rule first, then follows the execution where it only votes.
   let extra : ValidatorIndex → FastConfirmationStore × Option Slot :=
     fun u => if u = v then (fcr, some 0) else (getFastConfirmationStore store, none)
   let run : Event ValidatorIndex (Message preset fork) (ConfirmingState preset fork) :=

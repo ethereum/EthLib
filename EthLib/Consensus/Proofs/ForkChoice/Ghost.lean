@@ -17,38 +17,6 @@ The proposer boost counts as one more vote, for the boosted block.
 The stake of that vote is the score of the boost.
 
 The model is Algorithm 3.1 of Gasper, [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
-
-The known blocks of the store form a tree, and an unknown root hangs under a common root.
-
-The slot of a block serves as its height, so a known parent has to sit at a lower slot.
-
-The view holds the nodes that lead to a viable leaf, and their ancestors.
-
-Before Gloas, each ancestor of a viable node is viable, or the justified block descends from it.
-
-A validator counts when it is active and not slashed in the justified state.
-
-Its stake is its effective balance, and an equivocator has no latest message.
-
-A tie between two children goes to the greater root, read as a big-endian number.
-
-That order is the order of roots as strings of bytes.
-
-The head is a viable leaf, unless no leaf is viable, and then it is the justified block.
-
-So when some leaf is viable, the chain of the head holds the finalized block.
-
-That is not required when the finalized epoch is genesis.
-
-Take a viable block whose votes exceed half of the sum of the stake and the score of the boost.
-
-Those votes leave out the boost.
-
-The head then descends from it.
-
-That holds before Gloas, when each known block sits after its known parent.
-
-The proposer score succeeds when the boost times the largest possible total fits in 64 bits.
 -/
 
 @[expose] public section
@@ -65,15 +33,15 @@ open Uint64 Models
 
 /-- The proposer score fits in 64 bits for every active stake up to a cap.
 
-The score divides the unslashed active total by the slots of an epoch, then multiplies by the boost.
-
-The total is at least one increment, so the increment and the cap bound it.
-
-The product of that bound and the boost must stay below `2^64`, or the checked product fails.
-
-The cap itself must stay below `2^64`, or the total fails. -/
+It divides the unslashed active total by the slots of an epoch, then multiplies by the boost. -/
 structure Config.ProposerScoreFits (config : Config) (preset : Preset) (cap : ℕ) : Prop where
+  -- The cap itself must stay below `2^64`, or the total fails.
   total : cap < 2 ^ 64
+  -- The total is at least one increment, so the increment and the cap bound it.
+  --
+  -- The product of that bound and the boost must stay below `2^64`, or the checked product fails.
+  --
+  -- So the proposer score succeeds when the boost times the largest possible total fits in 64 bits.
   share : max preset.EFFECTIVE_BALANCE_INCREMENT.toNat cap * config.PROPOSER_SCORE_BOOST.toNat <
     2 ^ 64
 
@@ -162,8 +130,10 @@ variable {store}
 
 /-- The tree of the known blocks of a store whose parents sit at lower slots. -/
 def blockTree (lower : store.ParentsBelow) : BlockTree (Option Root) where
+  -- The known blocks of the store form a tree, and an unknown root hangs under a common root.
   genesis := none
   parent := store.treeParent
+  -- The slot of a block serves as its height, so a known parent has to sit at a lower slot.
   height := store.treeHeight
   parent_genesis := rfl
   height_parent := by
@@ -431,6 +401,7 @@ def latestVote (index : ValidatorIndex) : Option (Option Root) :=
 variable (lower) in
 /-- The view of the given nodes, their ancestors and the latest votes of the store. -/
 noncomputable def view (nodes : List ForkChoiceNode) : View ℕ (Option Root) (blockTree lower) :=
+  -- In the head proofs, the view holds the nodes that lead to a viable leaf, and their ancestors.
   View.ofBlocks (nodes.map (some ·.root)).toFinset (store.latestVote ·.toUInt64)
 
 /-- A sum over the selected entries of a list with their positions is a sum over the positions. -/
@@ -554,7 +525,10 @@ theorem getAttestationScore_eq_weight {node : ForkChoiceNode} {block : BeaconBlo
     simp only [latestVote, honest, Bool.false_eq_true, ↓reduceIte, message', Option.map_some]
     simp
 
-/-! ## The viable nodes -/
+/-! ## The viable nodes
+
+Before Gloas, each ancestor of a viable node is viable, or the justified block descends from it.
+-/
 
 /-- Viable nodes below a node come with that node, and each is a known block.
 
@@ -916,7 +890,12 @@ theorem isViableLeaf_finalized {config : Config} {node : ForkChoiceNode}
   · exact .inl genesis
   · exact .inr (same ▸ checkpointOk)
 
-/-! ## The order of roots -/
+/-! ## The order of roots
+
+A tie between two children goes to the greater root, read as a big-endian number.
+
+That order is the order of roots as strings of bytes.
+-/
 
 /-- A root read as a big-endian number, and the common root of the tree as 0. -/
 def rootValue : Option Root → ℕ
@@ -997,20 +976,20 @@ def boostedRoot : Option (Option Root) :=
   else some (some store.proposerBoostRoot)
 
 variable (store config) in
-/-- The score of the boost as a stake: the proposer score, from the justified state.
-
-It is 0 when the store boosts no block.
-
-It is also 0 when the proposer score fails.
-
-Then the weight of each node in the chain of the boosted block fails.
-
-So the head fails when the walk weighs such a node; otherwise no weight reads the score. -/
+/-- The score of the boost as a stake: the proposer score, from the justified state. -/
 def boostScore : ℕ :=
+  -- The score is 0 when the store boosts no block.
   if store.proposerBoostRoot = Vector.replicate 32 0 then 0
   else
     match store.getProposerScore config with
     | .ok score => score.toNat
+    -- The score is also 0 when the proposer score fails.
+    --
+    -- Then the weight of each node in the chain of the boosted block fails.
+    --
+    -- So the head fails when the walk weighs such a node.
+    --
+    -- Otherwise no weight reads the score.
     | .error _ => 0
 
 /-- Before Gloas and without a boost, the weight of a known pending node is its weight in the model.
@@ -1372,21 +1351,21 @@ theorem getHead_finalized {head : ForkChoiceNode} (found : store.getHead config 
 variable (lower) in
 /-- Before Gloas and without a boost, the head of the store is the head of LMD-GHOST.
 
-Each known block must sit at a later slot than its known parent.
-
-The model starts at the justified block, over the view of the viable nodes.
-
-Its voters are the validators active and not slashed in the justified state.
-
-Its stakes are their effective balances, and an equivocator has no vote.
-
-A tie goes to the greater root, as bytes. -/
+Each known block must sit at a later slot than its known parent. -/
 theorem getHead_eq_ghost {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
     (before : fork < .glamsterdam) (noBoost : store.proposerBoostRoot = Vector.replicate 32 0)
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
     (tree : store.getFilteredNodeTree config = .ok nodes)
     (found : store.getHead config = .ok head) :
+    -- The voters of the model are the validators active and not slashed in the justified state.
+    --
+    -- Their stakes are their effective balances, and an equivocator has no vote.
+    --
+    -- The model runs over the view of the viable nodes.
+    --
+    -- A tie goes to the greater root, as bytes.
     ghost (voters state) (balanceAt state) (view lower nodes) rootValue
+      -- The model starts at the justified block.
       (some store.justifiedCheckpoint.root) = some head.root := by
   have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   simp only [getHead, later, false_and, ↓reduceIte, tree, bind, Except.bind] at found
@@ -1396,26 +1375,27 @@ theorem getHead_eq_ghost {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
 variable (lower) in
 /-- Before Gloas, the head of the store is the head of LMD-GHOST with the boost.
 
-Each known block must sit at a later slot than its known parent.
-
-The model starts at the justified block, over the view of the viable nodes.
-
-Its voters are the validators active and not slashed in the justified state.
-
-Its stakes are their effective balances, and an equivocator has no vote.
-
-The boost is one more vote, for the boosted block, and its stake is the score of the boost.
-
-Without a boosted block, that vote is absent.
-
-A tie goes to the greater root, as bytes. -/
+Each known block must sit at a later slot than its known parent. -/
 theorem getHead_eq_ghost_withBoost {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
     (before : fork < .glamsterdam)
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
     (tree : store.getFilteredNodeTree config = .ok nodes)
     (found : store.getHead config = .ok head) :
+    -- The voters of the model are the validators active and not slashed in the justified state.
+    --
+    -- Their stakes are their effective balances, and an equivocator has no vote.
+    --
+    -- The boost is one more vote, and its stake is the score of the boost.
     ghost (voters state).insertNone (boostStake (balanceAt state) (store.boostScore config))
+      -- The model runs over the view of the viable nodes.
+      --
+      -- The vote of the boost is for the boosted block.
+      --
+      -- Without a boosted block, that vote is absent.
+      --
+      -- A tie goes to the greater root, as bytes.
       ((view lower nodes).withBoost store.boostedRoot) rootValue
+      -- The model starts at the justified block.
       (some store.justifiedCheckpoint.root) = some head.root := by
   have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   simp only [getHead, later, false_and, ↓reduceIte, tree, bind, Except.bind] at found
@@ -1466,18 +1446,18 @@ Those votes leave out the boost.
 
 The head is then in its subtree.
 
-That holds before Gloas, when each known block sits after its known parent.
-
-Without a boosted block, the score of the boost is 0.
-
-A validator counts when it is active and not slashed in the justified state.
-
-Its stake is its effective balance, and the votes of the block are counted at its node. -/
+That holds before Gloas, when each known block sits after its known parent. -/
 theorem ancestor_getHead_of_majority_withBoost {nodes : List ForkChoiceNode}
     {node head : ForkChoiceNode} {score : Gwei} (before : fork < .glamsterdam)
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
     (tree : store.getFilteredNodeTree config = .ok nodes) (viable : node ∈ nodes)
+    -- The votes of the block are counted at its node.
     (votes : store.getAttestationScore node state = .ok score)
+    -- A validator counts when it is active and not slashed in the justified state.
+    --
+    -- Its stake is its effective balance.
+    --
+    -- Without a boosted block, the score of the boost is 0.
     (majority :
       Models.stake (balanceAt state) (voters state) + store.boostScore config < 2 * score.toNat)
     (found : store.getHead config = .ok head) :
@@ -1508,24 +1488,23 @@ Those votes leave out the boost.
 
 The head then descends from its node.
 
-The ancestor check of the store returns true from the head back to that node.
-
-That holds before Gloas, when each known block sits after its known parent.
-
-Without a boosted block, the score of the boost is 0.
-
-A validator counts when it is active and not slashed in the justified state.
-
-Its stake is its effective balance, and the votes of the block are counted at its node. -/
+That holds before Gloas, when each known block sits after its known parent. -/
 theorem isAncestor_getHead_of_majority_withBoost {nodes : List ForkChoiceNode}
     {node head : ForkChoiceNode} {score : Gwei} (lower : store.ParentsBelow)
     (before : fork < .glamsterdam)
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
     (tree : store.getFilteredNodeTree config = .ok nodes) (viable : node ∈ nodes)
+    -- The votes of the block are counted at its node.
     (votes : store.getAttestationScore node state = .ok score)
+    -- A validator counts when it is active and not slashed in the justified state.
+    --
+    -- Its stake is its effective balance.
+    --
+    -- Without a boosted block, the score of the boost is 0.
     (majority :
       Models.stake (balanceAt state) (voters state) + store.boostScore config < 2 * score.toNat)
     (found : store.getHead config = .ok head) :
+    -- The ancestor check of the store returns true from the head back to that node.
     store.isAncestor head node = .ok true := by
   have above := ancestor_getHead_of_majority_withBoost lower before justifiedState tree viable votes
     majority found
@@ -1585,21 +1564,20 @@ theorem ancestor_getHead_of_majority {nodes : List ForkChoiceNode} {node head : 
 
 /-- When a viable block has more than half of the stake in votes, the head descends from its node.
 
-The ancestor check of the store returns true from the head back to that node.
-
-That holds before Gloas and without a boost, when each known block sits after its known parent.
-
-A validator counts when it is active and not slashed in the justified state.
-
-Its stake is its effective balance, and the votes of the block are counted at its node. -/
+That holds before Gloas and without a boost, when each known block sits after its known parent. -/
 theorem isAncestor_getHead_of_majority {nodes : List ForkChoiceNode} {node head : ForkChoiceNode}
     {score : Gwei} (lower : store.ParentsBelow) (before : fork < .glamsterdam)
     (noBoost : store.proposerBoostRoot = Vector.replicate 32 0)
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
     (tree : store.getFilteredNodeTree config = .ok nodes) (viable : node ∈ nodes)
+    -- The votes of the block are counted at its node.
     (votes : store.getAttestationScore node state = .ok score)
+    -- A validator counts when it is active and not slashed in the justified state.
+    --
+    -- Its stake is its effective balance.
     (majority : Models.stake (balanceAt state) (voters state) < 2 * score.toNat)
     (found : store.getHead config = .ok head) :
+    -- The ancestor check of the store returns true from the head back to that node.
     store.isAncestor head node = .ok true :=
   isAncestor_getHead_of_majority_withBoost lower before justifiedState tree viable votes
     (by rw [boostScore_of_zero noBoost, Nat.add_zero]; exact majority) found

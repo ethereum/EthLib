@@ -16,22 +16,6 @@ The fast confirmation rule weighs them with a state of an observed justified che
 
 Under the assumption the proof can compare the two weights through one reference state.
 
-Here the assumption is a relation between the reference state and each state that a store holds.
-
-It keeps only what the proofs use, and takes the validator set of the paper as the active one.
-
-Each honest validator is active and not slashed in both states, with the same effective balance.
-
-No effective balance is above that of the reference.
-
-A Byzantine validator active and not slashed in the state is so in the reference too.
-
-Then the honest supporters of a node weigh the same in two such states.
-
-The supporters of a node in a state weigh at most its supporters in the reference.
-
-A store built from an anchor holds only the anchor state, which agrees with itself.
-
 [fcr]: https://arxiv.org/abs/2405.00549v4
 -/
 
@@ -45,11 +29,9 @@ variable {preset : Preset} {fork : Fork}
 
 /-- A state agrees with a reference state on a static set of validators, with `J` the honest ones.
 
-No effective balance is above that of the reference.
+This relation is the static-validator assumption of the paper, kept to what the proofs use.
 
-Each honest validator is active and not slashed in both states, with one effective balance.
-
-A Byzantine validator active and not slashed in the state is so in the reference too. -/
+It takes the validator set of the paper as the active one. -/
 structure StaticPair (J : Set ValidatorIndex) (ref state : BeaconState preset fork) : Prop where
   /-- No effective balance is above that of the reference. -/
   balance_le : ∀ i, balanceAt state i ≤ balanceAt ref i
@@ -68,7 +50,9 @@ structure StaticPair (J : Set ValidatorIndex) (ref state : BeaconState preset fo
     ∃ validator', ref.validators.data[v.toNat]? = some validator' ∧
       validator'.slashed = false ∧ isActiveValidator validator' (getCurrentEpoch ref) = true
 
-/-- Every state that a store holds, for a block or a checkpoint, agrees with the reference. -/
+/-- Every state that a store holds, for a block or a checkpoint, agrees with the reference.
+
+So the assumption relates the reference state and each state that a store holds. -/
 def StaticStore (J : Set ValidatorIndex) (ref : BeaconState preset fork)
     (store : Store preset fork) : Prop :=
   (∀ (root : Root) state, store.blockStates[root]? = some state → StaticPair J ref state) ∧
@@ -104,6 +88,7 @@ theorem staticStore_getForkchoiceStore {config : Config} {anchorBlock : BeaconBl
     (honest : ∀ v ∈ J, ∃ validator, state.validators.data[v.toNat]? = some validator ∧
       validator.slashed = false ∧ isActiveValidator validator (getCurrentEpoch state) = true) :
     StaticStore J state store := by
+  -- A store built from an anchor holds only the anchor state, which agrees with itself.
   obtain ⟨r, -, -, states⟩ := getForkchoiceStore_maps made
   obtain ⟨r', -, cps⟩ := getForkchoiceStore_checkpointStates made
   have self := staticPair_self (state := state) honest

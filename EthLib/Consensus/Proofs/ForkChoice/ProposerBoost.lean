@@ -13,15 +13,7 @@ Suppose that the conflicting votes weigh less than the score of the boost.
 
 Then the head of the store descends from the boosted block.
 
-When no known block builds on the boosted block, the head is that block.
-
-At each fork on the way, the child towards the block holds at least the score of the boost.
-
-Every other child holds only conflicting votes.
-
 The boost is Buterin's [mitigation of balancing attacks][mitigation], "Proposed solution", step 3.
-
-A store whose votes all lie in the chain or the subtree of the block has no conflicting vote.
 
 [mitigation]: https://notes.ethereum.org/@vbuterin/lmd_ghost_mitigation
 -/
@@ -102,17 +94,17 @@ theorem ancestor_getHead_of_boost {nodes : List ForkChoiceNode} {head : ForkChoi
   have inView : some root ∈ (view lower nodes).blocks := by
     simp only [view, View.mem_ofBlocks, List.mem_toFinset, List.mem_map]
     exact ⟨_, ⟨_, viable, rfl⟩, .refl _⟩
-  -- The model head descends from the block, and the store head is the model head.
+  -- At each fork on the way, the child towards the block holds at least the score of the boost.
+  --
+  -- Every other child holds only conflicting votes.
+  --
+  -- So the model head descends from the block, and the store head is the model head.
   have model := ancestor_ghost_withBoost (V := voters state) (w := balanceAt state) rootValue
     inView belowJustified light
   rwa [← boostedRoot, ← scoreEq, getHead_eq_ghost_withBoost lower before justifiedState tree
     found] at model
 
 /-- Before Gloas, the boost makes a viable boosted block the head when no block builds on it.
-
-That asks it of every block of the store, viable or not.
-
-The conflicting votes must weigh less than the score of the boost.
 
 Each known block must sit at a later slot than its known parent.
 
@@ -123,7 +115,9 @@ theorem getHead_eq_of_boost {nodes : List ForkChoiceNode} {head : ForkChoiceNode
     (tree : store.getFilteredNodeTree config = .ok nodes) (viable : ⟨root, .pending⟩ ∈ nodes)
     (boosted : store.proposerBoostRoot = root) (nonzero : root ≠ Vector.replicate 32 0)
     (proposerScore : store.getProposerScore config = .ok score)
+    -- The conflicting votes must weigh less than the score of the boost.
     (light : store.stakeAgainst lower state root < score.toNat)
+    -- No block of the store builds on the boosted block, viable or not.
     (leaf : ∀ (child : Root) (block : BeaconBlock preset fork), store.blocks[child]? = some block →
       block.parentRoot ≠ root)
     (found : store.getHead config = .ok head) :

@@ -12,17 +12,6 @@ The list leaves out the terminal block.
 
 It is empty when the walk reaches a block whose slot is not above the slot of the terminal block.
 
-- A successful walk is empty, or it lists the block after its older roots.
-- A walk that returns a root starts at a block with a higher slot than the terminal block.
-- Every root that a walk lists has a higher slot than the terminal block.
-- The roots of a walk after one of its roots are the walk from the block back to that root.
-
-The last fact splits a walk at one of its roots.
-
-A second walk from the same block, back to a root of the first walk, lists the roots after it.
-
-Each root of a walk has the root before it as parent, or the terminal block for the first root.
-
 The block descends from each root of a walk, and each root descends from the terminal block.
 -/
 
@@ -202,7 +191,9 @@ private theorem getAncestorRoots_of_append_aux {root terminal mid : Root}
 
 /-- The walk from a block back to a root of a longer walk returns the roots after that root.
 
-The longer walk starts at the same block and goes back to an older terminal block. -/
+The longer walk starts at the same block and goes back to an older terminal block.
+
+This splits a walk at one of its roots. -/
 theorem getAncestorRoots_of_append {head terminal mid : Root} {older newer : List Root}
     (walked : store.getAncestorRoots head terminal = .ok (older ++ mid :: newer)) :
     store.getAncestorRoots head mid = .ok newer := by
