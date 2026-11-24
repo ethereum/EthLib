@@ -102,7 +102,7 @@
   "The public key grown from a seed."
 
 #define DOC_xmss_sign \
-  "`Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index."
+  "`Sig(sk, idx, m)` over a hash `H`: a message's signature at a leaf index, and the updated key."
 
 #define DOC_xmss_verify \
   "`Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key."
@@ -1284,7 +1284,7 @@
   "A framed stream that decodes to `data`: the stream identifier, then its chunks."
 
 #define DOC_snappy_masked_crc \
-  "The masked CRC-32C that a data chunk stores (§3)."
+  "The masked CRC-32C that a data chunk stores (§3), at its start."
 
 #define DOC_varint_encode \
   "A 64-bit value as an unsigned protobuf varint."
