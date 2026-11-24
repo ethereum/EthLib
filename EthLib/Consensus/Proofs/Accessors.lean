@@ -2287,28 +2287,37 @@ theorem proposerSearch_congr_validators {fork : Fork} {first second : Array Vali
       · have far : ¬ i + 1 < 18446744073709551616 := by omega
         simp only [far, dite_false]
 
-/-- The proposer of a slot reads the slot, the RANDAO mixes and the proposer lookahead.
+/-- Two states of one fork get the same result from `getBeaconProposerIndex`, an error included.
 
-It also reads the active validators of the epoch and their effective balances. -/
-theorem getBeaconProposerIndex_congr {fork : Fork} {s w : BeaconState preset fork}
-    (slot : w.slot = s.slot) (mixes : w.randaoMixes = s.randaoMixes)
+The theorem takes an equal slot.
+
+From Fusaka, it takes equal proposer lookahead vectors.
+
+Before Fusaka, it takes an equal seed of the current epoch of `s` with the proposer domain.
+
+Before Fusaka, it also takes equal checked active indices of that epoch.
+
+Before Fusaka, it also takes equal effective balances at every position of the registry of `s`. -/
+theorem getBeaconProposerIndex_congr_of_seed {fork : Fork} {s w : BeaconState preset fork}
+    (slot : w.slot = s.slot)
     (lookahead : ∀ fulu : .fusaka ≤ fork, w.proposerLookahead fulu = s.proposerLookahead fulu)
-    (active : getActiveValidatorIndicesChecked w (getCurrentEpoch s) =
+    (seed : fork < .fusaka → getSeed w (getCurrentEpoch s) DOMAIN_BEACON_PROPOSER =
+      getSeed s (getCurrentEpoch s) DOMAIN_BEACON_PROPOSER)
+    (active : fork < .fusaka → getActiveValidatorIndicesChecked w (getCurrentEpoch s) =
       getActiveValidatorIndicesChecked s (getCurrentEpoch s))
-    (effective : ∀ j < s.validators.data.size, (s.validators.data[j]?).map (·.effectiveBalance) =
-      (w.validators.data[j]?).map (·.effectiveBalance)) :
+    (effective : fork < .fusaka → ∀ j < s.validators.data.size,
+      (s.validators.data[j]?).map (·.effectiveBalance) =
+        (w.validators.data[j]?).map (·.effectiveBalance)) :
     getBeaconProposerIndex w = getBeaconProposerIndex s := by
   have epoch : getCurrentEpoch w = getCurrentEpoch s := by simp only [getCurrentEpoch, slot]
   unfold getBeaconProposerIndex
   split
   · rename_i fulu
     simp only [slot, lookahead fulu]
-  · have seed : getSeed w (getCurrentEpoch s) DOMAIN_BEACON_PROPOSER =
-        getSeed s (getCurrentEpoch s) DOMAIN_BEACON_PROPOSER := by
-      unfold getSeed getRandaoMix
-      rw [mixes]
+  · rename_i notFulu
+    have early : fork < .fusaka := Nat.lt_of_not_le notFulu
     dsimp only
-    rw [epoch, seed, active, slot]
+    rw [epoch, seed early, active early, slot]
     cases checked : getActiveValidatorIndicesChecked s (getCurrentEpoch s) with
     | error => simp only [bind, Except.bind]
     | ok indices =>
@@ -2331,6 +2340,20 @@ theorem getBeaconProposerIndex_congr {fork : Fork} {s w : BeaconState preset for
             (fun nil => empty (by simp [nil]))
           exact Nat.lt_of_le_of_lt (Nat.zero_le _) (inside index (by simpa using member))
         simp only [empty, ↓reduceIte]
-        rw [proposerSearch_congr_validators positive inside effective]
+        rw [proposerSearch_congr_validators positive inside (effective early)]
+
+/-- The proposer of a slot reads the slot, the RANDAO mixes and the proposer lookahead.
+
+It also reads the active validators of the epoch and their effective balances. -/
+theorem getBeaconProposerIndex_congr {fork : Fork} {s w : BeaconState preset fork}
+    (slot : w.slot = s.slot) (mixes : w.randaoMixes = s.randaoMixes)
+    (lookahead : ∀ fulu : .fusaka ≤ fork, w.proposerLookahead fulu = s.proposerLookahead fulu)
+    (active : getActiveValidatorIndicesChecked w (getCurrentEpoch s) =
+      getActiveValidatorIndicesChecked s (getCurrentEpoch s))
+    (effective : ∀ j < s.validators.data.size, (s.validators.data[j]?).map (·.effectiveBalance) =
+      (w.validators.data[j]?).map (·.effectiveBalance)) :
+    getBeaconProposerIndex w = getBeaconProposerIndex s :=
+  getBeaconProposerIndex_congr_of_seed slot lookahead
+    (fun _ => by unfold getSeed getRandaoMix; rw [mixes]) (fun _ => active) (fun _ => effective)
 
 end EthLib.Consensus

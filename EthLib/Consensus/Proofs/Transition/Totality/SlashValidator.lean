@@ -63,7 +63,7 @@ structure SlashRoom (config : Config) (state : BeaconState preset fork) (validat
   balance : ∃ b, getBalance state index = .ok b
 
 /-- Slashing a validator, with the proposer as whistleblower, succeeds on a state with room. -/
-theorem slashValidator_ok_of_room {config : Config} {state : BeaconState preset fork}
+theorem slashValidator_total_of_room {config : Config} {state : BeaconState preset fork}
     {index : ValidatorIndex} {validator : Validator}
     (found : getValidator state index = .ok validator)
     (room : SlashRoom config state validator index) :

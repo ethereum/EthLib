@@ -66,6 +66,19 @@ theorem RunStart.afterBlocks_zero (start : RunStart) (blocks : Nat) :
   cases start
   simp [RunStart.afterBlocks, BlockStep.zero]
 
+/-- One more block adds the step to the supply, effective, load, ceiling and slashed bounds.
+
+The other fields of the start stay as they are. -/
+theorem RunStart.afterBlocks_succ (start : RunStart) (step : BlockStep) (blocks : Nat) :
+    start.afterBlocks step (blocks + 1) =
+      { start.afterBlocks step blocks with
+        supply := (start.afterBlocks step blocks).supply + step.supply
+        effective := (start.afterBlocks step blocks).effective + step.effective
+        load := (start.afterBlocks step blocks).load + step.load
+        ceiling := (start.afterBlocks step blocks).ceiling + step.ceiling
+        slashed := (start.afterBlocks step blocks).slashed + step.slashed } := by
+  simp only [RunStart.afterBlocks, Nat.add_mul, Nat.one_mul, Nat.add_assoc]
+
 /-- The most blocks in the first epoch of a run and the epochs after it, one in each slot. -/
 def Preset.chainBlocks (preset : Preset) (epochs : Nat) : Nat :=
   (epochs + 1) * preset.SLOTS_PER_EPOCH.toNat

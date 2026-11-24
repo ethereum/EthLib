@@ -247,10 +247,10 @@ private theorem reached_le_ceilingAt {fork : Fork} {start : RunStart} {step : Bl
     reached + cost ≤ (start.afterBlocks step (blocks + 1)).ceilingAt preset budget elapsed := by
   have loadEq : (start.afterBlocks step (blocks + 1)).load =
       (start.afterBlocks step blocks).load + step.load := by
-    simp only [RunStart.afterBlocks, Nat.add_mul, Nat.one_mul, Nat.add_assoc]
+    rw [RunStart.afterBlocks_succ]
   have ceilingEq : (start.afterBlocks step (blocks + 1)).ceiling =
       (start.afterBlocks step blocks).ceiling + step.ceiling := by
-    simp only [RunStart.afterBlocks, Nat.add_mul, Nat.one_mul, Nat.add_assoc]
+    rw [RunStart.afterBlocks_succ]
   have most : (start.afterBlocks step blocks).load ≤
       (start.afterBlocks step (preset.chainBlocks epochs)).load := by
     simp only [RunStart.afterBlocks]
@@ -300,19 +300,19 @@ private theorem RunBounded.of_processBlock {fork : Fork} {engine : ExecutionEngi
   -- One more block raises each bound by its step.
   have supplyEq : (start.afterBlocks step (blocks + 1)).supply =
       (start.afterBlocks step blocks).supply + step.supply := by
-    simp only [RunStart.afterBlocks, Nat.add_mul, Nat.one_mul, Nat.add_assoc]
+    rw [RunStart.afterBlocks_succ]
   have effectiveEq : (start.afterBlocks step (blocks + 1)).effective =
       (start.afterBlocks step blocks).effective + step.effective := by
-    simp only [RunStart.afterBlocks, Nat.add_mul, Nat.one_mul, Nat.add_assoc]
+    rw [RunStart.afterBlocks_succ]
   have loadEq : (start.afterBlocks step (blocks + 1)).load =
       (start.afterBlocks step blocks).load + step.load := by
-    simp only [RunStart.afterBlocks, Nat.add_mul, Nat.one_mul, Nat.add_assoc]
+    rw [RunStart.afterBlocks_succ]
   have ceilingEq : (start.afterBlocks step (blocks + 1)).ceiling =
       (start.afterBlocks step blocks).ceiling + step.ceiling := by
-    simp only [RunStart.afterBlocks, Nat.add_mul, Nat.one_mul, Nat.add_assoc]
+    rw [RunStart.afterBlocks_succ]
   have slashedEq : (start.afterBlocks step (blocks + 1)).slashed =
       (start.afterBlocks step blocks).slashed + step.slashed := by
-    simp only [RunStart.afterBlocks, Nat.add_mul, Nat.one_mul, Nat.add_assoc]
+    rw [RunStart.afterBlocks_succ]
   have positive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
     have := UInt64.toNat_inj.not.mpr baseRun.positive.increment
     simp only [UInt64.toNat_zero] at this
@@ -591,6 +591,304 @@ theorem ChainHolds.of_stateTransitionAcross {fork : Fork} {engine : ExecutionEng
 
 /-! ## One slashing in a block -/
 
+/-- Take the state a block reaches after its proposer slashings and first `j` attester slashings.
+
+No attester slashing needs to exist at position `j`.
+
+When the mixes span more than the seed lookahead plus two, the proposer read there is the block's.
+
+When the balances there match the registry, that proposer's index is inside the balances. -/
+private theorem slashingTurn_proposer
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {fork : Fork} {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
+    {advanced turn : BeaconState preset fork} {j : Nat}
+    (turned : SlashingTurn config checks engine advanced block j turn)
+    (balancesMatch : BalancesMatch turn) :
+    getBeaconProposerIndex turn = .ok block.proposerIndex ∧
+      block.proposerIndex.toNat < turn.balances.data.size := by
+  obtain ⟨input, started, frameKept, -, proposerKept⟩ := slashingTurn_kept turned
+  obtain ⟨parented, headed, executed, revealed, -, headerOk, executionOk, randaoOk, eth1Ok⟩ :=
+    id started
+  obtain ⟨-, -, -, -, _, proposerFound, -⟩ := processBlockHeader_checks headerOk
+  have growsExecuted : headed.validators.data.size ≤ executed.validators.data.size := by
+    split at executionOk
+    · exact (frame_processBlockExecution executionOk).registryGrows
+    · cases executionOk
+      exact Nat.le_refl _
+  have growsInput : revealed.validators.data.size ≤ input.validators.data.size := by
+    split at eth1Ok
+    · exact (frame_processEth1Data eth1Ok).registryGrows
+    · cases eth1Ok
+      exact Nat.le_refl _
+  have proposerRegistered : block.proposerIndex.toNat < turn.validators.data.size :=
+    Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp (getValidator_eq_ok_iff.mp proposerFound)).1
+      ((frame_processBlockHeader headerOk).registryGrows.trans <| growsExecuted.trans <|
+        (frame_processRandao randaoOk).registryGrows.trans <| growsInput.trans
+          frameKept.registryGrows)
+  refine ⟨?_, by rw [balancesMatch]; exact proposerRegistered⟩
+  rw [proposerKept]
+  exact (operationsInput_proposer apart started).1
+
+/-- Take the state a block reaches after its proposer slashings and first `j` attester slashings.
+
+The attester slashing at position `j` has at least one index in its first attestation.
+
+The conditions of the chain hold, and one more block fits its count.
+
+The epoch of `advanced` is within the epochs of the chain.
+
+The facts of the chain hold at `advanced`, after advancing the slots and before the block.
+
+The slashing count and the deposits of the block are within the limits, which the step covers.
+
+Then four bounds hold for a validator in the registry at the turn.
+
+A successful read of the slashed balance of its epoch plus its effective balance is below `2^64`.
+
+From Altair, its whistleblower reward times the proposer weight is below `2^64`.
+
+Each balance at the turn plus that effective balance is below `2^64`.
+
+The sum of the balances at `advanced` is within the budget. -/
+private theorem slashingTurn_balanceRoom {start : RunStart} {step : BlockStep}
+    {limits : BlockLimits} {budget epochs lastEpoch startEpoch blocks : Nat}
+    (conditions : ChainConditions preset config start step budget epochs lastEpoch)
+    (coversSlashed : limits.slashings * preset.largestEffectiveBalance ≤ step.slashed)
+    {fork : Fork} {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
+    {advanced turn : BeaconState preset fork} {j : Nat}
+    (coversSupply : limits.deposits +
+      step.slashed / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
+      blockRewardBound preset budget ≤ step.supply)
+    (advancedHolds : ChainHolds config start step budget startEpoch blocks advanced)
+    (raised : blocks + 1 ≤ preset.chainBlocks epochs)
+    (le : (getCurrentEpoch advanced).toNat - startEpoch ≤ epochs)
+    (turned : SlashingTurn config checks engine advanced block j turn)
+    (counted : blockSlashingCount block.body ≤ limits.slashings)
+    (deposits : blockDepositAmount block.body ≤ limits.deposits)
+    {slashing : AttesterSlashing preset fork}
+    (atJ : block.body.attesterSlashings.data.toList[j]? = some slashing)
+    (named : 1 ≤ slashing.attestation1.attestingIndices.data.size)
+    {index : ValidatorIndex} {validator : Validator}
+    (found : turn.validators.data[index.toNat]? = some validator) :
+    (∀ amount, readCircular turn.slashings.elements (getCurrentEpoch turn) = .ok amount →
+      amount.toNat + validator.effectiveBalance.toNat < 2 ^ 64) ∧
+    (.altair ≤ fork → (validator.effectiveBalance /
+      (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT).toNat * PROPOSER_WEIGHT.toNat <
+        2 ^ 64) ∧
+    (∀ (position : Nat) (balance : Gwei), turn.balances.data[position]? = some balance →
+      balance.toNat + validator.effectiveBalance.toNat < 2 ^ 64) ∧
+    balanceSum advanced ≤ budget := by
+  have baseRun := conditions.at (Nat.le_of_succ_le raised)
+  have raisedRun := conditions.at raised
+  have runBounded := advancedHolds.bounded
+  -- The steps before the slashing keep the registry size and the effective balances.
+  obtain ⟨sizeTurn, effectiveTurn, slashedTurn⟩ :=
+    slashingTurn_slashed_le advancedHolds.shaped.capped turned
+  have supplyTurn := slashingTurn_supply_le turned
+  -- The validator keeps its effective balance, within the largest cap and the budget.
+  have inside := (Array.getElem?_eq_some_iff.mp found).1
+  have insideAdvanced : index.toNat < advanced.validators.data.size := sizeTurn ▸ inside
+  have effectiveSame := effectiveTurn index.toNat insideAdvanced
+  simp only [effectiveAt, found, Array.getElem?_eq_getElem insideAdvanced, Option.map_some,
+    Option.getD_some] at effectiveSame
+  have capLe : validator.effectiveBalance.toNat ≤ preset.largestEffectiveBalance :=
+    effectiveSame.trans_le ((UInt64.le_iff_toNat_le.mp (advancedHolds.shaped.capped _
+      (Array.getElem_mem insideAdvanced))).trans
+        (withdrawalMaxEffectiveBalance_le_largestEffectiveBalance preset fork _))
+  have sumTurn : effectiveBalanceSum turn = effectiveBalanceSum advanced :=
+    effectiveBalanceSum_eq_of_effectiveKept sizeTurn effectiveTurn
+  have effectiveLe := runBounded.effective_le baseRun le
+  have validatorLe : validator.effectiveBalance.toNat ≤ budget :=
+    (effectiveBalance_le_effectiveBalanceSum (Array.mem_of_getElem? found)).trans
+      (sumTurn ▸ effectiveLe)
+  have tripled := baseRun.tripled
+  -- The slashing at the turn supplies one name of the limit.
+  have entry : ((block.body.attesterSlashings.data.toList.take j).map fun slashing =>
+        slashing.attestation1.attestingIndices.data.size).sum +
+      slashing.attestation1.attestingIndices.data.size ≤
+        (block.body.attesterSlashings.data.toList.map fun slashing =>
+          slashing.attestation1.attestingIndices.data.size).sum := by
+    rw [List.map_take]
+    generalize names : (block.body.attesterSlashings.data.toList.map fun slashing =>
+      slashing.attestation1.attestingIndices.data.size) = sizes
+    have atSizes : sizes[j]? = some slashing.attestation1.attestingIndices.data.size := by
+      rw [← names, List.getElem?_map, atJ]
+      rfl
+    have split : sizes.take (j + 1) =
+        sizes.take j ++ [slashing.attestation1.attestingIndices.data.size] := by
+      rw [List.take_add_one, atSizes]
+      rfl
+    have whole : (sizes.take (j + 1)).sum ≤ sizes.sum := by
+      conv_rhs => rw [← List.take_append_drop (j + 1) sizes]
+      rw [List.sum_append]
+      omega
+    rw [split, List.sum_append, List.sum_singleton] at whole
+    exact whole
+  unfold blockSlashingCount at counted
+  generalize names : block.body.proposerSlashings.data.size +
+    ((block.body.attesterSlashings.data.toList.take j).map fun slashing =>
+      slashing.attestation1.attestingIndices.data.size).sum = before at slashedTurn
+  have oneName : before + 1 ≤ limits.slashings := by omega
+  have namesCap : before * preset.largestEffectiveBalance + preset.largestEffectiveBalance ≤
+      step.slashed := by
+    rw [← Nat.succ_mul]
+    exact (Nat.mul_le_mul_right _ oneName).trans coversSlashed
+  have capSlashed : preset.largestEffectiveBalance ≤ step.slashed := by omega
+  have slashedEq : (start.afterBlocks step (blocks + 1)).slashed =
+      (start.afterBlocks step blocks).slashed + step.slashed := by
+    rw [RunStart.afterBlocks_succ]
+  have slashedRoom : (start.afterBlocks step (blocks + 1)).slashed < 2 ^ 64 :=
+    Nat.lt_of_le_of_lt (Nat.le_mul_of_pos_right _ (Nat.succ_pos _)) (raisedRun.slashed fork)
+  have slashedAdvanced := runBounded.slashed
+  -- The balances at the turn are within the budget.
+  have supplyEq : (start.afterBlocks step (blocks + 1)).supply =
+      (start.afterBlocks step blocks).supply + step.supply := by
+    rw [RunStart.afterBlocks_succ]
+  have whistle : (slashedBalanceSum turn - slashedBalanceSum advanced) /
+        (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat ≤
+      step.slashed / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat :=
+    Nat.div_le_div_right (by omega)
+  have depositsLe := deposits
+  have supplyBefore := runBounded.supply
+  have budgetSupply := raisedRun.supply_le_budget
+  have issuanceLe := Nat.mul_le_mul_right (preset.epochIssuanceBeforeAltair budget) le
+  have balanceSumLe : balanceSum turn ≤ budget := by omega
+  refine ⟨fun amount read => ?_, fun altair => ?_, fun position balance read => ?_, by omega⟩
+  · -- The slashed balances plus one more largest cap are within the slashed bound.
+    have entryLe : amount.toNat ≤ slashedBalanceSum turn := by
+      unfold readCircular at read
+      split at read
+      · cases read
+      · cases read
+        unfold slashedBalanceSum
+        exact List.le_sum_of_mem (List.mem_map_of_mem (Vector.mem_toList_iff.mpr
+          (Vector.getElem_mem _)))
+    omega
+  · -- The whistleblower reward of one largest cap, times the proposer weight, fits.
+    rw [UInt64.toNat_div]
+    have weight : PROPOSER_WEIGHT.toNat = 8 := rfl
+    rw [weight]
+    have divLe : validator.effectiveBalance.toNat /
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat ≤
+        step.slashed / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat :=
+      Nat.div_le_div_right (capLe.trans capSlashed)
+    have room := conditions.run.supplyRoom
+    simp only [RunStart.afterBlocks] at room
+    have six : 6 ≤ preset.chainBlocks epochs := by
+      unfold Preset.chainBlocks
+      have := conditions.run.slots
+      exact this.trans (Nat.le_mul_of_pos_left _ (Nat.succ_pos _))
+    have sixSupply := Nat.mul_le_mul_right step.supply six
+    omega
+  · -- Each balance is at most their sum, within the budget.
+    have below := (Array.getElem?_eq_some_iff.mp read).1
+    have balanceLe := balance_le_balanceSum turn below
+    rw [Array.getElem?_eq_getElem below, Option.some.injEq] at read
+    rw [read] at balanceLe
+    omega
+
+/-- Take the state a block reaches after its proposer slashings and first `j` attester slashings.
+
+When the block has fewer than `j` attester slashings, that is the state after all of them.
+
+The conditions of the chain hold, and one more block fits its count.
+
+The epoch of `advanced` is within the epochs of the chain, and those end by its last epoch.
+
+The facts of the chain hold at `advanced`, after advancing the slots and before the block.
+
+The sum of the balances at `advanced` is within the budget.
+
+The withdrawal requests of the block are within the limit, and the ceiling step covers the exits.
+
+The withdrawal delay is positive, and an increment is at most the least balance to activate.
+
+Then starting the exit of a validator in the registry at the turn succeeds. -/
+private theorem slashingTurn_exitRoom {start : RunStart} {step : BlockStep}
+    {limits : BlockLimits} {budget epochs lastEpoch startEpoch blocks : Nat}
+    (conditions : ChainConditions preset config start step budget epochs lastEpoch)
+    (fits : startEpoch + epochs ≤ lastEpoch)
+    (coversCeiling : 1 + budget / preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
+      (start.afterBlocks step (preset.chainBlocks epochs)).load +
+      limits.joins *
+        (preset.largestEffectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1) +
+      limits.withdrawals * (budget / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1) ≤
+    step.ceiling)
+    (withdrawable : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (activationIncrement : preset.EFFECTIVE_BALANCE_INCREMENT ≤ preset.MIN_ACTIVATION_BALANCE)
+    {fork : Fork} {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
+    {advanced turn : BeaconState preset fork} {j : Nat}
+    (advancedHolds : ChainHolds config start step budget startEpoch blocks advanced)
+    (raised : blocks + 1 ≤ preset.chainBlocks epochs)
+    (le : (getCurrentEpoch advanced).toNat - startEpoch ≤ epochs)
+    (turned : SlashingTurn config checks engine advanced block j turn)
+    (withdrawals : (blockWithdrawalRequests block.body).length ≤ limits.withdrawals)
+    (capped : balanceSum advanced ≤ budget)
+    {index : ValidatorIndex} (inside : index.toNat < turn.validators.data.size) :
+    ∃ exited, initiateValidatorExit config turn index = .ok exited := by
+  have baseRun := conditions.at (Nat.le_of_succ_le raised)
+  have raisedRun := conditions.at raised
+  have runBounded := advancedHolds.bounded
+  have increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT :=
+    UInt64.pos_iff_ne_zero.mpr baseRun.positive.increment
+  obtain ⟨sizeTurn, effectiveTurn, -⟩ := slashingTurn_slashed_le advancedHolds.shaped.capped turned
+  have sumTurn : effectiveBalanceSum turn = effectiveBalanceSum advanced :=
+    effectiveBalanceSum_eq_of_effectiveKept sizeTurn effectiveTurn
+  have effectiveLe := runBounded.effective_le baseRun le
+  have tripled := baseRun.tripled
+  obtain ⟨reached, costLe, firstReached, exitsReached, queuesReached⟩ :=
+    slashingTurn_exits turned increment baseRun.minimum baseRun.maximum activationIncrement
+      withdrawable
+      (ceiling := (start.afterBlocks step blocks).ceilingAt preset budget
+        ((getCurrentEpoch advanced).toNat - startEpoch) + 1)
+      (by have := baseRun.first_le_ceilingAt fits advancedHolds.started; omega)
+      (fun validator member set => (runBounded.exits validator member set).trans
+        (Nat.le_succ _))
+      (fun electra => ⟨runBounded.queue electra,
+        (runBounded.consolidations electra).trans (Nat.le_succ _)⟩) capped
+  have joined : exitCostFrom preset turn advanced.validators.data.size = 0 := by
+    rw [← sizeTurn]
+    unfold exitCostFrom
+    rw [List.drop_eq_nil_of_le (by simp)]
+    rfl
+  have withdrawn : (if .glamsterdam ≤ fork then partialExitCost preset budget block.body
+      else 0) ≤ limits.withdrawals * (budget / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1) := by
+    split
+    · exact (partialExitCost_le budget block.body).trans
+        (Nat.mul_le_mul_right _ withdrawals)
+    · exact Nat.zero_le _
+  have reachedLe := reached_le_ceilingAt coversCeiling raised effectiveLe
+    (RunBounded.size_le runBounded) costLe (by rw [joined]; exact Nat.zero_le _) withdrawn
+  have ceilingLe : (start.afterBlocks step (blocks + 1)).ceilingAt preset budget
+        ((getCurrentEpoch advanced).toNat - startEpoch) ≤
+      (start.afterBlocks step (blocks + 1)).ceilingAt preset budget epochs := by
+    unfold RunStart.ceilingAt
+    exact Nat.add_le_add_left (Nat.mul_le_mul_right _ le) _
+  have exitRoom := raisedRun.exitRoom
+  by_cases electra : .pectra ≤ fork
+  · have registryLe : turn.validators.data.size ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat := by
+      rw [sizeTurn]
+      exact (RunBounded.size_le runBounded).trans baseRun.load.1
+    have carriedLe := (queuesReached electra).2
+    have carriedBefore := runBounded.exitChurn electra
+    have ceilingChurn : exitChurnCeiling config turn ≤ exitChurnBound preset config budget := by
+      unfold exitChurnCeiling exitChurnBound
+      omega
+    have churnRoom := baseRun.churnRoom
+    have carried : (turn.exitBalanceToConsume electra).toNat +
+        3 * exitChurnCeiling config turn < 2 ^ 64 := by
+      have maxLe : max (advanced.exitBalanceToConsume electra).toNat
+          (exitChurnCeiling config turn) ≤
+          max (start.afterBlocks step blocks).exitChurn (exitChurnBound preset config budget) :=
+        max_le carriedBefore (ceilingChurn.trans (le_max_right _ _))
+      omega
+    exact initiateValidatorExit_total_of_electra electra registryLe (by omega) increment
+      baseRun.minimum baseRun.maximum inside firstReached (queuesReached electra).1
+      exitsReached carried (by omega)
+  · obtain ⟨exited, ok, -⟩ := initiateValidatorExit_total_of_lt_electra (config := config)
+      (Nat.lt_of_not_le electra) inside firstReached exitsReached (by omega)
+    exact ⟨exited, ok⟩
+
 /-- At the turn of an attester slashing of a block, slashing any validator in the registry succeeds.
 
 The turn is the state that the steps before that attester slashing reach.
@@ -608,7 +906,7 @@ The signers are within the active balance at each epoch end of the slots.
 The withdrawal delay is positive, and an increment is at most the least balance to activate.
 
 The slashings vector has a nonzero length. -/
-theorem slashValidator_ok_of_block [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat]
+theorem slashValidator_total_of_block [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat]
     {start : RunStart} {step : BlockStep} {limits : BlockLimits}
     {budget epochs lastEpoch startEpoch blocks : Nat} {forked : ForkedBeaconState preset}
     (conditions : ChainConditions preset config start step budget epochs lastEpoch)
@@ -644,23 +942,12 @@ theorem slashValidator_ok_of_block [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.to
     omega
   obtain ⟨-, raised⟩ := raised_of_slots slotsPositive holds.counted advancedHolds.started
     advancedSlot later within
-  have baseRun := conditions.at (Nat.le_of_succ_le raised)
-  have raisedRun := conditions.at raised
   have advancedEpoch : (getCurrentEpoch advanced).toNat ≤ startEpoch + epochs := by
     rw [getCurrentEpoch_toNat, advancedSlot]
     exact within
   have le : (getCurrentEpoch advanced).toNat - startEpoch ≤ epochs := by omega
-  have runBounded := advancedHolds.bounded
-  have positive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
-    have := UInt64.toNat_inj.not.mpr baseRun.positive.increment
-    simp only [UInt64.toNat_zero] at this
-    omega
-  have increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT := UInt64.lt_iff_toNat_lt.mpr positive
-  -- The steps before the slashing keep the registry size and the effective balances.
-  obtain ⟨sizeTurn, effectiveTurn, slashedTurn⟩ :=
-    slashingTurn_slashed_le advancedHolds.shaped.capped turned
-  have supplyTurn := slashingTurn_supply_le turned
-  obtain ⟨input, started, frameKept, -, proposerKept⟩ := slashingTurn_kept turned
+  -- The steps keep the slot, and the match of the registry and balance lengths.
+  obtain ⟨input, started, frameKept, -, -⟩ := slashingTurn_kept turned
   have frameInput := frame_operationsInput started
   have turnSlot : turn.slot = advanced.slot := frameKept.slot.trans frameInput.slot
   have epochTurn : getCurrentEpoch turn = getCurrentEpoch advanced := by
@@ -668,196 +955,26 @@ theorem slashValidator_ok_of_block [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.to
     rw [turnSlot]
   have balancesMatch : BalancesMatch turn :=
     frameKept.balancesMatch (frameInput.balancesMatch advancedHolds.invariant.balancesMatch)
-  -- The validator keeps its effective balance, within the largest cap and the budget.
-  let validator := turn.validators.data[index.toNat]
-  have found : getValidator turn index = .ok validator :=
-    getValidator_eq_ok_iff.mpr (Array.getElem?_eq_getElem inside)
-  have insideAdvanced : index.toNat < advanced.validators.data.size := sizeTurn ▸ inside
-  have effectiveSame := effectiveTurn index.toNat insideAdvanced
-  simp only [effectiveAt, Array.getElem?_eq_getElem inside,
-    Array.getElem?_eq_getElem insideAdvanced, Option.map_some, Option.getD_some] at effectiveSame
-  have capLe : validator.effectiveBalance.toNat ≤ preset.largestEffectiveBalance :=
-    effectiveSame.trans_le ((UInt64.le_iff_toNat_le.mp (advancedHolds.shaped.capped _
-      (Array.getElem_mem insideAdvanced))).trans
-        (withdrawalMaxEffectiveBalance_le_largestEffectiveBalance preset fork _))
-  have sumTurn : effectiveBalanceSum turn = effectiveBalanceSum advanced :=
-    effectiveBalanceSum_eq_of_effectiveKept sizeTurn effectiveTurn
-  have effectiveLe := runBounded.effective_le baseRun le
-  have validatorLe : validator.effectiveBalance.toNat ≤ budget :=
-    (effectiveBalance_le_effectiveBalanceSum (Array.getElem_mem inside)).trans
-      (sumTurn ▸ effectiveLe)
-  have tripled := baseRun.tripled
-  -- The slashing at the turn supplies one name of the limit.
-  have entry : ((block.body.attesterSlashings.data.toList.take j).map fun slashing =>
-        slashing.attestation1.attestingIndices.data.size).sum +
-      slashing.attestation1.attestingIndices.data.size ≤
-        (block.body.attesterSlashings.data.toList.map fun slashing =>
-          slashing.attestation1.attestingIndices.data.size).sum := by
-    rw [List.map_take]
-    generalize names : (block.body.attesterSlashings.data.toList.map fun slashing =>
-      slashing.attestation1.attestingIndices.data.size) = sizes
-    have atSizes : sizes[j]? = some slashing.attestation1.attestingIndices.data.size := by
-      rw [← names, List.getElem?_map, atJ]
-      rfl
-    have split : sizes.take (j + 1) =
-        sizes.take j ++ [slashing.attestation1.attestingIndices.data.size] := by
-      rw [List.take_add_one, atSizes]
-      rfl
-    have whole : (sizes.take (j + 1)).sum ≤ sizes.sum := by
-      conv_rhs => rw [← List.take_append_drop (j + 1) sizes]
-      rw [List.sum_append]
-      omega
-    rw [split, List.sum_append, List.sum_singleton] at whole
-    exact whole
-  have counted := bounded.slashings
-  unfold blockSlashingCount at counted
-  generalize names : block.body.proposerSlashings.data.size +
-    ((block.body.attesterSlashings.data.toList.take j).map fun slashing =>
-      slashing.attestation1.attestingIndices.data.size).sum = before at slashedTurn
-  have oneName : before + 1 ≤ limits.slashings := by omega
-  have namesCap : before * preset.largestEffectiveBalance + preset.largestEffectiveBalance ≤
-      step.slashed := by
-    rw [← Nat.succ_mul]
-    exact (Nat.mul_le_mul_right _ oneName).trans covers.slashed
-  have capSlashed : preset.largestEffectiveBalance ≤ step.slashed := by omega
-  have slashedEq : (start.afterBlocks step (blocks + 1)).slashed =
-      (start.afterBlocks step blocks).slashed + step.slashed := by
-    simp only [RunStart.afterBlocks, Nat.add_mul, Nat.one_mul, Nat.add_assoc]
-  have slashedRoom : (start.afterBlocks step (blocks + 1)).slashed < 2 ^ 64 :=
-    Nat.lt_of_le_of_lt (Nat.le_mul_of_pos_right _ (Nat.succ_pos _)) (raisedRun.slashed fork)
-  have slashedAdvanced := runBounded.slashed
-  -- An entry of the slashed balances is at most their sum.
-  have entryLe : ∀ amount, readCircular turn.slashings.elements (getCurrentEpoch turn) =
-      .ok amount → amount.toNat ≤ slashedBalanceSum turn := by
-    intro amount read
-    unfold readCircular at read
-    split at read
-    · cases read
-    · cases read
-      unfold slashedBalanceSum
-      exact List.le_sum_of_mem (List.mem_map_of_mem (Vector.mem_toList_iff.mpr
-        (Vector.getElem_mem _)))
-  -- The balance of the proposer, read through the header step.
-  obtain ⟨parented, headed, executed, revealed, -, headerOk, executionOk, randaoOk, eth1Ok⟩ :=
-    id started
-  obtain ⟨-, -, -, -, _, proposerFound, -⟩ := processBlockHeader_checks headerOk
-  have growsExecuted : headed.validators.data.size ≤ executed.validators.data.size := by
-    split at executionOk
-    · exact (frame_processBlockExecution executionOk).registryGrows
-    · cases executionOk
-      exact Nat.le_refl _
-  have growsInput : revealed.validators.data.size ≤ input.validators.data.size := by
-    split at eth1Ok
-    · exact (frame_processEth1Data eth1Ok).registryGrows
-    · cases eth1Ok
-      exact Nat.le_refl _
-  have proposerRegistered : block.proposerIndex.toNat < turn.validators.data.size :=
-    Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp (getValidator_eq_ok_iff.mp proposerFound)).1
-      ((frame_processBlockHeader headerOk).registryGrows.trans <| growsExecuted.trans <|
-        (frame_processRandao randaoOk).registryGrows.trans <| growsInput.trans
-          frameKept.registryGrows)
-  have proposerInside : block.proposerIndex.toNat < turn.balances.data.size := by
-    rw [balancesMatch]
-    exact proposerRegistered
-  have turnProposer : getBeaconProposerIndex turn = .ok block.proposerIndex := by
-    rw [proposerKept]
-    exact (operationsInput_proposer conditions.run.apart started).1
-  -- The balances at the turn are within the budget.
-  have supplyEq : (start.afterBlocks step (blocks + 1)).supply =
-      (start.afterBlocks step blocks).supply + step.supply := by
-    simp only [RunStart.afterBlocks, Nat.add_mul, Nat.one_mul, Nat.add_assoc]
-  have whistle : (slashedBalanceSum turn - slashedBalanceSum advanced) /
-        (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat ≤
-      step.slashed / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat :=
-    Nat.div_le_div_right (by omega)
-  have coversSupply := covers.supply fork
-  have depositsLe := bounded.deposits
-  have supplyBefore := runBounded.supply
-  have budgetSupply := raisedRun.supply_le_budget
-  have issuanceLe := Nat.mul_le_mul_right (preset.epochIssuanceBeforeAltair budget) le
-  have balanceSumLe : balanceSum turn ≤ budget := by omega
-  have proposerBalanceLe := balance_le_balanceSum turn proposerInside
-  -- The exits: a bound covers the turn, with room for the cost and the delay.
-  have exitTurn : ∃ exited, initiateValidatorExit config turn index = .ok exited := by
-    have capped : balanceSum advanced ≤ budget := by omega
-    obtain ⟨reached, costLe, firstReached, exitsReached, queuesReached⟩ :=
-      slashingTurn_exits turned increment baseRun.minimum baseRun.maximum activationIncrement
-        withdrawable
-        (ceiling := (start.afterBlocks step blocks).ceilingAt preset budget
-          ((getCurrentEpoch advanced).toNat - startEpoch) + 1)
-        (by have := baseRun.first_le_ceilingAt fits advancedHolds.started; omega)
-        (fun validator member set => (runBounded.exits validator member set).trans
-          (Nat.le_succ _))
-        (fun electra => ⟨runBounded.queue electra,
-          (runBounded.consolidations electra).trans (Nat.le_succ _)⟩) capped
-    have joined : exitCostFrom preset turn advanced.validators.data.size = 0 := by
-      rw [← sizeTurn]
-      unfold exitCostFrom
-      rw [List.drop_eq_nil_of_le (by simp)]
-      rfl
-    have withdrawn : (if .glamsterdam ≤ fork then partialExitCost preset budget block.body
-        else 0) ≤ limits.withdrawals * (budget / preset.EFFECTIVE_BALANCE_INCREMENT.toNat + 1) := by
-      split
-      · exact (partialExitCost_le budget block.body).trans
-          (Nat.mul_le_mul_right _ bounded.withdrawals)
-      · exact Nat.zero_le _
-    have reachedLe := reached_le_ceilingAt covers.ceiling raised effectiveLe
-      (RunBounded.size_le runBounded) costLe (by rw [joined]; exact Nat.zero_le _) withdrawn
-    have ceilingLe : (start.afterBlocks step (blocks + 1)).ceilingAt preset budget
-          ((getCurrentEpoch advanced).toNat - startEpoch) ≤
-        (start.afterBlocks step (blocks + 1)).ceilingAt preset budget epochs := by
-      unfold RunStart.ceilingAt
-      exact Nat.add_le_add_left (Nat.mul_le_mul_right _ le) _
-    have exitRoom := raisedRun.exitRoom
-    by_cases electra : .pectra ≤ fork
-    · have registryLe : turn.validators.data.size ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat := by
-        rw [sizeTurn]
-        exact (RunBounded.size_le runBounded).trans baseRun.load.1
-      have carriedLe := (queuesReached electra).2
-      have carriedBefore := runBounded.exitChurn electra
-      have ceilingChurn : exitChurnCeiling config turn ≤ exitChurnBound preset config budget := by
-        unfold exitChurnCeiling exitChurnBound
-        omega
-      have churnRoom := baseRun.churnRoom
-      have carried : (turn.exitBalanceToConsume electra).toNat +
-          3 * exitChurnCeiling config turn < 2 ^ 64 := by
-        have maxLe : max (advanced.exitBalanceToConsume electra).toNat
-            (exitChurnCeiling config turn) ≤
-            max (start.afterBlocks step blocks).exitChurn (exitChurnBound preset config budget) :=
-          max_le carriedBefore (ceilingChurn.trans (le_max_right _ _))
-        omega
-      exact initiateValidatorExit_total_of_electra electra registryLe (by omega) increment
-        baseRun.minimum baseRun.maximum inside firstReached (queuesReached electra).1
-        exitsReached carried (by omega)
-    · obtain ⟨exited, ok, -⟩ := initiateValidatorExit_exists_ok (config := config)
-        (Nat.lt_of_not_le electra) inside firstReached exitsReached (by omega)
-      exact ⟨exited, ok⟩
-  refine slashValidator_ok_of_room found ⟨exitTurn, ?_, Uint64.ne_zero_of_neZero_toNat,
-    fun amount read => ?_, fun altair => ?_, ⟨block.proposerIndex, _, turnProposer,
-      getBalance_eq_ok_iff.mpr (Array.getElem?_eq_getElem proposerInside), by omega⟩,
+  have read : turn.validators.data[index.toNat]? = some turn.validators.data[index.toNat] :=
+    Array.getElem?_eq_getElem inside
+  have found := getValidator_eq_ok_iff.mpr read
+  -- The proposer at the turn, room in the balances, and room for the exit.
+  obtain ⟨turnProposer, proposerInside⟩ :=
+    slashingTurn_proposer conditions.run.apart turned balancesMatch
+  obtain ⟨slashedRoom, rewardRoom, balanceRoom, capped⟩ := slashingTurn_balanceRoom conditions
+    covers.slashed (covers.supply fork) advancedHolds raised le turned bounded.slashings
+    bounded.deposits atJ named read
+  have exitTurn := slashingTurn_exitRoom conditions fits covers.ceiling withdrawable
+    activationIncrement advancedHolds raised le turned bounded.withdrawals capped inside
+  refine slashValidator_total_of_room found ⟨exitTurn, ?_, Uint64.ne_zero_of_neZero_toNat,
+    slashedRoom, rewardRoom, ⟨block.proposerIndex, _, turnProposer,
+      getBalance_eq_ok_iff.mpr (Array.getElem?_eq_getElem proposerInside),
+      balanceRoom _ _ (Array.getElem?_eq_getElem proposerInside)⟩,
     ⟨_, getBalance_eq_ok_iff.mpr (Array.getElem?_eq_getElem (balancesMatch ▸ inside))⟩⟩
-  · -- The epoch of the turn is at most the last epoch of the chain.
-    have epochRoom := baseRun.epochRoom
-    rw [epochTurn]
-    omega
-  · -- The slashed balances plus one more largest cap are within the slashed bound.
-    have := entryLe amount read
-    omega
-  · -- The whistleblower reward of one largest cap, times the proposer weight, fits.
-    rw [UInt64.toNat_div]
-    have weight : PROPOSER_WEIGHT.toNat = 8 := rfl
-    rw [weight]
-    have divLe : validator.effectiveBalance.toNat /
-          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat ≤
-        step.slashed / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat :=
-      Nat.div_le_div_right (capLe.trans capSlashed)
-    have room := conditions.run.supplyRoom
-    simp only [RunStart.afterBlocks] at room
-    have six : 6 ≤ preset.chainBlocks epochs := by
-      unfold Preset.chainBlocks
-      have := conditions.run.slots
-      exact this.trans (Nat.le_mul_of_pos_left _ (Nat.succ_pos _))
-    have sixSupply := Nat.mul_le_mul_right step.supply six
-    omega
+  -- The epoch of the turn is at most the last epoch of the chain.
+  have baseRun := conditions.at (Nat.le_of_succ_le raised)
+  have epochRoom := baseRun.epochRoom
+  rw [epochTurn]
+  omega
 
 end EthLib.Consensus

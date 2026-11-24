@@ -660,7 +660,7 @@ private theorem attesterSlashing_accepted_of_lifetime {config : Config} {checks 
     have insideTurn : i.toUInt64.toNat < turn.validators.data.size := by
       rw [numeric]
       exact (Array.getElem?_eq_some_iff.mp currentFound).1
-    obtain ⟨after, slashed⟩ := slashValidator_ok_of_block conditions fits covers withdrawable
+    obtain ⟨after, slashed⟩ := slashValidator_total_of_block conditions fits covers withdrawable
       activationIncrement holds advancedOk later turned bounded blockWithin signers atJ
       (by rfl) insideTurn
     refine ⟨after, ?_⟩
@@ -774,7 +774,8 @@ The withdrawal delay is positive.
 An increment is at most the least balance to activate.
 
 The slashings vector has a nonzero length. -/
-theorem signedConflict_attesterSlashing_accepted_at {config : Config} {checks : SignatureChecks}
+theorem processAttesterSlashing_single_slashed_or_accepted_at {config : Config}
+    {checks : SignatureChecks}
     [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat]
     {g x : ForkedBeaconState preset} (shared : Run config checks g x)
     (genesis : Genesis config checks g)

@@ -9,6 +9,16 @@ Not yet released.
 
 ### Proof additions
 
+- In Lean, `getBeaconProposerIndex_congr_of_seed` (`Consensus/Proofs/Accessors.lean`) says that two states of one fork get the same result from `getBeaconProposerIndex`, an error included ([#4245](https://github.com/ethereum/EthLib/issues/4245)).
+  It takes an equal slot and, from Fusaka, equal proposer lookahead vectors.
+  Before Fusaka, it also takes an equal seed of the current epoch with the proposer domain and equal checked active indices of that epoch.
+  Before Fusaka, it also takes an equal effective balance at every position of the registry of the first state.
+  `getBeaconProposerIndex_congr` follows from it, with an unchanged statement.
+  `RunStart.afterBlocks_succ` (`Totality/ChainHolds.lean`) says that one more block adds the step to the supply, effective, load, ceiling and slashed bounds of a run start.
+  `Steady.proposer` (`Transition/BalanceNotRaisedBlock.lean`) reads `getBeaconProposerIndex_congr_of_seed`.
+  In `Totality/ChainBlock.lean`, `reached_le_ceilingAt`, `RunBounded.of_processBlock` and `slashingTurn_balanceRoom` read `RunStart.afterBlocks_succ`.
+  `Kept.proposer` (`Transition/BlockCredits.lean`) reads the existing `getBeaconProposerIndex_of_kept`.
+
 - In Lean, `readP256_eq_ok_iff` in `EthLib.Networking.Proofs.Libp2p.Tls` says that the libp2p TLS reader of a P-256 key accepts exactly a SubjectPublicKeyInfo of 26 fixed octets (RFC 5480 §§2.1.1, 2.1.1.1, 2.2), then octets that the uncompressed decoder accepts, and returns their point ([#4261](https://github.com/ethereum/EthLib/pull/4261)).
   So it refuses another key type or curve, another parameter form, a long length form, an unused bit and a trailing octet.
   `size_of_readP256_eq_ok` derives that such a SubjectPublicKeyInfo has 91 octets.
@@ -120,7 +130,7 @@ Not yet released.
 - At a state where the facts of a chain hold, an attester slashing of one validator by two signatures on a double or surround vote succeeds at its turn in a block within the limits ([#3431](https://github.com/ethereum/EthLib/issues/3431)).
   Otherwise the validator is already slashed there.
   A slashing that succeeds leaves the validator slashed, with its key, in the state right after it.
-  `DirectSafety.signedConflict_attesterSlashing_accepted_at` (`DirectSafety/Includable.lean`) states it for a key whose validator is activated and not yet withdrawable at the epoch of a state of a run.
+  `DirectSafety.processAttesterSlashing_single_slashed_or_accepted_at` (`DirectSafety/Includable.lean`) states it for a key whose validator is activated and not yet withdrawable at the epoch of a state of a run.
   The pair of votes is a `DirectSafety.VotePairAt`, and the result is conditional on the inclusion of the slashing and on the success of the steps before it.
   The block is at a strictly later slot in the epoch of that state or the next, at the same fork, and the slots up to it advance successfully.
   In the next epoch, three requirements apply.
@@ -134,8 +144,8 @@ Not yet released.
   The comparison is required only when those reads succeed.
   No fact of a chain gives that comparison.
   The chosen validator, if unslashed in that state, has a withdrawable epoch recorded in that state after the block's epoch.
-  `slashValidator_ok_of_block` (`Totality/ChainBlock.lean`) states that slashing succeeds at that turn, at the state that `SlashingTurn` (`Transition/Invariants.lean`) describes.
-  `SlashRoom` with `slashValidator_ok_of_room` (`Totality/SlashValidator.lean`) gives a room that suffices for slashing to succeed.
+  `slashValidator_total_of_block` (`Totality/ChainBlock.lean`) states that slashing succeeds at that turn, at the state that `SlashingTurn` (`Transition/Invariants.lean`) describes.
+  `SlashRoom` with `slashValidator_total_of_room` (`Totality/SlashValidator.lean`) gives a room that suffices for slashing to succeed.
   `slashingTurn_kept` there states that the steps from the operations to that turn keep the frame, activity and the proposer.
   `slashingTurn_exits`, `slashingTurn_supply_le` and `slashingTurn_slashed_le` bound the exits, the supply and the slashed balances at that turn.
   `initiateValidatorExit_total_of_electra` states that an exit succeeds from Electra within bounds on the exit queue, the churn and the exit epochs.
@@ -143,7 +153,7 @@ Not yet released.
   `slashings_initiateValidatorExit` states that an exit keeps the slashed balances.
   `forkVersions_eq_of_fork` states that two states at one fork, on chains from one genesis, hold the same versions.
   `DirectSafety.mem_keysAt_epoch_of_within` is `DirectSafety.mem_keysAt_epoch` with the registry limit in place of a fork before Gloas; `DirectSafety.mem_keysAt_epoch` keeps its statement.
-  Some earlier private declarations are now public, with unchanged statements: `ExitsBelow`, `initiateValidatorExit_exists_ok`, `activeStep_operationsInput`, `RunBounded.size_le`, and `getBeaconProposerIndex_of_kept`, which moves from `Transition/BlockLedger.lean` to `Transition/BalanceDrift.lean`.
+  Some earlier private declarations are now public, with unchanged statements: `ExitsBelow`, `initiateValidatorExit_total_of_lt_electra`, `activeStep_operationsInput`, `RunBounded.size_le`, and `getBeaconProposerIndex_of_kept`, which moves from `Transition/BlockLedger.lean` to `Transition/BalanceDrift.lean`.
   `upgradeNext_forkVersions` and `forkVersion_of_lt_altair` move from `BeaconApi/Config.lean` and are public in `Transition/ForkVersions.lean`, outside the `BeaconApi` namespace.
   `getBeaconProposerIndex_slashDebit` (`Transition/BalanceDrift.lean`) is new: the exit, the slashed mark, the slashings write and the debit of a slashing keep the proposer that an earlier state reads.
   `DirectSafety.genesisValidatorsRoot_chainSteps` (`DirectSafety/Signatures.lean`) is new: steps of a chain keep the genesis validators root.
@@ -1000,9 +1010,16 @@ Not yet released.
 
 ### Changes that break callers
 
+- Four theorems take new names, with unchanged statements ([#4245](https://github.com/ethereum/EthLib/issues/4245)).
+  `initiateValidatorExit_exists_ok` (`Totality/Registry.lean`) is now `initiateValidatorExit_total_of_lt_electra`.
+  `slashValidator_ok_of_room` (`Totality/SlashValidator.lean`) is now `slashValidator_total_of_room`.
+  `slashValidator_ok_of_block` (`Totality/ChainBlock.lean`) is now `slashValidator_total_of_block`.
+  `DirectSafety.signedConflict_attesterSlashing_accepted_at` (`DirectSafety/Includable.lean`) is now `DirectSafety.processAttesterSlashing_single_slashed_or_accepted_at`.
+  A caller replaces each old name with the new one.
+
 - The signed-conflict slashing theorem of [#3431](https://github.com/ethereum/EthLib/issues/3431) now also covers a block in the epoch after the state of the run, including a block at the first slot of an epoch ([#4243](https://github.com/ethereum/EthLib/issues/4243)).
   Write `x` for the state of the run at which the block applies.
-  `DirectSafety.signedConflict_attesterSlashing_accepted_at` (`DirectSafety/Includable.lean`) takes, for each block, a bound of one epoch in place of the hypothesis that the block is in the epoch of `x`.
+  `DirectSafety.processAttesterSlashing_single_slashed_or_accepted_at` (`DirectSafety/Includable.lean`) takes, for each block, a bound of one epoch in place of the hypothesis that the block is in the epoch of `x`.
   It also takes a premise for a block in the next epoch, under the guard that the block's epoch is after the epoch of `x`.
   That premise bundles the three requirements listed in the #3431 entry on the attester slashing at its turn.
   The block's epoch is at most the first epoch of the chain plus its number of epochs.
@@ -1045,7 +1062,7 @@ Not yet released.
   Migration: rewrite with `systemSubstate_of_glamsterdam` where a proof read the empty substate from Glamsterdam, and with `systemSubstate_of_lt_glamsterdam` where it reads `SystemCallBurns` before Glamsterdam.
 
 - The signed-conflict slashing theorem of [#3431](https://github.com/ethereum/EthLib/issues/3431) now covers a key whose validator has exited but is not yet withdrawable ([#4243](https://github.com/ethereum/EthLib/issues/4243)).
-  `DirectSafety.signedConflict_attesterSlashing_accepted_at` (`DirectSafety/Includable.lean`) takes `lifetime` in place of `member : key ∈ activeKeys x.state`.
+  `DirectSafety.processAttesterSlashing_single_slashed_or_accepted_at` (`DirectSafety/Includable.lean`) takes `lifetime` in place of `member : key ∈ activeKeys x.state`.
   `lifetime` gives a validator of `x` with the key that is activated and not yet withdrawable at the epoch of `x`.
   Unlike membership in `activeKeys`, `lifetime` still holds after the validator's exit epoch, until its withdrawable epoch.
   Unlike slashability, it does not require the validator to be unslashed.
@@ -1064,7 +1081,7 @@ Not yet released.
   `records_of_resolve` and `links_of_resolve` in `EthLib.Networking.Proofs.DnsDisc` state that each entry that a subtree of a resolved list reaches is a branch or a leaf of that subtree.
 
 - The signed-conflict slashing theorem of [#3431](https://github.com/ethereum/EthLib/issues/3431) now also states that the slashing leaves the validator slashed ([#4244](https://github.com/ethereum/EthLib/issues/4244)).
-  In `DirectSafety.signedConflict_attesterSlashing_accepted_at` (`DirectSafety/Includable.lean`), the right disjunct also gives the validator at the index in the state right after the slashing.
+  In `DirectSafety.processAttesterSlashing_single_slashed_or_accepted_at` (`DirectSafety/Includable.lean`), the right disjunct also gives the validator at the index in the state right after the slashing.
   That validator still has the key and is slashed.
   A caller that destructured the disjunct as `⟨after, ok⟩` now writes `⟨after, _, ok, _⟩`, where the first `_` is that validator.
   The old disjunction follows from the new one by `.imp id fun ⟨after, _, ok, _⟩ => ⟨after, ok⟩`.

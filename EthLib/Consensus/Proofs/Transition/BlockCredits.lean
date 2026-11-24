@@ -363,20 +363,13 @@ private theorem Steady.reads (kept : Steady s t) {base : ℕ → ℕ} (reads : R
   rw [← getBaseReward_congr inside (kept.effective_map _ inside)] at rewardOk
   exact reads index total reward recent totalOk rewardOk
 
-private theorem Kept.effective_map (kept : Kept s t) (j : ℕ) (inside : j < s.validators.data.size) :
-    (s.validators.data[j]?).map (·.effectiveBalance) =
-      (t.validators.data[j]?).map (·.effectiveBalance) := kept.steady.effective_map j inside
-
 private theorem Kept.reads (kept : Kept s t) {base : ℕ → ℕ} (reads : Reads s base) :
     Reads t base := kept.steady.reads reads
 
 /-- A kept step keeps the proposer of the slot. -/
 private theorem Kept.proposer (kept : Kept s t) :
     getBeaconProposerIndex t = getBeaconProposerIndex s :=
-  getBeaconProposerIndex_congr kept.inputs.slot kept.inputs.randaoMixes
-    (fun fulu => by rw [kept.inputs.proposerLookahead])
-    (kept.keeps.2.2.getActiveValidatorIndicesChecked_eq (getCurrentEpoch_le_activityFixedEpoch s))
-    kept.effective_map
+  getBeaconProposerIndex_of_kept kept.keeps kept.inputs kept.effective
 
 end Kept
 
