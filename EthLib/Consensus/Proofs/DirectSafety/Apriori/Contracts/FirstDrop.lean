@@ -477,19 +477,17 @@ private theorem potential_slash (ρn ρd M k c e d g cap EB Pm Pn : ℕ) (gcap :
 
 /-- The closed form of the potential after a slash.
 
-It loses a share `1 / M` of the potential, and the effective balance is stale or updated.
-
-While it is stale, a pass can lose the rate times a stale balance.
-
-That balance is at most `M / (M - 1)` times the potential.
-
-So the form charges the epochs without the spare pass.
-
-After the update the form charges one spare pass, as the stale pass already took it. -/
+It loses a share `1 / M` of the potential, and the effective balance is stale or updated. -/
 private def SlashedPotential (ρn ρd s M k g d P EB : ℕ) : Prop :=
+  -- While it is stale, a pass can lose the rate times a stale balance.
+  --
+  -- That balance is at most `M / (M - 1)` times the potential.
+  --
+  -- So the form charges the epochs without the spare pass.
   ((M - 1) * ((ρd - ρn * k) * (g + d)) ≤
       M * (ρd * (P + d) + if k = 0 then 0 else ρn * s) + ρd * (d + s) ∧
     (M - 1) * EB ≤ M * (P + d + if k = 0 then s else 0)) ∨
+  -- After the update the form charges one spare pass, as the stale pass already took it.
   (0 < k ∧ (M - 1) * ((ρd - ρn * (k + 1)) * (g + d)) ≤
       M * (ρd * (P + d) + ρn * s) + ρd * (d + s) ∧ EB ≤ P + d)
 
@@ -798,38 +796,35 @@ private def EffectiveOrigin {x y : ForkedBeaconState preset} (tail : Run config 
 
 /-- The floor of a branch from its start: its effective balance stays within the potential.
 
-The potential is the balance plus the debits that are no pass penalties.
-
-Its closed form loses at most the pass rate for each epoch.
-
-It vanishes if that loss reaches one.
-
-The rate bounds a pass penalty by a fraction of the effective balance.
-
-The slack of the effective balance at the start is charged once, at the first epoch.
-
-The key is unslashed at the start.
-
-If it is slashed at the end, the closed form is the one after a slash with the quotient `M`. -/
+The potential is the balance plus the debits that are no pass penalties. -/
 private def PotentialFloor {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (i : ValidatorIndex) (v : Validator) (events : List (BalanceEvent preset)) (M : ℕ) : Prop :=
+  -- The key is unslashed at the start.
   ∀ ρn ρd slack : ℕ, .fusaka ≤ x.fork → preset.IncrementWithinUpwardBand → v.slashed = false →
     effectiveAt x i.toNat ≤ actualBalanceAt x i.toNat + (preset.downwardBand + slack) →
+    -- The rate bounds a pass penalty by a fraction of the effective balance.
     (∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
       (step : Step config checks m n) (post : Run config checks n y),
       (pre.snoc step).append post = tail → ∀ evs, step.balanceEvents = .ok evs →
         (evs.map (penaltyDebit i.toNat)).sum ≤ ρn * effectiveAt m i.toNat / ρd) →
     ∀ w, y.state.validators.data[i.toNat]? = some w →
       (w.slashed = false →
+        -- The slack of the effective balance at the start is charged once, at the first epoch.
         effectiveAt y i.toNat ≤ actualBalanceAt y i.toNat + nonPassDebt i events +
           (preset.downwardBand + if (getCurrentEpoch y.state).toNat -
             (getCurrentEpoch x.state).toNat = 0 then slack else 0) ∧
+        -- Its closed form loses at most the pass rate for each epoch.
+        --
+        -- It vanishes if that loss reaches one.
         (ρd - ρn * ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat)) *
             (min (actualBalanceAt x i.toNat) (withdrawalMaxEffectiveBalance preset x.fork v).toNat +
               preset.downwardBand) ≤
           ρd * (actualBalanceAt y i.toNat + nonPassDebt i events + preset.downwardBand) +
             if (getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat = 0 then 0
             else ρn * slack) ∧
+      -- If it is slashed at the end, the closed form is the one after a slash.
+      --
+      -- That form uses the quotient `M`.
       (w.slashed = true → 2 ≤ M →
         SlashedPotential ρn ρd slack M
           ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat)
@@ -1211,27 +1206,7 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
       · exact .inr ⟨n, pre.snoc step, .nil, rfl, rfl, set,
           FloorTrace.effective_aligned (shared.append (pre.snoc step)) genesis aligned i.toNat⟩
 
-/-- The per-key accounting trace of a branch, from a floor.
-
-The floor is at most the key's largest effective balance at the start.
-
-A sweep or a switch to compounding leaves at least that much, and the largest only grows.
-
-Each step extends the trace, keeping the carried account.
-
-The trace is marked slashed only if the key ends the branch slashed.
-
-The key is unslashed at the start.
-
-Or it is slashed at the start, and its delayed penalty is not due along the branch.
-
-The key is activated, or the branch is from Fulu.
-
-At each step, the key's exit epoch after the step is beyond the window.
-
-Or its withdrawable epoch before the step is beyond the window.
-
-The high-water mark of the trace stays within any bound on the effective balance of the branch. -/
+/-- The per-key accounting trace of a branch, from a floor. -/
 theorem FloorTrace.run_of_le_cap_general
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
@@ -1240,14 +1215,22 @@ theorem FloorTrace.run_of_le_cap_general
     (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
     (i : ValidatorIndex) (v : Validator)
     (initial : x.state.validators.data[i.toNat]? = some v)
+    -- The key is activated, or the branch is from Fulu.
     (activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH ∨ .fusaka ≤ x.fork)
+    -- The floor is at most the key's largest effective balance at the start.
     (low base quotient : Nat) (low_le : low ≤ (withdrawalMaxEffectiveBalance preset x.fork v).toNat)
     (positive : 0 < quotient)
     (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
       (step : Step config checks m n) (post : Run config checks n y),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
+      -- At each step, the key's exit epoch after the step is beyond the window.
+      --
+      -- Or its withdrawable epoch before the step is beyond the window.
       (high + 1 < w.exitEpoch.toNat ∨
         ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) ∧
+      -- The key is unslashed at the start.
+      --
+      -- Or it is slashed at the start, and its delayed penalty is not due along the branch.
       ((v.slashed = false → (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
           (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat) ∧
@@ -1264,11 +1247,15 @@ theorem FloorTrace.run_of_le_cap_general
       effectiveAt y i.toNat ≤ last.high ∧
       ∃ w, y.state.validators.data[i.toNat]? = some w ∧
         max low last.high ≤ (withdrawalMaxEffectiveBalance preset y.fork w).toNat ∧
+        -- The trace is marked slashed only if the key ends the branch slashed.
         (if last.slashedHigh.isSome then 1 else 0) ≤ (if w.slashed then 1 else 0) ∧
         (∀ p ∈ tail.balancePath, ∃ c, FloorTrace low base quotient
             ⟨actualBalanceAt x i.toNat, 0, effectiveAt x i.toNat, none⟩ c ∧
           c.balance = actualBalanceAt p i.toNat ∧ c.debt ≤ last.debt ∧
           (if c.slashedHigh.isSome then 1 else 0) ≤ (if w.slashed then 1 else 0)) ∧
+        -- The high-water mark of the trace stays within any bound on the effective balance.
+        --
+        -- That bound holds on the whole branch.
         (∀ bound, effectiveAt x i.toNat ≤ bound →
           (∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
             (step : Step config checks m n) (post : Run config checks n y),
@@ -1276,6 +1263,9 @@ theorem FloorTrace.run_of_le_cap_general
           last.high ≤ max bound (effectiveAt y i.toNat) ∧
             ∀ h, last.slashedHigh = some h → h ≤ bound) ∧
         (v.slashed = true → last.slashedHigh = none) := by
+  -- A sweep or a switch to compounding leaves at least the floor, and the largest only grows.
+  --
+  -- Each step extends the trace, keeping the carried account.
   obtain ⟨last, trace, balance, debt, effective, w, final, capped, used, path, marks, none, -⟩ :=
     FloorTrace.run_of_le_cap_general_or_fulu shared tail genesis caps delay early high endEpoch i v
       initial activated low base quotient low_le positive guards replayed
@@ -1521,15 +1511,7 @@ theorem FloorTrace.run_effective_origin
   exact (FloorTrace.run_potential_core shared tail genesis caps delay early fulu high endEpoch i v
     initial clean quotient positive guards replayed).2.2 maxAligned
 
-/-- The per-key accounting trace of a branch, from a floor.
-
-The floor is at most the key's largest effective balance at the start.
-
-A sweep or a switch to compounding leaves at least that much, and the largest only grows.
-
-Each step extends the trace, keeping the carried account.
-
-The trace is marked slashed only if the key ends the branch slashed. -/
+/-- The per-key accounting trace of a branch, from a floor. -/
 private theorem FloorTrace.run_of_le_cap
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
@@ -1539,6 +1521,7 @@ private theorem FloorTrace.run_of_le_cap
     (i : ValidatorIndex) (v : Validator)
     (initial : x.state.validators.data[i.toNat]? = some v)
     (unslashed : v.slashed = false) (activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH)
+    -- The floor is at most the key's largest effective balance at the start.
     (low base quotient : Nat) (low_le : low ≤ (withdrawalMaxEffectiveBalance preset x.fork v).toNat)
     (positive : 0 < quotient)
     (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
@@ -1559,11 +1542,15 @@ private theorem FloorTrace.run_of_le_cap
       effectiveAt y i.toNat ≤ last.high ∧
       ∃ w, y.state.validators.data[i.toNat]? = some w ∧
         max low last.high ≤ (withdrawalMaxEffectiveBalance preset y.fork w).toNat ∧
+        -- The trace is marked slashed only if the key ends the branch slashed.
         (if last.slashedHigh.isSome then 1 else 0) ≤ (if w.slashed then 1 else 0) ∧
         ∀ p ∈ tail.balancePath, ∃ c, FloorTrace low base quotient
             ⟨actualBalanceAt x i.toNat, 0, effectiveAt x i.toNat, none⟩ c ∧
           c.balance = actualBalanceAt p i.toNat ∧ c.debt ≤ last.debt ∧
           (if c.slashedHigh.isSome then 1 else 0) ≤ (if w.slashed then 1 else 0) :=
+  -- A sweep or a switch to compounding leaves at least the floor, and the largest only grows.
+  --
+  -- Each step extends the trace, keeping the carried account.
   FloorTrace.run_of_le_cap_or_fulu shared tail genesis caps delay early high endEpoch i v initial
     unslashed (Or.inl activated) low base quotient low_le positive
     (fun pre step post split w found => by

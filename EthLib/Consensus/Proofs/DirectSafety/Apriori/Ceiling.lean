@@ -28,18 +28,6 @@ From a start `v` from Electra, the effective stake active at each state of a bra
 It is the ceiling of the epoch of the state.
 
 The ceiling grows each epoch by twice the issuance envelope and one epoch of deposit churn.
-
-The proof runs over the prefixes of the branch, one epoch at a time.
-
-At the start of epoch `t`, the keys active at `t - 1` and at `t` weigh at most the ceiling of `t`.
-
-Then the blocks and the rewards pass of `t` issue at most twice the envelope of that ceiling.
-
-So the funding at the start of `t + 1` is at most the ceiling of `t + 1`.
-
-The other credits, the floor of the active stake and a few facts of the preset are hypotheses.
-
-The floor is read only at earlier epochs, so a strong induction can supply it.
 -/
 
 /-- The funding credit of an event, unless it is a reward or a sync credit. -/
@@ -329,16 +317,9 @@ private theorem replayRewards_unscaled_credits_zero
 
 /-- The issuance of one epoch from Electra is at most twice the issuance envelope of the ceiling.
 
-It is the proposer and sync credits of the blocks of the epoch, and the rewards of its pass.
-
-The epoch runs from `r` to `s`, and the slot from `s` to `w` ends it.
-
-The keys active at the previous and the current epoch of `r` weigh at most the ceiling.
-
-Twice the ceiling is at most three times the total active balance.
-
-The slot moves the epoch on by one. -/
+It is the proposer and sync credits of the blocks of the epoch, and the rewards of its pass. -/
 private theorem epoch_issuance_actual {r s w : ForkedBeaconState preset}
+    -- The epoch runs from `r` to `s`, and the slot from `s` to `w` ends it.
     (inner : Run config checks r s) (same : getCurrentEpoch s.state = getCurrentEpoch r.state)
     (electra : .pectra ≤ r.fork) (boundary : advanceSlotAcross config checks s = .ok w)
     (early : w.fork < .glamsterdam)
@@ -349,15 +330,18 @@ private theorem epoch_issuance_actual {r s w : ForkedBeaconState preset}
     (aligned : EffectiveBalancesAligned r.state)
     (inc : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     {ceiling : Nat} (unit : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ ceiling)
+    -- The keys active at the previous and the current epoch of `r` weigh at most the ceiling.
     (previousLe : ∑ i ∈ (getActiveValidatorIndices r.state (getPreviousEpoch r.state)).toFinset,
       effectiveAt r i.toNat ≤ ceiling)
     (currentLe : ∑ i ∈ (getActiveValidatorIndices r.state (getCurrentEpoch r.state)).toFinset,
       effectiveAt r i.toNat ≤ ceiling)
+    -- Twice the ceiling is at most three times the total active balance.
     (ratio : ∀ total, getTotalActiveBalance r.state = .ok total →
       2 * ceiling ≤ 3 * total.toNat) :
     sourceCredits .rewards inside + sourceCredits .sync inside +
         (sourceCredits .rewards after + sourceCredits .sync after) ≤
       2 * preset.epochIssuanceBeforeAltair ceiling ∧
+      -- The slot moves the epoch on by one.
       (getCurrentEpoch w.state).toNat = (getCurrentEpoch s.state).toNat + 1 := by
   have sEarly : s.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (Step.slot boundary).chainStep.fork_le early
@@ -489,15 +473,7 @@ theorem ceiling_ge (ceiling : Nat → Nat) {start allowance : Nat}
 
 /-- The active-stake ceiling over the prefixes of a branch from `v`, one epoch at a time.
 
-Each prefix ends inside an epoch that started at a state `r`.
-
-The run to `r` issues at most twice the envelope of each earlier ceiling.
-
-At `r` the keys active at the previous and at the current epoch weigh at most its ceiling.
-
-The ratio of the ceiling to the total active balance is read only before the epoch of `y`.
-
-At `y` the keys active at the current and at the previous epoch weigh at most that ceiling. -/
+Each prefix ends inside an epoch that started at a state `r`. -/
 private theorem apriori_prefix_witness {g v y : ForkedBeaconState preset}
     (shared : Run config checks g v) (genesis : Genesis (config := config) (checks := checks) g)
     (tail : Run config checks v y) (electra : .pectra ≤ v.fork) (early : y.fork < .glamsterdam)
@@ -514,6 +490,7 @@ private theorem apriori_prefix_witness {g v y : ForkedBeaconState preset}
     (others : ∀ {u : ForkedBeaconState preset} (head : Run config checks v u),
       u.fork < .glamsterdam → (getCurrentEpoch u.state).toNat ≤ high + 1 → ∀ found,
         head.balanceEvents high = .ok found → (found.map otherCredit).sum ≤ allowance)
+    -- The ratio of the ceiling to the total active balance is read only before the epoch of `y`.
     (ratio : ∀ {u : ForkedBeaconState preset}, Run config checks v u → u.fork < .glamsterdam →
       (getCurrentEpoch u.state).toNat < (getCurrentEpoch y.state).toNat → ∀ total,
         getTotalActiveBalance u.state = .ok total →
@@ -523,16 +500,26 @@ private theorem apriori_prefix_witness {g v y : ForkedBeaconState preset}
       (inner : Run config checks r y) (before during : List (BalanceEvent preset)),
       tail = pre.append inner ∧
       pre.balanceEvents high = .ok before ∧ inner.balanceEvents high = .ok during ∧
+      -- `y` lies in the epoch that started at `r`, so the bounds at `r` below hold for its epoch.
       getCurrentEpoch y.state = getCurrentEpoch r.state ∧
+      -- At `r` the keys active at the previous and at the current epoch weigh at most its ceiling.
       (∑ i ∈ (getActiveValidatorIndices r.state (getCurrentEpoch r.state)).toFinset,
         effectiveAt r i.toNat) ≤
         ceiling ((getCurrentEpoch r.state).toNat - (getCurrentEpoch v.state).toNat) ∧
       (∑ i ∈ (getActiveValidatorIndices r.state (getPreviousEpoch r.state)).toFinset,
         effectiveAt r i.toNat) ≤
         ceiling ((getCurrentEpoch r.state).toNat - (getCurrentEpoch v.state).toNat) ∧
+      -- The run to `r` issues at most twice the envelope of each earlier ceiling.
       sourceCredits .rewards before + sourceCredits .sync before ≤
         ∑ s ∈ Finset.range ((getCurrentEpoch r.state).toNat - (getCurrentEpoch v.state).toNat),
           2 * preset.epochIssuanceBeforeAltair (ceiling s) := by
+  -- The proof runs over the prefixes of the branch, one epoch at a time.
+  --
+  -- At the start of epoch `t`, the keys active at `t - 1` and `t` weigh at most the ceiling of `t`.
+  --
+  -- Then the blocks and the rewards pass of `t` issue at most twice the envelope of that ceiling.
+  --
+  -- So the funding at the start of `t + 1` is at most the ceiling of `t + 1`.
   have mono : Monotone ceiling := monotone_nat_of_le_succ fun t =>
     (Nat.le_add_right _ _).trans ((Nat.le_add_right _ _).trans (grows t))
   have total := ceiling_ge (config := config) ceiling base grows
@@ -703,27 +690,24 @@ theorem ceilingAt_mono {x : ForkedBeaconState preset} (electra : .pectra ≤ x.f
 
 `T_plus` is read at the epoch of the state, and the stake is the effective stake of the active keys.
 
-The keys active at the previous epoch of the state weigh at most the same `T_plus`.
-
-Two hypotheses remain: a floor and the whistleblower allowance.
-
-The floor `T_minus` bounds the total active balance of each state of an earlier epoch from below.
-
-The credits other than rewards and sync credits fit the whistleblower allowance `Omega`.
-
-Four facts of the preset and the ceiling are hypotheses too. -/
+Two hypotheses remain: a floor and the whistleblower allowance. -/
 theorem activeStake_prefix_witness {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (tail : Run config checks x y) (electra : .pectra ≤ x.fork) (early : y.fork < .glamsterdam)
     (high : Nat) (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
+    -- Four facts of the preset and the ceiling are hypotheses.
     (guard : aprioriGuardAt config x high) (maxAligned : MaxEffectiveBalancesAligned preset)
     (unit : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ stakeCeilingAt config x high 0)
+    -- The credits other than rewards and sync credits fit the whistleblower allowance `Omega`.
     (others : ∀ {u : ForkedBeaconState preset} (head : Run config checks x u),
       u.fork < .glamsterdam → (getCurrentEpoch u.state).toNat ≤ high + 1 → ∀ found,
         head.balanceEvents high = .ok found → (found.map otherCredit).sum ≤
           whistleblowerAllowance preset config (referenceCount x) (scheduledActivationCount x)
             (unassignedPreStake x) (fundingCarry x) (exitedSlashableCount x)
             (driftHorizon x high) (preElectraEpochs config x high))
+    -- The floor `T_minus` is a lower bound on the total active balance at each earlier epoch.
+    --
+    -- The floor is read only at earlier epochs, so a strong induction can supply it.
     (floor : ∀ {u : ForkedBeaconState preset}, Run config checks x u → u.fork < .glamsterdam →
       (getCurrentEpoch u.state).toNat < (getCurrentEpoch y.state).toNat → ∀ total,
         getTotalActiveBalance u.state = .ok total →
@@ -737,6 +721,7 @@ theorem activeStake_prefix_witness {g x y : ForkedBeaconState preset}
       (∑ i ∈ (getActiveValidatorIndices r.state (getCurrentEpoch r.state)).toFinset,
         effectiveAt r i.toNat) ≤ stakeCeilingAt config x high
           ((getCurrentEpoch r.state).toNat - (getCurrentEpoch x.state).toNat) ∧
+      -- The keys active at the previous epoch of the state weigh at most the same `T_plus`.
       (∑ i ∈ (getActiveValidatorIndices r.state (getPreviousEpoch r.state)).toFinset,
         effectiveAt r i.toNat) ≤ stakeCeilingAt config x high
           ((getCurrentEpoch r.state).toNat - (getCurrentEpoch x.state).toNat) ∧
@@ -2364,15 +2349,7 @@ theorem FloorTrace.step_general_or_fulu {g x m y : ForkedBeaconState preset}
     · exact ⟨before, folded, atBefore, by omega, by rw [sameFlag]⟩
     · exact ⟨last, done, balance', le_rfl, le_rfl⟩
 
-/-- Concrete Steps preserve the carried account and cover each balance-path point.
-
-The key is unslashed at the start of the run and within the short window of a slash.
-
-Or it is slashed at the start with an assigned exit.
-
-Then its delayed penalty is not due in the epoch of the step.
-
-The high-water mark of the carried account rises at most to the effective balance after the step. -/
+/-- Concrete Steps preserve the carried account and cover each balance-path point. -/
 private theorem FloorTrace.step_general {g x m y : ForkedBeaconState preset}
     (shared : Run config checks g x) (pre : Run config checks x m)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
@@ -2383,8 +2360,12 @@ private theorem FloorTrace.step_general {g x m y : ForkedBeaconState preset}
     (initial : x.state.validators.data[i.toNat]? = some v)
     (middle : m.state.validators.data[i.toNat]? = some u)
     (final : y.state.validators.data[i.toNat]? = some w)
+    -- A key slashed at the start has an assigned exit.
     (assigned : v.slashed = true → v.exitEpoch ≠ FAR_FUTURE_EPOCH)
     (activated : u.activationEpoch ≠ FAR_FUTURE_EPOCH)
+    -- The key is unslashed at the start of the run and within the short window of a slash.
+    --
+    -- Or it is slashed at the start, and its delayed penalty is not due in the epoch of the step.
     (window : (v.slashed = false ∧
       (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
       preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
@@ -2411,6 +2392,7 @@ private theorem FloorTrace.step_general {g x m y : ForkedBeaconState preset}
       (∀ p ∈ step.balancePath, ∃ c, FloorTrace low base quotient a c ∧
         c.balance = actualBalanceAt p i.toNat ∧ c.debt ≤ last.debt ∧
         (if c.slashedHigh.isSome then 1 else 0) ≤ (if last.slashedHigh.isSome then 1 else 0)) ∧
+      -- The carried high-water mark rises at most to the effective balance after the step.
       last.high ≤ max b.high (effectiveAt y i.toNat) ∧
       (∀ h, last.slashedHigh = some h → b.slashedHigh = some h ∨ h = b.high) ∧
       (u.slashed = true → b.slashedHigh = none → last.slashedHigh = none) :=

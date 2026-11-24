@@ -61,7 +61,9 @@ def activeCountPath (config : Config) (start : Nat) : Nat → Nat
 
 /-- An upper envelope `delta T` of the Electra balance churn, in Gwei, at an active stake `T`.
 
-It rounds the stake over the churn quotient down to an increment, then takes the minimum if larger.
+It rounds the stake over the churn quotient down to an increment.
+
+It then takes the minimum if that is larger.
 
 The balance churn of EIP-7251 takes the larger value first, and rounds after.
 
@@ -123,22 +125,20 @@ def inactivityPenaltyDivisor (preset : Preset) (config : Config) : Nat :=
 
 /-- The activations of the window.
 
-Before the fork they are the growth of the active-count path.
-
-From Electra, keys already scheduled at `x` count separately.
-
-Each other activation needs `MAX_EFFECTIVE_BALANCE` of funding.
-
-That funding comes from the unassigned stake, or from the deposit carry.
-
-It may also come from the deposit churn of each epoch.
-
-A key made eligible before Electra has at least `MAX_EFFECTIVE_BALANCE` effective.
-
 It is a derived bound, not a rule of the specification. -/
 def windowActivations (preset : Preset) (config : Config)
     (count scheduled pending carry horizon forkEpochs : Nat) : Nat :=
+  -- Before the fork they are the growth of the active-count path.
   if 0 < forkEpochs then activeCountPath config (count + scheduled) (horizon + 1) - count
+  -- From Electra, keys already scheduled at `x` count separately.
+  --
+  -- Each other activation needs `MAX_EFFECTIVE_BALANCE` of funding.
+  --
+  -- That funding comes from the unassigned stake, or from the deposit carry.
+  --
+  -- It may also come from the deposit churn of each epoch.
+  --
+  -- A key made eligible before Electra has at least `MAX_EFFECTIVE_BALANCE` effective.
   else scheduled +
     (pending + carry + config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat * (horizon + 2)) /
     preset.MAX_EFFECTIVE_BALANCE.toNat
@@ -147,38 +147,31 @@ def windowActivations (preset : Preset) (config : Config)
 
 Every key that is slashable in the window pays it at most the window cap over `WQ`, once.
 
-Those keys are active at `x`, activate in the window, or are exited but not yet withdrawable.
-
-Before the fork the window cap is `MAX_EFFECTIVE_BALANCE`.
-
-From Electra it is `MAX_EFFECTIVE_BALANCE_ELECTRA`, since a key may switch to compounding.
-
 It bounds the whistleblower rewards of slashings; it is not a rule of the specification. -/
 def whistleblowerAllowance (preset : Preset) (config : Config)
     (count scheduled pending carry inactive horizon forkEpochs : Nat) : Nat :=
+  -- The slashable keys are active at `x`, activate in the window, or are exited.
+  --
+  -- The exited ones are not yet withdrawable.
   (count + windowActivations preset config count scheduled pending carry horizon forkEpochs +
       inactive) *
+    -- Before the fork the window cap is `MAX_EFFECTIVE_BALANCE`.
     (if 0 < forkEpochs then preset.MAX_EFFECTIVE_BALANCE.toNat
+      -- From Electra it is `MAX_EFFECTIVE_BALANCE_ELECTRA`, since a key may switch to compounding.
       else preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat) /
     whistleblowerQuotient preset forkEpochs
 
 /-- The ceiling `T_plus t` on the total active stake at epoch `t` of the window.
 
-Before the fork it is `MIN_ACTIVATION_BALANCE` times the active-count path.
-
-From Electra it starts at the funded stake, plus the deposit carry, plus `Omega`.
-
-The funded stake also counts the stake active only at the previous epoch.
-
-Each epoch then adds twice the issuance envelope and `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT`.
-
-The factor two covers one epoch's rewards, proposer rewards for two epochs of flags, and sync.
-
 It is a derived bound, not a rule of the specification. -/
 def stakeCeiling (preset : Preset) (config : Config)
     (count scheduled pending carry inactive funded horizon forkEpochs : Nat) : Nat → Nat
   | 0 =>
+    -- Before the fork it is `MIN_ACTIVATION_BALANCE` times the active-count path.
     if 0 < forkEpochs then preset.MIN_ACTIVATION_BALANCE.toNat * (count + scheduled)
+    -- From Electra it starts at the funded stake, plus the deposit carry, plus `Omega`.
+    --
+    -- The funded stake also counts the stake active only at the previous epoch.
     else funded + carry +
       whistleblowerAllowance preset config count scheduled pending carry inactive horizon forkEpochs
   | t + 1 =>
@@ -187,23 +180,28 @@ def stakeCeiling (preset : Preset) (config : Config)
     else
       let previous := stakeCeiling preset config count scheduled pending carry inactive funded
         horizon forkEpochs t
+      -- Each epoch then adds twice the issuance envelope.
+      --
+      -- It also adds `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT`.
+      --
+      -- The factor two covers one epoch's rewards and proposer rewards for two epochs of flags.
+      --
+      -- It also covers the sync rewards.
       previous + 2 * preset.epochIssuanceBeforeAltair previous +
         config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
 
-/-- The exits `nX_t` of epoch `t`.
-
-Before the fork they are the count churn at the end of the path, in `MIN_ACTIVATION_BALANCE`.
-
-From Electra they are the activation and exit part of `delta`, read at the ceiling.
-
-That is the activation and exit churn of EIP-7251, read at the ceiling.
-
-Before the fork the count churn is the validator churn limit of Phase 0. -/
+/-- The exits `nX_t` of epoch `t`. -/
 def exitFlow (preset : Preset) (config : Config) (count scheduled horizon forkEpochs : Nat)
     (ceiling : Nat → Nat) (t : Nat) : Nat :=
+  -- Before the fork they are the count churn at the end of the path, in `MIN_ACTIVATION_BALANCE`.
+  --
+  -- Before the fork the count churn is the validator churn limit of Phase 0.
   if t < forkEpochs then
     preset.MIN_ACTIVATION_BALANCE.toNat *
       cohortCap config (activeCountPath config (count + scheduled) (horizon + 1))
+  -- From Electra they are the activation and exit part of `delta`, read at the ceiling.
+  --
+  -- That is the activation and exit churn of EIP-7251, read at the ceiling.
   else activationExitChurn preset config (ceiling t)
 
 /-- The consolidations `nC_t` of epoch `t`: none before the fork, the constant cap `Cc` after.
@@ -217,22 +215,20 @@ def consolidationFlow (preset : Preset) (config : Config) (horizon forkEpochs : 
 
 /-- The non-slashing penalty `lambda_t` of epoch `t` over a stake `weight`, at a floor `lower`.
 
-The first part is `omega * BRF * weight / sqrt lower`, with `omega = (3 + BRPE) / BRPE`.
-
-`BRF` is `BASE_REWARD_FACTOR`, and `BRPE` is `BASE_REWARDS_PER_EPOCH`.
-
-The second part is the leak penalty at the score `score + bias * (t + 1)`.
-
-It is a derived envelope, not a rule of the specification.
-
-The first part bounds the source and target penalties of the participation flags from Altair.
-
-It also bounds the penalties of the sync committee.
-
-The second part bounds the inactivity penalty at that score. -/
+It is a derived envelope, not a rule of the specification. -/
 def epochPenalty (preset : Preset) (config : Config) (score weight lower t : Nat) : Nat :=
+  -- The first part is `omega * BRF * weight / sqrt lower`, with `omega = (3 + BRPE) / BRPE`.
+  --
+  -- `BRF` is `BASE_REWARD_FACTOR`, and `BRPE` is `BASE_REWARDS_PER_EPOCH`.
+  --
+  -- The first part bounds the source and target penalties of the participation flags from Altair.
+  --
+  -- It also bounds the penalties of the sync committee.
   (3 + BASE_REWARDS_PER_EPOCH.toNat) * preset.BASE_REWARD_FACTOR.toNat * weight /
       (BASE_REWARDS_PER_EPOCH.toNat * lower.sqrt) +
+    -- The second part is the leak penalty at the score `score + bias * (t + 1)`.
+    --
+    -- The second part bounds the inactivity penalty at that score.
     weight * (score + config.INACTIVITY_SCORE_BIAS.toNat * (t + 1)) / inactivityPenaltyDivisor
         preset config
 
@@ -257,19 +253,19 @@ def finalKeyCount (preset : Preset) (stake count last : Nat) : Nat :=
   count + (last - stake + preset.MIN_ACTIVATION_BALANCE.toNat - 1) /
     preset.MIN_ACTIVATION_BALANCE.toNat
 
-/-- The start `T_minus 0` of the floor.
-
-It is the stake less the slashed stake, the slack and one increment per key of `N_plus`.
-
-It also loses the slashing penalties of the ceiling, the due partials and the departures.
-
-The departures are the scheduled ones and the whole departure budget of the window.
-
-The slashing penalty term divides by `MSPQ`, the least quotient of the initial slashing penalty. -/
+/-- The start `T_minus 0` of the floor. -/
 def stakeFloorStart (preset : Preset)
     (stake slashed count slack departures partials budget last forkEpochs : Nat) : Nat :=
+  -- It is the stake less the slashed stake, the slack and one increment per key of `N_plus`.
   stake - slashed - slack -
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat * finalKeyCount preset stake count last -
+    -- It also loses the slashing penalties of the ceiling, the due partials and the departures.
+    --
+    -- The departures are the scheduled ones and the whole departure budget of the window.
+    --
+    -- The slashing penalty term divides by `MSPQ`.
+    --
+    -- That is the least quotient of the initial slashing penalty.
     last / minSlashingPenaltyQuotient preset forkEpochs - partials - departures - budget
 
 /-- The floor path of a window, with every input read from the observables.
@@ -288,64 +284,49 @@ def stakeFloor (preset : Preset) (config : Config)
 
 /-- The conditions under which the drift uses its formula.
 
-The divisors are positive, and the whistleblower quotient exceeds one.
-
-The minimum validator churn of Phase 0, a count of validators per epoch, is positive.
-
-With a zero minimum, a queue still lets one validator exit per epoch.
-
-The formula does not charge that exit.
-
-The withdrawal delay is at least two epochs.
-
-The window ends before half the slashings vector, and the floor stays positive through it.
-
-The floor takes the departure budget at its start.
-
-From the fork on, twice the ceiling is at most three times the floor.
-
-That ratio keeps one epoch's issuance below twice the issuance envelope of the ceiling.
-
-The last condition asks that a window from a state before Electra end before the fork.
-
-The condition also carries two fallbacks, both set through `forkEpochs = 1`.
-
-They are for a state before Altair and for a state that cannot reach Electra.
-
-When the guard fails, the drift is the unslashed active stake, and the bound says nothing.
-
-Dropping the condition for crossing windows would also drop both fallbacks. -/
+When the guard fails, the drift is the unslashed active stake, and the bound says nothing. -/
 abbrev aprioriGuard (preset : Preset) (config : Config)
     (stake slashed penalised count score slack carry pending scheduled departures partials budget
       inactive funded horizon forkEpochs : Nat) : Prop :=
+  -- The increment and the churn quotient are positive.
   0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∧ 0 < config.CHURN_LIMIT_QUOTIENT.toNat ∧
+    -- The minimum validator churn of Phase 0, a count of validators per epoch, is positive.
+    --
+    -- With a zero minimum, a queue still lets one validator exit per epoch.
+    --
+    -- The formula does not charge that exit.
     0 < config.MIN_PER_EPOCH_CHURN_LIMIT.toNat ∧
+    -- The other divisors are positive, and the whistleblower quotient exceeds one.
     0 < preset.MAX_EFFECTIVE_BALANCE.toNat ∧
     0 < preset.MIN_ACTIVATION_BALANCE.toNat ∧ 0 < preset.downwardBand ∧
     0 < inactivityPenaltyDivisor preset config ∧ 0 < minSlashingPenaltyQuotient preset forkEpochs ∧
     1 < whistleblowerQuotient preset forkEpochs ∧
+    -- The withdrawal delay is at least two epochs.
     2 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat ∧
+    -- The window ends before half the slashings vector, and the floor stays positive through it.
+    --
+    -- The floor takes the departure budget at its start.
     horizon + 2 < preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat / 2 ∧
     (∀ t < horizon + 2, 0 < stakeFloor preset config stake slashed penalised count score slack
       carry pending scheduled departures partials budget inactive funded horizon forkEpochs t) ∧
+    -- From the fork on, twice the ceiling is at most three times the floor.
+    --
+    -- That ratio keeps one epoch's issuance below twice the issuance envelope of the ceiling.
     (∀ t, forkEpochs ≤ t → t ≤ horizon + 1 →
       2 * stakeCeiling preset config count scheduled pending carry inactive funded horizon
         forkEpochs t ≤
       3 * stakeFloor preset config stake slashed penalised count score slack carry pending
         scheduled departures partials budget inactive funded horizon forkEpochs t) ∧
+    -- The last condition asks that a window from a state before Electra end before the fork.
+    --
+    -- The condition also carries two fallbacks, both set through `forkEpochs = 1`.
+    --
+    -- They are for a state before Altair and for a state that cannot reach Electra.
+    --
+    -- Dropping the condition for crossing windows would also drop both fallbacks.
     (forkEpochs = 0 ∨ horizon + 2 ≤ forkEpochs)
 
 /-- The departures that the queues admit in the window, from their ends at `x`.
-
-It is the carry of the queues, and the churn of each epoch from the end of each queue on.
-
-Before the fork the exit churn is the count churn at the end of the active-count path.
-
-From Electra it is `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT`.
-
-From Electra consolidations add `Cc`, the consolidation churn at the last ceiling.
-
-Two `MAX_EFFECTIVE_BALANCE_ELECTRA` cover one departure at each end of the window.
 
 It is a derived bound on the churn of the exit and consolidation queues of Electra.
 
@@ -355,14 +336,19 @@ def departureBudget (preset : Preset) (config : Config)
       forkEpochs : Nat) : Nat :=
   let ceiling := stakeCeiling preset config count scheduled pending carry inactive funded
     horizon forkEpochs
+  -- Before the fork the exit churn is the count churn at the end of the active-count path.
   let exitRate := if 0 < forkEpochs then
       preset.MIN_ACTIVATION_BALANCE.toNat *
         cohortCap config (activeCountPath config (count + scheduled) (horizon + 1))
+    -- From Electra it is `MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT`.
     else config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
+  -- From Electra consolidations add `Cc`, the consolidation churn at the last ceiling.
   let consolidationRate := if 0 < forkEpochs then 0
     else consolidationChurn preset config (ceiling (horizon + 1))
+  -- It is the carry of the queues, and the churn of each epoch from the end of each queue on.
   queued + (horizon + 2 - exitEnd) * exitRate +
     (horizon + 2 - consolidationEnd) * consolidationRate +
+    -- Two `MAX_EFFECTIVE_BALANCE_ELECTRA` cover one departure at each end of the window.
     2 * preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
 
 /-- `W`: the active effective stake at `x`, slashed keys included. -/
@@ -490,21 +476,21 @@ def previousOnlyStake (x : ForkedBeaconState preset) : Nat :=
         !isActiveValidator v (getCurrentEpoch x.state) then
       v.effectiveBalance.toNat else 0).sum
 
-/-- `H1`: the epochs of the window before Electra, and zero from Electra on.
-
-A state before Electra whose epoch has reached the fork epoch never upgrades.
-
-The upgrade fires only at the boundary of that epoch.
-
-`H1 = 1` then fails the clause of the guard against crossing, so the drift falls back to `W - Z`.
-
-A state before Altair takes `H1 = 1` too, so a window from it falls back in the same way. -/
+/-- `H1`: the epochs of the window before Electra, and zero from Electra on. -/
 def preElectraEpochs (config : Config) (x : ForkedBeaconState preset) (high : Nat) : Nat :=
   if x.fork < .pectra then
+    -- A state before Altair takes `H1 = 1`, so a window from it falls back to `W - Z`.
     if x.fork < .altair then 1
     else if (getCurrentEpoch x.state).toNat < config.ELECTRA_FORK_EPOCH.toNat then
       min (driftHorizon x high + 2)
         (config.ELECTRA_FORK_EPOCH.toNat - (getCurrentEpoch x.state).toNat)
+    -- A state before Electra whose epoch has reached the fork epoch never upgrades.
+    --
+    -- The upgrade fires only at the boundary of that epoch.
+    --
+    -- `H1 = 1` then fails the clause of the guard against crossing.
+    --
+    -- So the drift falls back to `W - Z`.
     else 1
   else 0
 
@@ -682,20 +668,18 @@ def activationBudget (x : ForkedBeaconState preset) (high : Nat) :=
     if 0 < preElectraEpochs config x high then preset.MIN_ACTIVATION_BALANCE.toNat *
         referenceCount x - referenceStake x else 0
 
-/-- The whistleblower allowance of the window, read at `x`.
-
-When the window has an epoch before Electra, it is `Omega`.
-
-Otherwise, when `WQ` is at least 2, it is also at most a bound over `WQ - 1`.
-
-That bound is the base `B` plus the issuance envelope of the window.
-
-It also adds the deposit carry and the exit flow of the window. -/
+/-- The whistleblower allowance of the window, read at `x`. -/
 abbrev whistleblowerAllowanceAt (x : ForkedBeaconState preset) (high : Nat) :=
   let omega := whistleblowerAllowance preset config (referenceCount x)
     (scheduledActivationCount x) (unassignedPreStake x) (fundingCarry x)
     (exitedSlashableCount x) (driftHorizon x high) (preElectraEpochs config x high)
+  -- When the window has an epoch before Electra, it is `Omega`.
   if 0 < preElectraEpochs config x high then omega
+  -- Otherwise, when `WQ` is at least 2, it is also at most a bound over `WQ - 1`.
+  --
+  -- That bound is the base `B` plus the issuance envelope of the window.
+  --
+  -- It also adds the deposit carry and the exit flow of the window.
   else if 2 ≤ preset.WHISTLEBLOWER_REWARD_QUOTIENT_ELECTRA.toNat then
     min omega ((slashableBase x + windowIssuance (config := config) x high + fundingCarry x +
         ((List.range (driftHorizon x high + 1)).map (exitFlowAt (config := config) x high)).sum) /
@@ -724,17 +708,17 @@ def withdrawalBudget (x : ForkedBeaconState preset) (high : Nat) :=
 
 It is a number of rounding steps times `EFFECTIVE_BALANCE_INCREMENT`.
 
-That number is the least of three bounds: the final key count and two counts of losses.
-
-The first count divides the losses and the withdrawal budget by the downward band.
-
-The second divides the losses by the downward band and adds the number of active keys at `x`. -/
+That number is the least of three bounds: the final key count and two counts of losses. -/
 def roundingBudget (x : ForkedBeaconState preset) (high : Nat) :=
   let a := startSlack x + windowPenalties (config := config) x high (driftHorizon x high + 1)
   preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
     min (finalKeyCount preset (referenceStake x) (referenceCount x)
           (stakeCeilingAt config x high (driftHorizon x high + 1)))
+      -- The first count divides the losses and the withdrawal budget by the downward band.
       (min ((a + withdrawalBudget (config := config) x high) / preset.downwardBand)
+        -- The second divides the losses by the downward band.
+        --
+        -- It adds the number of active keys at `x`.
         (a / preset.downwardBand + referenceCount x))
 
 /-- The total gain budget of a branch: activations, credits and pending source excess.
@@ -760,16 +744,15 @@ def windowEdgeLoad (x : ForkedBeaconState preset) (high : Nat) :=
 
 /-- The a priori bound on the drift of a window from `x` up to epoch `high + 1`.
 
-When the guard holds, it is a weighted sum of the budgets of the window.
-
-They are the departures, due partials, scheduled exits, start slack, penalties and rounding.
-
-They also include the gain budget, adjacent exits, previous-only stake, cohort growth and edge load.
-
-Otherwise it is the reference stake less the slashed active stake.
-
-That is the unslashed active stake at `x`, so the bound then says nothing. -/
+When the guard fails, the bound says nothing. -/
 def drift (x : ForkedBeaconState preset) (high : Nat) :=
+  -- When the guard holds, it is a weighted sum of the budgets of the window.
+  --
+  -- They are the departures, due partials, scheduled exits, start slack, penalties and rounding.
+  --
+  -- They also include the gain budget, adjacent exits, previous-only stake and cohort growth.
+  --
+  -- The edge load is the last.
   if aprioriGuardAt config x high then
     2 * (departureBudgetAt (config := config) x high +
         duePartialWithdrawals x (driftHorizon x high) +
@@ -779,6 +762,9 @@ def drift (x : ForkedBeaconState preset) (high : Nat) :=
       gainBudget (config := config) x high + 2 * adjacentExitStake x (driftHorizon x high) +
       previousOnlyStake x + 2 * exitCohortGrowth x high +
       2 * max (windowEdgeLoad (config := config) x high) (gainBudget (config := config) x high)
+  -- Otherwise it is the reference stake less the slashed active stake.
+  --
+  -- That is the unslashed active stake at `x`, so the bound then says nothing.
   else referenceStake x - slashedActiveStake x
 
 /-- The keys active and unslashed at `x` of validators whose exit epoch is before `cutoff`.
@@ -791,60 +777,45 @@ def exitedBefore (x : ForkedBeaconState preset) (cutoff : Nat) : Finset BLSPubke
 
 /-- The a priori accountable-safety statement for two conflicting finalized checkpoints.
 
-Two runs extend a common run from a genesis state `g` to `x`.
-
-They reach `a` and `b`, before Glamsterdam, with conflicting finalized checkpoints.
-
-The finalized epoch of `a` is at most that of `b`, and `x` is at most one epoch past the latter.
-
-The preset meets the parameters of the source bound and has at least two slots per epoch.
-
-It orders its caps and keeps its largest effective balances whole numbers of increments.
-
-The withdrawal delay is positive, and both runs keep enough stake to the finalized epoch of `b`.
-
-Then the unslashed stake at `x` is at most three times the accountable stake plus twice the drift.
-
-The drift is read at `x`, with the finalized epoch of `b` as `high`.
-
-Otherwise the hash objects of the two runs contain hash evidence.
-
 When the guard fails at `x`, twice the drift is twice the unslashed stake, and the bound is trivial.
 -/
 def AccountableDriftBound : Prop := ∀ {g x a b : ForkedBeaconState preset}
+  -- Two runs extend a common run from a genesis state `g` to `x`.
   (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b),
+  -- The preset meets the parameters of the source bound, and `g` is a genesis state.
   Parameters preset → Genesis (config := config) (checks := checks) g →
+  -- The withdrawal delay is positive, and the preset has at least two slots per epoch.
   0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat → 2 ≤ preset.SLOTS_PER_EPOCH.toNat →
+  -- The preset orders its caps.
+  --
+  -- Its largest effective balances are whole numbers of increments.
   CapOrder preset → MaxEffectiveBalancesAligned preset →
+  -- They reach `a` and `b`, before Glamsterdam.
   a.fork < .glamsterdam → b.fork < .glamsterdam →
+  -- `x` is at most one epoch past the finalized epoch of `b`.
   (getCurrentEpoch x.state).toNat ≤ b.state.finalizedCheckpoint.epoch.toNat + 1 →
+  -- Both runs keep enough stake to the finalized epoch of `b`.
   EnoughStake (shared.append left) b.state.finalizedCheckpoint.epoch.toNat →
   EnoughStake (shared.append right) b.state.finalizedCheckpoint.epoch.toNat →
+  -- The finalized epoch of `a` is at most that of `b`.
   a.state.finalizedCheckpoint.epoch ≤ b.state.finalizedCheckpoint.epoch →
+  -- The two finalized checkpoints conflict.
   Conflict (shared.append left) (shared.append right)
     a.state.finalizedCheckpoint b.state.finalizedCheckpoint →
+    -- Then the unslashed stake at `x` is at most a bound.
+    --
+    -- The bound is three times the accountable stake plus twice the drift.
+    --
+    -- The drift is read at `x`, with the finalized epoch of `b` as `high`.
     Models.stake (effectiveWeight x.state) (unslashedKeys x.state) ≤
       3 * Models.stake (effectiveWeight x.state) (accountableKeys shared left right) +
         2 * drift (config := config) x b.state.finalizedCheckpoint.epoch.toNat ∨
+      -- Otherwise the hash objects of the two runs contain hash evidence.
       HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects)
 
 /-- The guarded form of the drift bound, which also counts keys that exit before two calls.
 
-It adds the guard at `x` and `high` to the hypotheses of the drift bound.
-
-Here `high` is the finalized epoch of `b`.
-
-Then two calls drawn from the runs have target epochs between the two finalized epochs.
-
-Let `cutoff` be the earlier of their two target epochs.
-
-The unslashed stake at `x` is then bounded, plus three times the stake of the keys that exit first.
-
-Those keys are active and unslashed at `x`, and their exit epoch is before `cutoff`.
-
-The bound is three times the accountable stake plus twice the drift.
-
-Otherwise the hash objects of the two runs contain hash evidence. -/
+It adds the guard at `x` and `high` to the hypotheses of the drift bound. -/
 def AccountableWindowBound : Prop := ∀ {g x a b : ForkedBeaconState preset}
   (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b),
   Parameters preset → Genesis (config := config) (checks := checks) g →
@@ -857,17 +828,26 @@ def AccountableWindowBound : Prop := ∀ {g x a b : ForkedBeaconState preset}
   a.state.finalizedCheckpoint.epoch ≤ b.state.finalizedCheckpoint.epoch →
   Conflict (shared.append left) (shared.append right)
     a.state.finalizedCheckpoint b.state.finalizedCheckpoint →
+  -- Here `high` is the finalized epoch of `b`.
   aprioriGuardAt config x b.state.finalizedCheckpoint.epoch.toNat →
+  -- Then two calls drawn from the runs have target epochs between the two finalized epochs.
   (∃ one two : EitherCall (shared.append left) (shared.append right),
     a.state.finalizedCheckpoint.epoch.toNat ≤ one.targetEpoch ∧
     one.targetEpoch ≤ b.state.finalizedCheckpoint.epoch.toNat ∧
     a.state.finalizedCheckpoint.epoch.toNat ≤ two.targetEpoch ∧
     two.targetEpoch ≤ b.state.finalizedCheckpoint.epoch.toNat ∧
+    -- Let `cutoff` be the earlier of their two target epochs.
+    --
+    -- The unslashed stake at `x`, plus three times the stake of the keys exiting first, is bounded.
+    --
+    -- Those keys are active and unslashed at `x`, and their exit epoch is before `cutoff`.
     Models.stake (effectiveWeight x.state) (unslashedKeys x.state) +
       3 * Models.stake (effectiveWeight x.state)
           (exitedBefore x (min one.targetEpoch two.targetEpoch)) ≤
+      -- The bound is three times the accountable stake plus twice the drift.
       3 * Models.stake (effectiveWeight x.state) (accountableKeys shared left right) +
         2 * drift (config := config) x b.state.finalizedCheckpoint.epoch.toNat) ∨
+    -- Otherwise the hash objects of the two runs contain hash evidence.
     HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects)
 
 end

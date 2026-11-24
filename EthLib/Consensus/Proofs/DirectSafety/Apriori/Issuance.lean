@@ -39,17 +39,7 @@ public import Mathlib.Tactic.Ring
 /-!
 # A priori bounds on the balance changes of one epoch
 
-From Altair, the base reward of one increment of effective balance is a factor times the increment.
-
-That product is divided by the integer square root of the total active balance, rounding down.
-
-The total base rewards of an epoch are that reward for each whole increment of the total.
-
-They bound what one epoch can issue, but they are not monotone in the total.
-
-On mainnet, a total of 36,066,180 ETH gives 12,154,302,660 Gwei.
-
-One more ETH gives 12,118,236,816 Gwei, since the square root steps up while the increments do not.
+The total base rewards of an epoch bound what it can issue, but they are not monotone in the total.
 
 This module bounds them by an issuance envelope `BRF * (isqrt T + 2)`, monotone in the total.
 
@@ -77,6 +67,17 @@ private theorem totalBaseRewards_le_envelope {total perIncrement : Gwei}
     (computed : getBaseRewardPerIncrement preset total = .ok perIncrement) :
     total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * perIncrement.toNat ≤
       preset.epochIssuanceBeforeAltair total.toNat := by
+  -- From Altair, the base reward of one increment of effective balance is a factor times it.
+  --
+  -- That product is divided by the integer square root of the total active balance, rounding down.
+  --
+  -- The total base rewards of an epoch are that reward for each whole increment of the total.
+  --
+  -- They are not monotone in the total.
+  --
+  -- On mainnet, a total of 36,066,180 ETH gives 12,154,302,660 Gwei.
+  --
+  -- One more ETH gives 12,118,236,816 Gwei, since only the square root steps up.
   rw [toNat_getBaseRewardPerIncrement computed]
   unfold Preset.epochIssuanceBeforeAltair
   rcases Nat.eq_zero_or_pos total.toNat with zero | positive
@@ -92,10 +93,6 @@ The rewards pass pays the flags of the previous epoch.
 The blocks pay their proposers for newly set flags, and the sync committee for each slot.
 
 They stay below twice the issuance envelope of the ceiling `T_plus`.
-
-That needs `T_plus` to be at most three halves of the total active balance.
-
-The bound is `3439 / 1792` of the envelope, where `3439 / 1792 < 2`.
 -/
 
 /-- Four times a stake `a` is at most `5 * sqrt T * (sqrt a + 2)`, in integer roots.
@@ -126,22 +123,28 @@ private theorem four_le_five_sqrt {a T : Nat} (positive : 0 < T) (ratio : 2 * a 
     calc 4 * a ≤ 4 * S * (S + 2) := by rw [Nat.mul_assoc]; omega
       _ ≤ 5 * s * (S + 2) := Nat.mul_le_mul_right _ narrow
 
-/-- The credits of one epoch are at most twice the issuance envelope of the ceiling `a`.
-
-`F` bounds the flag rewards, `G` the proposer credits and `Y` the sync credits.
-
-They are read at a total `T` of `n` whole increments `I`, with base reward per increment `perInc`.
-
-`p` bounds the increments that set a flag, and `q` those that pay a proposer, over two epochs.
-
-The total is at most `a` and at least two thirds of it. -/
+/-- The credits of one epoch are at most twice the issuance envelope of the ceiling `a`. -/
 theorem issuance_certificate {I a T n perInc p q F G Y : Nat} (inc : 0 < I)
+    -- The credits are read at a total `T` of `n` whole increments `I`.
+    --
+    -- The total is at most `a` and at least two thirds of it.
+    --
+    -- So the ceiling `a` is at most three halves of the total active balance.
     (aligned : n * I = T) (positive : 0 < T) (ratio : 2 * a ≤ 3 * T) (bounded : T ≤ a)
+    -- The base reward per increment is `perInc`.
     (rate : perInc * T.sqrt ≤ I * preset.BASE_REWARD_FACTOR.toNat)
+    -- `p` bounds the increments that set a flag, and `q` those that pay a proposer.
+    --
+    -- Both count over two epochs.
     (part : p * I ≤ a) (attesters : q * I ≤ 2 * a)
+    -- `F` bounds the flag rewards, which the rewards pass pays for the flags of the previous epoch.
+    --
+    -- `G` bounds the proposer credits, which the blocks pay for newly set flags.
     (flags : F * (n * 64) ≤ 54 * perInc * p ^ 2) (proposers : G * 448 ≤ 54 * perInc * q)
+    -- `Y` bounds the sync credits, which the blocks pay to the sync committee for each slot.
     (sync : Y * 28 ≤ preset.epochIssuanceBeforeAltair T) :
     F + G + Y ≤ 2 * preset.epochIssuanceBeforeAltair a := by
+  -- The bound is `3439 / 1792` of the envelope, where `3439 / 1792 < 2`.
   have key := four_le_five_sqrt positive ratio
   have rootPos : 0 < T.sqrt := Nat.sqrt_pos.mpr positive
   have roots : T.sqrt ≤ a.sqrt := Nat.sqrt_le_sqrt bounded
@@ -262,20 +265,6 @@ theorem syncCredit_le {fork : Fork} {s : BeaconState preset fork}
 /-! ## The penalties of one rewards pass
 
 From Altair, the rewards pass charges an eligible validator three penalties at most.
-
-It pays the weight of the source flag and of the target flag, each when that flag is missing.
-
-The base reward times the weight is divided by the weight denominator, rounding down.
-
-It also pays the inactivity penalty when the target flag is missing.
-
-That penalty is the effective balance times the new score, over the score bias times the quotient.
-
-A missing head flag costs nothing, and the rewards only raise the balance.
-
-The sync committee penalties are not part of this pass.
-
-The processing of the sync aggregate applies them in each block.
 
 The bound reads the replay of the pass, which records each penalty entry as its own event.
 -/
@@ -625,26 +614,39 @@ theorem replayRewards_penalty_scalar_cases (altair : .altair ≤ fork)
 
 /-- The penalty debits of one rewards pass, from Altair, over a set `S` of keys.
 
-The pass is replayed from the state `state`, after the update of the inactivity scores.
+`E` is the eligible effective stake of `S` at the input of the pass.
 
-`E` is the eligible effective stake of `S` there, and `T` the total active balance.
-
-Each score of `S` must be at most `maxScore`.
+`T` is the total active balance there.
 
 ```text
 debits of S <= (W_source + W_target) * BASE_REWARD_FACTOR * E / (WEIGHT_DENOMINATOR * isqrt T)
                + E * maxScore / (INACTIVITY_SCORE_BIAS * INACTIVITY_PENALTY_QUOTIENT)
 ```
-
-Each key rounds down on its own, and the sum of those quotients is at most the quotient of the sum.
 -/
 theorem passPenalties_le (altair : .altair ≤ fork) (within : state.RegistryWithinLimit)
     {rewarded : BalanceReplay preset fork}
+    -- The pass is replayed from `state`, after the update of the inactivity scores.
     (replayed : replayRewards (config := config) (state, []) = .ok rewarded)
     (active : getTotalActiveBalance state = .ok total) (S : Finset Nat)
     (inside : ∀ j ∈ S, j < state.validators.data.size) {maxScore : Nat}
+    -- Each score of `S` must be at most `maxScore`.
     (capped : ∀ j ∈ S, ∀ score : UInt64,
       (state.inactivityScores altair).data[j]? = some score → score.toNat ≤ maxScore) :
+    -- The pass pays the weight of the source flag and of the target flag, each when it is missing.
+    --
+    -- The base reward times the weight is divided by the weight denominator, rounding down.
+    --
+    -- It also pays the inactivity penalty when the target flag is missing.
+    --
+    -- That penalty is the effective balance times the new score.
+    --
+    -- It is divided by the score bias times the quotient.
+    --
+    -- A missing head flag costs nothing, and the rewards only raise the balance.
+    --
+    -- The sync committee penalties are not part of this pass.
+    --
+    -- The processing of the sync aggregate applies them in each block.
     ∑ j ∈ S, (rewarded.2.map (penaltyDebit j)).sum ≤
       (TIMELY_SOURCE_WEIGHT.toNat + TIMELY_TARGET_WEIGHT.toNat) *
           preset.BASE_REWARD_FACTOR.toNat * (∑ j ∈ S, eligibleWeight state j) /
@@ -652,6 +654,9 @@ theorem passPenalties_le (altair : .altair ≤ fork) (within : state.RegistryWit
         (∑ j ∈ S, eligibleWeight state j) * maxScore /
           (config.INACTIVITY_SCORE_BIAS.toNat *
             (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat) := by
+  -- Each key rounds down on its own.
+  --
+  -- The sum of those quotients is at most the quotient of the sum.
   rcases replayRewards_penalty_entries altair replayed with quiet |
     ⟨_, source, target, head, inactivity, _, sourceOk, targetOk, headOk,
       inactivityOk, entries⟩

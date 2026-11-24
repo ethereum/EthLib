@@ -124,19 +124,20 @@ private theorem initialOwnership_valid (x : ForkedBeaconState preset) (high : Na
 
 /-- The initial ownership issues one token per unit of each of its pots.
 
-Its first pot is the capped excess of the keys active at `x`.
-
-For each key it is its balance capped at its largest effective balance, minus its effective balance.
-
-The next two are the pre-active stake `Pre` and the due consolidation credits `Pi_c`.
-
-The last is the excess of the pending sources inactive at `x` and withdrawable in the window.
-
 So it issues at most their sum. -/
 private theorem initialOwnership_card {x : ForkedBeaconState preset} (high : Nat)
     (early : x.fork < .glamsterdam) :
     (initialOwnership x high).issued.card ≤ initialCappedExcess x + preActiveStake x +
         dueConsolidationCredits x (driftHorizon x high) + pendingSourceExcess x high := by
+  -- Its first pot is the capped excess of the keys active at `x`.
+  --
+  -- For each key it is its balance capped at its largest effective balance.
+  --
+  -- Its effective balance is subtracted from that capped balance.
+  --
+  -- The next two are the pre-active stake `Pre` and the due consolidation credits `Pi_c`.
+  --
+  -- The last is the excess of the pending sources inactive at `x` and withdrawable in the window.
   have potCard : ∀ p, ((Finset.range (if p < 2 then x.state.validators.data.size
       else (pendingQueue x).length)).biUnion fun idx =>
         (Finset.range (initialPot x high p idx).2).image (TokenOrigin.initial p idx)).card ≤
@@ -333,18 +334,17 @@ private theorem initialOwnership_weight {g x : ForkedBeaconState preset}
 
 /-- The initial ownership of a window: the four initial pots, each unit owned by its key.
 
-It meets the initial ownership facts and the reserve cut at `x` itself.
-
-The reserve cut reads the actual pending queue.
-
-Each clause reads at most two pot entries of one key.
-
-The entries are its capped excess, its potential, and its due pending principal and headroom. -/
+It meets the initial ownership facts and the reserve cut at `x` itself. -/
 theorem initialOwnership_exists {g x : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (early : x.fork < .glamsterdam) (high : Nat) :
     ∃ owned : Ownership, owned = initialOwnership x high ∧ OwnedInitial x high owned ∧
       ReserveCut x high x (getCurrentEpoch x.state) (pendingQueue x) owned := by
+  -- The reserve cut reads the actual pending queue.
+  --
+  -- Each clause reads at most two pot entries of one key.
+  --
+  -- The entries are its capped excess, its potential, and its due pending principal and headroom.
   have valid := initialOwnership_valid x high
   have within := x.state.validators.bound early
   have unique := shared.pubkeysDistinct genesis
@@ -587,15 +587,7 @@ private theorem ownedTransfer_exists (before : Ownership) (p : Payment preset)
 
 It does so at its endpoint too.
 
-It leaves every other key's held tokens unchanged.
-
-The target keeps what it held, since those tokens are neither the source's nor new.
-
-It gains the moved tokens and the minted ones.
-
-These are disjoint from each other and from everything it held.
-
-Their number is exactly the payment. -/
+It leaves every other key's held tokens unchanged. -/
 theorem ownedTransfer_held {position : Nat} {p : Payment preset}
     {allocation : OwnedRelease} {before after : Ownership}
     (transfer : OwnedTransfer position p allocation before after)
@@ -604,6 +596,13 @@ theorem ownedTransfer_held {position : Nat} {p : Payment preset}
       (held before p.target ∩ before.endpoint).card + p.amount ≤
         (held after p.target ∩ after.endpoint).card ∧
       ∀ i, i ≠ p.source → i ≠ p.target → held after i = held before i := by
+  -- The target keeps what it held, since those tokens are neither the source's nor new.
+  --
+  -- It gains the moved tokens and the minted ones.
+  --
+  -- These are disjoint from each other and from everything it held.
+  --
+  -- Their number is exactly the payment.
   obtain ⟨_, _, moved, minted, inside, size, mintedEq, fresh, issued, amount, _, _, _, _, _,
     gained, lost, kept, endpoint⟩ := transfer
   have heldIssued : ∀ i, held before i ⊆ before.issued := fun _ => Finset.filter_subset _ _
@@ -869,17 +868,7 @@ private theorem creditOwnership_held {e : BalanceEvent preset} {before : Ownersh
   intro a b equal
   exact TokenOrigin.credit.inj equal |>.2.2
 
-/-- A balance growth that may append validators keeps the reserve cut.
-
-Indices below the old registry size keep their validators, so their clauses transport.
-
-Such an index may grow without tokens if no clause that reads a balance can see its validator.
-
-That is, the validator is not funding-relevant, never supported again, and not waiting to activate.
-
-Each appended validator meets its clauses through the explicit obligations.
-
-It is new at the reference state, is never supported again if retired, and holds enough tokens. -/
+/-- A balance growth that may append validators keeps the reserve cut. -/
 private theorem reserveCut_balance_hidden_append {x u v : ForkedBeaconState preset} {high : Nat}
     {epoch : Epoch} {suffix : List PendingConsolidation} {before after : Ownership}
     {growth : Nat → Nat}
@@ -895,6 +884,11 @@ private theorem reserveCut_balance_hidden_append {x u v : ForkedBeaconState pres
     (heldGrowth : ∀ i, (held before i).card + growth i ≤ (held after i).card)
     (endpointGrowth : ∀ i, (held before i ∩ before.endpoint).card + growth i ≤
       (held after i ∩ after.endpoint).card)
+    -- Each appended validator meets its clauses through the explicit obligations.
+    --
+    -- It is new at the reference state, and is never supported again if retired.
+    --
+    -- It holds enough tokens.
     (appendedFresh : ∀ j w, u.state.validators.data.size ≤ j →
       v.state.validators.data[j]? = some w → x.state.validators.data[j]? = none)
     (appendedRetired : ∀ j w, u.state.validators.data.size ≤ j →
@@ -911,6 +905,13 @@ private theorem reserveCut_balance_hidden_append {x u v : ForkedBeaconState pres
         w.pubkey + (held after j ∩ after.endpoint).card)
     (reserve : ReserveCut x high u epoch suffix before) :
     ReserveCut x high v epoch suffix after := by
+  -- Indices below the old registry size keep their validators, so their clauses transport.
+  --
+  -- Such an index may grow without tokens if no clause that reads a balance can see its validator.
+  --
+  -- That is, the validator is not funding-relevant and never supported again.
+  --
+  -- It is also not waiting to activate.
   obtain ⟨added, registry⟩ := registry
   have lookup : ∀ i, i < u.state.validators.data.size →
       v.state.validators.data[i]? = u.state.validators.data[i]? := by
@@ -1154,18 +1155,15 @@ private theorem ownedCredit_endpoint_growth {e : BalanceEvent preset}
   have partition := Finset.card_sdiff_add_card_inter (held before i) before.endpoint
   omega
 
-/-- A credit keeps the reserve cut when it may append validators and its unminted growth is hidden.
-
-Tokens cover the minted units: one per unit of balance growth.
-
-The exception is a deposit to a validator already withdrawable at the start epoch.
-
-It mints nothing.
-
-Such a validator, where its balance grew, is hidden from every clause that reads a balance. -/
+/-- A credit that may append validators, with its unminted growth hidden, keeps the reserve cut. -/
 private theorem reserveCut_credit_hidden_append {x : ForkedBeaconState preset}
     {e : BalanceEvent preset} {before : Ownership} {position high : Nat} {epoch : Epoch}
     {suffix : List PendingConsolidation}
+    -- A deposit to a validator already withdrawable at the start epoch mints nothing.
+    --
+    -- That deposit is the exception to the tokens that cover the minted units.
+    --
+    -- Such a validator, where its balance grew, is hidden from every clause that reads a balance.
     (dueHidden : ∀ i, e.source = .deposits →
       (e.before.state.validators.data[i]?.map (fun v =>
         decide (v.withdrawableEpoch.toNat ≤ (getCurrentEpoch e.before.state).toNat))).getD
@@ -1200,6 +1198,7 @@ private theorem reserveCut_credit_hidden_append {x : ForkedBeaconState preset}
           (creditOwnership position e before).endpoint).card)
     (reserve : ReserveCut x high e.before epoch suffix before) :
     ReserveCut x high e.after epoch suffix (creditOwnership position e before) := by
+  -- Tokens cover the minted units: one per unit of balance growth.
   have heldGrowth : ∀ i, (held before i).card + eventCreditUnits e i ≤
       (held (creditOwnership position e before) i).card := by
     intro i
@@ -1397,25 +1396,7 @@ private theorem pendingTransfer_paying {fork : Fork} {next : Epoch}
     rw [Array.getElem_set_ne _ insideU apartNat] at fits ⊢
     omega
 
-/-- A pending-consolidation pass keeps the registry.
-
-Take the longest front of the queue whose sources are slashed or can withdraw at `next`.
-
-The pass leaves the queue without that front.
-
-A waiting source is unslashed and cannot withdraw, so it stops the front.
-
-A slashed or paid source is in the front, and a payment keeps the registry.
-
-The pass is also the payment pass of its erased queue.
-
-It splits its queue into the consumed front and the suffix.
-
-It pays only from consumed tags, at their own sources and targets and at `next`.
-
-Each payment is from a state with the pass's validators.
-
-Between distinct keys, each payment moves the source's capped balance to the target. -/
+/-- A pending-consolidation pass keeps the registry. -/
 theorem TaggedPass.pass_shape {fork : Fork} {next : Epoch}
     {s t : BeaconState preset fork} {queue suffix consumed : List TaggedEntry}
     {payments : List (TaggedEntry × Payment preset)}
@@ -1432,6 +1413,23 @@ theorem TaggedPass.pass_shape {fork : Fork} {next : Epoch}
           pair.2.before = ⟨fork, w⟩ ∧ w.validators = s.validators) ∧
       ((∀ tag ∈ queue, tag.entry.sourceIndex ≠ tag.entry.targetIndex) →
         ∀ pair ∈ payments, Paying pair.2) := by
+  -- Take the longest front of the queue whose sources are slashed or can withdraw at `next`.
+  --
+  -- The pass leaves the queue without that front.
+  --
+  -- A waiting source is unslashed and cannot withdraw, so it stops the front.
+  --
+  -- A slashed or paid source is in the front, and a payment keeps the registry.
+  --
+  -- The pass is also the payment pass of its erased queue.
+  --
+  -- It splits its queue into the consumed front and the suffix.
+  --
+  -- It pays only from consumed tags, at their own sources and targets and at `next`.
+  --
+  -- Each payment is from a state with the pass's validators.
+  --
+  -- Between distinct keys, each payment moves the source's capped balance to the target.
   induction history with
   | nil => exact ⟨⟨List.Sublist.refl _, rfl, rfl⟩, .nil, rfl, .slnil, by simp, by simp⟩
   | waiting found unslashed later =>
@@ -1476,11 +1474,7 @@ theorem TaggedPass.pass_shape {fork : Fork} {next : Epoch}
 
 Take the longest front of the queue whose sources are slashed or can withdraw at `next`.
 
-The pass leaves the queue without that front.
-
-A waiting source is unslashed and cannot withdraw, so it stops the front.
-
-A slashed or paid source is in the front, and a payment keeps the registry. -/
+The pass leaves the queue without that front. -/
 theorem TaggedPass.suffix_drop {fork : Fork} {next : Epoch}
     {s t : BeaconState preset fork} {queue suffix consumed : List TaggedEntry}
     {payments : List (TaggedEntry × Payment preset)}
@@ -1489,6 +1483,9 @@ theorem TaggedPass.suffix_drop {fork : Fork} {next : Epoch}
       suffix.map (·.entry) = (queue.map (·.entry)).dropWhile fun c =>
         s.validators.data[c.sourceIndex.toNat]?.any fun v =>
           v.slashed || v.withdrawableEpoch ≤ next :=
+  -- A waiting source is unslashed and cannot withdraw, so it stops the front.
+  --
+  -- A slashed or paid source is in the front, and a payment keeps the registry.
   history.pass_shape.1
 /-- A pending-consolidation pass leaves a suffix of its queue.
 
@@ -1625,17 +1622,7 @@ theorem applyPendingDeposit_absent_balances {fork : Fork}
 
 It raises no balance except at a new index or a validator not due at the current epoch.
 
-The one other exception is the target of a withdrawn deposit.
-
-The fold over the applied deposits reads each deposit's status at the start of the pass.
-
-A deposit keeps every status, so the start status is also the status when it applies.
-
-With matched balances, each appended validator comes from a deposit.
-
-It waits to activate, and its balance covers its effective balance.
-
-Later deposits only raise that balance. -/
+The one other exception is the target of a withdrawn deposit. -/
 private theorem pass_deposit_shape_appended {fork : Fork} {stop : PendingDeposit → Bool}
     {nextEpoch : Epoch} {available : Gwei} {deposits : List PendingDeposit}
     {s : BeaconState preset fork} {processed : Gwei} {count : Nat}
@@ -1662,6 +1649,15 @@ private theorem pass_deposit_shape_appended {fork : Fork} {stop : PendingDeposit
         w.withdrawableEpoch = FAR_FUTURE_EPOCH ∧
         w.effectiveBalance.toNat ≤
           actualBalanceAt (⟨fork, pass.state⟩ : ForkedBeaconState preset) j) := by
+  -- The fold over the applied deposits reads each deposit's status at the start of the pass.
+  --
+  -- A deposit keeps every status, so the start status is also the status when it applies.
+  --
+  -- With matched balances, each appended validator comes from a deposit.
+  --
+  -- It waits to activate, and its balance covers its effective balance.
+  --
+  -- Later deposits only raise that balance.
   have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
   let Shape := fun u : BeaconState preset fork =>
     (∃ added : Array Validator, u.validators.data = s.validators.data ++ added) ∧
@@ -2073,18 +2069,17 @@ theorem initialOwnership_endpointCover {g x : ForkedBeaconState preset}
 
 /-- Take an unslashed validator that is not yet active and whose exit is after the window start.
 
-The endpoint covers its effective balance.
-
-A validator still to activate may hold an effective balance above its balance.
-
-So the capped balance that the endpoint covers for every such validator does not bound it.
-
-The guard has no condition on an assigned activation.
-
-The registry updates only assign an activation from the far future.
-
-So they keep every guarded validator guarded. -/
+The endpoint covers its effective balance. -/
 def FutureEffectiveCover (x u : ForkedBeaconState preset) (o : Ownership) : Prop :=
+  -- A validator still to activate may hold an effective balance above its balance.
+  --
+  -- So the capped balance that the endpoint covers for every such validator does not bound it.
+  --
+  -- The guard has no condition on an assigned activation.
+  --
+  -- The registry updates only assign an activation from the far future.
+  --
+  -- So they keep every guarded validator guarded.
   ∀ (i : Nat) (v : Validator), u.state.validators.data[i]? = some v →
     getCurrentEpoch u.state < v.activationEpoch → v.slashed = false →
     getCurrentEpoch x.state < v.exitEpoch →
@@ -2176,17 +2171,7 @@ private theorem eventCreditUnits_appended {e : BalanceEvent preset} {i : Nat}
     simp [actualBalanceAt, Array.getElem?_eq_none past]
   simp [eventCreditUnits, Array.getElem?_eq_none (Nat.le_of_not_lt old), noBalance]
 
-/-- A credit keeps the cover.
-
-Every grown validator mints its growth at the endpoint.
-
-The exception is a deposit to a validator already withdrawable.
-
-`dueExited` shows that this validator has exited, so it is not covered.
-
-Only a deposit needs `dueExited`.
-
-An appended validator had no balance before, so its whole balance is minted. -/
+/-- A credit keeps the cover. -/
 private theorem endpointCover_credit {x : ForkedBeaconState preset} {e : BalanceEvent preset}
     {before : Ownership} {position : Nat}
     (fork : e.after.fork = e.before.fork)
@@ -2194,6 +2179,13 @@ private theorem endpointCover_credit {x : ForkedBeaconState preset} {e : Balance
       e.after.state.validators.data = e.before.state.validators.data ++ added)
     (epochs : getCurrentEpoch e.after.state = getCurrentEpoch e.before.state)
     (matchedBefore : BalancesMatch e.before.state)
+    -- A deposit to a validator already withdrawable mints nothing.
+    --
+    -- It is the exception to every grown validator minting its growth at the endpoint.
+    --
+    -- This hypothesis shows that this validator has exited, so it is not covered.
+    --
+    -- Only a deposit needs this hypothesis.
     (dueExited : e.source = .deposits →
       ∀ (i : Nat) (v : Validator), e.before.state.validators.data[i]? = some v →
       v.withdrawableEpoch.toNat ≤ (getCurrentEpoch e.before.state).toNat →
@@ -2202,6 +2194,9 @@ private theorem endpointCover_credit {x : ForkedBeaconState preset} {e : Balance
     (credit : OwnedCredit position e before (creditOwnership position e before))
     (cover : EndpointCoverAll x e.before before) :
     EndpointCoverAll x e.after (creditOwnership position e before) := by
+  -- Every grown validator mints its growth at the endpoint.
+  --
+  -- An appended validator had no balance before, so its whole balance is minted.
   obtain ⟨added, registry⟩ := registry
   intro i w found clean notExited current
   have inside : i < e.after.state.validators.data.size := (Array.getElem?_eq_some_iff.mp found).1
@@ -2357,13 +2352,7 @@ private theorem endpointCover_transfer {x u v : ForkedBeaconState preset} {posit
 
 Every covered validator after it was covered before it, with no more capped balance.
 
-No key loses endpoint tokens.
-
-An ownership frame alone does not give `endpointKept`.
-
-It may erase an owner or drop an endpoint token.
-
-So each frame of the history must supply it. -/
+No key loses endpoint tokens. -/
 theorem endpointCover_mono {x u v : ForkedBeaconState preset} {before after : Ownership}
     (lookup : ∀ (i : Nat) (w : Validator), v.state.validators.data[i]? = some w →
       w.slashed = false → getCurrentEpoch x.state < w.exitEpoch →
@@ -2373,6 +2362,11 @@ theorem endpointCover_mono {x u v : ForkedBeaconState preset} {before after : Ow
         w₀.pubkey = w.pubkey ∧
         min (actualBalanceAt v i) (withdrawalMaxEffectiveBalance preset v.fork w).toNat ≤
           min (actualBalanceAt u i) (withdrawalMaxEffectiveBalance preset u.fork w₀).toNat)
+    -- An ownership frame alone does not give this hypothesis.
+    --
+    -- It may erase an owner or drop an endpoint token.
+    --
+    -- So each frame of the history must supply it.
     (endpointKept : ∀ i, (held before i ∩ before.endpoint).card ≤
       (held after i ∩ after.endpoint).card)
     (cover : EndpointCoverAll x u before) :
@@ -2425,23 +2419,7 @@ private theorem endpoint_sourceGone {v : Validator} {current next : Epoch}
 
 /-- The pending deposits keep the reserve cut, the endpoint cover and the future cover.
 
-They do so after one credit event.
-
-Both read the same pass shape and the same owned credit of the event.
-
-The cover needs no balance bound on new validators.
-
-An appended index has no unit before, and the event mints its whole balance.
-
-An appended validator's effective balance is at most its balance.
-
-So the future cover holds for it too.
-
-A covered validator is not due.
-
-A due one has exited before the current epoch.
-
-The reason is that its exit is assigned and at least two epochs before its withdrawal. -/
+They do so after one credit event. -/
 private theorem processPendingDeposits_reserve_covers {fork : Fork}
     {s t : BeaconState preset fork}
     {x : ForkedBeaconState preset} {high position : Nat} {before : Ownership}
@@ -2457,6 +2435,21 @@ private theorem processPendingDeposits_reserve_covers {fork : Fork}
     (fresh : ∀ i unit, TokenOrigin.credit position i unit ∉ before.issued)
     (reserve : ReserveCut x high ⟨fork, s⟩ (getCurrentEpoch s) suffix before) :
     let event : BalanceEvent preset :=
+      -- Both read the same pass shape and the same owned credit of the event.
+      --
+      -- The cover needs no balance bound on new validators.
+      --
+      -- An appended index has no unit before, and the event mints its whole balance.
+      --
+      -- An appended validator's effective balance is at most its balance.
+      --
+      -- So the future cover holds for it too.
+      --
+      -- A covered validator is not due.
+      --
+      -- A due one has exited before the current epoch.
+      --
+      -- The reason is that its exit is assigned and at least two epochs before its withdrawal.
       ⟨.deposits, ⟨fork, s⟩, ⟨fork, t⟩, consumedDeposits s t electra, 0⟩
     ReserveCut x high ⟨fork, t⟩ (getCurrentEpoch s) suffix
         (creditOwnership position event before) ∧
@@ -2838,12 +2831,6 @@ theorem switchToCompoundingValidator_consolidationQueues {fork : Fork}
 
 One recorded event keeps this.
 
-A request queues only an accepted source, and an accepted source has no exit at the event's state.
-
-The registry lifecycle from `x` to that state then leaves the exit unset at `x`.
-
-The pending pass keeps a sublist of the queue, and every other event keeps the queue.
-
 It also returns, for every tag the event appends, the unset exit at `x` of the tag's source. -/
 private theorem TagEvent.queueProvenance_appended {x : ForkedBeaconState preset}
     {e : BalanceEvent preset} {position : Nat} {before after consumed : List TaggedEntry}
@@ -2858,6 +2845,13 @@ private theorem TagEvent.queueProvenance_appended {x : ForkedBeaconState preset}
       ∀ tag ∈ after, tag ∉ before →
         (x.state.validators.data[tag.entry.sourceIndex.toNat]?).all
           (·.exitEpoch == FAR_FUTURE_EPOCH) := by
+  -- A request queues only an accepted source.
+  --
+  -- An accepted source has no exit at the event's state.
+  --
+  -- The registry lifecycle from `x` to that state then leaves the exit unset at `x`.
+  --
+  -- The pending pass keeps a sublist of the queue, and every other event keeps the queue.
   obtain ⟨erasedBefore, erasedAfter, rest⟩ := one
   rcases rest with ⟨_, rfl, _⟩ | requested | pending
   · exact ⟨held, fun _ member fresh => absurd member fresh⟩
@@ -3467,13 +3461,7 @@ Its credentials may be new.
 
 Its effective balance and current epoch are unchanged, and its balance does not rise.
 
-Its balance up to its cap does not rise either.
-
-The switch may raise the cap.
-
-But in the same step, its balance above the activation balance leaves for the pending deposits.
-
-The cap before is at least the activation balance. -/
+Its balance up to its cap does not rise either. -/
 theorem switchToCompoundingValidator_lookup {fork : Fork}
     {u v : BeaconState preset fork} {electra : .pectra ≤ fork} {index : ValidatorIndex}
     (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
@@ -3487,6 +3475,11 @@ theorem switchToCompoundingValidator_lookup {fork : Fork}
             (withdrawalMaxEffectiveBalance preset fork w).toNat ≤
           min (actualBalanceAt ⟨fork, u⟩ i)
             (withdrawalMaxEffectiveBalance preset fork w₀).toNat := by
+  -- The switch may raise the cap.
+  --
+  -- But in the same step, its balance above the activation balance leaves for the pending deposits.
+  --
+  -- The cap before is at least the activation balance.
   have slot := (frame_switchToCompoundingValidator ok).slot
   have epoch : getCurrentEpoch v = getCurrentEpoch u := by simp only [getCurrentEpoch, slot]
   simp only [switchToCompoundingValidator, bind_ok_iff] at ok
@@ -3556,15 +3549,7 @@ theorem switchToCompoundingValidator_lookup {fork : Fork}
     · rw [balanceEq]
     · rw [balanceEq]
 
-/-- A switch to compounding credentials keeps the endpoint cover.
-
-The switch may raise the validator's cap.
-
-But in the same step, its balance above the activation balance leaves for the pending deposits.
-
-So its capped balance after is at most the activation balance, which is at most its cap before.
-
-No other validator and no other balance changes. -/
+/-- A switch to compounding credentials keeps the endpoint cover. -/
 theorem endpointCover_switch {x : ForkedBeaconState preset} {fork : Fork}
     {u v : BeaconState preset fork} {electra : .pectra ≤ fork} {index : ValidatorIndex}
     {o : Ownership}
@@ -3572,6 +3557,13 @@ theorem endpointCover_switch {x : ForkedBeaconState preset} {fork : Fork}
     (ok : switchToCompoundingValidator u electra index = .ok v)
     (cover : EndpointCoverAll x ⟨fork, u⟩ o) :
     EndpointCoverAll x ⟨fork, v⟩ o := by
+  -- The switch may raise the validator's cap.
+  --
+  -- But in the same step, its balance above the activation balance leaves for the pending deposits.
+  --
+  -- So its capped balance after is at most the activation balance, which is at most its cap before.
+  --
+  -- No other validator and no other balance changes.
   obtain ⟨epoch, _, lookup⟩ := switchToCompoundingValidator_lookup compounding ok
   apply endpointCover_mono (u := ⟨fork, u⟩) ?_ (fun _ => Nat.le_refl _) cover
   intro i w foundV clean notExited current
@@ -3715,29 +3707,25 @@ private theorem futureCover_registry {x : ForkedBeaconState preset} {fork : Fork
 
 Let it also unslash nobody.
 
-Then it keeps the reserve cut at the current epoch.
-
-It may assign an activation, an exit and a withdrawable epoch, or set a slashed flag.
-
-Besides `kept`, it reads the facts that the registry updates need to keep the reserve cut.
-
-Retired and initially active keys were already activated.
-
-Activity up to the current epoch is unchanged.
-
-A withdrawable epoch is unchanged, or after the current epoch both before and after the step. -/
+Then it keeps the reserve cut at the current epoch. -/
 theorem reserveCut_of_kept {x : ForkedBeaconState preset} {high : Nat} {fork : Fork}
     {u v : BeaconState preset fork} {suffix : List PendingConsolidation} {o : Ownership}
+    -- Retired and initially active keys were already activated.
     (retiredActivated : ∀ i ∈ o.retired, ∀ w₀ : Validator, u.validators.data[i]? = some w₀ →
       w₀.activationEpoch ≠ FAR_FUTURE_EPOCH)
     (startActivated : ∀ (i : Nat) (initial w₀ : Validator),
       x.state.validators.data[i]? = some initial →
       isActiveValidator initial (getCurrentEpoch x.state) = true →
       u.validators.data[i]? = some w₀ → w₀.activationEpoch ≠ FAR_FUTURE_EPOCH)
+    -- Activity up to the current epoch is unchanged.
     (activity : ∀ (i : Nat) (w₀ w : Validator), u.validators.data[i]? = some w₀ →
       v.validators.data[i]? = some w → ∀ e ≤ getCurrentEpoch u,
         isActiveValidator w e = isActiveValidator w₀ e)
+    -- It may assign an activation, an exit and a withdrawable epoch, or set a slashed flag.
+    --
+    -- Besides the kept entries, it reads what the registry updates need to keep the reserve cut.
     (kept : RegistryEntriesKept u v)
+    -- A withdrawable epoch is unchanged, or after the current epoch both before and after the step.
     (withdrawable : ∀ (i : Nat) (w₀ w : Validator), u.validators.data[i]? = some w₀ →
       v.validators.data[i]? = some w →
       w.withdrawableEpoch = w₀.withdrawableEpoch ∨
@@ -3906,44 +3894,46 @@ theorem reserveCut_of_kept {x : ForkedBeaconState preset} {high : Nat} {fork : F
 
 /-- The registry updates keep the reserve cut at the current epoch, under four explicit facts.
 
-The updates keep the balances.
-
-They keep each validator's key, effective balance, credentials and slashed flag.
-
-So every clause transports once its guard does.
-
-They may assign an activation, an exit and a withdrawable epoch:
-
-- Two premises cover the retired keys and the keys active at the start.
-  They say that such a key was already activated.
-  So an assigned activation cannot make it supported later.
-- `activity` says that activity up to the current epoch is unchanged.
-  So support at the demand epoch and the one before it is unchanged.
-- `ejected` says that a key without an assigned exit keeps its withdrawable epoch.
-  Otherwise, both its old and new withdrawable epochs are after the current epoch.
-
-An assigned exit keeps its withdrawable epoch.
-
 This holds from Electra, for the registry updates. -/
 private theorem reserveCut_registry {x : ForkedBeaconState preset} {high : Nat} {fork : Fork}
     {u v : BeaconState preset fork} {suffix : List PendingConsolidation} {o : Ownership}
     (electra : .pectra ≤ fork)
     (ok : processRegistryUpdates config u = .ok v)
+    -- The updates may assign an activation, an exit and a withdrawable epoch.
+    --
+    -- These two premises cover the retired keys and the keys active at the start.
+    --
+    -- They say that such a key was already activated.
+    --
+    -- So an assigned activation cannot make it supported later.
     (retiredActivated : ∀ i ∈ o.retired, ∀ w₀ : Validator, u.validators.data[i]? = some w₀ →
       w₀.activationEpoch ≠ FAR_FUTURE_EPOCH)
     (startActivated : ∀ (i : Nat) (initial w₀ : Validator),
       x.state.validators.data[i]? = some initial →
       isActiveValidator initial (getCurrentEpoch x.state) = true →
       u.validators.data[i]? = some w₀ → w₀.activationEpoch ≠ FAR_FUTURE_EPOCH)
+    -- Activity up to the current epoch is unchanged.
+    --
+    -- So support at the demand epoch and the one before it is unchanged.
     (activity : ∀ (i : Nat) (w₀ w : Validator), u.validators.data[i]? = some w₀ →
       v.validators.data[i]? = some w → ∀ e ≤ getCurrentEpoch u,
         isActiveValidator w e = isActiveValidator w₀ e)
+    -- A key without an assigned exit keeps its withdrawable epoch.
+    --
+    -- Otherwise, both its old and new withdrawable epochs are after the current epoch.
     (ejected : ∀ (i : Nat) (w₀ w : Validator), u.validators.data[i]? = some w₀ →
       w₀.exitEpoch = FAR_FUTURE_EPOCH → v.validators.data[i]? = some w →
       w.withdrawableEpoch = w₀.withdrawableEpoch ∨
         (getCurrentEpoch u < w₀.withdrawableEpoch ∧ getCurrentEpoch u < w.withdrawableEpoch))
     (reserve : ReserveCut x high ⟨fork, u⟩ (getCurrentEpoch u) suffix o) :
     ReserveCut x high ⟨fork, v⟩ (getCurrentEpoch u) suffix o := by
+  -- The updates keep the balances.
+  --
+  -- They keep each validator's key, effective balance, credentials and slashed flag.
+  --
+  -- So every clause transports once its guard does.
+  --
+  -- An assigned exit keeps its withdrawable epoch.
   apply reserveCut_of_kept retiredActivated startActivated activity
     (registryKept_of_lookup (processRegistryUpdates_lookup ok)) ?_
     (processRegistryUpdates_balances ok) reserve
@@ -3994,22 +3984,15 @@ private theorem reserveCut_registry_of_ejected {x : ForkedBeaconState preset} {h
 
 /-- The registry updates keep the reserve cut at the current epoch.
 
-Besides the update, it reads four facts of the history.
-
-Retired and initially active keys were already activated, and exits come no later than withdrawals.
-
-The current epoch is finite.
-
-A key without an assigned exit then has its withdrawable epoch at the far future.
-
-That epoch is after the current epoch.
-
-The update keeps it there or sets it after the current epoch. -/
+Besides the update, it reads four facts of the history. -/
 private theorem reserveCut_registry_final {x : ForkedBeaconState preset} {high : Nat}
     {fork : Fork} {u v : BeaconState preset fork} {suffix : List PendingConsolidation}
     {o : Ownership}
     (electra : .pectra ≤ fork)
     (ok : processRegistryUpdates config u = .ok v)
+    -- Retired and initially active keys were already activated.
+    --
+    -- Exits come no later than withdrawals.
     (retiredActivated : ∀ i ∈ o.retired, ∀ w₀ : Validator, u.validators.data[i]? = some w₀ →
       w₀.activationEpoch ≠ FAR_FUTURE_EPOCH)
     (startActivated : ∀ (i : Nat) (initial w₀ : Validator),
@@ -4019,6 +4002,13 @@ private theorem reserveCut_registry_final {x : ForkedBeaconState preset} {high :
     (ordered : ExitsOrdered u) (finite : getCurrentEpoch u < FAR_FUTURE_EPOCH)
     (reserve : ReserveCut x high ⟨fork, u⟩ (getCurrentEpoch u) suffix o) :
     ReserveCut x high ⟨fork, v⟩ (getCurrentEpoch u) suffix o := by
+  -- The current epoch is finite.
+  --
+  -- A key without an assigned exit then has its withdrawable epoch at the far future.
+  --
+  -- That epoch is after the current epoch.
+  --
+  -- The update keeps it there or sets it after the current epoch.
   apply reserveCut_registry_of_ejected electra ok retiredActivated startActivated ?_ reserve
   intro i w₀ w foundU unassigned found
   obtain ⟨z, located, withdrawable⟩ :=
@@ -4308,23 +4298,23 @@ theorem reservedReplay_epochRewardStart_owned {fork : Fork}
       simp only [getCurrentEpoch, scoredOk.slot_eq]
       exact UInt64.le_refl _) justifiedFuture
 
-/-- Queueing a consolidation keeps the endpoint cover.
-
-Only the source changes: the step sets its exit epoch, which was the far future.
-
-Its key, credentials, slashed flag and balance stay.
-
-A source covered after the step was covered before it, since every epoch is at most the far future.
-
-No balance changes. -/
+/-- Queueing a consolidation keeps the endpoint cover. -/
 private theorem endpointCover_queueConsolidation {x : ForkedBeaconState preset} {fork : Fork}
     {u v : BeaconState preset fork} {electra : .pectra ≤ fork}
     {sourceIndex targetIndex : ValidatorIndex} {source : Validator} {o : Ownership}
     (found : u.validators.data[sourceIndex.toNat]? = some source)
+    -- Only the source changes: the step sets its exit epoch, which was the far future.
     (far : source.exitEpoch = FAR_FUTURE_EPOCH)
     (ok : queueConsolidation config u electra sourceIndex source targetIndex = .ok v)
     (cover : EndpointCoverAll x ⟨fork, u⟩ o) :
     EndpointCoverAll x ⟨fork, v⟩ o := by
+  -- Its key, credentials, slashed flag and balance stay.
+  --
+  -- A source covered after the step was covered before it.
+  --
+  -- That holds since every epoch is at most the far future.
+  --
+  -- No balance changes.
   have slot := (frame_queueConsolidation found ok).slot
   have epoch : getCurrentEpoch v = getCurrentEpoch u := by simp only [getCurrentEpoch, slot]
   obtain ⟨exitEpoch, _, _, _, _, churned, _, set, _, rfl⟩ := queueConsolidation_steps ok
@@ -4401,15 +4391,7 @@ theorem pendingTransfer_balances {fork : Fork} {u d t : BeaconState preset fork}
     simp [Array.getElem_set, apart, Array.getElem?_eq_getElem insideU]
   · simp [actualBalanceAt, BeaconState.putBalance, Ne.symm source, Ne.symm target]
 
-/-- A paid pending consolidation keeps the endpoint cover.
-
-The paid step keeps the registry and the slot.
-
-It gives the target at most the amount, and raises no other balance.
-
-The source can withdraw at the next epoch.
-
-So it has exited before the current epoch and is not covered. -/
+/-- A paid pending consolidation keeps the endpoint cover. -/
 theorem endpointCover_pendingTransfer {x : ForkedBeaconState preset} {fork : Fork}
     {u d t : BeaconState preset fork} {c : PendingConsolidation} {w : Validator}
     {b : Gwei} {next : Epoch} {position : Nat} {allocation : OwnedRelease}
@@ -4426,9 +4408,15 @@ theorem endpointCover_pendingTransfer {x : ForkedBeaconState preset} {fork : For
     (exits : ExitsOrdered u)
     (delay : ∀ (i : Nat) (v : Validator), u.validators.data[i]? = some v →
       v.exitEpoch ≠ FAR_FUTURE_EPOCH → v.exitEpoch.toNat + 2 ≤ v.withdrawableEpoch.toNat)
+    -- The source can withdraw at the next epoch.
+    --
+    -- So it has exited before the current epoch and is not covered.
     (due : w.withdrawableEpoch ≤ next)
     (cover : EndpointCoverAll x ⟨fork, u⟩ before) :
     EndpointCoverAll x ⟨fork, t⟩ after := by
+  -- The paid step keeps the registry and the slot.
+  --
+  -- It gives the target at most the amount, and raises no other balance.
   have foundU := getValidator_eq_ok_iff.mp found
   have apartNat : c.sourceIndex.toNat ≠ c.targetIndex.toNat :=
     fun same => apart (UInt64.toNat_inj.mp same)
@@ -4442,15 +4430,7 @@ theorem endpointCover_pendingTransfer {x : ForkedBeaconState preset} {fork : For
   exact consolidation_sourceGone twoSlots nextOk (exits w (Array.mem_of_getElem? foundU))
     (delay _ w foundU) due covered
 
-/-- An owned transfer keeps the reserve cut and drops its consolidation from the suffix.
-
-The source retires: it is never supported again, waits for no activation, and leaves the suffix.
-
-The target gains the whole payment in held and endpoint tokens.
-
-Its balance gains at most the payment.
-
-Every other key keeps its tokens, its original and its balance bound. -/
+/-- An owned transfer keeps the reserve cut and drops its consolidation from the suffix. -/
 private theorem reserveCut_transfer {x u v : ForkedBeaconState preset} {high position : Nat}
     {p : Payment preset} {allocation : OwnedRelease} {before after : Ownership}
     {epoch : Epoch} {c : PendingConsolidation} {suffix : List PendingConsolidation}
@@ -4466,6 +4446,16 @@ private theorem reserveCut_transfer {x u v : ForkedBeaconState preset} {high pos
     (sourceAbsent : ¬ ∃ q ∈ suffix, q.sourceIndex.toNat = p.source)
     (reserve : ReserveCut x high u epoch (c :: suffix) before) :
     ReserveCut x high v epoch suffix after := by
+  -- The source retires: it is never supported again and waits for no activation.
+  --
+  -- It also leaves the suffix.
+  --
+  -- The target gains the whole payment in held and endpoint tokens.
+  --
+  -- Its balance gains at most the payment.
+  --
+  -- Every other key keeps its tokens, its original and its balance bound.
+  --
   -- Only the target grows, by the payment.
   let growth : Nat → Nat := fun i => if i = p.target then p.amount else 0
   have tokens := ownedTransfer_held transfer apart

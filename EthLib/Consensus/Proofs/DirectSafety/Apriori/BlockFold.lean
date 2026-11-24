@@ -528,15 +528,7 @@ private theorem blockAssigned_lower {rounding : Nat → Nat} {f h : Fork}
     BlockAssigned rounding m n o' :=
   fun i v w found later unset assigned => (lower i).trans (held i v w found later unset assigned)
 
-/-- One consolidation request of a block, under the block's assignment bound.
-
-Its request bound comes from the block's bound.
-
-It goes through the lifecycle and the kept effective balances from the block input to the request.
-
-It then goes through the lifecycle from the request to the block output.
-
-An accepted request reads the churn at its input, which is a site of the block. -/
+/-- One consolidation request of a block, under the block's assignment bound. -/
 private theorem guardedReplay_consolidationRequest {x : ForkedBeaconState preset} {high : Nat}
     {rounding : Nat → Nat} {fork : Fork} (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
@@ -544,11 +536,17 @@ private theorem guardedReplay_consolidationRequest {x : ForkedBeaconState preset
     {S T a b : BeaconState preset fork} {request : ConsolidationRequest}
     {wide : List (ForkedBeaconState preset)}
     (ok : processConsolidationRequest config a electra request = .ok b)
+    -- It goes through the lifecycle from the block input to the request.
+    --
+    -- The effective balances are kept over that span.
     (lifeSA : RegistryLifecycle S a) (keptSA : EffectiveKept S a)
+    -- It then goes through the lifecycle from the request to the block output.
     (lifeBT : RegistryLifecycle b T)
     (sizeX : x.state.validators.data.size ≤ S.validators.data.size)
+    -- An accepted request reads the churn at its input, which is a site of the block.
     (siteIn : (b.pendingConsolidations electra).data.size ≠
       (a.pendingConsolidations electra).data.size → (⟨fork, a⟩ : ForkedBeaconState preset) ∈ wide) :
+    -- Its request bound comes from the block's bound.
     GuardedReplay (config := config) (checks := checks) (BlockAssigned rounding S T) x high
       rounding electra a b
       [⟨.excess, ⟨fork, a⟩, ⟨fork, b⟩, 0,
@@ -852,25 +850,21 @@ theorem blockReplay_proved :
 
 end
 
-/-- The pending deposits of an epoch read at most the exit flow of that epoch.
-
-They read the churn after the six stages before them.
-
-That state has the validators and the slot of the epoch's input `a`.
-
-Those stages keep activity and effective balances.
-
-So that churn reads the total active balance at `a`, which the ceiling bounds.
-
-From Electra the flow of an epoch is the activation and exit churn of the ceiling. -/
+/-- The pending deposits of an epoch read at most the exit flow of that epoch. -/
 private theorem deposit_churn_le_exits {g x a : ForkedBeaconState preset}
     (shared : Run config checks g x) (pre : Run config checks x a) (high : Nat)
     (supported : Supported shared pre high) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
     (electra : .pectra ≤ x.fork) (cached reset : BeaconState preset a.fork) (churn : Gwei)
+    -- The deposits read the churn after the six stages before them.
+    --
+    -- That state has the validators and the slot of the epoch's input `a`.
     (validators : cached.validators = a.state.validators) (slot : cached.slot = a.state.slot)
+    -- Those stages keep activity and effective balances.
     (trace : EpochTrace (EpochStage.action config checks)
       [.justification, .inactivity, .rewards, .registry, .slashings, .eth1Reset] cached reset)
+    -- So that churn reads the total active balance at `a`, which the ceiling bounds.
     (churnOk : depositChurnLimit config reset = .ok churn) :
+    -- From Electra the flow of an epoch is the activation and exit churn of the ceiling.
     churn.toNat ≤ exitFlowAt (config := config) x high
       ((getCurrentEpoch a.state).toNat - (getCurrentEpoch x.state).toNat) := by
   obtain ⟨genesis, _, _, aligned, aEarly, _, guard⟩ := id supported
