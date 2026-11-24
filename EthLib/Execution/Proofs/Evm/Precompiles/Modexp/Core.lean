@@ -7,16 +7,9 @@ public import EthLib.Execution.Evm.Precompiles.Modexp.Core
 /-!
 # Proofs: `Core`
 
-The precompile does what EIP-198 and EIP-7823 say.
+The precompile does what EIP-198 and EIP-7823 say, for its output, its input, its bound and its gas.
 
-- The output is `base ^ exponent mod modulus`, or `0` when the modulus is `0`.
-- The output has exactly `len_mod` bytes.
-- A short input reads as if padded with zeros.
-- Data past the last field is ignored.
-- From Fusaka, a length above 1024 fails before gas is charged.
-- Otherwise the call fails exactly when the gas given is below the price.
-- A call succeeds exactly when both checks pass, and it then returns the computed output.
-- The price always fits in 64 bits.
+The output is `base ^ exponent mod modulus`, or `0` when the modulus is `0`, on `len_mod` bytes.
 -/
 
 @[expose] public section
@@ -114,7 +107,9 @@ theorem modexp_append_zeros (fork : Fork) (data : ByteArray) (n gas : Nat) :
 /-- Two inputs that agree on the bytes the lengths describe give the same result.
 
 The bytes described are the three headers, `BASE`, `EXPONENT` and `MODULUS`.
+
 A byte past the end counts as zero.
+
 This covers excess data, which EIP-198 says "is ignored", and short input. -/
 theorem modexp_congr (fork : Fork) {d₁ d₂ : ByteArray} (gas : Nat)
     (h : ∀ i, i < BASE_OFFSET + (parseLengths d₁).base + (parseLengths d₁).exponent

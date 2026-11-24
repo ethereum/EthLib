@@ -11,11 +11,7 @@ A nonempty output is the address of a key that verifies the signature.
 
 Conversely, a signature made with a private key returns that key's address.
 
-Each documented cause of an empty output gives one, and only the first 128 bytes count.
-
-A call fails exactly when the gas is below 3000, and the error carries both.
-
-A call succeeds exactly when the gas is at least 3000, and then returns the output of the operation.
+A call fails exactly when the gas is below 3000, and otherwise returns the output of the operation.
 
 The price of an authorization of EIP-8037 is the sum of its parts, ECRECOVER among them.
 -/
@@ -215,7 +211,9 @@ theorem ecrecover_eq_error_iff (data : ByteArray) (gas : Nat) (e : EcrecoverErro
     · intro ⟨below, _⟩
       exact absurd below short
 
-/-! ## The three empty outputs -/
+/-! ## The three empty outputs
+
+Each documented cause of an empty output gives one. -/
 
 /-- A `v` other than 27 and 28 gives the empty output. -/
 theorem output_of_bad_v (hash : Vector UInt8 32) {v : Nat} (r s : Nat) (hv : ¬(v = 27 ∨ v = 28)) :

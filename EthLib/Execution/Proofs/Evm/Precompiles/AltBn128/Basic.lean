@@ -8,11 +8,9 @@ public import EthLib.Base.Proofs.MapM
 /-!
 # Proofs: `Evm.Precompiles.AltBn128`
 
-- ECADD and ECMUL fail exactly when the gas is below the price or a point is invalid.
-- ECPAIRING succeeds exactly when the gas covers the price and every pair decodes.
-- Every decoded point is on its curve: a point of `G_1` on the curve, a point of `G_2` on the twist.
-- Every output of ECADD and ECMUL has 64 bytes, and every output of ECPAIRING is the word 0 or 1.
-- ECPAIRING charges its gas before it checks that the call data is a whole number of 192-byte pairs.
+It proves when ECADD, ECMUL and ECPAIRING fail or succeed, and the size of their outputs.
+
+Each decoded point is on its curve: a point of `G_1` on the curve, a point of `G_2` on the twist.
 
 The Python suite checks the outputs against py_ecc.
 -/
@@ -73,7 +71,7 @@ theorem bytesToG1_invalidFieldElement {raw : List UInt8}
 
 /-! ## Success -/
 
-/-- A decoded point is on the curve. -/
+/-- A decoded point of `G_1` is on the curve. -/
 theorem bytesToG1_isOnCurve {raw : List UInt8} {p : Point} (h : bytesToG1 raw = .ok p) :
     p.isOnCurve = true := by
   simp only [bytesToG1, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at h
@@ -105,7 +103,9 @@ theorem bytesToG2_isOnCurve {raw : List UInt8} {q : Point2} (h : bytesToG2 raw =
       assumption
     · cases h
 
-/-- ECADD succeeds exactly when the gas covers the price and both points decode. -/
+/-- ECADD succeeds exactly when the gas covers the price and both points decode.
+
+So it fails exactly when the gas is below the price or a point is invalid. -/
 theorem ecadd_eq_ok_iff (fork : Fork) (data : ByteArray) (gas : Nat) (out : ByteArray) :
     ecadd fork data gas = .ok out ↔ ecaddGas fork ≤ gas ∧ ∃ p0 p1,
       bytesToG1 (bufferRead data 0 64) = .ok p0 ∧ bytesToG1 (bufferRead data 64 64) = .ok p1 ∧
@@ -117,7 +117,9 @@ theorem ecadd_eq_ok_iff (fork : Fork) (data : ByteArray) (gas : Nat) (out : Byte
     cases h0 : bytesToG1 (bufferRead data 0 64) <;>
       cases h1 : bytesToG1 (bufferRead data 64 64) <;> simp [Nat.not_lt.mp hgas, eq_comm]
 
-/-- ECMUL succeeds exactly when the gas covers the price and the point decodes. -/
+/-- ECMUL succeeds exactly when the gas covers the price and the point decodes.
+
+So it fails exactly when the gas is below the price or the point is invalid. -/
 theorem ecmul_eq_ok_iff (fork : Fork) (data : ByteArray) (gas : Nat) (out : ByteArray) :
     ecmul fork data gas = .ok out ↔ ecmulGas fork ≤ gas ∧ ∃ p0,
       bytesToG1 (bufferRead data 0 64) = .ok p0 ∧
@@ -131,7 +133,9 @@ theorem ecmul_eq_ok_iff (fork : Fork) (data : ByteArray) (gas : Nat) (out : Byte
 
 /-! ## ECPAIRING -/
 
-/-- ECPAIRING runs out of gas below its price, before it checks the length. -/
+/-- ECPAIRING runs out of gas below its price.
+
+It charges its gas before it checks that the call data is a whole number of 192-byte pairs. -/
 theorem ecpairing_outOfGas (fork : Fork) (data : ByteArray) {gas : Nat}
     (hgas : gas < ecpairingGas fork data.size) :
     ecpairing fork data gas = .error (.outOfGas (ecpairingGas fork data.size) gas) := by

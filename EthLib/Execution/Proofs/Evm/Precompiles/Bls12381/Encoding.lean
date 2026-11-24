@@ -10,12 +10,15 @@ public import EthLib.Base.Proofs.Except
 /-!
 # Proofs: `Evm.Precompiles.Bls12381.Encoding`
 
-- The decoder removes exactly the padding that the encoder adds.
-- Field elements and affine points on the curve decode back to themselves.
-- The point at infinity is all zero bytes, in both directions.
-- A point decodes only from all zeros, or from an affine point on its curve.
-- A decoded field element or G1 point encodes back to its bytes, so that encoding is canonical.
-- The padding check and the field check of Amsterdam reject exactly the inputs that Prague's single field check rejects.
+The decoder removes exactly the padding that the encoder adds.
+
+A decoded field element or G1 point encodes back to its bytes, so that encoding is canonical.
+
+A point decodes only from all zeros or from an affine point on its curve.
+
+All zeros is the point at infinity.
+
+Amsterdam's padding and field checks reject exactly what Prague's single field check rejects.
 -/
 
 @[expose] public section
