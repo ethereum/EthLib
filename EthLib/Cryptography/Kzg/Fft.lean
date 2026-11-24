@@ -58,20 +58,18 @@ theorem stage_product_lt {i m h r' : Nat} (hi : i < m * (2 * h)) (hr : r' < h) :
   rw [Nat.mul_comm m]
   omega
 
-/-- One stage of the iterative FFT, on `m` blocks of `2 h` values.
-
-In each block, value `r < h` pairs with value `r + h`.
-
-The second value is multiplied by a root of unity, once.
-
-The pair becomes the sum and the difference of the first value and that product.
-
-The root is entry `r * m` of the roots. -/
+/-- One stage of the iterative FFT, on `m` blocks of `2 h` values. -/
 def fftStage {n : Nat} (roots x : Vector Fr n) (m h : Nat) (hn : n = m * (2 * h)) :
     Vector Fr n :=
+  -- In each block, value `r < h` pairs with value `r + h`.
+  --
+  -- The second value is multiplied by a root of unity, once.
+  --
+  -- The root is entry `r * m` of the roots.
   let t := Vector.ofFn (n := m * h) fun j =>
     x[2 * h * (j.val / h) + h + j.val % h]'(hn ▸ stage_pair_lt j.isLt) *
       roots[m * (j.val % h)]'(hn ▸ stage_root_lt j.isLt)
+  -- The pair becomes the sum and the difference of the first value and that product.
   Vector.ofFn fun i =>
     let b := i.val / (2 * h)
     let r := i.val % (2 * h)
@@ -96,10 +94,6 @@ def fftStages {n : Nat} (roots : Vector Fr n) :
 
 /-- The radix-2 Cooley-Tukey FFT, iterative.
 
-The values are put in bit-reversed order, then each of the `log2 n` stages doubles the block size.
-
-After stage `s`, each block of `2^s` values is the FFT of the values its indices select.
-
 The values and the roots of unity must have the same length, a power of two.
 
 Values of any other shape have no transform, and they come back unchanged. -/
@@ -110,6 +104,11 @@ def fftFieldIter (vals roots : Array Fr) : Array Fr :=
   --
   -- Likewise `o_(i + n/2) = L_i - w_i R_i`, where `w_i` is root `i` and `n` the length.
   if h : vals.size = 2 ^ vals.size.log2 ∧ roots.size = vals.size then
+    -- The values are put in bit-reversed order.
+    --
+    -- Then each of the `log2 n` stages doubles the block size.
+    --
+    -- After stage `s`, each block of `2^s` values is the FFT of the values its indices select.
     (fftStages ⟨roots, h.2⟩ vals.size.log2
       ⟨bitReversalPermutation vals, by simp [bitReversalPermutation]⟩ 1
       (by rw [Nat.mul_one]; exact h.1)).toArray
@@ -142,17 +141,17 @@ def fftField
 
 Output `i` is `sum_j [w_i^j] vals[j]`, where `w_i` is entry `i` of the roots of unity.
 
-Computing each cell proof on its own needs no FFT in `G1`; the FK20 cell proofs use this one.
-
-The butterflies are those of the FFT over `Fr`.
-
-Each product by a root is a scalar multiplication. -/
+Computing each cell proof on its own needs no FFT in `G1`; the FK20 cell proofs use this one. -/
 def fftG1Vector : (k : Nat) → Vector Bls.G1 (2 ^ k) → Vector Fr (2 ^ k) → Vector Bls.G1 (2 ^ k)
   | 0, vals, _ => vals
   | k + 1, vals, rootsOfUnity =>
     let halfRoots := everyOther rootsOfUnity 0
     let l := fftG1Vector k (everyOther vals 0) halfRoots
     let r := fftG1Vector k (everyOther vals 1) halfRoots
+    -- The butterflies are those of the FFT over `Fr`.
+    --
+    -- Each product by a root is a scalar multiplication.
+    --
     -- Each product [root_i] r_i serves two outputs, so it is computed once.
     --
     -- The products are independent, so each runs as its own task.
