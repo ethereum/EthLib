@@ -9,20 +9,6 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Adversary
 
 EthLib's signer, with a key the prepared cache knows, is the model's table signer.
 
-A key the cache knows has the scheme's seed `S`, the parameter `P` and the top tree of `S`.
-
-Each tree it keeps is the build of its index, with the top signature of its root.
-
-It derives the same randomizer base and makes the same trials.
-
-Everything it computes after a codeword is cached.
-
-That is the chains, the bottom tree and the whole top signature.
-
-The bottom tree's build resolves to a tree with the stored root and the stored path of the key.
-
-A kept tree is the one the cache resolves, so it holds the same values.
-
 So signing erases to the values the model's key stores, and returns a key the cache knows.
 -/
 
@@ -530,6 +516,9 @@ theorem erases_signWith (h : Prepared seed d result cache) (hk : KeyResolves see
   simp only [bind_assoc, map_bind]
   have hR0 : cache (rndInput d.parameter seed ⟨index, message⟩) = some (d.rnd ⟨index, message⟩) :=
     h.prog_le (progCache_rnd seed d ⟨index, message⟩)
+  -- With a key the cache knows, the signer derives the same randomizer base.
+  --
+  -- It then makes the same trials.
   refine Erases.skip (spec := HashSpec) _ (d.rnd ⟨index, message⟩) ?_ _ _ ?_
   · rw [rndInput_toList]
     exact hR0
@@ -539,6 +528,9 @@ theorem erases_signWith (h : Prepared seed d result cache) (hk : KeyResolves see
   · simp [Except.toOption]
     exact .pure _
   · intro randomness encoding
+    -- Everything the signer computes after a codeword is cached.
+    --
+    -- That is the chains, the bottom tree and the whole top signature.
     apply erases_pure_of_resolves
     dsimp only
     simp only [bind_assoc, pure_bind]
@@ -546,6 +538,7 @@ theorem erases_signWith (h : Prepared seed d result cache) (hk : KeyResolves see
     refine (h.realBottomChains index encoding).bind ?_
     rw [Xmss.Unforgeability.bottomTree_ofLeafIndex]
     simp only [map_bind]
+    -- A kept tree is the one the cache resolves, so it holds the same values.
     obtain ⟨t, sk', hfetch, hpath, htop, -⟩ := h.realFetch hk index
     refine hfetch.bind ?_
     dsimp only

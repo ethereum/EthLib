@@ -11,17 +11,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Adversary
 
 After key generation, EthLib's game is the model's game.
 
-EthLib's signer keeps its key across requests, and the model's game uses the table signer.
-
-The prepared cache knows the key of key generation, and signing keeps it a key the cache knows.
-
-Under that cache, each request of EthLib's game erases to the model's.
-
 The adversary is translated as in `XmssSecurity/Adversary.lean`.
-
-The transcripts correspond entry by entry.
-
-The forgery wins in one exactly when its translation wins in the other.
 
 So the two games win equally often, and the model's makes at most the hash calls of EthLib's.
 -/
@@ -73,7 +63,9 @@ theorem gameAfterKeys_eq (adversary : Xmss.Unforgeability.Adversary) (pk : Xmss.
   rw [bind_map_left]
   rfl
 
-/-- The model's game after key generation: the translated run, then EthLib's check. -/
+/-- The model's game after key generation: the translated run, then EthLib's check.
+
+The forgery wins in one game exactly when its translation wins in the other. -/
 theorem gameRest_eq (adversary : Xmss.Unforgeability.Adversary) (d : Derivations)
     (result : (Digest × (TopIndex → Option (Randomness × Encoding))) × QueryLog HashSpec) :
     Seeded.gameRest (tableScheme d.rnd) (toModelAdversary adversary) (modelPublicKey d result)
@@ -218,12 +210,19 @@ theorem evalDist_rest (h : Prepared seed d result cache) (hk : KeyResolves seed 
         cache =ᵈ
       (simulateQ romImpl (Seeded.gameRest (tableScheme d.rnd) (toModelAdversary adversary)
         (modelPublicKey d result) (modelSecretKey d result))).run' cache := by
+  -- EthLib's signer keeps its key across requests, and the model's game uses the table signer.
   rw [gameAfterKeys_eq, gameRest_eq]
   simp only [simulateQ_bind, StateT.run'_eq, StateT.run_bind, map_bind, bind_map_left]
+  -- The prepared cache knows the key of key generation.
+  --
+  -- Signing keeps it a key the cache knows.
+  --
+  -- Under that cache, each request of EthLib's game erases to the model's.
   have hrun := evalDist_simulateQ_state cache (fun sk => KeyResolves seed d cache sk)
     keyedOracles _ ofEntry (fun q _ hs => h.erases_oracles hs q)
     (fun q sk c hs hc => h.keyResolves_oracles q sk c hs hc)
     (adversary.main (ofPublicKey (modelPublicKey d result))) sk cache hk le_rfl
+  -- The transcripts correspond entry by entry.
   have hbind := hrun.bind_left fun z =>
     Prod.fst <$> (simulateQ romImpl (checkForgery (ofPublicKey (modelPublicKey d result)) z.1)).run
       z.2

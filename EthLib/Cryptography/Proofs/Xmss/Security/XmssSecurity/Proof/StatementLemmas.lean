@@ -5,7 +5,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Wots
 public import EthLib.Cryptography.Proofs.Merkle.Completeness
 
 /-!
-Proof-side mirrors of the sealed statement definitions.
+# Proof-side mirrors of the sealed statement definitions
 
 Rewrite lemmas restate them, so proofs can unfold them without unsealing.
 
