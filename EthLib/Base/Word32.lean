@@ -3,9 +3,9 @@ module
 /-!
 # `Base.Word32`
 
-The 32-bit words of the ciphers whose state is a list of little-endian words.
+The 32-bit little-endian words that several hashes and ciphers read and write.
 
-ChaCha20 follows RFC 8439 §§2.1 and 2.3, and Salsa20/8 follows RFC 7914 §3.
+Among them, ChaCha20 follows RFC 8439 §§2.1 and 2.3, and Salsa20/8 follows RFC 7914 §3.
 -/
 
 @[expose] public section

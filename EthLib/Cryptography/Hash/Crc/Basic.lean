@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Base.Word32
+
 /-!
 # A 32-bit CRC
 
@@ -101,6 +103,6 @@ def digest (g : UInt32) (data : ByteArray) : Vector UInt8 4 :=
 /-- The CRC as a number: the digest bytes read least significant byte first. -/
 def value (g : UInt32) (data : ByteArray) : UInt32 :=
   let d := digest g data
-  d[0].toUInt32 ||| d[1].toUInt32 <<< 8 ||| d[2].toUInt32 <<< 16 ||| d[3].toUInt32 <<< 24
+  Base.uint32OfBytes d[0] d[1] d[2] d[3]
 
 end EthLib.Cryptography.Hash.Crc

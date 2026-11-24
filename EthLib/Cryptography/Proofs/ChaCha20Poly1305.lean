@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.ChaCha20Poly1305
 public import EthLib.Base.Proofs.Bytes
+public import EthLib.Base.Proofs.Word32
 
 /-!
 # Proofs: the ChaCha20-Poly1305 boundaries, round trip and bytes
@@ -191,40 +192,6 @@ Byte `i` is byte `i % 4` of word `i / 4`, its least significant byte first.
 Reading 64 bytes as a state undoes that serialization, in both directions.
 -/
 
-/-- The four bytes of a word, least significant first, read back as that word. -/
-private theorem uint32OfBytes_uint32Byte (w : UInt32) :
-    Base.uint32OfBytes (Base.uint32Byte w 0) (Base.uint32Byte w 1) (Base.uint32Byte w 2)
-      (Base.uint32Byte w 3) = w := by
-  apply UInt32.toBitVec_inj.mp
-  apply BitVec.eq_of_getLsbD_eq
-  intro k hk
-  simp only [Base.uint32Byte, Base.uint32OfBytes, UInt32.toBitVec_toUInt8, UInt8.toBitVec_toUInt32,
-    UInt32.toBitVec_or, UInt32.toBitVec_shiftLeft, UInt32.toBitVec_shiftRight,
-    BitVec.getLsbD_setWidth, BitVec.getLsbD_or]
-  simp +arith [hk]
-  -- Bit `k` comes from byte `k / 8`, so split on the byte that holds it.
-  have he := BitVec.getLsbD_eq_getElem (x := w.toBitVec) hk
-  by_cases h7 : k ≤ 7
-  · simp [h7, show k ≤ 15 by omega, show k ≤ 23 by omega]
-  by_cases h15 : k ≤ 15
-  · simp [h7, h15, show k ≤ 23 by omega, show k - 8 + 8 = k by omega, he]
-  by_cases h23 : k ≤ 23
-  · simp [h7, h15, h23, show k - 16 + 16 = k by omega, he]
-  · simp [h7, h15, h23, show k ≤ 31 by omega, show k - 24 + 24 = k by omega, he]
-
-/-- Each byte of a word read from four bytes is the byte at its place. -/
-private theorem uint32Byte_uint32OfBytes (b0 b1 b2 b3 : UInt8) :
-    Base.uint32Byte (Base.uint32OfBytes b0 b1 b2 b3) 0 = b0 ∧
-      Base.uint32Byte (Base.uint32OfBytes b0 b1 b2 b3) 1 = b1 ∧
-      Base.uint32Byte (Base.uint32OfBytes b0 b1 b2 b3) 2 = b2 ∧
-      Base.uint32Byte (Base.uint32OfBytes b0 b1 b2 b3) 3 = b3 := by
-  refine ⟨?_, ?_, ?_, ?_⟩ <;>
-  · apply UInt8.toBitVec_inj.mp
-    apply BitVec.eq_of_getLsbD_eq
-    intro k hk
-    simp +arith [Base.uint32Byte, Base.uint32OfBytes, show k ≤ 7 by omega, show k ≤ 15 by omega,
-      show k ≤ 23 by omega, show k ≤ 31 by omega]
-
 /-- Byte `i` of the serialized state is byte `i % 4` of word `i / 4`, RFC 8439 §2.3.
 
 So the least significant byte of each word comes first, and a big-endian serialization fails it. -/
@@ -247,7 +214,7 @@ theorem stateOfBytes_serializeState (words : State) :
   have h2 : (4 * j + 2) / 4 = j := by omega
   have h3 : (4 * j + 3) / 4 = j := by omega
   simp only [h0, h1, h2, h3, Nat.mul_mod_right, Nat.mul_add_mod_self_left]
-  exact uint32OfBytes_uint32Byte _
+  exact Base.uint32OfBytes_uint32Byte _
 
 /-- Serializing a state read from 64 bytes gives back the bytes.
 
@@ -256,7 +223,7 @@ theorem serializeState_stateOfBytes (bytes : Vector UInt8 64) :
     serializeState (stateOfBytes bytes) = bytes := by
   ext i hi
   simp only [stateOfBytes, serializeState, Vector.getElem_ofFn]
-  obtain ⟨e0, e1, e2, e3⟩ := uint32Byte_uint32OfBytes bytes[4 * (i / 4)]
+  obtain ⟨e0, e1, e2, e3⟩ := Base.uint32Byte_uint32OfBytes bytes[4 * (i / 4)]
     bytes[4 * (i / 4) + 1] bytes[4 * (i / 4) + 2] bytes[4 * (i / 4) + 3]
   -- Byte `i` is byte `i % 4` of the word read from bytes `4 * (i / 4)` to `4 * (i / 4) + 3`.
   rcases (by omega : i % 4 = 0 ∨ i % 4 = 1 ∨ i % 4 = 2 ∨ i % 4 = 3) with h | h | h | h

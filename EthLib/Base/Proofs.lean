@@ -30,6 +30,7 @@ public import EthLib.Base.Proofs.Toolchain.JsonBasic
 public import EthLib.Base.Proofs.Toolchain.ListControl
 public import EthLib.Base.Proofs.U256
 public import EthLib.Base.Proofs.Uint64
+public import EthLib.Base.Proofs.Word32
 
 /-!
 # `EthLib.Base.Proofs`
