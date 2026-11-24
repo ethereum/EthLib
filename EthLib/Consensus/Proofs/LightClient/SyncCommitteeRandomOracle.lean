@@ -12,29 +12,11 @@ A bootstrap proves its current sync committee with a branch against a state root
 
 An update proves its next sync committee the same way.
 
-An adversary outputs a state root and two committees with a branch each.
+An adversary wins with two different committees, if both branches pass the check at one index.
 
 The generalized index of the branches is fixed before the run.
 
-It wins with two different committees, if both branches pass the check at that index.
-
-The experiment roots both committees and climbs both branches, with the oracle as the node hash.
-
-Each win exposes two different queried inputs with one answer, so the birthday bound applies.
-
-The count grows with the size of a committee and the depth of the index.
-
-At mainnet, an adversary of `q` calls gives a bound of `(q + 2050 + 2 * depth)^2 / 2^256`.
-
-The depth of both indices is 5 before Electra, 6 from Electra and 11 from Gloas.
-
-With SHA-256 as the node hash, a win is two different committees that the branch check accepts.
-
-That result needs a committee of at least one member.
-
-Two accepted bootstraps with one state root and slot and different committees give one.
-
-So do two such updates that pass the check of the next committee.
+The experiment uses the oracle as the node hash.
 
 Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2, "Oracles".
 
@@ -247,7 +229,9 @@ private theorem hashTreeRootM_syncCommittee_queryBound (committee : SyncCommitte
 
 /-- The extraction makes at most `2 * (size + width + 1) + 2 * depth` oracle calls.
 
-A committee has `size` keys in a tree of `width` leaves, and `depth` is the depth of the index. -/
+A committee has `size` keys in a tree of `width` leaves, and `depth` is the depth of the index.
+
+The count grows with the size of a committee and the depth of the index. -/
 theorem extractSyncCommittees_queryBound (preset : Preset) (gindex : Nat)
     (claim : SyncCommitteeClaim preset) :
     IsQueryBoundP (extractSyncCommittees queryHash preset gindex claim) (fun _ => True)
@@ -289,6 +273,7 @@ theorem prEvent_syncCommitteeWins_le [SampleableType Hash32] (preset : Preset) (
     Pr{let z ← (simulateQ HashOracle.romImpl
       (experimentWith (extractSyncCommittees queryHash preset gindex) adversary)).run ∅}[
         SyncCommitteeWins gindex z.1] ≤ Q * ((Q : ℝ≥0∞) / Nat.card Hash32) :=
+  -- Each win exposes two different queried inputs with one answer, so the birthday bound applies.
   prEvent_experimentWith_le (extractSyncCommittees queryHash preset gindex)
     (SyncCommitteeWins gindex) collision_of_extractSyncCommittees adversary hQ
 
@@ -317,7 +302,9 @@ theorem prEvent_syncCommitteeWins_le_of_adversary (preset : Preset) (gindex : Na
 
 There a committee has 512 members, and `depth` is the base-2 logarithm of the index.
 
-It needs the adversary to make at most `q` oracle calls. -/
+It needs the adversary to make at most `q` oracle calls.
+
+The depth of both indices is 5 before Electra, 6 from Electra and 11 from Gloas. -/
 theorem prEvent_syncCommitteeWins_le_mainnet (gindex : Nat)
     (adversary : OracleComp (unifSpec + HashOracle) (SyncCommitteeClaim .mainnet))
     {q : Nat} (hq : IsQueryBoundP adversary (fun t => t.isRight = true) q) :

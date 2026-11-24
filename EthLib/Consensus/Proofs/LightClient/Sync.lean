@@ -7,43 +7,13 @@ import EthLib.Serialization.Proofs.Ssz.Type.ValueEquality
 /-!
 # Proofs: the light client sync protocol
 
-Each error of the light client has its own code.
-
-Two light client headers with one SSZ value have one beacon header.
-
-An update passes its checks against a store exactly when each check of the protocol holds.
-
-These include the order of its slots, its signature period, and whether the store can use it.
-
-The ranking of updates is a strict weak order.
-
-It is irreflexive, asymmetric and transitive, and its negation is transitive.
-
-Within one sync committee period, an earlier signature slot beats a later one when the rest matches.
-
-For an optimistic update, the earlier signature slot wins with no hypothesis on the period.
-
-Neither the new update nor the old best update ranks above a kept best valid update.
-
-The finalized and optimistic slots of a store never move back.
-
-A new store starts with one header for both.
-
-The finalized slot then stays at or below the optimistic slot.
-
-An update can make its attested header the optimistic header.
-
-That needs a newer attested header, and more signers than the safety threshold.
-
-That threshold is half the larger of the two counts of signers, rounded down.
-
-An update moves the finalized header only with two thirds of the committee.
-
-The two counts of signers move back a period when such a header opens the next period.
-
 One theorem each says when applying, forcing or processing an update succeeds.
 
 It also gives the store that the step returns.
+
+The ranking of updates is a strict weak order.
+
+The slots of a store never move back.
 -/
 
 @[expose] public section
@@ -93,45 +63,40 @@ theorem SyncAggregate.participants_le (aggregate : SyncAggregate preset) :
   unfold SyncAggregate.participants
   simpa using List.count_le_length (a := true) (l := aggregate.syncCommitteeBits.bits.toList)
 
-/--
-Applying an update succeeds exactly when the fork has a light client and the periods fit.
-
-A store that does not know the next committee needs the new finalized header in its own period.
-
-It then takes the next committee of the update.
-
-A store that knows the next committee moves a period on when the new header opens the next period.
-
-Its next committee becomes its current one, and it takes the next committee of the update.
-
-Its current count of signers becomes the previous count, and the current count starts at zero.
-
-A newer finalized header replaces the finalized header, and the optimistic header if it is newer.
-
-The store keeps its other fields.
--/
+/-- Applying an update succeeds exactly when the fork has a light client and the periods fit. -/
 theorem applyLightClientUpdate_eq_ok_iff {store after : LightClientStore preset fork}
     {update : LightClientUpdate preset fork} :
     applyLightClientUpdate store update = .ok after ↔
       .altair ≤ fork ∧
+      -- A store that does not know the next committee needs the new finalized header in its period.
       (store.isNextSyncCommitteeKnown = false →
         computeSyncCommitteePeriodAtSlot preset update.finalizedHeader.beacon.slot =
           computeSyncCommitteePeriodAtSlot preset store.finalizedHeader.beacon.slot) ∧
+      -- A store that knows the next committee moves a period on.
+      --
+      -- It does so when the new header opens the next period.
       let rotated := store.isNextSyncCommitteeKnown = true ∧
         computeSyncCommitteePeriodAtSlot preset update.finalizedHeader.beacon.slot =
           computeSyncCommitteePeriodAtSlot preset store.finalizedHeader.beacon.slot + 1
       let newer := store.finalizedHeader.beacon.slot < update.finalizedHeader.beacon.slot
+      -- The store keeps its other fields.
       after = { store with
+        -- On a move, its next committee becomes its current one.
         currentSyncCommittee :=
           if rotated then store.nextSyncCommittee else store.currentSyncCommittee
+        -- A store without a known next committee, or that moves on, takes the one of the update.
         nextSyncCommittee :=
           if store.isNextSyncCommitteeKnown = false ∨ rotated then update.nextSyncCommittee
           else store.nextSyncCommittee
+        -- On a move, its current count of signers becomes the previous count.
         previousMaxActiveParticipants :=
           if rotated then store.currentMaxActiveParticipants
           else store.previousMaxActiveParticipants
+        -- On a move, the current count starts at zero.
         currentMaxActiveParticipants := if rotated then 0 else store.currentMaxActiveParticipants
+        -- A newer finalized header replaces the finalized header.
         finalizedHeader := if newer then update.finalizedHeader else store.finalizedHeader
+        -- It also replaces the optimistic header if it is newer than that one.
         optimisticHeader :=
           if newer ∧ store.optimisticHeader.beacon.slot < update.finalizedHeader.beacon.slot then
             update.finalizedHeader
@@ -152,31 +117,25 @@ theorem applyLightClientUpdate_eq_ok_iff {store after : LightClientStore preset 
     exact eq_comm
   · simp [altair]
 
-/--
-A forced update fails at a fork without a light client, or when its timeout overflows 64 bits.
+/-- A forced update fails at a fork without a light client, or when its timeout overflows 64 bits.
 
-Past the timeout, it also fails when applying the best update fails.
-
-The timeout is the finalized slot of the store plus the slots of one sync committee period.
-
-After the timeout, the store applies the best update that it kept, and then drops it.
-
-Its attested header stands for its finalized header, unless that is newer than the store's.
-
-A store with no best update, or not yet past the timeout, stays as it is.
--/
+Past the timeout, it also fails when applying the best update fails. -/
 theorem processLightClientStoreForceUpdate_eq_ok_iff
     {store after : LightClientStore preset fork} {currentSlot : Slot} :
     processLightClientStoreForceUpdate store currentSlot = .ok after ↔
+      -- The timeout is the finalized slot of the store plus the slots of one sync committee period.
       let timeout := store.finalizedHeader.beacon.slot.toNat + preset.UPDATE_TIMEOUT.toNat
       .altair ≤ fork ∧ timeout < 2 ^ 64 ∧
+        -- After the timeout, the store applies the best update that it kept, and then drops it.
         (∀ best, store.bestValidUpdate = some best → timeout < currentSlot.toNat →
+          -- Its attested header replaces its finalized one, unless that is newer than the store's.
           ∃ applied, applyLightClientUpdate store { best with
               finalizedHeader :=
                 if store.finalizedHeader.beacon.slot < best.finalizedHeader.beacon.slot then
                   best.finalizedHeader
                 else best.attestedHeader } = .ok applied ∧
             after = { applied with bestValidUpdate := none }) ∧
+        -- A store with no best update, or not yet past the timeout, stays as it is.
         (store.bestValidUpdate = none ∨ currentSlot.toNat ≤ timeout → after = store) := by
   unfold processLightClientStoreForceUpdate
   simp only [bind, Except.bind, pure, Except.pure, Base.ensure,
@@ -203,15 +162,7 @@ theorem processLightClientStoreForceUpdate_eq_ok_iff
       cases applyLightClientUpdate store _ <;> simp [eq_comm]
     · simp [due, Nat.le_of_not_lt due, eq_comm]
 
-/-- Processing an update checks it, then builds a store, and may apply the update to that store.
-
-That store takes the update as best if it ranks above the kept one, or if none is kept.
-
-It also raises its count of signers, and may move the optimistic header.
-
-With two thirds of the committee, the update is applied if it finalizes a newer header.
-
-It is also applied if it brings the first next committee, from a finality update. -/
+/-- Processing an update checks it, then builds a store, and may apply the update to that store. -/
 private theorem processLightClientUpdate_eq_bind {config : Config} {checks : SignatureChecks}
     {store : LightClientStore preset fork} {update : LightClientUpdate preset fork}
     {currentSlot : Slot} {genesisValidatorsRoot : Root} :
@@ -220,18 +171,23 @@ private theorem processLightClientUpdate_eq_bind {config : Config} {checks : Sig
         fun _ =>
           let active := update.syncAggregate.participants
           let kept : LightClientStore preset fork := { store with
+            -- It takes the update as best if it ranks above the kept one, or if none is kept.
             bestValidUpdate :=
               if store.bestValidUpdate.all (isBetterUpdate update ·) then some update
               else store.bestValidUpdate
+            -- It also raises its count of signers.
             currentMaxActiveParticipants := max store.currentMaxActiveParticipants active.toUInt64
+            -- It may move the optimistic header.
             optimisticHeader :=
               if max store.previousMaxActiveParticipants.toNat
                     (max store.currentMaxActiveParticipants.toNat active) / 2 < active ∧
                   store.optimisticHeader.beacon.slot < update.attestedHeader.beacon.slot then
                 update.attestedHeader
               else store.optimisticHeader }
+          -- With two thirds of the committee, the update is applied if it finalizes a newer header.
           if preset.SYNC_COMMITTEE_SIZE.toNat * 2 ≤ active * 3 ∧
               (store.finalizedHeader.beacon.slot < update.finalizedHeader.beacon.slot ∨
+                -- It is also applied if it brings the first next committee, from a finality update.
                 store.isNextSyncCommitteeKnown = false ∧ update.isSyncCommitteeUpdate = true ∧
                   update.isFinalityUpdate = true ∧
                   computeSyncCommitteePeriodAtSlot preset update.finalizedHeader.beacon.slot =
@@ -271,33 +227,9 @@ private theorem processLightClientUpdate_eq_bind {config : Config} {checks : Sig
       store.optimisticHeader.beacon.slot < update.attestedHeader.beacon.slot <;>
     simp [opt, kept, LightClientStore.isNextSyncCommitteeKnown, and_assoc]
 
-/--
-Processing an update succeeds exactly when it passes its checks and an applied update fits.
+/-- Processing an update succeeds exactly when it passes its checks and an applied update fits.
 
-It is applied with two thirds of the committee, if it brings a newer finalized header.
-
-With two thirds, it is also applied if it brings the first next committee, from a finality update.
-
-Its finalized header must then be in the period of its attested header.
-
-An applied update fails at a store that does not know the next committee, outside its period.
-
-That is, the finalized header of the update must then be in the period of the store.
-
-The update becomes the best update if it ranks above the kept one, or if the store keeps none.
-
-An applied update then leaves the store with no best update.
-
-The current count of signers takes the signers of the update, if they are more.
-
-The attested header becomes the optimistic header if newer, with more signers than the threshold.
-
-That threshold is half the larger of the previous count and the current count, rounded down.
-
-The current count here already includes the signers of the update.
-
-An applied update moves the headers, the committees and the counts as applying an update does.
--/
+An applied update moves the headers, the committees and the counts as applying an update does. -/
 theorem processLightClientUpdate_eq_ok_iff {config : Config} {checks : SignatureChecks}
     {store after : LightClientStore preset fork} {update : LightClientUpdate preset fork}
     {currentSlot : Slot} {genesisValidatorsRoot : Root} :
@@ -306,6 +238,13 @@ theorem processLightClientUpdate_eq_ok_iff {config : Config} {checks : Signature
       let period := computeSyncCommitteePeriodAtSlot preset
       let active := update.syncAggregate.participants
       let finalized := update.finalizedHeader
+      -- The attested header becomes the optimistic header if it is newer.
+      --
+      -- That needs more signers than the threshold.
+      --
+      -- The threshold is half the larger of the previous count and the current count, rounded down.
+      --
+      -- The current count here already includes the signers of the update.
       let optimistic :=
         if max store.previousMaxActiveParticipants.toNat
               (max store.currentMaxActiveParticipants.toNat active) / 2 < active ∧
@@ -313,15 +252,24 @@ theorem processLightClientUpdate_eq_ok_iff {config : Config} {checks : Signature
           update.attestedHeader
         else store.optimisticHeader
       let newer := store.finalizedHeader.beacon.slot < finalized.beacon.slot
+      -- An update with two thirds of the committee is applied if it finalizes a newer header.
+      --
+      -- With two thirds, it is also applied if it brings the first next committee.
       let applied := preset.SYNC_COMMITTEE_SIZE.toNat * 2 ≤ active * 3 ∧
         (newer ∨ store.isNextSyncCommitteeKnown = false ∧ update.isSyncCommitteeUpdate = true ∧
+          -- That committee must come from a finality update.
           update.isFinalityUpdate = true ∧
+          -- Its finalized header must then be in the period of its attested header.
           period finalized.beacon.slot = period update.attestedHeader.beacon.slot)
       let rotated := applied ∧ store.isNextSyncCommitteeKnown = true ∧
         period finalized.beacon.slot = period store.finalizedHeader.beacon.slot + 1
+      -- The current count of signers takes the signers of the update, if they are more.
       let current := max store.currentMaxActiveParticipants active.toUInt64
       validateLightClientUpdate config checks store update currentSlot genesisValidatorsRoot =
           .ok () ∧
+        -- Without a known next committee, an applied update fails outside the period of the store.
+        --
+        -- That is, the finalized header of the update must then be in the period of the store.
         (applied → store.isNextSyncCommitteeKnown = false →
           period finalized.beacon.slot = period store.finalizedHeader.beacon.slot) ∧
         after = { store with
@@ -332,6 +280,9 @@ theorem processLightClientUpdate_eq_ok_iff {config : Config} {checks : Signature
             if applied ∧ store.isNextSyncCommitteeKnown = false ∨ rotated then
               update.nextSyncCommittee
             else store.nextSyncCommittee
+          -- An applied update leaves the store with no best update.
+          --
+          -- Otherwise it becomes the best if it ranks above the kept one, or if none is kept.
           bestValidUpdate :=
             if applied then none
             else if store.bestValidUpdate.all (isBetterUpdate update ·) then some update
@@ -551,7 +502,9 @@ theorem isBetterUpdate_false_trans {a b c : LightClientUpdate preset fork}
   exact List.not_lt.mpr (List.le_trans (List.not_lt.mp hab) (List.not_lt.mp hbc))
     ((isBetterUpdate_eq_rank_lt a c).mp ac)
 
-/-- An earlier signature in the same sync committee period ranks above a later one. -/
+/-- An earlier signature in the same sync committee period ranks above a later one.
+
+The two updates match in every other field. -/
 theorem isBetterUpdate_of_signatureSlot_lt {update : LightClientUpdate preset fork}
     {later : Slot} (earlier : update.signatureSlot < later)
     (samePeriod :
@@ -767,38 +720,35 @@ section Headers
 
 variable {preset : Preset} {fork : Fork}
 
-/-- After an update, both headers and both counts of signers take the values of the protocol.
-
-The current count first takes the signers of the update, if they are more.
-
-The optimistic header becomes the attested header if it is newer and more than the threshold signed.
-
-That threshold is half the larger of the previous count and the current count, rounded down.
-
-With two thirds of the committee, a newer finalized header replaces the finalized header.
-
-It also replaces the optimistic header if it is newer than that one.
-
-If it opens the next period while the next committee is known, the counts move back a period. -/
+/-- After an update, both headers and both counts of signers take the values of the protocol. -/
 private theorem processLightClientUpdate_fields {config : Config} {checks : SignatureChecks}
     {store after : LightClientStore preset fork} {update : LightClientUpdate preset fork}
     {currentSlot : Slot} {genesisValidatorsRoot : Root}
     (computed : processLightClientUpdate config checks store update currentSlot
       genesisValidatorsRoot = .ok after) :
     let active := update.syncAggregate.participants
+    -- The current count first takes the signers of the update, if they are more.
     let current := max store.currentMaxActiveParticipants.toNat active
+    -- The optimistic header becomes the attested header if it is newer.
+    --
+    -- That also needs more signers than the threshold.
+    --
+    -- That threshold is half the larger of the previous count and the current count, rounded down.
     let optimistic :=
       if active > max store.previousMaxActiveParticipants.toNat current / 2 ∧
           update.attestedHeader.beacon.slot > store.optimisticHeader.beacon.slot then
         update.attestedHeader
       else store.optimisticHeader
     let finalized := update.finalizedHeader
+    -- With two thirds of the committee, a newer finalized header replaces the finalized header.
     let newer := active * 3 ≥ preset.SYNC_COMMITTEE_SIZE.toNat * 2 ∧
       finalized.beacon.slot > store.finalizedHeader.beacon.slot
+    -- If it opens the next period while the next committee is known, the counts move back a period.
     let rotated := newer ∧ store.isNextSyncCommitteeKnown = true ∧
       computeSyncCommitteePeriodAtSlot preset finalized.beacon.slot =
         computeSyncCommitteePeriodAtSlot preset store.finalizedHeader.beacon.slot + 1
     after.finalizedHeader = (if newer then finalized else store.finalizedHeader) ∧
+      -- A newer finalized header also replaces the optimistic header if it is newer than that one.
       after.optimisticHeader =
         (if newer ∧ finalized.beacon.slot > optimistic.beacon.slot then finalized
           else optimistic) ∧
@@ -818,29 +768,30 @@ private theorem processLightClientUpdate_fields {config : Config} {checks : Sign
   clear computed
   refine ⟨?_, ?_, ?_, ?_⟩ <;> (repeat' split) <;> simp_all [← UInt64.not_le]
 
-/-- After an update, the optimistic header is the attested header if more than the threshold signed.
-
-That also needs the attested header to be newer than the optimistic header.
-
-The threshold is half the larger of the previous count and the current count, rounded down.
-
-The current count has first taken the signers of the update, if they are more.
-
-Otherwise the optimistic header stays.
-
-With two thirds of the committee, a newer finalized header replaces it if that is newer still. -/
+/--
+After an update, the optimistic header is the attested header if more than the threshold signed.
+-/
 theorem processLightClientUpdate_optimisticHeader {config : Config} {checks : SignatureChecks}
     {store after : LightClientStore preset fork} {update : LightClientUpdate preset fork}
     {currentSlot : Slot} {genesisValidatorsRoot : Root}
     (computed : processLightClientUpdate config checks store update currentSlot
       genesisValidatorsRoot = .ok after) :
     let active := update.syncAggregate.participants
+    -- The attested header must also be newer than the optimistic header.
+    --
+    -- The threshold is half the larger of the previous count and the current count, rounded down.
+    --
+    -- The current count has first taken the signers of the update, if they are more.
     let optimistic :=
       if active > max store.previousMaxActiveParticipants.toNat
             (max store.currentMaxActiveParticipants.toNat active) / 2 ∧
           update.attestedHeader.beacon.slot > store.optimisticHeader.beacon.slot then
         update.attestedHeader
+      -- Otherwise the optimistic header stays.
       else store.optimisticHeader
+    -- With two thirds of the committee, a newer finalized header may replace it.
+    --
+    -- It does so only if that header is newer still.
     after.optimisticHeader =
       if active * 3 ≥ preset.SYNC_COMMITTEE_SIZE.toNat * 2 ∧
           update.finalizedHeader.beacon.slot > store.finalizedHeader.beacon.slot ∧
@@ -898,68 +849,60 @@ section Checks
 
 variable {preset : Preset} {fork : Fork}
 
-/--
-An update passes its checks against a store exactly when each check of the sync protocol holds.
-
-The fork has a light client, enough bits of the aggregate are set, and the attested header is valid.
-
-The signature slot is at most the current slot and after the attested slot.
-
-The finalized slot is at most the attested slot.
-
-The signature period is the period of the store.
-
-If the store knows a next committee, the signature period can also be the next period.
-
-The attested slot is after the finalized slot of the store, or the update brings a next committee.
-
-It brings one when the store has none and the update carries one.
-
-Its attested slot must also be in the period of the store.
-
-The finality check passes, and an update without a committee branch carries the zero committee.
-
-An update with a committee branch passes its branch check.
-
-A carried committee from an attested slot in the period of the store equals a known next one.
-
-The signing root of the attested header can be computed.
-
-The signature check takes the keys of the signing members of the committee of the signature period.
-
-It accepts them on that signing root.
--/
+/-- An update passes its checks against a store exactly when each check of the protocol holds. -/
 theorem validateLightClientUpdate_eq_ok_iff {config : Config} {checks : SignatureChecks}
     {store : LightClientStore preset fork} {update : LightClientUpdate preset fork}
     {currentSlot : Slot} {genesisValidatorsRoot : Root} :
     validateLightClientUpdate config checks store update currentSlot genesisValidatorsRoot =
         .ok () ↔
+      -- The fork has a light client.
       .altair ≤ fork ∧
+      -- Enough bits of the aggregate are set.
       preset.MIN_SYNC_COMMITTEE_PARTICIPANTS.toNat ≤ update.syncAggregate.participants ∧
+      -- The attested header is valid.
       isValidLightClientHeader config update.attestedHeader = .ok true ∧
+      -- The signature slot is at most the current slot and after the attested slot.
       update.signatureSlot ≤ currentSlot ∧
       update.attestedHeader.beacon.slot < update.signatureSlot ∧
+      -- The finalized slot is at most the attested slot.
       update.finalizedHeader.beacon.slot ≤ update.attestedHeader.beacon.slot ∧
+      -- The signature period is the period of the store.
       (computeSyncCommitteePeriodAtSlot preset update.signatureSlot =
           computeSyncCommitteePeriodAtSlot preset store.finalizedHeader.beacon.slot ∨
+        -- If the store knows a next committee, the signature period can also be the next period.
         store.isNextSyncCommitteeKnown = true ∧
           computeSyncCommitteePeriodAtSlot preset update.signatureSlot =
             computeSyncCommitteePeriodAtSlot preset store.finalizedHeader.beacon.slot + 1) ∧
+      -- The attested slot is after the finalized slot of the store.
       (store.finalizedHeader.beacon.slot < update.attestedHeader.beacon.slot ∨
+        -- Or the update brings a next committee.
+        --
+        -- It brings one when the store has none and the update carries one.
         store.isNextSyncCommitteeKnown = false ∧ update.isSyncCommitteeUpdate = true ∧
+          -- Its attested slot must also be in the period of the store.
           computeSyncCommitteePeriodAtSlot preset update.attestedHeader.beacon.slot =
             computeSyncCommitteePeriodAtSlot preset store.finalizedHeader.beacon.slot) ∧
+      -- The finality check passes.
       validateFinality config update = .ok () ∧
+      -- An update without a committee branch carries the zero committee.
       (update.isSyncCommitteeUpdate = false →
         update.nextSyncCommittee = SyncCommittee.empty preset) ∧
       (update.isSyncCommitteeUpdate = true →
+        -- A carried committee from an attested slot in the store's period equals a known next one.
         (store.isNextSyncCommitteeKnown = true →
           computeSyncCommitteePeriodAtSlot preset update.attestedHeader.beacon.slot =
             computeSyncCommitteePeriodAtSlot preset store.finalizedHeader.beacon.slot →
           update.nextSyncCommittee = store.nextSyncCommittee) ∧
+        -- An update with a committee branch passes its branch check.
         validateNextSyncCommitteeBranch config update = .ok ()) ∧
+      -- The signing root of the attested header can be computed.
       ∃ signingRoot, syncCommitteeSigningRoot config update genesisValidatorsRoot =
           .ok signingRoot ∧
+        -- The signature check takes the keys of the signing members.
+        --
+        -- They are members of the committee of the signature period.
+        --
+        -- It accepts them on that signing root.
         checks.fastAggregateVerify
           ((store.signatureCommittee update).participantKeys update.syncAggregate)
           (packBytes signingRoot) update.syncAggregate.syncCommitteeSignature = true := by

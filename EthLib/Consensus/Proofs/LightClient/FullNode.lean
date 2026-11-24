@@ -8,19 +8,9 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Gindex
 /-!
 # Proofs: the light client data of a full node, and its upgrades
 
-A full node proves a node of a value by the branch that it builds for it.
+A light client accepts each branch that a full node builds, also after an upgrade.
 
-A light client accepts that branch for the node's generalized index and the root of the value.
-
-An upgrade puts zero nodes in front of a branch.
-
-The check of a normalized branch reads those nodes as the zero front, so it gives the same verdict.
-
-A bootstrap exists only for a state at the slot of its latest block header.
-
-An update takes the slot of its block as its signature slot.
-
-The aggregate of that block has enough participants.
+The module also states the slots of a bootstrap and of an update, and the participants of an update.
 -/
 
 @[expose] public section
@@ -57,6 +47,10 @@ theorem computeMerkleProof_isValidNormalizedMerkleBranch {α : Type} [SszType α
   · exact isValidNormalizedMerkleBranch_of_isValidMerkleBranch named valid
 
 /-- Zero nodes in front of a branch leave the check of a normalized branch unchanged.
+
+An upgrade puts such nodes in front of a branch.
+
+The check of a normalized branch reads those nodes as the zero front, so it gives the same verdict.
 
 This holds when the branch already reaches the depth of the index that the check reads. -/
 theorem isValidNormalizedMerkleBranch_normalize {leaf root : Bytes32} {branch : List Bytes32}
