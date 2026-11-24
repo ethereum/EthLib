@@ -9,31 +9,13 @@ import EthLib.Base.Proofs.CodeInjective
 /-!
 # Proofs: Noise XX
 
-[Noise revision 34, §4.3](https://noiseprotocol.org/noise_rev34.pdf) computes two outputs from HMAC.
+These theorems are about the XX handshake of [Noise revision 34, §7.5][noise].
 
-Its note calls this function HKDF of [RFC 5869](https://www.rfc-editor.org/rfc/rfc5869#section-2).
+They cover HKDF, the handshake errors and messages, the cipher state and the transcript.
 
-There the chaining key is the salt, and the info is empty.
+They also cover the frame of a transport message.
 
-So the two outputs are the first 64 bytes of that HKDF.
-
-Distinct kinds of handshake error have distinct codes.
-
-Each message keeps the role, advances the step by one, and comes at the step XX gives that role.
-
-The pattern is [Noise revision 34, §7.5](https://noiseprotocol.org/noise_rev34.pdf).
-
-The cipher state is [Noise revision 34, §5.1](https://noiseprotocol.org/noise_rev34.pdf).
-
-A keyed cipher state advances its nonce by one for each message it encrypts or decrypts.
-
-Without a key, both directions return their input and leave the cipher state as it was.
-
-Noise §5.1 reserves the greatest nonce, so both directions refuse it.
-
-From one state, decrypting what encrypting wrote returns the plaintext and the same next state.
-
-Both sides hash the same ciphertext, so their transcripts stay in step.
+[noise]: https://noiseprotocol.org/noise_rev34.pdf
 -/
 
 @[expose] public section
@@ -44,7 +26,15 @@ open EthLib.Base
 open EthLib.Cryptography
 open EthLib.Cryptography.Hash
 
-/-- The two outputs are the first 64 bytes of HKDF, with the chaining key as salt and empty info. -/
+/-- The two outputs are the first 64 bytes of HKDF, with the chaining key as salt and empty info.
+
+[Noise revision 34, §4.3][noise] computes them from HMAC.
+
+Its note calls this function HKDF of [RFC 5869][hkdf].
+
+[noise]: https://noiseprotocol.org/noise_rev34.pdf
+[hkdf]: https://www.rfc-editor.org/rfc/rfc5869#section-2
+-/
 theorem hkdf_eq_hkdf2 (chainingKey : ChainingKey) (input : ByteArray) :
     Hkdf.hkdf (packBytes chainingKey.bytes) input .empty 64 =
       .ok (packBytes (hkdf2 chainingKey input).1 ++ packBytes (hkdf2 chainingKey input).2) := by
@@ -160,7 +150,14 @@ private theorem readBytes_append_tag (c : ByteArray) (t : ChaCha20Poly1305.Tag)
   rw [Array.getElem_append_right (by simp)]
   simp [packBytes]
 
-/-! ## The cipher state -/
+/-! ## The cipher state
+
+The cipher state is [Noise revision 34, §5.1][noise].
+
+A keyed cipher state advances its nonce by one for each message it encrypts or decrypts.
+
+[noise]: https://noiseprotocol.org/noise_rev34.pdf
+-/
 
 /-- A key is installed with its nonce at zero. -/
 theorem nonce_initializeKey (key : Option ChaCha20Poly1305.Key) :

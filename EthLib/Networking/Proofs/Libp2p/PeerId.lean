@@ -9,12 +9,7 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Sign
 /-!
 # Proofs: libp2p secp256k1 public keys, peer IDs and DER signatures
 
-- A point of the curve, other than infinity, encodes to a key protobuf that decodes back to it.
-- A peer ID decodes back to its key, and the decoder accepts only peer IDs of keys.
-- Two different points of the curve have two different peer IDs.
-- A decoded key's peer ID is the two bytes `00 25`, then the key protobuf.
-- The signature decoder accepts exactly the encodings of r and low s in range, and returns them.
-- A signature that the identity secret makes verifies under the key protobuf of that secret.
+The key protobuf and the peer ID of a secp256k1 key decode back, and so does a DER signature.
 -/
 
 @[expose] public section

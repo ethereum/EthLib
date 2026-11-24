@@ -11,14 +11,6 @@ public import EthLib.Networking.Proofs.Encoding.Protobuf
 Reading message 2 or 3 accepts only a payload signed over the static key the message carries.
 
 The state then keeps that remote, so completion only returns it with the transport ciphers.
-
-Completion checks that the remote has the remote static key of the handshake.
-
-In a state that the libp2p functions produce, the stored remote has that key.
-
-Its signature verifies on that key, held by the handshake state that gives the transport ciphers.
-
-Such a state at step 3 always holds a remote, so completion succeeds.
 -/
 
 public section
@@ -301,18 +293,16 @@ private theorem foldl_payload (rs : List Record) :
       rw [hn 1 h1, hn 2 h2, hn 4 h4]
       simp
 
-/-- The decoder accepts exactly the protobuf messages of at most 65535 bytes.
-
-The identity key and the signature are the last length-delimited values of fields 1 and 2.
-
-Each is empty when its field has no such value.
-
-With no such value in field 4 there are no extensions.
-
-Otherwise the extensions are the values of field 4 joined in wire order. -/
+/-- The decoder accepts exactly the protobuf messages of at most 65535 bytes. -/
 theorem decodePayload_eq_ok_iff {bytes : ByteArray} {p : Payload} :
     decodePayload bytes = .ok p ↔ bytes.size ≤ 65535 ∧ ∃ rs, records bytes.data.toList = .ok rs ∧
+      -- The identity key and the signature are the last length-delimited values of fields 1 and 2.
+      --
+      -- Each is empty when its field has no such value.
       p = ⟨(lenValues rs 1).getLast?.getD .empty, (lenValues rs 2).getLast?.getD .empty,
+        -- With no such value in field 4 there are no extensions.
+        --
+        -- Otherwise the extensions are the values of field 4 joined in wire order.
         if lenValues rs 4 = [] then none else some ((lenValues rs 4).foldl (· ++ ·) .empty)⟩ := by
   by_cases hs : 65535 < bytes.size
   · simp [decodePayload, hs, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]

@@ -11,14 +11,6 @@ public import EthLib.Base.Proofs.MapM
 
 Completion reports the peer ID of certificate authentication and reconstructs the TLS key schedule.
 
-Rejection theorems cover the libp2p ALPN check and the required client certificate.
-
-Finished is accepted exactly when it matches the saved transcript.
-
-CertificateVerify also needs an offered scheme and an authenticated certificate.
-
-A completed dialer ignores every 1-RTT NewSessionTicket, whatever its body.
-
 No theorem here ties a completion to an earlier CertificateVerify over every reachable state.
 -/
 

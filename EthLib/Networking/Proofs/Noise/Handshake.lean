@@ -12,20 +12,6 @@ The XX pattern of [Noise revision 34, §7.5][noise] sends three messages.
 - `<- e, ee, s, es`
 - `-> s, se`
 
-Each token `ee`, `es` and `se` mixes one X25519 shared secret into the chaining key.
-
-The two peers compute it from opposite ends, and X25519 key agreement makes the two values equal.
-
-So two peers that follow the specification complete the handshake when each payload fits.
-
-Each read then returns the payload that the other peer wrote.
-
-Both peers end with the same symmetric state, and each learns the static public key of the other.
-
-The send cipher of each peer is then the receive cipher of the other.
-
-For each message, the chaining key mixes the X25519 outputs that the token rules name.
-
 [noise]: https://noiseprotocol.org/noise_rev34.pdf
 -/
 
@@ -114,10 +100,6 @@ private theorem extract_append_append_mid {a b c : ByteArray} {i j : Nat} (hi : 
 
 /-- Two honest peers complete XX, and each returns the payload that the other wrote.
 
-The secrets `si`, `ei` are those of the initiator, and `sr`, `er` those of the responder.
-
-Both peers hash the same prologue.
-
 Each payload must fit in a message of at most 65535 bytes, with the keys and tags of its message.
 
 Both peers end with the same symmetric state and swapped ciphers.
@@ -126,6 +108,9 @@ Each stores the static public key of the other. -/
 theorem handshake_complete (si ei sr er : Key) (prologue p₁ p₂ p₃ : ByteArray)
     (h₁ : p₁.size + 32 ≤ 65535) (h₂ : p₂.size + 96 ≤ 65535) (h₃ : p₃.size + 64 ≤ 65535) :
     ∃ (i₁ i₂ i₃ r₁ r₂ r₃ : HandshakeState) (m₁ m₂ m₃ : ByteArray) (c₁ c₂ : CipherState),
+      -- The secrets `si`, `ei` are those of the initiator, and `sr`, `er` those of the responder.
+      --
+      -- Both peers hash the same prologue.
       writeMessage (initializeHandshake true si ei prologue) p₁ = .ok (i₁, m₁) ∧
       readMessage (initializeHandshake false sr er prologue) m₁ = .ok (r₁, p₁) ∧
       writeMessage r₁ p₂ = .ok (r₂, m₂) ∧
@@ -159,6 +144,12 @@ theorem handshake_complete (si ei sr er : Key) (prologue p₁ p₂ p₃ : ByteAr
       readBytes_packBytes_append, hx, decryptAndHash_encryptAndHash he₁]
   generalize mixHash (mixHash (mixHash initializeSymmetric prologue)
     (packBytes (X25519.publicKey ei))) p₁ = S₁ at hw₁ hr₁
+  -- Each token `ee`, `es` and `se` mixes one X25519 shared secret into the chaining key.
+  --
+  -- The two peers compute it from opposite ends.
+  --
+  -- X25519 key agreement makes the two values equal.
+  --
   -- Message 2: both peers mix the same `ee`, then the same `es` after the encrypted static key.
   have hag₁ := X25519.x25519_agree ei er
   have hag₂ := X25519.x25519_agree ei sr
@@ -459,19 +450,17 @@ theorem chainingKey_readMessage_of_step_eq_two {s next : HandshakeState}
 
 /-- After message 3, the initiator's chaining key has mixed `ee`, `es` and `se`, in that order.
 
-The first chaining key is the one that the protocol name sets, Noise §5.2.
-
 `ee` and `es` pair the ephemeral key of the initiator with the remote ephemeral and static keys.
 
-`se` pairs the static key of the initiator with the remote ephemeral key.
-
-These remote keys are the ones that the final state stores. -/
+`se` pairs the static key of the initiator with the remote ephemeral key. -/
 theorem chainingKey_writeMessage_readMessage_writeMessage {si ei : Key}
     {prologue p₁ p₂ p₃ m₁ m₂ m₃ : ByteArray} {i₁ i₂ i₃ : HandshakeState}
     (h₁ : writeMessage (initializeHandshake true si ei prologue) p₁ = .ok (i₁, m₁))
     (h₂ : readMessage i₁ m₂ = .ok (i₂, p₂)) (h₃ : writeMessage i₂ p₃ = .ok (i₃, m₃)) :
+    -- The remote keys are the ones that the final state stores.
     ∃ re rs, i₃.remoteEphemeral = some re ∧ i₃.remoteStatic = some rs ∧
       i₃.symmetric.chainingKey =
+        -- The first chaining key is the one that the protocol name sets, Noise §5.2.
         ⟨(hkdf2 ⟨(hkdf2 ⟨(hkdf2 initializeSymmetric.chainingKey
           (packBytes (X25519.x25519 ei re))).1⟩ (packBytes (X25519.x25519 ei rs))).1⟩
           (packBytes (X25519.x25519 si re))).1⟩ := by
@@ -491,19 +480,17 @@ theorem chainingKey_writeMessage_readMessage_writeMessage {si ei : Key}
 
 /-- After message 3, the responder's chaining key has mixed `ee`, `es` and `se`, in that order.
 
-The first chaining key is the one that the protocol name sets, Noise §5.2.
-
 `ee` and `es` pair the ephemeral and static keys of the responder with the remote ephemeral key.
 
-`se` pairs the ephemeral key of the responder with the remote static key.
-
-These remote keys are the ones that the final state stores. -/
+`se` pairs the ephemeral key of the responder with the remote static key. -/
 theorem chainingKey_readMessage_writeMessage_readMessage {sr er : Key}
     {prologue p₁ p₂ p₃ m₁ m₂ m₃ : ByteArray} {r₁ r₂ r₃ : HandshakeState}
     (h₁ : readMessage (initializeHandshake false sr er prologue) m₁ = .ok (r₁, p₁))
     (h₂ : writeMessage r₁ p₂ = .ok (r₂, m₂)) (h₃ : readMessage r₂ m₃ = .ok (r₃, p₃)) :
+    -- The remote keys are the ones that the final state stores.
     ∃ re rs, r₃.remoteEphemeral = some re ∧ r₃.remoteStatic = some rs ∧
       r₃.symmetric.chainingKey =
+        -- The first chaining key is the one that the protocol name sets, Noise §5.2.
         ⟨(hkdf2 ⟨(hkdf2 ⟨(hkdf2 initializeSymmetric.chainingKey
           (packBytes (X25519.x25519 er re))).1⟩ (packBytes (X25519.x25519 sr re))).1⟩
           (packBytes (X25519.x25519 er rs))).1⟩ := by

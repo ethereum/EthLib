@@ -9,11 +9,6 @@ public import EthLib.Networking.Snappy.FrameEncode
 The stream that compresses decodes back to its data, against `framing_format.txt`:
 
 <https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/framing_format.txt>
-
-- A chunk of at most 65536 bytes, in the shorter of its two forms, decodes to its data (§4.2, §4.3).
-- The chunks of a stream decode to the data they were cut from.
-- Two streams, one after the other, decode to their two pieces of data in turn.
-- The stream is never longer than the stream of uncompressed chunks.
 -/
 
 @[expose] public section
@@ -27,6 +22,8 @@ open EthLib.Networking.Proofs.Snappy.Frame
 /-! ## One chunk -/
 
 /-- A chunk of at most 65536 bytes, in its shorter form, is a header and a body that decodes to it.
+
+Its two forms are the compressed chunk (§4.2) and the uncompressed chunk (§4.3).
 -/
 theorem dataChunk_spec {data : List UInt8} (h : data.length ≤ maxChunkLength) :
     ∃ (type : UInt8) (body : List UInt8), body.length < 2 ^ 24 ∧

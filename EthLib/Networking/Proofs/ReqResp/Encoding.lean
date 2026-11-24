@@ -11,24 +11,6 @@ import EthLib.Base.Proofs.CodeInjective
 # `Networking.Proofs.ReqResp.Encoding`
 
 Properties of the `ssz_snappy` encoding of requests and responses.
-
-A payload that decodes has its declared length, within both bounds.
-
-The decoder accepts exactly the encoding of that length, then compressed bytes.
-
-Those bytes are within the bound for that length.
-
-The reader reads them to the last chunk of the payload, with no byte left after it.
-
-So bytes appended to a payload that decodes make the longer message invalid.
-
-More compressed bytes than the bound for the declared length reject the payload.
-
-The literal encoder writes payloads and response chunks that decode back.
-
-The encoder that compresses writes payloads that decode back.
-
-Two errors with one code come from one constructor, and no error has code 0.
 -/
 
 @[expose] public section
@@ -427,21 +409,20 @@ theorem decodeResponseChunk_encodeResponseChunk {contextBytes : Nat}
   · exact hm ‹_›
   · exact Nat.zero_le _
 
-/-- The bytes that decode to a chunk are its code byte, its context bytes and a payload.
-
-The code is the code of its own byte, which excludes a reserved code outside 4 to 127.
-
-A success carries the context bytes of the method, and an error carries none.
-
-The payload decodes at the bounds of the code.
-
-On a success those are the bounds of the message type, and otherwise those of an error message. -/
+/-- The bytes that decode to a chunk are its code byte, its context bytes and a payload. -/
 theorem decodeResponseChunk_eq_ok_iff {contextBytes : Nat} {typeMin typeBound : UInt64}
     {bs : ByteArray} {c : ResponseChunk} :
     decodeResponseChunk contextBytes typeMin typeBound bs = .ok c ↔
+      -- The code is the code of its own byte, which excludes a reserved code outside 4 to 127.
       ResponseCode.ofByte c.code.toByte = c.code ∧
+        -- A success carries the context bytes of the method, and an error carries none.
         c.context.size = (if c.code = .success then contextBytes else 0) ∧
         ∃ p : ByteArray, bs = ⟨#[c.code.toByte]⟩ ++ c.context ++ p ∧
+          -- The payload decodes at the bounds of the code.
+          --
+          -- On a success those are the bounds of the message type.
+          --
+          -- Otherwise they are those of an error message.
           decodePayload (if c.code = .success then typeMin else 0)
             (if c.code = .success then typeBound else MAX_ERROR_MESSAGE_SIZE) p =
             .ok c.payload := by
