@@ -9,13 +9,14 @@ Not yet released.
 
 ### Proof additions
 
-- In Lean, `syncCommitteesResponse_error_code_of_run` (`Consensus/Proofs/BeaconApi/Committees.lean`) says that every error of the sync committees answer on a state of a run has code 400 ([#3585](https://github.com/ethereum/EthLib/issues/3585)).
-  The run starts at a genesis of deposits.
-  Before Altair the state holds no sync committee.
+- In Lean, `syncCommitteesResponse_error_code_of_keys` (`Consensus/Proofs/BeaconApi/Committees.lean`) gives a condition under which every error of the sync committees answer has code 400 ([#3585](https://github.com/ethereum/EthLib/issues/3585)).
+  From Altair, a validator of the registry holds each key of the current and the next sync committee.
+  Before Altair the state holds no sync committee, and the answer gets code 400.
   From Altair, an epoch outside the current and the next period of the state gets code 400.
-  For the current or the next period, a validator of the registry holds each key of the committee, so the answer has a value.
-  Decoding alone does not establish reachability.
-  From Altair, an unresolved key in the committee selected for the request gives code 500.
+  For the current or the next period, the lookup of each key names a validator, so the answer has a value.
+  `syncCommitteeOf_ok`, `syncCommitteeOf_error_code`, `epochSyncCommittees_ok_of_keys` and `resolveValidatorId_pubkey_isSome` carry these steps.
+  `syncCommitteesResponse_error_code_of_run` (`Consensus/Proofs/BeaconApi/SyncCommitteesReachable.lean`) applies it to a state of a run from a genesis of deposits.
+  On a state not known to satisfy the hypothesis, such as a decoded checkpoint state, a key that no validator holds still gives code 500.
 
 - In Lean, `getBeaconProposerIndex_congr_of_seed` (`Consensus/Proofs/Accessors.lean`) says that two states of one fork get the same result from `getBeaconProposerIndex`, an error included ([#4245](https://github.com/ethereum/EthLib/issues/4245)).
   It takes an equal slot and, from Fusaka, equal proposer lookahead vectors.
