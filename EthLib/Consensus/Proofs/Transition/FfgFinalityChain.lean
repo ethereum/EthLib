@@ -6,7 +6,12 @@ public import EthLib.Consensus.Proofs.Transition.FfgSlackActive
 /-!
 # Proofs: along a chain, the finalized checkpoint is slack-finalized in Casper FFG
 
-Each step of a chain from genesis keeps the finalized checkpoint slack-finalized in the model.
+Each step of a chain keeps the finalized checkpoint slack-finalized, with two facts of the bits:
+
+- A set bit 0 gives a slack link from the previous to the current justified checkpoint.
+- A set bit 1 makes the checkpoint two epochs back slack-justified.
+
+So along a chain from the genesis state built from deposits, it is slack-finalized in the model.
 
 Gasper Definition 4.9 defines `k`-finalization.
 
@@ -26,7 +31,11 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks} {β : Ty
 
 /-- The properties of a state that the steps of a chain keep, with finality.
 
-They are those for the justified checkpoints, and three more. -/
+They are those for the justified checkpoints, and three more:
+
+- The map from roots to blocks keeps in order the roots the state records at consecutive slots.
+- The two newest bits carry their facts for the current epoch.
+- The finalized checkpoint is slack-finalized in the model. -/
 structure SlackFinalityInvariant (V U : Models.Ffg.Checkpoint β → Finset ValidatorIndex)
     (W : Models.Ffg.Checkpoint β → Set (ValidatorIndex → ℕ)) (genesis : β)
     (attested : Set (ValidatorIndex × AttestationData)) (block : Root → β)

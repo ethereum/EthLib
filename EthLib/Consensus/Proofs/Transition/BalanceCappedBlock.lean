@@ -16,7 +16,25 @@ import EthLib.Consensus.Proofs.Transition.Withdrawals
 
 The capped balance of a validator is the lesser of its balance and its largest effective balance.
 
-The conditions exclude each way a block lowers it, each an act of the validator or a fault of it.
+A block lowers a balance in a few ways:
+
+- A proposer or attester slashing charges the validator it slashes.
+- From Altair, the sync aggregate charges each member of the committee whose bit is not set.
+- From Capella, a withdrawal lowers the balance that it names.
+- From Electra, a withdrawal request queues a partial withdrawal.
+- From Electra, a request to switch to compounding moves the balance above the activation balance.
+
+Every other step of a block raises a balance or keeps it.
+
+The withdrawal sweep takes only the part of a balance above the largest effective balance.
+
+So it keeps the capped balance, unless the validator may withdraw all of it.
+
+A queued partial withdrawal can take more.
+
+The conditions exclude it and the other ways, each an act of the validator or a fault of it.
+
+A slot that ends no epoch keeps every balance and the registry.
 
 The module follows a validator through any sequence of such slots and blocks.
 -/
@@ -781,6 +799,14 @@ That holds at every fork.
 
 The cap is the largest effective balance of the validator before the block.
 
+The conditions are these:
+
+- No proposer or attester slashing of the block names the validator.
+- From Altair, each member of the sync committee with its key has its bit set.
+- From Electra, no withdrawal or consolidation request that the block applies comes from its key.
+- The validator may not yet withdraw in the epoch of the state.
+- From Electra, no queued partial withdrawal names it.
+
 After the block it keeps its key, its effective balance and its largest effective balance. -/
 theorem cappedNotLowered_processBlock {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) {index : Nat}
@@ -895,7 +921,15 @@ theorem cappedNotLowered_processBlock {block : BeaconBlock preset fork}
 
 /-- One step between two epoch transitions, under which a validator keeps its capped balance.
 
-The validator is named by its position and by its key, given separately. -/
+The validator is named by its position and by its key, given separately.
+
+- A slot step is one slot that does not end an epoch, so it runs no epoch transition.
+- A block step is a successful block that meets these conditions:
+  - Its slashings name another validator.
+  - From Altair, each member of the current sync committee with the key has its bit set.
+  - From Electra, no withdrawal or consolidation request that it applies comes from the key.
+  - The validator at the position may not yet withdraw in the epoch of the state before.
+  - From Electra, no queued partial withdrawal of that state names the position. -/
 inductive VoterStep (config : Config) (checks : SignatureChecks) (index : Nat)
     (key : Cryptography.Bls.BLSPubkey) :
     BeaconState preset fork → BeaconState preset fork → Prop where

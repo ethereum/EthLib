@@ -9,7 +9,13 @@ The capped balance of a validator is the lesser of its balance and its largest e
 
 The sweep of a block pays a validator that may not yet withdraw only the part above that cap.
 
+A queued partial withdrawal can take more, so none may name the validator.
+
+From Gloas the withdrawals of builders lower no balance of a validator.
+
 So the withdrawals of a block keep the capped balance of such a validator.
+
+The queue pays a validator at most the amounts of the entries that it reads.
 -/
 
 @[expose] public section

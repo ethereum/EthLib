@@ -11,6 +11,8 @@ This is the step of plausible liveness that turns votes into finality, Theorem 2
 The paper is [arXiv 1710.09437v4](https://arxiv.org/abs/1710.09437v4).
 
 Each test is read here from honest validators with two thirds of the active stake.
+
+They must all be among the validators that justification counts for the target of the epoch.
 -/
 
 @[expose] public section
@@ -119,7 +121,9 @@ The newest bit of justification is then set.
 
 The active stake is that of the current epoch, with effective balances.
 
-Justification must run, after the first two epochs. -/
+Justification must run, after the first two epochs.
+
+Every target index that justification counts for the epoch must include the honest set. -/
 theorem processJustificationAndFinalization_justifiesCurrent
     (computed : processJustificationAndFinalization state = .ok after)
     (late : GENESIS_EPOCH + 1 < getCurrentEpoch state)
@@ -140,7 +144,15 @@ theorem processJustificationAndFinalization_justifiesCurrent
 
 The first step ends an epoch, and the second step ends the next one.
 
+Between them the current justified checkpoint and the bits of justification stay as they are.
+
 In each step, honest validators with two thirds of the active stake count for the target.
+
+Justification must run in the first step, after the first two epochs.
+
+Then the second step finalizes the checkpoint of the first epoch.
+
+The current justified checkpoint after the second step is that of the second epoch.
 
 The two states may be at different forks, as when an upgrade comes between the two steps. -/
 theorem processJustificationAndFinalization_finalizesTwoEpochs {fork' : Base.Fork}

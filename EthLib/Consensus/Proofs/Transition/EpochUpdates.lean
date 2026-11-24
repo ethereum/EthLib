@@ -8,9 +8,18 @@ public import EthLib.Consensus.Transition.EpochUpdates
 /-!
 # Proofs: the other steps of the epoch transition
 
-The update of the effective balances, the registry updates and the slashings.
+An updated effective balance is the old one, or the balance rounded down to an increment and capped.
 
-The resets, the rotation of the attestations and the update of the historical roots.
+Each other step changes one part of the state:
+
+- The slashings change only the balances, by the penalty of each validator when it is due.
+- The update of the effective balances changes only the registry.
+- The slashings reset clears the slashed balance of the next epoch.
+- The RANDAO reset copies the mix of the current epoch to the next.
+- Before Heze, the reset of the deposit votes changes only those votes.
+- From Altair, the update of the inactivity scores changes only those scores.
+- Before Altair, the rotation moves the pending attestations of the current epoch to the previous.
+- At the start of a span, a successful update adds a historical root, or from Capella a summary.
 -/
 
 @[expose] public section
@@ -482,7 +491,9 @@ theorem foldlM_activateValidator_activationEpochs {indices : List ValidatorIndex
 
 The queue and the limit are read after the first pass, as the step reads them.
 
-Before Deneb the limit is the validator churn limit; from Deneb it is capped, as [EIP-7514] says.
+Before Deneb the limit is the validator churn limit.
+
+From Deneb it is capped, as [EIP-7514] says.
 
 [EIP-7514]: https://eips.ethereum.org/EIPS/eip-7514#specification
 -/
@@ -1505,7 +1516,11 @@ theorem processHistoricalRootsUpdate_eq_error_iff (before : fork < .shapella)
 
 The next epoch fits in 64 bits.
 
-When it starts a span of slots, one summary joins the list; otherwise the state is unchanged. -/
+When it starts a span of slots, one summary joins the list.
+
+It holds the root of the block roots, then the root of the state roots.
+
+Otherwise the state is unchanged. -/
 theorem processHistoricalSummariesUpdate_eq {capella : .shapella ≤ fork}
     (computed : processHistoricalSummariesUpdate state capella = .ok after) :
     (getCurrentEpoch state).toNat + 1 < 2 ^ 64 ∧

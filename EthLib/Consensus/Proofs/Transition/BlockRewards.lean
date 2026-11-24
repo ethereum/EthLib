@@ -9,9 +9,30 @@ import EthLib.Consensus.Proofs.Participation
 
 From Altair, a block pays its proposer for slashings, attestations and the sync aggregate.
 
-This module covers the attestations and the sync aggregate, at every fork from Altair.
+This module covers the attestations and the sync aggregate.
 
-No EIP specifies the Altair rewards themselves, so the comments here state them.
+The rules are these:
+
+- An attestation pays the proposer of the slot one reward.
+- That reward sums the weighted base reward of each flag newly set, over the attesters.
+- The sum is divided by `(64 - 8) * 64 / 8 = 448`, rounding down.
+- Each sync committee member that signed earns the participant reward, and the proposer a share.
+- Each member that did not sign pays the participant reward, stopping at zero.
+- The participant reward is the total base reward of a slot, weighted and split among the members.
+- The proposer share is the participant reward times 8, over 64 - 8 = 56, rounding down.
+
+These rules hold at every fork from Altair.
+
+From Electra the attesters may come from several committees, as [EIP-7549] specifies.
+
+From Gloas an attestation also weighs a builder payment, as [EIP-7732] specifies.
+
+Neither changes how the rewards are computed.
+
+No EIP specifies the Altair rewards themselves, so this comment states them.
+
+[EIP-7549]: https://eips.ethereum.org/EIPS/eip-7549#consensus-layer
+[EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#beacon-chain-changes
 -/
 
 @[expose] public section

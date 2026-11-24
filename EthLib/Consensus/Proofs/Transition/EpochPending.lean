@@ -6,9 +6,17 @@ public import EthLib.Consensus.Transition.EpochPending
 /-!
 # Proofs: the pending deposits of an epoch
 
-What a pass over the queue of pending deposits reads, applies, postpones and carries over.
+A pass reads a prefix of the queue, applies some of it in order, and postpones the others.
 
-The step keeps one balance for each validator and never raises the balances plus the queue.
+A pass postpones exactly the deposits it reads whose validator exits and is not withdrawn:
+
+- The validator is the first with the key of the deposit, at the start of the pass.
+- It exits when its exit epoch is before the far future.
+- It is withdrawn when its withdrawable epoch is before the next epoch.
+
+The step keeps one balance for each validator.
+
+It never raises the balances plus the amounts in the queue.
 -/
 
 @[expose] public section
@@ -258,7 +266,17 @@ private theorem some_beq_true_false {status : Bool × Bool} :
 
 /-- What a pass does with `read`, the deposits that it reads.
 
-It applies `applied` in order, and postpones `moved` in order, and the two make up `read`. -/
+They are a prefix of its deposits, at most what the limit per epoch still allows.
+
+It applies `applied` in order, and postpones `moved` in order, and the two make up `read`.
+
+It reads no deposit for which `stop` is true.
+
+The churn that it uses grows by the amount of each deposit it reads that takes churn.
+
+`moved` holds exactly the deposits of `read` whose validator exits and is not withdrawn.
+
+`applied` holds the others. -/
 structure PassPendingDepositsFacts (config : Config) (checks : SignatureChecks)
     (stop : PendingDeposit → Bool) (nextEpoch : Epoch) (available : Gwei)
     (state : BeaconState preset fork) (processed : Gwei) (count : Nat)

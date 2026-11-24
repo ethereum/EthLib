@@ -9,11 +9,17 @@ public import EthLib.Consensus.Proofs.Transition.TargetPending
 
 The epoch step justifies the previous or the current epoch from the stake of its attesters.
 
+Each attester that the step counts meets three conditions:
+
+- It is active in the epoch of the target.
+- It cast a vote of a set whose source is the justified checkpoint of that epoch.
+- The target of that vote is the checkpoint of the epoch.
+
+The step drops slashed attesters, so the attesters are a subset of the voters of the model.
+
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
 Gasper §8.6 lets the validator set change, with a set for each block.
-
-Reading a vote as signed by its validator assumes the BLS checks and unforgeable aggregates.
 
 The paper is [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
 -/

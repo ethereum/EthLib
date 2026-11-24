@@ -6,9 +6,11 @@ public import EthLib.Consensus.Transition.Execution
 /-!
 # Proofs: the execution payload of a block
 
-What the execution layer accepts, and what a successful payload step checks and changes.
+The payload step runs from Bellatrix, and before Gloas.
 
-The state after differs from the state before only in the header of the latest payload.
+A block passes it only when the execution layer accepts its payload request.
+
+The state after the step differs from the state before only in the header of the latest payload.
 -/
 
 @[expose] public section

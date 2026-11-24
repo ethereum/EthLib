@@ -14,13 +14,31 @@ import EthLib.Consensus.Proofs.Transition.Withdrawals
 /-!
 # Proofs: a block raises no balance of a validator it does not credit
 
-A block credits a balance in a few ways.
+A block credits a balance in a few ways:
 
-Every other step of a block lowers a balance or keeps it.
+- Its proposer earns the rewards of the attestations, of the slashings and of the sync aggregate.
+- Each member of the sync committee that signs earns a reward.
+- Before Electra, a deposit adds its amount to the validator with its key.
+
+Every other step of a block lowers a balance or keeps it, at every fork.
+
+So the balance of a validator that is not the proposer does not rise in the block.
+
+From Altair this also needs the validator to sign no sync aggregate.
+
+Before Heze it also needs no deposit of the block to carry its key.
 
 A block also keeps the inactivity score at each position of the registry before it.
 
+A new validator takes a position at the end of the registry, so no earlier score moves.
+
 The bounds on an inactivity leak assume that a balance does not rise between two epochs.
+
+The proposer is read at several steps of the block, and each read gives the same validator.
+
+That holds when the mixes span more than the seed lookahead plus two epochs.
+
+This holds on mainnet and on the minimal preset.
 -/
 
 @[expose] public section
@@ -1378,6 +1396,14 @@ private theorem down_processBlock
 
 This holds when the block succeeds, at every fork.
 
+The conditions are these:
+
+- The validator has a balance, and it is not the proposer of the block.
+- From Altair, no member that signs the sync aggregate has its key.
+- No deposit of the block carries its key.
+
+A block has no deposits from Heze.
+
 The mixes must span more than the seed lookahead plus two epochs. -/
 theorem balanceNotRaised_processBlock
     -- The proposer is read at several steps of the block, and each read gives the same validator.
@@ -1490,7 +1516,9 @@ theorem fixed_processOperations {body : BeaconBlockBody preset fork} {parentSlot
 
 /-- A block keeps the inactivity score at each position of the registry before it.
 
-This holds when the block succeeds; before Altair there are no scores.
+This holds when the block succeeds.
+
+Before Altair there are no scores.
 
 A new validator takes the position at the end of the registry, so it moves no earlier score.
 
@@ -1539,7 +1567,9 @@ theorem scoresKept_processBlock {block : BeaconBlock preset fork}
 
 /-- A block keeps the inactivity score at each position of the registry before it.
 
-This holds when the block succeeds; before Altair there are no scores.
+This holds when the block succeeds.
+
+Before Altair there are no scores.
 
 A new validator takes the position at the end of the registry, so it moves no earlier score. -/
 theorem scoreKept_processBlock {block : BeaconBlock preset fork}

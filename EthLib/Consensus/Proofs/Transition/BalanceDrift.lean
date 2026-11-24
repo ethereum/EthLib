@@ -16,11 +16,25 @@ import EthLib.Consensus.Proofs.Transition.EpochPending
 /-!
 # Effective-balance changes from the actual balance path
 
-A block and each of its operations keep the effective balance of every existing validator.
+A block operation keeps the effective balance of every validator that existed before it.
+
+A whole block keeps them, at every fork.
+
+Registry updates keep them as well.
+
+Only rewards, slashings and the two pending stages can change the balances.
 
 An effective-balance update never raises the larger of the effective and the actual balance.
 
-Loss uses initial slack, balance debits and rounding; gain uses initial excess and credits.
+Loss uses initial slack, balance debits and rounding.
+
+Gain uses initial excess and credits.
+
+The effective-balance update of an epoch reads its intermediate balance, before later upgrades.
+
+So the balance path of a slot holds that intermediate state, not just its endpoints.
+
+A validator admitted along a run starts with an effective balance funded by its own balance.
 -/
 
 @[expose] public section

@@ -7,7 +7,19 @@ public import EthLib.Consensus.Proofs.Transition.FfgRoots
 
 The epoch step finalizes by four rules on the bits of justification.
 
+Between two slots, bit `i` of a state stands for the epoch `i + 1` before the current one.
+
 In the model, each rule is `k`-finalization with `k = 1` or `k = 2`, as in Gasper Definition 4.9.
+
+- The rule on bits 0 and 1 finalizes the old current justified checkpoint with `k = 1`.
+- The rule on bits 0 to 2 finalizes it with `k = 2`.
+- The rule on bits 1 and 2 finalizes the old previous justified checkpoint with `k = 1`.
+- The rule on bits 1 to 3 finalizes it with `k = 2`.
+
+So the bits carry facts of the model from one step to the next.
+
+- A set bit 0 means a slack link from the previous to the current justified checkpoint.
+- A set bit 1 means that the checkpoint of its epoch is slack-justified.
 
 The paper is [arXiv 2003.03052v3](https://arxiv.org/abs/2003.03052v3).
 -/
@@ -266,7 +278,11 @@ theorem processJustificationAndFinalization_slackBits
 
 /-- One slot keeps the facts of the bits and the finalized checkpoint slack-finalized.
 
-The hypotheses of justification are asked of the state before the slot. -/
+When the slot ends an epoch, justification runs at the state after the caching of the slot.
+
+That caching keeps the roots of the three latest epochs, the flags, the checkpoints and the stakes.
+
+So the hypotheses of justification are asked of the state before the slot. -/
 theorem advanceSlot_slackBits
     -- The buffer of roots must cover three epochs, as both presets do.
     --

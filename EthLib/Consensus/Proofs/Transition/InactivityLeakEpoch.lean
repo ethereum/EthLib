@@ -5,9 +5,25 @@ public import EthLib.Consensus.Proofs.Transition.Invariants
 /-!
 # Proofs: the chain stays in the leak unless finality advances
 
+The leak test reads only the slot and the finalized epoch.
+
+A later slot, with a finalized epoch no later, therefore keeps a leak.
+
+Justification and finalization keep the slot.
+
+The steps of an epoch read the leak test on the state that justification returns.
+
+Some read it later in the epoch, with the same slot and the same finalized checkpoint.
+
+That state still leaks unless the finalized epoch rises.
+
+So does the state after one slot, which ends at a later slot.
+
 In [Pavloff et al.][pat], Section 4, the leak starts after four epochs without finalization.
 
-Their Section 5.1 ends it at the next finalization; that direction is not proved here.
+Their Section 5.1 ends it at the next finalization.
+
+That direction is not proved here.
 
 The balance, score and effective-balance traces of the leak bounds are not derived here.
 

@@ -9,13 +9,30 @@ public import EthLib.Consensus.Proofs.Transition.Totality.EffectiveBalances
 
 From Altair, the rewards and penalties of an epoch come after justification.
 
-From the rewards up to the effective-balance update, only two kinds of step credit a balance.
+They also come after the update of the inactivity scores.
 
-They are the pending deposits and the pending consolidations, which exist from Electra.
+The steps that follow them run up to the update of the effective balances.
+
+Those steps credit a balance in two ways:
+
+- From Electra, a pending deposit adds to the balance of the validator with its key.
+- From Electra, a pending consolidation adds to the balance of its target.
+
+The registry updates, the slashings, the eth1 vote reset and the builder payments raise none.
+
+So the balance of a validator that no pending deposit or consolidation credits does not rise.
+
+The update of the effective balances reads the balance reached at that point.
+
+The later steps keep the balances and the registry.
 
 The same steps keep the inactivity score of each validator already in the registry.
 
-The trace bounds of an inactivity leak assume these facts; this module proves them per epoch.
+Only a pending deposit writes a score, and it writes it at the end of the registry.
+
+The trace bounds of an inactivity leak assume these facts.
+
+This module proves them per epoch.
 -/
 
 @[expose] public section
@@ -795,7 +812,15 @@ private theorem scoresKeptOrZero_processPendingDeposits {electra : .pectra ≤ f
     (fun _ _ found => .inl found) applies
   exact each i v found
 
-/-- From Altair, the steps of a successful epoch, and their effect at the position of a validator.
+/-- From Altair, a successful epoch runs its steps in order, each with its effect on a validator.
+
+Justification comes first, then the update of the inactivity scores, then the rewards.
+
+The steps up to the update of the effective balances follow, then that update, then the rest.
+
+Up to that update, a validator of the registry before the epoch keeps its effective balance.
+
+Its balance there does not rise from the rewards on, if no deposit or consolidation credits it.
 -/
 private theorem processEpochAltair_walk {altair : .altair ≤ fork}
     (computed : processEpochAltair config checks state altair = .ok after) :
@@ -992,7 +1017,9 @@ This holds when the epoch succeeds.
 
 Uncredited means that no pending deposit carries its key, and no pending consolidation targets it.
 
-The queues are those of the state before the epoch; there are none before Electra. -/
+The queues are those of the state before the epoch.
+
+There are none before Electra. -/
 theorem balanceNotRaised_processEpochAltair {altair : .altair ≤ fork}
     (computed : processEpochAltair config checks state altair = .ok after) {index : Nat}
     {validator : Validator} (found : state.validators.data[index]? = some validator)

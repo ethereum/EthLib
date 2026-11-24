@@ -10,7 +10,13 @@ public import EthLib.Consensus.Proofs.Transition.InactivityLeakTrace
 
 This module builds the four sequences of the trace bound from a run of the chain, from Altair.
 
-It then applies the run to every absent validator.
+From each visited state, the slot that ends the epoch runs the epoch transition.
+
+Then slots that end no epoch, and blocks that credit nothing to the validator, lead to the next one.
+
+The run assumes that the largest effective balance of the validator stays fixed.
+
+The module then applies the run to every absent validator.
 
 Either the leak stops or finality advances during the run.
 
@@ -27,7 +33,20 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 
 /-- A run of a leak brings the effective balance of an absent validator to a threshold.
 
-This holds from Altair, and the run stays within one fork.
+This holds from Altair.
+
+The run stays within one fork.
+
+- The run visits a state before each of its epoch transitions.
+- The slot that leaves each such state ends an epoch, and leads to a second state.
+- Steps that credit nothing to the validator lead from that second state to the next visited one.
+- Each epoch transition starts in a leak and does not raise the finalized epoch.
+- No pending deposit carries the key, and no pending consolidation targets the validator.
+- The largest effective balance of the validator stays the same over the run.
+- While its effective balance is above the threshold, it is eligible and lacks the target flag.
+- The run lasts at least the number of epochs of the trace bound, from the starting balance.
+
+Then the effective balance of the validator at the end of the run is at most the threshold.
 
 On mainnet a validator that exits is no longer eligible.
 
@@ -209,7 +228,20 @@ theorem effectiveBalance_le_of_leakRun (altair : .altair ≤ fork)
 
 /-- A run of a leak stops leaking, advances finality, or ends with two thirds for the voters.
 
-This holds from Altair, and the run stays within one fork.
+This holds from Altair.
+
+The run stays within one fork.
+
+- The run visits a state before each of its epoch transitions, as for one validator.
+- Each absent validator meets the conditions of the run for one validator.
+- In the final state, each active validator is a voter or an absent validator.
+- Twice the number of absent validators times the threshold is at most the balance of the voters.
+
+The voters are meant to be the unslashed attesters of the target, but any list works.
+
+Then some visited state does not leak, or the finalized epoch rises in the slot that leaves it.
+
+Otherwise, in the final state, twice the active balance is at most three times that of the voters.
 
 On mainnet a validator that exits is no longer eligible.
 
@@ -296,7 +328,9 @@ theorem twoThirds_of_leakRun (altair : .altair ≤ fork)
         (threshold + preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ epochs) :
     -- Then some visited state does not leak, or the finalized epoch rises in the slot leaving it.
     --
-    -- Otherwise, in the final state, twice the active balance is at most thrice that of the voters.
+    -- Otherwise the final state meets the bound of two thirds.
+    --
+    -- Twice its active balance is at most three times the balance of the voters.
     (∃ t < epochs, isInInactivityLeak (states t) ≠ .ok true ∨
       (states t).finalizedCheckpoint.epoch < (slotted t).finalizedCheckpoint.epoch) ∨
       2 * total.toNat ≤ 3 * voterTotal.toNat := by

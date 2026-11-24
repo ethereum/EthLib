@@ -7,9 +7,39 @@ public import EthLib.Consensus.Proofs.Transition.EpochUpdates
 
 From Altair, in a leak, an eligible validator without the target flag gains the bias each epoch.
 
-While its effective balance stays above a threshold, the losses add up quadratically.
+Each epoch it then loses at least its effective balance times its new score, over a divisor.
 
-A worked example compares the bound with [Pavloff et al.][pat], Section 4.3, Figure 2.
+Its effective balance follows its balance with some hysteresis.
+
+While the effective balance stays above a threshold, the losses add up quadratically.
+
+So after an explicit number of epochs the effective balance is at most the threshold.
+
+Take a bias of 4, a score of zero, and a threshold of 16 ETH.
+
+Take a balance and an effective balance of 32 ETH.
+
+The bound is then 5,488 epochs.
+
+That threshold is the ejection balance.
+
+[Pavloff et al.][pat], Section 4.3, Figure 2, reports the ejection at epoch 4,685.
+
+With the inactivity penalty alone, the discrete rule reaches it then too.
+
+The closed form of the paper gives about 4,661, at the stake of 16.75 ETH where it ejects.
+
+The bound is larger because it charges each epoch only the threshold plus an increment.
+
+An effective balance at most the ejection balance only starts the exit, at the next registry update.
+
+The validator leaves the active set later, after the exit queue, and pays the leak until then.
+
+The traces of the bound are assumptions, not derived from the state transition.
+
+They assume that no reward, deposit or consolidation raises the balance.
+
+They also assume a fixed largest effective balance: one fork and one kind of credentials.
 
 [pat]: https://arxiv.org/abs/2404.16363v2
 -/
@@ -91,22 +121,6 @@ def leakEpochs (floor bias divisor amount : Nat) : Nat :=
   -- In a leak, the slope is the threshold plus an increment, times the score bias.
   --
   -- The divisor is the score bias times the penalty quotient, `2^26` on mainnet from Bellatrix.
-  --
-  -- Take a bias of 4, a score of zero, and a threshold of 16 ETH.
-  --
-  -- Take a balance and an effective balance of 32 ETH.
-  --
-  -- The bound is then 5,488 epochs.
-  --
-  -- That threshold is the ejection balance.
-  --
-  -- Pavloff et al., Section 4.3, Figure 2, reports the ejection at epoch 4,685.
-  --
-  -- With the inactivity penalty alone, the discrete rule reaches it then too.
-  --
-  -- The closed form of the paper gives about 4,661, at the stake of 16.75 ETH where it ejects.
-  --
-  -- The bound is larger because it charges each epoch only the threshold plus an increment.
   Nat.sqrt (2 * divisor * amount / (floor * bias)) + 2 * divisor / (floor * bias) + 2
 
 /-- After that number of epochs the leak has taken at least the amount, from any score.
@@ -168,6 +182,18 @@ theorem leakEpochs_mono {floor bias divisor amount larger : Nat} (le : amount �
 /-- An absent validator in a leak: its effective balance falls to a threshold.
 
 Absent means eligible and without the timely target flag, while its effective balance is high.
+
+The traces count the epochs of the leak.
+
+While the effective balance is above the threshold, each epoch is a leak epoch.
+
+In it the score gains the bias, and the balance pays the effective balance times the new score.
+
+That product is divided by the divisor, and the balance stops at zero.
+
+In every epoch of the traces the balance does not rise, so the validator never votes again.
+
+The largest effective balance stays fixed.
 
 If the leak takes enough over at least one epoch, the effective balance is at most the threshold.
 
@@ -339,7 +365,11 @@ It is at most the threshold in any epoch of the leak from that number on.
 
 That number depends on the start balance, the threshold, the score bias, the divisor and the preset.
 
-The hypotheses are those of the bound above. -/
+The hypotheses are those of the bound above.
+
+The bias and the divisor must be positive.
+
+The threshold plus an increment must exceed the downward band. -/
 theorem effectiveBalance_le_of_leakEpochs {balance settled effective : Nat → Gwei}
     {score : Nat → Nat} {largest : Gwei} {bias divisor threshold epochs : Nat}
     -- The bias and the divisor must be positive.

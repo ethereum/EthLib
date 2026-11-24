@@ -8,7 +8,13 @@ public import EthLib.Consensus.Transition.Block
 
 An attester slashing carries two indexed attestations.
 
-Here each names one validator only, by the same index.
+Here each names one validator only, by the same index, so each carries the signature of that key.
+
+A state checks that the two data are slashable votes, and that both signatures verify there.
+
+The validator must also be slashable at the epoch of the state.
+
+Each signature verifies in the attester domain that the state reads at the target epoch of its data.
 
 Then the state accepts the slashing exactly when it can slash the validator.
 
@@ -67,7 +73,17 @@ private theorem isValidIndexedAttestation_single {config : Config} {checks : Sig
 
 /-- An attester slashing of one validator by its two signatures does what slashing it does.
 
-The state accepts the slashing exactly when it can slash the validator, with the same result. -/
+The conditions are these:
+
+- Each attestation names the validator alone, and the two data are a double or surround vote.
+- Each signature verifies in the attester domain that the state reads at its target epoch.
+- The validator is slashable at the epoch of the state.
+  It is active, not slashed and not yet withdrawable.
+- From Gloas, the limit of attesters of an indexed attestation is at least one.
+
+Then the state accepts the slashing exactly when it can slash the validator.
+
+Both then give the same result. -/
 theorem processAttesterSlashing_eq_slashValidator_of_single {config : Config}
     {checks : SignatureChecks}
     {state : BeaconState preset fork} {slashing : AttesterSlashing preset fork}

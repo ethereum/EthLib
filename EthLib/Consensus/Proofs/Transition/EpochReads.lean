@@ -17,9 +17,11 @@ import EthLib.Consensus.Proofs.Transition.SyncCommitteeProvenance
 
 The active total, the sync reward and the seats of a validator have values as natural numbers.
 
-From Altair, the rewards pass moves a balance within an envelope.
+From Altair, the rewards pass moves the balance of one validator within an envelope.
 
-The envelope reads only the effective balances, the balances and the inactivity scores.
+The envelope reads only three things before the pass.
+
+They are the effective balances, the balances and the inactivity scores.
 
 Inside one epoch a run keeps its fork and the keys of its current sync committee.
 

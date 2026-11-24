@@ -9,9 +9,24 @@ public import EthLib.Consensus.Transition.EpochRewards
 /-!
 # Proofs: rewards and penalties
 
-What the deltas of rewards and penalties hold, and how the step applies them to the balances.
+These proofs state what the deltas of rewards and penalties hold, and how the step applies them.
 
-From Altair, a bound on how much the step raises the sum of the balances.
+From Altair the deltas of the flags and of inactivity follow these rules:
+
+- A validator that did not set a flag earns no reward for it.
+- A validator that set it pays no penalty for it, and nobody pays one for the head flag.
+- An unslashed validator that set a flag in the previous epoch earns nothing for it in a leak.
+- Otherwise it earns the weight of the flag in its base reward, scaled by the share that set it.
+- The inactivity deltas hold no reward.
+- A validator with a timely target pays no inactivity penalty.
+
+Each set of deltas in turn adds the reward of each validator, then subtracts its penalty.
+
+Each subtraction stops at zero.
+
+From Altair the step raises the sum of the balances by a bounded amount.
+
+It is at most 54/64 of the base reward per increment, for each active increment.
 -/
 
 @[expose] public section
@@ -802,7 +817,13 @@ theorem processRewardsAndPenalties_frame {config : Config}
 
 /-- A fold over the first positions whose step acts on the balance at its own position.
 
-The fold keeps a property and relates the entries at those positions, as each step does. -/
+Each step from a state with a kept property gives a state with that property.
+
+It relates the old and new entries at its position, and keeps the other entries.
+
+The fold then gives a state with that property.
+
+It relates the old and new entries at each of those positions, and keeps the entries past them. -/
 theorem foldlM_range_balances {ε : Type}
     {step : BeaconState preset fork → Nat → Except ε (BeaconState preset fork)}
     (Keep : BeaconState preset fork → Prop) (Relates : Nat → Option Gwei → Option Gwei → Prop)
@@ -1193,7 +1214,9 @@ private theorem sum_flag_weights :
 
 The flags are those of the previous epoch, and the active balance is that of the current one.
 
-Then the step raises the balance sum by at most 54/64 of the base reward per active increment.
+Then the step raises the sum of the balances by at most 54/64 of the base reward per increment.
+
+It counts once for each active increment.
 
 That needs a registry within its limit, and an increment above zero. -/
 theorem processRewardsAndPenalties_balanceSum_le_of_participating_le {config : Config}
