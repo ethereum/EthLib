@@ -15,18 +15,6 @@ It keeps the first whose 16-byte digest is a codeword, and signing fails if none
 
 Here the hash is a random oracle, and its cache holds none of the trial inputs yet.
 
-The trial inputs are distinct, so the trials see fresh, independent, uniform digests.
-
-Exactly `|C|` of the `2^128` digests are codewords.
-
-So all trials fail with probability `(1 - |C| / 2^128)^(2^32)`, exactly.
-
-One trial succeeds with probability `|C| / 2^128 = 2^-20.0045`, about one in 1,051,863.
-
-So `2^32` trials expect 4083.2 codewords, and all fail with probability below `exp(-4000)`.
-
-That is below `2^-5770`.
-
 The bound is for one search, so for one layer of a signature.
 
 Whether the signer's cache holds a trial input when the search starts is not proved here.
@@ -134,6 +122,7 @@ theorem prEvent_findCodeword_none (publicParam : PublicParam) (layer : Layer) (e
           MAX_RANDOMIZER_TRIALS)).run' cache}[z = none]
       = (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ MAX_RANDOMIZER_TRIALS := by
   rw [← prEvent_not_codeword, Internal.findCodeword_eq]
+  -- The trial inputs are distinct, so the trials see fresh, independent, uniform digests.
   refine Wots.prEvent_findFirst_romImpl_none (trialRandomizer base)
     (fun rho => Hash.Keccak.lanesBytes
       (thInput publicParam (Address.msg layer e) (msg ++ rho.toArray)))
@@ -153,10 +142,14 @@ theorem prEvent_findCodeword_none (publicParam : PublicParam) (layer : Layer) (e
 
 /-- With uniform digests, all `2^32` trials miss the code with probability below `exp(-4000)`.
 
-`(1 - p)^(2^32) <= exp(-p)^(2^32) = exp(-2^32 p)`, and `2^32 p >= 4000`. -/
+`(1 - p)^(2^32) <= exp(-p)^(2^32) = exp(-2^32 p)`, and `2^32 p >= 4000`.
+
+That is below `2^-5770`. -/
 theorem all_trials_fail_probability :
     (1 - (CODE_SIZE : ℝ) / 2 ^ 128) ^ MAX_RANDOMIZER_TRIALS ≤ Real.exp (-4000) := by
+  -- One trial succeeds with probability `p = |C| / 2^128 = 2^-20.0045`, about one in 1,051,863.
   set p : ℝ := (CODE_SIZE : ℝ) / 2 ^ 128
+  -- So `2^32` trials expect 4083.2 codewords.
   have hmean : (4000 : ℝ) ≤ 2 ^ 32 * p := by
     simp only [p, CODE_SIZE]
     norm_num

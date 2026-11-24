@@ -10,17 +10,7 @@ public import EthLib.Cryptography.Proofs.Merkle.Build
 
 An honest path leads from a key's leaf to the root of its tree.
 
-On the bottom layer, key `idx` reaches the root of bottom tree `floor(idx / 2^16)`.
-
-On the top layer, key `b < 2^16` reaches the root of the one top tree.
-
-Another path that reaches the same root exposes a second preimage of `Th`, under one node address.
-
-The tree hashes only at levels 1 to 16, so no node address holds a level reduced modulo 17.
-
 Each statement specializes one proved for every Merkle tree.
-
-A build of bottom tree `b` holds its root and the path of each of its keys.
 
 The unfolding equations hold in every monad.
 
@@ -127,7 +117,10 @@ theorem fold_eq_of_agree (hash' : Merkle.Position → Digest → Digest → m Di
 
 end Monad
 
-/-! ## A build holds the root and the paths -/
+/-! ## A build holds the root and the paths
+
+A build of bottom tree `b` holds its root and the path of each of its keys.
+-/
 
 section Build
 
@@ -148,7 +141,12 @@ theorem path_build_run (e : Nat) :
 
 end Build
 
-/-! ## The path reaches the root -/
+/-! ## The path reaches the root
+
+On the bottom layer, key `idx` reaches the root of bottom tree `floor(idx / 2^16)`.
+
+On the top layer, key `b < 2^16` reaches the root of the one top tree.
+-/
 
 variable {f : Array UInt64 → Lanes4} {publicParam : PublicParam} {prf : SeedPrf Id} {layer : Layer}
 

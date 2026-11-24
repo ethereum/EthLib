@@ -13,14 +13,6 @@ For the bounds, each call of `H` makes at most one query on every path.
 - Signing with any key takes at most `2^33 + 205 * 2^16 + 407 = 8603369879` calls.
   That covers a tree the key must build, and the top key's signature of its root.
 - Verification takes at most `384` calls, as the query bounds of the algorithms already prove.
-
-The signing bounds charge each randomizer search all `2^32` trials.
-
-The top key's path is read from the key, so signing never hashes the top tree.
-
-Key generation does not search.
-
-So under fixed answers, when each call of `H` makes exactly one query, it makes `13434881` calls.
 -/
 
 @[expose] public section
@@ -48,7 +40,12 @@ theorem signKeptCalls_eq : MAX_RANDOMIZER_TRIALS + 204 = 4294967500 := by
 theorem signCalls_eq : 2 * MAX_RANDOMIZER_TRIALS + 205 * 2 ^ LAYER_HEIGHT + 407 = 8603369879 := by
   decide
 
-/-! ## Upper bounds on every path -/
+/-! ## Upper bounds on every path
+
+The signing bounds charge each randomizer search all `2^32` trials.
+
+The top key's path is read from the key, so signing never hashes the top tree.
+-/
 
 section Bounds
 

@@ -12,16 +12,6 @@ public import EthLib.Cryptography.Xmss.Sign
 A signature signs on two layers, and each layer searches for a codeword.
 
 Signing fails when either search finds none.
-
-Each search hashes at its key's message address, with a payload of one fixed length.
-
-Before a search, the signer hashes no such input.
-
-The calls before it have other addresses.
-
-So a cache that holds no trial input of either key keeps none until its search starts.
-
-Each search then fails with probability at most `exp(-4000)`, and signing at most twice that.
 -/
 
 @[expose] public section
@@ -35,7 +25,10 @@ open OracleSpec OracleComp ENNReal
 /-- The hash as a query to the random oracle of the game. -/
 local notation "Hq" => Unforgeability.queryH (m := OracleComp XmssSecurity.OracleWorld)
 
-/-! ## Trial inputs -/
+/-! ## Trial inputs
+
+Each search hashes at its key's message address, with a payload of one fixed length.
+-/
 
 /-- A query of an input at a given address whose payload has `k` lanes, `8 k` bytes.
 
@@ -62,7 +55,12 @@ theorem isQueryBoundP_queryH_of_ne {A A' : Address} (k : Nat) (publicParam : Pub
   obtain ⟨_, _, _, heq⟩ := h
   exact absurd (thInput_inj (Hash.Keccak.lanesBytes_injective heq)).2.1 hA
 
-/-! ## A layer never queries the other layer's trial inputs -/
+/-! ## A layer never queries the other layer's trial inputs
+
+Before a search, the signer hashes no trial input of that search.
+
+The calls before it have other addresses.
+-/
 
 section OtherLayer
 
@@ -158,7 +156,10 @@ theorem otsSign_isQueryBoundP_otherLayer (publicParam : PublicParam) (seed : See
 
 end OtherLayer
 
-/-! ## One layer fails rarely -/
+/-! ## One layer fails rarely
+
+A cache that holds no trial input of either key keeps none until its search starts.
+-/
 
 /-- The randomizer base is not a trial query of its own key. -/
 theorem randomizerBase_isQueryBoundP (publicParam : PublicParam) (seed : Seed) (layer : Layer)

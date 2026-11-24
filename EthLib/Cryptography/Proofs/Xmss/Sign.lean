@@ -15,16 +15,6 @@ What signing computes, and how it can fail.
 Each theorem holds for every hash function `f`, run in the identity monad.
 
 `sign` is the case `f = hash`, by a theorem that signing with Keccak-256 is the signer over it.
-
-The specification's signer reads its trees from the key, or builds and keeps them.
-
-Every key that key generation and signing reach holds the trees its seed gives.
-
-So that signer returns the note's signature, byte for byte, whatever trees the key keeps.
-
-The note's signature is two one-time signatures, each with its key's path.
-
-The bottom key `idx` signs the message, and the top key `b` signs the root of bottom tree `b`.
 -/
 
 @[expose] public section
@@ -296,7 +286,10 @@ theorem keyGenWith_fst (H : Array UInt64 → Id Lanes4) (seed : Seed) :
         publicParam := (publicParamOf (seedPrf H (schemeSeed H seed).run)).run } := by
   simp only [keyGenWith, Internal.keyGenFrom, Id.run_bind, Id.run_pure, value_build_run]
 
-/-! ## Signatures of the specification's signer -/
+/-! ## Signatures of the specification's signer
+
+The specification's signer reads its trees from the key, or builds and keeps them.
+-/
 
 /-- A signature holds the leaf index it was signed at, whatever the key. -/
 theorem leafIndex_signWith {H : Array UInt64 → Id Lanes4} {sk : SecretKey}

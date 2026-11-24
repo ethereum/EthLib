@@ -17,20 +17,9 @@ When the key does not keep the bottom tree, it builds it and runs the top layer'
 
 Until a request fails, every kept tree holds the top signature of a search that succeeded.
 
-A search reads its randomizer base from the table, at the parameter, its address and the message.
+When every earlier search succeeded, every kept tree holds a top signature.
 
-- A new search draws its base when it runs.
-  A cached input is a trial input of at most `2^32` of the `2^128` bases.
-  So with at most `Q` cached inputs, some trial is already cached with chance `<= Q / 2^96`.
-  The count takes the whole cache, not only the inputs at the key's message address.
-  Otherwise every trial is fresh, and all fail with probability at most `exp(-4000)`.
-- A repeated search reads the base of an earlier search.
-  When that search succeeded, the cache holds a trial with a codeword digest.
-  So the repeat succeeds too.
-
-When every earlier search succeeded, and so every kept tree holds a top signature,
-
-a request fails with chance `<= Q / 2^95 + 2 exp(-4000)`.
+Then a request fails with chance `<= Q / 2^95 + 2 exp(-4000)`.
 -/
 
 @[expose] public section
@@ -260,7 +249,12 @@ theorem exists_cached_of_mem_support_findCodeword (publicParam : PublicParam)
       (codeword_messageDigest_queryH publicParam layer e msg) _ 0 C z hz rho x hx
   exact ⟨j, by omega, y, hy, hcw⟩
 
-/-! ## A new base rarely meets the cache -/
+/-! ## A new base rarely meets the cache
+
+A cached input is a trial input of at most `2^32` of the `2^128` bases.
+
+The count takes the whole cache, not only the inputs at the key's message address.
+-/
 
 /-- A trial and its randomizer fix the base. -/
 theorem trialRandomizer_inj_base {base base' : Randomizer} {j : ℕ}
@@ -311,7 +305,10 @@ theorem prEvent_trial_cached_le (C : HashSpec.QueryCache)
     (le_of_eq ?_)
   rw [Finset.card_range, MAX_RANDOMIZER_TRIALS, Nat.cast_pow, Nat.cast_ofNat]
 
-/-! ## One search -/
+/-! ## One search
+
+A search reads its randomizer base from the table, at the parameter, its address and the message.
+-/
 
 /-- A derivation already in the table is read from it. -/
 theorem run_prfD_of_some {publicParam : PublicParam} {a : Address}
@@ -359,7 +356,11 @@ theorem two_pow_mul_div_two_pow (a b : ℕ) (Q : ℝ≥0∞) : 2 ^ a * (Q / 2 ^ 
 
 /-- **One search fails with probability at most `Q / 2^96 + exp(-4000)`.**
 
-A repeated search finds the cached trial of the earlier one, so it never fails.
+A repeated search reads the base of an earlier search.
+
+When that search succeeded, the cache holds a trial with a codeword digest.
+
+So the repeat finds that trial, and it never fails.
 
 A new search meets the cache with probability at most `Q / 2^96`.
 

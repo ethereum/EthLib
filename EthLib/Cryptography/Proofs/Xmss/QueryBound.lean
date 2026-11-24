@@ -17,10 +17,6 @@ Then each algorithm makes at most a fixed number of counted calls.
 - A tree at level 16 takes at most `205 * 2^16 - 1` calls.
 - A one-time signature takes at most `2^32 + 204` calls.
 - Verification takes at most `384` calls.
-
-A key's leaf takes `29` derivations, `174` chain steps and one hash, `204` calls in all.
-
-A node at level `l` takes `2^l` leaves and `2^l - 1` hashes, and so does its build.
 -/
 
 @[expose] public section
