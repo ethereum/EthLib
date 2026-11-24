@@ -8,37 +8,11 @@ public import EthLib.Consensus.Proofs.ForkChoice.Store
 /-!
 # Proofs: the head of the fork choice
 
-Before Gloas the children of a node are the known blocks whose parent is the node's block.
-
-From Gloas a pending node has its empty node as a child, and its full node once it is verified.
-
-From Gloas an empty or full node has the blocks that build on its payload status as children.
-
-The choice among weighted children returns one of them, and none of them is above it.
-
-A payload decision is the empty or the full node of a block from the previous slot.
-
-Such a node weighs nothing.
-
-Any other node weighs its votes in the justified state when the boost does not apply.
-
-The boost applies after a parent older than the previous slot, and after a parent that is not weak.
-
-After a weak parent it needs the timeliness of every block of the store.
-
-It then applies exactly when no other timely block of the parent's proposer is in the slot before.
-
-The head has no child among the viable nodes, so the walk stops only at a leaf.
+These proofs cover the children of a node, their weights, the boost and the walk to the head.
 
 At every fork, the head descends from the justified block.
 
-From Gloas the walk from any known node ends at a descendant of that node.
-
-A viable node with children has a viable child, so from Gloas the head is never a pending node.
-
-From Gloas, let a block of the previous slot have a verified payload and both its nodes viable.
-
-The walk then takes the full node exactly when the payload extends.
+The head has no child among the viable nodes, so the walk stops only at a leaf.
 -/
 
 @[expose] public section
@@ -408,37 +382,34 @@ private theorem filterM_entries_isEmpty_iff {β ε : Type} {test : Root × β �
     rw [← none]
     exact ⟨fun same => ⟨all, by rw [same]⟩, fun ⟨_, same⟩ => Bool.eq_iff_iff.mpr same.symm⟩
 
-/-- Whether the boost applies, from Gloas, on the blocks of the store and their timeliness.
-
-Without a boosted block it does not apply.
-
-Otherwise the store must hold the boosted block and a parent that is not in the last slot.
-
-A parent older than the slot before the boosted block lets the boost apply.
-
-So does a parent of that slot or later that is not weak.
-
-After a weak parent, every block of the store must have its timeliness for the payload committee.
-
-A timely block of the parent's proposer must not be in the last slot either.
-
-The boost then applies exactly when each such block of the slot before is the parent itself. -/
+/-- Whether the boost applies, from Gloas, on the blocks of the store and their timeliness. -/
 theorem shouldApplyProposerBoost_eq_ok_iff {apply : Bool} (gloas : .glamsterdam ≤ fork) :
     store.shouldApplyProposerBoost config gloas = .ok apply ↔
+      -- Without a boosted block it does not apply.
       store.proposerBoostRoot = Vector.replicate 32 0 ∧ apply = false ∨
+      -- Otherwise the store must hold the boosted block and a parent that is not in the last slot.
       store.proposerBoostRoot ≠ Vector.replicate 32 0 ∧ ∃ block parent,
         store.blocks[store.proposerBoostRoot]? = some block ∧
         store.blocks[block.parentRoot]? = some parent ∧
         parent.slot.toNat + 1 < 2 ^ 64 ∧
+        -- A parent older than the slot before the boosted block lets the boost apply.
         (parent.slot.toNat + 1 < block.slot.toNat ∧ apply = true ∨
           block.slot.toNat ≤ parent.slot.toNat + 1 ∧
+            -- So does a parent of that slot or later that is not weak.
             (store.isHeadWeak config block.parentRoot = .ok false ∧ apply = true ∨
               store.isHeadWeak config block.parentRoot = .ok true ∧
+                -- After a weak parent, every block of the store must have its timeliness.
+                --
+                -- That timeliness is the one for the payload committee.
                 (∀ (root : Root) (other : BeaconBlock preset fork),
                   store.blocks[root]? = some other →
                   ∃ timely, (store.ptcTimeliness gloas)[root]? = some timely ∧
+                    -- A timely block of the parent's proposer must not be in the last slot either.
                     (timely = true → other.proposerIndex = parent.proposerIndex →
                       other.slot.toNat + 1 < 2 ^ 64)) ∧
+                -- Take each timely block of the parent's proposer in the slot before.
+                --
+                -- The boost then applies exactly when each such block is the parent itself.
                 (apply = true ↔ ∀ (root : Root) (other : BeaconBlock preset fork),
                   store.blocks[root]? = some other →
                   (store.ptcTimeliness gloas)[root]? = some true →
@@ -884,16 +855,14 @@ theorem isPreviousSlotPayloadDecision_eq_false {node : ForkChoiceNode}
 
 This holds at every fork.
 
-From Gloas the node may be a payload node of the justified block.
-
-From Gloas the justified block must be older than the previous slot.
-
 It gives a receiver's justified state without assuming the read. -/
 theorem checkpointState_justified_of_getHead
     {nodes : List ForkChoiceNode} {head node : ForkChoiceNode}
     (tree : store.getFilteredNodeTree config = .ok nodes)
     (found : store.getHead config = .ok head) (member : node ∈ nodes)
+    -- From Gloas the node may be a payload node of the justified block.
     (other : node ≠ ⟨store.justifiedCheckpoint.root, .pending⟩)
+    -- From Gloas the justified block must be older than the previous slot.
     (justifiedEarly : .glamsterdam ≤ fork → ∃ current justifiedBlock,
       store.getCurrentSlot config = .ok current ∧
       store.blocks[store.justifiedCheckpoint.root]? = some justifiedBlock ∧

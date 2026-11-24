@@ -6,23 +6,9 @@ public import EthLib.Consensus.Proofs.ForkChoice.ForwardClock
 /-!
 # Proofs: where each latest vote of a store comes from
 
-The store records a latest vote only in the handler of an attestation.
+Each latest vote of a store with a forward clock is the vote of an attestation.
 
-So each latest vote of a store with a forward clock is the vote of an attestation with these facts.
-
-That attestation votes for a known block, from the slot of that block or later.
-
-Its target is in the epoch of its slot, with the checkpoint block of the chain of its vote as root.
-
-The store keeps the state of its target.
-
-In that state its committees pass the check of block processing, and the voter attests in it.
-
-When no tick sets the clock back, its slot is also before the current slot of the store.
-
-Those facts outlive the attestation: blocks and checkpoint states are only ever added.
-
-A new block takes a new root, so the ancestors of the known blocks stay the same.
+The facts behind that vote hold in the store, and they outlive the attestation.
 -/
 
 @[expose] public section
@@ -39,18 +25,6 @@ variable {config : Config} {store after : Store preset fork}
 
 /-- The facts behind a latest vote of a validator, from the attestation that cast it.
 
-The attestation votes for a known block, from the slot of that block or later.
-
-Its target is in the epoch of its slot, with the checkpoint block of the chain of its vote as root.
-
-The store keeps the state of that target.
-
-In that state the committees of the attestation pass the check of block processing.
-
-The validator is one of the attesters of the attestation in that state.
-
-The slot of the attestation is before the current slot of the store.
-
 The handler checks more, such as the signature, and those checks are left out here.
 
 The facts on the committees of the voter do not depend on them. -/
@@ -64,13 +38,15 @@ structure VoteOrigin (config : Config) (store : Store preset fork) (validator : 
   /-- The root of the target is the checkpoint block of the chain of the vote. -/
   targetRoot : store.getCheckpointBlock attestation.data.beaconBlockRoot
     attestation.data.target.epoch = .ok attestation.data.target.root
-  /-- The state of the target passes the committees, and the validator attests in it. -/
+  /-- The store keeps the state of the target, and the validator attests in it.
+
+  In that state the committees of the attestation pass the check of block processing. -/
   committees : ∃ targetState indexed,
     store.checkpointStates[attestation.data.target]? = some targetState ∧
       checkAttestationCommittees targetState attestation = .ok () ∧
       getIndexedAttestation targetState attestation = .ok indexed ∧
       validator ∈ indexed.attestingIndices.data.toList
-  /-- The slot is before the current slot. -/
+  /-- The slot is before the current slot of the store. -/
   past : ∃ current, store.getCurrentSlot config = .ok current ∧ attestation.data.slot < current
 
 /-- Each latest vote of the store is the vote of an attestation, with the facts behind it. -/
@@ -80,7 +56,9 @@ def VotesHaveOrigins (config : Config) (store : Store preset fork) : Prop :=
       ∃ attestation, message = LatestMessage.ofAttestation attestation ∧
         store.VoteOrigin config validator attestation
 
-/-! ## The facts outlive the step that set them -/
+/-! ## The facts outlive the step that set them
+
+Blocks and checkpoint states are only ever added. -/
 
 /-- The facts behind a vote hold in a later store that keeps every block and checkpoint state.
 
@@ -289,6 +267,8 @@ variable {config : Config} {anchorState : BeaconState preset fork}
 
 /-- Each latest vote of a store with a forward clock is the vote of some attestation.
 
+The store records a latest vote only in the handler of an attestation.
+
 The facts behind that vote hold in the store. -/
 theorem Store.ForwardReachable.votesHaveOrigins
     (forward : Store.ForwardReachable config anchorState anchorBlock store) :
@@ -303,6 +283,7 @@ theorem Store.ForwardReachable.votesHaveOrigins
     intro validator message found
     rw [(Store.onTick_checkpointStates_latestMessages ticked).2] at found
     obtain ⟨attestation, rfl, origin⟩ := ih found
+    -- A forward tick never sets the clock back, so the vote stays before the current slot.
     refine ⟨attestation, rfl, origin.mono (fun known => ?_) (fun known => ?_)
       (Store.exists_getCurrentSlot_onTick_ge forward ticked)⟩
     · rw [(Store.onTick_frame ticked).2.2.1]
@@ -313,6 +294,7 @@ theorem Store.ForwardReachable.votesHaveOrigins
     intro validator message found
     rw [(Store.onBlock_checkpointStates_latestMessages added).2] at found
     obtain ⟨attestation, rfl, origin⟩ := ih found
+    -- A new block takes a new root, so the ancestors of the known blocks stay the same.
     refine ⟨attestation, rfl, origin.mono (Store.onBlock_blocks_of_found added)
       (fun known => ?_) (fun slotOk =>
         ⟨_, slotOk ▸ (Store.onBlock_sameClock added).getCurrentSlot, UInt64.le_refl _⟩)⟩

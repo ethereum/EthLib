@@ -8,19 +8,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.Reachable
 
 When the execution layer finds a payload invalid, the store drops some blocks.
 
-Before Gloas the dropped blocks are exactly the known blocks that descend from one known block.
-
-From Gloas they are the known blocks that descend from one known block with its payload.
-
-That block stays without its payload, and no vote left supports it with that payload.
-
-So a block that stays never has a dropped parent.
-
-A linked store therefore stays linked, and before Gloas its head is still the head of LMD-GHOST.
-
 The latest valid hash decides where the removal starts.
-
-Each root keeps both its block and its state, or loses both.
 -/
 
 @[expose] public section
@@ -965,24 +953,23 @@ theorem firstInvalidPayload_of_absent {gloas : .glamsterdam ≤ fork} {hash : Ha
     exact absurd (lower root child parent found parentFound) notLower
 
 /-- The walk from Gloas keeps its candidate when its chain builds on no payload newer than the hash.
-
-The walk starts at a block that the store holds.
-
-The named block is the nearest block of the chain that builds on the hash.
-
-No block that descends from the named block, up to the start, builds on its parent's payload.
-
-That needs each known parent at a lower slot. -/
+-/
 theorem firstInvalidPayload_of_chain_empty {gloas : .glamsterdam ≤ fork} {hash : Hash32}
     {candidate root named : Root} {child namedBlock : BeaconBlock preset fork}
+    -- Each known parent must be at a lower slot.
+    --
+    -- The walk starts at a block that the store holds.
     (lower : store.ParentsBelow) (found : store.blocks[root]? = some child)
     (namedFound : store.blocks[named]? = some namedBlock)
+    -- The named block builds on the hash.
     (names : (namedBlock.body.signedExecutionPayloadBid gloas).message.parentBlockHash = hash)
     (descends : (blockTree lower).Ancestor (some named) (some root))
+    -- It is the nearest block of the chain that builds on the hash.
     (between : ∀ x block, store.blocks[x]? = some block →
       (blockTree lower).Ancestor (some named) (some x) →
       (blockTree lower).Ancestor (some x) (some root) → x ≠ named →
       (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash ≠ hash)
+    -- No block that descends from the named block, up to the start, builds on its parent's payload.
     (empty : ∀ x block parent, store.blocks[x]? = some block →
       store.blocks[block.parentRoot]? = some parent →
       (blockTree lower).Ancestor (some named) (some block.parentRoot) →
@@ -1031,34 +1018,30 @@ theorem firstInvalidPayload_of_chain_empty {gloas : .glamsterdam ≤ fork} {hash
 
 /-- The walk from Gloas finds the block of its chain with the earliest payload newer than the hash.
 
-The walk starts at a block that the store holds.
-
-The named block is the nearest block of the chain that builds on the hash.
-
-The found block is the named block or descends from it.
-
-Its child on the chain builds on its payload.
-
-No block that descends from the named block, up to the found block, builds on its parent's payload.
-
-So the payload of the found block is the first on the chain after the latest valid payload.
-
-That needs each known parent at a lower slot. -/
+The payload of the found block is then the first on the chain after the latest valid payload. -/
 theorem firstInvalidPayload_of_chain_full {gloas : .glamsterdam ≤ fork} {hash : Hash32}
     {candidate root named first link : Root}
     {child namedBlock firstBlock linkBlock : BeaconBlock preset fork}
+    -- Each known parent must be at a lower slot.
+    --
+    -- The walk starts at a block that the store holds.
     (lower : store.ParentsBelow) (found : store.blocks[root]? = some child)
     (namedFound : store.blocks[named]? = some namedBlock)
+    -- The named block builds on the hash.
     (names : (namedBlock.body.signedExecutionPayloadBid gloas).message.parentBlockHash = hash)
+    -- It is the nearest block of the chain that builds on the hash.
     (between : ∀ x block, store.blocks[x]? = some block →
       (blockTree lower).Ancestor (some named) (some x) →
       (blockTree lower).Ancestor (some x) (some root) → x ≠ named →
       (block.body.signedExecutionPayloadBid gloas).message.parentBlockHash ≠ hash)
     (firstFound : store.blocks[first]? = some firstBlock)
+    -- The found block is the named block or descends from it.
     (reaches : (blockTree lower).Ancestor (some named) (some first))
     (linkFound : store.blocks[link]? = some linkBlock) (linked : linkBlock.parentRoot = first)
     (descends : (blockTree lower).Ancestor (some link) (some root))
+    -- The child of the found block on the chain builds on its payload.
     (full : parentPayloadStatus linkBlock firstBlock = .full)
+    -- From the named block up to the found block, no descendant builds on its parent's payload.
     (emptyAbove : ∀ x block parent, store.blocks[x]? = some block →
       store.blocks[block.parentRoot]? = some parent →
       (blockTree lower).Ancestor (some named) (some block.parentRoot) →

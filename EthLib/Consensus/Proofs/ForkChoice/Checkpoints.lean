@@ -8,42 +8,6 @@ public import EthLib.Consensus.Proofs.ForkChoice.ForwardClock
 
 The finalized epoch of a reachable store is at most its justified epoch.
 
-The same holds for the unrealized checkpoints, which become those of the store at a new epoch.
-
-The anchor state must keep the invariant of the state transition, as a genesis state does.
-
-Each valid block then keeps that invariant in the state after it, whose checkpoints are in order.
-
-A block writes the checkpoints of such a state, and those it reaches at the end of its epoch.
-
-A new epoch writes the unrealized checkpoints, which are in order too.
-
-The justified epoch of the store is at least the current justified epoch of each held state.
-
-A store pulls up the state of each block that it imports, by justification and finalization.
-
-Once the clock passes the epoch of a held block, the justified epoch is at least its pull-up's.
-
-The unrealized justified epoch is at least that pull-up's once the block arrives.
-
-From Gloas, a vote of the payload committee and an envelope keep the checkpoints.
-
-From Heze, an inclusion list keeps them too.
-
-The state of each checkpoint of the store keeps the invariant too.
-
-So does the state of a block pulled up to the current epoch.
-
-Both have whole effective balances when the largest effective balances of the preset are whole.
-
-The state of each checkpoint is the state of its block.
-
-It is processed to the start of the epoch of the checkpoint when it is before that start.
-
-Another module ties the finalized checkpoint to the justified one after the anchor epoch.
-
-There it is on the justified chain, or two runs bound the accountable stake or show hash evidence.
-
 Other proofs take each checkpoint of a block state after the anchor epoch.
 
 They show that it names an ancestor of that block.
@@ -138,6 +102,7 @@ namespace Store
 /-- The finalized epoch is at most the justified epoch, for both pairs of checkpoints. -/
 def EpochsOrdered (store : Store preset fork) : Prop :=
   store.finalizedCheckpoint.epoch ≤ store.justifiedCheckpoint.epoch ∧
+    -- The unrealized checkpoints become those of the store at a new epoch.
     store.unrealizedFinalizedCheckpoint.epoch ≤ store.unrealizedJustifiedCheckpoint.epoch
 
 /-- Every state that the store keeps for a block keeps the invariant of the state transition. -/
@@ -250,6 +215,7 @@ theorem onTickPerSlot_ordered {timeMs : UInt64} (ordered : store.EpochsOrdered)
   refine EpochsOrdered.of_checkpoints ?_ same
   rcases which with rfl | rfl
   · exact ordered
+  -- A new epoch writes the unrealized checkpoints, which are in order too.
   · exact updateCheckpoints_ordered ordered ordered.2
 
 /-- The catch-up loop keeps the checkpoints ordered. -/
@@ -319,6 +285,7 @@ theorem onBlock_statesHold {checks : SignatureChecks}
   rw [states, Std.TreeMap.getElem?_insert] at keptFound
   split at keptFound
   · cases keptFound
+    -- Each valid block keeps the invariant in the state after it, whose checkpoints are in order.
     exact (stateTransition_invariant (holds found) transition).1
   · exact holds keptFound
 
@@ -377,6 +344,9 @@ theorem onBlock_ordered_finalized {checks : SignatureChecks}
         · exact holds keptFound
       · rw [updateCheckpoints_blockStates, (updateProposerBoostRoot_frame boost).2.2.1,
           (recordBlockTimeliness_frame record).2.2.1]
+    -- A block writes the checkpoints of its state, which keeps the invariant.
+    --
+    -- It also writes those that it reaches at the end of its epoch.
     refine ⟨computePulledUpTip_ordered
       (updateCheckpoints_ordered boostedOrdered (finalized_le_currentJustified invariant.ordered))
       statesHold added, ?_⟩
@@ -866,34 +836,31 @@ private theorem unrealized_bounds (s : Store preset fork) (j f : Checkpoint) :
 
 /-- A block that the store adds runs the pull-up of its state, on a store with its checkpoints.
 
-A known block leaves the store as it was.
-
-A new block enters the store at its root, with the state after it.
-
-The store before the pull-up has the justified checkpoints of the store before the block.
-
-Its finalized checkpoint is that of the store before the block or that of the state.
-
-On that store with the state's checkpoints, the pull-up records the block's pulled-up checkpoint.
-
-It then updates the unrealized checkpoints.
-
-It also updates the realized ones for a block of an earlier epoch. -/
+On that store, the pull-up records the block's pulled-up checkpoint. -/
 theorem onBlock_pulledUp {before after : Store preset fork} {checks : SignatureChecks}
     {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork}
     (added : before.onBlock config checks sources signed = .ok after) :
+    -- A known block leaves the store as it was.
     after = before ∨ ∃ (blockRoot : Root) (state pulled : BeaconState preset fork)
         (base : Store preset fork) (epoch : Epoch),
       SszType.hashTreeRoot signed.message = .ok blockRoot ∧ ¬ before.blocks.contains blockRoot ∧
+      -- A new block enters the store at its root, with the state after it.
       after.blocks = before.blocks.insert blockRoot signed.message ∧
       after.blockStates = before.blockStates.insert blockRoot state ∧
+      -- The store pulls up the state of the block, by justification and finalization.
       processJustificationAndFinalization state = .ok pulled ∧
       before.getCurrentStoreEpoch config = .ok epoch ∧
+      -- The store before the pull-up has the old justified checkpoint or the state's current one.
       (base.justifiedCheckpoint = before.justifiedCheckpoint ∨
         base.justifiedCheckpoint = state.currentJustifiedCheckpoint) ∧
+      -- Its finalized checkpoint is that of the store before the block or that of the state.
       (base.finalizedCheckpoint = before.finalizedCheckpoint ∨
         base.finalizedCheckpoint = state.finalizedCheckpoint) ∧
+      -- Its unrealized justified checkpoint is that of the store before the block.
       base.unrealizedJustifiedCheckpoint = before.unrealizedJustifiedCheckpoint ∧
+      -- The pull-up then updates the unrealized checkpoints.
+      --
+      -- It also updates the realized ones for a block of an earlier epoch.
       ((computeEpochAtSlot preset signed.message.slot < epoch ∧
           after = (base.updateUnrealizedCheckpoints pulled.currentJustifiedCheckpoint
             pulled.finalizedCheckpoint).updateCheckpoints pulled.currentJustifiedCheckpoint
@@ -1178,7 +1145,12 @@ theorem Store.Reachable.checkpointStatesHold (anchor : Invariant anchorState)
 
 /-- The finalized epoch of a reachable store is at most its justified epoch.
 
-The anchor state must keep the invariant of the state transition. -/
+The anchor state must keep the invariant of the state transition, as a genesis state does.
+
+Another module ties the finalized checkpoint to the justified one after the anchor epoch.
+
+There it is on the justified chain, or two runs bound the accountable stake or show hash evidence.
+-/
 theorem Store.Reachable.finalized_le_justified (anchor : Invariant anchorState)
     (reachable : Store.Reachable config anchorState anchorBlock store) :
     store.finalizedCheckpoint.epoch ≤ store.justifiedCheckpoint.epoch :=
@@ -1317,12 +1289,6 @@ private theorem Store.ForwardReachable.adoption (anchor : Invariant anchorState)
 
 /-- Past the epoch of a held block, its pull-up is at most the justified checkpoint of the store.
 
-A block of an earlier epoch passes its pull-up to the store when it arrives.
-
-The first tick of a new epoch adopts the unrealized justified checkpoint.
-
-That checkpoint is at least the pull-up of each held block.
-
 The anchor state must keep the invariant of the state transition. -/
 theorem Store.ForwardReachable.justified_le_of_pulledUp (anchor : Invariant anchorState)
     (forward : Store.ForwardReachable config anchorState anchorBlock store)
@@ -1333,6 +1299,11 @@ theorem Store.ForwardReachable.justified_le_of_pulledUp (anchor : Invariant anch
     (run : processJustificationAndFinalization state = .ok pulled)
     (earlier : computeEpochAtSlot preset block.slot < computeEpochAtSlot preset current) :
     pulled.currentJustifiedCheckpoint.epoch ≤ store.justifiedCheckpoint.epoch := by
+  -- A block of an earlier epoch passes its pull-up to the store when it arrives.
+  --
+  -- The first tick of a new epoch adopts the unrealized justified checkpoint.
+  --
+  -- That checkpoint is at least the pull-up of each held block.
   obtain ⟨now, nowOk, adopted⟩ := forward.adoption anchor positive slots
   cases Except.ok.inj (currentOk.symm.trans nowOk)
   exact (adopted root block state pulled known held run).2 earlier
@@ -1376,11 +1347,10 @@ Each of its effective balances is a whole number of increments.
 
 This is the source of balances of the votes for the target of the current epoch.
 
-The anchor state must keep the invariant of the state transition.
-
-The largest effective balances of the preset must be whole numbers of increments. -/
+The anchor state must keep the invariant of the state transition. -/
 theorem Store.Reachable.getPulledUpHeadState_aligned (anchor : Invariant anchorState)
     (reachable : Store.Reachable config anchorState anchorBlock store)
+    -- The largest effective balances of the preset must be whole numbers of increments.
     (maxAligned : MaxEffectiveBalancesAligned preset) {head : Root}
     {state : BeaconState preset fork}
     (pulled : store.getPulledUpHeadState config head = .ok state) :

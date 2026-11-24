@@ -6,19 +6,11 @@ public import EthLib.Consensus.Proofs.ForkChoice.CheckpointBlocks
 /-!
 # Proofs: the realized justification of held blocks
 
-A state transition never lowers the current justified epoch of a state that keeps the invariant.
-
-So along a chain of held blocks the realized justification only grows.
-
-A block's voting source is its realized justification, or the unrealized one of its pull-up.
-
-So every voting source above a block is at least the block's realized justification.
+Along a chain of held blocks the realized justification only grows.
 
 The store's realized finality is the anchor's, or strictly before its realized justification.
 
 The store's realized justification is at most its unrealized justification.
-
-Justification finalizes a checkpoint only below one it justifies at the same time.
 -/
 
 @[expose] public section
@@ -125,7 +117,9 @@ section Transition
 variable {config : Config} {checks : SignatureChecks} {engine : ExecutionEngine preset fork}
   {state after : BeaconState preset fork} {a : ℕ}
 
-/-- A justification step keeps the finality order, and links bit 0 when it weighs the votes. -/
+/-- A justification step keeps the finality order, and links bit 0 when it weighs the votes.
+
+Justification finalizes a checkpoint only below one it justifies at the same time. -/
 private theorem justification_step (holds : Invariant state) (below : FinalBelow a state)
     (linked : BitLinked a state)
     (computed : processJustificationAndFinalization state = .ok after) :
@@ -310,7 +304,9 @@ private theorem walk_realized_mono {store : Store preset fork}
     anchorSlot walk tipStored (rooted ▸ baseStored)
   exact (rel ((reachable.ordered sound).2 baseStored)).2
 
-/-- Every descendant source is at least as recent as the root's realized justification. -/
+/-- Every descendant source is at least as recent as the root's realized justification.
+
+A block's voting source is its realized justification, or the unrealized one of its pull-up. -/
 theorem Store.Reachable.realized_le_source {config : Config}
     {anchorState : BeaconState preset fork}
     {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}

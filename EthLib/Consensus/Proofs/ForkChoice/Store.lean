@@ -6,29 +6,9 @@ public import EthLib.Consensus.Proofs.Time
 /-!
 # Proofs: the store of the fork choice
 
-Each error of the fork choice has its own code.
+These proofs cover the error codes and the new store, the walk to an ancestor, and descent.
 
-A new store holds its anchor, justified and finalized, and its clock is at the anchor's slot.
-
-The ancestor of a node at a slot is a known block at or below that slot.
-
-A node at or below the slot is its own ancestor, so every known node descends from itself.
-
-A node that descends from a known node sits at the slot of that node or later.
-
-The ancestor of a block at the slot of an earlier parent is the node that the block builds on.
-
-A node descends from its ancestor at any slot.
-
-Each node of a block descends from the pending node of its parent at an earlier slot.
-
-The walk to a lower slot can stop at a higher slot on the way, and go on from there.
-
-From Gloas the walk gives each parent an empty or full status.
-
-It reaches the same blocks whatever the status of its start.
-
-So at every fork, a checkpoint read goes through the checkpoint the root reads at a later epoch.
+They also cover the checkpoint block that a root reads at an epoch, at every fork.
 -/
 
 @[expose] public section
@@ -150,19 +130,19 @@ theorem getAncestor_step {node : ForkChoiceNode} {slot : Slot}
 
 /-- The ancestor of a block at the slot of its parent is the node that the block builds on.
 
-That node is the parent with the payload status that the block gives it.
-
-The walk may start from any node of the block.
-
-The store must hold the block and its parent, the parent at an earlier slot.
-
 This identifies the parent node counted by arXiv 2405.00549v4, Definition 5. -/
 theorem getAncestor_parent_of_slot_lt {node : ForkChoiceNode}
     {block parent : BeaconBlock preset fork}
+    -- The walk may start from any node of the block.
+    --
+    -- The store must hold that block.
     (found : store.blocks[node.root]? = some block)
+    -- The store must hold the parent too.
     (parentFound : store.blocks[block.parentRoot]? = some parent)
+    -- The parent is at an earlier slot.
     (lower : parent.slot < block.slot) :
     store.getAncestor node parent.slot =
+      -- That node is the parent with the payload status that the block gives it.
       .ok ⟨block.parentRoot, parentPayloadStatus block parent⟩ := by
   rw [getAncestor_step found (UInt64.not_le.mpr lower) parentFound lower]
   exact getAncestor_of_le parentFound (UInt64.le_refl _)

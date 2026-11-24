@@ -11,35 +11,7 @@ From Gloas the head rule of the store is the rule of the LMD-GHOST model over no
 
 A node of the model is a block with its payload pending, empty or full, as EIP-7732 says.
 
-The tree of nodes stands over the tree of the known blocks of the store.
-
-A pending node hangs under the empty or the full node of its parent, as its bid builds on it.
-
-A vote supports the node that the store gives it.
-
-That is the pending node in the slot of its block, and later the empty or the full node.
-
-The theorem holds away from the payload decisions of the previous slot.
-
-There the payload committee and the proposer decide, which the model leaves out.
-
-When the store applies the boost, it counts as one more vote.
-
-That vote is for the pending node of the boosted block.
-
-A viable boosted block whose parent is from the previous slot is left out.
-
-The empty or full node of that parent is then a viable payload decision of the previous slot.
-
-A tie between two children goes to the greater root, then to the greater status number.
-
-Take a viable node whose votes exceed half of the sum of the stake and the score of the boost.
-
-Those votes leave out the boost.
-
-The head then descends from it.
-
-That holds away from the payload decisions of the previous slot.
+A viable node whose votes exceed half of the stake and the boost has the head in its subtree.
 -/
 
 @[expose] public section
@@ -112,8 +84,9 @@ def buildsOnFull : Option Root → Bool
 variable {store} {lower : store.ParentsBelow}
 
 variable (lower) in
-/-- The tree of payload-status nodes over the tree of the store. -/
+/-- The tree of payload-status nodes over the tree of the known blocks of the store. -/
 def nodeTree : BlockTree (Option Root × Status) :=
+  -- A pending node hangs under the empty or the full node of its parent, as its bid builds on it.
   (blockTree lower).payloadTree store.buildsOnFull
 
 /-- The node of a block of the store hangs under the node of its parent that it builds on. -/
@@ -260,6 +233,9 @@ An equivocator has none. -/
 def latestNode (index : ValidatorIndex) : Option (Option Root × Status) :=
   if store.equivocatingIndices.contains index then none
   else store.latestMessages[index]?.bind fun message =>
+    -- A vote supports the node that the store gives it.
+    --
+    -- That is the pending node in the slot of its block, and later the empty or the full node.
     (store.getSupportedNode message).toOption.map (·.toModel)
 
 variable (lower) in
@@ -316,44 +292,44 @@ When that check fails, the model has no boost.
 Then the weight of each node that is not a payload decision of the previous slot fails too. -/
 def boostedNode (gloas : .glamsterdam ≤ fork) : Option (Option Root × Status) :=
   match store.shouldApplyProposerBoost config gloas with
+  -- When the store applies the boost, it counts as one more vote.
+  --
+  -- That vote is for the pending node of the boosted block.
   | .ok true => some (some store.proposerBoostRoot, none)
   | _ => none
 
 variable (store config) in
-/-- From Gloas, the score of the boost as a stake: the proposer score, from the justified state.
-
-It is 0 when the boost does not apply.
-
-It is also 0 when the proposer score fails.
-
-Then the weight of each node in the chain of the boosted block fails.
-
-A payload decision of the previous slot is the exception.
-
-So the head fails when the walk weighs such a node; otherwise no weight reads the score. -/
+/-- From Gloas, the score of the boost as a stake: the proposer score, from the justified state. -/
 def boostScoreOfGloas (gloas : .glamsterdam ≤ fork) : ℕ :=
   match store.shouldApplyProposerBoost config gloas, store.getProposerScore config with
   | .ok true, .ok score => score.toNat
+  -- The score of the boost is 0 when the boost does not apply.
+  --
+  -- It is also 0 when the proposer score fails.
+  --
+  -- Then the weight of each node in the chain of the boosted block fails.
+  --
+  -- A payload decision of the previous slot is the exception.
+  --
+  -- So the head fails when the walk weighs such a node.
+  --
+  -- Otherwise no weight reads the score.
   | _, _ => 0
 
-/-- From Gloas, a known node weighs its weight in the model of nodes with the boost.
-
-The node must not be a payload decision of the previous slot.
-
-The boost is a vote for the pending node of the boosted block.
-
-Its stake is the score of the boost.
-
-The weights read a tally of the votes of the given state. -/
+/-- From Gloas, a known node weighs its weight in the model of nodes with the boost. -/
 theorem getWeight_eq_weight_withBoost_of_gloas {node : ForkChoiceNode}
     {block : BeaconBlock preset fork} {weightValue : Gwei} (gloas : .glamsterdam ≤ fork)
+    -- The node must not be a payload decision of the previous slot.
     (decision : store.isPreviousSlotPayloadDecision config node = .ok false)
+    -- The weights read a tally of the votes of the given state.
     (tallied : tally = .ok (store.tallyVotes state))
     (found : store.blocks[node.root]? = some block) (nodes : List ForkChoiceNode)
     (computed : store.getWeight config tally node = .ok weightValue) :
     weightValue.toNat =
       weight (voters state).insertNone
+        -- The stake of the boost vote is the score of the boost.
         (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
+        -- The boost is a vote for the pending node of the boosted block.
         ((nodeView lower nodes).withBoost (store.boostedNode config gloas)) node.toModel := by
   rw [weight_withBoost]
   cases boost : store.shouldApplyProposerBoost config gloas with
@@ -445,29 +421,26 @@ theorem mem_children_nodeView {nodes : List ForkChoiceNode} (gloas : .glamsterda
 
 /-- The order of nodes in a tie in the model: by root as bytes, then by status. -/
 abbrev nodeOrder : Option Root × Status → Lex (ℕ × ℕ) :=
+  -- A tie between two children goes to the greater root, then to the greater status number.
   nodeKey rootValue
 
 /-- From Gloas, the walk of the store ends where LMD-GHOST over nodes ends.
 
-That holds in any model of its weights.
-
-The model has the blocks of the view.
-
-Each viable node weighs in the model what the store computes.
-
-No viable node may be a payload decision of the previous slot.
-
-The walk starts from a node in the subtree of the pending node of the justified block. -/
+That holds in any model of its weights. -/
 private theorem getHeadFrom_eq_ghost_of_gloas_of_weights {ν : Type} {V : Finset ν} {w : ν → ℕ}
     {G : View ν (Option Root × Status) (nodeTree lower)} {nodes : List ForkChoiceNode}
     (gloas : .glamsterdam ≤ fork)
+    -- No viable node may be a payload decision of the previous slot.
     (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
     (tree : store.getFilteredNodeTree config = .ok nodes)
+    -- The model has the blocks of the view.
     (blocks : G.blocks = (nodeView lower nodes).blocks)
+    -- Each viable node weighs in the model what the store computes.
     (weighs : ∀ {node : ForkChoiceNode} {weightValue : Gwei}, node ∈ nodes →
       store.getWeight config tally node = .ok weightValue →
         weightValue.toNat = weight V w G node.toModel) :
     ∀ {start head : ForkChoiceNode},
+      -- The walk starts from a node in the subtree of the pending node of the justified block.
       (nodeTree lower).Ancestor (some store.justifiedCheckpoint.root, none) start.toModel →
       store.getHeadFrom config tally nodes start = .ok head →
       ghost V w G nodeOrder start.toModel = head.toModel := by
@@ -591,27 +564,22 @@ theorem getHeadFrom_eq_ghost_of_gloas {nodes : List ForkChoiceNode} (gloas : .gl
     getWeight_eq_weight_of_gloas gloas noBoost (noDecision _ inNodes) tallied found nodes
       computed
 
-/-- From Gloas, the walk of the store ends where LMD-GHOST over nodes with the boost ends.
-
-No viable node may be a payload decision of the previous slot.
-
-The boost is a vote for the pending node of the boosted block.
-
-Its stake is the score of the boost.
-
-It starts from a node in the subtree of the pending node of the justified block.
-
-The weights read a tally of the votes of the given state. -/
+/-- From Gloas, the walk of the store ends where LMD-GHOST over nodes with the boost ends. -/
 theorem getHeadFrom_eq_ghost_withBoost_of_gloas {nodes : List ForkChoiceNode}
     (gloas : .glamsterdam ≤ fork)
+    -- No viable node may be a payload decision of the previous slot.
     (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
+    -- The weights read a tally of the votes of the given state.
     (tallied : tally = .ok (store.tallyVotes state))
     (tree : store.getFilteredNodeTree config = .ok nodes) :
     ∀ {start head : ForkChoiceNode},
+      -- The walk starts from a node in the subtree of the pending node of the justified block.
       (nodeTree lower).Ancestor (some store.justifiedCheckpoint.root, none) start.toModel →
       store.getHeadFrom config tally nodes start = .ok head →
       ghost (voters state).insertNone
+        -- The stake of the boost vote is the score of the boost.
         (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
+        -- The boost is a vote for the pending node of the boosted block.
         ((nodeView lower nodes).withBoost (store.boostedNode config gloas)) nodeOrder
         start.toModel = head.toModel :=
   getHeadFrom_eq_ghost_of_gloas_of_weights
@@ -624,25 +592,28 @@ theorem getHeadFrom_eq_ghost_withBoost_of_gloas {nodes : List ForkChoiceNode}
 variable (lower) in
 /-- From Gloas, the head of the store is the head of LMD-GHOST over nodes.
 
-No viable node may be a payload decision of the previous slot, and the boost must not apply.
-
-Each known block must sit at a later slot than its known parent, and some node must be viable.
-
-The model starts at the pending node of the justified block, over the view of the viable nodes.
-
-Its voters are the validators active and not slashed in the justified state.
-
-Its stakes are their effective balances, and an equivocator has no vote.
-
-A tie goes to the greater root, as bytes, then to the greater status number. -/
+Each known block must sit at a later slot than its known parent. -/
 theorem getHead_eq_ghost_of_gloas {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
     (gloas : .glamsterdam ≤ fork)
+    -- The boost must not apply.
     (noBoost : store.shouldApplyProposerBoost config gloas = .ok false)
+    -- No viable node may be a payload decision of the previous slot.
+    --
+    -- There the payload committee and the proposer decide, which the model leaves out.
     (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    -- Some node must be viable.
     (tree : store.getFilteredNodeTree config = .ok nodes) (someViable : nodes ≠ [])
     (found : store.getHead config = .ok head) :
+    -- The voters are the validators active and not slashed in the justified state.
+    --
+    -- Their stakes are their effective balances, and an equivocator has no vote.
+    --
+    -- The model runs over the view of the viable nodes.
+    --
+    -- A tie goes to the greater root, as bytes, then to the greater status number.
     ghost (voters state) (balanceAt state) (nodeView lower nodes) nodeOrder
+      -- The model starts at the pending node of the justified block.
       (some store.justifiedCheckpoint.root, none) = head.toModel := by
   have notEmpty : ¬ (.glamsterdam ≤ fork ∧ nodes.isEmpty = true) :=
     fun ⟨_, empty⟩ => someViable (List.isEmpty_iff.mp empty)
@@ -653,34 +624,36 @@ theorem getHead_eq_ghost_of_gloas {nodes : List ForkChoiceNode} {head : ForkChoi
 variable (lower) in
 /-- From Gloas, the head of the store is the head of LMD-GHOST over nodes with the boost.
 
-No viable node may be a payload decision of the previous slot.
-
-So a viable boosted block must not build on a block of the previous slot.
-
-Each known block must sit at a later slot than its known parent, and some node must be viable.
-
-The model starts at the pending node of the justified block, over the view of the viable nodes.
-
-Its voters are the validators active and not slashed in the justified state.
-
-Its stakes are their effective balances, and an equivocator has no vote.
-
-The boost is one more vote, for the pending node of the boosted block.
-
-Its stake is the score of the boost.
-
-When the boost does not apply, that vote is absent.
-
-A tie goes to the greater root, as bytes, then to the greater status number. -/
+Each known block must sit at a later slot than its known parent. -/
 theorem getHead_eq_ghost_withBoost_of_gloas {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
     (gloas : .glamsterdam ≤ fork)
+    -- No viable node may be a payload decision of the previous slot.
+    --
+    -- So a viable boosted block must not build on a block of the previous slot.
+    --
+    -- The empty or full node of such a parent is then a viable payload decision of that slot.
     (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    -- Some node must be viable.
     (tree : store.getFilteredNodeTree config = .ok nodes) (someViable : nodes ≠ [])
     (found : store.getHead config = .ok head) :
+    -- The voters are the validators active and not slashed in the justified state.
+    --
+    -- The boost is one more vote.
     ghost (voters state).insertNone
+      -- The stakes are their effective balances, and an equivocator has no vote.
+      --
+      -- The stake of the boost is its score.
       (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
+      -- The model runs over the view of the viable nodes.
+      --
+      -- The boost votes for the pending node of the boosted block.
+      --
+      -- When the boost does not apply, that vote is absent.
+      --
+      -- A tie goes to the greater root, as bytes, then to the greater status number.
       ((nodeView lower nodes).withBoost (store.boostedNode config gloas)) nodeOrder
+      -- The model starts at the pending node of the justified block.
       (some store.justifiedCheckpoint.root, none) = head.toModel := by
   have notEmpty : ¬ (.glamsterdam ≤ fork ∧ nodes.isEmpty = true) :=
     fun ⟨_, empty⟩ => someViable (List.isEmpty_iff.mp empty)
@@ -744,31 +717,26 @@ theorem latestNode_ne_empty (gloas : .glamsterdam ≤ fork)
   · simp [getSupportedNode_of_same_slot gloas found (UInt64.not_lt.mp later), Except.toOption,
       ForkChoiceNode.toModel, PayloadStatus.toStatus] at vote
 
-/-- From Gloas, the head of a model of nodes is the full node of the head of a model of blocks.
-
-The model of nodes has the blocks of the view of nodes.
-
-The model of blocks has the blocks of the view of blocks.
-
-A vote of the model of blocks is the block of the vote of the model of nodes.
-
-No vote of the model of nodes is for an empty node.
-
-Every known block builds on the full node of its known parent.
-
-The full node of each viable block is viable, and some node is viable. -/
+/-- From Gloas, the head of a model of nodes is the full node of the head of a model of blocks. -/
 private theorem ghost_full_of_gloas {ν : Type} {V : Finset ν} {w : ν → ℕ}
     {N : View ν (Option Root × Status) (nodeTree lower)}
     {G : View ν (Option Root) (blockTree lower)} {nodes : List ForkChoiceNode}
     {head : ForkChoiceNode}
+    -- Every known block builds on the full node of its known parent.
     (fullParents : ∀ (root : Root) (block parent : BeaconBlock preset fork),
       store.blocks[root]? = some block → store.blocks[block.parentRoot]? = some parent →
       parentPayloadStatus block parent = .full)
+    -- Some node is viable.
     (tree : store.getFilteredNodeTree config = .ok nodes) (someViable : nodes ≠ [])
+    -- The full node of each viable block is viable.
     (fullViable : ∀ n ∈ nodes, ⟨n.root, .full⟩ ∈ nodes)
+    -- The model of nodes has the blocks of the view of nodes.
     (nodeBlocks : N.blocks = (nodeView lower nodes).blocks)
+    -- The model of blocks has the blocks of the view of blocks.
     (blockBlocks : G.blocks = (blockView lower nodes).blocks)
+    -- No vote of the model of nodes is for an empty node.
     (hvote : ∀ v r, N.latest v ≠ some (r, some false))
+    -- A vote of the model of blocks is the block of the vote of the model of nodes.
     (hlatest : ∀ v, G.latest v = (N.latest v).map Prod.fst)
     (model : ghost V w N nodeOrder (some store.justifiedCheckpoint.root, none) = head.toModel) :
     head.payloadStatus = .full ∧
@@ -818,35 +786,32 @@ private theorem ghost_full_of_gloas {ν : Type} {V : Finset ν} {w : ν → ℕ}
 
 /-- From Gloas, when every payload is present, the head is the full node of the head over blocks.
 
-That is the rule that the head follows before Gloas, over the view of the viable blocks.
-
-That view reads each vote as the block of the node that the store gives it.
-
-Every known block builds on the full node of its known parent.
-
-Each vote from a later slot than its block says the payload is present.
-
-The full node of each viable block is viable.
-
-No viable node is a payload decision of the previous slot, and the boost does not apply.
-
-Some node is viable. -/
+That is the rule that the head follows before Gloas, over the view of the viable blocks. -/
 theorem getHead_eq_ghost_full_of_gloas {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
     (gloas : .glamsterdam ≤ fork)
+    -- Every known block builds on the full node of its known parent.
     (fullParents : ∀ (root : Root) (block parent : BeaconBlock preset fork),
       store.blocks[root]? = some block → store.blocks[block.parentRoot]? = some parent →
       parentPayloadStatus block parent = .full)
+    -- Each vote from a later slot than its block says the payload is present.
     (present : ∀ (index : ValidatorIndex) (message : LatestMessage fork)
       (block : BeaconBlock preset fork),
       store.latestMessages[index]? = some message → store.blocks[message.root]? = some block →
       block.slot < message.slot gloas → message.payloadPresent gloas = true)
+    -- The boost does not apply.
     (noBoost : store.shouldApplyProposerBoost config gloas = .ok false)
+    -- No viable node is a payload decision of the previous slot.
     (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    -- Some node is viable.
     (tree : store.getFilteredNodeTree config = .ok nodes) (someViable : nodes ≠ [])
+    -- The full node of each viable block is viable.
     (fullViable : ∀ n ∈ nodes, ⟨n.root, .full⟩ ∈ nodes)
     (found : store.getHead config = .ok head) :
     head.payloadStatus = .full ∧
+      -- The view of the viable blocks reads each vote as a block.
+      --
+      -- That block is the block of the node that the store gives the vote.
       some head.root = ghost (voters state) (balanceAt state) (blockView lower nodes) rootValue
         (some store.justifiedCheckpoint.root) :=
   ghost_full_of_gloas fullParents tree someViable fullViable rfl rfl
@@ -857,40 +822,36 @@ theorem getHead_eq_ghost_full_of_gloas {nodes : List ForkChoiceNode} {head : For
 
 Its root is the head over blocks with the boost.
 
-That is the rule that the head follows before Gloas, over the view of the viable blocks.
-
-That view reads each vote as the block of the node that the store gives it.
-
-When the boost applies, it is one more vote, for the boosted block.
-
-Its stake is the score of the boost.
-
-Every known block builds on the full node of its known parent.
-
-Each vote from a later slot than its block says the payload is present.
-
-The full node of each viable block is viable.
-
-No viable node is a payload decision of the previous slot.
-
-Some node is viable. -/
+That is the rule that the head follows before Gloas, over the view of the viable blocks. -/
 theorem getHead_eq_ghost_full_withBoost_of_gloas {nodes : List ForkChoiceNode}
     {head : ForkChoiceNode} (gloas : .glamsterdam ≤ fork)
+    -- Every known block builds on the full node of its known parent.
     (fullParents : ∀ (root : Root) (block parent : BeaconBlock preset fork),
       store.blocks[root]? = some block → store.blocks[block.parentRoot]? = some parent →
       parentPayloadStatus block parent = .full)
+    -- Each vote from a later slot than its block says the payload is present.
     (present : ∀ (index : ValidatorIndex) (message : LatestMessage fork)
       (block : BeaconBlock preset fork),
       store.latestMessages[index]? = some message → store.blocks[message.root]? = some block →
       block.slot < message.slot gloas → message.payloadPresent gloas = true)
+    -- No viable node is a payload decision of the previous slot.
     (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
+    -- Some node is viable.
     (tree : store.getFilteredNodeTree config = .ok nodes) (someViable : nodes ≠ [])
+    -- The full node of each viable block is viable.
     (fullViable : ∀ n ∈ nodes, ⟨n.root, .full⟩ ∈ nodes)
     (found : store.getHead config = .ok head) :
     head.payloadStatus = .full ∧
+      -- When the boost applies, it is one more vote.
       some head.root = ghost (voters state).insertNone
+        -- The stake of the boost is its score.
         (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
+        -- The view of the viable blocks reads each vote as a block.
+        --
+        -- That block is the block of the node that the store gives the vote.
+        --
+        -- The boost votes for the boosted block.
         ((blockView lower nodes).withBoost ((store.boostedNode config gloas).map Prod.fst))
         rootValue (some store.justifiedCheckpoint.root) := by
   refine ghost_full_of_gloas fullParents tree someViable fullViable rfl rfl ?_ ?_
@@ -1089,31 +1050,27 @@ theorem full_mem_getFilteredNodeTree {nodes : List ForkChoiceNode}
 
 Its root is the head over blocks.
 
-That is the rule that the head follows before Gloas, over the view of the viable blocks.
-
-Every known block builds on the full node of its known parent.
-
-The store has verified the payload of every known block.
-
-Each vote from a later slot than its block says the payload is present.
-
-Every node of a known block is a viable leaf.
-
-No viable node is a payload decision of the previous slot, and the boost does not apply. -/
+That is the rule that the head follows before Gloas, over the view of the viable blocks. -/
 theorem getHead_eq_ghost_full_of_verified {nodes : List ForkChoiceNode} {head : ForkChoiceNode}
     (gloas : .glamsterdam ≤ fork)
+    -- Every known block builds on the full node of its known parent.
     (fullParents : ∀ (root : Root) (block parent : BeaconBlock preset fork),
       store.blocks[root]? = some block → store.blocks[block.parentRoot]? = some parent →
       parentPayloadStatus block parent = .full)
+    -- The store has verified the payload of every known block.
     (verified : ∀ (root : Root) (block : BeaconBlock preset fork),
       store.blocks[root]? = some block → store.isPayloadVerified gloas root = true)
+    -- Each vote from a later slot than its block says the payload is present.
     (present : ∀ (index : ValidatorIndex) (message : LatestMessage fork)
       (block : BeaconBlock preset fork),
       store.latestMessages[index]? = some message → store.blocks[message.root]? = some block →
       block.slot < message.slot gloas → message.payloadPresent gloas = true)
+    -- Every node of a known block is a viable leaf.
     (viable : ∀ (node : ForkChoiceNode) (block : BeaconBlock preset fork),
       store.blocks[node.root]? = some block → store.isViableLeaf config node = .ok true)
+    -- The boost does not apply.
     (noBoost : store.shouldApplyProposerBoost config gloas = .ok false)
+    -- No viable node is a payload decision of the previous slot.
     (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
     (tree : store.getFilteredNodeTree config = .ok nodes)
@@ -1130,40 +1087,33 @@ theorem getHead_eq_ghost_full_of_verified {nodes : List ForkChoiceNode} {head : 
 
 Its root is the head over blocks with the boost.
 
-That is the rule that the head follows before Gloas, over the view of the viable blocks.
-
-When the boost applies, it is one more vote, for the boosted block.
-
-Its stake is the score of the boost.
-
-Every known block builds on the full node of its known parent.
-
-The store has verified the payload of every known block.
-
-Each vote from a later slot than its block says the payload is present.
-
-Every node of a known block is a viable leaf.
-
-No viable node is a payload decision of the previous slot. -/
+That is the rule that the head follows before Gloas, over the view of the viable blocks. -/
 theorem getHead_eq_ghost_full_withBoost_of_verified {nodes : List ForkChoiceNode}
     {head : ForkChoiceNode} (gloas : .glamsterdam ≤ fork)
+    -- Every known block builds on the full node of its known parent.
     (fullParents : ∀ (root : Root) (block parent : BeaconBlock preset fork),
       store.blocks[root]? = some block → store.blocks[block.parentRoot]? = some parent →
       parentPayloadStatus block parent = .full)
+    -- The store has verified the payload of every known block.
     (verified : ∀ (root : Root) (block : BeaconBlock preset fork),
       store.blocks[root]? = some block → store.isPayloadVerified gloas root = true)
+    -- Each vote from a later slot than its block says the payload is present.
     (present : ∀ (index : ValidatorIndex) (message : LatestMessage fork)
       (block : BeaconBlock preset fork),
       store.latestMessages[index]? = some message → store.blocks[message.root]? = some block →
       block.slot < message.slot gloas → message.payloadPresent gloas = true)
+    -- Every node of a known block is a viable leaf.
     (viable : ∀ (node : ForkChoiceNode) (block : BeaconBlock preset fork),
       store.blocks[node.root]? = some block → store.isViableLeaf config node = .ok true)
+    -- No viable node is a payload decision of the previous slot.
     (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
     (tree : store.getFilteredNodeTree config = .ok nodes)
     (found : store.getHead config = .ok head) :
     head.payloadStatus = .full ∧
+      -- When the boost applies, it is one more vote, for the boosted block.
       some head.root = ghost (voters state).insertNone
+        -- The stake of the boost is its score.
         (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
         ((blockView lower nodes).withBoost ((store.boostedNode config gloas).map Prod.fst))
         rootValue (some store.justifiedCheckpoint.root) := by
@@ -1253,15 +1203,7 @@ theorem getHeadFrom_of_visited (lower : store.ParentsBelow) (gloas : .glamsterda
 open Models.ForkChoice in
 /-- From Gloas, the head walk from a node of the path descends from a viable target node.
 
-Below each node from that start to the target, the child toward it outweighs every viable rival.
-
-Rivals that are payload decisions of the previous slot are exempt from that comparison.
-
-When any distinct viable rival exists, decision or not, the child toward it has positive weight.
-
-The weights count the votes of the justified state and the boost.
-
-No viable node from the start to the target may be a payload decision of the previous slot. -/
+Below each node from that start to the target, the child toward it outweighs every viable rival. -/
 theorem isAncestor_getHeadFrom_of_sibling_bound (lower : store.ParentsBelow)
     (gloas : .glamsterdam ≤ fork) {nodes : List ForkChoiceNode}
     (tree : store.getFilteredNodeTree config = .ok nodes)
@@ -1269,14 +1211,17 @@ theorem isAncestor_getHeadFrom_of_sibling_bound (lower : store.ParentsBelow)
     {start target : ForkChoiceNode} (targetIn : target ∈ nodes)
     (below : (nodeTree lower).Ancestor (some store.justifiedCheckpoint.root, none) start.toModel)
     (onPath : (nodeTree lower).Ancestor start.toModel target.toModel)
+    -- No viable node from the start to the target may be a payload decision of the previous slot.
     (noDecision : ∀ n ∈ nodes, (nodeTree lower).Ancestor start.toModel n.toModel →
       (nodeTree lower).Ancestor n.toModel target.toModel →
       store.isPreviousSlotPayloadDecision config n = .ok false)
+    -- The weights count the votes of the justified state and the boost.
     (sibling : ∀ p ∈ nodes, ∀ c ∈ nodes, ∀ d ∈ nodes,
       (nodeTree lower).Ancestor start.toModel p.toModel →
       (nodeTree lower).IsChild c.toModel p.toModel →
       (nodeTree lower).IsChild d.toModel p.toModel →
       (nodeTree lower).Ancestor c.toModel target.toModel → d.toModel ≠ c.toModel →
+      -- Rivals that are payload decisions of the previous slot are exempt from that comparison.
       (store.isPreviousSlotPayloadDecision config d = .ok false →
         weight (voters state).insertNone
             (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
@@ -1284,6 +1229,9 @@ theorem isAncestor_getHeadFrom_of_sibling_bound (lower : store.ParentsBelow)
           weight (voters state).insertNone
             (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
             ((nodeView lower nodes).withBoost (store.boostedNode config gloas)) c.toModel) ∧
+      -- The child toward the target has positive weight when any distinct viable rival exists.
+      --
+      -- That rival may be a payload decision of the previous slot or not.
       0 < weight (voters state).insertNone
           (boostStake (balanceAt state) (store.boostScoreOfGloas config gloas))
           ((nodeView lower nodes).withBoost (store.boostedNode config gloas)) c.toModel)
@@ -1425,25 +1373,22 @@ Those votes leave out the boost.
 
 The head then descends from it.
 
-The ancestor check of the store returns true from the head back to that node.
-
-That holds from Gloas, away from the payload decisions of the previous slot.
-
-When the boost does not apply, its score is 0.
-
-Each known block must sit at a later slot than its known parent.
-
-A validator counts when it is active and not slashed in the justified state.
-
-Its stake is its effective balance, and the votes of the node are counted at that node. -/
+The ancestor check of the store returns true from the head back to that node. -/
 theorem isAncestor_getHead_of_majority_withBoost_of_gloas {nodes : List ForkChoiceNode}
+    -- Each known block must sit at a later slot than its known parent.
     {node head : ForkChoiceNode} {score : Gwei} (lower : store.ParentsBelow)
+    -- The theorem holds from Gloas.
     (gloas : .glamsterdam ≤ fork)
+    -- It holds away from the payload decisions of the previous slot.
     (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
+    -- A validator counts when it is active and not slashed in the justified state.
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
     (tree : store.getFilteredNodeTree config = .ok nodes) (viable : node ∈ nodes)
+    -- The votes of the node are counted at that node.
     (votes : store.getAttestationScore node state = .ok score)
+    -- The stake of a validator is its effective balance.
     (majority : Models.stake (balanceAt state) (voters state) +
+      -- When the boost does not apply, its score is 0.
       store.boostScoreOfGloas config gloas < 2 * score.toNat)
     (found : store.getHead config = .ok head) :
     store.isAncestor head node = .ok true := by
@@ -1474,22 +1419,20 @@ Those votes leave out the boost.
 
 The head is then in its subtree.
 
-That holds from Gloas, away from the payload decisions of the previous slot.
-
-When the boost does not apply, its score is 0.
-
-Each known block must sit at a later slot than its known parent.
-
-A validator counts when it is active and not slashed in the justified state.
-
-Its stake is its effective balance, and the votes of the node are counted at that node. -/
+Each known block must sit at a later slot than its known parent. -/
 theorem ancestor_getHead_of_majority_withBoost_of_gloas {nodes : List ForkChoiceNode}
+    -- The theorem holds from Gloas.
     {node head : ForkChoiceNode} {score : Gwei} (gloas : .glamsterdam ≤ fork)
+    -- It holds away from the payload decisions of the previous slot.
     (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
+    -- A validator counts when it is active and not slashed in the justified state.
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
     (tree : store.getFilteredNodeTree config = .ok nodes) (viable : node ∈ nodes)
+    -- The votes of the node are counted at that node.
     (votes : store.getAttestationScore node state = .ok score)
+    -- The stake of a validator is its effective balance.
     (majority : Models.stake (balanceAt state) (voters state) +
+      -- When the boost does not apply, its score is 0.
       store.boostScoreOfGloas config gloas < 2 * score.toNat)
     (found : store.getHead config = .ok head) :
     (nodeTree lower).Ancestor node.toModel head.toModel :=
@@ -1523,20 +1466,20 @@ theorem boostScoreOfGloas_le_boostScore (gloas : .glamsterdam ≤ fork) :
 variable (lower) in
 /-- When a viable node has more than half of the stake in votes, the head is in its subtree.
 
-That holds from Gloas, away from the payload decisions of the previous slot, and without a boost.
-
-Each known block must sit at a later slot than its known parent.
-
-A validator counts when it is active and not slashed in the justified state.
-
-Its stake is its effective balance, and the votes of the node are counted at that node. -/
+Each known block must sit at a later slot than its known parent. -/
 theorem ancestor_getHead_of_majority_of_gloas {nodes : List ForkChoiceNode}
+    -- The theorem holds from Gloas.
     {node head : ForkChoiceNode} {score : Gwei} (gloas : .glamsterdam ≤ fork)
+    -- It holds without a boost.
     (noBoost : store.shouldApplyProposerBoost config gloas = .ok false)
+    -- It holds away from the payload decisions of the previous slot.
     (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
+    -- A validator counts when it is active and not slashed in the justified state.
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
     (tree : store.getFilteredNodeTree config = .ok nodes) (viable : node ∈ nodes)
+    -- The votes of the node are counted at that node.
     (votes : store.getAttestationScore node state = .ok score)
+    -- The stake of a validator is its effective balance.
     (majority : Models.stake (balanceAt state) (voters state) < 2 * score.toNat)
     (found : store.getHead config = .ok head) :
     (nodeTree lower).Ancestor node.toModel head.toModel :=
@@ -1545,23 +1488,22 @@ theorem ancestor_getHead_of_majority_of_gloas {nodes : List ForkChoiceNode}
 
 /-- When a viable node has more than half of the stake in votes, the head descends from it.
 
-The ancestor check of the store returns true from the head back to that node.
-
-That holds from Gloas, away from the payload decisions of the previous slot, and without a boost.
-
-Each known block must sit at a later slot than its known parent.
-
-A validator counts when it is active and not slashed in the justified state.
-
-Its stake is its effective balance, and the votes of the node are counted at that node. -/
+The ancestor check of the store returns true from the head back to that node. -/
 theorem isAncestor_getHead_of_majority_of_gloas {nodes : List ForkChoiceNode}
+    -- Each known block must sit at a later slot than its known parent.
     {node head : ForkChoiceNode} {score : Gwei} (lower : store.ParentsBelow)
+    -- The theorem holds from Gloas.
     (gloas : .glamsterdam ≤ fork)
+    -- It holds without a boost.
     (noBoost : store.shouldApplyProposerBoost config gloas = .ok false)
+    -- It holds away from the payload decisions of the previous slot.
     (noDecision : ∀ n ∈ nodes, store.isPreviousSlotPayloadDecision config n = .ok false)
+    -- A validator counts when it is active and not slashed in the justified state.
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state)
     (tree : store.getFilteredNodeTree config = .ok nodes) (viable : node ∈ nodes)
+    -- The votes of the node are counted at that node.
     (votes : store.getAttestationScore node state = .ok score)
+    -- The stake of a validator is its effective balance.
     (majority : Models.stake (balanceAt state) (voters state) < 2 * score.toNat)
     (found : store.getHead config = .ok head) :
     store.isAncestor head node = .ok true :=
