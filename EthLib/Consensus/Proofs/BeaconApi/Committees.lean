@@ -9,7 +9,9 @@ public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.BeaconApi.Responses
 public import EthLib.Serialization.Proofs.Ssz.Typed.Collections
 public import EthLib.Serialization.Proofs.Ssz.Typed.Container
+public import EthLib.Consensus.Proofs.Transition.Trace
 import EthLib.Consensus.Proofs.BeaconApi.Encoding
+import EthLib.Consensus.Proofs.Transition.SyncCommitteeProvenance
 import EthLib.Serialization.Proofs.Ssz.Typed.Bounds
 
 /-!
@@ -326,6 +328,68 @@ theorem epochSyncCommittees_aggregates {state : BeaconState preset fork}
   rw [whole, List.take_length] at slices
   simp only [syncAggregates, ← List.flatMap_def]
   exact slices
+
+/-- A key that a validator of the registry holds names a validator. -/
+private theorem resolveValidatorId_pubkey_of_mem {state : BeaconState preset fork}
+    {key : Cryptography.Bls.BLSPubkey} (member : key ∈ validatorKeys state) :
+    ∃ index, resolveValidatorId state (.pubkey key) = some index := by
+  obtain ⟨validator, inside, rfl⟩ := List.mem_map.mp member
+  have named : (state.validators.data.findIdx? (·.pubkey == validator.pubkey)).isSome := by
+    rw [Array.findIdx?_isSome]
+    obtain ⟨i, lt, read⟩ := Array.mem_iff_getElem.mp (by simpa using inside)
+    exact Array.any_eq_true.mpr ⟨i, lt, by simp [read]⟩
+  obtain ⟨position, found⟩ := Option.isSome_iff_exists.mp named
+  exact ⟨UInt64.ofNat position, by simp only [resolveValidatorId, found, Option.map_some]⟩
+
+/-- The answer for an epoch has a value when the period lookup selects a committee.
+
+A validator of the registry must hold each key of that committee. -/
+private theorem epochSyncCommittees_ok_of_keys {state : BeaconState preset fork}
+    {altair : .altair ≤ fork} {epoch : Epoch} {committee : SyncCommittee preset}
+    (committeeOk : syncCommitteeOf state altair epoch = .ok committee)
+    (held : ∀ key ∈ committee.pubkeys.toList, key ∈ validatorKeys state) :
+    ∃ answer, epochSyncCommittees state altair epoch = .ok answer := by
+  simp only [epochSyncCommittees, committeeOk, bind, Except.bind, pure, Except.pure]
+  split
+  · rename_i message failed
+    obtain ⟨key, member, bad⟩ := exists_mem_of_mapM_error failed
+    obtain ⟨index, found⟩ := resolveValidatorId_pubkey_of_mem (held key member)
+    simp only [found, reduceCtorEq] at bad
+  · exact ⟨_, rfl⟩
+
+/-- Every error of the sync committee answer on a run from a genesis of deposits has code 400. -/
+theorem syncCommitteesResponse_error_code_of_run {config : Config} {checks : SignatureChecks}
+    {g x : ForkedBeaconState preset} (genesis : Genesis config checks g)
+    (run : Run config checks g x) {epoch : Option Epoch} {error : ErrorMessage}
+    (failed : syncCommitteesResponse x.state epoch = .error error) : error.code = 400 := by
+  unfold syncCommitteesResponse at failed
+  split at failed
+  · rename_i altair
+    -- Each key of the current and the next committee is the key of a validator of the registry.
+    obtain ⟨current, next⟩ := run.syncCommittee_keys genesis altair
+    let asked := epoch.getD (getCurrentEpoch x.state)
+    -- A selected committee with such keys gives the answer a value.
+    --
+    -- The lookup of a key names the first validator that holds it, so keys need not be distinct.
+    have served : ∀ committee, syncCommitteeOf x.state altair asked = .ok committee →
+        (∀ key ∈ committee.pubkeys.toList, key ∈ validatorKeys x.state) →
+        False := fun committee committeeOk held => by
+      obtain ⟨answer, answerOk⟩ := epochSyncCommittees_ok_of_keys committeeOk held
+      simp only [asked, answerOk, bind, Except.bind, pure, Except.pure, reduceCtorEq] at failed
+    -- The period lookup selects the current or the next committee.
+    by_cases same : computeSyncCommitteePeriod preset asked =
+        computeSyncCommitteePeriod preset (getCurrentEpoch x.state)
+    · exact (served _ (by simp [syncCommitteeOf, same]) current).elim
+    by_cases following : (computeSyncCommitteePeriod preset asked).toNat =
+        (computeSyncCommitteePeriod preset (getCurrentEpoch x.state)).toNat + 1
+    · exact (served _ (by simp [syncCommitteeOf, same, following]) next).elim
+    -- Any other period gets code 400.
+    simp [epochSyncCommittees, syncCommitteeOf, asked, same, following, bind, Except.bind]
+      at failed
+    rw [← failed]
+  -- Before Altair the state holds no sync committee, and the answer gets code 400.
+  · cases failed
+    rfl
 
 /-! ## Payload timeliness committees -/
 
