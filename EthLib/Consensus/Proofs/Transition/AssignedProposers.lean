@@ -1,24 +1,92 @@
 module
 
-public import EthLib.Consensus.Proofs.Transition.ValidatorStep
+public import EthLib.Consensus.Proofs.Proposers
+public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
+public import EthLib.Consensus.Proofs.Transition.Trace
+import EthLib.Consensus.Proofs.Transition.ActiveKept
+import EthLib.Consensus.Proofs.Transition.ForkBoundary
 import EthLib.Consensus.Proofs.Transition.ProposerLookahead
+import EthLib.Consensus.Proofs.Transition.StateTransition
 import EthLib.Consensus.Proofs.Transition.SyncCommitteeProvenance
 
 /-!
 # Proofs: along a run, each proposer of the lookahead names an assigned validator
 
-From Fulu the state keeps the proposers of this epoch and of the next `MIN_SEED_LOOKAHEAD` epochs.
+From Fulu the state keeps the proposers of the current epoch and the next `MIN_SEED_LOOKAHEAD` ones.
 
-Each was drawn active in the epoch it was drawn for, so its activation epoch is assigned.
+Each was drawn active in its epoch, so its activation epoch is assigned.
+
+No later step clears an assigned activation epoch.
 -/
 
 @[expose] public section
 
 namespace EthLib.Consensus
 
-open Base Internal
+open Base
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
+
+/-- From Fulu, each entry of the lookahead names a validator of the registry.
+
+That validator has an assigned activation epoch.
+
+Before Fulu the state has no lookahead, and the property holds. -/
+def AssignedProposers {f : Fork} (s : BeaconState preset f) : Prop :=
+  ∀ fulu : .fusaka ≤ f, ∀ i ∈ (s.proposerLookahead fulu).toList,
+    ∃ v, s.validators.data[i.toNat]? = some v ∧ v.activationEpoch ≠ FAR_FUTURE_EPOCH
+
+/-- Each proposer of an epoch names a validator with an assigned activation epoch. -/
+theorem getBeaconProposerIndices_assigned {f : Fork} {s : BeaconState preset f} {epoch : Epoch}
+    {proposers : Vector ValidatorIndex preset.SLOTS_PER_EPOCH.toNat}
+    (ok : getBeaconProposerIndices s epoch = .ok proposers) :
+    ∀ i ∈ proposers.toList,
+      ∃ v, s.validators.data[i.toNat]? = some v ∧ v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
+  intro i member
+  obtain ⟨v, found, active⟩ := getBeaconProposerIndices_active ok i member
+  exact ⟨v, found, Internal.assigned_of_active active⟩
+
+/-- Proposers stay assigned from one state to another that keeps the lifecycle of the registry.
+
+The two states may be of different forks. -/
+theorem AssignedProposers.transfer {f g : Fork} {s : BeaconState preset f}
+    {t : BeaconState preset g} (held : AssignedProposers s) (life : RegistryLifecycle s t)
+    -- From Fulu, the lookahead of the second state is a lookahead of the first.
+    (back : ∀ late : .fusaka ≤ g, ∃ early : .fusaka ≤ f,
+      t.proposerLookahead late = s.proposerLookahead early) : AssignedProposers t := by
+  intro late i member
+  obtain ⟨early, same⟩ := back late
+  rw [same] at member
+  obtain ⟨v, found, assigned⟩ := held early i member
+  obtain ⟨w, read, kept⟩ := life.validators i.toNat v found
+  exact ⟨w, read, (kept.activationEpoch assigned) ▸ assigned⟩
+
+/-- Each entry of a drawn lookahead names a validator with an assigned activation epoch. -/
+theorem initializeProposerLookahead_assigned {f : Fork} {s : BeaconState preset f}
+    {lookahead : Vector ValidatorIndex
+      ((preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat)}
+    (ok : initializeProposerLookahead s = .ok lookahead) :
+    ∀ i ∈ lookahead.toList,
+      ∃ v, s.validators.data[i.toNat]? = some v ∧ v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
+  intro i member
+  obtain ⟨k, inside, rfl⟩ := List.getElem_of_mem member
+  obtain ⟨_, _, -, computed, drawn⟩ :=
+    initializeProposerLookahead_drawn ok k (by simpa using inside)
+  exact getBeaconProposerIndices_assigned computed _ (by simpa using drawn)
+
+/-- A successful update of the lookahead keeps each of its proposers assigned. -/
+theorem AssignedProposers.refresh {f : Fork} {s t : BeaconState preset f}
+    {fulu : .fusaka ≤ f} (held : AssignedProposers s)
+    (ok : processProposerLookahead s fulu = .ok t) : AssignedProposers t := by
+  obtain ⟨epoch, _, rest⟩ := bind_ok_iff.mp ok
+  obtain ⟨last, drawn, final⟩ := bind_ok_iff.mp rest
+  cases final
+  intro _ i member
+  obtain ⟨j, inside, rfl⟩ := List.getElem_of_mem member
+  simp only [Vector.getElem_toList, Vector.getElem_ofFn]
+  split
+  · exact held fulu _ (by simp)
+  · exact getBeaconProposerIndices_assigned drawn _ (by simp)
 
 private theorem assignedProposers_processEpoch {fork : Fork} {s t : BeaconState preset fork}
     (held : AssignedProposers s) (ok : processEpoch config checks s = .ok t) :
@@ -35,7 +103,7 @@ private theorem assignedProposers_processEpoch {fork : Fork} {s t : BeaconState 
       simp only [EpochStage.Edge, fulu, ↓reduceDIte]
       exact draw
     have same := edge.validators_eq ⟨nofun, nofun, nofun⟩
-    exact (refreshed_proposers before draw).transfer (.of_data (by rw [validators, same]))
+    exact (before.refresh draw).transfer (.of_data (by rw [validators, same]))
       (fun late => ⟨late, congrFun lookEq late⟩)
   · exact fun later => absurd later fulu
 
@@ -73,7 +141,7 @@ private theorem assignedProposers_upgradeNext {pre : ForkedBeaconState preset}
       simp only [upgradeToFulu, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
         Except.ok.injEq] at upgraded
       obtain ⟨lookahead, drawn, rfl⟩ := upgraded
-      exact initialized_proposers drawn i member
+      exact initializeProposerLookahead_assigned drawn i member
     all_goals first
       | exact (early (by dsimp only; decide)).elim
       | (obtain ⟨_, _, rfl⟩ := ok; exact absurd late (by dsimp only; decide))

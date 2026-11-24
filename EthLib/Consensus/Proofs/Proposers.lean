@@ -210,7 +210,7 @@ theorem getBeaconProposerIndices_active {epoch : Epoch}
 
 /-- Each entry of a lookahead drawn from a state is a proposer that the state draws for its epoch.
 
-Entry `k` belongs to the epoch `k / SLOTS_PER_EPOCH` after the current one. -/
+Entry `k` belongs to the epoch that is `k / SLOTS_PER_EPOCH` epochs after the current one. -/
 theorem initializeProposerLookahead_drawn {lookahead : Vector ValidatorIndex
       ((preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat)}
     (computed : initializeProposerLookahead state = .ok lookahead) (k : Nat)

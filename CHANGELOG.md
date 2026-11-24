@@ -10,20 +10,15 @@ Not yet released.
 ### Proof additions
 
 - In Lean, `BeaconApi.dutiesResponse_proposer_error_code_of_run` (`Consensus/Proofs/BeaconApi/DutiesReachable.lean`) classifies the failures of a proposer answer ([#3585](https://github.com/ethereum/EthLib/issues/3585)).
-  From Fulu, at a state that a run from the genesis state of deposits reaches, such an answer that fails has code 400.
+  From Fulu, at a state that a run from the Phase 0 genesis state built from deposits reaches, such an answer that fails has code 400.
   It takes the bounds of `dutiesResponse_proposer_error_code` on the slots of the epoch and on the slot of the state.
   `Run.assignedProposers` (`Consensus/Proofs/Transition/AssignedProposers.lean`) says that along such a run, from Fulu, each entry of the lookahead names a validator with an assigned activation epoch.
-  The headline reads this invariant.
-  `initializeProposerLookahead_drawn` (`Consensus/Proofs/Proposers.lean`) is about any lookahead drawn from a state, as the upgrade to Fulu draws one.
-  It says that entry `k` is a proposer that the state draws for the epoch `k / SLOTS_PER_EPOCH` after the current one.
-  `LookaheadActive.upgradeToFulu` and `Internal.initialized_proposers` read it.
-  Six lemmas become public.
-  `Internal.assigned_draw` (`ValidatorStep.lean`) is read by `initialized_proposers` and `refreshed_proposers`.
-  `Internal.initialized_proposers` (`ValidatorStep.lean`) is read by the steps of `Run.assignedProposers` and by the upgrade to Fulu in `ValidatorStep.lean`.
-  `Internal.refreshed_proposers` (`ValidatorStep.lean`) is read by the steps of `Run.assignedProposers` and by the epoch stages in `ValidatorStep.lean`.
-  `Internal.AssignedProposers.transfer` (`ValidatorStep.lean`) relates states of two forks, and the steps of `Run.assignedProposers` and three proofs in `ValidatorStep.lean` read it.
-  `upgradeNext_proposerLookahead` (`ProposerLookahead.lean`) takes the Fulu bound of the state before the upgrade, and `proposerLookaheadShifted_upgradeNext` and the steps of `Run.assignedProposers` read it.
-  `registryLifecycle_processEpoch` (`RegistryLifecycle.lean`) is read by `registryLifecycle_advanceSlot` and the steps of `Run.assignedProposers`.
+  `BeaconApi.dutiesResponse_proposer_error_code_of_run` reads this invariant.
+  `initializeProposerLookahead_drawn` (`Consensus/Proofs/Proposers.lean`) says that entry `k` of a lookahead drawn from a state is a proposer that the state draws for the epoch that is `k / SLOTS_PER_EPOCH` epochs after the current one.
+  `Internal.AssignedProposers` (`Consensus/Proofs/Transition/ValidatorStep.lean`) becomes `AssignedProposers` (`Consensus/Proofs/Transition/AssignedProposers.lean`), with the same body.
+  Four lemmas about it become public there: `getBeaconProposerIndices_assigned`, `initializeProposerLookahead_assigned`, `AssignedProposers.transfer` and `AssignedProposers.refresh`.
+  `AssignedProposers.transfer` relates states of two forks.
+  `upgradeNext_proposerLookahead` (`Consensus/Proofs/Transition/ProposerLookahead.lean`) and `registryLifecycle_processEpoch` (`Consensus/Proofs/Transition/RegistryLifecycle.lean`) become public.
   No public statement changes.
 
 - In Lean, `syncCommitteesResponse_error_code_of_keys` (`Consensus/Proofs/BeaconApi/Committees.lean`) gives a condition under which every error of the sync committees answer has code 400 ([#3585](https://github.com/ethereum/EthLib/issues/3585)).

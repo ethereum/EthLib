@@ -16,6 +16,7 @@ import EthLib.Consensus.Proofs.Transition.ChainRoots
 import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
 import EthLib.Consensus.Proofs.Transition.RewardDeltas
 public import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
+public import EthLib.Consensus.Proofs.Transition.AssignedProposers
 import EthLib.Consensus.Proofs.Transition.InactivityLeakVoter
 import EthLib.Consensus.Proofs.Transition.ValidatorKeys
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
@@ -1027,11 +1028,6 @@ private theorem capped_setValidatorAt {f : Fork} {s t : BeaconState preset f}
   · exact capped w old
   · exact bound
 
-/-- Cached proposers retain their registry index and assigned activation epoch. -/
-def AssignedProposers {f : Fork} (s : BeaconState preset f) : Prop :=
-  ∀ fulu : .fusaka ≤ f, ∀ i ∈ (s.proposerLookahead fulu).toList,
-    ∃ v, s.validators.data[i.toNat]? = some v ∧ v.activationEpoch ≠ FAR_FUTURE_EPOCH
-
 /-- Each end of a queued consolidation has assigned activation at its stable index. -/
 def AssignedTargets {f : Fork} (s : BeaconState preset f) : Prop :=
   ∀ electra : .pectra ≤ f, ∀ entry ∈ (s.pendingConsolidations electra).data.toList,
@@ -1380,62 +1376,6 @@ private theorem assigned_of_slashable {v : Validator} {epoch : Epoch}
   have bound := v.withdrawableEpoch.toNat_lt
   change (2 ^ 64 - 1 : Nat) < v.withdrawableEpoch.toNat at less
   omega
-
-/-- Each proposer of an epoch names a validator with an assigned activation epoch. -/
-theorem assigned_draw {f : Fork} {s : BeaconState preset f} {epoch : Epoch}
-    {proposers : Vector ValidatorIndex preset.SLOTS_PER_EPOCH.toNat}
-    (ok : getBeaconProposerIndices s epoch = .ok proposers) :
-    ∀ i ∈ proposers.toList,
-      ∃ v, s.validators.data[i.toNat]? = some v ∧ v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-  intro i member
-  obtain ⟨v, found, active⟩ := getBeaconProposerIndices_active ok i member
-  exact ⟨v, found, assigned_of_active active⟩
-
-/-- From an assigned state, a step that keeps the registry lifecycle keeps assignedness.
-
-The lookahead of the second state is a lookahead of the first. -/
-theorem AssignedProposers.transfer {f g : Fork} {s : BeaconState preset f}
-    {t : BeaconState preset g} (held : AssignedProposers s) (life : RegistryLifecycle s t)
-    -- The lookahead of the second state is a lookahead of the first.
-    (back : ∀ late : .fusaka ≤ g, ∃ early : .fusaka ≤ f,
-      t.proposerLookahead late = s.proposerLookahead early) : AssignedProposers t := by
-  intro late i member
-  obtain ⟨early, same⟩ := back late
-  rw [same] at member
-  obtain ⟨v, found, assigned⟩ := held early i member
-  obtain ⟨w, read, kept⟩ := life.validators i.toNat v found
-  exact ⟨w, read, (kept.activationEpoch assigned) ▸ assigned⟩
-
-/-- Each entry of a drawn lookahead names a validator with an assigned activation epoch. -/
-theorem initialized_proposers {f : Fork} {s : BeaconState preset f}
-    {lookahead : Vector ValidatorIndex
-      ((preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat)}
-    (ok : initializeProposerLookahead s = .ok lookahead) :
-    ∀ i ∈ lookahead.toList,
-      ∃ v, s.validators.data[i.toNat]? = some v ∧ v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-  intro i member
-  obtain ⟨k, inside, rfl⟩ := List.getElem_of_mem member
-  obtain ⟨_, _, -, computed, drawn⟩ :=
-    initializeProposerLookahead_drawn ok k (by simpa using inside)
-  exact assigned_draw computed _ (by simpa using drawn)
-
-/-- A successful update of the lookahead keeps an assigned lookahead assigned. -/
-theorem refreshed_proposers {f : Fork} {s t : BeaconState preset f}
-    {fulu : .fusaka ≤ f} (held : AssignedProposers s)
-    (ok : processProposerLookahead s fulu = .ok t) : AssignedProposers t := by
-  obtain ⟨_, last, -, drawn, spec⟩ := processProposerLookahead_spec ok
-  -- As the lookahead stage, which reads no configuration or checks, the update keeps the registry.
-  have edge : EpochStage.Edge Config.mainnet .acceptAll .proposerLookahead s t := by
-    simp only [EpochStage.Edge, fulu, ↓reduceDIte]
-    exact ok
-  have same := edge.validators_eq ⟨nofun, nofun, nofun⟩
-  intro _ i member
-  obtain ⟨k, inside, rfl⟩ := List.getElem_of_mem member
-  simp only [Vector.getElem_toList, Vector.length_toList] at inside ⊢
-  rw [same, spec k inside]
-  split
-  · exact held fulu _ (by simp)
-  · exact assigned_draw drawn _ (by simp)
 
 structure CapStep (config : Config) {f h : Fork} (s : BeaconState preset f)
     (t : BeaconState preset h) : Prop where
@@ -3181,8 +3121,8 @@ private theorem CapStep.requests {f : Fork} {s t : BeaconState preset f}
     (trans (fold (fun _ _ _ => CapStepR.withdrawalRequest) withdrawals)
       (fold (fun _ _ _ => CapStepR.consolidationRequest order) consolidations))
 
-private theorem AssignedProposers.selected {f : Fork} {s : BeaconState preset f}
-    (held : AssignedProposers s) {proposer : ValidatorIndex}
+private theorem _root_.EthLib.Consensus.AssignedProposers.selected {f : Fork}
+    {s : BeaconState preset f} (held : AssignedProposers s) {proposer : ValidatorIndex}
     (ok : getBeaconProposerIndex s = .ok proposer) :
     ∃ v, s.validators.data[proposer.toNat]? = some v ∧
       v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
@@ -4096,7 +4036,7 @@ private theorem CapStep.epochEdge {f : Fork} {a b : BeaconState preset f} {k : E
   case proposerLookahead =>
     simp only [EpochStage.Edge] at edge
     split at edge
-    · have assigned := fun held => refreshed_proposers held edge
+    · have assigned := fun held => AssignedProposers.refresh held edge
       simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
         Except.ok.injEq] at edge
       obtain ⟨_, _, _, _, rfl⟩ := edge
@@ -4802,7 +4742,7 @@ private theorem CapStepR.upgrade {s : ForkedBeaconState preset}
     · obtain ⟨lookahead, initialized, final⟩ := bind_ok_iff.mp upgraded
       cases final
       intro _ i member
-      exact initialized_proposers (liftAccessor_ok.mp initialized) i member
+      exact initializeProposerLookahead_assigned (liftAccessor_ok.mp initialized) i member
     · obtain ⟨lookahead, initialized, final⟩ := bind_ok_iff.mp upgraded
       cases final
       intro electra entry member index named

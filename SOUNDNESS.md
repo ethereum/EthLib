@@ -6532,8 +6532,7 @@ It also needs the first slot after the epoch to fit, and the bound on the slot o
 `dutiesResponse_ptc_error_code` follows: such an answer fails only with code 400.
 `dutiesResponse_ptc_error` does not ask the epoch to be within the seed lookahead, so it covers the code 400 that an epoch past it gets.
 That error is reachable only at the next epoch, under a preset whose seed lookahead is zero.
-`Run.assignedProposers` bounds the lookahead along a run from the Phase 0 genesis state of deposits.
-From Fulu, each entry of the lookahead names a validator of the registry.
+`Run.assignedProposers` (`Consensus/Proofs/Transition/AssignedProposers.lean`) shows that along a run from the Phase 0 genesis state of deposits, from Fulu, each entry of the lookahead names a validator of the registry.
 `dutiesResponse_proposer_error_code_of_run` follows: at a state that such a run reaches, from Fulu, a proposer answer that fails has code 400.
 It needs the bounds of `dutiesResponse_proposer_error_code` on the slots of the epoch and on the slot of the state.
 These cases of code 500 remain without a theorem:
@@ -6542,6 +6541,8 @@ These cases of code 500 remain without a theorem:
   `dutiesResponse_proposer_internal_iff` gives code 500 exactly when such an entry is at a slot of the requested epoch.
   That holds for a served request: the first answer at the current epoch, or the second at an epoch of the seed lookahead.
   It also needs the slots of the epoch to fit in 64 bits, and the bound on the slot of the state.
+  `dutiesResponse_proposer_error_code_of_run` excludes such an entry only at a state that a run from the Phase 0 genesis state of deposits reaches.
+  As for the sync committees answer, it covers neither a chain whose genesis is at a later fork nor a checkpoint state with no run behind it.
 - Before Fulu, no theorem excludes a failed draw of the current epoch, which gives code 500 by `dutiesResponse_proposer_internal_iff_of_lt_fulu`.
   `dutiesResponse_proposer_error_of_lt_fulu` assumes that the draws of that epoch end (`ProposersDrawEnd`), as `getBeaconProposerIndices_ok` does.
   Under its other bounds, a draw of an epoch with active validators fails only for a product past 64 bits, or at `2^64` steps.

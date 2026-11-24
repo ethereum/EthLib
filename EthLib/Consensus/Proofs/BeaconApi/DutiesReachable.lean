@@ -1,7 +1,8 @@
 module
 
 public import EthLib.Consensus.Proofs.BeaconApi.Duties
-public import EthLib.Consensus.Proofs.Transition.AssignedProposers
+public import EthLib.Consensus.Proofs.Transition.Trace
+import EthLib.Consensus.Proofs.Transition.AssignedProposers
 
 /-!
 # Proofs: a proposer answer on a state that a run reaches
@@ -9,6 +10,8 @@ public import EthLib.Consensus.Proofs.Transition.AssignedProposers
 From Fulu a proposer answer reads the lookahead only for a served epoch.
 
 Along a run from genesis each entry names a validator, so looking it up in the registry cannot fail.
+
+So, under the two bounds on slots, such an answer fails only with code 400.
 -/
 
 @[expose] public section
@@ -19,7 +22,9 @@ open Base
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
-/-- Along a run from a genesis of deposits, a proposer answer from Fulu that fails has code 400.
+/-- From Fulu, a proposer answer on a state that a run reaches fails only with code 400.
+
+The run starts from a genesis state built from deposits.
 
 The slots of the requested epoch must fit in 64 bits.
 
