@@ -95,6 +95,40 @@ theorem dataCost_le_append (fork : Fork) (a b : ByteArray) :
   rw [dataCost_append]
   omega
 
+/-- From Istanbul, call data costs the standard price of a token for each of its tokens.
+
+[EIP-7623](https://eips.ethereum.org/EIPS/eip-7623#specification) writes the price so. -/
+theorem dataCost_eq_tokens {fork : Fork} (h : fork ≥ .istanbul) (data : ByteArray) :
+    dataCost fork data = TX_DATA_TOKEN_STANDARD * tokens data := by
+  -- From Istanbul a zero byte costs 4 and a nonzero byte 16, one and four tokens of 4 gas.
+  simp only [dataCost, tokens, gasSchedule, h, ite_true, TX_DATA_PER_ZERO, TX_DATA_TOKEN_STANDARD]
+  omega
+
+/-- The tokens of call data add up over concatenation. -/
+theorem tokens_append (a b : ByteArray) : tokens (a ++ b) = tokens a + tokens b := by
+  have ha := zeroBytes_le_size a
+  have hb := zeroBytes_le_size b
+  simp only [tokens, zeroBytes_append, ByteArray.size_append]
+  omega
+
+/-- Call data has at least one token per byte. -/
+theorem size_le_tokens (data : ByteArray) : data.size ≤ tokens data := by
+  have h := zeroBytes_le_size data
+  simp only [tokens]
+  omega
+
+/-- Call data has at most four tokens per byte. -/
+theorem tokens_le_four_mul_size (data : ByteArray) : tokens data ≤ 4 * data.size := by
+  have h := zeroBytes_le_size data
+  simp only [tokens]
+  omega
+
+/-- The floor tokens of call data add up over concatenation, at every fork. -/
+theorem floorTokens_append (fork : Fork) (a b : ByteArray) :
+    floorTokens fork (a ++ b) = floorTokens fork a + floorTokens fork b := by
+  unfold floorTokens
+  split <;> simp [tokens_append, ByteArray.size_append, Nat.mul_add]
+
 /-- The price of access lists adds up over concatenation. -/
 theorem accessListCost_append (fork : Fork) (a b : List Access) :
     accessListCost fork (a ++ b) = accessListCost fork a + accessListCost fork b := by

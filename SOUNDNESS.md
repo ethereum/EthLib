@@ -2365,6 +2365,10 @@ It needs a state with no fresh slot and a message that runs at its recipient, as
 Its proof counts the fresh slots of the accounts with a nonce or code, the only accounts where code runs, so that a rollback of a call that created an account cannot add a counted slot.
 From Hegotá a run fails as not yet specified, so there is no gas used to state.
 
+`dataCost_eq_tokens` (`Execution/Proofs/Transactions/Validity.lean`) proves that from Istanbul the intrinsic price of call data is 4 gas per token of EIP-7623.
+From Pectra to BPO5 the floor counts the same tokens, at 10 gas each, by the definition of `floorTokens`.
+`tokens_append` and `floorTokens_append` state that the counts add over concatenation, and `size_le_tokens` and `tokens_le_four_mul_size` bound them by one and four per byte.
+
 `prepareFirstFrame_of_applyAuthorizations` gives the first frame of a call that moves no ether, after its authorizations.
 `prepareFirstFrame_of_applyAuthorizations_error` proves that an error of the authorizations is the error of the first frame.
 `prepareFirstFrame_of_value_eq_zero` gives the first frame of a call that moves no ether and applies no authorization.
