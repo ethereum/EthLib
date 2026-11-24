@@ -78,6 +78,7 @@ def getBlobsOf (args : List PoolEntry × Bool × Nat × String × PyValue) : Res
   let some method := (request.getObjValAs? String "method").toOption
     | rejectArgument none "request: no method"
   let some version := getBlobsVersion method | rejectArgument none s!"no method {method}"
+  -- The parameters are decoded first, before any check of the fork or of the request size.
   let (hashes, bits) ← toResult "engine error"
     (getBlobsParams version (request.getObjValD "params"))
   let answer : Json ← match version, bits with
