@@ -14,31 +14,15 @@ import EthLib.Consensus.Proofs.ForkSchedule
 
 A bootstrap that the node serves from such a store starts a light client that trusts its block.
 
-The store holds the block under its own root, and the state after it with the state root it names.
-
-That result needs the forks from Capella to Heze in order.
-
-It also needs a lawful state type and nonzero preset sizes.
-
 Such a store also serves the bootstrap of each block of the fork of its slot.
 
 It refuses every other block.
-
-These served and refused cases need the post state of the block to be from the Altair fork epoch on.
-
-They need the anchor state at the slot of the anchor block, with the header of that block.
-
-Only the state roots of the two headers may differ.
-
-They also need Electra at or before Fulu and Gloas at or before Heze, with the same type and sizes.
 
 An invalid payload keeps the answer of each root whose block stays in the store.
 
 Recording whether a validated payload satisfies its inclusion lists keeps each bootstrap answer.
 
 So a bootstrap served after either step on a reachable store starts a light client too.
-
-That result needs the same forks, state type and preset sizes as the result for a reachable store.
 -/
 
 @[expose] public section
@@ -81,39 +65,40 @@ theorem bootstrapFor_valid_of_reachable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNa
       rw [bootstrapFor_of_missing (.inr heldState)] at served
       cases served
     | some state =>
+      -- The store holds the block under its own root.
+      --
+      -- It holds the state after the block with the state root that the block names.
       exact bootstrapFor_valid held heldState (reachable.root held)
         (stateRoot_blockStates reachable heldState held) ordered served
 
 /-- A reachable store serves the bootstrap of a root whose block and post state it holds.
 
-It needs that state to be from the Altair fork epoch on.
-
-It needs the schedule to give the fork of the store at the slot of the block.
-
-It needs the anchor state to sit at the slot of the anchor block.
-
-It needs the latest block header of the anchor state to match that block but for the state root.
-
-It needs the schedule to put Electra at or before Fulu, and Gloas at or before Heze.
-
 It needs the state type to be lawful, and the sizes of the preset in the block to be nonzero.
 
-It holds for a store of any fork from Altair, under any schedule with those two orders. -/
+It holds for a store of any fork from Altair.
+
+It holds under any schedule that puts Electra at or before Fulu, and Gloas at or before Heze. -/
 theorem bootstrapFor_ok_of_reachable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat]
     [NeZero preset.PTC_SIZE.toNat] [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat]
     [LawfulSszType (BeaconState preset fork)]
     (reachable : Store.Reachable config anchorState anchorBlock store)
+    -- The anchor state sits at the slot of the anchor block.
     (anchorSlot : anchorBlock.slot = anchorState.slot)
+    -- The latest block header of the anchor state matches that block but for the state root.
     (anchorHeader : anchorState.latestBlockHeader.slot = anchorBlock.slot ∧
       anchorState.latestBlockHeader.proposerIndex = anchorBlock.proposerIndex ∧
       anchorState.latestBlockHeader.parentRoot = anchorBlock.parentRoot ∧
       SszType.hashTreeRoot anchorBlock.body = .ok anchorState.latestBlockHeader.bodyRoot)
+    -- The schedule puts Electra at or before Fulu.
     (electraFulu : config.ELECTRA_FORK_EPOCH ≤ config.FULU_FORK_EPOCH)
+    -- It puts Gloas at or before Heze.
     (gloasHeze : config.GLOAS_FORK_EPOCH ≤ config.HEZE_FORK_EPOCH)
     {root : Root} {block : BeaconBlock preset fork} {state : BeaconState preset fork}
     (held : store.blocks[root]? = some block) (heldState : store.blockStates[root]? = some state)
+    -- That state is from the Altair fork epoch on.
     (fromAltair : config.ALTAIR_FORK_EPOCH ≤ computeEpochAtSlot preset state.slot)
+    -- The schedule gives the fork of the store at the slot of the block.
     (scheduled : config.forkAtEpoch (computeEpochAtSlot preset block.slot) = fork) :
     ∃ bootstrap, bootstrapFor config store root = .ok bootstrap := by
   obtain ⟨atBlock, slotHeld, proposerHeld, parentHeld, bodyHeld⟩ :=
@@ -144,31 +129,27 @@ theorem bootstrapFor_ok_of_reachable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
 
 That case is a block whose fork is not the fork that the schedule gives at its slot.
 
-It needs the store to hold the block and the post state of the root.
-
-It needs that state to be from the Altair fork epoch on.
-
-It needs the anchor state to sit at the slot of the anchor block.
-
-It needs the latest block header of the anchor state to match that block but for the state root.
-
-It needs the schedule to put Electra at or before Fulu, and Gloas at or before Heze.
-
 It needs the state type to be lawful, and the sizes of the preset in the block to be nonzero. -/
 theorem bootstrapFor_error_iff_of_reachable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat]
     [NeZero preset.PTC_SIZE.toNat] [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat]
     [LawfulSszType (BeaconState preset fork)]
     (reachable : Store.Reachable config anchorState anchorBlock store)
+    -- The anchor state sits at the slot of the anchor block.
     (anchorSlot : anchorBlock.slot = anchorState.slot)
+    -- The latest block header of the anchor state matches that block but for the state root.
     (anchorHeader : anchorState.latestBlockHeader.slot = anchorBlock.slot ∧
       anchorState.latestBlockHeader.proposerIndex = anchorBlock.proposerIndex ∧
       anchorState.latestBlockHeader.parentRoot = anchorBlock.parentRoot ∧
       SszType.hashTreeRoot anchorBlock.body = .ok anchorState.latestBlockHeader.bodyRoot)
+    -- The schedule puts Electra at or before Fulu.
     (electraFulu : config.ELECTRA_FORK_EPOCH ≤ config.FULU_FORK_EPOCH)
+    -- It puts Gloas at or before Heze.
     (gloasHeze : config.GLOAS_FORK_EPOCH ≤ config.HEZE_FORK_EPOCH)
     {root : Root} {block : BeaconBlock preset fork} {state : BeaconState preset fork}
+    -- The store holds the block and the post state of the root.
     (held : store.blocks[root]? = some block) (heldState : store.blockStates[root]? = some state)
+    -- That state is from the Altair fork epoch on.
     (fromAltair : config.ALTAIR_FORK_EPOCH ≤ computeEpochAtSlot preset state.slot) :
     bootstrapFor config store root = .error (noBootstrap root) ↔
       config.forkAtEpoch (computeEpochAtSlot preset block.slot) ≠ fork := by
@@ -208,8 +189,6 @@ theorem bootstrapFor_recordValidatedInclusionListSatisfaction {heze : .hegota �
 
 That light client trusts the block of the bootstrap.
 
-It needs the schedule to put the forks from Capella to Heze in order.
-
 It needs the sizes of the preset that the block and the state hold to be nonzero.
 
 It needs the state type to be lawful. -/
@@ -222,6 +201,7 @@ theorem bootstrapFor_valid_of_onInvalidPayload [NeZero preset.BYTES_PER_LOGS_BLO
     {after : Store preset fork}
     (invalidated : store.onInvalidPayload invalid latestValidHash = .ok after) {root : Root}
     {bootstrap : LightClientBootstrap preset fork}
+    -- The schedule puts the forks from Capella to Heze in order.
     (ordered : config.CAPELLA_FORK_EPOCH ≤ config.DENEB_FORK_EPOCH ∧
       config.DENEB_FORK_EPOCH ≤ config.ELECTRA_FORK_EPOCH ∧
       config.ELECTRA_FORK_EPOCH ≤ config.FULU_FORK_EPOCH ∧
@@ -241,8 +221,6 @@ theorem bootstrapFor_valid_of_onInvalidPayload [NeZero preset.BYTES_PER_LOGS_BLO
 
 That light client trusts the block of the bootstrap.
 
-It needs the schedule to put the forks from Capella to Heze in order.
-
 It needs the sizes of the preset that the block and the state hold to be nonzero.
 
 It needs the state type to be lawful. -/
@@ -256,6 +234,7 @@ theorem bootstrapFor_valid_of_recordValidatedInclusionListSatisfaction
     (recorded :
       store.recordValidatedInclusionListSatisfaction heze validated satisfied = .ok after)
     {root : Root} {bootstrap : LightClientBootstrap preset fork}
+    -- The schedule puts the forks from Capella to Heze in order.
     (ordered : config.CAPELLA_FORK_EPOCH ≤ config.DENEB_FORK_EPOCH ∧
       config.DENEB_FORK_EPOCH ≤ config.ELECTRA_FORK_EPOCH ∧
       config.ELECTRA_FORK_EPOCH ≤ config.FULU_FORK_EPOCH ∧

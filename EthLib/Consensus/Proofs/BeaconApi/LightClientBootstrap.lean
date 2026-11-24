@@ -19,6 +19,8 @@ A bootstrap that the node serves starts a light client that trusts its block.
 It refuses a block whose slot is of another fork than the store's, and refuses only with code 404.
 
 On the mainnet and minimal presets, its JSON and SSZ forms add no refusal of their own.
+
+The JSON answer passes each refusal on unchanged.
 -/
 
 @[expose] public section
@@ -234,25 +236,22 @@ theorem blockToLightClientHeader_exists [NeZero preset.BYTES_PER_LOGS_BLOOM.toNa
 
 /-- A state gives the bootstrap of a block when it passes the checks of the bootstrap on that block.
 
-It needs the fork to be from Altair, and the state to be from the Altair fork epoch on.
-
-It needs the state to sit at the slot of its latest block header.
-
-It needs that header, with the root of the state, to have the root of the block.
-
-It needs the index of the current sync committee at the slot of the state to be that of the fork.
-
 It needs the state type to be lawful, and the sizes of the preset in the block to be nonzero. -/
 theorem createLightClientBootstrap_exists [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat]
     [NeZero preset.PTC_SIZE.toNat] [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat]
     [LawfulSszType (BeaconState preset fork)] {config : Config} {state : BeaconState preset fork}
     {block : SignedBeaconBlock preset fork} {header : BeaconBlockHeader}
+    -- It needs the fork to be from Altair.
     (altair : .altair ≤ fork)
+    -- It needs the state to be from the Altair fork epoch on.
     (fromAltair : config.ALTAIR_FORK_EPOCH ≤ computeEpochAtSlot preset state.slot)
+    -- It needs the state to sit at the slot of its latest block header.
     (atBlock : state.slot = state.latestBlockHeader.slot)
+    -- It needs that header, with the root of the state, to have the root of the block.
     (headed : state.blockHeader = .ok header)
     (ofBlock : SszType.hashTreeRoot header = SszType.hashTreeRoot block.message)
+    -- It needs the index of the current sync committee, at the slot of the state, to be the fork's.
     (layout : currentSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config
       state.slot = .ok (currentSyncCommitteeGindex fork)) :
     ∃ bootstrap, createLightClientBootstrap config state block = .ok bootstrap := by
@@ -289,8 +288,6 @@ The store holds the block under its root, and the post state under the same root
 
 The block gives the root of that state, as the store checks when it takes the block.
 
-The schedule puts the forks from Capella to Heze in order.
-
 The state type is lawful, and the sizes of the preset that the block and state hold are nonzero. -/
 theorem bootstrapFor_valid [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat]
@@ -301,6 +298,7 @@ theorem bootstrapFor_valid [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     (held : store.blocks[root]? = some block) (heldState : store.blockStates[root]? = some state)
     (rooted : SszType.hashTreeRoot block = .ok root)
     (stated : SszType.hashTreeRoot state = .ok block.stateRoot)
+    -- The schedule puts the forks from Capella to Heze in order.
     (ordered : config.CAPELLA_FORK_EPOCH ≤ config.DENEB_FORK_EPOCH ∧
       config.DENEB_FORK_EPOCH ≤ config.ELECTRA_FORK_EPOCH ∧
       config.ELECTRA_FORK_EPOCH ≤ config.FULU_FORK_EPOCH ∧
@@ -375,6 +373,7 @@ theorem bootstrapFor_error {config : Config} {store : Store preset fork} {root :
   unfold bootstrapFor at refused
   split at refused
   · split at refused
+    -- The answer refuses a block of another fork than the fork of its slot.
     · cases refused
       rfl
     · simp only [Except.mapError] at refused
