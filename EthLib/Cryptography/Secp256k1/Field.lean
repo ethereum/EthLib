@@ -8,12 +8,6 @@ The two prime fields of secp256k1, from SEC 2 v2 §2.4.1.
 - `Fp` is the base field, integers mod `p = 2^256 - 2^32 - 977`, for the coordinates.
 - `Fn` is the scalar field, integers mod the order `n` of the generator.
 
-The private key and the integers `r` and `s` of a signature live in `Fn`.
-
-Each field is `Fin` of its modulus, so every element is below the modulus by construction.
-
-Core gives `Fin` its `+`, `-`, `*` and negation, all reduced mod the modulus.
-
 Other files of this module give the Montgomery form of `Fp`, the inverses and the square root.
 
 No division is defined.
@@ -38,10 +32,16 @@ instance Fp.instNeZeroModulus : NeZero Fp.modulus := ⟨by decide⟩
 
 instance Fn.instNeZeroModulus : NeZero Fn.modulus := ⟨by decide⟩
 
-/-- An element of the base field. -/
-abbrev Fp := Fin Fp.modulus
+/-- An element of the base field, for the coordinates. -/
+abbrev Fp :=
+  -- Each field is `Fin` of its modulus, so every element is below the modulus by construction.
+  --
+  -- Core gives `Fin` its `+`, `-`, `*` and negation, all reduced mod the modulus.
+  Fin Fp.modulus
 
-/-- An element of the scalar field. -/
+/-- An element of the scalar field.
+
+The private key and the integers `r` and `s` of a signature live in it. -/
 abbrev Fn := Fin Fn.modulus
 
 /-- `a^e` in `Fin m`, for `e < 2^fuel`, by square and multiply.

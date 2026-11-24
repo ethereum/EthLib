@@ -13,14 +13,7 @@ The decoder accepts exactly the two encodings of the points other than `O`.
 
 It returns the point that was encoded.
 
-- Decoding undoes either encoding.
-- A decoded point is on the curve and is not `O`, and the input is one of its two encodings.
-
 So the encodings are canonical: no other bytes decode to a point.
-
-The decoder rejects a coordinate of `p` or more, an unknown prefix, and a pair off the curve.
-
-It also rejects an `x` with no point, and `O`.
 -/
 
 @[expose] public section
@@ -159,7 +152,11 @@ theorem decode_encodeUncompressed {p : Point} (hp : p.isOnCurve = true) (hinf : 
     simp only [decode, encodeUncompressed, List.toList_toArray, List.cons_append, hlen, hne, htake, hdrop,
       Fp.ofBytes_toBytes, hp, bind, Except.bind, ite_true, ite_false, (by decide : ¬(64 : Nat) = 32)]
 
-/-- The decoder accepts exactly the encodings of the points other than `O`. -/
+/-- The decoder accepts exactly the encodings of the points other than `O`.
+
+It rejects a coordinate of `p` or more, an unknown prefix, and a pair off the curve.
+
+It also rejects an `x` with no point, and `O`. -/
 theorem decode_eq_ok_iff (bytes : ByteArray) (p : Point) :
     decode bytes = .ok p ↔
       p.isOnCurve = true ∧ p ≠ infinity ∧ (bytes = p.encodeCompressed ∨ bytes = p.encodeUncompressed) := by

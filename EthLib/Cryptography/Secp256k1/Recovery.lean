@@ -11,16 +11,9 @@ An Ethereum transaction carries a signature, not a public key.
 
 The key is rebuilt from the signature and the hash, then hashed into the sender's address.
 
-The recovery id picks the signer's point `R`, whose `x` is `r`.
+The recovery ids are those of Appendix F of the [Yellow Paper][yp], Shanghai version (`efc5f9a`).
 
-The id `0` names an even `y`, and `1` an odd `y`.
-
-That is the recovery identifier of Appendix F of the Yellow Paper, Shanghai version.
-
-It declares the ids 2 and 3 invalid.
-
-The source is `Paper.tex` at `efc5f9a`:
-<https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex>
+[yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
 
 @[expose] public section
@@ -43,6 +36,12 @@ def recover (hash : Vector UInt8 32) (r s : Nat) (recoveryId : Fin 2) : Except S
       -- Steps 1.1 to 1.3: `x = r + 0 n < p`, and `R` from `02 || X`, of even `y`.
       --
       -- Step 1.6.3 turns `R` into `-R`, of odd `y`: the id picks one of the two directly.
+      --
+      -- So the id picks the signer's point `R`, whose `x` is `r`.
+      --
+      -- The id `0` names an even `y`, and `1` an odd `y`.
+      --
+      -- The Yellow Paper declares the ids 2 and 3 invalid.
       let R ← Point.decompress (Fin.ofNat _ r) (recoveryId == 1)
       -- Step 1.4 asks `n R = O`, which holds for every point: the cofactor is 1.
       --

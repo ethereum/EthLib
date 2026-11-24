@@ -11,17 +11,11 @@ import EthLib.Cryptography.Proofs.Secp256k1.Montgomery
 /-!
 # Proofs: the double scalar multiplication of secp256k1
 
-The endomorphism scales the affine x coordinate by a cube root of unity.
-
-Since the generator spans the group, the map's effect on the generator determines its action.
-
-The signed digits preserve the four scalar products as they share the doubling chain.
-
-So on a point of the curve, the joint chain computes `k P + l G`.
+On a point of the curve, the joint chain computes `k P + l G`.
 
 The shared chain gives the same point.
 
-The double scalar multiplication then equals the shared chain on `Fp` for every input.
+The double scalar multiplication equals the shared chain on `Fp` for every input.
 -/
 
 @[expose] public section
@@ -60,7 +54,12 @@ theorem zeroElement_eq_true (x : Montgomery) : zeroElement x = true ↔ x = 0 :=
     Word64.Montgomery.mk.injEq, Word64.Raw.mk.injEq]
 
 
-/-! ## The endomorphism and its action on the group -/
+/-! ## The endomorphism and its action on the group
+
+It scales the affine x coordinate by a cube root of unity.
+
+Since the generator spans the group, the map's effect on the generator determines its action.
+-/
 
 private abbrev F := ZMod Fp.modulus
 
@@ -441,7 +440,10 @@ private theorem prepared_mul (a b : Montgomery) :
   simp only [toFin_embedding.map_mul, Jacobian.toZ_mul]
   ring
 
-/-! ## Signed digits and the doubling chain -/
+/-! ## Signed digits and the doubling chain
+
+The signed digits preserve the four scalar products as they share the doubling chain.
+-/
 
 /-! ## Models of the recoding
 

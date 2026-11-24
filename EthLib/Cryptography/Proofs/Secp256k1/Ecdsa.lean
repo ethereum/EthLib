@@ -7,13 +7,9 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Order
 /-!
 # Proofs: ECDSA verification over secp256k1
 
-- A signature made by the signing operation of SEC 1 v2 §4.1.3 verifies.
-- A valid signature has `r` and `s` in `[1, n - 1]`.
-- An invalid public key verifies nothing.
-- `(r, s)` and `(r, n - s)` are valid together, the malleability that EIP-2 removes.
-- Exactly one of `s` and `n - s` passes the low-s rule.
+Completeness, the range of a valid signature, and the malleability that the low-s rule removes.
 
-So the low-s rule keeps exactly one of the two signatures that every valid signature comes with.
+Sources: SEC 1 v2 §4.1.3, and EIP-2 for the low-s rule.
 -/
 
 @[expose] public section
@@ -158,7 +154,9 @@ theorem verify_neg_s (q : Point) (hash : Vector UInt8 32) (r : Nat) {s : Nat} (h
 
 /-- Exactly one of `s` and `n - s` passes the low-s rule, since `n` is odd.
 
-It holds for every `s`: `n - s` is `0` when `s >= n`, and `0` is low while `s` is not. -/
+It holds for every `s`: `n - s` is `0` when `s >= n`, and `0` is low while `s` is not.
+
+So the low-s rule keeps exactly one of the two signatures that every valid signature comes with. -/
 theorem isLowS_neg (s : Nat) : isLowS (Fn.modulus - s) = !isLowS s := by
   have hodd : Fn.modulus % 2 = 1 := by decide
   simp only [isLowS]

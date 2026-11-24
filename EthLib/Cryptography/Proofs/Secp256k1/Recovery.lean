@@ -8,19 +8,9 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
 /-!
 # Proofs: public key recovery
 
-- A recovered key verifies the signature.
-- Recovery returns the key of the signer, with the parity of `R` as the id.
-- When `r + n >= p`, every key that verifies a signature is recovered by one of the two ids.
-- The swap of `s` for `n - s` swaps the two ids: EIP-2 removes that malleability.
-- The two ids give two different keys.
+Soundness and completeness of public key recovery, and the malleability of its two ids.
 
-The bound `r + n >= p` covers every `r` but the smallest `p - n`.
-
-That is about `2^128` values of `r` out of `2^256`.
-
-Below it, `R` could have `x = r + n`, which only the ids 2 and 3 reach.
-
-Ethereum does not use those ids.
+Source: SEC 1 v2 §4.1.6.
 -/
 
 @[expose] public section
@@ -288,7 +278,11 @@ theorem verify_eq_true_iff {q : Point} {hash : Vector UInt8 32} {r s : Nat} :
 
 /-- Completeness of recovery: a key that verifies a signature is recovered by one of the two ids.
 
-The bound `p <= r + n` makes `x_R = r`: the other candidate `r + n` is not below `p`. -/
+The bound `p <= r + n` makes `x_R = r`: the other candidate `r + n` is not below `p`.
+
+The bound covers every `r` but the smallest `p - n`.
+
+That is about `2^128` values of `r` out of `2^256`. -/
 theorem recover_of_verify {q : Point} {hash : Vector UInt8 32} {r s : Nat} (hv : verify q hash r s = true)
     (hp : Fp.modulus ≤ r + Fn.modulus) : ∃ id : Fin 2, recover hash r s id = .ok q := by
   obtain ⟨hr, hs, hqi, hqc, x, y, hR, hx⟩ := verify_rebuilt hv
@@ -297,6 +291,10 @@ theorem recover_of_verify {q : Point} {hash : Vector UInt8 32} {r s : Nat} (hv :
     toZMod_ne_zero (fun h0 => by have h1 := congrArg Fin.val h0; simp at h1; omega)
   have hs0 : Fn.toZMod ⟨s, hs.2⟩ ≠ 0 :=
     toZMod_ne_zero (fun h0 => by have h1 := congrArg Fin.val h0; simp at h1; omega)
+  -- Below the bound, `R` could have `x = r + n`, which only the ids 2 and 3 reach.
+  --
+  -- Ethereum does not use those ids.
+  --
   -- `x_R = r`, since `x_R = r mod n` and `x_R < p <= r + n`.
   have hxr : x.val = r := Base.eq_of_mod_eq_of_lt hx x.isLt hp
   have hxx : (Fin.ofNat _ r : Fp) = x := Fin.ext (by rw [Fin.val_ofNat, ← hxr, Nat.mod_eq_of_lt x.isLt])
