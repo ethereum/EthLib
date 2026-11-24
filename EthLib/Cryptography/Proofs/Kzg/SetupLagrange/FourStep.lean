@@ -9,19 +9,9 @@ Take points `P_j` of order dividing `r`, for `j < 4096`, a scalar `c`, and `ζ` 
 
 The transform of the points has entry `T_k = sum_{j < 4096} (c ζ^(j k)) P_j`.
 
-Write `j = 256 j1 + 16 j2 + j3` and `k = k1 + 16 k2 + 256 k3`, each digit below 16.
+The entry `T_k` is computed in three rounds of transforms of size 16.
 
-Mod 4096, `j k` is `256 j1 k1 + 16 j2 k1 + 256 j2 k2 + j3 k1 + 16 j3 k2 + 256 j3 k3`.
-
-So `T_k` is computed in three rounds of transforms of size 16, each with the root `u = ζ^256`.
-
-1. `A(k1, j2, j3) = sum_{j1} u^(j1 k1) P_(256 j1 + 16 j2 + j3)`.
-2. `B(k1, k2, j3) = sum_{j2} u^(j2 k2) (c ζ^(16 j2 k1)) A(k1, j2, j3)`.
-3. `T_k = sum_{j3} u^(j3 k3) ζ^(j3 (k1 + 16 k2)) B(k1, k2, j3)`.
-
-The scalars act on points through their value below `r`.
-
-The statement holds for every `ζ` with `ζ^4096 = 1`, primitive or not.
+Each round uses the root `u = ζ^256`.
 -/
 
 @[expose] public section
@@ -45,6 +35,7 @@ private theorem scalar_eq {ζ : Fr} (hζ : ζ ^ 4096 = 1) (c : Fr) (j1 j2 j3 k1 
     (ζ ^ 256) ^ (j3 * k3) * (ζ ^ (j3 * (k1 + 16 * k2)) *
       ((ζ ^ 256) ^ (j2 * k2) * (c * ζ ^ (16 * j2 * k1) * (ζ ^ 256) ^ (j1 * k1)))) =
       c * ζ ^ ((256 * j1 + 16 * j2 + j3) * (k1 + 16 * k2 + 256 * k3)) := by
+  -- Mod 4096, `j k` is `256 j1 k1 + 16 j2 k1 + 256 j2 k2 + j3 k1 + 16 j3 k2 + 256 j3 k3`.
   have he : (256 * j1 + 16 * j2 + j3) * (k1 + 16 * k2 + 256 * k3) =
       (256 * (j3 * k3) + j3 * (k1 + 16 * k2) + 256 * (j2 * k2) + 16 * j2 * k1 + 256 * (j1 * k1)) +
         4096 * (j1 * k2 + 16 * j1 * k3 + j2 * k3) := by ring
@@ -68,7 +59,17 @@ private theorem sum_range_digits {M : Type*} [AddCommMonoid M] (f : Nat → M) :
         sum_congr rfl fun _ _ => sum_comm
     _ = _ := sum_comm
 
-/-- Entry `k1 + 16 k2 + 256 k3` of a transform of size 4096, as three rounds of size 16. -/
+/-- Entry `k1 + 16 k2 + 256 k3` of a transform of size 4096, as three rounds of size 16.
+
+Write `j = 256 j1 + 16 j2 + j3` and `k = k1 + 16 k2 + 256 k3`, each digit below 16.
+
+1. `A(k1, j2, j3) = sum_{j1} u^(j1 k1) P_(256 j1 + 16 j2 + j3)`.
+2. `B(k1, k2, j3) = sum_{j2} u^(j2 k2) (c ζ^(16 j2 k1)) A(k1, j2, j3)`.
+3. `T_k = sum_{j3} u^(j3 k3) ζ^(j3 (k1 + 16 k2)) B(k1, k2, j3)`.
+
+The scalars act on points through their value below `r`.
+
+The statement holds for every `ζ` with `ζ^4096 = 1`, primitive or not. -/
 theorem sum_eq_threeRounds {P : Nat → G1.curve.toAffine.Point}
     (htor : ∀ j, Fr.modulus • P j = 0) {ζ : Fr} (hζ : ζ ^ 4096 = 1) (c : Fr)
     (k1 k2 k3 : Nat) :

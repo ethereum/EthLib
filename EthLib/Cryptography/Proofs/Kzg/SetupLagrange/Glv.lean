@@ -6,21 +6,9 @@ public import EthLib.Cryptography.Proofs.Bls.G1Rotation
 /-!
 # Proofs: products by a scalar that split it in two halves
 
-Let `z` be the BLS parameter, and let `λ = z^2 - 1`.
-
-Then `λ^2 + λ + 1 = r`, so `λ` is a cube root of unity mod `r`, and `λ < 2^128`.
-
-The map `(x, y) ↦ (β' x, y)` sends the curve to itself, for a cube root of unity `β'` of `Fp`.
-
-It is a group homomorphism, and on the points of order dividing `r` it is the product by `λ`.
-
-The proof checks this on the generator, which spans those points.
+On the points of order dividing `r`, the map `(x, y) ↦ (β' x, y)` is the product by `λ = z^2 - 1`.
 
 So a product `[s] P` with `s < r` equals `[s mod λ] P + [s / λ] (β' x, y)`.
-
-Both scalars are below `2^128`, and one run of double and add computes the two products together.
-
-That takes 128 doublings instead of 255.
 
 The run uses the operations of the torsion check, on naturals, so the kernel can run it.
 -/
@@ -43,7 +31,9 @@ def cubeRootNat : Nat :=
 /-- The cube root of unity `β' = β^2`. -/
 def cubeRoot : F := betaZ ^ 2
 
-/-- The scalar `λ = z^2 - 1`. -/
+/-- The scalar `λ = z^2 - 1`, where `z` is the BLS parameter.
+
+Then `λ^2 + λ + 1 = r`, so `λ` is a cube root of unity mod `r`. -/
 def eigenvalue : Nat := blsX ^ 2 - 1
 
 theorem cubeRoot_val : cubeRoot.val = cubeRootNat := by decide +kernel
@@ -54,7 +44,9 @@ theorem cubeRoot_cube : cubeRoot ^ 3 = 1 := by
 theorem four_mul_beta_pow_six : (RingHom.id F) 4 * betaZ ^ 6 = 4 := by
   rw [RingHom.id_apply, show 6 = 3 * 2 from rfl, pow_mul, betaZ_cube, one_pow, mul_one]
 
-/-- The map `(x, y) ↦ (β' x, y)` of the curve, as a group homomorphism. -/
+/-- The map `(x, y) ↦ (β' x, y)` of the curve, as a group homomorphism.
+
+It sends the curve to itself, for a cube root of unity `β'` of `Fp`. -/
 noncomputable def endoHom : curve.toAffine.Point →+ curve.toAffine.Point :=
   ShortWeierstrass.scaledHom (RingHom.id F) betaZ_ne_zero four_mul_beta_pow_six
 
@@ -110,6 +102,7 @@ private theorem coords_endo_generator :
   rw [Fp.val_mul, val_cubeRoot]
   rfl
 
+/-- The scalar `λ` is below `2^128`. -/
 theorem eigenvalue_lt : eigenvalue < 2 ^ 128 := by decide +kernel
 
 /-- On the generator, the homomorphism is the product by `λ`, which the kernel checks. -/
@@ -123,6 +116,7 @@ theorem endoHom_generator : endoHom (toPoint generator) = eigenvalue • toPoint
 /-- On a point of order dividing `r`, the map `(x, y) ↦ (β' x, y)` is the product by `λ`. -/
 theorem toPoint_endo_of_torsion {q : G1} (h : Valid q) (ht : Fr.modulus • toPoint q = 0) :
     toPoint (endo q) = eigenvalue • toPoint q := by
+  -- The generator spans those points, and the product by `λ` holds on it.
   obtain ⟨n, -, he⟩ := exists_nsmul_generator_of_modulus_smul_eq_zero ht
   rw [toPoint_endo h, he, map_nsmul, endoHom_generator, smul_comm]
 
@@ -181,6 +175,9 @@ theorem jointMul_spec {p q t : G1} (hp : Valid p) (hq : Valid q) (ht : Valid t)
 /-- The product by `s`, as `[s mod λ] p + [s / λ] (β' x, y)` in one run. -/
 def glvMul (p : G1) (s : Nat) : G1 :=
   let e := endo p
+  -- Both scalars are below `2^128`, so one run of double and add computes the two products.
+  --
+  -- That takes 128 doublings instead of 255.
   jointMul 128 p e (add p e) (s % eigenvalue) (s / eigenvalue)
 
 /-- On a point of order dividing `r`, the split product is the product by `s`, for `s < r`. -/

@@ -11,18 +11,7 @@ public import EthLib.Cryptography.Proofs.Kzg.LagrangeCoefficients
 
 The inverse transform of the 4096 monomial points runs in three rounds of transforms of size 16.
 
-Four tables hold affine points as pairs of naturals.
-
-- Table `M` holds the decoded monomial points, and table `L` the decoded Lagrange points.
-- Tables `A` and `B` hold the results of the first two rounds.
-
-The checks test that each string of the setup encodes its table entry.
-
-They also compare each transform of size 16 with the entries of its inputs and outputs.
-
 If all checks pass, each Lagrange point is a combination of the monomial points.
-
-The factors are the coefficients of its basis polynomial.
 
 The tables are arbitrary here, so a wrong table only makes a check fail.
 -/
@@ -107,9 +96,19 @@ theorem eq_affinePoint {q : G1} {x y : Nat}
   rw [ex, ey, ez]
   rfl
 
-/-! ## The checks -/
+/-! ## The checks
 
-/-- A table of 4096 affine points, as pairs of naturals read by index. -/
+The checks test that each string of the setup encodes its table entry.
+
+They also compare each transform of size 16 with the entries of its inputs and outputs.
+-/
+
+/-- A table of 4096 affine points, as pairs of naturals read by index.
+
+Four tables hold the points.
+
+- Table `M` holds the decoded monomial points, and table `L` the decoded Lagrange points.
+- Tables `A` and `B` hold the results of the first two rounds. -/
 abbrev Table := Nat → Nat × Nat
 
 /-- Entry `n` of a table, as a point of `G1`. -/

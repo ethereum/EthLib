@@ -11,18 +11,6 @@ The FFT of `G1` multiplies points by roots of unity and adds them, in a recursio
 Here the same recursion runs on coordinates as naturals, with the operations of the torsion check.
 
 So the kernel can run it on concrete points, without reducing `Fp` or `Fr`.
-
-Each product by a root splits the root in two halves of 128 bits, as in `Glv`.
-
-The split gives other coordinates than the products of the FFT of `G1`, but the same points.
-
-The check takes affine inputs, a scalar for each input, the roots, and affine outputs.
-
-It multiplies each input by its scalar, runs the transform, and compares the results.
-
-The comparison is projective, so the check never inverts a coordinate.
-
-If the check passes, each output point is the sum that the transform defines.
 -/
 
 @[expose] public section
@@ -40,6 +28,7 @@ def fftNat : (k : Nat) → Vector Coords (2 ^ k) → Vector Nat (2 ^ k) → Vect
     let halfRoots := everyOther roots 0
     let l := fftNat k (everyOther vals 0) halfRoots
     let r := fftNat k (everyOther vals 1) halfRoots
+    -- Each product by a root splits the root in two halves of 128 bits, as in the GLV product.
     let t := Vector.ofFn (n := 2 ^ k) fun i => glvNat r[i] (roots[i.val]'(by
       have hlt := i.isLt
       have hpow : 2 ^ (k + 1) = 2 ^ k * 2 := Nat.pow_succ ..
@@ -94,7 +83,10 @@ theorem map_coords_fftGlv (k : Nat) (vals : Vector G1 (2 ^ k)) (roots : Vector N
     · simp only [G1.TorsionCheck.coords_add, coords_glvMul]
     · simp only [G1.TorsionCheck.coords_add, hneg, coords_glvMul]
 
-/-! ## The same points as the FFT of `G1` -/
+/-! ## The same points as the FFT of `G1`
+
+The split gives other coordinates than the products of the FFT of `G1`, but the same points.
+-/
 
 /-- `Q` is a valid point equal to the valid point `P`, of order dividing `r`. -/
 def SamePoint (P Q : G1) : Prop :=
@@ -144,12 +136,18 @@ theorem samePoint_fftGlv (k : Nat) {vals vals' : Vector G1 (2 ^ k)} (roots : Vec
 
 /-- The check of one transform: each pair is on the curve, and each output matches.
 
+The check takes affine inputs, a scalar for each input, the roots, and affine outputs.
+
 Input `i` is first multiplied by its scalar `tw[i]`. -/
 def dftCheck {k : Nat} (ins : Vector (Nat × Nat) (2 ^ k)) (tw roots : Vector Nat (2 ^ k))
     (outs : Vector (Nat × Nat) (2 ^ k)) : Bool :=
+  -- Multiply each input by its scalar, then run the transform.
   let res := fftNat k
     (Vector.ofFn fun (i : Fin (2 ^ k)) => glvNat (ins[i].1, ins[i].2, 1) tw[i]) roots
   ins.toList.all (fun q => onCurve q.1 q.2) && outs.toList.all (fun q => onCurve q.1 q.2) &&
+    -- Compare the results with the outputs.
+    --
+    -- The comparison is projective, so the check never inverts a coordinate.
     (Vector.ofFn fun (i : Fin (2 ^ k)) => sameAffine res[i] outs[i].1 outs[i].2).toList.all id
 
 /-- If the check passes, output `j` is the sum over `i` of `ω^(i j) tw[i]` times input `i`.

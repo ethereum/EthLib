@@ -63,14 +63,6 @@ public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Checks.RoundC15
 The embedded setup holds 4096 monomial points and 4096 Lagrange points of `G1`.
 
 The kernel checks that the Lagrange points are the inverse transform of the monomial points.
-
-The check tests that each string encodes its table point, and runs 768 transforms of size 16.
-
-So if the embedded setup decodes, each Lagrange point is a sum of the monomial points.
-
-The factors are the coefficients of its basis polynomial.
-
-Then the setup is well formed at `τ` as soon as its monomial points represent the powers of `τ`.
 -/
 
 @[expose] public section
@@ -86,6 +78,9 @@ open SetupLagrange
 The factors are the coefficients of its basis polynomial. -/
 theorem TrustedSetup.ofHex_lagrangeOfMonomial {s : TrustedSetup}
     (h : TrustedSetup.ofHex = .ok s) : s.LagrangeOfMonomial :=
+  -- The checks test that each string encodes its table point.
+  --
+  -- They run 768 transforms of size 16.
   lagrangeOfMonomial_of_checks (tM := tableM) (tA := tableA) (tB := tableB)
     (tL := tableL) h (checks_of% decodeM 256) (checks_of% decodeL 256)
     (checks_of% checkA 16 16) (checks_of% checkB 16 16) (checks_of% checkC 16 16)
