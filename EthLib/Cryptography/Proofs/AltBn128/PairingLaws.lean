@@ -13,16 +13,13 @@ It returns one exactly when `sum_i log_P1(a_i) log_P2(b_i) = 0`.
 This module states the law as one structure, and `PairingAte.lean` proves it.
 
 The law reads points as multiples of the generators `P1` and `P2`.
-
-Points are affine, so each group element has one representative.
-
-A pair with a point at infinity does not change the check, with or without the law.
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.AltBn128
 
+-- Points are affine, so each group element has one representative.
 /-- `P` is `a P1`. -/
 def Point.Represents (P : Point) (a : ZMod Fr.modulus) : Prop :=
   P = Point.mulBits 256 a.val Point.generator
@@ -44,7 +41,9 @@ structure PairingLaws : Prop where
         (pairs[i]).1.Represents (a[i]'(ha ▸ h)) ∧ (pairs[i]).2.Represents (b[i]'(hb ▸ h))) →
       (pairingCheck pairs = true ↔ (List.zipWith (· * ·) a b).sum = 0)
 
-/-! ## Pairs with a point at infinity -/
+/-! ## Pairs with a point at infinity
+
+A pair with a point at infinity does not change the check, with or without the law. -/
 
 /-- A pair with a point at infinity does not change the check, wherever it sits. -/
 theorem pairingCheck_append_cons {x : Point × Point2}

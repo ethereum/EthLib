@@ -9,48 +9,7 @@ public import EthLib.Cryptography.Proofs.MillerAte
 /-!
 # Proofs: the pairing of alt_bn128 is bilinear
 
-The optimal ate pairing of EIP-197 multiplies three values at `P`.
-
-Then it applies the final exponentiation.
-
-Let `Q'` be the untwist of `Q`, and let `s = 6 u + 2`.
-
-Let `pi` be the map `(x, y) -> (x^p, y^p)` on `E : y^2 = x^3 + 3` over `Fp12`.
-
-The first value is Miller's function of `s` and `Q'`.
-
-The second is the line through `s Q'` and `pi(Q')`.
-
-The third is the line through their sum and `-pi(pi(Q'))`.
-
-With the verticals through the two sums, these values form one quotient of products of lines, `f`.
-
-- The group `G` is the untwist of `G_2`: the multiples of the untwist of `P2`.
-- The untwist of `P2` has the order `q`.
-- The kernel computes `pi(P2) = p P2` on the twist, so `pi` acts on `G` as `p`.
-- In `G`, `pi` fixes only `O`, because `q` does not divide `p - 1`.
-- On `G`, `-pi^2` acts as `pi^8`, because `q` divides `p^6 + 1`.
-- On `G`, `s + p - p^2` acts as `pi^9`, because `q` divides `s + p - p^2 + p^3`.
-- So `f` has the ate divisor `sum_j c_j ((pi^j Q') - (O))`.
-- Its coefficients `c_j` are `s`, 1, 1 and -1 at `j` = 0, 1, 8 and 9.
-- Its exponent `n = s + p + p^8 - p^9` is a multiple of `q`.
-- So `z^(N n) = 1` for every nonzero `z`, with `N = (p^12 - 1) / q`.
-
-The ate value of `P` and `Q'` is `f(P)^N`.
-
-It is linear in `P` among the points that `pi` fixes, by the linearity of an ate-type pairing.
-
-It is linear in `Q'` in `G` too.
-
-The points of `G_1` lie on `E` over `Fp12`.
-
-`pi` fixes them, because their coordinates lie in `Fp`.
-
-Take a finite point `P` on the curve and a point `Q` on the twist whose untwist lies in `G`.
-
-Their pairing is the ate value of their points.
-
-The final exponentiation sends the two verticals to 1, so they do not change it.
+The optimal ate pairing of EIP-197 is bilinear on the multiples of the generators.
 
 So `e(a P1, b P2) = e(P1, P2)^(a b)` for all `a` and `b`.
 
@@ -164,6 +123,23 @@ theorem frobenius_iterate_of_mem {R : ambientCurve.Point} (hR : R ∈ g2Subgroup
 /-- The pairs `(j, c_j)` of the ate divisor of the optimal ate function. -/
 def ateCoeffs : List (ℕ × ℤ) := [(0, ATE_LOOP_COUNT), (1, 1), (8, 1), (9, -1)]
 
+-- The optimal ate pairing of EIP-197 multiplies three values at `P`.
+--
+-- Then it applies the final exponentiation.
+--
+-- Let `Q'` be the untwist of `Q`, and let `s = 6 u + 2`.
+--
+-- Let `pi` be the map `(x, y) -> (x^p, y^p)` on `E : y^2 = x^3 + 3` over `Fp12`.
+--
+-- The first value is Miller's function of `s` and `Q'`.
+--
+-- The second is the line through `s Q'` and `pi(Q')`.
+--
+-- The third is the line through their sum and `-pi(pi(Q'))`.
+--
+-- With the verticals through the two sums, these values form one quotient of products of lines.
+--
+-- That quotient is `f`.
 /-- The lines of the optimal ate function of EIP-197, with their verticals.
 
 They are Miller's function of `s = 6 u + 2` and `Q`, then `g_{s Q, pi Q}`.
@@ -190,6 +166,17 @@ theorem ateLines_sum {Q : ambientCurve.Point} (hQ : Q ∈ g2Subgroup) :
   rw [e]
   exact zsmul_eq_of_modEq hQ (by decide +kernel)
 
+-- The divisor of `f` follows in these steps.
+-- - The group `G` is the untwist of `G_2`: the multiples of the untwist of `P2`.
+-- - The untwist of `P2` has the order `q`.
+-- - The kernel computes `pi(P2) = p P2` on the twist, so `pi` acts on `G` as `p`.
+-- - In `G`, `pi` fixes only `O`, because `q` does not divide `p - 1`.
+-- - On `G`, `-pi^2` acts as `pi^8`, because `q` divides `p^6 + 1`.
+-- - On `G`, `s + p - p^2` acts as `pi^9`, because `q` divides `s + p - p^2 + p^3`.
+-- - So `f` has the ate divisor `sum_j c_j ((pi^j Q') - (O))`.
+-- - Its coefficients `c_j` are `s`, 1, 1 and -1 at `j` = 0, 1, 8 and 9.
+-- - Its exponent `n = s + p + p^8 - p^9` is a multiple of `q`.
+-- - So `z^(N n) = 1` for every nonzero `z`, with `N = (p^12 - 1) / q`.
 /-- The optimal ate function of a point `Q` of the untwist of `G_2` has the ate divisor.
 
 The divisor is `s ((Q) - (O)) + ((pi Q) - (O)) + ((pi^8 Q) - (O)) - ((pi^9 Q) - (O))`. -/
@@ -235,6 +222,11 @@ theorem LinesIn.ateLines {Q : ambientCurve.Point} (hQ : Q ∈ g2Subgroup) :
 
 /-! ## Linearity -/
 
+-- The ate value of `P` and `Q'` is `f(P)^N`.
+--
+-- It is linear in `P` among the points that `pi` fixes, by the linearity of an ate-type pairing.
+--
+-- It is linear in `Q'` in `G` too.
 /-- The optimal ate function of `Q`, at `P`, raised to the exponent `(p^12 - 1) / q`. -/
 noncomputable def ateValue (P Q : ambientCurve.Point) : Fp12 :=
   ratioAt (ateLines Q) P ^ FINAL_EXPONENT
@@ -301,6 +293,9 @@ noncomputable def ofZModHom : ZMod Fp.modulus →+* Fp12 where
 theorem ofZModHom_toZMod (a : Fp) : ofZModHom (Fp.toZMod a) = ofFpHom a :=
   congrArg ofFpHom (Fp.toZMod.symm_apply_apply a)
 
+-- The points of `G_1` lie on `E` over `Fp12`.
+--
+-- `pi` fixes them, because their coordinates lie in `Fp`.
 /-- The inclusion of the points of `G_1`, over `Fp`, into the points over `Fp12`. -/
 noncomputable def g1Hom : curve.Point →+ ambientCurve.Point :=
   ShortWeierstrass.scaledHom ofZModHom one_ne_zero (by rw [one_pow, mul_one, map_ofNat])
@@ -382,6 +377,7 @@ theorem pairing_eq_ateValue {xp yp : Fp} (hP : (Point.affine xp yp).isOnCurve = 
     g2Subgroup.add_mem (g2Subgroup.nsmul_mem hG _) (frobenius_mem hG)
   have hm2 : ATE_LOOP_COUNT • Q' + frobenius Q' + -frobenius (frobenius Q') ∈ g2Subgroup :=
     g2Subgroup.add_mem hm1 (g2Subgroup.neg_mem (frobenius_mem (frobenius_mem hG)))
+  -- The final exponentiation sends the two verticals to 1, so they do not change the pairing.
   have hV1 := finalExponentiation_line_neg_of_mem hm1 h1 xp yp
   have hV2 := finalExponentiation_line_neg_of_mem hm2 h2 xp yp
   rw [finalExponentiation_eq_pow] at hV1 hV2

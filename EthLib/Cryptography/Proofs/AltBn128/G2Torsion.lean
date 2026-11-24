@@ -12,18 +12,6 @@ This file proves it, in a stronger form: `q Q = O` exactly when `Q` is a multipl
 
 The proof does not count the points of the twist.
 
-A point is fixed by its `x` and a sign of its `y`, so the twist has at most `2 p^2 + 1` points.
-
-The kernel checks a point of prime order `10069` on the twist, and `P2` has order `q`.
-
-`10069` is not `q`, so the number of points is a multiple of `10069 q`.
-
-If `q^2` divided it, then `10069 q^2` would too, but `10069 q^2 > 2 p^2 + 1`.
-
-The points killed by `q` form a group, and its order is a power of `q` that divides that number.
-
-So that group has at most `q` elements, and it holds the `q` multiples of `P2`.
-
 Source: [EIP-197][eip197], section Definition of the groups.
 
 [eip197]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-197.md#definition-of-the-groups
@@ -111,6 +99,7 @@ instance : Finite twist.Point := Finite.of_injective _ pointCode_injective
 
 /-- The twist over `Fp2` has at most `2 p^2 + 1` points. -/
 theorem card_point_le : Nat.card twist.Point ≤ 2 * (Fp.modulus * Fp.modulus) + 1 := by
+  -- A point is fixed by its `x` and a sign of its `y`, so the twist has at most `2 p^2 + 1` points.
   have := Nat.card_le_card_of_injective _ pointCode_injective
   rwa [Finite.card_option, Nat.card_prod, Fp2.natCard_eq, Nat.card_eq_fintype_card (α := Bool),
     Fintype.card_bool, mul_comm] at this
@@ -150,9 +139,14 @@ theorem addOrderOf_torsionWitness : addOrderOf (toPoint torsionWitness) = 10069 
 /-- `q^2` does not divide the number of points of the twist. -/
 theorem not_sq_dvd_card_point : ¬Fr.modulus * Fr.modulus ∣ Nat.card twist.Point := by
   intro hsq
+  -- The kernel checks a point of prime order `10069` on the twist, and `P2` has order `q`.
+  --
+  -- `10069` is not `q`, so the number of points is a multiple of `10069 q`.
   have h1 : 10069 ∣ Nat.card twist.Point :=
     addOrderOf_torsionWitness ▸ addOrderOf_dvd_natCard _
   -- `q^2` and `10069` are coprime, so their product divides the number of points.
+  --
+  -- If `q^2` divided it, then `10069 q^2` would too, but `10069 q^2 > 2 p^2 + 1`.
   have hcop1 : Nat.Coprime Fr.modulus 10069 := by decide
   have hcop : Nat.Coprime (Fr.modulus * Fr.modulus) 10069 :=
     Nat.coprime_mul_iff_left.mpr ⟨hcop1, hcop1⟩
@@ -184,6 +178,7 @@ theorem torsion_eq_zmultiples_generator : torsion = AddSubgroup.zmultiples (toPo
       rw [← hX, addOrderOf_dvd_iff_nsmul_eq_zero]
       exact Subtype.ext (mem_torsion.mp X.2)
     exact (Nat.prime_dvd_prime_iff_eq hd hq).mp hdq
+  -- The points killed by `q` form a group, and its order is a power of `q`.
   obtain ⟨k, hk⟩ : ∃ k, Nat.card torsion = Fr.modulus ^ k :=
     ⟨_, Nat.eq_prime_pow_of_unique_prime_dvd Nat.card_pos.ne' hpow⟩
   -- The order divides the number of points, so it is not a multiple of `q^2`.
@@ -192,6 +187,7 @@ theorem torsion_eq_zmultiples_generator : torsion = AddSubgroup.zmultiples (toPo
     have hdvd : Fr.modulus * Fr.modulus ∣ Nat.card torsion :=
       hk ▸ (Nat.pow_two Fr.modulus ▸ Nat.pow_dvd_pow _ (by omega))
     exact not_sq_dvd_card_point (hdvd.trans (AddSubgroup.card_addSubgroup_dvd_card _))
+  -- So that group has at most `q` elements, and it holds the `q` multiples of `P2`.
   have hcard : Nat.card torsion ≤ Nat.card (AddSubgroup.zmultiples (toPoint generator)) := by
     rw [Nat.card_zmultiples, addOrderOf_generator, hk]
     calc Fr.modulus ^ k ≤ Fr.modulus ^ 1 := Nat.pow_le_pow_right hq.pos hk1

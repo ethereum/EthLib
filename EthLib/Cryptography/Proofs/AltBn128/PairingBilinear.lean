@@ -11,16 +11,6 @@ The pairing law of the check follows from one equation on the multiples of the g
 
 `e(a P1, b P2) = e(P1, P2)^(a b)` for all `a` and `b` in `Fr`.
 
-The check multiplies the Miller loops of its pairs and applies the final exponentiation once.
-
-The final exponentiation is multiplicative.
-
-So the check tests whether the product of the pairings is 1.
-
-By the equation, that product is `e(P1, P2)` to the power `sum_i a_i b_i`.
-
-The pairing of the generators has order `q`, so the power is 1 exactly when `q` divides the sum.
-
 This file takes the equation as a hypothesis.
 
 The proof of the equation imports this file and lives in another one.
@@ -55,6 +45,11 @@ private theorem finalExponentiation_checkStep (f : Fp12) (pq : Point × Point2) 
 /-- The check of a list of pairs passes exactly when the product of their pairings is 1. -/
 theorem pairingCheck_eq_true_iff (l : List (Point × Point2)) :
     pairingCheck l = true ↔ (l.map fun pq => pairing pq.1 pq.2).prod = 1 := by
+  -- The check multiplies the Miller loops of its pairs and applies the final exponentiation once.
+  --
+  -- The final exponentiation is multiplicative.
+  --
+  -- So the check tests whether the product of the pairings is 1.
   have hfold (acc : Fp12) : finalExponentiation (l.foldl checkStep acc) =
       finalExponentiation acc * (l.map fun pq => pairing pq.1 pq.2).prod := by
     induction l generalizing acc with
@@ -99,7 +94,11 @@ private theorem prod_pairing (h : PairingBilinear) :
 /-- Bilinearity gives the pairing law of the check. -/
 theorem PairingLaws.of_bilinear (h : PairingBilinear) : PairingLaws where
   pairingCheck_iff pairs a b ha hb hr := by
+    -- By the equation, the product of the pairings is `e(P1, P2)` to the power `sum_i a_i b_i`.
     rw [pairingCheck_eq_true_iff, prod_pairing h pairs a b ha hb hr, ← dvd_sum_zipWith_val_iff]
+    -- The pairing of the generators has order `q`.
+    --
+    -- So the power is 1 exactly when `q` divides the sum.
     have hord := orderOf_pairing_generators
     exact (hord ▸ orderOf_dvd_iff_pow_eq_one).symm
 
