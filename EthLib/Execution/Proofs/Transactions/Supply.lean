@@ -9,31 +9,11 @@ public import EthLib.Execution.Proofs.Transactions.Deletion
 
 The supply of a state is the sum of its balances, and a transaction changes it in four steps.
 
-The sender buys the gas: it pays the gas limit at the price per gas, and the fee of its blobs.
-
-The message then keeps or lowers the supply, since only SELFDESTRUCT can burn ether in it.
-
-The settlement gives back the gas left to the sender, and the priority fee to the beneficiary.
-
-Before Glamsterdam, the deletions at the end remove the balance of each account marked to delete.
-
-So the supply drops by at least the burned fees.
-
-Those are the base fee of each unit of gas used, and the fee of the blobs.
-
 [EIP-1559][e1559] burns the base fee, and [EIP-4844][e4844] burns the fee of the blobs.
 
 Before London the base fee is 0, and before Cancun there are no blobs.
 
-From Glamsterdam the supply drops by exactly the burned fees.
-
-There, SELFDESTRUCT and the deletion keep the balance of the account, by [EIP-8246][e8246].
-
-From Cancun, it drops by exactly the burned fees when the transaction ends with no created account.
-
-There, only an account created in the transaction can be burned or deleted, by [EIP-6780][e6780].
-
-Before Cancun, SELFDESTRUCT and the deletions can burn any balance, beyond the burned fees.
+Other sources: [EIP-6780][e6780] and [EIP-8246][e8246].
 
 [e1559]: https://eips.ethereum.org/EIPS/eip-1559#specification
 [e4844]: https://eips.ethereum.org/EIPS/eip-4844#gas-accounting
@@ -412,15 +392,23 @@ theorem runTransaction_supply {Meter : Type} [GasMeter Meter] [LawfulGasMeter Me
     (h : runTransaction Meter env block included tx = .ok out) :
     out.state.supply + burnedFees env tx out.gasUsed ≤
         (State.TransactionState.ofBlock block).supply ∧
+      -- Before Cancun, SELFDESTRUCT and the deletions can burn any balance, beyond the burned fees.
       (BurnsNone fork out.state →
         out.state.supply + burnedFees env tx out.gasUsed =
           (State.TransactionState.ofBlock block).supply) := by
+  -- The sender buys the gas: it pays the gas limit at the price per gas, and the fee of its blobs.
   obtain ⟨target, bought, message, output, settled, -, hbought, -, houtput, -, hs, hd⟩ :=
     runTransaction_eq_ok h
+  -- The message then keeps or lowers the supply, since only SELFDESTRUCT can burn ether in it.
   have hmsg := supplyLe_processMessageCall houtput
   have cset := createdAccounts_settleGas hs
+  -- Before Glamsterdam, the deletions at the end remove the balance of each account to delete.
   obtain ⟨hdel, cdel, hdelEq⟩ := supply_deleteAccounts hd
+  -- The settlement gives back the gas left to the sender, and the priority fee to the beneficiary.
   have hfees := supply_buyGas_settleGas hMin hPrice hbought hs
+  -- So the supply drops by at least the burned fees.
+  --
+  -- Those are the base fee of each unit of gas used, and the fee of the blobs.
   refine ⟨by have := hmsg.1; omega, fun burns => ?_⟩
   -- The message burns nothing, and neither do the deletions.
   have burnsOut : BurnsNone fork output.state := by
@@ -430,7 +418,11 @@ theorem runTransaction_supply {Meter : Type} [GasMeter Meter] [LawfulGasMeter Me
   have hdelSame : out.state.supply = settled.supply := by
     refine hdelEq ?_
     rcases burnsOut with hglam | ⟨hdencun, hnone⟩
+    -- From Glamsterdam, SELFDESTRUCT and the deletion keep the balance of the account, by EIP-8246.
     · exact .inl hglam
+    -- From Cancun, only an account that the transaction created can be burned or deleted.
+    --
+    -- EIP-6780 sets that rule.
     · exact .inr fun address hmem => hnone address
         (accountsToDelete_processMessageCall hdencun houtput (by simp) address hmem)
   omega
@@ -461,10 +453,6 @@ theorem processTransaction_supply {env : BlockEnvironment fork} {block : State.B
 
 /-- A transaction that runs lowers the supply by at least its burned fees, at every fork.
 
-The burned fees are the base fee per gas times the gas used.
-
-From Cancun, they add the base fee per blob gas times the blob gas.
-
 The gas limit must cover the least gas, and the price must cover the base fee.
 
 The checks of the block ensure both. -/
@@ -473,6 +461,9 @@ theorem processTransaction_supply_le {env : BlockEnvironment fork} {block : Stat
     (hMin : minimumGas fork included.sender tx ≤ tx.gas.toNat)
     (hPrice : baseFeeOf env ≤ effectiveGasPrice (baseFeeOf env) tx)
     (h : processTransaction env block included tx = .ok out) :
+    -- The burned fees are the base fee per gas times the gas used.
+    --
+    -- From Cancun, they add the base fee per blob gas times the blob gas.
     out.state.supply + burnedFees env tx out.gasUsed ≤
       (State.TransactionState.ofBlock block).supply :=
   (processTransaction_supply hMin hPrice h).1
@@ -493,10 +484,6 @@ theorem processTransaction_supply_of_glamsterdam {env : BlockEnvironment fork}
 
 /-- From Cancun, a transaction that ends with no created account lowers the supply by its fees.
 
-It lowers it by exactly its burned fees.
-
-No creation of it may have passed its preparation, not even one that then reverted.
-
 The gas limit must cover the least gas, and the price must cover the base fee.
 
 The checks of the block ensure both. -/
@@ -505,7 +492,9 @@ theorem processTransaction_supply_of_dencun {env : BlockEnvironment fork}
     (hfork : .dencun ≤ fork) (hMin : minimumGas fork included.sender tx ≤ tx.gas.toNat)
     (hPrice : baseFeeOf env ≤ effectiveGasPrice (baseFeeOf env) tx)
     (h : processTransaction env block included tx = .ok out)
+    -- No creation of it may have passed its preparation, not even one that then reverted.
     (created : ∀ address, address ∉ out.state.createdAccounts) :
+    -- The supply drops by exactly the burned fees.
     out.state.supply + burnedFees env tx out.gasUsed =
       (State.TransactionState.ofBlock block).supply :=
   (processTransaction_supply hMin hPrice h).2 (.inr ⟨hfork, created⟩)

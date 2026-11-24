@@ -6,13 +6,7 @@ public import EthLib.Execution.Proofs.Transactions.Settlement
 /-!
 # Proofs: gas payments keep the property used to rebuild a block state
 
-Buying gas raises the sender's nonce before debiting its balance.
-
-The sender therefore keeps a nonce even when it spends its whole balance on gas.
-
-From Paris, settlement only credits the refund and the beneficiary's priority fee.
-
-These steps keep the rebuild property and every existing nonce or code.
+The fee phases keep the rebuild property and every existing nonce or code.
 
 The nonce and gas updates follow [Yellow Paper §6.2][execution].
 
@@ -48,11 +42,13 @@ theorem buyGas_rebuildState {block : BlockState} {state state' : TransactionStat
     {env : BlockEnvironment fork} {sender : Address} {tx : Transaction}
     (valid : RebuildState block state) (h : buyGas env state sender tx = .ok state') :
     RebuildState block state' ∧ KeepsNonceOrCode state state' ∧
+      -- The sender keeps a nonce even when it spends its whole balance on gas.
       1 ≤ (state'.getAccount sender).nonce := by
   have raised := (buyGas_sender rfl h).2.2
   unfold buyGas at h
   rw [paidBaseFee_empty] at h
   obtain ⟨bumped, nonce, debit⟩ := bind_ok_iff.mp h
+  -- Buying gas raises the nonce of the sender before debiting its balance.
   obtain ⟨bumpedValid, bumpedKeeps, senderNonce⟩ := valid.incrementNonce nonce
   obtain ⟨account, computed, after⟩ := TransactionState.modifyState_eq_ok_iff.mp debit
   have set : bumped.setAccountBalance fork sender account.balance = .ok state' := by
@@ -78,6 +74,7 @@ theorem settleGas_rebuildState (paris : .paris ≤ fork) {block : BlockState}
   obtain ⟨paid, pay, h⟩ := bind_ok_iff.mp h
   cases h
   have notBefore : ¬fork < .paris := Nat.not_lt_of_ge paris
+  -- From Paris, settlement only credits the refund and the priority fee of the beneficiary.
   simp only [payBeneficiary, notBefore, false_and, and_false, ↓reduceIte] at pay
   obtain ⟨refundedValid, refundedKeeps⟩ := creditEther_rebuildState valid refund
   obtain ⟨paidValid, paidKeeps⟩ := creditEther_rebuildState refundedValid pay

@@ -8,23 +8,9 @@ import EthLib.Execution.Proofs.Transactions.Inclusion
 /-!
 # Proofs: no transaction overflows a balance when the supply leaves room
 
-A transaction first takes from its sender the fee for its whole gas limit and its blob gas.
-
-The authorizations keep every balance.
-
-So its first message starts with at most the supply before the transaction.
-
-No call or creation overflows a balance when the supply it starts with leaves room.
+A transaction that passes its checks, on a supply with room, never fails for a balance overflow.
 
 A supply leaves room when it is below `2^256`, or twice it is before Cancun.
-
-The settlement credits the refund of the sender and the priority fee of the beneficiary.
-
-Those two add up to at most the fee that the sender paid.
-
-So each credit raises one balance to at most the supply before the transaction.
-
-The deletions at the end credit nothing.
 -/
 
 @[expose] public section
@@ -247,8 +233,10 @@ theorem processMessageCall_ne_balanceOverflow [LawfulGasMeter Meter]
     · cases h
   · rw [hprep] at h
     dsimp only at h
+    -- The authorizations keep every balance.
     have froom : SupplyRoom fork first.state.supply := by
       rwa [supply_prepareFirstFrame hprep]
+    -- No call or creation overflows a balance when the supply it starts with leaves room.
     split at h
     · rcases Base.bind_eq_error h with h | ⟨_, -, h⟩
       · exact processCreateMessage_ne_balanceOverflow froom address h
@@ -274,6 +262,7 @@ private theorem runTransaction_ne_balanceOverflow [LawfulGasMeter Meter]
     · cases h
     · unfold Except.mapError at h
       split at h <;> cases h
+  -- The sender first pays the fee for the whole gas limit and the blob gas.
   rcases Base.bind_eq_error h with h | ⟨bought, hbought, h⟩
   · unfold Except.mapError at h
     split at h
@@ -300,6 +289,7 @@ private theorem runTransaction_ne_balanceOverflow [LawfulGasMeter Meter]
       | ok _ => cases h
     · cases h
   rcases Base.bind_eq_error h with h | ⟨output, houtput, h⟩
+  -- So the first message starts with at most the supply before the transaction.
   · exact processMessageCall_ne_balanceOverflow (room.mono (by omega)) address h
   have hended := (supplyLe_processMessageCall houtput).1
   rcases Base.bind_eq_error h with h | ⟨⟨settled, used⟩, -, h⟩
@@ -307,7 +297,11 @@ private theorem runTransaction_ne_balanceOverflow [LawfulGasMeter Meter]
     split at h
     · rename_i he'
       cases h
+      -- The settlement credits the refund of the sender and the priority fee of the beneficiary.
       refine settleGas_ne_balanceOverflow ?_ _ he'
+      -- Those two add up to at most the fee that the sender paid.
+      --
+      -- So each credit raises one balance to at most the supply before the transaction.
       have conserve := settlement_conserves hMin hPrice
         (output.gasLeft + output.reservoir) output.refund
       have := room.lt
@@ -319,6 +313,7 @@ private theorem runTransaction_ne_balanceOverflow [LawfulGasMeter Meter]
     split at h
     · rename_i he'
       cases h
+      -- The deletions at the end credit nothing.
       exact deleteAccounts_ne_balanceOverflow _ _ _ he'
     · cases h
   · cases h
