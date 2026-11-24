@@ -12,7 +12,19 @@ public import EthLib.Consensus.Proofs.Transition.Totality.Bound
 
 The proofs that the steps of an epoch succeed assume a registry within its limit.
 
-A slot never raises the validators plus the pending deposits, at every fork.
+From Electra an epoch adds validators, one for each pending deposit with a new key that it applies.
+
+So the size of the registry alone can grow from one slot to the next.
+
+The validators plus the pending deposits cannot, as each case of a pending deposit shows:
+
+- A deposit that adds a validator leaves the queue, so the count stays the same.
+- A top-up leaves the queue and adds no validator, so the count falls by one.
+- A postponed deposit leaves the queue and enters it again at its end.
+
+No other step of a slot adds a validator or a pending deposit.
+
+So a slot never raises the count, at every fork.
 
 The upgrades between forks and the blocks have their own statements.
 -/

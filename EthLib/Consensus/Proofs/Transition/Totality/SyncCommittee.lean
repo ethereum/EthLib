@@ -14,7 +14,17 @@ From Altair the epoch step draws a new sync committee at the start of each perio
 
 The draw reads the candidates in a fixed order and accepts each with a chance set by its balance.
 
-A candidate at the cap and a bound on the passes make the draw succeed.
+A candidate at the largest effective balance of the draw is always accepted.
+
+The order visits every candidate once in each pass over them.
+
+So each pass accepts at least one candidate.
+
+The draw then ends within as many passes as members.
+
+So a registry with a candidate at that balance, and a bound on the passes, makes the draw succeed.
+
+The committee then aggregates the keys of its members, which must all be valid.
 -/
 
 @[expose] public section

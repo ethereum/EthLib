@@ -683,7 +683,9 @@ def RunStart.mainnet (startEpoch : Nat) : RunStart :=
   --
   -- Every score is zero.
   { supply := 36 * 10 ^ 15, effective := 36 * 10 ^ 15, load := 2 ^ 22, scores := 0,
-    -- The exit queue end and every exit epoch set are at most `2^20` epochs past the given epoch.
+    -- The end of the exit queue is at most `2^20` epochs past the given epoch.
+    --
+    -- So is every exit epoch that is set.
     --
     -- The history has at most `2^20` entries.
     --

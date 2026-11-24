@@ -18,7 +18,22 @@ import EthLib.Consensus.Proofs.Transition.Requests
 
 A block moves the exit and consolidation queues through exits, slashings and two kinds of request.
 
-Each queue end plus the cost still owed rises only through new validators and partial withdrawals.
+Each validator that starts to exit moves the end of its queue by at most its cost.
+
+That cost is its effective balance in increments, plus one.
+
+The validator then stops owing it.
+
+So the end of each queue, plus the cost still owed, rises only through two kinds of steps:
+
+- A new validator owes its cost from the moment it joins.
+- A partial withdrawal moves the exit queue with no exit.
+
+Such a withdrawal moves the queue by at most its amount in increments, plus one.
+
+That amount is capped by the balance of the validator.
+
+Before Electra an exit moves the latest exit epoch by at most one, which is within its cost.
 
 From Electra, the churn carried for exits stays within one churn bound or its value before.
 -/
@@ -1191,7 +1206,9 @@ theorem processBlock_exits {engine : ExecutionEngine preset fork}
     ∃ reached, reached + exitCost preset after ≤
         -- It adds the cost of the validators that joined in the block.
         ceiling + exitCost preset state + exitCostFrom preset after state.validators.data.size +
-          -- It also adds the cost of the block's withdrawal requests, with their amounts capped.
+          -- It also adds the cost of the withdrawal requests of the block.
+          --
+          -- Their amounts are capped.
           partialExitCost preset cap block.body ∧
       -- The bound also covers the first epoch at which a new exit can take effect.
       (getCurrentEpoch after).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ reached ∧
@@ -1265,7 +1282,9 @@ theorem slashingTurn_exits {engine : ExecutionEngine preset fork}
     ∃ reached, reached + exitCost preset turn ≤
         -- It adds the cost of the validators that joined.
         ceiling + exitCost preset state + exitCostFrom preset turn state.validators.data.size +
-          -- From Gloas it also adds the cost of the parent payload's withdrawal requests, capped.
+          -- From Gloas it also adds the cost of the withdrawal requests of the parent payload.
+          --
+          -- Their amounts are capped.
           (if .glamsterdam ≤ fork then partialExitCost preset cap block.body else 0) ∧
       (getCurrentEpoch turn).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ reached ∧
       ExitsBelow turn reached ∧

@@ -19,7 +19,15 @@ import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 /-!
 # Proofs: the shape of the state that a run of slots keeps
 
-The totality theorems of the epoch steps read lists indexed by the registry, and assume a shape.
+The totality theorems of the epoch steps read lists indexed by the registry.
+
+They assume a shape of the state:
+
+- Each such list has one entry for each validator.
+- From Electra, each effective balance is at most the largest one of its validator.
+- From Electra, each queued consolidation names two validators of the registry.
+
+Before Electra they assume a weaker bound on the effective balances, which that cap implies.
 
 One epoch keeps these facts, and so does one slot and a run of slots within a fork.
 

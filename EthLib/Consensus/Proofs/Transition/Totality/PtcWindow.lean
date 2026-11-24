@@ -276,7 +276,9 @@ theorem computePtc_ok {state : BeaconState preset fork} {slot : Slot}
 
 /-- From Gloas, the move of the window of payload timeliness committees succeeds under bounds.
 
-The epoch it draws is the one after the seed lookahead, and it meets the assumptions of the draw.
+The epoch it draws is the one after the seed lookahead.
+
+That epoch meets the assumptions of the draw.
 
 The step changes only the window. -/
 theorem processPtcWindow_ok (gloas : .glamsterdam ≤ fork) {state : BeaconState preset fork}
@@ -460,7 +462,9 @@ theorem ptcRoom_presets {size : Nat} (few : size ≤ 2 ^ 40) :
 
 The upgrade to Gloas computes it.
 
-After the previous epoch, it covers the current epoch and each epoch of the seed lookahead.
+The committees of the previous epoch hold only index zero, and need no bound.
+
+The window then covers the current epoch and each epoch of the seed lookahead after it.
 
 Each of these epochs meets the assumptions of the draw. -/
 theorem initializePtcWindow_ok {state : BeaconState preset fork}

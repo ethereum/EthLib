@@ -20,7 +20,17 @@ So it cannot bound the next epoch.
 
 The supply grows slowly: the sum of the balances and of the amounts of the pending deposits.
 
+From Altair, only the rewards of the three flags raise it in the epoch transition.
+
+The pending deposits move amounts from the queue to the balances, or drop them.
+
+The other steps keep or lower the balances.
+
 When no flag was set by more balance than is active, the rise over one epoch is small.
+
+The effective balances follow the balances within the hysteresis band.
+
+So their sum stays at most a fixed multiple of the sum of the balances, 4/3 on mainnet.
 -/
 
 @[expose] public section

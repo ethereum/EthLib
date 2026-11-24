@@ -9,7 +9,11 @@ public import EthLib.Consensus.Proofs.Transition.EpochUpdates
 
 The registry step queues activations, ejects low-balance validators and activates a queue prefix.
 
-Room for the registry length and the withdrawability delay excludes every checked overflow.
+Let a ceiling bound the first activation epoch and every finite exit epoch before the step.
+
+Each ejection increases that ceiling by at most one.
+
+Room for the registry length and the withdrawability delay then excludes every checked overflow.
 
 The theorem applies to the state that the earlier epoch steps return, without their full invariant.
 

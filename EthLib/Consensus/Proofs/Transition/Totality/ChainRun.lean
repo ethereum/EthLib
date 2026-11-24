@@ -7,11 +7,25 @@ public import EthLib.Consensus.Proofs.Transition.Totality.RunHypotheses
 /-!
 # Proofs: every slot advance after a chain of bounded blocks succeeds
 
-A chain of blocks within the limits, each accepted by the transition, keeps the facts of a chain.
+A chain starts from a state that keeps the facts of a chain.
 
-From the state at its end, every slot advance within the epochs of the chain succeeds.
+Each of its blocks stays within the limits, and the transition accepts it.
+
+Each block keeps the facts, with one more block in the count.
+
+So the state at the end of the chain keeps them.
+
+From that state, every slot advance within the epochs of the chain succeeds.
+
+At the end of each epoch on the way, the signers must hold at most the active balance.
+
+The draws must end, and a run before Altair must end within the epoch limit.
 
 On mainnet, the step covers the limits for 16 epochs at a budget of `2^57` Gwei.
+
+Before Gloas, the types of a mainnet body keep it within three of those limits.
+
+The chain may start at any epoch up to `2^40`.
 -/
 
 @[expose] public section

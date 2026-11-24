@@ -43,7 +43,9 @@ def witnessCommittee : SyncCommittee Preset.mainnet where
 
 /-- A mainnet state at the first slot of the Altair fork epoch, with one validator.
 
-Its fork versions are Altair's, and each other field that no comment describes is zero or empty. -/
+Its fork versions are those of Altair.
+
+Each other field that no comment describes is zero or empty. -/
 def altairWitnessState : BeaconState Preset.mainnet .altair where
   genesisTime := 0
   genesisValidatorsRoot := Vector.replicate 32 0

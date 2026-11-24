@@ -11,7 +11,29 @@ A run of slots succeeds under bounds that each epoch keeps, and under three more
 
 They are not consequences of the bounds, so a run takes them as assumptions.
 
-They bound the early signers, ask that each draw ends, and bound the epochs before Altair.
+There are three of them:
+
+- The signers of the first two epochs hold at most the total active balance.
+- Each draw of committees and proposers ends.
+- A run that starts before Altair ends at an epoch within a limit.
+
+The run applies no block, so from the third epoch no one has signed and the first bound holds.
+
+A draw is certain to end when it meets a validator at the cap of its fork.
+
+A leak can lower their balances or make them exit.
+
+So the run cannot count on one staying at the cap.
+
+Without a validator at the cap, whether a draw ends depends on the hashes.
+
+The chance that such a draw fails is small but not zero, so the end of each draw stays a hypothesis.
+
+Before Altair, the inactivity penalty grows with the epochs since the last finality.
+
+It fits when the epoch is at most a limit, about `9 * 10^6` epochs on mainnet.
+
+A run that stays before Altair on a quiet state meets all three, since nothing is drawn there.
 -/
 
 @[expose] public section
@@ -239,13 +261,15 @@ This holds when each draw meets a validator at the cap of its fork.
 Without one, whether a draw ends depends on the hashes, so it stays a hypothesis. -/
 def DrawsEnd (config : Config) (checks : SignatureChecks) (forked : ForkedBeaconState preset)
     (count : Nat) : Prop :=
-  -- The validators at the cap can leave or lose balance during the run.
+  -- A leak can lower the balances of the validators at the cap, or make them exit.
   --
-  -- So a leak breaks the form at the cap.
+  -- So the run cannot count on one staying at the cap.
   --
   -- Without a validator at the cap, whether a draw ends depends on the hashes.
   --
-  -- In the random oracle model, a search of at most `2^32` members fails with chance `< 2^-128`.
+  -- Take the random oracle model, and a search of at most `2^32` members.
+  --
+  -- The search fails with chance below `2^-128`.
   --
   -- That needs a fresh cache and at least one candidate.
   --
@@ -255,12 +279,16 @@ def DrawsEnd (config : Config) (checks : SignatureChecks) (forked : ForkedBeacon
   --
   -- Each state that the run reaches before its end must let the draws of its next slot end.
   ∀ steps < count, ∀ reached, advanceSlotsAcross config checks steps forked = .ok reached →
-    -- At the end of an epoch, the epoch transition reads the state with the slot roots cached.
+    -- At the end of an epoch, the epoch transition reads the state.
+    --
+    -- The roots of the slot are cached in that state.
     ((reached.state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
       ∀ cached, processSlot reached.state = .ok cached → EpochDrawsEnd config checks cached) ∧
     -- The upgrades due at the next slot read the states they pass through.
     --
-    -- This hypothesis also carries the condition of the upgrade to Heze: its deposit indices agree.
+    -- This hypothesis also carries the condition of the upgrade to Heze.
+    --
+    -- Its two deposit indices must be equal.
     ∀ advanced, advanceSlot config checks reached.state = .ok advanced →
       ∀ upgrading, UpgradesPass config checks ⟨reached.fork, advanced⟩ upgrading →
         upgradeDue config upgrading = true → UpgradeDrawsEnd upgrading

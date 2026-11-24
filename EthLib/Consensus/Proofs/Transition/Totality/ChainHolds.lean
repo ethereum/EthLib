@@ -13,6 +13,10 @@ A chain alternates runs of slots and blocks.
 
 Its states keep the invariant, the shape of the state and the bounds of a run.
 
+A block may raise some of those bounds, by at most a fixed amount for each block.
+
+At most one block lands in each slot, so the slots since the start bound the number of blocks.
+
 Each empty slot keeps these facts, and succeeds, under hypotheses on the state it reaches.
 -/
 

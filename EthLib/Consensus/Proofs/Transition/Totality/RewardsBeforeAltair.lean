@@ -45,7 +45,9 @@ structure RewardsFitBeforeAltair (preset : Preset) (budget epochBound : Nat) : P
   --
   -- The rewards of the source, target and head votes are each at most one product.
   --
-  -- That product is the bound on the base reward of the largest cap, times the budget increments.
+  -- That product is the bound on the base reward of the largest cap.
+  --
+  -- That product is multiplied by the increments of the budget.
   --
   -- The inclusion rewards of a validator are at most the bound on the base reward of the budget.
   rewards : budget + 3 * preset.baseRewardBoundBeforeAltair preset.largestEffectiveBalance *
@@ -96,7 +98,9 @@ It is the budget plus a bound on all the rewards that one validator can earn in 
 def Preset.rewardsCeilingBeforeAltair (preset : Preset) (budget : Nat) : Nat :=
   -- The source, target and head votes each earn at most one product.
   --
-  -- That product is the bound on the base reward of the largest cap, times the budget increments.
+  -- That product is the bound on the base reward of the largest cap.
+  --
+  -- That product is multiplied by the increments of the budget.
   --
   -- The inclusion rewards earn at most the bound on the base reward of the budget.
   budget + 3 * preset.baseRewardBoundBeforeAltair preset.largestEffectiveBalance *
@@ -318,7 +322,9 @@ The signers of each matching attestation must succeed.
 
 Each base reward of the registry must succeed, at most a bound.
 
-Each reward is then at most the bound times the budget increments; each penalty, the bound. -/
+Each reward is then at most the bound times the increments of the budget.
+
+Each penalty is then at most the bound. -/
 private theorem getAttestationComponentDeltas_exists_le {budget ceiling : Nat}
     (within : state.RegistryWithinLimit) (summed : effectiveBalanceSum state ≤ budget)
     (budgetLt : budget < 2 ^ 64) (finalized : FinalizedSettled state) {total : Gwei}
@@ -586,7 +592,9 @@ private theorem getInclusionDelayDeltas_exists_le {budget : Nat} (before : fork 
     simpa [balanceAt, Array.getElem?_eq_getElem lt] using baseLe
   -- A proposer can earn a share of the base reward of every signer, once for each signer.
   --
-  -- So its inclusion reward is at most the bound on base rewards at the sum of the balances.
+  -- So its inclusion reward is at most one bound on base rewards.
+  --
+  -- That bound is taken at the sum of the effective balances.
   --
   -- The weights of the attesters sum to at most the bound at the budget.
   have weights : (attesters.map fun index =>
