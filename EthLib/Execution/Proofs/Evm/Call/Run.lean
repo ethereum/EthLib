@@ -6,31 +6,15 @@ public import EthLib.Execution.Proofs.Evm.Call.MessageCall
 /-!
 # Proofs: a property of each step holds for a whole run of a message
 
-A property of a run is a relation between two frames of the same message.
+A property of a run is a reflexive and transitive relation between two frames of the same message.
 
-It must be reflexive and transitive.
+When each step keeps it, so does a whole run of a frame.
 
-A step that sends a message relates its frame to the caller frame and to the frame that resumes.
+The frame that resumes after a message needs a fact about the frame that ends that message.
 
-The frame that resumes needs a fact about the frame that ends the message.
+That fact relates the message, its start state, substate and meter, and that frame.
 
-That fact relates the message, its start state, substate and meter, and the frame that ends it.
-
-When each step keeps the relation, so does a whole run of a frame.
-
-This needs a runner of messages that gives the fact.
-
-The fact then holds of every call and creation, by strong induction on the gas of the message.
-
-Each property supplies its steps, its halts and the start of a call.
-
-It also supplies the rollback of a call and the deposit of code.
-
-The steps may assume a frame invariant that the relation keeps.
-
-The run then needs that invariant at its start.
-
-A call starts from the state it enters: its target touched before Paris, then its value moved.
+This fact then holds of every call and creation, by strong induction on the gas of the message.
 -/
 
 @[expose] public section
@@ -46,18 +30,17 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- What a step from `evm` gives, for a relation `R` of frames and a relation `C` of messages.
 
-The next frame is related to `evm`.
-
-A message is sent from a frame related to `evm`.
-
-The frame that resumes is related to `evm` too.
-
-This needs `C` to hold of the caller, the message and the frame that ends the message. -/
+A step that sends a message relates `evm` to the caller frame and to the frame that resumes. -/
 def StepResult.Keeps (R : Evm fork Meter → Evm fork Meter → Prop)
     (C : Evm fork Meter → Message fork → Evm fork Meter → Prop) (evm : Evm fork Meter) :
     StepResult fork Meter → Prop
+  -- The next frame is related to `evm`.
   | .next after => R evm after
+  -- A message is sent from a frame related to `evm`.
   | .child caller message resume => R evm caller ∧
+      -- The frame that resumes is related to `evm` too.
+      --
+      -- This needs `C` to hold of the caller, the message and the frame that ends the message.
       ∀ child after, resume child = .ok after → C caller message child → R evm after
 
 omit [GasMeter Meter] in
@@ -105,23 +88,20 @@ variable {R : Evm fork Meter → Evm fork Meter → Prop}
 
 /-- A successful run of a frame is related to the frame it starts from.
 
-The relation must be reflexive and transitive, and hold of each exceptional halt.
-
-Each halt and each step starts from a frame with the invariant, and each step from a running one.
-
-Each step must keep the relation, which keeps the invariant.
-
-The runner must end each message from a caller with the invariant in a frame that `C` relates.
-
-The run must start from a frame with the invariant. -/
+The relation must be reflexive and transitive, and each step must keep it. -/
 theorem rel_runFrame [LawfulGasMeter Meter] (refl : ∀ evm, R evm evm)
     (trans : ∀ {a b c}, R a b → R b c → R a c)
+    -- The relation keeps the invariant.
     (keeps : ∀ {a b}, Inv a → R a b → Inv b)
+    -- The relation holds of each exceptional halt, from a frame with the invariant.
     (halt : ∀ evm error, Inv evm → R evm (exceptionalHalt evm error))
+    -- Each step starts from a running frame with the invariant, and must keep the relation.
     (steps : ∀ {evm result}, Inv evm → evm.running = true → step evm = .ok result →
       StepResult.Keeps R C evm result)
+    -- From a caller with the invariant, each message must end in a frame that `C` relates.
     (runs : ∀ caller message lt ended, Inv caller → runChild caller message lt = .ok ended →
       C caller message ended.val)
+    -- The run must start from a frame with the invariant.
     {evm after : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound} (start : Inv evm)
     (h : runFrame step decreases bound runChild evm within = .ok after) : R evm after := by
   revert start h
@@ -151,20 +131,17 @@ end Frame
 
 /-- The state and the substate that the frame of a message starts from, after those of its caller.
 
-Before Paris, the target of the message is touched first.
-
-A message that moves a value then moves it from its sender to its target.
-
-From Glamsterdam, it also logs a move to another account, by EIP-7708.
-
-Any other message starts from there with the substate of its caller. -/
+Before Paris, the target of the message is touched first. -/
 def Entered (fork : Fork) (message : Message fork) (state : TransactionState)
     (substate : Substate) (entry : TransactionState) (entrySubstate : Substate) : Prop :=
+  -- A message that moves no value starts there, with the substate of its caller.
   (¬(message.shouldTransferValue = true ∧ message.value ≠ 0) ∧
       entry = startState fork message state ∧ entrySubstate = substate) ∨
+    -- A message that moves a value then moves it from its sender to its target.
     ((message.shouldTransferValue = true ∧ message.value ≠ 0) ∧
       (startState fork message state).moveEther fork message.caller message.currentTarget
         message.value = .ok entry ∧
+      -- From Glamsterdam, it also logs a move to another account, by EIP-7708.
       entrySubstate = { substate with
         logs := pushTransferLog fork substate.logs message.caller message.currentTarget
           message.value
@@ -216,45 +193,38 @@ def ChildRelByKind
 
 /-- Every successful call satisfies a relation `Mcall`, and every creation a relation `Mcreate`.
 
-That holds at every fork.
-
-A fact `F` relates the start frame of a call to the frame that ends its code or its precompile.
-
-It must hold of each run of a frame whose message selects no precompile.
-
-That run may use a runner that ends each call by `Mcall` and each creation by `Mcreate`.
-
-It must also hold of each precompile that runs, and of each one skipped, whose frame just stops.
-
-A call must satisfy `Mcall` after its rollback, when `F` relates its start frame to its end.
-
-That frame starts from the state and substate before or after the transfer of value.
-
-After its deposit of code, a creation must satisfy `Mcreate` when its init code satisfies `Mcall`.
-
-The proof is by strong induction on the gas of the message, for calls and creations together. -/
+That holds at every fork. -/
 theorem processMessage_frame_byKind [LawfulGasMeter Meter]
+    -- `F` relates the start frame of a call to the frame that ends its code or precompile.
     {F : Evm fork Meter → Evm fork Meter → Prop}
     {Mcall Mcreate : Message fork → TransactionState → Substate → Meter → Evm fork Meter → Prop}
+    -- The fact must hold of each run of a frame whose message selects no precompile.
+    --
+    -- That run may use a runner that ends each call by `Mcall` and each creation by `Mcreate`.
     (frame : ∀ {bound : Nat} {runChild : MessageRunner fork Meter bound}
       {evm after : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound},
       RunnerEnsures (ChildRelByKind Mcall Mcreate) runChild →
       precompileAddress fork evm.message = none →
       runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok after →
       F evm after)
+    -- It must hold of each precompile skipped, whose frame just stops.
     (skip : ∀ {address : Nat} (evm : Evm fork Meter),
       precompileAddress fork evm.message = some address →
       (evm.message.disablePrecompiles = true ∨ runPrecompile fork address evm = none) →
       F evm { evm with running := false })
+    -- It must hold of each precompile that runs.
     (precompile : ∀ {address : Nat} {evm after : Evm fork Meter},
       precompileAddress fork evm.message = some address →
       evm.message.disablePrecompiles = false → runPrecompile fork address evm = some after →
       F evm after)
+    -- A call must satisfy `Mcall` after its rollback, when the fact relates its start to its end.
     (call : ∀ {message : Message fork} {state entry : TransactionState}
       {substate entrySubstate : Substate} {meter : Meter} {ended : Evm fork Meter},
+      -- Its start frame has the state and substate before or after the transfer of value.
       Entered fork message state substate entry entrySubstate →
       F (startFrame message entry entrySubstate meter) ended →
       Mcall message state substate meter (rollbackOnError state ended))
+    -- When its init code satisfies `Mcall`, a creation must satisfy `Mcreate` after its deposit.
     (create : ∀ {message : Message fork} {state prepared : TransactionState}
       {substate : Substate} {meter : Meter} {evm after : Evm fork Meter},
       prepareCreation fork state message.currentTarget = .ok prepared →
@@ -269,6 +239,7 @@ theorem processMessage_frame_byKind [LawfulGasMeter Meter]
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
         Mcreate message state substate meter ended.val) := by
+  -- The proof is by strong induction on the gas of the message, for calls and creations together.
   induction n using Nat.strongRecOn with
   | _ n ih =>
     have callCase : ∀ (message : Message fork) (state : TransactionState) (substate : Substate)
@@ -357,44 +328,36 @@ theorem processMessage_frame_byKind [LawfulGasMeter Meter]
 
 /-- Every successful call satisfies a relation `Mcall`, and every creation a relation `Mcreate`.
 
-That holds at every fork.
-
-The relation `R` of frames must be reflexive and transitive, and keep the invariant `Inv`.
-
-It must hold of each exceptional halt, each stop and each precompile.
-
-Each of these starts from a frame with the invariant.
-
-Each step from a frame with the invariant must keep `R`.
-
-It may use `Mcall` for the calls it sends, and `Mcreate` for the creations.
-
-A call must satisfy `Mcall` after its rollback, when its frame ends related to its start frame.
-
-That frame starts from the state and substate before or after the transfer of value.
-
-A call may use that relation only when its start frame has the invariant.
-
-After its deposit of code, a creation must satisfy `Mcreate` when its init code satisfies `Mcall`.
-
-The proof is by strong induction on the gas of the message, for calls and creations together. -/
+That holds at every fork. -/
 theorem processMessage_rel_byKind [LawfulGasMeter Meter]
     {R : Evm fork Meter → Evm fork Meter → Prop} {Inv : Evm fork Meter → Prop}
     {Mcall Mcreate : Message fork → TransactionState → Substate → Meter → Evm fork Meter → Prop}
+    -- The relation `R` of frames must be reflexive and transitive.
     (refl : ∀ evm, R evm evm) (trans : ∀ {a b c}, R a b → R b c → R a c)
+    -- It must keep the invariant `Inv`.
     (keeps : ∀ {a b}, Inv a → R a b → Inv b)
+    -- It must hold of each exceptional halt, from a frame with the invariant.
     (halt : ∀ evm error, Inv evm → R evm (exceptionalHalt evm error))
+    -- Each step from a frame with the invariant must keep `R`.
+    --
+    -- It may use `Mcall` for the calls it sends, and `Mcreate` for the creations.
     (steps : ∀ {evm result}, Inv evm → step fork evm = .ok result →
       StepResult.Keeps R (ChildRelByKind Mcall Mcreate) evm result)
+    -- It must hold of each stop and each precompile, from a frame with the invariant.
     (stop : ∀ evm : Evm fork Meter, Inv evm → R evm { evm with running := false })
     (precompile : ∀ {address : Nat} {evm after : Evm fork Meter},
       runPrecompile fork address evm = some after → Inv evm → R evm after)
+    -- A call must satisfy `Mcall` after its rollback, when its frame ends related to its start.
+    --
+    -- A call may use that relation only when its start frame has the invariant.
     (call : ∀ {message : Message fork} {state entry : TransactionState}
       {substate entrySubstate : Substate} {meter : Meter} {ended : Evm fork Meter},
+      -- Its start frame has the state and substate before or after the transfer of value.
       Entered fork message state substate entry entrySubstate →
       (Inv (startFrame message entry entrySubstate meter) →
         R (startFrame message entry entrySubstate meter) ended) →
       Mcall message state substate meter (rollbackOnError state ended))
+    -- When its init code satisfies `Mcall`, a creation must satisfy `Mcreate` after its deposit.
     (create : ∀ {message : Message fork} {state prepared : TransactionState}
       {substate : Substate} {meter : Meter} {evm after : Evm fork Meter},
       prepareCreation fork state message.currentTarget = .ok prepared →
@@ -409,6 +372,7 @@ theorem processMessage_rel_byKind [LawfulGasMeter Meter]
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
         Mcreate message state substate meter ended.val) :=
+  -- The proof is by strong induction on the gas of the message, for calls and creations together.
   processMessage_frame_byKind (F := fun a b => Inv a → R a b)
     (fun runs _ h hinv =>
       rel_runFrame refl trans keeps halt (fun hinv _ h => steps hinv h)
@@ -440,42 +404,34 @@ theorem ChildRelByKind.mono
   · exact hcall _ _ _ _ _
   · exact hcreate _ _ _ _ _
 
-/-- Every successful call and creation satisfies a relation `M` of messages, at every fork.
-
-The relation `R` of frames must be reflexive and transitive, and keep the invariant `Inv`.
-
-It must hold of each exceptional halt, each stop and each precompile.
-
-Each of these starts from a frame with the invariant.
-
-Each step from a frame with the invariant must keep `R`, given `M` for the messages it sends.
-
-A call must satisfy `M` after its rollback, when its frame ends related to its start frame.
-
-That frame starts from the state and substate before or after the transfer of value.
-
-A call may use that relation only when its start frame has the invariant.
-
-A creation must satisfy `M` when the call of its init code does, after its deposit of code.
-
-The proof is by strong induction on the gas of the message, for calls and creations together. -/
+/-- Every successful call and creation satisfies a relation `M` of messages, at every fork. -/
 theorem processMessage_rel [LawfulGasMeter Meter]
     {R : Evm fork Meter → Evm fork Meter → Prop} {Inv : Evm fork Meter → Prop}
     {M : Message fork → TransactionState → Substate → Meter → Evm fork Meter → Prop}
+    -- The relation `R` of frames must be reflexive and transitive.
     (refl : ∀ evm, R evm evm) (trans : ∀ {a b c}, R a b → R b c → R a c)
+    -- It must keep the invariant `Inv`.
     (keeps : ∀ {a b}, Inv a → R a b → Inv b)
+    -- It must hold of each exceptional halt, from a frame with the invariant.
     (halt : ∀ evm error, Inv evm → R evm (exceptionalHalt evm error))
+    -- Each step from a frame with the invariant must keep `R`, given `M` for the messages it sends.
     (steps : ∀ {evm result}, Inv evm → step fork evm = .ok result →
       StepResult.Keeps R (ChildRel M) evm result)
+    -- It must hold of each stop and each precompile, from a frame with the invariant.
     (stop : ∀ evm : Evm fork Meter, Inv evm → R evm { evm with running := false })
     (precompile : ∀ {address : Nat} {evm after : Evm fork Meter},
       runPrecompile fork address evm = some after → Inv evm → R evm after)
+    -- A call must satisfy `M` after its rollback, when its frame ends related to its start frame.
+    --
+    -- A call may use that relation only when its start frame has the invariant.
     (call : ∀ {message : Message fork} {state entry : TransactionState}
       {substate entrySubstate : Substate} {meter : Meter} {ended : Evm fork Meter},
+      -- Its start frame has the state and substate before or after the transfer of value.
       Entered fork message state substate entry entrySubstate →
       (Inv (startFrame message entry entrySubstate meter) →
         R (startFrame message entry entrySubstate meter) ended) →
       M message state substate meter (rollbackOnError state ended))
+    -- A creation must satisfy `M` when the call of its init code does, after its deposit of code.
     (create : ∀ {message : Message fork} {state prepared : TransactionState}
       {substate : Substate} {meter : Meter} {evm after : Evm fork Meter},
       prepareCreation fork state message.currentTarget = .ok prepared →
@@ -490,6 +446,7 @@ theorem processMessage_rel [LawfulGasMeter Meter]
       (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
         M message state substate meter ended.val) :=
+  -- The proof is by strong induction on the gas of the message, for calls and creations together.
   processMessage_rel_byKind refl trans keeps halt
     (fun hinv h => childRelByKind_self M ▸ steps hinv h) stop precompile call create n
 

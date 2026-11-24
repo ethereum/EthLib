@@ -10,29 +10,9 @@ public import EthLib.Execution.Proofs.Evm.Call.ToDelete
 
 The counted slots are the fresh slots of the accounts with a nonce or code.
 
-A message pays for them when its net state gas is at least a floor plus their state gas.
-
-The floor is the least of the net state gas of its meter and that of its meter rolled back.
-
-Each step of its frame pays, given what the messages it sends pay.
-
-A frame that succeeds then ends with a surplus at least that of its start.
-
-A frame that fails rolls back its meter to the floor, and the message puts back its state.
-
-The accounts that the message created had no nonce or code at its start.
-
-So the slots it counts are those of the state it started from.
+A call must run code only at an account with a nonce or code.
 
 A creation must start at an address with no nonce or code, and each nested creation does.
-
-It gives that address a nonce at once.
-
-Its deposit of code charges state gas, and its address keeps a nonce.
-
-The proof is by strong induction on the gas of the message, for calls and creations together.
-
-A call must run code only at an account with a nonce or code.
 
 Source: [EIP-8037][eip8037], its reservoir model and its accounting for halts and reverts.
 
@@ -299,6 +279,7 @@ private theorem frameRel_step (hfork : .glamsterdam ≤ fork) {evm : Evm fork St
     StepResult.Keeps FrameRel (ChildRelByKind CallPays CreatePays) evm result := by
   have hs := stepRules_state.step h
   have hm := meterRules_kept.step (C := fun _ _ _ => True) h
+  -- Each step of the frame pays, given what the messages it sends pay.
   have hp := paysSlots_step hfork running hinv h
   cases result with
   | next after => exact ⟨hs, hm, hp⟩
@@ -390,10 +371,13 @@ private theorem callPays_rollbackOnError {message : Message fork}
               (nonceOrCodeFreshSlots state).card) ≤
         (rollbackOnError state ended).gas.stateGasUsed := by
     rcases hpays with hf | ⟨-, hok⟩
-    · -- A failed frame rolls back its meter, and the call puts back the state.
+    · -- A failed frame rolls back its meter to the floor, and the call puts back the state.
       have hused : (rollbackOnError state ended).gas.stateGasUsed =
           meter.restore.stateGasUsed :=
         (stateGasUsed_rollbackOnError_of_failed hf).trans (stateGasUsed_restore_congr hmeter)
+      -- The accounts that the message created had no nonce or code at its start.
+      --
+      -- So the slots it counts are those of the state it started from.
       have hcard : nonceOrCodeFreshSlots (rollbackOnError state ended).state =
           nonceOrCodeFreshSlots state := by
         unfold rollbackOnError
@@ -402,7 +386,7 @@ private theorem callPays_rollbackOnError {message : Message fork}
       refine ⟨fun _ => hused, ?_⟩
       rw [hcard, hused, Int.sub_self, Int.mul_zero, Int.add_zero]
       exact Int.min_le_right _ _
-    · -- A frame with no error keeps the surplus of its start.
+    · -- A frame that succeeds ends with a surplus at least that of its start.
       obtain ⟨herr, hle⟩ := hok rfl
       have hE : rollbackOnError state ended = ended := by
         unfold rollbackOnError
@@ -538,6 +522,7 @@ private theorem pays_induction (hfork : .glamsterdam ≤ fork) (n : Nat) :
       (meter : StateGasMeter) (held : GasMeter.gasHeld meter ≤ message.gas), message.gas = n →
       ∀ ended, processCreateMessage fork message state substate meter held = .ok ended →
         CreatePays message state substate meter ended.val) :=
+  -- The proof is by strong induction on the gas of the message, for calls and creations together.
   processMessage_frame_byKind
     (F := fun a b => FrameInv a → a.error = none → FrameRel a b)
     (Mcall := CallPays) (Mcreate := CreatePays)
@@ -563,6 +548,9 @@ theorem processMessage_messagePays (hfork : .glamsterdam ≤ fork) {message : Me
     {held : GasMeter.gasHeld meter ≤ message.gas} {ended}
     (hcode : message.code.size ≠ 0 → HasNonceOrCode state message.currentTarget)
     (h : processMessage fork message state substate meter held = .ok ended) :
+    -- Its net state gas is at least a floor plus the state gas of the slots it adds.
+    --
+    -- The floor is the least of the net state gas of its meter and that of its meter rolled back.
     MessagePays message state substate meter ended.val :=
   ((pays_induction hfork message.gas).1 message state substate meter held rfl ended h
     hcode).2.2.2.2

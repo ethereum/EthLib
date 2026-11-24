@@ -8,33 +8,7 @@ public import EthLib.Execution.Proofs.Evm.Gas.StateGas
 
 The meter of [EIP-8037][eip8037] counts the net state gas of a frame, which can be negative.
 
-The slots counted are the fresh slots of the accounts with a nonce or code.
-
-The surplus of a frame is its net state gas, less the state gas of a new slot for each such slot.
-
-A frame fails when it stops with an error, and its meter has rolled back unless it reverted.
-
-The message that ran the frame then puts back the state from before it.
-
-A frame pays for its slots from an earlier frame when it failed, or when its surplus did not drop.
-
-Its surplus is then compared only when the earlier frame had no error, and it then has none.
-
-That relation is a preorder, and an exceptional halt pays for its slots.
-
-A running frame pays when it keeps its error and its surplus does not drop.
-
-Every frame pays from a frame with an error that has not failed.
-
-The relation compares no meters.
-
-A run keeps the starting reservoir, the baseline and the committed spill, proved apart.
-
-A message pays when its last frame keeps the starting reservoir and committed spill of its meter.
-
-Its net state gas must then be at least a floor, plus the state gas of the slots it adds.
-
-The floor is the least of the net state gas of its meter and that of its meter rolled back.
+It defines the surplus of a frame, and when a frame or a message pays for its slots.
 
 [eip8037]: https://eips.ethereum.org/EIPS/eip-8037#specification
 -/
@@ -51,22 +25,31 @@ variable {fork : Fork}
 
 /-- The net state gas of a frame, less the state gas of a new slot for each slot it counts. -/
 def slotSurplus (evm : Evm fork StateGasMeter) : Int :=
+  -- The slots counted are the fresh slots of the accounts with a nonce or code.
   evm.gas.stateGasUsed - STORAGE_SET_STATE_GAS * (nonceOrCodeFreshSlots evm.state).card
 
 /-- A frame that stops with an error.
 
-Unless it reverted, its meter has no spill and its reservoir is at its baseline. -/
+Unless it reverted, its meter has no spill and its reservoir is at its baseline.
+
+The message that ran the frame then puts back the state from before it. -/
 def FailedFrame (evm : Evm fork StateGasMeter) : Prop :=
   evm.running = false ∧ evm.error ≠ none ∧
     (evm.error = some .revert ∨ (evm.gas.spill = 0 ∧ evm.gas.reservoir = evm.gas.baseline))
 
-/-- The frame `b` pays for its slots from the frame `a`.
+/-- The frame `b` pays for its slots from the frame `a`: `b` failed, or its surplus did not drop.
 
-Either `b` failed, or `a` did not fail.
-
-In the second case, when `a` has no error, `b` has none and a surplus at least that of `a`. -/
+That relation is a preorder. -/
 def PaysSlots (a b : Evm fork StateGasMeter) : Prop :=
+  -- The relation compares no reservoir, baseline or committed spill of the two meters.
+  --
+  -- A run keeps the starting reservoir, the baseline and the committed spill, proved apart.
   FailedFrame b ∨
+    -- Otherwise `a` did not fail, and when `a` has no error, `b` has none.
+    --
+    -- Then `b` has a surplus at least that of `a`.
+    --
+    -- So every frame pays from a frame with an error that has not failed.
     (¬FailedFrame a ∧ (a.error = none → b.error = none ∧ slotSurplus a ≤ slotSurplus b))
 
 /-- Every frame pays for its slots from itself. -/
@@ -104,16 +87,14 @@ theorem PaysSlots.of_le {a b : Evm fork StateGasMeter} (running : a.running = tr
 
 /-- A message pays for its slots, from the state and the meter it starts with.
 
-The frame that ends it keeps the starting reservoir and the committed spill of the meter.
-
-Its net state gas is at least the floor plus the state gas of a new slot for each slot it adds.
-
-The floor is the least of the net state gas of the meter and that of the meter rolled back.
-
 The message and the substate are not read; they give the form of a relation of messages. -/
 def MessagePays (_message : Message fork) (state : TransactionState) (_substate : Substate)
     (meter : StateGasMeter) (ended : Evm fork StateGasMeter) : Prop :=
+  -- The frame that ends it keeps the starting reservoir and the committed spill of the meter.
   ended.gas.grant = meter.grant ∧ ended.gas.committed = meter.committed ∧
+    -- Its net state gas is at least the floor plus the state gas of a new slot per slot it adds.
+    --
+    -- The floor is the least of the net state gas of the meter and that of the meter rolled back.
     min meter.stateGasUsed meter.restore.stateGasUsed +
         STORAGE_SET_STATE_GAS *
           (((nonceOrCodeFreshSlots ended.state).card : Int) - (nonceOrCodeFreshSlots state).card) ≤

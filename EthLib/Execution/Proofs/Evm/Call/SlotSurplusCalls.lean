@@ -5,21 +5,7 @@ public import EthLib.Execution.Proofs.Evm.Call.SlotSurplusSteps
 /-!
 # Proofs: each step pays for the slots it counts, given what its messages pay
 
-From Glamsterdam, a call or a creation charges the state gas of a new account when it makes one.
-
-It passes its whole reservoir to its message, which raises its net state gas by that reservoir.
-
-The message ends having paid for its slots, from a meter whose floor is zero.
-
-Taking it back adds the net state gas of the message and lowers that of the caller by the reservoir.
-
-A message that failed gives back the state gas of the new account, which it did not make.
-
-So does a call that runs no message, and a creation at an address that collides.
-
-The rise of the nonce of the creator keeps the counted slots, since the creator has a nonce or code.
-
-So each step from a running frame pays for its slots, from Glamsterdam.
+From Glamsterdam, each step of a running frame pays for its slots.
 
 Its code must run at an account with a nonce or code.
 
@@ -68,6 +54,7 @@ private theorem slotSurplus_incorporateChild {message : Message fork} {substate 
     (incorporateChild fork caller child).error = caller.error ∧
       slotSurplus caller - reservoir ≤ slotSurplus (incorporateChild fork caller child) := by
   obtain ⟨hgrant, hcommitted, hle⟩ := paid
+  -- The message ends having paid for its slots, from a meter whose floor is zero.
   rw [min_stateGasUsed_start] at hle
   have hgas : (incorporateChild fork caller child).gas =
       StateGasMeter.absorb caller.gas child.gas child.error.isNone := by
@@ -80,7 +67,9 @@ private theorem slotSurplus_incorporateChild {message : Message fork} {substate 
     unfold incorporateChild
     split <;> rfl
   refine ⟨herr, ?_⟩
-  -- The merge adds the net state gas of the child, less the reservoir it started with.
+  -- Taking the child back adds its net state gas.
+  --
+  -- It lowers the net state gas of the caller by the reservoir that the child started with.
   simp only [slotSurplus, hgas, hstate, StateGasMeter.stateGasUsed_absorb_sub, hgrant, hcommitted]
   simp only [StateGasMeter.start] at hle ⊢
   rw [Int.mul_sub] at hle
@@ -102,6 +91,7 @@ private theorem resumeCall_slotSurplus {message : Message fork} {substate : Subs
   split at h1
   · obtain ⟨herr', hle'⟩ := surplusKept_pushWord h1
     exact ⟨herr'.trans herr, by simp only [slotSurplus, advance] at hle hle' ⊢; omega⟩
+  -- A message that failed gives back the state gas of the new account, which it did not make.
   · obtain ⟨herr', hle'⟩ := surplusKept_pushWord h1
     have := slotSurplus_refillStateGas (incorporateChild fork caller child) newAccount
     exact ⟨herr'.trans herr, by simp only [slotSurplus, advance] at hle hle' this ⊢; omega⟩
@@ -122,6 +112,7 @@ private theorem resumeCreate_slotSurplus {message : Message fork} {substate : Su
   split at h1
   · obtain ⟨herr', hle'⟩ := surplusKept_pushWord h1
     exact ⟨herr'.trans herr, by simp only [slotSurplus, advance] at hle hle' ⊢; omega⟩
+  -- A creation that failed gives back the state gas of the new account, which it did not make.
   · obtain ⟨herr', hle'⟩ := surplusKept_pushWord h1
     have := slotSurplus_refillStateGas (incorporateChild fork caller child) newAccount
     exact ⟨herr'.trans herr, by simp only [slotSurplus, advance] at hle hle' this ⊢; omega⟩
@@ -192,6 +183,7 @@ private theorem payCall_slotSurplus (hfork : .glamsterdam ≤ fork) {kind : Call
     cases h
     -- Two charges of execution gas, and between them the state gas of the new account.
     have k1 := surplusKept_chargeGas h1
+    -- A call charges the state gas of a new account when it makes one.
     have k2 := slotSurplus_chargeStateGas h2
     have k3 := surplusKept_chargeGas h3
     exact ⟨k3.1.trans (k2.1.trans k1.1), by have := k1.2; have := k3.2; omega⟩
@@ -230,7 +222,9 @@ private theorem finishCall_paysSlots {kind : CallKind} {call : CallOperands} {ca
   split at h
   · cases h
   dsimp only at h
-  -- The calling frame passes on its reservoir, which raises its surplus by that reservoir.
+  -- The calling frame passes its whole reservoir to its message.
+  --
+  -- That raises its surplus by that reservoir.
   have hc := slotSurplus_callerFrame evm expandBy
   have hr := slotSurplus_refillStateGas (callerFrame evm expandBy) newAccount
   have hres : GasMeter.reservoir evm.gas = evm.gas.reservoir := rfl
@@ -321,7 +315,9 @@ private theorem launchCreate_paysSlots {start evm : Evm fork StateGasMeter} {val
   · obtain ⟨e1, h1, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨e2, h2, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨state, hst, h⟩ := Base.bind_ok_iff.mp h
-    -- The state gas of the new account raises the surplus, and the charge of gas keeps it.
+    -- A creation charges the state gas of the new account, which raises the surplus.
+    --
+    -- The charge of gas keeps the surplus.
     have k1 := slotSurplus_chargeStateGas h1
     have k2 := surplusKept_chargeGas h2
     -- The sender keeps its nonce or code through the reads and the charges.
@@ -330,7 +326,7 @@ private theorem launchCreate_paysSlots {start evm : Evm fork StateGasMeter} {val
       rw [HasNonceOrCode.congr (tx := evm.state)]
       · exact hcode
       · simp [recordAccountRead]
-    -- The rise of its nonce keeps the counted slots.
+    -- The rise of its nonce keeps the counted slots, since it has a nonce or code.
     have hslots := nonceOrCodeFreshSlots_incrementNonce hcode' (Base.mapError_ok_iff.mp hst)
     have hstate : slotSurplus { e2 with state } = slotSurplus e2 := by
       simp only [slotSurplus, hslots]
@@ -343,7 +339,9 @@ private theorem launchCreate_paysSlots {start evm : Evm fork StateGasMeter} {val
       k2.1.trans (k1.1.trans s2.1)
     split at h
     · cases h
-      -- The creator passes on its reservoir, which raises its surplus by that reservoir.
+      -- The creator passes its whole reservoir to its message.
+      --
+      -- That raises its surplus by that reservoir.
       have hd : slotSurplus { e2 with state, gas := GasMeter.drain e2.gas } =
           slotSurplus { e2 with state } + e2.gas.reservoir := by
         simp only [slotSurplus, GasMeter.drain, StateGasMeter.drain, StateGasMeter.stateGasUsed]

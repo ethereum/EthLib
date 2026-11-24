@@ -9,20 +9,6 @@ From Glamsterdam, an instruction that gives the next frame changes the counted s
 
 The counted slots are the fresh slots of the accounts with a nonce or code.
 
-SSTORE writes the storage of the current account.
-
-When that account has a nonce or code, its state gas net of its refill pays for its slots.
-
-SELFDESTRUCT moves a balance, and may pay state gas for a new account.
-
-Every other instruction keeps the state up to its reads, its transient storage and its logs.
-
-It charges only execution gas, or halts.
-
-REVERT stops the frame with an error, and an exceptional halt rolls the meter back.
-
-So from a running frame whose current account has a nonce or code, each such instruction pays.
-
 Source: [EIP-8037][eip8037], the state gas of a new slot and its refill.
 
 [eip8037]: https://eips.ethereum.org/EIPS/eip-8037#specification
@@ -113,7 +99,7 @@ private theorem paysSlots_sstoreStep (hfork : .glamsterdam ≤ fork)
     have s5 := (chargeStateGas_sameContext h5).state.trans (chargeGas_sameContext h4).state
     rw [s5] at hst
     have err5 := (surplusKept_chargeStateGas h5).1.trans (surplusKept_chargeGas h4).1
-    -- The write is at the current account, which has a nonce or code.
+    -- SSTORE writes the storage of the current account, which has a nonce or code.
     have hcode' : HasNonceOrCode
         (e2.state.recordStorageRead e2.message.currentTarget (U256.toBeBytes k))
         e2.message.currentTarget := by
@@ -126,6 +112,7 @@ private theorem paysSlots_sstoreStep (hfork : .glamsterdam ≤ fork)
     rw [g4] at g5
     exact slotSurplus_eq_of_net
       (g5.trans (congrArg (· + _) (StateGasMeter.stateGasUsed_refill _ _))) hnet
+  -- An exceptional halt rolls the meter back.
   · exact paysSlots_exceptionalHalt _ _ _
 
 /-- SELFDESTRUCT from a running frame pays for its slots.
@@ -149,6 +136,7 @@ private theorem paysSlots_selfdestructStep {evm after : Evm fork StateGasMeter}
   rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
   · obtain ⟨e2, h2, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
+    -- The frame may pay state gas for a new account.
     have paid := (pre.trans (surplusKept_chargeGas h2)).trans (surplusKept_chargeStateGas h3)
     unfold finishSelfdestruct at h
     split at h
@@ -170,6 +158,9 @@ theorem paysSlots_instruction (hfork : .glamsterdam ≤ fork) {op : Op}
     (hcode : HasNonceOrCode evm.state evm.message.currentTarget)
     (hrun : instruction fork op = some run) (h : run evm = .ok after) : PaysSlots evm after := by
   unfold instruction at hrun
+  -- Every instruction other than SSTORE and SELFDESTRUCT charges only execution gas, or halts.
+  --
+  -- It keeps the state up to its reads, its transient storage and its logs.
   rcases orElse_eq_some hrun with hf | hrun
   · exact paysSlots_of_surplusKept running (surplusKept_stackOnlyStep hf h)
   rcases orElse_eq_some hrun with hf | hrun
@@ -177,7 +168,7 @@ theorem paysSlots_instruction (hfork : .glamsterdam ≤ fork) {op : Op}
   rcases orElse_eq_some hrun with hf | hrun
   · exact paysSlots_of_surplusKept running (surplusKept_memoryDataStep hf h)
   rcases orElse_eq_some hrun with hf | hrun
-  -- RETURN keeps the surplus, and REVERT fails.
+  -- RETURN keeps the surplus, and REVERT stops the frame with an error, so the frame fails.
   · exact (surplusKept_returnOpStep hf h).elim (paysSlots_of_surplusKept running) .inl
   rcases orElse_eq_some hrun with hf | hrun
   · exact paysSlots_of_surplusKept running (surplusKept_environmentStep hf h)
