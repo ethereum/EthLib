@@ -101,7 +101,7 @@ Its coins are free.
 
 The simulator of Bertoni et al., §4.3, Algorithm 3, asks its oracle at most once per call.
 
-Their oracle returns outputs of any length, and this one 256 bits.
+Their oracle returns outputs of any length, and this one returns outputs of one fixed type `Dg`.
 
 A version of their simulator that draws the other output bits itself is such a simulator. -/
 def AsksOnce (S : QueryImpl (PermSpec A) (StateT σ (OracleComp (RomSpec Msg Dg)))) : Prop :=

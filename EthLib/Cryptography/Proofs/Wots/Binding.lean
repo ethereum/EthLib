@@ -137,7 +137,7 @@ theorem findChainPreimage_honest [DecidableEq α] (c : α) :
 
 /-- Binding: a walk that reaches the honest value `steps` positions up started at the honest value.
 
-Otherwise the search finds a second preimage, valid by `findChainPreimage_valid`.
+Otherwise the search returns a second preimage, and whatever it returns is valid.
 
 When the honest values form a chain, the value it finds is a second preimage.
 
