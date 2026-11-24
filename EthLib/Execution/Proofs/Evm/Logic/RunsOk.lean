@@ -8,17 +8,9 @@ public import EthLib.Execution.Proofs.Evm.Logic.LessGas
 
 A run succeeds when the loop of the interpreter ends its frame in a frame with no error.
 
-A frame that reverts has an error, so its run does not succeed.
-
 A specification to frames with no error gives a run that succeeds.
 
-So does a specification whose runner may fail only on the messages that it names.
-
-The runner must then never fail on those messages.
-
-For the meter of one counter of gas, no run with less gas than a halt pays succeeds.
-
-That holds when a specification to that halt holds with any gas from some bound on.
+For one counter of gas, a run with less gas than a specified halt pays never succeeds.
 -/
 
 @[expose] public section
@@ -86,7 +78,7 @@ variable {code : ByteArray} {message : Message fork} {pc : Nat} {stack : List U2
   {returnData : ByteArray} {bound : Nat} {runChild : MessageRunner fork Nat bound}
   {evm : Evm fork Nat}
 
-/-- No run with less gas than `cost` succeeds.
+/-- For the meter of one counter of gas, no run with less gas than `cost` succeeds.
 
 A specification to a normal halt that pays `cost` must hold from the frame.
 

@@ -7,45 +7,7 @@ public import EthLib.Execution.Proofs.Evm.Call.Parent
 /-!
 # Proofs: the frames that a frame reaches through its messages
 
-A step of a frame can ask for a message, a call or a creation, before the frame goes on.
-
-The loop of the interpreter hands each such message to a runner of messages.
-
-The runner ends the message with a frame, and the frame of the caller goes on from it.
-
-The runner can also fail, and then the whole run fails with its error.
-
-So the frames that a frame reaches depend on that runner, and on its bound on the gas of messages.
-
-A step under a runner is a step that sends no message, or a message that the runner ends.
-
-The steps under one runner are deterministic, as the loop is.
-
-A frame that reaches a stopped frame under a runner is the result of the loop with that runner.
-
-The code that a message runs is arbitrary, and a triple does not reason about it.
-
-It takes an assumption instead, on each frame that ends a message.
-
-A runner meets the assumption when each frame that it gives meets the assumption.
-
-The runner must also fail only with an error that aborts the run.
-
-The runner of the messages of a frame of a message meets the assumption that always holds.
-
-That runner can fail, but only with an error that aborts, such as an error of the state.
-
-A triple under an assumption holds for every runner that meets it, and for every bound.
-
-From each frame of its precondition, the frame reaches a frame of its postcondition.
-
-Or it reaches a frame whose runner fails on its message, and then the run aborts.
-
-The message may change the state, and may even call the caller again.
-
-So a triple says about the state after a message only what the assumption says.
-
-With the assumption that always holds, a triple says nothing of the frame that ends a message.
+Steps and triples of a frame that may send messages, calls or creations, to a runner of messages.
 
 This file has no rule for an opcode that sends a message, only the rule for a step that sends one.
 -/
@@ -60,13 +22,16 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-! ## Steps under a runner of messages -/
 
-/-- One step of a running frame under a runner of messages.
+/-- One step of a running frame under a runner of messages, which ends each message with a frame.
 
-The step sends no message, or the runner runs its message, and the frame goes on or halts. -/
+The step sends no message, or the runner runs its message, and the frame goes on or halts.
+
+So the frames reached depend on the runner, and on its bound on the gas of messages. -/
 inductive StepBy (fork : Fork) (bound : Nat) (runChild : MessageRunner fork Meter bound) :
     Evm fork Meter → Evm fork Meter → Prop where
   /-- A step that sends no message. -/
   | step {evm after : Evm fork Meter} : Step fork evm after → StepBy fork bound runChild evm after
+  -- A step can ask for a message, a call or a creation, which the loop hands to the runner.
   /-- The runner ends the message with `child`, and the frame goes on from the resumed frame. -/
   | child {evm caller after : Evm fork Meter} {message : Message fork}
       {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
@@ -113,7 +78,7 @@ theorem Step.not_child {a b caller : Evm fork Meter} {message : Message fork}
   | next _ h => rw [sent] at h; cases h
   | halt _ h _ => rw [sent] at h; cases h
 
-/-- A step under a runner gives one frame. -/
+/-- A step under a runner gives one frame, as the loop does. -/
 theorem StepBy.deterministic {a b c : Evm fork Meter} (hb : StepBy fork bound runChild a b)
     (hc : StepBy fork bound runChild a c) : b = c := by
   cases hb with
@@ -164,6 +129,7 @@ def AbortsBy (fork : Fork) (bound : Nat) (runChild : MessageRunner fork Meter bo
     (evm : Evm fork Meter) : Prop :=
   evm.running = true ∧ ∃ caller message resume,
     step fork evm = .ok (.child caller message resume) ∧
+      -- Then the whole run fails with the error of the runner.
       ∃ lt e, runChild caller message lt = .error e
 
 /-! ## The loop of the interpreter -/
@@ -219,7 +185,9 @@ abbrev processRunner (fork : Fork) {Meter : Type} [GasMeter Meter] [LawfulGasMet
 
 /-- The runner of the messages of a frame of a message meets the assumption that always holds.
 
-It runs a call or a creation, as the code of a message runs them, for every bound on their gas. -/
+It runs a call or a creation, as the code of a message runs them, for every bound on their gas.
+
+It fails only with an error that aborts, such as an error of the state. -/
 theorem meets_process [LawfulGasMeter Meter] (fork : Fork) (bound : Nat) :
     Meets (bound := bound) (fun _ _ _ => True) (processRunner fork (Meter := Meter) bound) := by
   refine ⟨fun _ _ _ _ _ => trivial, fun caller message _ e h => ?_⟩
@@ -248,6 +216,13 @@ Or it reaches a frame whose runner fails on its message, so that the run aborts.
 That holds for every bound on the gas of messages, at least the gas of the frame. -/
 def HoareUnder (fork : Fork) (callee : Evm fork Meter → Message fork → Evm fork Meter → Prop)
     (P Q : Evm fork Meter → Prop) : Prop :=
+  -- The code of a message is arbitrary, so a triple assumes a fact of each frame that ends one.
+  --
+  -- The message may change the state, and may even call the caller again.
+  --
+  -- So a triple says about the state after a message only what the assumption says.
+  --
+  -- With the assumption that always holds, it says nothing of the frame that ends a message.
   ∀ bound (runChild : MessageRunner fork Meter bound), Meets callee runChild →
     ∀ evm, P evm → GasMeter.gasHeld evm.gas ≤ bound →
       ∃ after, Reaches (StepBy fork bound runChild) evm after ∧
@@ -294,18 +269,15 @@ theorem of_hoare {P Q : Evm fork Meter → Prop} (h : Hoare fork P Q) :
 
 /-- A step that sends a message, to a frame of `Q` from every frame that ends it.
 
-From each frame of `P`, the step asks for a message.
-
-Each frame that ends the message with at most its gas, and that meets the assumption, resumes.
-
-The resume gives a frame of `Q`, or fails with an error that does not abort.
-
-Then the frame halts exceptionally with that error, and the halted frame is in `Q`. -/
+From each frame of `P`, the step asks for a message. -/
 theorem of_child [LawfulGasMeter Meter] {P Q : Evm fork Meter → Prop}
     (h : ∀ evm, P evm → evm.running = true ∧ ∃ caller message resume,
       step fork evm = .ok (.child caller message resume) ∧
+      -- Each frame that ends the message with at most its gas, and meets the assumption, resumes.
       ∀ child, GasMeter.gasHeld child.gas ≤ message.gas → callee caller message child →
+        -- The resume gives a frame of `Q`.
         (∃ after, resume child = .ok after ∧ Q after) ∨
+          -- Or it fails with an error that does not abort, and the exceptional halt is in `Q`.
           ∃ e, resume child = .error e ∧ e.aborts = false ∧ Q (exceptionalHalt evm e)) :
     HoareUnder fork callee P Q := by
   intro bound runChild meets evm hp within
@@ -425,6 +397,7 @@ theorem runFrame [LawfulGasMeter Meter] {P Q : Evm fork Meter → Prop}
     ∃ e, runFrame (step fork) (step_decreases fork) bound runChild evm within = .error e ∧
       e.aborts = true := by
   obtain ⟨after, hreach, ⟨halted, hq⟩ | aborted⟩ := h bound runChild meets evm hp within
+  -- A frame that reaches a stopped frame under the runner is the result of the loop with it.
   · rw [runFrame_eq_of_reaches StepBy.gasHeld_le StepBy.runFrame_eq hreach within,
       runFrame_of_running_eq_false halted]
     exact .inl ⟨after, rfl, hq⟩

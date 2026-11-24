@@ -7,31 +7,11 @@ import EthLib.Execution.Proofs.Evm.Machine.Memory
 /-!
 # Proofs: a code stored as one natural number
 
-A proof about a code needs facts about its bytes.
-
-These are its size, the byte at a position, the data of a PUSH and its valid jump destinations.
+A code as one big-endian number, for facts about its size, bytes, PUSH data and jump destinations.
 
 On a literal array, such a fact costs time that grows with the position.
 
 Past a few hundred bytes, it runs out of the default limits.
-
-Here a code of `size` bytes is stored as one natural number `n`, the big-endian number of its bytes.
-
-The byte at a position is then one shift of `n`.
-
-The data of a PUSH is one shift and one remainder.
-
-The kernel and tactics such as `simp` and `decide` compute both on big numbers in one step.
-
-So a fact about one byte costs about the same at every position.
-
-A position is a valid jump destination when a walk along the opcodes from 0 reaches it.
-
-Its byte must also be JUMPDEST.
-
-The walk reads each byte the same way.
-
-It takes at most one step per opcode before the position, and `decide +kernel` checks it.
 -/
 
 @[expose] public section
@@ -44,9 +24,12 @@ open EthLib.Base (byteAtOrZero bytesToNat)
 
 The first byte of the code is the highest byte of `n`. -/
 def natByte (n size i : Nat) : UInt8 :=
+  -- One shift of `n`, which the kernel, `simp` and `decide` compute on big numbers in one step.
+  --
+  -- So a fact about one byte costs about the same at every position.
   if i < size then UInt8.ofNat (n >>> (8 * (size - 1 - i))) else 0
 
-/-- The code of `size` bytes stored in `n`.
+/-- The code of `size` bytes stored in `n`, the big-endian number of its bytes.
 
 A number above `256 ^ size` keeps only its lowest `size` bytes. -/
 def ofNat (n size : Nat) : ByteArray := ⟨Array.ofFn (n := size) fun i => natByte n size i.val⟩
@@ -109,7 +92,11 @@ theorem nextOpcode_ofNat (n size pc : Nat) : nextOpcode (ofNat n size) pc = next
 
 /-- Whether the opcodes from `pc` reach `target`, in at most `fuel` opcodes.
 
-The walk stops with false once it passes the target. -/
+The walk stops with false once it passes the target.
+
+It reads each byte the same way, one step per opcode before the target at most.
+
+The kernel checks it with `decide +kernel`. -/
 def walk (n size : Nat) : (fuel pc target : Nat) → Bool
   | 0, _, _ => false
   | fuel + 1, pc, target =>

@@ -10,39 +10,6 @@ A frame that knows a few slots of storage can create an account, and go on knowi
 
 The rules here hold from Berlin to the fork before Glamsterdam, with one counter of gas.
 
-The init code is the bytes of a fact of memory, so the creation grows no memory.
-
-The creator pays 32000, and from Shanghai 2 gas per word of init code, by EIP-3860.
-
-CREATE2 also pays 6 gas per word to hash the init code, by EIP-1014.
-
-The new address is the one that the specification derives from the base state.
-
-It must hold no code and a nonce of 0 in the base state, as EIP-684 asks.
-
-Its storage must be empty there, as EIP-7610 asks.
-
-No fact of a slot may give it a word other than zero.
-
-The nonce of the creator grows by one, whatever the creation does.
-
-The creation passes on all but one 64th of the gas left, by EIP-150.
-
-The init code is arbitrary, so the rule takes an effect of the frame that ends the creation.
-
-That effect may remake accounts, such as the new one, and give facts of accounts.
-
-- On success the frame pushes the new address and knows the facts that the effect gives.
-- It adds the refund of the effect, and the new base holds the balances and the accounts of it.
-- Its return data is then empty.
-- The new base gives the creator the grown nonce, unless the effect remakes the creator.
-- On failure the frame pushes 0, and keeps its facts of slots and its refund counter.
-- The new base then gives the creator the grown nonce.
-- Its return data is then an output that the assumption allows for a failure, such as a revert.
-- Either way, memory keeps every fact.
-- Either way, the new base agrees with the old one outside the touched slots and those of the facts.
-- It also agrees outside the addresses that the effect moves or remakes, and the creator.
-
 Out of scope: a creation that runs no message or runs in a static frame.
 
 Sources: EIP-150, EIP-684, EIP-1014, EIP-2929 and EIP-3860.
@@ -87,42 +54,36 @@ def CreateMessage (message : Message fork) (address : Address) (init : ByteArray
 
 /-- A frame of a creation that paid `cost`, after its message, with a gas, its facts and a base.
 
-The creator had the nonce `nonce` in the old base.
-
-The creation succeeded, or it failed and `sure` is false.
-
-On success the frame pushes `address`, knows the facts of the effect, and adds its refund.
-
-The new base then holds the balances and the accounts of the change.
-
-It also gives the creator the grown nonce, unless the change remakes the creator.
-
-The return data is then empty.
-
-On failure the frame pushes 0 and keeps its facts of slots and its refund counter.
-
-The new base then gives the creator the grown nonce.
-
-The return data is then some output that `failed` holds of.
-
-Memory keeps every fact. -/
+The creator had the nonce `nonce` in the old base, and memory keeps every fact. -/
 def AfterCreate (code : ByteArray) (message : Message fork) (pc : Nat) (rest : List U256)
     (size : Nat) (facts : List (Nat × ByteArray)) (gas cost : Nat) (address : Address)
     (failed : ByteArray → Prop) (nonce : Nat) (slots : List SlotFact) (refund : Int)
     (base : TransactionState) (accessed : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32))
     (change : Change) (sure : Bool) (evm : Evm fork Nat) : Prop :=
   ∃ left base' accessed', left ≤ createMessageGas fork (gas - cost) ∧
+    -- Either way, the new base agrees with the old one outside the touched slots and the facts.
+    --
+    -- It also agrees outside the addresses that the change moves or remakes, and the creator.
     Agrees (change.touched ++ slots.map SlotFact.slot) change.moved
       (change.remade ++ [message.currentTarget]) base accessed base' accessed' ∧
+    -- The creation succeeded, and the new base holds the balances and the accounts of the change.
     (((∀ fund ∈ change.funds, (base'.getAccount fund.1).balance = fund.2) ∧
       (∀ fact ∈ change.accounts, fact.Holds base') ∧
+      -- It gives the creator the grown nonce, unless the change remakes the creator.
       (message.currentTarget ∉ change.remade →
         (base'.getAccount message.currentTarget).nonce = nonce + 1) ∧
+      -- The frame pushes `address`, knows the facts of the change, and adds its refund.
+      --
+      -- The return data is then empty.
       Stored code message (pc + 1) (address.toU256 :: rest) size facts
         (gas - cost - createMessageGas fork (gas - cost) + left)
         (change.after ++ keptFacts change.touched slots) (refund + change.gain) base' accessed'
         .empty evm) ∨
+      -- Or it failed, `sure` is false, and the new base gives the creator the grown nonce.
       sure = false ∧ (base'.getAccount message.currentTarget).nonce = nonce + 1 ∧
+        -- The frame pushes 0 and keeps its facts of slots and its refund counter.
+        --
+        -- The return data is then some output that `failed` holds of, such as a revert.
         ∃ out, failed out ∧ Stored code message (pc + 1) (0 :: rest) size facts
           (gas - cost - createMessageGas fork (gas - cost) + left) slots refund base' accessed'
           out evm)
@@ -229,33 +190,7 @@ private theorem afterCreate_of_at {evm caller child final : Evm fork Nat} {rest 
 
 The byte at `pc` runs the creation, which sends a message.
 
-The frame may change the state, and its account holds the value in the base state.
-
-Its nonce in the base state is not the greatest, and its depth leaves room for one more frame.
-
-The init code is the bytes `init` of a fact of memory, of the size on the stack.
-
-From Shanghai, it is at most the greatest size, by EIP-3860.
-
-The new address is the one that the specification derives from the base state.
-
-It holds no code, a nonce of 0 and no storage in the base state.
-
-No fact of a slot gives it a word other than zero.
-
-The frame needs the price of the creation.
-
-Each frame that ends the message has the effect, by the assumption `callee`.
-
-The assumption may use the facts of the slots and the agreement of the creator with the base.
-
-It may also use the account of the creator, which is that of the base with the grown nonce.
-
-When `sure` is true, it says that such a frame ends with no error.
-
-It also says that `failed` holds of the output of such a frame that ends with an error.
-
-The frame after the creation is then one of `AfterCreate`, with the gas that the callee leaves. -/
+The frame after it is then that of a creation after its message, with the gas the callee leaves. -/
 theorem createKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {create2 : Bool} {byte : UInt8} {op : Op}
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
@@ -264,30 +199,57 @@ theorem createKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
     (hlt : pc < code.size) (hbyte : code[pc] = byte) (decoded : Op.ofByte fork byte = some op)
     (hnone : instruction (Meter := Nat) fork op = none)
     (hrun : messageInstruction (Meter := Nat) fork op = some (createStep create2))
+    -- The frame may change the state.
     (hstatic : message.isStatic = false)
+    -- The init code is the bytes of a fact of memory, of the size on the stack.
+    --
+    -- So the creation grows no memory.
     (hinput : (start.toNat, init) ∈ facts) (hlen : init.size = len.toNat)
+    -- From Shanghai, it is at most the greatest size, by EIP-3860.
     (hinit : .shapella ≤ fork → len.toNat ≤ maxInitCodeSize fork)
+    -- The account of the frame holds the value in the base state.
     (hbal : value ≤ (base.getAccount message.currentTarget).balance)
+    -- Its nonce in the base state is not the greatest.
+    --
+    -- That nonce grows by one, whatever the creation does.
     (hnonce : (base.getAccount message.currentTarget).nonce ≠ MAX_NONCE)
+    -- Its depth leaves room for one more frame.
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
+    -- The new address is the one that the specification derives from the base state.
     (haddr : creationAddress message.currentTarget (base.getAccount message.currentTarget).nonce
       (if create2 then some salt else none) init = .ok address)
+    -- It holds no code and a nonce of 0 in the base state, as EIP-684 asks.
+    --
+    -- Its storage is empty there, as EIP-7610 asks.
     (hdeploy : base.accountDeployable address = true)
+    -- No fact of a slot gives it a word other than zero.
     (hempty : ∀ fact ∈ slots, fact.address = address → fact.current = 0)
+    -- The frame needs the price of the creation, whose base is 32000 before Glamsterdam.
     (hgas : createBaseCost fork +
+        -- CREATE2 also pays 6 gas per word to hash the init code, by EIP-1014.
         (if create2 then OPCODE_KECCAK256_PER_WORD * wordCount len.toNat else 0) +
+        -- From Shanghai, it adds 2 gas per word of init code, by EIP-3860.
         (if fork ≥ .shapella then initCodeCost len.toNat else 0) ≤ gas)
+    -- The init code is arbitrary, so each frame that ends the message has an assumed effect.
+    --
+    -- That effect may remake accounts, such as the new one, and give facts of accounts.
     (heffect : ∀ caller msg child, callee caller msg child →
+      -- The creation passes on all but one 64th of the gas left, by EIP-150.
       CreateMessage message address init value (createMessageGas fork (gas -
         (createBaseCost fork +
           (if create2 then OPCODE_KECCAK256_PER_WORD * wordCount len.toNat else 0) +
           (if fork ≥ .shapella then initCodeCost len.toNat else 0)))) msg →
+      -- The assumption may use the facts of the slots, and the creator's agreement with the base.
       (∀ fact ∈ slots, fact.Holds caller.state caller.substate) →
       Agrees (slots.map SlotFact.slot) [] [message.currentTarget] base accessed caller.state
         caller.substate.accessedStorageKeys →
+      -- It may also use the account of the creator, that of the base with the grown nonce.
       caller.state.getAccountOptional message.currentTarget =
         some { base.getAccount message.currentTarget with
           nonce := (base.getAccount message.currentTarget).nonce + 1 } →
+      -- When `sure` is true, such a frame ends with no error.
+      --
+      -- When such a frame ends with an error, `failed` holds of its output.
       Effects change caller child ∧ (sure = true → child.error = none) ∧
         (child.error ≠ none → failed child.output)) :
     HoareUnder fork callee

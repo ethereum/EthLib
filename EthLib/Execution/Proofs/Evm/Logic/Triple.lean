@@ -7,20 +7,6 @@ public import EthLib.Execution.Proofs.Evm.Logic.Reach
 
 A triple says that from every frame of its precondition, the steps reach one of its postcondition.
 
-The rules of triples hold for every relation of steps, so the steps with messages share them.
-
-A triple over the steps without a message is total correctness: the reached frame exists.
-
-No gas bound is needed for the run to end, since every run of the loop ends by its measure.
-
-But a run can end in an exceptional halt, such as out of gas.
-
-So a postcondition that asks for a normal halt needs a precondition with enough gas.
-
-A specification asks for a stopped frame, the end of the run.
-
-The steps are deterministic, so that frame is the one result of the loop of the interpreter.
-
 The rules compose triples in sequence, weaken them, and carry an invariant of every step along.
 -/
 
@@ -32,7 +18,9 @@ open EthLib.Base (Fork)
 
 variable {fork : Fork} {Meter : Type}
 
-/-- From every frame that `P` holds of, the steps of `S` reach a frame that `Q` holds of. -/
+/-- From every frame that `P` holds of, the steps of `S` reach a frame that `Q` holds of.
+
+The rules of triples hold for every relation of steps, so the steps with messages share them. -/
 def Triple (S : Evm fork Meter → Evm fork Meter → Prop) (P Q : Evm fork Meter → Prop) : Prop :=
   ∀ evm, P evm → ∃ after, Reaches S evm after ∧ Q after
 
@@ -91,11 +79,21 @@ end Triple
 
 variable [GasMeter Meter]
 
-/-- From every frame that `P` holds of, the frame reaches a frame that `Q` holds of. -/
+/-- From every frame that `P` holds of, the frame reaches a frame that `Q` holds of.
+
+Over the steps without a message, this is total correctness: the reached frame exists.
+
+No gas bound is needed for the run to end, since every run of the loop ends by its measure.
+
+But a run can end in an exceptional halt, such as out of gas. -/
 abbrev Hoare (fork : Fork) (P Q : Evm fork Meter → Prop) : Prop :=
   Triple (Step fork) P Q
 
-/-- From every frame that `P` holds of, the frame reaches a stopped frame that `Q` holds of. -/
+/-- From every frame that `P` holds of, the frame reaches a stopped frame that `Q` holds of.
+
+The stopped frame is the end of the run.
+
+A postcondition that asks for a normal halt needs a precondition with enough gas. -/
 def Spec (fork : Fork) (P Q : Evm fork Meter → Prop) : Prop :=
   Hoare fork P fun evm => evm.running = false ∧ Q evm
 
@@ -112,7 +110,11 @@ theorem consequence {P P' Q Q' : Evm fork Meter → Prop} (h : Spec fork P Q)
 
 /-- From a frame of the precondition, the loop of the interpreter gives one of the postcondition.
 
-It holds for every bound on the gas of messages and every runner of messages. -/
+It holds for every bound on the gas of messages and every runner of messages.
+
+The loop runs the frame to the stopped frame that it reaches.
+
+The steps are deterministic, so that stopped frame is unique. -/
 theorem runFrame [LawfulGasMeter Meter] {P Q : Evm fork Meter → Prop} (h : Spec fork P Q)
     {bound : Nat} {runChild : MessageRunner fork Meter bound} {evm : Evm fork Meter}
     (hp : P evm) (within : GasMeter.gasHeld evm.gas ≤ bound) :

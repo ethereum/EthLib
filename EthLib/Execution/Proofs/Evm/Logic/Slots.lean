@@ -9,41 +9,7 @@ public import EthLib.Execution.Proofs.State.Tracker
 
 A specification often cares about a few slots of storage, not about the rest.
 
-A fact of a slot gives its account, its key, its word before the transaction, and its word now.
-
-It also says whether the slot is warm.
-
-A slot is warm when the transaction has accessed it, by EIP-2929.
-
-A frame of this kind knows ranges of memory, the facts of some slots, and the refund counter.
-
-It agrees with a base state and a base set of accessed keys at every slot that no fact names.
-
-There it reads the words of the base state, and it is warm exactly when the base set holds it.
-
-It also has the words before the transaction, the accounts, the codes and the block of the base.
-
-Agreement in general may leave out the accounts of some addresses, whose balances may move.
-
-Each of those still exists exactly when it does in the base, with its nonce and its code hash.
-
-It may also leave out the accounts of other addresses, which may change in every way.
-
-Every other account still exists exactly when it does in the base, with its nonce and its code.
-
-- A rule that keeps the state and the substate, for every state and substate, keeps every fact.
-- From Berlin, SLOAD of the key of a fact of the account of the frame pushes its word now.
-- It makes the slot warm, and pays 2100 for a cold slot and 100 for a warm one.
-- From Berlin to before Glamsterdam, SSTORE to the key of such a fact writes it and makes it warm.
-- It needs a frame that may change the state, more than 2300 gas, and its account in the base state.
-- It pays the price of EIP-2200 with the prices of EIP-2929, from the facts of the slot.
-- It adds the refund of the write, from the same facts, to the refund counter.
-- From Byzantium, RETURNDATASIZE of a frame that holds some return data pushes its size.
-- RETURNDATACOPY of a range within that return data writes its bytes as a fact of memory.
-- Both keep the return data and every fact of a slot.
-- A rule that halts and keeps the state and the substate keeps every fact in the halted frame.
-
-These frames say nothing of the logs, the accessed addresses and the other fields of the substate.
+So a frame here knows the facts of a few slots, and agrees with a base state at every other slot.
 -/
 
 @[expose] public section
@@ -66,7 +32,7 @@ structure SlotFact where
   original : U256
   /-- The word of the slot now. -/
   current : U256
-  /-- Whether the transaction has accessed the slot. -/
+  /-- Whether the slot is warm: the transaction has accessed it, by EIP-2929. -/
   warm : Bool
 
 /-- The account and the key of the slot of a fact. -/
@@ -88,23 +54,15 @@ def nonceAndCode (account : Account) : Nat × Hash32 := (account.nonce, account.
 
 /-- A state and its accessed keys agree with a base state and base keys outside some slots.
 
-Outside the slots of `touched`, each word reads as in `base`, and is warm when `accessed` holds it.
-
-Outside the addresses of `moved` and of `remade`, each account is that of `base`.
-
-Outside the addresses of `remade`, the account exists exactly when it does in `base`.
-
-There it has the nonce and the code hash of `base`, and the code of `base`.
-
-The words before the transaction and the block are those of `base`. -/
+The accounts of `moved` may differ in their balances, and those of `remade` in every way. -/
 structure Agrees (touched : List (Address × U256)) (moved remade : List Address)
     (base : TransactionState) (accessed : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32))
     (state : TransactionState) (keys : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32)) :
     Prop where
-  /-- Each word outside the slots reads as in the base state. -/
+  /-- Each word outside the slots of `touched` reads as in the base state. -/
   storage : ∀ address key, Untouched touched address key →
     state.getStorage address key = base.getStorage address key
-  /-- Each slot outside the slots is warm when the base keys hold it. -/
+  /-- Each slot outside the slots is warm exactly when the base keys hold it. -/
   warm : ∀ address key, Untouched touched address key →
     (key ∈ keys.getD address ∅ ↔ key ∈ accessed.getD address ∅)
   /-- The words before the transaction are those of the base state. -/
@@ -114,7 +72,7 @@ structure Agrees (touched : List (Address × U256)) (moved remade : List Address
     state.getAccountOptional address = base.getAccountOptional address
   /-- Outside the remade addresses, an account has the nonce and the code hash of the base.
 
-  Or it is missing in both. -/
+  Or it is missing in both, so it exists exactly when it does in the base. -/
   shape : ∀ address, address ∉ remade → (state.getAccountOptional address).map nonceAndCode =
     (base.getAccountOptional address).map nonceAndCode
   /-- Outside the remade addresses, an account has the code of the base state. -/
@@ -198,7 +156,9 @@ end Agrees
 
 /-- A frame that knows ranges of memory, the facts of some slots and the refund counter.
 
-Outside the slots of the facts, it agrees with the base state `base` and the keys `accessed`. -/
+Outside the slots of the facts, it agrees with the base state `base` and the keys `accessed`.
+
+It says nothing of the logs, the accessed addresses and the other fields of the substate. -/
 def Stored (code : ByteArray) (message : Message fork) (pc : Nat) (stack : List U256)
     (size : Nat) (facts : List (Nat × ByteArray)) (gas : Nat) (slots : List SlotFact)
     (refund : Int) (base : TransactionState)
@@ -207,6 +167,7 @@ def Stored (code : ByteArray) (message : Message fork) (pc : Nat) (stack : List 
   Known code message pc stack size facts gas evm.state evm.substate returnData evm ∧
     (∀ fact ∈ slots, fact.Holds evm.state evm.substate) ∧
     evm.substate.refundCounter = refund ∧
+    -- It also has the words before the transaction, the accounts, codes and block of the base.
     Agrees (slots.map SlotFact.slot) [] [] base accessed evm.state
       evm.substate.accessedStorageKeys
 
@@ -387,30 +348,28 @@ theorem sload_stored (hfork : .berlin ≤ fork) {fact : SlotFact} {rest : List U
         ((by rw [← haddress]; exact h : _ ∨ _).imp Ne.symm Ne.symm)) rfl (fun _ => rfl)
       (fun _ => rfl) rfl)⟩
 
-/-- From Berlin to before Glamsterdam, SSTORE to the key of a fact of the account writes it.
-
-It makes the slot warm.
-
-The frame may change the state, and holds more than the stipend of 2300 gas, by EIP-2200.
-
-The account of the frame exists in the base state.
-
-It pays the price of the write from the facts of the slot, by EIP-2200 with the prices of EIP-2929.
-
-It adds the refund of the write, from the same facts, to the refund counter. -/
+/-- From Berlin to before Glamsterdam, SSTORE to the key of a fact of the account writes it. -/
 theorem sstore_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {fact : SlotFact}
     {new : U256} {rest : List U256} (hlt : pc < code.size) (hbyte : code[pc] = 0x55)
+    -- The frame is not static, so it may change the state.
     (hstatic : message.isStatic = false) (hfact : fact ∈ slots)
     (haddress : fact.address = message.currentTarget)
+    -- The account of the frame exists in the base state.
     (hbase : (base.getAccountOptional message.currentTarget).isSome = true)
+    -- The frame holds more than the stipend of 2300 gas, by EIP-2200.
     (hstipend : CALL_STIPEND < gas)
+    -- It pays the price of the write from the facts of the slot.
+    --
+    -- That price is that of EIP-2200, with the prices of EIP-2929.
     (hgas : sstoreCost fork fact.original fact.current new (!fact.warm) ≤ gas) :
     Hoare fork
       (Stored code message pc (fact.key :: new :: rest) size facts gas slots refund base accessed
         returnData)
       (Stored code message (pc + 1) rest size facts
         (gas - sstoreCost fork fact.original fact.current new (!fact.warm))
+        -- It makes the slot warm.
         (touch { fact with current := new, warm := true } slots)
+        -- It adds the refund of the write, from the same facts, to the refund counter.
         (refund + sstoreRefund fork fact.original fact.current new) base accessed returnData) := by
   rintro evm ⟨⟨hat, hsize, hmod, hall⟩, hslots, hrefund, hagree⟩
   obtain ⟨ho, hc, hw⟩ := hslots fact hfact
