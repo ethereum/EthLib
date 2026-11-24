@@ -82,16 +82,15 @@ where
 
   `pq` is `P + Q`, and the scalars are four words each.
 
-  It is the shared chain of the simultaneous multiplication, with the same doublings and sums.
-
-  It reads bit `s` of the words instead of halving the scalars.
-
-  Halving a 256-bit integer at each step allocates a big integer, which would dominate the chain. -/
+  It is the shared chain of the simultaneous multiplication, with the same doublings and sums. -/
   chain (p q pq : Jacobian.Coords Montgomery) (k l : Word64.Raw) :
       Nat → Nat → Jacobian.Coords Montgomery
     | 0, _ => Jacobian.Coords.infinity
     | fuel + 1, s =>
       let acc := Jacobian.Coords.double aMontgomery (chain p q pq k l fuel (s + 1))
+      -- The chain reads bit `s` of the words instead of halving the scalars.
+      --
+      -- Halving a 256-bit integer at each step allocates a big integer, which would dominate.
       if k.bit s then
         if l.bit s then Jacobian.Coords.add aMontgomery acc pq
         else Jacobian.Coords.add aMontgomery acc p

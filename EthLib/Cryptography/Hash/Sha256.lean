@@ -7,10 +7,6 @@ SHA-256, as FIPS 180-4 defines it, for messages of whole bytes.
 
 Each step of the standard is one definition, from the padding of §5.1.1 to the hash of §6.2.
 
-The words of the state and of the schedule are record fields.
-
-The padded message is a byte array, and each block is read at its offset, with no copy.
-
 BLS hash-to-curve, the Fiat-Shamir challenges of KZG and SSZ merkleization use it.
 
 None of them needs constant time.
@@ -104,16 +100,16 @@ def lengthBytes (size : Nat) : ByteArray :=
   ⟨Array.ofFn fun i : Fin 8 => (bits >>> (56 - 8 * UInt64.ofNat i.val)).toUInt8⟩
 
 /--
-The padded message, FIPS 180-4 §5.1.1.
-
-It has four parts, in order:
-
-- The message itself, of `l` bits.
-- The byte `0b10000000`: the bit 1, then seven zero bits, since `l` is a multiple of 8.
-- The fewest zero bits that bring the size to 448 modulo 512.
-- The 64-bit block that holds `l`, big-endian, which completes the last 512-bit block.
+The padded message, FIPS 180-4 §5.1.1: the message, a set bit, zeros, then its length.
 -/
 def pad (message : ByteArray) : ByteArray :=
+  -- First the message itself, of `l` bits.
+  --
+  -- Then the byte `0b10000000`: the bit 1, then seven zero bits, since `l` is a multiple of 8.
+  --
+  -- Then the fewest zero bits that bring the size to 448 modulo 512.
+  --
+  -- Last the 64-bit block that holds `l`, big-endian, which completes the last 512-bit block.
   message ++ ⟨#[0b10000000]⟩ ++ ⟨Array.replicate (paddingZeros message.size) 0⟩ ++
     lengthBytes message.size
 
@@ -134,7 +130,9 @@ The first byte is the most significant.
   -- The last byte fills bits 7 to 0.
   b3.toUInt32
 
-/-! ## One block -/
+/-! ## One block
+
+The words of the state and of the schedule are record fields. -/
 
 /-- The eight words `a` to `h` of the working variables, or of a hash value. -/
 structure State where
@@ -173,13 +171,13 @@ The schedule sixteen words later, FIPS 180-4 §6.2.2, step 1.
 
 From the words `W_t` to `W_(t+15)`, it gives the words `W_(t+16)` to `W_(t+31)`.
 
-Each new word is `W_u = W_(u-16) + σ_0^{256}(W_(u-15)) + W_(u-7) + σ_1^{256}(W_(u-2))`.
-
-The later new words read the earlier new words, so they are computed in order.
-
 The rounds use one window for sixteen rounds.
 -/
 def Window.next (w : Window) : Window :=
+  -- Each new word is `W_u = W_(u-16) + σ_0^{256}(W_(u-15)) + W_(u-7) + σ_1^{256}(W_(u-2))`.
+  --
+  -- The later new words read the earlier new words, so they are computed in order.
+  --
   -- `n_i` is `W_(t+16+i)`; an operand past `W_(t+15)` is an earlier `n`.
   let n0 := w.w0 + smallSigma0 w.w1 + w.w9 + smallSigma1 w.w14
   let n1 := w.w1 + smallSigma0 w.w2 + w.w10 + smallSigma1 w.w15
@@ -202,16 +200,14 @@ def Window.next (w : Window) : Window :=
 /--
 Round `t` on the working variables a to h, FIPS 180-4 §6.2.2, step 3.
 
-It takes the constant `K_t^{256}` and the schedule word `W_t`, and adds modulo 2^32:
-
-- `T1 = h + Σ_1^{256}(e) + Ch(e, f, g) + K_t^{256} + W_t`
-- `T2 = Σ_0^{256}(a) + Maj(a, b, c)`
-- `h = g`, `g = f`, `f = e`, `e = d + T1`
-- `d = c`, `c = b`, `b = a`, `a = T1 + T2`
+It takes the constant `K_t^{256}` and the schedule word `W_t`, and adds modulo 2^32.
 -/
 @[inline] def round (s : State) (K_t W_t : UInt32) : State :=
+  -- `T1 = h + Σ_1^{256}(e) + Ch(e, f, g) + K_t^{256} + W_t`.
   let T1 := s.h + bigSigma1 s.e + ch s.e s.f s.g + K_t + W_t
+  -- `T2 = Σ_0^{256}(a) + Maj(a, b, c)`.
   let T2 := bigSigma0 s.a + maj s.a s.b s.c
+  -- `h = g`, `g = f`, `f = e`, `e = d + T1`, then `d = c`, `c = b`, `b = a`, `a = T1 + T2`.
   { h := s.g, g := s.f, f := s.e, e := s.d + T1, d := s.c, c := s.b, b := s.a, a := T1 + T2 }
 
 /--
@@ -242,24 +238,25 @@ The window holds `W_t` to `W_(t+15)`, and round `t + j` takes `K_(t+j)^{256}` an
 The hash value `H^(i)` after the block `M^(i)`, FIPS 180-4 §6.2.2, steps 1 to 4.
 
 The block is the `m / 8` bytes of `bytes` from `start`, and `H` is `H^(i-1)`.
-
-- Step 1: the schedule starts with the sixteen words of the block.
-- Step 2: the working variables a to h are set to `H_0^(i-1)` to `H_7^(i-1)`.
-- Step 3: the 64 rounds run on them.
-- Step 4: `H_0^(i) = a + H_0^(i-1)`, and so on to `H_7^(i) = h + H_7^(i-1)`, modulo 2^32.
 -/
 def compress (H : State) (bytes : ByteArray) (start : Nat)
     (whole : start + BLOCK_SIZE_BYTES ≤ bytes.size) :
     State :=
-  -- Step 1: the schedule, sixteen words at a time, from the words of the block.
+  -- Step 1: the schedule starts with the sixteen words of the block.
+  --
+  -- It is computed sixteen words at a time.
   let w0 := Window.ofBlock bytes start whole
   let w1 := w0.next
   let w2 := w1.next
   let w3 := w2.next
-  -- Steps 2 and 3: the 64 rounds, from `H^(i-1)`, sixteen on each window.
+  -- Step 2: the working variables a to h are set to `H_0^(i-1)` to `H_7^(i-1)`.
+  --
+  -- Step 3: the 64 rounds run on them, sixteen on each window.
   let r := rounds (rounds (rounds (rounds H w0 0 (by omega)) w1 16 (by omega)) w2 32 (by omega))
     w3 48 (by omega)
-  -- Step 4: each word of `H^(i)` is a working variable plus the same word of `H^(i-1)`.
+  -- Step 4: `H_0^(i) = a + H_0^(i-1)`, and so on to `H_7^(i) = h + H_7^(i-1)`, modulo 2^32.
+  --
+  -- Each word of `H^(i)` is a working variable plus the same word of `H^(i-1)`.
   { a := r.a + H.a, b := r.b + H.b, c := r.c + H.c, d := r.d + H.d,
     e := r.e + H.e, f := r.f + H.f, g := r.g + H.g, h := r.h + H.h }
 
@@ -311,15 +308,20 @@ def digest (H : State) : ByteArray :=
 
 /--
 SHA-256 of a message, FIPS 180-4 §6.2.
-
-- §6.2.1: the message is padded (§5.1.1) and parsed into `N` blocks of `m / 8` bytes (§5.2.1).
-- §6.2.1: the hash value starts as `H^(0)` (§5.3.3).
-- §6.2.2: for `i` from 1 to `N`, the compression of the block `M^(i)` gives `H^(i)`.
-- §6.2.2: the message digest is `H^(N)`, as bytes.
 -/
 def hash (message : ByteArray) : ByteArray :=
+  -- §6.2.1: the message is padded (§5.1.1) and parsed into `N` blocks of `m / 8` bytes (§5.2.1).
+  --
   -- The padded message is whole blocks.
+  --
+  -- It is a byte array, and each block is read at its offset, with no copy.
   let padded := pad message
+  -- §6.2.1: the hash value starts as `H^(0)` (§5.3.3).
+  --
+  -- §6.2.2: for `i` from 1 to `N`, the compression of the block `M^(i)` gives `H^(i)`.
+  --
+  -- §6.2.2: the message digest is `H^(N)`, as bytes.
+  --
   -- All `N` blocks from `H^(0)`, then the digest of `H^(N)`.
   digest (chain compress padded (padded.size / BLOCK_SIZE_BYTES) 0
     (by have := Nat.mul_div_le padded.size BLOCK_SIZE_BYTES; omega) initial)

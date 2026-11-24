@@ -10,13 +10,7 @@ The C exports of the sizes, the seed, the cache and the dataset items of Ethash.
 
 Their arguments and results are typed Python values, and a number crosses as an `int`.
 
-A cache crosses the boundary as its items in order, 64 bytes each.
-
 An argument of the wrong type fails with code 0.
-
-A dataset item needs a cache of at least one item, and the export rejects any other with code 0.
-
-The proof-of-work function also rejects, with code 0, a header hash or a nonce of the wrong size.
 -/
 
 public section
@@ -31,6 +25,9 @@ def bytesOfCache (c : Array Item) : ByteArray :=
 
 /-- The cache that bytes spell, 64 bytes per item. -/
 def cacheOfBytes (bytes : ByteArray) : Result (Array Item) := do
+  -- A dataset item needs a cache of at least one item, so an empty cache is rejected with code 0.
+  --
+  -- So is a cache whose size is not a multiple of 64 bytes.
   if bytes.size = 0 ∨ bytes.size % HASH_BYTES ≠ 0 then
     rejectArgument none s!"Ethash: a cache is a positive multiple of 64 bytes, got {bytes.size}"
   let data := bytes.data
@@ -79,6 +76,7 @@ def hashimotoLightOf (args : Nat × ByteArray × ByteArray × ByteArray) :
     Result (ByteArray × ByteArray) := do
   let (datasetSize, cacheBytes, headerHash, nonce) := args
   let c ← cacheOfBytes cacheBytes
+  -- A header hash or a nonce of the wrong size is rejected with code 0.
   if headerHash.size ≠ 32 then
     rejectArgument none s!"Ethash: a header hash is 32 bytes, got {headerHash.size}"
   if nonce.size ≠ 8 then

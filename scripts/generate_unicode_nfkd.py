@@ -59,10 +59,6 @@ The Unicode License V3 is in `EthLib/Cryptography/Unicode/LICENSE`.
 
 Copyright © 2024 Unicode, Inc.
 
-The decomposition table recursively expands both canonical and compatibility mappings.
-
-Hangul syllables are decomposed by the algorithm in `Unicode.lean`.
-
 Source: https://www.unicode.org/Public/16.0.0/ucd/UnicodeData.txt
 -/
 
@@ -72,7 +68,7 @@ namespace EthLib.Cryptography.Unicode.Data
 """
     lines = [header]
 
-    def table(name: str, type_: str, rows: list[str]) -> None:
+    def table(name: str, type_: str, rows: list[str], notes: tuple[str, ...] = ()) -> None:
         chunks = [rows[i : i + 64] for i in range(0, len(rows), 64)]
         for i, chunk in enumerate(chunks):
             lines.extend(
@@ -85,13 +81,19 @@ namespace EthLib.Cryptography.Unicode.Data
             )
         lines.append(f"\n/-- The {name} table, sorted by code point. -/")
         lines.append(f"def {name} : Array {type_} :=")
+        if notes:
+            lines.append("\n  --\n".join(f"  -- {note}" for note in notes))
         lines.append("\n    ++ ".join("  " + name + str(i) for i in range(len(chunks))))
         lines.append("\n")
 
     table(
         "decompositions",
         "(Nat × List Nat)",
-        [
+        notes=(
+            "The table recursively expands both canonical and compatibility mappings.",
+            "Hangul syllables are decomposed by the algorithm in `Unicode.lean`.",
+        ),
+        rows=[
             f"  (0x{code:X}, [{', '.join(f'0x{part:X}' for part in parts)}])"
             if len(parts) < 12
             else f"  (0x{code:X}, [\n    {', '.join(f'0x{part:X}' for part in parts[:9])},\n"

@@ -8,21 +8,9 @@ public import EthLib.Cryptography.Word64
 
 The base field of secp256r1 in Montgomery form, on four 64-bit words, with `R = 2^256`.
 
-An element holds `a R mod p`, below `p`, so equality of words is equality in the field.
-
 A product interleaves each row of word products with one step of Montgomery reduction.
 
 That is the CIOS method of [Koç, Acar and Kaliski][cios], after [Montgomery (1985)][redc].
-
-Since `-p^(-1) mod 2^64` is `1`, the multiple of `p` that a step adds is the low word itself.
-
-The words of `p` turn that multiple into shifts and sums, so the reduction is specific to `p`.
-
-That is why this form sits beside the Montgomery field on 32-bit limbs that other curves share.
-
-A sum, a difference and a product each end with at most one correction by `p`.
-
-The inverse goes through `Fp`, since it runs once for each scalar multiplication.
 
 [redc]: <https://doi.org/10.1090/S0025-5718-1985-0777282-X>
 
@@ -48,7 +36,9 @@ private theorem words_value (t : Words64) :
       2^256 * t.top.toNat := by
   simp only [value, lowValue, wordRadix]
 
-/-! ## One correction by `p` -/
+/-! ## One correction by `p`
+
+A sum, a difference and a product each end with at most one correction by `p`. -/
 
 /-- `p` in four words, least significant first.
 
@@ -131,7 +121,13 @@ theorem subRaw_val (a b : Raw) (ha : a.val < Fp.modulus) (hb : b.val < Fp.modulu
     rw [Raw.fromWords_val_low, Nat.mod_eq_of_lt (by omega)]
     omega
 
-/-! ## Product -/
+/-! ## Product
+
+The words of `p` turn the multiple that a reduction step adds into shifts and sums.
+
+So the reduction is specific to `p`.
+
+That is why this form sits beside the Montgomery field on 32-bit limbs that other curves share. -/
 
 /-- One row of a product: add `a x`, then add the multiple of `p` that clears the low word.
 
@@ -285,7 +281,9 @@ end Montgomery
 
 /-- An element of the base field in Montgomery form, with `R = 2^256`.
 
-The words hold `a R mod p`, below `p`, so each element has one encoding. -/
+The words hold `a R mod p`, below `p`, so each element has one encoding.
+
+So equality of words is equality in the field. -/
 abbrev Montgomery := Word64.Montgomery Fp.modulus
 
 namespace Montgomery
@@ -327,7 +325,9 @@ abbrev ofFin (a : Fp) : Montgomery := Word64.Montgomery.ofFin a
 /-- Leave the Montgomery form with a product by the integer one. -/
 abbrev toFin (a : Montgomery) : Fp := Word64.Montgomery.toFin a
 
-/-- The inverse, through the extended Euclidean algorithm on `Fp`, and 0 for 0. -/
+/-- The inverse, through the extended Euclidean algorithm on `Fp`, and 0 for 0.
+
+It goes through `Fp`, since it runs once for each scalar multiplication. -/
 def inv (a : Montgomery) : Montgomery := ofFin (Fin.inverse (toFin a))
 
 end Montgomery
