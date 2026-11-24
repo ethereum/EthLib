@@ -6,15 +6,7 @@ public import EthLib.Networking.Gossip.Cache
 /-!
 # Proofs: the gossipsub caches
 
-- A message put into the cache is found by its ID.
-- After a put and some shifts, the message is found iff fewer shifts than the history length ran.
-- Take a put of an ID that the cache did not hold, then some shifts.
-  The ID is told of in gossip iff fewer shifts ran than both window counts, and its topic matches.
-- These two results need a history of at least one window.
-- Every ID told of in gossip is found in the cache.
-- An ID inserted at a time is seen until its lifetime ends, and expiry then removes that entry.
-- Expiry keeps every answer at the time it runs, for the same lifetime.
-- The bytes of a message ID read back as that ID, and bytes that read as an ID are its bytes.
+Lookups and gossip of the message cache, answers of the seen cache, and the bytes of a message ID.
 -/
 
 @[expose] public section

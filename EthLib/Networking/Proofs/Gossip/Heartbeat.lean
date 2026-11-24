@@ -7,33 +7,13 @@ public import EthLib.Networking.Proofs.Gossip.Router
 /-!
 # Proofs: the gossipsub heartbeat
 
-For every lawful choice of peers, and every rank and standing that a client passes:
+The meshes, GRAFTs, PRUNEs, gossip and fanout that one heartbeat produces.
 
-- After a heartbeat, every mesh has at most the high bound plus the outbound count of peers.
-  At most the high bound of them are not outbound, and none appears twice.
-- A joined topic whose mesh is below the low bound, once negative peers leave, fills it.
-  It reaches the target, or stops early only when it runs out of peers that it may GRAFT.
-- A joined topic whose mesh is between the bounds, once negative peers leave, keeps those peers.
-  It adds only outbound peers that it may GRAFT, until it holds the outbound count or runs out.
-- No mesh holds a peer with a negative score.
-- A heartbeat keeps the explicit peers.
-  If no explicit peer is in a mesh before the heartbeat, none is after it.
-- A mesh of a joined topic pruned for oversubscription has the outbound count of outbound peers.
-  It has fewer only when it held fewer once its negative peers left.
-- Every peer added to a mesh gets a GRAFT.
-- Every peer removed from the mesh of a joined topic gets a PRUNE with the backoff.
-  The backoff of this node for that peer ends no earlier.
-- No IHAVE goes to a peer in the mesh or fanout of its topic.
-- No IHAVE goes to a peer below the gossip threshold.
-- The gossip of a topic whose windows hold message IDs reaches its gossip share of the candidates.
-- A fanout topic not published to for longer than its lifetime is gone.
-- If no fanout holds a peer twice before a heartbeat, none does after it.
+Each result holds for every lawful choice of peers, rank and standing that a client passes.
 
 The upper bounds and the outbound result of a pruned mesh need a target at most the high bound.
 
 The consensus layer sets them so.
-
-That outbound result also needs an outbound count at most the target.
 -/
 
 @[expose] public section

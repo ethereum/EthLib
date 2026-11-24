@@ -7,14 +7,7 @@ public import EthLib.Networking.Proofs.Encoding.Protobuf
 /-!
 # Proofs: the gossip RPC
 
-- Decoding the encoding of an RPC returns it, for an encoding shorter than `2^64` bytes.
-  This covers the fields of the partial message extension.
-- A subscription change, a control message or an RPC without an extension field has its default.
-- A peer that asks for partial messages can send them, and an unsubscription does neither.
-- A message whose records parse is rejected for signing exactly when it holds a forbidden field.
-- An RPC that publishes such a message is rejected.
-- For each forbidden field, a message with that field written first is rejected, even empty.
-- Two errors with one code come from one constructor.
+The encoding round trip of an RPC, the defaults of absent fields, and the forbidden fields.
 -/
 
 @[expose] public section
@@ -222,7 +215,9 @@ theorem decodeControl_encode (c : Control) (h : c.encode.size < 2 ^ 64) :
       mapM_bytesOf_len, h1, h2, h3, h4, h5, h6, bind, Except.bind, pure, Except.pure]
   · simp [lenRecord, maxField, or_imp, forall_and]
 
-/-- Decoding the encoding of an RPC returns it. -/
+/-- Decoding the encoding of an RPC returns it, when the encoding is shorter than `2^64` bytes.
+
+This covers the fields of the partial message extension. -/
 theorem decodeRpc_encode (rpc : Rpc) (h : rpc.encode.size < 2 ^ 64) :
     decodeRpc rpc.encode = .ok rpc := by
   obtain ⟨subs, pub, c, part⟩ := rpc

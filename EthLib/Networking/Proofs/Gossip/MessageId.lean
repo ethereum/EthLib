@@ -10,14 +10,9 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.Table
 
 Properties of the gossip message ID.
 
-- Data that decompresses is hashed as its payload under the domain `01 00 00 00`.
-- Other data is hashed as it is under the domain `00 00 00 00`.
-- As a byte string, the ID is the first 20 bytes of the SHA-256 digest of the hash input.
-- Two byte strings that decompress to one payload get one ID on one topic.
-- Before Altair the topic does not change the ID.
-- Each hash input determines its domain and its bytes, and under Altair its topic.
-  The topic must be shorter than 2^64 bytes.
-  So two messages that differ in one share an ID only if SHA-256, cut to 20 bytes, collides.
+Each hash input determines its domain, its bytes and, from Altair on, its topic.
+
+So two messages that differ in one of them share an ID only if SHA-256, cut to 20 bytes, collides.
 -/
 
 @[expose] public section
@@ -32,14 +27,14 @@ open EthLib.Serialization.Ssz (uintBytes_size uintBytes_injective)
 
 /-! ## The two cases -/
 
-/-- Data that decompresses is hashed as its payload, under the valid domain. -/
+/-- Data that decompresses is hashed as its payload, under the valid domain `01 00 00 00`. -/
 theorem messageId_of_ok (fork : Base.Fork) (topic : ByteArray) {data payload : ByteArray}
     (h : decompress data = .ok payload) :
     messageId fork topic data =
       (hash32 (hashInput fork MESSAGE_DOMAIN_VALID_SNAPPY topic payload)).take 20 := by
   simp only [messageId, h]
 
-/-- Data that does not decompress is hashed as it is, under the invalid domain. -/
+/-- Data that does not decompress is hashed as it is, under the invalid domain `00 00 00 00`. -/
 theorem messageId_of_error (fork : Base.Fork) (topic : ByteArray) {data : ByteArray}
     {e : SnappyError} (h : decompress data = .error e) :
     messageId fork topic data =
