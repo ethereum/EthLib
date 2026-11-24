@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.Bls12381.Encoding
+public import EthLib.Execution.Evm.Precompiles.Bls12381.Gas
 public import EthLib.Cryptography.Bls.MapToCurve
 
 /-!
@@ -70,13 +71,11 @@ def G2_MAX_DISCOUNT : Nat := 524
 
 /-- The discount for `k` pairs. -/
 def discountG2 (k : Nat) : Nat :=
-  -- The table covers `k <= 128`, and the maximum discount applies for `k > 128`.
-  if h : 0 < k ∧ k ≤ 128 then G2_K_DISCOUNT[k - 1] else G2_MAX_DISCOUNT
+  msmDiscount G2_K_DISCOUNT G2_MAX_DISCOUNT k
 
 /-- The price of G2MSM on `k` pairs: `k * 22500 * discount / 1000`, rounded down. -/
 def bls12G2MsmGas (k : Nat) : Nat :=
-  -- EIP-2537: `floor(k * c * discount(k) / 1000)`, for the price `c` of one multiplication.
-  k * GAS_G2MUL * discountG2 k / MULTIPLIER
+  msmGas GAS_G2MUL G2_K_DISCOUNT G2_MAX_DISCOUNT k
 
 /-- The sum of `[m]P` over the pairs, each point checked to be in the subgroup.
 
