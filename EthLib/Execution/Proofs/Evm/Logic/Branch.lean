@@ -7,21 +7,7 @@ public import EthLib.Execution.Proofs.Evm.Logic.Rules
 
 A table of entries in a code compares the top word of the stack with a key in each entry.
 
-Each entry is DUP1, a push of its key, EQ, a push of its destination, and JUMPI.
-
-The key takes `n` bytes and the destination `m` bytes, from 1 to 32 each, in every entry.
-
-An entry then takes `n + m + 5` bytes of code.
-
-The run jumps to the destination of the first entry whose key is the word.
-
-When no key is the word, the run goes on past the table.
-
-Each entry that the run tests costs 22 gas, at every fork with the one-counter meter.
-
-The stack keeps the word, and memory, the state and the substate stay as they are.
-
-Each destination must be a valid destination of a jump, and the stack must have room for two words.
+The run jumps to the destination of the first entry whose key is the word, or goes past the table.
 -/
 
 @[expose] public section
@@ -36,7 +22,9 @@ variable {fork : Fork}
 /-- The code holds the byte `b` at the index `i`. -/
 def ByteAt (code : ByteArray) (i : Nat) (b : UInt8) : Prop := ∃ h : i < code.size, code[i] = b
 
-/-- The size of an entry: DUP1, the push of its key, EQ, the push of its destination, JUMPI. -/
+/-- The size of an entry: DUP1, the push of its key, EQ, the push of its destination, JUMPI.
+
+That is `n + m + 5` bytes of code. -/
 abbrev entrySize (n m : Fin 33) : Nat := 1 + (1 + n) + 1 + (1 + m) + 1
 
 /-- A table of entries in the code from `pc`, each with a key of `n` bytes and a destination of `m`.
@@ -45,6 +33,7 @@ Each destination is a valid destination of a jump. -/
 def Table (code : ByteArray) (n m : Fin 33) : Nat → List (U256 × U256) → Prop
   | _, [] => True
   | pc, (key, dest) :: entries =>
+    -- DUP1, a push of the key, EQ, a push of the destination, and JUMPI.
     ByteAt code pc 0x80 ∧ ByteAt code (pc + 1) (0x5f + UInt8.ofNat n.val) ∧
       pushData code (pc + 1) n = key ∧ ByteAt code (pc + 1 + (1 + n)) 0x14 ∧
       ByteAt code (pc + 1 + (1 + n) + 1) (0x5f + UInt8.ofNat m.val) ∧
@@ -73,12 +62,18 @@ variable {code : ByteArray} {message : Message fork} {memory : ByteArray}
 
 When no key is `x`, the run goes on past the table.
 
-It pays 22 gas for each entry it tests, and keeps the word on the stack. -/
+It pays 22 gas for each entry it tests, and keeps the word on the stack.
+
+The key takes `n` bytes and the destination `m` bytes, from 1 to 32 each, in every entry. -/
 theorem branchTable {n m : Fin 33} (hn : n.val ≠ 0) (hm : m.val ≠ 0) {x : U256}
+    -- The stack must have room for two words.
     {rest : List U256} (hstack : rest.length + 2 < STACK_LIMIT) :
+    -- Each destination must be a valid destination of a jump.
     ∀ {pc gas : Nat} {entries : List (U256 × U256)}, Table code n m pc entries →
+      -- The price holds at every fork with the one-counter meter.
       22 * tested x entries ≤ gas →
       Hoare fork (At code message pc (x :: rest) memory gas state substate returnData)
+        -- The stack keeps the word, and memory, the state and the substate stay as they are.
         (At code message (branch x pc (entrySize n m) entries) (x :: rest) memory
           (gas - 22 * tested x entries) state substate returnData)
   | pc, gas, [], _, _ => Triple.of_imp fun _ h => h

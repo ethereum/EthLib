@@ -11,16 +11,6 @@ The frame that ends the init code of a creation deposits its output as the code 
 
 The rules here hold from Berlin to the fork before Glamsterdam, with one counter of gas.
 
-The deposit pays 200 gas a byte, from Frontier.
-
-From London, an output that starts with the byte `0xEF` fails, by EIP-3541.
-
-From Spurious Dragon, an output longer than 24576 bytes fails, by EIP-170.
-
-A deposit that fails puts back the state from before the creation.
-
-It then takes all the gas, and has no output.
-
 Sources: EIP-170 and EIP-3541.
 -/
 
@@ -43,7 +33,11 @@ It holds at most 24576 bytes, and the frame holds 200 gas for each of them.
 The deposit pays that gas and sets the code of the current account. -/
 theorem depositCode_of_ok (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {snapshot : TransactionState} {evm : Evm fork Nat} (herr : evm.error = none)
+    -- From London, an output that starts with the byte `0xEF` fails, by EIP-3541.
     (hprefix : .london ≤ fork → evm.output[0]? ≠ some 0xef)
+    -- From Spurious Dragon, an output longer than 24576 bytes fails, by EIP-170.
+    --
+    -- The deposit pays 200 gas a byte, from Frontier.
     (hsize : evm.output.size ≤ 24576) (hgas : evm.output.size * CODE_DEPOSIT_PER_BYTE ≤ evm.gas) :
     ∃ state', evm.state.setCode fork evm.message.currentTarget evm.output = .ok state' ∧
       depositCode fork snapshot evm =
@@ -81,6 +75,7 @@ The frame then has the state from before the creation, no gas, no output and out
 theorem depositCode_of_outOfGas (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {snapshot : TransactionState} {evm : Evm fork Nat} (herr : evm.error = none)
     (hprefix : .london ≤ fork → evm.output[0]? ≠ some 0xef)
+    -- The limit of 24576 bytes is from EIP-170, and the price of 200 gas a byte from Frontier.
     (hbad : 24576 < evm.output.size ∨ evm.gas < evm.output.size * CODE_DEPOSIT_PER_BYTE) :
     depositCode fork snapshot evm = .ok { evm with
       state := evm.state.restoreTxState snapshot, gas := 0, output := .empty,
@@ -136,24 +131,20 @@ theorem processCreateMessage_eq_ok {message : Message fork} {state : Transaction
     have he : rollbackOnError prepared stopped = ev.val := Except.ok.inj hmap
     exact ⟨prepared, stopped, hprep, hr, by rw [he]; exact hdep⟩
 
-/-- The assumption that a creation with code `code` runs as a specification of that code says.
-
-The message runs that code, has no target, sends no value, and runs no precompile.
-
-`G` holds of the message, of the state that the creation prepares, and of the substate.
-
-Then the frame that ends the init code is a stopped frame of `Q`.
-
-The frame that ends the creation is the deposit of that frame, after the rollback of a failure. -/
+/-- The assumption that a creation with code `code` runs as a specification of that code says. -/
 def CreatesAs (code : ByteArray) (G : Message fork → TransactionState → Substate → Prop)
     (Q : Message fork → TransactionState → Substate → Evm fork Nat → Prop)
     (caller : Evm fork Nat) (message : Message fork) (child : Evm fork Nat) : Prop :=
+  -- The message runs that code, has no target, sends no value, and runs no precompile.
   message.code = code → message.target = none →
     ¬(message.shouldTransferValue = true ∧ message.value ≠ 0) →
     precompileAddress fork message = none →
+    -- `G` holds of the message, of the state that the creation prepares, and of the substate.
     ∀ prepared, prepareCreation fork caller.state message.currentTarget = .ok prepared →
       G message prepared caller.substate.child →
+      -- Then the frame that ends the init code is a stopped frame of `Q`.
       ∃ stopped, Q message prepared caller.substate.child stopped ∧
+        -- The frame that ends the creation is the deposit of that frame, rolled back on a failure.
         depositCode fork caller.state (rollbackOnError prepared stopped) = .ok child
 
 /-- The runner of the interpreter meets the assumption of a specification of some init code.

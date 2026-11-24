@@ -10,22 +10,6 @@ The facts here are for the meter of one counter of gas, the meter of every fork 
 
 At a later fork they hold of that meter, not of the meter of the fork.
 
-A frame with `k` more gas is the same frame, with `k` added to its gas.
-
-An instruction is monotone in gas when, on every frame, it fails, or it gives a frame `b`.
-
-In that second case, the instruction on the frame with `k` more gas gives `b` with `k` more gas.
-
-A frame that halts with an error fails, and so does a frame that reverts.
-
-A frame is monotone in gas when the same holds of the step from every frame with less gas than it.
-
-The triples here are over the steps from frames that are monotone in gas.
-
-Each such triple is a triple over the steps of the logic.
-
-GAS is not monotone in gas, since it pushes the gas left.
-
 A step that sends a message, as a call or a creation does, is no step of the logic.
 -/
 
@@ -53,6 +37,7 @@ def addGas (k : Nat) (evm : Evm fork Nat) : Evm fork Nat := { evm with gas := ev
 
 /-- A result of an instruction that is no success: an error, or a stopped frame with an error. -/
 def Fails (r : Except EvmError (Evm fork Nat)) : Prop :=
+  -- A frame that halts with an error fails, and so does a frame that reverts.
   (∃ e, r = .error e) ∨ ∃ b, r = .ok b ∧ b.running = false ∧ b.error ≠ none
 
 /-- The result `lo` fails, or it is a frame `b` and the result `hi` is `b` with `k` more gas. -/
@@ -75,6 +60,7 @@ def StepFollows (k : Nat) (lo hi : Except EvmError (StepResult fork Nat)) : Prop
 
 /-- From every frame with `k` less gas than `evm`, the step fails, or it follows that of `evm`. -/
 def GasMono (evm : Evm fork Nat) : Prop :=
+  -- GAS is not monotone in gas, since it pushes the gas left.
   ∀ k low, evm = addGas k low → StepFollows k (step fork low) (step fork evm)
 
 /-- A step of the logic from a frame that is monotone in gas. -/

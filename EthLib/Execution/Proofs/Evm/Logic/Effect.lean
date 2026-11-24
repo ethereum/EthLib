@@ -11,55 +11,9 @@ A frame that knows a few slots of storage can send a message, and go on knowing 
 
 The effect of a message names the slots that it may touch, from the frame that sends it.
 
-It also names the addresses whose balances it may move.
+It also names the addresses whose balances it may move, and those whose accounts it may remake.
 
-It also names the addresses whose accounts it may remake, by a creation or a change of a nonce.
-
-Outside those slots and addresses, the frame that ends the message agrees with the frame before it.
-
-So every word reads as before there, and every slot is warm exactly when it was.
-
-The words before the transaction and the block stay too.
-
-Every account that is not remade still exists exactly when it did, with its nonce and its code.
-
-A message that fails touches no slot, moves no balance and remakes no account.
-
-A message that succeeds also gives facts of slots, balances, facts of accounts, and a refund to add.
-
-- A callee whose stopped frame agrees with the state of its caller, outside the change, has one.
-- On success that stopped frame must give the facts, the balances and the refund of the effect.
-- A failure rolls the state back, so the callee then touches nothing.
-- A move of a value that is not 0 between two accounts that exist moves only their balances.
-- It needs a sender with a nonce or a code, so that neither account ends empty.
-- CALL and CALLCODE with no value, STATICCALL and DELEGATECALL send no value of their own.
-- From Berlin to before Glamsterdam, such a call keeps each fact of a slot it does not touch.
-- It needs an input range that a fact of memory holds, and an output range within memory.
-- It also needs the gas of a call to a cold address.
-- On success, the frame then knows the facts that the effect gives, and adds its refund.
-- It also knows the output of the callee, which its assumption gives, as its return data.
-- It knows the start of that output in the output range, as far as both go.
-- On failure, it keeps every fact of a slot and the refund counter.
-- Its return data is then an output that the assumption allows for a failure, such as a revert.
-- Either way, it keeps each fact of memory apart from the output range.
-- Either way, its base agrees with the base before the call outside the touched slots and the facts.
-- From Berlin to before Glamsterdam, CALL with a value that is not 0 does the same.
-- It needs a frame that may change the state, and an account that holds the value in the base.
-- It also needs the gas of a cold call, of the value, and of a dead callee.
-- On success, its new base also holds the balances that the effect gives.
-- Its new base agrees with the old one outside the addresses whose balances the effect moves, too.
-
-A callee may call its caller again, before it ends.
-
-Then the code of the caller runs again, and its own specification says what that run does.
-
-The runner of the interpreter meets the specifications of a family of codes that call each other.
-
-Each specification may assume the specifications of the whole family on the messages it sends.
-
-Each starts from the frame of its message, after the move of the value of the message, if any.
-
-That holds by induction on the bound on the gas of messages, which each message is below.
+An account is remade by a creation or a change of a nonce.
 -/
 
 @[expose] public section
@@ -84,21 +38,19 @@ theorem Meets.and {Meter : Type} [GasMeter Meter] {bound : Nat}
   ⟨fun caller message lt child ran => ⟨ha.ok caller message lt child ran,
     hb.ok caller message lt child ran⟩, ha.aborts⟩
 
-/-- A message with code `code` runs as a specification of that code says.
-
-The message has a target and runs no precompile, and `G` holds of it and of its caller.
-
-It may move a value.
-
-Then the frame that ends it is a stopped frame of `Q`.
-
-That frame is the one that the callee stopped in, after the rollback of a failure. -/
+/-- A message with code `code` runs as a specification of that code says. -/
 def RunsFrom (code : ByteArray) (G : Message fork → TransactionState → Substate → Prop)
     (Q : Message fork → TransactionState → Substate → Evm fork Nat → Prop)
     (caller : Evm fork Nat) (message : Message fork) (child : Evm fork Nat) : Prop :=
+  -- The message has a target and runs no precompile.
+  --
+  -- It may move a value.
   message.code = code → message.target.isSome → precompileAddress fork message = none →
+    -- `G` holds of it and of its caller.
     G message caller.state caller.substate.child →
+    -- Then the frame that ends it is a stopped frame of `Q`.
     ∃ stopped, Q message caller.state caller.substate.child stopped ∧
+      -- That frame is the one that the callee stopped in, after the rollback of a failure.
       child = rollbackOnError caller.state stopped
 
 /-- Each code of a family runs as its specification says, on each message with that code. -/
@@ -110,24 +62,22 @@ def RunsAll {ι : Type} (code : ι → ByteArray)
 
 /-- The runner of the interpreter meets the specifications of a family of codes.
 
-Each specification holds of every message with its code and `G`, from the frame it starts.
-
-That frame starts after the move of the value of the message, if it has one.
-
-It is a triple under the assumption that the whole family runs as specified, together with `B`.
-
-So a code may call another of the family, or itself, or a code that calls it back.
-
-The runner of the interpreter must meet `B` for every bound on the gas of messages.
-
-The proof is an induction on that bound, since each message has less gas than the bound. -/
+So a code may call another of the family, or itself, or a code that calls it back. -/
 theorem meets_runsAll {ι : Type} {code : ι → ByteArray}
     {G : ι → Message fork → TransactionState → Substate → Prop}
     {Q : ι → Message fork → TransactionState → Substate → Evm fork Nat → Prop}
     {B : Evm fork Nat → Message fork → Evm fork Nat → Prop}
+    -- The runner of the interpreter must meet `B` for every bound on the gas of messages.
     (hB : ∀ bound, Meets B (processRunner fork bound))
+    -- Each specification holds of every message with its code and `G`, from the frame it starts.
     (hspec : ∀ i message state substate entry entrySubstate, message.code = code i →
+      -- That frame starts after the move of the value of the message, if it has one.
       G i message state substate → Entered fork message state substate entry entrySubstate →
+      -- It is a triple under the assumption that the whole family runs as specified, with `B`.
+      --
+      -- A callee may call its caller again, before it ends.
+      --
+      -- Then the code of the caller runs again, and its own specification says what that run does.
       SpecUnder fork (fun caller message child => RunsAll code G Q caller message child ∧
           B caller message child)
         (At (code i) message 0 [] .empty message.gas entry entrySubstate .empty)
@@ -135,6 +85,7 @@ theorem meets_runsAll {ι : Type} {code : ι → ByteArray}
     (bound : Nat) :
     Meets (fun caller message child => RunsAll code G Q caller message child ∧
       B caller message child) (processRunner fork bound) := by
+  -- The proof is an induction on that bound, since each message has less gas than the bound.
   induction bound using Nat.strongRecOn with
   | _ bound ih =>
   refine ⟨fun caller message lt child ran => ⟨fun i hcode htarget noPrecompile hg => ?_,
@@ -218,17 +169,18 @@ structure Change where
 
 Outside the touched slots and the moved and remade addresses of the change, the state agrees.
 
-A message that fails touches no slot, moves no balance and remakes no account.
-
-A message that succeeds gives the facts of slots, the balances and the accounts of the change.
-
-It also adds the refund of the change to the refund counter. -/
+A message that succeeds gives the facts of slots, the balances and the accounts of the change. -/
 structure Effect (change : Change) (state : TransactionState) (substate : Substate) (ok : Bool)
     (state' : TransactionState) (substate' : Substate) : Prop where
   /-- Outside the touched slots and the moved and remade addresses, the state agrees with the old.
 
-  On a failure it agrees everywhere. -/
+  There every word reads as before, and every slot is warm exactly when it was.
+
+  The words before the transaction and the block stay too.
+
+  Every account not remade still exists exactly when it did, with its nonce and its code. -/
   agrees : Agrees (if ok then change.touched else []) (if ok then change.moved else [])
+    -- A message that fails touches no slot, moves no balance and remakes no account.
     (if ok then change.remade else []) state substate.accessedStorageKeys state'
     substate'.accessedStorageKeys
   /-- A message that succeeds gives the facts of the change. -/
@@ -245,24 +197,19 @@ def Effects (change : Change) (caller child : Evm fork Nat) : Prop :=
   Effect change caller.state caller.substate child.error.isNone
     (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
 
-/-- A callee whose stopped frame agrees with its caller's state outside a change has its effect.
-
-The frame that ends the message is the stopped frame, rolled back on a failure.
-
-On success, the stopped frame gives the facts, the balances and the accounts of the change.
-
-It then holds the refund of the change.
-
-On a failure the rollback gives back the state of the caller, so nothing is touched. -/
+/-- A callee whose stopped frame agrees with its caller's state outside a change has its effect. -/
 theorem effects_rollbackOnError {change : Change} {caller stopped : Evm fork Nat}
     (hagree : Agrees change.touched change.moved change.remade caller.state
       caller.substate.accessedStorageKeys stopped.state stopped.substate.accessedStorageKeys)
+    -- On success, the stopped frame gives the facts, the balances and the accounts of the change.
     (hholds : stopped.error = none →
       ∀ fact ∈ change.after, fact.Holds stopped.state stopped.substate)
     (hfunds : stopped.error = none →
       ∀ fund ∈ change.funds, (stopped.state.getAccount fund.1).balance = fund.2)
     (haccounts : stopped.error = none → ∀ fact ∈ change.accounts, fact.Holds stopped.state)
+    -- It then holds the refund of the change.
     (hrefund : stopped.error = none → stopped.substate.refundCounter = change.gain) :
+    -- The frame that ends the message is the stopped frame, rolled back on a failure.
     Effects change caller (rollbackOnError caller.state stopped) := by
   unfold Effects
   cases herr : stopped.error with
@@ -271,6 +218,7 @@ theorem effects_rollbackOnError {change : Change} {caller stopped : Evm fork Nat
     simp only [incorporateChild, herr, Option.isNone_none, ite_true]
     exact ⟨hagree, fun _ => hholds herr, fun _ => hfunds herr, fun _ => haccounts herr,
       by simp [hrefund herr]⟩
+  -- On a failure the rollback gives back the state of the caller, so nothing is touched.
   | some e =>
     have hrb : rollbackOnError caller.state stopped =
         { stopped with
@@ -462,63 +410,66 @@ It counts the stipend when the value is not 0. -/
 abbrev callGas (fork : Fork) (value asked : U256) (gas extra : Nat) (cold : Bool) : Nat :=
   (messageCallGas fork value asked.toNat gas 0 ((if cold then 2600 else 100) + extra)).subCall
 
-/-- The message that a call of the kind `kind`, with no value of its own, sends from a frame.
-
-It runs the code `code` of the address `to`, with the data `data` and the gas `gas`.
-
-CALL and STATICCALL run it on `to`, and CALLCODE and DELEGATECALL on the current account.
-
-DELEGATECALL keeps the sender and the value of the current message.
-
-The others send from the current account, with no value.
-
-The message is one deeper than the frame, and static for STATICCALL or when the frame is. -/
+/-- The message that a call of the kind `kind`, with no value of its own, sends from a frame. -/
 def CallMessage (kind : CallKind) (message : Message fork) (to : Address) (code data : ByteArray)
     (gas : Nat) (msg : Message fork) : Prop :=
+  -- It has the gas `gas`.
   msg.gas = gas ∧
+    -- DELEGATECALL keeps the sender of the current message, and the others send from its account.
     msg.caller = (if kind = .delegatecall then message.caller else message.currentTarget) ∧
+    -- CALL and STATICCALL run it on `to`, and CALLCODE and DELEGATECALL on the current account.
     msg.currentTarget = (if kind = .call ∨ kind = .staticcall then to
       else message.currentTarget) ∧
     msg.target = some (if kind = .call ∨ kind = .staticcall then to
       else message.currentTarget) ∧
+    -- It runs the code `code` of the address `to`, with the data `data`.
     msg.codeAddress = some to ∧ msg.code = code ∧ msg.data = data ∧
+    -- DELEGATECALL keeps the value of the current message, and the others send no value.
     msg.value = (if kind = .delegatecall then message.value else 0) ∧
+    -- The message is one deeper than the frame, and static for STATICCALL or when the frame is.
     msg.depth = message.depth + 1 ∧ msg.isStatic = (kind == .staticcall || message.isStatic)
 
 /-- A frame of the call, after the message, with a flag, a gas, its facts, its refund and a base.
 
-The call succeeded, or it failed and `sure` is false.
-
-On success the new base holds the balances and the facts of accounts of the change.
-
-Memory keeps the facts apart from the output range.
-
-On success it also holds the start of `returned` at the start of that range.
-
-It holds as many bytes as both `returned` and the range hold.
-
-On success the return data is `returned`.
-
-On a failure the return data is some output that `failed` holds of. -/
+The call succeeded, or it failed and `sure` is false. -/
 def AfterCall (code : ByteArray) (message : Message fork) (pc : Nat) (rest : List U256)
     (size : Nat) (facts : List (Nat × ByteArray)) (outputStart outputSize : U256)
     (returned : ByteArray) (failed : ByteArray → Prop) (gas : Nat) (value asked : U256)
     (extra : Nat) (slots : List SlotFact) (refund : Int)
     (base : TransactionState) (accessed : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32))
     (change : Change) (sure : Bool) (evm : Evm fork Nat) : Prop :=
+  -- The frame gets back the gas that the callee leaves, at most the gas it passed on.
   ∃ cold left base' accessed', left ≤ callGas fork value asked gas extra cold ∧
+    -- The new base agrees with the old one outside the touched slots and the slots of the facts.
+    --
+    -- It also agrees outside the addresses whose balances it moves or whose accounts it remakes.
     Agrees (change.touched ++ slots.map SlotFact.slot) change.moved change.remade base accessed
       base' accessed' ∧
+    -- On success the new base holds the balances and the facts of accounts of the change.
     (((∀ fund ∈ change.funds, (base'.getAccount fund.1).balance = fund.2) ∧
       (∀ fact ∈ change.accounts, fact.Holds base') ∧
+      -- The frame then pushes 1.
       Stored code message (pc + 1) (1 :: rest) size
+        -- On success memory holds the start of `returned` at the start of the output range.
+        --
+        -- It holds as many bytes as both `returned` and the range hold.
         ((outputStart.toNat, returned.extract 0 (min outputSize.toNat returned.size)) ::
+          -- Memory keeps the facts apart from the output range.
           facts.filter (Apart outputStart.toNat outputSize.toNat))
         (gas - callCost fork value asked gas extra cold + left)
+        -- It knows the facts of the effect and of the slots it does not touch, and adds the refund.
         (change.after ++ keptFacts change.touched slots) (refund + change.gain) base' accessed'
+        -- On success the return data is `returned`.
         returned evm) ∨
+      -- Or, only when `sure` is false, the call fails.
+      --
+      -- The frame then pushes 0, and its return data is some output that `failed` holds of.
+      --
+      -- Such an output is one that the assumption allows for a failure, such as a revert.
       sure = false ∧ ∃ out, failed out ∧ Stored code message (pc + 1) (0 :: rest) size
+        -- Either way, memory keeps the facts apart from the output range.
         (facts.filter (Apart outputStart.toNat outputSize.toNat))
+        -- It keeps its facts of slots and its refund counter.
         (gas - callCost fork value asked gas extra cold + left) slots refund base' accessed' out
         evm)
 
@@ -640,68 +591,45 @@ private theorem afterCall_of_at {evm caller child final : Evm fork Nat} {rest : 
 
 /-- From Berlin to before Glamsterdam, a call that sends no value of its own from a frame of slots.
 
-The byte at `pc` runs the call of the kind `kind`, which sends a message.
-
 The callee has an effect on storage.
 
-The input range holds the bytes `data` of a fact of memory.
-
-The output range lies within memory.
-
-The callee runs the code of `to`, which the base state holds, and is no delegation.
-
-Each frame that ends such a message from the frame has the effect, by the assumption `callee`.
-
-The assumption also says that such a frame outputs `returned` when it ends with no error.
-
-It also says that `failed` holds of the output of such a frame that ends with an error.
-
-When `sure` is true, it says that such a frame ends with no error.
-
-The frame needs the gas of a call to a cold address.
-
-The frame then pushes 1 and knows the facts of the effect and of the slots it does not touch.
-
-It adds the refund of the effect.
-
-Its memory holds the start of `returned` at the start of the output range, as far as both go.
-
-Its return data is `returned`.
-
-Or, only when `sure` is false, the call fails.
-
-The frame then pushes 0 and keeps its facts of slots and its refund counter.
-
-Its return data is then an output that `failed` holds of.
-
-Either way, memory keeps the facts apart from the output range.
-
-The frame gets back the gas that the callee leaves, at most the gas it passed on.
-
-The new base agrees with the old one outside the touched slots and the slots of the facts. -/
+The frame then ends as a frame after the call, which pushes 1 on success and 0 on a failure. -/
 theorem callKind_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {kind : CallKind}
     {byte : UInt8} {op : Op} {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to inputStart inputSize outputStart outputSize : U256} {rest : List U256}
     {data returned calleeCode : ByteArray} {failed : ByteArray → Prop} {change : Change}
     {sure : Bool}
     (hlt : pc < code.size) (hbyte : code[pc] = byte)
+    -- The byte at `pc` runs the call of the kind `kind`, which sends a message.
     (decoded : Op.ofByte fork byte = some op) (hnone : instruction (Meter := Nat) fork op = none)
     (hrun : messageInstruction (Meter := Nat) fork op = some (callStep kind))
+    -- The input range holds the bytes `data` of a fact of memory.
     (hinput : (inputStart.toNat, data) ∈ facts) (hlen : data.size = inputSize.toNat)
+    -- The output range lies within memory.
     (houtput : outputStart.toNat + outputSize.toNat ≤ size)
+    -- The callee runs the code of `to`, which the base state holds.
     (hcode : base.getCode (base.getAccount (toAddressMasked to)).codeHash = .ok calleeCode)
+    -- From Pectra, that code is no delegation.
     (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
+    -- The frame needs the gas of a call to a cold address.
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT) (hgas : 2600 ≤ gas)
+    -- Each frame that ends such a message from the frame has the effect.
+    --
+    -- That is the assumption `callee`.
     (heffect : ∀ caller msg child cold, callee caller msg child →
       CallMessage kind message (toAddressMasked to) calleeCode data
         (callGas fork 0 asked gas 0 cold) msg →
       (∀ fact ∈ slots, fact.Holds caller.state caller.substate) →
       Agrees (slots.map SlotFact.slot) [] [] base accessed caller.state
         caller.substate.accessedStorageKeys →
+      -- When `sure` is true, the assumption says that such a frame ends with no error.
       Effects change caller child ∧ (sure = true → child.error = none) ∧
+        -- It also says that such a frame outputs `returned` when it ends with no error.
         (child.error = none → child.output = returned) ∧
+        -- It also says that `failed` holds of the output of such a frame that ends with an error.
         (child.error ≠ none → failed child.output)) :
     HoareUnder fork callee
+      -- CALL and CALLCODE with no value, STATICCALL and DELEGATECALL send no value of their own.
       (Stored code message pc (asked :: to :: ((if kind.sendsValue then [0] else []) ++
           inputStart :: inputSize :: outputStart :: outputSize :: rest)) size facts gas
         slots refund base accessed returnData)
@@ -896,64 +824,35 @@ def ValueMessage (message : Message fork) (to : Address) (code data : ByteArray)
 
 /-- From Berlin to before Glamsterdam, CALL with a value `v`, not 0, from a frame that knows slots.
 
-The frame may change the state, and its account holds at least `v` in the base state.
-
 The callee has an effect on storage and on balances.
 
-The input range holds the bytes `data` of a fact of memory.
-
-The output range lies within memory.
-
-The callee runs the code of `to`, which the base state holds, and is no delegation.
-
-Each frame that ends such a message from the frame has the effect, by the assumption `callee`.
-
-The assumption also says that such a frame outputs `returned` when it ends with no error.
-
-It also says that `failed` holds of the output of such a frame that ends with an error.
-
-When `sure` is true, it says that such a frame ends with no error.
-
-The frame needs 2600 for a cold access and 9000 for the value.
-
-It also needs 25000 when the callee is dead in the base state, by EIP-161.
-
-The frame then pushes 1 and knows the facts of the effect and of the slots it does not touch.
-
-It adds the refund of the effect, and the new base holds the balances of the effect.
-
-Its memory holds the start of `returned` at the start of the output range, as far as both go.
-
-Its return data is `returned`.
-
-Or, only when `sure` is false, the call fails.
-
-The frame then pushes 0 and keeps its facts of slots and its refund counter.
-
-Its return data is then an output that `failed` holds of.
-
-Either way, memory keeps the facts apart from the output range.
-
-The frame gets back the gas that the callee leaves, at most the gas it passed on with the stipend.
-
-The new base agrees with the old one outside the touched slots and the slots of the facts.
-
-It also agrees outside the addresses whose balances the effect moves. -/
+The frame then ends as a frame after the call, which pushes 1 on success and 0 on a failure. -/
 theorem callValue_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {asked to v inputStart inputSize outputStart outputSize : U256} {rest : List U256}
     {data returned calleeCode : ByteArray} {failed : ByteArray → Prop} {change : Change}
     {sure : Bool}
     (hlt : pc < code.size) (hbyte : code[pc] = 0xf1) (hv : v ≠ 0)
+    -- The frame may change the state, and its account holds at least `v` in the base state.
     (hstatic : message.isStatic = false)
     (hbal : v ≤ (base.getAccount message.currentTarget).balance)
+    -- The input range holds the bytes `data` of a fact of memory.
     (hinput : (inputStart.toNat, data) ∈ facts) (hlen : data.size = inputSize.toNat)
+    -- The output range lies within memory.
     (houtput : outputStart.toNat + outputSize.toNat ≤ size)
+    -- The callee runs the code of `to`, which the base state holds.
     (hcode : base.getCode (base.getAccount (toAddressMasked to)).codeHash = .ok calleeCode)
+    -- From Pectra, that code is no delegation.
     (hdel : .pectra ≤ fork → delegatedAddress calleeCode = none)
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
+    -- The frame needs 2600 for a cold access and 9000 for the value.
+    --
+    -- It also needs 25000 when the callee is dead in the base state, by EIP-161.
     (hgas : 2600 + (callNewAccountCost fork base (toAddressMasked to) v + callValueCost fork v) ≤
       gas)
+    -- Each frame that ends such a message from the frame has the effect.
+    --
+    -- That is the assumption `callee`.
     (heffect : ∀ caller msg child cold, callee caller msg child →
       ValueMessage message (toAddressMasked to) calleeCode data v
         (callGas fork v asked gas
@@ -961,13 +860,17 @@ theorem callValue_stored (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
       (∀ fact ∈ slots, fact.Holds caller.state caller.substate) →
       Agrees (slots.map SlotFact.slot) [] [] base accessed caller.state
         caller.substate.accessedStorageKeys →
+      -- When `sure` is true, the assumption says that such a frame ends with no error.
       Effects change caller child ∧ (sure = true → child.error = none) ∧
+        -- It also says that such a frame outputs `returned` when it ends with no error.
         (child.error = none → child.output = returned) ∧
+        -- It also says that `failed` holds of the output of such a frame that ends with an error.
         (child.error ≠ none → failed child.output)) :
     HoareUnder fork callee
       (Stored code message pc
         (asked :: to :: v :: inputStart :: inputSize :: outputStart :: outputSize :: rest) size
         facts gas slots refund base accessed returnData)
+      -- It gets back at most the gas that it passed on with the stipend.
       (AfterCall code message pc rest size facts outputStart outputSize returned failed gas v asked
         (callNewAccountCost fork base (toAddressMasked to) v + callValueCost fork v) slots refund
         base accessed change sure) := by

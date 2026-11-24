@@ -10,35 +10,9 @@ CREATE and CREATE2 send a message that runs init code from memory at a new addre
 
 The rules here hold from Berlin to the fork before Glamsterdam, with one counter of gas.
 
-The creation pays 32000, the growth of memory, and from Shanghai 2 gas per word of init code.
-
-The price of init code and its limit of 49152 bytes come from EIP-3860, from Shanghai.
-
-CREATE2, from Constantinople, also pays 6 gas per word to hash the init code, by EIP-1014.
-
-The new address is the one that the specification derives.
-
-For CREATE it hashes the sender and its nonce.
-
-For CREATE2 it hashes the sender, the salt and the init code.
-
-The address must hold no code and a nonce of 0, as EIP-684 asks, and no storage, as EIP-7610 asks.
-
-The creation accesses the new address, by EIP-2929.
-
-The nonce of the current account grows by one.
-
-It passes on all but one 64th of the gas left, by EIP-150.
-
-The message has no target, no data and the value, and it is not static.
-
-The callee runs arbitrary init code, so the rule takes an assumption on the frame that ends it.
-
-The caller then pushes the new address when that frame ends with no error, and 0 otherwise.
-
 Out of scope: a creation that runs no message, a creation in a static frame, and the deposit.
 
-Sources: EIP-150, EIP-684, EIP-1014, EIP-2929 and EIP-3860.
+Sources: EIP-150, EIP-684, EIP-1014, EIP-2929, EIP-3860 and EIP-7610.
 -/
 
 @[expose] public section
@@ -50,37 +24,37 @@ open GasCosts
 
 variable {fork : Fork}
 
-/-- The step of CREATE, or of CREATE2 with the salt `salt`, sends a message that runs init code.
-
-The init code is the range of memory that the operands name, once memory grows for it.
-
-The caller has paid the price of the creation, the growth of memory and the gas it passes on.
-
-It passes on the gas that a creation passes on, from the gas it has left after the price.
-
-It has accessed the new address, recorded the reads, and its state is the one with its nonce grown.
-
-It keeps its output.
-
-The message runs the init code at the new address, from the current account, with the value.
-
-It has no target and no data, and it is not static. -/
+/-- The step of CREATE, or of CREATE2 with the salt `salt`, sends a message that runs init code. -/
 theorem createStep_child (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {create2 : Bool}
     {evm : Evm fork Nat} {value start size salt : U256} {rest : List U256} {address : Address}
     (hst : evm.stack.val =
       value :: start :: size :: ((if create2 then [salt] else []) ++ rest))
     (hstatic : evm.message.isStatic = false)
+    -- From Shanghai, the init code is at most the greatest size, 49152 bytes, by EIP-3860.
     (hinit : .shapella ≤ fork → size.toNat ≤ maxInitCodeSize fork)
     (hbal : value ≤ (evm.state.getAccount evm.message.currentTarget).balance)
     (hnonce : (evm.state.getAccount evm.message.currentTarget).nonce ≠ MAX_NONCE)
     (hdepth : evm.message.depth + 1 ≤ STACK_DEPTH_LIMIT)
+    -- The new address is the one that the specification derives.
+    --
+    -- For CREATE it hashes the sender and its nonce.
+    --
+    -- For CREATE2 it hashes the sender, the salt and the init code.
     (haddr : creationAddress evm.message.currentTarget
       (evm.state.getAccount evm.message.currentTarget).nonce
       (if create2 then some salt else none)
       (memoryReadBytes (memoryExtend evm.memory
         (extendMemory evm.memory.size [(start, size)]).expandBy) start.toNat size.toNat) =
         .ok address)
+    -- The address must hold no code and a nonce of 0, as EIP-684 asks.
+    --
+    -- It must hold no storage, as EIP-7610 asks.
     (hdeploy : evm.state.accountDeployable address = true)
+    -- The creation pays 32000 and the growth of memory.
+    --
+    -- From Shanghai it also pays 2 gas per word of init code, by EIP-3860.
+    --
+    -- CREATE2, from Constantinople, also pays 6 gas per word to hash the init code, by EIP-1014.
     (hgas : createBaseCost fork +
         (if create2 then OPCODE_KECCAK256_PER_WORD * wordCount size.toNat else 0) +
         (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
@@ -91,6 +65,7 @@ theorem createStep_child (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
       caller.message = evm.message ∧ caller.pc = evm.pc ∧ caller.stack.val = rest ∧
       caller.memory = memoryExtend evm.memory
         (extendMemory evm.memory.size [(start, size)]).expandBy ∧
+      -- The caller has paid the price, the growth of memory and the gas that it passes on.
       caller.gas = evm.gas - (createBaseCost fork +
           (if create2 then OPCODE_KECCAK256_PER_WORD * wordCount size.toNat else 0) +
           (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
@@ -99,19 +74,28 @@ theorem createStep_child (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam
           (if create2 then OPCODE_KECCAK256_PER_WORD * wordCount size.toNat else 0) +
           (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
         (extendMemory evm.memory.size [(start, size)]).cost)) ∧
+      -- It keeps its output.
       caller.running = evm.running ∧ caller.error = evm.error ∧ caller.output = evm.output ∧
+      -- It has recorded the reads, and its state is the one with its nonce grown by one.
       ((evm.state.recordAccountRead evm.message.currentTarget).recordAccountRead
         address).incrementNonce fork evm.message.currentTarget = .ok caller.state ∧
+      -- It has accessed the new address, by EIP-2929.
       caller.substate = { evm.substate with
         accessedAddresses := evm.substate.accessedAddresses.insert address } ∧
+      -- It passes on all but one 64th of the gas left after the price, by EIP-150.
       msg.gas = createMessageGas fork (evm.gas - (createBaseCost fork +
           (if create2 then OPCODE_KECCAK256_PER_WORD * wordCount size.toNat else 0) +
           (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
         (extendMemory evm.memory.size [(start, size)]).cost)) ∧
+      -- The message runs the init code at the new address, from the current account.
+      --
+      -- It has no target.
       msg.caller = evm.message.currentTarget ∧ msg.target = none ∧
       msg.currentTarget = address ∧ msg.codeAddress = none ∧
+      -- The init code is the range of memory that the operands name, once memory grows for it.
       msg.code = memoryReadBytes (memoryExtend evm.memory
         (extendMemory evm.memory.size [(start, size)]).expandBy) start.toNat size.toNat ∧
+      -- It has no data, it carries the value, and it is not static.
       msg.data = .empty ∧ msg.value = value ∧ msg.depth = evm.message.depth + 1 ∧
       msg.isStatic = false := by
   have hng : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hglam
@@ -211,49 +195,43 @@ variable {code : ByteArray} {message : Message fork} {pc : Nat} {memory : ByteAr
 
 /-- From Berlin to before Glamsterdam, CREATE, or CREATE2 with a salt, of init code in memory.
 
-The opcode at the program counter runs the step of that creation.
+The callee runs arbitrary init code, so the rule takes an assumption on the frame that ends it.
 
-The frame may change the state, holds the value, and its nonce is below the greatest.
-
-Its depth leaves room for one more frame.
-
-From Shanghai, the init code is at most the greatest size, by EIP-3860.
-
-The new address is the one that the specification derives.
-
-It holds no code, a nonce of 0 and no storage.
-
-The creation pays its price and the growth of memory, and it accesses the new address.
-
-The message runs the init code at the new address, from the current account, with the value.
-
-It has no target and no data, and it is not static.
-
-The state of the creator is the one with its nonce grown, after the reads of both accounts.
-
-The rule holds for every frame that ends the message and meets the assumption.
-
-The creator pushes the new address when that frame ends with no error, and 0 otherwise.
-
-It gets back the gas that the frame leaves, and its state and substate come from the frame.
-
-The rule says nothing more of them, since the init code is arbitrary. -/
+The rule holds for every frame that ends the message and meets the assumption. -/
 theorem createKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) {create2 : Bool}
     {byte : UInt8} {op : Op} {callee : Evm fork Nat → Message fork → Evm fork Nat → Prop}
     {value start size salt : U256} {rest : List U256} {address : Address}
     (hlt : pc < code.size) (hbyte : code[pc] = byte) (decoded : Op.ofByte fork byte = some op)
+    -- The opcode at the program counter runs the step of that creation.
     (hnone : instruction (Meter := Nat) fork op = none)
     (hrun : messageInstruction (Meter := Nat) fork op = some (createStep create2))
+    -- The frame may change the state.
     (hstatic : message.isStatic = false)
+    -- From Shanghai, the init code is at most the greatest size, 49152 bytes, by EIP-3860.
     (hinit : .shapella ≤ fork → size.toNat ≤ maxInitCodeSize fork)
+    -- It holds the value, and its nonce is below the greatest.
     (hbal : value ≤ (state.getAccount message.currentTarget).balance)
     (hnonce : (state.getAccount message.currentTarget).nonce ≠ MAX_NONCE)
+    -- Its depth leaves room for one more frame.
     (hdepth : message.depth + 1 ≤ STACK_DEPTH_LIMIT)
+    -- The new address is the one that the specification derives.
+    --
+    -- For CREATE it hashes the sender and its nonce.
+    --
+    -- For CREATE2 it hashes the sender, the salt and the init code.
     (haddr : creationAddress message.currentTarget (state.getAccount message.currentTarget).nonce
       (if create2 then some salt else none)
       (memoryReadBytes (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
         start.toNat size.toNat) = .ok address)
+    -- The address must hold no code and a nonce of 0, as EIP-684 asks.
+    --
+    -- It must hold no storage, as EIP-7610 asks.
     (hdeploy : state.accountDeployable address = true)
+    -- The creation pays 32000 and the growth of memory.
+    --
+    -- From Shanghai it also pays 2 gas per word of init code, by EIP-3860.
+    --
+    -- CREATE2, from Constantinople, also pays 6 gas per word to hash the init code, by EIP-1014.
     (hgas : createBaseCost fork +
         (if create2 then OPCODE_KECCAK256_PER_WORD * wordCount size.toNat else 0) +
         (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
@@ -263,20 +241,28 @@ theorem createKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) 
         memory gas state substate returnData)
       fun after => ∃ caller msg child, callee caller msg child ∧
         child.gas ≤ msg.gas ∧
+        -- The state of the creator has its nonce grown, after the reads of both accounts.
         ((state.recordAccountRead message.currentTarget).recordAccountRead address).incrementNonce
           fork message.currentTarget = .ok caller.state ∧
+        -- The creation accesses the new address, by EIP-2929.
         caller.substate = { substate with
           accessedAddresses := substate.accessedAddresses.insert address } ∧
+        -- It passes on all but one 64th of the gas left after the price, by EIP-150.
         msg.gas = createMessageGas fork (gas - (createBaseCost fork +
             (if create2 then OPCODE_KECCAK256_PER_WORD * wordCount size.toNat else 0) +
             (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
           (extendMemory memory.size [(start, size)]).cost)) ∧
+        -- The message runs the init code at the new address, from the current account.
+        --
+        -- It has no target.
         msg.caller = message.currentTarget ∧ msg.target = none ∧ msg.currentTarget = address ∧
         msg.codeAddress = none ∧
         msg.code = memoryReadBytes (memoryExtend memory
           (extendMemory memory.size [(start, size)]).expandBy) start.toNat size.toNat ∧
+        -- It has no data, it carries the value, and it is not static.
         msg.data = .empty ∧ msg.value = value ∧ msg.depth = message.depth + 1 ∧
         msg.isStatic = false ∧
+        -- The creator pushes the new address when that frame ends with no error, and 0 otherwise.
         At code message (pc + 1) ((if child.error.isNone then address.toU256 else 0) :: rest)
           (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
           (gas - (createBaseCost fork +
@@ -287,6 +273,9 @@ theorem createKindWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam) 
               (if create2 then OPCODE_KECCAK256_PER_WORD * wordCount size.toNat else 0) +
               (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
             (extendMemory memory.size [(start, size)]).cost)) + child.gas)
+          -- It gets back the gas that the frame leaves, and its state and substate come from it.
+          --
+          -- The rule says nothing more of them, since the init code is arbitrary.
           (incorporateChild fork caller child).state (incorporateChild fork caller child).substate
           (if child.error.isNone then .empty else child.output) after := by
   apply HoareUnder.of_child
@@ -325,6 +314,7 @@ theorem createWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {value start size : U256} {rest : List U256} {address : Address}
     (hlt : pc < code.size) (hbyte : code[pc] = 0xf0)
     (hstatic : message.isStatic = false)
+    -- From Shanghai, the init code is at most the greatest size, 49152 bytes, by EIP-3860.
     (hinit : .shapella ≤ fork → size.toNat ≤ maxInitCodeSize fork)
     (hbal : value ≤ (state.getAccount message.currentTarget).balance)
     (hnonce : (state.getAccount message.currentTarget).nonce ≠ MAX_NONCE)
@@ -333,6 +323,9 @@ theorem createWith (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       none
       (memoryReadBytes (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
         start.toNat size.toNat) = .ok address)
+    -- The address must hold no code and a nonce of 0, as EIP-684 asks.
+    --
+    -- It must hold no storage, as EIP-7610 asks.
     (hdeploy : state.accountDeployable address = true)
     (hgas : createBaseCost fork +
         (if fork ≥ .shapella then initCodeCost size.toNat else 0) +
@@ -381,6 +374,7 @@ theorem create2With (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {value start size salt : U256} {rest : List U256} {address : Address}
     (hlt : pc < code.size) (hbyte : code[pc] = 0xf5)
     (hstatic : message.isStatic = false)
+    -- From Shanghai, the init code is at most the greatest size, 49152 bytes, by EIP-3860.
     (hinit : .shapella ≤ fork → size.toNat ≤ maxInitCodeSize fork)
     (hbal : value ≤ (state.getAccount message.currentTarget).balance)
     (hnonce : (state.getAccount message.currentTarget).nonce ≠ MAX_NONCE)
@@ -389,6 +383,9 @@ theorem create2With (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
       (some salt)
       (memoryReadBytes (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
         start.toNat size.toNat) = .ok address)
+    -- The address must hold no code and a nonce of 0, as EIP-684 asks.
+    --
+    -- It must hold no storage, as EIP-7610 asks.
     (hdeploy : state.accountDeployable address = true)
     (hgas : createBaseCost fork +
         OPCODE_KECCAK256_PER_WORD * wordCount size.toNat +

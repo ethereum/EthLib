@@ -12,24 +12,6 @@ The facts here cover the other outcomes of that step, for every kind of call tha
 
 They hold at every fork from Berlin, with one counter of gas, along either route.
 
-A call with less gas than its price before the gas it passes on fails, or halts the frame.
-
-That price is the access to the address and to the delegate if any, and the growth of memory.
-
-Up to BPO5, the charge of the call fails and the frame halts.
-
-From Glamsterdam, a check of the gas fails the step or halts the frame before it reads the delegate.
-
-A call at the greatest depth, with at least that price in gas, sends no message.
-
-The frame then pays that price, pushes 0 and goes on.
-
-From Pectra, the address may delegate, and the state may fail to give the code of the delegate.
-
-The call then fails, or halts the frame with an error.
-
-From Glamsterdam, a check of the gas may come first: the step fails with out of gas, or halts.
-
 Out of scope: a call that sends value, and a creation.
 -/
 
@@ -70,12 +52,16 @@ theorem callStep_fails_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
   generalize extendMemory evm.memory.size [(i, isz), (o, osz)] = growth at h hgas
   rw [h]
   by_cases hG : fork ≥ .glamsterdam
+  -- From Glamsterdam, a check of the gas comes before the read of the delegate.
+  --
+  -- It fails the step or halts the frame.
   · by_cases c1 : evm.gas < cb + growth.cost
     · simp only [hG, c1, and_self, ↓reduceIte]
       exact .inl ⟨_, rfl⟩
     have c2 : evm.gas < cb + growth.cost + dc := by omega
     simp only [hG, c1, c2, and_self, and_false, ↓reduceIte]
     exact .inr ⟨_, rfl, rfl, nofun⟩
+  -- Up to BPO5, the charge of the call fails and the frame halts.
   have hle : cb + dc ≤ (messageCallGas fork 0 g.toNat evm.gas growth.cost (cb + dc)).cost := by
     simp [messageCallGas]
   have c3 : evm.gas <
@@ -84,12 +70,6 @@ theorem callStep_fails_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
   exact .inr ⟨_, rfl, rfl, nofun⟩
 
 /-- The step of a call that sends no value of its own, at the greatest depth, sends no message.
-
-The gas of the frame covers at least the price of the access, the route and memory.
-
-The frame then pushes 0 and goes on to the next opcode, with empty return data.
-
-It pays only that price and grows its memory, and it gets back the gas it would pass on.
 
 It holds at every fork from Berlin. -/
 theorem callStep_deep_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
@@ -100,14 +80,17 @@ theorem callStep_deep_of_routes (hfork : .berlin ≤ fork) {kind : CallKind}
     (hcode : evm.state.getCode (evm.state.getAccount (toAddressMasked a)).codeHash = .ok calleeCode)
     (hroute : Routes fork evm.state calleeCode route)
     (hdeep : STACK_DEPTH_LIMIT < evm.message.depth + 1)
+    -- The gas of the frame covers at least the price of the access, the route and memory.
     (hgas : callBaseCost fork (decide (toAddressMasked a ∉ evm.substate.accessedAddresses)) +
       routeCost fork (evm.substate.accessedAddresses.insert (toAddressMasked a)) route +
       (extendMemory evm.memory.size [(i, isz), (o, osz)]).cost ≤ evm.gas) :
     ∃ after, callStep kind evm = .ok (.next after) ∧
       after.code = evm.code ∧ after.validJumpDestinations = evm.validJumpDestinations ∧
+      -- The frame then pushes 0 and goes on to the next opcode, with empty return data.
       after.message = evm.message ∧ after.pc = evm.pc + 1 ∧ after.stack.val = 0 :: rest ∧
       after.running = evm.running ∧ after.error = evm.error ∧ after.output = evm.output ∧
       after.returnData = .empty ∧
+      -- It pays only that price and grows its memory, and it gets back the gas it would pass on.
       after.memory = memoryExtend evm.memory
         (extendMemory evm.memory.size [(i, isz), (o, osz)]).expandBy ∧
       after.gas = evm.gas -
