@@ -16,13 +16,7 @@ The first nibble of its encoding holds the node type and the parity of the path 
 - 2: a leaf with an even path, followed by a 0 nibble of padding.
 - 3: a leaf with an odd path, whose first nibble shares the first byte.
 
-So the extension path `[1, 2, 3, 4, 5]` encodes as `0x112345`.
-
-The leaf path `[0, f, 1, c, b, 8]` encodes as `0x200f1cb8`.
-
 Every fork since Frontier uses this encoding.
-
-The Yellow Paper defines only the encoding, so the decoder accepts exactly its outputs.
 -/
 
 @[expose] public section
@@ -69,11 +63,15 @@ def nibbleListToCompact (x : List Nibble) (isLeaf : Bool) : ByteArray :=
     -- `||x||` even: `(16 * f(t), 16 * x[0] + x[1], 16 * x[2] + x[3], ...)`.
     --
     -- The first nibble `f(t)` and a 0 nibble of padding make the byte `16 * f(t)`.
+    --
+    -- So the leaf path `[0, f, 1, c, b, 8]` encodes as `0x200f1cb8`.
     ⟨⟨packNibbles ((if isLeaf then 2 else 0) :: 0 :: x) (by simp only [List.length_cons]; omega)⟩⟩
   else
     -- Otherwise: `(16 * (f(t) + 1) + x[0], 16 * x[1] + x[2], 16 * x[3] + x[4], ...)`.
     --
     -- The first nibble `f(t) + 1` and `x[0]` make the byte `16 * (f(t) + 1) + x[0]`.
+    --
+    -- So the extension path `[1, 2, 3, 4, 5]` encodes as `0x112345`.
     ⟨⟨packNibbles ((if isLeaf then 3 else 1) :: x) (by simp only [List.length_cons]; omega)⟩⟩
 
 /-- Why a byte string is not the hex-prefix encoding of a path. -/
@@ -100,6 +98,8 @@ def HexPrefixError.reprPrec : HexPrefixError → Nat → Std.Format
 instance : Repr HexPrefixError := ⟨HexPrefixError.reprPrec⟩
 
 /-- The path and the leaf flag that `compact` encodes: the inverse of the encoding.
+
+The Yellow Paper defines only the encoding, so the decoder accepts exactly its outputs.
 
 - Bit 0 of the first nibble is the parity of the path length.
 - Bit 1 is the leaf flag. -/

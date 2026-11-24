@@ -9,38 +9,12 @@ The rules of an eth session, from [`caps/eth.md`][eth], and when snap may run be
 
 [eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md
 
-The section Basic Operation asks each side to send Status first.
-
-The session is active once the peer's Status has arrived, and any other message may then come.
-
-A response repeats the request ID of a request of this node, as the section Protocol Messages says.
-
-So the session keeps the requests that no response has answered yet.
-
-A node must not send a transaction twice to one peer, nor back to the peer it came from.
-
-The section Transactions (0x02) states this rule, so the session keeps the hashes sent and received.
-
-The sections NewBlockHashes (0x01) and NewBlock (0x07) ask a proof-of-stake node to discard them.
-
-The session is that of a proof-of-stake network.
-
-The content of a response is checked apart, by the checks of each message.
-
 The source leaves some reactions open, and the session decides none of them:
 
 - a second Status from the peer gets its own error;
 - a response that answers no pending request gets its own error;
 - a snap message on a connection without eth is only flagged, by the check of shared capabilities;
 - a peer that sends a transaction twice, or back to this node, is accepted.
-
-The session reads every message, sent or received, as one of its negotiated version.
-
-The decoder of that version gives such messages, and the session does not check it again.
-
-eth.md asks to disconnect a peer that keeps sending NewBlock or NewBlockHashes, but sets no count.
-
-So the session only discards each such message.
 -/
 
 @[expose] public section
@@ -51,7 +25,11 @@ open EthLib.Base
 open EthLib.Networking.Devp2p
 open EthLib.Serialization.Rlp
 
-/-- What this node knows of an eth session with one peer. -/
+/-- What this node knows of an eth session with one peer.
+
+The session reads every message, sent or received, as one of its negotiated version.
+
+The decoder of that version gives such messages, and the session does not check it again. -/
 structure EthSession where
   /-- The negotiated version. -/
   version : EthVersion
@@ -59,9 +37,19 @@ structure EthSession where
   remoteStatus : Option Status
   /-- Whether this node has sent its own Status. -/
   statusSent : Bool
-  /-- The requests this node sent that no response has answered yet, oldest first. -/
+  /-- The requests this node sent that no response has answered yet, oldest first.
+
+  A response repeats the request ID of a request of this node.
+
+  The section Protocol Messages says so. -/
   pending : List Message
-  /-- The hashes of the transactions this node sent in Transactions or PooledTransactions. -/
+  /-- The hashes of the transactions this node sent in Transactions or PooledTransactions.
+
+  A node must not send a transaction twice to one peer, nor back to the peer it came from.
+
+  The section Transactions (0x02) states this rule.
+
+  So the session keeps the hashes it sends and receives. -/
   sentTxs : List Hash32
   /-- The hashes of the transactions the peer sent in Transactions or PooledTransactions. -/
   receivedTxs : List Hash32
@@ -141,20 +129,33 @@ end Message
 The session after the peer sends the message `m`, and what to do with the message.
 
 The node has the schedule `s`, and its head has a block number and a timestamp.
+
+The content of a response is checked apart, by the checks of each message.
 -/
 def receiveEth (s : Schedule) (number timestamp : Nat) (session : EthSession) (m : Message) :
     Except EthSessionError (EthSession × EthVerdict) := do
   match session.remoteStatus with
+  -- The section Basic Operation asks each side to send Status first.
+  --
   -- Basic Operation: before the peer's Status, only a Status that passes its checks.
   | none =>
     let .status status := m | throw (.beforeStatus m.id)
     (checkStatus session.version s number timestamp status).mapError .badStatus
     return ({ session with remoteStatus := some status }, .accept)
+  -- The session is active once the peer's Status has arrived, and any other message may then come.
   | some _ =>
     match m with
     -- A second Status gets its own error; the source fixes no reaction to it.
     | .status _ => throw .secondStatus
+    -- The sections NewBlockHashes and NewBlock ask a proof-of-stake node to discard them.
+    --
+    -- The session is that of a proof-of-stake network.
+    --
     -- EIP-3675: past the merge, which the session assumes, NewBlockHashes and NewBlock are dropped.
+    --
+    -- eth.md asks to disconnect a peer that keeps sending them, but sets no count.
+    --
+    -- So the session only discards each such message.
     | .newBlockHashes _ | .newBlock .. => return (session, .discard)
     -- BlockRangeUpdate: a peer with `earliest > latest` should be disconnected.
     | .blockRangeUpdate r =>

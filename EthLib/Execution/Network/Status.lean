@@ -18,14 +18,7 @@ The Status of eth/68 comes from [EIP-7642][eip-7642].
 - eth/68: `[version, networkid, td, blockhash, genesis, forkid]`.
 - eth/69 on: `[version, networkid, genesis, forkid, earliest, latest, latestHash]`.
 
-From eth/69 on, a node announces the blocks it can serve, in Status and in BlockRangeUpdate.
-
-Each peer validates the fork identifier of the other.
-
-It disconnects when they are incompatible, as [EIP-2364][eip-2364] requires.
-
 [eip-7642]: https://eips.ethereum.org/EIPS/eip-7642#status-message-changes
-[eip-2364]: https://eips.ethereum.org/EIPS/eip-2364#specification
 -/
 
 @[expose] public section
@@ -43,6 +36,8 @@ def STATUS_ID : Nat := 0x00
 def BLOCK_RANGE_UPDATE_ID : Nat := 0x11
 
 /-- The blocks that a node serves: `[earliest, latest, latestHash]`.
+
+From eth/69 on, a node announces them in Status and in BlockRangeUpdate.
 
 It serves the bodies and the receipts of each block from `earliest` to `latest`.
 
@@ -167,6 +162,11 @@ def checkStatus (version : EthVersion) (s : Schedule) (number timestamp : Nat)
     (status : Status) : Except StatusError Unit := do
   -- eth.md, Status: the version is the current protocol version, so it must be the negotiated one.
   if status.version ≠ version.number then throw (.version status.version)
+  -- Each peer validates the fork identifier of the other.
+  --
+  -- It disconnects when they are incompatible, as EIP-2364 requires.
+  -- https://eips.ethereum.org/EIPS/eip-2364#specification
+  --
   -- EIP-2364: the fork identifier passes the rules of EIP-2124, else the peer is incompatible.
   (s.validate number timestamp status.forkId).mapError .forkId
   match status with

@@ -16,10 +16,6 @@ A node fetches headers first, then asks for their bodies with GetBlockBodies (0x
 
 BlockBodies (0x06) answers with one body for each hash.
 
-A body is the RLP list of its transactions and its ommers, then its withdrawals from Shapella.
-
-A legacy transaction is an RLP list, and a typed one is the byte string of its type and payload.
-
 [eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#block-encoding-and-validity
 -/
 
@@ -85,25 +81,24 @@ def BodyError.code : BodyError → UInt32
 
 /-- The bytes that a transaction stands for in the trie of the transactions root.
 
-A list is a legacy transaction, and it stands for the bytes it was read from.
-
-The decoder keeps those bytes as its RLP encoding.
-
-A byte string is a typed transaction, and it stands for itself.
-
-Its first byte is the type, which [EIP-2718][eip-2718] keeps at most `0x7f`.
-
-An RLP list starts with a byte of at least `0xc0`, so the two forms never stand for the same bytes.
-
-[eip-2718]: https://eips.ethereum.org/EIPS/eip-2718#transactiontype-only-goes-up-to-0x7f -/
+A legacy transaction is an RLP list, and a typed one is the byte string of its type and payload. -/
 def transactionBytes (tx : Encoded) : Except BodyError ByteArray :=
   match tx.item with
+  -- A byte string is a typed transaction, and it stands for itself.
+  --
   -- `typed-tx = tx-type || tx-data`, with `tx-type` at most `0x7f` by EIP-2718; empty is refused.
+  -- https://eips.ethereum.org/EIPS/eip-2718#transactiontype-only-goes-up-to-0x7f
+  --
+  -- An RLP list starts with a byte of at least `0xc0`.
+  --
+  -- So the two forms never stand for the same bytes.
   | .bytes b =>
     if h : 0 < b.size then
       if b[0] < 0x80 then .ok b else .error (.untypedTransaction (some b[0]))
     else .error (.untypedTransaction none)
   -- A list is a `legacy-tx`, which stands for the bytes it was read from.
+  --
+  -- The decoder keeps those bytes as its RLP encoding.
   | .list _ => .ok tx.bytes
 
 /-- The bytes of each transaction of a body, in order. -/
@@ -121,6 +116,14 @@ def checkGasLimits {fork : Fork} (header : Header fork) (transactions : Item) :
     -- Each transaction decodes at the fork, so a type that the fork lacks fails.
     let tx ← (decodeBodyTransaction fork item).mapError (.invalidTransaction i)
     -- The gas limit of each transaction does not exceed the gas limit of the block.
+    --
+    -- Block Encoding and Validity bounds the gas limit of each transaction by that of the block.
+    --
+    -- It does not bound their sum.
+    --
+    -- Take a block of gas limit 30,000,000 and two transactions of gas limit 20,000,000 each.
+    --
+    -- If the first uses 21,000 gas, the second sees 29,979,000 gas left, so the block can be valid.
     ensure (tx.gas.toNat ≤ header.gasLimit) (.gasLimitAboveBlock i tx.gas.toNat header.gasLimit)
 
 /-- The transactions of a body match the transactions root of the header.
@@ -163,15 +166,15 @@ def checkOmmers {fork : Fork} (header : Header fork) (ommers : Encoded) :
 /--
 Check a body against the header that it was requested for.
 
-The body is the RLP list of the transactions and the ommers, then the withdrawals from Shapella.
+The caller pairs each body with the header of the hash that it requested.
 
 The check fails with the first rule that does not hold, in the order of the lines below.
-
-The check does not decode the ommers further, since their validity is left to the chain.
 
 The rules that the check marks come from the data validity rules of Block Encoding and Validity.
 
 The check reads only the body and the header.
+
+The check does not decode the ommers further, since their validity is left to the chain.
 
 It leaves out three rules of that section, each for a reason.
 
@@ -182,23 +185,16 @@ It leaves out three rules of that section, each for a reason.
   The rest needs the state before the block.
 - The ommer headers must be valid, and must be recent ancestors not included before.
   That needs the chain.
-
-The section bounds the gas limit of each transaction by that of the block, not their sum.
-
-Take a block of gas limit 30,000,000 and two transactions of gas limit 20,000,000 each.
-
-If the first uses 21,000 gas, the second sees 29,979,000 gas left, so the block can be valid.
-
-The caller pairs each body with the header of the hash that it requested.
-
-The body keeps the bytes it was read from.
-
-Each legacy transaction and the ommers list are hashed from their slices of those bytes.
-
-So the check never encodes an item that a peer chose.
 -/
 def checkBody {fork : Fork} (header : Header fork) (body : Encoded) : Except BodyError Unit := do
+  -- The body keeps the bytes it was read from.
+  --
+  -- Each legacy transaction and the ommers list are hashed from their slices of those bytes.
+  --
+  -- So the check never encodes an item that a peer chose.
   let items ← body.parts.mapError .decoding
+  -- A body is the RLP list of the transactions and the ommers, then the withdrawals from Shapella.
+  --
   -- From Shapella, `[transactions, ommers, withdrawals]`, by EIP-4895.
   if h : .shapella ≤ fork then
     match items with

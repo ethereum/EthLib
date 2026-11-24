@@ -16,10 +16,8 @@ The block exchange of the eth capability, from Protocol Messages in [`caps/eth.m
 - BlockHeaders (0x04) answers with the headers it has, at most as many as asked.
 - GetBlockBodies (0x05) asks for the bodies of blocks by hash, and BlockBodies (0x06) answers.
 - NewBlockHashes (0x01) and NewBlock (0x07) announce blocks.
-
-Since the Merge, a node must discard NewBlockHashes and NewBlock, as EIP-3675 says.
-
-The messages keep their IDs, so a reader still decodes them.
+  Since the Merge, a node must discard them, as EIP-3675 says.
+  They keep their IDs, so a reader still decodes them.
 
 A request carries a request ID, a 64-bit integer, and its response repeats it.
 
@@ -28,8 +26,6 @@ A request carries a request ID, a 64-bit integer, and its response repeats it.
 A header, a body and a block cross the wire as RLP items.
 
 Their fields depend on the fork of each block, so the messages carry them as items.
-
-A header of BlockHeaders also keeps the bytes it was read from, which give its hash.
 
 [eip-2481]: https://eips.ethereum.org/EIPS/eip-2481#specification
 -/
@@ -145,7 +141,9 @@ instance : Codec BlockAnnouncement := ⟨BlockAnnouncement.toItem, BlockAnnounce
 /-- The index of the number in a header, the ninth field at every fork. -/
 def HEADER_NUMBER_INDEX : Nat := 8
 
-/-- The hash of a header: the Keccak-256 hash of the bytes of its RLP encoding. -/
+/-- The hash of a header: the Keccak-256 hash of the bytes of its RLP encoding.
+
+A header of BlockHeaders keeps the bytes it was read from, which give its hash. -/
 def headerHash (header : Encoded) : Hash32 :=
   -- `keccak256(header)`, over the bytes the header was read from, so no item is encoded again.
   Cryptography.Hash.Keccak.keccak256 header.bytes

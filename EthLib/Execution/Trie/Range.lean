@@ -20,32 +20,6 @@ Those sections state what the proof shows, not how to check it.
 The check below is EthLib's own algorithm.
 
 [snap]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md
-
-The first end is a starting key, which the trie may not hold.
-
-The last end is the last key of the range.
-
-The check needs no node off the two paths: their parents hold each such subtree by reference.
-
-The check walks the trie of the root along the two paths, with nodes from the proof.
-
-Each subtree between the two paths must be the subtree that the entries under it build.
-
-Each subtree before the first end must hold no entry, and so must each after the last end.
-
-A range with no proof must be the whole trie: its entries must build the root.
-
-The check returns whether some key lies after the last entry, as the proof shows.
-
-Each key is a 32-byte hash, so each path in the trie has 64 nibbles.
-
-So no key ends at a branch, and a branch on the two paths holds no value.
-
-The proof may hold nodes that the check never reaches, and the check ignores them.
-
-The two paths share their upper nodes, so a sender may list those nodes twice.
-
-The check accepts a node listed twice.
 -/
 
 @[expose] public section
@@ -160,31 +134,39 @@ def lookupNode (nodes : List (Hash32 × ByteArray)) (reference : Item) : Except 
 
 The entries are those whose paths start with `pre`, as full paths with their values.
 
-It returns whether the subtree holds a key after the range.
-
-# Why fuel
-
-A call that goes deeper has a path that is a prefix of an end.
-
-The range check passes two ends of 64 nibbles, as long as `left`.
-
-Each such call is at least one nibble deeper than its caller.
-
-So at most one more than the length of `left` such calls nest, and one last call leaves the paths.
-
-So with ends of one length, a budget of two more than that length never runs out. -/
+It returns whether the subtree holds a key after the range. -/
 def checkSubtree (hash : ByteArray → Hash32) (nodes : List (Hash32 × ByteArray))
     (left : List Nibble) (right : Option (List Nibble)) :
     Nat → Item → List Nibble → List (List Nibble × ByteArray) → Except RangeError Bool
+  -- Why fuel: a call that goes deeper has a path that is a prefix of an end.
+  --
+  -- The range check passes two ends of 64 nibbles, as long as `left`.
+  --
+  -- Each such call is at least one nibble deeper than its caller.
+  --
+  -- So at most one more than the length of `left` such calls nest.
+  --
+  -- One last call then leaves the paths.
+  --
+  -- So with ends of one length, a budget of two more than that length never runs out.
+  --
   -- The budget never runs out, so this error never occurs.
   | 0, _, _, _ => .error (.proof (.missingNode none))
   | fuel + 1, reference, pre, entries =>
     match rangePlace left right pre with
-    -- No entry lies before the range.
+    -- Each subtree before the first end must hold no entry.
     | .before => if entries.isEmpty then .ok false else .error .mismatch
-    -- Any node after the range holds a key there.
+    -- Each subtree after the last end must hold no entry, too.
+    --
+    -- Any node after the range holds a key there, as the proof shows.
     | .after => if entries.isEmpty then .ok (reference != .bytes .empty) else .error .mismatch
+    -- Each subtree between the two paths must be the subtree that the entries under it build.
+    --
     -- The parent must hold the node that the entries build, as the parent of a trie does.
+    --
+    -- So the check needs no node off the two paths.
+    --
+    -- Their parents hold each such subtree by reference.
     | .inside => do
       let node ← (patricialize hash entries pre.length).mapError .rlp
       let held ← (encodeInternalNode hash node).mapError .rlp
@@ -212,6 +194,8 @@ def checkSubtree (hash : ByteArray → Hash32) (nodes : List (Hash32 × ByteArra
           throw .mismatch
       | .branch subnodes value =>
         -- Each key has 64 nibbles, so no key ends at a branch.
+        --
+        -- So a branch on the two paths holds no value.
         if value.size ≠ 0 then throw .branchValue
         -- Each entry goes on below the branch, to the child of its next nibble.
         unless entries.all fun (key, _) => pre.length < key.length do throw .mismatch
@@ -230,15 +214,14 @@ Each entry is a key and its value in the trie, whose keys are not hashed again.
 
 It returns whether the trie holds a key after the last entry.
 
-With no proof, the entries must be the whole trie.
-
 With no entry, the range runs from the start to the end of the trie.
 
-It then returns false, since the trie holds no key from the start on. -/
+The check then returns false, since the trie holds no key from the start on. -/
 def verifyRange (hash : ByteArray → Hash32) (root start : Hash32)
     (entries : List (Hash32 × ByteArray)) (proof : List ByteArray) : Except RangeError Bool := do
   -- `y(I)` of Appendix D: each key, a 32-byte hash, as its path of 64 nibbles.
   let obj := entries.map fun (key, value) => (bytesToNibbleList ⟨key.toArray⟩, value)
+  -- The first end is a starting key, which the trie may not hold.
   let left := bytesToNibbleList ⟨start.toArray⟩
   -- Each error names the first entry that breaks its rule, which exists when the rule fails.
   let keys := obj.map Prod.fst
@@ -251,6 +234,7 @@ def verifyRange (hash : ByteArray → Hash32) (root start : Hash32)
   -- EthLib's rule: no value is empty, since a value of a state or storage trie never is.
   let emptyIndex := obj.findIdx fun (_, value) => value.size = 0
   if obj.any fun (_, value) => value.size = 0 then throw (.emptyValue emptyIndex)
+  -- With no proof, the entries must be the whole trie.
   if proof.isEmpty then
     -- The whole trie: the entries must build the root.
     let trie : Trie := ⟨false, entries.map fun (key, value) => (⟨key.toArray⟩, value)⟩
@@ -261,7 +245,15 @@ def verifyRange (hash : ByteArray → Hash32) (root start : Hash32)
     | .error .emptyValue => throw (.emptyValue emptyIndex)
   -- With a proof: a walk from the root along the starting hash and the last entry.
   else
+    -- The walk takes its nodes from the proof.
+    --
+    -- The proof may hold nodes that the check never reaches, and the check ignores them.
+    --
+    -- The two paths share their upper nodes, so a sender may list those nodes twice.
+    --
+    -- The check accepts a node listed twice.
     let nodes := proof.map fun encoded => (hash encoded, encoded)
+    -- The last end is the last key of the range.
     checkSubtree hash nodes left (obj.getLast?.map Prod.fst) (left.length + 2)
       (.bytes ⟨root.toArray⟩) [] obj
 
