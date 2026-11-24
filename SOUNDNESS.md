@@ -2785,6 +2785,11 @@ Every random value, such as an ID nonce, a masking IV or an ephemeral key, is an
 `step_resend` (`Networking/Proofs/Discv5/Node.lean`) states that while a challenge is pending, a message that no session opens gets the same WHOAREYOU, byte for byte.
 `step_endpoint` states that a message from an endpoint with no session and no challenge gets a new WHOAREYOU, whatever the peer holds at other endpoints.
 `step_whoareyou_unsolicited` states that a WHOAREYOU that mirrors no pending request changes nothing, and `receiveHandshake_unchallenged` the same for a handshake packet with no stored challenge.
+`lookupKey_challenges_receiveHandshake` states that a handshake that opens removes the challenge it answers.
+`receiveHandshake_replay` follows from it.
+In the state right after such a handshake, any handshake packet under the same session key changes nothing and gets no answer.
+So the same packet, sent again at once, opens no second session.
+A replay that comes after a new challenge for that key is rejected only if it fails to open under that challenge, which no theorem shows.
 `handshake_agree` states that after a handshake run by both nodes through their steps, each opens what the other seals.
 `seal_nonce_distinct` states that two packets sealed at two counters of a session carry two different nonces.
 `counter_add_ne` states that the counters of `2^32` messages in a row differ.
