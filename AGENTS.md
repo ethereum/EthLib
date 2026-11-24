@@ -34,6 +34,8 @@ The [writing guide](WRITING.md) and its [vocabulary](WRITING.md#vocabulary) offe
    For contribution text, distinguish what changed, which checks ran and what remains uncertain.
 2. **Start with what the reader needs.**
    State the problem, result or action first.
+   In Lean, keep a header or a doc comment short.
+   Put each detail in a comment above the code line that it describes ([CONTRIBUTING.md, Doc comments in Lean](CONTRIBUTING.md#doc-comments-in-lean)).
    Develop one topic per paragraph.
    Use the guide when its advice helps the reader.
 3. **Revise real problems.**

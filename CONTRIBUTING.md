@@ -332,6 +332,11 @@ Repository habit alone does not justify unclear writing.
 
 The optional `scripts/check_writing.py` reports vocabulary, phrasal-verb, Latin-abbreviation, contraction, reference-history and approximate sentence-length suggestions.
 It reads Markdown and Lean comments; review other prose manually.
+It also reports each Lean doc comment that is too long (rule D1).
+That is a module or section doc of more than six lines, or a declaration doc of more than four.
+Blank lines, link reference definitions and fenced blocks do not count.
+With `--base`, D1 reads every Lean file that the branch changes or renames, also on the lines that the branch does not change.
+With file arguments, it reads each Lean file given.
 For a local editing aid, run:
 
 ```bash
@@ -365,7 +370,8 @@ These rules hold for both:
 - Explain why, not what.
   The code already says what.
 - Use ASCII for math and layouts: `x_i`, `2^32`, `sum_i`.
-- Draw byte layouts in a fenced `text` block.
+- In a Markdown file, draw a byte layout in a fenced `text` block.
+  In Lean, each field of a layout has its comment above the line that writes or reads it.
 - Do not add marketing or filler.
   Words such as "robust", "seamless", "comprehensive" and "it is worth noting" go.
 - Do not hedge a claim that the evidence supports, and keep an uncertainty that the evidence does not resolve.
@@ -374,33 +380,61 @@ These rules hold for both:
 
 ### Doc comments in Lean
 
+A reader of a Lean file reads the code and the comment next to it, a few lines at a time.
+So the documentation sits next to the code that it describes.
+A long block at the top of a module or a declaration goes unread, and it drifts apart from the code.
+
+Each piece of documentation has one place:
+
+- A module header is a title, one or two lines on what the module provides, and its source.
+  As a rule, it has at most about five lines, and the writing check flags more than six.
+  It does not restate the proofs, the algorithm or each definition of the module.
+  A section comment `/-! ## ... -/` is a title, with at most a line or two under it.
+- The doc comment of a definition or a theorem is one line, or a few short lines.
+  The writing check flags more than four.
+  It says what the definition returns or what the theorem states, with the hypotheses in words.
+- Each detail of a procedure is in a `--` comment right above the line that does it.
+  A detail is a step, an offset, a size, a check or an edge case.
+  [Step comments](#step-comments) gives the form of a step of a source.
+- Each other non-obvious step of a definition has its comment above the line that does it.
+- In a proof, each non-obvious step has its comment above the tactic that does it.
+
+When you shorten a header or a doc comment, move each fact that it held to the line that it describes, and delete none.
+A fact about the declaration as a whole, such as what it does not verify, stays in its doc comment, in a few words.
+
+The rules of form are these:
+
 - Write one sentence per line.
   A sentence that wraps onto a second line is too long, so split it.
   This holds for list items too.
+- Keep each line to at most 100 characters.
+  A URL alone on its line is the only exception.
+- Leave a blank line between the sentences of a comment.
+  Space makes a dense subject readable, and the layout check fails when two sentence lines touch.
+- Refer to a definition, a theorem or a field by what it does, not by its name, because names change and the comment goes stale.
+  Notation such as `(X, Y, Z)` and a type that the sentence is about, such as `G1`, can be in backticks.
+- Write math in ASCII, and do not quote code in another programming language, as [Step comments](#step-comments) says.
 - Keep a long link out of the sentence.
   Write `[text][ref]` in the sentence, and the definition `[ref]: <url>` at the end of the comment.
 - Put formulas that span several lines in a fenced `text` block.
   The layout check reads a line of a comment outside such a block as prose.
-- Leave a blank line between ideas.
-  Space makes a dense subject readable.
-- Comment every non-obvious step of a definition or proof.
-  Put the comment right above the line it explains.
 
-Example, from the XMSS signature layout:
+The example comes from the XMSS signature layout.
+The doc comment says what the definition returns.
+The comment above each line gives the size and the order of the field that the line writes:
 
-````lean
-/-- Encode one layer's signature as 1200 bytes.
-
-```text
-    [ randomizer: 16 | 58 chain values: 928 | 16 siblings: 256 ]
+```lean
+/-- Encode one layer's signature as 1200 bytes. -/
+def encodeLayerSignature (sig : LayerSignature) : ByteArray :=
+  -- The randomizer: 16 bytes.
+  packBytes sig.randomizer.bytes
+    -- The 58 chain values, in chain order: 928 bytes.
+    ++ packDigests sig.chainValues
+    -- The 16 siblings, from the leaf up to the root: 256 bytes.
+    ++ packDigests sig.path
 ```
 
-- Chain values are in chain order.
-- Siblings run from the leaf up to the root.
--/
-def encodeLayerSignature (sig : LayerSignature) : ByteArray :=
-  packBytes sig.randomizer ++ packDigests sig.chainValues ++ packDigests sig.path
-````
+In each changed Lean file, the writing check flags a long header or doc comment, as [Writing](#writing) describes.
 
 ### Markdown files
 

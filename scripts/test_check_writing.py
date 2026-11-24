@@ -180,6 +180,66 @@ class LeanExtractionTests(unittest.TestCase):
         self.assertEqual(rules, {(4, "W1")})
 
 
+def doc(opener: str, lines: int) -> str:
+    return opener + "\n" + "\n\n".join(f"Line {k}." for k in range(lines)) + "\n-/\n"
+
+
+class DocLengthTests(unittest.TestCase):
+    def test_declaration_doc_limit(self) -> None:
+        for lines, expected in [(4, []), (5, [1])]:
+            with self.subTest(lines=lines):
+                source = doc("/--", lines) + "def f : Nat := 1\n"
+                found = WRITING.long_docs("A.lean", source)
+                self.assertEqual([item.line for item in found], expected)
+                self.assertTrue(all(item.rule == "D1" for item in found))
+
+    def test_module_doc_limit(self) -> None:
+        for lines, expected in [(6, []), (7, [1])]:
+            with self.subTest(lines=lines):
+                self.assertEqual(
+                    [item.line for item in WRITING.long_docs("A.lean", doc("/-!", lines))],
+                    expected,
+                )
+
+    def test_blank_lines_and_link_references_do_not_count(self) -> None:
+        source = (
+            "/-- Line 0.\n\nLine 1.\n\nLine 2.\n\nLine 3 cites [the EIP][eip].\n\n\n"
+            "[eip]: https://eips.ethereum.org/EIPS/eip-1\n"
+            "[other]: https://example.org\n-/\n"
+        )
+        self.assertEqual(WRITING.long_docs("A.lean", source), [])
+
+    def test_fenced_blocks_do_not_count(self) -> None:
+        formula = "```text\n  a = b\n  c = d\n```\n"
+        source = "/-- Line 0.\n\nLine 1.\n\n" + formula + "\nLine 2.\n\nLine 3.\n-/\n"
+        self.assertEqual(WRITING.long_docs("A.lean", source), [])
+        longer = source.replace("Line 3.", "Line 3.\n\nLine 4.")
+        self.assertEqual([item.line for item in WRITING.long_docs("A.lean", longer)], [1])
+
+    def test_file_arguments_report_long_docs_last(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "A.lean"
+            path.write_text(doc("/--", 5) + "-- We utilize this.\ndef f : Nat := 1\n")
+            output = io.StringIO()
+            with mock.patch.object(sys, "stdout", output):
+                self.assertEqual(WRITING.main(["check_writing.py", str(path)]), 0)
+            rules = [
+                line.split("[")[1].split("]")[0] for line in output.getvalue().splitlines()[:-1]
+            ]
+            self.assertEqual(rules, ["W1", "D1"])
+
+    def test_plain_comments_strings_and_markdown_are_not_docs(self) -> None:
+        body = "\n".join(f"Line {k}." for k in range(9))
+        source = f"/- {body} -/\n-- {body.replace(chr(10), chr(10) + '-- ')}\n"
+        source += f'def s : String := "/-- {body} -/"\n'
+        self.assertEqual(WRITING.long_docs("A.lean", source), [])
+        self.assertEqual(WRITING.long_docs("A.md", doc("/--", 9)), [])
+
+    def test_line_points_to_the_opener(self) -> None:
+        source = "def g : Nat := 0\n\n" + doc("/--", 6) + "def f : Nat := 1\n"
+        self.assertEqual([item.line for item in WRITING.long_docs("A.lean", source)], [3])
+
+
 class ChangedLineTests(unittest.TestCase):
     def test_only_changed_blocks_are_checked(self) -> None:
         environment = {
@@ -383,6 +443,18 @@ class ChangedFileRegressionTests(unittest.TestCase):
                     found = WRITING.check_blocks(WRITING.changed_blocks("master"))
                     self.assertEqual({f.path for f in found if f.rule == "W1"}, set(names))
                     self.assertEqual({f.line for f in found if f.rule == "W1"}, {2})
+
+    def test_doc_length_covers_every_changed_lean_file(self) -> None:
+        long_doc = doc("/--", 5) + "def f : Nat := 1\n"
+        (self.root / "Changed.lean").write_text(long_doc)
+        (self.root / "Same.lean").write_text(long_doc)
+        self.git("add", ".")
+        self.git("commit", "-q", "-m", "base lean")
+        self.git("branch", "-f", "master", "HEAD")
+        (self.root / "Changed.lean").write_text(long_doc + "def g : Nat := 2\n")
+        lengths: list = []
+        WRITING.changed_blocks("master", None, lengths)
+        self.assertEqual([(f.path, f.line, f.rule) for f in lengths], [("Changed.lean", 1, "D1")])
 
     def test_renames_check_only_edited_prose(self) -> None:
         old, new = "old café.md", "new name.md"
