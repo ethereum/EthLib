@@ -15,17 +15,11 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
 
 The bytes of a transaction hash to the hash that names it in the request.
 
-In a valid view, the raw header of a block hashes to the hash that the block objects report.
+In a valid view, a raw header hashes to the hash that the block objects report.
 
-It decodes back to the header.
+A raw block decodes back to the block, when each ommer is at the fork the decoder gives it.
 
-The raw block decodes back to the block, with each transaction as its item in a body.
-
-This holds when each ommer is at the fork that the decoder gives its own number.
-
-In a valid view, take a canonical block after the lowest.
-
-Its raw receipts have the receipts root of its header.
+In a valid view, the raw receipts of a canonical block after the lowest have its receipts root.
 -/
 
 public section

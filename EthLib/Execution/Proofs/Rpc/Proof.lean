@@ -14,19 +14,9 @@ import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 The answer agrees with the account queries at the same block.
 
-Its balance and nonce are those of the balance and nonce queries.
-
-It echoes the address and the keys, and the words of an account are those of the storage query.
-
-An address with no account gets zero hashes, and each slot the word zero and no proof node.
-
-At a canonical block of a valid view, the answer passes the check.
-
-The check is against the state root of the header.
+At a canonical block of a valid view, the answer passes the check against the header's state root.
 
 The reader of answers reads back what the writer writes, for a nonce below `2^64`.
-
-Each key written as a number must also be below `16^63`.
 -/
 
 public section
@@ -299,20 +289,18 @@ private theorem accountProof_eq_ok {v : ChainView} {a : Address} {keys : List St
   | error e => rw [hx] at hf; cases hf
   | ok x => rw [hx] at hf; exact congrArg Except.ok (Except.ok.inj hf)
 
-/-- When the proof query answers, it agrees with the account queries of the same block.
-
-Its balance and nonce are the answers of the balance and nonce queries.
-
-It echoes the address and the keys, in order.
-
-The block resolves, and when its state has the account, the words come from the storage query.
-
-They are the answers of the one-key storage query, in order. -/
+/-- When the proof query answers, it agrees with the account queries of the same block. -/
 theorem accountProof_agree {v : ChainView} {a : Address} {keys : List StorageKey}
     {p : BlockParam} {answer : AccountProof} (h : v.accountProof a keys p = .ok answer) :
+    -- Its balance and nonce are the answers of the balance and nonce queries.
     v.balance a p = .ok answer.balance ∧ v.nonce a p = .ok answer.nonce ∧
+      -- It echoes the address and the keys, in order.
       answer.address = a ∧ answer.storageProof.map (·.key) = keys ∧
+      -- The block resolves.
+      --
+      -- When its state has the account, the words come from the storage query.
       ∃ r, v.resolve p = .ok (some r) ∧ (r.state.accounts[a]?.isSome = true →
+        -- They are the answers of the one-key storage query, in order.
         keys.mapM (fun key => v.storageAt a key.slot p) =
           .ok (answer.storageProof.map (·.value))) := by
   obtain ⟨r, hr, hp⟩ := accountProof_eq_ok h

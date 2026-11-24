@@ -11,21 +11,11 @@ public import EthLib.Execution.Proofs.Transactions.Network
 
 The hash that a submission returns is the hash of the transaction that its raw form holds.
 
-When the first byte of the raw form is not 3, that hash is the Keccak-256 hash of the raw bytes.
-
-The method of the dispatcher reads the raw bytes and returns that hash.
-
 A network form is accepted only when its blobs pass their checks, KZG proofs included.
 
-The next block in which a transaction is checked has the next base fee of the fee history.
+The checks of a transaction see the next base fee and the future nonce.
 
-A future nonce never fails the checks of the nonce.
-
-Each code that names the condition of a failed check is in a group that the method lists.
-
-It lies in the range of that group.
-
-Two failed checks get the same code only when they are of the same kind.
+A failed check has a code in a group that the method lists.
 -/
 
 public section
@@ -79,7 +69,7 @@ theorem ChainView.proofsVerify_of_sendRawTransaction {v : ChainView} {bytes : By
     proofsVerify v.setup (v.head.nextFork v.config) w = .ok true :=
   ((validateNetwork_eq_ok_iff _ _ _).mp (validateNetwork_of_sendRawTransaction hok hd)).2.2
 
-/-- The hash of an accepted submission whose first byte is not 3 is the hash of its bytes.
+/-- An accepted submission whose first byte is not 3 has the Keccak-256 hash of its bytes.
 
 Only a blob transaction, of type 3, comes in a network form. -/
 theorem ChainView.sendRawTransaction_keccak {v : ChainView} {bytes : ByteArray} {h : Hash32}
@@ -115,6 +105,7 @@ theorem ChainView.baseFeeOf_nextEnvironment (v : ChainView)
 /-- The sender has at least the nonce of the transaction in the state of the future nonce. -/
 theorem withFutureNonce_nonce (state : State.TransactionState) (sender : Address)
     (tx : Transaction) :
+    -- So the nonce of the transaction is never above that of the sender.
     tx.nonce.toNat ≤ ((withFutureNonce state sender tx).getAccount sender).nonce := by
   unfold withFutureNonce
   dsimp only

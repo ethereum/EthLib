@@ -11,8 +11,6 @@ A lookup by hash returns only a transaction of that hash, in a canonical block.
 
 The search under it finds nothing exactly when no canonical block has a transaction of that hash.
 
-The blocks off the canonical chain never change that search.
-
 A lookup by block and index returns the transaction at that index of the block that it names.
 
 In a valid view, the run of each canonical block after the lowest checked each of its transactions.
