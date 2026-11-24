@@ -7,16 +7,6 @@ public import EthLib.Cryptography.BaseField
 
 The quadratic extension `F[i] / (i^2 + 1)` of a base field `F`, with elements `c0 + c1 i`.
 
-The product follows from `i^2 = -1`: `(a + b i)(c + d i) = (ac - bd) + (ad + bc) i`.
-
-The inverse uses the conjugate: `(a + b i)^(-1) = (a - b i) / (a^2 + b^2)`.
-
-The code reads only the field operations of the base field.
-
-So proofs can run the same code on another base field with the same operations.
-
-The square root and the sign also read the square root and the sign of the base field.
-
 BLS12-381 and alt_bn128 both build their extension of degree 2 this way.
 -/
 
@@ -34,6 +24,9 @@ deriving Inhabited, BEq, DecidableEq, Repr
 
 namespace Fp2
 
+-- The code reads only the field operations of the base field.
+--
+-- So proofs can run the same code on another base field with the same operations.
 variable {F : Type} [FieldOps F]
 
 @[inline] def zero : Fp2 F := ⟨FieldOps.zero, FieldOps.zero⟩
@@ -51,6 +44,8 @@ instance : One (Fp2 F) := ⟨one⟩
 @[inline] def neg (a : Fp2 F)   : Fp2 F := ⟨-a.c0, -a.c1⟩
 
 @[inline] def mul (a b : Fp2 F) : Fp2 F :=
+  -- The product follows from `i^2 = -1`.
+  --
   -- (a0 + a1·i)(b0 + b1·i) = (a0·b0 − a1·b1) + (a0·b1 + a1·b0)·i
   ⟨a.c0 * b.c0 - a.c1 * b.c1, a.c0 * b.c1 + a.c1 * b.c0⟩
 
@@ -67,6 +62,7 @@ instance : Neg (Fp2 F) := ⟨neg⟩
 
 /-- Multiplicative inverse: `(c0 + c1·i)⁻¹ = (c0 − c1·i) / (c0^2 + c1^2)`, and 0 for 0. -/
 def inverse (a : Fp2 F) : Fp2 F :=
+  -- The inverse uses the conjugate, divided by the norm.
   let norm := a.c0 * a.c0 + a.c1 * a.c1   -- in the base field
   let invN := FieldOps.inverse norm
   ⟨a.c0 * invN, -(a.c1 * invN)⟩
@@ -101,26 +97,26 @@ decreasing_by omega
 
 section BaseField
 
+-- The square root and the sign also read the square root and the sign of the base field.
 variable {F : Type} [BaseField F]
 
 /-- A square root, by the [complex method][source] of Adj and Rodríguez-Henríquez, §V.A.
-
-The steps are those of its Algorithm 8.
-
-It relies on the base-field candidate, whose square is its input or the negation of its input.
 
 It returns `none` when the square root of the base field finds no root of the norm of the input.
 
 Which of the two roots it returns is not fixed, since every caller chooses the sign afterwards.
 
-When the base-field candidate and square root are one exponentiation each, as over BLS12-381:
-
-- a real input needs one exponentiation;
-- any other input needs at most two.
-
 [source]: https://eprint.iacr.org/2012/685
 -/
 def sqrt (a : Fp2 F) : Option (Fp2 F) :=
+  -- The steps are those of Algorithm 8 of the source.
+  --
+  -- The base-field candidate squares to its input or to the negation of its input.
+  --
+  -- Suppose the base-field candidate and root are one exponentiation each, as over BLS12-381.
+  --
+  -- Then a real input needs one exponentiation, and any other input needs at most two.
+  --
   -- Step 1: the case `a1 = 0`.
   if BaseField.isZero a.c1 then
     -- Step 2: the root is `SQRT_q(a0)`.

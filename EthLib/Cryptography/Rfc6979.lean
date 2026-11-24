@@ -32,8 +32,6 @@ structure NonceState where
 /--
 Steps b to g of RFC 6979 §3.2: the generator seeded with the key `x` and the hash `h1`.
 
-The group order is `q`; with `qlen = hlen = 256`, `bits2octets(h1)` is `h1 mod q` as 32 bytes.
-
 The result is that of RFC 6979 only for a 256-bit `q`, which both curves of EthLib have.
 
 It reads only the private key and the message hash, so one pair gives one nonce.
@@ -42,6 +40,8 @@ The key is secret, and this function makes no constant-time claim.
 -/
 def nonceSeed (q x : Nat) (hash : Vector UInt8 32) : NonceState :=
   -- `int2octets(x) || bits2octets(h1)`, shared by steps d and f.
+  --
+  -- The group order is `q`; with `qlen = hlen = 256`, `bits2octets(h1)` is `h1 mod q` as 32 bytes.
   let material := int2octets x ++ int2octets (Base.bytesToNat hash.toList % q)
   -- Step b: `V = 0x01 0x01 ... 0x01`, 32 bytes.
   let v : ByteArray := ⟨Array.replicate 32 0x01⟩

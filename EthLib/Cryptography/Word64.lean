@@ -5,15 +5,9 @@ module
 
 Products, sums and differences of 64-bit words, with their carries.
 
-Lean has no 128-bit product, so the high word of a product comes from four 32-bit products.
-
 Each operation states its result as an equation of natural numbers.
 
 The Montgomery forms of the base fields of secp256k1 and secp256r1 run on these words.
-
-The element of such a form and its conversions are written once, for any modulus.
-
-Each field gives its own constants and its own arithmetic.
 -/
 
 @[expose] public section
@@ -25,6 +19,7 @@ abbrev wordRadix : Nat := 2^64
 
 /-- The high word of the product of two words, from four 32-bit products. -/
 @[inline] def mulHigh (a b : UInt64) : UInt64 :=
+  -- Lean has no 128-bit product, so the high word comes from four 32-bit products.
   let alo := a &&& 0xffffffff
   let ahi := a >>> 32
   let blo := b &&& 0xffffffff
@@ -438,7 +433,12 @@ theorem sub4_spec (a b : Words64) :
   simp only [lowValue, wordRadix, UInt64.toNat_zero] at *
   omega
 
-/-! ## Montgomery residues on four words -/
+/-! ## Montgomery residues on four words
+
+The element of such a form and its conversions are written once, for any modulus.
+
+Each field gives its own constants and its own arithmetic.
+-/
 
 /-- An element of the integers mod `p` in Montgomery form on four words, with `R = 2^256`.
 

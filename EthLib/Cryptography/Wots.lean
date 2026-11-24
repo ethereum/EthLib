@@ -5,10 +5,6 @@ module
 
 leanXMSS and leanSPHINCS both sign with WOTS+C, and they share its two loops.
 
-A chain applies a step function once per position, from a start position upward.
-
-The search tries trials one by one and keeps the first that gives a codeword.
-
 Each scheme supplies its own step, trials and test.
 
 Source: [ePrint 2022/778](https://eprint.iacr.org/2022/778) for WOTS+C.
@@ -33,6 +29,8 @@ The step from position `k` gets `k`, so a scheme can put it in the hash address.
 A chain of `n + 1` positions has `n` steps, and the bound keeps the walk on the chain. -/
 def chain {α : Type} {n : Nat} (step : Fin n → α → m α) (start : Nat) :
     (steps : Nat) → start + steps ≤ n → α → m α
+  -- A chain applies a step function once per position, from a start position upward.
+  --
   -- Construction 2, steps 1 and 2: `y := x`, and `y` is the result when `s = 0`.
   | 0, _, value => pure value
   -- Step 3: for each `j ∈ [s]`, `y := Th(P, tweak(ep, i, k + j), y)`, with `k` the start.
@@ -49,6 +47,8 @@ def chain {α : Type} {n : Nat} (step : Fin n → α → m α) (start : Nat) :
 Returns the first trial whose test gives a codeword, with the codeword. -/
 @[specialize] def findFirst {κ β : Type} (trial : Nat → κ) (test : κ → m (Option β)) (c : Nat) :
     (fuel : Nat) → m (Option (κ × β))
+  -- The search tries trials one by one and keeps the first that gives a codeword.
+  --
   -- Construction 3, signing step 3: while `ctr < K` and `x = ⊥`, with `fuel` trials left.
   | 0 => pure none
   | fuel + 1 => do

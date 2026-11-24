@@ -20,20 +20,6 @@ Encryption runs the same steps forward, with the salt, the IV and the UUID as in
 
 Unicode normalization uses the pinned Unicode 16.0.0 tables.
 
-Metadata does not authenticate a secret or prove that it is a BLS private key.
-
-The reader still checks its form: an ERC-2334 path, an RFC 4122 UUID and a 48-byte public key.
-
-ERC-2335 allows a path of any depth, but ERC-2334 requires at least four indices, and wins here.
-
-The public key is 48 bytes of hex with no marker, as in the vectors of ERC-2335.
-
-A separate check compares the public key with that of the decrypted secret.
-
-Decryption takes bounds on the memory and work of key derivation, set by the caller.
-
-They are checked before any derivation step runs, since a keystore may request any cost.
-
 [erc]: https://github.com/ethereum/ERCs/blob/be307c948f28897adb8f25afcc253c2c909de35d/ERCS/erc-2335.md#specification
 -/
 
@@ -86,18 +72,18 @@ inductive Kdf where
 
 /-- A model of the memory of a key derivation, in bytes of its buffers.
 
-PBKDF2 holds its whole 32-byte output blocks, and the key cut from them.
-
-scrypt holds `N` blocks of `128 * r` bytes in ROMix, four buffers of `p` blocks, and its output.
-
-Those buffers are the expanded password, the mixed blocks, and two copies that hashing makes.
-
 It counts payload bytes only: no object headers, pointers or temporary blocks of ROMix.
 
 No theorem relates it to the memory that the code uses.
 -/
 def Kdf.memory : Kdf → Nat
+  -- PBKDF2 holds its whole 32-byte output blocks, and the key cut from them.
   | .pbkdf2 _ length _ => (length + 31) / 32 * 32 + length
+  -- scrypt holds `N` blocks of `128 * r` bytes in ROMix.
+  --
+  -- It also holds four buffers of `p` blocks, and its output.
+  --
+  -- Those buffers are the expanded password, the mixed blocks, and two copies that hashing makes.
   | .scrypt n r p length _ => 128 * r * n + 4 * (128 * r * p) + (length + 31) / 32 * 32 + length
 
 /-- The SHA-256 compressions that hash a message of `n` bytes, padding included (FIPS 180-4). -/
@@ -125,14 +111,15 @@ def pbkdf2Blocks (password salt iterations length : Nat) : Nat :=
 It counts calls of a function on one 64-byte block: the SHA-256 compression and the Salsa20/8 core.
 
 It is a count, not a time: the other steps of BlockMix and ROMix weigh more when `r` is small.
-
-scrypt makes `2 * r` Salsa20/8 calls per BlockMix, and `2 * N` BlockMix calls per block.
-
-It also runs PBKDF2 once to expand the password into `p` blocks, and once on them for its output.
 -/
 def Kdf.work (password : Nat) : Kdf → Nat
   | .pbkdf2 iterations length salt => pbkdf2Blocks password salt.size iterations length
   | .scrypt n r p length salt =>
+    -- scrypt makes `2 * r` Salsa20/8 calls per BlockMix, and `2 * N` BlockMix calls per block.
+    --
+    -- It also runs PBKDF2 once to expand the password into `p` blocks.
+    --
+    -- It runs PBKDF2 once more on those blocks for its output.
     4 * n * r * p + pbkdf2Blocks password salt.size 1 (128 * r * p) +
       pbkdf2Blocks password (128 * r * p) 1 length
 
@@ -147,7 +134,9 @@ structure KdfLimits where
 def KdfLimits.admits (limits : KdfLimits) (password : Nat) (kdf : Kdf) : Bool :=
   kdf.memory ≤ limits.memory && kdf.work password ≤ limits.work
 
-/-- The metadata of a keystore, which ERC-2335 neither encrypts nor authenticates. -/
+/-- The metadata of a keystore, which ERC-2335 neither encrypts nor authenticates.
+
+Metadata does not authenticate a secret or prove that it is a BLS private key. -/
 structure Metadata where
   /-- The ERC-2334 path of the key, none for the empty string. -/
   path : Option Bls.KeyPath.Path
@@ -216,6 +205,9 @@ def optionalField {α : Type} (value : Json) (name : String)
 def readPath (value : Json) : Except KeystoreError (Option Bls.KeyPath.Path) := do
   let text ← string "path" value
   if text = "" then return none
+  -- ERC-2335 allows a path of any depth, but ERC-2334 requires at least four indices.
+  --
+  -- ERC-2334 wins here.
   match Bls.KeyPath.parsePath text with
   | .ok path => return some path
   | .error error => throw (.invalidField "path" error.message)
@@ -241,9 +233,17 @@ def readUuid (value : Json) : Except KeystoreError (Vector UInt8 16) := do
 
 /-- The metadata of a keystore ("JSON schema"): its path, UUID, public key and description. -/
 def readMetadata (value : Json) : Except KeystoreError Metadata := do
+  -- Metadata does not authenticate a secret or prove that it is a BLS private key.
+  --
+  -- The reader still checks its form.
+  --
+  -- That form is an ERC-2334 path, an RFC 4122 UUID and a 48-byte public key.
   let path ← readPath (← field "keystore" value "path")
   let uuid ← readUuid (← field "keystore" value "uuid")
   let description ← optionalField value "description" (string "description")
+  -- The public key is 48 bytes of hex with no marker, as in the vectors of ERC-2335.
+  --
+  -- A separate check compares it with the public key of the decrypted secret.
   let pubkey ← optionalField value "pubkey" (fixed "pubkey" 48)
   return ⟨path, uuid, pubkey, description⟩
 
@@ -353,7 +353,9 @@ def decryptStore (limits : KdfLimits) (store : Store) (password : String) :
     Except KeystoreError ByteArray := do
   -- Password requirements: NFKD, control codes stripped, UTF-8.
   let password := passwordBytes password
-  -- Not in ERC-2335: the caller's bounds on the cost of the KDF, checked before it runs.
+  -- Not in ERC-2335: the caller's bounds on the memory and work of key derivation.
+  --
+  -- They are checked before any derivation step runs, since a keystore may request any cost.
   unless limits.admits password.size store.kdf do
     throw (.limitExceeded store.kdf.memory (store.kdf.work password.size))
   -- Decryption key, then password verification and secret decryption.
@@ -410,22 +412,22 @@ The salt is part of the key derivation, and the IV and the UUID are inputs.
 
 So writing is a function, and every random value comes from the caller.
 
-The key is derived from the prepared password, then the secret is encrypted with AES-128-CTR.
-
-The checksum is SHA-256 of key bytes 16 through 31 and the ciphertext, as decryption checks it.
-
-It runs the key derivation at any cost, so the caller chooses its parameters.
-
 ERC-2335 requires the public key when the secret is a private key, and the caller supplies it.
 -/
 def encrypt (kdf : Kdf) (iv : Aes.Block) (metadata : Metadata) (password : String)
     (secret : ByteArray) : Except KeystoreError Json := do
+  -- The key derivation runs at any cost, so the caller chooses its parameters.
+  --
   -- Decryption key: the KDF of the prepared password.
   let key ← deriveKey (passwordBytes password) kdf
   if h : 32 ≤ key.size then
     -- Secret decryption, run forward: CTR mode is its own inverse.
+    --
+    -- The secret is encrypted with AES-128-CTR under the key derived above.
     let message := Aes.ctr (Aes.ciph .aes128 (aesKey key h)) 128 iv secret
     -- The checksum module holds the SHA-256 digest of key bytes 16 to 31 and the cipher message.
+    --
+    -- Decryption checks the same checksum.
     return Json.mkObj ([("crypto", Json.mkObj [
       ("kdf", kdf.toJson),
       ("checksum", moduleJson "sha256" [] (hexText (passwordChecksum key message).toList)),
