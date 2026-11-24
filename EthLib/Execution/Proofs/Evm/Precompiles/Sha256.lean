@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.Sha256
+public import EthLib.Base.Proofs.Except
 public import EthLib.Execution.Proofs.Evm.Words
 public import EthLib.Cryptography.Proofs.Hash.Sha256
 
@@ -13,6 +14,8 @@ It fails exactly when the gas is below that price, and otherwise returns the 32-
 The digest is the FIPS 180-4 hash of `Cryptography.Proofs.Hash.Sha256` whenever the call data is shorter than 2^61 bytes.
 Every call that succeeds with less than `60 + 12 * 2^56` gas has such call data.
 
+The price grows with the size, and fits in 64 bits below 2^63 bytes.
+
 Two errors with one code come from one constructor.
 -/
 
@@ -20,26 +23,27 @@ Two errors with one code come from one constructor.
 
 namespace EthLib.Execution.Evm.Precompiles.Sha256
 
-open EthLib.Execution.Evm (wordCount_eq)
+open EthLib.Execution.Evm (wordPrice_eq wordPrice_mono wordPrice_le)
 
 /-! ## Gas -/
 
 /-- The price in closed form, `60 + 12 * ceil(size / 32)`. -/
-theorem gasCost_eq (size : Nat) : gasCost size = 60 + 12 * ((size + 31) / 32) := by
-  rw [gasCost, wordCount_eq]
-  rfl
+theorem gasCost_eq (size : Nat) : gasCost size = 60 + 12 * ((size + 31) / 32) :=
+  wordPrice_eq _ _ size
 
 /-- Longer call data never costs less. -/
-theorem gasCost_mono {short long : Nat} (le : short ≤ long) : gasCost short ≤ gasCost long := by
-  rw [gasCost_eq, gasCost_eq]
-  omega
+theorem gasCost_mono {short long : Nat} (le : short ≤ long) : gasCost short ≤ gasCost long :=
+  wordPrice_mono _ _ le
 
-/-- Below 2^63 bytes of call data, the price fits in 64 bits, so the C export reports it exactly. -/
+/-- Below 2^63 bytes of call data, the price fits in 64 bits.
+
+So a call with a 64-bit gas amount can pay it. -/
 theorem gasCost_lt_two_pow_64 {size : Nat} (bounded : size < 2 ^ 63) : gasCost size < 2 ^ 64 := by
-  rw [gasCost_eq]
-  have : (2 : Nat) ^ 63 = 9223372036854775808 := rfl
-  have : (2 : Nat) ^ 64 = 18446744073709551616 := rfl
-  omega
+  -- Such call data fits in 2^58 words.
+  have covers : size ≤ 32 * 2 ^ 58 := by
+    have : (2 : Nat) ^ 63 = 32 * 2 ^ 58 := by decide
+    omega
+  exact Nat.lt_of_le_of_lt (wordPrice_le _ _ covers) (by decide)
 
 /-! ## The call -/
 
@@ -56,37 +60,15 @@ theorem sha256_ok (data : ByteArray) (gas : Nat) (enough : gasCost data.size ≤
 /-- A call succeeds exactly when the gas covers the price, and then returns the digest. -/
 theorem sha256_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
     sha256 data gas = .ok out ↔ gasCost data.size ≤ gas ∧ out = Cryptography.Hash.sha256 data := by
-  by_cases short : gas < gasCost data.size
-  · rw [sha256_outOfGas data gas short]
-    constructor
-    · intro wrong
-      simp at wrong
-    · intro ⟨enough, _⟩
-      omega
-  · rw [sha256_ok data gas (by omega)]
-    constructor
-    · intro same
-      -- Injectivity, rather than `cases`, so the digest is never unfolded.
-      exact ⟨by omega, (Except.ok.inj same).symm⟩
-    · intro ⟨_, same⟩
-      rw [same]
+  -- The digest stays a term of the statement, never unfolded.
+  unfold sha256
+  exact Base.ite_lt_eq_ok_iff
 
 /-- A call fails exactly when the gas is below the price, and the error carries both. -/
 theorem sha256_eq_error_iff (data : ByteArray) (gas : Nat) (e : Sha256Error) :
     sha256 data gas = .error e ↔ gas < gasCost data.size ∧ e = .outOfGas (gasCost data.size) gas := by
-  by_cases short : gas < gasCost data.size
-  · rw [sha256_outOfGas data gas short]
-    constructor
-    · intro same
-      exact ⟨short, (Except.error.inj same).symm⟩
-    · intro ⟨_, same⟩
-      rw [same]
-  · rw [sha256_ok data gas (by omega)]
-    constructor
-    · intro wrong
-      simp at wrong
-    · intro ⟨below, _⟩
-      exact absurd below short
+  unfold sha256
+  exact Base.ite_lt_eq_error_iff
 
 /-- Every output is 32 bytes. -/
 theorem sha256_ok_size {data : ByteArray} {gas : Nat} {out : ByteArray} (ok : sha256 data gas = .ok out) :
