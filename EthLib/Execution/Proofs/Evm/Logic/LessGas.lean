@@ -11,33 +11,9 @@ A run that reverts fails too, so these facts say nothing of its gas.
 
 The facts here are for the meter of one counter of gas, the meter of every fork before Glamsterdam.
 
-Take a specification over such steps, from a frame with `k` more gas than a frame `l`.
+No fact here covers GAS, which is not monotone in gas, nor calls and creations.
 
-Say the loop of the interpreter runs `l` to a stopped frame with no error.
-
-Then that stopped frame, with `k` more gas, meets the postcondition.
-
-So a run with less gas that succeeds ends as the specification says, with exactly `k` less gas.
-
-A specification to a halt that pays `cost`, with any gas from some bound on, fixes every such run.
-
-That run had at least `cost` gas, and it ends with exactly `cost` less.
-
-A frame is stuck when it is running and the step from it, and from it with any less gas, fails.
-
-Say such steps reach a stuck frame from a frame with `k` more gas than a frame `l`.
-
-Then every frame that the loop runs `l` to has an error.
-
-SSTORE never completes in a static frame, or when the current address has no account.
-
-From Istanbul, it also fails with 2300 gas left or less, by EIP-2200.
-
-In each of these cases a frame at SSTORE with at least two words on its stack is stuck.
-
-GAS is not monotone in gas, and a step that sends a message is no step of the logic.
-
-So no fact here covers GAS, the calls and the creations.
+A step that sends a message is no step of the logic.
 -/
 
 @[expose] public section
@@ -275,6 +251,7 @@ It fails, or halts with an error, at every fork and with any gas. -/
 theorem sstore_stuck {key new : U256} {rest : List U256}
     (hlt : pc < code.size) (hbyte : code[pc] = 0x55)
     (bad : message.isStatic = true ∨ state.getAccountOptional message.currentTarget = none) :
+    -- A frame at SSTORE with at least two words on its stack is stuck.
     HoareG fork (At code message pc (key :: new :: rest) memory gas state substate returnData)
       Stuck := by
   refine At.stuck hlt hbyte (ofByte_of_decode (op := .sstore) rfl (Fork.frontier_le _))
@@ -293,6 +270,7 @@ From Glamsterdam, that is not the meter of the fork.
 It fails with every gas up to 2300. -/
 theorem sstore_low_stuck (hist : Fork.istanbul ≤ fork) {key new : U256} {rest : List U256}
     (hlt : pc < code.size) (hbyte : code[pc] = 0x55) (hstipend : gas ≤ CALL_STIPEND) :
+    -- A frame at SSTORE with at least two words on its stack is stuck.
     HoareG fork (At code message pc (key :: new :: rest) memory gas state substate returnData)
       Stuck := by
   refine At.stuck hlt hbyte (ofByte_of_decode (op := .sstore) rfl (Fork.frontier_le _))

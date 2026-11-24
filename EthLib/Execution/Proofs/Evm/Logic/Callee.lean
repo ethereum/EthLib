@@ -11,26 +11,6 @@ A triple under an assumption on the frames that end messages holds under each ru
 The runner of the interpreter runs each message of a call with the code that the message names.
 
 When that code has a specification with no message, the runner meets the assumption it gives.
-
-The assumption covers a message with that code and a target, with no value and no precompile.
-
-Its frame starts from the state of the caller, which before Paris has its target touched.
-
-The frame that ends the message is a stopped frame of the specification, rolled back on a failure.
-
-The callee sends no message itself, since its specification is one with no message.
-
-The code is the one that the message names, and a rule for a call ties it to the address.
-
-The runner touches the target before Paris, moves no value, runs the code, and rolls back a failure.
-
-A message with value moves it from the caller to the target first, and its frame starts from there.
-
-A message that ends with a frame has moved its value.
-
-The runner meets one assumption on such messages.
-
-A message with value to no code ends with no error, in the state that the move gives.
 -/
 
 @[expose] public section
@@ -56,6 +36,9 @@ theorem processMessage_map_val {Meter : Type} [GasMeter Meter] [LawfulGasMeter M
     (noPrecompile : precompileAddress fork message = none)
     (ran : runFrame (step fork) (step_decreases fork) message.gas (processRunner fork message.gas)
       (startFrame message (startState fork message state) substate meter) held = result) :
+    -- The runner touches the target before Paris, moves no value, and runs the code.
+    --
+    -- It rolls back a failure.
     (processMessage fork message state substate meter held).map Subtype.val =
       result.map (rollbackOnError state) := by
   have ran' : ∀ within, runFrame (step fork) (step_decreases fork) message.gas
@@ -248,42 +231,39 @@ theorem at_startFrame {code : ByteArray} {message : Message fork} (hcode : messa
   subst hcode
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-- The assumption that a call with code `code` runs as a specification of that code says.
-
-The message runs that code, has a target, sends no value, and runs no precompile.
-
-`G` holds of the message, and of the state and the substate that it starts from.
-
-Then the frame that ends it is a stopped frame of `Q`.
-
-That frame is the one that the callee stopped in, after the rollback of a failure. -/
+/-- The assumption that a call with code `code` runs as a specification of that code says. -/
 def RunsAs (code : ByteArray) (G : Message fork → TransactionState → Substate → Prop)
     (Q : Message fork → TransactionState → Substate → Evm fork Nat → Prop)
     (caller : Evm fork Nat) (message : Message fork) (child : Evm fork Nat) : Prop :=
+  -- The message runs that code, has a target, sends no value, and runs no precompile.
+  --
+  -- The code is the one that the message names, and a rule for a call ties it to the address.
   message.code = code → message.target.isSome →
     ¬(message.shouldTransferValue = true ∧ message.value ≠ 0) →
+    -- `G` holds of the message, and of the state and the substate that it starts from.
     precompileAddress fork message = none → G message caller.state caller.substate.child →
+    -- Then the frame that ends it is a stopped frame of `Q`.
     ∃ stopped, Q message caller.state caller.substate.child stopped ∧
+      -- That frame is the one that the callee stopped in, after the rollback of a failure.
       child = rollbackOnError caller.state stopped
 
 /-- The runner of the interpreter meets the assumption of a specification of the code of a callee.
 
-The specification holds of every message with that code and `G`, from the frame it starts.
-
 The callee may send messages: its specification is a triple under an assumption `A`.
-
-The runner of the interpreter must meet `A` for every bound on the gas of messages.
 
 A run of the callee that aborts makes the runner fail, and the assumption asks nothing of it. -/
 theorem meets_of_specUnder {code : ByteArray}
     {G : Message fork → TransactionState → Substate → Prop}
     {Q : Message fork → TransactionState → Substate → Evm fork Nat → Prop}
     {A : Evm fork Nat → Message fork → Evm fork Nat → Prop}
+    -- The specification holds of every message with that code and `G`, from the frame it starts.
     (hspec : ∀ message state substate, message.code = code → G message state substate →
       SpecUnder fork A
+        -- The frame starts from the state of the caller, which before Paris has its target touched.
         (At code message 0 [] .empty message.gas (startState fork message state) substate
           .empty)
         (Q message state substate))
+    -- The runner of the interpreter must meet `A` for every bound on the gas of messages.
     (meets : ∀ bound, Meets A (processRunner fork bound)) (bound : Nat) :
     Meets (RunsAs code G Q) (processRunner fork bound) := by
   refine ⟨fun caller message _ child ran hcode htarget noValue noPrecompile hg => ?_,

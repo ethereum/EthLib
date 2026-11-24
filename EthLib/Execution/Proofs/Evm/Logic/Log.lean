@@ -8,23 +8,11 @@ public import EthLib.Execution.Proofs.Evm.Instructions.LogData
 
 LOGn appends one log to the substate of the frame.
 
-The log holds the current address, `n` topics, and a range of memory as its data.
-
 The rule holds at every fork, with one counter of gas, the meter of the forks before Glamsterdam.
 
-It pays 375, 8 for each byte of data, 375 for each topic, and the growth of memory.
+It says nothing of the order of the logs of several frames.
 
-The rule is first proved over the steps that also never abort with less gas.
-
-That form gives the rule over the steps from frames that are monotone in gas.
-
-That rule gives the rule over the steps of the logic.
-
-The frame must be one that may change the state, since LOGn fails in a static frame.
-
-The rule says nothing of the order of the logs of several frames.
-
-It says nothing either of a log that a later revert of the frame or of a caller drops.
+Nor does it say anything of a log that a later revert of the frame or of a caller drops.
 -/
 
 @[expose] public section
@@ -78,13 +66,16 @@ It pays the price of the log and the growth of memory, in a frame that may chang
 It holds over the steps from frames that are monotone in gas and never abort with less gas. -/
 theorem logGA {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U256}
     (hlen : words.length = n.val) (hlt : pc < code.size) (hbyte : code[pc] = byte)
+    -- The frame may change the state, since LOGn fails in a static frame.
     (decoded : Op.decode byte = some (.log n)) (hstatic : message.isStatic = false)
+    -- It pays 375, 8 for each byte of data, 375 for each topic, and the growth of memory.
     (hgas : logCost n.val size + (extendMemory memory.size [(start, size)]).cost ≤ gas) :
     HoareGA fork (At code message pc (start :: size :: (words ++ rest)) memory gas state substate
         returnData)
       (At code message (pc + 1) rest
         (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
         (gas - (logCost n.val size + (extendMemory memory.size [(start, size)]).cost)) state
+        -- The log holds the current address, `n` topics, and a range of memory as its data.
         { substate with
           logs := substate.logs.push
             { address := message.currentTarget
@@ -127,13 +118,16 @@ It pays the price of the log and the growth of memory, in a frame that may chang
 It holds over the steps from frames that are monotone in gas. -/
 theorem logG {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U256}
     (hlen : words.length = n.val) (hlt : pc < code.size) (hbyte : code[pc] = byte)
+    -- The frame may change the state, since LOGn fails in a static frame.
     (decoded : Op.decode byte = some (.log n)) (hstatic : message.isStatic = false)
+    -- It pays 375, 8 for each byte of data, 375 for each topic, and the growth of memory.
     (hgas : logCost n.val size + (extendMemory memory.size [(start, size)]).cost ≤ gas) :
     HoareG fork (At code message pc (start :: size :: (words ++ rest)) memory gas state substate
         returnData)
       (At code message (pc + 1) rest
         (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
         (gas - (logCost n.val size + (extendMemory memory.size [(start, size)]).cost)) state
+        -- The log holds the current address, `n` topics, and a range of memory as its data.
         { substate with
           logs := substate.logs.push
             { address := message.currentTarget
@@ -147,6 +141,9 @@ theorem logG {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U
               data := memoryReadBytes
                 (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
                 start.toNat size.toNat } } returnData) :=
+  -- The rule is first proved over the steps that also never abort with less gas.
+  --
+  -- That form gives the rule over the steps from frames that are monotone in gas.
   (logGA hlen hlt hbyte decoded hstatic hgas).toG
 
 /-- LOGn appends a log of the current address, with the `n` words below the range as its topics.
@@ -156,13 +153,16 @@ The data of the log is the range of memory from `start`, after memory grows to h
 It pays the price of the log and the growth of memory, in a frame that may change the state. -/
 theorem log {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U256}
     (hlen : words.length = n.val) (hlt : pc < code.size) (hbyte : code[pc] = byte)
+    -- The frame may change the state, since LOGn fails in a static frame.
     (decoded : Op.decode byte = some (.log n)) (hstatic : message.isStatic = false)
+    -- It pays 375, 8 for each byte of data, 375 for each topic, and the growth of memory.
     (hgas : logCost n.val size + (extendMemory memory.size [(start, size)]).cost ≤ gas) :
     Hoare fork (At code message pc (start :: size :: (words ++ rest)) memory gas state substate
         returnData)
       (At code message (pc + 1) rest
         (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
         (gas - (logCost n.val size + (extendMemory memory.size [(start, size)]).cost)) state
+        -- The log holds the current address, `n` topics, and a range of memory as its data.
         { substate with
           logs := substate.logs.push
             { address := message.currentTarget
@@ -176,6 +176,7 @@ theorem log {n : Fin 5} {byte : UInt8} {start size : U256} {words rest : List U2
               data := memoryReadBytes
                 (memoryExtend memory (extendMemory memory.size [(start, size)]).expandBy)
                 start.toNat size.toNat } } returnData) :=
+  -- The rule over the steps from frames monotone in gas gives the rule over the steps of the logic.
   (logG hlen hlt hbyte decoded hstatic hgas).toHoare
 
 end EthLib.Execution.Evm.Logic

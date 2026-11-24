@@ -10,21 +10,7 @@ A triple under an assumption says about a frame that ends a message only what th
 
 The assumption here says what the messages of a named set do to the state.
 
-Take each such message that the runner ends with no error.
-
-The relation holds from the state of the frame that sends it to the state of the frame that ends it.
-
 One set names the CALLs with no value that a code makes to an address.
-
-Such a call runs the code that the address holds in a state, along its route.
-
-The state of the frame that sends it reads as that state.
-
-It has the same accounts, current storage, transient storage and code.
-
-So the message runs the real code of the address, or its precompile, and not any code.
-
-The message of a CALL along a route is in that set, with the state before the call.
 -/
 
 @[expose] public section
@@ -40,18 +26,15 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- The state `tx` reads as the state `S`.
 
-It has the account, the storage and the transient storage of `S` at every address.
+It has the account, the current storage and the transient storage of `S` at every address.
 
-It has the code of `S` at every code hash.
-
-The two may differ in the reads that they record.
-
-They may also differ in the block before the transaction.
-
-And they may differ in the accounts that the transaction created and the storage that it wiped.
-
-So the original storage and the account before the transaction may differ. -/
+It has the code of `S` at every code hash. -/
 def ReadsAs (tx S : TransactionState) : Prop :=
+  -- The two may differ in the reads that they record, and in the block before the transaction.
+  --
+  -- They may differ in the accounts that the transaction created and the storage that it wiped.
+  --
+  -- So the original storage and the account before the transaction may differ.
   TransactionState.SameOutside [] S tx ∧ ∀ codeHash, tx.getCode codeHash = S.getCode codeHash
 
 /-- A state reads as itself. -/
@@ -94,22 +77,19 @@ theorem Routes.of_readsAs {tx S : TransactionState} {c : ByteArray} {route : Rou
 
 /-- `msg` is a CALL with no value to `to`, along the route that `S` gives, from the frame `caller`.
 
-The current account of `message` makes the call, from a frame whose state reads as `S`.
-
-The message runs the code that `to` holds in `S`, along its route.
-
-It has the depth, the static flag, the block and the transaction of a call from `message`.
-
-Its data, its gas and its reservoir may be any.
-
-So may the frame `caller`, apart from its state. -/
+Its data, its gas, its reservoir and the frame `caller`, apart from its state, may be any. -/
 def SentVia (message : Message fork) (S : TransactionState) (to : Address)
     (caller : Evm fork Meter) (msg : Message fork) : Prop :=
+  -- The message runs the code that `to` holds in `S`, along its route.
   ∃ c route, S.getCode (S.getAccount to).codeHash = .ok c ∧ Routes fork S c route ∧
+    -- The frame that sends it has a state that reads as `S`.
     ReadsAs caller.state S ∧
+    -- The current account of `message` makes the call.
     msg.caller = message.currentTarget ∧ msg.currentTarget = to ∧ msg.target = some to ∧
+    -- So the message runs the real code of the address, or its precompile, and not any code.
     msg.codeAddress = some (routeAddr to route) ∧ msg.code = routeCode c route ∧
     msg.disablePrecompiles = route.isSome ∧ msg.value = 0 ∧ msg.shouldTransferValue = true ∧
+    -- It has the depth, the static flag, the block and the transaction of a call from `message`.
     msg.depth = message.depth + 1 ∧ msg.isStatic = message.isStatic ∧
     msg.blockEnv = message.blockEnv ∧ msg.txEnv = message.txEnv
 

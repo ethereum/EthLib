@@ -7,17 +7,6 @@ public import EthLib.Execution.Proofs.Evm.Logic.Region
 
 A frame of this kind names its memory only by its size and by ranges that hold known bytes.
 
-The size is a multiple of 32, as every size of memory that the interpreter reaches is.
-
-Each fact is a start and the bytes that memory holds from there.
-
-- A rule that keeps memory, for every memory, keeps the size and every fact.
-- A write keeps each fact whose range it does not touch, and adds the fact of what it writes.
-- Memory grows by the growth for the ranges of the write, which depends only on its size.
-- MLOAD of the range of a fact with the bytes of a word pushes that word.
-- RETURN and REVERT of the range of a fact give the bytes of the fact.
-- Two facts of adjacent ranges join into one, and a frame may forget facts.
-
 The rules here give this form to MSTORE, MSTORE8 and MCOPY.
 
 They give it to CALLDATACOPY, CODECOPY, RETURNDATACOPY and EXTCODECOPY too.
@@ -36,6 +25,7 @@ variable {fork : Fork}
 
 /-- Memory holds each range of a list, from its start. -/
 def HoldsAll (memory : ByteArray) (facts : List (Nat × ByteArray)) : Prop :=
+  -- Each fact is a start and the bytes that memory holds from there.
   ∀ fact ∈ facts, Holds memory fact.1 fact.2
 
 /-- Whether a fact ends before the range of `length` bytes from `start`, or starts after it. -/
@@ -49,6 +39,7 @@ def Known (code : ByteArray) (message : Message fork) (pc : Nat) (stack : List U
     (size : Nat) (facts : List (Nat × ByteArray)) (gas : Nat) (state : State.TransactionState)
     (substate : Substate) (returnData : ByteArray) (evm : Evm fork Nat) : Prop :=
   At code message pc stack evm.memory gas state substate returnData evm ∧
+    -- The size is a multiple of 32, as every size of memory that the interpreter reaches is.
     evm.memory.size = size ∧ size % 32 = 0 ∧ HoldsAll evm.memory facts
 
 variable {code : ByteArray} {message : Message fork} {pc pc' : Nat} {stack stack' : List U256}
@@ -115,13 +106,16 @@ The written range has some bytes and is one of those ranges.
 
 Memory has the size before the growth plus the growth, and holds the facts of the write. -/
 theorem known_of_write {memory value : ByteArray} {start length : U256}
+    -- The range has some bytes, since a write of no bytes touches no range.
     {ranges : List (U256 × U256)} {evm : Evm fork Nat} (hz : length ≠ 0)
     (hlen : value.size = length.toNat) (hmem : (start, length) ∈ ranges)
     (hsize : memory.size = size) (hmod : size % 32 = 0) (hall : HoldsAll memory facts)
     (h : At code message pc' stack'
       (memoryWrite (memoryExtend memory (extendMemory size ranges).expandBy) start.toNat value)
       gas' state' substate' returnData evm) :
+    -- Memory grows by the growth for the ranges of the write, which depends only on its size.
     Known code message pc' stack' (size + (extendMemory size ranges).expandBy)
+      -- The write keeps each fact whose range it does not touch, and adds the fact it writes.
       ((start.toNat, value) :: facts.filter (Apart start.toNat length.toNat)) gas' state'
       substate' returnData evm := by
   have cover := le_ceil32_add_expandBy size ranges (start, length) hmem hz
@@ -342,16 +336,13 @@ theorem returndatacopy_known (hfork : .byzantium ≤ fork) {start offset length 
 
 The fact is the code `c` of the account of the address, with zeros past its end.
 
-It keeps the facts apart from the range.
-
-It pays 2600 for a cold address and 100 for a warm one, 3 gas a word and the growth of memory.
-
-It then adds the address to the accessed addresses, and records the read of the account. -/
+It keeps the facts apart from the range. -/
 theorem extcodecopy_known (hfork : .berlin ≤ fork) (hglam : fork < .glamsterdam)
     {word start offset length : U256} {rest : List U256} {cold : Bool} {c : ByteArray}
     (hlt : pc < code.size) (hbyte : code[pc] = 0x3c) (hz : length ≠ 0)
     (hcode : state.getCode (state.getAccount (Base.toAddressMasked word)).codeHash = .ok c)
     (hcold : decide (Base.toAddressMasked word ∉ substate.accessedAddresses) = cold)
+    -- It pays 2600 for a cold address and 100 for a warm one, 3 gas a word and memory growth.
     (hgas : (if cold then 2600 else 100) + 3 * wordCount length.toNat +
       (extendMemory size [(start, length)]).cost ≤ gas) :
     Hoare fork
@@ -362,6 +353,7 @@ theorem extcodecopy_known (hfork : .berlin ≤ fork) (hglam : fork < .glamsterda
           facts.filter (Apart start.toNat length.toNat))
         (gas - ((if cold then 2600 else 100) + 3 * wordCount length.toNat +
           (extendMemory size [(start, length)]).cost))
+        -- It adds the address to the accessed addresses, and records the read of the account.
         (state.recordAccountRead (Base.toAddressMasked word))
         { substate with
           accessedAddresses :=
