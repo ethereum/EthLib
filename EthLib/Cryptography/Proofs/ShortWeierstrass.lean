@@ -15,10 +15,6 @@ This file restates it for `y^2 = x^3 + a x + b`, case by case as SEC 1 v2 §2.2.
 Over `ZMod p`, it also counts the points.
 
 The points of the specification map into that group, through a map of their field into a field.
-
-Addition and negation are the group's, and points on the curve and group elements correspond.
-
-So the group law is proved once, and each curve gives only its map.
 -/
 
 @[expose] public section
@@ -224,7 +220,12 @@ theorem card_point_eq (hp : p % 2 = 1) (hroot : ∀ x : ZMod p, x * x * x + a * 
 
 end ZMod
 
-/-! ## The points of the specification -/
+/-! ## The points of the specification
+
+Addition and negation are the group's, and points on the curve and group elements correspond.
+
+So the group law is proved once, and each curve gives only its map.
+-/
 
 section Points
 

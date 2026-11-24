@@ -7,28 +7,6 @@ public import EthLib.Cryptography.Proofs.MillerLines
 
 Two quotients of products of lines with the same divisor are equal.
 
-Miller calls a function normalized when the leading coefficient of its Laurent series at `O` is 1.
-
-He notes that each principal divisor has exactly one normalized function.
-
-Here the same holds for quotients of the lines of Miller's algorithm, in two steps.
-
-First, the same divisor gives the same fractional ideal, so the two functions differ by a unit.
-
-The units of the coordinate ring are the nonzero constants.
-
-Second, every line has the leading coefficient 1 at `O`, so the constant is 1.
-
-The leading coefficient is read in the basis `1, Y` of the coordinate ring over `F[X]`.
-
-Near `O`, `x` has a pole of order 2 and `y` a pole of order 3.
-
-So `p(X) + q(X) Y` has the leading term of `p(T^2) - T^3 q(T^2)`, in powers of `1 / T`.
-
-The even powers of this polynomial come from `p` and the odd ones from `q`, so no term cancels.
-
-The sign comes from the uniformizer `-x / y` at `O`, under which `y` has the leading coefficient -1.
-
 See Miller, "The Weil Pairing, and Its Efficient Calculation", J. Cryptology 17 (2004).
 
 Section 4.1 defines normalized functions (Definition 4).
@@ -85,9 +63,16 @@ theorem exists_eq_algebraMap_of_isUnit {a : W.CoordinateRing} (ha : IsUnit a) :
   rw [eq_C_of_degree_le_zero hp, zero_smul, add_zero, coeff_C_zero, Algebra.smul_def, mul_one]
   rfl
 
-/-! ## The leading coefficient at `O` -/
+/-! ## The leading coefficient at `O`
 
-/-- The polynomial `p(T^2) - T^3 q(T^2)`, whose leading term is that of `p + q Y` at `O`. -/
+The leading coefficient is read in the basis `1, Y` of the coordinate ring over `F[X]`.
+-/
+
+/-- The polynomial `p(T^2) - T^3 q(T^2)`, whose leading term is that of `p + q Y` at `O`.
+
+Its powers of `T` stand for powers of `1 / T`.
+
+Its even powers come from `p` and its odd ones from `q`, so no term cancels. -/
 noncomputable def leadForm (p q : F[X]) : F[X] := expand F 2 p - X ^ 3 * expand F 2 q
 
 /-- The odd coefficients of the polynomial come from `q`. -/
@@ -254,7 +239,12 @@ theorem leadCoeffO_linesElem (M : Multiset (W.Point × W.Point)) :
     rw [linesElem, Multiset.map_cons, Multiset.prod_cons, leadCoeffO_mul, ← linesElem, ih,
       leadCoeffO_lineElem, mul_one]
 
-/-! ## Uniqueness -/
+/-! ## Uniqueness
+
+Miller calls a function normalized when the leading coefficient of its Laurent series at `O` is 1.
+
+He notes that each principal divisor has exactly one normalized function.
+-/
 
 /-- Two quotients of products of lines with the same divisor are equal.
 
@@ -262,6 +252,9 @@ The quotients are `N₁ / D₁` and `N₂ / D₂`, written without division. -/
 theorem linesElem_mul_eq_of_linesDivisor {N₁ D₁ N₂ D₂ : Multiset (W.Point × W.Point)}
     (h : linesDivisor W N₁ - linesDivisor W D₁ = linesDivisor W N₂ - linesDivisor W D₂) :
     linesElem W N₁ * linesElem W D₂ = linesElem W N₂ * linesElem W D₁ := by
+  -- Like Miller's normalized functions, these quotients are unique, in two steps.
+  --
+  -- First, the same divisor gives the same fractional ideal, so the two functions differ by a unit.
   have hD : linesDivisor W (N₁ + D₂) = linesDivisor W (N₂ + D₁) := by
     rw [linesDivisor_add, linesDivisor_add]
     rw [sub_eq_sub_iff_add_eq_add] at h
@@ -271,7 +264,9 @@ theorem linesElem_mul_eq_of_linesDivisor {N₁ D₁ N₂ D₂ : Multiset (W.Poin
     rw [FractionalIdeal.coeIdeal_span_singleton, FractionalIdeal.coeIdeal_span_singleton,
       spanSingleton_linesElem, spanSingleton_linesElem, hD]
   obtain ⟨u, hu⟩ := Ideal.span_singleton_eq_span_singleton.mp hI
+  -- The units of the coordinate ring are the nonzero constants.
   obtain ⟨c, hc⟩ := exists_eq_algebraMap_of_isUnit u.isUnit
+  -- Second, every line has the leading coefficient 1 at `O`, so the constant is 1.
   have hc1 : c = 1 := by
     have := congrArg leadCoeffO hu
     rwa [leadCoeffO_mul, hc, leadCoeffO_algebraMap, leadCoeffO_linesElem, leadCoeffO_linesElem,

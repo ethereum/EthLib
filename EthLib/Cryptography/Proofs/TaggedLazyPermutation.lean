@@ -10,31 +10,20 @@ The lazy permutation keeps the pairs `(a, π a)` answered so far.
 
 Here each pair also carries a tag, set by the query that first answered it.
 
-The oracle takes two tags: one for its forward queries, one for its inverse queries.
-
-Several callers can share one cache, each with its own tags.
-
-Every query only adds pairs at the head of the cache.
-
-So a pair, once in the cache, stays in it with its tag.
-
-A caller that writes the cache directly, and not through queries, can set any tag.
-
 Erase the tags, and the oracle is the lazy permutation, run on the erased cache.
 
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
+The source is [Fersch, Kiltz, Poettering, CCS 2016][fkp16].
 
 The proofs of their Theorems 1 and 2 keep the pairs of the bijection in separate lists.
 
-In §4.1, Figure 5, the list `Π_O` holds the pairs of the forger's queries in both directions.
-
-Their Figure 6 relays those queries to the challenger.
-
-In both figures the list `Π_S` holds the pairs that the signatures set.
-
-In §4.2, Figure 7, one list holds the pairs of forward queries, and one those of inverse queries.
+- In §4.1, Figure 5, the list `Π_O` holds the pairs of the forger's queries in both directions.
+- Their Figure 6 relays those queries to the challenger.
+- In both figures the list `Π_S` holds the pairs that the signatures set.
+- In §4.2, Figure 7, one list holds the pairs of forward queries, and one those of inverse queries.
 
 A set of tags can stand for each such list.
+
+[fkp16]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -45,7 +34,11 @@ open OracleComp OracleSpec
 
 variable {A τ : Type}
 
-/-- The pairs `(a, π a)` answered so far, each with its tag, the most recent first. -/
+/-- The pairs `(a, π a)` answered so far, each with its tag, the most recent first.
+
+Several callers can share one cache, each with its own tags.
+
+A caller that writes the cache directly, and not through queries, can set any tag. -/
 abbrev TaggedCache (A τ : Type) := List ((A × A) × τ)
 
 /-- The cache without its tags. -/
