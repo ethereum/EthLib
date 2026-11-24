@@ -16,20 +16,6 @@ Their hash is a query to the random oracle, which is sampled lazily from an empt
 The adversary requests signatures of messages of its choice.
 
 It wins with a pair that verifies and that no request returned, after at most `2^30` requests.
-
-The budget `q` counts every hash call of the experiment, repeated inputs included.
-
-That is key generation, signing, the adversary's queries and the final verification.
-
-On each request the signer derives `PK.seed` and `SK.prf` again, and rebuilds the top tree.
-
-Those calls count too.
-
-Uniform samples are free.
-
-A second budget counts only the adversary's own hash calls.
-
-The calls of key generation, signing and verification then enter as a fixed additive constant.
 -/
 
 @[expose] public section
@@ -106,6 +92,7 @@ Coins pass through for free.
 noncomputable def countedOracle :=
   (unifFwdImpl HashSpec + (randomOracle : QueryImpl HashSpec
     (StateT (QueryCache HashSpec) ProbComp))).withAddCost
+    -- Uniform samples are free.
     (fun | .inl _ => (0 : Nat) | .inr _ => 1)
 
 /-- The game against one random oracle, from an empty cache.
@@ -118,7 +105,15 @@ noncomputable def experiment (adversary : Adversary) : ProbComp (Bool × Nat) :=
 noncomputable def forgeAdvantage (adversary : Adversary) : ℝ≥0∞ :=
   Pr{let result ← experiment adversary}[result.1 = true]
 
-/-- Every run of the experiment makes at most `q` hash calls. -/
+/-- Every run of the experiment makes at most `q` hash calls.
+
+The budget `q` counts every hash call of the experiment, repeated inputs included.
+
+That is key generation, signing, the adversary's queries and the final verification.
+
+On each request the signer derives `PK.seed` and `SK.prf` again, and rebuilds the top tree.
+
+Those calls count too. -/
 def HasHashQueryBound (adversary : Adversary) (q : Nat) : Prop :=
   ∀ result ∈ support (experiment adversary), result.2 ≤ q
 
@@ -129,7 +124,11 @@ def HasClassicalSecurityBits (bits : Nat) : Prop :=
   ∀ q, 1 ≤ q → ∀ adversary, HasHashQueryBound adversary q →
     forgeAdvantage adversary ≤ q / ((2 ^ bits : Nat) : ℝ≥0∞)
 
-/-! ## The adversary's own hash calls -/
+/-! ## The adversary's own hash calls
+
+A second budget counts only the adversary's own hash calls.
+
+The calls of key generation, signing and verification then enter as a fixed additive constant. -/
 
 /-- A query of the adversary that is a hash call, neither a coin nor a signing request. -/
 def IsAdversaryHashCall : (OracleWorld + SigningSpec).Domain → Prop

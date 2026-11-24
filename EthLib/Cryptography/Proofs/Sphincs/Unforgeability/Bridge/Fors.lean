@@ -10,14 +10,6 @@ public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme
 
 EthLib recovers a FORS public key from openings with the same calls as the model, in order.
 
-Each tree climbs from its leaf to its root, and `T_k` hashes the 24 roots.
-
-So the recovery with the query is the model's, value for value.
-
-Key generation and signing compute each node from scratch in EthLib, and so does the model.
-
-Under a fixed answer function a repeated call gets the same answer.
-
 So under every answer function, EthLib's FORS public key and openings are the model's.
 -/
 
@@ -44,7 +36,11 @@ def ofOpenings (opening : SphincsSecurity.FTree → SphincsSecurity.TreeOpening)
     Vector TreeOpening FORS_TREES :=
   Vector.ofFn fun κ => ofOpening (opening ⟨κ.val, κ.isLt⟩)
 
-/-! ## Recovering the key, call for call -/
+/-! ## Recovering the key, call for call
+
+Each tree climbs from its leaf to its root, and `T_k` hashes the 24 roots.
+
+So the recovery with the query is the model's, value for value. -/
 
 section Query
 
@@ -140,7 +136,11 @@ theorem forsRecover_queryH (P : SphincsSecurity.PublicParameter) (index : Sphinc
 
 end Query
 
-/-! ## Key and openings under fixed answers -/
+/-! ## Key and openings under fixed answers
+
+Key generation and signing compute each node from scratch in EthLib, and so does the model.
+
+Under a fixed answer function a repeated call gets the same answer. -/
 
 section Answers
 

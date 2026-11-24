@@ -12,27 +12,11 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.CachePartial
 
 The model's adversary runs EthLib's adversary on the translated public key.
 
-It sends each signing request on, translated, and translates each answer back.
-
-It returns the forgery translated to the model.
-
 Both games then draw the same seed and give the adversary the same answers in distribution.
-
-Key generation and verification are the same calls.
-
-The signers make different calls.
-
-Key generation leaves a cache, and every answer function that agrees with it gives the key.
-
-Under such an answer function the signers agree, since EthLib rebuilds the same key.
 
 So the forgery, the log and the verdict have the same joint distribution in both games.
 
 A forgery that wins against EthLib also wins against the model.
-
-EthLib's cap of `2^30` requests is below the model's cap of 1,182,000,000.
-
-A signature that no request returned stays so after translation.
 -/
 
 @[expose] public section
@@ -118,8 +102,10 @@ theorem modelWins_of_wins (run : Forgery × QueryLog SphincsSecurity.SigningSpec
   obtain ⟨⟨hvalid, hfresh⟩, hv⟩ := h
   refine ⟨⟨?_, fun ⟨entry, hmem, hm, hs⟩ ↦
     hfresh ⟨ofEntry entry, List.mem_map_of_mem hmem, ?_, ?_⟩⟩, hv⟩
+  -- EthLib's cap of `2^30` requests is below the model's cap of 1,182,000,000.
   · simp only [Valid, List.length_map] at hvalid
     exact hvalid.trans signatureLimit_le
+  -- A signature that no request returned stays so after translation.
   · simp only [ofEntry, hm, toForgery, ofMessage_toMessage]
   · simp only [ofEntry, hs, toForgery, Option.map_some, ofSignature_toSignature]
 
@@ -175,6 +161,7 @@ theorem gameCore_romEquiv (adversary : Adversary) :
       (toSignature forgery.signature)
     rwa [ofMessage_toMessage, ofSignature_toSignature] at h
   unfold gameCore signedGame sampleSeed signingOracle
+  -- Key generation and verification are the same calls.
   simp only [← liftComp_eq_liftM, liftComp_map, bind_map_left, keyGenWith_queryH, hverify]
   apply RomEquiv.bind_right
   intro seed
@@ -191,6 +178,11 @@ theorem gameCore_romEquiv (adversary : Adversary) :
   apply RomEquivFrom.liftComp
   intro f hf
   conv_lhs => rw [← ofMessage_toMessage message]
+  -- The signers make different calls.
+  --
+  -- Take an answer function that agrees with the cache after key generation.
+  --
+  -- Under it the signers agree, since EthLib rebuilds the same key.
   rw [signWith_answers f seed (toMessage message), evalWithAnswerFn_map, hkey f hf]
 
 /-- An adversary against EthLib wins at most as often as its translation against the model. -/

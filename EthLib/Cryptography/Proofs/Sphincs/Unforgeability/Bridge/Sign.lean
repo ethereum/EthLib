@@ -12,19 +12,7 @@ Both signers compute the randomizer, the digest, the FORS openings and one signa
 
 Both sign the layers from the bottom up, and they make different calls.
 
-- EthLib derives `PK.seed` and `SK.prf` again and rebuilds the top tree on each request.
-- EthLib builds each tree once, and the model computes each path, then the root from the path.
-- The model makes one more digest call, for its randomizer search.
-
-Under a fixed answer function each call is a value, whatever its order or repetition.
-
-So EthLib's signer gives what a signer that computes each path and each root apart gives.
-
-That signer computes each layer's message from scratch, and the model takes it from the layer below.
-
 So under every answer function EthLib's signature is the model's, and both fail together.
-
-The model signs with the secret key that its key generation returns under the same answers.
 -/
 
 @[expose] public section
@@ -193,6 +181,9 @@ theorem signDerived_answers (sk : SphincsSecurity.Seeded.SecretKey)
   generalize hrho : (evalWithAnswerFn f (SphincsSecurity.deriveRandomizer sk.prf sk.parameter msg
     : OracleComp HashSig.HashSpec _)).1 = rho
   conv_rhs => rw [eval_sign f sk msg rho hrho]
+  -- The signer that computes each path and root apart computes each layer's message from scratch.
+  --
+  -- The model takes that message from the layer below.
   unfold Recompute.signDerived
   simp only [ofPublicKey]
   rw [evalWithAnswerFn_bind, messageDigest_queryH (root := sk.root), evalWithAnswerFn_map,
@@ -316,6 +307,15 @@ theorem signWith_answers (S0 : SphincsSecurity.MasterSeed) (msg : SphincsSecurit
             (evalWithAnswerFn f (SphincsSecurity.Seeded.keygen S0)).2 msg
               : OracleComp HashSig.HashSpec _)) := by
   rw [eval_keygen, ← signDerived_answers]
+  -- EthLib's signer and the model's make different calls:
+  --
+  -- - EthLib derives `PK.seed` and `SK.prf` again and rebuilds the top tree on each request.
+  -- - EthLib builds each tree once, and the model computes each path, then the root from the path.
+  -- - The model makes one more digest call, for its randomizer search.
+  --
+  -- Under a fixed answer function each call is a value, whatever its order or repetition.
+  --
+  -- So EthLib's signer gives what a signer that computes each path and each root apart gives.
   rw [evalWithAnswerFn_map, eval_signWith_eq_recompute, Recompute.signWith, expandKey_queryH,
     bind_assoc, evalWithAnswerFn_bind,
     bind_assoc, evalWithAnswerFn_bind, pure_bind]
