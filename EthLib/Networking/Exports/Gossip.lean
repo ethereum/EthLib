@@ -11,19 +11,9 @@ public import EthLib.Networking.Gossip.Rpc
 /-!
 # `Exports.Gossip`
 
-C-ABI exports for the gossip message ID, payload, RPC and router.
+C-ABI exports for the gossip message ID, payload, RPC and router, called by the Python C extension.
 
 The router exports receive an RPC, join and leave a topic, publish, and run the heartbeat.
-
-The Python C extension calls them.
-
-The message ID takes typed values: the name of a fork as a `str`, then the topic and the data.
-
-An RPC crosses as a `dict` whose keys are the field names of its Lean structure, in snake case.
-
-Each nested message crosses the same way, and each list as a `list`.
-
-Every field has its key, in both directions.
 -/
 
 public section
@@ -33,6 +23,11 @@ namespace EthLib.Networking.Gossip.Exports
 open EthLib.Exports (ExportError Result PyValue UnreadArgument forkOfName pyExport rejectArgument
   toResult)
 
+-- An RPC crosses as a `dict` whose keys are the field names of its Lean structure, in snake case.
+--
+-- Each nested message crosses the same way, and each list as a `list`.
+--
+-- Every field has its key, in both directions.
 derive_py SubOpts
 derive_py_laws SubOpts
 derive_py Message
@@ -75,7 +70,7 @@ def messageIdOf (args : String × ByteArray × ByteArray) : Result MessageId := 
 
 /-- The message ID of a message on a topic of a named fork.
 
-The arguments are the name of the fork, the topic and the data. -/
+The arguments are typed values: the name of the fork as a `str`, then the topic and the data. -/
 @[export eth_gossip_message_id]
 def messageIdExport (args : PyValue) : Result PyValue :=
   pyExport messageIdOf args
@@ -128,26 +123,30 @@ def standingOf (standings : List (PeerId × Standing)) (peer : PeerId) : Standin
 
 /-- What the router does with one RPC, with its client choices given as tables.
 
-The arguments come in this order.
-
-- The name of a fork, whose rule gives the ID of every message, whatever the digest of its topic.
-- The gossipsub parameters, then the two durations in milliseconds that the router takes.
-- The standing of some peers; any other peer has every flag false.
-- The validation result of some message IDs; any other message is ignored.
-- The time in milliseconds, the peer that sent the RPC, the RPC and the state.
-
-In each table, the first entry for a key counts.
-
-One rule for every message fits a router whose topics all carry digests of forks with that rule.
-
-Phase 0 has one rule, and every fork from Altair on has another. -/
+In each table, the first entry for a key counts. -/
 def receiveRpcOf (args : String × GossipsubParameters × Nat × Nat × List (PeerId × Standing) ×
     List (MessageId × ValidationResult) × Nat × PeerId × Rpc × RouterState) :
     Result (RouterState × Out) := do
+  -- The arguments come in this order.
+  --
+  -- First, the name of a fork.
+  --
+  -- Then the gossipsub parameters, and the two durations in milliseconds that the router takes.
+  --
+  -- Then the standing of some peers, and the validation result of some message IDs.
+  --
+  -- Last, the time in milliseconds, the peer that sent the RPC, the RPC and the state.
   let (fork, p, backoffMs, pruneBackoffMs, standings, results, now, src, rpc, s) := args
   let fork ← forkOfName fork.toUTF8
+  -- The rule of the fork gives the ID of every message, whatever the digest of its topic.
+  --
+  -- One rule for all messages fits a router whose topics all carry digests of forks with that rule.
+  --
+  -- Phase 0 has one rule, and every fork from Altair on has another.
   let msgId (m : Message) : MessageId := messageId fork m.topic.toUTF8 m.data
+  -- A peer outside the standings has every flag false.
   let standing := standingOf standings
+  -- A message whose ID has no validation result is ignored.
   let validate (m : Message) : ValidationResult :=
     (results.lookup (msgId m)).getD (.ignore "no validation result")
   return receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s
@@ -176,11 +175,11 @@ def checkChoices (p : GossipsubParameters) (c : ClientChoices) : Result ClientCh
 /-- The router after this node joins a topic, and the GRAFTs it sends.
 
 The arguments are the parameters, some standings, the time in milliseconds, the topic and the state.
-
-The mesh takes the first peers of each candidate list. -/
+-/
 def joinOf (args : GossipsubParameters × List (PeerId × Standing) × Nat × String × RouterState) :
     Result (RouterState × Out) := do
   let (p, standings, now, topic, s) := args
+  -- The mesh takes the first peers of each candidate list.
   return join p Select.first (standingOf standings) now topic s
 
 /-- The router after this node joins a topic, given the parameters and some standings. -/
@@ -206,23 +205,24 @@ def leaveExport (args : PyValue) : Result PyValue :=
 
 /-- The router after this node publishes a message, and where the message goes.
 
-The arguments come in this order.
-
-- The name of a fork, whose rule gives the ID of the message, whatever the digest of its topic.
-- The parameters, the client choices and the standing of some peers.
-- The time in milliseconds, the message and the state.
-
-On a topic not joined, without flood publishing, an empty fanout takes the first peers.
-
-They are peers of the topic, neither explicit nor below the publish threshold.
-
 Client choices outside the bounds of gossipsub v1.1 are rejected. -/
 def publishOf (args : String × GossipsubParameters × ClientChoices × List (PeerId × Standing) ×
     Nat × Message × RouterState) : Result (RouterState × Out) := do
+  -- The arguments come in this order.
+  --
+  -- First, the name of a fork.
+  --
+  -- Then the parameters, the client choices and the standing of some peers.
+  --
+  -- Last, the time in milliseconds, the message and the state.
   let (fork, p, c, standings, now, m, s) := args
   let fork ← forkOfName fork.toUTF8
   let c ← checkChoices p c
+  -- The rule of the fork gives the ID of the message, whatever the digest of its topic.
   let msgId (m : Message) : MessageId := messageId fork m.topic.toUTF8 m.data
+  -- On a topic not joined, without flood publishing, an empty fanout takes the first peers.
+  --
+  -- They are peers of the topic, neither explicit nor below the publish threshold.
   return publish p c Select.first (standingOf standings) msgId now m s
 
 /-- The router after this node publishes a message, given a fork name and some standings. -/
@@ -232,19 +232,19 @@ def publishExport (args : PyValue) : Result PyValue :=
 
 /-- The router after one heartbeat, and the control messages it sends.
 
-The arguments come in this order.
-
-- The parameters and the client choices.
-- The peers in the order of their score, the best first; the others come after them.
-- The standing of some peers, the time in milliseconds and the state.
-
-Every choice among candidate peers takes the first ones, in the order of the candidates.
-
 Client choices outside the bounds of gossipsub v1.1 are rejected. -/
 def heartbeatOf (args : GossipsubParameters × ClientChoices × List PeerId ×
     List (PeerId × Standing) × Nat × RouterState) : Result (RouterState × Out) := do
+  -- The arguments come in this order.
+  --
+  -- First, the parameters and the client choices.
+  --
+  -- Then the peers in the order of their score, the best first; the others come after them.
+  --
+  -- Last, the standing of some peers, the time in milliseconds and the state.
   let (p, c, ranking, standings, now, s) := args
   let c ← checkChoices p c
+  -- Every choice among candidate peers takes the first ones, in the order of the candidates.
   return heartbeat p c Select.first (rankOf ranking) (standingOf standings) now s
 
 /-- The router after one heartbeat, given the parameters, the choices, a ranking and standings.

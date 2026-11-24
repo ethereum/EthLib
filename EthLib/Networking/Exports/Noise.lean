@@ -9,18 +9,6 @@ public import EthLib.Networking.Noise.Identity
 
 State tuples contain keys and must be kept private and passed back without modification.
 
-Use a fresh ephemeral private key for each handshake.
-
-Do not reuse a cipher state after a successful operation; use its returned state instead.
-
-Discard the handshake state after a handshake error.
-
-The libp2p state holds the remote that the read of message 2 or 3 authenticated.
-
-Completion returns that remote and does not verify its signature again.
-
-The state carries the remote's extensions; use them only from the completion result.
-
 Framing follows [noise-libp2p][libp2p], "Wire Format".
 
 [libp2p]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/noise/README.md
@@ -42,7 +30,9 @@ abbrev StateValue := Bool × Key × Key × Option Key × Option Key × Nat × Ve
 /-- The remote static key, identity key protobuf, signature and extensions. -/
 abbrev RemoteValue := Key × ByteArray × ByteArray × Option ByteArray
 
-/-- An XX state and its authenticated remote, if any. -/
+/-- An XX state and its authenticated remote, if any.
+
+The remote is the one that the read of message 2 or 3 authenticated. -/
 abbrev Libp2pValue := StateValue × Option RemoteValue
 
 def cipherToValue (s : CipherState) : CipherValue := (s.key, s.nonce)
@@ -79,12 +69,16 @@ def libp2pOfValue (v : Libp2pValue) : Except NoiseError Libp2pState := do
     | some r => some <$> remoteOfValue r
   return ⟨stateOfValue v.1, remote⟩
 
-/-- A Noise error reaches Python with its code, and its message is the printed error. -/
+/-- A Noise error reaches Python with its code, and its message is the printed error.
+
+Discard the handshake state after a handshake error. -/
 instance : ExportError NoiseError where
   code := NoiseError.code
   message := reprStr
 
-/-- Initialize the raw XX state with explicit private keys and prologue, Noise §5.3. -/
+/-- Initialize the raw XX state with explicit private keys and prologue, Noise §5.3.
+
+Use a fresh ephemeral private key for each handshake. -/
 @[export eth_noise_initialize]
 def initializeExport (args : PyValue) : Result PyValue :=
   pyExport (fun (initiator, staticKey, ephemeralKey, prologue) =>
@@ -115,7 +109,9 @@ def transportExport (args : PyValue) : Result PyValue :=
     let (send, receive) ← transport state
     return (cipherToValue send, cipherToValue receive, state.symmetric.hash.bytes))) args
 
-/-- Encrypt with a cipher state and associated data, returning its next state, Noise §5.1. -/
+/-- Encrypt with a cipher state and associated data, returning its next state, Noise §5.1.
+
+Do not reuse a cipher state after a successful operation; use its returned state instead. -/
 @[export eth_noise_cipher_encrypt]
 def cipherEncryptExport (args : PyValue) : Result PyValue :=
   pyExport (fun (value, aad, plaintext) => toResult none (do
@@ -166,7 +162,11 @@ def readLibp2pExport (args : PyValue) : Result PyValue :=
     let state ← readLibp2p (← libp2pOfValue value) message
     return libp2pToValue state)) args
 
-/-- Return the authenticated peer and transport keys only after completion. -/
+/-- Return the authenticated peer and transport keys only after completion.
+
+It does not verify the signature of the remote again.
+
+The state carries the remote's extensions; use them only from this result. -/
 @[export eth_noise_libp2p_complete]
 def completeExport (args : PyValue) : Result PyValue :=
   letI : EthLib.Exports.FromPyItems Libp2pValue := EthLib.Exports.instFromPyItemsOfFromPy

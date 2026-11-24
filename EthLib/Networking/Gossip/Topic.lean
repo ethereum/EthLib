@@ -5,17 +5,7 @@ public import EthLib.Base.Hex
 /-!
 # `Networking.Gossip.Topic`
 
-A gossip topic is the string `/eth2/D/N/ssz_snappy`.
-
-`D` is the fork digest, four bytes in lowercase hex, with no `0x` prefix.
-
-`N` is the name of the topic, and it contains no `/`.
-
-`ssz_snappy` names the encoding of the messages, and it is the only encoding.
-
-The topic of one subnet is named by a base name, `_` and the subnet ID in decimal.
-
-The fork digest is an input here, since the consensus layer computes it.
+A gossip topic is the string `/eth2/D/N/ssz_snappy`, for a fork digest `D` and a topic name `N`.
 
 Which names a fork uses is not part of this module.
 -/
@@ -32,16 +22,24 @@ def forkDigestChars (digest : Vector UInt8 4) : List Char :=
   -- Each byte `x` gives the digits of `x / 16` and `x mod 16`, in `0-9a-f`.
   digest.toList.flatMap Base.byteHexDigits
 
-/-- The topic string of a fork digest and a name. -/
+/-- The topic string of a fork digest and a name.
+
+The fork digest is an input here, since the consensus layer computes it. -/
 def topicString (digest : Vector UInt8 4) (name : String) : String :=
   -- The form `/eth2/D/N/ssz_snappy`, with `D` the eight hex digits of the digest.
+  --
+  -- `D` is the four bytes of the digest in lowercase hex, with no `0x` prefix.
+  --
+  -- `N` is the name of the topic, and it contains no `/`.
+  --
+  -- `ssz_snappy` names the encoding of the messages, and it is the only encoding.
   "/eth2/" ++ String.ofList (forkDigestChars digest) ++ "/" ++ name ++ "/ssz_snappy"
 
 /-- The name of the topic of one subnet.
 
 The subnet ID is in decimal, with no leading zero. -/
 def subnetTopicName (base : String) (subnetId : SubnetID) : String :=
-  -- The base name, then `_`, then the subnet ID in decimal.
+  -- The topic of one subnet is named by a base name, `_` and the subnet ID in decimal.
   base ++ "_" ++ Nat.repr subnetId.toNat
 
 /-- Every way a string can fail to be a topic. -/

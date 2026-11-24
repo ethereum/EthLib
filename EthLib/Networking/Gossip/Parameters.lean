@@ -7,22 +7,16 @@ public import EthLib.Base.Uint64
 
 The parameters of gossip on the consensus layer.
 
-The parameters of the attestation subnets come from a configuration of the consensus layer.
-
-Each one has the name it has in that configuration.
-
 The gossip subnets and the node record both read them, so they are defined once, here.
-
-The gossipsub parameters are fixed, except the lifetime of seen message IDs.
-
-That lifetime is two epochs, so it follows the slot duration and the slots per epoch.
 -/
 
 @[expose] public section
 
 namespace EthLib.Networking.Gossip
 
-/-- The parameters of the attestation subnets that a node subscribes to and announces. -/
+/-- The parameters of the attestation subnets that a node subscribes to and announces.
+
+They come from a configuration of the consensus layer, and each has its name there. -/
 structure SubnetParameters where
   /-- The number of epochs that a subscription to a subnet lasts. -/
   EPOCHS_PER_SUBNET_SUBSCRIPTION : UInt64
@@ -66,6 +60,10 @@ The values are those the consensus layer sets, and some differ from the defaults
 -/
 def gossipsubParameters (slotDurationMs slotsPerEpoch : UInt64) :
     Except Base.ArithError GossipsubParameters := do
+  -- The parameters are fixed, except the lifetime of seen message IDs.
+  --
+  -- That lifetime is two epochs, so it follows the slot duration and the slots per epoch.
+  --
   -- Two epochs in milliseconds: the slot duration times the slots per epoch, times 2.
   --
   -- The slot duration and the slots per epoch are 64-bit configuration values.

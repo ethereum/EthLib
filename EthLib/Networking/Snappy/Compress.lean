@@ -14,20 +14,6 @@ Its opening text describes the format, and not how the compressor works.
 
 So one input has many valid blocks.
 
-This compressor scans the input once, from the front, with a table that proposes earlier positions.
-
-The table is a hint.
-
-The compressor reads the input to find how far a proposal matches.
-
-So a wrong proposal costs only compression, never correctness.
-
-A match longer than 64 bytes is written as several copies of one offset (§2.2.2).
-
-The input must have at most 2^32 - 1 bytes, the largest length that a preamble can declare (§1).
-
-A longer input gives a preamble out of range, so decompression rejects the block.
-
 [format]: https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt
 -/
 
@@ -100,10 +86,14 @@ def compressLoop (src : ByteArray) (table : Array Nat) (i lit : Nat) (out : Byte
       -- The match length, computed once for this step.
       --
       -- The compressor reads the input to find it, so a wrong proposal gives a short match.
+      --
+      -- The table is only a hint: a wrong proposal costs compression, never correctness.
       let len := matchLength src c i hc.1
       -- At least four matching bytes: the bytes since the last copy as one literal, then the copy.
       --
       -- The scan then goes on from the end of the copy.
+      --
+      -- A match longer than 64 bytes is written as several copies of one offset (§2.2.2).
       if hl : minCopyLength ≤ len then
         compressLoop src table (i + len) (i + len)
           (emitCopies (i - c) (emitLiteral out src lit i) len)
@@ -127,7 +117,9 @@ The scan writes its elements straight after the preamble, so the body is not cop
 def compress (src : ByteArray) : ByteArray :=
   -- §1: the preamble, the input length as a varint, then the elements of §2.
   --
-  -- Every slot of the table starts at position 0.
+  -- The compressor scans the input once, from the front.
+  --
+  -- A table proposes earlier positions, and every slot of it starts at position 0.
   compressLoop src (Array.replicate (2 ^ tableBits) 0) 0 0
     ⟨(EthLib.Networking.Encoding.Varint.encodeAux src.size preambleMaxLength).toArray⟩
 

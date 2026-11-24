@@ -9,17 +9,9 @@ public import EthLib.Networking.Rlpx.Frame
 
 C-ABI exports for RLPx, callable from the Python C extension.
 
-A private key is 32 big-endian bytes, below the order `n`.
-
-A public key is either SEC 1 encoding.
-
 A key, an iv or a nonce that the export rejects has code 0.
 
 The other errors keep their codes: ECIES from 1 to 5, the handshake from 101, frames from 201.
-
-The secrets of a session come back as 128 bytes: aes-secret, mac-secret, then two digests.
-
-Each digest is the Keccak-256 digest of a MAC state after it absorbs the probe bytes.
 -/
 
 public section
@@ -49,7 +41,7 @@ def readPrivateKey (bytes : ByteArray) : Result Fn :=
     (fun size => UnreadArgument.mk s!"bad private key size: {size}, expected 32")
     (UnreadArgument.mk "private key is not below n"))
 
-/-- An encoded public key, or an error. -/
+/-- An encoded public key, in either SEC 1 encoding, or an error. -/
 def readPublicKey (bytes : ByteArray) : Result Point :=
   match Point.decode bytes with
   | .ok p => pure p
@@ -115,7 +107,9 @@ def constSecretsSize (_ : Unit) : UInt64 := UInt64.ofNat SECRETS_SIZE
 
 /-- The 128 bytes of the secrets, with the digests of the MAC states after the probe. -/
 def secretsBytes (secrets : Secrets) (probe : ByteArray) : ByteArray :=
+  -- Each digest is the Keccak-256 digest of a MAC state after it absorbs the probe bytes.
   let digest (h : Cryptography.Hash.Keccak.Hasher256) := (h.absorb probe).digest.toArray
+  -- The secrets of a session: aes-secret, mac-secret, then the two digests.
   ⟨secrets.aesSecret.toArray ++ secrets.macSecret.toArray ++ digest secrets.egressMac ++
     digest secrets.ingressMac⟩
 
