@@ -8,22 +8,6 @@ import EthLib.Consensus.Proofs.Transition.Genesis
 /-!
 # Proofs: each checkpoint of a beacon state names a block of its own chain
 
-A chain predicate holds the roots allowed at each slot.
-
-It is meant as the latest block of a chain at or before each slot.
-
-A state agrees with it from an anchor slot on when the following holds.
-
-Each root that the state records from the anchor on is a root of the chain at its slot.
-
-Each checkpoint whose epoch starts above the anchor names a root of the chain at that start.
-
-A block, the slots and the upgrades keep this, for a chain extended by the roots they record.
-
-A state with the invariant of valid blocks agrees with every chain from its own slot on.
-
-Along a run, the chain is the roots that the states of the run record.
-
 With ordered links in each state, the finalized block is at or before the current justified one.
 
 Each checkpoint names the block at the start of its epoch, as Gasper §4.1 defines checkpoints.
@@ -552,17 +536,14 @@ theorem ChainRoots.of_run
 
 /-- Ordered root links order the roots that a run records, the earlier slot first.
 
-The links of each state of the run must be in order for a map from roots.
-
-Each root is recorded by a state of the run, at a slot from the first slot of the run on.
-
-A slot step links its new root to the root of the slot before, so the order crosses states.
-
-The buffer of roots must cover two epochs, and an epoch must have at least one slot. -/
+Each root is recorded by a state of the run, at a slot from the first slot of the run on. -/
 theorem Run.le_of_records {β : Type*} [Preorder β] {block : Root → β}
+    -- An epoch must have at least one slot.
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    -- The buffer of roots must cover two epochs.
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     {first last : ForkedBeaconState preset} (run : Run config checks first last)
+    -- The links of each state of the run must be in order for a map from roots.
     (links : ∀ forked ∈ run.states, ∀ link ∈ rootLinks forked.state, block link.1 ≤ block link.2)
     {older newer : Slot} {olderRoot newerRoot : Root} (above : first.state.slot ≤ older)
     (le : older ≤ newer) (olderRead : run.Records older olderRoot)
@@ -574,6 +555,7 @@ theorem Run.le_of_records {β : Type*} [Preorder β] {block : Root → β}
     rw [Run.states, List.mem_singleton] at mem
     subst mem
     exact absurd above (UInt64.not_le.mpr (getBlockRootAtSlot_read read).1)
+  -- A slot step links its new root to the root of the slot before, so the order crosses states.
   | @snoc middle last pre step ih =>
     have preLinks : ∀ forked ∈ pre.states, ∀ link ∈ rootLinks forked.state,
         block link.1 ≤ block link.2 := fun forked mem => links forked (List.mem_append_left _ mem)
@@ -674,25 +656,11 @@ private theorem Run.chainSteps_of_mem {first last : ForkedBeaconState preset}
     · rw [List.mem_singleton.mp newest]
       exact ⟨(pre.chainSteps).tail step.chainStep, .refl⟩
 
-/-- Along a run, the finalized block is at or before the current justified block.
+/-- Along a run, one of two cases holds.
 
-The other case is a state that hashes to the zero root, between the first and the last state.
+A state between the first and the last hashes to the zero root.
 
-It is between them by chain steps, not necessarily a state of the run.
-
-The map from roots orders the parent root of each block step before the root of its block.
-
-The step is on any path of chain steps from the first state to the last one.
-
-The root of its block takes the root of the state after the step as its state root.
-
-The map must also order the pairs of the first state, and the pair that its first slot adds.
-
-The first state is at slot zero, or has its latest header at its slot.
-
-Or it records the root of that header at the slot before it.
-
-The finalized epoch must start after the first slot of the run.
+Or the finalized block is at or before the current justified one.
 
 The first state needs the invariant of valid blocks, and the buffer must cover two epochs. -/
 theorem Run.zeroPreimage_or_finalized_le_currentJustified {β : Type*} [Preorder β]
@@ -700,11 +668,16 @@ theorem Run.zeroPreimage_or_finalized_le_currentJustified {β : Type*} [Preorder
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     {first last : ForkedBeaconState preset} (holds : Invariant first.state)
     (run : Run config checks first last)
+    -- The first state is at slot zero, or has its latest header at its slot.
+    --
+    -- Or it records the root of that header at the slot before it.
     (recorded : first.state.slot = 0 ∨ first.state.latestBlockHeader.slot = first.state.slot ∨
       ∃ root,
         readCircular first.state.blockRoots.elements (first.state.slot - 1) = .ok root ∧
           hashTreeRoot first.state.latestBlockHeader = .ok root)
+    -- The map must also order the pairs of the first state.
     (start : ∀ link ∈ rootLinks first.state, block link.1 ≤ block link.2)
+    -- It must also order the pair that the first slot of the first state adds.
     (opening : ∀ before stateRoot root : Root,
       (if first.state.slot = 0 then before = Vector.replicate 32 0 else
         readCircular first.state.blockRoots.elements (first.state.slot - 1) = .ok before) →
@@ -712,6 +685,11 @@ theorem Run.zeroPreimage_or_finalized_le_currentJustified {β : Type*} [Preorder
       hashTreeRoot (if first.state.latestBlockHeader.stateRoot = Vector.replicate 32 0 then
         { first.state.latestBlockHeader with stateRoot := stateRoot }
       else first.state.latestBlockHeader) = .ok root → block before ≤ block root)
+    -- The map from roots orders the parent root of each block step before the root of its block.
+    --
+    -- The step is on any path of chain steps from the first state to the last one.
+    --
+    -- The root of its block takes the root of the state after the step as its state root.
     (ordered : ∀ (fork : Fork) (engine : ExecutionEngine preset fork)
       (pre post : BeaconState preset fork) (signed : SignedBeaconBlock preset fork)
       (validateResult : Bool) (stateRoot root : Root),
@@ -721,8 +699,12 @@ theorem Run.zeroPreimage_or_finalized_le_currentJustified {β : Type*} [Preorder
       hashTreeRoot post = .ok stateRoot →
       hashTreeRoot { signed.message with stateRoot := stateRoot } = .ok root →
       block signed.message.parentRoot ≤ block root)
+    -- The finalized epoch must start after the first slot of the run.
     (after : first.state.slot.toNat <
       last.state.finalizedCheckpoint.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat) :
+    -- The first case is a state that hashes to the zero root, between the first and the last state.
+    --
+    -- It is between them by chain steps, not necessarily a state of the run.
     (∃ forked : ForkedBeaconState preset,
       Relation.ReflTransGen (ChainStep config checks) first forked ∧
       Relation.ReflTransGen (ChainStep config checks) forked last ∧

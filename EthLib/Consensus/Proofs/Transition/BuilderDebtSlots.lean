@@ -6,23 +6,7 @@ public import EthLib.Consensus.Proofs.Transition.Invariants
 /-!
 # Proofs: slots keep the builder debt invariant
 
-A slot caches the roots of the state and of the latest block.
-
-From Gloas it also marks the next payload as not yet available.
-
-None of this touches the builders, their payments, their withdrawals or the latest bid.
-
-It keeps the slot and the slot of the latest block too, which place the parent payment.
-
-The last slot of an epoch runs the epoch transition.
-
-Each of its steps keeps those fields, except the step of the builder payments.
-
-That step, with the move to the next slot, keeps the invariant under a positive quorum.
-
-So every slot keeps the invariant, and so does a run of slots.
-
-A run of slots also keeps the builders.
+Every slot keeps the invariant under a positive quorum, and so does a run of slots.
 
 [EIP-7732] adds the builders and the epoch step of their payments.
 
@@ -161,6 +145,13 @@ theorem processEpoch_builderSplit {gloas : .glamsterdam ≤ fork}
 /-- A slot keeps the builder fields, the slot and the slot of the latest block. -/
 theorem builderFrame_processSlot (computed : processSlot state = .ok after) :
     BuilderFrame state after := by
+  -- A slot caches the roots of the state and of the latest block.
+  --
+  -- From Gloas it also marks the next payload as not yet available.
+  --
+  -- None of this touches the builders, their payments, their withdrawals or the latest bid.
+  --
+  -- It keeps the slot and the slot of the latest block too, which place the parent payment.
   have header : after.latestBlockHeader.slot = state.latestBlockHeader.slot := by
     unfold processSlot at computed
     simp only [bind_ok_iff, liftSsz_ok, liftAccessor_ok] at computed
@@ -176,20 +167,17 @@ theorem builderFrame_processSlot (computed : processSlot state = .ok after) :
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
   exact ⟨rfl, header, rfl, rfl, rfl, rfl⟩
 
-/-- From Gloas, one slot caches its roots, then may run the epoch step of the payments.
-
-The caching keeps the builder fields, the slot and the slot of the latest block header.
-
-Inside an epoch, the state after is the cached state at the next slot.
-
-At the last slot of an epoch, the epoch step of the payments runs between two frames.
-
-It starts from the state that the epoch transition reaches before its payments step. -/
+/-- From Gloas, one slot caches its roots, then may run the epoch step of the payments. -/
 theorem advanceSlot_builderSplit {gloas : .glamsterdam ≤ fork}
     (computed : advanceSlot config checks state = .ok after) :
     ∃ next cached, next.toNat = state.slot.toNat + 1 ∧ processSlot state = .ok cached ∧
+      -- The caching keeps the builder fields, the slot and the slot of the latest block header.
       BuilderFrame state cached ∧
+      -- Inside an epoch, the state after is the cached state at the next slot.
       ((next % preset.SLOTS_PER_EPOCH ≠ 0 ∧ after = { cached with slot := next }) ∨
+        -- At the last slot of an epoch, the epoch step of the payments runs between two frames.
+        --
+        -- It starts from the state that the epoch transition reaches before its payments step.
         (next % preset.SLOTS_PER_EPOCH = 0 ∧ ∃ pending paid,
           epochBeforePayments config checks cached = .ok pending ∧ BuilderFrame cached pending ∧
           processBuilderPendingPayments pending gloas = .ok paid ∧
@@ -248,6 +236,11 @@ theorem BuilderDebtCovered.advanceSlot (positive : preset.PaymentQuorumPositive)
     ⟨boundary, pending, paid, -, before, paidOk, tail⟩⟩ := advanceSlot_builderSplit computed
   · exact (holds.of_frame cachedFrame).withSlot
       (by rw [cachedFrame.slot]; exact nextSlot_epoch_of_inside sum inside)
+  -- The last slot of an epoch runs the epoch transition.
+  --
+  -- Each of its steps keeps the builder fields, except the step of the builder payments.
+  --
+  -- That step, with the move to the next slot, keeps the invariant under a positive quorum.
   · have paidHolds := ((holds.of_frame cachedFrame).of_frame before).processBuilderPendingPayments
       positive paidOk (by rw [before.slot, cachedFrame.slot]; exact sum) boundary
     exact paidHolds.of_frame tail

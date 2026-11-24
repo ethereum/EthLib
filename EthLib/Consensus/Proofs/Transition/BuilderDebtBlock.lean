@@ -10,31 +10,7 @@ public import EthLib.Consensus.Proofs.Transition.TargetSlots
 
 The balance of each builder covers its debt, from the upgrade to Gloas on.
 
-The upgrade starts with no debt, no payment and a latest bid of no value.
-
-A block keeps the invariant, as a whole.
-
-Its parent payload settles the parent payment and weakens the invariant.
-
-Its withdrawals keep the weaker form, and its bid restores the invariant.
-
-Its operations and its sync aggregate keep it.
-
-The slots keep it too, under a payment quorum of at least one gwei.
-
-So no builder withdrawal falls short, in a block from a covered state after a full parent.
-
-Each registry must hold at most 2^40 entries, so that the index of a withdrawal names one builder.
-
-The state transition does not bound the registries, so the theorems assume both bounds.
-
-They assume them after the block or at the end of a chain, since no step shrinks a registry.
-
-An epoch must also have at least two slots, so that the current epoch is never the far future one.
-
-The upgrade to Heze carries the invariant over.
-
-So the invariant also holds across the fork upgrades, on the way to the slot of each block.
+A block keeps it as a whole, and so do the slots and the fork upgrades.
 
 [EIP-7732] adds the builders, their bids, their payments and their withdrawals.
 
@@ -81,6 +57,7 @@ theorem builderDebtCovered_upgradeToGloas {pre : BeaconState preset .fusaka}
     {post : BeaconState preset .glamsterdam}
     (computed : upgradeToGloas config checks pre = .ok post) :
     BuilderDebtCovered post (by decide) :=
+  -- The upgrade starts with no debt, no payment and a latest bid of no value.
   have ⟨payments, withdrawals, value⟩ := upgradeToGloas_builderFields computed
   .of_empty payments withdrawals value
 
@@ -191,15 +168,7 @@ private theorem builderFrame_processSyncAggregate {altair : .altair ≤ fork}
     exact (builderFrame_increaseBalance raised).trans (builderFrame_increaseBalance paid)
   · exact builderFrame_decreaseBalance (liftAccessor_ok.mp ok)
 
-/-- From Gloas, a block runs its parent, header, withdrawal and bid steps, then the rest.
-
-Except the operations, the rest keeps the builder fields.
-
-Except the operations, the rest also keeps the slot and the slot of the latest block.
-
-The validators after the header are at most those after the block.
-
-The number of builders after the header is that after the block. -/
+/-- From Gloas, a block runs its parent, header, withdrawal and bid steps, then the rest. -/
 theorem processBlock_gloas_steps (gloas : .glamsterdam ≤ fork)
     {block : BeaconBlock preset fork}
     (computed : Consensus.processBlock config checks engine state block = .ok after) :
@@ -210,11 +179,15 @@ theorem processBlock_gloas_steps (gloas : .glamsterdam ≤ fork)
       processWithdrawals headed (Nat.le_trans (by decide) gloas) payload = .ok withdrawn ∧
       processExecutionPayloadBid config checks withdrawn gloas
         (block.body.signedExecutionPayloadBid gloas) = .ok bidded ∧
+      -- The steps between the bid and the operations keep the builder fields and the two slots.
       BuilderFrame bidded voted ∧
       processOperations config checks voted block.body state.latestBlockHeader.slot =
         .ok operated ∧
+      -- So do the steps after the operations.
       BuilderFrame operated after ∧
+      -- The validators after the header are at most those after the block.
       headed.validators.data.size ≤ after.validators.data.size ∧
+      -- The number of builders after the header is that after the block.
       (headed.builders gloas).data.size = (after.builders gloas).data.size := by
   obtain ⟨parented, headed, withdrawn, bidded, revealed, voted, operated, _, parentOk, headedOk,
     withdrawnOk, biddedOk, revealedOk, votedOk, kept, operatedOk, synced⟩ :=
@@ -292,14 +265,22 @@ theorem BuilderDebtCovered.headed {gloas : .glamsterdam ≤ fork}
   rw [zero] at older
   exact absurd older (by simp)
 
-/-- From Gloas, a block keeps each builder's debt covered.
+/-- From Gloas, a block as a whole keeps each builder's debt covered.
 
 The preset needs a positive payment quorum and at least two slots in an epoch.
 
 Each registry must hold at most 2^40 entries after the block. -/
 theorem BuilderDebtCovered.processBlock (positive : preset.PaymentQuorumPositive)
+    -- An epoch must have at least two slots.
+    --
+    -- Then the current epoch is never the far future one.
     (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) {gloas : .glamsterdam ≤ fork}
     {block : BeaconBlock preset fork} (holds : BuilderDebtCovered state gloas)
+    -- Each registry must hold at most 2^40 entries, so that a withdrawal index names one builder.
+    --
+    -- The state transition does not bound the registries, so the theorems assume both bounds.
+    --
+    -- They assume them after the block or at the end of a chain, since no step shrinks a registry.
     (validatorsFit : after.validators.data.size ≤ 2 ^ 40)
     (buildersFit : (after.builders gloas).data.size ≤ 2 ^ 40)
     (computed : Consensus.processBlock config checks engine state block = .ok after) :
@@ -307,6 +288,7 @@ theorem BuilderDebtCovered.processBlock (positive : preset.PaymentQuorumPositive
   obtain ⟨parented, headed, withdrawn, bidded, voted, operated, _, parentOk, headedOk,
     withdrawnOk, biddedOk, votedFrame, operatedOk, syncedFrame, grows, size⟩ :=
     processBlock_gloas_steps gloas computed
+  -- The parent payload settles the parent payment and weakens the invariant.
   obtain ⟨settled, placed, started⟩ := holds.headed parentOk headedOk
   -- The withdrawals keep the form inside a block, and the bid restores the invariant.
   have withdrawnInputs := payloadInputs_processWithdrawals withdrawnOk
@@ -322,6 +304,7 @@ theorem BuilderDebtCovered.processBlock (positive : preset.PaymentQuorumPositive
   have operatedHolds := (bidHolds.of_frame votedFrame).processOperations positive
     (by rw [votedFrame.headerSlot, votedFrame.slot, bidHeader, bidSlot]; exact placed)
     (by rw [votedFrame.slot, bidSlot]; exact started) operatedOk
+  -- The sync aggregate keeps it too.
   exact operatedHolds.of_frame syncedFrame
 
 /-- From Gloas, after a full parent, a block's withdrawals lower each builder's balance.
@@ -346,6 +329,9 @@ theorem BuilderDebtCovered.processBlock_builderBalance {gloas : .glamsterdam ≤
         getExpectedWithdrawals headed capella = .ok expected →
         Consensus.processWithdrawals headed capella payload = .ok withdrawn →
         ∀ index : BuilderIndex, index.toNat < (headed.builders gloas).data.size →
+          -- No builder withdrawal falls short.
+          --
+          -- This holds in a block from a covered state after a full parent.
           builderBalance withdrawn gloas index +
               withdrawnFrom expected.withdrawals (convertBuilderIndexToValidatorIndex index) =
             builderBalance headed gloas index := by
@@ -357,7 +343,10 @@ theorem BuilderDebtCovered.processBlock_builderBalance {gloas : .glamsterdam ≤
   exact settled.processWithdrawals_builderBalance (Nat.le_trans grows validatorsFit)
     (by rw [size]; exact buildersFit) full expectedOk withdrawnOk member
 
-/-! ## Slots and the state transition -/
+/-! ## Slots and the state transition
+
+The slots keep the invariant too, under a payment quorum of at least one gwei.
+-/
 
 /-- A run of slots never shrinks the registry of validators. -/
 theorem processSlots_registryGrows {slot : Slot}

@@ -54,14 +54,15 @@ theorem ActiveKept.mono {post : Base.Fork} {bound lower : Epoch}
 
 /-- The fixed epoch of a state: the steps below keep the active validators of each epoch up to it.
 
-It is the current epoch plus `MAX_SEED_LOOKAHEAD`, capped at the largest epoch.
-
-Every activation or exit that a step sets lands after it, and an activation lands just after it.
-
 The committees of an epoch are fixed only up to the current epoch plus `MIN_SEED_LOOKAHEAD`.
 
 That bound comes from the RANDAO mix that their seed reads. -/
 def activityFixedEpoch (state : BeaconState preset fork) : Epoch :=
+  -- The fixed epoch is the current epoch plus `MAX_SEED_LOOKAHEAD`, capped at the largest epoch.
+  --
+  -- Every activation or exit that a step sets lands after this epoch.
+  --
+  -- An activation lands just after it.
   UInt64.ofNat (min ((getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat) (2 ^ 64 - 1))
 
 /-- The fixed epoch of a state, as a natural number. -/

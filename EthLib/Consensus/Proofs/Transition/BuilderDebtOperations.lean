@@ -6,26 +6,6 @@ public import EthLib.Consensus.Proofs.Transition.PayloadInputs
 /-!
 # Proofs: the operations of a block keep the builder debt invariant
 
-The operations of a block run after its header and its bid.
-
-The latest block is then the block itself, at the slot of the state.
-
-So the payment of the parent, in the sense of the invariant, is the payment of the block's own bid.
-
-A slashing of a proposer cancels the payments of its blocks.
-
-The value of a cancelled payment of the block moves from the debt to the reserve of the late path.
-
-Any other cancelled payment only lowers the debt.
-
-An attestation adds weight to the payment of the block of its slot.
-
-It adds weight only to a payment with an amount.
-
-Its slot is before the slot of the state, so it never weighs the payment of the block itself.
-
-The other operations keep the builders, their payments, their withdrawals and the latest bid.
-
 [EIP-7732] adds the cancellation of the payments and their weight.
 
 [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#beacon-chain-changes
@@ -118,6 +98,7 @@ private theorem pendingBuilderTotal_add_lateBidValue_cancelProposerPayments_le
   rw [total]
   unfold pendingBuilderTotal
   rw [← paymentsDef]
+  -- A cancelled payment other than that of the parent only lowers the debt.
   by_cases opened : latePaymentOpen (cancelProposerPayments state gloas proposer) gloas =
     latePaymentOpen state gloas
   · have late : lateBidValue (cancelProposerPayments state gloas proposer) gloas index =
@@ -364,6 +345,11 @@ private theorem BuilderDebtCovered.recordPaymentWeight (positive : preset.Paymen
     (holds : BuilderDebtCovered state gloas)
     (computed : recordPaymentWeight state gloas data current before updated attesters = .ok after) :
     BuilderDebtCovered after gloas := by
+  -- An attestation adds weight to the payment of the block of its slot.
+  --
+  -- It adds weight only to a payment with an amount.
+  --
+  -- Its slot is before the slot of the state, so it never weighs the payment of the block itself.
   obtain ⟨one, fits⟩ := positive.slotsPerEpoch_bounds
   have rest := recordPaymentWeight_eq computed
   have position : parentPaymentPosition after = parentPaymentPosition state := by
@@ -573,10 +559,20 @@ theorem BuilderDebtCovered.processOperations (positive : preset.PaymentQuorumPos
     (holds : BuilderDebtCovered state gloas)
     (computed : processOperations config checks state body parentSlot = .ok after) :
     BuilderDebtCovered after gloas := by
+  -- The operations of a block run after its header and its bid.
+  --
+  -- The latest block is then the block itself, at the slot of the state.
+  --
+  -- So the payment of the parent, in the sense of the invariant, is the payment of the block's bid.
   simp only [Consensus.processOperations, gloas, ↓reduceDIte, processOperationsGloas,
     bind_ok_iff, ← Array.foldlM_toList] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
     attestedOk, _, exitsOk, _, changesOk, paid⟩ := computed
+  -- A slashing of a proposer cancels the payments of its blocks.
+  --
+  -- The value of a cancelled payment of the block moves from the debt to the late-path reserve.
+  --
+  -- Any other cancelled payment only lowers the debt.
   have proposers := foldlM_ok_invariant (fun s => BuilderDebtCovered s gloas)
     (fun _ _ _ kept ok => by
       simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
@@ -603,6 +599,7 @@ theorem BuilderDebtCovered.processOperations (positive : preset.PaymentQuorumPos
           (by rw [inputs.slot]; exact started) ok,
         inputs.trans (payloadInputs_processAttestation ok)⟩)
     ⟨attesters, slashed⟩ attestedOk
+  -- The other operations keep the builders, their payments, their withdrawals and the latest bid.
   have exited := foldlM_ok_invariant (fun s => BuilderDebtCovered s gloas)
     (fun _ _ _ kept ok => by
       unfold processVoluntaryExit at ok
