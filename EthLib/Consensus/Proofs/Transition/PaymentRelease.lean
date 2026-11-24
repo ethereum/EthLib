@@ -8,7 +8,9 @@ public import EthLib.Consensus.Proofs.Transition.Payload
 /-!
 # Proofs: the steps that pay the bid of a block
 
-From Gloas the builder of a block pays its proposer through a pending payment, by three paths.
+From Gloas the builder of a block pays its proposer through a pending payment.
+
+Three paths queue the withdrawal of a payment.
 
 * The payment of the parent settles it, when a child builds on the full parent.
 * The payment of the parent queues the value of the parent bid, when that payment left the window.
@@ -452,7 +454,9 @@ The positive quorum is an assumption on the preset, which both presets meet. -/
 theorem processBuilderPendingPayments_release (positive : preset.PaymentQuorumPositive)
     -- The hypothesis on the parent payment is part of the builder debt invariant.
     {gloas : .glamsterdam ≤ fork} (fresh : ParentPaymentFresh state gloas)
-    -- The weight and genesis epoch hypotheses hold along a chain from the upgrade to Gloas.
+    -- The hypotheses on the weights and the genesis epoch hold along a chain.
+    --
+    -- That chain starts at the upgrade to Gloas.
     (paid : WeightedPaymentsFunded state gloas) (genesis : GenesisFirstHalfEmpty state gloas)
     (computed : processBuilderPendingPayments state gloas = .ok after) {next : Slot}
     -- The state after the step is read at the next slot, the first of the next epoch.

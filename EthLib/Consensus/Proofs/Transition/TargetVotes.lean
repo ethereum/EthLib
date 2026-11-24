@@ -7,7 +7,9 @@ public import EthLib.Consensus.Proofs.Transition.TargetFlags
 /-!
 # Proofs: the target flags of a block come from the votes of its attestations
 
-From Altair the state keeps a byte of flags per validator, in the current and the previous epoch.
+From Altair the state keeps one byte of flags for each validator, in each of two epochs.
+
+They are the current and the previous epoch.
 
 Justification counts the stake of the unslashed validators whose byte holds the timely target flag.
 

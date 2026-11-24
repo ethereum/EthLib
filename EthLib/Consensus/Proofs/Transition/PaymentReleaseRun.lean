@@ -14,6 +14,10 @@ A run of slots and blocks inside one fork, from Gloas on, releases each payment 
 
 A run across the upgrade to Heze is not covered.
 
+The epoch step pays each payment of the previous epoch that reaches its quorum.
+
+So along a chain through that step, such a payment is paid exactly once.
+
 A payment is paid here when its withdrawal joins the queue of the withdrawals of the builders.
 
 [EIP-7732] adds the builders, their bids and their payments.
@@ -376,13 +380,17 @@ theorem chainSteps_paysQuorum (positive : preset.PaymentQuorumPositive)
     (before : Relation.ReflTransGen (ChainStep config checks) ⟨fork, first⟩ ⟨fork, middle⟩)
     (computed : advanceSlot config checks middle = .ok next)
     (behind : Relation.ReflTransGen (ChainStep config checks) ⟨fork, next⟩ ⟨fork, last⟩)
-    -- The slot ends an epoch, with the facts on the payments holding at the first state.
+    -- The slot ends an epoch.
+    --
+    -- The facts on the payments hold at the first state.
     (boundary : next.slot % preset.SLOTS_PER_EPOCH = 0) (holds : PaymentFacts first gloas)
     -- The registry of validators must hold at most 2^40 entries at the last state.
     (validatorsFit : last.validators.data.size ≤ 2 ^ 40)
     -- The registry of builders must hold at most 2^40 entries at the last state.
     (buildersFit : (last.builders gloas).data.size ≤ 2 ^ 40) :
-    -- It queues the withdrawals of exactly the previous epoch payments that reach its quorum.
+    -- Take the payments of the previous epoch that reach the quorum of the slot.
+    --
+    -- The slot queues the withdrawals of exactly those payments.
     ∃ more : List Slot, (next.builderPendingWithdrawals gloas).data.toList =
         (middle.builderPendingWithdrawals gloas).data.toList ++
           more.map (openWithdrawal middle gloas) ∧

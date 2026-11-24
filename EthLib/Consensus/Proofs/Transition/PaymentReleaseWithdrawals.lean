@@ -39,7 +39,9 @@ structure PaymentStep (state after : BeaconState preset fork) (gloas : .glamster
   nodup : released.Nodup
   -- The withdrawals of the list follow the queue before the step, in the order of the list.
   --
-  -- The step then drops a prefix of that queue, so the queue loses it after it gains them.
+  -- The step then drops a prefix of that queue.
+  --
+  -- So the queue loses that prefix after it gains the released withdrawals.
   queue : ∃ count, (after.builderPendingWithdrawals gloas).data.toList =
     ((state.builderPendingWithdrawals gloas).data.toList ++
       released.map (openWithdrawal state gloas)).drop count

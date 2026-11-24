@@ -104,7 +104,7 @@ theorem recordBidPayment_of_pos {bid : ExecutionPayloadBid preset fork}
       getBeaconProposerIndex state = .ok proposer ∧
       -- The payment sits at the position of the bid's slot in the second epoch of the list.
       --
-      -- That second epoch is the current epoch's half of the pending payments.
+      -- That second epoch is the half of the pending payments for the current epoch.
       position.val = preset.SLOTS_PER_EPOCH.toNat +
         (bid.slot % preset.SLOTS_PER_EPOCH).toNat ∧
       -- Every other field of the state is unchanged.

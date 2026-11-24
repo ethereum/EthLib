@@ -48,7 +48,9 @@ The positive quorum is an assumption on the preset, which both presets meet. -/
 theorem advanceSlot_release (positive : preset.PaymentQuorumPositive)
     -- The hypothesis on the parent payment is part of the builder debt invariant.
     {gloas : .glamsterdam ≤ fork} (fresh : ParentPaymentFresh state gloas)
-    -- The weight and genesis epoch hypotheses hold along a chain from the upgrade to Gloas.
+    -- The hypotheses on the weights and the genesis epoch hold along a chain.
+    --
+    -- That chain starts at the upgrade to Gloas.
     (paid : WeightedPaymentsFunded state gloas) (genesis : GenesisFirstHalfEmpty state gloas)
     (computed : advanceSlot config checks state = .ok after) :
     ∃ released : List Slot, PaymentRelease state after gloas released ∧

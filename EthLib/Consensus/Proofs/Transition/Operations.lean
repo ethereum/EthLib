@@ -10,7 +10,7 @@ public import EthLib.Consensus.Transition.Operations
 /-!
 # Proofs: the operations of a block
 
-Each operation of a block: what a valid one checks, and what it changes in the state.
+For each operation of a block, these proofs state what a valid one checks and what it changes.
 
 The operations of a block hold every outstanding deposit, up to the most per block.
 

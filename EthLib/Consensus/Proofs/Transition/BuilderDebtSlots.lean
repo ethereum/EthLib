@@ -6,7 +6,9 @@ public import EthLib.Consensus.Proofs.Transition.Invariants
 /-!
 # Proofs: slots keep the builder debt invariant
 
-Every slot keeps the invariant under a positive quorum, and so does a run of slots.
+Every slot keeps the invariant under a positive quorum.
+
+So does a run of slots, which also keeps the builders.
 
 [EIP-7732] adds the builders and the epoch step of their payments.
 

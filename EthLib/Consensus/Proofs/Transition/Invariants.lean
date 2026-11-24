@@ -16,9 +16,23 @@ public import EthLib.Consensus.Proofs.Transition.StateTransition
 /-!
 # Proofs: invariants of the state transition
 
-A valid block keeps five properties of a state, at every fork, and never lowers the finalized epoch.
+A valid block keeps five properties of a state, at every fork.
 
-Most steps form a frame: they keep the slot and the checkpoints, and never shrink the registry.
+* The registry and the balances keep one entry for each validator.
+* Each validator may withdraw no earlier than it exits.
+* The finalized, previous justified and current justified epochs stay in increasing order.
+* The current justified epoch is at most the previous epoch.
+* Each effective balance of the registry is a whole number of increments.
+
+The fourth one means the next epoch transition cannot lower the finalized epoch.
+
+The finalized epoch then never decreases.
+
+The last one needs the largest effective balances of the preset to be whole numbers of increments.
+
+Most steps form a frame.
+
+A frame keeps the slot and the checkpoints, and it never shrinks the registry.
 -/
 
 @[expose] public section
@@ -1190,11 +1204,12 @@ end EpochFrameLaws
 
 /-- A reflexive, transitive relation holds across the expected withdrawals.
 
-It must hold across each single withdrawal, and each write of a withdrawal index.
+It must hold across each of these steps.
 
-It must also hold across each write of a builder withdrawal queue.
-
-It must also hold across each write of the expected withdrawals of the payload. -/
+- Each single withdrawal.
+- Each write of a withdrawal index.
+- Each write of a builder withdrawal queue.
+- Each write of the expected withdrawals of the payload. -/
 theorem applyExpectedWithdrawals_of_updates
     (R : BeaconState preset fork → BeaconState preset fork → Prop)
     (refl : ∀ s, R s s)

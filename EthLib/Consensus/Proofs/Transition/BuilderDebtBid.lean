@@ -7,9 +7,17 @@ public import EthLib.Consensus.Proofs.Transition.PayloadInputs
 /-!
 # Proofs: from the parent payload to the bid, a block keeps each builder's debt covered
 
-A block of Gloas applies the payload of its parent, then its header, its withdrawals and its bid.
+A block of Gloas first applies the payload of its parent, then runs its header.
+
+Its withdrawals follow, then its bid.
 
 Between the payment of the parent and the bid, the invariant of the builder debt has a weaker form.
+
+* For each builder, the debt is at most the balance.
+* A builder that has started to exit owes nothing.
+* In the second half of the window, each position from that of the slot of the state is empty.
+
+The bid then restores the invariant.
 
 [EIP-7732] adds the payload of the parent and the bid of a block.
 

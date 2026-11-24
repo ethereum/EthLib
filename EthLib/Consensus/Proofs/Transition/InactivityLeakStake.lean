@@ -6,11 +6,17 @@ public import EthLib.Consensus.Proofs.Transition.FfgStake
 /-!
 # Proofs: the voters hold two thirds of the active stake after a leak
 
-Justification needs the voters to hold two thirds of the active balance, which a leak brings about.
+Justification needs the voters to hold two thirds of the active balance.
+
+The trace bound caps the effective balance of an absent validator after the epochs of a leak.
+
+Under the assumptions of that bound, a leak brings that about.
 
 For the discrete rule, this bounds the epoch that [Pavloff et al.][pat], Section 5.1, estimates.
 
-Their Equation 6 gives it in a continuous model, whose threshold condition is Equation 5 at 2/3.
+Their Equation 6 gives it in a continuous model.
+
+The condition of that model on the threshold is Equation 5 at two thirds.
 
 Here the share enters only through the threshold, which the balance of the voters sets.
 
@@ -141,7 +147,9 @@ theorem twoThirds_of_leak {voters : List ValidatorIndex} {absents : List Nat}
     (between : ∀ j ∈ absents, ∀ t < epochs, (balance j (t + 1)).toNat ≤ (settled j t).toNat)
     -- Its balance starts at most at a bound, the same for all.
     (bounded : ∀ j ∈ absents, (balance j 0).toNat ≤ start)
-    -- Twice the number of absent validators times the threshold is at most the voters' balance.
+    -- Take twice the number of absent validators times the threshold.
+    --
+    -- That product is at most the balance of the voters.
     (strong : 2 * absents.length * threshold ≤ voterTotal.toNat)
     -- With an increment, the threshold exceeds the downward band.
     (wide : preset.downwardBand < threshold + preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
@@ -159,7 +167,9 @@ theorem twoThirds_of_leak {voters : List ValidatorIndex} {absents : List Nat}
     (long : leakEpochs (threshold + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) bias divisor
       (start + preset.downwardBand + 1 - (threshold + preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
         epochs) :
-    -- After that many epochs or more, twice the active balance is at most three times theirs.
+    -- After that many epochs or more, take twice the active balance.
+    --
+    -- It is at most three times the balance of the voters.
     2 * total.toNat ≤ 3 * voterTotal.toNat := by
   refine twoThirds_of_effectiveBalance_le (threshold := threshold) within active voting covered
     (fun j absent inside => ?_) strong

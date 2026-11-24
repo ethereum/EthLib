@@ -1196,7 +1196,12 @@ end PendingConsolidationInvariant
 
 /-- From Electra, the pending consolidations are in the order of their sources' exits.
 
-It adds four facts about each source to the invariant of the pending consolidations. -/
+It adds four facts about each source to the invariant of the pending consolidations.
+
+- It exits no earlier than each source before it in the queue.
+- It exits no later than the earliest consolidation epoch.
+- If it is unslashed, it can withdraw no later than the withdrawal delay after its exit.
+- It can withdraw only after the epoch `bound`. -/
 def PendingConsolidationsOrdered (config : Config) (bound : Nat) {fork : Fork}
     (s : BeaconState preset fork) : Prop :=
   PendingConsolidationInvariant config s ∧ ∀ electra : .pectra ≤ fork,
@@ -1208,7 +1213,7 @@ def PendingConsolidationsOrdered (config : Config) (bound : Nat) {fork : Fork}
       s.validators.data[c.sourceIndex.toNat]? = some v →
         -- It exits no later than the earliest consolidation epoch.
         v.exitEpoch ≤ s.earliestConsolidationEpoch electra ∧
-        -- If it is unslashed, it can withdraw exactly the withdrawal delay after its exit.
+        -- If it is unslashed, it can withdraw no later than the withdrawal delay after its exit.
         (v.slashed = false → v.withdrawableEpoch.toNat ≤
           v.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) ∧
         -- It can withdraw only after the epoch `bound`.

@@ -186,7 +186,11 @@ The proposer slashings, the attester slashings and the attestations each keep it
 
 The operations after them keep it.
 
-It needs the slashings to spare it, and no deposit or consolidation request to use its key. -/
+It needs three conditions.
+
+- The slashings spare it.
+- Before Electra, no deposit of the block carries its key.
+- From Electra to Fulu, no consolidation request comes from its key. -/
 theorem processOperations_balance {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (computed : processOperations config checks state body parentSlot = .ok after) {index : Nat}
     {validator : Validator} (found : state.validators.data[index]? = some validator)

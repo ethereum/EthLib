@@ -252,7 +252,9 @@ theorem twoThirds_of_leakRun_start (altair : .altair ≤ fork)
     -- Either some visited state does not leak or sees finality rise in the slot that leaves it.
     (∃ t < epochs, isInInactivityLeak (states t) ≠ .ok true ∨
       (states t).finalizedCheckpoint.epoch < (slotted t).finalizedCheckpoint.epoch) ∨
-      -- Otherwise, in the final state, twice the active balance is at most three times the voters'.
+      -- Otherwise, take twice the active balance in the final state.
+      --
+      -- It is at most three times the balance of the voters.
       2 * total.toNat ≤ 3 * voterTotal.toNat := by
   by_cases stopped : ∃ t < epochs, isInInactivityLeak (states t) ≠ .ok true ∨
       (states t).finalizedCheckpoint.epoch < (slotted t).finalizedCheckpoint.epoch

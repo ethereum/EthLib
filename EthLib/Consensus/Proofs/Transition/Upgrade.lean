@@ -1195,7 +1195,9 @@ private theorem banded_processUpgrades {forked after : ForkedBeaconState preset}
 
 The bands hold before them with the largest effective balances of the fork before.
 
-The pre-Electra largest effective balance must be the activation balance, at most the Electra one.
+The largest effective balance before Electra must be the activation balance.
+
+The activation balance must be at most the largest effective balance of Electra.
 
 Each effective balance must be at most its largest value before the upgrades. -/
 theorem Hysteresis.upgrade {forked after : ForkedBeaconState preset}
