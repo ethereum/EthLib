@@ -17,10 +17,6 @@ Suppose every entry from some position on is pending at an epoch at or before th
 A block keeps that property.
 
 An epoch keeps it when the finalized epoch after it is at most the given epoch.
-
-The activation queue admits only entries that were eligible by the finalized epoch.
-
-A pending entry is never active, so every active position lies below the boundary position.
 -/
 
 @[expose] public section
@@ -41,7 +37,7 @@ private theorem activationEpoch_ne_farFuture_of_isActiveAt {state : BeaconState 
 
 /-- Each registry entry from the position on becomes eligible only after the epoch.
 
-None of those entries has an activation epoch. -/
+None of those entries has an activation epoch yet. -/
 def PendingTail (count : Nat) (epoch : Epoch) (state : BeaconState preset fork) : Prop :=
   ∀ index validator, count ≤ index → state.validators.data[index]? = some validator →
     epoch < validator.activationEligibilityEpoch ∧ validator.activationEpoch = FAR_FUTURE_EPOCH
@@ -254,6 +250,7 @@ private theorem pendingTail_processRegistryUpdates {config : Config}
     {state after : BeaconState preset fork} {count : Nat} {epoch : Epoch}
     (run : processRegistryUpdates config state = .ok after)
     (boundary : epoch ≤ getCurrentEpoch state)
+    -- The activation queue admits only entries that were eligible by the finalized epoch.
     (finalized : state.finalizedCheckpoint.epoch ≤ epoch) (tail : PendingTail count epoch state) :
     PendingTail count epoch after := by
   by_cases electra : .pectra ≤ fork
@@ -458,6 +455,7 @@ private theorem active_before_pendingTail {state : BeaconState preset fork}
     {epoch boundary : Epoch} {count position : Nat}
     (tail : PendingTail count boundary state)
     (active : isActiveAt state epoch position = true) : position < count := by
+  -- A pending entry is never active, so every active position lies below the boundary position.
   obtain ⟨validator, found, finite⟩ := activationEpoch_ne_farFuture_of_isActiveAt active
   by_contra outside
   exact finite (tail position validator (Nat.le_of_not_gt outside) found).2

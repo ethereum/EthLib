@@ -10,24 +10,6 @@ From Altair each target flag of the state comes from a vote of a set for the lin
 
 Each slot keeps this, the epoch step included.
 
-In the buffer of block roots, the slot step writes only the entry at the current slot.
-
-The root at the first slot of a recent epoch stays while it is in the buffer of roots.
-
-The buffer must cover two epochs, as both presets do, and an epoch must have at least one slot.
-
-The epoch step makes the flags of the current epoch those of the previous epoch.
-
-It clears the flags of the current epoch.
-
-Justification makes the current justified checkpoint the previous one.
-
-It does not run in the first two epochs.
-
-So the proof needs the two justified checkpoints equal in those epochs, which the slots keep.
-
-Once justification runs, the source of each link is older than its target.
-
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
 The votes for that link carry more than 2/3 of the stake.
@@ -335,6 +317,7 @@ theorem TargetFlagsVoted.of_processSlot {votes : Set (ValidatorIndex × Attestat
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     (holds : TargetFlagsVoted votes state)
     (computed : processSlot state = .ok after) : TargetFlagsVoted votes after := by
+  -- In the buffer of block roots, the slot step writes only the entry at the current slot.
   have frame := frame_processSlot computed
   have currentEq : getCurrentEpoch after = getCurrentEpoch state := by
     simp only [getCurrentEpoch, frame.slot]
@@ -368,7 +351,13 @@ An epoch must have at least one slot, and the buffer of roots must cover two epo
 The two justified checkpoints must be equal in the first two epochs. -/
 theorem TargetFlagsVoted.of_advanceSlot {votes : Set (ValidatorIndex × AttestationData)}
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    -- The buffer must cover two epochs, as both presets do.
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    -- Justification makes the current justified checkpoint the previous one.
+    --
+    -- It does not run in the first two epochs.
+    --
+    -- So the proof needs the two justified checkpoints equal in those epochs, which the slots keep.
     (early : JustifiedEarly state) (holds : TargetFlagsVoted votes state)
     (computed : advanceSlot config checks state = .ok after) :
     TargetFlagsVoted votes after := by
@@ -389,6 +378,9 @@ theorem TargetFlagsVoted.of_advanceSlot {votes : Set (ValidatorIndex × Attestat
     obtain ⟨justified, rooted, justifiedOk, head, tail⟩ := processEpochAltair_split epochedOk
     obtain ⟨-, -, -, -, -, -, -, -, -, justifiedCurrent⟩ :=
       processJustificationAndFinalization_keeps justifiedOk
+    -- The epoch step makes the flags of the current epoch those of the previous epoch.
+    --
+    -- It clears the flags of the current epoch.
     cases current
     · rcases (tail.flags altair position flags).1 found with rotated | ⟨rfl, -⟩
       · rcases (head.flags altair position flags).2 rotated with old | ⟨rfl, -⟩

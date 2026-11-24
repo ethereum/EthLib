@@ -6,21 +6,11 @@ public import EthLib.Consensus.Transition.StateTransition
 /-!
 # Proofs: the beacon state transition
 
-The caching of a slot keeps the slot, and each slot step moves it on by exactly one.
+The caching of a slot keeps the slot.
 
-The caching writes the root of its new latest block header into the buffer of block roots.
-
-From Gloas the caching also marks the payload of the next slot as not yet available.
-
-Advancing to a slot fails when the slot is not after that of the state.
-
-When it succeeds, the state ends exactly at that slot.
+Each slot step moves it on by exactly one.
 
 A valid block ran on the state at its slot.
-
-When the result is validated, it carries its proposer's signature.
-
-It then also commits to the root of the state after it.
 -/
 
 @[expose] public section

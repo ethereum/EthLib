@@ -5,31 +5,15 @@ public import EthLib.Consensus.Proofs.Transition.MixesKept
 /-!
 # Proofs: a run of slots and blocks within one fork keeps the committees of nearby epochs
 
-A slot or a block writes at most the RANDAO mix of an epoch between the current epochs of the run.
+A run keeps the committees of each epoch up to its start plus `MIN_SEED_LOOKAHEAD`.
 
-So a run keeps each mix at a position that none of those epochs takes.
+The epoch must also be within the activity that the run keeps.
 
-The seed of an epoch reads the mix `MIN_SEED_LOOKAHEAD + 1` epochs before it.
-
-That mix is final at the start when the epoch is at most `MIN_SEED_LOOKAHEAD` after its epoch.
-
-A run keeps it while it stays within the ring of mixes.
-
-A run also keeps activity up to its start plus `MAX_SEED_LOOKAHEAD`.
-
-So it keeps the committees of each epoch up to its start plus `MIN_SEED_LOOKAHEAD`.
-
-The epoch must also be within that activity, and the run must end within the ring.
+The run must end within the ring of mixes.
 
 The run stays within one fork, as the states of a store do.
 
-Slots processed to a later slot pass through each slot between.
-
-So the state before a block, processed to a slot at or before it, runs on to the state after it.
-
 Two runs from one state agree on the committees of a nearby epoch and on their count.
-
-Both use one setting of the signature checks.
 -/
 
 @[expose] public section
@@ -72,7 +56,9 @@ theorem RunKept.trans {first second third : BeaconState preset fork}
         apart written low (UInt64.le_trans high two.later)]
   active := one.active.trans (two.active.mono (activityFixedEpoch_mono one.later))
 
-/-- One slot is a run step. -/
+/-- One slot is a run step.
+
+A slot writes at most the RANDAO mix of an epoch between the current epochs of the run. -/
 theorem runKept_advanceSlot (computed : advanceSlot config checks state = .ok after) :
     RunKept state after := by
   have later : getCurrentEpoch state ≤ getCurrentEpoch after := by
@@ -84,7 +70,9 @@ theorem runKept_advanceSlot (computed : advanceSlot config checks state = .ok af
       apart _ later (UInt64.le_refl _) same.symm,
     activeKept_advanceSlot computed⟩
 
-/-- A block is a run step. -/
+/-- A block is a run step.
+
+A block writes at most the RANDAO mix of an epoch between the current epochs of the run. -/
 theorem runKept_processBlock {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
     RunKept state after := by
@@ -203,8 +191,12 @@ The epoch must also be at most the fixed epoch of activity of the start.
 The run must end before the mix that the seed of the epoch reads is written again. -/
 private theorem RunKept.seedKept (run : RunKept state after)
     {epoch : Epoch}
+    -- The seed of an epoch reads the mix `MIN_SEED_LOOKAHEAD + 1` epochs before it.
+    --
+    -- That mix is final if the epoch is at most `MIN_SEED_LOOKAHEAD` after the epoch of the start.
     (final : epoch.toNat ≤ (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat)
     (fixed : epoch ≤ activityFixedEpoch state)
+    -- A run keeps that mix while it stays within the ring of mixes.
     (inRing : (getCurrentEpoch after).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
       epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) :
     getActiveValidatorIndices after epoch = getActiveValidatorIndices state epoch ∧
@@ -291,6 +283,7 @@ It must also be at most the fixed epoch of activity of the common state.
 
 Both runs must end before the mix that the seed of the epoch reads is written again. -/
 theorem RunKept.committees_agree {common other : BeaconState preset fork}
+    -- Both runs use one setting of the signature checks.
     (one : RunKept common state) (two : RunKept common other) {epoch : Epoch}
     (final : epoch.toNat ≤ (getCurrentEpoch common).toNat + preset.MIN_SEED_LOOKAHEAD.toNat)
     (fixed : epoch ≤ activityFixedEpoch common)

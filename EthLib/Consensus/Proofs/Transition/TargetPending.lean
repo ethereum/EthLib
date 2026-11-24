@@ -11,10 +11,6 @@ Before Altair, justification counts the stake of the attesters of pending attest
 
 Each of them cast a vote of a set for the link of the epoch of its attestation.
 
-A block adds the votes that its attestations cast, and each other step keeps the fact.
-
-A block accepts an attestation only when the signature checks accept its aggregate signature.
-
 Reading such a vote as signed by its validator assumes the BLS checks and unforgeable aggregates.
 
 Gasper §4.4, Definition 4.5, justifies a checkpoint by the stake of the votes for one link.
@@ -148,6 +144,7 @@ theorem PendingVoted.of_processAttestation {votes : Set (ValidatorIndex × Attes
     (holds : PendingVoted votes state)
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     PendingVoted (votes ∪ attestationVotes state attestation) after := by
+  -- A block accepts an attestation only when the signature checks accept its aggregate signature.
   have frame := frame_processAttestation computed
   have registry := processAttestation_registry computed
   have beforeElectra : fork < .pectra := Nat.lt_trans before (by decide)
@@ -369,24 +366,20 @@ theorem PendingVoted.of_advanceSlots {votes : Set (ValidatorIndex × Attestation
 
 That vote is for the link of that epoch.
 
-The epoch is the current one when asked, and the previous one otherwise.
-
-The attestations are those of the epoch whose target is the first block of the epoch.
-
-Each unslashed member of their committees whose bit is set cast such a vote.
-
-The attester is active in that epoch.
-
-The two justified checkpoints must be equal in the first two epochs. -/
+The epoch is the current one when asked, and the previous one otherwise. -/
 theorem PendingVoted.attester {votes : Set (ValidatorIndex × AttestationData)}
     (before : fork < .altair) (holds : PendingVoted votes state)
+    -- The two justified checkpoints must be equal in the first two epochs.
     (early : JustifiedEarly state) (current : Bool)
     {attestations : Array (PendingAttestation preset)}
+    -- The attestations are those of the epoch whose target is the first block of the epoch.
     (matching : getMatchingTargetAttestations state before
       (if current then getCurrentEpoch state else getPreviousEpoch state) = .ok attestations)
     {indices : List ValidatorIndex}
+    -- The indices are the unslashed members of their committees whose bit is set.
     (counted : getUnslashedAttestingIndices state attestations = .ok indices)
     {index : ValidatorIndex} (member : index ∈ indices) :
+    -- The attester is active in that epoch.
     index ∈ getActiveValidatorIndices state
         (if current then getCurrentEpoch state else getPreviousEpoch state) ∧
       ∃ data, LinkVote state current index.toNat (index, data) ∧ (index, data) ∈ votes := by

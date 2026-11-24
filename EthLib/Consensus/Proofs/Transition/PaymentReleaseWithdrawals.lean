@@ -13,14 +13,6 @@ Inside a block, the withdrawals take a prefix of the queue of builder withdrawal
 
 So the steps of a block are named by a relation where the queue may lose a prefix.
 
-It loses it after it gains the released withdrawals.
-
-Each payment that such a step releases is closed after it.
-
-A step that releases payments, then a step that releases none, release those payments together.
-
-The withdrawals of a block release no payment.
-
 [EIP-7732] adds the builders, their bids, their payments and their withdrawals.
 
 [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#beacon-chain-changes
@@ -36,32 +28,30 @@ variable {preset : Preset} {fork : Base.Fork} {state after : BeaconState preset 
 
 /-- A step that queues the withdrawals of open payments, then may drop a prefix of the queue.
 
-No slot is twice in the list, and each slot of the list is before the slot of the state.
-
-The withdrawals of the list follow the queue before the step, in the order of the list.
-
-The step then drops a prefix of that queue.
-
-Each payment of the list is closed after the step.
-
-A payment open after the step was open before it, or is at the slot of the state or later.
-
-The slot of the state does not go back.
-
 Unlike a release step, it does not keep the withdrawal of a payment open before and after it.
 
-The chain of steps never reads that, and it would stop such steps from following each other. -/
+The chain of steps never reads that.
+
+It would also stop such steps from following each other. -/
 structure PaymentStep (state after : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
     (released : List Slot) : Prop where
+  -- No slot is twice in the list.
   nodup : released.Nodup
+  -- The withdrawals of the list follow the queue before the step, in the order of the list.
+  --
+  -- The step then drops a prefix of that queue, so the queue loses it after it gains them.
   queue : ∃ count, (after.builderPendingWithdrawals gloas).data.toList =
     ((state.builderPendingWithdrawals gloas).data.toList ++
       released.map (openWithdrawal state gloas)).drop count
   opened : ∀ slot ∈ released, PaymentOpen state gloas slot
+  -- Each slot of the list is before the slot of the state.
   past : ∀ slot ∈ released, slot < state.slot
+  -- Each payment of the list is closed after the step.
   closes : ∀ slot ∈ released, ¬ PaymentOpen after gloas slot
+  -- A payment open after the step was open before it, or is at the slot of the state or later.
   noReopen : ∀ slot, PaymentOpen after gloas slot →
     PaymentOpen state gloas slot ∨ state.slot ≤ slot
+  -- The slot of the state does not go back.
   forward : state.slot ≤ after.slot
 
 /-- A step that releases payments and closes each of them is such a step, with nothing dropped. -/
@@ -104,7 +94,7 @@ theorem PaymentStep.keepsClosed {gloas : .glamsterdam ≤ fork} {released : List
   · exact closed open_before
   · exact absurd later (UInt64.not_le.mpr past)
 
-/-- A step that releases payments, then a step that releases none, release those payments.
+/-- A step that releases payments, then a step that releases none, release those payments together.
 
 The second step may drop more of the queue, and it keeps each released payment closed. -/
 theorem PaymentStep.trans_nil {gloas : .glamsterdam ≤ fork}

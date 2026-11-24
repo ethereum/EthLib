@@ -7,37 +7,11 @@ public import EthLib.Consensus.Proofs.Transition.TargetFlags
 /-!
 # Proofs: the target flags of a block come from the votes of its attestations
 
-From Altair the state keeps one byte of flags for each validator, in each of two epochs.
-
-They are the current and the previous epoch.
+From Altair the state keeps a byte of flags per validator, in the current and the previous epoch.
 
 Justification counts the stake of the unslashed validators whose byte holds the timely target flag.
 
-A vote here is a pair of a validator index and attestation data, as in the model of Casper FFG.
-
-An attestation casts a vote for each validator that its bits show in its committees.
-
-The vote holds the data of the attestation.
-
-A block casts the votes of its attestations, with the committees of the state before the block.
-
-The block reads the same committees when it processes each attestation.
-
-A step of a block sets each target flag only from such a vote, for the link of its epoch.
-
-Such a vote has the position of the flag, and the target epoch of the flag.
-
-Its source is the justified checkpoint of that epoch.
-
-Its target root is the block root that the state records for the first slot of that epoch.
-
-Two steps chain into one step, whose votes are the union of their votes.
-
-Each attestation, each other step of a block, and a whole block are such steps.
-
-A block accepts an attestation only when the signature checks accept its aggregate signature.
-
-Reading such a vote as signed by its validator assumes the BLS checks and unforgeable aggregates.
+Reading a vote as signed by its validator assumes the BLS checks and unforgeable aggregates.
 
 Gasper §4.4, Definition 4.5, justifies a checkpoint by the stake of the votes for one link.
 
@@ -54,6 +28,8 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
   {engine : ExecutionEngine preset fork} {state after : BeaconState preset fork}
 
 /-- The votes that an attestation casts in a state.
+
+A vote here is a pair of a validator index and attestation data, as in the model of Casper FFG.
 
 Each holds the data of the attestation.
 
@@ -96,16 +72,14 @@ def TargetFlagsVoted (votes : Set (ValidatorIndex × AttestationData))
 
 /-- A frame that sets target flags only from a set of votes for the right link.
 
-It keeps the slot, the checkpoints, the fork versions and the genesis validators root.
-
-It also keeps the block roots.
-
-A target flag after the step was there before, or comes from a vote of the set.
-
-That vote is for the link of the epoch of the flag, at the position of the flag. -/
+It keeps the slot, the checkpoints, the fork versions and the genesis validators root. -/
 structure VoteFrame (votes : Set (ValidatorIndex × AttestationData))
     (state after : BeaconState preset fork) : Prop extends Frame state after where
+  -- It also keeps the block roots.
   blockRoots : after.blockRoots = state.blockRoots
+  -- A target flag after the step was there before, or comes from a vote of the set.
+  --
+  -- That vote is for the link of the epoch of the flag, at the position of the flag.
   flags : ∀ (altair : .altair ≤ fork) (current : Bool) (position : Nat),
     TargetFlagAt (recentParticipation after altair current) position →
       TargetFlagAt (recentParticipation state altair current) position ∨
@@ -188,6 +162,7 @@ private theorem voteFrame_processAttestationAltair {attestation : Attestation pr
     (computed :
       processAttestationAltair config checks state attestation altair parentSlot = .ok after) :
     VoteFrame (attestationVotes state attestation) state after := by
+  -- A block accepts an attestation only when the signature checks accept its aggregate signature.
   have frame := frame_processAttestationAltair computed
   have flagsOf := processAttestationAltair_targetFlag computed
   unfold processAttestationAltair at computed
@@ -328,6 +303,7 @@ theorem voteFrame_processBlock
     {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
     VoteFrame (blockVotes state block) state after := by
+  -- The block reads the same committees when it processes each attestation.
   obtain ⟨first, last, head, same, attested, tail⟩ :=
     processBlock_attestationSplit apart computed
   have middle := foldlM_processAttestation_votes (fun votes mid => VoteFrame votes state mid)

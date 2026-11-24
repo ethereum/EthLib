@@ -15,12 +15,6 @@ An assigned activation or exit epoch stays exactly the same.
 
 The registry also never shrinks.
 
-Each chain step preserves assigned epochs, and composition gives the same result for a run.
-
-The epoch step is read through the shared epoch schedule.
-
-Only registry updates, pending deposits and effective-balance updates change the validators.
-
 Block operations leave a validator that they append with no activation or exit epoch.
 -/
 
@@ -1170,6 +1164,9 @@ theorem RegistryLifecycle.chainStep {first last : ForkedBeaconState preset}
 /-- A run preserves the assigned epochs of every existing registry entry. -/
 theorem Run.registryLifecycle {first last : ForkedBeaconState preset}
     (run : Run config checks first last) : RegistryLifecycle first.state last.state := by
+  -- Each chain step preserves assigned epochs.
+  --
+  -- Composition gives the same result for a run.
   induction run with
   | nil => exact .refl _
   | snoc pre step ih => exact ih.trans (RegistryLifecycle.chainStep step.chainStep)

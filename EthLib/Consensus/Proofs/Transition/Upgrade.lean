@@ -9,39 +9,11 @@ public import EthLib.Consensus.Transition.Upgrade
 /-!
 # Proofs: the upgrades of the state
 
-The carry-over to a later fork before Gloas keeps the registry, balances, slot and checkpoints.
-
-After the upgrade to Altair, each list of flags and scores has one entry for each validator.
-
-The upgrade to Electra keeps the number of validators and of balances.
-
-The upgrade to Gloas keeps the Fulu fields, with each list unchanged as a sequence.
-
-The latest block hash and the block hash of the latest bid are the hash of the latest payload.
-
-The onboarding of builders changes only the builders and the queue of pending deposits.
-
-Each pending deposit stays in the queue, funds a builder with its amount, or is dropped.
-
-A deposit is dropped only when it has builder credentials and an invalid signature.
-
-So the builder balances and the queue together hold at most the value of the queue before.
-
-The upgrade of a Gloas state to Heze succeeds exactly when every contract deposit is processed.
-
-It then keeps every Gloas field that Heze keeps, each list as the same sequence.
-
-The latest bid differs from the Gloas bid only by its inclusion list bits, which are all unset.
-
 Each upgrade keeps the slot, the three checkpoints and the block roots.
-
-From Altair, an upgrade adds no target flag.
 
 Each upgrade keeps the invariant that each valid block keeps, and the finalized checkpoint.
 
 The upgrades of a slot keep the effective balances within the bands of hysteresis.
-
-The upgrade to Electra needs the largest effective balance before it to be the activation balance.
 -/
 
 @[expose] public section
@@ -70,53 +42,43 @@ theorem TargetFlagAt.of_flagsKeptOrZero {fork : Fork} {state after : BeaconState
     · exact ⟨flags, old, set⟩
     · exact absurd set (by decide)
 
-/-- An upgrade to a fork no earlier than the fork before.
-
-It keeps the slot, the three checkpoints, the bits of justification and the block roots.
-
-It also keeps the genesis validators root.
-
-The current fork version becomes the previous one, and the new one is that of the fork after.
-
-It never shrinks the registry.
-
-The public keys of the validators before it are a prefix of the public keys after it.
-
-When no two validators share a key before it, none share a key after it.
-
-When each validator has one balance before it, each has one after it.
-
-When each validator may withdraw no earlier than it exits before it, the same holds after it.
-
-Let the largest effective balances of the preset be whole numbers of increments.
-
-When each effective balance is a whole number of increments before it, the same holds after it.
-
-From Altair, a target flag after it was a target flag at its position before.
-
-It keeps the slashed flag at each position of the registry. -/
+/-- An upgrade to a fork no earlier than the fork before. -/
 structure UpgradeFrame (config : Config) {fork post : Fork} (pre : BeaconState preset fork)
     (after : BeaconState preset post) : Prop where
   forward : fork ≤ post
+  -- It keeps the slot, the three checkpoints, the bits of justification and the block roots.
   slot : after.slot = pre.slot
   finalized : after.finalizedCheckpoint = pre.finalizedCheckpoint
   previousJustified : after.previousJustifiedCheckpoint = pre.previousJustifiedCheckpoint
   currentJustified : after.currentJustifiedCheckpoint = pre.currentJustifiedCheckpoint
   justificationBits : after.justificationBits = pre.justificationBits
   blockRoots : after.blockRoots = pre.blockRoots
+  -- It also keeps the genesis validators root.
   genesisValidatorsRoot : after.genesisValidatorsRoot = pre.genesisValidatorsRoot
+  -- The current fork version becomes the previous one.
   previousVersion : after.forkVersions.previousVersion = pre.forkVersions.currentVersion
+  -- The new current version is that of the fork after.
   currentVersion : after.forkVersions.currentVersion = config.forkVersion post
+  -- It never shrinks the registry.
   registryGrows : pre.validators.data.size ≤ after.validators.data.size
+  -- The public keys of the validators before it are a prefix of the public keys after it.
   pubkeysPrefix : validatorKeys pre <+: validatorKeys after
+  -- When no two validators share a key before it, none share a key after it.
   pubkeysDistinct : PubkeysDistinct pre → PubkeysDistinct after
+  -- When each validator has one balance before it, each has one after it.
   balancesMatch : BalancesMatch pre → BalancesMatch after
+  -- When each validator may withdraw no earlier than it exits before it, the same holds after it.
   exitsOrdered : ExitsOrdered pre → ExitsOrdered after
+  -- Let the largest effective balances of the preset be whole numbers of increments.
+  --
+  -- When each effective balance is a whole number of increments before it, the same holds after it.
   aligned : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned pre →
     EffectiveBalancesAligned after
+  -- From Altair, a target flag after it was a target flag at its position before.
   flags : ∀ (altair : .altair ≤ fork) (current : Bool) (position : Nat),
     TargetFlagAt (recentParticipation after (Nat.le_trans altair forward) current) position →
       TargetFlagAt (recentParticipation pre altair current) position
+  -- It keeps the slashed flag at each position of the registry.
   slashed : ∀ position, slashedFlagAt after position = slashedFlagAt pre position
 
 /-- An upgrade that carries the registry and both lists of flags as the same sequences.
@@ -1233,22 +1195,22 @@ private theorem banded_processUpgrades {forked after : ForkedBeaconState preset}
 
 The bands hold before them with the largest effective balances of the fork before.
 
-The upgrade to Electra lowers a compounding balance above the activation balance to it.
+The pre-Electra largest effective balance must be the activation balance, at most the Electra one.
 
-So the largest effective balance before Electra must be the activation balance (`electraFloor`).
-
-It needs the activation balance to be at most the largest Electra effective balance (`electraCap`).
-
-It also needs each effective balance at most its largest value before the upgrades (`capped`).
-
-The other upgrades keep the validators and the balances. -/
+Each effective balance must be at most its largest value before the upgrades. -/
 theorem Hysteresis.upgrade {forked after : ForkedBeaconState preset}
     (holds : Hysteresis forked.state)
+    -- The upgrade to Electra lowers a compounding balance above the activation balance to it.
+    --
+    -- So the largest effective balance before Electra must be the activation balance.
     (electraFloor : preset.MAX_EFFECTIVE_BALANCE = preset.MIN_ACTIVATION_BALANCE)
+    -- The activation balance must be at most the largest Electra effective balance.
     (electraCap : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    -- Each effective balance must be at most its largest value before the upgrades.
     (capped : ∀ validator ∈ forked.state.validators.data,
       validator.effectiveBalance ≤ withdrawalMaxEffectiveBalance preset forked.fork validator)
     (computed : processUpgrades config checks forked = .ok after) : Hysteresis after.state :=
+  -- The upgrades other than the one to Electra keep the validators and the balances.
   (banded_processUpgrades electraFloor electraCap ⟨holds, capped⟩ computed).1
 
 end EthLib.Consensus

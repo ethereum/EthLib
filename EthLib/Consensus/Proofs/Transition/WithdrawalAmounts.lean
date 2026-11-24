@@ -7,17 +7,7 @@ public import EthLib.Consensus.Proofs.Transition.Withdrawals
 
 The step applies the expected withdrawals before Gloas, and from Gloas after a full parent.
 
-They lower a validator's balance by their total for it, before Gloas or for a non-builder index.
-
-That total never exceeds the balance, and a builder's balance stops at zero.
-
 Each queued partial withdrawal and each withdrawal of the validator sweep pays an exact amount.
-
-The sweep of validators names each validator at most once and comes last.
-
-So a validator that it pays in full ends the step at zero.
-
-One that it pays partially ends at exactly its largest effective balance.
 -/
 
 @[expose] public section
@@ -58,24 +48,22 @@ private theorem processWithdrawals_applies {capella : .shapella ≤ fork}
 
 This holds at every fork from Capella: before Gloas, or for an index that names no builder.
 
-The withdrawals are the expected ones.
-
-The step applies them before Gloas, and from Gloas after a parent with its payload.
-
-They never take more than the balance.
-
-So the subtraction never stops at zero, and a validator that withdraws nothing keeps its balance.
-
 Before Gloas the same holds for the withdrawals that the payload carries. -/
 theorem processWithdrawals_balance_of_notBuilder {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (computed : processWithdrawals state capella payload = .ok after)
     {expected : ExpectedWithdrawals}
+    -- The withdrawals are the expected ones.
     (expectedOk : getExpectedWithdrawals state capella = .ok expected)
+    -- The step applies them before Gloas, and from Gloas after a parent with its payload.
     (full : ∀ gloas : .glamsterdam ≤ fork, isParentBlockFull state gloas = true)
     {index : ValidatorIndex} (named : fork < .glamsterdam ∨ isBuilderIndex index = false)
     {balance : Gwei} (found : state.balances.data[index.toNat]? = some balance) :
+    -- They never take more than the balance.
     withdrawnFrom expected.withdrawals index ≤ balance.toNat ∧
+      -- So the subtraction never stops at zero.
+      --
+      -- A validator that withdraws nothing keeps its balance.
       (after.balances.data[index.toNat]?).map UInt64.toNat =
         some (balance.toNat - withdrawnFrom expected.withdrawals index) := by
   obtain ⟨applied, applyOk, balances, -⟩ := processWithdrawals_applies computed expectedOk full
@@ -307,24 +295,22 @@ theorem getBuilderWithdrawals_loop_processed {prior : Array Withdrawal} {limit :
       simp only [List.length_cons]
       omega
 
-/-- The bounds of the parts of the expected withdrawals.
-
-The sweep visits at most the registry and at most the most validators per sweep.
-
-From Gloas the sweep of builders visits at most their registry and the most builders per sweep.
-
-From Electra the queued partial withdrawals that are read number at most the queue.
-
-From Gloas the queued builder withdrawals that are read number at most their queue. -/
+/-- The bounds of the parts of the expected withdrawals. -/
 theorem getExpectedWithdrawals_bounds {capella : .shapella ≤ fork}
     {expected : ExpectedWithdrawals}
     (computed : getExpectedWithdrawals state capella = .ok expected) :
+    -- The sweep visits at most the registry and at most the most validators per sweep.
     expected.processedSweepWithdrawalsCount.toNat ≤
         min state.validators.data.size preset.MAX_VALIDATORS_PER_WITHDRAWALS_SWEEP.toNat ∧
+      -- From Gloas the sweep of builders visits at most their registry.
+      --
+      -- It also visits at most the most builders per sweep.
       (∀ gloas : .glamsterdam ≤ fork, expected.processedBuildersSweepCount.toNat ≤
         min (state.builders gloas).data.size preset.MAX_BUILDERS_PER_WITHDRAWALS_SWEEP.toNat) ∧
+      -- From Electra the queued partial withdrawals that are read number at most the queue.
       (∀ electra : .pectra ≤ fork, expected.processedPartialWithdrawalsCount.toNat ≤
         (state.pendingPartialWithdrawals electra).data.size) ∧
+      -- From Gloas the queued builder withdrawals that are read number at most their queue.
       (∀ gloas : .glamsterdam ≤ fork, expected.processedBuilderWithdrawalsCount.toNat ≤
         (state.builderPendingWithdrawals gloas).data.size) := by
   unfold getExpectedWithdrawals at computed
@@ -540,15 +526,7 @@ private theorem getValidatorsSweepWithdrawals_sweepPays {capella : .shapella ≤
     subst empty
     exact ⟨fun _ inside => absurd inside (by simp), by simp⟩
 
-/-- For a registry within its limit, what each withdrawal of the sweep pays.
-
-Each amount is read from the balance left after the withdrawals before it.
-
-A fully withdrawable validator withdraws all of that balance.
-
-Otherwise a partially withdrawable one withdraws the part above its largest effective balance.
-
-The sweep names each validator at most once. -/
+/-- For a registry within its limit, what each withdrawal of the sweep pays. -/
 theorem getValidatorsSweepWithdrawals_pays {capella : .shapella ≤ fork}
     (within : state.RegistryWithinLimit) {start : WithdrawalIndex}
     {prior sweep : Array Withdrawal} {next : WithdrawalIndex} {processed : Nat}
@@ -556,13 +534,19 @@ theorem getValidatorsSweepWithdrawals_pays {capella : .shapella ≤ fork}
       .ok (sweep, next, processed)) :
     (∀ k (inside : k < sweep.size),
       ∃ validator left, getValidator state sweep[k].validatorIndex = .ok validator ∧
+        -- Each amount is read from the balance left after the withdrawals before it.
         getBalanceAfterWithdrawals state sweep[k].validatorIndex (prior ++ sweep.extract 0 k) =
           .ok left ∧
+        -- A fully withdrawable validator withdraws all of that balance.
         ((isFullyWithdrawableValidator fork validator left (getCurrentEpoch state) = true ∧
             sweep[k].amount = left) ∨
+          -- Otherwise a partially withdrawable one withdraws a part of it.
+          --
+          -- That part is what lies above its largest effective balance.
           (isFullyWithdrawableValidator fork validator left (getCurrentEpoch state) = false ∧
             isPartiallyWithdrawableValidator preset fork validator left = true ∧
             sweep[k].amount = left - withdrawalMaxEffectiveBalance preset fork validator))) ∧
+    -- The sweep names each validator at most once.
     (sweep.toList.map (·.validatorIndex.toNat)).Nodup :=
   getValidatorsSweepWithdrawals_sweepPays within computed
 
@@ -641,39 +625,35 @@ private theorem withdrawnFrom_of_sweepPays {epoch : Epoch} {prior sweep : Array 
     · rw [total, amount, UInt64.toNat_sub_of_le _ _ (UInt64.le_of_lt excess.2)]
       omega
 
-/-- For a registry within its limit, the sweep leaves each validator it pays at a fixed balance.
-
-The registry limit must be at most `2^40`.
-
-The sweep is the last part of the expected withdrawals, after the withdrawals before it.
-
-The step applies the expected withdrawals before Gloas, and from Gloas after a full parent.
-
-A validator that the sweep pays in full ends the step at zero.
-
-One that it pays partially ends at exactly its largest effective balance.
-
-Whether it pays in full or partially is read from the balance left after the earlier withdrawals.
-
-Those are the queued withdrawals and the earlier visits of the sweep. -/
+/-- For a registry within its limit, the sweep leaves each validator it pays at a fixed balance. -/
 theorem processWithdrawals_sweep {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (computed : processWithdrawals state capella payload = .ok after)
+    -- The registry limit must be at most `2^40`.
     (within : state.RegistryWithinLimit) (limit : preset.VALIDATOR_REGISTRY_LIMIT.toNat ≤ 2 ^ 40)
     {expected : ExpectedWithdrawals}
     (expectedOk : getExpectedWithdrawals state capella = .ok expected)
+    -- The step applies the expected withdrawals before Gloas, and from Gloas after a full parent.
     (full : ∀ gloas : .glamsterdam ≤ fork, isParentBlockFull state gloas = true)
     {start next : WithdrawalIndex} {prior sweep : Array Withdrawal} {processed : Nat}
     (sweepOk : getValidatorsSweepWithdrawals state capella start prior =
       .ok (sweep, next, processed))
+    -- The sweep is the last part of the expected withdrawals, after the withdrawals before it.
     (split : expected.withdrawals = prior ++ sweep) :
     ∀ k (inside : k < sweep.size), ∃ validator left final,
       getValidator state sweep[k].validatorIndex = .ok validator ∧
+      -- The sweep reads the balance left after the earlier withdrawals.
+      --
+      -- Those are the queued withdrawals and the earlier visits of the sweep.
+      --
+      -- That balance decides whether the sweep pays in full or partially.
       getBalanceAfterWithdrawals state sweep[k].validatorIndex (prior ++ sweep.extract 0 k) =
         .ok left ∧
       after.balances.data[sweep[k].validatorIndex.toNat]? = some final ∧
+      -- A validator that the sweep pays in full ends the step at zero.
       ((isFullyWithdrawableValidator fork validator left (getCurrentEpoch state) = true ∧
           final = 0) ∨
+        -- One that it pays partially ends at exactly its largest effective balance.
         (isFullyWithdrawableValidator fork validator left (getCurrentEpoch state) = false ∧
           isPartiallyWithdrawableValidator preset fork validator left = true ∧
           final = withdrawalMaxEffectiveBalance preset fork validator)) := by
@@ -807,20 +787,6 @@ theorem getPendingPartialWithdrawals_pays {electra : .pectra ≤ fork} {start : 
 
 /-- The expected withdrawals are the four parts that their calls compute, in payload order.
 
-From Gloas, the queued builder withdrawals come first.
-
-The count of queued builder withdrawals read is the count of that first part.
-
-From Electra, the queued partial withdrawals follow.
-
-From Gloas, the sweep of builders follows.
-
-The sweep of validators comes last.
-
-Each part reads the parts before it.
-
-Before its fork a part is empty and keeps the withdrawal index.
-
 Theorems above state what the partial withdrawals and the validator sweep pay.
 
 The withdrawal proofs state what the builder parts pay. -/
@@ -829,17 +795,27 @@ theorem getExpectedWithdrawals_parts {capella : .shapella ≤ fork}
     (computed : getExpectedWithdrawals state capella = .ok expected) :
     ∃ (builders partials buildersSweep sweep : Array Withdrawal)
       (index1 index2 index3 index4 : WithdrawalIndex) (count1 count2 count3 count4 : Nat),
+      -- Each call below reads the parts before it.
       expected.withdrawals = builders ++ partials ++ buildersSweep ++ sweep ∧
+      -- From Gloas, the queued builder withdrawals come first.
+      --
+      -- The count of queued builder withdrawals read is the count of that first part.
       expected.processedBuilderWithdrawalsCount.toNat = count1 ∧
       (∀ gloas : .glamsterdam ≤ fork, getBuilderWithdrawals state gloas
         (state.nextWithdrawalIndex capella) #[] = .ok (builders, index1, count1)) ∧
+      -- Before its fork, Gloas, this part is empty and keeps the withdrawal index.
       (fork < .glamsterdam → builders = #[] ∧ index1 = state.nextWithdrawalIndex capella) ∧
+      -- From Electra, the queued partial withdrawals follow.
       (∀ electra : .pectra ≤ fork, getPendingPartialWithdrawals state electra index1 builders =
         .ok (partials, index2, count2)) ∧
+      -- Before its fork, Electra, this part is empty and keeps the withdrawal index.
       (fork < .pectra → partials = #[] ∧ index2 = index1) ∧
+      -- From Gloas, the sweep of builders follows.
       (∀ gloas : .glamsterdam ≤ fork, getBuildersSweepWithdrawals state gloas index2
         (builders ++ partials) = .ok (buildersSweep, index3, count3)) ∧
+      -- Before its fork, Gloas, this part is empty and keeps the withdrawal index.
       (fork < .glamsterdam → buildersSweep = #[] ∧ index3 = index2) ∧
+      -- The sweep of validators comes last.
       getValidatorsSweepWithdrawals state capella index3 (builders ++ partials ++ buildersSweep) =
         .ok (sweep, index4, count4) := by
   unfold getExpectedWithdrawals at computed

@@ -13,20 +13,6 @@ A payload passes the withdrawal step only with exactly the withdrawals that the 
 
 The withdrawal step and a change of credentials keep the sizes of the registry and the balances.
 
-A change of credentials checks the key and the signature of the change.
-
-It then gives the validator credentials that name the address of the change.
-
-A validator can withdraw its whole balance exactly when its credentials, epoch and balance allow it.
-
-Its credentials name an address exactly when their first byte is `0x01`, or `0x02` from Electra.
-
-Before Electra, a validator with any other first byte is neither fully nor partially withdrawable.
-
-A full payload starts the next sweep after its last withdrawal, before the wrap at the registry.
-
-Otherwise the next sweep starts one sweep after the start of the last one.
-
 From Gloas, a builder withdrawal pays a queued entry, or all that a withdrawable builder has left.
 -/
 

@@ -6,27 +6,9 @@ public import EthLib.Consensus.Proofs.Transition.Operations
 /-!
 # Proofs: where a timely target flag comes from, in one attestation
 
-From Altair the state keeps one byte of flags for each validator, in each of two epochs.
-
-They are the current and the previous epoch.
-
 Justification adds the stake of the unslashed validators whose byte holds the timely target flag.
 
 An attestation sets that flag only for its attesters, and only for a vote of the right link.
-
-Its data then has the justified checkpoint of its target epoch as source.
-
-Its target epoch is the current or the previous one.
-
-Its target root is the root of the block at the first slot of that epoch.
-
-The attester is in the indexed attestation, whose aggregate signature passed the checks of the step.
-
-With the BLS checks, the aggregate signature verifies under keys that include the attester's.
-
-Reading that as its signature assumes that no one forges a BLS aggregate.
-
-No other position gains the target flag, and the other epoch gains none.
 
 This is the step of one attestation toward the invariant that justification counts only such votes.
 
@@ -44,7 +26,9 @@ open Base Uint64
 variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
   {state after : BeaconState preset fork}
 
-/-- From Altair: the flags of the current epoch when asked for it, else of the previous epoch. -/
+/-- From Altair: the flags of the current epoch when asked for it, else of the previous epoch.
+
+From Altair the state keeps one byte of flags for each validator, in each of these two epochs. -/
 def recentParticipation (state : BeaconState preset fork) (altair : .altair ≤ fork)
     (current : Bool) : EpochParticipation preset fork :=
   if current then state.currentEpochParticipation altair
@@ -234,35 +218,37 @@ theorem foldlM_addAttesterFlags_target {total : Gwei} {earned : List UInt64}
 
 With the BLS checks, that vote carries a valid aggregate signature.
 
-The flag is at a position of the flags of the current epoch, or else of the previous one.
+Reading that as its signature assumes that no one forges a BLS aggregate.
 
-Either it was there before, or the attestation set it, and then five facts hold.
-
-The indexed attestation exists, and its aggregate signature passes the checks of the step.
-
-It holds the data of the attestation, and an attester at that position.
-
-The target epoch is the epoch of those flags.
-
-The source is the justified checkpoint that the state holds for that epoch.
-
-The target root is the root of the block at the first slot of that epoch. -/
+No other position or epoch gains the target flag. -/
 theorem processAttestationAltair_targetFlag {attestation : Attestation preset fork}
     {altair : .altair ≤ fork} {parentSlot : Slot}
     (computed :
       processAttestationAltair config checks state attestation altair parentSlot = .ok after)
     (current : Bool) (position : Nat)
+    -- The flag is at a position of the flags of the current epoch, or else of the previous one.
     (flagged : TargetFlagAt (recentParticipation after altair current) position) :
+    -- Either it was there before, or the attestation set it.
     TargetFlagAt (recentParticipation state altair current) position ∨
+      -- Then five facts hold.
+      --
+      -- The indexed attestation exists.
       ∃ indexed, getIndexedAttestation state attestation = .ok indexed ∧
+        -- Its aggregate signature passes the checks of the step.
+        --
+        -- With the BLS checks, it verifies under keys that include the attester's.
         isValidIndexedAttestation config checks state indexed = .ok true ∧
+        -- It holds the data of the attestation, and an attester at that position.
         indexed.data = attestation.data ∧
         (∃ attester ∈ indexed.attestingIndices.data, attester.toNat = position) ∧
+        -- The target epoch is the epoch of those flags.
         attestation.data.target.epoch =
           (if current then getCurrentEpoch state else getPreviousEpoch state) ∧
+        -- The source is the justified checkpoint that the state holds for that epoch.
         attestation.data.source =
           (if current then state.currentJustifiedCheckpoint
           else state.previousJustifiedCheckpoint) ∧
+        -- The target root is the root of the block at the first slot of that epoch.
         getBlockRoot state attestation.data.target.epoch = .ok attestation.data.target.root := by
   unfold processAttestationAltair at computed
   simp only [bind_ok_iff, liftAccessor_ok] at computed

@@ -17,15 +17,7 @@ A run keeps each step with its inputs: the slot step, or the signed block and it
 
 So a theorem about a run can name the blocks of that run and the attestations in them.
 
-A block step of a run checks its state root, and is applied on a state with no upgrade due.
-
 Each step of a run is a step of a chain, so the invariants of chains hold along a run.
-
-Slots and blocks before the next fork form runs.
-
-A run has at most one block for each slot it covers.
-
-A genesis state has its latest block header at slot zero, with a zero state root.
 -/
 
 @[expose] public section
@@ -87,6 +79,7 @@ inductive Step (config : Config) (checks : SignatureChecks) :
       Step config checks before after
   | block {fork : Fork} {before after : BeaconState preset fork}
       (engine : ExecutionEngine preset fork) (signed : SignedBeaconBlock preset fork)
+      -- A block step of a run is applied on a state with no upgrade due.
       (due : upgradeDue config ⟨fork, before⟩ = false)
       (ok : applySignedBlock config checks engine before signed true = .ok after) :
       Step config checks ⟨fork, before⟩ ⟨fork, after⟩
