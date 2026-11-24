@@ -5,26 +5,13 @@ public import EthLib.Consensus.Proofs.ForkDigest
 public import EthLib.Consensus.Proofs.LightClient.Containers
 public import EthLib.Base.Proofs.LittleEndian
 public import EthLib.Consensus.Proofs.BeaconApi.Responses
+import EthLib.Base.Proofs.MapM
 import EthLib.Consensus.Proofs.BeaconApi.Encoding
 
 /-!
 # Proofs: the light client answers of the Beacon API
 
-The longest answer to an updates request is one that the source accepts.
-
-It holds the known updates of the range from its earliest known period, with no gap, to the limit.
-
-The other accepted answers are its nonempty starts, so none holds more updates.
-
-On a chain whose digests name their forks, the SSZ chunks of updates decode back to the updates.
-
-On such a chain, bytes that decode are the chunks of the updates they give.
-
-Each latest update answer refuses with code 404 exactly when the node knows no update.
-
-It refuses with no other error, so a known update never gets code 500.
-
-That result needs a preset with a nonempty logs bloom and sync committee.
+Which updates a range answer holds, how their SSZ chunks round trip, and when each answer refuses.
 -/
 
 @[expose] public section
@@ -640,6 +627,8 @@ theorem optimisticUpdateResponse_notFound_iff {fork : Fork}
 
 Its error is then the one with code 404 for a missing finality update.
 
+So a known update never gets code 500.
+
 It needs a preset with a nonempty logs bloom and sync committee. -/
 theorem finalityUpdateResponse_eq_error_iff [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] {fork : Fork}
@@ -659,6 +648,8 @@ theorem finalityUpdateResponse_eq_error_iff [NeZero preset.BYTES_PER_LOGS_BLOOM.
 
 Its error is then the one with code 404 for a missing optimistic update.
 
+So a known update never gets code 500.
+
 It needs a preset with a nonempty logs bloom and sync committee. -/
 theorem optimisticUpdateResponse_eq_error_iff [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] {fork : Fork}
@@ -673,5 +664,21 @@ theorem optimisticUpdateResponse_eq_error_iff [NeZero preset.BYTES_PER_LOGS_BLOO
     rw [optimisticUpdateResponse, versioned_eq_error_iff
       fun (optimistic : LightClientOptimisticUpdate preset fork) _ => toApiJson_total optimistic]
     simp
+
+/-- The JSON answer for a range of updates never fails, so it never gets code 500.
+
+It needs a preset with a nonempty logs bloom and sync committee. -/
+theorem updatesJson_exists_ok [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
+    [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] (updates : List (AnyLightClientUpdate preset)) :
+    ∃ document, updatesJson updates = .ok document := by
+  unfold updatesJson
+  simp only [bind, Except.bind]
+  split
+  · -- A failed list fails on one update, whose JSON the writer still gives.
+    rename_i fault failed
+    obtain ⟨⟨fork, update⟩, -, refused⟩ := exists_mem_of_mapM_error failed
+    obtain ⟨document, written⟩ := toApiJson_total update
+    simp [apiJsonOr500, written, Except.mapError, pure, Except.pure] at refused
+  · exact ⟨_, rfl⟩
 
 end EthLib.Consensus.BeaconApi

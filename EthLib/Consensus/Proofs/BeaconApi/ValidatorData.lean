@@ -4,34 +4,18 @@ public import EthLib.Consensus.BeaconApi.ValidatorData
 public import EthLib.Consensus.Proofs.HonestAggregateSignatures
 public import EthLib.Consensus.Proofs.Transition.StateTransition
 public import EthLib.Consensus.Proofs.BeaconApi.Responses
+import EthLib.Consensus.Proofs.BeaconApi.Encoding
+import EthLib.Consensus.Proofs.Containers.Attestation
+import EthLib.Consensus.Proofs.Containers.Builder
+import EthLib.Consensus.Proofs.Containers.SyncCommittee
 import EthLib.Consensus.Proofs.ForkChoice.Head
 
 /-!
 # Proofs: the data that the Beacon API hands a validator
 
-The attestation data votes for the head of the store, at the requested slot.
+What the attestation data, payload attestation data, aggregate and contribution answers hold.
 
-For a store in Electra or Fulu its index is 0.
-
-Once the checks before a step pass, the attestation data gets code 500 exactly when that step fails.
-
-The steps are the head with its block and state, the current slot, the empty slots and the target.
-
-From Gloas, the payload attestation data refuses with code 500 exactly when the store has no head.
-
-An aggregate has the requested data root, slot and committee, and joins the messages that match.
-
-An aggregate of distinct honest signers passes the check of an indexed attestation.
-
-It needs each signer's key in the registry, and secret keys that do not sum to zero.
-
-A bit of a contribution is set exactly when the key of that seat signed a matching message.
-
-Each refusal of an aggregate or a contribution with a code other than 500 is stated with its cause.
-
-Once its checks pass, an aggregate refuses with code 500 exactly when its construction fails.
-
-A contribution gets code 500 only on a signature, or at the largest slot, whose next overflows.
+When each answer and its response refuse, and with which code.
 -/
 
 @[expose] public section
@@ -256,37 +240,30 @@ private theorem getAttestationData_internal_iff {state : BeaconState preset fork
 
 /-- Once the checks before a step pass, the answer gets code 500 exactly when that step fails.
 
-The answer is the attestation data at the head of the store.
-
-The first steps find the head of the store, then the block and the state of that head.
-
-The next step reads the current slot of the store, and needs a verified head block.
-
-The later steps also need a requested slot not after the current slot.
-
-The step of the empty slots takes the head state up to the requested slot.
-
-That step needs a requested slot after the slot of the head state.
-
-The last step takes the root of the target.
-
-It needs a requested slot not before the slot of the head state.
-
-Computing the index of the data never fails, since from Gloas the head is never a pending node. -/
+The answer is the attestation data at the head of the store. -/
 theorem produceAttestationData_internal_iff {config : Config} {store : Store preset fork}
     {optimistic : OptimisticStore preset fork} {slot : Slot} {committeeIndex : CommitteeIndex} :
     (∃ error, produceAttestationData config store optimistic slot committeeIndex =
       .error error ∧ error.code = 500) ↔
+      -- The first steps find the head of the store, then the block and the state of that head.
       (∃ fault, store.getHead config = .error fault) ∨
       ∃ head, store.getHead config = .ok head ∧
         (store.blocks[head.root]? = none ∨ store.blockStates[head.root]? = none ∨
           ∃ block headState, store.blocks[head.root]? = some block ∧
             store.blockStates[head.root]? = some headState ∧
+            -- The next step reads the current slot of the store, and needs a verified head block.
             isExecutionOptimistic optimistic head.root = false ∧
             ((∃ fault, store.getCurrentSlot config = .error fault) ∨
+              -- The later steps also need a requested slot not after the current slot.
               ∃ current, store.getCurrentSlot config = .ok current ∧ slot ≤ current ∧
+                -- The step of the empty slots takes the head state up to the requested slot.
+                --
+                -- That step needs a requested slot after the slot of the head state.
                 ((headState.slot < slot ∧
                     ∃ fault, processSlots config .bls headState slot = .error fault) ∨
+                  -- The last step takes the root of the target.
+                  --
+                  -- It needs a requested slot not before the slot of the head state.
                   ∃ state, stateAtSlot config headState slot = .ok state ∧
                     ∃ fault, getEpochBoundaryBlockRoot state head.root = .error fault))) := by
   unfold produceAttestationData
@@ -331,6 +308,9 @@ theorem produceAttestationData_internal_iff {config : Config} {store : Store pre
                 rw [atSlot] at refused
                 cases refused
               simp only [notInternal, Except.ok.injEq, exists_eq_left', false_or]
+              -- Computing the index of the data never fails.
+              --
+              -- That holds since from Gloas the head is never a pending node.
               simpa only [Except.mapError] using
                 getAttestationData_internal_iff fun gloas => Store.getHead_ne_pending gloas got
 
@@ -617,11 +597,7 @@ private theorem constructAggregateOfSingleAttestations_indexOutOfRange_iff
 
 /-- Before Electra, the aggregate answer refuses with a code other than 500 in two cases only.
 
-It refuses with code 404 when no attestation matches the data root, slot and committee.
-
-It refuses with code 503 when the block of the first match is optimistic.
-
-It needs a fork before Electra, and a code other than 500, the code of an internal error. -/
+It needs a code other than 500, the code of an internal error. -/
 theorem aggregateAttestation_error_iff_of_lt_electra {state : BeaconState preset fork}
     {optimistic : OptimisticStore preset fork} {attestations : List (Attestation preset fork)}
     {singles : List SingleAttestation} {dataRoot : Root} {slot : Slot}
@@ -629,8 +605,10 @@ theorem aggregateAttestation_error_iff_of_lt_electra {state : BeaconState preset
     (notInternal : code ≠ 500) :
     (∃ error, aggregateAttestation state optimistic attestations singles dataRoot slot
       committeeIndex = .error error ∧ error.code = code) ↔
+      -- Code 404 when no attestation matches the data root, slot and committee.
       code = 404 ∧ (¬∃ attestation ∈ attestations, hasRoot attestation.data dataRoot = true ∧
         attestation.data.slot = slot ∧ attestation.data.index = committeeIndex) ∨
+      -- Code 503 when the block of the first match is optimistic.
       ∃ first, attestations.find? (matchesRequest · dataRoot slot committeeIndex) = some first ∧
         isExecutionOptimistic optimistic first.data.beaconBlockRoot = true ∧ code = 503 := by
   unfold aggregateAttestation
@@ -649,17 +627,7 @@ theorem aggregateAttestation_error_iff_of_lt_electra {state : BeaconState preset
 
 /-- From Electra, the aggregate answer refuses with a code other than 500 in three cases only.
 
-It refuses with code 404 when no single attestation matches the data root, slot and committee.
-
-It refuses with code 503 when the block of the first match is optimistic.
-
-When that block is verified, it refuses with code 400 for a committee index out of range.
-
-That index is not below the most committees a slot can have.
-
-A lower index never gives code 400, even when the epoch has fewer committees.
-
-It needs a fork from Electra, and a code other than 500, the code of an internal error. -/
+It needs a code other than 500, the code of an internal error. -/
 theorem aggregateAttestation_error_iff_of_electra {state : BeaconState preset fork}
     {optimistic : OptimisticStore preset fork} {attestations : List (Attestation preset fork)}
     {singles : List SingleAttestation} {dataRoot : Root} {slot : Slot}
@@ -667,10 +635,17 @@ theorem aggregateAttestation_error_iff_of_electra {state : BeaconState preset fo
     (notInternal : code ≠ 500) :
     (∃ error, aggregateAttestation state optimistic attestations singles dataRoot slot
       committeeIndex = .error error ∧ error.code = code) ↔
+      -- Code 404 when no single attestation matches the data root, slot and committee.
       code = 404 ∧ (¬∃ single ∈ singles, hasRoot single.data dataRoot = true ∧
         single.data.slot = slot ∧ single.committeeIndex = committeeIndex) ∨
       ∃ first, singles.find? (singleMatchesRequest · dataRoot slot committeeIndex) = some first ∧
+        -- Code 503 when the block of the first match is optimistic.
         (isExecutionOptimistic optimistic first.data.beaconBlockRoot = true ∧ code = 503 ∨
+          -- When that block is verified, code 400 for a committee index out of range.
+          --
+          -- That index is not below the most committees a slot can have.
+          --
+          -- A lower index never gives code 400, even when the epoch has fewer committees.
           isExecutionOptimistic optimistic first.data.beaconBlockRoot = false ∧ code = 400 ∧
             preset.MAX_COMMITTEES_PER_SLOT ≤ committeeIndex) := by
   unfold aggregateAttestation
@@ -719,9 +694,7 @@ theorem aggregateAttestation_internal_iff_of_lt_electra {state : BeaconState pre
 
 The construction joins the single attestations of the committee with the data of the first match.
 
-That refusal also needs a match whose block is verified.
-
-It also needs a committee index below the most committees a slot can have. -/
+That refusal also needs a match whose block is verified. -/
 theorem aggregateAttestation_internal_iff_of_electra {state : BeaconState preset fork}
     {optimistic : OptimisticStore preset fork} {attestations : List (Attestation preset fork)}
     {singles : List SingleAttestation} {dataRoot : Root} {slot : Slot}
@@ -730,6 +703,7 @@ theorem aggregateAttestation_internal_iff_of_electra {state : BeaconState preset
       committeeIndex = .error error ∧ error.code = 500) ↔
       ∃ first, singles.find? (singleMatchesRequest · dataRoot slot committeeIndex) = some first ∧
         isExecutionOptimistic optimistic first.data.beaconBlockRoot = false ∧
+        -- It also needs a committee index below the most committees a slot can have.
         committeeIndex < preset.MAX_COMMITTEES_PER_SLOT ∧
         ∃ fault, constructAggregateOfSingleAttestations state first.data committeeIndex singles =
           .error fault := by
@@ -812,10 +786,6 @@ theorem produceSyncCommitteeContribution_bits {state : BeaconState preset fork}
 
 /-- A contribution fails for want of messages in one case only.
 
-That case is no message of the slot of the state on the root.
-
-It never fails for an index out of range.
-
 It needs a subcommittee index that names a subnet. -/
 private theorem constructSyncCommitteeContribution_noMessages_iff
     {state : BeaconState preset fork}
@@ -824,10 +794,12 @@ private theorem constructSyncCommitteeContribution_noMessages_iff
     (inRange : subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT) :
     (constructSyncCommitteeContribution state committee blockRoot subcommitteeIndex messages =
       .error (.noMessages state.slot blockRoot) ↔
+        -- That case is no message of the slot of the state on the root.
         ∀ message ∈ messages, message.slot = state.slot → message.beaconBlockRoot ≠ blockRoot) ∧
       (∀ slot root, constructSyncCommitteeContribution state committee blockRoot
         subcommitteeIndex messages = .error (.noMessages slot root) →
           slot = state.slot ∧ root = blockRoot) ∧
+      -- It never fails for an index out of range.
       ∀ index limit, constructSyncCommitteeContribution state committee blockRoot
         subcommitteeIndex messages ≠ .error (.indexOutOfRange index limit) := by
   by_cases empty : (messages.filter fun message =>
@@ -927,16 +899,6 @@ private theorem constructSyncCommitteeContribution_members_error
 
 /-- From Altair, the contribution answer refuses with a code other than 500 in three cases only.
 
-It refuses with code 400 when the slot is not that of the state, or the index names no subnet.
-
-Else it refuses with code 503 when the root is optimistic.
-
-Else it refuses with code 404 when no message of the slot on the root comes from a member.
-
-A member is a known validator with a key of the subcommittee.
-
-That refusal also needs the sync committee of the next slot to have a value.
-
 It needs a code other than 500, the code of an internal error. -/
 theorem produceSyncCommitteeContribution_error_iff {state : BeaconState preset fork}
     {altair : .altair ≤ fork} {optimistic : OptimisticStore preset fork}
@@ -944,9 +906,16 @@ theorem produceSyncCommitteeContribution_error_iff {state : BeaconState preset f
     {root : Root} {code : Nat} (notInternal : code ≠ 500) :
     (∃ error, produceSyncCommitteeContribution state altair optimistic messages slot
       subcommitteeIndex root = .error error ∧ error.code = code) ↔
+      -- Code 400 when the slot is not that of the state, or the index names no subnet.
       code = 400 ∧ (slot ≠ state.slot ∨ SYNC_COMMITTEE_SUBNET_COUNT ≤ subcommitteeIndex) ∨
         slot = state.slot ∧ subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT ∧
+          -- Else code 503 when the root is optimistic.
           (isExecutionOptimistic optimistic root = true ∧ code = 503 ∨
+            -- Else code 404 when no message of the slot on the root comes from a member.
+            --
+            -- A member is a known validator with a key of the subcommittee.
+            --
+            -- That refusal also needs the sync committee of the next slot to have a value.
             isExecutionOptimistic optimistic root = false ∧ code = 404 ∧
               ∃ committee, syncCommitteeAtNextSlot state altair = .ok committee ∧
                 ¬∃ message ∈ messages, message.slot = slot ∧ message.beaconBlockRoot = root ∧
@@ -1014,26 +983,23 @@ theorem produceSyncCommitteeContribution_error_iff {state : BeaconState preset f
       all_goals simp [throw, throwThe, MonadExceptOf.throw, constructionError,
         internalError, notInternal, @eq_comm _ 500 code]
 
-/-- From Altair, the contribution answer refuses with code 500 in two cases only.
-
-It refuses so when the sync committee of the next slot has no value.
-
-That happens only at the largest 64-bit slot, whose next slot overflows.
-
-Else it refuses so when the construction of the contribution fails on a signature.
-
-Both refusals need a request at the slot of the state, and a root whose block is verified.
-
-They also need an index that names a subnet. -/
+/-- From Altair, the contribution answer refuses with code 500 in two cases only. -/
 theorem produceSyncCommitteeContribution_internal_iff {state : BeaconState preset fork}
     {altair : .altair ≤ fork} {optimistic : OptimisticStore preset fork}
     {messages : List SyncCommitteeMessage} {slot : Slot} {subcommitteeIndex : UInt64}
     {root : Root} :
     (∃ error, produceSyncCommitteeContribution state altair optimistic messages slot
       subcommitteeIndex root = .error error ∧ error.code = 500) ↔
+      -- Both refusals need a request at the slot of the state, and a root whose block is verified.
+      --
+      -- They also need an index that names a subnet.
       slot = state.slot ∧ subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT ∧
         isExecutionOptimistic optimistic root = false ∧
+        -- Code 500 when the sync committee of the next slot has no value.
+        --
+        -- That happens only at the largest 64-bit slot, whose next slot overflows.
         ((∃ fault, syncCommitteeAtNextSlot state altair = .error fault) ∨
+          -- Else code 500 when the construction of the contribution fails on a signature.
           ∃ committee, syncCommitteeAtNextSlot state altair = .ok committee ∧ ∃ fault,
             constructSyncCommitteeContribution state committee root subcommitteeIndex
               (messages.filter (inSubcommittee state
@@ -1108,5 +1074,60 @@ theorem syncCommitteeContributionResponse_of_lt_altair {state : BeaconState pres
       .error (beforeFork "sync committee contribution" .altair) := by
   have notAltair : ¬ .altair ≤ fork := Nat.not_le.2 early
   simp [syncCommitteeContributionResponse, notAltair]
+
+/-- The attestation data response refuses exactly when the answer does, with the same error. -/
+theorem attestationDataResponse_eq_error_iff {config : Config} {store : Store preset fork}
+    {optimistic : OptimisticStore preset fork} {slot : Slot} {committeeIndex : CommitteeIndex}
+    {error : ErrorMessage} :
+    attestationDataResponse config store optimistic slot committeeIndex = .error error ↔
+      produceAttestationData config store optimistic slot committeeIndex = .error error := by
+  unfold attestationDataResponse
+  exact apiJsonOr500_bind_eq_error_iff fun data _ => toApiJson_total data
+
+/-- The payload attestation data response refuses exactly when the answer does, with its error. -/
+theorem payloadAttestationDataResponse_eq_error_iff {config : Config} {store : Store preset fork}
+    {slot : Slot} {payloadPresent blobDataAvailable : Bool} {error : ErrorMessage} :
+    payloadAttestationDataResponse config store slot payloadPresent blobDataAvailable =
+        .error error ↔
+      producePayloadAttestationData config store slot payloadPresent blobDataAvailable =
+        .error error := by
+  unfold payloadAttestationDataResponse
+  cases answer : producePayloadAttestationData config store slot payloadPresent blobDataAvailable
+    with
+  | error fault => simp [bind, Except.bind]
+  | ok data =>
+    cases data with
+    | none => simp [bind, Except.bind, pure, Except.pure]
+    | some data =>
+      obtain ⟨document, wrote⟩ := toApiJson_total data
+      simp [versioned, apiJsonOr500, wrote, Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-- The aggregate response refuses exactly when the answer does, with the same error.
+
+It needs a preset with at least one committee per slot. -/
+theorem aggregateAttestationResponse_eq_error_iff [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat]
+    {state : BeaconState preset fork} {optimistic : OptimisticStore preset fork}
+    {attestations : List (Attestation preset fork)} {singles : List SingleAttestation}
+    {dataRoot : Root} {slot : Slot} {committeeIndex : CommitteeIndex} {error : ErrorMessage} :
+    aggregateAttestationResponse state optimistic attestations singles dataRoot slot
+        committeeIndex = .error error ↔
+      aggregateAttestation state optimistic attestations singles dataRoot slot committeeIndex =
+        .error error := by
+  unfold aggregateAttestationResponse
+  exact versioned_eq_error_iff fun aggregate _ => toApiJson_total aggregate
+
+/-- From Altair, the contribution response refuses exactly when the answer does, with its error.
+
+It needs a preset whose sync subcommittees are not empty. -/
+theorem syncCommitteeContributionResponse_eq_error_iff [NeZero (syncSubcommitteeSize preset)]
+    {state : BeaconState preset fork} (altair : .altair ≤ fork)
+    {optimistic : OptimisticStore preset fork} {messages : List SyncCommitteeMessage}
+    {slot : Slot} {subcommitteeIndex : UInt64} {root : Root} {error : ErrorMessage} :
+    syncCommitteeContributionResponse state optimistic messages slot subcommitteeIndex root =
+        .error error ↔
+      produceSyncCommitteeContribution state altair optimistic messages slot subcommitteeIndex
+        root = .error error := by
+  rw [syncCommitteeContributionResponse, dite_eq_left altair]
+  exact apiJsonOr500_bind_eq_error_iff fun contribution _ => toApiJson_total contribution
 
 end EthLib.Consensus.BeaconApi
