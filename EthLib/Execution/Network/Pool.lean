@@ -19,16 +19,6 @@ A transaction must pass these rules when it is received:
 - its gas limit must cover its intrinsic gas;
 - its sender must hold its cost;
 - its nonce must be at least the nonce of its sender.
-
-A nonce above that of the sender passes, unlike in a block.
-
-A node discards a transaction that fails, and keeps the peer, unless no fork defines its type.
-
-[EIP-4844][eip-4844] adds that a node never sends a blob transaction whole on its own.
-
-It only announces it by its hash, and sends it when a peer asks.
-
-[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#networking
 -/
 
 @[expose] public section
@@ -73,6 +63,8 @@ def admitToPool (fork : Fork) (chainId : UInt64) (state : TransactionState)
   let account := state.getAccount sender
   -- The nonce is at least the nonce of the sender.
   --
+  -- A nonce above that of the sender passes, unlike in a block.
+  --
   -- The source leaves nonce gaps to the node; EthLib accepts any gap.
   --
   -- The source checks the balance first; the order only chooses the error.
@@ -98,18 +90,22 @@ A node should disconnect a peer that sends a transaction of a type that no fork 
 
 It must keep a peer that sends any other invalid transaction, which may follow other rules.
 
-So a type that a later fork defines keeps the peer too.
-
 A decoded transaction has a type that some fork defines, so only its decoding can disconnect. -/
 def peerAction : InclusionError → PeerAction
   -- A type that no fork defines: the peer should be disconnected.
+  --
+  -- A type that a later fork defines keeps the peer, as any other invalid transaction does.
   | .transaction (.unsupportedType type) => if typeFork type = none then .disconnect else .discard
   -- Any other invalid transaction: the node keeps the peer.
   | _ => .discard
 
 /-- Whether a node may send a transaction whole to its peers in a Transactions message.
 
-A blob transaction is only announced by its hash, so it is never sent whole on its own. -/
+[EIP-4844][eip-4844] says that a node never sends a blob transaction whole on its own.
+
+It only announces it by its hash, and sends it when a peer asks.
+
+[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#networking -/
 def mayBroadcastWhole (tx : Transaction) : Bool :=
   -- EIP-4844: a blob transaction goes only by announcement and request.
   tx.type != BLOB_TX_TYPE

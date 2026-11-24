@@ -12,20 +12,6 @@ The source is [`caps/snap.md`][snap] of the devp2p specifications.
 
 [snap]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md
 
-Each range must pass the range check of the trie against its proof.
-
-A range with no proof must be the whole trie, as the section GetStorageRanges (0x02) says.
-
-No signal says that a range reaches the end of its trie, as the section GetAccountRange (0x00) says.
-
-The proof shows it instead.
-
-A peer without the state of the root sends an empty reply, as the two requests say.
-
-A peer without the storage of a requested account does the same, as that section also says.
-
-The checks read no entry and no proof as that reply, never as an empty range.
-
 The checks do not read the limit hash.
 
 A peer may answer past it, as the section GetAccountRange (0x00) says.
@@ -87,6 +73,9 @@ inductive RangeAnswer where
 
 /-- The answer of a valid range, from whether its trie holds keys after it. -/
 def RangeAnswer.ofMore (more : Bool) : RangeAnswer :=
+  -- No signal says that a range reaches the end of its trie, as the section GetAccountRange says.
+  --
+  -- The proof shows it instead.
   if more then .more else .toEnd
 
 /-- Check the accounts of an AccountRange answer from `start`, in the state trie of `root`.
@@ -99,11 +88,15 @@ No account and no proof is the empty reply of a peer without the state. -/
 def verifyAccountRange (root start : Hash32) (accounts : List (RangeEntry Item))
     (proof : List ByteArray) : Except SnapRangeError RangeAnswer := do
   -- GetAccountRange: a peer without the state of the root answers with no account and no proof.
+  --
+  -- The check reads no entry and no proof as that reply, never as an empty range.
   if accounts.isEmpty && proof.isEmpty then return .noState
   -- Each slim body as its full value in the state trie.
   let entries ← accounts.mapM fun entry => do
     let some value := fullAccount entry.data | throw (.slimAccount entry.hash)
     return (entry.hash, value)
+  -- Each range must pass the range check of the trie against its proof.
+  --
   -- AccountRange: the accounts from the starting hash, proved there and at the last account.
   let more ← (verifyRange Cryptography.Hash.Keccak.keccak256 root start entries proof).mapError
     .range
@@ -113,19 +106,9 @@ def verifyAccountRange (root start : Hash32) (accounts : List (RangeEntry Item))
 
 `roots` holds the storage root of each requested account, in the order of the request.
 
-The data of a slot is its value in the storage trie.
-
 The starting hash crosses the wire with no fixed length.
 
 The caller passes it on 32 bytes, and an empty one as the zero hash.
-
-Each range but the last must be the whole storage of its account, so it takes no proof.
-
-The proof is that of the last range, as the section GetStorageRanges (0x02) says.
-
-That section starts at the starting hash for one account, and asks for whole ranges for several.
-
-So with several accounts, each range starts at the zero hash.
 
 No range and no proof is the empty reply of a peer without the state.
 
@@ -136,22 +119,35 @@ def verifyStorageRanges (roots : List Hash32) (start : Hash32)
     (slots : List (List (RangeEntry ByteArray))) (proof : List ByteArray) :
     Except SnapRangeError RangeAnswer := do
   -- GetStorageRanges: a peer without the state of the root or of a requested account sends neither.
+  --
+  -- The check reads no range and no proof as that reply, never as an empty range.
   if slots.isEmpty && proof.isEmpty then return .noState
   -- A proof with no range proves an empty range of the first account.
   let slots := if slots.isEmpty then [[]] else slots
   -- No more ranges than requested accounts.
   if roots.length < slots.length then throw (.tooManyRanges slots.length roots.length)
+  -- GetStorageRanges starts at the starting hash for one account.
+  --
+  -- It asks for whole ranges for several accounts.
+  --
+  -- So with several accounts, each range starts at the zero hash.
+  --
   -- EthLib's reading: the starting hash serves one account; with several, each range starts at 0.
   let first := if roots.length = 1 then start else Vector.replicate 32 0
+  -- Each range must pass the range check of the trie against its proof.
+  --
+  -- The data of a slot is its value in the storage trie.
   let check (root : Hash32) (range : List (RangeEntry ByteArray)) (proof : List ByteArray) :=
     (verifyRange Cryptography.Hash.Keccak.keccak256 root first
       (range.map fun entry => (entry.hash, entry.data)) proof).mapError .range
   let ranges := roots.zip slots
-  -- Each range but the last is a whole trie.
+  -- Each range but the last must be the whole storage of its account, so it takes no proof.
+  --
+  -- A range with no proof must be the whole trie, as the section GetStorageRanges (0x02) says.
   for (root, range) in ranges.dropLast do
     discard <| check root range []
   match ranges.getLast? with
-  -- The proof belongs to the last range.
+  -- The proof is that of the last range, as the section GetStorageRanges (0x02) says.
   | some (root, range) => return .ofMore (← check root range proof)
   -- The answer holds a range, so this case never occurs.
   | none => return .noState

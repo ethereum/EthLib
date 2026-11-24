@@ -18,8 +18,6 @@ EthLib specifies the versions from eth/68 on, which nodes of every current fork 
 - eth/70, [EIP-7975](https://eips.ethereum.org/EIPS/eip-7975), status Last Call.
 - eth/71, [EIP-8159](https://eips.ethereum.org/EIPS/eip-8159), status Last Call.
 - eth/72, [EIP-8070](https://eips.ethereum.org/EIPS/eip-8070), status Last Call.
-
-A capability takes as many message IDs as its highest message ID plus one.
 -/
 
 @[expose] public section
@@ -94,6 +92,8 @@ def ETH_NAME : ByteArray := ⟨#[0x65, 0x74, 0x68]⟩
 def EthVersion.capability (v : EthVersion) : Capability := ⟨ETH_NAME, v.number⟩
 
 /-- The number of message IDs of a capability, for the multiplexing of RLPx.
+
+A capability takes as many message IDs as its highest message ID plus one.
 
 It is the count of an eth version that EthLib specifies, and 0 for any other capability. -/
 def ethLength (c : Capability) : Nat :=

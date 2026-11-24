@@ -15,28 +15,11 @@ They are Receipt Encoding and Validity, and Protocol Messages.
 - GetReceipts (0x0f) asks for the receipts of blocks by hash.
 - Receipts (0x10) answers with one list of receipts for each block.
 
-On eth/68, a receipt has its consensus form, with its Bloom filter.
-
-From eth/69 on, it is `[tx-type, post-state-or-status, cumulative-gas, logs]`, without the filter.
-
-[EIP-7642][eip-7642] says so.
-
 From eth/70 on, a peer may send part of the receipts of a block, as [EIP-7975][eip-7975] says.
 
 - GetReceipts gains `firstBlockReceiptIndex`, the first receipt to send of the first block.
 - Receipts gains `lastBlockIncomplete`, set when the list of the last block is cut short.
 
-The fields of a receipt depend on the fork of its block.
-
-So the messages carry each receipt as its RLP item.
-
-A node checks the receipts of a whole block against the receipts root of its header.
-
-To do so, it computes the Bloom filter of each receipt again.
-
-It then encodes each receipt in its consensus form.
-
-[eip-7642]: https://eips.ethereum.org/EIPS/eip-7642#receipts-message-changes
 [eip-7975]: https://eips.ethereum.org/EIPS/eip-7975#specification
 -/
 
@@ -54,7 +37,13 @@ def GET_RECEIPTS_ID : Nat := 0x0f
 /-- The message ID of Receipts. -/
 def RECEIPTS_ID : Nat := 0x10
 
-/-- A receipt at fork `fork` as eth/69 sends it, without its Bloom filter. -/
+/-- A receipt at fork `fork` as eth/69 sends it, without its Bloom filter.
+
+From eth/69 on, it is `[tx-type, post-state-or-status, cumulative-gas, logs]`.
+
+[EIP-7642][eip-7642] says so.
+
+[eip-7642]: https://eips.ethereum.org/EIPS/eip-7642#receipts-message-changes -/
 structure WireReceipt (fork : Fork) where
   /-- The type of the transaction, 0 for a legacy transaction. -/
   txType : UInt8
@@ -107,6 +96,12 @@ From eth/69 on, the receipt gets the Bloom filter of its logs back.
 -/
 def consensusOfItem (version : EthVersion) (fork : Fork) (item : Item) :
     Except ReceiptError (UInt8 × Receipt fork) :=
+  -- The fields of a receipt depend on the fork of its block.
+  --
+  -- So the messages carry each receipt as its RLP item.
+  --
+  -- On eth/68, a receipt has its consensus form, with its Bloom filter.
+  --
   -- On eth/68, `legacy-receipt` as a list, or `typed-receipt = tx-type || rlp(legacy-receipt)`.
   if version = .eth68 then
     match item with
@@ -127,6 +122,12 @@ Receipts that do not read, or that have no root, do not match.
 -/
 def receiptsMatch (version : EthVersion) (fork : Fork) (receiptsRoot : Hash32)
     (receipts : List Item) : Bool :=
+  -- A node checks the receipts of a whole block against the receipts root of its header.
+  --
+  -- To do so, it computes the Bloom filter of each receipt again.
+  --
+  -- It then encodes each receipt in its consensus form.
+  --
   -- Receipt Encoding and Validity: the root is over the consensus forms.
   match receipts.mapM (consensusOfItem version fork) with
   | .ok rs =>

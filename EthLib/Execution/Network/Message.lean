@@ -18,10 +18,6 @@ The section Message Encoding of [`rlpx.md`][rlpx] defines this form.
 
 [rlpx]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/rlpx.md#message-encoding
 
-Here the ID is relative to the capability: Status is 0x00 whatever offset RLPx gives eth.
-
-A message whose ID the version does not use is rejected.
-
 Each transaction, header and access list of a message keeps the bytes it was read from.
 
 So its hash reads those bytes, and never encodes an item that a peer chose.
@@ -109,7 +105,9 @@ def EthError.code : EthError → UInt32
 
 namespace Message
 
-/-- The message ID. -/
+/-- The message ID.
+
+Here the ID is relative to the capability: Status is 0x00 whatever offset RLPx gives eth. -/
 def id : Message → Nat
   | status _ => STATUS_ID
   | newBlockHashes _ => NEW_BLOCK_HASHES_ID
@@ -225,9 +223,7 @@ The caller passes the encoding of `item` as `data`.
 
 Each transaction, header or access list keeps its own encoding, cut from `data`.
 
-On other bytes, they would keep unrelated slices.
-
-BlockRangeUpdate exists from eth/69 on. -/
+On other bytes, they would keep unrelated slices. -/
 def ofItem (version : EthVersion) (id : Nat) (item : Item) (data : ByteArray) :
     Except EthError Message :=
   -- Status (0x00): six fields on eth/68, seven from eth/69.
@@ -292,9 +288,11 @@ def ofItem (version : EthVersion) (id : Nat) (item : Item) (data : ByteArray) :
     match ← item.fields 4 with
     | [i, hs, gs, m] => return cells (← i.field 0) (← hs.field 1) (← gs.field 2) (← m.field 3)
     | items => throw (.wrongFieldCount 4 items.length)
-  -- BlockRangeUpdate (0x11), from eth/69 by EIP-7642.
+  -- BlockRangeUpdate (0x11) exists from eth/69 on, by EIP-7642.
   else if id = BLOCK_RANGE_UPDATE_ID ∧ EthVersion.eth69 ≤ version then
     (blockRangeUpdate <$> Codec.ofItem item).mapError .rlp
+  -- A message whose ID the version does not use is rejected.
+  --
   -- Any other ID: the version assigns no message to it, such as 0x0b to 0x0e.
   else .error (.unknownId id)
 
@@ -341,16 +339,15 @@ def checkCellsResponse (blobs : List Nat) (request response : Message) :
 
 /-- Whether `response` is BlockAccessLists that answers the GetBlockAccessLists `request`.
 
-`expected` holds the access list hash of the header of each requested block.
-
-The section BlockAccessLists of `eth.md` gives each element of the response one requested block.
-
-So the response has exactly one entry per request.
-
-This differs from snap/2, which lets the peer cut the tail. -/
+`expected` holds the access list hash of the header of each requested block. -/
 def accessListsResponse (expected : List Hash32) (request response : Message) : Bool :=
   match request, response with
   | getBlockAccessLists i _, blockAccessLists j lists =>
+    -- The section BlockAccessLists of `eth.md` gives each response element one requested block.
+    --
+    -- So the response has exactly one entry per requested block.
+    --
+    -- This differs from snap/2, which lets the peer cut the tail.
     i == j && lists.length == expected.length && accessListsAnswer expected lists
   | _, _ => false
 

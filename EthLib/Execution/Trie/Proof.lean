@@ -12,27 +12,6 @@ A client checks the value of the key against a root alone.
 
 Source: the account and storage proofs of [EIP-1186][eip-1186].
 
-The EIP describes a proof as the RLP-serialized nodes from the root, along the path of the key.
-
-A parent holds a short child inside its own encoding, and a long child by the hash of its encoding.
-
-So the proof lists the root node, then each node on the path that its parent holds by hash.
-
-A child held inside its parent is read from the parent, not from the proof.
-
-A proof shows either the value of the key or its absence:
-
-- The path ends at a leaf with the rest of the key, or at a branch with a value: the key is set.
-- The path leaves the trie: the key is not set.
-
-EIP-1186 says nothing of the empty trie, whose root is the hash of `0x80`, the RLP of no bytes.
-
-This specification decides that two proofs show any key not set against that root.
-
-One is the proof `[0x80]`, which starts with the encoding of the root, as the EIP describes.
-
-The other is the proof of no nodes, since the empty trie has no node to list.
-
 The module checks a proof, and builds the proof of a key from a trie.
 
 The step comments write the trie in the notation of Appendix D of the [Yellow Paper][yp].
@@ -140,6 +119,8 @@ def resolve (hash : ByteArray → Hash32) (reference : Item) (proof : List ByteA
   match reference with
   -- `n(I, i) = c(I, i)` when `||RLP(c(I, i))|| < 32`: a node held inside its parent.
   --
+  -- A child held inside its parent is read from the parent, not from the proof.
+  --
   -- EthLib does not check that size, here or for a node held by hash: the root hash binds the node.
   | .list _ => .ok (reference, proof)
   | .bytes digest =>
@@ -161,22 +142,21 @@ def resolve (hash : ByteArray → Hash32) (reference : Item) (proof : List ByteA
 
 /-- The value that the item `node` gives to the rest `path` of a key, and the proof nodes left.
 
-`none` means that the key is not set.
-
-# Why fuel
-
-Each call either returns or consumes at least one nibble of `path`.
-
-So a budget of one more than the length of `path` never runs out. -/
+`none` means that the key is not set. -/
 def walk (hash : ByteArray → Hash32) :
     Nat → Item → List Nibble → List ByteArray → Except ProofError (Option ByteArray × List ByteArray)
+  -- Why fuel: each call either returns or consumes at least one nibble of `path`.
+  --
+  -- So a budget of one more than the length of `path` never runs out.
   | 0, _, _, _ => .error (.missingNode none)
   | fuel + 1, node, path, proof =>
     match node with
-    -- The empty byte string is no node: the key is not set.
+    -- The empty byte string is no node: the path leaves the trie, and the key is not set.
     | .bytes data => if data.size = 0 then .ok (none, proof) else .error .invalidNode
     | .list _ => do
       match ← decodeNode node with
+      -- The path ends at a leaf with the rest of the key: the key is set.
+      --
       -- A leaf holds only the key whose rest of path it stores.
       --
       -- A leaf with another rest shows the key not set, as EIP-1186 says.
@@ -188,9 +168,13 @@ def walk (hash : ByteArray → Hash32) :
           walk hash fuel child (path.drop keySegment.length) rest
         else
           -- The path leaves the run of nibbles that every key below shares.
+          --
+          -- So the path leaves the trie: the key is not set.
           return (none, proof)
       | .branch subnodes value =>
         match path with
+        -- The path ends at a branch with a value: the key is set.
+        --
         -- The path ends here: `v`, where `()` means that no key ends here.
         | [] => return (if value.size = 0 then none else some value, proof)
         -- Else the child `u(j)` of the next nibble `j`.
@@ -211,6 +195,14 @@ Any other proof reads as it is. -/
 def readNodes (hash : ByteArray → Hash32) (root : Hash32) : List ByteArray → List ByteArray
   -- A choice of EthLib, which EIP-1186 leaves open.
   --
+  -- EIP-1186 says nothing of the empty trie, whose root is the hash of `0x80`, the RLP of no bytes.
+  --
+  -- EthLib decides that two proofs show any key not set against that root.
+  --
+  -- One is the proof `[0x80]`, which starts with the encoding of the root, as the EIP describes.
+  --
+  -- The other is the proof of no nodes, since the empty trie has no node to list.
+  --
   -- Against the empty root, a proof of no nodes reads as `[0x80]`.
   | [] => if root = emptyTrieRoot hash then [⟨#[0x80]⟩] else []
   | node :: rest => node :: rest
@@ -228,9 +220,15 @@ def verifyProof (hash : ByteArray → Hash32) (root : Hash32) (secured : Bool) (
   --
   -- The state and storage tries are secured.
   let path := keyPath hash secured key
+  -- EIP-1186 describes a proof as the RLP-serialized nodes from the root, along the key's path.
+  --
   -- EIP-1186: the proof starts with the root node, whose hash is the root.
   let (rootNode, rest) ← resolve hash (.bytes ⟨root.toArray⟩) (readNodes hash root proof)
-  -- Then the nodes along the path of the key, each held by hash in its parent.
+  -- A parent holds a short child inside its own encoding.
+  --
+  -- It holds a long child by the hash of its encoding.
+  --
+  -- So the proof lists the root node, then each node on the path that its parent holds by hash.
   let (value, unused) ← walk hash (path.length + 1) rootNode path rest
   -- EIP-1186 lists only the nodes along the path, so EthLib rejects a proof with any other node.
   if unused.isEmpty then
