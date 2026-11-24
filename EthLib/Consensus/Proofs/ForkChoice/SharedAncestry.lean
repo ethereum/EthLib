@@ -9,19 +9,7 @@ A safety argument for the fast confirmation rule works across honest nodes.
 
 It learns an ancestry in the store of one node and uses it in the store of another.
 
-The walk to an ancestor reads only the blocks of the store, by their roots.
-
-So two stores that hold the same block at each root of the walk make the same walk.
-
-In a reachable store each known block is keyed by its own hash tree root.
-
-So two reachable stores hold different blocks at one root only when those blocks collide.
-
-A search over the roots of the walk names such a collision, when there is one.
-
-So the walk of the first store is also the walk of the second, or the search names a collision.
-
-The second store must hold a block at each root of the walk.
+The walk of the first store is also the walk of the second, or a search names a collision.
 -/
 
 @[expose] public section
@@ -140,7 +128,9 @@ theorem findBlockCollision_held {roots : List Root} {root : Root}
         exact ⟨h₁, h₂, ne⟩
     · exact ih found
 
-/-- A search on two reachable stores names two different blocks with one hash tree root. -/
+/-- A search on two reachable stores names two different blocks with one hash tree root.
+
+In a reachable store each known block is keyed by its own hash tree root. -/
 theorem findBlockCollision_valid (reachable₁ : Reachable config anchorState₁ anchorBlock₁ first)
     (reachable₂ : Reachable config anchorState₂ anchorBlock₂ second) {roots : List Root}
     {root : Root} {block₁ block₂ : BeaconBlock preset fork}
@@ -165,6 +155,8 @@ theorem findBlockCollision_self (store : Store preset fork) (roots : List Root) 
     · exact ih
 
 /-- A walk to an ancestor gives the same result in a store that holds the same blocks on it.
+
+The walk reads only the blocks of the store, by their roots.
 
 The second store must hold, at each root that the walk of the first visits, the same block. -/
 theorem getAncestor_of_agree {node ancestor : ForkChoiceNode} {slot : Slot}

@@ -9,17 +9,7 @@ import EthLib.Consensus.Proofs.Transition.RunKept
 
 A reachable store keeps a state for each known block.
 
-A known anchor block has the anchor state.
-
-Each other block has the state that its transition gives from the state of its parent.
-
-So along a chain of known blocks above the anchor, each state is the transition of the one before.
-
-When every handler runs with one setting of the signature checks, each transition uses it.
-
-A block from the future is refused, and the clock of an honest node only moves forward.
-
-So in a store with a forward clock each block state is at or before the current slot.
+Along a chain of known blocks above the anchor, each state is the transition of the one before.
 -/
 
 @[expose] public section
@@ -34,30 +24,27 @@ namespace Store
 
 /-- Each known block of a store has a state, the state after that block.
 
-A known anchor block has the anchor state.
-
-That case reads the block, not its root; a reachable store keeps each block at its own root.
-
-Any other block is the message of a signed block whose transition gives that state.
-
-The transition starts from the state of the parent, which the store keeps.
-
-It ran with some execution engine, which may differ between blocks.
-
-It ran with a setting of the signature checks that the given predicate allows.
-
-It checks the state root, and the signature of the proposer under those checks.
-
 Some checks accept every signature, so this says nothing on signatures. -/
 def BlockStatesFromParents (config : Config) (allowed : SignatureChecks → Prop)
     (anchorState : BeaconState preset fork) (anchorBlock : BeaconBlock preset fork)
     (store : Store preset fork) : Prop :=
   ∀ ⦃root : Root⦄ ⦃block : BeaconBlock preset fork⦄, store.blocks[root]? = some block →
     ∃ state, store.blockStates[root]? = some state ∧
+      -- A known anchor block has the anchor state.
+      --
+      -- That case reads the block, not its root.
+      --
+      -- A reachable store keeps each block at its own root.
       (block = anchorBlock → state = anchorState) ∧
+      -- Any other block is the message of a signed block whose transition gives that state.
+      --
+      -- The transition ran with some execution engine, which may differ between blocks.
       (block ≠ anchorBlock → ∃ parentState checks engine, ∃ signed : SignedBeaconBlock preset fork,
+        -- It ran with a setting of the signature checks that the given predicate allows.
         allowed checks ∧ signed.message = block ∧
+        -- The transition starts from the state of the parent, which the store keeps.
         store.blockStates[block.parentRoot]? = some parentState ∧
+        -- It checks the state root, and the signature of the proposer under those checks.
         stateTransition config checks engine parentState signed true = .ok state)
 
 end Store
@@ -349,10 +336,11 @@ theorem Store.ForwardReachable.slot_le_of_blockState_of_getCurrentSlot
     obtain ⟨-, -, -, states⟩ := Store.onTick_frame ticked
     rw [states] at found
     obtain ⟨current, slotOk, le⟩ := ih found
+    -- The clock of an honest node only moves forward.
     obtain ⟨later, laterOk, laterLe⟩ := Store.exists_getCurrentSlot_onTick_ge forward ticked slotOk
     exact ⟨later, laterOk, UInt64.le_trans le laterLe⟩
   | block _ added ih =>
-    -- A new block is not from the future, and its state is at its slot.
+    -- A block from the future is refused, and the state of a new block is at its slot.
     rcases Store.onBlock_same_or_insert added with
       same | ⟨blockRoot, hashed, fresh, -, pre, newState, -, transition, states⟩
     · subst same

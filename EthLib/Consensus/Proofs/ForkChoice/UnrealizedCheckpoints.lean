@@ -9,13 +9,7 @@ The fork choice runs justification and finalization on the state after a block.
 
 The checkpoints it gets are the unrealized checkpoints of the block.
 
-If no other block comes before the next epoch, the slot advance runs the same step at its end.
-
-It weighs the same participation, the same balances and the same block roots.
-
-So its checkpoints are the unrealized ones, also when the block slashed validators.
-
-The block roots of the history must cover two epochs, as both presets do.
+They are those that the next epoch reaches when no other block comes before it.
 -/
 
 @[expose] public section
@@ -353,23 +347,23 @@ end Helpers
 
 /-- Advance a state to the first slot of the next epoch, with no block on the way.
 
-Its justified and finalized checkpoints are then those of the state after justification.
-
-Its justification bits are also those of that state.
-
-That step reads the same participation, balances and block roots as the epoch transition.
-
-The theorem assumes that the block roots of the history cover two epochs, as both presets do.
-
-The bound is on natural numbers, since twice the slots of an epoch could overflow 64 bits. -/
+Its justified and finalized checkpoints are then those of the state after justification. -/
 theorem processSlots_checkpoints_eq_of_justification
+    -- The block roots of the history must cover two epochs, as both presets do.
+    --
+    -- The bound is on natural numbers, since twice the slots of an epoch could overflow 64 bits.
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    -- Justification and finalization on the state give the tip.
+    --
+    -- That step reads the same participation, balances and block roots as the epoch transition.
     (pulled : processJustificationAndFinalization state = .ok tip)
     (start : computeStartSlotAtEpoch preset (getCurrentEpoch state + 1) = .ok next)
+    -- With no other block before the next epoch, the slot advance runs the same step at its end.
     (advanced : processSlots config checks state next = .ok after) :
     after.currentJustifiedCheckpoint = tip.currentJustifiedCheckpoint ∧
       after.previousJustifiedCheckpoint = tip.previousJustifiedCheckpoint ∧
       after.finalizedCheckpoint = tip.finalizedCheckpoint ∧
+      -- Its justification bits are also those of the tip.
       after.justificationBits = tip.justificationBits := by
   simp only [processSlots, bind_ok_iff, ensure_ok_iff] at advanced
   obtain ⟨_, lt, advanced⟩ := advanced
@@ -394,17 +388,17 @@ theorem processSlots_checkpoints_eq_of_justification
 
 /-- The pulled-up tip of a block records the justified checkpoint of the next epoch.
 
-The state of the block must advance to the first slot of the next epoch.
+This holds also when the block slashed validators.
 
-The store records no finalized checkpoint for each block; the previous theorem covers that one.
-
-The theorem assumes that the block roots of the history cover two epochs, as both presets do. -/
+The store records no finalized checkpoint for each block; the previous theorem covers that one. -/
 theorem Store.computePulledUpTip_unrealizedJustification {store pulledStore : Store preset fork}
     {root : Root}
+    -- The block roots of the history must cover two epochs, as both presets do.
     (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
     (pulled : store.computePulledUpTip config root = .ok pulledStore)
     (stateOk : store.blockState root = .ok state)
     (start : computeStartSlotAtEpoch preset (getCurrentEpoch state + 1) = .ok next)
+    -- The state of the block must advance to the first slot of the next epoch.
     (advanced : processSlots config checks state next = .ok after) :
     pulledStore.unrealizedJustifications[root]? = some after.currentJustifiedCheckpoint := by
   unfold computePulledUpTip at pulled

@@ -13,13 +13,7 @@ The count over the tally checks each group once, in the order of its first vote.
 
 It agrees with a count over the validators in order.
 
-That count adds the balance of each validator whose supported node descends from the node.
-
 The results agree in every case: the same sum, the same overflow and the same first error.
-
-So a computed score is a sum over the counted validators, one balance for each vote that counts.
-
-The node of each such vote is then found, and the check that it descends passes.
 -/
 
 @[expose] public section

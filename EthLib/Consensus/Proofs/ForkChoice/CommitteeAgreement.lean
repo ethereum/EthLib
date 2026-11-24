@@ -13,16 +13,6 @@ The fast confirmation rule reads the committees of the slot of the vote in the s
 Take a block that both the voted block and the head descend from.
 
 When the vote is at most one epoch after that block, the two states agree on those committees.
-
-They also agree on the count of committees per slot of the epoch of the vote.
-
-When the vote is at most two epochs after that block, the states agree on activity before it.
-
-That covers the epoch before the vote.
-
-So its voter was active in the head state then, unless it became active in the epoch of the vote.
-
-The store must run every handler with one setting of the signature checks.
 -/
 
 @[expose] public section
@@ -149,37 +139,36 @@ private theorem Store.ForwardReachableWith.runs_of_voteOrigin {checks : Signatur
 
 /-- The target state of a vote and the state of the head agree on the committees of its epoch.
 
-They also agree on the count of committees per slot of that epoch.
-
-The voted node and the head descend from a known block.
-
-The epoch of the vote is at most one after the epoch of that block.
-
-The store is built with one setting of the checks, and the anchor block is not after its state.
-
-Both lookaheads of the seed are at least one epoch.
-
-The ring of mixes is longer than the minimum lookahead plus one epoch.
-
-The head state must be before the mix that the seed of the epoch reads is written again. -/
+They also agree on the count of committees per slot of that epoch. -/
 theorem Store.ForwardReachableWith.committeesKept_of_voteOrigin {checks : SignatureChecks}
+    -- The anchor block is not after its state.
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    -- The store is built with one setting of the signature checks.
+    --
+    -- It runs every handler with that setting.
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    -- Both lookaheads of the seed are at least one epoch.
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
+    -- The ring of mixes is longer than the minimum lookahead plus one epoch.
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 1 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {root head : Root} {block : BeaconBlock preset fork} {voted : ForkChoiceNode}
     {validator : ValidatorIndex} {attestation : Attestation preset fork}
     {targetState headState : BeaconState preset fork}
+    -- The voted node and the head descend from a known block.
     (found : store.blocks[root]? = some block)
     (headDescends : store.isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true)
+    -- The vote passed the committee check in the state of its target.
     (origin : store.VoteOrigin config validator attestation)
     (votedRoot : voted.root = attestation.data.beaconBlockRoot)
     (voteDescends : store.isAncestor voted ⟨root, .pending⟩ = .ok true)
+    -- The epoch of the vote is at most one after the epoch of that block.
     (near : (computeEpochAtSlot preset attestation.data.slot).toNat ≤
       (computeEpochAtSlot preset block.slot).toNat + 1)
     (targetFound : store.checkpointStates[attestation.data.target]? = some targetState)
+    -- The fast confirmation rule reads the committees of the vote's slot in the head state.
     (headFound : store.blockStates[head]? = some headState)
+    -- The head state must be before the mix that the seed of the epoch reads is written again.
     (headInRing : (getCurrentEpoch headState).toNat + preset.MIN_SEED_LOOKAHEAD.toNat + 1 <
       (computeEpochAtSlot preset attestation.data.slot).toNat +
         preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) :
@@ -232,6 +221,7 @@ theorem Store.ForwardReachableWith.committeesKept_of_voteOrigin {checks : Signat
 The target is at most two epochs after a known block that the vote and the head descend from. -/
 theorem Store.ForwardReachableWith.active_or_newlyActive_of_voteOrigin {checks : SignatureChecks}
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    -- The store must run every handler with one setting of the signature checks.
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     {root head : Root} {block : BeaconBlock preset fork} {validator : ValidatorIndex}
@@ -242,6 +232,11 @@ theorem Store.ForwardReachableWith.active_or_newlyActive_of_voteOrigin {checks :
     (origin : store.VoteOrigin config validator attestation)
     (voteDescends : store.isAncestor ⟨attestation.data.beaconBlockRoot, .pending⟩
       ⟨root, .pending⟩ = .ok true)
+    -- The target is at most two epochs after that block.
+    --
+    -- The two states then agree on activity before the target.
+    --
+    -- That covers the epoch before the vote.
     (horizon : attestation.data.target.epoch.toNat ≤
       (computeEpochAtSlot preset block.slot).toNat + 2)
     (before : previous.toNat + 1 = attestation.data.target.epoch.toNat)

@@ -10,49 +10,11 @@ public import EthLib.Consensus.Proofs.ForkChoice.Optimistic
 /-!
 # Proofs: optimistic sync
 
-A block passes the optimistic check exactly when its parent carries a payload or it is old enough.
+These proofs cover the optimistic import of a block and the latest verified ancestor of a node.
 
-It is old enough when its slot is far enough before the clock.
+They cover the payload chain of a block, and how a valid or an invalid payload changes the store.
 
-Before Gloas, the latest verified ancestor of a node is reached through optimistic blocks only.
-
-It is not optimistic, or its parent root is zero.
-
-From Gloas it is the first payload that the node holds and that is not optimistic.
-
-It fails when there is none, and a node without its payload is never its own answer.
-
-Before Gloas the payload chain of a block is its chain.
-
-From Gloas it keeps the ancestors whose payload the chain builds on, linked by their bids.
-
-It goes on at the first ancestor whose bid names the hash that the chain expects.
-
-From any of its roots on, it is the payload chain of that root, so it holds every payload below.
-
-A valid payload removes exactly the block and its ancestors on its payload chain from the set.
-
-The first invalid block removes exactly the optimistic roots whose payload chain holds it.
-
-A tree filtered from a node is empty exactly when no viable leaf is reached from that node.
-
-So the second case of an optimistic node holds exactly when the filtered tree has no viable leaf.
-
-From Gloas a full head reads its own payload, and an empty one the payload it builds on.
-
-A node whose head is optimistic is an optimistic node, at every fork.
-
-Otherwise, at every fork, it needs a dropped block at or above the justified block.
-
-An optimistic validator may not sign exactly under seven domain types.
-
-From Heze a payload kept before it is validated satisfies its inclusion lists.
-
-An invalidated payload is never kept.
-
-Once an optimistic payload turns valid, the answer of the execution layer is recorded for its block.
-
-The answers of the other blocks stay.
+They also cover the optimistic head and node, and the domains an optimistic validator may not sign.
 -/
 
 @[expose] public section
@@ -457,7 +419,9 @@ theorem payloadChain_of_lt_glamsterdam (before : fork < .glamsterdam) (root : Ro
   simp only [payloadChain, notGloas, ↓reduceDIte]
   cases store.chain root <;> rfl
 
-/-- From Gloas, the payload chain of a block is its chain, filtered from no expected hash. -/
+/-- From Gloas, the payload chain of a block is its chain, filtered from no expected hash.
+
+It keeps the ancestors whose payload the chain builds on, linked by their bids. -/
 theorem payloadChain_of_glamsterdam (gloas : .glamsterdam ≤ fork) (root : Root) :
     store.payloadChain root = (store.payloadsOnChain gloas none ·) <$> store.chain root := by
   simp only [payloadChain, gloas, ↓reduceDIte]

@@ -13,14 +13,6 @@ The paper's latest-vote filter is in [arXiv 2405.00549v4, Section 3.1, LMD-GHOST
 
 A store keeps at most one latest vote for each validator.
 
-A vote replaces it only with a later rank: the target epoch before Gloas, the slot from Gloas.
-
-So no handler removes a latest vote, and none lowers its rank.
-
-An attester slashing adds equivocators, and leaves the latest votes as they are.
-
-Along an execution of the network model, the same holds for every store.
-
 [fcr]: https://arxiv.org/abs/2405.00549v4
 -/
 
@@ -50,6 +42,9 @@ theorem onAttestation_latestMessages_rank {checks : SignatureChecks}
   split at attested
   · simp only [pure, Except.pure, Except.ok.injEq] at attested
     subst attested
+    -- A vote replaces a latest vote only with a later rank.
+    --
+    -- The rank is the target epoch before Gloas, and the slot from Gloas.
     exact foldl_recordVote_rank indexed.attestingIndices.data.toList (kept ▸ found)
   · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at attested
 
@@ -78,6 +73,7 @@ theorem Handles.latestMessages_rank {config : Config} {checks : SignatureChecks}
       simpa only [(Store.onAttesterSlashing_checkpointStates_latestMessages slashed).2]
         using found, UInt64.le_refl _⟩
   | attestation _ attested => exact Store.onAttestation_latestMessages_rank attested found
+  -- An attester slashing adds equivocators, and leaves the latest votes as they are.
   | attesterSlashing _ slashed =>
     exact ⟨old, by
       simpa only [(Store.onAttesterSlashing_checkpointStates_latestMessages slashed).2]
