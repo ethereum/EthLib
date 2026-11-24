@@ -16,13 +16,11 @@ import Std.Data.TreeMap.Raw.Lemmas
 import Std.Data.TreeMap.Raw.WF
 
 /-!
-# Proofs: `Serialization.Exports.Ssz`
+# Proofs: the SSZ exports
 
 The SSZ exports read and write Python values directly.
 
 This file holds JSON readers of types and values, and a JSON writer of values, as a reference.
-
-The readers here test for the type `bool` with a match, not with the equality of JSON documents.
 
 It proves that reading a Python value gives what the reference gives on its JSON.
 

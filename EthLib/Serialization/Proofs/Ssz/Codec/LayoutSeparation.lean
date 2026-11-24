@@ -151,12 +151,6 @@ theorem findMixinCollision_self (shape : Desc) (value : Value)
 Two legal progressive containers with one root have one layout, or the search finds a collision.
 
 The hash is any hash with 32-byte digests, and it also computes the zero subtrees.
-
-The final hash takes the contents node and the layout word, 64 bytes in all.
-
-Equal inputs would give equal layout words, and legal layouts with equal words are equal.
-
-So different layouts give different inputs with one digest, and the search returns them.
 -/
 theorem hashTreeRootM_progressiveContainer_layouts_separate (hash : ByteArray → ByteArray)
     (width : ∀ x, (hash x).size = 32)
@@ -172,12 +166,16 @@ theorem hashTreeRootM_progressiveContainer_layouts_separate (hash : ByteArray �
     leftActive = rightActive ∨
       ∃ a b, findMixinCollision (.progressiveContainer leftActive leftNames leftFields)
           (.progressiveContainer rightActive rightNames rightFields) left right hash = some (a, b) ∧
+        -- The final hash takes the contents node and the layout word, 64 bytes in all.
         a.size = 2 * bytesPerChunk ∧ b.size = 2 * bytesPerChunk ∧ a ≠ b ∧
         hash (ByteArray.mk a) = hash (ByteArray.mk b) := by
   obtain ⟨leftContents, leftWidth, leftMessage, rfl⟩ :=
     hashTreeRootM_progressiveContainer_mixin hash width first
   obtain ⟨rightContents, rightWidth, rightMessage, joined⟩ :=
     hashTreeRootM_progressiveContainer_mixin hash width second
+  -- Equal inputs would give equal layout words, and legal layouts with equal words are equal.
+  --
+  -- So different layouts give different inputs with one digest, and the search returns them.
   by_cases same :
       leftContents ++ activeFieldsWord leftActive = rightContents ++ activeFieldsWord rightActive
   · -- Equal 32-byte left halves leave equal right halves, which are the layout words.

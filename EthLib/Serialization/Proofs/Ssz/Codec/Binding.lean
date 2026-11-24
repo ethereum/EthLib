@@ -92,8 +92,6 @@ The root is the one that a hash with 32-byte digests computes.
 
 The search compares the hash inputs of the two root computations.
 
-It returns two different 64-byte inputs with one digest, one hashed in each computation.
-
 Every nested variable-size count must fit its 256-bit mixing word.
 -/
 theorem hashTreeRootM_binding (hash : ByteArray → ByteArray) (width : ∀ x, (hash x).size = 32)
@@ -104,6 +102,9 @@ theorem hashTreeRootM_binding (hash : ByteArray → ByteArray) (width : ∀ x, (
     (second : (hashTreeRootM (Hasher.ofHash (m := Id) hash) shape right).run = .ok root) :
     left = right ∨ ∃ leftTree rightTree,
       valueTree shape left = .ok leftTree ∧ valueTree shape right = .ok rightTree ∧
+      -- The search returns two different 64-byte inputs with one digest.
+      --
+      -- One of them is hashed in each computation.
       ∃ a b, findMessageCollision (leftTree.messages hash) (rightTree.messages hash) hash
           = some (a, b) ∧
         a ∈ leftTree.messages hash ∧ b ∈ rightTree.messages hash ∧ MessageCollision a b hash := by

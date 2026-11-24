@@ -7,24 +7,13 @@ public import EthLib.Serialization.Rlp.Decode
 public import EthLib.Serialization.Proofs.Rlp.Item
 
 /-!
-# `Serialization.Proofs.Rlp.RoundTrip`
+# Proofs: RLP decoding undoes encoding
 
 Decoding undoes encoding: for every item `x`, if `encode x = .ok b`, then `decode b = .ok x`.
 
 So the encoding is injective: two items never share an encoding.
 
 No encoding is a proper prefix of another.
-
-The proof follows the shape of an encoding.
-
-1. The first byte and the length bytes of a prefix read back as the kind and the length.
-2. A byte string reads back from its prefix and its bytes.
-3. A list reads back from its prefix and the encodings of its items.
-4. Items read back one after another, by induction on the tree.
-
-Each step holds with any bytes after the encoding, since a list holds more items after each one.
-
-Each step also holds wherever the encoding sits in the array that the decoder reads.
 -/
 
 @[expose] public section
@@ -317,6 +306,14 @@ theorem joinEncodings_cons_ok (item : Item) (rest : List Item) (e : ByteArray)
       exact ⟨head, tail, by simp, by simp, h.symm⟩
 
 mutual
+
+-- The proof follows the shape of an encoding.
+--
+-- Items read back one after another, by induction on the tree.
+--
+-- Each step holds with any bytes after the encoding, since a list holds more items after each one.
+--
+-- Each step also holds wherever the encoding sits in the array that the decoder reads.
 
 /-- An encoding, then more bytes, reads back as the item and the position after the encoding. -/
 theorem readItem_encode : (x : Item) → (e : ByteArray) → encode x = .ok e →

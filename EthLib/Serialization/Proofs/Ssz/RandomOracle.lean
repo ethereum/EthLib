@@ -11,25 +11,7 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.CachePartial
 
 The node hash of SSZ is modelled as one random oracle with 32-byte answers.
 
-Every node shares it, and the roots of the all-zero subtrees are computed with it.
-
-An adversary that makes queries outputs two values of one type.
-
-Then the experiment computes both roots with the same oracle.
-
-It also hashes every node of the two expanded computations again, with the same oracle.
-
-The adversary wins when the two values differ, fit the well-formed type, and have one root.
-
-Every variable-size count in them must also fit the 256-bit word mixed into its root.
-
-Each win exposes two different queried inputs with one answer, found by the binding search.
-
-So the birthday bound of the oracle bounds the probability of a win.
-
-The bound counts every query of the experiment, the adversary's and the extraction's.
-
-A perfect subtree makes at most one oracle call per inner node, and its replay caches its messages.
+This module bounds the probability of two different values of one type with one root.
 
 Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2.
 
@@ -508,16 +490,20 @@ theorem collision_of_extract {cache : HashOracle.QueryCache} {shape : Desc} {fir
 
 `Q` bounds the oracle calls of the whole experiment, repeats included.
 
-The extraction alone hashes every node of the padded tree of each value.
-
-So for a list type, `Q` grows with the capacity of the type, not with the length of the values.
-
 The oracle cache starts empty, and the adversary's private sampling is not counted. -/
 theorem prEvent_wins_le [SampleableType Hash32] (shape : Desc)
     (adversary : OracleComp (unifSpec + HashOracle) (Value × Value)) {Q : Nat}
+    -- The extraction alone hashes every node of the padded tree of each value.
+    --
+    -- So for a list type, `Q` grows with the capacity of the type.
+    --
+    -- It does not grow with the length of the values.
     (hQ : IsQueryBoundP (experiment shape adversary) (fun t => t.isRight = true) Q) :
     Pr{let z ← (simulateQ HashOracle.romImpl (experiment shape adversary)).run ∅}[Wins shape z.1] ≤
       Q * ((Q : ℝ≥0∞) / Nat.card Hash32) :=
+  -- Each win exposes two different queried inputs with one answer, found by the binding search.
+  --
+  -- So the birthday bound of the oracle bounds the probability of a win.
   prEvent_experimentWith_le (fun pair : Value × Value => extract shape pair.1 pair.2) (Wins shape)
     (fun {_} {claim} {_} hrun hwins =>
       collision_of_extract (first := claim.1) (second := claim.2) hrun hwins) adversary hQ

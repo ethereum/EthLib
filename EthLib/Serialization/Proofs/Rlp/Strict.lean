@@ -32,13 +32,17 @@ namespace EthLib.Serialization.Rlp
 
 open EthLib.Base (byteArray_getElem_eq_get!)
 
-/-- A whole input whose first item fails fails with the same error. -/
+/-- A whole input whose first item fails fails with the same error.
+
+It lifts each theorem below, stated on the bytes the decoder reads, to a whole input. -/
 theorem decode_eq_error (input : ByteArray) (e : RlpError)
     (h : decodeItem input 0 input.size = .error e) :
     decode input = .error e := by
   simp [decode, h, bind, Except.bind]
 
-/-- `81 x`, with `x < 0x80`: the byte `x` written with a prefix. -/
+/-- `81 x`, with `x < 0x80`: the byte `x` written with a prefix.
+
+The byte string `[x]` encodes as `x`. -/
 theorem decodeItem_singleByteWithPrefix (x : UInt8) (hx : x < 0x80) {input : ByteArray}
     {pos stop : Nat} {rest : List UInt8} (hStop : stop ≤ input.size)
     (h : (input.extract pos stop).data.toList = 0x81 :: x :: rest) :
@@ -49,7 +53,9 @@ theorem decodeItem_singleByteWithPrefix (x : UInt8) (hx : x < 0x80) {input : Byt
   simp [byteArray_getElem_eq_get!, hPos, hFirst, readPrefix, hx, bind, Except.bind, hSecond,
     show pos + 1 + 1 ≤ stop by omega, show pos + 1 < input.size by omega]
 
-/-- `b7 + k`, then `k` length bytes of which the first is zero, for `1 <= k <= 8`. -/
+/-- `b7 + k`, then `k` length bytes of which the first is zero, for `1 <= k <= 8`.
+
+It is a byte string whose length has a leading zero byte. -/
 theorem decodeItem_leadingZero_bytes (k : Nat) (hk1 : 1 ≤ k) (hk8 : k ≤ 8) (lengthTail : List UInt8)
     {input : ByteArray} {pos stop : Nat} {rest : List UInt8} (hLen : lengthTail.length + 1 = k)
     (hStop : stop ≤ input.size)
@@ -74,7 +80,9 @@ theorem decodeItem_leadingZero_bytes (k : Nat) (hk1 : 1 ≤ k) (hk8 : k ≤ 8) (
     show ¬ stop - (pos + 1) < lengthTail.length + 1 by omega,
     bind, Except.bind]
 
-/-- `f7 + k`, then `k` length bytes of which the first is zero, for `1 <= k <= 8`. -/
+/-- `f7 + k`, then `k` length bytes of which the first is zero, for `1 <= k <= 8`.
+
+It is a list whose length has a leading zero byte. -/
 theorem decodeItem_leadingZero_list (k : Nat) (hk1 : 1 ≤ k) (hk8 : k ≤ 8) (lengthTail : List UInt8)
     {input : ByteArray} {pos stop : Nat} {rest : List UInt8} (hLen : lengthTail.length + 1 = k)
     (hStop : stop ≤ input.size)
@@ -100,7 +108,9 @@ theorem decodeItem_leadingZero_list (k : Nat) (hk1 : 1 ≤ k) (hk8 : k ≤ 8) (l
     show ¬ stop - (pos + 1) < lengthTail.length + 1 by omega,
     bind, Except.bind]
 
-/-- `b8 l`, with `0 < l < 56`: a short byte-string length in the long form. -/
+/-- `b8 l`, with `0 < l < 56`: a short byte-string length in the long form.
+
+A byte string of `l` bytes encodes as `80 + l`. -/
 theorem decodeItem_longFormForShortLength_bytes (l : UInt8) (h0 : 0 < l) (h56 : l < 56)
     {input : ByteArray} {pos stop : Nat} {rest : List UInt8} (hStop : stop ≤ input.size)
     (h : (input.extract pos stop).data.toList = 0xb8 :: l :: rest) :
@@ -114,7 +124,9 @@ theorem decodeItem_longFormForShortLength_bytes (l : UInt8) (h0 : 0 < l) (h56 : 
     UInt8.lt_iff_toNat_lt, bind, Except.bind, show l ≠ 0 from fun h => by simp [h] at h0,
     show l.toNat < 56 from h56, show ¬ stop - (pos + 1) < 1 by omega]
 
-/-- `f8 l`, with `0 < l < 56`: a short list-payload length in the long form. -/
+/-- `f8 l`, with `0 < l < 56`: a short list-payload length in the long form.
+
+A list payload of `l` bytes encodes as `c0 + l`. -/
 theorem decodeItem_longFormForShortLength_list (l : UInt8) (h0 : 0 < l) (h56 : l < 56)
     {input : ByteArray} {pos stop : Nat} {rest : List UInt8} (hStop : stop ≤ input.size)
     (h : (input.extract pos stop).data.toList = 0xf8 :: l :: rest) :

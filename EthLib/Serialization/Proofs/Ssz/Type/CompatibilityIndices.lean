@@ -190,26 +190,22 @@ theorem progressiveContainer_field_index {active : List Bool} {names : List Stri
 /--
 Compatible progressive containers address a field of one name at one node.
 
-    left   active [1,1]      names ["a","b"]        "b" sits at position 1
-    right  active [1,1,1]    names ["a","b","c"]    "b" sits at position 1
+The two declarations are required to differ.
 
 Appending a field leaves every earlier field where it was.
 
-A proof of "b" written against the shorter declaration therefore reads against the longer one.
-
-Where no name is shared the two say nothing about each other, which is the other half of the rule.
-
-The two declarations are required to differ.
-
-A declaration that repeats a field name disagrees with its own layout.
-
-It is compatible with itself only because the self-comparison comes before its layout is read.
+A proof of a field written against the shorter declaration therefore reads against the longer one.
 -/
 theorem compatible_named_field_index
     {leftActive rightActive : List Bool} {leftNames rightNames : List String}
     {leftFields rightFields : List Desc}
     (compatible : isCompatible (.progressiveContainer leftActive leftNames leftFields)
         (.progressiveContainer rightActive rightNames rightFields) = true)
+    -- A declaration that repeats a field name disagrees with its own layout.
+    --
+    -- Yet it is compatible with itself.
+    --
+    -- That is only because the self-comparison comes before its layout is read.
     (distinct : Desc.progressiveContainer leftActive leftNames leftFields
         ≠ .progressiveContainer rightActive rightNames rightFields)
     {leftOrdinal rightOrdinal leftPosition rightPosition : Nat} {name : String}
@@ -218,6 +214,9 @@ theorem compatible_named_field_index
     (rightPlaced : layoutPosition rightActive rightOrdinal = .ok rightPosition)
     (leftSelected : leftFields[leftOrdinal]? = some leftChild)
     (rightSelected : rightFields[rightOrdinal]? = some rightChild)
+    -- Where no name is shared the two say nothing about each other.
+    --
+    -- That is the other half of the rule.
     (leftNamed : leftNames[leftOrdinal]? = some name)
     (rightNamed : rightNames[rightOrdinal]? = some name) :
     getGeneralizedIndex (.progressiveContainer leftActive leftNames leftFields)
@@ -242,6 +241,8 @@ theorem compatible_named_field_index
 
 /-
 A worked pair, so the theorems above are known to say something about real declarations.
+
+In both declarations, the field named `"b"` sits at position 1.
 
     before  active [1,1]    names ["a","b"]        field "b" reads at index 40
     after   active [1,1,1]  names ["a","b","c"]    field "b" reads at index 40

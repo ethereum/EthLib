@@ -3,23 +3,13 @@ module
 public import EthLib.Serialization.Proofs.Rlp.Encode
 
 /-!
-# `Serialization.Proofs.Rlp.Bound`
-
-Exactly when the encoding fails.
+# Proofs: when RLP encoding fails, and how long an encoding is
 
 The Yellow Paper gives no encoding to a payload of `2^64` bytes or more.
 
-A byte string encodes exactly when it has fewer than `2^64` bytes.
+The encoding fails exactly where the Yellow Paper gives no encoding, at some node of the tree.
 
-A list whose items encode, encodes exactly when their encodings total fewer than `2^64` bytes.
-
-A list fails when one of its items fails.
-
-So the encoding fails exactly where the Yellow Paper gives no encoding, at some node of the tree.
-
-An encoding is at most 9 bytes longer than its payload, and 1 byte longer below 56 bytes.
-
-An encoding has at least 1 byte, and a list encodes to more bytes than it has items.
+This module also bounds the number of bytes of an encoding, from above and from below.
 -/
 
 @[expose] public section
