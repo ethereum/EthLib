@@ -9,59 +9,13 @@ public import VCVio.CryptoFoundations.HardnessAssumptions.DiffieHellman
 
 The game with the signer that has no key never reads the key `x`, only `X = x g`.
 
-So a key-only forger can run it, with its own oracle of `Π` in place of the lazy permutation.
+So a key-only forger can run it.
 
-It answers the queries of `Π` through the overlay, which relays new queries to its oracle.
+A forgery at a point that the signer programmed gives the key to a solver of the discrete logarithm.
 
-It answers the signing queries with the signer that has no key, which programs the overlay.
+Source: [Fersch, Kiltz, Poettering, CCS 2016][fkp], Theorem 1, Figure 6, the forger `F_0`.
 
-It returns the forgery and leaves the check to the key-only game.
-
-The game with the signer that has no key checks the forgery through the overlay.
-
-The key-only game checks it through `Π` directly.
-
-The two checks agree unless the most recent pair at the forgery's point is programmed.
-
-That case gives the key.
-
-Let the pair come from a nonce on the message `m'`, with `t = ψ(β)` and `U' = H(m') g + t X`.
-
-When `U'` is `0`, the key is `-H(m') / t`.
-
-Otherwise the point is `U' / c`, and the nonce signed `m'` with `(t, ±c)`.
-
-The forgery `(m, t, s)` then has `(H(m) + x t) / s = ±(H(m') + x t) / c`.
-
-That gives the key, unless `±s = c`.
-
-Then `m` and `m'` have one hash, and `m'` was signed, which a win with no collision excludes.
-
-The solver below tries each candidate for the key, and keeps the one that gives `X`.
-
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
-
-The forger is their `F_0` of Figure 6.
-
-Their line 30 signs the forgery's message with that key, by the signing of Figure 3, which may fail.
-
-So their claim that `F_0` wins as often as the forger in Game G3 does not hold exactly.
-
-Here the case of a programmed point is charged to a solver of the discrete logarithm instead.
-
-That adds one term to the bound of their Theorem 1.
-
-The solver runs the game with the signer that has no key, with the lazy permutation.
-
-No theorem states the running time of the forger or of the solver.
-
-Both run up to `fuel` nonces per signing query, and the solver also samples `Π` lazily.
-
-The forger here also leaves out the aborts of their Figure 6, at lines 06, 12, 16 to 18, 21 and 26.
-
-It returns every forgery, and the key-only game checks it.
-
-That can only raise its chance to win, and the key-only check covers lines 18, 21 and 26.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -82,17 +36,18 @@ Each message `m'` of the cache gives `-H(m') / t`.
 
 Each signature `(t', s')` on `m'`, read with `t' = t`, also gives two candidates.
 
-They solve `(H(m) + x t) / s = η (H(m') + x t) / s'`, for the signs `η = 1` and `η = -1`.
-
-They are the keys from `(m, t, s)` and `(m', t, s')` on one point, for those signs.
-
-When `η s'` is `s`, the division by `0` makes the candidate `-H(m) / t`.
-
-That is harmless, since the solver keeps only a candidate that gives the public key. -/
+They solve `(H(m) + x t) / s = η (H(m') + x t) / s'`, for the signs `η = 1` and `η = -1`. -/
 def keyCandidates (scheme : Scheme F G A M) (m : M) (t s : F) (cache : Cache F M) : List F :=
   cache.flatMap fun e =>
     -scheme.hash e.1 / t :: match e.2 with
       | some (_, s') =>
+        -- The two candidates are the keys from `(m, t, s)` and `(m', t, s')` on one point.
+        --
+        -- There is one for each of those signs.
+        --
+        -- When `η s'` is `s`, the division by `0` makes the candidate `-H(m) / t`.
+        --
+        -- That is harmless, since the solver keeps only a candidate that gives the public key.
         [forwardKey scheme (m, t, s) (e.1, t, s') 1, forwardKey scheme (m, t, s) (e.1, t, s') (-1)]
       | none => []
 
@@ -132,13 +87,20 @@ private theorem mem_keyCandidates [DecidableEq F] [DecidableEq M] {scheme : Sche
   refine ⟨(m', σ'), hmem, ?_⟩
   unfold NonceOrigin at ho
   rw [hβ] at ho
+  -- Let the pair come from a nonce on the message `m'`, with `t = ψ(β)` and `U' = H(m') g + t X`.
+  --
+  -- When `U'` is `0`, the key is `-H(m') / t`.
   by_cases hu' : scheme.hash m' + t * x = 0
   · refine List.mem_cons.2 (Or.inl ?_)
     field_simp
     linear_combination hu'
+  -- Otherwise the point is `U' / c`, and the nonce signed `m'` with `(t, ±c)`.
   rcases ho with h0 | ⟨c, hc, hP, hσ⟩
   · exact absurd ((smul_eq_zero.1 (by rwa [hsmul] at h0)).resolve_right hg) hu'
   obtain rfl := hσ ht
+  -- The key follows below, unless `±s = c`.
+  --
+  -- Then `m` and `m'` have one hash, and `m'` was signed, which a win with no collision excludes.
   have hh : scheme.hash m ≠ scheme.hash m' := by
     intro hh
     have hne : m' ≠ m := by
@@ -152,6 +114,7 @@ private theorem mem_keyCandidates [DecidableEq F] [DecidableEq M] {scheme : Sche
   have hs' : scheme.normalize c ≠ 0 := by
     rcases hnorm c with hn | hn <;> rw [hn]
     exacts [hc, neg_ne_zero.2 hc]
+  -- The forgery `(m, t, s)` then has `(H(m) + x t) / s = ±(H(m') + x t) / c`.
   have key : (scheme.normalize c)⁻¹ * (scheme.hash m' + t * x) =
         1 * (s⁻¹ * (scheme.hash m + t * x)) ∨
       (scheme.normalize c)⁻¹ * (scheme.hash m' + t * x) =
@@ -271,7 +234,9 @@ Coins pass to the coins of the key-only forger.
 
 A repeated message gets the answer it got first.
 
-A new message goes to the signer with no key, and its answer joins the signing cache.
+A new message goes to the signer with no key, which programs the overlay.
+
+Its answer joins the signing cache.
 
 These are the joint oracles over the oracle of `Π`, with the overlay and that signer. -/
 def forgerImpl (scheme : Scheme F G A M) (X : G) (fuel : ℕ) :
@@ -285,6 +250,13 @@ It runs the chosen-message forger on its key, with the oracles above from empty 
 It returns the forgery. -/
 def keylessForger (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary F G A M) :
     KeyOnlyAdversary F G A M where
+  -- It leaves the check to the key-only game.
+  --
+  -- It leaves out the aborts of their Figure 6, at lines 06, 12, 16 to 18, 21 and 26.
+  --
+  -- It returns every forgery, and the key-only game checks it.
+  --
+  -- That can only raise its chance to win, and the key-only check covers lines 18, 21 and 26.
   main X := Prod.fst <$> (simulateQ (forgerImpl scheme X fuel) (adversary.main X)).run ([], [])
 
 /-- Each oracle of the key-only forger asks for `Π` at most once, and only for a query of `Π`. -/
@@ -340,8 +312,22 @@ It reads the base point of the scheme, not its first argument.
 It returns the first candidate `c` for the key with `c g = X`, or `0` when there is none. -/
 def keylessSolver (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary F G A M) :
     DiffieHellman.DLogAdversary F G := fun _ X => do
+  -- Their line 30 signs the forgery's message with the key, by the signing of Figure 3.
+  --
+  -- That signing may fail.
+  --
+  -- So their claim that `F_0` wins as often as the forger in Game G3 does not hold exactly.
+  --
+  -- Here the case of a programmed point is charged to this solver instead.
+  --
+  -- That adds one term to the bound of their Theorem 1.
+  --
+  -- No theorem states the running time of the forger or of the solver.
+  --
+  -- Both run up to `fuel` nonces per signing query, and the solver also samples `Π` lazily.
   let z ← (simulateQ (jointImpl overlayLazyOracle (keylessFresh scheme X fuel))
     (runWithCheck scheme adversary X)).run ([], ([], []))
+  -- Try each candidate for the key, and keep the one that gives `X`.
   pure <| ((keyCandidates scheme z.1.1.1 z.1.1.2.1 z.1.1.2.2 z.2.1).find?
     fun c => decide (c • scheme.g = X)).getD 0
 
@@ -459,9 +445,15 @@ private theorem prEvent_win_le_of_key {scheme : Scheme F G A M} (hg : scheme.g �
   obtain ⟨hrel, horig⟩ := hinv
   dsimp only at hrel horig ⊢
   subst hrel
+  -- The game with the signer that has no key checks the forgery through the overlay.
+  --
+  -- The key-only game checks it through `Π` directly.
   rw [simulateQ_verifyQ_run, simulateQ_verifyQ_run]
   set P := scheme.encode (s⁻¹ • (scheme.hash m • scheme.g + t • X))
   split_ifs with hguard
+  -- The two checks agree unless the most recent pair at the forgery's point is programmed.
+  --
+  -- That case gives the key.
   · by_cases hprog : ∃ b, pc.lookupTagged P = some (b, true)
     · obtain ⟨β, hβ⟩ := hprog
       have hl : (TaggedCache.untag pc).lookup P = some β := by

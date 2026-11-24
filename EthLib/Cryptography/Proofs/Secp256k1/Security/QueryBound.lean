@@ -5,40 +5,13 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Security.LazyGame
 /-!
 # Proofs: how often the ECDSA game asks for `Π`
 
-The game as a program asks the permutation oracle for `Π`, in either direction.
+The game as a program asks `Π` or its inverse at most `q_Π + fuel · q_S + 1` times.
 
-Each query of the adversary to `Π` or its inverse asks once.
+There `q_Π` bounds the adversary's queries to `Π` or its inverse, and `q_S` its signing queries.
 
-Each signing query on a new message asks at most once per nonce, so at most `fuel` times.
+Source: [Fersch, Kiltz, Poettering][fkp], Theorem 1, §4.1, and Theorem 2, §4.2.
 
-The final check asks at most once.
-
-Take an adversary with `q_Π` queries to `Π` or its inverse and `q_S` signing queries.
-So the game asks `Π` or its inverse at most `q_Π + fuel · q_S + 1` times.
-
-The bounds are the framework's bounds on the queries of a program to some of its oracles.
-
-The source is [Fersch, Kiltz, Poettering](https://doi.org/10.1145/2976749.2978413).
-
-This is the `Q = Q_s + Q_Π` of their Theorem 1, §4.1, for the chosen-message game.
-
-Their signer tries one nonce, so take `fuel = 1`.
-
-Their Definition 4 assumes the forger asks the final check's query before it answers.
-
-So their `Q_Π` includes that query, and it is at most `q_Π + 1`.
-
-The count here is of queries, not of distinct pairs, so it may be one more than their `Q`.
-
-A later step that swaps the permutation for independent answers in this game needs this count.
-
-That step must count every new pair, also those of the signer and of the check.
-
-The `Q` of their Theorem 2, §4.2, is another count.
-
-It bounds the queries of the key-only forger, at most the `Q_Π` of Theorem 1, so `q_Π + 1`.
-
-This theorem does not give it.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -73,6 +46,7 @@ theorem isQueryBoundP_simulateQ_run_of_weighted_step {ι ι' σ α : Type}
     (hstep : ∀ t s, IsQueryBoundP ((impl t).run s) q
       ((if p t then 1 else 0) + (if r t then w else 0)))
     (s : σ) : IsQueryBoundP ((simulateQ impl oa).run s) q (n + w * k) :=
+  -- The bound is the framework's bound on the queries of a program to some of its oracles.
   IsQueryBound.simulateQ_run_of_step (hp.and_isQueryBound_pair hr)
     (combine := (· + ·)) (mapBudget := fun b : ℕ × ℕ => b.1 + w * b.2) (B := ℕ × ℕ) (B' := ℕ)
     (stepBudget := fun t _ => (if p t then 1 else 0) + (if r t then w else 0))
@@ -146,6 +120,9 @@ theorem isQueryBoundP_implQ_signQ (scheme : Scheme F G A M) (fuel : ℕ) (x : F)
     (t : (Spec F A M).Domain) (cache : Cache F M) :
     IsQueryBoundP ((implQ (signQ scheme fuel x) t).run cache) (·.isRight = true)
       ((if isPermQuery t = true then 1 else 0) + (if isSignQuery t = true then fuel else 0)) := by
+  -- Each query of the adversary to `Π` or its inverse asks once.
+  --
+  -- Each signing query on a new message asks at most once per nonce, so at most `fuel` times.
   rcases t with n | α | β | m
   · simp [implQ, isPermQuery, isSignQuery, StateT.run]
   · simp [implQ, isPermQuery, isSignQuery, StateT.run]
@@ -171,10 +148,32 @@ theorem isQueryBoundP_experimentViewQ (scheme : Scheme F G A M) (fuel : ℕ)
     (hSign : ∀ X, IsQueryBoundP (adversary.main X) (isSignQuery · = true) qSign) :
     IsQueryBoundP (experimentViewQ scheme fuel adversary) (·.isRight = true)
       (qPerm + fuel * qSign + 1) := by
+  -- The game as a program asks the permutation oracle for `Π`, in either direction.
+  --
+  -- This is the `Q = Q_s + Q_Π` of their Theorem 1, §4.1, for the chosen-message game.
+  --
+  -- Their signer tries one nonce, so take `fuel = 1`.
+  --
+  -- Their Definition 4 assumes the forger asks the final check's query before it answers.
+  --
+  -- So their `Q_Π` includes that query, and it is at most `q_Π + 1`.
+  --
+  -- The count here is of queries, not of distinct pairs, so it may be one more than their `Q`.
+  --
+  -- A later step that swaps the permutation for independent answers in this game needs this count.
+  --
+  -- That step must count every new pair, also those of the signer and of the check.
+  --
+  -- The `Q` of their Theorem 2, §4.2, is another count.
+  --
+  -- It bounds the queries of the key-only forger, at most the `Q_Π` of Theorem 1, so `q_Π + 1`.
+  --
+  -- This theorem does not give it.
   have h := isQueryBoundP_bind (isQueryBoundP_liftM_permComp ($ᵗ F)) fun x _ =>
     isQueryBoundP_bind (n := qPerm + fuel * qSign) (m := 1)
       (isQueryBoundP_simulateQ_run_of_weighted_step (hPerm (x • scheme.g)) (hSign (x • scheme.g))
         (isQueryBoundP_implQ_signQ scheme fuel x) [])
+      -- The final check asks at most once.
       fun z _ => (show IsQueryBoundP (if signed z.2 z.1.1 then
           (pure (z.1, false, z.2) : PermComp A _) else
           ((z.1, ·, z.2)) <$> verifyQ scheme (x • scheme.g) z.1.1 z.1.2.1 z.1.2.2) _ 1 by

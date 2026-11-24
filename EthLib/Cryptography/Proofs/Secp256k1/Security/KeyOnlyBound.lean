@@ -6,47 +6,13 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Security.ForwardSolver
 /-!
 # Proofs: the bound on a key-only forger
 
-Take a key-only forger with at most `q` queries to `Π` or its inverse, on every key.
+The advantage of a key-only forger is at most a sum of four terms.
 
-Its advantage is at most a sum of four terms.
+Two terms are in `|A|`, one is a solver's advantage, and one is a square root over a second solver.
 
-The first is `C(q + 1, 2) / |A|`, the cost of answering `Π` with independent values.
+Source: [Fersch, Kiltz, Poettering, CCS 2016][fkp], Theorem 2, Figures 7, 9 and 10.
 
-The second is the advantage of a solver of the discrete logarithm, for a forgery on an inverse pair.
-
-The third is `(q + 1) / |A|`.
-
-The last is the square root of `(q + 1) (ε' + (q + 1) ε_dr)`.
-
-There `ε'` is the advantage of a second solver of the discrete logarithm, from a fork.
-
-And `ε_dr` is the advantage of a reduction in the game of division resistance of `H`.
-
-Each of the three adversaries is built from the forger, and each advantage is a term of the bound.
-
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
-
-The bound is their Theorem 2, from their games of Figure 7 and the reductions of Figures 9 and 10.
-
-Their `Q` is `q + 1` here, and their `|B|` is `|A|`.
-
-Their bound is `√(2 Q^2 ε_dr + 2 Q ε') + ε'' + Q^2 / 2^L`, where `ε''` is the inverse solver's.
-
-Here the terms in `|A|` sum to `Q (Q + 1) / (2 |A|)`, at most `Q^2 / |A|`.
-
-The root here is `√(Q ε' + Q^2 ε_dr)`, so the bound here is at most theirs.
-
-The theorems bound chances only; no theorem states the running times of the three adversaries.
-
-The inverse solver is efficient only when the test of the image is, as Definition 2 (a) asks.
-
-Their key generation draws the key from the nonzero scalars; here it draws it from all of them.
-
-So the advantage here is the source's times `(n - 1) / n`, where `n` is the number of scalars.
-
-The hash `H` is fixed here, while their §2.3 draws a key for it.
-
-So the bound charges the named reduction, and no adversary of division resistance in general.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -87,6 +53,7 @@ theorem keyOnlyAdvantage_le_add_forkIndex {scheme : Scheme F G A M} {inImage : A
           (forkIndex scheme (x • scheme.g) q tr).isSome] := by
   have h1 := keyOnlyAdvantage_le_indep scheme adversary hq
   have h3 := keyOnlyIndepAdvantage_le_forkIndex_add_notMem scheme adversary hq
+  -- The inverse solver is efficient only when the test of the image is, as Definition 2 (a) asks.
   have h4 := prEvent_inverse_le_dlog (inImage := inImage) hImage hg h2 hsemi hneg adversary
   refine h1.trans ((add_le_add (h3.trans (add_le_add le_rfl h4)) le_rfl).trans_eq ?_)
   ring
@@ -120,6 +87,11 @@ theorem forkIndex_mul_le_dlog_add_division {scheme : Scheme F G A M} (hg : schem
           (keyOnlyOutsideRun scheme adversary (x • scheme.g)) (forkBound q) (.inr ())
           (forkIndex scheme (x • scheme.g) q))}[P r] := fun P ↦ by
     rw [map_bind]
+  -- The second term is division resistance of `H`.
+  --
+  -- The hash `H` is fixed here, while their §2.3 draws a key for it.
+  --
+  -- So the bound charges the named reduction, and no adversary of division resistance in general.
   refine le_trans ?_ (add_le_add (prEvent_contextFork_div_ne_le_dlog hg hsemi adversary q)
     (prEvent_contextFork_div_eq_le_divisionAdvantage scheme adversary q))
   rw [key, key, key]
@@ -156,7 +128,9 @@ Take a forger that asks for `Π` or its inverse at most `q` times, on every key.
 
 Let `ε''` be the advantage of the inverse solver and `ε'` the one of the forward solver.
 
-Let `ε_dr` be the advantage of the reduction to division resistance.
+The forward solver works from a fork.
+
+Let `ε_dr` be the advantage of the reduction in the game of division resistance of `H`.
 
 Then the forger's advantage is at most the sum of `C(q + 1, 2) / |A|`, `ε''` and `(q + 1) / |A|`.
 
@@ -178,10 +152,28 @@ theorem keyOnlyAdvantage_le {scheme : Scheme F G A M} {inImage : A → Bool}
               b = true] +
             (q + 1) * divisionAdvantage scheme (divisionReduction scheme adversary q))) ^
           (2⁻¹ : ℝ) := by
+  -- Each of the three adversaries is built from the forger.
+  --
+  -- Each advantage is a term of the bound.
   have h1 := keyOnlyAdvantage_le_add_forkIndex hImage hg h2 hsemi hneg adversary hq
   have h3 := le_mul_add_rpow_of_mul_div_sub_le (by positivity) (by simp)
     (forkIndex_mul_le_dlog_add_division hg hsemi adversary q)
   refine h1.trans ?_
+  -- This is their Theorem 2.
+  --
+  -- Their `Q` is `q + 1` here, and their `|B|` is `|A|`.
+  --
+  -- Their bound is `√(2 Q^2 ε_dr + 2 Q ε') + ε'' + Q^2 / 2^L`, where `ε''` is the inverse solver's.
+  --
+  -- Here the terms in `|A|` sum to `Q (Q + 1) / (2 |A|)`, at most `Q^2 / |A|`.
+  --
+  -- The root here is `√(Q ε' + Q^2 ε_dr)`, so the bound here is at most theirs.
+  --
+  -- The theorems bound chances only; no theorem states the running times of the three adversaries.
+  --
+  -- Their key generation draws the key from the nonzero scalars; here it draws it from all of them.
+  --
+  -- So the advantage here is the source's times `(n - 1) / n`, where `n` is the number of scalars.
   calc _ ≤ ((q + 1).choose 2 : ℝ≥0∞) / FinEnum.card A +
           Pr{let b ← (DiffieHellman.dlogExperiment scheme.g
             (inverseSolver scheme inImage adversary))}[b = true] +

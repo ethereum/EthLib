@@ -7,75 +7,15 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Security.JointGame
 /-!
 # Proofs: the ECDSA game with `Π` programmed by the signer
 
-The lazy game keeps one cache of `Π`, and the signer asks `Π` like the adversary does.
+Here the signer programs `Π`.
 
-Here the signer programs `Π` instead.
+The adversary's queries go to an overlay in front of the lazy permutation.
 
-For each nonzero nonce, it draws the answer uniformly from all of `A`, and records the pair.
+The chance to win the lazy game with no collision is at most a sum of two chances in this game.
 
-The adversary's queries go to an overlay.
+Source: [Fersch, Kiltz, Poettering, CCS 2016][fkp], Figures 4 and 5, from Game G1 to Game G2.
 
-The overlay answers from its own cache.
-
-Otherwise it asks the lazy permutation, and records the answer.
-
-So the lazy permutation sees only the relayed queries.
-
-Each pair of the overlay's cache carries a flag: set by the signer, or relayed.
-
-The overlay and the programming oracle come from a shared module on lazy permutations.
-
-The game also always checks the forgery, through the overlay, even on a signed message.
-
-A conflict is two pairs of the cache that share a query or an answer.
-
-Until a conflict, the lazy game puts at least as much mass on each outcome as this game.
-
-So the chance to win the lazy game with no collision is at most a sum of two chances.
-
-The first is the chance to win here with no collision and no conflict.
-
-The second is the chance of a conflict here.
-
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
-
-This is the step from Game G1 of their Figure 4 to Game G2 of their Figure 5.
-
-Their `Π_S` holds the pairs set by the signer, and their `Π_O` the relayed pairs.
-
-Their aborts in lines 05, 11, 13 and 25 are conflicts here.
-
-The relayed query of the check adds one more source of conflict.
-
-They stop the game, where here the game goes on and the event excludes them.
-
-Their signer tries one nonce, and the one here tries up to `fuel`.
-
-Each nonzero nonce asks `Π` once, so it records a pair, also when its signature then fails.
-
-Their line 14 records it before the checks of lines 16 and 19 too.
-
-So the cache holds up to `fuel` pairs set by the signer per signing query.
-
-So their counts of `Q_s` pairs set by the signer become `fuel` times `Q_s`.
-
-The check of the forgery may relay one more query, which their Definition 4 rules out.
-
-So a bound on the chance of a conflict counts that query too.
-
-The module on conflicts bounds that chance.
-
-That bound assumes a nonzero base point and a semi-injective `φ`.
-
-With the base point `0`, every nonce programs the same query, and the second one conflicts.
-
-The keyless signer of their Game G3 must record the pairs of failed nonces as well.
-
-Otherwise the cache, and the answers of later queries, differ from the ones here.
-
-Their Figure 5 records only at line 40, after the checks of lines 31, 34 and 36.
-
-So this departs from the source.
+[fkp]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -133,8 +73,57 @@ It returns the forgery, the result of the check, and the final states. -/
 def programmedExperiment (scheme : Scheme F G A M) (fuel : ℕ) (adversary : Adversary F G A M) :
     ProbComp (((M × F × F) × Bool) × JointState F M (ProgrammedCache A × PermCache A)) := do
   let x ← $ᵗ F
+  -- The lazy game keeps one cache of `Π`, and the signer asks `Π` like the adversary does.
+  --
+  -- Here the signer programs `Π` instead.
+  --
+  -- The adversary's queries go to an overlay.
+  --
+  -- The overlay answers from its own cache.
+  --
+  -- Otherwise it asks the lazy permutation, and records the answer.
+  --
+  -- So the lazy permutation sees only the relayed queries.
+  --
+  -- Each pair of the overlay's cache carries a flag: set by the signer, or relayed.
+  --
+  -- Their `Π_S` holds the pairs set by the signer, and their `Π_O` the relayed pairs.
+  --
+  -- The overlay and the programming oracle come from a shared module on lazy permutations.
+  --
+  -- Their aborts in lines 05, 11, 13 and 25 are conflicts here.
+  --
+  -- The relayed query of the check adds one more source of conflict.
+  --
+  -- They stop the game, where here the game goes on and the event excludes them.
   (simulateQ (jointImpl overlayLazyOracle
+      -- For each nonzero nonce, the signer draws the answer uniformly from all of `A`.
+      --
+      -- It records the pair, also when its signature then fails.
+      --
+      -- Their signer tries one nonce, and the one here tries up to `fuel`.
+      --
+      -- Each nonzero nonce asks `Π` once, so it records a pair.
+      --
+      -- Their line 14 records it before the checks of lines 16 and 19 too.
+      --
+      -- So the cache holds up to `fuel` pairs set by the signer per signing query.
+      --
+      -- So their counts of `Q_s` pairs set by the signer become `fuel` times `Q_s`.
+      --
+      -- The keyless signer of their Game G3 must record the pairs of failed nonces as well.
+      --
+      -- Otherwise the cache, and the answers of later queries, differ from the ones here.
+      --
+      -- Their Figure 5 records only at line 40, after the checks of lines 31, 34 and 36.
+      --
+      -- So this departs from the source.
       (liftFresh programPermOracle fun m => signFreshQ scheme x m fuel))
+    -- The game also always checks the forgery, through the overlay, even on a signed message.
+    --
+    -- Their Definition 4 rules out the new query of `Π` that this check may relay.
+    --
+    -- So a bound on the chance of a conflict counts that query too.
     (runWithCheck scheme adversary (x • scheme.g))).run ([], ([], []))
 
 /-- Whether a run of the game with `Π` programmed wins with no collision.
@@ -152,7 +141,11 @@ Both are chances in the programmed game.
 
 The first is the chance to win there with no collision and no conflict in the cache of `Π`.
 
-The second is the chance of a conflict there. -/
+The second is the chance of a conflict there.
+
+The module on conflicts bounds the second chance, for a nonzero base point and a semi-injective `φ`.
+
+With the base point `0`, every nonce programs the same query, and the second one conflicts. -/
 theorem noCollisionAdvantage_le_programmed (scheme : Scheme F G A M) (fuel : ℕ)
     (adversary : Adversary F G A M) :
     noCollisionAdvantage scheme fuel adversary ≤
@@ -172,6 +165,9 @@ theorem noCollisionAdvantage_le_programmed (scheme : Scheme F G A M) (fuel : ℕ
     dominatedUntilBad_programPermImpl.prEvent_simulateQ_run_map_and_not_bad_le
       preservesInv_programPermImpl_relayed preservesInv_programPermImpl_conflict
       (signFreshQ scheme x m fuel) s hs Q
+  -- A conflict is two pairs of the cache that share a query or an answer.
+  --
+  -- Until a conflict, the lazy game puts at least as much mass on each outcome as this game.
   have hdom := dominatedUntilBad_jointImpl dominatedUntilBad_overlayLazyOracle hfresh
   have hinv := preservesInv_jointImpl (F := F) preservesInv_overlayLazyOracle_relayed
     fun m => simulateQ_run_preservesInv _ _ preservesInv_programPermImpl_relayed
