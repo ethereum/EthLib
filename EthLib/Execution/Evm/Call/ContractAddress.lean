@@ -9,14 +9,6 @@ public import EthLib.Serialization.Rlp.Codec
 
 The address of a contract that CREATE or CREATE2 makes.
 
-The address is the last 20 bytes of the Keccak-256 hash of a preimage.
-
-CREATE hashes the RLP list of the sender and its nonce before the creation.
-
-CREATE2 hashes the byte `0xff`, the sender, a 32-byte salt and the hash of the init code.
-
-So the preimage of CREATE2 always has 85 bytes.
-
 Section 7, Contract Creation, of the Yellow Paper, Shanghai version, defines both.
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
@@ -42,6 +34,8 @@ def addressOfHash (hash : Vector UInt8 32) : Address :=
 
 /-- The preimage of the address of CREATE: the RLP list of the sender and its nonce.
 
+The nonce is the one before the creation.
+
 The encoding succeeds for every nonce below `2^256`. -/
 def createPreimage (sender : Address) (nonce : Nat) : Except RlpError ByteArray :=
   -- `L_A(s, n, zeta, i) = RLP((s, n))` if `zeta = {}`.
@@ -60,6 +54,8 @@ def create2Preimage (sender : Address) (salt : U256) (initCodeHash : Vector UInt
   -- `L_A(s, n, zeta, i) = (255) . s . zeta . KEC(i)` otherwise.
   --
   -- EIP-1014 writes the same bytes: `0xff`, the sender, the salt and the hash of the init code.
+  --
+  -- The salt has 32 bytes, so the preimage always has 85 bytes.
   ⟨#[0xff]⟩ ++ ⟨sender.toArray⟩ ++ ⟨(U256.toBeBytes salt).toArray⟩ ++ ⟨initCodeHash.toArray⟩
 
 /-- The address of the contract that the sender makes with CREATE2, from a salt and init code. -/

@@ -42,19 +42,14 @@ Each instruction is the word it pushes, as a function of the words it pops, in t
 
 KECCAK256 reads bytes from memory instead, so it is the word it pushes, as a function of those bytes.
 
-The precompiled contracts are here too, because only the EVM calls them.
+The module holds these parts:
 
-The gas prices and the price of memory are here.
-
-The opcodes, the stack, the memory and the state of a frame are here, with the gas meter.
-
-From Glamsterdam, the meter of state gas beside execution gas is here too.
-
-The addresses of the contracts that CREATE and CREATE2 make are here.
-
-The environments of the block and of the transaction are here, with the substate.
-
-The loop that runs one frame is here, with the measure that makes it end.
-
-The execution of a message is here, with the recursion of messages.
+- the precompiled contracts, because only the EVM calls them
+- the gas prices and the price of memory
+- the opcodes, the stack, the memory and the state of a frame, with the gas meter
+- from Glamsterdam, the meter of state gas beside execution gas
+- the addresses of the contracts that CREATE and CREATE2 make
+- the environments of the block and of the transaction, with the substate
+- the loop that runs one frame, with the measure that makes it end
+- the execution of a message, with the recursion of messages
 -/

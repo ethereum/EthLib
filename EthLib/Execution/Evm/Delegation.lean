@@ -7,10 +7,6 @@ public import EthLib.Base.Address
 
 The delegation indicator of an account, from Pectra.
 
-A set code transaction writes the indicator as the code of each account that authorizes it.
-
-The indicator is the three bytes `0xef0100`, then the 20 bytes of the address it delegates to.
-
 Its first byte is `0xef`, and from London no creation may deploy code that starts with `0xef`.
 
 [EIP-3541](https://eips.ethereum.org/EIPS/eip-3541#specification) sets that rule.
@@ -32,9 +28,11 @@ def DELEGATION_MARKER : ByteArray := ⟨#[0xef, 0x01, 0x00]⟩
 /-- The size of a delegation indicator: the marker and an address. -/
 def DELEGATION_SIZE : Nat := 23
 
-/-- The delegation indicator of an address: the marker, then the address. -/
+/-- The delegation indicator of an address: the marker, then the address.
+
+A set code transaction writes it as the code of each account that authorizes it. -/
 def delegationIndicator (address : Address) : ByteArray :=
-  -- EIP-7702: `0xef0100 || address`.
+  -- EIP-7702: `0xef0100 || address`, the three bytes, then the 20 bytes of the delegate.
   DELEGATION_MARKER ++ ⟨address.toArray⟩
 
 /-- Whether some code is a delegation indicator: the marker, then exactly one address. -/

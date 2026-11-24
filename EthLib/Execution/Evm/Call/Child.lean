@@ -7,12 +7,6 @@ public import EthLib.Execution.Evm.Machine.Frame
 
 The calling frame after the message that it ran, for a call or a creation.
 
-A call or a creation at the greatest depth, 1024, runs no message.
-
-The caller gets back the gas of the child, and the state that the child leaves.
-
-A child that succeeds also passes on its logs, its refund, its accounts to delete and its accesses.
-
 From Spurious Dragon and before Paris, a failed child undoes its touches, except that of 0x03.
 
 The Yellow Paper, Shanghai version, records it in its appendix Anomalies on the Main Network.

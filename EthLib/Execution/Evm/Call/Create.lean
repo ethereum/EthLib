@@ -9,48 +9,6 @@ public import EthLib.Execution.Evm.Call.ContractAddress
 
 The two instructions that create a contract: CREATE and CREATE2.
 
-A creation pops its value, the range of its init code and, for CREATE2, a salt.
-
-It pays 32000, the growth of memory, and from Shanghai 2 gas per word of init code.
-
-From Glamsterdam, it pays 12000 in place of the 32000, by EIP-8038.
-
-CREATE2 also pays 6 gas per word to hash the init code.
-
-A creation fails in a frame that must not change the state.
-
-From Glamsterdam, it checks the frame before it pops its operands.
-
-A frame that lacks the value, at the greatest depth, or with the greatest nonce runs no message.
-
-It pushes 0, and keeps its gas.
-
-Otherwise the creation accesses the new address.
-
-From Glamsterdam, a dead address costs the state gas of a new account, by EIP-8037.
-
-From Tangerine Whistle, it then passes on all but one 64th of the gas left, and before, all of it.
-
-An address with code, a nonce or storage takes that gas and pushes 0.
-
-The frame's nonce still grows.
-
-[EIP-7610][eip7610] adds the storage to the code and the nonce of EIP-684.
-
-It applies at every fork back to Frontier.
-
-From Glamsterdam, such a collision gets back the state gas of the new account, as EIP-8037 asks.
-
-EIP-8037 says that storage alone causes no collision; EthLib follows EIP-7610 there.
-
-Otherwise the frame's nonce grows and the init code runs at the new address.
-
-The caller pushes the new address on success, and 0 on failure with the output as return data.
-
-A creation that fails creates no account, so it gets back the state gas of the new account.
-
-A creation sends a message with less gas than it has, so it lowers the measure of the frame.
-
 Appendix H.2 of the Yellow Paper, Shanghai version, defines both instructions.
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
@@ -159,28 +117,16 @@ def resumeCreate (fork : Fork) (caller : Evm fork Meter) (newAccount : Nat) (add
 
 /-- The step of a creation that has paid its price.
 
-It runs no message when the frame lacks the value, is too deep, or has the greatest nonce.
-
-Otherwise it accesses the new address, and pays the state gas of a new account if any.
-
-It then keeps the gas of the message, and the nonce of the frame grows by one.
-
-An address with code, a nonce or storage gets no message, and gets back the state gas paid.
-
-Otherwise the frame passes on its whole reservoir to the message.
-
-It reads the sender first, then the new address once the checks pass, by EIP-7928.
-
-The read of the new address stays even when the creation then lacks gas. -/
+It sends a message that runs the init code at the new address, or pushes 0 when it cannot. -/
 def launchCreate (evm : Evm fork Meter) (value : U256) (initCode : ByteArray)
     (salt : Option U256) : Except EvmError (StepResult fork Meter) :=
   -- The return data becomes empty.
   let evm := { evm with returnData := .empty }
-  -- The account of the sender, the current target.
+  -- The account of the sender, the current target, is read first, by EIP-7928.
   let current := evm.message.currentTarget
   let evm := recordAccountRead evm current
   let sender := evm.state.getAccount current
-  -- The creation pushes 0 and sends no message when one of three conditions holds.
+  -- The creation pushes 0, sends no message and keeps its gas when one of three conditions holds.
   --
   -- The balance of the sender is below the value.
   --
@@ -194,6 +140,10 @@ def launchCreate (evm : Evm fork Meter) (value : U256) (initCode : ByteArray)
     -- The new address, by the Yellow Paper for CREATE and by EIP-1014 for CREATE2.
     let address ← creationAddress current sender.nonce salt initCode
     -- The new address joins the accessed addresses, by EIP-2929.
+    --
+    -- Once the checks pass, the new address is read too, by EIP-7928.
+    --
+    -- That read stays even when the creation then lacks gas.
     let evm := recordAccountRead (accessAddress evm address).2 address
     keepReads evm .next do
       -- From Glamsterdam, a new address that is not alive pays the state gas of a new account.
@@ -202,12 +152,15 @@ def launchCreate (evm : Evm fork Meter) (value : U256) (initCode : ByteArray)
       let evm ← chargeStateGas evm newAccount
       -- From Tangerine Whistle, the message gets all but one 64th of the gas left, by EIP-150.
       let gas := createMessageGas fork (GasMeter.gasLeft evm.gas)
+      -- The frame pays the gas of the message, which the message then holds.
       let evm ← chargeGas evm gas
       -- An address with code or a nonzero nonce gets no message, by EIP-684, and 0 is pushed.
       --
       -- The nonce of the sender grows by one in that case too.
       --
       -- An address with storage gets no message either, by EIP-7610.
+      --
+      -- EIP-7610 applies at every fork back to Frontier.
       --
       -- The nonce grows on both branches, so it grows once here, before the branch.
       let deployable := evm.state.accountDeployable address
@@ -239,6 +192,8 @@ def launchCreate (evm : Evm fork Meter) (value : U256) (initCode : ByteArray)
         -- A collision keeps the grant used and pushes 0.
         --
         -- EIP-8037: on an address collision, the state gas of the new account is refilled.
+        --
+        -- EIP-8037 says that storage alone causes no collision.
         --
         -- With storage alone a target is a collision here, by EIP-7610, and it was charged.
         let evm ← pushWord (refillStateGas evm newAccount) 0
@@ -273,9 +228,9 @@ def createStep (create2 : Bool) (evm : Evm fork Meter) :
   let (start, evm) ← popWord evm
   let (size, evm) ← popWord evm
   let (salt, evm) ← popSalt create2 evm
-  -- CREATE2 pays the hash cost, `G_keccak256word` per word of init code, by EIP-1014.
+  -- CREATE2 pays the hash cost, `G_keccak256word`, 6 gas per word of init code, by EIP-1014.
   let hashCost := if create2 then OPCODE_KECCAK256_PER_WORD * wordCount size.toNat else 0
-  -- From Shanghai, EIP-3860 charges `G_initcodeword` per word of init code.
+  -- From Shanghai, EIP-3860 charges `G_initcodeword`, 2 gas per word of init code.
   --
   -- EIP-3860 rule 4 charges it before the computation of the new address.
   let initCost := if fork ≥ .shapella then initCodeCost size.toNat else 0
@@ -301,7 +256,9 @@ def messageInstruction (fork : Fork) (op : Op) :
     Option (Evm fork Meter → Except EvmError (StepResult fork Meter)) :=
   callInstruction fork op <|> createInstruction fork op
 
-/-! ## Each creation lowers the measure of the frame -/
+/-! ## Each creation lowers the measure of the frame
+
+A creation sends a message with less gas than it has, so it lowers the measure of the frame. -/
 
 /-- A message with less gas than the frame paid, and a resume that adds the child's gas, decrease.
 
