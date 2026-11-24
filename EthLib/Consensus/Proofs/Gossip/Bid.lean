@@ -11,37 +11,7 @@ public import EthLib.Networking.Proofs.Gossip.Validation
 
 The topic checks a bid in a fixed order, so its outcome is a chain of checks.
 
-Once the computed inputs are fixed, the outcome is that chain.
-
 A bid is valid exactly when every check passes.
-
-A valid bid records its key, and a bid with the same key is then ignored.
-
-Each valid bid beats the best value before it, for its slot and parents.
-
-So the best value recorded for a slot and its parents only grows.
-
-A compatible gas limit moves from the parent's limit by less than a 1024th of it.
-
-The check of the inclusion lists of Heze accepts before Heze, and never rejects.
-
-A bid on the parent of the head block, and on the payload it builds on, is on the head branch.
-
-Otherwise it must build on the head block, with the payload that a proposer would build on.
-
-So a valid bid builds on the head block, or on its parent and the payload that the head builds on.
-
-The exit check reads the envelope that the store keeps for the parent block of a bid.
-
-It does so when the bid builds on the latest payload of the parent state, advanced to its slot.
-
-It then reports an exit exactly when a request there has the key and address of the builder.
-
-It fails when the store lacks that envelope.
-
-So the store holds the parent envelope of a valid bid on that payload.
-
-No exit request of that envelope has both the key and the address of the builder of the bid.
 -/
 
 @[expose] public section
@@ -129,7 +99,9 @@ theorem validateExecutionPayloadBid_of_not_best {best : Gwei}
     omega
   simp [validateExecutionPayloadBid, fresh, recorded, notBelow, pure, Except.pure]
 
-/-- A valid bid beats the best value recorded for its slot and parents, if there is one. -/
+/-- A valid bid beats the best value recorded for its slot and parents, if there is one.
+
+So the best value recorded for a slot and its parents only grows. -/
 theorem lt_value_of_validateExecutionPayloadBid_eq_accept {best : Gwei}
     (valid : validateExecutionPayloadBid config checks seen store gloas signed currentTimeMs =
       .ok accept)

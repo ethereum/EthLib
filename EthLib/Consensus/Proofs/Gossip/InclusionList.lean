@@ -9,13 +9,7 @@ public import EthLib.Networking.Proofs.Gossip.Validation
 
 The topic checks a list in a fixed order, so its outcome is a chain of checks.
 
-Once the computed inputs are fixed, the outcome is that chain.
-
-A list is valid exactly when every check passes.
-
-Each valid list counts once for its slot, dependent root and member.
-
-So gossip forwards at most two valid lists of a member for a slot and a dependent root.
+Gossip forwards at most two valid lists of a member for a slot and a dependent root.
 
 A list that gossip accepts in its slot is accepted by the fork choice in that slot too.
 -/
@@ -55,6 +49,7 @@ theorem validateInclusionList_recordInclusionList_twice {first second : SignedIn
         ((seen.recordInclusionList first).recordInclusionList second) store signed currentTimeMs =
       .ok (.ignore "already seen two valid inclusion lists from this validator") := by
   apply validateInclusionList_of_seen_twice
+  -- Each valid list counts once for its slot, dependent root and member.
   simp [Seen.recordInclusionList, firstSlot, firstRoot, firstMember, secondSlot, secondRoot,
     secondMember]
 

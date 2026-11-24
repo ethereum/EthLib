@@ -12,16 +12,6 @@ Each topic checks a message in a fixed order, so its outcome is a chain of check
 Once the clock, the head state, the committee and the signatures are computed, the outcome is fixed.
 
 It is then that chain, so it follows which messages each topic accepts and which it ignores.
-
-A valid message records its keys, and the same message is then ignored.
-
-A fresh node has seen no bits, and in the minimal preset every selection proof selects.
-
-So the checks of the seen bits and of the selection can pass, as the iffs need for an accept.
-
-The keys a topic checks come from the next committee of a state when the next slot starts a period.
-
-Otherwise they come from its current committee.
 -/
 
 @[expose] public section
@@ -34,7 +24,12 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {seen : Seen} {store : Store preset fork} {currentTimeMs : UInt64}
   {state : BeaconState preset fork} {altair : .altair ≤ fork}
 
-/-! ## Helpers -/
+/-! ## Helpers
+
+A fresh node has seen no bits, and in the minimal preset every selection proof selects.
+
+So the checks of the seen bits and of the selection can pass, as the iffs need for an accept.
+-/
 
 /-- No earlier bits cover new bits when there are none. -/
 @[simp] theorem isNonStrictSuperset_nil {bits : List Bool} : isNonStrictSuperset [] bits = false :=
@@ -106,12 +101,11 @@ When that slot starts a period, it is the next committee of the state.
 
 Otherwise it is the current committee of the state.
 
-A period is the slots of a fixed number of epochs.
-
 It fails with an overflow when the slot of the state is the largest 64-bit integer. -/
 theorem syncCommitteeAtNextSlot_eq :
     syncCommitteeAtNextSlot state altair =
       if state.slot.toNat + 1 < 2 ^ 64 then
+        -- A period is the slots of a fixed number of epochs.
         .ok (if (state.slot.toNat + 1) %
             (preset.SLOTS_PER_EPOCH.toNat * preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat) = 0
           then (state.nextSyncCommittee altair).value

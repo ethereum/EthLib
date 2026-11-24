@@ -10,33 +10,11 @@ import EthLib.Base.Proofs.CodeInjective
 /-!
 # Proofs: the indices and the name of an era file
 
-In an accepted file, each group holds the index of its state where the group says.
-
-That index has one entry, which finds the record of the state.
-
-The record decompresses and decodes to the state of the group, at the slot where its era ends.
-
-Each block of a group is found the same way, through the entry of its slot in the index of blocks.
-
-Its root is the one that the state holds for its slot, and its fork is the fork of that slot.
-
-A group of era 0 has no block, and a later group has an index entry for each slot of its era.
-
-Each entry that is not 0 finds a block, and each later entry of 0 repeats the root before it.
+In an accepted file, the indices of each group find its state and each of its blocks.
 
 So a reader can go straight to any block or state through the indices.
 
-Two errors of an era file with one code come from one constructor.
-
-A file name joins the configuration, the lowest era on at least five digits, and a short root.
-
-The short root comes from the state of the last group of the highest era.
-
-Era 0 is named by the root of the validators at genesis.
-
-A later era is named by a historical root while the state holds one for it.
-
-From Capella, past the historical roots, it is named by the root of a historical summary.
+A file name joins the configuration, the lowest era, and a short root of the highest era.
 -/
 
 @[expose] public section
@@ -398,28 +376,25 @@ private theorem decodeEra_block_facts {preset : Preset} {config : Config} {bytes
     mem_of_mem_groupsOf hgm ((List.takeWhile_prefix _).subset hrec),
     by simpa using List.all_eq_true.mp List.all_takeWhile _ hrec, hrb⟩
 
-/-- In an accepted file, the index of the state of each group finds the state.
-
-The index record sits where the group says, and has a single entry.
-
-The entry counts from the start of the index record, and finds the record of the state.
-
-That record decompresses and decodes, at the fork of the group, to the state of the group.
-
-The state is at the first slot of the index, where the era of the group ends. -/
+/-- In an accepted file, the index of the state of each group finds the state. -/
 theorem decodeEra_state {preset : Preset} {config : Config} {bytes : ByteArray}
     {groups : List (EraGroup preset)} (h : decodeEra preset config bytes = .ok groups)
     {group : EraGroup preset} (hg : group ∈ groups) :
+    -- The index record sits where the group says.
     (∃ length, E2store.readHeader bytes group.stateIndex.1 = .ok ⟨SLOT_INDEX, length⟩ ∧
       E2store.readIndex (bytes.extract (group.stateIndex.1 + 8) (group.stateIndex.1 + 8 + length)) =
         .ok group.stateIndex.2) ∧
     ∃ (offset : Int) (pos length : Nat) (ssz : ByteArray),
+      -- It has a single entry.
       group.stateIndex.2.offsets = [offset] ∧
+      -- The entry counts from the start of the index record, and finds the record of the state.
       (pos : Int) = group.stateIndex.1 + offset ∧
       E2store.readHeader bytes pos = .ok ⟨COMPRESSED_BEACON_STATE, length⟩ ∧
+      -- That record decompresses and decodes, at the fork of the group, to the state of the group.
       Networking.Snappy.decodeFrames (bytes.extract (pos + 8) (pos + 8 + length)) = .ok ssz ∧
       Ssz.SszType.deserialize (BeaconState preset group.fork) ssz = .ok group.state ∧
       group.fork = forkAtSlot preset config group.stateIndex.2.start ∧
+      -- The state is at the first slot of the index, where the era of the group ends.
       group.state.slot.toNat = group.stateIndex.2.start ∧
       group.era * preset.SLOTS_PER_HISTORICAL_ROOT.toNat = group.stateIndex.2.start := by
   obtain ⟨records, g, hdec, hgm, hrg⟩ := decodeEra_group h hg
@@ -738,25 +713,21 @@ private theorem foldl_highest {preset : Preset} (highest : EraGroup preset) :
 
 It is the name of the configuration, the digits of the lowest era, and a short root.
 
-Dashes separate them, and `.era` ends the name.
-
-The short root is the first 4 bytes of the root of the highest era, as lowercase hex.
-
-That root comes from the last group of the highest era.
-
-The statement splits the groups at that group.
-
-No group before it has a higher era, and every group after it has a lower era.
-
 The name fails exactly when that root fails, with the same error. -/
 theorem eraFileName_eq {preset : Preset} {config : Config} {first : EraGroup preset}
     {rest before after : List (EraGroup preset)} {highest : EraGroup preset} {lowest : Nat}
+    -- The root comes from the last group of the highest era.
+    --
+    -- The statement splits the groups at that group.
     (hsplit : first :: rest = before ++ highest :: after)
+    -- No group before it has a higher era, and every group after it has a lower era.
     (hbefore : ∀ g ∈ before, g.era ≤ highest.era) (hafter : ∀ g ∈ after, g.era < highest.era)
     (hlowest : ∃ g ∈ first :: rest, g.era = lowest)
     (hle : ∀ g ∈ first :: rest, lowest ≤ g.era) :
     eraFileName config first rest = (eraRoot highest.state highest.era).map fun root =>
+      -- Dashes separate the three parts, and `.era` ends the name.
       config.CONFIG_NAME ++ "-" ++ eraDigits lowest ++ "-" ++
+        -- The short root is the first 4 bytes of the root of the highest era, as lowercase hex.
         String.ofList ((root.toList.take 4).flatMap byteHexDigits) ++ ".era" := by
   have hlow : rest.foldl (fun era group => min era group.era) first.era = lowest := by
     have h : ((first :: rest).map (·.era)).min? = some lowest :=

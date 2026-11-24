@@ -18,83 +18,7 @@ A block that the topic rejects is invalid, and its sender is penalized.
 
 So a check that rejects a block that the block handler accepts penalizes an honest peer.
 
-From Gloas the topic checks the size of each list of operations of a block against its limit.
-
-Before Heze it also rejects a block with a deposit.
-
-In the same way, it checks four lists of requests that the block carries for its parent payload.
-
-It also checks the blob commitments of the bid against the blob limit of the epoch of the block.
-
-From Deneb to Fulu it checks the blob commitments of the block itself against the limit of its fork.
-
-From Fulu that limit is the one of the epoch of the block.
-
-The topic rejects or ignores a block whose parent has no state in the store.
-
-It checks the proposer that the parent state expects at the slot of the block.
-
-From Gloas it checks that the bid of the block names the parent of the block.
-
-It checks that the block comes after its parent block.
-
-From Capella to Fulu it checks the time of the payload against the genesis time of the head state.
-
-From Gloas a block on an empty parent must bid on the execution head of the parent state.
-
-The block handler checks the size of each list of operations against the same limit.
-
-On a full parent it checks the four counts of the requests, and an empty parent takes no request.
-
-Its bid step checks the same blob limit, on a state at the slot of the block.
-
-From Deneb to Fulu its payload step checks the same limit, on a state at the slot of the block.
-
-The handler fails on a block whose parent has no state in the store.
-
-Its header step checks the same proposer, on the parent state advanced to that slot.
-
-From Gloas the parent payload runs before that step, and keeps the proposer.
-
-From Gloas its bid step checks the parent root of the bid against the root at the slot before.
-
-The slots leave the root of the latest block header there, and the steps before the bid keep it.
-
-The header step checks that this root is the parent root of the block.
-
-The last three checks read the parent block, the head state, or the bid of the parent block.
-
-The handler reads the state that the store keeps for the parent.
-
-Take a store reached from an anchor block at or before the slot of the anchor state.
-
-Each kept state comes at or after the slot of its block.
-
-All kept states have one genesis time.
-
-From Gloas each kept state has the block hash of the bid of its block.
-
-Otherwise its latest block hash is the block hash of its own bid.
-
-That needs the anchor state to meet the same condition with the anchor block.
-
-At Bellatrix the topic tests whether payloads run on the head state.
-
-So the timestamp theorem starts at Capella.
-
-A new block that the handler accepts passes the block step of the transition.
-
-So the handler fails on every new block that these checks reject.
-
-It accepts a block that the store holds, whatever its body, so the theorems take a new block.
-
-So the topic rejects a new block that the handler accepts for one of three reasons only.
-
-The range of the proposer index and the signature of the proposer read the head state.
-
-The head may be on another branch than the parent, with other validators or fork versions.
-
-The third reason is the time of the payload at Bellatrix.
+The topic rejects a new block that the handler accepts for one of three reasons only.
 -/
 
 @[expose] public section
@@ -112,6 +36,9 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
 That step runs on the state of its parent, advanced to the slot of the block. -/
 theorem processBlock_of_onBlock {after : Store preset fork}
     (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
+    -- The handler accepts a block that the store holds, whatever its body.
+    --
+    -- So the block must be new for the handler to run the block step on it.
     (new : ¬ store.blocks.contains blockRoot)
     (added : store.onBlock config checks sources signed = .ok after) :
     ∃ pre advanced computed, store.blockStates[signed.message.parentRoot]? = some pre ∧
@@ -157,6 +84,9 @@ theorem checkExecutionRequestsLimits_of_onBlock (gloas : .glamsterdam ≤ fork)
       .accept := by
   obtain ⟨_, _, _, -, -, -, computed⟩ := processBlock_of_onBlock root new added
   obtain ⟨_, _, _, _, _, parentOk, -⟩ := processBlock_steps gloas computed
+  -- On a full parent the handler checks the four counts of the requests.
+  --
+  -- An empty parent takes no request.
   obtain ⟨withdrawals, consolidations, builderDeposits, exits⟩ :=
     processParentExecutionPayload_counts parentOk
   exact checkExecutionRequestsLimits_eq_accept.mpr
@@ -175,6 +105,7 @@ theorem blobKzgCommitments_size_le_of_onBlock (gloas : .glamsterdam ≤ fork)
   obtain ⟨_, _, _, -, -, -, computed⟩ := processBlock_of_onBlock root new added
   obtain ⟨_, _, _, _, _, -, headedOk, withdrawnOk, bid, -⟩ := processBlock_steps gloas computed
   obtain ⟨slot, -⟩ := processBlockHeader_checks headedOk
+  -- The bid step of the handler checks the same blob limit, on a state at the slot of the block.
   obtain ⟨-, blobs, -⟩ := checkExecutionPayloadBid_ok_iff.mp (processExecutionPayloadBid_ok bid).1
   -- The header step checks the slot of the block, and the header and withdrawal steps keep it.
   rwa [getCurrentEpoch, (payloadInputs_processWithdrawals withdrawnOk).slot,
@@ -193,6 +124,9 @@ theorem blobCountWithinLimit_of_onBlock (before : fork < .glamsterdam) {after : 
     obtain ⟨_, _, _, headedOk, withdrawnOk, paidOk⟩ :=
       processBlock_steps_of_lt_gloas (Nat.le_trans (by decide) deneb) before computed
     obtain ⟨slot, -⟩ := processBlockHeader_checks headedOk
+    -- From Deneb to Fulu the payload step of the handler checks the same limit.
+    --
+    -- It runs on a state at the slot of the block.
     have blobs := processExecutionPayload_blobCommitments paidOk
     -- The header step checks the slot of the block, and the header and withdrawal steps keep it.
     rw [maxBlobsPerBlock, getCurrentEpoch, (payloadInputs_processWithdrawals withdrawnOk).slot,
@@ -234,10 +168,12 @@ theorem expectedProposer_of_onBlock {after : Store preset fork}
   obtain rfl : pre = parentState := Option.some.inj (stored.symm.trans parentKnown)
   by_cases gloas : .glamsterdam ≤ fork
   · obtain ⟨_, _, _, _, _, parentOk, headedOk, -⟩ := processBlock_steps gloas computed
+    -- The header step checks the same proposer, on the parent state advanced to that slot.
     obtain ⟨-, -, proposer, -⟩ := processBlockHeader_checks headedOk
     rw [getBeaconProposerIndex_processParentExecutionPayload parentOk] at proposer
     simp only [expectedProposer, slots, proposer, bind, Except.bind, Except.mapError]
   · obtain ⟨_, headedOk⟩ := processBlock_header_of_lt_gloas (Nat.lt_of_not_le gloas) computed
+    -- The header step checks the same proposer, on the parent state advanced to that slot.
     obtain ⟨-, -, proposer, -⟩ := processBlockHeader_checks headedOk
     -- The topic advances that state as the handler does, then reads the same proposer.
     simp only [expectedProposer, slots, proposer, bind, Except.bind, Except.mapError]
@@ -329,17 +265,7 @@ theorem payloadTimestamp_of_onBlock (capella : .shapella ≤ fork) (before : for
 
 It bids on the execution head of the parent.
 
-The topic finds the parent empty from the bid of the parent block.
-
-The handler reads the latest bid of the parent state, which has the same block hash.
-
-It then finds the parent empty too, and its parent payload step keeps the latest block hash.
-
-Otherwise the latest block hash of that state is the block hash of its bid.
-
-The handler's test of a full parent is then the topic's test of the hash.
-
-Either way the bid builds on the latest block hash of the advanced parent state. -/
+That head is the latest block hash of the parent state, advanced to the slot of the block. -/
 theorem bidParentHash_of_onBlock (gloas : .glamsterdam ≤ fork) {after : Store preset fork}
     (bids : store.StatesKeepBids)
     (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
@@ -362,7 +288,9 @@ theorem bidParentHash_of_onBlock (gloas : .glamsterdam ≤ fork) {after : Store 
   obtain ⟨block, blockFound, sameBid⟩ := bids stored
   have sameBlock : parent = block := Option.some.inj (parentKnown.symm.trans blockFound)
   subst sameBlock
+  -- The slots keep the latest bid of the parent state, which the handler reads.
   have kept := processSlots_latestBid slots
+  -- The topic finds the parent empty from the bid of the parent block.
   simp only [Store.parentPayloadStatus, gloas, ↓reduceDIte] at empty
   by_cases emptyHere :
       (signed.message.body.signedExecutionPayloadBid gloas).message.parentBlockHash ≠
@@ -371,11 +299,17 @@ theorem bidParentHash_of_onBlock (gloas : .glamsterdam ≤ fork) {after : Store 
   -- A handler that finds the parent full needs a latest block hash equal to the hash of its bid.
   · have full := Classical.not_not.mp emptyHere
     rcases sameBid gloas with sameBlockBid | hashEq
+    -- That bid may have the block hash of the bid of the parent block.
     · rw [kept.2, sameBlockBid] at full
       simp [full] at empty
+    -- Otherwise the latest block hash of that state is the block hash of its bid.
+    --
+    -- The handler's test of a full parent is then the topic's test of the hash.
     · rw [full, kept.1, kept.2]
       exact hashEq.symm
-  -- Otherwise the handler finds the parent empty too, and its parent step keeps the state.
+  -- Otherwise the handler finds the parent empty too.
+  --
+  -- Its parent payload step then keeps the state, with its latest block hash.
   obtain ⟨parented, _, withdrawn, _, _, parentOk, headedOk, withdrawnOk, biddedOk, -⟩ :=
     processBlock_steps gloas computed
   have sameParented : parented = advanced := by
@@ -403,15 +337,7 @@ theorem Store.exists_blockStates_of_headState {state : BeaconState preset fork}
 
 The payload checks of the topic on that state reject the block only at Bellatrix.
 
-The reason is then the time of the payload.
-
-From Capella the topic checks that time on every payload, and the handler accepts it.
-
-At Bellatrix the topic checks it only when the kept state runs payloads.
-
-The handler checks it only when the parent state runs payloads.
-
-The two tests can differ, for example on an empty payload when only the kept state is merged. -/
+The reason is then the time of the payload. -/
 theorem payloadOutcome_reject_of_onBlock (before : fork < .glamsterdam)
     {after : Store preset fork} (oneTime : store.OneGenesisTime)
     (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
@@ -423,7 +349,15 @@ theorem payloadOutcome_reject_of_onBlock (before : fork < .glamsterdam)
     (rejected : payloadOutcome config kept before signed.message status = .ok (.reject reason)) :
     .bellatrix ≤ fork ∧ fork < .shapella ∧ reason = "incorrect execution payload timestamp" := by
   obtain ⟨bellatrix, timestamp⟩ := payloadOutcome_eq_reject rejected
+  -- At Bellatrix the topic checks the time only when the kept state runs payloads.
+  --
+  -- The handler checks it only when the parent state runs payloads.
+  --
+  -- The two tests can differ, for example on an empty payload when only the kept state is merged.
+  --
+  -- So from Capella the payload checks cannot reject, which leaves Bellatrix.
   refine ⟨bellatrix, Nat.lt_of_not_le fun capella => ?_, timestamp⟩
+  -- From Capella the topic checks that time on every payload, and the handler accepts it.
   exact payloadOutcome_ne_reject_of_capella capella
     (payloadTimestamp_of_onBlock capella before oneTime root new added keptFound) rejected
 
@@ -434,8 +368,6 @@ The topic then rejects it for its proposer index or its signature.
 It checks both on the head state.
 
 At Bellatrix it may also reject it for the time of its payload.
-
-The head state may be on another branch than the parent, with other validators or fork versions.
 
 Every other check that rejects also fails in the handler. -/
 theorem validateBeaconBlock_reject_of_onBlock_of_lt_gloas (before : fork < .glamsterdam)
@@ -469,6 +401,12 @@ theorem validateBeaconBlock_reject_of_onBlock_of_lt_gloas (before : fork < .glam
   simp only [parentFound, parentSlot, decide_true, beq_self_eq_true, ite_true, rejectUnless]
     at rejected
   -- What is left reads the head state and its payload checks.
+  --
+  -- The topic checks the proposer index and the signature on the head state.
+  --
+  -- The head state may be on another branch than the parent.
+  --
+  -- It may then hold other validators or fork versions.
   rcases head : store.headState config with _ | state
   · simp only [head] at rejected
     repeat' split at rejected
@@ -566,6 +504,13 @@ Each block of the store is at a higher slot than a known parent, and orphans sha
 From Gloas each kept state also keeps the bid of its block, or builds on the hash of its own bid. -/
 theorem validateBeaconBlock_reject_of_onBlock {orphanParent : Root} {seen : Seen}
     {statuses : PayloadStatuses} {currentTimeMs : UInt64} {reason : String}
+    -- The topic reads the slot of the parent from the parent block.
+    --
+    -- It reads the genesis time for the time of the payload from the head state.
+    --
+    -- From Gloas it reads the parent hash from the bid of the parent block.
+    --
+    -- The handler reads all three from the state that the store keeps for the parent.
     {after : Store preset fork} (linked : store.Linked orphanParent)
     (oneTime : store.OneGenesisTime) (bids : store.StatesKeepBids)
     (root : SszType.hashTreeRoot signed.message = .ok blockRoot)

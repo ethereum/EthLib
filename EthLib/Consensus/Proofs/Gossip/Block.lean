@@ -8,19 +8,7 @@ public import EthLib.Networking.Proofs.Gossip.Validation
 
 The block topic checks a block in a fixed order, so its outcome is a chain of checks.
 
-The chain needs the clock, the finalized slot, the head state and the signature.
-
-It also needs the payload checks, the finalized ancestor and the expected proposer.
-
-Once these are computed, the outcome is that chain.
-
 From the chain follows which blocks the topic accepts and which it ignores.
-
-A valid block records its slot and proposer, and the same block is then ignored.
-
-From Gloas the topic runs its own chain of checks, with the same results.
-
-There a valid block on the full parent has the payload of its parent verified.
 -/
 
 @[expose] public section
@@ -155,7 +143,11 @@ theorem validateBeaconBlock_of_unknown_parent (gloas : ¬ .glamsterdam ≤ fork)
 
 /-- The outcome of a block is its chain of checks, in order.
 
-This holds once the parent and its state are known and the fallible steps are computed. -/
+This holds once the parent and its state are known and the fallible steps are computed.
+
+The steps are the clock, the finalized slot, the head state and the signature.
+
+They also include the payload checks, the finalized ancestor and the expected proposer. -/
 theorem validateBeaconBlock_eq (gloas : ¬ .glamsterdam ≤ fork)
     (clock : store.isFutureSlot config signed.message.slot currentTimeMs = .ok future)
     (start : computeStartSlotAtEpoch preset store.finalizedCheckpoint.epoch = .ok finalizedSlot)
@@ -265,7 +257,10 @@ theorem validateBeaconBlock_eq_accept (gloas : ¬ .glamsterdam ≤ fork)
 
 end Chain
 
-/-! ## Blocks from Gloas -/
+/-! ## Blocks from Gloas
+
+From Gloas the topic runs its own chain of checks, with the same results.
+-/
 
 section Gloas
 
