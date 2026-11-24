@@ -11,6 +11,17 @@ An output of a bind is an output of its continuation on an output of its first s
 
 The image of an output under a map is an output of the mapped computation.
 
+Each lemma here holds for any computation, so the kernel checks it without running one.
+-/
+
+@[expose] public section
+
+namespace OracleComp
+
+variable {α β : Type}
+
+/-! ## Why the bind is stated at a uniform computation
+
 The library lemma states the bind through the generic monad instances.
 
 A do block builds it through the free monad's own instances.
@@ -30,15 +41,7 @@ A lemma instantiated with a continuation applies it, and the kernel does not red
 So the kernel compares the continuation applied, and the form a proof gives, as two computations.
 
 The same holds for a map, for two names of one output, and for a simulated bind.
-
-Each lemma here holds for any computation, so the kernel checks it without running one.
 -/
-
-@[expose] public section
-
-namespace OracleComp
-
-variable {α β : Type}
 
 /-- A value of the first step and an output of the continuation on it give an output of a bind.
 

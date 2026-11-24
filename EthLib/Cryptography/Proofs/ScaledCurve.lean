@@ -15,10 +15,6 @@ Then `(x, y)` goes to `(f x u^2, f y u^3)` on the second curve.
 This map of points is an injective group homomorphism.
 
 A sextic untwist is such a map, and so is the Frobenius map of a curve over the prime field.
-
-The line of Miller's algorithm through two images has the image of the slope times `u`.
-
-A point with `x = 0` on `y^2 = x^3 + c` has order 3.
 -/
 
 @[expose] public section
@@ -199,7 +195,9 @@ variable {F : Type*} [Field F] [DecidableEq F] {c : F}
 
 /-- A point with `x = 0` doubles to its opposite, so three times it is `O`.
 
-The tangent there is horizontal, and `x = 0` is a double root of `x^3 - (y^2 - c)`. -/
+The tangent there is horizontal, and `x = 0` is a double root of `x^3 - (y^2 - c)`.
+
+So a point with `x = 0` on `y^2 = x^3 + c` has order 3. -/
 theorem three_nsmul_some_zero {y : F} (h : (curve 0 c).Nonsingular 0 y) :
     3 • (Point.some 0 y h : (curve 0 c).Point) = 0 := by
   have hy : y ≠ (curve 0 c).negY 0 y := by

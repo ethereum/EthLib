@@ -13,10 +13,6 @@ public import Mathlib.Tactic.Ring
 
 An element holds `a R mod p`, with `R = 2 ^ (32 n)`, for the integer `a` that it stands for.
 
-The map below sends it to `a` in `ZMod p`, as its limbs times the inverse of `R`.
-
-`R` is invertible mod `p` because `p` is odd.
-
 Each operation maps to the same operation of `ZMod p`, and the map is a bijection.
 
 So the limb arithmetic is the arithmetic of the integers mod `p`.
@@ -48,7 +44,7 @@ theorem Modulus.odd (M : Modulus n) : M.p % 2 = 1 := by
 /-- The radix `R = 2 ^ (32 n)`, mod `p`. -/
 def radix (M : Modulus n) : ZMod M.p := ((2 ^ (32 * n) : ℕ) : ZMod M.p)
 
-/-- `R` is a unit mod `p`. -/
+/-- `R` is a unit mod `p`, because `p` is odd. -/
 theorem radix_mul_inv (M : Modulus n) : radix M * (radix M)⁻¹ = 1 :=
   ZMod.coe_mul_inv_eq_one _
     (Nat.Coprime.pow_left _ ((Nat.coprime_two_left).mpr (Nat.odd_iff.mpr M.odd)))

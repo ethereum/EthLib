@@ -7,25 +7,9 @@ public import EthLib.Cryptography.Proofs.MillerLines
 
 Weil reciprocity says that `f(div g) = g(div f)` for two functions `f` and `g` on a curve.
 
-Miller states it for two functions whose divisors have disjoint supports.
-
 Here `f` and `g` are quotients of products of lines.
 
-Every line has its only pole at `O`, so `O` may lie in both supports.
-
-At `O`, each line takes the value 1, the leading coefficient of its expansion there.
-
 Then `f(div g) = (-1)^(m n) g(div f)`, where `m` and `n` are the multiplicities of `O`.
-
-The divisors are the formal sums given to the lines, and `m` and `n` are read from them.
-
-The proof is direct.
-
-For two lines, both sides are products over the points where each line meets the curve.
-
-The cubic that a line cuts out of the curve gives the identity, for every pair of lines.
-
-The law for quotients follows when the lines of `f` and of `g` share no finite point.
 
 See Miller, "The Weil Pairing, and Its Efficient Calculation", J. Cryptology 17 (2004).
 
@@ -48,6 +32,7 @@ variable {F : Type*} [Field F] [DecidableEq F] {W : WeierstrassCurve.Affine F}
 
 /-- The value of the line through two points at a point of the curve, with 1 at `O`. -/
 noncomputable def lineAt (l : W.Point × W.Point) : W.Point → F
+  -- At `O`, each line takes the value 1, the leading coefficient of its expansion there.
   | .zero => 1
   | .some x y _ => line W l.1 l.2 x y
 
@@ -248,6 +233,9 @@ private theorem prod_lineAt_lineZeros_of_le (T S U V : W.Point)
       (-1) ^ (lineDivisor W T S 0 * lineDivisor W U V 0) *
         ((lineZeros (T, S)).map (lineAt (U, V))).prod := by
   rw [lineDivisor_apply, lineDivisor_apply] at hle ⊢
+  -- For two lines, both sides are products over the points where each line meets the curve.
+  --
+  -- The cubic that a line cuts out of the curve gives the identity, for every pair of lines.
   rcases shape (T, S) with ⟨hz, hv⟩ | ⟨a, b, hab, hz, hv⟩ |
     ⟨x₁, y₁, ℓ, x₂, y₂, x₃, y₃, h₁, h₂, h₃, hz, hv, e₂, e₃, hp⟩ <;>
   rcases shape (U, V) with ⟨hz', hv'⟩ | ⟨c, d, hcd, hz', hv'⟩ |
@@ -426,7 +414,15 @@ The lines of `f` and the lines of `g` must meet the curve at no common finite po
 
 Then `f(div g) = ε g(div f)`, with both functions worth 1 at `O`.
 
-The sign `ε` is -1 to the product of the multiplicities of `O` in the two divisors. -/
+The sign `ε` is -1 to the product of the multiplicities of `O` in the two divisors.
+
+Miller states the law for two functions whose divisors have disjoint supports.
+
+Every line has its only pole at `O`, so here `O` may lie in both supports.
+
+The divisors are the formal sums given to the lines.
+
+The multiplicities of `O` are read from them. -/
 theorem weil_reciprocity {N₁ D₁ N₂ D₂ : Multiset (W.Point × W.Point)}
     (h : ∀ R ∈ linesZeros (N₁ + D₁), R ∈ linesZeros (N₂ + D₂) → R = 0) :
     evalDivisor (fun R => linesAt N₁ R / linesAt D₁ R) (linesDivisor W N₂ - linesDivisor W D₂) =
@@ -451,6 +447,11 @@ theorem weil_reciprocity {N₁ D₁ N₂ D₂ : Multiset (W.Point × W.Point)}
   rw [evalDivisor_sub_linesDivisor (by simp) fun R hR => div_ne_zero (h₁ R hR).1 (h₁ R hR).2,
     evalDivisor_sub_linesDivisor (by simp) fun R hR => div_ne_zero (h₂ R hR).1 (h₂ R hR).2]
   simp only [Multiset.prod_map_div]
+  -- The proof is direct.
+  --
+  -- The law for quotients follows from the law for two lines.
+  --
+  -- It needs the lines of `f` and of `g` to share no finite point.
   rw [prod_linesAt_linesZeros N₁ N₂, prod_linesAt_linesZeros D₁ N₂,
     prod_linesAt_linesZeros N₁ D₂, prod_linesAt_linesZeros D₁ D₂]
   have hp {Z : Multiset W.Point} {M : Multiset (W.Point × W.Point)}

@@ -5,17 +5,9 @@ public import Mathlib.AlgebraicGeometry.EllipticCurve.Affine.AddSubMap
 /-!
 # Proofs: the u-only ladder on a Montgomery curve
 
-The Montgomery curve `v^2 = u^3 + A u^2 + u` is the Weierstrass curve with `a_2 = A` and `a_4 = 1`.
-
-So Mathlib's group law applies to its points as they are, with no change of coordinates.
+It proves the two formulas of the ladder of [RFC 7748 §5][rfc].
 
 A pair `(X : Z)` stands for the u-coordinate `X / Z` of a point, and `(1 : 0)` for infinity.
-
-The ladder of [RFC 7748 §5][rfc] combines two formulas on such pairs.
-
-- The doubling sends a pair of `Q` to a pair of `Q + Q`.
-- The differential addition sends pairs of `Q` and `R` to a pair of `Q + R`.
-  It needs the u-coordinate of `R - Q`, which must not be `0`, and a field in which `2 ≠ 0`.
 
 Each formula holds for every point, the point at infinity and the points of order 2 included.
 
@@ -30,7 +22,9 @@ open WeierstrassCurve WeierstrassCurve.Affine
 
 variable {F : Type*} [Field F]
 
-/-- The curve `v^2 = u^3 + A u^2 + u`, as a Weierstrass curve with `a_2 = A` and `a_4 = 1`. -/
+/-- The curve `v^2 = u^3 + A u^2 + u`, as a Weierstrass curve with `a_2 = A` and `a_4 = 1`.
+
+So Mathlib's group law applies to its points as they are, with no change of coordinates. -/
 def curve (A : F) : WeierstrassCurve.Affine F :=
   { a₁ := 0, a₂ := A, a₃ := 0, a₄ := 1, a₆ := 0 }
 

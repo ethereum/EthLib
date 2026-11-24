@@ -12,33 +12,13 @@ One of them programs `Π`: it draws each answer itself.
 
 The other asks `Π` through an overlay.
 
-Both write one cache of pairs, and each pair carries a flag.
-
-The programming oracle answers each query with a uniform value of `A`.
-
-It records the pair with the flag set, also when the query or the answer is cached.
-
-The overlay answers a cached query from the cache, in either direction.
-
-It relays a new query to the lazy permutation, and records the pair with the flag clear.
-
-So the lazy permutation sees only the relayed pairs.
-
-A conflict is two pairs of the cache that share a query or an answer.
-
-Once there, a conflict stays.
-
-Read the state of both oracles as the cache with its flags erased.
-
 Until a conflict, the lazy permutation puts at least as much mass on each outcome.
 
-The source is [Fersch, Kiltz, Poettering, CCS 2016](https://doi.org/10.1145/2976749.2978413).
+The source is [Fersch, Kiltz, Poettering, CCS 2016][fkp16].
 
 Their Game G2 of Figure 5 keeps the programmed pairs in `Π_S`, and the relayed pairs in `Π_O`.
 
-Their aborts in lines 05, 11, 13 and 25 are conflicts here.
-
-They stop the game, where here the oracles go on and an event excludes the conflict.
+[fkp16]: https://doi.org/10.1145/2976749.2978413
 -/
 
 @[expose] public section
@@ -50,7 +30,10 @@ open scoped List
 
 variable {A : Type}
 
-/-! ## The shared cache -/
+/-! ## The shared cache
+
+Both callers write one cache of pairs, and each pair carries a flag.
+-/
 
 /-- The pairs of `Π` known to the overlay, the most recent first.
 
@@ -61,7 +44,11 @@ abbrev ProgrammedCache (A : Type) := TaggedCache A Bool
 def ProgrammedCache.relayed (c : ProgrammedCache A) : PermCache A :=
   TaggedCache.untag (c.filter fun e => !e.2)
 
-/-- Two pairs of the cache share a query or an answer. -/
+/-- Two pairs of the cache share a query or an answer.
+
+The aborts in lines 05, 11, 13 and 25 of Figure 5 of the source are conflicts here.
+
+They stop the game, where here the oracles go on and an event excludes the conflict. -/
 def ProgrammedCache.Conflict (c : ProgrammedCache A) : Prop :=
   ¬(TaggedCache.untag c).IsPartialBijection
 
@@ -158,7 +145,9 @@ theorem ProgrammedCache.conflict_cons_of_swap_lookup {c : ProgrammedCache A} {a 
 
 A query in its cache gets the cached answer, in either direction.
 
-A new query goes to the oracle of `Π`, and the overlay records the relayed pair. -/
+A new query goes to the oracle of `Π`, and the overlay records the relayed pair with the flag clear.
+
+So the lazy permutation sees only the relayed pairs. -/
 def overlayPermOracle : QueryImpl (PermSpec A) (StateT (ProgrammedCache A) (PermComp A))
   | .inl a => fun c =>
     match (TaggedCache.untag c).lookup a with
@@ -181,19 +170,17 @@ def overlayLazyOracle :
 
 /-- The oracle of `Π` that programs each query with a uniform answer.
 
-A forward query gets a uniform value of `A`.
-
-It records the pair as programmed, even when the query or the answer is cached.
-
-It leaves the cache of the lazy permutation unchanged.
-
-An inverse query is programmed the same way, so that the oracle is total.
-
-The signing program never asks one, so a bound on conflicts need not count it. -/
+It leaves the cache of the lazy permutation unchanged. -/
 def programPermOracle :
     QueryImpl (PermSpec A) (StateT (ProgrammedCache A × PermCache A) ProbComp)
+  -- A forward query gets a uniform value of `A`.
+  --
+  -- It records the pair as programmed, even when the query or the answer is cached.
   | .inl a => fun s => (fun b => (b, (((a, b), true) :: s.1, s.2))) <$>
     (uniformOutside [] a : ProbComp A)
+  -- An inverse query is programmed the same way, so that the oracle is total.
+  --
+  -- The signing program never asks one, so a bound on conflicts need not count it.
   | .inr b => fun s => (fun a => (a, (((a, b), true) :: s.1, s.2))) <$>
     (uniformOutside [] b : ProbComp A)
 
@@ -411,7 +398,10 @@ theorem prEvent_overlayLazyOracle_conflict_le (q : (PermSpec A).Domain)
         simp only [List.length_map, le_refl]
     · simp [hc]
 
-/-! ## Domination until a conflict -/
+/-! ## Domination until a conflict
+
+Read the state of both oracles as the cache with its flags erased.
+-/
 
 /-- Until a conflict, the overlay is dominated by the lazy permutation on the whole cache. -/
 theorem dominatedUntilBad_overlayLazyOracle :

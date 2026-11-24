@@ -6,17 +6,9 @@ public import EthLib.Base.Proofs.ByteOrder
 /-!
 # Proofs: the X25519 clamp and coordinate encoding
 
-The clamp of [RFC 7748 §5][rfc] clears the three low bits and bit 255 of a scalar.
+It proves which bits the clamp and the coordinate decoding of [RFC 7748 §5][rfc] fix.
 
-It sets bit 254.
-
-It keeps bits 3 to 253 of the key as they are.
-
-The decoding of a coordinate clears bit 255 and reduces the rest modulo the field prime.
-
-So a noncanonical coordinate is accepted, and the encoding of a reduced coordinate decodes to it.
-
-The ladder ignores every scalar bit above bit 254, and bit 0 of a clamped scalar leaves no swap.
+It also proves which scalar bits the ladder reads.
 
 These are statements about the definitions alone.
 

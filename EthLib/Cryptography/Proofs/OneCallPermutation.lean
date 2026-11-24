@@ -11,30 +11,6 @@ A hash of this shape encodes the message as a point of `A`, permutes it, and rea
 The permutation is uniform, and the adversary evaluates it and its inverse.
 
 Collisions and preimages are then rare, and this file bounds them.
-
-The run with the permutation drawn up front has the law of the lazy run from no cache.
-
-So the bounds are union bounds over the pairs that the lazy run adds to its cache.
-
-Let `N` be the size of `A`, and `Q` the number of calls to the permutation, counted with the game's.
-
-Let each output be shared by at most `F` points, and the encodings lie in a set of at most `K`.
-
-A collision has chance at most `(Q (Q - 1) / 2 * F + Q K) / (N - Q)`.
-
-A preimage of a fixed output has chance at most `Q (F + K) / (N - Q)`.
-
-A new forward call draws its image among the `N - k` points that are no image yet.
-
-So it shares an output with one of the `k` earlier answers with chance at most `k F / (N - k)`.
-
-A new inverse call draws its preimage among the `N - k` points that are no preimage yet.
-
-So it lands among the encodings with chance at most `K / (N - k)`.
-
-The preimage bound holds for every output, which is stronger than for a uniform output.
-
-For `Q ≥ N` the denominators are zero and the bounds are trivial.
 -/
 
 @[expose] public section
@@ -222,7 +198,9 @@ theorem badOnGrowthBy_lazyPermImpl {bad : PermCache A → Prop} (out inp : PermC
         exact hle _ _ ((hinp c).trans (Nat.le_add_left _ _)) _ (List.length_map _) b
 
 omit [FinEnum A] in
-/-- The terms of the union bound share the smallest denominator, `N - Q`. -/
+/-- The terms of the union bound share the smallest denominator, `N - Q`.
+
+For `Q ≥ N` it is zero, and the bound is trivial. -/
 theorem sum_range_div_le (G : ℕ → ℕ) (N Q : ℕ) :
     ∑ i ∈ Finset.range Q, ((G i : ℕ) : ℝ≥0∞) / ((N - i : ℕ) : ℝ≥0∞) ≤
       ((∑ i ∈ Finset.range Q, G i : ℕ) : ℝ≥0∞) / ((N - Q : ℕ) : ℝ≥0∞) := by
@@ -332,7 +310,9 @@ An adversary with at most `q` calls to the permutation and its inverse finds a c
 
 Its chance is at most `(Q (Q - 1) / 2 * F + Q K) / (N - Q)`, with `Q = q + 2`.
 
-The two calls that hash its messages count in `Q`. -/
+The two calls that hash its messages count in `Q`.
+
+For `Q ≥ N` the denominator is zero, and the bound is trivial. -/
 theorem collisionAdvantage_le [DecidableEq D] (encode : M → A) (henc : Function.Injective encode)
     (hZ : ∀ m, encode m ∈ Z) {K : ℕ} (hK : Z.card ≤ K) {F : ℕ}
     (hF : ∀ y, (Finset.univ.filter fun x => output x = output y).card ≤ F)
@@ -341,6 +321,7 @@ theorem collisionAdvantage_le [DecidableEq D] (encode : M → A) (henc : Functio
     collisionAdvantage encode output adversary ≤
       (((q + 2).choose 2 * F + (q + 2) * K : ℕ) : ℝ≥0∞) /
         ((FinEnum.card A - (q + 2) : ℕ) : ℝ≥0∞) := by
+  -- The run with the permutation drawn up front has the law of the lazy run from no cache.
   rw [collisionAdvantage_eq_lazy, StateT.run'_eq, prEvent_map]
   refine (prEvent_mono_of_support _ _ (fun z => CollidesIn Z output z.2) fun z hz h => ?_).trans ?_
   · simp only [collisionRun, simulateQ_bind, StateT.run_bind, mem_support_bind_iff,
@@ -350,6 +331,15 @@ theorem collisionAdvantage_le [DecidableEq D] (encode : M → A) (henc : Functio
     obtain ⟨hm₂, hs⟩ := mem_of_mem_support_lazy_forward h₂
     exact ⟨(encode r.1, y₁), hs.subset hm₁, (encode r.2, y₂), hm₂, fun he => h.1 (henc he),
       hZ _, hZ _, h.2⟩
+  -- The bound is a union bound over the pairs that the lazy run adds to its cache.
+  --
+  -- A new forward call draws its image among the `N - k` points that are no image yet.
+  --
+  -- So it shares an output with one of the `k` earlier answers with chance at most `k F / (N - k)`.
+  --
+  -- A new inverse call draws its preimage among the `N - k` points that are no preimage yet.
+  --
+  -- So it lands among the encodings with chance at most `K / (N - k)`.
   · refine (prEvent_bad_lazy_le (length_le_of_mem_support_collisionRun encode hq)
       (by simp [CollidesIn])
       (sharedOutputs output) (fun _ => Z) (fun c a b hc hb => ?_)
@@ -418,7 +408,11 @@ An adversary with at most `q` calls to the permutation and its inverse gets an o
 
 It returns a message that hashes to `d` with chance at most `Q (F + K) / (N - Q)`, with `Q = q + 1`.
 
-The call that hashes its message counts in `Q`. -/
+The call that hashes its message counts in `Q`.
+
+The bound holds for every output, which is stronger than for a uniform output.
+
+For `Q ≥ N` the denominator is zero, and the bound is trivial. -/
 theorem preimageAdvantage_le [DecidableEq D] (encode : M → A) (hZ : ∀ m, encode m ∈ Z) {K : ℕ}
     (hK : Z.card ≤ K) {F : ℕ}
     (hF : ∀ y, (Finset.univ.filter fun x => output x = output y).card ≤ F)
@@ -426,12 +420,14 @@ theorem preimageAdvantage_le [DecidableEq D] (encode : M → A) (hZ : ∀ m, enc
     (hq : IsQueryBoundP (adversary d) (·.isRight = true) q) :
     preimageAdvantage encode output adversary d ≤
       (((q + 1) * (F + K) : ℕ) : ℝ≥0∞) / ((FinEnum.card A - (q + 1) : ℕ) : ℝ≥0∞) := by
+  -- The run with the permutation drawn up front has the law of the lazy run from no cache.
   rw [preimageAdvantage_eq_lazy, StateT.run'_eq, prEvent_map]
   refine (prEvent_mono_of_support _ _ (fun z => HitsIn Z output d z.2) fun z hz h => ?_).trans ?_
   · simp only [preimageRun, simulateQ_bind, StateT.run_bind, mem_support_bind_iff,
       simulateQ_pure, StateT.run_pure, support_pure, Set.mem_singleton_iff] at hz
     obtain ⟨⟨m, c₁⟩, -, ⟨y, c₂⟩, h₁, rfl⟩ := hz
     exact ⟨_, (mem_of_mem_support_lazy_forward h₁).1, hZ m, h⟩
+  -- The bound is a union bound over the pairs that the lazy run adds to its cache.
   · refine (prEvent_bad_lazy_le (length_le_of_mem_support_preimageRun encode d hq)
       (by simp [HitsIn])
       (fun _ => Finset.univ.filter fun x => output x = d) (fun _ => Z)

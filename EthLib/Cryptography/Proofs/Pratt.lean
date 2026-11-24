@@ -8,15 +8,6 @@ public import Mathlib.NumberTheory.LucasPrimality
 
 Lucas' test proves `m` prime from a witness `g` whose order is `m - 1`.
 
-- `g^(m - 1) = 1` mod `m`.
-- `g^((m - 1) / q)` is not 1 mod `m`, for each prime `q` that divides `m - 1`.
-
-`prime_of_lucas` takes `m - 1` as a list of prime powers `q^e`.
-
-The second check alone is also a lemma, for proofs that need the order of `g`.
-
-The kernel checks the product and the powers by `decide`, through Lean core's modular power.
-
 Each factor `q` needs its own proof of primality, by `norm_num` when small, or by this lemma again.
 
 That nesting is a Pratt certificate.
@@ -44,7 +35,9 @@ private theorem mem_of_dvd_prod {q : Nat} (hq : q.Prime) :
 
 /-- The second half of Lucas' test, with `m - 1` given as the product of `q^e` over `fs`.
 
-The power checks on the listed primes cover every prime that divides `m - 1`. -/
+The power checks on the listed primes cover every prime that divides `m - 1`.
+
+This half alone serves proofs that need the order of `g`. -/
 theorem pow_div_ne_one_of_lucas (m g : Nat) (fs : List (Nat × Nat))
     (hprod : (fs.map fun f => f.1 ^ f.2).prod = m - 1)
     (hprime : ∀ f ∈ fs, f.1.Prime)
@@ -56,7 +49,14 @@ theorem pow_div_ne_one_of_lucas (m g : Nat) (fs : List (Nat × Nat))
   have hne := List.all_eq_true.mp hdiv f hf
   exact natCast_pow_div_ne_one m g f.1 (by simpa using hne)
 
-/-- Lucas' test, with `m - 1` given as the product of `q^e` over `fs`. -/
+/-- Lucas' test, with `m - 1` given as the product of prime powers `q^e` over `fs`.
+
+It makes two checks:
+
+- `g^(m - 1) = 1` mod `m`.
+- `g^((m - 1) / q)` is not 1 mod `m`, for each prime `q` that divides `m - 1`.
+
+The kernel checks the product and the powers by `decide`, through Lean core's modular power. -/
 theorem prime_of_lucas (m g : Nat) (fs : List (Nat × Nat))
     (hprod : (fs.map fun f => f.1 ^ f.2).prod = m - 1)
     (hprime : ∀ f ∈ fs, f.1.Prime)

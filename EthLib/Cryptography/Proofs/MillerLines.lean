@@ -11,19 +11,7 @@ Here the algorithm records these factors, without evaluating them.
 
 The numerator is a multiset of lines, and so is the denominator.
 
-From the two multisets come three objects:
-
-- the value of the function at a point, which the loop computes;
-- the element of the function field;
-- the divisor, a formal sum of points.
-
-Each line through `T` and `S` gets the divisor `(T) + (S) + (-(T + S)) - 3 (O)`.
-
-These divisors add up to `s (Q) - (s Q) - (s - 1) (O)`, an identity of formal sums.
-
-The fractional ideals prove the affine part of each divisor, but not the multiplicity at `O`.
-
-So the fractional ideal of the function is the ideal of `Q` to the power `s`, over that of `s Q`.
+From the divisors of its lines come the divisor and the fractional ideal of the function.
 
 See Miller, "The Weil Pairing, and Its Efficient Calculation", J. Cryptology 17 (2004).
 
@@ -91,7 +79,14 @@ theorem divisorUnit_lineDivisor (T S : W.Point) :
     divisorUnit_single, divisorUnit_single, divisorUnit_single, pointUnit_zero, one_zpow,
     inv_one, mul_one, zpow_one, zpow_one, zpow_one]
 
-/-! ## Products of lines -/
+/-! ## Products of lines
+
+From a multiset of lines come three objects:
+
+- the value of the function at a point, which the loop computes;
+- the element of the function field;
+- the divisor, a formal sum of points.
+-/
 
 variable (W)
 
@@ -175,17 +170,15 @@ variable (W)
 
 The pair holds the numerator and the denominator, and `T` is the current point.
 
-Doubling squares the function and multiplies it by `g_{T,T}`.
-
-Adding `Q` multiplies it by `g_{2T,Q}`.
-
 The lines `L` go to the numerator, and the verticals to the denominator. -/
 noncomputable def lineSteps (s : ℕ) (Q : W.Point) :
     ℕ → W.Point → Multiset (W.Point × W.Point) × Multiset (W.Point × W.Point) →
       Multiset (W.Point × W.Point) × Multiset (W.Point × W.Point)
   | 0, _, M => M
+  -- Doubling squares the function and multiplies it by `g_{T,T}`.
   | n + 1, T, M =>
     if s.testBit n then
+      -- Adding `Q` also multiplies it by `g_{2T,Q}`.
       lineSteps s Q n (T + T + Q)
         (2 • M.1 + {(T, T), (T + T, Q)}, 2 • M.2 + {(T + T, -(T + T)), (T + T + Q, -(T + T + Q))})
     else lineSteps s Q n (T + T) (2 • M.1 + {(T, T)}, 2 • M.2 + {(T + T, -(T + T))})
@@ -323,6 +316,8 @@ theorem linesDivisor_lineSteps (s : ℕ) (Q : W.Point) :
 
 /-- The lines of `f_{s,Q}` have the divisor `s (Q) - (s Q) - (s - 1) (O)`.
 
+This is an identity of formal sums of points.
+
 This is Lemma 2, equation (7), of Miller (2004), Section 4.1. -/
 theorem linesDivisor_lines (s : ℕ) (Q : W.Point) :
     linesDivisor W (lines W s Q).1 - linesDivisor W (lines W s Q).2 = millerDivisor W s Q := by
@@ -341,7 +336,9 @@ theorem divisorUnit_millerDivisor (s : ℕ) (Q : W.Point) :
     Finsupp.smul_single_one, divisorUnit_single, divisorUnit_single, divisorUnit_single,
     pointUnit_zero, one_zpow, inv_one, mul_one, zpow_one, zpow_natCast]
 
-/-- The fractional ideal of `f_{s,Q}` is the ideal of `Q` to the power `s`, over that of `s Q`. -/
+/-- The fractional ideal of `f_{s,Q}` is the ideal of `Q` to the power `s`, over that of `s Q`.
+
+The fractional ideals prove the affine part of each divisor, but not the multiplicity at `O`. -/
 theorem spanSingleton_millerElem (s : ℕ) (Q : W.Point) :
     FractionalIdeal.spanSingleton W.CoordinateRing⁰ (millerElem W s Q) =
       ↑(pointUnit W Q ^ s * (pointUnit W (s • Q))⁻¹) := by
