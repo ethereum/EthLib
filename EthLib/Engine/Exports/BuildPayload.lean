@@ -33,27 +33,27 @@ instance : ExportError BuildError where
 
 /-- Build a payload on a chain, from attributes, the builder's choices and transactions.
 
-The chain crosses as for `engine_newPayload` on a chain: configuration, state and recent blocks.
-
-The attributes cross as the value of their JSON, with the method of the forkchoice update.
-
-The transactions are in the form of an execution payload.
-
 The result is the block in RLP form and the accounts after it, as the transition export gives.
 
 Then come the requests of the block and its value in wei.
 
-An error has the code of its Engine API error, of the transaction, or of the block.
-
-Code 0 is for a chain that does not decode, an unknown method, or a result with no encoding. -/
+An error has the code of its Engine API error, of the transaction, or of the block. -/
 def buildPayloadOf
     (args : PyValue × ByteArray × List (String × ByteArray × List ByteArray) × String × PyValue ×
       Address × ByteArray × UInt64 × List ByteArray) :
     Result (ByteArray × ByteArray × List ByteArray × Nat) := do
   let (config, state, recent, method, attributes, feeRecipient, extraData, target, txs) := args
+  -- The chain crosses as for `engine_newPayload` on a chain.
+  --
+  -- It is the configuration, the state and the recent blocks.
+  --
+  -- A chain that does not decode has code 0.
   let chain ← Execution.Blocks.Exports.chainOf config state recent
+  -- An unknown method has code 0.
   let some version := forkchoiceUpdatedVersion method | rejectArgument none s!"no method {method}"
+  -- The attributes cross as the value of their JSON, with the method of the forkchoice update.
   let decoded ← toResult "engine error" (payloadAttributesOfVersion version attributes.toJson)
+  -- The transactions are in the form of an execution payload.
   let ⟨_, built⟩ ← toResult none
     (buildPayloadOnChain chain version decoded ⟨feeRecipient, extraData, target⟩ txs)
   let encoded : Except BlockError (ByteArray × ByteArray) := do
@@ -61,6 +61,7 @@ def buildPayloadOf
     let accounts ← (Serialization.Rlp.encode
       (Execution.Blocks.Exports.accountsItem built.state)).mapError .encoding
     return (block, accounts)
+  -- A result with no encoding has code 0.
   let (block, accounts) ← toResult none
     (encoded.mapError fun e => UnreadArgument.mk s!"result: {reprStr e}")
   return (block, accounts, built.requests, built.blockValue)

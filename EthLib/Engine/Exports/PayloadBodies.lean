@@ -14,13 +14,7 @@ The store crosses as a list of entries, one per block.
 
 The number of the latest known block and the request limit cross beside the store.
 
-The request is a JSON-RPC request object, with its method and its parameters.
-
-The result is the JSON answer, as a Python value.
-
-A malformed store, block number or limit has code 0.
-
-So do a request without a method, an unknown method, and an argument that Lean cannot read.
+An argument that Lean cannot read has code 0.
 
 A second export reads the JSON result of any version, and writes it back.
 -/
@@ -79,6 +73,7 @@ def bodiesMethod (method : String) : Option (Nat × Bool) :=
 The arguments are the store's entries, the latest known block, the limit and the request. -/
 def payloadBodiesOf (args : List BodyEntry × Nat × Nat × PyValue) : Result PyValue := do
   let (entries, latest, maxRequest, request) := args
+  -- A malformed store has code 0.
   let entries ← entries.mapM storedOf
   -- A store holds each block once, and one canonical block at each number.
   unless (entries.map (·.1)).Nodup do rejectArgument none "store: two entries with one block hash"
@@ -87,6 +82,8 @@ def payloadBodiesOf (args : List BodyEntry × Nat × Nat × PyValue) : Result Py
   let canonical (n : Nat) : Option StoredBody :=
     (entries.find? (·.2.1 == some n)).map (·.2.2)
   -- A canonical entry must hold the latest known block, and the limit must be at least 32.
+  --
+  -- Otherwise the export raises with code 0.
   if missing : (canonical latest).isSome = false then
     rejectArgument none s!"store: no canonical entry at the latest known block {latest}"
   else
@@ -98,7 +95,9 @@ def payloadBodiesOf (args : List BodyEntry × Nat × Nat × PyValue) : Result Py
     byHash := fun hash => (entries.find? (·.1 == hash)).map (·.2.2)
     canonical, latest, latest_held := Bool.not_eq_false _ ▸ missing
     maxRequest, le_maxRequest := Nat.not_lt.1 below }
+  -- The request is a JSON-RPC request object, with its method and its parameters.
   let request := request.toJson
+  -- A request without a method, or with an unknown method, has code 0.
   let some method := (request.getObjValAs? String "method").toOption
     | rejectArgument none "request: no method"
   let some (version, byRange) := bodiesMethod method | rejectArgument none s!"no method {method}"
@@ -121,6 +120,7 @@ def payloadBodiesOf (args : List BodyEntry × Nat × Nat × PyValue) : Result Py
       let (start, count) ← toResult "engine error" (bodiesByRangeParams params)
       let bodies ← toResult "engine error" (getPayloadBodiesByRangeV2 store start count)
       pure (payloadBodiesV2Json bodies)
+  -- The result is the JSON answer, as a Python value.
   return .ofJson answer
 
 /-- The answer to a payload bodies request, from a store of bodies.

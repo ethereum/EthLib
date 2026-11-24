@@ -15,15 +15,7 @@ A third gives the finalized block hash of a store, from Bellatrix.
 
 Their arguments and their results are typed Python values.
 
-The preset, the configuration and the fork are named in UTF-8, with replacements of values.
-
-The states, the blocks, the hashes and the fee recipient are SSZ bytes.
-
-The result of an update is the value of its JSON: the forkchoice state and the payload attributes.
-
 An input that does not decode, an unknown name or a fork that the export does not cover has code 0.
-
-So do a step that does not read and a payload status above 2.
 -/
 
 public section
@@ -63,12 +55,20 @@ abbrev PrepareArgs := String × String × ByteArray × Option PyValue × ByteArr
 It is `None` when the proposer asks for nothing, before the merge. -/
 def prepareExecutionPayloadOf (args : PrepareArgs) : Result PyValue := do
   let (name, fork, state, replacements, safe, finalized, feeRecipient, powChain) := args
+  -- The preset, the configuration and the fork are named in UTF-8, with replacements of values.
+  --
+  -- An unknown name has code 0.
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   -- The configuration of the name holds, with its replacements.
   let config ← configWithValue name replacements
+  -- A fork that the export does not cover has code 0.
   let ⟨bellatrix⟩ ← holds (.bellatrix ≤ fork ∧ fork < .glamsterdam)
     s!"no payload preparation at {fork.name}"
+  -- The state, the hashes and the fee recipient are SSZ bytes.
+  --
   -- Each block of proof of work is SSZ bytes too.
+  --
+  -- An input that does not decode has code 0.
   let state ← decodeInput (BeaconState preset fork) state
   let safe ← decodeInput Root safe
   let finalized ← decodeInput Root finalized
@@ -76,7 +76,7 @@ def prepareExecutionPayloadOf (args : PrepareArgs) : Result PyValue := do
   let powChain ← powChain.mapM (decodeInput PowBlock)
   let prepared ← toResult none
     (prepareExecutionPayload config state bellatrix safe finalized feeRecipient powChain)
-  -- The result is `None`, or the forkchoice state and the payload attributes.
+  -- The result is `None`, or the JSON value of the forkchoice state and the payload attributes.
   return match prepared with
     | some (update, attributes) => .ofJson (updateJson update attributes)
     | none => .none
@@ -97,17 +97,10 @@ def payloadStatusOfCode : UInt64 → Result Consensus.PayloadStatus
   | 0 => return .empty
   | 1 => return .full
   | 2 => return .pending
+  -- A payload status above 2 has code 0.
   | _ => rejectArgument none "a payload status is 0, 1 or 2"
 
-/-- From Gloas: the forkchoice update of a proposer, as the value of its JSON.
-
-The store comes from an anchor state, an anchor block and steps of the fork choice export.
-
-The finalized block hash is that of the store.
-
-The custody columns are given as the SSZ bytes of their bitvector, or not at all.
-
-The signature checks run unless the flag is false. -/
+/-- From Gloas: the forkchoice update of a proposer, as the value of its JSON. -/
 def preparePayloadOnStore
     (args : String × String × ByteArray × ByteArray × List ForkChoiceStep × ByteArray × UInt64 ×
       ByteArray × ByteArray × ByteArray × UInt64 × Option ByteArray × Bool × Option PyValue) :
@@ -117,12 +110,14 @@ def preparePayloadOnStore
   let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
   let config ← configWithValue name replacements
   let ⟨gloas⟩ ← holds (.glamsterdam ≤ fork) s!"no payload preparation on a store at {fork.name}"
+  -- The signature checks run unless the flag is false.
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   -- The store comes from an anchor state, an anchor block and steps.
   --
   -- Those steps take the form of the fork choice export.
   let anchorState ← decodeInput (BeaconState preset fork) anchorState
   let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
+  -- A step that does not read has code 0.
   let (store, _) ← replayForkChoice config checks anchorState anchorBlock steps
   -- The head is a block root and a payload status: 0 empty, 1 full or 2 pending.
   let head : ForkChoiceNode :=
