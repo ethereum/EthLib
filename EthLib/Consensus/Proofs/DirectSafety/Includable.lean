@@ -5,6 +5,7 @@ public import EthLib.Consensus.Proofs.Transition.AttesterSlashingAccepted
 public import EthLib.Consensus.Proofs.Transition.Totality.ChainBlock
 import EthLib.Consensus.Proofs.Transition.BlockLedger
 import EthLib.Consensus.Proofs.Transition.ActiveKept
+import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
 import EthLib.Consensus.Proofs.Transition.Chain
 import EthLib.Consensus.Proofs.Transition.ForkVersions
 import EthLib.Consensus.Proofs.Transition.Totality.FlagsActive
@@ -42,7 +43,15 @@ At a state where the facts of a chain hold, take a key of a validator there.
 
 The validator is activated and not yet withdrawable at the epoch of that state.
 
-Take a block within the limits, at a later slot in the same epoch, whose body holds its slashing.
+Take a block within the limits, at a later slot in the same epoch or in the next.
+
+The block is at the fork of that state.
+
+Its body holds the slashing.
+
+In the next epoch the slots cross one epoch end.
+
+The theorem then requires the three facts that its statement lists for that case.
 
 Suppose the steps before that slashing succeed; the count checks of the operations are not read.
 
@@ -288,19 +297,206 @@ private theorem ages_slashingTurn {config : Config} {checks : SignatureChecks} {
   obtain ⟨input, proposed, started, proposersOk, attestersOk⟩ := turned
   exact (ages_operationsInput started).trans (ages_slashings proposersOk attestersOk)
 
+/-- A successful advance of slots from `x` to `y` gives a run from `x` to `y`. -/
+private theorem run_of_advanceSlotsAcross {config : Config} {checks : SignatureChecks} :
+    ∀ (count : Nat) {x y : ForkedBeaconState preset},
+      advanceSlotsAcross config checks count x = .ok y → Nonempty (Run config checks x y)
+  | 0, x, y, computed => by
+    simp only [advanceSlotsAcross, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact ⟨.nil⟩
+  | count + 1, x, y, computed => by
+    simp only [advanceSlotsAcross, bind_ok_iff] at computed
+    obtain ⟨middle, middleOk, rest⟩ := computed
+    obtain ⟨tail⟩ := run_of_advanceSlotsAcross count rest
+    exact ⟨(Run.nil.snoc (.slot middleOk)).append tail⟩
+
+/-- Take the state before the attester slashing at position `j`, in the epoch of `advanced`.
+
+Its exits must be ordered.
+
+Take the validator at index `i`, active at `advanced` and unslashed at that index at the turn.
+
+It is slashable there. -/
+private theorem slashable_of_active {config : Config} {checks : SignatureChecks} {fork : Fork}
+    {engine : ExecutionEngine preset fork} {advanced turn : BeaconState preset fork}
+    {block : BeaconBlock preset fork} {j : Nat}
+    (turned : SlashingTurn config checks engine advanced block j turn)
+    (ordered : ExitsOrdered turn) (epochTurn : getCurrentEpoch turn = getCurrentEpoch advanced)
+    {i : Nat} {mid : Validator} (midFound : advanced.validators.data[i]? = some mid)
+    (active : isActiveValidator mid (getCurrentEpoch advanced) = true)
+    {current : Validator} (currentFound : turn.validators.data[i]? = some current)
+    (unslashed : current.slashed = false) :
+    isSlashableValidator current (getCurrentEpoch turn) = true := by
+  obtain ⟨input, started, -, keepsKept, -⟩ := slashingTurn_kept turned
+  have stepActive : ActiveStep advanced turn :=
+    (activeStep_operationsInput started).trans keepsKept.2
+  have activeTurn : isActiveAt turn (getCurrentEpoch advanced) i = true := by
+    rw [stepActive.2 _ (getCurrentEpoch_le_activityFixedEpoch advanced)]
+    exact isActiveAt_eq_true_iff.mpr ⟨mid, midFound, active⟩
+  obtain ⟨current', currentFound', currentActive⟩ := isActiveAt_eq_true_iff.mp activeTurn
+  rw [currentFound, Option.some.injEq] at currentFound'
+  subst currentFound'
+  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at currentActive
+  -- Its exit is no later than its withdrawable epoch.
+  have exitLe := ordered current (Array.mem_of_getElem? currentFound)
+  simp only [isSlashableValidator, unslashed, epochTurn, Bool.not_false, Bool.true_and,
+    Bool.and_eq_true, decide_eq_true_eq]
+  exact ⟨currentActive.1, UInt64.lt_of_lt_of_le currentActive.2 exitLe⟩
+
+/-- Take the record of a validator at position `i` of `x`, activated by the epoch of `x`.
+
+The state `x` is reached by a run from a genesis of deposits.
+
+The withdrawal delay must be positive.
+
+The slots from `x` succeed and reach the epoch after `x`, at the fork of `x`.
+
+The steps of a block from there reach its turn, at the same epoch, where exits are ordered.
+
+If that record at `x` is unslashed, the epoch after `x` must be below its withdrawable epoch at `x`.
+
+Then the validator at position `i` of the turn, if unslashed there, is slashable there. -/
+private theorem slashable_of_nextEpoch {config : Config} {checks : SignatureChecks}
+    {g x : ForkedBeaconState preset} (shared : Run config checks g x)
+    (genesis : Genesis config checks g)
+    (withdrawableDelay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    {i : Nat} {validator : Validator} (found : x.state.validators.data[i]? = some validator)
+    (activation : validator.activationEpoch ≤ getCurrentEpoch x.state)
+    {count : Nat} {advanced turn : BeaconState preset x.fork}
+    {engine : ExecutionEngine preset x.fork} {block : BeaconBlock preset x.fork} {j : Nat}
+    (advancedOk : advanceSlotsAcross config checks count x = .ok ⟨x.fork, advanced⟩)
+    (next : (getCurrentEpoch advanced).toNat = (getCurrentEpoch x.state).toNat + 1)
+    (withdrawableNext : validator.slashed = false →
+      (getCurrentEpoch advanced).toNat < validator.withdrawableEpoch.toNat)
+    (turned : SlashingTurn config checks engine advanced block j turn)
+    (ordered : ExitsOrdered turn)
+    (epochTurn : getCurrentEpoch turn = getCurrentEpoch advanced)
+    {current : Validator} (currentFound : turn.validators.data[i]? = some current)
+    (unslashed : current.slashed = false) :
+    isSlashableValidator current (getCurrentEpoch turn) = true := by
+  obtain ⟨slots⟩ := run_of_advanceSlotsAcross count advancedOk
+  have aged := ages_slashingTurn turned
+  have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  -- The record at `advanced`, which the slots keep at the same position.
+  obtain ⟨mid, midFound, midLife⟩ := slots.registryLifecycle.validators i validator found
+  have stays := aged.1.later i mid current midFound currentFound
+  -- Unslashed at the turn, the record was unslashed at `x`, since a set flag is never cleared.
+  have xUnslashed : validator.slashed = false := by
+    cases flag : validator.slashed
+    · rfl
+    · obtain ⟨w, read, marked⟩ := (slots.slashedPersistence.trans aged.2.2) i validator found flag
+      rw [currentFound, Option.some.injEq] at read
+      rw [← read, unslashed] at marked
+      cases marked
+  -- The epoch after `x` is below the withdrawable epoch at `x`, so below the far future.
+  have bound := withdrawableNext xUnslashed
+  have capped := validator.withdrawableEpoch.toNat_lt
+  have activationSet : validator.activationEpoch ≠ FAR_FUTURE_EPOCH := by
+    intro same
+    have := UInt64.le_iff_toNat_le.mp activation
+    rw [same, farNat] at this
+    omega
+  have activationTurn : current.activationEpoch = validator.activationEpoch :=
+    stays.activation.trans (midLife.activationEpoch activationSet)
+  have extended := shared.append slots
+  -- It remains that the epoch of the turn is below the withdrawable epoch at the turn.
+  have ofLate : (getCurrentEpoch advanced).toNat < current.withdrawableEpoch.toNat →
+      isSlashableValidator current (getCurrentEpoch turn) = true := fun late => by
+    simp only [isSlashableValidator, unslashed, Bool.not_false, Bool.true_and,
+      Bool.and_eq_true, decide_eq_true_eq, epochTurn, activationTurn]
+    refine ⟨?_, UInt64.lt_iff_toNat_lt.mpr late⟩
+    rw [UInt64.le_iff_toNat_le, next]
+    have := UInt64.le_iff_toNat_le.mp activation
+    omega
+  by_cases far : validator.exitEpoch = FAR_FUTURE_EPOCH
+  · -- With no exit at `x`, the record is active at the epoch of `x`, up to `advanced`.
+    have active : isActiveValidator validator (getCurrentEpoch x.state) = true := by
+      simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq, far]
+      refine ⟨activation, ?_⟩
+      rw [UInt64.lt_iff_toNat_lt, farNat]
+      omega
+    have activeAdvanced : isActiveAt advanced (getCurrentEpoch x.state) i = true := by
+      rw [activeKept_of_chainSteps slots.chainSteps _
+        (getCurrentEpoch_le_activityFixedEpoch x.state)]
+      exact isActiveAt_eq_true_iff.mpr ⟨validator, found, active⟩
+    obtain ⟨mid', midFound', midActive⟩ := isActiveAt_eq_true_iff.mp activeAdvanced
+    rw [midFound, Option.some.injEq] at midFound'
+    subst midFound'
+    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at midActive
+    by_cases midFar : mid.exitEpoch = FAR_FUTURE_EPOCH
+    · -- Still no exit at `advanced`: active at the epoch of the turn, kept inside the block.
+      have midActiveNext : isActiveValidator mid (getCurrentEpoch advanced) = true := by
+        simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq, midFar]
+        constructor
+        · rw [UInt64.le_iff_toNat_le, next]
+          have := UInt64.le_iff_toNat_le.mp midActive.1
+          omega
+        · rw [UInt64.lt_iff_toNat_lt, farNat]
+          omega
+      exact slashable_of_active turned ordered epochTurn midFound midActiveNext currentFound
+        unslashed
+    · -- An exit set by `advanced` is after the epoch of `x`, and the delay follows it.
+      have delay := extended.exit_withdrawable_delay genesis i mid midFound midFar
+      have rises := (stays.withdrawable midFar).1
+      have exitAfter := UInt64.lt_iff_toNat_lt.mp midActive.2
+      rw [UInt64.le_iff_toNat_le] at rises
+      exact ofLate (by omega)
+  · -- An exit set at `x` is kept, and its withdrawable epoch is the delay after it.
+    have exact := shared.withdrawable_eq_exit_delay genesis i validator found xUnslashed
+    have midExit := midLife.exitEpoch far
+    have midFar : mid.exitEpoch ≠ FAR_FUTURE_EPOCH := by rw [midExit]; exact far
+    have delay := extended.exit_withdrawable_delay genesis i mid midFound midFar
+    have rises := (stays.withdrawable midFar).1
+    rw [UInt64.le_iff_toNat_le] at rises
+    rw [midExit] at delay
+    rcases exact with ⟨unset, -⟩ | equal
+    · exact absurd unset far
+    · exact ofLate (by omega)
+
 /-- At the turn of its slashing, a validator of `x` keeps its key.
 
 It is activated and not yet withdrawable at the epoch of `x`.
 
 A pair of votes has a signature on each signing root that verifies for its key alone.
 
-Take a block within the limits, applied at `x` at a later slot in the epoch of `x`.
+Take a block within the limits, applied at `x` at a later slot, at the fork of `x`.
+
+The block is in the epoch of `x` or in the next epoch.
+
+In the next epoch, the theorem requires three facts.
+
+The block's epoch is inside the epochs of the chain.
+
+The signers condition reads the last slot of the epoch of `x`, once its roots are cached.
+
+Its signer epoch is the epoch before that of `x`, or epoch 0 itself when `x` is in epoch 0.
+
+The signers of that epoch hold at most the current total active balance of the cached state.
+
+That balance is the total active balance of the epoch of `x`.
+
+Before Altair, the signers are the unslashed attesters of the signer epoch's pending attestations.
+
+Only those attestations that match the source count.
+
+From Altair, the bound holds for each participation flag, not for the union of the flags.
+
+For a flag, the signers are the unslashed validators active in the signer epoch that set it.
+
+The comparison is required only when the reads of those balances and indices succeed.
+
+If the chosen validator is unslashed at `x`, take its withdrawable epoch recorded at `x`.
+
+The block's epoch is below it.
 
 Its body contains the slashing of the validator by those votes, at a position.
 
 The steps before that slashing succeed, and reach a state.
 
-The slashing succeeds there, or the validator is already slashed there. -/
+The slashing succeeds there.
+
+Otherwise the validator is already slashed there. -/
 private theorem attesterSlashing_accepted_of_lifetime {config : Config} {checks : SignatureChecks}
     [NeZero preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat]
     {g x : ForkedBeaconState preset} (shared : Run config checks g x)
@@ -329,8 +525,13 @@ private theorem attesterSlashing_accepted_of_lifetime {config : Config} {checks 
     (advancedOk : advanceSlotsAcross config checks (block.slot.toNat - x.state.slot.toNat) x =
       .ok ⟨x.fork, advanced⟩)
     (later : x.state.slot.toNat < block.slot.toNat)
-    (sameEpoch : block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat =
-      (getCurrentEpoch x.state).toNat)
+    (nextAtMost : block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤
+      (getCurrentEpoch x.state).toNat + 1)
+    (crossing : (getCurrentEpoch x.state).toNat < block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat →
+      block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ startEpoch + epochs ∧
+      SignersAtEnds config checks x (block.slot.toNat - x.state.slot.toNat) ∧
+      (validator.slashed = false →
+        block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat < validator.withdrawableEpoch.toNat))
     (turned : SlashingTurn config checks engine advanced block j turn)
     (bounded : BlockBounded limits block.body)
     (atJ : block.body.attesterSlashings.data.toList[j]? =
@@ -343,7 +544,7 @@ private theorem attesterSlashing_accepted_of_lifetime {config : Config} {checks 
     (RunBounded.size_le holds.bounded).trans (holds.run conditions within).load.1
   have inside := (Array.getElem?_eq_some_iff.mp found).1
   have numeric := toNat_toUInt64_of_lt registry inside
-  -- The slots stay in the epoch of `x`.
+  -- The slots stay in the epoch of `x` or reach the next one.
   have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by
     have := conditions.run.slots
     omega
@@ -352,82 +553,89 @@ private theorem attesterSlashing_accepted_of_lifetime {config : Config} {checks 
     have := advanceSlotsAcross_slot _ advancedOk
     dsimp only at this
     omega
-  have epochAdvanced : getCurrentEpoch advanced = getCurrentEpoch x.state := by
-    apply UInt64.toNat_inj.mp
-    rw [getCurrentEpoch_toNat, advancedSlot, sameEpoch]
-  -- No slot before the block ends an epoch, so the signers condition holds.
-  have signers : SignersAtEnds config checks x (block.slot.toNat - x.state.slot.toNat) := by
-    intro steps below reached reachedOk ends
-    have reachedSlot := advanceSlotsAcross_slot _ reachedOk
-    have xEpoch := getCurrentEpoch_toNat x.state
-    exfalso
-    have boundary : (reached.state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat =
-        reached.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 :=
-      Nat.succ_div_of_dvd (Nat.dvd_of_mod_eq_zero ends)
-    have upper : (reached.state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat ≤
-        block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat :=
-      Nat.div_le_div_right (by omega)
-    have lower : x.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤
-        reached.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat :=
-      Nat.div_le_div_right (by omega)
-    omega
-  have blockWithin : block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ startEpoch + epochs := by
-    omega
+  have advancedEpoch : (getCurrentEpoch advanced).toNat =
+      block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
+    rw [getCurrentEpoch_toNat, advancedSlot]
+  have xEpoch := getCurrentEpoch_toNat x.state
+  have notBefore : (getCurrentEpoch x.state).toNat ≤
+      block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
+    rw [xEpoch]
+    exact Nat.div_le_div_right later.le
   -- The steps before the slashing keep the frame and activity.
   obtain ⟨input, started, frameKept, keepsKept, -⟩ := slashingTurn_kept turned
   have frameTurn := (frame_operationsInput started).toFrame.trans frameKept
+  have ordered : ExitsOrdered turn := frameTurn.exitsOrdered
+    ((advanceSlotsAcross_invariant holds.invariant advancedOk).1.exitsOrdered)
   -- The validator keeps its key at the turn.
   have prefixTurn : validatorKeys x.state <+: validatorKeys turn :=
     ((validatorKeys_prefix_and_distinct_of_chainSteps slotsSteps).1.trans
       frameTurn.pubkeysPrefix)
   obtain ⟨current, currentFound, currentKey⟩ :=
     validators_getElem?_of_validatorKeys_prefix prefixTurn found
-  -- The epoch of the turn is the epoch of `x`.
-  have epochTurn : getCurrentEpoch turn = getCurrentEpoch x.state := by
-    rw [← epochAdvanced]
+  -- The epoch of the turn is the epoch of the block.
+  have epochTurn : getCurrentEpoch turn = getCurrentEpoch advanced := by
     unfold getCurrentEpoch
     rw [frameTurn.slot]
-  -- Unslashed at the turn, the validator is slashable there.
-  have slashableTurn : current.slashed = false →
-      isSlashableValidator current (getCurrentEpoch turn) = true := by
-    intro unslashed
-    rw [epochTurn]
-    by_cases far : validator.exitEpoch = FAR_FUTURE_EPOCH
-    · -- With no exit yet, it is active at the epoch of `x`, and stays active to the turn.
-      have active : isActiveValidator validator (getCurrentEpoch x.state) = true := by
-        have below := getCurrentEpoch_succ_lt_farFuture conditions.run.roots.twoSlots x.state
-        simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq, far]
-        refine ⟨lifetime.1, ?_⟩
-        rw [UInt64.lt_iff_toNat_lt]
+  -- The block's epoch, the signers at the epoch ends, and slashability at the turn.
+  obtain ⟨blockWithin, signers, slashableTurn⟩ : block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤
+        startEpoch + epochs ∧
+      SignersAtEnds config checks x (block.slot.toNat - x.state.slot.toNat) ∧
+      (current.slashed = false → isSlashableValidator current (getCurrentEpoch turn) = true) := by
+    by_cases sameEpoch : block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat =
+        (getCurrentEpoch x.state).toNat
+    · have epochAdvanced : getCurrentEpoch advanced = getCurrentEpoch x.state :=
+        UInt64.toNat_inj.mp (advancedEpoch.trans sameEpoch)
+      refine ⟨by omega, ?_, ?_⟩
+      · -- In the same epoch, no slot before the block ends an epoch: the condition holds.
+        intro steps below reached reachedOk ends
+        have reachedSlot := advanceSlotsAcross_slot _ reachedOk
+        exfalso
+        have boundary : (reached.state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat =
+            reached.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 :=
+          Nat.succ_div_of_dvd (Nat.dvd_of_mod_eq_zero ends)
+        have upper : (reached.state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat ≤
+            block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat :=
+          Nat.div_le_div_right (by omega)
+        have lower : x.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤
+            reached.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat :=
+          Nat.div_le_div_right (by omega)
         omega
-      have slotsActive := activeKept_of_chainSteps slotsSteps
-      have stepActive : ActiveStep advanced turn :=
-        (activeStep_operationsInput started).trans keepsKept.2
-      have activeTurn : isActiveAt turn (getCurrentEpoch x.state) i = true := by
-        rw [stepActive.2 _ (epochAdvanced ▸ getCurrentEpoch_le_activityFixedEpoch advanced),
-          slotsActive _ (getCurrentEpoch_le_activityFixedEpoch x.state)]
-        exact isActiveAt_eq_true_iff.mpr ⟨validator, found, active⟩
-      obtain ⟨current', currentFound', currentActive⟩ := isActiveAt_eq_true_iff.mp activeTurn
-      rw [currentFound] at currentFound'
-      cases currentFound'
-      -- Its exit is no later than its withdrawable epoch.
-      have ordered := frameTurn.exitsOrdered
-        ((advanceSlotsAcross_invariant holds.invariant advancedOk).1.exitsOrdered)
-      have exitLe := ordered current (Array.mem_of_getElem? currentFound)
-      simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at currentActive
-      simp only [isSlashableValidator, unslashed, Bool.not_false, Bool.true_and,
-        Bool.and_eq_true, decide_eq_true_eq]
-      exact ⟨currentActive.1, UInt64.lt_of_lt_of_le currentActive.2 exitLe⟩
-    · -- With an exit set, it keeps its activation, and its withdrawable epoch only rises.
-      obtain ⟨last, same, sameValidators⟩ := validators_advanceSlotsAcross_of_epoch _ advancedOk
-        (by rw [Nat.add_sub_cancel' (Nat.le_of_lt later)]; exact sameEpoch)
-      obtain rfl : advanced = last := eq_of_heq (ForkedBeaconState.mk.inj same).2
-      have aged := ages_slashingTurn turned
-      have stays := aged.1.later i validator current (by rw [sameValidators]; exact found)
-        currentFound
-      simp only [isSlashableValidator, unslashed, stays.activation, Bool.not_false,
-        Bool.true_and, Bool.and_eq_true, decide_eq_true_eq]
-      exact ⟨lifetime.1, UInt64.lt_of_lt_of_le lifetime.2 (stays.withdrawable far).1⟩
+      · intro unslashed
+        by_cases far : validator.exitEpoch = FAR_FUTURE_EPOCH
+        · -- With no exit yet at `x`, it is active at the epoch of `x`, up to `advanced`.
+          have active : isActiveValidator validator (getCurrentEpoch x.state) = true := by
+            have below := getCurrentEpoch_succ_lt_farFuture conditions.run.roots.twoSlots x.state
+            simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq, far]
+            refine ⟨lifetime.1, ?_⟩
+            rw [UInt64.lt_iff_toNat_lt]
+            omega
+          have activeAdvanced : isActiveAt advanced (getCurrentEpoch x.state) i = true := by
+            rw [activeKept_of_chainSteps slotsSteps _
+              (getCurrentEpoch_le_activityFixedEpoch x.state)]
+            exact isActiveAt_eq_true_iff.mpr ⟨validator, found, active⟩
+          obtain ⟨mid, midFound, midActive⟩ := isActiveAt_eq_true_iff.mp activeAdvanced
+          exact slashable_of_active turned ordered epochTurn midFound
+            (epochAdvanced ▸ midActive) currentFound unslashed
+        · -- With an exit set, it keeps its activation, and its withdrawable epoch only rises.
+          rw [epochTurn, epochAdvanced]
+          obtain ⟨last, same, sameValidators⟩ :=
+            validators_advanceSlotsAcross_of_epoch _ advancedOk
+              (by rw [Nat.add_sub_cancel' (Nat.le_of_lt later)]; exact sameEpoch)
+          obtain rfl : advanced = last := eq_of_heq (ForkedBeaconState.mk.inj same).2
+          have aged := ages_slashingTurn turned
+          have stays := aged.1.later i validator current (by rw [sameValidators]; exact found)
+            currentFound
+          simp only [isSlashableValidator, unslashed, stays.activation, Bool.not_false,
+            Bool.true_and, Bool.and_eq_true, decide_eq_true_eq]
+          exact ⟨lifetime.1, UInt64.lt_of_lt_of_le lifetime.2 (stays.withdrawable far).1⟩
+    · -- In the next epoch, the three requirements of the crossing apply.
+      have crossed : (getCurrentEpoch x.state).toNat <
+          block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by omega
+      obtain ⟨blockWithin, signers, withdrawableNext⟩ := crossing crossed
+      refine ⟨blockWithin, signers, fun unslashed => slashable_of_nextEpoch shared genesis
+        withdrawable found lifetime.1 advancedOk (by omega)
+        (fun flag => advancedEpoch ▸ withdrawableNext flag) turned ordered epochTurn
+        currentFound unslashed⟩
   refine ⟨current, currentFound, currentKey, ?_⟩
   cases slashedFlag : current.slashed
   · right
@@ -498,7 +706,41 @@ The state `x` lies on a run from a genesis of deposits.
 
 A pair of votes has a signature on each signing root that verifies for that key alone.
 
-Take any block within the limits, applied at `x` at a later slot in the epoch of `x`.
+Take any block within the limits, applied at `x` at a later slot, at the fork of `x`.
+
+The block is in the epoch of `x` or in the next epoch.
+
+With `x` at the preceding slot, every first-slot block meets the one-epoch bound.
+
+The requirements below still apply.
+
+A block two or more epochs after `x` is not covered.
+
+In the next epoch, the theorem requires three facts.
+
+The block's epoch is inside the epochs of the chain.
+
+The signers condition reads the last slot of the epoch of `x`, once its roots are cached.
+
+Its signer epoch is the epoch before that of `x`, or epoch 0 itself when `x` is in epoch 0.
+
+The signers of that epoch hold at most the current total active balance of the cached state.
+
+That balance is the total active balance of the epoch of `x`.
+
+Before Altair, the signers are the unslashed attesters of the signer epoch's pending attestations.
+
+Only those attestations that match the source count.
+
+From Altair, the bound holds for each participation flag, not for the union of the flags.
+
+For a flag, the signers are the unslashed validators active in the signer epoch that set it.
+
+The comparison is required only when the reads of those balances and indices succeed.
+
+If the chosen validator is unslashed at `x`, take its withdrawable epoch recorded at `x`.
+
+The block's epoch is below it.
 
 Its body contains the slashing of that validator by those votes, at a position.
 
@@ -506,7 +748,9 @@ The steps before its operations and the slashings before that position succeed, 
 
 There the validator still has the key.
 
-The slashing succeeds there, or the validator is already slashed there.
+The slashing succeeds there.
+
+Otherwise the validator is already slashed there.
 
 After a slashing that succeeds, that validator still has the key and is slashed.
 
@@ -567,7 +811,12 @@ theorem signedConflict_attesterSlashing_accepted_at {config : Config} {checks : 
         advanceSlotsAcross config checks (block.slot.toNat - x.state.slot.toNat) x =
           .ok ⟨x.fork, advanced⟩ →
         x.state.slot.toNat < block.slot.toNat →
-        block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat = (getCurrentEpoch x.state).toNat →
+        block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ (getCurrentEpoch x.state).toNat + 1 →
+        ((getCurrentEpoch x.state).toNat < block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat →
+          block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ startEpoch + epochs ∧
+          SignersAtEnds config checks x (block.slot.toNat - x.state.slot.toNat) ∧
+          (validator.slashed = false →
+            block.slot.toNat / preset.SLOTS_PER_EPOCH.toNat < validator.withdrawableEpoch.toNat)) →
         SlashingTurn config checks engine advanced block j turn →
         BlockBounded limits block.body →
         block.body.attesterSlashings.data.toList[j]? =
@@ -584,11 +833,11 @@ theorem signedConflict_attesterSlashing_accepted_at {config : Config} {checks : 
   have numeric := toNat_toUInt64_of_lt registry (Array.getElem?_eq_some_iff.mp found).1
   subst keyEq
   refine ⟨i.toUInt64, validator, ⟨getValidator_eq_ok_iff.mpr (by rwa [numeric]), rfl⟩, ?_⟩
-  intro engine block advanced turn j advancedOk later sameEpoch turned bounded atJ
+  intro engine block advanced turn j advancedOk later nextAtMost crossing turned bounded atJ
   obtain ⟨current, currentFound, currentKey, outcome⟩ := attesterSlashing_accepted_of_lifetime
     shared genesis conditions fits covers withdrawable activationIncrement holds within found
     ⟨activation, withdrawal⟩ pair sameFork1 sameFork2 s1 s2 verified1 verified2 attesters
-    advancedOk later sameEpoch turned bounded atJ
+    advancedOk later nextAtMost crossing turned bounded atJ
   have found : getValidator turn i.toUInt64 = .ok current :=
     getValidator_eq_ok_iff.mpr (by rwa [numeric])
   -- After a successful slashing, the validator at that index is slashed and keeps the key.

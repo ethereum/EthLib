@@ -122,7 +122,17 @@ Not yet released.
   A slashing that succeeds leaves the validator slashed, with its key, in the state right after it.
   `DirectSafety.signedConflict_attesterSlashing_accepted_at` (`DirectSafety/Includable.lean`) states it for a key whose validator is activated and not yet withdrawable at the epoch of a state of a run.
   The pair of votes is a `DirectSafety.VotePairAt`, and the result is conditional on the inclusion of the slashing and on the success of the steps before it.
-  The block is at a strictly later slot in the epoch of that state, and the slots up to it advance successfully.
+  The block is at a strictly later slot in the epoch of that state or the next, at the same fork, and the slots up to it advance successfully.
+  In the next epoch, three requirements apply.
+  The block's epoch is inside the epochs of the chain.
+  `SignersAtEnds` holds for the slots up to the block.
+  The signer epoch is the epoch before that state's, or epoch 0 itself when that state is in epoch 0.
+  At the last slot of the epoch of that state, after its roots are cached, the signers of the signer epoch hold at most the current total active balance of the cached state.
+  That balance is the total active balance of the epoch of that state.
+  Before Altair, the signers are the unslashed attesters of the pending attestations of the signer epoch that match the source.
+  From Altair, for each participation flag, the unslashed validators active in the signer epoch that set it hold at most that balance; the bound is per flag, not on their union.
+  The comparison is required only when those reads succeed.
+  The chosen validator, if unslashed in that state, has a withdrawable epoch recorded in that state after the block's epoch.
   `slashValidator_ok_of_block` (`Totality/ChainBlock.lean`) states that slashing succeeds at that turn, at the state that `SlashingTurn` (`Transition/Invariants.lean`) describes.
   `SlashRoom` with `slashValidator_ok_of_room` (`Totality/SlashValidator.lean`) gives a room that suffices for slashing to succeed.
   `slashingTurn_kept` there states that the steps from the operations to that turn keep the frame, activity and the proposer.
@@ -987,6 +997,15 @@ Not yet released.
   `ValidatorStep`, `PinDriftBound.CreditBudgets` and `PinDriftBound.PreviousEpochRise` use it.
 
 ### Changes that break callers
+
+- The signed-conflict slashing theorem of [#3431](https://github.com/ethereum/EthLib/issues/3431) now also covers a block in the epoch after the state of the run, including a block at the first slot of an epoch ([#4243](https://github.com/ethereum/EthLib/issues/4243)).
+  `DirectSafety.signedConflict_attesterSlashing_accepted_at` (`DirectSafety/Includable.lean`) takes, for each block, a bound of one epoch in place of the hypothesis that the block is in the epoch of `x`.
+  It also takes a premise for a block in the next epoch, under the guard that the block's epoch is after the epoch of `x`.
+  That premise holds three requirements of the #3431 entry.
+  The block's epoch is inside the epochs of the chain.
+  `SignersAtEnds` holds for the slots up to the block.
+  The chosen validator, if unslashed at `x`, has its withdrawable epoch recorded at `x` after the block's epoch.
+  A caller with the old hypothesis `sameEpoch` must pass `sameEpoch.le.trans (Nat.le_succ _)` for the bound, and `fun crossing => absurd crossing (by omega)` for the guarded premise.
 
 - In Lean, the leanXMSS addresses take the name the specification gives them: `Xmss.CallSite` is now `Xmss.Address` ([#4278](https://github.com/ethereum/EthLib/pull/4278)).
   The old `Xmss.Address`, an abbreviation for the 16 bytes as `Lanes2`, is removed, and `Address.encode` now returns `Lanes2`.
